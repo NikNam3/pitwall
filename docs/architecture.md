@@ -4,15 +4,15 @@ Condensed from spec section 3 (`docs/superpowers/specs/2026-10-28-foundation-des
 
 ## Packages and allowed dependencies
 
-| Package | Role |
-| --- | --- |
-| `packages/protocol` | bytes to typed packets (spec 2025 only) |
+| Package | Role                                                                                                |
+| --- |-----------------------------------------------------------------------------------------------------|
+| `packages/protocol` | bytes to typed packets (spec 2025 only)                                                             |
 | `packages/domain` | JSON-safe domain vocabulary (`Known`, `Corners`, `CarState`, records, `Insight`, ids); leaf package |
-| `packages/engine` | race model: pure, no I/O, no clock, no network |
-| `packages/strategy` | strategy calculators |
-| `packages/contracts` | topic types and WebSocket messages, shared by bridge and UI; wire-only |
-| `apps/bridge` | imperative shell: input, frame assembler, engine runner, storage, WebSocket, CLI |
-| `apps/ui` | Svelte UI (sub-project 2) |
+| `packages/engine` | race model: pure, no I/O, no clock, no network                                                      |
+| `packages/strategy` | strategy calculators                                                                                |
+| `packages/contracts` | topic types and WebSocket messages, shared by bridge and UI; wire-only                              |
+| `apps/bridge` | imperative shell: input, frame assembler, engine runner, storage, WebSocket, CLI                    |
+| `apps/ui` | Svelte UI (sub-project 2)                                                                           |
 
 Allowed edges (everything else is a violation; dependency-cruiser fails the build):
 
