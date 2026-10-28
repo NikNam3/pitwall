@@ -33,6 +33,9 @@ const CADENCE_SAMPLES = 64;
 export class CadenceTracker {
   #steps: number[] = [];
   #last: SessionTime | undefined;
+  #median: number | undefined = undefined;
+  /** True when `#steps` changed since `#median` was last computed. */
+  #medianStale = true;
 
   get lastSessionTime(): SessionTime | undefined {
     return this.#last;
@@ -40,15 +43,21 @@ export class CadenceTracker {
 
   /** The median step, or `undefined` before the first positive step. */
   get medianMs(): number | undefined {
-    if (this.#steps.length === 0) return undefined;
-    const sorted = [...this.#steps].sort((a, b) => a - b);
-    return sorted[Math.floor(sorted.length / 2)];
+    if (this.#medianStale) {
+      this.#median =
+        this.#steps.length === 0
+          ? undefined
+          : [...this.#steps].sort((a, b) => a - b)[Math.floor(this.#steps.length / 2)];
+      this.#medianStale = false;
+    }
+    return this.#median;
   }
 
   record(sessionTime: SessionTime): void {
     if (this.#last !== undefined && sessionTime > this.#last) {
       this.#steps.push(sessionTime - this.#last);
       if (this.#steps.length > CADENCE_SAMPLES) this.#steps.shift();
+      this.#medianStale = true;
     }
     this.#last = sessionTime;
   }
