@@ -587,6 +587,7 @@ Answered (user, 2026-10-28):
 - **Radio lines:** none. The plan board holds plans and triggers, not sentences.
 - **Numbers only, no verdicts:** pitwall shows the computed numbers ("rejoin P6, 1.2 s behind VER; undercut +0.8 s") and never a verdict ("Undercut: WORKS") or a recommended call ("BOX this lap"). The user draws every conclusion. The plan board's triggers show *that* a condition holds, not what to do about it.
 - **AI cars:** there are AI cars in the lobby, so their wear, fuel, ERS and tyre sets are visible (no ⚠ for them).
+- **Realism mode:** using rival data a real team wouldn't have (e.g. AI cars' wear) counts as cheating to the user, so pitwall needs a switch that turns it off. Proposed scope, to be confirmed: with realism on, other teams' cars show only what a real team gets (timing, sectors, gaps, position on track, speed traps, compound and tyre age, pit stops, penalties). Their tyre wear, damage, fuel, ERS, tyre sets, temperatures, pressures and driver inputs become `unknown("realism")`, and the strategy model uses the same estimation path as for restricted humans. Our own two cars stay complete.
 
 Still open:
 1. **Fuel load:** can the league's settings let the player choose the race fuel load in F1 25? If not, D05 drops out. (The user is asking a friend what the drivers can edit.)
