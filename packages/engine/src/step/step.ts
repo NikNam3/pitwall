@@ -1,4 +1,7 @@
 import type { Frame } from '../frame/frame.ts';
+import { applyLaps } from '../history/laps.ts';
+import { applyPitStops } from '../history/pit-stops.ts';
+import { applyStints } from '../history/stints.ts';
 import type { EngineState } from '../state/engine-state.ts';
 import { applyCondition } from './condition.ts';
 import { applyDynamics } from './dynamics.ts';
@@ -22,6 +25,9 @@ export const SUB_STEPS: SubStep[] = [
   applyCondition,
   applyDynamics,
   applyOwnCar,
+  applyPitStops,
+  applyStints,
+  applyLaps,
 ];
 
 const refreshActive = (state: EngineState): void => {
