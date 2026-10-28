@@ -1,5 +1,5 @@
 // Helpers shared by the Task 22 specs: data dirs, workbook files and the bridge log.
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -27,13 +27,6 @@ export async function writeWorkbook(dataDir: string, name: string, windows: Wind
   const workbook = { name, windows: windows.map((w) => ({ id: w.id, layout: {}, panels: w.panels })) };
   await writeFile(workbookFile(dataDir, name), `${JSON.stringify(workbook, null, 2)}\n`);
 }
-
-/** Hand edit of an existing workbook file (not an atomic write by the bridge: the bridge must notice and re-read it). */
-export async function editWorkbook(dataDir: string, name: string, windows: WindowSpec[]): Promise<void> {
-  await writeWorkbook(dataDir, name, windows);
-}
-
-export const readWorkbook = async (dataDir: string, name: string): Promise<unknown> => JSON.parse(await readFile(workbookFile(dataDir, name), 'utf8'));
 
 /** The default workbook the specs start from: windows `main` and `side`, each with a feed-status panel. */
 export const twoWindows = (): WindowSpec[] => [

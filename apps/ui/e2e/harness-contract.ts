@@ -22,7 +22,7 @@ export type BridgeHandle = {
   stop(): Promise<void>;
   /** Starts it again on the same port, data dir, recording and options; `log()` starts empty again. */
   restart(): Promise<void>;
-  /** The bridge's stdout lines since the last (re)start, one pino JSON object per line, unparsed. */
+  /** The bridge's stdout and stderr lines since the last (re)start, one pino JSON object per line, unparsed. */
   log(): string[];
 };
 

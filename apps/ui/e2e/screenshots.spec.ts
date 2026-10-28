@@ -20,6 +20,9 @@ test.describe('screenshots', () => {
     await page.evaluate(() => document.fonts.ready);
     const ids = await page.$$eval('[data-gallery-id]', (figures) => figures.map((f) => (f as HTMLElement).dataset['galleryId'] ?? '?'));
     expect(ids.length).toBeGreaterThan(0);
+    // Playwright sanitises names further; two ids must never end up sharing one baseline file.
+    const sanitised = ids.map((id) => fileOf(id).replace(/[^a-zA-Z0-9_.]+/g, '-'));
+    expect(new Set(sanitised).size, 'baseline file names are unique').toBe(ids.length);
     for (const id of ids) {
       const cell = page.locator(`[data-gallery-id="${id}"]`);
       await cell.scrollIntoViewIfNeeded();

@@ -1,7 +1,7 @@
 // End to end (spec 9.3): a bridge replaying tt-zandvoort-lap1 (paused) and Electron with two windows, `main` and `side`.
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
-import { editWorkbook, feedStatus, makeDataDir, marker, removeDataDir, subscribeLines, twoWindows, unknownWidgetText, writeWorkbook } from './support.ts';
+import { feedStatus, makeDataDir, marker, removeDataDir, subscribeLines, twoWindows, unknownWidgetText, writeWorkbook } from './support.ts';
 import { launchPitwall, startBridge } from './harness.ts';
 import type { BridgeHandle, PitwallApp } from './harness-contract.ts';
 
@@ -12,27 +12,40 @@ const SETTLE_MS = 20_000;
 
 type Setup = { dataDir: string; bridge: BridgeHandle; app: PitwallApp; main: Page; side: Page };
 
-/** The default workbook has windows main and side; the second workbook ("other", Ctrl+2) marks each with an unknown widget. */
+/** Undo steps of everything started so far, newest last; `runCleanups` runs them all, each even if an earlier one throws. */
+const cleanups: Array<() => Promise<void>> = [];
+
+async function runCleanups(): Promise<void> {
+  const errors: unknown[] = [];
+  while (cleanups.length > 0) {
+    const step = cleanups.pop();
+    try {
+      await step?.();
+    } catch (error) {
+      errors.push(error);
+    }
+  }
+  if (errors.length > 0) throw errors[0];
+}
+
+/** The default workbook has windows main and side; the second workbook ("other", Ctrl+2) marks each with an unknown widget.
+ *  Every resource is registered for cleanup as soon as it exists, so a failing step leaves nothing behind. */
 async function setup(insight?: string): Promise<Setup> {
   const dataDir = await makeDataDir();
+  cleanups.push(() => removeDataDir(dataDir));
   await writeWorkbook(dataDir, 'default', twoWindows());
   await writeWorkbook(dataDir, 'other', [
     { id: 'main', panels: { a: marker('e2e-other-main') } },
     { id: 'side', panels: { a: marker('e2e-other-side') } },
   ]);
   const bridge = await startBridge({ recording: RECORDING, dataDir, insight });
+  cleanups.push(() => bridge.stop());
   const app = await launchPitwall({ wsPort: bridge.wsPort, dataDir });
+  cleanups.push(() => app.close());
   // `main` opens `side` itself, from the workbook.
   const main = await app.window('main');
   const side = await app.window('side');
   return { dataDir, bridge, app, main, side };
-}
-
-async function teardown(s: Setup | undefined): Promise<void> {
-  if (s === undefined) return;
-  await s.app.close();
-  await s.bridge.stop();
-  await removeDataDir(s.dataDir);
 }
 
 const connected = (page: Page) => page.getByText(/^connected$/);
@@ -41,8 +54,8 @@ const stale = (page: Page) => page.getByText(/^stale/);
 test.describe('two windows on a paused replay', () => {
   let s: Setup | undefined;
   test.afterEach(async () => {
-    await teardown(s);
     s = undefined;
+    await runCleanups();
   });
 
   test('the placeholder shows connected and the track in both windows', async () => {
@@ -104,7 +117,7 @@ test.describe('two windows on a paused replay', () => {
   test('a hand edit of the active workbook file changes the layout in both windows', async () => {
     s = await setup();
     await expect(connected(s.main)).toBeVisible({ timeout: SETTLE_MS });
-    await editWorkbook(s.dataDir, 'default', [
+    await writeWorkbook(s.dataDir, 'default', [
       { id: 'main', panels: { feed: feedStatus, extra: marker('e2e-extra') } },
       { id: 'side', panels: { edited: marker('e2e-edited-side') } },
     ]);
