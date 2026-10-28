@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>10 · Overlays</title><style>
+:root { --pw-bg:#0b0c0e; --pw-bgPanel:#15161a; --pw-bgBand:#1b1c21; --pw-border:#25272c; --pw-text:#d9dbe0; --pw-textDim:#8d9199; --pw-textFaint:#5c6068; --pw-critical:#ff5c5c; --pw-warning:#f0b429; --pw-best:#b06cff; --pw-personalBest:#3fcf70; --pw-flagYellow:#ffd23f; --pw-flagRed:#ff5c5c; --pw-flagBlue:#5ca8ff;
+  --pw-series1:oklch(0.72 0.09 250); --pw-series2:oklch(0.72 0.09 40); --pw-series3:oklch(0.72 0.09 150); --pw-series4:oklch(0.72 0.09 310); --pw-series5:oklch(0.72 0.09 95); --pw-series6:oklch(0.72 0.09 200);
+  --pw-font:'JetBrains Mono',monospace; --pw-font-px:13px; --pw-line:1.4; }
+* { box-sizing:border-box; margin:0; padding:0; }
+body { background:var(--pw-bg); color:var(--pw-text); font-family:var(--pw-font); font-size:var(--pw-font-px);
+  line-height:var(--pw-line); font-variant-ligatures:none; padding:24px 28px 48px; }
+.note { color:var(--pw-textDim); max-width:150ch; margin-bottom:18px; }
+.note b { color:var(--pw-text); font-weight:500; }
+h1 { font-size:var(--pw-font-px); font-weight:600; margin-bottom:4px; }
+h2 { font-size:var(--pw-font-px); font-weight:500; color:var(--pw-textDim); margin:22px 0 8px; }
+.row { display:flex; gap:12px; align-items:flex-start; flex-wrap:wrap; }
+.panel { background:var(--pw-bgPanel); border:1px solid var(--pw-border); }
+.ph { display:flex; gap:1ch; padding:0 1ch; border-bottom:1px solid var(--pw-border); color:var(--pw-textFaint); white-space:nowrap; }
+.ph .t { color:var(--pw-textDim); }
+.ph .sp { flex:1; }
+.ph .lk { color:var(--pw-textFaint); }
+.ph .lk.set { color:var(--pw-text); }
+.ph .st { color:var(--pw-warning); }
+.ph .er { color:var(--pw-critical); }
+.ph .age { color:var(--pw-textDim); }
+.pb { padding:0 1ch; }
+table { border-collapse:collapse; }
+th { font-weight:400; color:var(--pw-textFaint); text-align:right; padding:0; }
+td { text-align:right; padding:0; white-space:nowrap; }
+th + th, td + td { padding-left:1ch; }
+.l { text-align:left; }
+tbody tr:nth-child(even) td { background:var(--pw-bgBand); }
+tr.me td { color:#fff; font-weight:600; }
+tr.me td:first-child { box-shadow:inset 2px 0 0 var(--pw-text); }
+tr.out td { color:var(--pw-textFaint); }
+.est { color:var(--pw-textDim); }
+.stale { color:var(--pw-textFaint); }
+.best { color:var(--pw-best); }
+.pbst { color:var(--pw-personalBest); }
+.warn { color:var(--pw-warning); }
+.crit { color:var(--pw-critical); }
+.dim { color:var(--pw-textDim); }
+.faint { color:var(--pw-textFaint); }
+.tip { position:relative; }
+.tip .bubble { position:absolute; left:0; top:calc(var(--pw-line) * 1em + 2px); background:#25272c; color:var(--pw-text);
+  border:1px solid #33363c; padding:0 1ch; white-space:nowrap; z-index:2; font-weight:400; }
+.legend { max-width:70ch; color:var(--pw-textDim); }
+.legend div { margin-bottom:6px; }
+.legend b { color:var(--pw-text); font-weight:500; }
+.n { color:var(--pw-bg); background:var(--pw-textDim); padding:0 0.5ch; margin-right:1ch; }
+.ruler { color:var(--pw-textFaint); white-space:pre; }
+svg text { font-family:var(--pw-font); font-size:var(--pw-font-px); }
+kbd { font-family:inherit; color:var(--pw-text); border:1px solid var(--pw-border); padding:0 0.5ch; }
+</style></head>
+<body><h1>10 · Overlays</h1><div class="note">The shell's overlays use the same panel look as widgets. No icons beyond ⚙, no colour except a warning note in the key overview.</div><div class="row"><div><h2>command palette (Ctrl+K)</h2><div class="panel" style="width:60ch"><div class="ph"><span class="t">&gt; ack</span><span class="sp"></span></div><div class="pb"><table style="width:100%"><tbody><tr><td class="l">Acknowledge all alerts</td><td class="dim"><kbd>Ctrl+Enter</kbd></td></tr><tr><td class="l dim">Acknowledge: KUH front wing 42 %</td><td></td></tr><tr><td class="l dim">Acknowledge: KUH FL wear 71 %</td><td></td></tr></tbody></table></div></div></div><div><h2>settings popover (⚙)</h2><div class="panel" style="width:40ch"><div class="ph"><span class="t">Timing · settings</span><span class="lk">1</span><span class="sp"></span><span class="faint">⚙</span></div><div class="pb"><div>[x] Show sectors</div><div>[ ] Show best lap</div><div>Gap to  ( leader | <span style="color:#fff">ahead</span> | primary )</div><div class="faint">saved in this workbook</div></div></div></div></div><div class="row"><div><h2>key overview (?)</h2><div class="panel" style="width:58ch"><div class="ph"><span class="t">Keys</span><span class="lk"></span><span class="sp"></span><span class="faint">⚙</span></div><div class="pb"><table><tbody><tr><td class="l dim" colspan="2" style="padding-top:6px">Workbooks</td></tr><tr><td class="l"><kbd>Ctrl+1…9</kbd></td><td class="l dim">open workbook 1…9</td></tr><tr><td class="l"><kbd>Ctrl+O</kbd></td><td class="l dim">pick a workbook</td></tr><tr><td class="l dim" colspan="2" style="padding-top:6px">Alerts</td></tr><tr><td class="l"><kbd>Ctrl+Enter</kbd></td><td class="l dim">acknowledge all</td></tr><tr><td class="l dim" colspan="2" style="padding-top:6px">Cars</td></tr><tr><td class="l"><kbd>Ctrl+P</kbd></td><td class="l dim">pick primary car (group 1)</td></tr><tr><td class="l"><kbd>Escape</kbd></td><td class="l dim">back to our driver (group 1)</td></tr><tr><td class="l dim" colspan="2" style="padding-top:6px">Replay</td></tr><tr><td class="l"><kbd>Space</kbd></td><td class="l dim">pause / play</td></tr><tr><td class="l dim" colspan="2" style="padding-top:6px">Help</td></tr><tr><td class="l"><kbd>Ctrl+K</kbd></td><td class="l dim">command palette</td></tr><tr><td class="l"><kbd>?</kbd></td><td class="l dim">this overview</td></tr><tr><td class="l warn" colspan="2" style="padding-top:6px">keys.json: "Ctrl+W" → unknown command "close", ignored</td></tr></tbody></table></div></div></div><div><h2>dev inspector (Ctrl+I, dev builds)</h2><div class="panel" style="width:70ch"><div class="ph"><span class="t">Inspector · Timing</span><span class="lk"></span><span class="sp"></span><span class="faint">⚙</span></div><div class="pb"><div class="dim">widget  <span style="color:var(--pw-text)">timing-tower</span>  apps/ui/src/widgets/timing-tower/</div><div class="dim">├ cars.overview   ok  10 Hz  0.1 s ago</div><div class="dim">│ └ feature cars-overview · calc cars.overview  0.08 ms</div><div class="dim">│   apps/bridge/src/features/cars-overview/register.ts</div><div class="dim">└ laps (folded)   ok  append  1.9 s ago</div><div class="dim">  └ history laps</div></div></div></div></div></body></html>
