@@ -23,5 +23,5 @@ The earlier rule was "re-implement ideas, never copy". Pitwall itself is Apache-
 - From the first copied GPL-3.0 file on, every distributed copy of pitwall must be under GPL-3.0, with source available. Apache-2.0 code can be included in a GPL-3.0 work; the reverse is not allowed.
 - LGPL-3.0 code can be included in a GPL-3.0 work, so the TUM code is covered too.
 - Dependencies must stay GPL-3.0 compatible (MIT, BSD, Apache-2.0, LGPL and GPL-3.0 are; GPL-2.0-only is not).
-- Not covered: Simulator Controller ([SeriousOldMan/Simulator-Controller](https://github.com/SeriousOldMan/Simulator-Controller)) is mostly CC BY-NC-SA 4.0, which is not GPL-compatible. Its ideas only.
+- Not covered: Simulator Controller ([SeriousOldMan/Simulator-Controller](https://github.com/SeriousOldMan/Simulator-Controller)) is mostly CC BY-NC-SA 4.0, which is not GPL-compatible; only its ideas may be used.
 - Bonomi's data is from F1 2021, not F1 25, and is CSV rather than `.pwrec`. It can serve as strategy test data, not as protocol fixtures.
