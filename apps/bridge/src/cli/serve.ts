@@ -1,4 +1,5 @@
 import type { FeedInfo } from '@pitwall/contracts';
+import { createCalcStats } from '../dev/calc-stats.ts';
 import type { FeatureConfig } from '../feature-config.ts';
 import { FEATURES } from '../features/index.generated.ts';
 import { TopicHub } from '../hub/topic-hub.ts';
@@ -27,8 +28,13 @@ export type ServeOptions = {
   onDone?: () => void;
   /** The effective calculator config for the run (see `loadFeatureConfig`); without it, the declared defaults. */
   config?: FeatureConfig;
+  /** Dev mode (`--dev`): times every calculator run and publishes the `dev.calcStats` topic. */
+  dev?: boolean;
   io: CliIo;
 };
+
+/** How often dev mode publishes the calculator timings (the topic's 1 Hz). */
+const CALC_STATS_EVERY_MS = 1000;
 
 /**
  * Serves one feed over WebSocket until `io.signal` aborts. Starts the WebSocket server, then the pipeline, and
@@ -58,6 +64,12 @@ export async function serve(opts: ServeOptions): Promise<number> {
     if (uiState) undo.push(() => uiState.close());
     const server = await WsServer.start({ port: opts.wsPort, hub, feeds, ...(uiState && { uiState }) });
     undo.push(() => server.close());
+    const calcStats = opts.dev ? createCalcStats() : undefined;
+    if (calcStats) {
+      const publish = (): void => hub.publishGlobal('dev.calcStats', () => calcStats.snapshot());
+      const timer = setInterval(publish, CALC_STATS_EVERY_MS);
+      undo.push(() => clearInterval(timer));
+    }
     pipeline = new FeedPipeline({
       feedId: source.feedId,
       source,
@@ -68,6 +80,7 @@ export async function serve(opts: ServeOptions): Promise<number> {
       dumpsDir: opts.dumpsDir,
       ...(opts.storage && { storage: { db: opts.storage.db, recordingsDir: opts.storage.recordingsDir } }),
       ...(opts.staleCheck && { staleCheck: opts.staleCheck }),
+      ...(calcStats && { calcStats }),
     });
     pipeline.start();
     undo.push(() => pipeline?.stop());

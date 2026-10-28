@@ -55,10 +55,10 @@ describe('bindState: the calculator output must fit the topic', () => {
   });
 
   it('with select: a select returning the wrong type does not compile', () => {
-    // @ts-expect-error a string is not CarDynamics
+    // @ts-expect-error a string is not CarTelemetry
     const wrongReturn = bindState('car.telemetry', carsCalc, () => 'not dynamics');
-    // @ts-expect-error CarState is not CarDynamics
-    const wrongShape = bindState('car.telemetry', carsCalc, selectCar((car) => car));
+    // @ts-expect-error a value without dynamics is not CarTelemetry
+    const wrongShape = bindState('car.telemetry', carsCalc, selectCar((car) => ({ motion: car.motion })));
     expect(wrongReturn.topic).toBe('car.telemetry');
     expect(wrongShape.topic).toBe('car.telemetry');
   });
@@ -69,9 +69,9 @@ describe('bindState: the calculator output must fit the topic', () => {
     expect(wrongInput.topic).toBe('car.telemetry');
   });
 
-  it('with selectCar: car.detail checks against CarState and car.telemetry against CarDynamics (the picks are cloned, so mutable)', () => {
+  it('with selectCar: car.detail checks against CarState and car.telemetry against CarTelemetry (the picks are cloned, so mutable)', () => {
     const detail = bindState('car.detail', carsCalc, selectCar((car) => car));
-    const telemetry = bindState('car.telemetry', carsCalc, selectCar((car) => car.dynamics));
+    const telemetry = bindState('car.telemetry', carsCalc, selectCar((car) => ({ motion: car.motion, dynamics: car.dynamics })));
     expect([detail.topic, telemetry.topic]).toEqual(['car.detail', 'car.telemetry']);
   });
 

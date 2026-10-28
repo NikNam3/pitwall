@@ -1,4 +1,7 @@
-import type { CarDynamics } from '@pitwall/domain';
+import type { CarDynamics, CarMotion, Known } from '@pitwall/domain';
 import { defineTopic, type CarParams } from '../topic-def.ts';
 
-export default defineTopic<CarParams, CarDynamics>({ owner: 'core', mode: 'state', maxHz: 60 });
+/** One car's world motion and driving inputs. */
+export type CarTelemetry = { motion: CarMotion; dynamics: Known<CarDynamics> };
+
+export default defineTopic<CarParams, CarTelemetry>({ owner: 'core', mode: 'state', maxHz: 60 });

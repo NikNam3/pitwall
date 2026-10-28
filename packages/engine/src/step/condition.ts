@@ -1,3 +1,4 @@
+import { known } from '@pitwall/domain';
 import { CORNER_NAMES, cornersOf } from './corners.ts';
 import { knownUnlessRestricted } from './restricted.ts';
 import type { SubStep } from './types.ts';
@@ -54,8 +55,8 @@ export const applyCondition: SubStep = (state, frame, out) => {
       const t = telemetry.carTelemetryData[car.id];
       if (!t) continue;
       const brakeTemp = cornersOf(t.brakesTemperature);
-      for (const corner of CORNER_NAMES) car.condition.brakes[corner].tempC = brakeTemp[corner];
-      car.condition.engineTempC = t.engineTemperature;
+      for (const corner of CORNER_NAMES) car.condition.brakes[corner].tempC = known(brakeTemp[corner], at);
+      car.condition.engineTempC = known(t.engineTemperature, at);
     }
     out.changed.add('condition');
   }

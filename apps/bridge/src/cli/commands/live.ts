@@ -24,8 +24,8 @@ async function currentDatabase(dirs: DataDir, io: CliIo): Promise<Db | undefined
   }
 }
 
-/** `pitwall live`: records the game's UDP telemetry and serves it. */
-export async function run(_positionals: string[], _values: object, io: CliIo): Promise<number> {
+/** `pitwall live`: records the game's UDP telemetry and serves it; `--dev` also publishes calculator timings. */
+export async function run(_positionals: string[], values: { dev?: boolean | undefined }, io: CliIo): Promise<number> {
   const { udpPort, wsPort } = loadConfig(io.env);
   const dirs = dataDir(io.env);
   // Fixed for the run (a runtime change from the UI comes later); a config error stops the start before anything listens.
@@ -45,6 +45,7 @@ export async function run(_positionals: string[], _values: object, io: CliIo): P
     staleCheck: { clock: () => performance.now(), everyMs: 500 },
     // The port was free a moment ago; this catches the race and any other bind failure.
     bound: () => source.listening.catch((error: unknown) => Promise.reject(udpPortError(udpPort, error))),
+    ...(values.dev && { dev: true }),
     io,
   });
 }

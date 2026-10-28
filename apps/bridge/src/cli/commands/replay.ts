@@ -11,8 +11,8 @@ import { cliLogger, type CliIo } from '../io.ts';
 import { serve } from '../serve.ts';
 import { UsageError } from '../usage.ts';
 
-/** `pitwall replay <file> [--realtime]`: serves a recording as if it were live with its own config (`<file>.config.json`) if it has one; nothing is stored. */
-export async function run(positionals: string[], values: { realtime?: boolean | undefined }, io: CliIo): Promise<number> {
+/** `pitwall replay <file> [--realtime] [--dev]`: serves a recording as if it were live with its own config (`<file>.config.json`) if it has one; nothing is stored. */
+export async function run(positionals: string[], values: { realtime?: boolean | undefined; dev?: boolean | undefined }, io: CliIo): Promise<number> {
   const [file] = positionals;
   if (file === undefined) throw new UsageError('replay needs a recording file');
   if (!existsSync(file)) throw new StartupError(`recording ${file} not found`);
@@ -29,6 +29,7 @@ export async function run(positionals: string[], values: { realtime?: boolean | 
     uiDir: dirs.ui,
     config,
     onDone: () => io.err('pitwall: replay finished'),
+    ...(values.dev && { dev: true }),
     io,
   });
 }

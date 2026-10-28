@@ -16,6 +16,7 @@ import {
 } from '@pitwall/engine';
 import type { TopicName } from '@pitwall/contracts';
 import { peekHeader, type ParticipantsPacket, type SessionPacket } from '@pitwall/protocol';
+import type { CalcStats } from '../dev/calc-stats.ts';
 import type { FeatureConfig } from '../feature-config.ts';
 import type { FeedJobs } from '../jobs/feed-jobs.ts';
 import type { Logger } from '../log.ts';
@@ -50,6 +51,8 @@ export type SessionProcessorOptions = {
   storage?: SessionStorage;
   file?: SessionFile;
   dumpsDir?: string;
+  /** Dev mode: times every calculator run (see `createCalcStats`). */
+  calcStats?: CalcStats;
 };
 
 type Running = { runner: SessionRunner; scheduler: Scheduler };
@@ -136,7 +139,7 @@ export class SessionProcessor {
   #begin(participants?: ParticipantsPacket, playerCarIndex = 0): void {
     const { feedId, sessionUid, session, registry } = this.#o;
     const weekend = participants && this.#identify(participants, playerCarIndex);
-    const scheduler = new Scheduler(registry);
+    const scheduler = new Scheduler(registry, this.#o.calcStats && { onCalculatorRun: this.#o.calcStats.hook });
     scheduler.setNeeded(this.#o.needed());
     const running = { runner: new SessionRunner({ feedId, sessionUid, session, ...(weekend && { weekend }) }), scheduler };
     this.#running = running;
@@ -168,6 +171,7 @@ export class SessionProcessor {
         // A run triggered before the flashback would land on the new timeline.
         this.#o.jobs?.flashback();
       }
+      this.#o.calcStats?.atSessionTime(result.state.sessionTime);
       const scheduled = scheduler.run({ state: result.state, changed: result.changed, delta: result.delta, feed: this.#o.feedView(), config: this.#o.config });
       // Each topic is published on its own: a failing feature binding never holds back the others.
       const unpublished = [
@@ -193,6 +197,7 @@ export class SessionProcessor {
   #evaluateNow({ runner, scheduler }: Running, only: ReadonlySet<CalculatorId>): void {
     const { feedId, publisher, log } = this.#o;
     const { state } = runner;
+    this.#o.calcStats?.atSessionTime(state.sessionTime);
     const lengths = historyLengths(state.history);
     const scheduled = scheduler.run({
       state,

@@ -1,5 +1,6 @@
 import { describe, expect, expectTypeOf, it } from 'vitest';
-import type { CarDynamics, CarId, CarState, FeedId, LapRecord } from '@pitwall/domain';
+import type { CarDynamics, CarId, CarMotion, CarState, FeedId, Known, LapRecord } from '@pitwall/domain';
+import type { CarTelemetry } from '../src/topics/car.telemetry.ts';
 import {
   CONTRACT_VERSION,
   TOPICS,
@@ -20,6 +21,7 @@ import laps from '../src/topics/laps.ts';
 describe('TOPICS', () => {
   it('has exactly the 11 topics of spec 8.4 with their modes and rates', () => {
     const table = Object.entries(TOPICS)
+      .filter(([, d]) => d.scope === 'feed' && d.owner === 'core')
       .map(([key, d]) => [key, d.name, d.mode, d.maxHz] as const)
       .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
     expect(table).toEqual([
@@ -37,9 +39,12 @@ describe('TOPICS', () => {
     ]);
   });
   it('gives every one of the 11 topics owner core and scope feed', () => {
-    const all = Object.values(TOPICS);
-    expect(all).toHaveLength(11);
-    for (const d of all) expect(d).toMatchObject({ owner: 'core', scope: 'feed' });
+    const feed = Object.values(TOPICS).filter((d) => d.scope === 'feed');
+    expect(feed).toHaveLength(11);
+    for (const d of feed) expect(d).toMatchObject({ owner: 'core', scope: 'feed' });
+  });
+  it('has the global topic dev.calcStats: owner core, state, 1 Hz', () => {
+    expect(TOPICS['dev.calcStats']).toMatchObject({ name: 'dev.calcStats', owner: 'core', scope: 'global', mode: 'state', maxHz: 1 });
   });
   it('exports the contract version', () => { expect(CONTRACT_VERSION).toBe(2); });
 });
@@ -67,14 +72,15 @@ describe('topic types', () => {
   it('keep TopicName, TopicParams and TopicValue', () => {
     expectTypeOf<TopicName>().toEqualTypeOf<
       | 'feed.status' | 'session.info' | 'cars.overview' | 'car.detail' | 'car.telemetry' | 'laps'
-      | 'stints' | 'pitStops' | 'flagPhases' | 'events' | 'insights'
+      | 'stints' | 'pitStops' | 'flagPhases' | 'events' | 'insights' | 'dev.calcStats'
     >();
     expectTypeOf<TopicParams<'car.detail'>>().toEqualTypeOf<{ carId: CarId }>();
     expectTypeOf<TopicParams<'car.detail'>['carId']>().toEqualTypeOf<CarId>();
     expectTypeOf<TopicParams<'car.telemetry'>['carId']>().toEqualTypeOf<CarId>();
     expectTypeOf<TopicParams<'laps'>>().toEqualTypeOf<Record<string, never>>();
     expectTypeOf<TopicValue<'car.detail'>>().toEqualTypeOf<CarState>();
-    expectTypeOf<TopicValue<'car.telemetry'>>().toEqualTypeOf<CarDynamics>();
+    expectTypeOf<TopicValue<'car.telemetry'>>().toEqualTypeOf<{ motion: CarMotion; dynamics: Known<CarDynamics> }>();
+    expectTypeOf<TopicValue<'car.telemetry'>>().toEqualTypeOf<CarTelemetry>();
     expectTypeOf<TopicValue<'laps'>>().toEqualTypeOf<LapRecord>();
     expectTypeOf<TopicValue<'feed.status'>>().toEqualTypeOf<FeedStatus>();
     expectTypeOf<TopicValue<'session.info'>>().toEqualTypeOf<SessionInfo>();
