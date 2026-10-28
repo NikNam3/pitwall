@@ -202,6 +202,15 @@ describe('tier-1 alerts', () => {
   });
 });
 
+describe('lap input edge cases', () => {
+  it('clearing the lap input sends no replayControl', async () => {
+    const t = await setup('replay');
+    await t.push('replay.status', replayStatus(false));
+    await fireEvent.change(screen.getByTestId('replay-lap'), { target: { value: '' } });
+    expect(t.controls).toEqual([]);
+  });
+});
+
 describe('muting', () => {
   const open = async (muted: InsightCategory[] = []) => {
     const t = await setup();
@@ -220,6 +229,14 @@ describe('muting', () => {
     const t = await open();
     await fireEvent.click(screen.getByTestId('mute-tyres'));
     expect(t.actions).toEqual([{ kind: 'alertGroup.mute', category: 'tyres', muted: true }]);
+  });
+
+  it('the mute list closes on Escape', async () => {
+    await open();
+    const toggle = screen.getByTestId('mute-tyres');
+    await fireEvent.keyDown(toggle, { key: 'Escape' });
+    await tick();
+    expect(screen.queryByTestId('mute-tyres')).toBeNull();
   });
 
   it('a muted category toggles back with muted false', async () => {
