@@ -97,7 +97,7 @@ export default defineConfig(
   },
   ...svelte.configs['flat/recommended'].map((config) => ({ ...config, files: config.files ?? ['**/*.svelte'] })),
   {
-    files: ['**/*.svelte'],
+    files: ['**/*.svelte', '**/*.svelte.ts'],
     languageOptions: { parserOptions: { parser: tseslint.parser } },
     rules: { 'no-undef': 'off' },
   },
