@@ -13,6 +13,7 @@ import { USAGE, UsageError } from './usage.ts';
 
 const OPTIONS = {
   realtime: { type: 'boolean' },
+  dev: { type: 'boolean' },
   carId: { type: 'string' },
   url: { type: 'string' },
   feed: { type: 'string' },
