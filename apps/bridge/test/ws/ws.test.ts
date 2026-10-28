@@ -26,7 +26,7 @@ describe('WsServer / WsClient', () => {
   it('sends hello with the contract version and feeds on connect', async () => {
     const s = await server(newHub()); const hellos: unknown[] = [];
     client(s.port).onHello((m) => hellos.push(m));
-    await vi.waitFor(() => expect(hellos).toEqual([{ type: 'hello', contractVersion: 6, feeds: feeds() }]));
+    await vi.waitFor(() => expect(hellos).toEqual([{ type: 'hello', contractVersion: 7, feeds: feeds() }]));
   });
   it('routes subscribe/unsubscribe to the hub (default feed = first feed)', async () => {
     const hub = newHub(); hub.publishAppend(F, 'laps', [{ n: 1 }]);

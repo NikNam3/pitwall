@@ -16,7 +16,7 @@ const clients: ClientMessage[] = [
   { type: 'replayControl', id: 'r7', control: { kind: 'jumpToTime', sessionTimeMs: 61_250 } },
 ];
 const servers: ServerMessage[] = [
-  { type: 'hello', contractVersion: 6, feeds: [{ feedId: 'udp-20777' as never, kind: 'udp', label: 'UDP 20777' }] },
+  { type: 'hello', contractVersion: 7, feeds: [{ feedId: 'udp-20777' as never, kind: 'udp', label: 'UDP 20777' }] },
   { type: 'snapshot', id: 's1', value: { sessionUid: '1896528710553860228' } },
   { type: 'snapshot', id: 's2', entries: [] },
   { type: 'update', id: 's1', value: 1 },
