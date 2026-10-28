@@ -6,10 +6,14 @@ export const topicsHeading = 'topics';
 export const calculatorsHeading = 'calculators';
 export const filesHeading = 'files';
 export const unknownWidget = (widget: string): string => `${widget} is not in the catalogue; run pnpm gen`;
-export const rate = (maxHz: number | null): string => (maxHz === null ? 'unlimited' : `${maxHz} Hz`);
+export const unlimited = 'unlimited';
 export const binding = (kind: string, source: string): string => `${kind} ${source}`;
 export const noBinding = 'not bound';
 export const never = 'never';
 export const reads = (names: readonly string[]): string => `reads ${names.join(', ')}`;
-export const computeTime = (last: number, mean: number, runs: number): string => `${last} ms (mean ${mean} ms, ${runs} runs)`;
+export const computeTime = (last: string, mean: string, runs: number): string => `${last} (mean ${mean}, ${runs} runs)`;
+
+/** Longest rendering of a topic's value in a row. */
+export const valueMax = 120;
+export const noValue = '-';
 export const notRun = 'not run';

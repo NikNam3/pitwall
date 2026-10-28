@@ -37,3 +37,18 @@ export const formatKg = (k: Kg): string => k.toFixed(1);
 
 /** Percentage to whole numbers, `12.34` -> `12%`. */
 export const formatPct = (p: Percent): string => `${Math.round(p) + 0}%`;
+
+/** A rate, `10` -> `10 Hz`. */
+export const formatHz = (hz: number): string => `${hz} Hz`;
+
+/** A compute time to two decimals, `0.456` -> `0.46 ms`. */
+export const formatMs = (ms: number): string => `${Math.round(ms * 100) / 100} ms`;
+
+/** The wall-clock time of day, `14:03:09`. */
+export const formatClock = (at: Date): string => at.toTimeString().slice(0, 8);
+
+/** A value as short JSON, cut to `max` characters with `…`. */
+export function formatShort(value: unknown, max: number): string {
+  const json = JSON.stringify(value) ?? String(value);
+  return json.length <= max ? json : `${json.slice(0, max - 1)}…`;
+}

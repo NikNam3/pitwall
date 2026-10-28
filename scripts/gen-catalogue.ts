@@ -4,8 +4,8 @@ import { join, relative } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { Catalogue } from '../packages/contracts/src/topics/dev.catalogue.ts';
 import { findFeatureFolders } from './gen-features.ts';
-import { findRegisterFolders } from './gen-registry.ts';
 import { findTopicFiles } from './gen-topics.ts';
+import { findWidgetFolders } from './gen-widgets.ts';
 import { topicPrefix } from './units.ts';
 
 export type { Catalogue };
@@ -41,12 +41,18 @@ type WidgetModule = {
 };
 type BindingShape = { topic: string } & Partial<Record<'from' | 'fromHistory' | 'fromJob', string>> & { fromInsights?: true };
 type FeatureModule = {
-  calculators: Array<{ id: string; reads: readonly string[]; cadence: string }>;
+  calculators: Array<{ id: string; reads: ReadonlyArray<string | { calculator: string }>; cadence: string | { hz: number } }>;
   topics: BindingShape[];
   jobs?: Array<{ id: string }>;
   config?: Array<{ key: string }>;
 };
 type TopicModule = { owner: string; scope: string; mode: string; maxHz: number };
+
+/** An engine `Cadence` as text: `{ hz: 10 }` becomes `10 Hz`. */
+const cadenceText = (cadence: string | { hz: number }): string => (typeof cadence === 'string' ? cadence : `${cadence.hz} Hz`);
+
+/** An engine `Dependency` as text: `{ calculator: id }` becomes `calculator:<id>`. */
+const readText = (read: string | { calculator: string }): string => (typeof read === 'string' ? read : `calculator:${read.calculator}`);
 
 function bindingOf(shape: BindingShape, feature: string): NonNullable<Catalogue['topics'][number]['binding']> {
   if (shape.from !== undefined) return { kind: 'calculator', source: shape.from, feature };
@@ -57,7 +63,7 @@ function bindingOf(shape: BindingShape, feature: string): NonNullable<Catalogue[
 
 /** Imports every widget, feature and topic file in `dirs` and describes how they connect. */
 export async function buildCatalogue(dirs: CatalogueDirs = DEFAULT_DIRS): Promise<Catalogue> {
-  const widgetFolders = findRegisterFolders(dirs.widgets, 'widget');
+  const widgetFolders = findWidgetFolders(dirs.widgets);
   const widgets: Catalogue['widgets'] = [];
   for (const folder of widgetFolders) {
     const { decl } = await importDefault<WidgetModule>(join(dirs.widgets, folder, 'register.ts'));
@@ -70,6 +76,7 @@ export async function buildCatalogue(dirs: CatalogueDirs = DEFAULT_DIRS): Promis
     });
   }
 
+  const widgetNames = new Set(widgets.map((w) => w.name));
   const features: Catalogue['features'] = [];
   const bindings = new Map<string, NonNullable<Catalogue['topics'][number]['binding']>>();
   for (const name of findFeatureFolders(dirs.features)) {
@@ -79,8 +86,8 @@ export async function buildCatalogue(dirs: CatalogueDirs = DEFAULT_DIRS): Promis
       name,
       folder: shown(join(dirs.features, name)),
       ...(strategy !== undefined && existsSync(strategy) && { strategyFolder: shown(strategy) }),
-      private: existsSync(join(dirs.widgets, name)),
-      calculators: feature.calculators.map((c) => ({ id: c.id, reads: [...c.reads], cadence: c.cadence })),
+      private: widgetNames.has(name),
+      calculators: feature.calculators.map((c) => ({ id: c.id, reads: c.reads.map(readText), cadence: cadenceText(c.cadence) })),
       jobs: (feature.jobs ?? []).map((job) => job.id),
       config: (feature.config ?? []).map((key) => key.key),
     });
@@ -156,14 +163,14 @@ export function checkCatalogue(c: Catalogue): { errors: string[]; warnings: stri
   return { errors, warnings };
 }
 
-/** Builds the catalogue, writes `catalogue.generated.json` and prints the findings; returns the exit code. */
-export async function generateCatalogue(outFile: string = OUT_FILE): Promise<number> {
+/** Builds the catalogue, writes `catalogue.generated.json` and prints the findings; returns the exit code (0 for errors too when `failOnErrors` is false, so `pitwall where` can help fix them). */
+export async function generateCatalogue(outFile: string = OUT_FILE, failOnErrors = true): Promise<number> {
   const catalogue = await buildCatalogue();
   writeFileSync(outFile, `${JSON.stringify(catalogue, null, 2)}\n`);
   const { errors, warnings } = checkCatalogue(catalogue);
   for (const warning of warnings) console.warn(`warning: ${warning}`);
   for (const error of errors) console.error(`error: ${error}`);
-  return errors.length === 0 ? 0 : 1;
+  return errors.length === 0 || !failOnErrors ? 0 : 1;
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) process.exitCode = await generateCatalogue();
+if (process.argv[1] === fileURLToPath(import.meta.url)) process.exitCode = await generateCatalogue(OUT_FILE, !process.argv.includes('--no-fail'));

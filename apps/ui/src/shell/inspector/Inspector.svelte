@@ -4,6 +4,7 @@
   import { TOPICS, type TopicName, type TopicValue } from '@pitwall/contracts';
   import type { EntryState, TopicStore } from '../../connection/topic-store.svelte.ts';
   import type { ResolvedLink } from '../../kit/types.ts';
+  import { formatMs } from '../../kit/values/format.ts';
   import { role } from '../../theme/index.ts';
   import type { Host } from '../host/host.ts';
   import TopicRow from './TopicRow.svelte';
@@ -17,9 +18,11 @@
     widget: string;
     link: ResolvedLink;
     host: Pick<Host, 'openPath'>;
+    /** The params of a topic as the panel resolved them (the widget's params functions); none by default. */
+    params?: (topic: string) => object;
     onClose?: () => void;
   };
-  let { store, catalogue, widget, link, host, onClose }: Props = $props();
+  let { store, catalogue, widget, link, host, params = () => ({}), onClose }: Props = $props();
 
   const dev = import.meta.env.DEV;
   const entry = $derived(catalogue.widgets.find((w) => w.name === widget));
@@ -33,7 +36,7 @@
     }),
   );
   const paths = $derived(
-    [...new Set([...(entry === undefined ? [] : [entry.folder]), ...topics.flatMap((t) => (t.info === undefined ? [] : [t.info.file])), ...features.map((f) => f.folder)])],
+    [...new Set([...(entry === undefined ? [] : [entry.folder]), ...topics.flatMap((t) => (t.info === undefined ? [] : [t.info.file])), ...features.flatMap((f) => (f.strategyFolder === undefined ? [f.folder] : [f.folder, f.strategyFolder]))])],
   );
 
   let states = $state.raw<Record<string, EntryState<unknown>>>({});
@@ -43,7 +46,8 @@
     if (!dev) return;
     const held = topics.map((t) => {
       const topic = t.name as TopicName;
-      const key = TOPICS[topic]?.scope === 'global' ? { topic, params: {} } : { topic, params: {}, feedId: link.feedId };
+      const resolved = params(t.name) as never;
+      const key = TOPICS[topic]?.scope === 'global' ? { topic, params: resolved } : { topic, params: resolved, feedId: link.feedId };
       return { name: t.name, ...store.acquire(key) };
     });
     states = Object.fromEntries(held.map((h) => [h.name, h.state]));
@@ -59,8 +63,7 @@
   const timing = (id: string): string => {
     const stat = calcStats?.value?.find((s) => s.id === id);
     if (stat === undefined) return text.notRun;
-    const round = (ms: number): number => Math.round(ms * 100) / 100;
-    return text.computeTime(round(stat.lastMs), round(stat.meanMs), stat.runs);
+    return text.computeTime(formatMs(stat.lastMs), formatMs(stat.meanMs), stat.runs);
   };
 </script>
 

@@ -42,15 +42,17 @@ function unitLines(c: Catalogue, unit: string): string[] {
 /** `pitwall where <unit>` / `pitwall where --topic <name>`: prints the folders, files and links from the catalogue, one per line. */
 export async function run(positionals: string[], values: WhereValues, io: CliIo): Promise<number> {
   const [unit] = positionals;
-  if (unit === undefined && values.topic === undefined) throw new UsageError('where needs a unit or --topic <name>');
   const catalogue = readCatalogue(values.catalogue ?? DEFAULT_CATALOGUE_FILE);
+  const name = values.topic;
   let lines: string[];
-  if (values.topic !== undefined) {
-    const topic = catalogue.topics.find((t) => t.name === values.topic);
-    if (topic === undefined) throw new StartupError(`unknown topic "${values.topic}"`);
+  if (name !== undefined) {
+    const topic = catalogue.topics.find((t) => t.name === name);
+    if (topic === undefined) throw new StartupError(`unknown topic "${name}"`);
     lines = topicLines(catalogue, topic);
+  } else if (unit !== undefined) {
+    lines = unitLines(catalogue, unit);
   } else {
-    lines = unitLines(catalogue, unit as string);
+    throw new UsageError('where needs a unit or --topic <name>');
   }
   for (const line of lines) io.out(line);
   return 0;

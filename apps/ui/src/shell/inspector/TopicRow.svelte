@@ -1,6 +1,7 @@
 <script lang="ts">
   // One topic of the inspected widget: live status, rate, last update and binding.
   import type { EntryState } from '../../connection/topic-store.svelte.ts';
+  import { formatClock, formatHz, formatShort } from '../../kit/values/format.ts';
   import { role } from '../../theme/index.ts';
   import * as text from './text.ts';
 
@@ -14,13 +15,13 @@
 
   let updated = $state(text.never);
   $effect(() => {
-    void entry.value;
-    updated = new Date().toTimeString().slice(0, 8);
+    if (entry.value !== undefined) updated = formatClock(new Date());
   });
 </script>
 
 <span>{name}</span>
 <span style:color={entry.status === 'errored' ? role('critical') : role('textDim')}>{entry.status}</span>
-<span>{text.rate(maxHz)}</span>
+<span>{maxHz === null ? text.unlimited : formatHz(maxHz)}</span>
 <span>{updated}</span>
 <span>{binding ?? text.noBinding}</span>
+<span>{entry.value === undefined ? text.noValue : formatShort(entry.value, text.valueMax)}</span>
