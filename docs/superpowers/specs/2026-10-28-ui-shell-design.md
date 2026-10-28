@@ -130,7 +130,7 @@ export default defineWidget({
 - builds the settings popover from `options`
 
 ### 4.4 Size in character cells
-- One monospace font (JetBrains Mono, ligatures off) at **one size for all widget content**, set in the theme. A cell is exactly 0.6 em wide and one line high.
+- One monospace font (JetBrains Mono, ligatures off) at **one size per window**: the theme's default is 14 px, and each window can be made bigger or smaller (`Ctrl+=` / `Ctrl+-`, saved as the window's `fontPx` in the workbook), e.g. for the 14" monitor (user, Task 0). Everything in a window, headers and top bar included, uses that one size. A cell is exactly 0.6 em wide and one line high.
 - The component gets `size = { mode, cols, rows, px: { width, height }, dpr }`. Text widgets lay out in `cols × rows`; chart and canvas widgets use `px` and `dpr`.
 - **Fields drop by priority:** the kit's table takes a priority and a width in cells per column and drops the least important columns first. "Tyre age needs 3 columns, drop it below 40" is arithmetic.
 - Charts use extra space for more history, not for thicker lines or bigger text.
@@ -164,7 +164,7 @@ export default defineWidget({
 
 | Part | What it does |
 |---|---|
-| `values/` | **The value cell:** renders any `Known` value with its unit and format, following the session 1 value states: unknown or hidden → empty cell with the reason on hover (including `realism`); estimated → `~` and dimmer grey; inactive car → dim row; stale → dim (6.4). Also formatters per unit (ms → `1:23.456`, gaps, °C, psi, kg). |
+| `values/` | **The value cell:** renders any `Known` value with its unit and format, following the session 1 value states: unknown or hidden → empty cell with the reason on hover (including `realism`); estimated → `~` and dimmer grey; inactive car → dim row; stale → dim (6.4). Also formatters per unit (ms → `1:23.456`, gaps, °C, psi, kg) in one module, `values/format.ts`: widgets must format through it (lint-enforced), so a format changes in one place. |
 | `table/` | **Dense table:** columns with width in cells and priority, field dropping, row banding by lightness, inactive rows kept at the bottom, local row highlight |
 | `chart/` | **Time or lap chart** on uPlot: series with distinction colours from the theme, SC/VSC background bands, per-series freshness |
 | `canvas/` | **Canvas surface:** size and dpr handling, a draw callback, marks with freshness (dimmed by the kit, not by the widget) |
