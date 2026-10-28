@@ -2,6 +2,7 @@
 import {
   CONTRACT_VERSION,
   type ClientMessage,
+  type Fold,
   type ServerMessage,
   type SessionInfo,
   type TopicName,
@@ -12,7 +13,7 @@ import type { FeedId, SessionTime } from '@pitwall/domain';
 import type { Connection, ConnectionState } from './connection.ts';
 
 /** How an append topic's entries become a value. `add` must return a new value, never mutate `acc`. */
-export type Fold<E, R> = { init: () => R; add: (acc: R, entries: readonly E[]) => R };
+export type { Fold } from '@pitwall/contracts';
 /** What a panel reads: `waiting` until the first snapshot, then `ok`, `noData` or `errored`. */
 export type EntryState<V> = { status: 'waiting' | 'ok' | 'noData' | 'errored'; value: V | undefined };
 
