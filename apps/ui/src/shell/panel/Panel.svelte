@@ -17,6 +17,8 @@
   import LinkMarker from '../link-groups/LinkMarker.svelte';
   import { computedLap, headerState, type DataStatus } from './header-state.ts';
   import { Holdings } from './holdings.svelte.ts';
+  import type { Inspection } from '../inspector/inspection.svelte.ts';
+  import type { InspectTarget } from '../inspector/target.ts';
   import { portal } from './portal.ts';
   import { dataRequests, frameRequests, type DataRequest } from './requests.ts';
   import SettingsPopover from './SettingsPopover.svelte';
@@ -39,8 +41,12 @@
     send?: (action: UiAction) => void;
     /** Saves new option values for this panel with its window. */
     onOptions?: (options: Record<string, unknown>) => void;
+    /** The dev inspector's switch: while it is on, a click in the panel inspects its widget. */
+    inspection?: Inspection | undefined;
+    /** Told what the inspector needs of a clicked panel: its link and the params of its topics, read live. */
+    onInspect?: (target: InspectTarget) => void;
   };
-  let { store, spec, widget, link, headerTarget, group, defaultFeed, send = () => {}, onOptions = () => {} }: Props = $props();
+  let { store, spec, widget, link, headerTarget, group, defaultFeed, send = () => {}, onOptions = () => {}, inspection, onInspect = () => {} }: Props = $props();
 
   // The picker and the settings popover open next to their buttons; Escape closes them (the shell owns the keys).
   const stack = useOverlayStack();
@@ -56,6 +62,15 @@
     if (popover === undefined || stack === undefined) return;
     return stack.add(close);
   });
+
+  const inspect = (): void => {
+    if (inspection?.on !== true || widget === undefined) return;
+    inspection.open(widget.decl.name);
+    onInspect({
+      link: () => link,
+      params: (topic) => requests.find((r) => r.key.topic === topic)?.key.params ?? {},
+    });
+  };
 
   const font = useWindowFont();
   // The store is the window's for the panel's whole life.
@@ -149,7 +164,8 @@
   });
 </script>
 
-<div class="panel">
+<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+<div class="panel" onclick={inspect}>
   <header use:portal={headerTarget} style:background={role('bgBand')}>
     <span class="title" style:color={role('textDim')}>{widget?.decl.title ?? spec.widget}</span>
     <LinkMarker {store} groupId={spec.linkGroup} {group} {link} onOpen={(button) => openAt('picker', button)} />

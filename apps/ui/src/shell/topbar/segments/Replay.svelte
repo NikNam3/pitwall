@@ -36,7 +36,11 @@
         min="1"
         data-testid="replay-lap"
         value={status.playerLap}
-        onchange={(e) => bar.sendReplay({ kind: 'jumpToLap', lap: Number(e.currentTarget.value) })}
+        onchange={(e) => {
+          // A cleared or invalid field jumps nowhere.
+          const lap = e.currentTarget.valueAsNumber;
+          if (Number.isInteger(lap) && lap > 0) bar.sendReplay({ kind: 'jumpToLap', lap });
+        }}
       />
     </label>
     {#if status.note === 'beyondEnd'}<span style:color={role('warning')}>{text.topBar.beyondEnd}</span>{/if}

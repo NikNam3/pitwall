@@ -19,7 +19,8 @@
   import type { Host } from '../host/host.ts';
 import { Inspection } from '../inspector/inspection.svelte.ts';
 import { loadInspector } from '../inspector/load.ts';
-import type Inspector from '../inspector/Inspector.svelte';
+import type { InspectTarget } from '../inspector/target.ts';
+  import type Inspector from '../inspector/Inspector.svelte';
   import GroupPicker from '../link-groups/GroupPicker.svelte';
   import { resolveLink, sameLink } from '../link-groups/resolve.ts';
   import Panel from '../panel/Panel.svelte';
@@ -217,8 +218,9 @@ import type Inspector from '../inspector/Inspector.svelte';
     catalogue = held.state;
     return () => held.release();
   });
-  const inspected = $derived(catalogue?.status === 'ok' ? catalogue.value : undefined);
-  const inspectedLink = $derived(resolveLink(groupOf(1), sessionInfo, defaultFeed));
+  const inspectedCatalogue = $derived(catalogue?.status === 'ok' ? catalogue.value : undefined);
+  let inspected = $state.raw<InspectTarget | undefined>();
+  const inspectedLink = $derived(inspected?.link());
 
   // Panels are mounted by the dock, outside this component's tree: they get the window's contexts explicitly.
   const contexts = getAllContexts();
@@ -237,6 +239,8 @@ import type Inspector from '../inspector/Inspector.svelte';
           headerTarget: tab,
           defaultFeed,
           send,
+          inspection,
+          onInspect: (target: InspectTarget) => (inspected = target),
           onOptions: (options: Record<string, unknown>) => setOptions(panelId, options),
           get spec() {
             return current();
@@ -346,8 +350,8 @@ import type Inspector from '../inspector/Inspector.svelte';
       </div>
     {/if}
   </div>
-  {#if InspectorView !== undefined && inspection.widget !== undefined && inspected !== undefined && inspectedLink !== undefined}
-    <InspectorView {store} catalogue={inspected} widget={inspection.widget} link={inspectedLink} {host} onClose={() => inspection.close()} />
+  {#if InspectorView !== undefined && inspection.widget !== undefined && inspectedCatalogue !== undefined && inspectedLink !== undefined}
+    <InspectorView {store} catalogue={inspectedCatalogue} params={(topic) => inspected?.params(topic) ?? {}} widget={inspection.widget} link={inspectedLink} {host} onClose={() => inspection.close()} />
   {/if}
   {#if overlay?.kind === 'palette'}
     <Palette {registry} bindings={keys.bindings} onClose={closeOverlay} />
