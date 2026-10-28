@@ -40,6 +40,8 @@ Research done on 2026-10-28. It builds on [01](01-race-engineering-practice.md)�
 - **SC calls are pre-decided.** China 2018: Red Bull made the call "about five laps earlier"; when the SC came, both drivers pitted with no radio call, about 10 s later. A lap of discussion might have produced a hedged split. 🟢 [F1 strategists](https://www.formula1.com/en/latest/article/watch-the-insiders-guide-to-f1-strategists.6VT3445ugVd0bh85Pw5slO). Hannah Schmitz: you usually know what you'll do under an SC before it comes out; on the wall the decision is made **within seconds**. 🟡 [interview](https://www.femalesinmotorsport.com/post/hannah-schmitz-red-bull-s-star-strategist-on-baalance-fame-and-staying-true-to-yourself), [GPFans on Qatar 2025](https://www.gpfans.com/us/f1-news/1069481/red-bull-f1-hannah-schmitz-qatar-gp-strategy/)
 - **The flow:** factory analysts and simulations → strategist on the wall → head of strategy decides → race engineer → driver. The driver's feedback goes back up the same chain. Major calls are made by a small group (McLaren: TP, racing director, CEO). 🟢 [McLaren 2026](https://www.mclaren.com/racing/formula-1/2026/who-sits-on-mclarens-pit-wall/)
 - **Monte Carlo first, rivals second.** The baseline asks "without interacting with anyone else, what is the fastest way to do this race?". Then come rival pace models, historic SC timing per track, the overtaking threshold (about 1 s/lap even with DRS) and rejoining in clean air. 🟢 [Aston Martin, McCullough](https://www.astonmartinf1.com/en-GB/news/feature/strategically-speaking-f1-strategy-explained-with-tom-mccullough)
+- **Mission Control (McLaren, 2016):** 13 engineers in three rows. The front row watches car health and alerts the race team. The back row is three strategists: one per driver and one for the team result. None of them talks to the drivers; they communicate by secure instant chat to keep the radio clear. 🟢 [Motorsport.com, 2016](https://www.motorsport.com/f1/news/insight-inside-mclarens-secretive-f1-operations-room-mission-control/3221220/)
+- **Radio only on straights.** McLaren's gallery screen showed a track map so that "engineers only talk to the drivers when they [are] on the straights and not in the corners". 🟢 [Motorsport.com, 2016](https://www.motorsport.com/f1/news/insight-inside-mclarens-secretive-f1-operations-room-mission-control/3221220/)
 - **Everyone sees everything.** Telemetry and radio reach every console in real time, from the pit wall to the factory. 🟢 [McLaren 2026](https://www.mclaren.com/racing/formula-1/2026/who-sits-on-mclarens-pit-wall/), [Catapult RaceWatch](https://www.catapult.com/solutions/racewatch)
 - **Judge decisions, not outcomes.** Post-race reviews check whether the models matched reality. 🟢 [F1 strategists](https://www.formula1.com/en/latest/article/watch-the-insiders-guide-to-f1-strategists.6VT3445ugVd0bh85Pw5slO)
 
@@ -56,10 +58,11 @@ What follows for pitwall (🔵, derived from 1.2):
 6. **Two cars double every decision**, and add team play and pit stacking (D20, D27). A per-driver focus switch is cheaper than two full layouts.
 7. **Glance budget.** The user is also watching the race. Tier-1 answers must be readable in about two seconds.
 8. **The bar is the game's AI strategist.** The goal is that a smart human with pitwall beats the game's AI strategist by a wide margin (user, 2026-10-28). The game's own pit window is therefore not shown.
+9. **React more than plan.** The drivers are friends, not professionals: spins, offs, penalties and crashes are far more common than in real F1 (user, 2026-10-28). The weight shifts from the prepared plan to reacting to sudden events. Pitwall re-plans every lap and after every incident, and shows what changed (D33). Prepared plans still help, but as starting points.
 
 ## 2. Decision catalogue
 
-32 decisions in six phases. Each entry shows its default tier in the heading; escalation can raise it.
+33 decisions in six phases. Each entry shows its default tier in the heading; escalation can raise it.
 
 ### 2.1 Practice
 
@@ -340,6 +343,19 @@ The virtual finish car (🟢) runs at the average lap time and crosses the line 
 | Escalation | Tier 1 when the teammates run within 1.5 s with a pace delta above a threshold for 3+ laps. |
 | Time to decide | Laps. |
 
+#### D33 · React to an incident (tier 1 when it happens)
+| Field | Content |
+|---|---|
+| Decision | Re-plan after a spin, an off, a crash, a penalty or damage, to our car or a car near it: box now, change plan, push, or nothing. |
+| Question behind it | What just changed (positions, gaps, tyres, damage, penalties), and which of our numbers moved because of it? |
+| Computed answer | **Incident line:** who, what, where, the time lost (gap before against after); then **what changed for us**: position gained or lost, the new gaps ahead and behind, the new rejoin ghost, and whether the best plan's projected time moved. For our own car also: a flat-spot or damage check (wear and damage jump, lock-up count) and the warnings or penalty added. |
+| Display | Incident feed (V35) in the top bar, plus the affected cards updating in place (circle, undercut, plan table). |
+| Inputs | Collision, Penalty and Retirement events; `m_currentLapInvalid`, `m_cornerCuttingWarnings`, `m_penalties`; surface type per wheel (off track); sudden speed loss or yaw (spin, 🔧); damage and wear jumps; gaps before and after. |
+| Source | 🟢 a fixed plan loses badly after a disturbance: 31.45 s against 5.08 s for a re-planning agent ([Fieni et al. 2025](https://arxiv.org/abs/2512.21570), see [07](07-strategy-literature.md)); 🟢 HH Timing car-off-track display ([displays](https://help.hhtiming.com/displays/)); 🔵 incident line |
+| F1 25 feasibility | ✅ events, penalties, warnings and lap invalid for all cars; ✅ surface type per wheel (`m_surfaceType`, CarTelemetry, all cars) for off-track detection; 🔧 spin detection from speed and yaw; damage ⚠ for restricted rivals. With realism mode on, rivals' incidents are seen only through timing (time lost, lap invalid, events), since their telemetry is hidden. |
+| Escalation | Tier 1 for any incident to our cars, and for incidents to cars within ±1 position or ±3 s of our cars. |
+| Time to decide | Seconds to a lap. Detection and the re-plan run automatically; the user only reads what changed. |
+
 ### 2.5 Pit window and SC/VSC
 
 #### D21 · Box this lap, next lap, or stay out (tier 1 in the window)
@@ -502,11 +518,11 @@ The virtual finish car (🟢) runs at the average lap time and crosses the line 
 |---|---|
 | Decision | What to tell the drivers, which model parameters to update, which decisions were wrong. |
 | Question behind it | Did the models match reality (pit loss, degradation, fuel), and were the decisions right given what we knew? |
-| Computed answer | **Model error table:** predicted against actual per parameter; **decision review:** each call with what pitwall showed at the time. |
-| Display | Review page (replay of the race with the decision log). |
+| Computed answer | **Model error table:** predicted against actual per parameter; **decision review:** each call with what pitwall showed at the time; **AI yardstick:** the AI cars race on the game's strategist, so for each of our stops, the time gained or lost against AI cars of similar pace, and our race time against the best AI strategy on comparable pace. This measures the goal "beat the game's AI strategist" (user, 2026-10-28). |
+| Display | Review page (replay of the race with the decision log and the AI yardstick). |
 | Inputs | Recordings, decision and call log, model snapshots. |
-| Source | 🟢 judge decisions, not outcomes ([F1 strategists](https://www.formula1.com/en/latest/article/watch-the-insiders-guide-to-f1-strategists.6VT3445ugVd0bh85Pw5slO)); 🟢 HH Timing "show future laps" to check the settings of its own finish calculation ([car scoreboard](https://help.hhtiming.com/displays/scoreboards/car-scoreboard/)); 🔵 decision review |
-| F1 25 feasibility | ✅ recordings and replay |
+| Source | 🟢 judge decisions, not outcomes ([F1 strategists](https://www.formula1.com/en/latest/article/watch-the-insiders-guide-to-f1-strategists.6VT3445ugVd0bh85Pw5slO)); 🟢 HH Timing "show future laps" to check the settings of its own finish calculation ([car scoreboard](https://help.hhtiming.com/displays/scoreboards/car-scoreboard/)); 🟢 Avella et al. compared their strategy with the game's default strategy (7.79 s faster at COTA); 🔵 decision review and AI yardstick |
+| F1 25 feasibility | ✅ recordings and replay; ✅ AI cars' stops, compounds and lap times (timing data, so it works with realism mode on) |
 | Escalation | Tier 3. |
 | Time to decide | After the session. |
 
@@ -514,7 +530,7 @@ The virtual finish car (🟢) runs at the average lap time and crosses the line 
 
 | # | Display | What it shows | Serves | Source | Data |
 |---|---|---|---|---|---|
-| V01 | **Circle of doom** | All cars placed on a circle **by time gap** (equal distance = equal time); ghost markers for "rejoin if we box now", one per pit loss condition | D21, D23, D24, D25 | 🟡 the McLaren Track Viewer (2001): its author, a former McLaren race strategist, describes on LinkedIn gaps on a circle ("equal distance equals equal time"), a black background, driver labels round the edge, sector split markers and a marker for where the car comes out after a stop, and says the engineer on Piastri's car used a very similar display at the 2025 Belgian GP (read only through a search summary; the profile blocks direct access); 🟡 a Motorsport.com article on McLaren's mission control says the circle is kept deliberately simple to show how many seconds separate the cars, and that it shows when a pit window opens (search snippet only); 🟢 HH Timing gap overlay on its circle map; 🟡 own car at 12 o'clock is unconfirmed ([Tufte thread](https://www.edwardtufte.com/?p=409)); HH puts the start/finish line at the top instead. **Pitwall: own car at 12 o'clock** (user, 2026-10-28) | gaps of all cars, pit loss table |
+| V01 | **Circle of doom** | All cars placed on a circle **by time gap** (equal distance = equal time); ghost markers for "rejoin if we box now", one per pit loss condition | D21, D23, D24, D25 | 🟡 the McLaren Track Viewer (2001): its author, a former McLaren race strategist, describes on LinkedIn gaps on a circle ("equal distance equals equal time"), a black background, driver labels round the edge, sector split markers and a marker for where the car comes out after a stop, and says the engineer on Piastri's car used a very similar display at the 2025 Belgian GP (read only through a search summary; the profile blocks direct access); 🟢 McLaren's Mission Control (2016) showed "one large circle" that "is deliberately simple to show exactly how many seconds separate the cars"; "during a race, the circular map will show the engineers precisely when a pitstop window is opened". The gap between labels on the circle was translated into a length of track for the driver ("near Rosberg when he leaves the pit lane") ([Motorsport.com, 2016](https://www.motorsport.com/f1/news/insight-inside-mclarens-secretive-f1-operations-room-mission-control/3221220/)); 🟢 HH Timing gap overlay on its circle map; 🟡 own car at 12 o'clock is unconfirmed ([Tufte thread](https://www.edwardtufte.com/?p=409)); HH puts the start/finish line at the top instead. **Pitwall: own car at 12 o'clock** (user, 2026-10-28) | gaps of all cars, pit loss table |
 | V02 | **Gap track map** | Linear strip with the reference car at 0 s, cars by time gap; traffic prediction for future laps, time to catch, the line on track where a car will be caught | D17, D21 | 🟢 [HH gap track](https://help.hhtiming.com/displays/track-maps/gap-track/) | gaps, assumed pace, lap distance |
 | V03 | **Live crossing order with ghosts** | Cars in the order they will cross the line; the ghost listed between real cars with the gap ahead and behind | D21, D24 | 🟢 [HH live crossing order](https://help.hhtiming.com/displays/scoreboards/live-crossing-order-scoreboard/) | gaps, pit loss |
 | V04 | **Race history (gapper) chart** | Gap to a virtual car at constant pace per lap; ghost lines ("if he pitted at the end of this lap"); projected lines for the next laps; SC/VSC background | D21, D23, D31, D32 | 🟢 [HH gap graph](https://help.hhtiming.com/displays/graphing/gap-graph), [School of Race Engineering](https://schoolofraceengineering.co.uk/blog/post/15986/how-do-teams-analyse-f1-race-strategy), [03](03-strategy-models.md) | lap times of all cars |
@@ -547,6 +563,8 @@ The virtual finish car (🟢) runs at the average lap time and crosses the line 
 | V31 | **Damage card** | Damage %, measured lap-time loss, break-even laps against a stop | D10 | 🟢 Simulator Controller "Impact"; 🔵 break-even | CarDamage, lap times |
 | V32 | **Knowledge checklist** | What is still unknown for quali and the race, with session time left | D01 | 🔵 | fits, counts |
 | V33 | **Pit loss table** | Measured pit loss per track and condition (green, VSC, SC), with sample count | D21–D25 | 🟢 TUM table ([03](03-strategy-models.md)), HH pit stop scoreboard | pit-lane timers, lap times |
+| V34 | **Radio window** | Whether each of our drivers is on a straight now, and seconds until the next straight | all calls | 🟢 McLaren engineers only radio on the straights ([Motorsport.com, 2016](https://www.motorsport.com/f1/news/insight-inside-mclarens-secretive-f1-operations-room-mission-control/3221220/)); 🔵 countdown | lap distance, corner list |
+| V35 | **Incident feed** | One line per incident to our cars or cars near them: who, what, time lost, and what changed for us (position, gaps, plan delta) | D33, D10, D18 | 🟢 HH car-off-track display; 🔵 "what changed for us" | events, warnings, penalties, gaps, damage |
 
 **The most promising computed displays** (🔵 judgement): the circle of doom with condition ghosts (V01), the SC card as a standing answer (V18), the undercut card (V13), the pit-lap sweep (V15) and the plan board (V17). Together they move the strategist's live arithmetic into the tool, which is what the real teams try to avoid doing live.
 
@@ -564,6 +582,7 @@ The layout stays put. A situation lights up the few values it needs (colour only
 | **SC ending** | SafetyCar event Returning | D29, D13 | restart sheet |
 | **Red flag** | Red Flag event | D28 | strategy comparison |
 | **Rain coming** | forecast rain % above a threshold within the next samples, or the first car on the other tyre goes faster in a sector (🟢 Motor Sport) | D26 | crossover chart |
+| **Incident nearby** | Collision, spin, off track, penalty or retirement of a car within ±1 position or ±3 s of our cars | D33, D21, D17 | incident feed, affected cards |
 | **Incident / damage** | Collision event involving our car, or a jump in damage % | D10, D21 | damage card |
 | **Tyre limit near** | projected wear at the planned stop above the limit; blisters; pressure drop | D11, D16, D21 | tyre life bar, corner block |
 | **Temperature out of band** | a channel out of band for a full lap | D16, D14 | corner block cell |
@@ -583,6 +602,7 @@ The layout stays put. A situation lights up the few values it needs (colour only
 ### For the user
 
 Answered (user, 2026-10-28):
+- **Driver level:** friends, not professionals. Incidents are frequent, so reacting to sudden events matters more than the prepared plan (1.3, point 9; D33). The SC and incident probabilities for any simulation must come from the league's own races, not from real F1.
 - **Second car's data:** both drivers set their telemetry to public, and both feeds will reach pitwall. The second driver comes after the MVP, so the 🔒 items for the second car (D02, D14, D15) wait until then.
 - **Circle orientation:** own car at 12 o'clock.
 - **Radio lines:** none. The plan board holds plans and triggers, not sentences.
@@ -611,7 +631,7 @@ Still open:
 ### Sources not reached
 - Bernie Collins' "F1 Explains" episode on the pit wall's screens is audio only; there is no transcript ([F1](https://www.formula1.com/en/latest/article/f1-explains-what-goes-on-inside-an-f1-pit-lane-with-strategy-guru-bernie.6w7WwASefNkk5nZ2IIDqLG)).
 - Catapult RaceWatch has no public display documentation; only vendor claims (live degradation, pit stop analysis) ([Catapult](https://www.catapult.com/solutions/racewatch)).
-- The LinkedIn post on the McLaren Track Viewer and the Motorsport.com mission control article could not be opened directly; both are labelled 🟡.
+- The LinkedIn post on the McLaren Track Viewer could not be opened directly; it stays 🟡. The Motorsport.com mission control article was read in full (user download) and is now 🟢.
 - F1 Manager's strategy screens: no useful description found beyond forum posts.
 - MoTeC and Pi Toolbox car-care alarm displays: nothing public beyond [01](01-race-engineering-practice.md).
 - iRacing/LMU/ACC tools: only fuel calculators and relative overlays were documented; no pit rejoin or strategy views found.
@@ -626,7 +646,7 @@ Still open:
 - Females in Motorsport, [Hannah Schmitz interview](https://www.femalesinmotorsport.com/post/hannah-schmitz-red-bull-s-star-strategist-on-baalance-fame-and-staying-true-to-yourself); GPFans, [Schmitz on Qatar 2025](https://www.gpfans.com/us/f1-news/1069481/red-bull-f1-hannah-schmitz-qatar-gp-strategy/)
 - Sky Sports, [Hamilton on the Singapore VSC call](https://www.skysports.com/f1/news/13602364/lewis-hamilton-ferrari-driver-explains-taking-strategy-into-own-hands-in-singapore-ahead-of-united-states-gp) (2026)
 - Motorsport.com, [How F1 race strategy works](https://au.motorsport.com/f1/news/how-f1-race-strategy-works/6791895/)
-- Motorsport.com, [Inside McLaren's mission control](https://www.motorsport.com/f1/news/insight-inside-mclarens-secretive-f1-operations-room-mission-control/3221220/) (not opened; search snippet only)
+- Motorsport.com, [Inside McLaren's mission control](https://www.motorsport.com/f1/news/insight-inside-mclarens-secretive-f1-operations-room-mission-control/3221220/) (2016)
 - Amazon, [F1 Insights powered by AWS](https://press.aboutamazon.com/2021/4/new-f1-insights-powered-by-aws-will-help-formula-1-fans-make-sense-of-split-second-decisions-on-the-track)
 - Pirelli, [When it's time to change from slick to wet tyres](https://www.pirelli.com/global/en-ww/race/racingspot/formula-1/when-it-s-time-to-change-from-slick-to-wet-tyres-in-formula-1-52943/)
 - Motor Sport, [Switching from inters to slicks](https://motorsportmagazine.com/archive/article/december-2022/36/switching-from-inters-to-slicks-the-crucial-strategic-tyre-call-in-f1-wet-races) (2022)

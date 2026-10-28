@@ -11,12 +11,12 @@ Research done on 2026-10-28. The user's view: the 2026 paper is promising but no
 | Year | Paper | Method | Optimises | SC / rivals | Read |
 |---|---|---|---|---|---|
 | 2009 | Bekker & Lotz, *Planning F1 race strategies using discrete-event simulation*, JORS 60(7) | discrete-event simulation for one team; validated on three 2005 races | evaluates given strategies | failures, overtaking, pit stops / yes | 🟡 [IAOR](https://iaorifors.com/paper/64724) |
-| 2014 | Tulabandhula & Rudin, *Tire changes, fresh air, and yellow flags*, Big Data 2(2) | real-time prediction of rank change after a tyre decision (NASCAR) | 2- vs 4-tyre stop | yellow flags / rank | 🟡 [DOI](https://doi.org/10.1089/big.2014.0018), [MIT](https://dspace.mit.edu/handle/1721.1/109309) |
+| 2014 | Tulabandhula & Rudin, *Tire changes, fresh air, and yellow flags*, Big Data 2(2) | real-time prediction of rank change after a tyre decision (NASCAR) | 2- vs 4-tyre stop | yellow flags / rank | 🟢 [DOI](https://doi.org/10.1089/big.2014.0018) |
 | 2018–22 | Heilmeier et al. (TUM): race simulation, Monte Carlo, Virtual Strategy Engineer, dissertation | lap-wise simulation, Monte Carlo, neural nets for the pit decision | evaluates strategies; VSE decides pit and compound | yes / yes | 🟢 [03](03-strategy-models.md) |
 | 2023 | Carrasco Heine & Thraves, *On the optimization of pit stop strategies via dynamic programming*, CEJOR 31(1) | dynamic programming (DP), extended to stochastic DP (SDP) | stop laps and compounds, minimum race time | yellow flags, rain (SDP) / no | 🟡 [RePEc](https://ideas.repec.org/a/spr/cejnor/v31y2023i1d10.1007_s10100-022-00806-4.html) |
-| 2023 | Bonomi, Turri & Iacca, *Evolutionary F1 race strategy*, GECCO '23 Companion | genetic algorithm from practice data; evaluated on a video game and on **Pirelli tyre data**, with Pirelli strategy engineers | stop laps and compounds | no / no | 🟡 [UniTN](https://iris.unitn.it/handle/11572/384851), [DOI](https://doi.org/10.1145/3583133.3596349) |
+| 2023 | Bonomi, Turri & Iacca, *Evolutionary F1 race strategy*, GECCO '23 Companion | genetic algorithm from practice data; evaluated on **F1 2021 game practice data** and on Pirelli's degradation figures, with Pirelli strategy engineers | stop laps and compounds | no / no | 🟢 [DOI](https://doi.org/10.1145/3583133.3596349), [GitHub (GPL-3.0)](https://github.com/bonom/Evolutionary-F1-Race-Strategy) |
 | 2023 | Duhr et al. (ETH), *Minimum-race-time energy allocation strategies for the hybrid-electric F1 power unit*, IEEE TVT 72(6) | nonlinear program over lap-time maps | battery and fuel energy per lap | no / no | 🟡 (cited in Fieni 2025) |
-| 2024 | Aguad & Thraves, *Optimizing pit stop strategies in F1 with dynamic programming and game theory*, EJOR 319(3) | two-driver zero-sum feedback **Stackelberg game**, solved by DP; the leader moves first each lap | win probability | yellow flags / one rival | 🟡 [ANID](https://investigadores.anid.cl/es/public_search/work?id=772055) |
+| 2024 | Aguad & Thraves, *Optimizing pit stop strategies in F1 with dynamic programming and game theory*, EJOR 319(3) | two-driver zero-sum feedback **Stackelberg game**, solved by DP; the leader moves first each lap | win probability | yellow flags / one rival | 🟢 [DOI](https://doi.org/10.1016/j.ejor.2024.07.011) |
 | 2025 | Thomas et al. (Imperial + Mercedes), *Explainable RL for F1 race strategy* (RSRL), ACM SAC '25 | deep recurrent Q-network trained on Mercedes' Monte Carlo simulator; SHAP, decision-tree surrogates and counterfactuals | pit lap and compound | via the simulator / via the simulator | 🟢 parts, [arXiv 2501.04068](https://arxiv.org/abs/2501.04068) |
 | 2025 | Cappello & Hoegh, *A state-space approach to modeling tire degradation in F1*, arXiv 2512.00640 | **Bayesian state-space model** of latent tyre pace | estimates degradation live | no / no | 🟢 [arXiv](https://arxiv.org/abs/2512.00640) |
 | 2025 | Fieni et al. (ETH), *Towards learning-based F1 race strategies*, arXiv 2512.21570 | MINLP (BONMIN) plus an RL agent on the same model | pit stops, compound, battery and fuel per lap | one disturbance / no | 🟢 [arXiv](https://arxiv.org/abs/2512.21570) |
@@ -40,7 +40,12 @@ Found but not looked at in depth (🟡 search summaries): a genetic algorithm fr
   ```
   `a_j, b_j, c_j` are per compound and track; the mass term makes a heavy car wear its tyres faster. `ΔT_j(TW)` is a fitted curve per compound; Pirelli data covered `TW ≤ 0.6` only, because teams change tyres before then. A fresh hard costs about 2 s/lap against a fresh soft and pays off after about 18 laps.
   - In-lap, out-lap and "out-in-lap" each get their own lap-time map (example: 93.1 s normal, 104.6 s in-lap, 108.2 s out-lap).
-  - The tyre data came from a public GitHub repository released with Bonomi et al., made with Pirelli (repository URL not yet found).
+  - Fieni et al. say they identified the model from "the publicly available GitHub repository released by [Bonomi et al.], developed in collaboration with Pirelli". That repository holds **F1 2021 game practice data** per track (lap time, fuel, compound, wear per tyre per lap); Bonomi et al. write that the Pirelli data could not be published. So Fieni's tyre curves were most likely fitted on F1 game data (🔵 inference).
+- **Bonomi et al. 2023** (🟢) built strategies from **F1 2021 UDP practice data**: lap time, fuel and wear per tyre per lap, fitted linearly per compound. The race time is a sum of losses against the best lap:
+  ```
+  TotalTime = Σ_laps (t_best + t_compound + t_tyre_wear + t_fuel + t_pit + t_weather)
+  ```
+  with `t_fuel` about 0.03 s/kg, the compound loss from the first valid lap on each compound against the soft at equal fuel, and fuel burn as the slope between start and end fuel. Rain enters as a value per lap from 0 (dry) to 100 (≥ 5 mm). Pirelli's own model has the same shape: `delta + degradation × lap` per compound. The genetic algorithm matched a brute-force search within a few seconds per race. Its repository is GPL-3.0, so ideas only.
 - **Avella 2026** (🟢) uses one average degraded lap time per compound: `t_eff = t_base · (1 + δ·μ_perf/2)`. This is the crude part of that paper.
 
 **For pitwall (🔵):** F1 25 delivers **tyre wear %** directly (`m_tyresWear`) for our cars, AI cars and public players. So Fieni's split fits the game better than age-based models: fit the wear rate per compound from the wear channel, and the lap-time cost against wear from lap times. Hidden cars (restricted humans, or anyone when realism mode is on) fall back to the age-based TUM model.
@@ -77,7 +82,7 @@ This was an open research gap ([README](README.md)).
 ### 2.4 Safety cars and uncertainty
 
 - **Carrasco Heine & Thraves** (🟡): the SDP beats the plain DP, especially in races where yellow flags are likely. The SDP's policy is a *rule per state* ("in this state, if a yellow comes, pit"), which is exactly the standing SC answer of [06](06-engineer-decisions.md) D24.
-- **Aguad & Thraves** (🟡): with two drivers, yellow flags raise the **weaker driver's** chance of winning.
+- **Aguad & Thraves 2024** (🟢): VSC and SC are random events at the end of a lap, with a per-lap probability `q` and fixed lengths (VSC 2 laps, SC 3 laps in their instance). Overall, about **30 % of races have a VSC and 47 % an SC**, varying by circuit (their Appendix A). Under VSC every car runs a fixed slower lap time (speed −40 %) and a stop costs a separate, smaller loss; under SC gaps close up; no overtaking on track under either, but overtakes through stops count. DRS stays off during the first two laps and for some laps after a neutralisation. Yellow flags raise the **weaker driver's** chance of winning.
 - **TUM** ([03](03-strategy-models.md)): Monte Carlo with SC probabilities per race; SC starts at a race time, not a lap.
 - **RSRL** (🟢): answers questions like "if there is a safety car, what should we do" through its simulator.
 - **Fieni 2025** (🟢): after a disturbance at lap 22 (a jump in tyre wear), the RL agent lost 5.08 s against the re-solved optimum and a fixed heuristic lost 31.45 s. Plans that don't re-plan are expensive.
@@ -92,14 +97,32 @@ This was an open research gap ([README](README.md)).
   t_gap[k+1] = t_gap[k] + (T_lap_us[k] − T_lap_rival[k])
   ```
   `a, b` are per track; at Bahrain the fitted loss reaches about 0.4 s per lap close behind (read from their figure). **The agents observe only what a real pit wall sees of the rival: compound, tyre age, pit stop, "second compound used", gap.** Battery and energy are explicitly unobservable. The trained agents learned the undercut by themselves and held about 1.6 s behind, outside the wake, until their stop.
-- **Aguad & Thraves** (🟡): a two-driver game in which the leader moves first each lap.
+- **Aguad & Thraves 2024** (🟢): a two-driver game in which the leader moves first each lap and the follower answers.
+  ```
+  μ = γ + η(ε) − t_DRS · 1{gap in [0, 1] s}                     (lap time)
+  γ = d0 + p_pit · 1{pit} + β(compound, tyre use) − h · n          ("ghost" lap time, alone on track)
+  ε = gap + p_pit^A · 1{A pits} − p_pit^B · 1{B pits} ± DRS terms  (gap at pit exit)
+  η(ε) = exp(−λ·|ε|) · z1  if the rival is ahead,  · z2 if behind
+  ```
+  The interaction cost decays exponentially with the gap at the pit exit (their instance: λ = 2.0, pit loss about 20 s, `h` = 0.02 s/lap from fuel burn). Choosing `z1 < z2` makes overtaking hard even for a faster car. The state is both cars' compound, tyre use, "two compounds used", the gap on a ±35 s grid, plus the yellow-flag and DRS counters; solving took **hours** for hundreds of millions of states.
+  - **Findings:** a driver who plays the game wins **more than 15 % more often** against one who ignores the rival. Maximising the gap and maximising the win probability lead to different strategies, and the start compound becomes a mixed (randomised) choice.
 - **Joshi 2026** (🟡): the dirty-air penalty did not measurably shrink with the 2022 rules.
 
 **For pitwall (🔵):**
 - Fieni's dirty-air term and gap update go into every forecast that follows gaps: the battle forecast (D17), the undercut balance (D23) and the traffic after a rejoin (D21). The F1 25 coefficients have to be fitted from recordings (lap-time loss against the gap at the start of the lap).
 - Fieni's observation set matches the **realism mode** decided in [06](06-engineer-decisions.md): a model built on it works the same with realism on or off.
 
-### 2.6 Learned policies and explanations
+### 2.6 Lessons from NASCAR: definitions matter
+
+- **Tulabandhula & Rudin 2014** (🟢) built a real-time predictor of rank change after a tyre decision for NASCAR.
+  - The **"fresh air" effect:** cars at the front lap faster, and their lap-time slope over a run rises faster too.
+  - **Simpson's paradox:** pooled across all positions, two-tyre stops looked worse for tyre wear than four-tyre stops; split by position, the difference disappeared. Comparing degradation between choices without controlling for track position misleads.
+  - Prediction quality "improved dramatically" once outings, warm-up laps and "epochs" (laps in which the cars ahead had not pitted) were defined carefully, robust to green-flag stops and cautions.
+  - "Rank momentum" was a useful predictor; cars ahead can protect a car from faster cars behind.
+
+**For pitwall (🔵):** the clean-lap filter and the stint definitions are not details; they decide whether degradation estimates mean anything. Degradation should be compared between cars only in clean air, or with the dirty-air term from 2.5 taken out first.
+
+### 2.7 Learned policies and explanations
 
 - **VSE** (TUM), **RSRL** (Mercedes) and **Fieni's agents** output an *action*. RSRL ended its test race on average P5.33 against P5.63 for the best baseline.
 - RSRL adds **explanations**: feature importance (TimeSHAP), a decision-tree surrogate, and **counterfactuals** ("the smallest change in the race state that would change the decision").
@@ -114,14 +137,14 @@ This was an open research gap ([README](README.md)).
 | 2. Forecast | lap-by-lap gap forecast with the dirty-air term and overtaking threshold; rejoin and undercut calculations | Fieni 2026, TUM, HH ghosts | 4 |
 | 3. Optimiser | DP over the remaining race for each of our cars, every lap; table of strategies with projected times; sensitivity lines | Carrasco Heine & Thraves, Avella constraints | 4 |
 | 4. Uncertainty | SDP with SC/VSC per state, or Monte Carlo with distributions | Carrasco Heine & Thraves, TUM | 5 |
-| 5. Rivals' strategy | predicted stops of rivals from their stint lengths and tyre age, feeding layers 2 and 3 | HH predicted stint length, Aguad & Thraves | 5 |
+| 5. Rivals' strategy | predicted stops of rivals from their stint lengths and tyre age, feeding layers 2 and 3; later a two-car game for the car directly ahead or behind | HH predicted stint length, Aguad & Thraves | 5 |
 
 Every layer works with realism mode on: with wear hidden, layer 1 uses age-based degradation from lap times.
 
 ## 4. Open questions and next reads
 
-- **Full texts not read (🟡 above):** Carrasco Heine & Thraves (Springer), Aguad & Thraves (EJOR), Bekker & Lotz (JORS), Bonomi et al. (ACM; the UniTN copy didn't download as PDF), Tulabandhula & Rudin, Duhr et al. They hold the DP state definitions, the game formulation and the SC model that layers 3–5 need.
-- **The Pirelli tyre data repository** of Bonomi et al.: URL not found yet. It would give real wear-to-lap-time curves to compare with F1 25.
+- **Full texts still not read (🟡 above):** Carrasco Heine & Thraves (Springer; the download was only the one-page name correction, `10.1007/s10100-022-00810-8`; the article is `10.1007/s10100-022-00806-4`), Bekker & Lotz (JORS; the user couldn't find it), Duhr et al. Aguad & Thraves extends Carrasco Heine & Thraves, so its DP and SC model (2.4, 2.5) cover most of what layers 3–5 need.
+- **Bonomi's F1 2021 data** ([repository](https://github.com/bonom/Evolutionary-F1-Race-Strategy), GPL-3.0): practice laps with wear per tyre for six tracks. Useful to compare F1 2021 and F1 25 tyre behaviour; not to be copied into our fixtures (licence).
 - **F1 25 checks from recordings:** does lap time follow wear % (Fieni's `ΔT_j(TW)`) better than tyre age? How large is the dirty-air loss, and up to which gap? Does wear depend on fuel mass (Fieni's `b_j`)?
 - **DP runtime in TypeScript:** estimated, not measured; a spike in sub-project 4 settles it.
 
