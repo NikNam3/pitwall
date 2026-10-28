@@ -1,5 +1,5 @@
 import { describe, expect, expectTypeOf, it } from 'vitest';
-import type { CarDynamics, CarState, FeedId, LapRecord } from '@pitwall/domain';
+import type { CarDynamics, CarId, CarState, FeedId, LapRecord } from '@pitwall/domain';
 import {
   CONTRACT_VERSION,
   TOPICS,
@@ -55,7 +55,9 @@ describe('topic types', () => {
       | 'feed.status' | 'session.info' | 'cars.overview' | 'car.detail' | 'car.telemetry' | 'laps'
       | 'stints' | 'pitStops' | 'flagPhases' | 'events' | 'insights'
     >();
-    expectTypeOf<TopicParams<'car.detail'>>().toEqualTypeOf<{ carId: number }>();
+    expectTypeOf<TopicParams<'car.detail'>>().toEqualTypeOf<{ carId: CarId }>();
+    expectTypeOf<TopicParams<'car.detail'>['carId']>().toEqualTypeOf<CarId>();
+    expectTypeOf<TopicParams<'car.telemetry'>['carId']>().toEqualTypeOf<CarId>();
     expectTypeOf<TopicParams<'laps'>>().toEqualTypeOf<Record<string, never>>();
     expectTypeOf<TopicValue<'car.detail'>>().toEqualTypeOf<CarState>();
     expectTypeOf<TopicValue<'car.telemetry'>>().toEqualTypeOf<CarDynamics>();
