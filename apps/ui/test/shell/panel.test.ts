@@ -89,8 +89,8 @@ describe('Panel: header states', () => {
     await screen.findByTestId('probe');
     connection.push({ type: 'topicStatus', id: idOf('feed.status'), status: 'errored' });
     await vi.waitFor(() => expect(screen.queryByTestId('probe')).toBeNull());
-    expect(container.textContent).toContain(text.errored);
-    expect(container.textContent).not.toContain(text.noDataYet);
+    expect(header(container).textContent).toContain(text.errored);
+    expect(header(container).textContent).not.toContain(text.noDataYet);
   });
 
   it('stale context of 4 s: header shows stale 4 s and the values stay', async () => {

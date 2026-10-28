@@ -11,6 +11,7 @@
 //  - texts: `kit/text.ts` named export `addWidget` (the button's accessible name).
 import type { Geometry, Workbook, WorkbookWindow } from '@pitwall/contracts';
 import { cleanup, fireEvent, render, screen } from '@testing-library/svelte';
+import { carId, type FeedId, feedId } from '@pitwall/domain';
 import { tick } from 'svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TopicStore } from '../../src/connection/topic-store.svelte.ts';
@@ -19,6 +20,7 @@ import type { Host } from '../../src/shell/host/host.ts';
 import { THEMES } from '../../src/theme/index.ts';
 import { FakeConnection } from '../connection/fake-connection.ts';
 import { TEST_WIDGETS } from './fixtures/index.ts';
+import { linkLog } from './fixtures/link-probe/link-log.ts';
 
 type Handle = { addPanel: ReturnType<typeof vi.fn>; destroy: ReturnType<typeof vi.fn> };
 type OnChange = (layout: unknown, panels: WorkbookWindow['panels']) => void;
@@ -84,7 +86,7 @@ const setup = (windowId = 'main') => {
   };
   const updates = () =>
     connection.sent.flatMap((m) => (m.type === 'uiAction' && m.action.kind === 'workbook.updateWindow' ? [m.action.window] : []));
-  const mountShell = () => render(WindowShell, { store, host: h.host, widgets: TEST_WIDGETS });
+  const mountShell = (extra: { defaultFeed?: FeedId } = {}) => render(WindowShell, { store, host: h.host, widgets: TEST_WIDGETS, ...extra });
   return { connection, store, ...h, latestId, snapshot, update, updates, mountShell };
 };
 
@@ -97,7 +99,20 @@ beforeEach(() => {
     handles.push(handle);
     return handle;
   });
-  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      private readonly cb: (entries: unknown[]) => void;
+      constructor(cb: (entries: unknown[]) => void) {
+        this.cb = cb;
+      }
+      observe() {
+        this.cb([{ contentRect: { width: 600, height: 400 } }]);
+      }
+      disconnect() {}
+    },
+  );
+  vi.stubGlobal('matchMedia', () => ({ addEventListener() {}, removeEventListener() {}, matches: false }));
 });
 afterEach(() => {
   cleanup();
@@ -282,6 +297,8 @@ describe('WindowShell: font size', () => {
     await snapshot(book());
     await update(book('race', [win('main', { L: 1 }, { fontPx: 20 })]));
     expect(rootOf(container).style.getPropertyValue('--pw-font-px')).toBe('20px');
+    expect(mocks.mountDock).toHaveBeenCalledTimes(1);
+    expect(handles[0]!.destroy).not.toHaveBeenCalled();
   });
 });
 
@@ -309,6 +326,22 @@ describe('WindowShell: ensureWindows (first window of the workbook only)', () =>
     await snapshot(book('race'));
     await update(book('race', [win('main', { L: 'edited' }), win('second', 's')]));
     expect(host.ensureWindows).toHaveBeenCalledTimes(1);
+  });
+
+  it('also fires when the set of window ids of the same workbook changes (added or removed)', async () => {
+    const { snapshot, update, mountShell, host } = setup('main');
+    mountShell();
+    await snapshot(book('race'));
+    await update(book('race', [win('main', { L: 1 }, { geometry: GEO }), win('second', 's'), win('third', 't')]));
+    expect(host.ensureWindows).toHaveBeenCalledTimes(2);
+    expect(host.ensureWindows).toHaveBeenLastCalledWith([
+      { id: 'main', geometry: GEO },
+      { id: 'second', geometry: undefined },
+      { id: 'third', geometry: undefined },
+    ]);
+    await update(book('race', [win('main', { L: 1 }, { geometry: GEO })]));
+    expect(host.ensureWindows).toHaveBeenCalledTimes(3);
+    expect(host.ensureWindows).toHaveBeenLastCalledWith([{ id: 'main', geometry: GEO }]);
   });
 
   it('another window of the workbook never calls it', async () => {
@@ -351,6 +384,22 @@ describe('WindowShell: bridge restart (Review Focus 4)', () => {
     expect(updates().filter((w) => JSON.stringify(w.layout).includes('stale-local'))).toEqual([]);
   });
 
+  it('a change made while the connection is closed is sent once after the reconnect, even if the bridge copy is unchanged', async () => {
+    const { connection, snapshot, mountShell, updates } = setup();
+    mountShell();
+    await snapshot(book());
+    connection.close();
+    lastMount()[3]({ L: 'offline' }, { p1: { widget: 'probe', options: FULL, linkGroup: 5 } });
+    await vi.advanceTimersByTimeAsync(1000);
+    const before = updates().length; // FakeConnection records sends made while closed; the real one drops them
+    connection.reopen();
+    await snapshot(book()); // identical to the snapshot from before the disconnect
+    await vi.advanceTimersByTimeAsync(1000);
+    const after = updates().slice(before);
+    expect(after).toHaveLength(1);
+    expect(after[0]).toMatchObject({ id: 'main', layout: { L: 'offline' }, panels: { p1: { linkGroup: 5 } } });
+  });
+
   it('subscribes to ui.workbooks again after the reconnect, once', async () => {
     const { connection, snapshot, mountShell } = setup();
     mountShell();
@@ -358,5 +407,45 @@ describe('WindowShell: bridge restart (Review Focus 4)', () => {
     connection.close();
     connection.reopen();
     expect(connection.subscribes().filter((s) => s.topic === 'ui.workbooks')).toHaveLength(2);
+  });
+});
+
+describe('WindowShell: the link a widget gets (supervisor ruling)', () => {
+  const FEED = feedId('f1');
+  const session = (updatedAt: number, playerCar: number) => ({ feedId: FEED, playerCar: carId(playerCar), session: { updatedAt } });
+
+  // The panel is mounted the way the dock does it: through the `view` the shell hands to `mountDock`.
+  const mountPanel = async (ctx: ReturnType<typeof setup>) => {
+    ctx.mountShell({ defaultFeed: FEED });
+    await ctx.snapshot(book());
+    const view = lastMount()[4] as { render(content: HTMLElement, tab: HTMLElement, spec: WorkbookWindow['panels'][string]): unknown };
+    view.render(document.createElement('div'), document.createElement('div'), { widget: 'link-probe', options: {}, linkGroup: 1 });
+    ctx.connection.push({ type: 'snapshot', id: ctx.latestId('session.info'), value: session(1000, 5) });
+    await tick(); // the panel subscribes once its link exists
+    ctx.connection.push({ type: 'snapshot', id: ctx.latestId('feed.status'), value: { feedId: FEED, connected: true, stale: false } });
+    await vi.waitFor(() => expect(linkLog.length).toBeGreaterThan(0)); // the widget component loads lazily
+  };
+
+  it('stays the same object across session.info updates while the resolved values do not change', async () => {
+    linkLog.length = 0;
+    const ctx = setup();
+    await mountPanel(ctx);
+    expect(linkLog.length).toBeGreaterThan(0);
+    for (const t of [2000, 3000, 4000]) {
+      ctx.connection.push({ type: 'update', id: ctx.latestId('session.info'), value: session(t, 5) });
+      await tick();
+    }
+    expect(new Set(linkLog).size).toBe(1);
+    expect(linkLog[0]).toMatchObject({ primary: 5, feedId: FEED });
+  });
+
+  it('is a new object when a resolved value changes (the player\'s car)', async () => {
+    linkLog.length = 0;
+    const ctx = setup();
+    await mountPanel(ctx);
+    ctx.connection.push({ type: 'update', id: ctx.latestId('session.info'), value: session(2000, 9) });
+    await tick();
+    expect(new Set(linkLog).size).toBe(2);
+    expect(linkLog.at(-1)).toMatchObject({ primary: 9 });
   });
 });
