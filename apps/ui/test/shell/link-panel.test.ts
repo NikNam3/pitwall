@@ -9,10 +9,11 @@
 //    `{ type: 'uiAction', action: { kind: 'linkGroup.set', group } }` with the whole group and `primary` = that car's id;
 //  - nothing happens locally on that choice: the panel follows the next `ui.linkGroups` update from the bridge.
 import type { Geometry, LinkGroup, Workbook } from '@pitwall/contracts';
-import { cleanup, fireEvent, render, screen } from '@testing-library/svelte';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/svelte';
 import { carId, feedId } from '@pitwall/domain';
 import { tick } from 'svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as text from '../../src/kit/text.ts';
 import { TopicStore } from '../../src/connection/topic-store.svelte.ts';
 import type { Host } from '../../src/shell/host/host.ts';
 import { FakeConnection } from '../connection/fake-connection.ts';
@@ -94,13 +95,17 @@ describe('panels follow their link group', () => {
     const { carDetails, tab } = await setup();
     expect(carDetails().map((s) => s.params)).toEqual([{ carId: 5 }]);
     expect(carDetails()[0]).toMatchObject({ feedId: FEED });
-    expect(tab.textContent).toMatch(/^\s*1/);
+    // The title comes first, then the marker (approved Task 0 mockup, spec 7.4); the marker is found by its accessible name.
+    const marker = within(tab).getByRole('button', { name: `${text.linkMarker} 1` });
+    expect(marker.textContent).toMatch(/^\s*1/);
+    const title = within(tab).getByText('Probe');
+    expect(title.compareDocumentPosition(marker) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('changing the group\'s primary through the picker resubscribes car.detail with the new carId', async () => {
     const { connection, push, tab, carDetails, linkSets } = await setup();
     const oldId = carDetails()[0]!.id;
-    await fireEvent.click(tab.querySelector('button')!); // the link marker opens the picker
+    await fireEvent.click(within(tab).getByRole('button', { name: `${text.linkMarker} 1` })); // the link marker opens the picker
     await push('cars.overview', cars);
     await fireEvent.click(screen.getByRole('button', { name: /Hamilton/ }));
     expect(linkSets()).toHaveLength(1);
