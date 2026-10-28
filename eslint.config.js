@@ -4,11 +4,6 @@ import svelte from 'eslint-plugin-svelte';
 import tseslint from 'typescript-eslint';
 import uiStyle from './apps/ui/eslint/style-declarations.js';
 
-const COLOUR_PATTERN = '^(?:#[0-9a-fA-F]{3,8}|(?:rgba?|hsla?|oklch)\\(.*)$';
-const COLOUR_SELECTORS = ['Literal', 'TemplateElement', 'SvelteLiteral'].map((type) => ({
-  selector: `${type}[${type === 'TemplateElement' ? 'value.raw' : 'value'}=/${COLOUR_PATTERN}/]`,
-  message: 'Colour literals belong in theme/; use a theme role.',
-}));
 const WINDOW_HOST = ['open', 'moveTo', 'resizeTo', 'screen'].map((property) => ({
   object: 'window',
   property,
@@ -25,7 +20,7 @@ function uiRules({ network = true, host = true, format = true, colour = true } =
   return {
     'no-restricted-globals': network ? ['error', ...NETWORK] : 'off',
     'no-restricted-properties': ['error', ...(host ? WINDOW_HOST : []), ...(format ? NUMBER_FORMAT : [])],
-    'no-restricted-syntax': colour ? ['error', ...COLOUR_SELECTORS] : 'off',
+    'pw-ui/no-colour-literals': colour ? 'error' : 'off',
   };
 }
 const UI_FILES = ['apps/ui/src/**/*.ts', 'apps/ui/src/**/*.svelte'];
