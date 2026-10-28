@@ -80,13 +80,14 @@ Displays and calculations are many-to-many: the rejoin projection feeds V01, V03
 
 | File | Content |
 |---|---|
-| `register.ts` | default-exports `defineWidget({ … })` (4.2) |
+| `widget.ts` | `export const widget = declareWidget({ … })`: name, title, data, options, sizes (4.2) |
+| `register.ts` | `export default registerWidget(widget, () => import('./<Name>.svelte'))`; the component imports its prop types from `widget.ts`, so there is no import cycle |
 | `<Name>.svelte` | the component. It renders; it does not fetch, subscribe or measure. |
 | `emphasis.ts` | pure functions from states in topic values to theme roles; no colour literals |
 | `gallery.ts` | gallery cases (9.1); imported only by the gallery |
 | `*.test.ts` | emphasis tests and anything else the display needs |
 
-A generated index (`apps/ui/src/widgets/index.generated.ts`, gitignored, from `scripts/gen-widgets.ts`, part of `pnpm gen`) collects the `register.ts` files, as ADR 0005 does for features. The `name` in `defineWidget` must equal the folder name.
+A generated index (`apps/ui/src/widgets/index.generated.ts`, gitignored, from `scripts/gen-widgets.ts`, part of `pnpm gen`) collects the `register.ts` files, as ADR 0005 does for features. The `name` in `declareWidget` must equal the folder name. Below, `defineWidget` means the pair `declareWidget` + `registerWidget`.
 
 ### 4.2 `defineWidget`
 ```ts
@@ -289,10 +290,11 @@ The incident feed (V35, research 06) stays a normal display. Incidents serious e
 
 ### 7.8 UI state in the bridge
 The bridge owns UI state, so every window shows the same state and it survives restarts:
-- **Topics** (owner `core`):
+- **Topics** (owner `core`). They belong to no feed, so `defineTopic` gains `scope: 'feed' | 'global'` (default `'feed'`); the hub keeps global topics apart from the feeds, and a subscription to a global topic skips feed resolution.
   - `ui.workbooks`: the list of workbook names, the active name and its content
   - `ui.linkGroups`
   - `ui.alerts`: acknowledged keys, muted groups
+  - `ui.settings`: the realism value for the next session (7.9) and the effective key bindings from `keys.json` (7.7), since the UI cannot read files itself
 - **One new client message,** `{ type: 'uiAction', id, action: UiAction }`:
   - `UiAction` is a union: `workbook.open`, `workbook.update` (a patch from the shell), `workbook.saveAs`, `linkGroup.set`, `alert.ack`, `alert.ackAll`, `alertGroup.mute`, `realism.set`
   - an invalid action gets `error { id, reason: 'malformed' }`
@@ -301,7 +303,8 @@ The bridge owns UI state, so every window shows the same state and it survives r
 
 ### 7.9 Realism mode
 - **Set between sessions, not during one** (user, 2026-10-28). The top bar shows the current session's value and, if different, the value pending for the next session. `realism.set` writes it to the bridge config. The bridge applies it when the next session starts and saves it in that session's config sidecar, so replays reproduce it.
-- **Effect:** with realism on, rival cars' wear, damage, fuel, ERS, tyre sets, temperatures, pressures, driver inputs and car telemetry become `unknown('realism')` in engine state, before any calculator sees them. It's the same mechanism as `withholdRestricted`, with the field list from research 06 §5. Our own cars (player and teammate) stay complete. The value cell renders those values as empty cells with "realism" on hover.
+- **Effect:** with realism on, rival cars' wear, damage, fuel, ERS, tyre sets, temperatures, pressures, driver inputs and car telemetry become `unknown('realism')` in engine state, before any calculator sees them. An engine sub-step after `applyOwnCar` sets them, like `withholdRestricted` does for restricted cars, with the field list from research 06 §5.
+- **Domain change this needs:** today temperatures, pressures, blisters and the Car Telemetry fields are plain numbers, so they cannot be `unknown`. `UnknownReason` gains `'realism'`; `TyreCorner.surfaceTempC`, `pressurePsi`, `blistersPct`, the brake and engine temperatures become `Known`; `CarDynamics` splits into `motion` (position, velocity, orientation, g-forces: public, like a real team's GPS) and `dynamics: Known<…>` (speed, throttle, brake, steering, clutch, gear, RPM, rev lights, DRS, pit limiter). Doing this before sub-project 3's widgets exist is the cheap moment. Our own cars (player and teammate) stay complete. The value cell renders those values as empty cells with "realism" on hover.
 - The strategy model's estimation path for hidden rival data is sub-project 4.
 
 ## 8. Findability and the dev loop
@@ -354,7 +357,7 @@ Shown in the top bar when the feed is a replay: pause, play, speed, "jump to lap
 ## 9. Gallery and tests
 
 ### 9.1 Named moments
-- `fixtures/moments.json` names points in the committed fixture segments: `{ "zandvoort-tt.lap5": { "segment": "…", "sessionTime": 123456 } }`.
+- `fixtures/moments.json` names points in the committed fixture segments by receive-time offset from the segment's first record (session time stays 0 before lights out, so it can't name every moment): `{ "ttZandvoortLap1.crossing": { "segment": "tt-zandvoort-lap1.pwrec.gz", "atMs": 2500 } }`.
 - `pnpm gen:moments` runs the pipeline headless to each moment and saves every topic's value, for the player and every car param, under `test-support/moments/` (gitignored, deterministic, regenerated before tests).
 - **Synthetic cases:** a widget's `gallery.ts` adds hand-written topic values for what no recording has yet (SC, pit stop, rain, tier-1 alerts; review F8). When a recording arrives, a named moment replaces the synthetic case.
 - `gallery.ts` declares which moments and cases a widget is shown with.
@@ -372,7 +375,7 @@ A `/gallery` route in dev and test builds renders every widget × each size mode
 | Property | the UI fold equals the bridge fold for any lap sequence; workbook and keys parsing never throws; a reconnect leaves the store equal to a fresh subscription | fast-check |
 | Type | `defineWidget` types the props from `data` and `options`; a wrong topic, wrong params or an undeclared option fails (`@ts-expect-error`) | `pnpm typecheck` |
 | Fit | every widget at its minimum size, at each mode, and at sizes between modes: no overflow, no clipped text | Playwright |
-| Screenshot | every gallery cell against a committed baseline PNG | Playwright, Chromium pinned to Electron's version |
+| Screenshot | every gallery cell against a committed baseline PNG | Playwright driving Electron (`_electron.launch`), so the screenshots use exactly the Chromium you see |
 | End-to-end | bridge plus a fixture replay plus two windows: the placeholder shows feed status; reconnect; a workbook switch reaches both windows; an acknowledge shows in both; `pitwall dev` restores the moment after a feature change | Playwright |
 | Catalogue | each check in 8.1 on small fixture trees | Vitest |
 
