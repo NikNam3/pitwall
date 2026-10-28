@@ -13,7 +13,7 @@ import {
   type TopicParams,
   type TopicValue,
 } from '../src/index.ts';
-import { defineTopic } from '../src/topic-def.ts';
+import { defineTopic, type TopicOwner } from '../src/topic-def.ts';
 import carDetail from '../src/topics/car.detail.ts';
 import laps from '../src/topics/laps.ts';
 
@@ -36,16 +36,30 @@ describe('TOPICS', () => {
       ['stints', 'stints', 'append', Infinity],
     ]);
   });
+  it('gives every one of the 11 topics owner core and scope feed', () => {
+    const all = Object.values(TOPICS);
+    expect(all).toHaveLength(11);
+    for (const d of all) expect(d).toMatchObject({ owner: 'core', scope: 'feed' });
+  });
   it('exports the contract version', () => { expect(CONTRACT_VERSION).toBe(2); });
 });
 
 describe('defineTopic', () => {
-  it('returns mode and rate without a name', () => {
-    expect(defineTopic<Record<string, never>, number>({ mode: 'state', maxHz: 5 })).toEqual({ mode: 'state', maxHz: 5 });
+  it('returns owner, mode and rate without a name, scope defaulting to feed', () => {
+    expect(defineTopic<Record<string, never>, number>({ owner: 'core', mode: 'state', maxHz: 5 })).toEqual({ owner: 'core', mode: 'state', maxHz: 5, scope: 'feed' });
+  });
+  it('keeps an explicit global scope and a non-core owner', () => {
+    expect(defineTopic<Record<string, never>, number>({ owner: 'ui', mode: 'state', maxHz: 5, scope: 'global' })).toEqual({ owner: 'ui', mode: 'state', maxHz: 5, scope: 'global' });
+    expectTypeOf<TopicOwner>().toEqualTypeOf<'core' | (string & {})>();
+  });
+  it('does not compile without an owner', () => {
+    // @ts-expect-error owner is required
+    const noOwner = defineTopic<Record<string, never>, number>({ mode: 'state', maxHz: 5 });
+    expect(noOwner.mode).toBe('state');
   });
   it('is what each topic file default-exports', () => {
-    expect(carDetail).toEqual({ mode: 'state', maxHz: 30 });
-    expect(laps).toEqual({ mode: 'append', maxHz: Infinity });
+    expect(carDetail).toEqual({ owner: 'core', mode: 'state', maxHz: 30, scope: 'feed' });
+    expect(laps).toEqual({ owner: 'core', mode: 'append', maxHz: Infinity, scope: 'feed' });
   });
 });
 

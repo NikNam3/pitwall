@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { FeedId } from '@pitwall/domain';
 import type { ServerMessage } from '@pitwall/contracts';
 import { TopicHub } from '../../src/hub/topic-hub.ts';
+import { GLOBAL_TOPIC } from '../global-topic.ts';
 
 const A = 'feedA' as FeedId, B = 'feedB' as FeedId;
 class FakeSink { sent: ServerMessage[] = []; buffered = 0; send(m: ServerMessage) { this.sent.push(m); } bufferedAmount() { return this.buffered; } take() { return this.sent.splice(0); } }
@@ -98,5 +99,37 @@ describe('TopicHub', () => {
     expect(s.take()).toEqual([{ type: 'append', id: 'l', entries: [1] }]);
     s.buffered = 1_000_001; h.publishAppend(A, 'laps', [2]);
     expect(s.take()).toEqual([]);
+  });
+});
+
+describe('TopicHub global topics', () => {
+  const subGlobal = (id: string) => hub.subscribe({ clientId: 'c1', id, topic: GLOBAL_TOPIC, params: {}, feedId: undefined });
+  it('publishGlobal reaches a subscriber with feedId undefined', () => {
+    subGlobal('g'); sink.take();
+    hub.publishGlobal(GLOBAL_TOPIC, () => ({ v: 1 }));
+    expect(sink.take()).toEqual([{ type: 'topicStatus', id: 'g', status: 'ok' }, { type: 'update', id: 'g', value: { v: 1 } }]);
+    subGlobal('g2');
+    expect(sink.take()).toEqual([{ type: 'snapshot', id: 'g2', value: { v: 1 } }]);
+  });
+  it('resetFeed leaves a global value in place and does not resnapshot global subscribers', () => {
+    hub.publishGlobal(GLOBAL_TOPIC, () => 'kept'); subGlobal('g'); sink.take();
+    hub.resetFeed('replay' as FeedId);
+    expect(sink.take()).toEqual([]);
+    subGlobal('g2');
+    expect(sink.take()).toEqual([{ type: 'snapshot', id: 'g2', value: 'kept' }]);
+  });
+  it('subscribedTopics never lists a global topic, for any feed', () => {
+    subGlobal('g'); sub('l', 'laps');
+    expect([...hub.subscribedTopics(A)]).toEqual(['laps']);
+    expect([...hub.subscribedTopics(B)]).toEqual([]);
+  });
+  it('a global subscription does not call onDemandChange (subscribe, replace, unsubscribe, removeClient)', () => {
+    const changed: FeedId[] = [];
+    const h = new TopicHub({ now: () => 0, onDemandChange: (f) => { changed.push(f); } });
+    h.addClient('c1', new FakeSink());
+    const s = { clientId: 'c1', topic: GLOBAL_TOPIC, params: {}, feedId: undefined };
+    h.subscribe({ ...s, id: 'g' }); h.subscribe({ ...s, id: 'g' });
+    h.unsubscribe('c1', 'g'); h.subscribe({ ...s, id: 'g' }); h.removeClient('c1');
+    expect(changed).toEqual([]);
   });
 });
