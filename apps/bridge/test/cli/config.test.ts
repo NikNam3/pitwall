@@ -84,13 +84,21 @@ describe('pitwall CLI: config', { timeout: 30_000 }, () => {
     expect(r.stdout).not.toContain('listening');
   });
 
-  it('replay reads <recording>.config.json: a broken one stops the start, naming the key', async () => {
+  it('replay reads <recording>.config.json: invalid JSON stops the start', async () => {
     const { root, recording, sidecar } = withRecording();
-    writeFileSync(sidecar, BROKEN);
+    writeFileSync(sidecar, '{ nope');
     const r = await runCli(['replay', recording], { PITWALL_WS_PORT: '0', PITWALL_DATA_DIR: root });
     expect(r.code).toBe(1);
-    expect(r.stderr).toMatch(/^pitwall: .*no\.such\.key/m);
+    expect(r.stderr).toMatch(/^pitwall: /m);
     expect(r.stdout).not.toContain('listening');
+  });
+
+  it('replay reads a sidecar leniently: keys no feature declares are dropped and the recording is served', async () => {
+    const { root, recording, sidecar } = withRecording();
+    writeFileSync(sidecar, BROKEN);
+    const replay = startCli(['replay', recording], { PITWALL_WS_PORT: '0', PITWALL_DATA_DIR: root });
+    await replay.waitFor(/listening ws:\/\/127\.0\.0\.1:\d+/);
+    expect(await replay.stop()).toBe(0);
   });
 
   it('replay with a valid <recording>.config.json serves the recording', async () => {
@@ -101,12 +109,18 @@ describe('pitwall CLI: config', { timeout: 30_000 }, () => {
     expect(await replay.stop()).toBe(0);
   });
 
-  it('reprocess reads <recording>.config.json too: a broken one stops it, naming the key', async () => {
+  it('reprocess reads <recording>.config.json too: invalid JSON stops it', async () => {
     const { root, sidecar } = withRecording();
-    writeFileSync(sidecar, BROKEN);
+    writeFileSync(sidecar, '{ nope');
     const r = await runCli(['reprocess'], { PITWALL_DATA_DIR: root });
     expect(r.code).toBe(1);
-    expect(r.stderr).toMatch(/^pitwall: .*no\.such\.key/m);
+    expect(r.stderr).toMatch(/^pitwall: /m);
+  });
+
+  it('reprocess reads a sidecar leniently: keys no feature declares are dropped and the recording is processed', async () => {
+    const { root, sidecar } = withRecording();
+    writeFileSync(sidecar, BROKEN);
+    expect(await runCli(['reprocess'], { PITWALL_DATA_DIR: root })).toMatchObject({ code: 0, stdout: expect.stringContaining('reprocessed 1 recordings') });
   });
 
   it('reprocess with a valid config.json and no sidecar rebuilds as before', async () => {

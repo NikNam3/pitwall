@@ -3,10 +3,12 @@
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { Writable } from 'node:stream';
 import { describe, expect, it } from 'vitest';
 import { defineConfig } from '@pitwall/engine';
 import { defineFeature, type Feature } from '../src/features/feature.ts';
 import { loadFeatureConfig, recordingConfig, sessionConfigPath } from '../src/feature-config.ts';
+import { createLogger } from '../src/log.ts';
 import { StartupError } from '../src/startup-error.ts';
 
 const tyres = defineConfig('tyres.wear', { warnAt: 70, label: 'wear', strict: false });
@@ -157,12 +159,51 @@ describe('recordingConfig', () => {
       'fuel.margin': { laps: 1.5 },
     });
   });
-  it('a sidecar is validated like config.json: an unknown key or a wrong type is a StartupError', () => {
-    const unknown = failure(() => recordingConfig(recording(JSON.stringify({ 'brakes.wear': { x: 1 } })), features, effective));
-    expect(unknown.message).toContain('brakes.wear');
-    const wrong = failure(() => recordingConfig(recording(JSON.stringify({ 'fuel.margin': { laps: 'two' } })), features, effective));
-    expect(wrong.message).toContain('fuel.margin');
-    expect(wrong.message).toContain('laps');
-    expect(() => recordingConfig(recording('{ nope'), features, effective)).toThrow(StartupError);
+  describe('a sidecar is a historical record and is read leniently', () => {
+    /** The warnings (level 40) `recordingConfig` logs while reading `sidecar`, one parsed JSON line each. */
+    const warnings = (sidecar: unknown): { config: unknown; warned: string[] } => {
+      const lines: string[] = [];
+      const log = createLogger({ level: 'debug', destination: new Writable({ write(chunk, _enc, done) { lines.push(String(chunk)); done(); } }) });
+      const config = recordingConfig(recording(JSON.stringify(sidecar)), features, effective, log);
+      return { config, warned: lines.map((line) => JSON.parse(line) as { level: number }).filter((l) => l.level === 40).map((l) => JSON.stringify(l)) };
+    };
+
+    it('drops a key no feature declares any more, and warns naming it', () => {
+      const { config, warned } = warnings({ 'tyres.wear': { warnAt: 30 }, 'brakes.wear': { x: 1 } });
+      expect(config).toEqual({ 'tyres.wear': { warnAt: 30, label: 'wear', strict: false }, 'fuel.margin': { laps: 1.5 } });
+      expect(warned).toHaveLength(1);
+      expect(warned[0]).toContain('brakes.wear');
+    });
+    it('drops a field the key does not declare any more, and warns naming key and field', () => {
+      const { config, warned } = warnings({ 'tyres.wear': { warnAt: 30, oldName: 5 } });
+      expect(config).toEqual({ 'tyres.wear': { warnAt: 30, label: 'wear', strict: false }, 'fuel.margin': { laps: 1.5 } });
+      expect(warned).toHaveLength(1);
+      expect(warned[0]).toContain('tyres.wear');
+      expect(warned[0]).toContain('oldName');
+    });
+    it('a value of another type than the default falls back to the default, and warns naming key and field', () => {
+      const { config, warned } = warnings({ 'fuel.margin': { laps: 'two' }, 'tyres.wear': { warnAt: 30 } });
+      expect(config).toEqual({ 'tyres.wear': { warnAt: 30, label: 'wear', strict: false }, 'fuel.margin': { laps: 1.5 } });
+      expect(warned).toHaveLength(1);
+      expect(warned[0]).toContain('fuel.margin');
+      expect(warned[0]).toContain('laps');
+    });
+    it('the fallback is the feature default, not the current config.json override', () => {
+      const { config } = warnings({ 'tyres.wear': { warnAt: 'high' } });
+      expect(config).toMatchObject({ 'tyres.wear': { warnAt: 70 } });
+    });
+    it('warns once for each dropped or replaced entry, and not at all for a sidecar that fits', () => {
+      expect(warnings({ a: {}, b: {}, 'tyres.wear': { x: 1, y: 2, warnAt: true } }).warned).toHaveLength(5);
+      expect(warnings({ 'tyres.wear': { warnAt: 30 }, 'fuel.margin': { laps: 2 } }).warned).toEqual([]);
+    });
+    it('works without a logger', () => {
+      expect(recordingConfig(recording(JSON.stringify({ 'brakes.wear': { x: 1 }, 'fuel.margin': { laps: 'two' } })), features, effective)).toEqual(DEFAULTS);
+    });
+    it('invalid JSON and an unreadable file are still a StartupError', () => {
+      expect(() => recordingConfig(recording('{ nope'), features, effective)).toThrow(StartupError);
+      const path = join(tmp(), 'a.pwrec.gz');
+      mkdirSync(sessionConfigPath(path)); // a directory where the sidecar belongs
+      expect(() => recordingConfig(path, features, effective)).toThrow(StartupError);
+    });
   });
 });
