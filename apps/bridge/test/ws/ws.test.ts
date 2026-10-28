@@ -5,6 +5,7 @@ import type { FeedInfo, ServerMessage } from '@pitwall/contracts';
 import { TopicHub } from '../../src/hub/topic-hub.ts';
 import { WsServer } from '../../src/ws/server.ts';
 import { WsClient } from '../../src/ws/client.ts';
+import { GLOBAL_TOPIC } from '../global-topic.ts';
 
 const F = 'f1' as FeedId;
 const feeds = (): FeedInfo[] => [{ feedId: F, kind: 'replay', label: 'test' }];
@@ -78,5 +79,25 @@ describe('WsServer / WsClient', () => {
   it('rejects a busy port with a clear startup error', async () => {
     const s = await server(newHub());
     await expect(WsServer.start({ port: s.port, hub: newHub(), feeds })).rejects.toThrow(`WebSocket port ${s.port} is already in use`);
+  });
+  it('a global topic needs no feed: with no feeds on offer a subscription still gets its snapshot', async () => {
+    const hub = newHub(); hub.publishGlobal(GLOBAL_TOPIC, () => ({ theme: 'dark' }));
+    const s = await server(hub, { feeds: () => [] });
+    const { ws, got } = await raw(s.port);
+    ws.send(JSON.stringify({ type: 'subscribe', id: 'g1', topic: GLOBAL_TOPIC, params: {} }));
+    await vi.waitFor(() => expect(got.slice(1)).toEqual([{ type: 'snapshot', id: 'g1', value: { theme: 'dark' } }]));
+  });
+  it('ignores a feedId sent for a global topic, even an unknown one', async () => {
+    const hub = newHub(); hub.publishGlobal(GLOBAL_TOPIC, () => 7);
+    const s = await server(hub);
+    const { ws, got } = await raw(s.port);
+    ws.send(JSON.stringify({ type: 'subscribe', id: 'g1', topic: GLOBAL_TOPIC, params: {}, feedId: 'nope' }));
+    await vi.waitFor(() => expect(got.slice(1)).toEqual([{ type: 'snapshot', id: 'g1', value: 7 }]));
+  });
+  it('still answers unknownFeed for a feed topic when no feeds are on offer', async () => {
+    const s = await server(newHub(), { feeds: () => [] });
+    const { ws, got } = await raw(s.port);
+    ws.send(JSON.stringify({ type: 'subscribe', id: 's1', topic: 'laps', params: {} }));
+    await vi.waitFor(() => expect(got.slice(1)).toEqual([{ type: 'error', id: 's1', reason: 'unknownFeed' }]));
   });
 });

@@ -12,7 +12,8 @@ export type Subscription = {
   topic: TopicName;
   /** Passed through untouched to the topic's `valueFor`; the features validate it. */
   params: object;
-  feedId: FeedId;
+  /** `undefined` exactly for global topics, which belong to no feed. */
+  feedId: FeedId | undefined;
 };
 
 export interface ClientSink {
@@ -58,6 +59,8 @@ export class TopicHub {
   private readonly onDemandChange: ((feedId: FeedId) => void) | undefined;
   private readonly clients = new Map<string, { sink: ClientSink; entries: Map<string, Entry> }>();
   private readonly channels = new Map<FeedId, Map<TopicName, Channel>>();
+  /** Channels of global topics; `resetFeed` never touches them. */
+  private readonly globalChannels = new Map<TopicName, Channel>();
 
   constructor(options: TopicHubOptions) {
     this.now = options.now;
@@ -94,7 +97,7 @@ export class TopicHub {
     const entry: Entry = { subscription, sink: client.sink, pending: false, needsSnapshot: true };
     const replaced = client.entries.get(subscription.id)?.subscription.feedId;
     // A replacement may move the subscription to another feed: both feeds' topic sets can change.
-    const before = this.demandOf(new Set([subscription.feedId, ...(replaced !== undefined ? [replaced] : [])]));
+    const before = this.demandOf([subscription.feedId, replaced]);
     client.entries.delete(subscription.id);
     client.entries.set(subscription.id, entry);
     this.notifyDemand(before);
@@ -103,20 +106,25 @@ export class TopicHub {
 
   unsubscribe(clientId: string, id: string): void {
     const entries = this.clients.get(clientId)?.entries;
-    const feedId = entries?.get(id)?.subscription.feedId;
-    if (entries === undefined || feedId === undefined) return;
-    const before = this.demandOf([feedId]);
+    const entry = entries?.get(id);
+    if (entries === undefined || entry === undefined) return;
+    const before = this.demandOf([entry.subscription.feedId]);
     entries.delete(id);
     this.notifyDemand(before);
   }
 
-  publishState(feedId: FeedId, topic: TopicName, valueFor: ValueFor): void {
+  publishState(feedId: FeedId | undefined, topic: TopicName, valueFor: ValueFor): void {
     const channel = this.channel(feedId, topic);
     channel.valueFor = valueFor;
     channel.status = 'ok';
     for (const entry of this.entriesOf(feedId, topic)) {
       if (!entry.needsSnapshot) this.flushState(entry);
     }
+  }
+
+  /** Like `publishState`, for a global topic. */
+  publishGlobal(topic: TopicName, valueFor: ValueFor): void {
+    this.publishState(undefined, topic, valueFor);
   }
 
   publishAppend(feedId: FeedId, topic: TopicName, entries: unknown[]): void {
@@ -168,8 +176,11 @@ export class TopicHub {
     }
   }
 
-  private demandOf(feeds: Iterable<FeedId>): Map<FeedId, ReadonlySet<TopicName>> {
-    return new Map([...feeds].map((feedId) => [feedId, this.subscribedTopics(feedId)]));
+  /** Global subscriptions (`undefined`) have no feed and are skipped. */
+  private demandOf(feeds: Iterable<FeedId | undefined>): Map<FeedId, ReadonlySet<TopicName>> {
+    const feedIds = new Set<FeedId>();
+    for (const feedId of feeds) if (feedId !== undefined) feedIds.add(feedId);
+    return new Map([...feedIds].map((feedId) => [feedId, this.subscribedTopics(feedId)]));
   }
 
   /** Calls `onDemandChange` for each feed whose subscribed topics differ from `before`. */
@@ -181,7 +192,12 @@ export class TopicHub {
     }
   }
 
-  private channel(feedId: FeedId, topic: TopicName): Channel {
+  private channel(feedId: FeedId | undefined, topic: TopicName): Channel {
+    if (feedId === undefined) {
+      let channel = this.globalChannels.get(topic);
+      if (channel === undefined) this.globalChannels.set(topic, (channel = { log: [], status: 'ok' }));
+      return channel;
+    }
     let topics = this.channels.get(feedId);
     if (topics === undefined) this.channels.set(feedId, (topics = new Map()));
     let channel = topics.get(topic);
@@ -193,11 +209,11 @@ export class TopicHub {
     for (const client of this.clients.values()) yield* client.entries.values();
   }
 
-  private *entriesOfFeed(feedId: FeedId): Generator<Entry> {
+  private *entriesOfFeed(feedId: FeedId | undefined): Generator<Entry> {
     for (const entry of this.allEntries()) if (entry.subscription.feedId === feedId) yield entry;
   }
 
-  private *entriesOf(feedId: FeedId, topic: TopicName): Generator<Entry> {
+  private *entriesOf(feedId: FeedId | undefined, topic: TopicName): Generator<Entry> {
     for (const entry of this.entriesOfFeed(feedId)) if (entry.subscription.topic === topic) yield entry;
   }
 

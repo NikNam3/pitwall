@@ -2,7 +2,7 @@
 // The read-only MVP only serves subscriptions; the reserved `command` channel is always answered with `notSupported`.
 import { WebSocket, WebSocketServer } from 'ws';
 import type { FeedId } from '@pitwall/domain';
-import { CONTRACT_VERSION, decodeClientMessage, encodeMessage } from '@pitwall/contracts';
+import { CONTRACT_VERSION, TOPICS, decodeClientMessage, encodeMessage } from '@pitwall/contracts';
 import type { ClientMessage, FeedInfo, ServerMessage } from '@pitwall/contracts';
 import type { TopicHub } from '../hub/topic-hub.ts';
 import { StartupError } from '../startup-error.ts';
@@ -95,9 +95,12 @@ export class WsServer {
   private handle(clientId: string, message: ClientMessage, send: Send): void {
     switch (message.type) {
       case 'subscribe': {
-        const feedId = this.resolveFeed(message.feedId);
-        if (feedId === undefined) send({ type: 'error', id: message.id, reason: 'unknownFeed' });
-        else this.options.hub.subscribe({ clientId, id: message.id, topic: message.topic, params: message.params, feedId });
+        const { id, topic, params } = message;
+        // A global topic belongs to no feed: any `feedId` the client sent is ignored.
+        const global = TOPICS[topic].scope === 'global';
+        const feedId = global ? undefined : this.resolveFeed(message.feedId);
+        if (feedId === undefined && !global) send({ type: 'error', id, reason: 'unknownFeed' });
+        else this.options.hub.subscribe({ clientId, id, topic, params, feedId });
         return;
       }
       case 'unsubscribe':
