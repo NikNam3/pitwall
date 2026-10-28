@@ -7,6 +7,7 @@ export const SCHEMA_VERSION = 1;
 
 const DDL = `
 CREATE TABLE weekends (weekend_id TEXT PRIMARY KEY, season_id TEXT NOT NULL, track_id INTEGER NOT NULL) STRICT;
+/* One feed per session: session_uid is the key, so two feeds of the same session (a second car) cannot be stored side by side yet. */
 CREATE TABLE sessions (
   session_uid TEXT PRIMARY KEY, weekend_id TEXT NOT NULL REFERENCES weekends(weekend_id),
   session_type INTEGER NOT NULL, track_id INTEGER NOT NULL, started_at TEXT NOT NULL,

@@ -66,7 +66,7 @@ export class SessionStorage {
     this.#access?.writer.writeConfirmed(sessionUid, history, delta);
   }
 
-  /** The driver's earlier sessions of the weekend; `undefined` when storage is off or this session was never stored. */
+  /** The player's earlier sessions of the weekend with every driver's records; `undefined` when storage is off or this session was never stored. */
   weekendContext(weekendId: string, driverKey: DriverKey, sessionUid: SessionUid): WeekendContext | undefined {
     const repo = this.#access?.repo;
     if (repo === undefined) return undefined;

@@ -1,18 +1,34 @@
 import { feedId } from '@pitwall/domain';
 import { loadConfig } from '../../config.ts';
 import { UdpSource } from '../../input/udp-source.ts';
-import { openDatabase } from '../../storage/db.ts';
-import { dataDir } from '../../storage/data-dir.ts';
-import type { CliIo } from '../io.ts';
+import { dataDir, type DataDir } from '../../storage/data-dir.ts';
+import { openDatabase, SchemaVersionError, type Db } from '../../storage/db.ts';
+import { EXIT_INTERRUPTED, type CliIo } from '../io.ts';
+import { rebuildDatabase } from '../rebuild-database.ts';
 import { serve } from '../serve.ts';
 import { assertUdpPortFree, udpPortError } from '../udp-port.ts';
+
+/**
+ * The database, rebuilt from every recording first when it has an outdated schema (it is a cache of the recordings).
+ * Undefined when the rebuild was interrupted.
+ */
+async function currentDatabase(dirs: DataDir, io: CliIo): Promise<Db | undefined> {
+  try {
+    return openDatabase(dirs.dbPath);
+  } catch (error) {
+    if (!(error instanceof SchemaVersionError)) throw error;
+    io.err(`pitwall: database schema ${error.found} is outdated; rebuilding it from the recordings`);
+    return (await rebuildDatabase(dirs, io))?.db;
+  }
+}
 
 /** `pitwall live`: records the game's UDP telemetry and serves it. */
 export async function run(_positionals: string[], _values: object, io: CliIo): Promise<number> {
   const { udpPort, wsPort } = loadConfig(io.env);
   await assertUdpPortFree(udpPort);
   const dirs = dataDir(io.env);
-  const db = openDatabase(dirs.dbPath);
+  const db = await currentDatabase(dirs, io);
+  if (db === undefined) return EXIT_INTERRUPTED;
   const source = new UdpSource({ feedId: feedId(`udp-${udpPort}`), port: udpPort });
   return serve({
     source,
