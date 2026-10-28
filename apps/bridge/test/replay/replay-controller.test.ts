@@ -13,13 +13,21 @@ const open: Array<() => Promise<void>> = [];
 afterEach(async () => { for (const stop of open.splice(0)) await stop(); });
 const start = () => { const h = harness(SEGMENT); open.push(h.stop); return h; };
 
-/** Where a plain fast replay of the segment ends. */
-async function endOfSegment(): Promise<number> {
-  const pipeline = new FeedPipeline({ feedId: FEED, source: new PwrecSource({ feedId: FEED, path: SEGMENT, mode: 'asFastAsPossible' }), hub: new TopicHub({ now: () => performance.now() }), features: FEATURES, log: createLogger({ level: 'silent' }) });
+/** The session-time range of the segment (a mid-session cut, so it does not start at 0): first and last frame of a plain fast replay. */
+async function rangeOfSegment(): Promise<{ start: number; end: number; frac: (fraction: number) => number }> {
+  const source = new PwrecSource({ feedId: FEED, path: SEGMENT, mode: 'asFastAsPossible' });
+  const pipeline = new FeedPipeline({ feedId: FEED, source, hub: new TopicHub({ now: () => performance.now() }), features: FEATURES, log: createLogger({ level: 'silent' }) });
+  let start: number | undefined;
+  const original = source.start.bind(source);
+  source.start = (onPacket) => original((packet) => { onPacket(packet); start ??= pipeline.position()?.sessionTimeMs; });
   pipeline.start();
   await pipeline.done;
-  return pipeline.position()!.sessionTimeMs;
+  const end = pipeline.position()!.sessionTimeMs;
+  expect(start).toBeDefined();
+  expect(end).toBeGreaterThan(start! + 2000);
+  return { start: start!, end, frac: (fraction) => Math.floor(start! + (end - start!) * fraction) };
 }
+const endOfSegment = async (): Promise<number> => (await rangeOfSegment()).end;
 
 describe('ReplayController: pause, play, speed', () => {
   it('starts playing; pause stops the session time from advancing, play resumes it', async () => {
@@ -70,8 +78,8 @@ describe('ReplayController: pause, play, speed', () => {
 
 describe('ReplayController: jumps', () => {
   it('jumpToTime forward fast-forwards without waiting and keeps the paused state', async () => {
-    const end = await endOfSegment();
-    const target = Math.floor(end / 2);
+    const { end, frac } = await rangeOfSegment();
+    const target = frac(0.5);
     const h = start();
     h.controller.control({ kind: 'pause' });
     h.controller.control({ kind: 'jumpToTime', sessionTimeMs: target });
@@ -85,8 +93,8 @@ describe('ReplayController: jumps', () => {
     expect(h.status()).toMatchObject({ paused: true, atEnd: false, sessionTimeMs: at });
   });
   it('jumpToTime forward from playing goes on playing afterwards', async () => {
-    const end = await endOfSegment();
-    const target = Math.floor(end * 0.6);
+    const { frac } = await rangeOfSegment();
+    const target = frac(0.6);
     const h = start();
     await h.pump(5);
     h.controller.control({ kind: 'jumpToTime', sessionTimeMs: target });
@@ -96,9 +104,9 @@ describe('ReplayController: jumps', () => {
     expect(h.status()).toMatchObject({ paused: false });
   });
   it('jumpToTime backward resets the feed and replays from the start to the target', async () => {
-    const end = await endOfSegment();
-    const late = Math.floor(end * 0.75);
-    const early = Math.floor(end * 0.25);
+    const { frac } = await rangeOfSegment();
+    const late = frac(0.75);
+    const early = frac(0.25);
     const h = start();
     const reset = vi.spyOn(h.hub, 'resetFeed');
     h.controller.control({ kind: 'pause' });
@@ -112,9 +120,9 @@ describe('ReplayController: jumps', () => {
     expect(h.status()).toMatchObject({ paused: true, atEnd: false });
   });
   it('a backward jump leaves the same session.info and cars.overview as a fresh replay fast-forwarded to the target', async () => {
-    const end = await endOfSegment();
-    const late = Math.floor(end * 0.8);
-    const early = Math.floor(end * 0.3);
+    const { frac } = await rangeOfSegment();
+    const late = frac(0.8);
+    const early = frac(0.3);
     const jumped = start();
     jumped.controller.control({ kind: 'pause' });
     jumped.controller.control({ kind: 'jumpToTime', sessionTimeMs: late });
@@ -147,13 +155,13 @@ describe('ReplayController: jumps', () => {
     expect(h.controller.position()!.sessionTimeMs).toBe(end);
   }, 30_000);
   it('after a jump beyond the end, a jump back works and clears atEnd and the note', async () => {
-    const end = await endOfSegment();
+    const { end, frac } = await rangeOfSegment();
     const h = start();
     h.controller.control({ kind: 'pause' });
     h.controller.control({ kind: 'jumpToLap', lap: 99 });
     await until(() => h.status()?.atEnd === true, () => {}, 20_000);
     expect(h.status()).toMatchObject({ paused: true });
-    const target = Math.floor(end / 4);
+    const target = frac(0.25);
     h.controller.control({ kind: 'jumpToTime', sessionTimeMs: target });
     await until(() => { const s = h.status(); return s !== undefined && !s.atEnd && s.sessionTimeMs >= target && s.sessionTimeMs < end; }, () => {}, 20_000);
     const status = h.status()!;
