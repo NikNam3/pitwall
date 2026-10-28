@@ -1,5 +1,7 @@
 import { copyFileSync, existsSync, rmSync } from 'node:fs';
 import { basename, join } from 'node:path';
+import { loadFeatureConfig, recordingConfig, sessionConfigPath } from '../../feature-config.ts';
+import { FEATURES } from '../../features/index.generated.ts';
 import { StartupError } from '../../startup-error.ts';
 import { dataDir } from '../../storage/data-dir.ts';
 import { openDatabase } from '../../storage/db.ts';
@@ -18,13 +20,18 @@ export async function run(positionals: string[], _values: object, io: CliIo): Pr
   const target = join(dirs.recordings, name);
   if (existsSync(target)) throw new StartupError(`${name} is already imported`);
 
+  // The config the recording came with, if it has one next to it, travels with it.
+  const config = recordingConfig(file, FEATURES, loadFeatureConfig(dirs.root, FEATURES));
+
   const db = openDatabase(dirs.dbPath);
   try {
     copyFileSync(file, target);
+    if (existsSync(sessionConfigPath(file))) copyFileSync(sessionConfigPath(file), sessionConfigPath(target));
     try {
-      await processRecording(target, db, cliLogger(io, 'warn'), io.signal);
+      await processRecording(target, db, cliLogger(io, 'warn'), io.signal, config);
     } catch (error) {
-      rmSync(target, { force: true }); // a recording that cannot be processed (or was interrupted) is not imported
+      rmSync(target, { force: true });
+      rmSync(sessionConfigPath(target), { force: true }); // a recording that cannot be processed (or was interrupted) is not imported
       if (!io.signal.aborted) throw error;
       io.err('pitwall: interrupted, nothing imported');
       return EXIT_INTERRUPTED;

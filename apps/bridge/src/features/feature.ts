@@ -1,5 +1,5 @@
 import type { Computed, InsightEntry, TopicName, TopicValue } from '@pitwall/contracts';
-import type { Calculator, CalculatorId, History, IncrementalCalculator, Job, QuickCalculator } from '@pitwall/engine';
+import type { Calculator, CalculatorId, ConfigKey, ConfigValue, History, IncrementalCalculator, Job, QuickCalculator } from '@pitwall/engine';
 
 declare const bindingBrand: unique symbol;
 
@@ -68,6 +68,8 @@ export type Feature = {
   topics: TopicBinding[];
   /** Expensive computations that run in a worker; `bindJob` publishes their results. */
   jobs?: Job<unknown, unknown>[];
+  /** Thresholds and other values its calculators read with `read(view)`; `<data dir>/config.json` may override them. Keys are unique across features. */
+  config?: ConfigKey<Record<string, ConfigValue>>[];
 };
 
 export const defineFeature = (feature: Feature): Feature => feature;

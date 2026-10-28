@@ -1,9 +1,11 @@
 // One feed end to end (spec 4): PacketSource → decode → SessionTracker → SessionProcessor → TopicHub,
 // with the feed's health, its session files and its storage alongside.
+import { writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { toSessionTime, type FeedId, type SessionTime } from '@pitwall/domain';
 import { CalculatorRegistry, SessionTracker, type FrameMetrics, type InsightChange, type TrackerEvent } from '@pitwall/engine';
 import { decode } from '@pitwall/protocol';
+import { effectiveConfig, sessionConfigPath, type FeatureConfig } from '../feature-config.ts';
 import type { Feature } from '../features/feature.ts';
 import { feedStatusOf } from '../features/feed-status/feed-status.ts';
 import type { TopicHub } from '../hub/topic-hub.ts';
@@ -32,6 +34,11 @@ export type FeedPipelineOptions = {
    */
   features: readonly Feature[];
   log: Logger;
+  /**
+   * The effective calculator config (see `loadFeatureConfig`), fixed for the pipeline's run; unset means the defaults
+   * of the declared keys. Each session file gets a copy as `<file>.config.json`.
+   */
+  config?: FeatureConfig;
   /**
    * The database; with `recordingsDir` also one `.pwrec.gz` per session. `sourcePath` is the recording being
    * processed: its start dates the sessions, so a replay stores the same times on every run, and its absolute path
@@ -62,6 +69,7 @@ export class FeedPipeline {
   readonly #o: FeedPipelineOptions;
   readonly #feedId: FeedId;
   readonly #log: Logger;
+  readonly #config: FeatureConfig;
   readonly #registry: CalculatorRegistry;
   readonly #demand: ReturnType<typeof demandOf>;
   readonly #publisher: TopicPublisher;
@@ -83,6 +91,8 @@ export class FeedPipeline {
     this.#o = opts;
     this.#feedId = opts.feedId;
     this.#log = opts.log;
+    // Fixed for the run; changing the config from the UI at runtime comes later (it needs a new sidecar per change).
+    this.#config = effectiveConfig(opts.features, opts.config);
     this.#jobs = new FeedJobs(opts.features, (result) =>
       this.#guarded('job result', () => this.#onJobResult(result)),
     );
@@ -199,6 +209,7 @@ export class FeedPipeline {
       publisher: this.#publisher,
       jobs: this.#jobs,
       log,
+      config: this.#config,
       feedView: () => this.#monitor.view(this.#tracker.metrics, this.#lastReceivedAtMs),
       ...(storage && { storage }),
       ...(file && { file }),
@@ -209,13 +220,24 @@ export class FeedPipeline {
   #openSessionFile(event: SessionStarted, startedAt: string): SessionFile | undefined {
     const dir = this.#o.storage?.recordingsDir;
     if (dir === undefined) return undefined;
-    return new SessionFile({
+    const file = new SessionFile({
       dir,
       name: sessionRecordingName(this.#wallClock(), event.sessionUid),
       meta: { recorderVersion: 'pitwall-bridge', startedAt, listenPort: 0 },
       originMs: event.receivedAtMs,
       onError: (error) => this.#writeFailed('pwrec', error),
     });
+    this.#writeConfigSidecar(file.path);
+    return file;
+  }
+
+  /** The config the session runs with, next to its file, so a replay reproduces its alarms. A failure is a write failure of the session file. */
+  #writeConfigSidecar(sessionFilePath: string): void {
+    try {
+      writeFileSync(sessionConfigPath(sessionFilePath), `${JSON.stringify(this.#config, null, 2)}\n`);
+    } catch (error) {
+      this.#writeFailed('pwrec', error);
+    }
   }
 
   #endSession(receivedAtMs: number): void {

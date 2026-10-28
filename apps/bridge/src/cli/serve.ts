@@ -1,4 +1,5 @@
 import type { FeedInfo } from '@pitwall/contracts';
+import type { FeatureConfig } from '../feature-config.ts';
 import { FEATURES } from '../features/index.generated.ts';
 import { TopicHub } from '../hub/topic-hub.ts';
 import type { PacketSource } from '../input/packet-source.ts';
@@ -21,6 +22,8 @@ export type ServeOptions = {
   bound?: () => Promise<void>;
   /** Called when the source has delivered everything (a replay); `serve` goes on serving until the signal. */
   onDone?: () => void;
+  /** The effective calculator config for the run (see `loadFeatureConfig`); without it, the declared defaults. */
+  config?: FeatureConfig;
   io: CliIo;
 };
 
@@ -53,6 +56,7 @@ export async function serve(opts: ServeOptions): Promise<number> {
       source,
       hub,
       features: FEATURES,
+      ...(opts.config && { config: opts.config }),
       log: cliLogger(io, 'info'),
       dumpsDir: opts.dumpsDir,
       ...(opts.storage && { storage: { db: opts.storage.db, recordingsDir: opts.storage.recordingsDir } }),

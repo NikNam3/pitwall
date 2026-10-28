@@ -1,5 +1,6 @@
 import { basename } from 'node:path';
 import { feedId } from '@pitwall/domain';
+import type { FeatureConfig } from '../feature-config.ts';
 import { FEATURES } from '../features/index.generated.ts';
 import { TopicHub } from '../hub/topic-hub.ts';
 import { PwrecSource } from '../input/pwrec-source.ts';
@@ -10,9 +11,10 @@ import type { Db } from '../storage/db.ts';
 
 /**
  * Runs one recording through the pipeline as fast as possible, storing its sessions in `db`. Nobody listens to the hub.
+ * `config` is the calculator config it runs with (the recording's own, see `recordingConfig`).
  * An aborted `signal` (also one aborted before the call) stops the run, and it throws a `StartupError`.
  */
-export async function processRecording(path: string, db: Db, log: Logger, signal: AbortSignal): Promise<void> {
+export async function processRecording(path: string, db: Db, log: Logger, signal: AbortSignal, config: FeatureConfig): Promise<void> {
   if (signal.aborted) throw new StartupError('interrupted');
   const id = feedId('replay');
   const pipeline = new FeedPipeline({
@@ -25,6 +27,7 @@ export async function processRecording(path: string, db: Db, log: Logger, signal
       },
     }),
     features: FEATURES,
+    config,
     log,
     storage: { db, sourcePath: path },
   });

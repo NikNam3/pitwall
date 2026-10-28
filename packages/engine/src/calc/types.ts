@@ -36,6 +36,8 @@ export type EngineView = {
   feed: FeedMetricsView;
   /** Outputs of the calculators run before this one in the same pass. */
   outputs: ReadonlyMap<CalculatorId, unknown>;
+  /** The effective config of the run, by section key (see `defineConfig`); fixed for the run. */
+  config: DeepReadonly<Record<string, Record<string, number | string | boolean>>>;
 };
 
 type CalculatorBase = {

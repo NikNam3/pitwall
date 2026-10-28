@@ -170,6 +170,7 @@ export class Scheduler {
         delta: pending.delta,
         feed: input.feed,
         outputs: this.#outputs,
+        config: input.config,
       };
       let evaluation: Evaluation;
       try {

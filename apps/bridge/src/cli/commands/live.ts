@@ -1,5 +1,7 @@
 import { feedId } from '@pitwall/domain';
 import { loadConfig } from '../../config.ts';
+import { loadFeatureConfig } from '../../feature-config.ts';
+import { FEATURES } from '../../features/index.generated.ts';
 import { UdpSource } from '../../input/udp-source.ts';
 import { dataDir, type DataDir } from '../../storage/data-dir.ts';
 import { openDatabase, SchemaVersionError, type Db } from '../../storage/db.ts';
@@ -25,8 +27,10 @@ async function currentDatabase(dirs: DataDir, io: CliIo): Promise<Db | undefined
 /** `pitwall live`: records the game's UDP telemetry and serves it. */
 export async function run(_positionals: string[], _values: object, io: CliIo): Promise<number> {
   const { udpPort, wsPort } = loadConfig(io.env);
-  await assertUdpPortFree(udpPort);
   const dirs = dataDir(io.env);
+  // Fixed for the run (a runtime change from the UI comes later); a config error stops the start before anything listens.
+  const config = loadFeatureConfig(dirs.root, FEATURES);
+  await assertUdpPortFree(udpPort);
   const db = await currentDatabase(dirs, io);
   if (db === undefined) return EXIT_INTERRUPTED;
   const source = new UdpSource({ feedId: feedId(`udp-${udpPort}`), port: udpPort });
@@ -35,6 +39,7 @@ export async function run(_positionals: string[], _values: object, io: CliIo): P
     feed: { kind: 'udp', label: `UDP port ${udpPort}` },
     wsPort,
     dumpsDir: dirs.dumps,
+    config,
     storage: { db, recordingsDir: dirs.recordings },
     staleCheck: { clock: () => performance.now(), everyMs: 500 },
     // The port was free a moment ago; this catches the race and any other bind failure.

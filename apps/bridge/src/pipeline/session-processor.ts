@@ -15,6 +15,7 @@ import {
 } from '@pitwall/engine';
 import type { TopicName } from '@pitwall/contracts';
 import { peekHeader, type ParticipantsPacket, type SessionPacket } from '@pitwall/protocol';
+import type { FeatureConfig } from '../feature-config.ts';
 import type { FeedJobs } from '../jobs/feed-jobs.ts';
 import type { Logger } from '../log.ts';
 import type { SessionRow } from '../storage/db.ts';
@@ -43,6 +44,8 @@ export type SessionProcessorOptions = {
   log: Logger;
   /** The feed's health right now, for the calculators that read `feed`. */
   feedView: () => FeedMetricsView;
+  /** The effective calculator config, the same for every frame of the session. */
+  config: FeatureConfig;
   storage?: SessionStorage;
   file?: SessionFile;
   dumpsDir?: string;
@@ -147,7 +150,7 @@ export class SessionProcessor {
       const result = runner.apply(frame);
       storage?.writeConfirmed(this.#uid, result.state.history, result.delta);
       if (result.flashback) scheduler.reset();
-      const scheduled = scheduler.run({ state: result.state, changed: result.changed, delta: result.delta, feed: this.#o.feedView() });
+      const scheduled = scheduler.run({ state: result.state, changed: result.changed, delta: result.delta, feed: this.#o.feedView(), config: this.#o.config });
       // Each topic is published on its own: a failing feature binding never holds back the others.
       const unpublished = [
         ...publisher.publishOutputs(scheduled),
