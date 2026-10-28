@@ -1,5 +1,6 @@
 import { describe, expect, expectTypeOf, it } from 'vitest';
-import type { CarDynamics, CarId, CarState, FeedId, LapRecord } from '@pitwall/domain';
+import type { CarDynamics, CarId, CarMotion, CarState, FeedId, Known, LapRecord } from '@pitwall/domain';
+import type { CarTelemetry } from '../src/topics/car.telemetry.ts';
 import {
   CONTRACT_VERSION,
   TOPICS,
@@ -60,7 +61,8 @@ describe('topic types', () => {
     expectTypeOf<TopicParams<'car.telemetry'>['carId']>().toEqualTypeOf<CarId>();
     expectTypeOf<TopicParams<'laps'>>().toEqualTypeOf<Record<string, never>>();
     expectTypeOf<TopicValue<'car.detail'>>().toEqualTypeOf<CarState>();
-    expectTypeOf<TopicValue<'car.telemetry'>>().toEqualTypeOf<CarDynamics>();
+    expectTypeOf<TopicValue<'car.telemetry'>>().toEqualTypeOf<{ motion: CarMotion; dynamics: Known<CarDynamics> }>();
+    expectTypeOf<TopicValue<'car.telemetry'>>().toEqualTypeOf<CarTelemetry>();
     expectTypeOf<TopicValue<'laps'>>().toEqualTypeOf<LapRecord>();
     expectTypeOf<TopicValue<'feed.status'>>().toEqualTypeOf<FeedStatus>();
     expectTypeOf<TopicValue<'session.info'>>().toEqualTypeOf<SessionInfo>();

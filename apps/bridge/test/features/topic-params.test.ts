@@ -16,7 +16,7 @@ const select = (f: Feature, topic: string, params: unknown): unknown => {
 
 const cases = [
   { feature: carDetail, topic: 'car.detail', expected: (id: number) => view.state.cars[id] },
-  { feature: carTelemetry, topic: 'car.telemetry', expected: (id: number) => view.state.cars[id]!.dynamics },
+  { feature: carTelemetry, topic: 'car.telemetry', expected: (id: number) => ({ motion: view.state.cars[id]!.motion, dynamics: view.state.cars[id]!.dynamics }) },
 ];
 
 // `state.cars` holds every slot of the game (22), so the valid range is 0 .. cars.length - 1.
