@@ -17,7 +17,19 @@ module.exports = {
     layer('contracts-only-domain', 'packages/contracts', ['domain']),
     layer('engine-only-protocol-domain', 'packages/engine', ['protocol', 'domain']),
     layer('strategy-only-engine-domain', 'packages/strategy', ['engine', 'domain']),
-    layer('ui-only-contracts-domain', 'apps/ui', ['contracts', 'domain']),
+    {
+      name: 'ui-only-contracts-domain',
+      comment: 'The UI imports contracts and domain only; its tests may also build engine state (car-sources.test.ts).',
+      severity: 'error',
+      from: { path: '^apps/ui/', pathNot: '^apps/ui/test/' },
+      to: { path: '^(packages|apps)/', pathNot: '^(apps/ui|packages/contracts|packages/domain)/' },
+    },
+    {
+      name: 'ui-tests-only-contracts-domain-engine-state',
+      severity: 'error',
+      from: { path: '^apps/ui/test/' },
+      to: { path: '^(packages|apps)/', pathNot: '^(apps/ui|packages/contracts|packages/domain|packages/engine/src/(state|step/initial-state\\.ts))/?' },
+    },
     {
       name: 'ui-widgets-isolated',
       comment: 'A widget imports only kit, theme, emphasis (and contracts/domain) and its own folder.',
