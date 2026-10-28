@@ -8,3 +8,5 @@ packages/contracts/src/topics/index.generated.ts
 reports/
 .claude/worktrees/
 .superpowers/
+.svelte-kit/
+apps/ui/dist/

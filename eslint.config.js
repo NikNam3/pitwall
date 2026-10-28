@@ -1,6 +1,34 @@
 import js from '@eslint/js';
 import { defineConfig } from 'eslint/config';
+import svelte from 'eslint-plugin-svelte';
 import tseslint from 'typescript-eslint';
+import uiStyle from './apps/ui/eslint/style-declarations.js';
+
+const COLOUR_PATTERN = '^(?:#[0-9a-fA-F]{3,8}|(?:rgba?|hsla?|oklch)\\(.*)$';
+const COLOUR_SELECTORS = ['Literal', 'TemplateElement', 'SvelteLiteral'].map((type) => ({
+  selector: `${type}[${type === 'TemplateElement' ? 'value.raw' : 'value'}=/${COLOUR_PATTERN}/]`,
+  message: 'Colour literals belong in theme/; use a theme role.',
+}));
+const WINDOW_HOST = ['open', 'moveTo', 'resizeTo', 'screen'].map((property) => ({
+  object: 'window',
+  property,
+  message: 'Host calls go through shell/host/.',
+}));
+const NUMBER_FORMAT = [
+  ...['toFixed', 'toPrecision', 'toLocaleString'].map((property) => ({ property })),
+  ...['NumberFormat', 'DateTimeFormat'].map((property) => ({ object: 'Intl', property })),
+].map((entry) => ({ ...entry, message: 'Format numbers through kit/values/format.ts.' }));
+const NETWORK = ['WebSocket', 'fetch'].map((name) => ({ name, message: 'Only connection/ talks to the network.' }));
+
+/** The UI rules of spec 4.6 for `apps/ui/src`; a flag set to false exempts a folder from that rule. */
+function uiRules({ network = true, host = true, format = true, colour = true } = {}) {
+  return {
+    'no-restricted-globals': network ? ['error', ...NETWORK] : 'off',
+    'no-restricted-properties': ['error', ...(host ? WINDOW_HOST : []), ...(format ? NUMBER_FORMAT : [])],
+    'no-restricted-syntax': colour ? ['error', ...COLOUR_SELECTORS] : 'off',
+  };
+}
+const UI_FILES = ['apps/ui/src/**/*.ts', 'apps/ui/src/**/*.svelte'];
 
 const PURE_MESSAGE = 'Engine/strategy are pure: no clock, no environment, no I/O (spec 3.4).';
 
@@ -12,6 +40,7 @@ export default defineConfig(
       'recordings/',
       '**/.stryker-tmp/',
       '**/reports/',
+      'apps/ui/dist/',
       'apps/bridge/src/features/index.generated.ts',
       'packages/contracts/src/topics/index.generated.ts',
       '.claude/',
@@ -70,5 +99,21 @@ export default defineConfig(
         },
       ],
     },
+  },
+  ...svelte.configs['flat/recommended'].map((config) => ({ ...config, files: config.files ?? ['**/*.svelte'] })),
+  {
+    files: ['**/*.svelte'],
+    languageOptions: { parserOptions: { parser: tseslint.parser } },
+    rules: { 'no-undef': 'off' },
+  },
+  { files: UI_FILES, plugins: { 'pw-ui': uiStyle }, rules: uiRules() },
+  { files: ['apps/ui/src/**/*.svelte'], rules: { 'pw-ui/style-declarations': ['error', { colours: true, fontFamily: true }] } },
+  { files: ['apps/ui/src/theme/**'], rules: { ...uiRules({ colour: false }), 'pw-ui/style-declarations': ['error', { fontFamily: false }] } },
+  { files: ['apps/ui/src/connection/**'], rules: uiRules({ network: false }) },
+  { files: ['apps/ui/src/shell/host/**'], rules: uiRules({ host: false }) },
+  { files: ['apps/ui/src/kit/values/format.ts'], rules: uiRules({ format: false }) },
+  {
+    files: ['apps/ui/src/widgets/**/*.svelte'],
+    rules: { 'pw-ui/style-declarations': ['error', { colours: true, fontFamily: true, spacing: true }] },
   },
 );

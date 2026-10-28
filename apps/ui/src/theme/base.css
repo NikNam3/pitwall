@@ -1,0 +1,17 @@
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('./font/JetBrainsMono[wght].woff2') format('woff2');
+  font-weight: 100 800;
+  font-display: block;
+}
+
+:root {
+  --pw-font: 'JetBrains Mono', monospace;
+}
+
+html,
+body {
+  font-family: var(--pw-font);
+  /* Ligatures off globally: digits and operators stay one cell wide. */
+  font-variant-ligatures: none;
+}
