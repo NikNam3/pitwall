@@ -1,9 +1,10 @@
 // WebSocket server (spec 8): one hub client per connection, hello on connect, heartbeats, silent clients dropped.
-// The read-only MVP only serves subscriptions; the reserved `command` channel is always answered with `notSupported`.
+// Besides subscriptions it only passes `uiAction` messages to the UI state; the reserved `command` channel is always answered with `notSupported`.
 import { WebSocket, WebSocketServer } from 'ws';
 import type { FeedId } from '@pitwall/domain';
 import { CONTRACT_VERSION, TOPICS, decodeClientMessage, encodeMessage } from '@pitwall/contracts';
 import type { ClientMessage, FeedInfo, ServerMessage } from '@pitwall/contracts';
+import type { UiState } from '../ui-state/ui-state.ts';
 import type { TopicHub } from '../hub/topic-hub.ts';
 import { StartupError } from '../startup-error.ts';
 
@@ -13,6 +14,8 @@ export type WsServerOptions = {
   hub: TopicHub;
   /** The feeds on offer right now; asked again for every connection and subscription. */
   feeds: () => FeedInfo[];
+  /** The UI state that `uiAction` messages change; without it they are answered with `notSupported`. */
+  uiState?: Pick<UiState, 'apply'>;
   /** Default `127.0.0.1`. */
   host?: string;
   /** How often `hub.tick()` flushes throttled subscriptions and owed snapshots. Default 10. */
@@ -109,6 +112,11 @@ export class WsServer {
       case 'command':
         send({ type: 'commandResult', id: message.id, ok: false, reason: 'notSupported' });
         return;
+      case 'uiAction': {
+        const result = this.options.uiState?.apply(message.action) ?? { ok: false, reason: 'notSupported' } as const;
+        send({ type: 'actionResult', id: message.id, ...result });
+        return;
+      }
       case 'heartbeat':
         return; // only refreshes `lastSeen`
     }

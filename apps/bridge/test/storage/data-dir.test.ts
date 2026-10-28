@@ -7,7 +7,7 @@ const tmp = () => mkdtempSync(join(tmpdir(), 'data-'));
 describe('dataDir', () => {
   it('honors PITWALL_DATA_DIR and creates the subdirectories', () => {
     const root = join(tmp(), 'pw');
-    expect(dataDir({ PITWALL_DATA_DIR: root })).toEqual({ root, recordings: join(root, 'recordings'), dumps: join(root, 'dumps'), dbPath: join(root, 'pitwall.db') });
+    expect(dataDir({ PITWALL_DATA_DIR: root })).toEqual({ root, recordings: join(root, 'recordings'), dumps: join(root, 'dumps'), dbPath: join(root, 'pitwall.db'), ui: join(root, 'ui') });
     expect(existsSync(join(root, 'recordings')) && existsSync(join(root, 'dumps'))).toBe(true);
   });
   it('defaults to ~/.local/share/pitwall', () => {

@@ -5,6 +5,7 @@ import { FEATURES } from '../features/index.generated.ts';
 import { TopicHub } from '../hub/topic-hub.ts';
 import type { PacketSource } from '../input/packet-source.ts';
 import { FeedPipeline, type FeedPipelineOptions } from '../pipeline/feed-pipeline.ts';
+import { UiState } from '../ui-state/ui-state.ts';
 import { StartupError } from '../startup-error.ts';
 import type { Db } from '../storage/db.ts';
 import { WsServer } from '../ws/server.ts';
@@ -16,6 +17,8 @@ export type ServeOptions = {
   feed: Omit<FeedInfo, 'feedId'>;
   wsPort: number;
   dumpsDir: string;
+  /** `PITWALL_DATA_DIR/ui`: the UI state is kept there. Without it `uiAction` messages are answered with `notSupported`. */
+  uiDir?: string;
   /** Opened by the caller, closed by `serve` (also when it fails). */
   storage?: { db: Db; recordingsDir: string };
   staleCheck?: FeedPipelineOptions['staleCheck'];
@@ -57,7 +60,9 @@ export async function serve(opts: ServeOptions): Promise<number> {
       },
     });
     const feeds = (): FeedInfo[] => [{ feedId: source.feedId, ...opts.feed }];
-    const server = await WsServer.start({ port: opts.wsPort, hub, feeds });
+    const uiState = opts.uiDir === undefined ? undefined : UiState.open(opts.uiDir, hub, cliLogger(io, 'warn'));
+    if (uiState) undo.push(() => uiState.close());
+    const server = await WsServer.start({ port: opts.wsPort, hub, feeds, ...(uiState && { uiState }) });
     undo.push(() => server.close());
     const calcStats = opts.dev ? createCalcStats() : undefined;
     if (calcStats) {

@@ -39,6 +39,7 @@ export async function run(_positionals: string[], values: { dev?: boolean | unde
     feed: { kind: 'udp', label: `UDP port ${udpPort}` },
     wsPort,
     dumpsDir: dirs.dumps,
+    uiDir: dirs.ui,
     config,
     storage: { db, recordingsDir: dirs.recordings },
     staleCheck: { clock: () => performance.now(), everyMs: 500 },
