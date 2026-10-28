@@ -38,7 +38,13 @@ export async function serve(opts: ServeOptions): Promise<number> {
         storage.db.close();
       });
     }
-    const hub = new TopicHub({ now: () => performance.now() });
+    // The hub's one callback tells the pipeline which calculators its subscribers need; the pipeline exists by the first call.
+    const hub = new TopicHub({
+      now: () => performance.now(),
+      onDemandChange: (changed) => {
+        if (changed === source.feedId) pipeline.demandChanged();
+      },
+    });
     const feeds = (): FeedInfo[] => [{ feedId: source.feedId, ...opts.feed }];
     const server = await WsServer.start({ port: opts.wsPort, hub, feeds });
     undo.push(() => server.close());

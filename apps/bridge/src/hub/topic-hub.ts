@@ -25,6 +25,11 @@ export type TopicHubOptions = {
   now: () => number;
   /** A client with more than this many bytes queued only gets the newest state, or one fresh snapshot per append topic. */
   backpressureBytes?: number;
+  /**
+   * Called after `subscribe`, `unsubscribe` or `removeClient` changed which topics of a feed have a subscription, and
+   * only then. One callback: whoever owns the hub composes several listeners.
+   */
+  onDemandChange?: (feedId: FeedId) => void;
 };
 
 /** Derives one subscription's value from the latest state; `undefined` means "no data for these params". */
@@ -50,12 +55,14 @@ type Entry = {
 export class TopicHub {
   private readonly now: () => number;
   private readonly backpressureBytes: number;
+  private readonly onDemandChange: ((feedId: FeedId) => void) | undefined;
   private readonly clients = new Map<string, { sink: ClientSink; entries: Map<string, Entry> }>();
   private readonly channels = new Map<FeedId, Map<TopicName, Channel>>();
 
   constructor(options: TopicHubOptions) {
     this.now = options.now;
     this.backpressureBytes = options.backpressureBytes ?? DEFAULT_BACKPRESSURE_BYTES;
+    this.onDemandChange = options.onDemandChange;
   }
 
   addClient(clientId: string, sink: ClientSink): void {
@@ -63,7 +70,17 @@ export class TopicHub {
   }
 
   removeClient(clientId: string): void {
+    const client = this.clients.get(clientId);
+    if (client === undefined) return;
+    const feeds = new Set([...client.entries.values()].map((entry) => entry.subscription.feedId));
+    const before = this.demandOf(feeds);
     this.clients.delete(clientId);
+    this.notifyDemand(before);
+  }
+
+  /** The topics of a feed that at least one subscription asks for. */
+  subscribedTopics(feedId: FeedId): ReadonlySet<TopicName> {
+    return new Set([...this.entriesOfFeed(feedId)].map((entry) => entry.subscription.topic));
   }
 
   /** Replaces a subscription with the same `(clientId, id)`. Subscriptions of unknown clients are ignored. */
@@ -71,13 +88,20 @@ export class TopicHub {
     const client = this.clients.get(subscription.clientId);
     if (client === undefined) return;
     const entry: Entry = { subscription, sink: client.sink, pending: false, needsSnapshot: false };
+    const before = this.demandOf([subscription.feedId]);
     client.entries.delete(subscription.id);
     client.entries.set(subscription.id, entry);
+    this.notifyDemand(before);
     this.sendSnapshot(entry);
   }
 
   unsubscribe(clientId: string, id: string): void {
-    this.clients.get(clientId)?.entries.delete(id);
+    const entries = this.clients.get(clientId)?.entries;
+    const feedId = entries?.get(id)?.subscription.feedId;
+    if (entries === undefined || feedId === undefined) return;
+    const before = this.demandOf([feedId]);
+    entries.delete(id);
+    this.notifyDemand(before);
   }
 
   publishState(feedId: FeedId, topic: TopicName, valueFor: ValueFor): void {
@@ -135,6 +159,19 @@ export class TopicHub {
       } else if (entry.pending) {
         this.flushState(entry);
       }
+    }
+  }
+
+  private demandOf(feeds: Iterable<FeedId>): Map<FeedId, ReadonlySet<TopicName>> {
+    return new Map([...feeds].map((feedId) => [feedId, this.subscribedTopics(feedId)]));
+  }
+
+  /** Calls `onDemandChange` for each feed whose subscribed topics differ from `before`. */
+  private notifyDemand(before: ReadonlyMap<FeedId, ReadonlySet<TopicName>>): void {
+    if (this.onDemandChange === undefined) return;
+    for (const [feedId, topics] of before) {
+      const now = this.subscribedTopics(feedId);
+      if (now.size !== topics.size || [...now].some((topic) => !topics.has(topic))) this.onDemandChange(feedId);
     }
   }
 

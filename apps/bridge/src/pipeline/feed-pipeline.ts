@@ -12,6 +12,7 @@ import type { Logger } from '../log.ts';
 import type { Db } from '../storage/db.ts';
 import { SessionFile, sessionRecordingName } from '../storage/session-files.ts';
 import { FeedAlerts, type WriteFailure } from './feed-alerts.ts';
+import { demandOf } from './demand.ts';
 import { FeedMonitor } from './feed-monitor.ts';
 import { sessionClock, type SessionClock } from './session-clock.ts';
 import { SessionProcessor } from './session-processor.ts';
@@ -56,6 +57,7 @@ export class FeedPipeline {
   readonly #feedId: FeedId;
   readonly #log: Logger;
   readonly #registry: CalculatorRegistry;
+  readonly #demand: ReturnType<typeof demandOf>;
   readonly #publisher: TopicPublisher;
   readonly #tracker: SessionTracker;
   readonly #monitor = new FeedMonitor();
@@ -75,6 +77,7 @@ export class FeedPipeline {
     this.#feedId = opts.feedId;
     this.#log = opts.log;
     this.#registry = CalculatorRegistry.build(opts.features.flatMap((feature) => feature.calculators));
+    this.#demand = demandOf(opts.features, this.#registry);
     this.#publisher = new TopicPublisher({ feedId: opts.feedId, hub: opts.hub, features: opts.features, log: opts.log });
     this.#tracker = new SessionTracker({ feedId: opts.feedId });
     this.#alerts = new FeedAlerts(opts.feedId);
@@ -93,6 +96,14 @@ export class FeedPipeline {
       this.#staleTimer = setInterval(() => this.#guarded('stale check', () => this.#checkFeed(staleCheck.clock())), staleCheck.everyMs);
     }
     this.#finish().then(this.#done.resolve, this.#done.reject);
+  }
+
+  /**
+   * The hub's subscriptions changed (wire `TopicHub`'s `onDemandChange` to it): the running session takes the new set
+   * of needed calculators, a later session reads it when it starts. Harmless when no session runs.
+   */
+  demandChanged(): void {
+    this.#guarded('demand change', () => this.#session?.demandChanged());
   }
 
   /** Stops the source and resolves once `done` has settled. */
@@ -173,6 +184,7 @@ export class FeedPipeline {
       startedAt,
       pwrecPath,
       registry: this.#registry,
+      needed: () => this.#demand(hub.subscribedTopics(feedId)),
       publisher: this.#publisher,
       log,
       feedView: () => this.#monitor.view(this.#tracker.metrics, this.#lastReceivedAtMs),

@@ -4,6 +4,7 @@ import {
   driverKeyOf,
   Scheduler,
   SessionRunner,
+  type CalculatorId,
   type CalculatorRegistry,
   type FeedMetricsView,
   type FlashbackInfo,
@@ -33,6 +34,8 @@ export type SessionProcessorOptions = {
   /** The recording that holds the session's datagrams, stored with it; `null` when there is none. */
   pwrecPath: string | null;
   registry: CalculatorRegistry;
+  /** The calculators to run now; asked when the runner starts and on every `demandChanged()`. */
+  needed: () => Iterable<CalculatorId>;
   publisher: TopicPublisher;
   log: Logger;
   /** The feed's health right now, for the calculators that read `feed`. */
@@ -98,6 +101,11 @@ export class SessionProcessor {
     if (uid === this.sessionUid || uid === 0n) this.#o.file?.write(receivedAtMs, bytes);
   }
 
+  /** The set of needed calculators changed: the running scheduler takes the new set. Before the runner starts, nothing to do yet. */
+  demandChanged(): void {
+    this.#running?.scheduler.setNeeded(this.#o.needed());
+  }
+
   /** Runs whatever still waits for Participants, then closes the session file. */
   async end(receivedAtMs: number): Promise<void> {
     if (this.#running === undefined && this.#buffered.length > 0) this.#begin();
@@ -109,7 +117,7 @@ export class SessionProcessor {
     const { feedId, sessionUid, session, registry } = this.#o;
     const weekend = participants && this.#identify(participants, playerCarIndex);
     const scheduler = new Scheduler(registry);
-    scheduler.setNeeded(registry.order.map((calc) => calc.id));
+    scheduler.setNeeded(this.#o.needed());
     const running = { runner: new SessionRunner({ feedId, sessionUid, session, ...(weekend && { weekend }) }), scheduler };
     this.#running = running;
     const frames = this.#buffered;

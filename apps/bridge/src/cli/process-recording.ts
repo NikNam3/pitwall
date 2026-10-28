@@ -18,7 +18,12 @@ export async function processRecording(path: string, db: Db, log: Logger, signal
   const pipeline = new FeedPipeline({
     feedId: id,
     source: new PwrecSource({ feedId: id, path, mode: 'asFastAsPossible' }),
-    hub: new TopicHub({ now: () => 0 }),
+    hub: new TopicHub({
+      now: () => 0,
+      onDemandChange: (changed) => {
+        if (changed === id) pipeline.demandChanged();
+      },
+    }),
     features: FEATURES,
     log,
     storage: { db, sourcePath: path },
