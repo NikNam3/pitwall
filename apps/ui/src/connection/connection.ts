@@ -1,6 +1,7 @@
 // The only module that touches the WebSocket (spec 6.1).
 import { decodeServerMessage, encodeMessage, type ClientMessage, type ServerMessage } from '@pitwall/contracts';
 
+/** The link's state: `connecting` before the first open and between retries, `closed` while waiting to retry. */
 export type ConnectionState = 'connecting' | 'open' | 'closed';
 
 /** One link to the bridge. The topic store is its only consumer. */
@@ -11,6 +12,8 @@ export interface Connection {
   send(message: ClientMessage): void;
   onMessage(cb: (m: ServerMessage) => void): () => void;
   onState(cb: (s: ConnectionState) => void): () => void;
+  /** Stops the reconnect timer and closes the socket for good. */
+  close(): void;
 }
 
 const INITIAL_BACKOFF_MS = 250;
@@ -29,6 +32,8 @@ export function createWsConnection(
   let state: ConnectionState = 'connecting';
   let backoff = initialBackoff;
   let socket: WebSocket;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let disposed = false;
 
   const setState = (next: ConnectionState): void => {
     state = next;
@@ -48,11 +53,11 @@ export function createWsConnection(
       for (const cb of [...messageListeners]) cb(message);
     };
     ws.onclose = () => {
-      if (socket !== ws) return;
+      if (socket !== ws || disposed) return;
       setState('closed');
       const delay = backoff;
       backoff = Math.min(backoff * 2, maxBackoff);
-      setTimeout(() => {
+      timer = setTimeout(() => {
         setState('connecting');
         connect();
       }, delay);
@@ -74,6 +79,11 @@ export function createWsConnection(
     onState(cb) {
       stateListeners.add(cb);
       return () => stateListeners.delete(cb);
+    },
+    close() {
+      disposed = true;
+      clearTimeout(timer);
+      socket.close();
     },
   };
 }

@@ -13,8 +13,10 @@ import type { Connection, ConnectionState } from './connection.ts';
 
 /** How an append topic's entries become a value. `add` must return a new value, never mutate `acc`. */
 export type Fold<E, R> = { init: () => R; add: (acc: R, entries: readonly E[]) => R };
+/** What a panel reads: `waiting` until the first snapshot, then `ok`, `noData` or `errored`. */
 export type EntryState<V> = { status: 'waiting' | 'ok' | 'noData' | 'errored'; value: V | undefined };
 
+/** Which topic to read: name, params and feed. */
 export type TopicKey<T extends TopicName> = { topic: T; params: TopicParams<T>; feedId?: FeedId };
 
 type Entry = {
@@ -36,26 +38,44 @@ const canonical = (value: unknown): string =>
       : v,
   );
 
+/** The window's topics: shared, reference-counted subscriptions whose values are runes. */
 export class TopicStore {
+  #connection = $state<ConnectionState>('connecting');
+  #contractMismatch = $state(false);
   /** The state of the link to the bridge. */
-  connection = $state<ConnectionState>('connecting');
+  get connection(): ConnectionState {
+    return this.#connection;
+  }
   /** True once `hello` announced another contract version; the shell then reloads. */
-  contractMismatch = $state(false);
+  get contractMismatch(): boolean {
+    return this.#contractMismatch;
+  }
 
   private readonly link: Connection;
   private readonly entries = new Map<string, Entry>();
   private readonly byId = new Map<string, Entry>();
   private readonly clock = $state<Record<string, SessionTime>>({});
+  private readonly offs: Array<() => void>;
+  private readonly foldIds = new WeakMap<object, number>();
   private nextId = 1;
+  private nextFoldId = 1;
 
   constructor(link: Connection) {
     this.link = link;
-    this.connection = link.state;
-    link.onMessage((m) => this.handle(m));
-    link.onState((s) => {
-      this.connection = s;
-      if (s === 'open') this.resubscribeAll();
-    });
+    this.#connection = link.state;
+    this.offs = [
+      link.onMessage((m) => this.handle(m)),
+      link.onState((s) => {
+        this.#connection = s;
+        if (s === 'open') this.resubscribeAll();
+      }),
+    ];
+  }
+
+  /** Stops processing messages and resubscribing, and closes the connection. */
+  dispose(): void {
+    for (const off of this.offs) off();
+    this.link.close();
   }
 
   /** Takes a share of the subscription for `key`; the last `release` unsubscribes. Equal keys share one entry. */
@@ -63,10 +83,26 @@ export class TopicStore {
     key: TopicKey<T>,
     fold?: Fold<TopicValue<T>, V>,
   ): { state: EntryState<V>; release(): void } {
-    const text = canonical([key.feedId ?? null, key.topic, key.params]);
+    const text = canonical([key.feedId ?? null, key.topic, key.params, this.foldId(fold)]);
     let entry = this.entries.get(text);
     if (entry === undefined) {
-      const state = $state<EntryState<unknown>>({ status: 'waiting', value: undefined });
+      let status = $state<EntryState<unknown>['status']>('waiting');
+      let value = $state.raw<unknown>(undefined);
+      // Values are only ever replaced, so they stay unproxied.
+      const state: EntryState<unknown> = {
+        get status() {
+          return status;
+        },
+        set status(next) {
+          status = next;
+        },
+        get value() {
+          return value;
+        },
+        set value(next) {
+          value = next;
+        },
+      };
       entry = {
         key: key as TopicKey<TopicName>,
         holders: 0,
@@ -76,7 +112,7 @@ export class TopicStore {
         state,
       };
       this.entries.set(text, entry);
-      if (this.connection === 'open') this.subscribe(entry);
+      if (this.#connection === 'open') this.subscribe(entry);
     }
     entry.holders += 1;
     const held = entry;
@@ -106,6 +142,17 @@ export class TopicStore {
     this.link.send(message);
   }
 
+  /** Folds are part of the key: a different fold, or none, is its own entry. */
+  private foldId(fold: object | undefined): number {
+    if (fold === undefined) return 0;
+    let id = this.foldIds.get(fold);
+    if (id === undefined) {
+      id = this.nextFoldId++;
+      this.foldIds.set(fold, id);
+    }
+    return id;
+  }
+
   private subscribe(entry: Entry): void {
     if (entry.id !== undefined) this.byId.delete(entry.id);
     const id = `s${this.nextId++}`;
@@ -122,7 +169,7 @@ export class TopicStore {
   private handle(message: ServerMessage): void {
     switch (message.type) {
       case 'hello':
-        if (message.contractVersion !== CONTRACT_VERSION) this.contractMismatch = true;
+        if (message.contractVersion !== CONTRACT_VERSION) this.#contractMismatch = true;
         return;
       case 'snapshot': {
         const entry = this.byId.get(message.id);
@@ -153,6 +200,11 @@ export class TopicStore {
       case 'topicStatus': {
         const entry = this.byId.get(message.id);
         if (entry !== undefined) entry.state.status = message.status;
+        return;
+      }
+      case 'error': {
+        const entry = message.id === undefined ? undefined : this.byId.get(message.id);
+        if (entry !== undefined) entry.state.status = 'errored';
         return;
       }
       default:
