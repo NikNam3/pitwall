@@ -77,7 +77,13 @@ PacketSource (UDP | PwrecFile) → RawPacket → decode → Frame assembler → 
   ↘ PwrecWriter (raw)          ↘ StorageWriter (confirmed history → SQLite)
 ```
 
-### 3.3 Determinism rules
+### 3.3 Parallel development
+Several agents work in parallel in git worktrees; a supervisor merges. The architecture prevents conflicts on shared files:
+- **Registration by convention, no central lists.** Calculators, topics and (in sub-project 2) widgets register themselves through a file in their feature folder (e.g. `src/features/<name>/register.ts`, collected via a glob/convention loader). Adding a feature means adding a folder; no shared file gets edited.
+- **The supervisor owns the shared files:** `packages/contracts` (topic types, protocol messages), `package.json` files and the lockfile, base types in `engine`. Workers request changes in their report and don't make them themselves.
+- **Ports per worktree:** bridge WebSocket port, UDP port and UI dev port come from environment variables (`PITWALL_WS_PORT`, `PITWALL_UDP_PORT`, `PITWALL_UI_PORT`), so parallel instances and Playwright runs don't collide.
+
+### 3.4 Determinism rules
 - The engine never reads the system clock. Time comes only from `sessionTime` and frame IDs.
 - Randomness only through an injected, seeded generator.
 - The same input stream always produces the same state and the same topic stream (tested, see 10.2).
@@ -98,12 +104,12 @@ type RawPacket = { feedId: FeedId; receivedAtMs: number; bytes: Uint8Array };
 - `PwrecSource`: modes `realtime` (original timing) and `asFastAsPossible`.
 - `ForwarderSource`: later, not part of sub-project 1.
 
-### 4.2 `.pwrec` format v1 (compatible with recorder 0.1.0)
-- Bytes 0–4: magic `PWREC`; byte 5: version (`1`); bytes 6–9: `u32` length of the JSON header; then the JSON header (UTF-8). Fields seen: `recorderVersion`, `listenPort`, `startedAt`.
-- Then records: `u8 kind` · `f64 tMs` (milliseconds since recording start) · `u16 length` · `length` bytes of payload.
-- `kind 0` = raw UDP packet. `kind 255` = end marker (payload length 0; `tMs` = recording duration).
-- The first record starts directly after the JSON header (offset `10 + headerLength`), checked against all three recordings. The format is documented in `docs/pwrec.md`; the reader has its own test against the real recordings.
-- Files are gzip-compressed (`.pwrec.gz`). Pitwall writes uncompressed while live and compresses when the session ends.
+### 4.2 `.pwrec` format v1
+- **Authoritative source:** `FORMAT.md` in the recorder repo (`~/dev/personal/pitwall-recorder/FORMAT.md`, github.com/NikNam3/pitwall-recorder). Pitwall implements reader and writer to that spec and references it; it doesn't keep its own copy.
+- Summary: gzip layer; header `PWREC` · `u8` version 1 · `u32` JSON length · metadata JSON (`recorderVersion`, `startedAt`, `listenPort`; ignore unknown fields); then records `u8 kind` · `f64 t` (ms since start, non-decreasing) · `u16 len` · payload. `kind 0` = datagram, `kind 255` = clean end (empty payload; `t` = duration), **other kinds are skipped using `len`**. Reject other magic values and versions.
+- **Lenient reading:** decompress with `finishFlush: Z_SYNC_FLUSH`; an incomplete final record counts as the end of the data. A file without an end marker was cut off and is valid up to that point.
+- **Writer:** like the recorder, gzip with a sync flush about once per second, so a crash loses at most about one second.
+- Checked against all three recordings: the first record starts directly after the metadata (offset `10 + n`).
 
 ### 4.3 Decoder (`packages/protocol`)
 - **Schema-driven:** each spec struct is described once declaratively (field, type, array length, nesting). Decoder and encoder are generated from that description. Expected sizes per packet type are checked against the spec table at startup and in tests (motion 1349, session 753, lapData 1285, event 45, participants 1284, carSetups 1133, carTelemetry 1352, carStatus 1239, finalClassification 1042, lobbyInfo 954, carDamage 1041, sessionHistory 1460, tyreSets 231, motionEx 273, timeTrial 101, lapPositions 1131).
@@ -251,7 +257,8 @@ interface IncrementalCalculator<Acc, Out> {
 State that can't be derived from history belongs in the engine's history, not in a calculator.
 
 ### 7.3 Scheduler and registry
-- The registry builds a dependency graph from `reads`; a cycle is a startup error.
+- Calculators register themselves by convention (see 3.3); the registry collects them on startup, with no central list.
+- The registry builds a dependency graph from `reads`; a cycle is a startup error. Duplicate IDs are a startup error too.
 - `Cadence = 'frame' | { hz: number } | 'lapCompleted' | 'pitStop' | 'flagChange' | 'sessionChange'`, measured in session time.
 - Per frame, the scheduler runs calculators that are **due**, **needed** (subscribed topic, storage, or a dependent calculator) and **affected** (input changed).
 - An exception in a calculator marks its output topic `errored` and raises an insight; other calculators keep running.
@@ -265,6 +272,7 @@ type TopicDef<P, V> = {
 };
 ```
 - `state`: the latest value replaces the old one. `append`: new entries are added.
+- Topic definitions live in `packages/contracts` (owned by the supervisor, see 3.3). The producing calculator is linked to its topic through feature registration.
 - Each topic carries `feedId` (and `carId` where needed).
 
 ### 8.2 WebSocket protocol
@@ -273,7 +281,8 @@ type TopicDef<P, V> = {
 - Server → client: `snapshot { id, value | entries }`, then `update { id, value }` (state) or `append { id, entries }` (append), plus `topicStatus { id, status: 'ok' | 'errored' | 'noData' }`.
 - Throttled per topic and client to `maxHz`. A heartbeat every 5 s; the connection is dropped after 15 s of silence.
 - After a reconnect, the client subscribes again (no special case).
-- Encoding: JSON with full values. Diffs or binary formats only after a measurement shows the need.
+- **Backpressure: the latest value wins, never a queue.** If a client is slow (`ws.bufferedAmount` above a threshold), the server drops unsent intermediate values of `state` topics and sends only the newest. `append` topics are never dropped; on overflow the client gets a new snapshot instead.
+- Encoding: JSON with full values, behind **one swappable wire-format module** (`encode`/`decode`). Diffs or binary formats only after a measurement shows the need.
 - **Reserved:** `command { … }` from client to server for sub-project 6 (types only, the server rejects with `notSupported`).
 
 ### 8.3 Insights
@@ -368,7 +377,7 @@ type Insight = {
 - Vitest as the test runner.
 
 ### 10.4 Fixtures
-- Full recordings stay outside git in a local fixture directory with `fixtures/index.json` (file, track, type, laps, special features, checksum).
+- Full recordings stay outside git in a local fixture directory with `fixtures/index.json` (file, track, type, laps, special features, checksum). **Deliberately not Git LFS** (no bandwidth limits, and segments are enough for tests); can be revisited if full recordings should be versioned.
 - Small segments made with `pwrec-cut` are committed under `fixtures/segments/`.
 - Tests that need full recordings are skipped with a note if the file is missing.
 
