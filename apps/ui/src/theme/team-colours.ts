@@ -15,6 +15,9 @@ export const TEAM_COLOURS: Readonly<Record<number, string>> = {
   9: '#78d062', // Sauber
 };
 
+/** Set whose insertion order matters: player first, then teammate. */
+export type OrderedOwnCars = ReadonlySet<CarId>;
+
 type CarKey = { id: CarId; teamId: number; raceNumber: number };
 
 /** True when `a` sorts before `b` in the team: lower race number, then lower id. */
@@ -26,11 +29,13 @@ const before = (a: CarKey, b: CarKey): boolean =>
  * `ownCars` is the player: solid; the others dashed). Other cars take the team colour,
  * solid for the team's lowest race number and dashed for the rest. An unknown team is
  * `textDim`. Independent of the order of `field`.
+ *
+ * @param ownCars ORDERED set: the player first, then the teammate. Insertion order is the contract.
  */
 export function carColour(
   car: CarKey,
   field: ReadonlyArray<CarKey>,
-  ownCars: ReadonlySet<CarId>,
+  ownCars: OrderedOwnCars,
 ): { colour: string; dashed: boolean; ownCar: boolean } {
   if (ownCars.has(car.id)) {
     const player = ownCars.values().next().value;

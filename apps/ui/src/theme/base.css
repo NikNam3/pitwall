@@ -1,12 +1,9 @@
+/* Plain CSS cannot import a TS constant: this family name must match FONT_FAMILY in themes.ts. */
 @font-face {
   font-family: 'JetBrains Mono';
   src: url('./font/JetBrainsMono[wght].woff2') format('woff2');
   font-weight: 100 800;
   font-display: block;
-}
-
-:root {
-  --pw-font: 'JetBrains Mono', monospace;
 }
 
 html,
