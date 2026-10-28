@@ -15,4 +15,4 @@ export type FeedStatus = {
   wrongFormat?: number;
 };
 
-export default defineTopic<NoParams, FeedStatus>({ mode: 'state', maxHz: 2 });
+export default defineTopic<NoParams, FeedStatus>({ owner: 'core', mode: 'state', maxHz: 2 });

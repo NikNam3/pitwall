@@ -9,4 +9,4 @@ export type SessionInfo = {
   session: SessionState;
 };
 
-export default defineTopic<NoParams, SessionInfo>({ mode: 'state', maxHz: 2 });
+export default defineTopic<NoParams, SessionInfo>({ owner: 'core', mode: 'state', maxHz: 2 });

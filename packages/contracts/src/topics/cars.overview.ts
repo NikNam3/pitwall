@@ -9,4 +9,4 @@ export type CarOverview = {
   updatedAt: CarState['updatedAt'];
 };
 
-export default defineTopic<NoParams, CarOverview[]>({ mode: 'state', maxHz: 10 });
+export default defineTopic<NoParams, CarOverview[]>({ owner: 'core', mode: 'state', maxHz: 10 });
