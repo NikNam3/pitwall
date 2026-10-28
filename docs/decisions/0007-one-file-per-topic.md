@@ -1,4 +1,4 @@
-# 0006: One file per topic, collected by a generated index
+# 0007: One file per topic, collected by a generated index
 
 ## Status
 

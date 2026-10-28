@@ -58,7 +58,7 @@ Several agents work in parallel in git worktrees; a supervisor merges. The archi
 
 - **Registration by convention, no central lists.**
   - A feature is a folder `apps/bridge/src/features/<name>/register.ts`, collected by a generated index (ADR 0005). It declares calculators, jobs, config and topic bindings.
-  - A topic is a file `packages/contracts/src/topics/<topic name>.ts`, also collected by a generated index (ADR 0006).
+  - A topic is a file `packages/contracts/src/topics/<topic name>.ts`, also collected by a generated index (ADR 0007).
   - `pnpm gen` regenerates both indexes.
 - **Typed bindings:** `bindState`, `bindHistory`, `bindInsights` and `bindJob` (`features/feature.ts`) only compile when the source's value type matches the topic's.
 - **Change tags are domain areas** (`session, identity, timing, tyres, energy, condition, dynamics, ownCar` and the history lists), not packet names. A calculator's `reads` uses them.
@@ -71,9 +71,9 @@ Several agents work in parallel in git worktrees; a supervisor merges. The archi
 - **Freshness:** `CarState.updatedAt` holds, per data source, the session time of its last update for that car. `SOURCE_INTERVAL_MS` (domain) gives each source's expected interval, and `feed.status.cadenceMs` the measured menu-rate step. The UI decides when a value is stale; the engine has no stale reason.
 - **History:** append-only inside the engine state. Each lap is appended twice, provisional then confirmed. Read laps through `currentLaps` / `addLaps` (domain), which return the current record per car and lap.
 - **Calculators:** quick calculators keep no state. Incremental calculators keep an accumulator that is always a fold over a history prefix (tested: incremental = from scratch). Whatever has to be remembered lives in engine state or history.
-- **Config:** features declare read-only config (`defineConfig`). `<PITWALL_DATA_DIR>/config.json` overrides it, and calculators read it from `EngineView.config`. Each live session stores its effective config as a sidecar next to its recording, and replays use that sidecar (ADR 0007).
+- **Config:** features declare read-only config (`defineConfig`). `<PITWALL_DATA_DIR>/config.json` overrides it, and calculators read it from `EngineView.config`. Each live session stores its effective config as a sidecar next to its recording, and replays use that sidecar (ADR 0008).
 - **Storage:** raw `.pwrec` files per session are the source of truth; one SQLite database (`better-sqlite3`, ADR 0004) is a rebuildable cache written from confirmed history by the bridge. The engine has no database access. The bridge passes the player's earlier sessions of the weekend in as read-only `WeekendContext`, with every driver's records per session. `live` rebuilds an outdated database from the recordings by itself.
 
 ## Second car (later)
 
-Out of MVP scope, but no code may assume a single feed. ADR 0008 lists what the second car will need: storage keyed per view `(sessionUid, playerCar)`, several feeds in one bridge, and a weekend context per driver.
+Out of MVP scope, but no code may assume a single feed. ADR 0009 lists what the second car will need: storage keyed per view `(sessionUid, playerCar)`, several feeds in one bridge, and a weekend context per driver.

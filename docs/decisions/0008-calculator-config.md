@@ -1,4 +1,4 @@
-# 0007: Read-only config for calculators, stored with each session
+# 0008: Read-only config for calculators, stored with each session
 
 ## Status
 

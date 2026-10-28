@@ -457,9 +457,9 @@ F2 and F7 then come as the first tasks of SP 4, and F6 depends on Q-C. Recording
 ## Outcome (2026-10-28)
 
 **Your decisions:**
-- **Q-A:** a second car is out of MVP scope, but the door stays open (ADR 0008).
-- **Q-B:** one file per topic (ADR 0006).
-- **Q-C:** thresholds as read-only config for calculators (ADR 0007).
+- **Q-A:** a second car is out of MVP scope, but the door stays open (ADR 0009).
+- **Q-B:** one file per topic (ADR 0007).
+- **Q-C:** thresholds as read-only config for calculators (ADR 0008).
 - **Q-D:** the UI decides staleness.
 - **Q-E:** done as the groundwork plan, `docs/superpowers/plans/2026-10-28-groundwork.md`.
 

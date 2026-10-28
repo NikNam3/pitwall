@@ -1,4 +1,4 @@
-# 0008: A second car comes later; the door stays open
+# 0009: A second car comes later; the door stays open
 
 ## Status
 

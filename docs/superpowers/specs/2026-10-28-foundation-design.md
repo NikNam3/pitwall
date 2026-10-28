@@ -1,6 +1,6 @@
 # Pitwall: Sub-project 1 "Foundation", Design
 
-Status: approved · Date: 2026-10-28 · Revised during planning (domain package; corrections from the recordings, see the plan's "Corrections to the spec") and after the foundation review (groundwork plan `docs/superpowers/plans/2026-10-28-groundwork.md`; decisions in ADRs 0006–0008)
+Status: approved · Date: 2026-10-28 · Revised during planning (domain package; corrections from the recordings, see the plan's "Corrections to the spec") and after the foundation review (groundwork plan `docs/superpowers/plans/2026-10-28-groundwork.md`; decisions in ADRs 0007–0009)
 
 ## 1. Context
 
@@ -268,7 +268,7 @@ State that can't be derived from history belongs in the engine's history, not in
 - The registry builds a dependency graph from `reads`; a cycle is a startup error. Duplicate IDs are a startup error too.
 - `Cadence = 'frame' | { hz: number } | 'lapCompleted' | 'pitStop' | 'flagChange' | 'sessionChange'`, measured in session time.
 - Per frame, the scheduler runs calculators that are **due**, **needed** and **affected** (input changed). **Needed** means one of four things: bound to a topic that has a subscriber; it has an `insights` hook (alarms never depend on which screen is open); referenced by no binding and read by no calculator; or read by a needed calculator. When demand changes, newly needed calculators run at once against the current state, and the last session stays evaluable after it ends, so a late subscriber gets a value without waiting for a frame (job triggers wait for their next due frame). The hub reports demand per feed. Storage reads history, not calculator outputs.
-- **Config (ADR 0007):** features declare read-only config with `defineConfig(key, defaults)`. `<PITWALL_DATA_DIR>/config.json` overrides it. Calculators read it from `EngineView.config`. Each live session stores its effective config as `<session file>.config.json`, and replays use it; a sidecar is read leniently (unknown entries dropped, wrong types back to the default, with warnings), `config.json` strictly.
+- **Config (ADR 0008):** features declare read-only config with `defineConfig(key, defaults)`. `<PITWALL_DATA_DIR>/config.json` overrides it. Calculators read it from `EngineView.config`. Each live session stores its effective config as `<session file>.config.json`, and replays use it; a sidecar is read leniently (unknown entries dropped, wrong types back to the default, with warnings), `config.json` strictly.
 - An exception in a calculator marks its output topic `errored` and raises an insight; other calculators keep running.
 
 ## 8. Topics, WebSocket, insights
@@ -280,7 +280,7 @@ type TopicDef<P, V> = {
 };
 ```
 - `state`: the latest value replaces the old one. `append`: new entries are added.
-- Topic definitions live in `packages/contracts/src/topics/`, one file per topic, collected by a generated index (ADR 0006; owned by the supervisor, see 3.3). The producing calculator is linked to its topic through a typed binding in its feature (`bindState`, `bindHistory`, `bindInsights`, `bindJob`).
+- Topic definitions live in `packages/contracts/src/topics/`, one file per topic, collected by a generated index (ADR 0007; owned by the supervisor, see 3.3). The producing calculator is linked to its topic through a typed binding in its feature (`bindState`, `bindHistory`, `bindInsights`, `bindJob`).
 - Each topic carries `feedId` (and `carId` where needed).
 
 ### 8.2 WebSocket protocol
@@ -335,7 +335,7 @@ type Insight = {
 - Written when history entries are `confirmed`, in batches with one transaction each.
 - Library: `better-sqlite3`. Check whether the built-in `node:sqlite` is mature enough in the Node version used; if so, prefer it (no native dependency).
 - No migrations: on a schema version change, `pitwall live` rebuilds the database from the recordings by itself; `pitwall reprocess` does it on request. A rebuild marks the database outdated until it has finished, so an interrupted one is redone.
-- One feed per session is assumed by the `session_uid` keys; a second car needs keys per view (ADR 0008).
+- One feed per session is assumed by the `session_uid` keys; a second car needs keys per view (ADR 0009).
 
 ### 9.3 Repository and WeekendContext
 - `WeekendRepository` as the only access route (`sessionsOf`, `stintsOf`, `lapsOf`, `pitStopsOf` …).
@@ -408,4 +408,4 @@ type Insight = {
   - Motion "only sent while player is in control" (spec) against the observed behaviour (so far always as often as LapData)
   - maturity of `node:sqlite` (9.2)
 - The definition of "clean UI" is worked out with the user in sub-project 2.
-- A second car (team view) is out of MVP scope; ADR 0008 lists what it needs.
+- A second car (team view) is out of MVP scope; ADR 0009 lists what it needs.
