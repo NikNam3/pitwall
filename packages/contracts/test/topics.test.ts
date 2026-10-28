@@ -46,6 +46,9 @@ describe('TOPICS', () => {
   it('has the global topic dev.calcStats: owner core, state, 1 Hz', () => {
     expect(TOPICS['dev.calcStats']).toMatchObject({ name: 'dev.calcStats', owner: 'core', scope: 'global', mode: 'state', maxHz: 1 });
   });
+  it.each(['ui.workbooks', 'ui.linkGroups', 'ui.alerts', 'ui.settings'] as const)('has the global topic %s: owner core, state', (name) => {
+    expect(TOPICS[name]).toMatchObject({ name, owner: 'core', scope: 'global', mode: 'state' });
+  });
   it('exports the contract version', () => { expect(CONTRACT_VERSION).toBe(2); });
 });
 
@@ -73,6 +76,7 @@ describe('topic types', () => {
     expectTypeOf<TopicName>().toEqualTypeOf<
       | 'feed.status' | 'session.info' | 'cars.overview' | 'car.detail' | 'car.telemetry' | 'laps'
       | 'stints' | 'pitStops' | 'flagPhases' | 'events' | 'insights' | 'dev.calcStats'
+      | 'ui.workbooks' | 'ui.linkGroups' | 'ui.alerts' | 'ui.settings'
     >();
     expectTypeOf<TopicParams<'car.detail'>>().toEqualTypeOf<{ carId: CarId }>();
     expectTypeOf<TopicParams<'car.detail'>['carId']>().toEqualTypeOf<CarId>();
