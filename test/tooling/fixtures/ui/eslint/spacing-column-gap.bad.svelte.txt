@@ -1,0 +1,4 @@
+<div class="a">x</div>
+<style>
+  .a { column-gap: 4px; }
+</style>

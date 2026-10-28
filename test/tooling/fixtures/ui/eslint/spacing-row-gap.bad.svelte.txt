@@ -1,0 +1,4 @@
+<div class="a">x</div>
+<style>
+  .a { row-gap: 4px; }
+</style>

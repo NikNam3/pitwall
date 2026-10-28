@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve } from 'node:path';
 import { ESLint } from 'eslint';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -14,29 +15,35 @@ const fixture = (rel: string) => readFileSync(join(FIXTURES, rel), 'utf8');
 interface Probe { at: string; fixture: string }
 interface Violation { rule: { name: string }; from: string; to: string }
 
-const created: string[] = [];
-/** Writes probes (never over an existing file) and remembers the topmost directory it had to create. */
-function place(probes: Probe[]): void {
+let sandbox: string | undefined;
+/**
+ * Copies probes into a fresh temp directory (same relative paths), so nothing is written into the repo and a
+ * parallel repo-wide depcruise run never sees them. node_modules are symlinked so workspace imports resolve.
+ */
+function place(probes: Probe[]): string {
+  sandbox ??= mkdtempSync(join(tmpdir(), 'pitwall-ui-rules-'));
+  writeFileSync(join(sandbox, 'tsconfig.json'), JSON.stringify({ compilerOptions: { allowImportingTsExtensions: true, noEmit: true, module: 'nodenext' } }));
+  for (const [link, target] of [['node_modules', join(ROOT, 'node_modules')], ['apps/ui/node_modules', join(ROOT, 'apps/ui/node_modules')]] as const) {
+    if (!existsSync(target) || existsSync(join(sandbox, link))) continue;
+    mkdirSync(dirname(join(sandbox, link)), { recursive: true });
+    symlinkSync(target, join(sandbox, link), 'dir');
+  }
   for (const p of probes) {
-    const file = join(ROOT, p.at);
-    if (existsSync(file)) continue; // e.g. a generated index that exists in a built tree
-    let top = dirname(file);
-    while (!existsSync(dirname(top))) top = dirname(top);
-    const firstNew = existsSync(top) ? undefined : top;
+    const file = join(sandbox, p.at);
     mkdirSync(dirname(file), { recursive: true });
     writeFileSync(file, fixture(p.fixture));
-    created.push(file);
-    if (firstNew) created.push(firstNew);
   }
+  return sandbox;
 }
 afterEach(() => {
-  for (const path of created.splice(0).reverse()) rmSync(path, { recursive: true, force: true });
+  if (sandbox) rmSync(sandbox, { recursive: true, force: true });
+  sandbox = undefined;
 });
 
 /** Runs the repo's depcruise config on the probe entry files and returns every violation. */
-function cruise(entries: string[]): Violation[] {
-  const r = spawnSync('pnpm', ['exec', 'depcruise', '--config', '.dependency-cruiser.cjs', '--output-type', 'json', ...entries], {
-    cwd: ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024,
+function cruise(cwd: string, entries: string[]): Violation[] {
+  const r = spawnSync('pnpm', ['exec', 'depcruise', '--config', join(ROOT, '.dependency-cruiser.cjs'), '--output-type', 'json', ...entries], {
+    cwd, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024,
   });
   const report = JSON.parse(r.stdout) as { summary: { violations: Violation[] } };
   return report.summary.violations;
@@ -93,12 +100,12 @@ const depCases: DepCase[] = [
 describe('dependency-cruiser rules inside apps/ui', { timeout: 120_000 }, () => {
   describe.each(depCases)('$rule', ({ rule, bad, ok }) => {
     it('rejects the violating file', () => {
-      place([...(bad.support ?? []), { at: bad.entry, fixture: `depcruise/${bad.fixture}.ts.txt` }]);
-      expect(hits(cruise([bad.entry]), rule, bad.entry)).not.toEqual([]);
+      const dir = place([...(bad.support ?? []), { at: bad.entry, fixture: `depcruise/${bad.fixture}.ts.txt` }]);
+      expect(hits(cruise(dir, [bad.entry]), rule, bad.entry)).not.toEqual([]);
     });
     it('accepts the allowed file', () => {
-      place([...(ok.support ?? []), { at: ok.entry, fixture: `depcruise/${ok.fixture}.ts.txt` }]);
-      const violations = cruise([ok.entry]);
+      const dir = place([...(ok.support ?? []), { at: ok.entry, fixture: `depcruise/${ok.fixture}.ts.txt` }]);
+      const violations = cruise(dir, [ok.entry]);
       expect(hits(violations, rule, ok.entry)).toEqual([]);
       // an allowed file trips none of the UI rules either
       expect(violations.filter((v) => v.from === ok.entry && /^(ui-|desktop-)/.test(v.rule.name))).toEqual([]);
@@ -138,6 +145,42 @@ describe('ESLint: no colour literals outside theme/', { timeout: 60_000 }, () =>
   });
   it('accepts var(--pw-*) colours in a .svelte style', async () => {
     await expectAccepted('colour-literals.svelte.ok.svelte.txt', `${S}/widgets/demo/Demo.svelte`);
+  });
+});
+
+describe('ESLint: colour literals in longer strings, inline styles, and look-alikes', { timeout: 60_000 }, () => {
+  it('rejects a colour inside a longer string or template literal', async () => {
+    await expectRejected('colour-embedded.ts.txt', `${S}/kit/x.ts`, [1, 2, 3, 4]);
+  });
+  it('accepts the same embedded colours in theme/', async () => {
+    await expectAccepted('colour-embedded.ts.txt', `${S}/theme/x.ts`);
+  });
+  it('rejects an inline style attribute colour in a .svelte file', async () => {
+    await expectRejected('colour-inline.bad.svelte.txt', `${S}/kit/Demo.svelte`, [1]);
+  });
+  it('accepts look-alikes (#main, URL fragment, rgbaWidget, issue numbers)', async () => {
+    await expectAccepted('colour-lookalikes.ts.txt', `${S}/kit/x.ts`);
+  });
+});
+
+describe('ESLint: widget spacing in inline styles and directives', { timeout: 60_000 }, () => {
+  it.each([
+    ['inline style attribute', 'spacing-inline.bad.svelte.txt', 1],
+    ['style: directive', 'spacing-directive.bad.svelte.txt', 4],
+    ['grid-gap', 'spacing-grid-gap.bad.svelte.txt', 3],
+    ['row-gap', 'spacing-row-gap.bad.svelte.txt', 3],
+    ['column-gap', 'spacing-column-gap.bad.svelte.txt', 3],
+  ])('rejects %s in a widget', async (_name, file, line) => {
+    await expectRejected(file, `${S}/widgets/demo/Demo.svelte`, [line]);
+  });
+});
+
+describe('ESLint: font shorthand', { timeout: 60_000 }, () => {
+  it('rejects a font: shorthand naming another family', async () => {
+    await expectRejected('font-shorthand.bad.svelte.txt', `${S}/kit/Demo.svelte`, [3]);
+  });
+  it('accepts font-size and font-weight', async () => {
+    await expectAccepted('font-shorthand.ok.svelte.txt', `${S}/kit/Demo.svelte`);
   });
 });
 
@@ -212,9 +255,16 @@ describe('scans of apps/ui/src', () => {
     expect(offenders.map((f) => relative(ROOT, f))).toEqual([]);
   });
   it('ligatures are off globally (font-variant-ligatures: none)', () => {
-    const files = walk(join(ROOT, 'apps/ui'), (f) => /\.(css|svelte|html)$/.test(f) && !f.includes('node_modules'));
-    const sources = files.map((f) => readFileSync(f, 'utf8'));
-    expect(sources.some((s) => /font-variant-ligatures\s*:\s*none/.test(s))).toBe(true);
+    // the global stylesheet is the one src/main.ts imports
+    const main = readFileSync(join(ROOT, S, 'main.ts'), 'utf8');
+    const sheets = [...main.matchAll(/import\s+['"](\.\/[^'"]+\.css)['"]/g)].map((m) => join(ROOT, S, m[1]!));
+    expect(sheets, 'main.ts imports a global stylesheet').not.toEqual([]);
+    const rootBlocks = sheets.flatMap((f) =>
+      [...readFileSync(f, 'utf8').matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+        .filter((m) => m[1]!.split(',').some((sel) => /^(:root|html|body|\*)$/.test(sel.trim())))
+        .map((m) => m[2]!),
+    );
+    expect(rootBlocks.some((body) => /font-variant-ligatures\s*:\s*none\s*;/.test(body))).toBe(true);
   });
 });
 
@@ -235,7 +285,6 @@ describe('apps/ui scaffold', () => {
     // pnpm exits 0 when the filter matches nothing, so require the package first
     expect(JSON.parse(readFileSync(join(ROOT, 'apps/ui/package.json'), 'utf8')).name).toBe('@pitwall/ui');
     const r = spawnSync('pnpm', ['--filter', '@pitwall/ui', 'build'], { cwd: ROOT, encoding: 'utf8' });
-    expect(r.stderr + r.stdout).toContain('');
     expect(r.status, r.stdout + r.stderr).toBe(0);
   });
 });

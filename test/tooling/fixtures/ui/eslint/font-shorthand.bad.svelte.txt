@@ -1,0 +1,4 @@
+<div class="a">x</div>
+<style>
+  .a { font: 12px Arial, sans-serif; }
+</style>
