@@ -1,3 +1,4 @@
+import { EventEmitter } from 'node:events';
 import { describe, expect, it, vi } from 'vitest';
 import { ensureBridge } from '../src/bridge-process.ts';
 
@@ -53,5 +54,52 @@ describe('ensureBridge', () => {
     const bridge = await t.run();
     bridge.stop();
     expect(t.child.kill).not.toHaveBeenCalled();
+  });
+});
+
+// Fix round 1 seams:
+//   spawn returns an EventEmitter-like handle { pid?: number; kill(): void; on('error', cb) }
+//   options.killTree?: (pid: number) => void   stops the whole process tree; stop() calls it with child.pid
+//   (the default in main.ts does process.kill(-pid) on a detached child; only the injected seam is tested)
+//   A spawn failure ('error' emitted on a later tick, e.g. ENOENT) makes ensureBridge REJECT with an Error whose
+//   message contains the command and the original error message. Implementation must wait one macrotask
+//   (setImmediate) after spawn before resolving.
+class FakeChild extends EventEmitter {
+  pid = 4242;
+  kill = vi.fn();
+}
+
+describe('ensureBridge spawn failures and tree kill', () => {
+  it('rejects with a clear error when the child emits ENOENT', async () => {
+    const child = new FakeChild();
+    const spawn = vi.fn(() => {
+      setImmediate(() => child.emit('error', new Error('spawn pitwall ENOENT')));
+      return child;
+    });
+    const p = ensureBridge({ port: 1, probe: async () => false, spawn });
+    await expect(p).rejects.toThrow(/pitwall/);
+    await expect(p).rejects.toThrow(/ENOENT/);
+  });
+
+  it('does not throw when the child errors after ensureBridge resolved', async () => {
+    const child = new FakeChild();
+    await ensureBridge({ port: 1, probe: async () => false, spawn: () => child });
+    expect(() => child.emit('error', new Error('late'))).not.toThrow();
+  });
+
+  it('stop() kills the whole process tree through killTree(pid)', async () => {
+    const child = new FakeChild();
+    const killTree = vi.fn();
+    const bridge = await ensureBridge({ port: 1, probe: async () => false, spawn: () => child, killTree });
+    bridge.stop();
+    expect(killTree).toHaveBeenCalledTimes(1);
+    expect(killTree).toHaveBeenCalledWith(4242);
+  });
+
+  it('stop() on an attached bridge never calls killTree', async () => {
+    const killTree = vi.fn();
+    const bridge = await ensureBridge({ port: 1, probe: async () => true, spawn: () => new FakeChild(), killTree });
+    bridge.stop();
+    expect(killTree).not.toHaveBeenCalled();
   });
 });
