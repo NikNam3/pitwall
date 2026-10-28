@@ -1,0 +1,4 @@
+<div class="a">x</div>
+<style>
+  .a { font-size: 12px; font-weight: 600; }
+</style>

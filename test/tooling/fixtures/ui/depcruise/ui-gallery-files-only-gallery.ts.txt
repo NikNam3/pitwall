@@ -1,0 +1,2 @@
+import * as g from '../../widgets/__probe-a__/gallery.ts';
+export const x = g;

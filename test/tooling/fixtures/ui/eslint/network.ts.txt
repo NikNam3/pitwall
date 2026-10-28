@@ -1,0 +1,2 @@
+export const load = () => fetch('/data');
+export const open = () => new WebSocket('ws://localhost:4777');

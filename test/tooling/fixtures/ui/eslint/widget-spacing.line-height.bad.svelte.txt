@@ -1,0 +1,4 @@
+<div class="a">x</div>
+<style>
+  .a { line-height: 4px; }
+</style>

@@ -1,0 +1,4 @@
+<div class="a">x</div>
+<style>
+  .a { color: var(--pw-text); }
+</style>

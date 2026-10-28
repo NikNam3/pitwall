@@ -1,0 +1,5 @@
+export const selector = '#main';
+export const url = 'https://example.test/page#section';
+export const word = 'rgbaWidget';
+export const issue = 'see #12 and #ab for details';
+export const doc = 'colour names like hsla are explained elsewhere';

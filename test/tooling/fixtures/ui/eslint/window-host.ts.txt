@@ -1,0 +1,4 @@
+export const a = () => window.open('/x');
+export const b = () => window.moveTo(0, 0);
+export const c = () => window.resizeTo(1, 1);
+export const d = () => window.screen.width;

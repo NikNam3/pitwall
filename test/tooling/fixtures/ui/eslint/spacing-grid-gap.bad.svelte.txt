@@ -1,0 +1,4 @@
+<div class="a">x</div>
+<style>
+  .a { grid-gap: 4px; }
+</style>

@@ -1,0 +1,4 @@
+export const border = '1px solid #fff';
+export const css = 'color: rgb(1,2,3)';
+export const shadow = `0 0 1px rgba(0, 0, 0, 0.5)`;
+export const tpl = (n: number) => `${n}px hsl(1 2% 3%)`;

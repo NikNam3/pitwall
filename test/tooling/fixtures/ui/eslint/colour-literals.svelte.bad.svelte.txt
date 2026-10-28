@@ -1,0 +1,4 @@
+<div class="a">x</div>
+<style>
+  .a { color: #ff0000; background: oklch(0.7 0.1 200); }
+</style>

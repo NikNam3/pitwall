@@ -1,0 +1,3 @@
+import { leaf } from './leaf.ts';
+import { join } from 'node:path';
+export const x = join(String(leaf), 'a');

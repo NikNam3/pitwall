@@ -1,0 +1,5 @@
+export const hex3 = '#fff';
+export const hex6 = '#ff00aa';
+export const rgb = 'rgb(1, 2, 3)';
+export const hsl = 'hsl(10, 20%, 30%)';
+export const ok = 'oklch(0.7 0.1 200)';
