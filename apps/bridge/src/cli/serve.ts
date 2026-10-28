@@ -1,18 +1,24 @@
-import type { FeedInfo } from '@pitwall/contracts';
+import type { FeedInfo, ReplayControl } from '@pitwall/contracts';
+import type { FeedId } from '@pitwall/domain';
 import { createCalcStats } from '../dev/calc-stats.ts';
 import type { FeatureConfig } from '../feature-config.ts';
 import { FEATURES } from '../features/index.generated.ts';
 import { TopicHub } from '../hub/topic-hub.ts';
 import type { PacketSource } from '../input/packet-source.ts';
 import { FeedPipeline, type FeedPipelineOptions } from '../pipeline/feed-pipeline.ts';
+import { ReplayController } from '../replay/replay-controller.ts';
 import { UiState } from '../ui-state/ui-state.ts';
 import { StartupError } from '../startup-error.ts';
 import type { Db } from '../storage/db.ts';
 import { WsServer } from '../ws/server.ts';
 import { cliLogger, whenAborted, type CliIo } from './io.ts';
 
-export type ServeOptions = {
-  source: PacketSource;
+/** A recording served through a `ReplayController`; `controls` are applied (and any jump finished) before `listening` is printed. */
+export type ReplayInput = { feedId: FeedId; path: string; controls: readonly ReplayControl[]; unpaced: boolean };
+
+export type ServeOptions = ({ source: PacketSource; replay?: never } | { replay: ReplayInput; source?: never }) & ServeBase;
+
+type ServeBase = {
   /** What the feed is called in the `hello` message. */
   feed: Omit<FeedInfo, 'feedId'>;
   wsPort: number;
@@ -41,7 +47,8 @@ const CALC_STATS_EVERY_MS = 1000;
  * reports `listening` only once both are up; if a step fails, the ones before it are undone (nothing stays half-started).
  */
 export async function serve(opts: ServeOptions): Promise<number> {
-  const { source, io } = opts;
+  const { io } = opts;
+  const feedId = opts.replay ? opts.replay.feedId : opts.source.feedId;
   const undo: Array<() => void | Promise<void>> = [];
   try {
     const { storage } = opts;
@@ -56,13 +63,20 @@ export async function serve(opts: ServeOptions): Promise<number> {
     const hub = new TopicHub({
       now: () => performance.now(),
       onDemandChange: (changed) => {
-        if (changed === source.feedId) pipeline?.demandChanged();
+        if (changed === feedId) pipeline?.demandChanged();
       },
     });
-    const feeds = (): FeedInfo[] => [{ feedId: source.feedId, ...opts.feed }];
+    const feeds = (): FeedInfo[] => [{ feedId, ...opts.feed }];
     const uiState = opts.uiDir === undefined ? undefined : UiState.open(opts.uiDir, hub, cliLogger(io, 'warn'));
     if (uiState) undo.push(() => uiState.close());
-    const server = await WsServer.start({ port: opts.wsPort, hub, feeds, ...(uiState && { uiState }) });
+    let controller: ReplayController | undefined;
+    const server = await WsServer.start({
+      port: opts.wsPort,
+      hub,
+      feeds,
+      ...(uiState && { uiState }),
+      ...(opts.replay && { replay: { control: (control: ReplayControl) => controller?.control(control) } }),
+    });
     undo.push(() => server.close());
     const calcStats = opts.dev ? createCalcStats() : undefined;
     if (calcStats) {
@@ -70,8 +84,9 @@ export async function serve(opts: ServeOptions): Promise<number> {
       const timer = setInterval(publish, CALC_STATS_EVERY_MS);
       undo.push(() => clearInterval(timer));
     }
-    pipeline = new FeedPipeline({
-      feedId: source.feedId,
+    const makePipeline = (source: PacketSource): FeedPipeline =>
+      (pipeline = new FeedPipeline({
+      feedId,
       source,
       hub,
       features: FEATURES,
@@ -81,16 +96,28 @@ export async function serve(opts: ServeOptions): Promise<number> {
       ...(opts.storage && { storage: { db: opts.storage.db, recordingsDir: opts.storage.recordingsDir } }),
       ...(opts.staleCheck && { staleCheck: opts.staleCheck }),
       ...(calcStats && { calcStats }),
-    });
-    pipeline.start();
-    undo.push(() => pipeline?.stop());
+    }));
+    let finished: Promise<void>;
+    if (opts.replay) {
+      const { replay } = opts;
+      controller = new ReplayController({ path: replay.path, feedId, hub, makePipeline, unpaced: replay.unpaced, ...(opts.onDone && { onEnd: opts.onDone }) });
+      const running = controller;
+      undo.push(() => running.stop());
+      for (const control of replay.controls) running.control(control);
+      await running.settled();
+      finished = running.done;
+    } else {
+      const running = makePipeline(opts.source);
+      running.start();
+      undo.push(() => running.stop());
+      finished = running.done.then(() => opts.onDone?.());
+    }
     await opts.bound?.();
     io.out(`listening ws://127.0.0.1:${server.port}`);
 
     const aborted = whenAborted(io.signal);
-    const finished = pipeline.done.then(() => opts.onDone?.());
     await Promise.race([aborted, finished.then(() => aborted)]).catch((error: unknown) => {
-      throw new StartupError(`feed ${source.feedId} failed: ${error instanceof Error ? error.message : String(error)}`);
+      throw new StartupError(`feed ${feedId} failed: ${error instanceof Error ? error.message : String(error)}`);
     });
     return 0;
   } finally {

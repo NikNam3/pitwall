@@ -13,6 +13,10 @@ import { USAGE, UsageError } from './usage.ts';
 
 const OPTIONS = {
   realtime: { type: 'boolean' },
+  paused: { type: 'boolean' },
+  speed: { type: 'string' },
+  'at-lap': { type: 'string' },
+  'at-time': { type: 'string' },
   dev: { type: 'boolean' },
   carId: { type: 'string' },
   url: { type: 'string' },

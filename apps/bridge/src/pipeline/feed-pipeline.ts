@@ -59,6 +59,9 @@ export type FeedPipelineOptions = {
   calcStats?: CalcStats;
 };
 
+/** Where the feed is: the newest frame's session time and the player's lap. */
+export type FeedPosition = { sessionTimeMs: number; playerLap: number };
+
 type SessionStarted = Extract<TrackerEvent, { type: 'sessionStarted' }>;
 
 /**
@@ -89,6 +92,7 @@ export class FeedPipeline {
   /** The last session that ended, file closed; it stays evaluable for late subscribers until the next session starts. */
   #ended: SessionProcessor | undefined;
   #lastReceivedAtMs = 0;
+  #position: FeedPosition | undefined;
   #staleTimer: NodeJS.Timeout | undefined;
   #started = false;
 
@@ -131,6 +135,11 @@ export class FeedPipeline {
    */
   demandChanged(): void {
     this.#guarded('demand change', () => (this.#session ?? this.#ended)?.demandChanged());
+  }
+
+  /** The newest frame's position; undefined before any frame, and still readable after the source ended. */
+  position(): FeedPosition | undefined {
+    return this.#position;
   }
 
   /** Stops the source and resolves once `done` has settled; the feed's job runner is closed by then. */
@@ -184,6 +193,10 @@ export class FeedPipeline {
         this.#startSession(event);
         return;
       case 'frame':
+        this.#position = {
+          sessionTimeMs: event.frame.sessionTime,
+          playerLap: event.frame.lapData?.lapData[event.frame.playerCarIndex]?.currentLapNum ?? this.#position?.playerLap ?? 0,
+        };
         this.#session?.push(event.frame);
         return;
       case 'sessionEnded':
