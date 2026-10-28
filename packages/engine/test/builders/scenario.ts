@@ -3,6 +3,7 @@ import { feedId, toSessionTime, type SessionTime } from '@pitwall/domain';
 import {
   decode,
   encode,
+  PacketId,
   type CarStatusPacket,
   type CarTelemetryPacket,
   type EventDetails,
@@ -147,9 +148,17 @@ export class ScenarioBuilder {
     return this;
   }
 
-  /** Every packet as the decoder reads it back, so f32 rounding and field ranges are real. Queued packets without a frame get a last frame. */
+  /**
+   * Every packet as the decoder reads it back, so f32 rounding and field ranges are real. Queued packets without a
+   * frame get a last frame; a queued `SEND` carries the last frame's time and id, as the game's session end does.
+   */
   packets(): Array<{ packet: Packet; receivedAtMs: number }> {
-    const trailing = this.#stamp(this.#frameCount, this.#pending);
+    const isSessionEnd = (p: Packet): boolean => p.packetId === PacketId.event && p.details.code === 'SEND';
+    const lastFrame = Math.max(this.#frameCount - 1, 0);
+    const trailing = [
+      ...this.#stamp(this.#frameCount, this.#pending.filter((p) => !isSessionEnd(p))),
+      ...this.#stamp(lastFrame, this.#pending.filter(isSessionEnd)),
+    ];
     return [...this.#out, ...trailing].map(({ packet, receivedAtMs }) => ({ packet: roundTrip(packet), receivedAtMs }));
   }
 
