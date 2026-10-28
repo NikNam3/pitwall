@@ -184,7 +184,8 @@ const confirmLaps = (state: EngineState, packet: SessionHistoryPacket, at: Sessi
       sectorTimesMs: [entry.sector1TimeMs, entry.sector2TimeMs, entry.sector3TimeMs],
       valid: validFrom(entry.lapValidBitFlags),
       status: 'confirmed',
-      completedAt: at,
+      // the line crossing, not the Session History cycle that confirmed it (up to ~24 s later)
+      completedAt: before.reported ? before.lap.completedAt : at,
     };
     if (before.reported) out.corrections.push(...corrections(before.lap, confirmed));
     state.history.laps.push(confirmed);
