@@ -62,9 +62,15 @@ type ValueOf<D> = D extends { readonly _value?: () => infer R } ? R : never;
 
 type DataValue<E> = E extends { readonly optional: true } ? ValueOf<E> | undefined : ValueOf<E>;
 
+/** Maps each data entry of a declaration to the value the component gets, adding `| undefined` for `optional`. */
+export type DataValues<W extends { data: Record<string, AnyDataDecl> }> = { [K in keyof W['data']]: DataValue<W['data'][K]> };
+
+/** Maps each option of a declaration to its value type. */
+export type OptionValues<W extends { options: Record<string, OptionDecl<unknown>> }> = { [K in keyof W['options']]: ValueOf<W['options'][K]> };
+
 /**
  * The props of a widget component, derived from its declaration: each data entry typed as its value (`| undefined` when
- * optional) and each option as its value type. The maps are written inline on purpose: through a generic alias, TypeScript
+ * optional) and each option as its value type (the same mapping as `DataValues` and `OptionValues`). The maps are written inline on purpose: through a generic alias, TypeScript
  * compares declarations instead of props and would accept a component that expects an optional value to be present.
  */
 export type WidgetProps<W extends WidgetDecl<any, any>> = W extends WidgetDecl<infer D, infer O>
