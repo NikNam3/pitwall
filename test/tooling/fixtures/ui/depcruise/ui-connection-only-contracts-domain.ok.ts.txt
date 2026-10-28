@@ -1,0 +1,4 @@
+import type { Known } from '@pitwall/domain';
+import { CONTRACT_VERSION } from '@pitwall/contracts';
+export const x = CONTRACT_VERSION;
+export type K = Known<number>;

@@ -1,0 +1,2 @@
+import type { Known } from '@pitwall/domain';
+export type K = Known<number>;

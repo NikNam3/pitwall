@@ -1,0 +1,2 @@
+import { createDockview } from 'dockview-core';
+export const x = createDockview;

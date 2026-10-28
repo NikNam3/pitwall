@@ -1,0 +1,4 @@
+<div class="a">x</div>
+<style>
+  .a { font-family: var(--pw-font); }
+</style>

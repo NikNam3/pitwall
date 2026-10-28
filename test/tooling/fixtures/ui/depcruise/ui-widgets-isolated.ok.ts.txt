@@ -1,0 +1,5 @@
+import { leaf as kitLeaf } from '../../kit/__probe__/leaf.ts';
+import { leaf as own } from './leaf.ts';
+import type { Known } from '@pitwall/domain';
+export const x = [kitLeaf, own] as const;
+export type K = Known<number>;
