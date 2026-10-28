@@ -1,6 +1,5 @@
 <script lang="ts">
   // The page: one connection, one topic store and the window shell (spec 6.1, 7.1).
-  import type { FeedInfo } from '@pitwall/contracts';
   import { onDestroy } from 'svelte';
   import { createWsConnection } from './connection/connection.ts';
   import { TopicStore } from './connection/topic-store.svelte.ts';
@@ -17,15 +16,7 @@
   const connection = createWsConnection(bridgeUrl(location.search), import.meta.env.DEV ? { initialBackoffMs: 0 } : {});
   const store = new TopicStore(connection);
 
-  // The feeds of the bridge's `hello`; panels follow the first until link groups name one.
-  let feeds = $state.raw<FeedInfo[]>([]);
-  const offHello = connection.onMessage((m) => {
-    if (m.type === 'hello') feeds = m.feeds;
-  });
-  onDestroy(() => {
-    offHello();
-    store.dispose();
-  });
+  onDestroy(() => store.dispose());
 
   $effect(() => {
     if (!store.contractMismatch) return;
@@ -37,7 +28,8 @@
 {#if store.contractMismatch}
   <div class="notice" style:background={role('bgBand')} style:color={role('warning')}>{text.bridgeUpdated}</div>
 {/if}
-<WindowShell {store} host={getHost()} defaultFeed={feeds[0]?.feedId} />
+<!-- Panels follow the bridge's first feed until link groups name one. -->
+<WindowShell {store} host={getHost()} defaultFeed={store.feeds[0]?.feedId} />
 
 <style>
   .notice {

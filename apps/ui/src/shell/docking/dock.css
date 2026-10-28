@@ -18,7 +18,7 @@
   --dv-separator-border: transparent;
   --dv-sash-color: transparent;
   --dv-active-sash-color: var(--pw-border);
-  --dv-drag-over-background-color: color-mix(in srgb, var(--pw-textFaint) 35%, transparent);
+  --dv-drag-over-background-color: var(--pw-dropTarget);
   --dv-drag-over-border-color: var(--pw-border);
   --dv-tabs-container-scrollbar-color: var(--pw-border);
   --dv-icon-hover-background-color: var(--pw-border);

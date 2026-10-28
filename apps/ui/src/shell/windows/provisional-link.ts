@@ -8,3 +8,7 @@ export function provisionalLink(spec: PanelSpec, feedId: FeedId | undefined, ses
   if (feedId === undefined || session === undefined) return undefined;
   return { group: spec.linkGroup, feedId, primary: session.playerCar, compare: [], window: { kind: 'live' } };
 }
+
+/** True when two links resolve to the same feed, group, cars and time window. */
+export const sameLink = (a: ResolvedLink | undefined, b: ResolvedLink | undefined): boolean =>
+  a === b || (a !== undefined && b !== undefined && JSON.stringify(a) === JSON.stringify(b));

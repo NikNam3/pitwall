@@ -14,7 +14,7 @@
   import { computedLap, headerState, type DataStatus } from './header-state.ts';
   import { Holdings } from './holdings.svelte.ts';
   import { portal } from './portal.ts';
-  import { dataRequests, frameRequests } from './requests.ts';
+  import { dataRequests, frameRequests, type DataRequest } from './requests.ts';
   import { useWindowFont } from './window-font.ts';
 
   type Props = {
@@ -38,7 +38,14 @@
 
   const feedId = $derived(link?.feedId);
   const frameKeys = $derived(widget === undefined || feedId === undefined ? undefined : frameRequests(feedId));
-  const requests = $derived(widget === undefined || link === undefined ? [] : dataRequests(widget.decl, link, spec.options));
+  // Equal requests keep the previous array, so nothing downstream recomputes when an equal link is resolved again.
+  let lastRequests: DataRequest[] = [];
+  const requests = $derived.by(() => {
+    const next = widget === undefined || link === undefined ? [] : dataRequests(widget.decl, link, spec.options);
+    if (next.length === lastRequests.length && next.every((r, i) => r.id === lastRequests[i]?.id)) return lastRequests;
+    lastRequests = next;
+    return next;
+  });
 
   $effect(() => {
     const keys = frameKeys;

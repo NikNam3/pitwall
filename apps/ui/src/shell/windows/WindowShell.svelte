@@ -5,7 +5,7 @@
   import { getAllContexts, mount, onDestroy, unmount, untrack } from 'svelte';
   import type { EntryState, TopicStore } from '../../connection/topic-store.svelte.ts';
   import * as text from '../../kit/text.ts';
-  import type { RegisteredWidget } from '../../kit/types.ts';
+  import type { RegisteredWidget, ResolvedLink } from '../../kit/types.ts';
   import { role } from '../../theme/index.ts';
   import { DEFAULT_THEME } from '../default-theme.ts';
   import { WIDGETS } from '../../widgets/index.generated.ts';
@@ -15,7 +15,7 @@
   import { provideWindowFont } from '../panel/window-font.ts';
   import { defaultPanel } from '../workbooks/default-panel.ts';
   import { normaliseWorkbook } from '../workbooks/normalise.ts';
-  import { provisionalLink } from './provisional-link.ts';
+  import { provisionalLink, sameLink } from './provisional-link.ts';
   import WidgetPicker from './WidgetPicker.svelte';
   import { WindowSync } from './window-sync.ts';
 
@@ -42,9 +42,15 @@
     windowId,
     delayMs: SAVE_DEBOUNCE_MS,
     send: (window) => {
+      // The connection drops what it cannot send; the sync owes it instead.
+      if (store.connection !== 'open') return false;
       actions += 1;
       store.send({ type: 'uiAction', id: `${windowId}.${actions}`, action: { kind: 'workbook.updateWindow', window } });
+      return true;
     },
+  });
+  $effect(() => {
+    if (store.connection !== 'open') untrack(() => sync.connectionLost());
   });
 
   const byName = $derived(new Map(widgets.map((w) => [w.decl.name, w])));
@@ -82,6 +88,8 @@
   const view: PanelView = {
     title: (spec) => byName.get(spec.widget)?.decl.title ?? spec.widget,
     render(content, tab, spec: PanelSpec) {
+      // The same link object while its resolved values stay the same, so widgets are not re-derived per session update.
+      let link: ResolvedLink | undefined;
       const instance = mount(Panel, {
         target: content,
         context: contexts,
@@ -93,7 +101,9 @@
             return byName.get(spec.widget);
           },
           get link() {
-            return provisionalLink(spec, defaultFeed, session?.status === 'ok' ? session.value : undefined);
+            const next = provisionalLink(spec, defaultFeed, session?.status === 'ok' ? session.value : undefined);
+            if (!sameLink(link, next)) link = next;
+            return link;
           },
         },
       });
@@ -128,12 +138,14 @@
     });
   });
 
-  // The workbook's first window opens and places the others, once per workbook (spec 7.1).
+  // The workbook's first window opens and places the others (spec 7.1): again when the workbook or its windows change.
   let announced: string | undefined;
   $effect(() => {
     const book = read?.workbook;
-    if (book === undefined || book.windows[0]?.id !== windowId || book.name === announced) return;
-    announced = book.name;
+    if (book === undefined || book.windows[0]?.id !== windowId) return;
+    const key = JSON.stringify([book.name, book.windows.map((w) => w.id)]);
+    if (key === announced) return;
+    announced = key;
     untrack(() => host.ensureWindows(book.windows.map((w) => ({ id: w.id, geometry: w.geometry }))));
   });
 
@@ -214,7 +226,8 @@
     font-family: var(--pw-font);
     font-size: inherit;
     background: none;
-    border: 1px solid;
+    /* The theme's rule width (table.borderPx, published by applyTheme). */
+    border: var(--pw-border-px) solid;
     padding: 0 var(--pw-header-pad);
     cursor: pointer;
   }

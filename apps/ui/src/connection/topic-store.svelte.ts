@@ -2,6 +2,7 @@
 import {
   CONTRACT_VERSION,
   type ClientMessage,
+  type FeedInfo,
   type Fold,
   type ServerMessage,
   type SessionInfo,
@@ -43,9 +44,14 @@ const canonical = (value: unknown): string =>
 export class TopicStore {
   #connection = $state<ConnectionState>('connecting');
   #contractMismatch = $state(false);
+  #feeds = $state.raw<FeedInfo[]>([]);
   /** The state of the link to the bridge. */
   get connection(): ConnectionState {
     return this.#connection;
+  }
+  /** The feeds the bridge announced in its last `hello`; empty before the first. */
+  get feeds(): FeedInfo[] {
+    return this.#feeds;
   }
   /** True once `hello` announced another contract version; the shell then reloads. */
   get contractMismatch(): boolean {
@@ -170,6 +176,7 @@ export class TopicStore {
   private handle(message: ServerMessage): void {
     switch (message.type) {
       case 'hello':
+        this.#feeds = message.feeds;
         if (message.contractVersion !== CONTRACT_VERSION) this.#contractMismatch = true;
         return;
       case 'snapshot': {
