@@ -7,6 +7,7 @@ import {
   formatPct,
   formatPsi,
   formatSector,
+  formatSessionClock,
   formatTemp,
 } from '../../src/kit/values/format.ts';
 
@@ -76,4 +77,15 @@ describe('formatPct', () => {
     [99.5, '100%'],
     [100, '100%'],
   ])('%f -> %s', (p, text) => expect(formatPct(p)).toBe(text));
+});
+
+describe('formatSessionClock', () => {
+  it.each([
+    [4_324_000, '1:12:04'],
+    [471_000, '0:07:51'],
+    [0, '0:00:00'],
+    [59_999, '0:00:59'],
+    [3_600_000, '1:00:00'],
+    [36_000_000, '10:00:00'],
+  ])('%i ms -> %s', (ms, text) => expect(formatSessionClock(ms)).toBe(text));
 });

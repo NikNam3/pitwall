@@ -6,7 +6,7 @@
 //    named by the choice ('a', 'b'); a number option is a spinbutton named by its label ('Count');
 //  - changing a value sends (debounced like every window change) ONE workbook.updateWindow carrying the whole window, in
 //    which the panel's `options` (all of them) hold the new value and the rest of the panel spec is unchanged.
-import { cleanup, fireEvent, render, screen } from '@testing-library/svelte';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/svelte';
 import { carId } from '@pitwall/domain';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as text from '../../src/kit/text.ts';
@@ -68,5 +68,27 @@ describe('SettingsPopover', () => {
     await vi.advanceTimersByTimeAsync(1000);
     expect(ctx.updates()).toHaveLength(1);
     expect(ctx.updates()[0]!.panels.p1).toEqual({ widget: 'probe', linkGroup: 1, options: { mode: 'b', count: 3, flag: false } });
+  });
+});
+
+// Final fix wave (B-I2): the popover chooses the panel's link group (1 to 4).
+// Contract assumed: a radio group named `text.linkGroup` (new key in kit/text.ts, 'Link group') with radios named '1'..'4';
+// choosing one sends ONE workbook.updateWindow in which only that panel's `linkGroup` changed (options and widget unchanged).
+describe('SettingsPopover: link group choice', () => {
+  it('offers groups 1 to 4 with the panel\'s current group checked', async () => {
+    await open();
+    const group = screen.getByRole('radiogroup', { name: text.linkGroup });
+    const radios = within(group).getAllByRole('radio') as HTMLInputElement[];
+    expect(radios.map((r) => r.getAttribute('aria-label') ?? r.labels?.[0]?.textContent?.trim())).toEqual(['1', '2', '3', '4']);
+    expect(radios.map((r) => r.checked)).toEqual([true, false, false, false]);
+  });
+
+  it('choosing group 3 sends one updateWindow with linkGroup 3 and the options untouched', async () => {
+    const ctx = await open();
+    const group = screen.getByRole('radiogroup', { name: text.linkGroup });
+    await fireEvent.click(within(group).getByRole('radio', { name: '3' }));
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(ctx.updates()).toHaveLength(1);
+    expect(ctx.updates()[0]!.panels.p1).toEqual({ widget: 'probe', options: OPTIONS, linkGroup: 3 });
   });
 });

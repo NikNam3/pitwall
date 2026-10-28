@@ -138,3 +138,14 @@ describe('Inspector', () => {
     expect(screen.queryByTestId('inspector')).toBeNull();
   });
 });
+
+// Final fix wave (B-I4): the inspector's buttons use the shared look (`pw-button` from shell/controls.css), not a copy of it.
+describe('Inspector buttons', () => {
+  it('path buttons carry the pw-button class', () => {
+    vi.stubEnv('DEV', true);
+    setup();
+    const buttons = screen.getAllByRole('button').filter((b) => (b.textContent ?? '').includes('/'));
+    expect(buttons.length).toBeGreaterThan(0);
+    for (const b of buttons) expect(b.classList.contains('pw-button')).toBe(true);
+  });
+});

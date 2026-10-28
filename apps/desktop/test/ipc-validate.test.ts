@@ -72,3 +72,17 @@ describe('isAllowedOpenPath', () => {
     expect(isAllowedOpenPath(root, 7, true)).toBe(false);
   });
 });
+
+// Final fix wave (B-I3): `focusWindow` over IPC. Assumed: `parseFocusWindow(raw: unknown): string | undefined` in ipc-validate.ts.
+describe('parseFocusWindow', () => {
+  it('returns a non-empty string id unchanged', async () => {
+    const { parseFocusWindow } = await import('../src/ipc-validate.ts');
+    expect(parseFocusWindow('car')).toBe('car');
+    expect(parseFocusWindow('main')).toBe('main');
+  });
+
+  it.each([[undefined], [null], [''], [42], [{ id: 'car' }], [['car']], [true]])('rejects %j', async (raw) => {
+    const { parseFocusWindow } = await import('../src/ipc-validate.ts');
+    expect(parseFocusWindow(raw)).toBeUndefined();
+  });
+});

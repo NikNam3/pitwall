@@ -62,6 +62,7 @@ const fakeHost = (windowId = 'main') => {
       };
     },
     openPath: vi.fn(),
+    focusWindow: vi.fn(),
   };
   return { host, emitGeometry: (g: Geometry) => geometryListeners.forEach((cb) => cb(g)), unsubscribed };
 };
@@ -350,6 +351,39 @@ describe('WindowShell: ensureWindows (first window of the workbook only)', () =>
     mountShell();
     await snapshot(book('race'));
     await update(book('quali', [win('main', 'Q'), win('second', 'S')]));
+    expect(host.ensureWindows).not.toHaveBeenCalled();
+  });
+});
+
+describe('WindowShell: the initial window main always announces (final fix wave A-I4)', () => {
+  it('main announces the windows of a workbook that does not start with main (startup)', async () => {
+    const { snapshot, mountShell, host } = setup('main');
+    mountShell();
+    await snapshot(book('race', [win('strategy', 'S'), win('car', 'C')]));
+    expect(host.ensureWindows).toHaveBeenCalledTimes(1);
+    expect(host.ensureWindows).toHaveBeenLastCalledWith([
+      { id: 'strategy', geometry: undefined },
+      { id: 'car', geometry: undefined },
+    ]);
+  });
+
+  it('main announces again when the active workbook switches to one with other window ids (Ctrl+N)', async () => {
+    const { snapshot, update, mountShell, host } = setup('main');
+    mountShell();
+    await snapshot(book('race', [win('main', 'M'), win('side', 'S')]));
+    await update(book('quali', [win('strategy', 'S'), win('car', 'C')]));
+    expect(host.ensureWindows).toHaveBeenCalledTimes(2);
+    expect(host.ensureWindows).toHaveBeenLastCalledWith([
+      { id: 'strategy', geometry: undefined },
+      { id: 'car', geometry: undefined },
+    ]);
+  });
+
+  it('a window that is neither main nor first in the workbook still never announces', async () => {
+    const { snapshot, update, mountShell, host } = setup('side');
+    mountShell();
+    await snapshot(book('race', [win('main', 'M'), win('side', 'S')]));
+    await update(book('quali', [win('strategy', 'S'), win('side', 'C')]));
     expect(host.ensureWindows).not.toHaveBeenCalled();
   });
 });

@@ -241,6 +241,21 @@ describe('link groups, alerts and settings', () => {
     state.apply({ kind: 'alert.ackAll', keys: ['a', 'c'] });
     expect([...read(ALERTS).acknowledged].sort()).toEqual(['a', 'c']);
   });
+  it('pruneAcknowledged(active) drops the acknowledgements whose occurrence is no longer active, in ui.alerts and in state.json', async () => {
+    const { ui, state, read } = setup();
+    state.apply({ kind: 'alert.ackAll', keys: ['live:diskFull:1000', 'live:wing:2000', 'replay:wing:3000'] });
+    state.pruneAcknowledged(new Set(['live:wing:2000', 'live:other:9000']));
+    expect(read(ALERTS).acknowledged).toEqual(['live:wing:2000']);
+    await vi.waitFor(() => expect(readJson(file(ui, 'state.json')).acknowledged).toEqual(['live:wing:2000']), WAIT);
+  });
+  it('pruneAcknowledged with everything still active changes nothing; with nothing active it empties the list', () => {
+    const { state, read } = setup();
+    state.apply({ kind: 'alert.ackAll', keys: ['a:k:1', 'a:j:2'] });
+    state.pruneAcknowledged(new Set(['a:k:1', 'a:j:2']));
+    expect([...read(ALERTS).acknowledged].sort()).toEqual(['a:j:2', 'a:k:1']);
+    state.pruneAcknowledged(new Set());
+    expect(read(ALERTS).acknowledged).toEqual([]);
+  });
   it('alertGroup.mute adds and removes a category', async () => {
     const { ui, state, read } = setup();
     state.apply({ kind: 'alertGroup.mute', category: 'tyres', muted: true });

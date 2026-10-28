@@ -1,0 +1,4 @@
+export const a = () => globalThis.focus();
+export const b = () => globalThis.open('/x');
+export const c = () => open('/x');
+export const d = () => globalThis.moveTo(0, 0);

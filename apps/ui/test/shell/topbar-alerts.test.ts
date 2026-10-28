@@ -66,9 +66,18 @@ describe('tierOneAlerts', () => {
     expect(tierOneAlerts(active, none).map((i) => i.key)).toEqual(['c']);
   });
 
-  it('excludes acknowledged keys', () => {
+  it('excludes acknowledged occurrences, keyed `<feedId>:<insightKey>:<raisedAt>`', () => {
     const active = toMap(insight('a'), insight('b'));
-    expect(tierOneAlerts(active, { acknowledged: ['a'], muted: [] }).map((i) => i.key)).toEqual(['b']);
+    expect(tierOneAlerts(active, { acknowledged: ['f1:a:1000'], muted: [] }).map((i) => i.key)).toEqual(['b']);
+  });
+
+  it('an occurrence raised later (other raisedAt) or on another feed is not covered by the acknowledgement', () => {
+    const acknowledged = ['f1:a:1000'];
+    const later = toMap(insight('a', { raisedAt: 7000 }));
+    expect(tierOneAlerts(later, { acknowledged, muted: [] }).map((i) => i.key)).toEqual(['a']);
+    const otherFeed = toMap(insight('a', { feedId: feedId('f2') }));
+    expect(tierOneAlerts(otherFeed, { acknowledged, muted: [] }).map((i) => i.key)).toEqual(['a']);
+    expect(tierOneAlerts(toMap(insight('a')), { acknowledged: ['a'], muted: [] }).map((i) => i.key)).toEqual(['a']);
   });
 
   it('excludes muted categories', () => {
