@@ -39,9 +39,16 @@ describe('clampToDisplays', () => {
     expect({ width: r.width, height: r.height }).toEqual({ width: 1000, height: 600 });
   });
 
-  it('keeps a window that is less than 50 % off-screen where it is', () => {
-    const g = geo(0, 1500, 100, 1000, 600); // 420 of 1000 px visible
+  it('keeps a window that is 40 % off-screen where it is', () => {
+    const g = geo(0, 1320, 100, 1000, 600); // 600 of 1000 px visible
     expect(clampToDisplays(g, [screen0])).toEqual(rect(g));
+  });
+
+  it('moves a window with 499 of 1000 px visible (just over 50 % off) inside', () => {
+    const g = geo(0, 1421, 100, 1000, 600);
+    const r = clampToDisplays(g, [screen0]);
+    expect(inside(r, screen0.workArea)).toBe(true);
+    expect({ width: r.width, height: r.height }).toEqual({ width: 1000, height: 600 });
   });
 
   it('keeps a window on an attached second screen', () => {
