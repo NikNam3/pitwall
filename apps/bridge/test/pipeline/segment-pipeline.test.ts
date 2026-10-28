@@ -43,7 +43,7 @@ describe('FeedPipeline over the TT Zandvoort segment', () => {
     const [row] = db.prepare('SELECT weekend_id FROM sessions WHERE session_uid = ?').all(SESSION) as Array<{ weekend_id: string }>;
     expect(row).toBeDefined();
     const [session] = repo.sessionsOf(row!.weekend_id);
-    expect(session).toMatchObject({ sessionUid: SESSION, pwrecPath: null });
+    expect(session).toMatchObject({ sessionUid: SESSION, pwrecPath: SEGMENT });
     expect(session!.drivers.length).toBeGreaterThan(0);
     expect(Date.parse(session!.startedAt)).toBeGreaterThanOrEqual(Date.parse(source.startedAt) + source.firstT);
     const laps = repo.lapsOf(SESSION);
