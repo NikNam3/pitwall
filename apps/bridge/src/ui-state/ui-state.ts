@@ -167,8 +167,12 @@ export class UiState {
   private load(): void {
     ensureDir(join(this.ui, 'workbooks'));
     const saved = this.readSavedState();
-    if (saved) Object.assign(this, { linkGroups: saved.linkGroups, acknowledged: saved.acknowledged, muted: saved.muted, realism: saved.realism });
-    else this.stateDirty = true;
+    if (saved) {
+      this.linkGroups = saved.linkGroups;
+      this.acknowledged = saved.acknowledged;
+      this.muted = saved.muted;
+      this.realism = saved.realism;
+    } else this.stateDirty = true;
     this.names = workbookNames(join(this.ui, 'workbooks'));
     if (this.names.length === 0) {
       this.active = defaultWorkbook();
@@ -301,7 +305,11 @@ export class UiState {
   /** Writes what changed. A broken active file is not overwritten until it is valid again. */
   private flush(): void {
     clearTimeout(this.saveTimer);
-    if (this.workbookDirty && this.error === undefined) this.writeWorkbook();
+    if (this.workbookDirty && this.error === undefined) {
+      // A hand edit the watcher has not seen yet wins over the pending save.
+      if (this.readWorkbookFile(this.active.name)) this.publishWorkbooks();
+      else this.writeWorkbook();
+    }
     this.workbookDirty = false;
     if (this.stateDirty) this.writeState();
   }
@@ -321,9 +329,9 @@ export class UiState {
 
   private write(path: string, value: unknown): void {
     const text = `${JSON.stringify(value, null, 2)}\n`;
-    this.hashes.set(path, sha256(text));
     try {
       writeAtomic(path, text);
+      this.hashes.set(path, sha256(text));
     } catch (error) {
       this.log.error({ err: error, path }, 'cannot save the ui state');
     }

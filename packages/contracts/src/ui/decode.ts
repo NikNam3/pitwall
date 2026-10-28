@@ -36,7 +36,8 @@ const decodePanel = (raw: unknown): PanelSpec | undefined => {
 /** A window of a workbook; `layout` is kept as is. */
 export const decodeWorkbookWindow = (raw: unknown): WorkbookWindow | undefined => {
   if (!isObject(raw) || !isString(raw.id) || raw.id === '' || !('layout' in raw) || !isObject(raw.panels)) return undefined;
-  const panels: Record<string, PanelSpec> = {};
+  // No prototype, so a panel named `__proto__` is an ordinary key and is not dropped.
+  const panels: Record<string, PanelSpec> = Object.create(null) as Record<string, PanelSpec>;
   for (const [key, value] of Object.entries(raw.panels)) {
     const panel = decodePanel(value);
     if (panel === undefined) return undefined;
