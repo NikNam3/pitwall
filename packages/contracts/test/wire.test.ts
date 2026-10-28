@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { decodeClientMessage, decodeServerMessage, encodeMessage, type ClientMessage, type ServerMessage, type UiAction } from '../src/index.ts';
+import { decodeClientMessage, decodeServerMessage, encodeMessage, type ClientMessage, type ServerMessage, type ReplayControl, type UiAction } from '../src/index.ts';
 
 const clients: ClientMessage[] = [
   { type: 'subscribe', id: 's1', topic: 'car.detail', params: { carId: 3 } },
@@ -7,6 +7,13 @@ const clients: ClientMessage[] = [
   { type: 'unsubscribe', id: 's1' },
   { type: 'command', id: 'c1', command: { kind: 'boxCall', tyre: 'soft' as never } },
   { type: 'heartbeat' },
+  { type: 'replayControl', id: 'r1', control: { kind: 'pause' } },
+  { type: 'replayControl', id: 'r2', control: { kind: 'play' } },
+  { type: 'replayControl', id: 'r3', control: { kind: 'speed', factor: 4 } },
+  { type: 'replayControl', id: 'r4', control: { kind: 'speed', factor: 0.5 } },
+  { type: 'replayControl', id: 'r5', control: { kind: 'jumpToLap', lap: 5 } },
+  { type: 'replayControl', id: 'r6', control: { kind: 'jumpToTime', sessionTimeMs: 0 } },
+  { type: 'replayControl', id: 'r7', control: { kind: 'jumpToTime', sessionTimeMs: 61_250 } },
 ];
 const servers: ServerMessage[] = [
   { type: 'hello', contractVersion: 3, feeds: [{ feedId: 'udp-20777' as never, kind: 'udp', label: 'UDP 20777' }] },
@@ -34,8 +41,28 @@ describe('wire format', () => {
     '{"type":"unsubscribe","id":5}',
     '{"type":"command","id":"c","command":{"kind":"retire"}}',
     '{"type":"command","id":"c","command":{"kind":"boxCall","tyre":"purple"}}',
+    '{"type":"replayControl","control":{"kind":"pause"}}',                // missing id
+    '{"type":"replayControl","id":"r"}',                                  // missing control
+    '{"type":"replayControl","id":"r","control":{"kind":"rewind"}}',
+    '{"type":"replayControl","id":"r","control":{"kind":"speed","factor":0}}',
+    '{"type":"replayControl","id":"r","control":{"kind":"speed","factor":-2}}',
+    '{"type":"replayControl","id":"r","control":{"kind":"speed","factor":"4"}}',
+    '{"type":"replayControl","id":"r","control":{"kind":"speed"}}',
+    '{"type":"replayControl","id":"r","control":{"kind":"jumpToLap","lap":0}}',
+    '{"type":"replayControl","id":"r","control":{"kind":"jumpToLap","lap":2.5}}',
+    '{"type":"replayControl","id":"r","control":{"kind":"jumpToLap","lap":"2"}}',
+    '{"type":"replayControl","id":"r","control":{"kind":"jumpToTime","sessionTimeMs":-1}}',
+    '{"type":"replayControl","id":"r","control":{"kind":"jumpToTime"}}',
     '{"type":"hello","contractVersion":1,"feeds":[]}',                   // server message is not a client message
   ])('rejects malformed client message %s', (s) => { expect(decodeClientMessage(s)).toBeUndefined(); });
+  it('drops unknown extra fields of a replayControl', () => {
+    expect(decodeClientMessage('{"type":"replayControl","id":"r","control":{"kind":"pause","x":1},"y":2}')).toEqual({ type: 'replayControl', id: 'r', control: { kind: 'pause' } });
+  });
+  it('answers a replayControl with the existing actionResult', () => {
+    for (const m of [{ type: 'actionResult', id: 'r1', ok: true }, { type: 'actionResult', id: 'r1', ok: false, reason: 'notSupported' }] as const) {
+      expect(decodeServerMessage(encodeMessage(m))).toEqual(m);
+    }
+  });
   it('drops unknown extra fields', () => {
     expect(decodeClientMessage('{"type":"unsubscribe","id":"s1","x":1}')).toEqual({ type: 'unsubscribe', id: 's1' });
   });
@@ -106,4 +133,11 @@ describe('wire format: uiAction and actionResult', () => {
   });
   it.each(['{"type":"actionResult","id":"u"}', '{"type":"actionResult","id":"u","ok":false}', '{"type":"actionResult","id":"u","ok":false,"reason":"weird"}', '{"type":"actionResult","ok":true}'])(
     'rejects malformed server message %s', (s) => { expect(decodeServerMessage(s)).toBeUndefined(); });
+});
+
+describe('ReplayControl', () => {
+  it('is exactly the five kinds', () => {
+    const all: ReplayControl[] = [{ kind: 'pause' }, { kind: 'play' }, { kind: 'speed', factor: 2 }, { kind: 'jumpToLap', lap: 3 }, { kind: 'jumpToTime', sessionTimeMs: 10 }];
+    expect(all.map((c) => c.kind)).toEqual(['pause', 'play', 'speed', 'jumpToLap', 'jumpToTime']);
+  });
 });

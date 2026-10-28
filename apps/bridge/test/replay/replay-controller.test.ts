@@ -1,0 +1,182 @@
+// ReplayController on the committed tt-zandvoort-lap1 segment (spec 8.5, Task 5). Time is injected: the test releases the pacer's sleeps.
+import { join } from 'node:path';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { FEATURES } from '../../src/features/index.generated.ts';
+import { TopicHub } from '../../src/hub/topic-hub.ts';
+import { PwrecSource } from '../../src/input/pwrec-source.ts';
+import { createLogger } from '../../src/log.ts';
+import { FeedPipeline } from '../../src/pipeline/feed-pipeline.ts';
+import { FEED, harness, tick, until } from './harness.ts';
+
+const SEGMENT = join(import.meta.dirname, '../../../../fixtures/segments/tt-zandvoort-lap1.pwrec.gz');
+const open: Array<() => Promise<void>> = [];
+afterEach(async () => { for (const stop of open.splice(0)) await stop(); });
+const start = () => { const h = harness(SEGMENT); open.push(h.stop); return h; };
+
+/** Where a plain fast replay of the segment ends. */
+async function endOfSegment(): Promise<number> {
+  const pipeline = new FeedPipeline({ feedId: FEED, source: new PwrecSource({ feedId: FEED, path: SEGMENT, mode: 'asFastAsPossible' }), hub: new TopicHub({ now: () => performance.now() }), features: FEATURES, log: createLogger({ level: 'silent' }) });
+  pipeline.start();
+  await pipeline.done;
+  return pipeline.position()!.sessionTimeMs;
+}
+
+describe('ReplayController: pause, play, speed', () => {
+  it('starts playing; pause stops the session time from advancing, play resumes it', async () => {
+    const h = start();
+    await h.pumpUntil(() => (h.controller.position()?.sessionTimeMs ?? 0) > 0);
+    h.controller.control({ kind: 'pause' });
+    await h.pump(30);
+    const frozen = h.controller.position()!.sessionTimeMs;
+    const sleepsWhilePaused = h.gate.requested.length;
+    await h.pump(150);
+    expect(h.controller.position()!.sessionTimeMs).toBe(frozen);
+    expect(h.gate.requested.length).toBe(sleepsWhilePaused);
+    expect(h.status()).toMatchObject({ paused: true, atEnd: false, sessionTimeMs: frozen });
+    h.controller.control({ kind: 'play' });
+    await h.pumpUntil(() => h.controller.position()!.sessionTimeMs > frozen + 500);
+    expect(h.status()).toMatchObject({ paused: false, speed: 1 });
+  });
+  it('speed 4 asks the clock for a quarter of the waits speed 1 does, for the same records', async () => {
+    const waits = async (factor: number): Promise<number[]> => {
+      const h = start();
+      h.controller.control({ kind: 'pause' }); // before the first record is read
+      h.controller.control({ kind: 'speed', factor });
+      h.controller.control({ kind: 'play' });
+      await h.pumpUntil(() => h.gate.requested.length >= 60);
+      expect(h.status()).toMatchObject({ speed: factor });
+      await h.stop();
+      return h.gate.requested.slice(0, 60);
+    };
+    const normal = await waits(1);
+    const fast = await waits(4);
+    const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
+    expect(sum(normal)).toBeGreaterThan(200);
+    expect(sum(fast) / sum(normal)).toBeGreaterThan(0.2);
+    expect(sum(fast) / sum(normal)).toBeLessThan(0.3);
+  });
+  it('a speed set while playing applies to the waits that follow', async () => {
+    const h = start();
+    await h.pumpUntil(() => h.gate.requested.length >= 40);
+    h.controller.control({ kind: 'speed', factor: 8 });
+    await h.pump(3); // in-flight waits were asked before the change
+    const from = h.gate.requested.length;
+    await h.pumpUntil(() => h.gate.requested.length >= from + 40);
+    const after = h.gate.requested.slice(from, from + 40);
+    const before = h.gate.requested.slice(0, 40);
+    expect(Math.max(...after)).toBeLessThanOrEqual(Math.max(...before) / 8 + 1);
+  });
+});
+
+describe('ReplayController: jumps', () => {
+  it('jumpToTime forward fast-forwards without waiting and keeps the paused state', async () => {
+    const end = await endOfSegment();
+    const target = Math.floor(end / 2);
+    const h = start();
+    h.controller.control({ kind: 'pause' });
+    h.controller.control({ kind: 'jumpToTime', sessionTimeMs: target });
+    await until(() => (h.controller.position()?.sessionTimeMs ?? 0) >= target);
+    await tick();
+    expect(h.gate.requested).toEqual([]);
+    expect(h.controller.position()!.sessionTimeMs).toBeLessThan(end);
+    const at = h.controller.position()!.sessionTimeMs;
+    await h.pump(60);
+    expect(h.controller.position()!.sessionTimeMs).toBe(at);
+    expect(h.status()).toMatchObject({ paused: true, atEnd: false, sessionTimeMs: at });
+  });
+  it('jumpToTime forward from playing goes on playing afterwards', async () => {
+    const end = await endOfSegment();
+    const target = Math.floor(end * 0.6);
+    const h = start();
+    await h.pump(5);
+    h.controller.control({ kind: 'jumpToTime', sessionTimeMs: target });
+    await until(() => (h.controller.position()?.sessionTimeMs ?? 0) >= target, h.gate.releaseAll);
+    const at = h.controller.position()!.sessionTimeMs;
+    await h.pumpUntil(() => h.controller.position()!.sessionTimeMs > at + 200);
+    expect(h.status()).toMatchObject({ paused: false });
+  });
+  it('jumpToTime backward resets the feed and replays from the start to the target', async () => {
+    const end = await endOfSegment();
+    const late = Math.floor(end * 0.75);
+    const early = Math.floor(end * 0.25);
+    const h = start();
+    const reset = vi.spyOn(h.hub, 'resetFeed');
+    h.controller.control({ kind: 'pause' });
+    h.controller.control({ kind: 'jumpToTime', sessionTimeMs: late });
+    await until(() => (h.controller.position()?.sessionTimeMs ?? 0) >= late);
+    const resetsForward = reset.mock.calls.filter(([f]) => f === FEED).length;
+    h.controller.control({ kind: 'jumpToTime', sessionTimeMs: early });
+    await until(() => { const t = h.controller.position()?.sessionTimeMs; return t !== undefined && t >= early && t < late; });
+    expect(reset.mock.calls.filter(([f]) => f === FEED).length).toBeGreaterThan(resetsForward);
+    expect(h.gate.requested).toEqual([]);
+    expect(h.status()).toMatchObject({ paused: true, atEnd: false });
+  });
+  it('a backward jump leaves the same session.info and cars.overview as a fresh replay fast-forwarded to the target', async () => {
+    const end = await endOfSegment();
+    const late = Math.floor(end * 0.8);
+    const early = Math.floor(end * 0.3);
+    const jumped = start();
+    jumped.controller.control({ kind: 'pause' });
+    jumped.controller.control({ kind: 'jumpToTime', sessionTimeMs: late });
+    await until(() => (jumped.controller.position()?.sessionTimeMs ?? 0) >= late);
+    jumped.controller.control({ kind: 'jumpToTime', sessionTimeMs: early });
+    await until(() => { const t = jumped.controller.position()?.sessionTimeMs; return t !== undefined && t >= early && t < late; });
+    await tick();
+    const fresh = start();
+    fresh.controller.control({ kind: 'pause' });
+    fresh.controller.control({ kind: 'jumpToTime', sessionTimeMs: early });
+    await until(() => (fresh.controller.position()?.sessionTimeMs ?? 0) >= early);
+    await tick();
+    expect(jumped.controller.position()).toEqual(fresh.controller.position());
+    const info = fresh.read('session.info');
+    const cars = fresh.read('cars.overview');
+    expect(info).toBeDefined();
+    expect(cars).toBeDefined();
+    expect(jumped.read('session.info')).toEqual(info);
+    expect(jumped.read('cars.overview')).toEqual(cars);
+  });
+  it.each([
+    ['jumpToLap 99', { kind: 'jumpToLap', lap: 99 }],
+    ['jumpToTime far beyond the end', { kind: 'jumpToTime', sessionTimeMs: 10_000_000 }],
+  ] as const)('%s stops at the last frame with atEnd and note beyondEnd, and does not hang', async (_name, control) => {
+    const end = await endOfSegment();
+    const h = start();
+    h.controller.control(control);
+    await until(() => h.status()?.atEnd === true, () => {}, 20_000);
+    expect(h.status()).toMatchObject({ atEnd: true, note: 'beyondEnd', sessionTimeMs: end });
+    expect(h.controller.position()!.sessionTimeMs).toBe(end);
+  }, 30_000);
+  it('after a jump beyond the end, a jump back works and clears atEnd and the note', async () => {
+    const end = await endOfSegment();
+    const h = start();
+    h.controller.control({ kind: 'pause' });
+    h.controller.control({ kind: 'jumpToLap', lap: 99 });
+    await until(() => h.status()?.atEnd === true, () => {}, 20_000);
+    expect(h.status()).toMatchObject({ paused: true });
+    const target = Math.floor(end / 4);
+    h.controller.control({ kind: 'jumpToTime', sessionTimeMs: target });
+    await until(() => { const s = h.status(); return s !== undefined && !s.atEnd && s.sessionTimeMs >= target && s.sessionTimeMs < end; }, () => {}, 20_000);
+    const status = h.status()!;
+    expect(status.note).toBeUndefined();
+    expect(status.paused).toBe(true);
+  }, 30_000);
+});
+
+describe('ReplayController: replay.status', () => {
+  it('publishes paused, speed, sessionTimeMs, playerLap and atEnd for the feed', async () => {
+    const h = start();
+    h.controller.control({ kind: 'pause' });
+    h.controller.control({ kind: 'speed', factor: 2 });
+    await h.pumpUntil(() => h.status() !== undefined);
+    const status = h.status()!;
+    expect(status).toMatchObject({ paused: true, speed: 2, atEnd: false });
+    expect(Number.isInteger(status.sessionTimeMs)).toBe(true);
+    expect(Number.isInteger(status.playerLap)).toBe(true);
+    expect(status.note).toBeUndefined();
+  });
+  it('done settles once the recording is stopped', async () => {
+    const h = start();
+    await h.stop();
+    await expect(h.controller.done).resolves.toBeUndefined();
+  });
+});
