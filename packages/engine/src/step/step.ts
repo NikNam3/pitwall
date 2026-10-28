@@ -16,7 +16,7 @@ import { applyTiming } from './timing.ts';
 import { applyTyres } from './tyres.ts';
 import type { StepOutput, SubStep } from './types.ts';
 
-export { CHANGE_TAGS, type ChangeTag, type LapCorrection, type StepOutput, type SubStep } from './types.ts';
+export { ALL_CHANGE_TAGS, CHANGE_TAGS, type ChangeTag, type LapCorrection, type StepOutput, type SubStep } from './types.ts';
 
 /** Run in this order; a sub-step may rely on the ones before it. */
 export const SUB_STEPS: SubStep[] = [

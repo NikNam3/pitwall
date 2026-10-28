@@ -22,6 +22,8 @@ export const CHANGE_TAGS = [
   'miniSectors',
 ] as const;
 export type ChangeTag = (typeof CHANGE_TAGS)[number];
+/** Every change tag, each once: what a flashback changes. */
+export const ALL_CHANGE_TAGS: readonly ChangeTag[] = CHANGE_TAGS;
 
 /** A provisional lap value that the game's Session History replaced with the confirmed one. */
 export type LapCorrection = {

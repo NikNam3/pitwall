@@ -22,5 +22,6 @@ export type {
 export { createRng, type Rng } from './util/rng.ts';
 export { initialState } from './step/initial-state.ts';
 export { driverKeyOf } from './step/identity.ts';
-export { CHANGE_TAGS, step, type ChangeTag, type LapCorrection, type StepOutput, type SubStep } from './step/step.ts';
-export type { HistoryDelta } from './history/delta.ts';
+export { ALL_CHANGE_TAGS, CHANGE_TAGS, step, type ChangeTag, type LapCorrection, type StepOutput, type SubStep } from './step/step.ts';
+export { historyLengths, type HistoryDelta } from './history/delta.ts';
+export { SessionRunner, type FlashbackInfo, type SessionRunnerOptions, type StepResult } from './runner/session-runner.ts';
