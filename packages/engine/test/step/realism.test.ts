@@ -114,7 +114,7 @@ describe('withholdForRealism', () => {
     for (const [path, value] of hiddenFields(car)) expect([path, value]).toEqual([path, REALISM]);
     // everything outside the list is unchanged
     const rest = (c: CarState) => {
-      const copy = structuredClone(c) as Partial<CarState> & Record<string, any>;
+      const copy = structuredClone(c) as any;
       copy.energy = {} as never; copy.dynamics = undefined as never;
       copy.tyres = { ...copy.tyres, sets: undefined as never, corners: undefined as never };
       copy.condition = { ...copy.condition, bodywork: undefined as never, powerUnit: undefined as never, drsFault: undefined as never, engineTempC: undefined as never, brakes: undefined as never };

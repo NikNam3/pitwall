@@ -62,7 +62,7 @@ describe('pitwall CLI: config', { timeout: 30_000 }, () => {
     const [session, sidecar] = files as [string, string];
     expect(session).toMatch(/\.pwrec\.gz$/);
     expect(sidecar).toBe(`${session}.config.json`);
-    expect(JSON.parse(readFileSync(join(recordings, sidecar), 'utf8'))).toEqual({});
+    expect(JSON.parse(readFileSync(join(recordings, sidecar), 'utf8'))).toEqual({ realism: { enabled: false } });
     expect(await live.stop()).toBe(0);
   });
 

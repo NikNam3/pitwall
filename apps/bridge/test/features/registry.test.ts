@@ -6,8 +6,8 @@ import { FEATURES } from '../../src/features/index.generated.ts';
 
 describe('generated feature set', () => {
   const bindings = FEATURES.flatMap((f) => f.topics);
-  it('contains the seven base features in folder order', () => {
-    expect(FEATURES.map((f) => f.name)).toEqual(['car-detail', 'car-telemetry', 'cars-overview', 'feed-status', 'history', 'insights', 'session-info']);
+  it('contains the eight base features in folder order', () => {
+    expect(FEATURES.map((f) => f.name)).toEqual(['car-detail', 'car-telemetry', 'cars-overview', 'feed-status', 'history', 'insights', 'realism', 'session-info']);
   });
   it('calculators form a valid registry and every binding resolves', () => {
     const reg = CalculatorRegistry.build(FEATURES.flatMap((f) => f.calculators));
