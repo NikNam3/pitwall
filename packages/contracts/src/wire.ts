@@ -2,7 +2,7 @@
 // Decoders take untrusted input: they return `undefined` for anything malformed and never throw.
 // Accepted messages are rebuilt from the known fields only, so unknown extras are dropped.
 import { VisualCompound, type FeedId } from '@pitwall/domain';
-import type { ClientMessage, ErrorReason, ServerMessage, TopicStatus } from './messages.ts';
+import type { ClientMessage, ErrorReason, ReplayControl, ServerMessage, TopicStatus } from './messages.ts';
 import type { ReservedCommand } from './commands.ts';
 import type { FeedInfo } from './feeds.ts';
 import { decodeUiAction } from './ui/decode.ts';
@@ -32,6 +32,10 @@ export const decodeClientMessage = (text: string): ClientMessage | undefined => 
     case 'uiAction': {
       const action = isId(raw.id) ? decodeUiAction(raw.action) : undefined;
       return action === undefined ? undefined : { type: 'uiAction', id: raw.id as string, action };
+    }
+    case 'replayControl': {
+      const control = isId(raw.id) ? decodeReplayControl(raw.control) : undefined;
+      return control === undefined ? undefined : { type: 'replayControl', id: raw.id as string, control };
     }
     default:
       return undefined;
@@ -87,6 +91,25 @@ const decodeCommand = (raw: Json): ClientMessage | undefined => {
 const decodeReservedCommand = (raw: unknown): ReservedCommand | undefined => {
   if (!isPlainObject(raw) || raw.kind !== 'boxCall' || !isOneOf(COMPOUNDS, raw.tyre)) return undefined;
   return { kind: 'boxCall', tyre: raw.tyre as VisualCompound };
+};
+
+const decodeReplayControl = (raw: unknown): ReplayControl | undefined => {
+  if (!isPlainObject(raw)) return undefined;
+  switch (raw.kind) {
+    case 'pause':
+    case 'play':
+      return { kind: raw.kind };
+    case 'speed':
+      return typeof raw.factor === 'number' && Number.isFinite(raw.factor) && raw.factor > 0 ? { kind: 'speed', factor: raw.factor } : undefined;
+    case 'jumpToLap':
+      return Number.isInteger(raw.lap) && (raw.lap as number) >= 1 ? { kind: 'jumpToLap', lap: raw.lap as number } : undefined;
+    case 'jumpToTime':
+      return Number.isInteger(raw.sessionTimeMs) && (raw.sessionTimeMs as number) >= 0
+        ? { kind: 'jumpToTime', sessionTimeMs: raw.sessionTimeMs as number }
+        : undefined;
+    default:
+      return undefined;
+  }
 };
 
 const decodeHello = (raw: Json): ServerMessage | undefined => {

@@ -6,12 +6,20 @@ import { monotonicClock, type PacketSource, type RawPacket } from './packet-sour
 export interface PwrecSourceOptions {
   readonly feedId: FeedId;
   readonly path: string;
-  /** `realtime` keeps the recorded gaps between datagrams; `asFastAsPossible` delivers without waiting. */
-  readonly mode: 'realtime' | 'asFastAsPossible';
+  /** `realtime` keeps the recorded gaps between datagrams; `asFastAsPossible` delivers without waiting. Ignored when `pacer` is given. */
+  readonly mode?: 'realtime' | 'asFastAsPossible';
+  /** Decides how long each record waits; it replaces `mode`. */
+  readonly pacer?: Pacer;
   /** Monotonic ms clock used for pacing. Default `performance.now`. */
   readonly clock?: () => number;
   /** Waits `ms`; rejects (abort error) or resolves early once `signal` aborts. Default `timers/promises` `setTimeout`. */
   readonly sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
+}
+
+/** Holds the source back before each record after the first; `recordGapMs` is the recorded gap to the previous record. */
+export interface Pacer {
+  /** Resolves when the next record may go out; resolves early once `signal` aborts (the source is stopping). */
+  wait(recordGapMs: number, signal: AbortSignal): Promise<void>;
 }
 
 const defaultSleep = (ms: number, signal: AbortSignal): Promise<void> => sleepFor(ms, undefined, { signal });
@@ -24,19 +32,21 @@ export class PwrecSource implements PacketSource {
   readonly feedId: FeedId;
   readonly done: Promise<void>;
   readonly #path: string;
-  readonly #realtime: boolean;
+  readonly #pacer: Pacer;
   readonly #clock: () => number;
   readonly #sleep: (ms: number, signal: AbortSignal) => Promise<void>;
   readonly #abort = new AbortController();
   readonly #finish: PromiseWithResolvers<void> = Promise.withResolvers();
   #started = false;
+  /** The clock when the first record was read; the `realtime` pacer measures from it. */
+  #firstRecordClockMs = 0;
 
   constructor(opts: PwrecSourceOptions) {
     this.feedId = opts.feedId;
     this.#path = opts.path;
-    this.#realtime = opts.mode === 'realtime';
     this.#clock = opts.clock ?? monotonicClock;
     this.#sleep = opts.sleep ?? defaultSleep;
+    this.#pacer = opts.pacer ?? (opts.mode === 'realtime' ? this.#realtimePacer() : { wait: async () => {} });
     this.done = this.#finish.promise;
     this.done.catch(() => {});
   }
@@ -56,19 +66,33 @@ export class PwrecSource implements PacketSource {
     await this.done.catch(() => {});
   }
 
+  /** The `realtime` mode: keeps the recorded offsets from the first record, absorbing the time processing took. */
+  #realtimePacer(): Pacer {
+    let elapsedMs = 0;
+    return {
+      wait: async (gapMs) => {
+        elapsedMs += gapMs;
+        const waitMs = this.#firstRecordClockMs + elapsedMs - this.#clock();
+        if (waitMs > 0) await this.#waited(waitMs);
+      },
+    };
+  }
+
   get #stopped(): boolean {
     return this.#abort.signal.aborted;
   }
 
   async #deliver(onPacket: (packet: RawPacket) => void): Promise<void> {
-    let origin: { readonly clockMs: number; readonly recordMs: number } | undefined;
+    let previousMs: number | undefined;
     for await (const record of readPwrec(this.#path)) {
       if (this.#stopped) return;
-      if (this.#realtime) {
-        origin ??= { clockMs: this.#clock(), recordMs: record.t };
-        const waitMs = origin.clockMs + (record.t - origin.recordMs) - this.#clock();
-        if (waitMs > 0 && !(await this.#waited(waitMs))) return;
+      if (previousMs === undefined) {
+        this.#firstRecordClockMs = this.#clock();
+      } else {
+        await this.#pacer.wait(Math.max(0, record.t - previousMs), this.#abort.signal);
+        if (this.#stopped) return;
       }
+      previousMs = record.t;
       onPacket({ feedId: this.feedId, receivedAtMs: record.t, bytes: record.payload });
     }
   }

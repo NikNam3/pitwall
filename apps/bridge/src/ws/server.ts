@@ -1,9 +1,9 @@
 // WebSocket server (spec 8): one hub client per connection, hello on connect, heartbeats, silent clients dropped.
-// Besides subscriptions it only passes `uiAction` messages to the UI state; the reserved `command` channel is always answered with `notSupported`.
+// Besides subscriptions it only passes `uiAction` messages to the UI state and `replayControl` messages to the replay; the reserved `command` channel is always answered with `notSupported`.
 import { WebSocket, WebSocketServer } from 'ws';
 import type { FeedId } from '@pitwall/domain';
 import { CONTRACT_VERSION, TOPICS, decodeClientMessage, encodeMessage } from '@pitwall/contracts';
-import type { ClientMessage, FeedInfo, ServerMessage } from '@pitwall/contracts';
+import type { ClientMessage, FeedInfo, ReplayControl, ServerMessage } from '@pitwall/contracts';
 import type { UiState } from '../ui-state/ui-state.ts';
 import type { TopicHub } from '../hub/topic-hub.ts';
 import { StartupError } from '../startup-error.ts';
@@ -16,6 +16,8 @@ export type WsServerOptions = {
   feeds: () => FeedInfo[];
   /** The UI state that `uiAction` messages change; without it they are answered with `notSupported`. */
   uiState?: Pick<UiState, 'apply'>;
+  /** The replay transport that `replayControl` messages drive; without it (a live feed), or when its `control` returns `false`, they are answered with `notSupported`. */
+  replay?: { control(control: ReplayControl): boolean | undefined };
   /** Default `127.0.0.1`. */
   host?: string;
   /** How often `hub.tick()` flushes throttled subscriptions and owed snapshots. Default 10. */
@@ -115,6 +117,13 @@ export class WsServer {
       case 'uiAction': {
         const result = this.options.uiState?.apply(message.action) ?? { ok: false, reason: 'notSupported' } as const;
         send({ type: 'actionResult', id: message.id, ...result });
+        return;
+      }
+      case 'replayControl': {
+        const { replay } = this.options;
+        // `false` means the replay is not ready yet to take controls.
+        const taken = replay !== undefined && replay.control(message.control) !== false;
+        send({ type: 'actionResult', id: message.id, ...(taken ? { ok: true as const } : { ok: false as const, reason: 'notSupported' as const }) });
         return;
       }
       case 'heartbeat':

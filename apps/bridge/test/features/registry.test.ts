@@ -13,8 +13,8 @@ describe('generated feature set', () => {
     const reg = CalculatorRegistry.build(FEATURES.flatMap((f) => f.calculators));
     for (const b of bindings) if ('from' in b) expect(reg.get(b.from), b.topic).toBeDefined();
   });
-  it('binds every feed topic exactly once (global topics are published by the bridge shell, not bound by features)', () => {
-    const feedTopics = Object.entries(TOPICS).filter(([, d]) => d.scope === 'feed').map(([name]) => name);
+  it('binds every feed topic exactly once (global topics are published by the bridge shell, replay.status by the ReplayController; neither is bound by features)', () => {
+    const feedTopics = Object.entries(TOPICS).filter(([name, d]) => d.scope === 'feed' && name !== 'replay.status').map(([name]) => name);
     expect(bindings.map((b) => b.topic).sort()).toEqual(feedTopics.sort());
   });
 });

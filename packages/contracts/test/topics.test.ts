@@ -8,6 +8,7 @@ import {
   type FeedInfo,
   type FeedStatus,
   type InsightEntry,
+  type ReplayStatus,
   type ReservedCommand,
   type SessionInfo,
   type TopicName,
@@ -19,7 +20,7 @@ import carDetail from '../src/topics/car.detail.ts';
 import laps from '../src/topics/laps.ts';
 
 describe('TOPICS', () => {
-  it('has exactly the 11 topics of spec 8.4 with their modes and rates', () => {
+  it('has exactly the 12 feed topics (spec 8.4 and replay.status of 8.5) with their modes and rates', () => {
     const table = Object.entries(TOPICS)
       .filter(([, d]) => d.scope === 'feed' && d.owner === 'core')
       .map(([key, d]) => [key, d.name, d.mode, d.maxHz] as const)
@@ -34,13 +35,14 @@ describe('TOPICS', () => {
       ['insights', 'insights', 'append', Infinity],
       ['laps', 'laps', 'append', Infinity],
       ['pitStops', 'pitStops', 'append', Infinity],
+      ['replay.status', 'replay.status', 'state', 4],
       ['session.info', 'session.info', 'state', 2],
       ['stints', 'stints', 'append', Infinity],
     ]);
   });
-  it('gives every one of the 11 topics owner core and scope feed', () => {
+  it('gives every one of the 12 feed topics owner core and scope feed', () => {
     const feed = Object.values(TOPICS).filter((d) => d.scope === 'feed');
-    expect(feed).toHaveLength(11);
+    expect(feed).toHaveLength(12);
     for (const d of feed) expect(d).toMatchObject({ owner: 'core', scope: 'feed' });
   });
   it('has the global topic dev.calcStats: owner core, state, 1 Hz', () => {
@@ -49,7 +51,7 @@ describe('TOPICS', () => {
   it.each(['ui.workbooks', 'ui.linkGroups', 'ui.alerts', 'ui.settings'] as const)('has the global topic %s: owner core, state', (name) => {
     expect(TOPICS[name]).toMatchObject({ name, owner: 'core', scope: 'global', mode: 'state' });
   });
-  it('exports the contract version', () => { expect(CONTRACT_VERSION).toBe(4); });
+  it('exports the contract version', () => { expect(CONTRACT_VERSION).toBe(5); });
 });
 
 describe('defineTopic', () => {
@@ -76,7 +78,7 @@ describe('topic types', () => {
     expectTypeOf<TopicName>().toEqualTypeOf<
       | 'feed.status' | 'session.info' | 'cars.overview' | 'car.detail' | 'car.telemetry' | 'laps'
       | 'stints' | 'pitStops' | 'flagPhases' | 'events' | 'insights' | 'dev.calcStats'
-      | 'ui.workbooks' | 'ui.linkGroups' | 'ui.alerts' | 'ui.settings'
+      | 'replay.status' | 'ui.workbooks' | 'ui.linkGroups' | 'ui.alerts' | 'ui.settings'
     >();
     expectTypeOf<TopicParams<'car.detail'>>().toEqualTypeOf<{ carId: CarId }>();
     expectTypeOf<TopicParams<'car.detail'>['carId']>().toEqualTypeOf<CarId>();
@@ -90,6 +92,9 @@ describe('topic types', () => {
     expectTypeOf<TopicValue<'session.info'>>().toEqualTypeOf<SessionInfo>();
     expectTypeOf<TopicValue<'cars.overview'>>().toEqualTypeOf<CarOverview[]>();
     expectTypeOf<TopicValue<'insights'>>().toEqualTypeOf<InsightEntry>();
+    expectTypeOf<TopicValue<'replay.status'>>().toEqualTypeOf<ReplayStatus>();
+    expectTypeOf<TopicParams<'replay.status'>>().toEqualTypeOf<Record<string, never>>();
+    expectTypeOf<ReplayStatus>().toEqualTypeOf<{ paused: boolean; speed: number; sessionTimeMs: number; playerLap: number; atEnd: boolean; note?: 'beyondEnd' }>();
   });
   it('carry what the UI needs to grey out stale values', () => {
     expectTypeOf<CarOverview['updatedAt']>().toEqualTypeOf<CarState['updatedAt']>();
