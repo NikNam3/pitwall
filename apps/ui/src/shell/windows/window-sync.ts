@@ -31,6 +31,8 @@ export class WindowSync {
   #bridge: WorkbookWindow | undefined;
   #bridgeText: string | undefined;
   #geometry: Geometry | undefined;
+  /** The font size this window set and the bridge has not echoed yet. */
+  #fontPx: number | undefined;
   #timer: ReturnType<typeof setTimeout> | undefined;
   #unconfirmed: string[] = [];
   #owed = false;
@@ -50,6 +52,7 @@ export class WindowSync {
   /** The bridge published this window (undefined when the workbook does not know it). True: remount the dock. */
   fromBridge(window: WorkbookWindow | undefined): boolean {
     this.#bridge = window;
+    if (window?.fontPx === this.#fontPx) this.#fontPx = undefined;
     const content: DockContent = window === undefined ? { layout: undefined, panels: {} } : { layout: window.layout, panels: window.panels };
     const text = canonical(content);
     const unchanged = text === this.#bridgeText;
@@ -66,6 +69,7 @@ export class WindowSync {
     this.#cancel();
     this.#owed = false;
     this.#unconfirmed = [];
+    this.#fontPx = undefined;
     this.#dock = content;
     return true;
   }
@@ -73,6 +77,12 @@ export class WindowSync {
   /** The dock changed in this window. */
   dockChanged(content: DockContent): void {
     this.#dock = content;
+    this.#schedule();
+  }
+
+  /** This window's font size was changed. */
+  fontChanged(fontPx: number): void {
+    this.#fontPx = fontPx;
     this.#schedule();
   }
 
@@ -114,7 +124,7 @@ export class WindowSync {
     // Nothing to save before the first workbook arrived; the geometry goes with the first change after it.
     if (dock === undefined) return;
     const geometry = this.#geometry ?? this.#bridge?.geometry;
-    const fontPx = this.#bridge?.fontPx;
+    const fontPx = this.#fontPx ?? this.#bridge?.fontPx;
     const sent = this.#send({
       id: this.#id,
       ...(geometry === undefined ? {} : { geometry }),

@@ -44,3 +44,86 @@ export const estimatedPrefix = '~';
 
 /** Body of a gallery cell whose moment file is missing. */
 export const momentMissing = 'moment not generated, run pnpm gen:moments';
+
+// Shell: commands, keys and overlays (spec 7.7). Command titles and the headings of the key overview.
+
+/** Group headings of the key overview, one per kind of command. */
+export const commandGroups = {
+  workbooks: 'Workbooks',
+  alerts: 'Alerts',
+  cars: 'Cars',
+  replay: 'Replay',
+  window: 'Window',
+  theme: 'Theme',
+  realism: 'Realism',
+  help: 'Help',
+} as const;
+
+export const commandTitles = {
+  workbookOpen: (n: number): string => `Open workbook ${n}`,
+  workbookPick: 'Pick a workbook',
+  workbookSaveAs: 'Save workbook as',
+  alertsAckAll: 'Acknowledge all alerts',
+  pickPrimary: (group: number): string => `Pick primary car (group ${group})`,
+  resetPrimary: (group: number): string => `Back to our driver (group ${group})`,
+  paletteOpen: 'Command palette',
+  keysOverview: 'Key overview',
+  windowFocus: (id: string): string => `Focus window ${id}`,
+  realismToggle: 'Toggle realism mode',
+  replayPause: 'Pause replay',
+  replayPlay: 'Play replay',
+  fontBigger: 'Bigger font',
+  fontSmaller: 'Smaller font',
+  fontReset: 'Default font size',
+  theme: (name: string): string => `Theme ${name}`,
+} as const;
+
+/** Notes of the key overview for entries of `keys.json` that are ignored. */
+export const keyUnknownCommand = (key: string, command: string): string => `keys.json: "${key}" → unknown command "${command}", ignored`;
+export const keyBoundTwice = (key: string, command: string): string => `keys.json: "${key}" is bound twice, "${command}" ignored`;
+export const keyNotString = (key: string): string => `keys.json: "${key}" is not bound to a command name, ignored`;
+
+/** Title of the key overview, and its label for the notes. */
+export const keyOverviewTitle = 'Keys';
+
+/** Placeholder of the palette's input. */
+export const palettePlaceholder = 'command';
+
+/** Empty palette result. */
+export const noCommands = 'no matching command';
+
+/** Title of the workbook picker, and of the name prompt of `workbook.saveAs`. */
+export const workbooksTitle = 'Workbooks';
+export const saveAsTitle = 'Save workbook as';
+
+/** Empty workbook list. */
+export const noWorkbooks = 'no workbooks';
+
+/** Accessible name of the workbook name input. */
+export const workbookName = 'workbook name';
+
+/** Group picker (spec 7.5). */
+export const picker = {
+  primary: 'Primary',
+  compare: 'Compare',
+  window: 'Window',
+  player: 'player',
+  teammate: 'teammate',
+  live: 'live',
+  lap: 'lap',
+  range: 'range',
+  from: 'from lap',
+  to: 'to lap',
+  noFeed: 'no feed yet',
+  noCars: 'no cars yet',
+} as const;
+
+/** Settings popover. */
+export const settingsTitle = (widget: string): string => `${widget} · settings`;
+/** The choice of a car option that follows the panel's link group. */
+export const followLink = 'follow';
+export const noSettings = 'no settings';
+export const settingsSaved = 'saved in this workbook';
+
+/** Accessible name of the link marker button. */
+export const linkMarker = 'link group';

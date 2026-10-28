@@ -1,20 +1,30 @@
 <script lang="ts">
   // One window (spec 7.1-7.3): the active workbook's panels for this window, in a dock, saved back to the bridge.
-  import type { PanelSpec, SessionInfo } from '@pitwall/contracts';
+  import type { LinkGroup, PanelSpec, ReplayControl, SessionInfo, UiAction, UiSettings } from '@pitwall/contracts';
   import type { FeedId } from '@pitwall/domain';
   import { getAllContexts, mount, onDestroy, unmount, untrack } from 'svelte';
   import type { EntryState, TopicStore } from '../../connection/topic-store.svelte.ts';
   import * as text from '../../kit/text.ts';
   import type { RegisteredWidget, ResolvedLink } from '../../kit/types.ts';
-  import { DEFAULT_THEME, role } from '../../theme/index.ts';
+  import { applyTheme, DEFAULT_THEME, role, type ThemeVariant } from '../../theme/index.ts';
+  import '../controls.css';
   import { WIDGETS } from '../../widgets/index.generated.ts';
+  import { defaultCommands, DEFAULT_KEYS, windowCommands, type CommandContext, type ShellOverlay } from '../commands/default-commands.ts';
+  import { eventKey, parseKeys } from '../commands/keys.ts';
+  import KeyOverview from '../commands/KeyOverview.svelte';
+  import { OverlayStack, provideOverlayStack } from '../commands/overlay-stack.ts';
+  import Palette from '../commands/Palette.svelte';
+  import { CommandRegistry } from '../commands/registry.ts';
   import { mountDock, type DockHandle, type PanelView } from '../docking/index.ts';
   import type { Host } from '../host/host.ts';
+  import GroupPicker from '../link-groups/GroupPicker.svelte';
+  import { resolveLink, sameLink } from '../link-groups/resolve.ts';
   import Panel from '../panel/Panel.svelte';
   import { provideWindowFont } from '../panel/window-font.ts';
   import { defaultPanel } from '../workbooks/default-panel.ts';
   import { normaliseWorkbook } from '../workbooks/normalise.ts';
-  import { provisionalLink, sameLink } from './provisional-link.ts';
+  import WorkbookPicker from '../workbooks/WorkbookPicker.svelte';
+  import WorkbookSaveAs from '../workbooks/WorkbookSaveAs.svelte';
   import WidgetPicker from './WidgetPicker.svelte';
   import { WindowSync } from './window-sync.ts';
 
@@ -36,15 +46,22 @@
   const windowId = host.windowId();
   // svelte-ignore state_referenced_locally
   const workbooks = store.acquire({ topic: 'ui.workbooks', params: {} });
+  // svelte-ignore state_referenced_locally
+  const linkGroups = store.acquire({ topic: 'ui.linkGroups', params: {} });
+  // svelte-ignore state_referenced_locally
+  const uiSettings = store.acquire({ topic: 'ui.settings', params: {} });
   let actions = 0;
+  const nextId = (): string => {
+    actions += 1;
+    return `${windowId}.${actions}`;
+  };
   const sync = new WindowSync({
     windowId,
     delayMs: SAVE_DEBOUNCE_MS,
     send: (window) => {
       // The connection drops what it cannot send; the sync owes it instead.
       if (store.connection !== 'open') return false;
-      actions += 1;
-      store.send({ type: 'uiAction', id: `${windowId}.${actions}`, action: { kind: 'workbook.updateWindow', window } });
+      store.send({ type: 'uiAction', id: nextId(), action: { kind: 'workbook.updateWindow', window } });
       return true;
     },
   });
@@ -57,7 +74,14 @@
   const value = $derived(workbooks.state.status === 'ok' ? workbooks.state.value : undefined);
   const read = $derived(value === undefined ? undefined : normaliseWorkbook(value.active, decls));
   const thisWindow = $derived(read?.workbook.windows.find((w) => w.id === windowId));
-  const fontPx = $derived(thisWindow?.fontPx ?? DEFAULT_THEME.fontPx);
+  // A size set here shows at once; the bridge's copy takes over when it echoes it.
+  let pendingFontPx = $state<number | undefined>();
+  // The theme in use: cells are counted with its line height and a font reset goes to its size.
+  let theme = $state.raw<ThemeVariant>(DEFAULT_THEME);
+  const fontPx = $derived(pendingFontPx ?? thisWindow?.fontPx ?? theme.fontPx);
+  $effect(() => {
+    if (pendingFontPx !== undefined && thisWindow?.fontPx === pendingFontPx) pendingFontPx = undefined;
+  });
   // Unknown widgets say so in their panel; ignored options are listed on one line.
   const notes = $derived(
     (read?.notes ?? []).flatMap((n) => (n.windowId === windowId && n.kind !== 'unknownWidget' ? [text.optionIgnored(n.panelId, n.option)] : [])),
@@ -67,7 +91,9 @@
     get fontPx() {
       return fontPx;
     },
-    lineHeight: DEFAULT_THEME.density.lineHeight,
+    get lineHeight() {
+      return theme.density.lineHeight;
+    },
   });
 
   let session = $state.raw<EntryState<SessionInfo> | undefined>();
@@ -82,11 +108,98 @@
     return () => held.release();
   });
 
+  const sessionInfo = $derived(session?.status === 'ok' ? session.value : undefined);
+  const groups = $derived(linkGroups.state.status === 'ok' ? (linkGroups.state.value ?? []) : undefined);
+  const settings = $derived<UiSettings | undefined>(uiSettings.state.status === 'ok' ? uiSettings.state.value : undefined);
+  /** Until the bridge publishes the groups (or when one is missing there), a group follows the player live. */
+  const groupOf = (id: number): LinkGroup => groups?.find((g) => g.id === id) ?? { id, primary: 'player', compare: [], window: { kind: 'live' } };
+
+  // The panels' specs as the window holds them now: option changes made here reach the panels before the bridge echoes.
+  let panelSpecs = $state.raw<Record<string, PanelSpec>>({});
+  const setOptions = (id: string, options: Record<string, unknown>): void => {
+    const { layout, panels } = sync.content;
+    const before = panels[id];
+    if (before === undefined) return;
+    const after = { ...before, options };
+    panelSpecs = { ...panels, [id]: after };
+    // The dock keeps its own copy of every spec; it must hold the new one too.
+    dock?.updatePanel(id, after);
+    sync.dockChanged({ layout, panels: panelSpecs });
+  };
+
+  const send = (action: UiAction): void => store.send({ type: 'uiAction', id: nextId(), action });
+  const sendReplay = (control: ReplayControl): void => store.send({ type: 'replayControl', id: nextId(), control });
+
+  // Commands and keys (spec 7.7). Only this component listens to keys.
+  const registry = new CommandRegistry();
+  const stack = new OverlayStack();
+  provideOverlayStack(stack);
+  let overlay = $state<ShellOverlay | undefined>();
+  const closeOverlay = (): void => {
+    overlay = undefined;
+  };
+  $effect(() => {
+    if (overlay === undefined) return;
+    return stack.add(closeOverlay);
+  });
+  const commandContext: CommandContext = {
+    send,
+    sendReplay,
+    open: (next) => (overlay = next),
+    workbookNames: () => (value?.names ?? []),
+    groups: () => groups ?? [],
+    settings: () => settings,
+    fontPx: () => fontPx,
+    defaultFontPx: () => theme.fontPx,
+    setTheme: (variant) => {
+      theme = variant;
+      applyTheme(variant, document.documentElement);
+    },
+    setFontPx: (px) => {
+      pendingFontPx = px;
+      sync.fontChanged(px);
+    },
+    focusWindow: (id) => {
+      if (id === windowId) globalThis.focus();
+    },
+    // TODO(alerts task): the keys of the tier-1 alerts shown in the top bar.
+    alertKeys: () => [],
+  };
+  const baseCommands = defaultCommands(commandContext);
+  const commands = $derived([...baseCommands, ...windowCommands((read?.workbook.windows ?? []).map((w) => w.id), commandContext)]);
+  $effect(() => {
+    const offs = commands.map((c) => registry.register(c));
+    return () => offs.forEach((off) => off());
+  });
+  const keys = $derived(parseKeys(settings?.keys ?? {}, new Set(commands.map((c) => c.id)), DEFAULT_KEYS));
+
+  /** True when typing goes to the target: only Escape is handled there. */
+  const isTextTarget = (target: EventTarget | null): boolean =>
+    target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName));
+  const onKeydown = (e: KeyboardEvent): void => {
+    const key = eventKey(e);
+    if (key !== 'Escape' && isTextTarget(e.target)) return;
+    // Space on a focused button is its click.
+    if (key === 'Space' && e.target instanceof HTMLButtonElement) return;
+    if (key === 'Escape' && stack.closeTop()) {
+      e.preventDefault();
+      return;
+    }
+    const id = keys.bindings.get(key);
+    if (id !== undefined && registry.run(id)) e.preventDefault();
+  };
+  $effect(() => {
+    window.addEventListener('keydown', onKeydown);
+    return () => window.removeEventListener('keydown', onKeydown);
+  });
+
   // Panels are mounted by the dock, outside this component's tree: they get the window's contexts explicitly.
   const contexts = getAllContexts();
   const view: PanelView = {
     title: (spec) => byName.get(spec.widget)?.decl.title ?? spec.widget,
-    render(content, tab, spec: PanelSpec) {
+    render(content, tab, first: PanelSpec, panelId: string) {
+      // The panel follows option changes made here, which reach it before the bridge echoes them.
+      const current = (): PanelSpec => panelSpecs[panelId] ?? first;
       // The same link object while its resolved values stay the same, so widgets are not re-derived per session update.
       let link: ResolvedLink | undefined;
       const instance = mount(Panel, {
@@ -94,13 +207,21 @@
         context: contexts,
         props: {
           store,
-          spec,
           headerTarget: tab,
+          defaultFeed,
+          send,
+          onOptions: (options: Record<string, unknown>) => setOptions(panelId, options),
+          get spec() {
+            return current();
+          },
           get widget() {
-            return byName.get(spec.widget);
+            return byName.get(current().widget);
+          },
+          get group() {
+            return groups?.find((g) => g.id === current().linkGroup);
           },
           get link() {
-            const next = provisionalLink(spec, defaultFeed, session?.status === 'ok' ? session.value : undefined);
+            const next = resolveLink(groupOf(current().linkGroup), sessionInfo, defaultFeed);
             if (!sameLink(link, next)) link = next;
             return link;
           },
@@ -115,24 +236,34 @@
   let empty = $state(true);
   let picking = $state(false);
 
+  /** The gap the dock was mounted with: a theme with another gap mounts it again. */
+  let mountedGapPx: number | undefined;
   $effect(() => {
     const window = thisWindow;
     const el = dockEl;
+    const gapPx = theme.density.panelGapPx;
     if (read === undefined || el === undefined) return;
     untrack(() => {
-      if (!sync.fromBridge(window) && dock !== undefined) return;
+      const fromBridge = sync.fromBridge(window);
+      if (!fromBridge && dock !== undefined && gapPx === mountedGapPx) return;
+      // A size set here and not saved belongs to the window it was set in.
+      if (fromBridge) pendingFontPx = undefined;
+      mountedGapPx = gapPx;
       dock?.destroy();
       const { layout, panels } = sync.content;
       empty = Object.keys(panels).length === 0;
+      panelSpecs = panels;
       dock = mountDock(
         el,
         layout,
         panels,
         (nextLayout, nextPanels) => {
           empty = Object.keys(nextPanels).length === 0;
+          panelSpecs = nextPanels;
           sync.dockChanged({ layout: nextLayout, panels: nextPanels });
         },
         view,
+        gapPx,
       );
     });
   });
@@ -155,6 +286,8 @@
     sync.dispose();
     dock?.destroy();
     workbooks.release();
+    linkGroups.release();
+    uiSettings.release();
   });
 
   const pick = (widget: RegisteredWidget): void => {
@@ -174,13 +307,42 @@
     <div class="dock" bind:this={dockEl}></div>
     {#if read !== undefined && empty}
       <div class="empty">
-        <button type="button" style:color={role('textDim')} style:border-color={role('border')} onclick={() => (picking = !picking)}
+        <button type="button" class="pw-button" style:color={role('textDim')} style:border-color={role('border')} onclick={() => (picking = !picking)}
           >{text.addWidget}</button
         >
         {#if picking}<WidgetPicker {widgets} onPick={pick} />{/if}
       </div>
     {/if}
   </div>
+  {#if overlay?.kind === 'palette'}
+    <Palette {registry} bindings={keys.bindings} onClose={closeOverlay} />
+  {:else if overlay?.kind === 'keys'}
+    <KeyOverview {registry} bindings={keys.bindings} notes={keys.notes} onClose={closeOverlay} />
+  {:else if overlay?.kind === 'workbooks'}
+    <WorkbookPicker
+      names={value?.names ?? []}
+      active={value?.active.name}
+      onPick={(name) => {
+        closeOverlay();
+        send({ kind: 'workbook.open', name });
+      }}
+      onClose={closeOverlay}
+    />
+  {:else if overlay?.kind === 'saveAs'}
+    <WorkbookSaveAs
+      onSave={(name) => {
+        closeOverlay();
+        send({ kind: 'workbook.saveAs', name });
+      }}
+      onClose={closeOverlay}
+    />
+  {:else if overlay?.kind === 'picker'}
+    {@const wanted = overlay.group}
+    {@const picked = groups?.find((g) => g.id === wanted)}
+    {#if picked !== undefined}
+      <GroupPicker {store} group={picked} feedId={picked.feedId ?? defaultFeed} {send} onClose={closeOverlay} />
+    {/if}
+  {/if}
 </div>
 
 <style>
@@ -222,11 +384,7 @@
     pointer-events: auto;
   }
   button {
-    font-family: var(--pw-font);
-    font-size: inherit;
-    background: none;
     border: var(--pw-border-px) solid;
     padding: 0 var(--pw-header-pad);
-    cursor: pointer;
   }
 </style>
