@@ -5,7 +5,7 @@ Date: 2026-10-28 · Branch: `feat/groundwork` · Worktree: `../pitwall-wt/ground
 - **Source:** `docs/reviews/2026-10-28-foundation-architecture-review.md`, findings F1–F7 and section 5.
 - **Spec:** `docs/superpowers/specs/2026-10-28-foundation-design.md`. The supervisor updates it after the tasks (docs task at the end).
 - **User decisions (2026-10-28):**
-  - Q-A: one bridge with several feeds.
+  - Q-A: monitoring a second car (the whole team) is **out of scope for the MVP**. Nothing built now may close that door; multi-feed serving and per-feed storage come with the second driver later.
   - Q-B: one file per topic.
   - Q-C: thresholds and settings as read-only config for calculators (option A).
   - Q-D (stale values, F9): still open. **Not part of this plan.**
@@ -30,6 +30,7 @@ Date: 2026-10-28 · Branch: `feat/groundwork` · Worktree: `../pitwall-wt/ground
 - Every commit message ends with a blank line and `Co-Authored-By: <your model name> <noreply@anthropic.com>`.
 - Keep the code style: short doc comments on exported things, the existing naming, no new dependencies.
 - Determinism stays: the same recording, config and subscriptions → the same topic stream.
+- **Keep the door open for a second car:** no new code may assume there is only one feed. `feedId` stays on topics, insights, subscriptions and pipelines, and nothing becomes a process-wide singleton per feed.
 
 ---
 
@@ -188,26 +189,20 @@ Plus runtime tests that the helpers produce bindings the publisher handles as be
 
 ---
 
-### Task 6: Storage keyed per view, weekend context for every driver
+### Task 6: Weekend context for every driver, automatic database rebuild
 
 **Goal:**
-- Two feeds of the same online session (two drivers' games, same `sessionUid`) can be stored side by side.
-- The weekend context carries every driver's laps, not only the player's (review F7).
-- An old database rebuilds itself instead of failing.
+- The weekend context carries every driver's laps from the player's earlier sessions, not only the player's own (review F7). The strategy needs rivals' practice pace and degradation, and the player's own feed sees every car.
+- An outdated database rebuilds itself instead of failing.
 
 **Scope:** `apps/bridge/src/storage`, `apps/bridge/src/pipeline`, `apps/bridge/src/cli`, `packages/engine/src/state` (granted: `weekend-context.ts`), `packages/engine/src` (only what the type change needs), `apps/bridge/test`, `packages/engine/test`.
 
 **Requirements:**
-1. **A view** is one game's view of a session: `(sessionUid, playerCar)`, where `playerCar` is the `playerCarIndex` of the session's first packet header.
-2. **SQLite schema, `SCHEMA_VERSION = 2`:**
-   - `sessions` has the primary key `(session_uid, player_car)` and a column `player_driver_key TEXT` (the `driverKeyString` of the player, `NULL` until Participants arrives)
-   - every child table (`drivers`, `laps`, `stints`, `pit_stops`, `flag_phases`, `events`) gets `player_car INTEGER NOT NULL` in its primary key and its foreign key to `sessions`
-   - writer and repository methods take a `SessionView = { sessionUid, playerCar }` where they took a `sessionUid`
-3. **`WeekendContext`** (`packages/engine/src/state/weekend-context.ts`) becomes:
+1. **`WeekendContext`** (`packages/engine/src/state/weekend-context.ts`) becomes:
    ```ts
    type WeekendContext = {
      weekendId: string;
-     driverKey: DriverKey;            // this feed's player
+     driverKey: DriverKey;            // the player
      sessions: Array<{
        sessionUid: SessionUid;
        sessionType: number;
@@ -215,56 +210,23 @@ Plus runtime tests that the helpers produce bindings the publisher handles as be
      }>;
    };
    ```
-   - `sessions` = the weekend's earlier views **whose player is `driverKey`**, oldest first. "What this driver's game saw earlier this weekend": no duplicates from other views.
-   - `drivers` = every driver stored for that view, ordered by car id, each with their records.
-4. **Session file names** include the player car, so two feeds never collide: `sessionRecordingName(wallClockMs, sessionUid, playerCar)`.
-5. **Schema mismatch:**
-   - `openDatabase` with an old `user_version` no longer throws `SchemaVersionError` for `live`. The `live` command deletes the database files and recreates them, logs `database schema <found> is outdated; rebuilding it from the recordings`, then runs the same rebuild `reprocess` does (all recordings) before serving.
+   - `sessions` = the weekend's earlier sessions in which the player took part, oldest first (the same sessions as today).
+   - `drivers` = every driver stored for that session, ordered by car id, each with their own records (the repository already filters by `DriverKey`).
+2. **Schema mismatch:**
+   - `openDatabase` with an old `user_version` no longer stops `live`. The `live` command deletes the database files and recreates them, logs `database schema <found> is outdated; rebuilding it from the recordings`, then runs the same rebuild `reprocess` does (all recordings) before serving.
    - `reprocess` itself is unchanged.
    - `SchemaVersionError` may remain for other callers.
-6. Everything that reads `WeekendContext` (engine runner, tests) compiles against the new shape.
+3. Everything that reads `WeekendContext` (engine runner, tests) compiles against the new shape.
+4. Out of scope (second car, later): storing two feeds of the same `sessionUid` side by side. Today's `session_uid` keys assume one feed per session; leave a doc comment on the `sessions` table DDL saying so.
 
 **Tests:**
-- writer and repository round trip with two views of one `sessionUid`
-- `weekendContext` returns only the player's own earlier views and every driver within them
-- a schema-version-1 database file makes `live` rebuild and then start (with a fake source)
-- existing storage tests updated to views
+- `weekendContext` returns, per earlier session of the player, every stored driver with their records, ordered by car id
+- a database with an old `user_version` makes `live` rebuild and then start (with a fake source)
+- existing storage and weekend-context tests updated to the new shape
 
 ---
 
-### Task 7: One bridge, several feeds
-
-**Goal:** one bridge process serves several feeds: two drivers' UDP ports, and replays alongside live feeds as compare sets (user decision Q-A).
-
-**Scope:** `apps/bridge/src/cli`, `apps/bridge/src/pipeline`, `apps/bridge/src/ws`, `apps/bridge/test`.
-
-**Requirements:**
-1. **`serve`** takes `feeds: Array<{ source; feed: Omit<FeedInfo, 'feedId'>; storage?; staleCheck?; bound?: () => Promise<void> }>`:
-   - one `TopicHub`, one `WsServer`, one `FeedPipeline` per feed
-   - `hello.feeds` lists them all, in the order given
-   - startup stays all or nothing (any bind failure undoes everything)
-   - `onDone` is called once every replay feed has finished; live feeds never finish
-2. **`pitwall live [--udp <port>]... [--replay <file>]...`**:
-   - each `--udp` adds a UDP feed `udp-<port>` with storage
-   - without `--udp`, one feed on `PITWALL_UDP_PORT`
-   - each `--replay` adds a replay feed without storage
-   - duplicate ports are a `UsageError`
-3. **`pitwall replay <file>...`**: one replay feed per file.
-4. **Feed ids:**
-   - a replay feed's id is `replay:<file basename without .pwrec.gz>`; two files with the same basename are a `UsageError`
-   - `processRecording` keeps a fixed id; its value does not reach storage
-5. **`WsServer`:** a `subscribe` without `feedId` still picks the first feed. A `subscribe` naming an unknown feed answers `unknownFeed` (as today).
-6. **`tap`:** `--feed` already exists; no change beyond making it work with several feeds.
-7. **Usage text** documents the new options. The first line stays as pinned by the tests.
-
-**Tests:**
-- `serve` with two replay feeds: `hello` lists both; a client subscribed to each gets data from the right feed only
-- `live` argument parsing (several `--udp`, `--replay`, duplicates)
-- a bind failure on the second UDP port undoes the first
-
----
-
-### Task 8: Jobs as part of features
+### Task 7: Jobs as part of features
 
 **Goal:** an expensive computation (later Monte Carlo) can be declared in a feature, triggered by the scheduler, run in a worker, and published to a topic with what it was computed for (review F2).
 
@@ -307,7 +269,7 @@ The test-only topic and feature must not leak into production: the generators on
 
 ---
 
-### Task 9: Read-only config for calculators (thresholds)
+### Task 8: Read-only config for calculators (thresholds)
 
 **Goal:** features declare configurable values (thresholds, windows, targets) with defaults. The engineer overrides them in a file. Calculators read them from `EngineView`, and each session stores the config it ran with, so replays reproduce alarms (review F6, user decision Q-C).
 
@@ -338,7 +300,7 @@ The test-only topic and feature must not leak into production: the generators on
 
 ---
 
-### Task 10: Small consistency fixes
+### Task 9: Small consistency fixes
 
 **Goal:** the small items from review section 5.
 
