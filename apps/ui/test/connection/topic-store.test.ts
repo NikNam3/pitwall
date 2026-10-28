@@ -126,7 +126,9 @@ describe('TopicStore values', () => {
     const h = store.acquire({ topic: 'laps', params: {}, feedId: FEED });
     connection.push({ type: 'snapshot', id: 's1', entries: [lap(0, 1, 'confirmed')] });
     connection.push({ type: 'append', id: 's1', entries: [lap(0, 2, 'confirmed')] });
-    expect((h.state.value as LapRecord[]).map((l) => l.lapNumber)).toEqual([1, 2]);
+    // Without a fold the value is the entries array, but the default V = TopicValue<'laps'> is one record
+    // (topic mode is not a literal type), so the cast goes through unknown.
+    expect((h.state.value as unknown as LapRecord[]).map((l) => l.lapNumber)).toEqual([1, 2]);
   });
 
   it('an append folds into the result of the fold', () => {

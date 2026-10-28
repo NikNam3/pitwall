@@ -18,7 +18,10 @@ class FakeWebSocket {
   onerror: Listener | null = null;
   private readonly listeners = new Map<string, Set<Listener>>();
 
-  constructor(readonly url: string) {
+  readonly url: string;
+
+  constructor(url: string) {
+    this.url = url;
     FakeWebSocket.instances.push(this);
   }
   addEventListener(type: string, cb: Listener): void {
