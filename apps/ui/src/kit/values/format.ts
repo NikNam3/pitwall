@@ -1,0 +1,39 @@
+// The only place numbers become text (spec 5): every value cell formats through one of these.
+import type { Celsius, Kg, Ms, Percent, Psi } from '@pitwall/domain';
+
+const pad = (n: number, width: number): string => String(n).padStart(width, '0');
+
+/** `m:ss.mmm` for a non-negative duration. */
+function minutesSeconds(ms: Ms, minuteWidth: number): string {
+  const total = Math.round(ms);
+  const minutes = Math.floor(total / 60000);
+  return `${pad(minutes, minuteWidth)}:${pad(Math.floor((total % 60000) / 1000), 2)}.${pad(total % 1000, 3)}`;
+}
+
+/** Lap time, `83456` -> `1:23.456`. */
+export const formatLapTime = (ms: Ms): string => minutesSeconds(ms, 1);
+
+/** Signed gap, `1234` -> `+1.234`, `65000` -> `+1:05.000`. */
+export function formatGap(ms: Ms): string {
+  const abs = Math.abs(Math.round(ms));
+  const sign = ms < 0 ? '-' : '+';
+  return abs < 60000 ? `${sign}${formatSector(abs)}` : `${sign}${minutesSeconds(abs, 1)}`;
+}
+
+/** Sector time, `23456` -> `23.456`. */
+export function formatSector(ms: Ms): string {
+  const total = Math.round(ms);
+  return `${Math.floor(total / 1000)}.${pad(total % 1000, 3)}`;
+}
+
+/** Temperature to whole degrees, `94.6` -> `95°`. */
+export const formatTemp = (c: Celsius): string => `${Math.round(c) + 0}°`;
+
+/** Tyre pressure to one decimal, `23.456` -> `23.5`. */
+export const formatPsi = (p: Psi): string => p.toFixed(1);
+
+/** Mass in kg to one decimal, `10` -> `10.0`. */
+export const formatKg = (k: Kg): string => k.toFixed(1);
+
+/** Percentage to whole numbers, `12.34` -> `12%`. */
+export const formatPct = (p: Percent): string => `${Math.round(p) + 0}%`;
