@@ -1,13 +1,25 @@
 # Shared helpers for the pitwall Claude Code hooks. Sourced, not executed.
 # Reads the hook payload (JSON on stdin) once and derives PROJECT_DIR, TARGET and REL.
-set -euo pipefail
+set -Eeuo pipefail
+
+# A PreToolUse guard sets HOOK_FAILS_CLOSED=1 before sourcing this file: any unexpected failure
+# (malformed payload, node missing) then blocks the tool call instead of letting it through,
+# because exit codes other than 2 are non-blocking in Claude Code.
+fail_closed() {
+  if [ -n "${HOOK_FAILS_CLOSED:-}" ]; then
+    trap - ERR
+    echo "pitwall hook: could not process the hook payload; blocking the call" >&2
+    exit 2
+  fi
+}
+trap fail_closed ERR
 
 PAYLOAD="$(cat)"
 
 # payload_get <dotted.path>: print a string field of the payload, or nothing.
 payload_get() {
-  PAYLOAD="$PAYLOAD" node -e '
-    let value = JSON.parse(process.env.PAYLOAD);
+  printf '%s' "$PAYLOAD" | node -e '
+    let value = JSON.parse(require("node:fs").readFileSync(0, "utf8"));
     for (const key of process.argv[1].split(".")) value = value?.[key];
     if (typeof value === "string") process.stdout.write(value);
   ' "$1"

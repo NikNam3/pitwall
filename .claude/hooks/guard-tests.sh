@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # PreToolUse: in the implement phase, test files are read-only.
+HOOK_FAILS_CLOSED=1
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 [ "${PITWALL_PHASE:-}" = "implement" ] && [ -n "$REL" ] || exit 0

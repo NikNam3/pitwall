@@ -19,8 +19,12 @@ done
 [ "$dir" != "$root" ] || exit 0
 
 tsc="$(dirname "${BASH_SOURCE[0]}")/../../node_modules/.bin/tsc"
+if [ ! -x "$tsc" ]; then
+  echo "pitwall hook: tsc not found at $tsc; run pnpm install" >&2
+  exit 2
+fi
 if ! output="$("$tsc" -p "$dir/tsconfig.json" --pretty false 2>&1)"; then
   echo "pitwall hook: typecheck failed in ${dir#"$root"/}" >&2
-  echo "$output" >&2
+  printf '%s\n' "$output" >&2
   exit 2
 fi
