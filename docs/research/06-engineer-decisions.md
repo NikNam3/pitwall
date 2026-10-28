@@ -611,10 +611,20 @@ Answered (user, 2026-10-28):
 - **Goal:** beat the game's AI strategist by a wide margin; the game's own pit window is not shown.
 - **Realism mode:** using rival data a real team wouldn't have (e.g. AI cars' wear) counts as cheating to the user, so pitwall needs a switch that turns it off. Scope (confirmed by the user): with realism on, other teams' cars show only what a real team gets (timing, sectors, gaps, position on track, speed traps, compound and tyre age, pit stops, penalties). Their tyre wear, damage, fuel, ERS, tyre sets, temperatures, pressures, driver inputs and car telemetry (throttle, brake, steering, gear, RPM, DRS use, the telemetry speed trace) become `unknown("realism")`, and the strategy model uses the same estimation path as for restricted humans. Our own two cars stay complete. Speed traps stay, like a real team's timing. Coaching against a rival's lap (D06, D19) then has only our own two cars as references.
 
+Answered by the user's friend (2026-10-28):
+- **What drivers can edit in practice:** the full setup, so D02, D05 and D30 have every lever the game offers:
+  - fuel load (D05 stays in)
+  - front and rear wing
+  - differential on throttle and off throttle
+  - camber front and rear; toe front and rear
+  - suspension stiffness, anti-roll bar and ride height, each front and rear
+  - brake bias and brake pressure
+  - tyre pressure for each tyre
+- **Pit stacking:** the drivers may double stack if they want, so D27's "stack" option stays in. The stacked stop's stationary time is still unknown (research item 8 below).
+- **SC/VSC frequency:** safety cars and virtual safety cars come about twice as often as in real F1. Until the league's own races give a measured rate, an SC/VSC probability starts at twice the real-F1 value.
+
 Still open:
-1. **Fuel load:** can the league's settings let the player choose the race fuel load in F1 25? If not, D05 drops out. (The user is asking a friend what the drivers can edit.)
-2. **Pit stacking:** does the league use double stacking, and does F1 25 allow it for two human teammates? (The user is asking a friend.)
-3. **League rules:** two dry compounds, parc fermé, the SC setting, the track-limit penalty rules, red-flag tyre change. These set constants for D22, D28 and D30. Unknown for now.
+1. **League rules:** two dry compounds, parc fermé, the SC setting, the track-limit penalty rules, red-flag tyre change. These set constants for D22, D28 and D30. Unknown for now.
 
 ### For research and recordings
 1. **Pit loss per track and condition** (green, VSC, SC): no recordings yet with a stop or an SC (spec 12). This blocks D21–D25.
