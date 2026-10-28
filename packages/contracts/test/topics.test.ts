@@ -46,7 +46,7 @@ describe('TOPICS', () => {
   it('has the global topic dev.calcStats: owner core, state, 1 Hz', () => {
     expect(TOPICS['dev.calcStats']).toMatchObject({ name: 'dev.calcStats', owner: 'core', scope: 'global', mode: 'state', maxHz: 1 });
   });
-  it('exports the contract version', () => { expect(CONTRACT_VERSION).toBe(2); });
+  it('exports the contract version', () => { expect(CONTRACT_VERSION).toBe(3); });
 });
 
 describe('defineTopic', () => {
