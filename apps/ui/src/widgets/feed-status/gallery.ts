@@ -19,6 +19,8 @@ const healthyFeed: FeedStatus = {
   latencyMs: 12,
 };
 
+const { latencyMs: _latency, ...withoutLatency } = healthyFeed;
+
 const session: SessionState = {
   trackId: 10,
   sessionType: 8,
@@ -79,7 +81,7 @@ const gallery: GalleryEntry<typeof widget> = {
   moments: ['ttZandvoortLap1.crossing', 'raceSingaporeStart.grid'],
   cases: {
     disconnected: {
-      feed: { ...healthyFeed, connected: false, packetsPerSecond: 0, latencyMs: undefined },
+      feed: { ...withoutLatency, connected: false, packetsPerSecond: 0 },
       session: undefined,
     },
     wrongFormat: {

@@ -48,7 +48,7 @@ describe('connectionRole', () => {
 
   it('is undefined when the wrong-format count is 0 or absent', () => {
     expect(connectionRole({ ...healthy, wrongFormat: 0 })).toBeUndefined();
-    expect(connectionRole({ ...healthy, wrongFormat: undefined })).toBeUndefined();
+    expect(connectionRole(healthy)).toBeUndefined();
   });
 
   it('ignores late packets, decode errors, latency and cadence', () => {
