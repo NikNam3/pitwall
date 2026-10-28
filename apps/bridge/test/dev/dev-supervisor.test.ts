@@ -14,7 +14,9 @@ class FakeChild {
   killed: string[] = [];
   private msg: Array<(m: unknown) => void> = [];
   private exit: Array<(c: number | null) => void> = [];
-  constructor(readonly args: string[], private readonly onKill: (c: FakeChild, s: string) => void) {}
+  readonly args: string[];
+  private readonly onKill: (c: FakeChild, s: string) => void;
+  constructor(args: string[], onKill: (c: FakeChild, s: string) => void) { this.args = args; this.onKill = onKill; }
   onMessage(cb: (m: unknown) => void) { this.msg.push(cb); }
   onExit(cb: (c: number | null) => void) { this.exit.push(cb); }
   kill(signal: 'SIGTERM' | 'SIGKILL') { this.killed.push(signal); this.onKill(this, signal); }
@@ -36,13 +38,13 @@ const make = () => {
     debounceMs: DEBOUNCE,
     gen: () => { gens++; },
     // A well-behaved child: exits as soon as it is told to stop.
-    spawn: (args) => { const c = new FakeChild(args, (child) => queueMicrotask(() => child.exitWith(null))); children.push(c); return c; },
+    spawn: (args: string[]) => { const c = new FakeChild(args, (child) => queueMicrotask(() => child.exitWith(null))); children.push(c); return c; },
   } as ConstructorParameters<typeof DevSupervisor>[0]);
   sup.start();
   return sup;
 };
 const touch = (name: string, text = String(Math.random())) => { mkdirSync(join(dir, 'sub'), { recursive: true }); writeFileSync(join(dir, name), text); };
-const stderrLines = () => stderr.mock.calls.map((c) => String(c[0])).filter((s) => s.trim() !== '');
+const stderrLines = () => (stderr.mock.calls as unknown[][]).map((c) => String(c[0])).filter((s: string) => s.trim() !== '');
 const settle = (ms = DEBOUNCE * 3) => new Promise((r) => setTimeout(r, ms));
 const arg = (c: FakeChild, flag: string) => c.args[c.args.indexOf(flag) + 1];
 
