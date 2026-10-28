@@ -27,6 +27,10 @@ describe('declareWidget', () => {
     expect(() => declareWidget({ name: 'gaps', title: 'T', data, sizes: { compact: { minCols: 0, minRows: 4 } } })).toThrow();
     expect(() => declareWidget({ name: 'gaps', title: 'T', data, sizes: { a: { minCols: 10, minRows: 4 }, b: { minCols: -3, minRows: 4 } } })).toThrow();
   });
+  it('throws when a size mode has minRows below 1', () => {
+    expect(() => declareWidget({ name: 'gaps', title: 'T', data, sizes: { compact: { minCols: 28, minRows: 0 } } })).toThrow();
+    expect(() => declareWidget({ name: 'gaps', title: 'T', data, sizes: { a: { minCols: 10, minRows: 4 }, b: { minCols: 10, minRows: -1 } } })).toThrow();
+  });
   it('throws when there are no sizes', () => {
     expect(() => declareWidget({ name: 'gaps', title: 'T', data, sizes: {} })).toThrow();
   });

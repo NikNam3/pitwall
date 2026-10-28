@@ -14,9 +14,9 @@ import type { CarRef } from '@pitwall/contracts';
 const sizes = { compact: { minCols: 28, minRows: 4 } };
 
 const required = declareWidget({ name: 'a', title: 'A', data: { x: topic('session.info') }, sizes });
-const optionalDecl = declareWidget({ name: 'b', title: 'B', data: { x: optional(topic('session.info')) }, sizes });
-const foldedDecl = declareWidget({ name: 'c', title: 'C', data: { x: folded('laps', lapsFold) }, sizes });
-const withOptions = declareWidget({
+export const optionalDecl = declareWidget({ name: 'b', title: 'B', data: { x: optional(topic('session.info')) }, sizes });
+export const foldedDecl = declareWidget({ name: 'c', title: 'C', data: { x: folded('laps', lapsFold) }, sizes });
+export const withOptions = declareWidget({
   name: 'd',
   title: 'D',
   data: { x: topic('session.info') },
@@ -30,11 +30,6 @@ const withOptions = declareWidget({
 });
 
 describe('WidgetProps', () => {
-  it('has declarations that carry their names', () => {
-    expectTypeOf(optionalDecl.name).toBeString();
-    expectTypeOf(foldedDecl.name).toBeString();
-    expectTypeOf(withOptions.name).toBeString();
-  });
   it('types a required topic as its value', () => {
     expectTypeOf<WidgetProps<typeof required>['data']['x']>().toEqualTypeOf<SessionInfo>();
   });
@@ -77,6 +72,13 @@ describe('topic names and params', () => {
     topic('car.detail', ({ link }) => ({ carId: link.primary }));
     topic('car.detail', () => ({ carId: carId(1) }));
   });
+  it('requires params for a topic whose params have keys, and allows omitting them otherwise', () => {
+    // @ts-expect-error car.detail needs { carId }
+    topic('car.detail');
+    topic('session.info');
+    topic('cars.overview');
+    folded('laps', lapsFold);
+  });
   it('passes link and options to the params function', () => {
     topic('car.detail', (ctx) => {
       expectTypeOf(ctx.link).toEqualTypeOf<ResolvedLink>();
@@ -95,9 +97,37 @@ describe('registerWidget', () => {
     const ok = async () => ({ default: null as unknown as Component<WidgetProps<typeof required>> });
     registerWidget(required, ok);
   });
+  it('accepts a component for an optional() declaration written for SessionInfo | undefined', () => {
+    type Props = WidgetProps<typeof optionalDecl>;
+    const ok = async () => ({
+      default: null as unknown as Component<Omit<Props, 'data'> & { data: { x: SessionInfo | undefined } }>,
+    });
+    registerWidget(optionalDecl, ok);
+    const okFull = async () => ({ default: null as unknown as Component<Props> });
+    registerWidget(optionalDecl, okFull);
+  });
+  it('rejects a component that expects the optional value to be present', () => {
+    const bad = async () => ({ default: null as unknown as Component<WidgetProps<typeof required>> });
+    // @ts-expect-error the declaration says SessionInfo | undefined, the component needs SessionInfo
+    registerWidget(optionalDecl, bad);
+  });
   it('rejects a component whose props do not match', () => {
     const bad = async () => ({ default: null as unknown as Component<{ wrong: number }> });
     // @ts-expect-error the component's props are not WidgetProps of the declaration
     registerWidget(required, bad);
+  });
+});
+
+describe('option kinds', () => {
+  it('discriminates OptionDecl on kind: range only on number options, choices only on choice options', () => {
+    const flag = boolOption(true, 'Flag');
+    const count = numberOption(5, 'Count', { min: 1, max: 10, step: 1 });
+    const mode = choiceOption(['a', 'b'] as const, 'a', 'Mode');
+    expectTypeOf(flag).not.toHaveProperty('range');
+    expectTypeOf(flag).not.toHaveProperty('choices');
+    expectTypeOf(mode).not.toHaveProperty('range');
+    expectTypeOf(count).not.toHaveProperty('choices');
+    expectTypeOf(count.range).toEqualTypeOf<{ min: number; max: number; step: number }>();
+    expectTypeOf(mode.choices).toEqualTypeOf<readonly ('a' | 'b')[]>();
   });
 });
