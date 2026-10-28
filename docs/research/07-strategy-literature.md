@@ -45,7 +45,7 @@ Found but not looked at in depth (🟡 search summaries): a genetic algorithm fr
   ```
   TotalTime = Σ_laps (t_best + t_compound + t_tyre_wear + t_fuel + t_pit + t_weather)
   ```
-  with `t_fuel` about 0.03 s/kg, the compound loss from the first valid lap on each compound against the soft at equal fuel, and fuel burn as the slope between start and end fuel. Rain enters as a value per lap from 0 (dry) to 100 (≥ 5 mm). Pirelli's own model has the same shape: `delta + degradation × lap` per compound. The genetic algorithm matched a brute-force search within a few seconds per race. Its repository is GPL-3.0, so ideas only.
+  with `t_fuel` about 0.03 s/kg, the compound loss from the first valid lap on each compound against the soft at equal fuel, and fuel burn as the slope between start and end fuel. Rain enters as a value per lap from 0 (dry) to 100 (≥ 5 mm). Pirelli's own model has the same shape: `delta + degradation × lap` per compound. The genetic algorithm matched a brute-force search within a few seconds per race. Its repository is GPL-3.0; code and data may be copied under [ADR 0006](../decisions/0006-gpl-code-and-data-allowed.md).
 - **Avella 2026** (🟢) uses one average degraded lap time per compound: `t_eff = t_base · (1 + δ·μ_perf/2)`. This is the crude part of that paper.
 
 **For pitwall (🔵):** F1 25 delivers **tyre wear %** directly (`m_tyresWear`) for our cars, AI cars and public players. So Fieni's split fits the game better than age-based models: fit the wear rate per compound from the wear channel, and the lap-time cost against wear from lap times. Hidden cars (restricted humans, or anyone when realism mode is on) fall back to the age-based TUM model.
@@ -144,7 +144,7 @@ Every layer works with realism mode on: with wear hidden, layer 1 uses age-based
 ## 4. Open questions and next reads
 
 - **Full texts still not read (🟡 above):** Carrasco Heine & Thraves (Springer; the download was only the one-page name correction, `10.1007/s10100-022-00810-8`; the article is `10.1007/s10100-022-00806-4`), Bekker & Lotz (JORS; the user couldn't find it), Duhr et al. Aguad & Thraves extends Carrasco Heine & Thraves, so its DP and SC model (2.4, 2.5) cover most of what layers 3–5 need.
-- **Bonomi's F1 2021 data** ([repository](https://github.com/bonom/Evolutionary-F1-Race-Strategy), GPL-3.0): practice laps with wear per tyre for six tracks. Useful to compare F1 2021 and F1 25 tyre behaviour; not to be copied into our fixtures (licence).
+- **Bonomi's F1 2021 data** ([repository](https://github.com/bonom/Evolutionary-F1-Race-Strategy), GPL-3.0): practice laps with wear per tyre for six tracks. Useful as strategy test data and to compare F1 2021 with F1 25 tyre behaviour; copying is allowed under [ADR 0006](../decisions/0006-gpl-code-and-data-allowed.md), with a `SOURCE.md` next to the data.
 - **F1 25 checks from recordings:** does lap time follow wear % (Fieni's `ΔT_j(TW)`) better than tyre age? How large is the dirty-air loss, and up to which gap? Does wear depend on fuel mass (Fieni's `b_j`)?
 - **DP runtime in TypeScript:** estimated, not measured; a spike in sub-project 4 settles it.
 
