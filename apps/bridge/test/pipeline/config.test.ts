@@ -9,6 +9,7 @@ import type { FeedId, Insight } from '@pitwall/domain';
 import { defineConfig, type QuickCalculator } from '@pitwall/engine';
 import { ScenarioBuilder, packetBytes } from '../../../../packages/engine/test/builders/index.ts';
 import { bindInsights, defineFeature, type Feature } from '../../src/features/feature.ts';
+import sessionInfo from '../../src/features/session-info/register.ts';
 import { loadFeatureConfig, recordingConfig, sessionConfigPath } from '../../src/feature-config.ts';
 import { TopicHub } from '../../src/hub/topic-hub.ts';
 import type { PacketSource } from '../../src/input/packet-source.ts';
@@ -139,7 +140,8 @@ describe('FeedPipeline: the config travels with the session file', () => {
     await pipeline.stop();
   });
   it('a sidecar that cannot be written does not stop the session: the session file and the topics carry on', async () => {
-    const { features } = watcher();
+    // session.info is bound by the real session-info feature; the watcher features bind no topic but insights.
+    const features = [...watcher().features, sessionInfo];
     const dir = tmp();
     const at = new Date(2026, 9, 28, 13, 5, 9).getTime();
     const sessionFile = join(dir, '2026-10-28_13-05-09_000000000000004d.pwrec.gz');
