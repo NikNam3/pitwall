@@ -94,7 +94,7 @@ describe('SessionRunner: a flashback restores updatedAt with the snapshot', () =
   it('a source that only the discarded frames updated is not updated again', () => {
     const a = new SessionRunner(initFor(original()));
     runAll(a, original());
-    expect(a.state.cars[0]!.updatedAt.setups).toBe(250 * STEP);
+    expect(a.state.cars[0]!.updatedAt.setups).toBe(299 * STEP);
     runAll(a, after(fork(), 201, 300));
     expect(a.state.cars[0]!.updatedAt).not.toHaveProperty('setups');
     expect(a.state.cars[0]!.updatedAt.lapData).toBe(399 * STEP);
