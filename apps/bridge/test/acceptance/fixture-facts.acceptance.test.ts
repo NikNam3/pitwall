@@ -19,6 +19,7 @@ const activeCars = (r: Replay) => (r.value('overview') as CarOverview[]).filter(
 const latestLaps = (r: Replay) => [...new Map((r.entries('laps') as LapRecord[]).map((l) => [`${l.carId}:${l.lapNumber}`, l])).values()];
 const kinds = (r: Replay) => (r.entries('events') as RaceEvent[]).reduce<Record<string, number>>((n, e) => ({ ...n, [e.kind]: (n[e.kind] ?? 0) + 1 }), {});
 function expectCleanRun(r: Replay) {
+  expect(r.errors).toEqual([]);
   expect(r.errored).toEqual([]);
   expect(JSON.stringify(r.entries('insights'))).not.toContain('calculatorError');
   expect(r.value('feed')).toMatchObject({ decodeErrors: 0 });
@@ -34,7 +35,9 @@ describeWithFixture('ttZandvoort', 'acceptance: TT Zandvoort', (path) => {
     expect(laps.map((l) => l.lapNumber)).toEqual(Array.from({ length: 15 }, (_, i) => i + 1));
     expect([laps[0]!.lapTimeMs, laps[3]!.lapTimeMs, laps[8]!.lapTimeMs]).toEqual([71_910, 71_081, 73_253]);
     for (const l of laps) {
-      expect(Math.abs(l.sectorTimesMs[0] + l.sectorTimesMs[1] + l.sectorTimesMs[2] - l.lapTimeMs), `lap ${l.lapNumber}`).toBeLessThanOrEqual(2);
+      const sectorSum = l.sectorTimesMs[0] + l.sectorTimesMs[1] + l.sectorTimesMs[2]; // spec 10.2: lapTime - 2 <= sum <= lapTime
+      expect(sectorSum, `lap ${l.lapNumber}`).toBeLessThanOrEqual(l.lapTimeMs);
+      expect(sectorSum, `lap ${l.lapNumber}`).toBeGreaterThanOrEqual(l.lapTimeMs - 2);
       expect([l.fuelAtStartKg, l.fuelAtEndKg]).toMatchObject([{ known: true, value: 10 }, { known: true, value: 10 }]);
     }
     expect(latestLaps(r).some((l) => l.lapNumber === 16)).toBe(false);
@@ -97,6 +100,7 @@ describeWithFixture('menuOnly', 'acceptance: menu-only recording', (path) => {
     expect(r.frames).toBe(0);
     expect(r.metrics.droppedBeforeSession + r.metrics.droppedUid0).toBe(385);
     const replay = await replayTopics(path, SUBS);
+    expectCleanRun(replay);
     expect(replay.value('info')).toBeUndefined();
     expect([replay.entries('laps'), replay.entries('events')]).toEqual([[], []]);
   });

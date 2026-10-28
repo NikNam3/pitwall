@@ -1,13 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { CalculatorRegistry, Scheduler, type Calculator, type ChangeTag, type FeedMetricsView, type HistoryDelta, type IncrementalCalculator, type QuickCalculator } from '../../src/index.ts';
-
-const len = (laps = 0) => ({ laps, stints: 0, pitStops: 0, flagPhases: 0, events: 0, miniSectors: 0 });
-const delta = (b = 0, a = b, truncated = false): HistoryDelta => ({ before: len(b), after: len(a), truncated });
-const feed = { framesClosed: 0, incompleteFrames: 0, latePackets: 0, droppedBeforeSession: 0, droppedUid0: 0, decodeErrors: 0, packetsPerSecond: 0, connected: true, msSinceLastPacket: 0, lossPercent: 0 } as FeedMetricsView;
-const input = (t: number, changed: ChangeTag[] = ['timing'], d = delta(), laps = d.after.laps) =>
-  ({ state: { feedId: 'f1', sessionTime: t, history: { laps: new Array(laps).fill({}) } } as never, changed: new Set(changed), delta: d, feed });
-const quick = (id: string, o: Partial<QuickCalculator<unknown>> = {}): Calculator => ({ kind: 'quick', id, reads: ['timing'], cadence: 'frame', compute: (v) => v.state.sessionTime, ...o } as Calculator);
-const sched = (calcs: Calculator[], needed = calcs.map((c) => c.id)) => { const s = new Scheduler(CalculatorRegistry.build(calcs)); s.setNeeded(needed); return s; };
+import type { Calculator, IncrementalCalculator } from '../../src/index.ts';
+import { delta, input, quick, sched } from '../support/scheduler.ts';
 
 describe('Scheduler', () => {
   it('{ hz: 2 } runs at most every 500 ms of session time', () => {

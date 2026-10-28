@@ -2,34 +2,15 @@
 // scenarios here carries a race event, so a frame replayed twice or lost in a replay shows in the history.
 import { describe, expect, it } from 'vitest';
 import type { EventDetails } from '@pitwall/protocol';
-import { SessionRunner, type Frame, type StepResult } from '../../src/index.ts';
-import { ScenarioBuilder, type FrameDraft } from '../builders/index.ts';
+import { SessionRunner, type Frame } from '../../src/index.ts';
+import { ScenarioBuilder } from '../builders/index.ts';
 import { initFor } from '../support/run.ts';
+import { after, flashbacks, flbk, runAll, STEP, timeline as plainTimeline } from '../support/runner.ts';
 
-const STEP = 16;
-const runAll = (r: SessionRunner, frames: Frame[]): StepResult[] => frames.map((f) => r.apply(f));
-const flashbacks = (results: StepResult[]) => results.filter((r) => r.flashback !== undefined || r.delta.truncated).length;
-const flbk = (frameId: number): EventDetails => ({ code: 'FLBK', flashbackFrameIdentifier: frameId, flashbackSessionTime: (frameId * STEP) / 1000 });
 const overtake: EventDetails = { code: 'OVTK', overtakingVehicleIdx: 0, beingOvertakenVehicleIdx: 1 };
-
-// car 0 drives 40 m per frame on a 4000 m track; a new lap begins at each frame index in lapStarts
-const drive = (lapStarts: number[]) => (d: FrameDraft) => {
-  const starts = [0, ...lapStarts.filter((x) => x <= d.index)], start = starts.at(-1)!;
-  Object.assign(d.lapData.lapData[0]!, { currentLapNum: starts.length, lapDistance: (d.index - start) * 40 + 10, totalDistance: d.index * 40 + 10,
-    lastLapTimeInMs: starts.length === 1 ? 0 : (start - starts.at(-2)!) * STEP });
-};
-/** `frames` frames, each with an overtake plus the events `extra` names for its index. */
-const timeline = (frames: number, lapStarts: number[], extra: (index: number) => EventDetails[] = () => []) => {
-  const b = new ScenarioBuilder({ cars: 2, stepMs: STEP }).session({ trackLength: 4000 });
-  for (let i = 0; i < frames; i++) {
-    for (const details of [overtake, ...extra(i)]) b.event(details);
-    b.frame(drive(lapStarts));
-  }
-  return b.build();
-};
-// the game's frames from `first` on, with overallFrameId still rising
-const after = (fork: Frame[], first: number, nextOverall: number): Frame[] =>
-  fork.slice(first).map((f, k) => ({ ...f, overallFrameId: nextOverall + k }));
+/** The shared timeline with an overtake in every frame, before the events `extra` names for its index. */
+const timeline = (frames: number, lapStarts: number[], extra: (index: number) => EventDetails[] = () => []) =>
+  plainTimeline(frames, lapStarts, (i) => [overtake, ...extra(i)]);
 const eventsOf = (details: EventDetails) =>
   new ScenarioBuilder({ cars: 2, stepMs: STEP }).session({ trackLength: 4000 }).frames(1, () => {}).event(details).frames(1, () => {}).build()[1]!.events;
 const withEvents = (frame: Frame, details: EventDetails): Frame => ({ ...frame, events: [...frame.events, ...eventsOf(details)] });

@@ -20,16 +20,26 @@ function dumpDb(dir: string) {
   return dump;
 }
 
+/** The CLI logs bugs to stderr as JSON lines instead of throwing them: an error-level line is a failure. */
+async function runClean(args: string[], env: Record<string, string>) {
+  const r = await runCli(args, env);
+  const errors = r.stderr.split('\n').filter((l) => {
+    try { return ((JSON.parse(l) as { level?: number }).level ?? 0) >= 50; } catch { return false; }
+  });
+  expect(errors, `pitwall ${args.join(' ')}`).toEqual([]);
+  return r;
+}
+
 describe.skipIf(files.some((f) => f === undefined))('acceptance: pitwall import + reprocess', () => {
   it('reprocess rebuilds the database identically, twice', async () => {
     const env = { PITWALL_DATA_DIR: mkdtempSync(join(tmpdir(), 'pitwall-acc-')) };
-    for (const f of files) expect(await runCli(['import', f!], env)).toMatchObject({ code: 0 });
+    for (const f of files) expect(await runClean(['import', f!], env)).toMatchObject({ code: 0 });
     const imported = dumpDb(env.PITWALL_DATA_DIR);
     expect(imported.tables['sessions']).toHaveLength(2); // menuOnly opens no session
     expect(imported.tables['laps']).toHaveLength(15); // TT confirmed laps; Singapore completed none
-    expect(await runCli(['reprocess'], env)).toMatchObject({ code: 0, stdout: expect.stringContaining('reprocessed 3 recordings') });
+    expect(await runClean(['reprocess'], env)).toMatchObject({ code: 0, stdout: expect.stringContaining('reprocessed 3 recordings') });
     const first = dumpDb(env.PITWALL_DATA_DIR);
-    expect((await runCli(['reprocess'], env)).code).toBe(0);
+    expect((await runClean(['reprocess'], env)).code).toBe(0);
     expect(first).toEqual(imported);
     expect(dumpDb(env.PITWALL_DATA_DIR)).toEqual(first);
   });

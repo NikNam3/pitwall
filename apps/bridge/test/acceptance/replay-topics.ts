@@ -1,4 +1,4 @@
-// Real pipeline, in-memory client; last value per state topic, all entries per append topic.
+// Real pipeline, in-memory client; last value per state topic, all entries per append topic, error-level log lines.
 import type { ServerMessage, TopicName } from '@pitwall/contracts';
 import { feedId } from '@pitwall/domain';
 import { FEATURES } from '../../src/features/index.generated.ts';
@@ -20,9 +20,12 @@ export async function replayTopics(path: string, subs: ReadonlyArray<readonly [i
   };
   hub.addClient('acceptance', { send, bufferedAmount: () => 0 });
   for (const [id, topic, params] of subs) hub.subscribe({ clientId: 'acceptance', id, topic, params, feedId: F });
-  const pipeline = new FeedPipeline({ feedId: F, source: new PwrecSource({ feedId: F, path, mode: 'asFastAsPossible' }), hub, features: FEATURES, log: createLogger({ level: 'silent' }) });
+  const logs: string[] = []; // the pipeline logs bugs instead of throwing them: error-level lines are failures
+  const log = createLogger({ level: 'warn', destination: { write: (line: string) => logs.push(line) } });
+  const pipeline = new FeedPipeline({ feedId: F, source: new PwrecSource({ feedId: F, path, mode: 'asFastAsPossible' }), hub, features: FEATURES, log });
   pipeline.start();
   await pipeline.done;
   hub.tick();
-  return { value: (id: string) => values.get(id), entries: (id: string) => lists.get(id) ?? [], errored };
+  const errors = logs.filter((l) => (JSON.parse(l) as { level: number }).level >= 50);
+  return { value: (id: string) => values.get(id), entries: (id: string) => lists.get(id) ?? [], errored, errors };
 }

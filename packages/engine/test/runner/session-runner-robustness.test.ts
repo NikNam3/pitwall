@@ -1,23 +1,11 @@
 // SessionRunner beyond the brief's cases: bounded snapshots and frames, the weekend context, and one flashback that
 // the game reports twice or in a frame with an unexpected id.
 import { describe, expect, it } from 'vitest';
-import { SessionRunner, type Frame, type StepResult, type WeekendContext } from '../../src/index.ts';
-import { ScenarioBuilder, type FrameDraft } from '../builders/index.ts';
+import { SessionRunner, type Frame, type WeekendContext } from '../../src/index.ts';
+import { ScenarioBuilder } from '../builders/index.ts';
 import { initFor } from '../support/run.ts';
+import { after, flashbacks, runAll, STEP, timeline } from '../support/runner.ts';
 
-const STEP = 16;
-const runAll = (r: SessionRunner, frames: Frame[]): StepResult[] => frames.map((f) => r.apply(f));
-const flashbacks = (results: StepResult[]) => results.filter((r) => r.flashback !== undefined || r.delta.truncated).length;
-// car 0 drives 40 m per frame on a 4000 m track; a new lap begins at each frame index in lapStarts
-const drive = (lapStarts: number[]) => (d: FrameDraft) => {
-  const starts = [0, ...lapStarts.filter((x) => x <= d.index)], start = starts.at(-1)!;
-  Object.assign(d.lapData.lapData[0]!, { currentLapNum: starts.length, lapDistance: (d.index - start) * 40 + 10, totalDistance: d.index * 40 + 10,
-    lastLapTimeInMs: starts.length === 1 ? 0 : (start - starts.at(-2)!) * STEP });
-};
-const timeline = (frames: number, lapStarts: number[]) =>
-  new ScenarioBuilder({ cars: 2, stepMs: STEP }).session({ trackLength: 4000 }).frames(frames, drive(lapStarts)).build();
-// the game's frames from `first` on, with overallFrameId still rising
-const after = (fork: Frame[], first: number, nextOverall: number) => fork.slice(first).map((f, k) => ({ ...f, overallFrameId: nextOverall + k }));
 // an FLBK event packet with target frame 200 (t = 3200 ms), as the decoder yields it
 const flbk200 = (() => {
   const b = new ScenarioBuilder({ cars: 2, stepMs: STEP }).session({ trackLength: 4000 }).frames(201, () => {});

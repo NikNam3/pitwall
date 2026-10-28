@@ -1,17 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { CalculatorRegistry, Scheduler, type Cadence, type Calculator, type ChangeTag, type FeedMetricsView, type HistoryDelta } from '../../src/index.ts';
+import type { Cadence, ChangeTag } from '../../src/index.ts';
+import { delta as lapDelta, input, quick, sched } from '../support/scheduler.ts';
 
-const len = (n: number) => ({ laps: n, stints: 0, pitStops: n, flagPhases: 0, events: 0, miniSectors: 0 });
-const delta = (before: number, after: number, truncated: boolean): HistoryDelta => ({ before: len(before), after: len(after), truncated });
-const feed = { framesClosed: 0, incompleteFrames: 0, latePackets: 0, droppedBeforeSession: 0, droppedUid0: 0, decodeErrors: 0, packetsPerSecond: 0, connected: true, msSinceLastPacket: 0, lossPercent: 0 } as FeedMetricsView;
-const input = (t: number, changed: ChangeTag[], d: HistoryDelta) =>
-  ({ state: { feedId: 'f1', sessionTime: t, history: {} } as never, changed: new Set(changed), delta: d, feed });
-const scheduler = (cadence: Cadence, reads: ChangeTag[]) => {
-  const calc: Calculator = { kind: 'quick', id: 'a', reads, cadence, compute: (v) => v.state.sessionTime };
-  const s = new Scheduler(CalculatorRegistry.build([calc]));
-  s.setNeeded(['a']);
-  return s;
-};
+// laps and pit stops move together, so one delta serves both cadences
+const delta = (before: number, after: number, truncated: boolean) => lapDelta(before, after, truncated, ['laps', 'pitStops']);
+const scheduler = (cadence: Cadence, reads: ChangeTag[]) => sched([quick('a', { cadence, reads })]);
 
 describe('Scheduler after a flashback', () => {
   it.each([

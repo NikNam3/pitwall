@@ -1,38 +1,19 @@
 // packages/engine/test/runner/session-runner.test.ts
 import { describe, expect, it } from 'vitest';
-import type { EventDetails } from '@pitwall/protocol';
-import { SessionRunner, type Frame, type StepResult } from '../../src/index.ts';
-import { ScenarioBuilder, type FrameDraft } from '../builders/index.ts';
+import { SessionRunner, type Frame } from '../../src/index.ts';
 import { initFor } from '../support/run.ts';
+import { after, flbk, runAll, STEP, timeline } from '../support/runner.ts';
 
-const STEP = 16;
-const runAll = (r: SessionRunner, frames: Frame[]): StepResult[] => frames.map((f) => r.apply(f));
 const noFlbk = (fs: Frame[]) => fs.map((f) => ({ ...f, events: f.events.filter((e) => e.details.code !== 'FLBK') }));
-const flbk = (frameId: number): EventDetails => ({ code: 'FLBK', flashbackFrameIdentifier: frameId, flashbackSessionTime: (frameId * STEP) / 1000 });
-// car 0 drives 40 m per frame on a 4000 m track; a new lap begins at each frame index in lapStarts
-const drive = (lapStarts: number[]) => (d: FrameDraft) => {
-  const starts = [0, ...lapStarts.filter((x) => x <= d.index)], start = starts.at(-1)!;
-  Object.assign(d.lapData.lapData[0]!, { currentLapNum: starts.length, lapDistance: (d.index - start) * 40 + 10, totalDistance: d.index * 40 + 10,
-    lastLapTimeInMs: starts.length === 1 ? 0 : (start - starts.at(-2)!) * STEP });
-};
-// A timeline that equals `lapStarts` up to frame `target` and continues differently. With `event`, the FLBK event lands in frame target + 1.
-const timeline = (frames: number, lapStarts: number[], fork?: { target: number; event: boolean }) => {
-  const b = new ScenarioBuilder({ cars: 2, stepMs: STEP }).session({ trackLength: 4000 });
-  if (!fork) return b.frames(frames, drive(lapStarts)).build();
-  b.frames(fork.target + 1, drive(lapStarts));
-  if (fork.event) b.event(flbk(fork.target));
-  return b.frames(frames - fork.target - 1, drive(lapStarts)).build();
-};
-// what the game sends after a flashback: the forked frames from target + 1 on, with overallFrameId still rising
-const after = (fork: Frame[], target: number, nextOverall: number) =>
-  fork.slice(target + 1).map((f, k) => ({ ...f, overallFrameId: nextOverall + k }));
+// the FLBK event back to `target` lands in frame target + 1, where the forked timeline begins to differ
+const flbkAt = (target: number) => (i: number) => (i === target + 1 ? [flbk(target)] : []);
 
 // original: frames 0..299, laps begin at 100 and 250. The game flashes back to frame 200 (t = 3200 ms);
 // in the new timeline (frames 201..399) lap 3 begins at 330.
 const scene = (event: boolean) => {
   const original = timeline(300, [100, 250]);
-  const fork = timeline(400, [100, 330], { target: 200, event });
-  return { original, fork, continuation: after(fork, 200, 300), reference: noFlbk(fork) };
+  const fork = timeline(400, [100, 330], event ? flbkAt(200) : undefined);
+  return { original, fork, continuation: after(fork, 201, 300), reference: noFlbk(fork) };
 };
 
 describe('SessionRunner', () => {
@@ -69,7 +50,7 @@ describe('SessionRunner', () => {
   });
   it('a target older than the replay window restores the newest snapshot at or before it; the lap is detected again, once', () => {
     const original = timeline(300, [100, 250]);
-    const continuation = after(timeline(200, [120], { target: 90, event: true }), 90, 300);
+    const continuation = after(timeline(200, [120], flbkAt(90)), 91, 300);
     const a = new SessionRunner(initFor(original), { snapshotEveryMs: 1000, replayWindowMs: 1000 });
     runAll(a, original);
     expect(a.apply(continuation[0]!).delta.truncated).toBe(true);
@@ -79,8 +60,8 @@ describe('SessionRunner', () => {
   });
   it('a second flashback after the first one still matches the reference run', () => {
     const { original, continuation } = scene(true);
-    const again = timeline(360, [100, 340], { target: 300, event: true });             // equals the fork up to frame 300
-    const a = new SessionRunner(initFor(original)); runAll(a, original); runAll(a, continuation); runAll(a, after(again, 300, 499));
+    const again = timeline(360, [100, 340], flbkAt(300));             // equals the fork up to frame 300
+    const a = new SessionRunner(initFor(original)); runAll(a, original); runAll(a, continuation); runAll(a, after(again, 301, 499));
     const b = new SessionRunner(initFor(original)); runAll(b, noFlbk(again));
     expect(a.state).toEqual(b.state);
   });

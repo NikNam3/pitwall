@@ -1,18 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CalculatorRegistry, Scheduler, type Calculator, type QuickCalculator, type ChangeTag, type FeedMetricsView, type HistoryDelta } from '../../src/index.ts';
-
-const len = (laps: number) => ({ laps, stints: 0, pitStops: 0, flagPhases: 0, events: 0, miniSectors: 0 });
-const delta = (before = 0, after = before): HistoryDelta => ({ before: len(before), after: len(after), truncated: false });
-const feed = { framesClosed: 0, incompleteFrames: 0, latePackets: 0, droppedBeforeSession: 0, droppedUid0: 0, decodeErrors: 0, packetsPerSecond: 0, connected: true, msSinceLastPacket: 0, lossPercent: 0 } as FeedMetricsView;
-const input = (t: number, changed: ChangeTag[] = ['timing'], d = delta()) =>
-  ({ state: { feedId: 'f1', sessionTime: t, history: {} } as never, changed: new Set(changed), delta: d, feed });
-const quick = (id: string, o: Partial<QuickCalculator<unknown>> = {}): Calculator =>
-  ({ kind: 'quick', id, reads: ['timing'], cadence: 'frame', compute: (v) => v.state.sessionTime, ...o }) as Calculator;
-const sched = (calcs: Calculator[]) => {
-  const s = new Scheduler(CalculatorRegistry.build(calcs));
-  s.setNeeded(calcs.map((c) => c.id));
-  return s;
-};
+import { delta, input, quick, sched } from '../support/scheduler.ts';
 
 describe('Scheduler dependencies', () => {
   it('a dependent that was not due when its dependency ran picks the change up when it is due', () => {
