@@ -1,8 +1,10 @@
+import { known, type CarDynamics } from '@pitwall/domain';
 import type { SubStep } from './types.ts';
 
 /**
  * Driving inputs from Car Telemetry, world motion from Motion, and limits from Car Status.
  * Speed is km/h; world position, velocity and G-forces stay as the game sends them (m, m/s, g).
+ * `dynamics` is `notReceived` until Car Telemetry arrives; the Car Status limits fill into it from then on.
  */
 export const applyDynamics: SubStep = (state, frame, out) => {
   const { telemetry, motion, status } = frame;
@@ -12,7 +14,11 @@ export const applyDynamics: SubStep = (state, frame, out) => {
       const t = telemetry.carTelemetryData[car.id];
       if (!t) continue;
       car.updatedAt.telemetry = at;
-      Object.assign(car.dynamics, {
+      const limits = car.dynamics.known
+        ? car.dynamics.value
+        : { maxRpm: 0, drsAllowed: false, drsActivationDistanceM: 0, pitLimiter: false };
+      const dynamics: CarDynamics = {
+        ...limits,
         speedKmh: t.speed,
         throttle: t.throttle,
         brake: t.brake,
@@ -22,7 +28,8 @@ export const applyDynamics: SubStep = (state, frame, out) => {
         rpm: t.engineRpm,
         revLightsPct: t.revLightsPercent,
         drs: t.drs === 1,
-      });
+      };
+      car.dynamics = known(dynamics, at);
     }
     out.changed.add('dynamics');
   }
@@ -31,7 +38,7 @@ export const applyDynamics: SubStep = (state, frame, out) => {
       const m = motion.carMotionData[car.id];
       if (!m) continue;
       car.updatedAt.motion = at;
-      Object.assign(car.dynamics, {
+      Object.assign(car.motion, {
         position: { x: m.worldPositionX, y: m.worldPositionY, z: m.worldPositionZ },
         velocityMps: { x: m.worldVelocityX, y: m.worldVelocityY, z: m.worldVelocityZ },
         gForce: { lateral: m.gForceLateral, longitudinal: m.gForceLongitudinal, vertical: m.gForceVertical },
@@ -43,8 +50,8 @@ export const applyDynamics: SubStep = (state, frame, out) => {
   if (status) {
     for (const car of state.cars) {
       const s = status.carStatusData[car.id];
-      if (!s) continue;
-      Object.assign(car.dynamics, {
+      if (!s || !car.dynamics.known) continue;
+      Object.assign(car.dynamics.value, {
         maxRpm: s.maxRpm,
         drsAllowed: s.drsAllowed === 1,
         drsActivationDistanceM: s.drsActivationDistance,
