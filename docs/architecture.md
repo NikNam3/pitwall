@@ -36,7 +36,13 @@ PacketSource (UDP | PwrecFile) → RawPacket → decode → SessionTracker + Fra
 ```
 
 - `SessionTracker` and `FrameAssembler` are pure and live in `packages/engine/src/frame`. The bridge only feeds them packets.
-- **Calculators run on demand:** a calculator runs when a subscribed topic is bound to it, when no binding references it (it exists for insights), or when a needed calculator reads it. The hub reports demand changes per feed, and the pipeline passes them to the scheduler (`apps/bridge/src/pipeline/demand.ts`). A subscriber that arrives after a session has ended gets `noData` for topics whose calculator never ran.
+- **Calculators run on demand** (`apps/bridge/src/pipeline/demand.ts`). A calculator runs when:
+  - a subscribed topic is bound to it
+  - it has an `insights` hook
+  - no binding references it and no calculator reads it
+  - a needed calculator reads it
+
+  The hub reports demand changes per feed. Newly needed calculators run at once against the current state, also after the session has ended, so a late subscriber gets a value without waiting for a frame.
 - **Jobs** (expensive work, later Monte Carlo) are part of features: each job gets a trigger calculator `job:<id>` with the job's `reads` and cadence. Its output (the job's input) goes to the feed's `JobRunner`, which runs the job in a worker. The result is published as `Computed<T>` = `{ computedFor: { lap, frameId }, value }`. A declared job without a binding, or a binding to an undeclared job, fails at startup (`JobDeclarationError`). Job topics are excluded from the determinism hash.
 
 ## Determinism rules

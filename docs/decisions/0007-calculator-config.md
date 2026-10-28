@@ -20,5 +20,5 @@ Alarms and monitoring need values the engineer chooses: tyre temperature windows
 ## Consequences
 
 - Thresholds are data, not code; an alarm calculator stays pure and testable.
-- The raw truth of a session becomes the `.pwrec` file plus its config sidecar.
+- The raw truth of a session becomes the `.pwrec` file plus its config sidecar. `import` copies the sidecar along with the recording. `pwrec-cut` does not: a cut segment replays with the current config.
 - **Not yet:** changing config at runtime from the UI. When that comes, config changes need a change tag and must be logged into the session (with session time), so a replay still reproduces them.

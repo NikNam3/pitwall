@@ -267,7 +267,7 @@ State that can't be derived from history belongs in the engine's history, not in
 - `reads` uses change tags named after domain areas, not packets: `session, identity, timing, tyres, energy, condition, dynamics, ownCar` plus the history lists `laps, stints, pitStops, flagPhases, events, miniSectors`. Each sub-step tags only the area it wrote.
 - The registry builds a dependency graph from `reads`; a cycle is a startup error. Duplicate IDs are a startup error too.
 - `Cadence = 'frame' | { hz: number } | 'lapCompleted' | 'pitStop' | 'flagChange' | 'sessionChange'`, measured in session time.
-- Per frame, the scheduler runs calculators that are **due**, **needed** and **affected** (input changed). **Needed** means one of three things: bound to a topic that has a subscriber; referenced by no binding at all (it exists for insights); or read by a needed calculator. The hub reports demand per feed. Storage reads history, not calculator outputs.
+- Per frame, the scheduler runs calculators that are **due**, **needed** and **affected** (input changed). **Needed** means one of four things: bound to a topic that has a subscriber; it has an `insights` hook (alarms never depend on which screen is open); referenced by no binding and read by no calculator; or read by a needed calculator. When demand changes, newly needed calculators run at once against the current state, and the last session stays evaluable after it ends, so a late subscriber gets a value without waiting for a frame (job triggers wait for their next due frame). The hub reports demand per feed. Storage reads history, not calculator outputs.
 - **Config (ADR 0007):** features declare read-only config with `defineConfig(key, defaults)`. `<PITWALL_DATA_DIR>/config.json` overrides it. Calculators read it from `EngineView.config`. Each live session stores its effective config as `<session file>.config.json`, and replays use it; a sidecar is read leniently (unknown entries dropped, wrong types back to the default, with warnings), `config.json` strictly.
 - An exception in a calculator marks its output topic `errored` and raises an insight; other calculators keep running.
 
@@ -409,4 +409,3 @@ type Insight = {
   - maturity of `node:sqlite` (9.2)
 - The definition of "clean UI" is worked out with the user in sub-project 2.
 - A second car (team view) is out of MVP scope; ADR 0008 lists what it needs.
-- A subscriber that arrives after a session has ended gets `noData` for topics whose calculator never ran (calculators run on demand). To revisit if replay review in the UI needs it.
