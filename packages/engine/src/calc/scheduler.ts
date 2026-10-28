@@ -23,6 +23,8 @@ type Pending = { changed: Set<ChangeTag>; delta: HistoryDelta };
 type Slot = {
   lastRunAt: SessionTime | undefined;
   pending: Pending | undefined;
+  /** Calculators this one reads that ran since it last ran successfully: like a change tag, they stay until it runs. */
+  ranDependencies: Set<CalculatorId>;
   /** Boxed because an accumulator or output may legitimately be `undefined`. */
   acc: { value: unknown } | undefined;
   prevOutput: { value: unknown } | undefined;
@@ -32,7 +34,13 @@ type Entry = { calc: Calculator; slot: Slot };
 
 type Evaluation = { acc: Slot['acc']; output: unknown; raised: Insight[] | undefined };
 
-const freshSlot = (): Slot => ({ lastRunAt: undefined, pending: undefined, acc: undefined, prevOutput: undefined });
+const freshSlot = (): Slot => ({
+  lastRunAt: undefined,
+  pending: undefined,
+  ranDependencies: new Set(),
+  acc: undefined,
+  prevOutput: undefined,
+});
 
 /** Adds a frame to what is pending: the oldest `before`, the newest `after`, truncated if any frame was. */
 const absorb = (pending: Pending | undefined, input: SchedulerInput): Pending => {
@@ -63,10 +71,10 @@ const isDue = (cadence: Cadence, lastRunAt: SessionTime, pending: Pending, now: 
   }
 };
 
-const isAffected = (calc: Calculator, pending: Pending, ran: ReadonlySet<CalculatorId>): boolean =>
+const isAffected = (calc: Calculator, slot: Slot, pending: Pending): boolean =>
   calc.reads.some((read) => {
     if (read === 'feed') return true;
-    return typeof read === 'object' ? ran.has(read.calculator) : pending.changed.has(read);
+    return typeof read === 'object' ? slot.ranDependencies.has(read.calculator) : pending.changed.has(read);
   });
 
 /** Computes without touching the slot, so a throw leaves the calculator as it was. */
@@ -101,13 +109,17 @@ const calculatorError = (id: CalculatorId, error: unknown, input: SchedulerInput
 export class Scheduler {
   readonly #registry: CalculatorRegistry;
   readonly #entries: readonly Entry[];
+  readonly #slots: ReadonlyMap<CalculatorId, Slot>;
   readonly #outputs = new Map<CalculatorId, unknown>();
   readonly #book = new InsightBook();
+  /** Calculators whose last attempt threw, or that were skipped because a dependency did; cleared when they succeed. */
+  readonly #failed = new Set<CalculatorId>();
   #needed: ReadonlySet<CalculatorId> = new Set();
 
   constructor(registry: CalculatorRegistry) {
     this.#registry = registry;
     this.#entries = registry.order.map((calc) => ({ calc, slot: freshSlot() }));
+    this.#slots = new Map(this.#entries.map(({ calc, slot }) => [calc.id, slot]));
   }
 
   get activeInsights(): Insight[] {
@@ -131,12 +143,12 @@ export class Scheduler {
   /** Forgets accumulators, previous outputs and run times, so every needed calculator starts over. Outputs stay. */
   reset(): void {
     for (const { slot } of this.#entries) Object.assign(slot, freshSlot());
+    this.#failed.clear();
   }
 
   run(input: SchedulerInput): SchedulerResult {
     const now = input.state.sessionTime;
     const ran = new Set<CalculatorId>();
-    const blocked = new Set<CalculatorId>();
     const errors: SchedulerResult['errors'] = [];
     const insights: InsightChange[] = [];
 
@@ -145,12 +157,12 @@ export class Scheduler {
       const pending = absorb(slot.pending, input);
       slot.pending = pending;
       if (!this.#needed.has(calc.id)) continue;
-      if (calc.reads.some((read) => typeof read === 'object' && blocked.has(read.calculator))) {
-        blocked.add(calc.id);
+      if (calc.reads.some((read) => typeof read === 'object' && this.#failed.has(read.calculator))) {
+        this.#failed.add(calc.id);
         continue;
       }
       const due = slot.lastRunAt === undefined || isDue(calc.cadence, slot.lastRunAt, pending, now);
-      if (!due || (slot.lastRunAt !== undefined && !isAffected(calc, pending, ran))) continue;
+      if (!due || (slot.lastRunAt !== undefined && !isAffected(calc, slot, pending))) continue;
 
       const view: EngineView = {
         state: input.state,
@@ -159,22 +171,27 @@ export class Scheduler {
         feed: input.feed,
         outputs: this.#outputs,
       };
+      let evaluation: Evaluation;
       try {
-        const { acc, output, raised } = evaluate(calc, slot, view);
-        slot.acc = acc;
-        slot.prevOutput = { value: output };
-        slot.lastRunAt = now;
-        slot.pending = undefined;
-        this.#outputs.set(calc.id, output);
-        ran.add(calc.id);
-        insights.push(...this.#book.apply(`error:${calc.id}`, [], now));
-        if (raised !== undefined) insights.push(...this.#book.apply(`calc:${calc.id}`, raised, now));
+        evaluation = evaluate(calc, slot, view);
       } catch (error) {
         this.#outputs.delete(calc.id);
-        blocked.add(calc.id);
+        this.#failed.add(calc.id);
         errors.push({ id: calc.id, error });
         insights.push(...this.#book.apply(`error:${calc.id}`, [calculatorError(calc.id, error, input)], now));
+        continue;
       }
+      slot.acc = evaluation.acc;
+      slot.prevOutput = { value: evaluation.output };
+      slot.lastRunAt = now;
+      slot.pending = undefined;
+      slot.ranDependencies.clear();
+      this.#outputs.set(calc.id, evaluation.output);
+      this.#failed.delete(calc.id);
+      ran.add(calc.id);
+      for (const dependent of this.#registry.dependentsOf(calc.id)) this.#slots.get(dependent)?.ranDependencies.add(calc.id);
+      insights.push(...this.#book.apply(`error:${calc.id}`, [], now));
+      if (evaluation.raised !== undefined) insights.push(...this.#book.apply(`calc:${calc.id}`, evaluation.raised, now));
     }
     return { ran: [...ran], outputs: new Map(this.#outputs), errors, insights };
   }

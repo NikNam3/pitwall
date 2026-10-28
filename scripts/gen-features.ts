@@ -1,5 +1,5 @@
 // Registration by convention: every folder under apps/bridge/src/features with a register.ts is a feature.
-import { existsSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -7,12 +7,29 @@ const DEFAULT_FEATURES_DIR = join(import.meta.dirname, '..', 'apps', 'bridge', '
 
 const byCodeUnit = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
-/** The names of the folders in `featuresDir` that hold a `register.ts`, sorted by code unit. */
+const isFile = (path: string): boolean => existsSync(path) && statSync(path).isFile();
+
+/**
+ * The names of the folders in `featuresDir` that hold a `register.ts`, sorted by code unit.
+ * A folder with TypeScript files but no `register.ts` is a mistake (a misspelt entry file would silently drop the
+ * feature), so it throws; a folder without any, like `notes/`, is ignored.
+ */
 export function findFeatureFolders(featuresDir: string): string[] {
-  return readdirSync(featuresDir, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory() && existsSync(join(featuresDir, entry.name, 'register.ts')))
-    .map((entry) => entry.name)
-    .sort(byCodeUnit);
+  if (!existsSync(featuresDir)) throw new Error(`features directory not found: ${featuresDir}`);
+  const folders: string[] = [];
+  for (const name of readdirSync(featuresDir)) {
+    const folder = join(featuresDir, name);
+    if (!statSync(folder).isDirectory()) continue;
+    if (isFile(join(folder, 'register.ts'))) {
+      folders.push(name);
+      continue;
+    }
+    const sources = readdirSync(folder).filter((entry) => /\.tsx?$/.test(entry));
+    if (sources.length > 0) {
+      throw new Error(`feature folder "${name}" has no register.ts file (found ${sources.join(', ')})`);
+    }
+  }
+  return folders.sort(byCodeUnit);
 }
 
 export function renderFeaturesIndex(folders: readonly string[]): string {
