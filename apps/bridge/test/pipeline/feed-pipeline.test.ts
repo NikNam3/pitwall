@@ -26,6 +26,8 @@ import { ManualSource } from '../helpers/manual-source.ts';
 const F = 'test' as FeedId;
 const boomCalc: QuickCalculator<number> = { kind: 'quick', id: 'boom', reads: ['timing'], cadence: 'frame', compute: () => 1 };
 const tmp = () => mkdtempSync(join(tmpdir(), 'pipeline-'));
+/** The session files in `dir`, without their `.config.json` sidecars. */
+const recordingsOf = (dir: string): string[] => readdirSync(dir).filter((name) => name.endsWith('.pwrec.gz'));
 const FTLP = { code: 'FTLP', vehicleIdx: 0, lapTime: 80 } as const;
 type Timed = ReturnType<ScenarioBuilder['packets']>;
 const toPrepared = (packets: Timed): PreparedPacket[] => packets.map(({ packet, receivedAtMs }) => ({ bytes: packetBytes(packet), receivedAtMs }));
@@ -99,7 +101,7 @@ describe('FeedPipeline', () => {
   it('writes one .pwrec per session when recordingsDir is set', async () => {
     const dir = tmp(); const packets = scenario();
     await run(packets, { storage: { db: openDatabase(join(tmp(), 'p.db')), recordingsDir: dir } });
-    const files = readdirSync(dir); expect(files).toHaveLength(1); expect(files[0]).toMatch(/^\d{4}-\d\d-\d\d_\d\d-\d\d-\d\d_000000000000004d\.pwrec\.gz$/);
+    const files = recordingsOf(dir); expect(files).toHaveLength(1); expect(files[0]).toMatch(/^\d{4}-\d\d-\d\d_\d\d-\d\d-\d\d_000000000000004d\.pwrec\.gz$/);
     let n = 0; for await (const _ of readPwrec(join(dir, files[0]!))) n++;
     expect(n).toBe(packets.length);
   });
@@ -154,7 +156,7 @@ describe('FeedPipeline: debug dumps', () => {
     const dumps = tmp(); const recordings = tmp();
     await run(failing(77n, 10), { ...options(dumps), storage: { db: openDatabase(join(tmp(), 'd.db')), recordingsDir: recordings } });
     const dump = JSON.parse(readFileSync(join(dumps, readdirSync(dumps)[0]!), 'utf8'));
-    expect(dump.pwrec).toEqual({ path: join(recordings, readdirSync(recordings)[0]!), t: expect.any(Number) });
+    expect(dump.pwrec).toEqual({ path: join(recordings, recordingsOf(recordings)[0]!), t: expect.any(Number) });
   });
 });
 
@@ -189,15 +191,15 @@ describe('FeedPipeline: session files', () => {
   it('names the file after wallClock() and the session uid, with the bridge as recorder', async () => {
     const dir = tmp(); const at = new Date(2026, 9, 28, 13, 5, 9);
     await run(scenario(), { storage: { db: openDatabase(join(tmp(), 'n.db')), recordingsDir: dir }, wallClock: () => at.getTime() });
-    expect(readdirSync(dir)).toEqual(['2026-10-28_13-05-09_000000000000004d.pwrec.gz']);
-    const { meta, endedCleanly } = await readAll(join(dir, readdirSync(dir)[0]!));
+    expect(recordingsOf(dir)).toEqual(['2026-10-28_13-05-09_000000000000004d.pwrec.gz']);
+    const { meta, endedCleanly } = await readAll(join(dir, recordingsOf(dir)[0]!));
     expect(meta).toMatchObject({ recorderVersion: 'pitwall-bridge', startedAt: at.toISOString(), listenPort: 0 });
     expect(endedCleanly).toBe(true);
   });
   it('closes the file of a session when the next one starts; times are relative to each file', async () => {
     const dir = tmp(); const first = scenario(77n); const second = shifted(scenario(78n), 60_000);
     await run([...first, ...second], { storage: { db: openDatabase(join(tmp(), 'two.db')), recordingsDir: dir } });
-    const files = readdirSync(dir).sort(); expect(files).toHaveLength(2);
+    const files = recordingsOf(dir).sort(); expect(files).toHaveLength(2);
     const a = await readAll(join(dir, files.find((f) => f.endsWith('_000000000000004d.pwrec.gz'))!));
     const b = await readAll(join(dir, files.find((f) => f.endsWith('_000000000000004e.pwrec.gz'))!));
     expect([a.records.length, b.records.length]).toEqual([first.length, second.length]);
@@ -208,13 +210,13 @@ describe('FeedPipeline: session files', () => {
   it('keeps the raw datagrams byte for byte', async () => {
     const dir = tmp(); const packets = scenario();
     await run(packets, { storage: { db: openDatabase(join(tmp(), 'raw.db')), recordingsDir: dir } });
-    const { records } = await readAll(join(dir, readdirSync(dir)[0]!));
+    const { records } = await readAll(join(dir, recordingsOf(dir)[0]!));
     expect(records.map((r) => [...r.payload])).toEqual(packets.map((p) => [...p.bytes]));
   });
   it('records the session in the database with the file path', async () => {
     const dir = tmp(); const db = openDatabase(join(tmp(), 'row.db'));
     await run(scenario(), { storage: { db, recordingsDir: dir }, wallClock: () => Date.UTC(2026, 9, 28, 12, 0, 0) });
-    expect(new WeekendRepository(db).sessionsOf('0')).toMatchObject([{ sessionUid: '77', pwrecPath: join(dir, readdirSync(dir)[0]!), startedAt: '2026-10-28T12:00:00.000Z' }]);
+    expect(new WeekendRepository(db).sessionsOf('0')).toMatchObject([{ sessionUid: '77', pwrecPath: join(dir, recordingsOf(dir)[0]!), startedAt: '2026-10-28T12:00:00.000Z' }]);
   });
   it('without recordingsDir no file is written and the session has no path', async () => {
     const db = openDatabase(join(tmp(), 'nofile.db'));
@@ -230,7 +232,7 @@ describe('FeedPipeline: session files', () => {
     const dir = tmp(); const db = openDatabase(join(tmp(), 'replay.db'));
     await run(packets, { storage: { db, recordingsDir: dir, sourcePath }, wallClock: () => Date.UTC(2030, 0, 1) });
     expect(new WeekendRepository(db).sessionsOf('0')).toMatchObject([{ startedAt: '2026-01-01T10:00:05.000Z' }]);
-    expect((await readAll(join(dir, readdirSync(dir)[0]!))).meta.startedAt).toBe('2026-01-01T10:00:05.000Z');
+    expect((await readAll(join(dir, recordingsOf(dir)[0]!))).meta.startedAt).toBe('2026-01-01T10:00:05.000Z');
   });
 });
 
@@ -268,7 +270,7 @@ describe('FeedPipeline: live feed', () => {
     packets.forEach((p) => source.push(p.bytes, p.receivedAtMs));
     await h.pipeline.stop();
     await expect(h.pipeline.done).resolves.toBeUndefined();
-    const { records, endedCleanly } = await readAll(join(dir, readdirSync(dir)[0]!));
+    const { records, endedCleanly } = await readAll(join(dir, recordingsOf(dir)[0]!));
     expect(records).toHaveLength(packets.length); expect(endedCleanly).toBe(true);
     expect(h.of('session.info').some((m) => m.type === 'update')).toBe(true);
   });

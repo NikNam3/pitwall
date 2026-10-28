@@ -1,6 +1,6 @@
 // Shared by the Scheduler tests: history deltas, the feed metrics and the input a scheduler runs on, and a scheduler
 // over quick calculators that all count as needed.
-import { CalculatorRegistry, Scheduler, type Calculator, type ChangeTag, type FeedMetricsView, type HistoryDelta, type QuickCalculator } from '../../src/index.ts';
+import { CalculatorRegistry, Scheduler, type Calculator, type ChangeTag, type FeedMetricsView, type HistoryDelta, type QuickCalculator, type SchedulerInput } from '../../src/index.ts';
 
 type Lengths = HistoryDelta['before'];
 
@@ -16,9 +16,9 @@ export const delta = (before = 0, after = before, truncated = false, fields: Rea
 
 export const feed = { framesClosed: 0, incompleteFrames: 0, latePackets: 0, droppedBeforeSession: 0, droppedUid0: 0, decodeErrors: 0, packetsPerSecond: 0, connected: true, msSinceLastPacket: 0, lossPercent: 0 } as FeedMetricsView;
 
-/** A scheduler input at session time `t`; the state's history holds `laps` laps. */
-export const input = (t: number, changed: ChangeTag[] = ['timing'], d = delta(), laps = d.after.laps) =>
-  ({ state: { feedId: 'f1', sessionTime: t, history: { laps: new Array(laps).fill({}) } } as never, changed: new Set(changed), delta: d, feed });
+/** A scheduler input at session time `t`; the state's history holds `laps` laps; `config` is the features' effective config. */
+export const input = (t: number, changed: ChangeTag[] = ['timing'], d = delta(), laps = d.after.laps, config: SchedulerInput['config'] = {}): SchedulerInput =>
+  ({ state: { feedId: 'f1', sessionTime: t, history: { laps: new Array(laps).fill({}) } } as never, changed: new Set(changed), delta: d, feed, config });
 
 /** A quick calculator that reads timing, runs every frame and returns the session time, unless `o` says otherwise. */
 export const quick = (id: string, o: Partial<QuickCalculator<unknown>> = {}): Calculator =>

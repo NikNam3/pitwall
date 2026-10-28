@@ -52,7 +52,7 @@ describe('FeedPipeline over the TT Zandvoort segment', () => {
   it('writes a session file with the datagrams of the segment, in order', async () => {
     const recordings = tmp();
     await replay({ db: openDatabase(join(tmp(), 'copy.db')), recordingsDir: recordings, sourcePath: SEGMENT });
-    const files = readdirSync(recordings); expect(files).toHaveLength(1); expect(files[0]).toMatch(/_1a4f5531395c7884\.pwrec\.gz$/);
+    const files = readdirSync(recordings).filter((name) => name.endsWith('.pwrec.gz')); expect(files).toHaveLength(1); expect(files[0]).toMatch(/_1a4f5531395c7884\.pwrec\.gz$/);
     const written = (await datagrams(join(recordings, files[0]!))).payloads; const source = (await datagrams(SEGMENT)).payloads;
     expect(written.length).toBeGreaterThan(0);
     expect(source.slice(source.length - written.length)).toEqual(written);

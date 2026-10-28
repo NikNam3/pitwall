@@ -29,7 +29,7 @@ export function expectIncrementalEqualsFromScratch<Acc, Out>(
   let acc: { value: Acc } | undefined;
   frames.forEach((frame, i) => {
     const { state, changed, delta } = runner.apply(frame);
-    const view: EngineView = { state, changed, delta, feed, outputs: new Map() };
+    const view: EngineView = { state, changed, delta, feed, outputs: new Map(), config: {} };
     acc = acc === undefined || delta.truncated ? { value: calc.init(view) } : { value: calc.update(acc.value, delta, view) };
     expect(calc.output(acc.value), `frame ${i}`).toEqual(calc.output(calc.init(view)));
   });
