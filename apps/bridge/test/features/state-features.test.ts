@@ -50,8 +50,9 @@ describe('base state features', () => {
     expect(select(carDetail, 'car.detail', { carId: 99 })).toBeUndefined();
     expect(select(carDetail, 'car.detail', {})).toBeUndefined();
   });
-  it('car.telemetry selects the dynamics of one car', () => {
-    expect(select(carTelemetry, 'car.telemetry', { carId: 2 })).toEqual(view.state.cars[2]!.dynamics);
+  it('car.telemetry selects the motion and the Known dynamics of one car', () => {
+    const car = view.state.cars[2]!;
+    expect(select(carTelemetry, 'car.telemetry', { carId: 2 })).toEqual({ motion: car.motion, dynamics: car.dynamics });
     expect(select(carTelemetry, 'car.telemetry', { carId: 99 })).toBeUndefined();
   });
   it('history and insights bindings', () => {

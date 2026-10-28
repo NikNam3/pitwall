@@ -74,13 +74,13 @@ export type CarTiming = {
 };
 
 export type TyreCorner = {
-  surfaceTempC: Celsius;
+  surfaceTempC: Known<Celsius>;
   /** `notApplicable` when `settings.tyreTemperature` is `surfaceOnly`. */
   carcassTempC: Known<Celsius>;
-  pressurePsi: Psi;
+  pressurePsi: Known<Psi>;
   wearPct: Known<Percent>;
   damagePct: Known<Percent>;
-  blistersPct: Percent;
+  blistersPct: Known<Percent>;
 };
 
 export type TyreSet = {
@@ -138,10 +138,11 @@ export type CarCondition = {
   ersFault: boolean;
   engineBlown: boolean;
   engineSeized: boolean;
-  brakes: Corners<{ tempC: Celsius; damagePct: Known<Percent> }>;
-  engineTempC: Celsius;
+  brakes: Corners<{ tempC: Known<Celsius>; damagePct: Known<Percent> }>;
+  engineTempC: Known<Celsius>;
 };
 
+/** Driving inputs from Car Telemetry, limits from Car Status. */
 export type CarDynamics = {
   speedKmh: Kmh;
   throttle: Ratio;
@@ -158,6 +159,10 @@ export type CarDynamics = {
   drsAllowed: boolean;
   drsActivationDistanceM: Metres;
   pitLimiter: boolean;
+};
+
+/** World motion from the Motion packet. */
+export type CarMotion = {
   /** World position in m. */
   position: Vec3;
   /** World velocity in m/s. */
@@ -245,7 +250,9 @@ export type CarState = {
   tyres: CarTyres;
   energy: CarEnergy;
   condition: CarCondition;
-  dynamics: CarDynamics;
+  motion: CarMotion;
+  /** `notReceived` until Car Telemetry arrives; hidden in realism mode. */
+  dynamics: Known<CarDynamics>;
   /** Session time of the last frame whose packet of each source carried data for this car; a source never received has no entry. */
   updatedAt: Partial<Record<DataSource, SessionTime>>;
   /** Player car only; moves when the player changes. */

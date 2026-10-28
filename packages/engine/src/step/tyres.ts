@@ -46,9 +46,9 @@ export const applyTyres: SubStep = (state, frame, out) => {
       const pressure = cornersOf(t.tyresPressure);
       for (const corner of CORNER_NAMES) {
         const tyre = car.tyres.corners[corner];
-        tyre.surfaceTempC = surface[corner];
+        tyre.surfaceTempC = known(surface[corner], at);
         tyre.carcassTempC = surfaceOnly ? unknown('notApplicable') : known(carcass[corner], at);
-        tyre.pressurePsi = pressure[corner];
+        tyre.pressurePsi = known(pressure[corner], at);
       }
     }
     out.changed.add('tyres');
@@ -64,7 +64,7 @@ export const applyTyres: SubStep = (state, frame, out) => {
         const tyre = car.tyres.corners[corner];
         tyre.wearPct = knownUnlessRestricted(car, wear[corner], at);
         tyre.damagePct = knownUnlessRestricted(car, tyreDamage[corner], at);
-        tyre.blistersPct = blisters[corner];
+        tyre.blistersPct = known(blisters[corner], at);
       }
     }
     out.changed.add('tyres');
