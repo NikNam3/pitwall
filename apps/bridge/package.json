@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "bin": {
+    "pitwall": "./src/cli/pitwall.ts",
     "pwrec-cut": "./src/cli/pwrec-cut.ts"
   },
   "exports": {

@@ -1,5 +1,6 @@
 // One feed end to end (spec 4): PacketSource → decode → SessionTracker → SessionProcessor → TopicHub,
 // with the feed's health, its session files and its storage alongside.
+import { resolve } from 'node:path';
 import { toSessionTime, type FeedId, type SessionTime } from '@pitwall/domain';
 import { CalculatorRegistry, SessionTracker, type FrameMetrics, type InsightChange, type TrackerEvent } from '@pitwall/engine';
 import { decode } from '@pitwall/protocol';
@@ -26,7 +27,8 @@ export type FeedPipelineOptions = {
   log: Logger;
   /**
    * The database; with `recordingsDir` also one `.pwrec.gz` per session. `sourcePath` is the recording being
-   * replayed: its start dates the sessions, so a replay stores the same times on every run.
+   * processed: its start dates the sessions, so a replay stores the same times on every run, and its absolute path
+   * is stored as the sessions' recording (`reprocess` reads them from there).
    */
   storage?: { db: Db; recordingsDir?: string; sourcePath?: string };
   /** Where debug dumps go; without it none are written. */
@@ -161,11 +163,15 @@ export class FeedPipeline {
     const db = this.#o.storage?.db;
     const storage = db && new SessionStorage(db, { log, onError: (error) => this.#writeFailed('storage', error) });
     const file = this.#openSessionFile(event, startedAt);
+    // A session processed from a recording points at that recording (so `reprocess` finds it), a live one at its own file.
+    const sourcePath = this.#o.storage?.sourcePath;
+    const pwrecPath = sourcePath !== undefined ? resolve(sourcePath) : (file?.path ?? null);
     this.#session = new SessionProcessor({
       feedId,
       sessionUid: event.sessionUid,
       session: event.session,
       startedAt,
+      pwrecPath,
       registry: this.#registry,
       publisher: this.#publisher,
       log,

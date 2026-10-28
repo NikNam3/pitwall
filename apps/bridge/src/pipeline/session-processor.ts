@@ -30,6 +30,8 @@ export type SessionProcessorOptions = {
   session: SessionPacket;
   /** ISO 8601, stored with the session. */
   startedAt: string;
+  /** The recording that holds the session's datagrams, stored with it; `null` when there is none. */
+  pwrecPath: string | null;
   registry: CalculatorRegistry;
   publisher: TopicPublisher;
   log: Logger;
@@ -175,7 +177,7 @@ export class SessionProcessor {
   }
 
   #row(participants?: ParticipantsPacket): SessionRow {
-    const { session, startedAt, file } = this.#o;
-    return sessionRowOf({ sessionUid: this.#uid, session, startedAt, pwrecPath: file?.path ?? null, ...(participants && { participants }) });
+    const { session, startedAt, pwrecPath } = this.#o;
+    return sessionRowOf({ sessionUid: this.#uid, session, startedAt, pwrecPath, ...(participants && { participants }) });
   }
 }
