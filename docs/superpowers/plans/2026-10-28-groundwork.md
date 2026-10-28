@@ -318,3 +318,31 @@ The test-only topic and feature must not leak into production: the generators on
 4. In the `car.detail` and `car.telemetry` topic params, `carId` is typed `CarId` (wire value stays a number).
 
 **Tests:** existing tests updated to the new names and types. Add a type-level test that `view.state.open` does not compile.
+
+---
+
+### Task 10: Freshness data for the UI's stale check
+
+**Goal:** the UI decides when a value is too old (user decision Q-D = B, review F9). It needs, per car, when each data source last updated it, and how often each source is expected. The rule then is one factor ("stale after about 3 missed updates"), not one threshold per number.
+
+**Scope:** `packages/domain` (granted), `packages/contracts` (granted: `feed.status.ts`), `packages/engine/src/step`, `packages/engine/src/history`, `packages/engine/test`, `apps/bridge/src/features`, `apps/bridge/test`.
+
+**Requirements:**
+1. **`packages/domain/src/freshness.ts`** (exported from the domain index):
+   - `type DataSource = 'lapData' | 'motion' | 'telemetry' | 'status' | 'motionEx' | 'damage' | 'tyreSets' | 'sessionHistory' | 'participants' | 'setups'`
+   - `const SOURCE_INTERVAL_MS`: the expected interval per source from the F1 25 spec, or `'menuRate'` for the five menu-rate sources (`lapData`, `motion`, `telemetry`, `status`, `motionEx`). The rest: `damage: 100`, `setups: 500`, `participants: 5000`, `tyreSets: 1100`, `sessionHistory: 1100` (20/s rotating over up to 22 cars).
+   - The doc comment says that menu-rate sources use the measured cadence (`feed.status.cadenceMs`) and that the UI applies its own factor.
+2. **`CarState.updatedAt: Partial<Record<DataSource, SessionTime>>`:**
+   - the session time of the last frame whose packet of that source carried data for this car (`MotionEx` and `setups` only for the player car; `tyreSets` and `sessionHistory` when the rotating packet named this car)
+   - set by the sub-step that reads that source
+   - starts empty (`{}`)
+3. **`feed.status`** gets `cadenceMs?: number`, the median session-time step of closed frames. The assembler already measures it as `FrameMetrics.cadenceMs`.
+4. **Remove `'stale'` from `UnknownReason`** in `packages/domain/src/known.ts`. Nothing produces it; the UI decides staleness.
+5. **`car.detail`** carries `updatedAt` as part of `CarState`. `cars.overview` gets `updatedAt` too, so the timing tower can grey out a car whose timing stopped.
+
+**Tests:**
+- per source, a frame with that packet sets `updatedAt[source]` to the frame's session time for the cars it carries, and leaves other sources untouched
+- a frame without the packet leaves it unchanged
+- a flashback restores `updatedAt` with the snapshot (covered by the existing state round trip; add an assertion)
+- `feed.status` carries `cadenceMs` after a few frames
+- `UnknownReason` no longer accepts `'stale'` (type-level test)
