@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (2026-10-28)
+Accepted in principle (2026-10-28). The user wants to revisit licences before the first code is actually copied from Simulator Controller or Bonomi et al.
 
 ## Context
 
