@@ -171,7 +171,7 @@ export default defineWidget({
 | `size/` | the size primitive (4.4) |
 | `define-widget.ts` | `defineWidget`, `topic`, `folded`, `optional`, the option helpers |
 
-`apps/ui/src/theme/`: semantic roles to values, theme variants switchable at runtime, the font and its one size. It's the only place colour values exist.
+`apps/ui/src/theme/`: semantic roles to values, theme variants switchable at runtime, the font and its default size, and the **density tokens** (line height, panel gap, column gap, header padding). It's the only place colour and spacing values exist. Widgets set no margins, padding, gaps or line heights of their own; the kit's components own spacing. The user found the mockups very dense and wants to judge density once real displays exist (Task 0), so density must stay a one-place change.
 `apps/ui/src/emphasis/`: pure convention-emphasis functions; no Svelte; unit- and mutation-tested.
 
 ## 6. Data path
@@ -256,7 +256,7 @@ Not built. A what-if is a **parameterised subscription** to a simulator topic, e
 A thin adapter over dockview-core in `shell/docking/`. Nothing else imports dockview. Panels carry their widget name, options and link group; the adapter maps dockview's events to workbook changes.
 
 ### 7.4 Panel frame
-`shell/panel/` renders every panel the same way: a header with title, link-group marker (`1`, or `1 · HAM` when the primary isn't the default), the states from 4.3 and a settings button; then the widget body, sized by the size primitive.
+`shell/panel/` renders every panel the same way (Task 0 option B): a header **band** in `bgBand` with no rule and no outer border, holding the title, the link-group marker (`1`, or `1 · HAM` in white when the primary isn't the default; the car is never repeated in the title), the states from 4.3 and a gear icon (an SVG in the kit, since JetBrains Mono has no gear glyph) for settings; then the widget body, sized by the size primitive.
 
 ### 7.5 Link groups
 - Numbered, not coloured. A group holds a `feedId`, a primary car (default: the player), compare cars and a time window (live, one lap, or a lap range).
