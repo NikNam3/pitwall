@@ -1,15 +1,15 @@
 <script lang="ts">
   // One window (spec 7.1-7.3): the active workbook's panels for this window, in a dock, saved back to the bridge.
-  import type { LinkGroup, PanelSpec, ReplayControl, SessionInfo, UiAction, UiSettings } from '@pitwall/contracts';
+  import type { LinkGroup, PanelSpec, ReplayControl, SessionInfo, TopicValue, UiAction, UiSettings } from '@pitwall/contracts';
   import type { FeedId } from '@pitwall/domain';
-  import { getAllContexts, mount, onDestroy, unmount, untrack } from 'svelte';
+  import { getAllContexts, mount, onDestroy, unmount, untrack, type Component, type ComponentProps } from 'svelte';
   import type { EntryState, TopicStore } from '../../connection/topic-store.svelte.ts';
   import * as text from '../../kit/text.ts';
   import type { RegisteredWidget, ResolvedLink } from '../../kit/types.ts';
   import { applyTheme, DEFAULT_THEME, role, type ThemeVariant } from '../../theme/index.ts';
   import '../controls.css';
   import { WIDGETS } from '../../widgets/index.generated.ts';
-  import { defaultCommands, DEFAULT_KEYS, windowCommands, type CommandContext, type ShellOverlay } from '../commands/default-commands.ts';
+  import { alertCommands, defaultCommands, DEFAULT_KEYS, windowCommands, type CommandContext, type ShellOverlay } from '../commands/default-commands.ts';
   import { eventKey, parseKeys } from '../commands/keys.ts';
   import KeyOverview from '../commands/KeyOverview.svelte';
   import { OverlayStack, provideOverlayStack } from '../commands/overlay-stack.ts';
@@ -17,10 +17,15 @@
   import { CommandRegistry } from '../commands/registry.ts';
   import { mountDock, type DockHandle, type PanelView } from '../docking/index.ts';
   import type { Host } from '../host/host.ts';
+import { Inspection } from '../inspector/inspection.svelte.ts';
+import { loadInspector } from '../inspector/load.ts';
+import type { InspectTarget } from '../inspector/target.ts';
+  import type Inspector from '../inspector/Inspector.svelte';
   import GroupPicker from '../link-groups/GroupPicker.svelte';
   import { resolveLink, sameLink } from '../link-groups/resolve.ts';
   import Panel from '../panel/Panel.svelte';
   import { provideWindowFont } from '../panel/window-font.ts';
+  import TopBar from '../topbar/TopBar.svelte';
   import { defaultPanel } from '../workbooks/default-panel.ts';
   import { normaliseWorkbook } from '../workbooks/normalise.ts';
   import WorkbookPicker from '../workbooks/WorkbookPicker.svelte';
@@ -142,6 +147,9 @@
     if (overlay === undefined) return;
     return stack.add(closeOverlay);
   });
+  /** The keys of the tier-1 alerts the top bar shows. */
+  let shownAlerts = $state.raw<string[]>([]);
+  const inspection = new Inspection();
   const commandContext: CommandContext = {
     send,
     sendReplay,
@@ -162,11 +170,15 @@
     focusWindow: (id) => {
       if (id === windowId) globalThis.focus();
     },
-    // TODO(alerts task): the keys of the tier-1 alerts shown in the top bar.
-    alertKeys: () => [],
+    alertKeys: () => shownAlerts,
+    inspection,
   };
   const baseCommands = defaultCommands(commandContext);
-  const commands = $derived([...baseCommands, ...windowCommands((read?.workbook.windows ?? []).map((w) => w.id), commandContext)]);
+  const commands = $derived([
+    ...baseCommands,
+    ...alertCommands(shownAlerts, commandContext),
+    ...windowCommands((read?.workbook.windows ?? []).map((w) => w.id), commandContext),
+  ]);
   $effect(() => {
     const offs = commands.map((c) => registry.register(c));
     return () => offs.forEach((off) => off());
@@ -193,6 +205,23 @@
     return () => window.removeEventListener('keydown', onKeydown);
   });
 
+  // The dev inspector (spec 8.2): its chunk is loaded when inspection is first switched on, and exists in dev builds only.
+  let InspectorView = $state.raw<Component<ComponentProps<typeof Inspector>> | undefined>();
+  $effect(() => {
+    if (loadInspector === undefined || !inspection.on || InspectorView !== undefined) return;
+    void loadInspector().then((module) => (InspectorView = module.default));
+  });
+  let catalogue = $state.raw<EntryState<TopicValue<'dev.catalogue'>> | undefined>();
+  $effect(() => {
+    if (loadInspector === undefined || inspection.widget === undefined) return;
+    const held = untrack(() => store.acquire({ topic: 'dev.catalogue', params: {} }));
+    catalogue = held.state;
+    return () => held.release();
+  });
+  const inspectedCatalogue = $derived(catalogue?.status === 'ok' ? catalogue.value : undefined);
+  let inspected = $state.raw<InspectTarget | undefined>();
+  const inspectedLink = $derived(inspected?.link());
+
   // Panels are mounted by the dock, outside this component's tree: they get the window's contexts explicitly.
   const contexts = getAllContexts();
   const view: PanelView = {
@@ -210,6 +239,8 @@
           headerTarget: tab,
           defaultFeed,
           send,
+          inspection,
+          onInspect: (target: InspectTarget) => (inspected = target),
           onOptions: (options: Record<string, unknown>) => setOptions(panelId, options),
           get spec() {
             return current();
@@ -303,6 +334,11 @@
   {#if notes.length > 0}
     <div class="notice" style:color={role('textDim')}>{notes.join(text.separator)}</div>
   {/if}
+  {#if defaultFeed !== undefined}
+    {#key defaultFeed}
+      <TopBar {store} feedId={defaultFeed} {send} {sendReplay} onShown={(keys) => (shownAlerts = keys)} />
+    {/key}
+  {/if}
   <div class="area">
     <div class="dock" bind:this={dockEl}></div>
     {#if read !== undefined && empty}
@@ -314,6 +350,9 @@
       </div>
     {/if}
   </div>
+  {#if InspectorView !== undefined && inspection.widget !== undefined && inspectedCatalogue !== undefined && inspectedLink !== undefined}
+    <InspectorView {store} catalogue={inspectedCatalogue} params={(topic) => inspected?.params(topic) ?? {}} widget={inspection.widget} link={inspectedLink} {host} onClose={() => inspection.close()} />
+  {/if}
   {#if overlay?.kind === 'palette'}
     <Palette {registry} bindings={keys.bindings} onClose={closeOverlay} />
   {:else if overlay?.kind === 'keys'}

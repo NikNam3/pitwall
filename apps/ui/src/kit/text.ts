@@ -64,6 +64,8 @@ export const commandTitles = {
   workbookPick: 'Pick a workbook',
   workbookSaveAs: 'Save workbook as',
   alertsAckAll: 'Acknowledge all alerts',
+  alertAck: (key: string): string => `Acknowledge alert ${key}`,
+  devInspect: 'Inspect a widget (dev)',
   pickPrimary: (group: number): string => `Pick primary car (group ${group})`,
   resetPrimary: (group: number): string => `Back to our driver (group ${group})`,
   paletteOpen: 'Command palette',
@@ -127,3 +129,30 @@ export const settingsSaved = 'saved in this workbook';
 
 /** Accessible name of the link marker button. */
 export const linkMarker = 'link group';
+
+/** Top bar (spec 7.6, 7.7, 7.9, 8.5). */
+export const topBar = {
+  laps: (count: string): string => `${count} laps`,
+  flag: { green: 'green', sc: 'SC', vsc: 'VSC', formation: 'formation' },
+  realismOn: 'realism on',
+  realismOff: 'realism off',
+  /** The value realism takes at the next session, shown when it differs from this one. */
+  realismNext: (enabled: boolean): string => (enabled ? '→ on' : '→ off'),
+  feedUnknown: 'feed —',
+  feedDown: 'feed down',
+  feedStale: 'feed stale',
+  lossUnknown: '—',
+  feedOk: (loss: string): string => `feed ok · ${loss} loss`,
+  playing: '⏵ playing',
+  paused: '⏸ paused',
+  speed: 'replay speed',
+  lap: 'lap',
+  beyondEnd: 'end of recording',
+  alertMark: '!',
+  ack: 'ack',
+  acknowledge: 'acknowledge alert',
+  moreAlerts: (n: number): string => `+${n}`,
+  mutedGroups: (n: number): string => `${n} muted`,
+  mute: 'mute',
+  unmute: 'muted',
+} as const;
