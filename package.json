@@ -13,6 +13,7 @@
     "test": "vitest run",
     "pretest:acceptance": "pnpm gen",
     "test:acceptance": "vitest run -c vitest.acceptance.config.ts",
+    "test:ui": "pnpm gen && pnpm gen:moments && pnpm --filter @pitwall/ui build && VITE_PITWALL_GALLERY=1 pnpm --filter @pitwall/ui build --outDir dist-e2e && pnpm --filter @pitwall/desktop build && playwright test -c apps/ui/playwright.config.ts",
     "lint": "eslint .",
     "depcruise": "depcruise packages apps test-support test --config .dependency-cruiser.cjs",
     "mutation": "pnpm --workspace-concurrency=1 --filter @pitwall/protocol --filter @pitwall/engine --filter @pitwall/strategy run mutation && pnpm --dir apps/ui exec stryker run",
@@ -32,6 +33,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.64.1",
     "@stryker-mutator/core": "^10.1.1",
     "@stryker-mutator/vitest-runner": "^10.1.1",
     "@types/node": "^22.20.5",

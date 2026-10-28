@@ -40,6 +40,16 @@ type ServeBase = {
   io: CliIo;
 };
 
+/** The levels `PITWALL_WS_LOG_LEVEL` may name. */
+const LOG_LEVELS = ['trace', 'debug', 'info', 'warn', 'error', 'fatal', 'silent'];
+
+/** The WebSocket server's log level from `PITWALL_WS_LOG_LEVEL` (default `info`; the Playwright harness sets `debug`). */
+function wsLogLevel(env: NodeJS.ProcessEnv): string {
+  const level = env['PITWALL_WS_LOG_LEVEL'] || 'info';
+  if (!LOG_LEVELS.includes(level)) throw new StartupError(`PITWALL_WS_LOG_LEVEL must be one of ${LOG_LEVELS.join(', ')}, got "${level}"`);
+  return level;
+}
+
 /** How often a dev child reports its replay position to the supervisor. */
 const POSITION_EVERY_MS = 500;
 
@@ -78,6 +88,7 @@ export async function serve(opts: ServeOptions): Promise<number> {
       port: opts.wsPort,
       hub,
       feeds,
+      log: cliLogger(io, wsLogLevel(io.env)),
       ...(uiState && { uiState }),
       ...(opts.replay && { replay: { control: (control: ReplayControl) => (controller === undefined ? false : (trackTransport(control), controller.control(control), true)) } }),
     });
@@ -109,6 +120,8 @@ export async function serve(opts: ServeOptions): Promise<number> {
       const catalogue = readCatalogue();
       hub.publishGlobal('dev.catalogue', () => catalogue);
     }
+    // Test aid for the Playwright specs: inert unless set (see `FeedAlerts.raiseTestInsight`).
+    const testInsight = io.env['PITWALL_E2E_INSIGHT'] || undefined;
     const makePipeline = (source: PacketSource): FeedPipeline =>
       (pipeline = new FeedPipeline({
       feedId,
@@ -122,6 +135,7 @@ export async function serve(opts: ServeOptions): Promise<number> {
       ...(opts.staleCheck && { staleCheck: opts.staleCheck }),
       ...(calcStats && { calcStats }),
       ...(uiState && { realismNextSession: () => uiState.realismNextSession() }),
+      ...(testInsight !== undefined && { testInsight }),
     }));
     const failed = (error: unknown): never => {
       throw new StartupError(`feed ${feedId} failed: ${error instanceof Error ? error.message : String(error)}`);

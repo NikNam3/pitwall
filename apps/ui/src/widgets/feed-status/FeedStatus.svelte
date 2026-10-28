@@ -23,10 +23,11 @@
 
 <div class="feed">
   <div class="line">
-    <span class="state" style:color={colour}>{state}</span>{separator}<Value value={feed.lossPercent} format={formatLoss} />{separator}<Value
-      value={feed.packetsPerSecond}
-      format={formatRate}
-    />
+    <!-- Loss and packet rate are only measured while a feed is connected; without one they do not apply. -->
+    <span class="state" style:color={colour}>{state}</span>{#if feed.connected}{separator}<Value value={feed.lossPercent} format={formatLoss} />{separator}<Value
+        value={feed.packetsPerSecond}
+        format={formatRate}
+      />{/if}
   </div>
   {#if data.session}
     <div class="line dim">

@@ -34,6 +34,8 @@ const ownArgs = separator < 0 ? argv : argv.slice(0, separator);
 /** The bridge command after `--`, command first; empty means `pitwall live`. */
 const bridgeArgs = separator < 0 ? [] : argv.slice(separator + 1);
 const dev = ownArgs.includes('--dev');
+/** Test aid for the Playwright specs: `PITWALL_E2E=1` keeps every window hidden (still rendering), so a test run never shows windows on the desktop. */
+const e2e = process.env['PITWALL_E2E'] === '1';
 /** The repository root (this file is bundled to apps/desktop/dist/main.cjs). */
 const repoRoot = path.resolve(__dirname, '../../..');
 
@@ -137,7 +139,9 @@ const openWindow = (id: WindowId, bounds: Rectangle): void => {
   const win = new BrowserWindow({
     ...bounds,
     autoHideMenuBar: true,
+    ...(e2e && { show: false, paintWhenInitiallyHidden: true }),
     webPreferences: {
+      ...(e2e && { backgroundThrottling: false }),
       preload: path.join(__dirname, 'preload.cjs'),
       additionalArguments: [`--pitwall-window=${id}`],
       contextIsolation: true,

@@ -9,6 +9,7 @@ reports/
 .claude/worktrees/
 .superpowers/
 apps/ui/dist/
+apps/ui/dist-e2e/
 apps/ui/src/widgets/index.generated.ts
 catalogue.generated.json
 test-support/moments/

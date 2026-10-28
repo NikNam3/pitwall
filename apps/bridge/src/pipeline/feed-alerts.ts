@@ -39,6 +39,15 @@ export class FeedAlerts {
     return this.#book.apply('system', [...this.#failures.values()], at);
   }
 
+  /**
+   * Test aid for the Playwright specs (`PITWALL_E2E_INSIGHT`): one critical `system` insight with `key` as key and
+   * kind, active for the rest of the feed (a new session raises it again with the other active ones).
+   */
+  raiseTestInsight(key: string, at: SessionTime): InsightChange[] {
+    const insight: Insight = { key, severity: 'critical', category: 'system', feedId: this.#feedId, kind: key, params: {}, raisedAt: at };
+    return this.#book.apply('test', [insight], at);
+  }
+
   /** A new session opens its writers afresh, so earlier write failures no longer hold; the feed reset drops them from the log. */
   clearWriteFailures(at: SessionTime): void {
     this.#failures.clear();

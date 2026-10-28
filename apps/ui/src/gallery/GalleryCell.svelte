@@ -1,7 +1,7 @@
 <script lang="ts">
   // One gallery cell (spec 9.2): the real Panel on the real TopicStore, fed by a GalleryConnection, in a box of fixed
   // character cells under one theme. A real window would have a dock around it; nothing else differs.
-  import { onDestroy } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import { carId, feedId } from '@pitwall/domain';
   import type { SessionInfo } from '@pitwall/contracts';
   import { TopicStore } from '../connection/topic-store.svelte.ts';
@@ -14,6 +14,7 @@
   import { GalleryConnection, type GalleryOverride } from './gallery-connection.ts';
   import type { MomentValues } from './moment-values.ts';
   import { SUBPIXEL_PX } from './layout.ts';
+  import { afterFrames } from './ready.ts';
   import { themed } from './theme-action.ts';
 
   type Props = {
@@ -45,6 +46,20 @@
   /* svelte-ignore state_referenced_locally */
   const spec = widget === undefined ? { widget: widgetName, options: {}, linkGroup: 1 } : defaultPanel(widget.decl);
 
+  // Ready once the widget's lazily loaded component is in and has rendered (the Panel loads the same module).
+  let ready = $state(false);
+  onMount(() => {
+    let live = true;
+    void Promise.resolve(widget?.component())
+      .then(afterFrames)
+      .then(() => {
+        if (live) ready = true;
+      });
+    return () => {
+      live = false;
+    };
+  });
+
   const box = cellBox(font.fontPx, font.lineHeight);
   /* svelte-ignore state_referenced_locally */
   const width = (cols + 2 * theme.density.headerPadCols) * box.width + SUBPIXEL_PX;
@@ -52,7 +67,7 @@
   const height = (rows + 1) * box.height + SUBPIXEL_PX;
 </script>
 
-<figure data-gallery-id={id} use:themed={theme}>
+<figure data-gallery-id={id} data-ready={ready || undefined} use:themed={theme}>
   <figcaption style:color={role('textFaint')}>{id}</figcaption>
   <div class="cell" style:width="{width}px" style:height="{height}px" style:background={role('bgPanel')} style:border-color={role('border')}>
     <Panel {store} {spec} {widget} {link} />

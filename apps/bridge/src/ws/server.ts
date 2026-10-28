@@ -4,6 +4,7 @@ import { WebSocket, WebSocketServer } from 'ws';
 import type { FeedId } from '@pitwall/domain';
 import { CONTRACT_VERSION, TOPICS, decodeClientMessage, encodeMessage } from '@pitwall/contracts';
 import type { ClientMessage, FeedInfo, ReplayControl, ServerMessage } from '@pitwall/contracts';
+import type { Logger } from '../log.ts';
 import type { UiState } from '../ui-state/ui-state.ts';
 import type { TopicHub } from '../hub/topic-hub.ts';
 import { StartupError } from '../startup-error.ts';
@@ -26,6 +27,11 @@ export type WsServerOptions = {
   heartbeatMs?: number;
   /** A client that sent nothing for this long is dropped. Default 15000. */
   timeoutMs?: number;
+  /**
+   * Gets one `ws subscribe` line per accepted subscription (the Playwright specs check them for duplicates): at info
+   * with `clientId`, `id`, `topic` and `feedId`; at debug, instead, with the client's `params` as well.
+   */
+  log?: Pick<Logger, 'info' | 'debug' | 'isLevelEnabled'>;
 };
 
 /** Larger client messages close the connection with code 1009; real ones are a few hundred bytes. */
@@ -104,8 +110,12 @@ export class WsServer {
         // A global topic belongs to no feed: any `feedId` the client sent is ignored.
         const global = TOPICS[topic].scope === 'global';
         const feedId = global ? undefined : this.resolveFeed(message.feedId);
-        if (feedId === undefined && !global) send({ type: 'error', id, reason: 'unknownFeed' });
-        else this.options.hub.subscribe({ clientId, id, topic, params, feedId });
+        if (feedId === undefined && !global) {
+          send({ type: 'error', id, reason: 'unknownFeed' });
+          return;
+        }
+        this.logSubscribe({ clientId, id, topic, params, feedId });
+        this.options.hub.subscribe({ clientId, id, topic, params, feedId });
         return;
       }
       case 'unsubscribe':
@@ -129,6 +139,13 @@ export class WsServer {
       case 'heartbeat':
         return; // only refreshes `lastSeen`
     }
+  }
+
+  /** One line per subscription; the params (client-sized, up to MAX_PAYLOAD_BYTES) only at debug. */
+  private logSubscribe({ params, ...line }: { clientId: string; id: string; topic: string; params: unknown; feedId: FeedId | undefined }): void {
+    const { log } = this.options;
+    if (log?.isLevelEnabled('debug')) log.debug({ ...line, params }, 'ws subscribe');
+    else log?.info(line, 'ws subscribe');
   }
 
   /** The requested feed, or the first one when none is requested; `undefined` when it does not exist. */

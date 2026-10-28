@@ -20,8 +20,10 @@
     /** Safety-car and virtual-safety-car periods, painted behind the series. */
     bands?: Array<{ from: number; to: number; kind: 'sc' | 'vsc' }> | undefined;
     size: WidgetSize;
+    /** Called after every draw of the plot (the gallery marks its cell ready on the first). */
+    ondraw?: (() => void) | undefined;
   };
-  let { series, xLabel, yLabel, x, bands, size }: Props = $props();
+  let { series, xLabel, yLabel, x, bands, size, ondraw }: Props = $props();
 
   const SERIES_ROLES: Role[] = ['series1', 'series2', 'series3', 'series4', 'series5', 'series6'];
 
@@ -91,6 +93,7 @@
           axes: [{ ...axis, label: xLabel }, { ...axis, label: yLabel }],
           series: [{}, ...lines],
           hooks: {
+            draw: [() => ondraw?.()],
             drawClear: bandList.length
               ? [
                   (u) => {
