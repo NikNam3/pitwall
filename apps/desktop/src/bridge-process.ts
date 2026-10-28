@@ -5,11 +5,20 @@ export const DEFAULT_BRIDGE_COMMAND: readonly string[] = ['pitwall', 'live'];
 /** How long a running bridge has to answer before a new one is started. */
 const PROBE_TIMEOUT_MS = 500;
 
+/** What `spawn` returns: a child process, or a stand-in with the same members. */
+export type BridgeChild = {
+  pid?: number | undefined;
+  kill(): void;
+  on?(event: 'error', listener: (error: Error) => void): unknown;
+};
+
 export type EnsureBridgeOptions = {
   port: number;
   /** True when something answers at `url` within `timeoutMs`. */
   probe: (url: string, timeoutMs: number) => Promise<boolean>;
-  spawn: (command: string, args: string[]) => { kill(): void };
+  spawn: (command: string, args: string[]) => BridgeChild;
+  /** Stops the child and everything it started (the child leads its own process group); default is `child.kill()`. */
+  killTree?: ((pid: number) => void) | undefined;
   /** The bridge command, command first; default `pitwall live`. */
   args?: readonly string[] | undefined;
 };
@@ -28,5 +37,16 @@ export async function ensureBridge(options: EnsureBridgeOptions): Promise<Bridge
   }
   const [command, ...args] = options.args !== undefined && options.args.length > 0 ? options.args : DEFAULT_BRIDGE_COMMAND;
   const child = options.spawn(command as string, args);
-  return { attached: false, stop: () => child.kill() };
+  // A failed start (no such command) is reported as 'error' on a later tick; later errors are ignored.
+  let failure: Error | undefined;
+  child.on?.('error', (error) => {
+    failure = new Error(`Could not start the bridge (${[command, ...args].join(' ')}): ${error.message}`);
+  });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  if (failure !== undefined) throw failure;
+  const { killTree } = options;
+  return {
+    attached: false,
+    stop: () => (killTree !== undefined && child.pid !== undefined ? killTree(child.pid) : child.kill()),
+  };
 }

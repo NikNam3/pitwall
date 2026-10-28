@@ -1,11 +1,14 @@
 // Electron main: one BrowserWindow per workbook window, the bridge attached or started, browser shortcuts blocked.
 // Start: `electron . [--dev] [-- <bridge command>]`, e.g. `-- pitwall replay x.pwrec --realtime`.
 import { spawn } from 'node:child_process';
+import type { ChildProcess } from 'node:child_process';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { app, BrowserWindow, ipcMain, screen, shell } from 'electron';
 import type { Rectangle } from 'electron';
 import { ensureBridge } from './bridge-process.ts';
 import type { BridgeHandle } from './bridge-process.ts';
+import { isAllowedOpenPath, parseEnsureWindows } from './ipc-validate.ts';
 import { planWindows } from './window-manager.ts';
 import type { Display, Geometry, WindowId } from './window-manager.ts';
 
@@ -52,10 +55,23 @@ const probe = (url: string, timeoutMs: number): Promise<boolean> =>
   });
 
 /** `pitwall` is the bridge's bin; in this repository it runs as the root script `pnpm pitwall` (generates, then runs). */
-const spawnBridge = (command: string, args: string[]): { kill(): void } =>
-  command === 'pitwall'
-    ? spawn('pnpm', ['-s', 'pitwall', ...args], { cwd: repoRoot, stdio: 'inherit' })
-    : spawn(command, args, { cwd: repoRoot, stdio: 'inherit' });
+const spawnBridge = (command: string, args: string[]): ChildProcess => {
+  const [file, fileArgs] = command === 'pitwall' ? ['pnpm', ['-s', 'pitwall', ...args]] : [command, args];
+  // Detached: the child leads a process group, so `killTree` also stops pnpm's node child.
+  const child = spawn(file as string, fileArgs as string[], { cwd: repoRoot, stdio: 'inherit', detached: true });
+  child.on('error', (error) => console.error(`bridge process: ${error.message}`));
+  child.on('exit', (code, signal) => console.error(`bridge process exited (${signal ?? code})`));
+  return child;
+};
+
+/** Stops a bridge started by `spawnBridge` and its children. */
+const killTree = (pid: number): void => {
+  try {
+    process.kill(-pid, 'SIGTERM');
+  } catch {
+    // already gone
+  }
+};
 
 const displays = (): Display[] => {
   const primary = screen.getPrimaryDisplay();
@@ -103,11 +119,18 @@ const reportGeometry = (win: BrowserWindow): void => {
   win.on('closed', () => clearTimeout(timer));
 };
 
-const pageUrl = (id: WindowId): string => {
-  const query = `?window=${encodeURIComponent(id)}&ws=${WS_PORT}`;
-  return dev
-    ? `http://localhost:${UI_PORT}/${query}`
-    : `file://${path.join(repoRoot, 'apps/ui/dist/index.html')}${query}`;
+/** The page the app shows, without the query. */
+const pageBase = (): string =>
+  dev ? `http://localhost:${UI_PORT}/` : pathToFileURL(path.join(repoRoot, 'apps/ui/dist/index.html')).href;
+
+const pageUrl = (id: WindowId): string => `${pageBase()}?window=${encodeURIComponent(id)}&ws=${WS_PORT}`;
+
+/** A page may not open windows and may not leave the app's own page. */
+const lockNavigation = (win: BrowserWindow): void => {
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  win.webContents.on('will-navigate', (event, url) => {
+    if (!url.startsWith(pageBase())) event.preventDefault();
+  });
 };
 
 const openWindow = (id: WindowId, bounds: Rectangle): void => {
@@ -125,6 +148,7 @@ const openWindow = (id: WindowId, bounds: Rectangle): void => {
   windows.set(id, win);
   win.on('closed', () => windows.delete(id));
   blockBrowserShortcuts(win);
+  lockNavigation(win);
   reportGeometry(win);
   void win.loadURL(pageUrl(id));
 };
@@ -137,15 +161,26 @@ const ensureWindows = (desired: ReadonlyArray<{ id: WindowId; geometry?: Geometr
   for (const { id, bounds } of plan.move) windows.get(id)?.setBounds(bounds);
 };
 
-ipcMain.on('ensureWindows', (_event, desired: unknown) => {
-  if (Array.isArray(desired)) ensureWindows(desired as Array<{ id: WindowId; geometry?: Geometry }>);
+let warnedInvalid = false;
+ipcMain.on('ensureWindows', (_event, raw: unknown) => {
+  const desired = parseEnsureWindows(raw);
+  if (desired !== undefined) ensureWindows(desired);
+  else if (!warnedInvalid) {
+    warnedInvalid = true;
+    console.error('ignored an invalid ensureWindows request');
+  }
 });
 ipcMain.on('openPath', (_event, file: unknown) => {
-  if (typeof file === 'string') void shell.openPath(file);
+  if (isAllowedOpenPath(repoRoot, file, dev)) void shell.openPath(file);
 });
 
 void app.whenReady().then(async () => {
-  bridge = await ensureBridge({ port: WS_PORT, probe, spawn: spawnBridge, args: bridgeArgs });
+  try {
+    bridge = await ensureBridge({ port: WS_PORT, probe, spawn: spawnBridge, killTree, args: bridgeArgs });
+  } catch (error) {
+    // The windows still open and show the connection state; the engineer can start the bridge by hand.
+    console.error(error instanceof Error ? error.message : error);
+  }
   ensureWindows([{ id: FIRST_WINDOW }]);
 });
 app.on('window-all-closed', () => app.quit());
