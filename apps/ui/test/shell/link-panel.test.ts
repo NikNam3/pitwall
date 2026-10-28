@@ -29,10 +29,6 @@ import WindowShell from '../../src/shell/windows/WindowShell.svelte';
 const FEED = feedId('f1');
 const OPTIONS = { mode: 'a', count: 3, flag: false };
 const GEO: Geometry = { screen: 0, x: 0, y: 0, width: 1920, height: 1080 };
-const workbook: Workbook = {
-  name: 'race',
-  windows: [{ id: 'main', geometry: GEO, layout: {}, panels: { p1: { widget: 'probe', options: OPTIONS, linkGroup: 1 } } }],
-};
 const group1 = (extra: Partial<LinkGroup> = {}): LinkGroup => ({ id: 1, primary: 'player', compare: [], window: { kind: 'live' }, ...extra });
 const session = (updatedAt: number, playerCar: number) => ({ feedId: FEED, playerCar: carId(playerCar), session: { updatedAt } });
 const cars = [

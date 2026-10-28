@@ -295,7 +295,8 @@ describe('session segment: lap and clock', () => {
 describe('replay lap input width', () => {
   it('is NUMBER_INPUT_COLS characters wide, set from the constant', async () => {
     const { NUMBER_INPUT_COLS } = await import('../../src/shell/commands/overlay-sizes.ts');
-    await setup('replay');
+    const t = await setup('replay');
+    await t.push('replay.status', replayStatus(false));
     expect((screen.getByTestId('replay-lap') as HTMLInputElement).style.width).toBe(`${NUMBER_INPUT_COLS}ch`);
   });
 });
