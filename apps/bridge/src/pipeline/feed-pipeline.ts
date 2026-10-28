@@ -1,0 +1,223 @@
+// One feed end to end (spec 4): PacketSource → decode → SessionTracker → SessionProcessor → TopicHub,
+// with the feed's health, its session files and its storage alongside.
+import { toSessionTime, type FeedId, type SessionTime } from '@pitwall/domain';
+import { CalculatorRegistry, SessionTracker, type FrameMetrics, type TrackerEvent } from '@pitwall/engine';
+import { decode } from '@pitwall/protocol';
+import type { Feature } from '../features/feature.ts';
+import { feedStatusOf } from '../features/feed-status/feed-status.ts';
+import type { TopicHub } from '../hub/topic-hub.ts';
+import type { PacketSource, RawPacket } from '../input/packet-source.ts';
+import type { Logger } from '../log.ts';
+import type { Db } from '../storage/db.ts';
+import { SessionFile, sessionRecordingName } from '../storage/session-files.ts';
+import { FeedAlerts, type WriteFailure } from './feed-alerts.ts';
+import { FeedMonitor } from './feed-monitor.ts';
+import { sessionClock, type SessionClock } from './session-clock.ts';
+import { SessionProcessor } from './session-processor.ts';
+import { SessionStorage } from './session-storage.ts';
+import { TopicPublisher } from './topic-publisher.ts';
+
+export type FeedPipelineOptions = {
+  feedId: FeedId;
+  source: PacketSource;
+  hub: TopicHub;
+  features: readonly Feature[];
+  log: Logger;
+  /**
+   * The database; with `recordingsDir` also one `.pwrec.gz` per session. `sourcePath` is the recording being
+   * replayed: its start dates the sessions, so a replay stores the same times on every run.
+   */
+  storage?: { db: Db; recordingsDir?: string; sourcePath?: string };
+  /** Where debug dumps go; without it none are written. */
+  dumpsDir?: string;
+  /** Names the session files and dates live sessions. Default `Date.now`. */
+  wallClock?: () => number;
+  /**
+   * Live only: re-evaluates the feed's health every `everyMs`, at `clock()` (the source's receive clock), so a
+   * silent feed turns stale without a packet arriving. Replays leave it out and stay clock-free.
+   */
+  staleCheck?: { clock: () => number; everyMs: number };
+};
+
+type SessionStarted = Extract<TrackerEvent, { type: 'sessionStarted' }>;
+
+/**
+ * Runs one feed: every datagram updates the feed's health, the tracker splits the stream into sessions and frames,
+ * and each session runs in its own `SessionProcessor`. Nothing a datagram does throws out of the pipeline:
+ * decode errors are counted, write failures become insights, bugs are logged.
+ */
+export class FeedPipeline {
+  /** Settles once the source is done, the last session has ended and its file is closed; rejects with a source failure. */
+  readonly done: Promise<void>;
+  readonly #o: FeedPipelineOptions;
+  readonly #feedId: FeedId;
+  readonly #log: Logger;
+  readonly #registry: CalculatorRegistry;
+  readonly #publisher: TopicPublisher;
+  readonly #tracker: SessionTracker;
+  readonly #monitor = new FeedMonitor();
+  readonly #alerts: FeedAlerts;
+  readonly #wallClock: () => number;
+  readonly #sessionClock: SessionClock;
+  readonly #done: PromiseWithResolvers<void> = Promise.withResolvers();
+  /** Session files still closing. */
+  readonly #closing: Promise<void>[] = [];
+  #session: SessionProcessor | undefined;
+  #lastReceivedAtMs = 0;
+  #staleTimer: NodeJS.Timeout | undefined;
+  #started = false;
+
+  constructor(opts: FeedPipelineOptions) {
+    this.#o = opts;
+    this.#feedId = opts.feedId;
+    this.#log = opts.log;
+    this.#registry = CalculatorRegistry.build(opts.features.flatMap((feature) => feature.calculators));
+    this.#publisher = new TopicPublisher(opts.feedId, opts.hub, opts.features);
+    this.#tracker = new SessionTracker({ feedId: opts.feedId });
+    this.#alerts = new FeedAlerts(opts.feedId);
+    this.#wallClock = opts.wallClock ?? Date.now;
+    this.#sessionClock = sessionClock({ sourcePath: opts.storage?.sourcePath, wallClock: this.#wallClock, log: opts.log });
+    this.done = this.#done.promise;
+    this.done.catch(() => {});
+  }
+
+  start(): void {
+    if (this.#started) throw new Error('FeedPipeline: already started');
+    this.#started = true;
+    const { source, staleCheck } = this.#o;
+    if (staleCheck !== undefined) {
+      this.#staleTimer = setInterval(() => this.#guarded('stale check', () => this.#checkFeed(staleCheck.clock())), staleCheck.everyMs);
+    }
+    source.start((packet) => this.#onPacket(packet));
+    this.#finish().then(this.#done.resolve, this.#done.reject);
+  }
+
+  /** Stops the source and resolves once `done` has settled. */
+  async stop(): Promise<void> {
+    if (!this.#started) {
+      this.#started = true;
+      this.#done.resolve();
+    }
+    await this.#o.source.stop();
+    await this.done.catch(() => {});
+  }
+
+  async #finish(): Promise<void> {
+    let failure: { error: unknown } | undefined;
+    try {
+      await this.#o.source.done;
+    } catch (error) {
+      failure = { error };
+      this.#log.error({ feedId: this.#feedId, err: error }, 'packet source failed');
+    }
+    clearInterval(this.#staleTimer);
+    this.#guarded('stream end', () => {
+      for (const event of this.#tracker.end()) this.#handle(event, this.#lastReceivedAtMs);
+    });
+    await Promise.all(this.#closing);
+    if (failure !== undefined) throw failure.error;
+  }
+
+  #onPacket({ receivedAtMs, bytes }: RawPacket): void {
+    this.#lastReceivedAtMs = receivedAtMs;
+    this.#monitor.onPacket(receivedAtMs);
+    this.#guarded('datagram', () => {
+      const decoded = decode(bytes);
+      if (decoded.ok) {
+        for (const event of this.#tracker.push(decoded.packet, receivedAtMs)) this.#handle(event, receivedAtMs);
+      } else {
+        this.#monitor.onDecodeError(decoded.error, receivedAtMs);
+        this.#log.debug({ feedId: this.#feedId, error: decoded.error }, 'datagram not decoded');
+      }
+      this.#session?.record(receivedAtMs, bytes);
+      const metrics = this.#tracker.metrics;
+      this.#monitor.sample(metrics, receivedAtMs);
+      this.#checkFeed(receivedAtMs, metrics);
+    });
+  }
+
+  #handle(event: TrackerEvent, receivedAtMs: number): void {
+    switch (event.type) {
+      case 'sessionStarted':
+        this.#startSession(event);
+        return;
+      case 'frame':
+        this.#session?.push(event.frame);
+        return;
+      case 'sessionEnded':
+        this.#endSession(receivedAtMs);
+        return;
+    }
+  }
+
+  /** A new session: every topic of the feed starts over, apart from the feed's own insights that still hold. */
+  #startSession(event: SessionStarted): void {
+    const { feedId, hub, log, dumpsDir } = this.#o;
+    this.#alerts.clearWriteFailures(this.#sessionTime());
+    hub.resetFeed(feedId);
+    this.#publisher.publishInsights(this.#alerts.active.map((insight) => ({ type: 'raised', insight })));
+    const startedAt = this.#sessionClock(event.receivedAtMs);
+    const db = this.#o.storage?.db;
+    const storage = db && new SessionStorage(db, { log, onError: (error) => this.#writeFailed('storage', error) });
+    const file = this.#openSessionFile(event, startedAt);
+    this.#session = new SessionProcessor({
+      feedId,
+      sessionUid: event.sessionUid,
+      session: event.session,
+      startedAt,
+      registry: this.#registry,
+      publisher: this.#publisher,
+      log,
+      feedView: () => this.#monitor.view(this.#tracker.metrics, this.#lastReceivedAtMs),
+      ...(storage && { storage }),
+      ...(file && { file }),
+      ...(dumpsDir !== undefined && { dumpsDir }),
+    });
+  }
+
+  #openSessionFile(event: SessionStarted, startedAt: string): SessionFile | undefined {
+    const dir = this.#o.storage?.recordingsDir;
+    if (dir === undefined) return undefined;
+    return new SessionFile({
+      dir,
+      name: sessionRecordingName(this.#wallClock(), event.sessionUid),
+      meta: { recorderVersion: 'pitwall-bridge', startedAt, listenPort: 0 },
+      originMs: event.receivedAtMs,
+      onError: (error) => this.#writeFailed('pwrec', error),
+    });
+  }
+
+  #endSession(receivedAtMs: number): void {
+    const session = this.#session;
+    if (session === undefined) return;
+    this.#session = undefined;
+    this.#closing.push(session.end(receivedAtMs));
+  }
+
+  /** Publishes `feed.status` and the feed-health insights as they stand at `nowMs`. */
+  #checkFeed(nowMs: number, metrics: FrameMetrics = this.#tracker.metrics): void {
+    const view = this.#monitor.view(metrics, nowMs);
+    const status = feedStatusOf(this.#feedId, view);
+    this.#o.hub.publishState(this.#feedId, 'feed.status', () => status);
+    this.#publisher.publishInsights(this.#alerts.feedChanged(view, metrics.lastSessionTime ?? toSessionTime(0)));
+  }
+
+  #writeFailed(failure: WriteFailure, error: unknown): void {
+    this.#log.error({ feedId: this.#feedId, failure, err: error }, 'write failed, off for the rest of the session');
+    this.#publisher.publishInsights(this.#alerts.writeFailed(failure, error, this.#sessionTime()));
+  }
+
+  /** Feed-level insights are stamped with the newest session time seen, 0 before any. */
+  #sessionTime(): SessionTime {
+    return this.#tracker.metrics.lastSessionTime ?? toSessionTime(0);
+  }
+
+  /** Bugs are logged, never thrown into the source's callback or a timer. */
+  #guarded(what: string, work: () => void): void {
+    try {
+      work();
+    } catch (err) {
+      this.#log.error({ feedId: this.#feedId, err }, `${what} processing failed`);
+    }
+  }
+}
