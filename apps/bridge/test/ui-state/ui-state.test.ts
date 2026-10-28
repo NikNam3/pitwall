@@ -31,7 +31,7 @@ function setup(dir = mkdtempSync(join(tmpdir(), 'ui-state-')), before?: (ui: str
   opened.push(state);
   let n = 0;
   /** The current value of a topic, from a fresh subscription's snapshot. */
-  const read = <T = any>(topic: TopicName): T => { // eslint-disable-line @typescript-eslint/no-explicit-any
+  const read = <T = any>(topic: TopicName): T => {
     const id = `r${n++}`;
     hub.subscribe({ clientId: 'c1', id, topic, params: {}, feedId: undefined });
     const m = sent.filter((x) => 'id' in x && x.id === id).find((x) => x.type === 'snapshot');
@@ -287,5 +287,51 @@ describe('keys.json', () => {
     expect(existsSync(file(ui, 'keys.json'))).toBe(false);
     writeFileSync(file(ui, 'keys.json'), JSON.stringify({ a: 1 }));
     await vi.waitFor(() => expect(read(SETTINGS).keys).toEqual({ a: 1 }), WAIT);
+  });
+});
+
+describe('autosave never overwrites a hand edit', () => {
+  it('a valid hand edit made while a save is pending wins over the pending save', async () => {
+    const { ui, state, read } = setup();
+    const path = file(ui, 'workbooks', 'default.json');
+    const edited: Workbook = { name: 'default', windows: [win('hand', 'laps')] };
+    const text = JSON.stringify(edited, null, 2);
+    state.apply({ kind: 'workbook.updateWindow', window: win('a') });
+    await settle(10);
+    writeFileSync(path, text);
+    await settle(700); // past the debounce and the watcher
+    expect(readFileSync(path, 'utf8')).toBe(text);
+    await vi.waitFor(() => expect(read(WORKBOOKS).active).toEqual(edited), WAIT);
+    expect(read(WORKBOOKS).error).toBeUndefined();
+  });
+  it('an invalid hand edit made while a save is pending keeps its text, sets error and keeps active', async () => {
+    const { ui, state, read } = setup();
+    const path = file(ui, 'workbooks', 'default.json');
+    const good = read(WORKBOOKS).active;
+    state.apply({ kind: 'workbook.updateWindow', window: win('a') });
+    await settle(10);
+    writeFileSync(path, '{ not json');
+    await settle(700);
+    expect(readFileSync(path, 'utf8')).toBe('{ not json');
+    await vi.waitFor(() => expect(typeof read(WORKBOOKS).error).toBe('string'), WAIT);
+    expect(read(WORKBOOKS).active.windows.map((w: WorkbookWindow) => w.id)).toEqual(['main', 'a']);
+    expect(good.windows).toHaveLength(1);
+  });
+  it('workbook.open right after a pending updateWindow does not overwrite a hand edit made in between', async () => {
+    const { ui, state, read } = setup();
+    const path = file(ui, 'workbooks', 'default.json');
+    state.apply({ kind: 'workbook.saveAs', name: 'other' });
+    state.apply({ kind: 'workbook.open', name: 'default' });
+    await vi.waitFor(() => expect(readJson(file(ui, 'workbooks', 'other.json')).name).toBe('other'), WAIT);
+    await settle(400);
+    state.apply({ kind: 'workbook.updateWindow', window: win('a') });
+    const text = JSON.stringify({ name: 'default', windows: [win('hand')] }, null, 2);
+    await settle(10);
+    writeFileSync(path, text);
+    state.apply({ kind: 'workbook.open', name: 'other' });
+    await settle(700);
+    expect(readFileSync(path, 'utf8')).toBe(text);
+    state.apply({ kind: 'workbook.open', name: 'default' });
+    expect(read(WORKBOOKS).active.windows.map((w: WorkbookWindow) => w.id)).toEqual(['hand']);
   });
 });
