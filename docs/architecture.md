@@ -29,11 +29,15 @@ The UI imports neither `engine` nor `protocol`. See ADR 0003 for why `domain` is
 ## Data flow
 
 ```
-PacketSource (UDP | PwrecFile) → RawPacket → decode → Frame assembler → Frame
-  → Engine.step(state, frame) → state → Scheduler → calculators → topic values / insights
-  → TopicHub (throttle, per client) → WebSocket → UI
-  ↘ PwrecWriter (raw)          ↘ StorageWriter (confirmed history → SQLite)
+PacketSource (UDP | PwrecFile) → RawPacket → decode → SessionTracker + FrameAssembler → Frame
+  → Engine.step(state, frame) → state → Scheduler → calculators (and job triggers → JobRunner → worker)
+  → topic values / insights → TopicHub (throttle, per client) → WebSocket → UI
+  ↘ PwrecWriter (raw + config sidecar)   ↘ StorageWriter (confirmed history → SQLite)
 ```
+
+- `SessionTracker` and `FrameAssembler` are pure and live in `packages/engine/src/frame`. The bridge only feeds them packets.
+- **Calculators run on demand:** a calculator runs when a subscribed topic is bound to it, when no binding references it (it exists for insights), or when a needed calculator reads it. The hub reports demand changes per feed, and the pipeline passes them to the scheduler (`apps/bridge/src/pipeline/demand.ts`). A subscriber that arrives after a session has ended gets `noData` for topics whose calculator never ran.
+- **Jobs** (expensive work, later Monte Carlo) are part of features: each job gets a trigger calculator `job:<id>` with the job's `reads` and cadence. Its output (the job's input) goes to the feed's `JobRunner`, which runs the job in a worker. The result is published as `Computed<T>` = `{ computedFor: { lap, frameId }, value }`. A declared job without a binding, or a binding to an undeclared job, fails at startup (`JobDeclarationError`). Job topics are excluded from the determinism hash.
 
 ## Determinism rules
 
@@ -46,13 +50,24 @@ PacketSource (UDP | PwrecFile) → RawPacket → decode → Frame assembler → 
 
 Several agents work in parallel in git worktrees; a supervisor merges. The architecture prevents conflicts on shared files:
 
-- **Registration by convention, no central lists.** Calculators, topics and widgets register through a file in their feature folder (`src/features/<name>/register.ts`). Adding a feature means adding a folder (ADR 0005).
+- **Registration by convention, no central lists.**
+  - A feature is a folder `apps/bridge/src/features/<name>/register.ts`, collected by a generated index (ADR 0005). It declares calculators, jobs, config and topic bindings.
+  - A topic is a file `packages/contracts/src/topics/<topic name>.ts`, also collected by a generated index (ADR 0006).
+  - `pnpm gen` regenerates both indexes.
+- **Typed bindings:** `bindState`, `bindHistory`, `bindInsights` and `bindJob` (`features/feature.ts`) only compile when the source's value type matches the topic's.
+- **Change tags are domain areas** (`session, identity, timing, tyres, energy, condition, dynamics, ownCar` and the history lists), not packet names. A calculator's `reads` uses them.
 - **The supervisor owns the shared files:** `packages/contracts`, `packages/domain`, every `package.json`, the lockfile, base types in `engine`. Workers request changes in their report.
 - **Ports per worktree:** `PITWALL_WS_PORT`, `PITWALL_UDP_PORT` and `PITWALL_UI_PORT` come from the environment, so parallel instances and Playwright runs do not collide.
 
 ## Where state lives
 
-- **Engine state** (`EngineState`): session, one `CarState` per car (identity, timing, tyres, energy, condition, dynamics, own-car data), player and teammate ids. Held in memory, advanced only by `Engine.step(state, frame)`.
-- **History:** append-only inside the engine state; entries become `confirmed` once the game's SessionHistory data settles them.
-- **Calculators:** derive topic values and insights from engine state. They keep no state of their own; whatever they need lives in engine state or history.
-- **Storage:** raw `.pwrec` files per session are the source of truth; one SQLite database (`better-sqlite3`, ADR 0004) is a rebuildable cache written from confirmed history by the bridge. The engine has no database access; the bridge passes earlier sessions of the weekend in as read-only `WeekendContext`.
+- **Engine state** (`EngineState`): session, one `CarState` per car (identity, timing, tyres, energy, condition, dynamics, own-car data, `updatedAt`), player and teammate ids. Held in memory, advanced only by `Engine.step(state, frame)`. Calculators see it read-only and without the in-progress trackers (`open`).
+- **Freshness:** `CarState.updatedAt` holds, per data source, the session time of its last update for that car. `SOURCE_INTERVAL_MS` (domain) gives each source's expected interval, and `feed.status.cadenceMs` the measured menu-rate step. The UI decides when a value is stale; the engine has no stale reason.
+- **History:** append-only inside the engine state. Each lap is appended twice, provisional then confirmed. Read laps through `currentLaps` / `addLaps` (domain), which return the current record per car and lap.
+- **Calculators:** quick calculators keep no state. Incremental calculators keep an accumulator that is always a fold over a history prefix (tested: incremental = from scratch). Whatever has to be remembered lives in engine state or history.
+- **Config:** features declare read-only config (`defineConfig`). `<PITWALL_DATA_DIR>/config.json` overrides it, and calculators read it from `EngineView.config`. Each live session stores its effective config as a sidecar next to its recording, and replays use that sidecar (ADR 0007).
+- **Storage:** raw `.pwrec` files per session are the source of truth; one SQLite database (`better-sqlite3`, ADR 0004) is a rebuildable cache written from confirmed history by the bridge. The engine has no database access. The bridge passes the player's earlier sessions of the weekend in as read-only `WeekendContext`, with every driver's records per session. `live` rebuilds an outdated database from the recordings by itself.
+
+## Second car (later)
+
+Out of MVP scope, but no code may assume a single feed. ADR 0008 lists what the second car will need: storage keyed per view `(sessionUid, playerCar)`, several feeds in one bridge, and a weekend context per driver.

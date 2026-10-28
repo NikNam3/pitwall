@@ -1,6 +1,6 @@
 # Pitwall: Sub-project 1 "Foundation", Design
 
-Status: approved · Date: 2026-10-28 · Revised during planning (domain package; corrections from the recordings, see the plan's "Corrections to the spec")
+Status: approved · Date: 2026-10-28 · Revised during planning (domain package; corrections from the recordings, see the plan's "Corrections to the spec") and after the foundation review (groundwork plan `docs/superpowers/plans/2026-10-28-groundwork.md`; decisions in ADRs 0006–0008)
 
 ## 1. Context
 
@@ -192,17 +192,18 @@ type EngineState = {
 - `condition`: bodywork damage, PU damage and wear, gearbox, faults
 - `dynamics`: speed, throttle, brake, steering, gear, RPM, DRS, world position, G-forces, orientation
 - `ownCar` (player only): MotionEx values, setup, brake bias, differential
+- `updatedAt`: per data source (`lapData`, `motion`, `telemetry`, `status`, `motionEx`, `damage`, `tyreSets`, `sessionHistory`, `participants`, `setups`), the session time it last updated this car. With `SOURCE_INTERVAL_MS` (domain) and `feed.status.cadenceMs`, the UI decides when a value is stale (one factor, "about 3 missed updates").
 
 ### 6.2 Interpretation rules
 - **Named corners:** `Corners<T> = { fl, fr, rl, rr }`, translated from the game order RL/RR/FL/FR exactly once.
 - **Availability as a type:**
   ```ts
   type Known<T> = { known: true; value: T; at: SessionTime }
-                | { known: false; reason: 'restricted' | 'notReceived' | 'notApplicable' | 'stale' };
+                | { known: false; reason: 'restricted' | 'notReceived' | 'notApplicable' };
   ```
   - `restricted`: human, not your own car, telemetry restricted → the fields from the spec's list (Car Status, Car Damage, Tyre Sets) are **not** taken as 0
   - `notApplicable`: e.g. carcass temperature with the setting "surface only", MotionEx for other cars, setups of other players online
-  - `stale`: last update older than the topic's threshold
+  - Staleness is not a reason: the UI decides it from `updatedAt` (see 6.1).
 - **Units:** times in integer ms, distances in m, speed in km/h, temperatures in °C, pressure in psi, fuel in kg, energy in J, angles in rad. Formatting happens only in the UI.
 - **Compounds:** actual (C0–C6, inter, wet; F2/Classic as in the spec) and visual (soft, medium, hard, inter, wet) as separate enums.
 - **`DriverKey`** (stable across a weekend's sessions): AI → `driverId`; human → `networkId` + name + race number.
@@ -213,6 +214,7 @@ type EngineState = {
   - **provisional:** when `currentLapNum` goes up, time from `lastLapTimeInMS`.
   - **confirmed:** when the SessionHistory packet for that car contains the lap; differences are corrected (the authoritative value wins, the correction is logged).
   - Lap detection works on state changes, so a lost frame can't swallow a lap.
+  - Every reader takes the current record per car and lap through `currentLaps` / `addLaps` (domain), so the rule "confirmed wins" exists once.
 - **`StintRecord`:** car, first/last lap, actual and visual compound, tyre age at fitting.
 - **`PitStopRecord`:** car, lap, pit-lane entry and exit (session time), time in the pit lane, stationary time, flag status (green/SC/VSC), penalty served.
 - **`FlagPhase`:** `SC | VSC | red`, start and end (session time and leader lap), plus SC event phases (deployed, returning, returned, resume). A red phase ends at the next lights out, an SC restart, or the session end.
@@ -250,19 +252,23 @@ interface IncrementalCalculator<Acc, Out> {
 - **Mandatory test:** incremental = from scratch (property test plus fixtures).
 
 **Jobs:** expensive, asynchronous (implemented in sub-project 1 only as a framework, with no productive job).
-- run in a worker thread, get a read-only snapshot, are triggered by events
-- the result is published as a topic with `computedFor` (lap/frame)
-- a newer trigger replaces a running job
-- randomness only through the seeded generator
+- `Job<In, Out>` is an engine type (`packages/engine/src/calc/types.ts`), so `strategy` can declare jobs; a feature lists them in `jobs` and binds each with `bindJob`
+- triggered through a quick calculator `job:<id>` (the job's `reads` and cadence; `compute` = `prepare`), so demand and dependencies work as for any calculator
+- run in a worker thread (one `JobRunner` per feed pipeline, seed 0); the result is published as `Computed<T>` = `{ computedFor: { lap, frameId }, value }`
+- a newer trigger replaces a running job; a session end cancels running jobs
+- a declared job without a binding, or a binding to an undeclared job, fails at startup
+- randomness only through the seeded generator; job topics are excluded from the determinism hash
 
 ### 7.2 Rule for state
 State that can't be derived from history belongs in the engine's history, not in a calculator.
 
 ### 7.3 Scheduler and registry
 - Calculators register themselves by convention (see 3.3); the registry collects them on startup, with no central list.
+- `reads` uses change tags named after domain areas, not packets: `session, identity, timing, tyres, energy, condition, dynamics, ownCar` plus the history lists `laps, stints, pitStops, flagPhases, events, miniSectors`. Each sub-step tags only the area it wrote.
 - The registry builds a dependency graph from `reads`; a cycle is a startup error. Duplicate IDs are a startup error too.
 - `Cadence = 'frame' | { hz: number } | 'lapCompleted' | 'pitStop' | 'flagChange' | 'sessionChange'`, measured in session time.
-- Per frame, the scheduler runs calculators that are **due**, **needed** (subscribed topic, storage, or a dependent calculator) and **affected** (input changed).
+- Per frame, the scheduler runs calculators that are **due**, **needed** and **affected** (input changed). **Needed** means one of three things: bound to a topic that has a subscriber; referenced by no binding at all (it exists for insights); or read by a needed calculator. The hub reports demand per feed. Storage reads history, not calculator outputs.
+- **Config (ADR 0007):** features declare read-only config with `defineConfig(key, defaults)`. `<PITWALL_DATA_DIR>/config.json` overrides it. Calculators read it from `EngineView.config`. Each live session stores its effective config as `<session file>.config.json`, and replays use it.
 - An exception in a calculator marks its output topic `errored` and raises an insight; other calculators keep running.
 
 ## 8. Topics, WebSocket, insights
@@ -274,7 +280,7 @@ type TopicDef<P, V> = {
 };
 ```
 - `state`: the latest value replaces the old one. `append`: new entries are added.
-- Topic definitions live in `packages/contracts` (owned by the supervisor, see 3.3). The producing calculator is linked to its topic through feature registration.
+- Topic definitions live in `packages/contracts/src/topics/`, one file per topic, collected by a generated index (ADR 0006; owned by the supervisor, see 3.3). The producing calculator is linked to its topic through a typed binding in its feature (`bindState`, `bindHistory`, `bindInsights`, `bindJob`).
 - Each topic carries `feedId` (and `carId` where needed).
 
 ### 8.2 WebSocket protocol
@@ -328,11 +334,12 @@ type Insight = {
 - Tables: `weekends`, `sessions` (UID, type, track, settings, `.pwrec` path), `drivers` (`DriverKey` per session), `laps`, `stints`, `pit_stops`, `flag_phases`, `events`.
 - Written when history entries are `confirmed`, in batches with one transaction each.
 - Library: `better-sqlite3`. Check whether the built-in `node:sqlite` is mature enough in the Node version used; if so, prefer it (no native dependency).
-- No migrations: on a schema version change, the database is rebuilt via `pitwall reprocess`.
+- No migrations: on a schema version change, `pitwall live` rebuilds the database from the recordings by itself; `pitwall reprocess` does it on request. A rebuild marks the database outdated until it has finished, so an interrupted one is redone.
+- One feed per session is assumed by the `session_uid` keys; a second car needs keys per view (ADR 0008).
 
 ### 9.3 Repository and WeekendContext
 - `WeekendRepository` as the only access route (`sessionsOf`, `stintsOf`, `lapsOf`, `pitStopsOf` …).
-- When a session starts, the bridge waits for the first Participants packet (it needs the player's `DriverKey`), loads a `WeekendContext` (the same `DriverKey`'s earlier sessions that weekend) and passes it to the engine as **read-only input**. The engine has no database access.
+- When a session starts, the bridge waits for the first Participants packet (it needs the player's `DriverKey`), loads a `WeekendContext` (the same `DriverKey`'s earlier sessions that weekend, each with every stored driver's laps, stints and pit stops) and passes it to the engine as **read-only input**. The engine has no database access.
 
 ### 9.4 Tools
 - `pitwall reprocess [--weekend <id>]`: rebuilds the database from `.pwrec` files.
@@ -401,3 +408,5 @@ type Insight = {
   - Motion "only sent while player is in control" (spec) against the observed behaviour (so far always as often as LapData)
   - maturity of `node:sqlite` (9.2)
 - The definition of "clean UI" is worked out with the user in sub-project 2.
+- A second car (team view) is out of MVP scope; ADR 0008 lists what it needs.
+- A subscriber that arrives after a session has ended gets `noData` for topics whose calculator never ran (calculators run on demand). To revisit if replay review in the UI needs it.
