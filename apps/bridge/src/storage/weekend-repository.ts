@@ -75,7 +75,10 @@ export class WeekendRepository {
     return (this.statements.events.all(sessionUid) as string[]).map((json) => JSON.parse(json) as RaceEvent);
   }
 
-  /** What `driverKey` did in this weekend's sessions, oldest first; with `before`, only sessions that started earlier than it. */
+  /**
+   * The weekend's sessions `driverKey` (the player) took part in, oldest first, each with every driver stored for it and
+   * that driver's own records, ordered by car id; with `before`, only sessions that started earlier than it.
+   */
   weekendContext(weekendId: string, driverKey: DriverKey, opts: { before?: SessionUid } = {}): WeekendContext {
     const rows = this.statements.weekendSessionsOfDriverBefore.all({
       weekendId,
@@ -88,9 +91,12 @@ export class WeekendRepository {
       sessions: rows.map((row) => ({
         sessionUid: row.session_uid,
         sessionType: row.session_type,
-        laps: this.lapsOf(row.session_uid, driverKey),
-        stints: this.stintsOf(row.session_uid, driverKey),
-        pitStops: this.pitStopsOf(row.session_uid, driverKey),
+        drivers: this.driversOf(row.session_uid).map((driver) => ({
+          driverKey: driver.driverKey,
+          laps: this.lapsOf(row.session_uid, driver.driverKey),
+          stints: this.stintsOf(row.session_uid, driver.driverKey),
+          pitStops: this.pitStopsOf(row.session_uid, driver.driverKey),
+        })),
       })),
     };
   }
@@ -100,8 +106,12 @@ export class WeekendRepository {
     return rows.map((json) => JSON.parse(json) as T);
   }
 
+  private driversOf(sessionUid: SessionUid): SessionRow['drivers'] {
+    const rows = this.statements.drivers.all(sessionUid) as DriverDbRow[];
+    return rows.map((d) => ({ carId: d.car_id as CarId, driverKey: JSON.parse(d.key_json) as DriverKey }));
+  }
+
   private toSession(row: SessionDbRow): SessionRow {
-    const drivers = this.statements.drivers.all(row.session_uid) as DriverDbRow[];
     return {
       sessionUid: row.session_uid,
       weekendId: row.weekend_id,
@@ -111,7 +121,7 @@ export class WeekendRepository {
       startedAt: row.started_at,
       pwrecPath: row.pwrec_path,
       settings: JSON.parse(row.settings) as Record<string, number>,
-      drivers: drivers.map((d) => ({ carId: d.car_id as CarId, driverKey: JSON.parse(d.key_json) as DriverKey })),
+      drivers: this.driversOf(row.session_uid),
     };
   }
 }

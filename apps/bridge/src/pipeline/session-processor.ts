@@ -117,7 +117,7 @@ export class SessionProcessor {
     for (const frame of frames) this.#apply(running, frame);
   }
 
-  /** Stores the session's drivers and loads the player's earlier sessions of the weekend. */
+  /** Stores the session's drivers and loads the player's earlier sessions of the weekend, with every driver in them. */
   #identify(participants: ParticipantsPacket, playerCarIndex: number): WeekendContext | undefined {
     const { session, storage } = this.#o;
     this.#storeDrivers(participants);

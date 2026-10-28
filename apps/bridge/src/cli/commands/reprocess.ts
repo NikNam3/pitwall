@@ -1,21 +1,11 @@
-import { existsSync, readdirSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync } from 'node:fs';
 import { StartupError } from '../../startup-error.ts';
 import { dataDir } from '../../storage/data-dir.ts';
 import { openDatabase, type Db } from '../../storage/db.ts';
 import { StorageWriter } from '../../storage/storage-writer.ts';
 import { WeekendRepository } from '../../storage/weekend-repository.ts';
-import { cliLogger, EXIT_INTERRUPTED, type CliIo } from '../io.ts';
-import { processRecording } from '../process-recording.ts';
-
-const RECORDING_SUFFIX = '.pwrec.gz';
-
-function allRecordings(recordingsDir: string): string[] {
-  return readdirSync(recordingsDir)
-    .filter((name) => name.endsWith(RECORDING_SUFFIX))
-    .sort()
-    .map((name) => join(recordingsDir, name));
-}
+import { EXIT_INTERRUPTED, type CliIo } from '../io.ts';
+import { processRecordings, rebuildDatabase } from '../rebuild-database.ts';
 
 /**
  * The recordings the stored sessions of one weekend came from, after deleting the sessions they rebuild, so the new
@@ -41,25 +31,20 @@ function clearWeekend(db: Db, weekendId: string): string[] | undefined {
 export async function run(_positionals: string[], values: { weekend?: string | undefined }, io: CliIo): Promise<number> {
   const dirs = dataDir(io.env);
   if (values.weekend === undefined) {
-    for (const suffix of ['', '-wal', '-shm']) rmSync(dirs.dbPath + suffix, { force: true });
+    const rebuilt = await rebuildDatabase(dirs, io);
+    if (rebuilt === undefined) return EXIT_INTERRUPTED;
+    rebuilt.db.close();
+    io.out(`reprocessed ${rebuilt.recordings} recordings`);
+    return 0;
   }
   const db = openDatabase(dirs.dbPath);
   try {
-    const files = values.weekend === undefined ? allRecordings(dirs.recordings) : clearWeekend(db, values.weekend);
+    const files = clearWeekend(db, values.weekend);
     if (files === undefined) {
       io.err(`pitwall: no stored sessions of weekend ${values.weekend}`);
       return 1;
     }
-    const log = cliLogger(io, 'warn');
-    for (const file of files) {
-      try {
-        await processRecording(file, db, log, io.signal);
-      } catch (error) {
-        if (!io.signal.aborted) throw error;
-        io.err('pitwall: interrupted; the database is incomplete, run "pitwall reprocess" again');
-        return EXIT_INTERRUPTED;
-      }
-    }
+    if (!(await processRecordings(files, db, io))) return EXIT_INTERRUPTED;
     io.out(`reprocessed ${files.length} recordings`);
     return 0;
   } finally {
