@@ -3,7 +3,12 @@ import { feedId, toSessionTime, type SessionTime } from '@pitwall/domain';
 import {
   decode,
   encode,
+  HEADER_SIZE,
+  headerSchema,
   PacketId,
+  readField,
+  writeField,
+  type PacketHeader,
   type CarStatusPacket,
   type CarTelemetryPacket,
   type EventDetails,
@@ -55,25 +60,51 @@ const SESSION_DEFAULTS = {
   tyreTemperature: 1,
 };
 
+/** Carries the previous frame's menu packets and notes the slots the test reaches for (to read or to change). */
 class Draft implements FrameDraft {
   readonly index: number;
   readonly sessionTime: SessionTime;
-  motion: MotionPacket;
-  lapData: LapDataPacket;
-  telemetry: CarTelemetryPacket;
-  status: CarStatusPacket;
-  motionEx: MotionExPacket;
   readonly added: Packet[] = [];
   readonly dropped = new Set<MenuSlot>();
+  /** The other slots are sent exactly as in the previous frame. */
+  readonly touched = new Set<MenuSlot>();
+  readonly #menu: Menu;
 
   constructor(index: number, sessionTime: SessionTime, menu: Menu) {
     this.index = index;
     this.sessionTime = sessionTime;
-    this.motion = menu.motion;
-    this.lapData = menu.lapData;
-    this.telemetry = menu.telemetry;
-    this.status = menu.status;
-    this.motionEx = menu.motionEx;
+    this.#menu = { ...menu };
+  }
+
+  get motion(): MotionPacket {
+    return this.#touch('motion');
+  }
+  set motion(packet: MotionPacket) {
+    this.#replace('motion', packet);
+  }
+  get lapData(): LapDataPacket {
+    return this.#touch('lapData');
+  }
+  set lapData(packet: LapDataPacket) {
+    this.#replace('lapData', packet);
+  }
+  get telemetry(): CarTelemetryPacket {
+    return this.#touch('telemetry');
+  }
+  set telemetry(packet: CarTelemetryPacket) {
+    this.#replace('telemetry', packet);
+  }
+  get status(): CarStatusPacket {
+    return this.#touch('status');
+  }
+  set status(packet: CarStatusPacket) {
+    this.#replace('status', packet);
+  }
+  get motionEx(): MotionExPacket {
+    return this.#touch('motionEx');
+  }
+  set motionEx(packet: MotionExPacket) {
+    this.#replace('motionEx', packet);
   }
 
   add<N extends PacketName>(name: N, o?: DeepPartial<PacketOf<N>>): PacketOf<N> {
@@ -87,7 +118,17 @@ class Draft implements FrameDraft {
   }
 
   menu(): Menu {
-    return { motion: this.motion, lapData: this.lapData, telemetry: this.telemetry, status: this.status, motionEx: this.motionEx };
+    return { ...this.#menu };
+  }
+
+  #touch<S extends MenuSlot>(slot: S): Menu[S] {
+    this.touched.add(slot);
+    return this.#menu[slot];
+  }
+
+  #replace<S extends MenuSlot>(slot: S, packet: Menu[S]): void {
+    this.touched.add(slot);
+    this.#menu[slot] = packet;
   }
 }
 
@@ -95,6 +136,12 @@ const roundTrip = (packet: Packet): Packet => {
   const decoded = decode(encode(packet));
   if (!decoded.ok) throw new Error(`scenario packet ${packet.packetId}: ${decoded.error.kind}`);
   return decoded.packet;
+};
+const readBack = ({ packet, receivedAtMs }: Timed): Timed => ({ packet: roundTrip(packet), receivedAtMs });
+const headerView = new DataView(new ArrayBuffer(HEADER_SIZE));
+const readBackHeader = (header: PacketHeader): PacketHeader => {
+  writeField(headerSchema, headerView, 0, header);
+  return readField(headerSchema, headerView, 0);
 };
 
 export class ScenarioBuilder {
@@ -105,6 +152,11 @@ export class ScenarioBuilder {
   /** Packets waiting for the next frame; before the first frame the first two are the default Session and Participants. */
   #pending: Packet[];
   #prev: Menu;
+  /**
+   * Each menu slot's last packet as read back. A slot the draft leaves alone reuses its body with a new header, so
+   * frames share those decoded bodies: treat built frames as read-only.
+   */
+  readonly #prevReadBack: Partial<Record<MenuSlot, Packet>> = {};
   #frameCount = 0;
   readonly #out: Timed[] = [];
 
@@ -134,13 +186,24 @@ export class ScenarioBuilder {
 
   frame(fn: (f: FrameDraft) => void): this {
     const index = this.#frameCount++;
-    const draft = new Draft(index, toSessionTime(this.#timeMs(index) / 1000), structuredClone(this.#prev));
+    const draft = new Draft(index, toSessionTime(this.#timeMs(index) / 1000), this.#prev);
     fn(draft);
-    const menuGroup = MENU_RATE_SLOTS.filter((slot) => !draft.dropped.has(slot)).map((slot) => draft[slot]);
-    this.#out.push(...this.#stamp(index, [...this.#pending, ...draft.added, ...menuGroup]));
+    // Read back now: the frame keeps its own decoded copy, so the next draft may change the menu packets in place.
+    const extra = this.#stamp(index, [...this.#pending, ...draft.added]).map(readBack);
+    const menu = draft.menu();
+    const sent = MENU_RATE_SLOTS.filter((slot) => !draft.dropped.has(slot));
+    this.#out.push(...extra, ...sent.map((slot) => this.#readBackMenu(slot, this.#stamp(index, [menu[slot]])[0]!, draft.touched.has(slot))));
     this.#pending = [];
-    this.#prev = draft.menu();
+    this.#prev = menu;
     return this;
+  }
+
+  /** A menu packet as read back; an untouched slot only needs its new header read back. */
+  #readBackMenu(slot: MenuSlot, { packet, receivedAtMs }: Timed, touched: boolean): Timed {
+    const previous = touched ? undefined : this.#prevReadBack[slot];
+    const read = previous ? ({ ...previous, header: readBackHeader(packet.header) } as Packet) : roundTrip(packet);
+    this.#prevReadBack[slot] = read;
+    return { packet: read, receivedAtMs };
   }
 
   frames(n: number, fn: (f: FrameDraft, i: number) => void): this {
@@ -159,7 +222,7 @@ export class ScenarioBuilder {
       ...this.#stamp(this.#frameCount, this.#pending.filter((p) => !isSessionEnd(p))),
       ...this.#stamp(lastFrame, this.#pending.filter(isSessionEnd)),
     ];
-    return [...this.#out, ...trailing].map(({ packet, receivedAtMs }) => ({ packet: roundTrip(packet), receivedAtMs }));
+    return [...this.#out, ...trailing.map(readBack)];
   }
 
   build(): Frame[] {
