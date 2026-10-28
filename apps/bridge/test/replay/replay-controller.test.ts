@@ -1,4 +1,6 @@
 // ReplayController on the committed tt-zandvoort-lap1 segment (spec 8.5, Task 5). Time is injected: the test releases the pacer's sleeps.
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FEATURES } from '../../src/features/index.generated.ts';
@@ -168,6 +170,41 @@ describe('ReplayController: jumps', () => {
     expect(status.note).toBeUndefined();
     expect(status.paused).toBe(true);
   }, 30_000);
+});
+
+describe('ReplayController: a failing recording', () => {
+  it('a source failure during a jump rejects done and settles settled() instead of hanging', async () => {
+    const bad = join(mkdtempSync(join(tmpdir(), 'replay-bad-')), 'truncated.pwrec.gz');
+    writeFileSync(bad, readFileSync(SEGMENT).subarray(0, 3000));
+    const h = harness(bad);
+    open.push(h.stop);
+    h.controller.control({ kind: 'jumpToLap', lap: 5 });
+    await expect(h.controller.done).rejects.toBeDefined();
+    const outcome = await Promise.race([
+      h.controller.settled().then(() => 'settled', () => 'settled'),
+      new Promise<string>((r) => setTimeout(() => r('hung'), 5000)),
+    ]);
+    expect(outcome).toBe('settled');
+  }, 15_000);
+});
+
+describe('ReplayController: replay.status before the first frame', () => {
+  it('is not published until a frame exists: a subscriber gets noData, never sessionTimeMs 0', async () => {
+    const h = start();
+    h.controller.control({ kind: 'pause' });
+    const got: Array<{ type: string; [k: string]: unknown }> = [];
+    h.hub.addClient('early', { send: (m) => got.push(m as never), bufferedAmount: () => 0 });
+    h.hub.subscribe({ clientId: 'early', id: 'x', topic: 'replay.status', params: {}, feedId: FEED });
+    h.hub.tick();
+    expect(got.some((m) => (m.type === 'snapshot' || m.type === 'update') && 'value' in m)).toBe(false);
+    expect(h.status()).toBeUndefined();
+    await until(() => h.controller.position() !== undefined);
+    await tick();
+    h.hub.tick();
+    const values = got.filter((m) => (m.type === 'snapshot' || m.type === 'update') && 'value' in m).map((m) => m.value as { sessionTimeMs: number });
+    expect(values.length).toBeGreaterThan(0);
+    expect(values.every((v) => v.sessionTimeMs > 0)).toBe(true);
+  });
 });
 
 describe('ReplayController: replay.status', () => {

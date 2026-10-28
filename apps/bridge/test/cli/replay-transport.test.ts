@@ -1,5 +1,5 @@
 // `pitwall replay <file> [--paused] [--speed <n>] [--at-lap <n> | --at-time <ms>]` (Task 5, requirement 5).
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -19,18 +19,46 @@ async function firstStatus(args: string[]) {
 }
 
 describe('pitwall replay transport flags', { timeout: 30_000 }, () => {
-  it('--paused starts paused, at the start', async () => {
+  it('--paused starts paused, at the start, with the position of the first frame (never sessionTimeMs 0 before one)', async () => {
     const status = await firstStatus(['--paused']);
     expect(status).toMatchObject({ paused: true, speed: 1, atEnd: false });
+    expect(status.sessionTimeMs).toBeGreaterThan(0);
   });
   it('--speed sets the speed', async () => {
     expect(await firstStatus(['--paused', '--speed', '2'])).toMatchObject({ paused: true, speed: 2 });
   });
   it('--at-time has jumped before listening is printed, and --paused keeps it there', async () => {
-    const status = await firstStatus(['--paused', '--at-time', '20000']);
-    expect(status.sessionTimeMs).toBeGreaterThanOrEqual(20_000);
+    // The segment is a mid-session cut, about 112015 to 117993 ms: 115000 lies inside it, so only a real jump reaches it.
+    const status = await firstStatus(['--paused', '--at-time', '115000']);
+    expect(status.sessionTimeMs).toBeGreaterThanOrEqual(115_000);
+    expect(status.sessionTimeMs).toBeLessThan(117_900);
     expect(status).toMatchObject({ paused: true, atEnd: false });
   });
+  it('prints "replay finished" once for a real end, and not before listening when a startup jump lands at the end', async () => {
+    const jumped = startCli(['replay', SEGMENT, '--paused', '--at-lap', '99'], env());
+    await jumped.waitFor(/listening ws:\/\/127\.0\.0\.1:(\d+)/);
+    expect(jumped.stderr()).not.toContain('replay finished');
+    await new Promise((r) => setTimeout(r, 500));
+    expect((jumped.stderr().match(/replay finished/g) ?? []).length).toBeLessThanOrEqual(1);
+    await jumped.stop();
+    const plain = startCli(['replay', SEGMENT], env());
+    await plain.waitFor(/listening/);
+    const t0 = Date.now();
+    while (!plain.stderr().includes('replay finished') && Date.now() - t0 < 10_000) await new Promise((r) => setTimeout(r, 20));
+    await new Promise((r) => setTimeout(r, 300));
+    expect((plain.stderr().match(/replay finished/g) ?? []).length).toBe(1);
+    await plain.stop();
+  });
+  it.each([
+    ['a truncated recording', (dir: string) => { const f = join(dir, 'truncated.pwrec.gz'); writeFileSync(f, readFileSync(SEGMENT).subarray(0, 3000)); return f; }],
+    ['a file that is not gzip', (dir: string) => { const f = join(dir, 'garbage.pwrec.gz'); writeFileSync(f, 'this is not a recording'); return f; }],
+  ])('%s with --at-lap exits 1 with a pitwall: message instead of hanging before listening', async (_name, build) => {
+    const bad = build(tmp());
+    const r = await runCli(['replay', bad, '--at-lap', '5'], env());
+    expect(r.code).toBe(1);
+    expect(r.stderr).toMatch(/^pitwall: /m);
+    expect(r.stdout).not.toContain('listening');
+  }, 15_000);
   it('--at-lap beyond the end has reached the end before listening is printed', async () => {
     expect(await firstStatus(['--paused', '--at-lap', '99'])).toMatchObject({ atEnd: true, note: 'beyondEnd' });
   });
