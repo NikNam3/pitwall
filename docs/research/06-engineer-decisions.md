@@ -48,8 +48,8 @@ Research done on 2026-10-28. It builds on [01](01-race-engineering-practice.md)�
 The user is **two race engineers, two performance engineers, the strategist, the head of strategy and the ops room** at once. Only the sporting director's job is mostly left to the game.
 
 What follows for pitwall (🔵, derived from 1.2):
-1. **Pitwall is the ops room.** It simulates continuously and shows **conclusions, not data**. A display that needs reading and mental arithmetic in a race has failed.
-2. **Standing answers.** Every time-critical question ("box if SC now?", "where do we rejoin?") has an answer that is always up to date *before* the event. The real teams' pre-agreed triggers become armed answers on screen.
+1. **Pitwall is the ops room.** It simulates continuously and shows **computed results, not raw data**: "rejoin P6, 1.2 s behind VER", not a gap table to add up. A display that needs mental arithmetic in a race has failed. It shows **numbers only, no verdicts**: the user draws every conclusion (user, 2026-10-28; see section 5).
+2. **Standing answers.** Every time-critical question ("box if SC now?", "where do we rejoin?") has its numbers always up to date *before* the event. The real teams' pre-agreed triggers become armed conditions on screen.
 3. **Plans with triggers.** Plan A/B/C and their triggers are prepared between sessions and armed for the race. In the race, pitwall says which trigger fired.
 4. **Answers, not scripts.** The only channel to the driver is the user's voice, but the user words the calls themselves: no pre-written radio lines (user, 2026-10-28). The answer must still hold everything a call needs: action, tyre, rejoin position, gap.
 5. **Escalate, don't search.** The layout stays stable. The situation decides which few values light up (section 4).
@@ -198,7 +198,7 @@ The virtual finish car (🟢) runs at the average lap time and crosses the line 
 | Decision | Pit now for a new front wing, or run on with the damage. |
 | Question behind it | How much time does the damage cost per lap, against the extra pit loss and the place loss? |
 | Computed answer | **Break-even:** `laps_remaining · Δt_damage` against `L_pit + t_wing − (stop already planned ? L_pit : 0)`. If the planned stop is close, bring it forward. |
-| Display | Damage card: damage %, measured lap-time loss since the hit, break-even laps, recommendation. |
+| Display | Damage card: damage %, measured lap-time loss since the hit, break-even laps. |
 | Inputs | Wing, floor, diffuser, sidepod damage; lap times before and after; pit loss table; time for a wing change. |
 | Source | 🟢 Simulator Controller "Impact" repair rule: repair if lap time is slower than the reference by more than a threshold, with the reference = mean + σ of the current stint ([AI Race Engineer](https://github-wiki-see.page/m/SeriousOldMan/Simulator-Controller/wiki/AI-Race-Engineer)); 🔵 break-even formula |
 | F1 25 feasibility | ✅ own and AI damage; ⚠ for restricted rivals; wing-change time 🔧 from recordings |
@@ -251,7 +251,7 @@ The virtual finish car (🟢) runs at the average lap time and crosses the line 
 |---|---|
 | Decision | Tell the driver to move brake bias forward or back. |
 | Question behind it | Are the fronts or rears locking, are the brake temperatures unbalanced, has the fuel load or tyre state shifted the balance? |
-| Computed answer | **Lock-up count per axle and corner** (slip ratio spikes under braking) and the front/rear brake temperature split; a suggested direction. After the call: **confirmation** that the value changed. |
+| Computed answer | **Lock-up count per axle and corner** (slip ratio spikes under braking) and the front/rear brake temperature split. After the call: **confirmation** that the value changed. |
 | Display | Lock-up table per corner plus the call → confirmation log (V24). |
 | Inputs | Slip ratio per wheel, brake pedal, brake temperatures, `m_frontBrakeBias`. |
 | Source | 🟢 race engineers pass on brake-balance changes ([01](01-race-engineering-practice.md)); 🟢 call confirmation idea ([05](05-game-control-boundary.md)); 🔵 lock-up count |
@@ -332,7 +332,7 @@ The virtual finish car (🟢) runs at the average lap time and crosses the line 
 | Decision | Swap the two drivers, hold positions, or let the teammate through to attack. |
 | Question behind it | Is the car behind faster, can it actually catch the car ahead, and what does the swap cost the team? |
 | Computed answer | **Swap value:** pace delta between the teammates, laps for the rear car to reach the car ahead after a swap, the swap cost (about 0.5–1 s), and the team's projected points with and without. |
-| Display | Team card: both cars side by side, pace delta, swap gain, recommendation. |
+| Display | Team card: both cars side by side, pace delta, swap gain. |
 | Inputs | Both cars' lap times, gaps, tyres, battle forecast, points table. |
 | Source | 🟢 juggling order and splitting strategies are head-of-strategy calls ([McLaren 2026](https://www.mclaren.com/racing/formula-1/2026/who-sits-on-mclarens-pit-wall/)); 🔵 swap value |
 | F1 25 feasibility | ✅ timing of both cars in each feed |
@@ -381,7 +381,7 @@ The virtual finish car (🟢) runs at the average lap time and crosses the line 
 | Decision | Pit early to undercut the car ahead; pit to cover the car behind that just stopped; or stay out for the overcut. |
 | Question behind it | If we pit now and they pit N laps later, who is ahead after their stop? |
 | Computed answer | **Undercut balance:** `Δ(N) = Σ_{k=1..N} [t_rival(old tyres, age + k) − t_us(new tyres, k)] − t_cold − (L_pit_us − L_pit_rival)`. The undercut works if `Δ(N) > gap + 0.5 s` (TUM minimum gap). The overcut is the same sum with the roles swapped. For the threat from behind, the same with the rival as "us". |
-| Display | Undercut card per neighbour (ahead and behind): gap, Δ for N = 1, 2, 3, verdict; on the circle the rival's ghost too. |
+| Display | Undercut card per neighbour (ahead and behind): gap, Δ for N = 1, 2, 3, the margin over the gap; on the circle the rival's ghost too. |
 | Inputs | Degradation model of both cars, tyre ages, cold-tyre penalty (TUM: +1.0 s on the first lap), pit loss, gaps; whether the car behind has just pitted. |
 | Source | 🟢 F1/AWS "Undercut Threat" from gap, degradation and average pit loss ([Amazon](https://press.aboutamazon.com/2021/4/new-f1-insights-powered-by-aws-will-help-formula-1-fans-make-sense-of-split-second-decisions-on-the-track)); 🟢 TUM's input "has the car behind just pitted" ([03](03-strategy-models.md)); 🟢 the overcut works with clean air and low degradation ([Aston Martin](https://www.astonmartinf1.com/en-GB/news/feature/strategically-speaking-f1-strategy-explained-with-tom-mccullough)); 🔵 formula |
 | F1 25 feasibility | ✅ tyre ages, compounds, gaps for all; ⚠ rivals' wear, so their degradation comes from lap times |
@@ -393,7 +393,7 @@ The virtual finish car (🟢) runs at the average lap time and crosses the line 
 |---|---|
 | Decision | Pit under the SC, or stay out for track position. |
 | Question behind it | How much cheaper is a stop now, where do we rejoin in the queue, and who else will stop? |
-| Computed answer | **SC stop value:** `gain = L_pit_green − L_pit_SC` (track-specific: Catalunya 19.0 → 7.9 s, Melbourne 17.9 → 12.6 s); the rejoin position in the queue; the rivals for whom the same stop is free (in their window, old tyres). **Standing answer during green running:** "If the SC comes now: BOX / STAY". |
+| Computed answer | **SC stop value:** `gain = L_pit_green − L_pit_SC` (track-specific: Catalunya 19.0 → 7.9 s, Melbourne 17.9 → 12.6 s); the rejoin position in the queue; the rivals for whom the same stop is free (in their window, old tyres). **Standing numbers during green running:** "SC now: gain 11.2 s, rejoin P7". |
 | Display | SC card (V18), visible all race as a single line, expanding when the SC is deployed. |
 | Inputs | SC status and phase events, pit loss table per condition, gaps, rivals' tyre ages and planned stops, laps left. |
 | Source | 🟢 TUM pit loss table and SC model ([03](03-strategy-models.md)); 🟢 Red Bull's pre-decided SC stops ([F1 strategists](https://www.formula1.com/en/latest/article/watch-the-insiders-guide-to-f1-strategists.6VT3445ugVd0bh85Pw5slO)); 🟢 SCs come most often at the start and around pit stops ([Aston Martin](https://www.astonmartinf1.com/en-GB/news/feature/strategically-speaking-f1-strategy-explained-with-tom-mccullough)); 🔵 standing answer |
@@ -525,12 +525,12 @@ The virtual finish car (🟢) runs at the average lap time and crosses the line 
 | V10 | **Projected lap and gap** | Projected lap time, gap to best and projected line crossing | D08 | 🟢 [HH projected lap time](https://help.hhtiming.com/calculation-definitions/projected-lap-time/) | sectors |
 | V11 | **Virtual finish car** | A dot on the track map that crosses the line at zero time remaining | D07, D08 | 🟢 [HH full track](https://help.hhtiming.com/displays/track-maps/full-track/) | session time, average lap |
 | V12 | **Quali gap finder / release clock** | Projected cars around us on the push lap; free windows on a time strip; latest release | D07 | 🟢 HH uses GPS maps for this; 🔵 release clock | positions, driver status |
-| V13 | **Undercut card** | Per neighbour: gap, `Δ(N)` for N = 1–3, verdict | D23 | 🟢 AWS Undercut Threat inputs; 🔵 card and formula | gaps, degradation, pit loss |
+| V13 | **Undercut card** | Per neighbour: gap, `Δ(N)` for N = 1–3, margin over the gap | D23 | 🟢 AWS Undercut Threat inputs; 🔵 card and formula | gaps, degradation, pit loss |
 | V14 | **Battle cards** | Ahead and behind: gap, closing rate, laps to DRS range, pass feasibility, tyres | D17, D13 | 🟢 AWS Battle Forecast, HH time to catch; 🔵 card | gaps, pace, tyres |
 | V15 | **Pit-lap sweep** | For each lap in the window: rejoin position, traffic in the first laps, projected finish | D21 | 🟢 Simulator Controller (least traffic, undercut); 🔵 strip | gaps, pace, pit loss |
 | V16 | **Strategy comparison** | Rows = compound sequences / plans; finish time, position, gap to best, risk; later a distribution per plan | D22, D28, D31 | 🟢 TUM, Avella et al.; 🔵 table | fits, sets, pit loss |
 | V17 | **Plan board** | Plan A/B/C per driver: stop laps, compounds, target laps; armed triggers; which trigger fired | D09, D31, all race calls | 🟢 F1 strategists (pre-agreed plans and messages); 🔵 board | plans, live state |
-| V18 | **SC card (standing answer)** | One line in green running ("SC now → BOX, rejoin P7"); expands under SC/VSC with gain, rejoin, who else profits; restart sheet | D24, D25, D29 | 🟢 TUM, Red Bull; 🔵 card | SC state, pit loss table, gaps |
+| V18 | **SC card (standing answer)** | One line in green running ("SC now: gain 11.2 s, rejoin P7, 2 rivals in window"); expands under SC/VSC with gain, rejoin, who else profits; restart sheet | D24, D25, D29 | 🟢 TUM, Red Bull; 🔵 card | SC state, pit loss table, gaps |
 | V19 | **Crossover chart** | Field lap times by tyre type; 110 % line; forecast rain strip; payback laps | D26 | 🟢 Pirelli; 🔵 chart | lap times, compounds, forecast |
 | V20 | **Fuel delta gauge** | Laps of margin; save target per lap; SC credit | D12, D05 | 🟢 Simulator Controller, iRacing fuel tools ([iRacePal](https://github.com/Bahnzo/iRacePal)); 🔵 save target | fuel, burn, laps left |
 | V21 | **Tyre life bar** | Per corner: wear now, projected at the planned stop, limit, the game's life span | D11, D22 | 🟢 Simulator Controller wear rule; 🔵 bar | wear, rate, plan |
@@ -585,16 +585,13 @@ Answered (user, 2026-10-28):
 - **Second car's data:** both drivers set their telemetry to public, and both feeds will reach pitwall. The second driver comes after the MVP, so the 🔒 items for the second car (D02, D14, D15) wait until then.
 - **Circle orientation:** own car at 12 o'clock.
 - **Radio lines:** none. The plan board holds plans and triggers, not sentences.
+- **Numbers only, no verdicts:** pitwall shows the computed numbers ("rejoin P6, 1.2 s behind VER; undercut +0.8 s") and never a verdict ("Undercut: WORKS") or a recommended call ("BOX this lap"). The user draws every conclusion. The plan board's triggers show *that* a condition holds, not what to do about it.
 - **AI cars:** there are AI cars in the lobby, so their wear, fuel, ERS and tyre sets are visible (no ⚠ for them).
 
 Still open:
 1. **Fuel load:** can the league's settings let the player choose the race fuel load in F1 25? If not, D05 drops out. (The user is asking a friend what the drivers can edit.)
 2. **Pit stacking:** does the league use double stacking, and does F1 25 allow it for two human teammates? (The user is asking a friend.)
 3. **League rules:** two dry compounds, parc fermé, the SC setting, the track-limit penalty rules, red-flag tyre change. These set constants for D22, D28 and D30. Unknown for now.
-4. **Proposal or verdict:** how far should pitwall go towards the call?
-   - **A. Numbers only:** "rejoin P6, 1.2 s behind VER; undercut +0.8 s". The user draws the conclusion.
-   - **B. A verdict per question** (recommended): each card answers its own question in one word next to its numbers ("Undercut: WORKS", "SC now: BOX", "Fuel: SAVE 0.05 kg/lap"). There is no overall call; the user weighs the cards.
-   - **C. One recommended call:** pitwall weighs all cards into a single action ("BOX this lap, mediums") with the reasons listed. That needs a weighting model we can't validate yet; it could come with the Monte Carlo (sub-project 5).
 
 ### For research and recordings
 1. **Pit loss per track and condition** (green, VSC, SC): no recordings yet with a stop or an SC (spec 12). This blocks D21–D25.
