@@ -13,11 +13,15 @@ describe('agent docs', () => {
     for (const ref of ['docs/architecture.md', 'docs/decisions/', 'docs/tasks/_template.md', 'pnpm check', 'PITWALL_WORKER_SCOPE', 'PITWALL_PHASE', 'PITWALL_FIXTURES_DIR'])
       expect(md).toContain(ref);
   });
-  it('has the nine ADRs, each with status, context, decision and consequences', () => {
+  it('has the original nine ADRs and every ADR has status, context, decision and consequences', () => {
     const adrs = readdirSync(join(ROOT, 'docs/decisions')).filter((f) => f.endsWith('.md')).sort();
-    expect(adrs).toEqual(['0001-stack-and-native-type-stripping.md', '0002-fixtures-outside-git.md', '0003-shared-domain-package.md',
+    const original = ['0001-stack-and-native-type-stripping.md', '0002-fixtures-outside-git.md', '0003-shared-domain-package.md',
       '0004-better-sqlite3-over-node-sqlite.md', '0005-feature-registry-via-generated-index.md', '0006-gpl-code-and-data-allowed.md',
-      '0007-one-file-per-topic.md', '0008-calculator-config.md', '0009-second-car-later.md']);
+      '0007-one-file-per-topic.md', '0008-calculator-config.md', '0009-second-car-later.md'];
+    for (const f of original) expect(adrs, f).toContain(f);
+    for (const f of adrs) expect(f, `${f}: name`).toMatch(/^\d{4}-[a-z0-9-]+\.md$/);
+    const numbers = adrs.map((f) => f.slice(0, 4));
+    expect(new Set(numbers).size, 'unique ADR numbers').toBe(numbers.length);
     for (const f of adrs) for (const h of ['## Status', '## Context', '## Decision', '## Consequences']) expect(read(`docs/decisions/${f}`), `${f}: ${h}`).toContain(h);
   });
   it('architecture.md states every allowed dependency edge', () => {
