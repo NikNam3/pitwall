@@ -175,7 +175,7 @@ describe('hideable car data is Known (spec 7.9)', () => {
     expect(at).toBeGreaterThan(0);
     expect(car.tyres.corners.fl.surfaceTempC).toEqual(known(90, at));
     expect(car.tyres.corners.rr.pressurePsi).toEqual(known(21.75, at));
-    expect(car.condition.brakes.rl.tempC).toEqual(known(500, at));
+    expect(car.condition.brakes.fl.tempC).toEqual(known(500, at));
     expect(car.condition.engineTempC).toEqual(known(105, at));
     expect(car.dynamics).toMatchObject({ known: true, at, value: { speedKmh: 250 } });
   });

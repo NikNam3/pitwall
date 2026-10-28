@@ -57,8 +57,8 @@ describe('bindState: the calculator output must fit the topic', () => {
   it('with select: a select returning the wrong type does not compile', () => {
     // @ts-expect-error a string is not CarTelemetry
     const wrongReturn = bindState('car.telemetry', carsCalc, () => 'not dynamics');
-    // @ts-expect-error CarState is not CarTelemetry
-    const wrongShape = bindState('car.telemetry', carsCalc, selectCar((car) => car));
+    // @ts-expect-error a value without dynamics is not CarTelemetry
+    const wrongShape = bindState('car.telemetry', carsCalc, selectCar((car) => ({ motion: car.motion })));
     expect(wrongReturn.topic).toBe('car.telemetry');
     expect(wrongShape.topic).toBe('car.telemetry');
   });
