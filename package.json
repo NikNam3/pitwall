@@ -18,7 +18,7 @@
     "check": "pnpm typecheck && pnpm lint && pnpm depcruise && pnpm test",
     "gen:features": "node scripts/gen-features.ts",
     "pitwall": "pnpm -s gen:features && node apps/bridge/src/cli/pitwall.ts",
-    "pwrec-cut":"node apps/bridge/src/cli/pwrec-cut.ts"
+    "pwrec-cut": "node apps/bridge/src/cli/pwrec-cut.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
