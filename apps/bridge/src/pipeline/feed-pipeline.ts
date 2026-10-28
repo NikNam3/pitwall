@@ -57,6 +57,8 @@ export type FeedPipelineOptions = {
   staleCheck?: { clock: () => number; everyMs: number };
   /** Dev mode: times every calculator run. */
   calcStats?: CalcStats;
+  /** Live only: whether realism mode is on for the next session; read when a session starts and fixed for it. Replays use the config's value. */
+  realismNextSession?: () => boolean;
 };
 
 type SessionStarted = Extract<TrackerEvent, { type: 'sessionStarted' }>;
@@ -202,7 +204,8 @@ export class FeedPipeline {
     const startedAt = this.#sessionClock(event.receivedAtMs);
     const db = this.#o.storage?.db;
     const storage = db && new SessionStorage(db, { log, onError: (error) => this.#writeFailed('storage', error) });
-    const file = this.#openSessionFile(event, startedAt);
+    const config = this.#sessionConfig();
+    const file = this.#openSessionFile(event, startedAt, config);
     // A session processed from a recording points at that recording (so `reprocess` finds it), a live one at its own file.
     const sourcePath = this.#o.storage?.sourcePath;
     const pwrecPath = sourcePath !== undefined ? resolve(sourcePath) : (file?.path ?? null);
@@ -217,7 +220,7 @@ export class FeedPipeline {
       publisher: this.#publisher,
       jobs: this.#jobs,
       log,
-      config: this.#config,
+      config,
       feedView: () => this.#monitor.view(this.#tracker.metrics, this.#lastReceivedAtMs),
       ...(storage && { storage }),
       ...(file && { file }),
@@ -226,7 +229,14 @@ export class FeedPipeline {
     });
   }
 
-  #openSessionFile(event: SessionStarted, startedAt: string): SessionFile | undefined {
+  /** The run's config with `realism.enabled` taken from the live hook, if any; fixed for the whole session. */
+  #sessionConfig(): FeatureConfig {
+    const { realismNextSession } = this.#o;
+    if (realismNextSession === undefined) return this.#config;
+    return { ...this.#config, realism: { ...this.#config.realism, enabled: realismNextSession() } };
+  }
+
+  #openSessionFile(event: SessionStarted, startedAt: string, config: FeatureConfig): SessionFile | undefined {
     const dir = this.#o.storage?.recordingsDir;
     if (dir === undefined) return undefined;
     const file = new SessionFile({
@@ -236,14 +246,14 @@ export class FeedPipeline {
       originMs: event.receivedAtMs,
       onError: (error) => this.#writeFailed('pwrec', error),
     });
-    this.#writeConfigSidecar(file.path);
+    this.#writeConfigSidecar(file.path, config);
     return file;
   }
 
   /** The config the session runs with, next to its file, so a replay reproduces its alarms. A failure is a write failure of the session file. */
-  #writeConfigSidecar(sessionFilePath: string): void {
+  #writeConfigSidecar(sessionFilePath: string, config: FeatureConfig): void {
     try {
-      writeFileSync(sessionConfigPath(sessionFilePath), `${JSON.stringify(this.#config, null, 2)}\n`);
+      writeFileSync(sessionConfigPath(sessionFilePath), `${JSON.stringify(config, null, 2)}\n`);
     } catch (error) {
       this.#writeFailed('pwrec', error);
     }

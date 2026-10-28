@@ -125,6 +125,7 @@ export function initialState(init: {
   sessionUid: bigint;
   session: SessionPacket;
   weekend?: WeekendContext;
+  realism?: boolean;
 }): EngineState {
   const { header } = init.session;
   const session = sessionStateFrom(init.session, 0);
@@ -138,6 +139,7 @@ export function initialState(init: {
     lastFrameId: header.frameIdentifier,
     sessionTime: toSessionTime(header.sessionTime),
     open: emptyTrackers(session.flag),
+    realism: init.realism ?? false,
     ...(init.weekend && { weekend: init.weekend }),
   };
   placePlayer(state, header.playerCarIndex);

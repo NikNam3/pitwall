@@ -11,6 +11,7 @@ import { applyDynamics } from './dynamics.ts';
 import { applyEnergy } from './energy.ts';
 import { applyIdentity, isActiveCar } from './identity.ts';
 import { applyOwnCar } from './own-car.ts';
+import { applyRealism } from './realism.ts';
 import { applySession } from './session.ts';
 import { applyTiming } from './timing.ts';
 import { applyTyres } from './tyres.ts';
@@ -28,6 +29,7 @@ export const SUB_STEPS: SubStep[] = [
   applyCondition,
   applyDynamics,
   applyOwnCar,
+  applyRealism,
   applyPitStops,
   applyLaps,
   applyStints,

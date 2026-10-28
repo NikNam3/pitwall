@@ -117,4 +117,6 @@ export type EngineState = {
   sessionTime: SessionTime;
   open: OpenTrackers;
   weekend?: WeekendContext | undefined;
+  /** Realism mode (spec 7.9): rival cars' hidden fields stay `unknown('realism')`. Fixed for the session. */
+  realism: boolean;
 };

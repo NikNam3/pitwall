@@ -7,6 +7,8 @@ export type SessionInfo = {
   playerCar: CarId;
   teammateCar?: CarId;
   session: SessionState;
+  /** Realism mode is on for this session (spec 7.9); fixed from the session's start. */
+  realism: boolean;
 };
 
 export default defineTopic<NoParams, SessionInfo>({ owner: 'core', mode: 'state', maxHz: 2 });

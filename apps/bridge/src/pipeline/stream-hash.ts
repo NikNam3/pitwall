@@ -8,6 +8,7 @@ import { TopicHub } from '../hub/topic-hub.ts';
 import type { PacketSource, RawPacket } from '../input/packet-source.ts';
 import { PwrecSource } from '../input/pwrec-source.ts';
 import { createLogger } from '../log.ts';
+import { effectiveConfig, recordingConfig } from '../feature-config.ts';
 import { FeedPipeline } from './feed-pipeline.ts';
 
 /** Hands every packet on, then calls `after` with it: the hook that runs the hub's clock and ticks per packet. */
@@ -57,7 +58,7 @@ const jobTopicsOf = (features: readonly Feature[]): ReadonlySet<TopicName> =>
  *
  * Job topics stay out: their results come from worker threads and arrive whenever a worker finishes, so the same
  * recording may deliver them at other points of the stream. They are not subscribed, so their jobs do not run.
- * `features` replaces the registered features (default `FEATURES`).
+ * `features` replaces the registered features (default `FEATURES`). The recording's config sidecar applies, as in a replay.
  */
 export async function topicStreamHash(recordingPath: string, { features = FEATURES }: { features?: readonly Feature[] } = {}): Promise<string> {
   const id = feedId('hash');
@@ -79,7 +80,7 @@ export async function topicStreamHash(recordingPath: string, { features = FEATUR
     },
     after: () => hub.tick(),
   });
-  const pipeline = new FeedPipeline({ feedId: id, source, hub, features, log: createLogger({ level: 'silent' }) });
+  const pipeline = new FeedPipeline({ feedId: id, source, hub, features, config: recordingConfig(recordingPath, features, effectiveConfig(features)), log: createLogger({ level: 'silent' }) });
   pipeline.start();
   await pipeline.done;
   hub.tick();
