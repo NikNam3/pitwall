@@ -73,16 +73,19 @@ const setupFrom = (s: CarSetupsPacket['carSetupData'][number]): CarSetup => ({
 
 /** What the game sends for the player's car only: MotionEx, the setup and the live brake bias. */
 export const applyOwnCar: SubStep = (state, frame, out) => {
-  const own = state.cars[state.playerCar]?.ownCar;
-  if (!own) return;
+  const player = state.cars[state.playerCar];
+  const own = player?.ownCar;
+  if (!player || !own) return;
   const at = frame.sessionTime;
   if (frame.motionEx) {
     own.motionEx = known(motionExFrom(frame.motionEx), at);
+    player.updatedAt.motionEx = at;
     out.changed.add('ownCar');
   }
   const setup = frame.setups?.carSetupData[state.playerCar];
   if (setup) {
     own.setup = known(setupFrom(setup), at);
+    player.updatedAt.setups = at;
     out.changed.add('ownCar');
   }
   const status = frame.status?.carStatusData[state.playerCar];

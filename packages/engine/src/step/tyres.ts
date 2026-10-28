@@ -72,6 +72,7 @@ export const applyTyres: SubStep = (state, frame, out) => {
   for (const packet of tyreSets) {
     const car = state.cars[packet.carIdx];
     if (!car) continue;
+    car.updatedAt.tyreSets = at;
     car.tyres.sets = knownUnlessRestricted(
       car,
       { sets: packet.tyreSetData.map(tyreSetFrom), fittedIdx: packet.fittedIdx },

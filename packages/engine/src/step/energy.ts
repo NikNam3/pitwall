@@ -14,6 +14,7 @@ export const applyEnergy: SubStep = (state, frame, out) => {
   for (const car of state.cars) {
     const s = status.carStatusData[car.id];
     if (!s) continue;
+    car.updatedAt.status = at;
     car.energy = {
       fuel: knownUnlessRestricted(
         car,

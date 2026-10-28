@@ -88,7 +88,9 @@ export const applyIdentity: SubStep = (state, frame, out) => {
       const car = state.cars[i];
       if (!car) continue;
       const identity = identityFrom(p, i, car.identity.visibility);
-      if (identity) car.identity = identity;
+      if (!identity) continue;
+      car.identity = identity;
+      car.updatedAt.participants = frame.sessionTime;
     }
   }
   if (!p && !playerChanged) return;

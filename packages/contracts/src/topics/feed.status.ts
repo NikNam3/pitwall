@@ -9,6 +9,8 @@ export type FeedStatus = {
   latePackets: number;
   decodeErrors: number;
   packetsPerSecond: number;
+  /** Median session-time step of closed frames: the rate of the menu-rate sources. */
+  cadenceMs?: number;
   latencyMs?: number;
   wrongFormat?: number;
 };

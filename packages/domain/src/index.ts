@@ -7,3 +7,4 @@ export * from './session.ts';
 export * from './car.ts';
 export * from './records.ts';
 export * from './insight.ts';
+export * from './freshness.ts';

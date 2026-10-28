@@ -3,7 +3,8 @@
 // `notReceived` until the first packet.
 import type { ActualCompound, VisualCompound } from './compounds.ts';
 import type { Corners } from './corners.ts';
-import type { CarId, DriverKey } from './ids.ts';
+import type { DataSource } from './freshness.ts';
+import type { CarId, DriverKey, SessionTime } from './ids.ts';
 import type { Known } from './known.ts';
 import type { ZoneFlag } from './session.ts';
 import type { Celsius, Joules, Kg, Kmh, Metres, Ms, Percent, Psi, Radians, Ratio, Watts } from './units.ts';
@@ -232,6 +233,8 @@ export type CarState = {
   energy: CarEnergy;
   condition: CarCondition;
   dynamics: CarDynamics;
+  /** Session time of the last frame whose packet of each source carried data for this car; a source never received has no entry. */
+  updatedAt: Partial<Record<DataSource, SessionTime>>;
   /** Player car only; moves when the player changes. */
   ownCar?: OwnCarState | undefined;
 };
