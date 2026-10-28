@@ -245,7 +245,10 @@ Not built. A what-if is a **parameterised subscription** to a simulator topic, e
   }
   ```
 - **Read leniently,** like the config sidecars (ADR 0008): an unknown widget becomes a panel saying "unknown widget `x`"; an invalid or unknown option falls back to its default with a note; a broken layout falls back to an empty window. Invalid JSON is an error shown in the shell, and the previous workbook stays active.
-- **Saved automatically:** layout, panel, option and geometry changes are saved to the active workbook, debounced. A hand edit of a file takes effect when that workbook is opened next.
+- **Saved automatically:** layout, panel, option and geometry changes are saved to the active workbook, debounced.
+- **Hand edits are never overwritten.** The bridge watches `PITWALL_DATA_DIR/ui/workbooks/`:
+  - A changed file that the bridge didn't write itself (it compares a content hash) is re-read at once. If it's the active workbook, every window switches to the edited version.
+  - If the edited active workbook is invalid JSON, the shell shows the error and keeps the last good version, and autosave pauses until the file is valid again. A half-finished hand edit is never written over.
 - **Switching is manual only:** `Ctrl+1…9` plus a picker. There's no automatic switch at session change.
 
 ### 7.3 Docking
