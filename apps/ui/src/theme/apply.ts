@@ -12,5 +12,8 @@ export function applyTheme(variant: ThemeVariant, root: HTMLElement): void {
   set('--pw-line', String(variant.density.lineHeight));
   set('--pw-panel-gap', `${variant.density.panelGapPx}px`);
   set('--pw-col-gap', `${variant.density.columnGapCols}ch`);
+  set('--pw-chart-line', String(variant.chart.lineWidth));
+  set('--pw-chart-own-line', String(variant.chart.ownCarLineWidth));
+  set('--pw-chart-stale-alpha', String(variant.chart.staleAlpha));
   set('--pw-header-pad', `${variant.density.headerPadCols}ch`);
 }
