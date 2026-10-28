@@ -24,5 +24,6 @@ describe('Infer', () => {
     expectTypeOf<Infer<ReturnType<typeof chars>>>().toEqualTypeOf<string>();
     const s = struct({ uid: u64, laps: array(struct({ t: splitTime() }), 2) });
     expectTypeOf<Infer<typeof s>>().toEqualTypeOf<{ uid: bigint; laps: { t: number }[] }>();
+    expect(sizeOf(s)).toBe(8 + 2 * 3);
   });
 });
