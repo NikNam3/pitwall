@@ -1,17 +1,72 @@
-import { describe, expect, it } from 'vitest';
-import { CONTRACT_VERSION, TOPICS } from '../src/index.ts';
+import { describe, expect, expectTypeOf, it } from 'vitest';
+import type { CarDynamics, CarState, FeedId, LapRecord } from '@pitwall/domain';
+import {
+  CONTRACT_VERSION,
+  TOPICS,
+  type CarOverview,
+  type FeedInfo,
+  type FeedStatus,
+  type InsightEntry,
+  type ReservedCommand,
+  type SessionInfo,
+  type TopicName,
+  type TopicParams,
+  type TopicValue,
+} from '../src/index.ts';
+import { defineTopic } from '../src/topic-def.ts';
+import carDetail from '../src/topics/car.detail.ts';
+import laps from '../src/topics/laps.ts';
 
 describe('TOPICS', () => {
-  it('matches spec 8.4 exactly', () => {
-    const table = Object.entries(TOPICS).map(([k, d]) => [k, d.name, d.mode, d.maxHz]);
+  it('has exactly the 11 topics of spec 8.4 with their modes and rates', () => {
+    const table = Object.entries(TOPICS)
+      .map(([key, d]) => [key, d.name, d.mode, d.maxHz] as const)
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
     expect(table).toEqual([
-      ['feed.status', 'feed.status', 'state', 2], ['session.info', 'session.info', 'state', 2],
-      ['cars.overview', 'cars.overview', 'state', 10], ['car.detail', 'car.detail', 'state', 30],
-      ['car.telemetry', 'car.telemetry', 'state', 60], ['laps', 'laps', 'append', Infinity],
-      ['stints', 'stints', 'append', Infinity], ['pitStops', 'pitStops', 'append', Infinity],
-      ['flagPhases', 'flagPhases', 'append', Infinity], ['events', 'events', 'append', Infinity],
+      ['car.detail', 'car.detail', 'state', 30],
+      ['car.telemetry', 'car.telemetry', 'state', 60],
+      ['cars.overview', 'cars.overview', 'state', 10],
+      ['events', 'events', 'append', Infinity],
+      ['feed.status', 'feed.status', 'state', 2],
+      ['flagPhases', 'flagPhases', 'append', Infinity],
       ['insights', 'insights', 'append', Infinity],
+      ['laps', 'laps', 'append', Infinity],
+      ['pitStops', 'pitStops', 'append', Infinity],
+      ['session.info', 'session.info', 'state', 2],
+      ['stints', 'stints', 'append', Infinity],
     ]);
   });
   it('exports the contract version', () => { expect(CONTRACT_VERSION).toBe(1); });
+});
+
+describe('defineTopic', () => {
+  it('returns mode and rate without a name', () => {
+    expect(defineTopic<Record<string, never>, number>({ mode: 'state', maxHz: 5 })).toEqual({ mode: 'state', maxHz: 5 });
+  });
+  it('is what each topic file default-exports', () => {
+    expect(carDetail).toEqual({ mode: 'state', maxHz: 30 });
+    expect(laps).toEqual({ mode: 'append', maxHz: Infinity });
+  });
+});
+
+describe('topic types', () => {
+  it('keep TopicName, TopicParams and TopicValue', () => {
+    expectTypeOf<TopicName>().toEqualTypeOf<
+      | 'feed.status' | 'session.info' | 'cars.overview' | 'car.detail' | 'car.telemetry' | 'laps'
+      | 'stints' | 'pitStops' | 'flagPhases' | 'events' | 'insights'
+    >();
+    expectTypeOf<TopicParams<'car.detail'>>().toEqualTypeOf<{ carId: number }>();
+    expectTypeOf<TopicParams<'laps'>>().toEqualTypeOf<Record<string, never>>();
+    expectTypeOf<TopicValue<'car.detail'>>().toEqualTypeOf<CarState>();
+    expectTypeOf<TopicValue<'car.telemetry'>>().toEqualTypeOf<CarDynamics>();
+    expectTypeOf<TopicValue<'laps'>>().toEqualTypeOf<LapRecord>();
+    expectTypeOf<TopicValue<'feed.status'>>().toEqualTypeOf<FeedStatus>();
+    expectTypeOf<TopicValue<'session.info'>>().toEqualTypeOf<SessionInfo>();
+    expectTypeOf<TopicValue<'cars.overview'>>().toEqualTypeOf<CarOverview[]>();
+    expectTypeOf<TopicValue<'insights'>>().toEqualTypeOf<InsightEntry>();
+  });
+  it('keep the moved DTO types importable from the package index', () => {
+    expectTypeOf<FeedInfo['feedId']>().toEqualTypeOf<FeedId>();
+    expectTypeOf<ReservedCommand['kind']>().toEqualTypeOf<'boxCall'>();
+  });
 });
