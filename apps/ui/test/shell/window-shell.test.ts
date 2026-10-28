@@ -390,6 +390,18 @@ describe('WindowShell: the initial window main always announces (final fix wave 
     ]);
   });
 
+  it('after main has closed, a surviving window that is in neither of the next workbooks announces the second switch (reviewer scenario)', async () => {
+    const { snapshot, update, mountShell, host } = setup('car');
+    mountShell();
+    await snapshot(book('one', [win('main', 'M'), win('car', 'C')]));
+    await update(book('two', [win('car', 'C'), win('data', 'D')])); // main closes; car is now first
+    await update(book('three', [win('x', 'X'), win('y', 'Y')])); // car is not in it, not first, not main
+    expect(host.ensureWindows).toHaveBeenLastCalledWith([
+      { id: 'x', geometry: undefined },
+      { id: 'y', geometry: undefined },
+    ]);
+  });
+
   it('a window that is neither main nor first in the workbook still never announces', async () => {
     const { snapshot, update, mountShell, host } = setup('side');
     mountShell();

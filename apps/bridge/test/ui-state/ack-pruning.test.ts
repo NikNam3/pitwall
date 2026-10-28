@@ -59,6 +59,23 @@ describe('pruneEndedAcknowledgements', () => {
     expect(acked()).toEqual([]);
   });
 
+  it('the reviewer\'s order: after a re-run, a resolves before b is raised again; the acknowledgement of b@20 must survive until b itself resolves', () => {
+    const { hub, state, publish, acked } = setup();
+    publish(raised('a', 10), raised('b', 20));
+    state.apply({ kind: 'alert.ack', key: 'replay:b:20' });
+    publish(resolved('a', 15));
+    expect(acked()).toEqual(['replay:b:20']);
+    hub.resetFeed(FEED);
+    hub.tick();
+    publish(raised('a', 10));
+    publish(resolved('a', 15)); // b is not active at this moment: its occurrence has not been reached yet
+    expect(acked()).toEqual(['replay:b:20']);
+    publish(raised('b', 20));
+    expect(acked()).toEqual(['replay:b:20']);
+    publish(resolved('b', 40));
+    expect(acked()).toEqual([]);
+  });
+
   it('only the resolved occurrence goes: another occurrence of the same key stays acknowledged', () => {
     const { state, publish, acked } = setup();
     publish(raised('b', 20));
