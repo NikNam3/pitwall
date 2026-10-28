@@ -144,4 +144,24 @@ describe('Scheduler: newly needed calculators (ruling R9)', () => {
     s.setNeeded(['old', 'event', 'late']);
     expect(s.run(input(0, [], delta(1))).ran).toEqual(['late']);
   });
+  it('run with `only` leaves every other calculator untouched, a feed reader included', () => {
+    const s = sched([quick('feedReader', { reads: ['feed'] }), quick('dep'), quick('late', { reads: [{ calculator: 'dep' }] }), quick('acc', { reads: ['laps'], cadence: 'lapCompleted' })], ['feedReader', 'dep', 'acc']);
+    s.run(input(0, ['laps'], delta(0, 1)));
+    s.run(input(1, ['timing'], delta(1, 2)));                                 // acc is due and runs; feedReader and dep run
+    s.setNeeded(['feedReader', 'late', 'acc']);
+    const r = s.run(input(2, [], delta(2)), { only: new Set(['late']) });
+    expect(r.ran).toEqual(['late']);
+    expect(r.outputs.get('late')).toBe(2);
+    // acc did not note the empty pass: a lap completed in the next frame still finds it due.
+    expect(s.run(input(3, ['laps', 'timing'], delta(2, 3))).ran).toEqual(['feedReader', 'dep', 'late', 'acc']);
+  });
+});
+
+describe('Scheduler.withDependencies', () => {
+  it('is the ids and what they read, transitively, without changing what is needed', () => {
+    const s = sched([quick('a'), quick('b', { reads: [{ calculator: 'a' }] }), quick('c', { reads: [{ calculator: 'b' }] }), quick('d')], ['d']);
+    expect([...s.withDependencies(['c'])].sort()).toEqual(['a', 'b', 'c']);
+    expect(s.run(input(0)).ran).toEqual(['d']);
+    expect(() => s.withDependencies(['nope'])).toThrow(RegistryError);
+  });
 });

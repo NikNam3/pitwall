@@ -131,18 +131,24 @@ export class Scheduler {
    * not before, in registry order. Throws `RegistryError` for an unknown id.
    */
   setNeeded(ids: Iterable<CalculatorId>): CalculatorId[] {
-    const needed = new Set<CalculatorId>();
-    const visit = (id: CalculatorId): void => {
-      if (needed.has(id)) return;
-      const calc = this.#registry.get(id);
-      if (calc === undefined) throw new RegistryError('unknownDependency', [id], `unknown calculator "${id}"`);
-      needed.add(id);
-      for (const read of calc.reads) if (typeof read === 'object') visit(read.calculator);
-    };
-    for (const id of ids) visit(id);
+    const needed = this.withDependencies(ids);
     const before = this.#needed;
     this.#needed = needed;
     return this.#registry.order.map((calc) => calc.id).filter((id) => needed.has(id) && !before.has(id));
+  }
+
+  /** These calculators and the ones they read, transitively. Throws `RegistryError` for an unknown id. */
+  withDependencies(ids: Iterable<CalculatorId>): Set<CalculatorId> {
+    const found = new Set<CalculatorId>();
+    const visit = (id: CalculatorId): void => {
+      if (found.has(id)) return;
+      const calc = this.#registry.get(id);
+      if (calc === undefined) throw new RegistryError('unknownDependency', [id], `unknown calculator "${id}"`);
+      found.add(id);
+      for (const read of calc.reads) if (typeof read === 'object') visit(read.calculator);
+    };
+    for (const id of ids) visit(id);
+    return found;
   }
 
   /** Forgets accumulators, previous outputs and run times, so every needed calculator starts over. Outputs stay. */
@@ -151,13 +157,18 @@ export class Scheduler {
     this.#failed.clear();
   }
 
-  run(input: SchedulerInput): SchedulerResult {
+  /**
+   * One pass over the needed calculators, in dependency order. With `only`, the other calculators are left untouched:
+   * they neither run nor note what they missed (for a pass that adds nothing, like a demand change between frames).
+   */
+  run(input: SchedulerInput, opts: { only?: ReadonlySet<CalculatorId> } = {}): SchedulerResult {
     const now = input.state.sessionTime;
     const ran = new Set<CalculatorId>();
     const errors: SchedulerResult['errors'] = [];
     const insights: InsightChange[] = [];
 
     for (const { calc, slot } of this.#entries) {
+      if (opts.only !== undefined && !opts.only.has(calc.id)) continue;
       // Every calculator keeps track of what it missed, needed or not, so an accumulator never skips history.
       const pending = absorb(slot.pending, input);
       slot.pending = pending;

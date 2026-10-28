@@ -116,12 +116,14 @@ export class SessionProcessor {
   demandChanged(): void {
     const running = this.#running;
     if (running === undefined) return;
+    const { scheduler } = running;
     const needed = [...this.#o.needed()];
-    // Job triggers sit the pass out: a job runs for a frame (`computedFor`), so the next due frame starts it, and an
-    // event-cadence trigger is not used up before then. They are needed again right after the pass.
-    const now = needed.filter((id) => this.#o.jobs?.isTrigger(id) !== true);
-    if (running.scheduler.setNeeded(now).length > 0) this.#evaluateNow(running);
-    running.scheduler.setNeeded(needed);
+    const added = scheduler.setNeeded(needed);
+    // Job triggers, and what only they read, sit the pass out: a job runs for a frame (`computedFor`), so the next due
+    // frame starts it, and an event-cadence trigger is not used up before then.
+    const forTopics = scheduler.withDependencies(needed.filter((id) => this.#o.jobs?.isTrigger(id) !== true));
+    const only = new Set(added.filter((id) => forTopics.has(id)));
+    if (only.size > 0) this.#evaluateNow(running, only);
   }
 
   /** Runs whatever still waits for Participants, then closes the session file. `demandChanged()` still answers afterwards. */
@@ -183,11 +185,12 @@ export class SessionProcessor {
   }
 
   /**
-   * One scheduler pass on the current state with nothing changed and an empty history delta: a calculator that never
-   * ran is due and runs, the others are not affected and skip (a `feed` reader is always affected). Its outputs and
-   * insights are published; history topics have nothing new, and no job trigger takes part (see `demandChanged`).
+   * One scheduler pass on the current state with nothing changed and an empty history delta, restricted to the newly
+   * needed calculators `only`: one that never ran is due and runs. Every other calculator stays untouched, `feed`
+   * readers included (re-running `feed.status` on the last packet's time would undo a stale status). The outputs and
+   * insights are published; history topics have nothing new.
    */
-  #evaluateNow({ runner, scheduler }: Running): void {
+  #evaluateNow({ runner, scheduler }: Running, only: ReadonlySet<CalculatorId>): void {
     const { feedId, publisher, log } = this.#o;
     const { state } = runner;
     const lengths = historyLengths(state.history);
@@ -197,7 +200,7 @@ export class SessionProcessor {
       delta: { before: lengths, after: lengths, truncated: false },
       feed: this.#o.feedView(),
       config: this.#o.config,
-    });
+    }, { only });
     const unpublished = [...publisher.publishOutputs(scheduled), ...publisher.publishInsights(scheduled.insights)];
     for (const { error, topic } of unpublished) {
       log.error({ feedId, sessionUid: this.#uid, ...(topic && { topic }), err: error }, 'topic not published on a demand change, marked errored');

@@ -2,7 +2,7 @@
 // current state, and the last session stays evaluable after it ended until the next one starts. So a client that
 // subscribes after a fast replay has finished, or mid-session between two frames, gets a value straight away.
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { ServerMessage, TopicName } from '@pitwall/contracts';
 import type { FeedId } from '@pitwall/domain';
 import type { QuickCalculator } from '@pitwall/engine';
@@ -41,13 +41,13 @@ function probe() {
 }
 
 /** A hub wired to the pipeline as `serve` does, and one client that records what it receives per subscription. */
-function setup(source: PacketSource, features: readonly Feature[]) {
+function setup(source: PacketSource, features: readonly Feature[], staleCheck?: { clock: () => number; everyMs: number }) {
   let t = 0;
   let pipeline: FeedPipeline | undefined = undefined;
   const hub = new TopicHub({ now: () => (t += 1000), onDemandChange: (feedId) => { if (feedId === F) pipeline?.demandChanged(); } });
   const inbox: ServerMessage[] = [];
   hub.addClient('c', { send: (m) => inbox.push(m), bufferedAmount: () => 0 });
-  pipeline = new FeedPipeline({ feedId: F, source, hub, features, log: createLogger({ level: 'silent' }) });
+  pipeline = new FeedPipeline({ feedId: F, source, hub, features, log: createLogger({ level: 'silent' }), ...(staleCheck && { staleCheck }) });
   const subscribe = (id: string, topic: TopicName) => hub.subscribe({ clientId: 'c', id, topic, params: {}, feedId: F });
   /** The values received on `id`, from snapshots and updates, in order. */
   const values = (id: string) =>
@@ -117,5 +117,22 @@ describe('late subscribers (ruling R9)', () => {
     const cars = late.values('cars');
     expect(cars).toHaveLength(1);
     expect(Array.isArray(cars[0]) && cars[0].length > 0).toBe(true);
+  });
+
+  it('while the feed is stale, a new subscription does not publish a non-stale feed.status', async () => {
+    let now = 0;
+    const source = new ManualSource(F);
+    const { pipeline, subscribe, values } = setup(source, FEATURES, { clock: () => now, everyMs: 5 });
+    subscribe('status', 'feed.status');
+    pipeline.start();
+    packets(77n, 20).forEach((p) => source.push(p.bytes, 0));
+    now = 5000;
+    await vi.waitFor(() => expect(values('status').at(-1)).toMatchObject({ stale: true }));
+    const before = values('status').length;
+
+    subscribe('info', 'session.info'); // needs the session-info calculators: an immediate pass runs
+    expect(values('info')).toHaveLength(1);
+    expect(values('status').slice(before)).not.toContainEqual(expect.objectContaining({ stale: false }));
+    await pipeline.stop();
   });
 });
