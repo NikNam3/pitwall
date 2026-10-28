@@ -15,5 +15,11 @@ export function applyTheme(variant: ThemeVariant, root: HTMLElement): void {
   set('--pw-chart-line', String(variant.chart.lineWidth));
   set('--pw-chart-own-line', String(variant.chart.ownCarLineWidth));
   set('--pw-chart-stale-alpha', String(variant.chart.staleAlpha));
+  set('--pw-chart-dash', variant.chart.dash.join(' '));
+  set('--pw-chart-x-lap', String(variant.chart.xPerCell.lap));
+  set('--pw-chart-x-session', String(variant.chart.xPerCell.sessionTime));
+  set('--pw-border-px', `${variant.table.borderPx}px`);
+  set('--pw-bar-px', `${variant.table.barPx}px`);
+  set('--pw-weight-bold', String(variant.table.boldWeight));
   set('--pw-header-pad', `${variant.density.headerPadCols}ch`);
 }
