@@ -3,7 +3,9 @@
 // Accepted messages are rebuilt from the known fields only, so unknown extras are dropped.
 import { VisualCompound, type FeedId } from '@pitwall/domain';
 import type { ClientMessage, ErrorReason, ServerMessage, TopicStatus } from './messages.ts';
-import { TOPICS, type FeedInfo, type ReservedCommand, type TopicName } from './topics.ts';
+import type { ReservedCommand } from './commands.ts';
+import type { FeedInfo } from './feeds.ts';
+import { TOPICS, type TopicName } from './topics.ts';
 
 type Json = Record<string, unknown>;
 

@@ -7,18 +7,20 @@
     "node": ">=22.18"
   },
   "scripts": {
-    "pretypecheck": "pnpm gen:features",
+    "pretypecheck": "pnpm gen",
     "typecheck": "tsc -p tsconfig.json",
-    "pretest": "pnpm gen:features",
+    "pretest": "pnpm gen",
     "test": "vitest run",
-    "pretest:acceptance": "pnpm gen:features",
+    "pretest:acceptance": "pnpm gen",
     "test:acceptance": "vitest run -c vitest.acceptance.config.ts",
     "lint": "eslint .",
     "depcruise": "depcruise packages apps test-support test --config .dependency-cruiser.cjs",
     "mutation": "pnpm --workspace-concurrency=1 --filter @pitwall/protocol --filter @pitwall/engine --filter @pitwall/strategy run mutation",
     "check": "pnpm typecheck && pnpm lint && pnpm depcruise && pnpm test",
     "gen:features": "node scripts/gen-features.ts",
-    "pitwall": "pnpm -s gen:features && node apps/bridge/src/cli/pitwall.ts",
+    "gen:topics": "node scripts/gen-topics.ts",
+    "gen": "pnpm gen:features && pnpm gen:topics",
+    "pitwall": "pnpm -s gen && node apps/bridge/src/cli/pitwall.ts",
     "pwrec-cut": "node apps/bridge/src/cli/pwrec-cut.ts"
   },
   "devDependencies": {

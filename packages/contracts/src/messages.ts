@@ -1,6 +1,8 @@
 // WebSocket messages (spec 8.2). The reserved `command` channel only ever gets `notSupported` in the MVP.
 import type { FeedId } from '@pitwall/domain';
-import type { FeedInfo, ReservedCommand, TopicName } from './topics.ts';
+import type { ReservedCommand } from './commands.ts';
+import type { FeedInfo } from './feeds.ts';
+import type { TopicName } from './topics.ts';
 
 export type TopicStatus = 'ok' | 'errored' | 'noData';
 export type ErrorReason = 'malformed' | 'unknownFeed';

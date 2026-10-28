@@ -24,7 +24,7 @@ Dependency direction (enforced by dependency-cruiser): `protocol` and `domain` i
 - `pnpm test` / `pnpm test:acceptance`: unit and property tests / acceptance tests on real recordings
 - `pnpm typecheck`, `pnpm lint`, `pnpm depcruise`
 - `pnpm mutation`: Stryker on protocol, engine, strategy (score of at least 80 %)
-- `pnpm gen:features`: regenerate the gitignored `apps/bridge/src/features/index.generated.ts`
+- `pnpm gen`: regenerate both gitignored generated indexes (`gen:features`: `apps/bridge/src/features/index.generated.ts`; `gen:topics`: `packages/contracts/src/topics/index.generated.ts`)
 - `pitwall live|replay|tap|reprocess|import`: the bridge CLI
 - `pwrec-cut <in> <out> --from <sessionTime> --to <sessionTime>`: cut a fixture segment
 

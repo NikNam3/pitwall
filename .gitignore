@@ -3,6 +3,7 @@ recordings/
 external/
 .idea/
 apps/bridge/src/features/index.generated.ts
+packages/contracts/src/topics/index.generated.ts
 .stryker-tmp/
 reports/
 .claude/worktrees/
