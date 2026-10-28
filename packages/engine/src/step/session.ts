@@ -38,9 +38,9 @@ const forecastFrom = (s: SessionPacket['weatherForecastSamples'][number]): Forec
   offsetMin: s.timeOffset,
   weather: pick(WEATHER, s.weather),
   trackTempC: s.trackTemperature,
-  trackTempTrend: pick(TREND, s.trackTemperatureChange, 'flat'),
+  trackTempTrend: pick(TREND, s.trackTemperatureChange),
   airTempC: s.airTemperature,
-  airTempTrend: pick(TREND, s.airTemperatureChange, 'flat'),
+  airTempTrend: pick(TREND, s.airTemperatureChange),
   rainPct: s.rainPercentage,
 });
 

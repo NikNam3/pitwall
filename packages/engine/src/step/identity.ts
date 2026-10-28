@@ -3,18 +3,13 @@ import type { ParticipantsPacket } from '@pitwall/protocol';
 import type { EngineState } from '../state/engine-state.ts';
 import type { SubStep } from './types.ts';
 
-type Participant = ParticipantsPacket['participants'][number];
-
-/** The key of the driver in a slot: the AI by `driverId`, a human by `networkId`, name and race number (spec 6.2). */
-const keyOf = (c: Participant): DriverKey =>
-  c.aiControlled === 1
+/** The key of the driver in a slot: the AI by `driverId`, a human by `networkId`, name and race number (spec 6.2). The one rule; the weekend context reuses it. A slot the packet lacks reads as an unknown AI driver. */
+export const driverKeyOf = (p: ParticipantsPacket, carIndex: number): DriverKey => {
+  const c = p.participants[carIndex];
+  if (!c) return { kind: 'ai', driverId: 255 };
+  return c.aiControlled === 1
     ? { kind: 'ai', driverId: c.driverId }
     : { kind: 'human', networkId: c.networkId, name: c.name, raceNumber: c.raceNumber };
-
-/** The one rule for a `DriverKey`; the weekend context reuses it. A slot the packet lacks reads as an unknown AI driver. */
-export const driverKeyOf = (p: ParticipantsPacket, carIndex: number): DriverKey => {
-  const participant = p.participants[carIndex];
-  return participant ? keyOf(participant) : { kind: 'ai', driverId: 255 };
 };
 
 /** Whether the car is in the session: a slot below `numActiveCars` that the game has not marked invalid or inactive. */
@@ -30,7 +25,8 @@ const visibilityOf = (identity: Pick<CarIdentity, 'ai' | 'telemetryPublic'>, isP
 const identityFrom = (p: ParticipantsPacket, index: number, isPlayer: boolean): CarIdentity | undefined => {
   const c = p.participants[index];
   if (!c) return undefined;
-  const ai = c.aiControlled === 1;
+  const driverKey = driverKeyOf(p, index);
+  const ai = driverKey.kind === 'ai';
   const telemetryPublic = c.yourTelemetry === 1;
   return {
     name: c.name,
@@ -43,7 +39,7 @@ const identityFrom = (p: ParticipantsPacket, index: number, isPlayer: boolean): 
     myTeam: c.myTeam === 1,
     platform: c.platform,
     telemetryPublic,
-    driverKey: keyOf(c),
+    driverKey,
     visibility: visibilityOf({ ai, telemetryPublic }, isPlayer),
   };
 };

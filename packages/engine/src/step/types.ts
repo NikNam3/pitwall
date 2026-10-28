@@ -2,24 +2,26 @@ import type { CarId, Ms } from '@pitwall/domain';
 import type { Frame } from '../frame/frame.ts';
 import type { EngineState } from '../state/engine-state.ts';
 
-/** The part of the state a frame changed; calculators and the scheduler read these. */
-export type ChangeTag =
-  | 'session'
-  | 'participants'
-  | 'timing'
-  | 'motion'
-  | 'telemetry'
-  | 'status'
-  | 'damage'
-  | 'setups'
-  | 'motionEx'
-  | 'tyreSets'
-  | 'laps'
-  | 'stints'
-  | 'pitStops'
-  | 'flagPhases'
-  | 'events'
-  | 'miniSectors';
+/** Every part of the state a frame can change; calculators and the scheduler read these. */
+export const CHANGE_TAGS = [
+  'session',
+  'participants',
+  'timing',
+  'motion',
+  'telemetry',
+  'status',
+  'damage',
+  'setups',
+  'motionEx',
+  'tyreSets',
+  'laps',
+  'stints',
+  'pitStops',
+  'flagPhases',
+  'events',
+  'miniSectors',
+] as const;
+export type ChangeTag = (typeof CHANGE_TAGS)[number];
 
 /** A provisional lap value that the game's Session History replaced with the confirmed one. */
 export type LapCorrection = {

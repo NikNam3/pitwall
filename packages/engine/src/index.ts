@@ -20,4 +20,5 @@ export type {
 } from './calc/types.ts';
 export { createRng, type Rng } from './util/rng.ts';
 export { initialState } from './step/initial-state.ts';
-export { step, type ChangeTag, type LapCorrection, type StepOutput, type SubStep } from './step/step.ts';
+export { driverKeyOf } from './step/identity.ts';
+export { CHANGE_TAGS, step, type ChangeTag, type LapCorrection, type StepOutput, type SubStep } from './step/step.ts';

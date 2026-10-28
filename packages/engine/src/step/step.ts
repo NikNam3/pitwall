@@ -4,7 +4,7 @@ import { applyIdentity, isActiveCar } from './identity.ts';
 import { applySession } from './session.ts';
 import type { StepOutput, SubStep } from './types.ts';
 
-export type { ChangeTag, LapCorrection, StepOutput, SubStep } from './types.ts';
+export { CHANGE_TAGS, type ChangeTag, type LapCorrection, type StepOutput, type SubStep } from './types.ts';
 
 /** Run in this order; a sub-step may rely on the ones before it. */
 export const SUB_STEPS: SubStep[] = [applySession, applyIdentity];
