@@ -49,12 +49,13 @@ const absorb = (pending: Pending | undefined, input: SchedulerInput): Pending =>
 const isDue = (cadence: Cadence, lastRunAt: SessionTime, pending: Pending, now: SessionTime): boolean => {
   if (cadence === 'frame') return true;
   if (typeof cadence === 'object') return now < lastRunAt || now - lastRunAt >= 1000 / cadence.hz;
-  const { before, after } = pending.delta;
+  const { before, after, truncated } = pending.delta;
+  // A flashback discards history, so event calculators run again to catch up with it.
   switch (cadence) {
     case 'lapCompleted':
-      return after.laps > before.laps;
+      return truncated || after.laps > before.laps;
     case 'pitStop':
-      return after.pitStops > before.pitStops;
+      return truncated || after.pitStops > before.pitStops;
     case 'flagChange':
       return pending.changed.has('flagPhases');
     case 'sessionChange':
