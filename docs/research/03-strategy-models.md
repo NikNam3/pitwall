@@ -17,7 +17,7 @@
 - **Code:** [TUMFTM/race-simulation](https://github.com/TUMFTM/race-simulation), **LGPL-3.0**.
   - parameter files for 121 races from 2014–2019
   - `pars_mcs.ini` holds the Monte Carlo probabilities
-  - **Re-implement, don't copy:** copying code would bring LGPL obligations.
+  - **Copying is allowed** since [ADR 0006](../decisions/0006-gpl-code-and-data-allowed.md) (2026-10-28): pitwall accepts GPL-3.0, which can include LGPL-3.0 code. Copied files keep the TUM notice. (Earlier rule: re-implement, don't copy.)
 - **Timing data** 2014–2019: [TUMFTM/f1-timing-database](https://github.com/TUMFTM/f1-timing-database). It could serve as test data for the strategy layer.
 - The model steps forward **one lap at a time**.
 

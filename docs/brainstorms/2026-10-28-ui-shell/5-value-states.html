@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Value states</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap');
+* { box-sizing:border-box; margin:0; }
+body { background:#0b0c0e; color:#d9dbe0; font-family:Inter,system-ui,sans-serif; padding:24px 28px 60px; }
+h2 { font-size:20px; font-weight:600; margin-bottom:6px; }
+.sub { color:#8d9199; font-size:13px; line-height:1.5; max-width:1150px; margin-bottom:20px; }
+.wrap { display:flex; gap:28px; align-items:flex-start; flex-wrap:wrap; }
+.pw { --panel:#15161a; --band:#1b1c21; --line:#25272c; --t1:#d9dbe0; --t2:#8d9199; --t3:#5c6068; --best:#b06cff; --pb:#3fcf70; --warn:#f0b429; --crit:#ff5c5c;
+      font-family:'JetBrains Mono',monospace; font-variant-ligatures:none; font-size:13px; display:flex; flex-direction:column; gap:8px; }
+.w { background:var(--panel); border:1px solid var(--line); border-radius:3px; }
+.wh { font-size:10.5px; letter-spacing:.06em; text-transform:uppercase; color:var(--t3); padding:5px 8px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; gap:16px; }
+.wh .stale { color:var(--warn); }
+.wh .err { color:var(--crit); }
+table { border-collapse:collapse; }
+th { font-weight:400; font-size:10.5px; color:var(--t3); text-align:right; padding:4px 9px; text-transform:uppercase; }
+td { padding:3px 9px; text-align:right; white-space:nowrap; }
+th.l, td.l { text-align:left; }
+tbody tr:nth-child(even) td { background:var(--band); }
+tr.focus td:first-child { box-shadow: inset 2px 0 0 var(--t1); }
+tr.focus td { color:#fff; font-weight:600; }
+.u { color:var(--t3); }
+.est { color:var(--t2); }
+tr.out td { color:var(--t3); }
+.tag { position:relative; }
+.n { display:inline-block; min-width:16px; height:16px; line-height:16px; border-radius:8px; background:#d9dbe0; color:#0b0c0e; font:600 10px Inter,sans-serif; text-align:center; margin-left:4px; vertical-align:1px; }
+.tyres { display:grid; grid-template-columns:1fr 1fr; gap:6px; padding:8px; }
+.c { background:var(--band); border-radius:2px; padding:6px 8px; }
+.c .k { font-size:10.5px; color:var(--t3); text-transform:uppercase; }
+.c .v { font-size:20px; font-weight:500; line-height:1.25; }
+.c .s { font-size:11.5px; color:var(--t2); white-space:nowrap; }
+.dim .v, .dim .s { color:var(--t3); }
+.errbody { padding:14px 10px; color:var(--t2); font-size:12px; line-height:1.6; }
+.errbody b { color:var(--crit); font-weight:600; }
+.legend { max-width:520px; font-size:13px; line-height:1.5; }
+.legend div { display:grid; grid-template-columns:26px 1fr; gap:6px; margin-bottom:10px; }
+.legend code { font-family:'JetBrains Mono',monospace; background:#1b1c21; padding:0 4px; border-radius:2px; color:#d9dbe0; }
+.legend .q { color:#8d9199; }
+</style></head><body>
+
+<h2>Proposal: how values look when they aren't simply "there"</h2>
+<div class="sub">One proposal rather than options, because these are rules. The numbered dots mark examples; the list on the right explains each. Every non-normal value shows its exact reason on hover. Correct anything that feels wrong.</div>
+
+<div class="wrap">
+<div class="pw">
+  <div class="w"><div class="wh"><span>Timing</span><span>Lap 23 / 50</span></div>
+    <table><thead><tr><th class="l">P</th><th class="l">Driver</th><th>Gap</th><th>Int</th><th>Last</th><th class="l">Tyre</th><th>Wear</th><th>Fuel</th></tr></thead>
+    <tbody>
+      <tr><td class="l">1</td><td class="l">VER</td><td class="u">—</td><td class="u">—</td><td>1:25.497</td><td class="l">M 14</td><td>31%</td><td>38.2</td></tr>
+      <tr><td class="l">2</td><td class="l">NOR</td><td>2.184</td><td>2.184</td><td>1:25.539</td><td class="l">M 14</td><td class="est">~34%<span class="n">3</span></td><td class="u">priv<span class="n">2</span></td></tr>
+      <tr><td class="l">3</td><td class="l">LEC</td><td>5.903</td><td>3.719</td><td>1:25.671</td><td class="l">H 23</td><td>27%</td><td>36.9</td></tr>
+      <tr class="focus"><td class="l">4</td><td class="l">KUH</td><td>9.102</td><td>3.199</td><td>1:25.576</td><td class="l">M 12</td><td>24%</td><td>40.1</td></tr>
+      <tr><td class="l">5</td><td class="l">HAM</td><td>14.880</td><td>5.778</td><td class="u">—<span class="n">1</span></td><td class="l">H 23</td><td>29%</td><td>37.5</td></tr>
+      <tr class="out"><td class="l">–</td><td class="l">ALB</td><td colspan="4" class="l">DNF · L17 · collision<span class="n">4</span></td><td></td><td></td></tr>
+    </tbody></table></div>
+
+  <div style="display:flex; gap:8px;">
+    <div class="w" style="width:270px"><div class="wh"><span>Tyres · KUH</span><span class="stale">stale 6 s<span class="n">5</span></span></div>
+      <div class="tyres">
+        <div class="c dim"><div class="k">FL</div><div class="v">98</div><div class="s">23.4 psi · 6 %</div></div>
+        <div class="c dim"><div class="k">FR</div><div class="v">104</div><div class="s">23.9 psi · 9 %</div></div>
+        <div class="c dim"><div class="k">RL</div><div class="v">94</div><div class="s">21.8 psi · 5 %</div></div>
+        <div class="c dim"><div class="k">RR</div><div class="v">97</div><div class="s">22.1 psi · 7 %</div></div>
+      </div></div>
+    <div class="w" style="width:270px"><div class="wh"><span>Degradation</span><span class="err">error<span class="n">6</span></span></div>
+      <div class="errbody"><b>No result.</b> The degradation calculator failed on lap 22.<br>Details in the log. Other widgets are unaffected.</div></div>
+  </div>
+</div>
+
+<div class="legend">
+  <div><span class="n">1</span><span><b>No data yet / doesn't apply:</b> a dim dash <code>—</code>. HAM hasn't completed a lap since the pit stop. Also the leader's gap. <span class="q">Never a 0 and never a blank.</span></span></div>
+  <div><span class="n">2</span><span><b>Hidden by the game:</b> a human rival with private telemetry. A dim short word <code>priv</code>, so you know it's not missing but withheld.</span></div>
+  <div><span class="n">3</span><span><b>Estimated, not measured:</b> pitwall's own estimate (here NOR's wear from tyre age and lap times) gets a <code>~</code> and a slightly dimmer grey. Matters for strategy: you always know what's measured and what's guessed.</span></div>
+  <div><span class="n">4</span><span><b>Inactive car</b> (DNF, DSQ, retired): the whole row goes dim with the reason; it stays at the bottom so the order doesn't jump.</span></div>
+  <div><span class="n">5</span><span><b>Stale:</b> the data stopped arriving. Values stay visible but go dim, and the header says <code>stale 6 s</code> in amber. Stale is wrong, so it earns a highlight, but only once, in the header, not on every number.</span></div>
+  <div><span class="n">6</span><span><b>Errored:</b> a calculation failed. The widget shows one sentence instead of numbers, with the header marked red. It never shows old or made-up numbers.</span></div>
+</div>
+</div>
+</body></html>
