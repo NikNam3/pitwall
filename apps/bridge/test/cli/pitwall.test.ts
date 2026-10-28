@@ -6,6 +6,7 @@ import { basename, join } from 'node:path';
 import Database from 'better-sqlite3';
 import { describe, expect, it } from 'vitest';
 import { dataDir } from '../../src/storage/data-dir.ts';
+import { SCHEMA_VERSION } from '../../src/storage/db.ts';
 import { runCli, SEGMENT, startCli } from '../helpers/cli.ts';
 
 const tmp = () => mkdtempSync(join(tmpdir(), 'pitwall-cli-'));
@@ -51,12 +52,30 @@ describe('pitwall CLI', { timeout: 30_000 }, () => {
     const r = await runCli(['live'], { PITWALL_WS_PORT: '0', PITWALL_UDP_PORT: '0', PITWALL_DATA_DIR: join(file, 'data') });
     expect(r.code).toBe(1); expect(r.stderr).toMatch(/^pitwall: /m);
   });
-  it('live: database of another schema version → message pointing at reprocess, exit 1, nothing started', async () => {
-    const dir = tmp();
-    const db = new Database(dataDir({ PITWALL_DATA_DIR: dir }).dbPath); db.pragma('user_version = 999'); db.close();
-    const r = await runCli(['live'], { PITWALL_WS_PORT: '0', PITWALL_UDP_PORT: '0', PITWALL_DATA_DIR: dir });
-    expect(r.code).toBe(1); expect(r.stderr).toContain('pitwall: database schema version 999'); expect(r.stderr).toContain('pitwall reprocess');
-    expect(r.stdout).not.toContain('listening');
+  it('live: a database of another schema version is deleted and rebuilt from the recordings, then served', async () => {
+    const dir = tmp(); const dirs = dataDir({ PITWALL_DATA_DIR: dir });
+    copyFileSync(SEGMENT, join(dirs.recordings, basename(SEGMENT)));
+    const old = new Database(dirs.dbPath); old.exec('CREATE TABLE foreign_table (x INTEGER)'); old.pragma('user_version = 999'); old.close();
+    const live = startCli(['live'], { PITWALL_WS_PORT: '0', PITWALL_UDP_PORT: '0', PITWALL_DATA_DIR: dir });
+    await live.waitFor(/listening ws:\/\/127\.0\.0\.1:\d+/);
+    expect(live.stderr()).toContain('database schema 999 is outdated; rebuilding it from the recordings');
+    expect(await live.stop()).toBe(0);
+    const db = new Database(dirs.dbPath, { readonly: true });
+    try {
+      expect(db.pragma('user_version', { simple: true })).toBe(SCHEMA_VERSION);
+      expect(db.prepare("SELECT count(*) FROM sqlite_master WHERE name = 'foreign_table'").pluck().get()).toBe(0);
+      expect(db.prepare('SELECT count(*) FROM sessions').pluck().get()).toBe(1);
+      expect(db.prepare('SELECT count(*) FROM laps').pluck().get()).toBeGreaterThan(0);
+    } finally { db.close(); }
+  });
+  it('live: a new database is created empty, not filled from the recordings', async () => {
+    const dir = tmp(); const dirs = dataDir({ PITWALL_DATA_DIR: dir });
+    copyFileSync(SEGMENT, join(dirs.recordings, basename(SEGMENT)));
+    const live = startCli(['live'], { PITWALL_WS_PORT: '0', PITWALL_UDP_PORT: '0', PITWALL_DATA_DIR: dir });
+    await live.waitFor(/listening ws:\/\/127\.0\.0\.1:\d+/);
+    expect(await live.stop()).toBe(0);
+    expect(live.stderr()).not.toContain('is outdated');
+    expect(dump(dir)['sessions']).toHaveLength(0);
   });
   it('reprocess rebuilds the database identically', async () => {
     const dir = tmp(); const rec = dataDir({ PITWALL_DATA_DIR: dir }).recordings; mkdirSync(rec, { recursive: true }); copyFileSync(SEGMENT, join(rec, basename(SEGMENT)));
