@@ -23,6 +23,7 @@ import { TEST_WIDGETS } from './fixtures/index.ts';
 import { linkLog } from './fixtures/link-probe/link-log.ts';
 
 type Handle = { addPanel: ReturnType<typeof vi.fn>; destroy: ReturnType<typeof vi.fn> };
+type PanelViewLike = { render(content: HTMLElement, tab: HTMLElement, spec: WorkbookWindow['panels'][string]): unknown };
 type OnChange = (layout: unknown, panels: WorkbookWindow['panels']) => void;
 const mocks = vi.hoisted(() => ({ mountDock: vi.fn() }));
 vi.mock('../../src/shell/docking/index.ts', () => ({ mountDock: mocks.mountDock }));
@@ -43,7 +44,7 @@ const book = (name = 'race', windows: WorkbookWindow[] = [win('main', { L: 1 }, 
 });
 
 const handles: Handle[] = [];
-const mountCalls = () => mocks.mountDock.mock.calls as Array<[HTMLElement, unknown, WorkbookWindow['panels'], OnChange]>;
+const mountCalls = () => mocks.mountDock.mock.calls as Array<[HTMLElement, unknown, WorkbookWindow['panels'], OnChange, PanelViewLike]>;
 const lastMount = () => mountCalls().at(-1)!;
 
 const fakeHost = (windowId = 'main') => {
@@ -418,7 +419,7 @@ describe('WindowShell: the link a widget gets (supervisor ruling)', () => {
   const mountPanel = async (ctx: ReturnType<typeof setup>) => {
     ctx.mountShell({ defaultFeed: FEED });
     await ctx.snapshot(book());
-    const view = lastMount()[4] as { render(content: HTMLElement, tab: HTMLElement, spec: WorkbookWindow['panels'][string]): unknown };
+    const view = lastMount()[4];
     view.render(document.createElement('div'), document.createElement('div'), { widget: 'link-probe', options: {}, linkGroup: 1 });
     ctx.connection.push({ type: 'snapshot', id: ctx.latestId('session.info'), value: session(1000, 5) });
     await tick(); // the panel subscribes once its link exists
