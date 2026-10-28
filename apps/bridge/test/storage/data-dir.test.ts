@@ -14,6 +14,10 @@ describe('dataDir', () => {
     const home = tmp();
     expect(dataDir({ HOME: home }).root).toBe(join(home, '.local', 'share', 'pitwall'));
   });
+  it('treats an empty PITWALL_DATA_DIR as unset', () => {
+    const home = tmp();
+    expect(dataDir({ PITWALL_DATA_DIR: '', HOME: home }).root).toBe(join(home, '.local', 'share', 'pitwall'));
+  });
   it('throws StartupError naming the path when it cannot be created or written', () => {
     const blocker = join(tmp(), 'a-file');
     writeFileSync(blocker, '');

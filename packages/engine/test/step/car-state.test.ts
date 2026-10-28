@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { known, unknown } from '@pitwall/domain';
 import type { ChangeTag } from '../../src/index.ts';
 import { ScenarioBuilder } from '../builders/index.ts';
-import { runScenario } from '../support/run.ts';
+import { runFrames, runScenario } from '../support/run.ts';
 
 const R = unknown('restricted'), NR = unknown('notReceived');
 // car 1 = human with "Your Telemetry: restricted", car 2 = human public; player = car 0
@@ -58,6 +58,28 @@ describe('restricted data (spec 6.2)', () => {
       expect([tyres.corners[c].wearPct, tyres.corners[c].damagePct, condition.brakes[c].damagePct]).toEqual([R, R, R]);
     }
     expect([tyres.corners.fl.surfaceTempC, tyres.corners.rr.surfaceTempC, condition.brakes.fr.tempC]).toEqual([90, 81, 510]);
+  });
+  it('a car that Participants reveals as restricted withholds what earlier packets stored as known 0', () => {
+    // frame 0: Status, Car Damage and Tyre Sets for car 1 before any Participants (it looks like a public AI car);
+    // frame 1: Participants makes car 1 a human with restricted telemetry, and no Car Damage or Tyre Sets arrive
+    const frames = new ScenarioBuilder({ cars: 3 })
+      .frames(1, (d) => { d.add('carDamage'); d.add('tyreSets', { carIdx: 1 }); })
+      .participants({ participants: { 1: { aiControlled: 0, networkId: 5, yourTelemetry: 0 } } })
+      .frames(1, () => {})
+      .build();
+    const first = { ...frames[0]! };
+    delete first.participants;
+    expect([first.status !== undefined, first.damage !== undefined, first.tyreSets.length, first.participants]).toEqual([true, true, 1, undefined]);
+    expect([frames[1]!.participants !== undefined, frames[1]!.damage, frames[1]!.tyreSets]).toEqual([true, undefined, []]);
+    const { st } = runFrames([first, frames[1]!]);
+    const c = st.cars[1]!;
+    expect(c.identity.visibility).toBe('restricted');
+    expect([c.energy.fuel, c.energy.ers, c.energy.power]).toEqual([R, R, R]);
+    expect([c.condition.bodywork, c.condition.powerUnit, c.condition.drsFault]).toEqual([R, R, R]);
+    for (const w of ['fl', 'fr', 'rl', 'rr'] as const) {
+      expect([c.condition.brakes[w].damagePct, c.tyres.corners[w].wearPct, c.tyres.corners[w].damagePct], w).toEqual([R, R, R]);
+    }
+    expect(c.tyres.sets).toEqual(R);
   });
   it('a public human car with 0 fuel has known 0 fuel', () => {
     const { st } = runScenario(online().frames(1, () => {}));

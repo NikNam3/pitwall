@@ -41,6 +41,14 @@ describe('laps', () => {
       { carId: 0, lapNumber: 1, field: 'sector2Ms', provisional: 31_000, confirmed: 31_010 }]);
     expect(results[6]!.corrections).toEqual([]);
   });
+  it('a confirmed lap keeps the time it was completed, not the time Session History confirmed it', () => {
+    const history = { carIdx: 0, numLaps: 2, lapHistoryData: [
+      { lapTimeInMs: 90_500, sector1TimeMs: 30_000, sector2TimeMs: 31_000, sector3TimeMs: 29_500, lapValidBitFlags: 0b1111 }, { lapValidBitFlags: 0b1111 }] };
+    const { st, frames } = runScenario(lapOne().frames(3, () => {}).frames(1, (d) => { d.add('sessionHistory', history); }));
+    const completed = frames[3]!.sessionTime, confirmedAt = frames[8]!.sessionTime;
+    expect(confirmedAt).toBeGreaterThan(completed);
+    expect(st.history.laps.map((l) => [l.status, l.completedAt])).toEqual([['provisional', completed], ['confirmed', completed]]);
+  });
   it('SC/VSC share = share of the lap’s session time under each status', () => {
     const { st } = runScenario(new ScenarioBuilder({ cars: 1, stepMs: 1000 }).frames(1, () => {})
       .session({ safetyCarStatus: 1 }).frames(1, () => {})          // (0, 1000]     SC
