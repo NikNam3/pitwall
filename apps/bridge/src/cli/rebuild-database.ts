@@ -1,7 +1,7 @@
 import { readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type { DataDir } from '../storage/data-dir.ts';
-import { openDatabase, type Db } from '../storage/db.ts';
+import { openDatabase, SCHEMA_VERSION, type Db } from '../storage/db.ts';
 import { cliLogger, type CliIo } from './io.ts';
 import { processRecording } from './process-recording.ts';
 
@@ -36,16 +36,21 @@ export async function processRecordings(files: readonly string[], db: Db, io: Cl
 /**
  * Deletes the database files and rebuilds the database from every recording. Returns the open database and the number
  * of recordings, or undefined (database closed) when `io.signal` stopped it.
+ *
+ * Until the last recording is in, the database is marked with `user_version` 0: a rebuild stopped by a signal, an
+ * error or a crash leaves an outdated database, which `openDatabase` refuses and the next `live` rebuilds again.
  */
 export async function rebuildDatabase(dirs: DataDir, io: CliIo): Promise<{ db: Db; recordings: number } | undefined> {
   for (const suffix of ['', '-wal', '-shm']) rmSync(dirs.dbPath + suffix, { force: true });
   const db = openDatabase(dirs.dbPath);
   try {
+    db.pragma('user_version = 0');
     const files = allRecordings(dirs.recordings);
     if (!(await processRecordings(files, db, io))) {
       db.close();
       return undefined;
     }
+    db.pragma(`user_version = ${SCHEMA_VERSION}`);
     return { db, recordings: files.length };
   } catch (error) {
     db.close();
