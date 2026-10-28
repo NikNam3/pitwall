@@ -241,10 +241,10 @@ Not built. A what-if is a **parameterised subscription** to a simulator topic, e
       { "id": "strategy", "geometry": { "screen": 0, "x": 0, "y": 0, "width": 1920, "height": 1080 },
         "layout": { /* dockview serialised layout */ },
         "panels": { "p1": { "widget": "feed-status", "options": {}, "linkGroup": 1 } } }
-    ],
-    "linkGroups": [{ "id": 1, "feedId": "…", "primary": "player", "compare": [], "window": { "kind": "live" } }]
+    ]
   }
   ```
+- A panel names the link group it follows. The groups themselves (7.5) are runtime selections, not layout, so they live in `PITWALL_DATA_DIR/ui/state.json` and are the same in every workbook.
 - **Read leniently,** like the config sidecars (ADR 0008): an unknown widget becomes a panel saying "unknown widget `x`"; an invalid or unknown option falls back to its default with a note; a broken layout falls back to an empty window. Invalid JSON is an error shown in the shell, and the previous workbook stays active.
 - **Saved automatically:** layout, panel, option and geometry changes are saved to the active workbook, debounced.
 - **Hand edits are never overwritten.** The bridge watches `PITWALL_DATA_DIR/ui/workbooks/`:
