@@ -1,0 +1,25 @@
+import type { CarOverview } from '@pitwall/contracts';
+import type { QuickCalculator } from '@pitwall/engine';
+import { defineFeature } from '../feature.ts';
+
+const carsOverview: QuickCalculator<CarOverview[]> = {
+  id: 'cars.overview',
+  kind: 'quick',
+  reads: ['timing', 'participants', 'status', 'stints'],
+  cadence: { hz: 10 },
+  compute: ({ state }) =>
+    state.cars.map(({ id, identity, timing, tyres }) =>
+      structuredClone({
+        id,
+        identity,
+        timing,
+        tyres: { actualCompound: tyres.actualCompound, visualCompound: tyres.visualCompound, age: tyres.age },
+      }),
+    ),
+};
+
+export default defineFeature({
+  name: 'cars-overview',
+  calculators: [carsOverview],
+  topics: [{ topic: 'cars.overview', from: 'cars.overview' }],
+});
