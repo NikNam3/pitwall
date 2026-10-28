@@ -72,7 +72,8 @@ describe('guard-tests.sh', () => {
   });
 });
 
-describe('typecheck.sh', () => {
+// Real tsc runs (up to three per test) do not fit the 5 s default while the whole suite runs in parallel.
+describe('typecheck.sh', { timeout: 30_000 }, () => {
   function tempPackage(source: string): { root: string; file: string } {
     const root = mkdtempSync(join(tmpdir(), 'pitwall-hook-'));
     const pkg = join(root, 'packages/demo');
