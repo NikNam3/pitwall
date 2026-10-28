@@ -82,3 +82,6 @@ export function formatShort(value: unknown, max: number): string {
   const json = JSON.stringify(value) ?? String(value);
   return json.length <= max ? json : `${json.slice(0, max - 1)}…`;
 }
+
+/** Replay speed factor, `0.5` -> `×0.5`. */
+export const formatFactor = (factor: number): string => `×${factor}`;

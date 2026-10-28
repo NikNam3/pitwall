@@ -1,6 +1,7 @@
 // The shell's own commands and their default keys (spec 7.7). Widgets cannot register commands in the MVP.
 import type { LinkGroup, ReplayControl, UiAction, UiSettings } from '@pitwall/contracts';
 import * as text from '../../kit/text.ts';
+import type { Inspection } from '../inspector/inspection.svelte.ts';
 import { THEMES, type ThemeVariant } from '../../theme/index.ts';
 import type { Command } from './registry.ts';
 
@@ -30,6 +31,8 @@ export type CommandContext = {
   focusWindow: (id: string) => void;
   /** The keys of the tier-1 alerts shown now. */
   alertKeys: () => readonly string[];
+  /** The inspector's switch (dev builds). */
+  inspection: Inspection;
 };
 
 /** Smallest and largest font size a window can be set to, in px. */
@@ -45,6 +48,7 @@ export const DEFAULT_KEYS: Readonly<Record<string, string>> = {
   ...Object.fromEntries(Array.from({ length: WORKBOOK_SLOTS }, (_, i) => [`Ctrl+${i + 1}`, `workbook.open.${i + 1}`])),
   'Ctrl+O': 'workbook.pick',
   'Ctrl+Enter': 'alerts.ackAll',
+  'Ctrl+I': 'dev.inspect',
   Escape: `linkGroup.${KEY_GROUP}.resetPrimary`,
   'Ctrl+P': `linkGroup.${KEY_GROUP}.pickPrimary`,
   'Ctrl+K': 'palette.open',
@@ -55,7 +59,7 @@ export const DEFAULT_KEYS: Readonly<Record<string, string>> = {
   'Ctrl+0': 'window.fontReset',
 };
 
-/** The commands that do not depend on the workbook's windows. `dev.inspect` is registered by the inspector (Task 20). */
+/** The commands that do not depend on the workbook's windows. `dev.inspect` exists in dev builds only. */
 export function defaultCommands(ctx: CommandContext): Command[] {
   const g = text.commandGroups;
   const t = text.commandTitles;
@@ -88,6 +92,7 @@ export function defaultCommands(ctx: CommandContext): Command[] {
         if (keys.length > 0) ctx.send({ kind: 'alert.ackAll', keys });
       },
     },
+    ...(import.meta.env.DEV ? [{ id: 'dev.inspect', title: t.devInspect, group: g.help, run: () => ctx.inspection.toggle() }] : []),
     { id: `linkGroup.${KEY_GROUP}.resetPrimary`, title: t.resetPrimary(KEY_GROUP), group: g.cars, run: resetPrimary },
     { id: `linkGroup.${KEY_GROUP}.pickPrimary`, title: t.pickPrimary(KEY_GROUP), group: g.cars, run: () => ctx.open({ kind: 'picker', group: KEY_GROUP }) },
     { id: 'palette.open', title: t.paletteOpen, group: g.help, run: () => ctx.open({ kind: 'palette' }) },
@@ -110,6 +115,11 @@ export function defaultCommands(ctx: CommandContext): Command[] {
       run: () => ctx.setTheme(variant),
     })),
   ];
+}
+
+/** `alerts.ack.<key>` for each alert the top bar shows. */
+export function alertCommands(keys: readonly string[], ctx: Pick<CommandContext, 'send'>): Command[] {
+  return keys.map((key) => ({ id: `alerts.ack.${key}`, title: text.commandTitles.alertAck(key), group: text.commandGroups.alerts, run: () => ctx.send({ kind: 'alert.ack', key }) }));
 }
 
 /** `window.focus.<id>` for each window of the active workbook. */
