@@ -45,8 +45,9 @@ describe('Table: columns', () => {
     expect(container.querySelector('[data-row] [data-col="notes"]')).toBeNull();
   });
 
-  it('keeps dropping by priority as the width shrinks', () => {
-    const { container } = render(TableHarness, { rows, size: size(18) });
+  it('keeps dropping by priority as the width shrinks (10 + 1 gap + 8 = 19)', () => {
+    document.documentElement.style.setProperty('--pw-col-gap', '1ch');
+    const { container } = render(TableHarness, { rows, size: size(19) });
     expect(headerKeys(container)).toEqual(['name', 'gap']);
   });
 
@@ -60,9 +61,10 @@ describe('Table: columns', () => {
   });
 
   it('follows a size change', async () => {
+    document.documentElement.style.setProperty('--pw-col-gap', '1ch');
     const { container, rerender } = render(TableHarness, { rows, size: size(60) });
     expect(headerKeys(container)).toHaveLength(4);
-    await rerender({ rows, size: size(18) });
+    await rerender({ rows, size: size(19) });
     expect(headerKeys(container)).toEqual(['name', 'gap']);
   });
 });
@@ -100,6 +102,14 @@ describe('Table: rows', () => {
     const { container } = render(TableHarness, { rows, size: size(60), highlight: 'c' });
     expect(rowEl(container, 'c').classList.contains('highlight')).toBe(true);
     expect(rowEl(container, 'a').classList.contains('highlight')).toBe(false);
+  });
+
+  it('renders the highlighted (own car) row bold: inline font-weight bold or >= 700', () => {
+    const { container } = render(TableHarness, { rows, size: size(60), highlight: 'c' });
+    const w = rowEl(container, 'c').style.fontWeight;
+    expect(w === 'bold' || Number(w) >= 700).toBe(true);
+    const other = rowEl(container, 'a').style.fontWeight;
+    expect(other === 'bold' || Number(other) >= 700).toBe(false);
   });
 
   it('uses the theme font at the one size, not scaled with the panel', () => {

@@ -205,6 +205,27 @@ describe('Chart: width', () => {
     expect(resized || rebuilt).toBe(true);
   });
 
+  it('a data-only change calls setData on the same plot: no new constructor call, no destroy', async () => {
+    const { rerender } = render(Chart, { ...base, series: [{ label: 'a', points: pts(1) }] });
+    const first = last();
+    const count = instances.length;
+    await rerender({ ...base, series: [{ label: 'a', points: [[1, 5], [2, 6], [3, 7], [4, 8]] }] });
+    expect(instances.length).toBe(count);
+    expect(first.destroy).not.toHaveBeenCalled();
+    expect(first.setData).toHaveBeenCalled();
+    expect(first.setData.mock.calls.at(-1)![0]).toEqual([[1, 2, 3, 4], [5, 6, 7, 8]]);
+  });
+
+  it('a size-only change calls setSize on the same plot, without rebuilding', async () => {
+    const { rerender } = render(Chart, { ...base, series: [{ label: 'a', points: pts(1) }] });
+    const first = last();
+    const count = instances.length;
+    await rerender({ ...base, series: [{ label: 'a', points: pts(1) }], size: size(800) });
+    expect(instances.length).toBe(count);
+    expect(first.destroy).not.toHaveBeenCalled();
+    expect(first.setSize).toHaveBeenCalledWith(expect.objectContaining({ width: 800 }));
+  });
+
   it('destroys the plot on unmount', () => {
     const { unmount } = render(Chart, { ...base, series: [{ label: 'a', points: pts(1) }] });
     const inst = last();
