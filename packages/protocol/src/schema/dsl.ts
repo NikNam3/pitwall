@@ -70,13 +70,25 @@ const PRIMITIVE_BYTES: Readonly<Record<Primitive, number>> = {
   u8: 1, i8: 1, u16: 2, i16: 2, u32: 4, i32: 4, u64: 8, f32: 4, f64: 8,
 };
 
+/** Specs are immutable, so the size of a composite spec is computed once and remembered. */
+const compositeSizes = new WeakMap<FieldSpec, number>();
+
 /** Packed size in bytes. */
 export function sizeOf(spec: FieldSpec): number {
   switch (spec.kind) {
     case 'primitive': return PRIMITIVE_BYTES[spec.type];
-    case 'array': return spec.length * sizeOf(spec.item);
-    case 'struct': return Object.values(spec.fields).reduce((total, field) => total + sizeOf(field), 0);
+    case 'array': return memoised(spec, () => spec.length * sizeOf(spec.item));
+    case 'struct': return memoised(spec, () => Object.values(spec.fields).reduce((total, field) => total + sizeOf(field), 0));
     case 'chars': return spec.length;
     case 'splitTime': return SPLIT_TIME_BYTES;
   }
+}
+
+function memoised(spec: FieldSpec, compute: () => number): number {
+  let size = compositeSizes.get(spec);
+  if (size === undefined) {
+    size = compute();
+    compositeSizes.set(spec, size);
+  }
+  return size;
 }
