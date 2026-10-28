@@ -7,7 +7,7 @@ import { FEATURES } from '../../features/index.generated.ts';
 import { PwrecSource } from '../../input/pwrec-source.ts';
 import { StartupError } from '../../startup-error.ts';
 import { dataDir } from '../../storage/data-dir.ts';
-import type { CliIo } from '../io.ts';
+import { cliLogger, type CliIo } from '../io.ts';
 import { serve } from '../serve.ts';
 import { UsageError } from '../usage.ts';
 
@@ -19,7 +19,7 @@ export async function run(positionals: string[], values: { realtime?: boolean | 
   const { wsPort } = loadConfig(io.env);
   const dirs = dataDir(io.env);
   // The config the recording ran with if it has one, else the current one; fixed for the run (a runtime change from the UI comes later).
-  const config = recordingConfig(file, FEATURES, loadFeatureConfig(dirs.root, FEATURES));
+  const config = recordingConfig(file, FEATURES, loadFeatureConfig(dirs.root, FEATURES), cliLogger(io, 'warn'));
   const id = feedId('replay');
   return serve({
     source: new PwrecSource({ feedId: id, path: file, mode: values.realtime ? 'realtime' : 'asFastAsPossible' }),

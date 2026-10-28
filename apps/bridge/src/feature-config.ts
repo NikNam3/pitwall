@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ConfigKey, ConfigValue } from '@pitwall/engine';
 import type { Feature } from './features/feature.ts';
+import type { Logger } from './log.ts';
 import { StartupError } from './startup-error.ts';
 
 /** Section key → field → value. The effective config holds every declared key with all its fields. */
@@ -43,8 +44,12 @@ function readOptional(path: string): string | undefined {
   }
 }
 
-/** The overrides in `text` (the content of `path`), checked against the declared keys, fields and types. */
-function parseOverrides(path: string, text: string, declared: Declared): FeatureConfig {
+/**
+ * The overrides in `text` (the content of `path`). Structure that is not an object of objects, or not JSON, is always a
+ * `StartupError`. A key, field or value that does not fit the declarations goes to `reject`, which throws (strict) or
+ * logs (lenient); the entry is then left out and the default stays.
+ */
+function parseOverrides(path: string, text: string, declared: Declared, reject: (message: string) => void): FeatureConfig {
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
@@ -55,15 +60,22 @@ function parseOverrides(path: string, text: string, declared: Declared): Feature
   const overrides: FeatureConfig = {};
   for (const [key, section] of Object.entries(parsed)) {
     const known = declared.get(key);
-    if (known === undefined) throw new StartupError(`${path}: unknown config key "${key}"; known keys: ${[...declared.keys()].join(', ') || 'none'}`);
+    if (known === undefined) {
+      reject(`${path}: unknown config key "${key}"; known keys: ${[...declared.keys()].join(', ') || 'none'}`);
+      continue;
+    }
     if (!isRecord(section)) throw new StartupError(`${path}: config key "${key}" must be an object of field values`);
     const fields: Record<string, ConfigValue> = {};
     for (const [name, value] of Object.entries(section)) {
       if (!Object.hasOwn(known.defaults, name)) {
-        throw new StartupError(`${path}: unknown field "${name}" in config key "${key}"; known fields: ${Object.keys(known.defaults).join(', ')}`);
+        reject(`${path}: unknown field "${name}" in config key "${key}"; known fields: ${Object.keys(known.defaults).join(', ')}`);
+        continue;
       }
       const expected = typeof known.defaults[name];
-      if (typeof value !== expected) throw new StartupError(`${path}: config key "${key}", field "${name}" must be a ${expected}, got ${JSON.stringify(value)}`);
+      if (typeof value !== expected) {
+        reject(`${path}: config key "${key}", field "${name}" must be a ${expected}, got ${JSON.stringify(value)}`);
+        continue;
+      }
       fields[name] = value as ConfigValue;
     }
     overrides[key] = fields;
@@ -71,12 +83,16 @@ function parseOverrides(path: string, text: string, declared: Declared): Feature
   return overrides;
 }
 
-/** `overrides` read from `path` over the defaults; `undefined` when `path` does not exist. */
-function readConfigFile(path: string, features: readonly Feature[]): FeatureConfig | undefined {
+/** The file at `path` over the defaults; `undefined` when `path` does not exist. */
+function readConfigFile(path: string, features: readonly Feature[], reject: (message: string) => void): FeatureConfig | undefined {
   const declared = declaredBy(features);
   const text = readOptional(path);
-  return text === undefined ? undefined : effectiveConfig(features, parseOverrides(path, text, declared));
+  return text === undefined ? undefined : effectiveConfig(features, parseOverrides(path, text, declared, reject));
 }
+
+const fail = (message: string): never => {
+  throw new StartupError(message);
+};
 
 /**
  * The effective config of this run: the declared defaults with `<dataDirRoot>/config.json` over them (no file: the
@@ -87,16 +103,19 @@ function readConfigFile(path: string, features: readonly Feature[]): FeatureConf
  * config in the scheduler input and a new sidecar for the session.
  */
 export function loadFeatureConfig(dataDirRoot: string, features: readonly Feature[]): FeatureConfig {
-  return readConfigFile(join(dataDirRoot, 'config.json'), features) ?? effectiveConfig(features);
+  return readConfigFile(join(dataDirRoot, 'config.json'), features, fail) ?? effectiveConfig(features);
 }
 
 /** Where a recording keeps the config it ran with. */
 export const sessionConfigPath = (recordingPath: string): string => `${recordingPath}.config.json`;
 
 /**
- * The config to process a recording with: the one stored next to it (checked like `config.json`, fields declared
- * since then at their defaults) if there is one, else `effective`. Throws `StartupError` like `loadFeatureConfig`.
+ * The config to process a recording with: the one stored next to it if there is one, else `effective`. A sidecar is a
+ * historical record, so it is read leniently: a key, field or value that the features no longer declare (or declare
+ * with another type) is dropped with one `log.warn` and the feature default stays. Only an unreadable file, invalid
+ * JSON or a top level or section that is not an object throws `StartupError`.
  */
-export function recordingConfig(recordingPath: string, features: readonly Feature[], effective: FeatureConfig): FeatureConfig {
-  return readConfigFile(sessionConfigPath(recordingPath), features) ?? effective;
+export function recordingConfig(recordingPath: string, features: readonly Feature[], effective: FeatureConfig, log?: Logger): FeatureConfig {
+  const reject = (message: string): void => log?.warn({ recordingPath }, message);
+  return readConfigFile(sessionConfigPath(recordingPath), features, reject) ?? effective;
 }

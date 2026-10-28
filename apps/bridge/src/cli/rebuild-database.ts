@@ -2,6 +2,7 @@ import { readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { loadFeatureConfig, recordingConfig, type FeatureConfig } from '../feature-config.ts';
 import { FEATURES } from '../features/index.generated.ts';
+import type { Logger } from '../log.ts';
 import type { DataDir } from '../storage/data-dir.ts';
 import { openDatabase, SCHEMA_VERSION, type Db } from '../storage/db.ts';
 import { cliLogger, type CliIo } from './io.ts';
@@ -21,12 +22,12 @@ function allRecordings(recordingsDir: string): string[] {
 export type RecordingJob = { file: string; config: FeatureConfig };
 
 /**
- * Each of `files` with the config stored next to it, or the current one (`<dataDir>/config.json`). Throws `StartupError`
- * for a broken config, so call it before anything is deleted.
+ * Each of `files` with the config stored next to it (read leniently, problems warned to `log`), or the current one
+ * (`<dataDir>/config.json`). Throws `StartupError` for a broken config, so call it before anything is deleted.
  */
-export function recordingJobs(files: readonly string[], dirs: DataDir): RecordingJob[] {
+export function recordingJobs(files: readonly string[], dirs: DataDir, log: Logger): RecordingJob[] {
   const current = loadFeatureConfig(dirs.root, FEATURES);
-  return files.map((file) => ({ file, config: recordingConfig(file, FEATURES, current) }));
+  return files.map((file) => ({ file, config: recordingConfig(file, FEATURES, current, log) }));
 }
 
 /**
@@ -56,7 +57,7 @@ export async function processRecordings(jobs: readonly RecordingJob[], db: Db, i
  */
 export async function rebuildDatabase(dirs: DataDir, io: CliIo): Promise<{ db: Db; recordings: number } | undefined> {
   const files = allRecordings(dirs.recordings);
-  const jobs = recordingJobs(files, dirs);
+  const jobs = recordingJobs(files, dirs, cliLogger(io, 'warn'));
   for (const suffix of ['', '-wal', '-shm']) rmSync(dirs.dbPath + suffix, { force: true });
   const db = openDatabase(dirs.dbPath);
   try {
