@@ -151,11 +151,11 @@
 
 <div class="panel">
   <header use:portal={headerTarget} style:background={role('bgBand')}>
-    <LinkMarker {store} groupId={spec.linkGroup} {group} {link} onOpen={(button) => openAt('picker', button)} />
     <span class="title" style:color={role('textDim')}>{widget?.decl.title ?? spec.widget}</span>
+    <LinkMarker {store} groupId={spec.linkGroup} {group} {link} onOpen={(button) => openAt('picker', button)} />
     <span class="fill"></span>
     {#if header !== undefined}<span class="state" style:color={role(header.role)}>{header.text}</span>{/if}
-    <button type="button" class="gear" style:color={role('textFaint')} onclick={(e) => openAt('settings', e.currentTarget)}
+    <button type="button" class="pw-button" style:color={role('textFaint')} onclick={(e) => openAt('settings', e.currentTarget)}
       ><Gear label={text.settings} /></button
     >
   </header>
@@ -206,14 +206,6 @@
   }
   .fill {
     flex: 1;
-  }
-  .gear {
-    font-family: var(--pw-font);
-    font-size: inherit;
-    background: none;
-    border: none;
-    padding: 0;
-    cursor: pointer;
   }
   .body {
     flex: 1;

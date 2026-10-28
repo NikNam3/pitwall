@@ -3,6 +3,7 @@
   import * as text from '../../kit/text.ts';
   import { role } from '../../theme/index.ts';
   import Overlay from './Overlay.svelte';
+  import { KEY_COLUMN_COLS, OVERLAY_COLS } from './overlay-sizes.ts';
   import type { CommandRegistry } from './registry.ts';
 
   type Props = {
@@ -27,11 +28,11 @@
   });
 </script>
 
-<Overlay title={text.keyOverviewTitle} {onClose} cols={58}>
+<Overlay title={text.keyOverviewTitle} {onClose} cols={OVERLAY_COLS.keys}>
   {#each groups as [group, rows] (group)}
     <div class="group" style:color={role('textDim')}>{group}</div>
     {#each rows as row (row.key)}
-      <div class="row"><kbd>{row.key}</kbd><span style:color={role('textDim')}>{row.title}</span></div>
+      <div class="row"><kbd style:min-width="{KEY_COLUMN_COLS}ch">{row.key}</kbd><span style:color={role('textDim')}>{row.title}</span></div>
     {/each}
   {/each}
   {#each notes as note (note)}
@@ -47,6 +48,5 @@
   kbd {
     font-family: var(--pw-font);
     font-size: inherit;
-    min-width: 12ch;
   }
 </style>

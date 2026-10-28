@@ -18,7 +18,7 @@ import './dock.css';
 
 /** How the shell renders one panel: its body into `content` and its header band into `tab` (the drag handle). */
 export type PanelView = {
-  render(content: HTMLElement, tab: HTMLElement, spec: PanelSpec): { destroy(): void };
+  render(content: HTMLElement, tab: HTMLElement, spec: PanelSpec, panelId: string): { destroy(): void };
   /** The panel's title, for places dockview draws itself (the overflow list of a crowded group). */
   title(spec: PanelSpec): string;
 };
@@ -27,6 +27,8 @@ export type PanelView = {
 export type DockHandle = {
   /** Adds a panel under a fresh id; the change reaches `onChange` like any other. */
   addPanel(spec: PanelSpec): void;
+  /** Replaces the spec the dock holds for a panel (the shell changed its options); the panel is not rendered again. */
+  updatePanel(id: string, spec: PanelSpec): void;
   destroy(): void;
 };
 
@@ -75,7 +77,7 @@ export function mountDock(
         element: p.content,
         init: () => {
           const spec = specs.get(id);
-          if (spec !== undefined && p.rendered === undefined) p.rendered = view.render(p.content, p.tab, spec);
+          if (spec !== undefined && p.rendered === undefined) p.rendered = view.render(p.content, p.tab, spec, id);
         },
         dispose: () => {
           p.rendered?.destroy();
@@ -189,6 +191,9 @@ export function mountDock(
 
   return {
     addPanel: (spec) => add(spec),
+    updatePanel(id, spec) {
+      if (specs.has(id)) specs.set(id, spec);
+    },
     destroy() {
       for (const s of subscriptions) s.dispose();
       doc.removeEventListener('drop', onDrop, true);

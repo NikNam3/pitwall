@@ -37,19 +37,10 @@
 
 <button
   type="button"
+  class="pw-button"
   aria-label="{text.linkMarker} {groupId}"
   disabled={group === undefined}
   style:color={role(custom ? 'ownCar' : 'textFaint')}
   onclick={(e) => onOpen(e.currentTarget)}
 >{groupId}{#if custom}{text.separator}{name === undefined ? link?.primary : carLabel(name)}{/if}</button>
 
-<style>
-  button {
-    font-family: var(--pw-font);
-    font-size: inherit;
-    background: none;
-    border: none;
-    padding: 0;
-    cursor: pointer;
-  }
-</style>

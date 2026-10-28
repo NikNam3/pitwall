@@ -56,6 +56,7 @@
   <!-- svelte-ignore a11y_autofocus -->
   <input
     type="text"
+    class="pw-input"
     autofocus
     spellcheck="false"
     placeholder={text.palettePlaceholder}
@@ -67,7 +68,7 @@
   <ul>
     {#each results as command, i (command.id)}
       <li>
-        <button type="button" class:selected={i === selected} onclick={() => run(command.id)}>
+        <button type="button" class="pw-button" class:selected={i === selected} onclick={() => run(command.id)}>
           <span class="title">{command.title}</span>
           {#if keyOf.get(command.id) !== undefined}<kbd style:color={role('textDim')}>{keyOf.get(command.id)}</kbd>{/if}
         </button>
@@ -81,13 +82,6 @@
 <style>
   input {
     width: 100%;
-    box-sizing: border-box;
-    font-family: var(--pw-font);
-    font-size: inherit;
-    background: none;
-    border: none;
-    outline: none;
-    padding: 0;
   }
   ul {
     list-style: none;
@@ -98,14 +92,6 @@
     display: flex;
     justify-content: space-between;
     width: 100%;
-    font-family: var(--pw-font);
-    font-size: inherit;
-    color: inherit;
-    background: none;
-    border: none;
-    padding: 0;
-    cursor: pointer;
-    text-align: left;
   }
   button.selected {
     background: var(--pw-bgBand);

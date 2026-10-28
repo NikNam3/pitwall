@@ -3,6 +3,7 @@
   // Keys are not handled here: the shell closes the overlay on Escape.
   import type { Snippet } from 'svelte';
   import { role } from '../../theme/index.ts';
+  import { OVERLAY_COLS } from './overlay-sizes.ts';
 
   type Props = {
     title?: string | undefined;
@@ -13,7 +14,7 @@
     cols?: number;
     children: Snippet;
   };
-  let { title, onClose, anchor, cols = 60, children }: Props = $props();
+  let { title, onClose, anchor, cols = OVERLAY_COLS.palette, children }: Props = $props();
 </script>
 
 <div class="backdrop" role="presentation" onclick={onClose}></div>

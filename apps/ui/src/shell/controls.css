@@ -1,0 +1,21 @@
+/* The look of the shell's buttons and inputs: the one place it is decided (values come from the theme's tokens). */
+.pw-button {
+  font-family: var(--pw-font);
+  font-size: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+}
+
+.pw-input {
+  font-family: var(--pw-font);
+  font-size: inherit;
+  color: inherit;
+  background: none;
+  border: var(--pw-border-px) solid var(--pw-border);
+  padding: 0;
+  box-sizing: border-box;
+}

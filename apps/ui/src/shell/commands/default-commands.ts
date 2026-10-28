@@ -1,7 +1,7 @@
 // The shell's own commands and their default keys (spec 7.7). Widgets cannot register commands in the MVP.
 import type { LinkGroup, ReplayControl, UiAction, UiSettings } from '@pitwall/contracts';
 import * as text from '../../kit/text.ts';
-import { applyTheme, DEFAULT_THEME, THEMES } from '../../theme/index.ts';
+import { THEMES, type ThemeVariant } from '../../theme/index.ts';
 import type { Command } from './registry.ts';
 
 /** The overlays the shell can show. */
@@ -23,6 +23,9 @@ export type CommandContext = {
   /** This window's font size in px. */
   fontPx: () => number;
   setFontPx: (px: number) => void;
+  /** The font size of the theme in use. */
+  defaultFontPx: () => number;
+  setTheme: (variant: ThemeVariant) => void;
   /** Brings a workbook window to the front. */
   focusWindow: (id: string) => void;
   /** The keys of the tier-1 alerts shown now. */
@@ -99,12 +102,12 @@ export function defaultCommands(ctx: CommandContext): Command[] {
     { id: 'replay.play', title: t.replayPlay, group: g.replay, run: () => ctx.sendReplay({ kind: 'play' }) },
     { id: 'window.fontBigger', title: t.fontBigger, group: g.window, run: () => setFont(ctx.fontPx() + 1) },
     { id: 'window.fontSmaller', title: t.fontSmaller, group: g.window, run: () => setFont(ctx.fontPx() - 1) },
-    { id: 'window.fontReset', title: t.fontReset, group: g.window, run: () => setFont(DEFAULT_THEME.fontPx) },
+    { id: 'window.fontReset', title: t.fontReset, group: g.window, run: () => setFont(ctx.defaultFontPx()) },
     ...THEMES.map((variant): Command => ({
       id: `theme.${variant.name}`,
       title: t.theme(variant.name),
       group: g.theme,
-      run: () => applyTheme(variant, document.documentElement),
+      run: () => ctx.setTheme(variant),
     })),
   ];
 }

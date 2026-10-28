@@ -117,6 +117,8 @@ export const picker = {
 
 /** Settings popover. */
 export const settingsTitle = (widget: string): string => `${widget} · settings`;
+/** The choice of a car option that follows the panel's link group. */
+export const followLink = 'follow';
 export const noSettings = 'no settings';
 export const settingsSaved = 'saved in this workbook';
 

@@ -6,7 +6,8 @@
   import type { EntryState, TopicStore } from '../../connection/topic-store.svelte.ts';
   import * as text from '../../kit/text.ts';
   import type { RegisteredWidget, ResolvedLink } from '../../kit/types.ts';
-  import { DEFAULT_THEME, role } from '../../theme/index.ts';
+  import { applyTheme, DEFAULT_THEME, role, type ThemeVariant } from '../../theme/index.ts';
+  import '../controls.css';
   import { WIDGETS } from '../../widgets/index.generated.ts';
   import { defaultCommands, DEFAULT_KEYS, windowCommands, type CommandContext, type ShellOverlay } from '../commands/default-commands.ts';
   import { eventKey, parseKeys } from '../commands/keys.ts';
@@ -75,7 +76,9 @@
   const thisWindow = $derived(read?.workbook.windows.find((w) => w.id === windowId));
   // A size set here shows at once; the bridge's copy takes over when it echoes it.
   let pendingFontPx = $state<number | undefined>();
-  const fontPx = $derived(pendingFontPx ?? thisWindow?.fontPx ?? DEFAULT_THEME.fontPx);
+  // The theme in use: cells are counted with its line height and a font reset goes to its size.
+  let theme = $state.raw<ThemeVariant>(DEFAULT_THEME);
+  const fontPx = $derived(pendingFontPx ?? thisWindow?.fontPx ?? theme.fontPx);
   $effect(() => {
     if (pendingFontPx !== undefined && thisWindow?.fontPx === pendingFontPx) pendingFontPx = undefined;
   });
@@ -88,7 +91,9 @@
     get fontPx() {
       return fontPx;
     },
-    lineHeight: DEFAULT_THEME.density.lineHeight,
+    get lineHeight() {
+      return theme.density.lineHeight;
+    },
   });
 
   let session = $state.raw<EntryState<SessionInfo> | undefined>();
@@ -111,24 +116,15 @@
 
   // The panels' specs as the window holds them now: option changes made here reach the panels before the bridge echoes.
   let panelSpecs = $state.raw<Record<string, PanelSpec>>({});
-  const sameSpec = (a: PanelSpec, b: PanelSpec): boolean => a === b || JSON.stringify(a) === JSON.stringify(b);
-  /** The id of the panel with this spec in the window's panels. */
-  const panelIdOf = (spec: PanelSpec, all: Record<string, PanelSpec>): string | undefined => {
-    const entries = Object.entries(all);
-    return (entries.find(([, s]) => s === spec) ?? entries.find(([, s]) => sameSpec(s, spec)))?.[0];
-  };
-  /** Option changes made here, by panel id: the spec the dock still holds and the one that replaces it. */
-  let overrides: Record<string, { dock: PanelSpec; spec: PanelSpec }> = {};
-  const setOptions = (spec: PanelSpec, options: Record<string, unknown>): void => {
+  const setOptions = (id: string, options: Record<string, unknown>): void => {
     const { layout, panels } = sync.content;
-    const id = panelIdOf(spec, panels);
-    if (id === undefined) return;
-    const before = panels[id] as PanelSpec;
+    const before = panels[id];
+    if (before === undefined) return;
     const after = { ...before, options };
-    overrides = { ...overrides, [id]: { dock: overrides[id]?.dock ?? before, spec: after } };
-    const next = { ...panels, [id]: after };
-    panelSpecs = next;
-    sync.dockChanged({ layout, panels: next });
+    panelSpecs = { ...panels, [id]: after };
+    // The dock keeps its own copy of every spec; it must hold the new one too.
+    dock?.updatePanel?.(id, after);
+    sync.dockChanged({ layout, panels: panelSpecs });
   };
 
   const send = (action: UiAction): void => store.send({ type: 'uiAction', id: nextId(), action });
@@ -154,6 +150,11 @@
     groups: () => groups ?? [],
     settings: () => settings,
     fontPx: () => fontPx,
+    defaultFontPx: () => theme.fontPx,
+    setTheme: (variant) => {
+      theme = variant;
+      applyTheme(variant, document.documentElement);
+    },
     setFontPx: (px) => {
       pendingFontPx = px;
       sync.fontChanged(px);
@@ -196,13 +197,9 @@
   const contexts = getAllContexts();
   const view: PanelView = {
     title: (spec) => byName.get(spec.widget)?.decl.title ?? spec.widget,
-    render(content, tab, first: PanelSpec) {
-      // The panel's id is found by its spec once the window holds it; the spec then follows option changes made here.
-      let id: string | undefined;
-      const current = (): PanelSpec => {
-        id ??= panelIdOf(first, panelSpecs);
-        return (id === undefined ? undefined : panelSpecs[id]) ?? first;
-      };
+    render(content, tab, first: PanelSpec, panelId: string) {
+      // The panel follows option changes made here, which reach it before the bridge echoes them.
+      const current = (): PanelSpec => panelSpecs[panelId] ?? first;
       // The same link object while its resolved values stay the same, so widgets are not re-derived per session update.
       let link: ResolvedLink | undefined;
       const instance = mount(Panel, {
@@ -213,7 +210,7 @@
           headerTarget: tab,
           defaultFeed,
           send,
-          onOptions: (options: Record<string, unknown>) => setOptions(current(), options),
+          onOptions: (options: Record<string, unknown>) => setOptions(panelId, options),
           get spec() {
             return current();
           },
@@ -249,22 +246,14 @@
       const { layout, panels } = sync.content;
       empty = Object.keys(panels).length === 0;
       panelSpecs = panels;
-      overrides = {};
       dock = mountDock(
         el,
         layout,
         panels,
         (nextLayout, nextPanels) => {
           empty = Object.keys(nextPanels).length === 0;
-          // The dock keeps the specs it was mounted with: an option changed here wins over them.
-          const merged = Object.fromEntries(
-            Object.entries(nextPanels).map(([id, spec]) => {
-              const changed = overrides[id];
-              return [id, changed !== undefined && sameSpec(changed.dock, spec) ? changed.spec : spec];
-            }),
-          );
-          panelSpecs = merged;
-          sync.dockChanged({ layout: nextLayout, panels: merged });
+          panelSpecs = nextPanels;
+          sync.dockChanged({ layout: nextLayout, panels: nextPanels });
         },
         view,
       );
@@ -310,7 +299,7 @@
     <div class="dock" bind:this={dockEl}></div>
     {#if read !== undefined && empty}
       <div class="empty">
-        <button type="button" style:color={role('textDim')} style:border-color={role('border')} onclick={() => (picking = !picking)}
+        <button type="button" class="pw-button" style:color={role('textDim')} style:border-color={role('border')} onclick={() => (picking = !picking)}
           >{text.addWidget}</button
         >
         {#if picking}<WidgetPicker {widgets} onPick={pick} />{/if}
@@ -384,11 +373,7 @@
     pointer-events: auto;
   }
   button {
-    font-family: var(--pw-font);
-    font-size: inherit;
-    background: none;
     border: var(--pw-border-px) solid;
     padding: 0 var(--pw-header-pad);
-    cursor: pointer;
   }
 </style>

@@ -8,6 +8,7 @@
   import * as text from '../../kit/text.ts';
   import { role } from '../../theme/index.ts';
   import Overlay from '../commands/Overlay.svelte';
+  import { NUMBER_INPUT_COLS, OVERLAY_COLS } from '../commands/overlay-sizes.ts';
 
   type Cars = Array<{ id: number; identity: { name: string } }>;
   type Props = {
@@ -47,13 +48,13 @@
   const numberFrom = (e: Event): number => Math.max(1, Math.round((e.currentTarget as HTMLInputElement).valueAsNumber) || 1);
 </script>
 
-<Overlay title="{text.linkMarker} {group.id}" {onClose} {anchor} cols={40}>
+<Overlay title="{text.linkMarker} {group.id}" {onClose} {anchor} cols={OVERLAY_COLS.narrow}>
   <div class="head" style:color={role('textDim')}>{text.picker.primary}</div>
   <div class="list">
-    <button type="button" class:on={group.primary === 'player'} onclick={() => setPrimary('player')}>{text.picker.player}</button>
-    <button type="button" class:on={group.primary === 'teammate'} onclick={() => setPrimary('teammate')}>{text.picker.teammate}</button>
+    <button type="button" class="pw-button" class:on={group.primary === 'player'} onclick={() => setPrimary('player')}>{text.picker.player}</button>
+    <button type="button" class="pw-button" class:on={group.primary === 'teammate'} onclick={() => setPrimary('teammate')}>{text.picker.teammate}</button>
     {#each cars as car (car.id)}
-      <button type="button" class:on={group.primary === car.id} onclick={() => setPrimary(car.id as CarRef)}>{car.identity.name}</button>
+      <button type="button" class="pw-button" class:on={group.primary === car.id} onclick={() => setPrimary(car.id as CarRef)}>{car.identity.name}</button>
     {/each}
   </div>
   {#if feedId === undefined}
@@ -71,18 +72,18 @@
 
   <div class="head" style:color={role('textDim')}>{text.picker.window}</div>
   <div class="list">
-    <button type="button" class:on={group.window.kind === 'live'} onclick={() => set({ window: live })}>{text.picker.live}</button>
-    <button type="button" class:on={group.window.kind === 'lap'} onclick={() => set({ window: { kind: 'lap', lap: lapOf(group.window) } })}>{text.picker.lap}</button>
-    <button type="button" class:on={group.window.kind === 'range'} onclick={() => set({ window: { kind: 'range', from: lapOf(group.window), to: toOf(group.window) } })}
+    <button type="button" class="pw-button" class:on={group.window.kind === 'live'} onclick={() => set({ window: live })}>{text.picker.live}</button>
+    <button type="button" class="pw-button" class:on={group.window.kind === 'lap'} onclick={() => set({ window: { kind: 'lap', lap: lapOf(group.window) } })}>{text.picker.lap}</button>
+    <button type="button" class="pw-button" class:on={group.window.kind === 'range'} onclick={() => set({ window: { kind: 'range', from: lapOf(group.window), to: toOf(group.window) } })}
       >{text.picker.range}</button
     >
   </div>
   {#if group.window.kind === 'lap'}
-    <label><input type="number" min="1" value={group.window.lap} onchange={(e) => set({ window: { kind: 'lap', lap: numberFrom(e) } })} />{text.picker.lap}</label>
+    <label><input type="number" class="pw-input" style:width="{NUMBER_INPUT_COLS}ch" min="1" value={group.window.lap} onchange={(e) => set({ window: { kind: 'lap', lap: numberFrom(e) } })} />{text.picker.lap}</label>
   {:else if group.window.kind === 'range'}
     {@const range = group.window}
-    <label><input type="number" min="1" value={range.from} onchange={(e) => set({ window: { ...range, from: numberFrom(e) } })} />{text.picker.from}</label>
-    <label><input type="number" min="1" value={range.to} onchange={(e) => set({ window: { ...range, to: numberFrom(e) } })} />{text.picker.to}</label>
+    <label><input type="number" class="pw-input" style:width="{NUMBER_INPUT_COLS}ch" min="1" value={range.from} onchange={(e) => set({ window: { ...range, from: numberFrom(e) } })} />{text.picker.from}</label>
+    <label><input type="number" class="pw-input" style:width="{NUMBER_INPUT_COLS}ch" min="1" value={range.to} onchange={(e) => set({ window: { ...range, to: numberFrom(e) } })} />{text.picker.to}</label>
   {/if}
 </Overlay>
 
@@ -92,29 +93,12 @@
     flex-wrap: wrap;
     column-gap: var(--pw-col-gap);
   }
-  button {
-    font-family: var(--pw-font);
-    font-size: inherit;
-    color: inherit;
-    background: none;
-    border: none;
-    padding: 0;
-    cursor: pointer;
-  }
   button.on {
     color: var(--pw-ownCar);
     font-weight: var(--pw-weight-bold);
   }
   label {
     display: inline-flex;
-    gap: 1ch;
-  }
-  input[type='number'] {
-    font-family: var(--pw-font);
-    font-size: inherit;
-    color: inherit;
-    background: none;
-    border: var(--pw-border-px) solid var(--pw-border);
-    width: 5ch;
+    gap: var(--pw-col-gap);
   }
 </style>

@@ -11,7 +11,7 @@
 
 <ul class="picker" style:background={role('bgBand')}>
   {#each sorted as widget (widget.decl.name)}
-    <li><button type="button" style:color={role('text')} onclick={() => onPick(widget)}>{widget.decl.title}</button></li>
+    <li><button type="button" class="pw-button" style:color={role('text')} onclick={() => onPick(widget)}>{widget.decl.title}</button></li>
   {/each}
 </ul>
 
@@ -22,13 +22,6 @@
     padding: 0 var(--pw-header-pad);
   }
   button {
-    font-family: var(--pw-font);
-    font-size: inherit;
-    background: none;
-    border: none;
-    padding: 0;
-    cursor: pointer;
-    text-align: left;
     width: 100%;
   }
 </style>

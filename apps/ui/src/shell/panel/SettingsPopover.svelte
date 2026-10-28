@@ -6,6 +6,7 @@
   import type { OptionDecl, WidgetDecl } from '../../kit/types.ts';
   import { role } from '../../theme/index.ts';
   import Overlay from '../commands/Overlay.svelte';
+  import { OVERLAY_COLS } from '../commands/overlay-sizes.ts';
 
   type Props = {
     decl: WidgetDecl<any, any>;
@@ -24,10 +25,11 @@
     onChange(value === undefined ? rest : { ...rest, [name]: value });
   };
   const clamp = (v: number, range: { min: number; max: number }): number => Math.min(range.max, Math.max(range.min, v));
-  const FOLLOW = 'follow';
+  /** The value of the `follow the link` choice; the shown text is `text.followLink`. */
+  const FOLLOW = '';
 </script>
 
-<Overlay title={text.settingsTitle(decl.title)} {onClose} {anchor} cols={40}>
+<Overlay title={text.settingsTitle(decl.title)} {onClose} {anchor} cols={OVERLAY_COLS.narrow}>
   {#each declared as [name, option] (name)}
     {@const current = valueOf(name, option)}
     {#if option.kind === 'bool'}
@@ -44,6 +46,7 @@
         ><span style:color={role('textDim')}>{option.label}</span>
         <input
           type="number"
+          class="pw-input"
           aria-label={option.label}
           min={option.range.min}
           max={option.range.max}
@@ -58,8 +61,8 @@
     {:else}
       <label
         ><span style:color={role('textDim')}>{option.label}</span>
-        <select aria-label={option.label} onchange={(e) => change(name, e.currentTarget.value === FOLLOW ? undefined : /^\d+$/.test(e.currentTarget.value) ? Number(e.currentTarget.value) : e.currentTarget.value)}>
-          <option value={FOLLOW} selected={current === undefined}>{FOLLOW}</option>
+        <select class="pw-input" aria-label={option.label} onchange={(e) => change(name, e.currentTarget.value === FOLLOW ? undefined : /^\d+$/.test(e.currentTarget.value) ? Number(e.currentTarget.value) : e.currentTarget.value)}>
+          <option value={FOLLOW} selected={current === undefined}>{text.followLink}</option>
           <option value="player" selected={current === 'player'}>{text.picker.player}</option>
           <option value="teammate" selected={current === 'teammate'}>{text.picker.teammate}</option>
           {#if typeof current === 'number'}<option value={String(current)} selected>{current}</option>{/if}
@@ -75,19 +78,11 @@
 <style>
   label {
     display: inline-flex;
-    gap: 1ch;
-    margin-right: 1ch;
+    gap: var(--pw-col-gap);
+    margin-right: var(--pw-col-gap);
   }
   div[role='radiogroup'] {
     display: flex;
-    gap: 1ch;
-  }
-  input[type='number'],
-  select {
-    font-family: var(--pw-font);
-    font-size: inherit;
-    color: inherit;
-    background: none;
-    border: var(--pw-border-px) solid var(--pw-border);
+    gap: var(--pw-col-gap);
   }
 </style>
