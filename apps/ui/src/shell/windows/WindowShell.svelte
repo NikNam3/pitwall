@@ -6,8 +6,7 @@
   import type { EntryState, TopicStore } from '../../connection/topic-store.svelte.ts';
   import * as text from '../../kit/text.ts';
   import type { RegisteredWidget, ResolvedLink } from '../../kit/types.ts';
-  import { role } from '../../theme/index.ts';
-  import { DEFAULT_THEME } from '../default-theme.ts';
+  import { DEFAULT_THEME, role } from '../../theme/index.ts';
   import { WIDGETS } from '../../widgets/index.generated.ts';
   import { mountDock, type DockHandle, type PanelView } from '../docking/index.ts';
   import type { Host } from '../host/host.ts';
@@ -226,7 +225,6 @@
     font-family: var(--pw-font);
     font-size: inherit;
     background: none;
-    /* The theme's rule width (table.borderPx, published by applyTheme). */
     border: var(--pw-border-px) solid;
     padding: 0 var(--pw-header-pad);
     cursor: pointer;

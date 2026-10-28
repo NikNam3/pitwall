@@ -1,7 +1,7 @@
 // The thin adapter over dockview (spec 7.3): mounts a window's layout and panels and maps dockview's events back to
 // workbook changes. Panels are rendered by the caller's `PanelView`; nothing outside this folder knows dockview.
 import type { PanelSpec } from '@pitwall/contracts';
-import { DEFAULT_THEME } from '../default-theme.ts';
+import { DEFAULT_THEME } from '../../theme/index.ts';
 import {
   createDockview,
   positionToDirection,

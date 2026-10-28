@@ -1,6 +1,6 @@
 // The window's one font size (spec 4.4), shared with its panels so they count character cells with it.
 import { getContext, setContext } from 'svelte';
-import { DEFAULT_THEME } from '../default-theme.ts';
+import { DEFAULT_THEME } from '../../theme/index.ts';
 
 /** The font size in px and the line height every panel of a window measures cells with. */
 export type WindowFont = { readonly fontPx: number; readonly lineHeight: number };

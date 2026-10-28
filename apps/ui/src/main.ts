@@ -1,7 +1,6 @@
 import { mount, unmount } from 'svelte';
 import App from './App.svelte';
-import { DEFAULT_THEME } from './shell/default-theme.ts';
-import { applyTheme } from './theme/index.ts';
+import { applyTheme, DEFAULT_THEME } from './theme/index.ts';
 import './theme/base.css';
 
 const target = document.getElementById('app');
