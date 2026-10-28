@@ -12,6 +12,7 @@ import {
   type StepResult,
   type WeekendContext,
 } from '@pitwall/engine';
+import type { TopicName } from '@pitwall/contracts';
 import { peekHeader, type ParticipantsPacket, type SessionPacket } from '@pitwall/protocol';
 import type { Logger } from '../log.ts';
 import type { SessionRow } from '../storage/db.ts';
@@ -51,8 +52,9 @@ const flashbackChanges = (feedId: FeedId, flashback: FlashbackInfo, at: SessionT
 
 /**
  * Runs one session (spec 5.4, 7.3). Frames wait until the first Participants packet, which names the player's
- * `DriverKey` and so the weekend context (spec 9.3). An exception on a frame skips that frame: it is logged and,
- * up to `MAX_DUMPS_PER_SESSION` times, dumped with its place in the session file (spec 10.1).
+ * `DriverKey` and so the weekend context (spec 9.3). An exception on a frame skips that frame; a topic that fails to
+ * publish is marked errored while the other topics go out. Either way the failure is logged and, up to
+ * `MAX_DUMPS_PER_SESSION` times, the frame is dumped with its place in the session file (spec 10.1).
  */
 export class SessionProcessor {
   readonly sessionUid: bigint;
@@ -60,6 +62,7 @@ export class SessionProcessor {
   readonly #o: SessionProcessorOptions;
   #running: Running | undefined;
   #buffered: Frame[] = [];
+  #driversStored = false;
   #dumps = 0;
   #lastReceivedAtMs = 0;
 
@@ -72,6 +75,8 @@ export class SessionProcessor {
 
   push(frame: Frame): void {
     if (this.#running !== undefined) {
+      // A session started by the buffer cap still stores its drivers, so later sessions find it in the weekend.
+      if (frame.participants !== undefined && !this.#driversStored) this.#storeDrivers(frame.participants);
       this.#apply(this.#running, frame);
       return;
     }
@@ -80,7 +85,11 @@ export class SessionProcessor {
     else if (this.#buffered.length >= MAX_BUFFERED_FRAMES) this.#begin();
   }
 
-  /** Keeps a datagram in the session file when it belongs here: the session's own uid, or uid 0 while it is open. */
+  /**
+   * Keeps a datagram in the session file when it belongs here: the session's own uid, or uid 0 while it is open.
+   * It runs after the datagram's frames, so a dump's position is approximate: the datagram before the one that
+   * closed the frame.
+   */
   record(receivedAtMs: number, bytes: Uint8Array): void {
     this.#lastReceivedAtMs = receivedAtMs;
     const uid = peekHeader(bytes)?.sessionUid;
@@ -109,9 +118,14 @@ export class SessionProcessor {
   /** Stores the session's drivers and loads the player's earlier sessions of the weekend. */
   #identify(participants: ParticipantsPacket, playerCarIndex: number): WeekendContext | undefined {
     const { session, storage } = this.#o;
-    storage?.upsertSession(this.#row(participants));
+    this.#storeDrivers(participants);
     const driverKey = driverKeyOf(participants, playerCarIndex);
     return storage?.weekendContext(String(session.weekendLinkIdentifier), driverKey, this.#uid);
+  }
+
+  #storeDrivers(participants: ParticipantsPacket): void {
+    this.#driversStored = true;
+    this.#o.storage?.upsertSession(this.#row(participants));
   }
 
   #apply({ runner, scheduler }: Running, frame: Frame): void {
@@ -121,12 +135,16 @@ export class SessionProcessor {
       storage?.writeConfirmed(this.#uid, result.state.history, result.delta);
       if (result.flashback) scheduler.reset();
       const scheduled = scheduler.run({ state: result.state, changed: result.changed, delta: result.delta, feed: this.#o.feedView() });
-      publisher.publishOutputs(scheduled);
-      publisher.publishHistory(result.state.history, result.delta);
-      publisher.publishInsights([...this.#flashbackOf(result), ...scheduled.insights]);
+      // Each topic is published on its own: a failing feature binding never holds back the others.
+      const unpublished = [
+        ...publisher.publishOutputs(scheduled),
+        ...publisher.publishHistory(result.state.history, result.delta),
+        ...publisher.publishInsights([...this.#flashbackOf(result), ...scheduled.insights]),
+      ];
       for (const correction of result.corrections) log.info({ feedId, sessionUid: this.#uid, correction }, 'lap time corrected');
+      if (unpublished.length > 0) this.#report(frame, 'topic not published, marked errored', unpublished);
     } catch (error) {
-      this.#skipped(frame, error);
+      this.#report(frame, 'frame skipped: processing failed', [{ error }]);
     }
   }
 
@@ -134,9 +152,17 @@ export class SessionProcessor {
     return result.flashback ? flashbackChanges(this.#o.feedId, result.flashback, result.state.sessionTime) : [];
   }
 
-  #skipped(frame: Frame, error: unknown): void {
+  /** Logs every failure of the frame and dumps the frame once, with the first failure. */
+  #report(frame: Frame, message: string, failures: ReadonlyArray<{ error: unknown; topic?: TopicName }>): void {
+    const { feedId, log } = this.#o;
+    for (const { error, topic } of failures) {
+      log.error({ feedId, sessionUid: this.#uid, frameId: frame.frameId, ...(topic && { topic }), err: error }, message);
+    }
+    if (failures[0] !== undefined) this.#dump(frame, failures[0].error);
+  }
+
+  #dump(frame: Frame, error: unknown): void {
     const { feedId, log, dumpsDir, file } = this.#o;
-    log.error({ feedId, sessionUid: this.#uid, frameId: frame.frameId, err: error }, 'frame skipped: processing failed');
     if (dumpsDir === undefined || this.#dumps >= MAX_DUMPS_PER_SESSION) return;
     this.#dumps++;
     try {

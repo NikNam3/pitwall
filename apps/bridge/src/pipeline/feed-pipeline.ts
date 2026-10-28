@@ -1,7 +1,7 @@
 // One feed end to end (spec 4): PacketSource → decode → SessionTracker → SessionProcessor → TopicHub,
 // with the feed's health, its session files and its storage alongside.
 import { toSessionTime, type FeedId, type SessionTime } from '@pitwall/domain';
-import { CalculatorRegistry, SessionTracker, type FrameMetrics, type TrackerEvent } from '@pitwall/engine';
+import { CalculatorRegistry, SessionTracker, type FrameMetrics, type InsightChange, type TrackerEvent } from '@pitwall/engine';
 import { decode } from '@pitwall/protocol';
 import type { Feature } from '../features/feature.ts';
 import { feedStatusOf } from '../features/feed-status/feed-status.ts';
@@ -21,6 +21,7 @@ export type FeedPipelineOptions = {
   feedId: FeedId;
   source: PacketSource;
   hub: TopicHub;
+  /** The calculators and topic bindings. Feed and write-failure insights reach clients only through an `insights` binding. */
   features: readonly Feature[];
   log: Logger;
   /**
@@ -60,8 +61,8 @@ export class FeedPipeline {
   readonly #wallClock: () => number;
   readonly #sessionClock: SessionClock;
   readonly #done: PromiseWithResolvers<void> = Promise.withResolvers();
-  /** Session files still closing. */
-  readonly #closing: Promise<void>[] = [];
+  /** Session files still closing; each leaves the set once closed. */
+  readonly #closing = new Set<Promise<void>>();
   #session: SessionProcessor | undefined;
   #lastReceivedAtMs = 0;
   #staleTimer: NodeJS.Timeout | undefined;
@@ -72,7 +73,7 @@ export class FeedPipeline {
     this.#feedId = opts.feedId;
     this.#log = opts.log;
     this.#registry = CalculatorRegistry.build(opts.features.flatMap((feature) => feature.calculators));
-    this.#publisher = new TopicPublisher(opts.feedId, opts.hub, opts.features);
+    this.#publisher = new TopicPublisher({ feedId: opts.feedId, hub: opts.hub, features: opts.features, log: opts.log });
     this.#tracker = new SessionTracker({ feedId: opts.feedId });
     this.#alerts = new FeedAlerts(opts.feedId);
     this.#wallClock = opts.wallClock ?? Date.now;
@@ -85,10 +86,10 @@ export class FeedPipeline {
     if (this.#started) throw new Error('FeedPipeline: already started');
     this.#started = true;
     const { source, staleCheck } = this.#o;
+    source.start((packet) => this.#onPacket(packet));
     if (staleCheck !== undefined) {
       this.#staleTimer = setInterval(() => this.#guarded('stale check', () => this.#checkFeed(staleCheck.clock())), staleCheck.everyMs);
     }
-    source.start((packet) => this.#onPacket(packet));
     this.#finish().then(this.#done.resolve, this.#done.reject);
   }
 
@@ -155,7 +156,7 @@ export class FeedPipeline {
     const { feedId, hub, log, dumpsDir } = this.#o;
     this.#alerts.clearWriteFailures(this.#sessionTime());
     hub.resetFeed(feedId);
-    this.#publisher.publishInsights(this.#alerts.active.map((insight) => ({ type: 'raised', insight })));
+    this.#publishInsights(this.#alerts.active.map((insight) => ({ type: 'raised', insight })));
     const startedAt = this.#sessionClock(event.receivedAtMs);
     const db = this.#o.storage?.db;
     const storage = db && new SessionStorage(db, { log, onError: (error) => this.#writeFailed('storage', error) });
@@ -191,7 +192,8 @@ export class FeedPipeline {
     const session = this.#session;
     if (session === undefined) return;
     this.#session = undefined;
-    this.#closing.push(session.end(receivedAtMs));
+    const closing = session.end(receivedAtMs).finally(() => this.#closing.delete(closing));
+    this.#closing.add(closing);
   }
 
   /** Publishes `feed.status` and the feed-health insights as they stand at `nowMs`. */
@@ -199,12 +201,19 @@ export class FeedPipeline {
     const view = this.#monitor.view(metrics, nowMs);
     const status = feedStatusOf(this.#feedId, view);
     this.#o.hub.publishState(this.#feedId, 'feed.status', () => status);
-    this.#publisher.publishInsights(this.#alerts.feedChanged(view, metrics.lastSessionTime ?? toSessionTime(0)));
+    this.#publishInsights(this.#alerts.feedChanged(view, metrics.lastSessionTime ?? toSessionTime(0)));
   }
 
   #writeFailed(failure: WriteFailure, error: unknown): void {
     this.#log.error({ feedId: this.#feedId, failure, err: error }, 'write failed, off for the rest of the session');
-    this.#publisher.publishInsights(this.#alerts.writeFailed(failure, error, this.#sessionTime()));
+    this.#publishInsights(this.#alerts.writeFailed(failure, error, this.#sessionTime()));
+  }
+
+  /** The feed's own insights; outside a frame, a topic that fails to take them is only logged. */
+  #publishInsights(changes: readonly InsightChange[]): void {
+    for (const { topic, error } of this.#publisher.publishInsights(changes)) {
+      this.#log.error({ feedId: this.#feedId, topic, err: error }, 'topic not published, marked errored');
+    }
   }
 
   /** Feed-level insights are stamped with the newest session time seen, 0 before any. */
