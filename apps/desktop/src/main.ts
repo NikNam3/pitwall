@@ -4,11 +4,12 @@ import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { app, BrowserWindow, ipcMain, screen, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, screen, shell } from 'electron';
 import type { Rectangle } from 'electron';
+import { isBlockedKey } from './blocked-keys.ts';
 import { ensureBridge } from './bridge-process.ts';
 import type { BridgeHandle } from './bridge-process.ts';
-import { isAllowedOpenPath, parseEnsureWindows } from './ipc-validate.ts';
+import { isAllowedOpenPath, parseEnsureWindows, parseFocusWindow } from './ipc-validate.ts';
 import { planWindows } from './window-manager.ts';
 import type { Display, Geometry, WindowId } from './window-manager.ts';
 
@@ -18,15 +19,6 @@ const UI_PORT = Number(process.env['PITWALL_UI_PORT'] ?? '5173');
 const GEOMETRY_INTERVAL_MS = 500;
 /** The window shown first, before the workbook says which windows it wants. */
 const FIRST_WINDOW: WindowId = 'main';
-/** Key combinations a browser would act on; blocked outside `--dev`. */
-const BLOCKED_KEYS: ReadonlyArray<{ key: string; control?: boolean; shift?: boolean; alt?: boolean }> = [
-  { key: 'w', control: true },
-  { key: 'r', control: true },
-  { key: 'F5' },
-  { key: 'ArrowLeft', alt: true },
-  { key: 'ArrowRight', alt: true },
-  { key: 'i', control: true, shift: true },
-];
 
 const argv = process.argv.slice(2);
 const separator = argv.indexOf('--');
@@ -91,15 +83,7 @@ const geometryOf = (win: BrowserWindow): Geometry => {
 
 const blockBrowserShortcuts = (win: BrowserWindow): void => {
   win.webContents.on('before-input-event', (event, input) => {
-    if (dev || input.type !== 'keyDown') return;
-    const blocked = BLOCKED_KEYS.some(
-      (k) =>
-        k.key.toLowerCase() === input.key.toLowerCase() &&
-        (k.control ?? false) === input.control &&
-        (k.shift ?? false) === input.shift &&
-        (k.alt ?? false) === input.alt,
-    );
-    if (blocked) event.preventDefault();
+    if (input.type === 'keyDown' && isBlockedKey(input, dev)) event.preventDefault();
   });
 };
 
@@ -161,7 +145,8 @@ const ensureWindows = (desired: ReadonlyArray<{ id: WindowId; geometry?: Geometr
   const open = [...windows].map(([id, win]) => ({ id, geometry: geometryOf(win) }));
   const plan = planWindows(desired, open, displays());
   for (const { id, bounds } of plan.open) openWindow(id, bounds);
-  for (const id of plan.close) windows.get(id)?.close();
+  // A window the workbook does not name (the first window, `main`) closes only once another one is there instead.
+  if (desired.length > 0) for (const id of plan.close) windows.get(id)?.close();
   for (const { id, bounds } of plan.move) windows.get(id)?.setBounds(bounds);
 };
 
@@ -174,11 +159,20 @@ ipcMain.on('ensureWindows', (_event, raw: unknown) => {
     console.error('ignored an invalid ensureWindows request');
   }
 });
+ipcMain.on('focusWindow', (_event, raw: unknown) => {
+  const id = parseFocusWindow(raw);
+  const win = id === undefined ? undefined : windows.get(id);
+  if (win === undefined) return;
+  if (win.isMinimized()) win.restore();
+  win.focus();
+});
 ipcMain.on('openPath', (_event, file: unknown) => {
   if (isAllowedOpenPath(repoRoot, file, dev)) void shell.openPath(file);
 });
 
 void app.whenReady().then(async () => {
+  // Outside --dev there is no menu, so none of its accelerators (zoom, force reload) competes with the UI's keys.
+  if (!dev) Menu.setApplicationMenu(null);
   try {
     bridge = await ensureBridge({ port: WS_PORT, probe, spawn: spawnBridge, killTree, args: bridgeArgs });
   } catch (error) {

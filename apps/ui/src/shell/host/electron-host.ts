@@ -8,6 +8,7 @@ export type PitwallHostApi = {
   ensureWindows(windows: Array<{ id: WindowId; geometry?: Geometry | undefined }>): void;
   onGeometry(cb: (g: Geometry) => void): () => void;
   openPath(path: string): void;
+  focusWindow(id: WindowId): void;
 };
 
 /** Wraps the preload API as a `Host`. */
@@ -17,4 +18,5 @@ export const electronHost = (api: PitwallHostApi): Host => ({
   ensureWindows: (windows) => api.ensureWindows(windows),
   onGeometryChange: (cb) => api.onGeometry(cb),
   openPath: (path) => api.openPath(path),
+  focusWindow: (id) => api.focusWindow(id),
 });

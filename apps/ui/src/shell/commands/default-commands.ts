@@ -1,5 +1,6 @@
 // The shell's own commands and their default keys (spec 7.7). Widgets cannot register commands in the MVP.
-import type { LinkGroup, ReplayControl, UiAction, UiSettings } from '@pitwall/contracts';
+import { ackToken, type LinkGroup, type ReplayControl, type UiAction, type UiSettings } from '@pitwall/contracts';
+import type { Insight } from '@pitwall/domain';
 import * as text from '../../kit/text.ts';
 import type { Inspection } from '../inspector/inspection.svelte.ts';
 import { THEMES, type ThemeVariant } from '../../theme/index.ts';
@@ -29,7 +30,7 @@ export type CommandContext = {
   setTheme: (variant: ThemeVariant) => void;
   /** Brings a workbook window to the front. */
   focusWindow: (id: string) => void;
-  /** The keys of the tier-1 alerts shown now. */
+  /** The occurrence tokens (`ackToken`) of the tier-1 alerts shown now. */
   alertKeys: () => readonly string[];
   /** The inspector's switch (dev builds). */
   inspection: Inspection;
@@ -117,9 +118,14 @@ export function defaultCommands(ctx: CommandContext): Command[] {
   ];
 }
 
-/** `alerts.ack.<key>` for each alert the top bar shows. */
-export function alertCommands(keys: readonly string[], ctx: Pick<CommandContext, 'send'>): Command[] {
-  return keys.map((key) => ({ id: `alerts.ack.${key}`, title: text.commandTitles.alertAck(key), group: text.commandGroups.alerts, run: () => ctx.send({ kind: 'alert.ack', key }) }));
+/** `alerts.ack.<key>` for each alert the top bar shows; it acknowledges that occurrence (`ackToken`). */
+export function alertCommands(alerts: readonly Insight[], ctx: Pick<CommandContext, 'send'>): Command[] {
+  return alerts.map((alert) => ({
+    id: `alerts.ack.${alert.key}`,
+    title: text.commandTitles.alertAck(alert.key),
+    group: text.commandGroups.alerts,
+    run: () => ctx.send({ kind: 'alert.ack', key: ackToken(alert) }),
+  }));
 }
 
 /** `window.focus.<id>` for each window of the active workbook. */

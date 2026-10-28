@@ -8,6 +8,7 @@
     "src/emphasis/**/*.ts",
     "src/kit/folds.ts",
     "src/kit/size/**/*.ts",
+    "!src/kit/size/measure.ts",
     "src/kit/stale/**/*.ts",
     "src/connection/topic-store.svelte.ts",
     "src/shell/workbooks/normalise.ts",

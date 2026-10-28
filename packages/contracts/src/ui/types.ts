@@ -17,6 +17,7 @@ export type UiAction =
   | { kind: 'workbook.saveAs'; name: string }
   | { kind: 'workbook.updateWindow'; window: WorkbookWindow }
   | { kind: 'linkGroup.set'; group: LinkGroup }
+  /** `key`/`keys` are occurrence tokens (`ackToken`), not bare insight keys. */
   | { kind: 'alert.ack'; key: string }
   | { kind: 'alert.ackAll'; keys: string[] }
   | { kind: 'alertGroup.mute'; category: InsightCategory; muted: boolean }

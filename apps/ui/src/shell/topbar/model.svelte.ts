@@ -1,5 +1,5 @@
 // What the top bar's segments read: the topics of one feed plus the global alert and settings topics.
-import type { AlertsState, FeedStatus, ReplayControl, ReplayStatus, SessionInfo, UiAction, UiSettings } from '@pitwall/contracts';
+import type { AlertsState, CarOverview, FeedStatus, ReplayControl, ReplayStatus, SessionInfo, UiAction, UiSettings } from '@pitwall/contracts';
 import type { FeedId, Insight } from '@pitwall/domain';
 import type { EntryState, TopicStore } from '../../connection/topic-store.svelte.ts';
 import { activeInsights, MAX_SHOWN_ALERTS, tierOneAlerts } from './alerts.ts';
@@ -12,6 +12,7 @@ export class TopBarModel {
   readonly sendReplay: (control: ReplayControl) => void;
   readonly #session: EntryState<SessionInfo>;
   readonly #feed: EntryState<FeedStatus>;
+  readonly #cars: EntryState<CarOverview[]>;
   readonly #insights: EntryState<Map<string, Insight>>;
   readonly #alerts: EntryState<AlertsState>;
   readonly #settings: EntryState<UiSettings>;
@@ -28,6 +29,8 @@ export class TopBarModel {
     };
     this.#session = take(store.acquire({ topic: 'session.info', params: {}, feedId }));
     this.#feed = take(store.acquire({ topic: 'feed.status', params: {}, feedId }));
+    // The player's lap: the same source for a live and a replay feed.
+    this.#cars = take(store.acquire({ topic: 'cars.overview', params: {}, feedId }));
     this.#insights = take(store.acquire({ topic: 'insights', params: {}, feedId }, activeInsights));
     this.#alerts = take(store.acquire({ topic: 'ui.alerts', params: {} }));
     this.#settings = take(store.acquire({ topic: 'ui.settings', params: {} }));
@@ -38,6 +41,11 @@ export class TopBarModel {
 
   get session(): SessionInfo | undefined {
     return okValue(this.#session);
+  }
+  /** The player car's current lap; undefined until the overview has the player car. */
+  get playerLap(): number | undefined {
+    const player = this.session?.playerCar;
+    return player === undefined ? undefined : okValue(this.#cars)?.find((car) => car.id === player)?.timing?.lap;
   }
   get feed(): FeedStatus | undefined {
     return okValue(this.#feed);

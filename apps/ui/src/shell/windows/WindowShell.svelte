@@ -1,7 +1,7 @@
 <script lang="ts">
   // One window (spec 7.1-7.3): the active workbook's panels for this window, in a dock, saved back to the bridge.
-  import type { LinkGroup, PanelSpec, ReplayControl, SessionInfo, TopicValue, UiAction, UiSettings } from '@pitwall/contracts';
-  import type { FeedId } from '@pitwall/domain';
+  import { ackToken, type LinkGroup, type PanelSpec, type ReplayControl, type SessionInfo, type TopicValue, type UiAction, type UiSettings } from '@pitwall/contracts';
+  import type { FeedId, Insight } from '@pitwall/domain';
   import { getAllContexts, mount, onDestroy, unmount, untrack, type Component, type ComponentProps } from 'svelte';
   import type { EntryState, TopicStore } from '../../connection/topic-store.svelte.ts';
   import * as text from '../../kit/text.ts';
@@ -16,10 +16,10 @@
   import Palette from '../commands/Palette.svelte';
   import { CommandRegistry } from '../commands/registry.ts';
   import { mountDock, type DockHandle, type PanelView } from '../docking/index.ts';
-  import type { Host } from '../host/host.ts';
-import { Inspection } from '../inspector/inspection.svelte.ts';
-import { loadInspector } from '../inspector/load.ts';
-import type { InspectTarget } from '../inspector/target.ts';
+  import { INITIAL_WINDOW, type Host } from '../host/host.ts';
+  import { Inspection } from '../inspector/inspection.svelte.ts';
+  import { loadInspector } from '../inspector/load.ts';
+  import type { InspectTarget } from '../inspector/target.ts';
   import type Inspector from '../inspector/Inspector.svelte';
   import GroupPicker from '../link-groups/GroupPicker.svelte';
   import { resolveLink, sameLink } from '../link-groups/resolve.ts';
@@ -121,11 +121,11 @@ import type { InspectTarget } from '../inspector/target.ts';
 
   // The panels' specs as the window holds them now: option changes made here reach the panels before the bridge echoes.
   let panelSpecs = $state.raw<Record<string, PanelSpec>>({});
-  const setOptions = (id: string, options: Record<string, unknown>): void => {
+  const updatePanel = (id: string, change: Partial<PanelSpec>): void => {
     const { layout, panels } = sync.content;
     const before = panels[id];
     if (before === undefined) return;
-    const after = { ...before, options };
+    const after = { ...before, ...change };
     panelSpecs = { ...panels, [id]: after };
     // The dock keeps its own copy of every spec; it must hold the new one too.
     dock?.updatePanel(id, after);
@@ -147,8 +147,8 @@ import type { InspectTarget } from '../inspector/target.ts';
     if (overlay === undefined) return;
     return stack.add(closeOverlay);
   });
-  /** The keys of the tier-1 alerts the top bar shows. */
-  let shownAlerts = $state.raw<string[]>([]);
+  /** The tier-1 alerts the top bar shows. */
+  let shownAlerts = $state.raw<Insight[]>([]);
   const inspection = new Inspection();
   const commandContext: CommandContext = {
     send,
@@ -167,10 +167,8 @@ import type { InspectTarget } from '../inspector/target.ts';
       pendingFontPx = px;
       sync.fontChanged(px);
     },
-    focusWindow: (id) => {
-      if (id === windowId) globalThis.focus();
-    },
-    alertKeys: () => shownAlerts,
+    focusWindow: (id) => host.focusWindow(id),
+    alertKeys: () => shownAlerts.map(ackToken),
     inspection,
   };
   const baseCommands = defaultCommands(commandContext);
@@ -241,7 +239,8 @@ import type { InspectTarget } from '../inspector/target.ts';
           send,
           inspection,
           onInspect: (target: InspectTarget) => (inspected = target),
-          onOptions: (options: Record<string, unknown>) => setOptions(panelId, options),
+          onOptions: (options: Record<string, unknown>) => updatePanel(panelId, { options }),
+          onLinkGroup: (linkGroup: number) => updatePanel(panelId, { linkGroup }),
           get spec() {
             return current();
           },
@@ -249,7 +248,8 @@ import type { InspectTarget } from '../inspector/target.ts';
             return byName.get(current().widget);
           },
           get group() {
-            return groups?.find((g) => g.id === current().linkGroup);
+            // Once the groups are known, one the bridge has not created yet has the defaults; its first set creates it.
+            return groups === undefined ? undefined : groupOf(current().linkGroup);
           },
           get link() {
             const next = resolveLink(groupOf(current().linkGroup), sessionInfo, defaultFeed);
@@ -300,10 +300,11 @@ import type { InspectTarget } from '../inspector/target.ts';
   });
 
   // The workbook's first window opens and places the others (spec 7.1): again when the workbook or its windows change.
+  // So does the host's initial window, which may not be in the workbook at all (startup, a switch to other window ids).
   let announced: string | undefined;
   $effect(() => {
     const book = read?.workbook;
-    if (book === undefined || book.windows[0]?.id !== windowId) return;
+    if (book === undefined || (book.windows[0]?.id !== windowId && windowId !== INITIAL_WINDOW)) return;
     const key = JSON.stringify([book.name, book.windows.map((w) => w.id)]);
     if (key === announced) return;
     announced = key;
@@ -336,7 +337,7 @@ import type { InspectTarget } from '../inspector/target.ts';
   {/if}
   {#if defaultFeed !== undefined}
     {#key defaultFeed}
-      <TopBar {store} feedId={defaultFeed} {send} {sendReplay} onShown={(keys) => (shownAlerts = keys)} />
+      <TopBar {store} feedId={defaultFeed} {send} {sendReplay} onShown={(alerts) => (shownAlerts = alerts)} />
     {/key}
   {/if}
   <div class="area">
@@ -377,7 +378,7 @@ import type { InspectTarget } from '../inspector/target.ts';
     />
   {:else if overlay?.kind === 'picker'}
     {@const wanted = overlay.group}
-    {@const picked = groups?.find((g) => g.id === wanted)}
+    {@const picked = groups === undefined ? undefined : groupOf(wanted)}
     {#if picked !== undefined}
       <GroupPicker {store} group={picked} feedId={picked.feedId ?? defaultFeed} {send} onClose={closeOverlay} />
     {/if}

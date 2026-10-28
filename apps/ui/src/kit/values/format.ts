@@ -10,6 +10,12 @@ function minutesSeconds(ms: Ms, minuteWidth: number): string {
   return `${pad(minutes, minuteWidth)}:${pad(Math.floor((total % 60000) / 1000), 2)}.${pad(total % 1000, 3)}`;
 }
 
+/** Session clock to whole seconds, `4324000` -> `1:12:04`, `471000` -> `0:07:51`. */
+export function formatSessionClock(ms: Ms): string {
+  const seconds = Math.floor(Math.max(0, ms) / 1000);
+  return `${Math.floor(seconds / 3600)}:${pad(Math.floor((seconds % 3600) / 60), 2)}:${pad(seconds % 60, 2)}`;
+}
+
 /** Lap time, `83456` -> `1:23.456`. */
 export const formatLapTime = (ms: Ms): string => minutesSeconds(ms, 1);
 

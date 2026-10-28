@@ -3,6 +3,7 @@
   import * as text from '../../../kit/text.ts';
   import { formatFactor } from '../../../kit/values/format.ts';
   import { role } from '../../../theme/index.ts';
+  import { NUMBER_INPUT_COLS } from '../../commands/overlay-sizes.ts';
   import type { TopBarModel } from '../model.svelte.ts';
 
   let { bar }: { bar: TopBarModel } = $props();
@@ -31,7 +32,8 @@
     <label>
       {text.topBar.lap}
       <input
-        class="pw-input lap"
+        class="pw-input"
+        style:width="{NUMBER_INPUT_COLS}ch"
         type="number"
         min="1"
         data-testid="replay-lap"
@@ -51,8 +53,5 @@
   .transport {
     display: inline-flex;
     gap: var(--pw-header-pad);
-  }
-  .lap {
-    width: 5ch;
   }
 </style>

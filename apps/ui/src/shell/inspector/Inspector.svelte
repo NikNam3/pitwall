@@ -71,7 +71,7 @@
   <section data-testid="inspector" style:background={role('bgPanel')} style:color={role('text')}>
     <header style:background={role('bgBand')}>
       <span>{text.title(widget)}</span>
-      {#if onClose}<button type="button" onclick={onClose}>{text.close}</button>{/if}
+      {#if onClose}<button type="button" class="pw-button" onclick={onClose}>{text.close}</button>{/if}
     </header>
     {#if entry === undefined}
       <p>{text.unknownWidget(widget)}</p>
@@ -100,7 +100,7 @@
       <h3>{text.filesHeading}</h3>
       <ul>
         {#each paths as path (path)}
-          <li><button type="button" onclick={() => host.openPath(path)}>{path}</button></li>
+          <li><button type="button" class="pw-button" onclick={() => host.openPath(path)}>{path}</button></li>
         {/each}
       </ul>
     {/if}
@@ -115,15 +115,5 @@
     list-style: none;
     margin: 0;
     padding: 0;
-  }
-  button {
-    font-family: var(--pw-font);
-    font-size: inherit;
-    color: inherit;
-    background: none;
-    border: none;
-    padding: 0;
-    cursor: pointer;
-    text-align: left;
   }
 </style>

@@ -1,5 +1,5 @@
 // Tier-1 alerts (spec 7.7): the active insights and which of them the bar shows.
-import type { Fold, InsightEntry } from '@pitwall/contracts';
+import { ackToken, type Fold, type InsightEntry } from '@pitwall/contracts';
 import type { Insight, InsightCategory } from '@pitwall/domain';
 
 /** Folds `insights` entries into the insights active now, by key. Copies on write so the store sees a new value. */
@@ -15,10 +15,10 @@ export const activeInsights: Fold<InsightEntry, Map<string, Insight>> = {
   },
 };
 
-/** The critical insights not acknowledged and not muted, oldest first. */
+/** The critical insights whose occurrence (`ackToken`) is not acknowledged and whose group is not muted, oldest first. */
 export function tierOneAlerts(active: Map<string, Insight>, alerts: { acknowledged: string[]; muted: InsightCategory[] }): Insight[] {
   return [...active.values()]
-    .filter((i) => i.severity === 'critical' && !alerts.acknowledged.includes(i.key) && !alerts.muted.includes(i.category))
+    .filter((i) => i.severity === 'critical' && !alerts.acknowledged.includes(ackToken(i)) && !alerts.muted.includes(i.category))
     .sort((a, b) => a.raisedAt - b.raisedAt);
 }
 

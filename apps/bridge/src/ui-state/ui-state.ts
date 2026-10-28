@@ -109,6 +109,17 @@ export class UiState {
     return this.realism;
   }
 
+  /**
+   * Drops the acknowledgements whose occurrence (`<feedId>:<insightKey>:<raisedAt>`) is not in `active`, so a cleared
+   * alert's acknowledgement does not stay in `state.json` forever. Changes nothing when every one is still active.
+   */
+  pruneAcknowledged(active: ReadonlySet<string>): void {
+    const kept = this.acknowledged.filter((token) => active.has(token));
+    if (kept.length === this.acknowledged.length) return;
+    this.acknowledged = kept;
+    this.changedAlerts();
+  }
+
   /** Writes what is pending and stops watching. */
   close(): void {
     this.flush();

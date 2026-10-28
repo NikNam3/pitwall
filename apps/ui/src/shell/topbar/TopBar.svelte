@@ -1,7 +1,7 @@
 <script lang="ts">
   // The fixed top bar (spec 7.6, 7.7, 7.9, 8.5; mockup 9-top-bar): one line, built from the segments of layout.ts.
   import type { ReplayControl, UiAction } from '@pitwall/contracts';
-  import type { FeedId } from '@pitwall/domain';
+  import type { FeedId, Insight } from '@pitwall/domain';
   import type { Component } from 'svelte';
   import { onDestroy } from 'svelte';
   import type { TopicStore } from '../../connection/topic-store.svelte.ts';
@@ -14,8 +14,8 @@
     feedId: FeedId;
     send: (action: UiAction) => void;
     sendReplay: (control: ReplayControl) => void;
-    /** Called with the keys of the alerts shown, whenever they change. */
-    onShown?: (keys: string[]) => void;
+    /** Called with the alerts shown, whenever they change. */
+    onShown?: (alerts: Insight[]) => void;
   };
   let { store, feedId, send, sendReplay, onShown }: Props = $props();
 
@@ -29,7 +29,7 @@
   const SEGMENTS = new Map(Object.entries(files).map(([path, module]) => [(path.split('/').pop() ?? '').replace('.svelte', '').toLowerCase(), module.default]));
 
   $effect(() => {
-    onShown?.(bar.shown.map((i) => i.key));
+    onShown?.(bar.shown);
   });
 </script>
 

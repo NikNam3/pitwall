@@ -51,6 +51,11 @@ export class ReplayPacer implements Pacer {
     return this.#speed;
   }
 
+  /** Whether records pass without waiting (until the first speed change). */
+  get unpaced(): boolean {
+    return this.#unpaced;
+  }
+
   get seeking(): boolean {
     return this.#seek !== undefined;
   }

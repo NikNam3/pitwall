@@ -4,11 +4,12 @@ import svelte from 'eslint-plugin-svelte';
 import tseslint from 'typescript-eslint';
 import uiStyle from './apps/ui/eslint/style-declarations.js';
 
-const WINDOW_HOST = ['open', 'moveTo', 'resizeTo', 'screen'].map((property) => ({
-  object: 'window',
-  property,
-  message: 'Host calls go through shell/host/.',
-}));
+const HOST_MESSAGE = 'Host calls go through shell/host/.';
+const HOST_CALLS = ['open', 'focus', 'moveTo', 'resizeTo', 'screen'];
+/** `window.open(...)` and `globalThis.open(...)` alike. */
+const WINDOW_HOST = ['window', 'globalThis'].flatMap((object) => HOST_CALLS.map((property) => ({ object, property, message: HOST_MESSAGE })));
+/** The same calls without an object: `open(...)`. */
+const HOST_GLOBALS = HOST_CALLS.map((name) => ({ name, message: HOST_MESSAGE }));
 const NUMBER_FORMAT = [
   ...['toFixed', 'toPrecision', 'toLocaleString'].map((property) => ({ property })),
   ...['NumberFormat', 'DateTimeFormat'].map((property) => ({ object: 'Intl', property })),
@@ -18,7 +19,7 @@ const NETWORK = ['WebSocket', 'fetch'].map((name) => ({ name, message: 'Only con
 /** The UI rules of spec 4.6 for `apps/ui/src`; a flag set to false exempts a folder from that rule. */
 function uiRules({ network = true, host = true, format = true, colour = true } = {}) {
   return {
-    'no-restricted-globals': network ? ['error', ...NETWORK] : 'off',
+    'no-restricted-globals': ['error', ...(network ? NETWORK : []), ...(host ? HOST_GLOBALS : [])],
     'no-restricted-properties': ['error', ...(host ? WINDOW_HOST : []), ...(format ? NUMBER_FORMAT : [])],
     'pw-ui/no-colour-literals': colour ? 'error' : 'off',
   };

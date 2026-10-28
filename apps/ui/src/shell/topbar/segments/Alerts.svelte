@@ -1,5 +1,6 @@
 <script lang="ts">
   // Tier-1 alerts (spec 7.7): at most three in red until acknowledged, then `+N`, which opens the mute list.
+  import { ackToken } from '@pitwall/contracts';
   import { useOverlayStack } from '../../commands/overlay-stack.ts';
   import * as text from '../../../kit/text.ts';
   import { role } from '../../../theme/index.ts';
@@ -33,7 +34,7 @@
       data-testid="alert-ack-{alert.key}"
       aria-label={text.topBar.acknowledge}
       style:color={role('textFaint')}
-      onclick={() => bar.send({ kind: 'alert.ack', key: alert.key })}
+      onclick={() => bar.send({ kind: 'alert.ack', key: ackToken(alert) })}
     >{text.topBar.ack}</button>
   </span>
 {/each}

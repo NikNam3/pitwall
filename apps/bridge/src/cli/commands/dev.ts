@@ -20,7 +20,7 @@ const spawnPitwall: SpawnChild = (args) => {
   };
 };
 
-/** `pitwall dev --replay <file> [--at-lap n | --at-time ms]`: replays a recording and restarts the bridge at the same moment whenever its source changes. */
+/** `pitwall dev --replay <file> [--at-lap n | --at-time ms]`: replays a recording at the recorded pace and restarts the bridge at the same moment whenever its source changes. */
 export async function run(_positionals: string[], values: DevFlags, io: CliIo): Promise<number> {
   const { replay, 'at-lap': atLap, 'at-time': atTime } = values;
   if (replay === undefined) throw new UsageError('dev needs --replay <file>');

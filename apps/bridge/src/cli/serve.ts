@@ -2,12 +2,14 @@ import type { FeedInfo, ReplayControl } from '@pitwall/contracts';
 import type { FeedId } from '@pitwall/domain';
 import { createCalcStats } from '../dev/calc-stats.ts';
 import { readCatalogue } from '../dev/catalogue.ts';
+import type { PositionMessage } from '../dev/dev-supervisor.ts';
 import type { FeatureConfig } from '../feature-config.ts';
 import { FEATURES } from '../features/index.generated.ts';
 import { TopicHub } from '../hub/topic-hub.ts';
 import type { PacketSource } from '../input/packet-source.ts';
 import { FeedPipeline, type FeedPipelineOptions } from '../pipeline/feed-pipeline.ts';
 import { ReplayController } from '../replay/replay-controller.ts';
+import { pruneEndedAcknowledgements } from '../ui-state/ack-pruning.ts';
 import { UiState } from '../ui-state/ui-state.ts';
 import { StartupError } from '../startup-error.ts';
 import type { Db } from '../storage/db.ts';
@@ -82,7 +84,11 @@ export async function serve(opts: ServeOptions): Promise<number> {
     });
     const feeds = (): FeedInfo[] => [{ feedId, ...opts.feed }];
     const uiState = opts.uiDir === undefined ? undefined : UiState.open(opts.uiDir, hub, cliLogger(io, 'warn'));
-    if (uiState) undo.push(() => uiState.close());
+    if (uiState) {
+      undo.push(() => uiState.close());
+      // Acknowledgements of occurrences that have ended are dropped, so state.json does not grow forever.
+      undo.push(pruneEndedAcknowledgements(hub, [feedId], uiState));
+    }
     let controller: ReplayController | undefined;
     const server = await WsServer.start({
       port: opts.wsPort,
@@ -90,23 +96,18 @@ export async function serve(opts: ServeOptions): Promise<number> {
       feeds,
       log: cliLogger(io, wsLogLevel(io.env)),
       ...(uiState && { uiState }),
-      ...(opts.replay && { replay: { control: (control: ReplayControl) => (controller === undefined ? false : (trackTransport(control), controller.control(control), true)) } }),
+      ...(opts.replay && { replay: { control: (control: ReplayControl) => (controller === undefined ? false : (controller.control(control), true)) } }),
     });
     undo.push(() => server.close());
     // A dev child tells its supervisor where the replay is, so a restart can come back to the same moment.
     let listening = false;
-    const transport = { paused: false, speed: 1 };
-    const trackTransport = (control: ReplayControl): void => {
-      if (control.kind === 'pause') transport.paused = true;
-      else if (control.kind === 'play') transport.paused = false;
-      else if (control.kind === 'speed') transport.speed = control.factor;
-    };
     if (opts.dev && opts.replay && process.send) {
       const send = process.send.bind(process);
-      for (const control of opts.replay.controls) trackTransport(control);
       const timer = setInterval(() => {
         const position = controller?.position();
-        if (listening && position) send({ type: 'position', sessionTimeMs: position.sessionTimeMs, ...transport });
+        if (!listening || !controller || !position) return;
+        const { paused, speed } = controller.transport();
+        send({ type: 'position', sessionTimeMs: position.sessionTimeMs, paused, speed } satisfies PositionMessage);
       }, POSITION_EVERY_MS);
       undo.push(() => clearInterval(timer));
     }
@@ -134,7 +135,8 @@ export async function serve(opts: ServeOptions): Promise<number> {
       ...(opts.storage && { storage: { db: opts.storage.db, recordingsDir: opts.storage.recordingsDir } }),
       ...(opts.staleCheck && { staleCheck: opts.staleCheck }),
       ...(calcStats && { calcStats }),
-      ...(uiState && { realismNextSession: () => uiState.realismNextSession() }),
+      // Live only: a replay reproduces the realism its sidecar recorded (spec 7.9), whatever the UI prefers next.
+      ...(uiState && opts.source && { realismNextSession: () => uiState.realismNextSession() }),
       ...(testInsight !== undefined && { testInsight }),
     }));
     const failed = (error: unknown): never => {
