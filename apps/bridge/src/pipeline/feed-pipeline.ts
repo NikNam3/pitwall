@@ -83,6 +83,8 @@ export class FeedPipeline {
   /** Session files still closing; each leaves the set once closed. */
   readonly #closing = new Set<Promise<void>>();
   #session: SessionProcessor | undefined;
+  /** The last session that ended, file closed; it stays evaluable for late subscribers until the next session starts. */
+  #ended: SessionProcessor | undefined;
   #lastReceivedAtMs = 0;
   #staleTimer: NodeJS.Timeout | undefined;
   #started = false;
@@ -120,10 +122,12 @@ export class FeedPipeline {
 
   /**
    * The hub's subscriptions changed (wire `TopicHub`'s `onDemandChange` to it): the running session takes the new set
-   * of needed calculators, a later session reads it when it starts. Harmless when no session runs.
+   * of needed calculators and evaluates the newly needed ones at once (ruling R9); a later session reads the set when
+   * it starts. Once a session has ended, it still answers until the next one starts, so a subscriber that arrives
+   * after a replay has finished gets the final values. Harmless before any session.
    */
   demandChanged(): void {
-    this.#guarded('demand change', () => this.#session?.demandChanged());
+    this.#guarded('demand change', () => (this.#session ?? this.#ended)?.demandChanged());
   }
 
   /** Stops the source and resolves once `done` has settled; the feed's job runner is closed by then. */
@@ -188,6 +192,7 @@ export class FeedPipeline {
   /** A new session: every topic of the feed starts over, apart from the feed's own insights that still hold. */
   #startSession(event: SessionStarted): void {
     const { feedId, hub, log, dumpsDir } = this.#o;
+    this.#ended = undefined;
     this.#alerts.clearWriteFailures(this.#sessionTime());
     hub.resetFeed(feedId);
     this.#publishInsights(this.#alerts.active.map((insight) => ({ type: 'raised', insight })));
@@ -244,6 +249,7 @@ export class FeedPipeline {
     const session = this.#session;
     if (session === undefined) return;
     this.#session = undefined;
+    this.#ended = session;
     this.#jobs.sessionEnded();
     const closing = session.end(receivedAtMs).finally(() => this.#closing.delete(closing));
     this.#closing.add(closing);

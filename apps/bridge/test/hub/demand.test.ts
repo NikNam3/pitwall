@@ -1,6 +1,6 @@
 // What the hub tells the pipeline about demand: the topics that have a subscriber, per feed (spec 7.3, review F1).
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { TopicName } from '@pitwall/contracts';
+import type { ServerMessage, TopicName } from '@pitwall/contracts';
 import type { FeedId } from '@pitwall/domain';
 import { TopicHub } from '../../src/hub/topic-hub.ts';
 
@@ -182,5 +182,36 @@ describe('TopicHub onDemandChange', () => {
       quiet.removeClient('c');
     }).not.toThrow();
     expect([...quiet.subscribedTopics(A)]).toEqual([]);
+  });
+});
+
+describe('TopicHub onDemandChange: a replacement on another feed', () => {
+  it('fires for both feeds when a replacement moves a subscription from one feed to another', () => {
+    sub('c1', 'a', 'cars.overview', A);
+    changed.length = 0;
+    sub('c1', 'a', 'cars.overview', B);
+    expect([...changed].sort()).toEqual([A, B]);
+    expect(topics(A)).toEqual([]);
+    expect(topics(B)).toEqual(['cars.overview']);
+  });
+
+  it('fires only for the feed that changed when the old feed keeps the topic through another subscription', () => {
+    sub('c1', 'a', 'cars.overview', A); sub('c2', 'b', 'cars.overview', A);
+    changed.length = 0;
+    sub('c1', 'a', 'cars.overview', B);
+    expect(changed).toEqual([B]);
+  });
+});
+
+describe('TopicHub: a value published in reply to a demand change', () => {
+  it('arrives in the subscriber\'s snapshot, not as an update before it', () => {
+    const sent: ServerMessage[] = [];
+    const replying: TopicHub = new TopicHub({
+      now: () => 0,
+      onDemandChange: (feedId) => replying.publishState(feedId, 'session.info', () => ({ answered: true })),
+    });
+    replying.addClient('c', { send: (m) => sent.push(m), bufferedAmount: () => 0 });
+    replying.subscribe({ clientId: 'c', id: 's', topic: 'session.info', params: {}, feedId: A });
+    expect(sent).toEqual([{ type: 'snapshot', id: 's', value: { answered: true } }]);
   });
 });

@@ -126,8 +126,11 @@ export class Scheduler {
     return this.#book.active;
   }
 
-  /** Only these calculators and the ones they read, transitively, run. Throws `RegistryError` for an unknown id. */
-  setNeeded(ids: Iterable<CalculatorId>): void {
+  /**
+   * Only these calculators and the ones they read, transitively, run. Returns the calculators needed now that were
+   * not before, in registry order. Throws `RegistryError` for an unknown id.
+   */
+  setNeeded(ids: Iterable<CalculatorId>): CalculatorId[] {
     const needed = new Set<CalculatorId>();
     const visit = (id: CalculatorId): void => {
       if (needed.has(id)) return;
@@ -137,7 +140,9 @@ export class Scheduler {
       for (const read of calc.reads) if (typeof read === 'object') visit(read.calculator);
     };
     for (const id of ids) visit(id);
+    const before = this.#needed;
     this.#needed = needed;
+    return this.#registry.order.map((calc) => calc.id).filter((id) => needed.has(id) && !before.has(id));
   }
 
   /** Forgets accumulators, previous outputs and run times, so every needed calculator starts over. Outputs stay. */

@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Insight } from '@pitwall/domain';
 import { RegistryError } from '../../src/index.ts';
-import { input, len, quick, sched } from '../support/scheduler.ts';
+import { delta, input, len, quick, sched } from '../support/scheduler.ts';
 
 const insight = (key: string): Insight => ({ key, severity: 'info', category: 'race', feedId: 'f1', kind: key, params: {}, raisedAt: 0 }) as Insight;
 
@@ -127,5 +127,21 @@ describe('Scheduler: insights', () => {
     fail = false;
     s.run(input(1));
     expect(s.activeInsights).toEqual([]);
+  });
+});
+
+describe('Scheduler: newly needed calculators (ruling R9)', () => {
+  it('setNeeded returns the calculators needed now that were not before, in registry order, dependencies included', () => {
+    const s = sched([quick('a'), quick('b', { reads: [{ calculator: 'a' }] }), quick('c')], []);
+    expect(s.setNeeded(['b'])).toEqual(['a', 'b']);
+    expect(s.setNeeded(['b', 'a'])).toEqual([]);
+    expect(s.setNeeded(['c'])).toEqual(['c']);
+    expect(s.setNeeded(['a', 'c'])).toEqual(['a']);
+  });
+  it('a pass without changed tags and with an empty history delta runs only the calculators that never ran', () => {
+    const s = sched([quick('old', { reads: ['laps'] }), quick('event', { reads: ['laps'], cadence: 'lapCompleted' }), quick('late', { reads: ['laps'] })], ['old', 'event']);
+    s.run(input(0, ['laps'], delta(0, 1)));
+    s.setNeeded(['old', 'event', 'late']);
+    expect(s.run(input(0, [], delta(1))).ran).toEqual(['late']);
   });
 });

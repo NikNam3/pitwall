@@ -2,6 +2,7 @@
 import { sessionUidString, type FeedId, type Insight, type SessionTime, type SessionUid } from '@pitwall/domain';
 import {
   driverKeyOf,
+  historyLengths,
   Scheduler,
   SessionRunner,
   type CalculatorId,
@@ -107,12 +108,23 @@ export class SessionProcessor {
     if (uid === this.sessionUid || uid === 0n) this.#o.file?.write(receivedAtMs, bytes);
   }
 
-  /** The set of needed calculators changed: the running scheduler takes the new set. Before the runner starts, nothing to do yet. */
+  /**
+   * The set of needed calculators changed: the running scheduler takes the new set, and the calculators that became
+   * needed are evaluated at once against the current state (ruling R9), so a late subscriber gets a value without
+   * waiting for the next frame, or after the session ended. Before the runner starts, nothing to do yet.
+   */
   demandChanged(): void {
-    this.#running?.scheduler.setNeeded(this.#o.needed());
+    const running = this.#running;
+    if (running === undefined) return;
+    const needed = [...this.#o.needed()];
+    // Job triggers sit the pass out: a job runs for a frame (`computedFor`), so the next due frame starts it, and an
+    // event-cadence trigger is not used up before then. They are needed again right after the pass.
+    const now = needed.filter((id) => this.#o.jobs?.isTrigger(id) !== true);
+    if (running.scheduler.setNeeded(now).length > 0) this.#evaluateNow(running);
+    running.scheduler.setNeeded(needed);
   }
 
-  /** Runs whatever still waits for Participants, then closes the session file. */
+  /** Runs whatever still waits for Participants, then closes the session file. `demandChanged()` still answers afterwards. */
   async end(receivedAtMs: number): Promise<void> {
     if (this.#running === undefined && this.#buffered.length > 0) this.#begin();
     await this.#o.file?.close(receivedAtMs);
@@ -149,7 +161,11 @@ export class SessionProcessor {
     try {
       const result = runner.apply(frame);
       storage?.writeConfirmed(this.#uid, result.state.history, result.delta);
-      if (result.flashback) scheduler.reset();
+      if (result.flashback) {
+        scheduler.reset();
+        // A run triggered before the flashback would land on the new timeline.
+        this.#o.jobs?.flashback();
+      }
       const scheduled = scheduler.run({ state: result.state, changed: result.changed, delta: result.delta, feed: this.#o.feedView(), config: this.#o.config });
       // Each topic is published on its own: a failing feature binding never holds back the others.
       const unpublished = [
@@ -163,6 +179,28 @@ export class SessionProcessor {
       if (unpublished.length > 0) this.#report(frame, 'topic not published, marked errored', unpublished);
     } catch (error) {
       this.#report(frame, 'frame skipped: processing failed', [{ error }]);
+    }
+  }
+
+  /**
+   * One scheduler pass on the current state with nothing changed and an empty history delta: a calculator that never
+   * ran is due and runs, the others are not affected and skip (a `feed` reader is always affected). Its outputs and
+   * insights are published; history topics have nothing new, and no job trigger takes part (see `demandChanged`).
+   */
+  #evaluateNow({ runner, scheduler }: Running): void {
+    const { feedId, publisher, log } = this.#o;
+    const { state } = runner;
+    const lengths = historyLengths(state.history);
+    const scheduled = scheduler.run({
+      state,
+      changed: new Set(),
+      delta: { before: lengths, after: lengths, truncated: false },
+      feed: this.#o.feedView(),
+      config: this.#o.config,
+    });
+    const unpublished = [...publisher.publishOutputs(scheduled), ...publisher.publishInsights(scheduled.insights)];
+    for (const { error, topic } of unpublished) {
+      log.error({ feedId, sessionUid: this.#uid, ...(topic && { topic }), err: error }, 'topic not published on a demand change, marked errored');
     }
   }
 

@@ -83,12 +83,18 @@ export class TopicHub {
     return new Set([...this.entriesOfFeed(feedId)].map((entry) => entry.subscription.topic));
   }
 
-  /** Replaces a subscription with the same `(clientId, id)`. Subscriptions of unknown clients are ignored. */
+  /**
+   * Replaces a subscription with the same `(clientId, id)`. Subscriptions of unknown clients are ignored. The demand
+   * change comes before the snapshot, so a value the owner publishes in reply to it is already in the snapshot.
+   */
   subscribe(subscription: Subscription): void {
     const client = this.clients.get(subscription.clientId);
     if (client === undefined) return;
-    const entry: Entry = { subscription, sink: client.sink, pending: false, needsSnapshot: false };
-    const before = this.demandOf([subscription.feedId]);
+    // Owed until the snapshot below: what is published meanwhile goes into it instead of out as an update.
+    const entry: Entry = { subscription, sink: client.sink, pending: false, needsSnapshot: true };
+    const replaced = client.entries.get(subscription.id)?.subscription.feedId;
+    // A replacement may move the subscription to another feed: both feeds' topic sets can change.
+    const before = this.demandOf(new Set([subscription.feedId, ...(replaced !== undefined ? [replaced] : [])]));
     client.entries.delete(subscription.id);
     client.entries.set(subscription.id, entry);
     this.notifyDemand(before);

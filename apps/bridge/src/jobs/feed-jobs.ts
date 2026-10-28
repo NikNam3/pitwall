@@ -66,6 +66,11 @@ export class FeedJobs {
     this.#runner.onResult(onResult);
   }
 
+  /** Whether `id` is the trigger calculator of one of these jobs. */
+  isTrigger(id: CalculatorId): boolean {
+    return this.#jobs.has(id);
+  }
+
   /** After a scheduler pass: triggers every job whose calculator ran, on that calculator's output. */
   triggerRan(result: SchedulerResult, computedFor: ComputedFor): void {
     for (const id of result.ran) {
@@ -76,6 +81,11 @@ export class FeedJobs {
 
   /** The session ended: runs under way are dropped, their results belong to a session that is gone. */
   sessionEnded(): void {
+    this.#runner.cancel();
+  }
+
+  /** A flashback discarded the timeline the runs under way were triggered on: they are dropped, new triggers run. */
+  flashback(): void {
     this.#runner.cancel();
   }
 
