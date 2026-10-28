@@ -12,7 +12,7 @@ Each question has a provisional ruling already in effect in the code. Write your
 
 **Recommendation:** A. Physics channels are used for analysis rather than display, and converting them adds rounding for nothing.
 
-Answer:
+Answer: A
 
 ## Q2: Live acceptance run and a flashback recording (non-blocking, needs you at the game)
 
@@ -34,4 +34,4 @@ Answer:
 
 **Recommendation:** A. It costs nothing for the flashbacks the game actually allows (seconds back), and bounds memory.
 
-Answer:
+Answer: A
