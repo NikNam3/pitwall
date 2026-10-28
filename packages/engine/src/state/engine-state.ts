@@ -24,6 +24,10 @@ import type { WeekendContext } from './weekend-context.ts';
 
 /** Append-only (spec 6.3). */
 export type History = {
+  /**
+   * Every lap record ever emitted, so one (car, lap) can appear twice (provisional, then confirmed).
+   * Read it through `currentLaps` / `addLaps` from `@pitwall/domain`, not directly.
+   */
   laps: LapRecord[];
   stints: StintRecord[];
   pitStops: PitStopRecord[];
