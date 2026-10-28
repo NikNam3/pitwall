@@ -379,6 +379,17 @@ describe('WindowShell: the initial window main always announces (final fix wave 
     ]);
   });
 
+  it('after a switch to a workbook that does not contain main, main asks the host to ensure the new windows (with their geometry)', async () => {
+    const { snapshot, update, mountShell, host } = setup('main');
+    mountShell();
+    await snapshot(book('race', [win('main', 'M', { geometry: GEO }), win('side', 'S')]));
+    await update(book('quali', [win('strategy', 'S', { geometry: GEO }), win('car', 'C')]));
+    expect(host.ensureWindows).toHaveBeenLastCalledWith([
+      { id: 'strategy', geometry: GEO },
+      { id: 'car', geometry: undefined },
+    ]);
+  });
+
   it('a window that is neither main nor first in the workbook still never announces', async () => {
     const { snapshot, update, mountShell, host } = setup('side');
     mountShell();

@@ -1,6 +1,6 @@
 // Browser shortcuts the desktop shell blocks outside --dev (pure; the Electron `before-input-event` only calls this).
 // Assumed: `apps/desktop/src/blocked-keys.ts` exports `isBlockedKey(input: { key: string; control: boolean; shift: boolean; alt: boolean }, dev: boolean): boolean`
-// and the main process uses it. Electron's default menu accelerators (zoom, force reload) clash with the UI's font keys.
+// and the main process uses it. The application menu is removed, so the zoom keys reach the page as the UI's font keys and are not blocked.
 import { describe, expect, it } from 'vitest';
 import { isBlockedKey } from '../src/blocked-keys.ts';
 
@@ -15,16 +15,15 @@ describe('isBlockedKey outside --dev', () => {
     ['Alt+Left', press('ArrowLeft', { alt: true })],
     ['Alt+Right', press('ArrowRight', { alt: true })],
     ['Ctrl+Shift+I', press('I', { control: true, shift: true })],
-    ['Ctrl+= (zoom in)', press('=', { control: true })],
-    ['Ctrl++ (zoom in)', press('+', { control: true, shift: true })],
-    ['Ctrl+- (zoom out)', press('-', { control: true })],
-    ['Ctrl+_ (zoom out)', press('_', { control: true, shift: true })],
-    ['Ctrl+0 (zoom reset)', press('0', { control: true })],
   ])('blocks %s', (_name, input) => {
     expect(isBlockedKey(input, false)).toBe(true);
   });
 
   it.each([
+    ['Ctrl+= (the UI\'s font key)', press('=', { control: true })],
+    ['Ctrl++ (font larger)', press('+', { control: true, shift: true })],
+    ['Ctrl+- (font smaller)', press('-', { control: true })],
+    ['Ctrl+0 (font reset)', press('0', { control: true })],
     ['a plain letter', press('r')],
     ['Ctrl+K (the palette)', press('k', { control: true })],
     ['Ctrl+Shift+K', press('K', { control: true, shift: true })],
