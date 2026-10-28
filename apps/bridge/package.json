@@ -14,6 +14,13 @@
     "@pitwall/domain": "workspace:*",
     "@pitwall/contracts": "workspace:*",
     "@pitwall/engine": "workspace:*",
-    "@pitwall/strategy": "workspace:*"
+    "@pitwall/strategy": "workspace:*",
+    "better-sqlite3": "^13.0.3",
+    "pino": "^10.4.0",
+    "ws": "^8.22.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/ws": "^8.18.2"
   }
 }
