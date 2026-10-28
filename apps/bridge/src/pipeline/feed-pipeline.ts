@@ -17,6 +17,7 @@ import type { Db } from '../storage/db.ts';
 import { SessionFile, sessionRecordingName } from '../storage/session-files.ts';
 import { FeedAlerts, type WriteFailure } from './feed-alerts.ts';
 import { demandOf } from './demand.ts';
+import type { CalcStats } from '../dev/calc-stats.ts';
 import { FeedMonitor } from './feed-monitor.ts';
 import { sessionClock, type SessionClock } from './session-clock.ts';
 import { SessionProcessor } from './session-processor.ts';
@@ -54,6 +55,8 @@ export type FeedPipelineOptions = {
    * silent feed turns stale without a packet arriving. Replays leave it out and stay clock-free.
    */
   staleCheck?: { clock: () => number; everyMs: number };
+  /** Dev mode: times every calculator run. */
+  calcStats?: CalcStats;
 };
 
 type SessionStarted = Extract<TrackerEvent, { type: 'sessionStarted' }>;
@@ -219,6 +222,7 @@ export class FeedPipeline {
       ...(storage && { storage }),
       ...(file && { file }),
       ...(dumpsDir !== undefined && { dumpsDir }),
+      ...(this.#o.calcStats && { calcStats: this.#o.calcStats }),
     });
   }
 

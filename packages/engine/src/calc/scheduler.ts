@@ -77,17 +77,28 @@ const isAffected = (calc: Calculator, slot: Slot, pending: Pending): boolean =>
     return typeof read === 'object' ? slot.ranDependencies.has(read.calculator) : pending.changed.has(read);
   });
 
+/**
+ * Wraps each call of a calculator (`compute`, `init`, `update`, `output`) and returns the call's result. The engine
+ * reads no clock itself: a caller that wants timings measures inside the hook.
+ */
+export type OnCalculatorRun = <T>(id: CalculatorId, run: () => T) => T;
+
+export type SchedulerOptions = { onCalculatorRun?: OnCalculatorRun };
+
+const direct: OnCalculatorRun = (_id, run) => run();
+
 /** Computes without touching the slot, so a throw leaves the calculator as it was. */
-const evaluate = (calc: Calculator, slot: Slot, view: EngineView): Evaluation => {
+const evaluate = (calc: Calculator, slot: Slot, view: EngineView, hook: OnCalculatorRun): Evaluation => {
   let acc: Slot['acc'];
   let output: unknown;
   if (calc.kind === 'quick') {
-    output = calc.compute(view);
+    output = hook(calc.id, () => calc.compute(view));
   } else {
-    const next =
-      slot.acc === undefined || view.delta.truncated ? calc.init(view) : calc.update(slot.acc.value, view.delta, view);
+    const next = hook(calc.id, () =>
+      slot.acc === undefined || view.delta.truncated ? calc.init(view) : calc.update(slot.acc.value, view.delta, view),
+    );
     acc = { value: next };
-    output = calc.output(next);
+    output = hook(calc.id, () => calc.output(next));
   }
   return { acc, output, raised: calc.insights?.(output, slot.prevOutput?.value, view) };
 };
@@ -114,10 +125,12 @@ export class Scheduler {
   readonly #book = new InsightBook();
   /** Calculators whose last attempt threw, or that were skipped because a dependency did; cleared when they succeed. */
   readonly #failed = new Set<CalculatorId>();
+  readonly #hook: OnCalculatorRun;
   #needed: ReadonlySet<CalculatorId> = new Set();
 
-  constructor(registry: CalculatorRegistry) {
+  constructor(registry: CalculatorRegistry, opts: SchedulerOptions = {}) {
     this.#registry = registry;
+    this.#hook = opts.onCalculatorRun ?? direct;
     this.#entries = registry.order.map((calc) => ({ calc, slot: freshSlot() }));
     this.#slots = new Map(this.#entries.map(({ calc, slot }) => [calc.id, slot]));
   }
@@ -190,7 +203,7 @@ export class Scheduler {
       };
       let evaluation: Evaluation;
       try {
-        evaluation = evaluate(calc, slot, view);
+        evaluation = evaluate(calc, slot, view, this.#hook);
       } catch (error) {
         this.#outputs.delete(calc.id);
         this.#failed.add(calc.id);
