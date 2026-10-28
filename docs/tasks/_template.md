@@ -10,6 +10,8 @@
 
 Everything outside these repo-relative folders is read-only.
 
+Optional: `PITWALL_WORKER_UNIT=<unit>` for a task that builds one analysis or display. It additionally grants the unit's folders and topic files (ADR 0011).
+
 ## Interfaces
 
 - Consumes: <modules, types and files this task depends on, copied from the plan>
