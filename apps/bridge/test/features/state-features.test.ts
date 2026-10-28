@@ -1,5 +1,6 @@
 // apps/bridge/test/features/state-features.test.ts
 import { describe, expect, it } from 'vitest';
+import type { CarState } from '@pitwall/domain';
 import type { QuickCalculator } from '@pitwall/engine';
 import type { Feature, TopicBinding } from '../../src/features/feature.ts';
 import sessionInfo from '../../src/features/session-info/register.ts';
@@ -31,8 +32,17 @@ describe('base state features', () => {
     expect(list).toHaveLength(view.state.cars.length);
     const car = view.state.cars[1]!;
     expect(list[1]).toEqual({ id: car.id, identity: car.identity, timing: car.timing,
-      tyres: { actualCompound: car.tyres.actualCompound, visualCompound: car.tyres.visualCompound, age: car.tyres.age } });
+      tyres: { actualCompound: car.tyres.actualCompound, visualCompound: car.tyres.visualCompound, age: car.tyres.age },
+      updatedAt: car.updatedAt });
     expect(list[1]!['timing']).not.toBe(car.timing);
+    expect(list[1]!['updatedAt']).not.toBe(car.updatedAt);
+  });
+  it('cars.overview and car.detail carry when each data source last updated the car', () => {
+    const car = view.state.cars[1]!;
+    // the scenario sends the menu-rate packets (no MotionEx for another car) and one Participants packet, at the session times of its frames
+    expect(car.updatedAt).toEqual({ participants: 0, lapData: 32, motion: 32, telemetry: 32, status: 32 });
+    expect((out(carsOverview, 'cars.overview') as Array<{ updatedAt: object }>)[1]!.updatedAt).toEqual(car.updatedAt);
+    expect((select(carDetail, 'car.detail', { carId: 1 }) as CarState).updatedAt).toEqual(car.updatedAt);
   });
   it('car.detail selects one car by carId', () => {
     expect(select(carDetail, 'car.detail', { carId: 1 })).toEqual(view.state.cars[1]);
@@ -54,12 +64,17 @@ describe('base state features', () => {
 describe('what the features read (domain areas)', () => {
   const readsOf = (f: Feature, id: string) => (f.calculators.find((c) => c.id === id) as QuickCalculator<unknown>).reads;
   it.each([
-    ['car.detail', carDetail, 'cars.state', ['identity', 'timing', 'tyres', 'energy', 'condition', 'dynamics', 'ownCar', 'stints']],
-    ['cars.overview', carsOverview, 'cars.overview', ['identity', 'timing', 'tyres', 'stints']],
     ['car.telemetry', carTelemetry, 'cars.dynamics', ['dynamics']],
     ['session.info', sessionInfo, 'session.info', ['session', 'identity']],
     ['feed.status', feedStatus, 'feed.status', ['feed']],
   ] as const)('%s', (_, feature, id, reads) => {
     expect(readsOf(feature, id)).toEqual(reads);
+  });
+  // `updatedAt` moves with every source, so these two may read more tags than they show fields of; never fewer.
+  it.each([
+    ['car.detail', carDetail, 'cars.state', ['identity', 'timing', 'tyres', 'energy', 'condition', 'dynamics', 'ownCar', 'stints']],
+    ['cars.overview', carsOverview, 'cars.overview', ['identity', 'timing', 'tyres', 'stints']],
+  ] as const)('%s reads at least the areas of its fields', (_, feature, id, reads) => {
+    expect(readsOf(feature, id)).toEqual(expect.arrayContaining([...reads]));
   });
 });

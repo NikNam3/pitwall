@@ -31,6 +31,11 @@ describe('feed insights', () => {
     expect(feedInsights(f, feed({ msSinceLastPacket: 3000, lossPercent: 50, wrongFormat: 2023 }), 0).map((i) => i.key))
       .toEqual(['feed.stale', 'feed.packetLoss', 'feed.wrongFormat']);
   });
+  it('feed.status carries the measured send cadence once the feed has closed a few frames', () => {
+    const calc = feedStatus.calculators.find((c) => c.id === 'feed.status') as QuickCalculator<unknown>;
+    expect(calc.compute(viewFrom(frames, { cadenceMs: 16 }))).toMatchObject({ cadenceMs: 16 });
+    expect(calc.compute(viewFrom(frames, {}))).not.toHaveProperty('cadenceMs');
+  });
   it('feed.status topic value', () => {
     const calc = feedStatus.calculators.find((c) => c.id === 'feed.status') as QuickCalculator<unknown>;
     const v = viewFrom(frames, { msSinceLastPacket: 2500, lossPercent: 1.5, latePackets: 3, packetsPerSecond: 58 });

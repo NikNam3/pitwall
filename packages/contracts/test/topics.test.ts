@@ -65,6 +65,10 @@ describe('topic types', () => {
     expectTypeOf<TopicValue<'cars.overview'>>().toEqualTypeOf<CarOverview[]>();
     expectTypeOf<TopicValue<'insights'>>().toEqualTypeOf<InsightEntry>();
   });
+  it('carry what the UI needs to grey out stale values', () => {
+    expectTypeOf<CarOverview['updatedAt']>().toEqualTypeOf<CarState['updatedAt']>();
+    expectTypeOf<FeedStatus['cadenceMs']>().toEqualTypeOf<number | undefined>();
+  });
   it('keep the moved DTO types importable from the package index', () => {
     expectTypeOf<FeedInfo['feedId']>().toEqualTypeOf<FeedId>();
     expectTypeOf<ReservedCommand['kind']>().toEqualTypeOf<'boxCall'>();

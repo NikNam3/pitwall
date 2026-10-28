@@ -78,6 +78,10 @@ describe('FeedPipeline', () => {
     expect(r.of('events').flatMap((m) => ('entries' in m ? m.entries ?? [] : []))).toMatchObject([{ kind: 'fastestLap' }]);
     expect(r.of('feed.status').some((m) => m.type === 'update')).toBe(true);
   });
+  it('feed.status carries the median session-time step of the closed frames as cadenceMs', async () => {
+    const r = await run(scenario());
+    expect(r.of('feed.status').at(-1)).toMatchObject({ value: { cadenceMs: 16 } });
+  });
   it('wrong packet format → decode error metrics + critical feed.wrongFormat, before any session', async () => {
     const bad = packetBytes(buildPacket('session', { header: headerFor('session', { packetFormat: 2024 }) }));
     const r = await run([{ bytes: bad, receivedAtMs: 0 }]);
