@@ -3,7 +3,7 @@ import { basename, join } from 'node:path';
 import { StartupError } from '../../startup-error.ts';
 import { dataDir } from '../../storage/data-dir.ts';
 import { openDatabase } from '../../storage/db.ts';
-import { cliLogger, type CliIo } from '../io.ts';
+import { cliLogger, EXIT_INTERRUPTED, type CliIo } from '../io.ts';
 import { processRecording } from '../process-recording.ts';
 import { UsageError } from '../usage.ts';
 
@@ -22,10 +22,12 @@ export async function run(positionals: string[], _values: object, io: CliIo): Pr
   try {
     copyFileSync(file, target);
     try {
-      await processRecording(target, db, cliLogger(io, 'warn'));
+      await processRecording(target, db, cliLogger(io, 'warn'), io.signal);
     } catch (error) {
-      rmSync(target, { force: true }); // a recording that cannot be processed is not imported
-      throw error;
+      rmSync(target, { force: true }); // a recording that cannot be processed (or was interrupted) is not imported
+      if (!io.signal.aborted) throw error;
+      io.err('pitwall: interrupted, nothing imported');
+      return EXIT_INTERRUPTED;
     }
   } finally {
     db.close();

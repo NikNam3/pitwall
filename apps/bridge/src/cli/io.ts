@@ -8,6 +8,9 @@ export type CliIo = {
   signal: AbortSignal;
 };
 
+/** The exit code of a command stopped by `CliIo.signal` (128 + SIGINT, as a shell reports it). */
+export const EXIT_INTERRUPTED = 130;
+
 /** The process's own streams, environment and shutdown signals. */
 export function defaultIo(): CliIo {
   const abort = new AbortController();
