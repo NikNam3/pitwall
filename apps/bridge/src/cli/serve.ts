@@ -40,6 +40,16 @@ type ServeBase = {
   io: CliIo;
 };
 
+/** The levels `PITWALL_WS_LOG_LEVEL` may name. */
+const LOG_LEVELS = ['trace', 'debug', 'info', 'warn', 'error', 'fatal', 'silent'];
+
+/** The WebSocket server's log level from `PITWALL_WS_LOG_LEVEL` (default `info`; the Playwright harness sets `debug`). */
+function wsLogLevel(env: NodeJS.ProcessEnv): string {
+  const level = env['PITWALL_WS_LOG_LEVEL'] || 'info';
+  if (!LOG_LEVELS.includes(level)) throw new StartupError(`PITWALL_WS_LOG_LEVEL must be one of ${LOG_LEVELS.join(', ')}, got "${level}"`);
+  return level;
+}
+
 /** How often a dev child reports its replay position to the supervisor. */
 const POSITION_EVERY_MS = 500;
 
@@ -78,7 +88,7 @@ export async function serve(opts: ServeOptions): Promise<number> {
       port: opts.wsPort,
       hub,
       feeds,
-      log: cliLogger(io, 'info'),
+      log: cliLogger(io, wsLogLevel(io.env)),
       ...(uiState && { uiState }),
       ...(opts.replay && { replay: { control: (control: ReplayControl) => (controller === undefined ? false : (trackTransport(control), controller.control(control), true)) } }),
     });

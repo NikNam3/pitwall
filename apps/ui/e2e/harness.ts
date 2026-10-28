@@ -14,6 +14,8 @@ import type { BridgeHandle, GalleryHandle, LaunchPitwallOptions, PitwallApp, Sta
 
 const REPO_ROOT = path.resolve(import.meta.dirname, '../../..');
 const UI_DIR = path.join(REPO_ROOT, 'apps/ui');
+/** The gallery-enabled build `pnpm test:ui` makes next to the plain `dist` (which the desktop app loads). */
+const GALLERY_DIST = 'dist-e2e';
 const DESKTOP_DIR = path.join(REPO_ROOT, 'apps/desktop');
 const BRIDGE_CLI = path.join(REPO_ROOT, 'apps/bridge/src/cli/pitwall.ts');
 const GALLERY_MAIN = path.join(import.meta.dirname, 'gallery-main.cjs');
@@ -23,8 +25,10 @@ const HOST = '127.0.0.1';
 
 /** The gallery window; wide enough for the widest cell, its height only decides how much is laid out at once. */
 const GALLERY_WINDOW = { width: 1600, height: 1000 };
-/** How long a bridge, a window or a port may take. */
+/** How long a bridge, a window, a port or the gallery's lazy parts may take. */
 const START_TIMEOUT_MS = 30_000;
+/** How long a bridge has to exit after SIGTERM before it gets SIGKILL. */
+const STOP_TIMEOUT_MS = 5_000;
 const POLL_MS = 100;
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
@@ -45,15 +49,20 @@ function childEnv(extra: Record<string, string>): Record<string, string> {
   return { ...Object.fromEntries(inherited), ...extra };
 }
 
-/** Electron with the given app, every window hidden, one CSS pixel per device pixel (screenshots do not depend on the display). */
-const launchElectron = (app: string, env: Record<string, string>): Promise<ElectronApplication> =>
-  electron.launch({ executablePath: ELECTRON, args: ['--force-device-scale-factor=1', app], cwd: REPO_ROOT, env: childEnv({ PITWALL_E2E: '1', ...env }) });
+/** Electron with the given app and Chromium `flags`, every window hidden, one CSS pixel per device pixel (screenshots do not depend on the display). */
+const launchElectron = (app: string, env: Record<string, string>, flags: string[] = []): Promise<ElectronApplication> =>
+  electron.launch({ executablePath: ELECTRON, args: ['--force-device-scale-factor=1', ...flags, app], cwd: REPO_ROOT, env: childEnv({ PITWALL_E2E: '1', ...env }) });
 
-/** The gallery of the build in `apps/ui/dist`, served by Vite's preview server (the gallery needs the path `/gallery`). */
+/**
+ * The gallery of the build in `apps/ui/dist-e2e`, served by Vite's preview server (the gallery needs the path
+ * `/gallery`). The page is handed over once every cell is `data-ready`, i.e. its lazily loaded parts have rendered.
+ */
 export async function openGallery(): Promise<GalleryHandle> {
   const port = await freePort();
-  const server = await preview({ root: UI_DIR, configFile: false, logLevel: 'warn', preview: { host: HOST, port, strictPort: true } });
-  const app = await launchElectron(GALLERY_MAIN, {});
+  const server = await preview({ root: UI_DIR, configFile: false, logLevel: 'warn', build: { outDir: GALLERY_DIST }, preview: { host: HOST, port, strictPort: true } });
+  // No GPU: an offscreen window's screenshot leaves out GPU-drawn canvases (the kit chart came out empty). The app's
+  // hidden windows need the GPU, though: without it they never lay out their panels.
+  const app = await launchElectron(GALLERY_MAIN, {}, ['--disable-gpu']);
   const close = async (): Promise<void> => {
     await app.close();
     await server.close();
@@ -71,6 +80,9 @@ export async function openGallery(): Promise<GalleryHandle> {
     );
     const page = await opened;
     await page.waitForSelector('[data-gallery-id]');
+    await page.waitForFunction(() => [...document.querySelectorAll('[data-gallery-id]')].every((cell) => cell.hasAttribute('data-ready')), undefined, {
+      timeout: START_TIMEOUT_MS,
+    });
     return { page, close };
   } catch (error) {
     await close();
@@ -93,9 +105,24 @@ function recordingPath(name: string): string {
   return file;
 }
 
-/** `pitwall replay <recording> --paused`; resolves once it prints `listening`. Its stdout and stderr lines go to `lines`. */
+/** Every bridge still running; killed when the test process exits, so a failing spec leaves no `pitwall replay` behind. */
+const bridges = new Set<ChildProcess>();
+process.once('exit', () => {
+  for (const child of bridges) child.kill('SIGKILL');
+});
+
+/**
+ * `pitwall replay <recording> --paused`, with the WebSocket server's log at debug (its `ws subscribe` lines carry
+ * `params` only there); resolves once it prints `listening`. Its stdout and stderr lines go to `lines`.
+ */
 function spawnBridge(file: string, env: Record<string, string>, lines: string[]): Promise<ChildProcess> {
-  const child = spawn(process.execPath, [BRIDGE_CLI, 'replay', file, '--paused'], { cwd: REPO_ROOT, env: childEnv(env), stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = spawn(process.execPath, [BRIDGE_CLI, 'replay', file, '--paused'], {
+    cwd: REPO_ROOT,
+    env: childEnv({ PITWALL_WS_LOG_LEVEL: 'debug', ...env }),
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  bridges.add(child);
+  child.once('exit', () => bridges.delete(child));
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       child.kill('SIGKILL');
@@ -119,12 +146,14 @@ function spawnBridge(file: string, env: Record<string, string>, lines: string[])
   });
 }
 
-/** Stops the bridge with SIGTERM; resolves once it has exited (its port is free by then). */
+/** Stops the bridge with SIGTERM, SIGKILL after STOP_TIMEOUT_MS; resolves once it has exited (its port is free by then). */
 async function stopChild(child: ChildProcess): Promise<void> {
   if (child.exitCode !== null || child.signalCode !== null) return;
   const exited = new Promise<void>((resolve) => child.once('exit', () => resolve()));
   child.kill('SIGTERM');
+  const timer = setTimeout(() => child.kill('SIGKILL'), STOP_TIMEOUT_MS);
   await exited;
+  clearTimeout(timer);
 }
 
 /**

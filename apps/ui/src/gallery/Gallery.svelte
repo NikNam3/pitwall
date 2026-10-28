@@ -50,7 +50,7 @@
       <div class="grid">
         {#each cells as cell (cell.id)}
           {#if cell.data.kind === 'moment' && moments[cell.data.name] === undefined}
-            <figure data-gallery-id={cell.id} style:color={role('warning')}>{cell.id}: {text.momentMissing}</figure>
+            <figure data-gallery-id={cell.id} data-ready style:color={role('warning')}>{cell.id}: {text.momentMissing}</figure>
           {:else}
           <GalleryCell
             id={cell.id}

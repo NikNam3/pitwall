@@ -36,6 +36,7 @@ export default defineConfig(
       '**/.stryker-tmp/',
       '**/reports/',
       'apps/ui/dist/',
+      'apps/ui/dist-e2e/',
       'apps/desktop/dist/',
       'apps/bridge/src/features/index.generated.ts',
       'packages/contracts/src/topics/index.generated.ts',

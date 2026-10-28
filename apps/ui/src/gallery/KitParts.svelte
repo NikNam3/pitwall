@@ -1,5 +1,6 @@
 <script lang="ts">
   // The kit parts with sample data (spec 9.2): value cell states, icon and table, each in a cell of its own.
+  // `data-ready` marks a cell whose parts have rendered (the e2e harness waits for it); only the chart loads lazily.
   import { unknown } from '@pitwall/domain';
   import Gear from '../kit/icons/Gear.svelte';
   import Table from '../kit/table/Table.svelte';
@@ -21,20 +22,21 @@
     { label: 'own', points: [[1, 72.4], [2, 72.1], [3, 71.9], [4, 72.0], [5, 71.8]] as Array<[number, number]> },
     { label: 'rival', points: [[1, 72.9], [2, 72.6], [3, 72.5], [4, 72.4], [5, 72.6]] as Array<[number, number]> },
   ];
+  let chartDrawn = $state(false);
 </script>
 
 <div class="parts">
-  <figure data-gallery-id="kit/value">
+  <figure data-gallery-id="kit/value" data-ready>
     <figcaption style:color={role('textFaint')}>kit/value</figcaption>
     <div><Value value={71910} format={formatLapTime} /></div>
     <div><Value value={unknown('notReceived')} format={formatLapTime} widthCols={8} /></div>
     <div><Value value={94} format={formatPct} estimated /></div>
   </figure>
-  <figure data-gallery-id="kit/icon">
+  <figure data-gallery-id="kit/icon" data-ready>
     <figcaption style:color={role('textFaint')}>kit/icon</figcaption>
     <span style:color={role('textDim')}><Gear label="gear" /></span>
   </figure>
-  <figure data-gallery-id="kit/table">
+  <figure data-gallery-id="kit/table" data-ready>
     <figcaption style:color={role('textFaint')}>kit/table</figcaption>
     <Table
       {rows}
@@ -48,11 +50,13 @@
       ]}
     />
   </figure>
-  <figure data-gallery-id="kit/chart" style:width="{size.px.width}px" style:height="{size.px.height}px">
+  <figure data-gallery-id="kit/chart" data-ready={chartDrawn || undefined}>
     <figcaption style:color={role('textFaint')}>kit/chart</figcaption>
-    {#await loadChart() then { default: Chart }}
-      <Chart {series} xLabel="lap" yLabel="s" x={{ kind: 'lap' }} {size} />
-    {/await}
+    <div style:width="{size.px.width}px" style:height="{size.px.height}px">
+      {#await loadChart() then { default: Chart }}
+        <Chart {series} xLabel="lap" yLabel="s" x={{ kind: 'lap' }} {size} ondraw={() => (chartDrawn = true)} />
+      {/await}
+    </div>
   </figure>
 </div>
 
@@ -64,6 +68,8 @@
   .parts {
     display: flex;
     flex-wrap: wrap;
+    /* Each part at its own height, not stretched to the tallest (the chart). */
+    align-items: flex-start;
     gap: var(--pw-panel-gap);
   }
   figure {

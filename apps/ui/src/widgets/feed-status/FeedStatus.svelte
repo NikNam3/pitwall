@@ -19,17 +19,15 @@
   });
   const state = $derived(!feed.connected ? text.disconnected : feed.stale ? staleText() : text.connected);
   const full = $derived(size.mode === 'full');
-  // Loss and packet rate are not measured while no feed is connected: unknown, not 0.
-  const lossPercent = $derived(feed.connected ? feed.lossPercent : unknown('notReceived'));
-  const packetsPerSecond = $derived(feed.connected ? feed.packetsPerSecond : unknown('notReceived'));
 </script>
 
 <div class="feed">
   <div class="line">
-    <span class="state" style:color={colour}>{state}</span>{separator}<Value value={lossPercent} format={formatLoss} />{separator}<Value
-      value={packetsPerSecond}
-      format={formatRate}
-    />
+    <!-- Loss and packet rate are only measured while a feed is connected; without one they do not apply. -->
+    <span class="state" style:color={colour}>{state}</span>{#if feed.connected}{separator}<Value value={feed.lossPercent} format={formatLoss} />{separator}<Value
+        value={feed.packetsPerSecond}
+        format={formatRate}
+      />{/if}
   </div>
   {#if data.session}
     <div class="line dim">
