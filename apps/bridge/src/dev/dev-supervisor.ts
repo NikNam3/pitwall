@@ -24,12 +24,15 @@ export type DevSupervisorOptions = {
   debounceMs?: number;
   /** Runs before each restart (not the first start); default `pnpm gen`. */
   gen?: () => Promise<void> | void;
-  /** Extra replay flags for the first child only (`--at-lap n`, `--at-time ms`). */
+  /** Extra replay flags (`--at-lap n`, `--at-time ms`) for the first child, and for restarts until a child has reported a position. */
   firstArgs?: string[];
 };
 
 /** How long a child gets to exit after SIGTERM before it is killed. */
 const KILL_AFTER_MS = 2000;
+
+/** The pace flags of a dev child: always paced (never the unpaced `pitwall replay` default); `--speed` only when it is not 1. */
+const paceArgs = (speed: number): string[] => (speed === 1 ? ['--realtime'] : ['--speed', String(speed)]);
 
 const isPosition = (msg: unknown): msg is PositionMessage =>
   typeof msg === 'object' && msg !== null && (msg as { type?: unknown }).type === 'position';
@@ -37,7 +40,8 @@ const isPosition = (msg: unknown): msg is PositionMessage =>
 type Running = { handle: ChildHandle; reported: boolean; stopping: boolean; exited: boolean; whenExited: Promise<void> };
 
 /**
- * Restarts the replay child when source files change (spec 8.4), at the replay moment the old child last reported.
+ * Restarts the replay child when source files change (spec 8.4), at the replay moment the old child last reported
+ * (before any report: at the original `firstArgs` jump). Every child plays at the recorded pace times its speed.
  * A child that dies before its first position is reported once on stderr; the supervisor then waits for the next change.
  */
 export class DevSupervisor {
@@ -55,7 +59,7 @@ export class DevSupervisor {
   }
 
   start(): void {
-    this.#spawn(this.#o.firstArgs ?? []);
+    this.#spawn(this.#startArgs());
     for (const dir of this.#o.watch) {
       this.#watchers.push(watch(dir, { recursive: true }, (_event, name) => this.#changed(name)));
     }
@@ -90,7 +94,12 @@ export class DevSupervisor {
     }
     if (this.#stopped) return;
     const at = this.#last;
-    this.#spawn(at ? ['--at-time', String(at.sessionTimeMs), ...(at.paused ? ['--paused'] : []), '--speed', String(at.speed)] : []);
+    this.#spawn(at ? ['--at-time', String(at.sessionTimeMs), ...(at.paused ? ['--paused'] : []), ...paceArgs(at.speed)] : this.#startArgs());
+  }
+
+  /** The first child's flags: the requested jump, at the recorded pace. */
+  #startArgs(): string[] {
+    return [...(this.#o.firstArgs ?? []), ...paceArgs(1)];
   }
 
   #spawn(extra: string[]): void {

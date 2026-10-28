@@ -63,6 +63,11 @@ export class ReplayController {
     return this.#pipeline.position() ?? this.#carried;
   }
 
+  /** How the replay plays: paused, the speed factor and whether it runs unpaced (as fast as possible). */
+  transport(): { paused: boolean; speed: number; unpaced: boolean } {
+    return { paused: this.#pacer.paused, speed: this.#pacer.speed, unpaced: this.#pacer.unpaced };
+  }
+
   /** Applies a transport action. */
   control(control: ReplayControl): void {
     switch (control.kind) {
@@ -194,6 +199,7 @@ export class ReplayController {
       sessionTimeMs: position.sessionTimeMs,
       playerLap: position.playerLap,
       atEnd: this.#atEnd,
+      ...(this.#pacer.unpaced && { unpaced: true as const }),
       ...(this.#beyondEnd && { note: 'beyondEnd' as const }),
     };
   }

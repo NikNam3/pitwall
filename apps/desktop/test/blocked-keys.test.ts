@@ -1,0 +1,45 @@
+// Browser shortcuts the desktop shell blocks outside --dev (pure; the Electron `before-input-event` only calls this).
+// Assumed: `apps/desktop/src/blocked-keys.ts` exports `isBlockedKey(input: { key: string; control: boolean; shift: boolean; alt: boolean }, dev: boolean): boolean`
+// and the main process uses it. The application menu is removed, so the zoom keys reach the page as the UI's font keys and are not blocked.
+import { describe, expect, it } from 'vitest';
+import { isBlockedKey } from '../src/blocked-keys.ts';
+
+const press = (key: string, mods: { control?: boolean; shift?: boolean; alt?: boolean } = {}) => ({ key, control: false, shift: false, alt: false, ...mods });
+
+describe('isBlockedKey outside --dev', () => {
+  it.each([
+    ['Ctrl+W', press('w', { control: true })],
+    ['Ctrl+R', press('r', { control: true })],
+    ['Ctrl+Shift+R (force reload)', press('R', { control: true, shift: true })],
+    ['F5', press('F5')],
+    ['Alt+Left', press('ArrowLeft', { alt: true })],
+    ['Alt+Right', press('ArrowRight', { alt: true })],
+    ['Ctrl+Shift+I', press('I', { control: true, shift: true })],
+  ])('blocks %s', (_name, input) => {
+    expect(isBlockedKey(input, false)).toBe(true);
+  });
+
+  it.each([
+    ['Ctrl+= (the UI\'s font key)', press('=', { control: true })],
+    ['Ctrl++ (font larger)', press('+', { control: true, shift: true })],
+    ['Ctrl+- (font smaller)', press('-', { control: true })],
+    ['Ctrl+0 (font reset)', press('0', { control: true })],
+    ['a plain letter', press('r')],
+    ['Ctrl+K (the palette)', press('k', { control: true })],
+    ['Ctrl+Shift+K', press('K', { control: true, shift: true })],
+    ['Ctrl+N (a workbook switch)', press('n', { control: true })],
+    ['a plain minus', press('-')],
+    ['Enter', press('Enter')],
+  ])('lets %s through', (_name, input) => {
+    expect(isBlockedKey(input, false)).toBe(false);
+  });
+});
+
+describe('isBlockedKey with --dev', () => {
+  it.each([press('r', { control: true }), press('R', { control: true, shift: true }), press('=', { control: true }), press('F5'), press('I', { control: true, shift: true })])(
+    'blocks nothing (%j)',
+    (input) => {
+      expect(isBlockedKey(input, true)).toBe(false);
+    },
+  );
+});

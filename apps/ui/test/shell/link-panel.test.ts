@@ -29,10 +29,6 @@ import WindowShell from '../../src/shell/windows/WindowShell.svelte';
 const FEED = feedId('f1');
 const OPTIONS = { mode: 'a', count: 3, flag: false };
 const GEO: Geometry = { screen: 0, x: 0, y: 0, width: 1920, height: 1080 };
-const workbook: Workbook = {
-  name: 'race',
-  windows: [{ id: 'main', geometry: GEO, layout: {}, panels: { p1: { widget: 'probe', options: OPTIONS, linkGroup: 1 } } }],
-};
 const group1 = (extra: Partial<LinkGroup> = {}): LinkGroup => ({ id: 1, primary: 'player', compare: [], window: { kind: 'live' }, ...extra });
 const session = (updatedAt: number, playerCar: number) => ({ feedId: FEED, playerCar: carId(playerCar), session: { updatedAt } });
 const cars = [
@@ -64,10 +60,11 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-const setup = async () => {
+const setup = async (panelGroup = 1) => {
+  const workbook: Workbook = { name: 'race', windows: [{ id: 'main', geometry: GEO, layout: {}, panels: { p1: { widget: 'probe', options: OPTIONS, linkGroup: panelGroup } } }] };
   const connection = new FakeConnection();
   const store = new TopicStore(connection);
-  const host: Host = { kind: 'browser', windowId: () => 'main', ensureWindows: vi.fn(), onGeometryChange: () => () => {}, openPath: vi.fn() };
+  const host: Host = { kind: 'browser', windowId: () => 'main', ensureWindows: vi.fn(), onGeometryChange: () => () => {}, openPath: vi.fn(), focusWindow: vi.fn() };
   const latestId = (topic: string): string => {
     const found = connection.subscribes().filter((s) => s.topic === topic).at(-1);
     if (found === undefined) throw new Error(`no subscription to ${topic}`);
@@ -83,7 +80,7 @@ const setup = async () => {
   // The panel is mounted the way the dock does it; the tab is attached so the header can be queried.
   const view = (mocks.mountDock.mock.calls.at(-1) as unknown as MountCall)[4];
   const tab = document.body.appendChild(document.createElement('div'));
-  view.render(document.body.appendChild(document.createElement('div')), tab, { widget: 'probe', options: OPTIONS, linkGroup: 1 }, 'p1');
+  view.render(document.body.appendChild(document.createElement('div')), tab, { widget: 'probe', options: OPTIONS, linkGroup: panelGroup }, 'p1');
   await push('session.info', session(1000, 5));
   const carDetails = () => connection.subscribes().filter((s) => s.topic === 'car.detail');
   const linkSets = () => connection.sent.flatMap((m) => (m.type === 'uiAction' && m.action.kind === 'linkGroup.set' ? [m.action.group] : []));
@@ -136,5 +133,24 @@ describe('widgets cannot change the link group (spec 4.5, user decision)', () =>
     await tick();
     expect(linkSets()).toEqual([]);
     expect(connection.sent.filter((m) => m.type === 'uiAction' && m.action.kind === 'linkGroup.set')).toEqual([]);
+  });
+});
+
+// Final fix wave (B-I2): a group the bridge has not published yet (it starts with group 1 only) can be used.
+describe('a link group the bridge has not published yet', () => {
+  it('its marker is enabled and opens the picker; the panel follows the defaults (player, live) meanwhile', async () => {
+    const { tab, carDetails } = await setup(2);
+    expect(carDetails().map((s) => s.params)).toEqual([{ carId: 5 }]);
+    const marker = within(tab).getByRole('button', { name: `${text.linkMarker} 2` }) as HTMLButtonElement;
+    expect(marker.disabled).toBe(false);
+  });
+
+  it('the first linkGroup.set creates the group: the whole group, defaults for what was not chosen', async () => {
+    const { push, tab, linkSets } = await setup(2);
+    await fireEvent.click(within(tab).getByRole('button', { name: `${text.linkMarker} 2` }));
+    await push('cars.overview', cars);
+    await fireEvent.click(screen.getByRole('button', { name: /Hamilton/ }));
+    expect(linkSets()).toHaveLength(1);
+    expect(linkSets()[0]).toEqual({ id: 2, primary: carId(44), compare: [], window: { kind: 'live' } });
   });
 });

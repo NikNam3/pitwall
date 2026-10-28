@@ -126,6 +126,8 @@ export const settingsTitle = (widget: string): string => `${widget} · settings`
 export const followLink = 'follow';
 export const noSettings = 'no settings';
 export const settingsSaved = 'saved in this workbook';
+/** The settings popover's choice of the link group the panel follows. */
+export const linkGroup = 'Link group';
 
 /** Accessible name of the link marker button. */
 export const linkMarker = 'link group';
@@ -133,6 +135,8 @@ export const linkMarker = 'link group';
 /** Top bar (spec 7.6, 7.7, 7.9, 8.5). */
 export const topBar = {
   laps: (count: string): string => `${count} laps`,
+  /** The player's current lap, of the session's total when it has one: `L23/62`. */
+  lapOf: (lap: string, total: string | undefined): string => (total === undefined ? `L${lap}` : `L${lap}/${total}`),
   flag: { green: 'green', sc: 'SC', vsc: 'VSC', formation: 'formation' },
   realismOn: 'realism on',
   realismOff: 'realism off',

@@ -38,7 +38,7 @@ export const stubBrowser = (): void => {
 export const makeStore = () => {
   const connection = new FakeConnection();
   const store = new TopicStore(connection);
-  const host: Host = { kind: 'browser', windowId: () => 'main', ensureWindows: vi.fn(), onGeometryChange: () => () => {}, openPath: vi.fn() };
+  const host: Host = { kind: 'browser', windowId: () => 'main', ensureWindows: vi.fn(), onGeometryChange: () => () => {}, openPath: vi.fn(), focusWindow: vi.fn() };
   const latestId = (topic: string): string => {
     const found = connection.subscribes().filter((s) => s.topic === topic).at(-1);
     if (found === undefined) throw new Error(`no subscription to ${topic}`);

@@ -34,6 +34,11 @@ export function parseEnsureWindows(raw: unknown): WindowRequest[] | undefined {
   return raw as WindowRequest[];
 }
 
+/** The window id of a `focusWindow` request when it is a non-empty string, else undefined. */
+export function parseFocusWindow(raw: unknown): string | undefined {
+  return typeof raw === 'string' && raw !== '' ? raw : undefined;
+}
+
 /** True when `openPath` may open `file`: only in `--dev`, only an absolute path inside the repository. */
 export function isAllowedOpenPath(repoRoot: string, file: unknown, dev: boolean): file is string {
   if (!dev || typeof file !== 'string' || !path.isAbsolute(file)) return false;

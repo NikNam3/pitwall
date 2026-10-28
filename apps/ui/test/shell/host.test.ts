@@ -38,3 +38,24 @@ describe('browserHost', () => {
     expect(cb).toHaveBeenCalledTimes(1);
   });
 });
+
+// Final fix wave (B-I3): `Host.focusWindow(id)`.
+describe('Host.focusWindow', () => {
+  it('browser host: focuses the page for its own window id, does nothing for another window', () => {
+    vi.stubGlobal('location', { ...window.location, search: '?window=strategy' });
+    const focus = vi.spyOn(window, 'focus').mockImplementation(() => {});
+    browserHost.focusWindow('car');
+    expect(focus).not.toHaveBeenCalled();
+    browserHost.focusWindow('strategy');
+    expect(focus).toHaveBeenCalledTimes(1);
+    focus.mockRestore();
+  });
+
+  it('electron host: forwards the id to the preload API', async () => {
+    const { electronHost } = await import('../../src/shell/host/electron-host.ts');
+    const focusWindow = vi.fn();
+    const host = electronHost({ windowId: 'main', ensureWindows: () => {}, onGeometry: () => () => {}, openPath: () => {}, focusWindow });
+    host.focusWindow('car');
+    expect(focusWindow).toHaveBeenCalledExactlyOnceWith('car');
+  });
+});

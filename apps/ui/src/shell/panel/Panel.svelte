@@ -33,7 +33,7 @@
     link: ResolvedLink | undefined;
     /** Where the header band goes instead of above the body: the dock's tab, which is also the drag handle. */
     headerTarget?: HTMLElement | undefined;
-    /** The panel's link group as the bridge published it; undefined until then. */
+    /** The panel's link group as the bridge published it (defaults for one it has not created yet); undefined until the groups are known. */
     group?: LinkGroup | undefined;
     /** The feed a group without its own feed follows. */
     defaultFeed?: FeedId | undefined;
@@ -41,12 +41,14 @@
     send?: (action: UiAction) => void;
     /** Saves new option values for this panel with its window. */
     onOptions?: (options: Record<string, unknown>) => void;
+    /** Saves the link group this panel follows with its window. */
+    onLinkGroup?: (group: number) => void;
     /** The dev inspector's switch: while it is on, a click in the panel inspects its widget. */
     inspection?: Inspection | undefined;
     /** Told what the inspector needs of a clicked panel: its link and the params of its topics, read live. */
     onInspect?: (target: InspectTarget) => void;
   };
-  let { store, spec, widget, link, headerTarget, group, defaultFeed, send = () => {}, onOptions = () => {}, inspection, onInspect = () => {} }: Props = $props();
+  let { store, spec, widget, link, headerTarget, group, defaultFeed, send = () => {}, onOptions = () => {}, onLinkGroup = () => {}, inspection, onInspect = () => {} }: Props = $props();
 
   // The picker and the settings popover open next to their buttons; Escape closes them (the shell owns the keys).
   const stack = useOverlayStack();
@@ -180,7 +182,7 @@
     {#if popover?.kind === 'picker' && group !== undefined}
       <GroupPicker {store} {group} feedId={group.feedId ?? link?.feedId ?? defaultFeed} {send} onClose={close} anchor={popover.anchor} />
     {:else if popover?.kind === 'settings' && widget !== undefined}
-      <SettingsPopover decl={widget.decl} options={spec.options} onChange={onOptions} onClose={close} anchor={popover.anchor} />
+      <SettingsPopover decl={widget.decl} options={spec.options} onChange={onOptions} linkGroup={spec.linkGroup} {onLinkGroup} onClose={close} anchor={popover.anchor} />
     {/if}
   </div>
   <div class="body" use:measure={(m: Measured) => (measured = m)} style:color={dim ? role('textFaint') : undefined}>

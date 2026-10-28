@@ -25,6 +25,11 @@ describe('pitwall replay transport flags', { timeout: 30_000 }, () => {
     expect(status).toMatchObject({ paused: true, speed: 1, atEnd: false });
     expect(status.sessionTimeMs).toBeGreaterThan(0);
   });
+  it('a replay without --realtime or --speed says it is unpaced; --realtime and --speed do not', async () => {
+    expect(await firstStatus(['--paused'])).toMatchObject({ unpaced: true });
+    expect(await firstStatus(['--paused', '--realtime'])).not.toHaveProperty('unpaced');
+    expect(await firstStatus(['--paused', '--speed', '2'])).not.toHaveProperty('unpaced');
+  });
   it('--speed sets the speed', async () => {
     expect(await firstStatus(['--paused', '--speed', '2'])).toMatchObject({ paused: true, speed: 2 });
   });

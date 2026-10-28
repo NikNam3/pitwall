@@ -31,8 +31,9 @@ let gens: number;
 let sup: DevSupervisor | undefined;
 let stderr: ReturnType<typeof vi.spyOn>;
 
-const make = () => {
+const make = (extra: { firstArgs?: string[] } = {}) => {
   sup = new DevSupervisor({
+    ...extra,
     file: 'race.pwrec.gz',
     watch: [dir],
     debounceMs: DEBOUNCE,
@@ -160,5 +161,50 @@ describe('DevSupervisor', () => {
     touch('a.ts');
     await settle();
     expect(children).toHaveLength(1);
+  });
+
+  // Final fix wave (A-I2): dev children play paced, restarts keep the original jump, --speed only when it is not 1.
+  const paced = (c: FakeChild) => c.args.includes('--realtime') || c.args.includes('--speed');
+
+  it('every child is paced: --realtime (or an explicit --speed), never the unpaced default', async () => {
+    make({ firstArgs: ['--at-lap', '5'] });
+    expect(paced(children[0]!)).toBe(true);
+    children[0]!.position(10_000, false, 1);
+    touch('a.ts');
+    await vi.waitFor(() => expect(children).toHaveLength(2));
+    expect(paced(children[1]!)).toBe(true);
+  });
+
+  it('a restart at speed 1 passes no --speed; at another speed it passes --speed', async () => {
+    make();
+    children[0]!.position(10_000, false, 1);
+    touch('a.ts');
+    await vi.waitFor(() => expect(children).toHaveLength(2));
+    expect(children[1]!.args).not.toContain('--speed');
+    children[1]!.position(20_000, false, 2);
+    touch('a.ts');
+    await vi.waitFor(() => expect(children).toHaveLength(3));
+    expect(arg(children[2]!, '--speed')).toBe('2');
+  });
+
+  it('the first child gets firstArgs; a restart before any position keeps --at-lap', async () => {
+    make({ firstArgs: ['--at-lap', '5'] });
+    expect(arg(children[0]!, '--at-lap')).toBe('5');
+    touch('a.ts'); // saved during the startup jump: no position has been reported yet
+    await vi.waitFor(() => expect(children).toHaveLength(2));
+    expect(arg(children[1]!, '--at-lap')).toBe('5');
+    expect(children[1]!.args).not.toContain('--at-time');
+  });
+
+  it('a restart before any position keeps --at-time too; once a position is known it wins over firstArgs', async () => {
+    make({ firstArgs: ['--at-time', '61000'] });
+    touch('a.ts');
+    await vi.waitFor(() => expect(children).toHaveLength(2));
+    expect(arg(children[1]!, '--at-time')).toBe('61000');
+    children[1]!.position(70_000, false, 1);
+    touch('a.ts');
+    await vi.waitFor(() => expect(children).toHaveLength(3));
+    expect(arg(children[2]!, '--at-time')).toBe('70000');
+    expect(children[2]!.args).not.toContain('--at-lap');
   });
 });

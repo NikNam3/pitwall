@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FEATURES } from '../../src/features/index.generated.ts';
 import { TopicHub } from '../../src/hub/topic-hub.ts';
+import { ReplayController } from '../../src/replay/replay-controller.ts';
 import { PwrecSource } from '../../src/input/pwrec-source.ts';
 import { createLogger } from '../../src/log.ts';
 import { FeedPipeline } from '../../src/pipeline/feed-pipeline.ts';
@@ -223,5 +224,36 @@ describe('ReplayController: replay.status', () => {
     const h = start();
     await h.stop();
     await expect(h.controller.done).resolves.toBeUndefined();
+  });
+});
+
+// Interface assumed (final fix wave): `controller.transport(): { paused: boolean; speed: number; unpaced: boolean }` is the one
+// place the transport state lives (`serve` no longer tracks it); `replay.status` carries `unpaced: true` while the replay plays
+// without waiting (the `pitwall replay` default), and nothing (no key) otherwise.
+describe('ReplayController: transport accessor and unpaced status', () => {
+  it('transport() follows pause, play and speed', async () => {
+    const h = start();
+    expect(h.controller.transport()).toEqual({ paused: false, speed: 1, unpaced: false });
+    h.controller.control({ kind: 'pause' });
+    h.controller.control({ kind: 'speed', factor: 4 });
+    expect(h.controller.transport()).toEqual({ paused: true, speed: 4, unpaced: false });
+    h.controller.control({ kind: 'play' });
+    expect(h.controller.transport()).toEqual({ paused: false, speed: 4, unpaced: false });
+  });
+  it('a paced replay publishes no unpaced flag', async () => {
+    const h = start();
+    await h.pumpUntil(() => h.status() !== undefined);
+    expect(h.status()).not.toHaveProperty('unpaced');
+  });
+  it('an unpaced replay reports unpaced honestly in transport() and replay.status, until the first speed control', async () => {
+    const hub = new TopicHub({ now: () => performance.now() });
+    const controller = new ReplayController({
+      path: SEGMENT, feedId: FEED, hub, unpaced: true,
+      makePipeline: (source) => new FeedPipeline({ feedId: FEED, source, hub, features: FEATURES, log: createLogger({ level: 'silent' }) }),
+    });
+    open.push(() => controller.stop());
+    expect(controller.transport()).toMatchObject({ paused: false, unpaced: true });
+    controller.control({ kind: 'speed', factor: 2 });
+    expect(controller.transport()).toEqual({ paused: false, speed: 2, unpaced: false });
   });
 });

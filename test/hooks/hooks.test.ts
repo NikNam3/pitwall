@@ -89,8 +89,27 @@ describe('guard-scope.sh with PITWALL_WORKER_UNIT', () => {
   it('does not widen access to another unit\'s contracts file', () => {
     expect(runHook('guard-scope.sh', abs('packages/contracts/src/topics/undercutCard.projection.ts'), withUnit('rejoin')).code).toBe(2);
   });
-  it('does nothing without PITWALL_WORKER_SCOPE', () => {
-    expect(runHook('guard-scope.sh', abs('apps/ui/src/kit/x.ts'), { PITWALL_WORKER_UNIT: 'undercut-card' }).code).toBe(0);
+  it('with the unit alone, restricts writes to the unit\'s paths', () => {
+    const unit = { PITWALL_WORKER_UNIT: 'undercut-card' };
+    expect(runHook('guard-scope.sh', abs('apps/ui/src/kit/x.ts'), unit).code).toBe(2);
+    expect(runHook('guard-scope.sh', abs('docs/x.md'), unit).code).toBe(2);
+    expect(runHook('guard-scope.sh', abs('apps/ui/src/widgets/other/x.ts'), unit).code).toBe(2);
+    expect(runHook('guard-scope.sh', abs('apps/ui/src/widgets/undercut-card/Card.svelte'), unit).code).toBe(0);
+    expect(runHook('guard-scope.sh', abs('apps/bridge/src/features/undercut-card/register.ts'), unit).code).toBe(0);
+    expect(runHook('guard-scope.sh', abs('packages/contracts/src/topics/undercutCard.projection.ts'), unit).code).toBe(0);
+  });
+  it('with the unit alone, still blocks supervisor-owned files', () => {
+    const r = runHook('guard-scope.sh', abs('packages/domain/src/known.ts'), { PITWALL_WORKER_UNIT: 'undercut-card' });
+    expect(r.code).toBe(2);
+    expect(r.stderr).toContain('supervisor-owned');
+  });
+  it.each(['Undercut', 'a b', 'a.*', '../x', 'a/b', '-a', 'a-', 'a--b', '(x'])('rejects the unit name %j (kebab-case only)', (unit) => {
+    const r = runHook('guard-scope.sh', abs('apps/ui/src/widgets/x/x.ts'), { PITWALL_WORKER_UNIT: unit, PITWALL_WORKER_SCOPE: 'apps' });
+    expect(r.code).toBe(2);
+    expect(r.stderr).toContain('unit');
+  });
+  it('allows everything when neither PITWALL_WORKER_SCOPE nor PITWALL_WORKER_UNIT is set', () => {
+    expect(runHook('guard-scope.sh', abs('apps/ui/src/kit/x.ts')).code).toBe(0);
   });
 });
 

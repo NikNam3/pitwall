@@ -1,22 +1,28 @@
 <script lang="ts">
   /* eslint-disable @typescript-eslint/no-explicit-any -- `any` is the wildcard of the widget contract's WidgetDecl */
-  // The settings popover (spec 7.4, Task 0 overlays): one control per option the widget declares. Every change reports
-  // the whole options object; the shell saves it with the window.
+  // The settings popover (spec 7.4, Task 0 overlays): one control per option the widget declares, then the link group
+  // the panel follows (spec 7.5). Every option change reports the whole options object; the shell saves it with the window.
   import * as text from '../../kit/text.ts';
   import type { OptionDecl, WidgetDecl } from '../../kit/types.ts';
   import { role } from '../../theme/index.ts';
   import Overlay from '../commands/Overlay.svelte';
   import { OVERLAY_COLS } from '../commands/overlay-sizes.ts';
+  import { LINK_GROUP_IDS } from '../link-groups/group-ids.ts';
 
   type Props = {
     decl: WidgetDecl<any, any>;
     /** The panel's saved option values; an option not in it has its default. */
     options: Readonly<Record<string, unknown>>;
     onChange: (options: Record<string, unknown>) => void;
+    /** The link group the panel follows, and where a new choice goes. */
+    linkGroup: number;
+    onLinkGroup: (group: number) => void;
     onClose: () => void;
     anchor?: { x: number; y: number } | undefined;
   };
-  let { decl, options, onChange, onClose, anchor }: Props = $props();
+  let { decl, options, onChange, linkGroup, onLinkGroup, onClose, anchor }: Props = $props();
+  /** Radio group names are per popover, so the radios of two open popovers never form one group. */
+  const uid = $props.id();
 
   const declared = $derived(Object.entries(decl.options as Record<string, OptionDecl<unknown>>));
   const valueOf = (name: string, option: OptionDecl<unknown>): unknown => (name in options ? options[name] : option.default);
@@ -38,7 +44,7 @@
       <div role="radiogroup" aria-label={option.label}>
         <span style:color={role('textDim')}>{option.label}</span>
         {#each option.choices as choice (choice)}
-          <label><input type="radio" name="{decl.name}.{name}" checked={current === choice} onchange={() => change(name, choice)} />{choice}</label>
+          <label><input type="radio" name="{uid}.{name}" checked={current === choice} onchange={() => change(name, choice)} />{choice}</label>
         {/each}
       </div>
     {:else if option.kind === 'number'}
@@ -72,6 +78,12 @@
   {:else}
     <div style:color={role('textFaint')}>{text.noSettings}</div>
   {/each}
+  <div role="radiogroup" aria-label={text.linkGroup}>
+    <span style:color={role('textDim')}>{text.linkGroup}</span>
+    {#each LINK_GROUP_IDS as id (id)}
+      <label><input type="radio" name="{uid}-link-group" checked={linkGroup === id} onchange={() => onLinkGroup(id)} />{id}</label>
+    {/each}
+  </div>
   <div style:color={role('textFaint')}>{text.settingsSaved}</div>
 </Overlay>
 

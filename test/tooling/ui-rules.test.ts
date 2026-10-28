@@ -209,6 +209,12 @@ describe('ESLint: window host calls only in shell/host/', { timeout: 60_000 }, (
   it('accepts them in shell/host/x.ts', async () => {
     await expectAccepted('window-host.ts.txt', `${S}/shell/host/x.ts`);
   });
+  it('rejects globalThis.focus, globalThis.open, a bare open() and globalThis.moveTo in kit/x.ts', async () => {
+    await expectRejected('window-host-global.ts.txt', `${S}/kit/x.ts`, [1, 2, 3, 4]);
+  });
+  it('accepts them in shell/host/x.ts', async () => {
+    await expectAccepted('window-host-global.ts.txt', `${S}/shell/host/x.ts`);
+  });
 });
 
 describe('ESLint: number formatting only in kit/values/format.ts', { timeout: 60_000 }, () => {

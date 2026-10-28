@@ -14,4 +14,5 @@ contextBridge.exposeInMainWorld('pitwallHost', {
     return () => ipcRenderer.removeListener('geometry', listener);
   },
   openPath: (path: string): void => ipcRenderer.send('openPath', path),
+  focusWindow: (id: string): void => ipcRenderer.send('focusWindow', id),
 });

@@ -107,11 +107,12 @@ describe('alerts.ackAll (Ctrl+Enter)', () => {
         crit('c', 3000),
         crit('b', 2000),
       ],
-      { acknowledged: ['acked'], muted: ['tyres'] },
+      { acknowledged: ['f1:acked:600'], muted: ['tyres'] },
     );
     press('Enter', { ctrl: true });
     await tick();
-    expect(ackAlls(ctx)).toEqual([['a', 'b', 'c']]);
+    // the keys are occurrence tokens `<feedId>:<insightKey>:<raisedAt>`
+    expect(ackAlls(ctx)).toEqual([['f1:a:1000', 'f1:b:2000', 'f1:c:3000']]);
   });
 
   it('sends nothing when no alert is shown', async () => {

@@ -1,11 +1,17 @@
 #!/usr/bin/env bash
-# PreToolUse: keep a worker inside PITWALL_WORKER_SCOPE (colon-separated repo-relative folders).
+# PreToolUse: keep a worker inside PITWALL_WORKER_SCOPE (colon-separated repo-relative folders) plus the paths of
+# PITWALL_WORKER_UNIT. Either one turns the guard on; the unit alone allows only the unit's paths.
 HOOK_FAILS_CLOSED=1
 LIB="$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 [ -r "$LIB" ] || exit 2 # fail closed if the shared helpers are missing
 source "$LIB"
 
-[ -n "${PITWALL_WORKER_SCOPE:-}" ] && [ -n "$REL" ] || exit 0
+[ -n "${PITWALL_WORKER_SCOPE:-}${PITWALL_WORKER_UNIT:-}" ] && [ -n "$REL" ] || exit 0
+
+# The unit name goes into paths and a regex below: kebab-case only (scripts/units.ts).
+if [ -n "${PITWALL_WORKER_UNIT:-}" ] && ! [[ "$PITWALL_WORKER_UNIT" =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]]; then
+  block "PITWALL_WORKER_UNIT \"$PITWALL_WORKER_UNIT\" is not a kebab-case unit name (a-z, 0-9, single hyphens)"
+fi
 
 case "$REL" in
   ..|../*) block "$TARGET is outside the repository" ;;
@@ -43,7 +49,7 @@ for dir in "${UNIT_DIRS[@]}"; do
   if [[ "$REL" == "$dir"/* ]]; then exit 0; fi
 done
 
-IFS=':' read -ra entries <<< "$PITWALL_WORKER_SCOPE"
+IFS=':' read -ra entries <<< "${PITWALL_WORKER_SCOPE:-}"
 for entry in "${entries[@]}"; do
   entry="${entry%/}"
   if [ "$REL" = "$entry" ] || [[ "$REL" == "$entry"/* ]]; then
@@ -51,4 +57,4 @@ for entry in "${entries[@]}"; do
   fi
 done
 
-block "$REL is outside your task scope ($PITWALL_WORKER_SCOPE). Request the change in your report instead."
+block "$REL is outside your task scope (${PITWALL_WORKER_SCOPE:-unit ${PITWALL_WORKER_UNIT:-}}). Request the change in your report instead."

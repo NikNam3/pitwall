@@ -165,14 +165,23 @@ describe('tier-1 alerts', () => {
     expect(screen.getByTestId('alert-a').textContent).toContain(formatInsight(a));
     expect(screen.queryByTestId('alert-adv')).toBeNull();
     await fireEvent.click(screen.getByTestId('alert-ack-a'));
-    expect(t.actions).toEqual([{ kind: 'alert.ack', key: 'a' }]);
+    // acknowledged per occurrence: `<feedId>:<insightKey>:<raisedAt>`
+    expect(t.actions).toEqual([{ kind: 'alert.ack', key: 'f1:a:1000' }]);
   });
 
   it('hides acknowledged alerts', async () => {
     const t = await setup();
-    await t.push('ui.alerts', { acknowledged: ['a'], muted: [] });
+    await t.push('ui.alerts', { acknowledged: ['f1:a:1000'], muted: [] });
     await t.raise(crit('a', 1000), crit('b', 2000));
     expect(screen.queryByTestId('alert-a')).toBeNull();
+    expect(screen.getByTestId('alert-b')).toBeTruthy();
+  });
+
+  it('a later occurrence of an acknowledged alert (same key, raised again) shows again; a bare key acknowledges nothing', async () => {
+    const t = await setup();
+    await t.push('ui.alerts', { acknowledged: ['f1:a:1000', 'b'], muted: [] });
+    await t.raise(crit('a', 9000), crit('b', 2000));
+    expect(screen.getByTestId('alert-a')).toBeTruthy();
     expect(screen.getByTestId('alert-b')).toBeTruthy();
   });
 
@@ -243,5 +252,51 @@ describe('muting', () => {
     const t = await open(['tyres']);
     await fireEvent.click(screen.getByTestId('mute-tyres'));
     expect(t.actions).toEqual([{ kind: 'alertGroup.mute', category: 'tyres', muted: false }]);
+  });
+});
+
+// Final fix wave (B-I1, spec 7.6, mockup 9): the bar shows the lap `L23/62` and the session clock `1:12:04`.
+// Lap source (live and replay alike): the player's `timing.lap` in `cars.overview` (acquired by the top bar's model for the feed).
+// Clock: `session.info.session.timeLeftMs` as H:MM:SS via `formatSessionClock` in kit/values/format.ts.
+describe('session segment: lap and clock', () => {
+  const infoWith = (over: Record<string, unknown>) => ({ ...info(false), session: { ...info(false).session, ...over } });
+  const overview = (lap: number) => [
+    { id: carId(5), timing: { lap } },
+    { id: carId(7), timing: { lap: lap + 1 } },
+  ];
+
+  it('shows L<lap>/<total> of the player car and the time left', async () => {
+    const t = await setup();
+    await t.push('session.info', infoWith({ timeLeftMs: 4_324_000 }));
+    await t.push('cars.overview', overview(23));
+    const segment = screen.getByTestId('segment-session').textContent ?? '';
+    expect(segment).toContain('L23/62');
+    expect(segment).toContain('1:12:04');
+  });
+
+  it('works on a replay feed too, and follows the lap', async () => {
+    const t = await setup('replay');
+    await t.push('session.info', infoWith({ timeLeftMs: 471_000 }));
+    await t.push('cars.overview', overview(5));
+    expect(screen.getByTestId('segment-session').textContent).toContain('L5/62');
+    expect(screen.getByTestId('segment-session').textContent).toContain('0:07:51');
+    await t.push('cars.overview', overview(6));
+    expect(screen.getByTestId('segment-session').textContent).toContain('L6/62');
+  });
+
+  it('shows no lap before the overview has the player car (never L0)', async () => {
+    const t = await setup();
+    await t.push('session.info', infoWith({ timeLeftMs: 4_324_000 }));
+    expect(screen.getByTestId('segment-session').textContent).not.toMatch(/L\d/);
+  });
+});
+
+// Final fix wave (B-I4): the lap input's width comes from NUMBER_INPUT_COLS, inline (no second literal in a stylesheet).
+describe('replay lap input width', () => {
+  it('is NUMBER_INPUT_COLS characters wide, set from the constant', async () => {
+    const { NUMBER_INPUT_COLS } = await import('../../src/shell/commands/overlay-sizes.ts');
+    const t = await setup('replay');
+    await t.push('replay.status', replayStatus(false));
+    expect((screen.getByTestId('replay-lap') as HTMLInputElement).style.width).toBe(`${NUMBER_INPUT_COLS}ch`);
   });
 });
