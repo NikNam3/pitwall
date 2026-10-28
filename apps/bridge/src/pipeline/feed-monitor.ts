@@ -60,22 +60,24 @@ export class FeedMonitor {
   view(m: FrameMetrics, nowMs: number): FeedMetricsView {
     const last = this.#packetTimes.at(-1);
     const wrongFormat = this.#wrongFormat !== undefined && nowMs - this.#wrongFormat.atMs < this.#windowMs ? this.#wrongFormat.format : undefined;
+    const loss = this.#loss(m, nowMs);
     return {
       ...m,
       decodeErrors: m.decodeErrors + this.#decodeErrors,
       packetsPerSecond: this.#packetTimes.length - firstAfter(this.#packetTimes, nowMs - RATE_WINDOW_MS, itself),
       connected: last !== undefined,
       msSinceLastPacket: last === undefined ? 0 : nowMs - last,
-      lossPercent: this.#lossPercent(m, nowMs),
+      lossPercent: loss.percent,
+      lossWindowFrames: loss.frames,
       ...(wrongFormat !== undefined && { wrongFormat }),
     };
   }
 
   /** Incomplete over closed frames since the newest sample at or before the window start (or since the start). */
-  #lossPercent(m: FrameMetrics, nowMs: number): number {
+  #loss(m: FrameMetrics, nowMs: number): { percent: number; frames: number } {
     const baseline = this.#samples[firstAfter(this.#samples, nowMs - this.#windowMs, sampleTime) - 1];
     const closed = m.framesClosed - (baseline?.framesClosed ?? 0);
     const incomplete = m.incompleteFrames - (baseline?.incompleteFrames ?? 0);
-    return closed > 0 ? (incomplete / closed) * 100 : 0;
+    return { percent: closed > 0 ? (incomplete / closed) * 100 : 0, frames: closed };
   }
 }

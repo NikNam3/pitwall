@@ -21,6 +21,8 @@ export type FeedMetricsView = FrameMetrics & {
   msSinceLastPacket: number;
   /** Incomplete over closed frames in the last 10 s of receive time, 0..100. */
   lossPercent: number;
+  /** Closed frames that `lossPercent` is measured over; a small sample says little. Absent when the feed does not count them. */
+  lossWindowFrames?: number;
   /** The `packetFormat` of a wrong-format packet seen in the last 10 s. */
   wrongFormat?: number;
 };
