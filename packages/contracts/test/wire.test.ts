@@ -9,7 +9,7 @@ const clients: ClientMessage[] = [
   { type: 'heartbeat' },
 ];
 const servers: ServerMessage[] = [
-  { type: 'hello', contractVersion: 1, feeds: [{ feedId: 'udp-20777' as never, kind: 'udp', label: 'UDP 20777' }] },
+  { type: 'hello', contractVersion: 2, feeds: [{ feedId: 'udp-20777' as never, kind: 'udp', label: 'UDP 20777' }] },
   { type: 'snapshot', id: 's1', value: { sessionUid: '1896528710553860228' } },
   { type: 'snapshot', id: 's2', entries: [] },
   { type: 'update', id: 's1', value: 1 },

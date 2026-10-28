@@ -36,7 +36,7 @@ describe('TOPICS', () => {
       ['stints', 'stints', 'append', Infinity],
     ]);
   });
-  it('exports the contract version', () => { expect(CONTRACT_VERSION).toBe(1); });
+  it('exports the contract version', () => { expect(CONTRACT_VERSION).toBe(2); });
 });
 
 describe('defineTopic', () => {
