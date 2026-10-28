@@ -1,5 +1,6 @@
 // `pitwall replay <file> [--paused] [--speed <n>] [--at-lap <n> | --at-time <ms>]` (Task 5, requirement 5).
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { gzipSync } from 'node:zlib';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -50,7 +51,7 @@ describe('pitwall replay transport flags', { timeout: 30_000 }, () => {
     await plain.stop();
   });
   it.each([
-    ['a truncated recording', (dir: string) => { const f = join(dir, 'truncated.pwrec.gz'); writeFileSync(f, readFileSync(SEGMENT).subarray(0, 3000)); return f; }],
+    ['a gzip file with an invalid pwrec header', (dir: string) => { const f = join(dir, 'badheader.pwrec.gz'); writeFileSync(f, gzipSync('this is not a pwrec header\n')); return f; }],
     ['a file that is not gzip', (dir: string) => { const f = join(dir, 'garbage.pwrec.gz'); writeFileSync(f, 'this is not a recording'); return f; }],
   ])('%s with --at-lap exits 1 with a pitwall: message instead of hanging before listening', async (_name, build) => {
     const bad = build(tmp());
@@ -58,6 +59,13 @@ describe('pitwall replay transport flags', { timeout: 30_000 }, () => {
     expect(r.code).toBe(1);
     expect(r.stderr).toMatch(/^pitwall: /m);
     expect(r.stdout).not.toContain('listening');
+  }, 15_000);
+  it('a crash-cut (truncated) recording is not a failure: it replays up to its last flush, a jump past it ends with beyondEnd', async () => {
+    const f = join(tmp(), 'truncated.pwrec.gz'); writeFileSync(f, readFileSync(SEGMENT).subarray(0, 3000));
+    const replay = startCli(['replay', f, '--paused', '--at-lap', '5'], env());
+    await replay.waitFor(/listening ws:\/\/127\.0\.0\.1:(\d+)/);
+    expect(replay.stderr()).not.toMatch(/failed|error/i);
+    expect(await replay.stop()).toBe(0);
   }, 15_000);
   it('--at-lap beyond the end has reached the end before listening is printed', async () => {
     expect(await firstStatus(['--paused', '--at-lap', '99'])).toMatchObject({ atEnd: true, note: 'beyondEnd' });

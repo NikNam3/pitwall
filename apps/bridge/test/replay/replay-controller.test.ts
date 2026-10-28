@@ -1,5 +1,5 @@
 // ReplayController on the committed tt-zandvoort-lap1 segment (spec 8.5, Task 5). Time is injected: the test releases the pacer's sleeps.
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -173,9 +173,9 @@ describe('ReplayController: jumps', () => {
 });
 
 describe('ReplayController: a failing recording', () => {
-  it('a source failure during a jump rejects done and settles settled() instead of hanging', async () => {
-    const bad = join(mkdtempSync(join(tmpdir(), 'replay-bad-')), 'truncated.pwrec.gz');
-    writeFileSync(bad, readFileSync(SEGMENT).subarray(0, 3000));
+  it('an unreadable recording (not gzip) during a jump rejects done and settles settled() instead of hanging', async () => {
+    const bad = join(mkdtempSync(join(tmpdir(), 'replay-bad-')), 'garbage.pwrec.gz');
+    writeFileSync(bad, 'this is not a recording');
     const h = harness(bad);
     open.push(h.stop);
     h.controller.control({ kind: 'jumpToLap', lap: 5 });
