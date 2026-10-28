@@ -19,3 +19,5 @@ export type {
   QuickCalculator,
 } from './calc/types.ts';
 export { createRng, type Rng } from './util/rng.ts';
+export { initialState } from './step/initial-state.ts';
+export { step, type ChangeTag, type LapCorrection, type StepOutput, type SubStep } from './step/step.ts';
