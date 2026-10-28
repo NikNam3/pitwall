@@ -13,10 +13,11 @@ describe('agent docs', () => {
     for (const ref of ['docs/architecture.md', 'docs/decisions/', 'docs/tasks/_template.md', 'pnpm check', 'PITWALL_WORKER_SCOPE', 'PITWALL_PHASE', 'PITWALL_FIXTURES_DIR'])
       expect(md).toContain(ref);
   });
-  it('has the five ADRs, each with status, context, decision and consequences', () => {
+  it('has the eight ADRs, each with status, context, decision and consequences', () => {
     const adrs = readdirSync(join(ROOT, 'docs/decisions')).filter((f) => f.endsWith('.md')).sort();
     expect(adrs).toEqual(['0001-stack-and-native-type-stripping.md', '0002-fixtures-outside-git.md', '0003-shared-domain-package.md',
-      '0004-better-sqlite3-over-node-sqlite.md', '0005-feature-registry-via-generated-index.md']);
+      '0004-better-sqlite3-over-node-sqlite.md', '0005-feature-registry-via-generated-index.md', '0006-one-file-per-topic.md',
+      '0007-calculator-config.md', '0008-second-car-later.md']);
     for (const f of adrs) for (const h of ['## Status', '## Context', '## Decision', '## Consequences']) expect(read(`docs/decisions/${f}`), `${f}: ${h}`).toContain(h);
   });
   it('architecture.md states every allowed dependency edge', () => {
