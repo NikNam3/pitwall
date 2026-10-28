@@ -1,6 +1,6 @@
 # Pitwall: Sub-project 1 "Foundation", Design
 
-Status: draft for review · Date: 2026-10-28
+Status: approved · Date: 2026-10-28 · Revised during planning (domain package; corrections from the recordings, see the plan's "Corrections to the spec")
 
 ## 1. Context
 
@@ -61,13 +61,14 @@ The MVP consists of sub-projects 1–4. Timing, strategy and car monitoring are 
 ### 3.1 Packages and dependencies
 ```
 packages/protocol   bytes ↔ typed packets (spec 2025 only)
+packages/domain     JSON-safe domain vocabulary (Known, Corners, CarState, records, Insight, ids); leaf package
 packages/engine     race model: pure, no I/O, no clock, no network
 packages/strategy   strategy calculators (filled in sub-project 4; created empty in 1)
 packages/contracts  topic types and WebSocket messages, shared by bridge and UI
 apps/bridge         imperative shell: input, frame assembler, engine runner, storage, WebSocket, CLI
 apps/ui             Svelte UI (sub-project 2)
 ```
-Dependency direction: `protocol ← engine ← strategy ← bridge`; `contracts` is imported by `bridge` and `ui`; `ui` imports neither `engine` nor `protocol`. pnpm (strict dependencies) and `dependency-cruiser` enforce this; a violation fails the build.
+Dependency direction: `protocol ← engine ← strategy ← bridge`; `domain` is a leaf imported by `contracts`, `engine`, `strategy`, `bridge` and `ui`; `contracts` (topics and wire messages only) is imported by `bridge` and `ui`; `ui` imports neither `engine` nor `protocol`. (The `domain` package was added on 2026-10-28 so the shared types are defined once; ADR 0003.) pnpm (strict dependencies) and `dependency-cruiser` enforce this; a violation fails the build.
 
 ### 3.2 Data flow
 ```
@@ -113,7 +114,7 @@ type RawPacket = { feedId: FeedId; receivedAtMs: number; bytes: Uint8Array };
 
 ### 4.3 Decoder (`packages/protocol`)
 - **Schema-driven:** each spec struct is described once declaratively (field, type, array length, nesting). Decoder and encoder are generated from that description. Expected sizes per packet type are checked against the spec table at startup and in tests (motion 1349, session 753, lapData 1285, event 45, participants 1284, carSetups 1133, carTelemetry 1352, carStatus 1239, finalClassification 1042, lobbyInfo 954, carDamage 1041, sessionHistory 1460, tyreSets 231, motionEx 273, timeTrial 101, lapPositions 1131).
-- **Faithful to the spec,** with three cosmetic exceptions: no `m_` prefix; camelCase; split times (`…MSPart` + `…MinutesPart`) merged into milliseconds. Units, codes and wheel order (RL, RR, FL, FR) stay unchanged.
+- **Faithful to the spec,** with three cosmetic exceptions: no `m_` prefix; camelCase; split times (`…MSPart` + `…MinutesPart`) merged into milliseconds. The game writes small negative deltas as `msPart ≥ 60000` with `minutes = 0` (u16 wrap, observed −50…−16 ms); these decode to negative milliseconds and encode back byte-identically. Units, codes and wheel order (RL, RR, FL, FR) stay unchanged.
 - **Result instead of exception:**
   ```ts
   type DecodeResult =
@@ -140,7 +141,7 @@ type Frame = {
 The assembler is pure logic (usable from tests); the bridge only drives it.
 
 ### 5.2 Assembly rules
-- Grouped by `(sessionUid, frameId)`.
+- Grouped by `(sessionUid, overallFrameId)`. (`frameId` goes back after a flashback; grouping by it would drop every following packet as late.)
 - **Reorder window** of 2 frames. A frame is closed once a newer frame is beyond the window.
 - Packets for frames already closed are dropped and counted (`latePackets`).
 - **`frameId` gaps are not loss.** The game runs faster than the send rate and skips frame IDs (observed: delta 2 in about 3 % of frames, with a normal session-time step). Loss is measured instead by:
@@ -151,14 +152,14 @@ The assembler is pure logic (usable from tests); the bridge only drives it.
 ### 5.3 Session lifecycle
 - A session **opens only with the first Session packet** for a `sessionUid ≠ 0`. Packets before that (e.g. lobby/menu with only button events) are discarded.
 - A new `sessionUid` with a Session packet closes the current session and opens a new one.
-- **Grace window after a session end:** packets with `sessionUid = 0` arriving within 10 s of the `SEND` event are assigned to the session that just ended. This captures the final bulk SessionHistory, which was observed to arrive with UID 0, and the FinalClassification. Other `sessionUid = 0` packets are discarded.
+- **Grace window around a session end:** packets with `sessionUid = 0` arriving within 10 s of the `SEND` event, before or after it, are assigned to the session that just ended. This captures the final bulk SessionHistory, which was observed to arrive with UID 0 about 0.1 ms *before* `SEND`, and the FinalClassification. Other `sessionUid = 0` packets are discarded.
 - A session's weekend comes from `weekendLinkIdentifier` (Session packet).
 - Each session gets its own engine state and its own `.pwrec` file.
 
 ### 5.4 Flashbacks
 - **Detection:** `FLBK` event (target `frameId` and session time). As a backup: `frameId` goes backwards while `overallFrameId` rises.
 - **Snapshots:** every second of session time, a snapshot of the current state plus the lengths of all history lists.
-- **Raw frames** since the last snapshot are kept in a buffer.
+- **Raw frames** of the last `replayWindowMs` (default 10 s of session time, to be confirmed with a flashback recording) are kept in a buffer, so targets before the newest snapshot can still be replayed.
 - **Rewind:**
   1. restore the newest snapshot before the target
   2. cut the history back to the stored lengths
@@ -213,7 +214,7 @@ type EngineState = {
   - Lap detection works on state changes, so a lost frame can't swallow a lap.
 - **`StintRecord`:** car, first/last lap, actual and visual compound, tyre age at fitting.
 - **`PitStopRecord`:** car, lap, pit-lane entry and exit (session time), time in the pit lane, stationary time, flag status (green/SC/VSC), penalty served.
-- **`FlagPhase`:** `SC | VSC | red`, start and end (session time and leader lap), plus SC event phases (deployed, returning, returned, resume).
+- **`FlagPhase`:** `SC | VSC | red`, start and end (session time and leader lap), plus SC event phases (deployed, returning, returned, resume). A red phase ends at the next lights out, an SC restart, or the session end.
 - **`RaceEvent`:** penalty, overtake, collision, retirement (with reason), fastest lap, speed trap, DRS on/off (with reason), start lights, lights out.
 - **`MiniSectorCrossing`:** the lap split into 50 segments of equal length by distance; per car, the session time of each boundary crossing, linearly interpolated between frames. Basis for gaps between any two cars, live micro-sectors (sub-project 3) and the rejoin projection (sub-project 4).
 
@@ -330,7 +331,7 @@ type Insight = {
 
 ### 9.3 Repository and WeekendContext
 - `WeekendRepository` as the only access route (`sessionsOf`, `stintsOf`, `lapsOf`, `pitStopsOf` …).
-- When a session starts, the bridge loads a `WeekendContext` (the same `DriverKey`'s earlier sessions that weekend) and passes it to the engine as **read-only input**. The engine has no database access.
+- When a session starts, the bridge waits for the first Participants packet (it needs the player's `DriverKey`), loads a `WeekendContext` (the same `DriverKey`'s earlier sessions that weekend) and passes it to the engine as **read-only input**. The engine has no database access.
 
 ### 9.4 Tools
 - `pitwall reprocess [--weekend <id>]`: rebuilds the database from `.pwrec` files.
@@ -361,7 +362,7 @@ type Insight = {
   - positions are a permutation 1..n of the active cars
   - lap numbers don't go down (except on a flashback)
   - history only grows (except flashback truncation)
-  - sector sum = lap time for confirmed laps
+  - sector sum = lap time for confirmed laps, within the game's truncation: `lapTime − 2 ms ≤ Σ sectors ≤ lapTime`
 - **Incremental calculators:** incremental = from scratch.
 - **Determinism:** the same recording twice → an identical topic stream (hash).
 - **Fixture facts:**
