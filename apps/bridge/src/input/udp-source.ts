@@ -1,6 +1,5 @@
 import { createSocket, type Socket } from 'node:dgram';
 import type { FeedId } from '@pitwall/domain';
-import { deferred } from './deferred.ts';
 import type { PacketSource, RawPacket } from './packet-source.ts';
 
 export interface UdpSourceOptions {
@@ -24,8 +23,8 @@ export class UdpSource implements PacketSource {
   readonly #port: number;
   readonly #host: string;
   readonly #clock: () => number;
-  readonly #finish = deferred();
-  readonly #bound = deferred();
+  readonly #finish: PromiseWithResolvers<void> = Promise.withResolvers();
+  readonly #bound: PromiseWithResolvers<void> = Promise.withResolvers();
   #socket: Socket | undefined;
   #boundPort: number | undefined;
   #stopped = false;

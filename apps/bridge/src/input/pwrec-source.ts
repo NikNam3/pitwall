@@ -1,7 +1,6 @@
 import { setTimeout as sleepFor } from 'node:timers/promises';
 import type { FeedId } from '@pitwall/domain';
 import { readPwrec } from '../pwrec/reader.ts';
-import { deferred } from './deferred.ts';
 import type { PacketSource, RawPacket } from './packet-source.ts';
 
 export interface PwrecSourceOptions {
@@ -30,7 +29,7 @@ export class PwrecSource implements PacketSource {
   readonly #clock: () => number;
   readonly #sleep: (ms: number, signal: AbortSignal) => Promise<void>;
   readonly #abort = new AbortController();
-  readonly #finish = deferred();
+  readonly #finish: PromiseWithResolvers<void> = Promise.withResolvers();
   #started = false;
 
   constructor(opts: PwrecSourceOptions) {
