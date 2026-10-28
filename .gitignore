@@ -11,3 +11,4 @@ reports/
 apps/ui/dist/
 apps/ui/src/widgets/index.generated.ts
 catalogue.generated.json
+test-support/moments/

@@ -1,0 +1,5 @@
+{
+  "ttZandvoortLap1.crossing": { "segment": "tt-zandvoort-lap1.pwrec.gz", "atMs": 2800 },
+  "raceSingaporeStart.grid": { "segment": "race-singapore-start.pwrec.gz", "atMs": 9000 },
+  "raceSingaporeEnd.chequered": { "segment": "race-singapore-end.pwrec.gz", "atMs": 3400 }
+}

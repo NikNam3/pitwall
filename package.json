@@ -21,6 +21,7 @@
     "gen:topics": "node scripts/gen-topics.ts",
     "gen:widgets": "node scripts/gen-widgets.ts",
     "gen:catalogue": "node scripts/gen-catalogue.ts",
+    "gen:moments": "node scripts/gen-moments.ts",
     "gen": "pnpm gen:features && pnpm gen:topics && pnpm gen:widgets && pnpm gen:catalogue",
     "ui:dev": "pnpm --filter @pitwall/ui dev",
     "ui:build": "pnpm --filter @pitwall/ui build",
