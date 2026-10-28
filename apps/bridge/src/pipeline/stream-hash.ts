@@ -1,7 +1,7 @@
 // A fingerprint of everything a client would receive while a recording is replayed: equal hashes, equal streams.
 import { createHash } from 'node:crypto';
 import { encodeMessage, TOPICS, type TopicName } from '@pitwall/contracts';
-import { feedId } from '@pitwall/domain';
+import { feedId, MAX_CARS } from '@pitwall/domain';
 import { FEATURES } from '../features/index.generated.ts';
 import { TopicHub } from '../hub/topic-hub.ts';
 import type { PacketSource, RawPacket } from '../input/packet-source.ts';
@@ -42,10 +42,13 @@ class ObservedSource implements PacketSource {
   }
 }
 
+/** The topics whose value depends on the `carId` param. */
+const PER_CAR_TOPICS: ReadonlySet<TopicName> = new Set(['car.detail', 'car.telemetry']);
+
 /**
  * Replays `recordingPath` as fast as possible through the real pipeline, with the hub's clock on the record times,
- * and hashes (sha256, hex) every message one client subscribed to every topic receives. Per-car topics follow car 0;
- * the other topics ignore the `carId` param.
+ * and hashes (sha256, hex) every message one client subscribed to every topic receives. Per-car topics are subscribed
+ * once per car, so the player's own data enters the hash whichever car they drive; the other topics ignore `carId`.
  */
 export async function topicStreamHash(recordingPath: string): Promise<string> {
   const id = feedId('hash');
@@ -53,8 +56,11 @@ export async function topicStreamHash(recordingPath: string): Promise<string> {
   const hub = new TopicHub({ now: () => nowMs });
   const hash = createHash('sha256');
   hub.addClient('hash', { send: (message) => hash.update(`${encodeMessage(message)}\n`), bufferedAmount: () => 0 });
+  const subscribe = (subscriptionId: string, topic: TopicName, carId: number) =>
+    hub.subscribe({ clientId: 'hash', id: subscriptionId, topic, params: { carId }, feedId: id });
   for (const topic of Object.keys(TOPICS) as TopicName[]) {
-    hub.subscribe({ clientId: 'hash', id: topic, topic, params: { carId: 0 }, feedId: id });
+    if (!PER_CAR_TOPICS.has(topic)) subscribe(topic, topic, 0);
+    else for (let carId = 0; carId < MAX_CARS; carId++) subscribe(`${topic}:${carId}`, topic, carId);
   }
   const source = new ObservedSource(new PwrecSource({ feedId: id, path: recordingPath, mode: 'asFastAsPossible' }), {
     before: (packet) => {

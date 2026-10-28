@@ -206,6 +206,9 @@ export class FeedPipeline {
   #checkFeed(nowMs: number, metrics: FrameMetrics = this.#tracker.metrics): void {
     const view = this.#monitor.view(metrics, nowMs);
     const status = feedStatusOf(this.#feedId, view);
+    // The pre-session producer: the feed is watched before any session exists, so the pipeline publishes it per
+    // datagram. Inside a session the `feed-status` feature also publishes the same value per frame. Two producers
+    // by decision, until a feed-level binding kind replaces this one (sub-project 2).
     this.#o.hub.publishState(this.#feedId, 'feed.status', () => status);
     this.#publishInsights(this.#alerts.feedChanged(view, metrics.lastSessionTime ?? toSessionTime(0)));
   }
