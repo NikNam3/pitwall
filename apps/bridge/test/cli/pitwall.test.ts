@@ -19,7 +19,8 @@ describe('pitwall CLI', { timeout: 30_000 }, () => {
     expect(r.code).toBe(1); expect(r.stderr).toContain('usage: pitwall <live|replay|tap|reprocess|import>');
   });
   it('replay serves the segment; tap prints hello and the session.info snapshot as JSON lines', async () => {
-    const replay = startCli(['replay', SEGMENT], { PITWALL_WS_PORT: '0', PITWALL_DATA_DIR: tmp() });
+    // At the recorded pace, so the session is still running when the tap subscribes: calculators run on demand.
+    const replay = startCli(['replay', SEGMENT, '--realtime'], { PITWALL_WS_PORT: '0', PITWALL_DATA_DIR: tmp() });
     const [, port] = (await replay.waitFor(/listening ws:\/\/127\.0\.0\.1:(\d+)/))!;
     await new Promise((r) => setTimeout(r, 500));
     const tap = startCli(['tap', 'session.info', '--url', `ws://127.0.0.1:${port}`], {});
