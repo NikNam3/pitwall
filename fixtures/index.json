@@ -1,0 +1,55 @@
+{
+  "fixtures": [
+    {
+      "id": "ttZandvoort",
+      "file": "2026-10-27_23-31-43_1a4f5531395c7884.pwrec.gz",
+      "sha256": "4b973ffae797c1bd1a938d1c44037e376393b131bd02280243ae54a451600564",
+      "bytes": 42418062,
+      "track": "Zandvoort",
+      "trackId": 26,
+      "sessionType": "timeTrial",
+      "sessionTypeCode": 18,
+      "completedLaps": 15,
+      "durationMs": 1266710.4776,
+      "features": [
+        "15 completed player laps, lap 16 unfinished; lap 1 71.910 s, lap 4 71.081 s, lap 9 73.253 s (invalid)",
+        "one active car, fuel 10.0 kg throughout",
+        "FTLP x4",
+        "15 UID-0 SessionHistory just before SEND"
+      ]
+    },
+    {
+      "id": "raceSingapore",
+      "file": "2026-10-28_00-15-04_b3cd07e2790bdcbe.pwrec.gz",
+      "sha256": "82de3a428389d036ca3d6d5a0e7f109ca3fc9f87a590387c442199922767bb42",
+      "bytes": 8445878,
+      "track": "Singapore",
+      "trackId": 12,
+      "sessionType": "race",
+      "sessionTypeCode": 15,
+      "completedLaps": 0,
+      "durationMs": 79458.7947,
+      "features": [
+        "20 cars, 1 human (index 19)",
+        "STLG x5, LGOT x1, OVTK x39, COLL x4, PENA x6",
+        "sessionTime stays 0 until lights out",
+        "20 UID-0 SessionHistory just before SEND"
+      ]
+    },
+    {
+      "id": "menuOnly",
+      "file": "2026-10-27_22-50-28_5cc4798807ebe7a5.pwrec.gz",
+      "sha256": "e9c0515df640c71af6fe76feffd751b40382cf2ff7533cb673e4016f49594ab9",
+      "bytes": 4697,
+      "track": null,
+      "trackId": null,
+      "sessionType": null,
+      "sessionTypeCode": null,
+      "completedLaps": 0,
+      "durationMs": 2475323.6368,
+      "features": [
+        "385 BUTN events only (155 with UID 0), no Session packet"
+      ]
+    }
+  ]
+}

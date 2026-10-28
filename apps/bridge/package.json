@@ -1,0 +1,16 @@
+{
+  "name": "@pitwall/bridge",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@pitwall/protocol": "workspace:*",
+    "@pitwall/domain": "workspace:*",
+    "@pitwall/contracts": "workspace:*",
+    "@pitwall/engine": "workspace:*",
+    "@pitwall/strategy": "workspace:*"
+  }
+}

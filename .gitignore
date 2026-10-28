@@ -1,0 +1,9 @@
+node_modules/
+recordings/
+external/
+.idea/
+apps/bridge/src/features/index.generated.ts
+.stryker-tmp/
+reports/
+.claude/worktrees/
+.superpowers/
