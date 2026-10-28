@@ -5,6 +5,14 @@ import type { FeedInfo } from './feeds.ts';
 import type { TopicName } from './topics.ts';
 import type { UiAction } from './ui/types.ts';
 
+/** A transport action on a replay feed (spec 8.5). */
+export type ReplayControl =
+  | { kind: 'pause' }
+  | { kind: 'play' }
+  | { kind: 'speed'; factor: number }
+  | { kind: 'jumpToLap'; lap: number }
+  | { kind: 'jumpToTime'; sessionTimeMs: number };
+
 export type TopicStatus = 'ok' | 'errored' | 'noData';
 export type ErrorReason = 'malformed' | 'unknownFeed';
 
@@ -13,6 +21,7 @@ export type ClientMessage =
   | { type: 'unsubscribe'; id: string }
   | { type: 'command'; id: string; command: ReservedCommand }
   | { type: 'uiAction'; id: string; action: UiAction }
+  | { type: 'replayControl'; id: string; control: ReplayControl }
   | { type: 'heartbeat' };
 
 export type ServerMessage =

@@ -3,7 +3,7 @@
 import { writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { toSessionTime, type FeedId, type SessionTime } from '@pitwall/domain';
-import { CalculatorRegistry, SessionTracker, type FrameMetrics, type InsightChange, type TrackerEvent } from '@pitwall/engine';
+import { CalculatorRegistry, SessionTracker, type Frame, type FrameMetrics, type InsightChange, type TrackerEvent } from '@pitwall/engine';
 import { decode } from '@pitwall/protocol';
 import { effectiveConfig, sessionConfigPath, type FeatureConfig } from '../feature-config.ts';
 import type { Feature } from '../features/feature.ts';
@@ -61,6 +61,9 @@ export type FeedPipelineOptions = {
   realismNextSession?: () => boolean;
 };
 
+/** Where the feed is: the newest frame's session time and the player's lap. */
+export type FeedPosition = { sessionTimeMs: number; playerLap: number };
+
 type SessionStarted = Extract<TrackerEvent, { type: 'sessionStarted' }>;
 
 /**
@@ -91,6 +94,7 @@ export class FeedPipeline {
   /** The last session that ended, file closed; it stays evaluable for late subscribers until the next session starts. */
   #ended: SessionProcessor | undefined;
   #lastReceivedAtMs = 0;
+  #position: FeedPosition | undefined;
   #staleTimer: NodeJS.Timeout | undefined;
   #started = false;
 
@@ -133,6 +137,11 @@ export class FeedPipeline {
    */
   demandChanged(): void {
     this.#guarded('demand change', () => (this.#session ?? this.#ended)?.demandChanged());
+  }
+
+  /** The newest frame's position; undefined before any frame, and still readable after the source ended. */
+  position(): FeedPosition | undefined {
+    return this.#position;
   }
 
   /** Stops the source and resolves once `done` has settled; the feed's job runner is closed by then. */
@@ -186,12 +195,19 @@ export class FeedPipeline {
         this.#startSession(event);
         return;
       case 'frame':
+        this.#updatePosition(event.frame);
         this.#session?.push(event.frame);
         return;
       case 'sessionEnded':
         this.#endSession(receivedAtMs);
         return;
     }
+  }
+
+  /** The position follows the newest frame; without lap data it keeps the last lap, and stays unknown until one is seen. */
+  #updatePosition(frame: Frame): void {
+    const playerLap = frame.lapData?.lapData[frame.playerCarIndex]?.currentLapNum ?? this.#position?.playerLap;
+    if (playerLap !== undefined) this.#position = { sessionTimeMs: frame.sessionTime, playerLap };
   }
 
   /** A new session: every topic of the feed starts over, apart from the feed's own insights that still hold. */
