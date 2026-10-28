@@ -1,0 +1,170 @@
+<script lang="ts">
+  // The panel frame (spec 4.3, 7.4; Task 0 option B): a header band in bgBand with the title, the one state and the
+  // gear, then the widget body measured in character cells. The only place widget-level states are handled.
+  import type { PanelSpec } from '@pitwall/contracts';
+  import { onDestroy, untrack, type Component } from 'svelte';
+  import type { TopicStore } from '../../connection/topic-store.svelte.ts';
+  import Gear from '../../kit/icons/Gear.svelte';
+  import { measure, type Measured } from '../../kit/size/measure.ts';
+  import { cellBox, pickMode, toCells } from '../../kit/size/size.ts';
+  import { providePanelStale } from '../../kit/stale/panel-stale.ts';
+  import * as text from '../../kit/text.ts';
+  import type { RegisteredWidget, ResolvedLink, WidgetSize } from '../../kit/types.ts';
+  import { role } from '../../theme/index.ts';
+  import { computedLap, headerState, type DataStatus } from './header-state.ts';
+  import { Holdings } from './holdings.svelte.ts';
+  import { portal } from './portal.ts';
+  import { dataRequests, frameRequests } from './requests.ts';
+  import { useWindowFont } from './window-font.ts';
+
+  type Props = {
+    store: TopicStore;
+    spec: PanelSpec;
+    /** Undefined when the spec names a widget this build does not have. */
+    widget: RegisteredWidget | undefined;
+    /** Undefined until the link group resolves (no feed or no session yet): the panel then shows `no data yet`. */
+    link: ResolvedLink | undefined;
+    /** Where the header band goes instead of above the body: the dock's tab, which is also the drag handle. */
+    headerTarget?: HTMLElement | undefined;
+  };
+  let { store, spec, widget, link, headerTarget }: Props = $props();
+
+  const font = useWindowFont();
+  // The store is the window's for the panel's whole life.
+  // svelte-ignore state_referenced_locally
+  const frame = new Holdings(store);
+  // svelte-ignore state_referenced_locally
+  const data = new Holdings(store);
+
+  const feedId = $derived(link?.feedId);
+  const frameKeys = $derived(widget === undefined || feedId === undefined ? undefined : frameRequests(feedId));
+  const requests = $derived(widget === undefined || link === undefined ? [] : dataRequests(widget.decl, link, spec.options));
+
+  $effect(() => {
+    const keys = frameKeys;
+    untrack(() => frame.hold(keys === undefined ? [] : [keys.session, keys.feed]));
+  });
+  $effect(() => {
+    const next = requests;
+    untrack(() => data.hold(next));
+  });
+  onDestroy(() => {
+    data.release();
+    frame.release();
+  });
+
+  const feed = $derived.by(() => {
+    const state = frameKeys === undefined ? undefined : frame.states[frameKeys.feed.name];
+    return state?.status === 'ok' ? (state.value as { stale?: boolean; cadenceMs?: number } | undefined) : undefined;
+  });
+
+  const panelStale = providePanelStale({
+    now: () => (feedId === undefined ? undefined : store.now(feedId)),
+    cadenceMs: () => feed?.cadenceMs,
+  });
+
+  const status = $derived.by((): DataStatus => {
+    if (link === undefined) return 'waiting';
+    const required = requests.filter((r) => !r.optional).map((r) => data.states[r.name]?.status);
+    if (required.includes('errored')) return 'errored';
+    return required.every((s) => s === 'ok') ? 'ok' : 'waiting';
+  });
+  const failedTopic = $derived(requests.find((r) => !r.optional && data.states[r.name]?.status === 'errored')?.key.topic);
+
+  const values = $derived.by(() => {
+    const out: Record<string, unknown> = {};
+    for (const r of requests) {
+      const state = data.states[r.name];
+      out[r.name] = state?.status === 'ok' ? state.value : undefined;
+    }
+    return out;
+  });
+
+  const header = $derived(
+    headerState({
+      known: widget !== undefined,
+      data: status,
+      feedStale: store.connection !== 'open' || feed?.stale === true,
+      staleForMs: panelStale.staleForMs,
+      computedLaps: Object.values(values).flatMap((v) => computedLap(v) ?? []),
+    }),
+  );
+  const dim = $derived(store.connection !== 'open' || feed?.stale === true);
+
+  let measured = $state.raw<Measured | undefined>();
+  /** The size the component gets; null when no size mode fits, undefined before the first measurement. */
+  const size = $derived.by((): WidgetSize | null | undefined => {
+    if (measured === undefined || widget === undefined) return undefined;
+    const cells = toCells(measured.px, cellBox(font.fontPx, font.lineHeight));
+    const mode = pickMode(widget.decl.sizes, cells.cols, cells.rows);
+    return mode === undefined ? null : { mode, ...cells, px: measured.px, dpr: measured.dpr };
+  });
+
+  let View = $state.raw<Component<Record<string, unknown>> | undefined>();
+  $effect(() => {
+    const current = widget;
+    let live = true;
+    View = undefined;
+    void current?.component().then((m) => {
+      if (live) View = m.default;
+    });
+    return () => {
+      live = false;
+    };
+  });
+</script>
+
+<div class="panel">
+  <header use:portal={headerTarget} style:background={role('bgBand')}>
+    <span class="title" style:color={role('textDim')}>{widget?.decl.title ?? spec.widget}</span>
+    <span class="fill"></span>
+    {#if header !== undefined}<span class="state" style:color={role(header.role)}>{header.text}</span>{/if}
+    <span class="gear" style:color={role('textFaint')}><Gear label={text.settings} /></span>
+  </header>
+  <div class="body" use:measure={(m: Measured) => (measured = m)} style:color={dim ? role('textFaint') : undefined}>
+    {#if widget === undefined}
+      <span style:color={role('textDim')}>{text.unknownWidget(spec.widget)}</span>
+    {:else if status === 'errored'}
+      <span style:color={role('textDim')}
+        ><span style:color={role('critical')}>{text.noResult}</span> {text.topicErrored(failedTopic ?? spec.widget)}</span
+      >
+    {:else if status === 'ok' && size === null}
+      <span style:color={role('textFaint')}>{text.tooSmall}</span>
+    {:else if status === 'ok' && size !== undefined && View !== undefined && link !== undefined}
+      <View data={values} options={spec.options} {size} {link} />
+    {/if}
+  </div>
+</div>
+
+<style>
+  .panel {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+  }
+  header {
+    display: flex;
+    gap: var(--pw-col-gap);
+    padding: 0 var(--pw-header-pad);
+    white-space: nowrap;
+    overflow: hidden;
+    flex: none;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .fill {
+    flex: 1;
+  }
+  .body {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    padding: 0 var(--pw-header-pad);
+  }
+</style>

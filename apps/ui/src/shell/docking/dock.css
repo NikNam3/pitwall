@@ -1,0 +1,39 @@
+/* dockview's look mapped onto the theme roles and density tokens: no colour or size of its own. */
+.pw-dock .dockview-theme-dark,
+.pw-dock.dockview-theme-dark {
+  color-scheme: dark;
+  --dv-group-view-background-color: var(--pw-bgPanel);
+  --dv-tabs-and-actions-container-background-color: var(--pw-bgBand);
+  --dv-tabs-and-actions-container-height: calc(var(--pw-font-px) * var(--pw-line));
+  --dv-tabs-and-actions-container-font-size: var(--pw-font-px);
+  --dv-activegroup-visiblepanel-tab-background-color: var(--pw-bgBand);
+  --dv-inactivegroup-visiblepanel-tab-background-color: var(--pw-bgBand);
+  --dv-activegroup-hiddenpanel-tab-background-color: var(--pw-bg);
+  --dv-inactivegroup-hiddenpanel-tab-background-color: var(--pw-bg);
+  --dv-activegroup-visiblepanel-tab-color: var(--pw-textDim);
+  --dv-inactivegroup-visiblepanel-tab-color: var(--pw-textDim);
+  --dv-activegroup-hiddenpanel-tab-color: var(--pw-textFaint);
+  --dv-inactivegroup-hiddenpanel-tab-color: var(--pw-textFaint);
+  --dv-tab-divider-color: var(--pw-bg);
+  --dv-separator-border: transparent;
+  --dv-sash-color: transparent;
+  --dv-active-sash-color: var(--pw-border);
+  --dv-drag-over-background-color: color-mix(in srgb, var(--pw-textFaint) 35%, transparent);
+  --dv-drag-over-border-color: var(--pw-border);
+  --dv-tabs-container-scrollbar-color: var(--pw-border);
+  --dv-icon-hover-background-color: var(--pw-border);
+  --dv-paneview-header-border-color: var(--pw-border);
+  --dv-tab-font-size: inherit;
+  --dv-tab-margin: 0;
+  font-family: var(--pw-font);
+}
+
+/* The tab is the panel's header band: no tab padding, the header fills it. */
+.pw-dock .dv-tab {
+  padding: 0;
+}
+.pw-dock .pw-dock-tab,
+.pw-dock .pw-dock-content {
+  width: 100%;
+  height: 100%;
+}
