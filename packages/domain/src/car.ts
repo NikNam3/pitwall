@@ -68,7 +68,8 @@ export type CarTiming = {
   unservedDriveThroughs: number;
   unservedStopGos: number;
   gridPosition: number;
-  speedTrapFastestKmh: Kmh | undefined;
+  /** Fastest speed-trap value of the car; `notReceived` until it has one. */
+  speedTrapFastestKmh: Known<Kmh>;
   fiaFlag: FiaFlag;
 };
 
@@ -160,29 +161,41 @@ export type CarDynamics = {
   /** World position in m. */
   position: Vec3;
   /** World velocity in m/s. */
-  velocity: Vec3;
+  velocityMps: Vec3;
   gForce: { lateral: number; longitudinal: number; vertical: number };
   orientation: { yawRad: Radians; pitchRad: Radians; rollRad: Radians };
 };
 
 export type OwnCarMotionEx = {
   wheels: Corners<{
+    /** Unit not stated in the F1 25 spec. */
     suspensionPosition: number;
+    /** Unit not stated in the F1 25 spec. */
     suspensionVelocity: number;
+    /** Unit not stated in the F1 25 spec. */
     suspensionAcceleration: number;
+    /** Wheel speed. Unit not stated in the F1 25 spec. */
     speed: number;
+    /** Unit not stated in the F1 25 spec. */
     slipRatio: number;
+    /** Unit not stated in the F1 25 spec. */
     slipAngle: number;
+    /** Unit not stated in the F1 25 spec. */
     latForce: number;
+    /** Unit not stated in the F1 25 spec. */
     longForce: number;
+    /** Unit not stated in the F1 25 spec. */
     vertForce: number;
     camberRad: Radians;
     camberGainRad: Radians;
   }>;
   heightOfCogM: Metres;
-  localVelocity: Vec3;
-  angularVelocity: Vec3;
-  angularAcceleration: Vec3;
+  /** Local velocity in m/s. */
+  localVelocityMps: Vec3;
+  /** Angular velocity in rad/s. */
+  angularVelocityRadPerS: Vec3;
+  /** Angular acceleration in rad/s^2. */
+  angularAccelerationRadPerS2: Vec3;
   frontWheelsAngleRad: Radians;
   frontAeroHeightM: Metres;
   rearAeroHeightM: Metres;

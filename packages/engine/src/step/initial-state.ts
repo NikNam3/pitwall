@@ -66,7 +66,7 @@ export const createCarState = (id: CarId): CarState => ({
     unservedDriveThroughs: 0,
     unservedStopGos: 0,
     gridPosition: 0,
-    speedTrapFastestKmh: undefined,
+    speedTrapFastestKmh: unknown('notReceived'),
     fiaFlag: 'unknown',
   },
   tyres: {
@@ -109,7 +109,7 @@ export const createCarState = (id: CarId): CarState => ({
     drsActivationDistanceM: 0,
     pitLimiter: false,
     position: origin(),
-    velocity: origin(),
+    velocityMps: origin(),
     gForce: { lateral: 0, longitudinal: 0, vertical: 0 },
     orientation: { yawRad: 0, pitchRad: 0, rollRad: 0 },
   },

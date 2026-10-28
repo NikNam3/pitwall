@@ -122,7 +122,7 @@ describe('energy, condition, dynamics', () => {
     }));
     expect(st.cars[1]!.dynamics).toEqual({ speedKmh: 312, throttle: 0.75, brake: 0.25, steer: -0.5, clutchPct: 0, gear: 7, rpm: 11_500, maxRpm: 13_000,
       revLightsPct: 80, drs: true, drsAllowed: true, drsActivationDistanceM: 120, pitLimiter: true, position: { x: 100.5, y: 2.25, z: -30 },
-      velocity: { x: 80, y: 0, z: -4.5 }, gForce: { lateral: 1.5, longitudinal: -2, vertical: 0.5 }, orientation: { yawRad: 0.5, pitchRad: 0.25, rollRad: -0.125 } });
+      velocityMps: { x: 80, y: 0, z: -4.5 }, gForce: { lateral: 1.5, longitudinal: -2, vertical: 0.5 }, orientation: { yawRad: 0.5, pitchRad: 0.25, rollRad: -0.125 } });
   });
   it('tags the areas that the packets in the first frame feed', () => {
     const { results } = runScenario(new ScenarioBuilder({ cars: 1 }).frames(1, (d) => d.drop('motionEx')));
@@ -134,14 +134,17 @@ describe('energy, condition, dynamics', () => {
 describe('ownCar (player only)', () => {
   it('fills MotionEx (named corners), setup and live brake bias for the player; other cars get no ownCar', () => {
     const { st } = runScenario(new ScenarioBuilder({ cars: 2, player: 0 }).frames(1, (d) => {
-      Object.assign(d.motionEx, { wheelSpeed: [1, 2, 3, 4], wheelCamber: [0.5, 0.25, -0.5, -0.25], frontWheelsAngle: 0.125, heightOfCogAboveGround: 0.25 });
+      Object.assign(d.motionEx, { wheelSpeed: [1, 2, 3, 4], wheelCamber: [0.5, 0.25, -0.5, -0.25], frontWheelsAngle: 0.125, heightOfCogAboveGround: 0.25,
+        localVelocityX: 1, localVelocityY: 2, localVelocityZ: 3, angularVelocityX: 4, angularVelocityY: 5, angularVelocityZ: 6,
+        angularAccelerationX: 7, angularAccelerationY: 8, angularAccelerationZ: 9 });
       d.status.carStatusData[0]!.frontBrakeBias = 56;
       d.add('carSetups', { carSetupData: { 0: { onThrottle: 60, offThrottle: 50, brakeBias: 55, rearLeftTyrePressure: 21, rearRightTyrePressure: 21.5,
         frontLeftTyrePressure: 23, frontRightTyrePressure: 23.5, fuelLoad: 12.5 } } });
     }));
     const own = st.cars[0]!.ownCar!;
     expect(own.motionEx).toMatchObject({ known: true, value: { wheels: { fl: { speed: 3, camberRad: -0.5 }, rr: { speed: 2, camberRad: 0.25 } },
-      frontWheelsAngleRad: 0.125, heightOfCogM: 0.25 } });
+      frontWheelsAngleRad: 0.125, heightOfCogM: 0.25, localVelocityMps: { x: 1, y: 2, z: 3 }, angularVelocityRadPerS: { x: 4, y: 5, z: 6 },
+      angularAccelerationRadPerS2: { x: 7, y: 8, z: 9 } } });
     expect(own.setup).toMatchObject({ known: true, value: { diffOnThrottlePct: 60, diffOffThrottlePct: 50, brakeBiasPct: 55,
       tyrePressurePsi: { fl: 23, fr: 23.5, rl: 21, rr: 21.5 }, fuelLoadKg: 12.5 } });
     expect(own.brakeBiasPct).toEqual(known(56, 0));

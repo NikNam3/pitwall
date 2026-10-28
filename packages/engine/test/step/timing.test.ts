@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { known, unknown } from '@pitwall/domain';
 import { ScenarioBuilder } from '../builders/index.ts';
 import { runScenario } from '../support/run.ts';
 
@@ -16,7 +17,7 @@ describe('timing from LapData', () => {
       lastLapTimeMs: 91_234, sector: 3, sector1TimeMs: 30_123, sector2TimeMs: 31_456, currentLapInvalid: true, gapToLeaderMs: 65_432,
       gapToCarAheadMs: 1_250, safetyCarDeltaMs: -1_500, pitStatus: 'pitting', numPitStops: 1, pitLaneTimerActive: true, pitLaneTimeMs: 4_200,
       pitStopTimerMs: 0, shouldServePenalty: true, driverStatus: 'outLap', resultStatus: 'didNotFinish', timePenaltyMs: 5_000, totalWarnings: 2,
-      cornerCuttingWarnings: 1, unservedDriveThroughs: 1, unservedStopGos: 0, gridPosition: 7, speedTrapFastestKmh: 312.5, fiaFlag: 'yellow' });
+      cornerCuttingWarnings: 1, unservedDriveThroughs: 1, unservedStopGos: 0, gridPosition: 7, speedTrapFastestKmh: known(312.5, 0), fiaFlag: 'yellow' });
   });
   it('passes negative gaps through (the game reports a car slightly ahead as a small negative delta)', () => {
     const { st } = runScenario(new ScenarioBuilder({ cars: 2 }).frames(1, (d) => {
@@ -24,9 +25,15 @@ describe('timing from LapData', () => {
     }));
     expect([st.cars[1]!.timing.gapToCarAheadMs, st.cars[1]!.timing.gapToLeaderMs]).toEqual([-17, -50]);
   });
-  it('speed trap is undefined while its lap is 255', () => {
+  it('speed trap is unknown (notReceived) while its lap is 255', () => {
     const { st } = runScenario(new ScenarioBuilder({ cars: 1 }).frames(1, (d) => { d.lapData.lapData[0]!.speedTrapFastestLap = 255; }));
-    expect(st.cars[0]!.timing.speedTrapFastestKmh).toBeUndefined();
+    expect(st.cars[0]!.timing.speedTrapFastestKmh).toEqual(unknown('notReceived'));
+  });
+  it('speed trap is known (with its session time) once the car has a value', () => {
+    const { st } = runScenario(new ScenarioBuilder({ cars: 1 }).frames(1, (d) => {
+      Object.assign(d.lapData.lapData[0]!, { speedTrapFastestSpeed: 301.25, speedTrapFastestLap: 2 });
+    }));
+    expect(st.cars[0]!.timing.speedTrapFastestKmh).toEqual(known(301.25, 0));
   });
   it('keeps the last values and does not tag timing when a frame has no LapData and no Car Status', () => {
     const { st, results } = runScenario(new ScenarioBuilder({ cars: 1 }).frames(2, (d) => {

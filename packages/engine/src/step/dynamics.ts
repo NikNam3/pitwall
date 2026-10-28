@@ -33,7 +33,7 @@ export const applyDynamics: SubStep = (state, frame, out) => {
       car.updatedAt.motion = at;
       Object.assign(car.dynamics, {
         position: { x: m.worldPositionX, y: m.worldPositionY, z: m.worldPositionZ },
-        velocity: { x: m.worldVelocityX, y: m.worldVelocityY, z: m.worldVelocityZ },
+        velocityMps: { x: m.worldVelocityX, y: m.worldVelocityY, z: m.worldVelocityZ },
         gForce: { lateral: m.gForceLateral, longitudinal: m.gForceLongitudinal, vertical: m.gForceVertical },
         orientation: { yawRad: m.yaw, pitchRad: m.pitch, rollRad: m.roll },
       });

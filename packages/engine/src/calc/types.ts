@@ -29,7 +29,8 @@ export type FeedMetricsView = FrameMetrics & {
 
 /** Everything a calculator may look at: read-only. */
 export type EngineView = {
-  state: DeepReadonly<EngineState>;
+  /** The settled state; the in-progress `open` trackers are not part of the view. */
+  state: DeepReadonly<Omit<EngineState, 'open'>>;
   changed: ReadonlySet<ChangeTag>;
   delta: HistoryDelta;
   feed: FeedMetricsView;

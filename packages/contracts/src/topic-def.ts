@@ -1,3 +1,5 @@
+import type { CarId } from '@pitwall/domain';
+
 /**
  * A topic's definition (spec 8.4). `params` and `value` are phantom: they only carry types and are absent at runtime.
  * `state` replaces the previous value, `append` adds entries.
@@ -18,4 +20,4 @@ export function defineTopic<P, V>(def: { mode: TopicDef<P, V>['mode']; maxHz: nu
 /** Params of a topic that takes none. */
 export type NoParams = Record<string, never>;
 /** Params of a per-car topic. */
-export type CarParams = { carId: number };
+export type CarParams = { carId: CarId };

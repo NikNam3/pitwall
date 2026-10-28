@@ -1,3 +1,4 @@
+import { known, unknown } from '@pitwall/domain';
 import { pick } from './pick.ts';
 import { ZONE_FLAG } from './session.ts';
 import type { SubStep } from './types.ts';
@@ -57,7 +58,7 @@ export const applyTiming: SubStep = (state, frame, out) => {
         unservedDriveThroughs: l.numUnservedDriveThroughPens,
         unservedStopGos: l.numUnservedStopGoPens,
         gridPosition: l.gridPosition,
-        speedTrapFastestKmh: l.speedTrapFastestLap === NO_SPEED_TRAP_LAP ? undefined : l.speedTrapFastestSpeed,
+        speedTrapFastestKmh: l.speedTrapFastestLap === NO_SPEED_TRAP_LAP ? unknown('notReceived') : known(l.speedTrapFastestSpeed, at),
       });
     }
     out.changed.add('timing');
