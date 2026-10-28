@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Typeface</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&family=Roboto+Condensed:wght@400;500;600&display=swap');
+body{background:#0b0c0e;color:#d9dbe0;font-family:Inter,system-ui,sans-serif;padding:24px 28px 60px;margin:0}
+h2{font-size:20px;font-weight:600;margin:0 0 6px}.subtitle{color:#8d9199;font-size:13px;line-height:1.5;max-width:1100px;margin:0 0 20px}
+.option{border:1px solid #25272c;border-radius:6px;padding:14px 16px;margin-bottom:16px;cursor:pointer}.option:hover{border-color:#5c6068}.option.selected{border-color:#d9dbe0}
+.option .letter{display:none}.option h3{font-size:15px;margin:0 0 3px}.option p{color:#8d9199;font-size:13px;margin:0}
+.pw{display:inline-block}.pw .row2{grid-template-columns:auto 210px !important}.pw table{width:auto}.pw td,.pw th{padding:3px 10px}
+.pw tr.focus td.pb{color:var(--pb)}
+
+.pw { --bg:#0f1012; --panel:#15161a; --band:#1b1c21; --line:#25272c; --t1:#d9dbe0; --t2:#8d9199; --t3:#5c6068;
+      --best:#b06cff; --pb:#3fcf70; --warn:#f0b429; --crit:#ff5c5c;
+      background:var(--bg); padding:10px; border-radius:6px; color:var(--t1); font-variant-numeric:tabular-nums; }
+.pw.inter { font-family:'Inter',sans-serif; font-feature-settings:'tnum' 1,'cv11' 1; }
+.pw.mono  { font-family:'JetBrains Mono',monospace; }
+.pw.cond  { font-family:'Roboto Condensed',sans-serif; }
+.pw .row2 { display:grid; grid-template-columns: 1fr 210px; gap:8px; }
+.pw .w { background:var(--panel); border:1px solid var(--line); border-radius:3px; }
+.pw .wh { font-size:10.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--t3); padding:5px 8px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; }
+.pw table { border-collapse:collapse; width:100%; font-size:13px; }
+.pw th { font-weight:500; font-size:10.5px; color:var(--t3); text-align:right; padding:4px 7px; text-transform:uppercase; letter-spacing:.05em; }
+.pw td { padding:3px 7px; text-align:right; color:var(--t1); white-space:nowrap; }
+.pw th.l, .pw td.l { text-align:left; }
+.pw tbody tr:nth-child(even) td { background:var(--band); }
+.pw tr.focus td:first-child { box-shadow: inset 2px 0 0 var(--t1); }
+.pw tr.focus td { color:#fff; font-weight:500; }
+.pw .dim { color:var(--t2); }
+.pw .best { color:var(--best); font-weight:600; }
+.pw .pb { color:var(--pb); }
+.pw .tyres { display:grid; grid-template-columns:1fr 1fr; gap:6px; padding:8px; }
+.pw .c { background:var(--band); border-radius:2px; padding:6px 8px; }
+.pw .c .k { font-size:10.5px; color:var(--t3); text-transform:uppercase; letter-spacing:.05em; }
+.pw .c .v { font-size:20px; font-weight:500; line-height:1.2; }
+.pw .c .s { font-size:11.5px; color:var(--t2); }
+.pw .c.warn .v { color:var(--warn); }
+</style></head><body>
+
+<h2>Which typeface reads best for a dense race-engineering panel?</h2>
+<p class="subtitle">Same data, same colour rules, only the font differs. Grey by default; purple = overall-best sector, green = personal best of the focused car, amber = tyre out of window. The white bar marks your driver (P5). Look at the numbers especially.</p>
+
+<div class="options">
+
+<div class="option" data-choice="inter" onclick="sel(this)">
+  <div class="letter">A</div>
+  <div class="content">
+    <h3>A · Sans with tabular figures (Inter)</h3>
+    <p>Neutral, modern, very legible at small sizes; digits are fixed-width so columns line up.</p>
+    <div class="pw inter" style="margin-top:8px">
+      <div class="row2">
+        <div class="w"><div class="wh"><span>Timing</span><span>Lap 23 / 50</span></div>
+          <table><thead><tr><th class="l">P</th><th class="l">Driver</th><th>Gap</th><th>Int</th><th>S1</th><th>S2</th><th>S3</th><th>Last</th><th>Best</th><th class="l">Tyre</th><th>Pit</th></tr></thead>
+          <tbody>
+            <tr><td class="l">1</td><td class="l">VER</td><td class="dim">—</td><td class="dim">—</td><td>27.412</td><td>32.981</td><td>25.104</td><td>1:25.497</td><td>1:25.311</td><td class="l">M 14</td><td>1</td></tr>
+            <tr><td class="l">2</td><td class="l">NOR</td><td>2.184</td><td>2.184</td><td class="best">27.288</td><td>33.052</td><td>25.199</td><td>1:25.539</td><td>1:25.402</td><td class="l">M 14</td><td>1</td></tr>
+            <tr><td class="l">3</td><td class="l">LEC</td><td>5.903</td><td>3.719</td><td>27.530</td><td>33.110</td><td>25.031</td><td>1:25.671</td><td>1:25.488</td><td class="l">H 23</td><td>0</td></tr>
+            <tr><td class="l">4</td><td class="l">PIA</td><td>8.417</td><td>2.514</td><td>27.611</td><td class="best">32.874</td><td>25.240</td><td>1:25.725</td><td>1:25.590</td><td class="l">M 12</td><td>1</td></tr>
+            <tr class="focus"><td class="l">5</td><td class="l">KUH</td><td>9.102</td><td>0.685</td><td class="pb">27.395</td><td>33.004</td><td>25.177</td><td>1:25.576</td><td>1:25.576</td><td class="l">M 12</td><td>1</td></tr>
+            <tr><td class="l">6</td><td class="l">HAM</td><td>14.880</td><td>5.778</td><td>27.702</td><td>33.215</td><td>25.312</td><td>1:26.229</td><td>1:25.903</td><td class="l">H 23</td><td>0</td></tr>
+          </tbody></table></div>
+        <div class="w"><div class="wh"><span>Tyres · KUH</span><span>°C / psi</span></div>
+          <div class="tyres">
+            <div class="c"><div class="k">FL</div><div class="v">98</div><div class="s">23.4 psi · 6 %</div></div>
+            <div class="c warn"><div class="k">FR</div><div class="v">112</div><div class="s">23.9 psi · 9 %</div></div>
+            <div class="c"><div class="k">RL</div><div class="v">94</div><div class="s">21.8 psi · 5 %</div></div>
+            <div class="c"><div class="k">RR</div><div class="v">97</div><div class="s">22.1 psi · 7 %</div></div>
+          </div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="option" data-choice="mono" onclick="sel(this)">
+  <div class="letter">B</div>
+  <div class="content">
+    <h3>B · Monospace (JetBrains Mono)</h3>
+    <p>Terminal feel; every character the same width, so text and numbers align perfectly. Wider, fewer columns fit.</p>
+    <div class="pw mono" style="margin-top:8px">
+      <div class="row2">
+        <div class="w"><div class="wh"><span>Timing</span><span>Lap 23 / 50</span></div>
+          <table><thead><tr><th class="l">P</th><th class="l">Driver</th><th>Gap</th><th>Int</th><th>S1</th><th>S2</th><th>S3</th><th>Last</th><th>Best</th><th class="l">Tyre</th><th>Pit</th></tr></thead>
+          <tbody>
+            <tr><td class="l">1</td><td class="l">VER</td><td class="dim">—</td><td class="dim">—</td><td>27.412</td><td>32.981</td><td>25.104</td><td>1:25.497</td><td>1:25.311</td><td class="l">M 14</td><td>1</td></tr>
+            <tr><td class="l">2</td><td class="l">NOR</td><td>2.184</td><td>2.184</td><td class="best">27.288</td><td>33.052</td><td>25.199</td><td>1:25.539</td><td>1:25.402</td><td class="l">M 14</td><td>1</td></tr>
+            <tr><td class="l">3</td><td class="l">LEC</td><td>5.903</td><td>3.719</td><td>27.530</td><td>33.110</td><td>25.031</td><td>1:25.671</td><td>1:25.488</td><td class="l">H 23</td><td>0</td></tr>
+            <tr><td class="l">4</td><td class="l">PIA</td><td>8.417</td><td>2.514</td><td>27.611</td><td class="best">32.874</td><td>25.240</td><td>1:25.725</td><td>1:25.590</td><td class="l">M 12</td><td>1</td></tr>
+            <tr class="focus"><td class="l">5</td><td class="l">KUH</td><td>9.102</td><td>0.685</td><td class="pb">27.395</td><td>33.004</td><td>25.177</td><td>1:25.576</td><td>1:25.576</td><td class="l">M 12</td><td>1</td></tr>
+            <tr><td class="l">6</td><td class="l">HAM</td><td>14.880</td><td>5.778</td><td>27.702</td><td>33.215</td><td>25.312</td><td>1:26.229</td><td>1:25.903</td><td class="l">H 23</td><td>0</td></tr>
+          </tbody></table></div>
+        <div class="w"><div class="wh"><span>Tyres · KUH</span><span>°C / psi</span></div>
+          <div class="tyres">
+            <div class="c"><div class="k">FL</div><div class="v">98</div><div class="s">23.4 psi · 6 %</div></div>
+            <div class="c warn"><div class="k">FR</div><div class="v">112</div><div class="s">23.9 psi · 9 %</div></div>
+            <div class="c"><div class="k">RL</div><div class="v">94</div><div class="s">21.8 psi · 5 %</div></div>
+            <div class="c"><div class="k">RR</div><div class="v">97</div><div class="s">22.1 psi · 7 %</div></div>
+          </div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="option" data-choice="cond" onclick="sel(this)">
+  <div class="letter">C</div>
+  <div class="content">
+    <h3>C · Condensed sans (Roboto Condensed)</h3>
+    <p>Close to FIA timing screens and broadcast graphics; narrowest, so the most columns fit in a small panel.</p>
+    <div class="pw cond" style="margin-top:8px">
+      <div class="row2">
+        <div class="w"><div class="wh"><span>Timing</span><span>Lap 23 / 50</span></div>
+          <table><thead><tr><th class="l">P</th><th class="l">Driver</th><th>Gap</th><th>Int</th><th>S1</th><th>S2</th><th>S3</th><th>Last</th><th>Best</th><th class="l">Tyre</th><th>Pit</th></tr></thead>
+          <tbody>
+            <tr><td class="l">1</td><td class="l">VER</td><td class="dim">—</td><td class="dim">—</td><td>27.412</td><td>32.981</td><td>25.104</td><td>1:25.497</td><td>1:25.311</td><td class="l">M 14</td><td>1</td></tr>
+            <tr><td class="l">2</td><td class="l">NOR</td><td>2.184</td><td>2.184</td><td class="best">27.288</td><td>33.052</td><td>25.199</td><td>1:25.539</td><td>1:25.402</td><td class="l">M 14</td><td>1</td></tr>
+            <tr><td class="l">3</td><td class="l">LEC</td><td>5.903</td><td>3.719</td><td>27.530</td><td>33.110</td><td>25.031</td><td>1:25.671</td><td>1:25.488</td><td class="l">H 23</td><td>0</td></tr>
+            <tr><td class="l">4</td><td class="l">PIA</td><td>8.417</td><td>2.514</td><td>27.611</td><td class="best">32.874</td><td>25.240</td><td>1:25.725</td><td>1:25.590</td><td class="l">M 12</td><td>1</td></tr>
+            <tr class="focus"><td class="l">5</td><td class="l">KUH</td><td>9.102</td><td>0.685</td><td class="pb">27.395</td><td>33.004</td><td>25.177</td><td>1:25.576</td><td>1:25.576</td><td class="l">M 12</td><td>1</td></tr>
+            <tr><td class="l">6</td><td class="l">HAM</td><td>14.880</td><td>5.778</td><td>27.702</td><td>33.215</td><td>25.312</td><td>1:26.229</td><td>1:25.903</td><td class="l">H 23</td><td>0</td></tr>
+          </tbody></table></div>
+        <div class="w"><div class="wh"><span>Tyres · KUH</span><span>°C / psi</span></div>
+          <div class="tyres">
+            <div class="c"><div class="k">FL</div><div class="v">98</div><div class="s">23.4 psi · 6 %</div></div>
+            <div class="c warn"><div class="k">FR</div><div class="v">112</div><div class="s">23.9 psi · 9 %</div></div>
+            <div class="c"><div class="k">RL</div><div class="v">94</div><div class="s">21.8 psi · 5 %</div></div>
+            <div class="c"><div class="k">RR</div><div class="v">97</div><div class="s">22.1 psi · 7 %</div></div>
+          </div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<script>function sel(el){document.querySelectorAll(".option").forEach(o=>o.classList.remove("selected"));el.classList.add("selected");if(window.brainstorm)window.brainstorm.choice(el.dataset.choice);}</script>
+</body></html>

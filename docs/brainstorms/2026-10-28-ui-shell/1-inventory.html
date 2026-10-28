@@ -1,0 +1,142 @@
+<style>
+.inv { background:#0f1012; color:#d9dbe0; border-radius:6px; padding:12px; font-family:Inter,system-ui,sans-serif; font-size:13px; font-variant-numeric:tabular-nums; }
+.inv table { border-collapse:collapse; width:100%; }
+.inv th { font-weight:500; font-size:11px; color:#8d9199; text-transform:uppercase; letter-spacing:.05em; padding:6px 4px; text-align:center; vertical-align:bottom; border-bottom:1px solid #25272c; }
+.inv th.l { text-align:left; }
+.inv td { padding:3px 4px; border-bottom:1px solid #1b1c21; }
+.inv td.item { color:#d9dbe0; }
+.inv td.src { color:#5c6068; font-size:11px; white-space:nowrap; }
+.inv tr.grp td { padding-top:12px; color:#8d9199; font-size:11px; text-transform:uppercase; letter-spacing:.08em; border-bottom:1px solid #25272c; }
+.inv td.t { width:68px; text-align:center; cursor:pointer; user-select:none; border-radius:2px; }
+.inv td.t:hover { background:#25272c; }
+.inv .t1 { color:#ffffff; font-weight:700; background:#2a2c32; }
+.inv .t2 { color:#b5b8bf; }
+.inv .t3 { color:#6b6f77; }
+.inv .t0 { color:#33353a; }
+.inv td.changed { outline:1px dashed #d9dbe0; outline-offset:-2px; }
+.inv .legend { display:flex; gap:18px; margin:0 0 10px; color:#8d9199; font-size:12px; flex-wrap:wrap; }
+.inv .legend b { color:#fff; }
+.inv textarea { width:100%; min-height:60px; background:#15161a; color:#d9dbe0; border:1px solid #25272c; border-radius:3px; padding:6px; font:inherit; margin-top:10px; }
+.inv button { margin-top:6px; background:#25272c; color:#d9dbe0; border:1px solid #33353a; padding:5px 12px; border-radius:3px; cursor:pointer; font:inherit; }
+.inv .sent { color:#8d9199; margin-left:8px; font-size:12px; }
+</style>
+
+<h2>Information inventory v2: now with computed strategy results</h2>
+<p class="subtitle">v2: added the group <b>Strategy decisions (computed)</b>, a row for the cars around your driver, ERS raised to 1 in race stint. Raw fuel moved to car monitoring. <b>Click a cell to change its tier</b> (1 → 2 → 3 → – → 1); cells you changed get a dashed outline. Add missing items or notes in the box at the bottom.</p>
+
+<div class="inv">
+  <div class="legend">
+    <span><b>1</b> in your face: always visible on that phase's main screen, or alerts you when it matters</span>
+    <span><b style="color:#b5b8bf">2</b> one glance or one click away</span>
+    <span><b style="color:#6b6f77">3</b> there when you go looking</span>
+    <span><b style="color:#33353a">–</b> not needed</span>
+  </div>
+  <div class="legend">
+    <span>Source: ✅ direct from the game · 🔧 pitwall derives it · 🔒 own car only · ⚠ hidden for human rivals with private telemetry</span>
+  </div>
+  <table id="grid"></table>
+  <textarea id="note" placeholder="Missing items, wrong groupings, comments…"></textarea>
+  <button onclick="sendNote()">Send note</button><span class="sent" id="sent"></span>
+</div>
+
+<script>
+(function(){
+  const phases = [
+    ['P','Practice'], ['Q','Qualifying'], ['RS','Race start / lap 1'], ['ST','Race: stint'], ['PW','Race: pit window, SC/VSC'], ['DB','Between sessions / debrief']
+  ];
+  // tiers in phase order; 0 = not needed
+  const groups = [
+    ['Timing & race picture', [
+      ['order', 'Running order: position, gap to leader, interval', '✅', [3,2,1,2,1,3]],
+      ['myGaps', 'My driver: gap ahead / behind, with trend per lap', '🔧', [0,0,1,1,1,3]],
+      ['sectors', 'Sector times with purple / green', '🔧', [2,1,3,2,3,2]],
+      ['liveDelta', 'Live delta to driver\'s best lap (micro-sectors)', '🔧', [2,1,0,3,0,3]],
+      ['laps', 'Last / best lap per car', '✅', [2,1,3,2,2,2]],
+      ['lapHistory', 'Lap history per car (every lap, sectors, valid flag)', '✅', [2,3,0,3,3,1]],
+      ['speedTrap', 'Speed trap', '✅', [3,2,0,3,0,2]],
+      ['tyresField', 'Compound and tyre age per car', '✅', [3,2,2,2,1,3]],
+      ['pitStatus', 'Pit status and stop count per car', '✅', [0,0,3,2,1,3]],
+      ['penalties', 'Penalties, warnings, track-limit strikes', '✅', [2,1,1,2,2,2]],
+      ['lapChart', 'Lap chart (positions per lap)', '✅', [0,0,3,3,3,2]],
+      ['around', 'Cars around my driver (±2 positions): gaps, tyres, pace trend', '🔧', [0,0,1,1,1,0]],
+      ['trackMap', 'Track map with all cars', '✅', [3,2,2,3,2,3]],
+      ['qCutoff', 'Qualifying: drop zone and time to beat', '🔧', [0,1,0,0,0,0]],
+      ['qTraffic', 'Qualifying: traffic on out-lap / gap for a clean lap', '🔧', [0,1,0,0,0,0]],
+    ]],
+    ['Strategy inputs', [
+      ['raceHistory', 'Race history / gap chart', '🔧', [0,0,3,2,2,1]],
+      ['stintChart', 'Stint and tyre chart, whole field', '✅', [3,3,3,2,2,2]],
+      ['deg', 'Degradation per stint (fuel-corrected lap times)', '🔧 ⚠', [1,0,0,2,2,1]],
+      ['tyreSets', 'Available tyre sets: wear, remaining life', '✅ ⚠', [2,2,3,3,1,2]],
+      ['gameWindow', 'Game\'s own pit window (ideal / latest lap)', '✅', [0,0,0,3,2,0]],
+      ['weather', 'Weather now + forecast (rain %, temperature trend)', '✅', [2,1,2,2,1,2]],
+      ['sc', 'SC / VSC status and SC delta', '✅', [0,0,1,1,1,0]],
+      ['pitLoss', 'Measured pit loss: green / VSC / SC for this track', '🔧', [2,0,0,3,2,2]],
+    ]],
+    ['Strategy decisions (computed)', [
+      ['planVsAlt', 'Plan A vs alternatives: predicted race-time / position delta per strategy', '🔧', [0,0,2,2,1,1]],
+      ['boxLap', 'Box on lap N, N+1, N+2 …: projected rejoin position and gaps', '🔧', [0,0,0,2,1,3]],
+      ['undercut', 'Undercut / overcut: projected gain or loss against the cars around', '🔧', [0,0,0,2,1,3]],
+      ['tyreLife', 'Tyre life: laps until the pace loss outweighs a stop (crossover)', '🔧', [2,0,0,1,1,2]],
+      ['fuelProj', 'Fuel margin at the finish; lift-and-coast / mix needed', '🔧', [2,0,2,1,2,2]],
+      ['scCall', 'SC / VSC call: box now vs stay out, projected positions', '🔧', [0,0,1,1,1,0]],
+      ['targets', 'Target lap times the plan needs', '🔧', [0,0,0,2,2,3]],
+      ['battle', 'Battle forecast: laps until DRS range / until caught', '🔧', [0,0,2,2,2,3]],
+      ['weatherX', 'Weather crossover: when inters / wets become faster', '🔧', [0,0,2,2,1,0]],
+      ['confidence', 'Confidence of each projection (fit quality, clean laps used)', '🔧', [2,2,2,2,2,2]],
+    ]],
+    ['Car monitoring (my driver)', [
+      ['tyreTemp', 'Tyre temperatures surface / carcass, 4 corners', '✅', [1,1,2,1,2,2]],
+      ['tyrePress', 'Tyre pressures', '✅', [2,3,3,3,3,2]],
+      ['tyreWear', 'Tyre wear % per corner', '✅ ⚠', [1,3,3,1,1,2]],
+      ['brakes', 'Brake temperatures', '✅', [2,2,2,3,3,3]],
+      ['ers', 'ERS: store, deploy mode, harvest / deploy per lap', '✅ ⚠', [2,1,2,1,2,2]],
+      ['fuel', 'Fuel in tank, fuel mix, game\'s remaining-laps estimate', '✅ ⚠', [2,0,2,2,2,3]],
+      ['damage', 'Damage: wings, floor, sidepods, tyres', '✅ ⚠', [2,2,1,2,2,3]],
+      ['puWear', 'PU and gearbox wear', '✅ ⚠', [3,3,0,3,0,2]],
+      ['alarms', 'Alarms / insights log', '🔧', [1,1,1,1,1,2]],
+    ]],
+    ['Performance (coaching, setup)', [
+      ['runPlan', 'Run plan: programme, laps done (long run, quali sim)', '🔧', [1,0,0,0,0,2]],
+      ['overlay', 'Lap overlay vs reference (speed, throttle, brake, gear) + delta', '✅ 🔧', [2,3,0,0,0,1]],
+      ['corners', 'Time gained / lost per corner or segment', '🔧', [2,2,0,3,0,1]],
+      ['consistency', 'Lap-to-lap consistency', '🔧', [2,0,0,3,0,1]],
+      ['gg', 'GG diagram', '🔧', [3,0,0,0,0,2]],
+      ['balance', 'Balance: understeer / oversteer', '🔧 🔒', [2,0,0,0,0,2]],
+      ['limits', 'Track limits / surface (kerbs, off-track)', '✅', [3,3,0,3,0,2]],
+      ['setup', 'Setup sheet', '✅ 🔒', [2,3,0,0,0,2]],
+    ]],
+    ['Team (second driver, later)', [
+      ['team', 'Both drivers side by side: gap between, strategies', '🔧', [3,2,2,2,1,2]],
+    ]],
+    ['System', [
+      ['clock', 'Session clock / laps remaining / session state', '✅', [1,1,1,1,1,0]],
+      ['feed', 'Feed health: connected, stale, packet loss (alerts when bad)', '🔧', [1,1,1,1,1,3]],
+    ]],
+  ];
+
+  const label = t => t === 0 ? '–' : String(t);
+  const next = t => t === 1 ? 2 : t === 2 ? 3 : t === 3 ? 0 : 1;
+  const grid = document.getElementById('grid');
+  let html = '<thead><tr><th class="l">Item</th><th class="l">Src</th>' + phases.map(p => '<th>' + p[1] + '</th>').join('') + '</tr></thead><tbody>';
+  for (const [g, items] of groups) {
+    html += '<tr class="grp"><td colspan="' + (2 + phases.length) + '">' + g + '</td></tr>';
+    for (const [id, text, src, tiers] of items) {
+      html += '<tr><td class="item">' + text + '</td><td class="src">' + src + '</td>' +
+        tiers.map((t, i) => '<td class="t t' + t + '" data-item="' + id + '" data-phase="' + phases[i][0] + '" data-orig="' + t + '" data-tier="' + t + '">' + label(t) + '</td>').join('') + '</tr>';
+    }
+  }
+  grid.innerHTML = html + '</tbody>';
+  grid.addEventListener('click', e => {
+    const td = e.target.closest('td.t'); if (!td) return;
+    const t = next(Number(td.dataset.tier));
+    td.dataset.tier = t; td.className = 't t' + t + (String(t) === td.dataset.orig ? '' : ' changed'); td.textContent = label(t);
+    window.brainstorm && window.brainstorm.send({ type:'tier', item:td.dataset.item, phase:td.dataset.phase, tier:t });
+  });
+  window.sendNote = function(){
+    const v = document.getElementById('note').value.trim(); if (!v) return;
+    window.brainstorm && window.brainstorm.send({ type:'note', text:v });
+    document.getElementById('sent').textContent = 'sent';
+  };
+})();
+</script>
