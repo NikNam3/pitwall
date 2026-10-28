@@ -6,11 +6,12 @@ import { join } from 'node:path';
 import { Writable } from 'node:stream';
 import { describe, expect, it } from 'vitest';
 import type { ServerMessage } from '@pitwall/contracts';
-import type { FeedId } from '@pitwall/domain';
+import type { CarDynamics, FeedId } from '@pitwall/domain';
+import type { QuickCalculator } from '@pitwall/engine';
 import { PacketId } from '@pitwall/protocol';
 import { ScenarioBuilder, packetBytes } from '../../../../packages/engine/test/builders/index.ts';
 import { FEATURES } from '../../src/features/index.generated.ts';
-import { defineFeature, type Feature } from '../../src/features/feature.ts';
+import { bindState, defineFeature, type Feature } from '../../src/features/feature.ts';
 import history from '../../src/features/history/register.ts';
 import sessionInfo from '../../src/features/session-info/register.ts';
 import { TopicHub } from '../../src/hub/topic-hub.ts';
@@ -27,10 +28,11 @@ const scenario = () => prepared(new ScenarioBuilder({ sessionUid: 77n, cars: 2 }
   .event({ code: 'FTLP', vehicleIdx: 0, lapTime: 80 }).frames(5, () => {}));
 
 /** `car.telemetry` from a calculator that runs every frame, through `select`. */
-const telemetryFeature = (select: () => unknown): Feature => defineFeature({
+const telemetryCalc: QuickCalculator<number> = { kind: 'quick', id: 'telemetry-select', reads: ['timing'], cadence: 'frame', compute: () => 1 };
+const telemetryFeature = (select: () => CarDynamics | undefined): Feature => defineFeature({
   name: 'telemetry-select',
-  calculators: [{ kind: 'quick', id: 'telemetry-select', reads: ['timing'], cadence: 'frame', compute: () => 1 }],
-  topics: [{ topic: 'car.telemetry', from: 'telemetry-select', select }],
+  calculators: [telemetryCalc],
+  topics: [bindState('car.telemetry', telemetryCalc, select)],
 });
 
 async function replay(o: { features: Feature[]; now: () => number; packets?: PreparedPacket[]; storage?: object }) {
@@ -64,7 +66,7 @@ describe('FeedPipeline: a throwing select', () => {
     // The first value goes out at once; every later one is throttled (the clock stands still) and selected on tick.
     const flaky = telemetryFeature(() => {
       if (++calls > 1) throw new Error('select failed later');
-      return { speedKmh: 1 };
+      return { speedKmh: 1 } as unknown as CarDynamics;
     });
     const r = await replay({ features: [sessionInfo, flaky], now: () => now });
     expect(r.of('car.telemetry').filter((m) => m.type === 'update')).toHaveLength(1);

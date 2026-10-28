@@ -5,10 +5,11 @@ import { Writable } from 'node:stream';
 import { describe, expect, it, vi } from 'vitest';
 import type { FeedId } from '@pitwall/domain';
 import type { ServerMessage } from '@pitwall/contracts';
+import type { QuickCalculator } from '@pitwall/engine';
 import { PacketId } from '@pitwall/protocol';
 import { ScenarioBuilder, buildPacket, headerFor, packetBytes } from '../../../../packages/engine/test/builders/index.ts';
 import { FEATURES } from '../../src/features/index.generated.ts';
-import { defineFeature } from '../../src/features/feature.ts';
+import { bindState, defineFeature } from '../../src/features/feature.ts';
 import sessionInfo from '../../src/features/session-info/register.ts';
 import { TopicHub } from '../../src/hub/topic-hub.ts';
 import type { PacketSource } from '../../src/input/packet-source.ts';
@@ -23,6 +24,7 @@ import { ArraySource, type PreparedPacket } from '../helpers/array-source.ts';
 import { ManualSource } from '../helpers/manual-source.ts';
 
 const F = 'test' as FeedId;
+const boomCalc: QuickCalculator<number> = { kind: 'quick', id: 'boom', reads: ['timing'], cadence: 'frame', compute: () => 1 };
 const tmp = () => mkdtempSync(join(tmpdir(), 'pipeline-'));
 const FTLP = { code: 'FTLP', vehicleIdx: 0, lapTime: 80 } as const;
 type Timed = ReturnType<ScenarioBuilder['packets']>;
@@ -110,8 +112,8 @@ describe('FeedPipeline', () => {
     expect(r.of('session.info').some((m) => m.type === 'update')).toBe(true);
   });
   it('an exception while processing a frame: frame skipped, error logged, debug dump written (max 20)', async () => {
-    const boom = defineFeature({ name: 'boom', calculators: [{ kind: 'quick', id: 'boom', reads: ['timing'], cadence: 'frame', compute: () => 1 }],
-      topics: [{ topic: 'car.telemetry', from: 'boom', select: () => { throw new Error('select failed'); } }] });
+    const boom = defineFeature({ name: 'boom', calculators: [boomCalc],
+      topics: [bindState('car.telemetry', boomCalc, () => { throw new Error('select failed'); })] });
     const dumps = tmp();
     const r = await run(scenario(), { features: [sessionInfo, boom], dumpsDir: dumps, topics: [['session.info', {}], ['car.telemetry', { carId: 0 }]] });
     const err = r.logs.map((l) => JSON.parse(l)).find((l) => l.level === 50)!;
@@ -125,8 +127,8 @@ describe('FeedPipeline', () => {
 });
 
 describe('FeedPipeline: debug dumps', () => {
-  const boom = defineFeature({ name: 'boom', calculators: [{ kind: 'quick', id: 'boom', reads: ['timing'], cadence: 'frame', compute: () => 1 }],
-    topics: [{ topic: 'car.telemetry', from: 'boom', select: () => { throw new Error('select failed'); } }] });
+  const boom = defineFeature({ name: 'boom', calculators: [boomCalc],
+    topics: [bindState('car.telemetry', boomCalc, () => { throw new Error('select failed'); })] });
   const failing = (uid: bigint, frames: number) => prepared(new ScenarioBuilder({ sessionUid: uid, cars: 2 }).session().participants().frames(frames, () => {}));
   const options = (dumpsDir: string): Options => ({ features: [sessionInfo, boom], dumpsDir, topics: [['session.info', {}], ['car.telemetry', { carId: 0 }]] });
 
