@@ -26,7 +26,9 @@ function referencedCalculator(binding: TopicBinding): CalculatorId | undefined {
  */
 export function demandOf(features: readonly Feature[], registry: CalculatorRegistry): (subscribed: ReadonlySet<TopicName>) => CalculatorId[] {
   const bindings = features.flatMap((feature) => feature.topics);
-  const referenced = new Set(bindings.flatMap((binding) => referencedCalculator(binding) ?? []));
+  // A job's trigger counts as referenced even without a binding: a job runs only for a subscriber of its topic.
+  const jobTriggers = features.flatMap((feature) => feature.jobs ?? []).map((job) => jobCalculatorId(job.id));
+  const referenced = new Set([...jobTriggers, ...bindings.flatMap((binding) => referencedCalculator(binding) ?? [])]);
   const unreferenced = registry.order.map((calc) => calc.id).filter((id) => !referenced.has(id));
   return (subscribed) => [
     ...unreferenced,

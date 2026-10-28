@@ -27,7 +27,8 @@ export type FeedPipelineOptions = {
   hub: TopicHub;
   /**
    * The calculators, jobs and topic bindings. Feed and write-failure insights reach clients only through an
-   * `insights` binding.
+   * `insights` binding. Every job needs a `bindJob` binding and every bound job a feature that lists it, else the
+   * constructor throws `JobDeclarationError`.
    */
   features: readonly Feature[];
   log: Logger;
@@ -82,7 +83,7 @@ export class FeedPipeline {
     this.#o = opts;
     this.#feedId = opts.feedId;
     this.#log = opts.log;
-    this.#jobs = new FeedJobs(opts.features.flatMap((feature) => feature.jobs ?? []), (result) =>
+    this.#jobs = new FeedJobs(opts.features, (result) =>
       this.#guarded('job result', () => this.#onJobResult(result)),
     );
     this.#registry = CalculatorRegistry.build([...opts.features.flatMap((feature) => feature.calculators), ...this.#jobs.calculators]);
