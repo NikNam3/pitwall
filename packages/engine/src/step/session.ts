@@ -7,7 +7,7 @@ import type { SubStep } from './types.ts';
 const WEATHER = ['clear', 'lightCloud', 'overcast', 'lightRain', 'heavyRain', 'storm'] as const;
 const TREND = ['up', 'down', 'flat'] as const;
 /** Indexed by `zoneFlag + 1`: the game sends -1 for unknown. */
-const ZONE_FLAG = ['unknown', 'none', 'green', 'blue', 'yellow'] as const;
+export const ZONE_FLAG = ['unknown', 'none', 'green', 'blue', 'yellow'] as const;
 const SAFETY_CAR_STATUS = ['green', 'sc', 'vsc', 'formation'] as const;
 const FORECAST_ACCURACY = ['perfect', 'approximate'] as const;
 const LEVEL = ['off', 'reduced', 'standard', 'increased'] as const;

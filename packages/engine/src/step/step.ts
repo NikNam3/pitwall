@@ -1,13 +1,28 @@
 import type { Frame } from '../frame/frame.ts';
 import type { EngineState } from '../state/engine-state.ts';
+import { applyCondition } from './condition.ts';
+import { applyDynamics } from './dynamics.ts';
+import { applyEnergy } from './energy.ts';
 import { applyIdentity, isActiveCar } from './identity.ts';
+import { applyOwnCar } from './own-car.ts';
 import { applySession } from './session.ts';
+import { applyTiming } from './timing.ts';
+import { applyTyres } from './tyres.ts';
 import type { StepOutput, SubStep } from './types.ts';
 
 export { CHANGE_TAGS, type ChangeTag, type LapCorrection, type StepOutput, type SubStep } from './types.ts';
 
 /** Run in this order; a sub-step may rely on the ones before it. */
-export const SUB_STEPS: SubStep[] = [applySession, applyIdentity];
+export const SUB_STEPS: SubStep[] = [
+  applySession,
+  applyIdentity,
+  applyTiming,
+  applyTyres,
+  applyEnergy,
+  applyCondition,
+  applyDynamics,
+  applyOwnCar,
+];
 
 const refreshActive = (state: EngineState): void => {
   for (const car of state.cars) {
