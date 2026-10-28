@@ -37,3 +37,15 @@ export const formatKg = (k: Kg): string => k.toFixed(1);
 
 /** Percentage to whole numbers, `12.34` -> `12%`. */
 export const formatPct = (p: Percent): string => `${Math.round(p) + 0}%`;
+
+/** Whole number, `42.4` -> `42`. */
+export const formatCount = (n: number): string => `${Math.round(n) + 0}`;
+
+/** Packets per second, `59.6` -> `60/s`. */
+export const formatRate = (perSecond: number): string => `${Math.round(perSecond) + 0}/s`;
+
+/** Loss to one decimal so a threshold near a whole number stays readable, `4.99` -> `5.0%`. */
+export const formatLoss = (p: Percent): string => `${p.toFixed(1)}%`;
+
+/** Whole milliseconds, `12.4` -> `12 ms`. */
+export const formatMillis = (ms: Ms): string => `${Math.round(ms) + 0} ms`;
