@@ -5,6 +5,7 @@ import { VisualCompound, type FeedId } from '@pitwall/domain';
 import type { ClientMessage, ErrorReason, ServerMessage, TopicStatus } from './messages.ts';
 import type { ReservedCommand } from './commands.ts';
 import type { FeedInfo } from './feeds.ts';
+import { decodeUiAction } from './ui/decode.ts';
 import { TOPICS, type TopicName } from './topics.ts';
 
 type Json = Record<string, unknown>;
@@ -28,6 +29,10 @@ export const decodeClientMessage = (text: string): ClientMessage | undefined => 
       return decodeSubscribe(raw);
     case 'command':
       return decodeCommand(raw);
+    case 'uiAction': {
+      const action = isId(raw.id) ? decodeUiAction(raw.action) : undefined;
+      return action === undefined ? undefined : { type: 'uiAction', id: raw.id as string, action };
+    }
     default:
       return undefined;
   }
@@ -57,6 +62,8 @@ export const decodeServerMessage = (text: string): ServerMessage | undefined => 
       return typeof raw.id === 'string' && raw.ok === false && raw.reason === 'notSupported'
         ? { type: 'commandResult', id: raw.id, ok: false, reason: 'notSupported' }
         : undefined;
+    case 'actionResult':
+      return decodeActionResult(raw);
     case 'error':
       return decodeError(raw);
     default:
@@ -105,6 +112,14 @@ const decodeSnapshot = (raw: Json): ServerMessage | undefined => {
   if (typeof raw.id !== 'string') return undefined;
   if ('entries' in raw) return Array.isArray(raw.entries) ? { type: 'snapshot', id: raw.id, entries: raw.entries } : undefined;
   return 'value' in raw ? { type: 'snapshot', id: raw.id, value: raw.value } : undefined;
+};
+
+const decodeActionResult = (raw: Json): ServerMessage | undefined => {
+  if (typeof raw.id !== 'string') return undefined;
+  if (raw.ok === true) return { type: 'actionResult', id: raw.id, ok: true };
+  return raw.ok === false && (raw.reason === 'invalid' || raw.reason === 'notSupported')
+    ? { type: 'actionResult', id: raw.id, ok: false, reason: raw.reason }
+    : undefined;
 };
 
 const decodeError = (raw: Json): ServerMessage | undefined => {

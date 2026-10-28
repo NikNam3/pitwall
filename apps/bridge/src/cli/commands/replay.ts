@@ -26,6 +26,7 @@ export async function run(positionals: string[], values: { realtime?: boolean | 
     feed: { kind: 'replay', label: basename(file) },
     wsPort,
     dumpsDir: dirs.dumps,
+    uiDir: dirs.ui,
     config,
     onDone: () => io.err('pitwall: replay finished'),
     io,
