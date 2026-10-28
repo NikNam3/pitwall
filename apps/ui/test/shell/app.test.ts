@@ -20,7 +20,7 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
   connection = new FakeConnection();
   mocks.createWsConnection.mockReset().mockImplementation(() => connection);
-  mocks.mountDock.mockReset().mockReturnValue({ addPanel: vi.fn(), destroy: vi.fn() });
+  mocks.mountDock.mockReset().mockReturnValue({ addPanel: vi.fn(), updatePanel: vi.fn(), destroy: vi.fn() });
   reload.mockReset();
   vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
   vi.stubGlobal('location', { ...window.location, search: '?ws=4999', reload });

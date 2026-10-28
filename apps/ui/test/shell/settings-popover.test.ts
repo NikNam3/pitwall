@@ -13,7 +13,7 @@ import * as text from '../../src/kit/text.ts';
 import { TEST_WIDGETS } from './fixtures/index.ts';
 import { FEED, OPTIONS, group1, makeStore, stubBrowser, workbook } from './shell-harness.ts';
 
-type MountCall = [HTMLElement, unknown, unknown, unknown, { render(c: HTMLElement, t: HTMLElement, s: { widget: string; options: Record<string, unknown>; linkGroup: number }): unknown }];
+type MountCall = [HTMLElement, unknown, unknown, unknown, { render(c: HTMLElement, t: HTMLElement, s: { widget: string; options: Record<string, unknown>; linkGroup: number }, id: string): unknown }];
 const mocks = vi.hoisted(() => ({ mountDock: vi.fn() }));
 vi.mock('../../src/shell/docking/index.ts', () => ({ mountDock: mocks.mountDock }));
 
@@ -22,7 +22,7 @@ import WindowShell from '../../src/shell/windows/WindowShell.svelte';
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
   mocks.mountDock.mockReset();
-  mocks.mountDock.mockImplementation(() => ({ addPanel: vi.fn(), destroy: vi.fn() }));
+  mocks.mountDock.mockImplementation(() => ({ addPanel: vi.fn(), updatePanel: vi.fn(), destroy: vi.fn() }));
   stubBrowser();
 });
 afterEach(() => {
@@ -39,7 +39,7 @@ const open = async () => {
   await ctx.push('ui.linkGroups', [group1()]);
   const view = (mocks.mountDock.mock.calls.at(-1) as unknown as MountCall)[4];
   const tab = document.body.appendChild(document.createElement('div'));
-  view.render(document.body.appendChild(document.createElement('div')), tab, { widget: 'probe', options: OPTIONS, linkGroup: 1 });
+  view.render(document.body.appendChild(document.createElement('div')), tab, { widget: 'probe', options: OPTIONS, linkGroup: 1 }, 'p1');
   await ctx.push('session.info', { feedId: FEED, playerCar: carId(5), session: { updatedAt: 1 } });
   await fireEvent.click(screen.getByRole('img', { name: text.settings }));
   return ctx;

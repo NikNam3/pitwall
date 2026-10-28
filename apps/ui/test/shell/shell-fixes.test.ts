@@ -26,7 +26,7 @@ const BIG = { ...DEFAULT_THEME, name: 'test-big', fontPx: 18 };
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
   mocks.mountDock.mockReset();
-  mocks.mountDock.mockImplementation(() => ({ addPanel: vi.fn(), destroy: vi.fn() }));
+  mocks.mountDock.mockImplementation(() => ({ addPanel: vi.fn(), updatePanel: vi.fn(), destroy: vi.fn() }));
   stubBrowser();
   THEMES.push(BIG);
 });

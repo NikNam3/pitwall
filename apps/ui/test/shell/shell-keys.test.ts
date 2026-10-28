@@ -26,7 +26,7 @@ import WindowShell from '../../src/shell/windows/WindowShell.svelte';
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
   mocks.mountDock.mockReset();
-  mocks.mountDock.mockImplementation(() => ({ addPanel: vi.fn(), destroy: vi.fn() }));
+  mocks.mountDock.mockImplementation(() => ({ addPanel: vi.fn(), updatePanel: vi.fn(), destroy: vi.fn() }));
   stubBrowser();
 });
 afterEach(() => {

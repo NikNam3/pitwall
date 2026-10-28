@@ -22,8 +22,8 @@ import { FakeConnection } from '../connection/fake-connection.ts';
 import { TEST_WIDGETS } from './fixtures/index.ts';
 import { linkLog } from './fixtures/link-probe/link-log.ts';
 
-type Handle = { addPanel: ReturnType<typeof vi.fn>; destroy: ReturnType<typeof vi.fn> };
-type PanelViewLike = { render(content: HTMLElement, tab: HTMLElement, spec: WorkbookWindow['panels'][string]): unknown };
+type Handle = { addPanel: ReturnType<typeof vi.fn>; updatePanel: ReturnType<typeof vi.fn>; destroy: ReturnType<typeof vi.fn> };
+type PanelViewLike = { render(content: HTMLElement, tab: HTMLElement, spec: WorkbookWindow['panels'][string], id: string): unknown };
 type OnChange = (layout: unknown, panels: WorkbookWindow['panels']) => void;
 const mocks = vi.hoisted(() => ({ mountDock: vi.fn() }));
 vi.mock('../../src/shell/docking/index.ts', () => ({ mountDock: mocks.mountDock }));
@@ -96,7 +96,7 @@ beforeEach(() => {
   handles.length = 0;
   mocks.mountDock.mockReset();
   mocks.mountDock.mockImplementation(() => {
-    const handle: Handle = { addPanel: vi.fn(), destroy: vi.fn() };
+    const handle: Handle = { addPanel: vi.fn(), updatePanel: vi.fn(), destroy: vi.fn() };
     handles.push(handle);
     return handle;
   });
@@ -418,9 +418,10 @@ describe('WindowShell: the link a widget gets (supervisor ruling)', () => {
   // The panel is mounted the way the dock does it: through the `view` the shell hands to `mountDock`.
   const mountPanel = async (ctx: ReturnType<typeof setup>) => {
     ctx.mountShell({ defaultFeed: FEED });
-    await ctx.snapshot(book());
+    const linkProbe = { widget: 'link-probe', options: {}, linkGroup: 1 };
+    await ctx.snapshot(book('race', [win('main', { L: 1 }, { panels: { lp: linkProbe } })]));
     const view = lastMount()[4];
-    view.render(document.createElement('div'), document.createElement('div'), { widget: 'link-probe', options: {}, linkGroup: 1 });
+    view.render(document.createElement('div'), document.createElement('div'), linkProbe, 'lp');
     ctx.connection.push({ type: 'snapshot', id: ctx.latestId('session.info'), value: session(1000, 5) });
     await tick(); // the panel subscribes once its link exists
     ctx.connection.push({ type: 'snapshot', id: ctx.latestId('feed.status'), value: { feedId: FEED, connected: true, stale: false } });

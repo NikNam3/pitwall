@@ -19,7 +19,7 @@ import type { Host } from '../../src/shell/host/host.ts';
 import { FakeConnection } from '../connection/fake-connection.ts';
 import { TEST_WIDGETS } from './fixtures/index.ts';
 
-type PanelViewLike = { render(content: HTMLElement, tab: HTMLElement, spec: { widget: string; options: Record<string, unknown>; linkGroup: number }): unknown };
+type PanelViewLike = { render(content: HTMLElement, tab: HTMLElement, spec: { widget: string; options: Record<string, unknown>; linkGroup: number }, id: string): unknown };
 type MountCall = [HTMLElement, unknown, unknown, unknown, PanelViewLike];
 const mocks = vi.hoisted(() => ({ mountDock: vi.fn() }));
 vi.mock('../../src/shell/docking/index.ts', () => ({ mountDock: mocks.mountDock }));
@@ -42,7 +42,7 @@ const cars = [
 
 beforeEach(() => {
   mocks.mountDock.mockReset();
-  mocks.mountDock.mockImplementation(() => ({ addPanel: vi.fn(), destroy: vi.fn() }));
+  mocks.mountDock.mockImplementation(() => ({ addPanel: vi.fn(), updatePanel: vi.fn(), destroy: vi.fn() }));
   vi.stubGlobal(
     'ResizeObserver',
     class {
@@ -83,7 +83,7 @@ const setup = async () => {
   // The panel is mounted the way the dock does it; the tab is attached so the header can be queried.
   const view = (mocks.mountDock.mock.calls.at(-1) as unknown as MountCall)[4];
   const tab = document.body.appendChild(document.createElement('div'));
-  view.render(document.body.appendChild(document.createElement('div')), tab, { widget: 'probe', options: OPTIONS, linkGroup: 1 });
+  view.render(document.body.appendChild(document.createElement('div')), tab, { widget: 'probe', options: OPTIONS, linkGroup: 1 }, 'p1');
   await push('session.info', session(1000, 5));
   const carDetails = () => connection.subscribes().filter((s) => s.topic === 'car.detail');
   const linkSets = () => connection.sent.flatMap((m) => (m.type === 'uiAction' && m.action.kind === 'linkGroup.set' ? [m.action.group] : []));
