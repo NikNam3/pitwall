@@ -9,6 +9,7 @@ import { run as live } from './commands/live.ts';
 import { run as replay } from './commands/replay.ts';
 import { run as reprocess } from './commands/reprocess.ts';
 import { run as tap } from './commands/tap.ts';
+import { run as where } from './commands/where.ts';
 import { defaultIo, type CliIo } from './io.ts';
 import { USAGE, UsageError } from './usage.ts';
 
@@ -24,13 +25,15 @@ const OPTIONS = {
   url: { type: 'string' },
   feed: { type: 'string' },
   weekend: { type: 'string' },
+  topic: { type: 'string' },
+  catalogue: { type: 'string' },
   help: { type: 'boolean', short: 'h' },
 } as const;
 
 type Values = ReturnType<typeof parseArgs<{ options: typeof OPTIONS }>>['values'];
 type Command = (positionals: string[], values: Values, io: CliIo) => Promise<number>;
 
-const COMMANDS: Record<string, Command> = { live, replay, dev, tap, reprocess, import: importRecording };
+const COMMANDS: Record<string, Command> = { live, replay, dev, tap, reprocess, import: importRecording, where };
 
 /** SQLite codes of a file that is not (or no longer) a database. */
 const BROKEN_DATABASE_CODES = ['SQLITE_NOTADB', 'SQLITE_CORRUPT'];

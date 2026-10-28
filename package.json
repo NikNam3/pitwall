@@ -20,10 +20,11 @@
     "gen:features": "node scripts/gen-features.ts",
     "gen:topics": "node scripts/gen-topics.ts",
     "gen:widgets": "node scripts/gen-widgets.ts",
-    "gen": "pnpm gen:features && pnpm gen:topics && pnpm gen:widgets",
+    "gen:catalogue": "node scripts/gen-catalogue.ts",
+    "gen": "pnpm gen:features && pnpm gen:topics && pnpm gen:widgets && pnpm gen:catalogue",
     "ui:dev": "pnpm --filter @pitwall/ui dev",
     "ui:build": "pnpm --filter @pitwall/ui build",
-    "pitwall": "pnpm -s gen && node apps/bridge/src/cli/pitwall.ts",
+    "pitwall": "pnpm -s gen:features && pnpm -s gen:topics && pnpm -s gen:widgets && node scripts/gen-catalogue.ts --no-fail && node apps/bridge/src/cli/pitwall.ts",
     "pwrec-cut": "node apps/bridge/src/cli/pwrec-cut.ts",
     "desktop": "pnpm --filter @pitwall/desktop start",
     "desktop:dev": "pnpm --filter @pitwall/desktop dev"

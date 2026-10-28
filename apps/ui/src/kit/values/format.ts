@@ -67,3 +67,18 @@ export const formatSessionKind = (kind: SessionKind): string => SESSION_KIND_LAB
 
 /** Track by its game id (there is no name table yet), `10` -> `track 10`. */
 export const formatTrack = (trackId: number): string => `track ${trackId}`;
+
+/** A rate, `10` -> `10 Hz`. */
+export const formatHz = (hz: number): string => `${hz} Hz`;
+
+/** A compute time to two decimals, `0.456` -> `0.46 ms`. */
+export const formatMs = (ms: number): string => `${Math.round(ms * 100) / 100} ms`;
+
+/** The wall-clock time of day, `14:03:09`. */
+export const formatClock = (at: Date): string => at.toTimeString().slice(0, 8);
+
+/** A value as short JSON, cut to `max` characters with `…`. */
+export function formatShort(value: unknown, max: number): string {
+  const json = JSON.stringify(value) ?? String(value);
+  return json.length <= max ? json : `${json.slice(0, max - 1)}…`;
+}

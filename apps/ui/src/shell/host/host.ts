@@ -20,7 +20,7 @@ const browserGeometry = (): Geometry => ({
 
 /**
  * A plain browser tab: windows are tabs opened as `/?window=<id>`. A page cannot open or place tabs unasked, so
- * `ensureWindows` and `openPath` do nothing; geometry is still reported so the workbook keeps the tab's size.
+ * `ensureWindows` does nothing and `openPath` copies the path to the clipboard (spec 8.2); geometry is still reported so the workbook keeps the tab's size.
  */
 export const browserHost: Host = {
   kind: 'browser',
@@ -31,7 +31,10 @@ export const browserHost: Host = {
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   },
-  openPath: () => {},
+  openPath: (path) => {
+    // No clipboard (an insecure page, an old browser) or a refused write: the path is just not copied.
+    void navigator.clipboard?.writeText(path).catch(() => {});
+  },
 };
 
 /** The host this page runs in: Electron when its preload script exposed `window.pitwallHost`, else the browser. */
