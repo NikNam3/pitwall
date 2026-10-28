@@ -8,7 +8,7 @@
   },
   "scripts": {
     "pretypecheck": "pnpm gen",
-    "typecheck": "tsc -p tsconfig.json && pnpm --filter @pitwall/ui check",
+    "typecheck": "tsc -p tsconfig.json && pnpm --filter @pitwall/desktop typecheck && pnpm --filter @pitwall/ui check",
     "pretest": "pnpm gen",
     "test": "vitest run",
     "pretest:acceptance": "pnpm gen",
@@ -24,7 +24,9 @@
     "ui:dev": "pnpm --filter @pitwall/ui dev",
     "ui:build": "pnpm --filter @pitwall/ui build",
     "pitwall": "pnpm -s gen && node apps/bridge/src/cli/pitwall.ts",
-    "pwrec-cut": "node apps/bridge/src/cli/pwrec-cut.ts"
+    "pwrec-cut": "node apps/bridge/src/cli/pwrec-cut.ts",
+    "desktop": "pnpm --filter @pitwall/desktop start",
+    "desktop:dev": "pnpm --filter @pitwall/desktop dev"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

@@ -36,6 +36,7 @@ export default defineConfig(
       '**/.stryker-tmp/',
       '**/reports/',
       'apps/ui/dist/',
+      'apps/desktop/dist/',
       'apps/bridge/src/features/index.generated.ts',
       'packages/contracts/src/topics/index.generated.ts',
       '.claude/',
@@ -95,6 +96,8 @@ export default defineConfig(
       ],
     },
   },
+  // Electron's main and preload run on Node and Chromium globals; tsc checks names there.
+  { files: ['apps/desktop/src/**/*.ts'], rules: { 'no-undef': 'off' } },
   ...svelte.configs['flat/recommended'].map((config) => ({ ...config, files: config.files ?? ['**/*.svelte'] })),
   {
     files: ['**/*.svelte', '**/*.svelte.ts'],
