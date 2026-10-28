@@ -55,6 +55,7 @@ What follows for pitwall (🔵, derived from 1.2):
 5. **Escalate, don't search.** The layout stays stable. The situation decides which few values light up (section 4).
 6. **Two cars double every decision**, and add team play and pit stacking (D20, D27). A per-driver focus switch is cheaper than two full layouts.
 7. **Glance budget.** The user is also watching the race. Tier-1 answers must be readable in about two seconds.
+8. **The bar is the game's AI strategist.** The goal is that a smart human with pitwall beats the game's AI strategist by a wide margin (user, 2026-10-28). The game's own pit window is therefore not shown.
 
 ## 2. Decision catalogue
 
@@ -350,7 +351,7 @@ The virtual finish car (🟢) runs at the average lap time and crosses the line 
 | Display | Circle of doom (V01) with the ghost; live crossing order with ghosts (V03); pit-lap sweep strip (V15). |
 | Inputs | Gaps of all cars, pit loss table (green/VSC/SC, per track), assumed pace, degradation model, planned stops of rivals. |
 | Source | 🟢 HH Timing ghosts ([track item](https://help.hhtiming.com/settings-options/track-item-ghosts/), [live crossing order](https://help.hhtiming.com/displays/scoreboards/live-crossing-order-scoreboard/)); 🟢 McLaren strategist's GPS feed-out window ([McLaren 2026](https://www.mclaren.com/racing/formula-1/2026/who-sits-on-mclarens-pit-wall/)); 🟢 Simulator Controller picks the lap with the least traffic after rejoining ([AI Race Strategist](https://github-wiki-see.page/m/SeriousOldMan/Simulator-Controller/wiki/AI-Race-Strategist)); 🟡 circle of doom; 🔵 sweep strip |
-| F1 25 feasibility | ✅ gaps and positions; 🔧 pit loss per track from recordings; ✅ the game's own `m_pitStopRejoinPosition` as a cross-check |
+| F1 25 feasibility | ✅ gaps and positions; 🔧 pit loss per track from recordings |
 | Escalation | Tier 1 from 2 laps before the planned stop, and whenever another trigger (D23, D24, D25, D26) fires. |
 | Time to decide | Before the pit entry: the last sector. The call must be ready by the start of the in-lap. |
 
@@ -542,7 +543,7 @@ The virtual finish car (🟢) runs at the average lap time and crosses the line 
 | V27 | **Team card** | Both drivers: pace delta, gap, swap value, split/stack table | D20, D27 | 🔵 | both cars' timing |
 | V28 | **Lap analysis scoreboard** | Best laps and sectors of all cars as deltas to a reference car; theoretical and rolling best | D01, D06, D08 | 🟢 [HH lap analysis](https://help.hhtiming.com/displays/scoreboards/lap-analysis-scoreboard/), [best sector](https://help.hhtiming.com/displays/scoreboards/best-sector-scoreboard/) | sectors |
 | V29 | **Timing tower** | Position, gaps, last lap, tyre and age, stops, penalties and warnings, pit status | all | 🟢 ([01](01-race-engineering-practice.md)) | LapData, CarStatus |
-| V30 | **Game pit window badge** | The game's ideal and latest lap and rejoin position, as a cross-check | D21 | 🟢 F1 25 spec ([04](04-f1-25-data-mapping.md)) | Session |
+| V30 | ~~Game pit window badge~~ | Dropped: the goal is to beat the game's strategist, so its pit window is not shown (user, 2026-10-28) | – | – | – |
 | V31 | **Damage card** | Damage %, measured lap-time loss, break-even laps against a stop | D10 | 🟢 Simulator Controller "Impact"; 🔵 break-even | CarDamage, lap times |
 | V32 | **Knowledge checklist** | What is still unknown for quali and the race, with session time left | D01 | 🔵 | fits, counts |
 | V33 | **Pit loss table** | Measured pit loss per track and condition (green, VSC, SC), with sample count | D21–D25 | 🟢 TUM table ([03](03-strategy-models.md)), HH pit stop scoreboard | pit-lane timers, lap times |
@@ -587,7 +588,8 @@ Answered (user, 2026-10-28):
 - **Radio lines:** none. The plan board holds plans and triggers, not sentences.
 - **Numbers only, no verdicts:** pitwall shows the computed numbers ("rejoin P6, 1.2 s behind VER; undercut +0.8 s") and never a verdict ("Undercut: WORKS") or a recommended call ("BOX this lap"). The user draws every conclusion. The plan board's triggers show *that* a condition holds, not what to do about it.
 - **AI cars:** there are AI cars in the lobby, so their wear, fuel, ERS and tyre sets are visible (no ⚠ for them).
-- **Realism mode:** using rival data a real team wouldn't have (e.g. AI cars' wear) counts as cheating to the user, so pitwall needs a switch that turns it off. Proposed scope, to be confirmed: with realism on, other teams' cars show only what a real team gets (timing, sectors, gaps, position on track, speed traps, compound and tyre age, pit stops, penalties). Their tyre wear, damage, fuel, ERS, tyre sets, temperatures, pressures and driver inputs become `unknown("realism")`, and the strategy model uses the same estimation path as for restricted humans. Our own two cars stay complete.
+- **Goal:** beat the game's AI strategist by a wide margin; the game's own pit window is not shown.
+- **Realism mode:** using rival data a real team wouldn't have (e.g. AI cars' wear) counts as cheating to the user, so pitwall needs a switch that turns it off. Scope (confirmed by the user): with realism on, other teams' cars show only what a real team gets (timing, sectors, gaps, position on track, speed traps, compound and tyre age, pit stops, penalties). Their tyre wear, damage, fuel, ERS, tyre sets, temperatures, pressures, driver inputs and car telemetry (throttle, brake, steering, gear, RPM, DRS use, the telemetry speed trace) become `unknown("realism")`, and the strategy model uses the same estimation path as for restricted humans. Our own two cars stay complete. Speed traps stay, like a real team's timing. Coaching against a rival's lap (D06, D19) then has only our own two cars as references.
 
 Still open:
 1. **Fuel load:** can the league's settings let the player choose the race fuel load in F1 25? If not, D05 drops out. (The user is asking a friend what the drivers can edit.)
@@ -604,7 +606,7 @@ Still open:
 7. **Cold-tyre and out-lap penalty in F1 25** for the undercut formula.
 8. **Wing change and stacked-stop times** in the F1 25 pit stop.
 9. **Red flag rules in F1 25:** free tyre change or not.
-10. **The game's own pit window:** how good is it as a baseline? The 2026 paper beat it by 7.79 s at COTA in one test.
+10. ~~The game's own pit window as a baseline~~: dropped (see 1.3, point 8). For reference, the 2026 paper beat the game's default strategy by 7.79 s at COTA in one test.
 
 ### Sources not reached
 - Bernie Collins' "F1 Explains" episode on the pit wall's screens is audio only; there is no transcript ([F1](https://www.formula1.com/en/latest/article/f1-explains-what-goes-on-inside-an-f1-pit-lane-with-strategy-guru-bernie.6w7WwASefNkk5nZ2IIDqLG)).
