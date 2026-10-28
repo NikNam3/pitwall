@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # PreToolUse: in the implement phase, test files are read-only.
 HOOK_FAILS_CLOSED=1
-source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+LIB="$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+[ -r "$LIB" ] || exit 2 # fail closed if the shared helpers are missing
+source "$LIB"
 
 [ "${PITWALL_PHASE:-}" = "implement" ] && [ -n "$REL" ] || exit 0
 
