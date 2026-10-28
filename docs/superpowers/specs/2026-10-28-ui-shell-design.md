@@ -20,6 +20,7 @@ The ranked goals of the foundation spec (1.2) apply unchanged: clean code, exten
   - section 3, the shell decisions: stable layout, manual workbook switching, windows, link groups, fixed top bar, alerts, UI state in the bridge
 
   This spec gives those decisions their code shape and does not reopen them.
+- **Section 7 of the same notes, "Approved mockups" (Task 0):** the theme values, black background, font size per window, density tokens, panel frame B, and **one colour per team, the same in every chart** (replacing session 1's per-view distinction colours; our cars are white).
 - **Research 06** (`docs/research/06-engineer-decisions.md`): numbers only, no verdicts; realism mode; the display catalogue V01–V35; the escalation map and the race moment; the game's pit window is not shown.
 - **Groundwork** (on main): one file per topic (ADR 0007), typed `bind*` helpers, jobs with `Computed<T>`, read-only calculator config with session sidecars (ADR 0008), the UI decides staleness from `CarState.updatedAt` (Q-D), the second car later (ADR 0009).
 
