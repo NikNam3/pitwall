@@ -3,10 +3,21 @@
 import type { TopicName } from '@pitwall/contracts';
 import type { CalculatorId, CalculatorRegistry } from '@pitwall/engine';
 import type { Feature, TopicBinding } from '../features/feature.ts';
+import { jobCalculatorId } from '../jobs/feed-jobs.ts';
 
-/** The calculator a binding takes its value from, if it has one. A new binding kind that reads a calculator says so here. */
+/** The calculator a binding takes its value from, if it has one. A job's topic needs the job's trigger calculator. */
 function referencedCalculator(binding: TopicBinding): CalculatorId | undefined {
-  return 'from' in binding ? binding.from : undefined;
+  switch (true) {
+    case 'from' in binding:
+      return binding.from;
+    case 'fromJob' in binding:
+      return jobCalculatorId(binding.fromJob);
+    case 'fromHistory' in binding:
+    case 'fromInsights' in binding:
+      return undefined;
+    default:
+      throw new Error(`unknown topic binding ${JSON.stringify(binding satisfies never)}`);
+  }
 }
 
 /**

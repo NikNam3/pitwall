@@ -1,5 +1,5 @@
-import type { InsightEntry, TopicName, TopicValue } from '@pitwall/contracts';
-import type { Calculator, CalculatorId, History, IncrementalCalculator, QuickCalculator } from '@pitwall/engine';
+import type { Computed, InsightEntry, TopicName, TopicValue } from '@pitwall/contracts';
+import type { Calculator, CalculatorId, History, IncrementalCalculator, Job, QuickCalculator } from '@pitwall/engine';
 
 declare const bindingBrand: unique symbol;
 
@@ -10,9 +10,11 @@ type BindingShape =
   /** One of the append-only history lists. */
   | { topic: TopicName; fromHistory: keyof History }
   /** The active insights. */
-  | { topic: TopicName; fromInsights: true };
+  | { topic: TopicName; fromInsights: true }
+  /** The results of the job with this id, as `Computed` values. */
+  | { topic: TopicName; fromJob: CalculatorId };
 
-/** Where a topic's value comes from. Opaque: only `bindState`, `bindHistory` and `bindInsights` make one. */
+/** Where a topic's value comes from. Opaque: only `bindState`, `bindHistory`, `bindInsights` and `bindJob` make one. */
 export type TopicBinding = BindingShape & { readonly [bindingBrand]: true };
 
 // The helpers are the only place that vouches for a binding's types, hence the cast to the brand.
@@ -50,11 +52,22 @@ export const bindInsights = <T extends TopicName>(
   topic: InsightEntry extends TopicValue<T> ? T : never,
 ): TopicBinding => binding({ topic, fromInsights: true });
 
+/**
+ * Binds a topic to a job's results. Each result arrives as `{ computedFor, value }`, so `Computed<Out>` must be the
+ * topic's value. The job must also be listed in the feature's `jobs`.
+ */
+export const bindJob = <T extends TopicName, Out>(
+  topic: Computed<Out> extends TopicValue<T> ? T : never,
+  job: Job<unknown, Out>,
+): TopicBinding => binding({ topic, fromJob: job.id });
+
 /** A folder under `features/` with a `register.ts` whose default export is a feature. */
 export type Feature = {
   name: string;
   calculators: Calculator[];
   topics: TopicBinding[];
+  /** Expensive computations that run in a worker; `bindJob` publishes their results. */
+  jobs?: Job<unknown, unknown>[];
 };
 
 export const defineFeature = (feature: Feature): Feature => feature;

@@ -1,19 +1,22 @@
 // Turns what one frame produced into hub messages, following the features' topic bindings (spec 3.3, 8).
-import type { TopicName } from '@pitwall/contracts';
+import type { Computed, TopicName } from '@pitwall/contracts';
 import type { FeedId } from '@pitwall/domain';
 import type { DeepReadonly, History, HistoryDelta, InsightChange, SchedulerResult } from '@pitwall/engine';
 import type { Feature, TopicBinding } from '../features/feature.ts';
 import type { TopicHub, ValueFor } from '../hub/topic-hub.ts';
+import { jobCalculatorId } from '../jobs/feed-jobs.ts';
+import type { JobResult } from '../jobs/job-runner.ts';
 import type { Logger } from '../log.ts';
 
 type StateBinding = Extract<TopicBinding, { from: string }>;
 type HistoryBinding = Extract<TopicBinding, { fromHistory: keyof History }>;
+type JobBinding = Extract<TopicBinding, { fromJob: string }>;
 
 /** A topic that could not be published: a feature's `select` threw, or the hub did. The topic is marked `errored`. */
 export type PublishError = { topic: TopicName; error: unknown };
 
 /**
- * Publishes one feed's calculator outputs, history appends and insight changes to the topics bound to them.
+ * Publishes one feed's calculator outputs, history appends, insight changes and job results to the topics bound to them.
  * Every binding is contained: a failing one is marked `errored` and never stops the others.
  *
  * The `publish*` methods return the failures caught while they ran, so the caller can report them with its own
@@ -27,6 +30,7 @@ export class TopicPublisher {
   readonly #state: StateBinding[] = [];
   readonly #history: HistoryBinding[] = [];
   readonly #insights: TopicName[] = [];
+  readonly #jobs: JobBinding[] = [];
   /** Topics whose failure is already reported; a topic leaves the set when its `select` succeeds again. */
   readonly #failing = new Set<TopicName>();
   /** Set while a `publish*` call runs: its failures go back to the caller instead of the log. */
@@ -40,13 +44,15 @@ export class TopicPublisher {
       if ('from' in binding) this.#state.push(binding);
       else if ('fromHistory' in binding) this.#history.push(binding);
       else if ('fromInsights' in binding) this.#insights.push(binding.topic);
+      else if ('fromJob' in binding) this.#jobs.push(binding);
       else throw new Error(`unknown topic binding ${JSON.stringify(binding satisfies never)}`);
     }
   }
 
   /**
    * Topics of calculators that ran get their new output; topics of calculators that threw are marked `errored`
-   * until the calculator runs again (publishing a value sets the topic back to `ok`).
+   * until the calculator runs again (publishing a value sets the topic back to `ok`). A job whose trigger
+   * calculator (its `prepare`) threw marks its topics `errored` too; their values come from `publishJobResult`.
    */
   publishOutputs(result: SchedulerResult): PublishError[] {
     const ran = new Set(result.ran);
@@ -59,6 +65,24 @@ export class TopicPublisher {
           this.#guarded(topic, () => this.#hub.publishState(this.#feedId, topic, valueFor));
         } else if (failed.has(from)) {
           this.#guarded(topic, () => this.#hub.setStatus(this.#feedId, topic, 'errored'));
+        }
+      }
+      for (const { topic, fromJob } of this.#jobs) {
+        if (failed.has(jobCalculatorId(fromJob))) this.#guarded(topic, () => this.#hub.setStatus(this.#feedId, topic, 'errored'));
+      }
+    });
+  }
+
+  /** A job's result: its topics get `{ computedFor, value }`, or are marked `errored` when the job failed. */
+  publishJobResult(result: JobResult): PublishError[] {
+    return this.#collecting(() => {
+      for (const { topic, fromJob } of this.#jobs) {
+        if (fromJob !== result.jobId) continue;
+        if ('error' in result) {
+          this.#guarded(topic, () => this.#hub.setStatus(this.#feedId, topic, 'errored'));
+        } else {
+          const computed: Computed<unknown> = { computedFor: result.computedFor, value: result.value };
+          this.#guarded(topic, () => this.#hub.publishState(this.#feedId, topic, () => computed));
         }
       }
     });

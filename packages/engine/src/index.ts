@@ -17,6 +17,7 @@ export type {
   FeedMetricsView,
   IncrementalCalculator,
   InsightChange,
+  Job,
   QuickCalculator,
 } from './calc/types.ts';
 export { createRng, type Rng } from './util/rng.ts';

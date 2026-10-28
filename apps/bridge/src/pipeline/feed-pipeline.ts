@@ -8,6 +8,8 @@ import type { Feature } from '../features/feature.ts';
 import { feedStatusOf } from '../features/feed-status/feed-status.ts';
 import type { TopicHub } from '../hub/topic-hub.ts';
 import type { PacketSource, RawPacket } from '../input/packet-source.ts';
+import { FeedJobs } from '../jobs/feed-jobs.ts';
+import type { JobResult } from '../jobs/job-runner.ts';
 import type { Logger } from '../log.ts';
 import type { Db } from '../storage/db.ts';
 import { SessionFile, sessionRecordingName } from '../storage/session-files.ts';
@@ -23,7 +25,10 @@ export type FeedPipelineOptions = {
   feedId: FeedId;
   source: PacketSource;
   hub: TopicHub;
-  /** The calculators and topic bindings. Feed and write-failure insights reach clients only through an `insights` binding. */
+  /**
+   * The calculators, jobs and topic bindings. Feed and write-failure insights reach clients only through an
+   * `insights` binding.
+   */
   features: readonly Feature[];
   log: Logger;
   /**
@@ -59,6 +64,7 @@ export class FeedPipeline {
   readonly #registry: CalculatorRegistry;
   readonly #demand: ReturnType<typeof demandOf>;
   readonly #publisher: TopicPublisher;
+  readonly #jobs: FeedJobs;
   readonly #tracker: SessionTracker;
   readonly #monitor = new FeedMonitor();
   readonly #alerts: FeedAlerts;
@@ -76,7 +82,10 @@ export class FeedPipeline {
     this.#o = opts;
     this.#feedId = opts.feedId;
     this.#log = opts.log;
-    this.#registry = CalculatorRegistry.build(opts.features.flatMap((feature) => feature.calculators));
+    this.#jobs = new FeedJobs(opts.features.flatMap((feature) => feature.jobs ?? []), (result) =>
+      this.#guarded('job result', () => this.#onJobResult(result)),
+    );
+    this.#registry = CalculatorRegistry.build([...opts.features.flatMap((feature) => feature.calculators), ...this.#jobs.calculators]);
     this.#demand = demandOf(opts.features, this.#registry);
     this.#publisher = new TopicPublisher({ feedId: opts.feedId, hub: opts.hub, features: opts.features, log: opts.log });
     this.#tracker = new SessionTracker({ feedId: opts.feedId });
@@ -106,7 +115,7 @@ export class FeedPipeline {
     this.#guarded('demand change', () => this.#session?.demandChanged());
   }
 
-  /** Stops the source and resolves once `done` has settled. */
+  /** Stops the source and resolves once `done` has settled; the feed's job runner is closed by then. */
   async stop(): Promise<void> {
     if (!this.#started) {
       this.#started = true;
@@ -128,6 +137,7 @@ export class FeedPipeline {
     this.#guarded('stream end', () => {
       for (const event of this.#tracker.end()) this.#handle(event, this.#lastReceivedAtMs);
     });
+    await this.#jobs.close();
     await Promise.all(this.#closing);
     if (failure !== undefined) throw failure.error;
   }
@@ -186,6 +196,7 @@ export class FeedPipeline {
       registry: this.#registry,
       needed: () => this.#demand(hub.subscribedTopics(feedId)),
       publisher: this.#publisher,
+      jobs: this.#jobs,
       log,
       feedView: () => this.#monitor.view(this.#tracker.metrics, this.#lastReceivedAtMs),
       ...(storage && { storage }),
@@ -210,6 +221,7 @@ export class FeedPipeline {
     const session = this.#session;
     if (session === undefined) return;
     this.#session = undefined;
+    this.#jobs.sessionEnded();
     const closing = session.end(receivedAtMs).finally(() => this.#closing.delete(closing));
     this.#closing.add(closing);
   }
@@ -223,6 +235,15 @@ export class FeedPipeline {
     // by decision, until a feed-level binding kind replaces this one (sub-project 2).
     this.#o.hub.publishState(this.#feedId, 'feed.status', () => status);
     this.#publishInsights(this.#alerts.feedChanged(view, metrics.lastSessionTime ?? toSessionTime(0)));
+  }
+
+  /** A result only ever arrives for the running session: `#endSession` drops the runs of an ended one. */
+  #onJobResult(result: JobResult): void {
+    const { jobId, computedFor } = result;
+    if ('error' in result) this.#log.error({ feedId: this.#feedId, jobId, computedFor, error: result.error }, 'job failed, topic marked errored');
+    for (const { topic, error } of this.#publisher.publishJobResult(result)) {
+      this.#log.error({ feedId: this.#feedId, jobId, topic, err: error }, 'job result not published, marked errored');
+    }
   }
 
   #writeFailed(failure: WriteFailure, error: unknown): void {

@@ -64,5 +64,22 @@ export type IncrementalCalculator<Acc, Out> = CalculatorBase & {
 /** Method syntax above keeps `QuickCalculator<X>` assignable to the `unknown` form. */
 export type Calculator = QuickCalculator<unknown> | IncrementalCalculator<unknown, unknown>;
 
+/**
+ * An expensive, asynchronous computation (later Monte Carlo). The bridge turns it into the quick calculator
+ * `job:<id>` (these `reads`, `cadence: trigger`, `compute: prepare`), so the scheduler decides when it is due and
+ * demand whether it is needed. `prepare` extracts a structured-cloneable input from the view; the module at `module`
+ * exports `run(input, rng)` and runs in a worker thread. `Out` is what `run` resolves to.
+ */
+export type Job<In, Out> = {
+  kind: 'job';
+  id: CalculatorId;
+  reads: Dependency[];
+  trigger: Cadence;
+  prepare(view: EngineView): In;
+  module: URL;
+  /** Phantom marker that ties `Out` to the job; never set. */
+  readonly out?: Out;
+};
+
 /** A raised insight, or the key of one that no longer holds. */
 export type InsightChange = { type: 'raised'; insight: Insight } | { type: 'resolved'; key: string; at: SessionTime };

@@ -1,23 +1,9 @@
 import { Worker } from 'node:worker_threads';
-import type { Cadence, EngineView } from '@pitwall/engine';
+import type { Computed } from '@pitwall/contracts';
+import type { Job } from '@pitwall/engine';
 
-/** Where a result was computed: the lap and frame that triggered the job. */
-export type ComputedFor = { lap: number; frameId: number };
-
-/**
- * An expensive, asynchronous computation. `prepare` runs on the main thread and extracts a structured-cloneable
- * input from the engine view; the module at `module` exports `run(input, rng)` and runs in a worker thread.
- * `Out` is the type `run` resolves to; it documents the job for its author, results arrive as `unknown`.
- */
-export type Job<In, Out> = {
-  kind: 'job';
-  id: string;
-  trigger: Cadence;
-  prepare(view: EngineView): In;
-  module: URL;
-  /** Phantom marker that ties `Out` to the job; never set. */
-  readonly out?: Out;
-};
+/** Where a result was computed: the player's lap and the frame that triggered the job. */
+export type ComputedFor = Computed<unknown>['computedFor'];
 
 export type JobResult =
   | { jobId: string; computedFor: ComputedFor; value: unknown }
@@ -60,20 +46,26 @@ export class JobRunner {
     this.#listeners.push(callback);
   }
 
-  trigger<In, Out>(job: Job<In, Out>, view: EngineView, computedFor: ComputedFor): void {
+  /** Runs `job` on `input`, the output of its `prepare` (the pipeline runs that as the calculator `job:<id>`). */
+  trigger<In, Out>(job: Job<In, Out>, input: In, computedFor: ComputedFor): void {
     if (this.#closed) throw new Error('JobRunner closed');
     this.#discard(job.id);
     try {
-      this.#start(job.id, job.module, job.prepare(view), computedFor);
+      this.#start(job.id, job.module, input, computedFor);
     } catch (e) {
       this.#deliver({ jobId: job.id, computedFor, error: messageOf(e) });
     }
   }
 
+  /** Terminates the running workers; their results are never delivered. The runner still takes new triggers. */
+  cancel(): void {
+    for (const id of [...this.#running.keys()]) this.#discard(id);
+  }
+
   /** Terminates all running workers and resolves once they are gone. No result is delivered afterwards. */
   async close(): Promise<void> {
     this.#closed = true;
-    for (const id of [...this.#running.keys()]) this.#discard(id);
+    this.cancel();
     await Promise.all(this.#terminations);
   }
 

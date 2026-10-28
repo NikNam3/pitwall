@@ -15,6 +15,7 @@ import {
 } from '@pitwall/engine';
 import type { TopicName } from '@pitwall/contracts';
 import { peekHeader, type ParticipantsPacket, type SessionPacket } from '@pitwall/protocol';
+import type { FeedJobs } from '../jobs/feed-jobs.ts';
 import type { Logger } from '../log.ts';
 import type { SessionRow } from '../storage/db.ts';
 import type { SessionFile } from '../storage/session-files.ts';
@@ -37,6 +38,8 @@ export type SessionProcessorOptions = {
   /** The calculators to run now; asked when the runner starts and on every `demandChanged()`. */
   needed: () => Iterable<CalculatorId>;
   publisher: TopicPublisher;
+  /** The feed's jobs: those whose trigger calculator ran in a frame are started on its output. */
+  jobs?: FeedJobs;
   log: Logger;
   /** The feed's health right now, for the calculators that read `feed`. */
   feedView: () => FeedMetricsView;
@@ -151,6 +154,8 @@ export class SessionProcessor {
         ...publisher.publishHistory(result.state.history, result.delta),
         ...publisher.publishInsights([...this.#flashbackOf(result), ...scheduled.insights]),
       ];
+      const { cars, playerCar } = result.state;
+      this.#o.jobs?.triggerRan(scheduled, { lap: cars[playerCar]?.timing.lap ?? 0, frameId: frame.frameId });
       for (const correction of result.corrections) log.info({ feedId, sessionUid: this.#uid, correction }, 'lap time corrected');
       if (unpublished.length > 0) this.#report(frame, 'topic not published, marked errored', unpublished);
     } catch (error) {
