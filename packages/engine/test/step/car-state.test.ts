@@ -124,9 +124,9 @@ describe('energy, condition, dynamics', () => {
       revLightsPct: 80, drs: true, drsAllowed: true, drsActivationDistanceM: 120, pitLimiter: true, position: { x: 100.5, y: 2.25, z: -30 },
       velocity: { x: 80, y: 0, z: -4.5 }, gForce: { lateral: 1.5, longitudinal: -2, vertical: 0.5 }, orientation: { yawRad: 0.5, pitchRad: 0.25, rollRad: -0.125 } });
   });
-  it('tags exactly the packets present in the frame', () => {
+  it('tags the areas that the packets in the first frame feed', () => {
     const { results } = runScenario(new ScenarioBuilder({ cars: 1 }).frames(1, (d) => d.drop('motionEx')));
-    const present: ChangeTag[] = ['timing', 'motion', 'telemetry', 'status'], absent: ChangeTag[] = ['damage', 'setups', 'motionEx', 'tyreSets'];
+    const present: ChangeTag[] = ['session', 'identity', 'timing', 'tyres', 'energy', 'condition', 'dynamics', 'ownCar'], absent: ChangeTag[] = ['events', 'pitStops', 'flagPhases'];
     expect([present.filter((t) => !results[0]!.changed.has(t)), absent.filter((t) => results[0]!.changed.has(t))]).toEqual([[], []]);
   });
 });

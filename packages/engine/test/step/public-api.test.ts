@@ -10,7 +10,7 @@ describe('step public API', () => {
   });
   it('CHANGE_TAGS lists each tag once and is the source of ChangeTag', () => {
     expect(new Set(CHANGE_TAGS).size).toBe(CHANGE_TAGS.length);
-    expect(CHANGE_TAGS).toEqual(expect.arrayContaining(['session', 'participants', 'timing', 'laps', 'miniSectors']));
+    expect(CHANGE_TAGS).toEqual(expect.arrayContaining(['session', 'identity', 'timing', 'laps', 'miniSectors']));
   });
   it('an out-of-range trend or weather code reads as the first table entry', () => {
     const session = buildPacket('session', {

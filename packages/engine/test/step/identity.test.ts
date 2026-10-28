@@ -45,11 +45,11 @@ describe('car identity', () => {
     expect(run(new ScenarioBuilder({ cars: 6, player: 4 }).frames(1, () => {})).st.teammateCar).toBe(5);
     expect(run(new ScenarioBuilder({ cars: 6, player: 4 }).participants({ numActiveCars: 5 }).frames(1, () => {})).st.teammateCar).toBeUndefined();
   });
-  it('tags participants on Participants frames and when the player changes', () => {
+  it('tags identity on Participants frames and when the player changes', () => {
     const { st, frames, results } = run(new ScenarioBuilder({ cars: 2 }).frames(2, () => {}));
-    expect(results.map((r) => r.changed.has('participants'))).toEqual([true, false]);
+    expect(results.map((r) => r.changed.has('identity'))).toEqual([true, false]);
     const r = step(st, { ...frames[1]!, playerCarIndex: 1 });
-    expect([r.changed.has('participants'), st.playerCar, st.cars[1]!.identity.visibility, st.cars[0]!.identity.visibility]).toEqual([true, 1, 'own', 'public']);
+    expect([r.changed.has('identity'), st.playerCar, st.cars[1]!.identity.visibility, st.cars[0]!.identity.visibility]).toEqual([true, 1, 'own', 'public']);
     expect([st.cars[1]!.ownCar !== undefined, st.cars[0]!.ownCar]).toEqual([true, undefined]);
   });
 });

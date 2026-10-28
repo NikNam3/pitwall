@@ -6,6 +6,7 @@ import sessionInfo from '../../src/features/session-info/register.ts';
 import carsOverview from '../../src/features/cars-overview/register.ts';
 import carDetail from '../../src/features/car-detail/register.ts';
 import carTelemetry from '../../src/features/car-telemetry/register.ts';
+import feedStatus from '../../src/features/feed-status/register.ts';
 import history from '../../src/features/history/register.ts';
 import insights from '../../src/features/insights/register.ts';
 import { ScenarioBuilder } from '../../../../packages/engine/test/builders/index.ts';
@@ -47,5 +48,18 @@ describe('base state features', () => {
     expect(history.calculators).toEqual([]);
     expect(history.topics).toEqual(['laps', 'stints', 'pitStops', 'flagPhases', 'events'].map((k) => ({ topic: k, fromHistory: k })));
     expect(insights.topics).toEqual([{ topic: 'insights', fromInsights: true }]);
+  });
+});
+
+describe('what the features read (domain areas)', () => {
+  const readsOf = (f: Feature, id: string) => (f.calculators.find((c) => c.id === id) as QuickCalculator<unknown>).reads;
+  it.each([
+    ['car.detail', carDetail, 'cars.state', ['identity', 'timing', 'tyres', 'energy', 'condition', 'dynamics', 'ownCar', 'stints']],
+    ['cars.overview', carsOverview, 'cars.overview', ['identity', 'timing', 'tyres', 'stints']],
+    ['car.telemetry', carTelemetry, 'cars.dynamics', ['dynamics']],
+    ['session.info', sessionInfo, 'session.info', ['session', 'identity']],
+    ['feed.status', feedStatus, 'feed.status', ['feed']],
+  ] as const)('%s', (_, feature, id, reads) => {
+    expect(readsOf(feature, id)).toEqual(reads);
   });
 });

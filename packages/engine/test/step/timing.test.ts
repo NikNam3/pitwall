@@ -28,9 +28,9 @@ describe('timing from LapData', () => {
     const { st } = runScenario(new ScenarioBuilder({ cars: 1 }).frames(1, (d) => { d.lapData.lapData[0]!.speedTrapFastestLap = 255; }));
     expect(st.cars[0]!.timing.speedTrapFastestKmh).toBeUndefined();
   });
-  it('keeps the last values and does not tag timing when a frame has no LapData', () => {
+  it('keeps the last values and does not tag timing when a frame has no LapData and no Car Status', () => {
     const { st, results } = runScenario(new ScenarioBuilder({ cars: 1 }).frames(2, (d) => {
-      if (d.index === 0) d.lapData.lapData[0]!.currentLapNum = 4; else d.drop('lapData');
+      if (d.index === 0) d.lapData.lapData[0]!.currentLapNum = 4; else { d.drop('lapData'); d.drop('status'); }
     }));
     expect([st.cars[0]!.timing.lap, results[1]!.changed.has('timing')]).toEqual([4, false]);
   });
