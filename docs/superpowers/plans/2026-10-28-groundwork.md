@@ -8,7 +8,7 @@ Date: 2026-10-28 · Branch: `feat/groundwork` · Worktree: `../pitwall-wt/ground
   - Q-A: monitoring a second car (the whole team) is **out of scope for the MVP**. Nothing built now may close that door; multi-feed serving and per-feed storage come with the second driver later.
   - Q-B: one file per topic.
   - Q-C: thresholds and settings as read-only config for calculators (option A).
-  - Q-D (stale values, F9): still open. **Not part of this plan.**
+  - Q-D (stale values, F9): **the UI decides** (option B), with freshness data from the engine (Task 10).
 - **Not fixable here:** F8 (needs race recordings).
 
 ## Global Constraints (bind every task)
