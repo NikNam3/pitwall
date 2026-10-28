@@ -46,6 +46,7 @@ export class StorageWriter {
       upsertFlagPhase: upsertBySeq('flag_phases', 'record'),
       upsertEvent: upsertBySeq('events', 'car_id, record'),
       clear: STORED_TABLES.map((table) => db.prepare(`DELETE FROM ${table} WHERE session_uid = ?`)),
+      deleteSession: [...STORED_TABLES, 'drivers', 'sessions'].map((table) => db.prepare(`DELETE FROM ${table} WHERE session_uid = ?`)),
     };
   }
 
@@ -88,6 +89,15 @@ export class StorageWriter {
         pitStops.forEach((r, i) => s.upsertPitStop.run({ sessionUid, seq: from('pitStops') + i, car_id: r.carId, record: JSON.stringify(r) }));
         flagPhases.forEach((r, i) => s.upsertFlagPhase.run({ sessionUid, seq: from('flagPhases') + i, record: JSON.stringify(r) }));
         events.forEach((r, i) => s.upsertEvent.run({ sessionUid, seq: from('events') + i, car_id: r.carId ?? null, record: JSON.stringify(r) }));
+      })(),
+    );
+  }
+
+  /** Deletes the sessions and everything stored for them (children first, for the foreign keys), in one transaction. */
+  deleteSessions(sessionUids: readonly SessionUid[]): void {
+    this.guarded(() =>
+      this.db.transaction(() => {
+        for (const sessionUid of sessionUids) for (const remove of this.statements.deleteSession) remove.run(sessionUid);
       })(),
     );
   }
