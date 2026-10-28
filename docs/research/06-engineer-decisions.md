@@ -612,7 +612,14 @@ Answered (user, 2026-10-28):
 - **Realism mode:** using rival data a real team wouldn't have (e.g. AI cars' wear) counts as cheating to the user, so pitwall needs a switch that turns it off. Scope (confirmed by the user): with realism on, other teams' cars show only what a real team gets (timing, sectors, gaps, position on track, speed traps, compound and tyre age, pit stops, penalties). Their tyre wear, damage, fuel, ERS, tyre sets, temperatures, pressures, driver inputs and car telemetry (throttle, brake, steering, gear, RPM, DRS use, the telemetry speed trace) become `unknown("realism")`, and the strategy model uses the same estimation path as for restricted humans. Our own two cars stay complete. Speed traps stay, like a real team's timing. Coaching against a rival's lap (D06, D19) then has only our own two cars as references.
 
 Answered by the user's friend (2026-10-28):
-- **What drivers can edit:** fuel load, tyre pressures and other setup values can be changed, so D05 (race fuel load) stays in.
+- **What drivers can edit in practice:** the full setup, so D02, D05 and D30 have every lever the game offers:
+  - fuel load (D05 stays in)
+  - front and rear wing
+  - differential on throttle and off throttle
+  - camber front and rear; toe front and rear
+  - suspension stiffness, anti-roll bar and ride height, each front and rear
+  - brake bias and brake pressure
+  - tyre pressure for each tyre
 - **Pit stacking:** the drivers may double stack if they want, so D27's "stack" option stays in. The stacked stop's stationary time is still unknown (research item 8 below).
 - **SC/VSC frequency:** safety cars and virtual safety cars come about twice as often as in real F1. Until the league's own races give a measured rate, an SC/VSC probability starts at twice the real-F1 value.
 
