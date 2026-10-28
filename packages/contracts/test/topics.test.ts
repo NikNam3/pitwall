@@ -48,6 +48,9 @@ describe('TOPICS', () => {
   it('has the global topic dev.calcStats: owner core, state, 1 Hz', () => {
     expect(TOPICS['dev.calcStats']).toMatchObject({ name: 'dev.calcStats', owner: 'core', scope: 'global', mode: 'state', maxHz: 1 });
   });
+  it('has the global topic dev.catalogue: owner core, state', () => {
+    expect(TOPICS['dev.catalogue']).toMatchObject({ name: 'dev.catalogue', owner: 'core', scope: 'global', mode: 'state' });
+  });
   it.each(['ui.workbooks', 'ui.linkGroups', 'ui.alerts', 'ui.settings'] as const)('has the global topic %s: owner core, state', (name) => {
     expect(TOPICS[name]).toMatchObject({ name, owner: 'core', scope: 'global', mode: 'state' });
   });
@@ -77,7 +80,7 @@ describe('topic types', () => {
   it('keep TopicName, TopicParams and TopicValue', () => {
     expectTypeOf<TopicName>().toEqualTypeOf<
       | 'feed.status' | 'session.info' | 'cars.overview' | 'car.detail' | 'car.telemetry' | 'laps'
-      | 'stints' | 'pitStops' | 'flagPhases' | 'events' | 'insights' | 'dev.calcStats'
+      | 'stints' | 'pitStops' | 'flagPhases' | 'events' | 'insights' | 'dev.calcStats' | 'dev.catalogue'
       | 'replay.status' | 'ui.workbooks' | 'ui.linkGroups' | 'ui.alerts' | 'ui.settings'
     >();
     expectTypeOf<TopicParams<'car.detail'>>().toEqualTypeOf<{ carId: CarId }>();
