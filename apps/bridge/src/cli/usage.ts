@@ -6,13 +6,16 @@ export const USAGE = `usage: pitwall <live|replay|tap|reprocess|import> …
                             serve a .pwrec.gz recording; --realtime keeps the recorded pace
                             --paused starts paused, --speed sets the playback factor (1 = recorded pace),
                             --at-lap / --at-time jump there before the server reports it is listening
-                            --dev publishes per-calculator compute times (dev.calcStats)
+                            --dev publishes per-calculator compute times (dev.calcStats) and the catalogue (dev.catalogue)
   dev --replay <file> [--at-lap n | --at-time ms]
                             replay and restart the bridge at the same moment when its source changes
   tap <topic> [--carId n] [--url ws://…] [--feed id]
                             print the messages of one topic as JSON lines
   reprocess [--weekend id]  rebuild the database from the recordings (one weekend, or all)
   import <file>             copy a recording into the data directory and process it
+  where <unit> | --topic <name> [--catalogue <file>]
+                            print the folders, files and links of a unit, or who binds and reads a topic
+                            (reads catalogue.generated.json, written by pnpm gen)
 
 The WebSocket server listens on 127.0.0.1 only. Ports and the data directory come from
 PITWALL_WS_PORT, PITWALL_UDP_PORT and PITWALL_DATA_DIR.`;

@@ -1,6 +1,7 @@
 import type { FeedInfo, ReplayControl } from '@pitwall/contracts';
 import type { FeedId } from '@pitwall/domain';
 import { createCalcStats } from '../dev/calc-stats.ts';
+import { readCatalogue } from '../dev/catalogue.ts';
 import type { FeatureConfig } from '../feature-config.ts';
 import { FEATURES } from '../features/index.generated.ts';
 import { TopicHub } from '../hub/topic-hub.ts';
@@ -34,7 +35,7 @@ type ServeBase = {
   onDone?: () => void;
   /** The effective calculator config for the run (see `loadFeatureConfig`); without it, the declared defaults. */
   config?: FeatureConfig;
-  /** Dev mode (`--dev`): times every calculator run and publishes the `dev.calcStats` topic. */
+  /** Dev mode (`--dev`): times every calculator run and publishes the `dev.calcStats` and `dev.catalogue` topics. */
   dev?: boolean;
   io: CliIo;
 };
@@ -103,6 +104,10 @@ export async function serve(opts: ServeOptions): Promise<number> {
       const publish = (): void => hub.publishGlobal('dev.calcStats', () => calcStats.snapshot());
       const timer = setInterval(publish, CALC_STATS_EVERY_MS);
       undo.push(() => clearInterval(timer));
+    }
+    if (opts.dev) {
+      const catalogue = readCatalogue();
+      hub.publishGlobal('dev.catalogue', () => catalogue);
     }
     const makePipeline = (source: PacketSource): FeedPipeline =>
       (pipeline = new FeedPipeline({
