@@ -8,7 +8,7 @@ const ROOT = resolve(import.meta.dirname, '../..');
 const abs = (rel: string) => join(ROOT, rel);
 function runHook(script: string, filePath: string, env: Record<string, string> = {}, projectDir = ROOT, toolName = 'Edit') {
   const input = JSON.stringify({ hook_event_name: 'PreToolUse', cwd: projectDir, tool_name: toolName, tool_input: { file_path: filePath } });
-  const { PITWALL_WORKER_SCOPE: _s, PITWALL_PHASE: _p, ...base } = process.env;
+  const { PITWALL_WORKER_SCOPE: _s, PITWALL_PHASE: _p, PITWALL_WORKER_UNIT: _u, ...base } = process.env;
   const r = spawnSync(join(ROOT, '.claude/hooks', script), { input, encoding: 'utf8', env: { ...base, CLAUDE_PROJECT_DIR: projectDir, ...env } });
   return { code: r.status, stderr: r.stderr };
 }
@@ -57,7 +57,54 @@ describe('guard-scope.sh', () => {
   });
 });
 
+describe('guard-scope.sh with PITWALL_WORKER_UNIT', () => {
+  const withUnit = (unit: string) => ({ PITWALL_WORKER_SCOPE: 'docs', PITWALL_WORKER_UNIT: unit });
+  it.each([
+    'apps/ui/src/widgets/undercut-card/Card.svelte',
+    'apps/bridge/src/features/undercut-card/register.ts',
+    'apps/bridge/test/features/undercut-card/register.test.ts',
+    'packages/strategy/src/undercut-card/calc.ts',
+    'packages/strategy/test/undercut-card/calc.test.ts',
+    'packages/contracts/src/topics/undercutCard.projection.ts',
+    'docs/x.md',
+  ])('allows %s for a multi-word unit', (rel) => {
+    expect(runHook('guard-scope.sh', abs(rel), withUnit('undercut-card')).code).toBe(0);
+  });
+  it('uses the topicPrefix camelCase for the contracts file, also for a single-word unit', () => {
+    expect(runHook('guard-scope.sh', abs('packages/contracts/src/topics/rejoin.projection.ts'), withUnit('rejoin')).code).toBe(0);
+    expect(runHook('guard-scope.sh', abs('apps/ui/src/widgets/rejoin/W.svelte'), withUnit('rejoin')).code).toBe(0);
+  });
+  it.each([
+    'packages/contracts/src/topics/rejoin.projection.ts',
+    'packages/contracts/src/topics/undercut-card.projection.ts',
+    'packages/contracts/src/topics/undercutCardX.projection.ts',
+    'packages/contracts/src/topics.ts',
+    'packages/contracts/package.json',
+    'apps/ui/src/kit/x.ts',
+    'apps/ui/src/widgets/other/x.ts',
+    'apps/ui/src/widgets/undercut-cardx/x.ts',
+  ])('still blocks %s', (rel) => {
+    expect(runHook('guard-scope.sh', abs(rel), withUnit('undercut-card')).code).toBe(2);
+  });
+  it('does not widen access to another unit\'s contracts file', () => {
+    expect(runHook('guard-scope.sh', abs('packages/contracts/src/topics/undercutCard.projection.ts'), withUnit('rejoin')).code).toBe(2);
+  });
+  it('does nothing without PITWALL_WORKER_SCOPE', () => {
+    expect(runHook('guard-scope.sh', abs('apps/ui/src/kit/x.ts'), { PITWALL_WORKER_UNIT: 'undercut-card' }).code).toBe(0);
+  });
+});
+
 describe('guard-tests.sh', () => {
+  it.each(['apps/ui/src/widgets/undercut-card/x.test.ts', 'apps/ui/src/widgets/undercut-card/gallery.ts'])(
+    'blocks widget test file %s when PITWALL_PHASE=implement', (rel) => {
+      const r = runHook('guard-tests.sh', abs(rel), { PITWALL_PHASE: 'implement' });
+      expect(r.code).toBe(2);
+      expect(r.stderr).toContain('PITWALL_PHASE=implement');
+    });
+  it('allows widget sources and gallery.ts in the test phase', () => {
+    expect(runHook('guard-tests.sh', abs('apps/ui/src/widgets/undercut-card/Card.svelte'), { PITWALL_PHASE: 'implement' }).code).toBe(0);
+    expect(runHook('guard-tests.sh', abs('apps/ui/src/widgets/undercut-card/gallery.ts'), { PITWALL_PHASE: 'test' }).code).toBe(0);
+  });
   it.each(['packages/protocol/src/decode.test.ts', 'packages/engine/test/builders/scenario.ts', 'test-support/fixtures.ts', 'test/hooks/hooks.test.ts'])(
     'blocks %s when PITWALL_PHASE=implement', (rel) => {
       const r = runHook('guard-tests.sh', abs(rel), { PITWALL_PHASE: 'implement' });

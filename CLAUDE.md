@@ -13,7 +13,8 @@ Spec: `docs/superpowers/specs/2026-10-28-foundation-design.md`. Plan: `docs/supe
 - `packages/strategy`: strategy calculators
 - `packages/contracts`: topic types and WebSocket messages shared by bridge and UI
 - `apps/bridge`: imperative shell (input, frame assembler, engine runner, storage, WebSocket, CLI)
-- `apps/ui`: Svelte UI (sub-project 2)
+- `apps/ui`: Svelte UI: kit, shell, widgets, connection, theme, emphasis, gallery
+- `apps/desktop`: Electron host for the UI (imports nothing from the workspace)
 - `test-support/`: fixtures helper; `fixtures/`: committed `.pwrec` segments and `index.json`
 
 Dependency direction (enforced by dependency-cruiser): `protocol` and `domain` import nothing; `contracts` imports `domain`; `engine` imports `protocol`, `domain`; `strategy` imports `engine`, `domain`; `bridge` imports all packages; `ui` imports `contracts`, `domain` only. Details: `docs/architecture.md`.
@@ -23,9 +24,11 @@ Dependency direction (enforced by dependency-cruiser): `protocol` and `domain` i
 - `pnpm check`: typecheck, lint, depcruise and tests; run it before every commit
 - `pnpm test` / `pnpm test:acceptance`: unit and property tests / acceptance tests on real recordings
 - `pnpm typecheck`, `pnpm lint`, `pnpm depcruise`
-- `pnpm mutation`: Stryker on protocol, engine, strategy (score of at least 80 %)
-- `pnpm gen`: regenerate both gitignored generated indexes (`gen:features`: `apps/bridge/src/features/index.generated.ts`; `gen:topics`: `packages/contracts/src/topics/index.generated.ts`)
-- `pitwall live|replay|tap|reprocess|import`: the bridge CLI
+- `pnpm mutation`: Stryker on protocol, engine, strategy and the UI logic (score of at least 80 %)
+- `pnpm gen`: regenerate the gitignored generated files: `gen:features` (`apps/bridge/src/features/index.generated.ts`), `gen:topics` (`packages/contracts/src/topics/index.generated.ts`), `gen:widgets` (`apps/ui/src/widgets/index.generated.ts`) and `gen:catalogue` (the unit catalogue); `pnpm gen:moments` is separate
+- `pnpm test:ui`: the Playwright suite for the UI
+- `pnpm desktop` / `pnpm desktop:dev`: the Electron panel (starts or attaches to the bridge)
+- `pitwall live|replay|tap|reprocess|import`: the bridge CLI; `pitwall dev --replay <file> [--at-lap n]` restarts the replay on source changes; `pitwall where <unit|--topic name>` lists a unit's files
 - `pwrec-cut <in> <out> --from <sessionTime> --to <sessionTime>`: cut a fixture segment
 
 ## Rules
@@ -51,7 +54,8 @@ Each task has two phases, done by two separate agents: a test agent writes the f
 - Hooks in `.claude/hooks/` enforce this: `guard-scope.sh` and `guard-tests.sh` block writes, `typecheck.sh` typechecks the touched package after each edit.
 - Limit: the guards only see the Edit, Write, MultiEdit and NotebookEdit tools. A write through Bash bypasses them. The env vars are per process, so in-process subagents inherit the supervisor's environment. Hook-enforced workers must therefore be separate `claude` processes started in their worktree with the env set.
 - After every implement phase the supervisor checks that `git diff --stat <test-commit>..HEAD -- '*.test.ts' '**/test/**' test-support` is empty.
-- Supervisor-owned files: `packages/domain/**`, `packages/contracts/**`, every `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `packages/engine/src/state/**`, root configs. Workers never edit them; they list the change (file, exact change, why) under "Requested changes to supervisor-owned files" in their report.
+- Units: an analysis (shared calculation) or a display (one widget) is a unit with a kebab-case name, e.g. `undercut-card`. `PITWALL_WORKER_UNIT=<name>` additionally grants `apps/ui/src/widgets/<name>/`, `apps/bridge/src/features/<name>/`, `apps/bridge/test/features/<name>/`, `packages/strategy/src/<name>/`, `packages/strategy/test/<name>/` and `packages/contracts/src/topics/<camelName>.*.ts`. One agent per unit; analyses are built before the displays that read them (ADR 0011). In the implement phase, a widget's `gallery.ts` is read-only like a test.
+- Supervisor-owned files: `packages/domain/**`, `packages/contracts/**` (except a unit's own topic files), the UI kit, shell, connection, theme and emphasis (`apps/ui/src/{kit,shell,connection,theme,emphasis}/**`), every `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `packages/engine/src/state/**`, root configs. Workers never edit them; they list the change (file, exact change, why) under "Requested changes to supervisor-owned files" in their report.
 
 ## Git
 
@@ -62,9 +66,9 @@ Claude manages git: workers commit on their own branches; supervisor may merge t
 
 ## Where to look
 
-- `docs/architecture.md`: packages, data flow, determinism, parallel development, where state lives
+- `docs/architecture.md`: packages, data flow, UI structure, determinism, parallel development, where state lives
 - `docs/research/`: race-engineering research (real practice, ATLAS, TUM strategy model, F1 25 data mapping, control boundary)
-- `docs/decisions/`: ADRs (stack, fixtures, domain package, SQLite library, feature registry, GPL code and data allowed, one file per topic, calculator config, second car later)
+- `docs/decisions/`: ADRs (stack, fixtures, domain package, SQLite library, feature registry, GPL code and data allowed, one file per topic, calculator config, second car later, Electron host, analyses and displays, widget registry, UI state in the bridge)
 - `docs/tasks/_template.md`: the task-brief and report format
 - `~/dev/personal/pitwall-recorder/FORMAT.md`: the `.pwrec` file format
 - `external/`: the F1 25 UDP structs (`F1 25 Telemetry Output Structures.txt`), the data-output PDF and the TUM race-simulation paper (gitignored)
