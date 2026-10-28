@@ -58,8 +58,8 @@ const emptyCatalogue = { widgets: [], topics: [], features: [] };
 describe('panel click with inspection on', () => {
   it('opens the inspector for the clicked panel, with that panel\'s own link', async () => {
     const { ctx, panel } = await mount();
-    const first = panel('probe', 2, 'p1');
-    const second = panel('stale-probe', 1, 'p2');
+    const first = panel('probe', 2, 'p3');
+    const second = panel('stale-probe', 1, 'p4');
     press('i', { ctrl: true });
     await tick();
     await fireEvent.click(first);
@@ -77,7 +77,7 @@ describe('panel click with inspection on', () => {
 
   it('a click does not send linkGroup.set', async () => {
     const { ctx, panel } = await mount();
-    const el = panel('probe', 2, 'p1');
+    const el = panel('probe', 2, 'p3');
     press('i', { ctrl: true });
     await tick();
     await fireEvent.click(el);
@@ -88,7 +88,7 @@ describe('panel click with inspection on', () => {
 describe('panel click with inspection off', () => {
   it('shows no inspector, does not even ask for the catalogue, and sends no linkGroup.set', async () => {
     const { ctx, panel } = await mount();
-    const el = panel('probe', 2, 'p1');
+    const el = panel('probe', 2, 'p3');
     await fireEvent.click(el);
     await tick();
     expect(mocks.shown).toEqual([]);
@@ -98,7 +98,7 @@ describe('panel click with inspection off', () => {
 
   it('after Ctrl+I toggles it off again, a click opens nothing', async () => {
     const { panel } = await mount();
-    const el = panel('probe', 2, 'p1');
+    const el = panel('probe', 2, 'p3');
     press('i', { ctrl: true });
     press('i', { ctrl: true });
     await tick();
