@@ -1,5 +1,5 @@
 // The only place numbers become text (spec 5): every value cell formats through one of these.
-import type { Celsius, Kg, Ms, Percent, Psi } from '@pitwall/domain';
+import type { Celsius, CarId, Kg, Ms, Percent, Psi, SessionKind } from '@pitwall/domain';
 
 const pad = (n: number, width: number): string => String(n).padStart(width, '0');
 
@@ -49,3 +49,21 @@ export const formatLoss = (p: Percent): string => `${p.toFixed(1)}%`;
 
 /** Whole milliseconds, `12.4` -> `12 ms`. */
 export const formatMillis = (ms: Ms): string => `${Math.round(ms) + 0} ms`;
+
+/** Car index as a car number, `7` -> `#7`. */
+export const formatCarNumber = (id: CarId): string => `#${id}`;
+
+const SESSION_KIND_LABEL: Record<SessionKind, string> = {
+  unknown: 'unknown',
+  practice: 'practice',
+  qualifying: 'qualifying',
+  sprintShootout: 'sprint shootout',
+  race: 'race',
+  timeTrial: 'time trial',
+};
+
+/** Session kind in words, `sprintShootout` -> `sprint shootout`. */
+export const formatSessionKind = (kind: SessionKind): string => SESSION_KIND_LABEL[kind];
+
+/** Track by its game id (there is no name table yet), `10` -> `track 10`. */
+export const formatTrack = (trackId: number): string => `track ${trackId}`;
