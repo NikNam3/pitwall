@@ -5,7 +5,7 @@ import { defineFeature } from '../feature.ts';
 const carsOverview: QuickCalculator<CarOverview[]> = {
   id: 'cars.overview',
   kind: 'quick',
-  reads: ['timing', 'participants', 'status', 'stints'],
+  reads: ['identity', 'timing', 'tyres', 'stints'],
   cadence: { hz: 10 },
   compute: ({ state }) =>
     state.cars.map(({ id, identity, timing, tyres }) =>

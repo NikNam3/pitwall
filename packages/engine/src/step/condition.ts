@@ -46,7 +46,7 @@ export const applyCondition: SubStep = (state, frame, out) => {
         condition.brakes[corner].damagePct = knownUnlessRestricted(car, brakeDamage[corner], at);
       }
     }
-    out.changed.add('damage');
+    out.changed.add('condition');
   }
   if (telemetry) {
     for (const car of state.cars) {
@@ -56,6 +56,6 @@ export const applyCondition: SubStep = (state, frame, out) => {
       for (const corner of CORNER_NAMES) car.condition.brakes[corner].tempC = brakeTemp[corner];
       car.condition.engineTempC = t.engineTemperature;
     }
-    out.changed.add('telemetry');
+    out.changed.add('condition');
   }
 };

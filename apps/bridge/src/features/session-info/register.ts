@@ -6,7 +6,7 @@ import { defineFeature } from '../feature.ts';
 const sessionInfo: QuickCalculator<SessionInfo> = {
   id: 'session.info',
   kind: 'quick',
-  reads: ['session', 'participants'],
+  reads: ['session', 'identity'],
   cadence: 'sessionChange',
   compute: ({ state }) => ({
     feedId: state.feedId,

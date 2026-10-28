@@ -78,16 +78,16 @@ export const applyOwnCar: SubStep = (state, frame, out) => {
   const at = frame.sessionTime;
   if (frame.motionEx) {
     own.motionEx = known(motionExFrom(frame.motionEx), at);
-    out.changed.add('motionEx');
+    out.changed.add('ownCar');
   }
   const setup = frame.setups?.carSetupData[state.playerCar];
   if (setup) {
     own.setup = known(setupFrom(setup), at);
-    out.changed.add('setups');
+    out.changed.add('ownCar');
   }
   const status = frame.status?.carStatusData[state.playerCar];
   if (status) {
     own.brakeBiasPct = known(status.frontBrakeBias, at);
-    out.changed.add('status');
+    out.changed.add('ownCar');
   }
 };

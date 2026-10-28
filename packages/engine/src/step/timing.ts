@@ -66,6 +66,6 @@ export const applyTiming: SubStep = (state, frame, out) => {
       // The game sends -1 for an unknown flag, then 0 none, 1 green, 2 blue, 3 yellow.
       if (s) car.timing.fiaFlag = pick(ZONE_FLAG, s.vehicleFiaFlags + 1);
     }
-    out.changed.add('status');
+    out.changed.add('timing');
   }
 };

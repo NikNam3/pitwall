@@ -34,7 +34,7 @@ export const applyTyres: SubStep = (state, frame, out) => {
       car.tyres.visualCompound = visualCompoundFromCode(s.visualTyreCompound);
       car.tyres.age = s.tyresAgeLaps;
     }
-    out.changed.add('status');
+    out.changed.add('tyres');
   }
   if (telemetry) {
     const surfaceOnly = state.session.settings.tyreTemperature === 'surfaceOnly';
@@ -51,7 +51,7 @@ export const applyTyres: SubStep = (state, frame, out) => {
         tyre.pressurePsi = pressure[corner];
       }
     }
-    out.changed.add('telemetry');
+    out.changed.add('tyres');
   }
   if (damage) {
     for (const car of state.cars) {
@@ -67,7 +67,7 @@ export const applyTyres: SubStep = (state, frame, out) => {
         tyre.blistersPct = blisters[corner];
       }
     }
-    out.changed.add('damage');
+    out.changed.add('tyres');
   }
   for (const packet of tyreSets) {
     const car = state.cars[packet.carIdx];
@@ -78,5 +78,5 @@ export const applyTyres: SubStep = (state, frame, out) => {
       at,
     );
   }
-  if (tyreSets.length > 0) out.changed.add('tyreSets');
+  if (tyreSets.length > 0) out.changed.add('tyres');
 };

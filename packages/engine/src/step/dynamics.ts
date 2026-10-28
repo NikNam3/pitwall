@@ -22,7 +22,7 @@ export const applyDynamics: SubStep = (state, frame, out) => {
         drs: t.drs === 1,
       });
     }
-    out.changed.add('telemetry');
+    out.changed.add('dynamics');
   }
   if (motion) {
     for (const car of state.cars) {
@@ -35,7 +35,7 @@ export const applyDynamics: SubStep = (state, frame, out) => {
         orientation: { yawRad: m.yaw, pitchRad: m.pitch, rollRad: m.roll },
       });
     }
-    out.changed.add('motion');
+    out.changed.add('dynamics');
   }
   if (status) {
     for (const car of state.cars) {
@@ -48,6 +48,6 @@ export const applyDynamics: SubStep = (state, frame, out) => {
         pitLimiter: s.pitLimiterStatus === 1,
       });
     }
-    out.changed.add('status');
+    out.changed.add('dynamics');
   }
 };

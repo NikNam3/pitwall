@@ -93,5 +93,5 @@ export const applyIdentity: SubStep = (state, frame, out) => {
   }
   if (!p && !playerChanged) return;
   placePlayer(state, frame.playerCarIndex);
-  out.changed.add('participants');
+  out.changed.add('identity');
 };

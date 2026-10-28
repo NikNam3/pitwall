@@ -46,7 +46,7 @@ const refreshActive = (state: EngineState): void => {
 export function step(state: EngineState, frame: Frame): StepOutput {
   const out: StepOutput = { changed: new Set(), corrections: [] };
   for (const subStep of SUB_STEPS) subStep(state, frame, out);
-  if (out.changed.has('participants') || out.changed.has('timing')) refreshActive(state);
+  if (out.changed.has('identity') || out.changed.has('timing')) refreshActive(state);
   state.lastFrameId = frame.frameId;
   state.sessionTime = frame.sessionTime;
   return out;

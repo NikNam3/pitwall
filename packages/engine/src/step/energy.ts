@@ -34,5 +34,5 @@ export const applyEnergy: SubStep = (state, frame, out) => {
       power: knownUnlessRestricted(car, { iceW: s.enginePowerIce, mgukW: s.enginePowerMguk }, at),
     };
   }
-  out.changed.add('status');
+  out.changed.add('energy');
 };
