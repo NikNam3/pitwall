@@ -14,7 +14,7 @@ export interface RawPacket {
  */
 export interface PacketSource {
   readonly feedId: FeedId;
-  /** Starts delivering packets to `onPacket`. Calling it twice is a bug and throws. */
+  /** Starts delivering packets to `onPacket`. Calling it twice, or after `stop()`, is a bug and throws. */
   start(onPacket: (packet: RawPacket) => void): void;
   /** Stops delivering and resolves once `done` has settled (also when it settled with an error). */
   stop(): Promise<void>;
@@ -24,3 +24,6 @@ export interface PacketSource {
    */
   readonly done: Promise<void>;
 }
+
+/** Default monotonic ms clock of the sources. */
+export const monotonicClock = (): number => performance.now();

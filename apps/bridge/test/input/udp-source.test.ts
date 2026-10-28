@@ -35,3 +35,21 @@ describe('UdpSource', () => {
     await a.stop();
   });
 });
+
+describe('UdpSource lifecycle', () => {
+  it('start after stop throws and binds nothing', async () => {
+    const src = new UdpSource({ feedId: FEED, port: 0, host: '127.0.0.1' });
+    await src.stop();
+    expect(() => src.start(() => {})).toThrow();
+    await expect(src.done).resolves.toBeUndefined();
+    await expect(src.listening).rejects.toThrow(/before it was listening/);
+    expect(src.boundPort).toBeUndefined();
+  });
+  it('start twice throws', async () => {
+    const src = new UdpSource({ feedId: FEED, port: 0, host: '127.0.0.1' });
+    src.start(() => {});
+    await src.listening;
+    expect(() => src.start(() => {})).toThrow();
+    await src.stop();
+  });
+});

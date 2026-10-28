@@ -1,6 +1,6 @@
 import { createSocket, type Socket } from 'node:dgram';
 import type { FeedId } from '@pitwall/domain';
-import type { PacketSource, RawPacket } from './packet-source.ts';
+import { monotonicClock, type PacketSource, type RawPacket } from './packet-source.ts';
 
 export interface UdpSourceOptions {
   readonly feedId: FeedId;
@@ -12,19 +12,21 @@ export interface UdpSourceOptions {
   readonly clock?: () => number;
 }
 
-const defaultClock = (): number => performance.now();
-
 /** Listens for the datagrams of one feed on one UDP port. */
 export class UdpSource implements PacketSource {
   readonly feedId: FeedId;
   readonly done: Promise<void>;
-  /** Resolves once bound; rejects with the bind error (e.g. `EADDRINUSE`). */
+  /**
+   * Resolves once bound; rejects with the bind error (e.g. `EADDRINUSE`). Also rejects, with a
+   * "closed before it was listening" error that is not a bind failure, when `stop()` comes before the bind.
+   */
   readonly listening: Promise<void>;
   readonly #port: number;
   readonly #host: string;
   readonly #clock: () => number;
   readonly #finish: PromiseWithResolvers<void> = Promise.withResolvers();
   readonly #bound: PromiseWithResolvers<void> = Promise.withResolvers();
+  #started = false;
   #socket: Socket | undefined;
   #boundPort: number | undefined;
   #stopped = false;
@@ -34,7 +36,7 @@ export class UdpSource implements PacketSource {
     this.feedId = opts.feedId;
     this.#port = opts.port;
     this.#host = opts.host ?? '0.0.0.0';
-    this.#clock = opts.clock ?? defaultClock;
+    this.#clock = opts.clock ?? monotonicClock;
     this.done = this.#finish.promise;
     this.listening = this.#bound.promise;
     this.done.catch(() => {});
@@ -47,7 +49,8 @@ export class UdpSource implements PacketSource {
   }
 
   start(onPacket: (packet: RawPacket) => void): void {
-    if (this.#socket !== undefined) throw new Error('UdpSource: already started');
+    if (this.#started) throw new Error('UdpSource: already started or stopped');
+    this.#started = true;
     const socket = createSocket('udp4');
     this.#socket = socket;
     socket.on('message', (message) => {
@@ -63,18 +66,25 @@ export class UdpSource implements PacketSource {
       this.#finish.reject(error);
       this.#close(socket);
     });
-    socket.once('close', () => {
-      this.#bound.reject(new Error('UdpSource: closed before it was listening'));
-      this.#finish.resolve();
-    });
+    socket.once('close', () => this.#settle());
     socket.bind(this.#port, this.#host);
   }
 
   async stop(): Promise<void> {
     this.#stopped = true;
-    if (this.#socket === undefined) this.#finish.resolve();
-    else this.#close(this.#socket);
+    if (this.#socket !== undefined) {
+      this.#close(this.#socket);
+    } else {
+      this.#started = true; // a later start() must not bind
+      this.#settle();
+    }
     await this.done.catch(() => {});
+  }
+
+  /** The socket is gone (or never existed): settles whichever of `listening` and `done` is still pending. */
+  #settle(): void {
+    this.#bound.reject(new Error('UdpSource: closed before it was listening'));
+    this.#finish.resolve();
   }
 
   #close(socket: Socket): void {

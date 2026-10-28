@@ -1,7 +1,7 @@
 import { setTimeout as sleepFor } from 'node:timers/promises';
 import type { FeedId } from '@pitwall/domain';
 import { readPwrec } from '../pwrec/reader.ts';
-import type { PacketSource, RawPacket } from './packet-source.ts';
+import { monotonicClock, type PacketSource, type RawPacket } from './packet-source.ts';
 
 export interface PwrecSourceOptions {
   readonly feedId: FeedId;
@@ -14,7 +14,6 @@ export interface PwrecSourceOptions {
   readonly sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
 }
 
-const defaultClock = (): number => performance.now();
 const defaultSleep = (ms: number, signal: AbortSignal): Promise<void> => sleepFor(ms, undefined, { signal });
 
 /**
@@ -36,7 +35,7 @@ export class PwrecSource implements PacketSource {
     this.feedId = opts.feedId;
     this.#path = opts.path;
     this.#realtime = opts.mode === 'realtime';
-    this.#clock = opts.clock ?? defaultClock;
+    this.#clock = opts.clock ?? monotonicClock;
     this.#sleep = opts.sleep ?? defaultSleep;
     this.done = this.#finish.promise;
     this.done.catch(() => {});
