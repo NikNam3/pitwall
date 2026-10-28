@@ -14,7 +14,8 @@
     "depcruise": "depcruise packages apps test-support test --config .dependency-cruiser.cjs",
     "mutation": "pnpm --workspace-concurrency=1 --filter @pitwall/protocol --filter @pitwall/engine --filter @pitwall/strategy run mutation",
     "check": "pnpm typecheck && pnpm lint && pnpm depcruise && pnpm test",
-    "gen:features": "node scripts/gen-features.ts"
+    "gen:features": "node scripts/gen-features.ts",
+    "pwrec-cut": "node apps/bridge/src/cli/pwrec-cut.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

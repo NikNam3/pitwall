@@ -51,5 +51,48 @@
         "385 BUTN events only (155 with UID 0), no Session packet"
       ]
     }
+  ],
+  "segments": [
+    {
+      "file": "tt-zandvoort-lap1.pwrec.gz",
+      "source": "ttZandvoort",
+      "fromS": 112,
+      "toS": 118,
+      "records": 2144,
+      "features": [
+        "2 context packets (Session, Participants) first",
+        "FTLP (car 0, 71.910 s) at session time 114.228, lap 1 to 2 at 114.234",
+        "SessionHistory car 0 with 2 laps at 114.447",
+        "FTLP x1, SPTP x1, BUTN x3",
+        "duration 5979.381 ms"
+      ]
+    },
+    {
+      "file": "race-singapore-start.pwrec.gz",
+      "source": "raceSingapore",
+      "fromS": 0,
+      "toS": 0.5,
+      "records": 2169,
+      "features": [
+        "no context packets; first record is an event before the first Session packet",
+        "everything before lights out (session time stays 0 until LGOT)",
+        "SSTA x1, STLG x5, LGOT x1, BUTN x8",
+        "duration 8750.935 ms"
+      ]
+    },
+    {
+      "file": "race-singapore-end.pwrec.gz",
+      "source": "raceSingapore",
+      "fromS": 61.5,
+      "toS": 63.4,
+      "records": 696,
+      "features": [
+        "2 context packets (Session, Participants) first",
+        "COLL at session time 62.205",
+        "20 UID-0 SessionHistory packets (cars 0-19) just before SEND, then SEND",
+        "COLL x1, SEND x1, BUTN x18",
+        "duration 3265.341 ms"
+      ]
+    }
   ]
 }
