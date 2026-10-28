@@ -1,0 +1,230 @@
+// @vitest-environment jsdom
+// The top bar (Task 17, spec 7.6, 7.7, 7.9, 8.5; mockup 9-top-bar). Contract the tests assume of shell/topbar/TopBar.svelte:
+//  - props: `{ store: TopicStore; feedId: FeedId; send: (a: UiAction) => void; sendReplay: (c: ReplayControl) => void }`;
+//    it acquires `session.info`, `feed.status`, `replay.status` (feed topics), `insights` (with `activeInsights`) and the global
+//    `ui.alerts` and `ui.settings` itself; the feed's kind comes from `store.feeds` (the `hello` message);
+//  - test ids: root `topbar`; one `segment-<name>` per SegmentName of TOP_BAR (an empty segment may render nothing else);
+//    realism: a button `realism` whose text has `text.topBar.realismOn|realismOff` and, when ui.settings.realismNextSession differs,
+//    also `text.topBar.realismNext(next)` ("→ on" / "→ off"); a click sends `realism.set { enabled: !realismNextSession }`;
+//    transport: `replay-transport` (only for kind 'replay'), a button `replay-pause` (click sends pause while playing, play while
+//    paused), a <select> `replay-speed` with options 0.5, 1, 2, 4, 8 (change sends `speed`), a number input `replay-lap`
+//    (change sends `jumpToLap`);
+//    alerts: at most 3 tier-1 alerts `alert-<key>` showing `formatInsight(insight)`, each with a button `alert-ack-<key>` (sends
+//    `alert.ack`); beyond 3 a button `alerts-more` with text `text.topBar.moreAlerts(n)`; a click opens a list with a toggle button
+//    `mute-<category>` for every InsightCategory (click sends `alertGroup.mute { category, muted: !currentlyMuted }`).
+// New in kit/text.ts: `topBar = { realismOn, realismOff, realismNext(enabled: boolean), moreAlerts(n: number) }`.
+import type { ReplayControl, UiAction } from '@pitwall/contracts';
+import { cleanup, fireEvent, render, screen } from '@testing-library/svelte';
+import { carId, feedId, type Insight, type InsightCategory } from '@pitwall/domain';
+import { tick } from 'svelte';
+import { afterEach, describe, expect, it } from 'vitest';
+import { TopicStore } from '../../src/connection/topic-store.svelte.ts';
+import * as text from '../../src/kit/text.ts';
+import { formatInsight } from '../../src/shell/topbar/insight-text.ts';
+import { TOP_BAR } from '../../src/shell/topbar/layout.ts';
+import TopBar from '../../src/shell/topbar/TopBar.svelte';
+import { FakeConnection } from '../connection/fake-connection.ts';
+
+const FEED = feedId('f1');
+afterEach(cleanup);
+
+const crit = (key: string, at: number, over: Partial<Insight> = {}): Insight => ({
+  key,
+  severity: 'critical',
+  category: 'damage',
+  feedId: FEED,
+  carId: carId(5),
+  kind: 'madeUpKind',
+  params: { n: at },
+  raisedAt: at,
+  ...over,
+});
+const info = (realism: boolean) => ({
+  feedId: FEED,
+  sessionUid: '1',
+  playerCar: carId(5),
+  realism,
+  session: { kind: 'race', totalLaps: 62, timeLeftMs: 0, flag: 'green' },
+});
+const replayStatus = (paused: boolean) => ({ paused, speed: 1, sessionTimeMs: 1000, playerLap: 5, atEnd: false });
+
+const setup = async (kind: 'udp' | 'replay' = 'udp') => {
+  const connection = new FakeConnection();
+  const store = new TopicStore(connection);
+  const actions: UiAction[] = [];
+  const controls: ReplayControl[] = [];
+  connection.push({ type: 'hello', contractVersion: 0, feeds: [{ feedId: FEED, kind, label: 'x' }] });
+  render(TopBar, { store, feedId: FEED, send: (a: UiAction) => actions.push(a), sendReplay: (c: ReplayControl) => controls.push(c) });
+  const idOf = (topic: string): string => {
+    const found = connection.subscribes().filter((s) => s.topic === topic).at(-1);
+    if (found === undefined) throw new Error(`no subscription to ${topic}`);
+    return found.id;
+  };
+  const push = async (topic: string, value: unknown) => {
+    connection.push({ type: 'snapshot', id: idOf(topic), value });
+    await tick();
+  };
+  const raise = async (...list: Insight[]) => {
+    connection.push({ type: 'snapshot', id: idOf('insights'), entries: list.map((insight) => ({ type: 'raised', insight })) });
+    await tick();
+  };
+  return { connection, actions, controls, push, raise };
+};
+
+describe('segments', () => {
+  it('renders the root and one segment per name of the layout', async () => {
+    await setup();
+    expect(screen.getByTestId('topbar')).toBeTruthy();
+    for (const name of [...TOP_BAR.left, ...TOP_BAR.right]) expect(screen.getByTestId(`segment-${name}`)).toBeTruthy();
+  });
+});
+
+describe('realism', () => {
+  it('shows the current session value', async () => {
+    const t = await setup();
+    await t.push('session.info', info(true));
+    await t.push('ui.settings', { realismNextSession: true, keys: {} });
+    const el = screen.getByTestId('realism');
+    expect(el.textContent).toContain(text.topBar.realismOn);
+    expect(el.textContent).not.toContain('→');
+  });
+
+  it('a pending change shows → on', async () => {
+    const t = await setup();
+    await t.push('session.info', info(false));
+    await t.push('ui.settings', { realismNextSession: true, keys: {} });
+    const el = screen.getByTestId('realism');
+    expect(el.textContent).toContain(text.topBar.realismOff);
+    expect(el.textContent).toContain(text.topBar.realismNext(true));
+  });
+
+  it('a pending change to off shows → off', async () => {
+    const t = await setup();
+    await t.push('session.info', info(true));
+    await t.push('ui.settings', { realismNextSession: false, keys: {} });
+    expect(screen.getByTestId('realism').textContent).toContain(text.topBar.realismNext(false));
+  });
+
+  it('a click sends realism.set with the opposite of the value pending for the next session', async () => {
+    const t = await setup();
+    await t.push('session.info', info(true));
+    await t.push('ui.settings', { realismNextSession: true, keys: {} });
+    await fireEvent.click(screen.getByTestId('realism'));
+    expect(t.actions).toEqual([{ kind: 'realism.set', enabled: false }]);
+  });
+});
+
+describe('replay transport', () => {
+  it('is hidden for a udp feed', async () => {
+    const t = await setup('udp');
+    await t.push('session.info', info(false));
+    expect(screen.queryByTestId('replay-transport')).toBeNull();
+  });
+
+  it('is shown for a replay feed', async () => {
+    const t = await setup('replay');
+    await t.push('replay.status', replayStatus(false));
+    expect(screen.getByTestId('replay-transport')).toBeTruthy();
+  });
+
+  it('the pause button sends pause while playing and play while paused', async () => {
+    const t = await setup('replay');
+    await t.push('replay.status', replayStatus(false));
+    await fireEvent.click(screen.getByTestId('replay-pause'));
+    await t.push('replay.status', replayStatus(true));
+    await fireEvent.click(screen.getByTestId('replay-pause'));
+    expect(t.controls).toEqual([{ kind: 'pause' }, { kind: 'play' }]);
+  });
+
+  it('the speed control offers 0.5, 1, 2, 4, 8 and sends speed', async () => {
+    const t = await setup('replay');
+    await t.push('replay.status', replayStatus(false));
+    const select = screen.getByTestId('replay-speed') as HTMLSelectElement;
+    expect([...select.options].map((o) => Number(o.value))).toEqual([0.5, 1, 2, 4, 8]);
+    await fireEvent.change(select, { target: { value: '4' } });
+    expect(t.controls).toEqual([{ kind: 'speed', factor: 4 }]);
+  });
+
+  it('the lap input shows the player lap and sends jumpToLap', async () => {
+    const t = await setup('replay');
+    await t.push('replay.status', replayStatus(false));
+    const input = screen.getByTestId('replay-lap') as HTMLInputElement;
+    expect(input.type).toBe('number');
+    expect(input.value).toBe('5');
+    await fireEvent.change(input, { target: { value: '12' } });
+    expect(t.controls).toEqual([{ kind: 'jumpToLap', lap: 12 }]);
+  });
+});
+
+describe('tier-1 alerts', () => {
+  it('shows an alert with its formatted text and acknowledges it with alert.ack', async () => {
+    const t = await setup();
+    await t.push('ui.alerts', { acknowledged: [], muted: [] });
+    const a = crit('a', 1000);
+    await t.raise(a, crit('adv', 500, { severity: 'advisory' }));
+    expect(screen.getByTestId('alert-a').textContent).toContain(formatInsight(a));
+    expect(screen.queryByTestId('alert-adv')).toBeNull();
+    await fireEvent.click(screen.getByTestId('alert-ack-a'));
+    expect(t.actions).toEqual([{ kind: 'alert.ack', key: 'a' }]);
+  });
+
+  it('hides acknowledged alerts', async () => {
+    const t = await setup();
+    await t.push('ui.alerts', { acknowledged: ['a'], muted: [] });
+    await t.raise(crit('a', 1000), crit('b', 2000));
+    expect(screen.queryByTestId('alert-a')).toBeNull();
+    expect(screen.getByTestId('alert-b')).toBeTruthy();
+  });
+
+  it('shows at most 3, oldest first, plus +N', async () => {
+    const t = await setup();
+    await t.push('ui.alerts', { acknowledged: [], muted: [] });
+    await t.raise(crit('e', 5000), crit('c', 3000), crit('a', 1000), crit('d', 4000), crit('b', 2000));
+    for (const key of ['a', 'b', 'c']) expect(screen.getByTestId(`alert-${key}`)).toBeTruthy();
+    for (const key of ['d', 'e']) expect(screen.queryByTestId(`alert-${key}`)).toBeNull();
+    expect(screen.getByTestId('alerts-more').textContent).toContain(text.topBar.moreAlerts(2));
+  });
+
+  it('has no +N with three or fewer alerts', async () => {
+    const t = await setup();
+    await t.push('ui.alerts', { acknowledged: [], muted: [] });
+    await t.raise(crit('a', 1000), crit('b', 2000), crit('c', 3000));
+    expect(screen.queryByTestId('alerts-more')).toBeNull();
+  });
+
+  it('a resolved insight leaves the bar', async () => {
+    const t = await setup();
+    await t.push('ui.alerts', { acknowledged: [], muted: [] });
+    await t.raise(crit('a', 1000));
+    t.connection.push({ type: 'append', id: t.connection.subscribes().filter((s) => s.topic === 'insights').at(-1)!.id, entries: [{ type: 'resolved', key: 'a', at: 2000 }] });
+    await tick();
+    expect(screen.queryByTestId('alert-a')).toBeNull();
+  });
+});
+
+describe('muting', () => {
+  const open = async (muted: InsightCategory[] = []) => {
+    const t = await setup();
+    await t.push('ui.alerts', { acknowledged: [], muted });
+    await t.raise(crit('a', 1000), crit('b', 2000), crit('c', 3000), crit('d', 4000, { category: 'tyres' }));
+    await fireEvent.click(screen.getByTestId('alerts-more'));
+    return t;
+  };
+
+  it('the +N list has a mute toggle for every category', async () => {
+    await open();
+    for (const category of ['strategy', 'tyres', 'energy', 'damage', 'race', 'feed', 'system']) expect(screen.getByTestId(`mute-${category}`)).toBeTruthy();
+  });
+
+  it('muting tyres sends alertGroup.mute with muted true', async () => {
+    const t = await open();
+    await fireEvent.click(screen.getByTestId('mute-tyres'));
+    expect(t.actions).toEqual([{ kind: 'alertGroup.mute', category: 'tyres', muted: true }]);
+  });
+
+  it('a muted category toggles back with muted false', async () => {
+    const t = await open(['tyres']);
+    await fireEvent.click(screen.getByTestId('mute-tyres'));
+    expect(t.actions).toEqual([{ kind: 'alertGroup.mute', category: 'tyres', muted: false }]);
+  });
+});
