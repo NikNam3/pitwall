@@ -22,7 +22,7 @@ describe('writeDebugDump', () => {
     const written = writeDebugDump(d, { feedId: F, sessionUid: frame.sessionUid, frame, pwrec: { path: '/rec/a.pwrec.gz', t: 1234 }, error: new Error('select failed') });
     const dump = JSON.parse(readFileSync(join(d, basename(written)), 'utf8'));
     expect(dump).toMatchObject({ feedId: F, sessionUid: '1895827638050388100', frame: { sessionUid: '1895827638050388100', frameId: frame.frameId }, pwrec: { path: '/rec/a.pwrec.gz', t: 1234 } });
-    expect(dump.frame.session.header.sessionUid).toBe('1895827638050388100');
+    expect(dump.frame.lapData.header.sessionUid).toBe('1895827638050388100');
     expect(JSON.stringify(dump.error)).toContain('select failed');
   });
   it('without a session file the pwrec position has no path', () => {
