@@ -3,7 +3,10 @@ import type { FeedId } from '@pitwall/domain';
 /** One UDP datagram of one feed, exactly as received (or as recorded). */
 export interface RawPacket {
   readonly feedId: FeedId;
-  /** Shell-side diagnostics time in ms; never read by the engine. */
+  /**
+   * Shell-side diagnostics time in ms; never read by the engine, except that `SessionTracker` compares receive times
+   * (differences only) for the `SEND` grace window, because UID-0 packets carry no usable session time.
+   */
   readonly receivedAtMs: number;
   readonly bytes: Uint8Array;
 }

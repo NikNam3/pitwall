@@ -88,7 +88,7 @@ Several agents work in parallel in git worktrees; a supervisor merges. The archi
 - The engine never reads the system clock. Time comes only from `sessionTime` and frame IDs.
 - Randomness only through an injected, seeded generator.
 - The same input stream always produces the same state and the same topic stream (tested, see 10.2).
-- Wall-clock time (`receivedAtMs`) exists only in the shell, for diagnostics.
+- Wall-clock time (`receivedAtMs`) exists only in the shell, for diagnostics, except that `SessionTracker` compares receive times (differences only) for the `SEND` grace window, because UID-0 packets carry no usable session time.
 
 ## 4. Input and protocol
 
@@ -113,7 +113,7 @@ type RawPacket = { feedId: FeedId; receivedAtMs: number; bytes: Uint8Array };
 - Checked against all three recordings: the first record starts directly after the metadata (offset `10 + n`).
 
 ### 4.3 Decoder (`packages/protocol`)
-- **Schema-driven:** each spec struct is described once declaratively (field, type, array length, nesting). Decoder and encoder are generated from that description. Expected sizes per packet type are checked against the spec table at startup and in tests (motion 1349, session 753, lapData 1285, event 45, participants 1284, carSetups 1133, carTelemetry 1352, carStatus 1239, finalClassification 1042, lobbyInfo 954, carDamage 1041, sessionHistory 1460, tyreSets 231, motionEx 273, timeTrial 101, lapPositions 1131).
+- **Schema-driven:** each spec struct is described once declaratively (field, type, array length, nesting). Decoder and encoder are generated from that description. Expected sizes per packet type are checked against the spec table in tests (motion 1349, session 753, lapData 1285, event 45, participants 1284, carSetups 1133, carTelemetry 1352, carStatus 1239, finalClassification 1042, lobbyInfo 954, carDamage 1041, sessionHistory 1460, tyreSets 231, motionEx 273, timeTrial 101, lapPositions 1131).
 - **Faithful to the spec,** with three cosmetic exceptions: no `m_` prefix; camelCase; split times (`…MSPart` + `…MinutesPart`) merged into milliseconds. The game writes small negative deltas as `msPart ≥ 60000` with `minutes = 0` (u16 wrap, observed −50…−16 ms); these decode to negative milliseconds and encode back byte-identically. Units, codes and wheel order (RL, RR, FL, FR) stay unchanged.
 - **Result instead of exception:**
   ```ts
@@ -141,7 +141,7 @@ type Frame = {
 The assembler is pure logic (usable from tests); the bridge only drives it.
 
 ### 5.2 Assembly rules
-- Grouped by `(sessionUid, overallFrameId)`. (`frameId` goes back after a flashback; grouping by it would drop every following packet as late.)
+- Grouped by `overallFrameId` within a session (one assembler per session). (`frameId` goes back after a flashback; grouping by it would drop every following packet as late.)
 - **Reorder window** of 2 frames. A frame is closed once a newer frame is beyond the window.
 - Packets for frames already closed are dropped and counted (`latePackets`).
 - **`frameId` gaps are not loss.** The game runs faster than the send rate and skips frame IDs (observed: delta 2 in about 3 % of frames, with a normal session-time step). Loss is measured instead by:
@@ -165,7 +165,8 @@ The assembler is pure logic (usable from tests); the bridge only drives it.
   2. cut the history back to the stored lengths
   3. re-run the buffered frames up to the target frame
   4. continue normally with the game's new frames
-- Older snapshots are kept for the whole session (the current state is small; history is only referenced by length).
+- Every snapshot within `replayWindowMs` is kept; older ones are thinned to one per 30 s of session time plus the first one (pending the user's answer to Q3).
+- The game can report one flashback twice (an `FLBK` event and the `frameId` drop, in different frames). A rewind to the same target is ignored until the new timeline has passed the frame after it.
 - An info insight `flashback` (target lap, distance in seconds).
 - The `.pwrec` file keeps the original stream including the flashback.
 

@@ -40,7 +40,7 @@ PacketSource (UDP | PwrecFile) → RawPacket → decode → Frame assembler → 
 - The engine never reads the system clock. Time comes only from `sessionTime` and frame IDs.
 - Randomness only through an injected, seeded generator.
 - The same input stream always produces the same state and the same topic stream.
-- Wall-clock time (`receivedAtMs`) exists only in the shell, for diagnostics.
+- Wall-clock time (`receivedAtMs`) exists only in the shell, for diagnostics, except that `SessionTracker` compares receive times (differences only) for the `SEND` grace window, because UID-0 packets carry no usable session time.
 
 ## Parallel development
 
