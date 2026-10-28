@@ -56,7 +56,11 @@ describe('buildCatalogue on the clean tree', () => {
   it('lists features: folder, strategy folder, private flag, calculators, config', async () => {
     const c = await buildCatalogue(tree('clean'));
     const feature = (name: string) => c.features.find((f) => f.name === name)!;
-    expect(feature('rejoin')).toMatchObject({ private: false, calculators: [{ id: 'rejoin.projection', reads: ['feed'], cadence: 'frame' }], jobs: [], config: ['rejoin'] });
+    expect(feature('rejoin')).toMatchObject({ private: false, calculators: [
+        { id: 'rejoin.projection', reads: ['feed'], cadence: 'frame' },
+        // Engine shapes become strings: `{ hz: n }` -> `<n> Hz`, `{ calculator: id }` -> `calculator:<id>`.
+        { id: 'rejoin.rate', reads: ['calculator:rejoin.projection', 'feed'], cadence: '10 Hz' },
+      ], jobs: [], config: ['rejoin'] });
     expect(feature('rejoin').folder).toMatch(/features\/rejoin$/);
     expect(feature('rejoin').strategyFolder).toMatch(/strategy\/rejoin$/);
     expect(feature('undercut-card').private).toBe(true);

@@ -25,7 +25,8 @@
       "name": "feed-status",
       "folder": "apps/bridge/src/features/feed-status",
       "private": true,
-      "calculators": [{ "id": "feed.status", "reads": ["feed"], "cadence": "frame" }],
+      "calculators": [{ "id": "feed.status", "reads": ["feed"], "cadence": "frame" },
+        { "id": "feed.rate", "reads": ["calculator:feed.status"], "cadence": "10 Hz" }],
       "jobs": [],
       "config": []
     }

@@ -1,1 +1,1 @@
-export default { name: 'rejoin', calculators: [{ id: 'rejoin.projection', kind: 'quick', reads: ['feed'], cadence: 'frame' }], topics: [{ topic: 'rejoin.projection', from: 'rejoin.projection' }], config: [{ key: 'rejoin' }] };
+export default { name: 'rejoin', calculators: [{ id: 'rejoin.projection', kind: 'quick', reads: ['feed'], cadence: 'frame' }, { id: 'rejoin.rate', kind: 'quick', reads: [{ calculator: 'rejoin.projection' }, 'feed'], cadence: { hz: 10 } }], topics: [{ topic: 'rejoin.projection', from: 'rejoin.projection' }], config: [{ key: 'rejoin' }] };

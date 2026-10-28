@@ -36,7 +36,7 @@ const catalogue = {
     { name: 'session.info', owner: 'core', mode: 'state', scope: 'feed', maxHz: 2, file: 'packages/contracts/src/topics/session.info.ts', binding: { kind: 'calculator', source: 'session.info', feature: 'session-info' }, readers: ['feed-status'] },
   ],
   features: [
-    { name: 'feed-status', folder: 'apps/bridge/src/features/feed-status', private: true, calculators: [{ id: 'feed.status', reads: ['feed'], cadence: 'frame' }], jobs: [], config: [] },
+    { name: 'feed-status', folder: 'apps/bridge/src/features/feed-status', private: true, calculators: [{ id: 'feed.status', reads: ['feed'], cadence: 'frame' }, { id: 'feed.rate', reads: ['calculator:feed.status'], cadence: '10 Hz' }], jobs: [], config: [] },
     { name: 'session-info', folder: 'apps/bridge/src/features/session-info', private: false, calculators: [{ id: 'session.info', reads: ['session'], cadence: 'frame' }], jobs: [], config: [] },
   ],
 };
@@ -91,6 +91,28 @@ describe('Inspector', () => {
     await vi.waitFor(() => expect(screen.getByTestId('inspector').textContent).toContain('0.4'));
     expect(screen.getByTestId('inspector').textContent).toContain('0.3');
     expect(screen.getByTestId('inspector').textContent).toContain('frame');
+  });
+
+  it('shows calculator cadences and reads as strings', () => {
+    setup();
+    const text = screen.getByTestId('inspector').textContent ?? '';
+    expect(text).toContain('10 Hz');
+    expect(text).not.toContain('[object Object]');
+  });
+
+  it('shows the current value of a topic (a short rendering)', async () => {
+    const { connection, idOf } = setup();
+    connection.push({ type: 'snapshot', id: idOf('feed.status'), value: { feedId: FEED, connected: true, stale: false, lossPercent: 12.5 } });
+    await vi.waitFor(() => expect(row('feed.status').textContent).toContain('lossPercent'));
+    expect(row('feed.status').textContent).toContain('12.5');
+  });
+
+  it('a topic that never updated says "never" as its last update; after data it does not', async () => {
+    const { connection, idOf } = setup();
+    expect(row('feed.status').textContent).toContain('never');
+    connection.push({ type: 'snapshot', id: idOf('feed.status'), value: { feedId: FEED, connected: true, stale: false } });
+    await vi.waitFor(() => expect(row('feed.status').textContent).not.toContain('never'));
+    expect(row('session.info').textContent).toContain('never');
   });
 
   it.each([

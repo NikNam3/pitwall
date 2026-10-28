@@ -28,6 +28,13 @@ describe('pitwall where <unit>', () => {
     expect(r.out).toContainEqual(expect.stringMatching(/feed\.status.*calculator|calculator.*feed\.status/));
   });
 
+  it('prints cadences and reads as readable strings, never [object Object]', async () => {
+    const r = await where(['feed-status', '--catalogue', CATALOGUE]);
+    expect(r.out.join('\n')).not.toContain('[object Object]');
+    expect(r.out).toContainEqual(expect.stringContaining('10 Hz'));
+    expect(r.out).toContainEqual(expect.stringContaining('calculator:feed.status'));
+  });
+
   it('an unknown unit names itself, exits 1', async () => {
     const r = await where(['nope', '--catalogue', CATALOGUE]);
     expect(r.code).toBe(1);
