@@ -1,4 +1,4 @@
-import { known, unknown, type CarState, type Kg, type Known, type LapRecord, type SessionTime } from '@pitwall/domain';
+import { known, unknown, type CarId, type CarState, type Kg, type Known, type LapRecord, type SessionTime } from '@pitwall/domain';
 import type { SessionHistoryPacket } from '@pitwall/protocol';
 import type { Frame } from '../frame/frame.ts';
 import type { EngineState, LapCursor } from '../state/engine-state.ts';
@@ -44,19 +44,21 @@ const addElapsed = (state: EngineState, cursor: LapCursor, at: SessionTime): voi
 
 const share = (part: number, whole: number): number => (whole > 0 ? part / whole : 0);
 
-/** The lap just completed, with the values LapData can give: sector 3 is what is left of the lap time. */
-const provisionalLap = (state: EngineState, car: CarState, cursor: LapCursor, at: SessionTime): LapRecord => {
-  const { timing } = car;
-  const lapNumber = timing.lap - 1;
-  const lapTimeMs = timing.lastLapTimeMs;
+/** A lap of this cursor as the values LapData can give: sector 3 is what is left of the lap time. */
+const lapFromCursor = (
+  car: CarState,
+  cursor: LapCursor,
+  lapNumber: number,
+  lapTimeMs: number,
+  at: SessionTime,
+): LapRecord => {
   const hasSectors = cursor.lap === lapNumber && cursor.sector1Ms > 0 && cursor.sector2Ms > 0;
-  const [s1, s2] = hasSectors ? [cursor.sector1Ms, cursor.sector2Ms] : [0, 0];
   const valid = !cursor.invalid;
   return {
     carId: car.id,
     lapNumber,
     lapTimeMs,
-    sectorTimesMs: hasSectors ? [s1, s2, lapTimeMs - s1 - s2] : [0, 0, 0],
+    sectorTimesMs: hasSectors ? [cursor.sector1Ms, cursor.sector2Ms, lapTimeMs - cursor.sector1Ms - cursor.sector2Ms] : [0, 0, 0],
     valid: { lap: valid, sectors: [valid, valid, valid] },
     actualCompound: cursor.actualCompound,
     visualCompound: cursor.visualCompound,
@@ -67,11 +69,32 @@ const provisionalLap = (state: EngineState, car: CarState, cursor: LapCursor, at
     vscShare: share(cursor.vscMs, cursor.trackedMs),
     inLap: cursor.pitted,
     outLap: cursor.outLap,
-    positionAtEnd: timing.position,
+    positionAtEnd: car.timing.position,
     status: 'provisional',
     completedAt: at,
   };
 };
+
+/** A lap LapData never showed us: only Session History has it, so what LapData would have given is unknown. */
+const lapFromHistoryOnly = (car: CarState, lapNumber: number, lapTimeMs: number, at: SessionTime): LapRecord => ({
+  carId: car.id,
+  lapNumber,
+  lapTimeMs,
+  sectorTimesMs: [0, 0, 0],
+  valid: { lap: true, sectors: [true, true, true] },
+  actualCompound: 'unknown',
+  visualCompound: 'unknown',
+  tyreAgeAtStart: 0,
+  fuelAtStartKg: unknown('notReceived'),
+  fuelAtEndKg: unknown('notReceived'),
+  scShare: 0,
+  vscShare: 0,
+  inLap: false,
+  outLap: false,
+  positionAtEnd: 0,
+  status: 'provisional',
+  completedAt: at,
+});
 
 const trackLap = (state: EngineState, car: CarState, at: SessionTime): void => {
   const { timing } = car;
@@ -89,13 +112,23 @@ const trackLap = (state: EngineState, car: CarState, at: SessionTime): void => {
     cursor.invalid ||= timing.currentLapInvalid;
     return;
   }
-  const record = provisionalLap(state, car, cursor, at);
+  const lapNumber = timing.lap - 1;
   const indexOfLap = state.open.lapIndex[car.id];
-  if (indexOfLap) indexOfLap[record.lapNumber] = { provisional: state.history.laps.length, confirmed: false };
-  state.history.laps.push(record);
+  // Laps a lost frame swallowed have no provisional; Session History can still supply them.
+  if (indexOfLap) for (let skipped = cursor.lap; skipped < lapNumber; skipped++) indexOfLap[skipped] ??= { confirmed: false };
+  // Session History may already have confirmed this lap (a final lap the game never rolled over).
+  if (!indexOfLap?.[lapNumber]?.confirmed) {
+    if (indexOfLap) indexOfLap[lapNumber] = { provisional: state.history.laps.length, confirmed: false };
+    state.history.laps.push(lapFromCursor(car, cursor, lapNumber, timing.lastLapTimeMs, at));
+  }
   state.open.laps[car.id] = openCursor(car, at);
 };
 
+/** The newest lap of the car that has a record (provisional or confirmed), 0 if none. */
+export const lastRecordedLap = (state: EngineState, carId: CarId): number =>
+  Math.max(0, ...Object.keys(state.open.lapIndex[carId] ?? {}).map(Number));
+
+/** Corrections for what LapData got wrong; a sector LapData never had (0) is not a correction. */
 const corrections = (provisional: LapRecord, confirmed: LapRecord): LapCorrection[] => {
   const { carId, lapNumber } = provisional;
   const pairs = [
@@ -104,44 +137,66 @@ const corrections = (provisional: LapRecord, confirmed: LapRecord): LapCorrectio
     ['sector2Ms', provisional.sectorTimesMs[1], confirmed.sectorTimesMs[1]],
   ] as const;
   return pairs
-    .filter(([, before, after]) => before !== after)
+    .filter(([field, before, after]) => before !== after && (field === 'lapTimeMs' || before > 0))
     .map(([field, before, after]) => ({ carId, lapNumber, field, provisional: before, confirmed: after }));
 };
 
-/** Appends the confirmed version of every lap the packet completes and no earlier packet confirmed. */
+type LapEntry = SessionHistoryPacket['lapHistoryData'][number];
+
+const validFrom = (flags: number): LapRecord['valid'] => ({
+  lap: (flags & LAP_VALID) !== 0,
+  sectors: [(flags & SECTOR_VALID[0]) !== 0, (flags & SECTOR_VALID[1]) !== 0, (flags & SECTOR_VALID[2]) !== 0],
+});
+
+/**
+ * The lap before Session History confirms it: the stored provisional, the car's open lap (a final lap the game never
+ * rolled over) or a lap skipped by a lap-number jump. Laps from before the engine saw the car stay unknown.
+ */
+const unconfirmedLap = (state: EngineState, packet: SessionHistoryPacket, lapNumber: number, entry: LapEntry, at: SessionTime) => {
+  const slot = state.open.lapIndex[packet.carIdx]?.[lapNumber];
+  if (slot?.provisional !== undefined) {
+    const stored = state.history.laps[slot.provisional];
+    return stored && { lap: stored, reported: true };
+  }
+  const car = state.cars[packet.carIdx];
+  const cursor = state.open.laps[packet.carIdx];
+  if (!car) return undefined;
+  if (cursor?.lap === lapNumber) return { lap: lapFromCursor(car, cursor, lapNumber, entry.lapTimeInMs, at), reported: false };
+  return slot ? { lap: lapFromHistoryOnly(car, lapNumber, entry.lapTimeInMs, at), reported: false } : undefined;
+};
+
+/**
+ * Appends the confirmed version of every lap the packet completes and no earlier packet confirmed. Only a lap that
+ * has a provisional is compared with it; one that had none is created from the history entry.
+ */
 const confirmLaps = (state: EngineState, packet: SessionHistoryPacket, at: SessionTime, out: StepOutput): void => {
   const indexOfLap = state.open.lapIndex[packet.carIdx];
   if (!indexOfLap) return;
   for (let i = 0; i < packet.numLaps; i++) {
     const entry = packet.lapHistoryData[i];
-    const slot = indexOfLap[i + 1];
-    if (!entry || entry.lapTimeInMs <= 0 || !slot || slot.confirmed || slot.provisional === undefined) continue;
-    const provisional = state.history.laps[slot.provisional];
-    if (!provisional) continue;
+    const lapNumber = i + 1;
+    if (!entry || entry.lapTimeInMs <= 0 || indexOfLap[lapNumber]?.confirmed) continue;
+    const before = unconfirmedLap(state, packet, lapNumber, entry, at);
+    if (!before) continue;
     const confirmed: LapRecord = {
-      ...provisional,
+      ...before.lap,
       lapTimeMs: entry.lapTimeInMs,
       sectorTimesMs: [entry.sector1TimeMs, entry.sector2TimeMs, entry.sector3TimeMs],
-      valid: {
-        lap: (entry.lapValidBitFlags & LAP_VALID) !== 0,
-        sectors: [
-          (entry.lapValidBitFlags & SECTOR_VALID[0]) !== 0,
-          (entry.lapValidBitFlags & SECTOR_VALID[1]) !== 0,
-          (entry.lapValidBitFlags & SECTOR_VALID[2]) !== 0,
-        ],
-      },
+      valid: validFrom(entry.lapValidBitFlags),
       status: 'confirmed',
       completedAt: at,
     };
-    out.corrections.push(...corrections(provisional, confirmed));
+    if (before.reported) out.corrections.push(...corrections(before.lap, confirmed));
     state.history.laps.push(confirmed);
-    slot.confirmed = true;
+    const slot = indexOfLap[lapNumber];
+    if (slot) slot.confirmed = true;
+    else indexOfLap[lapNumber] = { confirmed: true };
   }
 };
 
 /**
  * Laps are appended twice, never changed: provisional when the lap number goes up (from LapData), confirmed when
- * Session History holds the lap. The confirmed record wins; what differed is reported as corrections.
+ * Session History holds the lap (a lap that never got a provisional is appended confirmed). The confirmed record wins; what differed is reported as corrections.
  */
 export const applyLaps: SubStep = (state, frame: Frame, out) => {
   const before = state.history.laps.length;

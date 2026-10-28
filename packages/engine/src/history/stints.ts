@@ -2,6 +2,7 @@ import type { CarState } from '@pitwall/domain';
 import type { EngineState, OpenStint } from '../state/engine-state.ts';
 import type { SubStep } from '../step/types.ts';
 import { carsWithLapData } from './cars.ts';
+import { lastRecordedLap } from './laps.ts';
 
 const openStint = (car: CarState, firstLap: number): OpenStint => ({
   firstLap,
@@ -38,7 +39,7 @@ const trackStint = (state: EngineState, car: CarState): void => {
   state.open.stints[car.id] = openStint(car, lastLap + 1);
 };
 
-/** Stints come from Car Status; `SEND` closes the stint every car is still on. */
+/** Stints come from Car Status; `SEND` closes the stint every car is still on, at its last recorded lap (so it runs after `applyLaps`). */
 export const applyStints: SubStep = (state, frame, out) => {
   const before = state.history.stints.length;
   for (const car of carsWithLapData(state, frame)) trackStint(state, car);
@@ -46,7 +47,7 @@ export const applyStints: SubStep = (state, frame, out) => {
     for (const car of state.cars) {
       const stint = state.open.stints[car.id];
       if (!stint) continue;
-      closeStint(state, car, stint, car.timing.lap - 1);
+      closeStint(state, car, stint, lastRecordedLap(state, car.id));
       state.open.stints[car.id] = undefined;
     }
   }
