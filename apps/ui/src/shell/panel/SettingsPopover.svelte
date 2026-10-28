@@ -21,6 +21,8 @@
     anchor?: { x: number; y: number } | undefined;
   };
   let { decl, options, onChange, linkGroup, onLinkGroup, onClose, anchor }: Props = $props();
+  /** Radio group names are per popover, so the radios of two open popovers never form one group. */
+  const uid = $props.id();
 
   const declared = $derived(Object.entries(decl.options as Record<string, OptionDecl<unknown>>));
   const valueOf = (name: string, option: OptionDecl<unknown>): unknown => (name in options ? options[name] : option.default);
@@ -42,7 +44,7 @@
       <div role="radiogroup" aria-label={option.label}>
         <span style:color={role('textDim')}>{option.label}</span>
         {#each option.choices as choice (choice)}
-          <label><input type="radio" name="{decl.name}.{name}" checked={current === choice} onchange={() => change(name, choice)} />{choice}</label>
+          <label><input type="radio" name="{uid}.{name}" checked={current === choice} onchange={() => change(name, choice)} />{choice}</label>
         {/each}
       </div>
     {:else if option.kind === 'number'}
@@ -79,7 +81,7 @@
   <div role="radiogroup" aria-label={text.linkGroup}>
     <span style:color={role('textDim')}>{text.linkGroup}</span>
     {#each LINK_GROUP_IDS as id (id)}
-      <label><input type="radio" name="pw-link-group" checked={linkGroup === id} onchange={() => onLinkGroup(id)} />{id}</label>
+      <label><input type="radio" name="{uid}-link-group" checked={linkGroup === id} onchange={() => onLinkGroup(id)} />{id}</label>
     {/each}
   </div>
   <div style:color={role('textFaint')}>{text.settingsSaved}</div>

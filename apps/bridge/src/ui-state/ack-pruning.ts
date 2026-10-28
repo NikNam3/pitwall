@@ -7,32 +7,42 @@ import type { UiState } from './ui-state.ts';
 const CLIENT_ID = 'bridge:ack-pruning';
 
 /**
- * Follows the `insights` topic of `feeds` as an in-process hub client and, each time an insight is resolved, calls
- * `pruneAcknowledged` with the occurrences active on any of them. Only a resolve prunes: a session change or a restart
- * re-raises the feed's insights that still hold with their old `raisedAt`, so their acknowledgements must survive the
- * moment the log is empty. Subscribing to `insights` runs no extra calculator (insight calculators always run).
+ * True when `token` names an occurrence on `feed` raised at or before `at` (it has been reached, so if it is not
+ * active it has ended), or is no occurrence token at all (a bare key from an older UI acknowledges nothing).
+ */
+function passedBy(token: string, feed: FeedId, at: number): boolean {
+  const cut = token.lastIndexOf(':');
+  const raisedAt = Number(token.slice(cut + 1));
+  if (token.indexOf(':') === cut || token.slice(cut + 1) === '' || !Number.isFinite(raisedAt)) return true;
+  return token.startsWith(`${feed}:`) && raisedAt <= at;
+}
+
+/**
+ * Follows the `insights` topic of `feeds` as an in-process hub client. Each resolve on a feed prunes the acknowledged
+ * occurrences of that feed whose time has passed (raised at or before the resolve) and that are not active. A replay
+ * that runs again from the start (a backward jump, a dev restart) raises the same occurrences with the same
+ * `raisedAt`, so an occurrence it has not reached yet keeps its acknowledgement. A snapshot (reset, flashback,
+ * startup) never prunes. Subscribing to `insights` runs no extra calculator (insight calculators always run).
  * Returns the unsubscribe.
  */
 export function pruneEndedAcknowledgements(hub: TopicHub, feeds: readonly FeedId[], state: Pick<UiState, 'pruneAcknowledged'>): () => void {
   const active = new Map<string, Map<string, Insight>>(feeds.map((feed) => [feed, new Map()]));
-  const apply = (byKey: Map<string, Insight>, entries: readonly InsightEntry[]): boolean => {
-    let resolved = false;
-    for (const entry of entries) {
-      if (entry.type === 'raised') byKey.set(entry.insight.key, entry.insight);
-      else resolved = byKey.delete(entry.key) || resolved;
-    }
-    return resolved;
-  };
   const send = (message: ServerMessage): void => {
     if (message.type !== 'snapshot' && message.type !== 'append') return;
+    const feed = feeds.find((f) => f === message.id);
     const byKey = active.get(message.id);
-    if (byKey === undefined) return;
-    const entries = (message.entries ?? []) as InsightEntry[];
-    if (message.type === 'snapshot') {
-      byKey.clear();
-      apply(byKey, entries);
-    } else if (apply(byKey, entries)) {
-      state.pruneAcknowledged(new Set([...active.values()].flatMap((insights) => [...insights.values()].map(ackToken))));
+    if (feed === undefined || byKey === undefined) return;
+    if (message.type === 'snapshot') byKey.clear();
+    for (const entry of (message.entries ?? []) as InsightEntry[]) {
+      if (entry.type === 'raised') {
+        byKey.set(entry.insight.key, entry.insight);
+        continue;
+      }
+      byKey.delete(entry.key);
+      if (message.type === 'append') {
+        const still = new Set([...byKey.values()].map(ackToken));
+        state.pruneAcknowledged(still, (token) => passedBy(token, feed, entry.at));
+      }
     }
   };
   hub.addClient(CLIENT_ID, { send, bufferedAmount: () => 0 });

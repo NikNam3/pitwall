@@ -300,11 +300,14 @@
   });
 
   // The workbook's first window opens and places the others (spec 7.1): again when the workbook or its windows change.
-  // So does the host's initial window, which may not be in the workbook at all (startup, a switch to other window ids).
+  // So do the host's initial window and any window the workbook does not contain (startup, a switch to other window
+  // ids): the new first window may not be open yet. Several announcers are harmless, the host's plan is idempotent.
   let announced: string | undefined;
   $effect(() => {
     const book = read?.workbook;
-    if (book === undefined || (book.windows[0]?.id !== windowId && windowId !== INITIAL_WINDOW)) return;
+    if (book === undefined) return;
+    const announces = book.windows[0]?.id === windowId || windowId === INITIAL_WINDOW || !book.windows.some((w) => w.id === windowId);
+    if (!announces) return;
     const key = JSON.stringify([book.name, book.windows.map((w) => w.id)]);
     if (key === announced) return;
     announced = key;

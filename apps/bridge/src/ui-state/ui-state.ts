@@ -110,11 +110,12 @@ export class UiState {
   }
 
   /**
-   * Drops the acknowledgements whose occurrence (`<feedId>:<insightKey>:<raisedAt>`) is not in `active`, so a cleared
-   * alert's acknowledgement does not stay in `state.json` forever. Changes nothing when every one is still active.
+   * Drops the acknowledgements whose occurrence (`<feedId>:<insightKey>:<raisedAt>`) is not in `active` and has
+   * `ended` (default: every inactive one), so a cleared alert's acknowledgement does not stay in `state.json` forever.
+   * Changes nothing when nothing is dropped.
    */
-  pruneAcknowledged(active: ReadonlySet<string>): void {
-    const kept = this.acknowledged.filter((token) => active.has(token));
+  pruneAcknowledged(active: ReadonlySet<string>, ended: (token: string) => boolean = () => true): void {
+    const kept = this.acknowledged.filter((token) => active.has(token) || !ended(token));
     if (kept.length === this.acknowledged.length) return;
     this.acknowledged = kept;
     this.changedAlerts();
