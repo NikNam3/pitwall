@@ -1,7 +1,7 @@
 import { CONTRACT_VERSION, type ServerMessage } from '@pitwall/contracts';
 import { addLaps, carId, emptyCurrentLaps, feedId, unknown, type LapRecord } from '@pitwall/domain';
 import fc from 'fast-check';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { TopicStore } from '../../src/connection/topic-store.svelte.ts';
 import { lapsFold } from '../../src/kit/folds.ts';
 import { FakeConnection } from './fake-connection.ts';
@@ -303,5 +303,70 @@ describe('TopicStore properties', () => {
         },
       ),
     );
+  });
+});
+
+describe('TopicStore errors, folds per entry and dispose', () => {
+  it('an error message for a subscription id makes that entry errored, not waiting', () => {
+    const { connection, store } = setup();
+    const a = store.acquire({ topic: 'cars.overview', params: {}, feedId: feedId('gone') });
+    const b = store.acquire({ topic: 'cars.overview', params: {}, feedId: FEED });
+    connection.push({ type: 'error', id: 's1', reason: 'unknownFeed' });
+    expect(a.state.status).toBe('errored');
+    expect(b.state.status).toBe('waiting');
+  });
+
+  it('the same key with the same fold shares one subscription', () => {
+    const { connection, store } = setup();
+    store.acquire({ topic: 'laps', params: {}, feedId: FEED }, lapsFold);
+    store.acquire({ topic: 'laps', params: {}, feedId: FEED }, lapsFold);
+    expect(connection.subscribes()).toHaveLength(1);
+  });
+
+  it('the same key with a different fold or none gets its own entry; each holder sees its own shape', () => {
+    const { connection, store } = setup();
+    const count = { init: () => 0, add: (acc: number, entries: readonly LapRecord[]) => acc + entries.length };
+    const folded = store.acquire({ topic: 'laps', params: {}, feedId: FEED }, lapsFold);
+    const counted = store.acquire({ topic: 'laps', params: {}, feedId: FEED }, count);
+    const plain = store.acquire<'laps', unknown>({ topic: 'laps', params: {}, feedId: FEED });
+    const subs = connection.subscribes();
+    expect(subs).toHaveLength(3);
+    expect(new Set(subs.map((m) => m.id)).size).toBe(3);
+    const entries = [lap(0, 1, 'confirmed'), lap(0, 2, 'confirmed')];
+    for (const m of subs) {
+      connection.push({ type: 'snapshot', id: m.id, entries });
+      connection.push({ type: 'append', id: m.id, entries: [lap(1, 1, 'confirmed')] });
+    }
+    expect(json(folded.state.value)).toBe(json(addLaps(emptyCurrentLaps(), [...entries, lap(1, 1, 'confirmed')])));
+    expect(counted.state.value).toBe(3);
+    expect((plain.state.value as LapRecord[]).map((l) => l.carId)).toEqual([0, 0, 1]);
+  });
+
+  it('releasing one fold entry leaves the other subscribed', () => {
+    const { connection, store } = setup();
+    const a = store.acquire({ topic: 'laps', params: {}, feedId: FEED }, lapsFold);
+    store.acquire({ topic: 'laps', params: {}, feedId: FEED });
+    a.release();
+    expect(connection.unsubscribes()).toEqual([{ type: 'unsubscribe', id: 's1' }]);
+  });
+
+  it('dispose stops reacting: no resubscribe on reopen and no message is processed', () => {
+    vi.useFakeTimers();
+    try {
+      const { connection, store } = setup();
+      const h = store.acquire({ topic: 'cars.overview', params: {}, feedId: FEED });
+      store.dispose();
+      connection.push({ type: 'snapshot', id: 's1', value: [overview(1)] });
+      connection.push({ type: 'hello', contractVersion: CONTRACT_VERSION + 1, feeds: [] });
+      expect(h.state.status).toBe('waiting');
+      expect(store.contractMismatch).toBe(false);
+      const before = connection.sent.length;
+      connection.close();
+      connection.reopen();
+      vi.advanceTimersByTime(60_000);
+      expect(connection.sent).toHaveLength(before);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

@@ -1,5 +1,6 @@
 import { decodeClientMessage, encodeMessage, type ServerMessage } from '@pitwall/contracts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { TopicStore } from '../../src/connection/topic-store.svelte.ts';
 import { createWsConnection, type ConnectionState } from '../../src/connection/connection.ts';
 
 type Listener = (event: { data?: string }) => void;
@@ -72,6 +73,7 @@ describe('createWsConnection', () => {
     const states: ConnectionState[] = [];
     const c = createWsConnection('ws://bridge');
     c.onState((s) => states.push(s));
+    expect(c.state).toBe('connecting');
     expect(FakeWebSocket.instances).toHaveLength(1);
     expect(last().url).toBe('ws://bridge');
     last().serverOpen();
@@ -142,5 +144,17 @@ describe('createWsConnection', () => {
     off();
     last().serverSend({ type: 'heartbeat' });
     expect(got).toEqual([]);
+  });
+});
+
+describe('TopicStore.dispose over a real connection', () => {
+  it('stops the reconnect timer: no new socket is opened after dispose', () => {
+    const c = createWsConnection('ws://bridge');
+    const store = new TopicStore(c);
+    last().serverOpen();
+    last().serverClose();
+    store.dispose();
+    vi.advanceTimersByTime(60_000);
+    expect(FakeWebSocket.instances).toHaveLength(1);
   });
 });
