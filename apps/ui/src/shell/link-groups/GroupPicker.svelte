@@ -94,7 +94,7 @@
     column-gap: var(--pw-col-gap);
   }
   button.on {
-    color: var(--pw-ownCar);
+    color: var(--pw-text);
     font-weight: var(--pw-weight-bold);
   }
   label {

@@ -13,7 +13,7 @@
   <ul>
     {#each names as name (name)}
       <li>
-        <button type="button" class="pw-button" style:color={role(name === active ? 'ownCar' : 'text')} onclick={() => onPick(name)}>{name}</button>
+        <button type="button" class="pw-button" style:color={role(name === active ? 'text' : 'textDim')} onclick={() => onPick(name)}>{name}</button>
       </li>
     {:else}
       <li style:color={role('textFaint')}>{text.noWorkbooks}</li>

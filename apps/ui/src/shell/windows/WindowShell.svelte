@@ -123,7 +123,7 @@
     const after = { ...before, options };
     panelSpecs = { ...panels, [id]: after };
     // The dock keeps its own copy of every spec; it must hold the new one too.
-    dock?.updatePanel?.(id, after);
+    dock?.updatePanel(id, after);
     sync.dockChanged({ layout, panels: panelSpecs });
   };
 
@@ -218,7 +218,7 @@
             return byName.get(current().widget);
           },
           get group() {
-            return groupOf(current().linkGroup);
+            return groups?.find((g) => g.id === current().linkGroup);
           },
           get link() {
             const next = resolveLink(groupOf(current().linkGroup), sessionInfo, defaultFeed);
@@ -236,12 +236,19 @@
   let empty = $state(true);
   let picking = $state(false);
 
+  /** The gap the dock was mounted with: a theme with another gap mounts it again. */
+  let mountedGapPx: number | undefined;
   $effect(() => {
     const window = thisWindow;
     const el = dockEl;
+    const gapPx = theme.density.panelGapPx;
     if (read === undefined || el === undefined) return;
     untrack(() => {
-      if (!sync.fromBridge(window) && dock !== undefined) return;
+      const fromBridge = sync.fromBridge(window);
+      if (!fromBridge && dock !== undefined && gapPx === mountedGapPx) return;
+      // A size set here and not saved belongs to the window it was set in.
+      if (fromBridge) pendingFontPx = undefined;
+      mountedGapPx = gapPx;
       dock?.destroy();
       const { layout, panels } = sync.content;
       empty = Object.keys(panels).length === 0;
@@ -256,6 +263,7 @@
           sync.dockChanged({ layout: nextLayout, panels: nextPanels });
         },
         view,
+        gapPx,
       );
     });
   });
@@ -329,8 +337,11 @@
       onClose={closeOverlay}
     />
   {:else if overlay?.kind === 'picker'}
-    {@const picked = groupOf(overlay.group)}
-    <GroupPicker {store} group={picked} feedId={picked.feedId ?? defaultFeed} {send} onClose={closeOverlay} />
+    {@const wanted = overlay.group}
+    {@const picked = groups?.find((g) => g.id === wanted)}
+    {#if picked !== undefined}
+      <GroupPicker {store} group={picked} feedId={picked.feedId ?? defaultFeed} {send} onClose={closeOverlay} />
+    {/if}
   {/if}
 </div>
 

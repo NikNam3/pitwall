@@ -3,10 +3,12 @@ import * as text from '../../kit/text.ts';
 
 const MODIFIERS = ['Ctrl', 'Alt', 'Shift', 'Meta'] as const;
 const MODIFIER_ALIASES: Record<string, (typeof MODIFIERS)[number]> = { ctrl: 'Ctrl', control: 'Ctrl', alt: 'Alt', shift: 'Shift', meta: 'Meta', cmd: 'Meta' };
+/** Keys with a name of more than one letter, as `KeyboardEvent.key` spells them. */
+const NAMED_KEYS = ['Escape', 'Enter', 'Tab', 'Backspace', 'Delete', 'Insert', 'Home', 'End', 'PageUp', 'PageDown', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
 const KEY_ALIASES: Record<string, string> = { esc: 'Escape', return: 'Enter', space: 'Space', ' ': 'Space' };
 
 /** A character key other than a letter already says whether Shift is held (`?`, `+`), so Shift is not part of its name. */
-const impliesShift = (key: string): boolean => key.length === 1 && key.toUpperCase() === key.toLowerCase();
+const impliesShift = (key: string): boolean => key.length === 1 && key.toUpperCase() === key.toLowerCase() && !/\d/.test(key);
 
 /** `Ctrl+Alt+Shift+Meta+` prefix of the held modifiers, then the key. */
 function join(held: ReadonlySet<string>, key: string): string {
@@ -17,7 +19,8 @@ function join(held: ReadonlySet<string>, key: string): string {
 const keyName = (raw: string): string => {
   const alias = KEY_ALIASES[raw.toLowerCase()];
   if (alias !== undefined) return alias;
-  return raw.length === 1 ? raw.toUpperCase() : raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
+  if (raw.length === 1) return raw.toUpperCase();
+  return NAMED_KEYS.find((k) => k.toLowerCase() === raw.toLowerCase()) ?? raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
 };
 
 /** The normalised name of a key as written in `keys.json` (`shift+ctrl+k` is `Ctrl+Shift+K`). */

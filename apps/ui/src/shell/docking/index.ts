@@ -1,7 +1,6 @@
 // The thin adapter over dockview (spec 7.3): mounts a window's layout and panels and maps dockview's events back to
 // workbook changes. Panels are rendered by the caller's `PanelView`; nothing outside this folder knows dockview.
 import type { PanelSpec } from '@pitwall/contracts';
-import { DEFAULT_THEME } from '../../theme/index.ts';
 import {
   createDockview,
   positionToDirection,
@@ -51,6 +50,7 @@ export function mountDock(
   panels: Record<string, PanelSpec>,
   onChange: (layout: unknown, panels: Record<string, PanelSpec>) => void,
   view: PanelView,
+  gapPx: number,
 ): DockHandle {
   const specs = new Map(Object.entries(panels));
   const parts = new Map<string, Parts>();
@@ -67,7 +67,7 @@ export function mountDock(
 
   el.classList.add(HOST_CLASS);
   const api: DockviewApi = createDockview(el, {
-    theme: { ...themeDark, gap: DEFAULT_THEME.density.panelGapPx },
+    theme: { ...themeDark, gap: gapPx },
     singleTabMode: 'fullwidth',
     defaultTabComponent: COMPONENT,
     disableFloatingGroups: true,
