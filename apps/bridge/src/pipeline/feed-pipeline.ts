@@ -3,7 +3,7 @@
 import { writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { toSessionTime, type FeedId, type SessionTime } from '@pitwall/domain';
-import { CalculatorRegistry, SessionTracker, type FrameMetrics, type InsightChange, type TrackerEvent } from '@pitwall/engine';
+import { CalculatorRegistry, SessionTracker, type Frame, type FrameMetrics, type InsightChange, type TrackerEvent } from '@pitwall/engine';
 import { decode } from '@pitwall/protocol';
 import { effectiveConfig, sessionConfigPath, type FeatureConfig } from '../feature-config.ts';
 import type { Feature } from '../features/feature.ts';
@@ -193,16 +193,19 @@ export class FeedPipeline {
         this.#startSession(event);
         return;
       case 'frame':
-        this.#position = {
-          sessionTimeMs: event.frame.sessionTime,
-          playerLap: event.frame.lapData?.lapData[event.frame.playerCarIndex]?.currentLapNum ?? this.#position?.playerLap ?? 0,
-        };
+        this.#updatePosition(event.frame);
         this.#session?.push(event.frame);
         return;
       case 'sessionEnded':
         this.#endSession(receivedAtMs);
         return;
     }
+  }
+
+  /** The position follows the newest frame; without lap data it keeps the last lap, and stays unknown until one is seen. */
+  #updatePosition(frame: Frame): void {
+    const playerLap = frame.lapData?.lapData[frame.playerCarIndex]?.currentLapNum ?? this.#position?.playerLap;
+    if (playerLap !== undefined) this.#position = { sessionTimeMs: frame.sessionTime, playerLap };
   }
 
   /** A new session: every topic of the feed starts over, apart from the feed's own insights that still hold. */

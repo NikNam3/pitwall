@@ -75,7 +75,7 @@ export async function serve(opts: ServeOptions): Promise<number> {
       hub,
       feeds,
       ...(uiState && { uiState }),
-      ...(opts.replay && { replay: { control: (control: ReplayControl) => controller?.control(control) } }),
+      ...(opts.replay && { replay: { control: (control: ReplayControl) => (controller === undefined ? false : (controller.control(control), true)) } }),
     });
     undo.push(() => server.close());
     const calcStats = opts.dev ? createCalcStats() : undefined;
@@ -97,14 +97,30 @@ export async function serve(opts: ServeOptions): Promise<number> {
       ...(opts.staleCheck && { staleCheck: opts.staleCheck }),
       ...(calcStats && { calcStats }),
     }));
+    const failed = (error: unknown): never => {
+      throw new StartupError(`feed ${feedId} failed: ${error instanceof Error ? error.message : String(error)}`);
+    };
     let finished: Promise<void>;
     if (opts.replay) {
       const { replay } = opts;
-      controller = new ReplayController({ path: replay.path, feedId, hub, makePipeline, unpaced: replay.unpaced, ...(opts.onDone && { onEnd: opts.onDone }) });
+      // A startup jump that lands at the end is not announced: the replay has not finished, it was jumped to the end.
+      let jumping = true;
+      controller = new ReplayController({
+        path: replay.path,
+        feedId,
+        hub,
+        makePipeline,
+        unpaced: replay.unpaced,
+        onEnd: () => {
+          if (!jumping) opts.onDone?.();
+        },
+      });
       const running = controller;
       undo.push(() => running.stop());
       for (const control of replay.controls) running.control(control);
-      await running.settled();
+      // A recording that cannot be read ends the wait too (`done` rejects), and so does an interrupt.
+      await Promise.race([running.settled(), running.done, whenAborted(io.signal)]).catch(failed);
+      jumping = false;
       finished = running.done;
     } else {
       const running = makePipeline(opts.source);
@@ -116,9 +132,7 @@ export async function serve(opts: ServeOptions): Promise<number> {
     io.out(`listening ws://127.0.0.1:${server.port}`);
 
     const aborted = whenAborted(io.signal);
-    await Promise.race([aborted, finished.then(() => aborted)]).catch((error: unknown) => {
-      throw new StartupError(`feed ${feedId} failed: ${error instanceof Error ? error.message : String(error)}`);
-    });
+    await Promise.race([aborted, finished.then(() => aborted)]).catch(failed);
     return 0;
   } finally {
     for (const step of undo.reverse()) await step();

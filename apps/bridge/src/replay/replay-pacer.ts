@@ -97,7 +97,7 @@ export class ReplayPacer implements Pacer {
       this.#o.onSeekDone();
     }
     await this.#holdWhilePaused(signal);
-    if (!this.#unpaced && this.#seek === undefined && !signal.aborted) {
+    if (!this.#unpaced && this.#seek === undefined && !signal.aborted && !(this.#paused && this.#o.position() === undefined)) {
       this.#owedMs += recordGapMs / this.#speed;
       if (this.#owedMs >= MIN_SLEEP_MS) {
         const ms = this.#owedMs;
@@ -109,7 +109,8 @@ export class ReplayPacer implements Pacer {
   }
 
   async #holdWhilePaused(signal: AbortSignal): Promise<void> {
-    while (this.#paused && this.#seek === undefined && !signal.aborted) {
+    // Before the first frame there is nothing to stay on: a pause takes hold from the first frame on.
+    while (this.#paused && this.#o.position() !== undefined && this.#seek === undefined && !signal.aborted) {
       await new Promise<void>((resolve) => {
         const done = (): void => {
           this.#wakers.delete(done);

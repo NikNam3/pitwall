@@ -42,6 +42,7 @@ export class ReplayController {
   #restartTarget: SeekTarget | undefined;
   #restarting = false;
   #stopped = false;
+  #failure = false;
 
   constructor(opts: ReplayControllerOptions) {
     this.#o = opts;
@@ -62,6 +63,7 @@ export class ReplayController {
     return this.#pipeline.position() ?? this.#carried;
   }
 
+  /** Applies a transport action. */
   control(control: ReplayControl): void {
     switch (control.kind) {
       case 'pause':
@@ -100,7 +102,7 @@ export class ReplayController {
   }
 
   get #idle(): boolean {
-    return this.#stopped || this.#atEnd || (!this.#pacer.seeking && !this.#restarting);
+    return this.#stopped || this.#failure || this.#atEnd || (!this.#pacer.seeking && !this.#restarting);
   }
 
   #jump(target: SeekTarget): void {
@@ -130,7 +132,7 @@ export class ReplayController {
     void stopping.then(() => {
       this.#restarting = false;
       if (this.#stopped) return;
-      this.#carried = this.#pipeline.position();
+      this.#carried = this.#pipeline.position() ?? this.#carried;
       this.#o.hub.resetFeed(this.#o.feedId);
       this.#atEnd = false;
       this.#pacer.seekTo(this.#restartTarget ?? target);
@@ -147,9 +149,18 @@ export class ReplayController {
     pipeline.start();
     pipeline.done.then(
       () => generation === this.#generation && this.#ended(),
-      (error: unknown) => generation === this.#generation && this.#done.reject(error),
+      (error: unknown) => generation === this.#generation && this.#failed(error),
     );
     this.#publish();
+  }
+
+  /** The recording cannot be read: `done` rejects and nobody keeps waiting for a jump. */
+  #failed(error: unknown): void {
+    this.#failure = true;
+    this.#restarting = false;
+    this.#pacer.cancelSeek();
+    this.#done.reject(error);
+    this.#settle();
   }
 
   /** The recording ran out; a fast-forward still under way did not reach its target. */
@@ -169,17 +180,19 @@ export class ReplayController {
     for (const resolve of this.#settled.splice(0)) resolve();
   }
 
+  /** Nothing is published before the first frame: subscribers see `noData`, not zeros. */
   #publish(): void {
+    if (this.position() === undefined) return;
     this.#o.hub.publishState(this.#o.feedId, 'replay.status', () => this.#status());
   }
 
   #status(): ReplayStatus {
-    const position: FeedPosition | undefined = this.position();
+    const position = this.position() ?? { sessionTimeMs: 0, playerLap: 0 };
     return {
       paused: this.#pacer.paused,
       speed: this.#pacer.speed,
-      sessionTimeMs: position?.sessionTimeMs ?? 0,
-      playerLap: position?.playerLap ?? 0,
+      sessionTimeMs: position.sessionTimeMs,
+      playerLap: position.playerLap,
       atEnd: this.#atEnd,
       ...(this.#beyondEnd && { note: 'beyondEnd' as const }),
     };
