@@ -108,8 +108,9 @@ describe('formatSessionKind', () => {
 
 describe('formatTrack', () => {
   it.each([
-    [0, 'track 0'],
-    [10, 'track 10'],
+    [26, 'Zandvoort'],
+    [1, 'track 1'],
+    [8, 'track 8'],
     [-1, 'track -1'],
   ])('%s -> %s', (id, text) => {
     expect(formatTrack(id)).toBe(text);

@@ -16,6 +16,8 @@ async function findViolations(page: Page): Promise<{ ids: string[]; violations: 
     const figures = [...document.querySelectorAll<HTMLElement>('[data-gallery-id]')];
     for (const figure of figures) {
       const id = figure.dataset['galleryId'] ?? '?';
+      // The kit parts are not panels: they have no widget body to check.
+      if (id.startsWith('kit/')) continue;
       const body = figure.querySelector<HTMLElement>('.panel .body');
       if (body === null) {
         violations.push({ id, problem: 'no widget body' });

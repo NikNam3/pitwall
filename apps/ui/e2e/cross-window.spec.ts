@@ -49,7 +49,7 @@ test.describe('two windows on a paused replay', () => {
     s = await setup();
     for (const page of [s.main, s.side]) {
       await expect(connected(page)).toBeVisible({ timeout: SETTLE_MS });
-      await expect(page.getByText(/Zandvoort/)).toBeVisible({ timeout: SETTLE_MS });
+      await expect(page.locator('.panel').getByText(/Zandvoort/)).toBeVisible({ timeout: SETTLE_MS });
     }
   });
 
