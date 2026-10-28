@@ -1,5 +1,8 @@
 import type { Frame } from '../frame/frame.ts';
+import { applyEvents } from '../history/events.ts';
+import { applyFlagPhases } from '../history/flags.ts';
 import { applyLaps } from '../history/laps.ts';
+import { applyMiniSectors } from '../history/mini-sectors.ts';
 import { applyPitStops } from '../history/pit-stops.ts';
 import { applyStints } from '../history/stints.ts';
 import type { EngineState } from '../state/engine-state.ts';
@@ -28,6 +31,9 @@ export const SUB_STEPS: SubStep[] = [
   applyPitStops,
   applyStints,
   applyLaps,
+  applyFlagPhases,
+  applyEvents,
+  applyMiniSectors,
 ];
 
 const refreshActive = (state: EngineState): void => {
