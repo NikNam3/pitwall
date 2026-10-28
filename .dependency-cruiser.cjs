@@ -102,7 +102,7 @@ module.exports = {
   ],
   options: {
     doNotFollow: { path: 'node_modules' },
-    exclude: { path: '(^|/)(\\.stryker-tmp|reports)/' },
+    exclude: { path: '(^|/)(\\.stryker-tmp|reports)/|^apps/[^/]+/dist/' },
     tsPreCompilationDeps: true,
     tsConfig: { fileName: 'tsconfig.json' },
     enhancedResolveOptions: {
