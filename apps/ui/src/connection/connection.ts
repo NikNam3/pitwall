@@ -18,9 +18,14 @@ export interface Connection {
 
 const INITIAL_BACKOFF_MS = 250;
 const MAX_BACKOFF_MS = 5000;
+/** The wait that replaces a zero delay: zero never doubles, so `initialBackoffMs: 0` (dev builds) would retry in a tight loop. */
+const ZERO_BACKOFF_MS = 100;
 const WS_OPEN = 1;
 
-/** A reconnecting WebSocket connection: the delay doubles from `initialBackoffMs` to `maxBackoffMs` and resets after an open. */
+/**
+ * A reconnecting WebSocket connection: the delay doubles from `initialBackoffMs` (100 ms when 0) to `maxBackoffMs`
+ * and resets after an open.
+ */
 export function createWsConnection(
   url: string,
   opts: { initialBackoffMs?: number; maxBackoffMs?: number } = {},
@@ -55,8 +60,8 @@ export function createWsConnection(
     ws.onclose = () => {
       if (socket !== ws || disposed) return;
       setState('closed');
-      const delay = backoff;
-      backoff = Math.min(backoff * 2, maxBackoff);
+      const delay = backoff > 0 ? backoff : ZERO_BACKOFF_MS;
+      backoff = Math.min(delay * 2, maxBackoff);
       timer = setTimeout(() => {
         setState('connecting');
         connect();

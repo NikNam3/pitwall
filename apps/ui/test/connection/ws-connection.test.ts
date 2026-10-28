@@ -125,6 +125,18 @@ describe('createWsConnection', () => {
     }
   });
 
+  it('initialBackoffMs: 0 still waits at least 100 ms between attempts (floor), then doubles', () => {
+    createWsConnection('ws://bridge', { initialBackoffMs: 0, maxBackoffMs: 5000 });
+    for (const delay of [100, 200, 400]) {
+      const n = FakeWebSocket.instances.length;
+      last().serverClose();
+      vi.advanceTimersByTime(delay - 1);
+      expect(FakeWebSocket.instances).toHaveLength(n);
+      vi.advanceTimersByTime(1);
+      expect(FakeWebSocket.instances).toHaveLength(n + 1);
+    }
+  });
+
   it('reports open again after a reconnect', () => {
     const states: ConnectionState[] = [];
     const c = createWsConnection('ws://bridge');

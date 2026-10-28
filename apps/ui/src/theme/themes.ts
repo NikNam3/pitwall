@@ -46,6 +46,8 @@ const QUIET_ROLES: Record<Role, string> = {
   bgRowBand: '#0d0d0f',
   border: '#25272c',
   grid: '#1c1d21',
+  // Where a dragged panel would land: textFaint at 35 % over the panel.
+  dropTarget: '#5c606859',
   critical: '#ff5c5c',
   warning: '#f0b429',
   best: '#b06cff',
