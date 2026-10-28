@@ -32,6 +32,7 @@ export function findFeatureFolders(featuresDir: string): string[] {
   return folders.sort(byCodeUnit);
 }
 
+/** The source of `index.generated.ts` for these feature folders: one import per `register.ts` and the `FEATURES` list. */
 export function renderFeaturesIndex(folders: readonly string[]): string {
   const imports = folders.map((folder, i) => `import feature${i} from './${folder}/register.ts';\n`);
   const list = folders.map((_, i) => `feature${i}`).join(', ');
@@ -43,6 +44,7 @@ export function renderFeaturesIndex(folders: readonly string[]): string {
   );
 }
 
+/** Writes `outFile` (default: the index inside the features folder) from the feature folders found in `featuresDir`. */
 export function generateFeatures(
   featuresDir: string = DEFAULT_FEATURES_DIR,
   outFile: string = join(featuresDir, 'index.generated.ts'),

@@ -26,6 +26,7 @@ export function findTopicFiles(topicsDir: string): string[] {
   return names.sort(byCodeUnit);
 }
 
+/** The source of `index.generated.ts` for these topic names: one import per topic file and the `TOPICS` map, keyed by name. */
 export function renderTopicsIndex(names: readonly string[]): string {
   const imports = names.map((name, i) => `import topic${i} from './${name}.ts';\n`);
   const entries = names.map((name, i) => `  '${name}': { name: '${name}', ...topic${i} },\n`);
@@ -38,6 +39,7 @@ export function renderTopicsIndex(names: readonly string[]): string {
   );
 }
 
+/** Writes `outFile` (default: the index next to the topic files) from the topic files found in `topicsDir`. */
 export function generateTopics(
   topicsDir: string = DEFAULT_TOPICS_DIR,
   outFile: string = join(topicsDir, INDEX_FILE),

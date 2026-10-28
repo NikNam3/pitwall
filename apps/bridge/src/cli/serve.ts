@@ -41,17 +41,19 @@ export async function serve(opts: ServeOptions): Promise<number> {
         storage.db.close();
       });
     }
-    // The hub's one callback tells the pipeline which calculators its subscribers need; the pipeline exists by the first call.
+    // The hub's one callback tells the pipeline which calculators its subscribers need. The pipeline is created after
+    // the server, so a change before then has no pipeline to reach; it reads the demand itself when a session starts.
+    let pipeline: FeedPipeline | undefined = undefined;
     const hub = new TopicHub({
       now: () => performance.now(),
       onDemandChange: (changed) => {
-        if (changed === source.feedId) pipeline.demandChanged();
+        if (changed === source.feedId) pipeline?.demandChanged();
       },
     });
     const feeds = (): FeedInfo[] => [{ feedId: source.feedId, ...opts.feed }];
     const server = await WsServer.start({ port: opts.wsPort, hub, feeds });
     undo.push(() => server.close());
-    const pipeline = new FeedPipeline({
+    pipeline = new FeedPipeline({
       feedId: source.feedId,
       source,
       hub,
@@ -63,7 +65,7 @@ export async function serve(opts: ServeOptions): Promise<number> {
       ...(opts.staleCheck && { staleCheck: opts.staleCheck }),
     });
     pipeline.start();
-    undo.push(() => pipeline.stop());
+    undo.push(() => pipeline?.stop());
     await opts.bound?.();
     io.out(`listening ws://127.0.0.1:${server.port}`);
 

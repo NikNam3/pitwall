@@ -22,6 +22,7 @@ export async function processRecording(path: string, db: Db, log: Logger, signal
     source: new PwrecSource({ feedId: id, path, mode: 'asFastAsPossible' }),
     hub: new TopicHub({
       now: () => 0,
+      // Nobody subscribes to this private hub today; wired like `serve` so a subscriber added later gets its calculators.
       onDemandChange: (changed) => {
         if (changed === id) pipeline.demandChanged();
       },
