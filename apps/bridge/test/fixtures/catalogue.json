@@ -1,0 +1,33 @@
+{
+  "widgets": [
+    {
+      "name": "feed-status",
+      "folder": "apps/ui/src/widgets/feed-status",
+      "topics": [{ "topic": "feed.status", "kind": "state", "optional": false }],
+      "options": [],
+      "sizes": ["compact"]
+    }
+  ],
+  "topics": [
+    {
+      "name": "feed.status",
+      "owner": "core",
+      "mode": "state",
+      "scope": "feed",
+      "maxHz": 2,
+      "file": "packages/contracts/src/topics/feed.status.ts",
+      "binding": { "kind": "calculator", "source": "feed.status", "feature": "feed-status" },
+      "readers": ["feed-status"]
+    }
+  ],
+  "features": [
+    {
+      "name": "feed-status",
+      "folder": "apps/bridge/src/features/feed-status",
+      "private": true,
+      "calculators": [{ "id": "feed.status", "reads": ["feed"], "cadence": "frame" }],
+      "jobs": [],
+      "config": []
+    }
+  ]
+}

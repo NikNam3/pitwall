@@ -1,0 +1,1 @@
+export default { name: 'rejoin', calculators: [{ id: 'rejoin.projection', kind: 'quick', reads: ['feed'], cadence: 'frame' }], topics: [{ topic: 'rejoin.projection', from: 'rejoin.projection' }] };

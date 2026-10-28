@@ -1,0 +1,1 @@
+export default { name: 'undercut-card', calculators: [{ id: 'undercutCard.rows', kind: 'quick', reads: ['feed'], cadence: 'frame' }], topics: [{ topic: 'undercutCard.rows', from: 'undercutCard.rows' }] };
