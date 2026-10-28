@@ -11,6 +11,7 @@
     "typecheck": "tsc -p tsconfig.json",
     "pretest": "pnpm gen:features",
     "test": "vitest run",
+    "pretest:acceptance": "pnpm gen:features",
     "test:acceptance": "vitest run -c vitest.acceptance.config.ts",
     "lint": "eslint .",
     "depcruise": "depcruise packages apps test-support test --config .dependency-cruiser.cjs",

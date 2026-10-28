@@ -13,6 +13,8 @@ export default defineConfig(
       '**/.stryker-tmp/',
       '**/reports/',
       'apps/bridge/src/features/index.generated.ts',
+      '.claude/',
+      '.superpowers/',
     ],
   },
   js.configs.recommended,
