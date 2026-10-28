@@ -1,7 +1,8 @@
 <script lang="ts">
   // The panel frame (spec 4.3, 7.4; Task 0 option B): a header band in bgBand with the title, the one state and the
   // gear, then the widget body measured in character cells. The only place widget-level states are handled.
-  import type { PanelSpec } from '@pitwall/contracts';
+  import type { LinkGroup, PanelSpec, UiAction } from '@pitwall/contracts';
+  import type { FeedId } from '@pitwall/domain';
   import { onDestroy, untrack, type Component } from 'svelte';
   import type { TopicStore } from '../../connection/topic-store.svelte.ts';
   import Gear from '../../kit/icons/Gear.svelte';
@@ -11,10 +12,14 @@
   import * as text from '../../kit/text.ts';
   import type { RegisteredWidget, ResolvedLink, WidgetSize } from '../../kit/types.ts';
   import { role } from '../../theme/index.ts';
+  import { useOverlayStack } from '../commands/overlay-stack.ts';
+  import GroupPicker from '../link-groups/GroupPicker.svelte';
+  import LinkMarker from '../link-groups/LinkMarker.svelte';
   import { computedLap, headerState, type DataStatus } from './header-state.ts';
   import { Holdings } from './holdings.svelte.ts';
   import { portal } from './portal.ts';
   import { dataRequests, frameRequests, type DataRequest } from './requests.ts';
+  import SettingsPopover from './SettingsPopover.svelte';
   import { useWindowFont } from './window-font.ts';
 
   type Props = {
@@ -26,8 +31,31 @@
     link: ResolvedLink | undefined;
     /** Where the header band goes instead of above the body: the dock's tab, which is also the drag handle. */
     headerTarget?: HTMLElement | undefined;
+    /** The panel's link group as the bridge published it; undefined until then. */
+    group?: LinkGroup | undefined;
+    /** The feed a group without its own feed follows. */
+    defaultFeed?: FeedId | undefined;
+    /** Sends a UI action to the bridge. */
+    send?: (action: UiAction) => void;
+    /** Saves new option values for this panel with its window. */
+    onOptions?: (options: Record<string, unknown>) => void;
   };
-  let { store, spec, widget, link, headerTarget }: Props = $props();
+  let { store, spec, widget, link, headerTarget, group, defaultFeed, send = () => {}, onOptions = () => {} }: Props = $props();
+
+  // The picker and the settings popover open next to their buttons; Escape closes them (the shell owns the keys).
+  const stack = useOverlayStack();
+  let popover = $state<{ kind: 'picker' | 'settings'; anchor: { x: number; y: number } } | undefined>();
+  const openAt = (kind: 'picker' | 'settings', button: HTMLElement): void => {
+    const box = button.getBoundingClientRect();
+    popover = { kind, anchor: { x: box.left, y: box.bottom } };
+  };
+  const close = (): void => {
+    popover = undefined;
+  };
+  $effect(() => {
+    if (popover === undefined || stack === undefined) return;
+    return stack.add(close);
+  });
 
   const font = useWindowFont();
   // The store is the window's for the panel's whole life.
@@ -123,11 +151,22 @@
 
 <div class="panel">
   <header use:portal={headerTarget} style:background={role('bgBand')}>
+    <LinkMarker {store} groupId={spec.linkGroup} {group} {link} onOpen={(button) => openAt('picker', button)} />
     <span class="title" style:color={role('textDim')}>{widget?.decl.title ?? spec.widget}</span>
     <span class="fill"></span>
     {#if header !== undefined}<span class="state" style:color={role(header.role)}>{header.text}</span>{/if}
-    <span class="gear" style:color={role('textFaint')}><Gear label={text.settings} /></span>
+    <button type="button" class="gear" style:color={role('textFaint')} onclick={(e) => openAt('settings', e.currentTarget)}
+      ><Gear label={text.settings} /></button
+    >
   </header>
+  <!-- Popovers sit on the page, not in the (clipped) panel. -->
+  <div use:portal={document.body}>
+    {#if popover?.kind === 'picker' && group !== undefined}
+      <GroupPicker {store} {group} feedId={group.feedId ?? link?.feedId ?? defaultFeed} {send} onClose={close} anchor={popover.anchor} />
+    {:else if popover?.kind === 'settings' && widget !== undefined}
+      <SettingsPopover decl={widget.decl} options={spec.options} onChange={onOptions} onClose={close} anchor={popover.anchor} />
+    {/if}
+  </div>
   <div class="body" use:measure={(m: Measured) => (measured = m)} style:color={dim ? role('textFaint') : undefined}>
     {#if widget === undefined}
       <span style:color={role('textDim')}>{text.unknownWidget(spec.widget)}</span>
@@ -167,6 +206,14 @@
   }
   .fill {
     flex: 1;
+  }
+  .gear {
+    font-family: var(--pw-font);
+    font-size: inherit;
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
   }
   .body {
     flex: 1;
