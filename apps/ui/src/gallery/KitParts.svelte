@@ -3,10 +3,10 @@
   import { unknown } from '@pitwall/domain';
   import Gear from '../kit/icons/Gear.svelte';
   import Table from '../kit/table/Table.svelte';
-  import type { WidgetSize } from '../kit/types.ts';
   import Value from '../kit/values/Value.svelte';
   import { formatLapTime, formatPct } from '../kit/values/format.ts';
   import { role } from '../theme/index.ts';
+  import { KIT_SIZE } from './layout.ts';
 
   type Row = { driver: string; lapMs: number; gripPct: number };
   const rows: Row[] = [
@@ -14,8 +14,13 @@
     { driver: 'HAM', lapMs: 72345, gripPct: 94 },
     { driver: 'LEC', lapMs: 72801, gripPct: 91 },
   ];
-  const size: WidgetSize = { mode: 'sample', cols: 40, rows: 8, px: { width: 400, height: 200 }, dpr: 1 };
-  // The chart is left out: uPlot needs a real canvas and `matchMedia` when its module loads, which jsdom lacks.
+  const size = KIT_SIZE;
+  /** Loaded on demand: uPlot needs `matchMedia` when its module loads. */
+  const loadChart = () => import('../kit/chart/Chart.svelte');
+  const series = [
+    { label: 'own', points: [[1, 72.4], [2, 72.1], [3, 71.9], [4, 72.0], [5, 71.8]] as Array<[number, number]> },
+    { label: 'rival', points: [[1, 72.9], [2, 72.6], [3, 72.5], [4, 72.4], [5, 72.6]] as Array<[number, number]> },
+  ];
 </script>
 
 <div class="parts">
@@ -42,6 +47,12 @@
         { key: 'grip', label: 'Grip', widthCols: 5, priority: 3, cell: grip },
       ]}
     />
+  </figure>
+  <figure data-gallery-id="kit/chart" style:width="{size.px.width}px" style:height="{size.px.height}px">
+    <figcaption style:color={role('textFaint')}>kit/chart</figcaption>
+    {#await loadChart() then { default: Chart }}
+      <Chart {series} xLabel="lap" yLabel="s" x={{ kind: 'lap' }} {size} />
+    {/await}
   </figure>
 </div>
 

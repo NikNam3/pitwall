@@ -1,7 +1,8 @@
 <script lang="ts">
   // The gallery (spec 9.1, 9.2): every widget at every declared size, on every moment and case, under every theme,
   // then the panel frame in each state and the kit parts. Dev and test builds only.
-  import type { RegisteredWidget } from '../kit/types.ts';
+  import * as text from '../kit/text.ts';
+  import { WIDGETS } from '../widgets/index.generated.ts';
   import { DEFAULT_THEME, role, THEMES } from '../theme/index.ts';
   import { widgetCells, type CellSource } from './cells.ts';
   import { FRAME_STATES, FRAME_WIDGET, MISSING_WIDGET } from './frame-states.ts';
@@ -11,7 +12,7 @@
   import type { MomentValues } from './moment-values.ts';
 
   /** What a widget's `gallery.ts` declares (the widgets' gallery files are only ever imported here). */
-  type Declared = CellSource & { cases?: Record<string, Record<string, unknown>> };
+  type Declared = CellSource & { cases?: Record<string, Record<string, unknown>> | undefined };
 
   type Props = {
     /** Moment name to its values; the default is every file `pnpm gen:moments` wrote. */
@@ -19,12 +20,9 @@
   };
   let { moments: given }: Props = $props();
 
-  // Found by convention like the generated index (a widget is a folder with a `register.ts`); only the shell may import the index.
-  const registered = import.meta.glob<{ default: RegisteredWidget }>('../widgets/*/register.ts', { eager: true });
-  const WIDGETS = Object.values(registered).map((m) => m.default);
   const files = import.meta.glob<{ default: Declared }>('../widgets/*/gallery.ts', { eager: true });
-  const files2 = import.meta.glob<MomentValues>('../../../../test-support/moments/*.json', { eager: true, import: 'default' });
-  const generated = Object.fromEntries(Object.entries(files2).map(([path, values]) => [path.slice(path.lastIndexOf('/') + 1, -'.json'.length), values]));
+  const momentFiles = import.meta.glob<MomentValues>('../../../../test-support/moments/*.json', { eager: true, import: 'default' });
+  const generated = Object.fromEntries(Object.entries(momentFiles).map(([path, values]) => [path.slice(path.lastIndexOf('/') + 1, -'.json'.length), values]));
   // svelte-ignore state_referenced_locally
   const moments = given ?? generated;
 
@@ -51,6 +49,9 @@
       <h2 style:color={role('textDim')}>{widget.decl.name}</h2>
       <div class="grid">
         {#each cells as cell (cell.id)}
+          {#if cell.data.kind === 'moment' && moments[cell.data.name] === undefined}
+            <figure data-gallery-id={cell.id} style:color={role('warning')}>{cell.id}: {text.momentMissing}</figure>
+          {:else}
           <GalleryCell
             id={cell.id}
             theme={cell.theme}
@@ -61,6 +62,7 @@
             moment={cell.data.kind === 'moment' ? (moments[cell.data.name] ?? []) : []}
             overrides={cell.data.kind === 'case' ? overridesOf(widget.decl.name, entry.cases?.[cell.data.name] ?? {}) : []}
           />
+          {/if}
         {/each}
       </div>
     </section>

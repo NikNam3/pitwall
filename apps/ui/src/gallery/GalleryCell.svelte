@@ -13,6 +13,7 @@
   import { provideWindowFont } from '../shell/panel/window-font.ts';
   import { GalleryConnection, type GalleryOverride } from './gallery-connection.ts';
   import type { MomentValues } from './moment-values.ts';
+  import { SUBPIXEL_PX } from './layout.ts';
   import { themed } from './theme-action.ts';
 
   type Props = {
@@ -28,8 +29,6 @@
   };
   let { id, theme, widget, widgetName, cols, rows, moment, overrides = [] }: Props = $props();
 
-  /** Room for the browser's rounding, so the panel measures exactly `cols` x `rows` cells. */
-  const SUBPIXEL_PX = 0.5;
   const GALLERY_FEED = feedId('gallery');
 
   // The gallery is static: everything is fixed when the cell mounts.

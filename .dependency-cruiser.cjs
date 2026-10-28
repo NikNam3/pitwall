@@ -52,16 +52,16 @@ module.exports = {
     },
     {
       name: 'ui-widget-index-only-shell',
-      comment: 'Only the shell imports the generated widget index.',
+      comment: 'Only the shell and the gallery import the generated widget index (one discovery mechanism).',
       severity: 'error',
-      from: { pathNot: '^apps/ui/src/shell/' },
+      from: { pathNot: '^apps/ui/src/(shell|gallery)/' },
       to: { path: '^apps/ui/src/widgets/index\\.generated\\.ts$' },
     },
     {
       name: 'ui-gallery-files-only-gallery',
       comment: 'Only the gallery imports the widgets\' gallery.ts files.',
       severity: 'error',
-      from: { pathNot: '^apps/ui/src/gallery/|/gallery\\.ts$' },
+      from: { pathNot: '^apps/ui/(src|test)/gallery/|/gallery\\.ts$' },
       to: { path: '^apps/ui/src/widgets/[^/]+/gallery\\.ts$' },
     },
     {

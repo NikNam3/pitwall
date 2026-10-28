@@ -41,3 +41,6 @@ export const settings = 'settings';
 
 /** Prefix of an estimated value in a value cell. */
 export const estimatedPrefix = '~';
+
+/** Body of a gallery cell whose moment file is missing. */
+export const momentMissing = 'moment not generated, run pnpm gen:moments';
