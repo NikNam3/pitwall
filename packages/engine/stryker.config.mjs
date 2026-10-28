@@ -9,4 +9,6 @@ export default {
   htmlReporter: { fileName: 'reports/mutation/index.html' },
   tempDirName: '.stryker-tmp',
   ignoreStatic: true,
+  // More runners oversubscribe the CPU; their timeouts count as kills and inflate the score.
+  concurrency: 8,
 };
