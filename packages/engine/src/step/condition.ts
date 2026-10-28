@@ -10,6 +10,7 @@ export const applyCondition: SubStep = (state, frame, out) => {
     for (const car of state.cars) {
       const d = damage.carDamageData[car.id];
       if (!d) continue;
+      car.updatedAt.damage = at;
       const { condition } = car;
       condition.bodywork = knownUnlessRestricted(
         car,

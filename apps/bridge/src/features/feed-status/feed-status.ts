@@ -25,6 +25,7 @@ export const feedStatusOf = (feedId: FeedId, feed: FeedMetricsView): FeedStatus 
   latePackets: feed.latePackets,
   decodeErrors: feed.decodeErrors,
   packetsPerSecond: feed.packetsPerSecond,
+  ...(feed.cadenceMs !== undefined && { cadenceMs: feed.cadenceMs }),
   ...(feed.latencyMs !== undefined && { latencyMs: feed.latencyMs }),
   ...(feed.wrongFormat !== undefined && { wrongFormat: feed.wrongFormat }),
 });

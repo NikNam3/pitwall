@@ -6,6 +6,7 @@ export type CarOverview = {
   identity: CarState['identity'];
   timing: CarState['timing'];
   tyres: Pick<CarState['tyres'], 'actualCompound' | 'visualCompound' | 'age'>;
+  updatedAt: CarState['updatedAt'];
 };
 
 export default defineTopic<NoParams, CarOverview[]>({ mode: 'state', maxHz: 10 });

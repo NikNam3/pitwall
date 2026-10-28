@@ -5,15 +5,17 @@ import { bindState, defineFeature } from '../feature.ts';
 const carsOverview: QuickCalculator<CarOverview[]> = {
   id: 'cars.overview',
   kind: 'quick',
-  reads: ['identity', 'timing', 'tyres', 'stints'],
+  // `updatedAt` moves with every source, so it reads every area a source feeds.
+  reads: ['identity', 'timing', 'tyres', 'condition', 'dynamics', 'ownCar', 'laps', 'stints'],
   cadence: { hz: 10 },
   compute: ({ state }) =>
-    state.cars.map(({ id, identity, timing, tyres }) =>
+    state.cars.map(({ id, identity, timing, tyres, updatedAt }) =>
       structuredClone({
         id,
         identity,
         timing,
         tyres: { actualCompound: tyres.actualCompound, visualCompound: tyres.visualCompound, age: tyres.age },
+        updatedAt,
       }),
     ),
 };

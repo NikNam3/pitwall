@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import type { EventDetails } from '@pitwall/protocol';
 import { SessionRunner, type Frame } from '../../src/index.ts';
-import { ScenarioBuilder } from '../builders/index.ts';
+import { buildPacket, ScenarioBuilder } from '../builders/index.ts';
 import { initFor } from '../support/run.ts';
 import { after, flashbacks, flbk, runAll, STEP, timeline as plainTimeline } from '../support/runner.ts';
 
@@ -83,6 +83,28 @@ describe('SessionRunner: recognising a flashback', () => {
     expect(a.apply(after(fork(), 6, 300)[0]!).flashback?.targetFrameId).toBe(5);
     runAll(a, after(fork(), 7, 301));
     expect(a.state).toEqual(sameAs(fork()));
+  });
+});
+
+describe('SessionRunner: a flashback restores updatedAt with the snapshot', () => {
+  // the original timeline receives a setup in every frame from 250 on; the fork never does
+  const original = () => timeline(300, [100, 250]).map((f, i) => (i >= 250 ? { ...f, setups: buildPacket('carSetups') } : f));
+  const fork = () => timeline(400, [100, 330]);
+
+  it('a source that only the discarded frames updated is not updated again', () => {
+    const a = new SessionRunner(initFor(original()));
+    runAll(a, original());
+    expect(a.state.cars[0]!.updatedAt.setups).toBe(299 * STEP);
+    runAll(a, after(fork(), 201, 300));
+    expect(a.state.cars[0]!.updatedAt).not.toHaveProperty('setups');
+    expect(a.state.cars[0]!.updatedAt.lapData).toBe(399 * STEP);
+  });
+  it('updatedAt equals that of a run that never saw the discarded frames', () => {
+    const a = new SessionRunner(initFor(original()));
+    runAll(a, original());
+    runAll(a, after(fork(), 201, 300));
+    const reference = sameAs(fork());
+    expect(a.state.cars.map((c) => c.updatedAt)).toEqual(reference.cars.map((c) => c.updatedAt));
   });
 });
 

@@ -24,9 +24,11 @@ const NO_SPEED_TRAP_LAP = 255;
 export const applyTiming: SubStep = (state, frame, out) => {
   const { lapData, status } = frame;
   if (lapData) {
+    const at = frame.sessionTime;
     for (const car of state.cars) {
       const l = lapData.lapData[car.id];
       if (!l) continue;
+      car.updatedAt.lapData = at;
       Object.assign(car.timing, {
         position: l.carPosition,
         lap: l.currentLapNum,

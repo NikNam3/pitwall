@@ -113,6 +113,7 @@ export const createCarState = (id: CarId): CarState => ({
     gForce: { lateral: 0, longitudinal: 0, vertical: 0 },
     orientation: { yawRad: 0, pitchRad: 0, rollRad: 0 },
   },
+  updatedAt: {},
 });
 
 const emptyHistory = (): History => ({ laps: [], stints: [], pitStops: [], flagPhases: [], events: [], miniSectors: [] });

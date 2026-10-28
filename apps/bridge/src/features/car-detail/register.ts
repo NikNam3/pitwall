@@ -6,7 +6,7 @@ import { selectCar, type ViewCars } from '../car-params.ts';
 const carsState: QuickCalculator<ViewCars> = {
   id: 'cars.state',
   kind: 'quick',
-  reads: ['identity', 'timing', 'tyres', 'energy', 'condition', 'dynamics', 'ownCar', 'stints'],
+  reads: ['identity', 'timing', 'tyres', 'energy', 'condition', 'dynamics', 'ownCar', 'laps', 'stints'],
   cadence: 'frame',
   compute: ({ state }) => state.cars,
 };

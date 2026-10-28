@@ -202,6 +202,10 @@ const confirmLaps = (state: EngineState, packet: SessionHistoryPacket, at: Sessi
 export const applyLaps: SubStep = (state, frame: Frame, out) => {
   const before = state.history.laps.length;
   for (const car of carsWithLapData(state, frame)) trackLap(state, car, frame.sessionTime);
-  for (const packet of frame.sessionHistory) confirmLaps(state, packet, frame.sessionTime, out);
+  for (const packet of frame.sessionHistory) {
+    const car = state.cars[packet.carIdx];
+    if (car) car.updatedAt.sessionHistory = frame.sessionTime;
+    confirmLaps(state, packet, frame.sessionTime, out);
+  }
   if (state.history.laps.length > before) out.changed.add('laps');
 };

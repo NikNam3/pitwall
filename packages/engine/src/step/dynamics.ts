@@ -6,10 +6,12 @@ import type { SubStep } from './types.ts';
  */
 export const applyDynamics: SubStep = (state, frame, out) => {
   const { telemetry, motion, status } = frame;
+  const at = frame.sessionTime;
   if (telemetry) {
     for (const car of state.cars) {
       const t = telemetry.carTelemetryData[car.id];
       if (!t) continue;
+      car.updatedAt.telemetry = at;
       Object.assign(car.dynamics, {
         speedKmh: t.speed,
         throttle: t.throttle,
@@ -28,6 +30,7 @@ export const applyDynamics: SubStep = (state, frame, out) => {
     for (const car of state.cars) {
       const m = motion.carMotionData[car.id];
       if (!m) continue;
+      car.updatedAt.motion = at;
       Object.assign(car.dynamics, {
         position: { x: m.worldPositionX, y: m.worldPositionY, z: m.worldPositionZ },
         velocity: { x: m.worldVelocityX, y: m.worldVelocityY, z: m.worldVelocityZ },
