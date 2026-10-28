@@ -71,7 +71,7 @@ describe('Scheduler', () => {
     const counter = (o: Partial<IncrementalCalculator<number, number>> = {}): Calculator => ({
       kind: 'incremental', id: 'n', reads: ['laps'], cadence: 'frame',
       init: (v) => { calls.push('init'); return v.state.history.laps.length; },
-      update: (acc, d) => { calls.push(`update ${d.before.laps}->${d.after.laps}`); return acc + d.after.laps - d.before.laps; },
+      update: (acc: number, d) => { calls.push(`update ${d.before.laps}->${d.after.laps}`); return acc + d.after.laps - d.before.laps; },
       output: (acc) => acc, ...o,
     } as Calculator);
     it('init on first run, update with delta, re-init on truncation and after reset()', () => {
