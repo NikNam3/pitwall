@@ -1,18 +1,10 @@
 // The host switch (spec 7.1): everything host-specific goes through a `Host`; this folder alone touches window.* host calls.
 import type { Geometry, WindowId } from '@pitwall/contracts';
+import { electronHost } from './electron-host.ts';
+import type { Host } from './host-type.ts';
+import type { PitwallHostApi } from './electron-host.ts';
 
-/** What the shell needs from the program that shows its windows. */
-export type Host = {
-  kind: 'electron' | 'browser';
-  /** The workbook window this page shows. */
-  windowId(): WindowId;
-  /** Opens, closes and places the workbook's windows; best effort where the host cannot. */
-  ensureWindows(windows: Array<{ id: WindowId; geometry?: Geometry | undefined }>): void;
-  /** Calls `cb` when this window moves or resizes; returns the unsubscribe. */
-  onGeometryChange(cb: (g: Geometry) => void): () => void;
-  /** Opens a file in the developer's editor (dev inspector). */
-  openPath(path: string): void;
-};
+export type { Host };
 
 /** The window id when the URL names none. */
 const DEFAULT_WINDOW: WindowId = 'main';
@@ -42,5 +34,8 @@ export const browserHost: Host = {
   openPath: () => {},
 };
 
-/** The host this page runs in. */
-export const getHost = (): Host => browserHost;
+/** The host this page runs in: Electron when its preload script exposed `window.pitwallHost`, else the browser. */
+export const getHost = (): Host => {
+  const api = (window as { pitwallHost?: PitwallHostApi }).pitwallHost;
+  return api === undefined ? browserHost : electronHost(api);
+};
