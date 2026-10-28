@@ -30,6 +30,11 @@ const withOptions = declareWidget({
 });
 
 describe('WidgetProps', () => {
+  it('has declarations that carry their names', () => {
+    expectTypeOf(optionalDecl.name).toBeString();
+    expectTypeOf(foldedDecl.name).toBeString();
+    expectTypeOf(withOptions.name).toBeString();
+  });
   it('types a required topic as its value', () => {
     expectTypeOf<WidgetProps<typeof required>['data']['x']>().toEqualTypeOf<SessionInfo>();
   });
