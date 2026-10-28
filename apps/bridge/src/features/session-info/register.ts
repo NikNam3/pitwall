@@ -1,7 +1,7 @@
 import type { SessionInfo } from '@pitwall/contracts';
 import type { SessionState } from '@pitwall/domain';
 import type { QuickCalculator } from '@pitwall/engine';
-import { defineFeature } from '../feature.ts';
+import { bindState, defineFeature } from '../feature.ts';
 
 const sessionInfo: QuickCalculator<SessionInfo> = {
   id: 'session.info',
@@ -20,5 +20,5 @@ const sessionInfo: QuickCalculator<SessionInfo> = {
 export default defineFeature({
   name: 'session-info',
   calculators: [sessionInfo],
-  topics: [{ topic: 'session.info', from: 'session.info' }],
+  topics: [bindState('session.info', sessionInfo)],
 });

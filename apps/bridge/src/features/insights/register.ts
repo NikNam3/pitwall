@@ -1,7 +1,7 @@
-import { defineFeature } from '../feature.ts';
+import { bindInsights, defineFeature } from '../feature.ts';
 
 export default defineFeature({
   name: 'insights',
   calculators: [],
-  topics: [{ topic: 'insights', fromInsights: true }],
+  topics: [bindInsights('insights')],
 });

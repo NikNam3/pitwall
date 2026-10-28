@@ -1,4 +1,4 @@
-import type { EngineView } from '@pitwall/engine';
+import type { DeepReadonly, EngineView } from '@pitwall/engine';
 
 /** The cars as a calculator sees them: every slot of the game, read-only. */
 export type ViewCars = EngineView['state']['cars'];
@@ -15,10 +15,9 @@ const carIdOf = (params: unknown, carCount: number): number | undefined => {
  * for params that do not name a car. Everything but `carId` in the params is ignored; the params are never changed.
  */
 export const selectCar =
-  <T>(pick: (car: ViewCars[number]) => T) =>
-  (cars: unknown, params: object): T | undefined => {
-    const list = cars as ViewCars;
-    const carId = carIdOf(params, list.length);
-    const car = carId === undefined ? undefined : list[carId];
-    return car === undefined ? undefined : structuredClone(pick(car));
+  <T>(pick: (car: ViewCars[number]) => DeepReadonly<NoInfer<T>>) =>
+  (cars: ViewCars, params: object): T | undefined => {
+    const carId = carIdOf(params, cars.length);
+    const car = carId === undefined ? undefined : cars[carId];
+    return car === undefined ? undefined : (structuredClone(pick(car)) as T);
   };

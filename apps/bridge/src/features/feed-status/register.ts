@@ -1,6 +1,6 @@
 import type { FeedStatus } from '@pitwall/contracts';
 import type { QuickCalculator } from '@pitwall/engine';
-import { defineFeature } from '../feature.ts';
+import { bindState, defineFeature } from '../feature.ts';
 import { feedStatusOf } from './feed-status.ts';
 
 const feedStatus: QuickCalculator<FeedStatus> = {
@@ -14,5 +14,5 @@ const feedStatus: QuickCalculator<FeedStatus> = {
 export default defineFeature({
   name: 'feed-status',
   calculators: [feedStatus],
-  topics: [{ topic: 'feed.status', from: 'feed.status' }],
+  topics: [bindState('feed.status', feedStatus)],
 });

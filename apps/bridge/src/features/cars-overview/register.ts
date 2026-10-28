@@ -1,6 +1,6 @@
 import type { CarOverview } from '@pitwall/contracts';
 import type { QuickCalculator } from '@pitwall/engine';
-import { defineFeature } from '../feature.ts';
+import { bindState, defineFeature } from '../feature.ts';
 
 const carsOverview: QuickCalculator<CarOverview[]> = {
   id: 'cars.overview',
@@ -21,5 +21,5 @@ const carsOverview: QuickCalculator<CarOverview[]> = {
 export default defineFeature({
   name: 'cars-overview',
   calculators: [carsOverview],
-  topics: [{ topic: 'cars.overview', from: 'cars.overview' }],
+  topics: [bindState('cars.overview', carsOverview)],
 });
