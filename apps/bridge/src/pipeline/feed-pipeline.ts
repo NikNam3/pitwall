@@ -57,6 +57,8 @@ export type FeedPipelineOptions = {
   staleCheck?: { clock: () => number; everyMs: number };
   /** Dev mode: times every calculator run. */
   calcStats?: CalcStats;
+  /** Test aid (`PITWALL_E2E_INSIGHT`): the key of one critical insight raised when the pipeline starts; see `FeedAlerts.raiseTestInsight`. */
+  testInsight?: string;
   /** Live only: whether realism mode is on for the next session; read when a session starts and fixed for it. Replays use the config's value. */
   realismNextSession?: () => boolean;
 };
@@ -121,7 +123,8 @@ export class FeedPipeline {
   start(): void {
     if (this.#started) throw new Error('FeedPipeline: already started');
     this.#started = true;
-    const { source, staleCheck } = this.#o;
+    const { source, staleCheck, testInsight } = this.#o;
+    if (testInsight !== undefined) this.#publishInsights(this.#alerts.raiseTestInsight(testInsight, this.#sessionTime()));
     source.start((packet) => this.#onPacket(packet));
     if (staleCheck !== undefined) {
       this.#staleTimer = setInterval(() => this.#guarded('stale check', () => this.#checkFeed(staleCheck.clock())), staleCheck.everyMs);

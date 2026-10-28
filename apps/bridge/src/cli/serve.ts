@@ -78,6 +78,7 @@ export async function serve(opts: ServeOptions): Promise<number> {
       port: opts.wsPort,
       hub,
       feeds,
+      log: cliLogger(io, 'info'),
       ...(uiState && { uiState }),
       ...(opts.replay && { replay: { control: (control: ReplayControl) => (controller === undefined ? false : (trackTransport(control), controller.control(control), true)) } }),
     });
@@ -109,6 +110,8 @@ export async function serve(opts: ServeOptions): Promise<number> {
       const catalogue = readCatalogue();
       hub.publishGlobal('dev.catalogue', () => catalogue);
     }
+    // Test aid for the Playwright specs: inert unless set (see `FeedAlerts.raiseTestInsight`).
+    const testInsight = io.env['PITWALL_E2E_INSIGHT'] || undefined;
     const makePipeline = (source: PacketSource): FeedPipeline =>
       (pipeline = new FeedPipeline({
       feedId,
@@ -122,6 +125,7 @@ export async function serve(opts: ServeOptions): Promise<number> {
       ...(opts.staleCheck && { staleCheck: opts.staleCheck }),
       ...(calcStats && { calcStats }),
       ...(uiState && { realismNextSession: () => uiState.realismNextSession() }),
+      ...(testInsight !== undefined && { testInsight }),
     }));
     const failed = (error: unknown): never => {
       throw new StartupError(`feed ${feedId} failed: ${error instanceof Error ? error.message : String(error)}`);

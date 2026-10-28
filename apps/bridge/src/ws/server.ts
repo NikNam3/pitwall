@@ -4,6 +4,7 @@ import { WebSocket, WebSocketServer } from 'ws';
 import type { FeedId } from '@pitwall/domain';
 import { CONTRACT_VERSION, TOPICS, decodeClientMessage, encodeMessage } from '@pitwall/contracts';
 import type { ClientMessage, FeedInfo, ReplayControl, ServerMessage } from '@pitwall/contracts';
+import type { Logger } from '../log.ts';
 import type { UiState } from '../ui-state/ui-state.ts';
 import type { TopicHub } from '../hub/topic-hub.ts';
 import { StartupError } from '../startup-error.ts';
@@ -26,6 +27,8 @@ export type WsServerOptions = {
   heartbeatMs?: number;
   /** A client that sent nothing for this long is dropped. Default 15000. */
   timeoutMs?: number;
+  /** Gets one `ws subscribe` info line per accepted subscription (the Playwright specs check them for duplicates). */
+  log?: Pick<Logger, 'info'>;
 };
 
 /** Larger client messages close the connection with code 1009; real ones are a few hundred bytes. */
@@ -104,8 +107,12 @@ export class WsServer {
         // A global topic belongs to no feed: any `feedId` the client sent is ignored.
         const global = TOPICS[topic].scope === 'global';
         const feedId = global ? undefined : this.resolveFeed(message.feedId);
-        if (feedId === undefined && !global) send({ type: 'error', id, reason: 'unknownFeed' });
-        else this.options.hub.subscribe({ clientId, id, topic, params, feedId });
+        if (feedId === undefined && !global) {
+          send({ type: 'error', id, reason: 'unknownFeed' });
+          return;
+        }
+        this.options.log?.info({ clientId, id, topic, params, feedId }, 'ws subscribe');
+        this.options.hub.subscribe({ clientId, id, topic, params, feedId });
         return;
       }
       case 'unsubscribe':

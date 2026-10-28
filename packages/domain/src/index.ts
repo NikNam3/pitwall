@@ -9,3 +9,4 @@ export * from './records.ts';
 export * from './insight.ts';
 export * from './laps.ts';
 export * from './freshness.ts';
+export * from './tracks.ts';
