@@ -12,7 +12,7 @@ This review checks every part of the foundation against three questions:
 Inputs:
 - the spec, the plan, the ADRs and `architecture.md`
 - the source of every package (about 8 k lines without tests)
-- the research session of 2026-10-27/28. It is not stored in the repo; its findings that matter are summarised in section 2.
+- the research of 2026-10-27/28, now in `docs/research/`. Its findings that matter are summarised in section 2.
 
 Gate run for this review: `pnpm check` is green, with 89 test files, 775 tests passing and 1 skipped.
 
@@ -48,7 +48,7 @@ Smaller notes are in section 5. Decisions only you can make are in section 6.
 
 ## 2. What the research asks of the foundation
 
-Condensed from the research session. Each later section refers back to these items as R1–R12.
+Condensed from `docs/research/`. Each later section refers back to these items as R1–R12.
 
 | # | Research finding | What it asks of the foundation |
 |---|---|---|
@@ -425,7 +425,6 @@ Condensed from the research session. Each later section refers back to these ite
 - Capture `mfdPanelIndex` in `ownCar` when SP 6 starts.
 - Rebuild the database automatically on a schema mismatch.
 - `architecture.md`: say that the frame assembler and `SessionTracker` live in `engine/frame`.
-- Write the research findings into the repo (`docs/research/`). Today they exist only in a past session transcript; the spec links to "the research" without a file.
 
 ## 6. Decisions for you
 

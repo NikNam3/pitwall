@@ -7,7 +7,7 @@ Status: approved · Date: 2026-10-28 · Revised during planning (domain package;
 ### 1.1 Product
 Pitwall is a race-engineer panel for F1 25. The user is a **remote race engineer** for two friends driving an online season on the same team. The drivers play on Windows PCs; the engineer runs pitwall on a Linux laptop. The MVP covers **one driver**. A second driver comes later as a second feed.
 
-Real race-engineering practice is the reference model (see the research: the four views of timing, strategy, car monitoring and performance analysis; the ATLAS interaction model; the TUM race simulation). The game is adapted to that model, not the other way round.
+Real race-engineering practice is the reference model (see the research in `docs/research/`: the four views of timing, strategy, car monitoring and performance analysis; the ATLAS interaction model; the TUM race simulation). The game is adapted to that model, not the other way round.
 
 ### 1.2 Goals (ranked, 1 = highest)
 1. Clean code
