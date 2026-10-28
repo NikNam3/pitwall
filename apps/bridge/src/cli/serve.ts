@@ -39,6 +39,9 @@ type ServeBase = {
   io: CliIo;
 };
 
+/** How often a dev child reports its replay position to the supervisor. */
+const POSITION_EVERY_MS = 500;
+
 /** How often dev mode publishes the calculator timings (the topic's 1 Hz). */
 const CALC_STATS_EVERY_MS = 1000;
 
@@ -75,9 +78,26 @@ export async function serve(opts: ServeOptions): Promise<number> {
       hub,
       feeds,
       ...(uiState && { uiState }),
-      ...(opts.replay && { replay: { control: (control: ReplayControl) => (controller === undefined ? false : (controller.control(control), true)) } }),
+      ...(opts.replay && { replay: { control: (control: ReplayControl) => (controller === undefined ? false : (trackTransport(control), controller.control(control), true)) } }),
     });
     undo.push(() => server.close());
+    // A dev child tells its supervisor where the replay is, so a restart can come back to the same moment.
+    let listening = false;
+    const transport = { paused: false, speed: 1 };
+    const trackTransport = (control: ReplayControl): void => {
+      if (control.kind === 'pause') transport.paused = true;
+      else if (control.kind === 'play') transport.paused = false;
+      else if (control.kind === 'speed') transport.speed = control.factor;
+    };
+    if (opts.dev && opts.replay && process.send) {
+      const send = process.send.bind(process);
+      for (const control of opts.replay.controls) trackTransport(control);
+      const timer = setInterval(() => {
+        const position = controller?.position();
+        if (listening && position) send({ type: 'position', sessionTimeMs: position.sessionTimeMs, ...transport });
+      }, POSITION_EVERY_MS);
+      undo.push(() => clearInterval(timer));
+    }
     const calcStats = opts.dev ? createCalcStats() : undefined;
     if (calcStats) {
       const publish = (): void => hub.publishGlobal('dev.calcStats', () => calcStats.snapshot());
@@ -130,6 +150,7 @@ export async function serve(opts: ServeOptions): Promise<number> {
       finished = running.done.then(() => opts.onDone?.());
     }
     await opts.bound?.();
+    listening = true;
     io.out(`listening ws://127.0.0.1:${server.port}`);
 
     const aborted = whenAborted(io.signal);

@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { StartupError } from '../startup-error.ts';
 import { SchemaVersionError } from '../storage/db.ts';
+import { run as dev } from './commands/dev.ts';
 import { run as importRecording } from './commands/import.ts';
 import { run as live } from './commands/live.ts';
 import { run as replay } from './commands/replay.ts';
@@ -18,6 +19,7 @@ const OPTIONS = {
   'at-lap': { type: 'string' },
   'at-time': { type: 'string' },
   dev: { type: 'boolean' },
+  replay: { type: 'string' },
   carId: { type: 'string' },
   url: { type: 'string' },
   feed: { type: 'string' },
@@ -28,7 +30,7 @@ const OPTIONS = {
 type Values = ReturnType<typeof parseArgs<{ options: typeof OPTIONS }>>['values'];
 type Command = (positionals: string[], values: Values, io: CliIo) => Promise<number>;
 
-const COMMANDS: Record<string, Command> = { live, replay, tap, reprocess, import: importRecording };
+const COMMANDS: Record<string, Command> = { live, replay, dev, tap, reprocess, import: importRecording };
 
 /** SQLite codes of a file that is not (or no longer) a database. */
 const BROKEN_DATABASE_CODES = ['SQLITE_NOTADB', 'SQLITE_CORRUPT'];
