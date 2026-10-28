@@ -7,6 +7,7 @@ export type { FrameMetrics } from './frame/metrics.ts';
 export { SessionTracker, type TrackerEvent } from './frame/session-tracker.ts';
 export { CalculatorRegistry, RegistryError, type RegistryErrorReason } from './calc/registry.ts';
 export { InsightBook } from './calc/insight-book.ts';
+export { Scheduler, type SchedulerInput, type SchedulerResult } from './calc/scheduler.ts';
 export type {
   Cadence,
   Calculator,

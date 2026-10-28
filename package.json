@@ -7,7 +7,9 @@
     "node": ">=22.18"
   },
   "scripts": {
+    "pretypecheck": "pnpm gen:features",
     "typecheck": "tsc -p tsconfig.json",
+    "pretest": "pnpm gen:features",
     "test": "vitest run",
     "test:acceptance": "vitest run -c vitest.acceptance.config.ts",
     "lint": "eslint .",

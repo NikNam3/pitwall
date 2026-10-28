@@ -1,6 +1,6 @@
 import type { Calculator, CalculatorId } from './types.ts';
 
-export type RegistryErrorReason = 'duplicateId' | 'unknownDependency' | 'cycle';
+export type RegistryErrorReason = 'duplicateId' | 'invalidCadence' | 'unknownDependency' | 'cycle';
 
 type Dependencies = ReadonlyMap<CalculatorId, readonly CalculatorId[]>;
 
@@ -39,12 +39,21 @@ export class CalculatorRegistry {
     );
   }
 
-  /** Checks, in this order: duplicate ids, unknown calculator dependencies, cycles. Throws `RegistryError`. */
+  /** Checks, in this order: duplicate ids, invalid cadences, unknown calculator dependencies, cycles. Throws `RegistryError`. */
   static build(calcs: readonly Calculator[]): CalculatorRegistry {
     const ids = new Set<CalculatorId>();
     for (const { id } of calcs) {
       if (ids.has(id)) throw new RegistryError('duplicateId', [id], `duplicate calculator id "${id}"`);
       ids.add(id);
+    }
+    for (const calc of calcs) {
+      if (typeof calc.cadence === 'object' && !(Number.isFinite(calc.cadence.hz) && calc.cadence.hz > 0)) {
+        throw new RegistryError(
+          'invalidCadence',
+          [calc.id],
+          `calculator "${calc.id}" has cadence hz ${calc.cadence.hz}, expected a positive number`,
+        );
+      }
     }
     const dependencies: Dependencies = new Map(calcs.map((calc) => [calc.id, dependenciesOf(calc)]));
     for (const calc of calcs) {
