@@ -11,7 +11,12 @@
 
 html,
 body {
+  margin: 0;
+  background: var(--pw-bg);
+  color: var(--pw-text);
   font-family: var(--pw-font);
+  font-size: var(--pw-font-px);
+  line-height: var(--pw-line);
   /* Ligatures off globally: digits and operators stay one cell wide. */
   font-variant-ligatures: none;
 }
