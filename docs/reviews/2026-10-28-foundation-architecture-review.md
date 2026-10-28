@@ -1,6 +1,6 @@
 # Foundation architecture review
 
-Date: 2026-10-28 · Subject: sub-project 1 as merged on `main` (bf342ac) · Status: draft for discussion
+Date: 2026-10-28 · Subject: sub-project 1 as merged on `main` (bf342ac) · Status: decisions taken, fixes done on `feat/groundwork` (see "Outcome" at the end)
 
 ## 0. Purpose and method
 
@@ -453,3 +453,25 @@ Condensed from `docs/research/`. Each later section refers back to these items a
 5. F9 per Q-D
 
 F2 and F7 then come as the first tasks of SP 4, and F6 depends on Q-C. Recordings for F8 are needed before SP 4.
+
+## Outcome (2026-10-28)
+
+**Your decisions:**
+- **Q-A:** a second car is out of MVP scope, but the door stays open (ADR 0008).
+- **Q-B:** one file per topic (ADR 0006).
+- **Q-C:** thresholds as read-only config for calculators (ADR 0007).
+- **Q-D:** the UI decides staleness.
+- **Q-E:** done as the groundwork plan, `docs/superpowers/plans/2026-10-28-groundwork.md`.
+
+| Finding | Done |
+|---|---|
+| F1 demand | calculators run on demand; the hub reports subscribed topics per feed (Task 5) |
+| F2 jobs | `Job` is in the engine; features declare jobs; trigger calculators `job:<id>`; results as `Computed<T>` (Task 7) |
+| F3 change tags | domain-area tags (Task 2) |
+| F4 typed bindings | `bindState`, `bindHistory`, `bindInsights`, `bindJob` (Tasks 3, 7) |
+| F5 laps twice | `currentLaps` / `addLaps` in domain (Task 4) |
+| F6 config | `defineConfig`, `EngineView.config`, `config.json`, session sidecar (Task 8) |
+| F7 weekend context | every driver of the player's earlier sessions; `live` rebuilds an outdated database (Task 6) |
+| F8 real-data coverage | **open:** needs the race recordings (spec 12, items 1 and 2) before sub-project 4 |
+| F9 stale values | `CarState.updatedAt` per source, `SOURCE_INTERVAL_MS`, `feed.status.cadenceMs`; `stale` removed from `UnknownReason` (Task 10) |
+| Section 5 items | unit suffixes where the spec states units; `Known` speed trap; `open` hidden from calculators; `CarId` params (Task 9). Not done: `mfdPanelIndex` (with sub-project 6). Done earlier: the research is in `docs/research/` |
