@@ -9,11 +9,8 @@ export type WindowId = string;
 /** An attached display. The first one passed to the functions below is the primary. */
 export type Display = { id: number; bounds: Rect; workArea: Rect };
 
-/**
- * A window with less than this share of its area on a work area is brought back. The brief says "more than 50 % off"
- * (half), but its test keeps a window with 42 % visible, so the line sits at a third.
- */
-const MIN_VISIBLE = 1 / 3;
+/** A window with less than this share of its area on a work area (more than half off) is brought back. */
+const MIN_VISIBLE = 1 / 2;
 /** The size a window without saved geometry opens with, shrunk to fit the primary work area. */
 const DEFAULT_SIZE = { width: 1280, height: 800 };
 
@@ -33,7 +30,7 @@ const fitInside = (size: Pick<Rect, 'width' | 'height'>, area: Rect): Rect => {
 };
 
 /**
- * Where `g` may open. A geometry on a missing screen, or with less than a third of its area on any work area, goes
+ * Where `g` may open. A geometry on a missing screen, or with more than half of its area off every work area, goes
  * to the primary display's work area at its saved size, shrunk to fit; anything else is kept as saved.
  */
 export function clampToDisplays(g: Geometry, displays: ReadonlyArray<Display>): Rect {
