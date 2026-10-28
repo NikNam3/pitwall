@@ -81,6 +81,7 @@ export async function serve(opts: ServeOptions): Promise<number> {
       ...(opts.storage && { storage: { db: opts.storage.db, recordingsDir: opts.storage.recordingsDir } }),
       ...(opts.staleCheck && { staleCheck: opts.staleCheck }),
       ...(calcStats && { calcStats }),
+      ...(uiState && { realismNextSession: () => uiState.realismNextSession() }),
     });
     pipeline.start();
     undo.push(() => pipeline?.stop());

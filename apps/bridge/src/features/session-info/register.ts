@@ -13,6 +13,7 @@ const sessionInfo: QuickCalculator<SessionInfo> = {
     sessionUid: state.sessionUid,
     playerCar: state.playerCar,
     ...(state.teammateCar !== undefined && { teammateCar: state.teammateCar }),
+    realism: state.realism,
     session: structuredClone(state.session) as SessionState,
   }),
 };

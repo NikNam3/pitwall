@@ -46,7 +46,7 @@ export type SessionProcessorOptions = {
   log: Logger;
   /** The feed's health right now, for the calculators that read `feed`. */
   feedView: () => FeedMetricsView;
-  /** The effective calculator config, the same for every frame of the session. */
+  /** The effective calculator config, the same for every frame of the session; `realism.enabled` switches realism mode on. */
   config: FeatureConfig;
   storage?: SessionStorage;
   file?: SessionFile;
@@ -141,7 +141,7 @@ export class SessionProcessor {
     const weekend = participants && this.#identify(participants, playerCarIndex);
     const scheduler = new Scheduler(registry, this.#o.calcStats && { onCalculatorRun: this.#o.calcStats.hook });
     scheduler.setNeeded(this.#o.needed());
-    const running = { runner: new SessionRunner({ feedId, sessionUid, session, ...(weekend && { weekend }) }), scheduler };
+    const running = { runner: new SessionRunner({ feedId, sessionUid, session, realism: this.#o.config.realism?.enabled === true, ...(weekend && { weekend }) }), scheduler };
     this.#running = running;
     const frames = this.#buffered;
     this.#buffered = [];
