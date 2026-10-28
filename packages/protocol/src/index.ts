@@ -5,3 +5,6 @@ export * from './sizes.ts';
 export * from './packets/index.ts';
 export * from './events.ts';
 export * from './packets/event.ts';
+export * from './packet.ts';
+export * from './decode.ts';
+export * from './encode.ts';
