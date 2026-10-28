@@ -51,7 +51,7 @@ What follows for pitwall (🔵, derived from 1.2):
 1. **Pitwall is the ops room.** It simulates continuously and shows **conclusions, not data**. A display that needs reading and mental arithmetic in a race has failed.
 2. **Standing answers.** Every time-critical question ("box if SC now?", "where do we rejoin?") has an answer that is always up to date *before* the event. The real teams' pre-agreed triggers become armed answers on screen.
 3. **Plans with triggers.** Plan A/B/C and their triggers are prepared between sessions and armed for the race. In the race, pitwall says which trigger fired.
-4. **Calls ready to read out.** The only channel to the driver is the user's voice. A call should come out as a sentence: "Box this lap, mediums, rejoin P6, 1.2 s behind Verstappen."
+4. **Answers, not scripts.** The only channel to the driver is the user's voice, but the user words the calls themselves: no pre-written radio lines (user, 2026-10-28). The answer must still hold everything a call needs: action, tyre, rejoin position, gap.
 5. **Escalate, don't search.** The layout stays stable. The situation decides which few values light up (section 4).
 6. **Two cars double every decision**, and add team play and pit stacking (D20, D27). A per-driver focus switch is cheaper than two full layouts.
 7. **Glance budget.** The user is also watching the race. Tier-1 answers must be readable in about two seconds.
@@ -486,7 +486,7 @@ The virtual finish car (🟢) runs at the average lap time and crosses the line 
 #### D31 · Race plan with triggers (tier 3)
 | Field | Content |
 |---|---|
-| Decision | Plan A, B and C for each driver, with the trigger for each switch and the radio message that goes with it. |
+| Decision | Plan A, B and C for each driver, with the trigger for each switch. |
 | Question behind it | What is the fastest race alone, what changes it (SC lap ranges, degradation off, rain), and what do we do in each case? |
 | Computed answer | **Plan set:** each plan with stop laps, compounds, target lap times and the predicted race time; for each SC lap range, the pre-decided "box / stay"; with Monte Carlo later, the spread of finishing positions per plan. |
 | Display | Plan board (V17) in edit mode; strategy comparison (V16). |
@@ -513,7 +513,7 @@ The virtual finish car (🟢) runs at the average lap time and crosses the line 
 
 | # | Display | What it shows | Serves | Source | Data |
 |---|---|---|---|---|---|
-| V01 | **Circle of doom** | All cars placed on a circle **by time gap** (equal distance = equal time); ghost markers for "rejoin if we box now", one per pit loss condition | D21, D23, D24, D25 | 🟡 the McLaren Track Viewer (2001): its author, a former McLaren race strategist, describes on LinkedIn gaps on a circle ("equal distance equals equal time"), a black background, driver labels round the edge, sector split markers and a marker for where the car comes out after a stop, and says the engineer on Piastri's car used a very similar display at the 2025 Belgian GP (read only through a search summary; the profile blocks direct access); 🟡 a Motorsport.com article on McLaren's mission control says the circle is kept deliberately simple to show how many seconds separate the cars, and that it shows when a pit window opens (search snippet only); 🟢 HH Timing gap overlay on its circle map; 🟡 own car at 12 o'clock is unconfirmed ([Tufte thread](https://www.edwardtufte.com/?p=409)); HH puts the start/finish line at the top instead | gaps of all cars, pit loss table |
+| V01 | **Circle of doom** | All cars placed on a circle **by time gap** (equal distance = equal time); ghost markers for "rejoin if we box now", one per pit loss condition | D21, D23, D24, D25 | 🟡 the McLaren Track Viewer (2001): its author, a former McLaren race strategist, describes on LinkedIn gaps on a circle ("equal distance equals equal time"), a black background, driver labels round the edge, sector split markers and a marker for where the car comes out after a stop, and says the engineer on Piastri's car used a very similar display at the 2025 Belgian GP (read only through a search summary; the profile blocks direct access); 🟡 a Motorsport.com article on McLaren's mission control says the circle is kept deliberately simple to show how many seconds separate the cars, and that it shows when a pit window opens (search snippet only); 🟢 HH Timing gap overlay on its circle map; 🟡 own car at 12 o'clock is unconfirmed ([Tufte thread](https://www.edwardtufte.com/?p=409)); HH puts the start/finish line at the top instead. **Pitwall: own car at 12 o'clock** (user, 2026-10-28) | gaps of all cars, pit loss table |
 | V02 | **Gap track map** | Linear strip with the reference car at 0 s, cars by time gap; traffic prediction for future laps, time to catch, the line on track where a car will be caught | D17, D21 | 🟢 [HH gap track](https://help.hhtiming.com/displays/track-maps/gap-track/) | gaps, assumed pace, lap distance |
 | V03 | **Live crossing order with ghosts** | Cars in the order they will cross the line; the ghost listed between real cars with the gap ahead and behind | D21, D24 | 🟢 [HH live crossing order](https://help.hhtiming.com/displays/scoreboards/live-crossing-order-scoreboard/) | gaps, pit loss |
 | V04 | **Race history (gapper) chart** | Gap to a virtual car at constant pace per lap; ghost lines ("if he pitted at the end of this lap"); projected lines for the next laps; SC/VSC background | D21, D23, D31, D32 | 🟢 [HH gap graph](https://help.hhtiming.com/displays/graphing/gap-graph), [School of Race Engineering](https://schoolofraceengineering.co.uk/blog/post/15986/how-do-teams-analyse-f1-race-strategy), [03](03-strategy-models.md) | lap times of all cars |
@@ -529,7 +529,7 @@ The virtual finish car (🟢) runs at the average lap time and crosses the line 
 | V14 | **Battle cards** | Ahead and behind: gap, closing rate, laps to DRS range, pass feasibility, tyres | D17, D13 | 🟢 AWS Battle Forecast, HH time to catch; 🔵 card | gaps, pace, tyres |
 | V15 | **Pit-lap sweep** | For each lap in the window: rejoin position, traffic in the first laps, projected finish | D21 | 🟢 Simulator Controller (least traffic, undercut); 🔵 strip | gaps, pace, pit loss |
 | V16 | **Strategy comparison** | Rows = compound sequences / plans; finish time, position, gap to best, risk; later a distribution per plan | D22, D28, D31 | 🟢 TUM, Avella et al.; 🔵 table | fits, sets, pit loss |
-| V17 | **Plan board** | Plan A/B/C per driver: stop laps, compounds, target laps; armed triggers; the pre-written radio line; which trigger fired | D09, D31, all race calls | 🟢 F1 strategists (pre-agreed plans and messages); 🔵 board | plans, live state |
+| V17 | **Plan board** | Plan A/B/C per driver: stop laps, compounds, target laps; armed triggers; which trigger fired | D09, D31, all race calls | 🟢 F1 strategists (pre-agreed plans and messages); 🔵 board | plans, live state |
 | V18 | **SC card (standing answer)** | One line in green running ("SC now → BOX, rejoin P7"); expands under SC/VSC with gain, rejoin, who else profits; restart sheet | D24, D25, D29 | 🟢 TUM, Red Bull; 🔵 card | SC state, pit loss table, gaps |
 | V19 | **Crossover chart** | Field lap times by tyre type; 110 % line; forecast rain strip; payback laps | D26 | 🟢 Pirelli; 🔵 chart | lap times, compounds, forecast |
 | V20 | **Fuel delta gauge** | Laps of margin; save target per lap; SC credit | D12, D05 | 🟢 Simulator Controller, iRacing fuel tools ([iRacePal](https://github.com/Bahnzo/iRacePal)); 🔵 save target | fuel, burn, laps left |
@@ -570,7 +570,7 @@ The layout stays put. A situation lights up the few values it needs (colour only
 | **Battle near** | DRS range predicted within 2 laps; car behind closing faster than a threshold (🟢 HH 0.03 s/s idea) | D17, D13 | battle card |
 | **Teammates together** | within 1.5 s with a pace delta for 3+ laps | D20 | team card |
 | **Penalty close** | one warning left before a penalty; new penalty | D18 | timing row badge, ghost includes penalty |
-| **Plan trigger fired** | any armed trigger on the plan board | the plan's decision | plan board row, radio line |
+| **Plan trigger fired** | any armed trigger on the plan board | the plan's decision | plan board row |
 | **Final laps** | laps left ≤ fuel/ERS horizon | D12, D13 (spend the reserve; the 2026 model lifts its battery margin in the last laps 🟢) | fuel gauge, ERS bar |
 | **Quali release window** | a free window opens in 30–60 s | D07 | release clock |
 | **Quali cut-off danger** | projection below the cut-off, lap invalid | D08 | projected row |
@@ -580,14 +580,21 @@ The layout stays put. A situation lights up the few values it needs (colour only
 ## 5. Gaps and open questions
 
 ### For the user
-1. **Fuel load:** can the league's settings let the player choose the race fuel load in F1 25? If not, D05 drops out.
-2. **Second car's data:** will both friends set their telemetry to public, and will the second driver's own feed reach pitwall (MotionEx, setup, the 🔒 items)? Out of MVP scope (Q-A), but D14, D15 and D02 depend on it for the second car.
-3. **Pit stacking:** does the league use double stacking? We don't know if F1 25 lets two human teammates stack, or what the wait costs.
-4. **Circle orientation:** own car at 12 o'clock (the rumoured McLaren version), or start/finish at the top (HH Timing)? Or both as an option?
-5. **Suggestions or numbers:** should pitwall *propose* the call ("BOX — rejoin P6") or only show the numbers? The catalogue assumes proposals with the numbers beside them.
-6. **Radio lines:** should the plan board hold pre-written radio sentences per plan and trigger?
-7. **League rules:** two dry compounds, parc fermé, the SC setting, the track-limit penalty rules, red-flag tyre change. These set constants for D22, D28 and D30.
-8. **AI cars in the lobby?** With AI cars, more rival data is visible (wear, fuel, sets).
+
+Answered (user, 2026-10-28):
+- **Second car's data:** both drivers set their telemetry to public, and both feeds will reach pitwall. The second driver comes after the MVP, so the 🔒 items for the second car (D02, D14, D15) wait until then.
+- **Circle orientation:** own car at 12 o'clock.
+- **Radio lines:** none. The plan board holds plans and triggers, not sentences.
+- **AI cars:** there are AI cars in the lobby, so their wear, fuel, ERS and tyre sets are visible (no ⚠ for them).
+
+Still open:
+1. **Fuel load:** can the league's settings let the player choose the race fuel load in F1 25? If not, D05 drops out. (The user is asking a friend what the drivers can edit.)
+2. **Pit stacking:** does the league use double stacking, and does F1 25 allow it for two human teammates? (The user is asking a friend.)
+3. **League rules:** two dry compounds, parc fermé, the SC setting, the track-limit penalty rules, red-flag tyre change. These set constants for D22, D28 and D30. Unknown for now.
+4. **Proposal or verdict:** how far should pitwall go towards the call?
+   - **A. Numbers only:** "rejoin P6, 1.2 s behind VER; undercut +0.8 s". The user draws the conclusion.
+   - **B. A verdict per question** (recommended): each card answers its own question in one word next to its numbers ("Undercut: WORKS", "SC now: BOX", "Fuel: SAVE 0.05 kg/lap"). There is no overall call; the user weighs the cards.
+   - **C. One recommended call:** pitwall weighs all cards into a single action ("BOX this lap, mediums") with the reasons listed. That needs a weighting model we can't validate yet; it could come with the Monte Carlo (sub-project 5).
 
 ### For research and recordings
 1. **Pit loss per track and condition** (green, VSC, SC): no recordings yet with a stop or an SC (spec 12). This blocks D21–D25.
