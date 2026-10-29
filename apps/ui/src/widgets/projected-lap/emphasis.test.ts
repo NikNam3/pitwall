@@ -13,9 +13,9 @@ describe('cutOffRole', () => {
 });
 
 describe('finishRole', () => {
-  it('is warning when no further lap can start (margin below zero)', () => {
-    expect(finishRole(-4100)).toBe('warning');
-    expect(finishRole(-1)).toBe('warning');
+  it('is critical when no further lap can start (margin below zero)', () => {
+    expect(finishRole(-4100)).toBe('critical');
+    expect(finishRole(-1)).toBe('critical');
   });
   it('is undefined for a zero or positive margin', () => {
     expect(finishRole(0)).toBeUndefined();

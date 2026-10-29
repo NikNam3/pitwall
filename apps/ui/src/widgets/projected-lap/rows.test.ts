@@ -30,7 +30,7 @@ describe('projectionRows', () => {
   it('writes a negative finish margin with a minus sign', () => {
     const rows = projectionRows(projection({ finishMs: -4_100 }));
     expect(rows[2]!.delta).toBe('-4.1 s');
-    expect(rows[2]!.deltaRole).toBe('warning');
+    expect(rows[2]!.deltaRole).toBe('critical');
   });
 
   it('colours the delta to best green for a new personal best, nothing otherwise', () => {
