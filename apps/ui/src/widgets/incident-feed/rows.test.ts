@@ -52,6 +52,12 @@ describe('incidentRows', () => {
     expect(timeLoss!.cells.forUs.text).toBe('us —, ALB −1.9→+5.8');
   });
 
+  it('takes the gap car as the first involved car that is not our car, even when ours is listed first', () => {
+    const [row] = incidentRows([entry({ carIds: [carId(1), carId(4)], forUs: [forUs({ gapBeforeMs: k(-1900), gapAfterMs: k(5800) })] })], cars, undefined);
+    expect(row!.cells.forUs.text).toBe('us P5→P4, ALB −1.9→+5.8');
+    expect(row!.cells.cars.text).toBe('KUH ALB');
+  });
+
   it('writes a position change as P7→P9 through the position mark', () => {
     const [row] = incidentRows([entry({ forUs: [forUs({ positionBefore: 7, positionAfter: k(9) })] })], cars, undefined);
     expect(row!.cells.forUs.text.startsWith('us P7→P9')).toBe(true);
