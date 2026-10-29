@@ -6,7 +6,7 @@ import { BATTLE, BATTLE_CONFIG } from '../../src/battle/index.ts';
 import { battleCalculator } from '../../src/battle/calculator.ts';
 import type { GapsOutput } from '../../src/gaps/index.ts';
 import type { Pace } from '../../src/pace/index.ts';
-import { carState, engineView, realismHidden } from '../../../../test-support/builders/index.ts';
+import { carState, engineView, realismHidden, type DeepPartial } from '../../../../test-support/builders/index.ts';
 
 type Line = { lap: number; at: number }[];
 const id = (n: number): CarId => carId(n);
@@ -30,12 +30,14 @@ type Scene = {
   kind?: 'race' | 'practice';
   teammate?: number;
   hidden?: number[];
+  /** Overrides of a car's state, by id. */
+  carOver?: Record<number, DeepPartial<CarState>>;
   config?: EngineView['config'];
 };
 
 const build = (s: Scene): EngineView => {
   const cars = s.cars.map(([n, position, timing]) => {
-    const car = carState({ id: id(n), timing: { position } });
+    const car = carState({ id: id(n), timing: { position }, ...s.carOver?.[n] });
     Object.assign(car.timing, timing);
     return s.hidden?.includes(n) ? realismHidden(car) : car;
   });
@@ -46,12 +48,15 @@ const build = (s: Scene): EngineView => {
     toAheadMs: known(n === 0 ? 1600 : 3000, 311_600),
     toBehindMs: known(n === 0 ? 2200 : 1600, 313_800),
     lapsDown: 0,
+    positionsGained: known(0, 311_600),
   });
   const gaps: GapsOutput = {
     intervals: (s.order ?? [1, 0, 3]).map(interval),
     lineTimes: Object.fromEntries(Object.entries(s.lineTimes).map(([k, v]) => [k, v])) as GapsOutput['lineTimes'],
     latest: (s.latest ?? {}) as GapsOutput['latest'],
+    recent: {},
     neighbourhood: [],
+    raceStartAt: known(0, 0),
   };
   const pace: Pace = {
     byCar: Object.fromEntries(Object.entries(s.pace ?? {}).map(([k, v]) => [k, paceOf(v)])) as Pace['byCar'],
@@ -192,11 +197,9 @@ describe('battle', () => {
   });
 
   it('compound and tyre age of both cars come from the car states', () => {
-    const view = build(base());
-    view.state.cars[0]!.tyres.visualCompound = 'medium';
-    view.state.cars[0]!.tyres.age = 7;
-    view.state.cars[1]!.tyres.visualCompound = 'hard';
-    view.state.cars[1]!.tyres.age = 12;
+    const view = build(
+      base({ carOver: { 0: { tyres: { visualCompound: 'medium', age: 7 } }, 1: { tyres: { visualCompound: 'hard', age: 12 } } } }),
+    );
     const ahead = card(view).ahead;
     if (!ahead.known) throw new Error('ahead unknown');
     expect(ahead.value.ours).toEqual({ compound: 'medium', age: 7 });
@@ -204,11 +207,8 @@ describe('battle', () => {
   });
 
   it('their ERS store is the car state value with its time', () => {
-    const view = build(base());
-    view.state.cars[1]!.energy.ers = known(
-      { storeJ: 2_500_000, mode: 'medium', harvestedMgukJ: 0, harvestedMguhJ: 0, deployedJ: 0 },
-      42_000,
-    );
+    const ers = known({ storeJ: 2_500_000, mode: 'medium' as const, harvestedMgukJ: 0, harvestedMguhJ: 0, deployedJ: 0 }, 42_000);
+    const view = build(base({ carOver: { 1: { energy: { ers } } } }));
     const ahead = card(view).ahead;
     if (!ahead.known) throw new Error('ahead unknown');
     expect(ahead.value.theirErsStoreJ).toEqual({ known: true, value: 2_500_000, at: 42_000 });
