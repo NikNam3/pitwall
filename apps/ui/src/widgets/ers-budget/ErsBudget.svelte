@@ -6,7 +6,7 @@
   import { role } from '../../theme/index.ts';
   import { ersRole } from './emphasis.ts';
   import * as text from './text.ts';
-  import { ersView } from './view.ts';
+  import { BAR_COLS, ersView } from './view.ts';
   import type { widget } from './widget.ts';
 
   let { data, size }: WidgetProps<typeof widget> = $props();
@@ -24,12 +24,12 @@
 <div class="ers" class:full>
   <div class="row">
     <span class="label">{text.labels.store}</span>
-    <span class="bar" title={text.attackLevel(view.level)}><Bar {...view.bar} cols={full ? 18 : 6} role="text" /></span>&nbsp;<span class="num" class:hot={hot !== undefined} style:color={colour} title={why('store')}>{view.store}</span>&nbsp;<span class="flow" class:hot={hot !== undefined} style:color={colour} title={why('flow')}>{view.flow}</span>
+    <span class="bar" title={text.attackLevel(view.level)}><Bar {...view.bar} cols={full ? BAR_COLS.full : BAR_COLS.compact} role="text" /></span>&nbsp;<span class="num" class:hot={hot !== undefined} style:color={colour} title={why('store')}>{view.store}</span>&nbsp;<span class="flow" class:hot={hot !== undefined} style:color={colour} title={why('flow')}>{view.flow}</span>
   </div>
   {#if full}
     <div class="row between">
       <span><span class="label">{text.labels.deploy}</span>{text.labels.thisLap}</span>
-      <span title={why('deployed')}>{view.deployed}{view.deployed ? ', ' : ''}{text.labels.limit} {view.deployLimit}</span>
+      <span title={why('deployed')}>{view.deployed}{view.deployed ? text.joint : ''}{text.labels.limit} {view.deployLimit}</span>
     </div>
     <div class="row between">
       <span><span class="label">{text.labels.harvest}</span>{text.labels.thisLap}</span>
@@ -38,7 +38,7 @@
   {/if}
   <div class="row">
     {#if full}<span class="label">{text.labels.trend}</span>{/if}
-    <span title={why('trend')}>{view.trend}</span>{#if view.attack}<span>,&nbsp;</span><span class:hot={hot !== undefined && view.attackReady} style:color={view.attackReady ? colour : undefined}>{view.attack}</span>{/if}
+    <span title={why('trend')}>{view.trend}</span>{#if view.trendJoint}<span>{view.trendJoint}</span>{/if}{#if view.attack}<span class:hot={hot !== undefined && view.attackReady} style:color={view.attackReady ? colour : undefined}>{view.attack}</span>{/if}
   </div>
 </div>
 

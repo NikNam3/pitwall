@@ -126,3 +126,28 @@ describe('ersView: trend and attack text', () => {
     expect(v.attackReady).toBe(false);
   });
 });
+
+describe('ersView: trend line', () => {
+  it('joins trend and attack with a separator', () => {
+    const v = ersView(state({ attack: known({ ready: true, inLaps: 0 }, at) }));
+    expect(v.trend).toBe('+0.4 MJ/lap');
+    expect(v.attack).toBe('attack ready');
+    expect(v.trendJoint).toBe(',\u00a0');
+  });
+
+  it('has no separator when the trend is empty and the attack shows', () => {
+    const v = ersView(state({ storeTrendJPerLap: unknown('notReceived'), attack: known({ ready: true, inLaps: 0 }, at) }));
+    expect(v.trend).toBe('');
+    expect(v.trendJoint).toBe('');
+  });
+
+  it('has no separator when there is no attack text', () => {
+    expect(ersView(state({ attack: unknown('notReceived') })).trendJoint).toBe('');
+  });
+
+  it('prints a falling trend with the true minus and the limit in MJ', () => {
+    const v = ersView(state({ storeTrendJPerLap: known(-0.4 * MJ, at) }));
+    expect(v.trend).toBe('−0.4 MJ/lap');
+    expect(v.deployLimit).toBe('4.0');
+  });
+});
