@@ -1,6 +1,9 @@
 // The only place numbers become text (spec 5): every value cell formats through one of these.
 import { trackName, type Celsius, type CarId, type Kg, type Ms, type Percent, type Psi, type SessionKind } from '@pitwall/domain';
 
+/** The one minus glyph of every signed value (U+2212): as wide as `+` in the mono font. */
+export const MINUS = '−';
+
 const pad = (n: number, width: number): string => String(n).padStart(width, '0');
 
 /** `m:ss.mmm` for a non-negative duration. */
@@ -22,7 +25,7 @@ export const formatLapTime = (ms: Ms): string => minutesSeconds(ms, 1);
 /** Signed gap, `1234` -> `+1.234`, `65000` -> `+1:05.000`. */
 export function formatGap(ms: Ms): string {
   const abs = Math.abs(Math.round(ms));
-  const sign = ms < 0 ? '-' : '+';
+  const sign = ms < 0 ? MINUS : '+';
   return abs < 60000 ? `${sign}${formatSector(abs)}` : `${sign}${minutesSeconds(abs, 1)}`;
 }
 
@@ -113,28 +116,58 @@ export const formatCelsius = (c: Celsius): string => (Number.isFinite(c) ? forma
 /** Percentage to whole numbers, `17.6` -> `18%`. */
 export const formatPercent = (p: Percent): string => (Number.isFinite(p) ? formatPct(p) : '');
 
-/** Energy shown as MJ with one decimal, `2100000` -> `2.1 MJ`. */
-export const formatJoules = (j: number): string => (Number.isFinite(j) ? `${fixed(j / 1e6, 1)} MJ` : '');
+/** A number with a true minus; a value that rounds to zero is unsigned. */
+const withMinus = (text: string): string => (text.startsWith('-') ? `${MINUS}${text.slice(1)}` : text);
 
-/** A time loss in ms per lap as signed seconds to two decimals, `120` -> `+0.12 s/lap`. */
-export const formatSecondsPerLap = (ms: Ms): string => {
-  if (!Number.isFinite(ms)) return '';
-  const text = fixed(ms / 1000, 2);
-  return `${text.startsWith('-') ? '' : '+'}${text} s/lap`;
+/** Joules as MJ to one decimal, no unit, `2100000` -> `2.1`, `-400000` -> `−0.4`. */
+export const formatMJ = (j: number): string => (Number.isFinite(j) ? withMinus(fixed(j / 1e6, 1)) : '');
+
+/** Joules as signed MJ to one decimal, no unit, `1200000` -> `+1.2`, `-400000` -> `−0.4`; zero is unsigned. */
+export const formatSignedMJ = (j: number): string => {
+  const text = formatMJ(j);
+  return text === '' || text.startsWith(MINUS) || Number(text) === 0 ? text : `+${text}`;
 };
 
-/** A delta in ms as signed seconds, `412` -> `+0.412`, `-412` -> `-0.412`. */
+/** Energy shown as MJ with one decimal, `2100000` -> `2.1 MJ`. */
+export const formatJoules = (j: number): string => (Number.isFinite(j) ? `${formatMJ(j)} MJ` : '');
+
+/** Seconds from ms, no unit, `4100` -> `4.1`, `-4100` -> `−4.1`; the caller names the unit. */
+export const formatSeconds = (ms: Ms, decimals: number): string => (Number.isFinite(ms) ? withMinus(fixed(ms / 1000, decimals)) : '');
+
+/** Signed seconds from ms, `120` at 2 decimals -> `+0.12`, `-120` -> `−0.12`; a value that rounds to zero reads `+`. */
+export const formatSignedSeconds = (ms: Ms, decimals: number): string => {
+  if (!Number.isFinite(ms)) return '';
+  const text = fixed(Math.abs(ms) / 1000, decimals);
+  return `${ms < 0 && Number(text) !== 0 ? MINUS : '+'}${text}`;
+};
+
+/** Laps a car is down, `2` -> `+2 laps`. */
+export const formatLapsDown = (n: number): string => (Number.isFinite(n) ? `+${n} ${n === 1 ? 'lap' : 'laps'}` : '');
+
+/** A time penalty from ms to whole seconds, `5000` -> `5s`. */
+export const formatPenaltyMs = (ms: Ms): string => (Number.isFinite(ms) ? `${Math.round(ms / 1000)}s` : '');
+
+/** A warning count, `2` -> `2w`. */
+export const formatWarnings = (n: number): string => (Number.isFinite(n) ? `${n}w` : '');
+
+/** A race position, `7` -> `7`; unknown is empty. */
+export const formatPlace = (n: number | undefined): string => (n === undefined || !Number.isFinite(n) ? '' : formatCount(n));
+
+/** A time loss in ms per lap as signed seconds to two decimals, `120` -> `+0.12 s/lap`. */
+export const formatSecondsPerLap = (ms: Ms): string => (Number.isFinite(ms) ? `${formatSignedSeconds(ms, 2)} s/lap` : '');
+
+/** A delta in ms as signed seconds, `412` -> `+0.412`, `-412` -> `−0.412`. */
 export const formatDeltaMs = (ms: Ms): string => {
   if (!Number.isFinite(ms)) return '';
   const abs = Math.abs(Math.round(ms));
-  return `${ms < 0 && abs > 0 ? '-' : '+'}${formatSector(abs)}`;
+  return `${ms < 0 && abs > 0 ? MINUS : '+'}${formatSector(abs)}`;
 };
 
 /** A signed count of laps to one decimal with a true minus, `1.8` -> `+1.8 laps`, `-0.7` -> `−0.7 laps`. */
 export const formatSignedLaps = (n: number): string => {
   if (!Number.isFinite(n)) return '';
   const text = fixed(Math.abs(n), 1);
-  return `${n < 0 && text !== '0.0' ? '−' : '+'}${text} laps`;
+  return `${n < 0 && text !== '0.0' ? MINUS : '+'}${text} laps`;
 };
 
 /** Fuel burn or save target to two decimals, `1.62` -> `1.62 kg/lap`. */

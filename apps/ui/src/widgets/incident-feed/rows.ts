@@ -4,9 +4,9 @@ import type { CarId, IncidentEntry, IncidentForUs, Known, RaceMoment, UnknownRea
 import { carCode } from '../../kit/car/car-code.ts';
 import { gridRow } from '../../kit/grid/grid.ts';
 import type { GridColumn } from '../../kit/grid/grid.ts';
-import { incidentKinds, insightText, separator } from '../../kit/text.ts';
-import { fixed, formatLapNumber } from '../../kit/values/format.ts';
-import { positionMarkText } from '../../kit/values/position-mark.ts';
+import { incidentKinds, separator } from '../../kit/text.ts';
+import { formatLapNumber, formatSeconds, formatSignedSeconds } from '../../kit/values/format.ts';
+import { positionPairText } from '../../kit/values/position-mark.ts';
 import type { Role } from '../../theme/roles.ts';
 import { incidentRole } from './emphasis.ts';
 import * as text from './text.ts';
@@ -18,7 +18,7 @@ export type IncidentRow = { id: string; role?: Role | undefined; cells: Record<I
 /** Id of the first major entry of the newest-first feed. */
 export const newestMajorId = (feed: readonly IncidentEntry[]): string | undefined => feed.find((e) => e.severity === 'major')?.id;
 
-const signedSeconds = (ms: number): string => (ms < 0 ? `${insightText.minus}${fixed(-ms / 1000, 1)}` : `+${fixed(ms / 1000, 1)}`);
+const signedSeconds = (ms: number): string => formatSignedSeconds(ms, 1);
 
 function gapText(before: Known<number>, after: Known<number>): string {
   if (!before.known && !after.known) return '';
@@ -28,7 +28,7 @@ function gapText(before: Known<number>, after: Known<number>): string {
 }
 
 function forUsText(f: IncidentForUs, entry: IncidentEntry, codeOf: (id: CarId) => string): string {
-  const position = f.positionAfter.known && f.positionAfter.value === f.positionBefore ? text.unchanged : positionMarkText({ from: f.positionBefore, to: f.positionAfter });
+  const position = positionPairText(f.positionBefore, f.positionAfter);
   const other = entry.carIds.find((id) => id !== f.ourCarId);
   const gap = other === undefined ? '' : gapText(f.gapBeforeMs, f.gapAfterMs);
   return `${text.us} ${position}${gap === '' || other === undefined ? '' : `, ${codeOf(other)} ${gap}`}`;
@@ -42,7 +42,7 @@ export function incidentRows(feed: readonly IncidentEntry[], cars: readonly CarO
   };
   const newest = newestMajorId(feed);
   return feed.map((entry) => {
-    const lost: IncidentCell = entry.timeLostMs.known ? { text: text.lost(entry.timeLostMs.value) } : { text: '', reason: entry.timeLostMs.reason };
+    const lost: IncidentCell = entry.timeLostMs.known ? { text: text.lost(formatSeconds(entry.timeLostMs.value, 1)) } : { text: '', reason: entry.timeLostMs.reason };
     return {
       id: entry.id,
       role: incidentRole(moment, entry, newest),

@@ -14,7 +14,7 @@ describe('projectionRows', () => {
 
   it('formats the push lap inside the cut-off like the mockup', () => {
     expect(text(projectionRows(insideCutOff))).toEqual([
-      ['proj', 'PROJ', '1:23.412', 'P6', '-0.118', 'to best'],
+      ['proj', 'PROJ', '1:23.412', 'P6', '−0.118', 'to best'],
       ['cutOff', 'CUT-OFF', '1:24.006', 'P15', '+0.594', 'margin'],
       ['finish', 'FINISH', '', '', '38.2 s', 'left at line'],
     ]);
@@ -29,7 +29,7 @@ describe('projectionRows', () => {
 
   it('writes a negative finish margin with a minus sign', () => {
     const rows = projectionRows(projection({ finishMs: -4_100 }));
-    expect(rows[2]!.delta).toBe('-4.1 s');
+    expect(rows[2]!.delta).toBe('−4.1 s');
     expect(rows[2]!.deltaRole).toBe('critical');
   });
 
@@ -39,7 +39,7 @@ describe('projectionRows', () => {
   });
 
   it('colours the margin red outside the cut-off, nothing inside', () => {
-    expect(projectionRows(outsideCutOff)[1]!.delta).toBe('-0.305');
+    expect(projectionRows(outsideCutOff)[1]!.delta).toBe('−0.305');
     expect(projectionRows(outsideCutOff)[1]!.deltaRole).toBe('critical');
     expect(projectionRows(insideCutOff)[1]!.deltaRole).toBeUndefined();
   });

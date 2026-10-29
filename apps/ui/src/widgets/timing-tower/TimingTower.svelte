@@ -6,7 +6,7 @@
   import CompoundMark from '../../kit/compound/CompoundMark.svelte';
   import Value from '../../kit/values/Value.svelte';
   import { positionMarkText } from '../../kit/values/position-mark.ts';
-  import { formatCount, formatDeltaMs, formatLapNumber, formatLapTime, formatSector } from '../../kit/values/format.ts';
+  import { formatCount, formatDeltaMs, formatLapNumber, formatLapsDown, formatLapTime, formatPenaltyMs, formatPlace, formatSector, formatWarnings } from '../../kit/values/format.ts';
   import { sectorStatusRole } from '../../emphasis/index.ts';
   import { role } from '../../theme/index.ts';
   import type { SectorStatus } from '@pitwall/domain';
@@ -26,17 +26,17 @@
     const r = sectorStatusRole(status, { ours });
     return r === undefined ? undefined : role(r);
   };
-  const penalty = (r: TowerRow) => (r.penaltyMs > 0 ? text.penaltySeconds(r.penaltyMs) : r.warnings > 0 ? text.warningCount(r.warnings) : '');
+  const penalty = (r: TowerRow) => (r.penaltyMs > 0 ? formatPenaltyMs(r.penaltyMs) : r.warnings > 0 ? formatWarnings(r.warnings) : '');
 </script>
 
 {#snippet position(r: TowerRow)}
   <span class="mark" style:box-shadow={incidentRole(data.moment, r.involved) ? `inset 2px 0 0 ${role('warning')}` : undefined}
-    >{r.position === undefined ? '–' : formatCount(r.position)}</span
+    >{formatPlace(r.position)}</span
   >
 {/snippet}
 {#snippet change(r: TowerRow)}{r.change === undefined ? '' : positionMarkText({ change: r.change })}{/snippet}
 {#snippet car(r: TowerRow)}<CarLabel identity={r.overview.identity} ours={r.ours} />{/snippet}
-{#snippet gap(r: TowerRow)}{#if r.retired}{text.dnf}{:else if r.lapsDown > 0}{text.lapsDown(r.lapsDown)}{:else}<Value value={r.gapToLeader} format={formatDeltaMs} />{/if}{/snippet}
+{#snippet gap(r: TowerRow)}{#if r.retired}{text.dnf}{:else if r.lapsDown > 0}{formatLapsDown(r.lapsDown)}{:else}<Value value={r.gapToLeader} format={formatDeltaMs} />{/if}{/snippet}
 {#snippet interval(r: TowerRow)}{#if r.retired}{formatLapNumber(r.retiredAtLap ?? NaN)}{:else if r.lapsDown === 0}<Value value={r.interval} format={formatDeltaMs} />{/if}{/snippet}
 {#snippet toUs(r: TowerRow)}{#if r.toUs !== undefined && !r.retired && r.lapsDown === 0}<Value value={r.toUs} format={formatDeltaMs} />{/if}{/snippet}
 {#snippet last(r: TowerRow)}<span style:color={colourOf(r.lastLapStatus, r.ours)}><Value value={r.lastLap} format={formatLapTime} /></span>{/snippet}
