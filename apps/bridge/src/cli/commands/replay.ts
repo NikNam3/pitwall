@@ -10,6 +10,7 @@ import { dataDir } from '../../storage/data-dir.ts';
 import { cliLogger, type CliIo } from '../io.ts';
 import { serve } from '../serve.ts';
 import { UsageError } from '../usage.ts';
+import { DEFAULT_WORKBOOKS_DIR, seedDefaultWorkbooks } from '../../ui-state/default-workbooks.ts';
 
 type ReplayFlags = {
   realtime?: boolean | undefined;
@@ -56,6 +57,7 @@ export async function run(positionals: string[], values: ReplayFlags, io: CliIo)
   const dirs = dataDir(io.env);
   // The config the recording ran with if it has one, else the current one; fixed for the run (a runtime change from the UI comes later).
   const config = recordingConfig(file, FEATURES, loadFeatureConfig(dirs.root, FEATURES), cliLogger(io, 'warn'));
+  await seedDefaultWorkbooks(dirs.root, DEFAULT_WORKBOOKS_DIR);
   return serve({
     replay: { feedId: feedId('replay'), path: file, controls, unpaced: !values.realtime && values.speed === undefined },
     feed: { kind: 'replay', label: basename(file) },
