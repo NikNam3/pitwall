@@ -102,15 +102,15 @@ Reads the five analyses above and the car state. It raises `Insight`s (domain ty
 
 | Rule | Severity | Category |
 |---|---|---|
-| a channel out of band for a full lap | `critical` | `tyres` (tyre channels), `damage` (brakes, engine) |
-| a channel out of band, less than a lap | `advisory` | as above |
+| a channel out of band for a full lap | `critical` | `tyres` (tyre channels), `car` (brakes, engine) |
+| the last completed lap out of band (brakes and engine: the lap peak; tyre surface, carcass, pressure: the lap mid-range) | `advisory` | as above |
 | laps until the wear limit below the threshold | `critical` | `tyres` |
 | fuel margin below zero | `critical` | `energy` |
 | a damage jump | `critical` | `damage` |
 | one corner-cutting warning left before a penalty | `advisory` | `race` |
 | a new penalty for our car | `critical` | `race` |
 
-Alarms are raised for our cars only. Each is resolved when its condition ends. Muting works per category, as built in the UI shell.
+Alarms are raised for our cars only. Each is resolved when its condition ends. Band advisories judge the last completed lap, not the live value: every channel swings across its band within a lap (brakes cool on every straight), so a live advisory would flicker; a lap aggregate changes at most once per lap. Muting works per category, as built in the UI shell.
 
 ## 6. Timing analyses
 
