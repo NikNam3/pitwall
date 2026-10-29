@@ -125,13 +125,17 @@ export function lap(over: Partial<LapRecord> = {}): LapRecord {
   };
 }
 
-/** The `MINI_SECTORS` (50) crossings of one lap, evenly spaced; segment `i` ends at `startAt + (i + 1) * lapTimeMs / 50` (rounded). */
+/**
+ * The `MINI_SECTORS` (50) crossings of one lap, evenly spaced, in the engine's convention: segment `i` is at
+ * `startAt + round(i * lapTimeMs / 50)`, so segment 0 is the start/finish line at the start of the lap. The line that
+ * completes the lap is the next lap's segment 0 (`crossings(car, lap + 1, ..., startAt + lapTimeMs)[0]`).
+ */
 export function crossings(car: CarId, lapNumber: number, lapTimeMs: Ms, startAt: SessionTime): MiniSectorCrossing[] {
   return Array.from({ length: MINI_SECTORS }, (_, segment) => ({
     carId: car,
     lap: lapNumber,
     segment,
-    at: startAt + Math.round(((segment + 1) * lapTimeMs) / MINI_SECTORS),
+    at: startAt + Math.round((segment * lapTimeMs) / MINI_SECTORS),
   }));
 }
 
@@ -151,7 +155,7 @@ export function flagPhase(over: Partial<FlagPhase> = {}): FlagPhase {
  * these defaults: it ends at `n * pace`; sectors are thirds of the pace; `fuelAtStartKg` 100 - 2 * (n - 1) and
  * `fuelAtEndKg` 2 kg less; `tyreAgeAtStart` n - 1 (one stint, soft C3); `wearAtEndPct` n % per corner; ERS store 4 MJ
  * at every lap end; `positionAtEnd` is the car's order by cumulative time at the end of lap n (ties by id). No in or out
- * laps and no SC share are set. `miniSectors` holds `laps * 50` crossings per car, sorted by time.
+ * laps and no SC share are set. `miniSectors` holds, per car, laps 1..n with segments 0..49 plus the closing line crossing (lap n + 1, segment 0) at `n * pace`, so `laps * 50 + 1` crossings per car, sorted by time (engine convention, see `crossings`).
  */
 export function field({ cars, laps, paceMs }: { cars: number; laps: number; paceMs: Ms | Ms[] }): {
   laps: LapRecord[];
@@ -183,6 +187,7 @@ export function field({ cars, laps, paceMs }: { cars: number; laps: number; pace
       );
       miniSectors.push(...crossings(carId(i), n, pace, (n - 1) * pace));
     }
+    miniSectors.push({ carId: carId(i), lap: laps + 1, segment: 0, at: laps * pace });
   }
   miniSectors.sort((a, b) => a.at - b.at);
   return { laps: records, miniSectors };
