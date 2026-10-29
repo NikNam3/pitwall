@@ -1,5 +1,5 @@
 // Gallery declaration of the alarm-list display (spec 9.1). Test-phase file: the implementer does not edit it.
-import { ackToken } from '@pitwall/contracts';
+import { ackToken, type InsightEntry } from '@pitwall/contracts';
 import { feedId, toSessionTime, type Insight } from '@pitwall/domain';
 import type { GalleryEntry } from '../../kit/gallery-types.ts';
 import type { widget } from './widget.ts';
@@ -8,7 +8,10 @@ const feed = feedId('gallery');
 const make = (key: string, severity: Insight['severity'], category: Insight['category'], raisedAt: number, params: Insight['params'] = {}): Insight => ({
   key, severity, category, feedId: feed, kind: key, params, raisedAt: toSessionTime(raisedAt),
 });
-const active = (...list: Insight[]): Map<string, Insight> => new Map(list.map((i) => [i.key, i]));
+type Active = Map<string, Insight>;
+// The gallery feeds an append topic its raw entries (the widget folds them), but `GalleryEntry` types the case as the fold's result: cast until the type knows.
+const entries = (list: InsightEntry[]): Active => list as unknown as Active;
+const active = (...list: Insight[]): Active => entries(list.map((insight) => ({ type: 'raised' as const, insight })));
 
 const brake = make('brake.fr', 'critical', 'tyres', 230_000, { corner: 'FR', celsius: 1043 });
 const fuel = make('fuel.short', 'critical', 'strategy', 230_000, { margin: -0.7 });
@@ -22,12 +25,12 @@ const info = make('pit.window', 'info', 'strategy', 200_000);
 const gallery: GalleryEntry<typeof widget> = {
   moments: ['ttZandvoortLap1.crossing', 'raceSingaporeStart.grid'],
   cases: {
-    none: { insights: new Map(), alerts: { acknowledged: [], muted: [] } },
+    none: { insights: entries([]), alerts: { acknowledged: [], muted: [] } },
     critical: { insights: active(brake, fuel), alerts: { acknowledged: [], muted: [] } },
     advisory: { insights: active(carcass, warning, info), alerts: { acknowledged: [], muted: [] } },
     acknowledged: { insights: active(brake, wing), alerts: { acknowledged: [ackToken(wing)], muted: [] } },
     mutedCategory: { insights: active(brake, ers), alerts: { acknowledged: [], muted: ['energy'] } },
-    mutedNothingActive: { insights: new Map(), alerts: { acknowledged: [], muted: ['feed'] } },
+    mutedNothingActive: { insights: entries([]), alerts: { acknowledged: [], muted: ['feed'] } },
     mixed: {
       insights: active(brake, fuel, carcass, warning, wing, ers),
       alerts: { acknowledged: [ackToken(wing)], muted: ['energy'] },
