@@ -22,7 +22,9 @@ export const widget = declareWidget({
     stints: folded('stints', collect<StintRecord>()),
     pitStops: folded('pitStops', collect<PitStopRecord>()),
     moment: optional(topic('raceMoment.current')),
-    neighbourhood: topic('gaps.neighbourhood'),
+    // Our cars (player and teammate) and the incidents of the incident moment.
+    session: topic('session.info'),
+    incidents: optional(topic('incidents.feed')),
   },
   options: { showRetired: boolOption(true, 'Show retired cars') },
   sizes: { compact: { minCols: 30, minRows: 6 }, full: { minCols: 84, minRows: 9 } },

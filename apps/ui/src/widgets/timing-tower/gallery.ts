@@ -2,7 +2,7 @@
 import { carId, known, toSessionTime, unknown } from '@pitwall/domain';
 import type { RaceMoment } from '@pitwall/domain';
 import type { GalleryEntry } from '../../kit/gallery-types.ts';
-import { boardRow, interval, lapBoard, overview, toCar } from './fixtures.ts';
+import { boardRow, incidentEntry, interval, lapBoard, overview, sessionInfo, toCar } from './fixtures.ts';
 import type { widget } from './widget.ts';
 
 /** Our car (id 3, KUH) is fourth; SAR is a lap down; OCO has retired; ALB is on an out lap. */
@@ -18,8 +18,8 @@ const cars = [
 ];
 
 const intervals = [
-  interval(0), interval(1, 2184, 2184), interval(2, 5903, 3719), interval(3, 9102, 3199),
-  interval(4, 14_880, 5778), interval(5, 16_025, 1145), interval(6, 70_000, 5000, 1), interval(7),
+  interval(0), interval(1, 2184, 2184, 0, 1), interval(2, 5903, 3719, 0, -1), interval(3, 9102, 3199),
+  interval(4, 14_880, 5778, 0, 2), interval(5, 16_025, 1145, 0, -1), interval(6, 70_000, 5000, 1), interval(7),
 ];
 const toUs = [
   toCar(0, -9102), toCar(1, -6918), toCar(2, -3199), toCar(3, undefined), toCar(4, 5778), toCar(5, 6923), toCar(6, undefined, 1), toCar(7, undefined),
@@ -39,7 +39,7 @@ const moment = (m: RaceMoment['moment']): RaceMoment => ({
   moment: m, since: known(toSessionTime(900), toSessionTime(900)), cause: { rule: 'majorIncident', params: {} }, active: [m],
 });
 
-const field = { cars, intervals, toCar: toUs, board, stints: [], pitStops: [], moment: undefined, neighbourhood: [] };
+const field = { cars, intervals, toCar: toUs, board, stints: [], pitStops: [], moment: undefined, session: sessionInfo(3), incidents: undefined };
 
 /** Synthetic cases and fit expectations for `timing-tower`. */
 const gallery: GalleryEntry<typeof widget> = {
@@ -55,17 +55,17 @@ const gallery: GalleryEntry<typeof widget> = {
         boardRow(1, 'realism'),
       ]),
     },
-    // Incident moment: SAR and OCO are in the neighbourhood, amber left bar on their rows.
+    // Incident moment: SAR and OCO are in the newest major incident, amber left bar on their rows.
     incidentMoment: {
       ...field,
       moment: known(moment('incident'), toSessionTime(900)),
-      neighbourhood: [{ ourCarId: carId(3), carIds: [carId(6), carId(7)] }],
+      incidents: [incidentEntry('collision-6-7', 'major', [6, 7])],
     },
-    // Another current moment: the neighbourhood carries no bar.
+    // Another current moment: the same incident carries no bar.
     battleMoment: {
       ...field,
       moment: known(moment('battle'), toSessionTime(900)),
-      neighbourhood: [{ ourCarId: carId(3), carIds: [carId(2), carId(4)] }],
+      incidents: [incidentEntry('collision-6-7', 'major', [6, 7])],
     },
     // Outside the race the moment is not applicable.
     noMoment: { ...field, moment: unknown('notApplicable') },

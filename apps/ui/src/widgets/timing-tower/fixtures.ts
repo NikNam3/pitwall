@@ -1,8 +1,8 @@
 // Builders shared by the timing-tower gallery and its row tests (test-phase file: the implementer does not edit it).
-import type { CarOverview } from '@pitwall/contracts';
-import { carId, known, toSessionTime, unknown } from '@pitwall/domain';
+import type { CarOverview, SessionInfo } from '@pitwall/contracts';
+import { feedId, carId, known, toSessionTime, unknown } from '@pitwall/domain';
 import type {
-  CarId, CarTiming, Interval, GapToCar, LapBoard, LapBoardRow, Ms, SectorStatus, VisualCompound,
+  IncidentEntry, CarId, CarTiming, Interval, GapToCar, LapBoard, LapBoardRow, Ms, SectorStatus, VisualCompound,
 } from '@pitwall/domain';
 
 const at = toSessionTime(1000);
@@ -47,13 +47,15 @@ export function overview(id: number, o: CarOptions): CarOverview {
 }
 
 /** A `gaps.intervals` entry; times in ms, `undefined` = unknown (the leader has no car ahead). */
-export function interval(id: number, toLeader?: number, toAhead?: number, lapsDown = 0): Interval {
+// `positionsGained` (gridPosition - position, computed by `gaps`) lands in `Interval` with the gaps task.
+export function interval(id: number, toLeader?: number, toAhead?: number, lapsDown = 0, positionsGained = 0): Interval {
   return {
     carId: carId(id),
     toLeaderMs: toLeader === undefined ? unknown('notApplicable') : ms(toLeader),
     toAheadMs: toAhead === undefined ? unknown('notApplicable') : ms(toAhead),
     toBehindMs: unknown('notApplicable'),
     lapsDown,
+    positionsGained,
   };
 }
 
@@ -93,4 +95,17 @@ export const lapBoard = (reference: number, rows: LapBoardRow[]): LapBoard => ({
   referenceCarId: carId(reference) as CarId,
   rows,
   sessionBest: { lap: unknown('notReceived'), sectors: [unknown('notReceived'), unknown('notReceived'), unknown('notReceived')] },
+});
+
+/** A `session.info` value: only the cars that are ours matter to the tower. */
+export const sessionInfo = (playerCar: number, teammateCar?: number): SessionInfo =>
+  ({
+    feedId: feedId('gallery'), sessionUid: '1', playerCar: carId(playerCar),
+    ...(teammateCar === undefined ? {} : { teammateCar: carId(teammateCar) }),
+    realism: false,
+  }) as SessionInfo;
+
+/** An `incidents.feed` entry. */
+export const incidentEntry = (id: string, severity: 'major' | 'minor', cars: number[]): IncidentEntry => ({
+  id, at: toSessionTime(900), lap: 23, kind: 'collision', severity, carIds: cars.map(carId), timeLostMs: unknown('insufficientData'), forUs: [],
 });

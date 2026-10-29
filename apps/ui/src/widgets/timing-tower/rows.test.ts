@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { carId, known, toSessionTime, unknown } from '@pitwall/domain';
-import type { Moment, PitStopRecord, RaceMoment, StintRecord } from '@pitwall/domain';
-import { boardRow, interval, lapBoard, ms, overview, toCar } from './fixtures.ts';
+import { carId, toSessionTime } from '@pitwall/domain';
+import type { PitStopRecord, StintRecord } from '@pitwall/domain';
+import { boardRow, incidentEntry, interval, lapBoard, ms, overview, sessionInfo, toCar } from './fixtures.ts';
 import { buildRows, type TowerInput } from './rows.ts';
 
 const base = (): TowerInput => ({
@@ -10,7 +10,7 @@ const base = (): TowerInput => ({
     overview(0, { name: 'Max Verstappen', position: 1, gridPosition: 1 }),
     overview(1, { name: 'Kuh Driver', position: 2, gridPosition: 1, ours: true }),
   ],
-  intervals: [interval(0), interval(1, 2184, 2184), interval(2, 5903, 3719)],
+  intervals: [interval(0), interval(1, 2184, 2184, 0, -1), interval(2, 5903, 3719, 0, 2)],
   toCar: [toCar(0, -2184), toCar(1, undefined), toCar(2, 3719)],
   board: lapBoard(1, [
     boardRow(0, 104_912, [28_104, 41_311, 35_497], ['sessionBest', 'none', 'none']),
@@ -19,8 +19,8 @@ const base = (): TowerInput => ({
   ]),
   stints: [],
   pitStops: [],
-  moment: undefined,
-  neighbourhood: [],
+  session: sessionInfo(1),
+  incidents: undefined,
   showRetired: true,
 });
 
@@ -31,17 +31,12 @@ const stop = (id: number, lap: number): PitStopRecord => ({
   carId: carId(id), lap, pitLaneEntry: toSessionTime(1), pitLaneExit: toSessionTime(21), pitLaneTimeMs: 20_000,
   stationaryTimeMs: 2_300, flag: 'green', penaltyServed: false,
 });
-const incident = known<RaceMoment>(
-  { moment: 'incident' as Moment, since: unknown('notApplicable'), cause: { rule: 'test', params: {} }, active: ['incident'] },
-  toSessionTime(5),
-);
-
 describe('buildRows', () => {
   it('orders the cars by position', () => {
     expect(buildRows(base()).map((r) => r.carId)).toEqual([0, 1, 2]);
   });
 
-  it('marks our car from the identity visibility, and only it', () => {
+  it('marks the player car, and only it, by default', () => {
     expect(buildRows(base()).map((r) => r.ours)).toEqual([false, true, false]);
   });
 
@@ -84,14 +79,13 @@ describe('buildRows', () => {
     expect(row?.lapsDown).toBe(0);
   });
 
-  it('computes the position change as grid position minus position (▲ = gained)', () => {
-    const rows = buildRows(base());
-    expect(rows.map((r) => r.change)).toEqual([0, -1, 2]);
+  it('takes the position change from the gaps analysis (positionsGained), no arithmetic of its own', () => {
+    expect(buildRows(base()).map((r) => r.change)).toEqual([0, -1, 2]);
   });
 
-  it('has no change when the grid position is unknown (0)', () => {
+  it('has no change for a car without an interval entry', () => {
     const input = base();
-    input.cars = [overview(0, { name: 'Max Verstappen', position: 1, gridPosition: 0 })];
+    input.intervals = [];
     expect(buildRows(input)[0]?.change).toBeUndefined();
   });
 
@@ -139,11 +133,24 @@ describe('buildRows', () => {
     expect(buildRows(input).map((r) => r.pit)).toEqual(['pit', 'pit', 'out', undefined]);
   });
 
-  it('flags the cars of the neighbourhood', () => {
+  it('marks our cars from session.info: the player car and the teammate', () => {
     const input = base();
-    input.moment = incident;
-    input.neighbourhood = [{ ourCarId: carId(1), carIds: [carId(2)] }];
-    expect(buildRows(input).map((r) => r.inNeighbourhood)).toEqual([false, false, true]);
+    input.session = sessionInfo(1, 2);
+    expect(buildRows(input).map((r) => r.ours)).toEqual([false, true, true]);
+  });
+
+  it('flags the cars of the newest major incident as involved', () => {
+    const input = base();
+    input.incidents = [incidentEntry('a', 'minor', [0]), incidentEntry('b', 'major', [2, 1]), incidentEntry('c', 'major', [0])];
+    expect(buildRows(input).map((r) => r.involved)).toEqual([false, true, true]);
+  });
+
+  it('flags nobody without a major entry or without the incident feed', () => {
+    const input = base();
+    input.incidents = [incidentEntry('a', 'minor', [0])];
+    expect(buildRows(input).some((r) => r.involved)).toBe(false);
+    input.incidents = undefined;
+    expect(buildRows(input).some((r) => r.involved)).toBe(false);
   });
 
   it('sinks a retired car below the running ones, without position or change, with its last lap', () => {

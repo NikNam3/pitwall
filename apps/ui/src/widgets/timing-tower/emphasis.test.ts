@@ -2,29 +2,29 @@ import { describe, expect, it } from 'vitest';
 import { known, toSessionTime, unknown } from '@pitwall/domain';
 import type { Moment, RaceMoment } from '@pitwall/domain';
 import { ourCarRole, sectorStatusRole } from '../../emphasis/index.ts';
-import { neighbourhoodRole } from './emphasis.ts';
+import { incidentRole } from './emphasis.ts';
 
 const current = (moment: Moment, active: Moment[] = [moment]) =>
   known<RaceMoment>({ moment, since: unknown('notApplicable'), cause: { rule: 'test', params: {} }, active }, toSessionTime(10));
 
-describe('neighbourhoodRole', () => {
-  it('is warning for a car in the neighbourhood while the incident moment is current', () => {
-    expect(neighbourhoodRole(current('incident'), true)).toBe('warning');
+describe('incidentRole', () => {
+  it('is warning for a car involved in the newest major incident while the incident moment is current', () => {
+    expect(incidentRole(current('incident'), true)).toBe('warning');
   });
 
-  it('is undefined for a car outside the neighbourhood in the incident moment', () => {
-    expect(neighbourhoodRole(current('incident'), false)).toBeUndefined();
+  it('is undefined for an uninvolved car in the incident moment', () => {
+    expect(incidentRole(current('incident'), false)).toBeUndefined();
   });
 
   it('is undefined in every other current moment, even when an incident is also active', () => {
     for (const moment of ['neutralised', 'weather', 'battle', 'carCare'] as const) {
-      expect(neighbourhoodRole(current(moment, [moment, 'incident']), true)).toBeUndefined();
+      expect(incidentRole(current(moment, [moment, 'incident']), true)).toBeUndefined();
     }
   });
 
   it('is undefined without a moment (the topic is optional) or outside the race', () => {
-    expect(neighbourhoodRole(undefined, true)).toBeUndefined();
-    expect(neighbourhoodRole(unknown('notApplicable'), true)).toBeUndefined();
+    expect(incidentRole(undefined, true)).toBeUndefined();
+    expect(incidentRole(unknown('notApplicable'), true)).toBeUndefined();
   });
 });
 
