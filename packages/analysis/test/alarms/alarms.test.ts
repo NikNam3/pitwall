@@ -348,10 +348,10 @@ describe('alarms calculator', () => {
     });
 
     it('unknown data of our own car raises nothing, never a zero reading', () => {
-      const wear: TyreWear = { ...wearOk(), corners: perCorner(() => ({ wearPct: unknown('noData'), ratePctPerLap: unknown('noData'), lapsToLimit: unknown('noData') })) };
-      const fuel: FuelState = { ...fuelOk(), marginLaps: unknown('noData') };
+      const wear: TyreWear = { ...wearOk(), corners: perCorner(() => ({ wearPct: unknown('notReceived'), ratePctPerLap: unknown('notReceived'), lapsToLimit: unknown('notReceived') })) };
+      const fuel: FuelState = { ...fuelOk(), marginLaps: unknown('notReceived') };
       const bands = bandsOk();
-      bands.engineC = { ...reading('in'), value: unknown('noData'), state: unknown('noData') };
+      bands.engineC = { ...reading('in'), value: unknown('notReceived'), state: unknown('notReceived') };
       expect(run(viewWith({ wear, fuel, bands }))).toEqual([]);
     });
 
