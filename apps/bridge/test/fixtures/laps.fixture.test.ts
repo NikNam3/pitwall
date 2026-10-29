@@ -3,6 +3,9 @@ import { expect, it } from 'vitest';
 import { describeWithFixture } from '../../../../test-support/fixtures.ts';
 import { replayState } from './engine-replay.ts';
 
+/** A whole recording through the engine takes about a minute alone and much longer while `pnpm check` runs every suite. */
+const WHOLE_RECORDING_MS = 300_000;
+
 describeWithFixture('ttZandvoort', 'laps from the TT Zandvoort recording', () => {
   it('15 completed player laps confirmed with the recorded times; lap 16 unfinished; no fuel use', async () => {
     const st = await replayState('ttZandvoort');
@@ -15,7 +18,7 @@ describeWithFixture('ttZandvoort', 'laps from the TT Zandvoort recording', () =>
     for (const l of confirmed.values()) expect([l.fuelAtStartKg, l.fuelAtEndKg]).toMatchObject([{ value: 10 }, { value: 10 }]);
     expect(st.history.stints).toEqual([{ carId: st.playerCar, firstLap: 1, lastLap: 15, actualCompound: 'C4', visualCompound: 'soft', tyreAgeAtFitting: 0 }]);
     expect(st.history.pitStops).toEqual([]);         // starts in the pit lane (pit status 1) and leaves at 18.7 s: no observed entry
-  }, 120_000);
+  }, WHOLE_RECORDING_MS);
 
   it('15 current laps after the full replay, all confirmed, lap numbers 1 to 15', async () => {
     const st = await replayState('ttZandvoort');
@@ -23,12 +26,22 @@ describeWithFixture('ttZandvoort', 'laps from the TT Zandvoort recording', () =>
     expect(current).toHaveLength(15);
     expect(current.every((l) => l.carId === st.playerCar && l.status === 'confirmed')).toBe(true);
     expect(current.map((l) => l.lapNumber)).toEqual(Array.from({ length: 15 }, (_, i) => i + 1));
-  }, 120_000);
+  }, WHOLE_RECORDING_MS);
+
+  it('every lap carries the lap-end samples: wear 0 and a store of 4 000 000 J, which the time trial holds fixed (spec 11.3)', async () => {
+    const st = await replayState('ttZandvoort');
+    const mine = st.history.laps.filter((l) => l.carId === st.playerCar);
+    expect(mine.length).toBeGreaterThan(0);
+    for (const l of mine) {
+      expect([l.lapNumber, l.wearAtEndPct.fl]).toMatchObject([l.lapNumber, { known: true, value: 0 }]);
+      expect([l.lapNumber, l.ersStoreAtEndJ]).toMatchObject([l.lapNumber, { known: true, value: 4_000_000 }]);
+    }
+  }, WHOLE_RECORDING_MS);
 });
 
 describeWithFixture('raceSingapore', 'laps from the aborted Singapore race', () => {
   it('no lap completed: no laps, stints or pit stops', async () => {
     const st = await replayState('raceSingapore');
     expect([st.history.laps, st.history.stints, st.history.pitStops]).toEqual([[], [], []]);
-  }, 120_000);
+  }, WHOLE_RECORDING_MS);
 });

@@ -1,5 +1,5 @@
 // The catalogue (spec 8.1): imports every widget, feature and topic file, writes catalogue.generated.json and checks the naming rules.
-import { existsSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { Catalogue } from '../packages/contracts/src/topics/dev.catalogue.ts';
@@ -13,14 +13,14 @@ export type { Catalogue };
 const ROOT = join(import.meta.dirname, '..');
 const OUT_FILE = join(ROOT, 'catalogue.generated.json');
 
-/** The directories the catalogue reads; absolute. `strategy` is optional: a feature without a folder there has none. */
-export type CatalogueDirs = { widgets: string; features: string; topics: string; strategy?: string };
+/** The directories the catalogue reads; absolute. `analysis` is optional: a feature without a folder there has none. */
+export type CatalogueDirs = { widgets: string; features: string; topics: string; analysis?: string };
 
 const DEFAULT_DIRS: Required<CatalogueDirs> = {
   widgets: join(ROOT, 'apps', 'ui', 'src', 'widgets'),
   features: join(ROOT, 'apps', 'bridge', 'src', 'features'),
   topics: join(ROOT, 'packages', 'contracts', 'src', 'topics'),
-  strategy: join(ROOT, 'packages', 'strategy', 'src'),
+  analysis: join(ROOT, 'packages', 'analysis', 'src'),
 };
 
 /** Topics that no feature binds because the bridge publishes them itself (global topics are exempt by their scope). */
@@ -81,11 +81,11 @@ export async function buildCatalogue(dirs: CatalogueDirs = DEFAULT_DIRS): Promis
   const bindings = new Map<string, NonNullable<Catalogue['topics'][number]['binding']>>();
   for (const name of findFeatureFolders(dirs.features)) {
     const feature = await importDefault<FeatureModule>(join(dirs.features, name, 'register.ts'));
-    const strategy = dirs.strategy === undefined ? undefined : join(dirs.strategy, name);
+    const analysis = dirs.analysis === undefined ? undefined : join(dirs.analysis, name);
     features.push({
       name,
       folder: shown(join(dirs.features, name)),
-      ...(strategy !== undefined && existsSync(strategy) && { strategyFolder: shown(strategy) }),
+      ...(analysis !== undefined && existsSync(analysis) && { analysisFolder: shown(analysis) }),
       private: widgetNames.has(name),
       calculators: feature.calculators.map((c) => ({ id: c.id, reads: c.reads.map(readText), cadence: cadenceText(c.cadence) })),
       jobs: (feature.jobs ?? []).map((job) => job.id),
@@ -113,12 +113,23 @@ export async function buildCatalogue(dirs: CatalogueDirs = DEFAULT_DIRS): Promis
   return { widgets, topics, features };
 }
 
-/** The catalogue's rule violations (errors, each naming its file) and hints (warnings). */
-export function checkCatalogue(c: Catalogue): { errors: string[]; warnings: string[] } {
+/** The folders in `analysisDir`, sorted; none when it is missing. Each is a unit even before its feature exists. */
+export function findAnalysisFolders(analysisDir: string | undefined): string[] {
+  if (analysisDir === undefined || !existsSync(analysisDir)) return [];
+  return readdirSync(analysisDir)
+    .filter((name) => statSync(join(analysisDir, name)).isDirectory())
+    .sort();
+}
+
+/**
+ * The catalogue's rule violations (errors, each naming its file) and hints (warnings). `analysisUnits` are the analysis
+ * folders: a topic may name one as its owner before the unit's feature exists (contracts are committed first, ADR 0014).
+ */
+export function checkCatalogue(c: Catalogue, analysisUnits: readonly string[] = []): { errors: string[]; warnings: string[] } {
   const errors: string[] = [];
   const warnings: string[] = [];
   const widgetNames = new Set(c.widgets.map((w) => w.name));
-  const units = new Set([...widgetNames, ...c.features.map((f) => f.name)]);
+  const units = new Set([...widgetNames, ...c.features.map((f) => f.name), ...analysisUnits]);
   const topicOf = new Map(c.topics.map((t) => [t.name, t]));
 
   for (const t of c.topics) {
@@ -167,7 +178,7 @@ export function checkCatalogue(c: Catalogue): { errors: string[]; warnings: stri
 export async function generateCatalogue(outFile: string = OUT_FILE, failOnErrors = true): Promise<number> {
   const catalogue = await buildCatalogue();
   writeFileSync(outFile, `${JSON.stringify(catalogue, null, 2)}\n`);
-  const { errors, warnings } = checkCatalogue(catalogue);
+  const { errors, warnings } = checkCatalogue(catalogue, findAnalysisFolders(DEFAULT_DIRS.analysis));
   for (const warning of warnings) console.warn(`warning: ${warning}`);
   for (const error of errors) console.error(`error: ${error}`);
   return errors.length === 0 || !failOnErrors ? 0 : 1;

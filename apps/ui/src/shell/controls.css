@@ -19,3 +19,41 @@
   padding: 0;
   box-sizing: border-box;
 }
+
+/* A select is one character cell tall; its native inner line is a pixel taller than the cell and would overflow it. */
+select.pw-input {
+  appearance: base-select;
+  line-height: calc(var(--pw-line) * 1em);
+}
+
+/* The open list of a select, drawn by the browser's customisable picker: the quiet theme, nothing of its own. */
+select.pw-input::picker(select) {
+  appearance: base-select;
+  background: var(--pw-bgPanel);
+  color: var(--pw-text);
+  border: var(--pw-border-px) solid var(--pw-border);
+  padding: 0;
+  font-family: var(--pw-font);
+  font-size: var(--pw-font-px);
+}
+select.pw-input option {
+  background: var(--pw-bgPanel);
+  color: var(--pw-text);
+  padding: 0 1ch;
+}
+select.pw-input option:hover,
+select.pw-input option:checked {
+  background: var(--pw-bgBand);
+}
+
+/* Keyboard focus: a quiet outline in the theme's focus role, never the browser's accent colour. */
+select.pw-input:focus-visible {
+  outline: var(--pw-border-px) solid var(--pw-focus);
+  outline-offset: 0;
+  accent-color: var(--pw-focus);
+}
+select.pw-input option:focus-visible {
+  outline: var(--pw-border-px) solid var(--pw-focus);
+  outline-offset: calc(-1 * var(--pw-border-px));
+  background: var(--pw-bgBand);
+}

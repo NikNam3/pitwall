@@ -65,6 +65,7 @@ export const createCarState = (id: CarId): CarState => ({
     cornerCuttingWarnings: 0,
     unservedDriveThroughs: 0,
     unservedStopGos: 0,
+    // 0 until the first LapData; from there on 1 for pole.
     gridPosition: 0,
     speedTrapFastestKmh: unknown('notReceived'),
     fiaFlag: 'unknown',
@@ -117,6 +118,7 @@ const emptyTrackers = (lastFlag: OpenTrackers['lastFlag']): OpenTrackers => ({
   miniSectors: perCar(() => undefined),
   lapIndex: perCar(() => ({})),
   pitStatus: perCar(() => undefined),
+  damage: perCar(() => undefined),
 });
 
 /** The state at the start of a session: the first Session packet is known, every car's data is not. */

@@ -1,11 +1,16 @@
-import { ActualCompound, VisualCompound, known, type CarId, type DriverKey, type FlagPhase, type LapRecord, type RaceEvent, type SessionUid, type StintRecord } from '@pitwall/domain';
+import { ActualCompound, VisualCompound, known, unknown, type CarId, type DriverKey, type FlagPhase, type LapRecord, type RaceEvent, type SessionUid, type StintRecord } from '@pitwall/domain';
 import type { History, HistoryDelta, HistoryLengths } from '@pitwall/engine';
 import type { SessionRow } from '../../src/storage/db.ts';
 export const car = (n: number) => n as CarId;
+const none = unknown('notReceived');
+const corners = <T>(v: T) => ({ fl: v, fr: v, rl: v, rr: v });
+/** The lap-end samples, all unknown: storage keeps them as JSON like the rest of the record. */
+const lapEnd = { wearAtEndPct: corners(none), ersStoreAtEndJ: none, ersDeployedJ: none, ersHarvestedJ: none, damageAtEnd: none,
+  channelRange: { tyres: corners({ surfaceC: none, carcassC: none, pressurePsi: none }), brakesC: corners(none), engineC: none } };
 export const lap = (c: number, n: number, o: Partial<LapRecord> = {}): LapRecord => ({ carId: car(c), lapNumber: n, lapTimeMs: 90_000,
   sectorTimesMs: [30_000, 30_000, 30_000], valid: { lap: true, sectors: [true, true, true] }, actualCompound: ActualCompound.C3,
   visualCompound: VisualCompound.medium, tyreAgeAtStart: n - 1, fuelAtStartKg: known(10, 0), fuelAtEndKg: known(9, 90_000), scShare: 0,
-  vscShare: 0, inLap: false, outLap: false, positionAtEnd: 1, status: 'confirmed', completedAt: n * 90_000, ...o });
+  vscShare: 0, inLap: false, outLap: false, positionAtEnd: 1, status: 'confirmed', completedAt: n * 90_000, ...lapEnd, ...o });
 export const stint = (c: number, firstLap: number): StintRecord => ({ carId: car(c), firstLap, lastLap: firstLap + 9,
   actualCompound: ActualCompound.C3, visualCompound: VisualCompound.medium, tyreAgeAtFitting: 0 });
 export const event = (at: number, c?: number): RaceEvent => ({ at, kind: 'overtake', ...(c === undefined ? {} : { carId: car(c) }), params: {} });

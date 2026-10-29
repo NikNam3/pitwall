@@ -18,7 +18,7 @@ function topicLines(c: Catalogue, t: Topic): string[] {
   return lines;
 }
 
-/** Every folder, file and link of a unit: its widget, feature, strategy folder, calculators, and the topics it owns, binds or reads. */
+/** Every folder, file and link of a unit: its widget, feature, analysis folder, calculators, and the topics it owns, binds or reads. */
 function unitLines(c: Catalogue, unit: string): string[] {
   const widget = c.widgets.find((w) => w.name === unit);
   const feature = c.features.find((f) => f.name === unit);
@@ -30,7 +30,7 @@ function unitLines(c: Catalogue, unit: string): string[] {
   if (widget !== undefined) lines.push(`widget   ${widget.folder}`);
   if (feature !== undefined) {
     lines.push(`feature  ${feature.folder}  (${feature.private ? 'private' : 'analysis'})`);
-    if (feature.strategyFolder !== undefined) lines.push(`strategy ${feature.strategyFolder}`);
+    if (feature.analysisFolder !== undefined) lines.push(`analysis ${feature.analysisFolder}`);
     for (const calc of feature.calculators) lines.push(`calc     ${calc.id}  reads ${calc.reads.join(', ')}  ${calc.cadence}`);
     for (const job of feature.jobs) lines.push(`job      ${job}`);
     for (const key of feature.config) lines.push(`config   ${key}`);

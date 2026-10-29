@@ -18,6 +18,8 @@ const RESULT_STATUS = [
 ] as const;
 /** The game counts sectors from 0. */
 const SECTOR = [1, 2, 3] as const;
+/** The game counts grid positions from 0 (pole is 0) but race positions from 1; ours both count from 1. */
+const GRID_FROM_ONE = 1;
 /** `speedTrapFastestLap` while the car has no speed trap time. */
 const NO_SPEED_TRAP_LAP = 255;
 
@@ -57,7 +59,7 @@ export const applyTiming: SubStep = (state, frame, out) => {
         cornerCuttingWarnings: l.cornerCuttingWarnings,
         unservedDriveThroughs: l.numUnservedDriveThroughPens,
         unservedStopGos: l.numUnservedStopGoPens,
-        gridPosition: l.gridPosition,
+        gridPosition: l.gridPosition + GRID_FROM_ONE,
         speedTrapFastestKmh: l.speedTrapFastestLap === NO_SPEED_TRAP_LAP ? unknown('notReceived') : known(l.speedTrapFastestSpeed, at),
       });
     }

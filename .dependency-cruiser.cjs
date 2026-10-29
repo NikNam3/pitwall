@@ -16,7 +16,7 @@ module.exports = {
     layer('domain-is-leaf', 'packages/domain', []),
     layer('contracts-only-domain', 'packages/contracts', ['domain']),
     layer('engine-only-protocol-domain', 'packages/engine', ['protocol', 'domain']),
-    layer('strategy-only-engine-domain', 'packages/strategy', ['engine', 'domain']),
+    layer('analysis-only-engine-domain', 'packages/analysis', ['engine', 'domain']),
     {
       name: 'ui-only-contracts-domain',
       comment: 'The UI imports contracts and domain only; its tests may also build engine state (car-sources.test.ts).',

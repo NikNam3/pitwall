@@ -10,3 +10,4 @@ export * from './insight.ts';
 export * from './laps.ts';
 export * from './freshness.ts';
 export * from './tracks.ts';
+export * from './analyses/index.ts';

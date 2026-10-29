@@ -10,6 +10,7 @@ import type { PacketSource } from '../input/packet-source.ts';
 import { FeedPipeline, type FeedPipelineOptions } from '../pipeline/feed-pipeline.ts';
 import { ReplayController } from '../replay/replay-controller.ts';
 import { pruneEndedAcknowledgements } from '../ui-state/ack-pruning.ts';
+import { DEFAULT_WORKBOOKS_DIR, seedDefaultWorkbooks } from '../ui-state/default-workbooks.ts';
 import { UiState } from '../ui-state/ui-state.ts';
 import { StartupError } from '../startup-error.ts';
 import type { Db } from '../storage/db.ts';
@@ -26,7 +27,10 @@ type ServeBase = {
   feed: Omit<FeedInfo, 'feedId'>;
   wsPort: number;
   dumpsDir: string;
-  /** `PITWALL_DATA_DIR/ui`: the UI state is kept there. Without it `uiAction` messages are answered with `notSupported`. */
+  /**
+   * `PITWALL_DATA_DIR/ui`: the UI state is kept there, and the shipped workbooks are seeded into it first.
+   * Without it `uiAction` messages are answered with `notSupported`.
+   */
   uiDir?: string;
   /** Opened by the caller, closed by `serve` (also when it fails). */
   storage?: { db: Db; recordingsDir: string };
@@ -59,8 +63,9 @@ const POSITION_EVERY_MS = 500;
 const CALC_STATS_EVERY_MS = 1000;
 
 /**
- * Serves one feed over WebSocket until `io.signal` aborts. Starts the WebSocket server, then the pipeline, and
- * reports `listening` only once both are up; if a step fails, the ones before it are undone (nothing stays half-started).
+ * Serves one feed over WebSocket until `io.signal` aborts. Starts the pipeline (a replay also lands its startup jump),
+ * then the WebSocket server, and reports `listening` only once both are up; if a step fails, the ones before it are
+ * undone (nothing stays half-started).
  */
 export async function serve(opts: ServeOptions): Promise<number> {
   const { io } = opts;
@@ -73,8 +78,8 @@ export async function serve(opts: ServeOptions): Promise<number> {
         storage.db.close();
       });
     }
-    // The hub's one callback tells the pipeline which calculators its subscribers need. The pipeline is created after
-    // the server, so a change before then has no pipeline to reach; it reads the demand itself when a session starts.
+    // The hub's one callback tells the pipeline which calculators its subscribers need. A change before the pipeline
+    // exists has none to reach; the pipeline reads the demand itself when a session starts.
     let pipeline: FeedPipeline | undefined = undefined;
     const hub = new TopicHub({
       now: () => performance.now(),
@@ -83,6 +88,8 @@ export async function serve(opts: ServeOptions): Promise<number> {
       },
     });
     const feeds = (): FeedInfo[] => [{ feedId, ...opts.feed }];
+    // Seeded first, so the UI state opens on the shipped workbooks, never on its own fallback, and on every start path.
+    if (opts.uiDir !== undefined) await seedDefaultWorkbooks(opts.uiDir, DEFAULT_WORKBOOKS_DIR);
     const uiState = opts.uiDir === undefined ? undefined : UiState.open(opts.uiDir, hub, cliLogger(io, 'warn'));
     if (uiState) {
       undo.push(() => uiState.close());
@@ -90,15 +97,20 @@ export async function serve(opts: ServeOptions): Promise<number> {
       undo.push(pruneEndedAcknowledgements(hub, [feedId], uiState));
     }
     let controller: ReplayController | undefined;
-    const server = await WsServer.start({
-      port: opts.wsPort,
-      hub,
-      feeds,
-      log: cliLogger(io, wsLogLevel(io.env)),
-      ...(uiState && { uiState }),
-      ...(opts.replay && { replay: { control: (control: ReplayControl) => (controller === undefined ? false : (controller.control(control), true)) } }),
-    });
-    undo.push(() => server.close());
+    // The server opens after the pipeline, and a replay's only once the startup jump has landed: a client that connects
+    // earlier would be told the positions the fast-forward passes through, and a dev restart would not come back to the moment it left.
+    const startServer = async (): Promise<WsServer> => {
+      const started = await WsServer.start({
+        port: opts.wsPort,
+        hub,
+        feeds,
+        log: cliLogger(io, wsLogLevel(io.env)),
+        ...(uiState && { uiState }),
+        ...(opts.replay && { replay: { control: (control: ReplayControl) => (controller === undefined ? false : (controller.control(control), true)) } }),
+      });
+      undo.push(() => started.close());
+      return started;
+    };
     // A dev child tells its supervisor where the replay is, so a restart can come back to the same moment.
     let listening = false;
     if (opts.dev && opts.replay && process.send) {
@@ -170,6 +182,7 @@ export async function serve(opts: ServeOptions): Promise<number> {
       undo.push(() => running.stop());
       finished = running.done.then(() => opts.onDone?.());
     }
+    const server = await startServer();
     await opts.bound?.();
     listening = true;
     io.out(`listening ws://127.0.0.1:${server.port}`);

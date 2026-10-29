@@ -1,4 +1,5 @@
 // Every fixed text of the kit and the shell (spec 4.3, 7.4): the one place UI wording changes.
+import type { Corners, DamageParts, IncidentKind, InsightCategory, UnknownReason } from '@pitwall/domain';
 
 /** Header state while a required topic has no value yet. */
 export const noDataYet = 'no data yet';
@@ -38,6 +39,15 @@ export const addWidget = 'add widget';
 
 /** Accessible name of a panel's settings icon. */
 export const settings = 'settings';
+
+/** Hover text of an empty value cell: why the value is missing (spec 5; `UnknownReason`). */
+export const unknownReason = {
+  restricted: "hidden by the driver's telemetry setting",
+  notReceived: 'not received yet',
+  notApplicable: 'not applicable',
+  realism: 'hidden by realism mode',
+  insufficientData: 'too few laps or samples yet',
+} as const satisfies Record<UnknownReason, string>;
 
 /** Prefix of an estimated value in a value cell. */
 export const estimatedPrefix = '~';
@@ -134,10 +144,14 @@ export const linkMarker = 'link group';
 
 /** Top bar (spec 7.6, 7.7, 7.9, 8.5). */
 export const topBar = {
+  /** Tooltip of the workbook name in the top bar, which opens the workbook picker. */
+  workbookTitle: 'Open a workbook (Ctrl+O)',
   laps: (count: string): string => `${count} laps`,
   /** The player's current lap, of the session's total when it has one: `L23/62`. */
   lapOf: (lap: string, total: string | undefined): string => (total === undefined ? `L${lap}` : `L${lap}/${total}`),
   flag: { green: 'green', sc: 'SC', vsc: 'VSC', formation: 'formation' },
+  /** The race moment's name (spec 7.2). */
+  moment: { neutralised: 'neutralised', incident: 'incident', weather: 'weather', battle: 'battle', carCare: 'car care' },
   realismOn: 'realism on',
   realismOff: 'realism off',
   /** The value realism takes at the next session, shown when it differs from this one. */
@@ -152,11 +166,69 @@ export const topBar = {
   speed: 'replay speed',
   lap: 'lap',
   beyondEnd: 'end of recording',
+  /** A jump is fast-forwarding to its target. */
+  jumping: 'jumping…',
   alertMark: '!',
   ack: 'ack',
   acknowledge: 'acknowledge alert',
   moreAlerts: (n: number): string => `+${n}`,
   mutedGroups: (n: number): string => `${n} muted`,
-  mute: 'mute',
-  unmute: 'muted',
 } as const;
+
+/** The alarm groups the engineer mutes by category: their names and the toggle's two actions, for the top bar and the alarm list. */
+export const alertGroups = {
+  category: {
+    strategy: 'strategy',
+    tyres: 'tyres',
+    energy: 'energy',
+    car: 'car',
+    damage: 'damage',
+    race: 'race',
+    feed: 'feed',
+    system: 'system',
+  } satisfies Record<InsightCategory, string>,
+  mute: 'mute',
+  unmute: 'unmute',
+} as const;
+
+/** Insight texts of the alarm kinds (spec 5.6); `formatInsight` fills in the values. */
+export const insightText = {
+  /** A tyre or brake or engine channel: `FR brake`, `RL carcass`, `engine`. */
+  channel: { surfaceC: 'surface', carcassC: 'carcass', pressurePsi: 'pressure', brakesC: 'brake', engineC: 'engine' },
+  outOfBandLap: 'out of band a full lap',
+  above: 'above band',
+  below: 'below band',
+  wearLimitNear: (corner: string, laps: string): string => `${corner} wear limit in ${laps}`,
+  fuelShort: (margin: string): string => `fuel short ${margin}`,
+  damageJump: (parts: string, percent: string): string => `damage: ${parts} ${percent}`,
+  warningLast: (warnings: number, before: number): string => `one warning left before a penalty ${warnings}/${before}`,
+  penalty: 'penalty',
+  /** The car parts of a damage jump, by the `DamageParts` keys the alarm sends. */
+  part: {
+    frontLeftWingPct: 'FL wing',
+    frontRightWingPct: 'FR wing',
+    rearWingPct: 'rear wing',
+    floorPct: 'floor',
+    diffuserPct: 'diffuser',
+    sidepodPct: 'sidepod',
+    gearboxPct: 'gearbox',
+    enginePct: 'engine',
+  } satisfies Record<keyof DamageParts, string>,
+} as const;
+
+/** The name of each corner of the car, by the `Corners` keys (`fl` -> `FL`). */
+export const cornerNames = { fl: 'FL', fr: 'FR', rl: 'RL', rr: 'RR' } as const satisfies Record<keyof Corners<unknown>, string>;
+
+/** The name of each sector of the lap (`2` -> `S2`). */
+export const sectorNames = { 1: 'S1', 2: 'S2', 3: 'S3' } as const satisfies Record<1 | 2 | 3, string>;
+
+/** What the incident feed says of each kind of incident. */
+export const incidentKinds = {
+  collision: 'collision',
+  retirement: 'retirement',
+  damage: 'damage',
+  timeLoss: 'time loss',
+  warning: 'warning',
+  penalty: 'penalty',
+  neutralised: 'neutralised',
+} as const satisfies Record<IncidentKind, string>;

@@ -6,6 +6,7 @@
   import type { OptionDecl, WidgetDecl } from '../../kit/types.ts';
   import { role } from '../../theme/index.ts';
   import Overlay from '../commands/Overlay.svelte';
+  import type { AnchorBox } from '../commands/placement.ts';
   import { OVERLAY_COLS } from '../commands/overlay-sizes.ts';
   import { LINK_GROUP_IDS } from '../link-groups/group-ids.ts';
 
@@ -18,7 +19,7 @@
     linkGroup: number;
     onLinkGroup: (group: number) => void;
     onClose: () => void;
-    anchor?: { x: number; y: number } | undefined;
+    anchor?: AnchorBox | undefined;
   };
   let { decl, options, onChange, linkGroup, onLinkGroup, onClose, anchor }: Props = $props();
   /** Radio group names are per popover, so the radios of two open popovers never form one group. */

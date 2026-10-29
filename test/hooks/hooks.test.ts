@@ -63,8 +63,8 @@ describe('guard-scope.sh with PITWALL_WORKER_UNIT', () => {
     'apps/ui/src/widgets/undercut-card/Card.svelte',
     'apps/bridge/src/features/undercut-card/register.ts',
     'apps/bridge/test/features/undercut-card/register.test.ts',
-    'packages/strategy/src/undercut-card/calc.ts',
-    'packages/strategy/test/undercut-card/calc.test.ts',
+    'packages/analysis/src/undercut-card/calc.ts',
+    'packages/analysis/test/undercut-card/calc.test.ts',
     'packages/contracts/src/topics/undercutCard.projection.ts',
     'docs/x.md',
   ])('allows %s for a multi-word unit', (rel) => {

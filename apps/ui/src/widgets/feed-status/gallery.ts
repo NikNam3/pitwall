@@ -80,16 +80,16 @@ const sessionInfo: SessionInfo = {
 const gallery: GalleryEntry<typeof widget> = {
   moments: ['ttZandvoortLap1.crossing', 'raceSingaporeStart.grid'],
   cases: {
+    lossy: {
+      feed: { ...healthyFeed, lossPercent: 8.5, latePackets: 17, decodeErrors: 3, packetsPerSecond: 48 },
+      session: sessionInfo,
+    },
     disconnected: {
       feed: { ...withoutLatency, connected: false, packetsPerSecond: 0 },
       session: undefined,
     },
     wrongFormat: {
       feed: { ...healthyFeed, wrongFormat: 42 },
-      session: sessionInfo,
-    },
-    lossy: {
-      feed: { ...healthyFeed, lossPercent: 8.5, latePackets: 17, decodeErrors: 3, packetsPerSecond: 48 },
       session: sessionInfo,
     },
   },

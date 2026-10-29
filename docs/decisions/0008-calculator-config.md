@@ -15,6 +15,7 @@ Alarms and monitoring need values the engineer chooses: tyre temperature windows
 - **The engineer overrides it** in `<PITWALL_DATA_DIR>/config.json` (`{ "<key>": { "<name>": value } }`). An unknown key or field, or a value of the wrong type, stops the bridge with a clear message before anything listens.
 - **The effective config is fixed per bridge run** and written as `<session file>.config.json` next to each live session's recording.
 - **Replays reproduce alarms:** `replay` and `reprocess` use the sidecar next to a recording when it exists, otherwise the current config.
+- **A config-only feature owns a shared key:** when a function several analyses call needs config, a feature with no calculators and no topics declares the key once (`config: [KEY]`), and each analysis reads it with `KEY.read(view)` and passes it on. Example: `per-lap-rate` declares `PER_LAP_RATE_CONFIG`; battle, ERS, fuel and tyre wear read it.
 - **Sidecars are read leniently** (they are history): an undeclared key or field is dropped and a wrong-typed value falls back to the feature default, each with a warning, so old recordings stay replayable after a feature changes its config. Invalid JSON or an unreadable sidecar is an error. `config.json` stays strict.
 
 ## Consequences

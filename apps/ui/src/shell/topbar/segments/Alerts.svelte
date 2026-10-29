@@ -4,8 +4,8 @@
   import { useOverlayStack } from '../../commands/overlay-stack.ts';
   import * as text from '../../../kit/text.ts';
   import { role } from '../../../theme/index.ts';
+  import InsightLine from '../../../kit/insight/InsightLine.svelte';
   import { INSIGHT_CATEGORIES } from '../alerts.ts';
-  import { formatInsight } from '../insight-text.ts';
   import type { TopBarModel } from '../model.svelte.ts';
 
   let { bar }: { bar: TopBarModel } = $props();
@@ -27,7 +27,7 @@
 
 {#each bar.shown as alert (alert.key)}
   <span class="alert" style:color={role('critical')}>
-    <span data-testid="alert-{alert.key}">{text.topBar.alertMark} {formatInsight(alert)}</span>
+    <span data-testid="alert-{alert.key}">{text.topBar.alertMark} <InsightLine insight={alert} acknowledged={false} /></span>
     <button
       type="button"
       class="pw-button"
@@ -55,7 +55,7 @@
           data-testid="mute-{category}"
           style:color={role(muted ? 'textFaint' : 'text')}
           onclick={() => bar.send({ kind: 'alertGroup.mute', category, muted: !muted })}
-        >{category}{text.separator}{muted ? text.topBar.unmute : text.topBar.mute}</button>
+        >{text.alertGroups.category[category]}{text.separator}{muted ? text.alertGroups.unmute : text.alertGroups.mute}</button>
       </li>
     {/each}
   </ul>

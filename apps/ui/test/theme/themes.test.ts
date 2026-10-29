@@ -6,7 +6,7 @@ import { lightness, parseOklch } from './colour.ts';
 const ROLES: Role[] = [
   'text', 'textDim', 'textFaint', 'ownCar', 'bg', 'bgPanel', 'bgBand', 'bgRowBand', 'border', 'grid',
   'critical', 'warning', 'best', 'personalBest', 'flagYellow', 'flagGreen', 'flagRed', 'flagBlue',
-  'series1', 'series2', 'series3', 'series4', 'series5', 'series6',
+  'series1', 'series2', 'series3', 'series4', 'series5', 'series6', 'focus',
 ];
 const SERIES: Role[] = ['series1', 'series2', 'series3', 'series4', 'series5', 'series6'];
 
@@ -25,6 +25,19 @@ describe('THEMES', () => {
     for (const t of THEMES) {
       for (const r of ROLES) expect(t.roles[r], `${t.name}.${r}`).toMatch(/\S/);
     }
+  });
+
+  it('the focus role of every variant is a quiet grey, never the critical or warning colour', () => {
+    for (const t of THEMES) {
+      expect(t.roles.focus, t.name).not.toBe(t.roles.critical);
+      expect(t.roles.focus, t.name).not.toBe(t.roles.warning);
+    }
+    expect(byName('quiet').roles.focus).toBe(byName('quiet').roles.textDim);
+  });
+
+  it('the red-flag band alpha is a chart token of every variant', () => {
+    for (const t of THEMES) expect(t.chart.redBandAlpha, t.name).toBeGreaterThan(0);
+    expect(byName('quiet').chart.redBandAlpha).toBe(0.3);
   });
 
   it('quiet carries the approved anchor values verbatim', () => {
@@ -103,6 +116,12 @@ describe('applyTheme()', () => {
     expect(parseFloat(props.get('--pw-panel-gap')!)).toBe(8);
     expect(parseFloat(props.get('--pw-col-gap')!)).toBe(1);
     expect(parseFloat(props.get('--pw-header-pad')!)).toBe(1);
+  });
+
+  it('sets the red-flag band alpha', () => {
+    const { root, props } = fakeRoot();
+    applyTheme(byName('quiet'), root);
+    expect(parseFloat(props.get('--pw-chart-red-alpha')!)).toBe(0.3);
   });
 
   it('switching variant overwrites the density variables', () => {

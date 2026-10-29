@@ -1,7 +1,7 @@
 import fc from 'fast-check';
 import type { SessionTime } from '@pitwall/domain';
 import { describe, expect, it } from 'vitest';
-import { isStale } from '../../src/kit/stale/stale.ts';
+import { carFieldStaleMs, isStale, staleRole } from '../../src/kit/stale/stale.ts';
 
 const T = (n: number) => n as SessionTime;
 
@@ -49,5 +49,42 @@ describe('isStale', () => {
         if (isStale(T(0), 'telemetry', T(age), cadence)) expect(isStale(T(0), 'telemetry', T(age + extra), cadence)).toBe(true);
       }),
     );
+  });
+});
+
+describe('carFieldStaleMs', () => {
+  it('is how much older the field\'s source is than the car\'s newest update, once it is stale', () => {
+    expect(carFieldStaleMs({ telemetry: T(1000), lapData: T(1200) }, 'condition.brakes.tempC', 50)).toBe(200);
+    expect(carFieldStaleMs({ damage: T(1000), telemetry: T(1301) }, 'tyres.corners.wearPct', undefined)).toBe(301);
+  });
+  it('is undefined while fresh, before the source arrived, without a cadence for a menu-rate source or without updatedAt', () => {
+    expect(carFieldStaleMs({ telemetry: T(1000), lapData: T(1100) }, 'condition.brakes.tempC', 50)).toBeUndefined();
+    expect(carFieldStaleMs({ lapData: T(5000) }, 'condition.brakes.tempC', 50)).toBeUndefined();
+    expect(carFieldStaleMs({ telemetry: T(0), lapData: T(5000) }, 'condition.brakes.tempC', undefined)).toBeUndefined();
+    expect(carFieldStaleMs(undefined, 'condition.brakes.tempC', 50)).toBeUndefined();
+  });
+  it('a car snapshot is judged by itself: every source as old as the newest is fresh, however old the snapshot (bug B2)', () => {
+    expect(carFieldStaleMs({ telemetry: T(1000), lapData: T(1000), damage: T(1000) }, 'condition.brakes.tempC', 18)).toBeUndefined();
+    expect(carFieldStaleMs({ telemetry: T(1000), lapData: T(1000), damage: T(1000) }, 'tyres.corners.wearPct', 18)).toBeUndefined();
+  });
+  it('at the rates measured on the TT Zandvoort recording no source of a steady car is stale', () => {
+    // Session-time gaps there (p99 / max): menu rate 20 / 32 ms at an 18 ms cadence, damage 106 / 133, setups 506 / 508,
+    // participants 5006 / 5007, tyre sets and session history 56 / 84.
+    const newest = T(100_000);
+    const updatedAt = { lapData: newest, telemetry: newest, motion: newest, status: newest, motionEx: newest,
+      damage: T(100_000 - 133), setups: T(100_000 - 508), participants: T(100_000 - 5007), tyreSets: T(100_000 - 84), sessionHistory: T(100_000 - 84) };
+    for (const field of ['tyres.corners.wearPct', 'condition.brakes.tempC', 'identity.teamId', 'tyres.sets', 'timing.lap'] as const) {
+      expect(carFieldStaleMs(updatedAt, field, 18)).toBeUndefined();
+    }
+  });
+});
+
+describe('staleRole: stale wins over every highlight', () => {
+  it('a stale value is faint whatever its role', () => {
+    for (const r of ['critical', 'warning', 'textDim', undefined] as const) expect(staleRole(r, true)).toBe('textFaint');
+  });
+  it('a fresh value keeps its role, or none', () => {
+    expect(staleRole('critical', false)).toBe('critical');
+    expect(staleRole(undefined, false)).toBeUndefined();
   });
 });

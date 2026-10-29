@@ -28,8 +28,8 @@ if [ -n "${PITWALL_WORKER_UNIT:-}" ]; then
     "apps/ui/src/widgets/$unit"
     "apps/bridge/src/features/$unit"
     "apps/bridge/test/features/$unit"
-    "packages/strategy/src/$unit"
-    "packages/strategy/test/$unit"
+    "packages/analysis/src/$unit"
+    "packages/analysis/test/$unit"
   )
   # A single file `<prefix>.<name>.ts` directly in the topics folder.
   UNIT_TOPIC_RE="^packages/contracts/src/topics/${prefix}\\.[^/]+\\.ts$"

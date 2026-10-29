@@ -3,6 +3,9 @@ import { afterEach, expect, it } from 'vitest';
 import { describeWithFixture } from '../../../../test-support/fixtures.ts';
 import { harness, until } from './harness.ts';
 
+/** Fast-forwarding the whole recording takes about a minute alone and much longer while `pnpm check` runs every suite. */
+const WHOLE_RECORDING_MS = 300_000;
+
 const open: Array<() => Promise<void>> = [];
 afterEach(async () => { for (const stop of open.splice(0)) await stop(); });
 
@@ -35,8 +38,8 @@ describeWithFixture('ttZandvoort', 'ReplayController on the TT Zandvoort recordi
   it('jumpToLap 99 ends with note beyondEnd within the test timeout', async () => {
     const h = start();
     h.controller.control({ kind: 'jumpToLap', lap: 99 });
-    await until(() => h.status()?.atEnd === true, () => {}, 120_000);
+    await until(() => h.status()?.atEnd === true, () => {}, WHOLE_RECORDING_MS);
     expect(h.status()).toMatchObject({ atEnd: true, note: 'beyondEnd', paused: true });
     expect(h.status()!.playerLap).toBeGreaterThanOrEqual(15);
-  }, 150_000);
+  }, WHOLE_RECORDING_MS + 30_000);
 });

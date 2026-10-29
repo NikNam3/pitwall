@@ -16,8 +16,11 @@
     sendReplay: (control: ReplayControl) => void;
     /** Called with the alerts shown, whenever they change. */
     onShown?: (alerts: Insight[]) => void;
+    /** The open workbook's name and the way to its picker, for the `workbook` segment. */
+    workbookName?: string | undefined;
+    onPickWorkbook?: () => void;
   };
-  let { store, feedId, send, sendReplay, onShown }: Props = $props();
+  let { store, feedId, send, sendReplay, onShown, workbookName, onPickWorkbook = () => {} }: Props = $props();
 
   // The bar is made per feed (the caller keys it); the feed and callbacks never change while it lives.
   // svelte-ignore state_referenced_locally
@@ -28,6 +31,10 @@
   const files = import.meta.glob<{ default: Component<{ bar: TopBarModel }> }>('./segments/*.svelte', { eager: true });
   const SEGMENTS = new Map(Object.entries(files).map(([path, module]) => [(path.split('/').pop() ?? '').replace('.svelte', '').toLowerCase(), module.default]));
 
+  $effect(() => {
+    bar.workbookName = workbookName;
+    bar.pickWorkbook = onPickWorkbook;
+  });
   $effect(() => {
     onShown?.(bar.shown);
   });
@@ -67,5 +74,9 @@
   .segment {
     display: inline-flex;
     gap: var(--pw-header-pad);
+  }
+  /* A segment with nothing to show (no workbook open, no alert) takes no gap. */
+  .segment:not(:has(*)):empty {
+    display: none;
   }
 </style>

@@ -2,6 +2,10 @@ import { addLaps, carId, emptyCurrentLaps, unknown, type LapRecord } from '@pitw
 import { describe, expect, it } from 'vitest';
 import { lapsFold } from '../../src/kit/folds.ts';
 
+const none = unknown('notReceived');
+const corners = <T>(v: T) => ({ fl: v, fr: v, rl: v, rr: v });
+const lapEnd = { wearAtEndPct: corners(none), ersStoreAtEndJ: none, ersDeployedJ: none, ersHarvestedJ: none, damageAtEnd: none,
+  channelRange: { tyres: corners({ surfaceC: none, carcassC: none, pressurePsi: none }), brakesC: corners(none), engineC: none } };
 const lap = (n: number, status: LapRecord['status']): LapRecord => ({
   carId: carId(0),
   lapNumber: n,
@@ -20,6 +24,7 @@ const lap = (n: number, status: LapRecord['status']): LapRecord => ({
   positionAtEnd: 1,
   status,
   completedAt: n * 70_000,
+  ...lapEnd,
 });
 
 describe('lapsFold', () => {

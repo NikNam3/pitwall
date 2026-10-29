@@ -5,7 +5,9 @@ import type { CarRef, Geometry, LinkGroup, PanelSpec, TimeWindow, UiAction, Work
 
 type Json = Record<string, unknown>;
 
-const CATEGORIES: readonly string[] = ['strategy', 'tyres', 'energy', 'damage', 'race', 'feed', 'system'] satisfies InsightCategory[];
+/** Every category, checked against the type: a category added to `InsightCategory` fails to compile until it is here. */
+const CATEGORY_SET: Record<InsightCategory, true> = { strategy: true, tyres: true, energy: true, car: true, damage: true, race: true, feed: true, system: true };
+const CATEGORIES: readonly string[] = Object.keys(CATEGORY_SET);
 
 const isObject = (value: unknown): value is Json => typeof value === 'object' && value !== null && !Array.isArray(value);
 const isString = (value: unknown): value is string => typeof value === 'string';

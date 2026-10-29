@@ -44,8 +44,15 @@ class ObservedSource implements PacketSource {
   }
 }
 
-/** The topics whose value depends on the `carId` param. */
-const PER_CAR_TOPICS: ReadonlySet<TopicName> = new Set(['car.detail', 'car.telemetry']);
+/**
+ * The params of the subscription for car `carId`: every key a feature's `select` reads, naming that car (`carId`, the
+ * lap board's `referenceCarId`), and the gapper's leader-average reference. A `select` ignores the keys it does not read.
+ */
+const paramsFor = (carId: number) => ({ carId, referenceCarId: carId, reference: { kind: 'leaderAverage' } });
+
+/** The topics a feature binds with a `select`: only their value depends on the params. */
+const selectedTopicsOf = (features: readonly Feature[]): ReadonlySet<TopicName> =>
+  new Set(features.flatMap((feature) => feature.topics.flatMap((binding) => ('from' in binding && binding.select !== undefined ? [binding.topic] : []))));
 
 /** The topics bound to a job's results. */
 const jobTopicsOf = (features: readonly Feature[]): ReadonlySet<TopicName> =>
@@ -53,8 +60,10 @@ const jobTopicsOf = (features: readonly Feature[]): ReadonlySet<TopicName> =>
 
 /**
  * Replays `recordingPath` as fast as possible through the real pipeline, with the hub's clock on the record times,
- * and hashes (sha256, hex) every message one client subscribed to every topic receives. Per-car topics are subscribed
- * once per car, so the player's own data enters the hash whichever car they drive; the other topics ignore `carId`.
+ * and hashes (sha256, hex) every message one client subscribed to every feed topic receives. A topic bound with a
+ * `select` is subscribed once per car with `paramsFor(car)`, so every car's value enters the hash (the player may drive
+ * any car, and the analyses publish per car); a topic without one sends every subscriber the same value, so once is enough.
+ * Global topics stay out: the bridge shell publishes them, not the replay.
  *
  * Job topics stay out: their results come from worker threads and arrive whenever a worker finishes, so the same
  * recording may deliver them at other points of the stream. They are not subscribed, so their jobs do not run.
@@ -67,11 +76,12 @@ export async function topicStreamHash(recordingPath: string, { features = FEATUR
   const hash = createHash('sha256');
   hub.addClient('hash', { send: (message) => hash.update(`${encodeMessage(message)}\n`), bufferedAmount: () => 0 });
   const subscribe = (subscriptionId: string, topic: TopicName, carId: number) =>
-    hub.subscribe({ clientId: 'hash', id: subscriptionId, topic, params: { carId }, feedId: id });
+    hub.subscribe({ clientId: 'hash', id: subscriptionId, topic, params: paramsFor(carId), feedId: id });
   const jobTopics = jobTopicsOf(features);
+  const selected = selectedTopicsOf(features);
   for (const topic of Object.keys(TOPICS) as TopicName[]) {
-    if (jobTopics.has(topic)) continue;
-    if (!PER_CAR_TOPICS.has(topic)) subscribe(topic, topic, 0);
+    if (TOPICS[topic].scope !== 'feed' || jobTopics.has(topic)) continue;
+    if (!selected.has(topic)) subscribe(topic, topic, 0);
     else for (let carId = 0; carId < MAX_CARS; carId++) subscribe(`${topic}:${carId}`, topic, carId);
   }
   const source = new ObservedSource(new PwrecSource({ feedId: id, path: recordingPath, mode: 'asFastAsPossible' }), {

@@ -1,8 +1,20 @@
 // History entries (spec 6.3): append-only facts about the session.
+import type { DamageParts } from './analyses/damage.ts';
 import type { ActualCompound, VisualCompound } from './compounds.ts';
+import type { Corners } from './corners.ts';
 import type { CarId, SessionTime } from './ids.ts';
 import type { Known } from './known.ts';
-import type { Kg, Ms, Ratio } from './units.ts';
+import type { Joules, Kg, Ms, Percent, Ratio } from './units.ts';
+
+/** The lowest and highest value a channel had over a span, e.g. one lap. */
+export type Range = { min: number; max: number };
+
+/** Per-lap min and max of every band channel (spec A.1), collected by the engine's lap cursor; `unknown` when no frame of the lap had the value. */
+export type ChannelRange = {
+  tyres: Corners<{ surfaceC: Known<Range>; carcassC: Known<Range>; pressurePsi: Known<Range> }>;
+  brakesC: Corners<Known<Range>>;
+  engineC: Known<Range>;
+};
 
 export type LapRecord = {
   carId: CarId;
@@ -23,6 +35,16 @@ export type LapRecord = {
   /** `provisional` from LapData, `confirmed` once SessionHistory contains the lap. */
   status: 'provisional' | 'confirmed';
   completedAt: SessionTime;
+  // Sampled at the lap end from the car state of the frame that completes the lap (spec 3.3, A.1).
+  wearAtEndPct: Corners<Known<Percent>>;
+  ersStoreAtEndJ: Known<Joules>;
+  /** Deployed during this lap. */
+  ersDeployedJ: Known<Joules>;
+  /** MGU-K + MGU-H, harvested during this lap. */
+  ersHarvestedJ: Known<Joules>;
+  damageAtEnd: Known<DamageParts>;
+  /** Min and max of every band channel over the lap. */
+  channelRange: ChannelRange;
 };
 
 export type StintRecord = {
@@ -67,7 +89,12 @@ export type RaceEventKind =
   | 'drsEnabled'
   | 'drsDisabled'
   | 'startLights'
-  | 'lightsOut';
+  | 'lightsOut'
+  /** Recorded by the engine, not sent by the game: a damage part rose between two frames (params: `DamageChangeParams`). */
+  | 'damageChange';
+
+/** The `params` of a `damageChange` event: which part rose, from and to what. A fall (a repair) is no event. */
+export type DamageChangeParams = { part: keyof DamageParts; fromPct: Percent; toPct: Percent };
 
 /** One object type for every kind; the details live in `params`. */
 export type RaceEvent = {
@@ -81,5 +108,9 @@ export type RaceEvent = {
 /** The lap is split into this many segments of equal length by distance. */
 export const MINI_SECTORS = 50;
 
-/** When a car crossed the end of a mini-sector, interpolated between frames. */
+/**
+ * When a car passed the boundary of mini-sector `segment` of lap `lap`, interpolated between frames. Segment s's
+ * boundary is at `s × trackLength / 50`, so segment 0 is the start/finish line at the start of the lap, and the line
+ * that completes lap L is `(L + 1, 0)`.
+ */
 export type MiniSectorCrossing = { carId: CarId; lap: number; segment: number; at: SessionTime };

@@ -1,5 +1,6 @@
 import { carId, type RaceEvent } from '@pitwall/domain';
 import type { EventDetails } from '@pitwall/protocol';
+import { applyDamageChanges } from './damage-changes.ts';
 import { pick } from '../step/pick.ts';
 import type { SubStep } from '../step/types.ts';
 
@@ -84,5 +85,6 @@ export const applyEvents: SubStep = (state, frame, out) => {
     const body = raceEventOf(details);
     if (body) state.history.events.push({ at: frame.sessionTime, ...body });
   }
+  applyDamageChanges(state, frame);
   if (state.history.events.length > before) out.changed.add('events');
 };

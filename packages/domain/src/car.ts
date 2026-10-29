@@ -67,6 +67,7 @@ export type CarTiming = {
   cornerCuttingWarnings: number;
   unservedDriveThroughs: number;
   unservedStopGos: number;
+  /** Grid position counting from 1 (pole is 1), as the race position does; 0 until the first LapData. */
   gridPosition: number;
   /** Fastest speed-trap value of the car; `notReceived` until it has one. */
   speedTrapFastestKmh: Known<Kmh>;

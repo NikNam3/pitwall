@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // The top bar (Task 17, spec 7.6, 7.7, 7.9, 8.5; mockup 9-top-bar). Contract the tests assume of shell/topbar/TopBar.svelte:
 //  - props: `{ store: TopicStore; feedId: FeedId; send: (a: UiAction) => void; sendReplay: (c: ReplayControl) => void }`;
-//    it acquires `session.info`, `feed.status`, `replay.status` (feed topics), `insights` (with `activeInsights`) and the global
+//    it acquires `session.info`, `feed.status`, `replay.status`, `raceMoment.current` (feed topics), `insights` (with `activeInsights`) and the global
 //    `ui.alerts` and `ui.settings` itself; the feed's kind comes from `store.feeds` (the `hello` message);
 //  - test ids: root `topbar`; one `segment-<name>` per SegmentName of TOP_BAR (an empty segment may render nothing else);
 //    realism: a button `realism` whose text has `text.topBar.realismOn|realismOff` and, when ui.settings.realismNextSession differs,
@@ -20,7 +20,7 @@ import { tick } from 'svelte';
 import { afterEach, describe, expect, it } from 'vitest';
 import { TopicStore } from '../../src/connection/topic-store.svelte.ts';
 import * as text from '../../src/kit/text.ts';
-import { formatInsight } from '../../src/shell/topbar/insight-text.ts';
+import { formatInsight } from '../../src/kit/insight/insight-text.ts';
 import { TOP_BAR } from '../../src/shell/topbar/layout.ts';
 import TopBar from '../../src/shell/topbar/TopBar.svelte';
 import { FakeConnection } from '../connection/fake-connection.ts';
@@ -76,6 +76,18 @@ describe('segments', () => {
     await setup();
     expect(screen.getByTestId('topbar')).toBeTruthy();
     for (const name of [...TOP_BAR.left, ...TOP_BAR.right]) expect(screen.getByTestId(`segment-${name}`)).toBeTruthy();
+  });
+});
+
+describe('moment', () => {
+  it('shows the race moment of raceMoment.current by its name, and nothing while it is unknown', async () => {
+    const { push } = await setup();
+    expect(screen.queryByTestId('moment')).toBeNull();
+    await push('raceMoment.current', { known: true, at: 1000, value: { moment: 'battle', since: { known: false, reason: 'notApplicable' },
+      cause: { rule: 'battle', params: {} }, active: ['battle', 'carCare'] } });
+    expect(screen.getByTestId('moment').textContent).toBe(text.topBar.moment.battle);
+    await push('raceMoment.current', { known: false, reason: 'notApplicable' });
+    expect(screen.queryByTestId('moment')).toBeNull();
   });
 });
 
@@ -211,6 +223,32 @@ describe('tier-1 alerts', () => {
   });
 });
 
+// Bug B2: a jump fast-forwards from where the replay is (from lap 1 for a jump back), and `replay.status` reports that
+// progress. The field must hold the lap asked for while `jumpingTo` is set, or the jump looks ignored.
+describe('lap input during a jump', () => {
+  it('holds the target lap and says it is jumping while the fast-forward is on an earlier lap', async () => {
+    const t = await setup('replay');
+    await t.push('replay.status', { ...replayStatus(false), playerLap: 1, jumpingTo: { kind: 'lap', lap: 8 } });
+    expect((screen.getByTestId('replay-lap') as HTMLInputElement).value).toBe('8');
+    expect(screen.getByTestId('replay-jumping').textContent).toBe(text.topBar.jumping);
+  });
+
+  it('shows the lap the jump landed on and no jumping note once it is done', async () => {
+    const t = await setup('replay');
+    await t.push('replay.status', { ...replayStatus(false), playerLap: 2, jumpingTo: { kind: 'lap', lap: 8 } });
+    await t.push('replay.status', { ...replayStatus(false), playerLap: 8 });
+    expect((screen.getByTestId('replay-lap') as HTMLInputElement).value).toBe('8');
+    expect(screen.queryByTestId('replay-jumping')).toBeNull();
+  });
+
+  it('a jump to a session time keeps showing the lap the fast-forward is on, with the note', async () => {
+    const t = await setup('replay');
+    await t.push('replay.status', { ...replayStatus(false), playerLap: 3, jumpingTo: { kind: 'time', sessionTimeMs: 900_000 } });
+    expect((screen.getByTestId('replay-lap') as HTMLInputElement).value).toBe('3');
+    expect(screen.getByTestId('replay-jumping')).toBeTruthy();
+  });
+});
+
 describe('lap input edge cases', () => {
   it('clearing the lap input sends no replayControl', async () => {
     const t = await setup('replay');
@@ -246,6 +284,12 @@ describe('muting', () => {
     await fireEvent.keyDown(toggle, { key: 'Escape' });
     await tick();
     expect(screen.queryByTestId('mute-tyres')).toBeNull();
+  });
+
+  it('each toggle names its category and the action it takes: mute, or unmute once muted', async () => {
+    await open(['tyres']);
+    expect(screen.getByTestId('mute-tyres').textContent).toContain(`${text.alertGroups.category.tyres}${text.separator}${text.alertGroups.unmute}`);
+    expect(screen.getByTestId('mute-energy').textContent).toContain(`${text.alertGroups.category.energy}${text.separator}${text.alertGroups.mute}`);
   });
 
   it('a muted category toggles back with muted false', async () => {
@@ -298,5 +342,28 @@ describe('replay lap input width', () => {
     const t = await setup('replay');
     await t.push('replay.status', replayStatus(false));
     expect((screen.getByTestId('replay-lap') as HTMLInputElement).style.width).toBe(`${NUMBER_INPUT_COLS}ch`);
+  });
+});
+
+describe('workbook name', () => {
+  const mount = (props: { workbookName?: string; onPickWorkbook?: () => void }) => {
+    const store = new TopicStore(new FakeConnection());
+    render(TopBar, { store, feedId: FEED, send: () => {}, sendReplay: () => {}, ...props });
+  };
+
+  it('shows the open workbook as a button with the shortcut as title; a click asks for the picker', async () => {
+    let picked = 0;
+    mount({ workbookName: 'race', onPickWorkbook: () => picked++ });
+    const button = screen.getByTestId('workbook-name');
+    expect(button.textContent).toBe('race');
+    expect(button.getAttribute('title')).toBe(text.topBar.workbookTitle);
+    expect(text.topBar.workbookTitle).toContain('Ctrl+O');
+    await fireEvent.click(button);
+    expect(picked).toBe(1);
+  });
+
+  it('shows nothing while no workbook is known', () => {
+    mount({});
+    expect(screen.queryByTestId('workbook-name')).toBeNull();
   });
 });

@@ -1,10 +1,10 @@
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { buildCatalogue, checkCatalogue } from './gen-catalogue.ts';
+import { buildCatalogue, checkCatalogue, findAnalysisFolders } from './gen-catalogue.ts';
 
 // Contract assumed of gen-catalogue.ts:
-//  - `buildCatalogue({ widgets, features, topics, strategy? })`: absolute directories (the widgets folder, the bridge
-//    features folder, the contracts topics folder and, optionally, the strategy folder). Defaults are the repo's own.
+//  - `buildCatalogue({ widgets, features, topics, analysis? })`: absolute directories (the widgets folder, the bridge
+//    features folder, the contracts topics folder and, optionally, the analysis folder). Defaults are the repo's own.
 //  - Fixture files are plain objects without imports (so tsc, eslint and depcruise may read them): a widget
 //    register.ts exports `{ decl, component }`, a feature register.ts a feature (`calculators`, `topics` as binding
 //    shapes `{ topic, from | fromHistory | fromInsights | fromJob }`, `jobs`, `config`), a topic file the topic
@@ -15,7 +15,7 @@ const tree = (name: string) => ({
   widgets: join(TREES, name, 'widgets'),
   features: join(TREES, name, 'features'),
   topics: join(TREES, name, 'topics'),
-  strategy: join(TREES, name, 'strategy'),
+  analysis: join(TREES, name, 'analysis'),
 });
 const check = async (name: string) => checkCatalogue(await buildCatalogue(tree(name)));
 
@@ -53,7 +53,7 @@ describe('buildCatalogue on the clean tree', () => {
     expect(topic('undercutCard.rows').readers).toEqual(['undercut-card']);
   });
 
-  it('lists features: folder, strategy folder, private flag, calculators, config', async () => {
+  it('lists features: folder, analysis folder, private flag, calculators, config', async () => {
     const c = await buildCatalogue(tree('clean'));
     const feature = (name: string) => c.features.find((f) => f.name === name)!;
     expect(feature('rejoin')).toMatchObject({ private: false, calculators: [
@@ -62,9 +62,9 @@ describe('buildCatalogue on the clean tree', () => {
         { id: 'rejoin.rate', reads: ['calculator:rejoin.projection', 'feed'], cadence: '10 Hz' },
       ], jobs: [], config: ['rejoin'] });
     expect(feature('rejoin').folder).toMatch(/features\/rejoin$/);
-    expect(feature('rejoin').strategyFolder).toMatch(/strategy\/rejoin$/);
+    expect(feature('rejoin').analysisFolder).toMatch(/analysis\/rejoin$/);
     expect(feature('undercut-card').private).toBe(true);
-    expect(feature('undercut-card').strategyFolder).toBeUndefined();
+    expect(feature('undercut-card').analysisFolder).toBeUndefined();
     expect(feature('feed-status').private).toBe(true);
     expect(feature('session-info').private).toBe(false);
   });
@@ -74,6 +74,14 @@ describe('checkCatalogue: errors name the file', () => {
   it('an owner that is neither core nor a unit', async () => {
     const { errors } = await check('owner-unknown');
     expect(errors).toContainEqual(expect.stringMatching(/topics\/ghost\.rows\.ts.*owner "ghost"/));
+  });
+
+  it('an owner with only an analysis folder is a unit: contracts come before the feature', async () => {
+    const dirs = tree('analysis-owner');
+    const { errors } = checkCatalogue(await buildCatalogue(dirs), findAnalysisFolders(dirs.analysis));
+    expect(errors).toEqual([]);
+    expect(findAnalysisFolders(dirs.analysis)).toEqual(['pace-model']);
+    expect(findAnalysisFolders(tree('owner-unknown').analysis)).toEqual([]);
   });
 
   it('a topic name not prefixed by its owner', async () => {

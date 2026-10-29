@@ -340,7 +340,7 @@
   {/if}
   {#if defaultFeed !== undefined}
     {#key defaultFeed}
-      <TopBar {store} feedId={defaultFeed} {send} {sendReplay} onShown={(alerts) => (shownAlerts = alerts)} />
+      <TopBar {store} feedId={defaultFeed} {send} {sendReplay} onShown={(alerts) => (shownAlerts = alerts)} workbookName={read?.workbook.name} onPickWorkbook={() => (overlay = { kind: 'workbooks' })} />
     {/key}
   {/if}
   <div class="area">

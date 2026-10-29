@@ -1,4 +1,4 @@
-import type { Insight, SessionTime } from '@pitwall/domain';
+import type { FlagPhase, Insight, SessionTime } from '@pitwall/domain';
 import type { FrameMetrics } from '../frame/metrics.ts';
 import type { HistoryDelta } from '../history/delta.ts';
 import type { EngineState } from '../state/engine-state.ts';
@@ -31,6 +31,8 @@ export type FeedMetricsView = FrameMetrics & {
 export type EngineView = {
   /** The settled state; the in-progress `open` trackers are not part of the view. */
   state: DeepReadonly<Omit<EngineState, 'open'>>;
+  /** The neutralised phase in progress, if any; it moves to `history.flagPhases` when it ends. */
+  activeFlagPhase: DeepReadonly<Omit<FlagPhase, 'end' | 'endLeaderLap'>> | undefined;
   changed: ReadonlySet<ChangeTag>;
   delta: HistoryDelta;
   feed: FeedMetricsView;

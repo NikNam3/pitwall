@@ -27,13 +27,13 @@ describe('dependency-cruiser layer rules', { timeout: 60_000 }, () => {
   });
 });
 
-describe('purity lint for engine and strategy', () => {
+describe('purity lint for engine and analysis', () => {
   const lint = async (rel: string, code: string) =>
     (await new ESLint({ cwd: ROOT }).lintText(code, { filePath: join(ROOT, rel) }))[0]!.messages.map((m) => m.ruleId);
-  it('rejects clock and Math.random in engine and strategy', async () => {
+  it('rejects clock and Math.random in engine and analysis', async () => {
     expect(await lint('packages/engine/src/x.ts', 'export const t = Date.now();\n')).toContain('no-restricted-globals');
     expect(await lint('packages/engine/src/x.ts', 'export const t = performance.now();\n')).toContain('no-restricted-globals');
-    expect(await lint('packages/strategy/src/x.ts', 'export const r = Math.random();\n')).toContain('no-restricted-properties');
+    expect(await lint('packages/analysis/src/x.ts', 'export const r = Math.random();\n')).toContain('no-restricted-properties');
     expect(await lint('packages/engine/src/x.ts', "import { readFileSync } from 'node:fs';\nexport const f = readFileSync;\n")).toContain('no-restricted-imports');
   });
   it('allows them in the bridge', async () => {
@@ -47,7 +47,7 @@ describe('workspace constraints', () => {
     expect(o).toMatchObject({ strict: true, noUncheckedIndexedAccess: true, exactOptionalPropertyTypes: true, noEmit: true,
       allowImportingTsExtensions: true, erasableSyntaxOnly: true, verbatimModuleSyntax: true, module: 'nodenext' });
   });
-  it.each(['protocol', 'domain', 'contracts', 'engine', 'strategy'].map((p) => `packages/${p}`).concat('apps/bridge'))('%s is an ESM package exporting src/index.ts', (dir) => {
+  it.each(['protocol', 'domain', 'contracts', 'engine', 'analysis'].map((p) => `packages/${p}`).concat('apps/bridge'))('%s is an ESM package exporting src/index.ts', (dir) => {
     const pkg = JSON.parse(readFileSync(join(ROOT, dir, 'package.json'), 'utf8'));
     expect(pkg).toMatchObject({ type: 'module', exports: { '.': './src/index.ts' } });
     expect(pkg.name).toBe(`@pitwall/${dir === 'apps/bridge' ? 'bridge' : dir.split('/')[1]}`);

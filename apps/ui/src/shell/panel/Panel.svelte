@@ -5,6 +5,7 @@
   import type { FeedId } from '@pitwall/domain';
   import { onDestroy, untrack, type Component } from 'svelte';
   import type { TopicStore } from '../../connection/topic-store.svelte.ts';
+  import { setUiActions } from '../../kit/actions.ts';
   import Gear from '../../kit/icons/Gear.svelte';
   import { measure, type Measured } from '../../kit/size/measure.ts';
   import { cellBox, pickMode, toCells } from '../../kit/size/size.ts';
@@ -13,6 +14,7 @@
   import type { RegisteredWidget, ResolvedLink, WidgetSize } from '../../kit/types.ts';
   import { role } from '../../theme/index.ts';
   import { useOverlayStack } from '../commands/overlay-stack.ts';
+  import type { AnchorBox } from '../commands/placement.ts';
   import GroupPicker from '../link-groups/GroupPicker.svelte';
   import LinkMarker from '../link-groups/LinkMarker.svelte';
   import { computedLap, headerState, type DataStatus } from './header-state.ts';
@@ -52,10 +54,10 @@
 
   // The picker and the settings popover open next to their buttons; Escape closes them (the shell owns the keys).
   const stack = useOverlayStack();
-  let popover = $state<{ kind: 'picker' | 'settings'; anchor: { x: number; y: number } } | undefined>();
+  let popover = $state<{ kind: 'picker' | 'settings'; anchor: AnchorBox } | undefined>();
   const openAt = (kind: 'picker' | 'settings', button: HTMLElement): void => {
     const box = button.getBoundingClientRect();
-    popover = { kind, anchor: { x: box.left, y: box.bottom } };
+    popover = { kind, anchor: { left: box.left, right: box.right, top: box.top, bottom: box.bottom } };
   };
   const close = (): void => {
     popover = undefined;
@@ -94,7 +96,7 @@
 
   $effect(() => {
     const keys = frameKeys;
-    untrack(() => frame.hold(keys === undefined ? [] : [keys.session, keys.feed]));
+    untrack(() => frame.hold(keys === undefined ? [] : [keys.feed]));
   });
   $effect(() => {
     const next = requests;
@@ -110,10 +112,10 @@
     return state?.status === 'ok' ? (state.value as { stale?: boolean; cadenceMs?: number } | undefined) : undefined;
   });
 
-  const panelStale = providePanelStale({
-    now: () => (feedId === undefined ? undefined : store.now(feedId)),
-    cadenceMs: () => feed?.cadenceMs,
-  });
+  // Widgets send their UI actions (acknowledge, mute) through the panel's `send`.
+  setUiActions((action) => send(action));
+
+  const panelStale = providePanelStale({ cadenceMs: () => feed?.cadenceMs });
 
   const status = $derived.by((): DataStatus => {
     if (link === undefined) return 'waiting';
@@ -167,7 +169,7 @@
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-<div class="panel" onclick={inspect}>
+<div class="panel" data-widget={spec.widget} onclick={inspect}>
   <header use:portal={headerTarget} style:background={role('bgBand')}>
     <span class="title" style:color={role('textDim')}>{widget?.decl.title ?? spec.widget}</span>
     <LinkMarker {store} groupId={spec.linkGroup} {group} {link} onOpen={(button) => openAt('picker', button)} />
@@ -195,7 +197,8 @@
     {:else if status === 'ok' && size === null}
       <span style:color={role('textFaint')}>{text.tooSmall}</span>
     {:else if status === 'ok' && size !== undefined && View !== undefined && link !== undefined}
-      <View data={values} options={spec.options} {size} {link} />
+      <!-- A dimmed view drops the inline highlight roles of its values: an old value must not stay amber or red. -->
+      <div class="view" class:dim><View data={values} options={spec.options} {size} {link} /></div>
     {/if}
   </div>
 </div>
@@ -230,5 +233,11 @@
     min-height: 0;
     overflow: hidden;
     padding: 0 var(--pw-header-pad);
+  }
+  .view {
+    display: contents;
+  }
+  .view.dim :global(*) {
+    color: inherit !important;
   }
 </style>

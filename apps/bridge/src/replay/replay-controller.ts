@@ -51,7 +51,11 @@ export class ReplayController {
       ...(opts.unpaced && { unpaced: true }),
       position: () => this.#pipeline.position(),
       onRecord: () => this.#publish(),
-      onSeekDone: () => this.#settle(),
+      onSeekDone: () => {
+        // A paused replay sends no further record after landing: without this, the status would stay on the jump.
+        this.#publish();
+        this.#settle();
+      },
     });
     this.done = this.#done.promise;
     this.done.catch(() => {});
@@ -191,8 +195,15 @@ export class ReplayController {
     this.#o.hub.publishState(this.#o.feedId, 'replay.status', () => this.#status());
   }
 
+  /** Where the jump under way goes: the restart's target until the restarted run fast-forwards to it. */
+  get #jumpingTo(): SeekTarget | undefined {
+    if (this.#stopped || this.#failure) return undefined;
+    return this.#restarting ? this.#restartTarget : this.#pacer.seekTarget;
+  }
+
   #status(): ReplayStatus {
     const position = this.position() ?? { sessionTimeMs: 0, playerLap: 0 };
+    const jumpingTo = this.#jumpingTo;
     return {
       paused: this.#pacer.paused,
       speed: this.#pacer.speed,
@@ -200,6 +211,7 @@ export class ReplayController {
       playerLap: position.playerLap,
       atEnd: this.#atEnd,
       ...(this.#pacer.unpaced && { unpaced: true as const }),
+      ...(jumpingTo !== undefined && { jumpingTo }),
       ...(this.#beyondEnd && { note: 'beyondEnd' as const }),
     };
   }

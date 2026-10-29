@@ -7,8 +7,8 @@
   import { DEFAULT_THEME, cssVar, resolveColour, resolveRole } from '../../theme/index.ts';
   import type { Role } from '../../theme/index.ts';
   import type { WidgetSize } from '../types.ts';
-  import { buildData, visibleXRange } from './data.ts';
-  import type { ChartSeries } from './data.ts';
+  import { buildData, clipBands, visibleXRange } from './data.ts';
+  import type { ChartSeries, PhaseBand } from './data.ts';
 
   type Props = {
     series: ChartSeries[];
@@ -17,13 +17,15 @@
     yLabel: string;
     /** Both kinds are plain numbers on the axis; the kind is for the caller's labels. */
     x: { kind: 'lap' | 'sessionTime' };
-    /** Safety-car and virtual-safety-car periods, painted behind the series. */
-    bands?: Array<{ from: number; to: number; kind: 'sc' | 'vsc' }> | undefined;
+    /** Safety-car, virtual-safety-car and red-flag periods, painted behind the series (clipped to the visible range). */
+    bands?: PhaseBand[] | undefined;
     size: WidgetSize;
+    /** Formats the y axis tick values; the default prints the plain numbers. */
+    yFormat?: ((v: number) => string) | undefined;
     /** Called after every draw of the plot (the gallery marks its cell ready on the first). */
     ondraw?: (() => void) | undefined;
   };
-  let { series, xLabel, yLabel, x, bands, size, ondraw }: Props = $props();
+  let { series, xLabel, yLabel, x, bands, size, yFormat, ondraw }: Props = $props();
 
   const SERIES_ROLES: Role[] = ['series1', 'series2', 'series3', 'series4', 'series5', 'series6'];
 
@@ -55,6 +57,7 @@
       const lineWidth = token(root, '--pw-chart-line', tokens.lineWidth);
       const ownWidth = token(root, '--pw-chart-own-line', tokens.ownCarLineWidth);
       const staleAlpha = token(root, '--pw-chart-stale-alpha', tokens.staleAlpha);
+      const redAlpha = token(root, '--pw-chart-red-alpha', tokens.redBandAlpha);
       const dashVar = cssVar(root, '--pw-chart-dash').split(/\s+/).map(Number).filter(Number.isFinite);
       const dash = dashVar.length > 0 ? dashVar : tokens.dash;
       const xPerCell = {
@@ -81,6 +84,7 @@
       cols = size.cols;
       applied = { width: size.px.width, height: size.px.height };
       const bandFill = resolveRole(el, 'bgBand');
+      const redFill = resolveRole(el, 'flagRed');
       const bandList = bands ?? [];
 
       plot = new uPlot(
@@ -90,7 +94,7 @@
           legend: { show: false },
           cursor: { show: false },
           scales: { x: { time: false, range: () => visibleXRange(xs, cols, x.kind, xPerCell) } },
-          axes: [{ ...axis, label: xLabel }, { ...axis, label: yLabel }],
+          axes: [{ ...axis, label: xLabel }, { ...axis, label: yLabel, ...(yFormat ? { values: (_u: uPlot, splits: number[]) => splits.map(yFormat) } : {}) }],
           series: [{}, ...lines],
           hooks: {
             draw: [() => ondraw?.()],
@@ -98,8 +102,9 @@
               ? [
                   (u) => {
                     u.ctx.save();
-                    u.ctx.fillStyle = bandFill;
-                    for (const b of bandList) {
+                    for (const b of clipBands(bandList, visibleXRange(xs, cols, x.kind, xPerCell))) {
+                      u.ctx.fillStyle = b.kind === 'red' ? redFill : bandFill;
+                      u.ctx.globalAlpha = b.kind === 'red' ? redAlpha : 1;
                       const left = u.valToPos(b.from, 'x', true);
                       u.ctx.fillRect(left, u.bbox.top, u.valToPos(b.to, 'x', true) - left, u.bbox.height);
                     }

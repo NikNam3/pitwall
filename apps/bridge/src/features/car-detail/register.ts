@@ -1,6 +1,6 @@
 import type { QuickCalculator } from '@pitwall/engine';
 import { bindState, defineFeature } from '../feature.ts';
-import { selectCar, type ViewCars } from '../car-params.ts';
+import { selectCarSlot, type ViewCars } from '../car-params.ts';
 
 /** Every car, by reference; the topic's `select` clones the one car a subscription asks for. */
 const carsState: QuickCalculator<ViewCars> = {
@@ -14,5 +14,5 @@ const carsState: QuickCalculator<ViewCars> = {
 export default defineFeature({
   name: 'car-detail',
   calculators: [carsState],
-  topics: [bindState('car.detail', carsState, selectCar((car) => car))],
+  topics: [bindState('car.detail', carsState, selectCarSlot((car) => car))],
 });

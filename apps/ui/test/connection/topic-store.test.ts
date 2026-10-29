@@ -7,6 +7,10 @@ import { lapsFold } from '../../src/kit/folds.ts';
 import { FakeConnection } from './fake-connection.ts';
 
 const FEED = feedId('f1');
+const none = unknown('notReceived');
+const corners = <T>(v: T) => ({ fl: v, fr: v, rl: v, rr: v });
+const lapEnd = { wearAtEndPct: corners(none), ersStoreAtEndJ: none, ersDeployedJ: none, ersHarvestedJ: none, damageAtEnd: none,
+  channelRange: { tyres: corners({ surfaceC: none, carcassC: none, pressurePsi: none }), brakesC: corners(none), engineC: none } };
 const lap = (car: number, lapNumber: number, status: LapRecord['status'], lapTimeMs = 70_000): LapRecord => ({
   carId: carId(car),
   lapNumber,
@@ -25,6 +29,7 @@ const lap = (car: number, lapNumber: number, status: LapRecord['status'], lapTim
   positionAtEnd: 1,
   status,
   completedAt: lapNumber * 70_000,
+  ...lapEnd,
 });
 
 const setup = () => {

@@ -33,7 +33,7 @@ describe('base state features', () => {
     const car = view.state.cars[1]!;
     expect(list[1]).toEqual({ id: car.id, identity: car.identity, timing: car.timing,
       tyres: { actualCompound: car.tyres.actualCompound, visualCompound: car.tyres.visualCompound, age: car.tyres.age },
-      updatedAt: car.updatedAt });
+      stops: car.timing.numPitStops, updatedAt: car.updatedAt });
     expect(list[1]!['timing']).not.toBe(car.timing);
     expect(list[1]!['updatedAt']).not.toBe(car.updatedAt);
   });
@@ -47,6 +47,10 @@ describe('base state features', () => {
   it('car.detail selects one car by carId', () => {
     expect(select(carDetail, 'car.detail', { carId: 1 })).toEqual(view.state.cars[1]);
     expect(select(carDetail, 'car.detail', { carId: 1 })).not.toBe(view.state.cars[1]);
+    // a deep copy: nothing nested is shared with the engine state, which the next frame changes
+    const detail = select(carDetail, 'car.detail', { carId: 1 }) as CarState;
+    expect(detail.tyres.corners.fl).not.toBe(view.state.cars[1]!.tyres.corners.fl);
+    expect(detail.timing).not.toBe(view.state.cars[1]!.timing);
     expect(select(carDetail, 'car.detail', { carId: 99 })).toBeUndefined();
     expect(select(carDetail, 'car.detail', {})).toBeUndefined();
   });
@@ -74,7 +78,7 @@ describe('what the features read (domain areas)', () => {
   // `updatedAt` moves with every source, so these two may read more tags than they show fields of; never fewer.
   it.each([
     ['car.detail', carDetail, 'cars.state', ['identity', 'timing', 'tyres', 'energy', 'condition', 'dynamics', 'ownCar', 'stints']],
-    ['cars.overview', carsOverview, 'cars.overview', ['identity', 'timing', 'tyres', 'stints']],
+    ['cars.overview', carsOverview, 'cars.overview', ['identity', 'timing', 'tyres', 'stints', 'pitStops']],
   ] as const)('%s reads at least the areas of its fields', (_, feature, id, reads) => {
     expect(readsOf(feature, id)).toEqual(expect.arrayContaining([...reads]));
   });

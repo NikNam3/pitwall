@@ -1,7 +1,7 @@
 // spec 10.2 fixture facts, acceptance criterion 1
 import { expect, it } from 'vitest';
 import type { CarOverview } from '@pitwall/contracts';
-import type { LapRecord, RaceEvent } from '@pitwall/domain';
+import type { Interval, LapRecord, RaceEvent } from '@pitwall/domain';
 import { describeWithFixture } from '../../../../test-support/fixtures.ts';
 import { trackFixture } from '../fixtures/replay.ts';
 import { replayTopics } from './replay-topics.ts';
@@ -69,13 +69,17 @@ describeWithFixture('ttZandvoort', 'acceptance: TT Zandvoort', (path) => {
 
 describeWithFixture('raceSingapore', 'acceptance: race Singapore', (path) => {
   it('20 cars, the only human at index 19, start lights and race events, no lap completed', async () => {
-    const r = await replayTopics(path, SUBS);
+    const r = await replayTopics(path, [...SUBS, ['intervals', 'gaps.intervals', {}]]);
     expectCleanRun(r);
     expect(r.value('info')).toMatchObject({ sessionUid: '12956020372289608894', playerCar: 19, session: { trackId: 12, sessionType: 15, numActiveCars: 20 } });
     expect(activeCars(r)).toHaveLength(20);
     expect(activeCars(r).filter((c) => !c.identity.ai).map((c) => c.id)).toEqual([19]);
     expect(kinds(r)).toMatchObject({ startLights: 5, lightsOut: 1, overtake: 39, collision: 4, penalty: 6 });
     expect(r.entries('laps')).toEqual([]);
+    // positions gained on lap 1, pole sitter included: the field nets to zero
+    const gained = (r.value('intervals') as Interval[]).map((i) => i.positionsGained);
+    expect(gained.every((g) => g.known)).toBe(true);
+    expect(gained.reduce((sum, g) => sum + (g.known ? g.value : 0), 0)).toBe(0);
   });
   it('the final UID-0 SessionHistory bulk (sent just before SEND) belongs to the session', async () => {
     const uid0Cars: number[] = [];

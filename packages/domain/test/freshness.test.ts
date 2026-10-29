@@ -35,7 +35,7 @@ describe('CarState.updatedAt', () => {
 
 describe('UnknownReason', () => {
   it('no longer accepts "stale"', () => {
-    expectTypeOf<UnknownReason>().toEqualTypeOf<'restricted' | 'notReceived' | 'notApplicable' | 'realism'>();
+    expectTypeOf<UnknownReason>().toEqualTypeOf<'restricted' | 'notReceived' | 'notApplicable' | 'realism' | 'insufficientData'>();
     // @ts-expect-error 'stale' is no UnknownReason: the UI decides when a value is too old
     const reason: UnknownReason = 'stale';
     // @ts-expect-error nothing can make a value unknown('stale')

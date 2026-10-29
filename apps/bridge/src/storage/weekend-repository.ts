@@ -1,5 +1,5 @@
 import { driverKeyString, type CarId, type DriverKey, type FlagPhase, type LapRecord, type PitStopRecord, type RaceEvent, type SessionUid, type StintRecord } from '@pitwall/domain';
-import type { WeekendContext } from '@pitwall/engine';
+import { unknownLapEnd, type WeekendContext } from '@pitwall/engine';
 import type { Db, SessionRow } from './db.ts';
 
 type SessionDbRow = {
@@ -14,6 +14,9 @@ type SessionDbRow = {
 };
 
 type DriverDbRow = { car_id: number; key_json: string };
+
+/** Laps stored before the lap-end samples existed lack those fields: they read as `unknown('notReceived')`. */
+const withLapEndSamples = (lap: LapRecord): LapRecord => ({ ...unknownLapEnd(), ...lap });
 
 /** Read side of storage: sessions of a weekend and the history records stored for them, in write order. */
 export class WeekendRepository {
@@ -56,7 +59,7 @@ export class WeekendRepository {
   }
 
   lapsOf(sessionUid: SessionUid, driverKey?: DriverKey): LapRecord[] {
-    return this.read<LapRecord>(this.statements.laps, sessionUid, driverKey);
+    return this.read<LapRecord>(this.statements.laps, sessionUid, driverKey).map(withLapEndSamples);
   }
 
   stintsOf(sessionUid: SessionUid, driverKey?: DriverKey): StintRecord[] {

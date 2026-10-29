@@ -36,3 +36,34 @@ export function widgetCells(widget: RegisteredWidget, entry: CellSource, themes:
     data.flatMap((d) => themes.map((theme) => ({ id: cellId(widget.decl.name, size.id, d.name, theme.name), widget, size, data: d, theme }))),
   );
 }
+
+/**
+ * Whether a widget cell has a screenshot baseline (the e2e screenshot spec compares only these; the fit spec checks every
+ * cell): the widget's first case (its first moment if it has no cases) at each mode's minimum, in the default theme.
+ */
+export function hasBaseline(cell: WidgetCell, entry: CellSource, defaultTheme: string): boolean {
+  const first = Object.keys(entry.cases ?? {})[0];
+  const data: GalleryData | undefined = first === undefined ? (entry.moments[0] === undefined ? undefined : { kind: 'moment', name: entry.moments[0] }) : { kind: 'case', name: first };
+  return cell.size.id === cell.size.mode && cell.theme.name === defaultTheme && data !== undefined && cell.data.kind === data.kind && cell.data.name === data.name;
+}
+
+/** What a shell cell shows (Task 4, spec 10): the top bar under one of its cases, or a shell overlay. */
+export type ShellCellKind = 'topbar' | 'palette' | 'key-overview' | 'settings-popover' | 'inspector';
+
+/** One cell of the shell: the top bar, a shell overlay, or the panel overlays of `feed-status`. */
+export type ShellCell = { id: string; kind: ShellCellKind; /** The top-bar case, the palette query, or the widget the overlay belongs to. */ detail?: string };
+
+/**
+ * The cells the gallery owes the shell. Ids are `shell/<kind>[/<detail>]`; the palette is open with the query `font`
+ * and the settings popover and inspector are those of `feed-status`. The gallery draws each as a `data-gallery-id` figure.
+ */
+export const SHELL_CELLS: readonly ShellCell[] = [
+  { id: 'shell/topbar/race-alert', kind: 'topbar', detail: 'race-alert' },
+  { id: 'shell/topbar/realism-pending', kind: 'topbar', detail: 'realism-pending' },
+  { id: 'shell/topbar/replay-transport', kind: 'topbar', detail: 'replay-transport' },
+  { id: 'shell/topbar/battle', kind: 'topbar', detail: 'battle' },
+  { id: 'shell/palette', kind: 'palette', detail: 'font' },
+  { id: 'shell/key-overview', kind: 'key-overview' },
+  { id: 'shell/settings-popover/feed-status', kind: 'settings-popover', detail: 'feed-status' },
+  { id: 'shell/inspector/feed-status', kind: 'inspector', detail: 'feed-status' },
+];

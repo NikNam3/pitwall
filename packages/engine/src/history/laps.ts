@@ -4,6 +4,7 @@ import type { Frame } from '../frame/frame.ts';
 import type { EngineState, LapCursor } from '../state/engine-state.ts';
 import type { LapCorrection, StepOutput, SubStep } from '../step/types.ts';
 import { carsWithLapData } from './cars.ts';
+import { emptyChannels, lapEndSamples, observeLapFrame, unknownLapEnd } from './lap-samples.ts';
 
 // Bits of `lapValidBitFlags`.
 const LAP_VALID = 0x01;
@@ -30,6 +31,9 @@ const openCursor = (car: CarState, at: SessionTime): LapCursor => {
     actualCompound: tyres.actualCompound,
     visualCompound: tyres.visualCompound,
     outLap: timing.pitStatus !== 'none' || timing.driverStatus === 'outLap',
+    ...emptyChannels(),
+    ersDeployedJ: undefined,
+    ersHarvestedJ: undefined,
   };
 };
 
@@ -72,6 +76,7 @@ const lapFromCursor = (
     positionAtEnd: car.timing.position,
     status: 'provisional',
     completedAt: at,
+    ...lapEndSamples(cursor, car, at),
   };
 };
 
@@ -94,6 +99,7 @@ const lapFromHistoryOnly = (car: CarState, lapNumber: number, lapTimeMs: number,
   positionAtEnd: 0,
   status: 'provisional',
   completedAt: at,
+  ...unknownLapEnd(),
 });
 
 const trackLap = (state: EngineState, car: CarState, at: SessionTime): void => {
@@ -101,7 +107,9 @@ const trackLap = (state: EngineState, car: CarState, at: SessionTime): void => {
   const cursor = state.open.laps[car.id];
   // The first LapData of a car, or a lap number that went down: start over without emitting.
   if (!cursor || timing.lap < cursor.lap) {
-    state.open.laps[car.id] = openCursor(car, at);
+    const fresh = openCursor(car, at);
+    observeLapFrame(fresh, car);
+    state.open.laps[car.id] = fresh;
     return;
   }
   addElapsed(state, cursor, at);
@@ -110,6 +118,7 @@ const trackLap = (state: EngineState, car: CarState, at: SessionTime): void => {
     if (timing.sector1TimeMs > 0) cursor.sector1Ms = timing.sector1TimeMs;
     if (timing.sector2TimeMs > 0) cursor.sector2Ms = timing.sector2TimeMs;
     cursor.invalid ||= timing.currentLapInvalid;
+    observeLapFrame(cursor, car);
     return;
   }
   const lapNumber = timing.lap - 1;
@@ -121,7 +130,10 @@ const trackLap = (state: EngineState, car: CarState, at: SessionTime): void => {
     if (indexOfLap) indexOfLap[lapNumber] = { provisional: state.history.laps.length, confirmed: false };
     state.history.laps.push(lapFromCursor(car, cursor, lapNumber, timing.lastLapTimeMs, at));
   }
-  state.open.laps[car.id] = openCursor(car, at);
+  // The completing frame belongs to the next lap's ranges and totals, not to the one it ends.
+  const next = openCursor(car, at);
+  observeLapFrame(next, car);
+  state.open.laps[car.id] = next;
 };
 
 /** The newest lap of the car that has a record (provisional or confirmed), 0 if none. */

@@ -2,6 +2,7 @@
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import type { ReplayStatus } from '@pitwall/contracts';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FEATURES } from '../../src/features/index.generated.ts';
 import { TopicHub } from '../../src/hub/topic-hub.ts';
@@ -256,4 +257,67 @@ describe('ReplayController: transport accessor and unpaced status', () => {
     controller.control({ kind: 'speed', factor: 2 });
     expect(controller.transport()).toEqual({ paused: false, speed: 2, unpaced: false });
   });
+});
+
+// Bug B2: a lap jump is a fast-forward through the recording (about 17 times real time on the TT Zandvoort recording:
+// lap 12 is 45 s away), and a jump back restarts at lap 1. `replay.status` showed only that progress, so the top bar's lap
+// field fell back to the lap the fast-forward was on and the jump looked ignored. `jumpingTo` names the target while the
+// jump is under way, and the status after it lands, paused or playing, no longer has it.
+describe('ReplayController: replay.status while a jump is under way', () => {
+  /** Every replay.status value an already subscribed client receives, as it arrives. */
+  const subscribe = (h: ReturnType<typeof start>) => {
+    const got: ReplayStatus[] = [];
+    h.hub.addClient('ui', { send: (m) => { if ((m.type === 'snapshot' || m.type === 'update') && 'value' in m) got.push(m.value as ReplayStatus); }, bufferedAmount: () => 0 });
+    h.hub.subscribe({ clientId: 'ui', id: 'rs', topic: 'replay.status', params: {}, feedId: FEED });
+    return { last: () => { h.hub.tick(); return got.at(-1); }, all: got };
+  };
+
+  it('a forward jump while paused names its target until it lands, then the paused status drops it', async () => {
+    const { frac } = await rangeOfSegment();
+    const target = frac(0.5);
+    const h = start();
+    h.controller.control({ kind: 'pause' });
+    await until(() => h.controller.position() !== undefined);
+    const ui = subscribe(h);
+    h.controller.control({ kind: 'jumpToTime', sessionTimeMs: target });
+    expect(ui.last()?.jumpingTo).toEqual({ kind: 'time', sessionTimeMs: target });
+    await until(() => (h.controller.position()?.sessionTimeMs ?? 0) >= target);
+    await h.controller.settled();
+    await tick();
+    expect(ui.last()).toMatchObject({ paused: true });
+    expect(ui.last()).not.toHaveProperty('jumpingTo');
+  });
+
+  it('a jump back names its target through the restart and the fast-forward from the start', async () => {
+    const { frac } = await rangeOfSegment();
+    const late = frac(0.75);
+    const early = frac(0.25);
+    const h = start();
+    h.controller.control({ kind: 'pause' });
+    h.controller.control({ kind: 'jumpToTime', sessionTimeMs: late });
+    await until(() => (h.controller.position()?.sessionTimeMs ?? 0) >= late);
+    await h.controller.settled();
+    const ui = subscribe(h);
+    const before = ui.all.length;
+    h.controller.control({ kind: 'jumpToTime', sessionTimeMs: early });
+    await h.controller.settled();
+    await tick();
+    const during = ui.all.slice(before, -1);
+    expect(during.length).toBeGreaterThan(0);
+    for (const status of during) expect(status.jumpingTo).toEqual({ kind: 'time', sessionTimeMs: early });
+    expect(ui.last()).toMatchObject({ paused: true, atEnd: false });
+    expect(ui.last()).not.toHaveProperty('jumpingTo');
+    expect(ui.last()!.sessionTimeMs).toBeGreaterThanOrEqual(early);
+  });
+
+  it('a lap jump names the lap; one beyond the end drops it with the beyondEnd note', async () => {
+    const h = start();
+    await until(() => h.controller.position() !== undefined, h.gate.releaseAll);
+    const ui = subscribe(h);
+    h.controller.control({ kind: 'jumpToLap', lap: 99 });
+    expect(ui.last()?.jumpingTo).toEqual({ kind: 'lap', lap: 99 });
+    await until(() => h.status()?.atEnd === true, () => {}, 20_000);
+    expect(ui.last()).toMatchObject({ atEnd: true, note: 'beyondEnd' });
+    expect(ui.last()).not.toHaveProperty('jumpingTo');
+  }, 30_000);
 });

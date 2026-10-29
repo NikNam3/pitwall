@@ -23,7 +23,7 @@ export type Catalogue = {
   features: Array<{
     name: string;
     folder: string;
-    strategyFolder?: string;
+    analysisFolder?: string;
     private: boolean;
     calculators: Array<{ id: string; reads: string[]; cadence: string }>;
     jobs: string[];
