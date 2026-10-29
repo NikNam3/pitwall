@@ -1,6 +1,7 @@
 // The `gaps` calculator (spec 6.1): a fold over the mini-sector crossings; the order and our cars come from the car state.
 import { known, unknown, type CarId, type Interval, type Known, type Ms, type Neighbourhood, type ResultStatus, type SessionTime } from '@pitwall/domain';
 import type { EngineView, IncrementalCalculator } from '@pitwall/engine';
+import { ourCars } from '../shared/our-cars.ts';
 import { gapBehind, lapsBehind, latestTime, progressOf, recentOf, type CarCrossings } from './gaps.ts';
 import { GAPS, GAPS_CONFIG, type GapsOutput } from './index.ts';
 
@@ -9,7 +10,6 @@ type Table = {
   /** By car id: every crossing, from progress 0. */
   tracks: Array<CarCrossings | undefined>;
   lineTimes: GapsOutput['lineTimes'];
-  latest: GapsOutput['latest'];
   recent: GapsOutput['recent'];
   /** The newest lights-out event. */
   lightsOutAt: SessionTime | undefined;
@@ -23,13 +23,12 @@ const OUT_OF_RACE: ReadonlySet<ResultStatus> = new Set(['retired', 'didNotFinish
 const NOT_APPLICABLE = unknown('notApplicable');
 
 /**
- * Adds the crossings from index `from` on. `lineTimes`, `latest` and `recent` are replaced, never changed, as earlier
+ * Adds the crossings from index `from` on. `lineTimes` and `recent` are replaced, never changed, as earlier
  * outputs hold them: one new `recent` window per car that crossed something.
  */
 function foldCrossings(acc: Table, view: EngineView, from: number): void {
   const list = view.state.history.miniSectors;
   if (from >= list.length) return;
-  const latest = { ...acc.latest };
   let lineTimes = acc.lineTimes;
   const crossed = new Set<CarId>();
   for (const m of list.slice(from)) {
@@ -39,7 +38,6 @@ function foldCrossings(acc: Table, view: EngineView, from: number): void {
     track.at[progress] = m.at;
     track.at.length = progress + 1; // a car that went back drops what lay ahead
     crossed.add(m.carId);
-    latest[m.carId] = { lap: m.lap, segment: m.segment, at: m.at };
     // segment 0 is the line at the start of its lap: it completes the lap before (none for lap 1, the start)
     const completed = m.lap - 1;
     if (m.segment === 0 && completed >= 1) {
@@ -49,7 +47,6 @@ function foldCrossings(acc: Table, view: EngineView, from: number): void {
   }
   const recent = { ...acc.recent };
   for (const id of crossed) recent[id] = recentOf(acc.tracks[id] as CarCrossings);
-  acc.latest = latest;
   acc.lineTimes = lineTimes;
   acc.recent = recent;
 }
@@ -81,7 +78,7 @@ const positionsGained = (timing: { gridPosition: number; position: number }, vie
 
 /** The running cars in position order (ties by id), their intervals, and the cars around each of ours. */
 function build(acc: Table, view: EngineView): GapsOutput {
-  const { cars, playerCar, teammateCar } = view.state;
+  const { cars } = view.state;
   const running = cars
     .filter((c) => c.active && !OUT_OF_RACE.has(c.timing.resultStatus))
     .sort((a, b) => a.timing.position - b.timing.position || a.id - b.id);
@@ -105,18 +102,18 @@ function build(acc: Table, view: EngineView): GapsOutput {
   const { neighbourhoodMs } = GAPS_CONFIG.read(view);
   const near = (gap: Known<Ms>) => gap.known && Math.abs(gap.value) <= neighbourhoodMs;
   const neighbourhood: Neighbourhood[] = [];
-  for (const ourCarId of new Set<CarId | undefined>([playerCar, teammateCar])) {
-    const at = ourCarId === undefined ? -1 : order.indexOf(ourCarId);
-    if (ourCarId === undefined || at < 0) continue;
+  for (const ourCarId of ourCars(view.state)) {
+    const at = order.indexOf(ourCarId);
+    if (at < 0) continue;
     const carIds = order.filter((_, j) => j !== at && (Math.abs(j - at) <= 1 || near(gapBehind(tracks[j], tracks[at]))));
     neighbourhood.push({ ourCarId, carIds });
   }
 
-  return { intervals, lineTimes: acc.lineTimes, latest: acc.latest, recent: acc.recent, neighbourhood, raceStartAt: raceStartAt(acc, view) };
+  return { intervals, lineTimes: acc.lineTimes, recent: acc.recent, neighbourhood, raceStartAt: raceStartAt(acc, view) };
 }
 
 const init = (view: EngineView): GapsAcc => {
-  const table: Table = { tracks: [], lineTimes: {}, latest: {}, recent: {}, lightsOutAt: undefined };
+  const table: Table = { tracks: [], lineTimes: {}, recent: {}, lightsOutAt: undefined };
   foldCrossings(table, view, 0);
   foldEvents(table, view, 0);
   return { ...table, out: build(table, view) };

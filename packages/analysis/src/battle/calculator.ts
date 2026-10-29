@@ -4,7 +4,8 @@ import { known, unknown, type BattleCard, type BattleSide, type CarId, type CarS
 import type { DeepReadonly, EngineView, QuickCalculator } from '@pitwall/engine';
 import type { GapsOutput } from '../gaps/index.ts';
 import type { Pace } from '../pace/index.ts';
-import { lapsUntil, perLapRate, PER_LAP_RATE_CONFIG, type RateSample } from '../per-lap-rate/index.ts';
+import { lapsToReach, perLapRate, PER_LAP_RATE_CONFIG, type RateSample } from '../per-lap-rate/index.ts';
+import { ourCars } from '../shared/our-cars.ts';
 import { BATTLE, BATTLE_CONFIG, type BattleOutput } from './index.ts';
 
 const NOT_APPLICABLE = unknown('notApplicable');
@@ -46,11 +47,8 @@ function side(view: EngineView, gaps: GapsOutput, pace: Pace, ourId: CarId, thei
     : gapSamples(gaps.lineTimes[theirId], gaps.lineTimes[ourId]);
   const rate = perLapRate(samples, PER_LAP_RATE_CONFIG.read(view));
   const closingMsPerLap: Known<number> = rate.known ? known(-rate.value.perLap, rate.at) : rate;
-  let lapsToDrs: Known<number>;
-  if (!gapMs.known) lapsToDrs = gapMs;
-  else if (!rate.known) lapsToDrs = rate;
-  else if (gapMs.value <= drsRangeMs) lapsToDrs = known(0, rate.at);
-  else lapsToDrs = lapsUntil(rate, gapMs.value, drsRangeMs);
+  // inside DRS range it is 0 as of the gap, with or without a closing rate
+  const lapsToDrs: Known<number> = gapMs.known ? lapsToReach(rate, gapMs, drsRangeMs, 'falling') : gapMs;
 
   const delta = paceDelta(pace.byCar[ourId]?.recentMs, pace.byCar[theirId]?.recentMs);
   const overtakeMarginMs: Known<Ms> = delta.known ? known((delta.value - overtakeThresholdMs) as Ms, delta.at) : delta;
@@ -97,9 +95,7 @@ export const battleCalculator: QuickCalculator<BattleOutput> = {
     const gaps = view.outputs.get('gaps') as GapsOutput | undefined;
     const pace = view.outputs.get('pace') as Pace | undefined;
     const out: BattleOutput = {};
-    for (const id of new Set<CarId | undefined>([view.state.playerCar, view.state.teammateCar])) {
-      if (id !== undefined) out[id] = cardOf(view, gaps, pace, id);
-    }
+    for (const id of ourCars(view.state)) out[id] = cardOf(view, gaps, pace, id);
     return out;
   },
 };

@@ -1,21 +1,21 @@
 // The `damage` calculator: per car, the damage now and the jumps folded from the `damageChange` events and the laps.
 import {
+  addLaps,
+  emptyCurrentLaps,
   known,
-  unknown,
   type CarId,
   type Corners,
+  type CurrentLaps,
   type DamageChangeParams,
   type DamageJump,
   type DamageParts,
   type DamageState,
   type LapRecord,
-  type Ms,
   type SessionTime,
 } from '@pitwall/domain';
 import type { EngineView, IncrementalCalculator } from '@pitwall/engine';
-import { classifyLap } from '../lap-classes/index.ts';
 import { PACE_CONFIG } from '../pace/index.ts';
-import { paceDelta } from '../pace-delta/index.ts';
+import { paceDeltaAround } from '../pace-delta/index.ts';
 import { DAMAGE, DAMAGE_CONFIG, type DamageOutput } from './index.ts';
 
 const CORNERS = ['fl', 'fr', 'rl', 'rr'] as const;
@@ -33,7 +33,8 @@ type Acc = {
   lapCount: number;
   clusters: Map<string, Cluster>;
   jumps: Map<CarId, RawJump[]>;
-  laps: Map<CarId, LapRecord[]>;
+  /** One record per (car, lap): confirmed over provisional. */
+  laps: CurrentLaps;
   /** Per active car: its state now without the jumps, and its current lap. */
   now: Map<CarId, { state: Omit<DamageState, 'jumps'>; lap: number }>;
   jumpPct: number;
@@ -72,19 +73,12 @@ const foldEvents = (acc: Acc, view: EngineView): void => {
 
 const foldLaps = (acc: Acc, view: EngineView): void => {
   const { laps } = view.state.history;
-  for (let i = acc.lapCount; i < laps.length; i++) {
-    const l = laps[i] as LapRecord | undefined;
-    if (l === undefined) continue;
-    const list = acc.laps.get(l.carId) ?? [];
-    list.push(l);
-    acc.laps.set(l.carId, list);
-  }
+  addLaps(acc.laps, laps.slice(acc.lapCount) as LapRecord[]);
   acc.lapCount = laps.length;
 };
 
 const foldCars = (acc: Acc, view: EngineView): void => {
   acc.now.clear();
-  const at = view.state.sessionTime;
   for (const car of view.state.cars) {
     if (!car.active) continue;
     const { bodywork, powerUnit } = car.condition;
@@ -94,7 +88,7 @@ const foldCars = (acc: Acc, view: EngineView): void => {
         ? powerUnit
         : known<DamageParts>(
             { ...bodywork.value, gearboxPct: powerUnit.value.gearboxDamagePct, enginePct: powerUnit.value.engineDamagePct },
-            at,
+            Math.max(bodywork.at, powerUnit.at),
           );
     const corner = (c: (typeof CORNERS)[number]) => ({
       tyrePct: car.tyres.corners[c].damagePct,
@@ -118,26 +112,14 @@ const fold = (acc: Acc, view: EngineView): Acc => {
 
 const init = (view: EngineView): Acc =>
   fold(
-    { events: 0, lapCount: 0, clusters: new Map(), jumps: new Map(), laps: new Map(), now: new Map(), ...settings(view) },
+    { events: 0, lapCount: 0, clusters: new Map(), jumps: new Map(), laps: emptyCurrentLaps(), now: new Map(), ...settings(view) },
     view,
   );
 
-/** The jump with its lap and its measured loss: pace laps before the jump's lap against pace laps after it. */
+/** The jump with its lap and its measured loss: `pace-delta` over the pace laps around the jump's lap. */
 const finishJump = (acc: Acc, raw: RawJump, laps: LapRecord[], currentLap: number): DamageJump => {
   const lap = laps.find((l) => l.completedAt >= raw.at)?.lapNumber ?? currentLap;
-  const paceLaps = laps.filter((l) => classifyLap(l, acc).forPace).sort((a, b) => a.lapNumber - b.lapNumber);
-  const before = paceLaps.filter((l) => l.lapNumber < lap).slice(-acc.window);
-  const after = paceLaps.filter((l) => l.lapNumber > lap).slice(0, acc.window);
-  const last = after[after.length - 1];
-  const lossMsPerLap =
-    last === undefined
-      ? unknown('insufficientData')
-      : paceDelta(
-          before.map((l) => l.lapTimeMs as Ms),
-          after.map((l) => l.lapTimeMs as Ms),
-          last.completedAt,
-        );
-  return { at: raw.at, lap, parts: [raw.part], deltaPct: raw.deltaPct, lossMsPerLap };
+  return { at: raw.at, lap, parts: [raw.part], deltaPct: raw.deltaPct, lossMsPerLap: paceDeltaAround(laps, lap, acc) };
 };
 
 /** Damage now and its jumps per active car; a jump's loss is `pace-delta` over the pace laps around it. */
@@ -151,7 +133,8 @@ export const damageCalculator: IncrementalCalculator<Acc, DamageOutput> = {
   output(acc) {
     const out: DamageOutput = {};
     for (const [id, { state, lap }] of acc.now) {
-      const laps = acc.laps.get(id) ?? [];
+      // integer keys iterate in ascending order: the car's laps by lap number
+      const laps = Object.values(acc.laps[id] ?? {});
       const jumps = (acc.jumps.get(id) ?? []).map((raw) => finishJump(acc, raw, laps, lap));
       out[id] = { ...state, jumps };
     }

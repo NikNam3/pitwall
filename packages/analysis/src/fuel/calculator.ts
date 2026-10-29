@@ -4,26 +4,16 @@ import type { EngineView, QuickCalculator } from '@pitwall/engine';
 import { classifyLap } from '../lap-classes/index.ts';
 import { PER_LAP_RATE_CONFIG, perLapRate, type RateSample } from '../per-lap-rate/index.ts';
 import { SESSION_REMAINING, type SessionRemaining } from '../session-remaining/index.ts';
+import { currentStintLaps } from '../shared/stint-laps.ts';
 import { FUEL, type FuelOutput, type FuelState } from './index.ts';
 
-type View = EngineView['state'];
-
-/** The first lap of the car's current stint (its stint with the highest `firstLap`). */
-const currentStintStart = (stints: View['history']['stints'], id: number): number =>
-  stints.reduce((first, s) => (s.carId === id && s.firstLap > first ? s.firstLap : first), -Infinity);
-
 /** Fuel levels at the end of the car's counted laps of the current stint, by lap. */
-const levelSamples = (view: EngineView, id: number, isRace: boolean): RateSample[] => {
-  const start = currentStintStart(view.state.history.stints, id);
-  const samples: RateSample[] = [];
-  for (const l of view.state.history.laps) {
-    if (l.carId !== id || l.lapNumber < start || !classifyLap(l, { isRace }).forRate || !l.fuelAtEndKg.known) continue;
-    samples.push({ lap: l.lapNumber, value: l.fuelAtEndKg.value, at: l.completedAt });
-  }
-  return samples.sort((a, b) => a.lap - b.lap);
-};
+const levelSamples = (view: EngineView, id: CarId, isRace: boolean): RateSample[] =>
+  currentStintLaps(view.state.history, id).flatMap((l) =>
+    classifyLap(l, { isRace }).forRate && l.fuelAtEndKg.known ? [{ lap: l.lapNumber, value: l.fuelAtEndKg.value, at: l.completedAt }] : [],
+  );
 
-const fuelState = (view: EngineView, id: number, lapsLeft: Known<number>): FuelState => {
+const fuelState = (view: EngineView, id: CarId, lapsLeft: Known<number>): FuelState => {
   const { state } = view;
   const car = state.cars[id];
   const fuel = car?.energy.fuel;

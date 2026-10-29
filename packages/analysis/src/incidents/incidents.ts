@@ -1,6 +1,7 @@
 // `incidents` maths (spec 6.4): each car's mini-sector track, the losses against its median, and positions and gaps
 // at a past moment, all from the crossings alone (engine convention: segment 0 of lap L is the line at its start).
 import { MINI_SECTORS, type CarId, type MiniSectorCrossing, type Ms, type SessionTime } from '@pitwall/domain';
+import { gapBehind, progressOf, type CarCrossings } from '../gaps/gaps.ts';
 
 /** The median of a segment is taken over the car's last this many laps that have it... */
 export const MEDIAN_LAPS = 5;
@@ -10,7 +11,7 @@ export const MEDIAN_MIN_LAPS = 3;
 /** A stretch of session time that is no racing for a car: a neutralised phase (an open one ends at `Infinity`) or a pit visit. */
 export type Span = { start: SessionTime; end: SessionTime };
 
-/** A crossing; "progress" counts mini-sector boundaries from the race start: `(lap - 1) * 50 + segment`. */
+/** A crossing; "progress" counts mini-sector boundaries from the race start (gaps' `progressOf`). */
 export type Point = { at: SessionTime; progress: number };
 
 /** One mini-sector against the car's median for its segment: `lossMs` negative = faster. */
@@ -40,7 +41,6 @@ export type SlowRun = { carId: CarId; at: SessionTime; endAt: SessionTime; start
 /** Every car's latest crossing at one moment and the positions it gives, indexed by car id. */
 export type Snapshot = { latest: (Point | undefined)[]; position: (number | undefined)[]; count: number };
 
-export const progressOf = (lap: number, segment: number): number => (lap - 1) * MINI_SECTORS + segment;
 export const lapOfProgress = (progress: number): number => Math.floor(progress / MINI_SECTORS) + 1;
 
 export const emptyTrack = (): Track => ({ points: [], atByProgress: [], evaluated: 0, samples: [], loss: [], slow: [] });
@@ -54,7 +54,7 @@ export function resetTrack(track: Track): void {
 }
 
 export function addCrossing(track: Track, c: MiniSectorCrossing): void {
-  const progress = progressOf(c.lap, c.segment);
+  const progress = progressOf(c);
   track.points.push({ at: c.at, progress });
   track.atByProgress[progress] = c.at;
 }
@@ -159,20 +159,26 @@ export function snapshotAt(tracks: readonly (Track | undefined)[], t: SessionTim
 /** The car's position in the snapshot; a car without a crossing yet ranks after every car with one. */
 export const positionIn = (snap: Snapshot, id: CarId): number => snap.position[id] ?? snap.count + 1;
 
+/** The track's crossings from progress `from` up to its point in the snapshot, in the shape `gaps` reads. */
+const crossingsUpTo = (track: Track, from: number, point: Point): CarCrossings => ({
+  fromProgress: from,
+  at: track.atByProgress.slice(from, point.progress + 1),
+});
+
 /**
- * The gap of car `a` behind car `b` in the snapshot (negative = `a` is ahead): at the latest point both have passed,
- * the difference of their crossing times. `undefined` when one has no crossing or the shared point is missing.
+ * The gap of car `a` behind car `b` in the snapshot (negative = `a` is ahead): gaps' `gapBehind` over the crossings
+ * up to the snapshot. `undefined` when one has no crossing or the shared point is missing.
  */
 export function gapIn(tracks: readonly (Track | undefined)[], snap: Snapshot, a: CarId, b: CarId): Ms | undefined {
   const pa = snap.latest[a];
   const pb = snap.latest[b];
-  if (pa === undefined || pb === undefined) return undefined;
-  if (pb.progress >= pa.progress) {
-    const tb = tracks[b]?.atByProgress[pa.progress];
-    return tb === undefined ? undefined : pa.at - tb;
-  }
-  const ta = tracks[a]?.atByProgress[pb.progress];
-  return ta === undefined ? undefined : -(pb.at - ta);
+  const ta = tracks[a];
+  const tb = tracks[b];
+  if (pa === undefined || pb === undefined || ta === undefined || tb === undefined) return undefined;
+  // the last point both passed is the nearer one: only the crossings from there on are needed
+  const from = Math.min(pa.progress, pb.progress);
+  const gap = gapBehind(crossingsUpTo(ta, from, pa), crossingsUpTo(tb, from, pb));
+  return gap.known ? gap.value : undefined;
 }
 
 /** Whether `other` is in the neighbourhood of `ours` in the snapshot: one position away or within `neighbourhoodMs`. */

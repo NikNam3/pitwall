@@ -213,6 +213,16 @@ describe("race-moment calculator", () => {
       expect(v.moment).toBe("carCare");
     });
 
+    it("weather reads only the forecast of this session: rain forecast for another session type is ignored", () => {
+      // the session is a race (sessionType 15); the game also sends the forecast of other sessions of the weekend
+      const otherSession = { ...rain(5, 100), sessionType: 13 } as ForecastSample;
+      expect(value(run({ forecast: [otherSession] })).moment).toBe("carCare");
+      expect(value(run({ forecast: [otherSession, rain(10, CFG.weatherRainPct)] })).cause.params).toEqual({
+        rainPct: CFG.weatherRainPct,
+        offsetMin: 10,
+      });
+    });
+
     it("battle by laps to DRS range at or below battleLaps", () => {
       const v = value(
         run({

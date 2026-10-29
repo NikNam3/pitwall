@@ -3,8 +3,9 @@ import type { BandReading, CarBands, CarId, DamageState, FuelState, Insight, Ins
 import type { EngineView, QuickCalculator } from '@pitwall/engine';
 import { CAR_BANDS } from '../car-bands/index.ts';
 import { DAMAGE } from '../damage/index.ts';
-import { ERS } from '../ers/index.ts';
 import { FUEL } from '../fuel/index.ts';
+import { ourCars } from '../shared/our-cars.ts';
+import { penaltyClass } from '../shared/penalties.ts';
 import { TYRE_WEAR } from '../tyre-wear/index.ts';
 import { ALARMS, ALARMS_CONFIG, type AlarmsOutput } from './index.ts';
 
@@ -54,18 +55,22 @@ const damageAlarms = (damage: DamageState, lap: number, make: Make): Insight[] =
     .filter((j) => j.lap === lap)
     .map((j) => make('damageJump', 'critical', 'damage', String(j.at), { lap: j.lap, parts: j.parts.join(','), deltaPct: j.deltaPct }));
 
+/**
+ * One corner-cutting warning left before a penalty. The game's count runs on after a penalty, so this assumes a
+ * penalty every `warningsBeforePenalty` warnings (not verified against the game).
+ */
 const warningAlarms = (warnings: number, config: Config, make: Make): Insight[] =>
-  warnings > 0 && warnings === config.warningsBeforePenalty - 1
+  config.warningsBeforePenalty > 1 && warnings > 0 && warnings % config.warningsBeforePenalty === config.warningsBeforePenalty - 1
     ? [make('warningLast', 'advisory', 'race', 'warnings', { warnings, before: config.warningsBeforePenalty })]
     : [];
 
-/** Penalties of the car after its latest completed lap; they resolve when it completes the next one. */
+/** Real penalties (not warnings, reminders or lap invalidations) of the car after its latest completed lap; they resolve when it completes the next one. */
 const penaltyAlarms = (view: EngineView, id: CarId, make: Make): Insight[] => {
   const { laps, events } = view.state.history;
   let lastLapAt = -Infinity;
   for (const l of laps) if (l.carId === id && l.completedAt > lastLapAt) lastLapAt = l.completedAt;
   return events
-    .filter((e) => e.kind === 'penalty' && e.carId === id && e.at > lastLapAt)
+    .filter((e) => e.kind === 'penalty' && e.carId === id && e.at > lastLapAt && penaltyClass(e.params['penaltyType']) === 'penalty')
     .map((e) => make('penaltyNew', 'critical', 'race', String(e.at), e.params as Insight['params']));
 };
 
@@ -104,7 +109,6 @@ export const alarmsCalculator: QuickCalculator<AlarmsOutput> = {
   reads: [
     { calculator: TYRE_WEAR },
     { calculator: FUEL },
-    { calculator: ERS },
     { calculator: CAR_BANDS },
     { calculator: DAMAGE },
     'timing',
@@ -114,9 +118,7 @@ export const alarmsCalculator: QuickCalculator<AlarmsOutput> = {
   cadence: { hz: 2 },
   compute(view) {
     const config = ALARMS_CONFIG.read(view);
-    const { playerCar, teammateCar } = view.state;
-    const ours = teammateCar === undefined || teammateCar === playerCar ? [playerCar] : [playerCar, teammateCar];
-    return ours.flatMap((id) => alarmsOf(view, id, config));
+    return ourCars(view.state).flatMap((id) => alarmsOf(view, id, config));
   },
   insights: (out) => out,
 };

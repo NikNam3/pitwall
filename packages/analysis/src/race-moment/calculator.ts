@@ -1,8 +1,19 @@
 // `race-moment` (spec 7): the one moment the race is in, from the neutralisation, the incidents, the forecast, our battles and our alarms.
 // Stateless; race only.
-import { known, unknown, type BattleCard, type BattleSide, type CarId, type Insight, type Known, type Moment, type RaceMoment, type SessionTime } from '@pitwall/domain';
+import {
+  known,
+  unknown,
+  type BattleCard,
+  type BattleSide,
+  type CarId,
+  type IncidentEntry,
+  type Insight,
+  type Known,
+  type Moment,
+  type RaceMoment,
+  type SessionTime,
+} from '@pitwall/domain';
 import type { QuickCalculator } from '@pitwall/engine';
-import type { IncidentEntry } from '@pitwall/domain';
 import { ALARMS } from '../alarms/index.ts';
 import { BATTLE, BATTLE_CONFIG, type BattleOutput } from '../battle/index.ts';
 import { INCIDENTS } from '../incidents/index.ts';
@@ -53,13 +64,18 @@ export const raceMomentCalculator: QuickCalculator<RaceMomentOutput> = {
       holding.push(['incident', { since: known(newest.at as SessionTime, now), cause: { rule: 'majorIncident', params: { kind: newest.kind, ageMs: now - newest.at } } }]);
     }
 
-    const rainy = session.forecast.find((s) => s.offsetMin >= 0 && s.offsetMin <= cfg.weatherHorizonMin && s.rainPct >= cfg.weatherRainPct);
+    // the game sends the forecast of every session of the weekend: only this session's samples count
+    const rainy = session.forecast.find(
+      (s) => s.sessionType === session.sessionType && s.offsetMin >= 0 && s.offsetMin <= cfg.weatherHorizonMin && s.rainPct >= cfg.weatherRainPct,
+    );
     if (rainy !== undefined) {
       holding.push(['weather', { since: NOT_APPLICABLE, cause: { rule: 'forecastRain', params: { rainPct: rainy.rainPct, offsetMin: rainy.offsetMin } } }]);
     }
 
     const { drsRangeMs } = BATTLE_CONFIG.read(view);
     const sides = [...sidesOf((view.outputs.get(BATTLE) as BattleOutput | undefined) ?? {})];
+    // laps to DRS first: battle gives 0 for a gap already in range and counts a closing one down; the gap alone is
+    // the fallback for a side whose laps to DRS are unknown
     const byLaps = sides.find((s) => (valueOf(s.value.lapsToDrs) ?? Infinity) <= cfg.battleLaps);
     const byGap = sides.find((s) => (valueOf(s.value.gapMs) ?? Infinity) <= drsRangeMs);
     const fight = byLaps ?? byGap;

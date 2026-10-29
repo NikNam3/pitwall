@@ -5,6 +5,7 @@ import { PER_LAP_RATE_CONFIG } from '../../src/per-lap-rate/index.ts';
 import { ERS, ERS_CONFIG } from '../../src/ers/index.ts';
 import { ersCalculator } from '../../src/ers/calculator.ts';
 import { carState, engineView, lap, realismHidden } from '../../../../test-support/builders/index.ts';
+import { engineShaped } from '../engine-shaped.ts';
 
 const MJ = 1_000_000;
 
@@ -43,7 +44,7 @@ describe('ers calculator', () => {
     expect(ersCalculator.id).toBe(ERS);
     expect(ersCalculator.kind).toBe('quick');
     expect(ersCalculator.cadence).toEqual({ hz: 4 });
-    expect(ersCalculator.reads).toEqual(expect.arrayContaining(['laps', 'energy']));
+    expect(ersCalculator.reads).toEqual(expect.arrayContaining(['laps', 'stints', 'energy', 'session']));
   });
 
   it('store 4.0, 3.6, 3.2 MJ at lap ends: trend -0.4 MJ/lap', () => {
@@ -203,6 +204,24 @@ describe('ers calculator', () => {
     const stints = [stint({ firstLap: 1, lastLap: 3 }), stint({ firstLap: 4, lastLap: 7 })];
     const t = run(viewOf(history, { storeMJ: 2.2 }, stints)).storeTrendJPerLap;
     expect(t.known && t.value).toBeCloseTo(0.4 * MJ, 3);
+  });
+
+  describe('on engine-shaped history: every lap provisional then confirmed, no record for the open stint', () => {
+    it('a new stint restarts the trend samples', () => {
+      const history = engineShaped([
+        ...laps([4, 3.6, 3.2]),
+        storedLap(4, 2.8, { inLap: true }),
+        storedLap(5, 4, { outLap: true }),
+        ...laps([1, 1.4, 1.8], 6),
+      ]);
+      const t = run(viewOf(history, { storeMJ: 1.8 }, [stint({ firstLap: 1, lastLap: 4 })])).storeTrendJPerLap;
+      expect(t.known && t.value).toBeCloseTo(0.4 * MJ, 3);
+    });
+
+    it('a lap counts once: two laps, each written twice, are below minSamples (3)', () => {
+      const out = run(viewOf(engineShaped(laps([1.2, 1.6])), { storeMJ: 1.6 }));
+      expect(out.storeTrendJPerLap).toEqual({ known: false, reason: 'insufficientData' });
+    });
   });
 
   it('without a stint record the history counts as one stint', () => {

@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { carState, engineView, event, lap, realismHidden } from '../../../../test-support/builders/index.ts';
 import { damageCalculator } from '../../src/damage/calculator.ts';
 import { DAMAGE } from '../../src/damage/index.ts';
+import { engineShaped } from '../engine-shaped.ts';
 
 const car0 = carId(0);
 const car1 = carId(1);
@@ -114,6 +115,12 @@ describe('damage calculator', () => {
       expect(loss).toEqual(known(1000, seven[6]!.completedAt));
     });
 
+    it('engine-shaped: a lap written provisional then confirmed counts once, so one pace lap after the jump is not enough', () => {
+      expect(run(jump, engineShaped(lapsOf(6, timeOf))).jumps[0]!.lossMsPerLap).toEqual(unknown('insufficientData'));
+      const seven = lapsOf(7, timeOf);
+      expect(run(jump, engineShaped(seven, { lapTimeMs: 80_000 })).jumps[0]!.lossMsPerLap).toEqual(known(1000, seven[6]!.completedAt));
+    });
+
     it('uses only pace laps: an in-lap after the jump is skipped', () => {
       const laps = lapsOf(8, timeOf).map((l) => (l.lapNumber === 6 ? { ...l, inLap: true, lapTimeMs: 150_000 } : l));
       const loss = run(jump, laps).jumps[0]!.lossMsPerLap;
@@ -154,19 +161,19 @@ describe('damage calculator', () => {
   });
 
   describe('state now', () => {
-    it('parts: the eight damage percentages from bodywork and power unit, known at the session time', () => {
+    it('parts: the eight damage percentages from bodywork and power unit, known as of the later of the two readings', () => {
       const car = carState({
         id: car0,
         condition: {
-          bodywork: known({ frontLeftWingPct: 1, frontRightWingPct: 2, rearWingPct: 3, floorPct: 4, diffuserPct: 5, sidepodPct: 6 }, 0),
-          powerUnit: known({ engineDamagePct: 8, gearboxDamagePct: 7, mguhWearPct: 0, esWearPct: 0, ceWearPct: 0, iceWearPct: 0, mgukWearPct: 0, tcWearPct: 0 }, 0),
+          bodywork: known({ frontLeftWingPct: 1, frontRightWingPct: 2, rearWingPct: 3, floorPct: 4, diffuserPct: 5, sidepodPct: 6 }, 4200),
+          powerUnit: known({ engineDamagePct: 8, gearboxDamagePct: 7, mguhWearPct: 0, esWearPct: 0, ceWearPct: 0, iceWearPct: 0, mgukWearPct: 0, tcWearPct: 0 }, 4100),
         },
       });
       const out = damageCalculator.output(damageCalculator.init(engineView({ cars: [car], sessionTime: 5000 })))[car0]!;
       expect(out.parts).toEqual(
         known(
           { frontLeftWingPct: 1, frontRightWingPct: 2, rearWingPct: 3, floorPct: 4, diffuserPct: 5, sidepodPct: 6, gearboxPct: 7, enginePct: 8 },
-          5000,
+          4200,
         ),
       );
     });

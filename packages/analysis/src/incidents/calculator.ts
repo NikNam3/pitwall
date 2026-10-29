@@ -19,9 +19,10 @@ import {
 import type { EngineView, IncrementalCalculator } from '@pitwall/engine';
 import { DAMAGE, type DamageOutput } from '../damage/index.ts';
 import { GAPS_CONFIG } from '../gaps/index.ts';
-import { classifyLap } from '../lap-classes/index.ts';
 import { PACE_CONFIG } from '../pace/index.ts';
-import { paceDelta } from '../pace-delta/index.ts';
+import { paceDeltaAround } from '../pace-delta/index.ts';
+import { ourCars } from '../shared/our-cars.ts';
+import { penaltyClass } from '../shared/penalties.ts';
 import {
   addCrossing,
   emptyTrack,
@@ -45,9 +46,6 @@ import { INCIDENTS, INCIDENTS_CONFIG, type IncidentsOutput } from './index.ts';
 const AFTER_MS = 5_000;
 /** A time loss this close to a collision or damage jump of the same car is part of that entry. */
 const MERGE_MS = 5_000;
-/** F1 25 `penaltyType` codes (data-output spec, "Penalty types"): 5 is a warning; these are penalties; the rest are no entry. */
-const WARNING_TYPE = 5;
-const PENALTY_TYPES: ReadonlySet<number> = new Set([0, 1, 2, 4, 6, 9]);
 
 type Config = ReturnType<typeof INCIDENTS_CONFIG.read>;
 
@@ -102,8 +100,7 @@ const readLive = (acc: Acc, view: EngineView): void => {
   acc.config = INCIDENTS_CONFIG.read(view);
   acc.neighbourhoodMs = GAPS_CONFIG.read(view).neighbourhoodMs;
   acc.window = PACE_CONFIG.read(view).window;
-  const { playerCar, teammateCar } = state;
-  acc.ours = teammateCar === undefined || teammateCar === playerCar ? [playerCar] : [playerCar, teammateCar];
+  acc.ours = ourCars(state);
   const phase = view.activeFlagPhase;
   acc.active = phase && { at: phase.start, lap: phase.startLeaderLap };
   acc.pitting = new Set(state.cars.filter((c) => c.timing.pitStatus !== 'none').map((c) => c.id));
@@ -150,9 +147,8 @@ const foldEvents = (acc: Acc, view: EngineView): void => {
     const carIds = e.otherCarId === undefined ? [e.carId] : [e.carId, e.otherCarId];
     if (e.kind === 'collision' || e.kind === 'retirement') acc.carEvents.push({ kind: e.kind, at: e.at, carIds });
     else if (e.kind === 'penalty') {
-      const type = e.params['penaltyType'];
-      const kind = type === WARNING_TYPE ? 'warning' : typeof type === 'number' && PENALTY_TYPES.has(type) ? 'penalty' : undefined;
-      if (kind !== undefined) acc.carEvents.push({ kind, at: e.at, carIds: [e.carId] });
+      const kind = penaltyClass(e.params['penaltyType']);
+      if (kind !== 'none') acc.carEvents.push({ kind, at: e.at, carIds: [e.carId] });
     }
   }
   acc.events = events.length;
@@ -272,15 +268,7 @@ const segmentLoss = (acc: Acc, id: CarId, t: SessionTime): Known<Ms> => {
 };
 
 /** `pace-delta` over the car's pace laps around `lap` (the lap itself excluded). */
-const paceAround = (acc: Acc, id: CarId, lap: number): Known<Ms> => {
-  const pace = Object.values(acc.current[id] ?? {})
-    .filter((l) => classifyLap(l, acc).forPace)
-    .sort((a, b) => a.lapNumber - b.lapNumber);
-  const before = pace.filter((l) => l.lapNumber < lap).slice(-acc.window);
-  const after = pace.filter((l) => l.lapNumber > lap).slice(0, acc.window);
-  const last = after[after.length - 1];
-  return last === undefined ? unknown('insufficientData') : paceDelta(before.map((l) => l.lapTimeMs), after.map((l) => l.lapTimeMs), last.completedAt);
-};
+const paceAround = (acc: Acc, id: CarId, lap: number): Known<Ms> => paceDeltaAround(Object.values(acc.current[id] ?? {}), lap, acc);
 
 /** Kinds with no time lost: the car is out, the field is neutralised, or the entry is a ruling, not a loss. */
 const NO_TIME_LOST: ReadonlySet<IncidentKind> = new Set(['retirement', 'neutralised', 'warning', 'penalty']);

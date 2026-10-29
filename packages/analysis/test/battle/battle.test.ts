@@ -24,8 +24,6 @@ type Scene = {
   lineTimes: Record<number, Line>;
   /** The cars in the order of `gaps.intervals` (retired and disqualified cars are already left out there). */
   order?: number[];
-  /** The latest crossings; the gap now does not depend on them. */
-  latest?: Record<number, { lap: number; segment: number; at: number }>;
   pace?: Record<number, Known<Ms>>;
   kind?: 'race' | 'practice';
   teammate?: number;
@@ -53,7 +51,6 @@ const build = (s: Scene): EngineView => {
   const gaps: GapsOutput = {
     intervals: (s.order ?? [1, 0, 3]).map(interval),
     lineTimes: Object.fromEntries(Object.entries(s.lineTimes).map(([k, v]) => [k, v])) as GapsOutput['lineTimes'],
-    latest: (s.latest ?? {}) as GapsOutput['latest'],
     recent: {},
     neighbourhood: [],
     raceStartAt: known(0, 0),
@@ -109,22 +106,6 @@ describe('battle', () => {
     expect(ahead.value.lapsToDrs).toEqual({ known: true, value: 1.5, at: 301_600 });
   });
 
-  it('the gap now comes from intervals even when the latest crossings are at different segments', () => {
-    const view = build(
-      base({
-        latest: {
-          1: { lap: 4, segment: 7, at: 309_000 },
-          0: { lap: 4, segment: 10, at: 311_600 },
-          3: { lap: 4, segment: 2, at: 305_000 },
-        },
-      }),
-    );
-    const c = card(view);
-    if (!c.ahead.known || !c.behind.known) throw new Error('ahead or behind unknown');
-    expect(c.ahead.value.gapMs).toEqual({ known: true, value: 1600, at: 311_600 });
-    expect(c.behind.value.gapMs).toEqual({ known: true, value: 2200, at: 313_800 });
-  });
-
   it('an unknown interval gap stays unknown with its reason', () => {
     const view = build(base());
     const gaps = view.outputs.get('gaps') as GapsOutput;
@@ -153,6 +134,19 @@ describe('battle', () => {
     if (!ahead.known) throw new Error('ahead unknown');
     expect(ahead.value.closingMsPerLap).toMatchObject({ known: true, value: -400 });
     expect(ahead.value.lapsToDrs).toMatchObject({ known: false, reason: 'notApplicable' });
+  });
+
+  it('a gap inside DRS range is 0 laps to DRS as of the gap, even without a closing rate', () => {
+    const view = build(base({ config: { [BATTLE_CONFIG.key]: { drsRangeMs: 1600 } } }));
+    const ahead = card(view).ahead;
+    if (!ahead.known) throw new Error('ahead unknown');
+    expect(ahead.value.lapsToDrs).toEqual({ known: true, value: 0, at: 311_600 });
+    const two = (l: Line): Line => l.slice(0, 2);
+    const t = base().lineTimes;
+    const few = card(build(base({ lineTimes: { 0: two(t[0]!), 1: two(t[1]!), 3: two(t[3]!) }, config: { [BATTLE_CONFIG.key]: { drsRangeMs: 1600 } } }))).ahead;
+    if (!few.known) throw new Error('ahead unknown');
+    expect(few.value.closingMsPerLap).toMatchObject({ known: false, reason: 'insufficientData' });
+    expect(few.value.lapsToDrs).toEqual({ known: true, value: 0, at: 311_600 });
   });
 
   it('fewer than the rate window needs: closing and lapsToDrs insufficientData', () => {

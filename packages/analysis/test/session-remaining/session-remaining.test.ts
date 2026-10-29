@@ -46,6 +46,11 @@ describe('session-remaining', () => {
     expect(out.timeLeftMs).toMatchObject({ known: false, reason: 'notApplicable' });
   });
 
+  it('a race without a lap count yet (totalLaps 0) has lapsLeft notReceived, not 0', () => {
+    const view = engineView({ cars: [leader(3, 1000)], session: { kind: 'race', totalLaps: 0, trackLengthM: 5000 } });
+    expect(sessionRemainingCalculator.compute(view).lapsLeft).toEqual({ known: false, reason: 'notReceived' });
+  });
+
   it('after the chequered flag lapsLeft is 0', () => {
     const view = engineView({
       cars: [leader(50, 4900, 'finished')],

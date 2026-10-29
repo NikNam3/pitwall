@@ -1,7 +1,7 @@
 import { known, unknown, type Known, type SessionTime } from '@pitwall/domain';
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
-import { lapsUntil, perLapRate, type Rate } from '../../src/per-lap-rate/index.ts';
+import { lapsToReach, lapsUntil, perLapRate, type Rate } from '../../src/per-lap-rate/index.ts';
 
 const OPTS = { window: 5, minSamples: 3 };
 const AT = 777 as SessionTime;
@@ -98,5 +98,30 @@ describe('lapsUntil', () => {
 
   it('passes an unknown rate through', () => {
     expect(lapsUntil(unknown('insufficientData'), 60, 40)).toEqual(unknown('insufficientData'));
+  });
+});
+
+describe('lapsToReach', () => {
+  const rate = (perLap: number) => known({ perLap, samples: 3 }, AT);
+  const reading = (value: number) => ({ value, at: 555 as SessionTime });
+
+  it('below a target it rises to: lapsUntil', () => {
+    expect(lapsToReach(rate(2), reading(60), 70, 'rising')).toEqual(lapsUntil(rate(2), 60, 70));
+  });
+
+  it('at or above a target it rises to: 0 as of the reading, whatever the rate', () => {
+    expect(lapsToReach(rate(2), reading(70), 70, 'rising')).toEqual(known(0, 555));
+    expect(lapsToReach(rate(-1), reading(76), 70, 'rising')).toEqual(known(0, 555));
+    expect(lapsToReach(unknown('insufficientData'), reading(76), 70, 'rising')).toEqual(known(0, 555));
+  });
+
+  it('at or below a target it falls to: 0 as of the reading; above it: lapsUntil', () => {
+    expect(lapsToReach(unknown('insufficientData'), reading(900), 1000, 'falling')).toEqual(known(0, 555));
+    expect(lapsToReach(rate(-400), reading(1000), 1000, 'falling')).toEqual(known(0, 555));
+    expect(lapsToReach(rate(-400), reading(1600), 1000, 'falling')).toEqual(lapsUntil(rate(-400), 1600, 1000));
+  });
+
+  it('not yet there: an unknown rate passes through', () => {
+    expect(lapsToReach(unknown('insufficientData'), reading(60), 70, 'rising')).toEqual(unknown('insufficientData'));
   });
 });

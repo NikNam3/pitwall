@@ -109,6 +109,24 @@ describe('car-bands calculator', () => {
     expect(bandsOf(car, []).tyres.fl.surfaceC.outForFullLap).toBe(false);
   });
 
+  it('an SC, VSC, in or out lap is no full-lap evidence: outForFullLap stays false', () => {
+    const car = withSurface(95);
+    const cold = rangeOf({ tyres: surfaceRange(60, 80) });
+    for (const over of [{ scShare: 1 }, { vscShare: 0.5 }, { inLap: true }, { outLap: true }]) {
+      expect(bandsOf(car, [lap({ lapNumber: 4, channelRange: cold, ...over })]).tyres.fl.surfaceC.outForFullLap).toBe(false);
+    }
+  });
+
+  it('outForFullLap judges the lap against the band of the compound it was driven on, not the one fitted now', () => {
+    // the last lap on inters at 65-80 °C (inside the inter band 60-90); now on softs (dry band 85-105)
+    const car = withSurface(95);
+    const onInters = lap({ lapNumber: 4, visualCompound: 'inter', actualCompound: 'inter', channelRange: rangeOf({ tyres: surfaceRange(65, 80) }) });
+    const b = bandsOf(car, [onInters]).tyres.fl.surfaceC;
+    expect(b.outForFullLap).toBe(false);
+    // the live reading and its band stay those of the fitted compound
+    expect(b.band).toEqual({ lo: 85, hi: 105 });
+  });
+
   it('outForFullLap covers brakes and engine, and an unknown range is not out', () => {
     const car = carState();
     const hotBrakes = lap({

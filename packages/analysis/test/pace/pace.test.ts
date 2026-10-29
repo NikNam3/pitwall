@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { PACE, PACE_CONFIG } from '../../src/pace/index.ts';
 import { paceCalculator } from '../../src/pace/calculator.ts';
 import { engineView, field, lap } from '../../../../test-support/builders/index.ts';
+import { engineShaped } from '../engine-shaped.ts';
 
 const stint = (over: Partial<StintRecord> & Pick<StintRecord, 'firstLap' | 'lastLap'>): StintRecord => ({
   carId: carId(0),
@@ -59,7 +60,8 @@ describe('pace calculator', () => {
 
   it('stint mean resets at a new stint', () => {
     const laps = [2, 3, 4, 5, 6, 7].map((n) => timed(n, n < 5 ? 90_000 : 96_000 + (n - 5) * 1_000));
-    const stints = [stint({ firstLap: 1, lastLap: 4 }), stint({ firstLap: 5, lastLap: 7 })];
+    // the engine writes a record when a stint closes: stint 1 has one, the open stint (lap 5 on) none
+    const stints = [stint({ firstLap: 1, lastLap: 4 })];
     const car = run(raceView(laps, stints)).byCar[carId(0)]!;
     // current stint: laps 5, 6, 7 = 96, 97, 98 s
     expect(car.stintMs).toEqual({ known: true, value: 97_000, at: laps[5]!.completedAt });
@@ -68,9 +70,35 @@ describe('pace calculator', () => {
 
   it('the stint mean spans the whole stint, not only the window', () => {
     const laps = [2, 3, 4, 5].map((n) => timed(n, 90_000 + (n - 2) * 2_000)); // 90, 92, 94, 96
-    const car = run(raceView(laps, [stint({ firstLap: 1, lastLap: 5 })])).byCar[carId(0)]!;
+    const car = run(raceView(laps)).byCar[carId(0)]!;
     expect(car.stintMs).toMatchObject({ known: true, value: 93_000 });
     expect(car.recentMs).toMatchObject({ known: true, value: 94_000 });
+  });
+
+  it('a stint record that ends on the newest lap (the session ended) is the current stint', () => {
+    const laps = [2, 3, 4, 5, 6].map((n) => timed(n, n < 4 ? 90_000 : 96_000));
+    const stints = [stint({ firstLap: 1, lastLap: 3 }), stint({ firstLap: 4, lastLap: 6 })];
+    expect(run(raceView(laps, stints)).byCar[carId(0)]!.stintMs).toMatchObject({ known: true, value: 96_000 });
+  });
+
+  it('engine-shaped: closed stint 1, the open stint 2 without a record, every lap provisional then confirmed', () => {
+    // stint 1: laps 2-4 at 90 s (lap 4 the in lap); stint 2 from lap 5 (the out lap), then 96, 97, 98 s
+    const laps = engineShaped(
+      [
+        timed(2, 90_000),
+        timed(3, 90_000),
+        timed(4, 110_000, { inLap: true }),
+        timed(5, 115_000, { outLap: true }),
+        timed(6, 96_000),
+        timed(7, 97_000),
+        timed(8, 98_000),
+      ],
+      { lapTimeMs: 80_000 },
+    );
+    const car = run(raceView(laps, [stint({ firstLap: 1, lastLap: 4 })])).byCar[carId(0)]!;
+    expect(car.stintMs).toMatchObject({ known: true, value: 97_000 });
+    expect(car.recentMs).toMatchObject({ known: true, value: 97_000 });
+    expect(car.samples).toBe(3);
   });
 
   it('without a stint record the history counts as one stint', () => {
