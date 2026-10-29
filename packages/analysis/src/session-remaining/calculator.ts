@@ -17,7 +17,7 @@ export const sessionRemainingCalculator: QuickCalculator<SessionRemaining> = {
       case 'race': {
         const leader = state.cars.find((c) => c.timing.position === 1);
         let lapsLeft: Known<number>;
-        if (!leader || session.trackLengthM <= 0) lapsLeft = unknown('notReceived');
+        if (!leader || session.trackLengthM <= 0 || session.totalLaps <= 0) lapsLeft = unknown('notReceived');
         else if (leader.timing.resultStatus === 'finished') lapsLeft = known(0, at);
         else {
           const done = leader.timing.lap - 1 + leader.timing.lapDistanceM / session.trackLengthM;
