@@ -8,7 +8,7 @@
   import Value from '../../kit/values/Value.svelte';
   import { unknownReason } from '../../kit/text.ts';
   import { positionMarkText } from '../../kit/values/position-mark.ts';
-  import { formatCount, formatDeltaMs, formatLapNumber, formatLapsDown, formatLapTime, formatPenaltyMs, formatPlace, formatSector, formatWarnings } from '../../kit/values/format.ts';
+  import { formatCount, formatDeltaMs, formatGap, formatLapNumber, formatLapsDown, formatLapTime, formatPenaltyMs, formatPlace, formatSector, formatWarnings } from '../../kit/values/format.ts';
   import { sectorStatusRole } from '../../emphasis/index.ts';
   import { roleOrUndefined } from '../../theme/index.ts';
   import type { Role } from '../../theme/roles.ts';
@@ -41,7 +41,7 @@
 {/snippet}
 {#snippet change(r: TowerRow)}{r.change === undefined ? '' : positionMarkText({ change: r.change })}{/snippet}
 {#snippet car(r: TowerRow)}<CarLabel identity={r.overview.identity} ours={r.ours} />{/snippet}
-{#snippet gap(r: TowerRow)}{#if r.retired}{text.dnf}{:else if r.lapsDown > 0}{formatLapsDown(r.lapsDown)}{:else}<Value value={r.gapToLeader} format={formatDeltaMs} />{/if}{/snippet}
+{#snippet gap(r: TowerRow)}{#if r.retired}{text.dnf}{:else if r.lapsDown > 0}{formatLapsDown(r.lapsDown)}{:else}<Value value={r.gapToLeader} format={formatGap} />{/if}{/snippet}
 {#snippet interval(r: TowerRow)}{#if r.retired}{formatLapNumber(r.retiredAtLap ?? NaN)}{:else if r.lapsDown === 0}<Value value={r.interval} format={formatDeltaMs} />{/if}{/snippet}
 {#snippet toUs(r: TowerRow)}{#if !r.retired}{@const c = gapToCarCell(r.toUs)}<span title={c.reason === undefined ? undefined : unknownReason[c.reason]}>{c.text}</span>{/if}{/snippet}
 {#snippet last(r: TowerRow)}<span style:color={colourOf(r.lastLapStatus, r.ours)}><Value value={r.lastLap} format={formatLapTime} /></span>{/snippet}

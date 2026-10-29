@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { carId, known, toSessionTime, unknown } from '@pitwall/domain';
 import type { IncidentEntry, IncidentForUs, Known, RaceMoment } from '@pitwall/domain';
 import type { CarOverview } from '@pitwall/contracts';
-import { columnsFor, incidentRowText, incidentRows } from './rows.ts';
+import { columnsFor, fitRow, incidentRowText, incidentRows } from './rows.ts';
 
 const k = <T>(v: T): Known<T> => known(v, 0);
 const overview = (id: number, name: string): CarOverview =>
@@ -132,5 +132,29 @@ describe('text layout', () => {
     expect(incidentRowText('full', a!)).toBe(' L23  OCO SAI  collision           lost 4.2 s  us P5→P4, OCO +4.1→DNF');
     expect(incidentRowText('full', b!).trimEnd()).toBe(' L14  KUH      damage');
     expect(incidentRowText('full', c!).trimEnd()).toBe(' L21  PIA      warning');
+  });
+});
+
+describe('fitRow', () => {
+  const long = entry({
+    carIds: [carId(4)],
+    forUs: [forUs({ otherCarId: k(carId(4)), positionBefore: k(12), positionAfter: k(14), gapBeforeMs: k(12_300), gapAfterMs: k(14_100) })],
+  });
+
+  it('cuts a last cell that does not fit the line with …, never silently', () => {
+    const [row] = incidentRows([long], cars, undefined);
+    const cells = fitRow('full', row!, 70);
+    const forUsCell = cells.find((c) => c.column === 'forUs')!;
+    expect(row!.cells.forUs.text).toBe('us P12→P14, ALB +12.3→+14.1');
+    expect(forUsCell.text).toBe('us P12→P14, ALB +12.3→…');
+    expect(incidentRowText('full', row!, 70)).toHaveLength(70);
+  });
+
+  it('keeps the fixed columns at their widths and gives an empty value its reason in words', () => {
+    const [row] = incidentRows([entry({ timeLostMs: unknown('insufficientData') })], cars, undefined);
+    const cells = fitRow('full', row!, 70);
+    expect(cells.map((c) => c.text.length).slice(0, 4)).toEqual([3, 7, 18, 10]);
+    expect(cells.find((c) => c.column === 'lost')?.title).toBe('too few laps or samples yet');
+    expect(cells.find((c) => c.column === 'lap')?.title).toBeUndefined();
   });
 });

@@ -2,9 +2,9 @@
 import type { CarOverview } from '@pitwall/contracts';
 import type { CarId, IncidentEntry, IncidentForUs, Known, RaceMoment, UnknownReason } from '@pitwall/domain';
 import { carCodeById } from '../../kit/car/car-label.ts';
-import { gridRow } from '../../kit/grid/grid.ts';
-import type { GridColumn } from '../../kit/grid/grid.ts';
-import { incidentKinds, separator } from '../../kit/text.ts';
+import { fitCell } from '../../kit/grid/grid.ts';
+import { incidentKinds, separator, unknownReason } from '../../kit/text.ts';
+import type { WidgetSize } from '../../kit/types.ts';
 import { formatLapNumber, formatSeconds, formatSignedSeconds } from '../../kit/values/format.ts';
 import { positionPairText } from '../../kit/values/position-mark.ts';
 import type { Role } from '../../theme/roles.ts';
@@ -80,14 +80,39 @@ export function incidentRows(feed: readonly IncidentEntry[], cars: readonly CarO
 }
 
 /** The columns a size mode shows. */
-export const columnsFor = (mode: string): IncidentColumn[] => (mode === 'full' ? ['lap', 'cars', 'what', 'lost', 'forUs'] : ['lap', 'cars', 'what']);
+export const columnsFor = (mode: WidgetSize['mode']): IncidentColumn[] =>
+  mode === 'full' ? ['lap', 'cars', 'what', 'lost', 'forUs'] : ['lap', 'cars', 'what'];
 
-/** Character widths of the grid; the last column is free. */
+/** Character widths of the grid; the last column shown takes the rest of the line. */
 export const widths: Record<IncidentColumn, number> = { lap: 3, cars: 7, what: 18, lost: 10, forUs: 0 };
 
-/** A row as one line of text on the fixed grid. */
-export function incidentRowText(mode: string, row: IncidentRow): string {
+/** Spaces between two columns, and the lead space before the first. */
+export const COLUMN_GAP = 2;
+export const LEAD = 1;
+
+/** One cell fitted to its field: the text and, for an empty value, the reason in words for the hover. */
+export type FittedCell = { column: IncidentColumn; text: string; title?: string };
+
+/**
+ * The row's cells on the fixed grid of a line `cols` characters wide: each column in its width, the last one in what
+ * is left of the line; a text that does not fit is cut with `…` (kit `fitCell`), never silently.
+ */
+export function fitRow(mode: WidgetSize['mode'], row: IncidentRow, cols: number): FittedCell[] {
   const columns = columnsFor(mode);
-  const grid: GridColumn[] = columns.map((c) => ({ width: c === 'forUs' ? row.cells.forUs.text.length : widths[c], align: 'left' }));
-  return ` ${gridRow(grid, columns.map((c) => row.cells[c].text), 2)}`.trimEnd();
+  const fixed = columns.slice(0, -1).reduce((sum, c) => sum + widths[c] + COLUMN_GAP, LEAD);
+  return columns.map((column, i) => {
+    const cell = row.cells[column];
+    const width = i === columns.length - 1 ? Math.max(0, cols - fixed) : widths[column];
+    const fitted = { column, text: fitCell(cell.text, width) };
+    return cell.reason === undefined ? fitted : { ...fitted, title: unknownReason[cell.reason] };
+  });
+}
+
+/** A row as one line of text on the fixed grid (`cols` wide; by default as wide as its last cell needs). */
+export function incidentRowText(mode: WidgetSize['mode'], row: IncidentRow, cols = Infinity): string {
+  const columns = columnsFor(mode);
+  const last = columns[columns.length - 1];
+  const needed = columns.slice(0, -1).reduce((sum, c) => sum + widths[c] + COLUMN_GAP, LEAD) + (last === undefined ? 0 : row.cells[last].text.length);
+  const cells = fitRow(mode, row, Math.min(cols, needed));
+  return `${' '.repeat(LEAD)}${cells.map((c) => c.text).join(' '.repeat(COLUMN_GAP))}`.trimEnd();
 }

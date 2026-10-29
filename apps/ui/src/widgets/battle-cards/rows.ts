@@ -78,5 +78,5 @@ export const battleHeader = (mode: WidgetSize['mode']): string =>
   gridRow(grid(mode), ['', ...columnsFor(mode).map((c) => text.header[c])]);
 
 /** A row as one line of fixed fields. */
-export const battleRowText = (mode: 'compact' | 'full', row: BattleRow): string =>
+export const battleRowText = (mode: WidgetSize['mode'], row: BattleRow): string =>
   gridRow(grid(mode), [row.label, ...columnsFor(mode).map((c) => row.cells[c].text)]);
