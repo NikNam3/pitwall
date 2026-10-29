@@ -223,7 +223,7 @@ describe('alarms calculator', () => {
     });
 
     it('a new penalty for our car: critical, race, penaltyNew with the event params', () => {
-      const penalty = event({ kind: 'penalty', carId: carId(0), at: 100_000, params: { penaltyType: 'timePenalty', infringementType: 'cornerCutting', timeMs: 5000, lap: 2 } });
+      const penalty = event({ kind: 'penalty', carId: carId(0), at: 100_000, params: { penaltyType: 4, infringementType: 7, timeMs: 5000, lap: 2 } });
       const [a, ...rest] = run(viewWith({}, { history: { laps: [lap({ lapNumber: 1 })], events: [penalty] } }));
       expect(rest).toEqual([]);
       expect(a).toMatchObject({
@@ -232,7 +232,7 @@ describe('alarms calculator', () => {
         category: 'race',
         carId: carId(0),
         key: 'penaltyNew:0:100000',
-        params: { penaltyType: 'timePenalty', infringementType: 'cornerCutting', timeMs: 5000, lap: 2 },
+        params: { penaltyType: 4, infringementType: 7, timeMs: 5000, lap: 2 },
       });
     });
   });
@@ -285,7 +285,7 @@ describe('alarms calculator', () => {
     });
 
     it('a penalty lasts until our car completes its next lap, then resolves; another car\'s lap does not end it', () => {
-      const penalty = event({ kind: 'penalty', carId: carId(0), at: 100_000, params: { lap: 2 } });
+      const penalty = event({ kind: 'penalty', carId: carId(0), at: 100_000, params: { penaltyType: 4, lap: 2 } });
       const hist = (laps: ReturnType<typeof lap>[]) => ({ laps, events: [penalty] });
       const before = [lap({ lapNumber: 1 })];
       expect(only(viewWith({}, { history: hist(before) }), 'penaltyNew')).toHaveLength(1);
@@ -294,14 +294,26 @@ describe('alarms calculator', () => {
     });
 
     it('a penalty before our first completed lap counts as new', () => {
-      const penalty = event({ kind: 'penalty', carId: carId(0), at: 1_000, params: { lap: 1 } });
+      const penalty = event({ kind: 'penalty', carId: carId(0), at: 1_000, params: { penaltyType: 0, lap: 1 } });
       expect(only(viewWith({}, { history: { events: [penalty] } }), 'penaltyNew')).toHaveLength(1);
+    });
+
+    it('a warning, a reminder, a lap invalidation or the black-flag timer is no penaltyNew; a real penalty is', () => {
+      // F1 25 penalty types: 5 warning, 3 reminder, 10-15 lap invalidated, 17 black-flag timer; 4 time penalty, 6 disqualified
+      for (const penaltyType of [3, 5, 10, 11, 12, 13, 14, 15, 17]) {
+        const e = event({ kind: 'penalty', carId: carId(0), at: 100_000, params: { penaltyType, infringementType: 7, lap: 2 } });
+        expect(only(viewWith({}, { history: { laps: [lap()], events: [e] } }), 'penaltyNew')).toEqual([]);
+      }
+      for (const penaltyType of [0, 1, 2, 4, 6, 9]) {
+        const e = event({ kind: 'penalty', carId: carId(0), at: 100_000, params: { penaltyType, infringementType: 7, lap: 2 } });
+        expect(only(viewWith({}, { history: { laps: [lap()], events: [e] } }), 'penaltyNew')).toHaveLength(1);
+      }
     });
 
     it('two penalties in one lap are two alarms with different keys', () => {
       const events = [
-        event({ kind: 'penalty', carId: carId(0), at: 100_000, params: { lap: 2 } }),
-        event({ kind: 'penalty', carId: carId(0), at: 120_000, params: { lap: 2 } }),
+        event({ kind: 'penalty', carId: carId(0), at: 100_000, params: { penaltyType: 4, lap: 2 } }),
+        event({ kind: 'penalty', carId: carId(0), at: 120_000, params: { penaltyType: 1, lap: 2 } }),
       ];
       expect(only(viewWith({}, { history: { laps: [lap()], events } }), 'penaltyNew').map((i) => i.key)).toEqual(['penaltyNew:0:100000', 'penaltyNew:0:120000']);
     });
@@ -319,7 +331,7 @@ describe('alarms calculator', () => {
       engineView({
         cars: [carState(), rivalCar],
         outputs: outputsOf([outputsFor(0), outputsFor(5, parts)]),
-        history: { events: [event({ kind: 'penalty', carId: carId(5), at: 1_000, params: { lap: 1 } })] },
+        history: { events: [event({ kind: 'penalty', carId: carId(5), at: 1_000, params: { penaltyType: 4, lap: 1 } })] },
         sessionTime: NOW,
       });
 

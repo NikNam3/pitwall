@@ -22,6 +22,7 @@ import { GAPS_CONFIG } from '../gaps/index.ts';
 import { classifyLap } from '../lap-classes/index.ts';
 import { PACE_CONFIG } from '../pace/index.ts';
 import { paceDelta } from '../pace-delta/index.ts';
+import { penaltyClass } from '../shared/penalties.ts';
 import {
   addCrossing,
   emptyTrack,
@@ -45,9 +46,6 @@ import { INCIDENTS, INCIDENTS_CONFIG, type IncidentsOutput } from './index.ts';
 const AFTER_MS = 5_000;
 /** A time loss this close to a collision or damage jump of the same car is part of that entry. */
 const MERGE_MS = 5_000;
-/** F1 25 `penaltyType` codes (data-output spec, "Penalty types"): 5 is a warning; these are penalties; the rest are no entry. */
-const WARNING_TYPE = 5;
-const PENALTY_TYPES: ReadonlySet<number> = new Set([0, 1, 2, 4, 6, 9]);
 
 type Config = ReturnType<typeof INCIDENTS_CONFIG.read>;
 
@@ -150,9 +148,8 @@ const foldEvents = (acc: Acc, view: EngineView): void => {
     const carIds = e.otherCarId === undefined ? [e.carId] : [e.carId, e.otherCarId];
     if (e.kind === 'collision' || e.kind === 'retirement') acc.carEvents.push({ kind: e.kind, at: e.at, carIds });
     else if (e.kind === 'penalty') {
-      const type = e.params['penaltyType'];
-      const kind = type === WARNING_TYPE ? 'warning' : typeof type === 'number' && PENALTY_TYPES.has(type) ? 'penalty' : undefined;
-      if (kind !== undefined) acc.carEvents.push({ kind, at: e.at, carIds: [e.carId] });
+      const kind = penaltyClass(e.params['penaltyType']);
+      if (kind !== 'none') acc.carEvents.push({ kind, at: e.at, carIds: [e.carId] });
     }
   }
   acc.events = events.length;
