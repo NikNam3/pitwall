@@ -3,7 +3,6 @@ import type { BandReading, CarBands, CarId, DamageState, FuelState, Insight, Ins
 import type { EngineView, QuickCalculator } from '@pitwall/engine';
 import { CAR_BANDS } from '../car-bands/index.ts';
 import { DAMAGE } from '../damage/index.ts';
-import { ERS } from '../ers/index.ts';
 import { FUEL } from '../fuel/index.ts';
 import { ourCars } from '../shared/our-cars.ts';
 import { penaltyClass } from '../shared/penalties.ts';
@@ -110,7 +109,6 @@ export const alarmsCalculator: QuickCalculator<AlarmsOutput> = {
   reads: [
     { calculator: TYRE_WEAR },
     { calculator: FUEL },
-    { calculator: ERS },
     { calculator: CAR_BANDS },
     { calculator: DAMAGE },
     'timing',

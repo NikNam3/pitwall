@@ -1,8 +1,19 @@
 // `race-moment` (spec 7): the one moment the race is in, from the neutralisation, the incidents, the forecast, our battles and our alarms.
 // Stateless; race only.
-import { known, unknown, type BattleCard, type BattleSide, type CarId, type Insight, type Known, type Moment, type RaceMoment, type SessionTime } from '@pitwall/domain';
+import {
+  known,
+  unknown,
+  type BattleCard,
+  type BattleSide,
+  type CarId,
+  type IncidentEntry,
+  type Insight,
+  type Known,
+  type Moment,
+  type RaceMoment,
+  type SessionTime,
+} from '@pitwall/domain';
 import type { QuickCalculator } from '@pitwall/engine';
-import type { IncidentEntry } from '@pitwall/domain';
 import { ALARMS } from '../alarms/index.ts';
 import { BATTLE, BATTLE_CONFIG, type BattleOutput } from '../battle/index.ts';
 import { INCIDENTS } from '../incidents/index.ts';

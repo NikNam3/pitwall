@@ -44,7 +44,7 @@ describe('ers calculator', () => {
     expect(ersCalculator.id).toBe(ERS);
     expect(ersCalculator.kind).toBe('quick');
     expect(ersCalculator.cadence).toEqual({ hz: 4 });
-    expect(ersCalculator.reads).toEqual(expect.arrayContaining(['laps', 'energy']));
+    expect(ersCalculator.reads).toEqual(expect.arrayContaining(['laps', 'stints', 'energy', 'session']));
   });
 
   it('store 4.0, 3.6, 3.2 MJ at lap ends: trend -0.4 MJ/lap', () => {

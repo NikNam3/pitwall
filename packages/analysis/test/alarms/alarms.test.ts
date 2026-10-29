@@ -89,14 +89,16 @@ const run = (view: EngineView): Insight[] => alarmsCalculator.insights!(alarmsCa
 const only = (view: EngineView, kind: string) => run(view).filter((i) => i.kind === kind);
 
 describe('alarms calculator', () => {
-  it('is the quick calculator `alarms` at 2 Hz reading the five analyses and the car state', () => {
+  it('is the quick calculator `alarms` at 2 Hz reading the four analyses it raises on and the car state', () => {
     expect(alarmsCalculator.id).toBe(ALARMS);
     expect(alarmsCalculator.kind).toBe('quick');
     expect(alarmsCalculator.cadence).toEqual({ hz: 2 });
     expect(alarmsCalculator.reads).toEqual(
-      expect.arrayContaining([TYRE_WEAR, FUEL, ERS, CAR_BANDS, DAMAGE].map((calculator) => ({ calculator }))),
+      expect.arrayContaining([TYRE_WEAR, FUEL, CAR_BANDS, DAMAGE].map((calculator) => ({ calculator }))),
     );
-    expect(alarmsCalculator.reads).toEqual(expect.arrayContaining(['timing', 'events']));
+    // no ERS alarm exists, so ERS is no input: a new ERS output must not re-run the alarms
+    expect(alarmsCalculator.reads).not.toContainEqual({ calculator: ERS });
+    expect(alarmsCalculator.reads).toEqual(expect.arrayContaining(['timing', 'events', 'laps']));
   });
 
   it('raises nothing when everything is in order', () => {
