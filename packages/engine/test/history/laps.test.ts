@@ -3,11 +3,9 @@ import { known, unknown } from '@pitwall/domain';
 import { ScenarioBuilder, type FrameDraft } from '../builders/index.ts';
 import { runFrames, runScenario } from '../support/run.ts';
 
-// The lap-end samples before the engine fills them (plan Task 2 replaces this with the sampled values).
-const none = unknown('notReceived');
-const corners = <T>(v: T) => ({ fl: v, fr: v, rl: v, rr: v });
-const lapEnd = { wearAtEndPct: corners(none), ersStoreAtEndJ: none, ersDeployedJ: none, ersHarvestedJ: none, damageAtEnd: none,
-  channelRange: { tyres: corners({ surfaceC: none, carcassC: none, pressurePsi: none }), brakesC: corners(none), engineC: none } };
+// The lap-end samples are pinned in lap-end-samples.test.ts; here they only have to be there.
+const lapEnd = { wearAtEndPct: expect.anything(), ersStoreAtEndJ: expect.anything(), ersDeployedJ: expect.anything(),
+  ersHarvestedJ: expect.anything(), damageAtEnd: expect.anything(), channelRange: expect.anything() };
 const car0 = (d: FrameDraft) => d.lapData.lapData[0]!;
 // frames 0–2 = lap 1 (sector 1 at frame 1, sector 2 + fuel 48.5 at frame 2); frame 3 = lap 2 begins; frame 4 = lap 2
 const lapOne = () => new ScenarioBuilder({ cars: 1 }).frames(5, (d) => {

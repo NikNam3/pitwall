@@ -56,6 +56,12 @@ export type LapCursor = {
   actualCompound: ActualCompound;
   visualCompound: VisualCompound;
   outLap: boolean;
+  /** Per band channel (the order of `CHANNELS` in `history/lap-samples.ts`): lowest and highest value of the lap's frames; min above max = none seen. */
+  channelMin: number[];
+  channelMax: number[];
+  /** The last in-lap ERS totals (the game resets them at the line); `undefined` = none seen. */
+  ersDeployedJ: number | undefined;
+  ersHarvestedJ: number | undefined;
 };
 
 /** The stint a car is on, until it becomes a `StintRecord`. */
@@ -102,6 +108,8 @@ export type OpenTrackers = {
   lapIndex: Array<Record<number, { provisional?: number; confirmed: boolean }>>;
   /** Per car: the pit status of the previous frame. */
   pitStatus: Array<PitStatus | undefined>;
+  /** Per car: the eight damage percentages of the previous frame (order of `DAMAGE_PARTS`), created on first use; for `damageChange` events. */
+  damage?: Array<number[] | undefined> | undefined;
 };
 
 /** The engine's whole model of one session (spec 6.1). `cars` is indexed by `CarId`. */
