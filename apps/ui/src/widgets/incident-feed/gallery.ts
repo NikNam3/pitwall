@@ -17,23 +17,25 @@ const collision: IncidentEntry = {
   timeLostMs: k(4200),
   // OCO retired by the after moment: its gap after is notApplicable (DNF)
   forUs: [{ ourCarId: carId(1), otherCarId: k(carId(2)), positionBefore: k(5), positionAfter: k(4), gapBeforeMs: k(4100), gapAfterMs: unknown('notApplicable') }],
+  where: { sector: unknown('notReceived') },
 };
 const timeLoss: IncidentEntry = {
   id: 'timeLoss:4:220000', at: toSessionTime(220_000), lap: 22, kind: 'timeLoss', severity: 'major', carIds: [carId(4)],
   timeLostMs: k(6100),
   forUs: [{ ourCarId: carId(1), otherCarId: k(carId(4)), positionBefore: k(5), positionAfter: k(5), gapBeforeMs: k(-1900), gapAfterMs: k(5800) }],
+  where: { sector: unknown('notReceived') },
 };
 const warning: IncidentEntry = {
   id: 'warning:5:210000', at: toSessionTime(210_000), lap: 21, kind: 'warning', severity: 'minor', carIds: [carId(5)],
-  timeLostMs: unknown('notApplicable'), forUs: [],
+  timeLostMs: unknown('notApplicable'), forUs: [], where: { sector: unknown('notReceived') },
 };
 const neutralised: IncidentEntry = {
   id: 'neutralised::190000', at: toSessionTime(190_000), lap: 19, kind: 'neutralised', severity: 'minor', carIds: [],
-  timeLostMs: unknown('notApplicable'), forUs: [],
+  timeLostMs: unknown('notApplicable'), forUs: [], where: { sector: unknown('notReceived') },
 };
 const damage: IncidentEntry = {
   id: 'damage:1:140000', at: toSessionTime(140_000), lap: 14, kind: 'damage', severity: 'major', carIds: [carId(1)],
-  timeLostMs: unknown('insufficientData'), forUs: [],
+  timeLostMs: unknown('insufficientData'), forUs: [], where: { sector: unknown('notReceived') },
 };
 
 /** A moment; the incident moment's cause names its entry (`entryId`), as race-moment gives it. */

@@ -15,6 +15,7 @@ import {
   type PitStopRecord,
   type RaceEvent,
   type SessionKind,
+  type SessionState,
 } from '@pitwall/domain';
 import { historyLengths, type EngineView } from '@pitwall/engine';
 import { engineView } from '../../../../test-support/builders/index.ts';
@@ -30,6 +31,8 @@ export const SEGMENT_MS = PACE_MS / MINI_SECTORS;
 export const SPACING_MS = 700;
 export const CARS = 10;
 export const LAPS = 8;
+/** The test track: 5 000 m (the builder's session), so a mini-sector is 100 m; sector 2 starts at 1 600 m, sector 3 at 3 300 m. */
+export const TRACK = { trackLengthM: 5_000, sector2StartM: 1_600, sector3StartM: 3_300 } as const;
 /** Our car: car 6, P7. With 700 ms spacing its neighbourhood (±1 position or ±3000 ms) is cars 2..9 except itself. */
 export const PLAYER = carId(6);
 
@@ -77,7 +80,11 @@ export type RaceInput = {
   gaps?: GapsOutput;
   playerCar?: number;
   config?: Record<string, number | boolean>;
+  /** Config of the `alarms` section (the warnings before a penalty). */
+  alarmsConfig?: Record<string, number | boolean>;
   kind?: SessionKind;
+  /** Merged onto the race session on `TRACK`. */
+  session?: Partial<SessionState>;
   /** The neutralised phase in progress (not yet in `flagPhases`). */
   activeFlagPhase?: EngineView['activeFlagPhase'];
   /** Live car states; none by default (the calculator works from the history). */
@@ -95,7 +102,9 @@ export function viewOf({
   gaps,
   playerCar = PLAYER,
   config = {},
+  alarmsConfig = {},
   kind = 'race',
+  session = {},
   activeFlagPhase,
   cars = [],
 }: RaceInput): EngineView {
@@ -109,8 +118,8 @@ export function viewOf({
     history: { miniSectors, events, flagPhases, pitStops, laps },
     outputs,
     playerCar,
-    config: { incidents: config },
-    session: { kind },
+    config: { incidents: config, alarms: alarmsConfig },
+    session: { ...TRACK, kind, ...session },
     sessionTime: last?.at ?? 0,
   });
 }

@@ -1,5 +1,6 @@
 // The `incidents` calculator (spec 6.4): a fold over the events, flag phases, pit stops, laps and mini-sector crossings
-// into `incidents.feed`. Positions and gaps before and after come from the crossings, so a flashback reproduces them.
+// into `incidents.feed`. Positions and gaps before and after, and the sector, come from the crossings, so a flashback
+// reproduces them.
 import {
   addLaps,
   emptyCurrentLaps,
@@ -8,6 +9,7 @@ import {
   type CarId,
   type CurrentLaps,
   type DamageJump,
+  type IncidentDamagePart,
   type IncidentEntry,
   type IncidentForUs,
   type IncidentKind,
@@ -17,12 +19,13 @@ import {
   type SessionTime,
 } from '@pitwall/domain';
 import type { EngineView, IncrementalCalculator } from '@pitwall/engine';
-import { DAMAGE, type DamageOutput } from '../damage/index.ts';
+import { ALARMS_CONFIG } from '../alarms/index.ts';
+import { DAMAGE, DAMAGE_CONFIG, type DamageOutput } from '../damage/index.ts';
 import { GAPS_CONFIG } from '../gaps/index.ts';
 import { PACE_CONFIG } from '../pace/index.ts';
 import { paceDeltaAround } from '../pace-delta/index.ts';
 import { ourCars } from '../shared/our-cars.ts';
-import { penaltyClass } from '../shared/penalties.ts';
+import { penaltyClass, warningInCycle } from '../shared/penalties.ts';
 import {
   addCrossing,
   emptyTrack,
@@ -33,12 +36,14 @@ import {
   latestAt,
   positionIn,
   resetTrack,
+  sectorAt,
   slowRuns,
   snapshotAt,
   type Snapshot,
   type Span,
   type SlowRun,
   type Track,
+  type TrackLayout,
 } from './incidents.ts';
 import { INCIDENTS, INCIDENTS_CONFIG, type IncidentsOutput } from './index.ts';
 
@@ -59,7 +64,8 @@ const MAJOR = {
   neutralised: 'neutralisedMajor',
 } as const satisfies Record<IncidentKind, keyof Config>;
 
-type CarEvent = { kind: 'collision' | 'retirement' | 'warning' | 'penalty'; at: SessionTime; carIds: CarId[] };
+/** `warnings`: on a warning, the car's count of warnings up to and including it. */
+type CarEvent = { kind: 'collision' | 'retirement' | 'warning' | 'penalty'; at: SessionTime; carIds: CarId[]; warnings?: number };
 
 type Acc = {
   /** How much of each history list is folded. */
@@ -76,6 +82,8 @@ type Acc = {
   /** Per car id, its recorded pit visits. */
   pits: Span[][];
   carEvents: CarEvent[];
+  /** Per car id, its warnings folded so far. */
+  warnings: number[];
   current: CurrentLaps;
   /** The newest crossing time; a moment up to it is final in the history. */
   newestAt: SessionTime;
@@ -87,9 +95,14 @@ type Acc = {
   jumps: { carId: CarId; jump: DamageJump }[];
   ours: CarId[];
   isRace: boolean;
+  layout: TrackLayout;
   config: Config;
   neighbourhoodMs: Ms;
   window: number;
+  /** Damage jumps of a car this close to the first one are one entry. */
+  jumpWindowMs: Ms;
+  /** Warnings before a penalty (the alarms' config). */
+  warningLimit: number;
 };
 
 const overlaps = (start: SessionTime, end: SessionTime, span: Span): boolean => start < span.end && end > span.start;
@@ -97,7 +110,11 @@ const overlaps = (start: SessionTime, end: SessionTime, span: Span): boolean => 
 const readLive = (acc: Acc, view: EngineView): void => {
   const { state } = view;
   acc.isRace = state.session.kind === 'race';
+  const { trackLengthM, sector2StartM, sector3StartM } = state.session;
+  acc.layout = { trackLengthM, sector2StartM, sector3StartM };
   acc.config = INCIDENTS_CONFIG.read(view);
+  acc.jumpWindowMs = DAMAGE_CONFIG.read(view).jumpWindowMs;
+  acc.warningLimit = ALARMS_CONFIG.read(view).warningsBeforePenalty;
   acc.neighbourhoodMs = GAPS_CONFIG.read(view).neighbourhoodMs;
   acc.window = PACE_CONFIG.read(view).window;
   acc.ours = ourCars(state);
@@ -148,7 +165,11 @@ const foldEvents = (acc: Acc, view: EngineView): void => {
     if (e.kind === 'collision' || e.kind === 'retirement') acc.carEvents.push({ kind: e.kind, at: e.at, carIds });
     else if (e.kind === 'penalty') {
       const kind = penaltyClass(e.params['penaltyType']);
-      if (kind !== 'none') acc.carEvents.push({ kind, at: e.at, carIds: [e.carId] });
+      if (kind === 'warning') {
+        const warnings = (acc.warnings[e.carId] ?? 0) + 1;
+        acc.warnings[e.carId] = warnings;
+        acc.carEvents.push({ kind, at: e.at, carIds: [e.carId], warnings });
+      } else if (kind !== 'none') acc.carEvents.push({ kind, at: e.at, carIds: [e.carId] });
     }
   }
   acc.events = events.length;
@@ -181,6 +202,7 @@ const init = (view: EngineView): Acc =>
       phaseStarts: [],
       pits: [],
       carEvents: [],
+      warnings: [],
       current: emptyCurrentLaps(),
       newestAt: -Infinity,
       snapshots: new Map(),
@@ -189,9 +211,12 @@ const init = (view: EngineView): Acc =>
       jumps: [],
       ours: [],
       isRace: false,
+      layout: { trackLengthM: 0, sector2StartM: 0, sector3StartM: 0 },
       config: INCIDENTS_CONFIG.read(view),
       neighbourhoodMs: 0,
       window: 0,
+      jumpWindowMs: 0,
+      warningLimit: 0,
     },
     view,
   );
@@ -204,7 +229,11 @@ type Candidate = {
   carIds: CarId[];
   /** Known up front for damage and neutralised entries; otherwise from the primary car's crossings. */
   lap?: number;
+  /** The first damage jump of a damage entry, and every jump of it. */
   jump?: DamageJump;
+  jumps?: DamageJump[];
+  /** A warning entry's count of the car's warnings. */
+  warnings?: number;
   run?: SlowRun;
   merged: SlowRun[];
 };
@@ -234,10 +263,32 @@ const standingRuns = (acc: Acc): SlowRun[] =>
     return acc.pitting.has(id as CarId) ? runs.filter((r) => r.endProgress !== newest) : runs;
   });
 
+/** Each car's damage jumps grouped: a jump within `jumpWindowMs` of a group's first one joins it (one incident, several parts). */
+const damageGroups = (acc: Acc): { carId: CarId; jumps: DamageJump[] }[] => {
+  const groups: { carId: CarId; jumps: DamageJump[] }[] = [];
+  const open = new Map<CarId, { carId: CarId; jumps: DamageJump[] }>();
+  const sorted = [...acc.jumps].sort((a, b) => a.jump.at - b.jump.at || a.carId - b.carId);
+  for (const { carId, jump } of sorted) {
+    const group = open.get(carId);
+    const first = group?.jumps[0];
+    if (group !== undefined && first !== undefined && jump.at - first.at <= acc.jumpWindowMs) {
+      group.jumps.push(jump);
+      continue;
+    }
+    const fresh = { carId, jumps: [jump] };
+    open.set(carId, fresh);
+    groups.push(fresh);
+  }
+  return groups;
+};
+
 /** Every entry the history gives, with each time loss merged into a collision or damage entry of its car close by. */
 const candidates = (acc: Acc): Candidate[] => {
-  const list = acc.carEvents.map((e) => candidate(e.kind, e.at, e.carIds));
-  for (const { carId, jump } of acc.jumps) list.push(candidate('damage', jump.at, [carId], { lap: jump.lap, jump }));
+  const list = acc.carEvents.map((e) => candidate(e.kind, e.at, e.carIds, e.warnings === undefined ? {} : { warnings: e.warnings }));
+  for (const { carId, jumps } of damageGroups(acc)) {
+    const [jump] = jumps;
+    if (jump !== undefined) list.push(candidate('damage', jump.at, [carId], { lap: jump.lap, jump, jumps }));
+  }
   const absorbers = list.filter((c) => c.kind === 'collision' || c.kind === 'damage');
   for (const run of standingRuns(acc)) {
     // F1 25 names a collision's two cars in no fixed order, so either one's time loss belongs to it.
@@ -339,6 +390,20 @@ const lapOf = (acc: Acc, c: Candidate): number => {
   return point === undefined ? 1 : lapOfProgress(point.progress);
 };
 
+/** The parts of a damage entry's jumps and their rise, the biggest first; `damage` gives one part per jump. */
+const damageParts = (jumps: readonly DamageJump[]): IncidentDamagePart[] => {
+  const rise = new Map<IncidentDamagePart['part'], number>();
+  for (const j of jumps) for (const part of j.parts) rise.set(part, (rise.get(part) ?? 0) + j.deltaPct);
+  return [...rise].map(([part, deltaPct]) => ({ part, deltaPct })).sort((a, b) => b.deltaPct - a.deltaPct);
+};
+
+/** The detail only some kinds have: a damage entry's parts, a warning's count of the limit. */
+const detailOf = (acc: Acc, c: Candidate): Pick<IncidentEntry, 'damage' | 'warning'> => {
+  if (c.jumps !== undefined) return { damage: damageParts(c.jumps) };
+  if (c.warnings !== undefined) return { warning: { count: warningInCycle(c.warnings, acc.warningLimit), limit: acc.warningLimit } };
+  return {};
+};
+
 /** Newest first, ties by id; only entries of our cars or their neighbourhood, cut at `feedLength`. */
 const output = (acc: Acc): IncidentsOutput => {
   if (!acc.isRace) return [];
@@ -360,6 +425,8 @@ const output = (acc: Acc): IncidentsOutput => {
       carIds: [...c.carIds],
       timeLostMs: timeLost(acc, c, lap),
       forUs,
+      where: { sector: c.carIds[0] === undefined ? unknown('notApplicable') : sectorAt(acc.tracks[c.carIds[0]], c.at, acc.layout) },
+      ...detailOf(acc, c),
     });
   }
   return feed;

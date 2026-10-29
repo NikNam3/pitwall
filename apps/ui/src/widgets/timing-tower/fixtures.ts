@@ -113,4 +113,5 @@ export const sessionInfo = (playerCar: number, teammateCar?: number): SessionInf
 /** An `incidents.feed` entry. */
 export const incidentEntry = (id: string, severity: 'major' | 'minor', cars: number[]): IncidentEntry => ({
   id, at: toSessionTime(900), lap: 23, kind: 'collision', severity, carIds: cars.map(carId), timeLostMs: unknown('insufficientData'), forUs: [],
+  where: { sector: unknown('notReceived') },
 });

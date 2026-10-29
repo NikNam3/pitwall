@@ -14,7 +14,7 @@ const forUs = (over: Partial<IncidentForUs> = {}): IncidentForUs => ({
 });
 const entry = (over: Partial<IncidentEntry> = {}): IncidentEntry => ({
   id: 'collision:2+3:230000', at: toSessionTime(230_000), lap: 23, kind: 'collision', severity: 'major', carIds: [carId(2), carId(3)],
-  timeLostMs: k(4200), forUs: [forUs()], ...over,
+  timeLostMs: k(4200), forUs: [forUs()], where: { sector: unknown('notReceived') }, ...over,
 });
 const minor = (over: Partial<IncidentEntry> = {}): IncidentEntry =>
   entry({ id: 'warning:5:210000', lap: 21, kind: 'warning', severity: 'minor', carIds: [carId(5)], timeLostMs: unknown('notApplicable'), forUs: [], ...over });
