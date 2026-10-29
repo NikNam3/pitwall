@@ -38,6 +38,12 @@ export const WIDTH: Record<ColumnId, GridColumn> = {
 /** The columns of a size mode. */
 export const columnsFor = (mode: WidgetSize['mode']): readonly ColumnId[] => (mode === 'compact' ? COMPACT : COLUMN_IDS);
 
+/**
+ * The sign of a side's gap, the app-wide convention (as the tower's TO US): a car ahead of us negative, behind
+ * positive. `battle.cards` gives each side's gap as an unsigned distance, so the display only picks the side's sign.
+ */
+const GAP_SIGN: Record<Side, 1 | -1> = { ahead: -1, behind: 1 };
+
 const valueCell = <T>(v: Known<T>, format: (t: T) => string): Cell =>
   v.known ? { text: format(v.value) } : { text: '', reason: v.reason };
 
@@ -51,10 +57,9 @@ function sideRow(label: BattleRow['label'], side: Side, card: BattleCard, cars: 
   }
   const s = known.value;
   const highlight = battleRole(moment, card.carId, side);
-  const sign = side === 'ahead' ? 1 : -1;
   const cells: Record<ColumnId, Cell> = {
     drv: carCodeById(cars, s.carId),
-    gap: valueCell(s.gapMs, (ms) => formatSignedSeconds(sign * ms, 3)),
+    gap: valueCell(s.gapMs, (ms) => formatSignedSeconds(GAP_SIGN[side] * ms, 3)),
     closing: valueCell(s.closingMsPerLap, formatSecondsPerLapPlain),
     toDrs: valueCell(s.lapsToDrs, (n) => (n === 0 ? text.inDrs : formatLaps(n))),
     paceDelta: valueCell(s.paceDeltaMs, (ms) => formatSignedSeconds(ms, 2)),

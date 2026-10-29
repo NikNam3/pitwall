@@ -7,6 +7,7 @@ import type { Joules, Ms } from '../units.ts';
 /** The car ahead of or behind one of our cars. */
 export type BattleSide = {
   carId: CarId;
+  /** The gap to that car as `gaps.intervals` gives it (`toAheadMs` / `toBehindMs`, unsigned); displays sign it by side. */
   gapMs: Known<Ms>;
   /** Positive = the gap shrinks. */
   closingMsPerLap: Known<number>;

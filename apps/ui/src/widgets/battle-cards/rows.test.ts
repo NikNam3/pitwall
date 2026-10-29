@@ -33,13 +33,14 @@ describe('battleRows', () => {
   it('formats every column as in the mockup', () => {
     const [ahead] = battleRows(card(), cars, undefined);
     expect(Object.fromEntries(Object.entries(ahead!.cells).map(([c, cell]) => [c, cell.text]))).toEqual({
-      drv: 'LEC', gap: '+3.199', closing: '0.31 s/lap', toDrs: '7.1 laps', paceDelta: '+0.29', margin: '−0.71', tyres: 'M12 H23', ers: '3.1 MJ',
+      drv: 'LEC', gap: '−3.199', closing: '0.31 s/lap', toDrs: '7.1 laps', paceDelta: '+0.29', margin: '−0.71', tyres: 'M12 H23', ers: '3.1 MJ',
     });
   });
 
-  it('signs the gap by side: positive ahead, negative (U+2212) behind', () => {
-    const [, behind] = battleRows(card(), cars, undefined);
-    expect(behind!.cells.gap.text).toBe('−0.841');
+  it('signs the gap by side as the tower does: a car ahead negative (U+2212), a car behind positive', () => {
+    const [ahead, behind] = battleRows(card(), cars, undefined);
+    expect(ahead!.cells.gap.text).toBe('−3.199');
+    expect(behind!.cells.gap.text).toBe('+0.841');
     expect(behind!.cells.paceDelta.text).toBe('−0.42');
     expect(behind!.cells.margin.text).toBe('−1.42');
   });
@@ -58,7 +59,7 @@ describe('battleRows', () => {
   it('renders a hidden rival ERS as an empty cell with its reason; the rest of the row stays', () => {
     const [, behind] = battleRows(card(), cars, undefined);
     expect(behind!.cells.ers).toMatchObject({ text: '', reason: 'realism' });
-    expect(behind!.cells.gap.text).toBe('−0.841');
+    expect(behind!.cells.gap.text).toBe('+0.841');
     expect(behind!.cells.drv.text).toBe('ALB');
   });
 
@@ -78,7 +79,7 @@ describe('battleRows', () => {
   it('shows an empty DRV with the reason on hover when the car is missing from cars.overview', () => {
     const rows = battleRows(card(), cars.slice(0, 2), undefined);
     expect(rows[1]!.cells.drv).toEqual({ text: '', reason: 'notReceived' });
-    expect(rows[1]!.cells.gap.text).toBe('−0.841');
+    expect(rows[1]!.cells.gap.text).toBe('+0.841');
   });
 
   it('lights drv, gap and toDrs of the row the moment names (BEHIND of card car 1) as text (white bold) in the battle moment, nothing else', () => {
@@ -109,8 +110,8 @@ describe('text layout', () => {
 
   it('full rows right-align numbers in fixed fields, as the mockup', () => {
     const [ahead, behind] = battleRows(card(), cars, undefined);
-    expect(battleRowText('full', ahead!)).toBe('AHEAD  LEC +3.199 0.31 s/lap 7.1 laps  +0.29  −0.71 M12 H23 3.1 MJ');
-    expect(battleRowText('full', behind!).trimEnd()).toBe('BEHIND ALB −0.841 0.22 s/lap   in DRS  −0.42  −1.42 M12 M1');
+    expect(battleRowText('full', ahead!)).toBe('AHEAD  LEC −3.199 0.31 s/lap 7.1 laps  +0.29  −0.71 M12 H23 3.1 MJ');
+    expect(battleRowText('full', behind!).trimEnd()).toBe('BEHIND ALB +0.841 0.22 s/lap   in DRS  −0.42  −1.42 M12 M1');
     expect(battleRowText('full', behind!)).toHaveLength(battleHeader('full').length);
   });
 
@@ -119,6 +120,6 @@ describe('text layout', () => {
     expect(columnsFor('full')).toEqual(['drv', 'gap', 'closing', 'toDrs', 'paceDelta', 'margin', 'tyres', 'ers']);
     const [ahead] = battleRows(card(), cars, undefined);
     expect(battleHeader('compact')).toBe('       DRV    GAP   TO DRS');
-    expect(battleRowText('compact', ahead!)).toBe('AHEAD  LEC +3.199 7.1 laps');
+    expect(battleRowText('compact', ahead!)).toBe('AHEAD  LEC −3.199 7.1 laps');
   });
 });
