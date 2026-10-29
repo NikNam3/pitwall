@@ -1,7 +1,8 @@
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { workbookNames } from '../../src/ui-state/ui-files.ts';
 import { seedDefaultWorkbooks } from '../../src/ui-state/default-workbooks.ts';
 
 /** The folder the bridge ships its default workbooks in. */
@@ -48,7 +49,7 @@ describe('seedDefaultWorkbooks', () => {
     const dir = uiDir();
     const defaults = defaultsWith({ 'one.json': '{"name":"one"}\n', 'two.json': '{ "name": "two" }' });
     await seedDefaultWorkbooks(dir, defaults);
-    expect(readdirSync(workbooks(dir)).sort()).toEqual(['one.json', 'two.json']);
+    expect(workbookNames(workbooks(dir))).toEqual(['one', 'two']);
     for (const file of ['one.json', 'two.json']) {
       expect(readFileSync(join(workbooks(dir), file), 'utf8')).toBe(readFileSync(join(defaults, file), 'utf8'));
     }
@@ -71,5 +72,46 @@ describe('seedDefaultWorkbooks', () => {
     await seedDefaultWorkbooks(dir, SHIPPED);
     expect(readdirSync(workbooks(dir)).sort()).toEqual(first);
     expect(readFileSync(join(workbooks(dir), 'car.json'), 'utf8')).toBe('edited');
+  });
+
+  it('a seeded default that was deleted is not recreated', async () => {
+    const dir = uiDir();
+    await seedDefaultWorkbooks(dir, SHIPPED);
+    rmSync(join(workbooks(dir), 'quali.json'));
+    await seedDefaultWorkbooks(dir, SHIPPED);
+    expect(existsSync(join(workbooks(dir), 'quali.json'))).toBe(false);
+    expect(existsSync(join(workbooks(dir), 'car.json'))).toBe(true);
+  });
+
+  it('a default added in a later release is copied once', async () => {
+    const dir = uiDir();
+    const defaults = defaultsWith({ 'one.json': 'one' });
+    await seedDefaultWorkbooks(dir, defaults);
+    writeFileSync(join(defaults, 'two.json'), 'two');
+    await seedDefaultWorkbooks(dir, defaults);
+    expect(readFileSync(join(workbooks(dir), 'two.json'), 'utf8')).toBe('two');
+    rmSync(join(workbooks(dir), 'two.json'));
+    await seedDefaultWorkbooks(dir, defaults);
+    expect(existsSync(join(workbooks(dir), 'two.json'))).toBe(false);
+  });
+
+  it('an existing file is kept and counts as seeded', async () => {
+    const dir = uiDir();
+    mkdirSync(workbooks(dir), { recursive: true });
+    writeFileSync(join(workbooks(dir), 'one.json'), 'mine');
+    const defaults = defaultsWith({ 'one.json': 'shipped' });
+    await seedDefaultWorkbooks(dir, defaults);
+    expect(readFileSync(join(workbooks(dir), 'one.json'), 'utf8')).toBe('mine');
+    rmSync(join(workbooks(dir), 'one.json'));
+    await seedDefaultWorkbooks(dir, defaults);
+    expect(existsSync(join(workbooks(dir), 'one.json'))).toBe(false);
+  });
+
+  it('the marker is a sorted JSON array of the seeded names and is not a workbook', async () => {
+    const dir = uiDir();
+    await seedDefaultWorkbooks(dir, defaultsWith({ 'b.json': '{}', 'a.json': '{}' }));
+    const marker = join(workbooks(dir), '.seeded-defaults.json');
+    expect(JSON.parse(readFileSync(marker, 'utf8'))).toEqual(['a.json', 'b.json']);
+    expect(workbookNames(workbooks(dir))).toEqual(['a', 'b']);
   });
 });
