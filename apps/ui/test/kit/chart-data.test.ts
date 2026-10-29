@@ -6,7 +6,8 @@
 //  - with enough history the span is exactly `span` (more width shows more history, independent of point spacing);
 //  - with less history than the width the range is `[min(xs), max(xs)]`: the axis starts at the first data point
 //    (never at negative laps) and the chart is stretched to the width (Q3);
-//  - a single point (min = max) returns `[end - span, end]`, so the range is never degenerate;
+//  - a single point (min = max) returns `[max(0, end - span), end]`, or `[end, end + span]` when that would be
+//    degenerate (end = 0), so the range is never degenerate and never negative;
 //  - empty `xs` does not throw and returns `[0, span]`.
 import { describe, expect, it } from 'vitest';
 import { visibleXRange } from '../../src/kit/chart/data.ts';
@@ -51,8 +52,9 @@ describe('visibleXRange', () => {
     }
   });
 
-  it('a single point gives [end - span, end]', () => {
-    expect(visibleXRange([7], 20, 'lap', xPerCell)).toEqual([-3, 7]);
+  it('a single point gives a non-degenerate, non-negative range', () => {
+    expect(visibleXRange([7], 20, 'lap', xPerCell)).toEqual([0, 7]);
+    expect(visibleXRange([0], 20, 'lap', xPerCell)).toEqual([0, 10]);
   });
 
   it('handles an empty series', () => {
