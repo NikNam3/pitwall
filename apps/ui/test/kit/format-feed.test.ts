@@ -17,8 +17,8 @@ describe('formatCount', () => {
     [42.4, '42'],
     [42.6, '43'],
     [1234567, '1234567'],
-    [-3, '-3'],
-    [-3.4, '-3'],
+    [-3, '−3'],
+    [-3.4, '−3'],
   ])('%s -> %s', (n, text) => {
     expect(formatCount(n)).toBe(text);
   });
@@ -35,7 +35,7 @@ describe('formatRate', () => {
     [60, '60/s'],
     [59.6, '60/s'],
     [59.4, '59/s'],
-    [-2, '-2/s'],
+    [-2, '−2/s'],
   ])('%s -> %s', (n, text) => {
     expect(formatRate(n)).toBe(text);
   });
@@ -54,7 +54,7 @@ describe('formatLoss', () => {
     [4.96, '5.0%'],
     [100, '100.0%'],
     [0.04, '0.0%'],
-    [-1.25, '-1.3%'],
+    [-1.25, '−1.3%'],
   ])('%s -> %s', (p, text) => {
     expect(formatLoss(p)).toBe(text);
   });
@@ -73,7 +73,7 @@ describe('formatMillis', () => {
     [12.4, '12 ms'],
     [12.6, '13 ms'],
     [1500, '1500 ms'],
-    [-7, '-7 ms'],
+    [-7, '−7 ms'],
   ])('%s -> %s', (ms, text) => {
     expect(formatMillis(ms)).toBe(text);
   });

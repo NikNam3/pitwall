@@ -1,5 +1,5 @@
 // Every fixed text of the kit and the shell (spec 4.3, 7.4): the one place UI wording changes.
-import type { IncidentKind, UnknownReason } from '@pitwall/domain';
+import type { Corners, DamageParts, IncidentKind, InsightCategory, UnknownReason } from '@pitwall/domain';
 
 /** Header state while a required topic has no value yet. */
 export const noDataYet = 'no data yet';
@@ -169,15 +169,27 @@ export const topBar = {
   acknowledge: 'acknowledge alert',
   moreAlerts: (n: number): string => `+${n}`,
   mutedGroups: (n: number): string => `${n} muted`,
+} as const;
+
+/** The alarm groups the engineer mutes by category: their names and the toggle's two actions, for the top bar and the alarm list. */
+export const alertGroups = {
+  category: {
+    strategy: 'strategy',
+    tyres: 'tyres',
+    energy: 'energy',
+    damage: 'damage',
+    race: 'race',
+    feed: 'feed',
+    system: 'system',
+  } satisfies Record<InsightCategory, string>,
   mute: 'mute',
-  unmute: 'muted',
+  unmute: 'unmute',
 } as const;
 
 /** Insight texts of the alarm kinds (spec 5.6); `formatInsight` fills in the values. */
 export const insightText = {
   /** A tyre or brake or engine channel: `FR brake`, `RL carcass`, `engine`. */
   channel: { surfaceC: 'surface', carcassC: 'carcass', pressurePsi: 'pressure', brakesC: 'brake', engineC: 'engine' },
-  outOfBand: 'out of band',
   outOfBandLap: 'out of band a full lap',
   above: 'above band',
   below: 'below band',
@@ -196,10 +208,11 @@ export const insightText = {
     sidepodPct: 'sidepod',
     gearboxPct: 'gearbox',
     enginePct: 'engine',
-  } as Readonly<Record<string, string>>,
-  /** The minus sign of a negative value. */
-  minus: '−',
+  } satisfies Record<keyof DamageParts, string>,
 } as const;
+
+/** The name of each corner of the car, by the `Corners` keys (`fl` -> `FL`). */
+export const cornerNames = { fl: 'FL', fr: 'FR', rl: 'RL', rr: 'RR' } as const satisfies Record<keyof Corners<unknown>, string>;
 
 /** What the incident feed says of each kind of incident. */
 export const incidentKinds = {

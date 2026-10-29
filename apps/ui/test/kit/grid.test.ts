@@ -5,7 +5,7 @@
 //   gridRow(columns: GridColumn[], cells: string[], gap = 1): string   // cells fitted and joined by `gap` spaces;
 //                                                      // fewer cells than columns: the rest is blank; width = gridWidth
 //   gridWidth(columns: GridColumn[], gap = 1): number  // sum of widths + gap between neighbours
-//   fixed(value: number, decimals: number): string     // `toFixed` with -0 shown as 0 (`-0.04` at 1 decimal -> `0.0`)
+//   fixed(value: number, decimals: number): string     // `toFixed` with the true minus and -0 shown as 0 (`-0.04` at 1 decimal -> `0.0`)
 import { describe, expect, it } from 'vitest';
 import { fixed, fitCell, gridRow, gridWidth } from '../../src/kit/grid/grid.ts';
 import { formatLapTime } from '../../src/kit/values/format.ts';
@@ -44,9 +44,12 @@ describe('fixed', () => {
     [1.625, 2, '1.63'],
     [0, 3, '0.000'],
     [-0.04, 1, '0.0'],
-    [-1.25, 1, '-1.3'],
+    [-1.25, 1, '−1.3'],
     [37, 0, '37'],
   ])('%f at %i decimals -> %s', (v, d, text) => expect(fixed(v, d)).toBe(text));
+  it('is empty for a value that is not a finite number, so a whole-number formatter never throws or prints NaN', () => {
+    for (const v of [Number.NaN, Number.POSITIVE_INFINITY, undefined as unknown as number]) expect(fixed(v, 1)).toBe('');
+  });
 });
 
 describe('alignment: the decimal point and the colon line up', () => {

@@ -15,7 +15,7 @@ export type FittedAlarms = { rows: FittedRow[]; more: number; muted: AlarmView['
 
 /** Characters of a row beside its text: label, the ack button or "acknowledged", and in full mode the mute button. */
 const besideText = (row: AlarmRow, full: boolean): number =>
-  SEVERITY_COLS + 1 + 1 + (row.acknowledged ? text.acknowledged : text.ack).length + (full ? 1 + `${text.mute} ${row.insight.category}`.length : 0);
+  SEVERITY_COLS + 1 + 1 + (row.acknowledged ? text.acknowledged : text.ack).length + (full ? 1 + text.muteGroup(row.insight.category).length : 0);
 
 /**
  * Fits `view` into `size`: every row and the muted line when they fit; else the first `rows - 1` alarms and a last line

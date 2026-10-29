@@ -55,7 +55,7 @@
           data-testid="mute-{category}"
           style:color={role(muted ? 'textFaint' : 'text')}
           onclick={() => bar.send({ kind: 'alertGroup.mute', category, muted: !muted })}
-        >{category}{text.separator}{muted ? text.topBar.unmute : text.topBar.mute}</button>
+        >{text.alertGroups.category[category]}{text.separator}{muted ? text.alertGroups.unmute : text.alertGroups.mute}</button>
       </li>
     {/each}
   </ul>

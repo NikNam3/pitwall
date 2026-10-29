@@ -4,7 +4,7 @@
 import { readFile } from 'node:fs/promises';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
-import { makeDataDir, removeDataDir, workbookFile } from './support.ts';
+import { makeDataDir, openWorkbook, panelOf, removeDataDir, workbookFile } from './support.ts';
 import { launchPitwall, startBridge } from './harness.ts';
 
 const RECORDING = 'ttZandvoort';
@@ -17,9 +17,8 @@ test.afterEach(async () => {
   while (cleanups.length > 0) await cleanups.pop()?.().catch(() => undefined);
 });
 
-/** The corner-block panel: the one with the full table's header line (case-sensitive, so "surface" elsewhere does not match).
- *  The panel title is portaled out of `.panel`, so it cannot be used. */
-const cornerPanel = (page: Page) => page.locator('.panel').filter({ has: page.locator('.line', { hasText: /\bSURF\b/ }) });
+/** The corner-block panel. */
+const cornerPanel = (page: Page) => panelOf(page, 'corner-block');
 
 /** The four corner rows of the full corner block: `FL  93  93  30.2  309  0%` split into fields. */
 async function cornerRows(page: Page): Promise<Record<string, string[]>> {
@@ -53,8 +52,8 @@ test('the car workbook is seeded, shows four known surface temperatures and live
   cleanups.push(() => app.close());
   const page = await app.window('main');
   await page.bringToFront();
-  // `car` is the only workbook in a fresh data dir, so it is workbook 1.
-  await page.keyboard.press('Control+1');
+  // The bridge seeds car, quali and race: open car by name.
+  await openWorkbook(page, 'car');
   await expect(cornerPanel(page).locator('.line', { hasText: /\bSURF\b/ })).toBeVisible({ timeout: SETTLE_MS });
 
   // From lap 2 the time trial holds the surface temperature at 93 degC: jump there and play.
@@ -64,10 +63,9 @@ test('the car workbook is seeded, shows four known surface temperatures and live
   await page.getByTestId('replay-pause').click();
   await expect.poll(async () => column(await cornerRows(page), SURFACE), { timeout: SETTLE_MS }).toEqual(['93', '93', '93', '93']);
 
-  // The brakes keep moving: the readings now and 10 s later differ in at least one corner, and all are known numbers.
+  // The brakes keep moving: the readings change in at least one corner while the replay plays, and all are known numbers.
   const before = column(await cornerRows(page), BRAKE);
-  await page.waitForTimeout(10_000);
-  const after = column(await cornerRows(page), BRAKE);
-  for (const value of [...before, ...after]) expect(value).toMatch(/^\d{2,4}$/);
-  expect(after).not.toEqual(before);
+  for (const value of before) expect(value).toMatch(/^\d{2,4}$/);
+  await expect.poll(async () => column(await cornerRows(page), BRAKE), { timeout: SETTLE_MS }).not.toEqual(before);
+  for (const value of column(await cornerRows(page), BRAKE)) expect(value).toMatch(/^\d{2,4}$/);
 });

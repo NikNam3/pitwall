@@ -1,7 +1,7 @@
 import fc from 'fast-check';
 import type { SessionTime } from '@pitwall/domain';
 import { describe, expect, it } from 'vitest';
-import { isStale } from '../../src/kit/stale/stale.ts';
+import { carFieldStaleMs, isStale, staleRole } from '../../src/kit/stale/stale.ts';
 
 const T = (n: number) => n as SessionTime;
 
@@ -49,5 +49,30 @@ describe('isStale', () => {
         if (isStale(T(0), 'telemetry', T(age), cadence)) expect(isStale(T(0), 'telemetry', T(age + extra), cadence)).toBe(true);
       }),
     );
+  });
+});
+
+describe('carFieldStaleMs', () => {
+  const clock = (now: number | undefined, cadenceMs?: number) => ({ now: () => (now === undefined ? undefined : T(now)), cadenceMs: () => cadenceMs });
+  it('is how long the field has been behind once its source is stale', () => {
+    expect(carFieldStaleMs({ telemetry: T(1000) }, 'condition.brakes.tempC', clock(1200, 50))).toBe(200);
+    expect(carFieldStaleMs({ damage: T(1000) }, 'tyres.corners.wearPct', clock(1301))).toBe(301);
+  });
+  it('is undefined while fresh, before the source arrived, without a clock or without updatedAt', () => {
+    expect(carFieldStaleMs({ telemetry: T(1000) }, 'condition.brakes.tempC', clock(1100, 50))).toBeUndefined();
+    expect(carFieldStaleMs({}, 'condition.brakes.tempC', clock(5000, 50))).toBeUndefined();
+    expect(carFieldStaleMs({ telemetry: T(0) }, 'condition.brakes.tempC', clock(undefined, 50))).toBeUndefined();
+    expect(carFieldStaleMs({ telemetry: T(0) }, 'condition.brakes.tempC', undefined)).toBeUndefined();
+    expect(carFieldStaleMs(undefined, 'condition.brakes.tempC', clock(5000, 50))).toBeUndefined();
+  });
+});
+
+describe('staleRole: stale wins over every highlight', () => {
+  it('a stale value is faint whatever its role', () => {
+    for (const r of ['critical', 'warning', 'textDim', undefined] as const) expect(staleRole(r, true)).toBe('textFaint');
+  });
+  it('a fresh value keeps its role, or none', () => {
+    expect(staleRole('critical', false)).toBe('critical');
+    expect(staleRole(undefined, false)).toBeUndefined();
   });
 });

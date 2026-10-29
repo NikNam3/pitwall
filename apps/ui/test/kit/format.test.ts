@@ -23,7 +23,50 @@ import {
   formatSector,
   formatSessionClock,
   formatTemp,
+  fixed,
+  formatCount,
+  formatGapTick,
+  formatLaps,
+  formatLoss,
+  formatMillis,
+  formatPercent,
+  formatCelsius,
+  formatRate,
+  formatKgPerLap,
+  MINUS,
 } from '../../src/kit/values/format.ts';
+
+describe('one minus glyph (U+2212) everywhere', () => {
+  const formatters: Array<[string, (n: number) => string]> = [
+    ['fixed', (n) => fixed(n, 1)],
+    ['formatTemp', formatTemp],
+    ['formatCelsius', formatCelsius],
+    ['formatPct', formatPct],
+    ['formatPercent', formatPercent],
+    ['formatCount', formatCount],
+    ['formatRate', formatRate],
+    ['formatLoss', formatLoss],
+    ['formatMillis', formatMillis],
+    ['formatPsi', formatPsi],
+    ['formatKg', formatKg],
+    ['formatKgUnit', formatKgUnit],
+    ['formatKgPerLap', formatKgPerLap],
+    ['formatLaps', formatLaps],
+    ['formatWhole', formatWhole],
+    ['formatWholeLaps', formatWholeLaps],
+    ['formatPenaltyMs', (n) => formatPenaltyMs(n * 1000)],
+    ['formatDeltaPct', formatDeltaPct],
+    ['formatGapTick', (n) => formatGapTick(-n)],
+    ['formatMJ', (n) => formatMJ(n * 1e6)],
+    ['formatSeconds', (n) => formatSeconds(n * 1000, 1)],
+  ];
+  it.each(formatters)('%s never prints an ASCII hyphen for a negative value', (_name, format) => {
+    fc.assert(fc.property(fc.double({ min: -1000, max: -0.0001, noNaN: true }), (n) => !format(n).includes('-')));
+  });
+  it.each(formatters)('%s prints the true minus for a clearly negative value', (_name, format) => {
+    expect(format(-7)).toContain(MINUS);
+  });
+});
 
 describe('formatLapTime', () => {
   it.each([
@@ -63,7 +106,7 @@ describe('formatTemp', () => {
     [94.6, '95°'],
     [94.4, '94°'],
     [0, '0°'],
-    [-3.2, '-3°'],
+    [-3.2, '−3°'],
   ])('%f -> %s', (c, text) => expect(formatTemp(c)).toBe(text));
 });
 
@@ -80,7 +123,7 @@ describe('formatKg', () => {
     [10, '10.0'],
     [0, '0.0'],
     [1.26, '1.3'],
-    [-2, '-2.0'],
+    [-2, '−2.0'],
   ] as Array<[number, string]>)('%f -> %s', (k, text) => expect(formatKg(k)).toBe(text));
 });
 

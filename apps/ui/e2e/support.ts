@@ -2,6 +2,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import type { Locator, Page } from '@playwright/test';
 
 type PanelSpec = { widget: string; options: Record<string, unknown>; linkGroup: number };
 export type WindowSpec = { id: string; panels: Record<string, PanelSpec> };
@@ -11,6 +12,15 @@ export const marker = (name: string): PanelSpec => ({ widget: name, options: {},
 export const feedStatus: PanelSpec = { widget: 'feed-status', options: {}, linkGroup: 1 };
 
 export const unknownWidgetText = (name: string): string => `unknown widget ${name}`;
+
+/** Opens a workbook by name through the picker (Ctrl+O), never by its position: the bridge seeds car, quali and race too. */
+export async function openWorkbook(page: Page, name: string): Promise<void> {
+  await page.keyboard.press('Control+O');
+  await page.getByTestId('workbook-picker').getByRole('button', { name, exact: true }).click();
+}
+
+/** The panel of one widget, by the panel's `data-widget`. */
+export const panelOf = (page: Page, widget: string): Locator => page.locator(`.panel[data-widget="${widget}"]`);
 
 export async function makeDataDir(): Promise<string> {
   const dir = await mkdtemp(path.join(tmpdir(), 'pitwall-e2e-'));

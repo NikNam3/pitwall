@@ -6,4 +6,8 @@ describe('roleOrUndefined', () => {
     expect(roleOrUndefined('critical')).toBe(role('critical'));
     expect(roleOrUndefined(undefined)).toBeUndefined();
   });
+  it('takes a fallback role for none, so a display never writes `r ? role(r) : role(x)`', () => {
+    expect(roleOrUndefined(undefined, 'textDim')).toBe(role('textDim'));
+    expect(roleOrUndefined('warning', 'textDim')).toBe(role('warning'));
+  });
 });

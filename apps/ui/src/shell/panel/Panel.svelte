@@ -171,7 +171,7 @@
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-<div class="panel" onclick={inspect}>
+<div class="panel" data-widget={spec.widget} onclick={inspect}>
   <header use:portal={headerTarget} style:background={role('bgBand')}>
     <span class="title" style:color={role('textDim')}>{widget?.decl.title ?? spec.widget}</span>
     <LinkMarker {store} groupId={spec.linkGroup} {group} {link} onOpen={(button) => openAt('picker', button)} />
@@ -199,7 +199,8 @@
     {:else if status === 'ok' && size === null}
       <span style:color={role('textFaint')}>{text.tooSmall}</span>
     {:else if status === 'ok' && size !== undefined && View !== undefined && link !== undefined}
-      <View data={values} options={spec.options} {size} {link} />
+      <!-- A dimmed view drops the inline highlight roles of its values: an old value must not stay amber or red. -->
+      <div class="view" class:dim><View data={values} options={spec.options} {size} {link} /></div>
     {/if}
   </div>
 </div>
@@ -234,5 +235,11 @@
     min-height: 0;
     overflow: hidden;
     padding: 0 var(--pw-header-pad);
+  }
+  .view {
+    display: contents;
+  }
+  .view.dim :global(*) {
+    color: inherit !important;
   }
 </style>

@@ -3,7 +3,7 @@
 // shows a collision before session time 79 s.
 import { readFile } from 'node:fs/promises';
 import { expect, test } from '@playwright/test';
-import { makeDataDir, removeDataDir, workbookFile } from './support.ts';
+import { makeDataDir, openWorkbook, panelOf, removeDataDir, workbookFile } from './support.ts';
 import { launchPitwall, startBridge } from './harness.ts';
 
 const RECORDING = 'raceSingapore';
@@ -45,11 +45,10 @@ test('the race workbook is seeded, opens by name, shows 20 tower rows and an ear
   await page.bringToFront();
 
   // Open the workbook by name through the picker (Ctrl+O), not by its position.
-  await page.keyboard.press('Control+O');
-  await page.getByRole('button', { name: 'race', exact: true }).click();
+  await openWorkbook(page, 'race');
 
   // The tower shows every car: header row excluded, 20 rows.
-  const towerRows = page.locator('.tower .row:not(.head)');
+  const towerRows = panelOf(page, 'timing-tower').locator('.row:not(.head)');
   await expect(towerRows).toHaveCount(20, { timeout: SETTLE_MS });
 
   // Play at 8x until a collision entry (feed id `collision:<cars>:<sessionTime ms>`) with session time < 79 s appears.

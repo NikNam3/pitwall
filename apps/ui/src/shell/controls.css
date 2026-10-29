@@ -45,3 +45,15 @@ select.pw-input option:hover,
 select.pw-input option:checked {
   background: var(--pw-bgBand);
 }
+
+/* Keyboard focus: a quiet outline in the theme's focus role, never the browser's accent colour. */
+select.pw-input:focus-visible {
+  outline: var(--pw-border-px) solid var(--pw-focus);
+  outline-offset: 0;
+  accent-color: var(--pw-focus);
+}
+select.pw-input option:focus-visible {
+  outline: var(--pw-border-px) solid var(--pw-focus);
+  outline-offset: calc(-1 * var(--pw-border-px));
+  background: var(--pw-bgBand);
+}

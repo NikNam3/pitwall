@@ -8,6 +8,8 @@ export type ChartTokens = {
   lineWidth: number;
   ownCarLineWidth: number;
   staleAlpha: number;
+  /** Alpha of the red-flag phase band over the plot. */
+  redBandAlpha: number;
   /** Dash pattern (px on, px off) of a teammate or second car line. */
   dash: [number, number];
   /** X units one character cell of chart width spans: a wider chart shows more history. */
@@ -26,6 +28,7 @@ const QUIET_CHART: ChartTokens = {
   lineWidth: 1.5,
   ownCarLineWidth: 3,
   staleAlpha: 0.35,
+  redBandAlpha: 0.3,
   dash: [6, 4],
   xPerCell: { lap: 0.5, sessionTime: 2000 },
 };
@@ -48,6 +51,8 @@ const QUIET_ROLES: Record<Role, string> = {
   grid: '#1c1d21',
   // Where a dragged panel would land: textFaint at 35 % over the panel.
   dropTarget: '#5c606859',
+  // Keyboard focus of a control: textDim, so it reads as a quiet outline and never as a highlight.
+  focus: '#8d9199',
   critical: '#ff5c5c',
   warning: '#f0b429',
   best: '#b06cff',

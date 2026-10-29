@@ -57,6 +57,7 @@
       const lineWidth = token(root, '--pw-chart-line', tokens.lineWidth);
       const ownWidth = token(root, '--pw-chart-own-line', tokens.ownCarLineWidth);
       const staleAlpha = token(root, '--pw-chart-stale-alpha', tokens.staleAlpha);
+      const redAlpha = token(root, '--pw-chart-red-alpha', tokens.redBandAlpha);
       const dashVar = cssVar(root, '--pw-chart-dash').split(/\s+/).map(Number).filter(Number.isFinite);
       const dash = dashVar.length > 0 ? dashVar : tokens.dash;
       const xPerCell = {
@@ -103,7 +104,7 @@
                     u.ctx.save();
                     for (const b of clipBands(bandList, visibleXRange(xs, cols, x.kind, xPerCell))) {
                       u.ctx.fillStyle = b.kind === 'red' ? redFill : bandFill;
-                      u.ctx.globalAlpha = b.kind === 'red' ? 0.3 : 1;
+                      u.ctx.globalAlpha = b.kind === 'red' ? redAlpha : 1;
                       const left = u.valToPos(b.from, 'x', true);
                       u.ctx.fillRect(left, u.bbox.top, u.valToPos(b.to, 'x', true) - left, u.bbox.height);
                     }
