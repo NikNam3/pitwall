@@ -2,7 +2,7 @@
 import { known } from '@pitwall/domain';
 import type { Known, TyreWear, UnknownReason } from '@pitwall/domain';
 import { barCells } from '../../kit/bar/bar.ts';
-import type { BarCells } from '../../kit/bar/bar.ts';
+import type { BarCells, BarInput } from '../../kit/bar/bar.ts';
 import { fixed, formatPercent } from '../../kit/values/format.ts';
 import * as text from './text.ts';
 
@@ -16,6 +16,8 @@ export type TyreLifeRow = {
   corner: CornerKey;
   label: string;
   bar: BarCells;
+  /** The same bar as input of the kit `Bar`. */
+  barInput: BarInput;
   wearText: string;
   rateText: string;
   lapsText: string;
@@ -41,10 +43,13 @@ export function tyreLifeRows(wear: TyreWear, cols: number): TyreLifeRow[] {
     const c = wear.corners[corner];
     const life = wear.gameLifeSpanLaps;
     const marker = c.ratePctPerLap.known && life.known ? known(c.ratePctPerLap.value * life.value, c.ratePctPerLap.at) : undefined;
+    const barInput: BarInput = { value: c.wearPct, min: 0, max: 100, cols, limit: wear.limitPct, marker };
+    const bar = barCells(barInput);
     return {
       corner,
       label: corner.toUpperCase(),
-      bar: barCells({ value: c.wearPct, min: 0, max: 100, cols, limit: wear.limitPct, marker }),
+      bar,
+      barInput,
       wearText: c.wearPct.known ? formatPercent(c.wearPct.value) : '',
       rateText: c.ratePctPerLap.known ? fixed(c.ratePctPerLap.value, 1) : '',
       lapsText: c.lapsToLimit.known ? String(Math.floor(c.lapsToLimit.value)) : '',
