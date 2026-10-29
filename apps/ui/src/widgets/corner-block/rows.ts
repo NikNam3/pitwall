@@ -1,8 +1,8 @@
 // Pure join of the three topics into display rows for the corner block: texts, roles and hidden reasons.
 import type { CarBands, CarState, Corners, Known, TyreWear, UnknownReason } from '@pitwall/domain';
-import { fixed, gridRow } from '../../kit/grid/grid.ts';
+import { gridRow } from '../../kit/grid/grid.ts';
 import type { GridColumn } from '../../kit/grid/grid.ts';
-import { formatCelsius, formatPercent, formatPsi } from '../../kit/values/format.ts';
+import { formatCelsius, formatPercent, formatPsi, formatWhole } from '../../kit/values/format.ts';
 import type { Role } from '../../theme/roles.ts';
 import { bandRole } from './emphasis.ts';
 import { columnHeaders, engineUnit } from './text.ts';
@@ -18,7 +18,6 @@ export const FULL_COLUMNS: readonly GridColumn[] = [
   { width: 5, align: 'right' }, { width: 6, align: 'right' }, { width: 5, align: 'right' },
 ];
 
-const whole = (n: number): string => fixed(n, 0);
 const none = (reason: UnknownReason): Cell => ({ text: '', compactText: '', reason });
 
 function cell(value: Known<number>, text: (n: number) => string, compact: (n: number) => string, role?: Role): Cell {
@@ -33,16 +32,16 @@ export function cornerBlockRows(car: CarState, bands: CarBands, wear: TyreWear):
     const tyre = car.tyres.corners[name];
     const band = bands.tyres[name];
     return {
-      surface: cell(tyre.surfaceTempC, whole, formatCelsius, bandRole(band.surfaceC)),
-      carcass: cell(tyre.carcassTempC, whole, formatCelsius, bandRole(band.carcassC)),
+      surface: cell(tyre.surfaceTempC, formatWhole, formatCelsius, bandRole(band.surfaceC)),
+      carcass: cell(tyre.carcassTempC, formatWhole, formatCelsius, bandRole(band.carcassC)),
       pressure: cell(tyre.pressurePsi, formatPsi, formatPsi, bandRole(band.pressurePsi)),
-      brake: cell(car.condition.brakes[name].tempC, whole, whole, bandRole(bands.brakesC[name])),
+      brake: cell(car.condition.brakes[name].tempC, formatWhole, formatWhole, bandRole(bands.brakesC[name])),
       wear: cell(wear.corners[name].wearPct, formatPercent, formatPercent),
     };
   };
   return {
     corners: { fl: row('fl'), fr: row('fr'), rl: row('rl'), rr: row('rr') },
-    engine: cell(car.condition.engineTempC, (n) => `${whole(n)}${engineUnit}`, whole, bandRole(bands.engineC)),
+    engine: cell(car.condition.engineTempC, (n) => `${formatWhole(n)}${engineUnit}`, formatWhole, bandRole(bands.engineC)),
   };
 }
 

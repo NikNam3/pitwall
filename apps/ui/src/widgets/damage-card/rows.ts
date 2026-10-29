@@ -1,5 +1,5 @@
 import type { Corners, DamageJump, DamageParts, DamageState, Known, UnknownReason } from '@pitwall/domain';
-import { formatCount, formatLapNumber, formatPct, formatSecondsPerLap } from '../../kit/values/format.ts';
+import { formatCount, formatDeltaPct, formatLapNumber, formatPct, formatSecondsPerLap } from '../../kit/values/format.ts';
 import { insightText } from '../../kit/text.ts';
 import type { Role } from '../../theme/roles.ts';
 import { jumpRole } from './emphasis.ts';
@@ -22,11 +22,9 @@ export type DamageRows = {
 
 const cell = (k: Known<number>): Cell => (k.known ? { text: formatPct(k.value) } : { text: '', reason: k.reason });
 
-const lap = (n: number): string => formatLapNumber(n).replace(/^L(\d)$/, 'L0$1');
-
 function jumpRow(jump: DamageJump, newest: boolean): JumpRow {
-  const parts = jump.parts.map((p) => insightText.part[p] ?? p).join(' + ');
-  const row: JumpRow = { text: `${lap(jump.lap)} ${parts} +${Math.round(jump.deltaPct)} %`, loss: '' };
+  const parts = jump.parts.map((p) => insightText.part[p] ?? p).join(text.partSeparator);
+  const row: JumpRow = { text: `${formatLapNumber(jump.lap, 2)} ${parts} ${formatDeltaPct(jump.deltaPct)}`, loss: '' };
   const loss = jump.lossMsPerLap;
   if (loss.known) row.loss = text.lossMeasured(formatSecondsPerLap(loss.value));
   else if (loss.reason === 'insufficientData') row.loss = text.lossMeasuring;
@@ -42,13 +40,16 @@ export function damageRows(state: DamageState): DamageRows {
   const part = (key: keyof DamageParts): Cell => (p.known ? cell({ ...p, value: p.value[key] }) : { text: '', reason: p.reason });
   const corner = (c: DamageState['corners']['fl']) => ({ tyre: cell(c.tyrePct), brake: cell(c.brakePct) });
   const faults = [
-    ...(state.drsFault.known && state.drsFault.value ? ['DRS fault'] : []),
-    ...(state.ersFault ? ['ERS fault'] : []),
+    ...(state.drsFault.known && state.drsFault.value ? [text.faults.drs] : []),
+    ...(state.ersFault ? [text.faults.ers] : []),
   ];
   const jumps = [...state.jumps].sort((a, b) => b.at - a.at).map((j, i) => jumpRow(j, i === 0));
   const n = (key: keyof DamageParts): string => (p.known ? formatCount(p.value[key]) : '');
   const line = p.known
-    ? `W${n('frontLeftWingPct')}/${n('frontRightWingPct')}/${n('rearWingPct')} F${n('floorPct')} D${n('diffuserPct')} S${n('sidepodPct')} G${n('gearboxPct')} E${n('enginePct')}`
+    ? text.compactParts({
+        wings: [n('frontLeftWingPct'), n('frontRightWingPct'), n('rearWingPct')],
+        floor: n('floorPct'), diffuser: n('diffuserPct'), sidepod: n('sidepodPct'), gearbox: n('gearboxPct'), engine: n('enginePct'),
+      })
     : '';
   return {
     parts: {
