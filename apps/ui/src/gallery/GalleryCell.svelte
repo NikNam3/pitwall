@@ -23,12 +23,14 @@
     /** Undefined renders the panel of a widget this build lacks, named `widgetName`. */
     widget: RegisteredWidget | undefined;
     widgetName: string;
+    /** True when the e2e screenshot spec compares this cell with a baseline (`data-baseline`). */
+    baseline?: boolean;
     cols: number;
     rows: number;
     moment: MomentValues;
     overrides?: readonly GalleryOverride[];
   };
-  let { id, theme, widget, widgetName, cols, rows, moment, overrides = [] }: Props = $props();
+  let { id, theme, widget, widgetName, baseline = false, cols, rows, moment, overrides = [] }: Props = $props();
 
   const GALLERY_FEED = feedId('gallery');
 
@@ -67,7 +69,7 @@
   const height = (rows + 1) * box.height + SUBPIXEL_PX;
 </script>
 
-<figure data-gallery-id={id} data-ready={ready || undefined} use:themed={theme}>
+<figure data-gallery-id={id} data-ready={ready || undefined} data-baseline={baseline || undefined} use:themed={theme}>
   <figcaption style:color={role('textFaint')}>{id}</figcaption>
   <div class="cell" style:width="{width}px" style:height="{height}px" style:background={role('bgPanel')} style:border-color={role('border')}>
     <Panel {store} {spec} {widget} {link} />

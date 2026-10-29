@@ -5,7 +5,7 @@
   import * as text from '../kit/text.ts';
   import { WIDGETS } from '../widgets/index.generated.ts';
   import { DEFAULT_THEME, role, THEMES } from '../theme/index.ts';
-  import { widgetCells, type CellSource } from './cells.ts';
+  import { hasBaseline, widgetCells, type CellSource } from './cells.ts';
   import { FRAME_STATES, FRAME_WIDGET, MISSING_WIDGET } from './frame-states.ts';
   import GalleryCell from './GalleryCell.svelte';
   import type { GalleryOverride } from './gallery-connection.ts';
@@ -65,6 +65,7 @@
               theme={cell.theme}
               {widget}
               widgetName={widget.decl.name}
+              baseline={hasBaseline(cell, entry, DEFAULT_THEME.name)}
               cols={cell.size.cols}
               rows={cell.size.rows}
               moment={cell.data.kind === 'moment' ? (moments[cell.data.name] ?? []) : []}
@@ -84,6 +85,7 @@
             theme={DEFAULT_THEME}
             widget={state.widget ? frameWidget : undefined}
             widgetName={MISSING_WIDGET}
+            baseline
             cols={frameSize.minCols}
             rows={frameSize.minRows}
             moment={[]}
