@@ -13,7 +13,7 @@ When a hand edit breaks a window's dockview layout so it can't be restored. The 
 
 Recommendation: A, no panel disappears.
 
-**Answer:**
+**Answer:** A
 
 ---
 
@@ -27,7 +27,7 @@ After a code edit, `pitwall dev` takes about 50 s to put the windows back at the
 
 Recommendation: A or C; B helps least exactly where sub-project 3 will work.
 
-**Answer:**
+**Answer:** A, C later
 
 ---
 
@@ -40,7 +40,7 @@ A chart shows `width in cells × laps per cell` of history. Early in a session t
 
 Recommendation: B, negative laps look like a bug.
 
-**Answer:**
+**Answer:** B
 
 ---
 
@@ -51,7 +51,7 @@ Recommendation: B, negative laps look like a bug.
 - **A.** Approved as they are.
 - **B.** Not approved: list what to change.
 
-**Answer:**
+**Answer:** A
 
 ---
 
@@ -65,4 +65,4 @@ Spec 9.3 wants gallery cells and baselines for the top bar and the shell overlay
 
 Recommendation: A.
 
-**Answer:**
+**Answer:** A
