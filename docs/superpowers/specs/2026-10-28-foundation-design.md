@@ -28,8 +28,8 @@ The MVP is **read-only**: pitwall changes nothing in the game.
 | **1** | **Foundation (this document)** | input, decoder, frame assembly, race model core, calculator framework, topics/WebSocket, storage |
 | 2 | UI shell | Svelte 5, free docking (dockview-core), workbooks, pop-out windows, topic subscriptions |
 | 3 | Timing + car monitoring | widgets plus derived values (micro-sectors, gap chart, tyre/fuel/ERS trends, alarms) |
-| 4 | Strategy (deterministic) | degradation fit, pit loss, rejoin projection, undercut/SC calls, weekend data |
-| 5 | Later | performance analysis, Monte Carlo, second driver, season-wide data |
+| 4 | Strategy (deterministic) | degradation fit, pit loss, rejoin projection, undercut/SC calls, weekend data; raising average (V08) and lap overview (V09), moved from 3 (2026-10-29) |
+| 5 | Later: training (calibration and coaching) and more | calibration of the defaults in training, coaching and performance analysis (renamed 2026-10-29), Monte Carlo, second driver, season-wide data |
 | 6 | Pit actuator | box call and tyre choice from outside (separate repo, starts with a spike), after the MVP |
 
 The MVP consists of sub-projects 1–4. Timing, strategy and car monitoring are all required.
