@@ -7,8 +7,8 @@
   import { DEFAULT_THEME, cssVar, resolveColour, resolveRole } from '../../theme/index.ts';
   import type { Role } from '../../theme/index.ts';
   import type { WidgetSize } from '../types.ts';
-  import { buildData, visibleXRange } from './data.ts';
-  import type { ChartSeries } from './data.ts';
+  import { buildData, clipBands, visibleXRange } from './data.ts';
+  import type { ChartSeries, PhaseBand } from './data.ts';
 
   type Props = {
     series: ChartSeries[];
@@ -17,8 +17,8 @@
     yLabel: string;
     /** Both kinds are plain numbers on the axis; the kind is for the caller's labels. */
     x: { kind: 'lap' | 'sessionTime' };
-    /** Safety-car and virtual-safety-car periods, painted behind the series. */
-    bands?: Array<{ from: number; to: number; kind: 'sc' | 'vsc' }> | undefined;
+    /** Safety-car, virtual-safety-car and red-flag periods, painted behind the series (clipped to the visible range). */
+    bands?: PhaseBand[] | undefined;
     size: WidgetSize;
     /** Called after every draw of the plot (the gallery marks its cell ready on the first). */
     ondraw?: (() => void) | undefined;
@@ -81,6 +81,7 @@
       cols = size.cols;
       applied = { width: size.px.width, height: size.px.height };
       const bandFill = resolveRole(el, 'bgBand');
+      const redFill = resolveRole(el, 'flagRed');
       const bandList = bands ?? [];
 
       plot = new uPlot(
@@ -98,8 +99,9 @@
               ? [
                   (u) => {
                     u.ctx.save();
-                    u.ctx.fillStyle = bandFill;
-                    for (const b of bandList) {
+                    for (const b of clipBands(bandList, visibleXRange(xs, cols, x.kind, xPerCell))) {
+                      u.ctx.fillStyle = b.kind === 'red' ? redFill : bandFill;
+                      u.ctx.globalAlpha = b.kind === 'red' ? 0.3 : 1;
                       const left = u.valToPos(b.from, 'x', true);
                       u.ctx.fillRect(left, u.bbox.top, u.valToPos(b.to, 'x', true) - left, u.bbox.height);
                     }
