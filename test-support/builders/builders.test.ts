@@ -7,7 +7,8 @@ describe('builders', () => {
   it('field gives each car laps × 50 crossings in time order', () => {
     const { laps, miniSectors } = field({ cars: 2, laps: 3, paceMs: 90_000 });
     expect(laps).toHaveLength(6);
-    expect(miniSectors).toHaveLength(2 * 3 * 50);
+    expect(miniSectors).toHaveLength(2 * (3 * 50 + 1));
+    expect(miniSectors.filter((m) => m.carId === 0 && m.lap === 4)).toEqual([{ carId: 0, lap: 4, segment: 0, at: 270_000 }]);
     const times = miniSectors.map((m) => m.at);
     expect(times).toEqual([...times].sort((a, b) => a - b));
   });
@@ -32,11 +33,12 @@ describe('builders', () => {
     expect(lap({ wearAtEndPct: { fl: { known: false, reason: 'notReceived' }, fr: l.wearAtEndPct.fr, rl: l.wearAtEndPct.rl, rr: l.wearAtEndPct.rr } }).wearAtEndPct.fl.known).toBe(false);
   });
 
-  it('crossings are 50 evenly spaced segments ending at the lap end', () => {
+  it('crossings are 50 evenly spaced segments, segment 0 at the lap start', () => {
     const c = crossings(carId(1), 2, 90_000, 10_000);
     expect(c).toHaveLength(50);
-    expect(c[0]).toMatchObject({ segment: 0, at: 11_800 });
-    expect(c[49]!.at).toBe(100_000);
+    expect(c[0]).toMatchObject({ segment: 0, at: 10_000 });
+    expect(c[1]!.at).toBe(11_800);
+    expect(c[49]!.at).toBe(98_200);
   });
 
   it('event and flagPhase fill defaults', () => {
@@ -61,7 +63,7 @@ describe('builders', () => {
     expect(view.state.cars[5]!.active).toBe(true);
     expect(view.state.cars[0]!.active).toBe(false);
     expect(view.state.history.laps).toHaveLength(2);
-    expect(view.delta.after.miniSectors).toBe(100);
+    expect(view.delta.after.miniSectors).toBe(101);
     expect(view.delta.truncated).toBe(false);
     expect(view.outputs.get('x')).toBe(1);
     expect(view.feed.connected).toBe(true);
