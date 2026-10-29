@@ -15,5 +15,10 @@ export const roleVar = (r: Role): string => `--pw-${r}`;
 /** The CSS reference components use as a colour value. */
 export const role = (r: Role): string => `var(${roleVar(r)})`;
 
-/** The colour of an optional role: `undefined` (no inline colour, the inherited one) when there is none. */
-export const roleOrUndefined = (r: Role | undefined): string | undefined => (r === undefined ? undefined : role(r));
+/** The colour of an optional role: the `fallback` role's, or `undefined` (no inline colour, the inherited one) when there is none. */
+export function roleOrUndefined(r: Role | undefined): string | undefined;
+export function roleOrUndefined(r: Role | undefined, fallback: Role): string;
+export function roleOrUndefined(r: Role | undefined, fallback?: Role): string | undefined {
+  const chosen = r ?? fallback;
+  return chosen === undefined ? undefined : role(chosen);
+}

@@ -14,7 +14,7 @@
   import Table from '../kit/table/Table.svelte';
   import Value from '../kit/values/Value.svelte';
   import { formatLapTime, formatPct } from '../kit/values/format.ts';
-  import { role } from '../theme/index.ts';
+  import { role, roleOrUndefined } from '../theme/index.ts';
   import { KIT_SIZE } from './layout.ts';
   import { snapGrid } from './snap.ts';
 
@@ -127,7 +127,7 @@
     <figcaption style:color={role('textFaint')}>kit/sector-status</figcaption>
     {#each sectors as [status, ours] (status + ours)}
       {@const r = sectorStatusRole(status, { ours })}
-      <div style:color={r ? role(r) : role('textDim')}>{status} · {ours ? 'ours' : 'rival'}</div>
+      <div style:color={roleOrUndefined(r, 'textDim')}>{status} · {ours ? 'ours' : 'rival'}</div>
     {/each}
   </figure>
 </div>
