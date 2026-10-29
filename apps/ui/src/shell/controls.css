@@ -19,3 +19,9 @@
   padding: 0;
   box-sizing: border-box;
 }
+
+/* A select is one character cell tall; its native inner line is a pixel taller than the cell and would overflow it. */
+select.pw-input {
+  appearance: base-select;
+  line-height: calc(var(--pw-line) * 1em);
+}
