@@ -92,10 +92,10 @@ Reads `per-lap-rate`, `session-remaining`, the lap history (`fuelAtStartKg`, `fu
 Reads `per-lap-rate`, the lap history (`ersStoreAtEndJ`) and the car state. Store now and capacity, the live flow (deploying, harvesting or idle, from the sign of the MGU-K power), deployed and harvested this lap against the per-lap deploy limit, store trend in J/lap, the attack level (config) and laps until the store reaches it, and the ERS mode (published, not displayed).
 
 ### 5.4 `car-bands` → `carBands.car`
-Reads the car state and config. Per channel (tyre surface, carcass and pressure per corner; brake temperature per corner; engine temperature): the value, its state (`below`, `in`, `above`), since when it is out of band, and whether it has been out for a full lap. Tyre bands are per compound. A state change needs the value to cross the band edge by the hysteresis margin, so a value on the edge does not flicker.
+Reads the car state, the lap history (`channelRange`) and config. Per channel (tyre surface, carcass and pressure per corner; brake temperature per corner; engine temperature): the value, its live state (`below`, `in`, `above`) and whether the last completed lap was out of band for the whole lap (its min and max both outside the band). Tyre bands are per compound. Calculators keep no frame-to-frame state (they are stateless or a fold over the history, and a flashback re-runs that fold), so there is no hysteresis and no "out since" (ruling R1, 2026-10-29).
 
 ### 5.5 `damage` → `damage.car`
-Reads `pace`, `pace-delta`, the lap history and the car state. Damage per part now (wings, floor, diffuser, sidepod, gearbox, engine), tyre and brake damage per corner, the faults (DRS, ERS), and the **jumps**: a part's damage rising by at least the jump threshold within a short window. Per jump: when, which parts, by how much, and the measured lap-time loss via `pace-delta`, `insufficientData` until there are two `forPace` laps after it.
+Reads `pace`, `pace-delta`, the lap history and the car state. Damage per part now (wings, floor, diffuser, sidepod, gearbox, engine), tyre and brake damage per corner, the faults (DRS, ERS), and the **jumps**: `damageChange` history events of one part within `jumpWindowMs` that add up to at least `jumpPct` (the engine records every rise of a damage part as such an event, ruling R1). Per jump: when, which parts, by how much, and the measured lap-time loss via `pace-delta`, `insufficientData` until there are two `forPace` laps after it.
 
 ### 5.6 `alarms` → insights
 Reads the five analyses above and the car state. It raises `Insight`s (domain type, existing). The `critical` ones are tier-1 alerts in the top bar until acknowledged (UI shell spec 7.7). The alarm list shows all of them. Rules (thresholds in config):
@@ -149,16 +149,16 @@ Reads `gaps` (the neighbourhood and the gaps before and after), `damage`, `pace-
 | `retirement` | `retirement` event | major |
 | `damage` | a `damage` jump | major |
 | `timeLoss` | a mini-sector more than `timeLossMs` slower than the car's median for that segment over its last laps: the only way to see a spin or an off, since the game sends no event for them | major |
-| `warning` | `cornerCuttingWarnings` increases | minor |
+| `warning` | `penalty` event with a warning `penaltyType` | minor |
 | `penalty` | `penalty` event | minor |
 | `neutralised` | an SC, VSC or red phase starts | minor |
 
-Per entry: when, lap, kind, severity, the cars involved, the time lost (from the mini-sector at once, then `pace-delta` once there are laps), and **what changed for us**: per our car, the position and the gap to the involved car before and after. An entry updates as its time lost resolves, so the topic is a `state` topic with the last `feedLength` entries, newest first. Which kinds are major is config, so warnings can be moved up later.
+Per entry: when, lap, kind, severity, the cars involved, the time lost (from the mini-sector at once, then `pace-delta` once there are laps), and **what changed for us**: per our car, the position and the gap to the involved car before and after, both taken from the mini-sector history (so a flashback reproduces them). An entry updates as its time lost resolves, so the topic is a `state` topic with the last `feedLength` entries, newest first. Which kinds are major is config, so warnings can be moved up later.
 
 ## 7. The race moment
 
 ### 7.1 `race-moment` → `raceMoment.current`
-Reads the flag phases, `incidents`, `battle`, the active insights from `alarms` and `session.info`. Race only, `notApplicable` in other sessions. Publishes the current moment, since when, the rule that set it, and every moment that is active underneath.
+Reads the flag phases, `incidents`, `battle`, the active insights from `alarms` and `session.info`. Race only, `notApplicable` in other sessions. Publishes the current moment, since when (from its cause: the flag phase start or the incident time; `notApplicable` for battle, weather and car care, since calculators keep no frame state), the rule that set it, and every moment that is active underneath.
 
 ### 7.2 Moments, highest priority first
 1. **neutralised:** an SC, VSC or red phase is active.
@@ -364,6 +364,15 @@ ersStoreAtEndJ: Known<Joules>;
 ersDeployedJ: Known<Joules>;      // deployed during this lap
 ersHarvestedJ: Known<Joules>;     // MGU-K + MGU-H, harvested during this lap
 damageAtEnd: Known<DamageParts>;
+// per-lap min and max of every band channel, collected by the engine's lap cursor
+channelRange: {
+  tyres: Corners<{ surfaceC: Known<Range>; carcassC: Known<Range>; pressurePsi: Known<Range> }>;
+  brakesC: Corners<Known<Range>>;
+  engineC: Known<Range>;
+};
+export type Range = { min: number; max: number };
+
+// packages/domain/src/records.ts: RaceEventKind gains 'damageChange', params { part: keyof DamageParts, fromPct, toPct }
 
 // packages/domain/src/analyses/damage.ts (shared with LapRecord)
 export type DamageParts = {
@@ -452,8 +461,7 @@ export type BandReading = {
   value: Known<number>;
   state: Known<BandState>;
   band: { lo: number; hi: number };
-  outSince?: SessionTime;
-  outForFullLap: boolean;
+  outForFullLap: boolean; // the last completed lap's whole range was outside the band
 };
 export type CarBands = {
   tyres: Corners<{ surfaceC: BandReading; carcassC: BandReading; pressurePsi: BandReading }>;
@@ -529,7 +537,7 @@ export type IncidentEntry = {
 };
 
 export type Moment = 'neutralised' | 'incident' | 'weather' | 'battle' | 'carCare';
-export type RaceMoment = { moment: Moment; since: SessionTime; cause: { rule: string; params: Record<string, number | string> }; active: Moment[] };
+export type RaceMoment = { moment: Moment; since: Known<SessionTime>; cause: { rule: string; params: Record<string, number | string> }; active: Moment[] };
 ```
 
 ### A.4 Kit components (props)
@@ -573,7 +581,6 @@ Every key is declared with `defineConfig` (ADR 0008) by the unit named in the fi
 | `car-bands` | `tyrePressurePsi` | 21.5–25.0 | community |
 | `car-bands` | `brakeC` | 300–1000 | community |
 | `car-bands` | `engineC` | up to 125 | community |
-| `car-bands` | `hysteresis` | 2 °C, 0.2 psi | pitwall estimate |
 | `ers` | `deployLimitJ`, `capacityJ` | 4 000 000, 4 000 000 | real F1 regulation (2014–2025), used by F1 25 |
 | `ers` | `attackLevelJ` | 2 400 000 | Avella et al. 40 % margin (research 07), pitwall estimate |
 | `damage` | `jumpPct`, `jumpWindowMs` | 5 %, 2000 | pitwall estimate |

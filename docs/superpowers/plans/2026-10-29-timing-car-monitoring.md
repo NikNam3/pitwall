@@ -141,14 +141,14 @@ Spec section 13 is the schedule. In short:
 
 ### Task 2: Lap-end samples in `LapRecord`
 
-**Goal:** every lap record carries the car's wear, ERS and damage at the lap end, so no analysis re-detects lap ends (spec 3.3).
+**Goal:** every lap record carries the car's wear, ERS and damage at the lap end and the lap's min/max of every band channel, and the engine records damage rises as history events, so no calculator needs frame-to-frame state (spec 3.3, A.1; ledger ruling R1).
 
 **Scope:** `packages/engine/src/history`, `packages/engine/test/history`, `packages/domain/src/records.ts` (from Task 3, read-only here).
 
 **Depends on:** Task 3 (the fields exist in the type).
 
 **Interfaces:**
-- Consumes: `LapRecord` with `wearAtEndPct`, `ersStoreAtEndJ`, `ersDeployedJ`, `ersHarvestedJ`, `damageAtEnd` (spec A.1).
+- Consumes: `LapRecord` with `wearAtEndPct`, `ersStoreAtEndJ`, `ersDeployedJ`, `ersHarvestedJ`, `damageAtEnd`, `channelRange`, and `RaceEventKind` `'damageChange'` (spec A.1).
 - Produces: the engine fills them where it writes a `LapRecord` today. Storage needs no change: laps are stored as JSON (`apps/bridge/src/storage/storage-writer.ts:86`).
 
 **Requirements:**
@@ -156,12 +156,17 @@ Spec section 13 is the schedule. In short:
 2. `ersDeployedJ` and `ersHarvestedJ` are the lap's totals. The game resets its per-lap counters at the line, so take the last value before the reset.
 3. A field the car state doesn't have (realism, not received) is that `Known`'s unknown, never 0.
 4. A `confirmed` record keeps the samples of its `provisional` predecessor.
+5. `channelRange` is collected in the `LapCursor` (like `scMs`): min and max of each band channel over the frames of the lap; `unknown` when no frame had the value.
+6. Whenever a damage part (`DamageParts` fields) rises between two frames, append a `RaceEvent` `{ kind: 'damageChange', carId, at, params: { part, fromPct, toPct } }` to the history. A fall (repair at a stop) appends nothing.
 
 **Tests** (`packages/engine/test/history/lap-end-samples.test.ts`):
 - `lap end samples wear per corner from the completing frame`
 - `ers deployed is the value before the per-lap reset`
 - `a rival hidden by realism has unknown('realism') samples`
 - `confirmed record keeps the provisional samples`
+- `channelRange holds the min and max surface temperature of the lap's frames`
+- `a front-left wing rise from 0 to 12 % appends one damageChange event; a repair appends none`
+- `a flashback truncates damageChange events like every other event`
 - Fixture test (`apps/bridge/test/fixtures/laps.fixture.test.ts`, new `it`): on `ttZandvoort` every lap has `wearAtEndPct.fl` known with value 0, and `ersStoreAtEndJ` known with value 4 000 000 (the time trial holds both fixed, spec 11.3).
 
 - [ ] Test phase · [ ] Implement phase · [ ] review · [ ] merged
@@ -404,14 +409,13 @@ The bindings compute `gaps.toCar` and `gaps.gapper` from it in their `select`, w
 
 ### Task 14: `car-bands`
 
-**Unit:** `car-bands` (quick calculator, `cadence: { hz: 4 }`, reads `tyres`, `condition`). Its out-of-band times need state, so they are kept by an incremental calculator over frames, or by comparing with the previous output (implementer's choice; the tests decide). **Depends on:** Tasks 3, 5.
+**Unit:** `car-bands` (quick calculator, `cadence: { hz: 4 }`, reads `tyres`, `condition`, `laps`). Stateless (ledger ruling R1): live state from the current value, `outForFullLap` from the last completed lap's `channelRange`. **Depends on:** Tasks 2, 3, 5.
 
 **Interfaces:** produces `carBands.car` (`CarBands`, spec A.3).
 
 **Tests:**
 - `soft surface 104 °C is in band; 106 °C is above`
-- `hysteresis: after going above at 106, 104.5 stays above, 102.9 returns to in`
-- `outSince is the session time the channel left the band; outForFullLap after one full lap out`
+- `outForFullLap when the last lap's channelRange min is above the band; false when the min was inside`
 - `inter tyres use the inter band`
 - `carcass in surface-only mode is notApplicable`
 - `a rival hidden by realism has unknown('realism') values and states`
@@ -475,13 +479,13 @@ The bindings compute `gaps.toCar` and `gaps.gapper` from it in their `select`, w
 
 ### Task 18: `damage` (critical path)
 
-**Unit:** `damage` (incremental calculator over frames and `laps`, reads `condition`, `tyres`, `laps`, `{ calculator: 'pace' }`). **Depends on:** Tasks 2, 10, 12.
+**Unit:** `damage` (incremental calculator over `events` and `laps`, reads `condition`, `tyres`, `events`, `laps`, `{ calculator: 'pace' }`). Jumps come from the `damageChange` history events (ledger ruling R1). **Depends on:** Tasks 2, 10, 12.
 
 **Interfaces:** produces `damage.car` (`DamageState`, with `corners` for tyre and brake damage).
 
 **Tests:**
-- `front left wing 0 → 12 % within 2 s is one jump with deltaPct 12`
-- `a 3 % rise is not a jump; two rises of 3 % within 2 s are`
+- `a damageChange of the front-left wing 0 → 12 % is one jump with deltaPct 12`
+- `a 3 % rise is not a jump; two rises of 3 % within 2000 ms are one jump of 6 %`
 - `lossMsPerLap is insufficientData until two pace laps after the jump, then pace after minus before`
 - `two jumps in one lap are two entries`
 - flashback equals fresh run
@@ -537,12 +541,12 @@ The bindings compute `gaps.toCar` and `gaps.gapper` from it in their `select`, w
 
 **Interfaces:** consumes `paceDelta`. Produces `incidents.feed` (`IncidentEntry[]`, newest first, at most `feedLength`).
 
-**Requirements:** spec 6.4. An entry's id is stable: kind + cars + session time, so an update replaces its entry instead of adding one. The "before" values are taken at the incident. The "after" values are taken 5 s later, `notReceived` until then.
+**Requirements:** spec 6.4. An entry's id is stable: kind + cars + session time, so an update replaces its entry instead of adding one. Warnings are `penalty` events with a warning `penaltyType`. The "before" and "after" (5 s later, `notReceived` until then) positions and gaps are computed from the mini-sector history, never from live snapshots (ledger ruling R1).
 
 **Tests:**
 - `a collision of the player car is a major entry with both cars`
 - `a collision of two cars outside the neighbourhood is not in the feed`
-- `a corner-cutting warning increase of a neighbour is a minor warning entry`
+- `a warning penalty event of a neighbour is a minor warning entry`
 - `a mini-sector 2.5 s slower than the car's median is a major timeLoss entry; 1.5 s is none`
 - `forUs: player P7 before, P9 five seconds later, gap to the car before and after`
 - `timeLostMs first from the mini-sector, then from paceDelta once two laps exist`
@@ -583,7 +587,7 @@ The bindings compute `gaps.toCar` and `gaps.gapper` from it in their `select`, w
 - `an SC with a fresh major incident: moment neutralised, active [neutralised, incident, carCare]`
 - `a minor incident never sets incident`
 - `incident holds for 30 s after the major entry, then falls back`
-- `since keeps its value while the moment stays the same`
+- `since is the flag phase start when neutralised, the incident time when incident, notApplicable otherwise`
 - `practice and qualifying: notApplicable`
 - `carCare's cause params carry the number of active critical alarms of our cars`
 
