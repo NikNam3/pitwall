@@ -39,7 +39,7 @@ const moment = (m: RaceMoment['moment']): RaceMoment => ({
   moment: m, since: known(toSessionTime(900), toSessionTime(900)), cause: { rule: 'majorIncident', params: {} }, active: [m],
 });
 
-const field = { cars, intervals, toCar: toUs, board, stints: [], pitStops: [], moment: undefined, session: sessionInfo(3), incidents: undefined };
+const field = { cars, intervals, toCar: toUs, board, moment: undefined, session: sessionInfo(3), incidents: undefined };
 
 /** Synthetic cases and fit expectations for `timing-tower`. */
 const gallery: GalleryEntry<typeof widget> = {

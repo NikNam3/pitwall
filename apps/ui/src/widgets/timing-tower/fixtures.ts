@@ -17,6 +17,8 @@ type CarOptions = {
   compound?: VisualCompound;
   age?: number;
   numPitStops?: number;
+  /** The reconciled stop count; defaults to `numPitStops`. */
+  stops?: number;
   timePenaltyMs?: number;
   totalWarnings?: number;
   resultStatus?: CarTiming['resultStatus'];
@@ -42,6 +44,7 @@ export function overview(id: number, o: CarOptions): CarOverview {
       gridPosition: o.gridPosition ?? o.position, speedTrapFastestKmh: unknown('notReceived'), fiaFlag: 'none',
     },
     tyres: { actualCompound: 'C3', visualCompound: o.compound ?? 'medium', age: o.age ?? 14 },
+    stops: o.stops ?? o.numPitStops ?? 1,
     updatedAt: {},
   };
 }

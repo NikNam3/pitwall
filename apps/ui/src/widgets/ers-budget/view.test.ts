@@ -14,6 +14,7 @@ const state = (over: Partial<ErsState> = {}): ErsState => ({
   storeTrendJPerLap: known(0.4 * MJ, at),
   attackLevelJ: 2.5 * MJ,
   lapsToAttackLevel: known(1.5, at),
+  attack: known({ ready: false, inLaps: 2 }, at),
   mode: known('medium', at),
   flow: known('harvesting', at),
   ...over,
@@ -97,35 +98,30 @@ describe('ersView: trend and attack text', () => {
     expect(v.reasons.trend).toBe('insufficientData');
   });
 
-  it('says "attack ready" when the store is at or above the level', () => {
-    const above = ersView(state({ storeJ: known(2.9 * MJ, at), storeTrendJPerLap: known(-0.3 * MJ, at) }));
-    expect(above.attack).toBe('attack ready');
-    expect(above.attackReady).toBe(true);
-    expect(ersView(state({ storeJ: known(2.5 * MJ, at) })).attack).toBe('attack ready');
+  it('says "attack ready" when the analysis says ready', () => {
+    const v = ersView(state({ storeJ: known(2.9 * MJ, at), storeTrendJPerLap: known(-0.3 * MJ, at), attack: known({ ready: true }, at) }));
+    expect(v.attack).toBe('attack ready');
+    expect(v.attackReady).toBe(true);
   });
 
-  it('is not ready just below the level', () => {
-    const v = ersView(state({ storeJ: known(2.5 * MJ - 1, at) }));
+  it('is not ready when the analysis says not ready', () => {
+    expect(ersView(state({ attack: known({ ready: false, inLaps: 1 }, at) })).attackReady).toBe(false);
+  });
+
+  it('says "attack in N laps" with the analysis`s whole laps', () => {
+    expect(ersView(state({ attack: known({ ready: false, inLaps: 2 }, at) })).attack).toBe('attack in 2 laps');
+    expect(ersView(state({ attack: known({ ready: false, inLaps: 1 }, at) })).attack).toBe('attack in 1 lap');
+  });
+
+  it('says nothing when the attack is not applicable (falling or flat below the level)', () => {
+    const v = ersView(state({ storeTrendJPerLap: known(-0.2 * MJ, at), lapsToAttackLevel: unknown('notApplicable'), attack: unknown('notApplicable') }));
+    expect(v.attack).toBe('');
     expect(v.attackReady).toBe(false);
   });
 
-  it('says "attack in N laps" below the level while rising, N rounded up', () => {
-    expect(ersView(state({ lapsToAttackLevel: known(1.5, at) })).attack).toBe('attack in 2 laps');
-    expect(ersView(state({ lapsToAttackLevel: known(2, at) })).attack).toBe('attack in 2 laps');
-    expect(ersView(state({ lapsToAttackLevel: known(0.2, at) })).attack).toBe('attack in 1 lap');
-  });
-
-  it('says nothing below the level while falling or flat', () => {
-    expect(ersView(state({ storeTrendJPerLap: known(-0.2 * MJ, at), lapsToAttackLevel: unknown('notApplicable') })).attack).toBe('');
-    expect(ersView(state({ storeTrendJPerLap: known(0, at), lapsToAttackLevel: unknown('notApplicable') })).attack).toBe('');
-  });
-
-  it('says nothing below the level when the laps to the level are unknown', () => {
-    expect(ersView(state({ lapsToAttackLevel: unknown('insufficientData') })).attack).toBe('');
-  });
-
-  it('says nothing when the store is unknown', () => {
-    const v = ersView(state({ storeJ: unknown('realism') }));
+  it('says nothing when the attack is unknown', () => {
+    expect(ersView(state({ attack: unknown('insufficientData') })).attack).toBe('');
+    const v = ersView(state({ storeJ: unknown('realism'), attack: unknown('realism') }));
     expect(v.attack).toBe('');
     expect(v.attackReady).toBe(false);
   });

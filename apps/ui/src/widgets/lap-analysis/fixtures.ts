@@ -19,6 +19,7 @@ export function overview(id: number, name: string): CarOverview {
     },
     timing: {} as CarOverview['timing'],
     tyres: { actualCompound: 'C3', visualCompound: 'medium', age: 10 },
+    stops: 0,
     updatedAt: {},
   };
 }
