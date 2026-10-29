@@ -1,11 +1,21 @@
 // `car-bands` (spec 5.4): every band channel of every active car against its band. Stateless (ruling R1).
-import { unknown, type BandReading, type BandState, type CarBands, type CarId, type CarState, type Known, type LapRecord, type VisualCompound } from '@pitwall/domain';
+import {
+  unknown,
+  type BandReading,
+  type BandState,
+  type CarBands,
+  type CarId,
+  type CarState,
+  type Known,
+  type LapRecord,
+  type Range,
+  type VisualCompound,
+} from '@pitwall/domain';
 import type { DeepReadonly, EngineView, QuickCalculator } from '@pitwall/engine';
 import { classifyLap } from '../lap-classes/index.ts';
 import { CAR_BANDS, CAR_BANDS_CONFIG, type CarBandsOutput } from './index.ts';
 
 type Band = { lo: number; hi: number };
-type Range = DeepReadonly<{ min: number; max: number }>;
 type Bands = { surface: Band; carcass: Band; pressure: Band; brakes: Band; engine: Band };
 
 /** The bands of a tyre kind: inter and wet have their own, every other compound is dry. */

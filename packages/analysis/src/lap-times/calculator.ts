@@ -71,11 +71,16 @@ const init = (view: EngineView): Acc => {
   return acc;
 };
 
+/** F1 25 session type codes (data-output spec, "Session types") of the knock-out parts with a cut-off. */
+const SESSION_TYPE = { q1: 5, q2: 6, sprintShootout1: 10, sprintShootout2: 11 } as const;
+
 /** Cars knocked out before the part this session type is, or `undefined` where there is no cut-off. */
 const eliminatedBefore = (acc: Acc): { part: 'q1' | 'q2'; count: number } | undefined => {
   const { sessionType } = acc.session;
-  if (sessionType === 5 || sessionType === 10) return { part: 'q1', count: acc.eliminated.q1 };
-  if (sessionType === 6 || sessionType === 11) return { part: 'q2', count: acc.eliminated.q1 + acc.eliminated.q2 };
+  if (sessionType === SESSION_TYPE.q1 || sessionType === SESSION_TYPE.sprintShootout1) return { part: 'q1', count: acc.eliminated.q1 };
+  if (sessionType === SESSION_TYPE.q2 || sessionType === SESSION_TYPE.sprintShootout2) {
+    return { part: 'q2', count: acc.eliminated.q1 + acc.eliminated.q2 };
+  }
   return undefined;
 };
 
