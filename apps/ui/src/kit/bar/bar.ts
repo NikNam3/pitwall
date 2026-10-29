@@ -42,3 +42,18 @@ export function barCells({ value, min, max, cols, limit, marker, reserve }: BarI
   put(limit, 'limit');
   return { text: kinds.map((k) => BAR_CHARS[k]).join(''), kinds, over, reason };
 }
+
+/** A run of equal-role cells: the fill in the caller's role, empty cells faint, markers dim. */
+export type BarRun = { text: string; tone: 'fill' | 'empty' | 'mark' };
+
+/** Group the cells into runs of equal tone, so the display renders one span per run. */
+export function barRuns({ kinds }: Pick<BarCells, 'kinds'>): BarRun[] {
+  const runs: BarRun[] = [];
+  for (const kind of kinds) {
+    const tone = kind === 'fill' || kind === 'empty' ? kind : 'mark';
+    const last = runs[runs.length - 1];
+    if (last?.tone === tone) last.text += BAR_CHARS[kind];
+    else runs.push({ text: BAR_CHARS[kind], tone });
+  }
+  return runs;
+}
