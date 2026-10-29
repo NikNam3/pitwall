@@ -87,10 +87,10 @@ describe('incidentRows', () => {
     expect(row!.cells.lost.text).toBe('');
   });
 
-  it('shows #<id> for a car missing from cars.overview and an empty cars cell for no car', () => {
+  it('leaves out a car missing from cars.overview, with the reason on hover, and an empty cars cell for no car', () => {
     const [a, b] = incidentRows([entry({ carIds: [carId(2), carId(9)] }), minor({ carIds: [] })], cars, undefined);
-    expect(a!.cells.cars.text).toBe('OCO #9');
-    expect(b!.cells.cars.text).toBe('');
+    expect(a!.cells.cars).toEqual({ text: 'OCO', reason: 'notReceived' });
+    expect(b!.cells.cars).toEqual({ text: '' });
   });
 
   it('dims minor entries and ambers only the newest major entry in the incident moment', () => {

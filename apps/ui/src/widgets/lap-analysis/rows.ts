@@ -1,7 +1,7 @@
 import type { CarOverview, SessionInfo } from '@pitwall/contracts';
 import type { CarId, LapBoard, LapBoardRow, Known, Ms, SectorStatus } from '@pitwall/domain';
-import { carCode } from '../../kit/car/car-code.ts';
-import { formatCarNumber } from '../../kit/values/format.ts';
+import { carCodeById, type CarCodeCell } from '../../kit/car/car-label.ts';
+import { ourCars } from '../../kit/car/our-cars.ts';
 
 export type LapAnalysisInput = { board: LapBoard; cars: CarOverview[]; session: SessionInfo };
 
@@ -10,7 +10,8 @@ export type Cell = { value: Known<Ms>; absolute: boolean; status: SectorStatus }
 
 export type LapAnalysisRow = {
   carId: CarId;
-  code: string;
+  /** The car code; empty with the reason when the field lacks the car. */
+  code: CarCodeCell;
   ours: boolean;
   reference: boolean;
   best: Cell;
@@ -24,21 +25,20 @@ function status(value: Known<Ms>, holder: LapBoard['sessionBest']['lap'], id: Ca
   return 'personalBest';
 }
 
-function toRow(row: LapBoardRow, input: LapAnalysisInput): LapAnalysisRow {
-  const { board, cars, session } = input;
+function toRow(row: LapBoardRow, input: LapAnalysisInput, ours: ReadonlySet<CarId>): LapAnalysisRow {
+  const { board, cars } = input;
   const reference = row.carId === board.referenceCarId;
   const pick = <T,>(absolute: T, delta: T): T => (reference ? absolute : delta);
   const make = (absolute: Known<Ms>, delta: Known<Ms>, holder: LapBoard['sessionBest']['lap'] | undefined): Cell => {
     const value = pick(absolute, delta);
     return { value, absolute: reference, status: holder ? status(value.known ? absolute : value, holder, row.carId) : 'none' };
   };
-  const identity = cars.find((c) => c.id === row.carId)?.identity;
   const d = row.deltaToReference;
   const sb = board.sessionBest;
   return {
     carId: row.carId,
-    code: identity ? carCode(identity) : formatCarNumber(row.carId),
-    ours: row.carId === session.playerCar || row.carId === session.teammateCar,
+    code: carCodeById(cars, row.carId),
+    ours: ours.has(row.carId),
     reference,
     best: make(row.bestLapMs, d.bestLapMs, sb.lap),
     sectors: row.bestSectorsMs.map((v, i) => make(v, d.bestSectorsMs[i] ?? v, sb.sectors[i])) as LapAnalysisRow['sectors'],
@@ -59,5 +59,6 @@ export function buildRows(input: LapAnalysisInput): LapAnalysisRow[] {
     if (ra === rb) return a.carId - b.carId;
     return ra - rb;
   });
-  return sorted.map((r) => toRow(r, input));
+  const ours = ourCars(input.session);
+  return sorted.map((r) => toRow(r, input, ours));
 }

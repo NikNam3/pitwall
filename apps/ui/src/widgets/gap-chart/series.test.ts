@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { CarOverview, SessionInfo } from '@pitwall/contracts';
 import { carId, known, toSessionTime, unknown } from '@pitwall/domain';
 import type { FlagPhase, GapperLines } from '@pitwall/domain';
-import { gapperReference, gapSeries, ownCarIds, phaseBands, phasesFold, REFERENCE_KINDS } from './series.ts';
+import { ourCars } from '../../kit/car/our-cars.ts';
+import { gapperReference, gapSeries, phaseBands, phasesFold, REFERENCE_KINDS } from './series.ts';
 import { TEAM_COLOURS } from '../../theme/team-colours.ts';
 
 const phase = (over: Partial<FlagPhase> = {}): FlagPhase => ({
@@ -88,20 +89,6 @@ describe('phaseBands', () => {
   });
 });
 
-describe('ownCarIds', () => {
-  it('is empty without a session', () => {
-    expect([...ownCarIds(undefined)]).toEqual([]);
-  });
-
-  it('is the player first, then the teammate', () => {
-    expect([...ownCarIds(session(4, 9))]).toEqual([4, 9]);
-  });
-
-  it('is the player alone without a teammate', () => {
-    expect([...ownCarIds(session(4))]).toEqual([4]);
-  });
-});
-
 describe('gapSeries', () => {
   const cars = [car(0, 'Kuhnlein', 7, 44), car(1, 'Zhou', 7, 24), car(2, 'Max Verstappen', 2, 1), car(3, 'Lando Norris', 8, 4), car(4, 'Oscar Piastri', 8, 81)];
   const lines: GapperLines = {
@@ -112,7 +99,7 @@ describe('gapSeries', () => {
       { carId: carId(0), byLap: [{ lap: 1, gapMs: 1000 }, { lap: 2, gapMs: 2500 }] },
     ],
   };
-  const ours = ownCarIds(session(0, 1));
+  const ours = ourCars(session(0, 1));
 
   it('makes one series per car, in the order of the lines, labelled with the car code', () => {
     expect(gapSeries(lines, cars, ours).map((s) => s.label)).toEqual(['VER', 'KUH']);
@@ -143,9 +130,9 @@ describe('gapSeries', () => {
     expect(pia?.colour?.dashed).toBe(true);
   });
 
-  it('labels a car without an identity #<id> and draws it in the dim colour, not an error', () => {
+  it('leaves the label of a car without an identity empty (kit carCodeById) and draws it in the dim colour, not an error', () => {
     const [s] = gapSeries({ ...lines, cars: [{ carId: carId(15), byLap: [{ lap: 1, gapMs: 10 }] }] }, cars, ours);
-    expect(s?.label).toBe('#15');
+    expect(s?.label).toBe('');
     expect(s?.colour).toMatchObject({ ownCar: false, dashed: false });
   });
 

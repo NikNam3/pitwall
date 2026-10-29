@@ -28,7 +28,7 @@
 <div class="block">
   <div class="line faint">{columns.map((c) => fitCell(text.headers[c.key], c.widthCols, c.align)).join(' ')}</div>
   {#each rows as r (r.carId)}
-    <div class="line" class:ref={r.reference}>{#each columns as c, i (c.key)}{i === 0 ? '' : ' '}{#if c.key === 'drv'}<span style:color={roleOrUndefined(ourCarRole(r.ours))}>{fitCell(r.code, c.widthCols, c.align)}</span>{:else}{@const cell = sectorOf(r, c.key)}{#if cell}<span style:color={roleOrUndefined(cellRole(cell.status, r.ours))} title={hint(cell)}>{fitCell(formatCell(c.key, cell), c.widthCols, c.align)}</span>{/if}{/if}{/each}</div>
+    <div class="line" class:ref={r.reference}>{#each columns as c, i (c.key)}{i === 0 ? '' : ' '}{#if c.key === 'drv'}<span style:color={roleOrUndefined(ourCarRole(r.ours))} title={r.code.reason === undefined ? undefined : unknownReason[r.code.reason]}>{fitCell(r.code.text, c.widthCols, c.align)}</span>{:else}{@const cell = sectorOf(r, c.key)}{#if cell}<span style:color={roleOrUndefined(cellRole(cell.status, r.ours))} title={hint(cell)}>{fitCell(formatCell(c.key, cell), c.widthCols, c.align)}</span>{/if}{/if}{/each}</div>
   {/each}
 </div>
 

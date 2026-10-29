@@ -1,7 +1,7 @@
 // Join and format logic of the incident feed: one pure function from the topics to display rows.
 import type { CarOverview } from '@pitwall/contracts';
 import type { CarId, IncidentEntry, IncidentForUs, Known, RaceMoment, UnknownReason } from '@pitwall/domain';
-import { carCode } from '../../kit/car/car-code.ts';
+import { carCodeById } from '../../kit/car/car-label.ts';
 import { gridRow } from '../../kit/grid/grid.ts';
 import type { GridColumn } from '../../kit/grid/grid.ts';
 import { incidentKinds, separator } from '../../kit/text.ts';
@@ -34,12 +34,17 @@ function forUsText(f: IncidentForUs, entry: IncidentEntry, codeOf: (id: CarId) =
   return `${text.us} ${position}${gap === '' || other === undefined ? '' : `, ${codeOf(other)} ${gap}`}`;
 }
 
+/** The codes of the entry's cars; a car the field lacks is left out and its reason goes to the hover. */
+function carsCell(ids: readonly CarId[], cars: readonly CarOverview[]): IncidentCell {
+  const codes = ids.map((id) => carCodeById(cars, id));
+  const text = codes.flatMap((c) => (c.text === '' ? [] : [c.text])).join(' ');
+  const reason = codes.find((c) => c.reason !== undefined)?.reason;
+  return reason === undefined ? { text } : { text, reason };
+}
+
 /** One row per entry, in feed order. */
 export function incidentRows(feed: readonly IncidentEntry[], cars: readonly CarOverview[], moment: Known<RaceMoment> | undefined): IncidentRow[] {
-  const codeOf = (id: CarId): string => {
-    const car = cars.find((c) => c.id === id);
-    return car === undefined ? `#${id}` : carCode(car.identity);
-  };
+  const codeOf = (id: CarId): string => carCodeById(cars, id).text;
   const newest = newestMajorId(feed);
   return feed.map((entry) => {
     const lost: IncidentCell = entry.timeLostMs.known ? { text: text.lost(formatSeconds(entry.timeLostMs.value, 1)) } : { text: '', reason: entry.timeLostMs.reason };
@@ -48,7 +53,7 @@ export function incidentRows(feed: readonly IncidentEntry[], cars: readonly CarO
       role: incidentRole(moment, entry, newest),
       cells: {
         lap: { text: formatLapNumber(entry.lap) },
-        cars: { text: entry.carIds.map(codeOf).join(' ') },
+        cars: carsCell(entry.carIds, cars),
         what: { text: incidentKinds[entry.kind] },
         lost,
         forUs: { text: entry.forUs.map((f) => forUsText(f, entry, codeOf)).join(separator) },

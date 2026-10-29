@@ -34,11 +34,12 @@ describe('buildRows', () => {
     expect(ver.theo).toMatchObject({ value: ms(VER.theo - KUH.theo), absolute: false });
   });
 
-  it('takes the code from cars.overview and falls back to the number for a car it lacks', () => {
+  it('takes the code from cars.overview; a car it lacks has an empty code with the reason (kit carCodeById)', () => {
     const input = base();
     input.cars = cars.filter((c) => c.id !== carId(4));
     const rows = buildRows(input);
-    expect(rows.map((r) => r.code)).toEqual(['KUH', 'VER', 'NOR', 'LEC', '#4']);
+    expect(rows.map((r) => r.code.text)).toEqual(['KUH', 'VER', 'NOR', 'LEC', '']);
+    expect(rows[4]!.code.reason).toBe('notReceived');
   });
 
   it('marks our cars from session.info: the player car and the teammate', () => {

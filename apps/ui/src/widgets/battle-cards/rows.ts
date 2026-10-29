@@ -1,6 +1,6 @@
 import type { BattleCard, BattleSide, Known, RaceMoment, UnknownReason, VisualCompound } from '@pitwall/domain';
 import type { CarOverview } from '@pitwall/contracts';
-import { carCode } from '../../kit/car/car-code.ts';
+import { carCodeById } from '../../kit/car/car-label.ts';
 import { gridRow, type GridColumn } from '../../kit/grid/grid.ts';
 import { compoundText } from '../../kit/compound/compound-mark.ts';
 import { formatJoules, formatLaps, formatSeconds, formatSignedSeconds } from '../../kit/values/format.ts';
@@ -51,10 +51,9 @@ function sideRow(label: BattleRow['label'], side: Side, card: BattleCard, cars: 
   }
   const s = known.value;
   const highlight = battleRole(moment, card.carId, side);
-  const car = cars.find((c) => c.id === s.carId);
   const sign = side === 'ahead' ? 1 : -1;
   const cells: Record<ColumnId, Cell> = {
-    drv: { text: car === undefined ? '' : carCode(car.identity) },
+    drv: carCodeById(cars, s.carId),
     gap: valueCell(s.gapMs, (ms) => formatSignedSeconds(sign * ms, 3)),
     closing: valueCell(s.closingMsPerLap, (ms) => `${formatSeconds(ms, 2)} ${text.perLap}`),
     toDrs: valueCell(s.lapsToDrs, (n) => (n === 0 ? text.inDrs : formatLaps(n))),

@@ -53,7 +53,7 @@ const gallery: GalleryEntry<typeof widget> = {
     incidentMomentMinorFirst: { feed: [warning, timeLoss, neutralised], cars, moment: moment('incident') },
     // Another moment: nothing amber.
     battleMoment: { feed: [collision, warning], cars, moment: moment('battle') },
-    // A car missing from cars.overview shows as #<id>.
+    // A car missing from cars.overview is left out of the cell, with the reason on hover.
     unknownCar: { feed: [collision], cars: cars.slice(0, 2), moment: undefined },
     // Realism hides no rival value of this display (incidents are public), so there is no realism case.
   },

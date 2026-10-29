@@ -75,9 +75,9 @@ describe('battleRows', () => {
     expect(rows[1]!.cells.drv.text).toBe('ALB');
   });
 
-  it('shows an empty DRV when the car is missing from cars.overview', () => {
+  it('shows an empty DRV with the reason on hover when the car is missing from cars.overview', () => {
     const rows = battleRows(card(), cars.slice(0, 2), undefined);
-    expect(rows[1]!.cells.drv.text).toBe('');
+    expect(rows[1]!.cells.drv).toEqual({ text: '', reason: 'notReceived' });
     expect(rows[1]!.cells.gap.text).toBe('−0.841');
   });
 

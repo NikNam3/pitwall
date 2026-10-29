@@ -1,6 +1,7 @@
 // Joins the topics the timing tower reads into one row per car (no arithmetic: the numbers, stops and compound included, come from the topics).
 import type { CarOverview, SessionInfo } from '@pitwall/contracts';
 import { unknown } from '@pitwall/domain';
+import { ourCars } from '../../kit/car/our-cars.ts';
 import type {
   CarId, GapToCar, IncidentEntry, Interval, Known, LapBoard, LapBoardRow, Ms, RaceMoment, SectorStatus, VisualCompound,
 } from '@pitwall/domain';
@@ -60,7 +61,8 @@ export function buildRows(input: TowerInput): TowerRow[] {
   const toCar = new Map(input.toCar.map((g) => [g.carId, g]));
   const board = new Map(input.board.rows.map((r) => [r.carId, r]));
   const major = input.incidents?.find((e) => e.severity === 'major');
-  const { playerCar, teammateCar } = input.session;
+  const ours = ourCars(input.session);
+  const { playerCar } = input.session;
 
   const rows = input.cars
     .filter((c) => !UNUSED.has(c.timing.resultStatus))
@@ -72,7 +74,7 @@ export function buildRows(input: TowerInput): TowerRow[] {
       const gained = gaps?.positionsGained;
       return {
         carId: id,
-        ours: id === playerCar || id === teammateCar,
+        ours: ours.has(id),
         involved: major?.carIds.includes(id) ?? false,
         retired,
         position: retired ? undefined : c.timing.position,
