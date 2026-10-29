@@ -4,12 +4,12 @@ import type { IncrementalCalculator } from '@pitwall/engine';
 import { describe, expect, it } from 'vitest';
 import type { TopicBinding } from '../../../src/features/feature.ts';
 import gaps from '../../../src/features/gaps/register.ts';
-import { carState, engineView, field } from '../../../../../test-support/builders/index.ts';
+import { carState, engineView, event, field } from '../../../../../test-support/builders/index.ts';
 
-// 3 cars at 90, 91 and 92 s, 3 full laps: positions 1..3 are cars 0..2, everyone at the line after lap 3
+// lights out at 0; 3 cars at 90, 91 and 92 s, 3 full laps: positions 1..3 are cars 0..2, everyone at the line after lap 3
 const { miniSectors } = field({ cars: 3, laps: 3, paceMs: [90_000, 91_000, 92_000] });
 const cars = [0, 1, 2].map((i) => carState({ id: carId(i), timing: { lap: 4, lapDistanceM: 0, totalDistanceM: 15_000 } }));
-const view = engineView({ cars, history: { miniSectors } });
+const view = engineView({ cars, history: { miniSectors, events: [event({ kind: 'lightsOut', at: 0 })] } });
 const calc = gaps.calculators.find((c) => c.id === GAPS) as IncrementalCalculator<unknown, GapsOutput>;
 const out = calc.output(calc.init(view));
 

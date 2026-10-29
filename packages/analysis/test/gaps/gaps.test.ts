@@ -29,6 +29,30 @@ describe('gaps calculator', () => {
     expect(gapsCalculator.reads).toEqual(expect.arrayContaining(['miniSectors', 'timing']));
   });
 
+  it('reads identity, so a playerCar change re-runs it', () => {
+    expect(gapsCalculator.reads).toContain('identity');
+  });
+
+  it('raceStartAt is the lights-out time', () => {
+    expect(run(viewOf(threeCars(), { lightsOutAt: 0 })).raceStartAt).toMatchObject({ known: true, value: 0 });
+    expect(run(viewOf(offsetRace([0, 1_000], 1, 90_000), { lightsOutAt: 4_200 })).raceStartAt).toMatchObject({ known: true, value: 4_200 });
+  });
+
+  it('raceStartAt is notReceived before lights out and follows the event when it arrives', () => {
+    const before = viewOf([], { lightsOutAt: null });
+    const acc = gapsCalculator.init(before);
+    expect(gapsCalculator.output(acc).raceStartAt).toEqual({ known: false, reason: 'notReceived' });
+    const after = viewOf([], { lightsOutAt: 12_000 });
+    const out = gapsCalculator.output(gapsCalculator.update(acc, deltaOf(before, after), after));
+    expect(out.raceStartAt).toMatchObject({ known: true, value: 12_000 });
+    expect(out).toEqual(run(after));
+  });
+
+  it('raceStartAt is notApplicable outside a race', () => {
+    const out = run(viewOf(threeCars(), { kind: 'practice', lightsOutAt: null }));
+    expect(out.raceStartAt).toEqual({ known: false, reason: 'notApplicable' });
+  });
+
   it('field 3 cars at 90/91/92 s: after lap 5, car 2 is 10 s behind the leader and 5 s behind car 1', () => {
     const out = run(viewOf(threeCars()));
     const [c0, c1, c2] = [interval(out, 0), interval(out, 1), interval(out, 2)];
@@ -197,6 +221,25 @@ describe('gapper', () => {
     expect(v(lines.referenceLapMs)).toBe(92_000);
     expect(line(lines, 0)).toEqual([[1, 2_000], [2, 4_000], [3, 0]]);
     expect(line(lines, 1)).toEqual([[1, -1_000], [2, -2_000], [3, -3_000]]);
+  });
+
+  it("counts each car's race time from lights out: a race that starts at 60 s gives the same lines", () => {
+    // the lights go out at 60 s; cars at 90, 91 and 92 s cross the line at 60 000 + n * pace
+    const start = 60_000;
+    const ms = byTime([0, 1, 2].flatMap((i) => [1, 2, 3].flatMap((n) => crossings(carId(i), n, 90_000 + 1_000 * i, start + (n - 1) * (90_000 + 1_000 * i)))));
+    const out = run(viewOf(ms, { lightsOutAt: start }));
+    expect(out.raceStartAt).toMatchObject({ known: true, value: start });
+    const leader = gapperLines(out, { kind: 'leaderAverage' });
+    expect(v(leader.referenceLapMs)).toBe(90_000);
+    expect(line(leader, 0)).toEqual([[1, 0], [2, 0], [3, 0]]);
+    expect(line(leader, 2)).toEqual([[1, -2_000], [2, -4_000], [3, -6_000]]);
+    const fixed = gapperLines(out, { kind: 'fixed', lapMs: 89_000 });
+    expect(line(fixed, 1)).toEqual([[1, -2_000], [2, -4_000], [3, -6_000]]);
+  });
+
+  it('without a known race start no car has a line', () => {
+    const lines = gapperLines(run(viewOf(threeCars(), { lightsOutAt: null })), { kind: 'fixed', lapMs: 90_000 });
+    expect(lines.cars.every((c) => c.byLap.length === 0)).toBe(true);
   });
 
   it('before any completed lap the reference is insufficientData and no car has a line', () => {

@@ -1,7 +1,7 @@
 // Test races for `gaps`: mini-sector histories with car states that agree with them (position, lap, total distance).
-import { carId, MINI_SECTORS, type CarId, type CarState, type MiniSectorCrossing, type ResultStatus } from '@pitwall/domain';
+import { carId, MINI_SECTORS, type CarId, type CarState, type MiniSectorCrossing, type ResultStatus, type SessionKind } from '@pitwall/domain';
 import { historyLengths, type EngineView } from '@pitwall/engine';
-import { carState, crossings, engineView } from '../../../../test-support/builders/index.ts';
+import { carState, crossings, engineView, event } from '../../../../test-support/builders/index.ts';
 import { gapsCalculator } from '../../src/gaps/calculator.ts';
 import type { GapsOutput } from '../../src/gaps/index.ts';
 
@@ -54,11 +54,27 @@ export function carsFor(miniSectors: MiniSectorCrossing[], over: Record<number, 
   });
 }
 
-/** The race view over these crossings, every crossing new; `cars` default to `carsFor(miniSectors)`. */
+/**
+ * The race view over these crossings, every crossing new; `cars` default to `carsFor(miniSectors)`. The lights go out
+ * at `lightsOutAt` (default 0, as `field` starts); `null` means not yet.
+ */
 export const viewOf = (
   miniSectors: MiniSectorCrossing[],
-  { cars, playerCar = 0, config = {} }: { cars?: CarState[]; playerCar?: number; config?: EngineView['config'] } = {},
-): EngineView => engineView({ cars: cars ?? carsFor(miniSectors), history: { miniSectors }, playerCar, config, session: { kind: 'race' } });
+  {
+    cars,
+    playerCar = 0,
+    config = {},
+    lightsOutAt = 0,
+    kind = 'race',
+  }: { cars?: CarState[]; playerCar?: number; config?: EngineView['config']; lightsOutAt?: number | null; kind?: SessionKind } = {},
+): EngineView =>
+  engineView({
+    cars: cars ?? carsFor(miniSectors),
+    history: { miniSectors, events: lightsOutAt === null ? [] : [event({ kind: 'lightsOut', at: lightsOutAt })] },
+    playerCar,
+    config,
+    session: { kind },
+  });
 
 /** `init` over the view, as on a fresh run. */
 export const run = (view: EngineView): GapsOutput => gapsCalculator.output(gapsCalculator.init(view));
