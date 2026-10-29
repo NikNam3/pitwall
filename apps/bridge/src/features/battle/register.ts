@@ -1,17 +1,10 @@
-import { BATTLE_CONFIG, battleCalculator, type BattleOutput } from '@pitwall/analysis';
-import { bindState, defineFeature } from '../feature.ts';
-
-/** `params.carId` must be an own integer property naming one of our cars in the output. */
-const selectCard = (out: BattleOutput, params: object) => {
-  if (!Object.hasOwn(params, 'carId')) return undefined;
-  const { carId } = params as { carId: unknown };
-  return typeof carId === 'number' && Number.isInteger(carId) && Object.hasOwn(out, carId) ? out[carId as keyof BattleOutput] : undefined;
-};
+import { BATTLE_CONFIG, battleCalculator } from '@pitwall/analysis';
+import { bindState, defineFeature, selectCar } from '../feature.ts';
 
 /** `battle`: our cars against the car ahead and the car behind (`battle.cards`). */
 export default defineFeature({
   name: 'battle',
   calculators: [battleCalculator],
-  topics: [bindState('battle.cards', battleCalculator, selectCard)],
+  topics: [bindState('battle.cards', battleCalculator, selectCar)],
   config: [BATTLE_CONFIG],
 });
