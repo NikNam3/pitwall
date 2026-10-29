@@ -74,6 +74,8 @@ export const raceMomentCalculator: QuickCalculator<RaceMomentOutput> = {
 
     const { drsRangeMs } = BATTLE_CONFIG.read(view);
     const sides = [...sidesOf((view.outputs.get(BATTLE) as BattleOutput | undefined) ?? {})];
+    // laps to DRS first: battle gives 0 for a gap already in range and counts a closing one down; the gap alone is
+    // the fallback for a side whose laps to DRS are unknown
     const byLaps = sides.find((s) => (valueOf(s.value.lapsToDrs) ?? Infinity) <= cfg.battleLaps);
     const byGap = sides.find((s) => (valueOf(s.value.gapMs) ?? Infinity) <= drsRangeMs);
     const fight = byLaps ?? byGap;
