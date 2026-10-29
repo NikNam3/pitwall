@@ -146,6 +146,26 @@ describe('gaps calculator', () => {
     expect(mid.latest[carId(1)]).toEqual({ lap: 3, segment: 10, at: 200_200 });
   });
 
+  describe('positionsGained', () => {
+    // five cars 1 s apart: car 2 runs P3
+    const ms = offsetRace([0, 1_000, 2_000, 3_000, 4_000], 1);
+    const gridded = (grid: number) =>
+      carsFor(ms).map((c) => (c.id === 2 ? { ...c, timing: { ...c.timing, gridPosition: grid } } : c));
+    const gained = (kind: 'race' | 'practice', grid: number) => interval(run(viewOf(ms, { cars: gridded(grid), kind })), 2).positionsGained;
+
+    it('in a race is the grid position minus the position now: from P5 to P3 is 2', () => {
+      expect(gained('race', 5)).toMatchObject({ known: true, value: 2 });
+    });
+
+    it('is notApplicable outside a race', () => {
+      expect(gained('practice', 5)).toEqual({ known: false, reason: 'notApplicable' });
+    });
+
+    it('is notReceived while the grid position is 0', () => {
+      expect(gained('race', 0)).toEqual({ known: false, reason: 'notReceived' });
+    });
+  });
+
   it('recent keeps at most 100 crossings per car, by progress, ending at its latest crossing', () => {
     const all = field({ cars: 2, laps: 3, paceMs: [90_000, 91_000] }).miniSectors;
     const out = run(viewOf(all));
