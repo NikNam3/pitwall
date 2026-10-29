@@ -14,7 +14,6 @@ import { carState, engineView, event, lap, realismHidden } from '../../../../tes
 // `brakesC.<corner>`, `engineC`, `wear.<corner>`, `fuel`, `warnings`; `damageJump` and `penaltyNew` use the jump's / event's session time as channel;
 // `compute` returns the active alarms and `insights` returns them unchanged; raisedAt = view.state.sessionTime.
 
-const corners = ['fl', 'fr', 'rl', 'rr'] as const;
 const perCorner = <T>(make: () => T) => ({ fl: make(), fr: make(), rl: make(), rr: make() });
 const NOW = 12_345;
 
@@ -32,6 +31,7 @@ const bandsOk = (): CarBands => ({
 const wearOk = (): TyreWear => ({
   corners: perCorner(() => ({ wearPct: known(20, 0), ratePctPerLap: known(2, 0), lapsToLimit: known(20, 0) })),
   limitPct: 80,
+  warnLaps: 3,
   gameLifeSpanLaps: known(30, 0),
 });
 const fuelOk = (): FuelState => ({
