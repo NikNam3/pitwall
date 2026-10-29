@@ -21,7 +21,7 @@ const overviewOf = (o: { numPitStops?: number; compound?: VisualCompound; pitSto
   return calculator.compute(view)[0]!;
 };
 
-describe('cars.overview: reconciled stops and compound', () => {
+describe('cars.overview: reconciled stops, live compound', () => {
   it('reads the pit-stop records', () => {
     expect(calculator.reads).toEqual(expect.arrayContaining(['pitStops', 'stints']));
   });
@@ -40,12 +40,9 @@ describe('cars.overview: reconciled stops and compound', () => {
     expect(overviewOf({ compound: 'soft', stints: [stint(0, 'hard')] }).tyres.visualCompound).toBe('soft');
   });
 
-  it('compound: the car`s latest stint record when the live compound is unknown', () => {
+  // A stint record is a closed stint, so the car's latest one is the set it had before: never shown as the current tyre.
+  it('compound: unknown while the game has not sent it, even when the car has an older stint record', () => {
     const stints = [stint(0, 'soft'), stint(0, 'hard'), stint(1, 'medium')];
-    expect(overviewOf({ compound: 'unknown', stints }).tyres.visualCompound).toBe('hard');
-  });
-
-  it('compound: unknown when neither the game nor a stint record has it', () => {
-    expect(overviewOf({ compound: 'unknown', stints: [stint(1, 'medium')] }).tyres.visualCompound).toBe('unknown');
+    expect(overviewOf({ compound: 'unknown', stints }).tyres.visualCompound).toBe('unknown');
   });
 });

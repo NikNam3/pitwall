@@ -1,5 +1,5 @@
 import type { CarOverview } from '@pitwall/contracts';
-import type { CarId, VisualCompound } from '@pitwall/domain';
+import type { CarId } from '@pitwall/domain';
 import type { QuickCalculator } from '@pitwall/engine';
 import { bindState, defineFeature } from '../feature.ts';
 
@@ -15,8 +15,8 @@ function byCar<T extends { carId: CarId }>(records: readonly T[]): Map<CarId, T[
 }
 
 /**
- * Every car's identity, timing and tyres, with the stop count and compound reconciled: the game's count can lag a
- * recorded stop, and the live compound is `unknown` while the game has not sent it (the latest stint record has it).
+ * Every car's identity, timing and tyres, with the stop count reconciled: the game's count can lag a recorded stop.
+ * The compound is the live one only: the stint records hold closed stints, so the latest is the previous set.
  */
 const carsOverview: QuickCalculator<CarOverview[]> = {
   id: 'cars.overview',
@@ -26,15 +26,12 @@ const carsOverview: QuickCalculator<CarOverview[]> = {
   cadence: { hz: 10 },
   compute: ({ state }) => {
     const stops = byCar(state.history.pitStops);
-    const stints = byCar(state.history.stints);
     return state.cars.map(({ id, identity, timing, tyres, updatedAt }) => {
-      const stintCompound: VisualCompound | undefined = stints.get(id)?.at(-1)?.visualCompound;
-      const visualCompound = tyres.visualCompound === 'unknown' && stintCompound !== undefined ? stintCompound : tyres.visualCompound;
       return structuredClone({
         id,
         identity,
         timing,
-        tyres: { actualCompound: tyres.actualCompound, visualCompound, age: tyres.age },
+        tyres: { actualCompound: tyres.actualCompound, visualCompound: tyres.visualCompound, age: tyres.age },
         stops: Math.max(stops.get(id)?.length ?? 0, timing.numPitStops),
         updatedAt,
       });
