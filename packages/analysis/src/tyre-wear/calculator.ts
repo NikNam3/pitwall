@@ -1,5 +1,6 @@
 import { known, unknown, type CarId, type Corners, type Known, type LapRecord, type StintRecord, type TyreSet } from '@pitwall/domain';
 import type { DeepReadonly, EngineView, QuickCalculator } from '@pitwall/engine';
+import { ALARMS_CONFIG } from '../alarms/config.ts';
 import { classifyLap } from '../lap-classes/index.ts';
 import { lapsUntil, PER_LAP_RATE_CONFIG, perLapRate, type RateSample } from '../per-lap-rate/index.ts';
 import { TYRE_WEAR, TYRE_WEAR_CONFIG, type TyreWear, type TyreWearOutput } from './index.ts';
@@ -33,6 +34,7 @@ export const tyreWearCalculator: QuickCalculator<TyreWearOutput> = {
   cadence: { hz: 4 },
   compute: (view: EngineView): TyreWearOutput => {
     const { limitPct } = TYRE_WEAR_CONFIG.read(view);
+    const { wearLapsWarning: warnLaps } = ALARMS_CONFIG.read(view);
     const rateOpts = PER_LAP_RATE_CONFIG.read(view);
     const isRace = view.state.session.kind === 'race';
     const { laps, stints } = view.state.history;
@@ -59,7 +61,7 @@ export const tyreWearCalculator: QuickCalculator<TyreWearOutput> = {
         };
       };
       const corners = Object.fromEntries(CORNERS.map((c) => [c, corner(c)])) as Corners<TyreWear['corners']['fl']>;
-      out[car.id] = { corners, limitPct, gameLifeSpanLaps: gameLifeSpan(car.tyres.sets) };
+      out[car.id] = { corners, limitPct, warnLaps, gameLifeSpanLaps: gameLifeSpan(car.tyres.sets) };
     }
     return out;
   },

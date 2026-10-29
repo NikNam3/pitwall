@@ -11,6 +11,7 @@ const value = (limitPct: number): TyreWear => ({
     rr: { wearPct: { known: false, reason: 'realism' }, ratePctPerLap: { known: false, reason: 'realism' }, lapsToLimit: { known: false, reason: 'realism' } },
   },
   limitPct,
+  warnLaps: 3,
   gameLifeSpanLaps: { known: false, reason: 'realism' },
 });
 
