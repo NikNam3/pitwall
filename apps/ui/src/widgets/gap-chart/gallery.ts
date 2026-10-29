@@ -29,6 +29,7 @@ const overview = (c: Car): CarOverview => ({
   } as unknown as CarOverview['identity'],
   timing: {} as CarOverview['timing'],
   tyres: {} as CarOverview['tyres'],
+  stops: 0,
   updatedAt: {},
 });
 const cars = CARS.map(overview);
