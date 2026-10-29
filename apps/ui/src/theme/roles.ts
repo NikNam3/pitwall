@@ -14,3 +14,6 @@ export const roleVar = (r: Role): string => `--pw-${r}`;
 
 /** The CSS reference components use as a colour value. */
 export const role = (r: Role): string => `var(${roleVar(r)})`;
+
+/** The colour of an optional role: `undefined` (no inline colour, the inherited one) when there is none. */
+export const roleOrUndefined = (r: Role | undefined): string | undefined => (r === undefined ? undefined : role(r));
