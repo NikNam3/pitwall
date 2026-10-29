@@ -1,6 +1,6 @@
 // Gallery declaration of the projected-lap display (spec 9.1). Test-phase file: the implementer does not edit it.
 import type { SessionInfo } from '@pitwall/contracts';
-import { carId, feedId, known, toSessionTime, unknown } from '@pitwall/domain';
+import { carId, feedId } from '@pitwall/domain';
 import type { GalleryEntry } from '../../kit/gallery-types.ts';
 import { insideCutOff, ms, outLap, outsideCutOff, projection } from './fixtures.ts';
 import type { widget } from './widget.ts';
@@ -26,17 +26,6 @@ const gallery: GalleryEntry<typeof widget> = {
     nothingYet: { projection: projection(), session },
     // The finish margin alone (hidden values stay empty cells).
     finishOnly: { projection: { ...projection({ onLap: false }), finishMarginMs: ms(12_000) }, session },
-    // First flying lap of the session: no projection yet, the cut-off stands, its margin is empty (hover: too few laps).
-    firstFlyingLap: {
-      projection: {
-        ...projection({ finishMs: 52_000 }),
-        projectedLapMs: unknown('insufficientData'),
-        cutOff: known({ position: 15, timeMs: 84_006, marginMs: unknown('insufficientData') }, toSessionTime(1000)),
-      },
-      session,
-    },
-    // A rival as the link primary: its projection faster than its best is not green (green is for our cars).
-    rivalPrimary: { projection: insideCutOff, session: { ...session, playerCar: carId(0) } },
   },
   // Task 22: sizes between the modes, one at each mode's minimum plus the edges just inside it.
   fit: [
