@@ -20,10 +20,12 @@
     /** Safety-car, virtual-safety-car and red-flag periods, painted behind the series (clipped to the visible range). */
     bands?: PhaseBand[] | undefined;
     size: WidgetSize;
+    /** Formats the y axis tick values; the default prints the plain numbers. */
+    yFormat?: ((v: number) => string) | undefined;
     /** Called after every draw of the plot (the gallery marks its cell ready on the first). */
     ondraw?: (() => void) | undefined;
   };
-  let { series, xLabel, yLabel, x, bands, size, ondraw }: Props = $props();
+  let { series, xLabel, yLabel, x, bands, size, yFormat, ondraw }: Props = $props();
 
   const SERIES_ROLES: Role[] = ['series1', 'series2', 'series3', 'series4', 'series5', 'series6'];
 
@@ -91,7 +93,7 @@
           legend: { show: false },
           cursor: { show: false },
           scales: { x: { time: false, range: () => visibleXRange(xs, cols, x.kind, xPerCell) } },
-          axes: [{ ...axis, label: xLabel }, { ...axis, label: yLabel }],
+          axes: [{ ...axis, label: xLabel }, { ...axis, label: yLabel, ...(yFormat ? { values: (_u: uPlot, splits: number[]) => splits.map(yFormat) } : {}) }],
           series: [{}, ...lines],
           hooks: {
             draw: [() => ondraw?.()],

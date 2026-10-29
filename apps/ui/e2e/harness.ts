@@ -93,12 +93,12 @@ export async function openGallery(): Promise<GalleryHandle> {
 /** A recording by fixture name: a committed segment (`fixtures/segments/<name>.pwrec.gz`) or a full recording's id in `PITWALL_FIXTURES_DIR`. */
 function recordingPath(name: string): string {
   const index = JSON.parse(readFileSync(path.join(REPO_ROOT, 'fixtures/index.json'), 'utf8')) as {
-    recordings: Array<{ id: string; file: string }>;
+    fixtures: Array<{ id: string; file: string }>;
     segments: Array<{ file: string }>;
   };
   const segment = index.segments.find((s) => s.file === `${name}.pwrec.gz`);
   if (segment !== undefined) return path.join(REPO_ROOT, 'fixtures/segments', segment.file);
-  const recording = index.recordings.find((r) => r.id === name);
+  const recording = index.fixtures.find((r) => r.id === name);
   const dir = process.env['PITWALL_FIXTURES_DIR'] ?? path.join(REPO_ROOT, 'recordings');
   const file = recording === undefined ? undefined : path.join(dir, recording.file);
   if (file === undefined || !existsSync(file)) throw new Error(`no fixture "${name}" (fixtures/index.json, ${dir})`);
