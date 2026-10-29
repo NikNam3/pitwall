@@ -1,7 +1,7 @@
 // End to end (spec 9.3): a bridge replaying tt-zandvoort-lap1 (paused) and Electron with two windows, `main` and `side`.
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
-import { feedStatus, makeDataDir, marker, removeDataDir, subscribeLines, twoWindows, unknownWidgetText, writeWorkbook } from './support.ts';
+import { feedStatus, makeDataDir, marker, openWorkbook, removeDataDir, subscribeLines, twoWindows, unknownWidgetText, writeWorkbook } from './support.ts';
 import { launchPitwall, startBridge } from './harness.ts';
 import type { BridgeHandle, PitwallApp } from './harness-contract.ts';
 
@@ -28,7 +28,8 @@ async function runCleanups(): Promise<void> {
   if (errors.length > 0) throw errors[0];
 }
 
-/** The default workbook has windows main and side; the second workbook ("other", Ctrl+2) marks each with an unknown widget.
+/** The default workbook has windows main and side; the workbook "other" (opened by name: the bridge seeds car, quali and
+ *  race too, so its position is not fixed) marks each with an unknown widget.
  *  Every resource is registered for cleanup as soon as it exists, so a failing step leaves nothing behind. */
 async function setup(insight?: string): Promise<Setup> {
   const dataDir = await makeDataDir();
@@ -66,11 +67,11 @@ test.describe('two windows on a paused replay', () => {
     }
   });
 
-  test('Ctrl+2 in main switches the workbook in both windows', async () => {
+  test('opening `other` from the picker in main switches the workbook in both windows', async () => {
     s = await setup();
     await expect(connected(s.main)).toBeVisible({ timeout: SETTLE_MS });
     await s.main.bringToFront();
-    await s.main.keyboard.press('Control+2');
+    await openWorkbook(s.main, 'other');
     await expect(s.main.getByText(unknownWidgetText('e2e-other-main'))).toBeVisible({ timeout: SETTLE_MS });
     await expect(s.side.getByText(unknownWidgetText('e2e-other-side'))).toBeVisible({ timeout: SETTLE_MS });
     await expect(connected(s.main)).toHaveCount(0);
