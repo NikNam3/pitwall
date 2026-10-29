@@ -186,6 +186,17 @@ export const insightText = {
   damageJump: (parts: string, percent: string): string => `damage: ${parts} ${percent}`,
   warningLast: (warnings: number, before: number): string => `one warning left before a penalty ${warnings}/${before}`,
   penalty: 'penalty',
+  /** The car parts of a damage jump, by the `DamageParts` keys the alarm sends. */
+  part: {
+    frontLeftWingPct: 'FL wing',
+    frontRightWingPct: 'FR wing',
+    rearWingPct: 'rear wing',
+    floorPct: 'floor',
+    diffuserPct: 'diffuser',
+    sidepodPct: 'sidepod',
+    gearboxPct: 'gearbox',
+    enginePct: 'engine',
+  } as Readonly<Record<string, string>>,
   /** The minus sign of a negative value. */
   minus: '−',
 } as const;

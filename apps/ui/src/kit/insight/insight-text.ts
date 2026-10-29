@@ -38,7 +38,7 @@ const KINDS: Record<string, (params: Params) => string> = {
   },
   damageJump: (p) => {
     const delta = num(p['deltaPct']);
-    return words.damageJump((str(p['parts']) ?? '').split(',').join(', '), delta === undefined ? '' : `+${Math.round(delta)} %`);
+    return words.damageJump((str(p['parts']) ?? '').split(',').filter((k) => k !== '').map((k) => words.part[k] ?? k).join(', '), delta === undefined ? '' : `+${Math.round(delta)} %`);
   },
   warningLast: (p) => words.warningLast(num(p['warnings']) ?? 0, num(p['before']) ?? 0),
   penaltyNew: (p) => {
