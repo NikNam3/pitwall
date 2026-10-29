@@ -1,19 +1,7 @@
 // Builds the `EngineView` a calculator sees after the last of `frames`, with feed health you control.
 import { SessionRunner, type EngineView, type FeedMetricsView, type Frame } from '@pitwall/engine';
+import { IDLE_FEED } from '../../../../test-support/builders/index.ts';
 import { initFor } from '../../../../packages/engine/test/support/run.ts';
-
-const IDLE_FEED: FeedMetricsView = {
-  framesClosed: 0,
-  incompleteFrames: 0,
-  latePackets: 0,
-  droppedBeforeSession: 0,
-  droppedUid0: 0,
-  decodeErrors: 0,
-  packetsPerSecond: 60,
-  connected: true,
-  msSinceLastPacket: 0,
-  lossPercent: 0,
-};
 
 /**
  * Runs a `SessionRunner` over `frames` (initialised from the first frame that carries a Session) and views the last result.
