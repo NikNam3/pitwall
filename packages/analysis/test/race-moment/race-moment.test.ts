@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { carId, known, unknown } from "@pitwall/domain";
+import type { EngineView } from "@pitwall/engine";
 import type {
   BattleCard,
   BattleSide,
