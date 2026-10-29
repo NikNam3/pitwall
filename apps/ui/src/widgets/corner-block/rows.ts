@@ -5,10 +5,10 @@ import type { GridColumn } from '../../kit/grid/grid.ts';
 import { staleRole } from '../../kit/stale/stale.ts';
 import { cornerNames } from '../../kit/text.ts';
 import type { CarFieldPath } from '../../kit/values/car-sources.ts';
-import { formatCelsius, formatPercent, formatPsi, formatWhole } from '../../kit/values/format.ts';
+import { formatCelsius, formatPercent, formatPsi, formatTemp, formatWhole } from '../../kit/values/format.ts';
 import type { Role } from '../../theme/roles.ts';
 import { bandRole } from './emphasis.ts';
-import { columnHeaders, engineUnit } from './text.ts';
+import { columnHeaders } from './text.ts';
 
 /**
  * One value: the raw `value`, `text` for the full table and `compactText` for the compact view; both texts empty when
@@ -55,8 +55,8 @@ export function cornerBlockRows(car: CarState, bands: CarBands, wear: TyreWear, 
     const tyre = car.tyres.corners[name];
     const band = bands.tyres[name];
     return {
-      surface: cell(tyre.surfaceTempC, of('tyres.corners.surfaceTempC', formatWhole, formatCelsius, bandRole(band.surfaceC))),
-      carcass: cell(tyre.carcassTempC, of('tyres.corners.carcassTempC', formatWhole, formatCelsius, bandRole(band.carcassC))),
+      surface: cell(tyre.surfaceTempC, of('tyres.corners.surfaceTempC', formatWhole, formatTemp, bandRole(band.surfaceC))),
+      carcass: cell(tyre.carcassTempC, of('tyres.corners.carcassTempC', formatWhole, formatTemp, bandRole(band.carcassC))),
       pressure: cell(tyre.pressurePsi, of('tyres.corners.pressurePsi', formatPsi, formatPsi, bandRole(band.pressurePsi))),
       brake: cell(car.condition.brakes[name].tempC, of('condition.brakes.tempC', formatWhole, formatWhole, bandRole(bands.brakesC[name]))),
       wear: cell(wear.corners[name].wearPct, { text: formatPercent, compact: formatPercent }),
@@ -64,7 +64,7 @@ export function cornerBlockRows(car: CarState, bands: CarBands, wear: TyreWear, 
   };
   return {
     corners: { fl: row('fl'), fr: row('fr'), rl: row('rl'), rr: row('rr') },
-    engine: cell(car.condition.engineTempC, of('condition.engineTempC', (n) => `${formatWhole(n)}${engineUnit}`, formatWhole, bandRole(bands.engineC))),
+    engine: cell(car.condition.engineTempC, of('condition.engineTempC', formatCelsius, formatWhole, bandRole(bands.engineC))),
   };
 }
 

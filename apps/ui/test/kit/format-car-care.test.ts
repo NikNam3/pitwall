@@ -34,13 +34,13 @@ describe('formatLaps (a count always says laps)', () => {
   it('a non-finite number is empty', () => expect(formatLaps(Number.NaN)).toBe(''));
 });
 
-describe('formatCelsius', () => {
+describe('formatCelsius: the one temperature with its unit (alarm texts, the engine line)', () => {
   it.each([
-    [94.6, '95°'],
-    [98, '98°'],
-    [0, '0°'],
-    [-0.4, '0°'],
-    [-3.6, '−4°'],
+    [94.6, '95 °C'],
+    [98, '98 °C'],
+    [0, '0 °C'],
+    [-0.4, '0 °C'],
+    [-3.6, '−4 °C'],
   ])('%f -> %s', (n, text) => expect(formatCelsius(n)).toBe(text));
   it('a non-finite number is empty', () => expect(formatCelsius(Number.NaN)).toBe(''));
 });
