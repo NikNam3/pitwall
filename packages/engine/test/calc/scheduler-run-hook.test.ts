@@ -50,8 +50,8 @@ describe('Scheduler onCalculatorRun', () => {
           const a = ra.apply(f);
           const b = rb.apply(f);
           calls.length = 0;
-          const withHook = hooked.run({ state: a.state, changed: a.changed, delta: a.delta, feed: IDLE_FEED, config: {} });
-          const without = plain.run({ state: b.state, changed: b.changed, delta: b.delta, feed: IDLE_FEED, config: {} });
+          const withHook = hooked.run({ state: a.state, activeFlagPhase: undefined, changed: a.changed, delta: a.delta, feed: IDLE_FEED, config: {} });
+          const without = plain.run({ state: b.state, activeFlagPhase: undefined, changed: b.changed, delta: b.delta, feed: IDLE_FEED, config: {} });
           expect(withHook).toEqual(without);
           for (const id of ['clock', 'slow', 'sum']) expect(calls.filter((c) => c === id).length).toBe(withHook.ran.includes(id) ? 1 : 0);
           expect(calls.filter((c) => c === 'lapCount').length).toBe(withHook.ran.includes('lapCount') ? 2 : 0);
@@ -67,7 +67,7 @@ describe('Scheduler onCalculatorRun', () => {
     const s = make((id, run) => { seen.push(id); return run(); });
     const frames = raceFrames({ cars: 2, frames: 60, speeds: [30, 30, 30, 30, 30, 30], jitter: [0], truncation: [0], flashback: undefined }).frames;
     const r = runnerFor(frames);
-    for (const f of frames) { const x = r.apply(f); s.run({ state: x.state, changed: x.changed, delta: x.delta, feed: IDLE_FEED, config: {} }); }
+    for (const f of frames) { const x = r.apply(f); s.run({ state: x.state, activeFlagPhase: undefined, changed: x.changed, delta: x.delta, feed: IDLE_FEED, config: {} }); }
     expect(seen.filter((id) => id === 'lapCount').length).toBeGreaterThanOrEqual(2);
     expect(seen.filter((id) => id === 'lapCount').length % 2).toBe(0);
   });

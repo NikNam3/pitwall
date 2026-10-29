@@ -18,7 +18,7 @@ export const feed = { framesClosed: 0, incompleteFrames: 0, latePackets: 0, drop
 
 /** A scheduler input at session time `t`; the state's history holds `laps` laps; `config` is the features' effective config. */
 export const input = (t: number, changed: ChangeTag[] = ['timing'], d = delta(), laps = d.after.laps, config: SchedulerInput['config'] = {}): SchedulerInput =>
-  ({ state: { feedId: 'f1', sessionTime: t, history: { laps: new Array(laps).fill({}) } } as never, changed: new Set(changed), delta: d, feed, config });
+  ({ activeFlagPhase: undefined, state: { feedId: 'f1', sessionTime: t, history: { laps: new Array(laps).fill({}) } } as never, changed: new Set(changed), delta: d, feed, config });
 
 /** A quick calculator that reads timing, runs every frame and returns the session time, unless `o` says otherwise. */
 export const quick = (id: string, o: Partial<QuickCalculator<unknown>> = {}): Calculator =>

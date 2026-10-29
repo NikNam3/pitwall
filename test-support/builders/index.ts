@@ -296,6 +296,7 @@ export function engineView({
   config = {},
   outputs = new Map(),
   delta,
+  activeFlagPhase,
   feed = {},
   playerCar = 0,
   sessionTime = 0,
@@ -306,6 +307,7 @@ export function engineView({
   config?: EngineView['config'];
   outputs?: ReadonlyMap<string, unknown>;
   delta?: EngineView['delta'];
+  activeFlagPhase?: EngineView['activeFlagPhase'];
   feed?: Partial<FeedMetricsView>;
   playerCar?: number;
   sessionTime?: SessionTime;
@@ -329,6 +331,7 @@ export function engineView({
   const lengths = historyLengths(full);
   return {
     state,
+    activeFlagPhase,
     changed: new Set(),
     delta: delta ?? { before: historyLengths({ laps: [], stints: [], pitStops: [], flagPhases: [], events: [], miniSectors: [] }), after: lengths, truncated: false },
     feed: { ...IDLE_FEED, ...feed },

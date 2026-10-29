@@ -7,6 +7,7 @@ export type { FrameMetrics } from './frame/metrics.ts';
 export { SessionTracker, type TrackerEvent } from './frame/session-tracker.ts';
 export { CalculatorRegistry, RegistryError, type RegistryErrorReason } from './calc/registry.ts';
 export { defineConfig, type ConfigKey, type ConfigShape, type ConfigValue } from './calc/config.ts';
+export { activeFlagPhaseOf } from './calc/active-flag-phase.ts';
 export { InsightBook } from './calc/insight-book.ts';
 export { Scheduler, type OnCalculatorRun, type SchedulerInput, type SchedulerOptions, type SchedulerResult } from './calc/scheduler.ts';
 export type {
