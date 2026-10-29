@@ -8,6 +8,9 @@ import { cleanup, render } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Gallery from '../../src/gallery/Gallery.svelte';
 
+// Each test renders the whole gallery (every widget, case and size), which takes seconds, more under load.
+vi.setConfig({ testTimeout: 30_000 });
+
 beforeEach(() => {
   vi.stubGlobal(
     'ResizeObserver',

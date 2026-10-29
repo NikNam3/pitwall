@@ -19,6 +19,9 @@ import { THEMES } from '../../src/theme/index.ts';
 import gallery from '../../src/widgets/feed-status/gallery.ts';
 import { widget } from '../../src/widgets/feed-status/widget.ts';
 
+// Each test renders the whole gallery (every widget, case and size), which takes seconds, more under load.
+vi.setConfig({ testTimeout: 30_000 });
+
 beforeEach(() => {
   vi.stubGlobal(
     'ResizeObserver',
