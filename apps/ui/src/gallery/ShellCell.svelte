@@ -8,6 +8,7 @@
   import { provideWindowFont } from '../shell/panel/window-font.ts';
   import { SUBPIXEL_PX } from './layout.ts';
   import { afterFrames } from './ready.ts';
+  import { snapBox } from './snap.ts';
   import { themed } from './theme-action.ts';
 
   type Props = {
@@ -32,6 +33,7 @@
   /* svelte-ignore state_referenced_locally */
   const width = cols * box.width + SUBPIXEL_PX;
 
+  let figure = $state<HTMLElement>();
   let stage = $state<HTMLElement>();
   let height = $state<number | undefined>(undefined);
   let ready = $state(false);
@@ -49,6 +51,8 @@
         height = Math.ceil(overlayBox.offsetTop + overlayBox.offsetHeight) + 1;
         await afterFrames();
       }
+      // Whole pixels, so the cells after this one sit on whole pixels whatever the cell's content measures.
+      if (live && figure !== undefined) snapBox(figure);
       if (live) ready = true;
     })();
     return () => {
@@ -57,18 +61,21 @@
   });
 </script>
 
-<figure data-gallery-id={id} data-ready={ready || undefined} use:themed={theme}>
+<figure bind:this={figure} data-gallery-id={id} data-ready={ready || undefined} use:themed={theme}>
   <figcaption style:color={role('textFaint')}>{id}</figcaption>
-  <div
-    class="stage"
-    bind:this={stage}
-    style:width="{width}px"
-    style:height={overlay ? `${height ?? rows * box.height}px` : undefined}
-    style:background={role('bgPanel')}
-    style:border-color={role('border')}
-    style:color={role('textDim')}
-  >
-    {@render children()}
+  <!-- The fit check (e2e/fit.spec.ts) looks for `.panel .body` in every cell that is not a kit part: the stage is the body. -->
+  <div class="panel">
+    <div
+      class="stage body"
+      bind:this={stage}
+      style:width="{width}px"
+      style:height={overlay ? `${height ?? rows * box.height}px` : undefined}
+      style:background={role('bgPanel')}
+      style:border-color={role('border')}
+      style:color={role('textDim')}
+    >
+      {@render children()}
+    </div>
   </div>
 </figure>
 
