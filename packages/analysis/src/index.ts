@@ -1,6 +1,7 @@
 // The analyses (spec 4–7): one folder per unit; each folder's index exports its calculator id, output type and config.
 export * from './alarms/index.ts';
 export * from './battle/index.ts';
+export { battleCalculator } from './battle/calculator.ts';
 export * from './car-bands/index.ts';
 export * from './car-bands/calculator.ts';
 export * from './damage/index.ts';
