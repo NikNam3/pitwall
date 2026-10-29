@@ -2,6 +2,7 @@
 export * from './alarms/index.ts';
 export * from './battle/index.ts';
 export * from './car-bands/index.ts';
+export * from './car-bands/calculator.ts';
 export * from './damage/index.ts';
 export * from './ers/index.ts';
 export * from './fuel/index.ts';

@@ -1,0 +1,72 @@
+// `car-bands` (spec 5.4): every band channel of every active car against its band. Stateless (ruling R1).
+import { unknown, type BandReading, type BandState, type CarBands, type CarId, type CarState, type Known, type LapRecord, type VisualCompound } from '@pitwall/domain';
+import type { DeepReadonly, EngineView, QuickCalculator } from '@pitwall/engine';
+import { CAR_BANDS, CAR_BANDS_CONFIG, type CarBandsOutput } from './index.ts';
+
+type Band = { lo: number; hi: number };
+type Range = DeepReadonly<{ min: number; max: number }>;
+type Bands = { surface: Band; carcass: Band; pressure: Band; brakes: Band; engine: Band };
+
+/** The bands of a tyre kind: inter and wet have their own, every other compound is dry. */
+const bandsFor = (compound: VisualCompound, c: ReturnType<typeof CAR_BANDS_CONFIG.read>): Bands => {
+  const tyre =
+    compound === 'inter'
+      ? { surface: { lo: c.surfaceInterLo, hi: c.surfaceInterHi }, carcass: { lo: c.carcassInterLo, hi: c.carcassInterHi } }
+      : compound === 'wet'
+        ? { surface: { lo: c.surfaceWetLo, hi: c.surfaceWetHi }, carcass: { lo: c.carcassWetLo, hi: c.carcassWetHi } }
+        : { surface: { lo: c.surfaceDryLo, hi: c.surfaceDryHi }, carcass: { lo: c.carcassDryLo, hi: c.carcassDryHi } };
+  return {
+    ...tyre,
+    pressure: { lo: c.pressureLo, hi: c.pressureHi },
+    brakes: { lo: c.brakeLo, hi: c.brakeHi },
+    engine: { lo: 0, hi: c.engineHi },
+  };
+};
+
+const stateOf = (value: number, { lo, hi }: Band): BandState => (value < lo ? 'below' : value > hi ? 'above' : 'in');
+
+/** The whole range of the last lap lay on one side of the band; an unknown range is not out. */
+const outFor = (range: DeepReadonly<Known<Range>> | undefined, { lo, hi }: Band): boolean =>
+  range !== undefined && range.known && (range.value.min > hi || range.value.max < lo);
+
+const reading = (value: Known<number>, band: Band, range: DeepReadonly<Known<Range>> | undefined): BandReading => ({
+  value,
+  state: value.known ? { known: true, value: stateOf(value.value, band), at: value.at } : unknown(value.reason),
+  band,
+  outForFullLap: outFor(range, band),
+});
+
+const bandsOfCar = (car: DeepReadonly<CarState>, last: DeepReadonly<LapRecord> | undefined, c: ReturnType<typeof CAR_BANDS_CONFIG.read>): CarBands => {
+  const b = bandsFor(car.tyres.visualCompound, c);
+  const r = last?.channelRange;
+  const tyre = (corner: 'fl' | 'fr' | 'rl' | 'rr') => ({
+    surfaceC: reading(car.tyres.corners[corner].surfaceTempC, b.surface, r?.tyres[corner].surfaceC),
+    carcassC: reading(car.tyres.corners[corner].carcassTempC, b.carcass, r?.tyres[corner].carcassC),
+    pressurePsi: reading(car.tyres.corners[corner].pressurePsi, b.pressure, r?.tyres[corner].pressurePsi),
+  });
+  const brake = (corner: 'fl' | 'fr' | 'rl' | 'rr') => reading(car.condition.brakes[corner].tempC, b.brakes, r?.brakesC[corner]);
+  return {
+    tyres: { fl: tyre('fl'), fr: tyre('fr'), rl: tyre('rl'), rr: tyre('rr') },
+    brakesC: { fl: brake('fl'), fr: brake('fr'), rl: brake('rl'), rr: brake('rr') },
+    engineC: reading(car.condition.engineTempC, b.engine, r?.engineC),
+  };
+};
+
+/** Each active car's channels against the bands; `outForFullLap` reads the car's highest-numbered lap. */
+export const carBandsCalculator: QuickCalculator<CarBandsOutput> = {
+  id: CAR_BANDS,
+  kind: 'quick',
+  reads: ['tyres', 'condition', 'laps'],
+  cadence: { hz: 4 },
+  compute(view: EngineView): CarBandsOutput {
+    const config = CAR_BANDS_CONFIG.read(view);
+    const lastLap = new Map<CarId, DeepReadonly<LapRecord>>();
+    for (const lap of view.state.history.laps) {
+      const seen = lastLap.get(lap.carId);
+      if (seen === undefined || lap.lapNumber > seen.lapNumber) lastLap.set(lap.carId, lap);
+    }
+    const out: CarBandsOutput = {};
+    for (const car of view.state.cars) if (car.active) out[car.id] = bandsOfCar(car, lastLap.get(car.id), config);
+    return out;
+  },
+};
