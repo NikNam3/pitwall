@@ -244,7 +244,8 @@ const candidates = (acc: Acc): Candidate[] => {
   for (const { carId, jump } of acc.jumps) list.push(candidate('damage', jump.at, [carId], { lap: jump.lap, jump }));
   const absorbers = list.filter((c) => c.kind === 'collision' || c.kind === 'damage');
   for (const run of standingRuns(acc)) {
-    const into = absorbers.filter((c) => c.carIds[0] === run.carId && Math.abs(c.at - run.at) <= MERGE_MS);
+    // F1 25 names a collision's two cars in no fixed order, so either one's time loss belongs to it.
+    const into = absorbers.filter((c) => c.carIds.includes(run.carId) && Math.abs(c.at - run.at) <= MERGE_MS);
     for (const c of into) c.merged.push(run);
     if (into.length === 0) list.push(candidate('timeLoss', run.at, [run.carId], { lap: lapOfProgress(run.startProgress), run }));
   }
@@ -281,18 +282,26 @@ const paceAround = (acc: Acc, id: CarId, lap: number): Known<Ms> => {
   return last === undefined ? unknown('insufficientData') : paceDelta(before.map((l) => l.lapTimeMs), after.map((l) => l.lapTimeMs), last.completedAt);
 };
 
-/** From the mini-sector at once, then from `pace-delta` once there are laps (spec 6.4). */
+/** Kinds with no time lost: the car is out, the field is neutralised, or the entry is a ruling, not a loss. */
+const NO_TIME_LOST: ReadonlySet<IncidentKind> = new Set(['retirement', 'neutralised', 'warning', 'penalty']);
+
+/**
+ * From the mini-sector at once, then from `pace-delta` once there are laps (spec 6.4). The loss is of the car that
+ * lost time: the first car, unless only the other car of a collision has a merged time loss.
+ */
 const timeLost = (acc: Acc, c: Candidate, lap: number): Known<Ms> => {
-  const primary = c.carIds[0];
-  if (primary === undefined || c.kind === 'retirement') return unknown('notApplicable');
+  const first = c.carIds[0];
+  if (first === undefined || NO_TIME_LOST.has(c.kind)) return unknown('notApplicable');
   if (c.jump?.lossMsPerLap.known) return c.jump.lossMsPerLap;
+  const car = c.merged.length > 0 && !c.merged.some((r) => r.carId === first) ? (c.merged[0]?.carId ?? first) : first;
   if (c.kind !== 'damage') {
-    const pace = paceAround(acc, primary, lap);
+    const pace = paceAround(acc, car, lap);
     if (pace.known) return pace;
   }
   if (c.run !== undefined) return runsLoss([c.run]);
-  if (c.merged.length > 0) return runsLoss(c.merged);
-  return segmentLoss(acc, primary, c.at);
+  const merged = c.merged.filter((r) => r.carId === car);
+  if (merged.length > 0) return runsLoss(merged);
+  return segmentLoss(acc, car, c.at);
 };
 
 const gapKnown = (acc: Acc, snap: Snapshot, ours: CarId, other: CarId, at: SessionTime): Known<Ms> => {
