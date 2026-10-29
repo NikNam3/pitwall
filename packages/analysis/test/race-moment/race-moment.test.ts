@@ -225,8 +225,10 @@ describe("race-moment calculator", () => {
       expect(v.moment).toBe("battle");
       expect(v.cause.rule).toBe("lapsToDrs");
       expect(v.cause.params).toEqual({
-        carId: car1,
+        carId: car0,
+        side: "ahead",
         lapsToDrs: CFG.battleLaps,
+        gapMs: 5000,
       });
       expect(v.active).toEqual(["battle", "carCare"]);
     });
@@ -241,7 +243,12 @@ describe("race-moment calculator", () => {
       );
       expect(v.moment).toBe("battle");
       expect(v.cause.rule).toBe("gap");
-      expect(v.cause.params).toEqual({ carId: car1, gapMs: DRS });
+      expect(v.cause.params).toEqual({
+        carId: car0,
+        side: "behind",
+        lapsToDrs: 20,
+        gapMs: DRS,
+      });
     });
 
     it("a battle card beyond both thresholds, or with unknown values, sets no battle", () => {
