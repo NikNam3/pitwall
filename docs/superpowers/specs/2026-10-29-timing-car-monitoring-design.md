@@ -344,7 +344,7 @@ At most **eight agents** at a time, reviewers included (user, 2026-10-29; the su
 
 ## 14. Open points
 1. **The recordings** (1.4, item 2): a practice session for the car care acceptance (11.3), and a full race for the timing acceptance, which also closes F8 for sub-project 4 (a pit stop; an SC if one happens). Both are planned by the user; the timing is unknown.
-2. **Tyre pressure default:** the time trial reports a fixed 30.16 psi, far above the default band 21.5–25 psi. Time-trial values prove nothing, but this default gets the closest look in the W0 source check.
+2. **Tyre pressure default:** the time trial reports a fixed 30.16 psi, far above the default band 21.5–25 psi. Time-trial values prove nothing, but this default gets the closest look in the W0 source check. W0 result: widened to 20.0–31.0 psi (Appendix B); per-axle bands are questions Q1.
 3. **League rules** (research 06 §5): the number of warnings before a penalty and the quali format feed `warningsBeforePenalty` and `quali.eliminatedPerPart`. The defaults (Appendix B) are F1 25's standard settings until the league confirms.
 4. **The two colour questions** are settled by the car care mockups (8.5).
 
@@ -571,14 +571,16 @@ type PhaseBand = { from: number; to: number; kind: 'sc' | 'vsc' | 'red' };
 
 Every key is declared with `defineConfig` (ADR 0008) by the unit named in the first column, with a source note in the declaration. In W0 the supervisor checks each default against a community source for F1 25 (or F1 24 where F1 25 has none), adjusts it if that source differs, and records the source. Values without one keep "pitwall estimate" as the source. Sub-project 5 calibrates all of them in training.
 
+Config fields are flat primitives: a band is one `lo`/`hi` pair per field (`surfaceDryLo`, `surfaceDryHi`, …, `pressureLo`, `pressureHi`, `engineHi`), the quali parts are `eliminatedQ1`, `eliminatedQ2`, and the major incident kinds are one boolean per kind (`collisionMajor`, …). The sources are in each unit's `packages/analysis/src/<unit>/config.ts`.
+
 | Unit | Key | Default | Initial source |
 |---|---|---|---|
 | `per-lap-rate` | `window`, `minSamples` | 5, 3 | pitwall estimate |
 | `pace` | `window` | 3 laps | pitwall estimate |
 | `tyre-wear` | `limitPct` | 70 % | community (performance drops sharply beyond it) |
 | `car-bands` | `tyreSurfaceC` | dry 85–105, inter 60–90, wet 50–80 | community |
-| `car-bands` | `tyreCarcassC` | dry 85–110, inter 60–95, wet 50–85 | community |
-| `car-bands` | `tyrePressurePsi` | 21.5–25.0 | community |
+| `car-bands` | `tyreCarcassC` | dry 85–110, inter 55–75, wet 45–65 | community F1 24 inner-temperature windows (C2–C3 85–105, C1 95–115, inter 55–75, wet 45–65), dry upper bound pitwall estimate |
+| `car-bands` | `tyrePressurePsi` | 20.0–31.0 | community F1 25 setups run up to 29.5 psi front / 26.5 rear cold and down to about 20.2 rear; the live value is higher (time trial 30.16 psi); headroom pitwall estimate; per-axle bands open (questions Q1) |
 | `car-bands` | `brakeC` | 300–1000 | community |
 | `car-bands` | `engineC` | up to 125 | community |
 | `ers` | `deployLimitJ`, `capacityJ` | 4 000 000, 4 000 000 | real F1 regulation (2014–2025), used by F1 25 |

@@ -69,7 +69,7 @@ Claude manages git: workers commit on their own branches; supervisor may merge t
 
 - `docs/architecture.md`: packages, data flow, UI structure, determinism, parallel development, where state lives
 - `docs/research/`: race-engineering research (real practice, ATLAS, TUM strategy model, F1 25 data mapping, control boundary)
-- `docs/decisions/`: ADRs (stack, fixtures, domain package, SQLite library, feature registry, GPL code and data allowed, one file per topic, calculator config, second car later, Electron host, analyses and displays, widget registry, UI state in the bridge)
+- `docs/decisions/`: ADRs (stack, fixtures, domain package, SQLite library, feature registry, GPL code and data allowed, one file per topic, calculator config, second car later, Electron host, analyses and displays, widget registry, UI state in the bridge, displays render and analyses compute)
 - `docs/tasks/_template.md`: the task-brief and report format
 - `~/dev/personal/pitwall-recorder/FORMAT.md`: the `.pwrec` file format
 - `external/`: the F1 25 UDP structs (`F1 25 Telemetry Output Structures.txt`), the data-output PDF and the TUM race-simulation paper (gitignored)
