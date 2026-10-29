@@ -337,6 +337,12 @@ describe('gapper', () => {
     expect(line(fixed, 1)).toEqual([[1, -2_000], [2, -4_000], [3, -6_000]]);
   });
 
+  it('names the reference it resolved: a car for carAverage, none for leaderAverage and fixed', () => {
+    expect(gapperLines(out(), { kind: 'carAverage', carId: carId(1) }).reference).toEqual({ kind: 'carAverage', carId: { known: true, value: carId(1), at: 0 } });
+    expect(gapperLines(out(), { kind: 'leaderAverage' }).reference).toEqual({ kind: 'leaderAverage', carId: { known: false, reason: 'notApplicable' } });
+    expect(gapperLines(out(), { kind: 'fixed', lapMs: 89_000 }).reference).toEqual({ kind: 'fixed', carId: { known: false, reason: 'notApplicable' } });
+  });
+
   it('without a known race start no car has a line', () => {
     const lines = gapperLines(run(viewOf(threeCars(), { lightsOutAt: null })), { kind: 'fixed', lapMs: 90_000 });
     expect(lines.cars.every((c) => c.byLap.length === 0)).toBe(true);
