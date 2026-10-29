@@ -13,14 +13,14 @@ export type { Catalogue };
 const ROOT = join(import.meta.dirname, '..');
 const OUT_FILE = join(ROOT, 'catalogue.generated.json');
 
-/** The directories the catalogue reads; absolute. `strategy` is optional: a feature without a folder there has none. */
-export type CatalogueDirs = { widgets: string; features: string; topics: string; strategy?: string };
+/** The directories the catalogue reads; absolute. `analysis` is optional: a feature without a folder there has none. */
+export type CatalogueDirs = { widgets: string; features: string; topics: string; analysis?: string };
 
 const DEFAULT_DIRS: Required<CatalogueDirs> = {
   widgets: join(ROOT, 'apps', 'ui', 'src', 'widgets'),
   features: join(ROOT, 'apps', 'bridge', 'src', 'features'),
   topics: join(ROOT, 'packages', 'contracts', 'src', 'topics'),
-  strategy: join(ROOT, 'packages', 'strategy', 'src'),
+  analysis: join(ROOT, 'packages', 'analysis', 'src'),
 };
 
 /** Topics that no feature binds because the bridge publishes them itself (global topics are exempt by their scope). */
@@ -81,11 +81,11 @@ export async function buildCatalogue(dirs: CatalogueDirs = DEFAULT_DIRS): Promis
   const bindings = new Map<string, NonNullable<Catalogue['topics'][number]['binding']>>();
   for (const name of findFeatureFolders(dirs.features)) {
     const feature = await importDefault<FeatureModule>(join(dirs.features, name, 'register.ts'));
-    const strategy = dirs.strategy === undefined ? undefined : join(dirs.strategy, name);
+    const analysis = dirs.analysis === undefined ? undefined : join(dirs.analysis, name);
     features.push({
       name,
       folder: shown(join(dirs.features, name)),
-      ...(strategy !== undefined && existsSync(strategy) && { strategyFolder: shown(strategy) }),
+      ...(analysis !== undefined && existsSync(analysis) && { analysisFolder: shown(analysis) }),
       private: widgetNames.has(name),
       calculators: feature.calculators.map((c) => ({ id: c.id, reads: c.reads.map(readText), cadence: cadenceText(c.cadence) })),
       jobs: (feature.jobs ?? []).map((job) => job.id),

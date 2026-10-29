@@ -36,7 +36,7 @@
     }),
   );
   const paths = $derived(
-    [...new Set([...(entry === undefined ? [] : [entry.folder]), ...topics.flatMap((t) => (t.info === undefined ? [] : [t.info.file])), ...features.flatMap((f) => (f.strategyFolder === undefined ? [f.folder] : [f.folder, f.strategyFolder]))])],
+    [...new Set([...(entry === undefined ? [] : [entry.folder]), ...topics.flatMap((t) => (t.info === undefined ? [] : [t.info.file])), ...features.flatMap((f) => (f.analysisFolder === undefined ? [f.folder] : [f.folder, f.analysisFolder]))])],
   );
 
   let states = $state.raw<Record<string, EntryState<unknown>>>({});
