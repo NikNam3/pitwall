@@ -24,6 +24,16 @@ describeWithFixture('ttZandvoort', 'laps from the TT Zandvoort recording', () =>
     expect(current.every((l) => l.carId === st.playerCar && l.status === 'confirmed')).toBe(true);
     expect(current.map((l) => l.lapNumber)).toEqual(Array.from({ length: 15 }, (_, i) => i + 1));
   }, 120_000);
+
+  it('every lap carries the lap-end samples: wear 0 and a store of 4 000 000 J, which the time trial holds fixed (spec 11.3)', async () => {
+    const st = await replayState('ttZandvoort');
+    const mine = st.history.laps.filter((l) => l.carId === st.playerCar);
+    expect(mine.length).toBeGreaterThan(0);
+    for (const l of mine) {
+      expect([l.lapNumber, l.wearAtEndPct.fl]).toMatchObject([l.lapNumber, { known: true, value: 0 }]);
+      expect([l.lapNumber, l.ersStoreAtEndJ]).toMatchObject([l.lapNumber, { known: true, value: 4_000_000 }]);
+    }
+  }, 120_000);
 });
 
 describeWithFixture('raceSingapore', 'laps from the aborted Singapore race', () => {

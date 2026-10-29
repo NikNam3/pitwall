@@ -4,6 +4,7 @@ import type { Frame } from '../frame/frame.ts';
 import type { EngineState, LapCursor } from '../state/engine-state.ts';
 import type { LapCorrection, StepOutput, SubStep } from '../step/types.ts';
 import { carsWithLapData } from './cars.ts';
+import { emptyChannels, lapEndSamples, type LapEndSamples, observeLapFrame } from './lap-samples.ts';
 
 // Bits of `lapValidBitFlags`.
 const LAP_VALID = 0x01;
@@ -30,6 +31,9 @@ const openCursor = (car: CarState, at: SessionTime): LapCursor => {
     actualCompound: tyres.actualCompound,
     visualCompound: tyres.visualCompound,
     outLap: timing.pitStatus !== 'none' || timing.driverStatus === 'outLap',
+    ...emptyChannels(),
+    ersDeployedJ: undefined,
+    ersHarvestedJ: undefined,
   };
 };
 
@@ -43,26 +47,6 @@ const addElapsed = (state: EngineState, cursor: LapCursor, at: SessionTime): voi
 };
 
 const share = (part: number, whole: number): number => (whole > 0 ? part / whole : 0);
-
-type LapEndSamples = Pick<LapRecord, 'wearAtEndPct' | 'ersStoreAtEndJ' | 'ersDeployedJ' | 'ersHarvestedJ' | 'damageAtEnd' | 'channelRange'>;
-
-/** Placeholder until the lap cursor samples them (plan Task 2): every lap-end sample `notReceived`. */
-const unknownLapEnd = (): LapEndSamples => {
-  const none = unknown('notReceived');
-  const corners = <T>(cell: T) => ({ fl: cell, fr: cell, rl: cell, rr: cell });
-  return {
-    wearAtEndPct: corners(none),
-    ersStoreAtEndJ: none,
-    ersDeployedJ: none,
-    ersHarvestedJ: none,
-    damageAtEnd: none,
-    channelRange: {
-      tyres: corners({ surfaceC: none, carcassC: none, pressurePsi: none }),
-      brakesC: corners(none),
-      engineC: none,
-    },
-  };
-};
 
 /** A lap of this cursor as the values LapData can give: sector 3 is what is left of the lap time. */
 const lapFromCursor = (
@@ -92,7 +76,21 @@ const lapFromCursor = (
     positionAtEnd: car.timing.position,
     status: 'provisional',
     completedAt: at,
-    ...unknownLapEnd(),
+    ...lapEndSamples(cursor, car, at),
+  };
+};
+
+/** Lap-end samples of a lap the engine never saw: all `notReceived`. */
+const unknownLapEnd = (): LapEndSamples => {
+  const none = unknown('notReceived');
+  const corners = <T>(cell: T) => ({ fl: cell, fr: cell, rl: cell, rr: cell });
+  return {
+    wearAtEndPct: corners(none),
+    ersStoreAtEndJ: none,
+    ersDeployedJ: none,
+    ersHarvestedJ: none,
+    damageAtEnd: none,
+    channelRange: { tyres: corners({ surfaceC: none, carcassC: none, pressurePsi: none }), brakesC: corners(none), engineC: none },
   };
 };
 
@@ -123,7 +121,9 @@ const trackLap = (state: EngineState, car: CarState, at: SessionTime): void => {
   const cursor = state.open.laps[car.id];
   // The first LapData of a car, or a lap number that went down: start over without emitting.
   if (!cursor || timing.lap < cursor.lap) {
-    state.open.laps[car.id] = openCursor(car, at);
+    const fresh = openCursor(car, at);
+    observeLapFrame(fresh, car);
+    state.open.laps[car.id] = fresh;
     return;
   }
   addElapsed(state, cursor, at);
@@ -132,6 +132,7 @@ const trackLap = (state: EngineState, car: CarState, at: SessionTime): void => {
     if (timing.sector1TimeMs > 0) cursor.sector1Ms = timing.sector1TimeMs;
     if (timing.sector2TimeMs > 0) cursor.sector2Ms = timing.sector2TimeMs;
     cursor.invalid ||= timing.currentLapInvalid;
+    observeLapFrame(cursor, car);
     return;
   }
   const lapNumber = timing.lap - 1;
@@ -143,7 +144,10 @@ const trackLap = (state: EngineState, car: CarState, at: SessionTime): void => {
     if (indexOfLap) indexOfLap[lapNumber] = { provisional: state.history.laps.length, confirmed: false };
     state.history.laps.push(lapFromCursor(car, cursor, lapNumber, timing.lastLapTimeMs, at));
   }
-  state.open.laps[car.id] = openCursor(car, at);
+  // The completing frame belongs to the next lap's ranges and totals, not to the one it ends.
+  const next = openCursor(car, at);
+  observeLapFrame(next, car);
+  state.open.laps[car.id] = next;
 };
 
 /** The newest lap of the car that has a record (provisional or confirmed), 0 if none. */

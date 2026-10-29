@@ -1,4 +1,4 @@
-import { driverKeyString, type CarId, type DriverKey, type FlagPhase, type LapRecord, type PitStopRecord, type RaceEvent, type SessionUid, type StintRecord } from '@pitwall/domain';
+import { driverKeyString, unknown, type CarId, type DriverKey, type FlagPhase, type LapRecord, type PitStopRecord, type RaceEvent, type SessionUid, type StintRecord } from '@pitwall/domain';
 import type { WeekendContext } from '@pitwall/engine';
 import type { Db, SessionRow } from './db.ts';
 
@@ -14,6 +14,21 @@ type SessionDbRow = {
 };
 
 type DriverDbRow = { car_id: number; key_json: string };
+
+/** Laps stored before the lap-end samples existed lack those fields: they read as `unknown('notReceived')`. */
+const withLapEndSamples = (lap: LapRecord): LapRecord => {
+  const none = unknown('notReceived');
+  const corners = <T>(cell: T) => ({ fl: cell, fr: cell, rl: cell, rr: cell });
+  const missing: Pick<LapRecord, 'wearAtEndPct' | 'ersStoreAtEndJ' | 'ersDeployedJ' | 'ersHarvestedJ' | 'damageAtEnd' | 'channelRange'> = {
+    wearAtEndPct: corners(none),
+    ersStoreAtEndJ: none,
+    ersDeployedJ: none,
+    ersHarvestedJ: none,
+    damageAtEnd: none,
+    channelRange: { tyres: corners({ surfaceC: none, carcassC: none, pressurePsi: none }), brakesC: corners(none), engineC: none },
+  };
+  return { ...missing, ...lap };
+};
 
 /** Read side of storage: sessions of a weekend and the history records stored for them, in write order. */
 export class WeekendRepository {
@@ -56,7 +71,7 @@ export class WeekendRepository {
   }
 
   lapsOf(sessionUid: SessionUid, driverKey?: DriverKey): LapRecord[] {
-    return this.read<LapRecord>(this.statements.laps, sessionUid, driverKey);
+    return this.read<LapRecord>(this.statements.laps, sessionUid, driverKey).map(withLapEndSamples);
   }
 
   stintsOf(sessionUid: SessionUid, driverKey?: DriverKey): StintRecord[] {
