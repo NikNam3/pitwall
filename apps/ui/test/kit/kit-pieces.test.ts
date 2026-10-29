@@ -37,11 +37,12 @@ describe('CornerGrid', () => {
 
 describe('Bar', () => {
   const props = { min: 0, max: 100, cols: 10, role: 'text' as const };
-  it('renders the computed cells in the role colour', () => {
+  it('renders the computed cells: fill in the role, empty faint, limit dim', () => {
     const { container } = render(Bar, { ...props, value: known(40, at), limit: 70 });
     const el = container.querySelector('.bar') as HTMLElement;
     expect(el.textContent).toBe(barCells({ value: known(40, at), min: 0, max: 100, cols: 10, limit: 70 }).text);
-    expect(el.style.color).toBe(role('text'));
+    const runs = [...el.querySelectorAll('span')].map((s) => (s as HTMLElement).style.color);
+    expect(runs).toEqual([role('text'), role('textFaint'), role('textDim'), role('textFaint')]);
     expect(el.getAttribute('title')).toBeNull();
   });
   it('an unknown value is an empty bar with the reason on hover', () => {
