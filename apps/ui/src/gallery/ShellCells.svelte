@@ -131,7 +131,7 @@
     {:else if cell.kind === 'settings-popover'}
       {#if widget !== undefined}
         <ShellCell id={cell.id} {theme} cols={stageCols(cell.kind)} overlay>
-          <SettingsPopover decl={widget.decl} options={{}} onChange={noop} linkGroup={1} onLinkGroup={noop} onClose={noop} anchor={{ x: 0, y: 0 }} />
+          <SettingsPopover decl={widget.decl} options={{}} onChange={noop} linkGroup={1} onLinkGroup={noop} onClose={noop} anchor={{ left: 0, right: 0, top: 0, bottom: 0 }} />
         </ShellCell>
       {/if}
     {:else if cell.kind === 'inspector'}

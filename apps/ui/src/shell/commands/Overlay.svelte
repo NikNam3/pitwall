@@ -4,25 +4,36 @@
   import type { Snippet } from 'svelte';
   import { role } from '../../theme/index.ts';
   import { OVERLAY_COLS } from './overlay-sizes.ts';
+  import { placePopover, type AnchorBox } from './placement.ts';
 
   type Props = {
     title?: string | undefined;
     onClose: () => void;
-    /** Top left corner in px (a popover next to its button); centred near the top when absent. */
-    anchor?: { x: number; y: number } | undefined;
+    /** The button box in px (a popover next to its button, opening leftward and kept inside the window); centred near the top when absent. */
+    anchor?: AnchorBox | undefined;
     /** Width in character cells. */
     cols?: number;
     children: Snippet;
   };
   let { title, onClose, anchor, cols = OVERLAY_COLS.palette, children }: Props = $props();
+
+  let box = $state<HTMLElement>();
+  let placed = $state<{ x: number; y: number }>();
+  $effect(() => {
+    if (anchor === undefined || box === undefined) return;
+    placed = placePopover(anchor, { width: box.offsetWidth, height: box.offsetHeight }, { width: window.innerWidth, height: window.innerHeight });
+  });
 </script>
 
 <div class="backdrop" role="presentation" onclick={onClose}></div>
 <div
+  bind:this={box}
+  data-testid="overlay"
   class="box"
   class:centred={anchor === undefined}
-  style:left={anchor === undefined ? undefined : `${anchor.x}px`}
-  style:top={anchor === undefined ? undefined : `${anchor.y}px`}
+  style:left={placed === undefined ? undefined : `${placed.x}px`}
+  style:top={placed === undefined ? undefined : `${placed.y}px`}
+  style:visibility={anchor !== undefined && placed === undefined ? 'hidden' : undefined}
   style:width="{cols}ch"
   style:background={role('bgPanel')}
   style:border-color={role('border')}

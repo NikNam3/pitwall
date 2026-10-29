@@ -8,6 +8,7 @@
   import * as text from '../../kit/text.ts';
   import { role } from '../../theme/index.ts';
   import Overlay from '../commands/Overlay.svelte';
+  import type { AnchorBox } from '../commands/placement.ts';
   import { NUMBER_INPUT_COLS, OVERLAY_COLS } from '../commands/overlay-sizes.ts';
 
   type Cars = Array<{ id: number; identity: { name: string } }>;
@@ -18,7 +19,7 @@
     feedId: FeedId | undefined;
     send: (action: UiAction) => void;
     onClose: () => void;
-    anchor?: { x: number; y: number } | undefined;
+    anchor?: AnchorBox | undefined;
   };
   let { store, group, feedId, send, onClose, anchor }: Props = $props();
 

@@ -14,6 +14,7 @@
   import type { RegisteredWidget, ResolvedLink, WidgetSize } from '../../kit/types.ts';
   import { role } from '../../theme/index.ts';
   import { useOverlayStack } from '../commands/overlay-stack.ts';
+  import type { AnchorBox } from '../commands/placement.ts';
   import GroupPicker from '../link-groups/GroupPicker.svelte';
   import LinkMarker from '../link-groups/LinkMarker.svelte';
   import { computedLap, headerState, type DataStatus } from './header-state.ts';
@@ -53,10 +54,10 @@
 
   // The picker and the settings popover open next to their buttons; Escape closes them (the shell owns the keys).
   const stack = useOverlayStack();
-  let popover = $state<{ kind: 'picker' | 'settings'; anchor: { x: number; y: number } } | undefined>();
+  let popover = $state<{ kind: 'picker' | 'settings'; anchor: AnchorBox } | undefined>();
   const openAt = (kind: 'picker' | 'settings', button: HTMLElement): void => {
     const box = button.getBoundingClientRect();
-    popover = { kind, anchor: { x: box.left, y: box.bottom } };
+    popover = { kind, anchor: { left: box.left, right: box.right, top: box.top, bottom: box.bottom } };
   };
   const close = (): void => {
     popover = undefined;
