@@ -144,6 +144,8 @@ export const linkMarker = 'link group';
 
 /** Top bar (spec 7.6, 7.7, 7.9, 8.5). */
 export const topBar = {
+  /** Tooltip of the workbook name in the top bar, which opens the workbook picker. */
+  workbookTitle: 'Open a workbook (Ctrl+O)',
   laps: (count: string): string => `${count} laps`,
   /** The player's current lap, of the session's total when it has one: `L23/62`. */
   lapOf: (lap: string, total: string | undefined): string => (total === undefined ? `L${lap}` : `L${lap}/${total}`),

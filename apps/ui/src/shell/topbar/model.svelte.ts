@@ -17,6 +17,10 @@ export class TopBarModel {
   readonly #alerts: EntryState<AlertsState>;
   readonly #settings: EntryState<UiSettings>;
   readonly #moment: EntryState<Known<RaceMoment>>;
+  /** The open workbook's name, set by the top bar; undefined until a workbook is known. */
+  workbookName = $state<string | undefined>();
+  /** Opens the workbook picker, set by the top bar. */
+  pickWorkbook: () => void = () => {};
   readonly #releases: Array<() => void> = [];
   readonly #isReplay: boolean;
   readonly #replay: EntryState<ReplayStatus> | undefined;

@@ -56,6 +56,28 @@ test('the car workbook is seeded, shows four known surface temperatures and live
   await openWorkbook(page, 'car');
   await expect(cornerPanel(page).locator('.line', { hasText: /\bSURF\b/ })).toBeVisible({ timeout: SETTLE_MS });
 
+  // The top bar names the workbook; a click on it opens the picker.
+  await expect(page.getByTestId('workbook-name')).toHaveText('car');
+  await page.getByTestId('workbook-name').click();
+  await expect(page.getByTestId('workbook-picker')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('workbook-picker')).toBeHidden();
+
+  // The settings popover of the panel nearest the window's right edge opens inside the window.
+  const gears = page.locator('button:has([aria-label="settings"])');
+  const rights = await gears.evaluateAll((els) => els.map((el) => el.getBoundingClientRect().right));
+  const rightmost = rights.indexOf(Math.max(...rights));
+  await gears.nth(rightmost).click();
+  const popover = page.getByTestId('overlay');
+  await expect(popover).toBeVisible();
+  const inside = await popover.evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    return r.left >= 0 && r.top >= 0 && r.right <= window.innerWidth && r.bottom <= window.innerHeight;
+  });
+  expect(inside).toBe(true);
+  await page.keyboard.press('Escape');
+  await expect(popover).toBeHidden();
+
   // From lap 2 the time trial holds the surface temperature at 93 degC: jump there and play.
   await page.getByTestId('replay-lap').fill('2');
   await page.getByTestId('replay-lap').press('Enter');

@@ -318,3 +318,26 @@ describe('replay lap input width', () => {
     expect((screen.getByTestId('replay-lap') as HTMLInputElement).style.width).toBe(`${NUMBER_INPUT_COLS}ch`);
   });
 });
+
+describe('workbook name', () => {
+  const mount = (props: { workbookName?: string; onPickWorkbook?: () => void }) => {
+    const store = new TopicStore(new FakeConnection());
+    render(TopBar, { store, feedId: FEED, send: () => {}, sendReplay: () => {}, ...props });
+  };
+
+  it('shows the open workbook as a button with the shortcut as title; a click asks for the picker', async () => {
+    let picked = 0;
+    mount({ workbookName: 'race', onPickWorkbook: () => picked++ });
+    const button = screen.getByTestId('workbook-name');
+    expect(button.textContent).toBe('race');
+    expect(button.getAttribute('title')).toBe(text.topBar.workbookTitle);
+    expect(text.topBar.workbookTitle).toContain('Ctrl+O');
+    await fireEvent.click(button);
+    expect(picked).toBe(1);
+  });
+
+  it('shows nothing while no workbook is known', () => {
+    mount({});
+    expect(screen.queryByTestId('workbook-name')).toBeNull();
+  });
+});

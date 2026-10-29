@@ -109,8 +109,8 @@ describe('formatInsight', () => {
 });
 
 describe('TOP_BAR layout (mockup 9)', () => {
-  it('left: session, flag, moment; right: alerts, replay, feed, realism', () => {
-    expect(TOP_BAR.left).toEqual(['session', 'flag', 'moment']);
+  it('left: workbook, session, flag, moment; right: alerts, replay, feed, realism', () => {
+    expect(TOP_BAR.left).toEqual(['workbook', 'session', 'flag', 'moment']);
     expect(TOP_BAR.right).toEqual(['alerts', 'replay', 'feed', 'realism']);
   });
 });
