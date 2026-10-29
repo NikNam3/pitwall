@@ -1,11 +1,11 @@
 // Join and format logic of the incident feed: one pure function from the topics to display rows.
 import type { CarOverview } from '@pitwall/contracts';
-import type { CarId, IncidentEntry, IncidentForUs, Known, RaceMoment, UnknownReason } from '@pitwall/domain';
+import type { CarId, IncidentEntry, IncidentForUs, IncidentKind, Known, RaceMoment, UnknownReason } from '@pitwall/domain';
 import { carCodeById } from '../../kit/car/car-label.ts';
 import { fitCell } from '../../kit/grid/grid.ts';
-import { incidentKinds, separator, unknownReason } from '../../kit/text.ts';
+import { incidentKinds, insightText, sectorNames, separator, unknownReason } from '../../kit/text.ts';
 import type { WidgetSize } from '../../kit/types.ts';
-import { formatLapNumber, formatSeconds, formatSignedSeconds } from '../../kit/values/format.ts';
+import { formatCount, formatDeltaPct, formatLapNumber, formatSeconds, formatSignedSeconds } from '../../kit/values/format.ts';
 import { positionPairText } from '../../kit/values/position-mark.ts';
 import type { Role } from '../../theme/roles.ts';
 import { incidentRole } from './emphasis.ts';
@@ -61,6 +61,30 @@ function carsCell(ids: readonly CarId[], cars: readonly CarOverview[]): Incident
   return reason === undefined ? { text } : { text, reason };
 }
 
+/** The kinds whose detail is where they happened. */
+const SECTOR_KINDS: ReadonlySet<IncidentKind> = new Set(['collision', 'timeLoss']);
+
+/** The entry's detail: the damaged parts, a warning's count of the limit, or the sector; empty when it has none known. */
+function detailText(entry: IncidentEntry): string {
+  if (entry.damage !== undefined) {
+    return entry.damage.map((d) => text.damagePart(insightText.part[d.part], formatDeltaPct(d.deltaPct))).join(text.partsJoint);
+  }
+  if (entry.warning !== undefined) return text.warningCount(formatCount(entry.warning.count), formatCount(entry.warning.limit));
+  return SECTOR_KINDS.has(entry.kind) && entry.where.sector.known ? sectorNames[entry.where.sector.value] : '';
+}
+
+/**
+ * The kind and its detail, `time loss S2`; when both do not fit the what column, the detail alone (`FL wing +12 %`:
+ * the part names say damage), cut by the grid if even that is too long.
+ */
+function whatText(entry: IncidentEntry): string {
+  const kind = incidentKinds[entry.kind];
+  const detail = detailText(entry);
+  if (detail === '') return kind;
+  const both = text.withDetail(kind, detail);
+  return both.length <= widths.what ? both : detail;
+}
+
 /** One row per entry, in feed order. */
 export function incidentRows(feed: readonly IncidentEntry[], cars: readonly CarOverview[], moment: Known<RaceMoment> | undefined): IncidentRow[] {
   return feed.map((entry) => {
@@ -71,7 +95,7 @@ export function incidentRows(feed: readonly IncidentEntry[], cars: readonly CarO
       cells: {
         lap: { text: formatLapNumber(entry.lap) },
         cars: carsCell(entry.carIds, cars),
-        what: { text: incidentKinds[entry.kind] },
+        what: { text: whatText(entry) },
         lost,
         forUs: forUsCells(entry, cars),
       },

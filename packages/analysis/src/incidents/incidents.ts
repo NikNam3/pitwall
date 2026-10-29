@@ -1,6 +1,16 @@
 // `incidents` maths (spec 6.4): each car's mini-sector track, the losses against its median, and positions and gaps
 // at a past moment, all from the crossings alone (engine convention: segment 0 of lap L is the line at its start).
-import { known, MINI_SECTORS, unknown, type CarId, type Known, type MiniSectorCrossing, type Ms, type SessionTime } from '@pitwall/domain';
+import {
+  known,
+  MINI_SECTORS,
+  unknown,
+  type CarId,
+  type Known,
+  type MiniSectorCrossing,
+  type Ms,
+  type SessionState,
+  type SessionTime,
+} from '@pitwall/domain';
 import { gapBehind, progressOf, type CarCrossings } from '../gaps/gaps.ts';
 
 /** The median of a segment is taken over the car's last this many laps that have it... */
@@ -182,6 +192,26 @@ export function gapIn(tracks: readonly (Track | undefined)[], snap: Snapshot, a:
   const from = Math.min(pa.progress, pb.progress);
   const gap = gapBehind(crossingsUpTo(ta, from, pa), crossingsUpTo(tb, from, pb));
   return gap.known ? gap.value : undefined;
+}
+
+/** The track's length and where its sectors 2 and 3 start, from the session. */
+export type TrackLayout = Pick<SessionState, 'trackLengthM' | 'sector2StartM' | 'sector3StartM'>;
+
+/**
+ * The sector the car was in at `t`: its lap distance from its latest crossing at or before `t`, interpolated towards
+ * the next crossing (at the mini-sector start while that is not in yet). `notReceived` before its first crossing or
+ * while the session has no sector distances.
+ */
+export function sectorAt(track: Track | undefined, t: SessionTime, layout: TrackLayout): Known<1 | 2 | 3> {
+  const { trackLengthM, sector2StartM, sector3StartM } = layout;
+  const point = track && latestAt(track, t);
+  if (track === undefined || point === undefined || !(trackLengthM > 0 && sector2StartM > 0 && sector3StartM > sector2StartM)) {
+    return unknown('notReceived');
+  }
+  const nextAt = track.atByProgress[point.progress + 1];
+  const fraction = nextAt !== undefined && nextAt > point.at ? Math.min(1, (t - point.at) / (nextAt - point.at)) : 0;
+  const distanceM = (((point.progress % MINI_SECTORS) + fraction) * trackLengthM) / MINI_SECTORS;
+  return known(distanceM < sector2StartM ? 1 : distanceM < sector3StartM ? 2 : 3, t);
 }
 
 /** Whether `other` is in the neighbourhood of `ours` in the snapshot: one position away or within `neighbourhoodMs`. */

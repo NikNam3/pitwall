@@ -50,8 +50,8 @@ export function fixed(value: number, decimals: number): string {
 /** A whole number with the true minus, `-3.4` -> `−3`, `-0.2` -> `0`. */
 const whole = (n: number): string => fixed(n, 0);
 
-/** Temperature to whole degrees, `94.6` -> `95°`. */
-export const formatTemp = (c: Celsius): string => `${whole(c)}°`;
+/** Temperature to whole degrees in a tight grid cell, `94.6` -> `95°`; in text a temperature is `formatCelsius`. */
+export const formatTemp = (c: Celsius): string => (Number.isFinite(c) ? `${whole(c)}°` : '');
 
 /** One decimal, a negative zero shown as 0. */
 const fixed1 = (n: number): string => fixed(n, 1);
@@ -119,8 +119,8 @@ export const formatLapNumber = (n: number, width = 1): string => (Number.isFinit
 /** A count of laps to one decimal, `1.8` -> `1.8 laps`. */
 export const formatLaps = (n: number): string => (Number.isFinite(n) ? `${fixed(n, 1)} laps` : '');
 
-/** Temperature to whole degrees, `94.6` -> `95°`. */
-export const formatCelsius = (c: Celsius): string => (Number.isFinite(c) ? formatTemp(c) : '');
+/** The one temperature with its unit, to whole degrees (alarm texts, the engine line), `94.6` -> `95 °C`. */
+export const formatCelsius = (c: Celsius): string => (Number.isFinite(c) ? `${whole(c)} °C` : '');
 
 /** Percentage to whole numbers, `17.6` -> `18%`. */
 export const formatPercent = (p: Percent): string => (Number.isFinite(p) ? formatPct(p) : '');

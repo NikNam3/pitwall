@@ -14,7 +14,7 @@ const forUs = (over: Partial<IncidentForUs> = {}): IncidentForUs => ({
 });
 const entry = (over: Partial<IncidentEntry> = {}): IncidentEntry => ({
   id: 'collision:2+3:230000', at: toSessionTime(230_000), lap: 23, kind: 'collision', severity: 'major', carIds: [carId(2), carId(3)],
-  timeLostMs: k(4200), forUs: [forUs()], ...over,
+  timeLostMs: k(4200), forUs: [forUs()], where: { sector: unknown('notReceived') }, ...over,
 });
 const minor = (over: Partial<IncidentEntry> = {}): IncidentEntry =>
   entry({ id: 'warning:5:210000', lap: 21, kind: 'warning', severity: 'minor', carIds: [carId(5)], timeLostMs: unknown('notApplicable'), forUs: [], ...over });
@@ -114,6 +114,44 @@ describe('incidentRows', () => {
   it('ambers nothing outside the incident moment', () => {
     const rows = incidentRows([entry({ id: 'm1' }), minor()], cars, undefined);
     expect(rows.map((r) => r.role)).toEqual([undefined, 'textDim']);
+  });
+});
+
+describe('the incident detail in the what cell (mockup: time loss (T7), damage FL wing +12, warning 2/3)', () => {
+  const what = (over: Partial<IncidentEntry>): string => incidentRows([entry(over)], cars, undefined)[0]!.cells.what.text;
+
+  it('a collision and a time loss name the sector (F1 25 has no turn numbers)', () => {
+    expect(what({ where: { sector: k(3) } })).toBe('collision S3');
+    expect(what({ kind: 'timeLoss', where: { sector: k(2) } })).toBe('time loss S2');
+  });
+
+  it('an unknown sector leaves the kind alone', () => {
+    expect(what({ where: { sector: unknown('notReceived') } })).toBe('collision');
+  });
+
+  it('a warning shows its count of the limit', () => {
+    expect(what({ kind: 'warning', warning: { count: 2, limit: 3 }, where: { sector: k(2) } })).toBe('warning 2/3');
+  });
+
+  it('a damage entry names its parts and their rise through the kit part names', () => {
+    expect(what({ kind: 'damage', damage: [{ part: 'floorPct', deltaPct: 8 }] })).toBe('damage floor +8 %');
+    expect(what({ kind: 'damage', damage: [] })).toBe('damage');
+  });
+
+  it('a detail too long for the what column beside the kind word is shown alone: the part names say damage', () => {
+    expect(what({ kind: 'damage', damage: [{ part: 'frontLeftWingPct', deltaPct: 12.4 }] })).toBe('FL wing +12 %');
+    expect(what({ kind: 'damage', damage: [{ part: 'frontLeftWingPct', deltaPct: 12 }, { part: 'floorPct', deltaPct: 8 }] })).toBe('FL wing +12 %, floor +8 %');
+  });
+
+  it('other kinds show no sector', () => {
+    expect(what({ kind: 'penalty', where: { sector: k(1) } })).toBe('penalty');
+    expect(what({ kind: 'neutralised', where: { sector: unknown('notApplicable') } })).toBe('neutralised');
+  });
+
+  it('full rows keep the grid with the detail, as the mockup', () => {
+    const [row] = incidentRows([entry({ id: 't', kind: 'timeLoss', carIds: [carId(4)], timeLostMs: k(6100), where: { sector: k(2) },
+      forUs: [forUs({ otherCarId: k(carId(4)), positionAfter: k(5), gapBeforeMs: k(-1900), gapAfterMs: k(5800) })] })], cars, undefined);
+    expect(incidentRowText('full', row!, 70)).toBe(' L23  ALB      time loss S2        lost 6.1 s  us —, ALB −1.9→+5.8');
   });
 });
 

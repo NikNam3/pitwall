@@ -18,6 +18,7 @@ const feed: IncidentsOutput = [
         gapBeforeMs: known(700, 407_900), gapAfterMs: unknown('notReceived'),
       },
     ],
+    where: { sector: known(2, 407_900) },
   },
 ];
 

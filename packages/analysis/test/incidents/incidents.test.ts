@@ -17,6 +17,7 @@ import {
   run,
   runSteps,
   startOf,
+  TRACK,
   until,
   viewOf,
   type Delay,
@@ -341,6 +342,86 @@ describe('incidents calculator', () => {
       expect(far.map((e) => e.kind).sort()).toEqual(['collision', 'timeLoss']);
       const other = run(viewOf({ miniSectors, events: [collision(8, 9, SLOW_START - 2_000)] }));
       expect(other.map((e) => e.kind).sort()).toEqual(['collision', 'timeLoss']);
+    });
+  });
+
+  describe('detail: where, damage parts, warning count (I1)', () => {
+    const damageOf = (jumps: Parameters<typeof damageState>[0]) =>
+      ({ [car(7)]: damageState(jumps) }) as Record<CarId, ReturnType<typeof damageState>>;
+    const jump = (at: number, part: 'frontLeftWingPct' | 'floorPct' | 'rearWingPct', deltaPct: number) =>
+      ({ at, lap: 5, parts: [part], deltaPct, lossMsPerLap: unknown('insufficientData') });
+
+    it('a collision carries the sector its first car was in, from the lap distance (2 428 m on the test track: S2)', () => {
+      expect(TRACK.sector2StartM).toBe(1_600);
+      const entry = only(run(viewOf({ miniSectors: race(), events: [collision(6, 5)] })), 'collision');
+      expect(entry.where).toEqual({ sector: known(2, T) });
+      // the player in mini-sector 40 of lap 5 (about 4 044 m): sector 3
+      const late = boundaryAt(6, 5, 40) + 800;
+      expect(only(run(viewOf({ miniSectors: race(), events: [collision(6, 5, late)] })), 'collision').where.sector).toEqual(known(3, late));
+    });
+
+    it('the lap distance is interpolated between the crossings, not the mini-sector start', () => {
+      // The player's mini-sector 24 runs from 2 400 m to 2 500 m; with sector 2 from 2 430 m it is in sector 1 at T
+      // (2 428 m) and in sector 2 300 ms later (2 444 m).
+      const session = { sector2StartM: 2_430 };
+      const at = (t: number) => only(run(viewOf({ miniSectors: race(), events: [collision(6, 5, t)], session })), 'collision').where.sector;
+      expect(at(T)).toEqual(known(1, T));
+      expect(at(T + 300)).toEqual(known(2, T + 300));
+    });
+
+    it('a timeLoss entry carries the sector of its start; a damage and a warning entry the sector of their car', () => {
+      const loss = only(run(viewOf({ miniSectors: race({ delays: [slow7(2_500)] }) })), 'timeLoss');
+      expect(loss.where.sector).toEqual(known(1, SLOW_START));
+      const damage = only(run(viewOf({ miniSectors: race(), damage: damageOf([jump(T, 'frontLeftWingPct', 12)]) })), 'damage');
+      expect(damage.where.sector).toEqual(known(2, T));
+      expect(only(run(viewOf({ miniSectors: race(), events: [penalty(7, WARNING)] })), 'warning').where.sector).toEqual(known(2, T));
+    });
+
+    it('no invented sector: notApplicable without a car, notReceived before a crossing or without the sector distances', () => {
+      const sc = flagPhase({ kind: 'SC', start: T, end: T + 60_000, startLeaderLap: 5, endLeaderLap: 6 });
+      expect(only(run(viewOf({ miniSectors: race(), flagPhases: [sc] })), 'neutralised').where.sector).toEqual(unknown('notApplicable'));
+      // our car (6) crosses its first boundary at 4 200 ms; the collision is at 1 000 ms
+      const early = only(run(viewOf({ miniSectors: until(race(), 3_000), events: [collision(6, 5, 1_000)] })), 'collision');
+      expect(early.where.sector).toEqual(unknown('notReceived'));
+      const noSectors = viewOf({ miniSectors: race(), events: [collision(6, 5)], session: { sector2StartM: 0, sector3StartM: 0 } });
+      expect(only(run(noSectors), 'collision').where.sector).toEqual(unknown('notReceived'));
+    });
+
+    it('a damage entry carries its parts and their rise, the biggest first; jumps of the car within the jump window are one entry', () => {
+      const jumps = [jump(T, 'frontLeftWingPct', 12), jump(T + 500, 'floorPct', 20), jump(T + 3_000, 'rearWingPct', 8)];
+      const feed = run(viewOf({ miniSectors: race(), damage: damageOf(jumps) })).filter((e) => e.kind === 'damage');
+      expect(feed.map((e) => e.id)).toEqual([`damage:7:${T + 3_000}`, `damage:7:${T}`]);
+      expect(feed[1]!.damage).toEqual([
+        { part: 'floorPct', deltaPct: 20 },
+        { part: 'frontLeftWingPct', deltaPct: 12 },
+      ]);
+      expect(feed[0]!.damage).toEqual([{ part: 'rearWingPct', deltaPct: 8 }]);
+    });
+
+    it('a warning entry carries its count of the limit: the car\'s nth warning, a penalty every warningsBeforePenalty', () => {
+      const events = [
+        penalty(7, WARNING, 370_000),
+        penalty(7, WARNING, 380_000),
+        penalty(7, TIME_PENALTY, 385_000),
+        penalty(7, WARNING, 390_000),
+        penalty(5, WARNING, 395_000),
+        penalty(7, WARNING, 400_000),
+      ];
+      const counts = (feed: IncidentEntry[], id: number) =>
+        feed.filter((e) => e.kind === 'warning' && e.carIds[0] === car(id)).map((e) => e.warning);
+      const feed = run(viewOf({ miniSectors: race(), events }));
+      expect(counts(feed, 7)).toEqual([1, 3, 2, 1].map((count) => ({ count, limit: 3 })));
+      expect(counts(feed, 5)).toEqual([{ count: 1, limit: 3 }]);
+      const two = run(viewOf({ miniSectors: race(), events, alarmsConfig: { warningsBeforePenalty: 2 } }));
+      expect(counts(two, 7)).toEqual([2, 1, 2, 1].map((count) => ({ count, limit: 2 })));
+    });
+
+    it('only damage entries carry damage and only warning entries carry warning', () => {
+      const feed = run(viewOf({ miniSectors: race(), events: [collision(6, 5), penalty(7, TIME_PENALTY, T + 100)] }));
+      for (const entry of feed) {
+        expect('damage' in entry, entry.kind).toBe(false);
+        expect('warning' in entry, entry.kind).toBe(false);
+      }
     });
   });
 

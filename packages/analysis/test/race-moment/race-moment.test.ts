@@ -41,6 +41,7 @@ const incident = (over: Partial<IncidentEntry> = {}): IncidentEntry => ({
   carIds: [car1],
   timeLostMs: na,
   forUs: [],
+  where: { sector: na },
   ...over,
 });
 

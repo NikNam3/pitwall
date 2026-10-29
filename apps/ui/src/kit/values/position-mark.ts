@@ -1,4 +1,5 @@
 import type { Known } from '@pitwall/domain';
+import { formatPosition } from './format.ts';
 
 /** Places gained or lost (`change`), or a before/after pair (`from`, `to`; `to` may be unknown). */
 export type PositionMarkProps = { change: number } | { from: number; to: Known<number> };
@@ -9,7 +10,7 @@ export function positionMarkText(props: PositionMarkProps): string {
     if (props.change === 0) return '';
     return props.change > 0 ? `▲${props.change}` : `▼${-props.change}`;
   }
-  return `P${props.from}→${props.to.known ? `P${props.to.value}` : ''}`;
+  return `${formatPosition(props.from)}→${props.to.known ? formatPosition(props.to.value) : ''}`;
 }
 
 /** The mark of a position that did not change in an incident. */
