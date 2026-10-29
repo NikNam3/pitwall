@@ -1,8 +1,14 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import {
+  formatDeltaPct,
   formatGap,
   formatKg,
+  formatKgUnit,
+  formatLapNumber,
+  formatSecondsPerLap,
+  formatWhole,
+  formatWholeLaps,
   formatLapTime,
   formatPct,
   formatPsi,
@@ -88,4 +94,35 @@ describe('formatSessionClock', () => {
     [3_600_000, '1:00:00'],
     [36_000_000, '10:00:00'],
   ])('%i ms -> %s', (ms, text) => expect(formatSessionClock(ms)).toBe(text));
+});
+
+describe('formatWholeLaps', () => {
+  it.each([[12.9, '12'], [0.4, '0'], [3, '3'], [Number.NaN, '']] as Array<[number, string]>)('%f -> %s', (n, text) =>
+    expect(formatWholeLaps(n)).toBe(text));
+});
+
+describe('formatKgUnit', () => {
+  it.each([[10, '10.0 kg'], [1.26, '1.3 kg'], [Number.NaN, '']] as Array<[number, string]>)('%f -> %s', (k, text) =>
+    expect(formatKgUnit(k)).toBe(text));
+});
+
+describe('formatWhole', () => {
+  it.each([[94.6, '95'], [-0.2, '0'], [7, '7'], [Number.POSITIVE_INFINITY, '']] as Array<[number, string]>)('%f -> %s', (n, text) =>
+    expect(formatWhole(n)).toBe(text));
+});
+
+describe('formatDeltaPct', () => {
+  it.each([[12.4, '+12 %'], [0, '+0 %'], [-0.2, '+0 %'], [-3, '\u22123 %'], [Number.NaN, '']] as Array<[number, string]>)('%f -> %s', (n, text) =>
+    expect(formatDeltaPct(n)).toBe(text));
+});
+
+describe('formatLapNumber', () => {
+  it.each([[9, 2, 'L09'], [23, 2, 'L23'], [123, 2, 'L123'], [Number.NaN, 2, '']] as Array<[number, number, string]>)('%f/%i -> %s', (n, w, text) =>
+    expect(formatLapNumber(n, w)).toBe(text));
+});
+
+describe('formatSecondsPerLap', () => {
+  it.each([[120, '+0.12 s/lap'], [0, '+0.00 s/lap'], [1500, '+1.50 s/lap'], [Number.NaN, '']] as Array<[number, string]>)('%f -> %s', (ms, text) =>
+    expect(formatSecondsPerLap(ms)).toBe(text));
+  it('a negative loss carries a minus sign', () => expect(formatSecondsPerLap(-120)).toMatch(/^[-\u2212]0\.12 s\/lap$/));
 });

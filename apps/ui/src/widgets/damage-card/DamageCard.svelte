@@ -4,8 +4,7 @@
   import CornerGrid from '../../kit/corners/CornerGrid.svelte';
   import { fitCell } from '../../kit/grid/grid.ts';
   import { unknownReason } from '../../kit/text.ts';
-  import { role } from '../../theme/index.ts';
-  import type { Role } from '../../theme/roles.ts';
+  import { role, roleOrUndefined } from '../../theme/index.ts';
   import { damageRows } from './rows.ts';
   import type { Cell, JumpRow } from './rows.ts';
   import * as text from './text.ts';
@@ -15,12 +14,11 @@
 
   const rows = $derived(damageRows(data.damage));
   const full = $derived(size.mode === 'full');
-  const colour = (r: Role | undefined): string | undefined => (r === undefined ? undefined : role(r));
   const hint = (c: { reason?: keyof typeof unknownReason }): string | undefined => (c.reason === undefined ? undefined : unknownReason[c.reason]);
   const pad = (c: Cell): string => fitCell(c.text, 3, 'right');
 </script>
 
-{#snippet jump(j: JumpRow)}<span style:color={colour(j.role)}>{fitCell(j.text, 20)}  <span title={hint(j)}>{j.loss}</span></span>{/snippet}
+{#snippet jump(j: JumpRow)}<span style:color={roleOrUndefined(j.role)}>{fitCell(j.text, 20)}  <span title={hint(j)}>{j.loss}</span></span>{/snippet}
 
 <div class="card">
   {#if full}
@@ -35,8 +33,8 @@
   {:else}
     <div class="line"><span title={hint(rows.parts.wingL)}>{rows.compact.parts}</span></div>
     <!-- Two rows only: a fault outranks the newest jump. -->
-    {#if rows.faults.length > 0}<div class="line" style:color={role('critical')}>{rows.faults.join(' · ')}</div>
-    {:else if rows.compact.jump}<div class="line" style:color={colour(rows.compact.jump.role)} title={rows.compact.jump.loss}>{rows.compact.jump.text}</div>{/if}
+    {#if rows.faults.length > 0}<div class="line" style:color={role('critical')}>{rows.faults.join(text.faultSeparator)}</div>
+    {:else if rows.compact.jump}<div class="line" style:color={roleOrUndefined(rows.compact.jump.role)} title={rows.compact.jump.loss}>{rows.compact.jump.text}</div>{/if}
   {/if}
 </div>
 

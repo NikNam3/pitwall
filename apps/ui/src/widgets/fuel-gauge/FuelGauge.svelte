@@ -2,8 +2,9 @@
   // Fuel margin in laps, burn, save target and the game's own estimate (V20, spec 8.2).
   import type { WidgetProps } from '../../kit/types.ts';
   import { unknownReason } from '../../kit/text.ts';
-  import { role } from '../../theme/index.ts';
+  import { roleOrUndefined } from '../../theme/index.ts';
   import { fuelRows, type FuelRow } from './rows.ts';
+  import * as text from './text.ts';
   import type { widget } from './widget.ts';
 
   let { data, size }: WidgetProps<typeof widget> = $props();
@@ -16,8 +17,8 @@
 <div class="fuel">
   {#each rows as row (row.key)}
     <div class="row" class:dim={row.dim} class:bold={row.bold}>
-      <span class="label">{row.label}</span>
-      <span class="text" style:color={row.role === undefined ? undefined : role(row.role)} title={row.reason === undefined ? undefined : unknownReason[row.reason]}>{row.text}</span>
+      <span class="label" style:min-width="{text.labelWidth}ch">{row.label}</span>
+      <span class="text" style:color={roleOrUndefined(row.role)} title={row.reason === undefined ? undefined : unknownReason[row.reason]}>{row.text}</span>
     </div>
   {/each}
 </div>
@@ -31,7 +32,6 @@
     display: flex;
   }
   .label {
-    min-width: 7ch;
     color: var(--pw-textDim);
   }
   .bold {

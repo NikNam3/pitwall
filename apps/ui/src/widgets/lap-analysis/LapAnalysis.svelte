@@ -5,8 +5,7 @@
   import { fitColumns } from '../../kit/size/size.ts';
   import { unknownReason } from '../../kit/text.ts';
   import { ourCarRole } from '../../emphasis/index.ts';
-  import { role } from '../../theme/index.ts';
-  import type { Role } from '../../theme/roles.ts';
+  import { roleOrUndefined } from '../../theme/index.ts';
   import { LAP_COLUMNS, formatCell } from './columns.ts';
   import type { LapColumnKey } from './columns.ts';
   import { cellRole } from './emphasis.ts';
@@ -21,7 +20,6 @@
   const rows = $derived(buildRows({ board: data.board, cars: data.cars, session: data.session }).slice(0, Math.max(1, size.rows - 1)));
   const kept = $derived(fitColumns(LAP_COLUMNS, size.cols, 1));
   const columns = $derived(LAP_COLUMNS.filter((c) => kept.includes(c.key)));
-  const colour = (r: Role | undefined): string | undefined => (r === undefined ? undefined : role(r));
   const hint = (c: Cell): string | undefined => (c.value.known ? undefined : unknownReason[c.value.reason]);
   const sectorOf = (r: (typeof rows)[number], key: LapColumnKey): Cell | undefined =>
     key === 'best' ? r.best : key === 'theo' ? r.theo : key === 's1' ? r.sectors[0] : key === 's2' ? r.sectors[1] : key === 's3' ? r.sectors[2] : undefined;
@@ -30,7 +28,7 @@
 <div class="block">
   <div class="line faint">{columns.map((c) => fitCell(text.headers[c.key], c.widthCols, c.align)).join(' ')}</div>
   {#each rows as r (r.carId)}
-    <div class="line" class:ref={r.reference}>{#each columns as c, i (c.key)}{i === 0 ? '' : ' '}{#if c.key === 'drv'}<span style:color={colour(ourCarRole(r.ours))}>{fitCell(r.code, c.widthCols, c.align)}</span>{:else}{@const cell = sectorOf(r, c.key)}{#if cell}<span style:color={colour(cellRole(cell.status, r.ours))} title={hint(cell)}>{fitCell(formatCell(c.key, cell), c.widthCols, c.align)}</span>{/if}{/if}{/each}</div>
+    <div class="line" class:ref={r.reference}>{#each columns as c, i (c.key)}{i === 0 ? '' : ' '}{#if c.key === 'drv'}<span style:color={roleOrUndefined(ourCarRole(r.ours))}>{fitCell(r.code, c.widthCols, c.align)}</span>{:else}{@const cell = sectorOf(r, c.key)}{#if cell}<span style:color={roleOrUndefined(cellRole(cell.status, r.ours))} title={hint(cell)}>{fitCell(formatCell(c.key, cell), c.widthCols, c.align)}</span>{/if}{/if}{/each}</div>
   {/each}
 </div>
 

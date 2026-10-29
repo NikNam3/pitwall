@@ -101,8 +101,8 @@ export function formatShort(value: unknown, max: number): string {
 /** Replay speed factor, `0.5` -> `×0.5`. */
 export const formatFactor = (factor: number): string => `×${factor}`;
 
-/** A lap number, `23` -> `L23` (a count says `laps`, see `formatLaps`). */
-export const formatLapNumber = (n: number): string => (Number.isFinite(n) ? `L${Math.round(n)}` : '');
+/** A lap number, `23` -> `L23`, zero-padded to `width` digits when given, `9` at width 2 -> `L09` (a count says `laps`, see `formatLaps`). */
+export const formatLapNumber = (n: number, width = 1): string => (Number.isFinite(n) ? `L${String(Math.round(n)).padStart(width, '0')}` : '');
 
 /** A count of laps to one decimal, `1.8` -> `1.8 laps`. */
 export const formatLaps = (n: number): string => (Number.isFinite(n) ? `${fixed(n, 1)} laps` : '');
@@ -139,6 +139,22 @@ export const formatSignedLaps = (n: number): string => {
 
 /** Fuel burn or save target to two decimals, `1.62` -> `1.62 kg/lap`. */
 export const formatKgPerLap = (kg: Kg): string => (Number.isFinite(kg) ? `${fixed(kg, 2)} kg/lap` : '');
+
+/** A count of whole laps, rounded down: the laps one can still complete, `12.9` -> `12`. */
+export const formatWholeLaps = (n: number): string => (Number.isFinite(n) ? `${Math.floor(n) + 0}` : '');
+
+/** Mass with its unit, `10` -> `10.0 kg`. */
+export const formatKgUnit = (k: Kg): string => (Number.isFinite(k) ? `${fixed1(k)} kg` : '');
+
+/** A whole number without a unit (grid cells), `94.6` -> `95`, `-0.2` -> `0`. */
+export const formatWhole = (n: number): string => (Number.isFinite(n) ? fixed(n, 0) : '');
+
+/** A relative change in percent with its sign and unit, `12.4` -> `+12 %`, `-3` -> `−3 %`. */
+export const formatDeltaPct = (pct: Percent): string => {
+  if (!Number.isFinite(pct)) return '';
+  const whole = Math.round(Math.abs(pct));
+  return `${pct < 0 && whole > 0 ? '−' : '+'}${whole} %`;
+};
 
 // gap chart
 
