@@ -14,6 +14,7 @@ const corner = (wearPct: number, rate: number, laps: number) => ({
 const wear = (fl: ReturnType<typeof corner>, fr: ReturnType<typeof corner>, rl: ReturnType<typeof corner>, rr: ReturnType<typeof corner>): TyreWear => ({
   corners: { fl, fr, rl, rr },
   limitPct: 70,
+  warnLaps: 3,
   gameLifeSpanLaps: known(22, at),
 });
 

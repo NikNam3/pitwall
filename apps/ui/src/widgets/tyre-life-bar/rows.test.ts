@@ -12,6 +12,7 @@ const c = (wearPct: number, rate: number, laps: number) => ({
 const base = (over: Partial<TyreWear['corners']> = {}, life: TyreWear['gameLifeSpanLaps'] = known(22, at)): TyreWear => ({
   corners: { fl: c(18, 2, 37.9), fr: c(21, 1.7, 29), rl: c(15, 1.2, 46), rr: c(17, 1.3, 41), ...over },
   limitPct: 70,
+  warnLaps: 3,
   gameLifeSpanLaps: life,
 });
 
