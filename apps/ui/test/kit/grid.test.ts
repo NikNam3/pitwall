@@ -28,7 +28,7 @@ describe('gridWidth and gridRow', () => {
     expect(gridWidth(columns, 2)).toBe(4 + 6 + 3 + 4);
     expect(gridWidth([])).toBe(0);
   });
-  it('joins fitted cells with the gap', () => expect(gridRow(columns, ['FL', '1.8', '37'])).toBe('FL       1.8  37'));
+  it('joins fitted cells with the gap', () => expect(gridRow(columns, ['FL', '1.8', '37'])).toBe('FL      1.8  37'));
   it('every row has the grid width, however short its cells', () => {
     for (const cells of [['FL', '1.8', '37'], ['RR'], [], ['VERY LONG NAME', '123456789', '12345']]) {
       expect(gridRow(columns, cells)).toHaveLength(gridWidth(columns));
