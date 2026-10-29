@@ -55,8 +55,12 @@ const damageAlarms = (damage: DamageState, lap: number, make: Make): Insight[] =
     .filter((j) => j.lap === lap)
     .map((j) => make('damageJump', 'critical', 'damage', String(j.at), { lap: j.lap, parts: j.parts.join(','), deltaPct: j.deltaPct }));
 
+/**
+ * One corner-cutting warning left before a penalty. The game's count runs on after a penalty, so this assumes a
+ * penalty every `warningsBeforePenalty` warnings (not verified against the game).
+ */
 const warningAlarms = (warnings: number, config: Config, make: Make): Insight[] =>
-  warnings > 0 && warnings === config.warningsBeforePenalty - 1
+  config.warningsBeforePenalty > 1 && warnings > 0 && warnings % config.warningsBeforePenalty === config.warningsBeforePenalty - 1
     ? [make('warningLast', 'advisory', 'race', 'warnings', { warnings, before: config.warningsBeforePenalty })]
     : [];
 

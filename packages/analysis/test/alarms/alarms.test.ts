@@ -258,6 +258,17 @@ describe('alarms calculator', () => {
       for (const warnings of [0, 3, 4]) expect(only(viewWith({}, { warnings, config }), 'warningLast')).toEqual([]);
     });
 
+    it('after a penalty the count runs on: one warning before the next penalty raises it again (5 and 8 with 3)', () => {
+      const config = { alarms: { warningsBeforePenalty: 3 } };
+      for (const warnings of [5, 8]) expect(only(viewWith({}, { warnings, config }), 'warningLast')).toHaveLength(1);
+      for (const warnings of [6, 7]) expect(only(viewWith({}, { warnings, config }), 'warningLast')).toEqual([]);
+    });
+
+    it('with a penalty on every warning (1) there is never one warning left', () => {
+      const config = { alarms: { warningsBeforePenalty: 1 } };
+      for (const warnings of [0, 1, 2]) expect(only(viewWith({}, { warnings, config }), 'warningLast')).toEqual([]);
+    });
+
     it('follows the config: with 4, three warnings raise it and two do not', () => {
       const config = { alarms: { warningsBeforePenalty: 4 } };
       expect(only(viewWith({}, { warnings: 3, config }), 'warningLast')).toHaveLength(1);
