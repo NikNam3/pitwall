@@ -319,7 +319,7 @@ A display also needs the kit pieces it uses (8.4) and the approved mockups. Leve
 A display's test phase also waits for the approved mockups, because its gallery cases and fit expectations come from them.
 
 ### 13.5 Scheduler rule
-At most **six agents** at a time, reviewers included (the supervisor's own work does not count). When a slot frees up, the supervisor gives it to the first item that applies:
+At most **eight agents** at a time, reviewers included (user, 2026-10-29; the supervisor's own work does not count). Eight is about the useful parallelism of this plan: roughly 100 agent slots of work over a critical path of about 14. Each agent runs only the tests its lane needs; the supervisor runs every larger suite. When a slot frees up, the supervisor gives it to the first item that applies:
 1. a ready implementation on the critical path
 2. any other ready implementation, the one with the longest chain of readers after it first
 3. a pending review

@@ -32,12 +32,18 @@
 - **Calculator outputs** (Task 3 commits them as types): a per-car analysis outputs `Record<CarId, Value>`, where `Value` is its topic's value, and the binding's `select` picks `params.carId`. A global analysis outputs its topic value. `gaps` outputs `GapsOutput` (Task 13). `alarms` outputs its active `Insight[]`.
 - **"Our cars"** are `session.info.playerCar` and `teammateCar` (engine: `state.playerCar`, and the teammate where present). No analysis assumes a single feed.
 - **Realism:** an analysis passes `unknown('realism')` through and never replaces it with a guess.
-- **Who runs which tests:** as in the UI shell plan. Set `PITWALL_FIXTURES_DIR=/home/nklx/dev/personal/pitwall/recordings` for every run.
-  - **Test agents** run only their own test files, once, to see them fail for the right reason.
-  - **Implementers** run only their task's tests while working. At the end they run the Vitest project of each package they touched, plus `pnpm lint` and `pnpm depcruise`. Never `pnpm check`, acceptance tests, `pnpm test:ui` or Stryker.
-  - **Reviewers** run no tests.
-  - **The supervisor** runs `pnpm check` on the integration branch after every three to four merges, and the heavier gates once in Task 38.
-  - **Never** run a gate while an agent is editing source.
+- **Who runs which tests** (user, 2026-10-29: the supervisor runs the big tests; each agent runs only what its lane strictly needs). Set `PITWALL_FIXTURES_DIR=/home/nklx/dev/personal/pitwall/recordings` for every run.
+  - **Test agents:** only the test files they wrote, once, to see them fail for the right reason.
+  - **Implementers:**
+    - while working: only their task's test files (the `typecheck.sh` hook already typechecks the touched package after each edit)
+    - once at the end: the same test files, `pnpm eslint <changed files>` and `pnpm depcruise`
+    - never a whole package's tests, `pnpm check`, `pnpm test:ui`, acceptance tests or Stryker
+  - **Reviewers:** no tests. They read the diff and the agents' reports.
+  - **The supervisor** runs everything bigger:
+    - `pnpm check` on the integration branch after every three to four merges, bisecting by unit on a failure
+    - `pnpm test:ui` at the milestones
+    - acceptance tests, determinism and Stryker once, in Task 38
+  - **Never** run a gate while an agent is editing source, and never two suites at the same time.
 - **Two phases per unit** (CLAUDE.md "Workflow"):
   - The test agent commits `test(<scope>): …` and lists its assumptions. The supervisor rules on them before the implementer starts.
   - The implementer commits `feat(<scope>): …` without touching tests, `test-support/` or a widget's `gallery.ts`.
@@ -63,7 +69,7 @@ Spec section 13 is the schedule. In short:
 - **Then every unit (Tasks 8–35) goes through its own life** (spec 13.1): test phase, ruling, implement phase, review, merge.
   - A unit's **test phase** may start once Tasks 3 and 5 are merged. A display's test phase also needs Task 0's approval.
   - Its **implement phase** may start once every task in its **Depends on** is merged.
-- **Scheduler rule (spec 13.5):** at most six agents, reviewers included. A free slot goes to:
+- **Scheduler rule (spec 13.5):** at most **eight** agents, reviewers included (user, 2026-10-29). A free slot goes to:
   1. a ready implementation on the critical path (Tasks 8, 12, 18, 21, 23, 35)
   2. another ready implementation, the one with the longest chain of readers first
   3. a pending review
