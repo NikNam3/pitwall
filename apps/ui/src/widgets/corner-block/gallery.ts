@@ -65,7 +65,7 @@ const wearOf = (t: Corners<Temps>, known_ = true): TyreWear => {
     ratePctPerLap: known_ ? k(1.5) : unknown('insufficientData'),
     lapsToLimit: known_ ? k(30) : unknown('insufficientData'),
   });
-  return { corners: { fl: c(t.fl.wear), fr: c(t.fr.wear), rl: c(t.rl.wear), rr: c(t.rr.wear) }, limitPct: 70, gameLifeSpanLaps: k(25) };
+  return { corners: { fl: c(t.fl.wear), fr: c(t.fr.wear), rl: c(t.rl.wear), rr: c(t.rr.wear) }, limitPct: 70, warnLaps: 3, gameLifeSpanLaps: k(25) };
 };
 
 const frCarcassHigh = reading(k(109), CARCASS, k('above'));
