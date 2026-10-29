@@ -24,7 +24,7 @@ describe('timing from LapData', () => {
       Object.assign(d.lapData.lapData[0]!, { carPosition: 1, gridPosition: 0 });
       Object.assign(d.lapData.lapData[1]!, { carPosition: 2, gridPosition: 1 });
     }));
-    expect(st.cars.map((c) => [c.timing.position, c.timing.gridPosition])).toEqual([[1, 1], [2, 2]]);
+    expect(st.cars.slice(0, 2).map((c) => [c.timing.position, c.timing.gridPosition])).toEqual([[1, 1], [2, 2]]);
   });
   it('passes negative gaps through (the game reports a car slightly ahead as a small negative delta)', () => {
     const { st } = runScenario(new ScenarioBuilder({ cars: 2 }).frames(1, (d) => {

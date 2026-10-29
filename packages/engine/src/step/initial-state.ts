@@ -65,6 +65,7 @@ export const createCarState = (id: CarId): CarState => ({
     cornerCuttingWarnings: 0,
     unservedDriveThroughs: 0,
     unservedStopGos: 0,
+    // 0 until the first LapData; from there on 1 for pole.
     gridPosition: 0,
     speedTrapFastestKmh: unknown('notReceived'),
     fiaFlag: 'unknown',

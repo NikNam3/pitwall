@@ -72,7 +72,7 @@ const leaderGap = (leader: CarCrossings | undefined): Known<Ms> => {
   return at === undefined ? unknown('notReceived') : known(0, at);
 };
 
-/** Grid position minus position; the game reports grid position 0 until it is known. */
+/** Grid position minus position; the grid position is 0 until the first LapData (the engine counts it from 1). */
 const positionsGained = (timing: { gridPosition: number; position: number }, view: EngineView): Known<number> => {
   if (view.state.session.kind !== 'race') return NOT_APPLICABLE;
   if (timing.gridPosition === 0) return unknown('notReceived');
