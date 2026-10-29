@@ -57,12 +57,29 @@ describe('gap properties', () => {
     );
   });
 
+  it('gap(A,B) is tA(p) − tB(p) at p, the last point both passed, at any moment', () => {
+    fc.assert(
+      fc.property(raceArb, (race) => {
+        const all = crossingsOf(race);
+        const first = Math.max(...race.startsMs.map((_, i) => all.findIndex((m) => m.carId === i))) + 1;
+        const history = all.slice(0, first + Math.floor(race.cut * (all.length - first)));
+        const time = new Map(history.map((m) => [`${m.carId}:${progressOf(m)}`, m.at]));
+        const latest = (car: number) => progressOf(history.findLast((m) => m.carId === car)!);
+        const out = run(viewOf(history));
+        for (const [a, b] of pairs(race.startsMs.length)) {
+          const p = Math.min(latest(a), latest(b));
+          expect(plain(gap(out, a, b))).toBe(plain(time.get(`${a}:${p}`)! - time.get(`${b}:${p}`)!));
+        }
+      }),
+    );
+  });
+
   it('gap(A,C) = gap(A,B) + gap(B,C) at a segment all three crossed', () => {
     fc.assert(
       fc.property(raceArb, (race) => {
         const all = crossingsOf(race);
         // every car's latest crossing is the same mini-sector
-        const point = 1 + Math.floor(race.cut * (race.laps * MINI_SECTORS - 1));
+        const point = Math.min(race.laps * MINI_SECTORS - 1, Math.floor(race.cut * race.laps * MINI_SECTORS));
         const history = all.filter((m) => progressOf(m) <= point);
         const at = (car: number) => history.findLast((m) => m.carId === car)!.at;
         const out = run(viewOf(history));

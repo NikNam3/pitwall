@@ -5,7 +5,7 @@ import { GAPS, GAPS_CONFIG, type GapsOutput } from '../../src/gaps/index.ts';
 import { gapsCalculator } from '../../src/gaps/calculator.ts';
 import { gapperLines, gapsToCar } from '../../src/gaps/gaps.ts';
 import { crossings, field } from '../../../../test-support/builders/index.ts';
-import { byTime, carsFor, deltaOf, offsetRace, plain, run, viewOf } from './race.ts';
+import { byTime, carsFor, deltaOf, offsetRace, plain, progressOf, run, viewOf } from './race.ts';
 
 /** A known value (with -0 as 0), or the reason it is unknown. */
 const v = (k: Known<number>): number | string => (k.known ? plain(k.value) : k.reason);
@@ -71,8 +71,8 @@ describe('gaps calculator', () => {
 
   it('the gap updates at every crossing, not only at the line', () => {
     const all = field({ cars: 2, laps: 3, paceMs: [90_000, 91_000] }).miniSectors;
-    // car 1 ends lap 2 at 182 s, 2 s behind car 0
-    let n = all.findIndex((m) => m.carId === 1 && m.lap === 2 && m.segment === 49) + 1;
+    // car 1 completes lap 2 at (3, 0) at 182 s, 2 s behind car 0
+    let n = all.findIndex((m) => m.carId === 1 && m.lap === 3 && m.segment === 0) + 1;
     let view = viewOf(all.slice(0, n));
     let acc = gapsCalculator.init(view);
     expect(v(interval(gapsCalculator.output(acc), 1).toLeaderMs)).toBe(2_000);
@@ -83,8 +83,8 @@ describe('gaps calculator', () => {
       view = next;
       if (all[n]!.carId === 1) seen.push(v(interval(gapsCalculator.output(acc), 1).toLeaderMs));
     }
-    // lap 3, segment s: car 1 at 182 000 + 1820 (s + 1), car 0 at 180 000 + 1800 (s + 1)
-    expect(seen).toEqual(Array.from({ length: 50 }, (_, s) => 2_000 + 20 * (s + 1)));
+    // lap 3, segment s (1..49, then the line at (4, 0) as s = 50): car 1 at 182 000 + 1820 s, car 0 at 180 000 + 1800 s
+    expect(seen).toEqual(Array.from({ length: 50 }, (_, k) => 2_000 + 20 * (k + 1)));
   });
 
   it("the gaps come from the crossings, never from the game's gaps", () => {
@@ -134,15 +134,45 @@ describe('gaps calculator', () => {
       { lap: 2, at: 182_000 },
       { lap: 3, at: 273_000 },
     ]);
-    expect(full.latest[carId(1)]).toEqual({ lap: 3, segment: 49, at: 273_000 });
+    // the line that completes lap 3 is segment 0 of lap 4
+    expect(full.latest[carId(1)]).toEqual({ lap: 4, segment: 0, at: 273_000 });
 
-    // mid lap 3: car 1 has crossed segment 9 at 182 000 + 10 * 1820
+    // mid lap 3: car 1 has crossed segment 10 at 182 000 + 10 * 1820
     const mid = run(viewOf(all.filter((m) => m.at <= 200_200)));
     expect(mid.lineTimes[carId(1)]).toEqual([
       { lap: 1, at: 91_000 },
       { lap: 2, at: 182_000 },
     ]);
-    expect(mid.latest[carId(1)]).toEqual({ lap: 3, segment: 9, at: 200_200 });
+    expect(mid.latest[carId(1)]).toEqual({ lap: 3, segment: 10, at: 200_200 });
+  });
+
+  it('recent keeps at most 100 crossings per car, by progress, ending at its latest crossing', () => {
+    const all = field({ cars: 2, laps: 3, paceMs: [90_000, 91_000] }).miniSectors;
+    const out = run(viewOf(all));
+    const rec = out.recent[carId(1)]!;
+    // car 1's latest crossing is (4, 0) at progress 150: the window is progress 51..150
+    expect(rec.at).toHaveLength(100);
+    expect(rec.fromProgress + rec.at.length - 1).toBe(progressOf(out.latest[carId(1)]!));
+    expect(rec.fromProgress).toBe(51);
+    const raw = new Map(all.filter((m) => m.carId === 1).map((m) => [progressOf(m), m.at]));
+    expect(rec.at).toEqual(Array.from({ length: 100 }, (_, i) => raw.get(51 + i)));
+  });
+
+  it('recent holds every crossing of a car that has fewer than 100', () => {
+    const ms = field({ cars: 1, laps: 1, paceMs: 90_000 }).miniSectors.filter((m) => m.lap === 1 && m.segment <= 20);
+    expect(run(viewOf(ms)).recent[carId(0)]).toEqual({ fromProgress: 0, at: ms.map((m) => m.at) });
+  });
+
+  it('an output taken before an update keeps its old window', () => {
+    const all = field({ cars: 2, laps: 3, paceMs: [90_000, 91_000] }).miniSectors;
+    const early = viewOf(all.slice(0, 200));
+    const acc = gapsCalculator.init(early);
+    const before = gapsCalculator.output(acc);
+    const copy = structuredClone(before);
+    const full = viewOf(all);
+    const after = gapsCalculator.output(gapsCalculator.update(acc, deltaOf(early, full), full));
+    expect(before).toEqual(copy);
+    expect(after.recent).not.toEqual(copy.recent);
   });
 
   it('update over deltas equals init over the whole history', () => {
@@ -174,6 +204,48 @@ describe('gaps to one car', () => {
     const of = (id: number) => toCar1.find((g) => g.carId === id)!;
     expect([v(of(0).gapMs), of(0).lapsDown]).toEqual([-5_000, 0]);
     expect([v(of(2).gapMs), of(2).lapsDown]).toEqual([5_000, 0]);
+  });
+
+  it('is exact for two cars at different points: their times at the last point both passed', () => {
+    // one lap; car 0 loses 400 ms in each of segments 27..30, so the leader-relative gaps of cars 1 and 2 differ from
+    // their gap to each other. At 60 s car 0 is at segment 32, car 1 at 31, car 2 at 26.
+    const times: Record<number, (s: number) => number> = {
+      0: (s) => 1_800 * s + 400 * Math.min(Math.max(s - 26, 0), 4),
+      1: (s) => 3_000 + 1_800 * s,
+      2: (s) => 13_000 + 1_800 * s,
+    };
+    const ms = byTime(
+      [0, 1, 2].flatMap((i) =>
+        Array.from({ length: 50 }, (_, segment) => ({ carId: carId(i), lap: 1, segment, at: times[i]!(segment) })),
+      ),
+    ).filter((m) => m.at <= 60_000);
+    const out = run(viewOf(ms));
+    expect(out.latest[carId(2)]).toMatchObject({ segment: 26 });
+    expect(out.latest[carId(1)]).toMatchObject({ segment: 31 });
+    // at segment 26: car 2 at 59 800, car 1 at 49 800
+    const gap = (a: number, to: number) => v(gapsToCar(out, carId(to))!.find((g) => g.carId === a)!.gapMs);
+    expect(gap(2, 1)).toBe(10_000);
+    expect(gap(1, 2)).toBe(-10_000);
+    expect(v(interval(out, 2).toAheadMs)).toBe(10_000);
+    expect(v(interval(out, 1).toBehindMs)).toBe(10_000);
+  });
+
+  it('a lapped pair from both sides: lapsDown ±k and the gap at the same place k laps apart', () => {
+    // at 950 s: car 0 (90 s laps) at progress 527, car 1 (100 s) at 475, car 2 (120 s) at 395
+    const ms = field({ cars: 3, laps: 11, paceMs: [90_000, 100_000, 120_000] }).miniSectors.filter((m) => m.at <= 950_000);
+    const out = run(viewOf(ms));
+    const of = (a: number, to: number) => {
+      const g = gapsToCar(out, carId(to))!.find((x) => x.carId === a)!;
+      return [g.lapsDown, v(g.gapMs)];
+    };
+    // car 1 passed progress 475 at 950 000, car 0 passed 525 at 945 000
+    expect(of(1, 0)).toEqual([1, 5_000]);
+    expect(of(0, 1)).toEqual([-1, -5_000]);
+    // car 2 passed 395 at 948 000; car 0 passed 495 at 891 000, car 1 passed 445 at 890 000
+    expect(of(2, 0)).toEqual([2, 57_000]);
+    expect(of(0, 2)).toEqual([-2, -57_000]);
+    expect(of(2, 1)).toEqual([1, 58_000]);
+    expect(of(1, 2)).toEqual([-1, -58_000]);
   });
 
   it('is undefined for a car that is not in the race', () => {
@@ -210,12 +282,14 @@ describe('gapper', () => {
   });
 
   it("leaderAverage is the leader's mean lap so far, applied to every lap, so the lines shift each lap", () => {
-    // the leader laps 90, 90 and 96 s (mean 92 s); car 1 laps 93 s
+    // the leader laps 90, 90 and 96 s (mean 92 s); car 1 laps 93 s; each closes lap 3 at (4, 0)
     const ms = byTime([
       ...crossings(carId(0), 1, 90_000, 0),
       ...crossings(carId(0), 2, 90_000, 90_000),
       ...crossings(carId(0), 3, 96_000, 180_000),
+      { carId: carId(0), lap: 4, segment: 0, at: 276_000 },
       ...[1, 2, 3].flatMap((n) => crossings(carId(1), n, 93_000, (n - 1) * 93_000)),
+      { carId: carId(1), lap: 4, segment: 0, at: 279_000 },
     ]);
     const lines = gapperLines(run(viewOf(ms)), { kind: 'leaderAverage' });
     expect(v(lines.referenceLapMs)).toBe(92_000);
@@ -226,7 +300,13 @@ describe('gapper', () => {
   it("counts each car's race time from lights out: a race that starts at 60 s gives the same lines", () => {
     // the lights go out at 60 s; cars at 90, 91 and 92 s cross the line at 60 000 + n * pace
     const start = 60_000;
-    const ms = byTime([0, 1, 2].flatMap((i) => [1, 2, 3].flatMap((n) => crossings(carId(i), n, 90_000 + 1_000 * i, start + (n - 1) * (90_000 + 1_000 * i)))));
+    const pace = (i: number) => 90_000 + 1_000 * i;
+    const ms = byTime(
+      [0, 1, 2].flatMap((i) => [
+        ...[1, 2, 3].flatMap((n) => crossings(carId(i), n, pace(i), start + (n - 1) * pace(i))),
+        { carId: carId(i), lap: 4, segment: 0, at: start + 3 * pace(i) },
+      ]),
+    );
     const out = run(viewOf(ms, { lightsOutAt: start }));
     expect(out.raceStartAt).toMatchObject({ known: true, value: start });
     const leader = gapperLines(out, { kind: 'leaderAverage' });
@@ -243,7 +323,8 @@ describe('gapper', () => {
   });
 
   it('before any completed lap the reference is insufficientData and no car has a line', () => {
-    const ms = field({ cars: 2, laps: 1, paceMs: 90_000 }).miniSectors.filter((m) => m.segment < 30);
+    // without field's closing (2, 0) crossing, nobody has completed lap 1
+    const ms = field({ cars: 2, laps: 1, paceMs: 90_000 }).miniSectors.filter((m) => m.lap === 1 && m.segment < 30);
     const lines = gapperLines(run(viewOf(ms)), { kind: 'leaderAverage' });
     expect(lines.referenceLapMs).toEqual({ known: false, reason: 'insufficientData' });
     expect(lines.cars.every((c) => c.byLap.length === 0)).toBe(true);

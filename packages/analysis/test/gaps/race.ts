@@ -9,18 +9,25 @@ import type { GapsOutput } from '../../src/gaps/index.ts';
 export const TRACK_M = 5000;
 const SEGMENT_M = TRACK_M / MINI_SECTORS;
 
-/** Mini-sectors a car has completed at this crossing, counted from the start. */
-export const progressOf = (m: Pick<MiniSectorCrossing, 'lap' | 'segment'>): number => (m.lap - 1) * MINI_SECTORS + m.segment + 1;
+/**
+ * Where a crossing is, in mini-sectors from the start line (the engine's convention): segment 0 is the line at the
+ * start of its lap, so the line that completes lap L is `(L + 1, 0)`, at progress `L × 50`.
+ */
+export const progressOf = (m: Pick<MiniSectorCrossing, 'lap' | 'segment'>): number => (m.lap - 1) * MINI_SECTORS + m.segment;
 
 /** Sorted by time, ties by car id: the order the history appends them in. */
 export const byTime = (list: MiniSectorCrossing[]): MiniSectorCrossing[] =>
   [...list].sort((a, b) => a.at - b.at || a.carId - b.carId);
 
-/** Every car runs `laps` laps at `paceMs`, car `i` starting `offsetsMs[i]` after 0: car i is `offsetsMs[i] - offsetsMs[j]` behind car j everywhere. */
+/**
+ * Every car runs `laps` laps at `paceMs`, car `i` starting `offsetsMs[i]` after 0, and closes its last lap at
+ * `(laps + 1, 0)`: car i is `offsetsMs[i] - offsetsMs[j]` behind car j everywhere.
+ */
 export function offsetRace(offsetsMs: number[], laps: number, paceMs = 90_000): MiniSectorCrossing[] {
   const list: MiniSectorCrossing[] = [];
   offsetsMs.forEach((offset, i) => {
     for (let n = 1; n <= laps; n++) list.push(...crossings(carId(i), n, paceMs, offset + (n - 1) * paceMs));
+    list.push({ carId: carId(i), lap: laps + 1, segment: 0, at: offset + laps * paceMs });
   });
   return byTime(list);
 }
@@ -36,7 +43,7 @@ export function carsFor(miniSectors: MiniSectorCrossing[], over: Record<number, 
   const latest = new Map<CarId, MiniSectorCrossing>();
   for (const m of miniSectors) latest.set(m.carId, m);
   const ids = [...new Set([...latest.keys(), ...Object.keys(over).map((k) => carId(Number(k)))])];
-  const progress = (id: CarId) => (latest.has(id) ? progressOf(latest.get(id)!) : 0);
+  const progress = (id: CarId) => (latest.has(id) ? progressOf(latest.get(id)!) : -1);
   const at = (id: CarId) => latest.get(id)?.at ?? Number.POSITIVE_INFINITY;
   const order = [...ids].sort((a, b) => progress(b) - progress(a) || at(a) - at(b) || a - b);
   return ids.map((id) => {
@@ -45,9 +52,9 @@ export function carsFor(miniSectors: MiniSectorCrossing[], over: Record<number, 
       id,
       timing: {
         position: over[id]?.position ?? order.indexOf(id) + 1,
-        lap: last === undefined ? 1 : last.segment === MINI_SECTORS - 1 ? last.lap + 1 : last.lap,
-        lapDistanceM: last === undefined ? 0 : ((last.segment + 1) % MINI_SECTORS) * SEGMENT_M,
-        totalDistanceM: progress(id) * SEGMENT_M,
+        lap: last?.lap ?? 1,
+        lapDistanceM: last === undefined ? 0 : last.segment * SEGMENT_M,
+        totalDistanceM: Math.max(0, progress(id)) * SEGMENT_M,
         resultStatus: over[id]?.resultStatus ?? 'active',
       },
     });
