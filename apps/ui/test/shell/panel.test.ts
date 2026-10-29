@@ -101,6 +101,16 @@ describe('Panel: header states', () => {
     await vi.waitFor(() => expect(header(container).textContent).toContain(text.stale(4)));
   });
 
+  it('a stale feed dims the widget: its view is marked `dim`, so inline highlight roles give way to the faint body colour', async () => {
+    const { store, snapshot } = setup();
+    render(Panel, { store, spec: spec('probe'), widget: widgetNamed('probe'), link: link() });
+    snapshot('feed.status', status);
+    const probe = await screen.findByTestId('probe');
+    expect(probe.closest('.view')?.classList.contains('dim')).toBe(false);
+    snapshot('feed.status', { ...status, stale: true });
+    await vi.waitFor(() => expect(probe.closest('.view')?.classList.contains('dim')).toBe(true));
+  });
+
   it('a Computed value shows L<lap> in the header', async () => {
     const { store, snapshot } = setup();
     const { container } = render(Panel, { store, spec: spec('computed-probe'), widget: widgetNamed('computed-probe'), link: link() });

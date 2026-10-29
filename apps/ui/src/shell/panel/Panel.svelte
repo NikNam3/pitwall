@@ -199,7 +199,8 @@
     {:else if status === 'ok' && size === null}
       <span style:color={role('textFaint')}>{text.tooSmall}</span>
     {:else if status === 'ok' && size !== undefined && View !== undefined && link !== undefined}
-      <View data={values} options={spec.options} {size} {link} />
+      <!-- A dimmed view drops the inline highlight roles of its values: an old value must not stay amber or red. -->
+      <div class="view" class:dim><View data={values} options={spec.options} {size} {link} /></div>
     {/if}
   </div>
 </div>
@@ -234,5 +235,11 @@
     min-height: 0;
     overflow: hidden;
     padding: 0 var(--pw-header-pad);
+  }
+  .view {
+    display: contents;
+  }
+  .view.dim :global(*) {
+    color: inherit !important;
   }
 </style>

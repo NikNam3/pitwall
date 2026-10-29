@@ -1,11 +1,11 @@
 <script lang="ts" generics="T">
   // The one cell that renders any value in every state (spec 5): known, unknown, estimated, stale.
   import type { Known } from '@pitwall/domain';
-  import { role } from '../../theme/index.ts';
-  import { usePanelStale } from '../stale/panel-stale.ts';
-  import { isStale } from '../stale/stale.ts';
+  import { roleOrUndefined } from '../../theme/index.ts';
+  import { useStaleCarFields } from '../stale/panel-stale.ts';
+  import { staleRole } from '../stale/stale.ts';
   import { estimatedPrefix, unknownReason } from '../text.ts';
-  import { CAR_FIELD_SOURCE, type CarFieldPath } from './car-sources.ts';
+  import type { CarFieldPath } from './car-sources.ts';
   import type { CarState } from '@pitwall/domain';
 
   type Props = {
@@ -20,29 +20,14 @@
   };
   let { value, format, car, estimated = false, widthCols, align = 'right' }: Props = $props();
 
-  const panel = usePanelStale();
-  const id = Symbol('value');
-
   const isKnownWrapper = (v: Known<T> | T): v is Known<T> =>
     typeof v === 'object' && v !== null && 'known' in v && typeof (v as { known: unknown }).known === 'boolean';
 
   const unwrapped = $derived(isKnownWrapper(value) ? value : { known: true as const, value: value as T });
-  const age = $derived.by(() => {
-    const now = panel?.clock.now();
-    if (!car || now === undefined) return undefined;
-    const source = CAR_FIELD_SOURCE[car.field];
-    const updatedAt = car.updatedAt[source];
-    if (updatedAt === undefined || !isStale(updatedAt, source, now, panel?.clock.cadenceMs())) return undefined;
-    return now - updatedAt;
-  });
-  const stale = $derived(age !== undefined);
+  const carStale = useStaleCarFields(() => (car === undefined ? undefined : { updatedAt: car.updatedAt, fields: [car.field] }));
+  const stale = $derived(car !== undefined && carStale.isStale(car.field));
 
-  $effect(() => {
-    panel?.reportStale(id, age);
-    return () => panel?.reportStale(id, undefined);
-  });
-
-  const colour = $derived(stale ? role('textFaint') : estimated ? role('textDim') : undefined);
+  const colour = $derived(roleOrUndefined(staleRole(estimated ? 'textDim' : undefined, stale)));
 </script>
 
 <span
