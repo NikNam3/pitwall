@@ -1,0 +1,15 @@
+# UI shell (sub-project 2): acceptance checklist
+
+Spec 12, checked on `feat/ui-shell` before the merge to `main` (2026-10-29). Items marked **user** need you; the run did not stop for them (plan: human interaction front-loaded, approvals in Task 24).
+
+| # | Criterion | Status | Evidence |
+|---|---|---|---|
+| 1 | `pnpm check`, `pnpm test:ui`, `pnpm test:acceptance` green | ✅ | check: 2060 passed, 1 skipped (final fix branch); test:ui: 8/8, baselines identical; acceptance: 10/10 (709 s) |
+| 2 | `pnpm --filter @pitwall/desktop start` opens the default workbook at its saved geometry, starts the bridge, the placeholder shows live feed status | partly ✅ · **user** | The Electron e2e (`cross-window.spec.ts`) launches the real desktop app on a paused replay, opens `main` and `side`, the placeholder shows `connected` and `Zandvoort`. Not done: a visible launch against a `--realtime` replay or the game on your screen (the run kept windows hidden so nothing opened on your desktop). Run `pnpm desktop` once and look. |
+| 3 | `pitwall dev --replay <full Zandvoort> --at-lap 5`; edit `feed-status`; windows back on lap 5 within 5 s | ❌ | Measured 58.1 s at the end of full Zandvoort (Task 7). Profiling (Task 7b): 47 s is the fast-forward itself; replay speed unchanged versus main. A checkpoint-resume design (~3 s, only for feature/strategy/UI edits) was written but not built: question Q2. The cached cadence median shaves ~10 % of fast-forward CPU. |
+| 4 | One-agent-per-display dry run with only `PITWALL_WORKER_UNIT=dry-run-card PITWALL_PHASE=implement` | partly ✅ · **user** | The guards enforce it and are tested (`test/hooks/hooks.test.ts`, incl. "unit alone restricts writes to the unit's paths", fixed in the final review). The live dry run with a separate `claude` worker was not started (it needs a new top-level session). |
+| 5 | `Ctrl+2` reaches both windows; an acknowledged alert disappears in both; a bridge restart keeps workbook, link groups and acknowledgements | ✅ | `cross-window.spec.ts` (Electron, two windows, bridge kill and restart). Acknowledgements are now per occurrence (`<feed>:<key>:<raisedAt>`); note: on a *live* bridge restart, a still-active alert is raised again with a new `raisedAt` and shows again. |
+| 6 | A hand-broken workbook opens with notes, nothing else broken; a half-written file is never overwritten | ✅ | `normalise` table tests, UiState hand-edit and invalid-JSON tests (autosave hash check), e2e hand edit. |
+| 7 | The user approves the provisional baselines; the fit test passes for every widget at every declared size | fit ✅ · approval **user** | 109 baselines in `apps/ui/e2e/__screenshots__/`, compared by the supervisor with the Task 0 values (question Q4). |
+| – | Questions answered | **user** | `docs/superpowers/plans/2026-10-28-ui-shell-questions.md`, Q1–Q5 with defaults. |
+| – | Stryker on the UI's pure modules | ✅ | first run 72.7 %; after the final fix wave's tests (measure.ts out of scope as a DOM action) 88.6 % (keys 91.7, normalise 95.7, panel-stale 88.9). Engine and protocol Stryker were not re-run (engine changes this run were additive and covered by the engine suite and acceptance). |

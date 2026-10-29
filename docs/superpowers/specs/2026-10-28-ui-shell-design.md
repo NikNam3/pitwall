@@ -1,6 +1,6 @@
 # Pitwall: Sub-project 2 "UI shell", Design
 
-Status: draft for user review · Date: 2026-10-28 · Brainstorm: session 1 in `docs/brainstorms/2026-10-28-ui-shell.md` (visual system, shell decisions), session 2 in conversation (code structure, this document)
+Status: built (feat/ui-shell merged 2026-10-29); acceptance in docs/acceptance/ui-shell-checklist.md, open questions in docs/superpowers/plans/2026-10-28-ui-shell-questions.md · Date: 2026-10-28 · Brainstorm: session 1 in `docs/brainstorms/2026-10-28-ui-shell.md` (visual system, shell decisions), session 2 in conversation (code structure, this document)
 
 ## 1. Context
 
