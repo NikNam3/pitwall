@@ -553,7 +553,7 @@ type BarProps = { value: Known<number>; min: number; max: number; cols: number; 
 type CompoundMarkProps = { compound: VisualCompound; age?: number };
 
 // CarLabel: the three-letter code (or number), our cars marked
-type CarLabelProps = { carId: CarId; ours: boolean };
+type CarLabelProps = { identity: Pick<CarIdentity, 'name' | 'raceNumber'>; ours: boolean };
 
 // PositionMark: change since the start or a before/after pair
 type PositionMarkProps = { change: number } | { from: number; to: Known<number> };
