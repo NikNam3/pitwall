@@ -8,6 +8,8 @@ import type { LapRecord } from '@pitwall/domain';
 export type LapClass = { forPace: boolean; forRate: boolean; forBest: { lap: boolean; sectors: [boolean, boolean, boolean] } };
 
 /** Classifies one lap record. */
-export function classifyLap(_lap: LapRecord, _session: { isRace: boolean }): LapClass {
-  throw new Error('not implemented');
+export function classifyLap(lap: LapRecord, session: { isRace: boolean }): LapClass {
+  const forRate = !lap.inLap && !lap.outLap && lap.scShare === 0 && lap.vscShare === 0;
+  const forPace = forRate && lap.valid.lap && !(session.isRace && lap.lapNumber === 1);
+  return { forPace, forRate, forBest: { lap: lap.valid.lap, sectors: [...lap.valid.sectors] } };
 }
