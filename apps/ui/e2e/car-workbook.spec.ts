@@ -17,9 +17,13 @@ test.afterEach(async () => {
   while (cleanups.length > 0) await cleanups.pop()?.().catch(() => undefined);
 });
 
+/** The corner-block panel: the one with the full table's header line (case-sensitive, so "surface" elsewhere does not match).
+ *  The panel title is portaled out of `.panel`, so it cannot be used. */
+const cornerPanel = (page: Page) => page.locator('.panel').filter({ has: page.locator('.line', { hasText: /\bSURF\b/ }) });
+
 /** The four corner rows of the full corner block: `FL  93  93  30.2  309  0%` split into fields. */
 async function cornerRows(page: Page): Promise<Record<string, string[]>> {
-  const lines = await page.locator('.panel .line').allInnerTexts();
+  const lines = await cornerPanel(page).locator('.line').allInnerTexts();
   const rows: Record<string, string[]> = {};
   for (const line of lines) {
     const fields = line.trim().split(/\s+/);
@@ -51,7 +55,7 @@ test('the car workbook is seeded, shows four known surface temperatures and live
   await page.bringToFront();
   // `car` is the only workbook in a fresh data dir, so it is workbook 1.
   await page.keyboard.press('Control+1');
-  await expect(page.getByText('SURF')).toBeVisible({ timeout: SETTLE_MS });
+  await expect(cornerPanel(page).locator('.line', { hasText: /\bSURF\b/ })).toBeVisible({ timeout: SETTLE_MS });
 
   // From lap 2 the time trial holds the surface temperature at 93 degC: jump there and play.
   await page.getByTestId('replay-lap').fill('2');
