@@ -44,6 +44,26 @@ const addElapsed = (state: EngineState, cursor: LapCursor, at: SessionTime): voi
 
 const share = (part: number, whole: number): number => (whole > 0 ? part / whole : 0);
 
+type LapEndSamples = Pick<LapRecord, 'wearAtEndPct' | 'ersStoreAtEndJ' | 'ersDeployedJ' | 'ersHarvestedJ' | 'damageAtEnd' | 'channelRange'>;
+
+/** Placeholder until the lap cursor samples them (plan Task 2): every lap-end sample `notReceived`. */
+const unknownLapEnd = (): LapEndSamples => {
+  const none = unknown('notReceived');
+  const corners = <T>(cell: T) => ({ fl: cell, fr: cell, rl: cell, rr: cell });
+  return {
+    wearAtEndPct: corners(none),
+    ersStoreAtEndJ: none,
+    ersDeployedJ: none,
+    ersHarvestedJ: none,
+    damageAtEnd: none,
+    channelRange: {
+      tyres: corners({ surfaceC: none, carcassC: none, pressurePsi: none }),
+      brakesC: corners(none),
+      engineC: none,
+    },
+  };
+};
+
 /** A lap of this cursor as the values LapData can give: sector 3 is what is left of the lap time. */
 const lapFromCursor = (
   car: CarState,
@@ -72,6 +92,7 @@ const lapFromCursor = (
     positionAtEnd: car.timing.position,
     status: 'provisional',
     completedAt: at,
+    ...unknownLapEnd(),
   };
 };
 
@@ -94,6 +115,7 @@ const lapFromHistoryOnly = (car: CarState, lapNumber: number, lapTimeMs: number,
   positionAtEnd: 0,
   status: 'provisional',
   completedAt: at,
+  ...unknownLapEnd(),
 });
 
 const trackLap = (state: EngineState, car: CarState, at: SessionTime): void => {

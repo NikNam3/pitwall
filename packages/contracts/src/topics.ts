@@ -12,6 +12,8 @@ export type { InsightEntry } from './topics/insights.ts';
 export type { WorkbooksState } from './topics/ui.workbooks.ts';
 export type { AlertsState } from './topics/ui.alerts.ts';
 export type { UiSettings } from './topics/ui.settings.ts';
+export type { GapperParams } from './topics/gaps.gapper.ts';
+export type { LapBoardParams } from './topics/lapTimes.board.ts';
 
 export type TopicName = keyof typeof TOPICS;
 export type TopicParams<T extends TopicName> = NonNullable<(typeof TOPICS)[T]['params']>;

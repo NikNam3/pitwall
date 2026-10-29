@@ -1,6 +1,6 @@
 // What the top bar's segments read: the topics of one feed plus the global alert and settings topics.
 import type { AlertsState, CarOverview, FeedStatus, ReplayControl, ReplayStatus, SessionInfo, UiAction, UiSettings } from '@pitwall/contracts';
-import type { FeedId, Insight } from '@pitwall/domain';
+import type { FeedId, Insight, Known, Moment, RaceMoment } from '@pitwall/domain';
 import type { EntryState, TopicStore } from '../../connection/topic-store.svelte.ts';
 import { activeInsights, MAX_SHOWN_ALERTS, tierOneAlerts } from './alerts.ts';
 
@@ -16,6 +16,7 @@ export class TopBarModel {
   readonly #insights: EntryState<Map<string, Insight>>;
   readonly #alerts: EntryState<AlertsState>;
   readonly #settings: EntryState<UiSettings>;
+  readonly #moment: EntryState<Known<RaceMoment>>;
   readonly #releases: Array<() => void> = [];
   readonly #isReplay: boolean;
   readonly #replay: EntryState<ReplayStatus> | undefined;
@@ -34,6 +35,8 @@ export class TopBarModel {
     this.#insights = take(store.acquire({ topic: 'insights', params: {}, feedId }, activeInsights));
     this.#alerts = take(store.acquire({ topic: 'ui.alerts', params: {} }));
     this.#settings = take(store.acquire({ topic: 'ui.settings', params: {} }));
+    // Optional: no data until the race-moment analysis publishes, and notApplicable outside the race.
+    this.#moment = take(store.acquire({ topic: 'raceMoment.current', params: {}, feedId }));
     // The feed's kind is fixed by its hello; a replay feed has a transport.
     this.#isReplay = store.feeds.find((f) => f.feedId === feedId)?.kind === 'replay';
     this.#replay = this.#isReplay ? take(store.acquire({ topic: 'replay.status', params: {}, feedId })) : undefined;
@@ -46,6 +49,11 @@ export class TopBarModel {
   get playerLap(): number | undefined {
     const player = this.session?.playerCar;
     return player === undefined ? undefined : okValue(this.#cars)?.find((car) => car.id === player)?.timing?.lap;
+  }
+  /** The race moment; undefined while it is unknown or not published. */
+  get moment(): Moment | undefined {
+    const current = okValue(this.#moment);
+    return current?.known ? current.value.moment : undefined;
   }
   get feed(): FeedStatus | undefined {
     return okValue(this.#feed);

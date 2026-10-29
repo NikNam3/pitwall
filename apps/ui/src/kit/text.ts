@@ -1,4 +1,5 @@
 // Every fixed text of the kit and the shell (spec 4.3, 7.4): the one place UI wording changes.
+import type { UnknownReason } from '@pitwall/domain';
 
 /** Header state while a required topic has no value yet. */
 export const noDataYet = 'no data yet';
@@ -38,6 +39,15 @@ export const addWidget = 'add widget';
 
 /** Accessible name of a panel's settings icon. */
 export const settings = 'settings';
+
+/** Hover text of an empty value cell: why the value is missing (spec 5; `UnknownReason`). */
+export const unknownReason = {
+  restricted: 'restricted by the game',
+  notReceived: 'not received yet',
+  notApplicable: 'not applicable',
+  realism: 'hidden by realism mode',
+  insufficientData: 'too few laps or samples yet',
+} as const satisfies Record<UnknownReason, string>;
 
 /** Prefix of an estimated value in a value cell. */
 export const estimatedPrefix = '~';
@@ -138,6 +148,8 @@ export const topBar = {
   /** The player's current lap, of the session's total when it has one: `L23/62`. */
   lapOf: (lap: string, total: string | undefined): string => (total === undefined ? `L${lap}` : `L${lap}/${total}`),
   flag: { green: 'green', sc: 'SC', vsc: 'VSC', formation: 'formation' },
+  /** The race moment's name (spec 7.2). */
+  moment: { neutralised: 'neutralised', incident: 'incident', weather: 'weather', battle: 'battle', carCare: 'car care' },
   realismOn: 'realism on',
   realismOff: 'realism off',
   /** The value realism takes at the next session, shown when it differs from this one. */

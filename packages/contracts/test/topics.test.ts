@@ -1,5 +1,5 @@
 import { describe, expect, expectTypeOf, it } from 'vitest';
-import type { CarDynamics, CarId, CarMotion, CarState, FeedId, Known, LapRecord } from '@pitwall/domain';
+import type { CarDynamics, CarId, CarMotion, CarState, FeedId, GapperReference, Interval, Known, LapRecord, RaceMoment } from '@pitwall/domain';
 import type { CarTelemetry } from '../src/topics/car.telemetry.ts';
 import {
   CONTRACT_VERSION,
@@ -40,10 +40,32 @@ describe('TOPICS', () => {
       ['stints', 'stints', 'append', Infinity],
     ]);
   });
-  it('gives every one of the 12 feed topics owner core and scope feed', () => {
-    const feed = Object.values(TOPICS).filter((d) => d.scope === 'feed');
-    expect(feed).toHaveLength(12);
-    for (const d of feed) expect(d).toMatchObject({ owner: 'core', scope: 'feed' });
+  it('gives every core topic outside dev and ui scope feed', () => {
+    const core = Object.entries(TOPICS).filter(([name, d]) => d.owner === 'core' && !/^(dev|ui)\./.test(name));
+    expect(core).toHaveLength(12);
+    for (const [, d] of core) expect(d.scope).toBe('feed');
+  });
+  it('has the analysis topics of sub-project 3 (spec A.3): owner, mode and rate', () => {
+    const table = Object.entries(TOPICS)
+      .filter(([, d]) => d.owner !== 'core')
+      .map(([key, d]) => [key, d.owner, d.scope, d.mode, d.maxHz] as const)
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+    expect(table).toEqual([
+      ['battle.cards', 'battle', 'feed', 'state', 2],
+      ['carBands.car', 'car-bands', 'feed', 'state', 4],
+      ['damage.car', 'damage', 'feed', 'state', 4],
+      ['ers.car', 'ers', 'feed', 'state', 4],
+      ['fuel.car', 'fuel', 'feed', 'state', 4],
+      ['gaps.gapper', 'gaps', 'feed', 'state', 1],
+      ['gaps.intervals', 'gaps', 'feed', 'state', 4],
+      ['gaps.neighbourhood', 'gaps', 'feed', 'state', 2],
+      ['gaps.toCar', 'gaps', 'feed', 'state', 4],
+      ['incidents.feed', 'incidents', 'feed', 'state', 4],
+      ['lapTimes.board', 'lap-times', 'feed', 'state', 4],
+      ['lapTimes.projection', 'lap-times', 'feed', 'state', 10],
+      ['raceMoment.current', 'race-moment', 'feed', 'state', 4],
+      ['tyreWear.car', 'tyre-wear', 'feed', 'state', 4],
+    ]);
   });
   it('has the global topic dev.calcStats: owner core, state, 1 Hz', () => {
     expect(TOPICS['dev.calcStats']).toMatchObject({ name: 'dev.calcStats', owner: 'core', scope: 'global', mode: 'state', maxHz: 1 });
@@ -54,7 +76,7 @@ describe('TOPICS', () => {
   it.each(['ui.workbooks', 'ui.linkGroups', 'ui.alerts', 'ui.settings'] as const)('has the global topic %s: owner core, state', (name) => {
     expect(TOPICS[name]).toMatchObject({ name, owner: 'core', scope: 'global', mode: 'state' });
   });
-  it('exports the contract version', () => { expect(CONTRACT_VERSION).toBe(7); });
+  it('exports the contract version', () => { expect(CONTRACT_VERSION).toBe(8); });
 });
 
 describe('defineTopic', () => {
@@ -82,7 +104,15 @@ describe('topic types', () => {
       | 'feed.status' | 'session.info' | 'cars.overview' | 'car.detail' | 'car.telemetry' | 'laps'
       | 'stints' | 'pitStops' | 'flagPhases' | 'events' | 'insights' | 'dev.calcStats' | 'dev.catalogue'
       | 'replay.status' | 'ui.workbooks' | 'ui.linkGroups' | 'ui.alerts' | 'ui.settings'
+      | 'tyreWear.car' | 'fuel.car' | 'ers.car' | 'carBands.car' | 'damage.car' | 'gaps.intervals' | 'gaps.toCar'
+      | 'gaps.gapper' | 'gaps.neighbourhood' | 'lapTimes.board' | 'lapTimes.projection' | 'battle.cards'
+      | 'incidents.feed' | 'raceMoment.current'
     >();
+    expectTypeOf<TopicParams<'gaps.gapper'>>().toEqualTypeOf<{ reference: GapperReference }>();
+    expectTypeOf<TopicParams<'lapTimes.board'>>().toEqualTypeOf<{ referenceCarId: CarId }>();
+    expectTypeOf<TopicParams<'battle.cards'>>().toEqualTypeOf<{ carId: CarId }>();
+    expectTypeOf<TopicValue<'gaps.intervals'>>().toEqualTypeOf<Interval[]>();
+    expectTypeOf<TopicValue<'raceMoment.current'>>().toEqualTypeOf<Known<RaceMoment>>();
     expectTypeOf<TopicParams<'car.detail'>>().toEqualTypeOf<{ carId: CarId }>();
     expectTypeOf<TopicParams<'car.detail'>['carId']>().toEqualTypeOf<CarId>();
     expectTypeOf<TopicParams<'car.telemetry'>['carId']>().toEqualTypeOf<CarId>();

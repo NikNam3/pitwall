@@ -4,7 +4,7 @@
   import { role } from '../../theme/index.ts';
   import { usePanelStale } from '../stale/panel-stale.ts';
   import { isStale } from '../stale/stale.ts';
-  import { estimatedPrefix } from '../text.ts';
+  import { estimatedPrefix, unknownReason } from '../text.ts';
   import { CAR_FIELD_SOURCE, type CarFieldPath } from './car-sources.ts';
   import type { CarState } from '@pitwall/domain';
 
@@ -50,7 +50,7 @@
   class:stale
   class:estimated
   class:left={align === 'left'}
-  title={unwrapped.known ? undefined : unwrapped.reason}
+  title={unwrapped.known ? undefined : unknownReason[unwrapped.reason]}
   style:color={colour}
   style:min-width={widthCols === undefined ? undefined : `${widthCols}ch`}
 >{#if unwrapped.known}{estimated ? estimatedPrefix : ''}{format(unwrapped.value)}{/if}</span>

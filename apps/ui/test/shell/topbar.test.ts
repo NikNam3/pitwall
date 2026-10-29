@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // The top bar (Task 17, spec 7.6, 7.7, 7.9, 8.5; mockup 9-top-bar). Contract the tests assume of shell/topbar/TopBar.svelte:
 //  - props: `{ store: TopicStore; feedId: FeedId; send: (a: UiAction) => void; sendReplay: (c: ReplayControl) => void }`;
-//    it acquires `session.info`, `feed.status`, `replay.status` (feed topics), `insights` (with `activeInsights`) and the global
+//    it acquires `session.info`, `feed.status`, `replay.status`, `raceMoment.current` (feed topics), `insights` (with `activeInsights`) and the global
 //    `ui.alerts` and `ui.settings` itself; the feed's kind comes from `store.feeds` (the `hello` message);
 //  - test ids: root `topbar`; one `segment-<name>` per SegmentName of TOP_BAR (an empty segment may render nothing else);
 //    realism: a button `realism` whose text has `text.topBar.realismOn|realismOff` and, when ui.settings.realismNextSession differs,
@@ -76,6 +76,18 @@ describe('segments', () => {
     await setup();
     expect(screen.getByTestId('topbar')).toBeTruthy();
     for (const name of [...TOP_BAR.left, ...TOP_BAR.right]) expect(screen.getByTestId(`segment-${name}`)).toBeTruthy();
+  });
+});
+
+describe('moment', () => {
+  it('shows the race moment of raceMoment.current by its name, and nothing while it is unknown', async () => {
+    const { push } = await setup();
+    expect(screen.queryByTestId('moment')).toBeNull();
+    await push('raceMoment.current', { known: true, at: 1000, value: { moment: 'battle', since: { known: false, reason: 'notApplicable' },
+      cause: { rule: 'battle', params: {} }, active: ['battle', 'carCare'] } });
+    expect(screen.getByTestId('moment').textContent).toBe(text.topBar.moment.battle);
+    await push('raceMoment.current', { known: false, reason: 'notApplicable' });
+    expect(screen.queryByTestId('moment')).toBeNull();
   });
 });
 

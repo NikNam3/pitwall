@@ -4,6 +4,11 @@ import { unknown } from '@pitwall/domain';
 import { ScenarioBuilder, type FrameDraft } from '../builders/index.ts';
 import { runScenario } from '../support/run.ts';
 
+// The lap-end samples before the engine fills them (plan Task 2 replaces this with the sampled values).
+const none = unknown('notReceived');
+const corners = <T>(v: T) => ({ fl: v, fr: v, rl: v, rr: v });
+const lapEnd = { wearAtEndPct: corners(none), ersStoreAtEndJ: none, ersDeployedJ: none, ersHarvestedJ: none, damageAtEnd: none,
+  channelRange: { tyres: corners({ surfaceC: none, carcassC: none, pressurePsi: none }), brakesC: corners(none), engineC: none } };
 const car = (d: FrameDraft, id = 0) => d.lapData.lapData[id]!;
 const entry = (lapTimeInMs: number, s1: number, s2: number, s3: number, lapValidBitFlags = 0b1111) => ({
   lapTimeInMs, sector1TimeMs: s1, sector2TimeMs: s2, sector3TimeMs: s3, lapValidBitFlags,
@@ -178,6 +183,7 @@ describe('confirming laps from Session History', () => {
       carId: 0, lapNumber: 1, lapTimeMs: 81_000, sectorTimesMs: [26_000, 27_000, 28_000], valid: { lap: true, sectors: [true, true, true] },
       actualCompound: 'unknown', visualCompound: 'unknown', tyreAgeAtStart: 0, fuelAtStartKg: unknown('notReceived'), fuelAtEndKg: unknown('notReceived'),
       scShare: 0, vscShare: 0, inLap: false, outLap: false, positionAtEnd: 0, status: 'confirmed', completedAt: st.history.laps.at(-1)!.completedAt,
+      ...lapEnd,
     });
   });
   it('a lap swallowed by a jump is confirmed once, however often the packet comes', () => {

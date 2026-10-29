@@ -2,12 +2,13 @@
 // The value cell (spec 5, 6.4). Contract the tests assume of Value.svelte:
 //  - the cell is the element with class `value`; modifier classes `stale` and `estimated` are set when they apply;
 //  - its colour is inline `color: <role(...)>` (textDim when estimated, textFaint when stale, stale wins);
-//  - an unknown value renders no text and sets `title` to the reason;
+//  - an unknown value renders no text and sets `title` to the reason's hover text from kit/text.ts;
 //  - staleness uses the panel clock given to `providePanelStale({ now, cadenceMs })` and reports to the panel,
 //    so `staleForMs` is a number while a value is stale and undefined otherwise.
 import { cleanup, render } from '@testing-library/svelte';
 import { unknown, known, type SessionTime } from '@pitwall/domain';
 import { afterEach, describe, expect, it } from 'vitest';
+import { unknownReason } from '../../src/kit/text.ts';
 import { role } from '../../src/theme/index.ts';
 import StaleHarness from './StaleHarness.svelte';
 
@@ -18,12 +19,12 @@ const cell = (c: HTMLElement) => c.querySelector('.value') as HTMLElement;
 const staleFor = (c: HTMLElement) => c.querySelector('[data-testid="stale-for"]')?.textContent ?? '';
 
 describe('Value: unknown', () => {
-  it.each(['realism', 'restricted', 'notReceived', 'notApplicable'] as const)(
+  it.each(['realism', 'restricted', 'notReceived', 'notApplicable', 'insufficientData'] as const)(
     'renders empty with title %s',
     (reason) => {
       const { container } = render(StaleHarness, { value: unknown(reason) });
       expect(cell(container).textContent?.trim()).toBe('');
-      expect(cell(container).getAttribute('title')).toBe(reason);
+      expect(cell(container).getAttribute('title')).toBe(unknownReason[reason]);
     },
   );
 });
