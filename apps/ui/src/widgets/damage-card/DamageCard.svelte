@@ -33,13 +33,14 @@
     </CornerGrid>
     {#each rows.jumps.slice(0, 2) as j (j.text)}<div class="line">{@render jump(j)}</div>{/each}
   {:else}
-    <div class="line"><span title={hint(rows.parts.wingL)}>{rows.compact.parts}</span>{#each rows.faults as fault (fault)} <span style:color={role('critical')}>{fault}</span>{/each}</div>
-    {#if rows.compact.jump}<div class="line">{@render jump(rows.compact.jump)}</div>{/if}
+    <div class="line"><span title={hint(rows.parts.wingL)}>{rows.compact.parts}</span></div>
+    <!-- Two rows only: a fault outranks the newest jump. -->
+    {#if rows.faults.length > 0}<div class="line" style:color={role('critical')}>{rows.faults.join(' · ')}</div>
+    {:else if rows.compact.jump}<div class="line" style:color={colour(rows.compact.jump.role)} title={rows.compact.jump.loss}>{rows.compact.jump.text}</div>{/if}
   {/if}
 </div>
 
 <style>
-  .card,
   .line {
     white-space: pre;
   }
