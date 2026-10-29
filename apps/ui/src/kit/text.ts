@@ -42,7 +42,7 @@ export const settings = 'settings';
 
 /** Hover text of an empty value cell: why the value is missing (spec 5; `UnknownReason`). */
 export const unknownReason = {
-  restricted: 'restricted by the game',
+  restricted: "hidden by the driver's telemetry setting",
   notReceived: 'not received yet',
   notApplicable: 'not applicable',
   realism: 'hidden by realism mode',

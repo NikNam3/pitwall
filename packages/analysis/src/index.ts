@@ -4,6 +4,7 @@ export * from './battle/index.ts';
 export * from './car-bands/index.ts';
 export * from './car-bands/calculator.ts';
 export * from './damage/index.ts';
+export { damageCalculator } from './damage/calculator.ts';
 export * from './ers/index.ts';
 export * from './fuel/index.ts';
 export * from './gaps/index.ts';
