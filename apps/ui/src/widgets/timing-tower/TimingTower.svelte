@@ -11,6 +11,7 @@
   import { formatCount, formatDeltaMs, formatLapNumber, formatLapsDown, formatLapTime, formatPenaltyMs, formatPlace, formatSector, formatWarnings } from '../../kit/values/format.ts';
   import { sectorStatusRole } from '../../emphasis/index.ts';
   import { role } from '../../theme/index.ts';
+  import type { Role } from '../../theme/roles.ts';
   import type { SectorStatus } from '@pitwall/domain';
   import { TOWER_COLUMNS } from './columns.ts';
   import { incidentRole } from './emphasis.ts';
@@ -28,11 +29,13 @@
     const r = sectorStatusRole(status, { ours });
     return r === undefined ? undefined : role(r);
   };
+  // the amber left bar of an incident car, in the role the emphasis gives
+  const bar = (r: Role | undefined): string | undefined => (r === undefined ? undefined : `inset 2px 0 0 ${role(r)}`);
   const penalty = (r: TowerRow) => (r.penaltyMs > 0 ? formatPenaltyMs(r.penaltyMs) : r.warnings > 0 ? formatWarnings(r.warnings) : '');
 </script>
 
 {#snippet position(r: TowerRow)}
-  <span class="mark" style:box-shadow={incidentRole(data.moment, r.involved) ? `inset 2px 0 0 ${role('warning')}` : undefined}
+  <span class="mark" style:box-shadow={bar(incidentRole(r.involved))}
     >{formatPlace(r.position)}</span
   >
 {/snippet}

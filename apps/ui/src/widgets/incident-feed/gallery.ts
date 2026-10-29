@@ -35,22 +35,28 @@ const damage: IncidentEntry = {
   timeLostMs: unknown('insufficientData'), forUs: [],
 };
 
-const moment = (name: Moment): Known<RaceMoment> =>
-  k({ moment: name, since: name === 'incident' ? known(toSessionTime(230_000), 10) : unknown('notApplicable'), cause: { rule: name, params: {} }, active: [name] });
+/** A moment; the incident moment's cause names its entry (`entryId`), as race-moment gives it. */
+const moment = (name: Moment, entryId?: string): Known<RaceMoment> =>
+  k({
+    moment: name,
+    since: name === 'incident' ? known(toSessionTime(230_000), 10) : unknown('notApplicable'),
+    cause: { rule: name, params: entryId === undefined ? {} : { entryId } },
+    active: [name],
+  });
 
 /** Synthetic cases and fit expectations for `incident-feed`. */
 const gallery: GalleryEntry<typeof widget> = {
   moments: ['raceSingaporeStart.grid', 'raceSingaporeEnd.chequered'],
   cases: {
-    // Mockup: in the incident moment the newest major entry is amber.
-    incidentMoment: { feed: [collision, timeLoss, warning, neutralised, damage], cars, moment: moment('incident') },
+    // Mockup: in the incident moment the entry it names (the newest major one) is amber.
+    incidentMoment: { feed: [collision, timeLoss, warning, neutralised, damage], cars, moment: moment('incident', collision.id) },
     empty: { feed: [], cars, moment: undefined },
     // Mockup: minor entries (warning, safety car) dim.
     feed: { feed: [collision, timeLoss, warning, neutralised, damage], cars, moment: undefined },
     // The unresolved time loss of the damage entry is an empty cell.
     unresolved: { feed: [damage], cars, moment: undefined },
-    // The newest entry is minor: the amber goes to the first major entry below it.
-    incidentMomentMinorFirst: { feed: [warning, timeLoss, neutralised], cars, moment: moment('incident') },
+    // The newest entry is minor: the moment names the major entry below it, which is amber.
+    incidentMomentMinorFirst: { feed: [warning, timeLoss, neutralised], cars, moment: moment('incident', timeLoss.id) },
     // Another moment: nothing amber.
     battleMoment: { feed: [collision, warning], cars, moment: moment('battle') },
     // A car missing from cars.overview is left out of the cell, with the reason on hover.

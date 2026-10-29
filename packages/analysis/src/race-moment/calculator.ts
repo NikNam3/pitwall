@@ -61,7 +61,7 @@ export const raceMomentCalculator: QuickCalculator<RaceMomentOutput> = {
       if (e.severity === 'major' && age >= 0 && age < cfg.incidentHoldMs && (newest === undefined || e.at > newest.at)) newest = e;
     }
     if (newest !== undefined) {
-      holding.push(['incident', { since: known(newest.at as SessionTime, now), cause: { rule: 'majorIncident', params: { kind: newest.kind, ageMs: now - newest.at } } }]);
+      holding.push(['incident', { since: known(newest.at as SessionTime, now), cause: { rule: 'majorIncident', params: { entryId: newest.id, kind: newest.kind, ageMs: now - newest.at } } }]);
     }
 
     // the game sends the forecast of every session of the weekend: only this session's samples count

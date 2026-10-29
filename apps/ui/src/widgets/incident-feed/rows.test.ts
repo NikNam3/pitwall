@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { carId, known, toSessionTime, unknown } from '@pitwall/domain';
 import type { IncidentEntry, IncidentForUs, Known, RaceMoment } from '@pitwall/domain';
 import type { CarOverview } from '@pitwall/contracts';
-import { columnsFor, incidentRowText, incidentRows, newestMajorId } from './rows.ts';
+import { columnsFor, incidentRowText, incidentRows } from './rows.ts';
 
 const k = <T>(v: T): Known<T> => known(v, 0);
 const overview = (id: number, name: string): CarOverview =>
@@ -18,18 +18,10 @@ const entry = (over: Partial<IncidentEntry> = {}): IncidentEntry => ({
 });
 const minor = (over: Partial<IncidentEntry> = {}): IncidentEntry =>
   entry({ id: 'warning:5:210000', lap: 21, kind: 'warning', severity: 'minor', carIds: [carId(5)], timeLostMs: unknown('notApplicable'), forUs: [], ...over });
-const incident: Known<RaceMoment> = k({ moment: 'incident', since: unknown('notApplicable'), cause: { rule: 'incident', params: {} }, active: ['incident'] });
-
-describe('newestMajorId', () => {
-  it('is the id of the first major entry of the feed (newest first), skipping minor ones', () => {
-    expect(newestMajorId([minor(), entry({ id: 'b' }), entry({ id: 'c' })])).toBe('b');
-  });
-
-  it('is undefined for an empty feed or one with only minor entries', () => {
-    expect(newestMajorId([])).toBeUndefined();
-    expect(newestMajorId([minor()])).toBeUndefined();
-  });
-});
+/** The incident moment whose cause names entry `entryId` (race-moment's `cause.params.entryId`). */
+const incidentNaming = (entryId: string): Known<RaceMoment> =>
+  k({ moment: 'incident', since: unknown('notApplicable'), cause: { rule: 'majorIncident', params: { entryId } }, active: ['incident'] });
+const incident = incidentNaming('m1');
 
 describe('incidentRows', () => {
   it('gives one row per entry, in feed order, keyed by the entry id', () => {
@@ -93,9 +85,11 @@ describe('incidentRows', () => {
     expect(b!.cells.cars).toEqual({ text: '' });
   });
 
-  it('dims minor entries and ambers only the newest major entry in the incident moment', () => {
+  it('dims minor entries and ambers only the entry the incident moment names', () => {
     const rows = incidentRows([minor({ id: 'w' }), entry({ id: 'm1' }), entry({ id: 'm2' })], cars, incident);
     expect(rows.map((r) => r.role)).toEqual(['textDim', 'warning', undefined]);
+    const older = incidentRows([entry({ id: 'm1' }), entry({ id: 'm2' })], cars, incidentNaming('m2'));
+    expect(older.map((r) => r.role)).toEqual([undefined, 'warning']);
   });
 
   it('ambers nothing outside the incident moment', () => {

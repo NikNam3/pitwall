@@ -2,6 +2,7 @@
 import type { CarOverview, SessionInfo } from '@pitwall/contracts';
 import { unknown } from '@pitwall/domain';
 import { ourCars } from '../../kit/car/our-cars.ts';
+import { momentIncident } from './emphasis.ts';
 import type {
   CarId, GapToCar, IncidentEntry, Interval, Known, LapBoard, LapBoardRow, Ms, RaceMoment, SectorStatus, VisualCompound,
 } from '@pitwall/domain';
@@ -20,7 +21,7 @@ export type TowerInput = {
 export type TowerRow = {
   carId: CarId;
   ours: boolean;
-  /** In a newest major incident (the widget colours it only in the incident moment). */
+  /** A car of the incident the incident moment names; false in every other moment. */
   involved: boolean;
   retired: boolean;
   position: number | undefined;
@@ -60,7 +61,7 @@ export function buildRows(input: TowerInput): TowerRow[] {
   const intervals = new Map(input.intervals.map((i) => [i.carId, i]));
   const toCar = new Map(input.toCar.map((g) => [g.carId, g]));
   const board = new Map(input.board.rows.map((r) => [r.carId, r]));
-  const major = input.incidents?.find((e) => e.severity === 'major');
+  const incident = momentIncident(input.moment, input.incidents);
   const ours = ourCars(input.session);
 
   const rows = input.cars
@@ -74,7 +75,7 @@ export function buildRows(input: TowerInput): TowerRow[] {
       return {
         carId: id,
         ours: ours.has(id),
-        involved: major?.carIds.includes(id) ?? false,
+        involved: incident?.carIds.includes(id) ?? false,
         retired,
         position: retired ? undefined : c.timing.position,
         change: retired || gained === undefined || !gained.known ? undefined : gained.value,

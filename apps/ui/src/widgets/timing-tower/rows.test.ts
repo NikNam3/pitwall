@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { unknown } from '@pitwall/domain';
+import { known, toSessionTime, unknown, type Known, type RaceMoment } from '@pitwall/domain';
 import { boardRow, incidentEntry, interval, lapBoard, ms, overview, sessionInfo, toCar } from './fixtures.ts';
 import { buildRows, type TowerInput } from './rows.ts';
+
+/** The incident moment naming entry `entryId`, as race-moment gives it. */
+const incidentMoment = (entryId: string): Known<RaceMoment> =>
+  known({ moment: 'incident', since: unknown('notApplicable'), cause: { rule: 'majorIncident', params: { entryId } }, active: ['incident'] }, toSessionTime(900));
 
 const base = (): TowerInput => ({
   cars: [
@@ -146,16 +150,20 @@ describe('buildRows', () => {
     expect(buildRows(input).map((r) => r.ours)).toEqual([false, true, true]);
   });
 
-  it('flags the cars of the newest major incident as involved', () => {
+  it('flags the cars of the incident the incident moment names as involved, not the newest major one', () => {
     const input = base();
     input.incidents = [incidentEntry('a', 'minor', [0]), incidentEntry('b', 'major', [2, 1]), incidentEntry('c', 'major', [0])];
+    input.moment = incidentMoment('c');
+    expect(buildRows(input).map((r) => r.involved)).toEqual([true, false, false]);
+    input.moment = incidentMoment('b');
     expect(buildRows(input).map((r) => r.involved)).toEqual([false, true, true]);
   });
 
-  it('flags nobody without a major entry or without the incident feed', () => {
+  it('flags nobody outside the incident moment or without the incident feed', () => {
     const input = base();
-    input.incidents = [incidentEntry('a', 'minor', [0])];
+    input.incidents = [incidentEntry('b', 'major', [2, 1])];
     expect(buildRows(input).some((r) => r.involved)).toBe(false);
+    input.moment = incidentMoment('b');
     input.incidents = undefined;
     expect(buildRows(input).some((r) => r.involved)).toBe(false);
   });

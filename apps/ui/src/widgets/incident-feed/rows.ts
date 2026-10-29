@@ -15,9 +15,6 @@ export type IncidentColumn = 'lap' | 'cars' | 'what' | 'lost' | 'forUs';
 export type IncidentCell = { text: string; reason?: UnknownReason };
 export type IncidentRow = { id: string; role?: Role | undefined; cells: Record<IncidentColumn, IncidentCell> };
 
-/** Id of the first major entry of the newest-first feed. */
-export const newestMajorId = (feed: readonly IncidentEntry[]): string | undefined => feed.find((e) => e.severity === 'major')?.id;
-
 const signedSeconds = (ms: number): string => formatSignedSeconds(ms, 1);
 
 function gapText(before: Known<number>, after: Known<number>): string {
@@ -45,12 +42,11 @@ function carsCell(ids: readonly CarId[], cars: readonly CarOverview[]): Incident
 /** One row per entry, in feed order. */
 export function incidentRows(feed: readonly IncidentEntry[], cars: readonly CarOverview[], moment: Known<RaceMoment> | undefined): IncidentRow[] {
   const codeOf = (id: CarId): string => carCodeById(cars, id).text;
-  const newest = newestMajorId(feed);
   return feed.map((entry) => {
     const lost: IncidentCell = entry.timeLostMs.known ? { text: text.lost(formatSeconds(entry.timeLostMs.value, 1)) } : { text: '', reason: entry.timeLostMs.reason };
     return {
       id: entry.id,
-      role: incidentRole(moment, entry, newest),
+      role: incidentRole(moment, entry),
       cells: {
         lap: { text: formatLapNumber(entry.lap) },
         cars: carsCell(entry.carIds, cars),

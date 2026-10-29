@@ -186,7 +186,7 @@ describe("race-moment calculator", () => {
       const v = value(run({ incidents: [incident()] }));
       expect(v.moment).toBe("incident");
       expect(v.cause.rule).toBe("majorIncident");
-      expect(v.cause.params).toEqual({ kind: "collision", ageMs: 10_000 });
+      expect(v.cause.params).toEqual({ entryId: "collision:0:590000", kind: "collision", ageMs: 10_000 });
       expect(v.active).toEqual(["incident", "carCare"]);
     });
 
@@ -341,7 +341,8 @@ describe("race-moment calculator", () => {
           ],
         }),
       );
-      expect(v.cause.params).toEqual({ kind: "retirement", ageMs: 5_000 });
+      // the entry the moment is about, by id: the displays light that entry, they do not pick one themselves
+      expect(v.cause.params).toEqual({ entryId: "new", kind: "retirement", ageMs: 5_000 });
     });
   });
 
