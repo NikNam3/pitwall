@@ -8,3 +8,5 @@ export const none = 'no alarms';
 /** The muted-groups line: `muted: energy (1)`. */
 export const mutedGroup = (category: string, count: number): string => `${category} (${count})`;
 export const mutedLabel = 'muted:';
+/** The last line's count of the alarms that do not fit: `+3`. */
+export const more = (n: number): string => `+${n}`;
