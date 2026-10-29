@@ -1,9 +1,9 @@
-import { carId } from '@pitwall/domain';
+import { carId, type CarId } from '@pitwall/domain';
 import type { DamageOutput } from '@pitwall/analysis';
 import { describe, expect, it } from 'vitest';
 import damage from '../../../src/features/damage/register.ts';
 
-const state = { parts: { known: false, reason: 'realism' }, jumps: [] } as unknown as DamageOutput[number];
+const state = { parts: { known: false, reason: 'realism' }, jumps: [] } as unknown as DamageOutput[CarId];
 
 describe('damage feature', () => {
   it('registers the calculator damage, the config section damage and the topic damage.car', () => {
