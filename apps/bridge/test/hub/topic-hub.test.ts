@@ -41,6 +41,26 @@ describe('TopicHub', () => {
     t = 2000; hub.tick();
     expect(sink.take()).toEqual([]);
   });
+  it('a throttled update owed to a subscription that is gone, replaced or whose client left is never sent by tick', () => {
+    hub.publishState(A, 'session.info', () => 0);
+    sub('gone', 'session.info'); sub('moved', 'session.info'); sink.take();
+    const other = new FakeSink(); hub.addClient('c2', other);
+    hub.subscribe({ clientId: 'c2', id: 'left', topic: 'session.info', params: {}, feedId: A }); other.take();
+    t = 100; hub.publishState(A, 'session.info', () => 1);                       // all three throttled: owed
+    hub.unsubscribe('c1', 'gone'); sub('moved', 'session.info', {}, B); hub.removeClient('c2'); sink.take();
+    t = 500; hub.tick();
+    expect(sink.take()).toEqual([]);
+    expect(other.take()).toEqual([]);
+  });
+  it('tick still flushes an update owed again after a throttled flush', () => {
+    hub.publishState(A, 'session.info', () => 0); sub('s', 'session.info'); sink.take();
+    t = 100; hub.publishState(A, 'session.info', () => 1);
+    t = 500; hub.tick();
+    t = 600; hub.publishState(A, 'session.info', () => 2);
+    t = 999; hub.tick();
+    t = 1000; hub.tick();
+    expect(sink.take()).toEqual([{ type: 'update', id: 's', value: 1 }, { type: 'update', id: 's', value: 2 }]);
+  });
   it('evaluates valueFor per subscription params; undefined → noData', () => {
     sub('d1', 'car.detail', { carId: 1 }); sub('d9', 'car.detail', { carId: 9 }); sink.take();
     hub.publishState(A, 'car.detail', (p) => ((p as { carId: number }).carId < 5 ? { id: (p as { carId: number }).carId } : undefined));

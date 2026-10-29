@@ -61,6 +61,10 @@ export class TopicHub {
   private readonly channels = new Map<FeedId, Map<TopicName, Channel>>();
   /** Channels of global topics; `resetFeed` never touches them. */
   private readonly globalChannels = new Map<TopicName, Channel>();
+  /** Every entry by feed (`undefined` for global topics) and topic, in subscription order: what a publish goes to. */
+  private readonly subscribers = new Map<FeedId | undefined, Map<TopicName, Set<Entry>>>();
+  /** The entries something is owed to (`pending` or `needsSnapshot`): all `tick()` has to look at. */
+  private readonly owed = new Set<Entry>();
 
   constructor(options: TopicHubOptions) {
     this.now = options.now;
@@ -77,6 +81,7 @@ export class TopicHub {
     if (client === undefined) return;
     const feeds = new Set([...client.entries.values()].map((entry) => entry.subscription.feedId));
     const before = this.demandOf(feeds);
+    for (const entry of client.entries.values()) this.forget(entry);
     this.clients.delete(clientId);
     this.notifyDemand(before);
   }
@@ -95,11 +100,13 @@ export class TopicHub {
     if (client === undefined) return;
     // Owed until the snapshot below: what is published meanwhile goes into it instead of out as an update.
     const entry: Entry = { subscription, sink: client.sink, pending: false, needsSnapshot: true };
-    const replaced = client.entries.get(subscription.id)?.subscription.feedId;
+    const replaced = client.entries.get(subscription.id);
     // A replacement may move the subscription to another feed: both feeds' topic sets can change.
-    const before = this.demandOf([subscription.feedId, replaced]);
+    const before = this.demandOf([subscription.feedId, replaced?.subscription.feedId]);
+    if (replaced !== undefined) this.forget(replaced);
     client.entries.delete(subscription.id);
     client.entries.set(subscription.id, entry);
+    this.subscribersOf(subscription.feedId, subscription.topic).add(entry);
     this.notifyDemand(before);
     this.sendSnapshot(entry);
   }
@@ -109,6 +116,7 @@ export class TopicHub {
     const entry = entries?.get(id);
     if (entries === undefined || entry === undefined) return;
     const before = this.demandOf([entry.subscription.feedId]);
+    this.forget(entry);
     entries.delete(id);
     this.notifyDemand(before);
   }
@@ -136,6 +144,7 @@ export class TopicHub {
       if (entry.needsSnapshot || this.isBackpressured(entry)) {
         // Never drop entries for a slow client: it gets the whole log as one snapshot once it catches up.
         entry.needsSnapshot = true;
+        this.owed.add(entry);
       } else {
         this.sendValue(entry, { type: 'append', id: entry.subscription.id, entries });
       }
@@ -167,12 +176,13 @@ export class TopicHub {
 
   /** Flushes whatever the throttle or backpressure held back and is now allowed to go out. */
   tick(): void {
-    for (const entry of this.allEntries()) {
+    for (const entry of this.owed) {
       if (entry.needsSnapshot) {
         if (!this.isBackpressured(entry)) this.sendSnapshot(entry);
       } else if (entry.pending) {
         this.flushState(entry);
       }
+      if (!entry.needsSnapshot && !entry.pending) this.owed.delete(entry);
     }
   }
 
@@ -213,8 +223,22 @@ export class TopicHub {
     for (const entry of this.allEntries()) if (entry.subscription.feedId === feedId) yield entry;
   }
 
-  private *entriesOf(feedId: FeedId | undefined, topic: TopicName): Generator<Entry> {
-    for (const entry of this.entriesOfFeed(feedId)) if (entry.subscription.topic === topic) yield entry;
+  private entriesOf(feedId: FeedId | undefined, topic: TopicName): Iterable<Entry> {
+    return this.subscribers.get(feedId)?.get(topic) ?? [];
+  }
+
+  private subscribersOf(feedId: FeedId | undefined, topic: TopicName): Set<Entry> {
+    let topics = this.subscribers.get(feedId);
+    if (topics === undefined) this.subscribers.set(feedId, (topics = new Map()));
+    let entries = topics.get(topic);
+    if (entries === undefined) topics.set(topic, (entries = new Set()));
+    return entries;
+  }
+
+  /** Takes an entry that is unsubscribed, replaced or whose client left out of the index and the owed set. */
+  private forget(entry: Entry): void {
+    this.subscribers.get(entry.subscription.feedId)?.get(entry.subscription.topic)?.delete(entry);
+    this.owed.delete(entry);
   }
 
   private isBackpressured(entry: Entry): boolean {
@@ -235,6 +259,7 @@ export class TopicHub {
   private flushState(entry: Entry): void {
     if (this.isThrottled(entry) || this.isBackpressured(entry)) {
       entry.pending = true;
+      this.owed.add(entry);
       return;
     }
     entry.pending = false;
@@ -259,8 +284,10 @@ export class TopicHub {
 
   /** Sends a snapshot now, or owes one while the client is backpressured. */
   private resnapshot(entry: Entry): void {
-    if (this.isBackpressured(entry)) entry.needsSnapshot = true;
-    else this.sendSnapshot(entry);
+    if (this.isBackpressured(entry)) {
+      entry.needsSnapshot = true;
+      this.owed.add(entry);
+    } else this.sendSnapshot(entry);
   }
 
   /** Sends a message that carries a value and starts a new throttle interval. */

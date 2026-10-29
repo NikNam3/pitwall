@@ -4,7 +4,7 @@ import type { Frame } from '../frame/frame.ts';
 import type { EngineState, LapCursor } from '../state/engine-state.ts';
 import type { LapCorrection, StepOutput, SubStep } from '../step/types.ts';
 import { carsWithLapData } from './cars.ts';
-import { emptyChannels, lapEndSamples, type LapEndSamples, observeLapFrame } from './lap-samples.ts';
+import { emptyChannels, lapEndSamples, observeLapFrame, unknownLapEnd } from './lap-samples.ts';
 
 // Bits of `lapValidBitFlags`.
 const LAP_VALID = 0x01;
@@ -77,20 +77,6 @@ const lapFromCursor = (
     status: 'provisional',
     completedAt: at,
     ...lapEndSamples(cursor, car, at),
-  };
-};
-
-/** Lap-end samples of a lap the engine never saw: all `notReceived`. */
-const unknownLapEnd = (): LapEndSamples => {
-  const none = unknown('notReceived');
-  const corners = <T>(cell: T) => ({ fl: cell, fr: cell, rl: cell, rr: cell });
-  return {
-    wearAtEndPct: corners(none),
-    ersStoreAtEndJ: none,
-    ersDeployedJ: none,
-    ersHarvestedJ: none,
-    damageAtEnd: none,
-    channelRange: { tyres: corners({ surfaceC: none, carcassC: none, pressurePsi: none }), brakesC: corners(none), engineC: none },
   };
 };
 

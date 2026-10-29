@@ -9,7 +9,6 @@ import { EXIT_INTERRUPTED, type CliIo } from '../io.ts';
 import { rebuildDatabase } from '../rebuild-database.ts';
 import { serve } from '../serve.ts';
 import { assertUdpPortFree, udpPortError } from '../udp-port.ts';
-import { DEFAULT_WORKBOOKS_DIR, seedDefaultWorkbooks } from '../../ui-state/default-workbooks.ts';
 
 /**
  * The database, rebuilt from every recording first when it has an outdated schema (it is a cache of the recordings).
@@ -35,7 +34,6 @@ export async function run(_positionals: string[], values: { dev?: boolean | unde
   const db = await currentDatabase(dirs, io);
   if (db === undefined) return EXIT_INTERRUPTED;
   const source = new UdpSource({ feedId: feedId(`udp-${udpPort}`), port: udpPort });
-  await seedDefaultWorkbooks(dirs.root, DEFAULT_WORKBOOKS_DIR);
   return serve({
     source,
     feed: { kind: 'udp', label: `UDP port ${udpPort}` },

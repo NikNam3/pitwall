@@ -5,7 +5,7 @@ import { describe, expect, expectTypeOf, it } from 'vitest';
 import type { FeedStatus, TopicValue } from '@pitwall/contracts';
 import type { IncrementalCalculator, QuickCalculator } from '@pitwall/engine';
 import { bindHistory, bindInsights, bindState, defineFeature, type TopicBinding } from '../../src/features/feature.ts';
-import { selectCar, type ViewCars } from '../../src/features/car-params.ts';
+import { selectCarSlot, type ViewCars } from '../../src/features/car-params.ts';
 
 /** A calculator of the given output type; `compute` is never called here. */
 const quick = <Out>(id: string, out: Out): QuickCalculator<Out> => ({ id, kind: 'quick', reads: ['timing'], cadence: 'frame', compute: () => out });
@@ -58,7 +58,7 @@ describe('bindState: the calculator output must fit the topic', () => {
     // @ts-expect-error a string is not CarTelemetry
     const wrongReturn = bindState('car.telemetry', carsCalc, () => 'not dynamics');
     // @ts-expect-error a value without dynamics is not CarTelemetry
-    const wrongShape = bindState('car.telemetry', carsCalc, selectCar((car) => ({ motion: car.motion })));
+    const wrongShape = bindState('car.telemetry', carsCalc, selectCarSlot((car) => ({ motion: car.motion })));
     expect(wrongReturn.topic).toBe('car.telemetry');
     expect(wrongShape.topic).toBe('car.telemetry');
   });
@@ -69,9 +69,9 @@ describe('bindState: the calculator output must fit the topic', () => {
     expect(wrongInput.topic).toBe('car.telemetry');
   });
 
-  it('with selectCar: car.detail checks against CarState and car.telemetry against CarTelemetry (the picks are cloned, so mutable)', () => {
-    const detail = bindState('car.detail', carsCalc, selectCar((car) => car));
-    const telemetry = bindState('car.telemetry', carsCalc, selectCar((car) => ({ motion: car.motion, dynamics: car.dynamics })));
+  it('with selectCarSlot: car.detail checks against CarState and car.telemetry against CarTelemetry (the picks are cloned, so mutable)', () => {
+    const detail = bindState('car.detail', carsCalc, selectCarSlot((car) => car));
+    const telemetry = bindState('car.telemetry', carsCalc, selectCarSlot((car) => ({ motion: car.motion, dynamics: car.dynamics })));
     expect([detail.topic, telemetry.topic]).toEqual(['car.detail', 'car.telemetry']);
   });
 

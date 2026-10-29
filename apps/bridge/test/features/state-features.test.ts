@@ -47,6 +47,10 @@ describe('base state features', () => {
   it('car.detail selects one car by carId', () => {
     expect(select(carDetail, 'car.detail', { carId: 1 })).toEqual(view.state.cars[1]);
     expect(select(carDetail, 'car.detail', { carId: 1 })).not.toBe(view.state.cars[1]);
+    // a deep copy: nothing nested is shared with the engine state, which the next frame changes
+    const detail = select(carDetail, 'car.detail', { carId: 1 }) as CarState;
+    expect(detail.tyres.corners.fl).not.toBe(view.state.cars[1]!.tyres.corners.fl);
+    expect(detail.timing).not.toBe(view.state.cars[1]!.timing);
     expect(select(carDetail, 'car.detail', { carId: 99 })).toBeUndefined();
     expect(select(carDetail, 'car.detail', {})).toBeUndefined();
   });

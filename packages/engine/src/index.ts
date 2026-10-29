@@ -23,8 +23,10 @@ export type {
   QuickCalculator,
 } from './calc/types.ts';
 export { createRng, type Rng } from './util/rng.ts';
+export { copyPlain } from './util/copy-plain.ts';
 export { initialState } from './step/initial-state.ts';
 export { driverKeyOf } from './step/identity.ts';
 export { ALL_CHANGE_TAGS, CHANGE_TAGS, step, type ChangeTag, type LapCorrection, type StepOutput, type SubStep } from './step/step.ts';
 export { historyLengths, type HistoryDelta } from './history/delta.ts';
+export { unknownLapEnd, type LapEndSamples } from './history/lap-samples.ts';
 export { SessionRunner, type FlashbackInfo, type SessionRunnerOptions, type StepResult } from './runner/session-runner.ts';

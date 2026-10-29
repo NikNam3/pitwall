@@ -1,4 +1,5 @@
 import type { Computed, InsightEntry, TopicName, TopicValue } from '@pitwall/contracts';
+import type { CarId } from '@pitwall/domain';
 import type { Calculator, CalculatorId, ConfigKey, ConfigValue, History, IncrementalCalculator, Job, QuickCalculator } from '@pitwall/engine';
 
 declare const bindingBrand: unique symbol;
@@ -39,6 +40,16 @@ export function bindState(
   select?: (out: never, params: object) => unknown,
 ): TopicBinding {
   return binding({ topic, from: calc.id, ...(select !== undefined && { select: select as (out: unknown, params: object) => unknown }) });
+}
+
+/**
+ * The `select` of a per-car topic whose calculator output is keyed by car id: the entry `params.carId` names. `params`
+ * is client input, so `carId` must be an own integer property naming a car the output has; anything else is `undefined`.
+ */
+export function selectCar<V>(out: Readonly<Record<CarId, V>>, params: object): V | undefined {
+  if (!Object.hasOwn(params, 'carId')) return undefined;
+  const { carId } = params as { carId: unknown };
+  return typeof carId === 'number' && Number.isInteger(carId) && Object.hasOwn(out, carId) ? out[carId as CarId] : undefined;
 }
 
 /** Binds a topic to a history list whose records are the topic's value. */

@@ -14,7 +14,14 @@ describe('flag phases', () => {
       .frames(1, (d) => { d.lapData.lapData[0]!.currentLapNum = 4; })                                     // 2000
       .session({ safetyCarStatus: 0 }).frames(1, noop));                                                  // 3000
     expect(st.history.flagPhases).toEqual([{ kind: 'SC', start: 1000, end: 3000, startLeaderLap: 3, endLeaderLap: 4, scPhases: [] }]);
-    expect(results.map((r) => r.changed.has('flagPhases'))).toEqual([false, false, false, true]);
+    // opening is a change too (the view's activeFlagPhase), not only closing
+    expect(results.map((r) => r.changed.has('flagPhases'))).toEqual([false, true, false, true]);
+  });
+  it('tags flagPhases when a red flag opens, when an SC phase is recorded, and not while nothing changes', () => {
+    const red = runScenario(race().event({ code: 'RDFL' }).frames(2, noop));                               // 1000 open, 2000 still open
+    expect(red.results.map((r) => r.changed.has('flagPhases'))).toEqual([false, true, false]);
+    const sc = runScenario(race().event(scar(0)).frames(1, noop).frames(1, noop).event(scar(1)).frames(1, noop));
+    expect(sc.results.map((r) => r.changed.has('flagPhases'))).toEqual([false, true, false, true]);       // 1000 deployed, 3000 returning
   });
   it('SCAR deployed opens early; returning/returned are recorded; resume closes', () => {
     const { st } = runScenario(race().event(scar(0)).frames(1, noop)                                        // 1000 deployed
