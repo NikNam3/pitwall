@@ -1,0 +1,293 @@
+{
+  "name": "race",
+  "windows": [
+    {
+      "id": "main",
+      "layout": {
+        "grid": {
+          "root": {
+            "type": "branch",
+            "data": [
+              {
+                "type": "branch",
+                "data": [
+                  {
+                    "type": "leaf",
+                    "data": {
+                      "views": [
+                        "timing-tower"
+                      ],
+                      "activeView": "timing-tower",
+                      "id": "gtiming-tower"
+                    },
+                    "size": 303
+                  }
+                ],
+                "size": 253
+              },
+              {
+                "type": "branch",
+                "data": [
+                  {
+                    "type": "leaf",
+                    "data": {
+                      "views": [
+                        "gap-chart"
+                      ],
+                      "activeView": "gap-chart",
+                      "id": "ggap-chart"
+                    },
+                    "size": 162
+                  },
+                  {
+                    "type": "branch",
+                    "data": [
+                      {
+                        "type": "leaf",
+                        "data": {
+                          "views": [
+                            "battle-cards"
+                          ],
+                          "activeView": "battle-cards",
+                          "id": "gbattle-cards"
+                        },
+                        "size": 150
+                      },
+                      {
+                        "type": "leaf",
+                        "data": {
+                          "views": [
+                            "incident-feed"
+                          ],
+                          "activeView": "incident-feed",
+                          "id": "gincident-feed"
+                        },
+                        "size": 155
+                      }
+                    ],
+                    "size": 131
+                  }
+                ],
+                "size": 311
+              }
+            ],
+            "size": 303
+          },
+          "width": 576,
+          "height": 303,
+          "orientation": "HORIZONTAL"
+        },
+        "panels": {
+          "timing-tower": {
+            "id": "timing-tower",
+            "contentComponent": "panel",
+            "title": "timing-tower"
+          },
+          "gap-chart": {
+            "id": "gap-chart",
+            "contentComponent": "panel",
+            "title": "gap-chart"
+          },
+          "battle-cards": {
+            "id": "battle-cards",
+            "contentComponent": "panel",
+            "title": "battle-cards"
+          },
+          "incident-feed": {
+            "id": "incident-feed",
+            "contentComponent": "panel",
+            "title": "incident-feed"
+          }
+        },
+        "activeGroup": "gtiming-tower"
+      },
+      "panels": {
+        "timing-tower": {
+          "widget": "timing-tower",
+          "options": {},
+          "linkGroup": 1
+        },
+        "gap-chart": {
+          "widget": "gap-chart",
+          "options": {},
+          "linkGroup": 1
+        },
+        "battle-cards": {
+          "widget": "battle-cards",
+          "options": {},
+          "linkGroup": 1
+        },
+        "incident-feed": {
+          "widget": "incident-feed",
+          "options": {},
+          "linkGroup": 1
+        }
+      }
+    },
+    {
+      "id": "side",
+      "layout": {
+        "grid": {
+          "root": {
+            "type": "branch",
+            "data": [
+              {
+                "type": "branch",
+                "data": [
+                  {
+                    "type": "leaf",
+                    "data": {
+                      "views": [
+                        "corner-block"
+                      ],
+                      "activeView": "corner-block",
+                      "id": "gcorner-block"
+                    },
+                    "size": 194
+                  },
+                  {
+                    "type": "leaf",
+                    "data": {
+                      "views": [
+                        "tyre-life-bar"
+                      ],
+                      "activeView": "tyre-life-bar",
+                      "id": "gtyre-life-bar"
+                    },
+                    "size": 194
+                  }
+                ],
+                "size": 87
+              },
+              {
+                "type": "branch",
+                "data": [
+                  {
+                    "type": "leaf",
+                    "data": {
+                      "views": [
+                        "fuel-gauge"
+                      ],
+                      "activeView": "fuel-gauge",
+                      "id": "gfuel-gauge"
+                    },
+                    "size": 94
+                  },
+                  {
+                    "type": "leaf",
+                    "data": {
+                      "views": [
+                        "ers-budget"
+                      ],
+                      "activeView": "ers-budget",
+                      "id": "gers-budget"
+                    },
+                    "size": 174
+                  },
+                  {
+                    "type": "leaf",
+                    "data": {
+                      "views": [
+                        "damage-card"
+                      ],
+                      "activeView": "damage-card",
+                      "id": "gdamage-card"
+                    },
+                    "size": 114
+                  }
+                ],
+                "size": 56
+              },
+              {
+                "type": "branch",
+                "data": [
+                  {
+                    "type": "leaf",
+                    "data": {
+                      "views": [
+                        "alarm-list"
+                      ],
+                      "activeView": "alarm-list",
+                      "id": "galarm-list"
+                    },
+                    "size": 394
+                  }
+                ],
+                "size": 46
+              }
+            ],
+            "size": 394
+          },
+          "width": 394,
+          "height": 189,
+          "orientation": "VERTICAL"
+        },
+        "panels": {
+          "corner-block": {
+            "id": "corner-block",
+            "contentComponent": "panel",
+            "title": "corner-block"
+          },
+          "tyre-life-bar": {
+            "id": "tyre-life-bar",
+            "contentComponent": "panel",
+            "title": "tyre-life-bar"
+          },
+          "fuel-gauge": {
+            "id": "fuel-gauge",
+            "contentComponent": "panel",
+            "title": "fuel-gauge"
+          },
+          "ers-budget": {
+            "id": "ers-budget",
+            "contentComponent": "panel",
+            "title": "ers-budget"
+          },
+          "damage-card": {
+            "id": "damage-card",
+            "contentComponent": "panel",
+            "title": "damage-card"
+          },
+          "alarm-list": {
+            "id": "alarm-list",
+            "contentComponent": "panel",
+            "title": "alarm-list"
+          }
+        },
+        "activeGroup": "gcorner-block"
+      },
+      "panels": {
+        "corner-block": {
+          "widget": "corner-block",
+          "options": {},
+          "linkGroup": 1
+        },
+        "tyre-life-bar": {
+          "widget": "tyre-life-bar",
+          "options": {},
+          "linkGroup": 1
+        },
+        "fuel-gauge": {
+          "widget": "fuel-gauge",
+          "options": {},
+          "linkGroup": 1
+        },
+        "ers-budget": {
+          "widget": "ers-budget",
+          "options": {},
+          "linkGroup": 1
+        },
+        "damage-card": {
+          "widget": "damage-card",
+          "options": {},
+          "linkGroup": 1
+        },
+        "alarm-list": {
+          "widget": "alarm-list",
+          "options": {},
+          "linkGroup": 1
+        }
+      }
+    }
+  ]
+}

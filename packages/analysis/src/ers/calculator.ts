@@ -1,5 +1,5 @@
 import { known } from '@pitwall/domain';
-import type { CarId, CarState, ErsState, Known, LapRecord } from '@pitwall/domain';
+import type { CarId, CarState, ErsAttack, ErsState, Known, LapRecord } from '@pitwall/domain';
 import type { EngineView, QuickCalculator } from '@pitwall/engine';
 import { classifyLap } from '../lap-classes/index.ts';
 import { lapsUntil, perLapRate, PER_LAP_RATE_CONFIG } from '../per-lap-rate/index.ts';
@@ -35,6 +35,14 @@ function flowOf(power: CarState['energy']['power']): ErsState['flow'] {
   return known(mgukW > 0 ? 'deploying' : mgukW < 0 ? 'harvesting' : 'idle', power.at);
 }
 
+/** Ready at or above the level (as of the reading); below it, the laps to the level rounded up to whole laps, at least 1. */
+function attackOf(storeJ: Known<number>, attackLevelJ: number, lapsToLevel: Known<number>): Known<ErsAttack> {
+  if (!storeJ.known) return storeJ;
+  if (storeJ.value >= attackLevelJ) return known({ ready: true }, storeJ.at);
+  if (!lapsToLevel.known) return lapsToLevel;
+  return known({ ready: false, inLaps: Math.max(1, Math.ceil(lapsToLevel.value)) }, lapsToLevel.at);
+}
+
 function ersOf(view: EngineView, car: EngineView['state']['cars'][number]): ErsState {
   const { deployLimitJ, capacityJ, attackLevelJ } = ERS_CONFIG.read(view);
   const constants = { capacityJ, deployLimitJ, attackLevelJ };
@@ -48,25 +56,29 @@ function ersOf(view: EngineView, car: EngineView['state']['cars'][number]): ErsS
       harvestedThisLapJ: hidden,
       storeTrendJPerLap: hidden,
       lapsToAttackLevel: hidden,
+      attack: hidden,
       mode: hidden,
       flow: flowOf(car.energy.power),
     };
   }
   const { storeJ, deployedJ, harvestedMgukJ, harvestedMguhJ, mode } = ers.value;
   const trend = perLapRate(trendSamples(view, car.id), PER_LAP_RATE_CONFIG.read(view));
+  const store = known(storeJ, ers.at);
+  const lapsToAttackLevel = storeJ >= attackLevelJ ? known(0, ers.at) : lapsUntil(trend, storeJ, attackLevelJ);
   return {
     ...constants,
-    storeJ: known(storeJ, ers.at),
+    storeJ: store,
     deployedThisLapJ: known(deployedJ, ers.at),
     harvestedThisLapJ: known(harvestedMgukJ + harvestedMguhJ, ers.at),
     storeTrendJPerLap: trend.known ? known(trend.value.perLap, trend.at) : trend,
-    lapsToAttackLevel: storeJ >= attackLevelJ ? known(0, ers.at) : lapsUntil(trend, storeJ, attackLevelJ),
+    lapsToAttackLevel,
+    attack: attackOf(store, attackLevelJ, lapsToAttackLevel),
     mode: known(mode, ers.at),
     flow: flowOf(car.energy.power),
   };
 }
 
-/** The ERS state of every active car: store, this lap's flows, the store's trend over the stint and the laps to the attack level. */
+/** The ERS state of every active car: store, this lap's flows, the store's trend over the stint, the laps to the attack level and the attack readiness. */
 export const ersCalculator: QuickCalculator<ErsOutput> = {
   id: ERS,
   kind: 'quick',

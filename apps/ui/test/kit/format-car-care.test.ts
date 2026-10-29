@@ -78,7 +78,7 @@ describe('formatJoules (shown as MJ, one decimal)', () => {
     [2_100_000, '2.1 MJ'],
     [1_949_999, '1.9 MJ'],
     [0, '0.0 MJ'],
-    [-400_000, '-0.4 MJ'],
+    [-400_000, '−0.4 MJ'],
     [4_000_000, '4.0 MJ'],
   ])('%i -> %s', (j, text) => expect(formatJoules(j)).toBe(text));
   it('a non-finite number is empty', () => expect(formatJoules(Number.NaN)).toBe(''));
@@ -87,10 +87,10 @@ describe('formatJoules (shown as MJ, one decimal)', () => {
 describe('formatDeltaMs (signed seconds, three decimals)', () => {
   it.each([
     [412, '+0.412'],
-    [-412, '-0.412'],
+    [-412, '−0.412'],
     [0, '+0.000'],
     [1234, '+1.234'],
-    [-1234, '-1.234'],
+    [-1234, '−1.234'],
   ])('%i -> %s', (ms, text) => expect(formatDeltaMs(ms)).toBe(text));
   it('a non-finite number is empty', () => expect(formatDeltaMs(Number.NaN)).toBe(''));
 });

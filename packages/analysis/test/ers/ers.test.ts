@@ -87,6 +87,43 @@ describe('ers calculator', () => {
     expect(out.lapsToAttackLevel).toEqual({ known: false, reason: 'insufficientData' });
   });
 
+  describe('attack (ready at or above the level; while rising below it, the whole laps to it)', () => {
+    it('is ready at and above the level, rising or falling, as of the ERS reading', () => {
+      expect(run(viewOf(laps([4, 3.6, 3.2]), { storeMJ: 3.2 })).attack).toEqual({ known: true, value: { ready: true }, at: 7_000 });
+      expect(run(viewOf(laps([3.2, 2.8, 2.4]), { storeMJ: 2.4 })).attack).toEqual({ known: true, value: { ready: true }, at: 7_000 });
+      expect(run(viewOf(laps([1.6, 2.0, 2.6]), { storeMJ: 2.6 })).attack).toEqual({ known: true, value: { ready: true }, at: 7_000 });
+    });
+
+    it('is ready above the level even without a trend', () => {
+      expect(run(viewOf(laps([3]), { storeMJ: 3 })).attack).toEqual({ known: true, value: { ready: true }, at: 7_000 });
+    });
+
+    it('rising below the level: the laps to it rounded up to whole laps, as of the trend', () => {
+      // 1 MJ to go at 0.4 MJ/lap is 2.5 laps
+      const history = laps([0.6, 1.0, 1.4]);
+      expect(run(viewOf(history, { storeMJ: 1.4 })).attack).toEqual({ known: true, value: { ready: false, inLaps: 3 }, at: history[2]!.completedAt });
+      // 1.2 MJ to go at 0.4 MJ/lap is 3 laps
+      expect(run(viewOf(laps([0.4, 0.8, 1.2]), { storeMJ: 1.2 })).attack).toMatchObject({ known: true, value: { ready: false, inLaps: 3 } });
+    });
+
+    it('rising just below the level: at least 1 lap', () => {
+      // 0.1 MJ to go at 0.4 MJ/lap is a quarter lap
+      expect(run(viewOf(laps([1.5, 1.9, 2.3]), { storeMJ: 2.3 })).attack).toMatchObject({ known: true, value: { ready: false, inLaps: 1 } });
+    });
+
+    it('falling below the level: notApplicable (no attack line)', () => {
+      expect(run(viewOf(laps([2.8, 2.4, 2.0]), { storeMJ: 2 })).attack).toEqual({ known: false, reason: 'notApplicable' });
+    });
+
+    it('flat below the level: notApplicable (no attack line)', () => {
+      expect(run(viewOf(laps([2, 2, 2]), { storeMJ: 2 })).attack).toEqual({ known: false, reason: 'notApplicable' });
+    });
+
+    it('below the level without a trend: insufficientData', () => {
+      expect(run(viewOf(laps([1]), { storeMJ: 1 })).attack).toEqual({ known: false, reason: 'insufficientData' });
+    });
+  });
+
   it('deployedThisLapJ is the car state`s deployedJ; the limit is 4 MJ', () => {
     const out = run(viewOf([], { deployedMJ: 1.5 }));
     expect(out.deployedThisLapJ).toEqual({ known: true, value: 1.5 * MJ, at: 7_000 });
@@ -202,7 +239,7 @@ describe('ers calculator', () => {
     });
     const out = ersCalculator.compute(view);
     const rival = out[carId(1)]!;
-    for (const field of ['storeJ', 'deployedThisLapJ', 'harvestedThisLapJ', 'storeTrendJPerLap', 'lapsToAttackLevel', 'mode', 'flow'] as const) {
+    for (const field of ['storeJ', 'deployedThisLapJ', 'harvestedThisLapJ', 'storeTrendJPerLap', 'lapsToAttackLevel', 'attack', 'mode', 'flow'] as const) {
       expect(rival[field]).toEqual(hidden);
     }
     // constants stay known
