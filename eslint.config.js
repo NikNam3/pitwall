@@ -43,6 +43,7 @@ export default defineConfig(
       'packages/contracts/src/topics/index.generated.ts',
       '.claude/',
       '.superpowers/',
+      'docs/**/*.mjs',
     ],
   },
   js.configs.recommended,
