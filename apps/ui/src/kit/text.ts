@@ -1,5 +1,5 @@
 // Every fixed text of the kit and the shell (spec 4.3, 7.4): the one place UI wording changes.
-import type { UnknownReason } from '@pitwall/domain';
+import type { IncidentKind, UnknownReason } from '@pitwall/domain';
 
 /** Header state while a required topic has no value yet. */
 export const noDataYet = 'no data yet';
@@ -200,3 +200,14 @@ export const insightText = {
   /** The minus sign of a negative value. */
   minus: '−',
 } as const;
+
+/** What the incident feed says of each kind of incident. */
+export const incidentKinds = {
+  collision: 'collision',
+  retirement: 'retirement',
+  damage: 'damage',
+  timeLoss: 'time loss',
+  warning: 'warning',
+  penalty: 'penalty',
+  neutralised: 'neutralised',
+} as const satisfies Record<IncidentKind, string>;

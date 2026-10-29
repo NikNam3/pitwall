@@ -4,6 +4,7 @@ import { carCode } from '../../kit/car/car-code.ts';
 import { gridRow, type GridColumn } from '../../kit/grid/grid.ts';
 import { fixed, formatJoules, formatLaps } from '../../kit/values/format.ts';
 import type { Role } from '../../theme/roles.ts';
+import type { WidgetSize } from '../../kit/types.ts';
 import { battleRole, type Side } from './emphasis.ts';
 import * as text from './text.ts';
 
@@ -36,7 +37,7 @@ export const WIDTH: Record<ColumnId, GridColumn> = {
 const LETTER: Record<VisualCompound, string> = { soft: 'S', medium: 'M', hard: 'H', superSoft: 'SS', inter: 'I', wet: 'W', unknown: '?' };
 
 /** The columns of a size mode. */
-export const columnsFor = (mode: 'compact' | 'full'): readonly ColumnId[] => (mode === 'compact' ? COMPACT : COLUMN_IDS);
+export const columnsFor = (mode: WidgetSize['mode']): readonly ColumnId[] => (mode === 'compact' ? COMPACT : COLUMN_IDS);
 
 /** Signed seconds with `decimals`; negative uses U+2212. `plus` also signs positives. */
 const seconds = (ms: number, decimals: number, plus: boolean): string => {
@@ -79,10 +80,10 @@ export function battleRows(card: BattleCard, cars: readonly CarOverview[], momen
   return [sideRow(text.ahead, 'ahead', card, cars, moment), sideRow(text.behind, 'behind', card, cars, moment)];
 }
 
-const grid = (mode: 'compact' | 'full'): GridColumn[] => [{ width: LABEL_WIDTH }, ...columnsFor(mode).map((c) => WIDTH[c])];
+const grid = (mode: WidgetSize['mode']): GridColumn[] => [{ width: LABEL_WIDTH }, ...columnsFor(mode).map((c) => WIDTH[c])];
 
 /** The header line over the fixed fields. */
-export const battleHeader = (mode: 'compact' | 'full'): string =>
+export const battleHeader = (mode: WidgetSize['mode']): string =>
   gridRow(grid(mode), ['', ...columnsFor(mode).map((c) => text.header[c])]);
 
 /** A row as one line of fixed fields. */
