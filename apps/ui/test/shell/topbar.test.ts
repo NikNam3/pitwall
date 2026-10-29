@@ -20,7 +20,7 @@ import { tick } from 'svelte';
 import { afterEach, describe, expect, it } from 'vitest';
 import { TopicStore } from '../../src/connection/topic-store.svelte.ts';
 import * as text from '../../src/kit/text.ts';
-import { formatInsight } from '../../src/shell/topbar/insight-text.ts';
+import { formatInsight } from '../../src/kit/insight/insight-text.ts';
 import { TOP_BAR } from '../../src/shell/topbar/layout.ts';
 import TopBar from '../../src/shell/topbar/TopBar.svelte';
 import { FakeConnection } from '../connection/fake-connection.ts';

@@ -1,6 +1,7 @@
 // One session of a feed: frames → SessionRunner → Scheduler → topics, plus its session file and its storage.
 import { sessionUidString, type FeedId, type Insight, type SessionTime, type SessionUid } from '@pitwall/domain';
 import {
+  activeFlagPhaseOf,
   driverKeyOf,
   historyLengths,
   Scheduler,
@@ -172,7 +173,7 @@ export class SessionProcessor {
         this.#o.jobs?.flashback();
       }
       this.#o.calcStats?.atSessionTime(result.state.sessionTime);
-      const scheduled = scheduler.run({ state: result.state, changed: result.changed, delta: result.delta, feed: this.#o.feedView(), config: this.#o.config });
+      const scheduled = scheduler.run({ state: result.state, activeFlagPhase: activeFlagPhaseOf(result.state), changed: result.changed, delta: result.delta, feed: this.#o.feedView(), config: this.#o.config });
       // Each topic is published on its own: a failing feature binding never holds back the others.
       const unpublished = [
         ...publisher.publishOutputs(scheduled),
@@ -201,6 +202,7 @@ export class SessionProcessor {
     const lengths = historyLengths(state.history);
     const scheduled = scheduler.run({
       state,
+      activeFlagPhase: activeFlagPhaseOf(state),
       changed: new Set(),
       delta: { before: lengths, after: lengths, truncated: false },
       feed: this.#o.feedView(),

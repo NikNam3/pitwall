@@ -24,7 +24,8 @@
   };
   let { store, catalogue, widget, link, host, params = () => ({}), onClose }: Props = $props();
 
-  const dev = import.meta.env.DEV;
+  // Dev builds, and the gallery build (it draws the inspector as a cell).
+  const dev = import.meta.env.DEV || import.meta.env.VITE_PITWALL_GALLERY === '1';
   const entry = $derived(catalogue.widgets.find((w) => w.name === widget));
   const topics = $derived(
     (entry?.topics ?? []).map((t) => ({ name: t.topic, info: catalogue.topics.find((c) => c.name === t.topic) })),

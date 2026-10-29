@@ -1,7 +1,7 @@
 // A `Connection` that answers subscriptions from a moment file and per-cell overrides (spec 9.2); the topic store and
 // the panels cannot tell it from the bridge.
-import type { ClientMessage, ServerMessage, TopicName, TopicStatus } from '@pitwall/contracts';
-import { TOPICS } from '@pitwall/contracts';
+import type { ClientMessage, FeedInfo, ServerMessage, TopicName, TopicStatus } from '@pitwall/contracts';
+import { CONTRACT_VERSION, TOPICS } from '@pitwall/contracts';
 import type { Connection, ConnectionState } from '../connection/connection.ts';
 import type { MomentValues } from './moment-values.ts';
 
@@ -25,11 +25,14 @@ export class GalleryConnection implements Connection {
   readonly state: ConnectionState = 'open';
   readonly #moment: MomentValues;
   readonly #overrides: readonly GalleryOverride[];
+  readonly #feeds: readonly FeedInfo[] | undefined;
   readonly #listeners = new Set<(m: ServerMessage) => void>();
 
-  constructor(moment: MomentValues, overrides: readonly GalleryOverride[] = []) {
+  /** `feeds`, when given, are announced in a `hello` to every listener as it registers (a top bar needs its feed's kind at once). */
+  constructor(moment: MomentValues, overrides: readonly GalleryOverride[] = [], feeds?: readonly FeedInfo[]) {
     this.#moment = moment;
     this.#overrides = overrides;
+    this.#feeds = feeds;
   }
 
   send(message: ClientMessage): void {
@@ -42,6 +45,7 @@ export class GalleryConnection implements Connection {
 
   onMessage(cb: (m: ServerMessage) => void): () => void {
     this.#listeners.add(cb);
+    if (this.#feeds !== undefined) cb({ type: 'hello', contractVersion: CONTRACT_VERSION, feeds: [...this.#feeds] });
     return () => this.#listeners.delete(cb);
   }
 
