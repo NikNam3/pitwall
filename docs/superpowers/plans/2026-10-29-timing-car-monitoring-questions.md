@@ -16,14 +16,8 @@ Recommendation: A until the practice recording shows real live pressures, then B
 
 **Answer:**
 
-## Q2. How many screenshot baselines should each display have?
+## Q2. How many screenshot baselines should each display have? (answered)
 
-The gallery (UI shell design, spec 9.1/9.2) screenshots every cell at each size (the size modes plus every extra fit size) × each case × all four theme variants. A display with 5 cases and 7 sizes gets 140 baselines; sub-project 3 adds about 1,500 PNGs, and `pnpm test:ui` gets several minutes slower. Every visual change then means regenerating and checking many near-identical images.
+The gallery would screenshot every cell at each size, case and theme (about 1,500 PNGs for sub-project 3).
 
-- **A.** Keep it as designed: every size × case × theme. *(built)*
-- **B.** Screenshots at the size modes only (compact, full) × the default theme; the extra fit sizes stay in the fit check (overflow, clipping) without a screenshot; theme variants screenshotted for one case per display.
-- **C.** Like B, but no theme variants at all except for the two colour-question variants (compound colour, personal-best unlit), one case each.
-
-Recommendation: B. The fit check already catches layout breaks at the extra sizes, and the theme variants differ only in colour, which one case shows.
-
-**Answer:** (user, 2026-10-29) far fewer: one baseline per display size (compact, full) of the main gallery case, default theme only, plus kit and shell cells; every other case and theme is covered by fit.spec and by one human look at a contact sheet before the merge.
+**Answer:** (user, 2026-10-29) far fewer: one baseline per display size (compact, full) of the main gallery case, default theme only, plus kit and shell cells; every other case and theme is covered by fit.spec and by one human look at a contact sheet before the merge. Built: 50 baselines, capped by `SCREENSHOT_BUDGET`.

@@ -10,10 +10,11 @@ Spec: `docs/superpowers/specs/2026-10-28-foundation-design.md`. Plan: `docs/supe
 - `packages/protocol`: bytes to typed packets (spec 2025 only)
 - `packages/domain`: JSON-safe domain vocabulary (`Known`, `Corners`, `CarState`, records, ids); leaf package
 - `packages/engine`: pure race model (no I/O, no clock, no network)
-- `packages/analysis`: analysis calculators (pure maths per unit)
+- `packages/analysis`: the analyses (calculators, one folder per unit); `src/shared/` holds helpers shared by analyses (e.g. current-stint laps, penalty classes)
 - `packages/contracts`: topic types and WebSocket messages shared by bridge and UI
 - `apps/bridge`: imperative shell (input, frame assembler, engine runner, storage, WebSocket, CLI)
 - `apps/ui`: Svelte UI: kit, shell, widgets, connection, theme, emphasis, gallery
+- `apps/bridge/src/ui-state/default-workbooks/`: default workbooks `car`, `quali`, `race`; seeded into `PITWALL_DATA_DIR/ui/workbooks/` when missing, never overwritten
 - `apps/desktop`: Electron host for the UI (imports nothing from the workspace)
 - `test-support/`: fixtures helper; `fixtures/`: committed `.pwrec` segments and `index.json`
 
@@ -24,9 +25,9 @@ Dependency direction (enforced by dependency-cruiser): `protocol` and `domain` i
 - `pnpm check`: typecheck, lint, depcruise and tests; run it before every commit
 - `pnpm test` / `pnpm test:acceptance`: unit and property tests / acceptance tests on real recordings
 - `pnpm typecheck`, `pnpm lint`, `pnpm depcruise`
-- `pnpm mutation`: Stryker on protocol, engine, analysis and the UI logic (score of at least 80 %)
+- `pnpm mutation`: Stryker on protocol, engine, analysis and the UI logic (score of at least 80 %); runs once at the MVP end, not per sub-project
 - `pnpm gen`: regenerate the gitignored generated files: `gen:features` (`apps/bridge/src/features/index.generated.ts`), `gen:topics` (`packages/contracts/src/topics/index.generated.ts`), `gen:widgets` (`apps/ui/src/widgets/index.generated.ts`) and `gen:catalogue` (the unit catalogue); `pnpm gen:moments` is separate
-- `pnpm test:ui`: the Playwright suite for the UI
+- `pnpm test:ui`: the Playwright suite for the UI. Screenshots: one baseline per display size of the display's first gallery case, default theme (plus kit and shell cells); `SCREENSHOT_BUDGET` (`apps/ui/test/gallery/screenshot-budget.test.ts`) caps the total. The gallery still renders every case and theme, and `fit.spec` checks them all
 - `pnpm desktop` / `pnpm desktop:dev`: the Electron panel (starts or attaches to the bridge)
 - `pitwall live|replay|tap|reprocess|import`: the bridge CLI; `pitwall dev --replay <file> [--at-lap n]` restarts the replay on source changes; `pitwall where <unit|--topic name>` lists a unit's files
 - `pwrec-cut <in> <out> --from <sessionTime> --to <sessionTime>`: cut a fixture segment
@@ -67,6 +68,7 @@ Claude manages git: workers commit on their own branches; supervisor may merge t
 
 ## Where to look
 
+- `docs/superpowers/specs/2026-10-29-timing-car-monitoring-design.md`: sub-project 3 spec; dependency graph of its units: `docs/superpowers/specs/2026-10-29-timing-car-monitoring/dependency-graph.html`; run rulings: `docs/superpowers/notes/2026-10-29-sp3-run-rulings.md`
 - `docs/architecture.md`: packages, data flow, UI structure, determinism, parallel development, where state lives
 - `docs/research/`: race-engineering research (real practice, ATLAS, TUM strategy model, F1 25 data mapping, control boundary)
 - `docs/decisions/`: ADRs (stack, fixtures, domain package, SQLite library, feature registry, GPL code and data allowed, one file per topic, calculator config, second car later, Electron host, analyses and displays, widget registry, UI state in the bridge, displays render and analyses compute)

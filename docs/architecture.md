@@ -66,6 +66,56 @@ Tests in `apps/ui` may build engine state for fixtures; the UI never imports eng
 
 Work is split into units (ADR 0011). A unit is named in kebab-case; its topics are prefixed with the camelCase name (`undercut-card` owns `undercutCard.*`). The topic is the seam between an analysis and the displays that read it. `pitwall where <unit>` lists a unit's files; the catalogue check (`gen:catalogue`) enforces owners and reading rules.
 
+## The analysis layer (sub-project 3)
+
+Three layers, built bottom-up (ADR 0014): calculators (pure maths) → analyses (`packages/analysis/src/<unit>/`, wired into the bridge by `apps/bridge/src/features/<unit>/register.ts`) → displays (`apps/ui/src/widgets/<unit>/`). A display renders only; every decision, threshold and sign convention is computed by an analysis and arrives in the topic value as a `Known` field.
+
+- **Quick calculators** are stateless: a function of the engine view.
+- **Incremental calculators** are a fold over the history (`init`, `step`); a flashback re-runs `init`, and a test checks incremental = from scratch.
+- `packages/analysis/src/shared/` holds helpers shared by analyses (current-stint laps, our cars, penalty classes). It is not a unit.
+- Thresholds live in each unit's `config.ts` (features declare them; `config.json` overrides). `per-lap-rate` owns the rate config that tyre-wear, fuel, ers and battle read.
+
+### Units and topics
+
+| Unit (analysis and display) | Topics | Reads |
+| --- | --- | --- |
+| `lap-times` (`lap-analysis`, `projected-lap`) | `lapTimes.board`, `lapTimes.projection` | laps, session |
+| `gaps` (`timing-tower`, `gap-chart`) | `gaps.intervals`, `gaps.neighbourhood`, `gaps.toCar`, `gaps.gapper` | mini-sector crossings, events |
+| `battle` (`battle-cards`) | `battle.cards` | gaps, pace-delta |
+| `tyre-wear` (`tyre-life-bar`) | `tyreWear.car` | per-lap-rate, tyre sets |
+| `fuel` (`fuel-gauge`) | `fuel.car` | per-lap-rate, session-remaining |
+| `ers` (`ers-budget`) | `ers.car` | per-lap-rate |
+| `damage` (`damage-card`) | `damage.car` | damage history, pace |
+| `car-bands` (`corner-block`) | `carBands.car` | tyre and brake temperatures |
+| `incidents` (`incident-feed`) | `incidents.feed` | events, penalties |
+| `alarms` (`alarm-list`) | `insights` (alarm kinds) | bands, wear, fuel, damage, penalties |
+| `race-moment` | `raceMoment.current` | flag phase, battle, incidents |
+| `pace`, `pace-delta`, `per-lap-rate`, `session-remaining`, `lap-classes` | fed into the units above | laps, session |
+| `feed-status` | `feed.status` | bridge |
+
+Other SP3 topics: `cars.overview` (assembled in the `cars-overview` feature, with stop count and compound fallback), `car.detail`, `car.telemetry`, `flagPhases`, `laps`, `stints`, `pitStops`, `events`, `session.info`, `replay.status`, `ui.*` and `dev.*`. The dependency graph of the units: `docs/superpowers/specs/2026-10-29-timing-car-monitoring/dependency-graph.html`.
+
+### The race moment
+
+`raceMoment.current` states what the race is doing now (e.g. car care, battle, incident, neutralised). It is computed by `race-moment` from the engine's open flag phase (`EngineView.activeFlagPhase`), the battle cards and the incident feed. Displays use it only to pick emphasis (`emphasis.ts` maps a moment to theme roles), and the top bar shows it. `cause.params` carries what triggered it (battle: car, side, laps to DRS, gap; incident: entry id), so no widget re-derives the trigger.
+
+### Alarms vs insights
+
+An insight is an event on the append topic `insights` (`raised`, `cleared`) with a category and severity. Alarms are the insights of the `alarms` analysis: a fixed set of kinds (`bandOut`, `bandOutLap`, `wearLimitNear`, `fuelShort`, `damageJump`, `warningLast`, `penaltyNew`), each keyed by kind, car and channel. Acknowledging and muting are `uiAction`s stored in the bridge (`ui.alerts`); `alarm-list` shows unacknowledged first. Other insights (advice, later sub-projects) use the same stream but are not alarms.
+
+### Where presentation lives
+
+One place each, never in a widget:
+
+- numbers and units: `apps/ui/src/kit/values/format.ts` (one minus glyph, U+2212; empty string for a non-finite input)
+- UI text, wording and reason texts: `apps/ui/src/kit/text.ts`; insight lines: `kit/insight`
+- colours and fonts: `theme/` roles; a widget gets a role from its `emphasis.ts` (pure state to role), never a literal
+- shared shapes: kit components (`Bar`, `Table`, `Chart`, `CarLabel`, `PositionMark`, corner grids, compound mark)
+
+### Screenshots and fit
+
+The gallery renders every case of every display at every declared size and theme. `fit.spec` checks all of them for overflow and clipping. Screenshots are far fewer: one baseline per display size of the display's first gallery case (the most telling one), default theme, plus kit and shell cells. `SCREENSHOT_BUDGET` caps the total and fails `pnpm check` if exceeded.
+
 ## Determinism rules
 
 - The engine never reads the system clock. Time comes only from `sessionTime` and frame IDs.
