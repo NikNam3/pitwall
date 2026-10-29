@@ -164,6 +164,8 @@ export const topBar = {
   speed: 'replay speed',
   lap: 'lap',
   beyondEnd: 'end of recording',
+  /** A jump is fast-forwarding to its target. */
+  jumping: 'jumping…',
   alertMark: '!',
   ack: 'ack',
   acknowledge: 'acknowledge alert',

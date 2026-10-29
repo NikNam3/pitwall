@@ -8,6 +8,7 @@ import {
   type FeedInfo,
   type FeedStatus,
   type InsightEntry,
+  type ReplayJump,
   type ReplayStatus,
   type ReservedCommand,
   type SessionInfo,
@@ -127,7 +128,8 @@ describe('topic types', () => {
     expectTypeOf<TopicValue<'insights'>>().toEqualTypeOf<InsightEntry>();
     expectTypeOf<TopicValue<'replay.status'>>().toEqualTypeOf<ReplayStatus>();
     expectTypeOf<TopicParams<'replay.status'>>().toEqualTypeOf<Record<string, never>>();
-    expectTypeOf<ReplayStatus>().toEqualTypeOf<{ paused: boolean; speed: number; sessionTimeMs: number; playerLap: number; atEnd: boolean; note?: 'beyondEnd'; unpaced?: true }>();
+    expectTypeOf<ReplayStatus>().toEqualTypeOf<{ paused: boolean; speed: number; sessionTimeMs: number; playerLap: number; atEnd: boolean; note?: 'beyondEnd'; unpaced?: true; jumpingTo?: ReplayJump }>();
+    expectTypeOf<ReplayJump>().toEqualTypeOf<{ kind: 'lap'; lap: number } | { kind: 'time'; sessionTimeMs: number }>();
   });
   it('carry what the UI needs to grey out stale values', () => {
     expectTypeOf<CarOverview['updatedAt']>().toEqualTypeOf<CarState['updatedAt']>();
