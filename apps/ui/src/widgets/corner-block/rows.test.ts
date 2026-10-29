@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { known, unknown } from '@pitwall/domain';
 import type { BandReading, CarBands, CarState, Corners, Known, TyreWear } from '@pitwall/domain';
-import { cornerBlockRows, fullHeader, fullRowText, worstBrake } from './rows.ts';
+import { CAR_FIELDS, compactBrake, cornerBlockRows, fullHeader, fullRowFields, fullRowText, worstBrake } from './rows.ts';
 
 const k = <T>(v: T): Known<T> => known(v, 0);
 const BAND = { lo: 80, hi: 100 };
@@ -100,8 +100,39 @@ describe('cornerBlockRows', () => {
     expect(rows.corners.fl.wear.reason).toBeUndefined();
   });
 
+  it('carries the raw value with every cell', () => {
+    const rows = cornerBlockRows(car({ engine: unknown('realism') }), bands(), wear());
+    expect(rows.corners.fr.brake.value).toEqual(k(1043));
+    expect(rows.engine.value).toEqual(unknown('realism'));
+  });
+
   it('has no reason on a known value', () => {
     expect(cornerBlockRows(car(), bands(), wear()).corners.fl.surface.reason).toBeUndefined();
+  });
+});
+
+describe('staleness of the car fields', () => {
+  const frOut = bands({ fr: { carcassC: rd(k(109), { state: k('above') }) }, brakes: { fr: rd(k(1043), { state: k('above'), outForFullLap: true }) } });
+
+  it('lists every car field it reads, so the display can ask the panel which are stale', () => {
+    expect([...CAR_FIELDS].sort()).toEqual(
+      ['condition.brakes.tempC', 'condition.engineTempC', 'tyres.corners.carcassTempC', 'tyres.corners.pressurePsi', 'tyres.corners.surfaceTempC'].sort(),
+    );
+  });
+
+  it('marks a cell of a stale field stale and faint: an out-of-band value stays no longer amber or red', () => {
+    const rows = cornerBlockRows(car(), frOut, wear(), (f) => f === 'tyres.corners.carcassTempC' || f === 'condition.brakes.tempC');
+    expect(rows.corners.fr.carcass).toMatchObject({ text: '109', stale: true, role: 'textFaint' });
+    expect(rows.corners.fr.brake).toMatchObject({ text: '1043', stale: true, role: 'textFaint' });
+    expect(rows.corners.fr.surface.stale).toBeUndefined();
+    expect(rows.corners.fr.wear.stale).toBeUndefined();
+  });
+
+  it('keeps the band roles while every field is fresh (the default)', () => {
+    const rows = cornerBlockRows(car(), frOut, wear());
+    expect(rows.corners.fr.carcass.role).toBe('warning');
+    expect(rows.corners.fr.brake.role).toBe('critical');
+    expect(rows.corners.fr.brake.stale).toBeUndefined();
   });
 });
 
@@ -114,6 +145,14 @@ describe('full text layout', () => {
     const rows = cornerBlockRows(car(), bands(), wear());
     expect(fullRowText('fl', rows.corners.fl)).toBe('FL    98   101  23.1    812   18%');
     expect(fullRowText('fr', rows.corners.fr)).toBe('FR   104   109  23.1   1043   21%');
+  });
+
+  it('gives the fields the display renders: the fitted texts that join to fullRowText, each value with its cell', () => {
+    const rows = cornerBlockRows(car(), bands(), wear());
+    const fields = fullRowFields('fr', rows.corners.fr);
+    expect(fields.map((f) => f.text).join(' ')).toBe(fullRowText('fr', rows.corners.fr));
+    expect(fields[0]).toEqual({ text: 'FR' });
+    expect(fields.slice(1).map((f) => f.cell)).toEqual([rows.corners.fr.surface, rows.corners.fr.carcass, rows.corners.fr.pressure, rows.corners.fr.brake, rows.corners.fr.wear]);
   });
 });
 
@@ -154,6 +193,11 @@ describe('worstBrake', () => {
     expect(worstBrake(rows)?.corner).toBe('rl');
   });
 
+  it('ranks by the raw temperature, not by its rounded text', () => {
+    const rows = cornerBlockRows(car({ brake: { fl: k(1043.2), fr: k(1043.4) } }), bands(), wear());
+    expect(worstBrake(rows)?.corner).toBe('fr');
+  });
+
   it('skips hidden brakes and is undefined when all are hidden', () => {
     const some = cornerBlockRows(car({ brake: { fr: unknown('realism') } }), bands(), wear());
     expect(worstBrake(some)?.corner).not.toBe('fr');
@@ -163,5 +207,17 @@ describe('worstBrake', () => {
       wear(),
     );
     expect(worstBrake(none)).toBeUndefined();
+  });
+});
+
+describe('compactBrake', () => {
+  it('names the worst brake and its compact value', () => {
+    const rows = cornerBlockRows(car(), bands({ brakes: { fr: rd(k(1043), { outForFullLap: true }) } }), wear());
+    expect(compactBrake(rows)).toMatchObject({ text: 'FR 1043', cell: { role: 'critical' } });
+  });
+
+  it('is empty with the reason when every brake is hidden', () => {
+    const rows = cornerBlockRows(car({ brake: four(() => unknown('realism')) }), bands(), wear());
+    expect(compactBrake(rows)).toMatchObject({ text: '', cell: { reason: 'realism' } });
   });
 });
