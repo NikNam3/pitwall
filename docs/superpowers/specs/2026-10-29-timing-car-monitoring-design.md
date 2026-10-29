@@ -17,7 +17,7 @@ The ranked goals of the foundation spec (1.2) apply unchanged: clean code, exten
 
 ### 1.4 Decisions made in this brainstorm (user, 2026-10-29)
 1. **Scope C:** car care and timing together, as one spec with **two plans**: the car care plan first, then the timing plan.
-2. **Recordings:** unit and property tests are synthetic. Acceptance tests that need a multi-car race wait for a race recording the user will supply; until then that task is open and the rest merges. The user's notification starts it.
+2. **Recordings:** unit and property tests are synthetic. Acceptance tests that need real car or race data wait for recordings the user will supply (a practice session and a full race, both planned, timing unknown); until then those tasks are open and the rest merges. The user's notification starts them.
 3. **All three sessions:** timing covers practice, qualifying and the race. V08 (raising average) and V09 (lap overview heat map) move to sub-project 4, next to the stint/degradation scatter V07, because they serve the same decision (D03) and read the same stint data.
 4. **Calibration is not in the MVP.** Sub-project 3 uses community figures and hand-set defaults in config, each with a source note. Calibration joins coaching in sub-project 5, renamed "training: calibration and coaching", because both happen in training, need per-lap channel traces and serve the same people. Appendix B lists every value to calibrate.
 5. **`race.moment` is built here**, with every moment except the pit window (sub-project 4).
@@ -254,8 +254,12 @@ A test builds a pit stop, an SC or a collision by overriding fields or appending
 | End-to-end | Car care plan: bridge + `ttZandvoort` replay → the `car` workbook shows the corner block with values. Timing plan: `raceSingapore` → the `race` workbook shows a tower with 20 rows and incident entries. |
 
 ### 11.3 Acceptance on real recordings
-- **Now:** `ttZandvoort` (15 laps, one car) covers wear rate, bands, ERS, lap times and projection. Its fuel stays at 10.0 kg (time trial), so the fuel test only checks that the burn is zero and the margin follows. `raceSingapore` (79 s, 20 cars) covers gaps at the start and incidents: its COLL ×4 and PENA ×6 events appear as feed entries of the right kind and severity.
-- **When the user's race recording arrives:** our gaps against the game's `gapToCarAheadMs` and `gapToLeaderMs` within a tolerance, the gapper lines, battle closing rates, race-moment transitions and the fuel burn. Until then this task is open in the timing plan, and the rest of the plan merges without it.
+**What the time trial holds fixed** (checked 2026-10-29 by replaying `ttZandvoort` lap by lap): tyre wear 0 %, tyre surface and carcass temperature 93 °C from lap 2, pressure 30.16 psi, engine temperature 110 °C, ERS store 4 MJ with nothing deployed or harvested, fuel 10.0 kg. Only the lap and sector times and the brake temperatures (309–355 °C) change. So it cannot check the car care model.
+
+- **Now:** `ttZandvoort` (15 laps, one car) covers lap times, the projection and the brake temperature band, and checks that every car care analysis gives a zero rate and a steady state on fixed inputs (no false alarm, no division by zero). `raceSingapore` (79 s, 20 cars) covers gaps at the start and incidents: its COLL ×4 and PENA ×6 events appear as feed entries of the right kind and severity.
+- **When the user's practice recording arrives** (10–15 laps on one set, normal fuel and wear): wear rate and laps to the limit, fuel burn and margin, the ERS trend, temperature and pressure bands against the defaults, so Appendix B's car care defaults can be compared with what the game actually sends. Until then this task is open in the car care plan.
+- **When the user's race recording arrives:** our gaps against the game's `gapToCarAheadMs` and `gapToLeaderMs` within a tolerance, the gapper lines, battle closing rates, race-moment transitions, and the car care checks again over a full race. Until then this task is open in the timing plan.
+- Each plan merges without its open task.
 
 ## 12. Error handling
 - Expected gaps are values: `insufficientData` (too few laps), `notApplicable` (wrong session, carcass temperature in surface-only mode, save target with a positive margin), `realism`, `notReceived`.
@@ -272,7 +276,7 @@ Two plans, both from this spec. Units in one wave never read each other. Display
 - **W0c:** `pace`
 - **W1:** `tyre-wear`, `fuel`, `ers`, `car-bands`, `damage`
 - **W2:** `alarms`, `corner-block`, `tyre-life-bar`, `fuel-gauge`, `ers-budget`, `damage-card`, `alarm-list`
-- **W3 (supervisor):** the `car` workbook, the car care e2e test, Stryker, acceptance on `ttZandvoort`.
+- **W3 (supervisor):** the `car` workbook, the car care e2e test, Stryker, acceptance on `ttZandvoort`; the practice-recording acceptance task stays open until the user's recording arrives.
 
 **Timing plan:**
 - **W0 (supervisor):** the top bar reads `raceMoment.current` (3.4); kit pieces of the timing plan (8.4); timing mockups → user approval.
@@ -284,9 +288,10 @@ Two plans, both from this spec. Units in one wave never read each other. Display
 The run lessons of the UI shell apply: pipelining (a unit starts when what it reads is merged), test agents state assumptions for a ruling before the implementer starts, named sets instead of "exactly N" tests, implementers also run `pnpm depcruise`, tests that spawn processes kill them in `finally`.
 
 ## 14. Open points
-1. **The race recording** (1.4, item 2): needed for the timing plan's full acceptance, and also closes F8 for sub-project 4 (a pit stop; an SC if one happens).
-2. **League rules** (research 06 §5): the number of warnings before a penalty and the quali format feed `warningsBeforePenalty` and `quali.eliminatedPerPart`. The defaults (Appendix B) are F1 25's standard settings until the league confirms.
-3. **The two colour questions** are settled by the car care mockups (8.5).
+1. **The recordings** (1.4, item 2): a practice session for the car care plan's acceptance (11.3), and a full race for the timing plan's, which also closes F8 for sub-project 4 (a pit stop; an SC if one happens). Both are planned by the user; the timing is unknown.
+2. **Tyre pressure default:** the time trial reports a fixed 30.16 psi, far above the default band 21.5–25 psi. Time-trial values prove nothing, but this default gets the closest look in the W0a source check.
+3. **League rules** (research 06 §5): the number of warnings before a penalty and the quali format feed `warningsBeforePenalty` and `quali.eliminatedPerPart`. The defaults (Appendix B) are F1 25's standard settings until the league confirms.
+4. **The two colour questions** are settled by the car care mockups (8.5).
 
 ## Appendix A: Contracts
 
