@@ -26,7 +26,7 @@ function uiRules({ network = true, host = true, format = true, colour = true } =
 }
 const UI_FILES = ['apps/ui/src/**/*.ts', 'apps/ui/src/**/*.svelte'];
 
-const PURE_MESSAGE = 'Engine/strategy are pure: no clock, no environment, no I/O (spec 3.4).';
+const PURE_MESSAGE = 'Engine/analysis are pure: no clock, no environment, no I/O (spec 3.4).';
 
 export default defineConfig(
   {
@@ -71,7 +71,7 @@ export default defineConfig(
     },
   },
   {
-    files: ['packages/engine/src/**/*.ts', 'packages/strategy/src/**/*.ts'],
+    files: ['packages/engine/src/**/*.ts', 'packages/analysis/src/**/*.ts'],
     ignores: ['**/*.test.ts'],
     rules: {
       'no-restricted-globals': [
@@ -91,7 +91,7 @@ export default defineConfig(
           patterns: [
             {
               group: ['node:*', 'fs', 'path', 'os', 'net', 'dgram', 'child_process', 'worker_threads'],
-              message: 'Engine/strategy do no I/O.',
+              message: 'Engine/analysis do no I/O.',
             },
           ],
         },

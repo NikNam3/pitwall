@@ -26,7 +26,7 @@ describe('agent docs', () => {
   });
   it('architecture.md states every allowed dependency edge', () => {
     const md = read('docs/architecture.md');
-    for (const edge of ['contracts → domain', 'engine → protocol, domain', 'strategy → engine, domain', 'bridge → all packages', 'ui → contracts, domain'])
+    for (const edge of ['contracts → domain', 'engine → protocol, domain', 'analysis → engine, domain', 'bridge → all packages', 'ui → contracts, domain'])
       expect(md).toContain(edge);
   });
   it('the task template asks for scope, interfaces, tests and the report format', () => {

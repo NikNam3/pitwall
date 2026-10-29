@@ -8,7 +8,7 @@ type DevFlags = { replay?: string | undefined; 'at-lap'?: string | undefined; 'a
 
 const ROOT = new URL('../../../../../', import.meta.url);
 /** The source folders whose changes restart the bridge. */
-const WATCHED = ['apps/bridge/src', 'packages/engine/src', 'packages/strategy/src', 'packages/domain/src', 'packages/contracts/src'];
+const WATCHED = ['apps/bridge/src', 'packages/engine/src', 'packages/analysis/src', 'packages/domain/src', 'packages/contracts/src'];
 const PITWALL = fileURLToPath(new URL('../pitwall.ts', import.meta.url));
 
 const spawnPitwall: SpawnChild = (args) => {
