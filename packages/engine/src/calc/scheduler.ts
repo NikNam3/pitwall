@@ -195,6 +195,7 @@ export class Scheduler {
 
       const view: EngineView = {
         state: input.state,
+        activeFlagPhase: input.activeFlagPhase,
         changed: pending.changed,
         delta: pending.delta,
         feed: input.feed,

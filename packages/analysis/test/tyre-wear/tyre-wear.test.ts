@@ -69,6 +69,17 @@ describe('tyre-wear calculator', () => {
     expect(corners.rr.ratePctPerLap).toMatchObject({ known: true, value: 4 });
   });
 
+  it('warnLaps is the alarms config default (3)', () => {
+    const laps = [0, 2, 4, 6, 8].map((w, i) => wornLap(i + 1, w));
+    expect(run(viewOf(laps, 8)).warnLaps).toBe(3);
+  });
+
+  it('warnLaps follows the alarms config override', () => {
+    const laps = [0, 2, 4, 6, 8].map((w, i) => wornLap(i + 1, w));
+    const out = run(viewOf(laps, 8, [], { alarms: { wearLapsWarning: 5 } }));
+    expect(out.warnLaps).toBe(5);
+  });
+
   it('the limit comes from the config', () => {
     const laps = [0, 2, 4, 6, 8].map((w, i) => wornLap(i + 1, w));
     const out = run(viewOf(laps, 8, [], { [TYRE_WEAR_CONFIG.key]: { limitPct: 80 } }));

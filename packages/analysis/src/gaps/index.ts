@@ -17,6 +17,12 @@ export type GapsOutput = {
   lineTimes: Record<CarId, { lap: number; at: SessionTime }[]>;
   /** Per car, its latest mini-sector crossing. */
   latest: Record<CarId, { lap: number; segment: number; at: SessionTime }>;
+  /**
+   * Per car, its last 100 crossings by progress (`(lap − 1) × 50 + segment`): `at[i]` is when it passed progress
+   * `fromProgress + i` (a hole where none was recorded). Two laps, enough for the exact gap of any pair within a lap,
+   * lapped ones included.
+   */
+  recent: Record<CarId, { fromProgress: number; at: SessionTime[] }>;
   neighbourhood: Neighbourhood[];
   /** When the race started (the lights-out event); the gapper counts each car's race time from it. `notApplicable` outside a race, `notReceived` before lights out. */
   raceStartAt: Known<SessionTime>;
