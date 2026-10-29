@@ -85,7 +85,7 @@ describe('buildRows', () => {
 
   it('has no change when positionsGained is unknown', () => {
     const input = base();
-    input.intervals = [interval(0, undefined, undefined, 0, undefined), ...input.intervals.slice(1)];
+    input.intervals = [interval(0, undefined, undefined, 0, 'unknown'), ...input.intervals.slice(1)];
     expect(buildRows(input)[0]?.change).toBeUndefined();
     expect(buildRows(input)[1]?.change).toBe(-1);
   });
