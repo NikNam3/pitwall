@@ -37,9 +37,11 @@ export function formatSector(ms: Ms): string {
 
 /**
  * `toFixed` with the true minus (`MINUS`) and a negative zero shown as 0, `-1.25` at one decimal -> `−1.3`,
- * `-0.04` -> `0.0`; every signed number becomes text here, and the grid helper re-exports it.
+ * `-0.04` -> `0.0`; every signed number becomes text here, and the grid helper re-exports it. A value that is not a
+ * finite number (a field missing at run time) is empty.
  */
 export function fixed(value: number, decimals: number): string {
+  if (!Number.isFinite(value)) return '';
   const text = value.toFixed(decimals);
   if (/^-0(\.0*)?$/.test(text)) return text.slice(1);
   return text.startsWith('-') ? `${MINUS}${text.slice(1)}` : text;

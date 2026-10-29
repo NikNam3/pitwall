@@ -47,6 +47,9 @@ describe('fixed', () => {
     [-1.25, 1, '−1.3'],
     [37, 0, '37'],
   ])('%f at %i decimals -> %s', (v, d, text) => expect(fixed(v, d)).toBe(text));
+  it('is empty for a value that is not a finite number, so a whole-number formatter never throws or prints NaN', () => {
+    for (const v of [Number.NaN, Number.POSITIVE_INFINITY, undefined as unknown as number]) expect(fixed(v, 1)).toBe('');
+  });
 });
 
 describe('alignment: the decimal point and the colon line up', () => {
