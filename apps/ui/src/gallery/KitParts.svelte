@@ -15,6 +15,7 @@
   import { formatLapTime, formatPct } from '../kit/values/format.ts';
   import { role } from '../theme/index.ts';
   import { KIT_SIZE } from './layout.ts';
+  import { snapGrid } from './snap.ts';
 
   type Row = { driver: string; lapMs: number; gripPct: number };
   const rows: Row[] = [
@@ -45,7 +46,7 @@
   let chartDrawn = $state(false);
 </script>
 
-<div class="parts">
+<div class="parts" use:snapGrid>
   <figure data-gallery-id="kit/value" data-ready>
     <figcaption style:color={role('textFaint')}>kit/value</figcaption>
     <div><Value value={71910} format={formatLapTime} /></div>
