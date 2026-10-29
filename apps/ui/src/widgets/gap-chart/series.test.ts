@@ -3,6 +3,7 @@ import type { CarOverview, SessionInfo } from '@pitwall/contracts';
 import { carId, known, toSessionTime, unknown } from '@pitwall/domain';
 import type { FlagPhase, GapperLines } from '@pitwall/domain';
 import { gapperReference, gapSeries, ownCarIds, phaseBands, phasesFold, REFERENCE_KINDS } from './series.ts';
+import { TEAM_COLOURS } from '../../theme/team-colours.ts';
 
 const phase = (over: Partial<FlagPhase> = {}): FlagPhase => ({
   kind: 'SC', start: toSessionTime(0), end: toSessionTime(60_000), startLeaderLap: 5, endLeaderLap: 7, scPhases: [], ...over,
@@ -126,7 +127,7 @@ describe('gapSeries', () => {
     const [ver, kuh] = gapSeries(lines, cars, ours);
     expect(kuh?.colour).toMatchObject({ ownCar: true, dashed: false });
     expect(ver?.colour).toMatchObject({ ownCar: false, dashed: false });
-    expect(ver?.colour?.colour).toBe('#cfb2ff');
+    expect(ver?.colour?.colour).toBe(TEAM_COLOURS[2]);
   });
 
   it('dashes the teammate and a team\'s second car', () => {
