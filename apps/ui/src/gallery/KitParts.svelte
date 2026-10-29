@@ -1,8 +1,12 @@
 <script lang="ts">
   // The kit parts with sample data (spec 9.2): value cell states, icon and table, each in a cell of its own.
   // `data-ready` marks a cell whose parts have rendered (the e2e harness waits for it); only the chart loads lazily.
-  import { unknown, type SessionTime } from '@pitwall/domain';
+  import { feedId, known, unknown, type Insight, type SessionTime } from '@pitwall/domain';
+  import Bar from '../kit/bar/Bar.svelte';
   import CarLabel from '../kit/car/CarLabel.svelte';
+  import CompoundMark from '../kit/compound/CompoundMark.svelte';
+  import CornerGrid from '../kit/corners/CornerGrid.svelte';
+  import InsightLine from '../kit/insight/InsightLine.svelte';
   import PositionMark from '../kit/values/PositionMark.svelte';
   import { sectorStatusRole } from '../emphasis/index.ts';
   import Gear from '../kit/icons/Gear.svelte';
@@ -28,6 +32,16 @@
   const bands = [{ from: 2, to: 3, kind: 'sc' as const }, { from: 4, to: 4.5, kind: 'vsc' as const }, { from: 4.5, to: 5, kind: 'red' as const }];
   let bandsDrawn = $state(false);
   const sectors = [['sessionBest', true], ['sessionBest', false], ['personalBest', true], ['personalBest', false], ['none', true]] as const;
+  const at = 0 as SessionTime;
+  const insight = (kind: string, severity: Insight['severity']): Insight => ({
+    key: kind,
+    severity,
+    category: 'tyres',
+    feedId: feedId('gallery'),
+    kind,
+    params: { pct: 42 },
+    raisedAt: 0,
+  });
   let chartDrawn = $state(false);
 </script>
 
@@ -55,6 +69,27 @@
         { key: 'grip', label: 'Grip', widthCols: 5, priority: 3, cell: grip },
       ]}
     />
+  </figure>
+  <figure data-gallery-id="kit/corner-grid" data-ready>
+    <figcaption style:color={role('textFaint')}>kit/corner-grid</figcaption>
+    <CornerGrid corners={{ fl: 31, fr: 28, rl: 22, rr: 25 }} {cell} />
+  </figure>
+  <figure data-gallery-id="kit/bar" data-ready>
+    <figcaption style:color={role('textFaint')}>kit/bar</figcaption>
+    <div><Bar value={known(40, at)} min={0} max={100} cols={20} role="text" /></div>
+    <div><Bar value={known(55, at)} min={0} max={100} cols={20} limit={70} marker={known(80, at)} reserve={30} role="text" /></div>
+    <div><Bar value={known(120, at)} min={0} max={100} cols={20} limit={70} role="warning" /></div>
+    <div><Bar value={unknown('restricted')} min={0} max={100} cols={20} role="text" /></div>
+  </figure>
+  <figure data-gallery-id="kit/compound-mark" data-ready>
+    <figcaption style:color={role('textFaint')}>kit/compound-mark</figcaption>
+    <div><CompoundMark compound="soft" age={4} /> <CompoundMark compound="medium" age={12} /> <CompoundMark compound="hard" age={0} /> <CompoundMark compound="inter" /></div>
+  </figure>
+  <figure data-gallery-id="kit/insight-line" data-ready>
+    <figcaption style:color={role('textFaint')}>kit/insight-line</figcaption>
+    <div><InsightLine insight={insight('tyreWear', 'critical')} acknowledged={false} /></div>
+    <div><InsightLine insight={insight('fuelMargin', 'advisory')} acknowledged={false} /></div>
+    <div><InsightLine insight={insight('tyreWear', 'critical')} acknowledged /></div>
   </figure>
   <figure data-gallery-id="kit/chart" data-ready={chartDrawn || undefined}>
     <figcaption style:color={role('textFaint')}>kit/chart</figcaption>
@@ -94,6 +129,7 @@
   </figure>
 </div>
 
+{#snippet cell(value: number, name: string)}{name.toUpperCase()} {value}{/snippet}
 {#snippet driver(r: Row)}{r.driver}{/snippet}
 {#snippet lap(r: Row)}<Value value={r.lapMs} format={formatLapTime} />{/snippet}
 {#snippet grip(r: Row)}<Value value={r.gripPct} format={formatPct} />{/snippet}
