@@ -1,7 +1,7 @@
 // Pure helpers of the gap chart: the reference option, the folded flag phases, the bands and one line per car.
 import type { CarOverview, Fold, SessionInfo } from '@pitwall/contracts';
 import type { CarId, FlagPhase, GapperLines, GapperReference } from '@pitwall/domain';
-import { carCode } from '../../kit/car/car-code.ts';
+import { carCodeById } from '../../kit/car/car-label.ts';
 import type { ChartSeries, PhaseBand } from '../../kit/chart/data.ts';
 import { carColour } from '../../theme/index.ts';
 
@@ -60,7 +60,7 @@ export function gapSeries(lines: GapperLines, cars: readonly CarOverview[], ours
     if (line.byLap.length === 0) continue;
     const car = cars.find((c) => c.id === line.carId);
     out.push({
-      label: car ? carCode(car.identity) : `#${line.carId}`,
+      label: carCodeById(cars, line.carId),
       points: line.byLap.map((p) => [p.lap, -p.gapMs / 1000]),
       colour: carColour(car ? { id: car.id, teamId: car.identity.teamId, raceNumber: car.identity.raceNumber } : { id: line.carId, teamId: -1, raceNumber: 0 }, field, ours),
     });

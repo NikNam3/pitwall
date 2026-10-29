@@ -139,3 +139,13 @@ export const formatSignedLaps = (n: number): string => {
 
 /** Fuel burn or save target to two decimals, `1.62` -> `1.62 kg/lap`. */
 export const formatKgPerLap = (kg: Kg): string => (Number.isFinite(kg) ? `${fixed(kg, 2)} kg/lap` : '');
+
+// gap chart
+
+/** A y tick of the gap chart from the plotted (negated) value, as seconds behind the reference: `-5` -> `+5`, `5` -> `−5`, `0` -> `0`. */
+export const formatGapTick = (plotted: number): string => {
+  if (!Number.isFinite(plotted)) return '';
+  const behind = Math.round(-plotted * 100) / 100;
+  if (behind === 0) return '0';
+  return behind > 0 ? `+${behind}` : `\u2212${-behind}`;
+};
