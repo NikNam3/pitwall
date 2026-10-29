@@ -36,3 +36,24 @@ export function widgetCells(widget: RegisteredWidget, entry: CellSource, themes:
     data.flatMap((d) => themes.map((theme) => ({ id: cellId(widget.decl.name, size.id, d.name, theme.name), widget, size, data: d, theme }))),
   );
 }
+
+/** What a shell cell shows (Task 4, spec 10): the top bar under one of its cases, or a shell overlay. */
+export type ShellCellKind = 'topbar' | 'palette' | 'key-overview' | 'settings-popover' | 'inspector';
+
+/** One cell of the shell: the top bar, a shell overlay, or the panel overlays of `feed-status`. */
+export type ShellCell = { id: string; kind: ShellCellKind; /** The top-bar case, the palette query, or the widget the overlay belongs to. */ detail?: string };
+
+/**
+ * The cells the gallery owes the shell. Ids are `shell/<kind>[/<detail>]`; the palette is open with the query `zoom`
+ * and the settings popover and inspector are those of `feed-status`. The gallery draws each as a `data-gallery-id` figure.
+ */
+export const SHELL_CELLS: readonly ShellCell[] = [
+  { id: 'shell/topbar/race-alert', kind: 'topbar', detail: 'race-alert' },
+  { id: 'shell/topbar/realism-pending', kind: 'topbar', detail: 'realism-pending' },
+  { id: 'shell/topbar/replay-transport', kind: 'topbar', detail: 'replay-transport' },
+  { id: 'shell/topbar/battle', kind: 'topbar', detail: 'battle' },
+  { id: 'shell/palette', kind: 'palette', detail: 'zoom' },
+  { id: 'shell/key-overview', kind: 'key-overview' },
+  { id: 'shell/settings-popover/feed-status', kind: 'settings-popover', detail: 'feed-status' },
+  { id: 'shell/inspector/feed-status', kind: 'inspector', detail: 'feed-status' },
+];
