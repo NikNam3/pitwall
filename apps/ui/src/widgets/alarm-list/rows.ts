@@ -1,21 +1,8 @@
-import type { AlertsState, Fold, InsightEntry } from '@pitwall/contracts';
+import { ackToken, type AlertsState } from '@pitwall/contracts';
 import type { Insight, InsightCategory } from '@pitwall/domain';
+import { INSIGHT_CATEGORIES } from '../../kit/folds.ts';
 
-/**
- * Folds `insights` entries into the insights active now, by key (copies on write). The same fold as the top bar's
- * `activeInsights`: a widget may not import the shell, so a copy lives here until the supervisor moves it to `kit/folds.ts`.
- */
-export const activeInsights: Fold<InsightEntry, Map<string, Insight>> = {
-  init: () => new Map(),
-  add: (acc, entries) => {
-    const next = new Map(acc);
-    for (const entry of entries) {
-      if (entry.type === 'raised') next.set(entry.insight.key, entry.insight);
-      else next.delete(entry.key);
-    }
-    return next;
-  },
-};
+const SEVERITY_ORDER: Record<Insight['severity'], number> = { critical: 0, advisory: 1, info: 2 };
 
 /** One listed alarm. */
 export type AlarmRow = { insight: Insight; token: string; acknowledged: boolean };
@@ -29,5 +16,23 @@ export type AlarmView = { rows: AlarmRow[]; muted: Array<{ category: InsightCate
  * acknowledged; within each by severity (critical, advisory, info), newest `raisedAt` first, then key.
  */
 export function alarmRows(active: ReadonlyMap<string, Insight>, alerts: AlertsState): AlarmView {
-  throw new Error(`not implemented: ${active.size} ${alerts.muted.length}`);
+  const all = [...active.values()];
+  const rows = all
+    .filter((insight) => !alerts.muted.includes(insight.category))
+    .map((insight): AlarmRow => {
+      const token = ackToken(insight);
+      return { insight, token, acknowledged: alerts.acknowledged.includes(token) };
+    })
+    .sort(
+      (a, b) =>
+        Number(a.acknowledged) - Number(b.acknowledged) ||
+        SEVERITY_ORDER[a.insight.severity] - SEVERITY_ORDER[b.insight.severity] ||
+        b.insight.raisedAt - a.insight.raisedAt ||
+        (a.insight.key < b.insight.key ? -1 : a.insight.key > b.insight.key ? 1 : 0),
+    );
+  const muted = INSIGHT_CATEGORIES.filter((c) => alerts.muted.includes(c)).map((category) => ({
+    category,
+    count: all.filter((i) => i.category === category).length,
+  }));
+  return { rows, muted };
 }

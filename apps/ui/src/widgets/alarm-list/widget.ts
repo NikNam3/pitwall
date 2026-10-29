@@ -1,6 +1,6 @@
 // Declaration of the alarm-list display (V25, spec 8.2): the active insights by severity, with acknowledge and mute by category.
 import { declareWidget, folded, topic } from '../../kit/define-widget.ts';
-import { activeInsights } from './rows.ts';
+import { activeInsights } from '../../kit/folds.ts';
 
 export const widget = declareWidget({
   name: 'alarm-list',

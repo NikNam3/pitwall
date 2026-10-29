@@ -5,6 +5,7 @@
   import type { FeedId } from '@pitwall/domain';
   import { onDestroy, untrack, type Component } from 'svelte';
   import type { TopicStore } from '../../connection/topic-store.svelte.ts';
+  import { setUiActions } from '../../kit/actions.ts';
   import Gear from '../../kit/icons/Gear.svelte';
   import { measure, type Measured } from '../../kit/size/measure.ts';
   import { cellBox, pickMode, toCells } from '../../kit/size/size.ts';
@@ -109,6 +110,9 @@
     const state = frameKeys === undefined ? undefined : frame.states[frameKeys.feed.name];
     return state?.status === 'ok' ? (state.value as { stale?: boolean; cadenceMs?: number } | undefined) : undefined;
   });
+
+  // Widgets send their UI actions (acknowledge, mute) through the panel's `send`.
+  setUiActions((action) => send(action));
 
   const panelStale = providePanelStale({
     now: () => (feedId === undefined ? undefined : store.now(feedId)),
