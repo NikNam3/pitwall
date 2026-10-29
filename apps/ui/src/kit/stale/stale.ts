@@ -2,8 +2,8 @@ import { SOURCE_INTERVAL_MS, type CarState, type DataSource, type SessionTime } 
 import type { Role } from '../../theme/roles.ts';
 import { CAR_FIELD_SOURCE, type CarFieldPath } from '../values/car-sources.ts';
 
-/** The session clock a panel reads to judge staleness; the shell passes the store's. */
-export type PanelClock = { now(): SessionTime | undefined; cadenceMs(): number | undefined };
+/** What a panel knows of its feed to judge staleness: the measured cadence of the menu-rate sources (`feed.status`). */
+export type PanelFeed = { cadenceMs(): number | undefined };
 
 /** Missed updates after which a value counts as stale (spec 6.4). */
 export const STALE_FACTOR = 3;
@@ -26,15 +26,25 @@ export function isStale(
   return now - updatedAt > factor * expected;
 }
 
+/** The car's newest update over all its sources: the moment its snapshot stands for. */
+function newestOf(updatedAt: CarState['updatedAt']): SessionTime | undefined {
+  let newest: SessionTime | undefined;
+  for (const at of Object.values(updatedAt)) if (newest === undefined || at > newest) newest = at;
+  return newest;
+}
+
 /**
- * How long a car field has been behind, in ms: its source's age once `isStale` says so (spec 6.4). Undefined while it
- * is fresh, before its source first arrived, and without a panel clock or a `CarState.updatedAt`.
+ * How long a car field has been behind, in ms: how much older its source's update is than the car's newest update, once
+ * `isStale` says so (spec 6.4). The car snapshot is its own reference: a session clock from another topic arrives at other
+ * moments (topics are throttled apart, the more so at replay speed) and made fresh fields stale for a frame. A car whose
+ * every source stops is the feed's staleness, not a field's. Undefined while fresh, before its source first arrived, and
+ * without `updatedAt`.
  */
-export function carFieldStaleMs(updatedAt: CarState['updatedAt'] | undefined, field: CarFieldPath, clock: PanelClock | undefined): number | undefined {
-  const now = clock?.now();
+export function carFieldStaleMs(updatedAt: CarState['updatedAt'] | undefined, field: CarFieldPath, cadenceMs: number | undefined): number | undefined {
   const source = CAR_FIELD_SOURCE[field];
   const at = updatedAt?.[source];
-  if (now === undefined || at === undefined || !isStale(at, source, now, clock?.cadenceMs())) return undefined;
+  const now = updatedAt === undefined ? undefined : newestOf(updatedAt);
+  if (at === undefined || now === undefined || !isStale(at, source, now, cadenceMs)) return undefined;
   return now - at;
 }
 

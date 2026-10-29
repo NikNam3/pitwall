@@ -1,9 +1,10 @@
 import { setTimeout as sleepFor } from 'node:timers/promises';
+import type { ReplayJump } from '@pitwall/contracts';
 import type { Pacer } from '../input/pwrec-source.ts';
 import type { FeedPosition } from '../pipeline/feed-pipeline.ts';
 
 /** Where a fast-forward stops: the first frame at or past it. */
-export type SeekTarget = { kind: 'lap'; lap: number } | { kind: 'time'; sessionTimeMs: number };
+export type SeekTarget = ReplayJump;
 
 export type ReplayPacerOptions = {
   /** Waits `ms`; resolves or rejects once `signal` aborts. Default `timers/promises` `setTimeout`. */
@@ -58,6 +59,11 @@ export class ReplayPacer implements Pacer {
 
   get seeking(): boolean {
     return this.#seek !== undefined;
+  }
+
+  /** The target of the fast-forward under way, if any. */
+  get seekTarget(): SeekTarget | undefined {
+    return this.#seek;
   }
 
   setPaused(paused: boolean): void {

@@ -9,6 +9,8 @@
   let { bar }: { bar: TopBarModel } = $props();
   const SPEEDS = [0.5, 1, 2, 4, 8];
   const status = $derived(bar.replay);
+  // While a lap jump fast-forwards, the field holds the lap asked for, not the lap the fast-forward is passing.
+  const shownLap = $derived(status?.jumpingTo?.kind === 'lap' ? status.jumpingTo.lap : status?.playerLap);
 </script>
 
 {#if bar.isReplay && status !== undefined}
@@ -37,7 +39,7 @@
         type="number"
         min="1"
         data-testid="replay-lap"
-        value={status.playerLap}
+        value={shownLap}
         onchange={(e) => {
           // A cleared or invalid field jumps nowhere.
           const lap = e.currentTarget.valueAsNumber;
@@ -45,6 +47,7 @@
         }}
       />
     </label>
+    {#if status.jumpingTo !== undefined}<span data-testid="replay-jumping" style:color={role('textDim')}>{text.topBar.jumping}</span>{/if}
     {#if status.note === 'beyondEnd'}<span style:color={role('warning')}>{text.topBar.beyondEnd}</span>{/if}
   </span>
 {/if}

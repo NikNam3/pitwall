@@ -223,6 +223,32 @@ describe('tier-1 alerts', () => {
   });
 });
 
+// Bug B2: a jump fast-forwards from where the replay is (from lap 1 for a jump back), and `replay.status` reports that
+// progress. The field must hold the lap asked for while `jumpingTo` is set, or the jump looks ignored.
+describe('lap input during a jump', () => {
+  it('holds the target lap and says it is jumping while the fast-forward is on an earlier lap', async () => {
+    const t = await setup('replay');
+    await t.push('replay.status', { ...replayStatus(false), playerLap: 1, jumpingTo: { kind: 'lap', lap: 8 } });
+    expect((screen.getByTestId('replay-lap') as HTMLInputElement).value).toBe('8');
+    expect(screen.getByTestId('replay-jumping').textContent).toBe(text.topBar.jumping);
+  });
+
+  it('shows the lap the jump landed on and no jumping note once it is done', async () => {
+    const t = await setup('replay');
+    await t.push('replay.status', { ...replayStatus(false), playerLap: 2, jumpingTo: { kind: 'lap', lap: 8 } });
+    await t.push('replay.status', { ...replayStatus(false), playerLap: 8 });
+    expect((screen.getByTestId('replay-lap') as HTMLInputElement).value).toBe('8');
+    expect(screen.queryByTestId('replay-jumping')).toBeNull();
+  });
+
+  it('a jump to a session time keeps showing the lap the fast-forward is on, with the note', async () => {
+    const t = await setup('replay');
+    await t.push('replay.status', { ...replayStatus(false), playerLap: 3, jumpingTo: { kind: 'time', sessionTimeMs: 900_000 } });
+    expect((screen.getByTestId('replay-lap') as HTMLInputElement).value).toBe('3');
+    expect(screen.getByTestId('replay-jumping')).toBeTruthy();
+  });
+});
+
 describe('lap input edge cases', () => {
   it('clearing the lap input sends no replayControl', async () => {
     const t = await setup('replay');

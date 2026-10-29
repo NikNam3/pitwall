@@ -3,8 +3,9 @@
 //  - the cell is the element with class `value`; modifier classes `stale` and `estimated` are set when they apply;
 //  - its colour is inline `color: <role(...)>` (textDim when estimated, textFaint when stale, stale wins);
 //  - an unknown value renders no text and sets `title` to the reason's hover text from kit/text.ts;
-//  - staleness uses the panel clock given to `providePanelStale({ now, cadenceMs })` and reports to the panel,
-//    so `staleForMs` is a number while a value is stale and undefined otherwise.
+//  - staleness compares the field's source with the car's newest update (`updatedAt`), with the menu-rate cadence given to
+//    `providePanelStale({ cadenceMs })`, and reports to the panel, so `staleForMs` is a number while a value is stale and
+//    undefined otherwise.
 import { cleanup, render } from '@testing-library/svelte';
 import { unknown, known, type SessionTime } from '@pitwall/domain';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -52,8 +53,7 @@ describe('Value: staleness of a car field', () => {
   it('a telemetry value 200 ms behind a 50 ms cadence is stale: class, textFaint, staleForMs set', () => {
     const { container } = render(StaleHarness, {
       value: known(90, T(0)),
-      car: { updatedAt: { telemetry: T(1000) }, field },
-      now: 1200,
+      car: { updatedAt: { telemetry: T(1000), lapData: T(1200) }, field },
       cadenceMs: 50,
     });
     expect(cell(container).classList.contains('stale')).toBe(true);
@@ -61,11 +61,20 @@ describe('Value: staleness of a car field', () => {
     expect(Number(staleFor(container))).toBeGreaterThan(0);
   });
 
+  it('a car whose every source is equally old is fresh: the reference is the car\'s own newest update', () => {
+    const { container } = render(StaleHarness, {
+      value: known(90, T(0)),
+      car: { updatedAt: { telemetry: T(1000), lapData: T(1000), damage: T(1000) }, field },
+      cadenceMs: 50,
+    });
+    expect(cell(container).classList.contains('stale')).toBe(false);
+    expect(staleFor(container)).toBe('');
+  });
+
   it('a fresh value is not dimmed and leaves staleForMs unset', () => {
     const { container } = render(StaleHarness, {
       value: known(90, T(0)),
-      car: { updatedAt: { telemetry: T(1000) }, field },
-      now: 1100,
+      car: { updatedAt: { telemetry: T(1000), lapData: T(1100) }, field },
       cadenceMs: 50,
     });
     expect(cell(container).classList.contains('stale')).toBe(false);
@@ -75,23 +84,21 @@ describe('Value: staleness of a car field', () => {
   it('a menu-rate value without cadence is never stale', () => {
     const { container } = render(StaleHarness, {
       value: known(90, T(0)),
-      car: { updatedAt: { telemetry: T(0) }, field },
-      now: 1_000_000,
+      car: { updatedAt: { telemetry: T(0), lapData: T(1_000_000) }, field },
     });
     expect(cell(container).classList.contains('stale')).toBe(false);
     expect(staleFor(container)).toBe('');
   });
 
   it('a field of a source that never arrived (no updatedAt) is not stale', () => {
-    const { container } = render(StaleHarness, { value: known(90, T(0)), car: { updatedAt: {}, field }, now: 5000, cadenceMs: 50 });
+    const { container } = render(StaleHarness, { value: known(90, T(0)), car: { updatedAt: { lapData: T(5000) }, field }, cadenceMs: 50 });
     expect(cell(container).classList.contains('stale')).toBe(false);
   });
 
   it('a fixed-interval source uses its own interval: damage wear 301 ms old is stale', () => {
     const { container } = render(StaleHarness, {
       value: known(12, T(0)),
-      car: { updatedAt: { damage: T(1000) }, field: 'tyres.corners.wearPct' },
-      now: 1301,
+      car: { updatedAt: { damage: T(1000), telemetry: T(1301) }, field: 'tyres.corners.wearPct' },
       cadenceMs: 50,
     });
     expect(cell(container).classList.contains('stale')).toBe(true);
@@ -101,8 +108,7 @@ describe('Value: staleness of a car field', () => {
     const { container } = render(StaleHarness, {
       value: known(90, T(0)),
       estimated: true,
-      car: { updatedAt: { telemetry: T(0) }, field },
-      now: 1000,
+      car: { updatedAt: { telemetry: T(0), lapData: T(1000) }, field },
       cadenceMs: 50,
     });
     expect(cell(container).style.color).toBe(role('textFaint'));
@@ -112,8 +118,7 @@ describe('Value: staleness of a car field', () => {
   it('staleForMs clears once the cell is gone', () => {
     const { container, unmount } = render(StaleHarness, {
       value: known(90, T(0)),
-      car: { updatedAt: { telemetry: T(0) }, field },
-      now: 1000,
+      car: { updatedAt: { telemetry: T(0), lapData: T(1000) }, field },
       cadenceMs: 50,
     });
     expect(Number(staleFor(container))).toBeGreaterThan(0);

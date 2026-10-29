@@ -4,19 +4,21 @@
 //    `widget` is undefined when the spec names an unknown widget;
 //  - the header band is the `<header>` element: title (the widget's title), states and the gear `<svg>`;
 //  - the panel holds the declared topics (params from `link` and `spec.options`, `feedId: link.feedId`) and, per feed,
-//    a `session.info` acquisition with an explicit feedId, so `store.now(feedId)` advances; it passes
-//    `providePanelStale({ now: () => store.now(feedId), cadenceMs })` to the widget;
+//    a `feed.status` acquisition with an explicit feedId; it passes `providePanelStale({ cadenceMs })` to the widget (car
+//    fields are judged by the car's own newest update, not a session clock: bug B2);
 //  - the body is measured with a ResizeObserver (stubbed below to 600 x 400 px);
 //  - texts come from `kit/text.ts` as named exports: `noDataYet`, `errored` (string), `stale(seconds)`, `unknownWidget(name)`.
 import type { PanelSpec } from '@pitwall/contracts';
 import { cleanup, render, screen } from '@testing-library/svelte';
 import { carId, feedId } from '@pitwall/domain';
+import { tick } from 'svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TopicStore } from '../../src/connection/topic-store.svelte.ts';
 import * as text from '../../src/kit/text.ts';
 import type { ResolvedLink } from '../../src/kit/types.ts';
 import Panel from '../../src/shell/panel/Panel.svelte';
 import { FakeConnection } from '../connection/fake-connection.ts';
+import carCellProbe from './fixtures/car-cell/register.ts';
 import { TEST_WIDGETS } from './fixtures/index.ts';
 
 const FEED = feedId('f1');
@@ -126,6 +128,41 @@ describe('Panel: header states', () => {
   });
 });
 
+// Bug B2: cells of car.detail (30 Hz) were judged against the session clock from session.info (2 Hz). The two topics are
+// throttled apart, so a session.info newer than the car snapshot on screen made fresh fields stale for one frame ("stale 0 s"),
+// often at replay speed 8 (264 ms of session time between two car.detail updates against a 54 ms telemetry limit).
+describe('Panel: car fields are judged by the car snapshot\'s own newest update', () => {
+  const car = (updatedAt: Record<string, number>) => ({ updatedAt });
+  const cell = (testId: string) => screen.getByTestId(testId).querySelector('.value') as HTMLElement;
+
+  it('a session.info newer than the car snapshot leaves fresh fields fresh', async () => {
+    const { store, snapshot } = setup();
+    // The window and the top bar hold session.info, so the store's session clock runs ahead of the car snapshot.
+    store.acquire({ topic: 'session.info', params: {}, feedId: FEED });
+    const { container } = render(Panel, { store, spec: spec('car-cell-probe'), widget: carCellProbe, link: link() });
+    snapshot('feed.status', { ...status, cadenceMs: 18 });
+    snapshot('car.detail', car({ telemetry: 9_700, lapData: 9_700, damage: 9_650 }));
+    await screen.findByTestId('car-cell-probe');
+    snapshot('session.info', { session: { updatedAt: 10_000 } });
+    await tick();
+    expect(store.now(FEED)).toBe(10_000);
+    expect(cell('brake').classList.contains('stale')).toBe(false);
+    expect(cell('wear').classList.contains('stale')).toBe(false);
+    expect(header(container).textContent).not.toContain(text.stale());
+  });
+
+  it('a source behind the car\'s newest update is stale, with its age in the header', async () => {
+    const { store, snapshot } = setup();
+    const { container } = render(Panel, { store, spec: spec('car-cell-probe'), widget: carCellProbe, link: link() });
+    snapshot('feed.status', { ...status, cadenceMs: 18 });
+    snapshot('car.detail', car({ telemetry: 10_000, lapData: 10_000, damage: 8_000 }));
+    await screen.findByTestId('car-cell-probe');
+    await vi.waitFor(() => expect(cell('wear').classList.contains('stale')).toBe(true));
+    expect(cell('brake').classList.contains('stale')).toBe(false);
+    expect(header(container).textContent).toContain(text.stale(2));
+  });
+});
+
 describe('Panel: data and props', () => {
   it('all required topics ok: the component gets typed data, options, size and link', async () => {
     const { store, snapshot } = setup();
@@ -199,43 +236,19 @@ describe('Panel: unknown widget', () => {
     const { store, connection } = setup();
     const { container } = render(Panel, { store, spec: spec('x', { a: 1 }), widget: undefined, link: link() });
     expect(container.textContent).toContain(text.unknownWidget('x'));
-    expect(connection.subscribes().filter((s) => s.topic !== 'session.info')).toEqual([]);
+    expect(connection.subscribes()).toEqual([]);
   });
 });
 
-describe('Panel: the session clock (supervisor ruling)', () => {
-  it('holds one session.info acquisition per feed with an explicit feedId, however many panels', () => {
-    const { store, connection } = setup();
-    render(Panel, { store, spec: spec('probe'), widget: widgetNamed('probe'), link: link(5) });
-    render(Panel, { store, spec: spec('probe'), widget: widgetNamed('probe'), link: link(6) });
-    const sessions = connection.subscribes().filter((s) => s.topic === 'session.info');
-    expect(sessions).toHaveLength(1);
-    expect(sessions[0]).toMatchObject({ params: {}, feedId: FEED });
-  });
-
-  it('store.now(feedId) advances with session.info, and the widget sees it through the panel clock', async () => {
-    const { store, connection, idOf, snapshot } = setup();
+describe('Panel: the feed cadence for staleness', () => {
+  it('passes feed.status cadenceMs to the widget through the panel context, and holds no session.info for it (bug B2)', async () => {
+    const { store, connection, snapshot } = setup();
     render(Panel, { store, spec: spec('probe'), widget: widgetNamed('probe'), link: link() });
     snapshot('feed.status', status);
     await screen.findByTestId('probe');
-    expect(store.now(FEED)).toBeUndefined();
-    expect(screen.getByTestId('clock-now').textContent).toBe('none');
-    connection.push({ type: 'snapshot', id: idOf('session.info'), value: { session: { updatedAt: 5000 } } });
-    expect(store.now(FEED)).toBe(5000);
-    await vi.waitFor(() => expect(screen.getByTestId('clock-now').textContent).toBe('5000'));
-    connection.push({ type: 'update', id: idOf('session.info'), value: { session: { updatedAt: 7500 } } });
-    await vi.waitFor(() => expect(screen.getByTestId('clock-now').textContent).toBe('7500'));
-  });
-
-  it('releases it with the last panel of the feed', () => {
-    const { store, connection } = setup();
-    const a = render(Panel, { store, spec: spec('probe'), widget: widgetNamed('probe'), link: link(5) });
-    const b = render(Panel, { store, spec: spec('probe'), widget: widgetNamed('probe'), link: link(6) });
-    const sessionId = connection.subscribes().find((s) => s.topic === 'session.info')!.id;
-    a.unmount();
-    expect(connection.unsubscribes().map((u) => u.id)).not.toContain(sessionId);
-    b.unmount();
-    expect(connection.unsubscribes().map((u) => u.id)).toContain(sessionId);
+    expect(screen.getByTestId('cadence').textContent).toBe('none');
+    snapshot('feed.status', { ...status, cadenceMs: 18 });
+    await vi.waitFor(() => expect(screen.getByTestId('cadence').textContent).toBe('18'));
+    expect(connection.subscribes().filter((s) => s.topic === 'session.info')).toEqual([]);
   });
 });
-

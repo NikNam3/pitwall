@@ -10,13 +10,12 @@
     format?: (v: number) => string;
     car?: { updatedAt: Partial<Record<string, number>>; field: CarFieldPath };
     estimated?: boolean;
-    /** The session clock the panel reads, and the measured cadence of the menu-rate sources. */
-    now?: number;
+    /** The measured cadence of the menu-rate sources. */
     cadenceMs?: number;
   };
-  let { value, format = (v: number) => `#${v}`, car, estimated, now, cadenceMs }: Props = $props();
+  let { value, format = (v: number) => `#${v}`, car, estimated, cadenceMs }: Props = $props();
 
-  const panel = providePanelStale({ now: () => now, cadenceMs: () => cadenceMs });
+  const panel = providePanelStale({ cadenceMs: () => cadenceMs });
 </script>
 
 <Value {value} {format} {car} {estimated} />
