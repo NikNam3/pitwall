@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { carId, known, unknown, type CarState, type ChannelRange, type LapRecord } from '../../../domain/src/index.ts';
+import type { EngineView } from '@pitwall/engine';
 import { carBandsCalculator } from '../../src/car-bands/calculator.ts';
 import { CAR_BANDS, CAR_BANDS_CONFIG, type CarBands } from '../../src/car-bands/index.ts';
 import { carState, engineView, lap, realismHidden } from '../../../../test-support/builders/index.ts';
@@ -11,7 +12,7 @@ const withSurface = (c: number) =>
   carState({
     tyres: { corners: { fl: { surfaceTempC: known(c, 0) }, fr: { surfaceTempC: known(c, 0) }, rl: { surfaceTempC: known(c, 0) }, rr: { surfaceTempC: known(c, 0) } } },
   });
-const bandsOf = (car: CarState, laps: LapRecord[] = [], opts: { config?: Record<string, object>; session?: object } = {}): CarBands => {
+const bandsOf = (car: CarState, laps: LapRecord[] = [], opts: { config?: EngineView['config']; session?: object } = {}): CarBands => {
   const view = engineView({ cars: [car], history: { laps }, ...(opts.session && { session: opts.session }), ...(opts.config && { config: opts.config }) });
   const out = carBandsCalculator.compute(view);
   return out[car.id]!;
