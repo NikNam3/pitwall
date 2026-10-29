@@ -1,4 +1,4 @@
-import type { DriverKey, LapRecord, StintRecord } from '@pitwall/domain';
+import { unknown, type DriverKey, type LapRecord, type StintRecord } from '@pitwall/domain';
 import { describe, expect, it } from 'vitest';
 import { openDatabase } from '../../src/storage/db.ts';
 import { StorageWriter } from '../../src/storage/storage-writer.ts';
@@ -26,6 +26,20 @@ describe('WeekendRepository', () => {
     const repo = weekend();
     expect(repo.lapsOf('1')).toEqual([lap(0, 1), lap(1, 1)]);
     expect(repo.lapsOf('1', HUMAN)).toEqual([lap(1, 1)]);
+  });
+  it('a lap stored before the lap-end samples existed reads with those fields as unknown("notReceived")', () => {
+    const db = openDatabase(':memory:');
+    const w = new StorageWriter(db, { onError: (e) => { throw e; } });
+    w.upsertSession(session('1'));
+    const h = history({ laps: [lap(0, 1)] });
+    w.writeConfirmed('1', h, all(h));
+    const { wearAtEndPct, ersStoreAtEndJ, ersDeployedJ, ersHarvestedJ, damageAtEnd, channelRange, ...old } = lap(0, 1);
+    void [wearAtEndPct, ersStoreAtEndJ, ersDeployedJ, ersHarvestedJ, damageAtEnd, channelRange];
+    db.prepare('UPDATE laps SET record = ? WHERE session_uid = ?').run(JSON.stringify(old), '1');
+    const [read] = new WeekendRepository(db).lapsOf('1');
+    expect(read).toEqual(lap(0, 1));                    // the helper's lap-end samples are all unknown('notReceived')
+    expect(read!.damageAtEnd).toEqual(unknown('notReceived'));
+    expect(read!.channelRange.tyres.fl.surfaceC).toEqual(unknown('notReceived'));
   });
   it('weekendContext: the player\'s sessions of the weekend, every stored driver with their own records, whatever its car index per session', () => {
     const dr = (driverKey: DriverKey, laps: LapRecord[], stints: StintRecord[] = []) => ({ driverKey, laps, stints, pitStops: [] });
