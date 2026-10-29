@@ -79,7 +79,6 @@ const foldLaps = (acc: Acc, view: EngineView): void => {
 
 const foldCars = (acc: Acc, view: EngineView): void => {
   acc.now.clear();
-  const at = view.state.sessionTime;
   for (const car of view.state.cars) {
     if (!car.active) continue;
     const { bodywork, powerUnit } = car.condition;
@@ -89,7 +88,7 @@ const foldCars = (acc: Acc, view: EngineView): void => {
         ? powerUnit
         : known<DamageParts>(
             { ...bodywork.value, gearboxPct: powerUnit.value.gearboxDamagePct, enginePct: powerUnit.value.engineDamagePct },
-            at,
+            Math.max(bodywork.at, powerUnit.at),
           );
     const corner = (c: (typeof CORNERS)[number]) => ({
       tyrePct: car.tyres.corners[c].damagePct,

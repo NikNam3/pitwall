@@ -161,19 +161,19 @@ describe('damage calculator', () => {
   });
 
   describe('state now', () => {
-    it('parts: the eight damage percentages from bodywork and power unit, known at the session time', () => {
+    it('parts: the eight damage percentages from bodywork and power unit, known as of the later of the two readings', () => {
       const car = carState({
         id: car0,
         condition: {
-          bodywork: known({ frontLeftWingPct: 1, frontRightWingPct: 2, rearWingPct: 3, floorPct: 4, diffuserPct: 5, sidepodPct: 6 }, 0),
-          powerUnit: known({ engineDamagePct: 8, gearboxDamagePct: 7, mguhWearPct: 0, esWearPct: 0, ceWearPct: 0, iceWearPct: 0, mgukWearPct: 0, tcWearPct: 0 }, 0),
+          bodywork: known({ frontLeftWingPct: 1, frontRightWingPct: 2, rearWingPct: 3, floorPct: 4, diffuserPct: 5, sidepodPct: 6 }, 4200),
+          powerUnit: known({ engineDamagePct: 8, gearboxDamagePct: 7, mguhWearPct: 0, esWearPct: 0, ceWearPct: 0, iceWearPct: 0, mgukWearPct: 0, tcWearPct: 0 }, 4100),
         },
       });
       const out = damageCalculator.output(damageCalculator.init(engineView({ cars: [car], sessionTime: 5000 })))[car0]!;
       expect(out.parts).toEqual(
         known(
           { frontLeftWingPct: 1, frontRightWingPct: 2, rearWingPct: 3, floorPct: 4, diffuserPct: 5, sidepodPct: 6, gearboxPct: 7, enginePct: 8 },
-          5000,
+          4200,
         ),
       );
     });
