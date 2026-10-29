@@ -87,3 +87,29 @@ Decisions the supervisor took during the autonomous run of `docs/superpowers/pla
 - Tower `TO US` is negative for cars ahead while the battle `GAP` is positive ahead; this matches the approved mockup (-3.199 / +3.199), so it is by design.
 - Tasks 39 and 40 wait for new recordings.
 - Question Q1 (tyre pressure band) in the questions file.
+
+## Late rulings (final review, fix waves and the user's first look)
+
+- **Display decisions moved into analyses (D1, D1b, FX-C):** ERS attack readiness, the tower's stop count, the gapper's resolved reference, TO US to the link primary, per-cell session-best status, the incident moment's entry id and the incident's other car are computed by the analyses; displays only read. Why: displays never compute. Cost if wrong: none beyond the contract fields.
+- **One formatter sweep (F1) and one minus glyph (U+2212)** for every signed value; formats in `kit/values/format.ts`, wording in `text.ts`. Cost if wrong: one constant.
+- **Lap analysis colours only session bests (purple).** In a best-lap table every value is a personal best, so green carried nothing. Cost if wrong: one emphasis rule.
+- **Band advisories judge the last completed lap** (brakes and engine: lap peak; tyres: lap mid-range); brake and engine temperatures form a new `car` category. Why: live values cross the band every lap, so the alarm flickered. Cost if wrong: an advisory reacts one lap later.
+- **Incident location is the sector** (S1–S3) until per-track turn data exists; F1 25 sends no turn numbers. Damage jumps of one car within `jumpWindowMs` are one entry. Cost if wrong: one field later.
+- **Penalty alarms only for real penalties** (one shared classification of PENA codes); warnings, reminders and lap invalidations are not tier-1 alerts. Cost if wrong: a missed alert type.
+- **One current-stint rule over deduplicated laps** (the engine writes a stint record only when the stint closes, and every lap twice). Cost if wrong: one helper.
+- **The determinism hash covers every per-car topic for every car**, derived from the registry. Cost if wrong: none.
+- **Default workbooks are copied once:** a marker file remembers seeded names, so a deleted default stays deleted. Cost if wrong: a deleted default stays deleted.
+- **Menus open inside the window** (leftward from the gear, clamped) and **the top bar names the workbook** as a button for the picker. Cost if wrong: one top-bar element.
+- **Car fields are stale against the car's own newest update**, not the session packet's clock (the flash to "stale"). **A lap jump shows its target** while it fast-forwards.
+- **Screenshot baselines:** one per display size of the first gallery case, default theme; a test caps the total at 50 (user decision). The gallery still renders every case; `fit.spec` checks them all.
+- **Test timeouts:** whole-recording fixture tests 300 s, hook tests 30 s, whole-gallery tests 30 s; the UI test setup waits for lazy imports to settle. Why: correct alone, slow under `pnpm check`. Cost if wrong: a slower check.
+
+## Open after the run
+
+- A lap jump fast-forwards at about 17× (lap 12 of the time trial ≈ 46 s); spec 8.4 targets 5 s. Needs seeking from history snapshots.
+- A whole time-trial replay through the engine takes about 50 s alone; replay and `pitwall dev` restarts would profit from a profile.
+- `moments/capture.ts` and `cli/commands/tap.ts` keep their own stale per-car topic list, so gallery moments miss some analysis data.
+- The warning count in the incident feed (warning events) can differ from the alarm (the game's corner-cutting counter); verify the game's rule.
+- Teammate car 14 in `raceSingapore` reads 0 on its first frames (should be unknown), which skews a lap mid-range.
+- Incident turn numbers need per-track corner data.
+- A lap-history display (our laps, lap by lap) for training in the `car` workbook was offered.
