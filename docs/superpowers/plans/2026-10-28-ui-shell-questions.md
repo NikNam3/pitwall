@@ -1,11 +1,68 @@
 # UI shell (sub-project 2): questions for the user
 
-Collected during the autonomous run. Each question has the default the supervisor chose, and work continued on that default. The user answers them in Task 24, or earlier if every task is blocked.
+Five open decisions from the autonomous run. The code currently does option **A** in each case, so nothing is blocked; pick a letter (or write your own) under **Answer**, and the next session applies every answer that isn't A.
 
-| # | Task | Question | Default chosen | Why |
-|---|---|---|---|---|
-| 1 | 15 | A window's saved dockview layout can't be restored (hand edit broke it). Spec 7.2 says open an empty window; should it instead lay out the workbook's panels in the default arrangement? | Default arrangement of the window's panels | No panel disappears from view; the panel specs in the workbook stay unchanged either way |
-| 2 | 7 / 7b | `pitwall dev` takes ~50 s to come back at the end of full Zandvoort (target 5 s, spec 8.4). Profiling: 47 s is the fast-forward itself (decode 45 %, GC 11 %, engine 17 %); main and this branch replay at the same speed. A checkpoint resume (old child writes a v8 checkpoint, new child resumes if every file in the pipeline's import closure is unchanged) would give ~3 s, but only for feature/strategy/UI edits: engine, protocol and pipeline edits, and any insight calculator, fall back to ~50 s; checkpoints are ~35 MB; at the end of a 90-min race the record skip alone is ~5 s. Build it now? Design: docs/superpowers/notes/2026-10-28-dev-restart-checkpoint-design.md | Not built in this run; only the cheap hot-spot fix (cached cadence median) | Clean code ranks above performance; the resume adds engine checkpoint methods and an import-closure validity rule that the next sub-project (insight calculators) would switch off |
-| 3 | 14 / 22 | When a chart has less history than its width shows, the x-axis extends into negative laps (e.g. −15…5 in the gallery's kit/chart). Clamp the left edge at the first data point (or lap 0) instead? | As built: the window is [newest − width, newest], no clamp | The ruling made the visible range proportional to the width only; clamping is a one-line change in visibleXRange plus its test |
-| 4 | 22 | The provisional screenshot baselines (109, in apps/ui/e2e/__screenshots__/) were compared by the supervisor with the Task 0 values (black, band header, title then link marker, gear, neutral grey, colour only for state). Approve them? | Committed provisionally | Plan: the user approves baselines in Task 24 |
-| 5 | final review | Spec 9.3 asks for gallery coverage of the top bar and the shell overlays (palette, key overview, settings popover, inspector) with screenshot baselines, and an end-to-end check that `pitwall dev` restores the moment. Neither was in the plan's tasks. Build them as a follow-up task before sub-project 3's first display? | Follow-up task, not in this run | Plan gap found by the final review; the pieces are unit-tested; adding baselines needs your look approval anyway |
+---
+
+## Q1. A window's saved layout is broken. What should the window show?
+
+When a hand edit breaks a window's dockview layout so it can't be restored. The workbook's panel list is fine either way; only the arrangement is lost.
+
+- **A.** All of the window's panels, in a default arrangement. *(built)*
+- **B.** An empty window with an "add widget" button, as spec 7.2 says. The panels stay in the file but aren't shown until you add them again.
+
+Recommendation: A, no panel disappears.
+
+**Answer:**
+
+---
+
+## Q2. Should `pitwall dev` get a checkpoint restart?
+
+After a code edit, `pitwall dev` takes about 50 s to put the windows back at the end of the full Zandvoort recording; the target is 5 s (spec 8.4). Almost all of it is the replay fast-forwarding from the start. The design (`docs/superpowers/notes/2026-10-28-dev-restart-checkpoint-design.md`): the old process saves a checkpoint, and the new one resumes from it if the engine/pipeline code didn't change.
+
+- **A.** Not now; live with ~50 s for long recordings. *(built: only a small speed-up)*
+- **B.** Build it now. About 3 s for edits to features, strategy and the UI. Edits to the engine, protocol or pipeline, and any insight calculator (the next sub-project), still take ~50 s. Checkpoints are ~35 MB. At the end of a 90-minute race the restart is still ~5 s.
+- **C.** Look for a different approach first (for example a seekable recording format).
+
+Recommendation: A or C; B helps least exactly where sub-project 3 will work.
+
+**Answer:**
+
+---
+
+## Q3. Charts with less history than their width: show negative laps?
+
+A chart shows `width in cells × laps per cell` of history. Early in a session there's less history than that, so the x-axis currently runs into negative laps (the gallery's sample chart shows −15 … 5).
+
+- **A.** Keep it: the axis always spans the full width, empty on the left. *(built)*
+- **B.** Start the axis at the first data point (or lap 0), so a young session's chart is stretched to the width.
+
+Recommendation: B, negative laps look like a bug.
+
+**Answer:**
+
+---
+
+## Q4. Do you approve the screenshot baselines?
+
+109 screenshots in `apps/ui/e2e/__screenshots__/`: every gallery cell (the `feed-status` widget at each size, moment and theme variant; the panel frame states; the kit parts). The supervisor compared them with the approved Task 0 values. They are committed provisionally, and every later look change will be compared against them pixel for pixel. To see them live: `pnpm ui:dev`, then open `/gallery`.
+
+- **A.** Approved as they are.
+- **B.** Not approved: list what to change.
+
+**Answer:**
+
+---
+
+## Q5. Screenshot coverage for the top bar and the overlays: when?
+
+Spec 9.3 wants gallery cells and baselines for the top bar and the shell overlays (palette, key overview, settings popover, inspector), plus an end-to-end test that `pitwall dev` restores the moment. The plan had no task for them, so only unit tests cover these parts now.
+
+- **A.** As the first task of sub-project 3, before its first display. *(planned default)*
+- **B.** Right now, as a small extra task on top of the UI shell.
+- **C.** Later; unit tests are enough for now.
+
+Recommendation: A.
+
+**Answer:**
