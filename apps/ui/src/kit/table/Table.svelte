@@ -79,7 +79,8 @@
   }
   .head {
     color: var(--pw-textDim);
-    border-bottom: var(--pw-border-px) solid var(--pw-border);
+    /* Inside the line box, so the header is exactly one line tall. */
+    box-shadow: inset 0 calc(-1 * var(--pw-border-px)) 0 var(--pw-border);
   }
   .cell {
     overflow: hidden;

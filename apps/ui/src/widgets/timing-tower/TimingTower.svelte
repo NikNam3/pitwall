@@ -51,7 +51,6 @@
 {#snippet s2(r: TowerRow)}{@render sector(r, 1)}{/snippet}
 {#snippet s3(r: TowerRow)}{@render sector(r, 2)}{/snippet}
 
-<!-- The kit header's border adds 1 px beyond the cell grid; drawn inside the line here so the table fits its body (reported to the supervisor). -->
 <div class="tower">
 <Table
   columns={TOWER_COLUMNS.map((c) => ({ ...c, cell: { position, change, car, gap, interval, toUs, last, s1, s2, s3, compound, age, stops, penalty: pen, pit }[c.key] }))}
@@ -66,10 +65,6 @@
 <style>
   .tower {
     height: 100%;
-  }
-  .tower :global(.head) {
-    border-bottom: 0;
-    box-shadow: inset 0 calc(-1 * var(--pw-border-px)) 0 var(--pw-border);
   }
   .mark {
     display: block;
