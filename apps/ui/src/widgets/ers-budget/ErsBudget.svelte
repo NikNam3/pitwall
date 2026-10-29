@@ -24,7 +24,7 @@
 <div class="ers" class:full>
   <div class="row">
     <span class="label">{text.labels.store}</span>
-    <span class="bar" title={text.attackLevel(view.level)}><Bar {...view.bar} cols={full ? 18 : 6} role="textDim" /></span>&nbsp;<span class="num" class:hot={hot !== undefined} style:color={colour} title={why('store')}>{view.store}</span>&nbsp;<span class="flow" class:hot={hot !== undefined} style:color={colour} title={why('flow')}>{view.flow}</span>
+    <span class="bar" title={text.attackLevel(view.level)}><Bar {...view.bar} cols={full ? 18 : 6} role="text" /></span>&nbsp;<span class="num" class:hot={hot !== undefined} style:color={colour} title={why('store')}>{view.store}</span>&nbsp;<span class="flow" class:hot={hot !== undefined} style:color={colour} title={why('flow')}>{view.flow}</span>
   </div>
   {#if full}
     <div class="row between">
