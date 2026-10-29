@@ -93,11 +93,13 @@ describe('incidents calculator', () => {
   it('a warning penalty event of a neighbour is a minor warning entry', () => {
     const entry = only(run(viewOf({ miniSectors: race(), events: [penalty(7, WARNING)] })), 'warning');
     expect(entry).toMatchObject({ id: `warning:7:${T}`, at: T, severity: 'minor', carIds: [car(7)] });
+    expect(entry.timeLostMs).toEqual(unknown('notApplicable'));
   });
 
   it('any other penalty type is a minor penalty entry', () => {
     const entry = only(run(viewOf({ miniSectors: race(), events: [penalty(7, TIME_PENALTY)] })), 'penalty');
     expect(entry).toMatchObject({ id: `penalty:7:${T}`, severity: 'minor', carIds: [car(7)] });
+    expect(entry.timeLostMs).toEqual(unknown('notApplicable'));
   });
 
   it('a damage jump of a neighbour is a major damage entry; its time lost is the jump\'s measured loss', () => {
@@ -284,6 +286,21 @@ describe('incidents calculator', () => {
       const feed = run(viewOf({ miniSectors, events: [collision(7, 8, SLOW_START - 2_000)] }));
       expect(feed.map((e) => e.kind)).toEqual(['collision']);
       expect(valueOf(feed[0]!.timeLostMs)).toBe(3_000);
+    });
+
+    it('a timeLoss of the second car of a collision (otherCarId) merges into that collision entry', () => {
+      const feed = run(viewOf({ miniSectors, events: [collision(8, 7, SLOW_START - 2_000)] }));
+      expect(feed.map((e) => e.kind)).toEqual(['collision']);
+      expect(feed[0]!.carIds).toEqual([car(8), car(7)]);
+      expect(valueOf(feed[0]!.timeLostMs)).toBe(3_000);
+    });
+
+    it('a timeLoss near a warning or penalty of the same car stays its own entry; the penalty has no time lost', () => {
+      for (const type of [WARNING, TIME_PENALTY]) {
+        const feed = run(viewOf({ miniSectors, events: [penalty(7, type, SLOW_START - 2_000)] }));
+        expect(feed.map((e) => e.kind).sort()).toEqual([type === WARNING ? 'warning' : 'penalty', 'timeLoss'].sort());
+        expect(feed.find((e) => e.kind !== 'timeLoss')!.timeLostMs).toEqual(unknown('notApplicable'));
+      }
     });
 
     it('a timeLoss within 5 s of a damage jump of the same car sets the damage entry\'s timeLostMs', () => {
