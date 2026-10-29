@@ -9,14 +9,12 @@ export const GAPS = 'gaps';
 
 /**
  * The output. The bindings compute `gaps.toCar` and `gaps.gapper` from it with their params; `battle` reads
- * `lineTimes` (the gap of A behind B at lap L is A's line time minus B's) and `latest` for the gap now.
+ * `intervals` for the gap now and `lineTimes` for its trend (the gap of A behind B at lap L is A's line time minus B's).
  */
 export type GapsOutput = {
   intervals: Interval[];
   /** Per car, when it crossed the line at the end of each lap. */
   lineTimes: Record<CarId, { lap: number; at: SessionTime }[]>;
-  /** Per car, its latest mini-sector crossing. */
-  latest: Record<CarId, { lap: number; segment: number; at: SessionTime }>;
   /**
    * Per car, its last 100 crossings by progress (`(lap − 1) × 50 + segment`): `at[i]` is when it passed progress
    * `fromProgress + i` (a hole where none was recorded). Two laps, enough for the exact gap of any pair within a lap,

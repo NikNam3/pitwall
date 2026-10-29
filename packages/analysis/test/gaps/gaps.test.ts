@@ -126,7 +126,7 @@ describe('gaps calculator', () => {
     expect(neighbours(out, 0)).not.toContain(3);
   });
 
-  it('lineTimes holds the line crossing of every completed lap, latest the newest crossing', () => {
+  it('lineTimes holds the line crossing of every completed lap', () => {
     const all = field({ cars: 2, laps: 3, paceMs: [90_000, 91_000] }).miniSectors;
     const full = run(viewOf(all));
     expect(full.lineTimes[carId(1)]).toEqual([
@@ -134,8 +134,6 @@ describe('gaps calculator', () => {
       { lap: 2, at: 182_000 },
       { lap: 3, at: 273_000 },
     ]);
-    // the line that completes lap 3 is segment 0 of lap 4
-    expect(full.latest[carId(1)]).toEqual({ lap: 4, segment: 0, at: 273_000 });
 
     // mid lap 3: car 1 has crossed segment 10 at 182 000 + 10 * 1820
     const mid = run(viewOf(all.filter((m) => m.at <= 200_200)));
@@ -143,7 +141,6 @@ describe('gaps calculator', () => {
       { lap: 1, at: 91_000 },
       { lap: 2, at: 182_000 },
     ]);
-    expect(mid.latest[carId(1)]).toEqual({ lap: 3, segment: 10, at: 200_200 });
   });
 
   describe('positionsGained', () => {
@@ -172,7 +169,7 @@ describe('gaps calculator', () => {
     const rec = out.recent[carId(1)]!;
     // car 1's latest crossing is (4, 0) at progress 150: the window is progress 51..150
     expect(rec.at).toHaveLength(100);
-    expect(rec.fromProgress + rec.at.length - 1).toBe(progressOf(out.latest[carId(1)]!));
+    expect(rec.fromProgress + rec.at.length - 1).toBe(progressOf({ lap: 4, segment: 0 }));
     expect(rec.fromProgress).toBe(51);
     const raw = new Map(all.filter((m) => m.carId === 1).map((m) => [progressOf(m), m.at]));
     expect(rec.at).toEqual(Array.from({ length: 100 }, (_, i) => raw.get(51 + i)));
@@ -240,8 +237,9 @@ describe('gaps to one car', () => {
       ),
     ).filter((m) => m.at <= 60_000);
     const out = run(viewOf(ms));
-    expect(out.latest[carId(2)]).toMatchObject({ segment: 26 });
-    expect(out.latest[carId(1)]).toMatchObject({ segment: 31 });
+    // car 2's latest crossing is segment 26, car 1's segment 31 (progress = segment on lap 1)
+    expect(out.recent[carId(2)]!.at).toHaveLength(27);
+    expect(out.recent[carId(1)]!.at).toHaveLength(32);
     // at segment 26: car 2 at 59 800, car 1 at 49 800
     const gap = (a: number, to: number) => v(gapsToCar(out, carId(to))!.find((g) => g.carId === a)!.gapMs);
     expect(gap(2, 1)).toBe(10_000);
