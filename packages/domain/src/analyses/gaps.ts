@@ -3,8 +3,18 @@ import type { CarId } from '../ids.ts';
 import type { Known } from '../known.ts';
 import type { Ms } from '../units.ts';
 
-/** `gaps.intervals`: one car's gaps to the leader and its neighbours on the road order. */
-export type Interval = { carId: CarId; toLeaderMs: Known<Ms>; toAheadMs: Known<Ms>; toBehindMs: Known<Ms>; lapsDown: number };
+/**
+ * `gaps.intervals`: one car's gaps to the leader and its neighbours on the road order, its laps down, and the positions
+ * it gained since the start (`gridPosition − position`; negative = lost).
+ */
+export type Interval = {
+  carId: CarId;
+  toLeaderMs: Known<Ms>;
+  toAheadMs: Known<Ms>;
+  toBehindMs: Known<Ms>;
+  lapsDown: number;
+  positionsGained: number;
+};
 
 /** `gaps.toCar`: one car's signed gap to the params car; positive = behind it. */
 export type GapToCar = { carId: CarId; gapMs: Known<Ms>; lapsDown: number };
