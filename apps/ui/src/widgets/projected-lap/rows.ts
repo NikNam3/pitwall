@@ -2,7 +2,7 @@
 import type { Known, Projection, UnknownReason } from '@pitwall/domain';
 import { gridRow } from '../../kit/grid/grid.ts';
 import type { GridColumn } from '../../kit/grid/grid.ts';
-import { formatDeltaMs, formatLapTime, formatSeconds } from '../../kit/values/format.ts';
+import { formatDeltaMs, formatLapTime, formatPosition, formatSeconds } from '../../kit/values/format.ts';
 import type { Role } from '../../theme/roles.ts';
 import { cutOffRole, deltaRole, finishRole } from './emphasis.ts';
 import { columnHeaders, labels, names, outLap, seconds } from './text.ts';
@@ -34,7 +34,6 @@ export const projectionHeader = (full = true): string => {
   return gridRow(columns, columnHeaders.slice(0, columns.length));
 };
 
-const position = (n: number): string => `P${n}`;
 const text = <T>(value: Known<T>, format: (v: T) => string): string => (value.known ? format(value.value) : '');
 const firstReason = (...values: Known<unknown>[]): UnknownReason | undefined => {
   for (const v of values) if (!v.known) return v.reason;
@@ -43,16 +42,16 @@ const firstReason = (...values: Known<unknown>[]): UnknownReason | undefined => 
 const withReason = (row: Omit<ProjectionRow, 'reason'>, reason: UnknownReason | undefined): ProjectionRow =>
   reason === undefined ? row : { ...row, reason };
 
-/** The rows PROJ, CUT-OFF and FINISH for a projection; hidden values are empty cells. */
-export function projectionRows(p: Projection): ProjectionRow[] {
+/** The rows PROJ, CUT-OFF and FINISH for a projection; hidden values are empty cells. `ours`: the car is one of ours. */
+export function projectionRows(p: Projection, ours: boolean): ProjectionRow[] {
   const proj: ProjectionRow = p.onLap
     ? withReason({
         key: 'proj', name: names.proj,
         time: text(p.projectedLapMs, formatLapTime),
-        pos: text(p.projectedPosition, position),
+        pos: text(p.projectedPosition, formatPosition),
         delta: text(p.deltaToBestMs, formatDeltaMs),
         label: p.deltaToBestMs.known ? labels.toBest : '',
-        deltaRole: p.deltaToBestMs.known ? deltaRole(p.deltaToBestMs.value) : undefined,
+        deltaRole: p.deltaToBestMs.known ? deltaRole(p.deltaToBestMs.value, ours) : undefined,
       }, firstReason(p.projectedLapMs, p.projectedPosition, p.deltaToBestMs))
     : { key: 'proj', name: names.proj, time: outLap, pos: '', delta: '', label: '', deltaRole: undefined };
 
@@ -61,7 +60,7 @@ export function projectionRows(p: Projection): ProjectionRow[] {
   const cutOff = withReason({
     key: 'cutOff', name: names.cutOff,
     time: text(cut, (c) => formatLapTime(c.timeMs)),
-    pos: text(cut, (c) => position(c.position)),
+    pos: text(cut, (c) => formatPosition(c.position)),
     delta: text(margin, formatDeltaMs),
     label: margin.known ? labels.margin : '',
     deltaRole: margin.known ? cutOffRole(margin.value) : undefined,

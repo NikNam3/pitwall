@@ -7,7 +7,7 @@ export const widget = declareWidget({
   data: {
     // The link group's primary car.
     projection: topic('lapTimes.projection', ({ link }) => ({ carId: link.primary })),
-    // The session state for the header (session name, time left).
+    // Our cars: a projection faster than the best is green only for them (a rival can be the primary).
     session: optional(topic('session.info')),
   },
   // Mockup 2-timing.html: full 42x4 (column header, PROJ, CUT-OFF, FINISH), compact = column header and PROJ without the label column.
