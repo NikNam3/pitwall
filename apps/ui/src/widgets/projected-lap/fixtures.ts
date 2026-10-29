@@ -10,7 +10,8 @@ type Over = {
   lapMs?: number;
   deltaMs?: number;
   position?: number;
-  cutOff?: { position: number; timeMs: number; marginMs: number };
+  /** The cut-off; a margin left out is `notApplicable` (off a lap). */
+  cutOff?: { position: number; timeMs: number; marginMs?: number };
   finishMs?: number;
 };
 
@@ -23,7 +24,7 @@ export function projection(over: Over = {}): Projection {
     projectedLapMs: over.lapMs === undefined ? na : ms(over.lapMs),
     deltaToBestMs: over.deltaMs === undefined ? na : ms(over.deltaMs),
     projectedPosition: over.position === undefined ? na : known(over.position, at),
-    cutOff: over.cutOff === undefined ? na : known(over.cutOff, at),
+    cutOff: over.cutOff === undefined ? na : known({ ...over.cutOff, marginMs: over.cutOff.marginMs === undefined ? na : ms(over.cutOff.marginMs) }, at),
     finishMarginMs: over.finishMs === undefined ? na : ms(over.finishMs),
   };
 }
@@ -36,5 +37,5 @@ export const outsideCutOff = projection({
   lapMs: 84_311, deltaMs: 781, position: 17, cutOff: { position: 15, timeMs: 84_006, marginMs: -305 }, finishMs: 21_400,
 });
 export const outLap = projection({
-  onLap: false, cutOff: { position: 10, timeMs: 83_870, marginMs: 0 }, finishMs: 3_900,
+  onLap: false, cutOff: { position: 10, timeMs: 83_870 }, finishMs: 3_900,
 });

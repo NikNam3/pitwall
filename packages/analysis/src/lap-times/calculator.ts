@@ -86,58 +86,68 @@ const eliminatedBefore = (acc: Acc): { part: 'q1' | 'q2'; count: number } | unde
 
 const TIMED: readonly SessionKind[] = ['practice', 'qualifying', 'sprintShootout'];
 
-const notOnLap = (carId: CarId): Projection => ({
+const notOnLap = (carId: CarId, cutOff: Projection['cutOff']): Projection => ({
   carId,
   onLap: false,
   projectedLapMs: notApplicable,
   deltaToBestMs: notApplicable,
   projectedPosition: notApplicable,
-  cutOff: notApplicable,
+  cutOff,
   finishMarginMs: notApplicable,
 });
 
-const noProjection = (carId: CarId): Projection => ({
+const noProjection = (carId: CarId, cutOff: Projection['cutOff']): Projection => ({
   carId,
   onLap: true,
   projectedLapMs: insufficientData,
   deltaToBestMs: insufficientData,
   projectedPosition: insufficientData,
-  cutOff: notApplicable,
+  cutOff,
   finishMarginMs: insufficientData,
 });
 
+/** The best laps of the active cars other than `id`. */
+const othersBests = (acc: Acc, id: CarId, bests: Map<CarId, CarBests>): Best[] =>
+  [...bests].filter(([other, b]) => other !== id && b.lap !== undefined && acc.cars[other]?.active === true).map(([, b]) => b.lap as Best);
+
+/**
+ * The quali cut-off from the other cars' bests alone, so it stands on an out lap and on the first flying lap too;
+ * known since the newest of those bests. `margin` is the car's: from its projection, or why there is none.
+ */
+const cutOffOf = (acc: Acc, others: readonly Best[], margin: (timeMs: Ms) => Known<Ms>): Projection['cutOff'] => {
+  const part = acc.session.kind === 'qualifying' || acc.session.kind === 'sprintShootout' ? eliminatedBefore(acc) : undefined;
+  if (part === undefined) return notApplicable;
+  const cutPosition = acc.session.numActiveCars - part.count;
+  if (cutPosition < 1) return notApplicable;
+  if (others.length < cutPosition) return insufficientData;
+  const timeMs = ([...others].sort((a, b) => a.ms - b.ms)[cutPosition - 1] as Best).ms;
+  const at = Math.max(...others.map((b) => b.completedAt));
+  return known({ position: cutPosition, timeMs, marginMs: margin(timeMs) }, at);
+};
+
 const projectionOf = (acc: Acc, car: CarSnapshot, best: Best | undefined, bests: Map<CarId, CarBests>): Projection => {
   const id = car.id;
+  const others = othersBests(acc, id, bests);
   const byLap = acc.laps[id] ?? {};
   const previous = byLap[car.lap - 1];
   if (car.driverStatus === 'inLap' || car.driverStatus === 'outLap' || car.driverStatus === 'inGarage' || car.pitStatus !== 'none' || previous?.inLap === true) {
-    return notOnLap(id);
+    return notOnLap(id, cutOffOf(acc, others, () => notApplicable));
   }
   const bestLap = best === undefined ? undefined : byLap[best.lapNumber];
   const now = acc.crossings[id]?.get(car.lap);
-  if (best === undefined || bestLap === undefined || previous === undefined || now === undefined) return noProjection(id);
-  const bestAtSegment = acc.crossings[id]?.get(best.lapNumber)?.at[now.latest.segment];
-  if (bestAtSegment === undefined) return noProjection(id);
+  const bestAtSegment = best === undefined || now === undefined ? undefined : acc.crossings[id]?.get(best.lapNumber)?.at[now.latest.segment];
+  if (best === undefined || bestLap === undefined || previous === undefined || now === undefined || bestAtSegment === undefined) {
+    return noProjection(id, cutOffOf(acc, others, () => insufficientData));
+  }
 
   const at = now.latest.at;
   const elapsed = at - previous.completedAt;
   const bestElapsed = bestAtSegment - (bestLap.completedAt - bestLap.lapTimeMs);
   const projected = elapsed + (best.ms - bestElapsed);
-
-  const others = [...bests].filter(([other, b]) => other !== id && b.lap !== undefined && acc.cars[other]?.active === true).map(([, b]) => (b.lap as Best).ms);
-  const position = 1 + others.filter((ms) => ms <= projected).length;
-
-  let cutOff: Projection['cutOff'] = notApplicable;
-  const part = acc.session.kind === 'qualifying' || acc.session.kind === 'sprintShootout' ? eliminatedBefore(acc) : undefined;
-  if (part !== undefined) {
-    const cutPosition = acc.session.numActiveCars - part.count;
-    if (cutPosition < 1) cutOff = notApplicable;
-    else if (others.length < cutPosition) cutOff = insufficientData;
-    else {
-      const timeMs = others.sort((a, b) => a - b)[cutPosition - 1] as Ms;
-      cutOff = known({ position: cutPosition, timeMs, marginMs: timeMs - projected }, at);
-    }
-  }
+  const position = 1 + others.filter((b) => b.ms <= projected).length;
+  // with a projection the cut-off is as of the latest crossing, like the margin
+  const cut = cutOffOf(acc, others, (timeMs) => known(timeMs - projected, at));
+  const cutOff: Projection['cutOff'] = cut.known ? known(cut.value, at) : cut;
 
   const finishMarginMs: Known<Ms> = TIMED.includes(acc.session.kind)
     ? known(acc.session.timeLeftMs - (at - acc.session.updatedAt) - (projected - elapsed), at)

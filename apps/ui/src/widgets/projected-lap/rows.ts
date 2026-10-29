@@ -57,15 +57,15 @@ export function projectionRows(p: Projection): ProjectionRow[] {
     : { key: 'proj', name: names.proj, time: outLap, pos: '', delta: '', label: '', deltaRole: undefined };
 
   const cut = p.cutOff;
-  const showMargin = p.onLap && cut.known;
+  const margin: Known<number> = cut.known ? cut.value.marginMs : cut;
   const cutOff = withReason({
     key: 'cutOff', name: names.cutOff,
     time: text(cut, (c) => formatLapTime(c.timeMs)),
     pos: text(cut, (c) => position(c.position)),
-    delta: showMargin ? formatDeltaMs(cut.value.marginMs) : '',
-    label: showMargin ? labels.margin : '',
-    deltaRole: showMargin ? cutOffRole(cut.value.marginMs) : undefined,
-  }, firstReason(cut));
+    delta: text(margin, formatDeltaMs),
+    label: margin.known ? labels.margin : '',
+    deltaRole: margin.known ? cutOffRole(margin.value) : undefined,
+  }, firstReason(cut, margin));
 
   const fin = p.finishMarginMs;
   const finish = withReason({

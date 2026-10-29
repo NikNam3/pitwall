@@ -62,6 +62,11 @@ describe('projectionRows', () => {
     expect(projectionRows(outLap)[1]!.deltaRole).toBeUndefined();
   });
 
+  it('on the first flying lap shows the cut-off without a margin, the margin\'s reason on hover', () => {
+    const p = { ...projection(), cutOff: known({ position: 15, timeMs: 84_006, marginMs: unknown('insufficientData') }, toSessionTime(0)) };
+    expect(projectionRows(p)[1]).toMatchObject({ time: '1:24.006', pos: 'P15', delta: '', label: '', deltaRole: undefined, reason: 'insufficientData' });
+  });
+
   it('on an out lap without a cut-off shows the finish margin only', () => {
     const rows = projectionRows(projection({ onLap: false, finishMs: 3_900 }));
     expect(rows[0]!.time).toBe('out lap');
