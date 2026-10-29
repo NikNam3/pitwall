@@ -79,6 +79,7 @@ describe('incidents calculator', () => {
       intervals: [],
       lineTimes: {},
       latest: {},
+      recent: {},
       neighbourhood: [{ ourCarId: PLAYER, carIds: [car(0), car(1)] }],
       raceStartAt: known(0, 0),
     };
