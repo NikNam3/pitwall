@@ -15,11 +15,11 @@ describe('generated feature set', () => {
     const reg = CalculatorRegistry.build(FEATURES.flatMap((f) => f.calculators));
     for (const b of bindings) if ('from' in b) expect(reg.get(b.from), b.topic).toBeDefined();
   });
-  it('binds every core feed topic exactly once (global topics are published by the bridge shell, replay.status by the ReplayController; neither is bound by features)', () => {
-    const feedTopics = Object.entries(TOPICS).filter(([name, d]) => d.scope === 'feed' && d.owner === 'core' && name !== 'replay.status').map(([name]) => name);
+  it('binds every feed topic exactly once, core and analysis alike (global topics are published by the bridge shell, replay.status by the ReplayController; neither is bound by features)', () => {
+    const feedTopics = Object.entries(TOPICS).filter(([name, d]) => d.scope === 'feed' && name !== 'replay.status').map(([name]) => name);
     const bound = bindings.map((b) => b.topic);
     expect(new Set(bound).size).toBe(bound.length);
-    expect(bound.filter((topic) => TOPICS[topic].owner === 'core').sort()).toEqual(feedTopics.sort());
+    expect([...bound].sort()).toEqual(feedTopics.sort());
   });
   it('binds an analysis topic only in the feature of its owner (its contract is committed before the feature exists, ADR 0014)', () => {
     for (const f of FEATURES) for (const b of f.topics) if (TOPICS[b.topic].owner !== 'core') expect(TOPICS[b.topic].owner, b.topic).toBe(f.name);
