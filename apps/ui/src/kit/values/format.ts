@@ -116,6 +116,13 @@ export const formatPercent = (p: Percent): string => (Number.isFinite(p) ? forma
 /** Energy shown as MJ with one decimal, `2100000` -> `2.1 MJ`. */
 export const formatJoules = (j: number): string => (Number.isFinite(j) ? `${fixed(j / 1e6, 1)} MJ` : '');
 
+/** A time loss in ms per lap as signed seconds to two decimals, `120` -> `+0.12 s/lap`. */
+export const formatSecondsPerLap = (ms: Ms): string => {
+  if (!Number.isFinite(ms)) return '';
+  const text = fixed(ms / 1000, 2);
+  return `${text.startsWith('-') ? '' : '+'}${text} s/lap`;
+};
+
 /** A delta in ms as signed seconds, `412` -> `+0.412`, `-412` -> `-0.412`. */
 export const formatDeltaMs = (ms: Ms): string => {
   if (!Number.isFinite(ms)) return '';
