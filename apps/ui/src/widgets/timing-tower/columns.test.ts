@@ -23,7 +23,8 @@ describe('TOWER_COLUMNS', () => {
 
   it('drops pit, penalty, stops, age, compound and S3 (61 cells needed) at 60, then the sectors, TO US and GAP as it narrows', () => {
     expect(kept(60)).toEqual(['position', 'change', 'car', 'gap', 'interval', 'toUs', 'last', 's1', 's2']);
-    expect(kept(40)).toEqual(['position', 'change', 'car', 'gap', 'interval', 'last']);
+    expect(kept(40)).toEqual(['position', 'change', 'car', 'gap', 'interval', 'toUs', 'last']);
+    expect(kept(39)).toEqual(['position', 'change', 'car', 'gap', 'interval', 'last']);
   });
 
   it('right-aligns the numbers and left-aligns the car, change, compound and pit columns', () => {
