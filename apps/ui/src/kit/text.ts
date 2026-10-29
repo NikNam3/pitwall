@@ -172,3 +172,31 @@ export const topBar = {
   mute: 'mute',
   unmute: 'muted',
 } as const;
+
+/** Insight texts of the alarm kinds (spec 5.6); `formatInsight` fills in the values. */
+export const insightText = {
+  /** A tyre or brake or engine channel: `FR brake`, `RL carcass`, `engine`. */
+  channel: { surfaceC: 'surface', carcassC: 'carcass', pressurePsi: 'pressure', brakesC: 'brake', engineC: 'engine' },
+  outOfBand: 'out of band',
+  outOfBandLap: 'out of band a full lap',
+  above: 'above band',
+  below: 'below band',
+  wearLimitNear: (corner: string, laps: string): string => `${corner} wear limit in ${laps}`,
+  fuelShort: (margin: string): string => `fuel short ${margin}`,
+  damageJump: (parts: string, percent: string): string => `damage: ${parts} ${percent}`,
+  warningLast: (warnings: number, before: number): string => `one warning left before a penalty ${warnings}/${before}`,
+  penalty: 'penalty',
+  /** The car parts of a damage jump, by the `DamageParts` keys the alarm sends. */
+  part: {
+    frontLeftWingPct: 'FL wing',
+    frontRightWingPct: 'FR wing',
+    rearWingPct: 'rear wing',
+    floorPct: 'floor',
+    diffuserPct: 'diffuser',
+    sidepodPct: 'sidepod',
+    gearboxPct: 'gearbox',
+    enginePct: 'engine',
+  } as Readonly<Record<string, string>>,
+  /** The minus sign of a negative value. */
+  minus: '−',
+} as const;
