@@ -1,6 +1,8 @@
 // Lap-end samples (spec 3.3, A.1): wear, ERS and damage at the lap end, the lap's channel ranges and damageChange events.
 import { describe, expect, it } from 'vitest';
-import { type RaceEvent } from '@pitwall/domain';
+import { known, unknown, type RaceEvent } from '@pitwall/domain';
+import type { Frame } from '../../src/frame/frame.ts';
+import { applyDamageChanges } from '../../src/history/damage-changes.ts';
 import { initialState, SessionRunner, step } from '../../src/index.ts';
 import { buildPacket, ScenarioBuilder, type FrameDraft } from '../builders/index.ts';
 import { initFor, runScenario } from '../support/run.ts';
@@ -113,6 +115,35 @@ describe('damageChange events', () => {
     const params = st.history.events.filter((e) => e.kind === 'damageChange').map((e) => e.params);
     expect(params).toEqual(expect.arrayContaining([{ part: 'gearboxPct', fromPct: 0, toPct: 5 }, { part: 'enginePct', fromPct: 0, toPct: 8 }]));
     expect(params).toHaveLength(2);
+  });
+
+  /** A state whose car 0 has a baseline of all parts at 0 %, and a frame at 9 s with or without Car Damage. */
+  const baseline = () => runScenario(new ScenarioBuilder({ cars: 1 }).frames(1, wing(0))).st;
+  const frame = (damage: boolean) => ({ sessionTime: 9000, events: [], ...(damage && { damage: buildPacket('carDamage') }) }) as unknown as Frame;
+  const wingAt = (st: ReturnType<typeof baseline>, pct: number) => {
+    const { bodywork } = st.cars[0]!.condition;
+    if (bodywork.known) st.cars[0]!.condition.bodywork = known({ ...bodywork.value, frontLeftWingPct: pct }, 9000);
+  };
+  const damageEventsOf = (st: ReturnType<typeof baseline>) => st.history.events.filter((e) => e.kind === 'damageChange');
+
+  it('a frame without Car Damage is no reading (only Car Damage changes the condition)', () => {
+    const st = baseline();
+    wingAt(st, 30);
+    applyDamageChanges(st, frame(false));
+    expect(damageEventsOf(st)).toEqual([]);
+  });
+
+  it('a reading with an unknown part is none: no event, and the baseline stays as it was', () => {
+    const st = baseline();
+    const { powerUnit } = st.cars[0]!.condition;
+    wingAt(st, 30);
+    st.cars[0]!.condition.powerUnit = unknown('restricted');
+    applyDamageChanges(st, frame(true));
+    expect(damageEventsOf(st)).toEqual([]);
+    expect(st.open.damage[0]).toEqual([0, 0, 0, 0, 0, 0, 0, 0]);
+    st.cars[0]!.condition.powerUnit = powerUnit;
+    applyDamageChanges(st, frame(true));
+    expect(damageEventsOf(st).map((e) => e.params)).toEqual([{ part: 'frontLeftWingPct', fromPct: 0, toPct: 30 }]);
   });
 
   it('a flashback truncates damageChange events like every other event', () => {

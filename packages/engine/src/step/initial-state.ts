@@ -118,6 +118,7 @@ const emptyTrackers = (lastFlag: OpenTrackers['lastFlag']): OpenTrackers => ({
   miniSectors: perCar(() => undefined),
   lapIndex: perCar(() => ({})),
   pitStatus: perCar(() => undefined),
+  damage: perCar(() => undefined),
 });
 
 /** The state at the start of a session: the first Session packet is known, every car's data is not. */
