@@ -1,6 +1,7 @@
 // The analyses (spec 4–7): one folder per unit; each folder's index exports its calculator id, output type and config.
 export * from './alarms/index.ts';
 export * from './battle/index.ts';
+export { battleCalculator } from './battle/calculator.ts';
 export * from './car-bands/index.ts';
 export * from './car-bands/calculator.ts';
 export * from './damage/index.ts';
@@ -8,9 +9,13 @@ export { damageCalculator } from './damage/calculator.ts';
 export * from './ers/index.ts';
 export * from './fuel/index.ts';
 export * from './gaps/index.ts';
+export { gapsCalculator } from './gaps/calculator.ts';
+export { gapperLines, gapsToCar } from './gaps/gaps.ts';
 export * from './incidents/index.ts';
 export * from './lap-classes/index.ts';
 export * from './lap-times/index.ts';
+export { lapTimesCalculator } from './lap-times/calculator.ts';
+export { boardFor } from './lap-times/lap-times.ts';
 export * from './pace/index.ts';
 export { paceCalculator } from './pace/calculator.ts';
 export { fuelCalculator } from './fuel/calculator.ts';
@@ -23,3 +28,4 @@ export { ersCalculator } from './ers/calculator.ts';
 export * from './tyre-wear/index.ts';
 export { tyreWearCalculator } from './tyre-wear/calculator.ts';
 export { alarmsCalculator } from './alarms/calculator.ts';
+export { incidentsCalculator } from './incidents/calculator.ts';
