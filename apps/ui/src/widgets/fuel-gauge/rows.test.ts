@@ -85,6 +85,11 @@ describe('fuelRows', () => {
     expect(r.game).toMatchObject({ text: '', reason: 'notReceived' });
   });
 
+  it('keeps the laps when only the kg are unknown, and shows nothing for the kg alone', () => {
+    expect(byKey({ ...positive, kg: unknown('realism') }).lasts).toEqual({ key: 'lasts', label: 'LASTS', text: '19.4 laps' });
+    expect(byKey({ ...positive, lapsOfFuel: unknown('realism') }).lasts).toMatchObject({ text: '', reason: 'realism' });
+  });
+
   it('shows no role on the other rows', () => {
     const r = byKey(negative);
     for (const key of ['lasts', 'toGo', 'burn', 'save', 'game']) expect(r[key]?.role).toBeUndefined();

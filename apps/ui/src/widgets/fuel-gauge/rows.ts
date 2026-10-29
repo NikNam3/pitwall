@@ -1,6 +1,6 @@
 import type { FuelState, Known, UnknownReason } from '@pitwall/domain';
 import type { Role } from '../../theme/roles.ts';
-import { formatKg, formatKgPerLap, formatLaps, formatSignedLaps } from '../../kit/values/format.ts';
+import { formatKgPerLap, formatKgUnit, formatLaps, formatSignedLaps } from '../../kit/values/format.ts';
 import { marginRole } from './emphasis.ts';
 import * as text from './text.ts';
 
@@ -20,11 +20,10 @@ const cell = (value: Known<number>, format: (n: number) => string): { text: stri
 
 /** The fuel rows in display order: margin, lasts, to go, burn, save target, the game's figure. */
 export function fuelRows(fuel: FuelState): FuelRow[] {
-  const lasts = !fuel.lapsOfFuel.known
-    ? cell(fuel.lapsOfFuel, formatLaps)
-    : !fuel.kg.known
-      ? cell(fuel.kg, formatKg)
-      : { text: `${formatLaps(fuel.lapsOfFuel.value)} (${formatKg(fuel.kg.value)} kg)` };
+  // The laps are the figure that decides; the kg in brackets is added when known (laps known and kg unknown shows the laps alone).
+  const lasts = fuel.lapsOfFuel.known
+    ? { text: fuel.kg.known ? text.lasts(formatLaps(fuel.lapsOfFuel.value), formatKgUnit(fuel.kg.value)) : formatLaps(fuel.lapsOfFuel.value) }
+    : cell(fuel.lapsOfFuel, formatLaps);
   const role = marginRole(fuel.marginLaps);
   return [
     { key: 'margin', label: text.labels.margin, ...cell(fuel.marginLaps, formatSignedLaps), role, bold: true },
