@@ -23,7 +23,7 @@ export type DamageRows = {
 const cell = (k: Known<number>): Cell => (k.known ? { text: formatPct(k.value) } : { text: '', reason: k.reason });
 
 function jumpRow(jump: DamageJump, newest: boolean): JumpRow {
-  const parts = jump.parts.map((p) => insightText.part[p] ?? p).join(text.partSeparator);
+  const parts = jump.parts.map((p) => insightText.part[p]).join(text.partSeparator);
   const row: JumpRow = { text: `${formatLapNumber(jump.lap, 2)} ${parts} ${formatDeltaPct(jump.deltaPct)}`, loss: '' };
   const loss = jump.lossMsPerLap;
   if (loss.known) row.loss = text.lossMeasured(formatSecondsPerLap(loss.value));
