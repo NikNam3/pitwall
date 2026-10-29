@@ -122,3 +122,13 @@ export const formatDeltaMs = (ms: Ms): string => {
   const abs = Math.abs(Math.round(ms));
   return `${ms < 0 && abs > 0 ? '-' : '+'}${formatSector(abs)}`;
 };
+
+/** A signed count of laps to one decimal with a true minus, `1.8` -> `+1.8 laps`, `-0.7` -> `−0.7 laps`. */
+export const formatSignedLaps = (n: number): string => {
+  if (!Number.isFinite(n)) return '';
+  const text = fixed(Math.abs(n), 1);
+  return `${n < 0 && text !== '0.0' ? '−' : '+'}${text} laps`;
+};
+
+/** Fuel burn or save target to two decimals, `1.62` -> `1.62 kg/lap`. */
+export const formatKgPerLap = (kg: Kg): string => (Number.isFinite(kg) ? `${fixed(kg, 2)} kg/lap` : '');
