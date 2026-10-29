@@ -15,3 +15,15 @@ The spec's default band was 21.5–25.0 psi (spec 14, item 2). The game's teleme
 Recommendation: A until the practice recording shows real live pressures, then B with values from it.
 
 **Answer:**
+
+## Q2. How many screenshot baselines should each display have?
+
+The gallery (UI shell design, spec 9.1/9.2) screenshots every cell at each size (the size modes plus every extra fit size) × each case × all four theme variants. A display with 5 cases and 7 sizes gets 140 baselines; sub-project 3 adds about 1,500 PNGs, and `pnpm test:ui` gets several minutes slower. Every visual change then means regenerating and checking many near-identical images.
+
+- **A.** Keep it as designed: every size × case × theme. *(built)*
+- **B.** Screenshots at the size modes only (compact, full) × the default theme; the extra fit sizes stay in the fit check (overflow, clipping) without a screenshot; theme variants screenshotted for one case per display.
+- **C.** Like B, but no theme variants at all except for the two colour-question variants (compound colour, personal-best unlit), one case each.
+
+Recommendation: B. The fit check already catches layout breaks at the extra sizes, and the theme variants differ only in colour, which one case shows.
+
+**Answer:**
