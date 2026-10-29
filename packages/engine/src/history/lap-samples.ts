@@ -89,3 +89,16 @@ export const lapEndSamples = (cursor: LapCursor, car: CarState, at: SessionTime)
   damageAtEnd: damageOf(car, at),
   channelRange: channelRange(cursor, car, at),
 });
+
+/** The lap-end samples of a lap they were never taken for (the engine never saw it, or it was stored before they existed): all `notReceived`. */
+export const unknownLapEnd = (): LapEndSamples => {
+  const none = unknown('notReceived');
+  return {
+    wearAtEndPct: mapCorners(() => none),
+    ersStoreAtEndJ: none,
+    ersDeployedJ: none,
+    ersHarvestedJ: none,
+    damageAtEnd: none,
+    channelRange: { tyres: mapCorners(() => ({ surfaceC: none, carcassC: none, pressurePsi: none })), brakesC: mapCorners(() => none), engineC: none },
+  };
+};
