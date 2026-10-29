@@ -21,5 +21,5 @@ export const activeInsights: Fold<InsightEntry, Map<string, Insight>> = {
 };
 
 /** Every category, for the mute list; the record makes a new category a type error here. */
-const CATEGORY_SET: Record<InsightCategory, true> = { strategy: true, tyres: true, energy: true, damage: true, race: true, feed: true, system: true };
+const CATEGORY_SET: Record<InsightCategory, true> = { strategy: true, tyres: true, energy: true, car: true, damage: true, race: true, feed: true, system: true };
 export const INSIGHT_CATEGORIES = Object.keys(CATEGORY_SET) as InsightCategory[];

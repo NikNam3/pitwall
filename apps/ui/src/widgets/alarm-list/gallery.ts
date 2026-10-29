@@ -14,12 +14,12 @@ type Active = Map<string, Insight>;
 const entries = (list: InsightEntry[]): Active => list as unknown as Active;
 const active = (...list: Insight[]): Active => entries(list.map((insight) => ({ type: 'raised' as const, insight })));
 
-const brake = make('bandOutLap', 'brakesC.fr', 'critical', 'damage', 230_000, { channel: 'brakesC.fr', lo: 300, hi: 900 });
+const brake = make('bandOutLap', 'brakesC.fr', 'critical', 'car', 230_000, { channel: 'brakesC.fr', lo: 300, hi: 900 });
 const fuel = make('fuelShort', 'fuel', 'critical', 'energy', 230_000, { marginLaps: -0.7 });
 const carcass = make('bandOut', 'tyre.carcassC.fr', 'advisory', 'tyres', 229_000, { channel: 'tyre.carcassC.fr', state: 'above', value: 109, lo: 85, hi: 105 });
 const warning = make('warningLast', 'warnings', 'advisory', 'race', 210_000, { warnings: 2, before: 3 });
 const wing = make('damageJump', '140000', 'critical', 'damage', 140_000, { lap: 12, parts: 'frontLeftWingPct', deltaPct: 12 });
-const engine = make('bandOut', 'engineC', 'advisory', 'damage', 225_000, { channel: 'engineC', state: 'above', value: 127, lo: 90, hi: 120 });
+const engine = make('bandOut', 'engineC', 'advisory', 'car', 225_000, { channel: 'engineC', state: 'above', value: 127, lo: 90, hi: 120 });
 const pressure = make('bandOut', 'tyre.pressurePsi.rl', 'advisory', 'tyres', 200_000, { channel: 'tyre.pressurePsi.rl', state: 'below', value: 21.2, lo: 21.5, hi: 23.5 });
 
 /** Synthetic cases and fit expectations for `alarm-list`. */

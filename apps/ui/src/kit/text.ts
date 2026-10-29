@@ -177,6 +177,7 @@ export const alertGroups = {
     strategy: 'strategy',
     tyres: 'tyres',
     energy: 'energy',
+    car: 'car',
     damage: 'damage',
     race: 'race',
     feed: 'feed',
