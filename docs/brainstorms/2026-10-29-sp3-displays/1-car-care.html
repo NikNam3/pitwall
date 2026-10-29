@@ -1,0 +1,93 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>1 · Car care displays (milestone "car")</title><style>
+:root { --bg:#000; --band:#141416; --rowband:#0d0d0f; --border:#25272c; --text:#d9dbe0; --dim:#8d9199; --faint:#5c6068;
+  --crit:#ff5c5c; --warn:#f0b429; --best:#b06cff; --pb:#3fcf70; --own:#fff; --grid:#1c1d21;
+  --cS:#ff7a70; --cM:#f5d547; --cH:#ffffff; --font:'JetBrains Mono',monospace; --px:14px; --line:1.4; }
+* { box-sizing:border-box; margin:0; padding:0; }
+body { background:var(--bg); color:var(--text); font-family:var(--font); font-size:var(--px); line-height:var(--line);
+  font-variant-ligatures:none; padding:24px 28px 56px; }
+h1 { font-size:var(--px); font-weight:600; margin-bottom:4px; }
+h2 { font-size:var(--px); font-weight:500; color:var(--dim); margin:26px 0 8px; }
+.note { color:var(--dim); max-width:150ch; margin-bottom:10px; }
+.note b, .note em { color:var(--text); font-weight:500; font-style:normal; }
+.row { display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap; }
+.panel { background:var(--bg); display:inline-block; vertical-align:top; }
+.ph { display:flex; gap:1ch; padding:0 1ch; background:var(--band); white-space:nowrap; color:var(--faint); }
+.ph .t { color:var(--dim); } .ph .sp { flex:1; } .ph .lk { color:var(--text); } .ph .age { color:var(--dim); }
+pre { font-family:inherit; font-size:inherit; line-height:inherit; padding:0 1ch; white-space:pre; }
+.cap { color:var(--faint); margin:4px 0 0; }
+.d { color:var(--dim); } .f { color:var(--faint); } .w { color:var(--warn); } .c { color:var(--crit); }
+.b { color:var(--best); } .g { color:var(--pb); } .o { color:var(--own); font-weight:700; } .hi { color:var(--own); font-weight:700; } .m { font-weight:700; }
+.t2 { color:var(--text); }
+.cS { color:var(--cS); } .cM { color:var(--cM); } .cH { color:var(--cH); }
+.band { background:var(--rowband); display:inline-block; width:100%; }
+.me { color:var(--own); font-weight:700; box-shadow:inset 2px 0 0 var(--text); display:inline-block; width:100%; }
+.inc { box-shadow:inset 2px 0 0 var(--warn); display:inline-block; width:100%; }
+.tip { position:relative; text-decoration:underline dotted var(--faint); }
+.legend { color:var(--dim); max-width:120ch; } .legend div { margin-bottom:4px; } .legend b { color:var(--text); font-weight:500; }
+.q { border-left:2px solid var(--border); padding-left:2ch; margin:10px 0 4px; max-width:130ch; color:var(--dim); }
+.q b { color:var(--text); font-weight:500; }
+svg text { font-family:var(--font); font-size:12px; }
+</style></head><body><h1>1 · Car care displays (milestone "car")</h1>
+<div class="note">Every value is grey unless it is wrong or very important (UI shell rule). <b>Amber</b> = out of band or advisory, <b>red</b> = out for a full lap, a critical alarm, a negative margin. <b>White bold</b> = relevant in the current race moment (no hue: the moment brightens, it doesn't colour). The main number of a card is bold, in normal grey. Empty cells have a reason on hover. All sizes are in character cells; the widths shown are the minimum of each mode.</div>
+<h2>Corner block (V22): full 44×7, compact 26×3</h2>
+<div class="row"><div><div class="panel" style="width:46ch"><div class="ph"><span class="t">Corners</span><span class="lk">1 · KUH</span><span class="sp"></span><span class="age"></span><span><svg width="14" height="14" viewBox="0 0 14 14" style="vertical-align:-2px"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.1" stroke-dasharray="2 1.4"/><circle cx="7" cy="7" r="2.1" fill="none" stroke="currentColor" stroke-width="1.1"/></svg></span></div><pre><span class="f">     SURF  CARC   PSI  BRAKE  WEAR</span>
+ FL    98   101  23.1    812   18%
+<span class="band"> FR   104   <span class="w">109</span>  23.4   <span class="c">1043</span>   21%</span>
+ RL    95    99  22.6    534   15%
+<span class="band"> RR    97   102  22.8    561   17%</span>
+
+ ENG  112 °C</pre></div><div class="cap">full · FR carcass out of band (amber), FR brake out for a full lap (red)</div></div><div><div class="panel" style="width:28ch"><div class="ph"><span class="t">Corners</span><span class="lk">1 · KUH</span><span class="sp"></span><span class="age"></span><span><svg width="14" height="14" viewBox="0 0 14 14" style="vertical-align:-2px"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.1" stroke-dasharray="2 1.4"/><circle cx="7" cy="7" r="2.1" fill="none" stroke="currentColor" stroke-width="1.1"/></svg></span></div><pre> FL  98° 18%  FR <span class="w">104°</span> 21%
+ RL  95° 15%  RR  97° 17%
+ BRK <span class="c">FR 1043</span>  ENG 112</pre></div><div class="cap">compact · surface temp and wear; the worst brake and the engine</div></div></div>
+<h2>Tyre life (V21): 47×5</h2>
+<div class="row"><div><div class="panel" style="width:49ch"><div class="ph"><span class="t">Tyre life</span><span class="lk">1 · KUH</span><span class="sp"></span><span class="age">M · 12 laps old</span><span><svg width="14" height="14" viewBox="0 0 14 14" style="vertical-align:-2px"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.1" stroke-dasharray="2 1.4"/><circle cx="7" cy="7" r="2.1" fill="none" stroke="currentColor" stroke-width="1.1"/></svg></span></div><pre><span class="f">    WEAR                  NOW %/LAP LAPS TO 70%</span>
+ FL █████<span class="f">░</span><span class="f">░</span><span class="f">░</span><span class="f">░</span><span class="f">░</span><span class="f">░</span><span class="d">:</span><span class="f">░</span><span class="f">░</span><span class="d">|</span><span class="f">░</span><span class="f">░</span><span class="f">░</span><span class="f">░</span><span class="f">░</span>  18%   1.4          37
+<span class="band"> FR ██████<span class="f">░</span><span class="f">░</span><span class="f">░</span><span class="f">░</span><span class="f">░</span><span class="d">:</span><span class="f">░</span><span class="f">░</span><span class="d">|</span><span class="f">░</span><span class="f">░</span><span class="f">░</span><span class="f">░</span><span class="f">░</span>  21%   1.7          29</span>
+ RL ████<span class="f">░</span><span class="f">░</span><span class="f">░</span><span class="f">░</span><span class="f">░</span><span class="f">░</span><span class="f">░</span><span class="d">:</span><span class="f">░</span><span class="f">░</span><span class="d">|</span><span class="f">░</span><span class="f">░</span><span class="f">░</span><span class="f">░</span><span class="f">░</span>  15%   1.2          46
+<span class="band"> RR █████<span class="f">░</span><span class="f">░</span><span class="f">░</span><span class="f">░</span><span class="f">░</span><span class="f">░</span><span class="d">:</span><span class="f">░</span><span class="f">░</span><span class="d">|</span><span class="f">░</span><span class="f">░</span><span class="f">░</span><span class="f">░</span><span class="f">░</span>  17%   1.3          41</span></pre></div><div class="cap">early stint · LAPS TO 70% = laps until the wear reaches the 70 % limit at this rate · | = limit, : = the game's life span</div></div><div><div class="panel" style="width:49ch"><div class="ph"><span class="t">Tyre life</span><span class="lk">1 · KUH</span><span class="sp"></span><span class="age">M · 31 laps old</span><span><svg width="14" height="14" viewBox="0 0 14 14" style="vertical-align:-2px"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.1" stroke-dasharray="2 1.4"/><circle cx="7" cy="7" r="2.1" fill="none" stroke="currentColor" stroke-width="1.1"/></svg></span></div><pre><span class="f">    WEAR                  NOW %/LAP LAPS TO 70%</span>
+ FL ███████████<span class="d">:</span><span class="f">░</span><span class="f">░</span><span class="d">|</span><span class="f">░</span><span class="f">░</span><span class="f">░</span><span class="f">░</span><span class="f">░</span>  61%   1.9           4
+<span class="band"> FR ███████████<span class="d">:</span>█<span class="f">░</span><span class="d">|</span><span class="f">░</span><span class="f">░</span><span class="f">░</span><span class="f">░</span><span class="f">░</span>  66%   2.0 <span class="c">          2</span></span>
+ RL ███████████<span class="d">:</span><span class="f">░</span><span class="f">░</span><span class="d">|</span><span class="f">░</span><span class="f">░</span><span class="f">░</span><span class="f">░</span><span class="f">░</span>  57%   1.6           8
+<span class="band"> RR ███████████<span class="d">:</span><span class="f">░</span><span class="f">░</span><span class="d">|</span><span class="f">░</span><span class="f">░</span><span class="f">░</span><span class="f">░</span><span class="f">░</span>  60%   1.7           5</span></pre></div><div class="cap">late stint · FR 2 laps to the limit (red: below the alarm threshold of 3 laps)</div></div></div>
+<h2>Fuel (V20): 30×6</h2>
+<div class="row"><div><div class="panel" style="width:32ch"><div class="ph"><span class="t">Fuel</span><span class="lk">1 · KUH</span><span class="sp"></span><span class="age"></span><span><svg width="14" height="14" viewBox="0 0 14 14" style="vertical-align:-2px"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.1" stroke-dasharray="2 1.4"/><circle cx="7" cy="7" r="2.1" fill="none" stroke="currentColor" stroke-width="1.1"/></svg></span></div><pre> MARGIN <span class="m"> +1.8</span> <span class="m">laps           </span>
+ LASTS   19.4 laps (31.4 kg) 
+ TO GO   17.6 laps           
+ BURN    1.62 kg/lap         
+ SAVE                        
+<span class="f"> GAME    +1.6 laps margin    </span></pre></div><div class="cap">margin positive: save target empty (not applicable)</div></div><div><div class="panel" style="width:32ch"><div class="ph"><span class="t">Fuel</span><span class="lk">1 · KUH</span><span class="sp"></span><span class="age"></span><span><svg width="14" height="14" viewBox="0 0 14 14" style="vertical-align:-2px"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.1" stroke-dasharray="2 1.4"/><circle cx="7" cy="7" r="2.1" fill="none" stroke="currentColor" stroke-width="1.1"/></svg></span></div><pre> MARGIN <span class="c m"> −0.7</span> <span class="c m">laps           </span>
+ LASTS   15.3 laps (26.2 kg) 
+ TO GO   16.0 laps           
+ BURN    1.71 kg/lap         
+ SAVE    0.07 kg/lap         
+<span class="f"> GAME    −0.4 laps margin    </span></pre></div><div class="cap">margin negative (red): save target shown</div></div></div>
+<div class="note">MARGIN = LASTS − TO GO: how many laps the fuel lasts at this burn, minus the laps still to race. The game's own figure is dim: its meaning (absolute laps or surplus) is unverified. Numbers are right-aligned in a fixed field, so the decimal points line up.</div>
+<h2>ERS budget (V23): 50×4</h2>
+<div class="row"><div><div class="panel" style="width:52ch"><div class="ph"><span class="t">ERS</span><span class="lk">1 · KUH</span><span class="sp"></span><span class="age"></span><span><svg width="14" height="14" viewBox="0 0 14 14" style="vertical-align:-2px"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.1" stroke-dasharray="2 1.4"/><circle cx="7" cy="7" r="2.1" fill="none" stroke="currentColor" stroke-width="1.1"/></svg></span></div><pre> STORE   █████████<span class="f">░</span><span class="f">░</span><span class="f">░</span><span class="d">|</span><span class="f">░</span><span class="f">░</span><span class="f">░</span><span class="f">░</span><span class="f">░</span><span class="f">░</span><span class="f">░</span>  1.9 MJ  ▲ harvesting
+ DEPLOY  this lap              2.1 MJ, limit 4.0 
+ HARVEST this lap              1.3 MJ            
+ TREND   per lap              +0.4 MJ, attack in 2 laps</pre></div><div class="cap">below the attack level (the | in the bar), rising; harvesting now</div></div><div><div class="panel" style="width:52ch"><div class="ph"><span class="t">ERS</span><span class="lk">1 · KUH</span><span class="sp"></span><span class="age"></span><span><svg width="14" height="14" viewBox="0 0 14 14" style="vertical-align:-2px"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.1" stroke-dasharray="2 1.4"/><circle cx="7" cy="7" r="2.1" fill="none" stroke="currentColor" stroke-width="1.1"/></svg></span></div><pre> STORE   ████████████<span class="d">|</span>█<span class="f">░</span><span class="f">░</span><span class="f">░</span><span class="f">░</span><span class="f">░</span><span class="f">░</span>  2.9 MJ  ▼ deploying
+ DEPLOY  this lap              2.1 MJ, limit 4.0 
+ HARVEST this lap              1.3 MJ            
+ TREND   per lap              −0.3 MJ, attack ready</pre></div><div class="cap">above the attack level; deploying now</div></div><div><div class="panel" style="width:52ch"><div class="ph"><span class="t">ERS</span><span class="lk">1 · KUH</span><span class="sp"></span><span class="age"></span><span><svg width="14" height="14" viewBox="0 0 14 14" style="vertical-align:-2px"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.1" stroke-dasharray="2 1.4"/><circle cx="7" cy="7" r="2.1" fill="none" stroke="currentColor" stroke-width="1.1"/></svg></span></div><pre> STORE   ████████████<span class="d">|</span>█<span class="f">░</span><span class="f">░</span><span class="f">░</span><span class="f">░</span><span class="f">░</span><span class="f">░</span> <span class="hi"> 2.9</span> <span class="hi">MJ  ▼ deploying</span>
+ DEPLOY  this lap              2.1 MJ, limit 4.0 
+ HARVEST this lap              1.3 MJ            
+ TREND   per lap              −0.3 <span class="hi">MJ, attack ready</span></pre></div><div class="cap">battle moment: store, flow and "attack ready" white bold</div></div></div>
+<div class="note">The attack level is the | in the bar; its value is in the panel's settings and on hover. When the store is falling and below the level, the attack text is empty. The flow (▼ deploying, ▲ harvesting, or nothing when idle) is live, from the MGU-K power. The deploy mode (none, medium, hotlap, overtake) is dropped here: the driver sets it every corner, so it says little at a glance.</div>
+<h2>Damage card (V31): 44×9</h2>
+<div class="row"><div><div class="panel" style="width:46ch"><div class="ph"><span class="t">Damage</span><span class="lk">1 · KUH</span><span class="sp"></span><span class="age"></span><span><svg width="14" height="14" viewBox="0 0 14 14" style="vertical-align:-2px"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.1" stroke-dasharray="2 1.4"/><circle cx="7" cy="7" r="2.1" fill="none" stroke="currentColor" stroke-width="1.1"/></svg></span></div><pre><span class="f">        L    R    REAR</span>
+ WING  <span class="c">12%</span>   0%    0%
+ FLOOR  4%  DIFF 0%  SIDEPOD 2%
+ GBX    8%  ENG 11%
+<span class="f">        TYRE  BRAKE      TYRE  BRAKE</span>
+ FL      3%    0%   FR    1%    0%
+ RL      0%    0%   RR    0%    0%
+ <span class="c">L14 FL wing +12 %   loss: measuring</span>
+ <span class="f">L09 floor +4 %      loss +0.12 s/lap</span></pre></div><div class="cap">a new jump stays red while its lap-time loss is still being measured (two clean laps)</div></div></div>
+<h2>Alarm list (V25): 62×6</h2>
+<div class="row"><div><div class="panel" style="width:64ch"><div class="ph"><span class="t">Alarms</span><span class="lk"></span><span class="sp"></span><span class="age"></span><span><svg width="14" height="14" viewBox="0 0 14 14" style="vertical-align:-2px"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.1" stroke-dasharray="2 1.4"/><circle cx="7" cy="7" r="2.1" fill="none" stroke="currentColor" stroke-width="1.1"/></svg></span></div><pre> <span class="c">CRIT</span>  L23  KUH  FR brake out of band a full lap  1043 °C
+ <span class="c">CRIT</span>  L23  KUH  fuel short  −0.7 laps
+ <span class="w">ADV </span>  L23  KUH  FR carcass above band  109 °C
+ <span class="w">ADV </span>  L21  KUH  one warning left before a penalty  2/3
+ <span class="f">CRIT  L14  KUH  damage: FL wing +12 %        acknowledged</span>
+ <span class="f">muted: energy (1)</span></pre></div><div class="cap">critical first, then advisory; acknowledged ones stay, dim; muted groups as a count</div></div></div></body></html>

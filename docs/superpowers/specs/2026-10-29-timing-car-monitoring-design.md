@@ -89,7 +89,7 @@ Reads `per-lap-rate`, the lap history (`wearAtEndPct`) and the car state. Per co
 Reads `per-lap-rate`, `session-remaining`, the lap history (`fuelAtStartKg`, `fuelAtEndKg`) and the car state. Fuel now, burn in kg/lap over `forRate` laps, laps of fuel (`kg / burn`), laps left, **margin in laps** (`lapsOfFuel − lapsLeft`), and the **save target** in kg/lap when the margin is negative (`burn − kg / lapsLeft`; `notApplicable` otherwise). The game's `remainingLaps` is published separately as `gameRemainingLaps`, because its meaning is unverified (research 06 §5, item 3).
 
 ### 5.3 `ers` → `ers.car`
-Reads `per-lap-rate`, the lap history (`ersStoreAtEndJ`) and the car state. Store now and capacity, deployed and harvested this lap against the per-lap deploy limit, store trend in J/lap, the attack level (config) and laps until the store reaches it, and the ERS mode.
+Reads `per-lap-rate`, the lap history (`ersStoreAtEndJ`) and the car state. Store now and capacity, the live flow (deploying, harvesting or idle, from the sign of the MGU-K power), deployed and harvested this lap against the per-lap deploy limit, store trend in J/lap, the attack level (config) and laps until the store reaches it, and the ERS mode (published, not displayed).
 
 ### 5.4 `car-bands` → `carBands.car`
 Reads the car state and config. Per channel (tyre surface, carcass and pressure per corner; brake temperature per corner; engine temperature): the value, its state (`below`, `in`, `above`), since when it is out of band, and whether it has been out for a full lap. Tyre bands are per compound. A state change needs the value to cross the band edge by the hysteresis margin, so a value on the edge does not flicker.
@@ -221,6 +221,8 @@ Each is used by two or more displays, so it is built in W0 (13.2), before any di
 | sector status emphasis | `emphasis/` | timing-tower, lap-analysis, projected-lap | timing |
 
 ### 8.5 Mockups
+**Approved 2026-10-29** (A1, B2 and the presentation rules): `docs/brainstorms/2026-10-29-sp3-displays/README.md`. Its rules (lap number vs lap count, column grids with aligned decimals, white bold for the moment) bind every display.
+
 In W0 the supervisor makes the mockups of all twelve displays with the cached headless Chromium, checked by screenshot, and the user approves them in one session before any display's test phase starts. They settle the column layout and size modes of every display, and the two open colour questions of the UI shell spec (13): **compound as a letter or a letter plus colour**, and **which personal-best sectors light up**. Both become theme variants, as the UI shell spec planned.
 
 ## 9. Workbooks
@@ -442,6 +444,7 @@ export type ErsState = {
   attackLevelJ: Joules;
   lapsToAttackLevel: Known<number>;
   mode: Known<'none' | 'medium' | 'hotlap' | 'overtake'>;
+  flow: Known<'deploying' | 'harvesting' | 'idle'>; // live, from the MGU-K power
 };
 
 export type BandState = 'below' | 'in' | 'above';
@@ -554,7 +557,7 @@ type InsightLineProps = { insight: Insight; acknowledged: boolean };
 type PhaseBand = { from: number; to: number; kind: 'sc' | 'vsc' | 'red' };
 ```
 
-`kit/values/format.ts` gains `formatCelsius`, `formatPsi`, `formatPercent`, `formatKg`, `formatLaps`, `formatJoules` and `formatDeltaMs` (signed). `emphasis/` gains `sectorStatusRole(status, focus)` and `ourCarRole(ours)`.
+`kit/values/format.ts` gains `formatLapNumber` (`L23`), `formatLaps` (`1.8 laps`), `formatCelsius`, `formatPsi`, `formatPercent`, `formatKg`, `formatLaps`, `formatJoules` and `formatDeltaMs` (signed). `emphasis/` gains `sectorStatusRole(status, focus)` and `ourCarRole(ours)`.
 
 ## Appendix B: Config defaults, values to calibrate in sub-project 5
 

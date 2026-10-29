@@ -1,0 +1,82 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>2 · Timing displays (milestone "race")</title><style>
+:root { --bg:#000; --band:#141416; --rowband:#0d0d0f; --border:#25272c; --text:#d9dbe0; --dim:#8d9199; --faint:#5c6068;
+  --crit:#ff5c5c; --warn:#f0b429; --best:#b06cff; --pb:#3fcf70; --own:#fff; --grid:#1c1d21;
+  --cS:#ff7a70; --cM:#f5d547; --cH:#ffffff; --font:'JetBrains Mono',monospace; --px:14px; --line:1.4; }
+* { box-sizing:border-box; margin:0; padding:0; }
+body { background:var(--bg); color:var(--text); font-family:var(--font); font-size:var(--px); line-height:var(--line);
+  font-variant-ligatures:none; padding:24px 28px 56px; }
+h1 { font-size:var(--px); font-weight:600; margin-bottom:4px; }
+h2 { font-size:var(--px); font-weight:500; color:var(--dim); margin:26px 0 8px; }
+.note { color:var(--dim); max-width:150ch; margin-bottom:10px; }
+.note b, .note em { color:var(--text); font-weight:500; font-style:normal; }
+.row { display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap; }
+.panel { background:var(--bg); display:inline-block; vertical-align:top; }
+.ph { display:flex; gap:1ch; padding:0 1ch; background:var(--band); white-space:nowrap; color:var(--faint); }
+.ph .t { color:var(--dim); } .ph .sp { flex:1; } .ph .lk { color:var(--text); } .ph .age { color:var(--dim); }
+pre { font-family:inherit; font-size:inherit; line-height:inherit; padding:0 1ch; white-space:pre; }
+.cap { color:var(--faint); margin:4px 0 0; }
+.d { color:var(--dim); } .f { color:var(--faint); } .w { color:var(--warn); } .c { color:var(--crit); }
+.b { color:var(--best); } .g { color:var(--pb); } .o { color:var(--own); font-weight:700; } .hi { color:var(--own); font-weight:700; } .m { font-weight:700; }
+.t2 { color:var(--text); }
+.cS { color:var(--cS); } .cM { color:var(--cM); } .cH { color:var(--cH); }
+.band { background:var(--rowband); display:inline-block; width:100%; }
+.me { color:var(--own); font-weight:700; box-shadow:inset 2px 0 0 var(--text); display:inline-block; width:100%; }
+.inc { box-shadow:inset 2px 0 0 var(--warn); display:inline-block; width:100%; }
+.tip { position:relative; text-decoration:underline dotted var(--faint); }
+.legend { color:var(--dim); max-width:120ch; } .legend div { margin-bottom:4px; } .legend b { color:var(--text); font-weight:500; }
+.q { border-left:2px solid var(--border); padding-left:2ch; margin:10px 0 4px; max-width:130ch; color:var(--dim); }
+.q b { color:var(--text); font-weight:500; }
+svg text { font-family:var(--font); font-size:12px; }
+</style></head><body><h1>2 · Timing displays (milestone "race")</h1>
+<div class="note">Same colour rules as page 1, with A1 (letter-only compounds) and B2 (purple for everyone, green only for our cars) applied. <b>L23 is always a lap number; a count of laps always says "laps".</b> <b>Amber left bar</b> in the tower = a car involved in a major incident in the incident moment (here SAR, after its collision with OCO). Gaps come from our own mini-sector timing, the same numbers in every display.</div>
+<h2>Timing tower (V29): full 84×9, compact 30×6</h2>
+<div class="row"><div><div class="panel" style="width:86ch"><div class="ph"><span class="t">Timing</span><span class="lk">1 · KUH</span><span class="sp"></span><span class="age">L23/62</span><span><svg width="14" height="14" viewBox="0 0 14 14" style="vertical-align:-2px"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.1" stroke-dasharray="2 1.4"/><circle cx="7" cy="7" r="2.1" fill="none" stroke="currentColor" stroke-width="1.1"/></svg></span></div><pre><span class="f">  P    DRV     GAP    INT  TO US     LAST     S1     S2     S3 T AGE ST PEN PIT</span>
+  1    VER                −9.102 1:44.912 <span class="b">28.104</span> 41.311 35.497 M  14  1        
+<span class="band">  2 ▲1 NOR  +2.184 +2.184 −6.918 1:45.031 28.211 41.402 35.418 M  14  1        </span>
+  3 ▼1 LEC  +5.903 +3.719 −3.199 1:45.208 28.240 41.630 <span class="b">35.338</span> H  23  0 <span class="w"> 5s</span>    
+<span class="me">  4    KUH  +9.102 +3.199        <span class="g">1:44.876</span> 28.150 <span class="b">41.288</span> <span class="g">35.438</span> M  12  1        </span>
+<span class="band">  5 ▲2 ALB +14.880 +5.778 +5.778          28.320               H   1  1     OUT</span>
+  6 ▼1 PIA +16.025 +1.145 +6.923 1:45.660 28.402 41.771 35.487 M  15  1        
+<span class="inc">  7    SAR  +1 lap               1:46.902 28.771 42.004 36.127 H  30  0        </span>
+<span class="f">  –    OCO     DNF · L23 · collision </span></pre></div><div class="cap">full · ▲▼ position change since the start · TO US = gap to our car · SAR one lap down · OCO retired, dim, at the bottom</div></div></div>
+<div class="row" style="margin-top:12px"><div><div class="panel" style="width:32ch"><div class="ph"><span class="t">Timing</span><span class="lk">1 · KUH</span><span class="sp"></span><span class="age">L23</span><span><svg width="14" height="14" viewBox="0 0 14 14" style="vertical-align:-2px"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.1" stroke-dasharray="2 1.4"/><circle cx="7" cy="7" r="2.1" fill="none" stroke="currentColor" stroke-width="1.1"/></svg></span></div><pre><span class="f">  P    DRV    INT     LAST</span>
+  1    VER        1:44.912
+<span class="band">  2 ▲1 NOR +2.184 1:45.031</span>
+  3 ▼1 LEC +3.719 1:45.208
+<span class="me">  4    KUH +3.199 <span class="g">1:44.876</span></span>
+<span class="band">  5 ▲2 ALB +5.778         </span></pre></div><div class="cap">compact · drops GAP, TO US, sectors, tyre, stops, penalties first</div></div></div>
+<h2>Lap analysis (V28): 44×6</h2>
+<div class="row"><div><div class="panel" style="width:46ch"><div class="ph"><span class="t">Lap analysis</span><span class="lk">1 · KUH</span><span class="sp"></span><span class="age">ref KUH</span><span><svg width="14" height="14" viewBox="0 0 14 14" style="vertical-align:-2px"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.1" stroke-dasharray="2 1.4"/><circle cx="7" cy="7" r="2.1" fill="none" stroke="currentColor" stroke-width="1.1"/></svg></span></div><pre><span class="f"> DRV     BEST     S1     S2     S3     THEO</span>
+<span class="me"> KUH 1:44.876 28.150 <span class="b">41.288</span> 35.438 1:44.876</span>
+ VER <span class="b">  −0.756</span> <span class="b">−0.046</span> +0.023 +0.059   −0.571
+<span class="band"> NOR   −0.574 +0.061 +0.114 −0.020   −0.433</span>
+ LEC   −0.278 +0.090 +0.342 <span class="b">−0.100</span>   −0.106
+<span class="band"> PIA   −0.175 +0.252 +0.483 +0.049   +0.196</span></pre></div><div class="cap">deltas to the reference car (our car, in absolute times); purple = session best; THEO = theoretical best</div></div></div>
+<h2>Projected lap (V10 + V11): 42×4</h2>
+<div class="note">Δ in the PROJ row = to our best lap (green: a new personal best); in the CUT-OFF row = our margin to the cut-off (negative = outside). FINISH = time left on the clock when we cross the line: positive means another lap can still start.</div>
+<div class="row"><div><div class="panel" style="width:44ch"><div class="ph"><span class="t">Projected lap</span><span class="lk">1 · KUH</span><span class="sp"></span><span class="age">Q1 · 3:12 left</span><span><svg width="14" height="14" viewBox="0 0 14 14" style="vertical-align:-2px"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.1" stroke-dasharray="2 1.4"/><circle cx="7" cy="7" r="2.1" fill="none" stroke="currentColor" stroke-width="1.1"/></svg></span></div><pre><span class="f">             TIME POS       Δ             </span>
+ PROJ    1:23.412  P6 <span class="g"> −0.118</span> to best     
+ CUT-OFF 1:24.006 P15  +0.594 margin      
+ FINISH                38.2 s left at line</pre></div><div class="cap">Q1 push lap, inside the cut-off</div></div><div><div class="panel" style="width:44ch"><div class="ph"><span class="t">Projected lap</span><span class="lk">1 · KUH</span><span class="sp"></span><span class="age">Q1 · 1:58 left</span><span><svg width="14" height="14" viewBox="0 0 14 14" style="vertical-align:-2px"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.1" stroke-dasharray="2 1.4"/><circle cx="7" cy="7" r="2.1" fill="none" stroke="currentColor" stroke-width="1.1"/></svg></span></div><pre><span class="f">             TIME POS       Δ             </span>
+ PROJ    1:24.311 P17  +0.781 to best     
+ CUT-OFF 1:24.006 P15 <span class="c"> −0.305</span> margin      
+ FINISH                21.4 s left at line</pre></div><div class="cap">projection outside the cut-off (red)</div></div><div><div class="panel" style="width:44ch"><div class="ph"><span class="t">Projected lap</span><span class="lk">1 · KUH</span><span class="sp"></span><span class="age">Q2 · 1:31 left</span><span><svg width="14" height="14" viewBox="0 0 14 14" style="vertical-align:-2px"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.1" stroke-dasharray="2 1.4"/><circle cx="7" cy="7" r="2.1" fill="none" stroke="currentColor" stroke-width="1.1"/></svg></span></div><pre><span class="f">             TIME POS       Δ             </span>
+ PROJ                         <span class="f">out lap     </span>
+ CUT-OFF 1:23.870 P10                     
+ FINISH                 3.9 s left at line</pre></div><div class="cap">out lap: no projection yet</div></div></div>
+<h2>Battle cards (V14): 70×3</h2>
+<div class="row"><div><div class="panel" style="width:72ch"><div class="ph"><span class="t">Battle</span><span class="lk">1 · KUH</span><span class="sp"></span><span class="age"></span><span><svg width="14" height="14" viewBox="0 0 14 14" style="vertical-align:-2px"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.1" stroke-dasharray="2 1.4"/><circle cx="7" cy="7" r="2.1" fill="none" stroke="currentColor" stroke-width="1.1"/></svg></span></div><pre><span class="f">        DRV    GAP    CLOSING   TO DRS PACE Δ MARGIN TYRES      ERS</span>
+ AHEAD  LEC +3.199 0.31 s/lap 7.1 laps  +0.29  −0.71 M12 H23 3.1 MJ
+<span class="band"> BEHIND ALB −0.841 0.22 s/lap   in DRS  −0.42  −1.42 M12 H1        </span></pre></div><div class="cap">one row per neighbour · PACE Δ positive = we are faster · MARGIN = pace delta minus the overtaking threshold (1.0 s) · TYRES ours then theirs · empty ERS = hidden by realism</div></div><div><div class="panel" style="width:72ch"><div class="ph"><span class="t">Battle</span><span class="lk">1 · KUH</span><span class="sp"></span><span class="age"></span><span><svg width="14" height="14" viewBox="0 0 14 14" style="vertical-align:-2px"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.1" stroke-dasharray="2 1.4"/><circle cx="7" cy="7" r="2.1" fill="none" stroke="currentColor" stroke-width="1.1"/></svg></span></div><pre><span class="f">        DRV    GAP    CLOSING   TO DRS PACE Δ MARGIN TYRES      ERS</span>
+ AHEAD  LEC +3.199 0.31 s/lap 7.1 laps  +0.29  −0.71 M12 H23 3.1 MJ
+<span class="band"> BEHIND <span class="hi">ALB</span> <span class="hi">−0.841</span> 0.22 s/lap <span class="hi">  in DRS</span>  −0.42  −1.42 M12 H1        </span></pre></div><div class="cap">battle moment: the row in DRS range (ALB, behind) turns white bold</div></div></div>
+<h2>Incident feed (V35): 70×5</h2>
+<div class="row"><div><div class="panel" style="width:72ch"><div class="ph"><span class="t">Incidents</span><span class="lk"></span><span class="sp"></span><span class="age"></span><span><svg width="14" height="14" viewBox="0 0 14 14" style="vertical-align:-2px"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.1" stroke-dasharray="2 1.4"/><circle cx="7" cy="7" r="2.1" fill="none" stroke="currentColor" stroke-width="1.1"/></svg></span></div><pre> L23  OCO SAR  collision           lost 4.2 s  us P5→P4, OCO +4.1→DNF
+ L22  ALB      time loss (T7)      lost 6.1 s  us —, ALB −1.9→+5.8
+<span class="f"> L21  PIA      warning 2/3</span>
+<span class="f"> L19  SC       safety car deployed</span>
+ L14  KUH      damage FL wing +12  lost <span class="tip">      </span></pre></div><div class="cap">minor entries (warnings, SC start) dim · an unresolved time loss is empty</div></div><div><div class="panel" style="width:72ch"><div class="ph"><span class="t">Incidents</span><span class="lk"></span><span class="sp"></span><span class="age"></span><span><svg width="14" height="14" viewBox="0 0 14 14" style="vertical-align:-2px"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.1" stroke-dasharray="2 1.4"/><circle cx="7" cy="7" r="2.1" fill="none" stroke="currentColor" stroke-width="1.1"/></svg></span></div><pre> <span class="w">L23  OCO SAR  collision           lost 4.2 s  us P5→P4, OCO +4.1→DNF</span>
+ L22  ALB      time loss (T7)      lost 6.1 s  us —, ALB −1.9→+5.8
+<span class="f"> L21  PIA      warning 2/3</span>
+<span class="f"> L19  SC       safety car deployed</span>
+ L14  KUH      damage FL wing +12  lost <span class="tip">      </span></pre></div><div class="cap">incident moment: the newest major entry in amber</div></div></div></body></html>

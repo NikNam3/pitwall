@@ -112,7 +112,9 @@ Spec section 13 is the schedule. In short:
 
 **Done by:** the supervisor, with the user. Not a two-phase task.
 
-**Depends on:** Task 3 (the contract types give the mockups real field names). **Blocks:** every display's test phase (Tasks 24–35) and Task 36.
+**Status: done 2026-10-29** (built from the spec's contracts before Task 3). Approved values and rules: `docs/brainstorms/2026-10-29-sp3-displays/README.md`. Display test agents read that README and the HTML pages.
+
+**Blocks:** every display's test phase (Tasks 24–35) and Task 36.
 
 - [ ] Write full HTML documents in `docs/brainstorms/2026-10-29-sp3-displays/`, one per display. Each shows compact and full mode at the theme's font size, with colour only where the spec's "Lights up" column says.
 - [ ] Add `0-compound-and-sectors.html` with the two open colour questions as variants: compound as a letter or a letter plus colour; purple and green for our cars only, or for every car.
@@ -248,12 +250,13 @@ Spec section 13 is the schedule. In short:
 
 **Depends on:** Task 3. The look follows Task 0 once approved: the plumbing can start before, the visual details are adjusted after.
 
-**Interfaces (produces):** the props of spec A.4 for `CornerGrid`, `Bar`, `InsightLine` and `CompoundMark`. `kit/values/format.ts` gains `formatCelsius`, `formatPsi`, `formatPercent`, `formatKg`, `formatLaps`, `formatJoules` (shown as MJ with one decimal) and `formatDeltaMs` (signed, `+0.412`).
+**Interfaces (produces):** the props of spec A.4 for `CornerGrid`, `Bar`, `InsightLine` and `CompoundMark`. `kit/values/format.ts` gains `formatLapNumber` (`L23`), `formatLaps` (`1.8 laps`; the Task 0 rule: a lap number is `L23`, a count always says laps), `formatCelsius`, `formatPsi`, `formatPercent`, `formatKg`, `formatLaps`, `formatJoules` (shown as MJ with one decimal) and `formatDeltaMs` (signed, `+0.412`).
 
 **Requirements:**
 1. `Bar` renders in text cells only (block characters), so it obeys the character-cell sizing. An unknown value is an empty bar with the reason on hover.
 2. `InsightLine` is the top bar's current insight rendering, moved. The top bar then uses the kit piece, and its baselines don't change.
-3. `CompoundMark` reads the theme variant from Task 0: letter only, or letter plus colour.
+3. `CompoundMark` reads the theme variant: letter only by default (Task 0, A1), letter plus colour in `quiet-compound-colour`.
+4. A kit grid helper for character-cell tables with fixed column widths and right-aligned numbers in fixed decimals, so `.` and `:` line up (Task 0 README); `Table` gains it if it doesn't do this already.
 
 **Tests:**
 - `format.test.ts`: each new formatter, including negative, zero and unknown
@@ -276,11 +279,11 @@ Spec section 13 is the schedule. In short:
 **Interfaces (produces):**
 - `CarLabel`, `PositionMark` and `PhaseBand` (spec A.4). `Chart` gains an optional `bands: PhaseBand[]` prop.
 - `emphasis/`:
-  - `sectorStatusRole(status: SectorStatus, focus: { ours: boolean }): Role | undefined`: `sessionBest` → the purple role, `personalBest` → the green role, limited to our cars or applied to every car per Task 0's variant
+  - `sectorStatusRole(status: SectorStatus, focus: { ours: boolean }): Role | undefined`: `sessionBest` → the purple role for every car, `personalBest` → the green role for our cars only (Task 0, B2)
   - `ourCarRole(ours: boolean): Role | undefined`
 
 **Tests:**
-- `emphasis.test.ts`: each branch of both functions under both variants
+- `emphasis.test.ts`: each branch of both functions, including a rival's personal best → `undefined`
 - `chart data.test.ts`: phase bands outside the x-range are clipped
 - gallery cells for each piece
 
@@ -599,7 +602,7 @@ Every display task has the same shape. Each row of the tables in spec 8.2 and 8.
 | 26 | `corner-block` | 0, 6, 14, 15 | `bandRole(reading)`: `warning` out of band, `critical` out for a full lap | carcass `notApplicable` renders empty without a gap in the grid |
 | 27 | `tyre-life-bar` | 0, 6, 15 | `lapsToLimitRole(laps, threshold)` | the game's life span marker; an unknown rate gives an empty bar tail |
 | 28 | `fuel-gauge` | 0, 6, 16 | `marginRole(marginLaps)` | the game's estimate is dimmed and labelled as the game's |
-| 29 | `ers-budget` | 0, 6, 17 | `ersRole(moment, lapsToAttack)` | without `raceMoment.current` (optional) nothing lights up |
+| 29 | `ers-budget` | 0, 6, 17 | `ersRole(moment, lapsToAttack)` | without `raceMoment.current` (optional) nothing lights up; the flow arrow for each `flow` value |
 | 30 | `damage-card` | 0, 6, 18 | `jumpRole(jump, newest)`: the newest jump is highlighted while its `lossMsPerLap` is still `insufficientData` (no clock in the widget) | two jumps: the newest first |
 | 31 | `timing-tower` | 0, 6, 7, 13, 19 | `sectorStatusRole` (kit), `ourCarRole` (kit), `neighbourhoodRole(moment, inNeighbourhood)` | a lapped car shows `+1L`; a retired car sits at the bottom, dim |
 | 32 | `lap-analysis` | 0, 6, 7, 19 | `sectorStatusRole` (kit) | the reference car's own row shows no deltas |

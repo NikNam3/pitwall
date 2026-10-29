@@ -1,0 +1,62 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>0 · Two open colour questions</title><style>
+:root { --bg:#000; --band:#141416; --rowband:#0d0d0f; --border:#25272c; --text:#d9dbe0; --dim:#8d9199; --faint:#5c6068;
+  --crit:#ff5c5c; --warn:#f0b429; --best:#b06cff; --pb:#3fcf70; --own:#fff; --grid:#1c1d21;
+  --cS:#ff7a70; --cM:#f5d547; --cH:#ffffff; --font:'JetBrains Mono',monospace; --px:14px; --line:1.4; }
+* { box-sizing:border-box; margin:0; padding:0; }
+body { background:var(--bg); color:var(--text); font-family:var(--font); font-size:var(--px); line-height:var(--line);
+  font-variant-ligatures:none; padding:24px 28px 56px; }
+h1 { font-size:var(--px); font-weight:600; margin-bottom:4px; }
+h2 { font-size:var(--px); font-weight:500; color:var(--dim); margin:26px 0 8px; }
+.note { color:var(--dim); max-width:150ch; margin-bottom:10px; }
+.note b, .note em { color:var(--text); font-weight:500; font-style:normal; }
+.row { display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap; }
+.panel { background:var(--bg); display:inline-block; vertical-align:top; }
+.ph { display:flex; gap:1ch; padding:0 1ch; background:var(--band); white-space:nowrap; color:var(--faint); }
+.ph .t { color:var(--dim); } .ph .sp { flex:1; } .ph .lk { color:var(--text); } .ph .age { color:var(--dim); }
+pre { font-family:inherit; font-size:inherit; line-height:inherit; padding:0 1ch; white-space:pre; }
+.cap { color:var(--faint); margin:4px 0 0; }
+.d { color:var(--dim); } .f { color:var(--faint); } .w { color:var(--warn); } .c { color:var(--crit); }
+.b { color:var(--best); } .g { color:var(--pb); } .o { color:var(--own); font-weight:700; } .hi { color:var(--own); font-weight:700; } .m { font-weight:700; }
+.t2 { color:var(--text); }
+.cS { color:var(--cS); } .cM { color:var(--cM); } .cH { color:var(--cH); }
+.band { background:var(--rowband); display:inline-block; width:100%; }
+.me { color:var(--own); font-weight:700; box-shadow:inset 2px 0 0 var(--text); display:inline-block; width:100%; }
+.inc { box-shadow:inset 2px 0 0 var(--warn); display:inline-block; width:100%; }
+.tip { position:relative; text-decoration:underline dotted var(--faint); }
+.legend { color:var(--dim); max-width:120ch; } .legend div { margin-bottom:4px; } .legend b { color:var(--text); font-weight:500; }
+.q { border-left:2px solid var(--border); padding-left:2ch; margin:10px 0 4px; max-width:130ch; color:var(--dim); }
+.q b { color:var(--text); font-weight:500; }
+svg text { font-family:var(--font); font-size:12px; }
+</style></head><body><h1>0 · Two open colour questions</h1>
+<div class="note">The UI shell left two colour questions to the first timing displays (spec 8.5). Both become theme variants, so they can be switched later. Purple = session best, green = personal best. KUH (white, bar) is our car.</div>
+<h2>Question A: compound as a letter, or letter plus colour?</h2>
+<div class="row"><div><div class="panel" style="width:46ch"><div class="ph"><span class="t">Timing</span><span class="lk">1 · KUH</span><span class="sp"></span><span class="age">L23/62</span><span><svg width="14" height="14" viewBox="0 0 14 14" style="vertical-align:-2px"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.1" stroke-dasharray="2 1.4"/><circle cx="7" cy="7" r="2.1" fill="none" stroke="currentColor" stroke-width="1.1"/></svg></span></div><pre><span class="f">P  DRV   LAST       S1     S2     S3  T AGE</span>
+ 1 VER 1:44.912 <span class="b">28.104</span> 41.311 35.497  M  14
+<span class="band"> 2 NOR 1:45.031 28.211 41.402 35.418  M  14</span>
+ 3 LEC 1:45.208 28.240 41.630 <span class="b">35.338</span>  H  23
+<span class="me"> 4 KUH <span class="g">1:44.876</span> 28.150 <span class="b">41.288</span> <span class="g">35.438</span>  M  12</span>
+ 5 HAM 1:45.660 28.402 41.771 35.487  S   3</pre></div><div class="cap">A1 · letter only (grey)</div></div><div><div class="panel" style="width:46ch"><div class="ph"><span class="t">Timing</span><span class="lk">1 · KUH</span><span class="sp"></span><span class="age">L23/62</span><span><svg width="14" height="14" viewBox="0 0 14 14" style="vertical-align:-2px"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.1" stroke-dasharray="2 1.4"/><circle cx="7" cy="7" r="2.1" fill="none" stroke="currentColor" stroke-width="1.1"/></svg></span></div><pre><span class="f">P  DRV   LAST       S1     S2     S3  T AGE</span>
+ 1 VER 1:44.912 <span class="b">28.104</span> 41.311 35.497  <span class="cM">M</span>  14
+<span class="band"> 2 NOR 1:45.031 28.211 41.402 35.418  <span class="cM">M</span>  14</span>
+ 3 LEC 1:45.208 28.240 41.630 <span class="b">35.338</span>  <span class="cH">H</span>  23
+<span class="me"> 4 KUH <span class="g">1:44.876</span> 28.150 <span class="b">41.288</span> <span class="g">35.438</span>  <span class="cM">M</span>  12</span>
+ 5 HAM 1:45.660 28.402 41.771 35.487  <span class="cS">S</span>   3</pre></div><div class="cap">A2 · letter plus colour (S red-ish, M yellow, H white)</div></div></div>
+<div class="q"><b>Recommendation: A1, letter only.</b> In A2 three of five rows carry a hue that is neither a highlight nor needed to tell rows apart: the letter already says it. The red-ish soft also competes with the critical red.</div>
+<h2>Question B: which purple and green sectors light up?</h2>
+<div class="row"><div><div class="panel" style="width:46ch"><div class="ph"><span class="t">Timing</span><span class="lk">1 · KUH</span><span class="sp"></span><span class="age">L23/62</span><span><svg width="14" height="14" viewBox="0 0 14 14" style="vertical-align:-2px"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.1" stroke-dasharray="2 1.4"/><circle cx="7" cy="7" r="2.1" fill="none" stroke="currentColor" stroke-width="1.1"/></svg></span></div><pre><span class="f">P  DRV   LAST       S1     S2     S3  T AGE</span>
+ 1 VER 1:44.912 <span class="b">28.104</span> <span class="g">41.311</span> 35.497  M  14
+<span class="band"> 2 NOR 1:45.031 28.211 <span class="g">41.402</span> 35.418  M  14</span>
+ 3 LEC 1:45.208 28.240 41.630 <span class="b">35.338</span>  H  23
+<span class="me"> 4 KUH <span class="g">1:44.876</span> 28.150 <span class="b">41.288</span> <span class="g">35.438</span>  M  12</span>
+ 5 HAM 1:45.660 28.402 41.771 35.487  S   3</pre></div><div class="cap">B1 · purple and green for every car</div></div><div><div class="panel" style="width:46ch"><div class="ph"><span class="t">Timing</span><span class="lk">1 · KUH</span><span class="sp"></span><span class="age">L23/62</span><span><svg width="14" height="14" viewBox="0 0 14 14" style="vertical-align:-2px"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.1" stroke-dasharray="2 1.4"/><circle cx="7" cy="7" r="2.1" fill="none" stroke="currentColor" stroke-width="1.1"/></svg></span></div><pre><span class="f">P  DRV   LAST       S1     S2     S3  T AGE</span>
+ 1 VER 1:44.912 <span class="b">28.104</span> 41.311 35.497  M  14
+<span class="band"> 2 NOR 1:45.031 28.211 41.402 35.418  M  14</span>
+ 3 LEC 1:45.208 28.240 41.630 <span class="b">35.338</span>  H  23
+<span class="me"> 4 KUH <span class="g">1:44.876</span> 28.150 <span class="b">41.288</span> <span class="g">35.438</span>  M  12</span>
+ 5 HAM 1:45.660 28.402 41.771 35.487  S   3</pre></div><div class="cap">B2 · purple for every car, green only for our cars</div></div><div><div class="panel" style="width:46ch"><div class="ph"><span class="t">Timing</span><span class="lk">1 · KUH</span><span class="sp"></span><span class="age">L23/62</span><span><svg width="14" height="14" viewBox="0 0 14 14" style="vertical-align:-2px"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.1" stroke-dasharray="2 1.4"/><circle cx="7" cy="7" r="2.1" fill="none" stroke="currentColor" stroke-width="1.1"/></svg></span></div><pre><span class="f">P  DRV   LAST       S1     S2     S3  T AGE</span>
+ 1 VER 1:44.912 28.104 41.311 35.497  M  14
+<span class="band"> 2 NOR 1:45.031 28.211 41.402 35.418  M  14</span>
+ 3 LEC 1:45.208 28.240 41.630 35.338  H  23
+<span class="me"> 4 KUH <span class="g">1:44.876</span> 28.150 <span class="b">41.288</span> <span class="g">35.438</span>  M  12</span>
+ 5 HAM 1:45.660 28.402 41.771 35.487  S   3</pre></div><div class="cap">B3 · both only for our cars</div></div></div>
+<div class="q"><b>Recommendation: B2.</b> A session best is news whoever sets it (it moves the reference). A rival's personal best is not: in B1 the table fills with green that asks for attention it doesn't deserve. B3 hides who just went purple.</div></body></html>
