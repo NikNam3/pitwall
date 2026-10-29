@@ -66,4 +66,25 @@ describe('builders', () => {
     expect(view.outputs.get('x')).toBe(1);
     expect(view.feed.connected).toBe(true);
   });
+
+  it('field laps progress: fuel, tyre age, wear, order by cumulative time', () => {
+    const { laps } = field({ cars: 2, laps: 3, paceMs: [90_000, 91_001] });
+    const l3 = laps.find((l) => l.carId === 1 && l.lapNumber === 3)!;
+    expect(l3.fuelAtStartKg).toMatchObject({ value: 96 });
+    expect(l3.fuelAtEndKg).toMatchObject({ value: 94 });
+    expect(l3.tyreAgeAtStart).toBe(2);
+    expect(l3.wearAtEndPct.fl).toMatchObject({ value: 3 });
+    expect(l3.positionAtEnd).toBe(2);
+    expect(l3.sectorTimesMs.reduce((a, b) => a + b, 0)).toBe(91_001);
+  });
+
+  it('lap derives its sectors from lapTimeMs and sums exactly', () => {
+    expect(lap().sectorTimesMs).toEqual([30_000, 30_000, 30_000]);
+    expect(lap({ lapTimeMs: 80_001 }).sectorTimesMs.reduce((a, b) => a + b, 0)).toBe(80_001);
+    expect(lap({ sectorTimesMs: [1, 2, 3] }).sectorTimesMs).toEqual([1, 2, 3]);
+  });
+
+  it('field throws when paceMs is shorter than cars', () => {
+    expect(() => field({ cars: 3, laps: 1, paceMs: [90_000] })).toThrow();
+  });
 });

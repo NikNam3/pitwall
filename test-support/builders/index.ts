@@ -6,7 +6,6 @@ import {
   known,
   MAX_CARS,
   MINI_SECTORS,
-  unknown,
   type CarId,
   type CarState,
   type Corners,
@@ -29,6 +28,7 @@ import {
 } from '../../packages/engine/src/index.ts';
 import { buildPacket } from '../../packages/engine/test/builders/index.ts';
 import { createCarState } from '../../packages/engine/src/step/initial-state.ts';
+import { withholdForRealism } from '../../packages/engine/src/step/realism.ts';
 
 /** Overrides nested objects key by key; arrays and `Known` values are replaced whole. */
 export type DeepPartial<T> = T extends readonly unknown[]
@@ -67,7 +67,7 @@ const range = (min: number, max: number) => ({ min, max });
 const perCorner = <T>(make: () => T): Corners<T> => ({ fl: make(), fr: make(), rl: make(), rr: make() });
 
 /**
- * A confirmed 90 s lap of car 0 (lap 1, sectors 30 s each, valid, soft C3, no SC), every `Known` field known at
+ * A confirmed 90 s lap of car 0 (lap 1, sectors three thirds of `lapTimeMs` summing exactly to it (30 s each at 90 s), valid, soft C3, no SC), every `Known` field known at
  * `completedAt`. Lap-end fields: wear 0 % per corner, ERS store 4 MJ, deployed and harvested 0, no damage, channel
  * ranges around tyres 90 to 100 degC and 23 to 27 psi, brakes 300 to 800 degC, engine 110 degC. `completedAt` defaults
  * to `lapNumber * lapTimeMs`. Any field is overridable.
@@ -76,11 +76,12 @@ export function lap(over: Partial<LapRecord> = {}): LapRecord {
   const lapNumber = over.lapNumber ?? 1;
   const lapTimeMs = over.lapTimeMs ?? 90_000;
   const at = over.completedAt ?? lapNumber * lapTimeMs;
+  const third = Math.floor(lapTimeMs / 3);
   return {
     carId: carId(0),
     lapNumber,
     lapTimeMs,
-    sectorTimesMs: [30_000, 30_000, 30_000],
+    sectorTimesMs: [third, third, lapTimeMs - 2 * third],
     valid: { lap: true, sectors: [true, true, true] },
     actualCompound: 'C3',
     visualCompound: 'soft',
@@ -146,24 +147,39 @@ export function flagPhase(over: Partial<FlagPhase> = {}): FlagPhase {
 
 /**
  * `cars` cars (ids 0..cars-1) each running `laps` laps from session time 0 at a constant pace: car `i` at `paceMs[i]`
- * (or the one `paceMs` for all). Lap `n` of a car ends at `n * pace`, `positionAtEnd` ranks the cars by pace (ties by id).
- * `miniSectors` holds `laps * 50` crossings per car, sorted by time.
+ * (or the one `paceMs` for all; throws if an array is shorter than `cars`). Lap `n` (1-based) of a car is a `lap()` with
+ * these defaults: it ends at `n * pace`; sectors are thirds of the pace; `fuelAtStartKg` 100 - 2 * (n - 1) and
+ * `fuelAtEndKg` 2 kg less; `tyreAgeAtStart` n - 1 (one stint, soft C3); `wearAtEndPct` n % per corner; ERS store 4 MJ
+ * at every lap end; `positionAtEnd` is the car's order by cumulative time at the end of lap n (ties by id). No in or out
+ * laps and no SC share are set. `miniSectors` holds `laps * 50` crossings per car, sorted by time.
  */
 export function field({ cars, laps, paceMs }: { cars: number; laps: number; paceMs: Ms | Ms[] }): {
   laps: LapRecord[];
   miniSectors: MiniSectorCrossing[];
 } {
-  const paceOf = (i: number): Ms => (typeof paceMs === 'number' ? paceMs : (paceMs[i] ?? paceMs.at(-1) ?? 90_000));
-  const rank = (i: number): number =>
-    1 + Array.from({ length: cars }, (_, j) => j).filter((j) => paceOf(j) < paceOf(i) || (paceOf(j) === paceOf(i) && j < i)).length;
+  if (typeof paceMs !== 'number' && paceMs.length < cars) throw new Error(`field: ${paceMs.length} paces for ${cars} cars`);
+  const paceOf = (i: number): Ms => (typeof paceMs === 'number' ? paceMs : paceMs[i]!);
+  const rank = (i: number, n: number): number =>
+    1 +
+    Array.from({ length: cars }, (_, j) => j).filter((j) => n * paceOf(j) < n * paceOf(i) || (n * paceOf(j) === n * paceOf(i) && j < i)).length;
   const records: LapRecord[] = [];
   const miniSectors: MiniSectorCrossing[] = [];
   for (let i = 0; i < cars; i++) {
     const pace = paceOf(i);
-    const third = Math.floor(pace / 3);
     for (let n = 1; n <= laps; n++) {
+      const at = n * pace;
+      const start = 100 - 2 * (n - 1);
       records.push(
-        lap({ carId: carId(i), lapNumber: n, lapTimeMs: pace, sectorTimesMs: [third, third, pace - 2 * third], positionAtEnd: rank(i) }),
+        lap({
+          carId: carId(i),
+          lapNumber: n,
+          lapTimeMs: pace,
+          positionAtEnd: rank(i, n),
+          tyreAgeAtStart: n - 1,
+          fuelAtStartKg: known(start, at),
+          fuelAtEndKg: known(start - 2, at),
+          wearAtEndPct: perCorner(() => known(n, at)),
+        }),
       );
       miniSectors.push(...crossings(carId(i), n, pace, (n - 1) * pace));
     }
@@ -174,7 +190,7 @@ export function field({ cars, laps, paceMs }: { cars: number; laps: number; pace
 
 /**
  * A complete, valid car: every `Known` field is known, so a test overrides only what it checks. Defaults: car 0, active,
- * lap 1 on soft C3, mid-field position 1, wear 0 %, tyres 95 degC and 25 psi, brakes 500 degC, engine 110 degC, 50 kg
+ * lap 1 (sector 1, lap distance 0) on soft C3, position `id + 1`, no tyre sets (`sets` is known with an empty list), wear 0 %, tyres 95 degC and 25 psi, brakes 500 degC, engine 110 degC, 50 kg
  * fuel, ERS store 4 MJ, no damage. `over` merges key by key; a `Known` or an array is replaced whole. To hide a rival's
  * values the way realism mode does, wrap the result in `realismHidden`.
  */
@@ -259,31 +275,11 @@ export function carState(over: DeepPartial<CarState> = {}): CarState {
   return merge(base, over) as CarState;
 }
 
-/** The car as realism mode shows a rival: the fields a real engineer cannot see are `unknown('realism')` (mirrors the engine's own list). */
+/** A copy of the car as realism mode shows a rival: the engine's own `withholdForRealism` sets the hidden fields to `unknown('realism')`. */
 export function realismHidden(car: CarState): CarState {
-  const hidden = unknown('realism');
-  const corner = <T extends object>(c: T, keys: string[]): T => ({ ...c, ...Object.fromEntries(keys.map((k) => [k, hidden])) });
-  const tyreKeys = ['surfaceTempC', 'carcassTempC', 'pressurePsi', 'wearPct', 'damagePct', 'blistersPct'];
-  const map = <T extends object>(c: Corners<T>, keys: string[]): Corners<T> => ({
-    fl: corner(c.fl, keys),
-    fr: corner(c.fr, keys),
-    rl: corner(c.rl, keys),
-    rr: corner(c.rr, keys),
-  });
-  return {
-    ...car,
-    energy: { fuel: hidden, ers: hidden, power: hidden },
-    tyres: { ...car.tyres, sets: hidden, corners: map(car.tyres.corners, tyreKeys) },
-    condition: {
-      ...car.condition,
-      bodywork: hidden,
-      powerUnit: hidden,
-      drsFault: hidden,
-      engineTempC: hidden,
-      brakes: map(car.condition.brakes, ['tempC', 'damagePct']),
-    },
-    dynamics: hidden,
-  };
+  const copy = structuredClone(car);
+  withholdForRealism(copy);
+  return copy;
 }
 
 /**
