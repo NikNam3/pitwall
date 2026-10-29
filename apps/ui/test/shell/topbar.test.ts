@@ -260,6 +260,12 @@ describe('muting', () => {
     expect(screen.queryByTestId('mute-tyres')).toBeNull();
   });
 
+  it('each toggle names its category and the action it takes: mute, or unmute once muted', async () => {
+    await open(['tyres']);
+    expect(screen.getByTestId('mute-tyres').textContent).toContain(`${text.alertGroups.category.tyres}${text.separator}${text.alertGroups.unmute}`);
+    expect(screen.getByTestId('mute-energy').textContent).toContain(`${text.alertGroups.category.energy}${text.separator}${text.alertGroups.mute}`);
+  });
+
   it('a muted category toggles back with muted false', async () => {
     const t = await open(['tyres']);
     await fireEvent.click(screen.getByTestId('mute-tyres'));

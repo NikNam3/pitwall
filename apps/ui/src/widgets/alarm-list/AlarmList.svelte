@@ -34,7 +34,7 @@
           type="button"
           class="pw-button faint"
           data-testid="mute-{row.insight.category}-{row.insight.key}"
-          onclick={() => send({ kind: 'alertGroup.mute', category: row.insight.category, muted: true })}>{text.mute} {row.insight.category}</button
+          onclick={() => send({ kind: 'alertGroup.mute', category: row.insight.category, muted: true })}>{text.muteGroup(row.insight.category)}</button
         >
       {/if}
     </div>
