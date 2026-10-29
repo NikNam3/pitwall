@@ -2,7 +2,6 @@
 export const ahead = 'AHEAD' as const;
 export const behind = 'BEHIND' as const;
 export const inDrs = 'in DRS';
-export const perLap = 's/lap';
 /** The column headers. */
 export const header = {
   drv: 'DRV',

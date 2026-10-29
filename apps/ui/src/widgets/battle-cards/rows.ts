@@ -3,7 +3,7 @@ import type { CarOverview } from '@pitwall/contracts';
 import { carCodeById } from '../../kit/car/car-label.ts';
 import { gridRow, type GridColumn } from '../../kit/grid/grid.ts';
 import { compoundText } from '../../kit/compound/compound-mark.ts';
-import { formatJoules, formatLaps, formatSeconds, formatSignedSeconds } from '../../kit/values/format.ts';
+import { formatJoules, formatLaps, formatSecondsPerLapPlain, formatSignedSeconds } from '../../kit/values/format.ts';
 import type { Role } from '../../theme/roles.ts';
 import type { WidgetSize } from '../../kit/types.ts';
 import { battleRole, type Side } from './emphasis.ts';
@@ -55,7 +55,7 @@ function sideRow(label: BattleRow['label'], side: Side, card: BattleCard, cars: 
   const cells: Record<ColumnId, Cell> = {
     drv: carCodeById(cars, s.carId),
     gap: valueCell(s.gapMs, (ms) => formatSignedSeconds(sign * ms, 3)),
-    closing: valueCell(s.closingMsPerLap, (ms) => `${formatSeconds(ms, 2)} ${text.perLap}`),
+    closing: valueCell(s.closingMsPerLap, formatSecondsPerLapPlain),
     toDrs: valueCell(s.lapsToDrs, (n) => (n === 0 ? text.inDrs : formatLaps(n))),
     paceDelta: valueCell(s.paceDeltaMs, (ms) => formatSignedSeconds(ms, 2)),
     margin: valueCell(s.overtakeMarginMs, (ms) => formatSignedSeconds(ms, 2)),
