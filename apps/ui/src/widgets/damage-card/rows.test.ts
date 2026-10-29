@@ -77,25 +77,25 @@ describe('damageRows jumps', () => {
   it('shows "loss: measuring" and a critical role for the newest jump while the loss is unknown', () => {
     const [newest, older] = damageRows(state({ jumps: [floor, wing] })).jumps;
     expect(newest).toMatchObject({ loss: 'loss: measuring', role: 'critical' });
-    expect(older.loss).toBe('loss +0.12 s/lap');
-    expect(older.role).toBeUndefined();
+    expect(older!.loss).toBe('loss +0.12 s/lap');
+    expect(older!.role).toBeUndefined();
   });
 
   it('has no role on the newest jump once its loss is measured', () => {
     const [newest] = damageRows(state({ jumps: [{ ...wing, lossMsPerLap: known(1230, 400_000) }] })).jumps;
     expect(newest).toMatchObject({ loss: 'loss +1.23 s/lap' });
-    expect(newest.role).toBeUndefined();
+    expect(newest!.role).toBeUndefined();
   });
 
   it('shows an empty loss with the reason when the loss is hidden', () => {
     const [row] = damageRows(state({ jumps: [{ ...wing, lossMsPerLap: unknown('realism') }] })).jumps;
     expect(row).toMatchObject({ loss: '', reason: 'realism' });
-    expect(row.role).toBeUndefined();
+    expect(row!.role).toBeUndefined();
   });
 
   it('joins several parts with " + " and rounds the delta to whole percent', () => {
     const [row] = damageRows(state({ jumps: [{ ...wing, parts: ['floorPct', 'diffuserPct'], deltaPct: 7.6 }] })).jumps;
-    expect(row.text).toBe('L14 floor + diffuser +8 %');
+    expect(row!.text).toBe('L14 floor + diffuser +8 %');
   });
 
   it('is empty without jumps', () => {
