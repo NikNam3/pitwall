@@ -3,7 +3,7 @@ export type Role =
   | 'text' | 'textDim' | 'textFaint'
   | 'ownCar'
   | 'bg' | 'bgPanel' | 'bgBand' | 'bgRowBand'
-  | 'border' | 'grid' | 'dropTarget'
+  | 'border' | 'grid' | 'dropTarget' | 'focus'
   | 'critical' | 'warning' | 'best' | 'personalBest'
   | 'flagYellow' | 'flagGreen' | 'flagRed' | 'flagBlue'
   | 'compoundSoft' | 'compoundMedium' | 'compoundHard'
