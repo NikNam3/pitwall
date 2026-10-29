@@ -10,6 +10,7 @@ import type { PacketSource } from '../input/packet-source.ts';
 import { FeedPipeline, type FeedPipelineOptions } from '../pipeline/feed-pipeline.ts';
 import { ReplayController } from '../replay/replay-controller.ts';
 import { pruneEndedAcknowledgements } from '../ui-state/ack-pruning.ts';
+import { DEFAULT_WORKBOOKS_DIR, seedDefaultWorkbooks } from '../ui-state/default-workbooks.ts';
 import { UiState } from '../ui-state/ui-state.ts';
 import { StartupError } from '../startup-error.ts';
 import type { Db } from '../storage/db.ts';
@@ -26,7 +27,10 @@ type ServeBase = {
   feed: Omit<FeedInfo, 'feedId'>;
   wsPort: number;
   dumpsDir: string;
-  /** `PITWALL_DATA_DIR/ui`: the UI state is kept there. Without it `uiAction` messages are answered with `notSupported`. */
+  /**
+   * `PITWALL_DATA_DIR/ui`: the UI state is kept there, and the shipped workbooks are seeded into it first.
+   * Without it `uiAction` messages are answered with `notSupported`.
+   */
   uiDir?: string;
   /** Opened by the caller, closed by `serve` (also when it fails). */
   storage?: { db: Db; recordingsDir: string };
@@ -83,6 +87,8 @@ export async function serve(opts: ServeOptions): Promise<number> {
       },
     });
     const feeds = (): FeedInfo[] => [{ feedId, ...opts.feed }];
+    // Seeded first, so the UI state opens on the shipped workbooks, never on its own fallback, and on every start path.
+    if (opts.uiDir !== undefined) await seedDefaultWorkbooks(opts.uiDir, DEFAULT_WORKBOOKS_DIR);
     const uiState = opts.uiDir === undefined ? undefined : UiState.open(opts.uiDir, hub, cliLogger(io, 'warn'));
     if (uiState) {
       undo.push(() => uiState.close());
