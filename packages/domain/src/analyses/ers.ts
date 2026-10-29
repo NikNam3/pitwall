@@ -8,7 +8,7 @@ import type { Joules } from '../units.ts';
  */
 export type ErsAttack = { ready: true } | { ready: false; inLaps: number };
 
-/** `ers.car`: store, this lap's deployment and harvest, the trend, the laps until the attack level and the attack readiness. */
+/** `ers.car`: store, this lap's deployment and harvest, the trend and the attack readiness. */
 export type ErsState = {
   storeJ: Known<Joules>;
   capacityJ: Joules;
@@ -19,7 +19,6 @@ export type ErsState = {
   storeTrendJPerLap: Known<number>;
   /** The store an attack needs (config). */
   attackLevelJ: Joules;
-  lapsToAttackLevel: Known<number>;
   /** Ready, or in whole laps while rising; `notApplicable` below the level while flat or falling, the trend's reason without one. */
   attack: Known<ErsAttack>;
   /** Published, not displayed. */

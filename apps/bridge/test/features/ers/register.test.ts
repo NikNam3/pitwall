@@ -12,7 +12,6 @@ const value = (storeTrendJPerLap: number): ErsState => ({
   harvestedThisLapJ: hidden,
   storeTrendJPerLap: { known: true, value: storeTrendJPerLap, at: 0 },
   attackLevelJ: 2_400_000,
-  lapsToAttackLevel: hidden,
   attack: hidden,
   mode: hidden,
   flow: hidden,

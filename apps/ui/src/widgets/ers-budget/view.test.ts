@@ -13,7 +13,6 @@ const state = (over: Partial<ErsState> = {}): ErsState => ({
   harvestedThisLapJ: known(1.3 * MJ, at),
   storeTrendJPerLap: known(0.4 * MJ, at),
   attackLevelJ: 2.5 * MJ,
-  lapsToAttackLevel: known(1.5, at),
   attack: known({ ready: false, inLaps: 2 }, at),
   mode: known('medium', at),
   flow: known('harvesting', at),
@@ -114,7 +113,7 @@ describe('ersView: trend and attack text', () => {
   });
 
   it('says nothing when the attack is not applicable (falling or flat below the level)', () => {
-    const v = ersView(state({ storeTrendJPerLap: known(-0.2 * MJ, at), lapsToAttackLevel: unknown('notApplicable'), attack: unknown('notApplicable') }));
+    const v = ersView(state({ storeTrendJPerLap: known(-0.2 * MJ, at), attack: unknown('notApplicable') }));
     expect(v.attack).toBe('');
     expect(v.attackReady).toBe(false);
   });
