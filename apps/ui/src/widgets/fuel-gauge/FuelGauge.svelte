@@ -3,21 +3,21 @@
   import type { WidgetProps } from '../../kit/types.ts';
   import { unknownReason } from '../../kit/text.ts';
   import { role } from '../../theme/index.ts';
-  import { fuelRows } from './rows.ts';
+  import { fuelRows, type FuelRow } from './rows.ts';
   import type { widget } from './widget.ts';
 
   let { data, size }: WidgetProps<typeof widget> = $props();
 
   // Compact keeps the two rows that decide the stint: margin and what the fuel lasts.
-  const COMPACT_ROWS = 2;
-  const rows = $derived(size.mode === 'full' ? fuelRows(data.fuel) : fuelRows(data.fuel).slice(0, COMPACT_ROWS));
+  const COMPACT_KEYS: readonly FuelRow['key'][] = ['margin', 'lasts'];
+  const rows = $derived(size.mode === 'full' ? fuelRows(data.fuel) : fuelRows(data.fuel).filter((r) => COMPACT_KEYS.includes(r.key)));
 </script>
 
 <div class="fuel">
   {#each rows as row (row.key)}
-    <div class="row" class:dim={row.dim} class:bold={row.bold} style:color={row.role === undefined ? undefined : role(row.role)}>
+    <div class="row" class:dim={row.dim} class:bold={row.bold}>
       <span class="label">{row.label}</span>
-      <span class="text" title={row.reason === undefined ? undefined : unknownReason[row.reason]}>{row.text}</span>
+      <span class="text" style:color={row.role === undefined ? undefined : role(row.role)} title={row.reason === undefined ? undefined : unknownReason[row.reason]}>{row.text}</span>
     </div>
   {/each}
 </div>
