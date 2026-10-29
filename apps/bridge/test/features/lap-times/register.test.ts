@@ -18,6 +18,8 @@ const row = (id: number, times: Times | 'insufficientData', at = 0): Row => {
     lastLapStatus: 'none',
     bestLapMs: ms(0),
     bestSectorsMs: [ms(1), ms(2), ms(3)],
+    bestLapStatus: 'none',
+    bestSectorStatus: ['none', 'none', 'none'],
     theoreticalBestMs: ms(4),
   };
 };
