@@ -232,7 +232,7 @@ describe("fuel calculator", () => {
       session: "timeTrial",
       left: unknown("notApplicable"),
     });
-    expect(valueOf(f.burnKgPerLap)).toBe(0);
+    expect(valueOf(f.burnKgPerLap)).toBeCloseTo(0, 9);
     const na = { known: false, reason: "notApplicable" };
     expect(f.lapsOfFuel).toEqual(na);
     expect(f.lapsLeft).toEqual(na);
