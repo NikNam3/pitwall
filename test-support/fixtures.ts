@@ -7,6 +7,11 @@ export const FIXTURES = {
   ttZandvoort: '2026-10-27_23-31-43_1a4f5531395c7884.pwrec.gz',
   raceSingapore: '2026-10-28_00-15-04_b3cd07e2790bdcbe.pwrec.gz',
   menuOnly: '2026-10-27_22-50-28_5cc4798807ebe7a5.pwrec.gz',
+  qualifyingSingapore: '2026-10-28_23-53-34_d2b06401967cd89c.pwrec.gz',
+  raceSingaporeWet: '2026-10-29_00-04-08_095e1bf6add44b18.pwrec.gz',
+  practiceZandvoortOnline: '2026-10-29_22-39-31_0022670294e098af.pwrec.gz',
+  raceZandvoortOnline: '2026-10-29_22-48-50_bbda17a651868614.pwrec.gz',
+  practiceZandvoortUidReuse: '2026-10-29_22-54-58_0022670294e098af.pwrec.gz',
 } as const;
 
 export type FixtureName = keyof typeof FIXTURES;

@@ -50,6 +50,121 @@
       "features": [
         "385 BUTN events only (155 with UID 0), no Session packet"
       ]
+    },
+    {
+      "id": "qualifyingSingapore",
+      "file": "2026-10-28_23-53-34_d2b06401967cd89c.pwrec.gz",
+      "sha256": "498f7aff0e0381e7000753022542ca52ff7c73f4b5a0a643332c2b1ed9b615e3",
+      "bytes": 28242493,
+      "track": "Singapore",
+      "trackId": 12,
+      "sessionType": "qualifying",
+      "sessionTypeCode": 6,
+      "completedLaps": 3,
+      "durationMs": 429081.3679,
+      "features": [
+        "Q2: 15 active cars, 1 human (index 14); same weekend as raceSingaporeWet",
+        "3 completed player laps on one soft set (actual 16, visual 16): 92.485 s, 101.307 s, 92.977 s, all valid; lap 4 unfinished, back in the garage",
+        "fuel 10.0 kg at start, 3.349 kg at the start of lap 4, 10.0 kg again in the garage at the end",
+        "tyre wear RL/RR/FL/FR 0/0/0/0 % at start, 12/15/9/16 % at the end",
+        "session time runs ahead of wall time in the garage (0 to 139 s in the first 15 s of the file; 467.8 to 900.6 s at the end)",
+        "no player pit stop; 11 AI cars show numPitStops 1 only in the final LapData",
+        "PENA x2 (ours, corner-cutting warnings on laps 3 and 4), FTLP x4, OVTK x115, no COLL, no SC",
+        "weather clear then light cloud, track 33 to 31 °C",
+        "15 UID-0 SessionHistory just before SEND; FinalClassification of 15 cars"
+      ]
+    },
+    {
+      "id": "raceSingaporeWet",
+      "file": "2026-10-29_00-04-08_095e1bf6add44b18.pwrec.gz",
+      "sha256": "2dd0d50c4d15eb51e9af464ea60c2ee8ac1033b2135daf3deee3daa817a9cbe2",
+      "bytes": 590061154,
+      "track": "Singapore",
+      "trackId": 12,
+      "sessionType": "race",
+      "sessionTypeCode": 15,
+      "completedLaps": 44,
+      "durationMs": 5220266.4206,
+      "features": [
+        "62-lap race, 20 cars, 1 human (index 19); cars 0 and 7 retire (mechanical) on laps 11 and 18, numActiveCars 20 to 18",
+        "44 completed player laps, all valid; lap 45 unfinished at SEND (4698.93 s), no FinalClassification; we lead from lap 11",
+        "formation lap: safetyCarStatus 3 from 1.008 s, then session time resets from 169.566 to 0 for the start without FLBK; STLG x5 and LGOT after the reset, one more LGOT before the formation lap",
+        "our stops: lap 6 (intermediates to mediums, actual 17 visual 17; pit entry 542.4 s, numPitStops 1 at 572.7 s) and lap 26 (mediums to intermediates; 2533.2 to 2559.6 s)",
+        "every other car stops twice (laps 5-7 to slicks, lap 26 to intermediates); cars 0 and 7 once",
+        "fuel 110.0 kg at start, 33.742 kg at the start of lap 45 (about 1.74 kg/lap)",
+        "tyre wear RL/RR/FL/FR on the medium stint: 1/1/0/1 % at the start of lap 7, 31/39/19/37 % at the start of lap 26; 23/25/7/11 % at the end on intermediates aged 19 laps",
+        "FLBK x5: 496.561 to 481.561 s (lap 5; undoes our terminal damage PENA, an SC deployment SCAR and DRSD), 757.045 to 742.045 and 742.831 to 742.076 s (lap 7), 4581.839 to 4566.839 and 4580.390 to 4566.822 s (lap 44)",
+        "no SC, VSC or red-flag phase: safetyCarStatus stays 0 after the start, numSafetyCarPeriods 0",
+        "weather light rain, overcast at 483 s, light cloud 987 s, overcast 1970 s, light rain 2549 s, storm 4143 s, light rain 4603 s",
+        "DRSE x1 (381.3 s, lap 4); DRSD x1 (wet) undone by the flashback",
+        "PENA x9 (ours 7, one a 3 s time penalty on lap 6), COLL x9 (ours 2), OVTK x241 (ours 19), FTLP x12, TMPT x2, RTMT x6",
+        "77 s of events before the first Session packet; LGOT, SCAR and one BUTN there carry playerCarIndex 0",
+        "21 s without packets at session time 1364 s (lap 15), session time frozen",
+        "20 UID-0 SessionHistory at SEND"
+      ]
+    },
+    {
+      "id": "practiceZandvoortOnline",
+      "file": "2026-10-29_22-39-31_0022670294e098af.pwrec.gz",
+      "sha256": "cfae2d816aa81a0bcc850276ab57d642c13a2739f598c9ba9ee2c3f2631fc43a",
+      "bytes": 10634658,
+      "track": "Zandvoort",
+      "trackId": 26,
+      "sessionType": "practice",
+      "sessionTypeCode": 4,
+      "completedLaps": 1,
+      "durationMs": 558632.9007,
+      "features": [
+        "online short practice, 20 cars, 2 humans (0 is the player, 1); same weekend as raceZandvoortOnline",
+        "1 completed player lap (81.879 s, valid, hard: actual 19 visual 18); soft fitted in the garage (actual 17 visual 16); terminal damage on lap 2 at 487.898 s (PENA retired), RTMT for cars 0 and 1",
+        "fuel 20.0 kg at start in the garage, 2.208 kg at the start of lap 2",
+        "after the retirement the session is simulated to its end: session time jumps from 487.898 to 3605.033 s",
+        "gamePaused 1 from 339.5 to 377.2 s while session time runs on",
+        "FTLP x5 (all car 1), COLL x2, OVTK x78, PENA x2, RTMT x2",
+        "40 UID-0 SessionHistory and 2 UID-0 FinalClassification after the retirement"
+      ]
+    },
+    {
+      "id": "raceZandvoortOnline",
+      "file": "2026-10-29_22-48-50_bbda17a651868614.pwrec.gz",
+      "sha256": "f8e064e9670fa89f9f628d4a17bc360b38bff3d115f0dbf4f6d3e6fdbb0dee3d",
+      "bytes": 10502681,
+      "track": "Zandvoort",
+      "trackId": 26,
+      "sessionType": "race",
+      "sessionTypeCode": 15,
+      "completedLaps": 0,
+      "durationMs": 368284.181,
+      "features": [
+        "online 72-lap race, 20 cars, 2 humans (0 is the player, 1)",
+        "formation lap: safetyCarStatus 3 from 1.069 s, RTMT car 0 at 125.339 s; session time resets 131.495 to 0, then 1.968 to 0.065 at the start, without FLBK; STLG x5, LGOT x2",
+        "no completed player lap: COLL x4 ours on lap 1, terminal damage at 24.001 s with SCAR VSC deployed at the same time; safetyCarStatus never shows 2",
+        "after the retirement the session is simulated to its end (24.001 to 6361.441 s); FinalClassification: 16 cars finish (72 or 67 laps, 2-3 stops), cars 0, 1, 9 and 15 DNF",
+        "fuel 105.2 kg at start, mediums (actual 17 visual 16)",
+        "PENA x5, COLL x5, OVTK x92",
+        "UID-0 bulks: 20 SessionHistory and 1 FinalClassification twice, then 12 LobbyInfo"
+      ]
+    },
+    {
+      "id": "practiceZandvoortUidReuse",
+      "file": "2026-10-29_22-54-58_0022670294e098af.pwrec.gz",
+      "sha256": "456712c7c2829c7b51802d3df4dd37559b54346e75f53d5ccd17fc0b3b922aae",
+      "bytes": 2383238,
+      "track": "Zandvoort",
+      "trackId": 26,
+      "sessionType": "practice",
+      "sessionTypeCode": 4,
+      "completedLaps": 0,
+      "durationMs": 339249.3616,
+      "features": [
+        "online short practice, 20 cars, 2 humans (0 is the player, 1)",
+        "same sessionUid as practiceZandvoortOnline but a new weekend (link ids 1945305838 against 221758740): the game reused the uid",
+        "no SSTA: the file starts with a Session packet at 0.076 s",
+        "no completed player lap: terminal damage on lap 1 at 135.163 s (PENA retired), RTMT for cars 0 and 1",
+        "fuel 20.0 kg at start in the garage; soft fitted in the garage (actual 17 visual 16)",
+        "then 33 UID-0 bulks (20 SessionHistory and 1 FinalClassification each) every 5 s and no other packets for 166 s, then session time 3760.546 s",
+        "OVTK x31, COLL x1, PENA x1, no FTLP"
+      ]
     }
   ],
   "segments": [
