@@ -166,6 +166,29 @@ describe('incidents calculator', () => {
     });
   });
 
+  describe('forUs, without inventing', () => {
+    it('positionBefore is notReceived while our car has no crossing at that moment (no invented position)', () => {
+      // our car (6) crosses its first boundary at 4 200 ms; the collision is at 1 000 ms
+      const us = only(run(viewOf({ miniSectors: until(race(), 3_000), events: [collision(6, 5, 1_000)] })), 'collision').forUs[0]!;
+      expect(us.positionBefore).toEqual(unknown('notReceived'));
+    });
+
+    it('a neutralised entry concerns us with no other car: otherCarId and the gaps are notApplicable', () => {
+      const phase = flagPhase({ kind: 'SC', start: T, end: T + 60_000, startLeaderLap: 5, endLeaderLap: 6 });
+      const us = only(run(viewOf({ miniSectors: race(), flagPhases: [phase] })), 'neutralised').forUs[0]!;
+      expect(us.otherCarId).toEqual(unknown('notApplicable'));
+      expect(us.gapBeforeMs).toEqual(unknown('notApplicable'));
+      expect(us.gapAfterMs).toEqual(unknown('notApplicable'));
+    });
+
+    it('the other car retired by the after moment: gapAfterMs notApplicable (it has no gap any more)', () => {
+      const events = [collision(6, 5), event({ kind: 'retirement', at: T + 1_000, carId: car(5), params: { reason: 'retired' } })];
+      const us = only(run(viewOf({ miniSectors: race(), events })), 'collision').forUs[0]!;
+      expect(valueOf(us.gapBeforeMs)).toBe(700);
+      expect(us.gapAfterMs).toEqual(unknown('notApplicable'));
+    });
+  });
+
   describe('forUs', () => {
     // The player collides with car 5 (P6, 0.7 s ahead) at T and loses 1.8 s in that mini-sector (below the time-loss
     // threshold). Five seconds later cars 7 and 8 are through: P7 → P9, 0.7 s → 2.5 s behind car 5.
@@ -176,7 +199,8 @@ describe('incidents calculator', () => {
       expect(entry.forUs).toHaveLength(1);
       const us = entry.forUs[0]!;
       expect(us.ourCarId).toBe(PLAYER);
-      expect(us.positionBefore).toBe(7);
+      expect(us.otherCarId).toEqual(known(car(5), T));
+      expect(valueOf(us.positionBefore)).toBe(7);
       expect(valueOf(us.positionAfter)).toBe(9);
       expect(valueOf(us.gapBeforeMs)).toBe(700);
       expect(valueOf(us.gapAfterMs)).toBe(2_500);
@@ -185,7 +209,7 @@ describe('incidents calculator', () => {
     it('before five seconds have passed in the history, the after values are notReceived', () => {
       const early = until(miniSectors, T + AFTER_MS - 1_900);
       const us = only(run(viewOf({ miniSectors: early, events: [collision(6, 5)] })), 'collision').forUs[0]!;
-      expect(us.positionBefore).toBe(7);
+      expect(valueOf(us.positionBefore)).toBe(7);
       expect(valueOf(us.gapBeforeMs)).toBe(700);
       expect(us.positionAfter).toEqual(unknown('notReceived'));
       expect(us.gapAfterMs).toEqual(unknown('notReceived'));
@@ -193,7 +217,9 @@ describe('incidents calculator', () => {
 
     it('for a neighbour\'s incident, the gap is ours to that car (positive = we are behind it)', () => {
       const us = only(run(viewOf({ miniSectors: race(), events: [penalty(5, WARNING)] })), 'warning').forUs[0]!;
-      expect(us.positionBefore).toBe(7);
+      expect(valueOf(us.positionBefore)).toBe(7);
+      // the car the gap is to: the neighbour of the incident, named so a label cannot name another car
+      expect(us.otherCarId).toEqual(known(car(5), T));
       expect(valueOf(us.gapBeforeMs)).toBe(700);
       const behind = only(run(viewOf({ miniSectors: race(), events: [penalty(8, WARNING)] })), 'warning').forUs[0]!;
       expect(valueOf(behind.gapBeforeMs)).toBe(-1_400);

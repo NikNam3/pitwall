@@ -10,7 +10,7 @@ const overview = (id: number, name: string): CarOverview =>
 const cars = [overview(1, 'Kuhnlein'), overview(2, 'Esteban Ocon'), overview(3, 'Carlos Sainz'), overview(4, 'Alexander Albon'), overview(5, 'Oscar Piastri')];
 
 const forUs = (over: Partial<IncidentForUs> = {}): IncidentForUs => ({
-  ourCarId: carId(1), positionBefore: 5, positionAfter: k(4), gapBeforeMs: k(4100), gapAfterMs: unknown('notApplicable'), ...over,
+  ourCarId: carId(1), otherCarId: k(carId(2)), positionBefore: k(5), positionAfter: k(4), gapBeforeMs: k(4100), gapAfterMs: unknown('notApplicable'), ...over,
 });
 const entry = (over: Partial<IncidentEntry> = {}): IncidentEntry => ({
   id: 'collision:2+3:230000', at: toSessionTime(230_000), lap: 23, kind: 'collision', severity: 'major', carIds: [carId(2), carId(3)],
@@ -38,25 +38,44 @@ describe('incidentRows', () => {
 
   it('shows what changed for us: position mark, then the incident car\'s gap before and after, minus as U+2212', () => {
     const [collision, timeLoss] = incidentRows(
-      [entry(), entry({ id: 't', kind: 'timeLoss', carIds: [carId(4)], forUs: [forUs({ positionAfter: k(5), gapBeforeMs: k(-1900), gapAfterMs: k(5800) })] })],
+      [entry(), entry({ id: 't', kind: 'timeLoss', carIds: [carId(4)], forUs: [forUs({ otherCarId: k(carId(4)), positionAfter: k(5), gapBeforeMs: k(-1900), gapAfterMs: k(5800) })] })],
       cars, undefined);
     expect(collision!.cells.forUs.text).toBe('us P5→P4, OCO +4.1→DNF');
     expect(timeLoss!.cells.forUs.text).toBe('us —, ALB −1.9→+5.8');
   });
 
-  it('takes the gap car as the first involved car that is not our car, even when ours is listed first', () => {
-    const [row] = incidentRows([entry({ carIds: [carId(1), carId(4)], forUs: [forUs({ gapBeforeMs: k(-1900), gapAfterMs: k(5800) })] })], cars, undefined);
+  it('names the car the analysis measured the gaps to (otherCarId), not one it picks from the entry itself', () => {
+    const [row] = incidentRows([entry({ carIds: [carId(1), carId(4)], forUs: [forUs({ otherCarId: k(carId(4)), gapBeforeMs: k(-1900), gapAfterMs: k(5800) })] })], cars, undefined);
     expect(row!.cells.forUs.text).toBe('us P5→P4, ALB −1.9→+5.8');
     expect(row!.cells.cars.text).toBe('KUH ALB');
+    const [second] = incidentRows([entry({ forUs: [forUs({ otherCarId: k(carId(3)) })] })], cars, undefined);
+    expect(second!.cells.forUs.text).toBe('us P5→P4, SAI +4.1→DNF');
+  });
+
+  it('shows no gap part when the entry has no other car (otherCarId notApplicable)', () => {
+    const [row] = incidentRows([entry({ forUs: [forUs({ otherCarId: unknown('notApplicable'), gapBeforeMs: unknown('notApplicable') })] })], cars, undefined);
+    expect(row!.cells.forUs).toEqual({ text: 'us P5→P4' });
+  });
+
+  it('leaves an unknown position out, with its reason on hover (no invented position)', () => {
+    const [row] = incidentRows([entry({ forUs: [forUs({ positionBefore: unknown('notReceived') })] })], cars, undefined);
+    expect(row!.cells.forUs).toEqual({ text: 'us, OCO +4.1→DNF', reason: 'notReceived' });
+  });
+
+  it('gives an unknown gap after its reason on hover; DNF (not applicable) needs none', () => {
+    const [waiting] = incidentRows([entry({ forUs: [forUs({ gapAfterMs: unknown('notReceived') })] })], cars, undefined);
+    expect(waiting!.cells.forUs).toEqual({ text: 'us P5→P4, OCO +4.1→', reason: 'notReceived' });
+    const [retired] = incidentRows([entry()], cars, undefined);
+    expect(retired!.cells.forUs.reason).toBeUndefined();
   });
 
   it('writes a position change as P7→P9 through the position mark', () => {
-    const [row] = incidentRows([entry({ forUs: [forUs({ positionBefore: 7, positionAfter: k(9) })] })], cars, undefined);
+    const [row] = incidentRows([entry({ forUs: [forUs({ positionBefore: k(7), positionAfter: k(9) })] })], cars, undefined);
     expect(row!.cells.forUs.text.startsWith('us P7→P9')).toBe(true);
   });
 
   it('writes P7→ while the position after is unknown', () => {
-    const [row] = incidentRows([entry({ forUs: [forUs({ positionBefore: 7, positionAfter: unknown('insufficientData') })] })], cars, undefined);
+    const [row] = incidentRows([entry({ forUs: [forUs({ positionBefore: k(7), positionAfter: unknown('insufficientData') })] })], cars, undefined);
     expect(row!.cells.forUs.text.startsWith('us P7→,')).toBe(true);
   });
 

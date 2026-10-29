@@ -15,12 +15,13 @@ const cars = [overview(1, 'Kuhnlein'), overview(2, 'Esteban Ocon'), overview(3, 
 const collision: IncidentEntry = {
   id: 'collision:2+3:230000', at: toSessionTime(230_000), lap: 23, kind: 'collision', severity: 'major', carIds: [carId(2), carId(3)],
   timeLostMs: k(4200),
-  forUs: [{ ourCarId: carId(1), positionBefore: 5, positionAfter: k(4), gapBeforeMs: k(4100), gapAfterMs: unknown('notApplicable') }],
+  // OCO retired by the after moment: its gap after is notApplicable (DNF)
+  forUs: [{ ourCarId: carId(1), otherCarId: k(carId(2)), positionBefore: k(5), positionAfter: k(4), gapBeforeMs: k(4100), gapAfterMs: unknown('notApplicable') }],
 };
 const timeLoss: IncidentEntry = {
   id: 'timeLoss:4:220000', at: toSessionTime(220_000), lap: 22, kind: 'timeLoss', severity: 'major', carIds: [carId(4)],
   timeLostMs: k(6100),
-  forUs: [{ ourCarId: carId(1), positionBefore: 5, positionAfter: k(5), gapBeforeMs: k(-1900), gapAfterMs: k(5800) }],
+  forUs: [{ ourCarId: carId(1), otherCarId: k(carId(4)), positionBefore: k(5), positionAfter: k(5), gapBeforeMs: k(-1900), gapAfterMs: k(5800) }],
 };
 const warning: IncidentEntry = {
   id: 'warning:5:210000', at: toSessionTime(210_000), lap: 21, kind: 'warning', severity: 'minor', carIds: [carId(5)],

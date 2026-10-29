@@ -1,6 +1,6 @@
 // `incidents` maths (spec 6.4): each car's mini-sector track, the losses against its median, and positions and gaps
 // at a past moment, all from the crossings alone (engine convention: segment 0 of lap L is the line at its start).
-import { MINI_SECTORS, type CarId, type MiniSectorCrossing, type Ms, type SessionTime } from '@pitwall/domain';
+import { known, MINI_SECTORS, unknown, type CarId, type Known, type MiniSectorCrossing, type Ms, type SessionTime } from '@pitwall/domain';
 import { gapBehind, progressOf, type CarCrossings } from '../gaps/gaps.ts';
 
 /** The median of a segment is taken over the car's last this many laps that have it... */
@@ -156,8 +156,11 @@ export function snapshotAt(tracks: readonly (Track | undefined)[], t: SessionTim
   return snap;
 }
 
-/** The car's position in the snapshot; a car without a crossing yet ranks after every car with one. */
-export const positionIn = (snap: Snapshot, id: CarId): number => snap.position[id] ?? snap.count + 1;
+/** The car's position in the snapshot at `at`; `notReceived` for a car without a crossing yet (no position is invented). */
+export function positionIn(snap: Snapshot, id: CarId, at: SessionTime): Known<number> {
+  const position = snap.position[id];
+  return position === undefined ? unknown('notReceived') : known(position, at);
+}
 
 /** The track's crossings from progress `from` up to its point in the snapshot, in the shape `gaps` reads. */
 const crossingsUpTo = (track: Track, from: number, point: Point): CarCrossings => ({
