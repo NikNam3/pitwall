@@ -32,8 +32,10 @@ test('the race workbook is seeded, opens by name, shows 20 tower rows and an ear
   // The bridge seeded race.json: its panels per window are the approved layout's.
   const workbook = JSON.parse(await readFile(workbookFile(dataDir, 'race'), 'utf8')) as WorkbookFile;
   expect(workbook.name).toBe('race');
-  const widgetsOf = (id: string): string[] =>
-    (workbook.windows.find((w) => w.id === id)?.panels ? Object.values(workbook.windows.find((w) => w.id === id)!.panels) : []).map((p) => p.widget).sort();
+  const widgetsOf = (id: string): string[] => {
+    const panels = workbook.windows.find((w) => w.id === id)?.panels;
+    return (panels === undefined ? [] : Object.values(panels)).map((p) => p.widget).sort();
+  };
   expect(widgetsOf('main')).toEqual(MAIN_WIDGETS);
   expect(widgetsOf('side')).toEqual(SIDE_WIDGETS);
 

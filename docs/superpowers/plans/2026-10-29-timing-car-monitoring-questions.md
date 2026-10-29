@@ -26,4 +26,4 @@ The gallery (UI shell design, spec 9.1/9.2) screenshots every cell at each size 
 
 Recommendation: B. The fit check already catches layout breaks at the extra sizes, and the theme variants differ only in colour, which one case shows.
 
-**Answer:**
+**Answer:** (user, 2026-10-29) far fewer: one baseline per display size (compact, full) of the main gallery case, default theme only, plus kit and shell cells; every other case and theme is covered by fit.spec and by one human look at a contact sheet before the merge.
