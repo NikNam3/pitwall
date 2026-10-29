@@ -29,3 +29,4 @@ export * from './tyre-wear/index.ts';
 export { tyreWearCalculator } from './tyre-wear/calculator.ts';
 export { alarmsCalculator } from './alarms/calculator.ts';
 export { incidentsCalculator } from './incidents/calculator.ts';
+export { raceMomentCalculator } from './race-moment/calculator.ts';
