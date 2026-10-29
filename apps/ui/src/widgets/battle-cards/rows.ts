@@ -21,8 +21,9 @@ export type BattleRow = {
 const MINUS = '−';
 const COLUMN_IDS: readonly ColumnId[] = ['drv', 'gap', 'closing', 'toDrs', 'paceDelta', 'margin', 'tyres', 'ers'];
 const COMPACT: readonly ColumnId[] = ['drv', 'gap', 'toDrs'];
-const LABEL_WIDTH = 6;
-const WIDTH: Record<ColumnId, GridColumn> = {
+export const LABEL_WIDTH = 6;
+/** The fixed field of each column. */
+export const WIDTH: Record<ColumnId, GridColumn> = {
   drv: { width: 3, align: 'right' },
   gap: { width: 6, align: 'right' },
   closing: { width: 10, align: 'right' },
@@ -75,7 +76,7 @@ function sideRow(label: BattleRow['label'], side: Side, card: BattleCard, cars: 
 
 /** The two rows of a card, AHEAD then BEHIND; the moment lights the side its battle cause names. */
 export function battleRows(card: BattleCard, cars: readonly CarOverview[], moment: Known<RaceMoment> | undefined): BattleRow[] {
-  return [sideRow('AHEAD', 'ahead', card, cars, moment), sideRow('BEHIND', 'behind', card, cars, moment)];
+  return [sideRow(text.ahead, 'ahead', card, cars, moment), sideRow(text.behind, 'behind', card, cars, moment)];
 }
 
 const grid = (mode: 'compact' | 'full'): GridColumn[] => [{ width: LABEL_WIDTH }, ...columnsFor(mode).map((c) => WIDTH[c])];
@@ -87,4 +88,3 @@ export const battleHeader = (mode: 'compact' | 'full'): string =>
 /** A row as one line of fixed fields. */
 export const battleRowText = (mode: 'compact' | 'full', row: BattleRow): string =>
   gridRow(grid(mode), [row.label, ...columnsFor(mode).map((c) => row.cells[c].text)]);
-

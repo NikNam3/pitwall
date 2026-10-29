@@ -1,6 +1,6 @@
 // Wording specific to this display; text shared with the kit and shell lives in kit/text.ts.
-export const ahead = 'AHEAD';
-export const behind = 'BEHIND';
+export const ahead = 'AHEAD' as const;
+export const behind = 'BEHIND' as const;
 export const inDrs = 'in DRS';
 export const perLap = 's/lap';
 /** The column headers. */
