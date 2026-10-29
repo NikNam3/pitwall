@@ -1,6 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { carId, toSessionTime } from '@pitwall/domain';
-import type { PitStopRecord, StintRecord } from '@pitwall/domain';
 import { boardRow, incidentEntry, interval, lapBoard, ms, overview, sessionInfo, toCar } from './fixtures.ts';
 import { buildRows, type TowerInput } from './rows.ts';
 
@@ -17,20 +15,11 @@ const base = (): TowerInput => ({
     boardRow(1, 104_876, [28_150, 41_288, 35_438], ['none', 'personalBest', 'none'], 'personalBest'),
     boardRow(2, 105_208),
   ]),
-  stints: [],
-  pitStops: [],
   session: sessionInfo(1),
   incidents: undefined,
   showRetired: true,
 });
 
-const stint = (id: number, compound: StintRecord['visualCompound']): StintRecord => ({
-  carId: carId(id), firstLap: 1, lastLap: 23, actualCompound: 'C3', visualCompound: compound, tyreAgeAtFitting: 0,
-});
-const stop = (id: number, lap: number): PitStopRecord => ({
-  carId: carId(id), lap, pitLaneEntry: toSessionTime(1), pitLaneExit: toSessionTime(21), pitLaneTimeMs: 20_000,
-  stationaryTimeMs: 2_300, flag: 'green', penaltyServed: false,
-});
 describe('buildRows', () => {
   it('orders the cars by position', () => {
     expect(buildRows(base()).map((r) => r.carId)).toEqual([0, 1, 2]);
@@ -102,23 +91,13 @@ describe('buildRows', () => {
     expect(buildRows(input)[2]?.lapsDown).toBe(1);
   });
 
-  it('takes compound and age from the overview; stops are the larger of the pit-stop records and the game count', () => {
+  it('takes compound, age and the reconciled stops from the overview (not the game count)', () => {
     const input = base();
-    input.cars = [overview(0, { name: 'Max Verstappen', position: 1, compound: 'hard', age: 23, numPitStops: 1 })];
-    input.pitStops = [stop(0, 10), stop(0, 18), stop(1, 5)];
+    input.cars = [overview(0, { name: 'Max Verstappen', position: 1, compound: 'hard', age: 23, numPitStops: 1, stops: 2 })];
     const row = buildRows(input)[0];
     expect(row?.compound).toBe('hard');
     expect(row?.age).toBe(23);
     expect(row?.stops).toBe(2);
-    input.pitStops = [];
-    expect(buildRows(input)[0]?.stops).toBe(1);
-  });
-
-  it('falls back to the latest stint record when the overview compound is unknown', () => {
-    const input = base();
-    input.cars = [overview(0, { name: 'Max Verstappen', position: 1, compound: 'unknown' })];
-    input.stints = [stint(0, 'soft'), stint(0, 'hard'), stint(1, 'medium')];
-    expect(buildRows(input)[0]?.compound).toBe('hard');
   });
 
   it('carries the time penalty and warnings', () => {

@@ -1,9 +1,8 @@
-// Joins the topics the timing tower reads into one row per car (no arithmetic: the numbers come from the analyses).
+// Joins the topics the timing tower reads into one row per car (no arithmetic: the numbers, stops and compound included, come from the topics).
 import type { CarOverview, SessionInfo } from '@pitwall/contracts';
 import { unknown } from '@pitwall/domain';
 import type {
-  CarId, GapToCar, IncidentEntry, Interval, Known, LapBoard, LapBoardRow, Ms, PitStopRecord, RaceMoment, SectorStatus, StintRecord,
-  VisualCompound,
+  CarId, GapToCar, IncidentEntry, Interval, Known, LapBoard, LapBoardRow, Ms, RaceMoment, SectorStatus, VisualCompound,
 } from '@pitwall/domain';
 
 export type TowerInput = {
@@ -11,8 +10,6 @@ export type TowerInput = {
   intervals: Interval[];
   toCar: GapToCar[];
   board: LapBoard;
-  stints: StintRecord[];
-  pitStops: PitStopRecord[];
   moment?: Known<RaceMoment> | undefined;
   session: SessionInfo;
   incidents: IncidentEntry[] | undefined;
@@ -73,9 +70,6 @@ export function buildRows(input: TowerInput): TowerRow[] {
       const gaps = intervals.get(id);
       const lap = board.get(id);
       const gained = gaps?.positionsGained;
-      const stintCompound = input.stints.filter((s) => s.carId === id).at(-1)?.visualCompound;
-      const compound = c.tyres.visualCompound === 'unknown' && stintCompound !== undefined ? stintCompound : c.tyres.visualCompound;
-      const stops = Math.max(input.pitStops.filter((p) => p.carId === id).length, c.timing.numPitStops);
       return {
         carId: id,
         ours: id === playerCar || id === teammateCar,
@@ -91,9 +85,9 @@ export function buildRows(input: TowerInput): TowerRow[] {
         lastLap: lap?.lastLapMs ?? missing(),
         lastLapStatus: lap?.lastLapStatus ?? 'none',
         sectors: sectorsOf(lap),
-        compound,
+        compound: c.tyres.visualCompound,
         age: c.tyres.age,
-        stops,
+        stops: c.stops,
         penaltyMs: c.timing.timePenaltyMs,
         warnings: c.timing.totalWarnings,
         pit: c.timing.pitStatus === 'pitting' || c.timing.pitStatus === 'inPitArea' ? 'pit' : c.timing.driverStatus === 'outLap' ? 'out' : undefined,
