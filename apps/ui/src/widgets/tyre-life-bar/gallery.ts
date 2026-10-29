@@ -29,15 +29,15 @@ const noRateCorner = { wearPct: known(18, at), ratePctPerLap: unknown('insuffici
 const gallery: GalleryEntry<typeof widget> = {
   moments: ['raceSingaporeEnd.chequered'],
   cases: {
-    // Mockup: early stint, nothing lights up.
-    earlyStint: {
-      wear: wear(corner(18, 1.4, 37), corner(21, 1.7, 29), corner(15, 1.2, 46), corner(17, 1.3, 41)),
-      car: carWith('medium', 12),
-    },
     // Mockup: late stint, FR at 2 laps to the limit lights up (below the alarm threshold of 3).
     lateStint: {
       wear: wear(corner(61, 1.9, 4), corner(66, 2, 2), corner(57, 1.6, 8), corner(60, 1.7, 5)),
       car: carWith('medium', 31),
+    },
+    // Mockup: early stint, nothing lights up.
+    earlyStint: {
+      wear: wear(corner(18, 1.4, 37), corner(21, 1.7, 29), corner(15, 1.2, 46), corner(17, 1.3, 41)),
+      car: carWith('medium', 12),
     },
     // Exactly at the threshold: not below it, nothing lights up.
     atThreshold: {

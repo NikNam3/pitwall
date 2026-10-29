@@ -70,8 +70,6 @@ const base = { gapper: lines(), phases: [] as FlagPhase[], cars, session: sessio
 const gallery: GalleryEntry<typeof widget> = {
   moments: ['raceSingaporeEnd.chequered'],
   cases: {
-    // default reference; our car white and thicker, the teammate dashed, McLaren's second car dashed
-    greenFlag: base,
     // an SC band across laps 5 to 7: the field bunches, every car gains 4 s from lap 8 on
     safetyCarBand: {
       ...base,
@@ -80,6 +78,8 @@ const gallery: GalleryEntry<typeof widget> = {
         cars: [line(2, 12, 0, bunch), line(3, 12, 300, bunch), line(5, 12, 600, bunch), line(0, 12, 900, bunch), line(4, 12, 1100, bunch), line(1, 12, 1500, bunch)],
       }),
     },
+    // default reference; our car white and thicker, the teammate dashed, McLaren's second car dashed
+    greenFlag: base,
     virtualSafetyCarAndRed: { ...base, phases: [{ ...scPhase(3, 4), kind: 'VSC' }, { ...scPhase(9, 9), kind: 'red' }] },
     // retired car: its line stops at lap 7; lapped car: it has completed fewer laps than the leader
     retiredAndLapped: {

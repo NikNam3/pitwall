@@ -42,13 +42,13 @@ const moment = (name: Moment): Known<RaceMoment> =>
 const gallery: GalleryEntry<typeof widget> = {
   moments: ['raceSingaporeStart.grid', 'raceSingaporeEnd.chequered'],
   cases: {
+    // Mockup: in the incident moment the newest major entry is amber.
+    incidentMoment: { feed: [collision, timeLoss, warning, neutralised, damage], cars, moment: moment('incident') },
     empty: { feed: [], cars, moment: undefined },
     // Mockup: minor entries (warning, safety car) dim.
     feed: { feed: [collision, timeLoss, warning, neutralised, damage], cars, moment: undefined },
     // The unresolved time loss of the damage entry is an empty cell.
     unresolved: { feed: [damage], cars, moment: undefined },
-    // Mockup: in the incident moment the newest major entry is amber.
-    incidentMoment: { feed: [collision, timeLoss, warning, neutralised, damage], cars, moment: moment('incident') },
     // The newest entry is minor: the amber goes to the first major entry below it.
     incidentMomentMinorFirst: { feed: [warning, timeLoss, neutralised], cars, moment: moment('incident') },
     // Another moment: nothing amber.

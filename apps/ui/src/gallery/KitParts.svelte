@@ -1,7 +1,7 @@
 <script lang="ts">
   // The kit parts with sample data (spec 9.2): value cell states, icon and table, each in a cell of its own.
   // `data-ready` marks a cell whose parts have rendered (the e2e harness waits for it); only the chart loads lazily.
-  // Every kit part has a screenshot baseline (`data-baseline`).
+  // Every kit part but the icon has a screenshot baseline (`data-baseline`).
   import { feedId, known, unknown, type Insight, type SessionTime } from '@pitwall/domain';
   import Bar from '../kit/bar/Bar.svelte';
   import CarLabel from '../kit/car/CarLabel.svelte';
@@ -54,7 +54,8 @@
     <div><Value value={unknown('notReceived')} format={formatLapTime} widthCols={8} /></div>
     <div><Value value={94} format={formatPct} estimated /></div>
   </figure>
-  <figure data-baseline data-gallery-id="kit/icon" data-ready>
+  <!-- No baseline: the gear is in every panel header, so the widget baselines cover it (budget). -->
+  <figure data-gallery-id="kit/icon" data-ready>
     <figcaption style:color={role('textFaint')}>kit/icon</figcaption>
     <span style:color={role('textDim')}><Gear label="gear" /></span>
   </figure>

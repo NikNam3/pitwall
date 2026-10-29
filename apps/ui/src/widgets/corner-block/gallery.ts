@@ -75,13 +75,13 @@ const frBrakeCritical = reading(k(1043), BRAKE, k('above'), true);
 const gallery: GalleryEntry<typeof widget> = {
   moments: ['raceSingaporeStart.grid', 'raceSingaporeEnd.chequered'],
   cases: {
-    allInBand: { bands: bandsOf(healthy), wear: wearOf(healthy), car: carOf(healthy) },
     // Mockup: FR carcass out of band (amber), FR brake out for a full lap (red).
     outOfBand: {
       bands: bandsOf({ ...healthy, fr }, { fr: { carcassC: frCarcassHigh }, frBrake: frBrakeCritical }),
       wear: wearOf({ ...healthy, fr }),
       car: carOf({ ...healthy, fr }),
     },
+    allInBand: { bands: bandsOf(healthy), wear: wearOf(healthy), car: carOf(healthy) },
     // Surface-only tyre temperatures: the carcass column stays, empty, with the reason on hover.
     carcassNotApplicable: { bands: bandsOf(surfaceOnly), wear: wearOf(surfaceOnly), car: carOf(surfaceOnly) },
     // A rival linked as primary in realism mode: every value is hidden.
