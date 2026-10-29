@@ -18,7 +18,11 @@ export function buildData(series: ChartSeries[]): Array<Array<number | null>> {
   })];
 }
 
-/** The visible x-range: ends at the newest x and spans `cols` cells of `xPerCell[kind]` x units each, so width shows history. */
+/**
+ * The visible x-range: ends at the newest x and spans at most `cols` cells of `xPerCell[kind]` x units each, so width
+ * shows history. With less history than that it starts at the first data point (never at negative laps); a single
+ * point starts at max(0, end - span), or spans [end, end + span] when that would be degenerate.
+ */
 export function visibleXRange(
   xs: number[],
   cols: number,
@@ -28,5 +32,10 @@ export function visibleXRange(
   const span = cols * xPerCell[kind];
   if (xs.length === 0) return [0, span];
   const end = xs.reduce((a, b) => Math.max(a, b));
-  return [end - span, end];
+  const first = xs.reduce((a, b) => Math.min(a, b));
+  if (first === end) {
+    const start = Math.max(0, end - span);
+    return start === end ? [end, end + span] : [start, end];
+  }
+  return [Math.max(first, end - span), end];
 }
