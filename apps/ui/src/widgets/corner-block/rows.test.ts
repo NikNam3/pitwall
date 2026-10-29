@@ -46,12 +46,18 @@ const wear = (over: Partial<Corners<Known<number>>> = {}): TyreWear => ({
 });
 
 describe('cornerBlockRows', () => {
-  it('formats each channel with the centralised formats: whole degrees, one-decimal psi, whole percent', () => {
+  it('gives `text` for the full table: plain numbers (the unit is in the column header), wear with %, engine with its unit', () => {
     const rows = cornerBlockRows(car(), bands(), wear());
     expect(rows.corners.fr).toMatchObject({
-      surface: { text: '104°' }, carcass: { text: '109°' }, pressure: { text: '23.1' }, brake: { text: '1043°' }, wear: { text: '21%' },
+      surface: { text: '104' }, carcass: { text: '109' }, pressure: { text: '23.1' }, brake: { text: '1043' }, wear: { text: '21%' },
     });
-    expect(rows.engine).toMatchObject({ text: '112°' });
+    expect(rows.engine).toMatchObject({ text: '112 °C' });
+  });
+
+  it('gives `compactText` for the compact view: surface with a degree sign, brake and engine plain, wear with %', () => {
+    const rows = cornerBlockRows(car(), bands(), wear());
+    expect(rows.corners.fr).toMatchObject({ surface: { compactText: '104°' }, brake: { compactText: '1043' }, wear: { compactText: '21%' } });
+    expect(rows.engine).toMatchObject({ compactText: '112' });
   });
 
   it('takes values from car.detail and roles from the band readings; wear has no role', () => {
@@ -75,20 +81,20 @@ describe('cornerBlockRows', () => {
   it('renders a carcass that is notApplicable as an empty cell with its reason, in every corner', () => {
     const rows = cornerBlockRows(car({ carcass: unknown('notApplicable') }), bands(), wear());
     for (const name of ['fl', 'fr', 'rl', 'rr'] as const) {
-      expect(rows.corners[name].carcass).toMatchObject({ text: '', reason: 'notApplicable' });
+      expect(rows.corners[name].carcass).toMatchObject({ text: '', compactText: '', reason: 'notApplicable' });
       expect(rows.corners[name].surface.text).not.toBe('');
     }
   });
 
   it('keeps the grid whole when the carcass is empty: the other cells stay in their columns', () => {
     const rows = cornerBlockRows(car({ carcass: unknown('notApplicable') }), bands(), wear());
-    expect(fullRowText('fl', rows.corners.fl)).toBe('FL   98°        23.1   812°   18%');
+    expect(fullRowText('fl', rows.corners.fl)).toBe('FL    98        23.1    812   18%');
     expect(fullRowText('fl', rows.corners.fl)).toHaveLength(fullHeader().length);
   });
 
   it('hides a value with its reason: empty text, reason kept', () => {
     const rows = cornerBlockRows(car({ engine: unknown('realism') }), bands(), wear({ rl: unknown('insufficientData') }));
-    expect(rows.engine).toMatchObject({ text: '', reason: 'realism' });
+    expect(rows.engine).toMatchObject({ text: '', compactText: '', reason: 'realism' });
     expect(rows.corners.rl.wear).toMatchObject({ text: '', reason: 'insufficientData' });
     expect(rows.corners.fl.wear.reason).toBeUndefined();
   });
@@ -105,15 +111,15 @@ describe('full text layout', () => {
 
   it('right-aligns numbers in fixed fields so the rows line up', () => {
     const rows = cornerBlockRows(car(), bands(), wear());
-    expect(fullRowText('fl', rows.corners.fl)).toBe('FL   98°  101°  23.1   812°   18%');
-    expect(fullRowText('fr', rows.corners.fr)).toBe('FR  104°  109°  23.1  1043°   21%');
+    expect(fullRowText('fl', rows.corners.fl)).toBe('FL    98   101  23.1    812   18%');
+    expect(fullRowText('fr', rows.corners.fr)).toBe('FR   104   109  23.1   1043   21%');
   });
 });
 
 describe('worstBrake', () => {
   it('picks the hottest brake when none is out of band', () => {
     const rows = cornerBlockRows(car({ brake: { rr: k(870) } }), bands(), wear());
-    expect(worstBrake(rows)).toMatchObject({ corner: 'fr', cell: { text: '1043°' } });
+    expect(worstBrake(rows)).toMatchObject({ corner: 'fr', cell: { text: '1043', compactText: '1043' } });
     const cooler = cornerBlockRows(car({ brake: { fr: k(700), rr: k(870) } }), bands(), wear());
     expect(worstBrake(cooler)?.corner).toBe('rr');
   });
