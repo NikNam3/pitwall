@@ -58,7 +58,6 @@ describe('perLapRate', () => {
     const rate = rateOf(perLapRate(odd, OPTS));
     expect(Math.abs(rate.perLap - 2)).toBeLessThan(0.2);
     expect(rate.samples).toBe(5);
-    expect(atResult(perLapRate([...old, ...recent], OPTS))).toBe(atOf(8));
   });
 
   it('2 samples with minSamples 3 is unknown(insufficientData)', () => {
@@ -79,6 +78,7 @@ describe('perLapRate', () => {
     const rate = rateOf(perLapRate([...old, ...recent], OPTS));
     expect(rate.perLap).toBeCloseTo(-2, 9);
     expect(rate.samples).toBe(5);
+    expect(atResult(perLapRate([...old, ...recent], OPTS))).toBe(atOf(8));
   });
 });
 
