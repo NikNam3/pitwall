@@ -1,10 +1,10 @@
 // The pure cell computation of `Bar` (spec 8.4, A.4). Contract assumed of `kit/bar/bar.ts`:
 //   barCells(input: { value: Known<number>; min: number; max: number; cols: number; limit?: number;
-//                     marker?: Known<number>; reserve?: number }): { text: string; kinds: BarCellKind[]; over: boolean; reason: UnknownReason | undefined }
+//                     marker?: Known<number>; reserve?: number }): { text: string; kinds: BarCellKind[]; reason: UnknownReason | undefined }
 //   BarCellKind = 'fill' | 'empty' | 'limit' | 'marker' | 'reserve'
 //   - `kinds.length === cols` and `text` has exactly `cols` characters, one per cell (block characters only);
 //   - the value fills `round((value - min) / (max - min) * cols)` cells from the left ('█' = BAR_CHARS.fill), the rest are
-//     empty ('░' = BAR_CHARS.empty); a value below min fills none, above max fills all and sets `over`;
+//     empty ('░' = BAR_CHARS.empty); a value below min fills none, above max fills all (no flag: nothing would draw it);
 //   - a position `p` (limit, marker, reserve) lands in cell `clamp(floor((p - min) / (max - min) * cols), 0, cols - 1)`
 //     and replaces that cell's character: limit '|', marker ':', reserve '¦' (BAR_CHARS.limit, .marker, .reserve);
 //     on one cell the order of precedence is limit, marker, reserve;
@@ -22,27 +22,24 @@ describe('barCells: the fill', () => {
   it('value at min is all empty', () => {
     const b = bar(0);
     expect(b.text).toBe(empty.repeat(10));
-    expect(b.over).toBe(false);
   });
   it('value at max is all filled', () => {
     const b = bar(100);
     expect(b.text).toBe(fill.repeat(10));
-    expect(b.over).toBe(false);
   });
+  it('carries no `over` flag: a bar beyond its max draws the same full bar', () => expect(Object.keys(bar(130))).not.toContain('over'));
   it('half is half', () => expect(bar(50).text).toBe(fill.repeat(5) + empty.repeat(5)));
   it('rounds to the nearest cell', () => {
     expect(bar(24).text).toBe(fill.repeat(2) + empty.repeat(8));
     expect(bar(26).text).toBe(fill.repeat(3) + empty.repeat(7));
   });
-  it('beyond the max is all filled and flagged over', () => {
+  it('beyond the max is all filled', () => {
     const b = bar(130);
     expect(b.text).toBe(fill.repeat(10));
-    expect(b.over).toBe(true);
   });
-  it('below the min is empty and not over', () => {
+  it('below the min is empty', () => {
     const b = bar(-20);
     expect(b.text).toBe(empty.repeat(10));
-    expect(b.over).toBe(false);
   });
   it('honours a min other than zero', () => {
     expect(barCells({ value: known(5, at), min: 4, max: 6, cols: 4 }).text).toBe(fill.repeat(2) + empty.repeat(2));
@@ -89,7 +86,6 @@ describe('barCells: unknown value', () => {
     expect(b.text).toBe(empty.repeat(8));
     expect(b.kinds).toEqual(Array(8).fill('empty'));
     expect(b.reason).toBe('restricted');
-    expect(b.over).toBe(false);
   });
   it('still shows a limit', () => {
     expect(barCells({ value: unknown('notReceived'), min: 0, max: 100, cols: 10, limit: 70 }).text[7]).toBe(BAR_CHARS.limit);

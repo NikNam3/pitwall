@@ -14,7 +14,8 @@ export type BarInput = {
   marker?: Known<number> | undefined;
   reserve?: number | undefined;
 };
-export type BarCells = { text: string; kinds: BarCellKind[]; over: boolean; reason: UnknownReason | undefined };
+/** The cells of a bar; a value beyond `max` fills every cell (the bar shows no more than full). */
+export type BarCells = { text: string; kinds: BarCellKind[]; reason: UnknownReason | undefined };
 
 /** Cells of a bar: the fill, then the reserve, marker and limit drawn over it (limit wins on one cell). */
 export function barCells({ value, min, max, cols, limit, marker, reserve }: BarInput): BarCells {
@@ -24,11 +25,10 @@ export function barCells({ value, min, max, cols, limit, marker, reserve }: BarI
   if (!(cols >= 1) || !(span > 0)) {
     const n = cols >= 1 ? Math.floor(cols) : 0;
     const kinds: BarCellKind[] = Array.from({ length: n }, () => 'empty');
-    return { text: BAR_CHARS.empty.repeat(n), kinds, over: false, reason };
+    return { text: BAR_CHARS.empty.repeat(n), kinds, reason };
   }
   const frac = (v: number): number => (v - min) / span;
   const kinds: BarCellKind[] = Array.from({ length: cols }, () => 'empty');
-  const over = value.known && value.value > max;
   if (value.known) {
     const filled = Math.min(cols, Math.max(0, Math.round(frac(value.value) * cols)));
     for (let i = 0; i < filled; i++) kinds[i] = 'fill';
@@ -40,7 +40,7 @@ export function barCells({ value, min, max, cols, limit, marker, reserve }: BarI
   put(reserve, 'reserve');
   put(marker?.known ? marker.value : undefined, 'marker');
   put(limit, 'limit');
-  return { text: kinds.map((k) => BAR_CHARS[k]).join(''), kinds, over, reason };
+  return { text: kinds.map((k) => BAR_CHARS[k]).join(''), kinds, reason };
 }
 
 /** A run of equal-role cells: the fill in the caller's role, empty cells faint, markers dim. */
