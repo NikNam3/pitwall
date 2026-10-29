@@ -1,5 +1,5 @@
 // `battle` (spec 6.3): our cars against the car ahead and behind, from `gaps` and `pace` outputs.
-import { carId, known, unknown, type CarId, type CarState, type Known, type Ms } from '@pitwall/domain';
+import { carId, known, unknown, type CarId, type CarState, type Interval, type Known, type Ms } from '@pitwall/domain';
 import type { EngineView } from '@pitwall/engine';
 import { describe, expect, it } from 'vitest';
 import { BATTLE, BATTLE_CONFIG } from '../../src/battle/index.ts';
@@ -22,7 +22,10 @@ type Scene = {
   /** Cars as `[id, position, over]`. */
   cars: [number, number, Partial<CarState['timing']>?][];
   lineTimes: Record<number, Line>;
-  latest: Record<number, { lap: number; segment: number; at: number }>;
+  /** The cars in the order of `gaps.intervals` (retired and disqualified cars are already left out there). */
+  order?: number[];
+  /** The latest crossings; the gap now does not depend on them. */
+  latest?: Record<number, { lap: number; segment: number; at: number }>;
   pace?: Record<number, Known<Ms>>;
   kind?: 'race' | 'practice';
   teammate?: number;
@@ -36,10 +39,18 @@ const build = (s: Scene): EngineView => {
     Object.assign(car.timing, timing);
     return s.hidden?.includes(n) ? realismHidden(car) : car;
   });
+  const interval = (n: number): Interval => ({
+    carId: id(n),
+    toLeaderMs: known(0, 311_600),
+    // what `gaps` computed at the latest common segment: ahead 1.6 s at 311.6 s, behind 2.2 s at 313.8 s
+    toAheadMs: known(n === 0 ? 1600 : 3000, 311_600),
+    toBehindMs: known(n === 0 ? 2200 : 1600, 313_800),
+    lapsDown: 0,
+  });
   const gaps: GapsOutput = {
-    intervals: [],
+    intervals: (s.order ?? [1, 0, 3]).map(interval),
     lineTimes: Object.fromEntries(Object.entries(s.lineTimes).map(([k, v]) => [k, v])) as GapsOutput['lineTimes'],
-    latest: s.latest as GapsOutput['latest'],
+    latest: (s.latest ?? {}) as GapsOutput['latest'],
     neighbourhood: [],
   };
   const pace: Pace = {
@@ -60,11 +71,6 @@ const base = (over: Partial<Scene> = {}): Scene => {
   return {
     cars: [[0, 3], [1, 2], [3, 4]],
     lineTimes: { 1: AHEAD_LINES, 0: ours, 3: plus(ours, [3000, 2600, 2200]) },
-    latest: {
-      1: { lap: 4, segment: 10, at: 310_000 },
-      0: { lap: 4, segment: 10, at: 311_600 },
-      3: { lap: 4, segment: 10, at: 313_800 },
-    },
     pace: {
       0: known(90_000, 50_000),
       1: known(92_500, 60_000),
@@ -91,11 +97,36 @@ describe('battle', () => {
     expect(ahead).toMatchObject({ known: true });
     if (!ahead.known) return;
     expect(ahead.value.carId).toBe(id(1));
-    // the gap now: our latest crossing minus theirs at the same mini-sector; its `at` is the later crossing
+    // the gap now is our `toAheadMs` of gaps.intervals, passed through with its `at`
     expect(ahead.value.gapMs).toEqual({ known: true, value: 1600, at: 311_600 });
     // the rate rests on the line times; its `at` is the later car's line time of the newest lap
     expect(ahead.value.closingMsPerLap).toEqual({ known: true, value: 400, at: 301_600 });
     expect(ahead.value.lapsToDrs).toEqual({ known: true, value: 1.5, at: 301_600 });
+  });
+
+  it('the gap now comes from intervals even when the latest crossings are at different segments', () => {
+    const view = build(
+      base({
+        latest: {
+          1: { lap: 4, segment: 7, at: 309_000 },
+          0: { lap: 4, segment: 10, at: 311_600 },
+          3: { lap: 4, segment: 2, at: 305_000 },
+        },
+      }),
+    );
+    const c = card(view);
+    if (!c.ahead.known || !c.behind.known) throw new Error('ahead or behind unknown');
+    expect(c.ahead.value.gapMs).toEqual({ known: true, value: 1600, at: 311_600 });
+    expect(c.behind.value.gapMs).toEqual({ known: true, value: 2200, at: 313_800 });
+  });
+
+  it('an unknown interval gap stays unknown with its reason', () => {
+    const view = build(base());
+    const gaps = view.outputs.get('gaps') as GapsOutput;
+    gaps.intervals.find((i) => i.carId === id(0))!.toAheadMs = unknown('notReceived');
+    const ahead = card(view).ahead;
+    if (!ahead.known) throw new Error('ahead unknown');
+    expect(ahead.value.gapMs).toMatchObject({ known: false, reason: 'notReceived' });
   });
 
   it('the car behind: its gap is its line time minus ours; closing positive when it catches up', () => {
@@ -184,7 +215,7 @@ describe('battle', () => {
   });
 
   it('no car ahead (we lead): ahead is notApplicable', () => {
-    const view = build(base({ cars: [[0, 1], [1, 2], [3, 3]] }));
+    const view = build(base({ cars: [[0, 1], [1, 2], [3, 3]], order: [0, 1, 3] }));
     const c = card(view);
     expect(c.carId).toBe(id(0));
     expect(c.ahead).toMatchObject({ known: false, reason: 'notApplicable' });
@@ -192,24 +223,18 @@ describe('battle', () => {
   });
 
   it('no car behind (we are last): behind is notApplicable', () => {
-    const view = build(base({ cars: [[0, 4], [1, 3], [3, 2]] }));
+    const view = build(base({ cars: [[0, 4], [1, 3], [3, 2]], order: [3, 1, 0] }));
     expect(card(view).behind).toMatchObject({ known: false, reason: 'notApplicable' });
   });
 
-  it('a retired car is never ahead or behind: the nearest running car on track position is taken', () => {
+  it('a retired car is never ahead or behind: the neighbours are those of gaps.intervals', () => {
     const ours = plus(AHEAD_LINES, [2400, 2000, 1600]);
     const view = build(
       base({
         // positions: car 2 P1, car 1 P2 (retired), car 0 P3 (ours), car 3 P4 (disqualified), car 4 P5
         cars: [[2, 1], [1, 2, { resultStatus: 'retired' }], [0, 3], [3, 4, { resultStatus: 'disqualified' }], [4, 5]],
         lineTimes: { 2: AHEAD_LINES, 1: AHEAD_LINES, 0: ours, 3: plus(ours, [500, 500, 500]), 4: plus(ours, [3000, 2600, 2200]) },
-        latest: {
-          2: { lap: 4, segment: 10, at: 310_000 },
-          1: { lap: 3, segment: 40, at: 295_000 },
-          0: { lap: 4, segment: 10, at: 311_600 },
-          3: { lap: 4, segment: 10, at: 312_100 },
-          4: { lap: 4, segment: 10, at: 313_800 },
-        },
+        order: [2, 0, 4],
         pace: { 0: known(90_000, 1), 1: known(90_000, 1), 2: known(92_500, 1), 3: known(90_000, 1), 4: known(90_000, 1) },
       }),
     );
@@ -221,7 +246,7 @@ describe('battle', () => {
   });
 
   it('when every car ahead is retired there is no car ahead', () => {
-    const view = build(base({ cars: [[0, 2], [1, 1, { resultStatus: 'retired' }], [3, 3]] }));
+    const view = build(base({ cars: [[0, 2], [1, 1, { resultStatus: 'retired' }], [3, 3]], order: [0, 3] }));
     expect(card(view).ahead).toMatchObject({ known: false, reason: 'notApplicable' });
   });
 
