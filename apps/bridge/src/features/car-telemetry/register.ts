@@ -1,7 +1,7 @@
 import type { TopicValue } from '@pitwall/contracts';
 import type { QuickCalculator } from '@pitwall/engine';
 import { bindState, defineFeature } from '../feature.ts';
-import { selectCar, type ViewCars } from '../car-params.ts';
+import { selectCarSlot, type ViewCars } from '../car-params.ts';
 
 /** Every car, by reference; the topic's `select` clones the dynamics of the one car a subscription asks for. */
 const carsDynamics: QuickCalculator<ViewCars> = {
@@ -15,5 +15,5 @@ const carsDynamics: QuickCalculator<ViewCars> = {
 export default defineFeature({
   name: 'car-telemetry',
   calculators: [carsDynamics],
-  topics: [bindState('car.telemetry', carsDynamics, selectCar<TopicValue<'car.telemetry'>>((car) => ({ motion: car.motion, dynamics: car.dynamics })))],
+  topics: [bindState('car.telemetry', carsDynamics, selectCarSlot<TopicValue<'car.telemetry'>>((car) => ({ motion: car.motion, dynamics: car.dynamics })))],
 });

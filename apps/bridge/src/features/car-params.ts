@@ -11,10 +11,11 @@ const carIdOf = (params: unknown, carCount: number): number | undefined => {
 };
 
 /**
- * A `select` for the `{ carId }` topics: copies (`copyPlain`, the engine state is plain data) what `pick` takes from the requested car, or gives `undefined`
- * for params that do not name a car. Everything but `carId` in the params is ignored; the params are never changed.
+ * A `select` for the `{ carId }` topics that read the engine's car slots: copies (`copyPlain`, the engine state is plain
+ * data) what `pick` takes from the requested car, or gives `undefined` for params that do not name a car. Everything
+ * but `carId` in the params is ignored; the params are never changed. For an output keyed by car id, see `selectCar`.
  */
-export const selectCar =
+export const selectCarSlot =
   <T>(pick: (car: ViewCars[number]) => DeepReadonly<NoInfer<T>>) =>
   (cars: ViewCars, params: object): T | undefined => {
     const carId = carIdOf(params, cars.length);
