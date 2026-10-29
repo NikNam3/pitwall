@@ -1,5 +1,5 @@
 // Builds the `EngineView` a calculator sees after the last of `frames`, with feed health you control.
-import { SessionRunner, type EngineView, type FeedMetricsView, type Frame } from '@pitwall/engine';
+import { activeFlagPhaseOf, SessionRunner, type EngineView, type FeedMetricsView, type Frame } from '@pitwall/engine';
 import { IDLE_FEED } from '../../../../test-support/builders/index.ts';
 import { initFor } from '../../../../packages/engine/test/support/run.ts';
 
@@ -14,5 +14,5 @@ export const viewFrom = (frames: readonly Frame[], feed: Partial<FeedMetricsView
   const runner = new SessionRunner(initFor(fromSession));
   const results = fromSession.map((f) => runner.apply(f));
   const last = results.at(-1)!;
-  return { state: last.state, changed: last.changed, delta: last.delta, feed: { ...IDLE_FEED, ...feed }, outputs: new Map(), config };
+  return { state: last.state, activeFlagPhase: activeFlagPhaseOf(runner.state), changed: last.changed, delta: last.delta, feed: { ...IDLE_FEED, ...feed }, outputs: new Map(), config };
 };
