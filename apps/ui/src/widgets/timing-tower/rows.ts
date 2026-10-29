@@ -30,8 +30,8 @@ export type TowerRow = {
   gapToLeader: Known<Ms>;
   interval: Known<Ms>;
   lapsDown: number;
-  /** Undefined for the player's own row. */
-  toUs: Known<Ms> | undefined;
+  /** TO US: the `gaps.toCar` entry, measured to the link group's primary car; that car's own entry is `notApplicable`. */
+  toUs: Pick<GapToCar, 'gapMs' | 'lapsDown'>;
   lastLap: Known<Ms>;
   lastLapStatus: SectorStatus;
   sectors: Array<{ timeMs: Known<Ms>; status: SectorStatus }>;
@@ -62,7 +62,6 @@ export function buildRows(input: TowerInput): TowerRow[] {
   const board = new Map(input.board.rows.map((r) => [r.carId, r]));
   const major = input.incidents?.find((e) => e.severity === 'major');
   const ours = ourCars(input.session);
-  const { playerCar } = input.session;
 
   const rows = input.cars
     .filter((c) => !UNUSED.has(c.timing.resultStatus))
@@ -83,7 +82,7 @@ export function buildRows(input: TowerInput): TowerRow[] {
         gapToLeader: gaps?.toLeaderMs ?? missing(),
         interval: gaps?.toAheadMs ?? missing(),
         lapsDown: gaps?.lapsDown ?? 0,
-        toUs: id === playerCar ? undefined : (toCar.get(id)?.gapMs ?? missing()),
+        toUs: toCar.get(id) ?? { gapMs: missing(), lapsDown: 0 },
         lastLap: lap?.lastLapMs ?? missing(),
         lastLapStatus: lap?.lastLapStatus ?? 'none',
         sectors: sectorsOf(lap),

@@ -57,12 +57,15 @@ function gapTo(a: CarCrossings | undefined, to: CarCrossings | undefined): Omit<
 /**
  * Every running car's signed gap to `carId` (positive = behind it), exact from both cars' crossings at the latest
  * point both passed. `lapsDown` is signed and relative to `carId` (negative = laps ahead); a lapped pair's `gapMs` is
- * the time between them at the same point of the track. `undefined` when `carId` is not a running car.
+ * the time between them at the same point of the track. `carId` itself has no gap to itself: `notApplicable`.
+ * `undefined` when `carId` is not a running car.
  */
 export function gapsToCar(out: GapsOutput, carId: CarId): GapToCar[] | undefined {
   if (!out.intervals.some((i) => i.carId === carId)) return undefined;
   const to = out.recent[carId];
-  return out.intervals.map((i) => ({ carId: i.carId, ...gapTo(out.recent[i.carId], to) }));
+  return out.intervals.map((i) =>
+    i.carId === carId ? { carId, gapMs: unknown('notApplicable'), lapsDown: 0 } : { carId: i.carId, ...gapTo(out.recent[i.carId], to) },
+  );
 }
 
 /** The car's line crossings after the race start: its completed race laps. */

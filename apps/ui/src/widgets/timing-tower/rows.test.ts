@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { unknown } from '@pitwall/domain';
 import { boardRow, incidentEntry, interval, lapBoard, ms, overview, sessionInfo, toCar } from './fixtures.ts';
 import { buildRows, type TowerInput } from './rows.ts';
 
@@ -29,14 +30,34 @@ describe('buildRows', () => {
     expect(buildRows(base()).map((r) => r.ours)).toEqual([false, true, false]);
   });
 
-  it('joins the gaps: gap to the leader, interval and TO US; our own row has no TO US', () => {
+  it('joins the gaps: gap to the leader, interval and TO US as gaps.toCar gives them', () => {
     const [vsr, us, alb] = buildRows(base());
     expect(vsr?.gapToLeader).toEqual({ known: false, reason: 'notApplicable' });
     expect(us?.gapToLeader).toEqual(ms(2184));
     expect(alb?.interval).toEqual(ms(3719));
-    expect(vsr?.toUs).toEqual(ms(-2184));
-    expect(alb?.toUs).toEqual(ms(3719));
-    expect(us?.toUs).toBeUndefined();
+    expect(vsr?.toUs).toMatchObject({ gapMs: ms(-2184), lapsDown: 0 });
+    expect(alb?.toUs).toMatchObject({ gapMs: ms(3719), lapsDown: 0 });
+    // the car the topic is measured to: the analysis gives it notApplicable
+    expect(us?.toUs.gapMs).toEqual(unknown('notApplicable'));
+  });
+
+  it('TO US follows the car the topic is measured to, not the player: with the teammate as primary the player row has its gap', () => {
+    const input = base();
+    input.session = sessionInfo(1, 2);
+    input.toCar = [toCar(0, -5903), toCar(1, -3719), toCar(2, undefined)];
+    const [, player, teammate] = buildRows(input);
+    expect(player?.toUs.gapMs).toEqual(ms(-3719));
+    expect(teammate?.toUs.gapMs).toEqual(unknown('notApplicable'));
+  });
+
+  it("TO US carries the laps from gaps.toCar, relative to that car, not the leader's laps down", () => {
+    const input = base();
+    // car 2 is a lap down on the leader but on the same lap as us; car 0 is a lap ahead of us
+    input.intervals = [interval(0), interval(1, 2184, 2184, 1), interval(2, 5903, 3719, 1)];
+    input.toCar = [toCar(0, -2184, -1), toCar(1, undefined), toCar(2, 3719)];
+    const [vsr, , alb] = buildRows(input);
+    expect(vsr?.toUs).toMatchObject({ lapsDown: -1 });
+    expect(alb?.toUs).toMatchObject({ gapMs: ms(3719), lapsDown: 0 });
   });
 
   it('joins the lap board: last lap, sectors and their statuses', () => {
@@ -63,7 +84,7 @@ describe('buildRows', () => {
     input.board = lapBoard(1, []);
     const row = buildRows(input)[0];
     expect(row?.gapToLeader.known).toBe(false);
-    expect(row?.toUs?.known).toBe(false);
+    expect(row?.toUs.gapMs.known).toBe(false);
     expect(row?.lastLap.known).toBe(false);
     expect(row?.lapsDown).toBe(0);
   });

@@ -3,8 +3,10 @@
   import type { WidgetProps } from '../../kit/types.ts';
   import Table from '../../kit/table/Table.svelte';
   import CarLabel from '../../kit/car/CarLabel.svelte';
+  import { gapToCarCell } from '../../kit/car/gap-to-car.ts';
   import CompoundMark from '../../kit/compound/CompoundMark.svelte';
   import Value from '../../kit/values/Value.svelte';
+  import { unknownReason } from '../../kit/text.ts';
   import { positionMarkText } from '../../kit/values/position-mark.ts';
   import { formatCount, formatDeltaMs, formatLapNumber, formatLapsDown, formatLapTime, formatPenaltyMs, formatPlace, formatSector, formatWarnings } from '../../kit/values/format.ts';
   import { sectorStatusRole } from '../../emphasis/index.ts';
@@ -38,7 +40,7 @@
 {#snippet car(r: TowerRow)}<CarLabel identity={r.overview.identity} ours={r.ours} />{/snippet}
 {#snippet gap(r: TowerRow)}{#if r.retired}{text.dnf}{:else if r.lapsDown > 0}{formatLapsDown(r.lapsDown)}{:else}<Value value={r.gapToLeader} format={formatDeltaMs} />{/if}{/snippet}
 {#snippet interval(r: TowerRow)}{#if r.retired}{formatLapNumber(r.retiredAtLap ?? NaN)}{:else if r.lapsDown === 0}<Value value={r.interval} format={formatDeltaMs} />{/if}{/snippet}
-{#snippet toUs(r: TowerRow)}{#if r.toUs !== undefined && !r.retired && r.lapsDown === 0}<Value value={r.toUs} format={formatDeltaMs} />{/if}{/snippet}
+{#snippet toUs(r: TowerRow)}{#if !r.retired}{@const c = gapToCarCell(r.toUs)}<span title={c.reason === undefined ? undefined : unknownReason[c.reason]}>{c.text}</span>{/if}{/snippet}
 {#snippet last(r: TowerRow)}<span style:color={colourOf(r.lastLapStatus, r.ours)}><Value value={r.lastLap} format={formatLapTime} /></span>{/snippet}
 {#snippet sector(r: TowerRow, i: number)}{@const s = r.sectors[i]}{#if s}<span style:color={colourOf(s.status, r.ours)}><Value value={s.timeMs} format={formatSector} /></span>{/if}{/snippet}
 {#snippet compound(r: TowerRow)}<CompoundMark compound={r.compound} />{/snippet}
