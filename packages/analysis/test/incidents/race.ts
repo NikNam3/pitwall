@@ -7,6 +7,7 @@ import {
   known,
   MINI_SECTORS,
   type CarId,
+  type CarState,
   type DamageState,
   type FlagPhase,
   type LapRecord,
@@ -77,6 +78,10 @@ export type RaceInput = {
   playerCar?: number;
   config?: Record<string, number | boolean>;
   kind?: SessionKind;
+  /** The neutralised phase in progress (not yet in `flagPhases`). */
+  activeFlagPhase?: EngineView['activeFlagPhase'];
+  /** Live car states; none by default (the calculator works from the history). */
+  cars?: CarState[];
 };
 
 /** A race view over this history, everything new; upstream outputs only where given. */
@@ -91,12 +96,16 @@ export function viewOf({
   playerCar = PLAYER,
   config = {},
   kind = 'race',
+  activeFlagPhase,
+  cars = [],
 }: RaceInput): EngineView {
   const outputs = new Map<string, unknown>();
   if (damage) outputs.set(DAMAGE, damage);
   if (gaps) outputs.set(GAPS, gaps);
   const last = miniSectors[miniSectors.length - 1];
   return engineView({
+    cars,
+    activeFlagPhase,
     history: { miniSectors, events, flagPhases, pitStops, laps },
     outputs,
     playerCar,

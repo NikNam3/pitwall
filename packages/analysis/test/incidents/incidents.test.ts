@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { carId, known, unknown, type CarId, type IncidentEntry, type Known, type RaceEvent } from '@pitwall/domain';
-import { event, flagPhase, lap } from '../../../../test-support/builders/index.ts';
+import { carState, event, flagPhase, lap } from '../../../../test-support/builders/index.ts';
 import { incidentsCalculator } from '../../src/incidents/calculator.ts';
 import { INCIDENTS, INCIDENTS_CONFIG } from '../../src/incidents/index.ts';
 import { DAMAGE } from '../../src/damage/index.ts';
@@ -10,6 +10,7 @@ import {
   damageState,
   deltaOf,
   PACE_MS,
+  SEGMENT_MS,
   pitStop,
   PLAYER,
   race,
@@ -213,6 +214,91 @@ describe('incidents calculator', () => {
 
   it('outside a race the feed is empty', () => {
     expect(run(viewOf({ miniSectors: race(), events: [collision(6, 5)], kind: 'practice' }))).toEqual([]);
+  });
+
+  describe('open phases (ruling 1)', () => {
+    const open = (start: number, kind: 'SC' | 'VSC' | 'red' = 'VSC') => ({ kind, start, startLeaderLap: 5, scPhases: [] });
+
+    it('the neutralised entry appears when the phase starts and keeps its id when it closes', () => {
+      const miniSectors = race();
+      const start = 400_000;
+      const running = viewOf({ miniSectors: until(miniSectors, 420_000), activeFlagPhase: open(start) });
+      const during = only(run(running), 'neutralised');
+      expect(during).toMatchObject({ id: `neutralised::${start}`, at: start, lap: 5, severity: 'minor', carIds: [] });
+
+      const closed = viewOf({
+        miniSectors: until(miniSectors, 470_000),
+        flagPhases: [flagPhase({ kind: 'VSC', start, end: 460_000, startLeaderLap: 5, endLeaderLap: 6 })],
+      });
+      const after = runSteps([running, closed]);
+      expect(only(after, 'neutralised').id).toBe(during.id);
+      expect(after).toEqual(run(closed));
+    });
+
+    it('a slow mini-sector inside an open neutralised phase is no timeLoss', () => {
+      const miniSectors = until(race({ delays: [slow7(2_500)] }), SLOW_START + 20_000);
+      for (const kind of ['SC', 'VSC', 'red'] as const) {
+        const feed = run(viewOf({ miniSectors, activeFlagPhase: open(SLOW_START - 10_000, kind) }));
+        expect(feed.filter((e) => e.kind === 'timeLoss'), kind).toEqual([]);
+      }
+    });
+  });
+
+  describe('pit lane (ruling 2)', () => {
+    // History up to just after car 7's slow mini-sector; its newest crossings are the slow one's end and after.
+    const miniSectors = until(race({ delays: [slow7(2_500)] }), SLOW_START + SEGMENT_MS + 2_500 + 500);
+    const car7 = (pitStatus: 'none' | 'pitting' | 'inPitArea') => [carState({ id: car(7), timing: { pitStatus } })];
+
+    it('no timeLoss for a car that is in the pit lane now, before its pit stop is recorded', () => {
+      expect(run(viewOf({ miniSectors, cars: car7('none') })).filter((e) => e.kind === 'timeLoss')).toHaveLength(1);
+      for (const status of ['pitting', 'inPitArea'] as const) {
+        expect(run(viewOf({ miniSectors, cars: car7(status) })).filter((e) => e.kind === 'timeLoss'), status).toEqual([]);
+      }
+    });
+
+    it('the live pit status does not remove an older timeLoss of that car', () => {
+      const later = until(race({ delays: [slow7(2_500)] }), boundaryAt(7, 7, 30));
+      expect(run(viewOf({ miniSectors: later, cars: car7('pitting') })).filter((e) => e.kind === 'timeLoss')).toHaveLength(1);
+    });
+  });
+
+  describe('penalty types (ruling 3)', () => {
+    it.each([0, 1, 2, 4, 6, 9])('penaltyType %i is a penalty entry', (type) => {
+      expect(run(viewOf({ miniSectors: race(), events: [penalty(7, type)] })).map((e) => e.kind)).toEqual(['penalty']);
+    });
+
+    it('penaltyType 5 is a warning entry', () => {
+      expect(run(viewOf({ miniSectors: race(), events: [penalty(7, WARNING)] })).map((e) => e.kind)).toEqual(['warning']);
+    });
+
+    it.each([3, 7, 8, 10, 11, 12, 13, 14, 15, 16, 17])('penaltyType %i is ignored', (type) => {
+      expect(run(viewOf({ miniSectors: race(), events: [penalty(7, type)] }))).toEqual([]);
+    });
+  });
+
+  describe('time loss merged into a collision or damage (ruling 4)', () => {
+    const miniSectors = race({ delays: [slow7(3_000)] });
+
+    it('a timeLoss within 5 s of a collision of the same car sets the collision\'s timeLostMs, no second entry', () => {
+      // The collision is reported 2 s before the slow mini-sector starts.
+      const feed = run(viewOf({ miniSectors, events: [collision(7, 8, SLOW_START - 2_000)] }));
+      expect(feed.map((e) => e.kind)).toEqual(['collision']);
+      expect(valueOf(feed[0]!.timeLostMs)).toBe(3_000);
+    });
+
+    it('a timeLoss within 5 s of a damage jump of the same car sets the damage entry\'s timeLostMs', () => {
+      const jump = { at: SLOW_START + 1_000, lap: 5, parts: ['floorPct' as const], deltaPct: 30, lossMsPerLap: unknown('insufficientData') };
+      const feed = run(viewOf({ miniSectors, damage: { [car(7)]: damageState([jump]) } as Record<CarId, ReturnType<typeof damageState>> }));
+      expect(feed.map((e) => e.kind)).toEqual(['damage']);
+      expect(valueOf(feed[0]!.timeLostMs)).toBe(3_000);
+    });
+
+    it('a timeLoss more than 5 s from the collision, or of another car, stays its own entry', () => {
+      const far = run(viewOf({ miniSectors, events: [collision(7, 8, SLOW_START - 8_000)] }));
+      expect(far.map((e) => e.kind).sort()).toEqual(['collision', 'timeLoss']);
+      const other = run(viewOf({ miniSectors, events: [collision(8, 9, SLOW_START - 2_000)] }));
+      expect(other.map((e) => e.kind).sort()).toEqual(['collision', 'timeLoss']);
+    });
   });
 
   describe('incremental', () => {
