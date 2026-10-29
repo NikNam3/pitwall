@@ -35,11 +35,20 @@ export function formatSector(ms: Ms): string {
 /** Temperature to whole degrees, `94.6` -> `95°`. */
 export const formatTemp = (c: Celsius): string => `${Math.round(c) + 0}°`;
 
+/** `toFixed` with a negative zero shown as 0, `-0.04` at one decimal -> `0.0`; the grid helper re-exports it. */
+export function fixed(value: number, decimals: number): string {
+  const text = value.toFixed(decimals);
+  return /^-0(\.0*)?$/.test(text) ? text.slice(1) : text;
+}
+
+/** One decimal, a negative zero shown as 0. */
+const fixed1 = (n: number): string => fixed(n, 1);
+
 /** Tyre pressure to one decimal, `23.456` -> `23.5`. */
-export const formatPsi = (p: Psi): string => p.toFixed(1);
+export const formatPsi = (p: Psi): string => (Number.isFinite(p) ? fixed1(p) : '');
 
 /** Mass in kg to one decimal, `10` -> `10.0`. */
-export const formatKg = (k: Kg): string => k.toFixed(1);
+export const formatKg = (k: Kg): string => (Number.isFinite(k) ? fixed1(k) : '');
 
 /** Percentage to whole numbers, `12.34` -> `12%`. */
 export const formatPct = (p: Percent): string => `${Math.round(p) + 0}%`;
@@ -91,3 +100,25 @@ export function formatShort(value: unknown, max: number): string {
 
 /** Replay speed factor, `0.5` -> `×0.5`. */
 export const formatFactor = (factor: number): string => `×${factor}`;
+
+/** A lap number, `23` -> `L23` (a count says `laps`, see `formatLaps`). */
+export const formatLapNumber = (n: number): string => (Number.isFinite(n) ? `L${Math.round(n)}` : '');
+
+/** A count of laps to one decimal, `1.8` -> `1.8 laps`. */
+export const formatLaps = (n: number): string => (Number.isFinite(n) ? `${fixed(n, 1)} laps` : '');
+
+/** Temperature to whole degrees, `94.6` -> `95°`. */
+export const formatCelsius = (c: Celsius): string => (Number.isFinite(c) ? formatTemp(c) : '');
+
+/** Percentage to whole numbers, `17.6` -> `18%`. */
+export const formatPercent = (p: Percent): string => (Number.isFinite(p) ? formatPct(p) : '');
+
+/** Energy shown as MJ with one decimal, `2100000` -> `2.1 MJ`. */
+export const formatJoules = (j: number): string => (Number.isFinite(j) ? `${fixed(j / 1e6, 1)} MJ` : '');
+
+/** A delta in ms as signed seconds, `412` -> `+0.412`, `-412` -> `-0.412`. */
+export const formatDeltaMs = (ms: Ms): string => {
+  if (!Number.isFinite(ms)) return '';
+  const abs = Math.abs(Math.round(ms));
+  return `${ms < 0 && abs > 0 ? '-' : '+'}${formatSector(abs)}`;
+};
