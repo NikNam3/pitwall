@@ -90,15 +90,21 @@ export async function serve(opts: ServeOptions): Promise<number> {
       undo.push(pruneEndedAcknowledgements(hub, [feedId], uiState));
     }
     let controller: ReplayController | undefined;
-    const server = await WsServer.start({
-      port: opts.wsPort,
-      hub,
-      feeds,
-      log: cliLogger(io, wsLogLevel(io.env)),
-      ...(uiState && { uiState }),
-      ...(opts.replay && { replay: { control: (control: ReplayControl) => (controller === undefined ? false : (controller.control(control), true)) } }),
-    });
-    undo.push(() => server.close());
+    // A replay's server opens only once the startup jump has landed: a client that connects earlier would be told the
+    // positions the fast-forward passes through, and a dev restart would not come back to the moment it left.
+    const startServer = async (): Promise<WsServer> => {
+      const started = await WsServer.start({
+        port: opts.wsPort,
+        hub,
+        feeds,
+        log: cliLogger(io, wsLogLevel(io.env)),
+        ...(uiState && { uiState }),
+        ...(opts.replay && { replay: { control: (control: ReplayControl) => (controller === undefined ? false : (controller.control(control), true)) } }),
+      });
+      undo.push(() => started.close());
+      return started;
+    };
+    let server: WsServer | undefined = opts.replay ? undefined : await startServer();
     // A dev child tells its supervisor where the replay is, so a restart can come back to the same moment.
     let listening = false;
     if (opts.dev && opts.replay && process.send) {
@@ -163,6 +169,7 @@ export async function serve(opts: ServeOptions): Promise<number> {
       // A recording that cannot be read ends the wait too (`done` rejects), and so does an interrupt.
       await Promise.race([running.settled(), running.done, whenAborted(io.signal)]).catch(failed);
       jumping = false;
+      server = await startServer();
       finished = running.done;
     } else {
       const running = makePipeline(opts.source);
@@ -172,7 +179,7 @@ export async function serve(opts: ServeOptions): Promise<number> {
     }
     await opts.bound?.();
     listening = true;
-    io.out(`listening ws://127.0.0.1:${server.port}`);
+    io.out(`listening ws://127.0.0.1:${server?.port}`);
 
     const aborted = whenAborted(io.signal);
     await Promise.race([aborted, finished.then(() => aborted)]).catch(failed);

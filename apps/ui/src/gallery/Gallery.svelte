@@ -1,6 +1,6 @@
 <script lang="ts">
   // The gallery (spec 9.1, 9.2): every widget at every declared size, on every moment and case, under every theme,
-  // then the panel frame in each state and the kit parts. Dev and test builds only.
+  // then the panel frame in each state, the kit parts and the shell (top bar and overlays); the shell comes last, so nothing above it moves. Dev and test builds only.
   import * as text from '../kit/text.ts';
   import { WIDGETS } from '../widgets/index.generated.ts';
   import { DEFAULT_THEME, role, THEMES } from '../theme/index.ts';
@@ -9,6 +9,7 @@
   import GalleryCell from './GalleryCell.svelte';
   import type { GalleryOverride } from './gallery-connection.ts';
   import KitParts from './KitParts.svelte';
+  import ShellCells from './ShellCells.svelte';
   import type { MomentValues } from './moment-values.ts';
 
   /** What a widget's `gallery.ts` declares (the widgets' gallery files are only ever imported here). */
@@ -87,6 +88,10 @@
   <section>
     <h2 style:color={role('textDim')}>kit</h2>
     <KitParts />
+  </section>
+  <section>
+    <h2 style:color={role('textDim')}>shell</h2>
+    <ShellCells {moments} />
   </section>
 </main>
 

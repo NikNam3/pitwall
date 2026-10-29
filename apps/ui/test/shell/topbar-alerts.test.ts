@@ -1,13 +1,13 @@
 // Top bar logic without a component (Task 17, spec 7.7).
 // Contract: `shell/topbar/alerts.ts` exports `activeInsights: Fold<InsightEntry, Map<string, Insight>>` (copy on write, like
 // every fold: `add` returns a new Map and leaves `acc` alone) and `tierOneAlerts(active, alerts)`;
-// `shell/topbar/insight-text.ts` exports `formatInsight(i)`, whose fallback for a kind it does not know contains the kind
+// `kit/insight/insight-text.ts` (moved from the shell) exports `formatInsight(i)`, whose fallback for a kind it does not know contains the kind
 // and every param value; `shell/topbar/layout.ts` exports `TOP_BAR` (the approved mockup 9-top-bar).
 import type { InsightEntry } from '@pitwall/contracts';
 import { feedId, type Insight } from '@pitwall/domain';
 import { describe, expect, it } from 'vitest';
 import { activeInsights, tierOneAlerts } from '../../src/shell/topbar/alerts.ts';
-import { formatInsight } from '../../src/shell/topbar/insight-text.ts';
+import { formatInsight } from '../../src/kit/insight/insight-text.ts';
 import { TOP_BAR } from '../../src/shell/topbar/layout.ts';
 
 const insight = (key: string, over: Partial<Insight> = {}): Insight => ({
