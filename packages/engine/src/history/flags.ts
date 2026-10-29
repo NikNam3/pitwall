@@ -77,12 +77,18 @@ const applyFlagChange = (state: EngineState, at: SessionTime): void => {
 
 /**
  * Safety car, virtual safety car and red flag phases. Events come first, so a `SCAR` and the status change of the
- * same frame make one phase. A phase is appended when it closes (spec correction 7 for the red flag).
+ * same frame make one phase. A phase is appended when it closes (spec correction 7 for the red flag). Opening a
+ * phase, a new SC phase and closing one each tag `flagPhases`: the open phase is the view's `activeFlagPhase`.
  */
 export const applyFlagPhases: SubStep = (state, frame, out) => {
   const before = state.history.flagPhases.length;
+  const openBefore = state.open.flagPhase;
+  const scPhasesBefore = openBefore?.scPhases.length;
   const at = frame.sessionTime;
   for (const { details } of frame.events) applyEvent(state, details, at);
   applyFlagChange(state, at);
-  if (state.history.flagPhases.length > before) out.changed.add('flagPhases');
+  const open = state.open.flagPhase;
+  if (state.history.flagPhases.length > before || open !== openBefore || open?.scPhases.length !== scPhasesBefore) {
+    out.changed.add('flagPhases');
+  }
 };
