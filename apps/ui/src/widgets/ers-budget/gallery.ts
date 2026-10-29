@@ -17,6 +17,7 @@ const base: ErsState = {
   storeTrendJPerLap: known(0.4 * MJ, at),
   attackLevelJ: 2.5 * MJ,
   lapsToAttackLevel: known(1.5, at),
+  attack: known({ ready: false, inLaps: 2 }, at),
   mode: known('medium', at),
   flow: known('harvesting', at),
 };
@@ -32,6 +33,7 @@ const attackReady: ErsState = {
   storeJ: known(2.9 * MJ, at),
   storeTrendJPerLap: known(-0.3 * MJ, at),
   lapsToAttackLevel: known(0, at),
+  attack: known({ ready: true }, at),
   flow: known('deploying', at),
 };
 
@@ -42,7 +44,7 @@ const gallery: GalleryEntry<typeof widget> = {
     belowLevelRising: { ers: base, moment: undefined },
     attackReadyDeploying: { ers: attackReady, moment: known(carCare, at) },
     // Falling below the level: the attack text is empty.
-    fallingBelowLevel: { ers: { ...base, storeTrendJPerLap: known(-0.2 * MJ, at), lapsToAttackLevel: unknown('notApplicable'), flow: known('idle', at) }, moment: undefined },
+    fallingBelowLevel: { ers: { ...base, storeTrendJPerLap: known(-0.2 * MJ, at), lapsToAttackLevel: unknown('notApplicable'), attack: unknown('notApplicable'), flow: known('idle', at) }, moment: undefined },
     // Battle moment: store, flow and "attack ready" white bold.
     battleMoment: { ers: attackReady, moment: known(battle, at) },
     // Without raceMoment.current nothing lights up.
@@ -56,6 +58,7 @@ const gallery: GalleryEntry<typeof widget> = {
         harvestedThisLapJ: unknown('realism'),
         storeTrendJPerLap: unknown('realism'),
         lapsToAttackLevel: unknown('realism'),
+        attack: unknown('realism'),
         mode: unknown('realism'),
         flow: unknown('realism'),
       },
