@@ -1,4 +1,4 @@
-import type { Corners, DamageJump, DamageParts, DamageState, Known, UnknownReason } from '@pitwall/domain';
+import type { Corners, DamageJump, DamageParts, DamageState, Known, SessionTime, UnknownReason } from '@pitwall/domain';
 import { formatCount, formatDeltaPct, formatLapNumber, formatPct, formatSecondsPerLap } from '../../kit/values/format.ts';
 import { insightText } from '../../kit/text.ts';
 import type { Role } from '../../theme/roles.ts';
@@ -8,8 +8,26 @@ import * as text from './text.ts';
 /** One shown value: its text, or an empty text with the reason it is hidden. */
 export type Cell = { text: string; reason?: UnknownReason };
 
-/** One listed damage jump. */
-export type JumpRow = { text: string; loss: string; role?: Role; reason?: UnknownReason };
+/** One listed damage jump; `at` is when it happened, the row's identity. */
+export type JumpRow = { at: SessionTime; text: string; loss: string; role?: Role; reason?: UnknownReason };
+
+/** The full card's widths in character cells (mockup 1-car-care.html): every fixed field of its lines. */
+export const FULL_WIDTHS = {
+  /** The row label (`WING`, `FLOOR`, `GBX`). */
+  label: 7,
+  /** The left and right wing columns. */
+  wing: 4,
+  /** The rear wing column. */
+  wingRear: 5,
+  /** A part value (`12%`). */
+  value: 3,
+  /** The second label of a line (`DIFF`, `ENG`). */
+  shortLabel: 5,
+  /** The sidepod label. */
+  sidepodLabel: 8,
+  /** A jump's text before its loss. */
+  jump: 20,
+} as const;
 
 /** What the damage card shows. */
 export type DamageRows = {
@@ -24,7 +42,7 @@ const cell = (k: Known<number>): Cell => (k.known ? { text: formatPct(k.value) }
 
 function jumpRow(jump: DamageJump, newest: boolean): JumpRow {
   const parts = jump.parts.map((p) => insightText.part[p]).join(text.partSeparator);
-  const row: JumpRow = { text: `${formatLapNumber(jump.lap, 2)} ${parts} ${formatDeltaPct(jump.deltaPct)}`, loss: '' };
+  const row: JumpRow = { at: jump.at, text: `${formatLapNumber(jump.lap, 2)} ${parts} ${formatDeltaPct(jump.deltaPct)}`, loss: '' };
   const loss = jump.lossMsPerLap;
   if (loss.known) row.loss = text.lossMeasured(formatSecondsPerLap(loss.value));
   else if (loss.reason === 'insufficientData') row.loss = text.lossMeasuring;

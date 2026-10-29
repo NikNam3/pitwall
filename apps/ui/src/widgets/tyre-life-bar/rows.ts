@@ -4,6 +4,7 @@ import type { Known, TyreWear, UnknownReason } from '@pitwall/domain';
 import { barCells } from '../../kit/bar/bar.ts';
 import type { BarCells, BarInput } from '../../kit/bar/bar.ts';
 import { fixed, formatPercent, formatWholeLaps } from '../../kit/values/format.ts';
+import { cornerNames } from '../../kit/text.ts';
 import * as text from './text.ts';
 
 /** Cells taken by everything but the bar: label, gaps, NOW, %/LAP and LAPS TO 70% (mockup 1-car-care.html). */
@@ -50,7 +51,7 @@ export function tyreLifeRows(wear: TyreWear, cols: number): TyreLifeRow[] {
     const bar = barCells(barInput);
     return {
       corner,
-      label: corner.toUpperCase(),
+      label: cornerNames[corner],
       bar,
       barInput,
       wearText: c.wearPct.known ? formatPercent(c.wearPct.value) : '',

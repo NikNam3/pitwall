@@ -98,6 +98,13 @@ describe('damageRows jumps', () => {
     expect(row!.text).toBe('L14 floor + diffuser +8 %');
   });
 
+  it('keeps each jump\'s time, so two jumps with the same text stay two rows (the display keys by it)', () => {
+    const twin = { ...wing, at: 205_000 };
+    const rows = damageRows(state({ jumps: [wing, twin] })).jumps;
+    expect(rows.map((r) => r.text)).toEqual([rows[0]!.text, rows[0]!.text]);
+    expect(rows.map((r) => r.at)).toEqual([205_000, 200_000]);
+  });
+
   it('is empty without jumps', () => {
     expect(damageRows(state()).jumps).toEqual([]);
   });
