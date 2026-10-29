@@ -83,13 +83,13 @@ Defaults: Appendix B.
 All run in practice, qualifying and the race, for every car whose data is visible. Rival data hidden by realism arrives as `unknown('realism')` and passes through unchanged. Each publishes one per-car topic with `CarParams` (`{ carId }`). Types: Appendix A.2.
 
 ### 5.1 `tyre-wear` → `tyreWear.car`
-Reads `per-lap-rate`, the lap history (`wearAtEndPct`) and the car state. Per corner: wear now, rate in %/lap over the `forRate` laps of the current stint, laps until the wear limit (config). Also the fitted set's game life span (`TyreSet.lifeSpanLaps`) as a reference marker, labelled as the game's figure.
+Reads `per-lap-rate`, the lap history (`wearAtEndPct`) and the car state. Per corner: wear now, rate in %/lap over the `forRate` laps of the current stint, laps until the wear limit (config), and the `warnLaps` threshold of the alarm so displays light up at the same value. Also the fitted set's game life span (`TyreSet.lifeSpanLaps`) as a reference marker, labelled as the game's figure.
 
 ### 5.2 `fuel` → `fuel.car`
 Reads `per-lap-rate`, `session-remaining`, the lap history (`fuelAtStartKg`, `fuelAtEndKg`) and the car state. Fuel now, burn in kg/lap over `forRate` laps, laps of fuel (`kg / burn`), laps left, **margin in laps** (`lapsOfFuel − lapsLeft`), and the **save target** in kg/lap when the margin is negative (`burn − kg / lapsLeft`; `notApplicable` otherwise). The game's `remainingLaps` is published separately as `gameRemainingLaps`, because its meaning is unverified (research 06 §5, item 3).
 
 ### 5.3 `ers` → `ers.car`
-Reads `per-lap-rate`, the lap history (`ersStoreAtEndJ`) and the car state. Store now and capacity, the live flow (deploying, harvesting or idle, from the sign of the MGU-K power), deployed and harvested this lap against the per-lap deploy limit, store trend in J/lap, the attack level (config) and laps until the store reaches it, and the ERS mode (published, not displayed).
+Reads `per-lap-rate`, the lap history (`ersStoreAtEndJ`) and the car state. Store now and capacity, the live flow (deploying, harvesting or idle, from the sign of the MGU-K power), deployed and harvested this lap against the per-lap deploy limit, store trend in J/lap, the attack level (config) and the **attack readiness** (`ErsAttack`: `ready`, or in how many whole laps the rising store reaches the level; `notApplicable` while flat or falling below it), and the ERS mode (published, not displayed).
 
 ### 5.4 `car-bands` → `carBands.car`
 Reads the car state, the lap history (`channelRange`) and config. Per channel (tyre surface, carcass and pressure per corner; brake temperature per corner; engine temperature): the value, its live state (`below`, `in`, `above`) and whether the last completed lap was out of band for the whole lap (its min and max both outside the band). Tyre bands are per compound. Calculators keep no frame-to-frame state (they are stateless or a fold over the history, and a flashback re-runs that fold), so there is no hysteresis and no "out since" (ruling R1, 2026-10-29).
@@ -115,18 +115,18 @@ Alarms are raised for our cars only. Each is resolved when its condition ends. M
 ## 6. Timing analyses
 
 ### 6.1 `gaps`
-Reads the mini-sector history (`MiniSectorCrossing`, 50 per lap) and the car state. **All gaps come from the crossings**, never from the game's `gapToCarAheadMs`: the game gives only "to ahead" and "to leader", and two sources would show two numbers for the same gap. The gap of car A behind car B is A's crossing time minus B's crossing time at the same lap and segment, taken at A's latest crossing. It updates 50× per lap and works for any pair. A car B has not yet reached is behind. Laps down follow from the total distance. Runs in every session. It is an incremental calculator over the history delta and handles `truncated` (flashback) by restarting from the truncated history.
+Reads the mini-sector history (`MiniSectorCrossing`, 50 per lap) and the car state. **All gaps come from the crossings**, never from the game's `gapToCarAheadMs`: the game gives only "to ahead" and "to leader", and two sources would show two numbers for the same gap. The gap of car A behind car B is A's crossing time minus B's crossing time at the same lap and segment, taken at A's latest crossing. A car ahead has a negative gap. It updates 50× per lap and works for any pair. A car B has not yet reached is behind. Laps down follow from the total distance. Runs in every session. It is an incremental calculator over the history delta and handles `truncated` (flashback) by restarting from the truncated history.
 
 Topics:
-- `gaps.intervals`: per car, to the leader, to the car ahead, to the car behind, laps down.
-- `gaps.toCar` (`CarParams`): every car's signed gap to one car (positive = behind it), and laps down.
+- `gaps.intervals`: per car, to the leader, to the car ahead, to the car behind, laps down, and the positions gained since the start (race only). A gap is signed by the car's side: a car ahead is negative.
+- `gaps.toCar` (`CarParams`): every car's signed gap to one car (positive = behind it; a car ahead is negative), and its laps down relative to that car. The params car's own entry is `notApplicable`.
 - `gaps.gapper` (`{ reference }`): per car, per completed lap, the gap to a virtual car at constant pace. `reference` is `{ kind: 'leaderAverage' }` (default: the leader's mean lap so far, recomputed every lap, so the lines shift as the race goes on), `{ kind: 'carAverage', carId }` or `{ kind: 'fixed', lapMs }`.
 - `gaps.neighbourhood`: per our car, the cars within ±1 position or ±`neighbourhoodMs` of it.
 
 ### 6.2 `lap-times`
 Reads `lap-classes`, `pace`, the lap history, the mini-sector history and `session.info`. Runs in every session.
-- `lapTimes.board` (`{ referenceCarId }`): per car, the last lap, the personal-best lap and sectors, the theoretical best (sum of best sectors) and the deltas of all of them to the reference car. Per sector of the latest lap, a status `sessionBest`, `personalBest` or `none`, so the display only maps a status to a colour. Plus the session-best lap and sectors with their holder.
-- `lapTimes.projection` (`CarParams`): for a car on a lap that is not an in or out lap, the **projected lap** = elapsed time at its latest crossing k + (its best lap − its best lap's time at crossing k), the live delta to its best, and its projected position. In qualifying also the **cut-off**: the position that is knocked out, the cut-off time and our margin to it. In timed sessions the **finish margin**: the time left on the clock when the car will cross the line, positive if another lap can still start (this replaces V11's dot on a track map).
+- `lapTimes.board` (`{ referenceCarId }`): per car, the last lap, the personal-best lap and sectors, the theoretical best (sum of best sectors) and the deltas of all of them to the reference car. Per sector of the latest lap, a status `sessionBest`, `personalBest` or `none`, and per best lap and best sector whether it is the session's best (`sessionBest` or `none`), so the display only maps a status to a colour. Plus the session-best lap and sectors with their holder.
+- `lapTimes.projection` (`CarParams`): for a car on a lap that is not an in or out lap, the **projected lap** = elapsed time at its latest crossing k + (its best lap − its best lap's time at crossing k), the live delta to its best, and its projected position. In qualifying also the **cut-off**: the position that is knocked out, the cut-off time and our margin to it (from the other cars' bests, so it stands on out laps too). In timed sessions the **finish margin**: the time left on the clock when the car will cross the line, positive if another lap can still start (this replaces V11's dot on a track map).
 
 ### 6.3 `battle` → `battle.cards` (`CarParams`)
 Reads `gaps`, `pace`, `per-lap-rate` and the car state. Race only. For each of our cars, the car ahead and the car behind:
@@ -153,12 +153,12 @@ Reads `gaps` (the neighbourhood and the gaps before and after), `damage`, `pace-
 | `penalty` | `penalty` event | minor |
 | `neutralised` | an SC, VSC or red phase starts | minor |
 
-Per entry: when, lap, kind, severity, the cars involved, the time lost (from the mini-sector at once, then `pace-delta` once there are laps), and **what changed for us**: per our car, the position and the gap to the involved car before and after, both taken from the mini-sector history (so a flashback reproduces them). An entry updates as its time lost resolves, so the topic is a `state` topic with the last `feedLength` entries, newest first. Which kinds are major is config, so warnings can be moved up later.
+Per entry: when, lap, kind, severity, the cars involved, the time lost (from the mini-sector at once, then `pace-delta` once there are laps), and **what changed for us**: per our car, the position and the gap to the involved car before and after, both taken from the mini-sector history (so a flashback reproduces them). Damage jumps of one car within `jumpWindowMs` are one entry, with the parts that rose. An entry's sector is interpolated from the car's crossings at the event and can refine when the next crossing arrives; turn numbers need per-track data (later). An entry updates as its time lost resolves, so the topic is a `state` topic with the last `feedLength` entries, newest first. Which kinds are major is config, so warnings can be moved up later.
 
 ## 7. The race moment
 
 ### 7.1 `race-moment` → `raceMoment.current`
-Reads the flag phases, `incidents`, `battle`, the active insights from `alarms` and `session.info`. Race only, `notApplicable` in other sessions. Publishes the current moment, since when (from its cause: the flag phase start or the incident time; `notApplicable` for battle, weather and car care, since calculators keep no frame state), the rule that set it, and every moment that is active underneath.
+Reads the flag phases, `incidents`, `battle`, the active insights from `alarms` and `session.info`. Race only, `notApplicable` in other sessions. Publishes the current moment, since when (from its cause: the flag phase start or the incident time; `notApplicable` for battle, weather and car care, since calculators keep no frame state), the rule that set it with its values (a battle names the card's car, side, laps to DRS and gap; an incident names its feed entry) so displays light what the cause names, and every moment that is active underneath.
 
 ### 7.2 Moments, highest priority first
 1. **neutralised:** an SC, VSC or red phase is active.
@@ -380,6 +380,12 @@ export type DamageParts = {
   floorPct: Percent; diffuserPct: Percent; sidepodPct: Percent;
   gearboxPct: Percent; enginePct: Percent;
 };
+
+// packages/domain/src/insight.ts: InsightCategory gains 'car' (brake and engine temperatures)
+export type InsightCategory = 'strategy' | 'tyres' | 'energy' | 'damage' | 'race' | 'feed' | 'system' | 'car';
+
+// packages/engine (EngineView): the neutralised phase in progress, which moves to history.flagPhases when it ends
+activeFlagPhase: Omit<FlagPhase, 'end' | 'endLeaderLap'> | undefined;
 ```
 
 ### A.2 Shared calculator outputs and functions (`packages/analysis`)
@@ -422,6 +428,7 @@ export type Pace = { byCar: Record<CarId, { recentMs: Known<Ms>; stintMs: Known<
 | `battle.cards` | `CarParams` | state | 2 | `BattleCard` |
 | `incidents.feed` | none | state | 4 | `IncidentEntry[]` |
 | `raceMoment.current` | none | state | 4 | `Known<RaceMoment>` |
+| `cars.overview` (existing) | none | state | 10 | `CarOverview[]`, gains `stops: number` (the larger of the pit-stop records and the game's `numPitStops`) |
 
 `alarms` publishes no topic of its own: its insights reach the existing `insights` topic. The shared calculators publish none.
 
@@ -429,6 +436,7 @@ export type Pace = { byCar: Record<CarId, { recentMs: Known<Ms>; stintMs: Known<
 export type TyreWear = {
   corners: Corners<{ wearPct: Known<Percent>; ratePctPerLap: Known<number>; lapsToLimit: Known<number> }>;
   limitPct: Percent;
+  warnLaps: number;                   // laps-to-limit below which the alarm fires (alarms config)
   gameLifeSpanLaps: Known<number>;
 };
 
@@ -443,6 +451,7 @@ export type FuelState = {
   mix: Known<'lean' | 'standard' | 'rich' | 'max'>;
 };
 
+export type ErsAttack = { ready: true } | { ready: false; inLaps: number }; // inLaps: whole laps, rounded up, at least 1
 export type ErsState = {
   storeJ: Known<Joules>;
   capacityJ: Joules;
@@ -451,7 +460,7 @@ export type ErsState = {
   harvestedThisLapJ: Known<Joules>;
   storeTrendJPerLap: Known<number>;
   attackLevelJ: Joules;
-  lapsToAttackLevel: Known<number>;
+  attack: Known<ErsAttack>;           // notApplicable below the level while the trend is flat or falling
   mode: Known<'none' | 'medium' | 'hotlap' | 'overtake'>;
   flow: Known<'deploying' | 'harvesting' | 'idle'>; // live, from the MGU-K power
 };
@@ -478,13 +487,23 @@ export type DamageState = {
   jumps: DamageJump[];
 };
 
-export type Interval = { carId: CarId; toLeaderMs: Known<Ms>; toAheadMs: Known<Ms>; toBehindMs: Known<Ms>; lapsDown: number };
-export type GapToCar = { carId: CarId; gapMs: Known<Ms>; lapsDown: number }; // positive = behind the params car
+export type Interval = {
+  carId: CarId; toLeaderMs: Known<Ms>; toAheadMs: Known<Ms>; toBehindMs: Known<Ms>; lapsDown: number;
+  positionsGained: Known<number>;     // gridPosition - position; negative = lost; notApplicable outside a race
+};
+// positive gapMs = behind the params car, a car ahead is negative; lapsDown is signed and relative to the params car
+// (negative = laps ahead); the params car's own entry is notApplicable with lapsDown 0
+export type GapToCar = { carId: CarId; gapMs: Known<Ms>; lapsDown: number };
 export type GapperReference = { kind: 'leaderAverage' } | { kind: 'carAverage'; carId: CarId } | { kind: 'fixed'; lapMs: Ms };
-export type GapperLines = { referenceLapMs: Known<Ms>; cars: { carId: CarId; byLap: { lap: number; gapMs: Ms }[] }[] };
+export type GapperLines = {
+  reference: { kind: GapperReference['kind']; carId: Known<CarId> }; // carId notApplicable unless carAverage
+  referenceLapMs: Known<Ms>;
+  cars: { carId: CarId; byLap: { lap: number; gapMs: Ms }[] }[];
+};
 export type Neighbourhood = { ourCarId: CarId; carIds: CarId[] };
 
 export type SectorStatus = 'sessionBest' | 'personalBest' | 'none';
+export type BestStatus = 'sessionBest' | 'none';   // a best is always personal, so no personalBest
 export type LapBoardRow = {
   carId: CarId;
   lastLapMs: Known<Ms>;
@@ -493,21 +512,24 @@ export type LapBoardRow = {
   lastLapStatus: SectorStatus;
   bestLapMs: Known<Ms>;
   bestSectorsMs: [Known<Ms>, Known<Ms>, Known<Ms>];
+  bestLapStatus: BestStatus;
+  bestSectorStatus: [BestStatus, BestStatus, BestStatus];
   theoreticalBestMs: Known<Ms>;
   deltaToReference: { bestLapMs: Known<Ms>; bestSectorsMs: [Known<Ms>, Known<Ms>, Known<Ms>]; theoreticalBestMs: Known<Ms> };
 };
+export type SessionBestTime = { ms: Ms; carId: CarId };
 export type LapBoard = {
   referenceCarId: CarId;
   rows: LapBoardRow[];
-  sessionBest: { lap: Known<{ ms: Ms; carId: CarId }>; sectors: [Known<{ ms: Ms; carId: CarId }>, Known<{ ms: Ms; carId: CarId }>, Known<{ ms: Ms; carId: CarId }>] };
+  sessionBest: { lap: Known<SessionBestTime>; sectors: [Known<SessionBestTime>, Known<SessionBestTime>, Known<SessionBestTime>] };
 };
 export type Projection = {
   carId: CarId;
-  onLap: boolean;                      // false on in and out laps: everything below is notApplicable
+  onLap: boolean;                      // false on in and out laps: the projection and the finish margin are notApplicable
   projectedLapMs: Known<Ms>;
   deltaToBestMs: Known<Ms>;
   projectedPosition: Known<number>;
-  cutOff: Known<{ position: number; timeMs: Ms; marginMs: Ms }>;   // quali only; positive margin = inside
+  cutOff: Known<{ position: number; timeMs: Ms; marginMs: Known<Ms> }>; // knock-out quali only, from the other cars' bests, so it stands off a lap; margin positive = inside, notApplicable off a lap
   finishMarginMs: Known<Ms>;           // timed sessions only; positive = another lap can start
 };
 
@@ -525,6 +547,17 @@ export type BattleSide = {
 export type BattleCard = { carId: CarId; ahead: Known<BattleSide>; behind: Known<BattleSide> };
 
 export type IncidentKind = 'collision' | 'retirement' | 'damage' | 'timeLoss' | 'warning' | 'penalty' | 'neutralised';
+export type IncidentForUs = {
+  ourCarId: CarId;
+  otherCarId: Known<CarId>;           // the entry's first car that is not ours; notApplicable without one
+  positionBefore: Known<number>;      // notReceived while our car has no crossing at that moment
+  positionAfter: Known<number>;
+  gapBeforeMs: Known<Ms>;             // to otherCarId, positive = we are behind it
+  gapAfterMs: Known<Ms>;
+};
+export type IncidentWhere = { sector: Known<1 | 2 | 3> };  // no turn numbers in F1 25: a `turn` needs per-track data (later)
+export type IncidentDamagePart = { part: keyof DamageParts; deltaPct: Percent };
+export type IncidentWarning = { count: number; limit: number };  // warning 2 of 3
 export type IncidentEntry = {
   id: string;
   at: SessionTime;
@@ -533,11 +566,16 @@ export type IncidentEntry = {
   severity: 'major' | 'minor';
   carIds: CarId[];
   timeLostMs: Known<Ms>;
-  forUs: { ourCarId: CarId; positionBefore: number; positionAfter: Known<number>; gapBeforeMs: Known<Ms>; gapAfterMs: Known<Ms> }[];
+  forUs: IncidentForUs[];
+  where: IncidentWhere;               // for the first car; sector interpolated from its crossings, can refine
+  damage?: IncidentDamagePart[];      // damage entries only, biggest rise first
+  warning?: IncidentWarning;          // warning entries only
 };
 
 export type Moment = 'neutralised' | 'incident' | 'weather' | 'battle' | 'carCare';
 export type RaceMoment = { moment: Moment; since: Known<SessionTime>; cause: { rule: string; params: Record<string, number | string> }; active: Moment[] };
+// cause.params by rule: flagPhase { kind }; majorIncident { entryId, kind, ageMs }; forecastRain { rainPct, offsetMin };
+// lapsToDrs | gap (battle) { carId, side, lapsToDrs?, gapMs? }; default { criticalAlarms }
 ```
 
 ### A.4 Kit components (props)
