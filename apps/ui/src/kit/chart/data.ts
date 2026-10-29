@@ -39,3 +39,17 @@ export function visibleXRange(
   }
   return [Math.max(first, end - span), end];
 }
+
+/** A safety-car, virtual-safety-car or red-flag period on the x axis. */
+export type PhaseBand = { from: number; to: number; kind: 'sc' | 'vsc' | 'red' };
+
+/** The bands clipped to the visible x-range; bands outside it, touching only its edge or empty are dropped. */
+export function clipBands(bands: PhaseBand[], [lo, hi]: [number, number]): PhaseBand[] {
+  const out: PhaseBand[] = [];
+  for (const b of bands) {
+    const from = Math.max(b.from, lo);
+    const to = Math.min(b.to, hi);
+    if (to > from) out.push({ from, to, kind: b.kind });
+  }
+  return out;
+}
