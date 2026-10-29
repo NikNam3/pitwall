@@ -106,3 +106,10 @@ describe('tyreLifeRows', () => {
     expect(tyreLifeRows(base(), 9)[0]!.bar.kinds).toHaveLength(9);
   });
 });
+
+describe('lapsHeader', () => {
+  it('names the wear limit of the topic', async () => {
+    const { lapsHeader } = await import('./text.ts');
+    expect(lapsHeader('70%')).toBe('LAPS TO 70%');
+  });
+});

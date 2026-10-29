@@ -3,7 +3,7 @@ import { known } from '@pitwall/domain';
 import type { Known, TyreWear, UnknownReason } from '@pitwall/domain';
 import { barCells } from '../../kit/bar/bar.ts';
 import type { BarCells, BarInput } from '../../kit/bar/bar.ts';
-import { fixed, formatPercent } from '../../kit/values/format.ts';
+import { fixed, formatPercent, formatWholeLaps } from '../../kit/values/format.ts';
 import * as text from './text.ts';
 
 /** Cells taken by everything but the bar: label, gaps, NOW, %/LAP and LAPS TO 70% (mockup 1-car-care.html). */
@@ -25,6 +25,9 @@ export type TyreLifeRow = {
   /** Why a cell is empty, for the hover. */
   reasons: { wear: UnknownReason | undefined; rate: UnknownReason | undefined; laps: UnknownReason | undefined };
 };
+
+/** Bar columns from which the header has room for the age in words beside WEAR. */
+export const AGE_MIN_BAR_COLUMNS = 16;
 
 /** What is left of the width for the bar. */
 export const barColumns = (cols: number): number => Math.max(MIN_BAR_COLUMNS, cols - FIXED_COLUMNS);
@@ -52,7 +55,7 @@ export function tyreLifeRows(wear: TyreWear, cols: number): TyreLifeRow[] {
       barInput,
       wearText: c.wearPct.known ? formatPercent(c.wearPct.value) : '',
       rateText: c.ratePctPerLap.known ? fixed(c.ratePctPerLap.value, 1) : '',
-      lapsText: c.lapsToLimit.known ? String(Math.floor(c.lapsToLimit.value)) : '',
+      lapsText: c.lapsToLimit.known ? formatWholeLaps(c.lapsToLimit.value) : '',
       lapsToLimit: c.lapsToLimit,
       reasons: { wear: reasonOf(c.wearPct), rate: reasonOf(c.ratePctPerLap), laps: reasonOf(c.lapsToLimit) },
     };
