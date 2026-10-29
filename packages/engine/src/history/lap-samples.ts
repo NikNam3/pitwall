@@ -7,7 +7,7 @@ export type LapEndSamples = Pick<LapRecord, 'wearAtEndPct' | 'ersStoreAtEndJ' | 
 type Reading = (car: CarState) => Known<number>;
 
 /** Every band channel in the order of the cursor's `channelMin`/`channelMax`: 3 per tyre corner, 1 per brake, then the engine. */
-const CHANNELS: Reading[] = [
+const CHANNELS: readonly Reading[] = [
   ...CORNER_NAMES.flatMap((c): Reading[] => [
     (car) => car.tyres.corners[c].surfaceTempC,
     (car) => car.tyres.corners[c].carcassTempC,
@@ -16,6 +16,11 @@ const CHANNELS: Reading[] = [
   ...CORNER_NAMES.map((c): Reading => (car) => car.condition.brakes[c].tempC),
   (car) => car.condition.engineTempC,
 ];
+
+/** Where each group of `CHANNELS` starts: the tyre corners' three, the brakes, the engine. */
+const TYRE_CHANNELS_PER_CORNER = 3;
+const BRAKE_CHANNEL_0 = TYRE_CHANNELS_PER_CORNER * CORNER_NAMES.length;
+const ENGINE_CHANNEL = BRAKE_CHANNEL_0 + CORNER_NAMES.length;
 
 /** A cursor's channel accumulators: nothing seen yet (min above max). */
 export const emptyChannels = (): Pick<LapCursor, 'channelMin' | 'channelMax'> => ({
@@ -26,12 +31,12 @@ export const emptyChannels = (): Pick<LapCursor, 'channelMin' | 'channelMax'> =>
 /** Folds the frame's channel values and ERS totals into the lap. Runs per car and frame: comparisons only, no allocation. */
 export const observeLapFrame = (cursor: LapCursor, car: CarState): void => {
   const { channelMin, channelMax } = cursor;
-  CHANNELS.forEach((read, i) => {
-    const reading = read(car);
-    if (!reading.known) return;
+  for (let i = 0; i < CHANNELS.length; i++) {
+    const reading = CHANNELS[i]?.(car);
+    if (!reading?.known) continue;
     if (reading.value < (channelMin[i] ?? Infinity)) channelMin[i] = reading.value;
     if (reading.value > (channelMax[i] ?? -Infinity)) channelMax[i] = reading.value;
-  });
+  }
   const { ers } = car.energy;
   if (ers.known) {
     cursor.ersDeployedJ = ers.value.deployedJ;
@@ -62,15 +67,13 @@ const rangeAt = (cursor: LapCursor, i: number, car: CarState, at: SessionTime): 
 };
 
 const channelRange = (cursor: LapCursor, car: CarState, at: SessionTime): ChannelRange => {
-  let i = 0;
-  const tyres = mapCorners(() => ({
-    surfaceC: rangeAt(cursor, i++, car, at),
-    carcassC: rangeAt(cursor, i++, car, at),
-    pressurePsi: rangeAt(cursor, i++, car, at),
-  }));
-  // mapCorners visits fl, fr, rl, rr, as CORNER_NAMES (and CHANNELS) do
-  const brakesC = mapCorners(() => rangeAt(cursor, i++, car, at));
-  return { tyres, brakesC, engineC: rangeAt(cursor, i, car, at) };
+  const range = (i: number) => rangeAt(cursor, i, car, at);
+  const tyres = mapCorners((corner) => {
+    const first = TYRE_CHANNELS_PER_CORNER * CORNER_NAMES.indexOf(corner);
+    return { surfaceC: range(first), carcassC: range(first + 1), pressurePsi: range(first + 2) };
+  });
+  const brakesC = mapCorners((corner) => range(BRAKE_CHANNEL_0 + CORNER_NAMES.indexOf(corner)));
+  return { tyres, brakesC, engineC: range(ENGINE_CHANNEL) };
 };
 
 /**
