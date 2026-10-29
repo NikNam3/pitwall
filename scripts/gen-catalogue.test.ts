@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { buildCatalogue, checkCatalogue } from './gen-catalogue.ts';
+import { buildCatalogue, checkCatalogue, findAnalysisFolders } from './gen-catalogue.ts';
 
 // Contract assumed of gen-catalogue.ts:
 //  - `buildCatalogue({ widgets, features, topics, analysis? })`: absolute directories (the widgets folder, the bridge
@@ -74,6 +74,14 @@ describe('checkCatalogue: errors name the file', () => {
   it('an owner that is neither core nor a unit', async () => {
     const { errors } = await check('owner-unknown');
     expect(errors).toContainEqual(expect.stringMatching(/topics\/ghost\.rows\.ts.*owner "ghost"/));
+  });
+
+  it('an owner with only an analysis folder is a unit: contracts come before the feature', async () => {
+    const dirs = tree('analysis-owner');
+    const { errors } = checkCatalogue(await buildCatalogue(dirs), findAnalysisFolders(dirs.analysis));
+    expect(errors).toEqual([]);
+    expect(findAnalysisFolders(dirs.analysis)).toEqual(['pace-model']);
+    expect(findAnalysisFolders(tree('owner-unknown').analysis)).toEqual([]);
   });
 
   it('a topic name not prefixed by its owner', async () => {
