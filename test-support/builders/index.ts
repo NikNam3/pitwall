@@ -156,6 +156,8 @@ export function flagPhase(over: Partial<FlagPhase> = {}): FlagPhase {
  * `fuelAtEndKg` 2 kg less; `tyreAgeAtStart` n - 1 (one stint, soft C3); `wearAtEndPct` n % per corner; ERS store 4 MJ
  * at every lap end; `positionAtEnd` is the car's order by cumulative time at the end of lap n (ties by id). No in or out
  * laps and no SC share are set. `miniSectors` holds, per car, laps 1..n with segments 0..49 plus the closing line crossing (lap n + 1, segment 0) at `n * pace`, so `laps * 50 + 1` crossings per car, sorted by time (engine convention, see `crossings`).
+ * The linear defaults have no physical floor or ceiling: fuel at the end of a lap goes below 0 kg after lap 50 and wear
+ * above 100 % after lap 100, so a test that needs real values keeps `laps` below those or overrides them.
  */
 export function field({ cars, laps, paceMs }: { cars: number; laps: number; paceMs: Ms | Ms[] }): {
   laps: LapRecord[];
