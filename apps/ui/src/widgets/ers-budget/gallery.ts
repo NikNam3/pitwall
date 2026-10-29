@@ -41,12 +41,12 @@ const attackReady: ErsState = {
 const gallery: GalleryEntry<typeof widget> = {
   moments: ['raceSingaporeStart.grid', 'ttZandvoortLap1.crossing'],
   cases: {
+    // Battle moment: store, flow and "attack ready" white bold.
+    battleMoment: { ers: attackReady, moment: known(battle, at) },
     belowLevelRising: { ers: base, moment: undefined },
     attackReadyDeploying: { ers: attackReady, moment: known(carCare, at) },
     // Falling below the level: the attack text is empty.
     fallingBelowLevel: { ers: { ...base, storeTrendJPerLap: known(-0.2 * MJ, at), lapsToAttackLevel: unknown('notApplicable'), attack: unknown('notApplicable'), flow: known('idle', at) }, moment: undefined },
-    // Battle moment: store, flow and "attack ready" white bold.
-    battleMoment: { ers: attackReady, moment: known(battle, at) },
     // Without raceMoment.current nothing lights up.
     noMoment: { ers: attackReady, moment: undefined },
     // Realism hides a rival's ERS (the car's values are restricted); the cells are empty with the reason on hover.

@@ -21,7 +21,6 @@ const positive: FuelState = {
 const gallery: GalleryEntry<typeof widget> = {
   moments: ['ttZandvoortLap1.crossing', 'raceSingaporeStart.grid'],
   cases: {
-    marginPositive: { fuel: positive },
     // Emphasis state: margin below zero (red), the save target shown.
     marginNegative: {
       fuel: {
@@ -35,6 +34,7 @@ const gallery: GalleryEntry<typeof widget> = {
         gameRemainingLaps: known(-0.4, at),
       },
     },
+    marginPositive: { fuel: positive },
     // Realism hides the fuel figures: every row is an empty cell with the reason on hover.
     realismHidden: {
       fuel: {

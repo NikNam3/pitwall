@@ -1,7 +1,7 @@
 <script lang="ts">
   // One gallery cell of the shell (spec 10): a stage of fixed character cells under the default theme, in which the top
   // bar or an overlay is drawn as in a window. An overlay is `position: fixed`; `contain: layout` makes the stage its
-  // containing block, and once drawn the stage shrinks to the overlay's height.
+  // containing block, and once drawn the stage shrinks to the overlay's height. Every shell cell has a screenshot baseline (`data-baseline`).
   import { onMount, tick, type Snippet } from 'svelte';
   import { cellBox } from '../kit/size/size.ts';
   import { role, type ThemeVariant } from '../theme/index.ts';
@@ -61,7 +61,7 @@
   });
 </script>
 
-<figure bind:this={figure} data-gallery-id={id} data-ready={ready || undefined} use:themed={theme}>
+<figure bind:this={figure} data-gallery-id={id} data-ready={ready || undefined} data-baseline use:themed={theme}>
   <figcaption style:color={role('textFaint')}>{id}</figcaption>
   <!-- The fit check (e2e/fit.spec.ts) looks for `.panel .body` in every cell that is not a kit part: the stage is the body. -->
   <div class="panel">

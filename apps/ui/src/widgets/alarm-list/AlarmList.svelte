@@ -1,10 +1,12 @@
 <script lang="ts">
-  // Active insights by severity (V25): critical first, acknowledged ones stay dim, muted groups as a count.
+  // Active insights by severity (V25): critical first, acknowledged ones stay dim, muted groups as a count. Only what
+  // fits the size is drawn (fit.ts): the rows beyond it are counted on the last line, long texts are cut.
   import { getUiActions } from '../../kit/actions.ts';
-  import InsightLine from '../../kit/insight/InsightLine.svelte';
+  import { formatInsight } from '../../kit/insight/insight-text.ts';
   import { role } from '../../theme/index.ts';
   import type { WidgetProps } from '../../kit/types.ts';
   import { severityRole } from './emphasis.ts';
+  import { fitAlarms, SEVERITY_COLS } from './fit.ts';
   import { alarmRows } from './rows.ts';
   import * as text from './text.ts';
   import type { widget } from './widget.ts';
@@ -14,17 +16,18 @@
   const { send } = getUiActions();
   const view = $derived(alarmRows(data.insights, data.alerts));
   const full = $derived(size.mode === 'full');
+  const fitted = $derived(fitAlarms(view, size, full, formatInsight));
   const colourOf = (severity: 'critical' | 'advisory' | 'info', acknowledged: boolean): string => {
     const r = acknowledged ? 'textFaint' : severityRole(severity);
     return r === undefined ? role('textDim') : role(r);
   };
 </script>
 
-<div class="alarms">
-  {#each view.rows as row (row.insight.key)}
+<div class="alarms" style:--sev-cols={SEVERITY_COLS}>
+  {#each fitted.rows as row (row.insight.key)}
     <div class="row" data-testid="alarm-{row.insight.key}">
       <span class="sev" style:color={colourOf(row.insight.severity, row.acknowledged)}>{text.severityLabel[row.insight.severity]}</span>
-      <InsightLine insight={row.insight} acknowledged={row.acknowledged} />
+      <span class="insight-line" data-severity={row.insight.severity} style:color={colourOf(row.insight.severity, row.acknowledged)}>{row.text}</span>
       {#if row.acknowledged}
         <span class="faint">{text.acknowledged}</span>
       {:else}
@@ -42,10 +45,11 @@
   {:else}
     {#if view.muted.length === 0}<div class="faint">{text.none}</div>{/if}
   {/each}
-  {#if view.muted.length > 0}
+  {#if fitted.more > 0 || fitted.muted.length > 0}
     <div class="row faint">
-      <span>{text.mutedLabel}</span>
-      {#each view.muted as m (m.category)}
+      {#if fitted.more > 0}<span data-testid="alarms-more">{text.more(fitted.more)}</span>{/if}
+      {#if fitted.muted.length > 0}<span>{text.mutedLabel}</span>{/if}
+      {#each fitted.muted as m (m.category)}
         <button
           type="button"
           class="pw-button faint"
@@ -64,7 +68,7 @@
   }
   .sev {
     display: inline-block;
-    width: 5ch;
+    width: calc(var(--sev-cols) * 1ch);
   }
   .faint {
     color: var(--pw-textFaint);

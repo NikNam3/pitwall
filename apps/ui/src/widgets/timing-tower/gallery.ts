@@ -45,6 +45,12 @@ const field = { cars, intervals, toCar: toUs, board, moment: undefined, session:
 const gallery: GalleryEntry<typeof widget> = {
   moments: ['raceSingaporeStart.grid', 'ttZandvoortLap1.crossing'],
   cases: {
+    // Incident moment: SAR and OCO are in the newest major incident, amber left bar on their rows.
+    incidentMoment: {
+      ...field,
+      moment: known(moment('incident'), toSessionTime(900)),
+      incidents: [incidentEntry('collision-6-7', 'major', [6, 7])],
+    },
     // Lapped car (+1 lap) and a retired car dim at the bottom, our car marked.
     lappedAndRetired: field,
     // A rival whose times are withheld by realism mode: empty cells, the row still renders.
@@ -54,12 +60,6 @@ const gallery: GalleryEntry<typeof widget> = {
         ...board.rows.filter((r) => r.carId !== carId(1)),
         boardRow(1, 'realism'),
       ]),
-    },
-    // Incident moment: SAR and OCO are in the newest major incident, amber left bar on their rows.
-    incidentMoment: {
-      ...field,
-      moment: known(moment('incident'), toSessionTime(900)),
-      incidents: [incidentEntry('collision-6-7', 'major', [6, 7])],
     },
     // Another current moment: the same incident carries no bar.
     battleMoment: {

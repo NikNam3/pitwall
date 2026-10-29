@@ -37,6 +37,16 @@ export function widgetCells(widget: RegisteredWidget, entry: CellSource, themes:
   );
 }
 
+/**
+ * Whether a widget cell has a screenshot baseline (the e2e screenshot spec compares only these; the fit spec checks every
+ * cell): the widget's first case (its first moment if it has no cases) at each mode's minimum, in the default theme.
+ */
+export function hasBaseline(cell: WidgetCell, entry: CellSource, defaultTheme: string): boolean {
+  const first = Object.keys(entry.cases ?? {})[0];
+  const data: GalleryData | undefined = first === undefined ? (entry.moments[0] === undefined ? undefined : { kind: 'moment', name: entry.moments[0] }) : { kind: 'case', name: first };
+  return cell.size.id === cell.size.mode && cell.theme.name === defaultTheme && data !== undefined && cell.data.kind === data.kind && cell.data.name === data.name;
+}
+
 /** What a shell cell shows (Task 4, spec 10): the top bar under one of its cases, or a shell overlay. */
 export type ShellCellKind = 'topbar' | 'palette' | 'key-overview' | 'settings-popover' | 'inspector';
 

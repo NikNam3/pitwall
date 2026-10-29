@@ -25,9 +25,9 @@ const base = (over: Partial<DamageState>): DamageState => ({
 const gallery: GalleryEntry<typeof widget> = {
   moments: ['raceSingaporeStart.grid', 'raceSingaporeEnd.chequered'],
   cases: {
-    undamaged: { damage: base({ parts: known(clean, at), corners: corners(0) }) },
     // Mockup: a new wing jump (red, loss still measuring) over an older floor jump with its measured loss.
     twoJumps: { damage: base({ jumps: [measured, measuring] }) },
+    undamaged: { damage: base({ parts: known(clean, at), corners: corners(0) }) },
     measuredLoss: { damage: base({ jumps: [{ ...measuring, lossMsPerLap: known(310, 300_000) }, measured] }) },
     faults: { damage: base({ drsFault: known(true, at), ersFault: true }) },
     // A rival linked as primary in realism mode: every value is hidden.

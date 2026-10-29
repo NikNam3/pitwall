@@ -29,9 +29,9 @@ const moment = (name: Moment): Known<RaceMoment> =>
 const gallery: GalleryEntry<typeof widget> = {
   moments: ['raceSingaporeStart.grid', 'raceSingaporeEnd.chequered'],
   cases: {
-    neighbours: { card, cars, moment: undefined },
     // Mockup: in the battle moment the row in DRS range (ALB, behind) turns white bold.
     battleMoment: { card, cars, moment: moment('battle') },
+    neighbours: { card, cars, moment: undefined },
     // Another moment: nothing lights up.
     carCareMoment: { card, cars, moment: moment('carCare') },
     // Realism: both rivals' ERS hidden, the cards still render.
