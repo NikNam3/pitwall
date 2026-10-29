@@ -155,6 +155,19 @@ describe('battle', () => {
     expect(ahead.value.lapsToDrs).toMatchObject({ known: false, reason: 'notApplicable' });
   });
 
+  it('a gap inside DRS range is 0 laps to DRS as of the gap, even without a closing rate', () => {
+    const view = build(base({ config: { [BATTLE_CONFIG.key]: { drsRangeMs: 1600 } } }));
+    const ahead = card(view).ahead;
+    if (!ahead.known) throw new Error('ahead unknown');
+    expect(ahead.value.lapsToDrs).toEqual({ known: true, value: 0, at: 311_600 });
+    const two = (l: Line): Line => l.slice(0, 2);
+    const t = base().lineTimes;
+    const few = card(build(base({ lineTimes: { 0: two(t[0]!), 1: two(t[1]!), 3: two(t[3]!) }, config: { [BATTLE_CONFIG.key]: { drsRangeMs: 1600 } } }))).ahead;
+    if (!few.known) throw new Error('ahead unknown');
+    expect(few.value.closingMsPerLap).toMatchObject({ known: false, reason: 'insufficientData' });
+    expect(few.value.lapsToDrs).toEqual({ known: true, value: 0, at: 311_600 });
+  });
+
   it('fewer than the rate window needs: closing and lapsToDrs insufficientData', () => {
     const two = (l: Line): Line => l.slice(0, 2);
     const t = base().lineTimes;

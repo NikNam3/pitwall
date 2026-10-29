@@ -188,6 +188,14 @@ describe('tyre-wear calculator', () => {
     expect(out.corners.fl.wearPct).toMatchObject({ known: true, value: 2 });
   });
 
+  it('at or past the limit the laps to it are 0 as of the wear reading, so the wear alarm stays raised', () => {
+    const laps = [64, 68, 72].map((w, i) => wornLap(i + 1, w));
+    expect(run(viewOf(laps, 76)).corners.fl.lapsToLimit).toEqual({ known: true, value: 0, at: 0 });
+    expect(run(viewOf(laps, 70)).corners.fl.lapsToLimit).toEqual({ known: true, value: 0, at: 0 });
+    // even before there is a rate
+    expect(run(viewOf([wornLap(1, 72)], 76)).corners.fl.lapsToLimit).toEqual({ known: true, value: 0, at: 0 });
+  });
+
   it('wear that does not grow has no laps to the limit', () => {
     const laps = [5, 5, 5].map((w, i) => wornLap(i + 1, w));
     const { fl } = run(viewOf(laps, 5)).corners;

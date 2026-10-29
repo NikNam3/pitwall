@@ -2,7 +2,7 @@ import { known, unknown, type CarId, type Corners, type Known, type TyreSet } fr
 import type { DeepReadonly, EngineView, QuickCalculator } from '@pitwall/engine';
 import { ALARMS_CONFIG } from '../alarms/config.ts';
 import { classifyLap } from '../lap-classes/index.ts';
-import { lapsUntil, PER_LAP_RATE_CONFIG, perLapRate, type RateSample } from '../per-lap-rate/index.ts';
+import { lapsToReach, PER_LAP_RATE_CONFIG, perLapRate, type RateSample } from '../per-lap-rate/index.ts';
 import { currentStintLaps } from '../shared/stint-laps.ts';
 import { TYRE_WEAR, TYRE_WEAR_CONFIG, type TyreWear, type TyreWearOutput } from './index.ts';
 
@@ -15,7 +15,7 @@ function gameLifeSpan(sets: DeepReadonly<Known<{ sets: TyreSet[]; fittedIdx: num
   return fitted === undefined ? unknown('notReceived') : known(fitted.lifeSpanLaps, sets.at);
 }
 
-/** Wear now, its rate over the current stint's rate laps and the laps until the wear limit, per corner and car. */
+/** Wear now, its rate over the current stint's rate laps and the laps until the wear limit (0 at or past it), per corner and car. */
 export const tyreWearCalculator: QuickCalculator<TyreWearOutput> = {
   id: TYRE_WEAR,
   kind: 'quick',
@@ -42,7 +42,7 @@ export const tyreWearCalculator: QuickCalculator<TyreWearOutput> = {
         return {
           wearPct,
           ratePctPerLap: rate.known ? known(rate.value.perLap, rate.at) : rate,
-          lapsToLimit: lapsUntil(rate, wearPct.value, limitPct),
+          lapsToLimit: lapsToReach(rate, wearPct, limitPct, 'rising'),
         };
       };
       const corners = Object.fromEntries(CORNERS.map((c) => [c, corner(c)])) as Corners<TyreWear['corners']['fl']>;

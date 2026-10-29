@@ -2,7 +2,7 @@ import { known } from '@pitwall/domain';
 import type { CarId, CarState, ErsAttack, ErsState, Known } from '@pitwall/domain';
 import type { EngineView, QuickCalculator } from '@pitwall/engine';
 import { classifyLap } from '../lap-classes/index.ts';
-import { lapsUntil, perLapRate, PER_LAP_RATE_CONFIG } from '../per-lap-rate/index.ts';
+import { lapsToReach, perLapRate, PER_LAP_RATE_CONFIG } from '../per-lap-rate/index.ts';
 import type { RateSample } from '../per-lap-rate/index.ts';
 import { currentStintLaps } from '../shared/stint-laps.ts';
 import { ERS, ERS_CONFIG } from './index.ts';
@@ -53,7 +53,7 @@ function ersOf(view: EngineView, car: EngineView['state']['cars'][number]): ErsS
   const { storeJ, deployedJ, harvestedMgukJ, harvestedMguhJ, mode } = ers.value;
   const trend = perLapRate(trendSamples(view, car.id), PER_LAP_RATE_CONFIG.read(view));
   const store = known(storeJ, ers.at);
-  const lapsToAttackLevel = storeJ >= attackLevelJ ? known(0, ers.at) : lapsUntil(trend, storeJ, attackLevelJ);
+  const lapsToAttackLevel = lapsToReach(trend, { value: storeJ, at: ers.at }, attackLevelJ, 'rising');
   return {
     ...constants,
     storeJ: store,

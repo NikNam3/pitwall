@@ -8,6 +8,7 @@ import { DAMAGE } from '../../src/damage/index.ts';
 import { ERS } from '../../src/ers/index.ts';
 import { FUEL } from '../../src/fuel/index.ts';
 import { TYRE_WEAR } from '../../src/tyre-wear/index.ts';
+import { tyreWearCalculator } from '../../src/tyre-wear/calculator.ts';
 import { carState, engineView, event, lap, realismHidden } from '../../../../test-support/builders/index.ts';
 
 // Assumptions pinned here (see the test report): key = `${kind}:${carId}:${channel}`; channel names `tyre.<surfaceC|carcassC|pressurePsi>.<corner>`,
@@ -175,6 +176,14 @@ describe('alarms calculator', () => {
         params: { corner: 'rl', lapsToLimit: 2.5, wearPct: 20, limitPct: 80 },
       });
       expect(run(viewWith({ wear }))).toHaveLength(1);
+    });
+
+    it('a tyre past the wear limit keeps wearLimitNear raised: tyre-wear gives 0 laps to the limit there', () => {
+      const corners = perCorner(() => ({ wearPct: known(76, 0) }));
+      const wearView = engineView({ cars: [carState({ tyres: { corners } })], history: { laps: [64, 68, 72].map((w, i) => lap({ lapNumber: i + 1, wearAtEndPct: perCorner(() => known(w, 0)) })) } });
+      const wear = tyreWearCalculator.compute(wearView)[carId(0)]!;
+      expect(wear.corners.fl.lapsToLimit).toMatchObject({ known: true, value: 0 });
+      expect(only(viewWith({ wear }), 'wearLimitNear').map((i) => i.key)).toEqual(['wearLimitNear:0:wear.fl', 'wearLimitNear:0:wear.fr', 'wearLimitNear:0:wear.rl', 'wearLimitNear:0:wear.rr']);
     });
 
     it('the wear threshold is read from config', () => {

@@ -41,3 +41,18 @@ export function lapsUntil(rate: Known<Rate>, now: number, target: number): Known
   const laps = (target - now) / rate.value.perLap;
   return Number.isFinite(laps) && laps > 0 ? known(laps, rate.at) : unknown('notApplicable');
 }
+
+/**
+ * Laps until a reading reaches `target`: 0 once it is there (at or above `target` for `rising`, at or below for
+ * `falling`), as of the reading and whatever the rate, so a limit that has been passed stays reached; before that,
+ * `lapsUntil`.
+ */
+export function lapsToReach(
+  rate: Known<Rate>,
+  reading: { value: number; at: SessionTime },
+  target: number,
+  direction: 'rising' | 'falling',
+): Known<number> {
+  const reached = direction === 'rising' ? reading.value >= target : reading.value <= target;
+  return reached ? known(0, reading.at) : lapsUntil(rate, reading.value, target);
+}
