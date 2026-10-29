@@ -31,10 +31,11 @@ const run = (events: RaceEvent[], laps: LapRecord[] = [], extra: Parameters<type
 };
 
 describe('damage calculator', () => {
-  it('has the id damage and reads condition, tyres, events, laps and pace', () => {
+  it('has the id damage and reads condition, tyres, events, laps (not pace)', () => {
     expect(damageCalculator.id).toBe(DAMAGE);
     expect(damageCalculator.kind).toBe('incremental');
-    expect(damageCalculator.reads).toEqual(expect.arrayContaining(['condition', 'tyres', 'events', 'laps', { calculator: 'pace' }]));
+    expect(damageCalculator.reads).toEqual(expect.arrayContaining(['condition', 'tyres', 'events', 'laps']));
+    expect(damageCalculator.reads).not.toContainEqual({ calculator: 'pace' });
   });
 
   it('a damageChange of the front-left wing 0 → 12 % is one jump with deltaPct 12', () => {
@@ -118,6 +119,15 @@ describe('damage calculator', () => {
       const loss = run(jump, laps).jumps[0]!.lossMsPerLap;
       // only lap 7 and 8 remain after: mean 91 s, before 90 s
       expect(loss).toMatchObject({ known: true, value: 1000, at: laps[7]!.completedAt });
+    });
+
+    it('uses the last 3 pace laps before and the first 3 after (the pace window): laps outside it do not change the loss', () => {
+      // jump during lap 7 (completes at 630 s); lap 2 is slow and lies before the last 3 pace laps (4..6); lap 11 is slow and lies after the first 3 (8..10)
+      const bounded = (n: number) => (n === 2 || n === 11 ? 200_000 : n <= 7 ? 90_000 : 91_000);
+      const laps = lapsOf(11, bounded);
+      const loss = run([dmg(600_000, 'frontRightWingPct', 0, 20)], laps).jumps[0]!;
+      expect(loss.lap).toBe(7);
+      expect(loss.lossMsPerLap).toEqual(known(1000, laps[9]!.completedAt));
     });
 
     it('needs two pace laps before the jump too', () => {
