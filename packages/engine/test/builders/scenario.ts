@@ -286,7 +286,7 @@ export class ScenarioBuilder {
     return {
       motion: buildPacket('motion'),
       lapData: buildPacket('lapData', {
-        lapData: cars.map((i) => ({ carPosition: i + 1, gridPosition: i + 1, currentLapNum: 1, resultStatus: 2, driverStatus: 4 })),
+        lapData: cars.map((i) => ({ carPosition: i + 1, gridPosition: i, currentLapNum: 1, resultStatus: 2, driverStatus: 4 })),
       }),
       telemetry: buildPacket('carTelemetry'),
       status: buildPacket('carStatus', {

@@ -17,7 +17,14 @@ describe('timing from LapData', () => {
       lastLapTimeMs: 91_234, sector: 3, sector1TimeMs: 30_123, sector2TimeMs: 31_456, currentLapInvalid: true, gapToLeaderMs: 65_432,
       gapToCarAheadMs: 1_250, safetyCarDeltaMs: -1_500, pitStatus: 'pitting', numPitStops: 1, pitLaneTimerActive: true, pitLaneTimeMs: 4_200,
       pitStopTimerMs: 0, shouldServePenalty: true, driverStatus: 'outLap', resultStatus: 'didNotFinish', timePenaltyMs: 5_000, totalWarnings: 2,
-      cornerCuttingWarnings: 1, unservedDriveThroughs: 1, unservedStopGos: 0, gridPosition: 7, speedTrapFastestKmh: known(312.5, 0), fiaFlag: 'yellow' });
+      cornerCuttingWarnings: 1, unservedDriveThroughs: 1, unservedStopGos: 0, gridPosition: 8, speedTrapFastestKmh: known(312.5, 0), fiaFlag: 'yellow' });
+  });
+  it('counts the grid position from 1 like the race position: the game sends it from 0, pole is 0', () => {
+    const { st } = runScenario(new ScenarioBuilder({ cars: 2 }).frames(1, (d) => {
+      Object.assign(d.lapData.lapData[0]!, { carPosition: 1, gridPosition: 0 });
+      Object.assign(d.lapData.lapData[1]!, { carPosition: 2, gridPosition: 1 });
+    }));
+    expect(st.cars.map((c) => [c.timing.position, c.timing.gridPosition])).toEqual([[1, 1], [2, 2]]);
   });
   it('passes negative gaps through (the game reports a car slightly ahead as a small negative delta)', () => {
     const { st } = runScenario(new ScenarioBuilder({ cars: 2 }).frames(1, (d) => {
