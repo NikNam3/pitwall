@@ -1,5 +1,5 @@
 // The unit formats of the car care group (spec 8.4, A.4; brainstorm rule "lap number vs lap count").
-// Assumed: a non-finite input (a bug upstream, since missing data is `Known`) renders as the em dash `—`, never `NaN`.
+// Assumed: a non-finite input (a bug upstream, since missing data is `Known`) formats to the empty string, never `NaN`.
 import { describe, expect, it } from 'vitest';
 import {
   formatCelsius,
