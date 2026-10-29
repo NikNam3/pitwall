@@ -179,13 +179,13 @@ describe("fuel calculator", () => {
   });
 
   it("a refuel or stop restarts the burn samples: only laps of the current stint count", () => {
-    // laps 1-4 burn 3 kg/lap, the car stops, laps 5-8 of the new stint burn 1.5 kg/lap
-    const laps = [...burnLaps(1, 4, 3, 100), ...burnLaps(5, 8, 1.5, 100)];
-    const f = run({ kg: 30, laps, stints: [stint(1, 4), stint(5, 99)] });
+    // laps 1-5 burn 3 kg/lap, the car stops and refuels to 110 kg, laps 6-8 of the new stint burn 1.5 kg/lap
+    const laps = [...burnLaps(1, 5, 3, 100), ...burnLaps(6, 8, 1.5, 110)];
+    const f = run({ kg: 30, laps, stints: [stint(1, 5), stint(6, 99)] });
     expect(valueOf(f.burnKgPerLap)).toBeCloseTo(1.5, 9);
-    // the older stint alone would give 3; mixing both would give something between
-    const old = run({ kg: 30, laps, stints: [stint(1, 99)] });
-    expect(valueOf(old.burnKgPerLap)).not.toBeCloseTo(1.5, 3);
+    // one stint over all laps: the window (laps 4-8) spans the refuel, so most pairwise slopes are positive
+    const single = run({ kg: 30, laps, stints: [stint(1, 99)] });
+    expect(valueOf(single.burnKgPerLap)).not.toBeCloseTo(1.5, 1);
   });
 
   it("a new stint with fewer samples than minSamples (3) has an unknown burn, not the old stint's", () => {
