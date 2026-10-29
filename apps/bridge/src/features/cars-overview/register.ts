@@ -1,6 +1,6 @@
 import type { CarOverview } from '@pitwall/contracts';
 import type { CarId } from '@pitwall/domain';
-import type { QuickCalculator } from '@pitwall/engine';
+import { copyPlain, type QuickCalculator } from '@pitwall/engine';
 import { bindState, defineFeature } from '../feature.ts';
 
 /** Every car's entries, by car id, of a history list (each car's latest last). */
@@ -27,7 +27,7 @@ const carsOverview: QuickCalculator<CarOverview[]> = {
   compute: ({ state }) => {
     const stops = byCar(state.history.pitStops);
     return state.cars.map(({ id, identity, timing, tyres, updatedAt }) => {
-      return structuredClone({
+      return copyPlain({
         id,
         identity,
         timing,
