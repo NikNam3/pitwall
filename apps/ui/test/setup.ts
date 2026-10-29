@@ -16,3 +16,5 @@ if (typeof globalThis.matchMedia !== 'function') {
 // The chart is a lazy import (uPlot and its CSS); a gallery test can end before it resolves, and a load after the
 // environment is torn down is an unhandled error. Loading it once here puts it in the module cache first.
 await import('../src/kit/chart/Chart.svelte');
+
+export {};
