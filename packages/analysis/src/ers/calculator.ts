@@ -1,32 +1,21 @@
 import { known } from '@pitwall/domain';
-import type { CarId, CarState, ErsAttack, ErsState, Known, LapRecord } from '@pitwall/domain';
+import type { CarId, CarState, ErsAttack, ErsState, Known } from '@pitwall/domain';
 import type { EngineView, QuickCalculator } from '@pitwall/engine';
 import { classifyLap } from '../lap-classes/index.ts';
 import { lapsUntil, perLapRate, PER_LAP_RATE_CONFIG } from '../per-lap-rate/index.ts';
 import type { RateSample } from '../per-lap-rate/index.ts';
+import { currentStintLaps } from '../shared/stint-laps.ts';
 import { ERS, ERS_CONFIG } from './index.ts';
 import type { ErsOutput } from './index.ts';
 
 type View = Pick<EngineView, 'state' | 'config'>;
 
-/** The laps of the car's current stint: after the last stint record unless that record still runs. */
-function currentStintLaps(view: View, id: CarId): readonly LapRecord[] {
-  const { laps, stints } = view.state.history;
-  // the view is deep-readonly; the records are only read
-  const mine = (laps as readonly LapRecord[]).filter((l) => l.carId === id);
-  const last = stints.filter((s) => s.carId === id).at(-1);
-  if (last === undefined) return mine;
-  const newest = mine.reduce((m, l) => Math.max(m, l.lapNumber), 0);
-  return last.lastLap >= newest ? mine : mine.filter((l) => l.lapNumber > last.lastLap);
-}
-
 /** The store at the end of each lap of the current stint that counts for a rate, oldest first. */
 function trendSamples(view: View, id: CarId): RateSample[] {
   const isRace = view.state.session.kind === 'race';
-  return currentStintLaps(view, id)
-    .filter((l) => classifyLap(l, { isRace }).forRate && l.ersStoreAtEndJ.known)
-    .sort((a, b) => a.lapNumber - b.lapNumber)
-    .flatMap((l) => (l.ersStoreAtEndJ.known ? [{ lap: l.lapNumber, value: l.ersStoreAtEndJ.value, at: l.completedAt }] : []));
+  return currentStintLaps(view.state.history, id).flatMap((l) =>
+    classifyLap(l, { isRace }).forRate && l.ersStoreAtEndJ.known ? [{ lap: l.lapNumber, value: l.ersStoreAtEndJ.value, at: l.completedAt }] : [],
+  );
 }
 
 function flowOf(power: CarState['energy']['power']): ErsState['flow'] {
@@ -82,7 +71,7 @@ function ersOf(view: EngineView, car: EngineView['state']['cars'][number]): ErsS
 export const ersCalculator: QuickCalculator<ErsOutput> = {
   id: ERS,
   kind: 'quick',
-  reads: ['laps', 'energy'],
+  reads: ['laps', 'stints', 'energy', 'session'],
   cadence: { hz: 4 },
   compute: (view): ErsOutput => {
     const out: ErsOutput = {};

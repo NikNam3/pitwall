@@ -1,9 +1,12 @@
 // The `damage` calculator: per car, the damage now and the jumps folded from the `damageChange` events and the laps.
 import {
+  addLaps,
+  emptyCurrentLaps,
   known,
   unknown,
   type CarId,
   type Corners,
+  type CurrentLaps,
   type DamageChangeParams,
   type DamageJump,
   type DamageParts,
@@ -33,7 +36,8 @@ type Acc = {
   lapCount: number;
   clusters: Map<string, Cluster>;
   jumps: Map<CarId, RawJump[]>;
-  laps: Map<CarId, LapRecord[]>;
+  /** One record per (car, lap): confirmed over provisional. */
+  laps: CurrentLaps;
   /** Per active car: its state now without the jumps, and its current lap. */
   now: Map<CarId, { state: Omit<DamageState, 'jumps'>; lap: number }>;
   jumpPct: number;
@@ -72,13 +76,7 @@ const foldEvents = (acc: Acc, view: EngineView): void => {
 
 const foldLaps = (acc: Acc, view: EngineView): void => {
   const { laps } = view.state.history;
-  for (let i = acc.lapCount; i < laps.length; i++) {
-    const l = laps[i] as LapRecord | undefined;
-    if (l === undefined) continue;
-    const list = acc.laps.get(l.carId) ?? [];
-    list.push(l);
-    acc.laps.set(l.carId, list);
-  }
+  addLaps(acc.laps, laps.slice(acc.lapCount) as LapRecord[]);
   acc.lapCount = laps.length;
 };
 
@@ -118,7 +116,7 @@ const fold = (acc: Acc, view: EngineView): Acc => {
 
 const init = (view: EngineView): Acc =>
   fold(
-    { events: 0, lapCount: 0, clusters: new Map(), jumps: new Map(), laps: new Map(), now: new Map(), ...settings(view) },
+    { events: 0, lapCount: 0, clusters: new Map(), jumps: new Map(), laps: emptyCurrentLaps(), now: new Map(), ...settings(view) },
     view,
   );
 
@@ -151,7 +149,8 @@ export const damageCalculator: IncrementalCalculator<Acc, DamageOutput> = {
   output(acc) {
     const out: DamageOutput = {};
     for (const [id, { state, lap }] of acc.now) {
-      const laps = acc.laps.get(id) ?? [];
+      // integer keys iterate in ascending order: the car's laps by lap number
+      const laps = Object.values(acc.laps[id] ?? {});
       const jumps = (acc.jumps.get(id) ?? []).map((raw) => finishJump(acc, raw, laps, lap));
       out[id] = { ...state, jumps };
     }

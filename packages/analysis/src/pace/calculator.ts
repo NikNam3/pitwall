@@ -1,23 +1,21 @@
 // The `pace` calculator: per car, the mean of the last `window` pace laps and of the current stint's pace laps.
-import { addLaps, emptyCurrentLaps, known, unknown, type CarId, type CurrentLaps, type LapRecord, type Ms } from '@pitwall/domain';
-import type { EngineView, IncrementalCalculator } from '@pitwall/engine';
+import { addLaps, emptyCurrentLaps, known, unknown, type CarId, type CurrentLaps, type LapRecord, type Ms, type StintRecord } from '@pitwall/domain';
+import type { DeepReadonly, EngineView, IncrementalCalculator } from '@pitwall/engine';
 import { classifyLap } from '../lap-classes/index.ts';
+import { stintLaps } from '../shared/stint-laps.ts';
 import { PACE, PACE_CONFIG, type Pace } from './index.ts';
 
 type PaceAcc = {
   laps: CurrentLaps;
-  /** First lap of each car's current stint (the greatest `firstLap` seen). */
-  stintStart: Array<number | undefined>;
+  /** Each car's last closed stint (the engine records a stint when it closes). */
+  lastStint: Array<DeepReadonly<StintRecord> | undefined>;
   isRace: boolean;
   window: number;
 };
 
 const foldStints = (acc: PaceAcc, view: EngineView, from: number): void => {
   const stints = view.state.history.stints;
-  for (let i = from; i < stints.length; i++) {
-    const s = stints[i];
-    if (s !== undefined && s.firstLap > (acc.stintStart[s.carId] ?? -Infinity)) acc.stintStart[s.carId] = s.firstLap;
-  }
+  for (const s of stints.slice(from)) acc.lastStint[s.carId] = s;
 };
 
 const foldLaps = (acc: PaceAcc, view: EngineView, from: number): void => {
@@ -33,7 +31,7 @@ const mean = (laps: LapRecord[]) => {
 };
 
 const init = (view: EngineView): PaceAcc => {
-  const acc: PaceAcc = { laps: emptyCurrentLaps(), stintStart: [], ...settings(view) };
+  const acc: PaceAcc = { laps: emptyCurrentLaps(), lastStint: [], ...settings(view) };
   foldLaps(acc, view, 0);
   foldStints(acc, view, 0);
   return acc;
@@ -59,8 +57,7 @@ export const paceCalculator: IncrementalCalculator<PaceAcc, Pace> = {
       const all = Object.values(byLap).sort((a, b) => a.lapNumber - b.lapNumber);
       if (all.length === 0) return;
       const pace = all.filter((l) => classifyLap(l, acc).forPace);
-      const stintStart = acc.stintStart[id] ?? -Infinity;
-      const stint = pace.filter((l) => l.lapNumber >= stintStart);
+      const stint = stintLaps(all, acc.lastStint[id]).filter((l) => classifyLap(l, acc).forPace);
       const recent = pace.slice(-acc.window);
       byCar[id as CarId] = {
         recentMs: recent.length > 0 ? mean(recent) : unknown('insufficientData'),

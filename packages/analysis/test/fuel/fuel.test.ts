@@ -13,6 +13,7 @@ import {
   engineView,
   lap,
 } from "../../../../test-support/builders/index.ts";
+import { engineShaped } from "../engine-shaped.ts";
 import { fuelCalculator } from "../../src/fuel/calculator.ts";
 import { FUEL, type FuelOutput } from "../../src/fuel/index.ts";
 import {
@@ -87,7 +88,7 @@ const fuelCar = (
 function run({
   kg,
   laps,
-  stints = [stint(1, 99)],
+  stints = [],
   left = known(18, 1),
   session,
   withRemaining = true,
@@ -181,10 +182,11 @@ describe("fuel calculator", () => {
   it("a refuel or stop restarts the burn samples: only laps of the current stint count", () => {
     // laps 1-5 burn 3 kg/lap, the car stops and refuels to 110 kg, laps 6-8 of the new stint burn 1.5 kg/lap
     const laps = [...burnLaps(1, 5, 3, 100), ...burnLaps(6, 8, 1.5, 110)];
-    const f = run({ kg: 30, laps, stints: [stint(1, 5), stint(6, 99)] });
+    // the engine writes a stint record when the stint closes: stint 1 (laps 1-5) has one, the open stint 2 none
+    const f = run({ kg: 30, laps, stints: [stint(1, 5)] });
     expect(valueOf(f.burnKgPerLap)).toBeCloseTo(1.5, 9);
     // one stint over all laps: the window (laps 4-8) spans the refuel, so most pairwise slopes are positive
-    const single = run({ kg: 30, laps, stints: [stint(1, 99)] });
+    const single = run({ kg: 30, laps, stints: [] });
     expect(valueOf(single.burnKgPerLap)).not.toBeCloseTo(1.5, 1);
   });
 
@@ -193,7 +195,7 @@ describe("fuel calculator", () => {
     const f = run({
       kg: 30,
       laps,
-      stints: [stint(1, 5), stint(6, 99)],
+      stints: [stint(1, 5)],
       left: known(18, 1),
     });
     const insufficient = { known: false, reason: "insufficientData" };
@@ -202,6 +204,27 @@ describe("fuel calculator", () => {
     expect(f.marginLaps).toEqual(insufficient);
     expect(f.saveTargetKgPerLap).toEqual(insufficient);
     expect(valueOf(f.kg)).toBe(30);
+  });
+
+  describe("on engine-shaped history: every lap provisional then confirmed, no record for the open stint", () => {
+    it("after a refuel the burn is the open stint's 1.5 kg/lap", () => {
+      const laps = engineShaped([...burnLaps(1, 5, 3, 100), ...burnLaps(6, 8, 1.5, 110)]);
+      const f = run({ kg: 30, laps, stints: [stint(1, 5)] });
+      expect(valueOf(f.burnKgPerLap)).toBeCloseTo(1.5, 9);
+      // two laps into the open stint: too few samples, not a mix with the old stint
+      const early = engineShaped([...burnLaps(1, 5, 3, 100), ...burnLaps(6, 7, 1.5, 110)]);
+      expect(run({ kg: 30, laps: early, stints: [stint(1, 5)] }).burnKgPerLap).toEqual({ known: false, reason: "insufficientData" });
+    });
+
+    it("a lap counts once: two laps, each written twice, are below minSamples (3)", () => {
+      const f = run({ kg: 30, laps: engineShaped(burnLaps(1, 2, 1.5, 100)) });
+      expect(f.burnKgPerLap).toEqual({ known: false, reason: "insufficientData" });
+    });
+
+    it("the confirmed record wins over the provisional one", () => {
+      const laps = engineShaped(burnLaps(1, 5, 1.5, 100), { fuelAtEndKg: known(0, 1) });
+      expect(valueOf(run({ kg: 30, laps }).burnKgPerLap)).toBeCloseTo(1.5, 9);
+    });
   });
 
   it("too few laps in a fresh run is insufficientData", () => {
@@ -321,7 +344,7 @@ describe("fuel calculator", () => {
   it("publishes one entry per active car, keyed by car id", () => {
     const view = engineView({
       cars: [fuelCar(30), carState({ id: carId(3) })],
-      history: { laps: burnLaps(1, 5, 1.5, 100), stints: [stint(1, 99)] },
+      history: { laps: burnLaps(1, 5, 1.5, 100) },
       outputs: new Map([[SESSION_REMAINING, remaining(known(18, 1))]]),
     });
     const out = fuelCalculator.compute(view);

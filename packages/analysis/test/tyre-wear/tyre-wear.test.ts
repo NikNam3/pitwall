@@ -5,6 +5,7 @@ import { PER_LAP_RATE_CONFIG } from '../../src/per-lap-rate/index.ts';
 import { TYRE_WEAR, TYRE_WEAR_CONFIG } from '../../src/tyre-wear/index.ts';
 import { tyreWearCalculator } from '../../src/tyre-wear/calculator.ts';
 import { carState, engineView, lap, realismHidden } from '../../../../test-support/builders/index.ts';
+import { engineShaped } from '../engine-shaped.ts';
 
 const stint = (over: Partial<StintRecord> & Pick<StintRecord, 'firstLap' | 'lastLap'>): StintRecord => ({
   carId: carId(0),
@@ -129,6 +130,28 @@ describe('tyre-wear calculator', () => {
     const laps = [wornLap(1, 9), wornLap(2, 12), wornLap(3, 0), wornLap(4, 2), wornLap(5, 4), wornLap(6, 6)];
     const stints = [stint({ firstLap: 1, lastLap: 2 }), stint({ firstLap: 3, lastLap: 6 })];
     expect(run(viewOf(laps, 6, stints)).corners.fl.ratePctPerLap).toMatchObject({ known: true, value: 2 });
+  });
+
+  describe('on engine-shaped history: every lap provisional then confirmed, no record for the open stint', () => {
+    it('the rate uses only the open stint', () => {
+      const laps = engineShaped([
+        wornLap(1, 0),
+        wornLap(2, 3),
+        wornLap(3, 6),
+        wornLap(4, 9, { inLap: true }),
+        wornLap(5, 1, { outLap: true }),
+        wornLap(6, 2),
+        wornLap(7, 4),
+        wornLap(8, 6),
+      ]);
+      const out = run(viewOf(laps, 6, [stint({ firstLap: 1, lastLap: 4 })]));
+      expect(out.corners.fl.ratePctPerLap).toMatchObject({ known: true, value: 2 });
+    });
+
+    it('a lap counts once: two laps, each written twice, are below minSamples (3)', () => {
+      const out = run(viewOf(engineShaped([wornLap(1, 0), wornLap(2, 2)]), 2));
+      expect(out.corners.fl.ratePctPerLap).toEqual({ known: false, reason: 'insufficientData' });
+    });
   });
 
   it('without a stint record the history counts as one stint', () => {

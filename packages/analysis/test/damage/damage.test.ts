@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { carState, engineView, event, lap, realismHidden } from '../../../../test-support/builders/index.ts';
 import { damageCalculator } from '../../src/damage/calculator.ts';
 import { DAMAGE } from '../../src/damage/index.ts';
+import { engineShaped } from '../engine-shaped.ts';
 
 const car0 = carId(0);
 const car1 = carId(1);
@@ -112,6 +113,12 @@ describe('damage calculator', () => {
       const loss = run(jump, seven).jumps[0]!.lossMsPerLap;
       // before: laps 2..4 (90 s); the jump's own lap 5 is in neither; after: laps 6 and 7 (91 s)
       expect(loss).toEqual(known(1000, seven[6]!.completedAt));
+    });
+
+    it('engine-shaped: a lap written provisional then confirmed counts once, so one pace lap after the jump is not enough', () => {
+      expect(run(jump, engineShaped(lapsOf(6, timeOf))).jumps[0]!.lossMsPerLap).toEqual(unknown('insufficientData'));
+      const seven = lapsOf(7, timeOf);
+      expect(run(jump, engineShaped(seven, { lapTimeMs: 80_000 })).jumps[0]!.lossMsPerLap).toEqual(known(1000, seven[6]!.completedAt));
     });
 
     it('uses only pace laps: an in-lap after the jump is skipped', () => {
