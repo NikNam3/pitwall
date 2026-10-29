@@ -26,8 +26,18 @@ export type GapToCar = { carId: CarId; gapMs: Known<Ms>; lapsDown: number };
 /** The virtual car of the gapper: the leader's mean lap so far (default), a car's mean lap, or a fixed lap time. */
 export type GapperReference = { kind: 'leaderAverage' } | { kind: 'carAverage'; carId: CarId } | { kind: 'fixed'; lapMs: Ms };
 
-/** `gaps.gapper`: per car, per completed lap, the gap to the virtual car at constant pace. */
-export type GapperLines = { referenceLapMs: Known<Ms>; cars: { carId: CarId; byLap: { lap: number; gapMs: Ms }[] }[] };
+/** The kinds of gapper reference. */
+export type GapperReferenceKind = GapperReference['kind'];
+
+/**
+ * `gaps.gapper`: per car, per completed lap, the gap to the virtual car at constant pace. `reference` is what the
+ * gapper resolved: its kind and, for `carAverage`, the car (`carId` is `notApplicable` for `leaderAverage` and `fixed`).
+ */
+export type GapperLines = {
+  reference: { kind: GapperReferenceKind; carId: Known<CarId> };
+  referenceLapMs: Known<Ms>;
+  cars: { carId: CarId; byLap: { lap: number; gapMs: Ms }[] }[];
+};
 
 /** `gaps.neighbourhood`: the cars within ±1 position or ±`neighbourhoodMs` of one of our cars. */
 export type Neighbourhood = { ourCarId: CarId; carIds: CarId[] };

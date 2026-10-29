@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { carId, known, toSessionTime, unknown } from '@pitwall/domain';
+import { carId, known, toSessionTime, unknown, type CarId, type Known } from '@pitwall/domain';
 import { lineRole } from './emphasis.ts';
 import { referenceText } from './text.ts';
 
@@ -26,22 +26,24 @@ describe('lineRole', () => {
 describe('referenceText', () => {
   const at = toSessionTime(0);
   const code = (id: number): string => (id === 5 ? 'LEC' : `#${id}`);
+  const none = unknown('notApplicable');
+  const text = (kind: 'leaderAverage' | 'carAverage' | 'fixed', car: Known<CarId>, lap: Known<number>) =>
+    referenceText({ reference: { kind, carId: car }, referenceLapMs: lap }, code);
 
   it('names the leader average with the reference lap time', () => {
-    expect(referenceText({ kind: 'leaderAverage' }, known(105_123, at), code)).toBe('ref leader avg 1:45.123');
+    expect(text('leaderAverage', none, known(105_123, at))).toBe('ref leader avg 1:45.123');
   });
 
-  it('names a car average with the car code', () => {
-    expect(referenceText({ kind: 'carAverage', carId: carId(5) }, known(106_000, at), code)).toBe('ref LEC avg 1:46.000');
+  it('names a car average with the car code of the car the gapper used', () => {
+    expect(text('carAverage', known(carId(5), at), known(106_000, at))).toBe('ref LEC avg 1:46.000');
   });
 
-  it('names a fixed reference with its own lap time', () => {
-    expect(referenceText({ kind: 'fixed', lapMs: 100_000 }, known(100_000, at), code)).toBe('ref fixed 1:40.000');
-    expect(referenceText({ kind: 'fixed', lapMs: 100_000 }, unknown('insufficientData'), code)).toBe('ref fixed 1:40.000');
+  it('names a fixed reference with the lap time the gapper used', () => {
+    expect(text('fixed', none, known(100_000, at))).toBe('ref fixed 1:40.000');
   });
 
   it('shows -- for an unknown lap time of a car or leader average', () => {
-    expect(referenceText({ kind: 'leaderAverage' }, unknown('insufficientData'), code)).toBe('ref leader avg --');
-    expect(referenceText({ kind: 'carAverage', carId: carId(5) }, unknown('insufficientData'), code)).toBe('ref LEC avg --');
+    expect(text('leaderAverage', none, unknown('insufficientData'))).toBe('ref leader avg --');
+    expect(text('carAverage', known(carId(5), at), unknown('insufficientData'))).toBe('ref LEC avg --');
   });
 });

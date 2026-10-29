@@ -104,5 +104,6 @@ export function gapperLines(out: GapsOutput, reference: GapperReference): Gapper
         ? raceLaps(out, carId, start.value).map(({ lap, at }) => ({ lap, gapMs: lap * referenceLapMs.value - (at - start.value) }))
         : [],
   }));
-  return { referenceLapMs, cars };
+  const named = reference.kind === 'carAverage' ? known(reference.carId, 0) : unknown('notApplicable');
+  return { reference: { kind: reference.kind, carId: named }, referenceLapMs, cars };
 }

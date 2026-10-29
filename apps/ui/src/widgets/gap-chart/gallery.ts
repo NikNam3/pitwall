@@ -53,6 +53,7 @@ const line = (id: number, laps: number, step: number, jump?: { at: number; ms: n
 });
 
 const lines = (over: Partial<GapperLines> = {}): GapperLines => ({
+  reference: { kind: 'leaderAverage', carId: unknown('notApplicable') },
   referenceLapMs: known(105_120, 0),
   cars: [line(2, 12, 0), line(3, 12, 300), line(5, 12, 600), line(0, 12, 900), line(4, 12, 1100), line(1, 12, 1500)],
   ...over,
@@ -88,7 +89,7 @@ const gallery: GalleryEntry<typeof widget> = {
     fixedReference: { ...base, gapper: lines({ referenceLapMs: known(100_000, 0) }) },
     referenceUnknown: { ...base, gapper: lines({ referenceLapMs: unknown('insufficientData'), cars: [] }) },
     noSession: { ...base, session: undefined },
-    empty: { ...base, gapper: { referenceLapMs: unknown('insufficientData'), cars: [] }, cars: [] },
+    empty: { ...base, gapper: lines({ referenceLapMs: unknown('insufficientData'), cars: [] }), cars: [] },
   },
   // Task 38: one size at each mode's minimum plus the edges just inside it.
   fit: [
