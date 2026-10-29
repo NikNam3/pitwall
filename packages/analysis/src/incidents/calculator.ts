@@ -19,9 +19,8 @@ import {
 import type { EngineView, IncrementalCalculator } from '@pitwall/engine';
 import { DAMAGE, type DamageOutput } from '../damage/index.ts';
 import { GAPS_CONFIG } from '../gaps/index.ts';
-import { classifyLap } from '../lap-classes/index.ts';
 import { PACE_CONFIG } from '../pace/index.ts';
-import { paceDelta } from '../pace-delta/index.ts';
+import { paceDeltaAround } from '../pace-delta/index.ts';
 import { penaltyClass } from '../shared/penalties.ts';
 import {
   addCrossing,
@@ -269,15 +268,7 @@ const segmentLoss = (acc: Acc, id: CarId, t: SessionTime): Known<Ms> => {
 };
 
 /** `pace-delta` over the car's pace laps around `lap` (the lap itself excluded). */
-const paceAround = (acc: Acc, id: CarId, lap: number): Known<Ms> => {
-  const pace = Object.values(acc.current[id] ?? {})
-    .filter((l) => classifyLap(l, acc).forPace)
-    .sort((a, b) => a.lapNumber - b.lapNumber);
-  const before = pace.filter((l) => l.lapNumber < lap).slice(-acc.window);
-  const after = pace.filter((l) => l.lapNumber > lap).slice(0, acc.window);
-  const last = after[after.length - 1];
-  return last === undefined ? unknown('insufficientData') : paceDelta(before.map((l) => l.lapTimeMs), after.map((l) => l.lapTimeMs), last.completedAt);
-};
+const paceAround = (acc: Acc, id: CarId, lap: number): Known<Ms> => paceDeltaAround(Object.values(acc.current[id] ?? {}), lap, acc);
 
 /** Kinds with no time lost: the car is out, the field is neutralised, or the entry is a ruling, not a loss. */
 const NO_TIME_LOST: ReadonlySet<IncidentKind> = new Set(['retirement', 'neutralised', 'warning', 'penalty']);

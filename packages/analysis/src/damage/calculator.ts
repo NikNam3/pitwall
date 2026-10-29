@@ -3,7 +3,6 @@ import {
   addLaps,
   emptyCurrentLaps,
   known,
-  unknown,
   type CarId,
   type Corners,
   type CurrentLaps,
@@ -12,13 +11,11 @@ import {
   type DamageParts,
   type DamageState,
   type LapRecord,
-  type Ms,
   type SessionTime,
 } from '@pitwall/domain';
 import type { EngineView, IncrementalCalculator } from '@pitwall/engine';
-import { classifyLap } from '../lap-classes/index.ts';
 import { PACE_CONFIG } from '../pace/index.ts';
-import { paceDelta } from '../pace-delta/index.ts';
+import { paceDeltaAround } from '../pace-delta/index.ts';
 import { DAMAGE, DAMAGE_CONFIG, type DamageOutput } from './index.ts';
 
 const CORNERS = ['fl', 'fr', 'rl', 'rr'] as const;
@@ -120,22 +117,10 @@ const init = (view: EngineView): Acc =>
     view,
   );
 
-/** The jump with its lap and its measured loss: pace laps before the jump's lap against pace laps after it. */
+/** The jump with its lap and its measured loss: `pace-delta` over the pace laps around the jump's lap. */
 const finishJump = (acc: Acc, raw: RawJump, laps: LapRecord[], currentLap: number): DamageJump => {
   const lap = laps.find((l) => l.completedAt >= raw.at)?.lapNumber ?? currentLap;
-  const paceLaps = laps.filter((l) => classifyLap(l, acc).forPace).sort((a, b) => a.lapNumber - b.lapNumber);
-  const before = paceLaps.filter((l) => l.lapNumber < lap).slice(-acc.window);
-  const after = paceLaps.filter((l) => l.lapNumber > lap).slice(0, acc.window);
-  const last = after[after.length - 1];
-  const lossMsPerLap =
-    last === undefined
-      ? unknown('insufficientData')
-      : paceDelta(
-          before.map((l) => l.lapTimeMs as Ms),
-          after.map((l) => l.lapTimeMs as Ms),
-          last.completedAt,
-        );
-  return { at: raw.at, lap, parts: [raw.part], deltaPct: raw.deltaPct, lossMsPerLap };
+  return { at: raw.at, lap, parts: [raw.part], deltaPct: raw.deltaPct, lossMsPerLap: paceDeltaAround(laps, lap, acc) };
 };
 
 /** Damage now and its jumps per active car; a jump's loss is `pace-delta` over the pace laps around it. */
