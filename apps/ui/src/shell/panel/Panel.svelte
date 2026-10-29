@@ -95,7 +95,7 @@
 
   $effect(() => {
     const keys = frameKeys;
-    untrack(() => frame.hold(keys === undefined ? [] : [keys.session, keys.feed]));
+    untrack(() => frame.hold(keys === undefined ? [] : [keys.feed]));
   });
   $effect(() => {
     const next = requests;
@@ -114,10 +114,7 @@
   // Widgets send their UI actions (acknowledge, mute) through the panel's `send`.
   setUiActions((action) => send(action));
 
-  const panelStale = providePanelStale({
-    now: () => (feedId === undefined ? undefined : store.now(feedId)),
-    cadenceMs: () => feed?.cadenceMs,
-  });
+  const panelStale = providePanelStale({ cadenceMs: () => feed?.cadenceMs });
 
   const status = $derived.by((): DataStatus => {
     if (link === undefined) return 'waiting';

@@ -32,11 +32,8 @@ export function dataRequests(decl: WidgetDecl<any, any>, link: ResolvedLink, opt
   });
 }
 
-/** The panel frame's own acquisitions for a feed: the session clock and the feed's health (spec 6.4). */
-export function frameRequests(feedId: FeedId): { session: DataRequest; feed: DataRequest } {
-  const request = (topic: TopicName): DataRequest => {
-    const key = keyOf(topic, {}, feedId);
-    return { name: topic, key, fold: undefined, optional: true, id: idOf('', key) };
-  };
-  return { session: request('session.info'), feed: request('feed.status') };
+/** The panel frame's own acquisition for a feed: the feed's health, for staleness (spec 6.4). */
+export function frameRequests(feedId: FeedId): { feed: DataRequest } {
+  const key = keyOf('feed.status', {}, feedId);
+  return { feed: { name: 'feed.status', key, fold: undefined, optional: true, id: idOf('', key) } };
 }

@@ -14,5 +14,5 @@
   <span data-testid="options">{JSON.stringify(options)}</span>
   <span data-testid="size-mode">{size.mode}</span>
   <span data-testid="link-primary">{link.primary}</span>
-  <span data-testid="clock-now">{stale?.clock.now() ?? 'none'}</span>
+  <span data-testid="cadence">{stale?.feed.cadenceMs() ?? 'none'}</span>
 </div>

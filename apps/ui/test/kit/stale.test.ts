@@ -53,17 +53,29 @@ describe('isStale', () => {
 });
 
 describe('carFieldStaleMs', () => {
-  const clock = (now: number | undefined, cadenceMs?: number) => ({ now: () => (now === undefined ? undefined : T(now)), cadenceMs: () => cadenceMs });
-  it('is how long the field has been behind once its source is stale', () => {
-    expect(carFieldStaleMs({ telemetry: T(1000) }, 'condition.brakes.tempC', clock(1200, 50))).toBe(200);
-    expect(carFieldStaleMs({ damage: T(1000) }, 'tyres.corners.wearPct', clock(1301))).toBe(301);
+  it('is how much older the field\'s source is than the car\'s newest update, once it is stale', () => {
+    expect(carFieldStaleMs({ telemetry: T(1000), lapData: T(1200) }, 'condition.brakes.tempC', 50)).toBe(200);
+    expect(carFieldStaleMs({ damage: T(1000), telemetry: T(1301) }, 'tyres.corners.wearPct', undefined)).toBe(301);
   });
-  it('is undefined while fresh, before the source arrived, without a clock or without updatedAt', () => {
-    expect(carFieldStaleMs({ telemetry: T(1000) }, 'condition.brakes.tempC', clock(1100, 50))).toBeUndefined();
-    expect(carFieldStaleMs({}, 'condition.brakes.tempC', clock(5000, 50))).toBeUndefined();
-    expect(carFieldStaleMs({ telemetry: T(0) }, 'condition.brakes.tempC', clock(undefined, 50))).toBeUndefined();
-    expect(carFieldStaleMs({ telemetry: T(0) }, 'condition.brakes.tempC', undefined)).toBeUndefined();
-    expect(carFieldStaleMs(undefined, 'condition.brakes.tempC', clock(5000, 50))).toBeUndefined();
+  it('is undefined while fresh, before the source arrived, without a cadence for a menu-rate source or without updatedAt', () => {
+    expect(carFieldStaleMs({ telemetry: T(1000), lapData: T(1100) }, 'condition.brakes.tempC', 50)).toBeUndefined();
+    expect(carFieldStaleMs({ lapData: T(5000) }, 'condition.brakes.tempC', 50)).toBeUndefined();
+    expect(carFieldStaleMs({ telemetry: T(0), lapData: T(5000) }, 'condition.brakes.tempC', undefined)).toBeUndefined();
+    expect(carFieldStaleMs(undefined, 'condition.brakes.tempC', 50)).toBeUndefined();
+  });
+  it('a car snapshot is judged by itself: every source as old as the newest is fresh, however old the snapshot (bug B2)', () => {
+    expect(carFieldStaleMs({ telemetry: T(1000), lapData: T(1000), damage: T(1000) }, 'condition.brakes.tempC', 18)).toBeUndefined();
+    expect(carFieldStaleMs({ telemetry: T(1000), lapData: T(1000), damage: T(1000) }, 'tyres.corners.wearPct', 18)).toBeUndefined();
+  });
+  it('at the rates measured on the TT Zandvoort recording no source of a steady car is stale', () => {
+    // Session-time gaps there (p99 / max): menu rate 20 / 32 ms at an 18 ms cadence, damage 106 / 133, setups 506 / 508,
+    // participants 5006 / 5007, tyre sets and session history 56 / 84.
+    const newest = T(100_000);
+    const updatedAt = { lapData: newest, telemetry: newest, motion: newest, status: newest, motionEx: newest,
+      damage: T(100_000 - 133), setups: T(100_000 - 508), participants: T(100_000 - 5007), tyreSets: T(100_000 - 84), sessionHistory: T(100_000 - 84) };
+    for (const field of ['tyres.corners.wearPct', 'condition.brakes.tempC', 'identity.teamId', 'tyres.sets', 'timing.lap'] as const) {
+      expect(carFieldStaleMs(updatedAt, field, 18)).toBeUndefined();
+    }
   });
 });
 

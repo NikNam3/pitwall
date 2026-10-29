@@ -1,12 +1,12 @@
 <script lang="ts">
-  // Test-only parent of any widget component: provides the panel staleness context (clock from the props) and shows `staleForMs`.
+  // Test-only parent of any widget component: provides the panel staleness context (cadence from the props) and shows `staleForMs`.
   import type { Component } from 'svelte';
   import { providePanelStale } from '../../src/kit/stale/panel-stale.ts';
 
-  type Props = { component: Component<Record<string, unknown>>; widgetProps: Record<string, unknown>; now?: number; cadenceMs?: number };
-  let { component: View, widgetProps, now, cadenceMs }: Props = $props();
+  type Props = { component: Component<Record<string, unknown>>; widgetProps: Record<string, unknown>; cadenceMs?: number };
+  let { component: View, widgetProps, cadenceMs }: Props = $props();
 
-  const panel = providePanelStale({ now: () => now, cadenceMs: () => cadenceMs });
+  const panel = providePanelStale({ cadenceMs: () => cadenceMs });
 </script>
 
 <View {...widgetProps} />

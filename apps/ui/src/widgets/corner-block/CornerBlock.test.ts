@@ -15,11 +15,12 @@ const k = <V>(v: V): Known<V> => known(v, T(0));
 const four = <V>(f: (name: keyof Corners<unknown>) => V): Corners<V> => ({ fl: f('fl'), fr: f('fr'), rl: f('rl'), rr: f('rr') });
 const rd = (v: number, over: Partial<BandReading> = {}): BandReading => ({ value: k(v), state: k('in'), band: { lo: 0, hi: 2000 }, outForFullLap: false, ...over });
 
-const car = (telemetryAt: number): CarState =>
+/** Telemetry at `telemetryAt`, the car's newest update (lap data) at `newestAt`. */
+const car = (telemetryAt: number, newestAt: number): CarState =>
   ({
     tyres: { corners: four(() => ({ surfaceTempC: k(98), carcassTempC: k(101), pressurePsi: k(23.1), wearPct: k(0) })) },
     condition: { brakes: four((n) => ({ tempC: k(n === 'fr' ? 1043 : 812), damagePct: k(0) })), engineTempC: k(112) },
-    updatedAt: { telemetry: T(telemetryAt) },
+    updatedAt: { telemetry: T(telemetryAt), lapData: T(newestAt) },
   }) as unknown as CarState;
 const bands: CarBands = {
   tyres: four(() => ({ surfaceC: rd(98), carcassC: rd(101), pressurePsi: rd(23.1) })),
@@ -31,11 +32,10 @@ const wear: TyreWear = {
   limitPct: 70, warnLaps: 3, gameLifeSpanLaps: k(25),
 };
 
-const show = (mode: 'compact' | 'full', telemetryAt: number, now: number) =>
+const show = (mode: 'compact' | 'full', telemetryAt: number, newestAt: number) =>
   render(InPanel, {
     component: CornerBlock as unknown as Component<Record<string, unknown>>,
-    widgetProps: { data: { car: car(telemetryAt), bands, wear }, options: {}, size: { mode, cols: 60, rows: 9, px: { width: 600, height: 200 }, dpr: 1 }, link: {} },
-    now,
+    widgetProps: { data: { car: car(telemetryAt, newestAt), bands, wear }, options: {}, size: { mode, cols: 60, rows: 9, px: { width: 600, height: 200 }, dpr: 1 }, link: {} },
     cadenceMs: 50,
   });
 const brake = (c: HTMLElement): HTMLElement => [...c.querySelectorAll('span')].find((s) => s.textContent?.includes('1043')) as HTMLElement;
