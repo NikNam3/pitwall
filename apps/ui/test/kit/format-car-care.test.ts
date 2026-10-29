@@ -19,7 +19,7 @@ describe('formatLapNumber', () => {
     [0, 'L0'],
     [62, 'L62'],
   ])('%i -> %s', (n, text) => expect(formatLapNumber(n)).toBe(text));
-  it('a non-finite number is a dash', () => expect(formatLapNumber(Number.NaN)).toBe('—'));
+  it('a non-finite number is empty', () => expect(formatLapNumber(Number.NaN)).toBe(''));
 });
 
 describe('formatLaps (a count always says laps)', () => {
@@ -31,7 +31,7 @@ describe('formatLaps (a count always says laps)', () => {
     [-1.8, '-1.8 laps'],
     [-0.04, '0.0 laps'],
   ])('%f -> %s', (n, text) => expect(formatLaps(n)).toBe(text));
-  it('a non-finite number is a dash', () => expect(formatLaps(Number.NaN)).toBe('—'));
+  it('a non-finite number is empty', () => expect(formatLaps(Number.NaN)).toBe(''));
 });
 
 describe('formatCelsius', () => {
@@ -42,7 +42,7 @@ describe('formatCelsius', () => {
     [-0.4, '0°'],
     [-3.6, '-4°'],
   ])('%f -> %s', (n, text) => expect(formatCelsius(n)).toBe(text));
-  it('a non-finite number is a dash', () => expect(formatCelsius(Number.NaN)).toBe('—'));
+  it('a non-finite number is empty', () => expect(formatCelsius(Number.NaN)).toBe(''));
 });
 
 describe('formatPercent', () => {
@@ -53,7 +53,7 @@ describe('formatPercent', () => {
     [-0.4, '0%'],
     [-12.4, '-12%'],
   ])('%f -> %s', (n, text) => expect(formatPercent(n)).toBe(text));
-  it('a non-finite number is a dash', () => expect(formatPercent(Number.NaN)).toBe('—'));
+  it('a non-finite number is empty', () => expect(formatPercent(Number.NaN)).toBe(''));
 });
 
 describe('formatPsi and formatKg (value only, the unit sits in the header or label)', () => {
@@ -67,9 +67,9 @@ describe('formatPsi and formatKg (value only, the unit sits in the header or lab
     [0, '0.0'],
     [-0.5, '-0.5'],
   ])('kg %f -> %s', (n, text) => expect(formatKg(n)).toBe(text));
-  it('a non-finite number is a dash', () => {
-    expect(formatPsi(Number.NaN)).toBe('—');
-    expect(formatKg(Number.NaN)).toBe('—');
+  it('a non-finite number is empty', () => {
+    expect(formatPsi(Number.NaN)).toBe('');
+    expect(formatKg(Number.NaN)).toBe('');
   });
 });
 
@@ -81,7 +81,7 @@ describe('formatJoules (shown as MJ, one decimal)', () => {
     [-400_000, '-0.4 MJ'],
     [4_000_000, '4.0 MJ'],
   ])('%i -> %s', (j, text) => expect(formatJoules(j)).toBe(text));
-  it('a non-finite number is a dash', () => expect(formatJoules(Number.NaN)).toBe('—'));
+  it('a non-finite number is empty', () => expect(formatJoules(Number.NaN)).toBe(''));
 });
 
 describe('formatDeltaMs (signed seconds, three decimals)', () => {
@@ -92,5 +92,5 @@ describe('formatDeltaMs (signed seconds, three decimals)', () => {
     [1234, '+1.234'],
     [-1234, '-1.234'],
   ])('%i -> %s', (ms, text) => expect(formatDeltaMs(ms)).toBe(text));
-  it('a non-finite number is a dash', () => expect(formatDeltaMs(Number.NaN)).toBe('—'));
+  it('a non-finite number is empty', () => expect(formatDeltaMs(Number.NaN)).toBe(''));
 });
