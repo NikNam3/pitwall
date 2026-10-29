@@ -13,7 +13,7 @@ describe('lap-times projection', () => {
     // 3 cars with best laps of 90.0, 89.8 and 89.6 s; car 0 starts lap 3 at 180 s and is 0.3 s up at crossing 25
     const { laps, miniSectors } = field({ cars: 3, laps: 2, paceMs: [90_000, 89_800, 89_600] });
     const live = lapInProgress(0, 3, 90_000, 180_000, 25, 300);
-    const latest = live[live.length - 1]!.at; // 180 000 + 46 800 − 300
+    const latest = live[live.length - 1]!.at; // 180 000 + 45 000 − 300
     const cars = activeCars(3, { 0: { lap: 3, driverStatus: 'flyingLap', currentLapTimeMs: latest - 180_000 } });
     const out = run(scene({ laps, miniSectors: [...miniSectors, ...live], cars, sessionTime: latest }));
 
@@ -21,7 +21,7 @@ describe('lap-times projection', () => {
     const p = out.projections[carId(0)]!;
     expect(p.carId).toBe(0);
     expect(p.onLap).toBe(true);
-    // 46 500 ms elapsed + (90 000 − 46 800)
+    // 44 700 ms elapsed + (90 000 − 45 000)
     expect(p.projectedLapMs).toEqual(known(89_700, latest));
     expect(p.deltaToBestMs).toEqual(known(-300, latest));
     // between car 2's 89.6 and car 1's 89.8
@@ -66,9 +66,10 @@ describe('lap-times projection', () => {
   it('without a valid best lap or a crossing in the current lap the projection is insufficientData', () => {
     // lap 1 in progress: no completed lap yet
     const first = lapInProgress(0, 1, 90_000, 0, 10);
-    const noBest = run(scene({ miniSectors: first, cars: activeCars(1, { 0: { lap: 1, driverStatus: 'flyingLap' } }), sessionTime: first[10]!.at }));
-    // lap 3 just started: the newest crossing belongs to lap 2
-    const { laps, miniSectors } = field({ cars: 1, laps: 2, paceMs: 90_000 });
+    const noBest = run(scene({ miniSectors: first, cars: activeCars(1, { 0: { lap: 1, driverStatus: 'flyingLap' } }), sessionTime: first[first.length - 1]!.at }));
+    // lap 3 just started but its start line is not recorded yet: the newest crossing belongs to lap 2
+    const { laps, miniSectors: all } = field({ cars: 1, laps: 2, paceMs: 90_000 });
+    const miniSectors = all.filter((m) => m.lap <= 2);
     const noCrossing = run(scene({ laps, miniSectors, cars: activeCars(1, { 0: { lap: 3, driverStatus: 'flyingLap' } }), sessionTime: 180_000 }));
     for (const out of [noBest, noCrossing]) {
       const p = out.projections[carId(0)]!;
@@ -178,10 +179,10 @@ describe('lap-times cut-off', () => {
 });
 
 describe('lap-times finish margin', () => {
-  /** Car 0 on lap 3 at crossing 24 (45 s into a 90 s best lap): 45 s of the projected lap remain. */
-  const atCrossing24 = (session: { sessionType: number; kind: 'practice' | 'qualifying' | 'race' | 'timeTrial' }, timeLeftMs: number) => {
+  /** Car 0 on lap 3 at crossing 25 (45 s into a 90 s best lap): 45 s of the projected lap remain. */
+  const atCrossing25 = (session: { sessionType: number; kind: 'practice' | 'qualifying' | 'race' | 'timeTrial' }, timeLeftMs: number) => {
     const { laps, miniSectors } = field({ cars: 1, laps: 2, paceMs: 90_000 });
-    const live = lapInProgress(0, 3, 90_000, 180_000, 24);
+    const live = lapInProgress(0, 3, 90_000, 180_000, 25);
     const sessionTime = live[live.length - 1]!.at; // 225 000
     const cars = activeCars(1, { 0: { lap: 3, driverStatus: 'flyingLap', currentLapTimeMs: 45_000 } });
     const view = scene({ laps, miniSectors: [...miniSectors, ...live], cars, session: { ...session, timeLeftMs, updatedAt: sessionTime }, sessionTime });
@@ -189,13 +190,13 @@ describe('lap-times finish margin', () => {
   };
 
   it('timed session, 60 s left, 45 s of the projected lap remaining: finishMarginMs 15 000', () => {
-    const { p, sessionTime } = atCrossing24(PRACTICE, 60_000);
+    const { p, sessionTime } = atCrossing25(PRACTICE, 60_000);
     expect(p.projectedLapMs).toEqual(known(90_000, sessionTime));
     expect(p.finishMarginMs).toEqual(known(15_000, sessionTime));
   });
 
   it('negative when the clock runs out before the car reaches the line', () => {
-    const { p, sessionTime } = atCrossing24(Q1, 30_000);
+    const { p, sessionTime } = atCrossing25(Q1, 30_000);
     expect(p.finishMarginMs).toEqual(known(-15_000, sessionTime));
   });
 
@@ -203,6 +204,6 @@ describe('lap-times finish margin', () => {
     ['the race', RACE],
     ['time trial', { sessionType: 18, kind: 'timeTrial' } as const],
   ])('no finish margin in %s', (_, session) => {
-    expect(atCrossing24(session, 60_000).p.finishMarginMs).toEqual(notApplicable);
+    expect(atCrossing25(session, 60_000).p.finishMarginMs).toEqual(notApplicable);
   });
 });

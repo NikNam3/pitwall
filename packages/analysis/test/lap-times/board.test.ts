@@ -84,7 +84,12 @@ describe('lap-times update and flashback', () => {
     sectorLap(0, 3, [29_600, 29_700, 29_700], 269_000),
     sectorLap(1, 3, [30_333, 30_333, 30_334], 273_000),
   ];
-  const allCrossings: MiniSectorCrossing[] = [...base.miniSectors, ...crossings(carId(0), 3, 89_000, 180_000), ...crossings(carId(1), 3, 91_000, 182_000)];
+  // engine convention: `field` already holds each car's lap-3 start line (3, 0); lap 3 adds segments 1..49 and the closing (4, 0)
+  const lapThree = (id: number, paceMs: number, startAt: number): MiniSectorCrossing[] => [
+    ...crossings(carId(id), 3, paceMs, startAt).slice(1),
+    { carId: carId(id), lap: 4, segment: 0, at: startAt + paceMs },
+  ];
+  const allCrossings: MiniSectorCrossing[] = [...base.miniSectors, ...lapThree(0, 89_000, 180_000), ...lapThree(1, 91_000, 182_000)];
 
   /** The session as it stood at time `t`: the laps and crossings until then, each car on the lap after its last one. */
   const at = (t: number): EngineView => {

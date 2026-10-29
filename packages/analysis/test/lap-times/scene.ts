@@ -17,11 +17,12 @@ export function sectorLap(car: number, lapNumber: number, sectorTimesMs: [number
 }
 
 /**
- * The crossings of a lap in progress: those of an evenly paced `paceMs` lap started at `startAt`, up to and including
- * `segment`, the last one `upMs` earlier (so the car is `upMs` up at `segment` on a lap at `paceMs`).
+ * The crossings of a lap in progress after its start line (engine convention: segment 0 is the line at `startAt`, which
+ * `field` already holds as the closing crossing of the lap before): segments 1 to `segment` of an evenly paced `paceMs`
+ * lap, the last one `upMs` earlier (so the car is `upMs` up at `segment` on a lap at `paceMs`).
  */
 export function lapInProgress(car: number, lapNumber: number, paceMs: number, startAt: number, segment: number, upMs = 0): MiniSectorCrossing[] {
-  const list = crossings(carId(car), lapNumber, paceMs, startAt).slice(0, segment + 1);
+  const list = crossings(carId(car), lapNumber, paceMs, startAt).slice(1, segment + 1);
   const last = list[list.length - 1]!;
   list[list.length - 1] = { ...last, at: last.at - upMs };
   return list;
