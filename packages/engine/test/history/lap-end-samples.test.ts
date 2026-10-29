@@ -71,7 +71,7 @@ describe('lap end samples', () => {
   });
 
   it('channelRange holds the min and max surface temperature of the lap\'s frames', () => {
-    // Front-left surface per frame 0–4: 80, 95, 70, 85 (the completing frame, inside the range), 200 (lap 2).
+    // Front-left surface per frame 0–4: 80, 95, 70 (lap 1), 85 (the completing frame, after the line: lap 2), 200 (lap 2).
     const surface = [80, 95, 70, 85, 200];
     const pressure = [23, 24, 22, 23, 30];
     const { st } = runScenario(new ScenarioBuilder({ cars: 1 }).frames(5, (d) => {
@@ -84,13 +84,13 @@ describe('lap end samples', () => {
     expect(range.tyres.fl.surfaceC).toEqual(val({ min: 70, max: 95 }));
     expect(range.tyres.fl.pressurePsi).toEqual(val({ min: 22, max: 24 }));
     expect(range.tyres.rl.surfaceC).toEqual(val({ min: 60, max: 60 }));
-    expect(range.brakesC.fl).toEqual(val({ min: 400, max: 700 }));
+    expect(range.brakesC.fl).toEqual(val({ min: 400, max: 600 }));
     expect(range.engineC).toEqual(val({ min: 100, max: 110 }));
   });
 
   it('a channel no frame of the lap had is unknown in channelRange', () => {
-    // The default session records surface temperatures only: no carcass temperature exists.
-    const { st } = runScenario(new ScenarioBuilder({ cars: 1 }).frames(5, complete));
+    // A surface-only session (tyreTemperature 0) has no carcass temperature.
+    const { st } = runScenario(new ScenarioBuilder({ cars: 1 }).session({ tyreTemperature: 0 }).frames(5, complete));
     expect(st.history.laps[0]!.channelRange.tyres.fl.carcassC.known).toBe(false);
   });
 });
