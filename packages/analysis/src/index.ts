@@ -12,6 +12,7 @@ export * from './lap-classes/index.ts';
 export * from './lap-times/index.ts';
 export * from './pace/index.ts';
 export { paceCalculator } from './pace/calculator.ts';
+export { fuelCalculator } from './fuel/calculator.ts';
 export * from './pace-delta/index.ts';
 export * from './per-lap-rate/index.ts';
 export * from './race-moment/index.ts';
