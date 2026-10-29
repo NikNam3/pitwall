@@ -214,6 +214,9 @@ export const insightText = {
 /** The name of each corner of the car, by the `Corners` keys (`fl` -> `FL`). */
 export const cornerNames = { fl: 'FL', fr: 'FR', rl: 'RL', rr: 'RR' } as const satisfies Record<keyof Corners<unknown>, string>;
 
+/** The name of each sector of the lap (`2` -> `S2`). */
+export const sectorNames = { 1: 'S1', 2: 'S2', 3: 'S3' } as const satisfies Record<1 | 2 | 3, string>;
+
 /** What the incident feed says of each kind of incident. */
 export const incidentKinds = {
   collision: 'collision',

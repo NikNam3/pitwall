@@ -11,31 +11,31 @@ const overview = (id: number, name: string): CarOverview =>
   ({ id: carId(id), identity: { name, raceNumber: id }, timing: {}, tyres: {}, updatedAt: 10 }) as unknown as CarOverview;
 const cars = [overview(1, 'Kuhnlein'), overview(2, 'Esteban Ocon'), overview(3, 'Carlos Sainz'), overview(4, 'Alexander Albon'), overview(5, 'Oscar Piastri')];
 
-// Mockup 2-timing.html, newest first. Car 1 is ours.
+// Mockup 2-timing.html, newest first. Car 1 is ours. The mockup's turn `(T7)` is a sector here: F1 25 sends no turn numbers.
 const collision: IncidentEntry = {
   id: 'collision:2+3:230000', at: toSessionTime(230_000), lap: 23, kind: 'collision', severity: 'major', carIds: [carId(2), carId(3)],
   timeLostMs: k(4200),
   // OCO retired by the after moment: its gap after is notApplicable (DNF)
   forUs: [{ ourCarId: carId(1), otherCarId: k(carId(2)), positionBefore: k(5), positionAfter: k(4), gapBeforeMs: k(4100), gapAfterMs: unknown('notApplicable') }],
-  where: { sector: unknown('notReceived') },
+  where: { sector: k(3) },
 };
 const timeLoss: IncidentEntry = {
   id: 'timeLoss:4:220000', at: toSessionTime(220_000), lap: 22, kind: 'timeLoss', severity: 'major', carIds: [carId(4)],
   timeLostMs: k(6100),
   forUs: [{ ourCarId: carId(1), otherCarId: k(carId(4)), positionBefore: k(5), positionAfter: k(5), gapBeforeMs: k(-1900), gapAfterMs: k(5800) }],
-  where: { sector: unknown('notReceived') },
+  where: { sector: k(2) },
 };
 const warning: IncidentEntry = {
   id: 'warning:5:210000', at: toSessionTime(210_000), lap: 21, kind: 'warning', severity: 'minor', carIds: [carId(5)],
-  timeLostMs: unknown('notApplicable'), forUs: [], where: { sector: unknown('notReceived') },
+  timeLostMs: unknown('notApplicable'), forUs: [], where: { sector: k(2) }, warning: { count: 2, limit: 3 },
 };
 const neutralised: IncidentEntry = {
   id: 'neutralised::190000', at: toSessionTime(190_000), lap: 19, kind: 'neutralised', severity: 'minor', carIds: [],
-  timeLostMs: unknown('notApplicable'), forUs: [], where: { sector: unknown('notReceived') },
+  timeLostMs: unknown('notApplicable'), forUs: [], where: { sector: unknown('notApplicable') },
 };
 const damage: IncidentEntry = {
   id: 'damage:1:140000', at: toSessionTime(140_000), lap: 14, kind: 'damage', severity: 'major', carIds: [carId(1)],
-  timeLostMs: unknown('insufficientData'), forUs: [], where: { sector: unknown('notReceived') },
+  timeLostMs: unknown('insufficientData'), forUs: [], where: { sector: k(1) }, damage: [{ part: 'frontLeftWingPct', deltaPct: 12 }],
 };
 
 /** A moment; the incident moment's cause names its entry (`entryId`), as race-moment gives it. */
