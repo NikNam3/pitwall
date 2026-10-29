@@ -32,10 +32,10 @@ export function parseJson(text: string): Parsed {
   }
 }
 
-/** The names (without `.json`) of the workbook files in `dir`, sorted. Temp files are not workbooks. */
+/** The names (without `.json`) of the workbook files in `dir`, sorted. Temp files and dotfiles (the seeding marker) are not workbooks. */
 export function workbookNames(dir: string): string[] {
   try {
-    return readdirSync(dir).filter((file) => file.endsWith('.json')).map((file) => file.slice(0, -'.json'.length)).sort();
+    return readdirSync(dir).filter((file) => file.endsWith('.json') && !file.startsWith('.')).map((file) => file.slice(0, -'.json'.length)).sort();
   } catch {
     return [];
   }
