@@ -19,6 +19,13 @@ export type BarCells = { text: string; kinds: BarCellKind[]; over: boolean; reas
 /** Cells of a bar: the fill, then the reserve, marker and limit drawn over it (limit wins on one cell). */
 export function barCells({ value, min, max, cols, limit, marker, reserve }: BarInput): BarCells {
   const span = max - min;
+  const reason = value.known ? undefined : value.reason;
+  // Guard: no columns or a zero (or inverted, or non-finite) span has no meaningful geometry; draw an empty bar.
+  if (!(cols >= 1) || !(span > 0)) {
+    const n = cols >= 1 ? Math.floor(cols) : 0;
+    const kinds: BarCellKind[] = Array.from({ length: n }, () => 'empty');
+    return { text: BAR_CHARS.empty.repeat(n), kinds, over: false, reason };
+  }
   const frac = (v: number): number => (v - min) / span;
   const kinds: BarCellKind[] = Array.from({ length: cols }, () => 'empty');
   const over = value.known && value.value > max;
@@ -33,5 +40,5 @@ export function barCells({ value, min, max, cols, limit, marker, reserve }: BarI
   put(reserve, 'reserve');
   put(marker?.known ? marker.value : undefined, 'marker');
   put(limit, 'limit');
-  return { text: kinds.map((k) => BAR_CHARS[k]).join(''), kinds, over, reason: value.known ? undefined : value.reason };
+  return { text: kinds.map((k) => BAR_CHARS[k]).join(''), kinds, over, reason };
 }
