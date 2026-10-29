@@ -108,5 +108,9 @@ export type RaceEvent = {
 /** The lap is split into this many segments of equal length by distance. */
 export const MINI_SECTORS = 50;
 
-/** When a car crossed the end of a mini-sector, interpolated between frames. */
+/**
+ * When a car passed the boundary of mini-sector `segment` of lap `lap`, interpolated between frames. Segment s's
+ * boundary is at `s × trackLength / 50`, so segment 0 is the start/finish line at the start of the lap, and the line
+ * that completes lap L is `(L + 1, 0)`.
+ */
 export type MiniSectorCrossing = { carId: CarId; lap: number; segment: number; at: SessionTime };

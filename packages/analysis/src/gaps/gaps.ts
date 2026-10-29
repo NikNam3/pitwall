@@ -8,11 +8,26 @@ import type { GapsOutput } from './index.ts';
  */
 export const progressOf = (m: { lap: number; segment: number }): number => (m.lap - 1) * MINI_SECTORS + m.segment;
 
-/** One car's crossings: the time of each by its progress, and the progress of the newest one. */
-export type CarTrack = { times: SessionTime[]; latest: number };
+/** How many crossings per car `GapsOutput.recent` keeps: two laps. */
+export const RECENT_CROSSINGS = 2 * MINI_SECTORS;
+
+/** A car's crossing times by progress, from `fromProgress` up to its newest crossing (the calculator keeps all, from 0). */
+export type CarCrossings = GapsOutput['recent'][CarId];
+
+const latestOf = (c: CarCrossings): number => c.fromProgress + c.at.length - 1;
+const timeAt = (c: CarCrossings, progress: number): SessionTime | undefined => c.at[progress - c.fromProgress];
+
+/** When the car passed its newest crossing. */
+export const latestTime = (c: CarCrossings): SessionTime | undefined => timeAt(c, latestOf(c));
+
+/** The car's last `RECENT_CROSSINGS` crossings, as a new object. */
+export const recentOf = (c: CarCrossings): CarCrossings => {
+  const from = Math.max(c.fromProgress, latestOf(c) - RECENT_CROSSINGS + 1);
+  return { fromProgress: from, at: c.at.slice(from - c.fromProgress) };
+};
 
 /** Whole laps car `a` is behind car `b` on the road, from their progress; 0 when `a` is not behind. */
-export const lapsBehind = (a: CarTrack, b: CarTrack): number => Math.max(0, Math.floor((b.latest - a.latest) / MINI_SECTORS));
+export const lapsBehind = (a: CarCrossings, b: CarCrossings): number => Math.max(0, Math.floor((latestOf(b) - latestOf(a)) / MINI_SECTORS));
 
 /**
  * The signed gap of car `a` behind car `b` (positive = behind), with `a` counted `laps` laps down: `a`'s time at a
@@ -20,35 +35,34 @@ export const lapsBehind = (a: CarTrack, b: CarTrack): number => Math.max(0, Math
  * not reached yet is behind it, and `gapBehind(a, b) = −gapBehind(b, a)`. With `laps` from `lapsBehind` it is the time
  * since `b` passed where `a` is now. `notReceived` while either car lacks the crossing.
  */
-export function gapBehind(a: CarTrack | undefined, b: CarTrack | undefined, laps = 0): Known<Ms> {
+export function gapBehind(a: CarCrossings | undefined, b: CarCrossings | undefined, laps = 0): Known<Ms> {
   if (a === undefined || b === undefined) return unknown('notReceived');
-  const point = Math.min(a.latest, b.latest - laps * MINI_SECTORS);
-  const ta = a.times[point];
-  const tb = b.times[point + laps * MINI_SECTORS];
+  const point = Math.min(latestOf(a), latestOf(b) - laps * MINI_SECTORS);
+  const ta = timeAt(a, point);
+  const tb = timeAt(b, point + laps * MINI_SECTORS);
   if (ta === undefined || tb === undefined) return unknown('notReceived');
   return known(ta - tb, Math.max(ta, tb));
 }
 
-/** `a − b`, or the reason of the first unknown one. */
-const difference = (a: Known<Ms>, b: Known<Ms>): Known<Ms> => {
-  if (!a.known) return a;
-  if (!b.known) return b;
-  return known(a.value - b.value, Math.max(a.at, b.at));
-};
+/** The gap of `a` to `to` with the laps between them: `a` down `lapsDown` laps (negative = up), then `gapMs` at the same point. */
+function gapTo(a: CarCrossings | undefined, to: CarCrossings | undefined): Omit<GapToCar, 'carId'> {
+  if (a === undefined || to === undefined) return { lapsDown: 0, gapMs: unknown('notReceived') };
+  const down = lapsBehind(a, to);
+  if (down > 0) return { lapsDown: down, gapMs: gapBehind(a, to, down) };
+  const up = lapsBehind(to, a);
+  const ahead = gapBehind(to, a, up);
+  return { lapsDown: 0 - up, gapMs: ahead.known ? known(0 - ahead.value, ahead.at) : ahead };
+}
 
 /**
- * Every running car's signed gap to `carId` (positive = behind it), from the gaps to the leader: `lapsDown` is how
- * many laps more than `carId` a car is down (negative = laps ahead), on top of `gapMs`. `undefined` when `carId` is not
- * a running car.
+ * Every running car's signed gap to `carId` (positive = behind it), exact from both cars' crossings at the latest
+ * point both passed. `lapsDown` is signed and relative to `carId` (negative = laps ahead); a lapped pair's `gapMs` is
+ * the time between them at the same point of the track. `undefined` when `carId` is not a running car.
  */
 export function gapsToCar(out: GapsOutput, carId: CarId): GapToCar[] | undefined {
-  const to = out.intervals.find((i) => i.carId === carId);
-  if (to === undefined) return undefined;
-  return out.intervals.map((i) => ({
-    carId: i.carId,
-    gapMs: difference(i.toLeaderMs, to.toLeaderMs),
-    lapsDown: i.lapsDown - to.lapsDown,
-  }));
+  if (!out.intervals.some((i) => i.carId === carId)) return undefined;
+  const to = out.recent[carId];
+  return out.intervals.map((i) => ({ carId: i.carId, ...gapTo(out.recent[i.carId], to) }));
 }
 
 /** The car's line crossings after the race start: its completed race laps. */

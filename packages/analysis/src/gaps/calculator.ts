@@ -1,15 +1,16 @@
 // The `gaps` calculator (spec 6.1): a fold over the mini-sector crossings; the order and our cars come from the car state.
 import { known, unknown, type CarId, type Interval, type Known, type Ms, type Neighbourhood, type ResultStatus, type SessionTime } from '@pitwall/domain';
 import type { EngineView, IncrementalCalculator } from '@pitwall/engine';
-import { gapBehind, lapsBehind, progressOf, type CarTrack } from './gaps.ts';
+import { gapBehind, lapsBehind, latestTime, progressOf, recentOf, type CarCrossings } from './gaps.ts';
 import { GAPS, GAPS_CONFIG, type GapsOutput } from './index.ts';
 
 /** What the crossings and events so far add up to. */
 type Table = {
-  /** By car id. */
-  tracks: Array<CarTrack | undefined>;
+  /** By car id: every crossing, from progress 0. */
+  tracks: Array<CarCrossings | undefined>;
   lineTimes: GapsOutput['lineTimes'];
   latest: GapsOutput['latest'];
+  recent: GapsOutput['recent'];
   /** The newest lights-out event. */
   lightsOutAt: SessionTime | undefined;
 };
@@ -21,18 +22,23 @@ const OUT_OF_RACE: ReadonlySet<ResultStatus> = new Set(['retired', 'didNotFinish
 
 const NOT_APPLICABLE = unknown('notApplicable');
 
-/** Adds the crossings from index `from` on. `lineTimes` and `latest` are replaced, never changed, as earlier outputs hold them. */
+/**
+ * Adds the crossings from index `from` on. `lineTimes`, `latest` and `recent` are replaced, never changed, as earlier
+ * outputs hold them: one new `recent` window per car that crossed something.
+ */
 function foldCrossings(acc: Table, view: EngineView, from: number): void {
   const list = view.state.history.miniSectors;
   if (from >= list.length) return;
   const latest = { ...acc.latest };
   let lineTimes = acc.lineTimes;
+  const crossed = new Set<CarId>();
   for (const m of list.slice(from)) {
     const progress = progressOf(m);
     if (progress < 0) continue; // laps count from 1
-    const track = (acc.tracks[m.carId] ??= { times: [], latest: 0 });
-    track.times[progress] = m.at;
-    track.latest = progress;
+    const track = (acc.tracks[m.carId] ??= { fromProgress: 0, at: [] });
+    track.at[progress] = m.at;
+    track.at.length = progress + 1; // a car that went back drops what lay ahead
+    crossed.add(m.carId);
     latest[m.carId] = { lap: m.lap, segment: m.segment, at: m.at };
     // segment 0 is the line at the start of its lap: it completes the lap before (none for lap 1, the start)
     const completed = m.lap - 1;
@@ -41,8 +47,11 @@ function foldCrossings(acc: Table, view: EngineView, from: number): void {
       lineTimes[m.carId] = [...(lineTimes[m.carId] ?? []).filter((l) => l.lap < completed), { lap: completed, at: m.at }];
     }
   }
+  const recent = { ...acc.recent };
+  for (const id of crossed) recent[id] = recentOf(acc.tracks[id] as CarCrossings);
   acc.latest = latest;
   acc.lineTimes = lineTimes;
+  acc.recent = recent;
 }
 
 function foldEvents(acc: Table, view: EngineView, from: number): void {
@@ -55,11 +64,11 @@ const raceStartAt = (acc: Table, view: EngineView): Known<SessionTime> => {
 };
 
 /** The gap of `a` to the car ahead of it in the order: the time since that car passed where `a` is now. */
-const roadGap = (a: CarTrack | undefined, ahead: CarTrack | undefined): Known<Ms> =>
+const roadGap = (a: CarCrossings | undefined, ahead: CarCrossings | undefined): Known<Ms> =>
   gapBehind(a, ahead, a === undefined || ahead === undefined ? 0 : lapsBehind(a, ahead));
 
-const leaderGap = (leader: CarTrack | undefined): Known<Ms> => {
-  const at = leader?.times[leader.latest];
+const leaderGap = (leader: CarCrossings | undefined): Known<Ms> => {
+  const at = leader === undefined ? undefined : latestTime(leader);
   return at === undefined ? unknown('notReceived') : known(0, at);
 };
 
@@ -96,11 +105,11 @@ function build(acc: Table, view: EngineView): GapsOutput {
     neighbourhood.push({ ourCarId, carIds });
   }
 
-  return { intervals, lineTimes: acc.lineTimes, latest: acc.latest, neighbourhood, raceStartAt: raceStartAt(acc, view) };
+  return { intervals, lineTimes: acc.lineTimes, latest: acc.latest, recent: acc.recent, neighbourhood, raceStartAt: raceStartAt(acc, view) };
 }
 
 const init = (view: EngineView): GapsAcc => {
-  const table: Table = { tracks: [], lineTimes: {}, latest: {}, lightsOutAt: undefined };
+  const table: Table = { tracks: [], lineTimes: {}, latest: {}, recent: {}, lightsOutAt: undefined };
   foldCrossings(table, view, 0);
   foldEvents(table, view, 0);
   return { ...table, out: build(table, view) };

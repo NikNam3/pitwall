@@ -16,7 +16,10 @@ export type Interval = {
   positionsGained: number;
 };
 
-/** `gaps.toCar`: one car's signed gap to the params car; positive = behind it. */
+/**
+ * `gaps.toCar`: one car's signed gap to the params car; positive = behind it. `lapsDown` is signed and relative to the
+ * params car: the laps this car is down on it (negative = laps ahead), on top of `gapMs`.
+ */
 export type GapToCar = { carId: CarId; gapMs: Known<Ms>; lapsDown: number };
 
 /** The virtual car of the gapper: the leader's mean lap so far (default), a car's mean lap, or a fixed lap time. */
