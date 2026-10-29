@@ -23,7 +23,7 @@ const alb: BattleSide = {
 const card: BattleCard = { carId: carId(1), ahead: k(lec), behind: k(alb) };
 
 const moment = (name: Moment): Known<RaceMoment> =>
-  k({ moment: name, since: unknown('notApplicable'), cause: { rule: name, params: { battleLaps: 2, drsRangeMs: 1000 } }, active: [name] });
+  k({ moment: name, since: unknown('notApplicable'), cause: { rule: name, params: { carId: 1, side: 'behind', lapsToDrs: 0, gapMs: 841 } }, active: [name] });
 
 /** Synthetic cases and fit expectations for `battle-cards`. */
 const gallery: GalleryEntry<typeof widget> = {

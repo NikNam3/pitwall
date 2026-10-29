@@ -21,7 +21,7 @@ const behindSide: BattleSide = {
 };
 const card = (over: Partial<BattleCard> = {}): BattleCard => ({ carId: OURS, ahead: k(aheadSide), behind: k(behindSide), ...over });
 
-const battle = (params: Record<string, number | string> = { battleLaps: 2, drsRangeMs: 1000 }): Known<RaceMoment> =>
+const battle = (params: Record<string, number | string> = { carId: 1, side: 'behind', lapsToDrs: 0, gapMs: 841 }): Known<RaceMoment> =>
   k({ moment: 'battle', since: unknown('notApplicable'), cause: { rule: 'battle', params }, active: ['battle'] });
 
 describe('battleRows', () => {
@@ -81,7 +81,7 @@ describe('battleRows', () => {
     expect(rows[1]!.cells.gap.text).toBe('−0.841');
   });
 
-  it('lights drv, gap and toDrs of the row in DRS range as text (white bold) in the battle moment, nothing else', () => {
+  it('lights drv, gap and toDrs of the row the moment names (BEHIND of card car 1) as text (white bold) in the battle moment, nothing else', () => {
     const [ahead, behind] = battleRows(card(), cars, battle());
     expect(behind!.highlighted).toBe(true);
     expect(behind!.cells.drv.role).toBe('text');
@@ -93,7 +93,9 @@ describe('battleRows', () => {
     expect(Object.values(ahead!.cells).every((c) => c.role === undefined)).toBe(true);
   });
 
-  it('lights nothing without the moment or outside the battle moment', () => {
+  it('lights nothing without the moment, outside the battle moment, or for another car\'s card', () => {
+    const other = k({ moment: 'battle', since: unknown('notApplicable'), cause: { rule: 'battle', params: { carId: 2, side: 'behind' } }, active: ['battle'] } as RaceMoment);
+    expect(battleRows(card(), cars, other).some((r) => r.highlighted)).toBe(false);
     for (const m of [undefined, unknown('notApplicable')] as const) {
       expect(battleRows(card(), cars, m).some((r) => r.highlighted)).toBe(false);
     }
