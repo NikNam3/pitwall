@@ -47,15 +47,15 @@ export function overview(id: number, o: CarOptions): CarOverview {
 }
 
 /** A `gaps.intervals` entry; times in ms, `undefined` = unknown (the leader has no car ahead). */
-// `positionsGained` (gridPosition - position, computed by `gaps`) lands in `Interval` with the gaps task.
-export function interval(id: number, toLeader?: number, toAhead?: number, lapsDown = 0, positionsGained = 0): Interval {
+// `positionsGained` (gridPosition - position, computed by `gaps`) is a `Known`; `undefined` = unknown.
+export function interval(id: number, toLeader?: number, toAhead?: number, lapsDown = 0, positionsGained: number | undefined = 0): Interval {
   return {
     carId: carId(id),
     toLeaderMs: toLeader === undefined ? unknown('notApplicable') : ms(toLeader),
     toAheadMs: toAhead === undefined ? unknown('notApplicable') : ms(toAhead),
     toBehindMs: unknown('notApplicable'),
     lapsDown,
-    positionsGained,
+    positionsGained: positionsGained === undefined ? unknown('notApplicable') : known(positionsGained, at),
   };
 }
 

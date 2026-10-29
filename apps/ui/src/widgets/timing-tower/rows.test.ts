@@ -83,6 +83,13 @@ describe('buildRows', () => {
     expect(buildRows(base()).map((r) => r.change)).toEqual([0, -1, 2]);
   });
 
+  it('has no change when positionsGained is unknown', () => {
+    const input = base();
+    input.intervals = [interval(0, undefined, undefined, 0, undefined), ...input.intervals.slice(1)];
+    expect(buildRows(input)[0]?.change).toBeUndefined();
+    expect(buildRows(input)[1]?.change).toBe(-1);
+  });
+
   it('has no change for a car without an interval entry', () => {
     const input = base();
     input.intervals = [];
