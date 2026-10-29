@@ -83,16 +83,38 @@ describe('lap-times projection', () => {
 
 describe('lap-times cut-off', () => {
   /**
-   * `cars` cars with best laps of 90.0, 90.1, 90.2 … s (two laps each); `subject` is on lap 3, `upMs` up on its best
-   * at crossing 25, so it projects its best − `upMs`.
+   * `cars` active cars with best laps of 90.0, 90.1, 90.2 … s (two laps each) in a session of `classified` cars
+   * (`session.numActiveCars`, default `cars`); `subject` is on lap 3, `upMs` up on its best at crossing 25, so it
+   * projects its best − `upMs`.
    */
-  const quali = ({ cars, subject = cars - 1, upMs, session = Q1, config = {} }: { cars: number; subject?: number; upMs: number; session?: { sessionType: number; kind: 'practice' | 'qualifying' | 'sprintShootout' | 'race' | 'timeTrial' }; config?: Record<string, Record<string, number>> }) => {
+  const quali = ({
+    cars,
+    classified = cars,
+    subject = cars - 1,
+    upMs,
+    session = Q1,
+    config = {},
+  }: {
+    cars: number;
+    classified?: number;
+    subject?: number;
+    upMs: number;
+    session?: { sessionType: number; kind: 'practice' | 'qualifying' | 'sprintShootout' | 'race' | 'timeTrial' };
+    config?: Record<string, Record<string, number>>;
+  }) => {
     const paces = Array.from({ length: cars }, (_, i) => 90_000 + 100 * i);
     const { laps, miniSectors } = field({ cars, laps: 2, paceMs: paces });
     const pace = paces[subject]!;
     const live = lapInProgress(subject, 3, pace, 2 * pace, 25, upMs);
     const sessionTime = live[live.length - 1]!.at;
-    const view = scene({ laps, miniSectors: [...miniSectors, ...live], cars: activeCars(cars, { [subject]: { lap: 3, driverStatus: 'flyingLap' } }), session, sessionTime, config });
+    const view = scene({
+      laps,
+      miniSectors: [...miniSectors, ...live],
+      cars: activeCars(cars, { [subject]: { lap: 3, driverStatus: 'flyingLap' } }),
+      session: { ...session, numActiveCars: classified },
+      sessionTime,
+      config,
+    });
     return { p: run(view).projections[carId(subject)]!, sessionTime, projected: pace - upMs };
   };
 
@@ -115,18 +137,28 @@ describe('lap-times cut-off', () => {
   it.each([
     ['Q1', 5, 'qualifying', 20, 15],
     ['Sprint Shootout 1', 10, 'sprintShootout', 20, 15],
-    ['Q2', 6, 'qualifying', 15, 10],
-    ['Sprint Shootout 2', 11, 'sprintShootout', 15, 10],
-  ] as const)('%s: active cars − eliminated is the cut-off position', (_, sessionType, kind, cars, position) => {
+    ['Q2', 6, 'qualifying', 20, 10],
+    ['Sprint Shootout 2', 11, 'sprintShootout', 20, 10],
+  ] as const)('%s, %s: classified cars − eliminated so far is the cut-off position', (_, sessionType, kind, cars, position) => {
     const { p, projected } = quali({ cars, upMs: 900, session: { sessionType, kind } });
     // the subject is the slowest car, so the P-th fastest of the others is car P − 1
     const timeMs = 90_000 + 100 * (position - 1);
     expect(p.cutOff).toMatchObject({ known: true, value: { position, timeMs, marginMs: timeMs - projected } });
   });
 
-  it('the eliminated count comes from the config', () => {
-    const { p } = quali({ cars: 20, upMs: 900, config: { [LAP_TIMES_CONFIG.key]: { eliminatedQ1: 6 } } });
-    expect(p.cutOff).toMatchObject({ known: true, value: { position: 14, timeMs: 91_300 } });
+  it('Q2 counts the cars knocked out in Q1: 20 classified, 15 still active, cut-off P10', () => {
+    // cars 0..14 run; car 14 (best 91.4 s) projects 90.5 s; P10 of the others is car 9 on 90.9 s
+    const { p, sessionTime } = quali({ cars: 15, classified: 20, upMs: 900, session: { sessionType: 6, kind: 'qualifying' } });
+    expect(p.cutOff).toEqual(known({ position: 10, timeMs: 90_900, marginMs: 400 }, sessionTime));
+  });
+
+  it('the eliminated counts come from the config', () => {
+    const config = { [LAP_TIMES_CONFIG.key]: { eliminatedQ1: 6, eliminatedQ2: 4 } };
+    const q1 = quali({ cars: 20, upMs: 900, config });
+    expect(q1.p.cutOff).toMatchObject({ known: true, value: { position: 14, timeMs: 91_300 } });
+    // 20 − 6 − 4
+    const q2 = quali({ cars: 20, upMs: 900, config, session: { sessionType: 6, kind: 'qualifying' } });
+    expect(q2.p.cutOff).toMatchObject({ known: true, value: { position: 10, timeMs: 90_900 } });
   });
 
   it.each([

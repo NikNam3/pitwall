@@ -12,6 +12,8 @@ describe('lap-times calculator', () => {
     expect(lapTimesCalculator.id).toBe(LAP_TIMES);
     expect(lapTimesCalculator.kind).toBe('incremental');
     expect(lapTimesCalculator.reads).toEqual(expect.arrayContaining(['laps', 'miniSectors', 'timing', 'session']));
+    // nothing in the outputs needs the pace calculator
+    expect(lapTimesCalculator.reads).not.toContainEqual({ calculator: 'pace' });
   });
 
   it('has a row per active car', () => {
