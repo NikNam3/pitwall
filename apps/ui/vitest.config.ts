@@ -9,5 +9,6 @@ export default defineProject({
   test: {
     name: 'ui',
     include: ['src/**/*.test.ts', 'test/**/*.test.ts'],
+    setupFiles: ['test/setup.ts'],
   },
 });
