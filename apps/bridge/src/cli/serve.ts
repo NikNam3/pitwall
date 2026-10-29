@@ -63,8 +63,9 @@ const POSITION_EVERY_MS = 500;
 const CALC_STATS_EVERY_MS = 1000;
 
 /**
- * Serves one feed over WebSocket until `io.signal` aborts. Starts the WebSocket server, then the pipeline, and
- * reports `listening` only once both are up; if a step fails, the ones before it are undone (nothing stays half-started).
+ * Serves one feed over WebSocket until `io.signal` aborts. Starts the pipeline (a replay also lands its startup jump),
+ * then the WebSocket server, and reports `listening` only once both are up; if a step fails, the ones before it are
+ * undone (nothing stays half-started).
  */
 export async function serve(opts: ServeOptions): Promise<number> {
   const { io } = opts;
@@ -77,8 +78,8 @@ export async function serve(opts: ServeOptions): Promise<number> {
         storage.db.close();
       });
     }
-    // The hub's one callback tells the pipeline which calculators its subscribers need. The pipeline is created after
-    // the server, so a change before then has no pipeline to reach; it reads the demand itself when a session starts.
+    // The hub's one callback tells the pipeline which calculators its subscribers need. A change before the pipeline
+    // exists has none to reach; the pipeline reads the demand itself when a session starts.
     let pipeline: FeedPipeline | undefined = undefined;
     const hub = new TopicHub({
       now: () => performance.now(),
@@ -96,8 +97,8 @@ export async function serve(opts: ServeOptions): Promise<number> {
       undo.push(pruneEndedAcknowledgements(hub, [feedId], uiState));
     }
     let controller: ReplayController | undefined;
-    // A replay's server opens only once the startup jump has landed: a client that connects earlier would be told the
-    // positions the fast-forward passes through, and a dev restart would not come back to the moment it left.
+    // The server opens after the pipeline, and a replay's only once the startup jump has landed: a client that connects
+    // earlier would be told the positions the fast-forward passes through, and a dev restart would not come back to the moment it left.
     const startServer = async (): Promise<WsServer> => {
       const started = await WsServer.start({
         port: opts.wsPort,
@@ -110,7 +111,6 @@ export async function serve(opts: ServeOptions): Promise<number> {
       undo.push(() => started.close());
       return started;
     };
-    let server: WsServer | undefined = opts.replay ? undefined : await startServer();
     // A dev child tells its supervisor where the replay is, so a restart can come back to the same moment.
     let listening = false;
     if (opts.dev && opts.replay && process.send) {
@@ -175,7 +175,6 @@ export async function serve(opts: ServeOptions): Promise<number> {
       // A recording that cannot be read ends the wait too (`done` rejects), and so does an interrupt.
       await Promise.race([running.settled(), running.done, whenAborted(io.signal)]).catch(failed);
       jumping = false;
-      server = await startServer();
       finished = running.done;
     } else {
       const running = makePipeline(opts.source);
@@ -183,9 +182,10 @@ export async function serve(opts: ServeOptions): Promise<number> {
       undo.push(() => running.stop());
       finished = running.done.then(() => opts.onDone?.());
     }
+    const server = await startServer();
     await opts.bound?.();
     listening = true;
-    io.out(`listening ws://127.0.0.1:${server?.port}`);
+    io.out(`listening ws://127.0.0.1:${server.port}`);
 
     const aborted = whenAborted(io.signal);
     await Promise.race([aborted, finished.then(() => aborted)]).catch(failed);
