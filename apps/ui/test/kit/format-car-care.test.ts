@@ -28,7 +28,7 @@ describe('formatLaps (a count always says laps)', () => {
     [17.64, '17.6 laps'],
     [0, '0.0 laps'],
     [1, '1.0 laps'],
-    [-1.8, '-1.8 laps'],
+    [-1.8, '−1.8 laps'],
     [-0.04, '0.0 laps'],
   ])('%f -> %s', (n, text) => expect(formatLaps(n)).toBe(text));
   it('a non-finite number is empty', () => expect(formatLaps(Number.NaN)).toBe(''));
@@ -40,7 +40,7 @@ describe('formatCelsius', () => {
     [98, '98°'],
     [0, '0°'],
     [-0.4, '0°'],
-    [-3.6, '-4°'],
+    [-3.6, '−4°'],
   ])('%f -> %s', (n, text) => expect(formatCelsius(n)).toBe(text));
   it('a non-finite number is empty', () => expect(formatCelsius(Number.NaN)).toBe(''));
 });
@@ -51,7 +51,7 @@ describe('formatPercent', () => {
     [0, '0%'],
     [100, '100%'],
     [-0.4, '0%'],
-    [-12.4, '-12%'],
+    [-12.4, '−12%'],
   ])('%f -> %s', (n, text) => expect(formatPercent(n)).toBe(text));
   it('a non-finite number is empty', () => expect(formatPercent(Number.NaN)).toBe(''));
 });
@@ -60,12 +60,12 @@ describe('formatPsi and formatKg (value only, the unit sits in the header or lab
   it.each([
     [23.456, '23.5'],
     [0, '0.0'],
-    [-1.25, '-1.3'],
+    [-1.25, '−1.3'],
   ])('psi %f -> %s', (n, text) => expect(formatPsi(n)).toBe(text));
   it.each([
     [31.44, '31.4'],
     [0, '0.0'],
-    [-0.5, '-0.5'],
+    [-0.5, '−0.5'],
   ])('kg %f -> %s', (n, text) => expect(formatKg(n)).toBe(text));
   it('a non-finite number is empty', () => {
     expect(formatPsi(Number.NaN)).toBe('');

@@ -35,14 +35,21 @@ export function formatSector(ms: Ms): string {
   return `${Math.floor(total / 1000)}.${pad(total % 1000, 3)}`;
 }
 
-/** Temperature to whole degrees, `94.6` -> `95°`. */
-export const formatTemp = (c: Celsius): string => `${Math.round(c) + 0}°`;
-
-/** `toFixed` with a negative zero shown as 0, `-0.04` at one decimal -> `0.0`; the grid helper re-exports it. */
+/**
+ * `toFixed` with the true minus (`MINUS`) and a negative zero shown as 0, `-1.25` at one decimal -> `−1.3`,
+ * `-0.04` -> `0.0`; every signed number becomes text here, and the grid helper re-exports it.
+ */
 export function fixed(value: number, decimals: number): string {
   const text = value.toFixed(decimals);
-  return /^-0(\.0*)?$/.test(text) ? text.slice(1) : text;
+  if (/^-0(\.0*)?$/.test(text)) return text.slice(1);
+  return text.startsWith('-') ? `${MINUS}${text.slice(1)}` : text;
 }
+
+/** A whole number with the true minus, `-3.4` -> `−3`, `-0.2` -> `0`. */
+const whole = (n: number): string => fixed(n, 0);
+
+/** Temperature to whole degrees, `94.6` -> `95°`. */
+export const formatTemp = (c: Celsius): string => `${whole(c)}°`;
 
 /** One decimal, a negative zero shown as 0. */
 const fixed1 = (n: number): string => fixed(n, 1);
@@ -54,19 +61,19 @@ export const formatPsi = (p: Psi): string => (Number.isFinite(p) ? fixed1(p) : '
 export const formatKg = (k: Kg): string => (Number.isFinite(k) ? fixed1(k) : '');
 
 /** Percentage to whole numbers, `12.34` -> `12%`. */
-export const formatPct = (p: Percent): string => `${Math.round(p) + 0}%`;
+export const formatPct = (p: Percent): string => `${whole(p)}%`;
 
 /** Whole number, `42.4` -> `42`. */
-export const formatCount = (n: number): string => `${Math.round(n) + 0}`;
+export const formatCount = (n: number): string => whole(n);
 
 /** Packets per second, `59.6` -> `60/s`. */
-export const formatRate = (perSecond: number): string => `${Math.round(perSecond) + 0}/s`;
+export const formatRate = (perSecond: number): string => `${whole(perSecond)}/s`;
 
 /** Loss to one decimal so a threshold near a whole number stays readable, `4.99` -> `5.0%`. */
-export const formatLoss = (p: Percent): string => `${p.toFixed(1)}%`;
+export const formatLoss = (p: Percent): string => `${fixed(p, 1)}%`;
 
 /** Whole milliseconds, `12.4` -> `12 ms`. */
-export const formatMillis = (ms: Ms): string => `${Math.round(ms) + 0} ms`;
+export const formatMillis = (ms: Ms): string => `${whole(ms)} ms`;
 
 /** Car index as a car number, `7` -> `#7`. */
 export const formatCarNumber = (id: CarId): string => `#${id}`;
@@ -116,11 +123,8 @@ export const formatCelsius = (c: Celsius): string => (Number.isFinite(c) ? forma
 /** Percentage to whole numbers, `17.6` -> `18%`. */
 export const formatPercent = (p: Percent): string => (Number.isFinite(p) ? formatPct(p) : '');
 
-/** A number with a true minus; a value that rounds to zero is unsigned. */
-const withMinus = (text: string): string => (text.startsWith('-') ? `${MINUS}${text.slice(1)}` : text);
-
 /** Joules as MJ to one decimal, no unit, `2100000` -> `2.1`, `-400000` -> `−0.4`. */
-export const formatMJ = (j: number): string => (Number.isFinite(j) ? withMinus(fixed(j / 1e6, 1)) : '');
+export const formatMJ = (j: number): string => (Number.isFinite(j) ? fixed(j / 1e6, 1) : '');
 
 /** Joules as signed MJ to one decimal, no unit, `1200000` -> `+1.2`, `-400000` -> `−0.4`; zero is unsigned. */
 export const formatSignedMJ = (j: number): string => {
@@ -132,7 +136,7 @@ export const formatSignedMJ = (j: number): string => {
 export const formatJoules = (j: number): string => (Number.isFinite(j) ? `${formatMJ(j)} MJ` : '');
 
 /** Seconds from ms, no unit, `4100` -> `4.1`, `-4100` -> `−4.1`; the caller names the unit. */
-export const formatSeconds = (ms: Ms, decimals: number): string => (Number.isFinite(ms) ? withMinus(fixed(ms / 1000, decimals)) : '');
+export const formatSeconds = (ms: Ms, decimals: number): string => (Number.isFinite(ms) ? fixed(ms / 1000, decimals) : '');
 
 /** Signed seconds from ms, `120` at 2 decimals -> `+0.12`, `-120` -> `−0.12`; a value that rounds to zero reads `+`. */
 export const formatSignedSeconds = (ms: Ms, decimals: number): string => {
@@ -145,7 +149,7 @@ export const formatSignedSeconds = (ms: Ms, decimals: number): string => {
 export const formatLapsDown = (n: number): string => (Number.isFinite(n) ? `+${n} ${n === 1 ? 'lap' : 'laps'}` : '');
 
 /** A time penalty from ms to whole seconds, `5000` -> `5s`. */
-export const formatPenaltyMs = (ms: Ms): string => (Number.isFinite(ms) ? `${Math.round(ms / 1000)}s` : '');
+export const formatPenaltyMs = (ms: Ms): string => (Number.isFinite(ms) ? `${whole(ms / 1000)}s` : '');
 
 /** A warning count, `2` -> `2w`. */
 export const formatWarnings = (n: number): string => (Number.isFinite(n) ? `${n}w` : '');
@@ -174,19 +178,19 @@ export const formatSignedLaps = (n: number): string => {
 export const formatKgPerLap = (kg: Kg): string => (Number.isFinite(kg) ? `${fixed(kg, 2)} kg/lap` : '');
 
 /** A count of whole laps, rounded down: the laps one can still complete, `12.9` -> `12`. */
-export const formatWholeLaps = (n: number): string => (Number.isFinite(n) ? `${Math.floor(n) + 0}` : '');
+export const formatWholeLaps = (n: number): string => (Number.isFinite(n) ? whole(Math.floor(n)) : '');
 
 /** Mass with its unit, `10` -> `10.0 kg`. */
 export const formatKgUnit = (k: Kg): string => (Number.isFinite(k) ? `${fixed1(k)} kg` : '');
 
 /** A whole number without a unit (grid cells), `94.6` -> `95`, `-0.2` -> `0`. */
-export const formatWhole = (n: number): string => (Number.isFinite(n) ? fixed(n, 0) : '');
+export const formatWhole = (n: number): string => (Number.isFinite(n) ? whole(n) : '');
 
 /** A relative change in percent with its sign and unit, `12.4` -> `+12 %`, `-3` -> `−3 %`. */
 export const formatDeltaPct = (pct: Percent): string => {
   if (!Number.isFinite(pct)) return '';
-  const whole = Math.round(Math.abs(pct));
-  return `${pct < 0 && whole > 0 ? '−' : '+'}${whole} %`;
+  const text = whole(Math.abs(pct));
+  return `${pct < 0 && text !== '0' ? MINUS : '+'}${text} %`;
 };
 
 // gap chart
@@ -196,5 +200,5 @@ export const formatGapTick = (plotted: number): string => {
   if (!Number.isFinite(plotted)) return '';
   const behind = Math.round(-plotted * 100) / 100;
   if (behind === 0) return '0';
-  return behind > 0 ? `+${behind}` : `\u2212${-behind}`;
+  return behind > 0 ? `+${behind}` : `${MINUS}${-behind}`;
 };
