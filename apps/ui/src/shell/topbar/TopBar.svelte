@@ -75,4 +75,8 @@
     display: inline-flex;
     gap: var(--pw-header-pad);
   }
+  /* A segment with nothing to show (no workbook open, no alert) takes no gap. */
+  .segment:not(:has(*)):empty {
+    display: none;
+  }
 </style>
