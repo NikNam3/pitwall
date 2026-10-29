@@ -2,7 +2,7 @@
   // The kit parts with sample data (spec 9.2): value cell states, icon and table, each in a cell of its own.
   // `data-ready` marks a cell whose parts have rendered (the e2e harness waits for it); only the chart loads lazily.
   // Every kit part but the icon has a screenshot baseline (`data-baseline`).
-  import { feedId, known, unknown, type Insight, type SessionTime } from '@pitwall/domain';
+  import { known, unknown, type SessionTime } from '@pitwall/domain';
   import Bar from '../kit/bar/Bar.svelte';
   import CarLabel from '../kit/car/CarLabel.svelte';
   import CompoundMark from '../kit/compound/CompoundMark.svelte';
@@ -17,6 +17,7 @@
   import { role, roleOrUndefined } from '../theme/index.ts';
   import { KIT_SIZE } from './layout.ts';
   import { snapGrid } from './snap.ts';
+  import { KIT_INSIGHTS } from './kit-insights.ts';
 
   type Row = { driver: string; lapMs: number; gripPct: number };
   const rows: Row[] = [
@@ -35,15 +36,6 @@
   let bandsDrawn = $state(false);
   const sectors = [['sessionBest', true], ['sessionBest', false], ['personalBest', true], ['personalBest', false], ['none', true]] as const;
   const at = 0 as SessionTime;
-  const insight = (kind: string, severity: Insight['severity']): Insight => ({
-    key: kind,
-    severity,
-    category: 'tyres',
-    feedId: feedId('gallery'),
-    kind,
-    params: { pct: 42 },
-    raisedAt: 0,
-  });
   let chartDrawn = $state(false);
 </script>
 
@@ -90,9 +82,7 @@
   </figure>
   <figure data-baseline data-gallery-id="kit/insight-line" data-ready>
     <figcaption style:color={role('textFaint')}>kit/insight-line</figcaption>
-    <div><InsightLine insight={insight('tyreWear', 'critical')} acknowledged={false} /></div>
-    <div><InsightLine insight={insight('fuelMargin', 'advisory')} acknowledged={false} /></div>
-    <div><InsightLine insight={insight('tyreWear', 'critical')} acknowledged /></div>
+    {#each KIT_INSIGHTS as line (line.insight.key)}<div><InsightLine insight={line.insight} acknowledged={line.acknowledged} /></div>{/each}
   </figure>
   <figure data-baseline data-gallery-id="kit/chart" data-ready={chartDrawn || undefined}>
     <figcaption style:color={role('textFaint')}>kit/chart</figcaption>

@@ -9,9 +9,9 @@ const battle: TopicValue<'raceMoment.current'> = known(
   1_200_000,
 );
 
-/** One tier-1 alert (a critical insight, not acknowledged, not muted). */
+/** One tier-1 alert (a critical insight, not acknowledged, not muted): a new 5 s penalty. */
 const alertEntries: InsightEntry[] = [
-  { type: 'raised', insight: { key: 'gallery-critical', severity: 'critical', category: 'damage', feedId: feedId('gallery'), kind: 'gallery', params: {}, raisedAt: 600_000 } },
+  { type: 'raised', insight: { key: 'gallery-critical', severity: 'critical', category: 'race', feedId: feedId('gallery'), kind: 'penaltyNew', params: { timeMs: 5000 }, raisedAt: 600_000 } },
 ];
 
 /** The session's realism differs from the setting for the next one. */
