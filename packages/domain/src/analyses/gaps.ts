@@ -5,7 +5,8 @@ import type { Ms } from '../units.ts';
 
 /**
  * `gaps.intervals`: one car's gaps to the leader and its neighbours on the road order, its laps down, and the positions
- * it gained since the start (`gridPosition − position`; negative = lost).
+ * it gained since the start (`gridPosition − position`; negative = lost): `notApplicable` outside a race, `notReceived`
+ * until the grid position is known.
  */
 export type Interval = {
   carId: CarId;
@@ -13,7 +14,7 @@ export type Interval = {
   toAheadMs: Known<Ms>;
   toBehindMs: Known<Ms>;
   lapsDown: number;
-  positionsGained: number;
+  positionsGained: Known<number>;
 };
 
 /**

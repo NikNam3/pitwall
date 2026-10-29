@@ -72,6 +72,13 @@ const leaderGap = (leader: CarCrossings | undefined): Known<Ms> => {
   return at === undefined ? unknown('notReceived') : known(0, at);
 };
 
+/** Grid position minus position; the game reports grid position 0 until it is known. */
+const positionsGained = (timing: { gridPosition: number; position: number }, view: EngineView): Known<number> => {
+  if (view.state.session.kind !== 'race') return NOT_APPLICABLE;
+  if (timing.gridPosition === 0) return unknown('notReceived');
+  return known(timing.gridPosition - timing.position, view.state.sessionTime);
+};
+
 /** The running cars in position order (ties by id), their intervals, and the cars around each of ours. */
 function build(acc: Table, view: EngineView): GapsOutput {
   const { cars, playerCar, teammateCar } = view.state;
@@ -91,7 +98,7 @@ function build(acc: Table, view: EngineView): GapsOutput {
       toAheadMs: toAhead[i] ?? NOT_APPLICABLE,
       toBehindMs: toAhead[i + 1] ?? NOT_APPLICABLE,
       lapsDown,
-      positionsGained: timing.gridPosition - timing.position,
+      positionsGained: positionsGained(timing, view),
     };
   });
 
