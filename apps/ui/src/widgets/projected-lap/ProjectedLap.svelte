@@ -12,8 +12,7 @@
 
   const full = $derived(size.mode === 'full');
   const rows = $derived(projectionRows(data.projection).filter((r) => full || r.key === 'proj'));
-  // Compact has no label column.
-  const header = $derived(full ? projectionHeader() : projectionHeader().slice(0, 28));
+  const header = $derived(projectionHeader(full));
   const cell = (row: ProjectionRow, key: 'name' | 'time' | 'pos' | 'delta' | 'label'): string => {
     const column = PROJECTION_COLUMNS.find((c) => c.key === key);
     return fitCell(row[key], column?.width ?? 0, column?.align);

@@ -1,8 +1,8 @@
 // Pure join of the projection into the three display rows: texts, roles and hidden reasons.
 import type { Known, Projection, UnknownReason } from '@pitwall/domain';
-import { fixed, gridRow } from '../../kit/grid/grid.ts';
+import { gridRow } from '../../kit/grid/grid.ts';
 import type { GridColumn } from '../../kit/grid/grid.ts';
-import { formatDeltaMs, formatLapTime } from '../../kit/values/format.ts';
+import { formatDeltaMs, formatLapTime, formatSeconds } from '../../kit/values/format.ts';
 import type { Role } from '../../theme/roles.ts';
 import { cutOffRole, deltaRole, finishRole } from './emphasis.ts';
 import { columnHeaders, labels, names, outLap, seconds } from './text.ts';
@@ -28,8 +28,11 @@ export const PROJECTION_COLUMNS = [
   { key: 'label', width: 12, align: 'left' },
 ] as const satisfies readonly (GridColumn & { key: string })[];
 
-/** The column header line over the same fixed fields as the rows. */
-export const projectionHeader = (): string => gridRow(PROJECTION_COLUMNS, columnHeaders);
+/** The column header line over the same fixed fields as the rows; compact has no label column. */
+export const projectionHeader = (full = true): string => {
+  const columns = full ? PROJECTION_COLUMNS : PROJECTION_COLUMNS.slice(0, -1);
+  return gridRow(columns, columnHeaders.slice(0, columns.length));
+};
 
 const position = (n: number): string => `P${n}`;
 const text = <T>(value: Known<T>, format: (v: T) => string): string => (value.known ? format(value.value) : '');
@@ -67,7 +70,7 @@ export function projectionRows(p: Projection): ProjectionRow[] {
   const fin = p.finishMarginMs;
   const finish = withReason({
     key: 'finish', name: names.finish, time: '', pos: '',
-    delta: text(fin, (ms) => `${fixed(ms / 1000, 1)}${seconds}`),
+    delta: text(fin, (ms) => `${formatSeconds(ms, 1)}${seconds}`),
     label: fin.known ? labels.leftAtLine : '',
     deltaRole: fin.known ? finishRole(fin.value) : undefined,
   }, firstReason(fin));

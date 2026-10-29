@@ -2,7 +2,8 @@ import type { BattleCard, BattleSide, Known, RaceMoment, UnknownReason, VisualCo
 import type { CarOverview } from '@pitwall/contracts';
 import { carCode } from '../../kit/car/car-code.ts';
 import { gridRow, type GridColumn } from '../../kit/grid/grid.ts';
-import { fixed, formatJoules, formatLaps } from '../../kit/values/format.ts';
+import { compoundText } from '../../kit/compound/compound-mark.ts';
+import { formatJoules, formatLaps, formatSeconds, formatSignedSeconds } from '../../kit/values/format.ts';
 import type { Role } from '../../theme/roles.ts';
 import type { WidgetSize } from '../../kit/types.ts';
 import { battleRole, type Side } from './emphasis.ts';
@@ -19,7 +20,6 @@ export type BattleRow = {
   tyres?: TyrePair;
 };
 
-const MINUS = '−';
 const COLUMN_IDS: readonly ColumnId[] = ['drv', 'gap', 'closing', 'toDrs', 'paceDelta', 'margin', 'tyres', 'ers'];
 const COMPACT: readonly ColumnId[] = ['drv', 'gap', 'toDrs'];
 export const LABEL_WIDTH = 6;
@@ -34,22 +34,14 @@ export const WIDTH: Record<ColumnId, GridColumn> = {
   tyres: { width: 7, align: 'left' },
   ers: { width: 6, align: 'right' },
 };
-const LETTER: Record<VisualCompound, string> = { soft: 'S', medium: 'M', hard: 'H', superSoft: 'SS', inter: 'I', wet: 'W', unknown: '?' };
 
 /** The columns of a size mode. */
 export const columnsFor = (mode: WidgetSize['mode']): readonly ColumnId[] => (mode === 'compact' ? COMPACT : COLUMN_IDS);
 
-/** Signed seconds with `decimals`; negative uses U+2212. `plus` also signs positives. */
-const seconds = (ms: number, decimals: number, plus: boolean): string => {
-  const s = fixed(Math.abs(ms) / 1000, decimals);
-  return ms < 0 && Number(s) !== 0 ? `${MINUS}${s}` : plus ? `+${s}` : s;
-};
-
 const valueCell = <T>(v: Known<T>, format: (t: T) => string): Cell =>
   v.known ? { text: format(v.value) } : { text: '', reason: v.reason };
 
-const tyreText = (side: BattleSide): string =>
-  `${LETTER[side.ours.compound]}${side.ours.age} ${LETTER[side.theirs.compound]}${side.theirs.age}`;
+const tyreText = (side: BattleSide): string => `${compoundText(side.ours.compound, side.ours.age)} ${compoundText(side.theirs.compound, side.theirs.age)}`;
 
 function sideRow(label: BattleRow['label'], side: Side, card: BattleCard, cars: readonly CarOverview[], moment: Known<RaceMoment> | undefined): BattleRow {
   const known = card[side];
@@ -63,11 +55,11 @@ function sideRow(label: BattleRow['label'], side: Side, card: BattleCard, cars: 
   const sign = side === 'ahead' ? 1 : -1;
   const cells: Record<ColumnId, Cell> = {
     drv: { text: car === undefined ? '' : carCode(car.identity) },
-    gap: valueCell(s.gapMs, (ms) => seconds(sign * ms, 3, true)),
-    closing: valueCell(s.closingMsPerLap, (ms) => `${seconds(ms, 2, false)} ${text.perLap}`),
+    gap: valueCell(s.gapMs, (ms) => formatSignedSeconds(sign * ms, 3)),
+    closing: valueCell(s.closingMsPerLap, (ms) => `${formatSeconds(ms, 2)} ${text.perLap}`),
     toDrs: valueCell(s.lapsToDrs, (n) => (n === 0 ? text.inDrs : formatLaps(n))),
-    paceDelta: valueCell(s.paceDeltaMs, (ms) => seconds(ms, 2, true)),
-    margin: valueCell(s.overtakeMarginMs, (ms) => seconds(ms, 2, true)),
+    paceDelta: valueCell(s.paceDeltaMs, (ms) => formatSignedSeconds(ms, 2)),
+    margin: valueCell(s.overtakeMarginMs, (ms) => formatSignedSeconds(ms, 2)),
     tyres: { text: tyreText(s) },
     ers: valueCell(s.theirErsStoreJ, formatJoules),
   };

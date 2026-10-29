@@ -11,3 +11,10 @@ export function positionMarkText(props: PositionMarkProps): string {
   }
   return `P${props.from}→${props.to.known ? `P${props.to.value}` : ''}`;
 }
+
+/** The mark of a position that did not change in an incident. */
+export const positionUnchanged = '—';
+
+/** A before/after pair of an incident: `P7→P9`, `P7→` while unknown, `—` when the position held. */
+export const positionPairText = (from: number, to: Known<number>): string =>
+  to.known && to.value === from ? positionUnchanged : positionMarkText({ from, to });

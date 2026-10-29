@@ -7,3 +7,5 @@ export const attackReady = 'attack ready';
 export const attackIn = (laps: number): string => `attack in ${laps} ${laps === 1 ? 'lap' : 'laps'}`;
 /** Hover text of the bar: the attack level. */
 export const attackLevel = (level: string): string => `attack level ${level}`;
+/** The separator between two parts of one line; the no-break space keeps the gap. */
+export const joint = ',\u00a0';
