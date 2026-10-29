@@ -27,7 +27,8 @@ describe('LAP_COLUMNS', () => {
   });
 
   it('drops the sectors before THEO and BEST as it narrows', () => {
-    expect(kept(30)).toEqual(['drv', 'best', 'theo']);
+    expect(kept(30)).toEqual(['drv', 'best', 's1', 'theo']);
+    expect(kept(27)).toEqual(['drv', 'best', 'theo']);
     expect(kept(12)).toEqual(['drv', 'best']);
   });
 });
