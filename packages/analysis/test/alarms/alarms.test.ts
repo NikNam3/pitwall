@@ -32,6 +32,7 @@ const bandsOk = (): CarBands => ({
 const wearOk = (): TyreWear => ({
   corners: perCorner(() => ({ wearPct: known(20, 0), ratePctPerLap: known(2, 0), lapsToLimit: known(20, 0) })),
   limitPct: 80,
+  warnLaps: 3,
   gameLifeSpanLaps: known(30, 0),
 });
 const fuelOk = (): FuelState => ({
