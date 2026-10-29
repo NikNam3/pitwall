@@ -10,7 +10,7 @@
     "pretypecheck": "pnpm gen",
     "typecheck": "tsc -p tsconfig.json && pnpm --filter @pitwall/desktop typecheck && pnpm --filter @pitwall/ui check",
     "pretest": "pnpm gen",
-    "test": "vitest run",
+    "test": "vitest run --maxWorkers=50%",
     "pretest:acceptance": "pnpm gen",
     "test:acceptance": "vitest run -c vitest.acceptance.config.ts",
     "test:ui": "pnpm gen && pnpm gen:moments && pnpm --filter @pitwall/ui build && VITE_PITWALL_GALLERY=1 pnpm --filter @pitwall/ui build --outDir dist-e2e && pnpm --filter @pitwall/desktop build && playwright test -c apps/ui/playwright.config.ts",
