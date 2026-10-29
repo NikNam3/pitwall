@@ -8,6 +8,8 @@ export { damageCalculator } from './damage/calculator.ts';
 export * from './ers/index.ts';
 export * from './fuel/index.ts';
 export * from './gaps/index.ts';
+export { gapsCalculator } from './gaps/calculator.ts';
+export { gapperLines, gapsToCar } from './gaps/gaps.ts';
 export * from './incidents/index.ts';
 export * from './lap-classes/index.ts';
 export * from './lap-times/index.ts';
