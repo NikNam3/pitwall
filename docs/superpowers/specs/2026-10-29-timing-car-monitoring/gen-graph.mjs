@@ -10,14 +10,12 @@ const kinds = {
 };
 
 const columns = [
-  { id: 'in', title: 'exists today', plan: null },
-  { id: 'cc0b', title: 'W0b', plan: 'cc' },
-  { id: 'cc0c', title: 'W0c', plan: 'cc' },
-  { id: 'cc1', title: 'W1', plan: 'cc' },
-  { id: 'cc2', title: 'W2', plan: 'cc' },
-  { id: 't1', title: 'W1', plan: 't' },
-  { id: 't2', title: 'W2', plan: 't' },
-  { id: 't3', title: 'W3', plan: 't' },
+  { id: 'in', title: 'exists today' },
+  { id: 'L0', title: 'level 0' },
+  { id: 'L1', title: 'level 1' },
+  { id: 'L2', title: 'level 2' },
+  { id: 'L3', title: 'level 3' },
+  { id: 'L4', title: 'level 4' },
 ];
 
 const nodes = [
@@ -29,40 +27,43 @@ const nodes = [
   ['flag phases', 'input', 'in', 'SC / VSC / red'],
   ['stints, pit stops', 'input', 'in', 'history lists'],
 
-  ['session-remaining', 'shared', 'cc0b', 'laps or time left'],
-  ['lap-classes', 'shared', 'cc0b', 'which laps count'],
-  ['per-lap-rate', 'shared', 'cc0b', 'rate per lap, laps until x'],
-  ['pace-delta', 'shared', 'cc0b', 'loss: pace after vs before'],
-  ['pace', 'shared', 'cc0c', 'clean-lap pace per car'],
+  ['session-remaining', 'shared', 'L0', 'laps or time left'],
+  ['lap-classes', 'shared', 'L0', 'which laps count'],
+  ['per-lap-rate', 'shared', 'L0', 'rate per lap, laps until x'],
+  ['pace-delta', 'shared', 'L0', 'loss: pace after vs before'],
+  ['pace', 'shared', 'L1', 'clean-lap pace per car'],
 
-  ['fuel', 'analysis', 'cc1', 'fuel.car'],
-  ['tyre-wear', 'analysis', 'cc1', 'tyreWear.car'],
-  ['ers', 'analysis', 'cc1', 'ers.car'],
-  ['car-bands', 'analysis', 'cc1', 'carBands.car'],
-  ['damage', 'analysis', 'cc1', 'damage.car'],
+  ['fuel', 'analysis', 'L1', 'fuel.car'],
+  ['tyre-wear', 'analysis', 'L1', 'tyreWear.car'],
+  ['ers', 'analysis', 'L1', 'ers.car'],
+  ['car-bands', 'analysis', 'L0', 'carBands.car'],
+  ['damage', 'analysis', 'L2', 'damage.car'],
 
-  ['alarms', 'analysis', 'cc2', '→ insights (top bar alerts)'],
-  ['fuel-gauge', 'display', 'cc2', 'V20'],
-  ['tyre-life-bar', 'display', 'cc2', 'V21'],
-  ['corner-block', 'display', 'cc2', 'V22'],
-  ['ers-budget', 'display', 'cc2', 'V23'],
-  ['damage-card', 'display', 'cc2', 'V31'],
-  ['alarm-list', 'display', 'cc2', 'V25'],
+  ['alarms', 'analysis', 'L3', '→ insights (top bar alerts)'],
+  ['fuel-gauge', 'display', 'L2', 'V20'],
+  ['tyre-life-bar', 'display', 'L2', 'V21'],
+  ['corner-block', 'display', 'L2', 'V22'],
+  ['ers-budget', 'display', 'L2', 'V23'],
+  ['damage-card', 'display', 'L3', 'V31'],
+  ['alarm-list', 'display', 'L0', 'V25'],
 
-  ['lap-times', 'analysis', 't1', 'lapTimes.board / .projection'],
-  ['gaps', 'analysis', 't1', 'gaps.intervals .toCar .gapper .neighbourhood'],
+  ['lap-times', 'analysis', 'L2', 'lapTimes.board / .projection'],
+  ['gaps', 'analysis', 'L0', 'gaps.intervals .toCar .gapper .neighbourhood'],
 
-  ['battle', 'analysis', 't2', 'battle.cards'],
-  ['incidents', 'analysis', 't2', 'incidents.feed'],
+  ['battle', 'analysis', 'L2', 'battle.cards'],
+  ['incidents', 'analysis', 'L3', 'incidents.feed'],
 
-  ['race-moment', 'analysis', 't3', 'raceMoment.current'],
-  ['projected-lap', 'display', 't3', 'V10 + V11'],
-  ['lap-analysis', 'display', 't3', 'V28'],
-  ['timing-tower', 'display', 't3', 'V29'],
-  ['gap-chart', 'display', 't3', 'V04'],
-  ['battle-cards', 'display', 't3', 'V14'],
-  ['incident-feed', 'display', 't3', 'V35'],
+  ['race-moment', 'analysis', 'L4', 'raceMoment.current'],
+  ['projected-lap', 'display', 'L3', 'V10 + V11'],
+  ['lap-analysis', 'display', 'L3', 'V28'],
+  ['timing-tower', 'display', 'L3', 'V29'],
+  ['gap-chart', 'display', 'L1', 'V04'],
+  ['battle-cards', 'display', 'L3', 'V14'],
+  ['incident-feed', 'display', 'L4', 'V35'],
 ].map(([id, kind, col, sub]) => ({ id, kind, col, sub }));
+
+const critical = new Set(['lap-classes', 'pace', 'damage', 'incidents', 'race-moment', 'incident-feed']);
+const carMilestone = new Set(['alarms', 'corner-block', 'tyre-life-bar', 'fuel-gauge', 'ers-budget', 'damage-card', 'alarm-list']);
 
 // [from, to] means "to reads from"; a third element 'runtime' marks a data flow that is not a build dependency.
 const edges = [
@@ -181,19 +182,13 @@ function svgFrom(columns, nodes, edges, pos) {
   const maxRows = Math.max(...columns.map((c) => nodes.filter((n) => n.col === c.id).length));
   const W = LEFT * 2 + (columns.length - 1) * COLW + NW + 40, H = TOP + maxRows * ROWH + 20;
   const x = (ci) => LEFT + ci * COLW;
-  const plans = [
-    { id: 'cc', title: 'Car care plan', from: 0, to: 3 },
-    { id: 't', title: 'Timing plan', from: 4, to: 6 },
-  ];
   let s = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">`;
-  for (const p of plans) {
-    s += `<rect x="${x(p.from) - 14}" y="20" width="${x(p.to) - x(p.from) + NW + 28}" height="${H - 30}" rx="8" class="band"/>`;
-    s += `<text x="${x(p.from) - 2}" y="44" class="plan">${p.title}</text>`;
-  }
+  s += `<rect x="${x(0) - 14}" y="20" width="${x(columns.length - 1) - x(0) + NW + 28}" height="${H - 30}" rx="8" class="band"/>`;
+  s += `<text x="${x(0) - 2}" y="44" class="plan">One plan · milestone "car" when every unit marked car is merged · milestone "race" at the end</text>`;
   columns.forEach((c, ci) => (s += `<text x="${x(ci) + NW / 2}" y="${p0(c)}" class="col" text-anchor="middle">${c.title}</text>`));
   function p0() { return 80; }
   for (const [from, to, kind] of edges) {
-    s += `<path d="${edgePath(pos.get(from), pos.get(to))}" class="edge ${kind ?? ''}" data-from="${esc(from)}" data-to="${esc(to)}"/>`;
+    s += `<path d="${edgePath(pos.get(from), pos.get(to))}" class="edge ${kind ?? ''} ${critical.has(from) && critical.has(to) ? 'crit' : ''}" data-from="${esc(from)}" data-to="${esc(to)}"/>`;
   }
   for (const n of nodes) s += nodeSvg(n, pos.get(n.id));
   return s + '</svg>';
@@ -202,7 +197,8 @@ function svgFrom(columns, nodes, edges, pos) {
 function nodeSvg(n, p) {
   const k = kinds[n.kind];
   return `<g class="node" data-id="${esc(n.id)}" transform="translate(${p.x},${p.y})">` +
-    `<rect width="${NW}" height="${NH}" rx="6" fill="${k.fill}" stroke="${k.stroke}"/>` +
+    `<rect width="${NW}" height="${NH}" rx="6" fill="${k.fill}" stroke="${k.stroke}" stroke-width="${critical.has(n.id) && n.col !== 'k' && n.col !== 'd' ? 3 : 1.3}"/>` +
+    (carMilestone.has(n.id) && n.col !== 'd' ? `<text x="${NW - 10}" y="19" text-anchor="end" class="badge">car</text>` : '') +
     `<text x="10" y="19" class="name" fill="${k.text}">${esc(n.id)}</text>` +
     `<text x="10" y="35" class="sub">${esc(fit(n.sub))}</text>` +
     (n.reads ? `<text x="10" y="51" class="reads">${esc(fit('in: ' + n.reads))}</text><title>${esc('reads: ' + n.reads)}</title>` : '') +
@@ -216,7 +212,7 @@ function fit(t) {
 
 function svgKit() {
   const displays = nodes.filter((n) => n.kind === 'display');
-  const kn = kitNodes.map(([id, plan]) => ({ id, kind: 'kit', col: 'k', sub: plan === 'cc' ? 'car care plan W0a' : 'timing plan W0' }));
+  const kn = kitNodes.map(([id, plan]) => ({ id, kind: 'kit', col: 'k', sub: plan === 'cc' ? 'W0, car care group' : 'W0, timing group' }));
   const dn = displays.map((d) => ({ ...d, col: 'd', reads: '' }));
   const cols = [{ id: 'k' }, { id: 'd' }];
   const KCOLW = 420;
@@ -234,7 +230,7 @@ function svgKit() {
 }
 
 const legend = Object.entries(kinds).filter(([k]) => k !== 'input').map(([, k]) => k).map((k) => `<span class="lg"><i style="background:${k.fill};border-color:${k.stroke}"></i>${k.label}</span>`).join('') +
-  '<span class="lg"><b class="solid"></b>is read by (build dependency)</span><span class="lg"><span class="rd">in: …</span>engine data and optional topics the unit reads</span>';
+  '<span class="lg"><b class="solid"></b>is read by (build dependency)</span><span class="lg"><b class="crit"></b>critical path (thick border)</span><span class="lg"><span class="rd">car</span>in milestone "car"</span><span class="lg"><span class="rd">in: …</span>engine data and optional topics the unit reads</span>';
 
 const html = `<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><title>Sub-project 3: dependency graph</title>
@@ -248,6 +244,7 @@ const html = `<!DOCTYPE html>
   .lg i { width: 18px; height: 12px; border: 1px solid; border-radius: 3px; display: inline-block; }
   .lg b { width: 26px; height: 0; border-top: 1.6px solid #7d8590; display: inline-block; }
   .lg b.dash { border-top-style: dashed; }
+  .lg b.crit { border-top: 2px solid #c9ced6; }
   svg { display: block; overflow: visible; }
   svg text { font-family: inherit; }
   .band { fill: #1c1f23; stroke: #2c3036; }
@@ -260,18 +257,19 @@ const html = `<!DOCTYPE html>
   .edge { fill: none; stroke: #5d646e; stroke-width: 1.3; opacity: .55; transition: opacity .1s; }
   .edge.runtime { stroke-dasharray: 5 4; }
   .node { cursor: default; }
-  .node rect { stroke-width: 1.3; }
+  .badge { font-size: 10px; fill: #c9ced6; }
+  .edge.crit { stroke: #c9ced6; opacity: .9; stroke-width: 2; }
   svg.focus .edge { opacity: .08; }
   svg.focus .edge.on { opacity: 1; stroke: #e6e9ee; stroke-width: 1.8; }
   svg.focus .node { opacity: .35; }
   svg.focus .node.on { opacity: 1; }
 </style></head><body>
 <h1>Sub-project 3 (timing + car monitoring): dependency graph</h1>
-<p>Left to right is build order: waves of the car care plan, then the timing plan. A line runs from a unit to the units that read it. Units in the same column never read each other. The third line in a box lists what it reads from the engine (car state, lap history, mini-sectors, events, flag phases, session info, stints and pit stops) and the optional topics it reads at runtime; those exist before the run and are not build dependencies. Supervisor W0 work (rename, contracts, LapRecord fields, test builders, mockups) comes before every column. <b>Hover a node</b> to highlight what it reads and who reads it.</p>
+<p>Left to right is build order by level (spec 13.3): a unit can be implemented once every unit it reads is merged; there is no barrier between levels. A line runs from a unit to the units that read it. Units in the same column never read each other. The third line in a box lists what it reads from the engine (car state, lap history, mini-sectors, events, flag phases, session info, stints and pit stops) and the optional topics it reads at runtime; those exist before the run and are not build dependencies. W0 (rename, contracts, test builders, kit pieces, all mockups; spec 13.2) comes before every column. Displays also need their kit pieces and the approved mockups. <b>Hover a node</b> to highlight what it reads and who reads it.</p>
 <div class="legend">${legend}</div>
 ${svgMain()}
 <h2>UI kit pieces → displays</h2>
-<p>Built by the supervisor in each plan's W0, before any display agent starts. CompoundMark moved to the car care plan because tyre-life-bar uses it.</p>
+<p>All built in W0 (spec 13.2) by two agents, one per group, before any display starts.</p>
 ${svgKit()}
 <script>
   for (const svg of document.querySelectorAll('svg')) {

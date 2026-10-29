@@ -16,7 +16,7 @@ The ranked goals of the foundation spec (1.2) apply unchanged: clean code, exten
 - **ADR 0008**: read-only calculator config, stored as a sidecar with each session.
 
 ### 1.4 Decisions made in this brainstorm (user, 2026-10-29)
-1. **Scope C:** car care and timing together, as one spec with **two plans**: the car care plan first, then the timing plan.
+1. **Scope C:** car care and timing together, in **one plan with two milestones** ("car", then "race"), ordered by the real dependencies so as many agents as possible work in parallel (section 13).
 2. **Recordings:** unit and property tests are synthetic. Acceptance tests that need real car or race data wait for recordings the user will supply (a practice session and a full race, both planned, timing unknown); until then those tasks are open and the rest merges. The user's notification starts them.
 3. **All three sessions:** timing covers practice, qualifying and the race. V08 (raising average) and V09 (lap overview heat map) move to sub-project 4, next to the stint/degradation scatter V07, because they serve the same decision (D03) and read the same stint data.
 4. **Calibration is not in the MVP.** Sub-project 3 uses community figures and hand-set defaults in config, each with a source note. Calibration joins coaching in sub-project 5, renamed "training: calibration and coaching", because both happen in training, need per-lap channel traces and serve the same people. Appendix B lists every value to calibrate.
@@ -46,7 +46,7 @@ The ranked goals of the foundation spec (1.2) apply unchanged: clean code, exten
 
 **Roadmap change:** the foundation spec's sub-project table (1.3) gets V08 and V09 under sub-project 4 and the new name of sub-project 5.
 
-## 3. Repository changes (supervisor, first wave of each plan)
+## 3. Repository changes (supervisor, W0)
 
 ### 3.1 Rename `packages/strategy` → `packages/analysis`
 Package name `@pitwall/analysis`. Updated in one commit: the folder, every `package.json`, `pnpm-lock.yaml`, dependency-cruiser rules, the Stryker config, `guard-scope.sh` (`PITWALL_WORKER_UNIT` grants `packages/analysis/src/<name>/` and `packages/analysis/test/<name>/`), CLAUDE.md (map, dependency direction, unit folders), `docs/architecture.md`, ADR 0011 (paths). The dependency direction is unchanged: `analysis` imports `engine` and `domain`.
@@ -59,14 +59,14 @@ Package name `@pitwall/analysis`. Updated in one commit: the folder, every `pack
 - `LapRecord` gains the lap-end samples (Appendix A.1). The engine fills them where it writes the record today (`packages/engine/src/history/`), so no second calculator re-detects lap ends. They are stored in SQLite with the record, which also serves sub-projects 4 and 5.
 
 ### 3.4 `race.moment` → `raceMoment.current`
-Topic names start with their owner (UI shell spec 3.2), so the top bar's reserved name becomes `raceMoment.current`, owned by the `race-moment` analysis. The top bar's `Moment` segment is updated to read it (timing plan W0).
+Topic names start with their owner (UI shell spec 3.2), so the top bar's reserved name becomes `raceMoment.current`, owned by the `race-moment` analysis. The top bar's `Moment` segment is updated to read it (W0).
 
 ### 3.5 ADR 0014 "Displays render, analyses compute"
 It records decisions 7 and 8 of 1.4. It amends ADR 0011: the display-private feature folder stays possible in the code but is not used in new work; maths that only one display needs is still an analysis. CLAUDE.md's Workflow section gets the rule in one line.
 
 ## 4. Shared calculators and functions
 
-All pure, in `packages/analysis/src/<name>/`, built in the car care plan's W0b/W0c. A **function** is imported by the analyses that use it. A **calculator** is an engine calculator (`reads`, run in dependency order) registered once by its own bridge feature with no topics, and its output is read by other calculators through `reads: [{ calculator }]`.
+All pure, in `packages/analysis/src/<name>/`, built first (levels 0 and 1, section 13.3). A **function** is imported by the analyses that use it. A **calculator** is an engine calculator (`reads`, run in dependency order) registered once by its own bridge feature with no topics, and its output is read by other calculators through `reads: [{ calculator }]`.
 
 | Name | Kind | Computes |
 |---|---|---|
@@ -182,7 +182,7 @@ A display may read `raceMoment.current` as an optional topic, and its emphasis f
 - Hidden or missing values are empty cells with the reason on hover. Estimates, staleness and errors work as built in the UI shell.
 - Each has a compact and a full size mode in character cells. Column priorities and exact sizes come from the approved mockups (8.4).
 
-### 8.2 Car care displays (all sessions; car care plan W2)
+### 8.2 Car care displays (all sessions; milestone "car")
 
 | Display | Reads | Shows | Lights up |
 |---|---|---|---|
@@ -193,7 +193,7 @@ A display may read `raceMoment.current` as an optional topic, and its emphasis f
 | `damage-card` (V31) | `damage.car` | damage per part, tyre and brake damage per corner (`CornerGrid`), faults, the last jump with its Δ and measured loss per lap | a new jump |
 | `alarm-list` (V25) | `insights`, `ui.alerts` | active alarms by severity with acknowledge and mute by category, each as an insight line | severity by theme role |
 
-### 8.3 Timing displays (timing plan W3)
+### 8.3 Timing displays (milestone "race")
 
 | Display | Sessions | Reads | Shows | Lights up |
 |---|---|---|---|---|
@@ -205,36 +205,36 @@ A display may read `raceMoment.current` as an optional topic, and its emphasis f
 | `incident-feed` (V35) | race | `incidents.feed`, `raceMoment.current` (optional) | one line per incident: lap, cars, what, time lost, what changed for us (`P7→P9`, gap); minor entries dimmed | in the incident moment: the newest major entry |
 
 ### 8.4 UI kit pieces, built first (supervisor)
-Each is used by two or more displays, so it is built before the display wave of its plan, and its props are part of the contracts (Appendix A.4).
+Each is used by two or more displays, so it is built in W0 (13.2), before any display, and its props are part of the contracts (Appendix A.4). Two agents build them: one the car care group, one the timing group.
 
-| Piece | Where | Used by | Plan |
+| Piece | Where | Used by | Group |
 |---|---|---|---|
-| `CornerGrid` | `kit/corners/` | corner-block, tyre-life-bar, damage-card | car care W0a |
-| `Bar` | `kit/bar/` | tyre-life-bar, fuel-gauge, ers-budget | car care W0a |
-| unit formats (°C, psi, %, kg, laps, J) | `kit/values/format.ts` | every car care display | car care W0a |
-| insight line (moved out of the top bar) | `kit/insight/` | alarm-list, top bar | car care W0a |
-| `CompoundMark` | `kit/compound/` | tyre-life-bar, timing-tower, lap-analysis, battle-cards | car care W0a |
-| `CarLabel` | `kit/car/` | every timing display | timing W0 |
-| position mark (`▲2`, `P7→P9`) | `kit/values/` | timing-tower, incident-feed | timing W0 |
-| phase bands (SC/VSC background) | `kit/chart/` | gap-chart (sub-project 4's charts later) | timing W0 |
-| our-cars highlight | `kit/car/` + `emphasis/` | timing-tower, gap-chart, lap-analysis | timing W0 |
-| sector status emphasis | `emphasis/` | timing-tower, lap-analysis, projected-lap | timing W0 |
+| `CornerGrid` | `kit/corners/` | corner-block, tyre-life-bar, damage-card | car care |
+| `Bar` | `kit/bar/` | tyre-life-bar, fuel-gauge, ers-budget | car care |
+| unit formats (°C, psi, %, kg, laps, J) | `kit/values/format.ts` | every car care display | car care |
+| insight line (moved out of the top bar) | `kit/insight/` | alarm-list, top bar | car care |
+| `CompoundMark` | `kit/compound/` | tyre-life-bar, timing-tower, lap-analysis, battle-cards | car care |
+| `CarLabel` | `kit/car/` | every timing display | timing |
+| position mark (`▲2`, `P7→P9`) | `kit/values/` | timing-tower, incident-feed | timing |
+| phase bands (SC/VSC background) | `kit/chart/` | gap-chart (sub-project 4's charts later) | timing |
+| our-cars highlight | `kit/car/` + `emphasis/` | timing-tower, gap-chart, lap-analysis | timing |
+| sector status emphasis | `emphasis/` | timing-tower, lap-analysis, projected-lap | timing |
 
 ### 8.5 Mockups
-Each plan's W0 makes mockups with the cached headless Chromium, checked by screenshot, and the user approves them before any display agent starts. They settle the column layout and size modes of every display in the plan, and in the car care plan the two open colour questions of the UI shell spec (13): **compound as a letter or a letter plus colour**, and **which personal-best sectors light up**. Both become theme variants, as the UI shell spec planned.
+In W0 the supervisor makes the mockups of all twelve displays with the cached headless Chromium, checked by screenshot, and the user approves them in one session before any display's test phase starts. They settle the column layout and size modes of every display, and the two open colour questions of the UI shell spec (13): **compound as a letter or a letter plus colour**, and **which personal-best sectors light up**. Both become theme variants, as the UI shell spec planned.
 
 ## 9. Workbooks
 Shipped as defaults in `PITWALL_DATA_DIR/ui/workbooks/` when missing, never overwriting a user's file. The layouts come from the approved mockups, for the 24" main and the 14" side monitor.
-- **`car`** (end of the car care plan): the six car care displays. Usable in preseason training before the timing plan is done.
-- **`quali`** and **`race`** (end of the timing plan): `quali` for practice and qualifying (tower, lap analysis, projected lap plus car care), `race` for the race (tower, gap chart, battle cards, incident feed plus car care).
+- **`car`** (milestone "car"): the six car care displays. Usable in preseason training before the timing displays are done.
+- **`quali`** and **`race`** (milestone "race"): `quali` for practice and qualifying (tower, lap analysis, projected lap plus car care), `race` for the race (tower, gap chart, battle cards, incident feed plus car care).
 
 ## 10. First task (UI shell question Q5)
-In the car care plan's W0a, before everything else in this spec: gallery cells and screenshot baselines for the top bar and the shell overlays (palette, key overview, settings popover, inspector), and the e2e test "`pitwall dev` restores the moment after a feature change" (UI shell spec 9.3).
+In W0, in parallel with the kit pieces and right after the contracts (13.2): gallery cells and screenshot baselines for the top bar and the shell overlays (palette, key overview, settings popover, inspector), and the e2e test "`pitwall dev` restores the moment after a feature change" (UI shell spec 9.3).
 
 ## 11. Testing
 
 ### 11.1 Test data
-`test-support/` gets plain builders with defaults (car care plan W0a):
+`test-support/` gets plain builders with defaults (W0, 13.2):
 - `lap({ carId, lapNumber, lapTimeMs, … })`
 - `crossings(carId, lap, lapTimeMs)` (50 evenly spaced crossings)
 - `event({ kind, carId, at, … })`
@@ -250,16 +250,16 @@ A test builds a pit stop, an SC or a collision by overriding fields or appending
 | Shared functions and calculators | Unit tests and fast-check properties. `per-lap-rate`: a linear series gives its slope; adding a constant changes nothing; one outlier changes little; `insufficientData` below the minimum. `lap-classes`: an SC lap never counts for pace or rate. `pace-delta`: symmetric in sign. |
 | Analyses | Unit tests on builder data. Property tests: `gaps` gives gap(A,B) = −gap(B,A), and gap(A,C) = gap(A,B) + gap(B,C) at a segment all three have crossed. For every incremental analysis, **after a flashback the output equals a fresh run over the truncated history**. Replay determinism: the same recording and config sidecar give the same topics. |
 | Displays | As in the UI shell: gallery cases (typed by the committed contracts), emphasis tests, fit tests at every size mode, screenshot baselines through Electron. |
-| Mutation | Stryker over `packages/analysis` and the new `emphasis.ts` files, at least 80 %. Once at the end of each plan, not per task. |
-| End-to-end | Car care plan: bridge + `ttZandvoort` replay → the `car` workbook shows the corner block with values. Timing plan: `raceSingapore` → the `race` workbook shows a tower with 20 rows and incident entries. |
+| Mutation | Stryker over `packages/analysis` and the new `emphasis.ts` files, at least 80 %. Once at the end of the run, not per task. |
+| End-to-end | Milestone "car": bridge + `ttZandvoort` replay → the `car` workbook shows the corner block with values. Milestone "race": `raceSingapore` → the `race` workbook shows a tower with 20 rows and incident entries. |
 
 ### 11.3 Acceptance on real recordings
 **What the time trial holds fixed** (checked 2026-10-29 by replaying `ttZandvoort` lap by lap): tyre wear 0 %, tyre surface and carcass temperature 93 °C from lap 2, pressure 30.16 psi, engine temperature 110 °C, ERS store 4 MJ with nothing deployed or harvested, fuel 10.0 kg. Only the lap and sector times and the brake temperatures (309–355 °C) change. So it cannot check the car care model.
 
 - **Now:** `ttZandvoort` (15 laps, one car) covers lap times, the projection and the brake temperature band, and checks that every car care analysis gives a zero rate and a steady state on fixed inputs (no false alarm, no division by zero). `raceSingapore` (79 s, 20 cars) covers gaps at the start and incidents: its COLL ×4 and PENA ×6 events appear as feed entries of the right kind and severity.
-- **When the user's practice recording arrives** (10–15 laps on one set, normal fuel and wear): wear rate and laps to the limit, fuel burn and margin, the ERS trend, temperature and pressure bands against the defaults, so Appendix B's car care defaults can be compared with what the game actually sends. Until then this task is open in the car care plan.
-- **When the user's race recording arrives:** our gaps against the game's `gapToCarAheadMs` and `gapToLeaderMs` within a tolerance, the gapper lines, battle closing rates, race-moment transitions, and the car care checks again over a full race. Until then this task is open in the timing plan.
-- Each plan merges without its open task.
+- **When the user's practice recording arrives** (10–15 laps on one set, normal fuel and wear): wear rate and laps to the limit, fuel burn and margin, the ERS trend, temperature and pressure bands against the defaults, so Appendix B's car care defaults can be compared with what the game actually sends. Until then this task is open.
+- **When the user's race recording arrives:** our gaps against the game's `gapToCarAheadMs` and `gapToLeaderMs` within a tolerance, the gapper lines, battle closing rates, race-moment transitions, and the car care checks again over a full race. Until then this task is open.
+- The plan merges without these open tasks.
 
 ## 12. Error handling
 - Expected gaps are values: `insufficientData` (too few laps), `notApplicable` (wrong session, carcass temperature in surface-only mode, save target with a positive margin), `realism`, `notReceived`.
@@ -267,35 +267,88 @@ A test builds a pit stop, an SC or a collision by overriding fields or appending
 - A session change resets every analysis. A flashback truncates the history, and every incremental analysis restarts from the truncated history (11.2).
 - Config: new keys follow ADR 0008. A wrong value in `config.json` stops the bridge with a clear message; sidecars are read leniently.
 
-## 13. Plans and waves
-Two plans, both from this spec. Units in one wave never read each other. Displays start once the analyses they read are merged, so the build goes bottom-up even though the committed contracts would let them start earlier. The [dependency graph](2026-10-29-timing-car-monitoring/dependency-graph.html) shows the same waves.
+## 13. Build order and parallel agents
 
-**Car care plan:**
-- **W0a (supervisor):** first task (section 10); rename (3.1); domain and `LapRecord` changes (3.3); every contract of both plans as code (Appendix A), so the race moment and the timing types exist from the start; config keys with defaults and sources (Appendix B); test builders (11.1); ADR 0014 and CLAUDE.md; kit pieces of the car care plan (8.4); car care mockups → user approval.
-- **W0b:** `lap-classes`, `per-lap-rate`, `pace-delta`, `session-remaining`
-- **W0c:** `pace`
-- **W1:** `tyre-wear`, `fuel`, `ers`, `car-bands`, `damage`
-- **W2:** `alarms`, `corner-block`, `tyre-life-bar`, `fuel-gauge`, `ers-budget`, `damage-card`, `alarm-list`
-- **W3 (supervisor):** the `car` workbook, the car care e2e test, Stryker, acceptance on `ttZandvoort`; the practice-recording acceptance task stays open until the user's recording arrives.
+One plan with two milestones. The order follows the real dependencies, not the car care / timing split: the timing analyses barely depend on car care (`gaps` reads only the mini-sector history), so building car care first and timing second would leave agent slots idle for half the run. The [dependency graph](2026-10-29-timing-car-monitoring/dependency-graph.html) shows the same levels.
 
-**Timing plan:**
-- **W0 (supervisor):** the top bar reads `raceMoment.current` (3.4); kit pieces of the timing plan (8.4); timing mockups → user approval.
-- **W1:** `gaps`, `lap-times`
-- **W2:** `battle`, `incidents`
-- **W3:** `race-moment`, `timing-tower`, `gap-chart`, `lap-analysis`, `projected-lap`, `battle-cards`, `incident-feed`
-- **W4 (supervisor):** the `quali` and `race` workbooks, the timing e2e test, Stryker, acceptance on `raceSingapore`; the full-race acceptance task stays open until the user's recording arrives.
+### 13.1 The life of a unit
+Every analysis, calculator and display goes through the same five steps (CLAUDE.md, Workflow):
+1. **Test phase:** a test agent writes the failing tests against the committed contracts and commits them.
+2. **Ruling:** the supervisor answers the assumptions the test agent listed, before the implementer starts.
+3. **Implement phase:** an implementation agent makes the tests pass without touching them.
+4. **Review:** a reviewer agent; fixes go back to the implementer.
+5. **Merge** to the integration branch as soon as the review is clean.
 
-The run lessons of the UI shell apply: pipelining (a unit starts when what it reads is merged), test agents state assumptions for a ruling before the implementer starts, named sets instead of "exactly N" tests, implementers also run `pnpm depcruise`, tests that spawn processes kill them in `finally`.
+Steps 1, 3 and 4 each take one agent slot.
+
+### 13.2 W0: the only serial stretch (supervisor)
+Done in this order, so the parallel part can start as early as possible:
+1. **Rename** `packages/strategy` → `packages/analysis` (3.1). It touches everything, so it goes first, alone.
+2. **Contracts as code:**
+   - the domain additions (3.3)
+   - every value type and topic file (Appendix A)
+   - the `LapRecord` lap-end samples in the engine
+   - `raceMoment.current` in the top bar (3.4)
+   - every config key with its default and source note (Appendix B)
+   - ADR 0014 and CLAUDE.md (3.5)
+3. **Then, in parallel:**
+   - **agents:** the first task (section 10: overlay gallery and the `pitwall dev` e2e test), the test builders (11.1), and the kit pieces (8.4: all ten, in two agents, one for the car care pieces and one for the timing pieces)
+   - **supervisor:** the mockups of **all twelve displays**, checked by screenshot, for **one approval session** with the user (8.5). One wait instead of two, and no display waits on a second session.
+
+As soon as the contracts and the test builders are merged, the analysis test phases can start, while the kit and the mockups are still in progress.
+
+### 13.3 Levels
+A unit's implementation can start once every unit it reads is merged. Grouped by the earliest point that happens:
+
+| Level | Analyses and calculators | Displays |
+|---|---|---|
+| 0 | `lap-classes`, `per-lap-rate`, `pace-delta`, `session-remaining`, `gaps`, `car-bands` | `alarm-list` (reads only core topics) |
+| 1 | `pace`, `tyre-wear`, `fuel`, `ers` | `gap-chart` |
+| 2 | `damage`, `lap-times`, `battle` | `corner-block`, `tyre-life-bar`, `fuel-gauge`, `ers-budget` |
+| 3 | `incidents`, `alarms` | `damage-card`, `timing-tower`, `lap-analysis`, `projected-lap`, `battle-cards` |
+| 4 | `race-moment` | `incident-feed` |
+
+A display also needs the kit pieces it uses (8.4) and the approved mockups. Levels are for reading only. There is no barrier between them: a unit starts the moment its own inputs are merged, not when its level is done.
+
+**Critical path:** `lap-classes` → `pace` → `damage` → `incidents` → `race-moment` and `incident-feed`. Any delay there delays the end of the run, so it always goes first.
+
+### 13.4 Two fronts
+- **The test front runs ahead.** The contracts exist from W0, so a test agent needs nothing merged except the contracts and the builders. Upstream outputs are stubbed through the contract types. Every slot not needed for implementation writes tests for later levels.
+- **The implementation front follows the levels**, strictly bottom-up (1.4, item 8).
+
+A display's test phase also waits for the approved mockups, because its gallery cases and fit expectations come from them.
+
+### 13.5 Scheduler rule
+At most **six agents** at a time, reviewers included (the supervisor's own work does not count). When a slot frees up, the supervisor gives it to the first item that applies:
+1. a ready implementation on the critical path
+2. any other ready implementation, the one with the longest chain of readers after it first
+3. a pending review
+4. the next test phase, lowest level first; analyses before displays at the same level
+
+### 13.6 Milestones and the end
+- **Milestone "car":** `alarms` and the six car care displays are merged. The supervisor adds the `car` workbook and the car care e2e test (11.2). Usable in preseason training from here.
+- **Milestone "race":** everything else is merged. The supervisor adds the `quali` and `race` workbooks and the timing e2e test.
+- **At the end, once:** `pnpm check`, `pnpm test:ui`, Stryker (11.2), acceptance on `ttZandvoort` and `raceSingapore` (11.3), a final review of the whole diff (split by area if it exceeds about 300 KB), and the re-review of its fix wave.
+- **Open tasks:** the practice-recording and race-recording acceptance tasks (11.3) stay open until the user's recordings arrive. The plan merges without them.
+
+### 13.7 Lessons from the UI shell run that apply
+- Merge each unit as soon as its review is clean, and start its readers from the integration branch.
+- Run `pnpm check` on the integration branch after every few merges: it catches breaks between units.
+- Use named sets in tests, not "exactly N".
+- Implementers also run `pnpm depcruise`.
+- Tests that spawn processes kill them in `finally`.
+- Never run a gate (acceptance, Stryker) while an agent is editing source.
+- Workers list changes to supervisor-owned files in their report. The supervisor batches them between merges, so two workers never edit a shared file.
 
 ## 14. Open points
-1. **The recordings** (1.4, item 2): a practice session for the car care plan's acceptance (11.3), and a full race for the timing plan's, which also closes F8 for sub-project 4 (a pit stop; an SC if one happens). Both are planned by the user; the timing is unknown.
-2. **Tyre pressure default:** the time trial reports a fixed 30.16 psi, far above the default band 21.5–25 psi. Time-trial values prove nothing, but this default gets the closest look in the W0a source check.
+1. **The recordings** (1.4, item 2): a practice session for the car care acceptance (11.3), and a full race for the timing acceptance, which also closes F8 for sub-project 4 (a pit stop; an SC if one happens). Both are planned by the user; the timing is unknown.
+2. **Tyre pressure default:** the time trial reports a fixed 30.16 psi, far above the default band 21.5–25 psi. Time-trial values prove nothing, but this default gets the closest look in the W0 source check.
 3. **League rules** (research 06 §5): the number of warnings before a penalty and the quali format feed `warningsBeforePenalty` and `quali.eliminatedPerPart`. The defaults (Appendix B) are F1 25's standard settings until the league confirms.
 4. **The two colour questions** are settled by the car care mockups (8.5).
 
 ## Appendix A: Contracts
 
-These are the shapes the supervisor commits as code in the car care plan's W0a. Field names and units here are binding. Doc comments, helper types and the exact file split may be refined while committing, as long as the meaning stays.
+These are the shapes the supervisor commits as code in W0 (13.2). Field names and units here are binding. Doc comments, helper types and the exact file split may be refined while committing, as long as the meaning stays.
 
 ### A.1 Domain additions
 
@@ -505,7 +558,7 @@ type PhaseBand = { from: number; to: number; kind: 'sc' | 'vsc' | 'red' };
 
 ## Appendix B: Config defaults, values to calibrate in sub-project 5
 
-Every key is declared with `defineConfig` (ADR 0008) by the unit named in the first column, with a source note in the declaration. In W0a the supervisor checks each default against a community source for F1 25 (or F1 24 where F1 25 has none), adjusts it if that source differs, and records the source. Values without one keep "pitwall estimate" as the source. Sub-project 5 calibrates all of them in training.
+Every key is declared with `defineConfig` (ADR 0008) by the unit named in the first column, with a source note in the declaration. In W0 the supervisor checks each default against a community source for F1 25 (or F1 24 where F1 25 has none), adjusts it if that source differs, and records the source. Values without one keep "pitwall estimate" as the source. Sub-project 5 calibrates all of them in training.
 
 | Unit | Key | Default | Initial source |
 |---|---|---|---|
