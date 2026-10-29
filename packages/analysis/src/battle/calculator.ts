@@ -5,6 +5,7 @@ import type { DeepReadonly, EngineView, QuickCalculator } from '@pitwall/engine'
 import type { GapsOutput } from '../gaps/index.ts';
 import type { Pace } from '../pace/index.ts';
 import { lapsToReach, perLapRate, PER_LAP_RATE_CONFIG, type RateSample } from '../per-lap-rate/index.ts';
+import { ourCars } from '../shared/our-cars.ts';
 import { BATTLE, BATTLE_CONFIG, type BattleOutput } from './index.ts';
 
 const NOT_APPLICABLE = unknown('notApplicable');
@@ -94,9 +95,7 @@ export const battleCalculator: QuickCalculator<BattleOutput> = {
     const gaps = view.outputs.get('gaps') as GapsOutput | undefined;
     const pace = view.outputs.get('pace') as Pace | undefined;
     const out: BattleOutput = {};
-    for (const id of new Set<CarId | undefined>([view.state.playerCar, view.state.teammateCar])) {
-      if (id !== undefined) out[id] = cardOf(view, gaps, pace, id);
-    }
+    for (const id of ourCars(view.state)) out[id] = cardOf(view, gaps, pace, id);
     return out;
   },
 };

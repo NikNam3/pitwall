@@ -5,6 +5,7 @@ import { CAR_BANDS } from '../car-bands/index.ts';
 import { DAMAGE } from '../damage/index.ts';
 import { ERS } from '../ers/index.ts';
 import { FUEL } from '../fuel/index.ts';
+import { ourCars } from '../shared/our-cars.ts';
 import { penaltyClass } from '../shared/penalties.ts';
 import { TYRE_WEAR } from '../tyre-wear/index.ts';
 import { ALARMS, ALARMS_CONFIG, type AlarmsOutput } from './index.ts';
@@ -119,9 +120,7 @@ export const alarmsCalculator: QuickCalculator<AlarmsOutput> = {
   cadence: { hz: 2 },
   compute(view) {
     const config = ALARMS_CONFIG.read(view);
-    const { playerCar, teammateCar } = view.state;
-    const ours = teammateCar === undefined || teammateCar === playerCar ? [playerCar] : [playerCar, teammateCar];
-    return ours.flatMap((id) => alarmsOf(view, id, config));
+    return ourCars(view.state).flatMap((id) => alarmsOf(view, id, config));
   },
   insights: (out) => out,
 };

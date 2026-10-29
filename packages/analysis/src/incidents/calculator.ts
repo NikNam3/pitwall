@@ -21,6 +21,7 @@ import { DAMAGE, type DamageOutput } from '../damage/index.ts';
 import { GAPS_CONFIG } from '../gaps/index.ts';
 import { PACE_CONFIG } from '../pace/index.ts';
 import { paceDeltaAround } from '../pace-delta/index.ts';
+import { ourCars } from '../shared/our-cars.ts';
 import { penaltyClass } from '../shared/penalties.ts';
 import {
   addCrossing,
@@ -99,8 +100,7 @@ const readLive = (acc: Acc, view: EngineView): void => {
   acc.config = INCIDENTS_CONFIG.read(view);
   acc.neighbourhoodMs = GAPS_CONFIG.read(view).neighbourhoodMs;
   acc.window = PACE_CONFIG.read(view).window;
-  const { playerCar, teammateCar } = state;
-  acc.ours = teammateCar === undefined || teammateCar === playerCar ? [playerCar] : [playerCar, teammateCar];
+  acc.ours = ourCars(state);
   const phase = view.activeFlagPhase;
   acc.active = phase && { at: phase.start, lap: phase.startLeaderLap };
   acc.pitting = new Set(state.cars.filter((c) => c.timing.pitStatus !== 'none').map((c) => c.id));

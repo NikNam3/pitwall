@@ -1,6 +1,7 @@
 // The `gaps` calculator (spec 6.1): a fold over the mini-sector crossings; the order and our cars come from the car state.
 import { known, unknown, type CarId, type Interval, type Known, type Ms, type Neighbourhood, type ResultStatus, type SessionTime } from '@pitwall/domain';
 import type { EngineView, IncrementalCalculator } from '@pitwall/engine';
+import { ourCars } from '../shared/our-cars.ts';
 import { gapBehind, lapsBehind, latestTime, progressOf, recentOf, type CarCrossings } from './gaps.ts';
 import { GAPS, GAPS_CONFIG, type GapsOutput } from './index.ts';
 
@@ -77,7 +78,7 @@ const positionsGained = (timing: { gridPosition: number; position: number }, vie
 
 /** The running cars in position order (ties by id), their intervals, and the cars around each of ours. */
 function build(acc: Table, view: EngineView): GapsOutput {
-  const { cars, playerCar, teammateCar } = view.state;
+  const { cars } = view.state;
   const running = cars
     .filter((c) => c.active && !OUT_OF_RACE.has(c.timing.resultStatus))
     .sort((a, b) => a.timing.position - b.timing.position || a.id - b.id);
@@ -101,9 +102,9 @@ function build(acc: Table, view: EngineView): GapsOutput {
   const { neighbourhoodMs } = GAPS_CONFIG.read(view);
   const near = (gap: Known<Ms>) => gap.known && Math.abs(gap.value) <= neighbourhoodMs;
   const neighbourhood: Neighbourhood[] = [];
-  for (const ourCarId of new Set<CarId | undefined>([playerCar, teammateCar])) {
-    const at = ourCarId === undefined ? -1 : order.indexOf(ourCarId);
-    if (ourCarId === undefined || at < 0) continue;
+  for (const ourCarId of ourCars(view.state)) {
+    const at = order.indexOf(ourCarId);
+    if (at < 0) continue;
     const carIds = order.filter((_, j) => j !== at && (Math.abs(j - at) <= 1 || near(gapBehind(tracks[j], tracks[at]))));
     neighbourhood.push({ ourCarId, carIds });
   }
