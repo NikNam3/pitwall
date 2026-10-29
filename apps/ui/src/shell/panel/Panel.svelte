@@ -171,7 +171,7 @@
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-<div class="panel" onclick={inspect}>
+<div class="panel" data-widget={spec.widget} onclick={inspect}>
   <header use:portal={headerTarget} style:background={role('bgBand')}>
     <span class="title" style:color={role('textDim')}>{widget?.decl.title ?? spec.widget}</span>
     <LinkMarker {store} groupId={spec.linkGroup} {group} {link} onOpen={(button) => openAt('picker', button)} />

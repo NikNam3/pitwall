@@ -10,7 +10,7 @@
 </script>
 
 <Overlay title={text.workbooksTitle} {onClose} cols={OVERLAY_COLS.narrow}>
-  <ul>
+  <ul data-testid="workbook-picker">
     {#each names as name (name)}
       <li>
         <button type="button" class="pw-button" style:color={role(name === active ? 'text' : 'textDim')} onclick={() => onPick(name)}>{name}</button>

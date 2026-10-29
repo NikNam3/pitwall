@@ -67,6 +67,12 @@ describe('Panel: header states', () => {
     expect(screen.queryByTestId('probe')).toBeNull();
   });
 
+  it('the panel names its widget in data-widget, so a test can find the panel of one widget', () => {
+    const { store } = setup();
+    const { container } = render(Panel, { store, spec: spec('probe'), widget: widgetNamed('probe'), link: link() });
+    expect(container.querySelector('.panel')?.getAttribute('data-widget')).toBe('probe');
+  });
+
   it('the header shows the widget title and a gear icon', () => {
     const { store } = setup();
     const { container } = render(Panel, { store, spec: spec('probe'), widget: widgetNamed('probe'), link: link() });
