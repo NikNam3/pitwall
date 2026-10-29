@@ -4,7 +4,7 @@
   import type { WidgetProps } from '../../kit/types.ts';
   import Value from '../../kit/values/Value.svelte';
   import { formatCarNumber, formatCount, formatSessionKind, formatTrack, formatLoss, formatMillis, formatRate } from '../../kit/values/format.ts';
-  import { role } from '../../theme/index.ts';
+  import { roleOrUndefined } from '../../theme/index.ts';
   import { separator, stale as staleText } from '../../kit/text.ts';
   import { connectionRole } from './emphasis.ts';
   import * as text from './text.ts';
@@ -13,10 +13,7 @@
   let { data, options, size }: WidgetProps<typeof widget> = $props();
 
   const feed = $derived(data.feed);
-  const colour = $derived.by(() => {
-    const r = connectionRole(feed);
-    return r === undefined ? undefined : role(r);
-  });
+  const colour = $derived(roleOrUndefined(connectionRole(feed)));
   const state = $derived(!feed.connected ? text.disconnected : feed.stale ? staleText() : text.connected);
   const full = $derived(size.mode === 'full');
 </script>

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { known, toSessionTime, unknown } from '@pitwall/domain';
 import type { Moment, RaceMoment } from '@pitwall/domain';
 import { ourCarRole, sectorStatusRole } from '../../emphasis/index.ts';
-import { incidentRole, momentIncident } from './emphasis.ts';
+import { incidentRole, momentIncident, penaltyRole } from './emphasis.ts';
 import { incidentEntry } from './fixtures.ts';
 
 const current = (moment: Moment, active: Moment[] = [moment], entryId = 'a') =>
@@ -36,6 +36,13 @@ describe('incidentRole', () => {
   it('is warning (the amber bar) for a car of the named incident, nothing otherwise', () => {
     expect(incidentRole(true)).toBe('warning');
     expect(incidentRole(false)).toBeUndefined();
+  });
+});
+
+describe('penaltyRole', () => {
+  it('is warning (amber) for a time penalty, nothing without one', () => {
+    expect(penaltyRole(5000)).toBe('warning');
+    expect(penaltyRole(0)).toBeUndefined();
   });
 });
 

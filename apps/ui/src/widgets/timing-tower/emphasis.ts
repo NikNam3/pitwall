@@ -10,3 +10,6 @@ export function momentIncident(moment: Known<RaceMoment> | undefined, incidents:
 
 /** The amber left bar: a car of the incident the incident moment names. */
 export const incidentRole = (involved: boolean): Role | undefined => (involved ? 'warning' : undefined);
+
+/** The PEN cell is amber while the car has a time penalty to serve; warnings alone stay neutral. */
+export const penaltyRole = (penaltyMs: number): Role | undefined => (penaltyMs > 0 ? 'warning' : undefined);

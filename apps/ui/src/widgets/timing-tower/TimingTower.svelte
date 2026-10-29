@@ -10,11 +10,11 @@
   import { positionMarkText } from '../../kit/values/position-mark.ts';
   import { formatCount, formatDeltaMs, formatLapNumber, formatLapsDown, formatLapTime, formatPenaltyMs, formatPlace, formatSector, formatWarnings } from '../../kit/values/format.ts';
   import { sectorStatusRole } from '../../emphasis/index.ts';
-  import { role } from '../../theme/index.ts';
+  import { roleOrUndefined } from '../../theme/index.ts';
   import type { Role } from '../../theme/roles.ts';
   import type { SectorStatus } from '@pitwall/domain';
   import { TOWER_COLUMNS } from './columns.ts';
-  import { incidentRole } from './emphasis.ts';
+  import { incidentRole, penaltyRole } from './emphasis.ts';
   import { buildRows, visibleRows, type TowerRow } from './rows.ts';
   import * as text from './text.ts';
   import type { widget } from './widget.ts';
@@ -25,12 +25,12 @@
   const rows = $derived(visibleRows(buildRows({ ...data, showRetired: options.showRetired }), size.rows - 1, data.session.playerCar));
   const player = $derived(String(data.session.playerCar));
 
-  const colourOf = (status: SectorStatus, ours: boolean) => {
-    const r = sectorStatusRole(status, { ours });
-    return r === undefined ? undefined : role(r);
-  };
+  const colourOf = (status: SectorStatus, ours: boolean): string | undefined => roleOrUndefined(sectorStatusRole(status, { ours }));
   // the amber left bar of an incident car, in the role the emphasis gives
-  const bar = (r: Role | undefined): string | undefined => (r === undefined ? undefined : `inset 2px 0 0 ${role(r)}`);
+  const bar = (r: Role | undefined): string | undefined => {
+    const colour = roleOrUndefined(r);
+    return colour === undefined ? undefined : `inset 2px 0 0 ${colour}`;
+  };
   const penalty = (r: TowerRow) => (r.penaltyMs > 0 ? formatPenaltyMs(r.penaltyMs) : r.warnings > 0 ? formatWarnings(r.warnings) : '');
 </script>
 
@@ -49,7 +49,7 @@
 {#snippet compound(r: TowerRow)}<CompoundMark compound={r.compound} />{/snippet}
 {#snippet age(r: TowerRow)}{formatCount(r.age)}{/snippet}
 {#snippet stops(r: TowerRow)}{formatCount(r.stops)}{/snippet}
-{#snippet pen(r: TowerRow)}<span style:color={r.penaltyMs > 0 ? role('warning') : undefined}>{penalty(r)}</span>{/snippet}
+{#snippet pen(r: TowerRow)}<span style:color={roleOrUndefined(penaltyRole(r.penaltyMs))}>{penalty(r)}</span>{/snippet}
 {#snippet pit(r: TowerRow)}{r.pit === undefined ? '' : text.pit[r.pit]}{/snippet}
 
 {#snippet s1(r: TowerRow)}{@render sector(r, 0)}{/snippet}

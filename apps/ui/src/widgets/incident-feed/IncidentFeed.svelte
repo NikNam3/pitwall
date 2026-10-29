@@ -1,6 +1,6 @@
 <script lang="ts">
   // One line per incident, newest first (V35): minor entries dim, the newest major one amber in the incident moment.
-  import { role } from '../../theme/index.ts';
+  import { roleOrUndefined } from '../../theme/index.ts';
   import { unknownReason } from '../../kit/text.ts';
   import { columnsFor, incidentRows, widths } from './rows.ts';
   import type { widget } from './widget.ts';
@@ -15,7 +15,7 @@
 
 <div class="feed">
   {#each rows as row (row.id)}
-    <div class="row" style:color={row.role === undefined ? undefined : role(row.role)} data-testid="incident-{row.id}">
+    <div class="row" style:color={roleOrUndefined(row.role)} data-testid="incident-{row.id}">
       <span class="lead"></span>
       {#each columns as column, i (column)}
         <span class="cell {column}" class:last={i === columns.length - 1} style:width={i === columns.length - 1 ? undefined : `${widths[column] + 2}ch`} title={row.cells[column].reason === undefined ? undefined : unknownReason[row.cells[column].reason]}
