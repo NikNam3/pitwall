@@ -16,3 +16,4 @@ export * from './race-moment/index.ts';
 export * from './session-remaining/index.ts';
 export { sessionRemainingCalculator } from './session-remaining/calculator.ts';
 export * from './tyre-wear/index.ts';
+export { tyreWearCalculator } from './tyre-wear/calculator.ts';
