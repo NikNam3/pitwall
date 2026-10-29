@@ -42,6 +42,7 @@ const wear = (over: Partial<Corners<Known<number>>> = {}): TyreWear => ({
     wearPct: over[n] ?? k(n === 'fr' ? 21 : 18), ratePctPerLap: k(1.5), lapsToLimit: k(30),
   })),
   limitPct: 70,
+  warnLaps: 3,
   gameLifeSpanLaps: k(25),
 });
 

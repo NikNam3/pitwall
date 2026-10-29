@@ -26,6 +26,7 @@
   import type { MomentValues } from './moment-values.ts';
   import { afterFrames } from './ready.ts';
   import ShellCell from './ShellCell.svelte';
+  import { snapOrigin } from './snap.ts';
   import { TOP_BAR_CASES } from './topbar-cases.ts';
 
   type Props = { moments: Record<string, MomentValues> };
@@ -109,7 +110,7 @@
     (kind === 'topbar' ? TOP_BAR_COLS : kind === 'key-overview' ? OVERLAY_COLS.keys : kind === 'inspector' ? INSPECTOR_COLS : kind === 'palette' ? OVERLAY_COLS.palette : OVERLAY_COLS.narrow) + (kind === 'topbar' || kind === 'inspector' ? 0 : OVERLAY_MARGIN_COLS);
 </script>
 
-<div class="grid">
+<div class="grid" use:snapOrigin>
   {#each SHELL_CELLS as cell (cell.id)}
     {#if cell.kind === 'topbar'}
       {#if base === undefined}
