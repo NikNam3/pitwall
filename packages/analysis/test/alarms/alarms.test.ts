@@ -85,6 +85,20 @@ const viewWith = (parts: Parts, o: ViewOpts = {}): EngineView =>
     ...(o.playerCar !== undefined && { playerCar: o.playerCar }),
   });
 
+/** A completed lap of car 0 whose channel ranges are the builder's (all in band) except `over`, e.g. `{ 'brakesC.fl': [250, 290] }`. */
+const lapWith = (over: Record<string, [number, number]>, rec: Parameters<typeof lap>[0] = {}) => {
+  const l = lap(rec);
+  for (const [channel, [min, max]] of Object.entries(over)) {
+    const r = known({ min, max }, l.completedAt);
+    const [head, second, third] = channel.split('.') as [string, string, string];
+    if (head === 'tyre') l.channelRange.tyres[third as 'fl'][second as 'surfaceC'] = r;
+    else if (head === 'brakesC') l.channelRange.brakesC[second as 'fl'] = r;
+    else l.channelRange.engineC = r;
+  }
+  return l;
+};
+const lapsView = (laps: ReturnType<typeof lap>[], parts: Parts = {}, o: ViewOpts = {}) => viewWith(parts, { ...o, history: { ...o.history, laps } });
+
 const run = (view: EngineView): Insight[] => alarmsCalculator.insights!(alarmsCalculator.compute(view), undefined, view);
 const only = (view: EngineView, kind: string) => run(view).filter((i) => i.kind === kind);
 
@@ -122,39 +136,34 @@ describe('alarms calculator', () => {
       });
     });
 
-    it('a brake or engine channel out of band for a full lap: critical, damage', () => {
+    it('a brake or engine channel out of band for a full lap: critical, car', () => {
       const bands = bandsOk();
       bands.brakesC.rr = reading('below', { outForFullLap: true });
       bands.engineC = reading('above', { outForFullLap: true });
       const found = run(viewWith({ bands }));
       expect(found.map((i) => [i.key, i.kind, i.severity, i.category]).sort()).toEqual([
-        ['bandOutLap:0:brakesC.rr', 'bandOutLap', 'critical', 'damage'],
-        ['bandOutLap:0:engineC', 'bandOutLap', 'critical', 'damage'],
+        ['bandOutLap:0:brakesC.rr', 'bandOutLap', 'critical', 'car'],
+        ['bandOutLap:0:engineC', 'bandOutLap', 'critical', 'car'],
       ]);
     });
 
-    it('a tyre channel out of band now, not for a full lap: advisory, tyres, bandOut with state and value', () => {
-      const bands = bandsOk();
-      bands.tyres.rr.pressurePsi = reading('above', { value: 33 });
-      const [a, ...rest] = run(viewWith({ bands }));
+    it('a tyre channel out of band on the mid-range of the last lap: advisory, tyres, bandOut with state, value, band, lap and measure', () => {
+      const [a, ...rest] = run(lapsView([lapWith({ 'tyre.pressurePsi.rr': [31, 33] }, { lapNumber: 4 })]));
       expect(rest).toEqual([]);
       expect(a).toMatchObject({
         kind: 'bandOut',
         severity: 'advisory',
         category: 'tyres',
         key: 'bandOut:0:tyre.pressurePsi.rr',
-        params: { channel: 'tyre.pressurePsi.rr', state: 'above', value: 33, lo: 85, hi: 105 },
+        params: { channel: 'tyre.pressurePsi.rr', state: 'above', value: 32, lo: 20, hi: 31, lap: 4, measure: 'midRange' },
       });
     });
 
-    it('a brake or engine channel out of band now: advisory, damage', () => {
-      const bands = bandsOk();
-      bands.brakesC.fl = reading('below', { value: 200 });
-      bands.engineC = reading('above', { value: 140 });
-      const found = run(viewWith({ bands }));
-      expect(found.map((i) => [i.key, i.kind, i.severity, i.category]).sort()).toEqual([
-        ['bandOut:0:brakesC.fl', 'bandOut', 'advisory', 'damage'],
-        ['bandOut:0:engineC', 'bandOut', 'advisory', 'damage'],
+    it('a brake or engine channel out of band on the peak of the last lap: advisory, car', () => {
+      const found = run(lapsView([lapWith({ 'brakesC.fl': [180, 290], engineC: [120, 130] })]));
+      expect(found.map((i) => [i.key, i.kind, i.severity, i.category, i.params['state'], i.params['value'], i.params['measure']]).sort()).toEqual([
+        ['bandOut:0:brakesC.fl', 'bandOut', 'advisory', 'car', 'below', 290, 'peak'],
+        ['bandOut:0:engineC', 'bandOut', 'advisory', 'car', 'above', 130, 'peak'],
       ]);
     });
 
@@ -248,6 +257,87 @@ describe('alarms calculator', () => {
     });
   });
 
+  describe('band advisories judge the last completed lap, not the live value', () => {
+    it('a brake below its band now but whose last lap peaked in band raises nothing (the B3 flicker: FL 297 °C on a straight)', () => {
+      const bands = bandsOk();
+      bands.brakesC.fl = reading('below', { value: 297 });
+      expect(run(lapsView([lapWith({ 'brakesC.fl': [235, 865] })], { bands }))).toEqual([]);
+    });
+
+    it('a live value out of band raises no advisory before the car has completed a lap', () => {
+      const bands = bandsOk();
+      bands.brakesC.fl = reading('below', { value: 25 });
+      bands.tyres.fr.surfaceC = reading('below', { value: 45 });
+      bands.engineC = reading('above', { value: 140 });
+      expect(run(viewWith({ bands }))).toEqual([]);
+    });
+
+    it('within a lap the advisory does not change while the live values swing across the band', () => {
+      const laps = [lapWith({ 'brakesC.fl': [180, 290] })];
+      const outs = [25, 297, 865, 1100].map((value) => {
+        const bands = bandsOk();
+        bands.brakesC.fl = reading(value < 300 ? 'below' : value > 1000 ? 'above' : 'in', { value });
+        return run(lapsView(laps, { bands })).map((i) => [i.key, i.params['state'], i.params['value']]);
+      });
+      for (const out of outs) expect(out).toEqual([['bandOut:0:brakesC.fl', 'below', 290]]);
+    });
+
+    it('brakes judge the peak: a lap that dips below the band but peaks in it is in; a peak above the band is above', () => {
+      expect(run(lapsView([lapWith({ 'brakesC.rr': [120, 750] })]))).toEqual([]);
+      expect(run(lapsView([lapWith({ 'brakesC.rr': [400, 1050] })])).map((i) => [i.key, i.params['state'], i.params['value']])).toEqual([
+        ['bandOut:0:brakesC.rr', 'above', 1050],
+      ]);
+    });
+
+    it('tyre channels judge the mid-range of the lap: surface 70-98 °C (84) is below the dry band, 80-100 °C (90) is in', () => {
+      expect(run(lapsView([lapWith({ 'tyre.surfaceC.fl': [70, 98] })])).map((i) => [i.key, i.params['state'], i.params['value']])).toEqual([
+        ['bandOut:0:tyre.surfaceC.fl', 'below', 84],
+      ]);
+      expect(run(lapsView([lapWith({ 'tyre.surfaceC.fl': [80, 100] })]))).toEqual([]);
+      expect(run(lapsView([lapWith({ 'tyre.carcassC.rl': [110, 114] })])).map((i) => [i.key, i.params['state']])).toEqual([
+        ['bandOut:0:tyre.carcassC.rl', 'above'],
+      ]);
+    });
+
+    it('the band is the one of the lap compound: an inter lap at 65-75 °C surface is in, though below the dry band', () => {
+      const inter = { visualCompound: 'inter' as const, actualCompound: 'inter' as const };
+      const all = Object.fromEntries((['fl', 'fr', 'rl', 'rr'] as const).flatMap((c) => [[`tyre.surfaceC.${c}`, [65, 75]], [`tyre.carcassC.${c}`, [60, 70]]])) as Record<string, [number, number]>;
+      expect(run(lapsView([lapWith(all, inter)]))).toEqual([]);
+      expect(run(lapsView([lapWith(all)])).map((i) => i.key)).toContain('bandOut:0:tyre.surfaceC.fl');
+    });
+
+    it('the bands come from the car-bands config', () => {
+      const laps = [lapWith({ 'brakesC.fl': [200, 340] })];
+      expect(run(lapsView(laps))).toEqual([]);
+      expect(run(lapsView(laps, {}, { config: { 'car-bands': { brakeLo: 350 } } })).map((i) => [i.key, i.params['lo']])).toEqual([['bandOut:0:brakesC.fl', 350]]);
+    });
+
+    it('judges the highest-numbered lap of the car; laps of another car do not count', () => {
+      const hot = lapWith({ engineC: [126, 128] }, { lapNumber: 2 });
+      const cool = lapWith({}, { lapNumber: 3 });
+      expect(run(lapsView([hot, cool]))).toEqual([]);
+      expect(run(lapsView([cool, hot].map((l, i) => ({ ...l, lapNumber: 3 + i })))).map((i) => [i.key, i.params['lap']])).toEqual([['bandOut:0:engineC', 4]]);
+      expect(run(lapsView([cool, { ...hot, carId: carId(5), lapNumber: 9 }]))).toEqual([]);
+    });
+
+    it('an unknown range of the last lap raises nothing, never a zero reading', () => {
+      const l = lap();
+      l.channelRange.brakesC.fl = unknown('notReceived');
+      l.channelRange.engineC = unknown('notReceived');
+      expect(run(lapsView([l]))).toEqual([]);
+    });
+
+    it('the advisory changes at the end of a lap: raised when a lap ends out of band, resolved when the next ends in band', () => {
+      const out = lapWith({ 'brakesC.fl': [180, 290] }, { lapNumber: 1 });
+      const back = lapWith({}, { lapNumber: 2 });
+      const book = new InsightBook();
+      expect(book.apply(ALARMS, run(lapsView([])), 1_000)).toEqual([]);
+      expect(book.apply(ALARMS, run(lapsView([out])), 90_000)).toEqual([{ type: 'raised', insight: expect.objectContaining({ key: 'bandOut:0:brakesC.fl' }) }]);
+      expect(book.apply(ALARMS, run(lapsView([out])), 120_000)).toEqual([]);
+      expect(book.apply(ALARMS, run(lapsView([out, back])), 180_000)).toEqual([{ type: 'resolved', key: 'bandOut:0:brakesC.fl', at: 180_000 }]);
+    });
+  });
+
   describe('warningsBeforePenalty', () => {
     it('two cornerCuttingWarnings with warningsBeforePenalty 3 raises warningLast; one does not', () => {
       const config = { alarms: { warningsBeforePenalty: 3 } };
@@ -281,22 +371,21 @@ describe('alarms calculator', () => {
   describe('resolution', () => {
     it('an alarm resolves when its condition ends', () => {
       const bad = bandsOk();
-      bad.engineC = reading('above');
+      bad.engineC = reading('above', { outForFullLap: true });
       const book = new InsightBook();
       const first = book.apply(ALARMS, run(viewWith({ bands: bad })), 1_000);
-      expect(first).toEqual([{ type: 'raised', insight: expect.objectContaining({ key: 'bandOut:0:engineC', raisedAt: 1_000 }) }]);
+      expect(first).toEqual([{ type: 'raised', insight: expect.objectContaining({ key: 'bandOutLap:0:engineC', raisedAt: 1_000 }) }]);
       expect(book.apply(ALARMS, run(viewWith({ bands: bad })), 2_000)).toEqual([]);
-      expect(book.apply(ALARMS, run(viewWith({ bands: bandsOk() })), 3_000)).toEqual([{ type: 'resolved', key: 'bandOut:0:engineC', at: 3_000 }]);
+      expect(book.apply(ALARMS, run(viewWith({ bands: bandsOk() })), 3_000)).toEqual([{ type: 'resolved', key: 'bandOutLap:0:engineC', at: 3_000 }]);
     });
 
     it('a channel that gets worse resolves bandOut and raises bandOutLap under a different key', () => {
-      const early = bandsOk();
-      early.engineC = reading('above');
+      const laps = [lapWith({ engineC: [126, 130] })];
       const late = bandsOk();
       late.engineC = reading('above', { outForFullLap: true });
       const book = new InsightBook();
-      book.apply(ALARMS, run(viewWith({ bands: early })), 1);
-      const changes = book.apply(ALARMS, run(viewWith({ bands: late })), 2);
+      book.apply(ALARMS, run(lapsView(laps)), 1);
+      const changes = book.apply(ALARMS, run(lapsView(laps, { bands: late })), 2);
       expect(changes.map((c) => (c.type === 'raised' ? c.insight.key : c.key))).toEqual(['bandOut:0:engineC', 'bandOutLap:0:engineC']);
     });
 

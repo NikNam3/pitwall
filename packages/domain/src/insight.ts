@@ -1,7 +1,8 @@
 import type { CarId, FeedId, SessionTime } from './ids.ts';
 
 export type InsightSeverity = 'critical' | 'advisory' | 'info';
-export type InsightCategory = 'strategy' | 'tyres' | 'energy' | 'damage' | 'race' | 'feed' | 'system';
+/** What an insight is about; the engineer mutes by category. `car`: brake and engine temperatures; `damage`: damage to parts. */
+export type InsightCategory = 'strategy' | 'tyres' | 'energy' | 'car' | 'damage' | 'race' | 'feed' | 'system';
 
 /** A condition worth telling the engineer about (spec 8.3); active until `resolvedAt`. The UI formats `params`. */
 export type Insight = {
