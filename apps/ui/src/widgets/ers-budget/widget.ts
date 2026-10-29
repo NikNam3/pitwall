@@ -8,6 +8,6 @@ export const widget = declareWidget({
     ers: topic('ers.car', ({ link }) => ({ carId: link.primary })),
     moment: optional(topic('raceMoment.current')),
   },
-  // Mockup 1-car-care.html: 50x4 (STORE, DEPLOY, HARVEST, TREND). One mode only: the rows do not shrink.
-  sizes: { full: { minCols: 50, minRows: 4 } },
+  // Mockup 1-car-care.html: 50x4 (STORE, DEPLOY, HARVEST, TREND). Compact 32x2: STORE bar (fewer cells), MJ and flow; TREND with the attack text.
+  sizes: { compact: { minCols: 32, minRows: 2 }, full: { minCols: 50, minRows: 4 } },
 });

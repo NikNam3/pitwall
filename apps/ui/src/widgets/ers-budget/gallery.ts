@@ -63,6 +63,8 @@ const gallery: GalleryEntry<typeof widget> = {
     },
   },
   fit: [
+    { mode: 'compact', cols: 32, rows: 2 },
+    { mode: 'compact', cols: 49, rows: 3 },
     { mode: 'full', cols: 50, rows: 4 },
     { mode: 'full', cols: 64, rows: 6 },
   ],
