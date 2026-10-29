@@ -147,8 +147,9 @@ export const formatSignedSeconds = (ms: Ms, decimals: number): string => {
   return `${ms < 0 && Number(text) !== 0 ? MINUS : '+'}${text}`;
 };
 
-/** Laps a car is down, `2` -> `+2 laps`. */
-export const formatLapsDown = (n: number): string => (Number.isFinite(n) ? `+${n} ${n === 1 ? 'lap' : 'laps'}` : '');
+/** Laps a car is down, signed: `2` -> `+2 laps`, laps ahead `-1` -> `−1 lap`. */
+export const formatLapsDown = (n: number): string =>
+  Number.isFinite(n) ? `${n < 0 ? MINUS : '+'}${Math.abs(n)} ${Math.abs(n) === 1 ? 'lap' : 'laps'}` : '';
 
 /** A time penalty from ms to whole seconds, `5000` -> `5s`. */
 export const formatPenaltyMs = (ms: Ms): string => (Number.isFinite(ms) ? `${whole(ms / 1000)}s` : '');
@@ -161,6 +162,12 @@ export const formatPlace = (n: number | undefined): string => (n === undefined |
 
 /** A time loss in ms per lap as signed seconds to two decimals, `120` -> `+0.12 s/lap`. */
 export const formatSecondsPerLap = (ms: Ms): string => (Number.isFinite(ms) ? `${formatSignedSeconds(ms, 2)} s/lap` : '');
+
+/** A rate in ms per lap as seconds to two decimals without a forced plus, `310` -> `0.31 s/lap`, `-120` -> `−0.12 s/lap`. */
+export const formatSecondsPerLapPlain = (ms: Ms): string => (Number.isFinite(ms) ? `${formatSeconds(ms, 2)} s/lap` : '');
+
+/** A race position with its P, `7` -> `P7`. */
+export const formatPosition = (n: number): string => (Number.isFinite(n) ? `P${formatCount(n)}` : '');
 
 /** A delta in ms as signed seconds, `412` -> `+0.412`, `-412` -> `−0.412`. */
 export const formatDeltaMs = (ms: Ms): string => {

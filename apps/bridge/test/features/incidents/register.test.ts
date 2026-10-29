@@ -13,7 +13,10 @@ const feed: IncidentsOutput = [
     carIds: [carId(6), carId(5)],
     timeLostMs: known(1_800, 409_200),
     forUs: [
-      { ourCarId: carId(6), positionBefore: 7, positionAfter: unknown('notReceived'), gapBeforeMs: known(700, 407_900), gapAfterMs: unknown('notReceived') },
+      {
+        ourCarId: carId(6), otherCarId: known(carId(5), 407_900), positionBefore: known(7, 407_900), positionAfter: unknown('notReceived'),
+        gapBeforeMs: known(700, 407_900), gapAfterMs: unknown('notReceived'),
+      },
     ],
   },
 ];

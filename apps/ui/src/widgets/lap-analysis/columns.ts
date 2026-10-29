@@ -1,6 +1,8 @@
-import type { Known, Ms } from '@pitwall/domain';
+import type { BestStatus, Known, Ms } from '@pitwall/domain';
 import { formatDeltaMs, formatLapTime, formatSector } from '../../kit/values/format.ts';
-import type { Cell } from './rows.ts';
+
+/** One time cell: the value as the board gave it, whether it is an absolute time, and the board's best status. */
+export type Cell = { value: Known<Ms>; absolute: boolean; status: BestStatus };
 
 export type LapColumnKey = 'drv' | 's1' | 's2' | 's3' | 'best' | 'theo';
 

@@ -10,7 +10,10 @@ export type RaceMoment = {
   moment: Moment;
   /** From the cause: the flag phase start or the incident time; `notApplicable` for battle, weather and car care. */
   since: Known<SessionTime>;
-  /** The rule that set the moment and its values. */
+  /**
+   * The rule that set the moment and its values. `incident` names its entry of `incidents.feed` (`entryId`, with
+   * `kind`, `ageMs`); `battle` names the card's car and side (`carId`, `side`). Displays light what the cause names.
+   */
   cause: { rule: string; params: Record<string, number | string> };
   /** Every moment that holds now, the current one included, highest priority first. */
   active: Moment[];

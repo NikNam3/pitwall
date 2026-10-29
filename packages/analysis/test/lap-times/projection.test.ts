@@ -45,13 +45,14 @@ describe('lap-times projection', () => {
     ['in the garage', { driverStatus: 'inGarage' }, {}],
     ['in the pit lane', { driverStatus: 'onTrack', pitStatus: 'pitting' }, {}],
     ['the lap after an in lap', { driverStatus: 'onTrack' }, { inLap: true }],
-  ])('no projection on an in or out lap (onLap false, rest notApplicable): %s', (_, timing, lapsOver) => {
+  ])('no projection on an in or out lap (onLap false, the projection notApplicable; the cut-off is not ours): %s', (_, timing, lapsOver) => {
     expect(run(lapThree(timing, lapsOver)).projections[carId(0)]).toEqual({
       carId: carId(0),
       onLap: false,
       projectedLapMs: notApplicable,
       deltaToBestMs: notApplicable,
       projectedPosition: notApplicable,
+      // one car leaves no cut-off position; the cut-off on an out lap is in "lap-times cut-off"
       cutOff: notApplicable,
       finishMarginMs: notApplicable,
     });
@@ -95,6 +96,8 @@ describe('lap-times cut-off', () => {
     upMs,
     session = Q1,
     config = {},
+    timing = { driverStatus: 'flyingLap' },
+    noBest = false,
   }: {
     cars: number;
     classified?: number;
@@ -102,16 +105,21 @@ describe('lap-times cut-off', () => {
     upMs: number;
     session?: { sessionType: number; kind: 'practice' | 'qualifying' | 'sprintShootout' | 'race' | 'timeTrial' };
     config?: Record<string, Record<string, number>>;
+    /** The subject's timing on lap 3. */
+    timing?: Partial<CarTiming>;
+    /** The subject has no lap yet: lap 3 is its first flying lap. */
+    noBest?: boolean;
   }) => {
     const paces = Array.from({ length: cars }, (_, i) => 90_000 + 100 * i);
-    const { laps, miniSectors } = field({ cars, laps: 2, paceMs: paces });
+    const { laps: all, miniSectors } = field({ cars, laps: 2, paceMs: paces });
+    const laps = noBest ? all.filter((l) => l.carId !== carId(subject)) : all;
     const pace = paces[subject]!;
     const live = lapInProgress(subject, 3, pace, 2 * pace, 25, upMs);
     const sessionTime = live[live.length - 1]!.at;
     const view = scene({
       laps,
       miniSectors: [...miniSectors, ...live],
-      cars: activeCars(cars, { [subject]: { lap: 3, driverStatus: 'flyingLap' } }),
+      cars: activeCars(cars, { [subject]: { lap: 3, ...timing } }),
       session: { ...session, numActiveCars: classified },
       sessionTime,
       config,
@@ -123,16 +131,16 @@ describe('lap-times cut-off', () => {
     // car 19 (P20 on 91.9 s) projects 91.0 s; P15 is car 14 on 91.4 s
     const inside = quali({ cars: 20, upMs: 900 });
     expect(inside.p.projectedLapMs).toEqual(known(91_000, inside.sessionTime));
-    expect(inside.p.cutOff).toEqual(known({ position: 15, timeMs: 91_400, marginMs: 400 }, inside.sessionTime));
+    expect(inside.p.cutOff).toEqual(known({ position: 15, timeMs: 91_400, marginMs: known(400, inside.sessionTime) }, inside.sessionTime));
     // projecting 91.6 s it would be out by 0.2 s
     const outside = quali({ cars: 20, upMs: 300 });
-    expect(outside.p.cutOff).toEqual(known({ position: 15, timeMs: 91_400, marginMs: -200 }, outside.sessionTime));
+    expect(outside.p.cutOff).toEqual(known({ position: 15, timeMs: 91_400, marginMs: known(-200, outside.sessionTime) }, outside.sessionTime));
   });
 
   it('the cut-off time leaves the car itself out: for the fastest car it is the 15th fastest of the others', () => {
     // car 0 (90.0 s) projects 89.7 s; the others are cars 1..19, the 15th fastest of them car 15 on 91.5 s
     const { p, sessionTime } = quali({ cars: 20, subject: 0, upMs: 300 });
-    expect(p.cutOff).toEqual(known({ position: 15, timeMs: 91_500, marginMs: 1_800 }, sessionTime));
+    expect(p.cutOff).toEqual(known({ position: 15, timeMs: 91_500, marginMs: known(1_800, sessionTime) }, sessionTime));
   });
 
   it.each([
@@ -144,13 +152,27 @@ describe('lap-times cut-off', () => {
     const { p, projected } = quali({ cars, upMs: 900, session: { sessionType, kind } });
     // the subject is the slowest car, so the P-th fastest of the others is car P − 1
     const timeMs = 90_000 + 100 * (position - 1);
-    expect(p.cutOff).toMatchObject({ known: true, value: { position, timeMs, marginMs: timeMs - projected } });
+    expect(p.cutOff).toMatchObject({ known: true, value: { position, timeMs, marginMs: { known: true, value: timeMs - projected } } });
   });
 
   it('Q2 counts the cars knocked out in Q1: 20 classified, 15 still active, cut-off P10', () => {
     // cars 0..14 run; car 14 (best 91.4 s) projects 90.5 s; P10 of the others is car 9 on 90.9 s
     const { p, sessionTime } = quali({ cars: 15, classified: 20, upMs: 900, session: { sessionType: 6, kind: 'qualifying' } });
-    expect(p.cutOff).toEqual(known({ position: 10, timeMs: 90_900, marginMs: 400 }, sessionTime));
+    expect(p.cutOff).toEqual(known({ position: 10, timeMs: 90_900, marginMs: known(400, sessionTime) }, sessionTime));
+  });
+
+  it('on an out lap the cut-off still stands, from the others\' bests; only the margin is notApplicable', () => {
+    // P15 of the others is car 14 on 91.4 s; known since the newest of the others' bests: car 18's lap 1, at 91.8 s
+    const { p } = quali({ cars: 20, upMs: 900, timing: { driverStatus: 'outLap' } });
+    expect(p.onLap).toBe(false);
+    expect(p.cutOff).toEqual(known({ position: 15, timeMs: 91_400, marginMs: notApplicable }, 91_800));
+  });
+
+  it('on the first flying lap (no best of its own) the cut-off stands; the margin is insufficientData', () => {
+    const { p } = quali({ cars: 20, upMs: 900, noBest: true });
+    expect(p.onLap).toBe(true);
+    expect(p.projectedLapMs).toEqual(insufficientData);
+    expect(p.cutOff).toEqual(known({ position: 15, timeMs: 91_400, marginMs: insufficientData }, 91_800));
   });
 
   it('the eliminated counts come from the config', () => {

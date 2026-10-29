@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { carId, known, toSessionTime, unknown } from '@pitwall/domain';
 import type { IncidentEntry, IncidentForUs, Known, RaceMoment } from '@pitwall/domain';
 import type { CarOverview } from '@pitwall/contracts';
-import { columnsFor, incidentRowText, incidentRows, newestMajorId } from './rows.ts';
+import { columnsFor, fitRow, incidentRowText, incidentRows } from './rows.ts';
 
 const k = <T>(v: T): Known<T> => known(v, 0);
 const overview = (id: number, name: string): CarOverview =>
@@ -10,7 +10,7 @@ const overview = (id: number, name: string): CarOverview =>
 const cars = [overview(1, 'Kuhnlein'), overview(2, 'Esteban Ocon'), overview(3, 'Carlos Sainz'), overview(4, 'Alexander Albon'), overview(5, 'Oscar Piastri')];
 
 const forUs = (over: Partial<IncidentForUs> = {}): IncidentForUs => ({
-  ourCarId: carId(1), positionBefore: 5, positionAfter: k(4), gapBeforeMs: k(4100), gapAfterMs: unknown('notApplicable'), ...over,
+  ourCarId: carId(1), otherCarId: k(carId(2)), positionBefore: k(5), positionAfter: k(4), gapBeforeMs: k(4100), gapAfterMs: unknown('notApplicable'), ...over,
 });
 const entry = (over: Partial<IncidentEntry> = {}): IncidentEntry => ({
   id: 'collision:2+3:230000', at: toSessionTime(230_000), lap: 23, kind: 'collision', severity: 'major', carIds: [carId(2), carId(3)],
@@ -18,18 +18,10 @@ const entry = (over: Partial<IncidentEntry> = {}): IncidentEntry => ({
 });
 const minor = (over: Partial<IncidentEntry> = {}): IncidentEntry =>
   entry({ id: 'warning:5:210000', lap: 21, kind: 'warning', severity: 'minor', carIds: [carId(5)], timeLostMs: unknown('notApplicable'), forUs: [], ...over });
-const incident: Known<RaceMoment> = k({ moment: 'incident', since: unknown('notApplicable'), cause: { rule: 'incident', params: {} }, active: ['incident'] });
-
-describe('newestMajorId', () => {
-  it('is the id of the first major entry of the feed (newest first), skipping minor ones', () => {
-    expect(newestMajorId([minor(), entry({ id: 'b' }), entry({ id: 'c' })])).toBe('b');
-  });
-
-  it('is undefined for an empty feed or one with only minor entries', () => {
-    expect(newestMajorId([])).toBeUndefined();
-    expect(newestMajorId([minor()])).toBeUndefined();
-  });
-});
+/** The incident moment whose cause names entry `entryId` (race-moment's `cause.params.entryId`). */
+const incidentNaming = (entryId: string): Known<RaceMoment> =>
+  k({ moment: 'incident', since: unknown('notApplicable'), cause: { rule: 'majorIncident', params: { entryId } }, active: ['incident'] });
+const incident = incidentNaming('m1');
 
 describe('incidentRows', () => {
   it('gives one row per entry, in feed order, keyed by the entry id', () => {
@@ -46,25 +38,44 @@ describe('incidentRows', () => {
 
   it('shows what changed for us: position mark, then the incident car\'s gap before and after, minus as U+2212', () => {
     const [collision, timeLoss] = incidentRows(
-      [entry(), entry({ id: 't', kind: 'timeLoss', carIds: [carId(4)], forUs: [forUs({ positionAfter: k(5), gapBeforeMs: k(-1900), gapAfterMs: k(5800) })] })],
+      [entry(), entry({ id: 't', kind: 'timeLoss', carIds: [carId(4)], forUs: [forUs({ otherCarId: k(carId(4)), positionAfter: k(5), gapBeforeMs: k(-1900), gapAfterMs: k(5800) })] })],
       cars, undefined);
     expect(collision!.cells.forUs.text).toBe('us P5→P4, OCO +4.1→DNF');
     expect(timeLoss!.cells.forUs.text).toBe('us —, ALB −1.9→+5.8');
   });
 
-  it('takes the gap car as the first involved car that is not our car, even when ours is listed first', () => {
-    const [row] = incidentRows([entry({ carIds: [carId(1), carId(4)], forUs: [forUs({ gapBeforeMs: k(-1900), gapAfterMs: k(5800) })] })], cars, undefined);
+  it('names the car the analysis measured the gaps to (otherCarId), not one it picks from the entry itself', () => {
+    const [row] = incidentRows([entry({ carIds: [carId(1), carId(4)], forUs: [forUs({ otherCarId: k(carId(4)), gapBeforeMs: k(-1900), gapAfterMs: k(5800) })] })], cars, undefined);
     expect(row!.cells.forUs.text).toBe('us P5→P4, ALB −1.9→+5.8');
     expect(row!.cells.cars.text).toBe('KUH ALB');
+    const [second] = incidentRows([entry({ forUs: [forUs({ otherCarId: k(carId(3)) })] })], cars, undefined);
+    expect(second!.cells.forUs.text).toBe('us P5→P4, SAI +4.1→DNF');
+  });
+
+  it('shows no gap part when the entry has no other car (otherCarId notApplicable)', () => {
+    const [row] = incidentRows([entry({ forUs: [forUs({ otherCarId: unknown('notApplicable'), gapBeforeMs: unknown('notApplicable') })] })], cars, undefined);
+    expect(row!.cells.forUs).toEqual({ text: 'us P5→P4' });
+  });
+
+  it('leaves an unknown position out, with its reason on hover (no invented position)', () => {
+    const [row] = incidentRows([entry({ forUs: [forUs({ positionBefore: unknown('notReceived') })] })], cars, undefined);
+    expect(row!.cells.forUs).toEqual({ text: 'us, OCO +4.1→DNF', reason: 'notReceived' });
+  });
+
+  it('gives an unknown gap after its reason on hover; DNF (not applicable) needs none', () => {
+    const [waiting] = incidentRows([entry({ forUs: [forUs({ gapAfterMs: unknown('notReceived') })] })], cars, undefined);
+    expect(waiting!.cells.forUs).toEqual({ text: 'us P5→P4, OCO +4.1→', reason: 'notReceived' });
+    const [retired] = incidentRows([entry()], cars, undefined);
+    expect(retired!.cells.forUs.reason).toBeUndefined();
   });
 
   it('writes a position change as P7→P9 through the position mark', () => {
-    const [row] = incidentRows([entry({ forUs: [forUs({ positionBefore: 7, positionAfter: k(9) })] })], cars, undefined);
+    const [row] = incidentRows([entry({ forUs: [forUs({ positionBefore: k(7), positionAfter: k(9) })] })], cars, undefined);
     expect(row!.cells.forUs.text.startsWith('us P7→P9')).toBe(true);
   });
 
   it('writes P7→ while the position after is unknown', () => {
-    const [row] = incidentRows([entry({ forUs: [forUs({ positionBefore: 7, positionAfter: unknown('insufficientData') })] })], cars, undefined);
+    const [row] = incidentRows([entry({ forUs: [forUs({ positionBefore: k(7), positionAfter: unknown('insufficientData') })] })], cars, undefined);
     expect(row!.cells.forUs.text.startsWith('us P7→,')).toBe(true);
   });
 
@@ -87,15 +98,17 @@ describe('incidentRows', () => {
     expect(row!.cells.lost.text).toBe('');
   });
 
-  it('shows #<id> for a car missing from cars.overview and an empty cars cell for no car', () => {
+  it('leaves out a car missing from cars.overview, with the reason on hover, and an empty cars cell for no car', () => {
     const [a, b] = incidentRows([entry({ carIds: [carId(2), carId(9)] }), minor({ carIds: [] })], cars, undefined);
-    expect(a!.cells.cars.text).toBe('OCO #9');
-    expect(b!.cells.cars.text).toBe('');
+    expect(a!.cells.cars).toEqual({ text: 'OCO', reason: 'notReceived' });
+    expect(b!.cells.cars).toEqual({ text: '' });
   });
 
-  it('dims minor entries and ambers only the newest major entry in the incident moment', () => {
+  it('dims minor entries and ambers only the entry the incident moment names', () => {
     const rows = incidentRows([minor({ id: 'w' }), entry({ id: 'm1' }), entry({ id: 'm2' })], cars, incident);
     expect(rows.map((r) => r.role)).toEqual(['textDim', 'warning', undefined]);
+    const older = incidentRows([entry({ id: 'm1' }), entry({ id: 'm2' })], cars, incidentNaming('m2'));
+    expect(older.map((r) => r.role)).toEqual([undefined, 'warning']);
   });
 
   it('ambers nothing outside the incident moment', () => {
@@ -119,5 +132,29 @@ describe('text layout', () => {
     expect(incidentRowText('full', a!)).toBe(' L23  OCO SAI  collision           lost 4.2 s  us P5→P4, OCO +4.1→DNF');
     expect(incidentRowText('full', b!).trimEnd()).toBe(' L14  KUH      damage');
     expect(incidentRowText('full', c!).trimEnd()).toBe(' L21  PIA      warning');
+  });
+});
+
+describe('fitRow', () => {
+  const long = entry({
+    carIds: [carId(4)],
+    forUs: [forUs({ otherCarId: k(carId(4)), positionBefore: k(12), positionAfter: k(14), gapBeforeMs: k(12_300), gapAfterMs: k(14_100) })],
+  });
+
+  it('cuts a last cell that does not fit the line with …, never silently', () => {
+    const [row] = incidentRows([long], cars, undefined);
+    const cells = fitRow('full', row!, 70);
+    const forUsCell = cells.find((c) => c.column === 'forUs')!;
+    expect(row!.cells.forUs.text).toBe('us P12→P14, ALB +12.3→+14.1');
+    expect(forUsCell.text).toBe('us P12→P14, ALB +12.3→…');
+    expect(incidentRowText('full', row!, 70)).toHaveLength(70);
+  });
+
+  it('keeps the fixed columns at their widths and gives an empty value its reason in words', () => {
+    const [row] = incidentRows([entry({ timeLostMs: unknown('insufficientData') })], cars, undefined);
+    const cells = fitRow('full', row!, 70);
+    expect(cells.map((c) => c.text.length).slice(0, 4)).toEqual([3, 7, 18, 10]);
+    expect(cells.find((c) => c.column === 'lost')?.title).toBe('too few laps or samples yet');
+    expect(cells.find((c) => c.column === 'lap')?.title).toBeUndefined();
   });
 });

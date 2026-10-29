@@ -1,6 +1,8 @@
 // Joins the topics the timing tower reads into one row per car (no arithmetic: the numbers, stops and compound included, come from the topics).
 import type { CarOverview, SessionInfo } from '@pitwall/contracts';
 import { unknown } from '@pitwall/domain';
+import { ourCars } from '../../kit/car/our-cars.ts';
+import { momentIncident } from './emphasis.ts';
 import type {
   CarId, GapToCar, IncidentEntry, Interval, Known, LapBoard, LapBoardRow, Ms, RaceMoment, SectorStatus, VisualCompound,
 } from '@pitwall/domain';
@@ -19,7 +21,7 @@ export type TowerInput = {
 export type TowerRow = {
   carId: CarId;
   ours: boolean;
-  /** In a newest major incident (the widget colours it only in the incident moment). */
+  /** A car of the incident the incident moment names; false in every other moment. */
   involved: boolean;
   retired: boolean;
   position: number | undefined;
@@ -29,8 +31,8 @@ export type TowerRow = {
   gapToLeader: Known<Ms>;
   interval: Known<Ms>;
   lapsDown: number;
-  /** Undefined for the player's own row. */
-  toUs: Known<Ms> | undefined;
+  /** TO US: the `gaps.toCar` entry, measured to the link group's primary car; that car's own entry is `notApplicable`. */
+  toUs: Pick<GapToCar, 'gapMs' | 'lapsDown'>;
   lastLap: Known<Ms>;
   lastLapStatus: SectorStatus;
   sectors: Array<{ timeMs: Known<Ms>; status: SectorStatus }>;
@@ -59,8 +61,8 @@ export function buildRows(input: TowerInput): TowerRow[] {
   const intervals = new Map(input.intervals.map((i) => [i.carId, i]));
   const toCar = new Map(input.toCar.map((g) => [g.carId, g]));
   const board = new Map(input.board.rows.map((r) => [r.carId, r]));
-  const major = input.incidents?.find((e) => e.severity === 'major');
-  const { playerCar, teammateCar } = input.session;
+  const incident = momentIncident(input.moment, input.incidents);
+  const ours = ourCars(input.session);
 
   const rows = input.cars
     .filter((c) => !UNUSED.has(c.timing.resultStatus))
@@ -72,8 +74,8 @@ export function buildRows(input: TowerInput): TowerRow[] {
       const gained = gaps?.positionsGained;
       return {
         carId: id,
-        ours: id === playerCar || id === teammateCar,
-        involved: major?.carIds.includes(id) ?? false,
+        ours: ours.has(id),
+        involved: incident?.carIds.includes(id) ?? false,
         retired,
         position: retired ? undefined : c.timing.position,
         change: retired || gained === undefined || !gained.known ? undefined : gained.value,
@@ -81,7 +83,7 @@ export function buildRows(input: TowerInput): TowerRow[] {
         gapToLeader: gaps?.toLeaderMs ?? missing(),
         interval: gaps?.toAheadMs ?? missing(),
         lapsDown: gaps?.lapsDown ?? 0,
-        toUs: id === playerCar ? undefined : (toCar.get(id)?.gapMs ?? missing()),
+        toUs: toCar.get(id) ?? { gapMs: missing(), lapsDown: 0 },
         lastLap: lap?.lastLapMs ?? missing(),
         lastLapStatus: lap?.lastLapStatus ?? 'none',
         sectors: sectorsOf(lap),

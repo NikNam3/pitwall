@@ -1,7 +1,7 @@
 // `lap-times` (spec 6.2): publishes `lapTimes.board` (`{ referenceCarId }`) and `lapTimes.projection` (`CarParams`).
 import type { CarId, LapBoard, LapBoardRow, Projection } from '@pitwall/domain';
 
-export type { LapBoard, LapBoardRow, Projection, SectorStatus, SessionBestTime } from '@pitwall/domain';
+export type { BestStatus, LapBoard, LapBoardRow, Projection, SectorStatus, SessionBestTime } from '@pitwall/domain';
 export * from './config.ts';
 
 /** The calculator id. */

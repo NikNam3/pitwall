@@ -3,7 +3,7 @@
   import type { WidgetProps } from '../../kit/types.ts';
   import Bar from '../../kit/bar/Bar.svelte';
   import { unknownReason } from '../../kit/text.ts';
-  import { role } from '../../theme/index.ts';
+  import { roleOrUndefined } from '../../theme/index.ts';
   import { ersRole } from './emphasis.ts';
   import * as text from './text.ts';
   import { BAR_COLS, ersView } from './view.ts';
@@ -14,7 +14,7 @@
   const view = $derived(ersView(data.ers));
   const full = $derived(size.mode === 'full');
   const hot = $derived(ersRole(data.moment));
-  const colour = $derived(hot === undefined ? undefined : role(hot));
+  const colour = $derived(roleOrUndefined(hot));
   const why = (r: keyof typeof view.reasons): string | undefined => {
     const reason = view.reasons[r];
     return reason === undefined ? undefined : unknownReason[reason];

@@ -1,4 +1,4 @@
-import { carId, type Interval, type Known } from '@pitwall/domain';
+import { carId, unknown, type Interval, type Known } from '@pitwall/domain';
 import type { EngineView } from '@pitwall/engine';
 import { describe, expect, it } from 'vitest';
 import { GAPS, GAPS_CONFIG, type GapsOutput } from '../../src/gaps/index.ts';
@@ -221,6 +221,11 @@ describe('gaps to one car', () => {
     const of = (id: number) => toCar1.find((g) => g.carId === id)!;
     expect([v(of(0).gapMs), of(0).lapsDown]).toEqual([-5_000, 0]);
     expect([v(of(2).gapMs), of(2).lapsDown]).toEqual([5_000, 0]);
+  });
+
+  it('gives the car itself notApplicable: it has no gap to itself', () => {
+    const self = gapsToCar(run(viewOf(threeCars())), carId(1))!.find((g) => g.carId === carId(1));
+    expect(self).toEqual({ carId: carId(1), gapMs: unknown('notApplicable'), lapsDown: 0 });
   });
 
   it('is exact for two cars at different points: their times at the last point both passed', () => {

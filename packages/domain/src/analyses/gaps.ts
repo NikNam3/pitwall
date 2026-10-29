@@ -19,7 +19,8 @@ export type Interval = {
 
 /**
  * `gaps.toCar`: one car's signed gap to the params car; positive = behind it. `lapsDown` is signed and relative to the
- * params car: the laps this car is down on it (negative = laps ahead), on top of `gapMs`.
+ * params car: the laps this car is down on it (negative = laps ahead), on top of `gapMs`. The params car's own entry
+ * is `notApplicable` with `lapsDown` 0.
  */
 export type GapToCar = { carId: CarId; gapMs: Known<Ms>; lapsDown: number };
 

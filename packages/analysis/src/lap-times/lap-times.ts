@@ -1,5 +1,5 @@
 // The maths of `lap-times` (spec 6.2): bests and sector status per car, the session bests, and the board deltas.
-import { known, unknown, type CarId, type Known, type LapBoard, type LapBoardRow, type LapRecord, type Ms, type SectorStatus, type SessionBestTime } from '@pitwall/domain';
+import { known, unknown, type BestStatus, type CarId, type Known, type LapBoard, type LapBoardRow, type LapRecord, type Ms, type SectorStatus, type SessionBestTime } from '@pitwall/domain';
 import { classifyLap } from '../lap-classes/index.ts';
 
 type Sectors<T> = [T, T, T];
@@ -47,6 +47,10 @@ export function statusOf(valid: boolean, carId: CarId, lapNumber: number, own: B
   return own?.lapNumber === lapNumber ? 'personalBest' : 'none';
 }
 
+/** `sessionBest` when the car holds the session best: its own best is then that time (ties go to the holder only). */
+const bestStatusOf = (carId: CarId, own: Best | undefined, session: Holder | undefined): BestStatus =>
+  own !== undefined && session?.carId === carId ? 'sessionBest' : 'none';
+
 const knownBest = (b: Best | undefined): Known<Ms> => (b === undefined ? unknown('insufficientData') : known(b.ms, b.completedAt));
 const knownHolder = (h: Holder | undefined): Known<SessionBestTime> => (h === undefined ? unknown('insufficientData') : known({ ms: h.ms, carId: h.carId }, h.completedAt));
 
@@ -67,6 +71,8 @@ export function rowOf(carId: CarId, laps: readonly LapRecord[], bests: CarBests,
     lastLapStatus: last === undefined || lastClass === undefined ? 'none' : statusOf(lastClass.lap, carId, last.lapNumber, bests.lap, session.lap),
     bestLapMs: knownBest(bests.lap),
     bestSectorsMs: bests.sectors.map(knownBest) as Sectors<Known<Ms>>,
+    bestLapStatus: bestStatusOf(carId, bests.lap, session.lap),
+    bestSectorStatus: SECTORS.map((i) => bestStatusOf(carId, bests.sectors[i], session.sectors[i])) as Sectors<BestStatus>,
     theoreticalBestMs: sectorsKnown
       ? known(
           bests.sectors.reduce((sum, s) => sum + (s as Best).ms, 0),

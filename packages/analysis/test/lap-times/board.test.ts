@@ -47,6 +47,22 @@ describe('lap-times board', () => {
     expect(car1.lastLapStatus).toBe('sessionBest');
   });
 
+  it("best status: each best lap and best sector is sessionBest when it is the session's, else none (never personalBest)", () => {
+    const car0 = rowOf(out, 0)!;
+    const car1 = rowOf(out, 1)!;
+    // car 1 holds the best lap and sectors 1 and 2; car 0 holds sector 3
+    expect(car1.bestLapStatus).toBe('sessionBest');
+    expect(car1.bestSectorStatus).toEqual(['sessionBest', 'sessionBest', 'none']);
+    expect(car0.bestLapStatus).toBe('none');
+    expect(car0.bestSectorStatus).toEqual(['none', 'none', 'sessionBest']);
+  });
+
+  it('best status is none for a car without a best yet', () => {
+    const row = rowOf(run(scene({ laps: [], cars: activeCars(1) })), 0)!;
+    expect(row.bestLapStatus).toBe('none');
+    expect(row.bestSectorStatus).toEqual(['none', 'none', 'none']);
+  });
+
   it('the session bests carry their holder, known since the lap that set them', () => {
     expect(out.sessionBest.lap).toEqual(known({ ms: 89_300, carId: carId(1) }, 89_300));
     expect(out.sessionBest.sectors).toEqual([

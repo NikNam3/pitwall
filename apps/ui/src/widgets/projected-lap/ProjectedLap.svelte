@@ -3,7 +3,8 @@
   import type { WidgetProps } from '../../kit/types.ts';
   import { fitCell } from '../../kit/grid/grid.ts';
   import { unknownReason } from '../../kit/text.ts';
-  import { role } from '../../theme/index.ts';
+  import { ourCars } from '../../kit/car/our-cars.ts';
+  import { roleOrUndefined } from '../../theme/index.ts';
   import { PROJECTION_COLUMNS, projectionHeader, projectionRows } from './rows.ts';
   import type { ProjectionRow } from './rows.ts';
   import type { widget } from './widget.ts';
@@ -11,7 +12,8 @@
   let { data, size }: WidgetProps<typeof widget> = $props();
 
   const full = $derived(size.mode === 'full');
-  const rows = $derived(projectionRows(data.projection).filter((r) => full || r.key === 'proj'));
+  const ours = $derived(ourCars(data.session).has(data.projection.carId));
+  const rows = $derived(projectionRows(data.projection, ours).filter((r) => full || r.key === 'proj'));
   const header = $derived(projectionHeader(full));
   const cell = (row: ProjectionRow, key: 'name' | 'time' | 'pos' | 'delta' | 'label'): string => {
     const column = PROJECTION_COLUMNS.find((c) => c.key === key);
@@ -23,7 +25,7 @@
 <div class="block">
   <div class="line faint">{header}</div>
   {#each rows as row (row.key)}
-    <div class="line" title={hint(row)}>{cell(row, 'name')} {cell(row, 'time')} {cell(row, 'pos')} <span style:color={row.deltaRole === undefined ? undefined : role(row.deltaRole)}>{cell(row, 'delta')}</span>{#if full}{` ${cell(row, 'label')}`}{/if}</div>
+    <div class="line" title={hint(row)}>{cell(row, 'name')} {cell(row, 'time')} {cell(row, 'pos')} <span style:color={roleOrUndefined(row.deltaRole)}>{cell(row, 'delta')}</span>{#if full}{` ${cell(row, 'label')}`}{/if}</div>
   {/each}
 </div>
 

@@ -15,12 +15,13 @@ const cars = [overview(1, 'Kuhnlein'), overview(2, 'Esteban Ocon'), overview(3, 
 const collision: IncidentEntry = {
   id: 'collision:2+3:230000', at: toSessionTime(230_000), lap: 23, kind: 'collision', severity: 'major', carIds: [carId(2), carId(3)],
   timeLostMs: k(4200),
-  forUs: [{ ourCarId: carId(1), positionBefore: 5, positionAfter: k(4), gapBeforeMs: k(4100), gapAfterMs: unknown('notApplicable') }],
+  // OCO retired by the after moment: its gap after is notApplicable (DNF)
+  forUs: [{ ourCarId: carId(1), otherCarId: k(carId(2)), positionBefore: k(5), positionAfter: k(4), gapBeforeMs: k(4100), gapAfterMs: unknown('notApplicable') }],
 };
 const timeLoss: IncidentEntry = {
   id: 'timeLoss:4:220000', at: toSessionTime(220_000), lap: 22, kind: 'timeLoss', severity: 'major', carIds: [carId(4)],
   timeLostMs: k(6100),
-  forUs: [{ ourCarId: carId(1), positionBefore: 5, positionAfter: k(5), gapBeforeMs: k(-1900), gapAfterMs: k(5800) }],
+  forUs: [{ ourCarId: carId(1), otherCarId: k(carId(4)), positionBefore: k(5), positionAfter: k(5), gapBeforeMs: k(-1900), gapAfterMs: k(5800) }],
 };
 const warning: IncidentEntry = {
   id: 'warning:5:210000', at: toSessionTime(210_000), lap: 21, kind: 'warning', severity: 'minor', carIds: [carId(5)],
@@ -35,25 +36,31 @@ const damage: IncidentEntry = {
   timeLostMs: unknown('insufficientData'), forUs: [],
 };
 
-const moment = (name: Moment): Known<RaceMoment> =>
-  k({ moment: name, since: name === 'incident' ? known(toSessionTime(230_000), 10) : unknown('notApplicable'), cause: { rule: name, params: {} }, active: [name] });
+/** A moment; the incident moment's cause names its entry (`entryId`), as race-moment gives it. */
+const moment = (name: Moment, entryId?: string): Known<RaceMoment> =>
+  k({
+    moment: name,
+    since: name === 'incident' ? known(toSessionTime(230_000), 10) : unknown('notApplicable'),
+    cause: { rule: name, params: entryId === undefined ? {} : { entryId } },
+    active: [name],
+  });
 
 /** Synthetic cases and fit expectations for `incident-feed`. */
 const gallery: GalleryEntry<typeof widget> = {
   moments: ['raceSingaporeStart.grid', 'raceSingaporeEnd.chequered'],
   cases: {
-    // Mockup: in the incident moment the newest major entry is amber.
-    incidentMoment: { feed: [collision, timeLoss, warning, neutralised, damage], cars, moment: moment('incident') },
+    // Mockup: in the incident moment the entry it names (the newest major one) is amber.
+    incidentMoment: { feed: [collision, timeLoss, warning, neutralised, damage], cars, moment: moment('incident', collision.id) },
     empty: { feed: [], cars, moment: undefined },
     // Mockup: minor entries (warning, safety car) dim.
     feed: { feed: [collision, timeLoss, warning, neutralised, damage], cars, moment: undefined },
     // The unresolved time loss of the damage entry is an empty cell.
     unresolved: { feed: [damage], cars, moment: undefined },
-    // The newest entry is minor: the amber goes to the first major entry below it.
-    incidentMomentMinorFirst: { feed: [warning, timeLoss, neutralised], cars, moment: moment('incident') },
+    // The newest entry is minor: the moment names the major entry below it, which is amber.
+    incidentMomentMinorFirst: { feed: [warning, timeLoss, neutralised], cars, moment: moment('incident', timeLoss.id) },
     // Another moment: nothing amber.
     battleMoment: { feed: [collision, warning], cars, moment: moment('battle') },
-    // A car missing from cars.overview shows as #<id>.
+    // A car missing from cars.overview is left out of the cell, with the reason on hover.
     unknownCar: { feed: [collision], cars: cars.slice(0, 2), moment: undefined },
     // Realism hides no rival value of this display (incidents are public), so there is no realism case.
   },

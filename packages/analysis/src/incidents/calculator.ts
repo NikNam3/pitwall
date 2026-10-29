@@ -297,6 +297,16 @@ const gapKnown = (acc: Acc, snap: Snapshot, ours: CarId, other: CarId, at: Sessi
   return gap === undefined ? unknown('notReceived') : known(gap, at);
 };
 
+/** Whether `id` has a retirement event at or before `t`. */
+const retiredBy = (acc: Acc, id: CarId, t: SessionTime): boolean =>
+  acc.carEvents.some((e) => e.kind === 'retirement' && e.at <= t && e.carIds.includes(id));
+
+/** Our gap to `other` after the incident: none once it retired, `notReceived` until the after moment is in the history. */
+const gapAfter = (acc: Acc, after: Snapshot | undefined, ours: CarId, other: CarId, afterAt: SessionTime): Known<Ms> => {
+  if (retiredBy(acc, other, afterAt)) return unknown('notApplicable');
+  return after === undefined ? unknown('notReceived') : gapKnown(acc, after, ours, other, afterAt);
+};
+
 /** Per our car that is involved or has an involved car in its neighbourhood: its position and gap before and after. */
 const forUsOf = (acc: Acc, c: Candidate): IncidentForUs[] => {
   const before = snapshot(acc, c.at);
@@ -309,13 +319,14 @@ const forUsOf = (acc: Acc, c: Candidate): IncidentForUs[] => {
       c.carIds.some((id) => id === ours || isNear(acc.tracks, before, ours, id, acc.neighbourhoodMs));
     if (!concerned) continue;
     const other = c.carIds.find((id) => id !== ours);
+    const none = unknown('notApplicable');
     items.push({
       ourCarId: ours,
-      positionBefore: positionIn(before, ours),
-      positionAfter: after === undefined ? unknown('notReceived') : known(positionIn(after, ours), afterAt),
-      gapBeforeMs: other === undefined ? unknown('notApplicable') : gapKnown(acc, before, ours, other, c.at),
-      gapAfterMs:
-        other === undefined ? unknown('notApplicable') : after === undefined ? unknown('notReceived') : gapKnown(acc, after, ours, other, afterAt),
+      otherCarId: other === undefined ? none : known(other, c.at),
+      positionBefore: positionIn(before, ours, c.at),
+      positionAfter: after === undefined ? unknown('notReceived') : positionIn(after, ours, afterAt),
+      gapBeforeMs: other === undefined ? none : gapKnown(acc, before, ours, other, c.at),
+      gapAfterMs: other === undefined ? none : gapAfter(acc, after, ours, other, afterAt),
     });
   }
   return items;

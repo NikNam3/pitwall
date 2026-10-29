@@ -1,9 +1,9 @@
 import type { BattleCard, BattleSide, Known, RaceMoment, UnknownReason, VisualCompound } from '@pitwall/domain';
 import type { CarOverview } from '@pitwall/contracts';
-import { carCode } from '../../kit/car/car-code.ts';
+import { carCodeById } from '../../kit/car/car-label.ts';
 import { gridRow, type GridColumn } from '../../kit/grid/grid.ts';
 import { compoundText } from '../../kit/compound/compound-mark.ts';
-import { formatJoules, formatLaps, formatSeconds, formatSignedSeconds } from '../../kit/values/format.ts';
+import { formatJoules, formatLaps, formatSecondsPerLapPlain, formatSignedSeconds } from '../../kit/values/format.ts';
 import type { Role } from '../../theme/roles.ts';
 import type { WidgetSize } from '../../kit/types.ts';
 import { battleRole, type Side } from './emphasis.ts';
@@ -38,6 +38,12 @@ export const WIDTH: Record<ColumnId, GridColumn> = {
 /** The columns of a size mode. */
 export const columnsFor = (mode: WidgetSize['mode']): readonly ColumnId[] => (mode === 'compact' ? COMPACT : COLUMN_IDS);
 
+/**
+ * The sign of a side's gap, the app-wide convention (as the tower's TO US): a car ahead of us negative, behind
+ * positive. `battle.cards` gives each side's gap as an unsigned distance, so the display only picks the side's sign.
+ */
+const GAP_SIGN: Record<Side, 1 | -1> = { ahead: -1, behind: 1 };
+
 const valueCell = <T>(v: Known<T>, format: (t: T) => string): Cell =>
   v.known ? { text: format(v.value) } : { text: '', reason: v.reason };
 
@@ -51,12 +57,10 @@ function sideRow(label: BattleRow['label'], side: Side, card: BattleCard, cars: 
   }
   const s = known.value;
   const highlight = battleRole(moment, card.carId, side);
-  const car = cars.find((c) => c.id === s.carId);
-  const sign = side === 'ahead' ? 1 : -1;
   const cells: Record<ColumnId, Cell> = {
-    drv: { text: car === undefined ? '' : carCode(car.identity) },
-    gap: valueCell(s.gapMs, (ms) => formatSignedSeconds(sign * ms, 3)),
-    closing: valueCell(s.closingMsPerLap, (ms) => `${formatSeconds(ms, 2)} ${text.perLap}`),
+    drv: carCodeById(cars, s.carId),
+    gap: valueCell(s.gapMs, (ms) => formatSignedSeconds(GAP_SIGN[side] * ms, 3)),
+    closing: valueCell(s.closingMsPerLap, formatSecondsPerLapPlain),
     toDrs: valueCell(s.lapsToDrs, (n) => (n === 0 ? text.inDrs : formatLaps(n))),
     paceDelta: valueCell(s.paceDeltaMs, (ms) => formatSignedSeconds(ms, 2)),
     margin: valueCell(s.overtakeMarginMs, (ms) => formatSignedSeconds(ms, 2)),
@@ -79,5 +83,5 @@ export const battleHeader = (mode: WidgetSize['mode']): string =>
   gridRow(grid(mode), ['', ...columnsFor(mode).map((c) => text.header[c])]);
 
 /** A row as one line of fixed fields. */
-export const battleRowText = (mode: 'compact' | 'full', row: BattleRow): string =>
+export const battleRowText = (mode: WidgetSize['mode'], row: BattleRow): string =>
   gridRow(grid(mode), [row.label, ...columnsFor(mode).map((c) => row.cells[c].text)]);

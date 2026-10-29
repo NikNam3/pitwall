@@ -24,12 +24,15 @@ describe('finishRole', () => {
 });
 
 describe('deltaRole', () => {
-  it('is the personal-best role for a delta below zero (a new personal best)', () => {
-    expect(deltaRole(-118)).toBe('personalBest');
-    expect(deltaRole(-1)).toBe('personalBest');
+  it('is the personal-best role for a delta below zero of our car (a new personal best)', () => {
+    expect(deltaRole(-118, true)).toBe('personalBest');
+    expect(deltaRole(-1, true)).toBe('personalBest');
   });
   it('is undefined for a zero or positive delta', () => {
-    expect(deltaRole(0)).toBeUndefined();
-    expect(deltaRole(781)).toBeUndefined();
+    expect(deltaRole(0, true)).toBeUndefined();
+    expect(deltaRole(781, true)).toBeUndefined();
+  });
+  it('is undefined for a rival projected faster than its best: green is for our cars only', () => {
+    expect(deltaRole(-118, false)).toBeUndefined();
   });
 });

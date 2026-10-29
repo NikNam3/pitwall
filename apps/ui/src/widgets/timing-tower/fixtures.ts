@@ -88,6 +88,8 @@ export function boardRow(
     lastLapStatus: lapStatus,
     bestLapMs: unknown('notReceived'),
     bestSectorsMs: [unknown('notReceived'), unknown('notReceived'), unknown('notReceived')],
+    bestLapStatus: 'none',
+    bestSectorStatus: ['none', 'none', 'none'],
     theoreticalBestMs: unknown('notReceived'),
     deltaToReference: { bestLapMs: unknownDelta, bestSectorsMs: [unknownDelta, unknownDelta, unknownDelta], theoreticalBestMs: unknownDelta },
   };

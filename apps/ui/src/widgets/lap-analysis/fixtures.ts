@@ -1,7 +1,7 @@
 // Builders shared by the lap-analysis gallery and its tests (test-phase file: the implementer does not edit it).
 import type { CarOverview, SessionInfo } from '@pitwall/contracts';
 import { carId, feedId, known, toSessionTime, unknown } from '@pitwall/domain';
-import type { CarId, LapBoard, LapBoardRow, Known, Ms, SessionBestTime } from '@pitwall/domain';
+import type { BestStatus, CarId, LapBoard, LapBoardRow, Known, Ms, SessionBestTime } from '@pitwall/domain';
 
 const at = toSessionTime(1000);
 export const ms = (n: number): Known<Ms> => known(n, at);
@@ -30,6 +30,7 @@ export function boardRow(id: number, t: Times | 'realism' | 'noTimes', ref: Time
     carId: carId(id), lastLapMs: none(reason), lastSectorsMs: [none(reason), none(reason), none(reason)],
     lastSectorStatus: ['none', 'none', 'none'], lastLapStatus: 'none', bestLapMs: none(reason),
     bestSectorsMs: [none(reason), none(reason), none(reason)], theoreticalBestMs: none(reason),
+    bestLapStatus: 'none', bestSectorStatus: ['none', 'none', 'none'],
     deltaToReference: { bestLapMs: none(reason), bestSectorsMs: [none(reason), none(reason), none(reason)], theoreticalBestMs: none(reason) },
   });
   if (t === 'realism') return unknownRow('realism');
@@ -51,14 +52,22 @@ export function boardRow(id: number, t: Times | 'realism' | 'noTimes', ref: Time
 
 const holder = (id: number, time: number): Known<SessionBestTime> => known({ ms: time, carId: carId(id) }, at);
 
-/** A board with the given session-best holders (`undefined` = not known yet). */
+/** `sessionBest` for the holder's row when its time is known, as `lap-times` gives it. */
+const statusFor = (row: LapBoardRow, value: Known<Ms>, holder: [number, number] | undefined): BestStatus =>
+  holder !== undefined && holder[0] === row.carId && value.known ? 'sessionBest' : 'none';
+
+/** A board with the given session-best holders (`undefined` = not known yet); each row's best status follows them. */
 export const lapBoard = (
   reference: number,
   rows: LapBoardRow[],
   sessionBest: { lap?: [number, number]; sectors?: [[number, number]?, [number, number]?, [number, number]?] } = {},
 ): LapBoard => ({
   referenceCarId: carId(reference) as CarId,
-  rows,
+  rows: rows.map((r) => ({
+    ...r,
+    bestLapStatus: statusFor(r, r.bestLapMs, sessionBest.lap),
+    bestSectorStatus: [0, 1, 2].map((i) => statusFor(r, r.bestSectorsMs[i] as Known<Ms>, sessionBest.sectors?.[i])) as LapBoardRow['bestSectorStatus'],
+  })),
   sessionBest: {
     lap: sessionBest.lap ? holder(...sessionBest.lap) : none(),
     sectors: [0, 1, 2].map((i) => {

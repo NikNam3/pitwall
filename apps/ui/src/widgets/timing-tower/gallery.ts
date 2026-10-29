@@ -35,8 +35,9 @@ const board = lapBoard(3, [
   boardRow(7, undefined),
 ]);
 
+/** A moment whose cause names the incident entry `collision-6-7` (race-moment's incident cause carries `entryId`). */
 const moment = (m: RaceMoment['moment']): RaceMoment => ({
-  moment: m, since: known(toSessionTime(900), toSessionTime(900)), cause: { rule: 'majorIncident', params: {} }, active: [m],
+  moment: m, since: known(toSessionTime(900), toSessionTime(900)), cause: { rule: 'majorIncident', params: { entryId: 'collision-6-7' } }, active: [m],
 });
 
 const field = { cars, intervals, toCar: toUs, board, moment: undefined, session: sessionInfo(3), incidents: undefined };
@@ -45,7 +46,7 @@ const field = { cars, intervals, toCar: toUs, board, moment: undefined, session:
 const gallery: GalleryEntry<typeof widget> = {
   moments: ['raceSingaporeStart.grid', 'ttZandvoortLap1.crossing'],
   cases: {
-    // Incident moment: SAR and OCO are in the newest major incident, amber left bar on their rows.
+    // Incident moment: SAR and OCO are in the incident it names, amber left bar on their rows.
     incidentMoment: {
       ...field,
       moment: known(moment('incident'), toSessionTime(900)),

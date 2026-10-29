@@ -44,7 +44,6 @@ function ersOf(view: EngineView, car: EngineView['state']['cars'][number]): ErsS
       deployedThisLapJ: hidden,
       harvestedThisLapJ: hidden,
       storeTrendJPerLap: hidden,
-      lapsToAttackLevel: hidden,
       attack: hidden,
       mode: hidden,
       flow: flowOf(car.energy.power),
@@ -53,21 +52,20 @@ function ersOf(view: EngineView, car: EngineView['state']['cars'][number]): ErsS
   const { storeJ, deployedJ, harvestedMgukJ, harvestedMguhJ, mode } = ers.value;
   const trend = perLapRate(trendSamples(view, car.id), PER_LAP_RATE_CONFIG.read(view));
   const store = known(storeJ, ers.at);
-  const lapsToAttackLevel = lapsToReach(trend, { value: storeJ, at: ers.at }, attackLevelJ, 'rising');
+  const lapsToLevel = lapsToReach(trend, { value: storeJ, at: ers.at }, attackLevelJ, 'rising');
   return {
     ...constants,
     storeJ: store,
     deployedThisLapJ: known(deployedJ, ers.at),
     harvestedThisLapJ: known(harvestedMgukJ + harvestedMguhJ, ers.at),
     storeTrendJPerLap: trend.known ? known(trend.value.perLap, trend.at) : trend,
-    lapsToAttackLevel,
-    attack: attackOf(store, attackLevelJ, lapsToAttackLevel),
+    attack: attackOf(store, attackLevelJ, lapsToLevel),
     mode: known(mode, ers.at),
     flow: flowOf(car.energy.power),
   };
 }
 
-/** The ERS state of every active car: store, this lap's flows, the store's trend over the stint, the laps to the attack level and the attack readiness. */
+/** The ERS state of every active car: store, this lap's flows, the store's trend over the stint and the attack readiness. */
 export const ersCalculator: QuickCalculator<ErsOutput> = {
   id: ERS,
   kind: 'quick',

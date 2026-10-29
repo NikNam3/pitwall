@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { carId, unknown } from '@pitwall/domain';
 import { KUH, LEC, NOR, PIA, VER, boardRow, cars, lapBoard, ms, sessionBests, sessionInfo } from './fixtures.ts';
-import { buildRows, type LapAnalysisInput } from './rows.ts';
+import { buildRows, cellOf, type LapAnalysisInput } from './rows.ts';
 
 const base = (): LapAnalysisInput => ({
   board: lapBoard(1, [
@@ -34,11 +34,12 @@ describe('buildRows', () => {
     expect(ver.theo).toMatchObject({ value: ms(VER.theo - KUH.theo), absolute: false });
   });
 
-  it('takes the code from cars.overview and falls back to the number for a car it lacks', () => {
+  it('takes the code from cars.overview; a car it lacks has an empty code with the reason (kit carCodeById)', () => {
     const input = base();
     input.cars = cars.filter((c) => c.id !== carId(4));
     const rows = buildRows(input);
-    expect(rows.map((r) => r.code)).toEqual(['KUH', 'VER', 'NOR', 'LEC', '#4']);
+    expect(rows.map((r) => r.code.text)).toEqual(['KUH', 'VER', 'NOR', 'LEC', '']);
+    expect(rows[4]!.code.reason).toBe('notReceived');
   });
 
   it('marks our cars from session.info: the player car and the teammate', () => {
@@ -48,32 +49,28 @@ describe('buildRows', () => {
     expect(buildRows(input).map((r) => r.ours)).toEqual([true, false, false, true, false]);
   });
 
-  it('gives a session best to the car that holds it, the lap and each sector', () => {
+  it("takes each cell's status from the board: session bests where it says so, none elsewhere", () => {
     const rows = buildRows(base());
     const [ref, ver, , lec] = rows;
     expect(ver?.best.status).toBe('sessionBest');
-    expect(ver?.sectors.map((s) => s.status)).toEqual(['sessionBest', 'personalBest', 'personalBest']);
-    expect(ref?.sectors.map((s) => s.status)).toEqual(['personalBest', 'sessionBest', 'personalBest']);
+    expect(ver?.sectors.map((s) => s.status)).toEqual(['sessionBest', 'none', 'none']);
+    expect(ref?.best.status).toBe('none');
+    expect(ref?.sectors.map((s) => s.status)).toEqual(['none', 'sessionBest', 'none']);
     expect(lec?.sectors[2]?.status).toBe('sessionBest');
   });
 
-  it('gives every other known best time a personal best, and unknown ones none', () => {
+  it('decides no best itself: a status the board gives is carried as is, whatever the times', () => {
     const input = base();
-    input.board = lapBoard(1, [boardRow(1, KUH, KUH), boardRow(2, NOR, KUH), boardRow(0, 'noTimes', KUH)], sessionBests);
-    const [, nor, none] = buildRows(input);
-    expect(nor?.best.status).toBe('personalBest');
-    expect(none?.best.status).toBe('none');
-    expect(none?.sectors.map((s) => s.status)).toEqual(['none', 'none', 'none']);
+    const nor = input.board.rows.find((r) => r.carId === carId(2))!;
+    nor.bestLapStatus = 'sessionBest';
+    nor.bestSectorStatus = ['none', 'none', 'sessionBest'];
+    const row = buildRows(input).find((r) => r.carId === carId(2))!;
+    expect(row.best.status).toBe('sessionBest');
+    expect(row.sectors.map((s) => s.status)).toEqual(['none', 'none', 'sessionBest']);
   });
 
   it('never lights the theoretical best', () => {
     expect(buildRows(base()).map((r) => r.theo.status)).toEqual(['none', 'none', 'none', 'none', 'none']);
-  });
-
-  it('does not give the session best to a car with an equal time that is not the holder', () => {
-    const input = base();
-    input.board = lapBoard(1, [boardRow(1, KUH, KUH), boardRow(2, VER, KUH)], { lap: [0, VER.best] });
-    expect(buildRows(input)[1]?.best.status).toBe('personalBest');
   });
 
   it('keeps a realism-hidden rival as unknown cells with the reason, and still builds the row', () => {
@@ -102,5 +99,15 @@ describe('buildRows', () => {
     const row = input.board.rows.find((r) => r.carId === carId(0))!;
     row.deltaToReference.bestLapMs = ms(12_345);
     expect(buildRows(input)[1]?.best.value).toEqual(ms(12_345));
+  });
+});
+
+describe('cellOf', () => {
+  it('gives the cell of each time column and none for DRV', () => {
+    const [ref] = buildRows(base());
+    expect(cellOf(ref!, 'best')).toBe(ref!.best);
+    expect(cellOf(ref!, 'theo')).toBe(ref!.theo);
+    expect([cellOf(ref!, 's1'), cellOf(ref!, 's2'), cellOf(ref!, 's3')]).toEqual(ref!.sectors);
+    expect(cellOf(ref!, 'drv')).toBeUndefined();
   });
 });

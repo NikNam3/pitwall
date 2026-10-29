@@ -9,7 +9,7 @@ export const widget = declareWidget({
     // Stops and compound arrive reconciled with the stint and pit-stop records.
     cars: topic('cars.overview'),
     intervals: topic('gaps.intervals'),
-    // TO US: every car's gap to the link group's primary car (our car).
+    // TO US: every car's gap to the link group's primary car; that car's own entry is notApplicable (an empty cell).
     toCar: topic('gaps.toCar', ({ link }) => ({ carId: link.primary })),
     // Deltas are measured to the same car.
     board: topic('lapTimes.board', ({ link }) => ({ referenceCarId: link.primary })),
