@@ -56,6 +56,17 @@ function membersOf<T>(spec: StructSpec, codecOf: (field: FieldSpec) => T): Struc
   });
 }
 
+/**
+ * A struct reader that returns one object literal with every field in spec order, so all results of a
+ * struct share one hidden class (a loop of keyed writes into `{}` is several times slower). The literal
+ * is generated once per spec; field names go in through `JSON.stringify`, offsets are numbers.
+ */
+function compileStructReader(members: readonly StructMember<Reader>[]): Reader {
+  const fields = members.map((member, i) => `${JSON.stringify(member.name)}: c[${i}](v, o + ${member.offset})`);
+  const build = new Function('c', `return (v, o) => ({ ${fields.join(', ')} });`) as (codecs: readonly Reader[]) => Reader;
+  return build(members.map((member) => member.codec));
+}
+
 function compileReader(spec: FieldSpec): Reader {
   switch (spec.kind) {
     case 'primitive':
@@ -63,20 +74,15 @@ function compileReader(spec: FieldSpec): Reader {
     case 'array': {
       const readItem = readerOf(spec.item);
       const stride = sizeOf(spec.item);
+      const length = spec.length;
       return (view, offset) => {
-        const items: unknown[] = [];
-        for (let i = 0; i < spec.length; i++) items.push(readItem(view, offset + i * stride));
+        const items = new Array<unknown>(length);
+        for (let i = 0; i < length; i++) items[i] = readItem(view, offset + i * stride);
         return items;
       };
     }
-    case 'struct': {
-      const members = membersOf(spec, readerOf);
-      return (view, offset) => {
-        const result: Record<string, unknown> = {};
-        for (const member of members) result[member.name] = member.codec(view, offset + member.offset);
-        return result;
-      };
-    }
+    case 'struct':
+      return compileStructReader(membersOf(spec, readerOf));
     case 'chars':
       return (view, offset) => {
         const bytes = new Uint8Array(view.buffer, view.byteOffset + offset, spec.length);
