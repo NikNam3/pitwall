@@ -8,6 +8,7 @@ const card = (n: number): BattleCard => ({
   carId: carId(n),
   ahead: unknown('notApplicable'),
   behind: unknown('notApplicable'),
+  drs: { enabled: true },
 });
 
 describe('battle feature', () => {
