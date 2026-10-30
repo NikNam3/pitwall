@@ -91,7 +91,9 @@ function compileReader(spec: FieldSpec): Reader {
       return (view, offset) => {
         const msPart = view.getUint16(offset, LITTLE_ENDIAN);
         const minutes = view.getUint8(offset + 2);
-        return minutes === 0 && msPart >= MS_PER_MINUTE ? msPart - U16_RANGE : minutes * MS_PER_MINUTE + msPart;
+        if (msPart < MS_PER_MINUTE) return minutes * MS_PER_MINUTE + msPart;
+        // minutes 0: a small negative delta; minutes >= 1: garbage from the qualifying garage, read below -120 000 ms
+        return minutes === 0 ? msPart - U16_RANGE : -(minutes * MS_PER_MINUTE + msPart);
       };
   }
 }

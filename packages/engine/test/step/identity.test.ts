@@ -56,7 +56,7 @@ describe('car identity', () => {
   // The game lowers numActiveCars when a car drops out but keeps every car in its slot (b-report.md, failure 1).
   it.each([[7, 'retired'], [5, 'disqualified'], [4, 'didNotFinish']] as const)(
     'a car out of the race (result status %i, %s) keeps its slot: every car of a 4-car field stays active when numActiveCars drops to 3',
-    (resultStatus) => {
+    (resultStatus, _name) => {
       const { st } = run(new ScenarioBuilder({ cars: 4 }).frames(1, () => {})
         .participants({ numActiveCars: 3 }).frames(1, (d) => { d.lapData.lapData[1]!.resultStatus = resultStatus; }));
       expect(st.cars.slice(0, 4).map((c) => c.active)).toEqual([true, true, true, true]);
