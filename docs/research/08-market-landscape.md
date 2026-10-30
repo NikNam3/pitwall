@@ -66,7 +66,7 @@ Ordered by value for the league use case; each points at the sub-project it fits
 | 3 | **Workbook switches by session type** (practice → `car`, quali → `quali`, race → `race`), with manual override | RaceLab smart layouts | UI shell, small |
 | 4 | **Driver tags and notes** on rivals ("defends hard", "slow out of T3", "on a 1-stop") that show in the tower and battle cards | RaceLab | 4a or SP5; the note store needs weekend lifetime |
 | 5 | **Pre-race brief and post-race debrief** as generated pages: weather, tyre allocation, deg from practice, planned stops; afterwards stints, stops, incidents, what changed the result | PITWALL ONE, RaceLab, Team Center race summary | 4b brief; SP5 debrief |
-| 6 | **Driver-facing lite view** on a phone via QR code: next stop lap, compound, target, gap ahead/behind; read-only, no controls | Team Center Lite UI, PITWALL ONE second screen, Pacedex | after 4a; reuses topics, a new workbook |
+| 6 | ~~**Driver-facing lite view** on a phone via QR code~~ (rejected by the user: pitwall is for the human engineer, not the driver) | Team Center Lite UI, PITWALL ONE second screen, Pacedex | – |
 | 7 | **Stint comparison table** for the whole field: stint lengths, average pace per stint, deg per stint, pit-lane times | Pitwall.live, undercut-f1 | 4a (deg fit gives the numbers) |
 | 8 | **Timing by lap**: scrub the tower back to any lap and see position changes and gap shifts | undercut-f1 | uses stored laps; SP5 or a tower mode |
 | 9 | **Mini sectors** computed from lap distance (the game sends only S1/S2) | f1-dash | SP5, together with the per-turn deltas (V26) |
@@ -95,9 +95,9 @@ Not worth taking:
 
 ## 5. Where pitwall is behind
 
-- **One game, one UDP format.** Only F1 25 in the 2025 format. Rivals cover several sims, and Pits n' Giggles and Pacedex already support the 2026 Season Pack. See §6.
-- **Nothing for the driver.** No overlay, phone view or voice. The friends depend on the engineer's voice on Discord. Idea 6 closes most of the gap cheaply.
-- **No track map, weather crossover or strategy yet.** These are planned for 4a, but PITWALL ONE ships them today.
+- **One game, one UDP format.** Only F1 25 in the 2025 format. Rivals cover several sims, and Pits n' Giggles and Pacedex already support the 2026 Season Pack. Other sims are a far-future goal outside the MVP (§8).
+- **Nothing for the driver.** No overlay, phone view or voice. By design: the driver gets the human engineer's voice on Discord (§8).
+- **No track map, weather crossover or strategy yet.** These are planned for SP4, but PITWALL ONE ships them today.
 - **No coaching or reference laps.** Track Titan, trophi and Delta are deep here. This is SP5 for pitwall.
 - **One engineer, one car.** Team Center, RaceLab team sync and SimEndurance share plans between several people.
 - **Setup effort.** A bridge, a forwarder and Tailscale, against a single installer with a QR code. Fine for three friends, a barrier for anyone else.
@@ -105,7 +105,7 @@ Not worth taking:
 
 ## 6. Risks found
 
-- **The F1 25 2026 Season Pack** (out 3 June 2026, $29.99) adds 2026 cars and rules: active aero and overtake boost. Its telemetry needs the in-game **UDP format "2026"**. In the 2025 format, sessions may come through as "F1 Generic" without boost and ERS data ([F1Laps](https://www.f1laps.com/faqs/f1-26-udp-telemetry-settings/)). EA published a separate spec ([EA forum thread](https://forums.ea.com/discussions/f1-25-general-discussion-en/discussion-f1%C2%AE25-2026-season-pack-udp-specification/13424444), not readable here; there is a new "Car Telemetry 2" packet). Pitwall rejects every format except 2025, and none of the repo docs mention the pack. **If the league races 2026 cars, pitwall decodes nothing.** Pits n' Giggles (MIT) already parses the 2026 format and could serve as a reference.
+- **The F1 25 2026 Season Pack** (out 3 June 2026, $29.99) adds 2026 cars and rules: active aero and overtake boost. Its telemetry needs the in-game **UDP format "2026"**. In the 2025 format, sessions may come through as "F1 Generic" without boost and ERS data ([F1Laps](https://www.f1laps.com/faqs/f1-26-udp-telemetry-settings/)). EA published a separate spec ([EA forum thread](https://forums.ea.com/discussions/f1-25-general-discussion-en/discussion-f1%C2%AE25-2026-season-pack-udp-specification/13424444), not readable here; there is a new "Car Telemetry 2" packet). Pitwall rejects every format except 2025, and none of the repo docs mention the pack. **If the league races 2026 cars, pitwall decodes nothing.** Pits n' Giggles (MIT) already parses the 2026 format and could serve as a reference. *Resolved: the league uses the 2025 format (§8).*
 - **Name collision.** PITWALL ONE (same game, same buyer), Pitwall.live/SimGrid, PitWall Pro and an MCP "Pitwall" for F1 data. This only matters for a public release.
 - **The voice-engineer market is saturated.** If pitwall is ever published, it should compete on the engineer workbench and the strategy model, not on radio.
 
@@ -116,11 +116,12 @@ Not worth taking:
 - Money in the sector goes to AI coaching (Track Titan's seed round) and to platforms buying tools (SimGrid bought Pitwall.live; Coach Dave folded Race Sync into it).
 - 🔵 For a personal league tool none of this changes the plan. For a public release, the gap is a **human-engineer workbench for F1 leagues**, which nobody serves.
 
-## 8. Open questions
+## 8. User answers (2026-10-30)
 
-1. Does the league race with 2026 cars (the Season Pack), now or next season? If yes, 2026-format support has to come before SP4.
-2. Should a driver-facing phone view (idea 6) enter the 4a scope or wait until after it?
-3. Is a public release ever the goal? If yes, rename early.
+1. **UDP format:** the league uses the 2025 format, so the Season Pack risk does not apply. Support for other simulators' outputs is a far-future goal outside the MVP.
+2. **Audience:** pitwall is for the human race engineer. No driver-facing views (idea 6 rejected).
+3. **Public release:** not a goal so far, so the name collision does not matter.
+4. **Coaching, track map and strategy** are already planned in SP4 and SP5; the ideas in §3 feed those specs.
 
 ## 9. Sources
 
