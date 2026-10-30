@@ -179,8 +179,8 @@ describe('lap-times cut-off', () => {
     const config = { [LAP_TIMES_CONFIG.key]: { eliminatedQ1: 6, eliminatedQ2: 4 } };
     const q1 = quali({ cars: 20, upMs: 900, config });
     expect(q1.p.cutOff).toMatchObject({ known: true, value: { position: 14, timeMs: 91_300 } });
-    // 20 − 6 − 4
-    const q2 = quali({ cars: 20, upMs: 900, config, session: { sessionType: 6, kind: 'qualifying' } });
+    // in Q2 F1 25 counts only the cars still in qualifying (numActiveCars 14 after 6 went out in Q1): 14 − 4
+    const q2 = quali({ cars: 14, upMs: 900, config, session: { sessionType: 6, kind: 'qualifying' } });
     expect(q2.p.cutOff).toMatchObject({ known: true, value: { position: 10, timeMs: 90_900 } });
   });
 
