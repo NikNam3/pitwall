@@ -351,3 +351,25 @@ describe("fuel calculator", () => {
     expect(Object.keys(out).sort()).toEqual(["0", "3"]);
   });
 });
+
+describe("fuel burn against the lap-end samples", () => {
+  it("a refuel in the garage on the same set restarts the burn samples: the burn is the new run's 1.5 kg/lap", () => {
+    // practice: out lap 1, laps 2-4, in lap 5 burn 1.5 kg/lap from 30 kg; the garage refuels to 30 kg without new tyres
+    // (no stint record), then out lap 6 and laps 7-9 burn 1.5 kg/lap again
+    const run1 = burnLaps(1, 5, 1.5, 30);
+    const run2 = burnLaps(6, 9, 1.5, 30);
+    const laps = [...run1, ...run2].map((l) => ({ ...l, outLap: l.lapNumber === 1 || l.lapNumber === 6, inLap: l.lapNumber === 5 }));
+    const f = run({ kg: 24, laps, session: "practice" });
+    expect(valueOf(f.burnKgPerLap)).toBeCloseTo(1.5, 9);
+  });
+
+  it("lap-end fuel with per-lap noise of up to 0.04 kg around 1.7 kg/lap: the burn is within 0.05 kg/lap of it", () => {
+    // the built trend is 1.7 kg/lap; each lap end is off it by the noise below
+    const noise = [0, 0.04, -0.03, 0.02, -0.04, 0.03, -0.01];
+    const laps = noise.map((e, i) =>
+      lap({ lapNumber: i + 1, completedAt: (i + 1) * 1000, fuelAtEndKg: known(100 - 1.7 * (i + 1) + e, (i + 1) * 1000) }),
+    );
+    const f = run({ kg: 88, laps });
+    expect(f.burnKgPerLap.known && Math.abs(f.burnKgPerLap.value - 1.7)).toBeLessThanOrEqual(0.05);
+  });
+});
