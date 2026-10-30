@@ -59,10 +59,10 @@ describe('lap-times projection', () => {
   });
 
   it.each(['retired', 'didNotFinish', 'disqualified'] as const)(
-    'a car out of the race (%s) is not projected: its projection will not come (notApplicable)',
+    'a car out of the race (%s) is not projected: its projection will not come (notApplicable), on its lap (never an out lap)',
     (resultStatus) => {
       const p = run(lapThree({ driverStatus: 'onTrack', resultStatus })).projections[carId(0)];
-      expect(p).toMatchObject({ projectedLapMs: notApplicable, deltaToBestMs: notApplicable, projectedPosition: notApplicable, finishMarginMs: notApplicable });
+      expect(p).toMatchObject({ onLap: true, projectedLapMs: notApplicable, deltaToBestMs: notApplicable, projectedPosition: notApplicable, finishMarginMs: notApplicable });
     },
   );
 
