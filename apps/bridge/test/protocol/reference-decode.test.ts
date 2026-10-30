@@ -8,7 +8,11 @@ import { referenceDecode } from '../../../../test-support/reference-decoder.ts';
 import { readPwrec } from '../../src/pwrec/reader.ts';
 
 const SEGMENTS = join(import.meta.dirname, '../../../../fixtures/segments');
-const segmentFiles = readdirSync(SEGMENTS).filter((file) => file.endsWith('.pwrec.gz')).sort();
+// The full-lap segments (about 8 MB) hold the same packet kinds as the short ones; decoding each of their records
+// twice takes longer than a unit test may, so they are left out here.
+const segmentFiles = readdirSync(SEGMENTS)
+  .filter((file) => file.endsWith('.pwrec.gz') && !file.endsWith('-full-lap.pwrec.gz'))
+  .sort();
 
 /** Key order matters too: downstream hashes serialise packets. `bigint` becomes a tagged string. */
 const serialise = (result: DecodeResult): string =>

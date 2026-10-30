@@ -2,7 +2,17 @@
 // deltas and flashbacks are part of the run.
 import { basename } from 'node:path';
 import type { FeedId } from '@pitwall/domain';
-import { SessionRunner, type Frame, type StepResult } from '@pitwall/engine';
+import {
+  activeFlagPhaseOf,
+  CalculatorRegistry,
+  Scheduler,
+  SessionRunner,
+  type Calculator,
+  type Frame,
+  type SchedulerResult,
+  type StepResult,
+} from '@pitwall/engine';
+import { IDLE_FEED } from '../../../../test-support/builders/index.ts';
 import { trackFile } from './replay.ts';
 
 export async function replayRunner(path: string, onResult: (r: StepResult, f: Frame) => void = () => {}): Promise<SessionRunner> {
@@ -13,4 +23,22 @@ export async function replayRunner(path: string, onResult: (r: StepResult, f: Fr
   });
   if (!box.runner) throw new Error(`${path}: no frame carried a session`);
   return box.runner;
+}
+
+/**
+ * `replayRunner` plus a `Scheduler` over `calculators`, every one needed, on the default config and a healthy feed:
+ * the engine and the units under test, without topics. A flashback resets the scheduler, as in the bridge.
+ */
+export async function replayScheduled(
+  path: string,
+  calculators: readonly Calculator[],
+  onStep: (r: StepResult, scheduled: SchedulerResult, f: Frame) => void = () => {},
+): Promise<SessionRunner> {
+  const scheduler = new Scheduler(CalculatorRegistry.build(calculators));
+  scheduler.setNeeded(calculators.map((c) => c.id));
+  return replayRunner(path, (r, f) => {
+    if (r.flashback) scheduler.reset();
+    const scheduled = scheduler.run({ state: r.state, activeFlagPhase: activeFlagPhaseOf(r.state), changed: r.changed, delta: r.delta, feed: IDLE_FEED, config: {} });
+    onStep(r, scheduled, f);
+  });
 }
