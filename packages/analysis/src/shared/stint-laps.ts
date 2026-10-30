@@ -1,4 +1,4 @@
-// The laps of a car's current stint, one record per lap: the one rule for the analyses that rate or average a stint.
+// A car's laps and those of its current stint, one record per lap: the one rule for the analyses that rate or average them.
 import { currentLaps, type CarId, type LapRecord, type StintRecord } from '@pitwall/domain';
 import type { EngineView } from '@pitwall/engine';
 
@@ -21,12 +21,16 @@ export function stintLaps<L extends { lapNumber: number }>(
 }
 
 /**
- * The car's laps of its current stint (`stintLaps`), one record per lap (confirmed over provisional, as the domain's
- * `currentLaps`), sorted by lap number. The records are the view's, to be read only.
+ * The car's laps, one record per lap (confirmed over provisional, as the domain's `currentLaps`), sorted by lap number.
+ * The records are the view's, to be read only.
  */
-export function currentStintLaps(history: History, carId: CarId): LapRecord[] {
+export function carLaps(history: Pick<History, 'laps'>, carId: CarId): LapRecord[] {
   // the view is deep-readonly; the records are only read
-  const own = currentLaps((history.laps as readonly LapRecord[]).filter((l) => l.carId === carId));
+  return currentLaps((history.laps as readonly LapRecord[]).filter((l) => l.carId === carId));
+}
+
+/** The car's laps of its current stint (`stintLaps`), as `carLaps` gives them. */
+export function currentStintLaps(history: History, carId: CarId): LapRecord[] {
   const last = history.stints.filter((s) => s.carId === carId).at(-1);
-  return stintLaps(own, last);
+  return stintLaps(carLaps(history, carId), last);
 }

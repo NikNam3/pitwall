@@ -14,6 +14,7 @@ import {
   type SessionTime,
 } from '@pitwall/domain';
 import type { EngineView, IncrementalCalculator } from '@pitwall/engine';
+import { LAP_CLASSES_CONFIG } from '../lap-classes/index.ts';
 import { PACE_CONFIG } from '../pace/index.ts';
 import { paceDeltaAround } from '../pace-delta/index.ts';
 import { DAMAGE, DAMAGE_CONFIG, type DamageOutput } from './index.ts';
@@ -40,12 +41,14 @@ type Acc = {
   jumpPct: number;
   jumpWindowMs: number;
   isRace: boolean;
+  maxNeutralisedMs: number;
   window: number;
 };
 
 const settings = (view: EngineView) => ({
   ...DAMAGE_CONFIG.read(view),
   isRace: view.state.session.kind === 'race',
+  ...LAP_CLASSES_CONFIG.read(view),
   window: PACE_CONFIG.read(view).window,
 });
 

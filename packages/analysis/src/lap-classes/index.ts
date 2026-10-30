@@ -2,15 +2,23 @@
 import type { LapRecord } from '@pitwall/domain';
 import type { DeepReadonly } from '@pitwall/engine';
 
+export * from './config.ts';
+
 /**
- * Which uses a lap counts for. `forPace`: valid, no in or out lap, `scShare` and `vscShare` 0, not lap 1 of a race.
- * `forRate`: no in or out lap, `scShare` and `vscShare` 0. `forBest`: per sector the sector is valid; the lap is valid.
+ * Which uses a lap counts for. `forRate`: no in or out lap, neutralised time below `maxNeutralisedMs`. `forPace`: a
+ * rate lap that is valid and not lap 1 of a race. `forBest`: per sector the sector is valid; the lap is valid.
  */
 export type LapClass = { forPace: boolean; forRate: boolean; forBest: { lap: boolean; sectors: [boolean, boolean, boolean] } };
 
+/** The session and the `lap-classes` config, as `classifyLap` needs them. */
+export type LapClassOptions = { isRace: boolean; maxNeutralisedMs: number };
+
+/** Time of the lap under SC or VSC, in ms. */
+const neutralisedMs = (lap: DeepReadonly<LapRecord>): number => (lap.scShare + lap.vscShare) * lap.lapTimeMs;
+
 /** Classifies one lap record. */
-export function classifyLap(lap: DeepReadonly<LapRecord>, session: { isRace: boolean }): LapClass {
-  const forRate = !lap.inLap && !lap.outLap && lap.scShare === 0 && lap.vscShare === 0;
-  const forPace = forRate && lap.valid.lap && !(session.isRace && lap.lapNumber === 1);
+export function classifyLap(lap: DeepReadonly<LapRecord>, opts: LapClassOptions): LapClass {
+  const forRate = !lap.inLap && !lap.outLap && neutralisedMs(lap) < opts.maxNeutralisedMs;
+  const forPace = forRate && lap.valid.lap && !(opts.isRace && lap.lapNumber === 1);
   return { forPace, forRate, forBest: { lap: lap.valid.lap, sectors: [...lap.valid.sectors] } };
 }

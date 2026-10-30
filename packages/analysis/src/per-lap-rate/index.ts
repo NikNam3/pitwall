@@ -1,4 +1,4 @@
-// `per-lap-rate` (spec 4): a robust per-lap slope and the laps until a target. A function, imported by the analyses that use it.
+// `per-lap-rate` (spec 4): robust per-lap rates and the laps until a target. Functions, imported by the analyses that use them.
 import { known, unknown, type Known, type SessionTime } from '@pitwall/domain';
 
 export * from './config.ts';
@@ -6,17 +6,40 @@ export * from './config.ts';
 /** A per-lap rate in the samples' unit per lap, and how many samples it rests on. */
 export type Rate = { perLap: number; samples: number };
 
-/** A sample of a per-lap value; `at` is the session time it was taken (the lap's completion). The result's `at` is the newest used sample's. */
+/** Sizes of a rate's sample window. */
+export type RateOptions = { window: number; minSamples: number };
+
+/** The last `window` samples, newest last; `undefined` when they are fewer than `minSamples` or none. */
+function windowOf<S>(samples: readonly S[], opts: RateOptions): S[] | undefined {
+  const used = opts.window > 0 ? samples.slice(-opts.window) : [];
+  return used.length > 0 && used.length >= opts.minSamples ? used : undefined;
+}
+
+/** One lap's own change of a value (its end sample against its start sample); `at` is the lap's completion. */
+export type GainSample = { lap: number; gain: number; at: SessionTime };
+
+/**
+ * The median of the last `window` gains (sorted by lap, newest last), as of the newest; `unknown('insufficientData')`
+ * below `minSamples`. A lap's gain is its own, so laps that are no samples leave nothing behind in the rate.
+ */
+export function perLapGainRate(samples: GainSample[], opts: RateOptions): Known<Rate> {
+  const used = windowOf(samples, opts);
+  const newest = used?.at(-1);
+  if (used === undefined || newest === undefined) return unknown('insufficientData');
+  return known({ perLap: median(used.map((s) => s.gain)), samples: used.length }, newest.at);
+}
+
+/** A value sampled once a lap, e.g. a gap at the line; `at` is when it was taken. The result's `at` is the newest used sample's. */
 export type RateSample = { lap: number; value: number; at: SessionTime };
 
 /**
  * Theil–Sen slope (median of the pairwise slopes) of the last `window` samples (sorted by lap, newest last);
- * `unknown('insufficientData')` below `minSamples`.
+ * `unknown('insufficientData')` below `minSamples`. For values sampled at the line that no lap owns, such as a gap.
  */
-export function perLapRate(samples: RateSample[], opts: { window: number; minSamples: number }): Known<Rate> {
-  const used = opts.window > 0 ? samples.slice(-opts.window) : [];
-  const newest = used[used.length - 1];
-  if (newest === undefined || used.length < opts.minSamples) return unknown('insufficientData');
+export function perLapRate(samples: RateSample[], opts: RateOptions): Known<Rate> {
+  const used = windowOf(samples, opts);
+  const newest = used?.at(-1);
+  if (used === undefined || newest === undefined) return unknown('insufficientData');
   const slopes: number[] = [];
   used.forEach((a, i) => {
     for (const b of used.slice(i + 1)) {
