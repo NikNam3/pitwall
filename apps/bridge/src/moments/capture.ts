@@ -1,5 +1,5 @@
 // Named moments (spec 9.1): the topic values a client would hold at one point of a recording.
-import { TOPICS, type MomentValues, type ServerMessage, type TopicName } from '@pitwall/contracts';
+import { canonicalJson, TOPICS, type MomentValues, type ServerMessage, type TopicName } from '@pitwall/contracts';
 import { carId, feedId, MAX_CARS, type CarId } from '@pitwall/domain';
 import { effectiveConfig, recordingConfig } from '../feature-config.ts';
 import { FEATURES } from '../features/index.generated.ts';
@@ -25,13 +25,7 @@ const paramsFor = (topic: TopicName, carIds: readonly CarId[]): object[] => {
   return momentParams?.(carIds) ?? [{}];
 };
 
-/** JSON with sorted object keys, so params that are equal give the same subscription id. */
-const canonical = (value: unknown): string =>
-  JSON.stringify(value, (_k, v: unknown) =>
-    typeof v === 'object' && v !== null && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) : v,
-  );
-
-const subscriptionId = (topic: TopicName, params: object): string => `${topic}:${canonical(params)}`;
+const subscriptionId = (topic: TopicName, params: object): string => `${topic}:${canonicalJson(params)}`;
 
 /** Hands packets on (with hooks around each) until one lies past `untilMs` (receive time from the first record), then stops the inner source. */
 class StopAfterSource implements PacketSource {
