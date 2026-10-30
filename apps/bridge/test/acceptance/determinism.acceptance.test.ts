@@ -3,7 +3,7 @@ import { expect, it } from 'vitest';
 import { describeWithFixture, type FixtureName } from '../../../../test-support/fixtures.ts';
 import { topicStreamHash } from '../../src/pipeline/stream-hash.ts';
 
-// User ruling 2026-10-30: the time trial is too special a case, and the two big races (raceSingaporeWet, raceZandvoortUidReuse) cost too long.
+// User ruling 2026-10-30: the time trial is too special a case, and the big races (raceSingaporeWet, raceZandvoortUidReuse, raceWetVscMexico) cost too long.
 const names: FixtureName[] = ['raceSingapore', 'menuOnly', 'qualifyingSingapore', 'practiceZandvoortOnline', 'raceZandvoortOnline', 'practiceZandvoortUidReuse', 'lobbyOnly'];
 const hashes = new Map<FixtureName, string>();
 for (const name of names) {
