@@ -3,7 +3,11 @@
 // `opts`, `data` and `target` in `instances`, and has `setSize(size)`, `setData(data)` and `destroy()` that record their calls.
 // Contract the tests assume of Chart.svelte:
 //  - `data[0]` is the x values and `data[i + 1]` the y values of `series[i]` (union of x's is not required: each series
-//    is given its own points, so the test uses series that share x values);
+//    is given its own points, so the test uses series that share x values); after the n series' lines come their n
+//    live lines (`plotLines`, wave 2 T6): `data[n + i + 1]` and `opts.series[n + i + 1]` are `series[i]`'s live segment,
+//    all nulls when it has no live end, so the plot's series never depend on which series are live;
+//  - a live line strokes like its series (colour, width, alpha) with the theme's live dash `--pw-chart-live-dash`
+//    (numbers, px on and px off) as its `dash`; a solid series has no dash;
 //  - colours are resolved at construction time from the document root's `--pw-*` variables (uPlot cannot use `var()`);
 //  - `opts.series[0]` is the x series; `opts.series[i + 1]` belongs to `series[i]`;
 //  - `opts.width` / `opts.height` are `size.px`; a size change calls `setSize({ width, height })` (or rebuilds);
@@ -51,7 +55,9 @@ const VARS: Record<string, string> = {
   '--pw-series1': '#a10001', '--pw-series2': '#a20002', '--pw-series3': '#a30003',
   '--pw-series4': '#a40004', '--pw-series5': '#a50005', '--pw-series6': '#a60006',
   '--pw-font': '"JetBrains Mono", monospace', '--pw-font-px': '13px',
+  '--pw-chart-live-dash': '2 5',
 };
+const LIVE_DASH = [2, 5];
 const size = (width: number): WidgetSize => ({ mode: 'full', cols: Math.floor(width / 8), rows: 20, px: { width, height: 300 }, dpr: 1 });
 const pts = (k: number): Array<[number, number]> => [[1, k], [2, k + 1], [3, k + 2]];
 const last = (): Fake => instances[instances.length - 1];
@@ -71,14 +77,14 @@ describe('Chart: series', () => {
   it('hands uPlot the --pw-series1... values for series without a colour, in order', () => {
     render(Chart, { ...base, series: [1, 2, 3, 4, 5, 6].map((k) => ({ label: `s${k}`, points: pts(k) })) });
     const s = last().opts.series;
-    expect(s).toHaveLength(7);
-    expect(s.slice(1).map((x: any) => x.stroke)).toEqual(['#a10001', '#a20002', '#a30003', '#a40004', '#a50005', '#a60006']);
-    expect(s.slice(1).map((x: any) => x.label)).toEqual(['s1', 's2', 's3', 's4', 's5', 's6']);
+    expect(s).toHaveLength(13);
+    expect(s.slice(1, 7).map((x: any) => x.stroke)).toEqual(['#a10001', '#a20002', '#a30003', '#a40004', '#a50005', '#a60006']);
+    expect(s.slice(1, 7).map((x: any) => x.label)).toEqual(['s1', 's2', 's3', 's4', 's5', 's6']);
   });
 
   it('gives uPlot x values first and each series y values', () => {
     render(Chart, { ...base, series: [{ label: 'a', points: pts(10) }, { label: 'b', points: pts(20) }] });
-    expect(last().data).toEqual([[1, 2, 3], [10, 11, 12], [20, 21, 22]]);
+    expect(last().data).toEqual([[1, 2, 3], [10, 11, 12], [20, 21, 22], [null, null, null], [null, null, null]]);
   });
 
   it('uses a given car colour (resolved), dashes the teammate and draws own cars thicker', () => {
@@ -115,7 +121,68 @@ describe('Chart: series', () => {
       ...base,
       series: [{ label: 'a', points: pts(1), fresh: false }, { label: 'b', points: pts(2), fresh: true }, { label: 'c', points: pts(3) }],
     });
-    expect(last().opts.series.slice(1).map((s: any) => s.alpha)).toEqual([0.35, 1, 1]);
+    expect(last().opts.series.slice(1, 4).map((s: any) => s.alpha)).toEqual([0.35, 1, 1]);
+  });
+});
+
+describe('Chart: the live segment', () => {
+  const own = { colour: '#c13b43', dashed: false, ownCar: true };
+  const mate = { colour: '#c13b43', dashed: true, ownCar: false };
+  const liveSeries = () => [
+    { label: 'a', points: [...pts(1), [3.5, 3.4]] as Array<[number, number]>, liveEnd: true, colour: own },
+    { label: 'b', points: pts(2), fresh: false },
+    { label: 'c', points: [...pts(3), [3.4, 5.2]] as Array<[number, number]>, liveEnd: true, colour: mate },
+  ];
+
+  it("draws each series' live line after the series, in its look with the theme's live dash", () => {
+    render(Chart, { ...base, series: liveSeries() });
+    const s = last().opts.series;
+    expect(s).toHaveLength(7);
+    const [solid, live] = [s.slice(1, 4), s.slice(4, 7)];
+    live.forEach((l: any, i: number) => {
+      expect(l.stroke, `live ${i}`).toBe(solid[i].stroke);
+      expect(l.width, `live ${i}`).toBe(solid[i].width);
+      expect(l.alpha, `live ${i}`).toBe(solid[i].alpha);
+      expect(l.dash, `live ${i}`).toEqual(LIVE_DASH);
+    });
+    expect(solid[0].dash ?? []).toHaveLength(0);
+  });
+
+  it('hands uPlot the live segments after the settled points, all nulls for a series without a live end', () => {
+    render(Chart, { ...base, series: liveSeries() });
+    expect(last().data).toEqual([
+      [1, 2, 3, 3.4, 3.5],
+      [1, 2, 3, null, null],
+      [2, 3, 4, null, null],
+      [3, 4, 5, null, null],
+      [null, null, 3, null, 3.4],
+      [null, null, null, null, null],
+      [null, null, 5, 5.2, null],
+    ]);
+  });
+
+  it('a live end that comes or goes updates the same plot: no new constructor call, no destroy', async () => {
+    const { rerender } = render(Chart, { ...base, series: liveSeries() });
+    const first = last();
+    const count = instances.length;
+    // car a crosses the line (its live end goes), car b leaves it (a live end comes)
+    const next = [
+      { label: 'a', points: [...pts(1), [4, 3.5]] as Array<[number, number]>, colour: own },
+      { label: 'b', points: [...pts(2), [3.1, 4.1]] as Array<[number, number]>, fresh: false, liveEnd: true },
+      liveSeries()[2]!,
+    ];
+    await rerender({ ...base, series: next });
+    expect(instances.length).toBe(count);
+    expect(first.destroy).not.toHaveBeenCalled();
+    expect(first.setData.mock.calls.at(-1)![0]).toEqual([
+      [1, 2, 3, 3.1, 3.4, 4],
+      [1, 2, 3, null, null, 3.5],
+      [2, 3, 4, null, null, null],
+      [3, 4, 5, null, null, null],
+      [null, null, null, null, null, null],
+      [null, null, 4, 4.1, null, null],
+      [null, null, 5, null, 5.2, null],
+    ]);
   });
 });
 
@@ -213,7 +280,7 @@ describe('Chart: width', () => {
     expect(instances.length).toBe(count);
     expect(first.destroy).not.toHaveBeenCalled();
     expect(first.setData).toHaveBeenCalled();
-    expect(first.setData.mock.calls.at(-1)![0]).toEqual([[1, 2, 3, 4], [5, 6, 7, 8]]);
+    expect(first.setData.mock.calls.at(-1)![0]).toEqual([[1, 2, 3, 4], [5, 6, 7, 8], [null, null, null, null]]);
   });
 
   it('a size-only change calls setSize on the same plot, without rebuilding', async () => {

@@ -9,11 +9,19 @@
 //    a stale line, else 1) and `ctx.font` the chart font (`--pw-font-px` and `--pw-font`; canvas scale 1 here: `size.dpr`
 //    and `uPlot.pxRatio` are 1), bold (`bold` or a weight of 600 to 900) exactly for an own car;
 //  - `x` lies right of the plot (`x >= bbox.left + bbox.width`); labels of lines that end on the same value are drawn
-//    at least one font height apart.
+//    at least one font height apart;
+//  - the column of labels starts one column gap right of the plot: the active theme's `density.columnGapCols` cells of
+//    `cellBox(fontPx, lineHeight).width` (wave 2 T6: read as the theme's value, whatever unit `--pw-col-gap` carries);
+//  - a line that ends well before the newest x (a retired car, or a lapped car counting its own laps: 1.5 laps or more
+//    here) is labelled at its own end instead, inside the plot: `x` from its end's px up to two font heights right of it,
+//    `y` within a font height of its end's px; a line ending within the last lap (the running field's live ends, up to
+//    0.7 laps before the newest x here) keeps its label in the column. Where between the two the cut lies is free.
 import { cleanup, render } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ChartSeries } from '../../src/kit/chart/data.ts';
+import { cellBox } from '../../src/kit/size/size.ts';
 import type { WidgetSize } from '../../src/kit/types.ts';
+import { THEMES, applyTheme } from '../../src/theme/index.ts';
 
 const { instances } = vi.hoisted(() => ({ instances: [] as any[] }));
 vi.mock('uplot', () => ({
@@ -49,8 +57,14 @@ const pts = (end: number): Array<[number, number]> => [[1, end - 2], [2, end - 1
 
 type Text = { text: string; x: number; y: number; fillStyle: unknown; font: string; globalAlpha: number };
 
-/** Renders the chart, runs its draw hooks on a fake plot of 300 x 200 canvas px and returns the texts drawn. */
-function drawnTexts(series: ChartSeries[]): { texts: Text[]; bbox: { left: number; top: number; width: number; height: number } } {
+type Scale = { min: number; max: number };
+type Drawn = { texts: Text[]; bbox: { left: number; top: number; width: number; height: number }; valToPos: (v: number, scale: string) => number };
+
+/**
+ * Renders the chart, runs its draw hooks on a fake plot of 300 x 200 canvas px and returns the texts drawn; `x` is the
+ * fake plot's x scale (default laps 1 to 3, the range of `pts`).
+ */
+function drawnTexts(series: ChartSeries[], x: Scale = { min: 1, max: 3 }): Drawn {
   render(Chart, { ...base, series });
   const inst = instances[instances.length - 1];
   const texts: Text[] = [];
@@ -75,7 +89,8 @@ function drawnTexts(series: ChartSeries[]): { texts: Text[]; bbox: { left: numbe
   });
   const bbox = { left: 50, top: 10, width: 300, height: 200 };
   const y = { min: 0, max: 25 };
-  const x = { min: 1, max: 3 };
+  const valToPos = (v: number, scale: string) =>
+    scale === 'x' ? bbox.left + ((v - x.min) / (x.max - x.min)) * bbox.width : bbox.top + ((y.max - v) / (y.max - y.min)) * bbox.height;
   const u = {
     ctx,
     bbox,
@@ -84,13 +99,10 @@ function drawnTexts(series: ChartSeries[]): { texts: Text[]; bbox: { left: numbe
     scales: { x, y },
     width: size.px.width,
     height: size.px.height,
-    valToPos: (v: number, scale: string) =>
-      scale === 'x'
-        ? bbox.left + ((v - x.min) / (x.max - x.min)) * bbox.width
-        : bbox.top + ((y.max - v) / (y.max - y.min)) * bbox.height,
+    valToPos,
   };
   for (const h of (inst.opts.hooks?.draw ?? []) as Array<(u: unknown) => void>) h(u);
-  return { texts, bbox };
+  return { texts, bbox, valToPos };
 }
 
 const byText = (texts: Text[], text: string): Text => {
@@ -154,5 +166,52 @@ describe('Chart: end-of-line labels', () => {
       { label: 'NOR', points: pts(12), colour: rival },
     ]);
     expect(Math.abs(byText(texts, 'VER').y - byText(texts, 'NOR').y)).toBeGreaterThanOrEqual(FONT_PX - 1e-9);
+  });
+});
+
+describe('Chart: the column of labels', () => {
+  afterEach(() => document.documentElement.removeAttribute('style'));
+
+  it.each(THEMES.map((t) => [t.name, t] as const))("%s: starts one column gap of the theme right of the plot", (_name, theme) => {
+    applyTheme(theme, document.documentElement);
+    const { texts, bbox } = drawnTexts([{ label: 'VER', points: pts(12), colour: rival }]);
+    const cell = cellBox(theme.fontPx, theme.density.lineHeight).width;
+    expect(byText(texts, 'VER').x - (bbox.left + bbox.width)).toBeCloseTo(theme.density.columnGapCols * cell, 6);
+  });
+});
+
+// A line that ends before the newest x (review RU8, wave 2 T6): its label at the right edge would sit at the y of a
+// line that stopped further left, as if a running car were there.
+describe('Chart: the label of a line that ends early', () => {
+  /** Laps 1 to `to` at a constant y, then a live point at `now` (when given). */
+  const run = (to: number, y: number, now?: number): Array<[number, number]> => [
+    ...Array.from({ length: to }, (_, i): [number, number] => [i + 1, y]),
+    ...(now === undefined ? [] : [[now, y] as [number, number]]),
+  ];
+  // the newest x is VER's live point at 11.8: LEC 0.7 laps behind on the lead lap, KUH lapped (its own lap 10.3),
+  // OCO retired after lap 7
+  const field = (): ChartSeries[] => [
+    { label: 'VER', points: run(11, 20, 11.8), liveEnd: true, colour: rival },
+    { label: 'LEC', points: run(11, 15, 11.1), liveEnd: true, colour: rival },
+    { label: 'KUH', points: run(10, 8, 10.3), liveEnd: true, colour: own },
+    { label: 'OCO', points: run(7, 3), colour: rival },
+  ];
+  const X = { min: 1, max: 11.8 };
+
+  it('labels a retired and a lapped car at their own line ends, inside the plot', () => {
+    const { texts, bbox, valToPos } = drawnTexts(field(), X);
+    for (const [label, endX, endY] of [['KUH', 10.3, 8], ['OCO', 7, 3]] as const) {
+      const t = byText(texts, label);
+      const end = { x: valToPos(endX, 'x'), y: valToPos(endY, 'y') };
+      expect(t.x, label).toBeGreaterThanOrEqual(end.x);
+      expect(t.x, label).toBeLessThanOrEqual(end.x + 2 * FONT_PX);
+      expect(t.x, label).toBeLessThan(bbox.left + bbox.width);
+      expect(Math.abs(t.y - end.y), label).toBeLessThanOrEqual(FONT_PX);
+    }
+  });
+
+  it('keeps the labels of the running field in the column right of the plot', () => {
+    const { texts, bbox } = drawnTexts(field(), X);
+    for (const label of ['VER', 'LEC']) expect(byText(texts, label).x, label).toBeGreaterThanOrEqual(bbox.left + bbox.width);
   });
 });
