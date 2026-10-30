@@ -80,6 +80,12 @@ const gallery: GalleryEntry<typeof widget> = {
     },
     // default reference; our car white and thicker, the teammate dashed, McLaren's second car dashed
     greenFlag: base,
+    // a train within a second of the leader, ZHO far behind: five lines end within one text row, so their end labels
+    // are pushed apart in gap order
+    closeTogether: {
+      ...base,
+      gapper: lines({ cars: [line(2, 12, 0), line(3, 12, 20), line(5, 12, 40), line(0, 12, 60), line(4, 12, 80), line(1, 12, 1500)] }),
+    },
     virtualSafetyCarAndRed: { ...base, phases: [{ ...scPhase(3, 4), kind: 'VSC' }, { ...scPhase(9, 9), kind: 'red' }] },
     // retired car: its line stops at lap 7; lapped car: it has completed fewer laps than the leader
     retiredAndLapped: {
