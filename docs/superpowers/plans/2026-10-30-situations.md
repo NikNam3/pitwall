@@ -133,10 +133,10 @@
 **Files:** Create `packages/engine/src/history/situations/race-control.ts`; modify `engine-state.ts` (`History.raceControl`), `calc/types.ts` (`EngineView.situation.raceControl`), `packages/analysis/src/battle/calculator.ts`; delete `packages/analysis/src/shared/drs-status.ts`. Tests: bring in `w2/drs` (T3) and adapt to the spans.
 
 **Interfaces:**
-- Produces: `export type RaceControlSpan = { kind: 'drs'; status: DrsStatus; start: SessionTime; end: SessionTime }`; `History.raceControl: RaceControlSpan[]`; `EngineView.situation.raceControl: { drs: DrsStatus }`. The engine maps an unknown DRSD reason code to `'unknown'`.
+- Produces: `export type RaceControlSpan = { kind: 'drs'; status: DrsStatus; start: SessionTime; end: SessionTime }`; `History.raceControl: RaceControlSpan[]`; `EngineView.situation.raceControl: { drs: DrsStatus; compoundRuleWaived: ReadonlyArray<boolean> }` (by car id; true from the first race lap on intermediates or wets). The engine maps an unknown DRSD reason code to `'unknown'`.
 
 - [ ] **Step 0 (supervisor):** domain and state/view fields.
-- [ ] **Step 1 (test agent):** the rules of spec 3.4 (before lights out `notEnabledYet`; a DRSD before lights out stands; after a late join with no DRS event, on; DRSE/DRSD; an unknown code is `unknown`); `BattleCard.drs` from the view; the `race-zandvoort-vsc` segment; T3's tests adapted. Run: fail.
+- [ ] **Step 1 (test agent):** the rules of spec 3.4 (before lights out `notEnabledYet`; a DRSD before lights out stands; after a late join with no DRS event, on; DRSE/DRSD; an unknown code is `unknown`); `BattleCard.drs` from the view; the `race-zandvoort-vsc` segment; T3's tests adapted; `compoundRuleWaived` (false on slicks, true from the first race lap on intermediates or wets and stays true, false in practice and qualifying). Run: fail.
 - [ ] **Step 2 (implementer):** implement; battle reads `view.situation.raceControl.drs`.
 - [ ] **Step 3:** engine and analysis tests pass.
 - [ ] **Step 4:** commit `feat(engine): race control spans; DRS status from them`.

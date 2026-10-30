@@ -55,6 +55,7 @@ At `formation`'s close (the race's first LGOT after STLG), the tracker cuts the 
 Recorded by the tracker as spans too:
 - **DRS** (on, or off with a reason): DRSE / DRSD events (the engine maps an unknown reason code to `unknown`). In a race before lights out: off, `notEnabledYet`. After a late join (no lights out seen) with no DRS event: on. A DRSD before lights out (a wet start) stands until a DRSE. `BattleCard.drs` reads these spans (replaces the helper of the live-test fixes).
 - **Weather and temperatures** per Session packet, as the lap conditions read them (4.4).
+- **Wet-weather rule changes** (user ruling 2026-10-30: wet and dry enter the situations only where the rules change): DRS off for a wet track comes through the DRS span above (DRSD reason wet track); and per car `compoundRuleWaived`, true from the first race lap the car runs on intermediates or wets (visual compounds 7, 8): the obligation to use two different dry compounds no longer applies to it (FIA Sporting Regulations, tyre use in a race declared wet by the use of wet-weather tyres). Read by SP4's strategy; no display for now.
 
 ## 4. Car situations
 
