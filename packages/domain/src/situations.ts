@@ -25,6 +25,8 @@ export type SessionPhaseDetail =
 
 /**
  * One closed phase. `startLeaderLap` / `endLeaderLap` are the leader's lap in progress at the start and the end.
+ * `end` can lie below `start` when the game reset the session clock inside the phase (the formation lap): take
+ * durations from leader laps, not from session times, across such a span.
  * `joinedAt` marks a phase the engine joined after it began (its `start` is the first frame the engine saw).
  */
 export type SessionPhaseSpan = {

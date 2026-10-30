@@ -87,6 +87,8 @@
 
 ## Task 3: Car situations (spec 4.1, 4.3)
 
+Additions from review 2 (2026-10-30): the engine records a finisher's finish-line crossing (the game holds the lap number and wraps the lap distance at the flag: push `(lap + 1, segment 0)` at that wrap) and no mini-sector crossings in `coolDown` (finish segment from `raceFriendWet` about 2215–2232 s, under 1 MB, one behaviour: every finisher's final lap is in `lineTimes` and on the gapper); `history/laps.ts` (`scMs`/`vscMs`) and `pit-stops.ts` stop reading the raw safety car status (spans instead).
+
 **Files:** Create `packages/engine/src/history/situations/car-situation.ts`; modify `situations/index.ts`, `engine-state.ts` (`History.carSituations`, open per car; supervisor), `calc/types.ts` (`EngineView.situation.cars`; supervisor). Tests: `packages/engine/test/situations/car-situation.test.ts`; segments (existing): `race-zandvoort-pit-stop`, `race-zandvoort-pit-exit`, `race-drive-through`, `practice-wing-change`, `race-zandvoort-retire`; new under 1 MB where the catalogue names a window (garage entry and exit from `practiceFriendWings`, a finish from `raceWetVscMexico`).
 
 **Interfaces:**
@@ -129,6 +131,8 @@
 - [ ] **Step 4:** commit `feat(engine): laps, pit stops and stints from the situation spans; lap conditions; rates per stint at the current mix`.
 
 ## Task 5: Race control spans (spec 3.4)
+
+Addition from review 2: the formation discard drops DRSE/DRSD sent before lights out (S4); reconcile with spec 3.4 "a DRSD before lights out stands" (DRS events are race control, not formation history: keep them through the discard, or rule otherwise with the user).
 
 **Files:** Create `packages/engine/src/history/situations/race-control.ts`; modify `engine-state.ts` (`History.raceControl`), `calc/types.ts` (`EngineView.situation.raceControl`), `packages/analysis/src/battle/calculator.ts`; delete `packages/analysis/src/shared/drs-status.ts`. Tests: bring in `w2/drs` (T3) and adapt to the spans.
 
@@ -182,6 +186,8 @@
 - [ ] **Step 4:** commit `feat(ui): the tower and the top bar show the situations`.
 
 ## Task 9: The situations catalogue and the recording checklist (spec 9)
+
+Addition from review 2: a penalty given during the formation lap is discarded with it while the car's penalty counters stay: the catalogue says so, and the recording checklist asks for one.
 
 **Files:** Create `docs/research/09-situations-catalogue.md` from the inventory and the diagnosis, one section per situation: signals with times in our recordings, the tracker's rule (link to the code), the behaviour row, the test (segment or builder), "seen in" / "not yet seen". Update `docs/testing.md` section 3 (the start segments) and `docs/architecture.md` (the tracker in the data flow, "Where state lives").
 

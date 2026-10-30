@@ -122,7 +122,7 @@ The gallery renders every case of every display at every declared size and theme
 - The engine never reads the system clock. Time comes only from `sessionTime` and frame IDs.
 - Randomness only through an injected, seeded generator.
 - The same input stream always produces the same state and the same topic stream.
-- Wall-clock time (`receivedAtMs`) exists only in the shell, for diagnostics, except that `SessionTracker` compares receive times (differences only) for the `SEND` grace window, because UID-0 packets carry no usable session time.
+- Wall-clock time (`receivedAtMs`) enters the engine only as receive-time differences on frames: `SessionTracker` compares receive times to assemble frames, and the situation tracker reads the wall gap between frames for offline pauses and to tell a post-session jump from garage time acceleration. A recording's record time `t` reproduces them, so a replay stays deterministic; nothing in the engine reads the clock.
 
 ## Parallel development
 
