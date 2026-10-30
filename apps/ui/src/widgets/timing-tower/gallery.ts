@@ -73,6 +73,14 @@ const gallery: GalleryEntry<typeof widget> = {
       ...field,
       intervals: intervals.map((i) => (i.carId === carId(1) ? interval(1, 2184, 2184, 0, 19) : i.carId === carId(2) ? interval(2, 5903, 3719, 0, -19) : i)),
     },
+    // Unserved penalties: NOR a drive-through, PIA a stop-go beside a 5 s time penalty (the time in the title), LEC 5 s.
+    driveThrough: {
+      ...field,
+      cars: cars.map((c) =>
+        c.id === carId(1) ? overview(1, { name: 'Lando Norris', position: 2, gridPosition: 3, unservedDriveThroughs: 1 })
+        : c.id === carId(5) ? overview(5, { name: 'Oscar Piastri', position: 6, gridPosition: 5, age: 15, unservedStopGos: 1, timePenaltyMs: 5000 })
+        : c),
+    },
     // Outside the race the moment is not applicable.
     noMoment: { ...field, moment: unknown('notApplicable') },
   },
