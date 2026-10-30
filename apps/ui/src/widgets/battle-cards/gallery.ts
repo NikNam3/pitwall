@@ -20,7 +20,7 @@ const alb: BattleSide = {
   carId: carId(7), gapMs: k(841), closingMsPerLap: k(220), lapsToDrs: k(0), paceDeltaMs: k(-420), overtakeMarginMs: k(-1420),
   ours: { compound: 'medium', age: 12 }, theirs: { compound: 'medium', age: 1 }, theirErsStoreJ: unknown('realism'),
 };
-const card: BattleCard = { carId: carId(1), ahead: k(lec), behind: k(alb) };
+const card: BattleCard = { carId: carId(1), ahead: k(lec), behind: k(alb), drs: { enabled: true } };
 
 const moment = (name: Moment): Known<RaceMoment> =>
   k({ moment: name, since: unknown('notApplicable'), cause: { rule: name, params: { carId: 1, side: 'behind', lapsToDrs: 0, gapMs: 841 } }, active: [name] });
@@ -43,7 +43,18 @@ const gallery: GalleryEntry<typeof widget> = {
     // Race leader: nobody ahead.
     leader: { card: { ...card, ahead: unknown('notApplicable') }, cars, moment: undefined },
     // Linked car in realism mode: every value hidden.
-    allHidden: { card: { carId: carId(1), ahead: unknown('realism'), behind: unknown('realism') }, cars, moment: undefined },
+    allHidden: { card: { carId: carId(1), ahead: unknown('realism'), behind: unknown('realism'), drs: { enabled: true } }, cars, moment: undefined },
+    // Race control has DRS off for a wet track: TO DRS reads "DRS off" on both rows, the reason in its title.
+    drsOffWet: {
+      card: {
+        ...card,
+        ahead: k({ ...lec, lapsToDrs: unknown('notApplicable') }),
+        behind: k({ ...alb, lapsToDrs: unknown('notApplicable') }),
+        drs: { enabled: false, reason: 'wetTrack' },
+      },
+      cars,
+      moment: undefined,
+    },
   },
   fit: [
     { mode: 'compact', cols: 26, rows: 3 },
