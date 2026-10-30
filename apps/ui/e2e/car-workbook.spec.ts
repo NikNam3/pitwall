@@ -80,6 +80,21 @@ test('the car workbook is seeded, shows four known surface temperatures and live
   await page.keyboard.press('Escape');
   await expect(popover).toBeHidden();
 
+  // Whatever pokes past the window's edge, the page itself never scrolls (no browser scrollbars, white by default),
+  // and inner scroll areas get the dark scheme's scrollbars (user, live test 2026-10-30).
+  const page_ = await page.evaluate(() => {
+    const probe = document.createElement('div');
+    probe.style.cssText = 'position:absolute;left:0;top:0;width:200vw;height:200vh';
+    document.body.appendChild(probe);
+    const result = {
+      scrollbars: window.innerWidth - document.documentElement.clientWidth + (window.innerHeight - document.documentElement.clientHeight),
+      colorScheme: getComputedStyle(document.documentElement).colorScheme,
+    };
+    probe.remove();
+    return result;
+  });
+  expect(page_).toEqual({ scrollbars: 0, colorScheme: 'dark' });
+
   // Jump to the player's line crossing (the replay stays paused): the corner block shows four known surface temperatures.
   await page.getByTestId('replay-lap').fill(JUMP_LAP);
   await page.getByTestId('replay-lap').press('Enter');
