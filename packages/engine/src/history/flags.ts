@@ -1,7 +1,7 @@
 import type { FlagPhase, ScPhase, SessionFlag, SessionTime } from '@pitwall/domain';
 import type { EventDetails, EventDetailsOf } from '@pitwall/protocol';
 import type { EngineState } from '../state/engine-state.ts';
-import { isActiveCar } from '../step/identity.ts';
+import { isActiveCar, slotsInUse } from '../step/identity.ts';
 import type { SubStep } from '../step/types.ts';
 
 type NeutralisedKind = Exclude<FlagPhase['kind'], 'red'>;
@@ -13,10 +13,10 @@ const KIND_OF_SC_TYPE: ReadonlyArray<NeutralisedKind | undefined> = [undefined, 
 const SC_PHASES: ReadonlyArray<ScPhase['phase']> = ['deployed', 'returning', 'returned', 'resume'];
 
 /** The lap of the car in first place; 0 when no active car holds it. */
-const leaderLap = (state: EngineState): number =>
-  state.cars.find(
-    (car) => car.timing.position === 1 && isActiveCar(car.id, state.session.numActiveCars, car.timing.resultStatus),
-  )?.timing.lap ?? 0;
+const leaderLap = (state: EngineState): number => {
+  const slots = slotsInUse(state);
+  return state.cars.find((car) => car.timing.position === 1 && isActiveCar(car.id, slots, car.timing.resultStatus))?.timing.lap ?? 0;
+};
 
 const closePhase = (state: EngineState, at: SessionTime): void => {
   const phase = state.open.flagPhase;

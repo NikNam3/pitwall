@@ -9,7 +9,7 @@ import type { EngineState } from '../state/engine-state.ts';
 import { applyCondition } from './condition.ts';
 import { applyDynamics } from './dynamics.ts';
 import { applyEnergy } from './energy.ts';
-import { applyIdentity, isActiveCar } from './identity.ts';
+import { applyIdentity, isActiveCar, slotsInUse } from './identity.ts';
 import { applyOwnCar } from './own-car.ts';
 import { applyRealism } from './realism.ts';
 import { applySession } from './session.ts';
@@ -39,8 +39,9 @@ export const SUB_STEPS: SubStep[] = [
 ];
 
 const refreshActive = (state: EngineState): void => {
+  const slots = slotsInUse(state);
   for (const car of state.cars) {
-    car.active = isActiveCar(car.id, state.session.numActiveCars, car.timing.resultStatus);
+    car.active = isActiveCar(car.id, slots, car.timing.resultStatus);
   }
 };
 
