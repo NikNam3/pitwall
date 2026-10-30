@@ -48,7 +48,7 @@ At `formation`'s close (the race's first LGOT after STLG), the tracker cuts the 
 - **The formation reset** (the fall at the formation lap's end, inventory 1.2): ignored by itself; the formation phase's close (3.2) handles it.
 - **Garage acceleration** (session time running ahead of wall time): no jump; nothing to do (laps are not timed in the garage).
 - **Post-session jump** (3.1): opens `post-session`.
-- **Any other fall or jump** (not a flashback): changes nothing and is logged with the session uid and both times. Not seen in any recording outside the start.
+- **Any other fall** (not a flashback, not the start): logged with the session uid and both times, and the engine keeps its race clock monotonic: every entry stamped after the fall gets the fall's size as an offset (as the start's settling does), so every time-based analysis stays consistent; the raw session time stays on the frame for diagnostics (user ruling 2026-10-30). Not seen in any recording outside the start. **Any other forward jump** (not the post-session jump): logged, no change.
 
 ### 3.4 Race control state
 
