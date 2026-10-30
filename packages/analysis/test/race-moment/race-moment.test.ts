@@ -5,6 +5,7 @@ import type {
   BattleCard,
   BattleSide,
   CarId,
+  DrsStatus,
   ForecastSample,
   IncidentEntry,
   Insight,
@@ -61,10 +62,12 @@ const side = (over: Partial<BattleSide> = {}): BattleSide => ({
 const card = (
   ahead: Known<BattleSide> = na,
   behind: Known<BattleSide> = na,
+  drs: DrsStatus = { enabled: true },
 ): BattleCard => ({
   carId: car0,
   ahead,
   behind,
+  drs,
 });
 
 const alarm = (over: Partial<Insight> = {}): Insight =>
@@ -261,6 +264,27 @@ describe("race-moment calculator", () => {
         lapsToDrs: 20,
         gapMs: DRS,
       });
+    });
+
+    it("while DRS is off a closing car sets no battle by laps to DRS (battle gives lapsToDrs notApplicable)", () => {
+      const off: DrsStatus = { enabled: false, reason: "wetTrack" };
+      const closing = side({ gapMs: known(DRS + 500, NOW), lapsToDrs: na });
+      const v = value(
+        run({ battle: { [car0]: card(known(closing, NOW), na, off) } }),
+      );
+      expect(v.moment).toBe("carCare");
+      expect(v.active).toEqual(["carCare"]);
+    });
+
+    it("while DRS is off a gap at or below drsRangeMs still sets the battle, by the gap rule", () => {
+      const off: DrsStatus = { enabled: false, reason: "safetyCar" };
+      const close = side({ gapMs: known(DRS, NOW), lapsToDrs: na });
+      const v = value(
+        run({ battle: { [car0]: card(na, known(close, NOW), off) } }),
+      );
+      expect(v.moment).toBe("battle");
+      expect(v.cause.rule).toBe("gap");
+      expect(v.cause.params).toEqual({ carId: car0, side: "behind", gapMs: DRS });
     });
 
     it("a battle card beyond both thresholds, or with unknown values, sets no battle", () => {
