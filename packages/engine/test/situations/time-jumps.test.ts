@@ -161,6 +161,30 @@ describe('a flashback is never a clock fall', () => {
     const r = results[LIGHTS_OUT + 201]!;
     expect([r.flashback?.targetFrameId, r.clockFall]).toEqual([LIGHTS_OUT + 100, undefined]);
   });
+
+  // Inventory 1.10 (raceSingaporeWet lap 44): after a rewind the first packets carry the target's frame ids with the old
+  // session time; only the frames after them carry the target's time.
+  /** Index of race frame k of `gridStart` among the frames. */
+  const raceFrame = (k: number) => LIGHTS_OUT + 1 + k;
+  /** The game's frames after a rewind to race frame 100: race frames 101.., the first `stale` of them at the old `oldMs`. */
+  const resumed = (all: ReturnType<typeof frames>, nextOverall: number, oldMs: number, stale = 2) =>
+    after(all, raceFrame(101), nextOverall).slice(0, 50).map((f, i) => (i < stale ? { ...f, sessionTime: oldMs } : f));
+  const falls = (results: ReturnType<typeof run>['results']) =>
+    results.flatMap((r, i) => (r.clockFall === undefined ? [] : [`frame ${i}: ${JSON.stringify(r.clockFall)}`]));
+
+  it('the first frames after a rewind (frame id going back) that still carry the old session time are part of the flashback: no clock fall when the time then drops to the target’s', () => {
+    const all = frames();
+    const { runner } = run(all.slice(0, raceFrame(200) + 1));
+    const results = resumed(all, raceFrame(201), raceAt(200)).map((f) => runner.apply(f));
+    expect(results[0]!.flashback?.targetFrameId).toBe(raceFrame(100));
+    expect(falls(results)).toEqual([]);
+  });
+  it('the first frames after an FLBK that still carry the old session time are part of the flashback: no clock fall when the time then drops to the target’s', () => {
+    const withFlbk = script(gridStart(300, (k) => (k === 201 ? { events: [flbk(raceFrame(100), raceAt(100))] } : {})));
+    const { runner, results: before } = run(withFlbk.slice(0, raceFrame(201) + 1));
+    expect(before[raceFrame(201)]!.flashback?.targetFrameId).toBe(raceFrame(100));
+    expect(falls(resumed(frames(), raceFrame(202), raceAt(201)).map((f) => runner.apply(f)))).toEqual([]);
+  });
 });
 
 describe('garage time acceleration', () => {
