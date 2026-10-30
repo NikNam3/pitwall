@@ -15,9 +15,7 @@ export type ProjectionRow = {
   delta: string;
   label: string;
   deltaRole: Role | undefined;
-  /** Why a value of this row is hidden (first one), for the hover. */
-  reason?: UnknownReason;
-  /** Why each hidden value cell is empty, so the display shows that cell's mark. */
+  /** Why each unknown value cell has no text, so the display shows that cell's mark; absent when every value is known. */
   unknown?: Partial<Record<ValueColumn, UnknownReason>>;
 };
 
@@ -40,48 +38,43 @@ export const projectionHeader = (full = true): string => {
 };
 
 const text = <T>(value: Known<T>, format: (v: T) => string): string => (value.known ? format(value.value) : '');
-const firstReason = (...values: Known<unknown>[]): UnknownReason | undefined => {
-  for (const v of values) if (!v.known) return v.reason;
-  return undefined;
-};
-/** The row with the reason of its first hidden value and the reason of each hidden cell (`cells`, unknown ones only). */
-function withReason(row: Omit<ProjectionRow, 'reason' | 'unknown'>, reason: UnknownReason | undefined, cells: Partial<Record<ValueColumn, Known<unknown>>> = {}): ProjectionRow {
-  if (reason === undefined) return row;
+/** The row with the reason of each unknown value cell (`cells`, unknown ones only); unchanged when all are known. */
+function withUnknown(row: Omit<ProjectionRow, 'unknown'>, cells: Partial<Record<ValueColumn, Known<unknown>>>): ProjectionRow {
   const unknown = Object.fromEntries(Object.entries(cells).flatMap(([key, v]) => (v.known ? [] : [[key, v.reason]])));
-  return { ...row, reason, unknown };
+  return Object.keys(unknown).length === 0 ? row : { ...row, unknown };
 }
 
-/** The rows PROJ, CUT-OFF and FINISH for a projection; hidden values are empty cells. `ours`: the car is one of ours. */
+/** The rows PROJ, CUT-OFF and FINISH for a projection; an unknown value has no text and its cell's reason. `ours`: the car is one of ours. */
 export function projectionRows(p: Projection, ours: boolean): ProjectionRow[] {
   const proj: ProjectionRow = p.onLap
-    ? withReason({
+    ? withUnknown({
         key: 'proj', name: names.proj,
         time: text(p.projectedLapMs, formatLapTime),
         pos: text(p.projectedPosition, formatPosition),
         delta: text(p.deltaToBestMs, formatDeltaMs),
         label: p.deltaToBestMs.known ? labels.toBest : '',
         deltaRole: p.deltaToBestMs.known ? deltaRole(p.deltaToBestMs.value, ours) : undefined,
-      }, firstReason(p.projectedLapMs, p.projectedPosition, p.deltaToBestMs), { time: p.projectedLapMs, pos: p.projectedPosition, delta: p.deltaToBestMs })
+      }, { time: p.projectedLapMs, pos: p.projectedPosition, delta: p.deltaToBestMs })
     : { key: 'proj', name: names.proj, time: outLap, pos: '', delta: '', label: '', deltaRole: undefined };
 
   const cut = p.cutOff;
   const margin: Known<number> = cut.known ? cut.value.marginMs : cut;
-  const cutOff = withReason({
+  const cutOff = withUnknown({
     key: 'cutOff', name: names.cutOff,
     time: text(cut, (c) => formatLapTime(c.timeMs)),
     pos: text(cut, (c) => formatPosition(c.position)),
     delta: text(margin, formatDeltaMs),
     label: margin.known ? labels.margin : '',
     deltaRole: margin.known ? cutOffRole(margin.value) : undefined,
-  }, firstReason(cut, margin), { time: cut, pos: cut, delta: margin });
+  }, { time: cut, pos: cut, delta: margin });
 
   const fin = p.finishMarginMs;
-  const finish = withReason({
+  const finish = withUnknown({
     key: 'finish', name: names.finish, time: '', pos: '',
     delta: text(fin, (ms) => `${formatSeconds(ms, 1)}${seconds}`),
     label: fin.known ? labels.leftAtLine : '',
     deltaRole: fin.known ? finishRole(fin.value) : undefined,
-  }, firstReason(fin), { delta: fin });
+  }, { delta: fin });
 
   return [proj, cutOff, finish];
 }

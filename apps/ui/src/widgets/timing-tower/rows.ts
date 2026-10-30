@@ -34,7 +34,10 @@ export type TowerRow = {
   gapToLeader: Known<Ms>;
   interval: Known<Ms>;
   lapsDown: number;
-  /** TO US: the `gaps.toCar` entry, measured to the link group's primary car; that car's own entry is `notApplicable`. */
+  /**
+   * TO US: the `gaps.toCar` entry, measured to the link group's primary car; that car's own entry is `notApplicable`, and
+   * so is a retired car's: it will not come.
+   */
   toUs: Pick<GapToCar, 'gapMs' | 'lapsDown'>;
   lastLap: Known<Ms>;
   lastLapStatus: SectorStatus;
@@ -42,8 +45,6 @@ export type TowerRow = {
   compound: VisualCompound;
   age: number;
   stops: number;
-  penaltyMs: number;
-  warnings: number;
   /** The PEN cell as it shows: `SG`, `DT`, the time penalty (`5s`) or the warnings (`2w`); a time beside SG/DT in the title. */
   penalty: { text: string; role?: Role | undefined; title?: string };
   pit: 'pit' | 'out' | undefined;
@@ -53,6 +54,8 @@ export type TowerRow = {
 const RETIRED = new Set(['didNotFinish', 'disqualified', 'notClassified', 'retired']);
 const UNUSED = new Set(['invalid', 'inactive']);
 const missing = (): Known<Ms> => unknown('notReceived');
+/** A retired car's TO US: its gap to us will not come. */
+const RETIRED_TO_US: TowerRow['toUs'] = { gapMs: unknown('notApplicable'), lapsDown: 0 };
 
 function sectorsOf(row: LapBoardRow | undefined): TowerRow['sectors'] {
   return [0, 1, 2].map((i) => ({
@@ -61,12 +64,21 @@ function sectorsOf(row: LapBoardRow | undefined): TowerRow['sectors'] {
   }));
 }
 
-/** An unserved stop-go before a drive-through before the time penalty; the warning count when there is no penalty. */
+/**
+ * An unserved stop-go before a drive-through before the time penalty, with the count of that kind when more than one;
+ * the warning count when there is no penalty.
+ */
 function penaltyCell(t: CarTiming): TowerRow['penalty'] {
   const role = penaltyRole(t.timePenaltyMs, t.unservedStopGos + t.unservedDriveThroughs);
-  const unserved = t.unservedStopGos > 0 ? text.unservedPenalty.stopGo : t.unservedDriveThroughs > 0 ? text.unservedPenalty.driveThrough : undefined;
+  const unserved =
+    t.unservedStopGos > 0 ? { kind: text.unservedPenalty.stopGo, count: t.unservedStopGos }
+    : t.unservedDriveThroughs > 0 ? { kind: text.unservedPenalty.driveThrough, count: t.unservedDriveThroughs }
+    : undefined;
   const time = t.timePenaltyMs > 0 ? formatPenaltyMs(t.timePenaltyMs) : undefined;
-  if (unserved !== undefined) return { text: unserved.code, role, title: time === undefined ? unserved.name : text.withTimePenalty(unserved.name, time) };
+  if (unserved !== undefined) {
+    const name = unserved.kind.name(unserved.count);
+    return { text: unserved.kind.code(unserved.count), role, title: time === undefined ? name : text.withTimePenalty(name, time) };
+  }
   if (time !== undefined) return { text: time, role };
   return { text: t.totalWarnings > 0 ? formatWarnings(t.totalWarnings) : '' };
 }
@@ -98,15 +110,13 @@ export function buildRows(input: TowerInput): TowerRow[] {
         gapToLeader: gaps?.toLeaderMs ?? missing(),
         interval: gaps?.toAheadMs ?? missing(),
         lapsDown: gaps?.lapsDown ?? 0,
-        toUs: toCar.get(id) ?? { gapMs: missing(), lapsDown: 0 },
+        toUs: retired ? RETIRED_TO_US : (toCar.get(id) ?? { gapMs: missing(), lapsDown: 0 }),
         lastLap: lap?.lastLapMs ?? missing(),
         lastLapStatus: lap?.lastLapStatus ?? 'none',
         sectors: sectorsOf(lap),
         compound: c.tyres.visualCompound,
         age: c.tyres.age,
         stops: c.stops,
-        penaltyMs: c.timing.timePenaltyMs,
-        warnings: c.timing.totalWarnings,
         penalty: penaltyCell(c.timing),
         pit: c.timing.pitStatus === 'pitting' || c.timing.pitStatus === 'inPitArea' ? 'pit' : c.timing.driverStatus === 'outLap' ? 'out' : undefined,
         overview: c,

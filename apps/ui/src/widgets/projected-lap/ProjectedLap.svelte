@@ -2,7 +2,7 @@
   // The projected lap, the quali cut-off and the finish margin (spec 8.3, V10 + V11).
   import type { WidgetProps } from '../../kit/types.ts';
   import { fitCell } from '../../kit/grid/grid.ts';
-  import UnknownMark from '../../kit/values/UnknownMark.svelte';
+  import TextCell from '../../kit/values/TextCell.svelte';
   import { ourCars } from '../../kit/car/our-cars.ts';
   import { roleOrUndefined } from '../../theme/index.ts';
   import { PROJECTION_COLUMNS, projectionHeader, projectionRows } from './rows.ts';
@@ -21,7 +21,7 @@
 </script>
 
 <!-- A hidden value shows its own reason's mark in its cell, as wide as the column. -->
-{#snippet value(row: ProjectionRow, key: ValueColumn)}{@const reason = row.unknown?.[key]}{#if reason}<UnknownMark {reason} cols={columnOf(key)?.width} align="right" />{:else}{cell(row, key)}{/if}{/snippet}
+{#snippet value(row: ProjectionRow, key: ValueColumn)}<TextCell text={row[key]} reason={row.unknown?.[key]} width={columnOf(key)?.width} align={columnOf(key)?.align} />{/snippet}
 
 <div class="block">
   <div class="line faint">{header}</div>

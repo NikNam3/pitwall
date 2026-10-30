@@ -5,7 +5,7 @@ import { unknownMark, unknownReason } from '../text.ts';
 /** How an unknown value shows in a cell: its reason's mark, in the faint colour, with the reason on hover (Task P). */
 export type UnknownShown = { text: string; title: string; colour: string };
 
-/** The one way an unknown value shows: `Value` and `UnknownMark` render it. */
+/** The one way an unknown value shows: `Value`, `TextCell` and `UnknownMark` render it. */
 export const unknownShown = (reason: UnknownReason): UnknownShown => ({
   text: unknownMark[reason],
   title: unknownReason[reason],
