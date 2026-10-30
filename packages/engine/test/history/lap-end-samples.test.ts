@@ -100,12 +100,32 @@ describe('lap end samples', () => {
 describe('damageChange events', () => {
   const wing = (pct: number) => (d: FrameDraft) => { d.add('carDamage', { carDamageData: { 0: { frontLeftWingDamage: pct } } }); };
 
-  it('a front-left wing rise from 0 to 12 % appends one damageChange event; a repair appends none', () => {
-    const plan = [0, 12, 12, 0, 0];
-    const { st, frames, results } = runScenario(new ScenarioBuilder({ cars: 1 }).frames(plan.length, (d) => wing(plan[d.index]!)(d)));
-    expect(st.history.events).toEqual([{ at: frames[1]!.sessionTime, kind: 'damageChange', carId: 0,
-      params: { part: 'frontLeftWingPct', fromPct: 0, toPct: 12 } }]);
-    expect(results.map((r) => r.changed.has('events'))).toEqual([false, true, false, false, false]);
+  /** Runs one car whose front-left wing reads `plan[i]` % in frame i. */
+  const wingPlan = (plan: number[]) => runScenario(new ScenarioBuilder({ cars: 1 }).frames(plan.length, (d) => wing(plan[d.index]!)(d)));
+  const wingChange = (at: number, fromPct: number, toPct: number) =>
+    ({ at, kind: 'damageChange', carId: 0, params: { part: 'frontLeftWingPct', fromPct, toPct } });
+
+  it('a front-left wing rise from 0 to 12 % appends one damageChange event', () => {
+    const { st, frames, results } = wingPlan([0, 12]);
+    expect(st.history.events).toEqual([wingChange(frames[1]!.sessionTime, 0, 12)]);
+    expect(results.map((r) => r.changed.has('events'))).toEqual([false, true]);
+  });
+
+  it('a fall of the front-left wing from 12 to 0 % (a repair) appends a damageChange with fromPct above toPct', () => {
+    const { st, frames, results } = wingPlan([0, 12, 0]);
+    expect(st.history.events).toEqual([wingChange(frames[1]!.sessionTime, 0, 12), wingChange(frames[2]!.sessionTime, 12, 0)]);
+    expect(results.map((r) => r.changed.has('events'))).toEqual([false, true, true]);
+  });
+
+  it('a reading equal to the previous one appends no event', () => {
+    const { st, frames, results } = wingPlan([0, 7, 7, 7]);
+    expect(st.history.events).toEqual([wingChange(frames[1]!.sessionTime, 0, 7)]);
+    expect(results.map((r) => r.changed.has('events'))).toEqual([false, true, false, false]);
+  });
+
+  it("a car's first reading only sets the baseline: a wing already at 30 % is no event, the next change counts from 30", () => {
+    const { st, frames } = wingPlan([30, 30, 40]);
+    expect(st.history.events).toEqual([wingChange(frames[2]!.sessionTime, 30, 40)]);
   });
 
   it('every rising part is one event of its own, named as in DamageParts', () => {
