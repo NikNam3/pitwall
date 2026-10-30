@@ -6,7 +6,7 @@
 //  - append topics (`laps`) carry `entries`, state topics carry `value`;
 //  - deterministic: two runs give byte-identical JSON.
 import { existsSync } from 'node:fs';
-import { TOPICS, type SessionInfo, type TopicName } from '@pitwall/contracts';
+import { canonicalJson, TOPICS, type SessionInfo, type TopicName } from '@pitwall/contracts';
 import { carId, MAX_CARS, type CarId } from '@pitwall/domain';
 import { describe, expect, it } from 'vitest';
 import { FEATURES } from '../../src/features/index.generated.ts';
@@ -20,11 +20,8 @@ const LAP10 = 'race-zandvoort-lap10.pwrec.gz';
 /** The `raceZandvoortLap10.crossing` moment: just after the player's line crossing. */
 const CROSSING_MS = 3200;
 
-/** JSON with sorted object keys, so equal params give equal text. */
-const canonical = (value: unknown): string =>
-  JSON.stringify(value, (_k, v: unknown) =>
-    typeof v === 'object' && v !== null && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => a.localeCompare(b))) : v,
-  );
+/** Equal params give equal text (the contracts' one canonical form). */
+const canonical = canonicalJson;
 
 const JOB_TOPICS = new Set<string>(FEATURES.flatMap((f) => f.topics.flatMap((b) => ('fromJob' in b ? [b.topic] : []))));
 
