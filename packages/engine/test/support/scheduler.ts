@@ -5,7 +5,7 @@ import { CalculatorRegistry, Scheduler, type Calculator, type ChangeTag, type Fe
 type Lengths = HistoryDelta['before'];
 
 /** History lengths: zero except those given. */
-export const len = (o: Partial<Lengths> = {}): Lengths => ({ laps: 0, stints: 0, pitStops: 0, flagPhases: 0, events: 0, miniSectors: 0, ...o });
+export const len = (o: Partial<Lengths> = {}): Lengths => ({ laps: 0, stints: 0, pitStops: 0, flagPhases: 0, sessionPhases: 0, pauses: 0, events: 0, miniSectors: 0, ...o });
 
 /** The history grew (or shrank) from `before` to `after` entries in each of `fields`. */
 export const delta = (before = 0, after = before, truncated = false, fields: ReadonlyArray<keyof Lengths> = ['laps']): HistoryDelta => ({

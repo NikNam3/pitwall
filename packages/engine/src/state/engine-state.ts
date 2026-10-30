@@ -1,4 +1,7 @@
 import type {
+  OpenSessionPhase,
+  PauseSpan,
+  SessionPhaseSpan,
   ActualCompound,
   CarId,
   CarState,
@@ -32,6 +35,10 @@ export type History = {
   stints: StintRecord[];
   pitStops: PitStopRecord[];
   flagPhases: FlagPhase[];
+  /** Closed session phases, oldest first (spec 3.1); the phase in progress is `open.situations.session`. */
+  sessionPhases: SessionPhaseSpan[];
+  /** Pauses, oldest first (display only). */
+  pauses: PauseSpan[];
   events: RaceEvent[];
   miniSectors: MiniSectorCrossing[];
 };
@@ -97,6 +104,8 @@ export type OpenPitVisit = {
  * Plain data only, so `structuredClone` can snapshot it.
  */
 export type OpenTrackers = {
+  /** The situation tracker's open state (`history/situations/`): the phase in progress and whether the session is paused. */
+  situations: { session: OpenSessionPhase; paused: boolean };
   laps: Array<LapCursor | undefined>;
   stints: Array<OpenStint | undefined>;
   pitVisits: Array<OpenPitVisit | undefined>;

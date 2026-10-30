@@ -13,6 +13,8 @@ export const historyLengths = (h: DeepReadonly<History>): HistoryLengths => ({
   stints: h.stints.length,
   pitStops: h.pitStops.length,
   flagPhases: h.flagPhases.length,
+  sessionPhases: h.sessionPhases.length,
+  pauses: h.pauses.length,
   events: h.events.length,
   miniSectors: h.miniSectors.length,
 });

@@ -17,9 +17,10 @@ export const pitStop = (c: number, lap: number): PitStopRecord => ({ carId: car(
   pitLaneTimeMs: 22_000, stationaryTimeMs: 2_500, flag: 'green', penaltyServed: false });
 export const event = (at: number, c?: number): RaceEvent => ({ at, kind: 'overtake', ...(c === undefined ? {} : { carId: car(c) }), params: {} });
 export const sc = (start: number): FlagPhase => ({ kind: 'SC', start, end: start + 60_000, startLeaderLap: 3, endLeaderLap: 5, scPhases: [] });
-export const history = (o: Partial<History> = {}): History => ({ laps: [], stints: [], pitStops: [], flagPhases: [], events: [], miniSectors: [], ...o });
+export const history = (o: Partial<History> = {}): History => ({ laps: [], stints: [], pitStops: [], flagPhases: [], sessionPhases: [], pauses: [], events: [], miniSectors: [], ...o });
 const lengths = (h: History): HistoryLengths => ({ laps: h.laps.length, stints: h.stints.length, pitStops: h.pitStops.length,
-  flagPhases: h.flagPhases.length, events: h.events.length, miniSectors: h.miniSectors.length });
+  flagPhases: h.flagPhases.length, sessionPhases: h.sessionPhases.length, pauses: h.pauses.length, events: h.events.length,
+  miniSectors: h.miniSectors.length });
 export const all = (h: History): HistoryDelta => ({ before: lengths(history()), after: lengths(h), truncated: false });
 export const since = (prev: History, h: History, truncated = false): HistoryDelta => ({ before: lengths(prev), after: lengths(h), truncated });
 export const AI9: DriverKey = { kind: 'ai', driverId: 9 };

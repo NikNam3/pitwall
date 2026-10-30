@@ -341,7 +341,7 @@ export function engineView({
   });
   const slots = Array.from({ length: Math.max(MAX_CARS, ...cars.map((c) => c.id + 1)) }, (_, i) => base.cars[i] ?? createCarState(carId(i)));
   for (const c of cars) slots[c.id] = c;
-  const full: History = { laps: [], stints: [], pitStops: [], flagPhases: [], events: [], miniSectors: [], ...history };
+  const full: History = { laps: [], stints: [], pitStops: [], flagPhases: [], sessionPhases: [], pauses: [], events: [], miniSectors: [], ...history };
   const { open: _open, ...state } = {
     ...base,
     cars: slots,
@@ -355,7 +355,7 @@ export function engineView({
     state,
     activeFlagPhase,
     changed: new Set(),
-    delta: delta ?? { before: historyLengths({ laps: [], stints: [], pitStops: [], flagPhases: [], events: [], miniSectors: [] }), after: lengths, truncated: false },
+    delta: delta ?? { before: historyLengths({ laps: [], stints: [], pitStops: [], flagPhases: [], sessionPhases: [], pauses: [], events: [], miniSectors: [] }), after: lengths, truncated: false },
     feed: { ...IDLE_FEED, ...feed },
     outputs,
     config,
@@ -364,5 +364,5 @@ export function engineView({
 
 /** A `History` with the given lists and the rest empty: pass it to `engineView({ history })`. */
 export function history(lists: Partial<History> = {}): History {
-  return { laps: [], stints: [], pitStops: [], flagPhases: [], events: [], miniSectors: [], ...lists };
+  return { laps: [], stints: [], pitStops: [], flagPhases: [], sessionPhases: [], pauses: [], events: [], miniSectors: [], ...lists };
 }
