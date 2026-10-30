@@ -46,7 +46,8 @@
   - Implementers run their task's files, then `pnpm eslint <changed files>` and `pnpm depcruise` once at the end.
   - Reviewers run nothing.
   - The supervisor runs `pnpm check` after every three to four merges, and `test:ui` and acceptance in Task 45. Never while an agent edits source.
-- **Two phases per unit,** worker env `PITWALL_PHASE=<test|implement> PITWALL_WORKER_UNIT=<unit> PITWALL_WORKER_SCOPE=<folders>`, one worktree per task under `../pitwall-wt/<task>`. Implementers never touch tests, `test-support/`, `fixtures/` or a widget's `gallery.ts`.
+- **Two phases per lane** (Lanes, below), one worktree per lane under `../pitwall-wt/<lane>`. Implementers never touch tests, `test-support/`, `fixtures/` or a widget's `gallery.ts`.
+- **Workers are in-process subagents** (user, 2026-10-30, as in SP3), so the `PITWALL_*` hooks don't bind them. The supervisor checks each phase's scope with `git diff --stat` against the lane's folders, and after every implement phase that `git diff --stat <test-commit>..HEAD -- '*.test.ts' '**/test/**' test-support fixtures '**/gallery.ts'` is empty.
 - **Centralise presentation:** formats in `kit/values/format.ts`, texts in `kit/text.ts` or the widget's `text.ts`, colours as theme roles.
 - **Questions during the run** go into `docs/superpowers/plans/2026-10-30-strategy-live-calls-questions.md` (lettered options, what was built, a recommendation, an empty `**Answer:**`). Work continues on the built option.
 - **Agents:** at most eight at once, reviewers included.
@@ -68,7 +69,7 @@ Five conditions the spec implies but its happy path doesn't spell out. Each has 
 ## Build order
 
 Spec section 12 is the schedule:
-- **Level 0** (Tasks 0–7). Task 1 first and alone. Tasks 2, 3, 4, 5, 6, 7 follow in parallel; Task 3 needs Task 2.
+- **Level 0** (Tasks 0–7). **Task 0 (mockups) and Task 1 (contracts) start together, first** (user, 2026-10-30: the human review runs while the others build, so nobody waits on it). The mockups work from the spec's Appendix A; a contract change Task 1 makes is carried into the mockups before the approval session. Tasks 2, 4, 5, 6, 7 follow Task 1 in parallel; Task 3 needs Task 2.
 - **Then each unit** (Tasks 8–43) goes through test phase, ruling, implement phase, review, merge.
   - A unit's **test phase** may start once Tasks 1 and 4 are merged.
   - A display's test phase also needs Task 0's approval.
@@ -90,6 +91,50 @@ Spec section 12 is the schedule:
 | displays | 30–43, each after its analysis's contract (test phase) and Tasks 0, 7 (implement phase) |
 | end | 44, 45 |
 
+### Lanes (user, 2026-10-30)
+
+A **lane** is what one agent builds per phase: one unit, or units of the same level that share a type or a reader. Each lane has a test agent, a ruling on the test agent's assumptions, an implementation agent and a reviewer. A unit is never split between lanes. The lane's scope is the union of its units' folders.
+
+**Models:** Opus for level 0, the critical path, level 3, the scoreboard, the bigger displays and **every review**; Sonnet where the table says so (both phases).
+
+| Level | Lane | Tasks | Model |
+|---|---|---|---|
+| 0 | `mockups` | 0 (single phase, then the user's session) | Opus |
+| 0 | `contracts` | 1 (single phase, supervisor-owned scope) | Opus |
+| 0 | `storage-key` → `priors` | 2 → 3 | Opus |
+| 0 | `builders` | 4 (single phase) | Opus |
+| 0 | `segments` | 5 (single phase) | Sonnet |
+| 0 | `turn-data` | 6 (single phase; the licence question goes to the questions file) | Sonnet |
+| 0 | `kit` | 7 | Opus |
+| 1 | `lap-model` ⚑ | 10 | Opus |
+| 1 | `degradation` ⚑ | 13 | Opus |
+| 1 | `pit-loss` | 12 | Opus |
+| 1 | `track` | 8, 11 | Opus |
+| 1 | `tyre-weather` | 9, 14 | Sonnet |
+| 1 | `lap-views` | 15, 16 | Sonnet |
+| 2 | `race-forecast` ⚑ | 17 | Opus |
+| 2 | `forecast-field` ⚑ | 18 | Opus |
+| 2 | `longrun` | 19, 20 | Sonnet |
+| 2 | `map` | 21, 22, 25 | Opus |
+| 2 | `crossover` | 23 | Opus |
+| 2 | `pit-window` | 24 | Opus |
+| 3 | `rejoin` ⚑ | 26 | Opus |
+| 3 | `undercut` | 27 | Opus |
+| 3 | `sc-call` | 28 | Opus |
+| 3 | `pit-sweep` | 29 | Opus |
+| 4 | `scoreboard` | 29a | Opus |
+| displays | `ghost-views` | 34, 35 | Opus |
+| displays | `map-views` | 36, 43 | Opus |
+| displays | `longrun-views` | 30, 31, 32, 33 | Sonnet |
+| displays | `call-cards` | 38, 39 | Opus |
+| displays | `sweep-view` | 40 | Sonnet |
+| displays | `weather-views` | 41, 42 | Sonnet |
+| displays | `radio-view` | 37 | Sonnet |
+| end | `workbooks` | 44 | Sonnet |
+| end | gates | 45 (supervisor) | — |
+
+⚑ critical path. The scheduler rule above applies to lanes; a lane is ready when all its tasks' **Depends on** are merged.
+
 **Common files of a unit task** (as in the SP3 plan, not repeated below):
 - `packages/analysis/src/<unit>/{index,<unit>,calculator,config}.ts`, tests in `packages/analysis/test/<unit>/`
 - `apps/bridge/src/features/<unit>/register.ts`, binding tests in `apps/bridge/test/features/<unit>/`
@@ -108,7 +153,7 @@ Spec section 12 is the schedule:
 
 **Goal:** the user approves how every display looks, in one session (spec 8.4).
 
-**Done by:** the supervisor, with the user. Not a two-phase task. **Depends on:** Task 1 (the contracts the mockups show).
+**Done by:** one agent (lane `mockups`, single phase), reviewed by the supervisor; then the user's approval session. **Depends on:** nothing; it starts together with Task 1 and works from the spec's Appendix A. Before the session the supervisor carries any contract change of Task 1 into the mockups.
 
 **Blocks:** every display's test phase (Tasks 30–43) and Task 44.
 
@@ -124,7 +169,7 @@ Spec section 12 is the schedule:
 
 **Goal:** every interface between the parts exists as code before any unit starts (spec 3, Appendix A and B).
 
-**Done by:** the supervisor. Not a two-phase task. Verified by `pnpm gen`, `pnpm typecheck`, `pnpm depcruise`, `pnpm check`.
+**Done by:** one agent (lane `contracts`, single phase, supervisor-owned scope), reviewed before merge. Verified by `pnpm gen`, `pnpm typecheck`, `pnpm depcruise`, `pnpm check`.
 
 - [ ] `packages/domain/src/knowledge.ts`: `Lifetime`, `KnowledgeSource` (A.1). `tracks.ts`: `TrackTurn`, `TrackTurns`. `analyses/track.ts`: `MapPoint`, `Corner`, `Straight`, `TrackGeometry`. `incidents.ts`: `IncidentWhere.turn`, filled with `unknown('notApplicable')` where entries are built today. `race-moment.ts`: `'window'` in `Moment` between `'neutralised'` and `'incident'`, with a `kit/text.ts` name.
 - [ ] `packages/domain/src/analyses/`: one file per new analysis with the value types of spec A.3, named after the analysis (`pit-losses.ts`, `stint-analysis.ts`, `raising-average.ts`, `lap-overview.ts`, `rejoin.ts`, `undercut.ts`, `sc-call.ts`, `pit-sweep.ts`, `pit-window.ts`, `track-positions.ts`, `radio-window.ts`, `weather.ts`, `crossover.ts`), plus `strategy.ts` with `PitCondition`, `PitLossSample`, `CompoundFit`, `StintFit`. Export them from the package index.
@@ -261,7 +306,7 @@ Spec section 12 is the schedule:
 
 **Goal:** the real-data cases 4a needs, as committed segments (spec 10.1, `docs/testing.md` §3).
 
-**Done by:** the supervisor. **Depends on:** nothing left: the `perf/full-laps` work (the 20-car race-lap segment) is merged (ba032e0).
+**Done by:** one agent (lane `segments`, single phase), reviewed by the supervisor. **Depends on:** nothing left: the `perf/full-laps` work (the 20-car race-lap segment) is merged (ba032e0).
 
 - [ ] Check the existing segments for reuse: `race-zandvoort-pit-stop`, `race-zandvoort-pit-exit` (green stop), `race-zandvoort-vsc`.
 - [ ] Search `raceZandvoortUidReuse` and `raceSingaporeWet` for a stop under VSC or SC (`PitStopRecord.flag`). If one exists, cut the pit-lane entry to the exit (≤ 1 MB) as `race-<track>-<vsc|sc>-stop`. If none exists, record that in the questions file; the case stays covered by builders.
@@ -276,7 +321,7 @@ Spec section 12 is the schedule:
 
 **Goal:** official turn numbers for the league's tracks (spec 6.4).
 
-**Done by:** the supervisor (research and script), with the user for the licence decision. Outside the worker run. **Depends on:** Task 1 (the `TrackTurns` type).
+**Done by:** one agent (lane `turn-data`, single phase: research and script), with the user for the licence decision through the questions file. **Depends on:** Task 1 (the `TrackTurns` type).
 
 - [ ] Check FastF1 `get_circuit_info()`:
   - its corner fields (number, letter, distance)

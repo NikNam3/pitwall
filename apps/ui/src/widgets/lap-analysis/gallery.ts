@@ -10,7 +10,7 @@ const field = { board: lapBoard(1, rows, sessionBests), cars, session: sessionIn
 
 /** Synthetic cases and fit expectations for `lap-analysis`. */
 const gallery: GalleryEntry<typeof widget> = {
-  moments: ['ttZandvoortLap1.crossing', 'raceSingaporeStart.grid'],
+  moments: ['raceZandvoortLap10.crossing', 'raceSingaporeStart.grid'],
   cases: {
     // The mockup: the reference row in absolute times, deltas below, purple session bests (no green: every value is a personal best).
     mockup: field,

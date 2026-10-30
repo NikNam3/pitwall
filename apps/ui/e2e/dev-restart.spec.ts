@@ -1,5 +1,6 @@
 // `pitwall dev` restores the moment (spec 10, UI shell spec 9.3): after a source change the bridge restarts and the
-// replay is where it was, with data on the topics the panels read. Needs no Electron: a WebSocket client stands in for the UI.
+// replay of the segment race-zandvoort-lap10 (a normal race) is where it was, with data on the topics the panels read.
+// Needs no Electron: a WebSocket client stands in for the UI.
 import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import { rm, writeFile } from 'node:fs/promises';
@@ -10,7 +11,7 @@ import type { ReplayStatus } from '@pitwall/contracts';
 
 const REPO_ROOT = path.resolve(import.meta.dirname, '../../..');
 const BRIDGE_CLI = path.join(REPO_ROOT, 'apps/bridge/src/cli/pitwall.ts');
-const SEGMENT = path.join(REPO_ROOT, 'fixtures/segments/tt-zandvoort-lap1.pwrec.gz');
+const SEGMENT = path.join(REPO_ROOT, 'fixtures/segments/race-zandvoort-lap10.pwrec.gz');
 /**
  * A new, untracked source file in a watched folder: writing it is the change, `finally` removes it. No tracked file is
  * edited, so a killed run leaves at most this comment-only file behind. Any other `pitwall dev` running in this
@@ -19,8 +20,8 @@ const SEGMENT = path.join(REPO_ROOT, 'fixtures/segments/tt-zandvoort-lap1.pwrec.
 const TOUCH_FILE = path.join(REPO_ROOT, 'apps/bridge/src/dev/.dev-restart-touch.ts');
 /** How often the replay child reports its position to the supervisor. */
 const POSITION_INTERVAL_MS = 500;
-/** Inside the segment (session time 112 s to 118 s). */
-const SEEK_MS = 116_000;
+/** Inside the segment (session time 721 s to 726 s), after the player's crossing into lap 10 at 723.381 s. */
+const SEEK_MS = 724_500;
 const TOLERANCE_MS = 1_000;
 /** The restart runs `pnpm gen` first. */
 const RESTART_TIMEOUT_MS = 60_000;
@@ -98,7 +99,7 @@ const statusOf = async (client: Awaited<ReturnType<typeof connect>>): Promise<Re
 test('pitwall dev restores the replay moment after a source file changes', async () => {
   const port = await freePort();
   const output: string[] = [];
-  const child: ChildProcess = spawn(process.execPath, [BRIDGE_CLI, 'dev', '--replay', SEGMENT, '--at-lap', '2'], {
+  const child: ChildProcess = spawn(process.execPath, [BRIDGE_CLI, 'dev', '--replay', SEGMENT, '--at-lap', '10'], {
     cwd: REPO_ROOT,
     env: { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== 'NODE_OPTIONS')), PITWALL_WS_PORT: String(port) },
     stdio: ['ignore', 'pipe', 'pipe'],

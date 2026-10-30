@@ -71,8 +71,11 @@ export const formatCount = (n: number): string => whole(n);
 /** Packets per second, `59.6` -> `60/s`. */
 export const formatRate = (perSecond: number): string => `${whole(perSecond)}/s`;
 
-/** Loss to one decimal so a threshold near a whole number stays readable, `4.99` -> `5.0%`. */
-export const formatLoss = (p: Percent): string => `${fixed(p, 1)}%`;
+/**
+ * Loss to one decimal so a threshold near a whole number stays readable, `4.94` -> `4.9%`; from 10 % whole, so the
+ * text never grows past `100%`: `10.2` -> `10%`.
+ */
+export const formatLoss = (p: Percent): string => `${fixed(p, Math.abs(p) < 9.95 ? 1 : 0)}%`;
 
 /** Whole milliseconds, `12.4` -> `12 ms`. */
 export const formatMillis = (ms: Ms): string => `${whole(ms)} ms`;

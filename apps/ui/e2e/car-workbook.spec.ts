@@ -1,13 +1,15 @@
 // End to end (plan task 36, milestone "car"): the default car workbook, seeded by the bridge, on a replay of the
-// full time-trial recording `ttZandvoort` (PITWALL_FIXTURES_DIR). Spec 13.6: the time trial holds tyre surface at
-// 93 degC from lap 2 and only the brake temperatures change, so those two are what this spec can check.
+// committed segment `race-zandvoort-full-lap` (a normal race; car 1, the player, crosses into lap 10 at session time
+// 723.368 and drives the whole lap). The spec jumps to that crossing, checks the corner block's readings, then plays.
 import { readFile } from 'node:fs/promises';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { makeDataDir, openWorkbook, panelOf, removeDataDir, workbookFile } from './support.ts';
 import { launchPitwall, startBridge } from './harness.ts';
 
-const RECORDING = 'ttZandvoort';
+const RECORDING = 'race-zandvoort-full-lap';
+/** The jump target: car 1 crosses into lap 10 at 723.368, 1.4 s into the segment. */
+const JUMP_LAP = '10';
 const SETTLE_MS = 30_000;
 /** The panels of the approved car layout (docs/brainstorms/2026-10-29-sp3-displays/4-layouts.html, "car"), in any order. */
 const CAR_WIDGETS = ['alarm-list', 'corner-block', 'damage-card', 'ers-budget', 'fuel-gauge', 'tyre-life-bar'];
@@ -78,16 +80,17 @@ test('the car workbook is seeded, shows four known surface temperatures and live
   await page.keyboard.press('Escape');
   await expect(popover).toBeHidden();
 
-  // From lap 2 the time trial holds the surface temperature at 93 degC: jump there and play.
-  await page.getByTestId('replay-lap').fill('2');
+  // Jump to the player's line crossing (the replay stays paused): the corner block shows four known surface temperatures.
+  await page.getByTestId('replay-lap').fill(JUMP_LAP);
   await page.getByTestId('replay-lap').press('Enter');
   await page.getByTestId('replay-lap').blur();
-  await page.getByTestId('replay-pause').click();
-  await expect.poll(async () => column(await cornerRows(page), SURFACE), { timeout: SETTLE_MS }).toEqual(['93', '93', '93', '93']);
+  const known = (values: string[]): boolean => values.length === 4 && values.every((v) => /^\d{2,3}$/.test(v));
+  await expect.poll(async () => known(column(await cornerRows(page), SURFACE)), { timeout: SETTLE_MS }).toBe(true);
 
-  // The brakes keep moving: the readings change in at least one corner while the replay plays, and all are known numbers.
+  // The brakes keep moving: the readings are known numbers and change in at least one corner once the replay plays.
+  await expect.poll(async () => column(await cornerRows(page), BRAKE).every((v) => /^\d{2,4}$/.test(v)), { timeout: SETTLE_MS }).toBe(true);
   const before = column(await cornerRows(page), BRAKE);
-  for (const value of before) expect(value).toMatch(/^\d{2,4}$/);
+  await page.getByTestId('replay-pause').click();
   await expect.poll(async () => column(await cornerRows(page), BRAKE), { timeout: SETTLE_MS }).not.toEqual(before);
   for (const value of column(await cornerRows(page), BRAKE)) expect(value).toMatch(/^\d{2,4}$/);
 });

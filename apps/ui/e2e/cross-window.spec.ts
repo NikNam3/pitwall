@@ -1,11 +1,11 @@
-// End to end (spec 9.3): a bridge replaying tt-zandvoort-lap1 (paused) and Electron with two windows, `main` and `side`.
+// End to end (spec 9.3): a bridge replaying the segment race-zandvoort-lap10 (paused) and Electron with two windows, `main` and `side`.
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { feedStatus, makeDataDir, marker, openWorkbook, removeDataDir, subscribeLines, twoWindows, unknownWidgetText, writeWorkbook } from './support.ts';
 import { launchPitwall, startBridge } from './harness.ts';
 import type { BridgeHandle, PitwallApp } from './harness-contract.ts';
 
-const RECORDING = 'tt-zandvoort-lap1';
+const RECORDING = 'race-zandvoort-lap10';
 const CRITICAL_KEY = 'e2e-critical';
 /** Generous: the bridge and Electron start, the first snapshot arrives. */
 const SETTLE_MS = 20_000;

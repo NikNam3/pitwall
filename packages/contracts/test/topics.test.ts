@@ -16,7 +16,8 @@ import {
   type TopicParams,
   type TopicValue,
 } from '../src/index.ts';
-import { defineTopic, type TopicOwner } from '../src/topic-def.ts';
+import { carId } from '@pitwall/domain';
+import { defineTopic, eachCar, type CarParams, type TopicOwner } from '../src/topic-def.ts';
 import carDetail from '../src/topics/car.detail.ts';
 import laps from '../src/topics/laps.ts';
 
@@ -94,8 +95,18 @@ describe('defineTopic', () => {
     expect(noOwner.mode).toBe('state');
   });
   it('is what each topic file default-exports', () => {
-    expect(carDetail).toEqual({ owner: 'core', mode: 'state', maxHz: 30, scope: 'feed' });
+    expect(carDetail).toEqual({ owner: 'core', mode: 'state', maxHz: 30, scope: 'feed', momentParams: eachCar });
     expect(laps).toEqual({ owner: 'core', mode: 'append', maxHz: Infinity, scope: 'feed' });
+  });
+  it('requires momentParams exactly for a topic with params', () => {
+    // @ts-expect-error a topic with params must say which params a moment captures
+    const missing = defineTopic<CarParams, number>({ owner: 'core', mode: 'state', maxHz: 5 });
+    // @ts-expect-error a topic without params is captured with {} only
+    const extra = defineTopic<Record<string, never>, number>({ owner: 'core', mode: 'state', maxHz: 5, momentParams: eachCar });
+    expect([missing.mode, extra.mode]).toEqual(['state', 'state']);
+  });
+  it('eachCar gives one { carId } per car, in order', () => {
+    expect(eachCar([carId(3), carId(0)])).toEqual([{ carId: 3 }, { carId: 0 }]);
   });
 });
 
