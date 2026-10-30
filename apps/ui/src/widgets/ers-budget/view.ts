@@ -19,8 +19,6 @@ export type ErsView = {
   trend: string;
   attack: string;
   attackReady: boolean;
-  /** Between the trend and the attack: both always show, as a text or an unknown's mark. */
-  trendJoint: string;
   /** Why a text is empty: the display shows the reason's mark in its place. */
   reasons: Record<'store' | 'flow' | 'deployed' | 'harvested' | 'trend' | 'attack', UnknownReason | undefined>;
 };
@@ -51,7 +49,6 @@ export function ersView(s: ErsState): ErsView {
     trend,
     attack,
     attackReady: s.attack.known && s.attack.value.ready,
-    trendJoint: text.joint,
     reasons: {
       store: reasonOf(s.storeJ),
       flow: reasonOf(s.flow),

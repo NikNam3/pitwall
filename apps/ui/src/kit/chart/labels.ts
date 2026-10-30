@@ -14,6 +14,13 @@ export const EARLY_END = { lap: 1, sessionTime: 60_000 } as const;
 /** Whether the label's line ends so far before the range's end (the newest x) that it is labelled at its own end. */
 export const endsEarly = (label: EndLabel, [, hi]: [number, number], kind: keyof typeof EARLY_END): boolean => hi - label.x >= EARLY_END[kind];
 
+/**
+ * The left of an early line's label: one gap right of its line's end, moved left just far enough to end at the plot's
+ * right edge, so it never reaches the label column, where it could sit on a column label's row (canvas px).
+ */
+export const earlyLabelLeft = (endPx: number, gapPx: number, widthPx: number, plotRightPx: number): number =>
+  Math.min(endPx + gapPx, plotRightPx - widthPx);
+
 /** One label per series with a point in `range` (inclusive), in series order; an own car's label is bold. */
 export function endLabels(series: ChartSeries[], [lo, hi]: [number, number]): EndLabel[] {
   const out: EndLabel[] = [];

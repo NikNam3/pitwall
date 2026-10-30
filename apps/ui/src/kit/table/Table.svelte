@@ -1,7 +1,7 @@
 <script lang="ts" generics="Row">
   // The dense table every display uses (spec 5): columns drop by priority, rows are banded, inactive rows sink.
   import type { Snippet } from 'svelte';
-  import { DEFAULT_THEME, cssVar, role } from '../../theme/index.ts';
+  import { DEFAULT_THEME, cssNumber, role } from '../../theme/index.ts';
   import { fitColumns } from '../size/size.ts';
   import type { WidgetSize } from '../types.ts';
 
@@ -25,15 +25,13 @@
   };
   let { columns, rows, rowKey, inactive, size, highlight }: Props = $props();
 
-  // The gap is the density token `--pw-col-gap` (a length in ch), counted in cells; unset falls back to the default theme.
-  const gapCols = $derived.by(() => {
-    const v = parseFloat(cssVar(document.documentElement, '--pw-col-gap'));
-    return Number.isFinite(v) ? v : DEFAULT_THEME.density.columnGapCols;
-  });
-  const boldWeight = $derived.by(() => {
-    const v = parseFloat(cssVar(document.documentElement, '--pw-weight-bold'));
-    return Number.isFinite(v) ? v : DEFAULT_THEME.table.boldWeight;
-  });
+  let host: HTMLDivElement | undefined = $state();
+  // The tokens as the table sees them (a theme may be applied on an ancestor, as in the gallery's cells). The column
+  // gap is read one way per use: code counts it in cells from `--pw-col-gap-cols` (as the chart does), CSS lays it out
+  // with the length `--pw-col-gap`.
+  const tokens = $derived(host ?? document.documentElement);
+  const gapCols = $derived(cssNumber(tokens, '--pw-col-gap-cols', DEFAULT_THEME.density.columnGapCols));
+  const boldWeight = $derived(cssNumber(tokens, '--pw-weight-bold', DEFAULT_THEME.table.boldWeight));
   const shown = $derived.by(() => {
     const keep = new Set(fitColumns(columns, size.cols, gapCols));
     return columns.filter((c) => keep.has(c.key));
@@ -45,8 +43,8 @@
   const template = $derived(shown.map((c) => `${c.widthCols}ch`).join(' '));
 </script>
 
-<div class="table" style:font-family="var(--pw-font)" style:font-size="var(--pw-font-px)" style:line-height="var(--pw-line)">
-  <div class="row head" style:grid-template-columns={template} style:column-gap="{gapCols}ch">
+<div class="table" bind:this={host} style:font-family="var(--pw-font)" style:font-size="var(--pw-font-px)" style:line-height="var(--pw-line)">
+  <div class="row head" style:grid-template-columns={template} style:column-gap="var(--pw-col-gap)">
     {#each shown as c (c.key)}
       <div class="cell" class:right={c.align === 'right'} data-col={c.key}>{c.label}</div>
     {/each}
@@ -58,7 +56,7 @@
       class:highlight={highlight !== undefined && rowKey(r) === highlight}
       data-row={rowKey(r)}
       style:grid-template-columns={template}
-      style:column-gap="{gapCols}ch"
+      style:column-gap="var(--pw-col-gap)"
       style:font-weight={highlight !== undefined && rowKey(r) === highlight ? boldWeight : undefined}
       style:background-color={i % 2 === 1 ? role('bgRowBand') : undefined}
     >

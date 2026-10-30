@@ -2,19 +2,19 @@
   // The line chart every display uses (spec 5): uPlot on a black plot with labelled axes and grids; each line is named at
   // its right end in its colour (our car bold), labels pushed apart where lines end close together; when they cannot all
   // fit, ours and the ones nearest to ours keep theirs. A line that ends well before the newest x (a retired or lapped
-  // car) is named at its own end instead. A series' live end is drawn dotted (`ChartSeries.liveEnd`): every series has
+  // car) is named at its own end instead, inside the plot. A line of one point shows as a dot. A series' live end is drawn dotted (`ChartSeries.liveEnd`): every series has
   // its live line, empty when not live, so a live end that comes or goes is a data change, never a rebuild.
   // Nothing scales with the panel: more width shows more history (the x-range follows the width in cells).
   import { untrack } from 'svelte';
   import uPlot from 'uplot';
   import 'uplot/dist/uPlot.min.css';
-  import { DEFAULT_THEME, cssVar, resolveColour, resolveRole } from '../../theme/index.ts';
+  import { DEFAULT_THEME, cssNumber, cssVar, resolveColour, resolveRole } from '../../theme/index.ts';
   import type { Role } from '../../theme/index.ts';
   import { cellBox } from '../size/size.ts';
   import type { WidgetSize } from '../types.ts';
   import { buildData, clipBands, plotLines, visibleXRange } from './data.ts';
   import type { ChartSeries, PhaseBand } from './data.ts';
-  import { endLabels, endsEarly, placeLabels } from './labels.ts';
+  import { earlyLabelLeft, endLabels, endsEarly, placeLabels } from './labels.ts';
   import type { EndLabel } from './labels.ts';
 
   type Props = {
@@ -42,12 +42,6 @@
   let cols = 0;
   let xs: number[] = [];
 
-  /** A chart token from the active theme's CSS variable, else the default theme's value. */
-  function token(root: Element, name: string, fallback: number): number {
-    const v = parseFloat(cssVar(root, name));
-    return Number.isFinite(v) ? v : fallback;
-  }
-
   /** A dash pattern token (px on, px off) from the active theme's CSS variable, else the default theme's value. */
   function dashToken(root: Element, name: string, fallback: number[]): number[] {
     const v = cssVar(root, name).split(/\s+/).filter((t) => t !== '').map(Number).filter(Number.isFinite);
@@ -67,44 +61,49 @@
     untrack(() => {
       const root = document.documentElement;
       const tokens = DEFAULT_THEME.chart;
-      const lineWidth = token(root, '--pw-chart-line', tokens.lineWidth);
-      const ownWidth = token(root, '--pw-chart-own-line', tokens.ownCarLineWidth);
-      const staleAlpha = token(root, '--pw-chart-stale-alpha', tokens.staleAlpha);
-      const redAlpha = token(root, '--pw-chart-red-alpha', tokens.redBandAlpha);
+      const lineWidth = cssNumber(root, '--pw-chart-line', tokens.lineWidth);
+      const ownWidth = cssNumber(root, '--pw-chart-own-line', tokens.ownCarLineWidth);
+      const staleAlpha = cssNumber(root, '--pw-chart-stale-alpha', tokens.staleAlpha);
+      const redAlpha = cssNumber(root, '--pw-chart-red-alpha', tokens.redBandAlpha);
       const dash = dashToken(root, '--pw-chart-dash', tokens.dash);
       const liveDash = dashToken(root, '--pw-chart-live-dash', tokens.liveDash);
       const xPerCell = {
-        lap: token(root, '--pw-chart-x-lap', tokens.xPerCell.lap),
-        sessionTime: token(root, '--pw-chart-x-session', tokens.xPerCell.sessionTime),
+        lap: cssNumber(root, '--pw-chart-x-lap', tokens.xPerCell.lap),
+        sessionTime: cssNumber(root, '--pw-chart-x-session', tokens.xPerCell.sessionTime),
       };
       const font = `${cssVar(root, '--pw-font-px')} ${cssVar(root, '--pw-font')}`;
-      const fontPx = token(root, '--pw-font-px', DEFAULT_THEME.fontPx);
-      const boldWeight = token(root, '--pw-weight-bold', DEFAULT_THEME.table.boldWeight);
+      const fontPx = cssNumber(root, '--pw-font-px', DEFAULT_THEME.fontPx);
+      const boldWeight = cssNumber(root, '--pw-weight-bold', DEFAULT_THEME.table.boldWeight);
       // The labels sit one column gap right of the plot; the plot leaves room for the gap and the longest label.
       const cellPx = cellBox(fontPx, DEFAULT_THEME.density.lineHeight).width;
-      const labelGapPx = token(root, '--pw-col-gap-cols', DEFAULT_THEME.density.columnGapCols) * cellPx;
+      const labelGapPx = cssNumber(root, '--pw-col-gap-cols', DEFAULT_THEME.density.columnGapCols) * cellPx;
       const labelRoomPx = labelGapPx + cellPx * series.reduce((m, s) => Math.max(m, s.label.length), 0);
       const grid = resolveRole(el, 'grid');
       const axis = { stroke: resolveRole(el, 'textDim'), font, labelFont: font, grid: { stroke: grid }, ticks: { stroke: grid } };
 
+      // A line of one point has no segment to draw (a settled point at the end of lap 1, or a live point before it), so
+      // it shows as a dot of its stroke; a line of more points shows none.
+      const onePoint = (u: uPlot, i: number): boolean => (u.data[i] ?? []).filter((v) => v !== null && v !== undefined).length === 1;
       let plain = 0;
-      const lines = series.map((s) => ({
-        label: s.label,
-        stroke: s.colour ? resolveColour(el, s.colour.colour) : resolveRole(el, SERIES_ROLES[plain++ % SERIES_ROLES.length] ?? 'series1'),
-        width: s.colour?.ownCar ? ownWidth : lineWidth,
-        ...(s.colour?.dashed ? { dash } : {}),
-        alpha: s.fresh === false ? staleAlpha : 1,
-        spanGaps: true,
-        points: { show: false },
-      }));
+      const lines = series.map((s) => {
+        const stroke = s.colour ? resolveColour(el, s.colour.colour) : resolveRole(el, SERIES_ROLES[plain++ % SERIES_ROLES.length] ?? 'series1');
+        const width = s.colour?.ownCar ? ownWidth : lineWidth;
+        return {
+          label: s.label,
+          stroke,
+          width,
+          ...(s.colour?.dashed ? { dash } : {}),
+          alpha: s.fresh === false ? staleAlpha : 1,
+          spanGaps: true,
+          points: { show: onePoint, size: 2 * width, fill: stroke, stroke },
+        };
+      });
 
       const plotted = plotLines(series);
-      // The live lines follow the series' own lines, in their look but dotted. A live line of one point (lap 1: no
-      // settled point yet) has no segment to draw, so it shows as a dot of its stroke.
-      const onePoint = (u: uPlot, i: number): boolean => (u.data[i] ?? []).filter((v) => v !== null && v !== undefined).length === 1;
+      // The live lines follow the series' own lines, in their look but dotted.
       const liveLines = plotted.flatMap((p) => {
         const line = p.live ? lines[p.of] : undefined;
-        return line ? [{ ...line, dash: liveDash, points: { show: onePoint, size: 2 * line.width, fill: line.stroke, stroke: line.stroke } }] : [];
+        return line ? [{ ...line, dash: liveDash }] : [];
       });
       const data = buildData(plotted);
       xs = data[0] as number[];
@@ -116,7 +115,8 @@
 
       /**
        * Paints each line's label: right of the plot at its end, or, for a line that ends early, one gap right of its own
-       * end (canvas px: scaled by the canvas' pixel ratio).
+       * end but never past the plot's right edge, so it stays clear of the column (canvas px: scaled by the canvas' pixel
+       * ratio).
        */
       const drawLabels = (u: uPlot): void => {
         const ratio = uPlot.pxRatio;
@@ -126,23 +126,28 @@
         const early = labels.filter((l) => endsEarly(l, range, x.kind));
         const column = labels.filter((l) => !endsEarly(l, range, x.kind));
         const ys = placeLabels(column.map((l) => u.valToPos(l.value, 'y', true) - u.bbox.top), rowPx, u.bbox.height, column.map((l) => l.bold));
-        const columnLeft = u.bbox.left + u.bbox.width + labelGapPx * ratio;
-        const draw = (l: EndLabel, left: number, y: number): void => {
+        const plotRight = u.bbox.left + u.bbox.width;
+        const columnLeft = plotRight + labelGapPx * ratio;
+        /** Draws the label at the left `leftOf` gives for its width in the label font. */
+        const draw = (l: EndLabel, leftOf: (widthPx: number) => number, y: number): void => {
           const line = lines[l.index];
           if (!line) return;
           u.ctx.font = `${l.bold ? `${boldWeight} ` : ''}${rowPx}px ${cssVar(root, '--pw-font')}`;
           u.ctx.fillStyle = line.stroke;
           u.ctx.globalAlpha = line.alpha;
-          u.ctx.fillText(l.text, left, y);
+          u.ctx.fillText(l.text, leftOf(u.ctx.measureText(l.text).width), y);
         };
         u.ctx.save();
         u.ctx.textAlign = 'left';
         u.ctx.textBaseline = 'middle';
         column.forEach((l, i) => {
           const y = ys[i];
-          if (y !== undefined) draw(l, columnLeft, u.bbox.top + y);
+          if (y !== undefined) draw(l, () => columnLeft, u.bbox.top + y);
         });
-        for (const l of early) draw(l, u.valToPos(l.x, 'x', true) + labelGapPx * ratio, u.valToPos(l.value, 'y', true));
+        for (const l of early) {
+          const endPx = u.valToPos(l.x, 'x', true);
+          draw(l, (widthPx) => earlyLabelLeft(endPx, labelGapPx * ratio, widthPx, plotRight), u.valToPos(l.value, 'y', true));
+        }
         u.ctx.restore();
       };
 

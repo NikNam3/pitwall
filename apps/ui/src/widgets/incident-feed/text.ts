@@ -11,8 +11,6 @@ export const us = 'us';
 export const joint = ', ';
 /** Between the before and after of a pair. */
 export const arrow = '→';
-/** A before/after pair, `+4.1→+5.8`; either side may be empty. */
-export const pair = (before: string, after: string): string => `${before}${arrow}${after}`;
 /** The kind word and its detail: `time loss S2`, `warning 2/3`, `damage floor +8 %`. */
 export const withDetail = (kind: string, detail: string): string => `${kind} ${detail}`;
 /** A warning's count of the limit: `2/3`. */

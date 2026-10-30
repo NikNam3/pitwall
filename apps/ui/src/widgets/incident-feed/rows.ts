@@ -21,23 +21,12 @@ export type IncidentRow = { id: string; role?: Role | undefined; cells: Record<I
 
 const signedSeconds = (ms: number): string => formatSignedSeconds(ms, 1);
 
-/** The first reason among values that are unknown. */
-const firstReason = (...values: Known<unknown>[]): UnknownReason | undefined => values.find((v) => !v.known)?.reason;
-
-/** Our gap to the other car before and after: `+4.1→+5.8`; after it retired, `+4.1→DNF` (its gap after is not applicable). */
-function gapText(before: Known<number>, after: Known<number>): string {
-  if (!before.known && !after.known && after.reason !== 'notApplicable') return '';
-  const b = before.known ? signedSeconds(before.value) : '';
-  const a = after.known ? signedSeconds(after.value) : after.reason === 'notApplicable' ? text.retired : '';
-  return text.pair(b, a);
-}
-
 /** A known value's text, or the unknown's part (its mark shows in place). */
 const valuePart = <T>(v: Known<T>, format: (t: T) => string): CellPart => (v.known ? { text: format(v.value) } : { text: '', reason: v.reason });
 
 /**
  * The parts of `us P5→P4, OCO +4.1→DNF` with each unknown value in its place: `us …, OCO +4.1→…`; the gaps show (as
- * marks) even when both are unknown, which the plain text leaves out.
+ * marks) even when both are unknown. After the other car retired its gap after is not applicable: `DNF`.
  */
 function forUsParts(f: IncidentForUs, cars: readonly CarOverview[]): CellPart[] {
   const position: CellPart[] = f.positionBefore.known
@@ -50,21 +39,15 @@ function forUsParts(f: IncidentForUs, cars: readonly CarOverview[]): CellPart[] 
   return [...parts, { text: text.joint }, code, { text: ' ' }, valuePart(f.gapBeforeMs, signedSeconds), { text: text.arrow }, after];
 }
 
-/** What changed for one of our cars: `us P5→P4, OCO +4.1→DNF`; the gaps are to the car the analysis names. */
+/**
+ * What changed for one of our cars: `us P5→P4, OCO +4.1→DNF`; the gaps are to the car the analysis names. Built once
+ * from its parts: the plain text is their texts joined (no marks), the hover reason the first unknown part's.
+ */
 function forUsCell(f: IncidentForUs, cars: readonly CarOverview[]): IncidentCell {
-  const position = f.positionBefore.known ? positionPairText(f.positionBefore.value, f.positionAfter) : '';
-  const lead = position === '' ? text.us : `${text.us} ${position}`;
-  if (!f.otherCarId.known) {
-    const reason = firstReason(f.positionBefore, f.positionAfter);
-    return withParts(reason === undefined ? { text: lead } : { text: lead, reason }, forUsParts(f, cars));
-  }
-  const code = carCodeById(cars, f.otherCarId.value);
-  const gap = gapText(f.gapBeforeMs, f.gapAfterMs);
-  const gapAfter = f.gapAfterMs.known || f.gapAfterMs.reason === 'notApplicable' ? [] : [f.gapAfterMs];
-  const reason = firstReason(f.positionBefore, f.positionAfter, f.gapBeforeMs, ...gapAfter) ?? code.reason;
-  const other = [code.text, gap].filter((t) => t !== '').join(' ');
-  const cellText = gap === '' ? lead : `${lead}${text.joint}${other}`;
-  return withParts(reason === undefined ? { text: cellText } : { text: cellText, reason }, forUsParts(f, cars));
+  const parts = forUsParts(f, cars);
+  const cellText = parts.map((p) => p.text).join('');
+  const reason = parts.find((p) => p.reason !== undefined)?.reason;
+  return withParts(reason === undefined ? { text: cellText } : { text: cellText, reason }, parts);
 }
 
 /** The cell with its parts, when one of them is unknown (a known cell shows its text alone). */
