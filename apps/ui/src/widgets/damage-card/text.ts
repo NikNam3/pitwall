@@ -6,6 +6,10 @@ export const wingHeader = ['L', 'R', 'REAR'] as const;
 export const cornerLabels = { tyre: 'TYRE', brake: 'BRAKE' } as const;
 /** The loss of a jump whose lap-time cost is still being measured. */
 export const lossMeasuring = 'loss: measuring';
+/** The loss of a jump whose lap-time cost can never be measured. */
+export const lossNotMeasurable = 'loss: not measurable';
+/** Why it can never be measured: the title of `lossNotMeasurable`. */
+export const lossNotMeasurableTitle = 'too few clean laps before the hit';
 /** Loss text of a measured jump, `loss +0.12 s/lap`. */
 export const lossMeasured = (seconds: string): string => `loss ${seconds}`;
 
