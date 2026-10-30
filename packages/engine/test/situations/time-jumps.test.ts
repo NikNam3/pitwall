@@ -287,15 +287,29 @@ describe('a flashback after a mid-race fall of the session time (review 2 C5)', 
     expect(runner.state).toEqual(fresh.state);
   });
 
-  // Inventory 1.10 across a fall (w3e implement report, concern 2): the clock falls only 400 ms at race frame 200, so its
-  // raw time at race frame 240 still lies above race frame `target`'s. After the rewind from race frame 240 the game's
-  // first two frames still carry that old raw time; the frames after them are on the target's clock.
+  // Inventory 1.10 (raceSingaporeWet lap 44), as the supervisor ruled it: the frames right after a rewind that still
+  // carry the pre-rewind session time belong to the rewind's target moment, so everything they record is stamped with
+  // the target's time on the race clock. At race frame 240 the game rewinds to race frame `target`; its first two frames
+  // still carry the raw session time of race frame 240. Car 0 drives 40 m a frame, so it passes a mini-sector boundary
+  // in the second of them, and stands still on the frame after them (later crossings are then timed from that frame,
+  // as in a fresh run). Cases: the clock fell 400 ms at race frame 200 and the rewind goes before the fall (its old raw
+  // time still lies above the target's) or after it; and a plain rewind without any fall.
   it.each([
-    ['before the fall', 180],
-    ['after the fall', 220],
-  ] as const)('a rewind to %s whose first frames still carry the old session time reports no clock fall and keeps the target’s race clock', (_, target) => {
-    const all = withFall(undefined, 2_800);
-    const fork = withFall((k) => (k === target + 5 ? { events: [ovtk(1, 0)] } : {}), 2_800);
+    ['across a mid-race fall, to before it', 180, 2_800],
+    ['to after a mid-race fall', 220, 2_800],
+    ['without any fall', 180, undefined],
+  ] as const)('a rewind %s whose first frames still carry the old session time equals a fresh run to the same frame, those frames stamped at the target', (_, target, fallTo) => {
+    const standAt = target + 3;
+    const timeline = (extra: (k: number) => Beat = () => ({})) => script(gridStart(260, (k) => {
+      const driven = k < standAt ? k : k - 1;
+      return {
+        ...(fallTo !== undefined && k >= FALL && { at: fallTo + (k - FALL) * STEP }),
+        cars: (d) => lap(d, 0, { currentLapNum: 1 + Math.floor(driven / 90), lapDistance: (driven % 90) * 40 + 10, ...(driven >= 90 && { lastLapTimeInMs: 90 * STEP }) }),
+        ...extra(k),
+      };
+    }));
+    const all = timeline();
+    const fork = timeline((k) => (k === target + 5 ? { events: [ovtk(1, 0)] } : {}));
     const runner = new SessionRunner(initFor(all), OPTS);
     for (const f of all.slice(0, raceFrame(240) + 1)) runner.apply(f);
     const oldMs = all[raceFrame(240)]!.sessionTime;
@@ -303,18 +317,23 @@ describe('a flashback after a mid-race fall of the session time (review 2 C5)', 
     const results = continuation.map((f) => runner.apply(f));
     expect(results[0]!.flashback?.targetFrameId).toBe(raceFrame(target));
     expect(results.flatMap((r, i) => (r.clockFall ? [`frame ${i}: ${JSON.stringify(r.clockFall)}`] : []))).toEqual([]);
-    // A fresh run to the same frame. The stale frames' own stamps (their crossings, the lap cursors' time) carry the old
-    // time in any rewind of this shape, so the comparison leaves those out.
+
+    // The fresh run to the same frame, noting the target's time on the race clock and the crossings of the two frames
+    // the stale ones replace.
     const fresh = new SessionRunner(initFor(fork), OPTS);
-    for (const f of fork.slice(0, raceFrame(target + 15) + 1)) fresh.apply(f);
-    const seen = (r: SessionRunner) => ({
-      sessionTime: r.state.sessionTime,
-      clockOffsetMs: r.state.open.phaseBook.clockOffsetMs,
-      phases: r.state.history.sessionPhases,
-      open: r.state.open.situations.session,
-      events: r.state.history.events,
-      laps: r.state.history.laps,
+    let targetAt = 0;
+    let staleCrossings = { from: 0, to: 0 };
+    fork.slice(0, raceFrame(target + 15) + 1).forEach((f, i) => {
+      if (i === raceFrame(target + 1)) staleCrossings.from = fresh.state.history.miniSectors.length;
+      fresh.apply(f);
+      if (i === raceFrame(target)) targetAt = fresh.state.sessionTime;
+      if (i === raceFrame(target + 2)) staleCrossings = { ...staleCrossings, to: fresh.state.history.miniSectors.length };
     });
-    expect(seen(runner)).toEqual(seen(fresh));
+    expect(staleCrossings.to - staleCrossings.from).toBe(1);
+    // The only difference the ruling allows: what the stale frames recorded (here one crossing) is stamped at the
+    // target's time, where the fresh run has the frames' own times. Nothing else is left out.
+    const { history } = fresh.state;
+    const miniSectors = history.miniSectors.map((m, i) => (i >= staleCrossings.from && i < staleCrossings.to ? { ...m, at: targetAt } : m));
+    expect(runner.state).toEqual({ ...fresh.state, history: { ...history, miniSectors } });
   });
 });
