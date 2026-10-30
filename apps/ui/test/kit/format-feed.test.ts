@@ -52,7 +52,10 @@ describe('formatLoss', () => {
     [8.5, '8.5%'],
     [4.94, '4.9%'],
     [4.96, '5.0%'],
-    [100, '100.0%'],
+    [9.94, '9.9%'],
+    [9.96, '10%'],
+    [10.2, '10%'],
+    [100, '100%'],
     [0.04, '0.0%'],
     [-1.25, '−1.3%'],
   ])('%s -> %s', (p, text) => {
@@ -63,6 +66,10 @@ describe('formatLoss', () => {
     expect(formatLoss(4.94)).not.toBe('5%');
     expect(formatLoss(4.94)).toBe('4.9%');
     expect(formatLoss(5)).toBe('5.0%');
+  });
+
+  it('is whole from 10 %, so the text is never longer than 100%', () => {
+    for (const p of [9.96, 10.2, 55.55, 99.6, 100]) expect(formatLoss(p).length).toBeLessThanOrEqual('100%'.length);
   });
 });
 

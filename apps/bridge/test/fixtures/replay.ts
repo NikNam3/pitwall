@@ -9,7 +9,7 @@ import { readPwrec } from '../../src/pwrec/reader.ts';
 /** The committed segment `file` of `fixtures/segments/`. */
 export const segmentPath = (file: string): string => join(import.meta.dirname, '../../../../fixtures/segments', file);
 
-/** Every committed segment of a normal session (`tt-zandvoort-lap1` stays for the UI only). */
+/** Every committed segment (all of normal sessions). */
 export const SEGMENT_FILES = [
   'race-singapore-start.pwrec.gz',
   'race-singapore-end.pwrec.gz',

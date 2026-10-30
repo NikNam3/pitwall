@@ -10,7 +10,7 @@ const session = { feedId: feedId('gallery'), sessionUid: '1', playerCar: carId(1
 
 /** Synthetic cases and fit expectations for `projected-lap`. */
 const gallery: GalleryEntry<typeof widget> = {
-  moments: ['ttZandvoortLap1.crossing'],
+  moments: ['raceZandvoortLap10.crossing'],
   cases: {
     // Mockup: Q1 push lap inside the cut-off, a new personal best (green delta).
     insideCutOff: { projection: insideCutOff, session },

@@ -64,7 +64,7 @@ describe('Gallery', () => {
   it('renders one cell per expected data-gallery-id for feed-status, each once', () => {
     const { container } = render(Gallery, { moments });
     const ids = [...container.querySelectorAll('[data-gallery-id^="feed-status/"]')].map((e) => e.getAttribute('data-gallery-id')!);
-    expect(expectedIds().length).toBe(5 * 5 * THEMES.length);
+    expect(expectedIds().length).toBe(5 * 6 * THEMES.length);
     expect([...ids].sort()).toEqual([...expectedIds()].sort());
   });
 
