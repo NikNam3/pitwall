@@ -13,12 +13,30 @@ const SECTOR_VALID = [0x02, 0x04, 0x08] as const;
 const fuelAt = (car: CarState, at: SessionTime): Known<Kg> =>
   car.energy.fuel.known ? known(car.energy.fuel.value.kg, at) : unknown(car.energy.fuel.reason);
 
-const openCursor = (car: CarState, at: SessionTime): LapCursor => {
+/** Fuel at the lap's start; unknown when the engine joined the lap after it (the car's own reason first). */
+const fuelAtStart = (car: CarState, at: SessionTime, fromStart: boolean): Known<Kg> =>
+  fromStart || !car.energy.fuel.known ? fuelAt(car, at) : unknown('notReceived');
+
+/**
+ * The car has not begun its lap on the first frame the engine sees of it: before the line (lap distance not above 0)
+ * or with the lap timer not running (on the grid before the start, in the garage).
+ */
+const lapNotBegun = (car: CarState): boolean => car.timing.lapDistanceM <= 0 || car.timing.currentLapTimeMs === 0;
+
+/**
+ * An out lap that crosses the line without the lap number going up: in qualifying and practice the car leaves the garage
+ * on the lap it then times from the line, so the lap restarts there.
+ */
+const outLapReachesLine = (cursor: LapCursor, car: CarState): boolean =>
+  cursor.outLap && cursor.lapDistanceM < 0 && car.timing.lapDistanceM >= 0;
+
+/** A new lap cursor; `fromStart` = the engine sees the lap from its start (the line crossing, or the car before it). */
+const openCursor = (car: CarState, at: SessionTime, fromStart: boolean): LapCursor => {
   const { timing, tyres } = car;
   return {
     lap: timing.lap,
     startedAt: at,
-    fuelAtStartKg: fuelAt(car, at),
+    fuelAtStartKg: fuelAtStart(car, at, fromStart),
     tyreAgeAtStart: tyres.age,
     scMs: 0,
     vscMs: 0,
@@ -31,6 +49,8 @@ const openCursor = (car: CarState, at: SessionTime): LapCursor => {
     actualCompound: tyres.actualCompound,
     visualCompound: tyres.visualCompound,
     outLap: timing.pitStatus !== 'none' || timing.driverStatus === 'outLap',
+    fromStart,
+    lapDistanceM: timing.lapDistanceM,
     ...emptyChannels(),
     ersDeployedJ: undefined,
     ersHarvestedJ: undefined,
@@ -102,17 +122,22 @@ const lapFromHistoryOnly = (car: CarState, lapNumber: number, lapTimeMs: number,
   ...unknownLapEnd(),
 });
 
+/** Opens the car's lap cursor on this frame; the frame is the lap's first. */
+const startLap = (state: EngineState, car: CarState, at: SessionTime, fromStart: boolean): void => {
+  const cursor = openCursor(car, at, fromStart);
+  observeLapFrame(cursor, car);
+  state.open.laps[car.id] = cursor;
+};
+
 const trackLap = (state: EngineState, car: CarState, at: SessionTime): void => {
   const { timing } = car;
   const cursor = state.open.laps[car.id];
   // The first LapData of a car, or a lap number that went down: start over without emitting.
-  if (!cursor || timing.lap < cursor.lap) {
-    const fresh = openCursor(car, at);
-    observeLapFrame(fresh, car);
-    state.open.laps[car.id] = fresh;
-    return;
-  }
+  if (!cursor || timing.lap < cursor.lap) return startLap(state, car, at, lapNotBegun(car));
+  // The out lap ends at the line; what the game times from there is the lap, without the out lap's part.
+  if (timing.lap === cursor.lap && outLapReachesLine(cursor, car)) return startLap(state, car, at, true);
   addElapsed(state, cursor, at);
+  cursor.lapDistanceM = timing.lapDistanceM;
   if (timing.lap === cursor.lap) {
     // The game resets the sectors at the line, so the last non-zero value is the lap's.
     if (timing.sector1TimeMs > 0) cursor.sector1Ms = timing.sector1TimeMs;
@@ -131,9 +156,7 @@ const trackLap = (state: EngineState, car: CarState, at: SessionTime): void => {
     state.history.laps.push(lapFromCursor(car, cursor, lapNumber, timing.lastLapTimeMs, at));
   }
   // The completing frame belongs to the next lap's ranges and totals, not to the one it ends.
-  const next = openCursor(car, at);
-  observeLapFrame(next, car);
-  state.open.laps[car.id] = next;
+  startLap(state, car, at, true);
 };
 
 /** The newest lap of the car that has a record (provisional or confirmed), 0 if none. */
