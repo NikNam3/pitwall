@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { CLI, SEGMENT } from '../helpers/cli.ts';
 
-const AT_MS = 116_015;
+const AT_MS = 724_015;
 
 async function freePort(): Promise<number> {
   const server = createServer();

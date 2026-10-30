@@ -8,7 +8,7 @@ import { fixturePath } from '../../../../test-support/fixtures.ts';
 import { dataDir } from '../../src/storage/data-dir.ts';
 import { runCli } from '../helpers/cli.ts';
 
-const files = (['menuOnly', 'ttZandvoort', 'raceSingapore'] as const).map((n) => fixturePath(n)); // file-name order = reprocess order
+const files = (['menuOnly', 'raceSingapore', 'practiceZandvoortOnline'] as const).map((n) => fixturePath(n)); // file-name order = reprocess order
 function dumpDb(dir: string) {
   const db = new Database(dataDir({ PITWALL_DATA_DIR: dir }).dbPath, { readonly: true });
   const tables = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").pluck().all() as string[];
@@ -36,7 +36,7 @@ describe.skipIf(files.some((f) => f === undefined))('acceptance: pitwall import 
     for (const f of files) expect(await runClean(['import', f!], env)).toMatchObject({ code: 0 });
     const imported = dumpDb(env.PITWALL_DATA_DIR);
     expect(imported.tables['sessions']).toHaveLength(2); // menuOnly opens no session
-    expect(imported.tables['laps']).toHaveLength(15); // TT confirmed laps; Singapore completed none
+    expect(imported.tables['laps']).toHaveLength(8); // the practice's laps (1 ours, 5 of car 1, 2 AI); Singapore completed none
     expect(await runClean(['reprocess'], env)).toMatchObject({ code: 0, stdout: expect.stringContaining('reprocessed 3 recordings') });
     const first = dumpDb(env.PITWALL_DATA_DIR);
     expect((await runClean(['reprocess'], env)).code).toBe(0);

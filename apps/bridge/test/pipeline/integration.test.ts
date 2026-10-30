@@ -11,7 +11,7 @@ import { topicStreamHash } from '../../src/pipeline/stream-hash.ts';
 import { WsClient } from '../../src/ws/client.ts';
 import { WsServer } from '../../src/ws/server.ts';
 
-const SEGMENT = join(import.meta.dirname, '../../../../fixtures/segments/tt-zandvoort-lap1.pwrec.gz');
+const SEGMENT = join(import.meta.dirname, '../../../../fixtures/segments/race-zandvoort-lap10.pwrec.gz');
 const F = 'replay' as FeedId;
 
 describe('PwrecSource → pipeline → WebSocket (in process)', () => {
@@ -27,13 +27,13 @@ describe('PwrecSource → pipeline → WebSocket (in process)', () => {
     const p = new FeedPipeline({ feedId: F, source: new PwrecSource({ feedId: F, path: SEGMENT, mode: 'asFastAsPossible' }), hub, features: FEATURES, log: createLogger({ level: 'silent' }) });
     p.start(); await p.done; hub.tick();
     await vi.waitFor(() => expect(info.some((m) => m.type === 'update' || m.type === 'snapshot')).toBe(true));
-    expect(info.findLast((m) => m.type === 'update')).toMatchObject({ value: { sessionUid: '1895827638050388100' } });
+    expect(info.findLast((m) => m.type === 'update')).toMatchObject({ value: { sessionUid: '13536157633115227668' } });
     const entries = laps.flatMap((m) => (m.type === 'append' || m.type === 'snapshot' ? (m.entries ?? []) : [])) as Array<{ lapTimeMs: number }>;
     expect(entries.length).toBeGreaterThan(0); expect(entries.every((l) => l.lapTimeMs > 0)).toBe(true);
     await s1.close(); const s2 = await WsServer.start({ port, hub, feeds });
     await vi.waitFor(() => expect(hellos).toBe(2), { timeout: 3000 });
     await vi.waitFor(() => expect(laps.at(-1)).toMatchObject({ type: 'snapshot', entries: expect.arrayContaining([expect.objectContaining({ lapTimeMs: entries[0]!.lapTimeMs })]) }));
-    expect(info.at(-1)).toMatchObject({ type: 'snapshot', value: { sessionUid: '1895827638050388100' } });
+    expect(info.at(-1)).toMatchObject({ type: 'snapshot', value: { sessionUid: '13536157633115227668' } });
     c.close(); await s2.close();
   });
   it('topic stream hash is deterministic', async () => {

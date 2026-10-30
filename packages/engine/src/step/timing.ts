@@ -1,4 +1,4 @@
-import { known, unknown } from '@pitwall/domain';
+import { known, unknown, type Known, type Ms, type SessionTime } from '@pitwall/domain';
 import { pick } from './pick.ts';
 import { ZONE_FLAG } from './session.ts';
 import type { SubStep } from './types.ts';
@@ -22,6 +22,10 @@ const SECTOR = [1, 2, 3] as const;
 const GRID_FROM_ONE = 1;
 /** `speedTrapFastestLap` while the car has no speed trap time. */
 const NO_SPEED_TRAP_LAP = 255;
+/** A gap beyond 5 minutes either way tells the engineer nothing; the qualifying garage sends hours (user ruling 2026-10-30). */
+const MAX_GAP_MS = 300_000;
+
+const gap = (ms: Ms, at: SessionTime): Known<Ms> => (Math.abs(ms) > MAX_GAP_MS ? unknown('notApplicable') : known(ms, at));
 
 /** Timing from LapData; the FIA flag comes from Car Status. Gaps are kept as sent: a car just ahead can show a small negative delta. */
 export const applyTiming: SubStep = (state, frame, out) => {
@@ -43,8 +47,8 @@ export const applyTiming: SubStep = (state, frame, out) => {
         sector1TimeMs: l.sector1TimeMs,
         sector2TimeMs: l.sector2TimeMs,
         currentLapInvalid: l.currentLapInvalid === 1,
-        gapToLeaderMs: l.deltaToRaceLeaderMs,
-        gapToCarAheadMs: l.deltaToCarInFrontMs,
+        gapToLeaderMs: gap(l.deltaToRaceLeaderMs, at),
+        gapToCarAheadMs: gap(l.deltaToCarInFrontMs, at),
         safetyCarDeltaMs: Math.round(l.safetyCarDelta * 1000),
         pitStatus: pick(PIT_STATUS, l.pitStatus),
         numPitStops: l.numPitStops,

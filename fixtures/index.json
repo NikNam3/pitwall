@@ -50,6 +50,166 @@
       "features": [
         "385 BUTN events only (155 with UID 0), no Session packet"
       ]
+    },
+    {
+      "id": "qualifyingSingapore",
+      "file": "2026-10-28_23-53-34_d2b06401967cd89c.pwrec.gz",
+      "sha256": "498f7aff0e0381e7000753022542ca52ff7c73f4b5a0a643332c2b1ed9b615e3",
+      "bytes": 28242493,
+      "track": "Singapore",
+      "trackId": 12,
+      "sessionType": "qualifying",
+      "sessionTypeCode": 6,
+      "completedLaps": 3,
+      "durationMs": 429081.3679,
+      "features": [
+        "Q2: 15 active cars, 1 human (index 14); same weekend as raceSingaporeWet",
+        "3 completed player laps on one soft set (actual 16, visual 16): 92.485 s, 101.307 s, 92.977 s, all valid; lap 4 unfinished, back in the garage",
+        "fuel 10.0 kg at start, 3.349 kg at the start of lap 4, 10.0 kg again in the garage at the end",
+        "tyre wear RL/RR/FL/FR 0/0/0/0 % at start, 12/15/9/16 % at the end",
+        "session time runs ahead of wall time in the garage (0 to 139 s in the first 15 s of the file; 467.8 to 900.6 s at the end)",
+        "no player pit stop; 11 AI cars show numPitStops 1 only in the final LapData",
+        "PENA x2 (ours, corner-cutting warnings on laps 3 and 4), FTLP x4, OVTK x115, no COLL, no SC",
+        "weather clear then light cloud, track 33 to 31 °C",
+        "15 UID-0 SessionHistory just before SEND; FinalClassification of 15 cars"
+      ]
+    },
+    {
+      "id": "raceSingaporeWet",
+      "file": "2026-10-29_00-04-08_095e1bf6add44b18.pwrec.gz",
+      "sha256": "2dd0d50c4d15eb51e9af464ea60c2ee8ac1033b2135daf3deee3daa817a9cbe2",
+      "bytes": 590061154,
+      "track": "Singapore",
+      "trackId": 12,
+      "sessionType": "race",
+      "sessionTypeCode": 15,
+      "completedLaps": 44,
+      "durationMs": 5220266.4206,
+      "features": [
+        "62-lap race, 20 cars, 1 human (index 19); cars 0 and 7 retire (mechanical) on laps 11 and 18, numActiveCars 20 to 18",
+        "44 completed player laps, all valid; lap 45 unfinished at SEND (4698.93 s), no FinalClassification; we lead from lap 11",
+        "formation lap: safetyCarStatus 3 from 1.008 s, then session time resets from 169.566 to 0 for the start without FLBK; STLG x5 and LGOT after the reset, one more LGOT before the formation lap",
+        "our stops: lap 6 (intermediates to mediums, actual 17 visual 17; pit entry 542.4 s, numPitStops 1 at 572.7 s) and lap 26 (mediums to intermediates; 2533.2 to 2559.6 s)",
+        "every other car stops twice (laps 5-7 to slicks, lap 26 to intermediates); cars 0 and 7 once",
+        "fuel 110.0 kg at start, 33.742 kg at the start of lap 45 (about 1.74 kg/lap)",
+        "tyre wear RL/RR/FL/FR on the medium stint: 1/1/0/1 % at the start of lap 7, 31/39/19/37 % at the start of lap 26; 23/25/7/11 % at the end on intermediates aged 19 laps",
+        "FLBK x5: 496.561 to 481.561 s (lap 5; undoes our terminal damage PENA, an SC deployment SCAR and DRSD), 757.045 to 742.045 and 742.831 to 742.076 s (lap 7), 4581.839 to 4566.839 and 4580.390 to 4566.822 s (lap 44)",
+        "no SC, VSC or red-flag phase: safetyCarStatus stays 0 after the start, numSafetyCarPeriods 0",
+        "weather light rain, overcast at 483 s, light cloud 987 s, overcast 1970 s, light rain 2549 s, storm 4143 s, light rain 4603 s",
+        "DRSE x1 (381.3 s, lap 4); DRSD x1 (wet) undone by the flashback",
+        "PENA x9 (ours 7, one a 3 s time penalty on lap 6), COLL x9 (ours 2), OVTK x241 (ours 19), FTLP x12, TMPT x2, RTMT x6",
+        "77 s of events before the first Session packet; LGOT, SCAR and one BUTN there carry playerCarIndex 0",
+        "21 s without packets at session time 1364 s (lap 15), session time frozen",
+        "20 UID-0 SessionHistory at SEND"
+      ]
+    },
+    {
+      "id": "lobbyOnly",
+      "file": "2026-10-29_22-35-28_unknown-session.pwrec.gz",
+      "sha256": "26108369da9854fd379065a8089486af6338bb2b768096e516be3ac337127398",
+      "bytes": 5236,
+      "track": null,
+      "trackId": null,
+      "sessionType": null,
+      "sessionTypeCode": null,
+      "completedLaps": 0,
+      "durationMs": 243846.5686,
+      "features": [
+        "online lobby just before practiceZandvoortOnline: 61 LobbyInfo and 294 BUTN, all UID 0, no Session packet",
+        "1 lobby player from 47.2 s, 20 from 192.7 s (2 humans, 18 AI); we turn ready at 201.8 s"
+      ]
+    },
+    {
+      "id": "practiceZandvoortOnline",
+      "file": "2026-10-29_22-39-31_0022670294e098af.pwrec.gz",
+      "sha256": "cfae2d816aa81a0bcc850276ab57d642c13a2739f598c9ba9ee2c3f2631fc43a",
+      "bytes": 10634658,
+      "track": "Zandvoort",
+      "trackId": 26,
+      "sessionType": "practice",
+      "sessionTypeCode": 4,
+      "completedLaps": 1,
+      "durationMs": 558632.9007,
+      "features": [
+        "online short practice, 20 cars, 2 humans (0 is the player, 1); same weekend as raceZandvoortOnline",
+        "1 completed player lap (81.879 s, valid, hard: actual 19 visual 18); soft fitted in the garage (actual 17 visual 16); terminal damage on lap 2 at 487.898 s (PENA retired), RTMT for cars 0 and 1",
+        "fuel 20.0 kg at start in the garage, 2.208 kg at the start of lap 2",
+        "after the retirement the session is simulated to its end: session time jumps from 487.898 to 3605.033 s",
+        "gamePaused 1 from 339.5 to 377.2 s while session time runs on",
+        "FTLP x5 (all car 1), COLL x2, OVTK x78, PENA x2, RTMT x2",
+        "40 UID-0 SessionHistory and 2 UID-0 FinalClassification after the retirement"
+      ]
+    },
+    {
+      "id": "raceZandvoortOnline",
+      "file": "2026-10-29_22-48-50_bbda17a651868614.pwrec.gz",
+      "sha256": "f8e064e9670fa89f9f628d4a17bc360b38bff3d115f0dbf4f6d3e6fdbb0dee3d",
+      "bytes": 10502681,
+      "track": "Zandvoort",
+      "trackId": 26,
+      "sessionType": "race",
+      "sessionTypeCode": 15,
+      "completedLaps": 0,
+      "durationMs": 368284.181,
+      "features": [
+        "online 72-lap race, 20 cars, 2 humans (0 is the player, 1)",
+        "formation lap: safetyCarStatus 3 from 1.069 s, RTMT car 0 at 125.339 s; session time resets 131.495 to 0, then 1.968 to 0.065 at the start, without FLBK; STLG x5, LGOT x2",
+        "no completed player lap: COLL x4 ours on lap 1, terminal damage at 24.001 s with SCAR VSC deployed at the same time; safetyCarStatus never shows 2",
+        "after the retirement the session is simulated to its end (24.001 to 6361.441 s); FinalClassification: 16 cars finish (72 or 67 laps, 2-3 stops), cars 0, 1, 9 and 15 DNF",
+        "fuel 105.2 kg at start, mediums (actual 17 visual 16)",
+        "PENA x5, COLL x5, OVTK x92",
+        "UID-0 bulks: 20 SessionHistory and 1 FinalClassification twice, then 12 LobbyInfo"
+      ]
+    },
+    {
+      "id": "practiceZandvoortUidReuse",
+      "file": "2026-10-29_22-54-58_0022670294e098af.pwrec.gz",
+      "sha256": "456712c7c2829c7b51802d3df4dd37559b54346e75f53d5ccd17fc0b3b922aae",
+      "bytes": 2383238,
+      "track": "Zandvoort",
+      "trackId": 26,
+      "sessionType": "practice",
+      "sessionTypeCode": 4,
+      "completedLaps": 0,
+      "durationMs": 339249.3616,
+      "features": [
+        "online short practice, 20 cars, 2 humans (0 is the player, 1)",
+        "same sessionUid as practiceZandvoortOnline but a new weekend (link ids 1945305838 against 221758740): the game reused the uid",
+        "no SSTA: the file starts with a Session packet at 0.076 s",
+        "no completed player lap: terminal damage on lap 1 at 135.163 s (PENA retired), RTMT for cars 0 and 1",
+        "fuel 20.0 kg at start in the garage; soft fitted in the garage (actual 17 visual 16)",
+        "then 33 UID-0 bulks (20 SessionHistory and 1 FinalClassification each) every 5 s and no other packets for 166 s, then session time 3760.546 s",
+        "OVTK x31, COLL x1, PENA x1, no FTLP"
+      ]
+    },
+    {
+      "id": "raceZandvoortUidReuse",
+      "file": "2026-10-29_23-00-37_bbda17a651868614.pwrec.gz",
+      "sha256": "f5bda11ab891ce137908c47170759ac12b4fb267b3cd05e8666bb1db9b52a7ae",
+      "bytes": 153556305,
+      "track": "Zandvoort",
+      "trackId": 26,
+      "sessionType": "race",
+      "sessionTypeCode": 15,
+      "completedLaps": 14,
+      "durationMs": 1714703.5553,
+      "features": [
+        "online 72-lap race, 20 cars, 2 humans (1 is the player, 0); recorded by the other human of the earlier online sessions; same weekend as practiceZandvoortUidReuse (link id 1945305838)",
+        "same sessionUid as raceZandvoortOnline but a new weekend: the game reused the uid",
+        "formation lap: session time resets 57.2 to 0 for it, safetyCarStatus 3 from 0.887 s; resets 131.714 to 0.033 for the start; STLG x5, LGOT x2; then 6.908 to 0.831 to 0.027 at the start, without FLBK",
+        "LapPositions headers stay at session time 33.337 (frame 10539) for the first 350 s of the file",
+        "14 completed player laps, all valid: lap 1 82.486 s, best 74.655 s on lap 9 (FTLP); we lead laps 4-7; lap 15 unfinished",
+        "our stops: lap 8 (mediums actual 18 visual 17 to softs actual 17 visual 16; pit entry 548.4 s, numPitStops 1 at 574.4 s) and lap 13 under the safety car (softs to hards actual 19 visual 18; 970.4 to 990.1 s)",
+        "car 2 terminal damage on lap 12 (912.0 s): VSC at 914.2 s (safetyCarStatus 2), full SC from 924.2 s (status 1), returning 1121.9 s, resume 1160.0 s; most AI cars stop on lap 13 under it",
+        "terminal damage for us on lap 15 at 1207.667 s after COLL with car 12 (PENA retired, RTMT), SCAR at the same time; the session is then simulated to its end (1207.667 to 5842.006 s)",
+        "fuel 103.8 kg at start, 83.372 kg at the start of lap 15 (about 1.46 kg/lap)",
+        "tyre wear RL/RR/FL/FR on the medium stint: 4/3/3/1 % at the start of lap 2, 18/12/19/8 % at the start of lap 8",
+        "weather light cloud, clear from 924 s; track 19 to 20 °C",
+        "FinalClassification: 17 finish (72 or 71 laps, all but one on 3 stops); cars 0, 1 and 2 DNF, car 0 (the other human) after 13 laps without an RTMT",
+        "PENA x12 (ours 1), COLL x12 (ours 3), OVTK x189, FTLP x5 (ours 3), SCAR x12, DRSE x2, DRSD x2, RTMT x2",
+        "LGOT, the formation SCAR and one DRSD carry playerCarIndex 0",
+        "UID-0 bulks: 40 SessionHistory and 2 FinalClassification after our retirement, 20 SessionHistory and 1 FinalClassification at the end, then 451 LobbyInfo"
+      ]
     }
   ],
   "segments": [
@@ -92,6 +252,107 @@
         "20 UID-0 SessionHistory packets (cars 0-19) just before SEND, then SEND",
         "COLL x1, SEND x1, BUTN x18",
         "duration 3265.341 ms"
+      ]
+    },
+    {
+      "file": "race-zandvoort-lap10.pwrec.gz",
+      "source": "raceZandvoortUidReuse",
+      "fromS": 721,
+      "toS": 726,
+      "records": 1778,
+      "features": [
+        "2 context packets (Session, Participants) first",
+        "car 1 (the player) crosses the line into lap 10 at 723.381: lap 9 74.655 s (sectors 25.980/25.877/22.798, valid), FTLP car 1 at 723.366; SessionHistory confirms it in the segment",
+        "mini-sector crossings of car 1: lap 9 segments 48-49, lap 10 segments 0-2",
+        "20 active cars, 2 humans (1 is the player, 0), teammate 4; grid P1-P20",
+        "band advisories (tyre surface/carcass, car 1) raise after the line and escalate to bandOutLap 0.5 s later",
+        "OVTK x2, SPTP x2, FTLP x1",
+        "duration 4961.544 ms"
+      ]
+    },
+    {
+      "file": "race-zandvoort-pit-stop.pwrec.gz",
+      "source": "raceZandvoortUidReuse",
+      "fromS": 548.2,
+      "toS": 555,
+      "records": 2424,
+      "features": [
+        "2 context packets (Session, Participants) first",
+        "car 1 (the player) enters the pit lane at 548.387 (pitStatus 1), crosses the line into lap 8 in the pit lane at 549.521, stops at 553.276 (pitStatus 2)",
+        "tyres change at 554.740: mediums (actual 18 visual 17, age 7) to softs (actual 17 visual 16, age 0); the engine closes the medium stint (laps 7-7, fitted at age 6)",
+        "numPitStops stays 0 (it becomes 1 at 565.105, see race-zandvoort-pit-exit)",
+        "OVTK x3, SPTP x5, BUTN x1",
+        "duration 6784.360 ms"
+      ]
+    },
+    {
+      "file": "race-zandvoort-pit-exit.pwrec.gz",
+      "source": "raceZandvoortUidReuse",
+      "fromS": 564.5,
+      "toS": 566,
+      "records": 536,
+      "features": [
+        "2 context packets (Session, Participants) first",
+        "car 1 (the player) in the pit lane on softs (age 0) after its stop: numPitStops 0 to 1 at 565.105; it leaves the pit lane only at 574.376 (outside the segment)",
+        "SPTP x2",
+        "duration 1479.996 ms"
+      ]
+    },
+    {
+      "file": "race-zandvoort-vsc.pwrec.gz",
+      "source": "raceZandvoortUidReuse",
+      "fromS": 913.5,
+      "toS": 916.5,
+      "records": 1073,
+      "features": [
+        "2 context packets (Session, Participants) first",
+        "car 2 terminal damage (PENA 16/42 at 912.011, just before the segment): SCAR VSC deployed at 914.178, DRSD (wet track) at 914.178, safetyCarStatus 2 from 915.045, RTMT car 2 at 916.028, resultStatus retired from 916.042",
+        "numActiveCars stays 20",
+        "OVTK x3, SCAR x1, DRSD x1, RTMT x1",
+        "duration 2979.902 ms"
+      ]
+    },
+    {
+      "file": "race-zandvoort-retire.pwrec.gz",
+      "source": "raceZandvoortUidReuse",
+      "fromS": 1205,
+      "toS": 5846,
+      "records": 1487,
+      "features": [
+        "2 context packets (Session, Participants) first; numActiveCars 19 (car 2 retired on lap 12) while car 19 still races at P13",
+        "COLL car 12 with car 1 at 1204.770 (before the segment); terminal damage for car 1 (the player) at 1207.667: PENA retired, RTMT car 1, PENA car 12, SCAR SC deployed, two SCAR resume; all events at session time 1207.667, frame 89947",
+        "the last LapData is at 1207.660: car 1 still shows resultStatus active",
+        "then the session is simulated to its end: no packets between 1207.667 and 5837.001; UID-0 bulks of 20 SessionHistory and 1 FinalClassification at 5837.001, 5842.006 and 5845.008, then 451 UID-0 LobbyInfo; no SEND",
+        "OVTK x5, PENA x2, RTMT x1, SCAR x3, BUTN x10",
+        "duration 319971.618 ms"
+      ]
+    },
+    {
+      "file": "race-singapore-wet-flashback.pwrec.gz",
+      "source": "raceSingaporeWet",
+      "fromS": 741.5,
+      "toS": 744.5,
+      "records": 2170,
+      "features": [
+        "2 context packets (Session, Participants) first; car 19 (the player) on lap 7",
+        "three passes through the window: the first run 741.5-744.5 s; the second after the flashback 757.045 to 742.045 (its FLBK, sent at 757.045, is outside the segment: the frame id falls to 56744 at 742.098); the third after FLBK 742.831 to 742.076 (target frame 56743), resuming at frame 56743 (742.097)",
+        "BUTN x22, FLBK x1",
+        "duration 27878.511 ms"
+      ]
+    },
+    {
+      "file": "qualifying-singapore-end.pwrec.gz",
+      "source": "qualifyingSingapore",
+      "fromS": 899,
+      "toS": 900.6,
+      "records": 70,
+      "features": [
+        "2 context packets (Session, Participants) first; car 14 (the player) in the garage, 15 active cars",
+        "15 UID-0 SessionHistory (cars 0-14) at 900.594 just before SEND, then 15 SessionHistory and a FinalClassification of 15 cars with the session's own UID after SEND, then UID-0 BUTN",
+        "4 frames, cadence 532 ms",
+        "LapData carries a split time of 255 min 62 703 ms that the encoder rejects (datagrams 3, 10, 16, 43)",
+        "SPTP x1, SEND x1, BUTN x6",
+        "duration 4197.329 ms"
       ]
     }
   ]

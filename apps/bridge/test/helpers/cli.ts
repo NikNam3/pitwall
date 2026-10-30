@@ -2,7 +2,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { afterEach } from 'vitest';
 export const CLI = fileURLToPath(new URL('../../src/cli/pitwall.ts', import.meta.url));
-export const SEGMENT = fileURLToPath(new URL('../../../../fixtures/segments/tt-zandvoort-lap1.pwrec.gz', import.meta.url));
+export const SEGMENT = fileURLToPath(new URL('../../../../fixtures/segments/race-zandvoort-lap10.pwrec.gz', import.meta.url));
 /** Every child started and not yet exited: a test that times out or throws must not leave a bridge running. */
 const running = new Set<ChildProcess>();
 const killAll = (): void => { for (const child of running) child.kill('SIGKILL'); running.clear(); };

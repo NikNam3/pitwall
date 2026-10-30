@@ -34,10 +34,10 @@ describe('pitwall replay transport flags', { timeout: 30_000 }, () => {
     expect(await firstStatus(['--paused', '--speed', '2'])).toMatchObject({ paused: true, speed: 2 });
   });
   it('--at-time has jumped before listening is printed, and --paused keeps it there', async () => {
-    // The segment is a mid-session cut, about 112015 to 117993 ms: 115000 lies inside it, so only a real jump reaches it.
-    const status = await firstStatus(['--paused', '--at-time', '115000']);
-    expect(status.sessionTimeMs).toBeGreaterThanOrEqual(115_000);
-    expect(status.sessionTimeMs).toBeLessThan(117_900);
+    // The segment is a mid-session cut, about 721000 to 725980 ms: 723000 lies inside it, so only a real jump reaches it.
+    const status = await firstStatus(['--paused', '--at-time', '723000']);
+    expect(status.sessionTimeMs).toBeGreaterThanOrEqual(723_000);
+    expect(status.sessionTimeMs).toBeLessThan(725_900);
     expect(status).toMatchObject({ paused: true, atEnd: false });
   });
   it('prints "replay finished" once for a real end, and not before listening when a startup jump lands at the end', async () => {

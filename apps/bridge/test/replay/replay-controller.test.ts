@@ -1,4 +1,4 @@
-// ReplayController on the committed tt-zandvoort-lap1 segment (spec 8.5, Task 5). Time is injected: the test releases the pacer's sleeps.
+// ReplayController on the committed race-zandvoort-lap10 segment (spec 8.5, Task 5). Time is injected: the test releases the pacer's sleeps.
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -12,7 +12,7 @@ import { createLogger } from '../../src/log.ts';
 import { FeedPipeline } from '../../src/pipeline/feed-pipeline.ts';
 import { FEED, harness, tick, until } from './harness.ts';
 
-const SEGMENT = join(import.meta.dirname, '../../../../fixtures/segments/tt-zandvoort-lap1.pwrec.gz');
+const SEGMENT = join(import.meta.dirname, '../../../../fixtures/segments/race-zandvoort-lap10.pwrec.gz');
 const open: Array<() => Promise<void>> = [];
 afterEach(async () => { for (const stop of open.splice(0)) await stop(); });
 const start = () => { const h = harness(SEGMENT); open.push(h.stop); return h; };
@@ -146,6 +146,32 @@ describe('ReplayController: jumps', () => {
     expect(cars).toBeDefined();
     expect(jumped.read('session.info')).toEqual(info);
     expect(jumped.read('cars.overview')).toEqual(cars);
+  });
+  it('jumpToLap 10 (past the line) then jumpToLap 9 gives the same session.info and cars.overview as a fresh replay jumped to lap 9', async () => {
+    const jumpToLap = async (h: ReturnType<typeof start>, lap: number, notBefore?: (lap: number) => boolean) => {
+      h.controller.control({ kind: 'jumpToLap', lap });
+      await until(() => { const p = h.controller.position(); return p !== undefined && p.playerLap >= lap && (notBefore?.(p.playerLap) ?? true); });
+    };
+    const jumped = start();
+    jumped.controller.control({ kind: 'pause' });
+    await jumpToLap(jumped, 10);
+    expect(jumped.controller.position()!.playerLap).toBe(10);
+    await jumpToLap(jumped, 9, (lap) => lap < 10);
+    await tick();
+    const fresh = start();
+    fresh.controller.control({ kind: 'pause' });
+    await jumpToLap(fresh, 9);
+    await tick();
+    expect(jumped.controller.position()).toEqual(fresh.controller.position());
+    expect(jumped.controller.position()!.playerLap).toBe(9);
+    const info = fresh.read('session.info');
+    const cars = fresh.read('cars.overview');
+    expect(info).toBeDefined();
+    expect(cars).toBeDefined();
+    expect(jumped.read('session.info')).toEqual(info);
+    expect(jumped.read('cars.overview')).toEqual(cars);
+    expect(jumped.status()).toMatchObject({ paused: true, atEnd: false, playerLap: 9 });
+    expect(jumped.gate.requested).toEqual([]);
   });
   it.each([
     ['jumpToLap 99', { kind: 'jumpToLap', lap: 99 }],

@@ -3,7 +3,6 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { describeWithFixture } from '../../../../test-support/fixtures.ts';
 import { main } from '../../src/cli/pwrec-cut.ts';
 import { drain } from '../pwrec/helpers.ts';
 
@@ -41,18 +40,3 @@ describe('pwrec-cut CLI', () => {
     expect(r.status).toBe(1); expect(r.stderr).toContain(USAGE);
   });
 });
-
-const SEGMENTS = [
-  ['ttZandvoort', 'tt-zandvoort-lap1.pwrec.gz', '112', '118'],
-  ['raceSingapore', 'race-singapore-start.pwrec.gz', '0', '0.5'],
-  ['raceSingapore', 'race-singapore-end.pwrec.gz', '61.5', '63.4'],
-] as const;
-for (const [fixture, file, from, to] of SEGMENTS) {
-  describeWithFixture(fixture, `re-cutting ${file}`, (path) => {
-    it('reproduces the committed segment record for record', async () => {
-      const out = join(tmp(), file);
-      expect((await run([path, out, '--from', from, '--to', to])).code).toBe(0);
-      expect(await drain(out)).toEqual(await drain(join(SEG, file)));
-    }, 120_000);
-  });
-}

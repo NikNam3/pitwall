@@ -12,7 +12,7 @@ import { bindJob, bindState, defineFeature, type TopicBinding } from '../../src/
 import { topicStreamHash } from '../../src/pipeline/stream-hash.ts';
 import type { AddRngInput } from '../jobs/fixtures/add-rng.ts';
 
-const SEGMENT = join(import.meta.dirname, '../../../../fixtures/segments/tt-zandvoort-lap1.pwrec.gz');
+const SEGMENT = join(import.meta.dirname, '../../../../fixtures/segments/race-zandvoort-lap10.pwrec.gz');
 const TOPIC: TopicName = 'session.info';
 const bindTestJob = bindJob as unknown as (topic: TopicName, job: Job<unknown, unknown>) => TopicBinding;
 

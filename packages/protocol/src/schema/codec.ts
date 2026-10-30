@@ -3,6 +3,7 @@ import { SPLIT_TIME_MAX_MS, SPLIT_TIME_MIN_MS, sizeOf, type FieldSpec, type Infe
 const LITTLE_ENDIAN = true;
 const MS_PER_MINUTE = 60_000;
 const U16_RANGE = 65_536;
+const U8_MAX = 255;
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder('utf-8');
@@ -55,6 +56,17 @@ function membersOf<T>(spec: StructSpec, codecOf: (field: FieldSpec) => T): Struc
   });
 }
 
+/**
+ * A struct reader that returns one object literal with every field in spec order, so all results of a
+ * struct share one hidden class (a loop of keyed writes into `{}` is several times slower). The literal
+ * is generated once per spec; field names go in through `JSON.stringify`, offsets are numbers.
+ */
+function compileStructReader(members: readonly StructMember<Reader>[]): Reader {
+  const fields = members.map((member, i) => `${JSON.stringify(member.name)}: c[${i}](v, o + ${member.offset})`);
+  const build = new Function('c', `return (v, o) => ({ ${fields.join(', ')} });`) as (codecs: readonly Reader[]) => Reader;
+  return build(members.map((member) => member.codec));
+}
+
 function compileReader(spec: FieldSpec): Reader {
   switch (spec.kind) {
     case 'primitive':
@@ -62,20 +74,15 @@ function compileReader(spec: FieldSpec): Reader {
     case 'array': {
       const readItem = readerOf(spec.item);
       const stride = sizeOf(spec.item);
+      const length = spec.length;
       return (view, offset) => {
-        const items: unknown[] = [];
-        for (let i = 0; i < spec.length; i++) items.push(readItem(view, offset + i * stride));
+        const items = new Array<unknown>(length);
+        for (let i = 0; i < length; i++) items[i] = readItem(view, offset + i * stride);
         return items;
       };
     }
-    case 'struct': {
-      const members = membersOf(spec, readerOf);
-      return (view, offset) => {
-        const result: Record<string, unknown> = {};
-        for (const member of members) result[member.name] = member.codec(view, offset + member.offset);
-        return result;
-      };
-    }
+    case 'struct':
+      return compileStructReader(membersOf(spec, readerOf));
     case 'chars':
       return (view, offset) => {
         const bytes = new Uint8Array(view.buffer, view.byteOffset + offset, spec.length);
@@ -86,7 +93,8 @@ function compileReader(spec: FieldSpec): Reader {
       return (view, offset) => {
         const msPart = view.getUint16(offset, LITTLE_ENDIAN);
         const minutes = view.getUint8(offset + 2);
-        return minutes === 0 && msPart >= MS_PER_MINUTE ? msPart - U16_RANGE : minutes * MS_PER_MINUTE + msPart;
+        if (msPart < MS_PER_MINUTE) return minutes * MS_PER_MINUTE + msPart;
+        return minutes === 0 ? msPart - U16_RANGE : -(minutes * MS_PER_MINUTE + msPart);
       };
   }
 }
@@ -126,14 +134,23 @@ function compileWriter(spec: FieldSpec): Writer {
     case 'splitTime':
       return (view, offset, value) => {
         const ms = value as number;
-        if (!Number.isInteger(ms) || ms < SPLIT_TIME_MIN_MS || ms > SPLIT_TIME_MAX_MS) {
-          throw new RangeError(`splitTime must be an integer in ${SPLIT_TIME_MIN_MS}..${SPLIT_TIME_MAX_MS} ms, got ${ms}`);
-        }
-        const negative = ms < 0;
-        view.setUint16(offset, negative ? ms + U16_RANGE : ms % MS_PER_MINUTE, LITTLE_ENDIAN);
-        view.setUint8(offset + 2, negative ? 0 : Math.floor(ms / MS_PER_MINUTE));
+        const [minutes, msPart] = splitTimeParts(ms);
+        view.setUint16(offset, msPart, LITTLE_ENDIAN);
+        view.setUint8(offset + 2, minutes);
       };
   }
+}
+
+/** The raw `[minutes, msPart]` of a split time: the inverse of the `splitTime` reader (see `splitTime` in dsl.ts). */
+function splitTimeParts(ms: number): readonly [number, number] {
+  if (Number.isInteger(ms)) {
+    if (ms >= 0 && ms <= SPLIT_TIME_MAX_MS) return [Math.floor(ms / MS_PER_MINUTE), ms % MS_PER_MINUTE];
+    if (ms < 0 && ms >= SPLIT_TIME_MIN_MS) return [0, ms + U16_RANGE];
+    const minutes = Math.floor(-ms / MS_PER_MINUTE) - 1;
+    const msPart = -ms - minutes * MS_PER_MINUTE;
+    if (minutes >= 1 && minutes <= U8_MAX && msPart < U16_RANGE) return [minutes, msPart];
+  }
+  throw new RangeError(`splitTime must be an integer in ${SPLIT_TIME_MIN_MS}..${SPLIT_TIME_MAX_MS} ms or a garbage pair's value, got ${ms}`);
 }
 
 const readerOf = (spec: FieldSpec): Reader => cached(readers, spec, compileReader);
