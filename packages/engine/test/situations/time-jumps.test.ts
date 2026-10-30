@@ -1,7 +1,9 @@
 // Session-time jumps (spec 3.3; diagnosis t1-diagnosis.md P1, P4, P5): the start's settling after lights out is
 // re-stamped onto the race clock, any other fall changes nothing and is reported, a flashback stays a flashback (the
-// runner decides what is one), a flashback after a fall restores the state by frame id, and garage acceleration is no
-// jump, also across a stall. The two online start shapes follow raceZandvoortOnline (S3) and raceZandvoortUidReuse (S4).
+// runner decides what is one, and a replay keeps its decision), a flashback after a fall restores the state by frame id,
+// the frames a rewind stamps at its target keep that stamp on every replay, garage acceleration is no jump, and any
+// other forward jump of more than 60 s is reported. The two online start shapes follow raceZandvoortOnline (S3) and
+// raceZandvoortUidReuse (S4).
 import { describe, expect, it } from 'vitest';
 import type { EventDetails } from '@pitwall/protocol';
 import { SessionRunner } from '../../src/index.ts';
@@ -226,23 +228,38 @@ describe('a flashback is never a clock fall', () => {
   });
 });
 
+// Garage acceleration peaks at about 31.6 times wall time: inventory 1.9, raceSingaporeWet qualifying (SgQ) frames
+// 720 to 750 cover 0.5 s of wall time and 15.777 s of session time (review 3 E7). The tests run the clock at that peak.
+const GARAGE_PEAK = 31.6;
+/** Session time of frame k of a clock running at the peak, 16 ms of wall time a frame. */
+const atPeak = (k: number): number => Math.round(k * STEP * GARAGE_PEAK);
+/** Practice at the peak; frame 100 comes `wallMs` of wall time and `advanceMs` of session time after frame 99. */
+const stall = (wallMs: number, advanceMs: number) =>
+  run(script(beats(150, (k) => ({
+    at: k < 100 ? atPeak(k) : atPeak(99) + advanceMs + atPeak(k - 99) - atPeak(1),
+    wall: k * STEP + (k >= 100 ? wallMs - STEP : 0),
+  })), { session: { sessionType: 1 } }));
+/** Frames whose step reported a clock jump, a clock fall or a truncation. */
+const jumpy = (results: ReturnType<typeof run>['results']) =>
+  results.flatMap((r, i) => (r.clockJump !== undefined || r.clockFall !== undefined || r.delta.truncated ? [i] : []));
+
 describe('garage time acceleration', () => {
-  it('a session clock running 30 times faster than wall time is no jump, no fall and no pause', () => {
-    const { runner, results } = run(script(beats(200, (k) => ({ at: k * 500, wall: k * STEP })), { session: { sessionType: 1 } }));
-    expect(results.flatMap((r, i) => (r.clockFall !== undefined || r.delta.truncated ? [i] : []))).toEqual([]);
+  it('a session clock running at the measured peak of 31.6 times wall time is no jump, no fall and no pause', () => {
+    const { runner, results } = run(script(beats(200, (k) => ({ at: atPeak(k), wall: k * STEP })), { session: { sessionType: 1 } }));
+    expect(jumpy(results)).toEqual([]);
     expect(runner.state.history.pauses).toEqual([]);
     expect(runner.state.open.situations.session.kind).toBe('running');
   });
 
   // Review 2 B3: a stall of a few seconds while the clock runs ahead of wall time gives one advance above 60 s. A
   // post-session jump must also outrun 60 times the wall gap of its step: the recorded simulation jumps are thousands of
-  // seconds within one frame interval, garage acceleration is at most about 30 times wall time.
-  /** Practice at 30 times wall time (480 ms a frame); frame 100 comes `wallMs` of wall time and `advanceMs` of session time after frame 99. */
-  const stall = (wallMs: number, advanceMs: number) =>
-    run(script(beats(150, (k) => ({ at: k * 480 + (k >= 100 ? advanceMs - 480 : 0), wall: k * STEP + (k >= 100 ? wallMs - STEP : 0) })), { session: { sessionType: 1 } }));
+  // seconds within one frame interval, while garage acceleration peaks at 31.6 times wall time, which leaves the factor
+  // 60 a headroom of about 1.9.
+  /** A 3 s stall at the peak advances the clock 94.8 s. */
+  const STALL_ADVANCE = 3_000 * GARAGE_PEAK;
 
-  it('a 3 s stall in a clock running 30 times faster than wall time (a 90 s advance) opens no post-session, and is no fall and no pause', () => {
-    const { runner, results } = stall(3_000, 90_000);
+  it('a 3 s stall in a clock running at the peak (a 94.8 s advance) opens no post-session, and is no fall and no pause', () => {
+    const { runner, results } = stall(3_000, STALL_ADVANCE);
     expect(runner.state.open.situations.session.kind).toBe('running');
     expect(results.flatMap((r, i) => (r.clockFall !== undefined || r.delta.truncated ? [i] : []))).toEqual([]);
     expect(runner.state.history.pauses).toEqual([]);
@@ -255,6 +272,48 @@ describe('garage time acceleration', () => {
     [181_000, 'postSession'],
   ] as const)('after a 3 s stall, an advance of %i ms leaves the phase %s: the jump must outrun 60 times the wall gap', (advanceMs, kind) => {
     expect(stall(3_000, advanceMs).runner.state.open.situations.session.kind).toBe(kind);
+  });
+});
+
+// Spec 3.3: any other forward jump (not the post-session jump) of more than 60 s is reported with the game's times, like
+// a fall, and changes nothing else.
+describe('any other forward jump of the session time', () => {
+  it('a 3 s stall in the garage at the peak (a 94.8 s advance) is reported on its step with both times, and on no other', () => {
+    const { results } = stall(3_000, 94_800);
+    expect(results.flatMap((r, i) => (r.clockJump === undefined ? [] : [{ i, ...r.clockJump }]))).toEqual([
+      { i: 100, fromMs: atPeak(99), toMs: atPeak(99) + 94_800 },
+    ]);
+  });
+  it('the reported jump changes nothing else: no fall, no truncation, no pause, the phase stays running', () => {
+    const { runner, results } = stall(3_000, 94_800);
+    expect([results[100]!.clockFall, results[100]!.delta.truncated, results[100]!.changed.has('sessionPhases')]).toEqual([undefined, false, false]);
+    expect(runner.state.history.pauses).toEqual([]);
+    expect([runner.state.history.sessionPhases.map((p) => p.kind), runner.state.open.situations.session.kind]).toEqual([['preStart'], 'running']);
+  });
+  it('a forward jump of exactly 60 s is not reported', () => {
+    expect(jumpy(stall(3_000, 60_000).results)).toEqual([]);
+  });
+  it('the post-session jump is no clock jump: it opens the post-session instead', () => {
+    const { runner, results } = run(script(beats(150, (k) => ({ at: k < 100 ? atPeak(k) : 4_500_000 + k * STEP })), { session: { sessionType: 1 } }));
+    expect(runner.state.open.situations.session.kind).toBe('postSession');
+    expect(results.flatMap((r, i) => (r.clockJump === undefined ? [] : [i]))).toEqual([]);
+  });
+  it('a forward jump in a race after a mid-race fall is reported with the game’s times, and the race clock keeps its offset', () => {
+    // the clock falls from raceAt(199) to 1 s at race frame 200, then jumps 90 s ahead at race frame 300 after a 3 s stall
+    const OFFSET = raceAt(199) - 1000;
+    const rawAt = (k: number) => 1000 + (k - 200) * STEP + (k >= 300 ? 90_000 : 0);
+    const all = script(gridStart(400, (k) => ({
+      ...(k >= 200 && { at: rawAt(k) }),
+      ...(k >= 300 && { wall: (raceFrame(k) * STEP) + 3_000 }),
+      ...(k === 350 && { events: [ovtk(0, 1)] }),
+    })));
+    const { runner, results } = run(all);
+    expect(results.flatMap((r, i) => (r.clockJump === undefined ? [] : [{ i, ...r.clockJump }]))).toEqual([
+      { i: raceFrame(300), fromMs: rawAt(299), toMs: rawAt(300) },
+    ]);
+    expect([results[raceFrame(300)]!.clockFall, results[raceFrame(300)]!.delta.truncated]).toEqual([undefined, false]);
+    expect(runner.state.history.events.filter((e) => e.kind === 'overtake').map((e) => e.at)).toEqual([rawAt(350) + OFFSET]);
+    expect(runner.state.open.situations.session.kind).toBe('racing');
   });
 });
 
@@ -335,5 +394,86 @@ describe('a flashback after a mid-race fall of the session time (review 2 C5)', 
     const { history } = fresh.state;
     const miniSectors = history.miniSectors.map((m, i) => (i >= staleCrossings.from && i < staleCrossings.to ? { ...m, at: targetAt } : m));
     expect(runner.state).toEqual({ ...fresh.state, history: { ...history, miniSectors } });
+  });
+});
+
+// Review 3 E1: the stamp a frame got right after a rewind (it still carried the pre-rewind session time, so it belongs
+// to the rewind's target moment) is reproduced whenever the frame is replayed. A second rewind about 1 s after the
+// first one's target restores a snapshot from before those frames and replays them (inventory 1.10: SgW f56788, 0.8 s
+// after f56743; raceSingaporeWet lap 44, two rewinds 1.5 s apart, the first with stale frames).
+describe('a second rewind whose replay crosses the frames the first one stamped at its target', () => {
+  const FALL = 200;
+  /** Car 0 drives 40 m a frame; the clock falls to `fallTo` at race frame `FALL` when given; `extra` adds events. */
+  const timeline = (fallTo: number | undefined, extra: (k: number) => Beat = () => ({})) => script(gridStart(260, (k) => ({
+    ...(fallTo !== undefined && k >= FALL && { at: fallTo + (k - FALL) * STEP }),
+    cars: (d) => lap(d, 0, { currentLapNum: 1 + Math.floor(k / 90), lapDistance: (k % 90) * 40 + 10, ...(k >= 90 && { lastLapTimeInMs: 90 * STEP }) }),
+    ...extra(k),
+  })));
+  /** `frames` with race frames `from`.. (`count` of them) carrying the session time `ms`, packets unchanged. */
+  const withTime = <F extends { sessionTime: number }>(frames: F[], from: number, count: number, ms: number): F[] =>
+    frames.map((f, i) => (i >= raceFrame(from) && i < raceFrame(from + count) ? { ...f, sessionTime: ms } : f));
+
+  // Rewind 1 at race frame 240 to race frame 180; rewind 2 at race frame `at2` of the new timeline to race frame
+  // `target2`. Each rewind's first two frames still carry the session time the game had before it. Each timeline
+  // differs from the one before by an overtake, so a frame of the wrong timeline shows. With the default snapshot
+  // interval (1 s of session time) the first snapshot after rewind 1 comes at race frame 185, so rewind 2 restores one
+  // from before race frame 180 and replays the stale frames.
+  it.each([
+    ['to after them, about 1 s later', undefined, 184, 240],
+    ['onto the last of them, 6 frames later', undefined, 182, 188],
+    ['to after them, about 1 s later, the first rewind across a mid-race fall to before it', 2_800, 184, 240],
+  ] as const)('a second rewind %s equals a fresh run, every stale frame stamped at its rewind’s target (full state and history)', (_, fallTo, target2, at2) => {
+    const all = timeline(fallTo);
+    const fork1 = timeline(fallTo, (k) => (k === 183 ? { events: [ovtk(1, 0)] } : {}));
+    const fork2 = timeline(fallTo, (k) => (k === 183 ? { events: [ovtk(1, 0)] } : k === target2 + 5 ? { events: [ovtk(0, 1)] } : {}));
+    const runner = new SessionRunner(initFor(all));
+    for (const f of all.slice(0, raceFrame(240) + 1)) runner.apply(f);
+
+    const old1 = all[raceFrame(240)]!.sessionTime;
+    const resumed1 = after(fork1, raceFrame(181), raceFrame(241)).slice(0, at2 - 180).map((f, i) => (i < 2 ? { ...f, sessionTime: old1 } : f));
+    const results1 = resumed1.map((f) => runner.apply(f));
+    expect(results1[0]!.flashback?.targetFrameId).toBe(raceFrame(180));
+
+    const old2 = resumed1.at(-1)!.sessionTime;
+    const resumed2 = after(fork2, raceFrame(target2 + 1), raceFrame(241) + resumed1.length).slice(0, 15).map((f, i) => (i < 2 ? { ...f, sessionTime: old2 } : f));
+    const results2 = resumed2.map((f) => runner.apply(f));
+    expect(results2[0]!.flashback?.targetFrameId).toBe(raceFrame(target2));
+    // The stale frames and the frame after them are no clock fall (the timeline's own fall, at race frame 200, is).
+    const settled = [...results1.slice(0, 3), ...results2.slice(0, 3)];
+    expect(settled.flatMap((r, i) => (r.clockFall ? [`frame ${i}: ${JSON.stringify(r.clockFall)}`] : []))).toEqual([]);
+
+    // The fresh run over the last timeline, each rewind's stale frames carrying the session time of its target frame
+    // (the ruling's stamp: what they record lies at the target's time on the race clock).
+    const stamped1 = withTime(fork2, 181, 2, fork2[raceFrame(180)]!.sessionTime);
+    const reference = withTime(stamped1, target2 + 1, 2, stamped1[raceFrame(target2)]!.sessionTime);
+    const fresh = new SessionRunner(initFor(reference));
+    for (const f of reference.slice(0, raceFrame(target2 + 15) + 1)) fresh.apply(f);
+    expect(runner.state).toEqual(fresh.state);
+  });
+});
+
+// Review 3 E2: the runner's decision that a frame reports a flashback reaches the tracker one way, and a replay after a
+// later rewind reproduces it. Here an FLBK that targets no frame behind the state (so no rewind is taken) comes with
+// the session time falling 800 ms; it is a report, so the tracker reads no clock fall on it. A later rewind replays it.
+describe('a frame the runner took as a flashback report stays one when a later rewind replays it', () => {
+  /** At race frame 200 an FLBK naming its own frame id, the clock 800 ms lower from there on; frame ids keep rising. */
+  const frames = () => script(gridStart(300, (k) => ({
+    ...(k >= 200 && { at: raceAt(k) - 800 }),
+    ...(k === 200 && { events: [flbk(raceFrame(200), raceAt(150))] }),
+    cars: (d) => lap(d, 0, { currentLapNum: 1 + Math.floor(k / 90), lapDistance: (k % 90) * 40 + 10, ...(k >= 90 && { lastLapTimeInMs: 90 * STEP }) }),
+  })));
+
+  it('the report reads no clock fall on the first pass', () => {
+    const { results } = run(frames().slice(0, raceFrame(210) + 1));
+    expect([results[raceFrame(200)]!.flashback, results[raceFrame(200)]!.clockFall]).toEqual([undefined, undefined]);
+  });
+  it('a rewind at race frame 230 to race frame 205, replaying the report, equals a run without the rewind and reports no clock fall', () => {
+    const all = frames();
+    const { runner, results: first } = run(all.slice(0, raceFrame(230) + 1));
+    const results = after(all, raceFrame(206), raceFrame(231)).slice(0, 40).map((f) => runner.apply(f));
+    expect(results[0]!.flashback?.targetFrameId).toBe(raceFrame(205));
+    expect([...first, ...results].flatMap((r, i) => (r.clockFall ? [`frame ${i}: ${JSON.stringify(r.clockFall)}`] : []))).toEqual([]);
+    const fresh = run(all.slice(0, raceFrame(245) + 1)).runner;
+    expect(runner.state).toEqual(fresh.state);
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { FeedId } from '@pitwall/domain';
+import { OUT_OF_RACE_STATUSES, type FeedId, type ResultStatus } from '@pitwall/domain';
 import { initialState, step } from '../../src/index.ts';
 import { driverKeyOf, isActiveCar } from '../../src/step/identity.ts';
 import { ScenarioBuilder } from '../builders/index.ts';
@@ -54,13 +54,29 @@ describe('car identity', () => {
   });
 
   // The game lowers numActiveCars when a car drops out but keeps every car in its slot (b-report.md, failure 1).
-  it.each([[7, 'retired'], [5, 'disqualified'], [4, 'didNotFinish']] as const)(
+  it.each([[7, 'retired'], [5, 'disqualified'], [4, 'didNotFinish'], [6, 'notClassified']] as const)(
     'a car out of the race (result status %i, %s) keeps its slot: every car of a 4-car field stays active when numActiveCars drops to 3',
     (resultStatus, _name) => {
       const { st } = run(new ScenarioBuilder({ cars: 4 }).frames(1, () => {})
         .participants({ numActiveCars: 3 }).frames(1, (d) => { d.lapData.lapData[1]!.resultStatus = resultStatus; }));
       expect(st.cars.slice(0, 4).map((c) => c.active)).toEqual([true, true, true, true]);
       expect(st.cars[4]!.active).toBe(false);
+    },
+  );
+
+  // One set of out-of-race statuses (supervisor, wave 4): the engine counts a car's slot as out of the race exactly when
+  // the domain's OUT_OF_RACE_STATUSES holds its status, so a status added there changes the engine too.
+  /** Every result status, by the game's code (LapData `resultStatus` 0..7); a Record, so a new status must be named here. */
+  const BY_CODE: Record<ResultStatus, number> = {
+    invalid: 0, inactive: 1, active: 2, finished: 3, didNotFinish: 4, disqualified: 5, notClassified: 6, retired: 7,
+  };
+  it.each(Object.entries(BY_CODE) as Array<[ResultStatus, number]>)(
+    'a car with result status %s (code %i) adds a slot when numActiveCars drops exactly when the domain counts it out of the race',
+    (status, code) => {
+      const { st } = run(new ScenarioBuilder({ cars: 4 }).frames(1, () => {})
+        .participants({ numActiveCars: 3 }).frames(1, (d) => { d.lapData.lapData[1]!.resultStatus = code; }));
+      expect(st.cars[1]!.timing.resultStatus).toBe(status);
+      expect(st.cars[3]!.active).toBe(OUT_OF_RACE_STATUSES.has(status));
     },
   );
 });
