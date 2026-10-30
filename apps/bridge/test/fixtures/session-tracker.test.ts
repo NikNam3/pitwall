@@ -1,8 +1,11 @@
 // SessionTracker on real packets: sessions open and end, and the UID-0 packets the game sends around a session's end
 // join its last frame (spec 5.3).
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
+import type { FeedId } from '@pitwall/domain';
+import type { Frame } from '@pitwall/engine';
+import { PacketId, type Packet } from '@pitwall/protocol';
 import { describeWithFixture } from '../../../../test-support/fixtures.ts';
-import { segmentPath, trackFile, trackFixture, type TrackedFixture } from './replay.ts';
+import { filePackets, segmentPath, trackFile, trackFixture, trackPackets, type TrackedFixture } from './replay.ts';
 
 const started = (r: TrackedFixture) => r.lifecycle.filter((e) => e.type === 'sessionStarted').map((e) => e.sessionUid);
 const uid0History = (r: TrackedFixture) => r.lastFrame!.sessionHistory.filter((p) => p.header.sessionUid === 0n).map((p) => p.carIdx);
@@ -53,5 +56,57 @@ describe('session end on committed segments', () => {
     expect(r.lastFrame!.finalClassification).toBeUndefined();
     expect(uid0History(r)).toEqual([]);
     expect(r.metrics.droppedUid0).toBeGreaterThan(0);
+  });
+});
+
+// raceZandvoortUidReuse reuses a session uid: right after every real LapPositions packet (1 Hz) the game sends one whose
+// header is frozen at frame 10539, session time 33.337 s (fixtures/index.json). The segment's window holds the
+// formation start and the race start but not those frozen packets (their session time lies outside it), so the second
+// run puts them back where the source has them.
+describe('race-zandvoort-uid-reuse-start: a packet type with a frozen header hides no frame', () => {
+  const FILE = 'race-zandvoort-uid-reuse-start.pwrec.gz';
+  const FROZEN = { frameIdentifier: 10_539, overallFrameIdentifier: 10_539, sessionTime: 33.336_673_736_572_266 };
+
+  async function* withFrozenLapPositions(path: string): AsyncGenerator<{ packet: Packet; receivedAtMs: number }> {
+    for await (const item of filePackets(path)) {
+      yield item;
+      const { packet, receivedAtMs } = item;
+      if (packet.packetId === PacketId.lapPositions) yield { packet: { ...packet, header: { ...packet.header, ...FROZEN } }, receivedAtMs };
+    }
+  }
+
+  /** What the engine takes from a frame: its ids and time, which LapPositions it holds, its events. */
+  const summary = (f: Frame) => ({
+    frameId: f.frameId,
+    overallFrameId: f.overallFrameId,
+    sessionTime: f.sessionTime,
+    lapPositionsFrame: f.lapPositions?.header.overallFrameIdentifier,
+    events: f.events.map((e) => e.details.code),
+  });
+  type Run = { frames: ReturnType<typeof summary>[]; tracked: TrackedFixture };
+  const run = async (packets: AsyncIterable<{ packet: Packet; receivedAtMs: number }>): Promise<Run> => {
+    const frames: Run['frames'] = [];
+    const tracked = await trackPackets(FILE as FeedId, packets, (f) => frames.push(summary(f)));
+    return { frames, tracked };
+  };
+  const lightsOutFrames = (r: Run) => r.frames.filter((f) => f.events.includes('LGOT')).map((f) => f.frameId);
+  let plain: Run;
+  let frozen: Run;
+
+  beforeAll(async () => {
+    plain = await run(filePackets(segmentPath(FILE)));
+    frozen = await run(withFrozenLapPositions(segmentPath(FILE)));
+  });
+
+  it('as cut: frames from its first second on, the formation start, and lights out', () => {
+    expect(plain.frames[0]).toMatchObject({ frameId: 30, sessionTime: 390 });
+    expect(lightsOutFrames(plain)).toEqual([8369]);
+    expect(plain.tracked.metrics.latePackets).toBe(0);
+  });
+  it('with the frozen LapPositions back: the same frames, in order, lights out seen', () => {
+    expect(frozen.frames.length).toBe(plain.frames.length);
+    expect(frozen.frames).toEqual(plain.frames);
+    expect(lightsOutFrames(frozen)).toEqual([8369]);
+    expect(frozen.tracked.metrics).toMatchObject({ framesClosed: plain.tracked.metrics.framesClosed, incompleteFrames: plain.tracked.metrics.incompleteFrames });
   });
 });
