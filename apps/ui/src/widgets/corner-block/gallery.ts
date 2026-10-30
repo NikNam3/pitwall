@@ -18,6 +18,8 @@ const CARCASS = { lo: 85, hi: 105 };
 const PRESSURE = { lo: 22.5, hi: 24 };
 const BRAKE = { lo: 300, hi: 900 };
 const ENGINE = { lo: 80, hi: 120 };
+/** The surface has no live state: `car-bands` judges it per lap only (ruling 2026-10-30). */
+const surfaceOf = (value: number): BandReading => reading(k(value), SURFACE, unknown('notApplicable'));
 
 
 type Temps = { surface: number; carcass: Known<number>; psi: number; brake: number; wear: number };
@@ -46,7 +48,7 @@ function carOf(t: Corners<Temps>, hidden?: UnknownReason): CarState {
 
 function bandsOf(t: Corners<Temps>, over: { fr?: Partial<CarBands['tyres']['fr']>; frBrake?: BandReading } = {}): CarBands {
   const tyre = (c: Temps) => ({
-    surfaceC: inBand(c.surface, SURFACE),
+    surfaceC: surfaceOf(c.surface),
     carcassC: c.carcass.known ? inBand(c.carcass.value, CARCASS) : reading(unknown('notApplicable'), CARCASS, unknown('notApplicable')),
     pressurePsi: inBand(c.psi, PRESSURE),
   });
