@@ -24,7 +24,7 @@ export type ResultStatus =
   | 'retired';
 /**
  * The result statuses of a car out of the race (retired, did not finish, disqualified, not classified): it will set no
- * more times. The one set the analyses (`outOfRace`) and the timing tower read.
+ * more times. The one set the analyses read (`outOfRace`); displays get the result from them (e.g. `LapBoardRow.outOfRace`).
  */
 export const OUT_OF_RACE_STATUSES: ReadonlySet<ResultStatus> = new Set<ResultStatus>(['retired', 'didNotFinish', 'disqualified', 'notClassified']);
 export type Vec3 = { x: number; y: number; z: number };

@@ -72,6 +72,7 @@ export function rowOf(
   const sectorsKnown = bests.sectors.every((s) => s !== undefined);
   return {
     carId,
+    outOfRace,
     lastLapMs: last === undefined ? unknownMs : known(last.lapTimeMs, last.completedAt),
     lastSectorsMs: last === undefined ? [unknownMs, unknownMs, unknownMs] : (last.sectorTimesMs.map((ms) => known(ms, last.completedAt)) as Sectors<Known<Ms>>),
     lastSectorStatus:

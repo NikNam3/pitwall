@@ -1,6 +1,6 @@
 // Joins the topics the timing tower reads into one row per car (no arithmetic: the numbers, stops and compound included, come from the topics).
 import type { CarOverview, SessionInfo } from '@pitwall/contracts';
-import { OUT_OF_RACE_STATUSES, unknown } from '@pitwall/domain';
+import { unknown } from '@pitwall/domain';
 import { ourCars } from '../../kit/car/our-cars.ts';
 import { formatPenaltyMs, formatWarnings } from '../../kit/values/format.ts';
 import type { Role } from '../../theme/roles.ts';
@@ -26,6 +26,7 @@ export type TowerRow = {
   ours: boolean;
   /** A car of the incident the incident moment names; false in every other moment. */
   involved: boolean;
+  /** Out of the race, as the lap board's row says (`LapBoardRow.outOfRace`); false for a car the board lacks. */
   retired: boolean;
   position: number | undefined;
   /** Places gained (positive) or lost, from the gaps analysis; undefined when unknown or retired. */
@@ -92,9 +93,9 @@ export function buildRows(input: TowerInput): TowerRow[] {
     .filter((c) => !UNUSED.has(c.timing.resultStatus))
     .map((c): TowerRow => {
       const id = c.id;
-      const retired = OUT_OF_RACE_STATUSES.has(c.timing.resultStatus);
       const gaps = intervals.get(id);
       const lap = board.get(id);
+      const retired = lap?.outOfRace === true;
       const gained = gaps?.positionsGained;
       const toUs = toCar.get(id);
       return {

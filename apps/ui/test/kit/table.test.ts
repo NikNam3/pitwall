@@ -4,9 +4,10 @@
 //    body cells hold the rendered `cell` snippet; header cells sit outside `[data-row]`;
 //  - every body row carries `data-row="<rowKey>"` and, as classes, `inactive` and `highlight` when they apply;
 //  - the available width is `size.cols`; the gap between columns is read one way (review 2, F9): code counts it with
-//    the unitless density token `--pw-col-gap-cols` on the document root (e.g. `2`; the default theme's value when
-//    unset), passed to `fitColumns` as a number of cells, the same token the chart reads; the CSS gap of the header and
-//    each row is the length variable itself, inline `column-gap: var(--pw-col-gap)`;
+//    the unitless density token `--pw-col-gap-cols` as the table's own element sees it (review 3, U3: a theme on an
+//    ancestor, a gallery cell or a panel, counts; e.g. `2`; the default theme's value when unset), passed to
+//    `fitColumns` as a number of cells, the same token the chart reads; the CSS gap of the header and each row is the
+//    length variable itself, inline `column-gap: var(--pw-col-gap)`;
 //  - row banding: every second body row (index 1, 3, ...) has inline `background-color: <role('bgRowBand')>`,
 //    the others have none;
 //  - the text sits in the theme font at the one size: the root `.table` has inline `font-family: var(--pw-font)` and
@@ -89,6 +90,24 @@ describe('Table: columns', () => {
     const lines = [...container.querySelectorAll<HTMLElement>('.row')];
     expect(lines.length).toBe(rows.length + 1);
     for (const line of lines) expect(line.style.columnGap).toBe('var(--pw-col-gap)');
+  });
+
+  // The table counts with the theme of its own element (review 3, U3, as the chart's "the theme of its own element"):
+  // a gallery cell or a panel with another theme sets the token on a wrapper, and the table inside fits its columns
+  // with that theme's gap.
+  it("counts the gap set on an ancestor, not the root's", () => {
+    document.documentElement.style.setProperty('--pw-col-gap-cols', '3');
+    const wrapper = document.createElement('div');
+    wrapper.style.setProperty('--pw-col-gap-cols', '1');
+    document.body.appendChild(wrapper);
+    try {
+      // 10 + 1 gap + 8 = 19 with the wrapper's gap; with the root's (3) only the name column would fit
+      const { container } = render(TableHarness, { target: wrapper, props: { rows, size: size(19) } });
+      expect(headerKeys(container)).toEqual(['name', 'gap']);
+    } finally {
+      cleanup();
+      wrapper.remove();
+    }
   });
 
   it('follows a size change', async () => {

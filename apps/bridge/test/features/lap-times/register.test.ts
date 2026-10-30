@@ -12,6 +12,7 @@ const row = (id: number, times: Times | 'insufficientData', at = 0): Row => {
   const ms = (i: number): Known<Ms> => (times === 'insufficientData' ? unknown(times) : known(times[i]!, at));
   return {
     carId: carId(id),
+    outOfRace: false,
     lastLapMs: ms(0),
     lastSectorsMs: [ms(1), ms(2), ms(3)],
     lastSectorStatus: ['none', 'none', 'none'],

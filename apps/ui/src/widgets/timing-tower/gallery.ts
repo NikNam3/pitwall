@@ -19,7 +19,8 @@ const cars = [
 
 const intervals = [
   interval(0), interval(1, 2184, 2184, 0, 1), interval(2, 5903, 3719, 0, -1), interval(3, 9102, 3199),
-  interval(4, 14_880, 5778, 0, 2), interval(5, 16_025, 1145, 0, -1), interval(6, 70_000, 5000, 1), interval(7),
+  interval(4, 14_880, 5778, 0, 2), interval(5, 16_025, 1145, 0, -1), interval(6, 70_000, 5000, 1),
+  // no interval for OCO (7): `gaps` leaves out-of-race cars out of the intervals
 ];
 const toUs = [
   toCar(0, -9102), toCar(1, -6918), toCar(2, -3199), toCar(3, undefined), toCar(4, 5778), toCar(5, 6923), toCar(6, undefined, 1), toCar(7, undefined),

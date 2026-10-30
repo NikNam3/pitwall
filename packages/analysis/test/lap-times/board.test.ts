@@ -198,5 +198,27 @@ describe('lap-times board: a car out of the race', () => {
     const acc = lapTimesCalculator.update(lapTimesCalculator.init(running), { before: lengths, after: lengths, truncated: false }, retired);
     expect(lapTimesCalculator.output(acc)).toEqual(run(retired));
     expect(rowOf(lapTimesCalculator.output(acc), 1)!.bestLapMs).toEqual(notApplicable);
+    expect(rowOf(lapTimesCalculator.output(acc), 1)!.outOfRace).toBe(true);
+  });
+
+  // The row says whether its car is out of the race (review 3, U5): the timing tower reads it there, so the one rule
+  // (`shared/out-of-race.ts`) is all that decides it, for the analyses and the display alike.
+  describe('every row says whether its car is out of the race', () => {
+    it.each(['retired', 'didNotFinish', 'disqualified', 'notClassified'] as const)('%s: out', (resultStatus) => {
+      const out = run(scene({ laps, cars: activeCars(2, { 1: { resultStatus } }) }));
+      expect(rowOf(out, 1)!.outOfRace).toBe(true);
+      expect(rowOf(out, 0)!.outOfRace).toBe(false);
+    });
+
+    it.each(['active', 'finished'] as const)('%s: not out', (resultStatus) => {
+      expect(rowOf(run(scene({ laps, cars: activeCars(2, { 1: { resultStatus } }) })), 1)!.outOfRace).toBe(false);
+    });
+
+    it('a car out of the race keeps the times it set and is still out', () => {
+      const own = [sectorLap(1, 1, [30_500, 30_500, 30_500], 91_500)];
+      const row = rowOf(run(scene({ laps: [...laps, ...own], cars: activeCars(2, { 1: { resultStatus: 'retired' } }) })), 1)!;
+      expect(row.lastLapMs).toEqual(known(91_500, 91_500));
+      expect(row.outOfRace).toBe(true);
+    });
   });
 });

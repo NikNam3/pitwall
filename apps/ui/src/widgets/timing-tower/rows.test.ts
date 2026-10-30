@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { known, OUT_OF_RACE_STATUSES, toSessionTime, unknown, type Known, type RaceMoment } from '@pitwall/domain';
+import { known, toSessionTime, unknown, type Known, type RaceMoment } from '@pitwall/domain';
 import { formatPenaltyMs } from '../../kit/values/format.ts';
-import { boardRow, incidentEntry, interval, lapBoard, ms, overview, sessionInfo, toCar } from './fixtures.ts';
+import { boardRow, incidentEntry, interval, lapBoard, ms, outOfRaceRow, overview, sessionInfo, toCar } from './fixtures.ts';
 import { buildRows, type TowerInput } from './rows.ts';
 
 /** The incident moment naming entry `entryId`, as race-moment gives it. */
@@ -224,6 +224,7 @@ describe('buildRows', () => {
       overview(3, { name: 'Esteban Ocon', position: 2, lap: 22, resultStatus: 'didNotFinish' }),
       ...base().cars,
     ];
+    input.board = lapBoard(1, [...base().board.rows, boardRow(3, 'retired')]);
     const rows = buildRows(input);
     expect(rows.map((r) => r.carId)).toEqual([0, 1, 2, 3]);
     const retired = rows[3];
@@ -234,14 +235,37 @@ describe('buildRows', () => {
     expect(rows.slice(0, 3).every((r) => !r.retired && r.retiredAtLap === undefined)).toBe(true);
   });
 
-  it("treats the domain's out-of-race statuses as retired; finished stays running", () => {
-    const input = base();
-    const statuses = [...OUT_OF_RACE_STATUSES, 'finished' as const];
-    input.cars = statuses.map((status, i) => overview(i, { name: 'X', position: i + 1, resultStatus: status }));
-    const rows = buildRows(input);
-    const finished = statuses.length - 1;
-    expect(rows.map((r) => r.carId)).toEqual([finished, ...statuses.slice(0, -1).map((_, i) => i)]);
-    expect(rows.map((r) => r.retired)).toEqual([false, ...statuses.slice(0, -1).map(() => true)]);
+  // "Out of the race" is the analysis's answer (review 3, U5): the lap board's row carries it (`outOfRace`, from the
+  // shared rule in packages/analysis), and the tower reads it there, never the raw result status, so a later answer
+  // (car situations) reaches the tower without a change here.
+  describe('out of the race as the lap board gives it', () => {
+    it('a car the board counts out is retired, whatever its result status says', () => {
+      const input = base();
+      input.board = lapBoard(1, [...base().board.rows.filter((r) => r.carId !== 2), outOfRaceRow(boardRow(2, 105_208))]);
+      const row = buildRows(input).find((r) => r.carId === 2);
+      expect(row?.retired).toBe(true);
+      expect(row?.position).toBeUndefined();
+      expect(row?.lastLap).toEqual(ms(105_208));
+    });
+
+    it('a car the board counts running is running, whatever its result status says', () => {
+      const input = base();
+      input.cars = [...base().cars.filter((c) => c.id !== 2), overview(2, { name: 'Alex Albon', position: 3, gridPosition: 5, resultStatus: 'retired' })];
+      const rows = buildRows(input);
+      expect(rows.map((r) => [r.carId, r.retired, r.position])).toEqual([[0, false, 1], [1, false, 2], [2, false, 3]]);
+    });
+
+    it('a finished car stays running: the board does not count it out', () => {
+      const input = base();
+      input.cars = [...base().cars.filter((c) => c.id !== 0), overview(0, { name: 'Max Verstappen', position: 1, gridPosition: 1, resultStatus: 'finished' })];
+      expect(buildRows(input).map((r) => r.retired)).toEqual([false, false, false]);
+    });
+
+    it('a car the board lacks is not counted out (nothing says so)', () => {
+      const input = base();
+      input.board = lapBoard(1, base().board.rows.filter((r) => r.carId !== 2));
+      expect(buildRows(input).find((r) => r.carId === 2)?.retired).toBe(false);
+    });
   });
 
   // The analysis decides a retired car's TO US reason (review 2, F6): gaps.toCar gives it notApplicable, and the tower
@@ -254,6 +278,7 @@ describe('buildRows', () => {
       overview(4, { name: 'Pierre Gasly', position: 5, lap: 9, resultStatus: 'disqualified' }),
     ];
     input.toCar = [...base().toCar, toCar(3, undefined)];
+    input.board = lapBoard(1, [...base().board.rows, boardRow(3, 'retired'), boardRow(4, 'retired')]);
     const rows = buildRows(input);
     expect(rows.find((r) => r.carId === 3)?.toUs).toEqual({ gapMs: unknown('notApplicable'), lapsDown: 0 });
     expect(rows.find((r) => r.carId === 4)?.toUs.gapMs).toEqual(unknown('notReceived'));
@@ -268,6 +293,7 @@ describe('buildRows', () => {
   it('omits the retired cars when showRetired is off', () => {
     const input = base();
     input.cars = [...base().cars, overview(3, { name: 'Esteban Ocon', position: 4, resultStatus: 'retired' })];
+    input.board = lapBoard(1, [...base().board.rows, boardRow(3, 'retired')]);
     input.showRetired = false;
     expect(buildRows(input).map((r) => r.carId)).toEqual([0, 1, 2]);
   });

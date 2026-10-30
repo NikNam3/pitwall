@@ -32,6 +32,7 @@ export function boardRow(id: number, t: Times | 'realism' | 'noTimes', ref: Time
     bestSectorsMs: [none(reason), none(reason), none(reason)], theoreticalBestMs: none(reason),
     bestLapStatus: 'none', bestSectorStatus: ['none', 'none', 'none'],
     deltaToReference: { bestLapMs: none(reason), bestSectorsMs: [none(reason), none(reason), none(reason)], theoreticalBestMs: none(reason) },
+    outOfRace: false,
   });
   if (t === 'realism') return unknownRow('realism');
   if (t === 'noTimes') return unknownRow('notReceived');
