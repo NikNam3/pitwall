@@ -20,7 +20,7 @@ export type Interval = {
 /**
  * `gaps.toCar`: one car's signed gap to the params car; positive = behind it. `lapsDown` is signed and relative to the
  * params car: the laps this car is down on it (negative = laps ahead), on top of `gapMs`. The params car's own entry
- * is `notApplicable` with `lapsDown` 0.
+ * is `notApplicable` with `lapsDown` 0; so is a car out of the race (its gap will not come).
  */
 export type GapToCar = { carId: CarId; gapMs: Known<Ms>; lapsDown: number };
 
@@ -33,6 +33,7 @@ export type GapperReferenceKind = GapperReference['kind'];
 /**
  * `gaps.gapper`: per car, per completed lap, the gap to the virtual car at constant pace. `reference` is what the
  * gapper resolved: its kind and, for `carAverage`, the car (`carId` is `notApplicable` for `leaderAverage` and `fixed`).
+ * A car out of the race keeps its completed race laps; its `now` is `notApplicable`.
  */
 export type GapperLines = {
   reference: { kind: GapperReferenceKind; carId: Known<CarId> };
