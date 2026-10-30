@@ -21,7 +21,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ChartSeries } from '../../src/kit/chart/data.ts';
 import { cellBox } from '../../src/kit/size/size.ts';
 import type { WidgetSize } from '../../src/kit/types.ts';
-import { THEMES, applyTheme } from '../../src/theme/index.ts';
+import { DEFAULT_THEME, THEMES, applyTheme } from '../../src/theme/index.ts';
 
 const { instances } = vi.hoisted(() => ({ instances: [] as any[] }));
 vi.mock('uplot', () => ({
@@ -64,8 +64,9 @@ type Drawn = { texts: Text[]; bbox: { left: number; top: number; width: number; 
  * Renders the chart, runs its draw hooks on a fake plot of 300 x 200 canvas px and returns the texts drawn; `x` is the
  * fake plot's x scale (default laps 1 to 3, the range of `pts`).
  */
-function drawnTexts(series: ChartSeries[], x: Scale = { min: 1, max: 3 }): Drawn {
-  render(Chart, { ...base, series });
+function drawnTexts(series: ChartSeries[], x: Scale = { min: 1, max: 3 }, target?: HTMLElement): Drawn {
+  if (target === undefined) render(Chart, { ...base, series });
+  else render(Chart, { target, props: { ...base, series } });
   const inst = instances[instances.length - 1];
   const texts: Text[] = [];
   const state: Record<string | symbol, unknown> = { fillStyle: '', strokeStyle: '', font: '', globalAlpha: 1, textAlign: 'start', textBaseline: 'alphabetic' };
@@ -178,6 +179,23 @@ describe('Chart: the column of labels', () => {
     const cell = cellBox(theme.fontPx, theme.density.lineHeight).width;
     expect(byText(texts, 'VER').x - (bbox.left + bbox.width)).toBeCloseTo(theme.density.columnGapCols * cell, 6);
   });
+
+  // A chart reads its tokens where it is drawn, not on the document root (W3-A implement finding): a gallery cell or a
+  // panel with another theme sets the variables on a wrapper, and the chart inside takes that theme's gap and font.
+  it("takes the gap and the label font of the theme on its own element's ancestors, not the root's", () => {
+    const wrapper = document.createElement('div');
+    for (const [k, v] of Object.entries({ '--pw-col-gap-cols': '3', '--pw-font-px': '16px', '--pw-weight-bold': '800' })) wrapper.style.setProperty(k, v);
+    document.body.appendChild(wrapper);
+    try {
+      const { texts, bbox } = drawnTexts([{ label: 'KUH', points: pts(20), colour: own }, { label: 'VER', points: pts(4), colour: rival }], undefined, wrapper);
+      expect(byText(texts, 'VER').x - (bbox.left + bbox.width)).toBeCloseTo(3 * cellBox(16, DEFAULT_THEME.density.lineHeight).width, 6);
+      expect(byText(texts, 'VER').font).toContain('16px');
+      expect(byText(texts, 'KUH').font).toMatch(/\b800\b/);
+    } finally {
+      cleanup();
+      wrapper.remove();
+    }
+  });
 });
 
 // A line that ends before the newest x (review RU8, wave 2 T6): its label at the right edge would sit at the y of a
@@ -213,5 +231,23 @@ describe('Chart: the label of a line that ends early', () => {
   it('keeps the labels of the running field in the column right of the plot', () => {
     const { texts, bbox } = drawnTexts(field(), X);
     for (const label of ['VER', 'LEC']) expect(byText(texts, label).x, label).toBeGreaterThanOrEqual(bbox.left + bbox.width);
+  });
+
+  // Review 2, F3: a line that ends one lap before the newest x (a car just lapped) ends a gap and a label width or less
+  // from the plot's right edge. Its label, one gap right of its end, would cross the edge into the label column, where
+  // it can sit on a column label's row; it stays inside the plot instead, at its end's y.
+  it('keeps the label of a line that ends one lap before the newest x inside the plot, clear of the column', () => {
+    // KUH lapped: its live point at 10.8, exactly one lap behind VER's at 11.8
+    const series: ChartSeries[] = [
+      { label: 'VER', points: run(11, 20, 11.8), liveEnd: true, colour: rival },
+      { label: 'LEC', points: run(11, 8, 11.6), liveEnd: true, colour: rival },
+      { label: 'KUH', points: run(10, 8, 10.8), liveEnd: true, colour: own },
+    ];
+    const { texts, bbox, valToPos } = drawnTexts(series, X);
+    const kuh = byText(texts, 'KUH');
+    const width = 'KUH'.length * cellBox(FONT_PX, DEFAULT_THEME.density.lineHeight).width;
+    expect(kuh.x + width).toBeLessThanOrEqual(bbox.left + bbox.width + 1e-9);
+    expect(Math.abs(kuh.y - valToPos(8, 'y'))).toBeLessThanOrEqual(FONT_PX);
+    expect(byText(texts, 'LEC').x).toBeGreaterThanOrEqual(bbox.left + bbox.width);
   });
 });

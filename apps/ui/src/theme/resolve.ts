@@ -6,6 +6,15 @@ export function cssVar(el: Element, name: string): string {
   return getComputedStyle(el).getPropertyValue(name).trim();
 }
 
+/**
+ * A number token at `el`: a unitless CSS variable (e.g. `--pw-col-gap-cols`) read as a number, for code that counts or
+ * draws with it; `fallback` (the default theme's value) when unset or not a number. CSS uses the length variables.
+ */
+export function cssNumber(el: Element, name: string, fallback: number): number {
+  const v = parseFloat(cssVar(el, name));
+  return Number.isFinite(v) ? v : fallback;
+}
+
 /** The resolved colour of a role at `el`: for places that cannot use `var(...)`, such as canvas and uPlot. */
 export function resolveRole(el: Element, r: Role): string {
   return cssVar(el, roleVar(r));

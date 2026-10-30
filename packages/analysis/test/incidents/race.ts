@@ -78,7 +78,8 @@ export type RaceInput = {
   laps?: LapRecord[];
   /** A `damage` output in the view; `incidents` must not read it (a log reads the history only). */
   damage?: DamageOutput;
-  gaps?: GapsOutput;
+  /** A `gaps` output in the view (only the fields a test sets); `incidents` must not read it either. */
+  gaps?: Partial<GapsOutput>;
   playerCar?: number;
   config?: Record<string, number | boolean>;
   /** Config of the `alarms` section (the warnings before a penalty). */

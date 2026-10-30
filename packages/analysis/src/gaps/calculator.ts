@@ -1,5 +1,5 @@
 // The `gaps` calculator (spec 6.1): a fold over the mini-sector crossings; the order and our cars come from the car state.
-import { known, MINI_SECTORS, unknown, type CarId, type FlagPhase, type Interval, type Known, type Ms, type Neighbourhood, type ResultStatus, type SessionTime } from '@pitwall/domain';
+import { known, MINI_SECTORS, unknown, type CarId, type FlagPhase, type Interval, type Known, type Ms, type Neighbourhood, type SessionTime } from '@pitwall/domain';
 import type { EngineView, IncrementalCalculator } from '@pitwall/engine';
 import { ourCars } from '../shared/our-cars.ts';
 import { outOfRace } from '../shared/out-of-race.ts';
@@ -84,9 +84,6 @@ const neutralisedPhases = (view: EngineView): Phase[] => {
   return open === undefined ? closed : [...closed, { kind: open.kind, start: open.start, end: undefined }];
 };
 
-/** Whether the car has taken the chequered flag. */
-const hasFinished = (car: { timing: { resultStatus: ResultStatus } }): boolean => car.timing.resultStatus === 'finished';
-
 /** The leader's progress in laps at `t`: the furthest crossing of any car by then, / 50 (the race start before any). */
 const leaderLapAt = (acc: Table, t: SessionTime): number => {
   let furthest = 0;
@@ -107,11 +104,11 @@ const phasesOf = (acc: Table, view: EngineView): GapsOutput['phases'] => {
   }));
 };
 
-/** The running cars in position order (ties by id), their intervals, and the cars around each of ours. */
+/** The running cars in position order (ties by id), their intervals, the cars around each of ours, and the cars out of the race. */
 function build(acc: Table, view: EngineView): GapsOutput {
-  const { cars } = view.state;
-  const running = cars
-    .filter((c) => c.active && !outOfRace(c)) // out of the race: no gaps, no neighbour
+  const active = view.state.cars.filter((c) => c.active);
+  const running = active
+    .filter((c) => !outOfRace(c)) // out of the race: no gaps, no neighbour
     .sort((a, b) => a.timing.position - b.timing.position || a.id - b.id);
   const order = running.map((c) => c.id);
   const tracks = order.map((id) => acc.tracks[id]);
@@ -146,7 +143,7 @@ function build(acc: Table, view: EngineView): GapsOutput {
     recent: acc.recent,
     neighbourhood,
     raceStartAt: raceStartAt(acc, view),
-    finished: running.filter(hasFinished).map((c) => c.id),
+    outOfRace: active.filter((c) => outOfRace(c)).map((c) => c.id).sort((a, b) => a - b),
     phases: phasesOf(acc, view),
   };
 }

@@ -1,6 +1,6 @@
 // Joins the topics the timing tower reads into one row per car (no arithmetic: the numbers, stops and compound included, come from the topics).
 import type { CarOverview, SessionInfo } from '@pitwall/contracts';
-import { unknown } from '@pitwall/domain';
+import { OUT_OF_RACE_STATUSES, unknown } from '@pitwall/domain';
 import { ourCars } from '../../kit/car/our-cars.ts';
 import { formatPenaltyMs, formatWarnings } from '../../kit/values/format.ts';
 import type { Role } from '../../theme/roles.ts';
@@ -35,8 +35,8 @@ export type TowerRow = {
   interval: Known<Ms>;
   lapsDown: number;
   /**
-   * TO US: the `gaps.toCar` entry, measured to the link group's primary car; that car's own entry is `notApplicable`, and
-   * so is a retired car's: it will not come.
+   * TO US: the `gaps.toCar` entry as it comes, measured to the link group's primary car; the analysis gives that car's own
+   * entry and a retired car's `notApplicable`. `notReceived` for a car the topic lacks.
    */
   toUs: Pick<GapToCar, 'gapMs' | 'lapsDown'>;
   lastLap: Known<Ms>;
@@ -51,11 +51,8 @@ export type TowerRow = {
   overview: CarOverview;
 };
 
-const RETIRED = new Set(['didNotFinish', 'disqualified', 'notClassified', 'retired']);
 const UNUSED = new Set(['invalid', 'inactive']);
 const missing = (): Known<Ms> => unknown('notReceived');
-/** A retired car's TO US: its gap to us will not come. */
-const RETIRED_TO_US: TowerRow['toUs'] = { gapMs: unknown('notApplicable'), lapsDown: 0 };
 
 function sectorsOf(row: LapBoardRow | undefined): TowerRow['sectors'] {
   return [0, 1, 2].map((i) => ({
@@ -95,10 +92,11 @@ export function buildRows(input: TowerInput): TowerRow[] {
     .filter((c) => !UNUSED.has(c.timing.resultStatus))
     .map((c): TowerRow => {
       const id = c.id;
-      const retired = RETIRED.has(c.timing.resultStatus);
+      const retired = OUT_OF_RACE_STATUSES.has(c.timing.resultStatus);
       const gaps = intervals.get(id);
       const lap = board.get(id);
       const gained = gaps?.positionsGained;
+      const toUs = toCar.get(id);
       return {
         carId: id,
         ours: ours.has(id),
@@ -110,7 +108,7 @@ export function buildRows(input: TowerInput): TowerRow[] {
         gapToLeader: gaps?.toLeaderMs ?? missing(),
         interval: gaps?.toAheadMs ?? missing(),
         lapsDown: gaps?.lapsDown ?? 0,
-        toUs: retired ? RETIRED_TO_US : (toCar.get(id) ?? { gapMs: missing(), lapsDown: 0 }),
+        toUs: toUs === undefined ? { gapMs: missing(), lapsDown: 0 } : { gapMs: toUs.gapMs, lapsDown: toUs.lapsDown },
         lastLap: lap?.lastLapMs ?? missing(),
         lastLapStatus: lap?.lastLapStatus ?? 'none',
         sectors: sectorsOf(lap),

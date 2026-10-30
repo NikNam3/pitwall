@@ -1,4 +1,4 @@
-import { carId, known, unknown, type Interval, type Known } from '@pitwall/domain';
+import { carId, known, unknown, type Interval, type Known, type ResultStatus } from '@pitwall/domain';
 import type { EngineView } from '@pitwall/engine';
 import { describe, expect, it } from 'vitest';
 import { GAPS, GAPS_CONFIG, type GapsOutput } from '../../src/gaps/index.ts';
@@ -288,6 +288,25 @@ describe('gaps to one car', () => {
     expect(of(1, 2)).toEqual([-1, -58_000]);
   });
 
+  // The analysis decides the reason of a car out of the race (review 2, F6): its gap will not come, so the display
+  // shows the analysis' reason and keeps no rule of its own.
+  it.each(['retired', 'didNotFinish', 'disqualified', 'notClassified'] as const)('gives a %s car notApplicable: its gap will not come', (resultStatus) => {
+    // car 3 ran two laps at 90.5 s and stopped; the car state still has it at P2
+    const ms = byTime([...threeCars(), ...crossings(carId(3), 1, 90_500, 0), ...crossings(carId(3), 2, 90_500, 90_500)]);
+    const out = run(viewOf(ms, { cars: carsFor(ms, { 3: { position: 2, resultStatus }, 1: { position: 3 }, 2: { position: 4 } }) }));
+    expect(gapsToCar(out, carId(1))!.find((g) => g.carId === carId(3))).toEqual({ carId: carId(3), gapMs: unknown('notApplicable'), lapsDown: 0 });
+  });
+
+  it("lists every car out of the race, one without a crossing too, beside the running cars' gaps", () => {
+    // car 3 retired after two laps, car 4 was disqualified before its first crossing
+    const ms = byTime([...threeCars(), ...crossings(carId(3), 1, 90_500, 0), ...crossings(carId(3), 2, 90_500, 90_500)]);
+    const cars = carsFor(ms, { 3: { position: 2, resultStatus: 'retired' }, 4: { position: 5, resultStatus: 'disqualified' }, 1: { position: 3 }, 2: { position: 4 } });
+    const toCar1 = gapsToCar(run(viewOf(ms, { cars })), carId(1))!;
+    expect(toCar1.map((g) => g.carId).sort((a, b) => a - b)).toEqual([0, 1, 2, 3, 4]);
+    expect(toCar1.filter((g) => g.gapMs.known).map((g) => [g.carId, v(g.gapMs)])).toEqual([[0, -5_000], [2, 5_000]]);
+    expect(toCar1.find((g) => g.carId === carId(4))?.gapMs).toEqual(unknown('notApplicable'));
+  });
+
   it('is undefined for a car that is not in the race', () => {
     const out = run(viewOf(threeCars()));
     expect(gapsToCar(out, carId(7))).toBeUndefined(); // an idle slot
@@ -531,46 +550,101 @@ describe("the gapper's live point (now)", () => {
   });
 });
 
-// A finished car's cool-down lap is no race (review RA8): the gapper draws no live point beyond the chequered flag.
-describe("the gapper's live point of a finished car", () => {
+// The game sends no line crossing at the chequered flag: a finisher keeps its lap number while its lap distance wraps,
+// so the engine's crossings end at the last mini-sector before the line, and none follow (review 2, F1). The engine
+// will record the finish crossing itself (plan Task 3). Either way the newest crossing is where the car's race ended,
+// so the gapper has no rule of its own for a finished car: its final lap stays on the chart.
+describe('the gapper line of a finished car', () => {
   /**
-   * Car 0 at 90 s has completed 3 laps and taken the flag, then crossed mini-sector 20 of its cool-down lap (at
-   * 306 000); car 1 at 92 s is still racing, at mini-sector 30 of lap 3 (at 239 200).
+   * Car 0 leads: laps 1 and 2 in 90 s, its final lap 3 in 96 s, its crossings ending at mini-sector 49 of lap 3 (at
+   * 274 080), or with `atLine` at the finish line (4, 0) at 276 000. Car 1 laps in 95 s and is still racing in lap 3,
+   * its crossings up to the same moment.
    */
-  const finish = () =>
-    byTime([
-      ...[1, 2, 3].flatMap((n) => crossings(carId(0), n, 90_000, (n - 1) * 90_000)),
-      ...crossings(carId(0), 4, 90_000, 270_000).filter((m) => m.segment <= 20),
-      ...[1, 2].flatMap((n) => crossings(carId(1), n, 92_000, (n - 1) * 92_000)),
-      ...crossings(carId(1), 3, 92_000, 184_000).filter((m) => m.segment <= 30),
+  const finish = (atLine: boolean) => {
+    const end = atLine ? 276_000 : 274_080;
+    return byTime([
+      ...[1, 2].flatMap((n) => crossings(carId(0), n, 90_000, (n - 1) * 90_000)),
+      ...crossings(carId(0), 3, 96_000, 180_000),
+      ...(atLine ? [{ carId: carId(0), lap: 4, segment: 0, at: 276_000 }] : []),
+      ...[1, 2, 3].flatMap((n) => crossings(carId(1), n, 95_000, (n - 1) * 95_000)).filter((m) => m.at <= end),
     ]);
-  const finished = (ms: ReturnType<typeof finish>) => carsFor(ms, { 0: { resultStatus: 'finished' } });
-  const nowOf = (lines: ReturnType<typeof gapperLines>, id: number) => {
-    const now = lines.cars.find((c) => c.carId === id)?.now;
-    return now === undefined ? 'no line' : now.known ? 'known' : now.reason;
   };
+  const finished = (ms: ReturnType<typeof finish>) => carsFor(ms, { 0: { resultStatus: 'finished' } });
+  const fixed = { kind: 'fixed', lapMs: 90_000 } as const;
+  const nowOf = (lines: ReturnType<typeof gapperLines>, id: number) => lines.cars.find((c) => c.carId === id)?.now;
 
-  it('is notApplicable once the car has finished: no point on its cool-down lap', () => {
-    const ms = finish();
-    const lines = gapperLines(run(viewOf(ms, { cars: finished(ms) })), { kind: 'fixed', lapMs: 90_000 });
-    expect(nowOf(lines, 0)).toBe('notApplicable');
+  it('keeps the live point of a finisher whose crossings end before the line: its final lap stays on the chart', () => {
+    const ms = finish(false);
+    const lines = gapperLines(run(viewOf(ms, { cars: finished(ms) })), fixed);
+    expect(line(lines, 0)).toEqual([[1, 0], [2, 0]]);
+    // progress 149 (lap 3, mini-sector 49): 149 / 50 laps at 90 s is 268 200, its race time 274 080
+    expect(nowOf(lines, 0)).toEqual(known({ lap: 2.98, gapMs: -5_880 }, 274_080));
   });
 
-  it("keeps the finished car's completed laps and the live point of a car still racing", () => {
-    const ms = finish();
-    const lines = gapperLines(run(viewOf(ms, { cars: finished(ms) })), { kind: 'fixed', lapMs: 90_000 });
-    expect(line(lines, 0)).toEqual([[1, 0], [2, 0], [3, 0]]);
-    expect(nowOf(lines, 1)).toBe('known');
+  it('settles the final lap of a finisher whose crossings end at the finish line, with no live point at the line', () => {
+    const ms = finish(true);
+    const lines = gapperLines(run(viewOf(ms, { cars: finished(ms) })), fixed);
+    expect(line(lines, 0)).toEqual([[1, 0], [2, 0], [3, -6_000]]);
+    expect(nowOf(lines, 0)).toEqual(unknown('notApplicable'));
   });
 
-  it('turns notApplicable when the car finishes without a new crossing (the status alone)', () => {
-    const ms = finish();
+  it("takes a finished leader's average at its newest crossing, its final lap included", () => {
+    const ms = finish(false);
+    const lines = gapperLines(run(viewOf(ms, { cars: finished(ms) })), { kind: 'leaderAverage' });
+    // race time 274 080 over progress 149: 91 973.15 ms a lap (its last line crossing alone would give 90 000)
+    expect(lines.referenceLapMs).toEqual(known(91_973, 274_080));
+  });
+
+  it.each([false, true])('the finished status alone changes nothing: the lines equal those of the car still racing (at the line: %s)', (atLine) => {
+    const ms = finish(atLine);
+    for (const reference of [fixed, { kind: 'leaderAverage' } as const]) {
+      expect(gapperLines(run(viewOf(ms, { cars: finished(ms) })), reference)).toEqual(gapperLines(run(viewOf(ms)), reference));
+    }
+  });
+
+  it('a car that takes the flag without a new crossing keeps its live point through an update', () => {
+    const ms = finish(false);
     const racing = viewOf(ms);
     const acc = gapsCalculator.init(racing);
-    expect(nowOf(gapperLines(gapsCalculator.output(acc), { kind: 'fixed', lapMs: 90_000 }), 0)).toBe('known');
     const flagged = viewOf(ms, { cars: finished(ms) });
     const out = gapsCalculator.output(gapsCalculator.update(acc, deltaOf(racing, flagged), flagged));
-    expect(nowOf(gapperLines(out, { kind: 'fixed', lapMs: 90_000 }), 0)).toBe('notApplicable');
+    expect(nowOf(gapperLines(out, fixed), 0)).toEqual(known({ lap: 2.98, gapMs: -5_880 }, 274_080));
+  });
+});
+
+// A car out of the race keeps its line (review 2, F2; ruling): its completed race laps as recorded, no live point. The
+// chart names a line that ends early at its own end.
+describe('the gapper line of a car out of the race', () => {
+  /** Car 3 ran two laps at 90.5 s and stopped at mini-sector 10 of lap 3; the car state still has it at P2. */
+  const ms = byTime([
+    ...threeCars(),
+    ...crossings(carId(3), 1, 90_500, 0),
+    ...crossings(carId(3), 2, 90_500, 90_500),
+    ...crossings(carId(3), 3, 90_500, 181_000).filter((m) => m.segment <= 10),
+  ]);
+  const out = (resultStatus: ResultStatus) =>
+    run(viewOf(ms, { cars: carsFor(ms, { 3: { position: 2, resultStatus }, 1: { position: 3 }, 2: { position: 4 } }) }));
+
+  it.each(['retired', 'didNotFinish', 'disqualified', 'notClassified'] as const)('keeps a %s car\'s completed laps, with no live point', (resultStatus) => {
+    const lines = gapperLines(out(resultStatus), { kind: 'fixed', lapMs: 90_000 });
+    expect(lines.cars.find((c) => c.carId === carId(3))).toEqual({
+      carId: carId(3),
+      byLap: [{ lap: 1, gapMs: -500 }, { lap: 2, gapMs: -1_000 }],
+      now: unknown('notApplicable'),
+    });
+  });
+
+  it('keeps the running cars\' lines beside it, and the leader average of the running leader', () => {
+    const lines = gapperLines(out('retired'), { kind: 'leaderAverage' });
+    expect(lines.cars.map((c) => c.carId).sort((a, b) => a - b)).toEqual([0, 1, 2, 3]);
+    expect(lines.referenceLapMs).toEqual(known(90_000, 450_000));
+  });
+
+  it('lists no line for a car out of the race without a completed race lap', () => {
+    // car 4 stopped at mini-sector 20 of lap 1
+    const early = byTime([...threeCars(), ...crossings(carId(4), 1, 91_000, 0).filter((m) => m.segment <= 20)]);
+    const lines = gapperLines(run(viewOf(early, { cars: carsFor(early, { 4: { resultStatus: 'retired' } }) })), { kind: 'fixed', lapMs: 90_000 });
+    expect(lines.cars.map((c) => c.carId).sort((a, b) => a - b)).toEqual([0, 1, 2]);
   });
 });
 

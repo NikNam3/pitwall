@@ -24,8 +24,11 @@ export type GapsOutput = {
   neighbourhood: Neighbourhood[];
   /** When the race started (the lights-out event); the gapper counts each car's race time from it. `notApplicable` outside a race, `notReceived` before lights out. */
   raceStartAt: Known<SessionTime>;
-  /** The cars that took the chequered flag: their race ended at their last line crossing, so the gapper has no `now` for them. */
-  finished: CarId[];
+  /**
+   * The cars out of the race (retired, did not finish, disqualified, not classified), by id; they are not in
+   * `intervals`. `gaps.toCar` gives them `notApplicable`, the gapper keeps their completed race laps.
+   */
+  outOfRace: CarId[];
   /** The race's neutralised phases in the leader's progress at their start and end (`GapperLines.phases`); `[]` outside a race. */
   phases: GapperLines['phases'];
 };

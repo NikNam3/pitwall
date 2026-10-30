@@ -12,7 +12,8 @@ export function applyTheme(variant: ThemeVariant, root: HTMLElement): void {
   set('--pw-line', String(variant.density.lineHeight));
   set('--pw-panel-gap', `${variant.density.panelGapPx}px`);
   set('--pw-col-gap', `${variant.density.columnGapCols}ch`);
-  // The same gap in cells, unitless, for code that counts in cells (the chart's label column).
+  // The same gap in cells, unitless, for code that counts in cells (`cssNumber`: the table's columns, the chart's label
+  // column); CSS lays out with the length above.
   set('--pw-col-gap-cols', String(variant.density.columnGapCols));
   set('--pw-chart-line', String(variant.chart.lineWidth));
   set('--pw-chart-own-line', String(variant.chart.ownCarLineWidth));

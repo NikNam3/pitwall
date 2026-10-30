@@ -36,7 +36,7 @@
   {/if}
   <div class="row">
     {#if full}<span class="label">{text.labels.trend}</span>{/if}
-    <span>{@render shown('trend', view.trend)}</span><span>{view.trendJoint}</span><span class:hot={hot !== undefined && view.attackReady}
+    <span>{@render shown('trend', view.trend)}</span><span>{text.joint}</span><span class:hot={hot !== undefined && view.attackReady}
       ><TextCell text={view.attack} reason={view.reasons.attack} role={view.attackReady ? hot : undefined} /></span
     >
   </div>

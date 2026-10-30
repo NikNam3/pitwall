@@ -3,15 +3,17 @@
 //  - every header cell and every body cell carries `data-col="<column key>"`; header cells hold the column label,
 //    body cells hold the rendered `cell` snippet; header cells sit outside `[data-row]`;
 //  - every body row carries `data-row="<rowKey>"` and, as classes, `inactive` and `highlight` when they apply;
-//  - the available width is `size.cols`; the gap between columns is the density token `--pw-col-gap` on the document
-//    root (a CSS length in `ch`, e.g. `2ch`, 1 when unset), passed to `fitColumns` as a number of cells;
+//  - the available width is `size.cols`; the gap between columns is read one way (review 2, F9): code counts it with
+//    the unitless density token `--pw-col-gap-cols` on the document root (e.g. `2`; the default theme's value when
+//    unset), passed to `fitColumns` as a number of cells, the same token the chart reads; the CSS gap of the header and
+//    each row is the length variable itself, inline `column-gap: var(--pw-col-gap)`;
 //  - row banding: every second body row (index 1, 3, ...) has inline `background-color: <role('bgRowBand')>`,
 //    the others have none;
 //  - the text sits in the theme font at the one size: the root `.table` has inline `font-family: var(--pw-font)` and
 //    `font-size: var(--pw-font-px)` and nothing in the table sets another font size.
 import { cleanup, render } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { role } from '../../src/theme/index.ts';
+import { applyTheme, role, THEMES } from '../../src/theme/index.ts';
 import type { WidgetSize } from '../../src/kit/types.ts';
 import TableHarness from './TableHarness.svelte';
 
@@ -23,8 +25,14 @@ const rows = [
   { id: 'd', name: 'NOR', gap: '+3.1', tyre: 'M', notes: 'w' },
 ];
 
-beforeEach(() => document.documentElement.style.removeProperty('--pw-col-gap'));
-afterEach(cleanup);
+beforeEach(() => {
+  document.documentElement.style.removeProperty('--pw-col-gap');
+  document.documentElement.style.removeProperty('--pw-col-gap-cols');
+});
+afterEach(() => {
+  cleanup();
+  document.documentElement.removeAttribute('style');
+});
 
 const headers = (c: HTMLElement) => [...c.querySelectorAll('[data-col]')].filter((e) => !e.closest('[data-row]'));
 const headerKeys = (c: HTMLElement) => headers(c).map((e) => e.getAttribute('data-col'));
@@ -46,22 +54,45 @@ describe('Table: columns', () => {
   });
 
   it('keeps dropping by priority as the width shrinks (10 + 1 gap + 8 = 19)', () => {
-    document.documentElement.style.setProperty('--pw-col-gap', '1ch');
+    document.documentElement.style.setProperty('--pw-col-gap-cols', '1');
     const { container } = render(TableHarness, { rows, size: size(19) });
     expect(headerKeys(container)).toEqual(['name', 'gap']);
   });
 
-  it('uses the density token for the gap: with --pw-col-gap 2ch, 29 columns drop two columns, with 1ch only one', () => {
+  it('uses the density token for the gap: with --pw-col-gap-cols 2, 29 columns drop two columns, with 1 only one', () => {
+    document.documentElement.style.setProperty('--pw-col-gap-cols', '1');
     const one = render(TableHarness, { rows, size: size(29) });
     expect(headerKeys(one.container)).toEqual(['name', 'gap', 'tyre']);
     cleanup();
-    document.documentElement.style.setProperty('--pw-col-gap', '2ch');
+    document.documentElement.style.setProperty('--pw-col-gap-cols', '2');
     const two = render(TableHarness, { rows, size: size(29) });
     expect(headerKeys(two.container)).toEqual(['name', 'gap']);
   });
 
-  it('follows a size change', async () => {
+  it('counts the gap from the unitless count, not from the CSS length (one variable per use)', () => {
     document.documentElement.style.setProperty('--pw-col-gap', '1ch');
+    document.documentElement.style.setProperty('--pw-col-gap-cols', '2');
+    const { container } = render(TableHarness, { rows, size: size(29) });
+    expect(headerKeys(container)).toEqual(['name', 'gap']);
+  });
+
+  it.each(THEMES.map((t) => [t.name, t] as const))('%s: counts the gap of the applied theme', (_name, theme) => {
+    applyTheme(theme, document.documentElement);
+    // name, gap and tyre need 10 + 8 + 8 cells and two gaps: they fit exactly in 26 + 2 × the theme's gap
+    const { container } = render(TableHarness, { rows, size: size(26 + 2 * theme.density.columnGapCols) });
+    expect(headerKeys(container)).toEqual(['name', 'gap', 'tyre']);
+  });
+
+  it('lays the columns out with the CSS length variable: column-gap var(--pw-col-gap) on the header and every row', () => {
+    document.documentElement.style.setProperty('--pw-col-gap-cols', '2');
+    const { container } = render(TableHarness, { rows, size: size(60) });
+    const lines = [...container.querySelectorAll<HTMLElement>('.row')];
+    expect(lines.length).toBe(rows.length + 1);
+    for (const line of lines) expect(line.style.columnGap).toBe('var(--pw-col-gap)');
+  });
+
+  it('follows a size change', async () => {
+    document.documentElement.style.setProperty('--pw-col-gap-cols', '1');
     const { container, rerender } = render(TableHarness, { rows, size: size(60) });
     expect(headerKeys(container)).toHaveLength(4);
     await rerender({ rows, size: size(19) });

@@ -1,5 +1,7 @@
 // The one out-of-race set every analysis asks (wave 2, T7; situations plan Task 0): a car that will set no more times.
-import type { ResultStatus } from '@pitwall/domain';
+// The statuses live in `@pitwall/domain` (`OUT_OF_RACE_STATUSES`, review 2, F6), so the analyses and the timing tower
+// read one set.
+import { OUT_OF_RACE_STATUSES, type ResultStatus } from '@pitwall/domain';
 import { describe, expect, it } from 'vitest';
 import { outOfRace } from '../../src/shared/out-of-race.ts';
 
@@ -12,5 +14,10 @@ describe('outOfRace', () => {
 
   it.each(['invalid', 'inactive', 'active', 'finished'] as const)('a %s car is not', (resultStatus) => {
     expect(outOfRace(car(resultStatus))).toBe(false);
+  });
+
+  it("asks the domain's out-of-race statuses: retired, did not finish, disqualified, not classified", () => {
+    expect([...OUT_OF_RACE_STATUSES].sort()).toEqual(['didNotFinish', 'disqualified', 'notClassified', 'retired']);
+    for (const resultStatus of OUT_OF_RACE_STATUSES) expect(outOfRace(car(resultStatus)), resultStatus).toBe(true);
   });
 });

@@ -19,20 +19,20 @@ const CARS: Car[] = [
   { id: 5, name: 'Leclerc', teamId: 1, raceNumber: 16 },
 ];
 
-/** Only identity and id matter to the display; the rest of an overview is irrelevant here. */
-const overview = (c: Car): CarOverview => ({
+/** Only identity and id matter to the display; the rest of an overview is irrelevant here (a result status only names the case). */
+const overview = (c: Car, resultStatus?: CarOverview['timing']['resultStatus']): CarOverview => ({
   id: carId(c.id),
   identity: {
     name: c.name, teamId: c.teamId, raceNumber: c.raceNumber, nationality: 0, ai: c.id > 0, driverId: c.id,
     networkId: 255, myTeam: false, platform: 0, telemetryPublic: true,
     driverKey: { kind: 'game', driverId: c.id }, visibility: 'public',
   } as unknown as CarOverview['identity'],
-  timing: {} as CarOverview['timing'],
+  timing: (resultStatus === undefined ? {} : { resultStatus }) as CarOverview['timing'],
   tyres: {} as CarOverview['tyres'],
   stops: 0,
   updatedAt: {},
 });
-const cars = CARS.map(overview);
+const cars = CARS.map((c) => overview(c));
 
 const sessionInfo = {
   feedId: feedId('gallery'),
@@ -113,10 +113,12 @@ const gallery: GalleryEntry<typeof widget> = {
     safetyCarOut: { ...base, gapper: lines({ phases: [phase('SC', 11.7)] }) },
     // a VSC inside laps 3 and 4, and a red flag under which the field stood still (it starts and ends at 9.0)
     virtualSafetyCarAndRed: { ...base, gapper: lines({ phases: [phase('VSC', 3.2, 4.1), phase('red', 9, 9)] }) },
-    // retired car: its line stops at lap 7, no live point; lapped car: it has completed fewer laps than the leader and
-    // its live point is in its own lap 11
+    // retired car (PIA): `gaps.gapper` keeps an out-of-race car's line (review 2, F2): its completed laps to lap 7 and
+    // no live point, so the line stops there and is named at its end; lapped car: it has completed fewer laps than the
+    // leader and its live point is in its own lap 11
     retiredAndLapped: {
       ...base,
+      cars: CARS.map((c) => overview(c, c.id === 4 ? 'retired' : undefined)),
       gapper: lines({
         cars: [line(2, 12, 0, undefined, liveLap(0)), line(3, 12, 300, undefined, liveLap(1)), line(0, 12, 900, undefined, liveLap(2)), line(4, 7, 1100), line(1, 10, 1500, undefined, 10.5)],
       }),
