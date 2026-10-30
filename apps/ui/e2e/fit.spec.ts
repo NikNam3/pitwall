@@ -65,6 +65,18 @@ test.describe('fit', () => {
     expect(new Set(ids).size, 'ids are unique').toBe(ids.length);
   });
 
+  test('the gallery page scrolls by hand (the no-scroll rule is the app window\'s only)', async () => {
+    const scrolled = await gallery.page.evaluate(() => {
+      const page = document.scrollingElement ?? document.documentElement;
+      page.scrollTop = 0;
+      window.scrollBy(0, 400);
+      const moved = page.scrollTop;
+      page.scrollTop = 0;
+      return { tall: page.scrollHeight > window.innerHeight, moved };
+    });
+    expect(scrolled).toEqual({ tall: true, moved: 400 });
+  });
+
   test('no element in any widget body overflows and no text is clipped', async () => {
     const { ids, violations } = await findViolations(gallery.page);
     // The frame cells show states of the panel, not widget sizes, and every one of them has a body too.
