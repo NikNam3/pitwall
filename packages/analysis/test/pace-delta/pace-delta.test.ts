@@ -57,7 +57,8 @@ describe('paceDelta', () => {
 describe('paceDeltaAround', () => {
   const laps = (count: number, timeOf: (n: number) => number) =>
     Array.from({ length: count }, (_, i) => lap({ lapNumber: i + 1, lapTimeMs: timeOf(i + 1), completedAt: (i + 1) * 100_000 }));
-  const race = { window: 3, isRace: true };
+  /** The lap-class options are required: the caller passes the `lap-classes` config (its default here). */
+  const race = { window: 3, isRace: true, maxNeutralisedMs: 2000 };
 
   it('pace laps after the lap minus those before it, the lap itself excluded, as of the newest lap used', () => {
     const list = laps(8, (n) => (n < 5 ? 90_000 : n === 5 ? 150_000 : 91_000));
@@ -68,14 +69,14 @@ describe('paceDeltaAround', () => {
     // laps 2..4 before (lap 1 of a race is no pace lap), 6..8 after; lap 9 lies outside the window
     const list = laps(9, (n) => (n === 9 ? 200_000 : n < 5 ? 90_000 : 91_000));
     expect(paceDeltaAround(list, 5, race)).toEqual(known(1000, 800_000));
-    expect(paceDeltaAround(list, 5, { window: 2, isRace: true })).toEqual(known(1000, 700_000));
+    expect(paceDeltaAround(list, 5, { ...race, window: 2 })).toEqual(known(1000, 700_000));
   });
 
   it('only pace laps count: lap 1 of a race and an in lap are skipped', () => {
     const list = laps(8, () => 90_000).map((l) => (l.lapNumber === 6 ? { ...l, inLap: true, lapTimeMs: 150_000 } : l));
     expect(paceDeltaAround(list, 5, race)).toEqual(known(0, 800_000));
     // in practice lap 1 is a pace lap, but one lap before is still too few, and it can never become more
-    expect(paceDeltaAround(laps(3, (n) => (n === 1 ? 80_000 : 90_000)), 2, { window: 3, isRace: false })).toEqual(unknown('notApplicable'));
+    expect(paceDeltaAround(laps(3, (n) => (n === 1 ? 80_000 : 90_000)), 2, { ...race, isRace: false })).toEqual(unknown('notApplicable'));
   });
 
   it('fewer than two pace laps before the lap is notApplicable, whatever comes after', () => {
@@ -113,5 +114,21 @@ describe('paceDeltaAround', () => {
   it('the order of the laps does not matter', () => {
     const list = laps(8, (n) => (n < 5 ? 90_000 : 91_000));
     expect(paceDeltaAround([...list].reverse(), 5, race)).toEqual(paceDeltaAround(list, 5, race));
+  });
+
+  it('the lap-class options are required: a call without maxNeutralisedMs is a type error, not a silent default', () => {
+    const list = laps(8, () => 90_000);
+    // @ts-expect-error maxNeutralisedMs is required (the `lap-classes` config of the caller)
+    const call = () => paceDeltaAround(list, 5, { window: 3, isRace: true });
+    expect(typeof call).toBe('function');
+  });
+
+  it('a lap counts as a pace lap by the given maxNeutralisedMs: 3 s under SC is out at 2000 ms and in at 5000 ms', () => {
+    // lap 7 is slow (100 s) with 3 s of it under SC (scShare 0.03)
+    const list = laps(8, (n) => (n === 7 ? 100_000 : n < 5 ? 90_000 : 91_000)).map((l) => (l.lapNumber === 7 ? { ...l, scShare: 0.03 } : l));
+    // out: laps 6 and 8 after (91 s)
+    expect(paceDeltaAround(list, 5, race)).toEqual(known(1000, 800_000));
+    // in: laps 6, 7, 8 after (mean 94 s)
+    expect(paceDeltaAround(list, 5, { ...race, maxNeutralisedMs: 5000 })).toEqual(known(4000, 800_000));
   });
 });

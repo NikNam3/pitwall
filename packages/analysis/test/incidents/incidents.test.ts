@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { carId, known, unknown, type CarId, type IncidentEntry, type Known, type RaceEvent } from '@pitwall/domain';
+import { carId, known, unknown, type CarId, type DamageParts, type IncidentEntry, type Known, type LapRecord, type RaceEvent } from '@pitwall/domain';
 import { carState, event, flagPhase, lap } from '../../../../test-support/builders/index.ts';
 import { incidentsCalculator } from '../../src/incidents/calculator.ts';
 import { INCIDENTS, INCIDENTS_CONFIG } from '../../src/incidents/index.ts';
@@ -44,6 +44,19 @@ const STOP_GO = 1;
 const WARNING = 5;
 const TIME_PENALTY = 4;
 
+/** A `damageChange` event of car `id` (car 7 by default): `part` goes from `fromPct` to `toPct`. */
+const dmg = (at: number, part: keyof DamageParts, fromPct: number, toPct: number, id = 7): RaceEvent =>
+  event({ kind: 'damageChange', at, carId: car(id), params: { part, fromPct, toPct } });
+
+/** Car 7's lap records 1..count from its start: lap n takes `timeOf(n)` ms. */
+const lapsOf7 = (count: number, timeOf: (n: number) => number): LapRecord[] => {
+  let end = startOf(7);
+  return Array.from({ length: count }, (_, i) => {
+    end += timeOf(i + 1);
+    return lap({ carId: car(7), lapNumber: i + 1, lapTimeMs: timeOf(i + 1), completedAt: end });
+  });
+};
+
 const only = (feed: IncidentEntry[], kind: IncidentEntry['kind']): IncidentEntry => {
   const entries = feed.filter((e) => e.kind === kind);
   expect(entries, `entries of kind ${kind}`).toHaveLength(1);
@@ -55,12 +68,11 @@ const slow7 = (ms: number, segment = 10): Delay => ({ carId: car(7), lap: 5, seg
 const SLOW_START = boundaryAt(7, 5, 10);
 
 describe('incidents calculator', () => {
-  it('is incremental over events, flag phases, mini-sectors, pit stops and laps, and reads damage', () => {
+  it('is incremental over events, flag phases, mini-sectors, pit stops and laps, and reads no damage output (a log reads the history only)', () => {
     expect(incidentsCalculator.id).toBe(INCIDENTS);
     expect(incidentsCalculator.kind).toBe('incremental');
-    expect(incidentsCalculator.reads).toEqual(
-      expect.arrayContaining(['events', 'flagPhases', 'miniSectors', 'pitStops', 'laps', { calculator: DAMAGE }]),
-    );
+    expect(incidentsCalculator.reads).toEqual(expect.arrayContaining(['events', 'flagPhases', 'miniSectors', 'pitStops', 'laps']));
+    expect(incidentsCalculator.reads).not.toContainEqual({ calculator: DAMAGE });
   });
 
   it('a collision of the player car is a major entry with both cars', () => {
@@ -109,11 +121,26 @@ describe('incidents calculator', () => {
     expect(entry.timeLostMs).toEqual(unknown('notApplicable'));
   });
 
-  it('a damage jump of a neighbour is a major damage entry; its time lost is the jump\'s measured loss', () => {
-    const jump = { at: T, lap: 5, parts: ['frontLeftWingPct' as const], deltaPct: 20, lossMsPerLap: known(800, 500_000) };
-    const entry = only(run(viewOf({ miniSectors: race(), damage: { [car(7)]: damageState([jump]) } as Record<CarId, ReturnType<typeof damageState>> })), 'damage');
+  it('a damage jump of a neighbour (from its damageChange events) is a major damage entry; its time lost is the jump\'s pace delta', () => {
+    // Car 7: 90 s laps up to lap 4, lap 5 (the hit) 92 s, then 90.8 s: the pace delta around lap 5 is +800 ms per lap.
+    const laps = lapsOf7(7, (n) => (n <= 4 ? PACE_MS : n === 5 ? PACE_MS + 2_000 : PACE_MS + 800));
+    const entry = only(run(viewOf({ miniSectors: race(), events: [dmg(T, 'frontLeftWingPct', 0, 20)], laps })), 'damage');
     expect(entry).toMatchObject({ id: `damage:7:${T}`, at: T, lap: 5, severity: 'major', carIds: [car(7)] });
-    expect(valueOf(entry.timeLostMs)).toBe(800);
+    expect(entry.damage).toEqual([{ part: 'frontLeftWingPct', deltaPct: 20 }]);
+    expect(entry.timeLostMs).toEqual(known(800, laps[6]!.completedAt));
+  });
+
+  it('a damage entry comes from the history only: a damage output with a jump and no damageChange event gives none', () => {
+    const jump = { at: T, lap: 5, parts: ['frontLeftWingPct' as const], deltaPct: 20, lossMsPerLap: known(800, 500_000) };
+    const damage = { [car(7)]: damageState([jump]) } as Record<CarId, ReturnType<typeof damageState>>;
+    expect(run(viewOf({ miniSectors: race(), damage }))).toEqual([]);
+  });
+
+  it('the jump grouping follows the damage config: a 3 % rise is no entry by default and one with jumpPct 3', () => {
+    const events = [dmg(T, 'floorPct', 0, 3)];
+    expect(run(viewOf({ miniSectors: race(), events })).filter((e) => e.kind === 'damage')).toEqual([]);
+    const entry = only(run(viewOf({ miniSectors: race(), events, damageConfig: { jumpPct: 3 } })), 'damage');
+    expect(entry.damage).toEqual([{ part: 'floorPct', deltaPct: 3 }]);
   });
 
   it('an SC phase start is a minor neutralised entry with no cars', () => {
@@ -337,8 +364,7 @@ describe('incidents calculator', () => {
     });
 
     it('a timeLoss within 5 s of a damage jump of the same car sets the damage entry\'s timeLostMs', () => {
-      const jump = { at: SLOW_START + 1_000, lap: 5, parts: ['floorPct' as const], deltaPct: 30, lossMsPerLap: unknown('insufficientData') };
-      const feed = run(viewOf({ miniSectors, damage: { [car(7)]: damageState([jump]) } as Record<CarId, ReturnType<typeof damageState>> }));
+      const feed = run(viewOf({ miniSectors, events: [dmg(SLOW_START + 1_000, 'floorPct', 0, 30)] }));
       expect(feed.map((e) => e.kind)).toEqual(['damage']);
       expect(valueOf(feed[0]!.timeLostMs)).toBe(3_000);
     });
@@ -352,10 +378,8 @@ describe('incidents calculator', () => {
   });
 
   describe('detail: where, damage parts, warning count (I1), penalty kind', () => {
-    const damageOf = (jumps: Parameters<typeof damageState>[0]) =>
-      ({ [car(7)]: damageState(jumps) }) as Record<CarId, ReturnType<typeof damageState>>;
-    const jump = (at: number, part: 'frontLeftWingPct' | 'floorPct' | 'rearWingPct', deltaPct: number) =>
-      ({ at, lap: 5, parts: [part], deltaPct, lossMsPerLap: unknown('insufficientData') });
+    /** A hit of car 7 that is a jump on its own: `part` rises from 0 by `deltaPct`. */
+    const hit = (at: number, part: 'frontLeftWingPct' | 'floorPct' | 'rearWingPct', deltaPct: number) => dmg(at, part, 0, deltaPct);
 
     it('a collision carries the sector its first car was in, from the lap distance (2 428 m on the test track: S2)', () => {
       expect(TRACK.sector2StartM).toBe(1_600);
@@ -378,7 +402,7 @@ describe('incidents calculator', () => {
     it('a timeLoss entry carries the sector of its start; a damage and a warning entry the sector of their car', () => {
       const loss = only(run(viewOf({ miniSectors: race({ delays: [slow7(2_500)] }) })), 'timeLoss');
       expect(loss.where.sector).toEqual(known(1, SLOW_START));
-      const damage = only(run(viewOf({ miniSectors: race(), damage: damageOf([jump(T, 'frontLeftWingPct', 12)]) })), 'damage');
+      const damage = only(run(viewOf({ miniSectors: race(), events: [hit(T, 'frontLeftWingPct', 12)] })), 'damage');
       expect(damage.where.sector).toEqual(known(2, T));
       expect(only(run(viewOf({ miniSectors: race(), events: [penalty(7, WARNING)] })), 'warning').where.sector).toEqual(known(2, T));
     });
@@ -394,8 +418,8 @@ describe('incidents calculator', () => {
     });
 
     it('a damage entry carries its parts and their rise, the biggest first; jumps of the car within the jump window are one entry', () => {
-      const jumps = [jump(T, 'frontLeftWingPct', 12), jump(T + 500, 'floorPct', 20), jump(T + 3_000, 'rearWingPct', 8)];
-      const feed = run(viewOf({ miniSectors: race(), damage: damageOf(jumps) })).filter((e) => e.kind === 'damage');
+      const events = [hit(T, 'frontLeftWingPct', 12), hit(T + 500, 'floorPct', 20), hit(T + 3_000, 'rearWingPct', 8)];
+      const feed = run(viewOf({ miniSectors: race(), events })).filter((e) => e.kind === 'damage');
       expect(feed.map((e) => e.id)).toEqual([`damage:7:${T + 3_000}`, `damage:7:${T}`]);
       expect(feed[1]!.damage).toEqual([
         { part: 'floorPct', deltaPct: 20 },
@@ -457,6 +481,78 @@ describe('incidents calculator', () => {
         expect('damage' in entry, entry.kind).toBe(false);
         expect('warning' in entry, entry.kind).toBe(false);
       }
+    });
+  });
+
+  describe('a repair (a fall of the part) changes nothing in the feed: it is a log (RA1)', () => {
+    const miniSectors = race({ delays: [slow7(3_000)] });
+    const HIT = SLOW_START + 1_000;
+    const hitEvents = [dmg(HIT, 'frontRightWingPct', 0, 37)];
+    /** The same hit, then a wing change about a lap later. */
+    const repaired = [...hitEvents, dmg(HIT + 90_000, 'frontRightWingPct', 37, 0)];
+
+    it('a hit with a merged time loss, then a wing change: the damage entry and its merged loss stay; no timeLoss entry appears', () => {
+      const feed = run(viewOf({ miniSectors, events: repaired }));
+      expect(feed.map((e) => e.kind)).toEqual(['damage']);
+      const entry = feed[0]!;
+      expect(entry).toMatchObject({ id: `damage:7:${HIT}`, at: HIT, carIds: [car(7)] });
+      expect(entry.damage).toEqual([{ part: 'frontRightWingPct', deltaPct: 37 }]);
+      expect(valueOf(entry.timeLostMs)).toBe(3_000);
+      expect(feed).toEqual(run(viewOf({ miniSectors, events: hitEvents })));
+    });
+
+    it("the user's case: three hits on the front-right wing, each followed by a change: three damage entries", () => {
+      const events = [
+        dmg(200_000, 'frontRightWingPct', 0, 37),
+        dmg(250_000, 'frontRightWingPct', 37, 0),
+        dmg(300_000, 'frontRightWingPct', 0, 33),
+        dmg(350_000, 'frontRightWingPct', 33, 0),
+        dmg(450_000, 'frontRightWingPct', 0, 30),
+        dmg(500_000, 'frontRightWingPct', 30, 0),
+      ];
+      const feed = run(viewOf({ miniSectors: race(), events })).filter((e) => e.kind === 'damage');
+      expect(feed.map((e) => [e.id, e.damage])).toEqual([
+        [`damage:7:450000`, [{ part: 'frontRightWingPct', deltaPct: 30 }]],
+        [`damage:7:300000`, [{ part: 'frontRightWingPct', deltaPct: 33 }]],
+        [`damage:7:200000`, [{ part: 'frontRightWingPct', deltaPct: 37 }]],
+      ]);
+    });
+
+    it('a hit after the wing change is a new entry with its rise from the repaired value; the first one stays', () => {
+      const events = [...repaired, dmg(HIT + 200_000, 'frontRightWingPct', 0, 12)];
+      // no slow run here: with the 3 s loss car 7 drops out of our neighbourhood before the second hit
+      const feed = run(viewOf({ miniSectors: race(), events })).filter((e) => e.kind === 'damage');
+      expect(feed.map((e) => [e.at, e.damage])).toEqual([
+        [HIT + 200_000, [{ part: 'frontRightWingPct', deltaPct: 12 }]],
+        [HIT, [{ part: 'frontRightWingPct', deltaPct: 37 }]],
+      ]);
+    });
+
+    // in time order, as the history appends them
+    const events = [...repaired, dmg(HIT + 200_000, 'frontRightWingPct', 0, 12), collision(6, 5)].sort((a, b) => a.at - b.at);
+    // Car 7's laps: 90 s, then 93 s for the lap of the hit (lap 5), then 91 s.
+    const laps = lapsOf7(8, (n) => (n <= 4 ? PACE_MS : n === 5 ? PACE_MS + 3_000 : PACE_MS + 1_000));
+    // no slow run: car 7 stays in our neighbourhood for the second hit
+    const steady = race();
+    const at = (t: number) => viewOf({ miniSectors: until(steady, t), events: until(events, t), laps: laps.filter((l) => l.completedAt <= t) });
+    const times = [...new Set([...events.map((e) => e.at), ...laps.map((l) => l.completedAt), 300_000, 700_000])].sort((a, b) => a - b);
+
+    it('incremental equals from scratch through the hit, the repair and the next hit, after every event and every lap', () => {
+      const views = [at(0), ...times.map(at)];
+      for (let i = 1; i < views.length; i++) {
+        expect(runSteps(views.slice(0, i + 1)), `at ${times[i - 1]}`).toEqual(run(views[i]!));
+      }
+      const feed = run(views[views.length - 1]!).filter((e) => e.kind === 'damage');
+      expect(feed.map((e) => e.at)).toEqual([HIT + 200_000, HIT]);
+    });
+
+    it('a flashback to between the hit and the repair equals a fresh run, and the entry is there', () => {
+      const full = at(720_000);
+      const cut = at(HIT + 60_000);
+      const acc = incidentsCalculator.update(incidentsCalculator.init(at(0)), deltaOf(at(0), full), full);
+      const after = incidentsCalculator.output(incidentsCalculator.update(acc, deltaOf(full, cut, true), cut));
+      expect(after).toEqual(run(cut));
+      expect(after.filter((e) => e.kind === 'damage').map((e) => e.at)).toEqual([HIT]);
     });
   });
 
