@@ -1,6 +1,6 @@
-import { ActualCompound, VisualCompound, known, unknown, type CarId, type DriverKey, type FlagPhase, type LapRecord, type RaceEvent, type SessionUid, type StintRecord } from '@pitwall/domain';
+import { ActualCompound, VisualCompound, known, unknown, type CarId, type DriverKey, type FlagPhase, type LapRecord, type PitStopRecord, type RaceEvent, type SessionUid, type StintRecord } from '@pitwall/domain';
 import type { History, HistoryDelta, HistoryLengths } from '@pitwall/engine';
-import type { SessionRow } from '../../src/storage/db.ts';
+import type { SessionKey, SessionRow } from '../../src/storage/db.ts';
 export const car = (n: number) => n as CarId;
 const none = unknown('notReceived');
 const corners = <T>(v: T) => ({ fl: v, fr: v, rl: v, rr: v });
@@ -13,6 +13,8 @@ export const lap = (c: number, n: number, o: Partial<LapRecord> = {}): LapRecord
   vscShare: 0, inLap: false, outLap: false, positionAtEnd: 1, status: 'confirmed', completedAt: n * 90_000, ...lapEnd, ...o });
 export const stint = (c: number, firstLap: number): StintRecord => ({ carId: car(c), firstLap, lastLap: firstLap + 9,
   actualCompound: ActualCompound.C3, visualCompound: VisualCompound.medium, tyreAgeAtFitting: 0 });
+export const pitStop = (c: number, lap: number): PitStopRecord => ({ carId: car(c), lap, pitLaneEntry: lap * 90_000, pitLaneExit: lap * 90_000 + 22_000,
+  pitLaneTimeMs: 22_000, stationaryTimeMs: 2_500, flag: 'green', penaltyServed: false });
 export const event = (at: number, c?: number): RaceEvent => ({ at, kind: 'overtake', ...(c === undefined ? {} : { carId: car(c) }), params: {} });
 export const sc = (start: number): FlagPhase => ({ kind: 'SC', start, end: start + 60_000, startLeaderLap: 3, endLeaderLap: 5, scPhases: [] });
 export const history = (o: Partial<History> = {}): History => ({ laps: [], stints: [], pitStops: [], flagPhases: [], events: [], miniSectors: [], ...o });
@@ -25,3 +27,5 @@ export const HUMAN: DriverKey = { kind: 'human', networkId: 1, name: 'Driver One
 export const session = (uid: string, o: Partial<SessionRow> = {}): SessionRow => ({ sessionUid: uid as SessionUid, weekendId: 'W1', seasonId: 'S1',
   sessionType: 1, trackId: 26, startedAt: '2026-10-27T20:00:00.000Z', pwrecPath: `/rec/${uid}.pwrec.gz`, settings: { tyreTemperature: 1 },
   drivers: [{ carId: car(0), driverKey: AI9 }, { carId: car(1), driverKey: HUMAN }], ...o });
+/** The storage key of `session(uid, { weekendId })`. */
+export const key = (uid: string, weekendId = 'W1'): SessionKey => ({ sessionUid: uid as SessionUid, weekendId });

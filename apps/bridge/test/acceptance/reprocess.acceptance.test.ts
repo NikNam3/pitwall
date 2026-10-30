@@ -3,12 +3,23 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { fixturePath } from '../../../../test-support/fixtures.ts';
 import { dataDir } from '../../src/storage/data-dir.ts';
+import { trackFile } from '../fixtures/replay.ts';
 import { runCli } from '../helpers/cli.ts';
 
-const files = (['menuOnly', 'raceSingapore', 'practiceZandvoortOnline'] as const).map((n) => fixturePath(n)); // file-name order = reprocess order
+// file-name order = reprocess order; the two practices share a session uid (the game reused it in a new weekend)
+const files = (['menuOnly', 'raceSingapore', 'practiceZandvoortOnline', 'practiceZandvoortUidReuse'] as const).map((n) => fixturePath(n));
+
+/** Every session the recordings open, as its storage key `uid/weekend` (decimal, like the stored columns), sorted. */
+async function sessionKeysOf(paths: readonly string[]): Promise<string[]> {
+  const keys = new Set<string>();
+  for (const path of paths) {
+    for (const e of (await trackFile(path)).lifecycle) if (e.type === 'sessionStarted') keys.add(`${e.sessionUid}/${e.session.weekendLinkIdentifier}`);
+  }
+  return [...keys].sort();
+}
 function dumpDb(dir: string) {
   const db = new Database(dataDir({ PITWALL_DATA_DIR: dir }).dbPath, { readonly: true });
   const tables = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").pluck().all() as string[];
@@ -31,13 +42,20 @@ async function runClean(args: string[], env: Record<string, string>) {
 }
 
 describe.skipIf(files.some((f) => f === undefined))('acceptance: pitwall import + reprocess', () => {
-  it('reprocess rebuilds the database identically, twice', async () => {
-    const env = { PITWALL_DATA_DIR: mkdtempSync(join(tmpdir(), 'pitwall-acc-')) };
+  let env: { PITWALL_DATA_DIR: string };
+  let imported: ReturnType<typeof dumpDb>;
+  beforeAll(async () => {
+    env = { PITWALL_DATA_DIR: mkdtempSync(join(tmpdir(), 'pitwall-acc-')) };
     for (const f of files) expect(await runClean(['import', f!], env)).toMatchObject({ code: 0 });
-    const imported = dumpDb(env.PITWALL_DATA_DIR);
-    expect(imported.tables['sessions']).toHaveLength(2); // menuOnly opens no session
-    expect(imported.tables['laps']).toHaveLength(8); // the practice's laps (1 ours, 5 of car 1, 2 AI); Singapore completed none
-    expect(await runClean(['reprocess'], env)).toMatchObject({ code: 0, stdout: expect.stringContaining('reprocessed 3 recordings') });
+    imported = dumpDb(env.PITWALL_DATA_DIR);
+  });
+
+  it('every session the recordings open is stored as its own (session_uid, weekend_id) row, also when two share a uid', async () => {
+    const rows = imported.tables['sessions'] as Array<{ session_uid: string; weekend_id: string }>;
+    expect(rows.map((r) => `${r.session_uid}/${r.weekend_id}`).sort()).toEqual(await sessionKeysOf(files as string[]));
+  });
+  it('reprocess rebuilds the database identically, twice', async () => {
+    expect(await runClean(['reprocess'], env)).toMatchObject({ code: 0, stdout: expect.stringContaining(`reprocessed ${files.length} recordings`) });
     const first = dumpDb(env.PITWALL_DATA_DIR);
     expect((await runClean(['reprocess'], env)).code).toBe(0);
     expect(first).toEqual(imported);

@@ -3,7 +3,7 @@ import { carId, type DriverKey, type SessionUid } from '@pitwall/domain';
 import { driverKeyOf, type DeepReadonly, type History, type HistoryDelta, type WeekendContext } from '@pitwall/engine';
 import type { ParticipantsPacket, SessionPacket } from '@pitwall/protocol';
 import type { Logger } from '../log.ts';
-import type { Db, SessionRow } from '../storage/db.ts';
+import type { Db, SessionKey, SessionRow } from '../storage/db.ts';
 import { StorageWriter } from '../storage/storage-writer.ts';
 import { WeekendRepository } from '../storage/weekend-repository.ts';
 
@@ -62,12 +62,12 @@ export class SessionStorage {
     this.#access?.writer.upsertSession(row);
   }
 
-  writeConfirmed(sessionUid: SessionUid, history: DeepReadonly<History>, delta: HistoryDelta): void {
-    this.#access?.writer.writeConfirmed(sessionUid, history, delta);
+  writeConfirmed(key: SessionKey, history: DeepReadonly<History>, delta: HistoryDelta): void {
+    this.#access?.writer.writeConfirmed(key, history, delta);
   }
 
   /** The player's earlier sessions of the weekend with every driver's records; `undefined` when storage is off or this session was never stored. */
-  weekendContext(weekendId: string, driverKey: DriverKey, sessionUid: SessionUid): WeekendContext | undefined {
+  weekendContext({ sessionUid, weekendId }: SessionKey, driverKey: DriverKey): WeekendContext | undefined {
     const repo = this.#access?.repo;
     if (repo === undefined) return undefined;
     try {

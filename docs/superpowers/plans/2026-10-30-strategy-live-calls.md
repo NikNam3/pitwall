@@ -724,8 +724,8 @@ Spec section 12 is the schedule:
 - Produces (types in spec A.2, committed by Task 1 in `packages/analysis/src/forecast-score/index.ts`):
   - calculator `forecast-score` (quick, cadence `lapCompleted`, output `ScoreForecastOut`)
   - `scoreForecasts(log: ScoreLog, history: DeepReadonly<History>, config: ForecastScoreConfig): ForecastScore`
-  - `FeedPipelineOptions.tap?: { calculators: CalculatorId[]; onPass(at: SessionTime, outputs: ReadonlyMap<CalculatorId, unknown>, state: EngineView['state']): void }`. The tapped ids join the demand. `onPass` gets only the tapped calculators that ran in that pass. After a flashback the pipeline calls `onRewind(at)` (also in `tap`) before the next pass, so the collector drops later entries.
-  - `scoreRecording(path: string, config: FeatureConfig, priors: PriorsSource, log: Logger, signal: AbortSignal): Promise<ForecastScore>` in `apps/bridge/src/cli/process-recording.ts`, next to `processRecording`, wired the same way but without `storage`. `PriorsSource` is what Task 3 reads priors from (the sidecar, the store or a pinned file).
+  - `FeedPipelineOptions.tap?: { calculators: CalculatorId[]; onPass(at: SessionTime, outputs: ReadonlyMap<CalculatorId, unknown>, state: EngineView['state']): void }`. Observation only: the tap changes neither the demand nor the schedule. `onPass` gets only the tapped calculators that ran in that pass. After a flashback the pipeline calls `onRewind(at)` (also in `tap`) before the next pass, so the collector drops later entries.
+  - `scoreRecording(path: string, config: FeatureConfig, priors: PriorsSource, log: Logger, signal: AbortSignal): Promise<ForecastScore>` in `apps/bridge/src/cli/process-recording.ts`, next to `processRecording`, wired the same way but without `storage`, with hub subscriptions to `rejoin.car` and `undercut.car` so the existing demand runs those calculators (the `forecast-score` calculator runs always, since nothing references it). `PriorsSource` is what Task 3 reads priors from (the sidecar, the store or a pinned file).
 
 **Requirements:**
 - The calculator, the exclusions, the errors, the rejoin and undercut rows: exactly as spec 7.15. One forecast per leader lap is scored (the first one made at that leader lap).
@@ -744,7 +744,7 @@ Spec section 12 is the schedule:
 - `a rival ahead stopping 2 laps after us gives an undercut row with n 2 and the real gain from the lap records`
 - `only the first forecast of a leader lap is scored`
 - calculator: `the forecast covers max(scoreHorizons) laps for every running car`, budget `< 5 ms` on `benchField()`, `never reads SessionState.pitWindow`
-- `apps/bridge/test/pipeline/output-tap.test.ts` on segments: `onPass gets only the tapped calculators that ran`, `tapped calculators run without a subscriber`, `on race-singapore-wet-flashback onRewind comes before the replayed passes`
+- `apps/bridge/test/pipeline/output-tap.test.ts` on segments: `onPass gets only the tapped calculators that ran`, `the tap leaves the calculators that run unchanged`, `on race-singapore-wet-flashback onRewind comes before the replayed passes`
 - `apps/bridge/test/cli/pitwall-score.test.ts` on a segment: `score prints the table header and one row per horizon and basis`, `--json prints a ForecastScore`, `score writes no session and no knowledge` (the data directory is unchanged), `a missing recording exits 1 with a message`
 
 - [ ] Test phase · [ ] Implement phase · [ ] review · [ ] merged
