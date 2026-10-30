@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // The corner block on a stale feed (spec 8.1, 6.4): its car fields dim through the kit's stale path and report to the panel.
 import { cleanup, render } from '@testing-library/svelte';
-import { known, type BandReading, type CarBands, type CarState, type Corners, type Known, type SessionTime, type TyreWear } from '@pitwall/domain';
+import { known, unknown, type BandReading, type CarBands, type CarState, type Corners, type Known, type SessionTime, type TyreWear } from '@pitwall/domain';
 import type { Component } from 'svelte';
 import { afterEach, describe, expect, it } from 'vitest';
 import InPanel from '../../../test/kit/InPanel.svelte';
@@ -24,7 +24,8 @@ const car = (telemetryAt: number, newestAt: number): CarState =>
   }) as unknown as CarState;
 const bands: CarBands = {
   tyres: four(() => ({ surfaceC: rd(98), carcassC: rd(101), pressurePsi: rd(23.1) })),
-  brakesC: { ...four(() => rd(812)), fr: rd(1043, { state: k('above'), outForFullLap: true }) },
+  // the brakes have no live state (judged per lap only, ruling 2026-10-30): FR is red for a whole lap out of band
+  brakesC: { ...four(() => rd(812, { state: unknown('notApplicable') })), fr: rd(1043, { state: unknown('notApplicable'), outForFullLap: true }) },
   engineC: rd(112),
 };
 const wear: TyreWear = {
