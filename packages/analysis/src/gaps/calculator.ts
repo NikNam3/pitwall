@@ -1,8 +1,8 @@
 // The `gaps` calculator (spec 6.1): a fold over the mini-sector crossings; the order and our cars come from the car state.
-import { known, unknown, type CarId, type Interval, type Known, type Ms, type Neighbourhood, type ResultStatus, type SessionTime } from '@pitwall/domain';
+import { known, MINI_SECTORS, unknown, type CarId, type FlagPhase, type Interval, type Known, type Ms, type Neighbourhood, type ResultStatus, type SessionTime } from '@pitwall/domain';
 import type { EngineView, IncrementalCalculator } from '@pitwall/engine';
 import { ourCars } from '../shared/our-cars.ts';
-import { gapBehind, lapsBehind, latestTime, progressOf, recentOf, type CarCrossings } from './gaps.ts';
+import { gapBehind, lapsBehind, latestTime, progressAt, progressOf, recentOf, type CarCrossings } from './gaps.ts';
 import { GAPS, GAPS_CONFIG, type GapsOutput } from './index.ts';
 
 /** What the crossings and events so far add up to. */
@@ -76,6 +76,39 @@ const positionsGained = (timing: { gridPosition: number; position: number }, vie
   return known(timing.gridPosition - timing.position, view.state.sessionTime);
 };
 
+/** A neutralised phase: its end `undefined` while it is open. */
+type Phase = { kind: FlagPhase['kind']; start: SessionTime; end: SessionTime | undefined };
+
+/** The race's neutralised phases from the history, then the open one. */
+const neutralisedPhases = (view: EngineView): Phase[] => {
+  const closed = view.state.history.flagPhases.map((p) => ({ kind: p.kind, start: p.start, end: p.end }));
+  const open = view.activeFlagPhase;
+  return open === undefined ? closed : [...closed, { kind: open.kind, start: open.start, end: undefined }];
+};
+
+/** Whether the car has taken the chequered flag. */
+const hasFinished = (car: { timing: { resultStatus: ResultStatus } }): boolean => car.timing.resultStatus === 'finished';
+
+/** The leader's progress in laps at `t`: the furthest crossing of any car by then, / 50 (the race start before any). */
+const leaderLapAt = (acc: Table, t: SessionTime): number => {
+  let furthest = 0;
+  for (const track of acc.tracks) {
+    const progress = track === undefined ? undefined : progressAt(track, t);
+    if (progress !== undefined && progress > furthest) furthest = progress;
+  }
+  return furthest / MINI_SECTORS;
+};
+
+/** The phases on the gapper's x: the leader's progress at their start and end. */
+const phasesOf = (acc: Table, view: EngineView): GapsOutput['phases'] => {
+  if (view.state.session.kind !== 'race') return [];
+  return neutralisedPhases(view).map(({ kind, start, end }) => ({
+    kind,
+    fromLap: leaderLapAt(acc, start),
+    toLap: end === undefined ? NOT_APPLICABLE : known(leaderLapAt(acc, end), end),
+  }));
+};
+
 /** The running cars in position order (ties by id), their intervals, and the cars around each of ours. */
 function build(acc: Table, view: EngineView): GapsOutput {
   const { cars } = view.state;
@@ -109,7 +142,15 @@ function build(acc: Table, view: EngineView): GapsOutput {
     neighbourhood.push({ ourCarId, carIds });
   }
 
-  return { intervals, lineTimes: acc.lineTimes, recent: acc.recent, neighbourhood, raceStartAt: raceStartAt(acc, view) };
+  return {
+    intervals,
+    lineTimes: acc.lineTimes,
+    recent: acc.recent,
+    neighbourhood,
+    raceStartAt: raceStartAt(acc, view),
+    finished: running.filter(hasFinished).map((c) => c.id),
+    phases: phasesOf(acc, view),
+  };
 }
 
 const init = (view: EngineView): GapsAcc => {
@@ -121,12 +162,13 @@ const init = (view: EngineView): GapsAcc => {
 
 /**
  * Every gap from the crossings, kept up to date crossing by crossing: each new crossing is one table write, and the
- * output is rebuilt from the table and the car state in O(cars). A flashback starts over.
+ * output is rebuilt from the table and the car state in O(cars), plus a binary search per car and phase. A flashback
+ * starts over.
  */
 export const gapsCalculator: IncrementalCalculator<GapsAcc, GapsOutput> = {
   id: GAPS,
   kind: 'incremental',
-  reads: ['miniSectors', 'timing', 'identity', 'events'],
+  reads: ['miniSectors', 'timing', 'identity', 'events', 'flagPhases'],
   cadence: 'frame',
   init,
   update(acc, delta, view) {

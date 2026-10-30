@@ -14,11 +14,34 @@ export const RECENT_CROSSINGS = 2 * MINI_SECTORS;
 /** A car's crossing times by progress, from `fromProgress` up to its newest crossing (the calculator keeps all, from 0). */
 export type CarCrossings = GapsOutput['recent'][CarId];
 
+const NOT_APPLICABLE = unknown('notApplicable');
+
 const latestOf = (c: CarCrossings): number => c.fromProgress + c.at.length - 1;
 const timeAt = (c: CarCrossings, progress: number): SessionTime | undefined => c.at[progress - c.fromProgress];
 
 /** When the car passed its newest crossing. */
 export const latestTime = (c: CarCrossings): SessionTime | undefined => timeAt(c, latestOf(c));
+
+/**
+ * The car's furthest progress by `t`: its newest crossing at or before `t` (crossing times grow with progress; holes are
+ * skipped), by binary search. `undefined` before its first crossing.
+ */
+export function progressAt(c: CarCrossings, t: SessionTime): number | undefined {
+  let lo = 0;
+  let hi = c.at.length - 1;
+  let best: number | undefined;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    let i = mid;
+    while (i >= lo && c.at[i] === undefined) i--;
+    if (i < lo) lo = mid + 1;
+    else if ((c.at[i] as SessionTime) <= t) {
+      best = i;
+      lo = mid + 1;
+    } else hi = i - 1;
+  }
+  return best === undefined ? undefined : c.fromProgress + best;
+}
 
 /** The car's last `RECENT_CROSSINGS` crossings, as a new object. */
 export const recentOf = (c: CarCrossings): CarCrossings => {
@@ -71,13 +94,29 @@ export function gapsToCar(out: GapsOutput, carId: CarId): GapToCar[] | undefined
 /** The car's line crossings after the race start: its completed race laps. */
 const raceLaps = (out: GapsOutput, carId: CarId, startAt: SessionTime) => (out.lineTimes[carId] ?? []).filter((l) => l.at > startAt);
 
-/** The car's mean lap from the race start to its latest line crossing. */
+/**
+ * The car's mean lap so far: its race time at its newest crossing over its progress there (completed laps plus the part
+ * of the current lap), so it is known from the first mini-sector and equals the mean of the completed laps at the line.
+ * A finished car's race ends at its last line crossing, so its cool-down lap does not count. `insufficientData` before
+ * its first crossing past the start line after lights out.
+ */
 function meanLap(out: GapsOutput, carId: CarId | undefined): Known<Ms> {
   const start = out.raceStartAt;
   if (!start.known) return start;
-  const last = carId === undefined ? undefined : raceLaps(out, carId, start.value).at(-1);
-  if (last === undefined) return unknown('insufficientData');
-  return known(Math.round((last.at - start.value) / last.lap), last.at);
+  const end = carId === undefined ? undefined : raceEnd(out, carId);
+  if (end === undefined || end.at <= start.value || end.progress === 0) return unknown('insufficientData');
+  return known(Math.round(((end.at - start.value) * MINI_SECTORS) / end.progress), end.at);
+}
+
+/** Where the car's race stands: its newest crossing, or a finished car's last line crossing. */
+function raceEnd(out: GapsOutput, carId: CarId): { progress: number; at: SessionTime } | undefined {
+  if (out.finished.includes(carId)) {
+    const line = out.lineTimes[carId]?.at(-1);
+    return line === undefined ? undefined : { progress: line.lap * MINI_SECTORS, at: line.at };
+  }
+  const crossings = out.recent[carId];
+  const at = crossings === undefined ? undefined : latestTime(crossings);
+  return crossings === undefined || at === undefined ? undefined : { progress: latestOf(crossings), at };
 }
 
 /** The virtual car's lap time; a fixed lap is given, so it is known from the start. */
@@ -95,13 +134,14 @@ function referenceLap(out: GapsOutput, reference: GapperReference): Known<Ms> {
 /**
  * The car's gap now, at its newest crossing after `startAt`: `progress / 50` laps (its own completed laps plus the part
  * of the current lap) at the reference pace minus its race time, in whole ms. `notApplicable` at the line (the point
- * is the completed lap's) and before its first crossing after lights out.
+ * is the completed lap's), before its first crossing after lights out and once the car has finished (its cool-down lap
+ * is no race).
  */
 function gapNow(crossings: CarCrossings | undefined, startAt: SessionTime, referenceLapMs: Ms): GapperLines['cars'][number]['now'] {
   const at = crossings === undefined ? undefined : latestTime(crossings);
-  if (crossings === undefined || at === undefined || at <= startAt) return unknown('notApplicable');
+  if (crossings === undefined || at === undefined || at <= startAt) return NOT_APPLICABLE;
   const progress = latestOf(crossings);
-  if (progress % MINI_SECTORS === 0) return unknown('notApplicable');
+  if (progress % MINI_SECTORS === 0) return NOT_APPLICABLE;
   return known({ lap: progress / MINI_SECTORS, gapMs: Math.round((progress * referenceLapMs) / MINI_SECTORS - (at - startAt)) }, at);
 }
 
@@ -109,6 +149,7 @@ function gapNow(crossings: CarCrossings | undefined, startAt: SessionTime, refer
  * Per running car, per completed race lap L, the gap to a virtual car that laps at the reference pace from lights
  * out: `L × referenceLap − (lineTime(L) − raceStart)`, positive = ahead of it; `now` is the same gap at the car's
  * newest mini-sector crossing. Without a known race start or reference lap every line is empty and `now` unknown.
+ * `phases` are the calculator's, the same for every reference.
  */
 export function gapperLines(out: GapsOutput, reference: GapperReference): GapperLines {
   const referenceLapMs = referenceLap(out, reference);
@@ -119,9 +160,9 @@ export function gapperLines(out: GapsOutput, reference: GapperReference): Gapper
     return {
       carId,
       byLap: raceLaps(out, carId, start.value).map(({ lap, at }) => ({ lap, gapMs: lap * referenceLapMs.value - (at - start.value) })),
-      now: gapNow(out.recent[carId], start.value, referenceLapMs.value),
+      now: out.finished.includes(carId) ? NOT_APPLICABLE : gapNow(out.recent[carId], start.value, referenceLapMs.value),
     };
   });
   const named = reference.kind === 'carAverage' ? known(reference.carId, 0) : unknown('notApplicable');
-  return { reference: { kind: reference.kind, carId: named }, referenceLapMs, cars };
+  return { reference: { kind: reference.kind, carId: named }, referenceLapMs, cars, phases: out.phases };
 }
