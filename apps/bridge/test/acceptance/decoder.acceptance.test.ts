@@ -6,15 +6,15 @@ import { FIXTURES, describeWithFixture, type FixtureName } from '../../../../tes
 import { referenceDecode } from '../../../../test-support/reference-decoder.ts';
 import { readPwrec } from '../../src/pwrec/reader.ts';
 
-/** Too big to decode twice in this suite; the segments and the other recordings cover the same packet layouts. */
-const TOO_BIG: readonly FixtureName[] = ['raceSingaporeWet', 'raceZandvoortUidReuse'];
+/** The two big races are too big to decode twice here, and the time trial is no test fixture (user ruling 2026-10-30); the segments and the other recordings cover the same packet layouts. */
+const EXCLUDED: readonly FixtureName[] = ['raceSingaporeWet', 'raceZandvoortUidReuse', 'ttZandvoort'];
 
 /** Best of three warm passes over every `qualifyingSingapore` payload; the generic interpreter took about 4 400 ms. */
 const SPEED_TARGET_MS = 1_500;
 const TIMED_PASSES = 3;
 
 for (const name of Object.keys(FIXTURES) as FixtureName[]) {
-  if (TOO_BIG.includes(name)) continue;
+  if (EXCLUDED.includes(name)) continue;
   describeWithFixture(name, `decoder: ${name}`, (path) => {
     it('every record decodes exactly as the reference decoder', async () => {
       let index = 0;
