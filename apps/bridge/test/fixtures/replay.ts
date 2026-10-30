@@ -20,6 +20,8 @@ export const SEGMENT_FILES = [
   'race-zandvoort-pit-exit.pwrec.gz',
   'race-zandvoort-vsc.pwrec.gz',
   'race-zandvoort-retire.pwrec.gz',
+  'practice-wing-change.pwrec.gz',
+  'race-drive-through.pwrec.gz',
 ] as const;
 
 export async function* filePackets(path: string): AsyncGenerator<{ packet: Packet; receivedAtMs: number }> {
