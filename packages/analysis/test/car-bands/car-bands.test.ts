@@ -7,7 +7,8 @@ import { carState, engineView, lap, realismHidden } from '../../../../test-suppo
 
 // Every case runs on TEST_BANDS, a fixed config (the defaults before 2026-10-30), so no case depends on the defaults;
 // only 'the default bands' pins those. Soft is a dry compound. The engine band's lo is pinned to 0 (engineHi only).
-// The tyre surface has no live state (ruling 2026-10-30: it swings 30-60 °C within a lap); only outForFullLap judges it.
+// The tyre surface and the brakes have no live state (rulings 2026-10-30: the surface swings 30-60 °C within a lap, the
+// brakes fall below the band on many straights); only outForFullLap judges them.
 const TEST_BANDS = {
   surfaceDryLo: 85, surfaceDryHi: 105, surfaceInterLo: 60, surfaceInterHi: 90, surfaceWetLo: 50, surfaceWetHi: 80,
   carcassDryLo: 85, carcassDryHi: 110, carcassInterLo: 55, carcassInterHi: 75, carcassWetLo: 45, carcassWetHi: 65,
@@ -26,6 +27,7 @@ const bandsOf = (car: CarState, laps: LapRecord[] = [], opts: { config?: EngineV
   return out[car.id]!;
 };
 const perCorner = <T>(make: () => T) => ({ fl: make(), fr: make(), rl: make(), rr: make() });
+const withBrakes = (c: number) => carState({ condition: { brakes: perCorner(() => ({ tempC: known(c, 0) })) } });
 const rangeOf = (over: Partial<ChannelRange>): ChannelRange => ({ ...lap().channelRange, ...over });
 const surfaceRange = (min: number, max: number): ChannelRange['tyres'] =>
   perCorner(() => ({ surfaceC: known({ min, max }, 0), carcassC: known({ min: 90, max: 100 }, 0), pressurePsi: known({ min: 23, max: 27 }, 0) }));
@@ -58,7 +60,24 @@ describe('car-bands calculator', () => {
     }
   });
 
-  it('only the surface loses its live state: carcass, pressure, brakes and engine out of band read it live on every corner', () => {
+  it('the brakes have no live state: notApplicable on every corner whether their value is in, above or below the band; value and band stay', () => {
+    for (const c of [650, 1100, 278]) {
+      const bands = bandsOf(withBrakes(c));
+      for (const corner of corners) {
+        expect(bands.brakesC[corner]).toEqual({ value: known(c, 0), state: NO_LIVE_STATE, band: { lo: 300, hi: 1000 }, outForFullLap: false });
+      }
+    }
+  });
+
+  it('a brake in band now whose last lap was out for the whole lap: outForFullLap, still no live state', () => {
+    const cold = lap({ lapNumber: 3, channelRange: rangeOf({ brakesC: perCorner(() => known({ min: 150, max: 290 }, 0)) }) });
+    const b = bandsOf(withBrakes(650), [cold]);
+    for (const corner of corners) {
+      expect(b.brakesC[corner]).toEqual({ value: known(650, 0), state: NO_LIVE_STATE, band: { lo: 300, hi: 1000 }, outForFullLap: true });
+    }
+  });
+
+  it('only the surface and the brakes lose their live state: carcass, pressure and engine out of band read it live on every corner', () => {
     const car = carState({
       tyres: { corners: perCorner(() => ({ surfaceTempC: known(120, 0), carcassTempC: known(120, 0), pressurePsi: known(32, 0) })) },
       condition: { brakes: perCorner(() => ({ tempC: known(1100, 0) })), engineTempC: known(130, 0) },
@@ -66,8 +85,8 @@ describe('car-bands calculator', () => {
     const b = bandsOf(car, [lap({ lapNumber: 2 })]);
     const above = { known: true, value: 'above' };
     for (const corner of corners) {
-      expect(b.tyres[corner].surfaceC.state).toEqual(NO_LIVE_STATE);
-      expect([b.tyres[corner].carcassC.state, b.tyres[corner].pressurePsi.state, b.brakesC[corner].state]).toMatchObject([above, above, above]);
+      expect([b.tyres[corner].surfaceC.state, b.brakesC[corner].state]).toEqual([NO_LIVE_STATE, NO_LIVE_STATE]);
+      expect([b.tyres[corner].carcassC.state, b.tyres[corner].pressurePsi.state]).toMatchObject([above, above]);
     }
     expect(b.engineC.state).toMatchObject(above);
   });
@@ -89,8 +108,7 @@ describe('car-bands calculator', () => {
     expect(b.tyres.fl.carcassC).toMatchObject({ band: { lo: 85, hi: 110 }, state: { known: true, value: 'above' } });
     expect(b.tyres.fl.pressurePsi).toMatchObject({ band: { lo: 20, hi: 31 }, state: { known: true, value: 'below' } });
     expect(b.tyres.fr.pressurePsi.state).toMatchObject({ known: true, value: 'in' });
-    expect(b.brakesC.rr).toMatchObject({ band: { lo: 300, hi: 1000 }, state: { known: true, value: 'above' } });
-    expect(b.brakesC.fl.state).toMatchObject({ known: true, value: 'in' });
+    expect(b.brakesC.rr).toMatchObject({ band: { lo: 300, hi: 1000 }, value: known(1100, 0) });
     expect(b.engineC).toMatchObject({ band: { lo: 0, hi: 125 }, value: known(130, 0), state: { known: true, value: 'above' } });
   });
 
@@ -188,14 +206,14 @@ describe('car-bands calculator', () => {
     }
   });
 
-  it('a rival hidden by realism has unknown(\'realism\') values and live states; the surface still has no live state', () => {
+  it('a rival hidden by realism has unknown(\'realism\') values and live states; the surface and the brakes still have no live state', () => {
     const rival = realismHidden(carState({ id: carId(1) }));
     const b = bandsOf(rival, [lap({ carId: carId(1), lapNumber: 2 })]);
     const hidden = { value: unknown('realism'), state: unknown('realism'), outForFullLap: false };
     for (const corner of corners) {
       for (const channel of ['carcassC', 'pressurePsi'] as const) expect(b.tyres[corner][channel]).toMatchObject(hidden);
       expect(b.tyres[corner].surfaceC).toMatchObject({ ...hidden, state: NO_LIVE_STATE });
-      expect(b.brakesC[corner]).toMatchObject(hidden);
+      expect(b.brakesC[corner]).toMatchObject({ ...hidden, state: NO_LIVE_STATE });
     }
     expect(b.engineC).toMatchObject(hidden);
     // the band is still given: it is config, not data

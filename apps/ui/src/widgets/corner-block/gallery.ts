@@ -18,8 +18,9 @@ const CARCASS = { lo: 85, hi: 105 };
 const PRESSURE = { lo: 22.5, hi: 24 };
 const BRAKE = { lo: 300, hi: 900 };
 const ENGINE = { lo: 80, hi: 120 };
-/** The surface has no live state: `car-bands` judges it per lap only (ruling 2026-10-30). */
+/** The surface and the brakes have no live state: `car-bands` judges them per lap only (rulings 2026-10-30). */
 const surfaceOf = (value: number): BandReading => reading(k(value), SURFACE, unknown('notApplicable'));
+const brakeOf = (value: number, outForFullLap = false): BandReading => reading(k(value), BRAKE, unknown('notApplicable'), outForFullLap);
 
 
 type Temps = { surface: number; carcass: Known<number>; psi: number; brake: number; wear: number };
@@ -55,7 +56,7 @@ function bandsOf(t: Corners<Temps>, over: { fr?: Partial<CarBands['tyres']['fr']
   return {
     tyres: { fl: tyre(t.fl), fr: { ...tyre(t.fr), ...over.fr }, rl: tyre(t.rl), rr: tyre(t.rr) },
     brakesC: {
-      fl: inBand(t.fl.brake, BRAKE), fr: over.frBrake ?? inBand(t.fr.brake, BRAKE), rl: inBand(t.rl.brake, BRAKE), rr: inBand(t.rr.brake, BRAKE),
+      fl: brakeOf(t.fl.brake), fr: over.frBrake ?? brakeOf(t.fr.brake), rl: brakeOf(t.rl.brake), rr: brakeOf(t.rr.brake),
     },
     engineC: inBand(112, ENGINE),
   };
@@ -71,7 +72,7 @@ const wearOf = (t: Corners<Temps>, known_ = true): TyreWear => {
 };
 
 const frCarcassHigh = reading(k(109), CARCASS, k('above'));
-const frBrakeCritical = reading(k(1043), BRAKE, k('above'), true);
+const frBrakeCritical = brakeOf(1043, true);
 
 /** Synthetic cases and fit expectations for `corner-block`. */
 const gallery: GalleryEntry<typeof widget> = {
