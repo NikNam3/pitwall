@@ -48,6 +48,20 @@ describe('pitwall CLI', { timeout: 30_000 }, () => {
     sock.close();
     expect(r.code).toBe(1); expect(r.stderr).toContain(`pitwall: UDP port ${port} is already in use`);
   });
+  it('live: PITWALL_UDP_HOST binds the UDP port on that address only; the port held on another address does not stop it', async () => {
+    // 127.0.0.1 holds the port, so neither the wildcard nor 127.0.0.1 is free: live can only listen on 127.0.0.2 itself.
+    const held = createSocket('udp4'); await new Promise<void>((r) => held.bind(0, '127.0.0.1', () => r()));
+    const port = held.address().port;
+    try {
+      const live = startCli(['live'], { PITWALL_WS_PORT: '0', PITWALL_UDP_PORT: String(port), PITWALL_UDP_HOST: '127.0.0.2', PITWALL_DATA_DIR: tmp() });
+      await live.waitFor(/listening ws:\/\/127\.0\.0\.1:\d+/);
+      const probe = createSocket('udp4');
+      const bindError = await new Promise<string | undefined>((r) => { probe.once('error', (e: NodeJS.ErrnoException) => r(e.code)); probe.bind(port, '127.0.0.2', () => r(undefined)); });
+      probe.close();
+      expect(bindError).toBe('EADDRINUSE');
+      expect(await live.stop()).toBe(0);
+    } finally { held.close(); }
+  });
   it('live: data dir not writable → exit 1 with a pitwall: message', async () => {
     const file = join(tmp(), 'file'); writeFileSync(file, '');
     const r = await runCli(['live'], { PITWALL_WS_PORT: '0', PITWALL_UDP_PORT: '0', PITWALL_DATA_DIR: join(file, 'data') });

@@ -164,6 +164,17 @@ describe('lap-times board: a car out of the race', () => {
     expect(row.theoreticalBestMs).toEqual(notApplicable);
   });
 
+  it("a notClassified car's times will not come (notApplicable), like a retired car's (the shared out-of-race set)", () => {
+    const rowWith = (resultStatus: ResultStatus) => rowOf(run(scene({ laps, cars: activeCars(2, { 1: { resultStatus } }) })), 1)!;
+    const row = rowWith('notClassified');
+    expect(row.lastLapMs).toEqual(notApplicable);
+    expect(row.lastSectorsMs).toEqual([notApplicable, notApplicable, notApplicable]);
+    expect(row.bestLapMs).toEqual(notApplicable);
+    expect(row.bestSectorsMs).toEqual([notApplicable, notApplicable, notApplicable]);
+    expect(row.theoreticalBestMs).toEqual(notApplicable);
+    expect(row).toEqual(rowWith('retired'));
+  });
+
   it('a running car without a lap still waits for its times (insufficientData)', () => {
     const row = rowOf(run(scene({ laps, cars: activeCars(2) })), 1)!;
     expect(row.lastLapMs).toEqual(unknown('insufficientData'));

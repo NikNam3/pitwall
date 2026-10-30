@@ -34,11 +34,11 @@
 
 ## Task 0: Integration follow-ups of wave 2
 
-**Files:** Modify `packages/analysis/src/gaps/calculator.ts` (out-of-race set), `apps/ui/src/widgets/gap-chart/GapChart.svelte` and `gap-chart/*.ts` (use the kit `TextCell`); delete `apps/ui/src/kit/values/UnknownMark.svelte` when no source imports it. Test: `packages/analysis/test/gaps/gaps.test.ts`, `apps/ui/test/gallery/unknown-marks.test.ts`.
+**Files:** Modify `packages/analysis/src/gaps/calculator.ts` (out-of-race set), `apps/ui/src/widgets/gap-chart/GapChart.svelte` and `gap-chart/*.ts` (use the kit `TextCell`); delete `apps/ui/src/kit/values/UnknownMark.svelte` when no source imports it. Test: `packages/analysis/test/gaps/gaps.test.ts`, `apps/ui/test/kit/unknown-in-kit.test.ts` (the gap-chart exclusion lives there).
 
 **Interfaces:** Consumes `isOutOfRace(car)` from `packages/analysis/src/shared/out-of-race.ts` (Task T7 of wave 2) and the kit `TextCell` (`{ text, reason?, width, align, role?, title? }`).
 
-- [ ] **Step 1 (test agent):** `gaps.test.ts`: "a not-classified car leaves the intervals like a retired one" (the shared set includes `notClassified`); `unknown-marks.test.ts`: the source scan includes `widgets/gap-chart` (remove its exclusion). Run: both fail.
+- [ ] **Step 1 (test agent):** `gaps.test.ts`: "a not-classified car leaves the intervals like a retired one" (the shared set includes `notClassified`); `unknown-in-kit.test.ts`: the source scan includes `widgets/gap-chart` (remove its exclusion). Run: both fail.
 - [ ] **Step 2 (implementer):** `gaps` filters with `isOutOfRace`; the gap chart renders its reference cell through `TextCell`; delete `UnknownMark.svelte` (grep: no importer left).
 - [ ] **Step 3:** `nice -n 10 pnpm vitest run packages/analysis/test/gaps apps/ui/test/gallery` passes; typecheck, lint, depcruise clean.
 - [ ] **Step 4:** commit `refactor: gaps and the gap chart use the shared out-of-race set and the kit text cell`.
@@ -83,7 +83,7 @@
 - [ ] **Step 3:** engine frame tests and `apps/bridge/test/fixtures` pass.
 - [ ] **Step 4:** commit `fix(engine): a packet type with frozen headers no longer makes every other packet late`.
 
-**Merge point (spec 10):** after Tasks 0–2, gate `integ/live-fixes` (`pnpm check`, `pnpm test:ui` with baselines, `pnpm test:acceptance`), a review of the diff since 1d86112, fix wave, merge to main, push, tell the user to restart, unblock SP4a (with the schema note).
+**Merge point (spec 10):** after Tasks 0–2, gate `integ/live-fixes` (`pnpm check`, `pnpm test:ui` with baselines, `pnpm test:acceptance`), a review of the diff since 1d86112, fix wave, merge to main, push, tell the user to restart. SP4a stays on hold until the end gates of the whole plan (user, 2026-10-30).
 
 ## Task 3: Car situations (spec 4.1, 4.3)
 
@@ -191,4 +191,4 @@
 
 ## End gates
 
-After Task 9: `pnpm check`, `pnpm test:ui` (baselines shown to the user), `pnpm test:acceptance`; a final review of the diff since the merge point with the user's three questions (A hasty architecture, B fixes causing later bugs, C workarounds); a fix wave; merge to main; push; tell the user to restart.
+After Task 9: `pnpm check`, `pnpm test:ui` (baselines shown to the user), `pnpm test:acceptance`; a final review of the diff since the merge point with the user's three questions (A hasty architecture, B fixes causing later bugs, C workarounds); a fix wave; merge to main; push; tell the user to restart; then SP4a may start (rewrite `sp4a-handoff.md` first).

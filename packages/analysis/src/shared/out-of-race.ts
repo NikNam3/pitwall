@@ -2,7 +2,7 @@
 // result status; a situations model (car situations as engine spans) may later answer it, and only this file changes.
 import type { CarState, ResultStatus } from '@pitwall/domain';
 
-const OUT_OF_RACE: ReadonlySet<ResultStatus> = new Set(['retired', 'didNotFinish', 'disqualified']);
+const OUT_OF_RACE: ReadonlySet<ResultStatus> = new Set(['retired', 'didNotFinish', 'disqualified', 'notClassified']);
 
-/** Whether the car is out of the race now (retired, did not finish, disqualified): what it lacks will not come. */
+/** Whether the car is out of the race now (retired, did not finish, disqualified, not classified): what it lacks will not come. */
 export const outOfRace = (car: { timing: Pick<CarState['timing'], 'resultStatus'> }): boolean => OUT_OF_RACE.has(car.timing.resultStatus);

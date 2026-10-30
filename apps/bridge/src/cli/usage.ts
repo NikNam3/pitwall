@@ -17,8 +17,8 @@ export const USAGE = `usage: pitwall <live|replay|tap|reprocess|import> …
                             print the folders, files and links of a unit, or who binds and reads a topic
                             (reads catalogue.generated.json, written by pnpm gen)
 
-The WebSocket server listens on 127.0.0.1 only. Ports and the data directory come from
-PITWALL_WS_PORT, PITWALL_UDP_PORT and PITWALL_DATA_DIR.`;
+The WebSocket server listens on 127.0.0.1 only. Ports, the UDP bind address and the data directory
+come from PITWALL_WS_PORT, PITWALL_UDP_PORT, PITWALL_UDP_HOST (default 0.0.0.0) and PITWALL_DATA_DIR.`;
 
 /** The command line was used wrongly (a missing argument); the CLI prints the message and the usage. */
 export class UsageError extends Error {
