@@ -299,8 +299,9 @@ Done on main by a separate fix (d4a5737, tests eab70ec): sessions and every chil
 
 **Done by:** one agent (lane `segments`, single phase), reviewed by the supervisor. **Depends on:** nothing left: the `perf/full-laps` work (the 20-car race-lap segment) is merged (ba032e0).
 
-- [ ] Check the existing segments for reuse: `race-zandvoort-pit-stop`, `race-zandvoort-pit-exit` (green stop), `race-zandvoort-vsc`.
-- [ ] Search `raceZandvoortUidReuse` and `raceSingaporeWet` for a stop under VSC or SC (`PitStopRecord.flag`). If one exists, cut the pit-lane entry to the exit (≤ 1 MB) as `race-<track>-<vsc|sc>-stop`. If none exists, record that in the questions file; the case stays covered by builders.
+- [ ] Check the existing segments for reuse: `race-zandvoort-pit-stop`, `race-zandvoort-pit-exit` (green stop), `race-zandvoort-vsc`, and `race-zandvoort-full-lap` for the geometry (a clean lap of the full field). Two of the three full-lap slots are used (`race-zandvoort-full-lap`, `qualifying-singapore-full-lap`); 4a cuts no new full-lap segment unless the user agrees.
+- [ ] The new wet race with a VSC (`2026-10-30_15-20-41_55cc94d2d5c13280`, labelled on `fixtures/wet-race-2` by the other session) is a candidate for the VSC stop and the wet crossover; that session passes suggested windows to the supervisor.
+- [ ] Search `raceZandvoortUidReuse`, `raceSingaporeWet` and the new wet race for a stop under VSC or SC (`PitStopRecord.flag`). If one exists, cut the pit-lane entry to the exit (≤ 1 MB) as `race-<track>-<vsc|sc>-stop`. If none exists, record that in the questions file; the case stays covered by builders.
 - [ ] Cut `race-singapore-wet-crossover`: a moment where a car on intermediates sets a faster sector than our car on slicks (or the reverse) in `raceSingaporeWet`. ≤ 1 MB.
 - [ ] Record each one in `fixtures/index.json` with its verified facts. Facts help pick a segment; they are not assertions.
 - [ ] Commit: `test: sub-project 4a segments`.

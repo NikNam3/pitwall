@@ -353,7 +353,7 @@ Open for the 4b brainstorm:
 Rivals' predicted stops and the two-dry-compound rule stay in sub-project 5 (1.5).
 
 ## 14. Open points
-1. Does the game reuse `weekendLinkIdentifier` across weekends, and what do offline sessions get (one shared value would let two offline sessions with a reused UID collide in storage)? Verify with the next league weekend and an offline session; if either holds, the weekend identity adds the date. This affects the storage key (3.3) and the weekend scope (4).
+1. Does the game reuse `weekendLinkIdentifier` across weekends? Verify with the next league weekend; if it does, the weekend identity adds the date. (Checked 2026-10-30 on every recording: offline Grand Prix weekends send a real link id; only the time trial sends 0. Two time-trial sessions with a reused UID would still collide in storage; none is known, and the user accepted that edge.)
 2. League rules: the league races under the 2025 F1 sporting regulations (user, 2026-10-30), so the two-dry-compound rule applies; it is used from sub-project 5 (1.5). The next compounds come from our car's tyre sets (7.9).
 3. FastF1 licence (R1).
 4. The overtaking threshold and dirty-air coefficients for F1 25 are defaults until sub-project 5 calibrates them.
