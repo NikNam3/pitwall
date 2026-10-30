@@ -55,11 +55,6 @@ At `formation`'s close (the race's first LGOT after STLG), the tracker cuts the 
 Recorded by the tracker as spans too:
 - **DRS** (on, or off with a reason): DRSE / DRSD events (the engine maps an unknown reason code to `unknown`). In a race before lights out: off, `notEnabledYet`. After a late join (no lights out seen) with no DRS event: on. A DRSD before lights out (a wet start) stands until a DRSE. `BattleCard.drs` reads these spans (replaces the helper of the live-test fixes).
 - **Weather and temperatures** per Session packet, as the lap conditions read them (4.4).
-- **Track condition** (`dry` / `damp` / `wet`; user ruling 2026-10-30): a span over the session, from three signals, the field's tyre choice first:
-  - the share of running cars on intermediates or wets (visual compounds 7, 8): below 25 % points to `dry`, 25–75 % to `damp`, above 75 % to `wet` (the field reacts to the track; Mexico's weather said storm all race while the switch from wets to intermediates on lap 5 showed the track drying);
-  - the Session weather (0 clear … 5 storm) and the rain forecast: light rain with the field still on slicks points to `damp` (rain starting); clear or light cloud with the field on intermediates points to `damp` (drying);
-  - DRSD with reason wet track confirms `wet` or `damp`.
-  A new condition takes over only after it held for 30 s of session time (hysteresis; no flicker at a shower's edge). The 25/75 % shares and the 30 s are pitwall estimates with source notes, checked against `raceSingaporeWet` (rain coming and going), `raceWetVscMexico` and `raceFriendWet`. Before the first running car's tyres are known: `unknown('notReceived')`.
 
 ## 4. Car situations
 
@@ -92,7 +87,7 @@ Recorded by the tracker as spans too:
 
 ### 4.4 Lap conditions (for rates and the future simulator)
 
-`LapRecord.conditions`: the fuel mix and the ERS deploy mode used for most of the lap with their shares of the lap (from CarStatus), the weather at the lap's start and end, the track and air temperature at the lap's start and end (from the Session packet), and the track condition at the lap's start and end (3.4). Known only for laps the engine saw from their start.
+`LapRecord.conditions`: the fuel mix and the ERS deploy mode used for most of the lap with their shares of the lap (from CarStatus), the weather at the lap's start and end, and the track and air temperature at the lap's start and end (from the Session packet). Known only for laps the engine saw from their start.
 
 ## 5. Readers
 
@@ -131,7 +126,6 @@ Every analysis gets the view's current session phase and the car's situation (`v
 | car `retired` | stopped | final | out of gaps, battles and the neighbourhood | the retirement entry | final | off | resolved | `incident` if major | — |
 | car `finished` / `coolDown` | no samples | final | final position; no live point | none | final | off | resolved | — | — |
 | `paused` (overlay) | unchanged | unchanged | unchanged | unchanged | unchanged | unchanged | none new | unchanged | unchanged |
-| track `dry` / `damp` / `wet` (race control) | per stint as always (a compound change opens a stint); no other change | pace, pace delta and the bests compare only laps whose condition at start and end is the same as each other's; the session bests are kept per condition and the board shows the current condition's | battle pace delta over laps of the current condition only; the gapper's leader-average reference over laps of the current condition (a condition change restarts the reference) | a condition change is a `trackCondition` entry | live | bands per tyre kind as today | for our cars: a tyre kind that does not fit the condition (slicks on `wet`, wets on `dry`) raises an advisory | `weather` when the condition changes within the forecast window | unchanged |
 
 Display rows (each display's table follows them): the tower shows the car situation (section 8) and leaves rates and gaps of an out-of-race car as "–"; the battle cards show "DRS off" with the reason while neutralised and hide a retired neighbour; the gap chart draws `neutralised`/`suspended` bands and no live point after a finish; the incident feed lists the phase entries; the fuel gauge, ERS budget and tyre-life bar show their values frozen with the "–"/"…" marks of their reasons; the corner block and the damage card stay live in the garage and pit lane (repairs, temperatures); the alarm list follows `alarms`; the top bar shows the session phase (section 8).
 
@@ -148,14 +142,13 @@ Display rows (each display's table follows them): the tower shows the car situat
 - `session.phase` (new): the current phase with `since` and its details (SC stage; the red flag's restart kind), and the list of spans.
 - `cars.overview`: each car gets `situation: { kind, since, detail }` (the penalty being served, the lap role).
 - Top bar: a session-phase segment, shown only when the phase is not `racing`/`running`: FORMATION, START, SC/VSC with its stage, RED, FINISHED, PAUSED; SC/VSC/RED in the attention role, the rest grey.
-- Top bar: the track condition beside it, shown only when not `dry`: DAMP, WET (grey; the alarm carries the attention for a car on the wrong tyre).
 - Tower: the PIT column becomes a situation column: GARAGE, PIT, BOX, DT, SG, OUT, IN, RET, FIN (nothing on a flying lap); DT/SG in the penalty role, RET/FIN dimmed like out-of-race rows.
 - Wording in each widget's `text.ts` and the kit text; roles in the emphasis files.
 
 ## 9. Catalogue and recordings
 
 - `docs/research/09-situations-catalogue.md`: per situation the signals (with times in our recordings), the tracker's rule, the behaviour row, the test (segment or builder) and "seen in" or "not yet seen".
-- **Recording checklist** (the user records; each recording is labelled, cut into segments and confirms or corrects its rule): a race with a red flag and a standing restart; a red flag with a rolling restart behind the SC; a stop-go served; a restart behind the SC; a stop under the VSC; a qualifying Q1 → Q2 → Q3; a session restarted from the menu; an online race with a pause; a car joining mid-session; a pit-lane start; a race that dries from wets to slicks; a dry race that turns wet.
+- **Recording checklist** (the user records; each recording is labelled, cut into segments and confirms or corrects its rule): a race with a red flag and a standing restart; a red flag with a rolling restart behind the SC; a stop-go served; a restart behind the SC; a stop under the VSC; a qualifying Q1 → Q2 → Q3; a session restarted from the menu; an online race with a pause; a car joining mid-session; a pit-lane start.
 
 ## 10. Rollout
 

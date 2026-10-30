@@ -28,8 +28,7 @@
 2. **A bridge joining mid-session** (no SSTA, first frame mid-lap or mid-SC, MiP starts at 121.6 s): the tracker opens the current phase and situations at the first frame with `start` unknown-ish semantics (`joinedAt` detail), no false transitions, DRS on. → Task 1, Task 3, Task 5.
 3. **The session end in each of its six shapes** (inventory 1.6–1.7): no false `finished` for cars set to `resultStatus` 3 mid-lap in the last frame; `post-session` opens on SEND, on the simulation jump and on a UID-0 classification. → Task 1, Task 3.
 4. **Garage acceleration** (session time 4–30× wall time in the garage): no lap, no false pause, no false jump. → Task 1, Task 3.
-5. **A shower's edge** (the field split between slicks and intermediates, the weather flipping between light cloud and light rain): the track condition does not flicker (30 s hysteresis), and pace never mixes a wet lap with a dry one. → Task 5, Task 7.
-6. **Signals out of order** (DTSV 7 s after the pit exit; RTMT before `resultStatus`; PENA 16/42 4 s before RTMT; SCAR before the status): each transition waits for or matches its confirmation as the spec says. → Task 3, Task 5.
+5. **Signals out of order** (DTSV 7 s after the pit exit; RTMT before `resultStatus`; PENA 16/42 4 s before RTMT; SCAR before the status): each transition waits for or matches its confirmation as the spec says. → Task 3, Task 5.
 
 ---
 
@@ -117,7 +116,7 @@
 - Consumes: Task 3's spans.
 - Produces:
   ```ts
-  export type LapConditions = { fuelMix: { mix: FuelMix; share: Ratio }[]; ersMode: { mode: ErsDeployMode; share: Ratio }[]; weather: { start: Weather; end: Weather }; trackTempC: { start: number; end: number }; airTempC: { start: number; end: number }; trackCondition: { start: Known<TrackCondition>; end: Known<TrackCondition> } };
+  export type LapConditions = { fuelMix: { mix: FuelMix; share: Ratio }[]; ersMode: { mode: ErsDeployMode; share: Ratio }[]; weather: { start: Weather; end: Weather }; trackTempC: { start: number; end: number }; airTempC: { start: number; end: number } };
   // LapRecord.conditions: Known<LapConditions> (notReceived for a lap joined after its start)
   export type PenaltyServedRecord = { carId: CarId; penalty: 'driveThrough' | 'stopGo'; givenAt: Known<SessionTime>; servedAt: SessionTime; lap: number; pitLaneEntry: SessionTime; pitLaneExit: SessionTime };
   ```
@@ -129,15 +128,15 @@
 - [ ] **Step 3:** `packages/engine/test`, `packages/analysis/test`, `apps/bridge/test` pass.
 - [ ] **Step 4:** commit `feat(engine): laps, pit stops and stints from the situation spans; lap conditions; rates per stint at the current mix`.
 
-## Task 5: Race control spans: DRS and the track condition (spec 3.4)
+## Task 5: Race control spans (spec 3.4)
 
 **Files:** Create `packages/engine/src/history/situations/race-control.ts`; modify `engine-state.ts` (`History.raceControl`), `calc/types.ts` (`EngineView.situation.raceControl`), `packages/analysis/src/battle/calculator.ts`; delete `packages/analysis/src/shared/drs-status.ts`. Tests: bring in `w2/drs` (T3) and adapt to the spans.
 
 **Interfaces:**
-- Produces: `export type TrackCondition = 'dry' | 'damp' | 'wet'`; `export type RaceControlSpan = { kind: 'drs'; status: DrsStatus; start: SessionTime; end: SessionTime } | { kind: 'trackCondition'; condition: TrackCondition; start: SessionTime; end: SessionTime }`; `History.raceControl: RaceControlSpan[]`; `EngineView.situation.raceControl: { drs: DrsStatus; trackCondition: Known<TrackCondition> }`. The engine maps an unknown DRSD reason code to `'unknown'`. Task 4's `LapConditions.trackCondition` reads this (Task 5 runs before Task 4's implement phase, or Task 4 fills it from Task 5's helper once merged: the supervisor orders them).
+- Produces: `export type RaceControlSpan = { kind: 'drs'; status: DrsStatus; start: SessionTime; end: SessionTime }`; `History.raceControl: RaceControlSpan[]`; `EngineView.situation.raceControl: { drs: DrsStatus }`. The engine maps an unknown DRSD reason code to `'unknown'`.
 
 - [ ] **Step 0 (supervisor):** domain and state/view fields.
-- [ ] **Step 1 (test agent):** the DRS rules of spec 3.4 (before lights out `notEnabledYet`; a DRSD before lights out stands; after a late join with no DRS event, on; DRSE/DRSD; an unknown code is `unknown`); `BattleCard.drs` from the view; the `race-zandvoort-vsc` segment; T3's tests adapted. The track-condition rules: each signal and its share bands (25 %, 75 %), rain starting with the field on slicks, drying with the field on intermediates, DRSD wet track as confirmation, the 30 s hysteresis (a shower's edge does not flicker), `notReceived` before tyres are known; segments under 1 MB where the catalogue finds a change (`raceSingaporeWet` rain arriving and leaving, `raceWetVscMexico`'s lap-5 switch). Run: fail.
+- [ ] **Step 1 (test agent):** the rules of spec 3.4 (before lights out `notEnabledYet`; a DRSD before lights out stands; after a late join with no DRS event, on; DRSE/DRSD; an unknown code is `unknown`); `BattleCard.drs` from the view; the `race-zandvoort-vsc` segment; T3's tests adapted. Run: fail.
 - [ ] **Step 2 (implementer):** implement; battle reads `view.situation.raceControl.drs`.
 - [ ] **Step 3:** engine and analysis tests pass.
 - [ ] **Step 4:** commit `feat(engine): race control spans; DRS status from them`.
@@ -160,11 +159,11 @@
 **Interfaces:**
 - Produces:
   ```ts
-  export type SituationKey = SessionPhaseKind | CarSituationKind | TrackCondition | 'paused';
+  export type SituationKey = SessionPhaseKind | CarSituationKind | 'paused';
   export type SituationBehaviour<B> = Record<SituationKey, B>;
   export function behaviourFor<B>(table: SituationBehaviour<B>, view: EngineView, carId?: CarId): B[]; // the rows that apply now: the session phase's, the car's, 'paused' when paused
   ```
-  Each unit exports its table as `<UNIT>_SITUATIONS` from its `index.ts`, with the row values of spec 6 for that unit. `SituationKey` also covers the track conditions (`'dry' | 'damp' | 'wet'`): pace, pace delta, bests, battle pace delta and the gapper reference compare only laps of the same condition; alarms add the wrong-tyre advisory for our cars; race-moment's `weather` on a condition change.
+  Each unit exports its table as `<UNIT>_SITUATIONS` from its `index.ts`, with the row values of spec 6 for that unit.
 
 - [ ] **Step 1 (test agent, per group):** one test per matrix row of the group's units (builder views with the situation set), asserting spec 6's cell; `completeness.test.ts`: every exported `*_SITUATIONS` table has every `SituationKey`. Run: fail.
 - [ ] **Step 2 (implementer, per group):** the tables and the calculators reading them.
@@ -175,7 +174,7 @@
 
 **Files:** contracts: `packages/contracts/src/topics/session.phase.ts` (Task 6), `cars.overview.ts` gains `situation` (supervisor); bridge feature `apps/bridge/src/features/session-info/` or a new `situations/` feature publishes; UI: `apps/ui/src/shell/topbar/segments/Phase.svelte` (new; shell is supervisor-owned: delegated), `apps/ui/src/widgets/timing-tower/` (situation column replaces `pit`), texts in `text.ts`, roles in `emphasis.ts`; gallery cases per situation; one screenshot baseline change at most per display size (budget).
 
-**Interfaces:** `CarOverview.situation: { kind: CarSituationKind; since: SessionTime; detail?: CarSituationDetail }`. Tower column codes: `GARAGE`, `PIT`, `BOX`, `DT`, `SG`, `OUT`, `IN`, `RET`, `FIN`; empty on a flying lap. Top bar labels: `FORMATION`, `START`, `SC`/`VSC` + stage, `RED`, `FINISHED`, `PAUSED`; hidden while `racing`/`running`; the track condition `DAMP` / `WET` beside it, hidden while `dry`.
+**Interfaces:** `CarOverview.situation: { kind: CarSituationKind; since: SessionTime; detail?: CarSituationDetail }`. Tower column codes: `GARAGE`, `PIT`, `BOX`, `DT`, `SG`, `OUT`, `IN`, `RET`, `FIN`; empty on a flying lap. Top bar labels: `FORMATION`, `START`, `SC`/`VSC` + stage, `RED`, `FINISHED`, `PAUSED`; hidden while `racing`/`running`.
 
 - [ ] **Step 1 (test agent):** row tests for the tower column and the top-bar segment per situation; gallery cases; the display behaviour rows of spec 6. Run: fail.
 - [ ] **Step 2 (implementer):** topics, features, displays.
