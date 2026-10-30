@@ -46,7 +46,7 @@ describe('FeedPipeline over the Zandvoort race segment', () => {
     expect(session).toMatchObject({ sessionUid: SESSION, pwrecPath: SEGMENT });
     expect(session!.drivers.length).toBeGreaterThan(0);
     expect(Date.parse(session!.startedAt)).toBeGreaterThanOrEqual(Date.parse(source.startedAt) + source.firstT);
-    const laps = repo.lapsOf(SESSION);
+    const laps = repo.lapsOf({ sessionUid: SESSION, weekendId: row!.weekend_id });
     expect(laps.length).toBeGreaterThan(0); expect(laps.every((l) => l.status === 'confirmed' && l.lapTimeMs > 0)).toBe(true);
   });
   it('writes a session file with the datagrams of the segment, in order', async () => {

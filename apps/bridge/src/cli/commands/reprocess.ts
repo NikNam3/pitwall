@@ -15,7 +15,7 @@ import { processRecordings, rebuildDatabase, recordingJobs, type RecordingJob } 
 function clearWeekend(db: Db, weekendId: string, dirs: DataDir, log: Logger): RecordingJob[] | undefined {
   const sessions = new WeekendRepository(db).sessionsOf(weekendId);
   if (sessions.length === 0) return undefined;
-  const rebuilt = sessions.flatMap((s) => (s.pwrecPath === null ? [] : [{ sessionUid: s.sessionUid, path: s.pwrecPath }]));
+  const rebuilt = sessions.flatMap((s) => (s.pwrecPath === null ? [] : [{ key: { sessionUid: s.sessionUid, weekendId: s.weekendId }, path: s.pwrecPath }]));
   const missing = rebuilt.find(({ path }) => !existsSync(path));
   if (missing) throw new StartupError(`recording ${missing.path} not found; nothing was deleted`);
   const jobs = recordingJobs([...new Set(rebuilt.map(({ path }) => path))], dirs, log);
@@ -25,7 +25,7 @@ function clearWeekend(db: Db, weekendId: string, dirs: DataDir, log: Logger): Re
       throw error;
     },
   });
-  writer.deleteSessions(rebuilt.map(({ sessionUid }) => sessionUid));
+  writer.deleteSessions(rebuilt.map(({ key }) => key));
   return jobs;
 }
 
