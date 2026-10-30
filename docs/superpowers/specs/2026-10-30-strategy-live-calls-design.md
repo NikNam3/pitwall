@@ -40,7 +40,7 @@ From `docs/superpowers/notes/2026-10-30-strategy-quality-vs-team-center.md`:
 ## 2. Scope
 
 **In scope:**
-1. Repository changes: priors and contributions (ADR 0015), the simulator kind, the storage key fix, the benchmark harness, domain and contract additions (section 3).
+1. Repository changes: priors and contributions (ADR 0015), the simulator kind, the benchmark harness, domain and contract additions (section 3).
 2. Shared functions and two simulators, `lap-model` and `race-forecast` (section 5).
 3. Three calculators: `track-geometry`, `degradation`, `pit-loss` (section 6).
 4. Thirteen analyses, each with its topic, and changes to `incidents` and `race-moment` (section 7).
@@ -64,8 +64,8 @@ Section 4. Engine: `EngineView.priors`, `definePriors`. Bridge: `Feature.priors`
 ### 3.2 The simulator kind
 A **simulator** is a pure function in `packages/analysis/src/<name>/` (a unit like any other) that analyses call to run a model forward. It has no `reads` and no cadence; it is not registered. It takes plain arrays and numbers and returns typed arrays, so its kernel can be replaced without touching callers (1.4 point 9). `gen:catalogue` lists it as a unit of kind `simulator`. ADR 0014 gets one line naming the kind.
 
-### 3.3 Storage key fix
-The game reuses session UIDs within an online weekend (both UIDs of the Zandvoort weekend were reused). `sessions` gets a surrogate key `session_key` = `<uid>-<startedAt>`; every child table references it. `SCHEMA_VERSION` becomes 2. Nothing reads the version 1 tables, so a version 1 database is renamed aside with a message and rebuilt by `pitwall reprocess`.
+### 3.3 Storage key (done before 4a)
+The game reuses session UIDs across online weekends (`fixtures/index.json`: both UIDs of the first Zandvoort weekend came back in a later one). Fixed on main before this run (d4a5737): `sessions` and every child table are keyed by `(session_uid, weekend_id)`, `weekend_id` being the game's `weekendLinkIdentifier`; `SCHEMA_VERSION` 2. 4a builds on that key. The knowledge table (section 4) references `(session_uid, weekend_id)` and raises `SCHEMA_VERSION` to 3; a database of another version is refused as today, and `pitwall reprocess` rebuilds it, contributions included.
 
 ### 3.4 Benchmark harness
 `test-support/bench.ts`: `withinBudget(name, budgetMs, fn, { runs })` runs `fn` after a warm-up and fails with the median and the budget when the median exceeds it. Budget tests are ordinary `*.test.ts` files and run in `pnpm test`. A miss is fixed by profiling, never by raising the budget without the user (memory rule "fix slowness, not timeouts").
@@ -90,7 +90,7 @@ The analyses stay pure. Knowledge copies ADR 0008 one to one:
 
 - **Lifetime** is `reference` (committed data, never written: the turn files), `track` (all sessions at this track) or `weekend` (all sessions of this weekend).
 - **A contribution** is what one session measured: the pit stops with their losses, the geometry samples, the per-compound fits. A calculator's output carries it; `Feature.contributions` names the calculator and the priors key it feeds.
-- **The bridge stores contributions per source session** (`knowledge` table: key, lifetime, scope id, session key, laps covered, JSON, written at every lap completion and at session end). Only `live`, `import` and `reprocess` write; **`replay` and `dev` never write**, so testing with partial replays cannot touch the store. A contribution is replaced only by one of the same session that covers **at least as many laps**, so a re-run never counts a session twice and a partial run (a bridge restarted mid-session) never shrinks it. A bad session can be dropped by deleting its rows.
+- **The bridge stores contributions per source session** (`knowledge` table: key, lifetime, scope id, session (`session_uid`, `weekend_id`), laps covered, JSON, written at every lap completion and at session end). Only `live`, `import` and `reprocess` write; **`replay` and `dev` never write**, so testing with partial replays cannot touch the store. A contribution is replaced only by one of the same session that covers **at least as many laps**, so a re-run never counts a session twice and a partial run (a bridge restarted mid-session) never shrinks it. A bad session can be dropped by deleting its rows.
 - **At session start** the bridge loads every contribution in scope (same track, or same weekend), calls the key's pure `aggregate(contributions)` and passes the result as the prior. With no contributions the prior is the key's `defaults`: the community values, each with a source note.
 - **Moving to a real team's database later** (everything across weekends, weighted by age and conditions) is a new `aggregate` and a wider scope, not a migration.
 - **Determinism:** priors are an input to the run like the recording. The determinism and segment tests pin them (empty or a committed priors file). The determinism hash covers the topics, not the store.
@@ -278,7 +278,7 @@ The layouts come from the approved mockups, for the 24" main and the 14" side mo
 
 ### 10.1 Test data
 - **Synthetic builders** for edge cases (SP3 11.1), extended with stops, flag phases, positions on a synthetic oval and a priors builder.
-- **Segments** (≤ 1 MB, a few seconds to a lap) cut from the existing races, each around one behaviour (research task R2): a green stop, a VSC stop and an SC stop (`raceZandvoortUidReuse`, wet Singapore race), a clean lap of the full field (geometry), a wet crossover moment (Singapore).
+- **Segments** (≤ 1 MB, a few seconds to a lap) cut from the existing races, each around one behaviour (research task R2): a green stop, a stop onto the same compound (`raceWetVscMexico`), a VSC or SC stop if one exists (`raceZandvoortUidReuse`, `raceSingaporeWet`; `raceWetVscMexico` has none), a clean lap of the full field (geometry: the existing `race-zandvoort-full-lap`). The wet crossover spans laps of the field, far beyond 1 MB, so `crossover` is tested with builders and checked by the user on the wet races in Task 45.
 - **No whole-recording fact checks** (memory rule "segment tests only"). Whole recordings only for determinism and reprocess. `pitwall score` runs on whole recordings, but it is a report for the user, not a test.
 
 ### 10.2 Per layer
@@ -317,7 +317,7 @@ As SP3 13: one unit per agent, test phase then implement phase, at most 8 agents
 **Starts after the replay-speed fix and the full-lap segments are merged** (segment cuts and determinism need them). Both are on main (c45284e, ba032e0).
 
 ### 12.1 Level 0 (supervisor)
-Contracts and value types (Appendix A), priors and contributions (section 4), the simulator kind, the storage key fix, the benchmark harness, ADR 0015, the kit pieces (8.3), the mockups (8.4).
+Contracts and value types (Appendix A), priors and contributions (section 4), the simulator kind, the benchmark harness, ADR 0015, the kit pieces (8.3), the mockups (8.4).
 
 ### 12.2 Levels
 | Level | Units |
@@ -353,7 +353,7 @@ Open for the 4b brainstorm:
 Rivals' predicted stops and the two-dry-compound rule stay in sub-project 5 (1.5).
 
 ## 14. Open points
-1. Does the game reuse `weekendLinkIdentifier` across weekends? Verify with the next league weekend; if it does, the weekend identity adds the date.
+1. Does the game reuse `weekendLinkIdentifier` across weekends? Verify with the next league weekend; if it does, the weekend identity adds the date. (Checked 2026-10-30 on every recording: offline Grand Prix weekends send a real link id; only the time trial sends 0. Two time-trial sessions with a reused UID would still collide in storage; none is known, and the user accepted that edge.)
 2. League rules: the league races under the 2025 F1 sporting regulations (user, 2026-10-30), so the two-dry-compound rule applies; it is used from sub-project 5 (1.5). The next compounds come from our car's tyre sets (7.9).
 3. FastF1 licence (R1).
 4. The overtaking threshold and dirty-air coefficients for F1 25 are defaults until sub-project 5 calibrates them.

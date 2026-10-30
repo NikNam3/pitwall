@@ -6,8 +6,8 @@ import { FIXTURES, describeWithFixture, type FixtureName } from '../../../../tes
 import { referenceDecode } from '../../../../test-support/reference-decoder.ts';
 import { readPwrec } from '../../src/pwrec/reader.ts';
 
-/** The two big races are too big to decode twice here, and the time trial is no test fixture (user ruling 2026-10-30); the segments and the other recordings cover the same packet layouts. */
-const EXCLUDED: readonly FixtureName[] = ['raceSingaporeWet', 'raceZandvoortUidReuse', 'ttZandvoort'];
+/** The big races are too big to decode twice here, and the time trial is no test fixture (user ruling 2026-10-30); the segments and the other recordings cover the same packet layouts. */
+const EXCLUDED: readonly FixtureName[] = ['raceSingaporeWet', 'raceZandvoortUidReuse', 'raceWetVscMexico', 'ttZandvoort'];
 
 /** Best of three warm passes over every `qualifyingSingapore` payload; the generic interpreter took about 4 400 ms. */
 const SPEED_TARGET_MS = 1_500;

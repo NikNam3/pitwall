@@ -14,6 +14,7 @@ export const FIXTURES = {
   raceZandvoortOnline: '2026-10-29_22-48-50_bbda17a651868614.pwrec.gz',
   practiceZandvoortUidReuse: '2026-10-29_22-54-58_0022670294e098af.pwrec.gz',
   raceZandvoortUidReuse: '2026-10-29_23-00-37_bbda17a651868614.pwrec.gz',
+  raceWetVscMexico: '2026-10-30_15-20-41_55cc94d2d5c13280.pwrec.gz',
 } as const;
 
 export type FixtureName = keyof typeof FIXTURES;
