@@ -18,7 +18,7 @@ import { ArraySource, type PreparedPacket } from '../helpers/array-source.ts';
 import { ManualSource } from '../helpers/manual-source.ts';
 
 const F = 'test' as FeedId;
-const SEGMENT = join(import.meta.dirname, '../../../../fixtures/segments/tt-zandvoort-lap1.pwrec.gz');
+const SEGMENT = join(import.meta.dirname, '../../../../fixtures/segments/race-zandvoort-lap10.pwrec.gz');
 
 const packets = (uid: bigint, frames: number): PreparedPacket[] =>
   new ScenarioBuilder({ sessionUid: uid, cars: 2 }).frames(frames, () => {}).packets()
@@ -113,7 +113,7 @@ describe('late subscribers (ruling R9)', () => {
     await late.pipeline.done;
     late.subscribe('info', 'session.info');
     late.subscribe('cars', 'cars.overview');
-    expect(late.values('info')).toEqual([expect.objectContaining({ sessionUid: '1895827638050388100' })]);
+    expect(late.values('info')).toEqual([expect.objectContaining({ sessionUid: '13536157633115227668' })]);
     const cars = late.values('cars');
     expect(cars).toHaveLength(1);
     expect(Array.isArray(cars[0]) && cars[0].length > 0).toBe(true);

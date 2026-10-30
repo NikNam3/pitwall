@@ -15,21 +15,6 @@ async function load(file: string) {
 const ids = (ps: Packet[]) => ps.map((p) => p.packetId);
 
 describe('committed segments', () => {
-  it('tt-zandvoort-lap1: context first, end of lap 1 with FTLP 71.910 s', async () => {
-    const s = await load('tt-zandvoort-lap1.pwrec.gz');
-    expect(s.records).toHaveLength(2144);
-    expect(ids(s.packets.slice(0, 2))).toEqual([1, 4]);
-    expect(s.packets[0]!.header.frameIdentifier).toBe(s.packets[2]!.header.frameIdentifier);
-    expect(s.codes).toEqual({ FTLP: 1, SPTP: 1, BUTN: 3 });
-    const ftlp = s.packets.find((p) => p.packetId === 3 && p.details.code === 'FTLP');
-    expect(ftlp).toMatchObject({ details: { vehicleIdx: 0 } });
-    expect((ftlp as { details: { lapTime: number } }).details.lapTime).toBeCloseTo(71.91, 3);
-    const laps = new Set(s.packets.flatMap((p) => (p.packetId === 2 ? [p.lapData[0]!.currentLapNum] : [])));
-    expect([...laps]).toEqual([1, 2]);
-    expect(s.summary).toMatchObject({ endedCleanly: true, meta: { startedAt: '2026-10-27T22:33:35.674Z',
-      cut: { source: '2026-10-27_23-31-43_1a4f5531395c7884.pwrec.gz', fromS: 112, toS: 118, contextPackets: 2 } } });
-    expect(s.summary.durationMs).toBeCloseTo(5979.381, 2);
-  });
   it('race-singapore-start: start lights and lights out, session opened by a later Session packet', async () => {
     const s = await load('race-singapore-start.pwrec.gz');
     expect(s.records).toHaveLength(2169);
@@ -48,5 +33,21 @@ describe('committed segments', () => {
     expect(uid0.every(({ i }) => i < send)).toBe(true);
     expect(s.summary).toMatchObject({ endedCleanly: true, meta: { startedAt: '2026-10-27T23:16:14.670Z', cut: { fromS: 61.5, toS: 63.4, contextPackets: 2 } } });
     expect(s.summary.durationMs).toBeCloseTo(3265.341, 2);
+  });
+  // Cut with pwrec-cut from the whole recordings; provenance and verified facts in fixtures/index.json.
+  it.each([
+    ['race-zandvoort-lap10.pwrec.gz', 1778, { OVTK: 2, SPTP: 2, FTLP: 1 }, 721, 726],
+    ['race-zandvoort-pit-stop.pwrec.gz', 2424, { OVTK: 3, SPTP: 5, BUTN: 1 }, 548.2, 555],
+    ['race-zandvoort-pit-exit.pwrec.gz', 536, { SPTP: 2 }, 564.5, 566],
+    ['race-zandvoort-vsc.pwrec.gz', 1073, { OVTK: 3, SCAR: 1, DRSD: 1, RTMT: 1 }, 913.5, 916.5],
+    ['race-zandvoort-retire.pwrec.gz', 1487, { OVTK: 5, PENA: 2, RTMT: 1, SCAR: 3, BUTN: 10 }, 1205, 5846],
+    ['race-singapore-wet-flashback.pwrec.gz', 2170, { BUTN: 22, FLBK: 1 }, 741.5, 744.5],
+    ['qualifying-singapore-end.pwrec.gz', 70, { SPTP: 1, SEND: 1, BUTN: 6 }, 899, 900.6],
+  ] as const)('%s: %i records, context (Session, Participants) first, these events, clean end', async (file, records, codes, fromS, toS) => {
+    const s = await load(file);
+    expect(s.records).toHaveLength(records);
+    expect(ids(s.packets.slice(0, 2))).toEqual([1, 4]);
+    expect(s.codes).toEqual(codes);
+    expect(s.summary).toMatchObject({ endedCleanly: true, meta: { cut: { fromS, toS, contextPackets: 2 } } });
   });
 });

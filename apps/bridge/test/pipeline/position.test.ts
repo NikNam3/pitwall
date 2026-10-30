@@ -9,7 +9,7 @@ import { createLogger } from '../../src/log.ts';
 import { FeedPipeline } from '../../src/pipeline/feed-pipeline.ts';
 import { ManualSource } from '../helpers/manual-source.ts';
 
-const SEGMENT = join(import.meta.dirname, '../../../../fixtures/segments/tt-zandvoort-lap1.pwrec.gz');
+const SEGMENT = join(import.meta.dirname, '../../../../fixtures/segments/race-zandvoort-lap10.pwrec.gz');
 const F = 'replay' as FeedId;
 const pipelineOf = (source: ManualSource | PwrecSource) =>
   new FeedPipeline({ feedId: F, source, hub: new TopicHub({ now: () => performance.now() }), features: FEATURES, log: createLogger({ level: 'silent' }) });

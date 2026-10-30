@@ -8,7 +8,7 @@ import { CLI, SEGMENT } from '../helpers/cli.ts';
 
 describe('pitwall replay --dev as an IPC child', { timeout: 20_000 }, () => {
   it('sends position messages with the transport state while paused', async () => {
-    const child = spawn(process.execPath, [CLI, 'replay', SEGMENT, '--dev', '--paused', '--speed', '2', '--at-time', '115000'], {
+    const child = spawn(process.execPath, [CLI, 'replay', SEGMENT, '--dev', '--paused', '--speed', '2', '--at-time', '723000'], {
       stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
       env: { ...process.env, PITWALL_WS_PORT: '0', PITWALL_DATA_DIR: mkdtempSync(join(tmpdir(), 'pitwall-ipc-')) },
     });
@@ -20,8 +20,8 @@ describe('pitwall replay --dev as an IPC child', { timeout: 20_000 }, () => {
       expect(messages.length).toBeGreaterThanOrEqual(2);
       for (const m of messages) {
         expect(m).toMatchObject({ type: 'position', paused: true, speed: 2 });
-        expect((m as { sessionTimeMs: number }).sessionTimeMs).toBeGreaterThanOrEqual(115_000);
-        expect((m as { sessionTimeMs: number }).sessionTimeMs).toBeLessThan(117_900);
+        expect((m as { sessionTimeMs: number }).sessionTimeMs).toBeGreaterThanOrEqual(723_000);
+        expect((m as { sessionTimeMs: number }).sessionTimeMs).toBeLessThan(725_900);
       }
     } finally { child.kill('SIGKILL'); }
   });

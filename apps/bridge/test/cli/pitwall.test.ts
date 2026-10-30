@@ -24,7 +24,7 @@ describe('pitwall CLI', { timeout: 30_000 }, () => {
     const [, port] = (await replay.waitFor(/listening ws:\/\/127\.0\.0\.1:(\d+)/))!;
     await new Promise((r) => setTimeout(r, 500));
     const tap = startCli(['tap', 'session.info', '--url', `ws://127.0.0.1:${port}`], {});
-    await tap.waitFor(/"sessionUid":"1895827638050388100"/);
+    await tap.waitFor(/"sessionUid":"13536157633115227668"/);
     const lines = tap.stdout().trim().split('\n').map((l) => JSON.parse(l));
     expect(lines[0]).toMatchObject({ type: 'hello', contractVersion: 8 });
     expect(lines.some((m) => m.type === 'snapshot' || m.type === 'update')).toBe(true);

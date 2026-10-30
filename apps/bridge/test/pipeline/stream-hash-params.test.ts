@@ -11,7 +11,7 @@ import type { QuickCalculator } from '@pitwall/engine';
 import { bindState, defineFeature, type TopicBinding } from '../../src/features/feature.ts';
 import { topicStreamHash } from '../../src/pipeline/stream-hash.ts';
 
-const SEGMENT = join(import.meta.dirname, '../../../../fixtures/segments/tt-zandvoort-lap1.pwrec.gz');
+const SEGMENT = join(import.meta.dirname, '../../../../fixtures/segments/race-zandvoort-lap10.pwrec.gz');
 const bindAny = bindState as unknown as (topic: TopicName, calc: QuickCalculator<unknown>, select: (out: unknown, params: object) => unknown) => TopicBinding;
 
 /** Counts across runs of the hash, so every run publishes other values. */

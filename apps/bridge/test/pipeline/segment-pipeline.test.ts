@@ -13,8 +13,8 @@ import { readPwrec } from '../../src/pwrec/reader.ts';
 import { openDatabase } from '../../src/storage/db.ts';
 import { WeekendRepository } from '../../src/storage/weekend-repository.ts';
 
-const SEGMENT = join(import.meta.dirname, '../../../../fixtures/segments/tt-zandvoort-lap1.pwrec.gz');
-const SESSION = '1895827638050388100' as SessionUid;
+const SEGMENT = join(import.meta.dirname, '../../../../fixtures/segments/race-zandvoort-lap10.pwrec.gz');
+const SESSION = '13536157633115227668' as SessionUid;
 const F = 'replay' as FeedId;
 const tmp = () => mkdtempSync(join(tmpdir(), 'segment-'));
 
@@ -34,7 +34,7 @@ async function replay(storage: object): Promise<void> {
   p.start(); await p.done;
 }
 
-describe('FeedPipeline over the TT Zandvoort segment', () => {
+describe('FeedPipeline over the Zandvoort race segment', () => {
   it('stores the session, its drivers and the confirmed laps', async () => {
     const db = openDatabase(join(tmp(), 'segment.db'));
     const source = await datagrams(SEGMENT);
@@ -52,7 +52,7 @@ describe('FeedPipeline over the TT Zandvoort segment', () => {
   it('writes a session file with the datagrams of the segment, in order', async () => {
     const recordings = tmp();
     await replay({ db: openDatabase(join(tmp(), 'copy.db')), recordingsDir: recordings, sourcePath: SEGMENT });
-    const files = readdirSync(recordings).filter((name) => name.endsWith('.pwrec.gz')); expect(files).toHaveLength(1); expect(files[0]).toMatch(/_1a4f5531395c7884\.pwrec\.gz$/);
+    const files = readdirSync(recordings).filter((name) => name.endsWith('.pwrec.gz')); expect(files).toHaveLength(1); expect(files[0]).toMatch(/_bbda17a651868614\.pwrec\.gz$/);
     const written = (await datagrams(join(recordings, files[0]!))).payloads; const source = (await datagrams(SEGMENT)).payloads;
     expect(written.length).toBeGreaterThan(0);
     expect(source.slice(source.length - written.length)).toEqual(written);
