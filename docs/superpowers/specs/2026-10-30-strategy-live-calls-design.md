@@ -278,7 +278,7 @@ The layouts come from the approved mockups, for the 24" main and the 14" side mo
 
 ### 10.1 Test data
 - **Synthetic builders** for edge cases (SP3 11.1), extended with stops, flag phases, positions on a synthetic oval and a priors builder.
-- **Segments** (≤ 1 MB, a few seconds to a lap) cut from the existing races, each around one behaviour (research task R2): a green stop, a VSC stop and an SC stop (`raceZandvoortUidReuse`, wet Singapore race), a clean lap of the full field (geometry), a wet crossover moment (Singapore).
+- **Segments** (≤ 1 MB, a few seconds to a lap) cut from the existing races, each around one behaviour (research task R2): a green stop, a stop onto the same compound (`raceWetVscMexico`), a VSC or SC stop if one exists (`raceZandvoortUidReuse`, `raceSingaporeWet`; `raceWetVscMexico` has none), a clean lap of the full field (geometry: the existing `race-zandvoort-full-lap`). The wet crossover spans laps of the field, far beyond 1 MB, so `crossover` is tested with builders and checked by the user on the wet races in Task 45.
 - **No whole-recording fact checks** (memory rule "segment tests only"). Whole recordings only for determinism and reprocess. `pitwall score` runs on whole recordings, but it is a report for the user, not a test.
 
 ### 10.2 Per layer

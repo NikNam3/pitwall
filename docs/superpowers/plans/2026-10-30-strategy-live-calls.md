@@ -300,9 +300,12 @@ Done on main by a separate fix (d4a5737, tests eab70ec): sessions and every chil
 **Done by:** one agent (lane `segments`, single phase), reviewed by the supervisor. **Depends on:** nothing left: the `perf/full-laps` work (the 20-car race-lap segment) is merged (ba032e0).
 
 - [ ] Check the existing segments for reuse: `race-zandvoort-pit-stop`, `race-zandvoort-pit-exit` (green stop), `race-zandvoort-vsc`, and `race-zandvoort-full-lap` for the geometry (a clean lap of the full field). Two of the three full-lap slots are used (`race-zandvoort-full-lap`, `qualifying-singapore-full-lap`); 4a cuts no new full-lap segment unless the user agrees.
-- [ ] The new wet race with a VSC (`2026-10-30_15-20-41_55cc94d2d5c13280`, labelled on `fixtures/wet-race-2` by the other session) is a candidate for the VSC stop and the wet crossover; that session passes suggested windows to the supervisor.
-- [ ] Search `raceZandvoortUidReuse`, `raceSingaporeWet` and the new wet race for a stop under VSC or SC (`PitStopRecord.flag`). If one exists, cut the pit-lane entry to the exit (≤ 1 MB) as `race-<track>-<vsc|sc>-stop`. If none exists, record that in the questions file; the case stays covered by builders.
-- [ ] Cut `race-singapore-wet-crossover`: a moment where a car on intermediates sets a faster sector than our car on slicks (or the reverse) in `raceSingaporeWet`. ≤ 1 MB.
+- [ ] `raceWetVscMexico` (on main, 945e8e5; windows from the other session in `.superpowers/sdd/2026-10-30-storage-c-39-40/label-report.md`):
+  - cut `race-mexico-wet-stop` 516.2–523 (our stop, wets → intermediates, green)
+  - cut `race-mexico-same-compound-stop` 2797–2799.5 (intermediates → intermediates, only the age resets) for Task 13's `a stop onto the same compound starts a new stint fit`
+  - it has no stop under the VSC (VSC laps 14–15, nobody stops) and no slick/inter crossover (only wets → intermediates on laps 5–6, 405–443 s, about 4 MB at this race's rate, over the cap). Not cut.
+- [ ] Search `raceZandvoortUidReuse` and `raceSingaporeWet` for a stop under VSC or SC (`PitStopRecord.flag`). If one exists, cut the pit-lane entry to the exit (≤ 1 MB) as `race-<track>-<vsc|sc>-stop`. If none exists, record that in the questions file; the case stays covered by builders.
+- [ ] No crossover segment: the crossover spans laps of the field (spec 10.1). Task 23 uses builders; Task 45's checklist covers `raceSingaporeWet` and `raceWetVscMexico`.
 - [ ] Record each one in `fixtures/index.json` with its verified facts. Facts help pick a segment; they are not assertions.
 - [ ] Commit: `test: sub-project 4a segments`.
 
@@ -481,6 +484,7 @@ Done on main by a separate fix (d4a5737, tests eab70ec): sessions and every chil
 - `σ of ν shrinks as laps arrive`
 - `one lap +3 s slower moves ν by less than 5 ms; one lap −3 s faster moves it fully`
 - `a stop starts a new stint fit seeded from the compound prior`
+- segment `race-mexico-same-compound-stop`: `a stop onto the same compound starts a new stint fit`
 - `a flashback before the stop removes the new stint` (Review Focus 1)
 - `a rival hidden by realism has basis age`
 - `the weekend prior seeds the first stint`
@@ -842,7 +846,7 @@ Done on main by a separate fix (d4a5737, tests eab70ec): sessions and every chil
   - the SC card under the SC
   - the undercut card before the stop
   - turn labels at Zandvoort
-  - the forecast strip and crossover in `raceSingaporeWet`
+  - the forecast strip and crossover in `raceSingaporeWet`, and the wets → intermediates crossover in `raceWetVscMexico` (laps 5–6)
 - [ ] Run `pitwall score` with `fixtures/priors/empty.json` on the league races in `recordings/` and put the tables in `docs/acceptance/4a.md` as the baseline 4b is judged against. This is a report for the user, not a gate.
 - [ ] Get the user's check. Their findings become fix tasks.
 - [ ] Write the run rulings to `docs/superpowers/notes/2026-10-30-sp4a-run-rulings.md`. Update CLAUDE.md: "Where to look", and `score` in the bridge CLI line of "Commands".
