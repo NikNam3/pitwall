@@ -1,6 +1,6 @@
 # Research
 
-Race-engineering research done on 2026-10-27/28; 01–05 before the foundation spec, 06–07 before the strategy and UI work. These files keep its findings in the repo; the spec and the architecture review refer to them.
+Race-engineering research done on 2026-10-27/28; 01–05 before the foundation spec, 06–07 before the strategy and UI work; 08 (market landscape) on 2026-10-30. These files keep its findings in the repo; the spec and the architecture review refer to them.
 
 | File | Content |
 |---|---|
@@ -11,6 +11,7 @@ Race-engineering research done on 2026-10-27/28; 01–05 before the foundation s
 | [05-game-control-boundary.md](05-game-control-boundary.md) | What can be changed in the game from outside; why pitwall is read-only; the pit actuator idea (sub-project 6) |
 | [06-engineer-decisions.md](06-engineer-decisions.md) | The engineer's decision catalogue: pit-wall roles and information flow, 33 decisions per weekend phase with computed answer, display, inputs, F1 25 feasibility and escalation; display catalogue; escalation map; open questions |
 | [07-strategy-literature.md](07-strategy-literature.md) | Literature map of strategy models (DP/SDP, MILP, MINLP, RL, game theory, state-space degradation, dirty air): what each adds and how they combine into pitwall's strategy layer |
+| [08-market-landscape.md](08-market-landscape.md) | Other race-engineer tools (F1 25 apps, iRacing/LMU/ACC team platforms, real-F1 timing apps): what to take, where pitwall is ahead and behind, the 2026 Season Pack format risk |
 
 ## Provenance
 
