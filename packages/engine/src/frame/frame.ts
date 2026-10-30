@@ -30,6 +30,11 @@ export type Frame = {
   overallFrameId: number;
   /** The latest header session time of the frame's packets. */
   sessionTime: SessionTime;
+  /**
+   * When the frame's first packet arrived (wall clock, ms, as the source stamped it; only compared, never read from a
+   * clock): the situation tracker tells an offline pause by it. Absent when the packets came without one.
+   */
+  receivedAtMs?: number;
   playerCarIndex: number;
   motion?: MotionPacket;
   lapData?: LapDataPacket;

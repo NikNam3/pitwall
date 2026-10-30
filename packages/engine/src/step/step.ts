@@ -4,6 +4,7 @@ import { applyFlagPhases } from '../history/flags.ts';
 import { applyLaps } from '../history/laps.ts';
 import { applyMiniSectors } from '../history/mini-sectors.ts';
 import { applyPitStops } from '../history/pit-stops.ts';
+import { applySituations } from '../history/situations/index.ts';
 import { applyStints } from '../history/stints.ts';
 import type { EngineState } from '../state/engine-state.ts';
 import { applyCondition } from './condition.ts';
@@ -17,7 +18,7 @@ import { applyTiming } from './timing.ts';
 import { applyTyres } from './tyres.ts';
 import type { StepOutput, SubStep } from './types.ts';
 
-export { ALL_CHANGE_TAGS, CHANGE_TAGS, type ChangeTag, type LapCorrection, type StepOutput, type SubStep } from './types.ts';
+export { ALL_CHANGE_TAGS, CHANGE_TAGS, type ChangeTag, type ClockFall, type LapCorrection, type StepOutput, type SubStep } from './types.ts';
 
 /** Run in this order; a sub-step may rely on the ones before it. */
 export const SUB_STEPS: SubStep[] = [
@@ -30,6 +31,8 @@ export const SUB_STEPS: SubStep[] = [
   applyDynamics,
   applyOwnCar,
   applyRealism,
+  // The first history step: the others read the session phase it records.
+  applySituations,
   applyPitStops,
   applyLaps,
   applyStints,

@@ -100,12 +100,41 @@ export type OpenPitVisit = {
 };
 
 /**
+ * The situation tracker's bookkeeping behind `OpenTrackers.situations` (`history/situations/`, spec 3.1-3.3): what a
+ * later frame needs to confirm, discard or re-stamp what an earlier one recorded.
+ */
+export type PhaseBook = {
+  /** A frame was applied, so the next one is not the session's first (where the tracker joins the session). */
+  started: boolean;
+  /**
+   * A neutralisation opened on its SCAR deployment and not yet confirmed by the safety car status: the span it closed
+   * (recorded on confirmation) and the phase it replaced (back in place when it is dropped), and how many later Session
+   * packets did not confirm it.
+   */
+  unconfirmed?: { closed: SessionPhaseSpan; replaced: OpenSessionPhase; sessionPackets: number } | undefined;
+  /** The history lengths when the formation phase opened: lights out cuts the history back to them (spec 3.2). */
+  formationFrom?: HistoryLengths | undefined;
+  /** The history lengths when the race's start lights began (not a restart's): where the start's entries begin. */
+  startFrom?: HistoryLengths | undefined;
+  /**
+   * The race's lights out: its frame id (the start settles within a window after it) and the start's entries that the
+   * settling re-stamps: history from `from`, phases from index `phaseFrom` (the start lights) on (spec 3.3).
+   */
+  lightsOut?: { frameId: number; from: HistoryLengths; phaseFrom: number } | undefined;
+  /** The receive time of the previous frame (wall clock, ms), for offline pauses. */
+  lastWallMs?: number | undefined;
+  /** An online pause (`gamePaused`) in progress: its session time and receive time. */
+  onlinePause?: { start: SessionTime; wallMs: number } | undefined;
+};
+
+/**
  * Work in progress behind the history. Per-car arrays are indexed by `CarId` and have `MAX_CARS` entries.
  * Plain data only, so `structuredClone` can snapshot it.
  */
 export type OpenTrackers = {
   /** The situation tracker's open state (`history/situations/`): the phase in progress and whether the session is paused. */
   situations: { session: OpenSessionPhase; paused: boolean };
+  phaseBook: PhaseBook;
   laps: Array<LapCursor | undefined>;
   stints: Array<OpenStint | undefined>;
   pitVisits: Array<OpenPitVisit | undefined>;

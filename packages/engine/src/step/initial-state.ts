@@ -112,6 +112,7 @@ const perCar = <T>(make: () => T): T[] => Array.from({ length: MAX_CARS }, make)
 /** Nothing opened yet; per-car arrays hold `MAX_CARS` entries. */
 const emptyTrackers = (lastFlag: OpenTrackers['lastFlag']): OpenTrackers => ({
   situations: { session: { kind: 'preStart', start: toSessionTime(0), startLeaderLap: 0 }, paused: false },
+  phaseBook: { started: false },
   laps: perCar(() => undefined),
   stints: perCar(() => undefined),
   pitVisits: perCar(() => undefined),

@@ -7,3 +7,9 @@ export const activeFlagPhaseOf = (state: DeepReadonly<EngineState>): EngineView[
   const phase = state.open.flagPhase;
   return phase && { ...phase, scPhases: [...phase.scPhases] };
 };
+
+/** The `situation` of the view for `state`: the tracker's open phase (replaced, never changed, on every change) and the pause flag. */
+export const situationOf = (state: DeepReadonly<EngineState>): EngineView['situation'] => {
+  const { session, paused } = state.open.situations;
+  return { session, paused };
+};
