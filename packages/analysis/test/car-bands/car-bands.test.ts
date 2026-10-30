@@ -5,15 +5,23 @@ import { carBandsCalculator } from '../../src/car-bands/calculator.ts';
 import { CAR_BANDS, CAR_BANDS_CONFIG, type CarBands } from '../../src/car-bands/index.ts';
 import { carState, engineView, lap, realismHidden } from '../../../../test-support/builders/index.ts';
 
-// The default bands (config.ts): dry surface 85-105, dry carcass 85-110, inter surface 60-90, inter carcass 55-75,
-// pressure 20-31, brakes 300-1000, engine 0-125 (engineHi only; lo is pinned to 0). Soft is a dry compound.
+// Every case runs on TEST_BANDS, a fixed config (the defaults before 2026-10-30), so no case depends on the defaults;
+// only 'the default bands' pins those. Soft is a dry compound. The engine band's lo is pinned to 0 (engineHi only).
+// The tyre surface has no live state (ruling 2026-10-30: it swings 30-60 °C within a lap); only outForFullLap judges it.
+const TEST_BANDS = {
+  surfaceDryLo: 85, surfaceDryHi: 105, surfaceInterLo: 60, surfaceInterHi: 90, surfaceWetLo: 50, surfaceWetHi: 80,
+  carcassDryLo: 85, carcassDryHi: 110, carcassInterLo: 55, carcassInterHi: 75, carcassWetLo: 45, carcassWetHi: 65,
+  pressureLo: 20, pressureHi: 31, brakeLo: 300, brakeHi: 1000, engineHi: 125,
+};
+const NO_LIVE_STATE = unknown('notApplicable');
 const corners = ['fl', 'fr', 'rl', 'rr'] as const;
 const withSurface = (c: number) =>
   carState({
     tyres: { corners: { fl: { surfaceTempC: known(c, 0) }, fr: { surfaceTempC: known(c, 0) }, rl: { surfaceTempC: known(c, 0) }, rr: { surfaceTempC: known(c, 0) } } },
   });
 const bandsOf = (car: CarState, laps: LapRecord[] = [], opts: { config?: EngineView['config']; session?: object } = {}): CarBands => {
-  const view = engineView({ cars: [car], history: { laps }, ...(opts.session && { session: opts.session }), ...(opts.config && { config: opts.config }) });
+  const config = opts.config ?? { [CAR_BANDS_CONFIG.key]: TEST_BANDS };
+  const view = engineView({ cars: [car], history: { laps }, config, ...(opts.session && { session: opts.session }) });
   const out = carBandsCalculator.compute(view);
   return out[car.id]!;
 };
@@ -30,24 +38,46 @@ describe('car-bands calculator', () => {
     expect(carBandsCalculator.reads).toEqual(expect.arrayContaining(['tyres', 'condition', 'laps']));
   });
 
-  it('soft surface 104 °C is in band; 106 °C is above', () => {
-    for (const [c, state] of [[104, 'in'], [106, 'above'], [80, 'below']] as const) {
+  it('the default bands: dry, inter and wet tyre bands; one band each for pressure, brakes and engine', () => {
+    const on = (visual: 'inter' | 'wet' | 'medium', actual: 'inter' | 'wet' | 'C2') =>
+      bandsOf(carState({ tyres: { visualCompound: visual, actualCompound: actual } }), [], { config: {} });
+    const tyreBands = (b: CarBands) => [b.tyres.fl.surfaceC.band, b.tyres.fl.carcassC.band];
+    expect(tyreBands(on('medium', 'C2'))).toEqual([{ lo: 55, hi: 100 }, { lo: 75, hi: 110 }]);
+    expect(tyreBands(on('inter', 'inter'))).toEqual([{ lo: 30, hi: 85 }, { lo: 55, hi: 95 }]);
+    expect(tyreBands(on('wet', 'wet'))).toEqual([{ lo: 50, hi: 80 }, { lo: 45, hi: 65 }]);
+    const dry = on('medium', 'C2');
+    expect([dry.tyres.fl.pressurePsi.band, dry.brakesC.fl.band, dry.engineC.band]).toEqual([{ lo: 20, hi: 31 }, { lo: 300, hi: 1000 }, { lo: 0, hi: 135 }]);
+  });
+
+  it('the surface has no live state: notApplicable on every corner whether its value is in, above or below the band; value and band stay', () => {
+    for (const c of [95, 106, 80]) {
       const bands = bandsOf(withSurface(c));
       for (const corner of corners) {
-        const r = bands.tyres[corner].surfaceC;
-        expect(r.value).toEqual(known(c, 0));
-        expect(r.state).toMatchObject({ known: true, value: state });
-        expect(r.band).toEqual({ lo: 85, hi: 105 });
+        expect(bands.tyres[corner].surfaceC).toEqual({ value: known(c, 0), state: NO_LIVE_STATE, band: { lo: 85, hi: 105 }, outForFullLap: false });
       }
     }
   });
 
-  it('the band comes from the config: an override moves it', () => {
-    const car = withSurface(104);
-    const key = CAR_BANDS_CONFIG.key;
-    const bands = bandsOf(car, [], { config: { [key]: { surfaceDryHi: 100 } } });
-    expect(bands.tyres.fl.surfaceC.band).toEqual({ lo: 85, hi: 100 });
-    expect(bands.tyres.fl.surfaceC.state).toMatchObject({ known: true, value: 'above' });
+  it('only the surface loses its live state: carcass, pressure, brakes and engine out of band read it live on every corner', () => {
+    const car = carState({
+      tyres: { corners: perCorner(() => ({ surfaceTempC: known(120, 0), carcassTempC: known(120, 0), pressurePsi: known(32, 0) })) },
+      condition: { brakes: perCorner(() => ({ tempC: known(1100, 0) })), engineTempC: known(130, 0) },
+    });
+    const b = bandsOf(car, [lap({ lapNumber: 2 })]);
+    const above = { known: true, value: 'above' };
+    for (const corner of corners) {
+      expect(b.tyres[corner].surfaceC.state).toEqual(NO_LIVE_STATE);
+      expect([b.tyres[corner].carcassC.state, b.tyres[corner].pressurePsi.state, b.brakesC[corner].state]).toMatchObject([above, above, above]);
+    }
+    expect(b.engineC.state).toMatchObject(above);
+  });
+
+  it('the band comes from the config: an override moves it, field by field over the defaults', () => {
+    const d = CAR_BANDS_CONFIG.defaults;
+    const bands = bandsOf(carState(), [], { config: { [CAR_BANDS_CONFIG.key]: { surfaceDryHi: 120, carcassDryHi: 90 } } });
+    expect(bands.tyres.fl.surfaceC.band).toEqual({ lo: d.surfaceDryLo, hi: 120 });
+    // the builder's carcass is 95 °C: above the moved band
+    expect(bands.tyres.fl.carcassC).toMatchObject({ band: { lo: d.carcassDryLo, hi: 90 }, state: { known: true, value: 'above' } });
   });
 
   it('carcass, pressure, brakes and engine each use their own band', () => {
@@ -67,15 +97,16 @@ describe('car-bands calculator', () => {
   it('inter tyres use the inter band; wet tyres use the wet band; slicks use the dry band', () => {
     const on = (visual: 'inter' | 'wet' | 'medium', actual: 'inter' | 'wet' | 'C2') =>
       bandsOf(carState({ tyres: { visualCompound: visual, actualCompound: actual } }));
-    // the default 95 °C surface is in the dry band but above the inter band (60-90) and the wet band (50-80)
+    // the builder's 95 °C carcass is in the dry band (85-110) but above the inter band (55-75) and the wet band (45-65)
     const inter = on('inter', 'inter');
-    expect(inter.tyres.fl.surfaceC).toMatchObject({ band: { lo: 60, hi: 90 }, state: { known: true, value: 'above' } });
-    expect(inter.tyres.fl.carcassC.band).toEqual({ lo: 55, hi: 75 });
+    expect(inter.tyres.fl.surfaceC.band).toEqual({ lo: 60, hi: 90 });
+    expect(inter.tyres.fl.carcassC).toMatchObject({ band: { lo: 55, hi: 75 }, state: { known: true, value: 'above' } });
     const wet = on('wet', 'wet');
     expect(wet.tyres.fl.surfaceC.band).toEqual({ lo: 50, hi: 80 });
-    expect(wet.tyres.fl.carcassC.band).toEqual({ lo: 45, hi: 65 });
+    expect(wet.tyres.fl.carcassC).toMatchObject({ band: { lo: 45, hi: 65 }, state: { known: true, value: 'above' } });
     const dry = on('medium', 'C2');
-    expect(dry.tyres.fl.surfaceC).toMatchObject({ band: { lo: 85, hi: 105 }, state: { known: true, value: 'in' } });
+    expect(dry.tyres.fl.surfaceC.band).toEqual({ lo: 85, hi: 105 });
+    expect(dry.tyres.fl.carcassC).toMatchObject({ band: { lo: 85, hi: 110 }, state: { known: true, value: 'in' } });
   });
 
   it('outForFullLap when the last lap\'s channelRange min is above the band; false when the min was inside', () => {
@@ -84,8 +115,8 @@ describe('car-bands calculator', () => {
     const touched = lap({ lapNumber: 3, channelRange: rangeOf({ tyres: surfaceRange(104, 112) }) });
     expect(bandsOf(car, [hot]).tyres.rl.surfaceC.outForFullLap).toBe(true);
     expect(bandsOf(car, [touched]).tyres.rl.surfaceC.outForFullLap).toBe(false);
-    // the live value is independent of the lap: in band now, but the lap was out
-    expect(bandsOf(car, [hot]).tyres.rl.surfaceC.state).toMatchObject({ known: true, value: 'in' });
+    // the lap is the surface's only judgement: no live state beside it
+    expect(bandsOf(car, [hot]).tyres.rl.surfaceC.state).toEqual(NO_LIVE_STATE);
   });
 
   it('outForFullLap also holds when the whole range was below the band; a range that crosses the band is not out', () => {
@@ -153,16 +184,17 @@ describe('car-bands calculator', () => {
       expect(b.tyres[corner].carcassC.value).toEqual(unknown('notApplicable'));
       expect(b.tyres[corner].carcassC.state).toEqual(unknown('notApplicable'));
       expect(b.tyres[corner].carcassC.outForFullLap).toBe(false);
-      expect(b.tyres[corner].surfaceC.state).toMatchObject({ known: true, value: 'in' });
+      expect(b.tyres[corner].surfaceC.value).toEqual(known(95, 0));
     }
   });
 
-  it('a rival hidden by realism has unknown(\'realism\') values and states', () => {
+  it('a rival hidden by realism has unknown(\'realism\') values and live states; the surface still has no live state', () => {
     const rival = realismHidden(carState({ id: carId(1) }));
     const b = bandsOf(rival, [lap({ carId: carId(1), lapNumber: 2 })]);
     const hidden = { value: unknown('realism'), state: unknown('realism'), outForFullLap: false };
     for (const corner of corners) {
-      for (const channel of ['surfaceC', 'carcassC', 'pressurePsi'] as const) expect(b.tyres[corner][channel]).toMatchObject(hidden);
+      for (const channel of ['carcassC', 'pressurePsi'] as const) expect(b.tyres[corner][channel]).toMatchObject(hidden);
+      expect(b.tyres[corner].surfaceC).toMatchObject({ ...hidden, state: NO_LIVE_STATE });
       expect(b.brakesC[corner]).toMatchObject(hidden);
     }
     expect(b.engineC).toMatchObject(hidden);
@@ -171,7 +203,7 @@ describe('car-bands calculator', () => {
   });
 
   it('is stateless: the same view gives the same output twice', () => {
-    const view = engineView({ cars: [withSurface(110)], history: { laps: [lap({ lapNumber: 2 })] } });
+    const view = engineView({ cars: [withSurface(110)], history: { laps: [lap({ lapNumber: 2 })] }, config: { [CAR_BANDS_CONFIG.key]: TEST_BANDS } });
     expect(carBandsCalculator.compute(view)).toEqual(carBandsCalculator.compute(view));
   });
 });

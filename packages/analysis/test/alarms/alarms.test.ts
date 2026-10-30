@@ -3,7 +3,7 @@ import { InsightBook, type EngineView, type History } from '@pitwall/engine';
 import { describe, expect, it } from 'vitest';
 import { ALARMS } from '../../src/alarms/index.ts';
 import { alarmsCalculator } from '../../src/alarms/calculator.ts';
-import { CAR_BANDS } from '../../src/car-bands/index.ts';
+import { CAR_BANDS, CAR_BANDS_CONFIG } from '../../src/car-bands/index.ts';
 import { carBandsCalculator } from '../../src/car-bands/calculator.ts';
 import { DAMAGE } from '../../src/damage/index.ts';
 import { damageCalculator } from '../../src/damage/calculator.ts';
@@ -21,6 +21,16 @@ import { carState, engineView, event, lap, realismHidden, telemetryRestricted } 
 // `compute` returns the active alarms and `insights` returns them unchanged; raisedAt = view.state.sessionTime.
 
 const perCorner = <T>(make: () => T) => ({ fl: make(), fr: make(), rl: make(), rr: make() });
+/**
+ * The `car-bands` config of every `viewWith` view (the defaults before 2026-10-30), so the band cases below don't
+ * depend on the defaults: dry surface 85-105, dry carcass 85-110, inter surface 60-90, inter carcass 55-75,
+ * pressure 20-31, brakes 300-1000, engine 0-125.
+ */
+const TEST_BANDS = {
+  surfaceDryLo: 85, surfaceDryHi: 105, surfaceInterLo: 60, surfaceInterHi: 90, surfaceWetLo: 50, surfaceWetHi: 80,
+  carcassDryLo: 85, carcassDryHi: 110, carcassInterLo: 55, carcassInterHi: 75, carcassWetLo: 45, carcassWetHi: 65,
+  pressureLo: 20, pressureHi: 31, brakeLo: 300, brakeHi: 1000, engineHi: 125,
+};
 const CORNER_IDS = ['fl', 'fr', 'rl', 'rr'] as const;
 const NOW = 12_345;
 
@@ -87,7 +97,7 @@ const viewWith = (parts: Parts, o: ViewOpts = {}): EngineView =>
     outputs: outputsOf([outputsFor(0, parts)]),
     sessionTime: NOW,
     ...(o.history && { history: o.history }),
-    ...(o.config && { config: o.config }),
+    config: { [CAR_BANDS_CONFIG.key]: TEST_BANDS, ...o.config },
     ...(o.playerCar !== undefined && { playerCar: o.playerCar }),
   });
 
@@ -315,7 +325,7 @@ describe('alarms calculator', () => {
     it('the bands come from the car-bands config', () => {
       const laps = [lapWith({ 'brakesC.fl': [200, 340] })];
       expect(run(lapsView(laps))).toEqual([]);
-      expect(run(lapsView(laps, {}, { config: { 'car-bands': { brakeLo: 350 } } })).map((i) => [i.key, i.params['lo']])).toEqual([['bandOut:0:brakesC.fl', 350]]);
+      expect(run(lapsView(laps, {}, { config: { 'car-bands': { ...TEST_BANDS, brakeLo: 350 } } })).map((i) => [i.key, i.params['lo']])).toEqual([['bandOut:0:brakesC.fl', 350]]);
     });
 
     it('judges the highest-numbered lap of the car; laps of another car do not count', () => {
