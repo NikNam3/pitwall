@@ -85,9 +85,8 @@ describe('lap-times projection', () => {
 
 describe('lap-times cut-off', () => {
   /**
-   * `cars` active cars with best laps of 90.0, 90.1, 90.2 … s (two laps each) (numActiveCars)
-   * (`session.numActiveCars`, default `cars`); `subject` is on lap 3, `upMs` up on its best at crossing 25, so it
-   * projects its best − `upMs`.
+   * `cars` active cars (also `session.numActiveCars`) with best laps of 90.0, 90.1, 90.2 … s (two laps each);
+   * `subject` is on lap 3, `upMs` up on its best at crossing 25, so it projects its best − `upMs`.
    */
   const quali = ({
     cars,
