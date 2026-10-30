@@ -17,17 +17,31 @@ export type TopicDef<P, V> = {
   maxHz: number;
   params?: P;
   value?: V;
+  /**
+   * The params a named moment (spec 9.1) captures the topic with, given every car id it may hold; the capture keeps
+   * those of the cars that are active at the moment. Absent for a topic without params: it is captured with `{}`.
+   */
+  momentParams?: (carIds: readonly CarId[]) => P[];
 };
 
+/** `momentParams` is required exactly for a topic with params, so no such topic is left out of the moments. */
+type MomentParamsOption<P> = [P] extends [NoParams] ? { momentParams?: never } : { momentParams: (carIds: readonly CarId[]) => P[] };
+
 /** What a topic file default-exports; the generated index adds the `name` from the file name. */
-export function defineTopic<P, V>(def: {
-  owner: TopicOwner;
-  mode: TopicDef<P, V>['mode'];
-  maxHz: number;
-  scope?: TopicDef<P, V>['scope'];
-}): Omit<TopicDef<P, V>, 'name'> {
-  return { owner: def.owner, mode: def.mode, maxHz: def.maxHz, scope: def.scope ?? 'feed' };
+export function defineTopic<P, V>(
+  def: {
+    owner: TopicOwner;
+    mode: TopicDef<P, V>['mode'];
+    maxHz: number;
+    scope?: TopicDef<P, V>['scope'];
+  } & MomentParamsOption<P>,
+): Omit<TopicDef<P, V>, 'name'> {
+  const base = { owner: def.owner, mode: def.mode, maxHz: def.maxHz, scope: def.scope ?? 'feed' } as const;
+  return def.momentParams === undefined ? base : { ...base, momentParams: def.momentParams };
 }
+
+/** `momentParams` of a per-car topic: one `{ carId }` per car. */
+export const eachCar = (carIds: readonly CarId[]): CarParams[] => carIds.map((carId) => ({ carId }));
 
 /** Params of a topic that takes none. */
 export type NoParams = Record<string, never>;
