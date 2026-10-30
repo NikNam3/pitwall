@@ -253,6 +253,107 @@
         "COLL x1, SEND x1, BUTN x18",
         "duration 3265.341 ms"
       ]
+    },
+    {
+      "file": "race-zandvoort-lap10.pwrec.gz",
+      "source": "raceZandvoortUidReuse",
+      "fromS": 721,
+      "toS": 726,
+      "records": 1778,
+      "features": [
+        "2 context packets (Session, Participants) first",
+        "car 1 (the player) crosses the line into lap 10 at 723.381: lap 9 74.655 s (sectors 25.980/25.877/22.798, valid), FTLP car 1 at 723.366; SessionHistory confirms it in the segment",
+        "mini-sector crossings of car 1: lap 9 segments 48-49, lap 10 segments 0-2",
+        "20 active cars, 2 humans (1 is the player, 0), teammate 4; grid P1-P20",
+        "band advisories (tyre surface/carcass, car 1) raise after the line and escalate to bandOutLap 0.5 s later",
+        "OVTK x2, SPTP x2, FTLP x1",
+        "duration 4961.544 ms"
+      ]
+    },
+    {
+      "file": "race-zandvoort-pit-stop.pwrec.gz",
+      "source": "raceZandvoortUidReuse",
+      "fromS": 548.2,
+      "toS": 555,
+      "records": 2424,
+      "features": [
+        "2 context packets (Session, Participants) first",
+        "car 1 (the player) enters the pit lane at 548.387 (pitStatus 1), crosses the line into lap 8 in the pit lane at 549.521, stops at 553.276 (pitStatus 2)",
+        "tyres change at 554.740: mediums (actual 18 visual 17, age 7) to softs (actual 17 visual 16, age 0); the engine closes the medium stint (laps 7-7, fitted at age 6)",
+        "numPitStops stays 0 (it becomes 1 at 565.105, see race-zandvoort-pit-exit)",
+        "OVTK x3, SPTP x5, BUTN x1",
+        "duration 6784.360 ms"
+      ]
+    },
+    {
+      "file": "race-zandvoort-pit-exit.pwrec.gz",
+      "source": "raceZandvoortUidReuse",
+      "fromS": 564.5,
+      "toS": 566,
+      "records": 536,
+      "features": [
+        "2 context packets (Session, Participants) first",
+        "car 1 (the player) in the pit lane on softs (age 0) after its stop: numPitStops 0 to 1 at 565.105; it leaves the pit lane only at 574.376 (outside the segment)",
+        "SPTP x2",
+        "duration 1479.996 ms"
+      ]
+    },
+    {
+      "file": "race-zandvoort-vsc.pwrec.gz",
+      "source": "raceZandvoortUidReuse",
+      "fromS": 913.5,
+      "toS": 916.5,
+      "records": 1073,
+      "features": [
+        "2 context packets (Session, Participants) first",
+        "car 2 terminal damage (PENA 16/42 at 912.011, just before the segment): SCAR VSC deployed at 914.178, DRSD (wet track) at 914.178, safetyCarStatus 2 from 915.045, RTMT car 2 at 916.028, resultStatus retired from 916.042",
+        "numActiveCars stays 20",
+        "OVTK x3, SCAR x1, DRSD x1, RTMT x1",
+        "duration 2979.902 ms"
+      ]
+    },
+    {
+      "file": "race-zandvoort-retire.pwrec.gz",
+      "source": "raceZandvoortUidReuse",
+      "fromS": 1205,
+      "toS": 5846,
+      "records": 1487,
+      "features": [
+        "2 context packets (Session, Participants) first; numActiveCars 19 (car 2 retired on lap 12) while car 19 still races at P13",
+        "COLL car 12 with car 1 at 1204.770 (before the segment); terminal damage for car 1 (the player) at 1207.667: PENA retired, RTMT car 1, PENA car 12, SCAR SC deployed, two SCAR resume; all events at session time 1207.667, frame 89947",
+        "the last LapData is at 1207.660: car 1 still shows resultStatus active",
+        "then the session is simulated to its end: no packets between 1207.667 and 5837.001; UID-0 bulks of 20 SessionHistory and 1 FinalClassification at 5837.001, 5842.006 and 5845.008, then 451 UID-0 LobbyInfo; no SEND",
+        "OVTK x5, PENA x2, RTMT x1, SCAR x3, BUTN x10",
+        "duration 319971.618 ms"
+      ]
+    },
+    {
+      "file": "race-singapore-wet-flashback.pwrec.gz",
+      "source": "raceSingaporeWet",
+      "fromS": 741.5,
+      "toS": 744.5,
+      "records": 2170,
+      "features": [
+        "2 context packets (Session, Participants) first; car 19 (the player) on lap 7",
+        "three passes through the window: the first run 741.5-744.5 s; the second after the flashback 757.045 to 742.045 (its FLBK, sent at 757.045, is outside the segment: the frame id falls to 56744 at 742.098); the third after FLBK 742.831 to 742.076 (target frame 56743), resuming at frame 56743 (742.097)",
+        "BUTN x22, FLBK x1",
+        "duration 27878.511 ms"
+      ]
+    },
+    {
+      "file": "qualifying-singapore-end.pwrec.gz",
+      "source": "qualifyingSingapore",
+      "fromS": 899,
+      "toS": 900.6,
+      "records": 70,
+      "features": [
+        "2 context packets (Session, Participants) first; car 14 (the player) in the garage, 15 active cars",
+        "15 UID-0 SessionHistory (cars 0-14) at 900.594 just before SEND, then 15 SessionHistory and a FinalClassification of 15 cars with the session's own UID after SEND, then UID-0 BUTN",
+        "4 frames, cadence 532 ms",
+        "LapData carries a split time of 255 min 62 703 ms that the encoder rejects (datagrams 3, 10, 16, 43)",
+        "SPTP x1, SEND x1, BUTN x6",
+        "duration 4197.329 ms"
+      ]
     }
   ]
 }
