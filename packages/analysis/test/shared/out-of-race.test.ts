@@ -1,6 +1,6 @@
-// The one out-of-race set every analysis asks (wave 2, T7; situations plan Task 0): a car that will set no more times.
-// The statuses live in `@pitwall/domain` (`OUT_OF_RACE_STATUSES`, review 2, F6), so the analyses and the timing tower
-// read one set.
+// The one out-of-race rule every analysis asks (wave 2, T7; situations plan Task 0): a car that will set no more times.
+// The statuses live in `@pitwall/domain` (`OUT_OF_RACE_STATUSES`, review 2, F6). The timing tower takes the answer from
+// the lap board's `outOfRace` (review 3, U5), so this rule is the only reader of the statuses for that question.
 import { OUT_OF_RACE_STATUSES, type ResultStatus } from '@pitwall/domain';
 import { describe, expect, it } from 'vitest';
 import { outOfRace } from '../../src/shared/out-of-race.ts';
