@@ -2,6 +2,7 @@ import { toSessionTime, type Ms, type SessionTime } from '@pitwall/domain';
 import type { EventDetails } from '@pitwall/protocol';
 import type { Frame } from '../frame/frame.ts';
 import { historyLengths, truncateHistory, type HistoryDelta } from '../history/delta.ts';
+import { noteRewind } from '../history/situations/time-jumps.ts';
 import type { EngineState } from '../state/engine-state.ts';
 import { initialState } from '../step/initial-state.ts';
 import { ALL_CHANGE_TAGS, step, type ChangeTag, type ClockFall, type LapCorrection } from '../step/step.ts';
@@ -125,7 +126,6 @@ export class SessionRunner {
    */
   #rewind(target: Target, frame: Frame): FlashbackInfo {
     const rewoundFrom = this.#state.sessionTime;
-    // Wall time does not go back: an offline pause is measured from the last frame applied, not the restored one.
     const { lastWallMs } = this.#state.open.phaseBook;
     const replayTo = Math.min(target.frameId, frame.frameId - 1);
     const snapshot = this.#snapshots.newestAtOrBefore(replayTo);
@@ -136,7 +136,7 @@ export class SessionRunner {
     // A target older than the window has no kept frames after its snapshot: the snapshot's state stands for it.
     for (const f of this.#frames) if (f.frameId > snapshot.frameId && f.frameId <= replayTo) step(this.#state, f);
     this.#frames = this.#frames.filter((f) => f.frameId <= replayTo);
-    this.#state.open.phaseBook.lastWallMs = lastWallMs;
+    noteRewind(this.#state, { sessionTime: rewoundFrom, lastWallMs }, frame);
     const targetSessionTime = target.sessionTime ?? this.#state.sessionTime;
     return {
       targetFrameId: target.frameId,

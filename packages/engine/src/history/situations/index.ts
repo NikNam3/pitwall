@@ -3,7 +3,7 @@
 // car status, the session clock's jumps and pauses) to decide the session phase; the others read its spans.
 import type { SubStep } from '../../step/types.ts';
 import { applyPhaseSignals, enterPostSession, joinSession } from './session-phase.ts';
-import { restampStart, timeJumpOf, trackPauses } from './time-jumps.ts';
+import { followsRewind, restampStart, timeJumpOf, trackPauses } from './time-jumps.ts';
 
 /**
  * Records the session phases (`history.sessionPhases`, the open one in `open.situations`) and the pauses. Tags
@@ -18,7 +18,7 @@ export const applySituations: SubStep = (state, frame, out) => {
   if (!open.phaseBook.started) {
     joinSession(state, frame);
     open.phaseBook.started = true;
-  } else {
+  } else if (!followsRewind(state, frame)) {
     const jump = timeJumpOf(state, frame);
     if (jump.kind === 'simulated') enterPostSession(state, state.sessionTime);
     else if (jump.kind === 'fall') out.clockFall = jump.fall;

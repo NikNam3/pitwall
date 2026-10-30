@@ -123,6 +123,11 @@ export type PhaseBook = {
   lightsOut?: { frameId: number; from: HistoryLengths; phaseFrom: number } | undefined;
   /** The receive time of the previous frame (wall clock, ms), for offline pauses. */
   lastWallMs?: number | undefined;
+  /**
+   * Set by a rewind whose frame still carried the old timeline's session time (inventory 1.10): frames at or above this
+   * time are still the old timeline's, and the fall to the first frame on the target's clock belongs to the flashback.
+   */
+  staleFromMs?: SessionTime | undefined;
   /** An online pause (`gamePaused`) in progress: its session time and receive time. */
   onlinePause?: { start: SessionTime; wallMs: number } | undefined;
 };

@@ -23,6 +23,29 @@ export const SIMULATION_JUMP_MS = 60_000;
  */
 export const PAUSE_AFTER_WALL_MS = 2000;
 
+/**
+ * Notes a rewind the runner just took, before the game's new frame is applied: wall time does not go back, so an offline
+ * pause is measured from the last frame applied (`before.lastWallMs`), not the restored one; and when the new frame still
+ * carries the old timeline's session time (at or above `before.sessionTime`, where the rewind started), the frames on
+ * that time are part of the flashback (`staleFromMs`).
+ */
+export const noteRewind = (state: EngineState, before: { sessionTime: SessionTime; lastWallMs: number | undefined }, frame: Frame): void => {
+  const book = state.open.phaseBook;
+  book.lastWallMs = before.lastWallMs;
+  book.staleFromMs = frame.sessionTime >= before.sessionTime ? before.sessionTime : undefined;
+};
+
+/**
+ * Whether the frame still belongs to the flashback just taken: one on the old timeline's session time, or the first on
+ * the target's clock, whose fall from the old time is the flashback's and no clock fall. The mark ends at that frame.
+ */
+export const followsRewind = (state: EngineState, frame: Frame): boolean => {
+  const book = state.open.phaseBook;
+  if (book.staleFromMs === undefined) return false;
+  if (frame.sessionTime < book.staleFromMs) book.staleFromMs = undefined;
+  return true;
+};
+
 /** What the frame's session time did against the previous frame's. */
 export type TimeJump =
   | { kind: 'none' }
