@@ -1,5 +1,5 @@
-// The `fuel` calculator: per active car, the fuel now, its burn over the current stint, and the margin against the laps left.
-import { known, unknown, type CarId, type Known, type Kg, type SessionTime } from '@pitwall/domain';
+// The `fuel` calculator: per active car, the fuel now, its burn over the current run (stint, since a refuel), and the margin against the laps left.
+import { known, unknown, type CarId, type Known, type Kg, type LapRecord, type SessionTime } from '@pitwall/domain';
 import type { EngineView, QuickCalculator } from '@pitwall/engine';
 import { classifyLap } from '../lap-classes/index.ts';
 import { PER_LAP_RATE_CONFIG, perLapRate, type RateSample } from '../per-lap-rate/index.ts';
@@ -7,9 +7,27 @@ import { SESSION_REMAINING, type SessionRemaining } from '../session-remaining/i
 import { currentStintLaps } from '../shared/stint-laps.ts';
 import { FUEL, type FuelOutput, type FuelState } from './index.ts';
 
-/** Fuel levels at the end of the car's counted laps of the current stint, by lap. */
+/**
+ * Fuel was added on the way to this lap's end: it ends above its start, or starts above the lap before's end. Fuel goes
+ * only into a car in the garage, so the lap or the one before must touch the pits (an in or out lap); that also keeps
+ * laps whose start and end are not one frame's fuel (the engine reads both on the crossing frame) from splitting a run.
+ * Fuel never rises otherwise, so the comparison needs no tolerance.
+ */
+const refuelled = (lap: LapRecord, before: LapRecord | undefined): boolean => {
+  if (!(lap.inLap || lap.outLap || before?.inLap === true) || !lap.fuelAtStartKg.known) return false;
+  const start = lap.fuelAtStartKg.value;
+  return (lap.fuelAtEndKg.known && lap.fuelAtEndKg.value > start) || (before?.fuelAtEndKg.known === true && start > before.fuelAtEndKg.value);
+};
+
+/**
+ * The laps of the current run: the current stint's laps from its last refuel on. A garage visit in practice or
+ * qualifying can refuel on the same set, which closes no stint.
+ */
+const runLaps = (laps: readonly LapRecord[]): readonly LapRecord[] => laps.slice(Math.max(0, laps.findLastIndex((l, i) => refuelled(l, laps[i - 1]))));
+
+/** Fuel levels at the end of the car's counted laps of the current run (`runLaps`), by lap. */
 const levelSamples = (view: EngineView, id: CarId, isRace: boolean): RateSample[] =>
-  currentStintLaps(view.state.history, id).flatMap((l) =>
+  runLaps(currentStintLaps(view.state.history, id)).flatMap((l) =>
     classifyLap(l, { isRace }).forRate && l.fuelAtEndKg.known ? [{ lap: l.lapNumber, value: l.fuelAtEndKg.value, at: l.completedAt }] : [],
   );
 
