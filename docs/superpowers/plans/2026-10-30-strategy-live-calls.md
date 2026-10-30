@@ -69,7 +69,7 @@ Five conditions the spec implies but its happy path doesn't spell out. Each has 
 ## Build order
 
 Spec section 12 is the schedule:
-- **Level 0** (Tasks 0–7). **Task 0 (mockups) and Task 1 (contracts) start together, first** (user, 2026-10-30: the human review runs while the others build, so nobody waits on it). The mockups work from the spec's Appendix A; a contract change Task 1 makes is carried into the mockups before the approval session. Tasks 2, 4, 5, 6, 7 follow Task 1 in parallel; Task 3 needs Task 2.
+- **Level 0** (Tasks 0–7). **Task 0 (mockups) and Task 1 (contracts) start together, first** (user, 2026-10-30: the human review runs while the others build, so nobody waits on it). The mockups work from the spec's Appendix A; a contract change Task 1 makes is carried into the mockups before the approval session. Tasks 3, 4, 5, 6, 7 follow Task 1 in parallel. Task 2 was done on main before the run (d4a5737).
 - **Then each unit** (Tasks 8–43) goes through test phase, ruling, implement phase, review, merge.
   - A unit's **test phase** may start once Tasks 1 and 4 are merged.
   - A display's test phase also needs Task 0's approval.
@@ -101,7 +101,7 @@ A **lane** is what one agent builds per phase: one unit, or units of the same le
 |---|---|---|---|
 | 0 | `mockups` | 0 (single phase, then the user's session) | Opus |
 | 0 | `contracts` | 1 (single phase, supervisor-owned scope) | Opus |
-| 0 | `storage-key` → `priors` | 2 → 3 | Opus |
+| 0 | `priors` | 3 | Opus |
 | 0 | `builders` | 4 (single phase) | Opus |
 | 0 | `segments` | 5 (single phase) | Sonnet |
 | 0 | `turn-data` | 6 (single phase; the licence question goes to the questions file) | Sonnet |
@@ -182,6 +182,7 @@ A **lane** is what one agent builds per phase: one unit, or units of the same le
 
   Bodies throw `not implemented`.
 - [ ] `packages/contracts/src/topics/`: the 14 topic files of A.3, with the names fixed in the spec: `pitLosses.track`, `stintAnalysis.car`, `raisingAverage.car`, `lapOverview.car`, `rejoin.car`, `undercut.car`, `scCall.car`, `pitSweep.car` (params `{ carId: CarId; compound: ActualCompound }`), `pitWindow.car`, `trackPositions.geometry`, `trackPositions.cars`, `radioWindow.car`, `weather.forecast`, `crossover.field`.
+  Every topic with params declares `momentParams` (required since main 1197d50, so moments capture it): the `CarParams` topics use `eachCar`; `pitSweep.car` gives each car with each dry compound of its available tyre sets, or each car with every dry `ActualCompound` if `momentParams` cannot see the sets.
 - [ ] `packages/analysis/src/<unit>/config.ts` for every Appendix B row: flat fields, each with a source comment. **R3 happens here.** Look up community values for F1 25 (F1 24 where 25 has none):
   - pit loss per track and condition
   - dirty-air coefficients
@@ -201,23 +202,11 @@ A **lane** is what one agent builds per phase: one unit, or units of the same le
 
 ---
 
-### Task 2: Storage session key
+### Task 2: Storage session key (done before the run)
 
-**Goal:** sessions whose UID the game reuses are stored side by side (spec 3.3).
+Done on main by a separate fix (d4a5737, tests eab70ec): sessions and every child table are keyed by `(session_uid, weekend_id)`, `weekend_id` = `weekendLinkIdentifier`, `SCHEMA_VERSION` 2, `SessionKey = { sessionUid; weekendId }` in `apps/bridge/src/storage/db.ts`. Nothing to build. Spec 3.3, open point 14.1.
 
-**Scope:** `apps/bridge/src/storage`, `apps/bridge/src/cli/rebuild-database.ts`, `apps/bridge/test/storage`. **Depends on:** Task 1. The supervisor bumps `SCHEMA_VERSION` to 2 in the test commit.
-
-**Interfaces:**
-- Produces: `sessions.session_key TEXT PRIMARY KEY` = `` `${uid}-${startedAt}` ``. Every child table references `session_key`; `session_uid` stays as a plain indexed column. `SessionRow` gains `sessionKey: string`.
-- A database of version 1 is renamed to `pitwall.v1.sqlite` with a log line, and a new one is created. (Nothing reads v1; `pitwall reprocess` rebuilds it.)
-
-**Tests** (`apps/bridge/test/storage/session-key.test.ts`):
-- `two sessions with the same uid and different start times are stored side by side`
-- `laps of the second session do not overwrite the first's`
-- `a version 1 database is moved aside and a version 2 one created`
-- segment test: `practice and race of the UID-reuse weekend both land in the store` (the Zandvoort pit-exit segment and a few seconds of `practiceZandvoortUidReuse`, cut in Task 5)
-
-- [ ] Test phase · [ ] Implement phase · [ ] review · [ ] merged
+- [x] merged
 
 ---
 
@@ -227,13 +216,13 @@ A **lane** is what one agent builds per phase: one unit, or units of the same le
 
 **Scope:**
 - `packages/engine/src/calc/{priors,scheduler,types}.ts`
-- `apps/bridge/src/knowledge/` (new)
+- `apps/bridge/src/knowledge/` (new), the `knowledge` DDL in `apps/bridge/src/storage/db.ts`
 - `apps/bridge/src/features/feature.ts`
 - `apps/bridge/src/pipeline/feed-pipeline.ts`
 - `apps/bridge/src/cli/commands/{replay,reprocess,live}.ts`
 - their tests
 
-**Depends on:** Tasks 1, 2.
+**Depends on:** Task 1 (and the storage key, already on main).
 
 **Interfaces:**
 - Produces:
@@ -241,9 +230,9 @@ A **lane** is what one agent builds per phase: one unit, or units of the same le
   - `Feature.priors?: PriorsKey<unknown, unknown>[]`
   - `Feature.contributions?: { calculator: CalculatorId; key: PriorsKey<unknown, unknown>; pick(output: unknown): unknown | undefined }[]`
 - `apps/bridge/src/knowledge/store.ts`:
-  - table `knowledge (key TEXT, scope_id TEXT, session_key TEXT REFERENCES sessions, laps INTEGER, json TEXT, PRIMARY KEY (key, scope_id, session_key)) STRICT`
-  - `saveContribution(db, c: { key; scopeId; sessionKey; laps; value }): 'written' | 'keptFuller'`: replaces the row only when `laps` ≥ the stored row's `laps` (laps = the leader's completed laps when the contribution was taken)
-  - `loadContributions(db, key, scopeId): unknown[]` in `session_key` order
+  - table `knowledge (key TEXT, scope_id TEXT, session_uid TEXT, weekend_id TEXT, laps INTEGER, json TEXT, PRIMARY KEY (key, scope_id, session_uid, weekend_id), FOREIGN KEY (session_uid, weekend_id) REFERENCES sessions) STRICT`, added to the DDL in `db.ts`; the supervisor bumps `SCHEMA_VERSION` to 3 in the test commit
+  - `saveContribution(db, c: { key; scopeId; session: SessionKey; laps; value }): 'written' | 'keptFuller'`: replaces the row only when `laps` ≥ the stored row's `laps` (laps = the leader's completed laps when the contribution was taken)
+  - `loadContributions(db, key, scopeId): unknown[]` in the sessions' `started_at` order
 - Scope ids: `track:<trackId>` and `weekend:<weekendLinkIdentifier>-<trackId>`.
 - `apps/bridge/src/knowledge/priors.ts`: `loadPriors(db, features, session): Record<string, unknown>`.
   - It aggregates each declared key over its scope.
@@ -269,6 +258,8 @@ A **lane** is what one agent builds per phase: one unit, or units of the same le
   - `--fresh-priors loads from the store`
   - `a missing turn file gives null`
   - `a sidecar with an unknown key drops it with a warning`
+  - `a version 2 database is refused with the schema version error`
+  - `two sessions with the same uid in different weekends keep separate contributions`
 
 - [ ] Test phase · [ ] Implement phase · [ ] review · [ ] merged
 
@@ -311,7 +302,6 @@ A **lane** is what one agent builds per phase: one unit, or units of the same le
 - [ ] Check the existing segments for reuse: `race-zandvoort-pit-stop`, `race-zandvoort-pit-exit` (green stop), `race-zandvoort-vsc`.
 - [ ] Search `raceZandvoortUidReuse` and `raceSingaporeWet` for a stop under VSC or SC (`PitStopRecord.flag`). If one exists, cut the pit-lane entry to the exit (≤ 1 MB) as `race-<track>-<vsc|sc>-stop`. If none exists, record that in the questions file; the case stays covered by builders.
 - [ ] Cut `race-singapore-wet-crossover`: a moment where a car on intermediates sets a faster sector than our car on slicks (or the reverse) in `raceSingaporeWet`. ≤ 1 MB.
-- [ ] Cut `practice-zandvoort-uid-reuse-start` (a few seconds) for Task 2.
 - [ ] Record each one in `fixtures/index.json` with its verified facts. Facts help pick a segment; they are not assertions.
 - [ ] Commit: `test: sub-project 4a segments`.
 
