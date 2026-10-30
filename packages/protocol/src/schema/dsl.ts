@@ -54,15 +54,17 @@ export const chars = (length: number): CharsSpec => Object.freeze({ kind: 'chars
  * Encoding: `msPart = ms % 60000`, `minutes = floor(ms / 60000)`.
  * Negative deltas: the game writes them as `msPart = ms + 65536` with `minutes = 0`. A real
  * ms part is always below 60000, so `minutes === 0 && msPart >= 60000` reads as `msPart - 65536`.
+ * Garbage (cars in the qualifying garage): `minutes >= 1 && msPart >= 60000` is no time; it reads as
+ * `-(minutes * 60000 + msPart)`, at most -120000, so every raw pair decodes to its own value and re-encodes.
  */
 export const splitTime = (): SplitTimeSpec => Object.freeze({ kind: 'splitTime' });
 
 export const struct = <F extends Record<string, FieldSpec>>(fields: F): StructSpec<F> =>
   Object.freeze({ kind: 'struct', fields });
 
-/** Largest encodable split time: 255 min 59.999 s. */
+/** Largest real split time: 255 min 59.999 s. */
 export const SPLIT_TIME_MAX_MS = 255 * 60_000 + 59_999;
-/** Smallest encodable split time: the negative delta written as `msPart = 60000`, minutes 0. */
+/** Smallest real split time: the negative delta written as `msPart = 60000`, minutes 0. Garbage pairs read below it. */
 export const SPLIT_TIME_MIN_MS = 60_000 - 65_536;
 export const SPLIT_TIME_BYTES = 3;
 

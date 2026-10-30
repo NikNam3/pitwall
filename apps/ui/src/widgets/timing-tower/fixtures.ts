@@ -36,8 +36,8 @@ export function overview(id: number, o: CarOptions): CarOverview {
     },
     timing: {
       position: o.position, lap: o.lap ?? 23, lapDistanceM: 1000, totalDistanceM: 100_000, currentLapTimeMs: 30_000,
-      lastLapTimeMs: 105_000, sector: 1, sector1TimeMs: 0, sector2TimeMs: 0, currentLapInvalid: false, gapToLeaderMs: 0,
-      gapToCarAheadMs: 0, safetyCarDeltaMs: 0, pitStatus: o.pitStatus ?? 'none', numPitStops: o.numPitStops ?? 1,
+      lastLapTimeMs: 105_000, sector: 1, sector1TimeMs: 0, sector2TimeMs: 0, currentLapInvalid: false, gapToLeaderMs: ms(0),
+      gapToCarAheadMs: ms(0), safetyCarDeltaMs: 0, pitStatus: o.pitStatus ?? 'none', numPitStops: o.numPitStops ?? 1,
       pitLaneTimerActive: false, pitLaneTimeMs: 0, pitStopTimerMs: 0, shouldServePenalty: false,
       driverStatus: o.driverStatus ?? 'onTrack', resultStatus: o.resultStatus ?? 'active', timePenaltyMs: o.timePenaltyMs ?? 0,
       totalWarnings: o.totalWarnings ?? 0, cornerCuttingWarnings: 0, unservedDriveThroughs: 0, unservedStopGos: 0,

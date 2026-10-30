@@ -51,8 +51,9 @@ export type CarTiming = {
   sector1TimeMs: Ms;
   sector2TimeMs: Ms;
   currentLapInvalid: boolean;
-  gapToLeaderMs: Ms;
-  gapToCarAheadMs: Ms;
+  /** The game's gap; `notApplicable` beyond 5 minutes either way (the qualifying garage sends hours). */
+  gapToLeaderMs: Known<Ms>;
+  gapToCarAheadMs: Known<Ms>;
   safetyCarDeltaMs: Ms;
   pitStatus: PitStatus;
   numPitStops: number;
