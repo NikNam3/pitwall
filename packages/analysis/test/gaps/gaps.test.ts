@@ -417,3 +417,99 @@ describe('gapper lines are continuous', () => {
     expect(line(lines, 1)).toEqual([1, 2, 3, 4, 5].map((lap) => [lap, -20_000 * lap]));
   });
 });
+
+describe("the gapper's live point (now)", () => {
+  /** A car's `now` as `{ lap, gapMs, at }` (with -0 as 0), or the reason it is unknown. */
+  const nowOf = (lines: ReturnType<typeof gapperLines>, id: number) => {
+    const car = lines.cars.find((c) => c.carId === id);
+    if (car === undefined) throw new Error(`no line for car ${id}`);
+    const { now } = car;
+    return now.known ? { lap: now.value.lap, gapMs: plain(now.value.gapMs), at: now.at } : now.reason;
+  };
+  const knownNow = (lines: ReturnType<typeof gapperLines>, id: number) => {
+    const now = nowOf(lines, id);
+    if (typeof now === 'string') throw new Error(`car ${id} has no now: ${now}`);
+    return now;
+  };
+
+  /**
+   * Car 0 at 90 s has completed laps 1 and 2 and crossed mini-sector 25 of lap 3 (at 225 s); car 1 at 91 s has
+   * completed 2 laps and crossed mini-sector 10 of lap 3 (at 200.2 s). Every time is shifted by `start`.
+   */
+  const midLap = (start = 0) =>
+    byTime([
+      ...[1, 2].flatMap((n) => crossings(carId(0), n, 90_000, start + (n - 1) * 90_000)),
+      ...crossings(carId(0), 3, 90_000, start + 180_000).filter((m) => m.segment <= 25),
+      ...[1, 2].flatMap((n) => crossings(carId(1), n, 91_000, start + (n - 1) * 91_000)),
+      ...crossings(carId(1), 3, 91_000, start + 182_000).filter((m) => m.segment <= 10),
+    ]);
+
+  it('is the gap at the newest crossing: completed laps + crossed mini-sectors / 50 at the reference lap, minus the race time', () => {
+    const lines = gapperLines(run(viewOf(midLap())), { kind: 'fixed', lapMs: 89_000 });
+    // car 0: 2.5 × 89 000 − 225 000
+    expect(nowOf(lines, 0)).toEqual({ lap: 2.5, gapMs: -2_500, at: 225_000 });
+    // car 1: 2.2 × 89 000 − 200 200
+    const car1 = knownNow(lines, 1);
+    expect(car1.lap).toBeCloseTo(2.2, 9);
+    expect([car1.gapMs, car1.at]).toEqual([-4_400, 200_200]);
+    // the completed laps stay as they were
+    expect(line(lines, 0)).toEqual([[1, -1_000], [2, -2_000]]);
+  });
+
+  it('counts the race time from lights out: a race that starts at 60 s gives the same live point', () => {
+    const lines = gapperLines(run(viewOf(midLap(60_000), { lightsOutAt: 60_000 })), { kind: 'fixed', lapMs: 89_000 });
+    expect(nowOf(lines, 0)).toEqual({ lap: 2.5, gapMs: -2_500, at: 285_000 });
+  });
+
+  it('is whole ms when the reference lap does not divide into 50 mini-sectors', () => {
+    const lines = gapperLines(run(viewOf(midLap())), { kind: 'fixed', lapMs: 90_001 });
+    const car1 = knownNow(lines, 1);
+    expect(Number.isInteger(car1.gapMs)).toBe(true);
+    expect(Math.abs(car1.gapMs - (2.2 * 90_001 - 200_200))).toBeLessThanOrEqual(0.5);
+  });
+
+  it('a lapped car counts its own laps, not the leader\'s', () => {
+    // the leader laps in 90 s, car 1 in 110 s: at 560 s the leader is at (7, 11), car 1 a lap down at (6, 4)
+    const ms = byTime([
+      ...[1, 2, 3, 4, 5, 6, 7].flatMap((n) => crossings(carId(0), n, 90_000, (n - 1) * 90_000)),
+      ...[1, 2, 3, 4, 5, 6].flatMap((n) => crossings(carId(1), n, 110_000, (n - 1) * 110_000)),
+    ]).filter((m) => m.at <= 560_000);
+    const out = run(viewOf(ms));
+    expect(interval(out, 1).lapsDown).toBe(1);
+    const lines = gapperLines(out, { kind: 'fixed', lapMs: 90_000 });
+    // the leader: 6.22 × 90 000 − 559 800; car 1: 5.08 × 90 000 − 558 800
+    const leader = knownNow(lines, 0);
+    const lapped = knownNow(lines, 1);
+    expect(leader.lap).toBeCloseTo(6.22, 9);
+    expect(lapped.lap).toBeCloseTo(5.08, 9);
+    expect([leader.gapMs, leader.at, lapped.gapMs, lapped.at]).toEqual([0, 559_800, -101_600, 558_800]);
+  });
+
+  it('is notApplicable before the car\'s first crossing after lights out', () => {
+    // the lights go out at 10 s: car 0 crossed the line before them only, car 1 has crossed mini-sector 5 since
+    const ms = byTime([
+      { carId: carId(0), lap: 1, segment: 0, at: 0 },
+      { carId: carId(1), lap: 1, segment: 0, at: 0 },
+      { carId: carId(1), lap: 1, segment: 5, at: 19_000 },
+    ]);
+    const lines = gapperLines(run(viewOf(ms, { lightsOutAt: 10_000 })), { kind: 'fixed', lapMs: 90_000 });
+    expect(nowOf(lines, 0)).toBe('notApplicable');
+    // 0.1 × 90 000 − 9 000
+    expect(nowOf(lines, 1)).toEqual({ lap: expect.closeTo(0.1, 9), gapMs: 0, at: 19_000 });
+  });
+
+  it('is notApplicable at the line: the live point would be the completed lap\'s point', () => {
+    const lines = gapperLines(run(viewOf(threeCars())), { kind: 'leaderAverage' });
+    expect([0, 1, 2].map((id) => nowOf(lines, id))).toEqual(['notApplicable', 'notApplicable', 'notApplicable']);
+    expect(line(lines, 1)).toEqual([1, 2, 3, 4, 5].map((lap) => [lap, -1_000 * lap]));
+  });
+
+  it('is unknown for every car without a known race start or reference lap', () => {
+    const noStart = gapperLines(run(viewOf(midLap(), { lightsOutAt: null })), { kind: 'fixed', lapMs: 90_000 });
+    expect(noStart.cars.filter((c) => c.now.known).map((c) => c.carId)).toEqual([]);
+    // nobody has completed lap 1, so the leader average is insufficientData
+    const ms = field({ cars: 2, laps: 1, paceMs: 90_000 }).miniSectors.filter((m) => m.lap === 1 && m.segment < 30);
+    const noReference = gapperLines(run(viewOf(ms)), { kind: 'leaderAverage' });
+    expect(noReference.cars.filter((c) => c.now.known).map((c) => c.carId)).toEqual([]);
+  });
+});
