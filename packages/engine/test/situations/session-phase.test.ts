@@ -152,7 +152,8 @@ describe('a neutralisation dropped unconfirmed is a discarded timeline (review 2
   });
   it('a deployment dropped at SEND: the SEND step is truncated', () => {
     const { results } = race(200, { 190: { events: [scar(1, 0)] }, 199: { events: [SEND] } });
-    expect(truncated(results)).toEqual([raceFrame(199)]);
+    // SEND and the packets after it carry frame id 0, so the assembler adds them to the frame before: race frame 198.
+    expect(truncated(results)).toEqual([raceFrame(198)]);
   });
   it('a deployment dropped at the simulated end: the step of the jump is truncated', () => {
     const { results } = race(150, { 90: { events: [scar(2, 0)] } }, { from: 100, ms: 6_000_000 });

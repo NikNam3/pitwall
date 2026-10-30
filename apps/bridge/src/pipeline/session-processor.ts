@@ -170,9 +170,10 @@ export class SessionProcessor {
     try {
       const result = runner.apply(frame);
       storage?.writeConfirmed(this.#key, result.state.history, result.delta);
-      // A session time that fell back with no flashback and no start changes nothing; it is worth knowing (spec 3.3).
+      // A session time that fell back with no flashback and no start: the engine keeps its race clock monotonic (spec 3.3); worth knowing.
       if (result.clockFall) log.info({ feedId, sessionUid: this.#uid, clockFall: result.clockFall }, 'session time fell back');
-      // A flashback, or the race start discarding the formation lap or settling its clock, changed history: the calculators start over.
+      // A flashback, the race start (discarding the formation lap, settling its clock) or a dropped unconfirmed neutralisation
+      // changed history: the calculators start over.
       if (result.delta.truncated) {
         scheduler.reset();
         // A run triggered before it would land on the new timeline.
