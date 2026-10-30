@@ -40,12 +40,23 @@ function forUsParts(f: IncidentForUs, cars: readonly CarOverview[]): CellPart[] 
 }
 
 /**
+ * The plain text of the parts (no marks): their texts joined, where an unknown part (empty) takes the space it would
+ * leave before a comma or beside another space with it: `us, OCO +4.1→DNF`, not `us , OCO +4.1→DNF`.
+ */
+function plainText(parts: readonly CellPart[]): string {
+  return parts.reduce((out, p, i) => {
+    const strayBefore = parts[i - 1]?.reason !== undefined && out.endsWith(' ') && /^[ ,]/.test(p.text);
+    return (strayBefore ? out.slice(0, -1) : out) + p.text;
+  }, '');
+}
+
+/**
  * What changed for one of our cars: `us P5→P4, OCO +4.1→DNF`; the gaps are to the car the analysis names. Built once
- * from its parts: the plain text is their texts joined (no marks), the hover reason the first unknown part's.
+ * from its parts: the plain text is theirs (`plainText`), the hover reason the first unknown part's.
  */
 function forUsCell(f: IncidentForUs, cars: readonly CarOverview[]): IncidentCell {
   const parts = forUsParts(f, cars);
-  const cellText = parts.map((p) => p.text).join('');
+  const cellText = plainText(parts);
   const reason = parts.find((p) => p.reason !== undefined)?.reason;
   return withParts(reason === undefined ? { text: cellText } : { text: cellText, reason }, parts);
 }

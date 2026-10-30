@@ -1,6 +1,6 @@
 <script lang="ts">
   // The canvas surface (spec 5): dpr scaling, redraw on size or draw change, and a role-aware drawing api.
-  import { cssVar, resolveRole } from '../../theme/index.ts';
+  import { DEFAULT_THEME, cssNumber, cssVar, resolveRole } from '../../theme/index.ts';
   import { cellBox } from '../size/size.ts';
   import type { DrawApi } from './types.ts';
   import type { WidgetSize } from '../types.ts';
@@ -19,11 +19,11 @@
     canvas.width = Math.round(width * dpr);
     canvas.height = Math.round(height * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.font = `${cssVar(document.documentElement, '--pw-font-px')} ${cssVar(document.documentElement, '--pw-font')}`;
+    // the tokens as the canvas sees them, so a theme set on an ancestor (a gallery cell, a panel) counts
     const el = canvas;
-    const root = document.documentElement;
-    const fontPx = parseFloat(cssVar(root, '--pw-font-px'));
-    const line = parseFloat(cssVar(root, '--pw-line'));
+    const fontPx = cssNumber(el, '--pw-font-px', DEFAULT_THEME.fontPx);
+    const line = cssNumber(el, '--pw-line', DEFAULT_THEME.density.lineHeight);
+    ctx.font = `${fontPx}px ${cssVar(el, '--pw-font')}`;
     const cell = cellBox(fontPx, line);
     const api: DrawApi = {
       role: (r) => resolveRole(el, r),
