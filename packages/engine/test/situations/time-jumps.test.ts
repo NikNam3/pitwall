@@ -259,13 +259,14 @@ describe('garage time acceleration', () => {
 });
 
 describe('a flashback after a mid-race fall of the session time (review 2 C5)', () => {
-  // The clock falls at race frame 200 to 1 s; at race frame `from` the game goes back to race frame `target`, before the
+  // The clock falls at race frame 200 to 1 s (unless a test says otherwise); at race frame `from` the game goes back to race frame `target`, before the
   // fall or after it, and the fork has an overtake 5 frames after the target. Small snapshot intervals and a short replay
   // window, so the restore goes through snapshots taken on both sides of the fall.
   const FALL = 200;
   const OPTS = { snapshotEveryMs: 100, replayWindowMs: 1_000 };
-  const withFall = (extra: (k: number) => Beat = () => ({})) => script(gridStart(260, (k) => ({
-    ...(k >= FALL && { at: 1000 + (k - FALL) * STEP }),
+  /** The clock falls to `toMs` at race frame `FALL`. */
+  const withFall = (extra: (k: number) => Beat = () => ({}), toMs = 1000) => script(gridStart(260, (k) => ({
+    ...(k >= FALL && { at: toMs + (k - FALL) * STEP }),
     cars: (d) => lap(d, 0, { currentLapNum: 1 + Math.floor(k / 90), lapDistance: (k % 90) * 40 + 10, ...(k >= 90 && { lastLapTimeInMs: 90 * STEP }) }),
     ...extra(k),
   })));
@@ -284,5 +285,36 @@ describe('a flashback after a mid-race fall of the session time (review 2 C5)', 
     const fresh = new SessionRunner(initFor(fork), OPTS);
     for (const f of fork) fresh.apply(f);
     expect(runner.state).toEqual(fresh.state);
+  });
+
+  // Inventory 1.10 across a fall (w3e implement report, concern 2): the clock falls only 400 ms at race frame 200, so its
+  // raw time at race frame 240 still lies above race frame `target`'s. After the rewind from race frame 240 the game's
+  // first two frames still carry that old raw time; the frames after them are on the target's clock.
+  it.each([
+    ['before the fall', 180],
+    ['after the fall', 220],
+  ] as const)('a rewind to %s whose first frames still carry the old session time reports no clock fall and keeps the target’s race clock', (_, target) => {
+    const all = withFall(undefined, 2_800);
+    const fork = withFall((k) => (k === target + 5 ? { events: [ovtk(1, 0)] } : {}), 2_800);
+    const runner = new SessionRunner(initFor(all), OPTS);
+    for (const f of all.slice(0, raceFrame(240) + 1)) runner.apply(f);
+    const oldMs = all[raceFrame(240)]!.sessionTime;
+    const continuation = after(fork, raceFrame(target + 1), raceFrame(241)).slice(0, 15).map((f, i) => (i < 2 ? { ...f, sessionTime: oldMs } : f));
+    const results = continuation.map((f) => runner.apply(f));
+    expect(results[0]!.flashback?.targetFrameId).toBe(raceFrame(target));
+    expect(results.flatMap((r, i) => (r.clockFall ? [`frame ${i}: ${JSON.stringify(r.clockFall)}`] : []))).toEqual([]);
+    // A fresh run to the same frame. The stale frames' own stamps (their crossings, the lap cursors' time) carry the old
+    // time in any rewind of this shape, so the comparison leaves those out.
+    const fresh = new SessionRunner(initFor(fork), OPTS);
+    for (const f of fork.slice(0, raceFrame(target + 15) + 1)) fresh.apply(f);
+    const seen = (r: SessionRunner) => ({
+      sessionTime: r.state.sessionTime,
+      clockOffsetMs: r.state.open.phaseBook.clockOffsetMs,
+      phases: r.state.history.sessionPhases,
+      open: r.state.open.situations.session,
+      events: r.state.history.events,
+      laps: r.state.history.laps,
+    });
+    expect(seen(runner)).toEqual(seen(fresh));
   });
 });
