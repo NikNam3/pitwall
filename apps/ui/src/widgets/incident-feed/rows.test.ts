@@ -54,17 +54,18 @@ describe('incidentRows', () => {
 
   it('shows no gap part when the entry has no other car (otherCarId notApplicable)', () => {
     const [row] = incidentRows([entry({ forUs: [forUs({ otherCarId: unknown('notApplicable'), gapBeforeMs: unknown('notApplicable') })] })], cars, undefined);
-    expect(row!.cells.forUs).toEqual({ text: 'us P5→P4' });
+    expect(row!.cells.forUs).toMatchObject({ text: 'us P5→P4' });
+    expect(row!.cells.forUs.reason).toBeUndefined();
   });
 
-  it('leaves an unknown position out, with its reason on hover (no invented position)', () => {
+  it('leaves an unknown position out of the plain text, with its reason on hover (no invented position)', () => {
     const [row] = incidentRows([entry({ forUs: [forUs({ positionBefore: unknown('notReceived') })] })], cars, undefined);
-    expect(row!.cells.forUs).toEqual({ text: 'us, OCO +4.1→DNF', reason: 'notReceived' });
+    expect(row!.cells.forUs).toMatchObject({ text: 'us, OCO +4.1→DNF', reason: 'notReceived' });
   });
 
   it('gives an unknown gap after its reason on hover; DNF (not applicable) needs none', () => {
     const [waiting] = incidentRows([entry({ forUs: [forUs({ gapAfterMs: unknown('notReceived') })] })], cars, undefined);
-    expect(waiting!.cells.forUs).toEqual({ text: 'us P5→P4, OCO +4.1→', reason: 'notReceived' });
+    expect(waiting!.cells.forUs).toMatchObject({ text: 'us P5→P4, OCO +4.1→', reason: 'notReceived' });
     const [retired] = incidentRows([entry()], cars, undefined);
     expect(retired!.cells.forUs.reason).toBeUndefined();
   });

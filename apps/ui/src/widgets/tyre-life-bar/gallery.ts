@@ -44,12 +44,12 @@ const gallery: GalleryEntry<typeof widget> = {
       wear: wear(corner(61, 1.9, 3), corner(66, 2, 3), corner(57, 1.6, 8), corner(60, 1.7, 5)),
       car: carWith('hard', 20),
     },
-    // Rate unknown (too few laps): empty bar tail, no marker, empty rate and laps cells with the reason on hover.
+    // Rate unknown (too few laps): empty bar tail, no marker, the rate and laps cells show their mark with the reason on hover.
     rateUnknown: {
       wear: wear(noRateCorner, noRateCorner, noRateCorner, noRateCorner),
       car: carWith('soft', 2),
     },
-    // Realism mode withholds the wear: every cell empty, reason on hover.
+    // Realism mode withholds the wear: an empty bar, every text cell the realism mark, reason on hover.
     realismHidden: {
       wear: wear(hiddenCorner, hiddenCorner, hiddenCorner, hiddenCorner),
       car: carWith('medium', 12),

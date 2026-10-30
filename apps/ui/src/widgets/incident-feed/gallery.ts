@@ -65,7 +65,7 @@ const gallery: GalleryEntry<typeof widget> = {
     empty: { feed: [], cars, moment: undefined },
     // Mockup: minor entries (warning, safety car) dim.
     feed: { feed: [collision, timeLoss, warning, neutralised, damage], cars, moment: undefined },
-    // The unresolved time loss of the damage entry is an empty cell.
+    // The unresolved time loss of the damage entry shows its mark (still measuring).
     unresolved: { feed: [damage], cars, moment: undefined },
     // The newest entry is minor: the moment names the major entry below it, which is amber.
     incidentMomentMinorFirst: { feed: [warning, timeLoss, neutralised], cars, moment: moment('incident', timeLoss.id) },
@@ -73,8 +73,14 @@ const gallery: GalleryEntry<typeof widget> = {
     battleMoment: { feed: [collision, warning], cars, moment: moment('battle') },
     // A drive-through, a stop-go and a 5 s time penalty among the feed: each names its ruling.
     driveThrough: { feed: [driveThrough, stopGo, timePenalty, collision, warning], cars, moment: undefined },
-    // A car missing from cars.overview is left out of the cell, with the reason on hover.
+    // A car missing from cars.overview shows its mark in its place, with the reason on hover.
     unknownCar: { feed: [collision], cars: cars.slice(0, 2), moment: undefined },
+    // Our position before and the gap after still to come: each mark sits where its value goes, `us …, OCO +4.1→…`.
+    forUsPending: {
+      feed: [{ ...collision, forUs: [{ ourCarId: carId(1), otherCarId: k(carId(2)), positionBefore: unknown('notReceived'), positionAfter: k(4), gapBeforeMs: k(4100), gapAfterMs: unknown('notReceived') }] }],
+      cars,
+      moment: undefined,
+    },
     // Realism hides no rival value of this display (incidents are public), so there is no realism case.
   },
   fit: [

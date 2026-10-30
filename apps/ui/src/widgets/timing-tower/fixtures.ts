@@ -69,18 +69,20 @@ export const toCar = (id: number, gapMs: number | undefined, lapsDown = 0): GapT
   carId: carId(id), gapMs: gapMs === undefined ? unknown('notApplicable') : ms(gapMs), lapsDown,
 });
 
-/** A lap-board row; `last` is the last lap in ms (`undefined` = unknown, `'realism'` = withheld). */
+/**
+ * A lap-board row; `last` is the last lap in ms (`undefined` = not received yet, `'realism'` = withheld, `'retired'` = a
+ * car out of the race without a time: its times will not come, as `lap-times` gives them).
+ */
 export function boardRow(
   id: number,
-  last: number | 'realism' | undefined,
+  last: number | 'realism' | 'retired' | undefined,
   sectors: [number?, number?, number?] = [],
   status: [SectorStatus, SectorStatus, SectorStatus] = ['none', 'none', 'none'],
   lapStatus: SectorStatus = 'none',
 ): LapBoardRow {
-  const time = (v: number | 'realism' | undefined) =>
-    v === 'realism' ? unknown('realism') : v === undefined ? unknown('notReceived') : ms(v);
-  const hidden = last === 'realism';
-  const s = (v: number | undefined) => (hidden ? unknown('realism') : time(v));
+  const time = (v: number | 'realism' | 'retired' | undefined) =>
+    v === 'realism' ? unknown('realism') : v === 'retired' ? unknown('notApplicable') : v === undefined ? unknown('notReceived') : ms(v);
+  const s = (v: number | undefined) => (last === 'realism' || last === 'retired' ? time(last) : time(v));
   const unknownDelta = unknown('notApplicable');
   return {
     carId: carId(id),
