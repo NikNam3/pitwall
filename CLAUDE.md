@@ -43,6 +43,7 @@ Dependency direction (enforced by dependency-cruiser): `protocol` and `domain` i
 - Registration by convention: a feature is a folder `apps/bridge/src/features/<name>/register.ts`; no central lists.
 - Ports and paths come from env: `PITWALL_WS_PORT`, `PITWALL_UDP_PORT`, `PITWALL_UI_PORT`, `PITWALL_DATA_DIR`, `PITWALL_FIXTURES_DIR`.
 - Only `packetFormat === 2025`. Wheel order in protocol stays RL, RR, FL, FR; it becomes `Corners` once, in the engine.
+- Tests on real data use short segments (`fixtures/segments/`, at most 1 MB, cut from normal sessions with `pwrec-cut`), each targeting one behaviour of our code. Whole recordings only serve whole-pipeline properties in the acceptance suite (determinism, reprocess, decoder equality and speed). Never test facts of a recording ("15 laps", "fuel stays 10 kg"); the time trial is no test fixture.
 - Goals, highest first: clean code, extendable code, clean UI, intuitive UX, realism, findability, performance.
 
 ## Workflow
