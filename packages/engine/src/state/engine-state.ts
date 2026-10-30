@@ -56,6 +56,10 @@ export type LapCursor = {
   actualCompound: ActualCompound;
   visualCompound: VisualCompound;
   outLap: boolean;
+  /** The engine saw the lap from its start; false when it joined the car mid-lap, so ranges and fuel at start would cover part of it only. */
+  fromStart: boolean;
+  /** The car's lap distance on the lap's newest LapData frame; negative before the line (an out lap from the garage). */
+  lapDistanceM: Metres;
   /** Per band channel (the order of `CHANNELS` in `history/lap-samples.ts`): lowest and highest value of the lap's frames; min above max = none seen. */
   channelMin: number[];
   channelMax: number[];

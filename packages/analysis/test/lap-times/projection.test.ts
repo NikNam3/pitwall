@@ -85,13 +85,11 @@ describe('lap-times projection', () => {
 
 describe('lap-times cut-off', () => {
   /**
-   * `cars` active cars with best laps of 90.0, 90.1, 90.2 … s (two laps each) in a session of `classified` cars
-   * (`session.numActiveCars`, default `cars`); `subject` is on lap 3, `upMs` up on its best at crossing 25, so it
-   * projects its best − `upMs`.
+   * `cars` active cars (also `session.numActiveCars`) with best laps of 90.0, 90.1, 90.2 … s (two laps each);
+   * `subject` is on lap 3, `upMs` up on its best at crossing 25, so it projects its best − `upMs`.
    */
   const quali = ({
     cars,
-    classified = cars,
     subject = cars - 1,
     upMs,
     session = Q1,
@@ -100,7 +98,6 @@ describe('lap-times cut-off', () => {
     noBest = false,
   }: {
     cars: number;
-    classified?: number;
     subject?: number;
     upMs: number;
     session?: { sessionType: number; kind: 'practice' | 'qualifying' | 'sprintShootout' | 'race' | 'timeTrial' };
@@ -120,7 +117,7 @@ describe('lap-times cut-off', () => {
       laps,
       miniSectors: [...miniSectors, ...live],
       cars: activeCars(cars, { [subject]: { lap: 3, ...timing } }),
-      session: { ...session, numActiveCars: classified },
+      session: { ...session, numActiveCars: cars },
       sessionTime,
       config,
     });
@@ -146,18 +143,19 @@ describe('lap-times cut-off', () => {
   it.each([
     ['Q1', 5, 'qualifying', 20, 15],
     ['Sprint Shootout 1', 10, 'sprintShootout', 20, 15],
-    ['Q2', 6, 'qualifying', 20, 10],
-    ['Sprint Shootout 2', 11, 'sprintShootout', 20, 10],
-  ] as const)('%s, %s: classified cars − eliminated so far is the cut-off position', (_, sessionType, kind, cars, position) => {
+    // in the second part F1 25 counts only the 15 cars still in it
+    ['Q2', 6, 'qualifying', 15, 10],
+    ['Sprint Shootout 2', 11, 'sprintShootout', 15, 10],
+  ] as const)('%s, %s: the cars in this part − the cars it knocks out is the cut-off position', (_, sessionType, kind, cars, position) => {
     const { p, projected } = quali({ cars, upMs: 900, session: { sessionType, kind } });
     // the subject is the slowest car, so the P-th fastest of the others is car P − 1
     const timeMs = 90_000 + 100 * (position - 1);
     expect(p.cutOff).toMatchObject({ known: true, value: { position, timeMs, marginMs: { known: true, value: timeMs - projected } } });
   });
 
-  it('Q2 counts the cars knocked out in Q1: 20 classified, 15 still active, cut-off P10', () => {
+  it('Q2 counts only the cars still in it (numActiveCars 15, as F1 25 sends it): cut-off P10', () => {
     // cars 0..14 run; car 14 (best 91.4 s) projects 90.5 s; P10 of the others is car 9 on 90.9 s
-    const { p, sessionTime } = quali({ cars: 15, classified: 20, upMs: 900, session: { sessionType: 6, kind: 'qualifying' } });
+    const { p, sessionTime } = quali({ cars: 15, upMs: 900, session: { sessionType: 6, kind: 'qualifying' } });
     expect(p.cutOff).toEqual(known({ position: 10, timeMs: 90_900, marginMs: known(400, sessionTime) }, sessionTime));
   });
 
@@ -179,8 +177,8 @@ describe('lap-times cut-off', () => {
     const config = { [LAP_TIMES_CONFIG.key]: { eliminatedQ1: 6, eliminatedQ2: 4 } };
     const q1 = quali({ cars: 20, upMs: 900, config });
     expect(q1.p.cutOff).toMatchObject({ known: true, value: { position: 14, timeMs: 91_300 } });
-    // 20 − 6 − 4
-    const q2 = quali({ cars: 20, upMs: 900, config, session: { sessionType: 6, kind: 'qualifying' } });
+    // in Q2 F1 25 counts only the cars still in qualifying (numActiveCars 14 after 6 went out in Q1): 14 − 4
+    const q2 = quali({ cars: 14, upMs: 900, config, session: { sessionType: 6, kind: 'qualifying' } });
     expect(q2.p.cutOff).toMatchObject({ known: true, value: { position: 10, timeMs: 90_900 } });
   });
 

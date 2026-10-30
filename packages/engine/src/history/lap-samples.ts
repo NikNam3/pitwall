@@ -58,10 +58,11 @@ const total = (value: number | undefined, ers: CarState['energy']['ers'], at: Se
   return unknown(ers.known ? 'notReceived' : ers.reason);
 };
 
+/** A channel's range over the lap; unknown when no frame had it or the engine joined the lap after its start (part of a lap is no lap). */
 const rangeAt = (cursor: LapCursor, i: number, car: CarState, at: SessionTime): Known<{ min: number; max: number }> => {
   const min = cursor.channelMin[i] ?? Infinity;
   const max = cursor.channelMax[i] ?? -Infinity;
-  if (min <= max) return known({ min, max }, at);
+  if (cursor.fromStart && min <= max) return known({ min, max }, at);
   const reading = CHANNELS[i]?.(car);
   return unknown(reading && !reading.known ? reading.reason : 'notReceived');
 };

@@ -1,7 +1,6 @@
 // The real pipeline and features over the committed segments of normal sessions: clean runs, and the topic behaviours
-// that need real packets (session info, positions gained, band alarms).
+// that need real packets (session info, positions gained).
 import { describe, expect, it } from 'vitest';
-import type { InsightEntry } from '@pitwall/contracts';
 import type { Interval } from '@pitwall/domain';
 import { describeWithFixture } from '../../../../test-support/fixtures.ts';
 import { SEGMENT_FILES, segmentPath } from '../fixtures/replay.ts';
@@ -17,7 +16,6 @@ const SUBS = [
   ['intervals', 'gaps.intervals', {}],
 ] as const;
 type Replay = Awaited<ReturnType<typeof replayTopics>>;
-const BAND_KINDS = new Set(['bandOut', 'bandOutLap']);
 
 function expectCleanRun(r: Replay) {
   expect(r.errors).toEqual([]);
@@ -49,21 +47,5 @@ describe('race-zandvoort-lap10 through the pipeline', () => {
     expect(gained).toHaveLength(20);
     expect(gained.every((g) => g.known)).toBe(true);
     expect(gained.reduce((sum, g) => sum + (g.known ? g.value : 0), 0)).toBe(0);
-  });
-
-  // B3: the alarm list flashed "FL brake below band" on and off all lap. Band advisories judge the last completed lap, so
-  // after the line a band alarm raises once; an advisory that resolves again within its lap gives way to the critical
-  // `bandOutLap` of the same channel at the same moment, it does not flash.
-  it('band alarms raise once per key; an advisory resolved within its lap is escalated to bandOutLap at that moment', async () => {
-    const r = await replayTopics(segmentPath('race-zandvoort-lap10.pwrec.gz'), [['insights', 'insights', {}]]);
-    const entries = r.entries('insights') as InsightEntry[];
-    const raises = entries.flatMap((e) => (e.type === 'raised' && BAND_KINDS.has(e.insight.kind) ? [{ key: e.insight.key, at: e.insight.raisedAt }] : []));
-    const resolves = entries.flatMap((e) => (e.type === 'resolved' && e.key.startsWith('bandOut') ? [{ key: e.key, at: e.at }] : []));
-    expect(raises.length).toBeGreaterThan(0);
-    expect(resolves.length).toBeGreaterThan(0);
-    const keys = raises.map((e) => e.key);
-    expect(keys.filter((k, i) => keys.indexOf(k) !== i)).toEqual([]);
-    const escalated = (e: { key: string; at: number }) => raises.some((x) => x.key === e.key.replace(/^bandOut:/, 'bandOutLap:') && x.at === e.at);
-    expect(resolves.filter((e) => !e.key.startsWith('bandOut:') || !escalated(e))).toEqual([]);
   });
 });

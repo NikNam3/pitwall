@@ -74,13 +74,14 @@ const init = (view: EngineView): Acc => {
 /** F1 25 session type codes (data-output spec, "Session types") of the knock-out parts with a cut-off. */
 const SESSION_TYPE = { q1: 5, q2: 6, sprintShootout1: 10, sprintShootout2: 11 } as const;
 
-/** Cars knocked out before the part this session type is, or `undefined` where there is no cut-off. */
-const eliminatedBefore = (acc: Acc): { part: 'q1' | 'q2'; count: number } | undefined => {
+/**
+ * Cars this part knocks out, or `undefined` where there is no cut-off. F1 25 counts in `numActiveCars` only the cars
+ * still in qualifying, so the cut-off of every part is `numActiveCars` minus the cars this part knocks out.
+ */
+const eliminatedIn = (acc: Acc): number | undefined => {
   const { sessionType } = acc.session;
-  if (sessionType === SESSION_TYPE.q1 || sessionType === SESSION_TYPE.sprintShootout1) return { part: 'q1', count: acc.eliminated.q1 };
-  if (sessionType === SESSION_TYPE.q2 || sessionType === SESSION_TYPE.sprintShootout2) {
-    return { part: 'q2', count: acc.eliminated.q1 + acc.eliminated.q2 };
-  }
+  if (sessionType === SESSION_TYPE.q1 || sessionType === SESSION_TYPE.sprintShootout1) return acc.eliminated.q1;
+  if (sessionType === SESSION_TYPE.q2 || sessionType === SESSION_TYPE.sprintShootout2) return acc.eliminated.q2;
   return undefined;
 };
 
@@ -115,9 +116,9 @@ const othersBests = (acc: Acc, id: CarId, bests: Map<CarId, CarBests>): Best[] =
  * known since the newest of those bests. `margin` is the car's: from its projection, or why there is none.
  */
 const cutOffOf = (acc: Acc, others: readonly Best[], margin: (timeMs: Ms) => Known<Ms>): Projection['cutOff'] => {
-  const part = acc.session.kind === 'qualifying' || acc.session.kind === 'sprintShootout' ? eliminatedBefore(acc) : undefined;
-  if (part === undefined) return notApplicable;
-  const cutPosition = acc.session.numActiveCars - part.count;
+  const eliminated = acc.session.kind === 'qualifying' || acc.session.kind === 'sprintShootout' ? eliminatedIn(acc) : undefined;
+  if (eliminated === undefined) return notApplicable;
+  const cutPosition = acc.session.numActiveCars - eliminated;
   if (cutPosition < 1) return notApplicable;
   if (others.length < cutPosition) return insufficientData;
   const timeMs = ([...others].sort((a, b) => a.ms - b.ms)[cutPosition - 1] as Best).ms;
