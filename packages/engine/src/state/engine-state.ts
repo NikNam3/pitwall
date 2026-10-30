@@ -130,10 +130,10 @@ export type PhaseBook = {
   /** The receive time of the previous frame (wall clock, ms), for offline pauses and the post-session jump. */
   lastWallMs?: number | undefined;
   /**
-   * Set by a rewind whose frame still carried the old timeline's session time (inventory 1.10): frames at or above this
-   * time are still the old timeline's, and the fall to the first frame on the target's clock belongs to the flashback.
+   * Set by a rewind whose frame still carried the pre-rewind session time (inventory 1.10): the game's session time
+   * (not the race clock) the frames right after the rewind carry while they still belong to its target moment.
    */
-  staleFromMs?: SessionTime | undefined;
+  staleRawMs?: SessionTime | undefined;
   /** An online pause (`gamePaused`) in progress: its session time and receive time. */
   onlinePause?: { start: SessionTime; wallMs: number } | undefined;
 };

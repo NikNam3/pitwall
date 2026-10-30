@@ -33,29 +33,41 @@ export const PAUSE_AFTER_WALL_MS = 2000;
 /** A session time of the game on the race clock of `state`. */
 export const onRaceClock = (state: EngineState, sessionTime: SessionTime): SessionTime => sessionTime + state.open.phaseBook.clockOffsetMs;
 
+/** What a rewind needs to know of the state it leaves: its frame id, the game's session time there, the last wall time. */
+export type RewindMark = { frameId: number; rawMs: SessionTime; lastWallMs: number | undefined };
+
+/** The mark of `state`, taken by the runner before it restores a snapshot. */
+export const rewindMarkOf = (state: EngineState): RewindMark => ({
+  frameId: state.lastFrameId,
+  rawMs: state.sessionTime - state.open.phaseBook.clockOffsetMs,
+  lastWallMs: state.open.phaseBook.lastWallMs,
+});
+
 /**
  * Notes a rewind the runner just took, before the game's new frame is applied: wall time does not go back, so an offline
- * pause is measured from the last frame applied (`before.lastWallMs`), not the restored one; and when the new frame still
- * carries the old timeline's time (at or above `before.sessionTime`, where the rewind started), the frames on that time
- * are part of the flashback (`staleFromMs`). Both times are on the race clock, the frame's on the restored one: a
- * rewind from a frame after a fall to one before it then sees the new timeline below the old time, as it is.
+ * pause is measured from the last frame applied (`before.lastWallMs`), not the restored one. The old timeline's last
+ * session time is the new frame's own when its frame id still rises (an FLBK sent on the old timeline), else the time
+ * where the rewind started. While frames carry exactly that time (inventory 1.10: the game's time, whatever the race
+ * clock did), they belong to the rewind's target moment (`staleRawMs`).
  */
-export const noteRewind = (state: EngineState, before: { sessionTime: SessionTime; lastWallMs: number | undefined }, frame: Frame): void => {
+export const noteRewind = (state: EngineState, before: RewindMark, frame: Frame): void => {
   const book = state.open.phaseBook;
   book.lastWallMs = before.lastWallMs;
-  book.staleFromMs = onRaceClock(state, frame.sessionTime) >= before.sessionTime ? before.sessionTime : undefined;
+  const oldMs = frame.frameId > before.frameId ? frame.sessionTime : before.rawMs;
+  book.staleRawMs = frame.sessionTime === oldMs ? oldMs : undefined;
 };
 
 /**
- * Whether the frame (on the race clock) still belongs to the flashback just taken: one on the old timeline's time, or
- * the first on the target's clock, whose fall from the old time is the flashback's and no clock fall. The mark ends at
- * that frame.
+ * The frame stamped at the rewind's target moment (the state's time on the race clock) while it still carries the
+ * pre-rewind session time (supervisor ruling 2026-10-31): what it records belongs there, and it is no jump. The mark
+ * ends at the first frame on another time; undefined from then on.
  */
-export const followsRewind = (state: EngineState, frame: Frame): boolean => {
+export const atRewindTarget = (state: EngineState, frame: Frame): Frame | undefined => {
   const book = state.open.phaseBook;
-  if (book.staleFromMs === undefined) return false;
-  if (frame.sessionTime < book.staleFromMs) book.staleFromMs = undefined;
-  return true;
+  if (book.staleRawMs === undefined) return undefined;
+  if (frame.sessionTime === book.staleRawMs) return { ...frame, sessionTime: state.sessionTime };
+  book.staleRawMs = undefined;
+  return undefined;
 };
 
 /** What the frame's session time did against the previous frame's. */

@@ -5,7 +5,7 @@ import type { Frame } from '../../frame/frame.ts';
 import type { EngineState } from '../../state/engine-state.ts';
 import type { StepOutput, SubStep } from '../../step/types.ts';
 import { applyPhaseSignals, enterPostSession, joinSession } from './session-phase.ts';
-import { followsRewind, onRaceClock, restampStart, timeJumpOf, trackPauses } from './time-jumps.ts';
+import { atRewindTarget, onRaceClock, restampStart, timeJumpOf, trackPauses } from './time-jumps.ts';
 
 /** Runs `apply` and tags `sessionPhases` when it opened, closed or changed a phase. */
 const tagPhases = (state: EngineState, out: StepOutput, apply: () => void): void => {
@@ -18,16 +18,18 @@ const tagPhases = (state: EngineState, out: StepOutput, apply: () => void): void
 
 /**
  * Reads the jump of the session time to `frame` (spec 3.3) before any step stamps with it, and returns the frame on
- * the race clock, the time every step stamps with. A frame the runner took as a flashback report, or one still on the
- * flashback's old time, is no jump. The start's settling re-stamps the start (`rewritten`); the post-session
+ * the race clock, the time every step stamps with. A frame the runner took as a flashback report is no jump; one still
+ * on the pre-rewind session time is none either and is stamped at the rewind's target. The start's settling re-stamps the start (`rewritten`); the post-session
  * simulation opens `postSession`; any other fall is reported as `clockFall` and, from the race start on, the race clock
  * continues over it by the fall's size (user ruling 2026-10-30).
  */
 export const applySessionClock = (state: EngineState, frame: Frame, out: StepOutput): Frame => {
   const book = state.open.phaseBook;
+  const stale = atRewindTarget(state, frame);
+  if (stale) return stale;
   const onClock = (): Frame => (book.clockOffsetMs === 0 ? frame : { ...frame, sessionTime: onRaceClock(state, frame.sessionTime) });
   const clocked = onClock();
-  if (!book.started || followsRewind(state, clocked) || frame.flashbackReport) return clocked;
+  if (!book.started || frame.flashbackReport) return clocked;
   const jump = timeJumpOf(state, clocked);
   if (jump.kind === 'simulated') tagPhases(state, out, () => enterPostSession(state, state.sessionTime, out));
   else if (jump.kind === 'settle') {
