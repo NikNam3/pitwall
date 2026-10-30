@@ -4,7 +4,7 @@ import { lapsFold } from '../../src/kit/folds.ts';
 
 const none = unknown('notReceived');
 const corners = <T>(v: T) => ({ fl: v, fr: v, rl: v, rr: v });
-const lapEnd = { wearAtEndPct: corners(none), ersStoreAtEndJ: none, ersDeployedJ: none, ersHarvestedJ: none, damageAtEnd: none,
+const lapEnd = { wearAtStartPct: corners(none), ersStoreAtStartJ: none, wearAtEndPct: corners(none), ersStoreAtEndJ: none, ersDeployedJ: none, ersHarvestedJ: none, damageAtEnd: none,
   channelRange: { tyres: corners({ surfaceC: none, carcassC: none, pressurePsi: none }), brakesC: corners(none), engineC: none } };
 const lap = (n: number, status: LapRecord['status']): LapRecord => ({
   carId: carId(0),
