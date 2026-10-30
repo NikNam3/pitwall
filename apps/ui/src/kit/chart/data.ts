@@ -15,12 +15,13 @@ export type ChartSeries = {
 export type PlotLine = { of: number; live: boolean; points: ChartSeries['points'] };
 
 /**
- * The lines uPlot draws: every series in order, without its live point, then one two-point line per live end (from
- * the series' last settled point to its live point), in series order.
+ * The lines uPlot draws: every series in order, without its live point, then every series' live line in series order:
+ * the segment from its last settled point to its live point, or no points when it has no live end. The lines depend
+ * only on the number of series, so a live end that comes or goes changes the data, never the plot.
  */
 export function plotLines(series: ChartSeries[]): PlotLine[] {
   const settled = series.map((s, of) => ({ of, live: false, points: s.liveEnd === true ? s.points.slice(0, -1) : s.points }));
-  const live = series.flatMap((s, of) => (s.liveEnd === true ? [{ of, live: true, points: s.points.slice(-2) }] : []));
+  const live = series.map((s, of) => ({ of, live: true, points: s.liveEnd === true ? s.points.slice(-2) : [] }));
   return [...settled, ...live];
 }
 

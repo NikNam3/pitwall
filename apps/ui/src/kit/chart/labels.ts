@@ -1,8 +1,18 @@
 /** Pure helpers of the chart's end-of-line labels: which lines get one, and where they go without overlapping. */
 import type { ChartSeries } from './data.ts';
 
-/** A line's label: `index` is the series' index, `value` the y of its last point in the visible range. */
-export type EndLabel = { index: number; text: string; value: number; bold: boolean };
+/** A line's label: `index` is the series' index, `x` and `value` the x and y of its last point in the visible range. */
+export type EndLabel = { index: number; text: string; x: number; value: number; bold: boolean };
+
+/**
+ * How far before the newest x a line must end to be labelled at its own end instead of in the column, per x kind: a
+ * car on the lead lap ends within a lap of the newest x (each car counts its own laps), a lapped or retired car
+ * further back; on session time, a line without a point for a minute has stopped.
+ */
+export const EARLY_END = { lap: 1, sessionTime: 60_000 } as const;
+
+/** Whether the label's line ends so far before the range's end (the newest x) that it is labelled at its own end. */
+export const endsEarly = (label: EndLabel, [, hi]: [number, number], kind: keyof typeof EARLY_END): boolean => hi - label.x >= EARLY_END[kind];
 
 /** One label per series with a point in `range` (inclusive), in series order; an own car's label is bold. */
 export function endLabels(series: ChartSeries[], [lo, hi]: [number, number]): EndLabel[] {
@@ -10,7 +20,7 @@ export function endLabels(series: ChartSeries[], [lo, hi]: [number, number]): En
   series.forEach((s, index) => {
     let last: [number, number] | undefined;
     for (const p of s.points) if (p[0] >= lo && p[0] <= hi && (last === undefined || p[0] > last[0])) last = p;
-    if (last !== undefined) out.push({ index, text: s.label, value: last[1], bold: s.colour?.ownCar === true });
+    if (last !== undefined) out.push({ index, text: s.label, x: last[0], value: last[1], bold: s.colour?.ownCar === true });
   });
   return out;
 }
