@@ -21,6 +21,7 @@ import {
 import { currentLaps, type BandReading, type CarBands, type CarState, type ChannelRange, type Known, type LapRecord, type Range } from '@pitwall/domain';
 import type { DeepReadonly, EngineState, SchedulerResult, StepResult } from '@pitwall/engine';
 import { InvariantChecker } from '../../../../packages/engine/test/support/invariants.ts';
+import { bandsAgainstPackets, type BandsAgainstPackets } from './car-bands-packets.ts';
 import { replayScheduled } from './engine-replay.ts';
 import { segmentPath } from './replay.ts';
 
@@ -69,6 +70,7 @@ const run: {
   /** `car ... lap ...` for every lap that `car-bands` or `alarms` judged as a whole lap without its start line crossing. */
   partialLapEvidence: Set<string>;
   invariantErrors: string[];
+  bands: BandsAgainstPackets;
 } = {} as never;
 
 const newLapSeen = (car: Car): LapSeen => ({
@@ -90,6 +92,7 @@ beforeAll(async () => {
   const lineCrossed = new Set<string>();
   const lastLap = new Map<number, number>();
   let last: SchedulerResult | undefined;
+  const bands = bandsAgainstPackets();
 
   /** Laps, crossings and the lap ranges move on the frames that carry LapData only, so only those are observed. */
   const observeLapData = ({ state }: StepResult, scheduled: SchedulerResult): void => {
@@ -144,9 +147,10 @@ beforeAll(async () => {
     }
     if (frame.lapData) observeLapData(r, scheduled);
     judgePartialLaps(r, scheduled);
+    bands.observe(r.state, scheduled, frame);
     last = scheduled;
   });
-  Object.assign(run, { state: runner.state, last: last!, seen, lineBetween, partialLapEvidence, invariantErrors });
+  Object.assign(run, { state: runner.state, last: last!, seen, lineBetween, partialLapEvidence, invariantErrors, bands: bands.seen });
 });
 
 const crossingsOf = (carId: number) => run.state.history.miniSectors.filter((m) => m.carId === carId);
@@ -312,5 +316,12 @@ describe('race-zandvoort-full-lap: a whole lap out of band', () => {
 
   it('a lap the engine joined after its start line is no evidence of a whole lap out of band: no outForFullLap, no bandOutLap', () => {
     expect([...run.partialLapEvidence]).toEqual([]);
+  });
+});
+
+describe("race-zandvoort-full-lap: car-bands on the game's packets", () => {
+  it("on every run of car-bands, each of the player's channels and corners carries the packet value, the config band of the fitted slick and the state it gives", () => {
+    expect(run.bands.runs).toBeGreaterThan(0);
+    expect(run.bands.off).toEqual([]);
   });
 });
