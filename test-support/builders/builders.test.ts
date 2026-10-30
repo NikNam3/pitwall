@@ -30,6 +30,9 @@ describe('builders', () => {
     const l = lap({ lapNumber: 3, lapTimeMs: 80_000 });
     expect(l).toMatchObject({ carId: 0, status: 'confirmed', completedAt: 240_000, actualCompound: 'C3', visualCompound: 'soft' });
     expect(l.ersStoreAtEndJ).toEqual({ known: true, value: 4_000_000, at: 240_000 });
+    // the lap-start samples equal the lap-end ones: the lap's own wear and ERS change are 0
+    expect(l.ersStoreAtStartJ).toEqual({ known: true, value: 4_000_000, at: 240_000 });
+    expect(l.wearAtStartPct).toEqual(l.wearAtEndPct);
     expect(lap({ wearAtEndPct: { fl: { known: false, reason: 'notReceived' }, fr: l.wearAtEndPct.fr, rl: l.wearAtEndPct.rl, rr: l.wearAtEndPct.rr } }).wearAtEndPct.fl.known).toBe(false);
   });
 
@@ -75,7 +78,9 @@ describe('builders', () => {
     expect(l3.fuelAtStartKg).toMatchObject({ value: 96 });
     expect(l3.fuelAtEndKg).toMatchObject({ value: 94 });
     expect(l3.tyreAgeAtStart).toBe(2);
+    expect(l3.wearAtStartPct.fl).toMatchObject({ value: 2 });
     expect(l3.wearAtEndPct.fl).toMatchObject({ value: 3 });
+    expect(l3.ersStoreAtStartJ).toMatchObject({ value: 4_000_000 });
     expect(l3.positionAtEnd).toBe(2);
     expect(l3.sectorTimesMs.reduce((a, b) => a + b, 0)).toBe(91_001);
   });

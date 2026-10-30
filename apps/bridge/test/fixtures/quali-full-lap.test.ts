@@ -2,7 +2,7 @@
 // in Q2, car 14 (the player) leaves the out lap at the line and runs its flying lap 1 to the line; ten other cars
 // complete a lap whose start lies before the segment. One replay through the engine, `lap-times` and `car-bands` feeds every test.
 import { beforeAll, describe, expect, it } from 'vitest';
-import { carBandsCalculator, classifyLap, LAP_TIMES, LAP_TIMES_CONFIG, lapTimesCalculator, type LapTimesOutput } from '@pitwall/analysis';
+import { carBandsCalculator, classifyLap, LAP_CLASSES_CONFIG, LAP_TIMES, LAP_TIMES_CONFIG, lapTimesCalculator, type LapTimesOutput } from '@pitwall/analysis';
 import type { Known, LapRecord } from '@pitwall/domain';
 import type { DeepReadonly, EngineState } from '@pitwall/engine';
 import { InvariantChecker } from '../../../../packages/engine/test/support/invariants.ts';
@@ -54,7 +54,7 @@ describe('qualifying-singapore-full-lap: the flying lap', () => {
   });
 
   it('the flying lap timed from the line after the out lap from the garage counts for pace, for the rate and for bests', () => {
-    expect(classifyLap(flyingLap(), { isRace: false })).toEqual({ forPace: true, forRate: true, forBest: { lap: true, sectors: [true, true, true] } });
+    expect(classifyLap(flyingLap(), { isRace: false, ...LAP_CLASSES_CONFIG.defaults })).toEqual({ forPace: true, forRate: true, forBest: { lap: true, sectors: [true, true, true] } });
   });
 
   it("the lap carries the game's lap time, its sectors add up to it, and the board shows both as the last lap", () => {

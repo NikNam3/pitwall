@@ -527,18 +527,28 @@ describe('hidden data of one of our cars (Review Focus 5)', () => {
       lap({
         carId: TEAMMATE,
         lapNumber: n,
+        wearAtStartPct: perCorner(() => known(46 + 3 * n, n * 90_000)),
         wearAtEndPct: perCorner(() => known(49 + 3 * n, n * 90_000)),
+        fuelAtStartKg: known(13.5 - 1.5 * n, n * 90_000),
         fuelAtEndKg: known(12 - 1.5 * n, n * 90_000),
       }),
     );
   /** As the engine records the same laps of a car whose driver withholds the telemetry: the lap-end samples are restricted too. */
   const hiddenLaps = () =>
-    teammateLaps().map((l) => ({ ...l, wearAtEndPct: perCorner(() => restricted), fuelAtEndKg: restricted, fuelAtStartKg: restricted, ersStoreAtEndJ: restricted }));
-  /** The teammate with 65 % wear and 3 kg of fuel: 2 laps to the 70 % limit, 2 laps of fuel for 10 laps left. */
+    teammateLaps().map((l) => ({
+      ...l,
+      wearAtStartPct: perCorner(() => restricted),
+      wearAtEndPct: perCorner(() => restricted),
+      fuelAtEndKg: restricted,
+      fuelAtStartKg: restricted,
+      ersStoreAtStartJ: restricted,
+      ersStoreAtEndJ: restricted,
+    }));
+  /** The teammate on its 5-lap-old set with 65 % wear and 3 kg of fuel: 2 laps to the 70 % limit, 2 laps of fuel for 10 laps left. */
   const teammate = () =>
     carState({
       id: TEAMMATE,
-      tyres: { corners: perCorner(() => ({ wearPct: known(65, 0) })) },
+      tyres: { age: 5, corners: perCorner(() => ({ wearPct: known(65, 0) })) },
       energy: { fuel: known({ kg: 3, capacityKg: 110, remainingLaps: 2, mix: 'standard' as const }, 0) },
     });
 

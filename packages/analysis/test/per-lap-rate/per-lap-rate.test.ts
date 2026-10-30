@@ -1,7 +1,7 @@
 import { known, unknown, type Known, type SessionTime } from '@pitwall/domain';
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
-import { lapsToReach, lapsUntil, perLapRate, type Rate } from '../../src/per-lap-rate/index.ts';
+import { lapsToReach, lapsUntil, PER_LAP_RATE_CONFIG, perLapGainRate, perLapRate, type GainSample, type Rate } from '../../src/per-lap-rate/index.ts';
 
 const OPTS = { window: 5, minSamples: 3 };
 const AT = 777 as SessionTime;
@@ -21,7 +21,85 @@ const lapsArb = fc
   .tuple(fc.integer({ min: 1, max: 10 }), fc.array(fc.integer({ min: 1, max: 3 }), { minLength: 2, maxLength: 4 }))
   .map(([start, steps]) => steps.reduce<number[]>((acc, s) => [...acc, acc[acc.length - 1]! + s], [start]));
 
-describe('perLapRate', () => {
+describe('per-lap-rate config', () => {
+  it('a rate is the median of the last 5 per-lap gains and is known from 2 of them (user ruling 2026-10-30)', () => {
+    expect(PER_LAP_RATE_CONFIG.key).toBe('per-lap-rate');
+    expect(PER_LAP_RATE_CONFIG.defaults).toMatchObject({ window: 5, minSamples: 2 });
+  });
+});
+
+/** One gain sample per lap from `from` on, at `lap * 1000`. */
+const gains = (values: number[], from = 1): GainSample[] => values.map((gain, i) => ({ lap: from + i, gain, at: atOf(from + i) }));
+const GAIN_OPTS = { window: 5, minSamples: 2 };
+
+describe('perLapGainRate (median of the laps` own gains)', () => {
+  it('the rate is the median of the gains, as of the newest sample', () => {
+    // sorted 1.8, 2, 2.1, 2.4, 3: the median is 2.1
+    expect(perLapGainRate(gains([2, 2.4, 1.8, 3, 2.1]), GAIN_OPTS)).toEqual(known({ perLap: 2.1, samples: 5 }, atOf(5)));
+  });
+
+  it('an even number of gains gives the mean of the middle two', () => {
+    expect(perLapGainRate(gains([2, 3]), GAIN_OPTS)).toEqual(known({ perLap: 2.5, samples: 2 }, atOf(2)));
+    // sorted 1, 2, 4, 8: (2 + 4) / 2
+    expect(perLapGainRate(gains([8, 1, 4, 2]), GAIN_OPTS)).toEqual(known({ perLap: 3, samples: 4 }, atOf(4)));
+  });
+
+  it('2 gains give a rate; 1 does not (minSamples 2)', () => {
+    expect(perLapGainRate(gains([3, 3]), GAIN_OPTS)).toMatchObject({ known: true, value: { perLap: 3, samples: 2 } });
+    expect(perLapGainRate(gains([3]), GAIN_OPTS)).toEqual(unknown('insufficientData'));
+  });
+
+  it('no gains is unknown(insufficientData)', () => {
+    expect(perLapGainRate([], GAIN_OPTS)).toEqual(unknown('insufficientData'));
+  });
+
+  it('minSamples comes from the options', () => {
+    expect(perLapGainRate(gains([3, 3]), { window: 5, minSamples: 3 })).toEqual(unknown('insufficientData'));
+  });
+
+  it('one outlier lap among 5 leaves the rate at the others` value', () => {
+    expect(perLapGainRate(gains([2, 2, 14, 2, 2]), GAIN_OPTS)).toMatchObject({ known: true, value: { perLap: 2 } });
+    expect(perLapGainRate(gains([2, 2, -9, 2, 2]), GAIN_OPTS)).toMatchObject({ known: true, value: { perLap: 2 } });
+  });
+
+  it('only the last `window` gains count', () => {
+    // the median of all 8 is 1; of the last 5 (1, 1, 3, 3, 3) it is 3
+    const rate = perLapGainRate(gains([1, 1, 1, 1, 1, 3, 3, 3]), GAIN_OPTS);
+    expect(rate).toEqual(known({ perLap: 3, samples: 5 }, atOf(8)));
+  });
+
+  it('gains of laps that are not consecutive count the same: a lap number gap does not scale the rate', () => {
+    // laps 1, 2, 6, 7: the laps between them were no samples
+    const samples = [1, 2, 6, 7].map((lap) => ({ lap, gain: 2, at: atOf(lap) }));
+    expect(perLapGainRate(samples, GAIN_OPTS)).toEqual(known({ perLap: 2, samples: 4 }, atOf(7)));
+  });
+
+  it('property: equal gains g give the rate g', () => {
+    fc.assert(
+      fc.property(fc.double({ min: -1e6, max: 1e6, noNaN: true }), fc.integer({ min: 2, max: 9 }), (g, n) => {
+        const rate = rateOf(perLapGainRate(gains(Array.from({ length: n }, () => g)), GAIN_OPTS));
+        expect(rate.perLap).toBe(g);
+        expect(rate.samples).toBe(Math.min(n, 5));
+      }),
+    );
+  });
+
+  it('property: the rate lies between the smallest and the largest gain of the window, whatever their order', () => {
+    fc.assert(
+      fc.property(fc.array(fc.integer({ min: -100, max: 100 }), { minLength: 2, maxLength: 9 }), (values) => {
+        const window = values.slice(-5);
+        const rate = rateOf(perLapGainRate(gains(values), GAIN_OPTS));
+        expect(rate.perLap).toBeGreaterThanOrEqual(Math.min(...window));
+        expect(rate.perLap).toBeLessThanOrEqual(Math.max(...window));
+        const reversed = rateOf(perLapGainRate(gains([...values.slice(0, -5), ...[...window].reverse()]), GAIN_OPTS));
+        expect(reversed.perLap).toBe(rate.perLap);
+      }),
+    );
+  });
+});
+
+// Theil–Sen over values sampled at the line: the battle's closing rate (gaps at each line crossing) keeps this method.
+describe('perLapRate (Theil–Sen slope)', () => {
   it('property: a linear series a + b·lap gives perLap b', () => {
     fc.assert(
       fc.property(fc.integer({ min: -100, max: 100 }), fc.integer({ min: -20, max: 20 }), lapsArb, (a, b, laps) => {
