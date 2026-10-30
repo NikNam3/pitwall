@@ -1,4 +1,4 @@
-import { carId, MAX_CARS, unknown, type CarIdentity, type DriverKey, type OwnCarState, type ResultStatus, type Visibility } from '@pitwall/domain';
+import { carId, MAX_CARS, OUT_OF_RACE_STATUSES, unknown, type CarIdentity, type DriverKey, type OwnCarState, type ResultStatus, type Visibility } from '@pitwall/domain';
 import type { ParticipantsPacket } from '@pitwall/protocol';
 import type { EngineState } from '../state/engine-state.ts';
 import { withholdRestricted } from './restricted.ts';
@@ -13,15 +13,13 @@ export const driverKeyOf = (p: ParticipantsPacket, carIndex: number): DriverKey 
     : { kind: 'human', networkId: c.networkId, name: c.name, raceNumber: c.raceNumber };
 };
 
-/** A car out of the race: the game keeps it in its slot but no longer counts it in `numActiveCars`. */
-const OUT_OF_RACE: ReadonlySet<ResultStatus> = new Set(['didNotFinish', 'disqualified', 'notClassified', 'retired']);
-
 /**
  * The slots the session uses. Participants `numActiveCars` counts only the cars still in the race, and a car that drops
- * out keeps its slot (the game does not renumber), so each car out of the race adds one slot to the count.
+ * out keeps its slot (the game does not renumber), so each car out of the race (`OUT_OF_RACE_STATUSES`) adds one slot
+ * to the count.
  */
 export const slotsInUse = (state: EngineState): number =>
-  state.cars.reduce((slots, car) => (OUT_OF_RACE.has(car.timing.resultStatus) ? slots + 1 : slots), state.session.numActiveCars);
+  state.cars.reduce((slots, car) => (OUT_OF_RACE_STATUSES.has(car.timing.resultStatus) ? slots + 1 : slots), state.session.numActiveCars);
 
 /** Whether the car is in the session: a slot below `slots` (see `slotsInUse`) that the game has not marked invalid or inactive. */
 export const isActiveCar = (index: number, slots: number, resultStatus: ResultStatus): boolean =>

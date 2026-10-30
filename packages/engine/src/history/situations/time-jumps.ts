@@ -6,7 +6,7 @@ import type { Known, Ms, OpenSessionPhase, SessionPhaseDetail, SessionPhaseSpan,
 import type { Frame } from '../../frame/frame.ts';
 import type { EngineState, LapCursor } from '../../state/engine-state.ts';
 import { mapCorners } from '../../step/corners.ts';
-import type { ClockFall } from '../../step/types.ts';
+import type { ClockFall, ClockJump, RewindMark } from '../../step/types.ts';
 
 /**
  * A fall of the session time at most this many frames after the race's lights out is the race clock settling: seen 4
@@ -15,13 +15,15 @@ import type { ClockFall } from '../../step/types.ts';
 export const START_SETTLE_FRAMES = 60;
 /**
  * A forward jump of more than this from one frame to the next is the game simulating the rest of an online session
- * (inventory 1.7: from 24 s to 6361 s, from 1207 s to 5837 s); spec 3.1, user ruling 2026-10-30.
+ * (inventory 1.7: from 24 s to 6361 s, from 1207 s to 5837 s) when it also outruns wall time (`SIMULATION_RATE`), and
+ * is reported as a clock jump otherwise; spec 3.1, 3.3, user ruling 2026-10-30.
  */
 export const SIMULATION_JUMP_MS = 60_000;
 /**
  * The simulation jump also outruns wall time by more than this factor: the recorded ones are thousands of seconds
- * within one frame interval, while garage acceleration runs at most about 30 times wall time (inventory 1.9: 10.8x
- * SgQ, 4.6x MiP), so a stall of a few seconds in the garage is no simulation; review 2 B3, ruling 2026-10-30.
+ * within one frame interval, while garage acceleration peaks at about 31.6 times wall time (inventory 1.9: SgQ frames
+ * 720 to 750, 15.777 s of session time in 0.5 s of wall time). The factor leaves a headroom of about 1.9 over that
+ * peak, so a stall of a few seconds in the garage is no simulation; review 2 B3, review 3 E7, ruling 2026-10-30.
  */
 export const SIMULATION_RATE = 60;
 /**
@@ -33,9 +35,6 @@ export const PAUSE_AFTER_WALL_MS = 2000;
 /** A session time of the game on the race clock of `state`. */
 export const onRaceClock = (state: EngineState, sessionTime: SessionTime): SessionTime => sessionTime + state.open.phaseBook.clockOffsetMs;
 
-/** What a rewind needs to know of the state it leaves: its frame id, the game's session time there, the last wall time. */
-export type RewindMark = { frameId: number; rawMs: SessionTime; lastWallMs: number | undefined };
-
 /** The mark of `state`, taken by the runner before it restores a snapshot. */
 export const rewindMarkOf = (state: EngineState): RewindMark => ({
   frameId: state.lastFrameId,
@@ -44,11 +43,12 @@ export const rewindMarkOf = (state: EngineState): RewindMark => ({
 });
 
 /**
- * Notes a rewind the runner just took, before the game's new frame is applied: wall time does not go back, so an offline
- * pause is measured from the last frame applied (`before.lastWallMs`), not the restored one. The old timeline's last
- * session time is the new frame's own when its frame id still rises (an FLBK sent on the old timeline), else the time
- * where the rewind started. While frames carry exactly that time (inventory 1.10: the game's time, whatever the race
- * clock did), they belong to the rewind's target moment (`staleRawMs`).
+ * Notes the rewind the runner took on `frame`, before the frame is applied, on its first pass and on every replay of
+ * it: wall time does not go back, so an offline pause is measured from the last frame applied before the rewind
+ * (`before.lastWallMs`), not the restored one. The old timeline's last session time is the new frame's own when its
+ * frame id still rises (an FLBK sent on the old timeline), else the time where the rewind started. While frames carry
+ * exactly that time (inventory 1.10: the game's time, whatever the race clock did), they belong to the rewind's target
+ * moment (`staleRawMs`).
  */
 export const noteRewind = (state: EngineState, before: RewindMark, frame: Frame): void => {
   const book = state.open.phaseBook;
@@ -81,7 +81,9 @@ export type TimeJump =
    * Any other fall: it is reported with the game's times, and from the race start on the race clock continues over it
    * (`offsetMs`, the fall's size; 0 before the start, where the start's own rules apply).
    */
-  | { kind: 'fall'; fall: ClockFall; offsetMs: Ms };
+  | { kind: 'fall'; fall: ClockFall; offsetMs: Ms }
+  /** Any other forward jump by more than `SIMULATION_JUMP_MS` (a stall in the garage), with the game's times. */
+  | { kind: 'forward'; jump: ClockJump };
 
 const NONE: TimeJump = { kind: 'none' };
 
@@ -89,32 +91,28 @@ const NONE: TimeJump = { kind: 'none' };
 const BEFORE_START: ReadonlySet<OpenSessionPhase['kind']> = new Set(['preStart', 'formation', 'startLights']);
 
 /**
- * The game simulated the rest of the session: the clock jumped forward by more than `SIMULATION_JUMP_MS` and by more
- * than `SIMULATION_RATE` times the wall time between the frames (without a wall time before, by the first alone).
+ * Reads the jump of the session time from the previous frame to `frame` (on the race clock), `wallMs` of wall time
+ * after it. A frame the runner took as a flashback report is no jump here (the caller skips it); garage acceleration
+ * (the clock ahead of wall time) is none either. The rest of the session simulated is a forward jump by more than
+ * `SIMULATION_JUMP_MS` and by more than `SIMULATION_RATE` times `wallMs`; any other forward jump by more than
+ * `SIMULATION_JUMP_MS` is only reported. A fall while the formation lap is open is the formation's reset: lights out
+ * discards the formation, so it needs nothing itself.
  */
-const isSimulation = (state: EngineState, frame: Frame, advanceMs: Ms): boolean => {
-  const { lastWallMs } = state.open.phaseBook;
-  return advanceMs > SIMULATION_JUMP_MS && (lastWallMs === undefined || advanceMs > SIMULATION_RATE * (frame.receivedAtMs - lastWallMs));
-};
-
-/**
- * Reads the jump of the session time from the previous frame to `frame` (on the race clock). A frame the runner took
- * as a flashback report is no jump here (the caller skips it); garage acceleration (the clock ahead of wall time) is
- * none either. A fall while the formation lap is open is the formation's reset: lights out discards the formation, so
- * it needs nothing itself.
- */
-export const timeJumpOf = (state: EngineState, frame: Frame): TimeJump => {
+export const timeJumpOf = (state: EngineState, frame: Frame, wallMs: number): TimeJump => {
   const { phaseBook } = state.open;
   const { kind } = state.open.situations.session;
   if (kind === 'postSession') return NONE;
   const fromMs = state.sessionTime;
   const toMs = frame.sessionTime;
-  if (isSimulation(state, frame, toMs - fromMs)) return { kind: 'simulated' };
+  const raw = (at: SessionTime): SessionTime => at - phaseBook.clockOffsetMs;
+  const advanceMs = toMs - fromMs;
+  if (advanceMs > SIMULATION_JUMP_MS) {
+    return advanceMs > SIMULATION_RATE * wallMs ? { kind: 'simulated' } : { kind: 'forward', jump: { fromMs: raw(fromMs), toMs: raw(toMs) } };
+  }
   if (toMs >= fromMs) return NONE;
   const sinceLightsOut = phaseBook.lightsOut === undefined ? undefined : frame.frameId - phaseBook.lightsOut.frameId;
   if (sinceLightsOut !== undefined && sinceLightsOut > 0 && sinceLightsOut <= START_SETTLE_FRAMES) return { kind: 'settle', offsetMs: fromMs - toMs };
   if (phaseBook.formationFrom !== undefined) return NONE;
-  const raw = (at: SessionTime): SessionTime => at - phaseBook.clockOffsetMs;
   const started = phaseBook.lightsOut !== undefined || !BEFORE_START.has(kind);
   return { kind: 'fall', fall: { fromMs: raw(fromMs), toMs: raw(toMs) }, offsetMs: started ? fromMs - toMs : 0 };
 };

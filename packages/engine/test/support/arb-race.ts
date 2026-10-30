@@ -1,6 +1,7 @@
 // A deterministic race on a 1000 m track, 16 ms frames, built through the encoder, with optional session-phase beats
 // (review 2 B5): the start (five start lights and lights out, perhaps after a formation lap whose clock resets at its
 // end), a neutralisation (SCAR and safety car status, or either alone), a red flag and a mid-race fall of the session time.
+// Up to two rewinds back to back, each perhaps with frames that still carry the pre-rewind session time (review 3 E1).
 import fc from 'fast-check';
 import { feedId } from '@pitwall/domain';
 import type { EventDetails, Packet } from '@pitwall/protocol';
@@ -38,13 +39,24 @@ export type PhaseBeats = {
 /** No phase beat: the engine joins a race in progress and nothing else happens. */
 export const NO_PHASES: PhaseBeats = { start: 'none', neutralisation: undefined, redFlag: undefined, fall: undefined };
 
+/**
+ * One rewind of the game: `back` frames behind the frame before it, reported by an FLBK event or by the frame id going
+ * back. Its first `stale` frames still carry the session time the game had before the rewind (inventory 1.10: the
+ * target's frame ids with the old session time); they belong to the target's moment.
+ */
+export type Rewind = { back: number; viaEvent: boolean; stale: number };
+
 export type RaceParams = {
   cars: number;
   frames: number;
   speeds: number[];
   jitter: number[];
   truncation: number[];
-  flashback: { at: number; back: number; viaEvent: boolean } | undefined;
+  /**
+   * A rewind at frame `at` (the frames sent before it are 0..at-1), and perhaps a second one `after` frames past the
+   * first one's stale frames, on its new timeline (inventory 1.10: rewinds 0.8 and 1.5 s apart).
+   */
+  flashback: (Rewind & { at: number; then: (Rewind & { after: number }) | undefined }) | undefined;
   phases: PhaseBeats;
 };
 
@@ -72,18 +84,41 @@ const arbPhases: fc.Arbitrary<PhaseBeats> = fc.record({
   fall: fc.option(fc.record({ after: fc.integer({ min: 0, max: 219 }), ms: fc.integer({ min: 100, max: 1000 }) }), { nil: undefined }),
 });
 
-export const arbRace: fc.Arbitrary<RaceParams> = fc.record({
-  cars: fc.integer({ min: 1, max: 6 }),
-  frames: fc.integer({ min: 60, max: 300 }),
-  speeds: fc.array(fc.integer({ min: 15, max: 45 }), { minLength: 6, maxLength: 6 }),
-  jitter: fc.array(fc.integer({ min: 0, max: 10 }), { minLength: 1, maxLength: 20 }),
-  // the game truncates sectors: lap − Σ ∈ 0..2
-  truncation: fc.array(fc.integer({ min: 0, max: 2 }), { minLength: 1, maxLength: 5 }),
-  flashback: fc.option(fc.record({ at: fc.integer({ min: 20, max: 299 }), back: fc.integer({ min: 3, max: 60 }), viaEvent: fc.boolean() }), {
-    nil: undefined,
+/** A rewind within a race of `frames` frames, perhaps followed by a second one. */
+const arbFlashback = (frames: number): fc.Arbitrary<RaceParams['flashback']> =>
+  fc.option(
+    fc.record({
+      at: fc.integer({ min: 20, max: frames - 1 }),
+      back: fc.integer({ min: 3, max: 60 }),
+      viaEvent: fc.boolean(),
+      stale: fc.integer({ min: 0, max: 3 }),
+      then: fc.option(
+        // about 1 s apart at most; mostly close behind the first one, so the second rewind's replay often goes back
+        // across the first one's stale frames (the snapshot it restores lies before them)
+        fc.record({
+          after: fc.oneof({ arbitrary: fc.integer({ min: 4, max: 14 }), weight: 3 }, { arbitrary: fc.integer({ min: 2, max: 70 }), weight: 1 }),
+          back: fc.oneof({ arbitrary: fc.integer({ min: 3, max: 8 }), weight: 3 }, { arbitrary: fc.integer({ min: 3, max: 80 }), weight: 1 }),
+          viaEvent: fc.boolean(),
+          stale: fc.integer({ min: 0, max: 3 }),
+        }),
+        { nil: undefined },
+      ),
+    }),
+    { nil: undefined },
+  );
+
+export const arbRace: fc.Arbitrary<RaceParams> = fc.integer({ min: 60, max: 300 }).chain((frames) =>
+  fc.record({
+    cars: fc.integer({ min: 1, max: 6 }),
+    frames: fc.constant(frames),
+    speeds: fc.array(fc.integer({ min: 15, max: 45 }), { minLength: 6, maxLength: 6 }),
+    jitter: fc.array(fc.integer({ min: 0, max: 10 }), { minLength: 1, maxLength: 20 }),
+    // the game truncates sectors: lap − Σ ∈ 0..2
+    truncation: fc.array(fc.integer({ min: 0, max: 2 }), { minLength: 1, maxLength: 5 }),
+    flashback: arbFlashback(frames),
+    phases: arbPhases,
   }),
-  phases: arbPhases,
-});
+);
 
 /** The frame of lights out, if the race starts with lights. */
 const lightsOutAt = (start: PhaseBeats['start']): number | undefined => (start === 'none' ? undefined : LIGHTS_FROM[start] + 5);
@@ -188,35 +223,85 @@ function build(p: RaceParams, ticks: Tick[], extra: ReadonlyMap<number, EventDet
 
 const fresh = (n: number): Car[] => Array.from({ length: n }, () => ({ total: 0, lapStart: 0, lastLap: 0, s1: 0, s2: 0, done: [] }));
 
+/** A timeline: from each fork's frame on, the cars drive with its salt (salt 0 from frame 0). */
+type Fork = { from: number; salt: number };
+
+/** The ticks of frames 0..to-1 of the timeline `forks`. */
+function ticksOf(p: RaceParams, forks: readonly Fork[], to: number): Tick[] {
+  const cars = fresh(p.cars);
+  return forks.flatMap((fork, i) => simulate(p, cars, fork.from, Math.min(forks[i + 1]?.from ?? to, to), fork.salt));
+}
+
+/** A rewind taken: its target frame, its stale frames and the timeline it starts. */
+type Taken = { target: number; stale: number; viaEvent: boolean; forks: Fork[] };
+
+/** `frames` with frames `from`.. (`count` of them) carrying the session time `ms`; the packets keep the game's. */
+const carrying = (frames: Frame[], from: number, count: number, ms: number): Frame[] =>
+  frames.map((f, i) => (i >= from && i < from + count ? { ...f, sessionTime: ms } : f));
+
 /**
- * The race's frames, and the frames of a run that never had the ones a flashback discards. A flashback goes back no
- * further than a formation lap's lights out: the game cannot rewind past the race start.
+ * The race's frames, and the frames of a run that never had the ones a rewind discards. A rewind goes back no further
+ * than a formation lap's lights out: the game cannot rewind past the race start. In the reference, a rewind's stale
+ * frames carry the session time of its target frame, the moment they belong to.
  */
 export function raceFrames(p: RaceParams): { frames: Frame[]; reference: Frame[] } {
   const earliest = p.phases.start === 'formation' ? lightsOutAt('formation')! : 1;
   const fb = p.flashback && p.flashback.at < p.frames && p.flashback.at - p.flashback.back >= earliest ? p.flashback : undefined;
   if (!fb) {
-    const frames = build(p, simulate(p, fresh(p.cars), 0, p.frames, 0));
+    const frames = build(p, ticksOf(p, [{ from: 0, salt: 0 }], p.frames));
     return { frames, reference: frames };
   }
-  const target = fb.at - fb.back;
-  const cars = fresh(p.cars);
-  const prefix = simulate(p, cars, 0, target + 1, 0);
-  const fork = structuredClone(cars);
-  // frames 0..at-1
-  const original = build(p, [...prefix, ...simulate(p, cars, target + 1, fb.at, 0)]);
-  const details: EventDetails = { code: 'FLBK', flashbackFrameIdentifier: target, flashbackSessionTime: timeOf(p.phases, target) / 1000 };
-  // salt 3: the timeline diverges
-  const replayed = build(
-    p,
-    [...prefix, ...simulate(p, fork, target + 1, target + 1 + p.frames - fb.at, 3)],
-    fb.viaEvent ? new Map([[target + 1, details]]) : undefined,
-  );
-  // overallFrameIdentifier goes on rising across the rewind; the receive times stay the reference's, so the state's
-  // last receive time compares equal
-  const continuation = replayed.slice(target + 1).map((f, k) => ({ ...f, overallFrameId: fb.at + k }));
-  return {
-    frames: [...original, ...continuation],
-    reference: replayed.map((f) => ({ ...f, events: f.events.filter((e) => e.details.code !== 'FLBK') })),
+  // salt 3, then salt 5: each rewind's timeline diverges
+  const first: Taken = { target: fb.at - fb.back, stale: fb.stale, viaEvent: fb.viaEvent, forks: [{ from: 0, salt: 0 }, { from: fb.at - fb.back + 1, salt: 3 }] };
+  const rewinds = [first];
+  /** Frames sent on each timeline: the original up to `at`, then each rewind's continuation; `p.frames` in all. */
+  const sent = [fb.at];
+  const then = fb.then;
+  const at2 = then && first.target + 1 + fb.stale + then.after;
+  if (then && at2 !== undefined && at2 - then.back >= earliest && fb.at + (at2 - first.target - 1) < p.frames) {
+    const target = at2 - then.back;
+    const forks = [...first.forks.filter((f) => f.from <= target), { from: target + 1, salt: 5 }];
+    rewinds.push({ target, stale: then.stale, viaEvent: then.viaEvent, forks });
+    sent.push(at2 - first.target - 1);
+  }
+  sent.push(p.frames - sent.reduce((a, b) => a + b, 0));
+
+  /** Frames 0..length-1 of the timeline `forks`, with the FLBK of `rewind` if it reports by event. */
+  const timelineOf = (forks: readonly Fork[], length: number, rewind?: Taken): Frame[] => {
+    const extra = rewind?.viaEvent
+      ? new Map<number, EventDetails>([[rewind.target + 1, { code: 'FLBK', flashbackFrameIdentifier: rewind.target, flashbackSessionTime: timeOf(p.phases, rewind.target) / 1000 }]])
+      : undefined;
+    return build(p, ticksOf(p, forks, length), extra);
   };
+  // frames 0..at-1 of the original
+  let frames = timelineOf(first.forks.slice(0, 1), fb.at);
+  let timeline = frames;
+  /** Per rewind, how many of its first frames carry the session time of the frame before it. */
+  const staleCounts: number[] = [];
+  rewinds.forEach((r, k) => {
+    timeline = timelineOf(r.forks, r.target + 1 + sent[k + 1]!, r);
+    const own = timeline.slice(r.target + 1);
+    // The first `stale` frames still carry the session time of the frame before the rewind. A frame right after them
+    // that carries that time anyway (the new timeline reaching it again) is one of them: nothing tells it apart. A frame
+    // on another time ends them, so the race does not end inside them (the engine would still wait for that frame).
+    const oldMs = frames.at(-1)!.sessionTime;
+    const staleFrom = (n: number): number => {
+      let count = Math.min(n, own.length);
+      while (count < own.length && own[count]!.sessionTime === oldMs) count++;
+      return count;
+    };
+    const stale = staleFrom(r.stale) < own.length ? staleFrom(r.stale) : staleFrom(0);
+    staleCounts.push(stale);
+    // overallFrameIdentifier goes on rising across the rewind; the receive times stay the timeline's, so the state's
+    // last receive time compares equal
+    frames = [...frames, ...own.map((f, i) => ({ ...f, overallFrameId: frames.length + i, ...(i < stale && { sessionTime: oldMs }) }))];
+  });
+
+  // the last timeline from its start; a stale frame a later rewind discarded is not in it
+  let reference = timeline.map((f) => ({ ...f, events: f.events.filter((e) => e.details.code !== 'FLBK') }));
+  rewinds.forEach((r, k) => {
+    const kept = Math.min(staleCounts[k]!, (rewinds[k + 1]?.target ?? Infinity) - r.target);
+    if (kept > 0) reference = carrying(reference, r.target + 1, kept, reference[r.target]!.sessionTime);
+  });
+  return { frames, reference };
 }

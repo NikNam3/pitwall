@@ -8,7 +8,11 @@ import { expectScheduledIncremental, underNeutralisation } from '../support/sche
 
 const run = (frames: Frame[], each?: (r: StepResult) => void) => {
   const runner = new SessionRunner(initFor(frames));
-  for (const f of frames) each?.(runner.apply(f));
+  for (const f of frames) {
+    // applied whether or not `each` is given: an optional call skips evaluating its argument
+    const result = runner.apply(f);
+    each?.(result);
+  }
   return runner;
 };
 const OPTS = { numRuns: 40 };

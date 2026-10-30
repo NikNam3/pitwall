@@ -2,10 +2,10 @@ import { toSessionTime, type Ms, type SessionTime } from '@pitwall/domain';
 import type { EventDetails } from '@pitwall/protocol';
 import type { Frame } from '../frame/frame.ts';
 import { historyLengths, truncateHistory, type HistoryDelta } from '../history/delta.ts';
-import { noteRewind, onRaceClock, rewindMarkOf } from '../history/situations/time-jumps.ts';
+import { onRaceClock, rewindMarkOf } from '../history/situations/time-jumps.ts';
 import type { EngineState } from '../state/engine-state.ts';
 import { initialState } from '../step/initial-state.ts';
-import { ALL_CHANGE_TAGS, step, type ChangeTag, type ClockFall, type LapCorrection } from '../step/step.ts';
+import { ALL_CHANGE_TAGS, step, type ChangeTag, type ClockFall, type ClockJump, type FlashbackReport, type LapCorrection } from '../step/step.ts';
 import { copyPlain } from '../util/copy-plain.ts';
 import type { DeepReadonly } from '../util/deep-readonly.ts';
 import { SnapshotStore } from './snapshots.ts';
@@ -17,7 +17,8 @@ export type FlashbackInfo = { targetFrameId: number; targetSessionTime: SessionT
  * What applying one frame did. When it changed history recorded before it (a flashback, lights out discarding the
  * formation lap, the start's settling re-stamping it) or took back what readers saw (a neutralisation dropped
  * unconfirmed), `changed` holds every tag and `delta.truncated` is true; `flashback` tells a flashback. `clockFall`
- * reports a fall of the session time that changed nothing recorded (spec 3.3). Session times are on the race clock.
+ * reports a fall of the session time that changed nothing recorded, `clockJump` a forward jump that is no post-session
+ * jump (spec 3.3); both carry the game's times. Every other session time is on the race clock.
  */
 export type StepResult = {
   state: DeepReadonly<EngineState>;
@@ -26,6 +27,7 @@ export type StepResult = {
   delta: HistoryDelta;
   flashback?: FlashbackInfo;
   clockFall?: ClockFall;
+  clockJump?: ClockJump;
 };
 
 export type SessionRunnerOptions = {
@@ -45,6 +47,9 @@ const framesIn = (ms: number): number => Math.ceil((ms / 1000) * MAX_FRAMES_PER_
 /** The frame a flashback goes back to; without an `FLBK` event its session time is only known after the replay. */
 type Target = { frameId: number; sessionTime?: SessionTime };
 
+/** An applied frame and the runner's decision on it, given again to `step` whenever a rewind replays the frame. */
+type Kept = { frame: Frame; report?: FlashbackReport };
+
 type FlashbackDetails = Extract<EventDetails, { code: 'FLBK' }>;
 const isFlashback = (details: EventDetails): details is FlashbackDetails => details.code === 'FLBK';
 
@@ -54,8 +59,9 @@ const isFlashback = (details: EventDetails): details is FlashbackDetails => deta
  * newest snapshot at or before the target, cuts the history back, replays the kept frames up to the target and
  * then applies the game's new frame, so the discarded frames leave no trace. A step that rewrote earlier history (the
  * situation tracker at the race start) drops every snapshot and kept frame, so no later rewind goes back before it.
- * The runner alone decides what reports a flashback; it marks such a frame (`flashbackReport`), and every other
- * session-time jump is the situation tracker's (`history/situations/`).
+ * The runner alone decides what reports a flashback; it hands that decision to `step` with the frame (a
+ * `FlashbackReport`) and keeps it with the frame for every replay. Every other session-time jump is the situation
+ * tracker's (`history/situations/`).
  */
 export class SessionRunner {
   #state: EngineState;
@@ -63,7 +69,7 @@ export class SessionRunner {
   readonly #snapshotEveryMs: number;
   readonly #snapshotEveryFrames: number;
   /** Applied frames, ids strictly rising; they hold every frame after the snapshot at the replay window's start. */
-  #frames: Frame[] = [];
+  #frames: Kept[] = [];
   #lastOverallFrameId: number;
   /**
    * The target of the last rewind, until the new timeline has moved past the frame after it. The game can report
@@ -90,18 +96,19 @@ export class SessionRunner {
     return { snapshots: this.#snapshots.size, frames: this.#frames.length };
   }
 
-  apply(received: Frame): StepResult {
+  apply(frame: Frame): StepResult {
     const before = historyLengths(this.#state.history);
-    const report = this.#flashbackReport(received);
-    const target = report && this.#takes(report) ? report : undefined;
-    const frame: Frame = report ? { ...received, flashbackReport: true } : received;
+    const reported = this.#reportedTarget(frame);
+    const target = reported && this.#takes(reported) ? reported : undefined;
+    // The runner's decision on the frame; a rewind's mark is of the state it leaves, so taken before restoring.
+    const report: FlashbackReport | undefined = reported && (target ? { rewound: rewindMarkOf(this.#state) } : {});
     const flashback = target && this.#rewind(target, frame);
-    const { changed, corrections, rewritten, discarded, clockFall } = step(this.#state, frame);
+    const { changed, corrections, rewritten, discarded, clockFall, clockJump } = step(this.#state, frame, report);
     this.#lastOverallFrameId = frame.overallFrameId;
     if (target) this.#rewoundTo = target.frameId;
     else if (this.#rewoundTo !== undefined && frame.frameId > this.#rewoundTo + 1) this.#rewoundTo = undefined;
     if (rewritten) this.#restart();
-    else this.#keep(frame);
+    else this.#keep({ frame, ...(report && { report }) });
     const truncated = flashback !== undefined || rewritten === true || discarded === true;
     return {
       state: this.#state,
@@ -110,6 +117,7 @@ export class SessionRunner {
       delta: { before, after: historyLengths(this.#state.history), truncated },
       ...(flashback && { flashback }),
       ...(clockFall && { clockFall }),
+      ...(clockJump && { clockJump }),
     };
   }
 
@@ -117,7 +125,7 @@ export class SessionRunner {
    * The flashback the frame reports: an `FLBK` event's target, else the frame before this one when `frameId` went back
    * while `overallFrameId` rose. A `frameId` going back while `overallFrameId` does not rise reports none.
    */
-  #flashbackReport(frame: Frame): Target | undefined {
+  #reportedTarget(frame: Frame): Target | undefined {
     const event = frame.events.map((e) => e.details).find(isFlashback);
     if (event) return { frameId: event.flashbackFrameIdentifier, sessionTime: toSessionTime(event.flashbackSessionTime) };
     return frame.frameId < this.#state.lastFrameId && frame.overallFrameId > this.#lastOverallFrameId ? { frameId: frame.frameId - 1 } : undefined;
@@ -130,11 +138,11 @@ export class SessionRunner {
 
   /**
    * Restores the state after the target frame, or after the frame before `frame` when the game sends `frame` with an
-   * id at or below the target: the state never runs ahead of the frame applied next.
+   * id at or below the target: the state never runs ahead of the frame applied next. Each replayed frame gets the
+   * runner's decision it got when first applied.
    */
   #rewind(target: Target, frame: Frame): FlashbackInfo {
     const rewoundFrom = this.#state.sessionTime;
-    const mark = rewindMarkOf(this.#state);
     const replayTo = Math.min(target.frameId, frame.frameId - 1);
     const snapshot = this.#snapshots.newestAtOrBefore(replayTo);
     this.#snapshots.dropAfter(snapshot.frameId);
@@ -142,9 +150,8 @@ export class SessionRunner {
     truncateHistory(history, snapshot.lengths);
     this.#state = { ...copyPlain(snapshot.state), history, ...(weekend && { weekend }) };
     // A target older than the window has no kept frames after its snapshot: the snapshot's state stands for it.
-    for (const f of this.#frames) if (f.frameId > snapshot.frameId && f.frameId <= replayTo) step(this.#state, f);
-    this.#frames = this.#frames.filter((f) => f.frameId <= replayTo);
-    noteRewind(this.#state, mark, frame);
+    for (const { frame: f, report } of this.#frames) if (f.frameId > snapshot.frameId && f.frameId <= replayTo) step(this.#state, f, report);
+    this.#frames = this.#frames.filter(({ frame: f }) => f.frameId <= replayTo);
     const targetSessionTime = target.sessionTime === undefined ? this.#state.sessionTime : onRaceClock(this.#state, target.sessionTime);
     return {
       targetFrameId: target.frameId,
@@ -164,17 +171,18 @@ export class SessionRunner {
    * Keeps the applied frame. Once per `snapshotEveryMs` of session time (or the frames that many ms take at most)
    * takes a snapshot and drops the frames no replay needs.
    */
-  #keep(frame: Frame): void {
+  #keep(kept: Kept): void {
+    const { frame } = kept;
     // A frame id at or below kept ones (a flashback, or a report of one that was ignored) makes those stale.
     this.#snapshots.dropAfter(frame.frameId - 1);
-    while ((this.#frames.at(-1)?.frameId ?? -Infinity) >= frame.frameId) this.#frames.pop();
-    this.#frames.push(frame);
+    while ((this.#frames.at(-1)?.frame.frameId ?? -Infinity) >= frame.frameId) this.#frames.pop();
+    this.#frames.push(kept);
     const newest = this.#snapshots.newest;
     const due = this.#state.sessionTime >= newest.sessionTime + this.#snapshotEveryMs || frame.frameId >= newest.frameId + this.#snapshotEveryFrames;
     if (!due) return;
     this.#snapshots.take(this.#state, frame.frameId);
     const start = this.#snapshots.windowStart.frameId;
-    const firstNeeded = this.#frames.findIndex((f) => f.frameId > start);
+    const firstNeeded = this.#frames.findIndex(({ frame: f }) => f.frameId > start);
     this.#frames.splice(0, firstNeeded < 0 ? this.#frames.length : firstNeeded);
   }
 }

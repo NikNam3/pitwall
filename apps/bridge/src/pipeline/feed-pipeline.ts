@@ -63,7 +63,10 @@ export type FeedPipelineOptions = {
   realismNextSession?: () => boolean;
 };
 
-/** Where the feed is: the newest frame's session time and the player's lap. */
+/**
+ * Where the feed is: the newest frame's session time and the player's lap. The time is the game's own, not the race
+ * clock: `--at-time` and the dev supervisor's restart (`jumpToTime`) name a moment of the recording by it.
+ */
 export type FeedPosition = { sessionTimeMs: number; playerLap: number };
 
 type SessionStarted = Extract<TrackerEvent, { type: 'sessionStarted' }>;
@@ -296,7 +299,7 @@ export class FeedPipeline {
     // datagram. Inside a session the `feed-status` feature also publishes the same value per frame. Two producers
     // by decision, until a feed-level binding kind replaces this one (sub-project 2).
     this.#o.hub.publishState(this.#feedId, 'feed.status', () => status);
-    this.#publishInsights(this.#alerts.feedChanged(view, metrics.lastSessionTime ?? toSessionTime(0)));
+    this.#publishInsights(this.#alerts.feedChanged(view, this.#sessionTime()));
   }
 
   /** A result only ever arrives for the running session: `#endSession` drops the runs of an ended one. */
@@ -320,9 +323,13 @@ export class FeedPipeline {
     }
   }
 
-  /** Feed-level insights are stamped with the newest session time seen, 0 before any. */
+  /**
+   * Feed-level insights are stamped on the engine's race clock (spec 3.3), like every entry the engine records: the
+   * time of the newest frame the session's engine applied. Before the engine runs, no fall has moved the race clock
+   * off the game's, so the newest session time seen stands in; 0 before any.
+   */
   #sessionTime(): SessionTime {
-    return this.#tracker.metrics.lastSessionTime ?? toSessionTime(0);
+    return (this.#session ?? this.#ended)?.sessionTime ?? this.#tracker.metrics.lastSessionTime ?? toSessionTime(0);
   }
 
   /** Bugs are logged, never thrown into the source's callback or a timer. */

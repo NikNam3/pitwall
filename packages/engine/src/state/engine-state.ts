@@ -127,7 +127,10 @@ export type PhaseBook = {
    * falls but at a flashback or the start's own rules.
    */
   clockOffsetMs: Ms;
-  /** The receive time of the previous frame (wall clock, ms), for offline pauses and the post-session jump. */
+  /**
+   * The receive time of the previous frame (wall clock, ms), for offline pauses and the post-session jump; unset only
+   * before the session's first frame.
+   */
   lastWallMs?: number | undefined;
   /**
    * Set by a rewind whose frame still carried the pre-rewind session time (inventory 1.10): the game's session time
