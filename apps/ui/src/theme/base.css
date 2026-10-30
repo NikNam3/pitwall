@@ -9,10 +9,7 @@
 html,
 body {
   margin: 0;
-  height: 100%;
-  /* The panel never scrolls as a page: a panel clips its own content, and the browser's (white) scrollbars never show. */
-  overflow: hidden;
-  /* Inner scroll areas (overlays) get dark scrollbars. */
+  /* Scrollbars, where a page or an inner area scrolls, are dark. */
   color-scheme: dark;
   background: var(--pw-bg);
   color: var(--pw-text);
@@ -21,4 +18,11 @@ body {
   line-height: var(--pw-line);
   /* Ligatures off globally: digits and operators stay one cell wide. */
   font-variant-ligatures: none;
+}
+
+/* The app window never scrolls as a page: a panel clips its own content (main.ts sets the class; the gallery page scrolls). */
+html.pw-window,
+html.pw-window body {
+  height: 100%;
+  overflow: hidden;
 }
