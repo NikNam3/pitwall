@@ -30,12 +30,10 @@ const FORMATION_SC_TYPE = 3;
 const STAGES: readonly NeutralisedStage[] = ['deployed', 'returning', 'returned', 'resume'];
 
 /**
- * Session packets after a deployment that may still confirm it with the safety car status; the status follows the SCAR
- * by one packet, 0.5 to 1.3 s (spec 3.1; inventory 1.4).
+ * Session time after a SCAR deployment within which the safety car status must show its car: the status follows the
+ * SCAR by 0.6 to 1.31 s in the recordings (inventory 1.4); spec 3.1, user ruling 2026-10-30.
  */
-const CONFIRM_WITHIN_SESSION_PACKETS = 2;
-/** A Session packet this soon after a deployment left the game before its status could show it (observed: 29 ms). */
-const SENT_WITH_DEPLOYMENT_MS = 100;
+const CONFIRM_WITHIN_MS = 3000;
 /**
  * A race joined with a lap timer above this is under way: on the grid the timers read 0, or 510 ms for the cars past
  * the line in raceZandvoortOnline's hold (t1-diagnosis.md S3).
@@ -118,24 +116,19 @@ const deploy = (state: EngineState, car: NeutralisingCar, at: SessionTime): void
   // An earlier deployment still waiting stands: this one closes it.
   confirm(state);
   const replaced = situations.session;
-  phaseBook.unconfirmed = { closed: closed(state, replaced, at, 'rolling'), replaced, sessionPackets: 0 };
+  phaseBook.unconfirmed = { closed: closed(state, replaced, at, 'rolling'), replaced };
   situations.session = neutralised(state, car, at, ['deployed']);
 };
 
 /**
- * A Session packet after the deployment: its status confirms the neutralisation, or counts against it when it shows
- * none. A packet that still shows the earlier neutralisation (a VSC upgraded to an SC: raceZandvoortUidReuse at 924.231
- * s, the SC status 1.3 s later) or that came right after the deployment (built before it: inventory MiR, 29 ms after the
- * VSC's SCAR at 203.137 s) does not count.
+ * A deployment stands once the safety car status shows its car; when it has not within `CONFIRM_WITHIN_MS` of the SCAR,
+ * it never happened (an SC undone by a flashback, one announced before a simulated end).
  */
-const countConfirmation = (state: EngineState, frame: Frame): void => {
+const confirmOrExpire = (state: EngineState, at: SessionTime): void => {
   const pending = state.open.phaseBook.unconfirmed;
-  if (!pending || !frame.session) return;
-  const shown = CAR_OF_FLAG[state.session.flag];
-  if (shown === carOf(state.open.situations.session)) return confirm(state);
-  if (shown !== undefined || frame.sessionTime - pending.closed.end < SENT_WITH_DEPLOYMENT_MS) return;
-  pending.sessionPackets++;
-  if (pending.sessionPackets >= CONFIRM_WITHIN_SESSION_PACKETS) drop(state);
+  if (!pending) return;
+  if (CAR_OF_FLAG[state.session.flag] === carOf(state.open.situations.session)) confirm(state);
+  else if (at - pending.closed.end > CONFIRM_WITHIN_MS) drop(state);
 };
 
 /**
@@ -247,10 +240,11 @@ const everyCarFinished = (state: EngineState): boolean => {
   return inSession.length > 0 && inSession.every((car) => car.timing.resultStatus === 'finished');
 };
 
-/** SEND ends the session as it stands: a neutralisation not yet confirmed is kept. Practice and qualifying finish on time over. */
+/** SEND ends the session: a neutralisation not yet confirmed is dropped. Practice and qualifying finish on time over. */
 const endSession = (state: EngineState, at: SessionTime): void => {
+  if (state.open.situations.session.kind === 'postSession') return;
+  drop(state);
   const open = state.open.situations.session;
-  if (open.kind === 'postSession') return;
   if (!isRace(state) && !isOver(open) && everyCarFinished(state)) enter(state, phase(state, 'finished', at));
   enter(state, phase(state, 'postSession', at));
 };
@@ -341,13 +335,13 @@ export const joinSession = (state: EngineState, frame: Frame): void => {
 };
 
 /**
- * Applies the frame's phase signals, in order: the confirmation of a waiting neutralisation by this frame's Session
- * packet, the events (so a SCAR and the status change of the same frame make one neutralisation), the safety car
- * status, a final classification, and the clock starting in practice and qualifying.
+ * Applies the frame's phase signals, in order: the confirmation (or the expiry) of a waiting neutralisation, the events
+ * (so a SCAR and the status change of the same frame make one neutralisation), the safety car status, a final
+ * classification, and the clock starting in practice and qualifying.
  */
 export const applyPhaseSignals = (state: EngineState, frame: Frame, out: StepOutput): void => {
   const at = frame.sessionTime;
-  countConfirmation(state, frame);
+  confirmOrExpire(state, at);
   for (const { details } of frame.events) applyEvent(state, frame, details, out);
   applyStatus(state, at);
   if (frame.finalClassification) enterPostSession(state, at);

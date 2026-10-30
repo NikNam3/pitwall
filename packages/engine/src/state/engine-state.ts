@@ -108,10 +108,10 @@ export type PhaseBook = {
   started: boolean;
   /**
    * A neutralisation opened on its SCAR deployment and not yet confirmed by the safety car status: the span it closed
-   * (recorded on confirmation) and the phase it replaced (back in place when it is dropped), and how many later Session
-   * packets did not confirm it.
+   * (recorded on confirmation; its end is the deployment's time) and the phase it replaced (back in place when it is
+   * dropped).
    */
-  unconfirmed?: { closed: SessionPhaseSpan; replaced: OpenSessionPhase; sessionPackets: number } | undefined;
+  unconfirmed?: { closed: SessionPhaseSpan; replaced: OpenSessionPhase } | undefined;
   /** The history lengths when the formation phase opened: lights out cuts the history back to them (spec 3.2). */
   formationFrom?: HistoryLengths | undefined;
   /** The history lengths when the race's start lights began (not a restart's): where the start's entries begin. */
