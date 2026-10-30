@@ -75,6 +75,7 @@ describe('builders', () => {
     expect(l3.fuelAtStartKg).toMatchObject({ value: 96 });
     expect(l3.fuelAtEndKg).toMatchObject({ value: 94 });
     expect(l3.tyreAgeAtStart).toBe(2);
+    expect(l3.wearAtStartPct.fl).toMatchObject({ value: 2 });
     expect(l3.wearAtEndPct.fl).toMatchObject({ value: 3 });
     expect(l3.positionAtEnd).toBe(2);
     expect(l3.sectorTimesMs.reduce((a, b) => a + b, 0)).toBe(91_001);

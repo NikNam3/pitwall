@@ -420,7 +420,7 @@
       "features": [
         "full-lap segment, 8 952 201 bytes (the shortest window that holds the lap and its confirmation); 2 context packets (Session, Participants) first; session time 166.408 to 259.682, rising throughout",
         "Q2 (session type 6), 15 active cars (numActiveCars 15), car 14 the player, teammate 8",
-        "car 14 starts on its out lap from the garage (lap 1, driverStatus outLap, negative lap distance), crosses the line at 166.466 and turns flyingLap on the same lap 1; lap 1 92.485 s (sectors 27.286/39.038/26.160, valid, softs) from line to line, completed at 258.966 (line 258.937), confirmed by SessionHistory at 259.649; the engine records it with outLap true",
+        "car 14 starts on its out lap from the garage (lap 1, driverStatus outLap, negative lap distance), crosses the line at 166.466 and turns flyingLap on the same lap 1; lap 1 92.485 s (sectors 27.286/39.038/26.160, valid, softs) from line to line, completed at 258.966 (line 258.937), confirmed by SessionHistory at 259.649; the engine restarts the lap at the line, so the flying lap is no out lap",
         "ten other cars complete lap 1 with its start before the segment, each confirmed; the fastest is car 8, 92.134 s (FTLP cars 6, 9, 8)",
         "lap-times: car 14's lap 1 is its personal best and holds the session-best sector 1; its projection on lap 2 is known from 258.937; the cut-off comes out at position 5 (15 active cars minus 5 + 5 eliminated)",
         "car 14 at the end of lap 1: tyre wear FL/FR/RL/RR 4/6/5/6 %, ERS store 0.148 MJ, deployed 3.209 MJ, harvested 3.035 MJ",

@@ -35,6 +35,12 @@ export type LapRecord = {
   /** `provisional` from LapData, `confirmed` once SessionHistory contains the lap. */
   status: 'provisional' | 'confirmed';
   completedAt: SessionTime;
+  /**
+   * Sampled at the lap start from the car state of the frame that starts the lap; `unknown('notReceived')` for a lap the
+   * engine joined after its start. With the lap-end samples they give the lap's own wear and ERS change (rates per lap).
+   */
+  wearAtStartPct: Corners<Known<Percent>>;
+  ersStoreAtStartJ: Known<Joules>;
   // Sampled at the lap end from the car state of the frame that completes the lap (spec 3.3, A.1).
   wearAtEndPct: Corners<Known<Percent>>;
   ersStoreAtEndJ: Known<Joules>;

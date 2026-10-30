@@ -4,7 +4,7 @@ import { addLaps, carId, currentLaps, emptyCurrentLaps, unknown, type LapRecord 
 
 const none = unknown('notReceived');
 const corners = <T>(v: T) => ({ fl: v, fr: v, rl: v, rr: v });
-const lapEnd = { wearAtEndPct: corners(none), ersStoreAtEndJ: none, ersDeployedJ: none, ersHarvestedJ: none, damageAtEnd: none,
+const lapEnd = { wearAtStartPct: corners(none), ersStoreAtStartJ: none, wearAtEndPct: corners(none), ersStoreAtEndJ: none, ersDeployedJ: none, ersHarvestedJ: none, damageAtEnd: none,
   channelRange: { tyres: corners({ surfaceC: none, carcassC: none, pressurePsi: none }), brakesC: corners(none), engineC: none } };
 
 const lap = (car: number, lapNumber: number, status: LapRecord['status'], lapTimeMs = 70_000): LapRecord => ({

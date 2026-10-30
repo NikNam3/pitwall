@@ -19,8 +19,8 @@ const keyOf = (row: SessionDbRow): SessionKey => ({ sessionUid: row.session_uid,
 /** The named parameters of a key; a caller's key object may carry more fields than the statement binds. */
 const keyParams = ({ sessionUid, weekendId }: SessionKey) => ({ sessionUid, weekendId });
 
-/** Laps stored before the lap-end samples existed lack those fields: they read as `unknown('notReceived')`. */
-const withLapEndSamples = (lap: LapRecord): LapRecord => ({ ...unknownLapEnd(), ...lap });
+/** Laps stored before the lap-start or lap-end samples existed lack those fields: they read as `unknown('notReceived')`. */
+const withLapSamples = (lap: LapRecord): LapRecord => ({ ...unknownLapEnd(), ...lap });
 
 /** Read side of storage: sessions of a weekend and the history records stored for them, in write order. */
 export class WeekendRepository {
@@ -67,7 +67,7 @@ export class WeekendRepository {
   }
 
   lapsOf(key: SessionKey, driverKey?: DriverKey): LapRecord[] {
-    return this.read<LapRecord>(this.statements.laps, key, driverKey).map(withLapEndSamples);
+    return this.read<LapRecord>(this.statements.laps, key, driverKey).map(withLapSamples);
   }
 
   stintsOf(key: SessionKey, driverKey?: DriverKey): StintRecord[] {

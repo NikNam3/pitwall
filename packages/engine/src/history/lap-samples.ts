@@ -2,6 +2,7 @@ import { known, unknown, type CarState, type ChannelRange, type DamageParts, typ
 import type { LapCursor } from '../state/engine-state.ts';
 import { CORNER_NAMES, mapCorners } from '../step/corners.ts';
 
+export type LapStartSamples = Pick<LapRecord, 'wearAtStartPct' | 'ersStoreAtStartJ'>;
 export type LapEndSamples = Pick<LapRecord, 'wearAtEndPct' | 'ersStoreAtEndJ' | 'ersDeployedJ' | 'ersHarvestedJ' | 'damageAtEnd' | 'channelRange'>;
 
 type Reading = (car: CarState) => Known<number>;
@@ -77,6 +78,20 @@ const channelRange = (cursor: LapCursor, car: CarState, at: SessionTime): Channe
   return { tyres, brakesC, engineC: range(ENGINE_CHANNEL) };
 };
 
+const ersStoreOf = (car: CarState, at: SessionTime): Known<number> =>
+  car.energy.ers.known ? known(car.energy.ers.value.storeJ, at) : unknown(car.energy.ers.reason);
+
+const unknownLapStart = (): LapStartSamples => {
+  const none = unknown('notReceived');
+  return { wearAtStartPct: mapCorners(() => none), ersStoreAtStartJ: none };
+};
+
+/** Wear and ERS store from the car state of the frame that starts the lap; `notReceived` when the engine joined the lap after its start. */
+export const lapStartSamples = (car: CarState, at: SessionTime, fromStart: boolean): LapStartSamples => {
+  if (!fromStart) return unknownLapStart();
+  return { wearAtStartPct: mapCorners((corner) => car.tyres.corners[corner].wearPct), ersStoreAtStartJ: ersStoreOf(car, at) };
+};
+
 /**
  * What the car had at the end of the lap that `cursor` collected. Wear, ERS store and damage are read from the car state
  * of the completing frame; the totals and ranges come from the frames of the lap. The completing frame itself is
@@ -84,17 +99,21 @@ const channelRange = (cursor: LapCursor, car: CarState, at: SessionTime): Channe
  */
 export const lapEndSamples = (cursor: LapCursor, car: CarState, at: SessionTime): LapEndSamples => ({
   wearAtEndPct: mapCorners((corner) => car.tyres.corners[corner].wearPct),
-  ersStoreAtEndJ: car.energy.ers.known ? known(car.energy.ers.value.storeJ, at) : unknown(car.energy.ers.reason),
+  ersStoreAtEndJ: ersStoreOf(car, at),
   ersDeployedJ: total(cursor.ersDeployedJ, car.energy.ers, at),
   ersHarvestedJ: total(cursor.ersHarvestedJ, car.energy.ers, at),
   damageAtEnd: damageOf(car, at),
   channelRange: channelRange(cursor, car, at),
 });
 
-/** The lap-end samples of a lap they were never taken for (the engine never saw it, or it was stored before they existed): all `notReceived`. */
-export const unknownLapEnd = (): LapEndSamples => {
+/**
+ * The lap-start and lap-end samples of a lap they were never taken for (the engine never saw it, or it was stored before
+ * they existed): all `notReceived`.
+ */
+export const unknownLapEnd = (): LapStartSamples & LapEndSamples => {
   const none = unknown('notReceived');
   return {
+    ...unknownLapStart(),
     wearAtEndPct: mapCorners(() => none),
     ersStoreAtEndJ: none,
     ersDeployedJ: none,

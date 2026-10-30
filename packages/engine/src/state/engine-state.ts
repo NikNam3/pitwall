@@ -60,6 +60,11 @@ export type LapCursor = {
   fromStart: boolean;
   /** The car's lap distance on the lap's newest LapData frame; negative before the line (an out lap from the garage). */
   lapDistanceM: Metres;
+  /** The lap timer on the lap's newest LapData frame; a drop tells the line after an out lap on the same lap number. */
+  lapTimeMs: Ms;
+  /** Wear and ERS store from the frame that starts the lap; `unknown('notReceived')` when the engine joined the lap after its start. */
+  wearAtStartPct: LapRecord['wearAtStartPct'];
+  ersStoreAtStartJ: LapRecord['ersStoreAtStartJ'];
   /** Per band channel (the order of `CHANNELS` in `history/lap-samples.ts`): lowest and highest value of the lap's frames; min above max = none seen. */
   channelMin: number[];
   channelMax: number[];
