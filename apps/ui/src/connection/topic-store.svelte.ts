@@ -1,5 +1,6 @@
 // The typed, reference-counted topic store (spec 6.2). One per window; the shell reads it, widgets only get props.
 import {
+  canonicalJson,
   CONTRACT_VERSION,
   type ClientMessage,
   type FeedInfo,
@@ -31,14 +32,6 @@ type Entry = {
   acc: unknown;
   state: EntryState<unknown>;
 };
-
-/** JSON with sorted object keys, so equal params give equal text. */
-const canonical = (value: unknown): string =>
-  JSON.stringify(value, (_k, v: unknown) =>
-    typeof v === 'object' && v !== null && !Array.isArray(v)
-      ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
-      : v,
-  );
 
 /** The window's topics: shared, reference-counted subscriptions whose values are runes. */
 export class TopicStore {
@@ -90,7 +83,7 @@ export class TopicStore {
     key: TopicKey<T>,
     fold?: Fold<TopicValue<T>, V>,
   ): { state: EntryState<V>; release(): void } {
-    const text = canonical([key.feedId ?? null, key.topic, key.params, this.foldId(fold)]);
+    const text = canonicalJson([key.feedId ?? null, key.topic, key.params, this.foldId(fold)]);
     let entry = this.entries.get(text);
     if (entry === undefined) {
       let status = $state<EntryState<unknown>['status']>('waiting');
