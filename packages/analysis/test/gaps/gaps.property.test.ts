@@ -143,4 +143,25 @@ describe('gap properties', () => {
       }),
     );
   });
+
+  it("the leader average is the leader's race time at its newest crossing over its progress, at any moment", () => {
+    fc.assert(
+      fc.property(raceArb, (race) => {
+        const all = crossingsOf(race);
+        const history = all.slice(0, 1 + Math.floor(race.cut * (all.length - 1)));
+        const out = run(viewOf(history));
+        const leader = out.intervals[0]!.carId;
+        const newest = history.findLast((m) => m.carId === leader)!;
+        const value = gapperLines(out, { kind: 'leaderAverage' }).referenceLapMs;
+        const progress = progressOf(newest);
+        if (progress === 0) {
+          expect(value).toEqual({ known: false, reason: 'insufficientData' });
+          return;
+        }
+        if (!value.known) throw new Error(`no leader average at progress ${progress}: ${value.reason}`);
+        expect(Number.isInteger(value.value)).toBe(true);
+        expect(Math.abs(value.value - newest.at / (progress / MINI_SECTORS))).toBeLessThanOrEqual(0.5);
+      }),
+    );
+  });
 });
