@@ -19,7 +19,10 @@ svg text.s { font-size:12px; }
 .d { color:var(--pw-textDim); } .f { color:var(--pw-textFaint); } .w { color:var(--pw-warning); } .c { color:var(--pw-critical); }
 .b { color:var(--pw-best); } .g { color:var(--pw-personalBest); } .y { color:var(--pw-flagYellow); }
 .o, .hi { color:var(--pw-ownCar); font-weight:700; } .m { font-weight:700; }
-.gA-green { color:var(--pw-series3); opacity:0.55; } .gA-vsc { color:var(--pw-series5); opacity:0.55; } .gA-sc { color:var(--pw-series2); opacity:0.55; }
+.slot-both { display:inline-block; box-shadow:inset 0 1px 0 var(--pw-textFaint), inset 0 -1px 0 var(--pw-textFaint); }
+.slot-top { display:inline-block; box-shadow:inset 0 1px 0 var(--pw-textFaint); }
+.slot-base { display:inline-block; box-shadow:inset 0 -1px 0 var(--pw-textFaint); }
+.opp-cyan { color:#3fd8e8; font-weight:700; } .opp-teal { color:#2ec4b6; font-weight:700; } .opp-series6 { color:oklch(0.72 0.09 200); font-weight:700; }
 .gband { background:var(--pw-bgBand); }
 .ty-inter { color:var(--pw-series3); }
 .litW { background:var(--pw-text); color:var(--pw-bg); font-weight:700; } .litA { background:var(--pw-warning); color:var(--pw-bg); font-weight:700; }
@@ -36,7 +39,7 @@ table.sizes { border-collapse:collapse; color:var(--pw-textDim); } table.sizes t
 table.sizes th { color:var(--pw-textFaint); }
 </style></head><body><h1>1 · Rejoin ghost: crossing order and gap chart (V03, V04)</h1>
 <div class="note">Sample race for every page: Silverstone, <b>L23/52</b>. Our cars <b>KUH</b> (P6, medium, 23 laps old) and <b>LIN</b> (P9, stopped L15). The ghost is where KUH would be if it boxed at the end of this lap, per condition (<code>rejoin.car</code>). Our cars are white. Gap sign as SP3: a car ahead is negative, behind positive. Hover texts are in the captions (a screenshot cannot hover).</div>
-<div class="note"><b>The ghost's look is open (new Q1, page 6).</b> This page shows the recommended variant B (faint, letters and dashes): the ghost row in the faint text role, our code plain, the condition named by its column; in the chart faint lines told apart by dash and letter. Changing the variant changes all three displays together.</div>
+<div class="note"><b>New Q1:</b> B is chosen (faint row, letters and dashes); how it marks the slot is open (page 6). This page shows the recommended B1 (B with hairlines above and below): the ghost row in the faint text role between two solid hairlines, our code plain, the condition named by its column; in the chart faint lines told apart by dash and letter.</div>
 
 <h2>Crossing order (V03): full 54×9, compact 20×7</h2>
 <div class="row"><div><div class="panel" style="width:56ch"><div class="ph"><span class="t">Crossing order</span><span class="lk">1 · KUH</span><span class="sp"></span><span class="age"></span><span><svg width="14" height="14" viewBox="0 0 14 14" style="display:inline;vertical-align:-2px"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.1" stroke-dasharray="2 1.4"/><circle cx="7" cy="7" r="2.1" fill="none" stroke="currentColor" stroke-width="1.1"/></svg></span></div><pre> green <span title="measured · 6 stops">20.3 </span>       VSC <span title="stored · 3 stops">13.1<span class="d">ˢ</span></span>         SC <span title="default · community value, Silverstone (R3)">9.8<span class="d">ᵈ</span></span>        
@@ -44,7 +47,7 @@ table.sizes th { color:var(--pw-textFaint); }
   9 GAS   +3.684    7 ALO   +3.573    6 RUS   +1.304
  10 HAD   +4.593   <span class="o"> 8</span> <span class="o">LIN </span> <span class="o"> +4.079</span>    7 ALO   +3.573
  <span class="m">11</span> <span class="m">HUL </span> <span class="m"> +2.779</span>   <span class="m"> 9</span> <span class="m">GAS </span> <span class="m"> +3.684</span>   <span class="o"> 8</span> <span class="o">LIN </span> <span class="o"> +4.079</span>
- <span class="f">12</span> <span class="f">KUH </span> <span class="f"> +0.612</span>   <span class="f">10</span> <span class="f">KUH </span> <span class="f"> +0.458</span>   <span class="f"> 9</span> <span class="f">KUH </span> <span class="f"> +0.844</span>
+ <span class="slot-both"><span class="f">12</span> <span class="f">KUH </span> <span class="f"> +0.612</span></span>   <span class="slot-both"><span class="f">10</span> <span class="f">KUH </span> <span class="f"> +0.458</span></span>   <span class="slot-both"><span class="f"> 9</span> <span class="f">KUH </span> <span class="f"> +0.844</span></span>
  <span class="m">13</span> <span class="m">OCO </span> <span class="m"> +1.496</span>   <span class="m">11</span> <span class="m">HAD </span> <span class="m"> +4.135</span>   <span class="m">10</span> <span class="m">GAS </span> <span class="m"> +2.840</span>
  14 STR   +3.573   12 HUL   +2.779   11 HAD   +4.593
  15 BEA   +3.569   13 OCO   +2.396   12 HUL   +2.779</pre></div><div class="cap">full · green running: the three conditions side by side, three cars either side of the ghost · INT = <code>intervalMs</code>, the gap to the car ahead in the projected crossing order · P = the order item's <code>position</code> · the car directly ahead and behind the ghost bold · LIN white (ours) · VSC loss stored (ˢ), SC loss default (ᵈ); hover: "measured · 6 stops", "stored · 3 stops", "default · community value, Silverstone (R3)"</div></div></div>
@@ -52,20 +55,20 @@ table.sizes th { color:var(--pw-textFaint); }
  <span class="f"> P DRV      INT</span>
  10 HAD   +4.593
  <span class="m">11</span> <span class="m">HUL </span> <span class="m"> +2.779</span>
- <span class="f">12</span> <span class="f">KUH </span> <span class="f"> +0.612</span>
+ <span class="slot-both"><span class="f">12</span> <span class="f">KUH </span> <span class="f"> +0.612</span></span>
  <span class="m">13</span> <span class="m">OCO </span> <span class="m"> +1.496</span>
  14 STR   +3.573</pre></div><div class="cap">compact · green running: the green condition only, two cars either side</div></div><div><div class="panel" style="width:22ch"><div class="ph"><span class="t">Crossing order</span><span class="lk">1 · KUH</span><span class="sp"></span><span class="age"><span class="y">SC</span></span><span><svg width="14" height="14" viewBox="0 0 14 14" style="display:inline;vertical-align:-2px"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.1" stroke-dasharray="2 1.4"/><circle cx="7" cy="7" r="2.1" fill="none" stroke="currentColor" stroke-width="1.1"/></svg></span></div><pre> SC <span title="default · community value, Silverstone (R3)">9.8<span class="d">ᵈ</span></span>        
  <span class="f"> P DRV      INT</span>
   7 ALO   +3.573
  <span class="o"> 8</span> <span class="o">LIN </span> <span class="o"> +4.079</span>
- <span class="f"> 9</span> <span class="f">KUH </span> <span class="f"> +0.844</span>
+ <span class="slot-both"><span class="f"> 9</span> <span class="f">KUH </span> <span class="f"> +0.844</span></span>
  <span class="m">10</span> <span class="m">GAS </span> <span class="m"> +2.840</span>
  11 HAD   +4.593</pre></div><div class="cap">compact · SC out: the SC condition (the one that applies now)</div></div><div><div class="panel" style="width:56ch"><div class="ph"><span class="t">Crossing order</span><span class="lk">1 · KUH</span><span class="sp"></span><span class="age"><span class="y">SC</span></span><span><svg width="14" height="14" viewBox="0 0 14 14" style="display:inline;vertical-align:-2px"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.1" stroke-dasharray="2 1.4"/><circle cx="7" cy="7" r="2.1" fill="none" stroke="currentColor" stroke-width="1.1"/></svg></span></div><pre> green <span title="measured · 6 stops">20.3 </span>       VSC <span title="stored · 3 stops">13.1<span class="d">ˢ</span></span>         <span class="hi">SC 9.8ᵈ</span>        
  <span class="f"> P DRV      INT</span>   <span class="f"> P DRV      INT</span>   <span class="f"> P DRV      INT</span>
   9 GAS   +3.684    7 ALO   +3.573    6 RUS   +1.304
  10 HAD   +4.593   <span class="o"> 8</span> <span class="o">LIN </span> <span class="o"> +4.079</span>    7 ALO   +3.573
  <span class="m">11</span> <span class="m">HUL </span> <span class="m"> +2.779</span>   <span class="m"> 9</span> <span class="m">GAS </span> <span class="m"> +3.684</span>   <span class="o"> 8</span> <span class="o">LIN </span> <span class="o"> +4.079</span>
- <span class="f">12</span> <span class="f">KUH </span> <span class="f"> +0.612</span>   <span class="f">10</span> <span class="f">KUH </span> <span class="f"> +0.458</span>   <span class="f"> 9</span> <span class="f">KUH </span> <span class="f"> +0.844</span>
+ <span class="slot-both"><span class="f">12</span> <span class="f">KUH </span> <span class="f"> +0.612</span></span>   <span class="slot-both"><span class="f">10</span> <span class="f">KUH </span> <span class="f"> +0.458</span></span>   <span class="slot-both"><span class="f"> 9</span> <span class="f">KUH </span> <span class="f"> +0.844</span></span>
  <span class="m">13</span> <span class="m">OCO </span> <span class="m"> +1.496</span>   <span class="m">11</span> <span class="m">HAD </span> <span class="m"> +4.135</span>   <span class="m">10</span> <span class="m">GAS </span> <span class="m"> +2.840</span>
  14 STR   +3.573   12 HUL   +2.779   11 HAD   +4.593
  15 BEA   +3.569   13 OCO   +2.396   12 HUL   +2.779</pre></div><div class="cap">full · SC out: the SC condition's title white bold (relevant now); the header shows SC</div></div></div>

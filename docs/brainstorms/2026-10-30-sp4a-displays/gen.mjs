@@ -62,21 +62,28 @@ const TEXT = {
   tyreType: { slick: 'slick', inter: 'inter', wet: 'wet' },
 };
 
-// ---------------------------------------------------------------- the ghost (kit piece, spec 8.3): round-2 variants (page 6, new Q1)
-// Every variant is quieter than a real car and keeps our code plain (no glyph inside it). One variant is used in every
-// display at once: crossing order (table), gap chart (line), track map (marker). Pages 1 and 2 show REC_GHOST.
+// ---------------------------------------------------------------- the ghost (kit piece, spec 8.3): new Q1 answered B (faint,
+// letters and dashes); round 3 shows B and three ways to mark where the ghost slots in, all with solid hairlines.
+// One variant styles the crossing order (table), the gap chart (line) and the track map (marker) together.
 const CONDITIONS = ['green', 'vsc', 'sc'];
-const HUE = { green: 'series3', vsc: 'series5', sc: 'series2' };
 const LETTER = { green: 'G', vsc: 'VSC', sc: 'SC' };
+const B_LOOK = { colour: () => R.textFaint, opacity: 1, dash: (c) => ({ green: [2, 3], vsc: [7, 3], sc: [7, 3, 2, 3] })[c], marker: 'ring' };
 const GHOST_STYLES = {
-  A: { name: 'muted hue, dimmed', table: 'hue', colour: (c) => R[HUE[c]], opacity: 0.55, dash: () => [2, 3], marker: 'ring' },
-  B: { name: 'faint, letters and dashes', table: 'faint', colour: () => R.textFaint, opacity: 1, dash: (c) => ({ green: [2, 3], vsc: [7, 3], sc: [7, 3, 2, 3] })[c], marker: 'ring' },
-  C: { name: 'insertion rule', table: 'rule', colour: () => R.textFaint, opacity: 1, dash: (c) => ({ green: [2, 3], vsc: [7, 3], sc: [7, 3, 2, 3] })[c], marker: 'tick' },
-  D: { name: 'band', table: 'band', colour: () => R.textDim, opacity: 1, dash: (c) => ({ green: [2, 3], vsc: [7, 3], sc: [7, 3, 2, 3] })[c], marker: 'ring' },
+  B: { ...B_LOOK, name: 'B as answered: faint row', slot: '' },
+  B1: { ...B_LOOK, name: 'B with hairlines above and below', slot: 'slot-both' },
+  B2: { ...B_LOOK, name: 'B with a hairline on top', slot: 'slot-top' },
+  B3: { ...B_LOOK, name: 'B sitting on a rule', slot: 'slot-base' },
 };
-const REC_GHOST = 'B';
-/** The CSS class of a ghost's text in a variant. */
-const ghostText = (v, c) => (GHOST_STYLES[v].table === 'hue' ? `gA-${c}` : GHOST_STYLES[v].table === 'band' ? 'd' : 'f');
+const REC_GHOST = 'B1';
+
+// ---------------------------------------------------------------- the undercut highlight: new Q9 answered B (colour);
+// round 3 shows candidate hues for "our undercut possible" (a new theme role, proposed name `opportunity`); theirs stays amber.
+const OPPORTUNITY = { cyan: '#3fd8e8', teal: '#2ec4b6', series6: R.series6 };
+const REC_OPP = 'cyan';
+
+// ---------------------------------------------------------------- flags on the map: how a car shown blue is marked (new Q16)
+const BLUE_MARKS = { ring: 'a blue ring around the dot', tick: 'a short blue bar beside the dot', code: 'the car code in blue' };
+const REC_BLUE = 'ring';
 
 // ---------------------------------------------------------------- the source badge (kit piece, spec 8.1, 8.3)
 // Measured this session: no mark (the normal case). Stored (earlier sessions): ˢ. Default (community value): ᵈ.
@@ -106,7 +113,10 @@ svg text.s { font-size:${FONT_PX - 2}px; }
 .d { color:var(--pw-textDim); } .f { color:var(--pw-textFaint); } .w { color:var(--pw-warning); } .c { color:var(--pw-critical); }
 .b { color:var(--pw-best); } .g { color:var(--pw-personalBest); } .y { color:var(--pw-flagYellow); }
 .o, .hi { color:var(--pw-ownCar); font-weight:${DEFAULT_THEME.table.boldWeight}; } .m { font-weight:${DEFAULT_THEME.table.boldWeight}; }
-${CONDITIONS.map((c) => `.gA-${c} { color:${roleVar(HUE[c])}; opacity:${GHOST_STYLES.A.opacity}; }`).join(' ')}
+.slot-both { display:inline-block; box-shadow:inset 0 1px 0 var(--pw-textFaint), inset 0 -1px 0 var(--pw-textFaint); }
+.slot-top { display:inline-block; box-shadow:inset 0 1px 0 var(--pw-textFaint); }
+.slot-base { display:inline-block; box-shadow:inset 0 -1px 0 var(--pw-textFaint); }
+${Object.entries(OPPORTUNITY).map(([k, v]) => `.opp-${k} { color:${v}; font-weight:700; }`).join(' ')}
 .gband { background:var(--pw-bgBand); }
 .ty-inter { color:var(--pw-series3); }
 .litW { background:var(--pw-text); color:var(--pw-bg); font-weight:700; } .litA { background:var(--pw-warning); color:var(--pw-bg); font-weight:700; }
@@ -242,21 +252,13 @@ function crossingBlock(c, { around = 2, active = false, unknown = false, v = REC
   const r = REJOIN[c];
   const loss = PIT_LOSS[c];
   const lossCell = unknown ? span('tip', '    ', TEXT.unknown.insufficientData) : V(FMT.seconds(loss.lossMs, 1), loss.source, 'stops').t;
-  const word = GHOST_STYLES[v].table === 'hue' ? span(`gA-${c}`, TEXT.condition[c]) : TEXT.condition[c];
+  const word = TEXT.condition[c];
   const title = `${word} ${unknown ? lossCell : span('', lossCell, sourceHover(loss.source, 'stops'))}`;
   const head = active ? span('hi', strip(title)) : title;
   if (unknown) return [padR(head, BW), span('f', padR(' P DRV      INT', BW)), span('tip', sp(BW), TEXT.unknown.insufficientData)];
   const gi = r.order.findIndex((o) => o[0] === 'ghost');
   const rows = r.order.slice(gi - around, gi + around + 1).map(([code, p, int]) => {
-    if (code === 'ghost') {
-      const t = GHOST_STYLES[v].table;
-      if (t === 'rule') {
-        const line = `${padL(String(p), 2)} KUH ${padL(FMT.gap(int), 7)}`.replace(/ /g, '╌');
-        return { raw: span('f', `${line}╌`) };
-      }
-      const cls = ghostText(v, c);
-      return { cls: t === 'band' ? 'gband' : '', cells: [C(String(p), cls), C('KUH', cls), C(FMT.gap(int), cls)] };
-    }
+    if (code === 'ghost') return { cls: GHOST_STYLES[v].slot, cells: [C(String(p), 'f'), C('KUH', 'f'), C(FMT.gap(int), 'f')] };
     const near = code === r.ahead[0] || code === r.behind[0];
     const cls = OURS.has(code) ? 'o' : near ? 'm' : '';
     return { cells: [C(String(p), cls), C(code, cls), C(FMT.gap(int), cls)] };
@@ -279,7 +281,7 @@ function gapChart({ cols, rows, ghosts = true, laps = LAP, from = 1, v = REC_GHO
     return { pts, colour: colourOf(code), width: own ? CHART.ownCarLineWidth : CHART.lineWidth, dash: mate || ['PIA', 'HAM', 'ALO'].includes(code) ? CHART.dash : undefined, bold: own };
   });
   const us = cars[5].pts;
-  const lettered = g.table !== 'hue';
+  const lettered = true;
   const ghostLines = ghosts
     ? CONDITIONS.map((c) => ({ pts: us.filter(([l]) => l >= LAP - 5).map(([l, gp]) => [l, gp + PIT_LOSS[c].lossMs / 1000]), colour: g.colour(c), opacity: g.opacity < 1 ? g.opacity : undefined, width: 1, dash: g.dash(c), label: lettered ? LETTER[c] : undefined }))
     : [];
@@ -295,7 +297,7 @@ function gapChart({ cols, rows, ghosts = true, laps = LAP, from = 1, v = REC_GHO
   });
   const leg = (c, words) => {
     const t = `${words ? (lettered ? LETTER[c] : TEXT.condition[c]) + ' ' : ''}${FMT.seconds(PIT_LOSS[c].lossMs, 1)}`;
-    return lettered ? t : span(`gA-${c}`, t);
+    return t;
   };
   const legend = !ghosts ? '' : wide ? ` · ${span('d', 'pit')} ` + CONDITIONS.map((c) => leg(c, true)).join(' ') : `${span('d', 'pit')} ` + CONDITIONS.map((c) => leg(c, lettered)).join(' ');
   const ref = wide || !ghosts ? `ref leader avg 1:30.207${legend}` : legend;
@@ -306,7 +308,7 @@ function gapChart({ cols, rows, ghosts = true, laps = LAP, from = 1, v = REC_GHO
   const gapCompact = (ghosts) => gapChart({ cols: 36, rows: 8, ghosts, from: LAP - 17 });
   page('1-ghost-views.html', '1 · Rejoin ghost: crossing order and gap chart (V03, V04)', `
 <div class="note">Sample race for every page: Silverstone, <b>L23/52</b>. Our cars <b>KUH</b> (P6, medium, 23 laps old) and <b>LIN</b> (P9, stopped L15). The ghost is where KUH would be if it boxed at the end of this lap, per condition (<code>rejoin.car</code>). Our cars are white. Gap sign as SP3: a car ahead is negative, behind positive. Hover texts are in the captions (a screenshot cannot hover).</div>
-<div class="note"><b>The ghost's look is open (new Q1, page 6).</b> This page shows the recommended variant ${REC_GHOST} (${GHOST_STYLES[REC_GHOST].name}): the ghost row in the faint text role, our code plain, the condition named by its column; in the chart faint lines told apart by dash and letter. Changing the variant changes all three displays together.</div>
+<div class="note"><b>New Q1:</b> B is chosen (faint row, letters and dashes); how it marks the slot is open (page 6). This page shows the recommended ${REC_GHOST} (${GHOST_STYLES[REC_GHOST].name}): the ghost row in the faint text role between two solid hairlines, our code plain, the condition named by its column; in the chart faint lines told apart by dash and letter.</div>
 
 <h2>Crossing order (V03): full 54×9, compact 20×7</h2>
 <div class="row">${fig(crossingFull(), 'full · green running: the three conditions side by side, three cars either side of the ghost · INT = <code>intervalMs</code>, the gap to the car ahead in the projected crossing order · P = the order item\'s <code>position</code> · the car directly ahead and behind the ghost bold · LIN white (ours) · VSC loss stored (ˢ), SC loss default (ᵈ); hover: "measured · 6 stops", "stored · 3 stops", "default · community value, Silverstone (R3)"')}</div>
@@ -360,8 +362,10 @@ let mapPanelShared; // page 6 draws the map in each ghost variant
   const carsOnTrack = FIELD.map(([code, g]) => ({ code, f: fOf(g - US_GAP), inPit: code === 'DOO' }));
   const ghostF = (c) => { const r = REJOIN[c]; const aheadGap = FIELD.find(([k]) => k === r.ahead[0])[1] - US_GAP; return fOf(aheadGap) + r.ahead[1] / 1000 / LAP_S; };
   const SECTORS = [0, 0.31, 0.665];
+  // sample: one marshal zone around T15 (the collision) shows yellow; every other zone green or none
+  const YELLOW_ZONES = [[apexF[14] - 0.035, apexF[14] + 0.03]];
 
-  const map = ({ cols, rows, turns = true, codes = true, ghosts = true, incident = true, v = REC_GHOST }) => {
+  const map = ({ cols, rows, turns = true, codes = true, ghosts = true, incident = true, v = REC_GHOST, flags = true, blueCars = ['BOR'], blueMark = REC_BLUE }) => {
     const W = (cols + 2) * CELL_W, H = rows * CELL_H;
     const xs = POLY.map((p) => p[0]), ys = POLY.map((p) => p[1]);
     const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
@@ -386,6 +390,11 @@ let mapPanelShared; // page 6 draws the map in each ghost variant
     };
     let svg = `<svg width="${W}" height="${H}">`;
     svg += `<polyline points="${pts.map((p) => P(p).map((q) => q.toFixed(1)).join(',')).join(' ')}" fill="none" stroke="${R.textFaint}" stroke-width="${big ? 3 : 2}" stroke-linejoin="round"/>`;
+    // marshal zones (trackPositions.cars zones): a yellow zone redraws its stretch of the outline in flagYellow
+    if (flags) for (const [a, b] of YELLOW_ZONES) {
+      const zp = Array.from({ length: 41 }, (_, k) => P(at(a + ((b - a) * k) / 40)).map((q) => q.toFixed(1)).join(','));
+      svg += `<polyline points="${zp.join(' ')}" fill="none" stroke="${R.flagYellow}" stroke-width="${big ? 4 : 3}" stroke-linecap="round"/>`;
+    }
     const carDots = carsOnTrack.map((car) => { const q = at(car.f); const [cx, cy] = P(q); return { car, q, cx, cy: car.inPit ? cy - 9 : cy }; });
     for (const d of carDots) boxes.push({ x: d.cx, y: d.cy, w: 10 });
     for (let k = 0; k < 400; k++) { const [tx, ty] = P(at(k / 400)); boxes.push({ x: tx, y: ty, w: 2, line: true }); }
@@ -413,7 +422,11 @@ let mapPanelShared; // page 6 draws the map in each ghost variant
     for (const { car, q, cx, cy } of carDots) {
       const own = OURS.has(car.code);
       svg += car.inPit ? `<circle cx="${cx}" cy="${cy}" r="4" fill="none" stroke="${colourOf(car.code)}" stroke-width="1.5"/>` : `<circle cx="${cx}" cy="${cy}" r="${own ? 5.5 : 4}" fill="${colourOf(car.code)}"/>`;
-      if (own || codes) svg += label(car.code, cx, cy, inward(q), own ? R.ownCar : R.textFaint, own);
+      const blue = flags && blueCars.includes(car.code);
+      if (blue && blueMark === 'ring') svg += `<circle cx="${cx}" cy="${cy}" r="${(own ? 5.5 : 4) + 3.5}" fill="none" stroke="${R.flagBlue}" stroke-width="2"/>`;
+      if (blue && blueMark === 'tick') svg += `<line x1="${cx + (own ? 9 : 8)}" y1="${cy - 6}" x2="${cx + (own ? 9 : 8)}" y2="${cy + 6}" stroke="${R.flagBlue}" stroke-width="3"/>`;
+      const showCode = own || codes || (blue && blueMark === 'code');
+      if (showCode) svg += label(car.code, cx, cy, inward(q), blue && blueMark === 'code' ? R.flagBlue : own ? R.ownCar : R.textFaint, own || (blue && blueMark === 'code'));
     }
     if (ghosts) for (const c of CONDITIONS) {
       const g = GHOST_STYLES[v];
@@ -428,7 +441,7 @@ let mapPanelShared; // page 6 draws the map in each ghost variant
         svg += `<line x1="${cx - nx * h}" y1="${cy - ny * h}" x2="${cx + nx * h}" y2="${cy + ny * h}" stroke="${g.colour(c)}" stroke-width="2"/>`;
       } else svg += `<circle cx="${cx}" cy="${cy}" r="${big ? 5 : 4}" fill="none" stroke="${g.colour(c)}" stroke-width="1.5"${op}/>`;
       boxes.push({ x: cx, y: cy, w: 10 });
-      if (big) svg += label(g.table === 'hue' ? TEXT.condition[c] : LETTER[c], cx, cy, inward(q).map((x) => -x), g.colour(c)).replace('<text', `<text${op}`);
+      if (big) svg += label(LETTER[c], cx, cy, inward(q).map((x) => -x), g.colour(c)).replace('<text', `<text${op}`);
     }
     return svg + '</svg>';
   };
@@ -449,9 +462,9 @@ let mapPanelShared; // page 6 draws the map in each ghost variant
   const feedCompact = (turns) => panel('Incidents', { cols: 34, rows: 3, link: '', lines: feedRows(turns).slice(0, 3).map(([c, cells]) => span(c, feedLine(cells.slice(0, 3)).trimEnd())) });
 
   page('2-map-views.html', '2 · Track map and the incident feed\'s turn', `
-<div class="note">The outline is the analysis's centreline (<code>trackPositions.geometry</code>); here a sketch, not Silverstone's real shape, so the turn places are illustrative. <b>Turn labels come only from the turn file</b> (the corner's <code>turn</code>); a track without one shows no turn labels, the sectors stay. Rivals are dots in their team colour (Q7 B), our cars white and larger. The ghosts use the recommended variant ${REC_GHOST} of page 6 (faint rings with the condition letter). The amber triangle is a major incident of the last 2 laps, labelled with its kind (Q8 B; OCO and STR collided at T15). DOO is in the pit lane (hollow). The white tick is the start line; the grey ticks are the sector starts.</div>
+<div class="note">The outline is the analysis's centreline (<code>trackPositions.geometry</code>); here a sketch, not Silverstone's real shape, so the turn places are illustrative. <b>Turn labels come only from the turn file</b> (the corner's <code>turn</code>); a track without one shows no turn labels, the sectors stay. Rivals are dots in their team colour (Q7 B), our cars white and larger. The ghosts are B (faint rings with the condition letter). The amber triangle is a major incident of the last 2 laps, labelled with its kind (Q8 B; OCO and STR collided at T15). <b>Flags (new Q16):</b> the marshal zone around T15 shows yellow, so its stretch of the outline is drawn in the flag yellow; BOR is being shown blue, marked with ${BLUE_MARKS[REC_BLUE]} (recommended). DOO is in the pit lane (hollow). The white tick is the start line; the grey ticks are the sector starts.</div>
 <h2>Track map: full 64×20, compact 32×10</h2>
-<div class="row">${fig(mapPanel({ cols: 64, rows: 20 }), 'full · Silverstone (turn file): T1–T18, codes for every car, the three ghosts with their letter')}${fig(mapPanel({ cols: 32, rows: 10, turns: false, codes: false }), 'compact · no turn labels, no rival codes; ghosts without letters')}</div>
+<div class="row">${fig(mapPanel({ cols: 64, rows: 20 }), 'full · Silverstone (turn file): T1–T18, codes for every car, the three ghosts with their letter')}${fig(mapPanel({ cols: 32, rows: 10, turns: false, codes: false }), 'compact · no turn labels, no rival codes; ghosts without letters; the yellow zone and the blue ring stay')}</div>
 <div class="row" style="margin-top:12px">${fig(mapPanel({ cols: 64, rows: 20, turns: false, state: 'Silverstone (Reverse)' }), 'no turn file (a reverse layout): no turn labels; the sectors stay')}${fig(mapPanel({ cols: 32, rows: 10, turns: false, codes: false, ghosts: false, incident: false }), 'rejoin unknown: no ghosts')}</div>
 <div class="note">Realism: positions stay visible (a real team has GPS). Before the first full lap the geometry is <code>unknown</code> and the panel says "no data yet". The incident marker uses the topic's new <code>point</code> (Q8 B).</div>
 <h2>Incident feed (V35) with the official turn: full 70×5, compact 34×3 (existing sizes)</h2>
@@ -462,13 +475,8 @@ let mapPanelShared; // page 6 draws the map in each ghost variant
 // ================================================================ page 3: call cards (undercut, SC, pit sweep)
 // The undercut card's highlight is open (new Q9, page 6): "our undercut is possible" (positive margin, AHEAD row) and
 // its mirror "their undercut on us is possible" (positive margin, BEHIND row). Page 3 shows REC_UC.
-const UC_HL = {
-  A: { name: 'lit cell', cell: (ahead) => (ahead ? 'litW' : 'litA') },
-  B: { name: 'hue', cell: (ahead) => (ahead ? 'gm' : 'wm') },
-  C: { name: 'edge bar', cell: (ahead) => (ahead ? 'hi' : 'wm'), row: (ahead) => (ahead ? 'barW' : 'barA') },
-  D: { name: 'lit side label', cell: (ahead) => (ahead ? 'hi' : 'wm'), side: (ahead) => (ahead ? 'litW' : 'litA') },
-};
-const REC_UC = 'A';
+const UC_HL = Object.fromEntries(Object.keys(OPPORTUNITY).map((k) => [k, { name: k, cell: (ahead) => (ahead ? `opp-${k}` : 'wm') }]));
+const REC_UC = REC_OPP;
 let undercutShared; // page 6 draws the card in each highlight variant
 {
   // ---- undercut-card (undercut.car)
@@ -538,9 +546,9 @@ let undercutShared; // page 6 draws the card in each highlight variant
   page('3-call-cards.html', '3 · Call cards: undercut, SC/VSC, pit sweep (V13, V18, V15)', `
 <div class="note">Numbers only, no verdicts: no card says "box", "undercut works" or "stay out". <b>White bold</b> = relevant now (SP3), <b>amber</b> = advisory. Source badges as on page 4: no mark = measured this session, ˢ = stored from earlier sessions, ᵈ = community default; the hover names it.</div>
 <h2>Undercut card (V13): full 58×5, compact 36×4</h2>
-<div class="row">${fig(undercut(), 'full · one row per neighbour within 5 s · GAIN n = what the car that stops first gains over the other when the other stops n laps later · MARGIN = gain minus the absolute gap · a positive margin is lit: white on the AHEAD row (our undercut on HAM), amber on a BEHIND row (RUS\'s undercut on us) · ALO past its tyre life: STOP due · highlight = the recommended variant ' + REC_UC + ' of page 6 (new Q9)')}</div>
+<div class="row">${fig(undercut(), 'full · one row per neighbour within 5 s · GAIN n = what the car that stops first gains over the other when the other stops n laps later · MARGIN = gain minus the absolute gap · a positive margin is bold in colour: the proposed <code>opportunity</code> hue on the AHEAD row (our undercut on HAM; candidate ' + REC_UC + ', page 6), amber on a BEHIND row (RUS\'s undercut on us) · ALO past its tyre life: STOP due')}</div>
 <div class="row" style="margin-top:12px">${fig(undercutCompact(), 'compact · margins only, the nearest car ahead and behind')}${fig(undercut(REC_UC, true), 'unknown · ALO\'s model is missing: its gains and margins are empty ("too few laps or samples yet")')}</div>
-<div class="note">Realism: a rival whose wear is hidden still gets gains from the age basis; the card looks the same. The highlight is open: page 6, new Q9.</div>
+<div class="note">Realism: a rival whose wear is hidden still gets gains from the age basis; the card looks the same. The hue of <code>opportunity</code> is open: page 6, new Q9.</div>
 <h2>SC / VSC call (V18): full 50×4, compact 34×2</h2>
 <div class="row">${fig(greenLine(50), 'green running · one line: if an SC came now we rejoin P9 and gain 10.5 s against a green stop; under a VSC P10, +7.2 s · the gains rest on the SC default and the VSC stored loss (ᵈ, ˢ)')}${fig(greenCompact, 'compact · the same, without the words')}</div>
 <div class="row" style="margin-top:12px">${fig(sheet('sc'), 'SC out · the sheet: the SC row white bold, the cars within the window who would also gain · hover on 9.8ᵈ: "default · community value, Silverstone (R3)"')}${fig(sheet('vsc'), 'VSC out · the VSC row white bold')}${fig(sheetCompact('sc'), 'compact · SC out: the active option and who else gains')}</div>
@@ -816,37 +824,50 @@ let undercutShared; // page 6 draws the card in each highlight variant
 <div>${screen('longrun main', W24, H24, longrunMain)}${screen('longrun side', W14, H14, longrunSide)}</div>
 <div class="q"><b>Main = our pace</b> (stint scatter, raising average, lap overview); <b>side = the knowledge it feeds</b> (pit loss, crossover). The timing tower on main keeps the rivals' pace in view (Q15 A).</div>`);
 }
-// ================================================================ page 6: options for the two open points (new Q1, new Q9)
+// ================================================================ page 6: options for new Q1 (the ghost's slot), new Q9 (the opportunity hue), new Q16 (blue flag)
 {
-  const GHOST_TEXT = {
-    A: 'the condition hues (series3, series5, series2) at 55 % opacity: the row, the dotted line and a hollow ring in the hue, dimmer than any rival; the condition word in its hue.',
-    B: 'one neutral faint grey (textFaint) for all three conditions: the table names the condition in the column title; the chart tells them apart by dash (G dotted, VSC dashed, SC dash-dot) and a letter at the line end; the map by a faint ring and its letter.',
-    C: 'as B, but in the table the ghost has no row of its own look: a faint dashed rule between the two cars it splits, carrying its position and interval; on the map a short faint tick across the track instead of a ring.',
-    D: 'the ghost row in the dim grey (textDim, between the rivals\' text and faint) on a subtle band (bgBand); chart and map as B, in the dim grey.',
+  const SLOT_TEXT = {
+    B: 'the baseline as answered: the ghost row in the faint text role, no line.',
+    B1: 'two solid hairlines (faint, 1 px) above and below the ghost row: the row reads as a slot opened between the two cars.',
+    B2: 'one solid hairline on top of the ghost row: the line marks where the ghost cuts in, under the car it would follow.',
+    B3: 'one solid hairline under the ghost row: the faint row sits on a rule between the two cars.',
   };
-  const ghostRows = Object.keys(GHOST_STYLES).map((v) => `
+  const slotRows = Object.keys(GHOST_STYLES).map((v) => `
 <h2>${v} · ${GHOST_STYLES[v].name}${v === REC_GHOST ? ' (recommended)' : ''}</h2>
-<div class="note">${GHOST_TEXT[v]}</div>
-<div class="row">${fig(crossingCompact('green', '', v), 'crossing order · green condition')}${fig(gapChart({ cols: 56, rows: 11, from: LAP - 13, v }), 'gap chart · ghost lines over the last 6 laps')}${fig(mapPanelShared({ cols: 44, rows: 13, v }), 'track map · rivals in team colour (Q7 B)')}</div>`).join('');
-  const UC_TEXT = {
-    A: 'lit cell: a positive margin is an inverted cell, dark text on the light text colour (ours) or on amber (theirs). No new hue; the strongest mark that stays inside the colour rule.',
-    B: 'hue: a positive margin in bold green (personalBest, the theme\'s only "good" hue) for ours, bold amber for theirs. Green already means a personal best elsewhere.',
-    C: 'edge bar: a 3 px bar at the row\'s left edge (white for ours, amber for theirs, like the SP3 tower\'s amber bar) plus the positive margins bold in the same colour.',
-    D: 'lit side label: the AHEAD / BEHIND label inverted (light or amber), the positive margins bold. The eye finds the row, then the number.',
+<div class="note">${SLOT_TEXT[v]}</div>
+<div class="row">${fig(crossingFull({ v }), 'full · three conditions')}${fig(crossingCompact('green', '', v), 'compact · green')}${fig(crossingCompact('sc', span('y', 'SC'), v), 'compact · SC out')}</div>`).join('');
+  const OPP_TEXT = {
+    cyan: 'cyan #3fd8e8: the furthest from green and purple; lighter than the blue flag (#5ca8ff), so the two differ in brightness as well as hue.',
+    teal: 'teal #2ec4b6: calmer, but close to the personal-best green (#3fcf70) for red-green colour blindness.',
+    series6: 'the existing muted series6 (oklch 0.72 0.09 200): no new value, but too soft to be stronger than white bold.',
   };
-  const ucRows = Object.keys(UC_HL).map((v) => `
-<h2>${v} · ${UC_HL[v].name}${v === REC_UC ? ' (recommended)' : ''}</h2>
-<div class="note">${UC_TEXT[v]}</div>
-<div class="row">${fig(undercutShared.undercut(v), 'full · HAM ahead: our undercut possible at n = 3 · RUS behind: theirs possible at n = 2, 3')}${fig(undercutShared.undercutCompact(v), 'compact')}</div>`).join('');
-  page('6-options.html', '6 · Options: the rejoin ghost (new Q1) and the undercut highlight (new Q9)', `
-<div class="note">Round 2 of the review. Each variant is shown in every place it applies, with the same sample race. Pick a letter per question in the README.</div>
-<h2>New Q1 · the rejoin ghost</h2>
-<div class="note">Rules for every variant: the ghost is <b>quieter than the real cars</b> (our white car stays the brightest thing on every display, the rivals keep their normal grey or team colour), and <b>no glyph sits inside the driver code</b>: the ghost row reads plain <code>KUH</code>. Each variant is one style for the crossing order, the gap chart and the track map together.</div>
-${ghostRows}
-<h2>${REC_GHOST} in the full crossing order</h2>
-<div class="row">${fig(crossingFull({ v: REC_GHOST }), 'full · the three conditions side by side in the recommended variant')}${fig(crossingFull({ v: 'C' }), 'for comparison: the insertion rules of C in the full order')}</div>
-<h2>New Q9 · the undercut highlight</h2>
-<div class="note">"Our undercut is possible" = a positive margin on an AHEAD row; its mirror "their undercut on us is possible" = a positive margin on a BEHIND row (amber, advisory). Both must be stronger than white bold. The theme has no neutral "good" hue: its roles are text greys, ownCar white, critical red, warning amber, best purple, personalBest green, the flag colours and the muted series.</div>
-${ucRows}`);
+  const oppRows = Object.keys(OPPORTUNITY).map((k) => `
+<h2>${k}${k === REC_OPP ? ' (recommended)' : ''}</h2>
+<div class="note">${OPP_TEXT[k]}</div>
+<div class="row">${fig(undercutShared.undercut(k), 'full · HAM ahead: our undercut possible at n = 3 (the candidate) · RUS behind: theirs at n = 2, 3 (amber)')}${fig(undercutShared.undercutCompact(k), 'compact')}</div>`).join('');
+  // the palette check: every colour that already means something, next to each candidate
+  const sw = (label, colour, text, bold = true) => ` ${padR(label, 19)} <span style="color:${colour};${bold ? 'font-weight:700' : ''}">${text}</span>`;
+  const palette = panel('Palette check', { cols: 46, rows: 9, link: '', lines: [
+    sw('session best', R.best, '28.104  S1'), sw('personal best', R.personalBest, '41.311  S2'),
+    ...Object.entries(OPPORTUNITY).map(([k, c]) => sw(`opportunity ${k}`, c, '+0.8    margin')),
+    sw('blue flag', R.flagBlue, '●  BOR shown blue'), sw('advisory', R.warning, '+1.4    margin'), sw('critical', R.critical, '−0.7    laps'), sw('yellow flag', R.flagYellow, '━━  zone'),
+  ] });
+  const lapRow = (k) => panel('Side by side', { cols: 46, rows: 1, link: '', lines: [` S1 ${span('b', '28.104')}  S2 ${span('g', '41.311')}  MARGIN ${span(`opp-${k}`, '+0.8')} ${span('wm', '+1.4')}`] });
+  const blueRows = Object.keys(BLUE_MARKS).map((k) => `
+<h2>${k}${k === REC_BLUE ? ' (recommended)' : ''}</h2>
+<div class="note">${BLUE_MARKS[k]}.</div>
+<div class="row">${fig(mapPanelShared({ cols: 64, rows: 20, blueMark: k }), 'full · BOR shown blue; the yellow zone around T15')}${fig(mapPanelShared({ cols: 32, rows: 10, turns: false, codes: false, blueMark: k, blueCars: ['KUH'] }), 'compact · our car KUH shown blue')}</div>`).join('');
+  page('6-options.html', '6 · Options: the ghost\'s slot (new Q1), the opportunity hue (new Q9), the blue flag (new Q16)', `
+<div class="note">Round 3. The user chose B for the ghost and B (colour) for the undercut; this page shows the variants inside those answers, plus the new flags on the map. Each variant is shown in every place it applies, with the same sample race.</div>
+<h2>New Q1 · B, and how it marks the slot</h2>
+<div class="note">B stays the ghost's look: faint, our code plain, no glyph; the gap chart's faint lines (G dotted, VSC dashed, SC dash-dot, the letter at the end) and the map's faint rings are the same in every variant. The variants differ only in the crossing order: how the ghost row shows <b>where it slots in</b> between two cars, with solid 1 px hairlines in the faint role, no dashes and no leader dots. Every row keeps the exact columns of the real rows.</div>
+${slotRows}
+<h2>New Q9 · B (colour): the hue for "our undercut is possible"</h2>
+<div class="note">A positive margin on an AHEAD row is bold in a new theme role, proposed name <code>opportunity</code>; on a BEHIND row it stays bold amber (<code>warning</code>). The hue must not clash with purple (session best), green (personal best), amber, red or the blue flag. The theme's series roles are muted (oklch 0.72, chroma 0.09) and read weaker than white bold, so the candidates are full-strength values except series6 for comparison.</div>
+<div class="row">${fig(palette, 'every colour that already means something, next to each candidate')}${fig(lapRow(REC_OPP), 'the recommended candidate in one line with a purple and a green sector and the amber mirror')}</div>
+${oppRows}
+<h2>New Q16 · flags on the map</h2>
+<div class="note"><b>Yellow:</b> a marshal zone that shows yellow redraws its stretch of the outline in <code>flagYellow</code> (the sample: the zone around T15). Green and no-flag zones stay grey. The game sends one yellow (<code>ZoneFlag</code>: unknown, none, green, blue, yellow), so there is no double yellow to show. <b>Blue:</b> a car being shown blue (its <code>fiaFlag</code>) gets a mark in <code>flagBlue</code>; the ways to mark it follow. Rivals in team colour, ghosts as B.</div>
+${blueRows}`);
 }
 console.log('written');
