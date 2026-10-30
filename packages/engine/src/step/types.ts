@@ -34,14 +34,19 @@ export type LapCorrection = {
   confirmed: Ms;
 };
 
-/** The session time fell from `fromMs` to `toMs` with no flashback and no start settling: nothing changes (spec 3.3). */
+/**
+ * The game's session time fell from `fromMs` to `toMs` with no flashback and no start settling (spec 3.3): nothing
+ * recorded changes, and from the race start on the race clock continues over the fall (user ruling 2026-10-30).
+ */
 export type ClockFall = { fromMs: SessionTime; toMs: SessionTime };
 
 /**
  * What a step did besides its tags. `rewritten`: it changed history recorded by earlier steps (lights out discarding
  * the formation lap, the start's settling re-stamping it), so readers start over and no rewind may go back before it.
+ * `discarded`: it took back what readers already saw without changing the history (a neutralisation dropped
+ * unconfirmed), so readers start over; rewinds across it stay exact.
  */
-export type StepOutput = { changed: Set<ChangeTag>; corrections: LapCorrection[]; rewritten?: true; clockFall?: ClockFall };
+export type StepOutput = { changed: Set<ChangeTag>; corrections: LapCorrection[]; rewritten?: true; discarded?: true; clockFall?: ClockFall };
 
 /** One part of `step`: reads the frame, updates its part of the state and tags what it changed. */
 export type SubStep = (state: EngineState, frame: Frame, out: StepOutput) => void;

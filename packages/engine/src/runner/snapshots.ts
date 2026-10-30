@@ -30,9 +30,11 @@ const snapshotOf = (state: EngineState, frameId: number): Snapshot => {
 };
 
 /**
- * The snapshots of one session. Frame ids and session times rise from one snapshot to the next, because a rewind
- * drops every snapshot after the one it restores. The first snapshot is only replaced by a restart (a step that rewrote history). Every snapshot from the
- * window's start on is kept; before it, one per `KEEP_OLDER_EVERY_MS` slot, so the count grows by two a minute.
+ * The snapshots of one session. Frame ids rise from one snapshot to the next, because a rewind drops every snapshot
+ * after the one it restores. Session times may fall between them (a fall before the race start, the formation reset
+ * before lights out), so the window's frame bound and the restore go by frame id. The first snapshot is only replaced
+ * by a restart (a step that rewrote history). Every snapshot from the window's start on is kept; before it, one per
+ * `KEEP_OLDER_EVERY_MS` slot, so the count grows by two a minute.
  */
 export class SnapshotStore {
   readonly #window: SnapshotWindow;
