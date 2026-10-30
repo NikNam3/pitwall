@@ -42,9 +42,9 @@
   let cols = 0;
   let xs: number[] = [];
 
-  /** A dash pattern token (px on, px off) from the active theme's CSS variable, else the default theme's value. */
-  function dashToken(root: Element, name: string, fallback: number[]): number[] {
-    const v = cssVar(root, name).split(/\s+/).filter((t) => t !== '').map(Number).filter(Number.isFinite);
+  /** A dash pattern token (px on, px off) from the theme's CSS variable at `el`, else the default theme's value. */
+  function dashToken(el: Element, name: string, fallback: number[]): number[] {
+    const v = cssVar(el, name).split(/\s+/).filter((t) => t !== '').map(Number).filter(Number.isFinite);
     return v.length > 0 ? v : fallback;
   }
 
@@ -59,24 +59,24 @@
     if (!host) return;
     const el = host;
     untrack(() => {
-      const root = document.documentElement;
+      // Every token is read at the chart's own element: a theme set on an ancestor (a gallery cell, a panel) counts.
       const tokens = DEFAULT_THEME.chart;
-      const lineWidth = cssNumber(root, '--pw-chart-line', tokens.lineWidth);
-      const ownWidth = cssNumber(root, '--pw-chart-own-line', tokens.ownCarLineWidth);
-      const staleAlpha = cssNumber(root, '--pw-chart-stale-alpha', tokens.staleAlpha);
-      const redAlpha = cssNumber(root, '--pw-chart-red-alpha', tokens.redBandAlpha);
-      const dash = dashToken(root, '--pw-chart-dash', tokens.dash);
-      const liveDash = dashToken(root, '--pw-chart-live-dash', tokens.liveDash);
+      const lineWidth = cssNumber(el, '--pw-chart-line', tokens.lineWidth);
+      const ownWidth = cssNumber(el, '--pw-chart-own-line', tokens.ownCarLineWidth);
+      const staleAlpha = cssNumber(el, '--pw-chart-stale-alpha', tokens.staleAlpha);
+      const redAlpha = cssNumber(el, '--pw-chart-red-alpha', tokens.redBandAlpha);
+      const dash = dashToken(el, '--pw-chart-dash', tokens.dash);
+      const liveDash = dashToken(el, '--pw-chart-live-dash', tokens.liveDash);
       const xPerCell = {
-        lap: cssNumber(root, '--pw-chart-x-lap', tokens.xPerCell.lap),
-        sessionTime: cssNumber(root, '--pw-chart-x-session', tokens.xPerCell.sessionTime),
+        lap: cssNumber(el, '--pw-chart-x-lap', tokens.xPerCell.lap),
+        sessionTime: cssNumber(el, '--pw-chart-x-session', tokens.xPerCell.sessionTime),
       };
-      const font = `${cssVar(root, '--pw-font-px')} ${cssVar(root, '--pw-font')}`;
-      const fontPx = cssNumber(root, '--pw-font-px', DEFAULT_THEME.fontPx);
-      const boldWeight = cssNumber(root, '--pw-weight-bold', DEFAULT_THEME.table.boldWeight);
+      const font = `${cssVar(el, '--pw-font-px')} ${cssVar(el, '--pw-font')}`;
+      const fontPx = cssNumber(el, '--pw-font-px', DEFAULT_THEME.fontPx);
+      const boldWeight = cssNumber(el, '--pw-weight-bold', DEFAULT_THEME.table.boldWeight);
       // The labels sit one column gap right of the plot; the plot leaves room for the gap and the longest label.
       const cellPx = cellBox(fontPx, DEFAULT_THEME.density.lineHeight).width;
-      const labelGapPx = cssNumber(root, '--pw-col-gap-cols', DEFAULT_THEME.density.columnGapCols) * cellPx;
+      const labelGapPx = cssNumber(el, '--pw-col-gap-cols', DEFAULT_THEME.density.columnGapCols) * cellPx;
       const labelRoomPx = labelGapPx + cellPx * series.reduce((m, s) => Math.max(m, s.label.length), 0);
       const grid = resolveRole(el, 'grid');
       const axis = { stroke: resolveRole(el, 'textDim'), font, labelFont: font, grid: { stroke: grid }, ticks: { stroke: grid } };
@@ -132,7 +132,7 @@
         const draw = (l: EndLabel, leftOf: (widthPx: number) => number, y: number): void => {
           const line = lines[l.index];
           if (!line) return;
-          u.ctx.font = `${l.bold ? `${boldWeight} ` : ''}${rowPx}px ${cssVar(root, '--pw-font')}`;
+          u.ctx.font = `${l.bold ? `${boldWeight} ` : ''}${rowPx}px ${cssVar(el, '--pw-font')}`;
           u.ctx.fillStyle = line.stroke;
           u.ctx.globalAlpha = line.alpha;
           u.ctx.fillText(l.text, leftOf(u.ctx.measureText(l.text).width), y);
