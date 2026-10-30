@@ -200,7 +200,7 @@ Params: our car and the next compound. Per lap L from the next lap to the end of
 ### 7.9 `pit-window` → `pitWindow.car`, and the *window* moment
 - **Latest lap:** when the current tyres reach their life (`tyre-life`).
 - **Earliest lap per next compound:** the last lap minus that compound's life, so it reaches the finish.
-- **The next compounds** are the dry compounds among our car's available tyre sets (`CarTyres.sets`, `available`), so the event's allocation decides, not config; `realism` when the sets are hidden.
+- **The next compounds** are the dry compounds among our car's available tyre sets (`CarTyres.sets`, `available`), so the event's allocation decides, not config; `notReceived` until the sets arrive.
 - **The window** is from the earliest (over the next compounds) to the latest. Both `Known`; `insufficientData` until the fit has `minLaps`.
 - **`race-moment`** gains the moment `window` between `neutralised` and `incident` (SP3 spec 7.2): active from `earliest − windowLeadLaps` until our car stops or the window closes. `cause.params`: `earliestLap`, `latestLap`.
 
