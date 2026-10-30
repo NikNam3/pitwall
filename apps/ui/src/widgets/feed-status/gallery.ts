@@ -84,6 +84,11 @@ const gallery: GalleryEntry<typeof widget> = {
       feed: { ...healthyFeed, lossPercent: 8.5, latePackets: 17, decodeErrors: 3, packetsPerSecond: 48 },
       session: sessionInfo,
     },
+    // the widest line: a loss shown as 100% and a three-digit packet rate (a 20-car race sends about 360 per second)
+    heavyLoss: {
+      feed: { ...healthyFeed, lossPercent: 99.6, latePackets: 999, decodeErrors: 999, packetsPerSecond: 999 },
+      session: sessionInfo,
+    },
     disconnected: {
       feed: { ...withoutLatency, connected: false, packetsPerSecond: 0 },
       session: undefined,
