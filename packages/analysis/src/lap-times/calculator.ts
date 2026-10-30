@@ -18,13 +18,14 @@ import {
 } from '@pitwall/domain';
 import type { EngineView, IncrementalCalculator } from '@pitwall/engine';
 import { LAP_CLASSES_CONFIG, type LapClassOptions } from '../lap-classes/index.ts';
+import { outOfRace } from '../shared/out-of-race.ts';
 import { bestsOf, rowOf, sessionBestBoard, sessionBestsOf, type Best, type CarBests } from './lap-times.ts';
 import { LAP_TIMES, LAP_TIMES_CONFIG, type LapTimesOutput } from './index.ts';
 
 /** The crossings of one lap of one car: time by segment, and the newest. */
 type LapCrossings = { at: number[]; latest: { segment: number; at: number } };
 
-type CarSnapshot = { id: CarId; active: boolean; lap: number; driverStatus: DriverStatus; pitStatus: PitStatus };
+type CarSnapshot = { id: CarId; active: boolean; lap: number; driverStatus: DriverStatus; pitStatus: PitStatus; outOfRace: boolean };
 
 type Acc = {
   laps: CurrentLaps;
@@ -59,7 +60,7 @@ const foldCrossings = (acc: Acc, view: EngineView, from: number): void => {
 /** What the view shows right now: cars, session and config (the history is folded separately). */
 const snapshot = (acc: Acc, view: EngineView): void => {
   const { state } = view;
-  acc.cars = state.cars.map((c) => ({ id: c.id, active: c.active, lap: c.timing.lap, driverStatus: c.timing.driverStatus, pitStatus: c.timing.pitStatus }));
+  acc.cars = state.cars.map((c) => ({ id: c.id, active: c.active, lap: c.timing.lap, driverStatus: c.timing.driverStatus, pitStatus: c.timing.pitStatus, outOfRace: outOfRace(c) }));
   const s = state.session;
   acc.session = { kind: s.kind, sessionType: s.sessionType, numActiveCars: s.numActiveCars, timeLeftMs: s.timeLeftMs, updatedAt: s.updatedAt };
   const config = LAP_TIMES_CONFIG.read(view);
@@ -101,14 +102,15 @@ const notOnLap = (carId: CarId, cutOff: Projection['cutOff']): Projection => ({
   finishMarginMs: notApplicable,
 });
 
-const noProjection = (carId: CarId, cutOff: Projection['cutOff']): Projection => ({
+/** A car on its lap with no projection: `insufficientData` while one may still come, `notApplicable` once it cannot. */
+const noProjection = (carId: CarId, cutOff: Projection['cutOff'], reason: Known<never> = insufficientData): Projection => ({
   carId,
   onLap: true,
-  projectedLapMs: insufficientData,
-  deltaToBestMs: insufficientData,
-  projectedPosition: insufficientData,
+  projectedLapMs: reason,
+  deltaToBestMs: reason,
+  projectedPosition: reason,
   cutOff,
-  finishMarginMs: insufficientData,
+  finishMarginMs: reason,
 });
 
 /** The best laps of the active cars other than `id`. */
@@ -135,6 +137,8 @@ const projectionOf = (acc: Acc, car: CarSnapshot, best: Best | undefined, bests:
   const others = othersBests(acc, id, bests);
   const byLap = acc.laps[id] ?? {};
   const previous = byLap[car.lap - 1];
+  // a car out of the race stays on its lap, where its projection will not come (wave 2, T7 ruling 2)
+  if (car.outOfRace) return noProjection(id, cutOffOf(acc, others, () => notApplicable), notApplicable);
   if (car.driverStatus === 'inLap' || car.driverStatus === 'outLap' || car.driverStatus === 'inGarage' || car.pitStatus !== 'none' || previous?.inLap === true) {
     return notOnLap(id, cutOffOf(acc, others, () => notApplicable));
   }
@@ -182,7 +186,7 @@ const output = (acc: Acc): LapTimesOutput => {
   for (const car of acc.cars) {
     if (!car.active) continue;
     const carBests = bests.get(car.id) ?? { sectors: [undefined, undefined, undefined] };
-    rows.push(rowOf(car.id, lapsByCar.get(car.id) ?? [], carBests, session, acc.classes));
+    rows.push(rowOf(car.id, lapsByCar.get(car.id) ?? [], carBests, session, acc.classes, car.outOfRace));
     projections[car.id] = projectionOf(acc, car, carBests.lap, bests);
   }
   return { rows, sessionBest: sessionBestBoard(session), projections };
