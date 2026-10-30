@@ -23,11 +23,11 @@ type Prepared = Array<{ bytes: Uint8Array; receivedAtMs: number }>;
 const toPrepared = (packets: Timed): Prepared => packets.map(({ packet, receivedAtMs }) => ({ bytes: packetBytes(packet), receivedAtMs }));
 
 /**
- * Formation frames 0..59 (0 to 2.95 s, a fastest lap at frame 20), then the race on its own clock from 0: frame ids
+ * Formation frames 0..59 (0 to 2.95 s, a fastest lap at frame 40, 2 s), then the race on its own clock from 0: frame ids
  * go on from 60 and no FLBK comes.
  */
 function clockReset(): { before: Prepared; after: Prepared } {
-  const formation = new ScenarioBuilder({ sessionUid: 77n, cars: 2, stepMs: STEP_MS }).session().participants().frames(20, () => {}).event(FTLP).frames(40, () => {});
+  const formation = new ScenarioBuilder({ sessionUid: 77n, cars: 2, stepMs: STEP_MS }).session().participants().frames(40, () => {}).event(FTLP).frames(20, () => {});
   const race = new ScenarioBuilder({ sessionUid: 77n, cars: 2, stepMs: STEP_MS }).session().participants().frames(20, () => {}).packets();
   const continued = race.map(({ packet, receivedAtMs }) => ({
     packet: { ...packet, header: { ...packet.header, frameIdentifier: packet.header.frameIdentifier + 60, overallFrameIdentifier: packet.header.overallFrameIdentifier + 60 } },
