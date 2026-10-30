@@ -71,7 +71,7 @@ export const toCar = (id: number, gapMs: number | undefined, lapsDown = 0): GapT
 
 /**
  * A lap-board row; `last` is the last lap in ms (`undefined` = not received yet, `'realism'` = withheld, `'retired'` = a
- * car out of the race without a time: its times will not come, as `lap-times` gives them).
+ * car out of the race without a time: its times will not come and the row says it is out, as `lap-times` gives them).
  */
 export function boardRow(
   id: number,
@@ -96,8 +96,12 @@ export function boardRow(
     bestSectorStatus: ['none', 'none', 'none'],
     theoreticalBestMs: unknown('notReceived'),
     deltaToReference: { bestLapMs: unknownDelta, bestSectorsMs: [unknownDelta, unknownDelta, unknownDelta], theoreticalBestMs: unknownDelta },
+    outOfRace: last === 'retired',
   };
 }
+
+/** The row of a car the analysis counts out of the race, whatever times it kept (a car that retired after setting laps). */
+export const outOfRaceRow = (row: LapBoardRow): LapBoardRow => ({ ...row, outOfRace: true });
 
 /** A lap board with no session bests. */
 export const lapBoard = (reference: number, rows: LapBoardRow[]): LapBoard => ({

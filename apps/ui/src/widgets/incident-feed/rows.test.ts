@@ -60,10 +60,9 @@ describe('incidentRows', () => {
 
   it('leaves an unknown position out of the plain text, with its reason on hover (no invented position)', () => {
     const [row] = incidentRows([entry({ forUs: [forUs({ positionBefore: unknown('notReceived') })] })], cars, undefined);
-    expect(row!.cells.forUs.reason).toBe('notReceived');
-    expect(row!.cells.forUs.text).not.toMatch(/P\d/);
-    expect(row!.cells.forUs.text.endsWith(', OCO +4.1→DNF')).toBe(true);
+    expect(row!.cells.forUs).toMatchObject({ text: 'us, OCO +4.1→DNF', reason: 'notReceived' });
   });
+
 
   it('gives an unknown gap after its reason on hover; DNF (not applicable) needs none', () => {
     const [waiting] = incidentRows([entry({ forUs: [forUs({ gapAfterMs: unknown('notReceived') })] })], cars, undefined);
@@ -91,25 +90,40 @@ describe('incidentRows', () => {
     expect(b!.cells.forUs.text).toBe('');
   });
 
-  // One builder of the for-us cell (review 2, F7): the parts are built once, the plain text is their texts joined and
-  // the hover reason the first unknown part's, so the text and the marks never disagree.
+  // One builder of the for-us cell (review 2, F7): the parts are built once, the plain text comes from their texts and
+  // the hover reason is the first unknown part's, so the text and the marks never disagree. The plain text has no stray
+  // space (review 3, U1): an unknown part's empty text takes the space it leaves before a comma or beside another space
+  // with it; the parts keep every space, as the marks stand in their places.
   describe('the for-us cell is built from its parts', () => {
-    const cases: Record<string, IncidentForUs[]> = {
-      'position before unknown': [forUs({ positionBefore: unknown('notReceived') })],
-      'position after unknown': [forUs({ positionAfter: unknown('insufficientData') })],
-      'gap after not received': [forUs({ gapAfterMs: unknown('notReceived') })],
-      'both gaps unknown': [forUs({ gapBeforeMs: unknown('insufficientData'), gapAfterMs: unknown('realism') })],
-      'other car missing from the field, gap after unknown': [forUs({ otherCarId: k(carId(9)), gapAfterMs: unknown('notReceived') })],
-      'no other car': [forUs({ otherCarId: unknown('notApplicable'), positionAfter: unknown('notReceived') })],
-      'player and teammate, the second unknown': [forUs(), forUs({ ourCarId: carId(5), positionBefore: unknown('realism') })],
+    const cases: Record<string, { list: IncidentForUs[]; text: string }> = {
+      'position before unknown': { list: [forUs({ positionBefore: unknown('notReceived') })], text: 'us, OCO +4.1→DNF' },
+      'position after unknown': { list: [forUs({ positionAfter: unknown('insufficientData') })], text: 'us P5→, OCO +4.1→DNF' },
+      'gap after not received': { list: [forUs({ gapAfterMs: unknown('notReceived') })], text: 'us P5→P4, OCO +4.1→' },
+      'both gaps unknown': { list: [forUs({ gapBeforeMs: unknown('insufficientData'), gapAfterMs: unknown('realism') })], text: 'us P5→P4, OCO →' },
+      'other car missing from the field, gap after unknown': {
+        list: [forUs({ otherCarId: k(carId(9)), gapAfterMs: unknown('notReceived') })], text: 'us P5→P4, +4.1→',
+      },
+      'no other car': { list: [forUs({ otherCarId: unknown('notApplicable'), positionAfter: unknown('notReceived') })], text: 'us P5→' },
+      // the joined form: our two cars one after the other, each in its plain form
+      'player and teammate, the second unknown': {
+        list: [forUs(), forUs({ ourCarId: carId(5), positionBefore: unknown('realism') })], text: 'us P5→P4, OCO +4.1→DNF · us, OCO +4.1→DNF',
+      },
     };
 
-    it.each(Object.entries(cases))('%s: the text is the parts joined, the reason the first unknown part\'s', (_name, list) => {
+    it.each(Object.entries(cases))('%s: the plain text without stray spaces, the reason the first unknown part\'s', (_name, { list, text }) => {
       const [row] = incidentRows([entry({ forUs: list })], cars, undefined);
       const cell = row!.cells.forUs;
       expect(cell.parts, 'an unknown value has its part').toBeDefined();
-      expect(cell.text).toBe(cell.parts!.map((p) => p.text).join(''));
+      expect(cell.text).toBe(text);
       expect(cell.reason).toBe(cell.parts!.find((p) => p.reason !== undefined)?.reason);
+    });
+
+    it.each(Object.entries(cases))('%s: the parts hold the plain text, with its spaces and a mark at each unknown value', (_name, { list, text }) => {
+      const [row] = incidentRows([entry({ forUs: list })], cars, undefined);
+      const parts = row!.cells.forUs.parts!;
+      const known = parts.filter((p) => p.reason === undefined).map((p) => p.text).join('');
+      expect(known.replace(/ +(?=,)/g, '').replace(/ {2,}/g, ' ')).toBe(text);
+      expect(parts.filter((p) => p.reason !== undefined).every((p) => p.text === '')).toBe(true);
     });
   });
 
