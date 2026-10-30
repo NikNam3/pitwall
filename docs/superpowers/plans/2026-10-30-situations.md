@@ -83,7 +83,7 @@
 - [ ] **Step 3:** engine frame tests and `apps/bridge/test/fixtures` pass.
 - [ ] **Step 4:** commit `fix(engine): a packet type with frozen headers no longer makes every other packet late`.
 
-**Merge point (spec 10):** after Tasks 0–2, gate `integ/live-fixes` (`pnpm check`, `pnpm test:ui` with baselines, `pnpm test:acceptance`), a review of the diff since 1d86112, fix wave, merge to main, push, tell the user to restart, unblock SP4a (with the schema note).
+**Merge point (spec 10):** after Tasks 0–2, gate `integ/live-fixes` (`pnpm check`, `pnpm test:ui` with baselines, `pnpm test:acceptance`), a review of the diff since 1d86112, fix wave, merge to main, push, tell the user to restart. SP4a stays on hold until the end gates of the whole plan (user, 2026-10-30).
 
 ## Task 3: Car situations (spec 4.1, 4.3)
 
@@ -191,4 +191,4 @@
 
 ## End gates
 
-After Task 9: `pnpm check`, `pnpm test:ui` (baselines shown to the user), `pnpm test:acceptance`; a final review of the diff since the merge point with the user's three questions (A hasty architecture, B fixes causing later bugs, C workarounds); a fix wave; merge to main; push; tell the user to restart.
+After Task 9: `pnpm check`, `pnpm test:ui` (baselines shown to the user), `pnpm test:acceptance`; a final review of the diff since the merge point with the user's three questions (A hasty architecture, B fixes causing later bugs, C workarounds); a fix wave; merge to main; push; tell the user to restart; then SP4a may start (rewrite `sp4a-handoff.md` first).
