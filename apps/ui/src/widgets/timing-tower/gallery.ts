@@ -68,6 +68,11 @@ const gallery: GalleryEntry<typeof widget> = {
       moment: known(moment('battle'), toSessionTime(900)),
       incidents: [incidentEntry('collision-6-7', 'major', [6, 7])],
     },
+    // The widest change marks of a 20-car race: from P20 to P1 and back (a real race moment shows 12 and 16 places lost).
+    bigMoves: {
+      ...field,
+      intervals: intervals.map((i) => (i.carId === carId(1) ? interval(1, 2184, 2184, 0, 19) : i.carId === carId(2) ? interval(2, 5903, 3719, 0, -19) : i)),
+    },
     // Outside the race the moment is not applicable.
     noMoment: { ...field, moment: unknown('notApplicable') },
   },
