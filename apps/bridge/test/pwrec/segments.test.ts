@@ -44,6 +44,8 @@ describe('committed segments', () => {
     ['race-singapore-wet-flashback.pwrec.gz', 2170, { BUTN: 22, FLBK: 1 }, 741.5, 744.5],
     ['race-zandvoort-clock-reset.pwrec.gz', 3096, { BUTN: 14, OVTK: 15, SPTP: 20, COLL: 2 }, 2, 9],
     ['qualifying-singapore-end.pwrec.gz', 70, { SPTP: 1, SEND: 1, BUTN: 6 }, 899, 900.6],
+    ['practice-wing-change.pwrec.gz', 523, {}, 615, 619],
+    ['race-drive-through.pwrec.gz', 848, { SCAR: 1, PENA: 1, BUTN: 16 }, 1530.5, 1534],
   ] as const)('%s: %i records, context (Session, Participants) first, these events, clean end', async (file, records, codes, fromS, toS) => {
     const s = await load(file);
     expect(s.records).toHaveLength(records);
