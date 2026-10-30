@@ -31,10 +31,16 @@ const AFTER_MS = 5_000;
 const valueOf = <T>(k: Known<T>): T | undefined => (k.known ? k.value : undefined);
 
 const collision = (a: number, b: number, at = T): RaceEvent => event({ kind: 'collision', at, carId: car(a), otherCarId: car(b) });
-const penalty = (id: number, penaltyType: number, at = T): RaceEvent =>
-  event({ kind: 'penalty', at, carId: car(id), params: { penaltyType, infringementType: 7, lap: 5, placesGained: 0 } });
+/** A PENA event; `timeMs` is the engine's param for the event's `time` (absent when the game sends 255, no value). */
+const penalty = (id: number, penaltyType: number, at = T, timeMs?: number): RaceEvent =>
+  event({
+    kind: 'penalty', at, carId: car(id),
+    params: { penaltyType, infringementType: 7, ...(timeMs !== undefined && { timeMs }), lap: 5, placesGained: 0 },
+  });
 
 /** The F1 25 `penaltyType` codes (Event packet, "Penalty types" appendix of the data-output spec). */
+const DRIVE_THROUGH = 0;
+const STOP_GO = 1;
 const WARNING = 5;
 const TIME_PENALTY = 4;
 
@@ -345,7 +351,7 @@ describe('incidents calculator', () => {
     });
   });
 
-  describe('detail: where, damage parts, warning count (I1)', () => {
+  describe('detail: where, damage parts, warning count (I1), penalty kind', () => {
     const damageOf = (jumps: Parameters<typeof damageState>[0]) =>
       ({ [car(7)]: damageState(jumps) }) as Record<CarId, ReturnType<typeof damageState>>;
     const jump = (at: number, part: 'frontLeftWingPct' | 'floorPct' | 'rearWingPct', deltaPct: number) =>
@@ -414,6 +420,35 @@ describe('incidents calculator', () => {
       expect(counts(feed, 5)).toEqual([{ count: 1, limit: 3 }]);
       const two = run(viewOf({ miniSectors: race(), events, alarmsConfig: { warningsBeforePenalty: 2 } }));
       expect(counts(two, 7)).toEqual([2, 1, 2, 1].map((count) => ({ count, limit: 2 })));
+    });
+
+    it('a penalty entry says which penalty was given: a drive-through and a stop-go carry their kind and no time', () => {
+      expect(only(run(viewOf({ miniSectors: race(), events: [penalty(7, DRIVE_THROUGH)] })), 'penalty').penalty).toEqual({ kind: 'driveThrough' });
+      expect(only(run(viewOf({ miniSectors: race(), events: [penalty(7, STOP_GO)] })), 'penalty').penalty).toEqual({ kind: 'stopGo' });
+    });
+
+    it('a time penalty carries its time from the PENA time', () => {
+      const entry = only(run(viewOf({ miniSectors: race(), events: [penalty(7, TIME_PENALTY, T, 5_000)] })), 'penalty');
+      expect(entry.penalty).toEqual({ kind: 'time', timeMs: 5_000 });
+    });
+
+    it('a time penalty without a time (the game sent none) carries no invented time', () => {
+      const entry = only(run(viewOf({ miniSectors: race(), events: [penalty(7, TIME_PENALTY)] })), 'penalty');
+      expect(entry.penalty).toEqual({ kind: 'time' });
+    });
+
+    it.each([
+      [2, 'grid'],
+      [6, 'disqualified'],
+      [9, 'tyreRegulations'],
+    ] as const)('penaltyType %i is a penalty entry of kind %s', (type, kind) => {
+      expect(only(run(viewOf({ miniSectors: race(), events: [penalty(7, type)] })), 'penalty').penalty).toEqual({ kind });
+    });
+
+    it('only penalty entries carry penalty', () => {
+      const feed = run(viewOf({ miniSectors: race(), events: [collision(6, 5), penalty(7, WARNING, T + 100), penalty(7, TIME_PENALTY, T + 200, 5_000)] }));
+      expect(feed.map((e) => e.kind).sort()).toEqual(['collision', 'penalty', 'warning']);
+      for (const entry of feed) expect('penalty' in entry, entry.kind).toBe(entry.kind === 'penalty');
     });
 
     it('only damage entries carry damage and only warning entries carry warning', () => {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { known, toSessionTime, unknown, type Known, type RaceMoment } from '@pitwall/domain';
+import { formatPenaltyMs } from '../../kit/values/format.ts';
 import { boardRow, incidentEntry, interval, lapBoard, ms, overview, sessionInfo, toCar } from './fixtures.ts';
 import { buildRows, type TowerInput } from './rows.ts';
 
@@ -131,6 +132,46 @@ describe('buildRows', () => {
     const row = buildRows(input)[0];
     expect(row?.penaltyMs).toBe(5000);
     expect(row?.warnings).toBe(2);
+  });
+
+  describe('the PEN cell: an unserved stop-go, else a drive-through, else the time penalty (user, live test 2026-10-30)', () => {
+    type Penalties = { timePenaltyMs?: number; totalWarnings?: number; unservedDriveThroughs?: number; unservedStopGos?: number };
+    const pen = (p: Penalties) => {
+      const input = base();
+      input.cars = [overview(0, { name: 'Max Verstappen', position: 1, ...p })];
+      return buildRows(input)[0]!.penalty;
+    };
+
+    it('an unserved stop-go shows SG, an unserved drive-through DT, both in the penalty role', () => {
+      expect(pen({ unservedStopGos: 1 })).toMatchObject({ text: 'SG', role: 'warning' });
+      expect(pen({ unservedDriveThroughs: 1 })).toMatchObject({ text: 'DT', role: 'warning' });
+    });
+
+    it('a stop-go comes before a drive-through', () => {
+      expect(pen({ unservedStopGos: 1, unservedDriveThroughs: 1 })).toMatchObject({ text: 'SG', role: 'warning' });
+    });
+
+    it('a time penalty alone shows its time, as before', () => {
+      expect(pen({ timePenaltyMs: 5000 })).toMatchObject({ text: '5s', role: 'warning' });
+    });
+
+    it('a time penalty beside a drive-through or stop-go goes to the title, in the time format of the cell', () => {
+      const dt = pen({ timePenaltyMs: 5000, unservedDriveThroughs: 1 });
+      expect(dt).toMatchObject({ text: 'DT', role: 'warning' });
+      expect(dt.title).toContain(formatPenaltyMs(5000));
+      const sg = pen({ timePenaltyMs: 10_000, unservedStopGos: 1 });
+      expect(sg).toMatchObject({ text: 'SG', role: 'warning' });
+      expect(sg.title).toContain(formatPenaltyMs(10_000));
+    });
+
+    it('no penalty: an empty neutral cell; warnings alone show their count, neutral, as before', () => {
+      const none = pen({});
+      expect(none.text).toBe('');
+      expect(none.role).toBeUndefined();
+      const warned = pen({ totalWarnings: 2 });
+      expect(warned.text).toBe('2w');
+      expect(warned.role).toBeUndefined();
+    });
   });
 
   it('reports the pit status: in the pits, or on an out lap', () => {

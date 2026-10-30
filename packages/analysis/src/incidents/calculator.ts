@@ -13,6 +13,7 @@ import {
   type IncidentEntry,
   type IncidentForUs,
   type IncidentKind,
+  type IncidentPenalty,
   type Known,
   type LapRecord,
   type Ms,
@@ -26,7 +27,7 @@ import { LAP_CLASSES_CONFIG } from '../lap-classes/index.ts';
 import { PACE_CONFIG } from '../pace/index.ts';
 import { paceDeltaAround } from '../pace-delta/index.ts';
 import { ourCars } from '../shared/our-cars.ts';
-import { penaltyClass, warningInCycle } from '../shared/penalties.ts';
+import { penaltyClass, penaltyKind, warningInCycle } from '../shared/penalties.ts';
 import {
   addCrossing,
   emptyTrack,
@@ -65,8 +66,14 @@ const MAJOR = {
   neutralised: 'neutralisedMajor',
 } as const satisfies Record<IncidentKind, keyof Config>;
 
-/** `warnings`: on a warning, the car's count of warnings up to and including it. */
-type CarEvent = { kind: 'collision' | 'retirement' | 'warning' | 'penalty'; at: SessionTime; carIds: CarId[]; warnings?: number };
+/** `warnings`: on a warning, the car's count of warnings up to and including it; `penalty`: on a penalty, its ruling. */
+type CarEvent = {
+  kind: 'collision' | 'retirement' | 'warning' | 'penalty';
+  at: SessionTime;
+  carIds: CarId[];
+  warnings?: number;
+  penalty?: IncidentPenalty;
+};
 
 type Acc = {
   /** How much of each history list is folded. */
@@ -161,6 +168,14 @@ const foldCrossings = (acc: Acc, view: EngineView): void => {
   });
 };
 
+/** A PENA event's ruling; a time penalty carries the engine's `timeMs` param when the game sent a time. */
+const penaltyOf = (params: Record<string, number | string>): IncidentPenalty | undefined => {
+  const kind = penaltyKind(params['penaltyType']);
+  if (kind === undefined) return undefined;
+  const timeMs = params['timeMs'];
+  return kind === 'time' && typeof timeMs === 'number' ? { kind, timeMs } : { kind };
+};
+
 const foldEvents = (acc: Acc, view: EngineView): void => {
   const { events } = view.state.history;
   for (const e of events.slice(acc.events)) {
@@ -173,7 +188,10 @@ const foldEvents = (acc: Acc, view: EngineView): void => {
         const warnings = (acc.warnings[e.carId] ?? 0) + 1;
         acc.warnings[e.carId] = warnings;
         acc.carEvents.push({ kind, at: e.at, carIds: [e.carId], warnings });
-      } else if (kind !== 'none') acc.carEvents.push({ kind, at: e.at, carIds: [e.carId] });
+      } else {
+        const penalty = penaltyOf(e.params);
+        if (penalty !== undefined) acc.carEvents.push({ kind: 'penalty', at: e.at, carIds: [e.carId], penalty });
+      }
     }
   }
   acc.events = events.length;
@@ -239,6 +257,8 @@ type Candidate = {
   jumps?: DamageJump[];
   /** A warning entry's count of the car's warnings. */
   warnings?: number;
+  /** A penalty entry's ruling. */
+  penalty?: IncidentPenalty;
   run?: SlowRun;
   merged: SlowRun[];
 };
@@ -289,7 +309,12 @@ const damageGroups = (acc: Acc): { carId: CarId; jumps: DamageJump[] }[] => {
 
 /** Every entry the history gives, with each time loss merged into a collision or damage entry of its car close by. */
 const candidates = (acc: Acc): Candidate[] => {
-  const list = acc.carEvents.map((e) => candidate(e.kind, e.at, e.carIds, e.warnings === undefined ? {} : { warnings: e.warnings }));
+  const list = acc.carEvents.map((e) =>
+    candidate(e.kind, e.at, e.carIds, {
+      ...(e.warnings !== undefined && { warnings: e.warnings }),
+      ...(e.penalty !== undefined && { penalty: e.penalty }),
+    }),
+  );
   for (const { carId, jumps } of damageGroups(acc)) {
     const [jump] = jumps;
     if (jump !== undefined) list.push(candidate('damage', jump.at, [carId], { lap: jump.lap, jump, jumps }));
@@ -402,10 +427,11 @@ const damageParts = (jumps: readonly DamageJump[]): IncidentDamagePart[] => {
   return [...rise].map(([part, deltaPct]) => ({ part, deltaPct })).sort((a, b) => b.deltaPct - a.deltaPct);
 };
 
-/** The detail only some kinds have: a damage entry's parts, a warning's count of the limit. */
-const detailOf = (acc: Acc, c: Candidate): Pick<IncidentEntry, 'damage' | 'warning'> => {
+/** The detail only some kinds have: a damage entry's parts, a warning's count of the limit, a penalty's ruling. */
+const detailOf = (acc: Acc, c: Candidate): Pick<IncidentEntry, 'damage' | 'warning' | 'penalty'> => {
   if (c.jumps !== undefined) return { damage: damageParts(c.jumps) };
   if (c.warnings !== undefined) return { warning: { count: warningInCycle(c.warnings, acc.warningLimit), limit: acc.warningLimit } };
+  if (c.penalty !== undefined) return { penalty: { ...c.penalty } };
   return {};
 };
 

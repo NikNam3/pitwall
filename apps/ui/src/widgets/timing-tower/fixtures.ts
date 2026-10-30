@@ -21,6 +21,8 @@ type CarOptions = {
   stops?: number;
   timePenaltyMs?: number;
   totalWarnings?: number;
+  unservedDriveThroughs?: number;
+  unservedStopGos?: number;
   resultStatus?: CarTiming['resultStatus'];
   pitStatus?: CarTiming['pitStatus'];
   driverStatus?: CarTiming['driverStatus'];
@@ -40,7 +42,7 @@ export function overview(id: number, o: CarOptions): CarOverview {
       gapToCarAheadMs: ms(0), safetyCarDeltaMs: 0, pitStatus: o.pitStatus ?? 'none', numPitStops: o.numPitStops ?? 1,
       pitLaneTimerActive: false, pitLaneTimeMs: 0, pitStopTimerMs: 0, shouldServePenalty: false,
       driverStatus: o.driverStatus ?? 'onTrack', resultStatus: o.resultStatus ?? 'active', timePenaltyMs: o.timePenaltyMs ?? 0,
-      totalWarnings: o.totalWarnings ?? 0, cornerCuttingWarnings: 0, unservedDriveThroughs: 0, unservedStopGos: 0,
+      totalWarnings: o.totalWarnings ?? 0, cornerCuttingWarnings: 0, unservedDriveThroughs: o.unservedDriveThroughs ?? 0, unservedStopGos: o.unservedStopGos ?? 0,
       gridPosition: o.gridPosition ?? o.position, speedTrapFastestKmh: unknown('notReceived'), fiaFlag: 'none',
     },
     tyres: { actualCompound: 'C3', visualCompound: o.compound ?? 'medium', age: o.age ?? 14 },

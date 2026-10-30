@@ -148,6 +148,34 @@ describe('the incident detail in the what cell (mockup: time loss (T7), damage F
     expect(what({ kind: 'neutralised', where: { sector: unknown('notApplicable') } })).toBe('neutralised');
   });
 
+  describe('a penalty entry names the penalty given (the PEN kind from incidents)', () => {
+    const penalty = (detail: IncidentEntry['penalty']): string =>
+      what({ kind: 'penalty', severity: 'minor', timeLostMs: unknown('notApplicable'), where: { sector: k(2) }, ...(detail && { penalty: detail }) });
+
+    it('beside the kind word when both fit the what column: stop-go, a time penalty with the kit time, grid', () => {
+      expect(penalty({ kind: 'stopGo' })).toBe('penalty stop-go');
+      expect(penalty({ kind: 'time', timeMs: 5_000 })).toBe('penalty +5 s');
+      expect(penalty({ kind: 'time', timeMs: 10_000 })).toBe('penalty +10 s');
+      expect(penalty({ kind: 'grid' })).toBe('penalty grid');
+    });
+
+    it('alone when kind word and name do not fit: the name says it is a penalty', () => {
+      expect(penalty({ kind: 'driveThrough' })).toBe('drive-through');
+      expect(penalty({ kind: 'disqualified' })).toBe('disqualified');
+      expect(penalty({ kind: 'tyreRegulations' })).toBe('tyre regulations');
+    });
+
+    it('a time penalty without its time, or an entry without the kind, is a bare penalty (no invented time)', () => {
+      expect(penalty({ kind: 'time' })).toBe('penalty');
+      expect(penalty(undefined)).toBe('penalty');
+    });
+
+    it('a full row of a drive-through keeps the grid', () => {
+      const [row] = incidentRows([minor({ id: 'penalty:5:210000', kind: 'penalty', penalty: { kind: 'driveThrough' } })], cars, undefined);
+      expect(incidentRowText('full', row!).trimEnd()).toBe(' L21  PIA      drive-through');
+    });
+  });
+
   it('full rows keep the grid with the detail, as the mockup', () => {
     const [row] = incidentRows([entry({ id: 't', kind: 'timeLoss', carIds: [carId(4)], timeLostMs: k(6100), where: { sector: k(2) },
       forUs: [forUs({ otherCarId: k(carId(4)), positionAfter: k(5), gapBeforeMs: k(-1900), gapAfterMs: k(5800) })] })], cars, undefined);
