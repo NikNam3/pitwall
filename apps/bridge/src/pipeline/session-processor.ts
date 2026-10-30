@@ -21,7 +21,7 @@ import type { CalcStats } from '../dev/calc-stats.ts';
 import type { FeatureConfig } from '../feature-config.ts';
 import type { FeedJobs } from '../jobs/feed-jobs.ts';
 import type { Logger } from '../log.ts';
-import type { SessionRow } from '../storage/db.ts';
+import type { SessionKey, SessionRow } from '../storage/db.ts';
 import type { SessionFile } from '../storage/session-files.ts';
 import { MAX_DUMPS_PER_SESSION, writeDebugDump } from './debug-dump.ts';
 import { sessionRowOf, type SessionStorage } from './session-storage.ts';
@@ -75,6 +75,8 @@ const flashbackChanges = (feedId: FeedId, flashback: FlashbackInfo, at: SessionT
 export class SessionProcessor {
   readonly sessionUid: bigint;
   readonly #uid: SessionUid;
+  /** The session's storage key: the game reuses session uids across weekends. */
+  readonly #key: SessionKey;
   readonly #o: SessionProcessorOptions;
   #running: Running | undefined;
   #buffered: Frame[] = [];
@@ -86,6 +88,7 @@ export class SessionProcessor {
     this.#o = opts;
     this.sessionUid = opts.sessionUid;
     this.#uid = sessionUidString(opts.sessionUid);
+    this.#key = { sessionUid: this.#uid, weekendId: String(opts.session.weekendLinkIdentifier) };
     opts.storage?.upsertSession(this.#row());
   }
 
@@ -151,10 +154,9 @@ export class SessionProcessor {
 
   /** Stores the session's drivers and loads the player's earlier sessions of the weekend, with every driver in them. */
   #identify(participants: ParticipantsPacket, playerCarIndex: number): WeekendContext | undefined {
-    const { session, storage } = this.#o;
     this.#storeDrivers(participants);
     const driverKey = driverKeyOf(participants, playerCarIndex);
-    return storage?.weekendContext(String(session.weekendLinkIdentifier), driverKey, this.#uid);
+    return this.#o.storage?.weekendContext(this.#key, driverKey);
   }
 
   #storeDrivers(participants: ParticipantsPacket): void {
@@ -166,7 +168,7 @@ export class SessionProcessor {
     const { feedId, publisher, storage, log } = this.#o;
     try {
       const result = runner.apply(frame);
-      storage?.writeConfirmed(this.#uid, result.state.history, result.delta);
+      storage?.writeConfirmed(this.#key, result.state.history, result.delta);
       if (result.flashback) {
         scheduler.reset();
         // A run triggered before the flashback would land on the new timeline.
