@@ -15,6 +15,8 @@ const corners = (tyre: number) => {
 };
 
 const measuring: DamageJump = { at: 200_000, lap: 14, parts: ['frontLeftWingPct'], deltaPct: 12, lossMsPerLap: unknown('insufficientData') };
+// A hit on lap 2 of a race: no clean lap before it, so its loss can never be measured.
+const notMeasurable: DamageJump = { at: 150_000, lap: 2, parts: ['frontLeftWingPct'], deltaPct: 18, lossMsPerLap: unknown('notApplicable') };
 const measured: DamageJump = { at: 100_000, lap: 9, parts: ['floorPct'], deltaPct: 4, lossMsPerLap: known(120, 150_000) };
 
 const base = (over: Partial<DamageState>): DamageState => ({
@@ -29,6 +31,7 @@ const gallery: GalleryEntry<typeof widget> = {
     twoJumps: { damage: base({ jumps: [measured, measuring] }) },
     undamaged: { damage: base({ parts: known(clean, at), corners: corners(0) }) },
     measuredLoss: { damage: base({ jumps: [{ ...measuring, lossMsPerLap: known(310, 300_000) }, measured] }) },
+    notMeasurableLoss: { damage: base({ jumps: [notMeasurable] }) },
     faults: { damage: base({ drsFault: known(true, at), ersFault: true }) },
     // A rival linked as primary in realism mode: every value is hidden.
     realismHidden: {
