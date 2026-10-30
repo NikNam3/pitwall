@@ -2,9 +2,12 @@
 import type { CarOverview, SessionInfo } from '@pitwall/contracts';
 import { unknown } from '@pitwall/domain';
 import { ourCars } from '../../kit/car/our-cars.ts';
-import { momentIncident } from './emphasis.ts';
+import { formatPenaltyMs, formatWarnings } from '../../kit/values/format.ts';
+import type { Role } from '../../theme/roles.ts';
+import { momentIncident, penaltyRole } from './emphasis.ts';
+import * as text from './text.ts';
 import type {
-  CarId, GapToCar, IncidentEntry, Interval, Known, LapBoard, LapBoardRow, Ms, RaceMoment, SectorStatus, VisualCompound,
+  CarId, CarTiming, GapToCar, IncidentEntry, Interval, Known, LapBoard, LapBoardRow, Ms, RaceMoment, SectorStatus, VisualCompound,
 } from '@pitwall/domain';
 
 export type TowerInput = {
@@ -41,6 +44,8 @@ export type TowerRow = {
   stops: number;
   penaltyMs: number;
   warnings: number;
+  /** The PEN cell as it shows: `SG`, `DT`, the time penalty (`5s`) or the warnings (`2w`); a time beside SG/DT in the title. */
+  penalty: { text: string; role?: Role | undefined; title?: string };
   pit: 'pit' | 'out' | undefined;
   overview: CarOverview;
 };
@@ -54,6 +59,16 @@ function sectorsOf(row: LapBoardRow | undefined): TowerRow['sectors'] {
     timeMs: row?.lastSectorsMs[i] ?? missing(),
     status: row?.lastSectorStatus[i] ?? 'none',
   }));
+}
+
+/** An unserved stop-go before a drive-through before the time penalty; the warning count when there is no penalty. */
+function penaltyCell(t: CarTiming): TowerRow['penalty'] {
+  const role = penaltyRole(t.timePenaltyMs, t.unservedStopGos + t.unservedDriveThroughs);
+  const unserved = t.unservedStopGos > 0 ? text.unservedPenalty.stopGo : t.unservedDriveThroughs > 0 ? text.unservedPenalty.driveThrough : undefined;
+  const time = t.timePenaltyMs > 0 ? formatPenaltyMs(t.timePenaltyMs) : undefined;
+  if (unserved !== undefined) return { text: unserved.code, role, title: time === undefined ? unserved.name : text.withTimePenalty(unserved.name, time) };
+  if (time !== undefined) return { text: time, role };
+  return { text: t.totalWarnings > 0 ? formatWarnings(t.totalWarnings) : '' };
 }
 
 /** One row per running or retired car: running by position, then retired by car id. */
@@ -92,6 +107,7 @@ export function buildRows(input: TowerInput): TowerRow[] {
         stops: c.stops,
         penaltyMs: c.timing.timePenaltyMs,
         warnings: c.timing.totalWarnings,
+        penalty: penaltyCell(c.timing),
         pit: c.timing.pitStatus === 'pitting' || c.timing.pitStatus === 'inPitArea' ? 'pit' : c.timing.driverStatus === 'outLap' ? 'out' : undefined,
         overview: c,
       };

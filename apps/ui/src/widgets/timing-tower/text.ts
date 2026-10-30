@@ -7,3 +7,10 @@ export const headers = {
   position: 'P', change: '', car: 'DRV', gap: 'GAP', interval: 'INT', toUs: 'TO US', last: 'LAST', s1: 'S1', s2: 'S2', s3: 'S3',
   compound: 'T', age: 'AGE', stops: 'ST', penalty: 'PEN', pit: 'PIT',
 } as const;
+/** An unserved stop-go or drive-through in the PEN cell: its code, and its name for the hover. */
+export const unservedPenalty = {
+  stopGo: { code: 'SG', name: 'stop-go to serve' },
+  driveThrough: { code: 'DT', name: 'drive-through to serve' },
+} as const;
+/** The hover of a stop-go or drive-through beside a time penalty: `drive-through to serve, 5s time penalty`. */
+export const withTimePenalty = (name: string, time: string): string => `${name}, ${time} time penalty`;
