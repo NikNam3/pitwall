@@ -34,11 +34,11 @@
 
 ## Task 0: Integration follow-ups of wave 2
 
-**Files:** Modify `packages/analysis/src/gaps/calculator.ts` (out-of-race set), `apps/ui/src/widgets/gap-chart/GapChart.svelte` and `gap-chart/*.ts` (use the kit `TextCell`); delete `apps/ui/src/kit/values/UnknownMark.svelte` when no source imports it. Test: `packages/analysis/test/gaps/gaps.test.ts`, `apps/ui/test/gallery/unknown-marks.test.ts`.
+**Files:** Modify `packages/analysis/src/gaps/calculator.ts` (out-of-race set), `apps/ui/src/widgets/gap-chart/GapChart.svelte` and `gap-chart/*.ts` (use the kit `TextCell`); delete `apps/ui/src/kit/values/UnknownMark.svelte` when no source imports it. Test: `packages/analysis/test/gaps/gaps.test.ts`, `apps/ui/test/kit/unknown-in-kit.test.ts` (the gap-chart exclusion lives there).
 
 **Interfaces:** Consumes `isOutOfRace(car)` from `packages/analysis/src/shared/out-of-race.ts` (Task T7 of wave 2) and the kit `TextCell` (`{ text, reason?, width, align, role?, title? }`).
 
-- [ ] **Step 1 (test agent):** `gaps.test.ts`: "a not-classified car leaves the intervals like a retired one" (the shared set includes `notClassified`); `unknown-marks.test.ts`: the source scan includes `widgets/gap-chart` (remove its exclusion). Run: both fail.
+- [ ] **Step 1 (test agent):** `gaps.test.ts`: "a not-classified car leaves the intervals like a retired one" (the shared set includes `notClassified`); `unknown-in-kit.test.ts`: the source scan includes `widgets/gap-chart` (remove its exclusion). Run: both fail.
 - [ ] **Step 2 (implementer):** `gaps` filters with `isOutOfRace`; the gap chart renders its reference cell through `TextCell`; delete `UnknownMark.svelte` (grep: no importer left).
 - [ ] **Step 3:** `nice -n 10 pnpm vitest run packages/analysis/test/gaps apps/ui/test/gallery` passes; typecheck, lint, depcruise clean.
 - [ ] **Step 4:** commit `refactor: gaps and the gap chart use the shared out-of-race set and the kit text cell`.
