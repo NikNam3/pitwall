@@ -2,13 +2,13 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** computed answers for the race's strategy decisions (box now or later, compound, undercut or cover, box under SC/VSC, weather switch), plus the track map with official turn numbers, the radio window and the forecast, with practice feeding the race through stored knowledge.
+**Goal:** computed answers for the race's strategy decisions (box now or later, compound, undercut or cover, box under SC/VSC, weather switch), plus the track map with official turn numbers and flags, and the forecast, with practice feeding the race through stored knowledge.
 
 **Architecture:**
 - **`packages/analysis`:** functions, two **simulators** (`lap-model`, `race-forecast`: pure, plain arrays in, typed arrays out), three calculators (`track-geometry`, `degradation`, `pit-loss`) and thirteen analyses, one folder per unit. The forecast scoreboard (`forecast-score`, Task 29a) is a calculator plus a pure scoring function; the bridge collects its log through an output tap.
 - **Knowledge** copies ADR 0008: `EngineView.priors` fixed per session, `definePriors`, contributions stored per source session by the bridge, a `<session>.priors.json` sidecar (ADR 0015).
 - **`apps/bridge/src/features/<unit>/`** registers calculators, binds topics, declares config, priors and contributions.
-- **`apps/ui/src/widgets/<display>/`:** twelve new widgets that only render, plus ghost lines on `gap-chart` and turns in `incident-feed`.
+- **`apps/ui/src/widgets/<display>/`:** eleven new widgets that only render, plus ghost lines on `gap-chart` and turns in `incident-feed`.
 
 **Tech stack:** existing only. TypeScript (strict, type stripping), Vitest, fast-check, Svelte 5, uPlot, canvas, Playwright, Electron, better-sqlite3. No new dependency in pitwall. The FastF1 import script is Python and lives in its own repo (Task 6).
 
@@ -28,8 +28,8 @@
 - **Displays render, analyses compute** (ADR 0014). Any arithmetic on topic values beyond formatting is a review finding.
 - **A display never shares its unit name with an analysis** (spec 8.2).
 - **Contracts are binding.** Task 1 commits every value type, topic file, calculator id, simulator signature, priors key and config declaration. Unit workers treat them as read-only; changes go under "Requested changes to supervisor-owned files".
-- **Calculator outputs** follow SP3. A per-car analysis outputs `Record<CarId, Value>`, and the binding's `select` picks `params.carId`. Strategy analyses fill only our cars (`session.info` `playerCar`, `teammateCar`); any other car is `notApplicable`. The `forecast-score` calculator (Task 29a) forecasts the whole field and has no topic.
-- **Cadence** (spec 1.4, item 9): strategy units run on `lapCompleted`, `pitStop`, `flagChange` and `{ hz: 1 }`, **never `'frame'`**. Only `track-positions` and `radio-window` place cars per frame, and only by lookups into precomputed geometry.
+- **Calculator outputs** follow SP3. A per-car analysis outputs `Record<CarId, Value>`, and the binding's `select` picks `params.carId`. Strategy analyses fill only our cars (`session.info` `playerCar`, `teammateCar`); any other car is `notApplicable`. Exception: `raising-average` and `lap-overview` fill every car (mockups Q13). The `forecast-score` calculator (Task 29a) forecasts the whole field and has no topic.
+- **Cadence** (spec 1.4, item 9): strategy units run on `lapCompleted`, `pitStop`, `flagChange` and `{ hz: 1 }`, **never `'frame'`**. Only `track-positions` places cars per frame, and only by lookups into precomputed geometry.
 - **Budgets** are tests (spec 10.3, `test-support/bench.ts`). A miss is profiled and fixed. A budget is never raised without the user.
 - **Numbers only, no verdicts.** No text such as "BOX", "undercut works" or "switch now". **The game's pit window** (`SessionState.pitWindow`) is never read by any unit.
 - **Rivals do not stop in 4a forecasts.** A rival past its tyre life is marked `stopDue`.
@@ -85,7 +85,7 @@ Spec section 12 is the schedule:
 |---|---|
 | 0 | 1 → 2 → 3; 0, 4, 5, 6, 7 |
 | 1 | 8 `track-lookup`, 9 `tyre-life`, 10 `lap-model`, 11 `track-geometry`, 12 `pit-loss`, 13 `degradation`, 14 `weather`, 15 `raising-average`, 16 `lap-overview` |
-| 2 | 17 `race-forecast`, 18 `forecast-field`, 19 `pit-losses`, 20 `stint-analysis`, 21 `track-positions`, 22 `radio-window`, 23 `crossover`, 24 `pit-window`, 25 `incidents` turn |
+| 2 | 17 `race-forecast`, 18 `forecast-field`, 19 `pit-losses`, 20 `stint-analysis`, 21 `track-positions`, 23 `crossover`, 24 `pit-window`, 25 `incidents` turn |
 | 3 | 26 `rejoin`, 27 `undercut`, 28 `sc-call`, 29 `pit-sweep` |
 | 4 | 29a `forecast-score`: its calculator, `scoreForecasts`, the output tap, `pitwall score` |
 | displays | 30–43, each after its analysis's contract (test phase) and Tasks 0, 7 (implement phase) |
@@ -115,7 +115,7 @@ A **lane** is what one agent builds per phase: one unit, or units of the same le
 | 2 | `race-forecast` ⚑ | 17 | Opus |
 | 2 | `forecast-field` ⚑ | 18 | Opus |
 | 2 | `longrun` | 19, 20 | Sonnet |
-| 2 | `map` | 21, 22, 25 | Opus |
+| 2 | `map` | 21, 25 | Opus |
 | 2 | `crossover` | 23 | Opus |
 | 2 | `pit-window` | 24 | Opus |
 | 3 | `rejoin` ⚑ | 26 | Opus |
@@ -129,7 +129,6 @@ A **lane** is what one agent builds per phase: one unit, or units of the same le
 | displays | `call-cards` | 38, 39 | Opus |
 | displays | `sweep-view` | 40 | Sonnet |
 | displays | `weather-views` | 41, 42 | Sonnet |
-| displays | `radio-view` | 37 | Sonnet |
 | end | `workbooks` | 44 | Sonnet |
 | end | gates | 45 (supervisor) | — |
 
@@ -157,11 +156,11 @@ A **lane** is what one agent builds per phase: one unit, or units of the same le
 
 **Blocks:** every display's test phase (Tasks 30–43) and Task 44.
 
-- [ ] Write full HTML documents in `docs/brainstorms/2026-10-30-sp4a-displays/`, one per display of spec 8.2, plus the `gap-chart` ghost lines and the `incident-feed` turn. Each shows compact and full mode at the theme's font size, with the real theme roles, colour only to highlight or distinguish, our cars white, and the source badge on prior-based values.
-- [ ] Add `0-layouts.html` with the `strategy` and `longrun` workbooks (spec 9) on the 24" and the 14" monitor.
-- [ ] Screenshot every document with the cached headless Chromium (`~/.cache/ms-playwright/chromium_headless_shell-1243/chrome-headless-shell-linux64/chrome-headless-shell --no-sandbox --hide-scrollbars --window-size=1500,1500 --screenshot=<scratchpad>/x.png file://…`) and check each one before showing it.
-- [ ] Get the user's approval. Record column priorities, size modes and layouts in `docs/brainstorms/2026-10-30-sp4a-displays/README.md`.
-- [ ] Commit: `docs: approved sub-project 4a display mockups`.
+- [x] Write full HTML documents in `docs/brainstorms/2026-10-30-sp4a-displays/`, one per display of spec 8.2, plus the `gap-chart` ghost lines and the `incident-feed` turn. Each shows compact and full mode at the theme's font size, with the real theme roles, colour only to highlight or distinguish, our cars white, and the source badge on prior-based values.
+- [x] Add `0-layouts.html` with the `strategy` and `longrun` workbooks (spec 9) on the 24" and the 14" monitor.
+- [x] Screenshot every document with the cached headless Chromium (`~/.cache/ms-playwright/chromium_headless_shell-1243/chrome-headless-shell-linux64/chrome-headless-shell --no-sandbox --hide-scrollbars --window-size=1500,1500 --screenshot=<scratchpad>/x.png file://…`) and check each one before showing it.
+- [x] Get the user's approval. Record column priorities, size modes and layouts in `docs/brainstorms/2026-10-30-sp4a-displays/README.md`.
+- [x] Commit: `docs: approved sub-project 4a display mockups`.
 
 ---
 
@@ -169,10 +168,12 @@ A **lane** is what one agent builds per phase: one unit, or units of the same le
 
 **Goal:** every interface between the parts exists as code before any unit starts (spec 3, Appendix A and B).
 
+**Approved mockups first:** apply the checklist "Contract and theme changes for Task 1" in `docs/brainstorms/2026-10-30-sp4a-displays/README.md` on top of Appendix A (it wins where they differ), including the theme role `opportunity` and the `ghostLaps` config of `rejoin`. Tick each row in the report.
+
 **Done by:** one agent (lane `contracts`, single phase, supervisor-owned scope), reviewed before merge. Verified by `pnpm gen`, `pnpm typecheck`, `pnpm depcruise`, `pnpm check`.
 
 - [ ] `packages/domain/src/knowledge.ts`: `Lifetime`, `KnowledgeSource` (A.1). `tracks.ts`: `TrackTurn`, `TrackTurns`. `analyses/track.ts`: `MapPoint`, `Corner`, `Straight`, `TrackGeometry`. `incidents.ts`: `IncidentWhere.turn`, filled with `unknown('notApplicable')` where entries are built today. `race-moment.ts`: `'window'` in `Moment` between `'neutralised'` and `'incident'`, with a `kit/text.ts` name.
-- [ ] `packages/domain/src/analyses/`: one file per new analysis with the value types of spec A.3, named after the analysis (`pit-losses.ts`, `stint-analysis.ts`, `raising-average.ts`, `lap-overview.ts`, `rejoin.ts`, `undercut.ts`, `sc-call.ts`, `pit-sweep.ts`, `pit-window.ts`, `track-positions.ts`, `radio-window.ts`, `weather.ts`, `crossover.ts`), plus `strategy.ts` with `PitCondition`, `PitLossSample`, `CompoundFit`, `StintFit`. Export them from the package index.
+- [ ] `packages/domain/src/analyses/`: one file per new analysis with the value types of spec A.3, named after the analysis (`pit-losses.ts`, `stint-analysis.ts`, `raising-average.ts`, `lap-overview.ts`, `rejoin.ts`, `undercut.ts`, `sc-call.ts`, `pit-sweep.ts`, `pit-window.ts`, `track-positions.ts`, `weather.ts`, `crossover.ts`), plus `strategy.ts` with `PitCondition`, `PitLossSample`, `CompoundFit`, `StintFit`. Export them from the package index.
 - [ ] `packages/engine/src/calc/priors.ts`: the `PriorsKey` type and `definePriors` signature (A.2). It throws `not implemented` until Task 3. `EngineView` gains `priors`.
 - [ ] `packages/analysis/src/<unit>/index.ts` for every unit of Tasks 8–29a: the exported types, signatures and calculator ids of A.2, and the priors keys:
   - `PIT_LOSS_PRIORS` (`'pit-loss'`, `track`)
@@ -181,7 +182,7 @@ A **lane** is what one agent builds per phase: one unit, or units of the same le
   - `TRACK_TURNS_PRIORS` (`'track-turns'`, `reference`, default `null`)
 
   Bodies throw `not implemented`.
-- [ ] `packages/contracts/src/topics/`: the 14 topic files of A.3, with the names fixed in the spec: `pitLosses.track`, `stintAnalysis.car`, `raisingAverage.car`, `lapOverview.car`, `rejoin.car`, `undercut.car`, `scCall.car`, `pitSweep.car` (params `{ carId: CarId; compound: ActualCompound }`), `pitWindow.car`, `trackPositions.geometry`, `trackPositions.cars`, `radioWindow.car`, `weather.forecast`, `crossover.field`.
+- [ ] `packages/contracts/src/topics/`: the 13 topic files of A.3, with the names fixed in the spec: `pitLosses.track`, `stintAnalysis.car`, `raisingAverage.car`, `lapOverview.car`, `rejoin.car`, `undercut.car`, `scCall.car`, `pitSweep.car` (params `{ carId: CarId; compound: ActualCompound }`), `pitWindow.car`, `trackPositions.geometry`, `trackPositions.cars`, `weather.forecast`, `crossover.field`.
   Every topic with params declares `momentParams` (required since main 1197d50, so moments capture it): the `CarParams` topics use `eachCar`; `pitSweep.car` gives each car with each dry compound of its available tyre sets, or each car with every dry `ActualCompound` if `momentParams` cannot see the sets.
 - [ ] `packages/analysis/src/<unit>/config.ts` for every Appendix B row: flat fields, each with a source comment. **R3 happens here.** Look up community values for F1 25 (F1 24 where 25 has none):
   - pit loss per track and condition
@@ -622,18 +623,9 @@ Done on main by a separate fix (d4a5737, tests eab70ec): sessions and every chil
 
 ---
 
-### Task 22: `radio-window` → `radioWindow.car`
+### Task 22: `radio-window` (dropped)
 
-**Unit:** analysis (quick, cadence `{ hz: 4 }`). **Depends on:** Tasks 8, 11.
-
-**Tests:**
-- `on the oval's straight at 300 m at 300 km/h, 300 m left gives 3.6 s`
-- `in a corner, seconds to the next straight from distance and speed`
-- `below 30 km/h the stored median speed per bin is used`
-- `no geometry gives insufficientData`
-- `another car is notApplicable`
-
-- [ ] Test phase · [ ] Implement phase · [ ] review · [ ] merged
+Dropped by the user in the mockup review (2026-10-30): the track map shows where our car is. V34 is not built.
 
 ---
 
@@ -699,7 +691,7 @@ Done on main by a separate fix (d4a5737, tests eab70ec): sessions and every chil
 - `a retired car is not in the order` (Review Focus 4)
 - `a lapped car is traffic, not a position` (Review Focus 4)
 - `with no samples the loss is the default with source default and the ghost is still placed` (Review Focus 2)
-- `ghost lines are the gapper line minus the loss`
+- `ghost lines are the gapper line plus the loss, over the last ghostLaps laps`
 - `a flashback before a stop gives the fresh run's ghost` (Review Focus 1)
 - budget: `< 5 ms`
 
@@ -806,12 +798,12 @@ Done on main by a separate fix (d4a5737, tests eab70ec): sessions and every chil
 | 32 | `raising-average-chart` (V08) | `raisingAverage.car` | our cars white, rivals by team colour |
 | 33 | `lap-overview-grid` (V09) | `lapOverview.car` | session best purple; in/out marked; SC/VSC strip |
 | 34 | `crossing-order` (V03) | `rejoin.car` | ghost row per condition; the cars around the ghost highlighted |
-| 35 | `gap-chart` change (V04) | `gaps.gapper`, `rejoin.car` | ghost line per condition, dashed; hidden when `rejoin` is unknown |
-| 36 | `track-map` | `trackPositions.geometry`, `trackPositions.cars`, `rejoin.car` | our cars white; ghost; incident marker; turn labels only from the topic |
-| 37 | `radio-clock` (V34) | `radioWindow.car` | "on straight" highlighted; counts down |
-| 38 | `undercut-card` (V13) | `undercut.car` | positive margin highlighted, never a verdict text; `stopDue` mark |
+| 35 | `gap-chart` change (V04) | `gaps.gapper`, `rejoin.car` | ghost line per condition, faint, told apart by dash and letter (mockups Q1 B1); hidden when `rejoin` is unknown |
+| 36 | `track-map` | `trackPositions.geometry`, `trackPositions.cars`, `rejoin.car` | our cars white, rivals in team colour; faint ghost rings with letters; incident marker with its kind; yellow zones; blue bar beside a blue-flagged car, clear of neighbours; turn labels only from the topic |
+| 37 | ~~`radio-clock` (V34)~~ | dropped (mockup review) | — |
+| 38 | `undercut-card` (V13) | `undercut.car` | our positive margin bold in `opportunity`, theirs bold in `warning`; never a verdict text; `stopDue` mark |
 | 39 | `sc-card` (V18) | `scCall.car` | one line when `active` is none; the sheet when sc/vsc |
-| 40 | `pit-sweep-table` (V15) | `pitSweep.car` | `exceedsLife` rows marked; compound selector sets params |
+| 40 | `pit-sweep-table` (V15) | `pitSweep.car`, `pitWindow.car` | `exceedsLife` rows marked; finish as `finishDeltaMs`; compound selector sets params, options from `pitWindow.car` |
 | 41 | `forecast-strip` | `weather.forecast` | first rain sample highlighted; `approximate` shown |
 | 42 | `crossover-chart` (V19) | `crossover.field` | the 110 % line; our ratio; payback laps |
 | 43 | `incident-feed` change | `incidents.feed` | turn label shown when known, sector otherwise |
