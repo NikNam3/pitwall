@@ -1,7 +1,7 @@
 // Generates the sub-project 4a display mockups (plan Task 0): node gen.mjs
 // Every display is laid out in character cells, with the real theme (imported from apps/ui/src/theme) and the SP3
 // panel frame B. Presentation lives in one place each: THEME (roles, font, density), FMT (formats, mirroring
-// kit/values/format.ts), TEXT (wording), GHOST (the shared ghost marker), SOURCE (the source badge).
+// kit/values/format.ts), TEXT (wording), GHOST_STYLES (the ghost variants), UC_HL (the undercut highlights), SOURCE (the source badge).
 // The generator throws when a line is wider than its panel or a cell wider than its column, so a misfit cannot ship.
 import { writeFileSync } from 'node:fs';
 import { DEFAULT_THEME, FONT_FAMILY } from '../../../apps/ui/src/theme/themes.ts';
@@ -62,14 +62,21 @@ const TEXT = {
   tyreType: { slick: 'slick', inter: 'inter', wet: 'wet' },
 };
 
-// ---------------------------------------------------------------- the ghost marker (kit piece, spec 8.3): one style for crossing order, gap chart, map
-const GHOST = {
-  glyph: '◇',
-  role: { green: 'series3', vsc: 'series5', sc: 'series2' },
-  dash: [2, 3], // dotted; the teammate's line keeps the theme's dash [6, 4]
-};
+// ---------------------------------------------------------------- the ghost (kit piece, spec 8.3): round-2 variants (page 6, new Q1)
+// Every variant is quieter than a real car and keeps our code plain (no glyph inside it). One variant is used in every
+// display at once: crossing order (table), gap chart (line), track map (marker). Pages 1 and 2 show REC_GHOST.
 const CONDITIONS = ['green', 'vsc', 'sc'];
-const ghostCls = (c) => `gh-${c}`;
+const HUE = { green: 'series3', vsc: 'series5', sc: 'series2' };
+const LETTER = { green: 'G', vsc: 'VSC', sc: 'SC' };
+const GHOST_STYLES = {
+  A: { name: 'muted hue, dimmed', table: 'hue', colour: (c) => R[HUE[c]], opacity: 0.55, dash: () => [2, 3], marker: 'ring' },
+  B: { name: 'faint, letters and dashes', table: 'faint', colour: () => R.textFaint, opacity: 1, dash: (c) => ({ green: [2, 3], vsc: [7, 3], sc: [7, 3, 2, 3] })[c], marker: 'ring' },
+  C: { name: 'insertion rule', table: 'rule', colour: () => R.textFaint, opacity: 1, dash: (c) => ({ green: [2, 3], vsc: [7, 3], sc: [7, 3, 2, 3] })[c], marker: 'tick' },
+  D: { name: 'band', table: 'band', colour: () => R.textDim, opacity: 1, dash: (c) => ({ green: [2, 3], vsc: [7, 3], sc: [7, 3, 2, 3] })[c], marker: 'ring' },
+};
+const REC_GHOST = 'B';
+/** The CSS class of a ghost's text in a variant. */
+const ghostText = (v, c) => (GHOST_STYLES[v].table === 'hue' ? `gA-${c}` : GHOST_STYLES[v].table === 'band' ? 'd' : 'f');
 
 // ---------------------------------------------------------------- the source badge (kit piece, spec 8.1, 8.3)
 // Measured this session: no mark (the normal case). Stored (earlier sessions): ˢ. Default (community value): ᵈ.
@@ -99,7 +106,12 @@ svg text.s { font-size:${FONT_PX - 2}px; }
 .d { color:var(--pw-textDim); } .f { color:var(--pw-textFaint); } .w { color:var(--pw-warning); } .c { color:var(--pw-critical); }
 .b { color:var(--pw-best); } .g { color:var(--pw-personalBest); } .y { color:var(--pw-flagYellow); }
 .o, .hi { color:var(--pw-ownCar); font-weight:${DEFAULT_THEME.table.boldWeight}; } .m { font-weight:${DEFAULT_THEME.table.boldWeight}; }
-${CONDITIONS.map((c) => `.${ghostCls(c)} { color:${roleVar(GHOST.role[c])}; }`).join(' ')}
+${CONDITIONS.map((c) => `.gA-${c} { color:${roleVar(HUE[c])}; opacity:${GHOST_STYLES.A.opacity}; }`).join(' ')}
+.gband { background:var(--pw-bgBand); }
+.ty-inter { color:var(--pw-series3); }
+.litW { background:var(--pw-text); color:var(--pw-bg); font-weight:700; } .litA { background:var(--pw-warning); color:var(--pw-bg); font-weight:700; }
+.barW { box-shadow:inset 3px 0 0 var(--pw-ownCar); display:inline-block; width:100%; } .barA { box-shadow:inset 3px 0 0 var(--pw-warning); display:inline-block; width:100%; }
+.wm { color:var(--pw-warning); font-weight:700; } .gm { color:var(--pw-personalBest); font-weight:700; }
 .band { background:var(--pw-bgRowBand); display:inline-block; width:100%; }
 .me { color:var(--pw-ownCar); font-weight:700; box-shadow:inset ${DEFAULT_THEME.table.barPx}px 0 0 var(--pw-text); display:inline-block; width:100%; }
 .tip { text-decoration:underline dotted var(--pw-textFaint); }
@@ -183,12 +195,12 @@ function chart({ cols, rows, x, y, series = [], bands = [], over = () => '', mar
   const ends = [];
   for (const sr of series) {
     const pts = sr.pts.map(([a, b]) => `${X(a).toFixed(1)},${Y(b).toFixed(1)}`).join(' ');
-    s += `<polyline points="${pts}" fill="none" stroke="${sr.colour}" stroke-width="${sr.width ?? CHART.lineWidth}" ${sr.dash ? `stroke-dasharray="${sr.dash.join(' ')}"` : ''} stroke-linejoin="round"/>`;
+    s += `<polyline points="${pts}" fill="none" stroke="${sr.colour}" stroke-width="${sr.width ?? CHART.lineWidth}" ${sr.dash ? `stroke-dasharray="${sr.dash.join(' ')}"` : ''} ${sr.opacity ? `opacity="${sr.opacity}"` : ''} stroke-linejoin="round"/>`;
     if (sr.label) ends.push({ sr, y: Y(sr.pts.at(-1)[1]) });
   }
   ends.sort((p, q) => p.y - q.y);
   for (let i = 1; i < ends.length; i++) ends[i].y = Math.max(ends[i].y, ends[i - 1].y + 14); // labels never overlap
-  for (const e of ends) s += `<text x="${W - m.r + 6}" y="${e.y + 4}" fill="${e.sr.labelColour ?? e.sr.colour}" ${e.sr.bold ? 'font-weight="700"' : ''}>${e.sr.label}</text>`;
+  for (const e of ends) s += `<text x="${W - m.r + 6}" y="${e.y + 4}" fill="${e.sr.labelColour ?? e.sr.colour}" ${e.sr.opacity ? `opacity="${e.sr.opacity}"` : ''} ${e.sr.bold ? 'font-weight="700"' : ''}>${e.sr.label}</text>`;
   s += over(X, Y, W, H, m);
   return s + '</svg>';
 }
@@ -222,86 +234,93 @@ const REJOIN = {
 };
 
 // ================================================================ page 1: ghost views (crossing order, gap chart ghost lines)
+// Shared with page 6, so they live outside the page block.
+const blockSpec = [{ h: 'P', w: 2, a: 'r' }, { h: 'DRV', w: 4, a: 'l' }, { h: 'INT', w: 7, a: 'r' }];
+const BW = 2 + 1 + 4 + 1 + 7; // 15 cells
+/** One condition of the crossing order: title (condition, loss), header, the cars around the ghost. */
+function crossingBlock(c, { around = 2, active = false, unknown = false, v = REC_GHOST } = {}) {
+  const r = REJOIN[c];
+  const loss = PIT_LOSS[c];
+  const lossCell = unknown ? span('tip', '    ', TEXT.unknown.insufficientData) : V(FMT.seconds(loss.lossMs, 1), loss.source, 'stops').t;
+  const word = GHOST_STYLES[v].table === 'hue' ? span(`gA-${c}`, TEXT.condition[c]) : TEXT.condition[c];
+  const title = `${word} ${unknown ? lossCell : span('', lossCell, sourceHover(loss.source, 'stops'))}`;
+  const head = active ? span('hi', strip(title)) : title;
+  if (unknown) return [padR(head, BW), span('f', padR(' P DRV      INT', BW)), span('tip', sp(BW), TEXT.unknown.insufficientData)];
+  const gi = r.order.findIndex((o) => o[0] === 'ghost');
+  const rows = r.order.slice(gi - around, gi + around + 1).map(([code, p, int]) => {
+    if (code === 'ghost') {
+      const t = GHOST_STYLES[v].table;
+      if (t === 'rule') {
+        const line = `${padL(String(p), 2)} KUH ${padL(FMT.gap(int), 7)}`.replace(/ /g, '╌');
+        return { raw: span('f', `${line}╌`) };
+      }
+      const cls = ghostText(v, c);
+      return { cls: t === 'band' ? 'gband' : '', cells: [C(String(p), cls), C('KUH', cls), C(FMT.gap(int), cls)] };
+    }
+    const near = code === r.ahead[0] || code === r.behind[0];
+    const cls = OURS.has(code) ? 'o' : near ? 'm' : '';
+    return { cells: [C(String(p), cls), C(code, cls), C(FMT.gap(int), cls)] };
+  });
+  return [padR(head, BW), ...table(blockSpec, rows, { lead: 0, band: false }).map((l) => padR(l, BW))];
+}
+const crossingFull = (opts = {}) => panel('Crossing order', { cols: 54, rows: 9, state: opts.state ?? '', lines: CONDITIONS.map((c) => crossingBlock(c, { around: 3, active: opts.active === c, unknown: opts.unknown, v: opts.v })).reduce((acc, b) => acc.map((l, i) => l + (l ? '   ' : ' ') + (b[i] ?? sp(BW))), Array(9).fill('')) });
+const crossingCompact = (c, state = '', v = REC_GHOST) => panel('Crossing order', { cols: 20, rows: 7, state, lines: crossingBlock(c, { v }).map((l) => ' ' + l) });
+
+/** The gap chart (existing widget) with the ghost lines of rejoin.car in variant v. */
+function gapChart({ cols, rows, ghosts = true, laps = LAP, from = 1, v = REC_GHOST }) {
+  const g = GHOST_STYLES[v];
+  const cars = FIELD.slice(0, 14).map(([code, g23, stop], i) => {
+    const lossAt = stop ? 20.3 : 0;
+    const slope = (g23 - lossAt) / LAP;
+    const pts = [];
+    for (let l = from; l <= laps; l++) pts.push([l, slope * l + (stop && l >= stop ? lossAt : 0) + (l === LAP ? 0 : noise(l + i, 0.12))]);
+    const own = OURS.has(code);
+    const mate = code === 'LIN';
+    return { pts, colour: colourOf(code), width: own ? CHART.ownCarLineWidth : CHART.lineWidth, dash: mate || ['PIA', 'HAM', 'ALO'].includes(code) ? CHART.dash : undefined, bold: own };
+  });
+  const us = cars[5].pts;
+  const lettered = g.table !== 'hue';
+  const ghostLines = ghosts
+    ? CONDITIONS.map((c) => ({ pts: us.filter(([l]) => l >= LAP - 5).map(([l, gp]) => [l, gp + PIT_LOSS[c].lossMs / 1000]), colour: g.colour(c), opacity: g.opacity < 1 ? g.opacity : undefined, width: 1, dash: g.dash(c), label: lettered ? LETTER[c] : undefined }))
+    : [];
+  const wide = cols > 50;
+  const svg = chart({
+    cols, rows: rows - 1,
+    x: { min: from, max: laps, ticks: Array.from({ length: laps }, (_, k) => k + 1).filter((l) => l >= from && (l - 1) % (wide ? 2 : 4) === 0), fmt: String, label: wide ? 'lap' : '' },
+    y: { min: -2, max: 48, invert: true, ticks: [0, 10, 20, 30, 40], fmt: FMT.gapTick, label: wide ? 'behind reference, s' : '' },
+    bands: from <= 9 ? [{ from: 9, to: 11, label: 'VSC' }] : [],
+    series: [...cars, ...ghostLines],
+    margin: wide ? { r: lettered && ghosts ? 40 : 16 } : { l: 44, r: lettered && ghosts ? 34 : 12, b: 22 },
+    over: (X, Y) => (ghosts && !lettered ? CONDITIONS.map((c) => `<circle cx="${X(LAP)}" cy="${Y(us.at(-1)[1] + PIT_LOSS[c].lossMs / 1000)}" r="3.5" fill="${R.bg}" stroke="${g.colour(c)}" stroke-width="1.2" opacity="${g.opacity}"/>`).join('') : ''),
+  });
+  const leg = (c, words) => {
+    const t = `${words ? (lettered ? LETTER[c] : TEXT.condition[c]) + ' ' : ''}${FMT.seconds(PIT_LOSS[c].lossMs, 1)}`;
+    return lettered ? t : span(`gA-${c}`, t);
+  };
+  const legend = !ghosts ? '' : wide ? ` · ${span('d', 'pit')} ` + CONDITIONS.map((c) => leg(c, true)).join(' ') : `${span('d', 'pit')} ` + CONDITIONS.map((c) => leg(c, lettered)).join(' ');
+  const ref = wide || !ghosts ? `ref leader avg 1:30.207${legend}` : legend;
+  return panel('Gap chart', { cols, rows, lines: [padL(ref, cols)], svg, svgRows: rows - 1 });
+}
+
 {
-  // ---- crossing order: one block per condition, P / DRV / INT (gap to the car ahead in the order)
-  const blockSpec = [{ h: 'P', w: 2, a: 'r' }, { h: 'DRV', w: 4, a: 'l' }, { h: 'INT', w: 7, a: 'r' }];
-  const BW = 2 + 1 + 4 + 1 + 7; // 15 cells
-  const block = (c, { around = 2, active = false, unknown = false } = {}) => {
-    const r = REJOIN[c];
-    const loss = PIT_LOSS[c];
-    const lossCell = unknown ? span('tip', '    ', TEXT.unknown.insufficientData) : V(FMT.seconds(loss.lossMs, 1), loss.source, 'stops').t;
-    const title = `${span(ghostCls(c), `${GHOST.glyph} ${TEXT.condition[c]}`)} ${unknown ? lossCell : span('', lossCell, sourceHover(loss.source, 'stops'))}`;
-    const head = [active ? span('hi', strip(title).replace(/./g, (ch) => ch)) : title];
-    if (unknown) return [padR(head[0], BW), span('f', padR(' P DRV      INT', BW)), span('tip', sp(BW), TEXT.unknown.insufficientData)];
-    const gi = r.order.findIndex((o) => o[0] === 'ghost');
-    const rows = r.order.slice(gi - around, gi + around + 1).map(([code, p, int]) => {
-      if (code === 'ghost') return { cells: [C(String(p), ghostCls(c)), C(`${GHOST.glyph}KUH`, ghostCls(c)), C(FMT.gap(int), ghostCls(c))] };
-      const near = code === r.ahead[0] || code === r.behind[0];
-      const cls = OURS.has(code) ? 'o' : near ? 'm' : '';
-      return { cells: [C(String(p), cls), C(code, cls), C(FMT.gap(int), cls)] };
-    });
-    return [padR(head[0], BW), ...table(blockSpec, rows, { lead: 0, band: false }).map((l) => padR(l, BW))];
-  };
-  const side = (blocks) => blocks[0].map((_, i) => ' ' + blocks.map((b) => b[i]).join('   '));
-  const full = (opts = {}) => panel('Crossing order', { cols: 54, rows: 9, state: opts.state ?? '', lines: side(CONDITIONS.map((c) => block(c, { around: 3, active: opts.active === c, unknown: opts.unknown }))) });
-  const compact = (c, state = '') => panel('Crossing order', { cols: 20, rows: 7, state, lines: block(c).map((l) => ' ' + l) });
-
-  // ---- gap chart with ghost lines (existing widget + rejoin.car ghostLines)
-  const gapChart = ({ cols, rows, ghosts = true, laps = LAP, from = 1, lastLabels = true }) => {
-    const cars = FIELD.slice(0, 14).map(([code, g23, stop], i) => {
-      const lossAt = stop ? 20.3 : 0;
-      const slope = (g23 - lossAt) / LAP;
-      const pts = [];
-      for (let l = from; l <= laps; l++) pts.push([l, slope * l + (stop && l >= stop ? lossAt : 0) + (l === LAP ? 0 : noise(l + i, 0.12))]);
-      const own = OURS.has(code);
-      const mate = code === 'LIN';
-      return { pts, colour: colourOf(code), width: own ? CHART.ownCarLineWidth : CHART.lineWidth, dash: mate || ['PIA', 'HAM', 'ALO'].includes(code) ? CHART.dash : undefined, bold: own };
-    });
-    const us = cars[5].pts;
-    const ghostLines = ghosts
-      ? CONDITIONS.map((c) => ({ pts: us.filter(([l]) => l >= LAP - 5).map(([l, g]) => [l, g + PIT_LOSS[c].lossMs / 1000]), colour: R[GHOST.role[c]], width: CHART.lineWidth, dash: GHOST.dash }))
-      : [];
-    const svg = chart({
-      cols, rows: rows - 1,
-      x: { min: from, max: laps, ticks: Array.from({ length: laps }, (_, k) => k + 1).filter((l) => l >= from && (l - 1) % (cols > 50 ? 2 : 4) === 0), fmt: String, label: cols > 50 ? 'lap' : '' },
-      y: { min: -2, max: 48, invert: true, ticks: [0, 10, 20, 30, 40], fmt: FMT.gapTick, label: cols > 50 ? 'behind reference, s' : '' },
-      bands: from <= 9 ? [{ from: 9, to: 11, label: 'VSC' }] : [],
-      series: [...cars, ...ghostLines],
-      margin: cols > 50 ? { r: 16 } : { l: 44, r: 12, b: 22 },
-      over: (X, Y) => ghosts ? CONDITIONS.map((c) => diamond(X(LAP), Y(us.at(-1)[1] + PIT_LOSS[c].lossMs / 1000), 4, R[GHOST.role[c]], 1.5)).join('') : '',
-    });
-    const wide = cols > 50;
-    const legend = !ghosts ? '' : wide
-      ? ' · ' + CONDITIONS.map((c) => span(ghostCls(c), `${GHOST.glyph} ${TEXT.condition[c]} ${FMT.seconds(PIT_LOSS[c].lossMs, 1)}`)).join(' ')
-      : CONDITIONS.map((c) => span(ghostCls(c), `${GHOST.glyph}${FMT.seconds(PIT_LOSS[c].lossMs, 1)}`)).join(' ');
-    const ref = wide || !ghosts ? `ref leader avg 1:30.207${legend}` : legend;
-    return panel('Gap chart', { cols, rows, lines: [padL(ref, cols)], svg, svgRows: rows - 1 });
-  };
   const gapCompact = (ghosts) => gapChart({ cols: 36, rows: 8, ghosts, from: LAP - 17 });
-
-  // ---- the shared ghost style
-  const styleTable = `<pre>${CONDITIONS.map((c) => ' ' + span(ghostCls(c), `${GHOST.glyph}KUH  ${padR(TEXT.condition[c], 6)}`)).join('   ')}</pre>`;
-  const styleLine = `<svg width="300" height="70">${CONDITIONS.map((c, i) => `<line x1="10" x2="240" y1="${14 + i * 21}" y2="${14 + i * 21}" stroke="${R[GHOST.role[c]]}" stroke-width="${CHART.lineWidth}" stroke-dasharray="${GHOST.dash.join(' ')}"/>${diamond(240, 14 + i * 21, 4, R[GHOST.role[c]], 1.5)}<text x="252" y="${18 + i * 21}" fill="${R[GHOST.role[c]]}">${TEXT.condition[c]}</text>`).join('')}</svg>`;
-  const styleMap = `<svg width="300" height="70"><path d="M10 50 Q 80 10 150 40 T 290 30" fill="none" stroke="${R.textFaint}" stroke-width="3"/>${[[60, 27, 'green', 24], [150, 40, 'vsc', 24], [214, 33, 'sc', -12]].map(([x, y, c, dy]) => diamond(x, y, 6, R[GHOST.role[c]]) + `<text class="s" x="${x}" y="${y + dy}" text-anchor="middle" fill="${R[GHOST.role[c]]}">${TEXT.condition[c]}</text>`).join('')}<circle cx="268" cy="27" r="5.5" fill="${R.ownCar}"/><text class="s" x="268" y="52" text-anchor="middle" fill="${R.ownCar}" font-weight="700">KUH</text></svg>`;
-
   page('1-ghost-views.html', '1 · Rejoin ghost: crossing order and gap chart (V03, V04)', `
-<div class="note">Sample race for every page: Silverstone, <b>L23/52</b>. Our cars <b>KUH</b> (P6, medium, 23 laps old) and <b>LIN</b> (P9, stopped L15). The ghost is where KUH would be if it boxed at the end of this lap, per condition (<code>rejoin.car</code>). Grey by default; colour only to tell the three conditions apart. Our cars are white. Gap sign as SP3: a car ahead is negative, behind positive. Hover texts are in the captions (a screenshot cannot hover).</div>
-<h2>The ghost marker (kit piece, spec 8.3): one style in all three displays</h2>
-<div class="row">${fig(`<div class="panel" style="width:60ch">${styleTable}</div>`, 'in a table: ◇ before our code, the row in the condition colour')}${fig(`<div class="panel">${styleLine}</div>`, 'in a chart: dotted line in the condition colour, ◇ at its newest point')}${fig(`<div class="panel">${styleMap}</div>`, 'on the map: a hollow ◇ in the condition colour; our car is the white dot')}</div>
-<div class="note">Condition colours are the theme's muted series roles: green condition = <span class="${ghostCls('green')}">series3</span>, VSC = <span class="${ghostCls('vsc')}">series5</span>, SC = <span class="${ghostCls('sc')}">series2</span>. They only distinguish; they are not the flag colours, so they never read as a flag or an alarm. The ghost line is dotted because the teammate's line is already dashed.</div>
+<div class="note">Sample race for every page: Silverstone, <b>L23/52</b>. Our cars <b>KUH</b> (P6, medium, 23 laps old) and <b>LIN</b> (P9, stopped L15). The ghost is where KUH would be if it boxed at the end of this lap, per condition (<code>rejoin.car</code>). Our cars are white. Gap sign as SP3: a car ahead is negative, behind positive. Hover texts are in the captions (a screenshot cannot hover).</div>
+<div class="note"><b>The ghost's look is open (new Q1, page 6).</b> This page shows the recommended variant ${REC_GHOST} (${GHOST_STYLES[REC_GHOST].name}): the ghost row in the faint text role, our code plain, the condition named by its column; in the chart faint lines told apart by dash and letter. Changing the variant changes all three displays together.</div>
 
 <h2>Crossing order (V03): full 54×9, compact 20×7</h2>
-<div class="row">${fig(full(), 'full · green running: the three conditions side by side, three cars either side of the ghost · INT = gap to the car ahead in the projected crossing order · the car directly ahead and behind the ghost bold · LIN white (ours) · VSC loss stored (ˢ), SC loss default (ᵈ); hover: "measured · 6 stops", "stored · 3 stops", "default · community value, Silverstone (R3)"')}</div>
-<div class="row" style="margin-top:12px">${fig(compact('green'), 'compact · green running: the green condition only, two cars either side')}${fig(compact('sc', span('y', 'SC')), 'compact · SC out: the SC condition (the one that applies now)')}${fig(full({ active: 'sc', state: span('y', 'SC') }), 'full · SC out: the SC condition\'s title white bold (relevant now); the header shows SC')}</div>
-<div class="row" style="margin-top:12px">${fig(full({ unknown: true }), 'unknown · L1, no gaps yet: titles stay, the losses and orders are empty with "too few laps or samples yet" on hover')}</div>
-<div class="note">Realism: no field of this display is hidden (positions and gaps are GPS and timing); a rival's hidden wear only changes the forecast's basis inside <code>rejoin</code>. Positions in the P column and the meaning of INT need contract changes (README Q4).</div>
+<div class="row">${fig(crossingFull(), 'full · green running: the three conditions side by side, three cars either side of the ghost · INT = <code>intervalMs</code>, the gap to the car ahead in the projected crossing order · P = the order item\'s <code>position</code> · the car directly ahead and behind the ghost bold · LIN white (ours) · VSC loss stored (ˢ), SC loss default (ᵈ); hover: "measured · 6 stops", "stored · 3 stops", "default · community value, Silverstone (R3)"')}</div>
+<div class="row" style="margin-top:12px">${fig(crossingCompact('green'), 'compact · green running: the green condition only, two cars either side')}${fig(crossingCompact('sc', span('y', 'SC')), 'compact · SC out: the SC condition (the one that applies now)')}${fig(crossingFull({ active: 'sc', state: span('y', 'SC') }), 'full · SC out: the SC condition\'s title white bold (relevant now); the header shows SC')}</div>
+<div class="row" style="margin-top:12px">${fig(crossingFull({ unknown: true }), 'unknown · L1, no gaps yet: titles stay, the losses and orders are empty with "too few laps or samples yet" on hover')}</div>
+<div class="note">Realism: no field of this display is hidden (positions and gaps are GPS and timing); a rival's hidden wear only changes the forecast's basis inside <code>rejoin</code>.</div>
 
 <h2>Gap chart (V04) with ghost lines: full 72×14, compact 36×8 (existing sizes)</h2>
-<div class="row">${fig(gapChart({ cols: 72, rows: 14 }), 'full · our gapper line shifted by each condition\'s loss, over the last 6 laps (README Q6) · the cars between our white line and a ghost line are the cars we would drop behind · the header names the ghosts with their losses')}</div>
-<div class="row" style="margin-top:12px">${fig(gapCompact(true), 'compact · the losses only as ◇ + seconds; no end labels')}${fig(gapCompact(false), 'rejoin unknown: no ghost lines, the chart as today')}</div>`);
+<div class="row">${fig(gapChart({ cols: 72, rows: 14 }), 'full · our gapper line plus each condition\'s loss, over the last 6 laps (Q6 A) · the cars between our white line and a ghost line are the cars we would drop behind · faint lines: G dotted, VSC dashed, SC dash-dot, the letter at the end · the header names the losses')}</div>
+<div class="row" style="margin-top:12px">${fig(gapCompact(true), 'compact · letters and losses in the header')}${fig(gapCompact(false), 'rejoin unknown: no ghost lines, the chart as today')}</div>`);
 }
 
 // ================================================================ page 2: map views (track map, incident feed turn)
+let mapPanelShared; // page 6 draws the map in each ghost variant
 {
   // A sketch of a circuit (not Silverstone's real geometry): polygon vertices in lap order; each vertex is a turn.
   const POLY = [[62, 62], [70, 56], [78, 58], [84, 65], [90, 58], [92, 40], [86, 30], [74, 28], [66, 20], [58, 23], [52, 14], [44, 10], [34, 16], [24, 13], [14, 22], [10, 36], [17, 49], [12, 60]];
@@ -342,7 +361,7 @@ const REJOIN = {
   const ghostF = (c) => { const r = REJOIN[c]; const aheadGap = FIELD.find(([k]) => k === r.ahead[0])[1] - US_GAP; return fOf(aheadGap) + r.ahead[1] / 1000 / LAP_S; };
   const SECTORS = [0, 0.31, 0.665];
 
-  const map = ({ cols, rows, turns = true, codes = true, ghosts = true, incident = true }) => {
+  const map = ({ cols, rows, turns = true, codes = true, ghosts = true, incident = true, v = REC_GHOST }) => {
     const W = (cols + 2) * CELL_W, H = rows * CELL_H;
     const xs = POLY.map((p) => p[0]), ys = POLY.map((p) => p[1]);
     const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
@@ -358,8 +377,9 @@ const REJOIN = {
     const hits = (x, y, w) => boxes.some((b) => Math.abs(b.x - x) < (b.w + w) / 2 + 2 && Math.abs(b.y - y) < (b.line ? 8 : 13));
     const label = (text, x, y, [ux, uy], fill, bold = false) => {
       const w = text.length * (FONT_PX - 2) * 0.6;
-      for (const d of [14, 22, 32, 44]) for (const [vx, vy] of [[ux, uy], [-ux, -uy], [uy, -ux], [-uy, ux]]) {
+      for (const d of [14, 22, 32, 44, 58, 72]) for (const [vx, vy] of [[ux, uy], [-ux, -uy], [uy, -ux], [-uy, ux]]) {
         const [lx, ly] = [x + vx * d, y + vy * d];
+        if (lx - w / 2 < 2 || lx + w / 2 > W - 2 || ly < 12 || ly > H - 6) continue;
         if (!hits(lx, ly, w)) { boxes.push({ x: lx, y: ly, w }); return `<text class="s" x="${lx.toFixed(1)}" y="${(ly + 4).toFixed(1)}" text-anchor="middle" fill="${fill}" ${bold ? 'font-weight="700"' : ''}>${text}</text>`; }
       }
       return '';
@@ -388,22 +408,32 @@ const REJOIN = {
       const [cx, cy] = P(q);
       svg += `<polygon points="${cx},${cy - 9} ${cx + 8},${cy + 5} ${cx - 8},${cy + 5}" fill="none" stroke="${R.warning}" stroke-width="2"/>`;
       boxes.push({ x: cx, y: cy, w: 16 });
-      if (big) svg += label(turns ? 'T15' : 'S3', cx, cy, inward(q), R.warning);
+      if (big) svg += label('collision', cx, cy, inward(q), R.warning);
     }
     for (const { car, q, cx, cy } of carDots) {
       const own = OURS.has(car.code);
-      svg += car.inPit ? `<circle cx="${cx}" cy="${cy}" r="4" fill="none" stroke="${R.textDim}" stroke-width="1.5"/>` : `<circle cx="${cx}" cy="${cy}" r="${own ? 5.5 : 4}" fill="${own ? R.ownCar : R.textDim}"/>`;
+      svg += car.inPit ? `<circle cx="${cx}" cy="${cy}" r="4" fill="none" stroke="${colourOf(car.code)}" stroke-width="1.5"/>` : `<circle cx="${cx}" cy="${cy}" r="${own ? 5.5 : 4}" fill="${colourOf(car.code)}"/>`;
       if (own || codes) svg += label(car.code, cx, cy, inward(q), own ? R.ownCar : R.textFaint, own);
     }
     if (ghosts) for (const c of CONDITIONS) {
-      const q = at(ghostF(c));
+      const g = GHOST_STYLES[v];
+      const f = ghostF(c);
+      const q = at(f);
       const [cx, cy] = P(q);
-      svg += diamond(cx, cy, big ? 6 : 4.5, R[GHOST.role[c]]);
-      if (big) svg += label(TEXT.condition[c], cx, cy, inward(q).map((v) => -v), R[GHOST.role[c]]);
+      const op = g.opacity < 1 ? ` opacity="${g.opacity}"` : '';
+      if (g.marker === 'tick') {
+        const [a, b] = [P(at(f - 0.002)), P(at(f + 0.002))];
+        const [nx, ny] = unit(-(b[1] - a[1]), b[0] - a[0]);
+        const h = big ? 8 : 6;
+        svg += `<line x1="${cx - nx * h}" y1="${cy - ny * h}" x2="${cx + nx * h}" y2="${cy + ny * h}" stroke="${g.colour(c)}" stroke-width="2"/>`;
+      } else svg += `<circle cx="${cx}" cy="${cy}" r="${big ? 5 : 4}" fill="none" stroke="${g.colour(c)}" stroke-width="1.5"${op}/>`;
+      boxes.push({ x: cx, y: cy, w: 10 });
+      if (big) svg += label(g.table === 'hue' ? TEXT.condition[c] : LETTER[c], cx, cy, inward(q).map((x) => -x), g.colour(c)).replace('<text', `<text${op}`);
     }
     return svg + '</svg>';
   };
   const mapPanel = (o) => panel('Track map', { cols: o.cols, rows: o.rows, link: '', state: o.state ?? '', svg: map(o), svgRows: o.rows });
+  mapPanelShared = mapPanel;
 
   // ---- incident feed with the turn (existing widget: what column 18 wide; detail = turn when known, else the sector)
   const FEED_W = [3, 7, 18, 10];
@@ -419,17 +449,27 @@ const REJOIN = {
   const feedCompact = (turns) => panel('Incidents', { cols: 34, rows: 3, link: '', lines: feedRows(turns).slice(0, 3).map(([c, cells]) => span(c, feedLine(cells.slice(0, 3)).trimEnd())) });
 
   page('2-map-views.html', '2 · Track map and the incident feed\'s turn', `
-<div class="note">The outline is the analysis's centreline (<code>trackPositions.geometry</code>); here a sketch, not Silverstone's real shape, so the turn places are illustrative. <b>Turn labels come only from the turn file</b> (the corner's <code>turn</code>); a track without one shows no turn labels, the sectors stay. Rivals are grey dots, our cars white. The three ghosts are the shared ◇ marker. The amber triangle is a major incident of the last 2 laps (OCO and STR collided at T15). DOO is in the pit lane (hollow). The white tick is the start line; the grey ticks are the sector starts.</div>
+<div class="note">The outline is the analysis's centreline (<code>trackPositions.geometry</code>); here a sketch, not Silverstone's real shape, so the turn places are illustrative. <b>Turn labels come only from the turn file</b> (the corner's <code>turn</code>); a track without one shows no turn labels, the sectors stay. Rivals are dots in their team colour (Q7 B), our cars white and larger. The ghosts use the recommended variant ${REC_GHOST} of page 6 (faint rings with the condition letter). The amber triangle is a major incident of the last 2 laps, labelled with its kind (Q8 B; OCO and STR collided at T15). DOO is in the pit lane (hollow). The white tick is the start line; the grey ticks are the sector starts.</div>
 <h2>Track map: full 64×20, compact 32×10</h2>
-<div class="row">${fig(mapPanel({ cols: 64, rows: 20 }), 'full · Silverstone (turn file): T1–T18, codes for every car, the three ghosts with their condition')}${fig(mapPanel({ cols: 32, rows: 10, turns: false, codes: false }), 'compact · no turn labels, no rival codes; ghosts without words')}</div>
-<div class="row" style="margin-top:12px">${fig(mapPanel({ cols: 64, rows: 20, turns: false, state: 'Silverstone (Reverse)' }), 'no turn file (a reverse layout): no turn labels; sectors and the incident\'s sector label (S3) stay')}${fig(mapPanel({ cols: 32, rows: 10, turns: false, codes: false, ghosts: false, incident: false }), 'rejoin unknown: no ghosts')}</div>
-<div class="note">Realism: positions stay visible (a real team has GPS). Before the first full lap the geometry is <code>unknown</code> and the panel says "no data yet". The incident marker needs a map point in the topic (README Q8).</div>
+<div class="row">${fig(mapPanel({ cols: 64, rows: 20 }), 'full · Silverstone (turn file): T1–T18, codes for every car, the three ghosts with their letter')}${fig(mapPanel({ cols: 32, rows: 10, turns: false, codes: false }), 'compact · no turn labels, no rival codes; ghosts without letters')}</div>
+<div class="row" style="margin-top:12px">${fig(mapPanel({ cols: 64, rows: 20, turns: false, state: 'Silverstone (Reverse)' }), 'no turn file (a reverse layout): no turn labels; the sectors stay')}${fig(mapPanel({ cols: 32, rows: 10, turns: false, codes: false, ghosts: false, incident: false }), 'rejoin unknown: no ghosts')}</div>
+<div class="note">Realism: positions stay visible (a real team has GPS). Before the first full lap the geometry is <code>unknown</code> and the panel says "no data yet". The incident marker uses the topic's new <code>point</code> (Q8 B).</div>
 <h2>Incident feed (V35) with the official turn: full 70×5, compact 34×3 (existing sizes)</h2>
 <div class="row">${fig(feed(true), 'Silverstone (turn file): the turn replaces the sector in the what column (collision T15, time loss T6)')}${fig(feed(false), 'no turn file: the sector stays (collision S3, time loss S1), as today')}</div>
 <div class="row" style="margin-top:12px">${fig(feedCompact(true), 'compact · with the turn')}</div>`);
 }
 
-// ================================================================ page 3: call cards (undercut, SC, pit sweep, radio clock)
+// ================================================================ page 3: call cards (undercut, SC, pit sweep)
+// The undercut card's highlight is open (new Q9, page 6): "our undercut is possible" (positive margin, AHEAD row) and
+// its mirror "their undercut on us is possible" (positive margin, BEHIND row). Page 3 shows REC_UC.
+const UC_HL = {
+  A: { name: 'lit cell', cell: (ahead) => (ahead ? 'litW' : 'litA') },
+  B: { name: 'hue', cell: (ahead) => (ahead ? 'gm' : 'wm') },
+  C: { name: 'edge bar', cell: (ahead) => (ahead ? 'hi' : 'wm'), row: (ahead) => (ahead ? 'barW' : 'barA') },
+  D: { name: 'lit side label', cell: (ahead) => (ahead ? 'hi' : 'wm'), side: (ahead) => (ahead ? 'litW' : 'litA') },
+};
+const REC_UC = 'A';
+let undercutShared; // page 6 draws the card in each highlight variant
 {
   // ---- undercut-card (undercut.car)
   const UNDERCUT = [
@@ -438,17 +478,23 @@ const REJOIN = {
     { side: 'BEHIND', code: 'ALO', gap: 4877, delta: [1400, 3000, 4400], margin: [-3500, -1900, -500], stopDue: true },
   ];
   const sec1 = (ms) => FMT.signedSeconds(ms, 1);
-  const marginCell = (r, ms) => (ms <= 0 ? sec1(ms) : C(sec1(ms), r.side === 'AHEAD' ? 'hi' : 'w'));
-  const ucSpec = [{ h: '', w: 6, a: 'l' }, { h: 'DRV', w: 3, a: 'l' }, { h: 'GAP', w: 6, a: 'r' }, { h: '1', w: 4, a: 'r' }, { h: '2', w: 4, a: 'r' }, { h: '3', w: 4, a: 'r' }, { h: '1', w: 5, a: 'r' }, { h: '2', w: 4, a: 'r' }, { h: '3', w: 4, a: 'r' }, { h: 'STOP', w: 4, a: 'l' }];
-  const ucRows = (unknown) => UNDERCUT.map((r, i) => ({
-    cells: [r.side, r.code, FMT.gap(r.gap),
-      ...(unknown && i === 2 ? [U('insufficientData'), U('insufficientData'), U('insufficientData'), U('insufficientData'), U('insufficientData'), U('insufficientData')] : [...r.delta.map(sec1), ...r.margin.map((m) => marginCell(r, m))]),
-      r.stopDue ? 'due' : ''],
-  }));
-  const ucGroup = span('f', ' ' + sp(6 + 1 + 3 + 1 + 6 + 1) + padR('GAIN, n LAPS', 14) + ' ' + padR('MARGIN, n LAPS', 15));
-  const undercut = (unknown = false) => panel('Undercut', { cols: 58, rows: 5, lines: [ucGroup, ...table(ucSpec, ucRows(unknown))] });
-  const ucCSpec = [ucSpec[0], ucSpec[1], ucSpec[2], ucSpec[6], ucSpec[7], ucSpec[8]];
-  const undercutCompact = panel('Undercut', { cols: 36, rows: 4, lines: [span('f', ' ' + sp(18) + 'MARGIN, n LAPS'), ...table(ucCSpec, UNDERCUT.slice(0, 2).map((r) => ({ cells: [r.side, r.code, FMT.gap(r.gap), ...r.margin.map((m) => marginCell(r, m))] })))] });
+  const N = (h) => ({ h, w: 4, a: 'r' });
+  const ucSpec = [{ h: '', w: 6, a: 'l' }, { h: 'DRV', w: 3, a: 'l' }, { h: 'GAP', w: 6, a: 'r' }, N('1'), N('2'), N('3'), { h: '', w: 0, a: 'l' }, N('1'), N('2'), N('3'), { h: 'STOP', w: 4, a: 'l' }];
+  const row = (r, hl, { unknown = false, full = true } = {}) => {
+    const ahead = r.side === 'AHEAD';
+    const h = UC_HL[hl];
+    const lit = r.margin.some((m) => m > 0) && !unknown;
+    const margins = unknown ? r.margin.map(() => U('insufficientData')) : r.margin.map((m) => (m > 0 ? C(sec1(m), h.cell(ahead)) : sec1(m)));
+    const side = lit && h.side ? C(r.side, h.side(ahead)) : r.side;
+    const head = [side, r.code, FMT.gap(r.gap)];
+    const cells = full ? [...head, ...(unknown ? r.delta.map(() => U('insufficientData')) : r.delta.map(sec1)), '', ...margins, r.stopDue ? 'due' : ''] : [...head, '', ...margins];
+    return { cls: lit && h.row ? h.row(ahead) : '', cells };
+  };
+  const ucGroup = span('f', ' ' + sp(6 + 1 + 3 + 1 + 6 + 1) + padR('GAIN, n LAPS', 14) + '  ' + 'MARGIN, n LAPS');
+  const undercut = (hl = REC_UC, unknown = false) => panel('Undercut', { cols: 58, rows: 5, lines: [ucGroup, ...table(ucSpec, UNDERCUT.map((r, i) => row(r, hl, { unknown: unknown && i === 2 })))] });
+  const ucCSpec = [ucSpec[0], ucSpec[1], ucSpec[2], ucSpec[6], ucSpec[7], ucSpec[8], ucSpec[9]];
+  const undercutCompact = (hl = REC_UC) => panel('Undercut', { cols: 36, rows: 4, lines: [span('f', ' ' + sp(19) + 'MARGIN, n LAPS'), ...table(ucCSpec, UNDERCUT.slice(0, 2).map((r) => row(r, hl, { full: false })))] });
+  undercutShared = { undercut, undercutCompact };
 
   // ---- sc-card (scCall.car)
   const SC = { sc: { position: 9, gain: 10500, alsoGain: ['ALO', 'HAM'] }, vsc: { position: 10, gain: 7200, alsoGain: ['HAM'] } };
@@ -478,43 +524,30 @@ const REJOIN = {
     H: [[24, 12, ['OCO', 'STR'], 4724600, 7, false], [25, 12, ['OCO'], 4723100, 7, false], [26, 11, ['HUL', 'OCO'], 4722000, 6, false], [27, 11, ['HUL'], 4721700, 6, false], [28, 11, [], 4722300, 6, false], [29, 10, ['HAD'], 4723500, 6, false], [30, 10, ['HAD', 'HUL'], 4725200, 7, false]],
     M: [[24, 12, ['OCO', 'STR'], 4722900, 6, true], [25, 12, ['OCO'], 4721800, 6, true], [26, 11, ['HUL', 'OCO'], 4721100, 6, true], [27, 11, ['HUL'], 4721000, 6, true], [28, 11, [], 4721600, 6, false], [29, 10, ['HAD'], 4722800, 6, false], [30, 10, ['HAD', 'HUL'], 4724700, 7, false]],
   };
-  const swSpec = [{ h: 'LAP', w: 3, a: 'l' }, { h: 'REJOIN', w: 6, a: 'r' }, { h: 'TRAFFIC', w: 11, a: 'l' }, { h: 'FINISH', w: 9, a: 'r' }, { h: 'POS', w: 3, a: 'r' }, { h: 'LIFE', w: 4, a: 'l' }];
+  const swSpec = [{ h: 'LAP', w: 3, a: 'l' }, { h: 'REJOIN', w: 6, a: 'r' }, { h: 'TRAFFIC', w: 11, a: 'l' }, { h: 'FINISH', w: 6, a: 'r' }, { h: 'POS', w: 3, a: 'r' }, { h: 'LIFE', w: 4, a: 'l' }];
+  // finishDeltaMs (Q10 A): the analysis delivers it; here derived from the sample race times
+  const bestOf = (k) => Math.min(...SWEEP[k].map((r) => r[3]));
   const selector = (sel) => ` ${span('f', 'NEXT')}  ${['H', 'M'].map((k) => (k === sel ? span('sel', k) : span('d', k))).join('  ')}`;
-  const sweepRow = ([lap, pos, traffic, finish, fpos, over], unknown) => ({
-    cells: [FMT.lapNumber(lap), FMT.position(pos), traffic.join(' '), unknown ? U('insufficientData') : FMT.raceTime(finish), unknown ? U('insufficientData') : FMT.position(fpos), over ? C('over', 'w') : ''],
+  const sweepRow = ([lap, pos, traffic, finish, fpos, over], unknown, best) => ({
+    cells: [FMT.lapNumber(lap), FMT.position(pos), traffic.join(' '), unknown ? U('insufficientData') : FMT.signedSeconds(finish - best, 1), unknown ? U('insufficientData') : FMT.position(fpos), over ? C('over', 'w') : ''],
   });
-  const sweep = (k, { unknown = false } = {}) => panel('Pit sweep', { cols: 44, rows: 10, lines: [selector(k), ...table(swSpec, SWEEP[k].map((r) => sweepRow(r, unknown)))] });
+  const sweep = (k, { unknown = false } = {}) => panel('Pit sweep', { cols: 40, rows: 10, lines: [selector(k), ...table(swSpec, SWEEP[k].map((r) => sweepRow(r, unknown, bestOf(k))))] });
   const swCSpec = [swSpec[0], swSpec[1], swSpec[4], swSpec[5]];
   const sweepCompact = (k) => panel('Pit sweep', { cols: 24, rows: 7, lines: [selector(k), ...table(swCSpec, SWEEP[k].slice(0, 5).map(([lap, pos, , , fpos, over]) => ({ cells: [FMT.lapNumber(lap), FMT.position(pos), FMT.position(fpos), over ? C('over', 'w') : ''] })))] });
 
-  // ---- radio-clock (radioWindow.car, one per our car)
-  const rcSpec = [{ h: '', w: 3, a: 'l' }, { h: 'NOW', w: 8, a: 'l' }, { h: 'SEC LEFT', w: 8, a: 'r' }, { h: 'SEC TO NEXT', w: 11, a: 'r' }];
-  const radio = (kuhLeft = 4.2) => panel('Radio window', { cols: 36, rows: 3, link: '', lines: table(rcSpec, [
-    { cells: [C('KUH', 'o'), C('straight', 'hi'), C(fixed(kuhLeft, 1), 'hi'), ''] },
-    { cells: [C('LIN', 'o'), 'corner', C('', '', TEXT.unknown.notApplicable), fixed(6.8, 1)] },
-  ], { band: false }) });
-  const radioUnknown = panel('Radio window', { cols: 36, rows: 3, link: '', lines: table(rcSpec, [
-    { cells: [C('KUH', 'o'), U('insufficientData'), U('insufficientData'), U('insufficientData')] },
-    { cells: [C('LIN', 'o'), U('insufficientData'), U('insufficientData'), U('insufficientData')] },
-  ], { band: false }) });
-  const radioCompact = panel('Radio window', { cols: 18, rows: 2, link: '', lines: [` ${span('o', 'KUH')} ${span('hi', 'left  4.2 s')}`, ` ${span('o', 'LIN')} next  6.8 s`] });
-
-  page('3-call-cards.html', '3 · Call cards: undercut, SC/VSC, pit sweep, radio window (V13, V18, V15, V34)', `
+  page('3-call-cards.html', '3 · Call cards: undercut, SC/VSC, pit sweep (V13, V18, V15)', `
 <div class="note">Numbers only, no verdicts: no card says "box", "undercut works" or "stay out". <b>White bold</b> = relevant now (SP3), <b>amber</b> = advisory. Source badges as on page 4: no mark = measured this session, ˢ = stored from earlier sessions, ᵈ = community default; the hover names it.</div>
 <h2>Undercut card (V13): full 58×5, compact 36×4</h2>
-<div class="row">${fig(undercut(), 'full · one row per neighbour within 5 s · GAIN n = what the car that stops first gains over the other when the other stops n laps later · MARGIN = gain minus the gap (the absolute gap) · AHEAD: a positive margin is our undercut on HAM (white bold) · BEHIND: a positive margin is the rival\'s undercut on us (amber) · ALO past its tyre life: STOP due')}</div>
-<div class="row" style="margin-top:12px">${fig(undercutCompact, 'compact · margins only, the nearest car ahead and behind')}${fig(undercut(true), 'unknown · ALO\'s model is missing: its gains and margins are empty ("too few laps or samples yet")')}</div>
-<div class="note">Realism: a rival whose wear is hidden still gets gains from the age basis; the card looks the same. Mirror semantics of the BEHIND rows: README Q9.</div>
+<div class="row">${fig(undercut(), 'full · one row per neighbour within 5 s · GAIN n = what the car that stops first gains over the other when the other stops n laps later · MARGIN = gain minus the absolute gap · a positive margin is lit: white on the AHEAD row (our undercut on HAM), amber on a BEHIND row (RUS\'s undercut on us) · ALO past its tyre life: STOP due · highlight = the recommended variant ' + REC_UC + ' of page 6 (new Q9)')}</div>
+<div class="row" style="margin-top:12px">${fig(undercutCompact(), 'compact · margins only, the nearest car ahead and behind')}${fig(undercut(REC_UC, true), 'unknown · ALO\'s model is missing: its gains and margins are empty ("too few laps or samples yet")')}</div>
+<div class="note">Realism: a rival whose wear is hidden still gets gains from the age basis; the card looks the same. The highlight is open: page 6, new Q9.</div>
 <h2>SC / VSC call (V18): full 50×4, compact 34×2</h2>
 <div class="row">${fig(greenLine(50), 'green running · one line: if an SC came now we rejoin P9 and gain 10.5 s against a green stop; under a VSC P10, +7.2 s · the gains rest on the SC default and the VSC stored loss (ᵈ, ˢ)')}${fig(greenCompact, 'compact · the same, without the words')}</div>
 <div class="row" style="margin-top:12px">${fig(sheet('sc'), 'SC out · the sheet: the SC row white bold, the cars within the window who would also gain · hover on 9.8ᵈ: "default · community value, Silverstone (R3)"')}${fig(sheet('vsc'), 'VSC out · the VSC row white bold')}${fig(sheetCompact('sc'), 'compact · SC out: the active option and who else gains')}</div>
-<h2>Pit sweep (V15): full 44×10, compact 24×7</h2>
-<div class="row">${fig(sweep('H'), 'full · next compound H (selected, white underlined) · one row per stop lap to the end of the window (L30) · REJOIN = position at pit exit · TRAFFIC = cars within 1.35 s in the first 3 laps · FINISH = projected race time at the flag with no further stop, POS its position')}${fig(sweep('M'), 'next compound M · a stint to the flag beyond the medium\'s life: LIFE "over" (amber)')}</div>
-<div class="row" style="margin-top:12px">${fig(sweepCompact('M'), 'compact · LAP, REJOIN, POS, LIFE')}${fig(sweep('H', { unknown: true }), 'unknown · the forecast lacks a model for a car: finish time and position empty')}</div>
-<div class="note">Finish times are 9 cells and hard to compare by eye: README Q10 asks for a delta field. The compound selector's options: README Q11.</div>
-<h2>Radio window (V34): full 36×3, compact 18×2</h2>
-<div class="row">${fig(radio(), 'full · per our car: KUH on a straight, 4.2 s left (white bold, counts down at 4 Hz) · LIN in a corner, the next straight in 6.8 s')}${fig(radioCompact, 'compact · left = on a straight')}${fig(radioUnknown, 'unknown · no geometry yet (before the first full lap)')}</div>
-<div class="note">Realism: no field is hidden (our own cars).</div>`);
+<h2>Pit sweep (V15): full 40×10, compact 24×7</h2>
+<div class="row">${fig(sweep('H'), 'full · next compound H (selected, white underlined) · one row per stop lap to the end of the window (L30) · REJOIN = position at pit exit · TRAFFIC = cars within 1.35 s in the first 3 laps · FINISH = the projected finish against the fastest row (<code>finishDeltaMs</code>, Q10 A), with no further stop · POS the position at the flag')}${fig(sweep('M'), 'next compound M · a stint to the flag beyond the medium\'s life: LIFE "over" (amber)')}</div>
+<div class="row" style="margin-top:12px">${fig(sweepCompact('M'), 'compact · LAP, REJOIN, POS, LIFE')}${fig(sweep('H', { unknown: true }), 'unknown · the forecast lacks a model for a car: finish delta and position empty')}</div>
+<div class="note">The selector's options are the next compounds of <code>pitWindow.car</code> (Q11 A).</div>`);
 }
 
 // ================================================================ page 4: longrun views (pit-loss table, stint scatter, raising average, lap overview)
@@ -703,7 +736,7 @@ const REJOIN = {
     cols, rows, link: '', state: 'L34',
     lines: [
       ` ${span('f', 'US')} 109.3% ${span('f', 'of dry ref')} ${FMT.lapTime(DRY)}   ${span('f', 'PAYBACK')} ${span('m', FMT.laps(12.3))}`,
-      ` ${span('f', 'FIRST FASTER')} GAS ${span('f', 'on')} ${span('gh-green', 'inter')} ${span('f', 'in')} S2 ${span('f', 'on')} L33`,
+      ` ${span('f', 'FIRST FASTER')} GAS ${span('f', 'on')} ${span('ty-inter', 'inter')} ${span('f', 'in')} S2 ${span('f', 'on')} L33`,
     ],
     svg: chart({
       cols, rows: rows - 2,
@@ -720,11 +753,11 @@ const REJOIN = {
     }),
     svgRows: rows - 2,
   });
-  const xoverCompact = panel('Crossover', { cols: 40, rows: 3, link: '', state: 'L34', lines: [` ${span('f', 'US')} 109.3% ${span('f', 'of dry ref')} ${FMT.lapTime(DRY)}`, ` ${span('f', 'FIRST FASTER')} GAS ${span('gh-green', 'inter')} S2 L33`, ` ${span('f', 'PAYBACK')} ${span('m', FMT.laps(12.3))}`] });
+  const xoverCompact = panel('Crossover', { cols: 40, rows: 3, link: '', state: 'L34', lines: [` ${span('f', 'US')} 109.3% ${span('f', 'of dry ref')} ${FMT.lapTime(DRY)}`, ` ${span('f', 'FIRST FASTER')} GAS ${span('ty-inter', 'inter')} S2 L33`, ` ${span('f', 'PAYBACK')} ${span('m', FMT.laps(12.3))}`] });
   const xoverDry = panel('Crossover', { cols: 40, rows: 3, link: '', state: 'L23', lines: [` ${span('f', 'US')} 100.6% ${span('f', 'of dry ref')} ${FMT.lapTime(DRY)}`, ` ${span('f', 'FIRST FASTER')} ${span('tip', sp(16), TEXT.unknown.notApplicable)}`, ` ${span('f', 'PAYBACK')} ${span('tip', sp(10), TEXT.unknown.notApplicable)}`] });
 
   page('5-weather.html', '5 · Weather: forecast strip and crossover chart (V19)', `
-<div class="note">The forecast is the game's (<code>weather.forecast</code>), samples of this session only. The crossover chart is the field's median lap per tyre type. Tyre types are told apart by colour (slick grey, <span class="gh-green">inter series3</span>, <span style="color:${R.series1}">wet series1</span>), which is the one place colour distinguishes here. No text says "switch now".</div>
+<div class="note">The forecast is the game's (<code>weather.forecast</code>), samples of this session only. The crossover chart is the field's median lap per tyre type. Tyre types are told apart by colour (slick grey, <span class="ty-inter">inter series3</span>, <span style="color:${R.series1}">wet series1</span>), which is the one place colour distinguishes here. No text says "switch now".</div>
 <h2>Forecast strip: full 56×5, compact 34×2</h2>
 <div class="row">${fig(strip(true), 'full · one column per sample (minutes from now) · the first sample at or above the rain threshold (+30, 45 %) white bold · ▲▼ = the game\'s trend · "approximate" = the game\'s accuracy flag')}${fig(stripCompact, 'compact · now, and the first rain')}${fig(stripNone, 'no rain in the forecast: first rain not applicable')}</div>
 <h2>Crossover chart (V19): full 72×16, compact 40×3</h2>
@@ -747,8 +780,7 @@ const REJOIN = {
   const W24 = 684, H24 = 385, W14 = 480, H14 = 270;
   const strategyMain = [
     ['timing-tower', 0, 0, 0.38, 0.6, 'full, 20 rows'],
-    ['crossing-order', 0, 0.6, 0.38, 0.25, 'full'],
-    ['radio-clock', 0, 0.85, 0.38, 0.15, 'full'],
+    ['crossing-order', 0, 0.6, 0.38, 0.4, 'full'],
     ['track-map', 0.38, 0, 0.3, 0.58, 'full, ghosts'],
     ['gap-chart', 0.68, 0, 0.32, 0.58, 'ghost lines'],
     ['undercut-card', 0.38, 0.58, 0.3, 0.2, 'full'],
@@ -757,18 +789,18 @@ const REJOIN = {
   ];
   const strategySide = [
     ['forecast-strip', 0, 0, 0.5, 0.25, 'full'],
-    ['tyre-life-bar', 0.5, 0, 0.5, 0.25, 'proposal, Q15'],
-    ['corner-block', 0, 0.25, 0.5, 0.35, 'proposal, Q15'],
-    ['fuel-gauge', 0.5, 0.25, 0.22, 0.35, 'proposal'],
-    ['ers-budget', 0.72, 0.25, 0.28, 0.35, 'proposal'],
-    ['alarm-list', 0, 0.6, 0.6, 0.4, 'proposal'],
-    ['damage-card', 0.6, 0.6, 0.4, 0.4, 'proposal'],
+    ['tyre-life-bar', 0.5, 0, 0.5, 0.25, 'Q15 A'],
+    ['corner-block', 0, 0.25, 0.5, 0.35, 'Q15 A'],
+    ['fuel-gauge', 0.5, 0.25, 0.22, 0.35, 'Q15 A'],
+    ['ers-budget', 0.72, 0.25, 0.28, 0.35, 'Q15 A'],
+    ['alarm-list', 0, 0.6, 0.6, 0.4, 'Q15 A'],
+    ['damage-card', 0.6, 0.6, 0.4, 0.4, 'Q15 A'],
   ];
   const longrunMain = [
     ['stint-scatter', 0, 0, 0.55, 0.6, 'full'],
     ['raising-average-chart', 0.55, 0, 0.45, 0.6, 'full'],
     ['lap-overview-grid', 0, 0.6, 0.55, 0.4, 'full'],
-    ['timing-tower', 0.55, 0.6, 0.45, 0.4, '(not in spec 9: Q15)'],
+    ['timing-tower', 0.55, 0.6, 0.45, 0.4, '(Q15 A)'],
   ];
   const longrunSide = [
     ['pit-loss-table', 0, 0, 0.35, 1, 'full'],
@@ -779,9 +811,42 @@ const REJOIN = {
 <div class="note">Proportions on a 1920×1080 screen each; the 24" main monitor left, the 14" side monitor right. At 14 px a window holds about 228 × 53 character cells; each box shows its cells (cols × rows), so you can check them against the displays' minimum sizes. The 14" window will likely get its own font size (saved per window). Starting points: panels can be dragged and resized, and the workbook saves it. The existing <code>car</code>, <code>quali</code> and <code>race</code> stay as they are.</div>
 <h2>strategy (the race, when a call is near)</h2>
 <div>${screen('strategy main', W24, H24, strategyMain)}${screen('strategy side', W14, H14, strategySide)}</div>
-<div class="q"><b>Main = every call and the race picture it needs</b>: the tower, where we would rejoin (crossing order, map, ghost lines), the undercut and SC cards and the pit sweep. The radio window sits under the tower, near where the eye already is. <b>Side = the forecast, then car care</b>: spec 9's nine widgets leave the side nearly empty, so the mockup proposes the <code>race</code> workbook's car-care set there (marked "proposal"), so the side screen keeps one job in every race workbook (Q15).</div>
+<div class="q"><b>Main = every call and the race picture it needs</b>: the tower, where we would rejoin (crossing order, map, ghost lines), the undercut and SC cards and the pit sweep. <b>Side = the forecast, then car care</b>: the <code>race</code> workbook's car-care set there, so the side screen keeps one job in every race workbook (Q15 A, approved as a starting point).</div>
 <h2>longrun (practice long runs, and the post-stint look in the race)</h2>
 <div>${screen('longrun main', W24, H24, longrunMain)}${screen('longrun side', W14, H14, longrunSide)}</div>
-<div class="q"><b>Main = our pace</b> (stint scatter, raising average, lap overview); <b>side = the knowledge it feeds</b> (pit loss, crossover). The timing tower on main is a proposal so the rivals' pace stays in view (Q15).</div>`);
+<div class="q"><b>Main = our pace</b> (stint scatter, raising average, lap overview); <b>side = the knowledge it feeds</b> (pit loss, crossover). The timing tower on main keeps the rivals' pace in view (Q15 A).</div>`);
+}
+// ================================================================ page 6: options for the two open points (new Q1, new Q9)
+{
+  const GHOST_TEXT = {
+    A: 'the condition hues (series3, series5, series2) at 55 % opacity: the row, the dotted line and a hollow ring in the hue, dimmer than any rival; the condition word in its hue.',
+    B: 'one neutral faint grey (textFaint) for all three conditions: the table names the condition in the column title; the chart tells them apart by dash (G dotted, VSC dashed, SC dash-dot) and a letter at the line end; the map by a faint ring and its letter.',
+    C: 'as B, but in the table the ghost has no row of its own look: a faint dashed rule between the two cars it splits, carrying its position and interval; on the map a short faint tick across the track instead of a ring.',
+    D: 'the ghost row in the dim grey (textDim, between the rivals\' text and faint) on a subtle band (bgBand); chart and map as B, in the dim grey.',
+  };
+  const ghostRows = Object.keys(GHOST_STYLES).map((v) => `
+<h2>${v} · ${GHOST_STYLES[v].name}${v === REC_GHOST ? ' (recommended)' : ''}</h2>
+<div class="note">${GHOST_TEXT[v]}</div>
+<div class="row">${fig(crossingCompact('green', '', v), 'crossing order · green condition')}${fig(gapChart({ cols: 56, rows: 11, from: LAP - 13, v }), 'gap chart · ghost lines over the last 6 laps')}${fig(mapPanelShared({ cols: 44, rows: 13, v }), 'track map · rivals in team colour (Q7 B)')}</div>`).join('');
+  const UC_TEXT = {
+    A: 'lit cell: a positive margin is an inverted cell, dark text on the light text colour (ours) or on amber (theirs). No new hue; the strongest mark that stays inside the colour rule.',
+    B: 'hue: a positive margin in bold green (personalBest, the theme\'s only "good" hue) for ours, bold amber for theirs. Green already means a personal best elsewhere.',
+    C: 'edge bar: a 3 px bar at the row\'s left edge (white for ours, amber for theirs, like the SP3 tower\'s amber bar) plus the positive margins bold in the same colour.',
+    D: 'lit side label: the AHEAD / BEHIND label inverted (light or amber), the positive margins bold. The eye finds the row, then the number.',
+  };
+  const ucRows = Object.keys(UC_HL).map((v) => `
+<h2>${v} · ${UC_HL[v].name}${v === REC_UC ? ' (recommended)' : ''}</h2>
+<div class="note">${UC_TEXT[v]}</div>
+<div class="row">${fig(undercutShared.undercut(v), 'full · HAM ahead: our undercut possible at n = 3 · RUS behind: theirs possible at n = 2, 3')}${fig(undercutShared.undercutCompact(v), 'compact')}</div>`).join('');
+  page('6-options.html', '6 · Options: the rejoin ghost (new Q1) and the undercut highlight (new Q9)', `
+<div class="note">Round 2 of the review. Each variant is shown in every place it applies, with the same sample race. Pick a letter per question in the README.</div>
+<h2>New Q1 · the rejoin ghost</h2>
+<div class="note">Rules for every variant: the ghost is <b>quieter than the real cars</b> (our white car stays the brightest thing on every display, the rivals keep their normal grey or team colour), and <b>no glyph sits inside the driver code</b>: the ghost row reads plain <code>KUH</code>. Each variant is one style for the crossing order, the gap chart and the track map together.</div>
+${ghostRows}
+<h2>${REC_GHOST} in the full crossing order</h2>
+<div class="row">${fig(crossingFull({ v: REC_GHOST }), 'full · the three conditions side by side in the recommended variant')}${fig(crossingFull({ v: 'C' }), 'for comparison: the insertion rules of C in the full order')}</div>
+<h2>New Q9 · the undercut highlight</h2>
+<div class="note">"Our undercut is possible" = a positive margin on an AHEAD row; its mirror "their undercut on us is possible" = a positive margin on a BEHIND row (amber, advisory). Both must be stronger than white bold. The theme has no neutral "good" hue: its roles are text greys, ownCar white, critical red, warning amber, best purple, personalBest green, the flag colours and the muted series.</div>
+${ucRows}`);
 }
 console.log('written');
