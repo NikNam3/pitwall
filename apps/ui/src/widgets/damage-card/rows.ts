@@ -8,8 +8,8 @@ import * as text from './text.ts';
 /** One shown value: its text, or an empty text with the reason it is hidden. */
 export type Cell = { text: string; reason?: UnknownReason };
 
-/** One listed damage jump; `at` is when it happened, the row's identity. */
-export type JumpRow = { at: SessionTime; text: string; loss: string; role?: Role; reason?: UnknownReason };
+/** One listed damage jump; `at` is when it happened, the row's identity; `title` explains its loss text. */
+export type JumpRow = { at: SessionTime; text: string; loss: string; title?: string; role?: Role; reason?: UnknownReason };
 
 /** The full card's widths in character cells (mockup 1-car-care.html): every fixed field of its lines. */
 export const FULL_WIDTHS = {
@@ -46,7 +46,10 @@ function jumpRow(jump: DamageJump, newest: boolean): JumpRow {
   const loss = jump.lossMsPerLap;
   if (loss.known) row.loss = text.lossMeasured(formatSecondsPerLap(loss.value));
   else if (loss.reason === 'insufficientData') row.loss = text.lossMeasuring;
-  else row.reason = loss.reason;
+  else if (loss.reason === 'notApplicable') {
+    row.loss = text.lossNotMeasurable;
+    row.title = text.lossNotMeasurableTitle;
+  } else row.reason = loss.reason;
   const role = jumpRole(jump, newest);
   if (role !== undefined) row.role = role;
   return row;

@@ -137,9 +137,32 @@ describe('damage calculator', () => {
       expect(loss.lossMsPerLap).toEqual(known(1000, laps[8]!.completedAt));
     });
 
-    it('needs two pace laps before the jump too', () => {
+    it('is notApplicable with fewer than two pace laps before the jump, however many laps follow (it can never be measured)', () => {
       const early = [dmg(100_000, 'frontRightWingPct', 0, 20)]; // lap 2: only lap 1 (no pace lap in a race) before
-      expect(run(early, lapsOf(6, timeOf)).jumps[0]!.lossMsPerLap).toEqual(unknown('insufficientData'));
+      expect(run(early, lapsOf(2, timeOf)).jumps[0]!.lap).toBe(2);
+      for (const count of [2, 3, 6, 10]) {
+        expect(run(early, lapsOf(count, timeOf)).jumps[0]!.lossMsPerLap, `${count} laps`).toEqual(unknown('notApplicable'));
+      }
+      const third = [dmg(200_000, 'frontRightWingPct', 0, 20)]; // lap 3: only lap 2 is a pace lap before
+      expect(run(third, lapsOf(8, timeOf)).jumps[0]!.lap).toBe(3);
+      expect(run(third, lapsOf(8, timeOf)).jumps[0]!.lossMsPerLap).toEqual(unknown('notApplicable'));
+    });
+
+    it('is insufficientData with two pace laps before and fewer than two after, then known', () => {
+      const fourth = [dmg(300_000, 'frontRightWingPct', 0, 20)]; // lap 4: laps 2 and 3 before
+      expect(run(fourth, lapsOf(4, timeOf)).jumps[0]!.lap).toBe(4);
+      expect(run(fourth, lapsOf(4, timeOf)).jumps[0]!.lossMsPerLap).toEqual(unknown('insufficientData'));
+      expect(run(fourth, lapsOf(5, timeOf)).jumps[0]!.lossMsPerLap).toEqual(unknown('insufficientData'));
+      const six = lapsOf(6, (n) => (n <= 4 ? 90_000 : 91_000));
+      expect(run(fourth, six).jumps[0]!.lossMsPerLap).toEqual(known(1000, six[5]!.completedAt));
+    });
+
+    it('update keeps an unmeasurable loss notApplicable as laps arrive', () => {
+      const early = [dmg(100_000, 'frontRightWingPct', 0, 20)];
+      const before = engineView({ cars: [carState({ id: car0 })], history: { events: early, laps: lapsOf(2, timeOf) } });
+      const later = engineView({ cars: [carState({ id: car0 })], history: { events: early, laps: lapsOf(7, timeOf) } });
+      const acc = damageCalculator.update(damageCalculator.init(before), later.delta, later);
+      expect(damageCalculator.output(acc)[car0]!.jumps[0]!.lossMsPerLap).toEqual(unknown('notApplicable'));
     });
 
     it('is measured per car', () => {

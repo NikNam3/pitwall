@@ -19,7 +19,7 @@
   const wingWidth = (i: number): number => (i === 2 ? W.wingRear : W.wing);
 </script>
 
-{#snippet jump(j: JumpRow)}<span style:color={roleOrUndefined(j.role)}>{fitCell(j.text, W.jump)}  <span title={hint(j)}>{j.loss}</span></span>{/snippet}
+{#snippet jump(j: JumpRow)}<span style:color={roleOrUndefined(j.role)}>{fitCell(j.text, W.jump)}  <span title={j.title ?? hint(j)}>{j.loss}</span></span>{/snippet}
 
 <div class="card">
   {#if full}

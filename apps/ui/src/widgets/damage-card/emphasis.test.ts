@@ -20,6 +20,10 @@ describe('jumpRole', () => {
     expect(jumpRole(jump(), false)).toBeUndefined();
   });
 
+  it('is undefined for the newest jump whose loss can never be measured', () => {
+    expect(jumpRole(jump({ lossMsPerLap: unknown('notApplicable') }), true)).toBeUndefined();
+  });
+
   it('is undefined for the newest jump whose loss is hidden for another reason', () => {
     expect(jumpRole(jump({ lossMsPerLap: unknown('realism') }), true)).toBeUndefined();
   });

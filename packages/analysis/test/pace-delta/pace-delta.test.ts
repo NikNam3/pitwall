@@ -22,13 +22,18 @@ describe('paceDelta', () => {
     expect(valueOf(paceDelta([90_000, 92_000, 91_000], [90_000, 90_500], at))).toBeCloseTo(-750);
   });
 
-  it('fewer than two laps on either side is insufficientData', () => {
-    const insufficient = { known: false, reason: 'insufficientData' };
-    expect(paceDelta([90_000], [91_000, 91_000], at)).toEqual(insufficient);
+  it('fewer than two laps before is notApplicable (the laps before never grow), whatever comes after', () => {
+    const never = unknown('notApplicable');
+    expect(paceDelta([90_000], [91_000, 91_000], at)).toEqual(never);
+    expect(paceDelta([], [91_000, 91_000], at)).toEqual(never);
+    expect(paceDelta([90_000], [91_000], at)).toEqual(never);
+    expect(paceDelta([], [], at)).toEqual(never);
+  });
+
+  it('two laps before and fewer than two after is insufficientData (the laps after still come)', () => {
+    const insufficient = unknown('insufficientData');
     expect(paceDelta([90_000, 90_000], [91_000], at)).toEqual(insufficient);
-    expect(paceDelta([], [91_000, 91_000], at)).toEqual(insufficient);
     expect(paceDelta([90_000, 90_000], [], at)).toEqual(insufficient);
-    expect(paceDelta([], [], at)).toEqual(insufficient);
   });
 
   it('exactly two laps on each side is enough', () => {
@@ -69,14 +74,40 @@ describe('paceDeltaAround', () => {
   it('only pace laps count: lap 1 of a race and an in lap are skipped', () => {
     const list = laps(8, () => 90_000).map((l) => (l.lapNumber === 6 ? { ...l, inLap: true, lapTimeMs: 150_000 } : l));
     expect(paceDeltaAround(list, 5, race)).toEqual(known(0, 800_000));
-    // in practice lap 1 is a pace lap, but one lap before is still too few
-    expect(paceDeltaAround(laps(3, (n) => (n === 1 ? 80_000 : 90_000)), 2, { window: 3, isRace: false })).toEqual(unknown('insufficientData'));
+    // in practice lap 1 is a pace lap, but one lap before is still too few, and it can never become more
+    expect(paceDeltaAround(laps(3, (n) => (n === 1 ? 80_000 : 90_000)), 2, { window: 3, isRace: false })).toEqual(unknown('notApplicable'));
   });
 
-  it('fewer than two pace laps on a side is insufficientData', () => {
+  it('fewer than two pace laps before the lap is notApplicable, whatever comes after', () => {
+    // lap 1 of a race is no pace lap: before lap 2 there is none, before lap 3 only lap 2
+    expect(paceDeltaAround(laps(8, () => 90_000), 2, race)).toEqual(unknown('notApplicable'));
+    expect(paceDeltaAround(laps(8, () => 90_000), 3, race)).toEqual(unknown('notApplicable'));
+    expect(paceDeltaAround(laps(2, () => 90_000), 2, race)).toEqual(unknown('notApplicable'));
+    expect(paceDeltaAround([], 2, race)).toEqual(unknown('notApplicable'));
+    fc.assert(
+      fc.property(fc.integer({ min: 2, max: 3 }), fc.integer({ min: 0, max: 8 }), (event, after) => {
+        expect(paceDeltaAround(laps(event + after, () => 90_000), event, race)).toEqual(unknown('notApplicable'));
+      }),
+    );
+  });
+
+  it('only pace laps count before the lap: an in lap among them leaves too few, so notApplicable', () => {
+    // laps 2..4 before lap 5, but 3 and 4 are an in lap and an out lap: only lap 2 is a pace lap
+    const list = laps(8, () => 90_000).map((l) =>
+      l.lapNumber === 3 ? { ...l, inLap: true } : l.lapNumber === 4 ? { ...l, outLap: true } : l,
+    );
+    expect(paceDeltaAround(list, 5, race)).toEqual(unknown('notApplicable'));
+  });
+
+  it('two pace laps before and fewer than two after is insufficientData', () => {
+    // before lap 4: laps 2 and 3
+    expect(paceDeltaAround(laps(4, () => 90_000), 4, race)).toEqual(unknown('insufficientData'));
+    expect(paceDeltaAround(laps(5, () => 90_000), 4, race)).toEqual(unknown('insufficientData'));
     expect(paceDeltaAround(laps(6, () => 90_000), 5, race)).toEqual(unknown('insufficientData'));
-    expect(paceDeltaAround(laps(8, () => 90_000), 2, race)).toEqual(unknown('insufficientData'));
-    expect(paceDeltaAround([], 2, race)).toEqual(unknown('insufficientData'));
+  });
+
+  it('two pace laps on each side is known', () => {
+    expect(paceDeltaAround(laps(6, (n) => (n < 4 ? 90_000 : 91_000)), 4, race)).toEqual(known(1000, 600_000));
   });
 
   it('the order of the laps does not matter', () => {
