@@ -4,6 +4,7 @@
   import { COLUMN_GAP, fitRow, incidentRows, LEAD } from './rows.ts';
   import type { widget } from './widget.ts';
   import type { WidgetProps } from '../../kit/types.ts';
+  import UnknownMark from '../../kit/values/UnknownMark.svelte';
 
   let { data, size }: WidgetProps<typeof widget> = $props();
 
@@ -17,7 +18,7 @@
   {#each rows as row (row.id)}
     <div class="row" style:color={roleOrUndefined(row.role)} data-testid="incident-{row.id}">{lead}{#each fitRow(size.mode, row, size.cols) as cell, i (cell.column)}{i === 0 ? '' : gap}<span
           class="cell {cell.column}"
-          title={cell.title}>{cell.text}</span
+          title={cell.title}>{#if cell.unknown}{cell.unknown.lead}<UnknownMark reason={cell.unknown.reason} />{cell.unknown.trail}{:else}{cell.text}{/if}</span
         >{/each}</div>
   {/each}
 </div>

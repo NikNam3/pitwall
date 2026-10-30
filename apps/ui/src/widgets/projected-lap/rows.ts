@@ -17,7 +17,12 @@ export type ProjectionRow = {
   deltaRole: Role | undefined;
   /** Why a value of this row is hidden (first one), for the hover. */
   reason?: UnknownReason;
+  /** Why each hidden value cell is empty, so the display shows that cell's mark. */
+  unknown?: Partial<Record<ValueColumn, UnknownReason>>;
 };
+
+/** The columns that hold a value, which may be unknown. */
+export type ValueColumn = 'time' | 'pos' | 'delta';
 
 /** Columns: name, time, position, delta, label. */
 export const PROJECTION_COLUMNS = [
@@ -39,8 +44,12 @@ const firstReason = (...values: Known<unknown>[]): UnknownReason | undefined => 
   for (const v of values) if (!v.known) return v.reason;
   return undefined;
 };
-const withReason = (row: Omit<ProjectionRow, 'reason'>, reason: UnknownReason | undefined): ProjectionRow =>
-  reason === undefined ? row : { ...row, reason };
+/** The row with the reason of its first hidden value and the reason of each hidden cell (`cells`, unknown ones only). */
+function withReason(row: Omit<ProjectionRow, 'reason' | 'unknown'>, reason: UnknownReason | undefined, cells: Partial<Record<ValueColumn, Known<unknown>>> = {}): ProjectionRow {
+  if (reason === undefined) return row;
+  const unknown = Object.fromEntries(Object.entries(cells).flatMap(([key, v]) => (v.known ? [] : [[key, v.reason]])));
+  return { ...row, reason, unknown };
+}
 
 /** The rows PROJ, CUT-OFF and FINISH for a projection; hidden values are empty cells. `ours`: the car is one of ours. */
 export function projectionRows(p: Projection, ours: boolean): ProjectionRow[] {
@@ -52,7 +61,7 @@ export function projectionRows(p: Projection, ours: boolean): ProjectionRow[] {
         delta: text(p.deltaToBestMs, formatDeltaMs),
         label: p.deltaToBestMs.known ? labels.toBest : '',
         deltaRole: p.deltaToBestMs.known ? deltaRole(p.deltaToBestMs.value, ours) : undefined,
-      }, firstReason(p.projectedLapMs, p.projectedPosition, p.deltaToBestMs))
+      }, firstReason(p.projectedLapMs, p.projectedPosition, p.deltaToBestMs), { time: p.projectedLapMs, pos: p.projectedPosition, delta: p.deltaToBestMs })
     : { key: 'proj', name: names.proj, time: outLap, pos: '', delta: '', label: '', deltaRole: undefined };
 
   const cut = p.cutOff;
@@ -64,7 +73,7 @@ export function projectionRows(p: Projection, ours: boolean): ProjectionRow[] {
     delta: text(margin, formatDeltaMs),
     label: margin.known ? labels.margin : '',
     deltaRole: margin.known ? cutOffRole(margin.value) : undefined,
-  }, firstReason(cut, margin));
+  }, firstReason(cut, margin), { time: cut, pos: cut, delta: margin });
 
   const fin = p.finishMarginMs;
   const finish = withReason({
@@ -72,7 +81,7 @@ export function projectionRows(p: Projection, ours: boolean): ProjectionRow[] {
     delta: text(fin, (ms) => `${formatSeconds(ms, 1)}${seconds}`),
     label: fin.known ? labels.leftAtLine : '',
     deltaRole: fin.known ? finishRole(fin.value) : undefined,
-  }, firstReason(fin));
+  }, firstReason(fin), { delta: fin });
 
   return [proj, cutOff, finish];
 }

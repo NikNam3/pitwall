@@ -3,7 +3,7 @@ import type { CarOverview } from '@pitwall/contracts';
 import type { CarId, IncidentEntry, IncidentForUs, IncidentKind, Known, RaceMoment, UnknownReason } from '@pitwall/domain';
 import { carCodeById } from '../../kit/car/car-label.ts';
 import { fitCell } from '../../kit/grid/grid.ts';
-import { incidentKinds, insightText, sectorNames, separator, unknownReason } from '../../kit/text.ts';
+import { incidentKinds, insightText, sectorNames, separator, unknownMark, unknownReason } from '../../kit/text.ts';
 import type { WidgetSize } from '../../kit/types.ts';
 import { formatCount, formatDeltaPct, formatLapNumber, formatSeconds, formatSignedSeconds } from '../../kit/values/format.ts';
 import { positionPairText } from '../../kit/values/position-mark.ts';
@@ -114,8 +114,19 @@ export const widths: Record<IncidentColumn, number> = { lap: 3, cars: 7, what: 1
 export const COLUMN_GAP = 2;
 export const LEAD = 1;
 
-/** One cell fitted to its field: the text and, for an empty value, the reason in words for the hover. */
-export type FittedCell = { column: IncidentColumn; text: string; title?: string };
+/**
+ * One cell fitted to its field: the text and, for an unknown value, the reason in words for the hover and how the cell
+ * shows its reason's mark: the known part (`lead`, with its space), the mark, then the padding (`trail`) to the width.
+ */
+export type FittedCell = { column: IncidentColumn; text: string; title?: string; unknown?: { reason: UnknownReason; lead: string; trail: string } };
+
+/** Where the mark of an unknown cell goes in `width` characters: after its known part, cut to leave room for the mark. */
+function markLayout(cell: IncidentCell, reason: UnknownReason, width: number): NonNullable<FittedCell['unknown']> {
+  const mark = unknownMark[reason];
+  const room = width - mark.length - 1;
+  const lead = cell.text === '' || room <= 0 ? '' : `${fitCell(cell.text, room).trimEnd()} `;
+  return { reason, lead, trail: ' '.repeat(Math.max(0, width - lead.length - mark.length)) };
+}
 
 /**
  * The row's cells on the fixed grid of a line `cols` characters wide: each column in its width, the last one in what
@@ -128,11 +139,11 @@ export function fitRow(mode: WidgetSize['mode'], row: IncidentRow, cols: number)
     const cell = row.cells[column];
     const width = i === columns.length - 1 ? Math.max(0, cols - fixed) : widths[column];
     const fitted = { column, text: fitCell(cell.text, width) };
-    return cell.reason === undefined ? fitted : { ...fitted, title: unknownReason[cell.reason] };
+    return cell.reason === undefined ? fitted : { ...fitted, title: unknownReason[cell.reason], unknown: markLayout(cell, cell.reason, width) };
   });
 }
 
-/** A row as one line of text on the fixed grid (`cols` wide; by default as wide as its last cell needs). */
+/** A row as one line of text on the fixed grid (`cols` wide; by default as wide as its last cell needs), without the marks. */
 export function incidentRowText(mode: WidgetSize['mode'], row: IncidentRow, cols = Infinity): string {
   const columns = columnsFor(mode);
   const last = columns[columns.length - 1];

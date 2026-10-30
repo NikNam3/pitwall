@@ -4,7 +4,8 @@
   import Chart from '../../kit/chart/Chart.svelte';
   import type { WidgetProps } from '../../kit/types.ts';
   import { ourCars } from '../../kit/car/our-cars.ts';
-  import { noDataYet, unknownReason } from '../../kit/text.ts';
+  import { noDataYet } from '../../kit/text.ts';
+  import UnknownMark from '../../kit/values/UnknownMark.svelte';
   import { formatGapTick } from '../../kit/values/format.ts';
   import { role } from '../../theme/index.ts';
   import { gapSeries, phaseBands } from './series.ts';
@@ -23,7 +24,8 @@
 </script>
 
 <div class="gap">
-  <div class="ref" style:color={role('textDim')} style:height="{rowPx}px" title={header.reason === undefined ? undefined : unknownReason[header.reason]}>{header.text}</div>
+  <!-- The unknown part of the line (the lap time, or the reference car's code) shows as one mark at its end. -->
+  <div class="ref" style:color={role('textDim')} style:height="{rowPx}px">{header.text}{#if header.reason}&nbsp;<UnknownMark reason={header.reason} />{/if}</div>
   {#if series.length === 0}
     <div class="empty" style:color={role('textDim')}>{noDataYet}</div>
   {:else}
