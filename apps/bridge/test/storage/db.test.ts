@@ -5,14 +5,16 @@ import { SCHEMA_VERSION, SchemaVersionError, openDatabase } from '../../src/stor
 const file = () => join(mkdtempSync(join(tmpdir(), 'db-')), 'pitwall.db');
 
 describe('openDatabase', () => {
-  it('creates the schema at version 1 with foreign keys on', () => {
+  it('creates the schema at the current version with foreign keys on, sessions keyed by uid and weekend', () => {
     const db = openDatabase(':memory:');
     expect(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").pluck().all())
       .toEqual(['drivers', 'events', 'flag_phases', 'laps', 'pit_stops', 'sessions', 'stints', 'weekends']);
     expect(db.pragma('user_version', { simple: true })).toBe(SCHEMA_VERSION);
-    expect(SCHEMA_VERSION).toBe(1);
+    expect(SCHEMA_VERSION).toBe(2);
     expect(db.pragma('foreign_keys', { simple: true })).toBe(1);
-    expect(db.prepare("SELECT name FROM pragma_table_info('laps') WHERE pk > 0 ORDER BY pk").pluck().all()).toEqual(['session_uid', 'car_id', 'lap_number']);
+    const key = (table: string) => db.prepare(`SELECT name FROM pragma_table_info('${table}') WHERE pk > 0 ORDER BY pk`).pluck().all();
+    expect(key('sessions')).toEqual(['session_uid', 'weekend_id']);
+    expect(key('laps')).toEqual(['session_uid', 'weekend_id', 'car_id', 'lap_number']);
   });
   it('reopens an existing database', () => {
     const path = file();
@@ -26,6 +28,14 @@ describe('openDatabase', () => {
     raw.pragma(`user_version = ${version}`);
     raw.close();
     expect(() => openDatabase(path)).toThrow(SchemaVersionError);
-    try { openDatabase(path); } catch (e) { expect(e).toMatchObject({ found: version, expected: 1 }); }
+    try { openDatabase(path); } catch (e) { expect(e).toMatchObject({ found: version, expected: SCHEMA_VERSION }); }
+  });
+  it('refuses a version-1 database (sessions keyed by uid alone) with SchemaVersionError', () => {
+    const path = file();
+    const raw = new Database(path);
+    raw.exec('CREATE TABLE sessions (session_uid TEXT PRIMARY KEY, weekend_id TEXT NOT NULL)');
+    raw.pragma('user_version = 1');
+    raw.close();
+    expect(() => openDatabase(path)).toThrow(expect.objectContaining({ name: 'SchemaVersionError', found: 1, expected: SCHEMA_VERSION }));
   });
 });
