@@ -97,6 +97,7 @@ The analyses stay pure. Knowledge copies ADR 0008 one to one:
 | `per-lap-rate` (exists) | Theil–Sen rates; used for wear per lap |
 | `track-lookup` | on a `TrackGeometry`: the corner or straight at a lap distance, the next straight, the map point of a lap distance, the turn label at a lap distance (from the turn file) |
 | `tyre-life` | the lap at which a stint reaches its limit: wear at `wearLimitPct` (wear visible) or the age at which the predicted loss reaches `ageLossLimitMs` (wear hidden) |
+| `forecast-field` | builds the `ForecastField` and `ForecastParams` of `race-forecast` from the engine view and the outputs of `degradation` and `pit-loss`; the one place that turns calculator outputs into `CarModel`s, shared by every strategy analysis |
 
 ### 5.2 `lap-model` (simulator)
 One predicted lap time, Fieni's split with the TUM age model as the fallback (research 07, 2.1):
@@ -296,7 +297,7 @@ Contracts and value types (Appendix A), priors and contributions (section 4), th
 | Level | Units |
 |---|---|
 | 1 | `track-lookup`, `tyre-life`, `lap-model`, `track-geometry`, `pit-loss`, `degradation`, `weather`, `raising-average`, `lap-overview` |
-| 2 | `race-forecast`, `pit-losses`, `stint-analysis`, `track-positions`, `radio-window`, `crossover`, `pit-window` with the `race-moment` change, `incidents` change |
+| 2 | `race-forecast`, `forecast-field`, `pit-losses`, `stint-analysis`, `track-positions`, `radio-window`, `crossover`, `pit-window` with the `race-moment` change, `incidents` change |
 | 3 | `rejoin`, `undercut`, `sc-call`, `pit-sweep` |
 | displays | each right behind its analysis, after the mockups are approved |
 
