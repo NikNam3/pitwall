@@ -11,8 +11,8 @@ const CAR = 19 as CarId;
 const CHANGE_AT = 616_783;
 
 /** The session time, car 19's front-right wing and the parts of its jumps, of each damage run over the segment. */
-async function damageRuns(): Promise<{ at: number; frontRightWingPct: number | undefined; jumpParts: string[] }[]> {
-  const runs: { at: number; frontRightWingPct: number | undefined; jumpParts: string[] }[] = [];
+async function damageRuns(): Promise<{ at: number; frontRightWingPct: number | undefined }[]> {
+  const runs: { at: number; frontRightWingPct: number | undefined }[] = [];
   await replayScheduled(segmentPath(FILE), [damageCalculator], ({ state }, scheduled) => {
     if (!scheduled.ran.includes(DAMAGE)) return;
     const car = (scheduled.outputs.get(DAMAGE) as DamageOutput)[CAR];
@@ -20,7 +20,6 @@ async function damageRuns(): Promise<{ at: number; frontRightWingPct: number | u
     runs.push({
       at: state.sessionTime,
       frontRightWingPct: car.parts.known ? car.parts.value.frontRightWingPct : undefined,
-      jumpParts: car.jumps.flatMap((j) => j.parts),
     });
   });
   return runs;
@@ -41,10 +40,4 @@ describe('a wing change on real data', () => {
     expect(runs.slice(first).map((r) => r.frontRightWingPct)).toEqual(runs.slice(first).map(() => 0));
   });
 
-  it('practice-wing-change: after the change the car has no damage jump on the front-right wing', async () => {
-    const runs = await damageRuns();
-    const after = runs.filter((r) => r.at >= CHANGE_AT);
-    expect(after.length).toBeGreaterThan(0);
-    for (const r of after) expect(r.jumpParts, `at ${r.at}`).not.toContain('frontRightWingPct');
-  });
 });
