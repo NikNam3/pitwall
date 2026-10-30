@@ -16,6 +16,7 @@ Optional: `PITWALL_WORKER_UNIT=<unit>` for a task that builds one analysis or di
 
 - Consumes: <modules, types and files this task depends on, copied from the plan>
 - Produces: <modules, types and files other tasks will depend on, copied from the plan>
+- Readers of every changed output: <for each changed topic, analysis output, event kind or type: every reader found by grep (direct and through other analyses' outputs), and what each one expects after the change>
 
 ## Tests to pass
 

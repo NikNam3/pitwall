@@ -72,7 +72,8 @@ Three layers, built bottom-up (ADR 0014): calculators (pure maths) → analyses 
 
 - **Quick calculators** are stateless: a function of the engine view.
 - **Incremental calculators** are a fold over the history (`init`, `step`); a flashback re-runs `init`, and a test checks incremental = from scratch.
-- `packages/analysis/src/shared/` holds helpers shared by analyses (current-stint laps, our cars, penalty classes). It is not a unit.
+- `packages/analysis/src/shared/` holds helpers shared by analyses (current-stint laps, our cars, penalty classes, DRS status, damage jump grouping). It is not a unit.
+- **A log reads the history only.** An analysis that keeps a record of what happened (a feed, a history list) folds the engine history (events, laps, phases, crossings). It never reads another analysis's current-state output, which can shrink or change (a repaired part, a recomputed rate). Logic both need goes into a shared pure function over the history (as `pace-delta` and the damage jump grouping do). Why: the incident feed lost its damage entries when the damage analysis started clearing repaired jumps (2026-10-30).
 - Thresholds live in each unit's `config.ts` (features declare them; `config.json` overrides). `per-lap-rate` owns the rate config that tyre-wear, fuel, ers and battle read.
 
 ### Units and topics
