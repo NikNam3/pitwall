@@ -82,7 +82,7 @@ The analyses stay pure. Knowledge copies ADR 0008 one to one:
 
 - **Lifetime** is `reference` (committed data, never written: the turn files), `track` (all sessions at this track) or `weekend` (all sessions of this weekend).
 - **A contribution** is what one session measured: the pit stops with their losses, the geometry samples, the per-compound fits. A calculator's output carries it; `Feature.contributions` names the calculator and the priors key it feeds.
-- **The bridge stores contributions per source session** (`knowledge` table: key, lifetime, scope id, session key, JSON, written at every lap completion and at session end, an upsert). Replaying or reprocessing a session **replaces** its contribution, so nothing is counted twice; a bad session can be dropped by deleting its rows.
+- **The bridge stores contributions per source session** (`knowledge` table: key, lifetime, scope id, session key, laps covered, JSON, written at every lap completion and at session end). Only `live`, `import` and `reprocess` write; **`replay` and `dev` never write**, so testing with partial replays cannot touch the store. A contribution is replaced only by one of the same session that covers **at least as many laps**, so a re-run never counts a session twice and a partial run (a bridge restarted mid-session) never shrinks it. A bad session can be dropped by deleting its rows.
 - **At session start** the bridge loads every contribution in scope (same track, or same weekend), calls the key's pure `aggregate(contributions)` and passes the result as the prior. With no contributions the prior is the key's `defaults`: the community values, each with a source note.
 - **Moving to a real team's database later** (everything across weekends, weighted by age and conditions) is a new `aggregate` and a wider scope, not a migration.
 - **Determinism:** priors are an input to the run like the recording. The determinism and segment tests pin them (empty or a committed priors file). The determinism hash covers the topics, not the store.
@@ -111,7 +111,7 @@ T_lap = baseMs + compoundOffsetMs
       + in/out-lap and cold-tyre penalty on the stop laps
 ```
 
-Input per car: a `CarModel` (Appendix A.2) built by the analyses from `degradation`, `pit-loss` and config. `predictLaps(car, fromLap, count, out)` fills `out` without allocating.
+Input per car: a `CarModel` (Appendix A.2) built by the analyses from `degradation`, `pit-loss` and config. `predictLaps(car, fromLap, count, gapAheadMs, params, out)` fills `out` without allocating; `lapTime(car, ageOffset, fuelKg, gapAheadMs, params)` gives one lap.
 
 ### 5.3 `race-forecast` (simulator)
 Steps the field lap by lap from the current state. Input: a `ForecastField` (per car: race time at the last line crossing, lap, position, `CarModel`), a list of `ForecastStop { carIndex, lap, compound, condition }` and the number of laps. Per lap:
@@ -262,7 +262,7 @@ The layouts come from the approved mockups, for the 24" main and the 14" side mo
 | simulators | unit and fast-check properties: with no stops and equal pace gaps hold (dirty air off); a car below the threshold never passes; a stop never gains position at the rejoin moment; adding a stop never shortens the race time; the forecast with no stops matches straight extrapolation |
 | calculators | builders for edge cases (no clean laps, one sample, an SC that ends mid in-lap, a stint with all laps excluded); segments for a real stop, a real lap of the field |
 | analyses | every output field becomes `unknown(reason)` when its input is missing; builders plus segments |
-| priors | replaying a session twice leaves the store unchanged; pinned priors give identical topic streams; `aggregate` is order-independent |
+| priors | reprocessing a session twice leaves the store unchanged; replay and dev write nothing; a contribution covering fewer laps never replaces a fuller one; pinned priors give identical topic streams; `aggregate` is order-independent |
 | turn files | each file is valid; turns snap to detected corners in order where a recording exists |
 | budgets | 10.3 |
 | displays | gallery cases from the mockups, `fit.spec`, one baseline per display size within the cap (50) |
