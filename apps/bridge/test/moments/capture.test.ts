@@ -20,9 +20,6 @@ const LAP10 = 'race-zandvoort-lap10.pwrec.gz';
 /** The `raceZandvoortLap10.crossing` moment: just after the player's line crossing. */
 const CROSSING_MS = 3200;
 
-/** Equal params give equal text (the contracts' one canonical form). */
-const canonical = canonicalJson;
-
 const JOB_TOPICS = new Set<string>(FEATURES.flatMap((f) => f.topics.flatMap((b) => ('fromJob' in b ? [b.topic] : []))));
 
 /** The feed topics a moment captures with params, with their `momentParams`, from the contracts alone. */
@@ -34,7 +31,7 @@ const PARAM_TOPICS = (Object.keys(TOPICS) as TopicName[]).flatMap((topic) => {
 const activeCars = (values: MomentValues): CarId[] =>
   values.flatMap((v) => (v.topic === 'car.detail' && (v.value as { active?: boolean } | undefined)?.active === true ? [(v.params as { carId: CarId }).carId] : []));
 
-const paramsOf = (values: MomentValues, topic: string): string[] => values.filter((v) => v.topic === topic).map((v) => canonical(v.params));
+const paramsOf = (values: MomentValues, topic: string): string[] => values.filter((v) => v.topic === topic).map((v) => canonicalJson(v.params));
 
 describe('captureMoment', () => {
   it('twice gives byte-identical JSON', async () => {
@@ -67,7 +64,7 @@ describe('captureMoment', () => {
     expect(active.length).toBeGreaterThan(0);
     expect(PARAM_TOPICS.length).toBeGreaterThan(2);
     for (const { topic, momentParams } of PARAM_TOPICS) {
-      const expected = momentParams(active).map(canonical);
+      const expected = momentParams(active).map(canonicalJson);
       const got = paramsOf(values, topic);
       expect(got.length, topic).toBeGreaterThan(0);
       // a state topic without a value is left out, so the moment holds an ordered part of the expected params
@@ -90,8 +87,8 @@ describe('captureMoment', () => {
     const inactive = Array.from({ length: MAX_CARS }, (_, i) => carId(i)).filter((id) => !active.includes(id));
     expect(inactive.length).toBeGreaterThan(0);
     for (const { topic, momentParams } of PARAM_TOPICS) {
-      const allowed = new Set(momentParams(active).map(canonical));
-      const inactiveOnly = momentParams(inactive).map(canonical).filter((p) => !allowed.has(p));
+      const allowed = new Set(momentParams(active).map(canonicalJson));
+      const inactiveOnly = momentParams(inactive).map(canonicalJson).filter((p) => !allowed.has(p));
       expect(inactiveOnly.length, topic).toBeGreaterThan(0);
       for (const p of inactiveOnly) expect(paramsOf(values, topic), topic).not.toContain(p);
     }

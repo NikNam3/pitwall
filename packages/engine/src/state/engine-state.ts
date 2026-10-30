@@ -121,13 +121,19 @@ export type PhaseBook = {
    * settling re-stamps: history from `from`, phases from index `phaseFrom` (the start lights) on (spec 3.3).
    */
   lightsOut?: { frameId: number; from: HistoryLengths; phaseFrom: number } | undefined;
-  /** The receive time of the previous frame (wall clock, ms), for offline pauses. */
+  /**
+   * How far the race clock runs ahead of the game's session time: the sum of the unexplained falls since the race start
+   * (spec 3.3, user ruling 2026-10-30). Every frame is stamped at its session time plus this, so the race clock never
+   * falls but at a flashback or the start's own rules.
+   */
+  clockOffsetMs: Ms;
+  /** The receive time of the previous frame (wall clock, ms), for offline pauses and the post-session jump. */
   lastWallMs?: number | undefined;
   /**
-   * Set by a rewind whose frame still carried the old timeline's session time (inventory 1.10): frames at or above this
-   * time are still the old timeline's, and the fall to the first frame on the target's clock belongs to the flashback.
+   * Set by a rewind whose frame still carried the pre-rewind session time (inventory 1.10): the game's session time
+   * (not the race clock) the frames right after the rewind carry while they still belong to its target moment.
    */
-  staleFromMs?: SessionTime | undefined;
+  staleRawMs?: SessionTime | undefined;
   /** An online pause (`gamePaused`) in progress: its session time and receive time. */
   onlinePause?: { start: SessionTime; wallMs: number } | undefined;
 };
@@ -137,8 +143,8 @@ export type PhaseBook = {
  * Plain data only, so `structuredClone` can snapshot it.
  */
 export type OpenTrackers = {
-  /** The situation tracker's open state (`history/situations/`): the phase in progress and whether the session is paused. */
-  situations: { session: OpenSessionPhase; paused: boolean };
+  /** The situation tracker's open state (`history/situations/`): the phase in progress (paused: `phaseBook.onlinePause`). */
+  situations: { session: OpenSessionPhase };
   phaseBook: PhaseBook;
   laps: Array<LapCursor | undefined>;
   stints: Array<OpenStint | undefined>;
@@ -174,6 +180,7 @@ export type EngineState = {
   playerCar: CarId;
   teammateCar?: CarId | undefined;
   lastFrameId: number;
+  /** The last frame's time on the race clock: its session time plus `open.phaseBook.clockOffsetMs`. */
   sessionTime: SessionTime;
   open: OpenTrackers;
   weekend?: WeekendContext | undefined;

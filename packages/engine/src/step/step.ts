@@ -4,7 +4,7 @@ import { applyFlagPhases } from '../history/flags.ts';
 import { applyLaps } from '../history/laps.ts';
 import { applyMiniSectors } from '../history/mini-sectors.ts';
 import { applyPitStops } from '../history/pit-stops.ts';
-import { applySituations } from '../history/situations/index.ts';
+import { applySessionClock, applySituations } from '../history/situations/index.ts';
 import { applyStints } from '../history/stints.ts';
 import type { EngineState } from '../state/engine-state.ts';
 import { applyCondition } from './condition.ts';
@@ -48,9 +48,13 @@ const refreshActive = (state: EngineState): void => {
   }
 };
 
-/** Applies one frame to the state in place (spec 6.1). */
-export function step(state: EngineState, frame: Frame): StepOutput {
+/**
+ * Applies one frame to the state in place (spec 6.1). The situation tracker reads the session time's jump first, and
+ * every sub-step stamps with the frame's time on its race clock (spec 3.3).
+ */
+export function step(state: EngineState, received: Frame): StepOutput {
   const out: StepOutput = { changed: new Set(), corrections: [] };
+  const frame = applySessionClock(state, received, out);
   for (const subStep of SUB_STEPS) subStep(state, frame, out);
   if (out.changed.has('identity') || out.changed.has('timing')) refreshActive(state);
   state.lastFrameId = frame.frameId;

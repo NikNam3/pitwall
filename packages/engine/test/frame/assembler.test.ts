@@ -5,7 +5,9 @@ import { FrameAssembler, type Frame } from '../../src/index.ts';
 import { menuGroup, stub } from './stub-packet.ts';
 
 const feedId = 'test' as FeedId;
-const pushAll = (a: FrameAssembler, ps: Packet[]) => ps.flatMap((p) => a.push(p));
+/** Pushes a packet received at its own header session time (wall clock = session time unless a test says otherwise). */
+const push = (a: FrameAssembler, p: Packet, receivedAtMs = p.header.sessionTime * 1000) => a.push(p, receivedAtMs);
+const pushAll = (a: FrameAssembler, ps: Packet[]) => ps.flatMap((p) => push(a, p));
 const ids = (fs: Frame[]) => fs.map((f) => f.frameId);
 const range = (from: number, to: number) => Array.from({ length: to - from + 1 }, (_, i) => from + i);
 
@@ -19,10 +21,17 @@ describe('FrameAssembler', () => {
     expect(f.damage).toBeUndefined();
     expect([f.sessionHistory, f.tyreSets, f.events]).toEqual([[], [], []]);
   });
+  it('a frame carries the receive time of its first packet', () => {
+    const a = new FrameAssembler({ feedId });
+    push(a, stub('motion', 10, 1.0), 5_000);
+    push(a, stub('lapData', 10, 1.0), 5_004);
+    push(a, stub('motion', 11, 1.016), 5_016);
+    expect(a.flush().map((f) => [f.frameId, f.receivedAtMs])).toEqual([[10, 5_000], [11, 5_016]]);
+  });
   it('closes frame N only when a packet for N+3 arrives', () => {
     const a = new FrameAssembler({ feedId });
     expect(pushAll(a, [...menuGroup(10, 1.0), ...menuGroup(11, 1.016), ...menuGroup(12, 1.032)])).toEqual([]);
-    expect(ids(a.push(stub('lapData', 13, 1.048)))).toEqual([10]);
+    expect(ids(push(a, stub('lapData', 13, 1.048)))).toEqual([10]);
   });
   it('merges a packet for N that arrives after N+1 and N+2', () => {
     const a = new FrameAssembler({ feedId });
@@ -33,8 +42,8 @@ describe('FrameAssembler', () => {
   it('drops and counts a packet more than 2 behind the newest; 2 behind is still accepted', () => {
     const a = new FrameAssembler({ feedId });
     pushAll(a, [...menuGroup(10, 1.0), stub('motion', 13, 1.048)]);
-    expect(a.push(stub('lapData', 10, 1.0))).toEqual([]);
-    a.push(stub('lapData', 11, 1.016));
+    expect(push(a, stub('lapData', 10, 1.0))).toEqual([]);
+    push(a, stub('lapData', 11, 1.016));
     expect(a.metrics.latePackets).toBe(1);
     expect(ids(a.flush())).toEqual([11, 13]);
   });
@@ -134,7 +143,7 @@ describe('FrameAssembler', () => {
     const a = new FrameAssembler({ feedId });
     const closed = pushAll(a, [...menuGroup(10, 1.0), ...menuGroup(11, 1.016), ...menuGroup(500, 8.856), ...menuGroup(501, 8.872)]);
     expect(ids(closed)).toEqual([10, 11]);
-    expect(a.push(stub('lapData', 11, 1.016))).toEqual([]);
+    expect(push(a, stub('lapData', 11, 1.016))).toEqual([]);
     expect(a.metrics.latePackets).toBe(1);
     expect(ids(a.flush())).toEqual([500, 501]);
     expect(a.metrics).toMatchObject({ framesClosed: 4, incompleteFrames: 0 });

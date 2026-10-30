@@ -5,8 +5,8 @@ import { CadenceTracker, emptyMetrics, type FrameMetrics } from './metrics.ts';
 
 const DEFAULT_REORDER_WINDOW = 2;
 
-/** A packet and when it arrived, if the caller knows. */
-type Arrival = { packet: Packet; receivedAtMs: number | undefined };
+/** A packet and when it arrived. */
+type Arrival = { packet: Packet; receivedAtMs: number };
 
 /** Stores a packet in its slot: single-instance slots keep the last packet, list slots append. */
 function place(frame: Frame, packet: Packet): void {
@@ -68,7 +68,7 @@ export class FrameAssembler {
   }
 
   /** Adds a packet that arrived at `receivedAtMs` (wall clock, ms); returns the frames it closed, oldest first. */
-  push(packet: Packet, receivedAtMs?: number): Frame[] {
+  push(packet: Packet, receivedAtMs: number): Frame[] {
     const key = packet.header.overallFrameIdentifier;
     const arrival = { packet, receivedAtMs };
     if (this.#newest !== undefined && key - this.#newest > this.#reorderWindow + 1) return this.#pushAhead(arrival, key);
@@ -129,7 +129,7 @@ export class FrameAssembler {
     this.#held = [];
   }
 
-  #frameFor(packet: Packet, key: number, receivedAtMs: number | undefined): Frame {
+  #frameFor(packet: Packet, key: number, receivedAtMs: number): Frame {
     const existing = this.#open.get(key);
     if (existing !== undefined) return existing;
     const { header } = packet;
@@ -140,7 +140,7 @@ export class FrameAssembler {
       overallFrameId: key,
       sessionTime: toSessionTime(header.sessionTime),
       playerCarIndex: header.playerCarIndex,
-      ...(receivedAtMs !== undefined && { receivedAtMs }),
+      receivedAtMs,
       sessionHistory: [],
       tyreSets: [],
       events: [],

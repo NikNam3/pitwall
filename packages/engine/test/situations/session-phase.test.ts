@@ -2,9 +2,9 @@
 // signal opens and closes each phase, the confirmations, the session ends, joins, pauses and a flashback across a
 // phase boundary. Closed phases are `history.sessionPhases`; the phase in progress is `open.situations.session`.
 import { describe, expect, it } from 'vitest';
-import { activeFlagPhaseOf, type SessionRunner } from '../../src/index.ts';
+import { activeFlagPhaseOf, situationOf, type SessionRunner, type StepResult } from '../../src/index.ts';
 import { after } from '../support/runner.ts';
-import { input, quick, sched } from '../support/scheduler.ts';
+import { expectScheduledIncremental, input, quick, sched, underNeutralisation } from '../support/scheduler.ts';
 import {
   beats,
   CHQF,
@@ -12,6 +12,7 @@ import {
   lap,
   LGOT,
   LIGHTS_OUT,
+  ovtk,
   raceAt,
   rcwn,
   RDFL,
@@ -22,6 +23,7 @@ import {
   status,
   STEP,
   stlg,
+  TRACK,
   type Beat,
 } from './script.ts';
 
@@ -34,8 +36,11 @@ const raceFrame = (k: number) => LIGHTS_OUT + 1 + k;
  * A race of `n` frames after a grid start whose race frame k has the beat `at[k]`. With `jump`, the session time jumps
  * forward by `ms` at race frame `from` and runs on from there.
  */
-const race = (n: number, at: Record<number, Beat>, jump?: { from: number; ms: number }) =>
-  run(script(gridStart(n, (k) => ({ ...(jump && k >= jump.from && { at: raceAt(k) + jump.ms }), ...at[k] }))));
+const raceScript = (n: number, at: Record<number, Beat>, jump?: { from: number; ms: number }) =>
+  script(gridStart(n, (k) => ({ ...(jump && k >= jump.from && { at: raceAt(k) + jump.ms }), ...at[k] })));
+const race = (n: number, at: Record<number, Beat>, jump?: { from: number; ms: number }) => run(raceScript(n, at, jump));
+/** The steps that discarded history (`delta.truncated`), by frame index. */
+const truncated = (results: StepResult[]) => results.flatMap((r, i) => (r.delta.truncated ? [i] : []));
 
 describe('the start of a race without a formation lap', () => {
   it('the grid is preStart, the first start light opens startLights, lights out opens racing', () => {
@@ -129,6 +134,50 @@ describe('a neutralisation (SC, VSC)', () => {
     const { runner } = race(200, { 50: { events: [scar(1, 0)] }, 60: { session: status(1) }, 150: { events: [scar(1, 3)] }, 160: { session: status(0) } });
     expect(runner.state.history.flagPhases).toMatchObject([{ kind: 'SC', start: raceAt(50), end: raceAt(150),
       scPhases: [{ phase: 'deployed', at: raceAt(50) }, { phase: 'resume', at: raceAt(150) }] }]);
+  });
+});
+
+describe('a neutralisation dropped unconfirmed is a discarded timeline (review 2 B2)', () => {
+  /** The first race frame more than 3 s after a deployment at race frame 50: the deployment expires there. */
+  const EXPIRY = 50 + Math.floor(3_000 / STEP) + 1;
+  /** Car 0 drives 40 m a frame from lights out, so mini-sector crossings come while the deployment waits. */
+  const driving = (k: number): Beat => ({
+    cars: (d) => lap(d, 0, { currentLapNum: 1 + Math.floor((10 + 40 * k) / TRACK), lapDistance: (10 + 40 * k) % TRACK }),
+  });
+
+  it('a deployment that expires after 3 s: that step, and no other, is truncated, and it reports no flashback', () => {
+    const { results } = race(EXPIRY + 20, { 50: { events: [scar(1, 0)] } });
+    expect(truncated(results)).toEqual([raceFrame(EXPIRY)]);
+    expect(results[raceFrame(EXPIRY)]!.flashback).toBeUndefined();
+  });
+  it('a deployment dropped at SEND: the SEND step is truncated', () => {
+    const { results } = race(200, { 190: { events: [scar(1, 0)] }, 199: { events: [SEND] } });
+    // SEND and the packets after it carry frame id 0, so the assembler adds them to the frame before: race frame 198.
+    expect(truncated(results)).toEqual([raceFrame(198)]);
+  });
+  it('a deployment dropped at the simulated end: the step of the jump is truncated', () => {
+    const { results } = race(150, { 90: { events: [scar(2, 0)] } }, { from: 100, ms: 6_000_000 });
+    expect(truncated(results)).toEqual([raceFrame(100)]);
+  });
+  it('a deployment the status confirms truncates no step', () => {
+    const { results } = race(EXPIRY + 20, { 50: { events: [scar(1, 0)] }, 60: { session: status(1) } });
+    expect(truncated(results)).toEqual([]);
+  });
+  it('a flashback from after the drop to the wait before it equals a run that never saw the discarded frames', () => {
+    const scarAt50 = { 50: { events: [scar(1, 0)] } };
+    const first = raceScript(EXPIRY + 40, scarAt50);
+    const fork = raceScript(EXPIRY + 40, { ...scarAt50, [EXPIRY - 20]: { events: [ovtk(1, 0)] } });
+    const { runner } = run(first.slice(0, raceFrame(EXPIRY + 20) + 1));
+    const results = after(fork, raceFrame(EXPIRY - 29), raceFrame(EXPIRY + 21)).map((f) => runner.apply(f));
+    expect(results[0]!.flashback?.targetFrameId).toBe(raceFrame(EXPIRY - 30));
+    expect(runner.state).toEqual(run(fork).runner.state);
+  });
+  it.each([
+    ['its 3 s expiry', EXPIRY + 40, undefined],
+    ['the simulated end', 150, { from: 100, ms: 6_000_000 }],
+  ] as const)('a reader that folds what happened under a neutralisation equals a fresh init on every step, across a deployment dropped at %s', (_, n, jump) => {
+    const frames = script(gridStart(n, (k) => ({ ...driving(k), ...(jump && k >= jump.from && { at: raceAt(k) + jump.ms }), ...(k === 50 && { events: [scar(1, 0)] }) })));
+    expectScheduledIncremental(underNeutralisation, frames);
   });
 });
 
@@ -239,6 +288,33 @@ describe('a bridge that joins mid-session', () => {
     expect(closed(runner)).toMatchObject([{ kind: 'neutralised', start: 300_000, joinedAt: true, detail: { kind: 'neutralised', car: 'SC' } }]);
     expect(current(runner)).toEqual({ kind: 'racing', start: 300_000 + 50 * STEP, startLeaderLap: 5 });
   });
+  // Review 2 B1: a bridge started in the start lights' hold (after the fifth light) or within 1 s after lights out sees
+  // no start light and no lap timer past 1 s, so it opens the grid; the race is under way once a timer passes 1 s.
+  /** Both cars' lap timers read `ms`. */
+  const timers = (ms: number): NonNullable<Beat['cars']> => (d) => { lap(d, 0, { currentLapTimeInMs: ms }); lap(d, 1, { currentLapTimeInMs: ms }); };
+  it('joining after the fifth start light: racing opens, marked joined, on the first frame a lap timer runs past 1 s; the race winner finishes it', () => {
+    const { runner } = run(script([
+      ...beats(30, (k) => ({ at: 0, ...(k === 29 && { events: [LGOT] }) })),
+      ...beats(200, (k) => ({ at: (k + 1) * STEP, cars: timers((k + 1) * STEP), ...(k === 150 && { events: [rcwn(0)] }) })),
+    ]));
+    expect(closed(runner)).toMatchObject([
+      { kind: 'preStart', start: 0, end: 1008 },
+      { kind: 'racing', start: 1008, end: 151 * STEP, joinedAt: true },
+    ]);
+    expect(current(runner)).toMatchObject({ kind: 'finished', start: 151 * STEP });
+  });
+  it('joining within 1 s after lights out: racing opens, marked joined, once a lap timer runs past 1 s; the chequered flag finishes it', () => {
+    const { runner } = run(script(beats(150, (k) => ({ at: 500 + k * STEP, cars: timers(500 + k * STEP), ...(k === 100 && { events: [CHQF] }) }))));
+    expect(closed(runner)).toMatchObject([
+      { kind: 'preStart', start: 500, end: 500 + 32 * STEP },
+      { kind: 'racing', start: 500 + 32 * STEP, end: 500 + 100 * STEP, joinedAt: true },
+    ]);
+    expect(current(runner)).toMatchObject({ kind: 'finished', start: 500 + 100 * STEP });
+  });
+  it('on the grid a lap timer below 1 s (a car standing past the line) is no race under way: the grid waits for the start lights', () => {
+    const { runner } = run(script(gridStart(20, () => ({})).map((beat, k) => (k <= LIGHTS_OUT ? { ...beat, cars: (d) => lap(d, 1, { currentLapTimeInMs: 510 }) } : beat))));
+    expect(kinds(runner)).toEqual(['preStart', 'startLights']);
+  });
   it('joining a practice mid-session: running from the first frame, marked joined', () => {
     const { runner } = run(script(beats(100, (k) => ({ at: 121_552 + k * STEP })), { session: { sessionType: 1, sessionDuration: 3600, sessionTimeLeft: 3478 } }));
     expect(kinds(runner)).toEqual([]);
@@ -265,9 +341,9 @@ describe('pauses', () => {
     const beatsOf = (n: number) => script(gridStart(n, (k) => (k === 50 ? { session: { gamePaused: 1 } } : k === 100 ? { session: { gamePaused: 0 } } : {})),
       { session: { networkGame: 1 } });
     const during = run(beatsOf(80)).runner;
-    expect([during.state.open.situations.paused, during.state.history.pauses]).toEqual([true, []]);
+    expect([situationOf(during.state).paused, during.state.history.pauses]).toEqual([true, []]);
     const { runner } = run(beatsOf(150));
-    expect(runner.state.open.situations.paused).toBe(false);
+    expect(situationOf(runner.state).paused).toBe(false);
     expect(runner.state.history.pauses).toEqual([{ start: raceAt(50), wallMs: 50 * STEP, kind: 'online' }]);
     expect(current(runner)).toEqual({ kind: 'racing', start: 0, startLeaderLap: 1 });
   });

@@ -71,7 +71,7 @@ describe('SessionRunner: one flashback, reported in more than one way', () => {
 
   it('FLBK in a frame that still carries the old high frameId: one rewind', () => {
     const { feedId, sessionUid, playerCarIndex } = fork[201]!;
-    const stale: Frame = { feedId, sessionUid, playerCarIndex, frameId: 300, overallFrameId: 300, sessionTime: 3_200, sessionHistory: [], tyreSets: [], events: flbk200 };
+    const stale: Frame = { feedId, sessionUid, playerCarIndex, frameId: 300, overallFrameId: 300, sessionTime: 3_200, receivedAtMs: 3_200, sessionHistory: [], tyreSets: [], events: flbk200 };
     const a = new SessionRunner(initFor(original));
     runAll(a, original);
     const results = runAll(a, [stale, ...after(fork, 201, 301)]);

@@ -10,7 +10,7 @@ const FILE = 'practice-wing-change.pwrec.gz';
 const CAR = 19 as CarId;
 const CHANGE_AT = 616_783;
 
-/** The session time, car 19's front-right wing and the parts of its jumps, of each damage run over the segment. */
+/** The session time and car 19's front-right wing, of each damage run over the segment. */
 async function damageRuns(): Promise<{ at: number; frontRightWingPct: number | undefined }[]> {
   const runs: { at: number; frontRightWingPct: number | undefined }[] = [];
   await replayScheduled(segmentPath(FILE), [damageCalculator], ({ state }, scheduled) => {
@@ -39,5 +39,4 @@ describe('a wing change on real data', () => {
     expect(runs[first - 1]!.frontRightWingPct).toBe(100);
     expect(runs.slice(first).map((r) => r.frontRightWingPct)).toEqual(runs.slice(first).map(() => 0));
   });
-
 });
