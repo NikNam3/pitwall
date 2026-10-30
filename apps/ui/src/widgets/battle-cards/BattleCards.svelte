@@ -21,7 +21,7 @@
 <div class="battle"><span class="head">{battleHeader(mode)}</span>{#each rows as row (row.label)}<span class="row" class:hi={row.highlighted} data-testid="battle-{row.label}">{row.label.padEnd(LABEL_WIDTH)}{#each columns as c (c)}{sp}{#if c === 'tyres' && row.tyres}<CompoundMark compound={row.tyres.ours.compound} age={row.tyres.ours.age} />{sp}<CompoundMark compound={row.tyres.theirs.compound} age={row.tyres.theirs.age} />{pad(row.cells.tyres.text)}{:else}<span
           class:strong={row.cells[c].role === 'text'}
           style:color={roleOrUndefined(row.cells[c].role)}
-          title={row.cells[c].reason === undefined ? undefined : unknownReason[row.cells[c].reason]}>{cell(c, row.cells[c].text)}</span
+          title={row.cells[c].title ?? (row.cells[c].reason === undefined ? undefined : unknownReason[row.cells[c].reason])}>{cell(c, row.cells[c].text)}</span
         >{/if}{/each}</span>{/each}</div>
 
 <style>
