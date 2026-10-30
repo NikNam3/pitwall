@@ -12,10 +12,26 @@
 //    - when `ends.length * rowPx <= heightPx`, any two centres are at least `rowPx` apart;
 //    - a label at least a few rows from every other one and inside the plot stays at its end;
 //    - a label pushed apart moves by at most one row; the input is not mutated.
+//  Labels that fit (Task GL, user ruling 2026-10-30): `placeLabels(ends, rowPx, heightPx, ours)` takes a fourth,
+//  optional argument, `ours[i]` true when label i is one of our cars, and returns `undefined` for a dropped label:
+//    - while `ends.length * rowPx <= heightPx` no label is dropped;
+//    - otherwise exactly `Math.floor(heightPx / rowPx)` labels are kept (at most two of ours here): every one of ours,
+//      then the others nearest to one of ours by end; the rest are dropped (the chart still draws their lines);
+//    - the kept labels obey the rules above (inside the plot, a row apart, in end order).
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import type { ChartSeries } from '../../src/kit/chart/data.ts';
 import { endLabels, placeLabels } from '../../src/kit/chart/labels.ts';
+
+/** The signature this file assumes; the current 3-argument function is assignable to it, so this typechecks either way. */
+type PlaceLabels = (ends: number[], rowPx: number, heightPx: number, ours?: readonly boolean[]) => Array<number | undefined>;
+const place: PlaceLabels = placeLabels;
+
+/** The centres, after checking that no label was dropped. */
+const all = (out: Array<number | undefined>): number[] => {
+  expect(out.every((y) => y !== undefined)).toBe(true);
+  return out as number[];
+};
 
 const ROW = 13;
 const HEIGHT = 300;
@@ -61,38 +77,38 @@ describe('endLabels', () => {
 
 describe('placeLabels', () => {
   it('keeps a single label at its end', () => {
-    expect(placeLabels([120], ROW, HEIGHT)).toEqual([120]);
+    expect(place([120], ROW, HEIGHT)).toEqual([120]);
   });
 
   it('keeps labels more than a row apart at their ends', () => {
-    expect(placeLabels([40, 100, 200], ROW, HEIGHT)).toEqual([40, 100, 200]);
+    expect(place([40, 100, 200], ROW, HEIGHT)).toEqual([40, 100, 200]);
   });
 
   it('pushes two labels within one row apart to a full row, each by at most a row, in end order', () => {
     const ends = [104, 100];
-    const [lower, upper] = placeLabels(ends, ROW, HEIGHT) as [number, number];
+    const [lower, upper] = all(place(ends, ROW, HEIGHT)) as [number, number];
     expect(lower - upper).toBeGreaterThanOrEqual(ROW - EPS);
     expect(Math.abs(lower - 104)).toBeLessThanOrEqual(ROW + EPS);
     expect(Math.abs(upper - 100)).toBeLessThanOrEqual(ROW + EPS);
   });
 
   it('gives two lines that end on the same value a row each', () => {
-    const [a, b] = placeLabels([150, 150], ROW, HEIGHT) as [number, number];
+    const [a, b] = all(place([150, 150], ROW, HEIGHT)) as [number, number];
     expect(Math.abs(a - b)).toBeGreaterThanOrEqual(ROW - EPS);
   });
 
   it('leaves a far label at its end while pushing a close pair apart', () => {
-    expect(placeLabels([100, 104, 250], ROW, HEIGHT)[2]).toBe(250);
+    expect(place([100, 104, 250], ROW, HEIGHT)[2]).toBe(250);
   });
 
   it('keeps a label inside the plot when its line ends at the top or bottom edge', () => {
-    const [top, bottom] = placeLabels([0, HEIGHT], ROW, HEIGHT) as [number, number];
+    const [top, bottom] = all(place([0, HEIGHT], ROW, HEIGHT)) as [number, number];
     expect(top).toBeGreaterThanOrEqual(ROW / 2 - EPS);
     expect(bottom).toBeLessThanOrEqual(HEIGHT - ROW / 2 + EPS);
   });
 
   it('keeps a bunch at the bottom edge inside the plot, a row apart', () => {
-    const out = placeLabels([HEIGHT, HEIGHT - 1, HEIGHT - 2, HEIGHT - 3], ROW, HEIGHT);
+    const out = all(place([HEIGHT, HEIGHT - 1, HEIGHT - 2, HEIGHT - 3], ROW, HEIGHT));
     const sorted = [...out].sort((a, b) => a - b);
     expect(sorted.at(-1)!).toBeLessThanOrEqual(HEIGHT - ROW / 2 + EPS);
     for (let i = 1; i < sorted.length; i++) expect(sorted[i]! - sorted[i - 1]!).toBeGreaterThanOrEqual(ROW - EPS);
@@ -100,15 +116,15 @@ describe('placeLabels', () => {
 
   it('does not mutate the ends and returns none for no labels', () => {
     const ends = [100, 101, 102];
-    placeLabels(ends, ROW, HEIGHT);
+    place(ends, ROW, HEIGHT);
     expect(ends).toEqual([100, 101, 102]);
-    expect(placeLabels([], ROW, HEIGHT)).toEqual([]);
+    expect(place([], ROW, HEIGHT)).toEqual([]);
   });
 
   it('labels that fit are a row apart, inside the plot and in end order, for any ends', () => {
     fc.assert(
       fc.property(fc.array(fc.double({ min: 0, max: HEIGHT, noNaN: true }), { maxLength: Math.floor(HEIGHT / ROW) }), (ends) => {
-        const out = placeLabels(ends, ROW, HEIGHT);
+        const out = all(place(ends, ROW, HEIGHT));
         expect(out).toHaveLength(ends.length);
         for (const y of out) {
           expect(y).toBeGreaterThanOrEqual(ROW / 2 - EPS);
@@ -125,13 +141,72 @@ describe('placeLabels', () => {
     );
   });
 
-  it('labels that cannot all fit still stay inside the plot and keep end order', () => {
-    const ends = [10, 20, 30, 40, 50, 60];
-    const out = placeLabels(ends, ROW, 50);
-    for (const y of out) {
-      expect(y).toBeGreaterThanOrEqual(ROW / 2 - EPS);
-      expect(y).toBeLessThanOrEqual(50 - ROW / 2 + EPS);
+});
+
+describe('placeLabels: labels that do not all fit', () => {
+  // 40 px hold three labels a row apart (3 × 13 <= 40 < 4 × 13)
+  const LOW = 40;
+  const ends = [2, 9, 15, 21, 26, 33, 38];
+  const kept = (out: Array<number | undefined>) => out.map((y) => y !== undefined);
+  const ours = (...indices: number[]) => ends.map((_, i) => indices.includes(i));
+
+  /** The kept centres: inside the plot, a row apart and in end order. */
+  const expectPlaced = (ends: number[], out: Array<number | undefined>, rowPx: number, heightPx: number) => {
+    const placed = out.flatMap((y, i) => (y === undefined ? [] : [{ end: ends[i]!, y }])).sort((a, b) => a.end - b.end || a.y - b.y);
+    for (const { y } of placed) {
+      expect(y).toBeGreaterThanOrEqual(rowPx / 2 - EPS);
+      expect(y).toBeLessThanOrEqual(heightPx - rowPx / 2 + EPS);
     }
-    for (let i = 1; i < out.length; i++) expect(out[i]!).toBeGreaterThanOrEqual(out[i - 1]! - EPS);
+    for (let k = 1; k < placed.length; k++) expect(placed[k]!.y - placed[k - 1]!.y).toBeGreaterThanOrEqual(rowPx - 1e-6);
+  };
+
+  it("keeps our car's label and the two nearest to it by end, and drops the rest", () => {
+    // ours ends at 26: 21 (5 away) and 33 (7 away) are nearest
+    const out = place(ends, ROW, LOW, ours(4));
+    expect(kept(out)).toEqual([false, false, false, true, true, true, false]);
+    expectPlaced(ends, out, ROW, LOW);
+  });
+
+  it('keeps both of our cars, then the one nearest to either', () => {
+    // ours end at 2 and 38: 33 is 5 from 38, every other more than 5 from both
+    const out = place(ends, ROW, LOW, ours(0, 6));
+    expect(kept(out)).toEqual([true, false, false, false, false, true, true]);
+    expectPlaced(ends, out, ROW, LOW);
+  });
+
+  it('keeps as many as fit without our cars too, a row apart', () => {
+    const out = place(ends, ROW, LOW);
+    expect(kept(out).filter(Boolean)).toHaveLength(3);
+    expectPlaced(ends, out, ROW, LOW);
+  });
+
+  it('drops nothing while the labels fit, ours given or not', () => {
+    const out = place([10, 11, 12], ROW, LOW, [false, true, false]);
+    expect(kept(out)).toEqual([true, true, true]);
+    expectPlaced([10, 11, 12], out, ROW, LOW);
+  });
+
+  it('for any ends and up to two of ours: as many as fit, ours first, then the nearest to ours', () => {
+    const H = 100; // 7 rows
+    const arb = fc.array(fc.double({ min: 0, max: H, noNaN: true }), { minLength: 1, maxLength: 30 }).chain((ends) =>
+      fc.record({
+        ends: fc.constant(ends),
+        ours: fc.uniqueArray(fc.integer({ min: 0, max: ends.length - 1 }), { minLength: 1, maxLength: Math.min(2, ends.length) }),
+      }),
+    );
+    fc.assert(
+      fc.property(arb, ({ ends, ours: own }) => {
+        const flags = ends.map((_, i) => own.includes(i));
+        const out = place(ends, ROW, H, flags);
+        expect(out).toHaveLength(ends.length);
+        const keptIdx = ends.flatMap((_, i) => (out[i] === undefined ? [] : [i]));
+        expect(keptIdx).toHaveLength(Math.min(ends.length, Math.floor(H / ROW)));
+        for (const i of own) expect(out[i]).toBeDefined();
+        const distance = (i: number) => Math.min(...own.map((o) => Math.abs(ends[i]! - ends[o]!)));
+        const dropped = ends.flatMap((_, i) => (out[i] === undefined ? [i] : []));
+        for (const k of keptIdx) for (const d of dropped) expect(distance(k)).toBeLessThanOrEqual(distance(d));
+        expectPlaced(ends, out, ROW, H);
+      }),
+    );
   });
 });
