@@ -188,6 +188,33 @@ describe('Chart: the live segment', () => {
 
 // A line of one point has no segment to draw (review 2, F4): at the end of lap 1 each car's line is one settled point
 // until its next crossing, so every line of one point, settled or live, shows as a dot of its stroke.
+// A chart reads its tokens where it is drawn, not on the document root (W3-A implement finding): a gallery cell or a
+// panel with another theme sets the variables on a wrapper, and the chart inside draws with that theme's values.
+describe('Chart: the theme of its own element', () => {
+  it("draws with the line widths and dashes set on an ancestor, not the root's", () => {
+    const wrapper = document.createElement('div');
+    const tokens = { '--pw-chart-live-dash': '7 3', '--pw-chart-dash': '6 2', '--pw-chart-line': '2.5', '--pw-chart-own-line': '4' };
+    for (const [k, v] of Object.entries(tokens)) wrapper.style.setProperty(k, v);
+    document.body.appendChild(wrapper);
+    try {
+      const own = { colour: '#c13b43', dashed: false, ownCar: true };
+      const mate = { colour: '#c13b43', dashed: true, ownCar: false };
+      render(Chart, {
+        target: wrapper,
+        props: { ...base, series: [{ label: 'a', points: [...pts(1), [3.5, 3.4]] as Array<[number, number]>, liveEnd: true, colour: own }, { label: 'b', points: pts(2), colour: mate }] },
+      });
+      const [a, b, liveA] = last().opts.series.slice(1);
+      expect(a.width).toBe(4);
+      expect(b.width).toBe(2.5);
+      expect(b.dash).toEqual([6, 2]);
+      expect(liveA.dash).toEqual([7, 3]);
+    } finally {
+      cleanup();
+      wrapper.remove();
+    }
+  });
+});
+
 describe('Chart: a line of one point', () => {
   /** Whether uPlot shows the points of plot series `i`: `points.show` is a boolean or a function of the plot and index. */
   const shows = (i: number): boolean => {

@@ -64,8 +64,9 @@ type Drawn = { texts: Text[]; bbox: { left: number; top: number; width: number; 
  * Renders the chart, runs its draw hooks on a fake plot of 300 x 200 canvas px and returns the texts drawn; `x` is the
  * fake plot's x scale (default laps 1 to 3, the range of `pts`).
  */
-function drawnTexts(series: ChartSeries[], x: Scale = { min: 1, max: 3 }): Drawn {
-  render(Chart, { ...base, series });
+function drawnTexts(series: ChartSeries[], x: Scale = { min: 1, max: 3 }, target?: HTMLElement): Drawn {
+  if (target === undefined) render(Chart, { ...base, series });
+  else render(Chart, { target, props: { ...base, series } });
   const inst = instances[instances.length - 1];
   const texts: Text[] = [];
   const state: Record<string | symbol, unknown> = { fillStyle: '', strokeStyle: '', font: '', globalAlpha: 1, textAlign: 'start', textBaseline: 'alphabetic' };
@@ -177,6 +178,23 @@ describe('Chart: the column of labels', () => {
     const { texts, bbox } = drawnTexts([{ label: 'VER', points: pts(12), colour: rival }]);
     const cell = cellBox(theme.fontPx, theme.density.lineHeight).width;
     expect(byText(texts, 'VER').x - (bbox.left + bbox.width)).toBeCloseTo(theme.density.columnGapCols * cell, 6);
+  });
+
+  // A chart reads its tokens where it is drawn, not on the document root (W3-A implement finding): a gallery cell or a
+  // panel with another theme sets the variables on a wrapper, and the chart inside takes that theme's gap and font.
+  it("takes the gap and the label font of the theme on its own element's ancestors, not the root's", () => {
+    const wrapper = document.createElement('div');
+    for (const [k, v] of Object.entries({ '--pw-col-gap-cols': '3', '--pw-font-px': '16px', '--pw-weight-bold': '800' })) wrapper.style.setProperty(k, v);
+    document.body.appendChild(wrapper);
+    try {
+      const { texts, bbox } = drawnTexts([{ label: 'KUH', points: pts(20), colour: own }, { label: 'VER', points: pts(4), colour: rival }], undefined, wrapper);
+      expect(byText(texts, 'VER').x - (bbox.left + bbox.width)).toBeCloseTo(3 * cellBox(16, DEFAULT_THEME.density.lineHeight).width, 6);
+      expect(byText(texts, 'VER').font).toContain('16px');
+      expect(byText(texts, 'KUH').font).toMatch(/\b800\b/);
+    } finally {
+      cleanup();
+      wrapper.remove();
+    }
   });
 });
 
