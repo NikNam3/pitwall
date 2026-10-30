@@ -265,7 +265,7 @@
         "car 1 (the player) crosses the line into lap 10 at 723.381: lap 9 74.655 s (sectors 25.980/25.877/22.798, valid), FTLP car 1 at 723.366; SessionHistory confirms it in the segment",
         "mini-sector crossings of car 1: lap 9 segments 48-49, lap 10 segments 0-2",
         "20 active cars, 2 humans (1 is the player, 0), teammate 4; grid P1-P20",
-        "band advisories (tyre surface/carcass, car 1) raise after the line and escalate to bandOutLap 0.5 s later",
+        "car 1 crosses the line 1.4 s after the segment starts: the engine sees lap 9 only partly, so no band alarm judges it",
         "OVTK x2, SPTP x2, FTLP x1",
         "duration 4961.544 ms"
       ]
