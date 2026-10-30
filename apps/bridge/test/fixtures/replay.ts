@@ -21,6 +21,7 @@ export const SEGMENT_FILES = [
   'race-zandvoort-vsc.pwrec.gz',
   'race-zandvoort-retire.pwrec.gz',
   'race-zandvoort-clock-reset.pwrec.gz',
+  'race-zandvoort-uid-reuse-start.pwrec.gz',
   'practice-wing-change.pwrec.gz',
   'race-drive-through.pwrec.gz',
 ] as const;
@@ -41,7 +42,16 @@ export type TrackedFixture = {
 
 /** Runs the recording at `path` through a `SessionTracker`; `onFrame` sees every frame. */
 export async function trackFile(path: string, onFrame: (f: Frame) => void = () => {}): Promise<TrackedFixture> {
-  const tracker = new SessionTracker({ feedId: basename(path) as FeedId });
+  return trackPackets(basename(path) as FeedId, filePackets(path), onFrame);
+}
+
+/** Runs `packets` through a `SessionTracker`; `onFrame` sees every frame. */
+export async function trackPackets(
+  feedId: FeedId,
+  packets: AsyncIterable<{ packet: Packet; receivedAtMs: number }>,
+  onFrame: (f: Frame) => void = () => {},
+): Promise<TrackedFixture> {
+  const tracker = new SessionTracker({ feedId });
   const out: TrackedFixture = { lifecycle: [], frames: 0, lastFrame: undefined, metrics: tracker.metrics };
   const take = (es: TrackerEvent[]) => {
     for (const e of es) {
@@ -52,7 +62,7 @@ export async function trackFile(path: string, onFrame: (f: Frame) => void = () =
       } else out.lifecycle.push(e);
     }
   };
-  for await (const { packet, receivedAtMs } of filePackets(path)) take(tracker.push(packet, receivedAtMs));
+  for await (const { packet, receivedAtMs } of packets) take(tracker.push(packet, receivedAtMs));
   take(tracker.end());
   return { ...out, metrics: tracker.metrics };
 }

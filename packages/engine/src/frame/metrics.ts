@@ -5,7 +5,7 @@ export type FrameMetrics = {
   framesClosed: number;
   /** Closed frames missing a menu-rate packet. */
   incompleteFrames: number;
-  /** Packets dropped because their frame was already closed. */
+  /** Packets dropped because their frame was already closed, or held far ahead and never confirmed (a stale header). */
   latePackets: number;
   /** Counted by the session tracker: packets before the first Session packet. */
   droppedBeforeSession: number;
