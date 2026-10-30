@@ -5,7 +5,7 @@
 **Goal:** computed answers for the race's strategy decisions (box now or later, compound, undercut or cover, box under SC/VSC, weather switch), plus the track map with official turn numbers, the radio window and the forecast, with practice feeding the race through stored knowledge.
 
 **Architecture:**
-- **`packages/analysis`:** functions, two **simulators** (`lap-model`, `race-forecast`: pure, plain arrays in, typed arrays out), three calculators (`track-geometry`, `degradation`, `pit-loss`) and thirteen analyses, one folder per unit.
+- **`packages/analysis`:** functions, two **simulators** (`lap-model`, `race-forecast`: pure, plain arrays in, typed arrays out), three calculators (`track-geometry`, `degradation`, `pit-loss`) and fourteen analyses (the fourteenth, `forecast-score`, scores the others' forecasts), one folder per unit.
 - **Knowledge** copies ADR 0008: `EngineView.priors` fixed per session, `definePriors`, contributions stored per source session by the bridge, a `<session>.priors.json` sidecar (ADR 0015).
 - **`apps/bridge/src/features/<unit>/`** registers calculators, binds topics, declares config, priors and contributions.
 - **`apps/ui/src/widgets/<display>/`:** twelve new widgets that only render, plus ghost lines on `gap-chart` and turns in `incident-feed`.
@@ -28,7 +28,7 @@
 - **Displays render, analyses compute** (ADR 0014). Any arithmetic on topic values beyond formatting is a review finding.
 - **A display never shares its unit name with an analysis** (spec 8.2).
 - **Contracts are binding.** Task 1 commits every value type, topic file, calculator id, simulator signature, priors key and config declaration. Unit workers treat them as read-only; changes go under "Requested changes to supervisor-owned files".
-- **Calculator outputs** follow SP3. A per-car analysis outputs `Record<CarId, Value>`, and the binding's `select` picks `params.carId`. Strategy analyses fill only our cars (`session.info` `playerCar`, `teammateCar`); any other car is `notApplicable`.
+- **Calculator outputs** follow SP3. A per-car analysis outputs `Record<CarId, Value>`, and the binding's `select` picks `params.carId`. Strategy analyses fill only our cars (`session.info` `playerCar`, `teammateCar`); any other car is `notApplicable`. The exception is `forecast-score` (Task 29a), a session topic over the whole field.
 - **Cadence** (spec 1.4, item 9): strategy units run on `lapCompleted`, `pitStop`, `flagChange` and `{ hz: 1 }`, **never `'frame'`**. Only `track-positions` and `radio-window` place cars per frame, and only by lookups into precomputed geometry.
 - **Budgets** are tests (spec 10.3, `test-support/bench.ts`). A miss is profiled and fixed. A budget is never raised without the user.
 - **Numbers only, no verdicts.** No text such as "BOX", "undercut works" or "switch now". **The game's pit window** (`SessionState.pitWindow`) is never read by any unit.
@@ -78,7 +78,7 @@ Spec section 12 is the schedule:
   2. another ready implementation, the one with the longest chain of readers first
   3. a pending review
   4. the next test phase, lowest level first, analyses before displays
-- **End:** Task 44 once all displays are merged, then Task 45.
+- **End:** Task 44 once all displays are merged, then Task 45. Task 29a has no display and runs whenever a slot is free after its dependencies.
 
 | Level (spec 12.2) | Tasks |
 |---|---|
@@ -86,6 +86,7 @@ Spec section 12 is the schedule:
 | 1 | 8 `track-lookup`, 9 `tyre-life`, 10 `lap-model`, 11 `track-geometry`, 12 `pit-loss`, 13 `degradation`, 14 `weather`, 15 `raising-average`, 16 `lap-overview` |
 | 2 | 17 `race-forecast`, 18 `forecast-field`, 19 `pit-losses`, 20 `stint-analysis`, 21 `track-positions`, 22 `radio-window`, 23 `crossover`, 24 `pit-window`, 25 `incidents` turn |
 | 3 | 26 `rejoin`, 27 `undercut`, 28 `sc-call`, 29 `pit-sweep` |
+| 4 | 29a `forecast-score` and `pitwall score` |
 | displays | 30–43, each after its analysis's contract (test phase) and Tasks 0, 7 (implement phase) |
 | end | 44, 45 |
 
@@ -126,16 +127,16 @@ Spec section 12 is the schedule:
 **Done by:** the supervisor. Not a two-phase task. Verified by `pnpm gen`, `pnpm typecheck`, `pnpm depcruise`, `pnpm check`.
 
 - [ ] `packages/domain/src/knowledge.ts`: `Lifetime`, `KnowledgeSource` (A.1). `tracks.ts`: `TrackTurn`, `TrackTurns`. `analyses/track.ts`: `MapPoint`, `Corner`, `Straight`, `TrackGeometry`. `incidents.ts`: `IncidentWhere.turn`, filled with `unknown('notApplicable')` where entries are built today. `race-moment.ts`: `'window'` in `Moment` between `'neutralised'` and `'incident'`, with a `kit/text.ts` name.
-- [ ] `packages/domain/src/analyses/`: one file per new analysis with the value types of spec A.3, named after the analysis (`pit-losses.ts`, `stint-analysis.ts`, `raising-average.ts`, `lap-overview.ts`, `rejoin.ts`, `undercut.ts`, `sc-call.ts`, `pit-sweep.ts`, `pit-window.ts`, `track-positions.ts`, `radio-window.ts`, `weather.ts`, `crossover.ts`), plus `strategy.ts` with `PitCondition`, `PitLossSample`, `CompoundFit`, `StintFit`. Export them from the package index.
+- [ ] `packages/domain/src/analyses/`: one file per new analysis with the value types of spec A.3, named after the analysis (`pit-losses.ts`, `stint-analysis.ts`, `raising-average.ts`, `lap-overview.ts`, `rejoin.ts`, `undercut.ts`, `sc-call.ts`, `pit-sweep.ts`, `pit-window.ts`, `track-positions.ts`, `radio-window.ts`, `weather.ts`, `crossover.ts`, `forecast-score.ts`), plus `strategy.ts` with `PitCondition`, `PitLossSample`, `CompoundFit`, `StintFit`. Export them from the package index.
 - [ ] `packages/engine/src/calc/priors.ts`: the `PriorsKey` type and `definePriors` signature (A.2). It throws `not implemented` until Task 3. `EngineView` gains `priors`.
-- [ ] `packages/analysis/src/<unit>/index.ts` for every unit of Tasks 8–29: the exported types, signatures and calculator ids of A.2, and the priors keys:
+- [ ] `packages/analysis/src/<unit>/index.ts` for every unit of Tasks 8–29a: the exported types, signatures and calculator ids of A.2, and the priors keys:
   - `PIT_LOSS_PRIORS` (`'pit-loss'`, `track`)
   - `DEGRADATION_PRIORS` (`'degradation'`, `weekend`)
   - `TRACK_GEOMETRY_PRIORS` (`'track-geometry'`, `track`)
   - `TRACK_TURNS_PRIORS` (`'track-turns'`, `reference`, default `null`)
 
   Bodies throw `not implemented`.
-- [ ] `packages/contracts/src/topics/`: the 14 topic files of A.3, with the names fixed in the spec: `pitLosses.track`, `stintAnalysis.car`, `raisingAverage.car`, `lapOverview.car`, `rejoin.car`, `undercut.car`, `scCall.car`, `pitSweep.car` (params `{ carId: CarId; compound: ActualCompound }`), `pitWindow.car`, `trackPositions.geometry`, `trackPositions.cars`, `radioWindow.car`, `weather.forecast`, `crossover.field`.
+- [ ] `packages/contracts/src/topics/`: the 15 topic files of A.3, with the names fixed in the spec: `pitLosses.track`, `stintAnalysis.car`, `raisingAverage.car`, `lapOverview.car`, `rejoin.car`, `undercut.car`, `scCall.car`, `pitSweep.car` (params `{ carId: CarId; compound: ActualCompound }`), `pitWindow.car`, `trackPositions.geometry`, `trackPositions.cars`, `radioWindow.car`, `weather.forecast`, `crossover.field`, `forecastScore.session`.
 - [ ] `packages/analysis/src/<unit>/config.ts` for every Appendix B row: flat fields, each with a source comment. **R3 happens here.** Look up community values for F1 25 (F1 24 where 25 has none):
   - pit loss per track and condition
   - dirty-air coefficients
@@ -713,6 +714,36 @@ Spec section 12 is the schedule:
 
 ---
 
+### Task 29a: `forecast-score` → `forecastScore.session`, and `pitwall score`
+
+**Unit:** analysis (incremental, cadence `lapCompleted`, `pitStop`, `flagChange`) plus a CLI command (spec 7.15, 1.5). **Depends on:** Tasks 17, 18, 26, 27. **Scope** adds `apps/bridge/src/cli/` and `apps/bridge/test/cli/`.
+
+**Interfaces:**
+- Consumes: `raceForecast`, `forecastField` (Tasks 17, 18), the `rejoin` and `undercut` calculator outputs (Tasks 26, 27), the engine's `LapRecord`, `PitStopRecord` and flag history.
+- Produces: `forecastScore.session` (A.3); `scoreRecording(path: string, config: FeatureConfig, priors: PriorsSource, log: Logger, signal: AbortSignal): Promise<ForecastScore>` in `apps/bridge/src/cli/process-recording.ts`, next to `processRecording`, wired the same way but without `storage`, with one hub subscriber on `forecastScore.session`. `PriorsSource` is whatever Task 3 reads priors from (the store or a pinned file).
+
+**Requirements:**
+- At each line crossing, one no-stop forecast of the field for `max(scoreHorizons)` laps; the pending predictions are kept until their target laps are done.
+- Exclusion, errors, rejoin and undercut rows exactly as spec 7.15. The rejoin and undercut predictions are the values published at the line crossing that starts our in-lap.
+- `pitwall score <recording> [--priors <file>] [--json]`: `apps/bridge/src/cli/commands/score.ts`, plus a line in `usage.ts`. The table prints one row per horizon and basis, then the excluded counts, then the rejoin and undercut rows. It opens no database for writing and writes no knowledge.
+
+**Tests** (builders unless named):
+- `a forecast that matches the laps scores 0 error and every position right`
+- `a car 200 ms per lap slower than its model shows bias +200, +600, +1000, +2000 ms at horizons 1, 3, 5, 10`
+- `a stop inside the horizon excludes the pair with reason stop`
+- `a VSC inside the horizon excludes the pair with reason neutralised`
+- `a retired car's pending pairs are excluded with reason retired`
+- `errors are split by basis; a realism-hidden rival counts under age`
+- `one of our stops gives one rejoin row with the condition the stop had`
+- `a rival stopping 2 laps after us gives an undercut row with n 2 and the real gain`
+- `a flashback drops the forecasts made after the target time` (plus the common flashback and incremental properties)
+- budget: `< 5 ms` per lap on `benchField()`
+- `apps/bridge/test/cli/pitwall-score.test.ts`, on a segment: `score prints the table header and one row per horizon`, `--json prints the topic value`, `score writes no session and no knowledge` (the data directory is unchanged), `a missing recording exits 1 with a message`
+
+- [ ] Test phase · [ ] Implement phase · [ ] review · [ ] merged
+
+---
+
 ### Tasks 30–43: Displays
 
 **Common to all:**
@@ -769,6 +800,7 @@ Spec section 12 is the schedule:
   - the undercut card before the stop
   - turn labels at Zandvoort
   - the forecast strip and crossover in `raceSingaporeWet`
+- [ ] Run `pitwall score` with `fixtures/priors/empty.json` on the league races in `recordings/` and put the tables in `docs/acceptance/4a.md` as the baseline 4b is judged against. This is a report for the user, not a gate.
 - [ ] Get the user's check. Their findings become fix tasks.
 - [ ] Write the run rulings to `docs/superpowers/notes/2026-10-30-sp4a-run-rulings.md`. Update CLAUDE.md "Where to look".
 - [ ] Merge to main and push.

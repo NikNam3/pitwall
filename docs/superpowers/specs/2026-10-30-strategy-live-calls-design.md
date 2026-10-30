@@ -1,6 +1,6 @@
 # Pitwall: Sub-project 4a "Strategy: live race calls", Design
 
-Status: spec, awaiting user review · Date: 2026-10-30 · Brainstorm: in conversation (2026-10-30)
+Status: spec, approved 2026-10-30; amended the same day after the market research (1.5) · Date: 2026-10-30 · Brainstorm: in conversation (2026-10-30)
 
 ## 1. Context
 
@@ -30,13 +30,20 @@ The ranked goals of the foundation spec (1.2) apply unchanged: clean code, exten
 10. **The existing architecture stays.** Every addition is additive and uses the existing kinds; nothing changes shape except the three planned extensions (gap chart ghost lines, incident turns, the *window* moment).
 11. **Mockups for every display**, made by the supervisor as the run's first task and approved in one session, as in SP3 (8.5 there).
 
+### 1.5 Decisions after the market research (user, 2026-10-30)
+From `docs/superpowers/notes/2026-10-30-strategy-quality-vs-team-center.md`:
+1. **A forecast scoreboard is in 4a** (Q1): the `forecast-score` analysis (7.15) and the `pitwall score <recording>` report. Every model guess in 4a (degradation fit, dirty air, out-lap penalty) is unchecked until something scores it.
+2. **The two-dry-compound rule is not built in 4a** (Q2). The league races under the 2025 F1 sporting regulations, so the rule applies, but 4a's rivals never stop and the engineer picks our next compound. It enters with the rival-stop prediction in sub-project 5.
+3. **Rivals' predicted stops stay in sub-project 5** (Q3). Beating Team Center is not an MVP goal; nothing is pulled forward for it.
+4. **4b's objective** (Q4) is recorded in section 13.
+
 ## 2. Scope
 
 **In scope:**
 1. Repository changes: priors and contributions (ADR 0015), the simulator kind, the storage key fix, the benchmark harness, domain and contract additions (section 3).
 2. Shared functions and two simulators, `lap-model` and `race-forecast` (section 5).
 3. Three calculators: `track-geometry`, `degradation`, `pit-loss` (section 6).
-4. Thirteen analyses, each with its topic, and changes to `incidents` and `race-moment` (section 7).
+4. Fourteen analyses, each with its topic (the fourteenth is the forecast scoreboard, 7.15), and changes to `incidents` and `race-moment` (section 7).
 5. Twelve displays plus the gap chart's ghost lines and the incident feed's turns (section 8).
 6. Two new default workbooks, `strategy` and `longrun` (section 9).
 7. Turn files for the league calendar, produced outside the run (section 6.4).
@@ -212,6 +219,14 @@ Per lap: the field's median lap time per tyre type (slick, intermediate, wet); t
 - **`incidents`:** `IncidentWhere` gains `turn: Known<string>` from `track-lookup` (`notApplicable` without a turn file, the sector stays).
 - **`race-moment`:** the `window` moment (7.9).
 
+### 7.15 `forecast-score` → `forecastScore.session`, and `pitwall score`
+Scores 4a's forecasts against what happened, so a model change shows whether it helped. Unlike the other analyses it covers the whole field, and it only reads.
+- **Lap forecasts.** At each line crossing, a no-stop `race-forecast` of the field for the longest horizon. When the target lap is done, each car's error for horizons `scoreHorizons` (1, 3, 5, 10 laps): predicted race time at lap L + h minus the actual, and predicted minus actual position. A pair is **excluded** when the car stopped or a VSC or SC was out within the horizon (4a's forecast models neither), or the car retired; excluded pairs are counted by reason. Errors are split by basis (`wear`, `age`), which splits our cars from realism-hidden rivals.
+- **Rejoin.** For each of our stops: `rejoin.car` as published at the line crossing that starts the in-lap, for the condition the stop really had, against the real position and the gap to the car ahead at pit exit.
+- **Undercut.** For each of our stops at lap S and each rival in `undercut.car` at the start of the in-lap that stopped at S + N (N = 1–3): the predicted `Δ(N)` against the real gain (the gap after both stops minus the gap before). Cover rows (the rival stops first) the same way.
+- **Output:** per horizon and basis: count, bias, mean absolute error, 90th percentile of the absolute error, share of positions right; the excluded counts; one row per scored stop and per scored undercut. Incremental; a flashback drops the forecasts made after the target time.
+- **`pitwall score <recording> [--priors <file>]`** runs the recording like `reprocess` but stores nothing (no sessions, no knowledge contributions), subscribes to `forecastScore.session` and prints the final value as a table (`--json` for the raw value). It is a report, not a test; no test asserts a recording's scores. With `--priors` the knowledge is pinned, so two model versions are compared on equal input.
+
 ## 8. Displays
 
 ### 8.1 Rules
@@ -263,6 +278,7 @@ The layouts come from the approved mockups, for the 24" main and the 14" side mo
 | calculators | builders for edge cases (no clean laps, one sample, an SC that ends mid in-lap, a stint with all laps excluded); segments for a real stop, a real lap of the field |
 | analyses | every output field becomes `unknown(reason)` when its input is missing; builders plus segments |
 | priors | reprocessing a session twice leaves the store unchanged; replay and dev write nothing; a contribution covering fewer laps never replaces a fuller one; pinned priors give identical topic streams; `aggregate` is order-independent |
+| scoreboard | builders: a forecast that matches the builder's laps scores 0; a known bias shows as that bias; stops, VSC and SC inside the horizon exclude the pair; a flashback equals a fresh run; a builder race with one of our stops gives one rejoin row and its undercut rows; on a segment, `pitwall score` prints a table and writes neither sessions nor knowledge |
 | turn files | each file is valid; turns snap to detected corners in order where a recording exists |
 | budgets | 10.3 |
 | displays | gallery cases from the mockups, `fit.spec`, one baseline per display size within the cap (50) |
@@ -299,6 +315,7 @@ Contracts and value types (Appendix A), priors and contributions (section 4), th
 | 1 | `track-lookup`, `tyre-life`, `lap-model`, `track-geometry`, `pit-loss`, `degradation`, `weather`, `raising-average`, `lap-overview` |
 | 2 | `race-forecast`, `forecast-field`, `pit-losses`, `stint-analysis`, `track-positions`, `radio-window`, `crossover`, `pit-window` with the `race-moment` change, `incidents` change |
 | 3 | `rejoin`, `undercut`, `sc-call`, `pit-sweep` |
+| 4 | `forecast-score` |
 | displays | each right behind its analysis, after the mockups are approved |
 
 ### 12.3 Before the run (research tasks, not workers)
@@ -307,11 +324,18 @@ Contracts and value types (Appendix A), priors and contributions (section 4), th
 - **R3** community defaults with sources (Appendix B): pit loss per track, dirty-air coefficients, overtaking threshold, wear limit, `γ`.
 
 ## 13. What 4b builds on
-4b's DP optimiser calls `lap-model` and `race-forecast`; the plan board's triggers read the 4a topics; weather enters the model as a compound switch at lap N. The budgets of 10.3 are the baseline for its DP spike.
+4b's DP optimiser calls `lap-model` and `race-forecast`; the plan board's triggers read the 4a topics; weather enters the model as a compound switch at lap N. The budgets of 10.3 are the baseline for its DP spike, and `pitwall score` (7.15) judges its model changes.
+
+**The optimiser's objective** (user, 2026-10-30), in order, each breaking the ties of the one before:
+1. expected finishing position, per car
+2. expected league points
+3. minimum race time, per car (TUM's objective)
+
+It goes together with the win-probability objective of Aguad & Thraves (research 07 §2.5). How to combine the two cars and the position distribution is for the 4b brainstorm. Rivals' predicted stops and the two-dry-compound rule stay in sub-project 5 (1.5).
 
 ## 14. Open points
 1. Does the game reuse `weekendLinkIdentifier` across weekends? Verify with the next league weekend; if it does, the weekend identity adds the date.
-2. League rules (compounds, red-flag tyre change) are still unknown; the allowed compounds are config.
+2. League rules: the league races under the 2025 F1 sporting regulations (user, 2026-10-30), so the two-dry-compound rule applies; it is used from sub-project 5 (1.5). The allowed compounds stay config.
 3. FastF1 licence (R1).
 4. The overtaking threshold and dirty-air coefficients for F1 25 are defaults until sub-project 5 calibrates them.
 
@@ -405,6 +429,7 @@ export function forecast(field: ForecastField, stops: readonly ForecastStop[], l
 | `trackPositions.cars` | none | state, 10 | `{ cars: { carId; lapDistanceM; point: MapPoint; inPit: boolean }[]; incidents: { entryId; lapDistanceM; label: string }[] }` |
 | `radioWindow.car` | `CarParams` | state, 4 | `{ onStraight: boolean; secondsLeft: Known<number>; secondsToNext: Known<number> }` |
 | `weather.forecast` | none | state, 0.2 | `{ samples: ForecastSample[]; accuracy: 'perfect' \| 'approximate'; firstRain: Known<{ offsetMin; rainPct }> }` |
+| `forecastScore.session` | none | state, 0.2 | `{ horizons: { laps: number; basis: 'wear' \| 'age'; count: number; biasMs: Known<Ms>; maeMs: Known<Ms>; p90AbsMs: Known<Ms>; positionsRight: Known<Ratio> }[]; excluded: { reason: 'stop' \| 'neutralised' \| 'retired'; count: number }[]; rejoins: { lap; condition: PitCondition; predicted: Known<number>; actual: Known<number>; gapAheadErrorMs: Known<Ms> }[]; undercuts: { lap; carId; side: 'ahead' \| 'behind'; n: 1 \| 2 \| 3; predictedMs: Known<Ms>; actualMs: Known<Ms> }[] }` |
 | `crossover.field` | none | state, 1 | `{ dryReferenceMs: Known<Ms>; ourRatioPct: Known<number>; byType: { type: 'slick' \| 'inter' \| 'wet'; byLap: { lap; medianMs: Ms }[] }[]; firstFaster: Known<{ carId; sector: 1 \| 2 \| 3; lap; type }>; paybackLaps: Known<number> }` |
 
 ## Appendix B: Config defaults (to calibrate in sub-project 5)
@@ -427,3 +452,4 @@ Sources are filled in by R3; values marked "pitwall estimate" are starting point
 | `pit-sweep` | `trafficGapMs`, `trafficLaps` | 1350, 3 | Fieni 2026 (dirty-air range) |
 | `pit-window` | `windowLeadLaps`, `minLaps` | 2, 3 | research 06 §4 |
 | `track-positions` | `markerLaps` | 2 | pitwall estimate |
+| `forecast-score` | `scoreHorizons` | [1, 3, 5, 10] | the note's Q1 |

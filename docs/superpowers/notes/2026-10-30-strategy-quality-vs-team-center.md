@@ -27,7 +27,7 @@ The 4a spec and plan are written. Pitwall can already replay a recording determi
 
 Recommendation: **A** if the 4a run hasn't started, otherwise **B**. Every model choice in 4a (degradation fit, dirty air, out-lap penalty) is a guess until something scores it.
 
-**Answer:**
+**Answer:** A (user, 2026-10-30). In 4a as the `forecast-score` analysis and `pitwall score` (spec 7.15, plan Task 29a).
 
 ### Q2. Does the league race under the two-dry-compound rule, and should 4a use it?
 
@@ -38,7 +38,7 @@ In a dry race, a car that hasn't used a second dry compound must still stop. Tha
 
 Recommendation: **A**, provided the league confirms the rule. It is cheap, and the undercut card is misleading without it.
 
-**Answer:**
+**Answer:** B (user, 2026-10-30). The league races under the 2025 F1 sporting regulations, so the rule applies. In 4a it is not worth building: 4a's rivals never stop, so a rival's forced stop changes no number, and the engineer picks our next compound. The rule enters with the rival-stop prediction in SP5. Beating Team Center is not an MVP goal.
 
 ### Q3. Should rivals' predicted stops move from SP5 to 4b?
 
@@ -49,7 +49,7 @@ It is Team Center's largest gap, and every undercut and cover call depends on it
 
 Recommendation: **A**, a deterministic prediction (stint lengths, tyre life, compound rule) in 4b. The probabilistic version stays with the Monte Carlo in SP5.
 
-**Answer:**
+**Answer:** B (user, 2026-10-30). Rivals' predicted stops stay in SP5 with the Monte Carlo; nothing is pulled forward to beat Team Center.
 
 ### Q4. What should the 4b optimiser maximise?
 
@@ -59,7 +59,7 @@ Recommendation: **A**, a deterministic prediction (stint lengths, tyre life, com
 
 Recommendation: **A**. Points are what the league counts. Joint planning avoids double-stack conflicts and allows covering plays. Friends spin often, so a plan that collapses after one lost five seconds is a bad plan. C can stay as the inner measure.
 
-**Answer:**
+**Answer:** an ordered objective (user, 2026-10-30): first expected finishing position per car, then expected league points, then minimum race time per car, each breaking the ties of the one before. It goes together with the win-probability objective of Aguad & Thraves (research 07 §2.5). Recorded in the 4a spec §13 as input for the 4b brainstorm.
 
 ### Q5. Build a head-to-head harness against Team Center?
 
@@ -70,4 +70,4 @@ It needs the recorder to play a `.pwrec` back as UDP, plus a Windows machine run
 
 Recommendation: **B** for now. Real outcomes are the better referee; revisit if a comparison is ever needed.
 
-**Answer:**
+**Answer:** B (user, 2026-10-30).
