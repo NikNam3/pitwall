@@ -7,6 +7,7 @@ import {
   CalculatorRegistry,
   Scheduler,
   SessionRunner,
+  situationOf,
   type Calculator,
   type EngineView,
   type Frame,
@@ -41,7 +42,7 @@ export async function replayScheduled(
   scheduler.setNeeded(calculators.map((c) => c.id));
   return replayRunner(path, (r, f) => {
     if (r.delta.truncated) scheduler.reset();
-    const scheduled = scheduler.run({ state: r.state, activeFlagPhase: activeFlagPhaseOf(r.state), situation: r.state.open.situations, changed: r.changed, delta: r.delta, feed: IDLE_FEED, config });
+    const scheduled = scheduler.run({ state: r.state, activeFlagPhase: activeFlagPhaseOf(r.state), situation: situationOf(r.state), changed: r.changed, delta: r.delta, feed: IDLE_FEED, config });
     onStep(r, scheduled, f);
   });
 }

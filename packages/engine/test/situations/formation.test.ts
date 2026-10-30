@@ -33,8 +33,8 @@ const drive = (k: number, car: number, gridM: number, from: number, timed: boole
   else lap(d, car, { currentLapNum: 2, lapDistance: gridM + frames * 40 - TRACK, currentLapTimeInMs: (frames - lap1) * STEP, lastLapTimeInMs: lap1 * STEP });
 };
 
-/** The formation start of the file comment; `extra` adds events per frame. */
-const formationStart = (extra: (k: number) => EventDetails[] = () => []): Beat[] =>
+/** The formation start of the file comment; `extra` adds events per frame, `cars` shapes the cars further. */
+const formationStart = (extra: (k: number) => EventDetails[] = () => [], cars: (k: number, d: Parameters<NonNullable<Beat['cars']>>[0]) => void = () => {}): Beat[] =>
   beats(LIGHTS_OUT + RACE_FRAMES, (k) => ({
     at: k < RESET ? k * STEP : k <= LIGHTS_OUT ? 0 : raceAt(k - LIGHTS_OUT),
     ...(k === FORMATION && { session: status(3) }),
@@ -62,6 +62,7 @@ const formationStart = (extra: (k: number) => EventDetails[] = () => []): Beat[]
         const kg = k < 200 ? 99 : 98.5;
         fuel(d, 0, kg); fuel(d, 1, kg);
       }
+      cars(k, d);
     },
   }));
 
@@ -112,6 +113,12 @@ describe('at lights out the formation lap is discarded', () => {
   it('lap 1 starts at lights out from its start: its fuel at the start is the fuel at lights out', () => {
     const { runner } = startRun();
     expect(runner.state.history.laps.filter((l) => l.lapNumber === 1 && l.carId === 0)).toMatchObject([{ fuelAtStartKg: { known: true, value: 98.5 } }]);
+  });
+  // Review 2 B4: a car that enters the pit lane during the formation lap starts from the pit lane (spec 3.2).
+  it('a pit-lane start is no pit stop: the car in the pit lane from the formation lap to after lights out records none; its later stop is recorded', () => {
+    const pitLane = (k: number) => (k >= 80 && k < LIGHTS_OUT + 30) || (k >= LIGHTS_OUT + 80 && k < LIGHTS_OUT + 100);
+    const { runner } = run(script(formationStart(() => [], (k, d) => lap(d, 0, { pitStatus: pitLane(k) ? 1 : 0 }))));
+    expect(runner.state.history.pitStops.filter((s) => s.carId === 0)).toMatchObject([{ pitLaneEntry: raceAt(80), pitLaneExit: raceAt(100) }]);
   });
   it('a car whose lap timer already runs on the grid starts lap 1 from its start at lights out too', () => {
     const { runner } = startRun();

@@ -1,6 +1,23 @@
-// Shared by the Scheduler tests: history deltas, the feed metrics and the input a scheduler runs on, and a scheduler
-// over quick calculators that all count as needed.
-import { CalculatorRegistry, Scheduler, type Calculator, type ChangeTag, type FeedMetricsView, type HistoryDelta, type QuickCalculator, type SchedulerInput } from '../../src/index.ts';
+// Shared by the Scheduler tests: history deltas, the feed metrics and the input a scheduler runs on, a scheduler over
+// quick calculators that all count as needed, and the scheduler's incremental = from scratch check over frames.
+import { expect } from 'vitest';
+import {
+  activeFlagPhaseOf,
+  CalculatorRegistry,
+  Scheduler,
+  SessionRunner,
+  situationOf,
+  type Calculator,
+  type ChangeTag,
+  type EngineView,
+  type FeedMetricsView,
+  type Frame,
+  type HistoryDelta,
+  type IncrementalCalculator,
+  type QuickCalculator,
+  type SchedulerInput,
+} from '../../src/index.ts';
+import { initFor } from './run.ts';
 
 type Lengths = HistoryDelta['before'];
 
@@ -32,3 +49,45 @@ export const sched = (calcs: Calculator[], needed = calcs.map((c) => c.id)) => {
   s.setNeeded(needed);
   return s;
 };
+
+type Folded = { crossings: number; neutralised: number; events: number };
+
+/**
+ * A reader that folds what happened while a neutralisation stood, as `incidents` does: it counts the mini-sector
+ * crossings, those a neutralised span covers (a closed one, or the one in progress from its start on), and the events.
+ */
+export const underNeutralisation: IncrementalCalculator<Folded, Folded> = (() => {
+  const covered = (v: EngineView, at: number): boolean =>
+    v.state.history.sessionPhases.some((p) => p.kind === 'neutralised' && p.start <= at && at < p.end) ||
+    (v.situation.session.kind === 'neutralised' && at >= v.situation.session.start);
+  const fold = (acc: Folded, v: EngineView, from: number, to: number): Folded => {
+    let neutralised = acc.neutralised;
+    for (const c of v.state.history.miniSectors.slice(from, to)) if (covered(v, c.at)) neutralised++;
+    return { crossings: acc.crossings + to - from, neutralised, events: v.state.history.events.length };
+  };
+  return {
+    kind: 'incremental',
+    id: 'probe.underNeutralisation',
+    reads: ['miniSectors', 'events', 'sessionPhases'],
+    cadence: 'frame',
+    init: (v) => fold({ crossings: 0, neutralised: 0, events: 0 }, v, 0, v.state.history.miniSectors.length),
+    update: (acc, d, v) => fold(acc, v, d.before.miniSectors, d.after.miniSectors),
+    output: (acc) => acc,
+  };
+})();
+
+/**
+ * Runs `frames` through a `SessionRunner` and a `Scheduler` that needs `calc` and, on every step it ran, expects its
+ * output to equal a fresh `init` over that step's view (incremental = from scratch, docs/testing.md section 5). The
+ * scheduler is never reset by hand: a step that discarded history must say so in its delta.
+ */
+export function expectScheduledIncremental<Acc, Out>(calc: IncrementalCalculator<Acc, Out>, frames: readonly Frame[]): void {
+  const runner = new SessionRunner(initFor([...frames]));
+  const scheduler = sched([calc as Calculator]);
+  frames.forEach((frame, i) => {
+    const r = runner.apply(frame);
+    const view = { state: r.state, activeFlagPhase: activeFlagPhaseOf(r.state), situation: situationOf(r.state), changed: r.changed, delta: r.delta, feed, config: {} };
+    const { ran, outputs } = scheduler.run(view);
+    if (ran.includes(calc.id)) expect(outputs.get(calc.id), `frame ${i}`).toEqual(calc.output(calc.init({ ...view, outputs: new Map() })));
+  });
+}
