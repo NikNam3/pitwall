@@ -14,8 +14,8 @@ describe('timing from LapData', () => {
       d.status.carStatusData[1]!.vehicleFiaFlags = 3;
     }));
     expect(st.cars[1]!.timing).toEqual({ position: 3, lap: 5, lapDistanceM: 1234.5, totalDistanceM: 20_000.25, currentLapTimeMs: 45_678,
-      lastLapTimeMs: 91_234, sector: 3, sector1TimeMs: 30_123, sector2TimeMs: 31_456, currentLapInvalid: true, gapToLeaderMs: 65_432,
-      gapToCarAheadMs: 1_250, safetyCarDeltaMs: -1_500, pitStatus: 'pitting', numPitStops: 1, pitLaneTimerActive: true, pitLaneTimeMs: 4_200,
+      lastLapTimeMs: 91_234, sector: 3, sector1TimeMs: 30_123, sector2TimeMs: 31_456, currentLapInvalid: true, gapToLeaderMs: known(65_432, 0),
+      gapToCarAheadMs: known(1_250, 0), safetyCarDeltaMs: -1_500, pitStatus: 'pitting', numPitStops: 1, pitLaneTimerActive: true, pitLaneTimeMs: 4_200,
       pitStopTimerMs: 0, shouldServePenalty: true, driverStatus: 'outLap', resultStatus: 'didNotFinish', timePenaltyMs: 5_000, totalWarnings: 2,
       cornerCuttingWarnings: 1, unservedDriveThroughs: 1, unservedStopGos: 0, gridPosition: 8, speedTrapFastestKmh: known(312.5, 0), fiaFlag: 'yellow' });
   });
@@ -30,7 +30,21 @@ describe('timing from LapData', () => {
     const { st } = runScenario(new ScenarioBuilder({ cars: 2 }).frames(1, (d) => {
       Object.assign(d.lapData.lapData[1]!, { deltaToCarInFrontMs: -17, deltaToRaceLeaderMs: -50 });
     }));
-    expect([st.cars[1]!.timing.gapToCarAheadMs, st.cars[1]!.timing.gapToLeaderMs]).toEqual([-17, -50]);
+    expect([st.cars[1]!.timing.gapToCarAheadMs, st.cars[1]!.timing.gapToLeaderMs]).toEqual([known(-17, 0), known(-50, 0)]);
+  });
+  // User ruling 2026-10-30: gaps beyond 5 minutes either way are unknown. The game sends such values from the garage
+  // in qualifying (a minutes byte of 253-255), and a gap that large tells the engineer nothing.
+  it.each([
+    [300_000, known(300_000, 0)],
+    [-300_000, known(-300_000, 0)],
+    [300_001, unknown('notApplicable')],
+    [-300_001, unknown('notApplicable')],
+    [15_362_703, unknown('notApplicable')],
+  ])('a gap of %i ms reads as %o', (raw, expected) => {
+    const { st } = runScenario(new ScenarioBuilder({ cars: 2 }).frames(1, (d) => {
+      Object.assign(d.lapData.lapData[1]!, { deltaToCarInFrontMs: raw, deltaToRaceLeaderMs: raw });
+    }));
+    expect([st.cars[1]!.timing.gapToCarAheadMs, st.cars[1]!.timing.gapToLeaderMs]).toEqual([expected, expected]);
   });
   it('speed trap is unknown (notReceived) while its lap is 255', () => {
     const { st } = runScenario(new ScenarioBuilder({ cars: 1 }).frames(1, (d) => { d.lapData.lapData[0]!.speedTrapFastestLap = 255; }));

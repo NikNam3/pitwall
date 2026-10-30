@@ -1,4 +1,4 @@
-import { carId, unknown, type Interval, type Known } from '@pitwall/domain';
+import { carId, known, unknown, type Interval, type Known } from '@pitwall/domain';
 import type { EngineView } from '@pitwall/engine';
 import { describe, expect, it } from 'vitest';
 import { GAPS, GAPS_CONFIG, type GapsOutput } from '../../src/gaps/index.ts';
@@ -89,7 +89,7 @@ describe('gaps calculator', () => {
 
   it("the gaps come from the crossings, never from the game's gaps", () => {
     const ms = threeCars();
-    const cars = carsFor(ms).map((c) => ({ ...c, timing: { ...c.timing, gapToLeaderMs: 77_777, gapToCarAheadMs: 33_333 } }));
+    const cars = carsFor(ms).map((c) => ({ ...c, timing: { ...c.timing, gapToLeaderMs: known(77_777, 0), gapToCarAheadMs: known(33_333, 0) } }));
     expect(run(viewOf(ms, { cars }))).toEqual(run(viewOf(ms)));
   });
 

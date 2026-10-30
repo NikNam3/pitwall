@@ -45,10 +45,13 @@ describe('session end on committed segments', () => {
     expect(lastFrameTimes).toEqual([900_594, 900_594]);
   });
 
-  it('race-zandvoort-retire: a session simulated to its end without SEND keeps its final SessionHistory and FinalClassification', async () => {
+  // User ruling 2026-10-30: once our driver has retired there is nothing left to engineer, so the bulks of a session
+  // the game simulates to its end without SEND are not kept.
+  it('race-zandvoort-retire: without SEND the UID-0 SessionHistory and FinalClassification bulks are dropped', async () => {
     const r = await trackFile(segmentPath('race-zandvoort-retire.pwrec.gz'));
     expect(started(r)).toEqual([13536157633115227668n]);
-    expect(r.lastFrame!.finalClassification).toBeDefined();
-    expect(uid0History(r)).toEqual(expect.arrayContaining([...Array(20).keys()]));
+    expect(r.lastFrame!.finalClassification).toBeUndefined();
+    expect(uid0History(r)).toEqual([]);
+    expect(r.metrics.droppedUid0).toBeGreaterThan(0);
   });
 });
