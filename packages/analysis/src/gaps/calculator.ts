@@ -2,6 +2,7 @@
 import { known, MINI_SECTORS, unknown, type CarId, type FlagPhase, type Interval, type Known, type Ms, type Neighbourhood, type ResultStatus, type SessionTime } from '@pitwall/domain';
 import type { EngineView, IncrementalCalculator } from '@pitwall/engine';
 import { ourCars } from '../shared/our-cars.ts';
+import { outOfRace } from '../shared/out-of-race.ts';
 import { gapBehind, lapsBehind, latestTime, progressAt, progressOf, recentOf, type CarCrossings } from './gaps.ts';
 import { GAPS, GAPS_CONFIG, type GapsOutput } from './index.ts';
 
@@ -16,9 +17,6 @@ type Table = {
 };
 
 type GapsAcc = Table & { out: GapsOutput };
-
-/** Out of the race: no gaps, no neighbour. */
-const OUT_OF_RACE: ReadonlySet<ResultStatus> = new Set(['retired', 'didNotFinish', 'disqualified']);
 
 const NOT_APPLICABLE = unknown('notApplicable');
 
@@ -113,7 +111,7 @@ const phasesOf = (acc: Table, view: EngineView): GapsOutput['phases'] => {
 function build(acc: Table, view: EngineView): GapsOutput {
   const { cars } = view.state;
   const running = cars
-    .filter((c) => c.active && !OUT_OF_RACE.has(c.timing.resultStatus))
+    .filter((c) => c.active && !outOfRace(c)) // out of the race: no gaps, no neighbour
     .sort((a, b) => a.timing.position - b.timing.position || a.id - b.id);
   const order = running.map((c) => c.id);
   const tracks = order.map((id) => acc.tracks[id]);

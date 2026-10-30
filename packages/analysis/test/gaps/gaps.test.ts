@@ -126,6 +126,23 @@ describe('gaps calculator', () => {
     expect(neighbours(out, 0)).not.toContain(3);
   });
 
+  it('a not-classified car leaves the intervals like a retired one (the shared out-of-race set)', () => {
+    // car 3 ran two laps at 90.5 s and stopped; the car state still has it at P2
+    const ms = byTime([
+      ...threeCars(),
+      ...crossings(carId(3), 1, 90_500, 0),
+      ...crossings(carId(3), 2, 90_500, 90_500),
+    ]);
+    const outWith = (resultStatus: 'retired' | 'notClassified') =>
+      run(viewOf(ms, { cars: carsFor(ms, { 3: { position: 2, resultStatus }, 1: { position: 3 }, 2: { position: 4 } }) }));
+    const notClassified = outWith('notClassified');
+    const retired = outWith('retired');
+    expect(notClassified.intervals.map((i) => i.carId)).toEqual([0, 1, 2]);
+    expect(neighbours(notClassified, 0)).not.toContain(3);
+    expect(notClassified.intervals).toEqual(retired.intervals);
+    expect(notClassified.neighbourhood).toEqual(retired.neighbourhood);
+  });
+
   it('lineTimes holds the line crossing of every completed lap', () => {
     const all = field({ cars: 2, laps: 3, paceMs: [90_000, 91_000] }).miniSectors;
     const full = run(viewOf(all));
