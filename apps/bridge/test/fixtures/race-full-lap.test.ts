@@ -6,6 +6,7 @@ import {
   ALARMS,
   alarmsCalculator,
   CAR_BANDS,
+  CAR_BANDS_CONFIG,
   carBandsCalculator,
   damageCalculator,
   fuelCalculator,
@@ -73,6 +74,12 @@ const run: {
   bands: BandsAgainstPackets;
 } = {} as never;
 
+/**
+ * The run's `car-bands` config: the defaults, except an engine band the engine is above on every frame, so the player's
+ * lap is out of band for a whole lap whatever the defaults (the block below tests the rule, not the defaults).
+ */
+const BANDS = { engineHi: 0 };
+
 const newLapSeen = (car: Car): LapSeen => ({
   min: CHANNELS.map(() => Infinity),
   max: CHANNELS.map(() => -Infinity),
@@ -92,7 +99,7 @@ beforeAll(async () => {
   const lineCrossed = new Set<string>();
   const lastLap = new Map<number, number>();
   let last: SchedulerResult | undefined;
-  const bands = bandsAgainstPackets();
+  const bands = bandsAgainstPackets(BANDS);
 
   /** Laps, crossings and the lap ranges move on the frames that carry LapData only, so only those are observed. */
   const observeLapData = ({ state }: StepResult, scheduled: SchedulerResult): void => {
@@ -149,7 +156,7 @@ beforeAll(async () => {
     judgePartialLaps(r, scheduled);
     bands.observe(r.state, scheduled, frame);
     last = scheduled;
-  });
+  }, { [CAR_BANDS_CONFIG.key]: BANDS });
   Object.assign(run, { state: runner.state, last: last!, seen, lineBetween, partialLapEvidence, invariantErrors, bands: bands.seen });
 });
 
@@ -299,8 +306,8 @@ describe('race-zandvoort-full-lap: a whole lap out of band', () => {
     return CHANNELS.filter((_, i) => seen.below[i] || seen.above[i]).map((c) => c.name);
   };
 
-  it('the player lap has a channel out of band on every frame (the case the next tests need)', () => {
-    expect(outAllLap()).toEqual(['tyre.carcassC.fr']);
+  it('the player lap has a channel out of band on every frame (the case the next tests need: the test band of the engine)', () => {
+    expect(outAllLap()).toContain('engineC');
   });
 
   it('car-bands marks outForFullLap exactly for the channels that were out of band on every frame of the lap', () => {
@@ -320,7 +327,7 @@ describe('race-zandvoort-full-lap: a whole lap out of band', () => {
 });
 
 describe("race-zandvoort-full-lap: car-bands on the game's packets", () => {
-  it("on every run of car-bands, each of the player's channels and corners carries the packet value, the config band of the fitted slick and the state it gives", () => {
+  it("on every run of car-bands, each of the player's channels and corners carries the packet value, the config band of the fitted slick and the live state it gives; the surface has no live state", () => {
     expect(run.bands.runs).toBeGreaterThan(0);
     expect(run.bands.off).toEqual([]);
   });
