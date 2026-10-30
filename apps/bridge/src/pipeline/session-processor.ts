@@ -93,6 +93,11 @@ export class SessionProcessor {
     opts.storage?.upsertSession(this.#row());
   }
 
+  /** The newest applied frame's time on the engine's race clock (spec 3.3); undefined before the engine runs. */
+  get sessionTime(): SessionTime | undefined {
+    return this.#running?.runner.state.sessionTime;
+  }
+
   push(frame: Frame): void {
     if (this.#running !== undefined) {
       // A session started by the buffer cap still stores its drivers, so later sessions find it in the weekend.
@@ -172,6 +177,9 @@ export class SessionProcessor {
       storage?.writeConfirmed(this.#key, result.state.history, result.delta);
       // A session time that fell back with no flashback and no start: the engine keeps its race clock monotonic (spec 3.3); worth knowing.
       if (result.clockFall) log.info({ feedId, sessionUid: this.#uid, clockFall: result.clockFall }, 'session time fell back');
+      // A forward jump of over a minute that is no post-session jump (a stall while the garage clock runs ahead): it
+      // changes nothing (spec 3.3); worth knowing too.
+      if (result.clockJump) log.info({ feedId, sessionUid: this.#uid, clockJump: result.clockJump }, 'session time jumped forward');
       // A flashback, the race start (discarding the formation lap, settling its clock) or a dropped unconfirmed neutralisation
       // changed history: the calculators start over.
       if (result.delta.truncated) {
