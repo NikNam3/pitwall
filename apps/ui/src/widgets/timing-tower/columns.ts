@@ -10,7 +10,8 @@ export type TowerColumn = { key: TowerColumnKey; label: string; widthCols: numbe
 /** The tower's columns in display order; the Table drops them by priority, highest number first. */
 export const TOWER_COLUMNS: TowerColumn[] = [
   { key: 'position', label: text.headers.position, widthCols: 2, priority: 1, align: 'right' },
-  { key: 'change', label: text.headers.change, widthCols: 2, priority: 2, align: 'left' },
+  // 3 cells: the widest mark of a 20-car race, 19 places gained or lost (▲19, ▼19).
+  { key: 'change', label: text.headers.change, widthCols: 3, priority: 2, align: 'left' },
   { key: 'car', label: text.headers.car, widthCols: 3, priority: 1, align: 'left' },
   { key: 'gap', label: text.headers.gap, widthCols: 7, priority: 3, align: 'right' },
   { key: 'interval', label: text.headers.interval, widthCols: 6, priority: 2, align: 'right' },
