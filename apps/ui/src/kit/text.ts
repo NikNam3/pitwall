@@ -40,13 +40,30 @@ export const addWidget = 'add widget';
 /** Accessible name of a panel's settings icon. */
 export const settings = 'settings';
 
-/** Hover text of an empty value cell: why the value is missing (spec 5; `UnknownReason`). */
+/** Hover text of an unknown value: why the value is missing (spec 5; `UnknownReason`). */
 export const unknownReason = {
   restricted: "hidden by the driver's telemetry setting",
   notReceived: 'not received yet',
   notApplicable: 'not applicable',
   realism: 'hidden by realism mode',
   insufficientData: 'too few laps or samples yet',
+} as const satisfies Record<UnknownReason, string>;
+
+/** Mark of a value still to come (measuring, not received yet): the ellipsis. */
+const markPending = '…';
+/** Mark of a value that will not come (hidden, not applicable): the en dash; the minus (U+2212) is for signed values. */
+const markAbsent = '–';
+
+/**
+ * The one-character mark an unknown value shows in its cell, in the faint role, with `unknownReason` on hover (user
+ * ruling 2026-10-30): an ellipsis while the value is still coming, an en dash when it will not come.
+ */
+export const unknownMark = {
+  restricted: markAbsent,
+  notReceived: markPending,
+  notApplicable: markAbsent,
+  realism: markAbsent,
+  insufficientData: markPending,
 } as const satisfies Record<UnknownReason, string>;
 
 /** Prefix of an estimated value in a value cell. */

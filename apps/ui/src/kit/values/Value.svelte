@@ -4,8 +4,9 @@
   import { roleOrUndefined } from '../../theme/index.ts';
   import { useStaleCarFields } from '../stale/panel-stale.ts';
   import { staleRole } from '../stale/stale.ts';
-  import { estimatedPrefix, unknownReason } from '../text.ts';
+  import { estimatedPrefix } from '../text.ts';
   import type { CarFieldPath } from './car-sources.ts';
+  import { unknownShown } from './unknown-mark.ts';
   import type { CarState } from '@pitwall/domain';
 
   type Props = {
@@ -27,7 +28,9 @@
   const carStale = useStaleCarFields(() => (car === undefined ? undefined : { updatedAt: car.updatedAt, fields: [car.field] }));
   const stale = $derived(car !== undefined && carStale.isStale(car.field));
 
-  const colour = $derived(roleOrUndefined(staleRole(estimated ? 'textDim' : undefined, stale)));
+  const shownUnknown = $derived(unwrapped.known ? undefined : unknownShown(unwrapped.reason));
+  // An unknown is its reason's faint mark, whatever else holds; a known value dims when estimated, fainter when stale.
+  const colour = $derived(shownUnknown?.colour ?? roleOrUndefined(staleRole(estimated ? 'textDim' : undefined, stale)));
 </script>
 
 <span
@@ -35,10 +38,10 @@
   class:stale
   class:estimated
   class:left={align === 'left'}
-  title={unwrapped.known ? undefined : unknownReason[unwrapped.reason]}
+  title={shownUnknown?.title}
   style:color={colour}
   style:min-width={widthCols === undefined ? undefined : `${widthCols}ch`}
->{#if unwrapped.known}{estimated ? estimatedPrefix : ''}{format(unwrapped.value)}{/if}</span>
+>{#if unwrapped.known}{estimated ? estimatedPrefix : ''}{format(unwrapped.value)}{:else}{shownUnknown?.text}{/if}</span>
 
 <style>
   .value {
