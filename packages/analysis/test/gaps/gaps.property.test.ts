@@ -2,7 +2,7 @@ import { carId, MINI_SECTORS, type MiniSectorCrossing } from '@pitwall/domain';
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import type { GapsOutput } from '../../src/gaps/index.ts';
-import { gapsToCar } from '../../src/gaps/gaps.ts';
+import { gapperLines, gapsToCar } from '../../src/gaps/gaps.ts';
 import { byTime, plain, progressOf, run, viewOf } from './race.ts';
 
 /**
@@ -90,6 +90,33 @@ describe('gap properties', () => {
             if (c === a || c === b) continue;
             expect(plain(gap(out, a, c))).toBe(plain(gap(out, a, b) + gap(out, b, c)));
           }
+        }
+      }),
+    );
+  });
+
+  it("the gapper's live point lies after the car's last completed lap, at its newest crossing, at any moment", () => {
+    fc.assert(
+      fc.property(raceArb, (race) => {
+        const all = crossingsOf(race);
+        const history = all.slice(0, 1 + Math.floor(race.cut * (all.length - 1)));
+        const lines = gapperLines(run(viewOf(history)), { kind: 'fixed', lapMs: 90_000 });
+        for (const car of lines.cars) {
+          const newest = history.findLast((m) => m.carId === car.carId)!;
+          if (newest.lap === 1 && newest.segment === 0) continue; // the start line: not pinned
+          if (newest.segment === 0) {
+            expect(car.now, `car ${car.carId} at the line`).toEqual({ known: false, reason: 'notApplicable' });
+            continue;
+          }
+          if (!car.now.known) throw new Error(`car ${car.carId} has no now at (${newest.lap}, ${newest.segment})`);
+          const lap = newest.lap - 1 + newest.segment / MINI_SECTORS;
+          const completed = car.byLap.at(-1)?.lap ?? 0;
+          expect(car.now.value.lap).toBeCloseTo(lap, 9);
+          expect(car.now.value.lap).toBeGreaterThan(completed);
+          expect(car.now.value.lap).toBeLessThan(completed + 1);
+          expect(Number.isInteger(car.now.value.gapMs)).toBe(true);
+          expect(Math.abs(car.now.value.gapMs - (lap * 90_000 - newest.at))).toBeLessThanOrEqual(0.5);
+          expect(car.now.at).toBe(newest.at);
         }
       }),
     );

@@ -93,20 +93,35 @@ function referenceLap(out: GapsOutput, reference: GapperReference): Known<Ms> {
 }
 
 /**
+ * The car's gap now, at its newest crossing after `startAt`: `progress / 50` laps (its own completed laps plus the part
+ * of the current lap) at the reference pace minus its race time, in whole ms. `notApplicable` at the line (the point
+ * is the completed lap's) and before its first crossing after lights out.
+ */
+function gapNow(crossings: CarCrossings | undefined, startAt: SessionTime, referenceLapMs: Ms): GapperLines['cars'][number]['now'] {
+  const at = crossings === undefined ? undefined : latestTime(crossings);
+  if (crossings === undefined || at === undefined || at <= startAt) return unknown('notApplicable');
+  const progress = latestOf(crossings);
+  if (progress % MINI_SECTORS === 0) return unknown('notApplicable');
+  return known({ lap: progress / MINI_SECTORS, gapMs: Math.round((progress * referenceLapMs) / MINI_SECTORS - (at - startAt)) }, at);
+}
+
+/**
  * Per running car, per completed race lap L, the gap to a virtual car that laps at the reference pace from lights
- * out: `L × referenceLap − (lineTime(L) − raceStart)`, positive = ahead of it. Without a known race start or
- * reference lap every line is empty.
+ * out: `L × referenceLap − (lineTime(L) − raceStart)`, positive = ahead of it; `now` is the same gap at the car's
+ * newest mini-sector crossing. Without a known race start or reference lap every line is empty and `now` unknown.
  */
 export function gapperLines(out: GapsOutput, reference: GapperReference): GapperLines {
   const referenceLapMs = referenceLap(out, reference);
   const start = out.raceStartAt;
-  const cars = out.intervals.map(({ carId }) => ({
-    carId,
-    byLap:
-      referenceLapMs.known && start.known
-        ? raceLaps(out, carId, start.value).map(({ lap, at }) => ({ lap, gapMs: lap * referenceLapMs.value - (at - start.value) }))
-        : [],
-  }));
+  const cars = out.intervals.map(({ carId }) => {
+    if (!start.known) return { carId, byLap: [], now: unknown(start.reason) };
+    if (!referenceLapMs.known) return { carId, byLap: [], now: unknown(referenceLapMs.reason) };
+    return {
+      carId,
+      byLap: raceLaps(out, carId, start.value).map(({ lap, at }) => ({ lap, gapMs: lap * referenceLapMs.value - (at - start.value) })),
+      now: gapNow(out.recent[carId], start.value, referenceLapMs.value),
+    };
+  });
   const named = reference.kind === 'carAverage' ? known(reference.carId, 0) : unknown('notApplicable');
   return { reference: { kind: reference.kind, carId: named }, referenceLapMs, cars };
 }

@@ -37,7 +37,16 @@ export type GapperReferenceKind = GapperReference['kind'];
 export type GapperLines = {
   reference: { kind: GapperReferenceKind; carId: Known<CarId> };
   referenceLapMs: Known<Ms>;
-  cars: { carId: CarId; byLap: { lap: number; gapMs: Ms }[] }[];
+  cars: {
+    carId: CarId;
+    byLap: { lap: number; gapMs: Ms }[];
+    /**
+     * The car's gap now, at its newest mini-sector crossing: `lap` counts completed laps plus the part of the current
+     * lap (crossed mini-sectors / 50), so it lies after the last `byLap` point. `notApplicable` before the first crossing
+     * after lights out, or when it would equal the last completed lap.
+     */
+    now: Known<{ lap: number; gapMs: Ms }>;
+  }[];
 };
 
 /** `gaps.neighbourhood`: the cars within ±1 position or ±`neighbourhoodMs` of one of our cars. */

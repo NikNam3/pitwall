@@ -93,11 +93,12 @@ describe('race-zandvoort-full-lap: the line times the gapper draws from', () => 
     }
   });
 
-  it('joined after lights out, the gapper draws no line for any car and says why: the race start is notReceived', () => {
+  it('joined after lights out, the gapper draws no line and no live point for any car and says why: the race start is notReceived', () => {
     expect(run.last.raceStartAt).toEqual({ known: false, reason: 'notReceived' });
     for (const reference of [{ kind: 'leaderAverage' }, { kind: 'fixed', lapMs: 75_000 }] as const) {
       const lines = gapperLines(run.last, reference);
       expect(lines.cars.filter((c) => c.byLap.length > 0).map((c) => c.carId), reference.kind).toEqual([]);
+      expect(lines.cars.filter((c) => c.now.known).map((c) => c.carId), reference.kind).toEqual([]);
     }
     expect(gapperLines(run.last, { kind: 'leaderAverage' }).referenceLapMs).toEqual({ known: false, reason: 'notReceived' });
   });

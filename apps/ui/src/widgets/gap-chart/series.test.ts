@@ -3,6 +3,8 @@ import type { CarOverview, SessionInfo } from '@pitwall/contracts';
 import { carId, known, toSessionTime, unknown } from '@pitwall/domain';
 import type { FlagPhase, GapperLines } from '@pitwall/domain';
 import { ourCars } from '../../kit/car/our-cars.ts';
+import { buildData, clipBands, visibleXRange } from '../../kit/chart/data.ts';
+import { endLabels } from '../../kit/chart/labels.ts';
 import { gapperReference, gapSeries, phaseBands, phasesFold, REFERENCE_KINDS } from './series.ts';
 import { TEAM_COLOURS } from '../../theme/team-colours.ts';
 
@@ -12,6 +14,9 @@ const phase = (over: Partial<FlagPhase> = {}): FlagPhase => ({
 
 const car = (id: number, name: string, teamId: number, raceNumber: number): CarOverview =>
   ({ id: carId(id), identity: { name, teamId, raceNumber } }) as unknown as CarOverview;
+
+/** A car that just crossed the line (or has not crossed one since lights out): no live point. */
+const NO_NOW = unknown('notApplicable');
 
 const session = (playerCar: number, teammateCar?: number): SessionInfo =>
   ({ playerCar: carId(playerCar), ...(teammateCar === undefined ? {} : { teammateCar: carId(teammateCar) }) }) as unknown as SessionInfo;
@@ -95,8 +100,8 @@ describe('gapSeries', () => {
     reference: { kind: 'leaderAverage', carId: unknown('notApplicable') },
     referenceLapMs: known(105_000, toSessionTime(0)),
     cars: [
-      { carId: carId(2), byLap: [{ lap: 1, gapMs: 250 }, { lap: 2, gapMs: 500 }] },
-      { carId: carId(0), byLap: [{ lap: 1, gapMs: 1000 }, { lap: 2, gapMs: 2500 }] },
+      { carId: carId(2), byLap: [{ lap: 1, gapMs: 250 }, { lap: 2, gapMs: 500 }], now: NO_NOW },
+      { carId: carId(0), byLap: [{ lap: 1, gapMs: 1000 }, { lap: 2, gapMs: 2500 }], now: NO_NOW },
     ],
   };
   const ours = ourCars(session(0, 1));
@@ -120,9 +125,9 @@ describe('gapSeries', () => {
 
   it('dashes the teammate and a team\'s second car', () => {
     const more: GapperLines = { ...lines, cars: [
-      { carId: carId(1), byLap: [{ lap: 1, gapMs: 100 }] },
-      { carId: carId(3), byLap: [{ lap: 1, gapMs: 100 }] },
-      { carId: carId(4), byLap: [{ lap: 1, gapMs: 100 }] },
+      { carId: carId(1), byLap: [{ lap: 1, gapMs: 100 }], now: NO_NOW },
+      { carId: carId(3), byLap: [{ lap: 1, gapMs: 100 }], now: NO_NOW },
+      { carId: carId(4), byLap: [{ lap: 1, gapMs: 100 }], now: NO_NOW },
     ] };
     const [zho, nor, pia] = gapSeries(more, cars, ours);
     expect(zho?.colour).toMatchObject({ ownCar: true, dashed: true });
@@ -131,13 +136,13 @@ describe('gapSeries', () => {
   });
 
   it('leaves the label of a car without an identity empty (kit carCodeById) and draws it in the dim colour, not an error', () => {
-    const [s] = gapSeries({ ...lines, cars: [{ carId: carId(15), byLap: [{ lap: 1, gapMs: 10 }] }] }, cars, ours);
+    const [s] = gapSeries({ ...lines, cars: [{ carId: carId(15), byLap: [{ lap: 1, gapMs: 10 }], now: NO_NOW }] }, cars, ours);
     expect(s?.label).toBe('');
     expect(s?.colour).toMatchObject({ ownCar: false, dashed: false });
   });
 
   it('keeps a retired or lapped car as a shorter line and drops a car without any lap', () => {
-    const short: GapperLines = { ...lines, cars: [{ carId: carId(2), byLap: [{ lap: 1, gapMs: 0 }] }, { carId: carId(3), byLap: [] }] };
+    const short: GapperLines = { ...lines, cars: [{ carId: carId(2), byLap: [{ lap: 1, gapMs: 0 }], now: NO_NOW }, { carId: carId(3), byLap: [], now: NO_NOW }] };
     const out = gapSeries(short, cars, ours);
     expect(out.map((s) => s.label)).toEqual(['VER']);
     expect(out[0]?.points).toHaveLength(1);
@@ -145,5 +150,60 @@ describe('gapSeries', () => {
 
   it('is empty when the reference is unknown and no car has data', () => {
     expect(gapSeries({ reference: { kind: 'leaderAverage', carId: unknown('notApplicable') }, referenceLapMs: unknown('insufficientData'), cars: [] }, cars, ours)).toEqual([]);
+  });
+});
+
+// The live point (Task GL, user ruling 2026-10-30): each car's line runs solid through its completed laps, then dotted
+// to `now`, its gap at its newest mini-sector crossing. Contract assumed of the kit chart (src/kit/chart/data.ts):
+// `ChartSeries.liveEnd === true` says the series' last point is live, so the chart draws the segment to it dotted (the
+// look is the kit's, not a colour); a series without a live point has no `liveEnd: true`.
+describe('gapSeries: the live point', () => {
+  const cars = [car(0, 'Kuhnlein', 7, 44), car(1, 'Zhou', 7, 24), car(2, 'Max Verstappen', 2, 1), car(3, 'Lando Norris', 8, 4)];
+  const ours = ourCars(session(0, 1));
+  const live = (lap: number, gapMs: number) => known({ lap, gapMs }, toSessionTime(0));
+  // VER is 40 % into lap 3, KUH 30 %; NOR has just crossed the line
+  const lines: GapperLines = {
+    reference: { kind: 'leaderAverage', carId: unknown('notApplicable') },
+    referenceLapMs: known(105_000, toSessionTime(0)),
+    cars: [
+      { carId: carId(2), byLap: [{ lap: 1, gapMs: 250 }, { lap: 2, gapMs: 500 }], now: live(2.4, 700) },
+      { carId: carId(0), byLap: [{ lap: 1, gapMs: 1000 }, { lap: 2, gapMs: 2500 }], now: live(2.3, 2900) },
+      { carId: carId(3), byLap: [{ lap: 1, gapMs: -500 }, { lap: 2, gapMs: -1500 }], now: NO_NOW },
+    ],
+  };
+  const range = (series: ReturnType<typeof gapSeries>) => visibleXRange(buildData(series)[0] as number[], 50, 'lap', { lap: 0.25, sessionTime: 1000 });
+
+  it("continues a car's line from its last completed lap to now, as a live (dotted) last segment", () => {
+    const [ver, kuh] = gapSeries(lines, cars, ours);
+    expect(ver).toMatchObject({ label: 'VER', points: [[1, -0.25], [2, -0.5], [2.4, -0.7]], liveEnd: true });
+    expect(kuh).toMatchObject({ label: 'KUH', points: [[1, -1], [2, -2.5], [2.3, -2.9]], liveEnd: true });
+  });
+
+  it('draws a car without a live point (at the line) solid through its completed laps only', () => {
+    const nor = gapSeries(lines, cars, ours)[2];
+    expect(nor?.points).toEqual([[1, 0.5], [2, 1.5]]);
+    expect(nor).not.toMatchObject({ liveEnd: true });
+  });
+
+  it('the live segment is a series flag, not a colour: the car keeps its colour', () => {
+    const atTheLine: GapperLines = { ...lines, cars: lines.cars.map((c) => ({ ...c, now: NO_NOW })) };
+    expect(gapSeries(lines, cars, ours).map((s) => s.colour)).toEqual(gapSeries(atTheLine, cars, ours).map((s) => s.colour));
+  });
+
+  it('the x-range ends at the newest live point', () => {
+    expect(range(gapSeries(lines, cars, ours))[1]).toBe(2.4);
+  });
+
+  it("each car's end label sits at its live end", () => {
+    const series = gapSeries(lines, cars, ours);
+    expect(endLabels(series, range(series)).map((l) => [l.text, l.value])).toEqual([['VER', -0.7], ['KUH', -2.9], ['NOR', 1.5]]);
+  });
+
+  it('a safety car that ended on the newest completed lap ends before the right edge once the cars are past it', () => {
+    const series = gapSeries(lines, cars, ours);
+    const visible = range(series);
+    const [band] = clipBands(phaseBands([phase({ startLeaderLap: 1, endLeaderLap: 2 })]), visible);
+    expect(band).toEqual({ from: 1, to: 2, kind: 'sc' });
+    expect(band!.to).toBeLessThan(visible[1]);
   });
 });

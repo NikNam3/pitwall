@@ -1,5 +1,5 @@
 <script lang="ts">
-  // The gap chart (V04): each car's gap to a virtual car at the reference pace, per lap.
+  // The gap chart (V04): each car's gap to a virtual car at the reference pace, per lap, then dotted to its gap now.
   import { carCodeById } from '../../kit/car/car-label.ts';
   import Chart from '../../kit/chart/Chart.svelte';
   import type { WidgetProps } from '../../kit/types.ts';

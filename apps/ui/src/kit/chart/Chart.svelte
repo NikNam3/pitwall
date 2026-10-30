@@ -1,14 +1,18 @@
 <script lang="ts">
-  // The line chart every display uses (spec 5): uPlot on a black plot with labelled axes and grids.
+  // The line chart every display uses (spec 5): uPlot on a black plot with labelled axes and grids; each line is named at
+  // its right end in its colour (our car bold), labels pushed apart where lines end close together; when they cannot all
+  // fit, ours and the ones nearest to ours keep theirs. A series' live end is drawn dotted (`ChartSeries.liveEnd`).
   // Nothing scales with the panel: more width shows more history (the x-range follows the width in cells).
   import { untrack } from 'svelte';
   import uPlot from 'uplot';
   import 'uplot/dist/uPlot.min.css';
   import { DEFAULT_THEME, cssVar, resolveColour, resolveRole } from '../../theme/index.ts';
   import type { Role } from '../../theme/index.ts';
+  import { cellBox } from '../size/size.ts';
   import type { WidgetSize } from '../types.ts';
-  import { buildData, clipBands, visibleXRange } from './data.ts';
+  import { buildData, clipBands, plotLines, visibleXRange } from './data.ts';
   import type { ChartSeries, PhaseBand } from './data.ts';
+  import { endLabels, placeLabels } from './labels.ts';
 
   type Props = {
     series: ChartSeries[];
@@ -41,9 +45,15 @@
     return Number.isFinite(v) ? v : fallback;
   }
 
+  /** A dash pattern token (px on, px off) from the active theme's CSS variable, else the default theme's value. */
+  function dashToken(root: Element, name: string, fallback: number[]): number[] {
+    const v = cssVar(root, name).split(/\s+/).filter((t) => t !== '').map(Number).filter(Number.isFinite);
+    return v.length > 0 ? v : fallback;
+  }
+
   /** What changes the look of the plot but not its data or size: a change rebuilds the plot. */
   const structure = $derived(
-    JSON.stringify([series.map((s) => [s.label, s.colour, s.fresh]), bands, xLabel, yLabel, x.kind]),
+    JSON.stringify([series.map((s) => [s.label, s.colour, s.fresh, s.liveEnd === true]), bands, xLabel, yLabel, x.kind]),
   );
 
   // Structural effect: builds the plot. Data and size changes are handled below on the same instance.
@@ -58,13 +68,19 @@
       const ownWidth = token(root, '--pw-chart-own-line', tokens.ownCarLineWidth);
       const staleAlpha = token(root, '--pw-chart-stale-alpha', tokens.staleAlpha);
       const redAlpha = token(root, '--pw-chart-red-alpha', tokens.redBandAlpha);
-      const dashVar = cssVar(root, '--pw-chart-dash').split(/\s+/).map(Number).filter(Number.isFinite);
-      const dash = dashVar.length > 0 ? dashVar : tokens.dash;
+      const dash = dashToken(root, '--pw-chart-dash', tokens.dash);
+      const liveDash = dashToken(root, '--pw-chart-live-dash', tokens.liveDash);
       const xPerCell = {
         lap: token(root, '--pw-chart-x-lap', tokens.xPerCell.lap),
         sessionTime: token(root, '--pw-chart-x-session', tokens.xPerCell.sessionTime),
       };
       const font = `${cssVar(root, '--pw-font-px')} ${cssVar(root, '--pw-font')}`;
+      const fontPx = token(root, '--pw-font-px', DEFAULT_THEME.fontPx);
+      const boldWeight = token(root, '--pw-weight-bold', DEFAULT_THEME.table.boldWeight);
+      // The labels sit one column gap right of the plot; the plot leaves room for the gap and the longest label.
+      const cellPx = cellBox(fontPx, DEFAULT_THEME.density.lineHeight).width;
+      const labelGapPx = token(root, '--pw-col-gap', DEFAULT_THEME.density.columnGapCols) * cellPx;
+      const labelRoomPx = labelGapPx + cellPx * series.reduce((m, s) => Math.max(m, s.label.length), 0);
       const grid = resolveRole(el, 'grid');
       const axis = { stroke: resolveRole(el, 'textDim'), font, labelFont: font, grid: { stroke: grid }, ticks: { stroke: grid } };
 
@@ -79,7 +95,13 @@
         points: { show: false },
       }));
 
-      const data = buildData(series);
+      const plotted = plotLines(series);
+      // The live segments follow the series' own lines, in their look but dotted.
+      const liveLines = plotted.flatMap((p) => {
+        const line = p.live ? lines[p.of] : undefined;
+        return line ? [{ ...line, dash: liveDash }] : [];
+      });
+      const data = buildData(plotted);
       xs = data[0] as number[];
       cols = size.cols;
       applied = { width: size.px.width, height: size.px.height };
@@ -87,17 +109,40 @@
       const redFill = resolveRole(el, 'flagRed');
       const bandList = bands ?? [];
 
+      /** Paints each line's label right of the plot, at its end (canvas px: scaled by the canvas' pixel ratio). */
+      const drawLabels = (u: uPlot): void => {
+        const ratio = uPlot.pxRatio;
+        const rowPx = fontPx * ratio;
+        const labels = endLabels(untrack(() => series), visibleXRange(xs, cols, x.kind, xPerCell));
+        const ys = placeLabels(labels.map((l) => u.valToPos(l.value, 'y', true) - u.bbox.top), rowPx, u.bbox.height, labels.map((l) => l.bold));
+        const left = u.bbox.left + u.bbox.width + labelGapPx * ratio;
+        u.ctx.save();
+        u.ctx.textAlign = 'left';
+        u.ctx.textBaseline = 'middle';
+        labels.forEach((l, i) => {
+          const line = lines[l.index];
+          const y = ys[i];
+          if (!line || y === undefined) return;
+          u.ctx.font = `${l.bold ? `${boldWeight} ` : ''}${rowPx}px ${cssVar(root, '--pw-font')}`;
+          u.ctx.fillStyle = line.stroke;
+          u.ctx.globalAlpha = line.alpha;
+          u.ctx.fillText(l.text, left, u.bbox.top + y);
+        });
+        u.ctx.restore();
+      };
+
       plot = new uPlot(
         {
           width: size.px.width,
           height: size.px.height,
           legend: { show: false },
+          padding: [null, labelRoomPx, null, null],
           cursor: { show: false },
           scales: { x: { time: false, range: () => visibleXRange(xs, cols, x.kind, xPerCell) } },
           axes: [{ ...axis, label: xLabel }, { ...axis, label: yLabel, ...(yFormat ? { values: (_u: uPlot, splits: number[]) => splits.map(yFormat) } : {}) }],
-          series: [{}, ...lines],
+          series: [{}, ...lines, ...liveLines],
           hooks: {
-            draw: [() => ondraw?.()],
+            draw: [drawLabels, () => ondraw?.()],
             drawClear: bandList.length
               ? [
                   (u) => {
@@ -126,7 +171,7 @@
 
   // Data effect: new points go to the same plot.
   $effect(() => {
-    const data = buildData(series);
+    const data = buildData(plotLines(series));
     xs = data[0] as number[];
     plot?.setData(data as uPlot.AlignedData);
   });
@@ -138,7 +183,7 @@
     if (plot && (width !== applied.width || height !== applied.height)) {
       applied = { width, height };
       plot.setSize({ width, height });
-      plot.setData(buildData(untrack(() => series)) as uPlot.AlignedData);
+      plot.setData(buildData(plotLines(untrack(() => series))) as uPlot.AlignedData);
     }
   });
 </script>

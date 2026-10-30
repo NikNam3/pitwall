@@ -12,6 +12,8 @@ export type ChartTokens = {
   redBandAlpha: number;
   /** Dash pattern (px on, px off) of a teammate or second car line. */
   dash: [number, number];
+  /** Dash pattern (px on, px off) of a line's live segment: from its last completed point to its point now. */
+  liveDash: [number, number];
   /** X units one character cell of chart width spans: a wider chart shows more history. */
   xPerCell: { lap: number; sessionTime: number };
 };
@@ -30,6 +32,7 @@ const QUIET_CHART: ChartTokens = {
   staleAlpha: 0.35,
   redBandAlpha: 0.3,
   dash: [6, 4],
+  liveDash: [1.5, 3],
   xPerCell: { lap: 0.5, sessionTime: 2000 },
 };
 

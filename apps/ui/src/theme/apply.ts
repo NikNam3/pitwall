@@ -17,6 +17,7 @@ export function applyTheme(variant: ThemeVariant, root: HTMLElement): void {
   set('--pw-chart-stale-alpha', String(variant.chart.staleAlpha));
   set('--pw-chart-red-alpha', String(variant.chart.redBandAlpha));
   set('--pw-chart-dash', variant.chart.dash.join(' '));
+  set('--pw-chart-live-dash', variant.chart.liveDash.join(' '));
   set('--pw-chart-x-lap', String(variant.chart.xPerCell.lap));
   set('--pw-chart-x-session', String(variant.chart.xPerCell.sessionTime));
   set('--pw-border-px', `${variant.table.borderPx}px`);

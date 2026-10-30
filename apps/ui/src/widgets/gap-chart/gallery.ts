@@ -43,19 +43,31 @@ const sessionInfo = {
   realism: false,
 } as unknown as SessionInfo;
 
-/** Gap in ms behind the reference per lap: car `i` loses `(i + 1) * 120` ms a lap, so the lines fan out. */
-const line = (id: number, laps: number, step: number, jump?: { at: number; ms: number }) => ({
-  carId: carId(id),
-  byLap: Array.from({ length: laps }, (_, i) => ({
-    lap: i + 1,
-    gapMs: step * (i + 1) + (jump !== undefined && i + 1 >= jump.at ? jump.ms : 0),
-  })),
-});
+/**
+ * Gap in ms per lap: `step` ms more each lap, plus `jump.ms` from lap `jump.at` on, so the lines fan out. With
+ * `nowLap` the car is that far into its current lap and has a live point there on the same trend; without it the car
+ * has just crossed the line (no live point).
+ */
+const line = (id: number, laps: number, step: number, jump?: { at: number; ms: number }, nowLap?: number): GapperLines['cars'][number] => {
+  const gapAt = (lap: number) => step * lap + (jump !== undefined && lap >= jump.at ? jump.ms : 0);
+  return {
+    carId: carId(id),
+    byLap: Array.from({ length: laps }, (_, i) => ({ lap: i + 1, gapMs: gapAt(i + 1) })),
+    now: nowLap === undefined ? unknown('notApplicable') : known({ lap: nowLap, gapMs: Math.round(gapAt(nowLap)) }, 0),
+  };
+};
+
+/** Live, mid-lap: the leader 60 % into lap 13, each car behind it a little less far. */
+const liveLap = (rank: number) => 12.6 - 0.03 * rank;
+
+/** The six cars in running order (VER, NOR, LEC, KUH, PIA, ZHO), 12 laps and a live point each; `steps[rank]` per car. */
+const liveField = (steps: number[], jump?: { at: number; ms: number }) =>
+  [2, 3, 5, 0, 4, 1].map((id, rank) => line(id, 12, steps[rank] ?? 0, jump, liveLap(rank)));
 
 const lines = (over: Partial<GapperLines> = {}): GapperLines => ({
   reference: { kind: 'leaderAverage', carId: unknown('notApplicable') },
   referenceLapMs: known(105_120, 0),
-  cars: [line(2, 12, 0), line(3, 12, 300), line(5, 12, 600), line(0, 12, 900), line(4, 12, 1100), line(1, 12, 1500)],
+  cars: liveField([0, 300, 600, 900, 1100, 1500]),
   ...over,
 });
 
@@ -70,7 +82,8 @@ const base = { gapper: lines(), phases: [] as FlagPhase[], cars, session: sessio
 const gallery: GalleryEntry<typeof widget> = {
   moments: ['raceSingaporeEnd.chequered'],
   cases: {
-    // an SC band across laps 5 to 7: the field bunches, every car gains 4 s from lap 8 on
+    // an SC band across laps 5 to 7: the field bunches, every car gains 4 s from lap 8 on; every car has just crossed
+    // the line, so no line has a live segment
     safetyCarBand: {
       ...base,
       phases: [scPhase(5, 7)],
@@ -78,13 +91,31 @@ const gallery: GalleryEntry<typeof widget> = {
         cars: [line(2, 12, 0, bunch), line(3, 12, 300, bunch), line(5, 12, 600, bunch), line(0, 12, 900, bunch), line(4, 12, 1100, bunch), line(1, 12, 1500, bunch)],
       }),
     },
-    // default reference; our car white and thicker, the teammate dashed, McLaren's second car dashed
+    // default reference; our car white and thicker, the teammate dashed, McLaren's second car dashed; mid-lap, so each
+    // line runs dotted from lap 12 to its live point
     greenFlag: base,
+    // a train within a second of the leader, ZHO far behind: five lines end within one text row, so their end labels
+    // are pushed apart in gap order; where the plot is too low for all of them (compact), KUH's label and the nearest
+    // to it stay and the rest are dropped (their lines stay)
+    closeTogether: {
+      ...base,
+      gapper: lines({ cars: liveField([0, 20, 40, 60, 80, 1500]) }),
+    },
+    // an SC that ended as the leader completed lap 12 (the field bunched from lap 10): the band stops at lap 12 and the
+    // dotted live segments run on past it, so the chart shows the SC is over
+    scEnded: {
+      ...base,
+      phases: [scPhase(9, 12)],
+      gapper: lines({ cars: liveField([0, 300, 600, 900, 1100, 1500], { at: 10, ms: -4000 }) }),
+    },
     virtualSafetyCarAndRed: { ...base, phases: [{ ...scPhase(3, 4), kind: 'VSC' }, { ...scPhase(9, 9), kind: 'red' }] },
-    // retired car: its line stops at lap 7; lapped car: it has completed fewer laps than the leader
+    // retired car: its line stops at lap 7, no live point; lapped car: it has completed fewer laps than the leader and
+    // its live point is in its own lap 11
     retiredAndLapped: {
       ...base,
-      gapper: lines({ cars: [line(2, 12, 0), line(3, 12, 300), line(0, 12, 900), line(4, 7, 1100), line(1, 10, 1500)] }),
+      gapper: lines({
+        cars: [line(2, 12, 0, undefined, liveLap(0)), line(3, 12, 300, undefined, liveLap(1)), line(0, 12, 900, undefined, liveLap(2)), line(4, 7, 1100), line(1, 10, 1500, undefined, 10.5)],
+      }),
     },
     fixedReference: { ...base, gapper: lines({ referenceLapMs: known(100_000, 0) }) },
     referenceUnknown: { ...base, gapper: lines({ referenceLapMs: unknown('insufficientData'), cars: [] }) },
