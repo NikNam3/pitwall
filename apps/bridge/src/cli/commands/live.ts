@@ -26,14 +26,14 @@ async function currentDatabase(dirs: DataDir, io: CliIo): Promise<Db | undefined
 
 /** `pitwall live`: records the game's UDP telemetry and serves it; `--dev` also publishes calculator timings. */
 export async function run(_positionals: string[], values: { dev?: boolean | undefined }, io: CliIo): Promise<number> {
-  const { udpPort, wsPort } = loadConfig(io.env);
+  const { udpPort, udpHost, wsPort } = loadConfig(io.env);
   const dirs = dataDir(io.env);
   // Fixed for the run (a runtime change from the UI comes later); a config error stops the start before anything listens.
   const config = loadFeatureConfig(dirs.root, FEATURES);
-  await assertUdpPortFree(udpPort);
+  await assertUdpPortFree(udpPort, udpHost);
   const db = await currentDatabase(dirs, io);
   if (db === undefined) return EXIT_INTERRUPTED;
-  const source = new UdpSource({ feedId: feedId(`udp-${udpPort}`), port: udpPort });
+  const source = new UdpSource({ feedId: feedId(`udp-${udpPort}`), port: udpPort, host: udpHost });
   return serve({
     source,
     feed: { kind: 'udp', label: `UDP port ${udpPort}` },
