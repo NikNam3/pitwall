@@ -132,26 +132,24 @@ describe('ersView: trend and attack text', () => {
   });
 });
 
-// The joint between trend and attack is the view's alone (review-ui finding 3): an unknown part still shows (its mark),
-// so the line is joined whenever both parts show, known or not.
+// The joint between trend and attack is a constant of the widget's text (review 2, F8): the component renders
+// `text.joint` between them, known or not (ErsBudget.test.ts pins the rendered line), so the view carries no joint.
 describe('ersView: trend line', () => {
-  it('joins trend and attack with a separator', () => {
+  it('gives the trend and the attack text', () => {
     const v = ersView(state({ attack: known({ ready: true, inLaps: 0 }, at) }));
     expect(v.trend).toBe('+0.4 MJ/lap');
     expect(v.attack).toBe('attack ready');
-    expect(v.trendJoint).toBe(',\u00a0');
   });
 
-  it('joins an unknown trend (its mark) to the attack text', () => {
+  it('gives an unknown trend as no text and its reason', () => {
     const v = ersView(state({ storeTrendJPerLap: unknown('notReceived'), attack: known({ ready: true, inLaps: 0 }, at) }));
     expect(v.trend).toBe('');
     expect(v.reasons.trend).toBe('notReceived');
-    expect(v.trendJoint).toBe(',\u00a0');
   });
 
-  it('joins the trend to an unknown attack (its mark)', () => {
-    expect(ersView(state({ attack: unknown('notReceived') })).trendJoint).toBe(',\u00a0');
-    expect(ersView(state({ storeTrendJPerLap: unknown('realism'), attack: unknown('realism') })).trendJoint).toBe(',\u00a0');
+  it('carries no joint: the component joins the trend and the attack', () => {
+    expect(ersView(state())).not.toHaveProperty('trendJoint');
+    expect(ersView(state({ storeTrendJPerLap: unknown('realism'), attack: unknown('realism') }))).not.toHaveProperty('trendJoint');
   });
 
   it('prints a falling trend with the true minus and the limit in MJ', () => {

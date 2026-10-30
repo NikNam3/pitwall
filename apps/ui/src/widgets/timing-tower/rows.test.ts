@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { known, toSessionTime, unknown, type Known, type RaceMoment } from '@pitwall/domain';
+import { known, OUT_OF_RACE_STATUSES, toSessionTime, unknown, type Known, type RaceMoment } from '@pitwall/domain';
 import { formatPenaltyMs } from '../../kit/values/format.ts';
 import { boardRow, incidentEntry, interval, lapBoard, ms, overview, sessionInfo, toCar } from './fixtures.ts';
 import { buildRows, type TowerInput } from './rows.ts';
@@ -234,13 +234,29 @@ describe('buildRows', () => {
     expect(rows.slice(0, 3).every((r) => !r.retired && r.retiredAtLap === undefined)).toBe(true);
   });
 
-  it('treats disqualified, not classified and retired as retired; finished stays running', () => {
+  it("treats the domain's out-of-race statuses as retired; finished stays running", () => {
     const input = base();
-    input.cars = (['disqualified', 'notClassified', 'retired', 'finished'] as const).map((status, i) =>
-      overview(i, { name: 'X', position: i + 1, resultStatus: status }));
+    const statuses = [...OUT_OF_RACE_STATUSES, 'finished' as const];
+    input.cars = statuses.map((status, i) => overview(i, { name: 'X', position: i + 1, resultStatus: status }));
     const rows = buildRows(input);
-    expect(rows.map((r) => r.carId)).toEqual([3, 0, 1, 2]);
-    expect(rows.map((r) => r.retired)).toEqual([false, true, true, true]);
+    const finished = statuses.length - 1;
+    expect(rows.map((r) => r.carId)).toEqual([finished, ...statuses.slice(0, -1).map((_, i) => i)]);
+    expect(rows.map((r) => r.retired)).toEqual([false, ...statuses.slice(0, -1).map(() => true)]);
+  });
+
+  // The analysis decides a retired car's TO US reason (review 2, F6): gaps.toCar gives it notApplicable, and the tower
+  // shows the entry as it comes, with no rule of its own.
+  it("shows a retired car's TO US as gaps.toCar gives it, and like any car the topic lacks without an entry", () => {
+    const input = base();
+    input.cars = [
+      ...base().cars,
+      overview(3, { name: 'Esteban Ocon', position: 4, lap: 22, resultStatus: 'retired' }),
+      overview(4, { name: 'Pierre Gasly', position: 5, lap: 9, resultStatus: 'disqualified' }),
+    ];
+    input.toCar = [...base().toCar, toCar(3, undefined)];
+    const rows = buildRows(input);
+    expect(rows.find((r) => r.carId === 3)?.toUs).toEqual({ gapMs: unknown('notApplicable'), lapsDown: 0 });
+    expect(rows.find((r) => r.carId === 4)?.toUs.gapMs).toEqual(unknown('notReceived'));
   });
 
   it('drops unused car slots (invalid, inactive)', () => {

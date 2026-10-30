@@ -186,6 +186,32 @@ describe('Chart: the live segment', () => {
   });
 });
 
+// A line of one point has no segment to draw (review 2, F4): at the end of lap 1 each car's line is one settled point
+// until its next crossing, so every line of one point, settled or live, shows as a dot of its stroke.
+describe('Chart: a line of one point', () => {
+  /** Whether uPlot shows the points of plot series `i`: `points.show` is a boolean or a function of the plot and index. */
+  const shows = (i: number): boolean => {
+    const show = last().opts.series[i]?.points?.show;
+    return typeof show === 'function' ? show({ data: last().data }, i) === true : show === true;
+  };
+  const one = (): Array<[number, number]> => [[1, 5]];
+
+  it('shows a single settled point as a dot in its stroke, and no dots on a line of more points', () => {
+    render(Chart, { ...base, series: [{ label: 'a', points: one(), colour: { colour: '#c13b43', dashed: false, ownCar: false } }, { label: 'b', points: pts(2) }] });
+    const [a] = last().opts.series.slice(1);
+    expect(shows(1), 'a: one settled point').toBe(true);
+    expect(a.points.fill).toBe(a.stroke);
+    expect(shows(2), 'b: three settled points').toBe(false);
+  });
+
+  it('shows a single live point as a dot too (lap 1, before any completed lap)', () => {
+    render(Chart, { ...base, series: [{ label: 'a', points: [[0.4, -1.2]], liveEnd: true }, { label: 'b', points: pts(2) }] });
+    // the settled lines first, then the live lines: series a's live line is plot series 3
+    expect(shows(1), 'a: no settled point').toBe(false);
+    expect(shows(3), 'a: its live point').toBe(true);
+  });
+});
+
 describe('Chart: axes, font, black plot', () => {
   it('labels both axes and draws a grid on both', () => {
     render(Chart, { ...base, series: [{ label: 'a', points: pts(1) }] });

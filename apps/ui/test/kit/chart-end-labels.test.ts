@@ -21,7 +21,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ChartSeries } from '../../src/kit/chart/data.ts';
 import { cellBox } from '../../src/kit/size/size.ts';
 import type { WidgetSize } from '../../src/kit/types.ts';
-import { THEMES, applyTheme } from '../../src/theme/index.ts';
+import { DEFAULT_THEME, THEMES, applyTheme } from '../../src/theme/index.ts';
 
 const { instances } = vi.hoisted(() => ({ instances: [] as any[] }));
 vi.mock('uplot', () => ({
@@ -213,5 +213,23 @@ describe('Chart: the label of a line that ends early', () => {
   it('keeps the labels of the running field in the column right of the plot', () => {
     const { texts, bbox } = drawnTexts(field(), X);
     for (const label of ['VER', 'LEC']) expect(byText(texts, label).x, label).toBeGreaterThanOrEqual(bbox.left + bbox.width);
+  });
+
+  // Review 2, F3: a line that ends one lap before the newest x (a car just lapped) ends a gap and a label width or less
+  // from the plot's right edge. Its label, one gap right of its end, would cross the edge into the label column, where
+  // it can sit on a column label's row; it stays inside the plot instead, at its end's y.
+  it('keeps the label of a line that ends one lap before the newest x inside the plot, clear of the column', () => {
+    // KUH lapped: its live point at 10.8, exactly one lap behind VER's at 11.8
+    const series: ChartSeries[] = [
+      { label: 'VER', points: run(11, 20, 11.8), liveEnd: true, colour: rival },
+      { label: 'LEC', points: run(11, 8, 11.6), liveEnd: true, colour: rival },
+      { label: 'KUH', points: run(10, 8, 10.8), liveEnd: true, colour: own },
+    ];
+    const { texts, bbox, valToPos } = drawnTexts(series, X);
+    const kuh = byText(texts, 'KUH');
+    const width = 'KUH'.length * cellBox(FONT_PX, DEFAULT_THEME.density.lineHeight).width;
+    expect(kuh.x + width).toBeLessThanOrEqual(bbox.left + bbox.width + 1e-9);
+    expect(Math.abs(kuh.y - valToPos(8, 'y'))).toBeLessThanOrEqual(FONT_PX);
+    expect(byText(texts, 'LEC').x).toBeGreaterThanOrEqual(bbox.left + bbox.width);
   });
 });

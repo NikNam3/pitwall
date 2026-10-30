@@ -95,6 +95,27 @@ test('the car workbook is seeded, shows four known surface temperatures and live
   });
   expect(page_).toEqual({ scrollbars: 0, colorScheme: 'dark' });
 
+  // The app route has the no-scroll rule (review 2, F5): the window class is set, the page clips (html and body), and
+  // even with content taller and wider than the window a programmatic scroll moves nothing. Without the rule the probe
+  // below would grow the page and scrollBy would move it.
+  const noScroll = await page.evaluate(() => {
+    const html = document.documentElement;
+    const scroller = document.scrollingElement ?? html;
+    const probe = document.createElement('div');
+    probe.style.cssText = 'width:200vw;height:200vh';
+    document.body.appendChild(probe);
+    window.scrollBy(400, 400);
+    const result = {
+      windowClass: html.classList.contains('pw-window'),
+      overflow: [getComputedStyle(html).overflow, getComputedStyle(document.body).overflow],
+      moved: [scroller.scrollLeft, scroller.scrollTop],
+    };
+    window.scrollTo(0, 0);
+    probe.remove();
+    return result;
+  });
+  expect(noScroll).toEqual({ windowClass: true, overflow: ['hidden', 'hidden'], moved: [0, 0] });
+
   // Jump to the player's line crossing (the replay stays paused): the corner block shows four known surface temperatures.
   await page.getByTestId('replay-lap').fill(JUMP_LAP);
   await page.getByTestId('replay-lap').press('Enter');

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // The tower's TO US cell of a retired car (wave 2, T7; supervisor ruling): its gap to us will not come, so the cell shows
-// the "will not come" mark, faint, the reason on hover, never an empty cell. `gaps.toCar` has no entry for a car out of
-// the race.
+// the "will not come" mark, faint, the reason on hover, never an empty cell. `gaps.toCar` gives a car out of the race
+// `notApplicable` (the analysis decides the reason, review 2, F6).
 import { cleanup, render } from '@testing-library/svelte';
 import type { Component } from 'svelte';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -20,7 +20,7 @@ const data = {
     overview(2, { name: 'Esteban Ocon', position: 3, lap: 22, resultStatus: 'didNotFinish' }),
   ],
   intervals: [interval(0), interval(1, 2184, 2184)],
-  toCar: [toCar(0, -2184), toCar(1, undefined)],
+  toCar: [toCar(0, -2184), toCar(1, undefined), toCar(2, undefined)],
   board: lapBoard(1, [boardRow(0, 104_912), boardRow(1, 104_876), boardRow(2, 'retired')]),
   moment: undefined,
   session: sessionInfo(1),

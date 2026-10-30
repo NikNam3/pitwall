@@ -4,7 +4,7 @@ import { carId, known, toSessionTime, unknown } from '@pitwall/domain';
 import type { GapperLines } from '@pitwall/domain';
 import { ourCars } from '../../kit/car/our-cars.ts';
 import { buildData, clipBands, visibleXRange } from '../../kit/chart/data.ts';
-import { endLabels } from '../../kit/chart/labels.ts';
+import { endLabels, endsEarly } from '../../kit/chart/labels.ts';
 import { gapperReference, gapSeries, phaseBands, REFERENCE_KINDS } from './series.ts';
 import { TEAM_COLOURS } from '../../theme/team-colours.ts';
 
@@ -187,6 +187,26 @@ describe('gapSeries: the live point', () => {
   it("each car's end label sits at its live end", () => {
     const series = gapSeries(lines, cars, ours);
     expect(endLabels(series, range(series)).map((l) => [l.text, l.value])).toEqual([['VER', -0.7], ['KUH', -2.9], ['NOR', 1.5]]);
+  });
+
+  // `gaps.gapper` keeps an out-of-race car's line (review 2, F2): its completed laps and `now` notApplicable. The line
+  // stops where the car stopped, and its label goes to its own end.
+  it("draws a retired car's line, as gaps.gapper gives it, to its last completed lap, named at its own end", () => {
+    const longer: GapperLines = {
+      ...lines,
+      cars: [
+        { carId: carId(2), byLap: [1, 2, 3, 4, 5].map((lap) => ({ lap, gapMs: 250 * lap })), now: live(5.4, 1400) },
+        { carId: carId(3), byLap: [{ lap: 1, gapMs: -500 }, { lap: 2, gapMs: -1500 }], now: NO_NOW },
+      ],
+    };
+    const series = gapSeries(longer, cars, ours);
+    const nor = series.find((x) => x.label === 'NOR');
+    expect(nor?.points).toEqual([[1, 0.5], [2, 1.5]]);
+    expect(nor).not.toMatchObject({ liveEnd: true });
+    const visible = range(series);
+    const label = endLabels(series, visible).find((l) => l.text === 'NOR')!;
+    expect([label.x, label.value]).toEqual([2, 1.5]);
+    expect(endsEarly(label, visible, 'lap')).toBe(true);
   });
 
   it('a safety car that ended mid-lap ends there, before the newest live point', () => {

@@ -60,7 +60,9 @@ describe('incidentRows', () => {
 
   it('leaves an unknown position out of the plain text, with its reason on hover (no invented position)', () => {
     const [row] = incidentRows([entry({ forUs: [forUs({ positionBefore: unknown('notReceived') })] })], cars, undefined);
-    expect(row!.cells.forUs).toMatchObject({ text: 'us, OCO +4.1→DNF', reason: 'notReceived' });
+    expect(row!.cells.forUs.reason).toBe('notReceived');
+    expect(row!.cells.forUs.text).not.toMatch(/P\d/);
+    expect(row!.cells.forUs.text.endsWith(', OCO +4.1→DNF')).toBe(true);
   });
 
   it('gives an unknown gap after its reason on hover; DNF (not applicable) needs none', () => {
@@ -80,12 +82,35 @@ describe('incidentRows', () => {
     expect(row!.cells.forUs.text.startsWith('us P7→,')).toBe(true);
   });
 
-  it('leaves the gap part out when both gaps are unknown, and the cell empty without forUs', () => {
+  it('keeps the other car and the arrow when both gaps are unknown, each mark in its place; the cell is empty without forUs', () => {
     const [a, b] = incidentRows(
       [entry({ forUs: [forUs({ gapBeforeMs: unknown('insufficientData'), gapAfterMs: unknown('insufficientData') })] }), minor()],
       cars, undefined);
-    expect(a!.cells.forUs.text).toBe('us P5→P4');
+    expect(a!.cells.forUs).toMatchObject({ text: 'us P5→P4, OCO →', reason: 'insufficientData' });
+    expect(a!.cells.forUs.parts?.filter((p) => p.reason !== undefined).map((p) => p.reason)).toEqual(['insufficientData', 'insufficientData']);
     expect(b!.cells.forUs.text).toBe('');
+  });
+
+  // One builder of the for-us cell (review 2, F7): the parts are built once, the plain text is their texts joined and
+  // the hover reason the first unknown part's, so the text and the marks never disagree.
+  describe('the for-us cell is built from its parts', () => {
+    const cases: Record<string, IncidentForUs[]> = {
+      'position before unknown': [forUs({ positionBefore: unknown('notReceived') })],
+      'position after unknown': [forUs({ positionAfter: unknown('insufficientData') })],
+      'gap after not received': [forUs({ gapAfterMs: unknown('notReceived') })],
+      'both gaps unknown': [forUs({ gapBeforeMs: unknown('insufficientData'), gapAfterMs: unknown('realism') })],
+      'other car missing from the field, gap after unknown': [forUs({ otherCarId: k(carId(9)), gapAfterMs: unknown('notReceived') })],
+      'no other car': [forUs({ otherCarId: unknown('notApplicable'), positionAfter: unknown('notReceived') })],
+      'player and teammate, the second unknown': [forUs(), forUs({ ourCarId: carId(5), positionBefore: unknown('realism') })],
+    };
+
+    it.each(Object.entries(cases))('%s: the text is the parts joined, the reason the first unknown part\'s', (_name, list) => {
+      const [row] = incidentRows([entry({ forUs: list })], cars, undefined);
+      const cell = row!.cells.forUs;
+      expect(cell.parts, 'an unknown value has its part').toBeDefined();
+      expect(cell.text).toBe(cell.parts!.map((p) => p.text).join(''));
+      expect(cell.reason).toBe(cell.parts!.find((p) => p.reason !== undefined)?.reason);
+    });
   });
 
   it('renders an unresolved time loss as an empty cell with its reason on hover', () => {
