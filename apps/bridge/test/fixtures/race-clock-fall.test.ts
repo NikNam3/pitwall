@@ -1,65 +1,43 @@
-// The clock reset at the race start, on race-zandvoort-clock-reset (facts in fixtures/index.json): the formation lap,
-// then the race from a session time the formation lap already passed, frame ids rising, no FLBK. The engine and
-// `gaps` only; one replay feeds every test.
+// A fall of the session time that is no race start changes nothing (spec 3.3, "any other fall"), on
+// race-zandvoort-clock-reset (facts in fixtures/index.json): the formation lap from 2 s, then the race from 2 s again,
+// frame ids rising, no FLBK and no lights out in between. The engine alone; one replay feeds every test.
 import { beforeAll, describe, expect, it } from 'vitest';
-import { GAPS, gapsCalculator, type GapsOutput } from '@pitwall/analysis';
-import type { Known, Ms } from '@pitwall/domain';
-import type { StepResult } from '@pitwall/engine';
-import { replayScheduled } from './engine-replay.ts';
+import type { History, StepResult } from '@pitwall/engine';
+import { replayRunner } from './engine-replay.ts';
 import { segmentPath } from './replay.ts';
 
-/** One step after the reset: its session time and the gaps then. */
-type After = { sessionTime: number; gaps: GapsOutput };
-
 const run: {
-  /** The step whose session time fell by more than 1 s, and the session time before it. */
-  reset: { result: StepResult; fromMs: number; toMs: number } | undefined;
-  /** Every step from the reset on. */
-  after: After[];
-} = { reset: undefined, after: [] };
+  /** The step whose session time fell by more than 1 s, and the history just before it. */
+  fall: { result: StepResult; before: History } | undefined;
+  /** Whether any step was truncated. */
+  truncated: boolean[];
+  phases: string[];
+} = { fall: undefined, truncated: [], phases: [] };
 
 beforeAll(async () => {
-  let previous: number | undefined;
-  await replayScheduled(segmentPath('race-zandvoort-clock-reset.pwrec.gz'), [gapsCalculator], (r, scheduled) => {
+  let previous: { at: number; history: History } | undefined;
+  const runner = await replayRunner(segmentPath('race-zandvoort-clock-reset.pwrec.gz'), (r) => {
     const now = r.state.sessionTime;
-    if (run.reset === undefined && previous !== undefined && now < previous - 1000) {
-      run.reset = { result: r, fromMs: previous, toMs: now };
-    }
-    previous = now;
-    if (run.reset !== undefined) run.after.push({ sessionTime: now, gaps: structuredClone(scheduled.outputs.get(GAPS) as GapsOutput) });
+    if (run.fall === undefined && previous !== undefined && now < previous.at - 1000) run.fall = { result: r, before: previous.history };
+    run.truncated.push(r.delta.truncated);
+    previous = { at: now, history: structuredClone(r.state.history) as History };
   });
+  run.phases = [...runner.state.history.sessionPhases, runner.state.open.situations.session].map((p) => p.kind);
 });
 
-/** The car's three gaps by name. */
-const gapsOf = (i: GapsOutput['intervals'][number]): Array<[string, Known<Ms>]> => [
-  ['toLeaderMs', i.toLeaderMs],
-  ['toAheadMs', i.toAheadMs],
-  ['toBehindMs', i.toBehindMs],
-];
-
-describe('race-zandvoort-clock-reset: the session time falls back at the race start', () => {
-  it('the fall is a clock reset: the step is truncated and reports it, and is no flashback', () => {
-    const { result, fromMs, toMs } = run.reset!;
-    expect([result.delta.truncated, result.clockReset, result.flashback]).toEqual([true, { fromMs, toMs }, undefined]);
+describe('race-zandvoort-clock-reset: the session time falls back without a start in between', () => {
+  it('no step is truncated and no flashback is reported', () => {
+    expect(run.truncated.filter(Boolean)).toEqual([]);
+    expect(run.fall!.result.flashback).toBeUndefined();
   });
-  it('from the reset on, every known gap was measured on the new clock: after the reset and no later than the frame', () => {
-    const { toMs } = run.reset!;
-    const off = run.after.flatMap(({ sessionTime, gaps }) =>
-      gaps.intervals.flatMap((i) =>
-        gapsOf(i).flatMap(([name, gap]) =>
-          gap.known && (gap.at < toMs || gap.at > sessionTime) ? [`car ${i.carId} ${name} at ${gap.at} on the frame at ${sessionTime}`] : [],
-        ),
-      ),
-    );
-    expect(off.slice(0, 10)).toEqual([]);
+  it('the history recorded before the fall stays as it was', () => {
+    const { result, before } = run.fall!;
+    const h = result.state.history;
+    expect({ events: h.events.slice(0, before.events.length), miniSectors: h.miniSectors.slice(0, before.miniSectors.length) })
+      .toEqual({ events: before.events, miniSectors: before.miniSectors });
+    expect(before.miniSectors.length).toBeGreaterThan(0);
   });
-  it('by the end every running car has its gaps again from the crossings after the reset', () => {
-    const last = run.after.at(-1)!;
-    const [leader, ...rest] = last.gaps.intervals;
-    const unknownGaps = [
-      ...(leader!.toLeaderMs.known ? [] : [`leader ${leader!.carId} toLeaderMs`]),
-      ...rest.flatMap((i) => gapsOf(i).slice(0, 2).flatMap(([name, gap]) => (gap.known ? [] : [`car ${i.carId} ${name}`]))),
-    ];
-    expect(unknownGaps).toEqual([]);
+  it('without lights out no phase reaches racing', () => {
+    expect(run.phases).not.toContain('racing');
   });
 });

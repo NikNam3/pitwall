@@ -14,5 +14,5 @@ export const viewFrom = (frames: readonly Frame[], feed: Partial<FeedMetricsView
   const runner = new SessionRunner(initFor(fromSession));
   const results = fromSession.map((f) => runner.apply(f));
   const last = results.at(-1)!;
-  return { state: last.state, activeFlagPhase: activeFlagPhaseOf(runner.state), changed: last.changed, delta: last.delta, feed: { ...IDLE_FEED, ...feed }, outputs: new Map(), config };
+  return { state: last.state, activeFlagPhase: activeFlagPhaseOf(runner.state), situation: runner.state.open.situations, changed: last.changed, delta: last.delta, feed: { ...IDLE_FEED, ...feed }, outputs: new Map(), config };
 };
