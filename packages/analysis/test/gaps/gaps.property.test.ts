@@ -3,6 +3,7 @@ import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import type { GapsOutput } from '../../src/gaps/index.ts';
 import { gapperLines, gapsToCar } from '../../src/gaps/gaps.ts';
+import { flagPhase } from '../../../../test-support/builders/index.ts';
 import { byTime, plain, progressOf, run, viewOf } from './race.ts';
 
 /**
@@ -118,6 +119,48 @@ describe('gap properties', () => {
           expect(Math.abs(car.now.value.gapMs - (lap * 90_000 - newest.at))).toBeLessThanOrEqual(0.5);
           expect(car.now.at).toBe(newest.at);
         }
+      }),
+    );
+  });
+
+  it("a phase lies at the leader's progress at its start and its end: the furthest crossing of any car by then, / 50", () => {
+    const phaseArb = fc.record({ race: raceArb, a: fc.double({ min: 0, max: 1, noNaN: true }), b: fc.double({ min: 0, max: 1, noNaN: true }) });
+    fc.assert(
+      fc.property(phaseArb, ({ race, a, b }) => {
+        const all = crossingsOf(race);
+        const history = all.slice(0, 1 + Math.floor(race.cut * (all.length - 1)));
+        const first = history[0]!.at;
+        const last = history.at(-1)!.at;
+        const [start, end] = [a, b].map((f) => Math.round(first + f * (last - first))).sort((x, y) => x - y) as [number, number];
+        const leaderAt = (t: number) => Math.max(...history.filter((m) => m.at <= t).map(progressOf)) / MINI_SECTORS;
+        const lines = gapperLines(run(viewOf(history, { flagPhases: [flagPhase({ start, end })] })), { kind: 'fixed', lapMs: 90_000 });
+        expect(lines.phases).toHaveLength(1);
+        const [phase] = lines.phases;
+        expect(phase!.fromLap).toBeCloseTo(leaderAt(start), 9);
+        if (!phase!.toLap.known) throw new Error(`a closed phase has no toLap: ${phase!.toLap.reason}`);
+        expect(phase!.toLap.value).toBeCloseTo(leaderAt(end), 9);
+        expect(phase!.fromLap).toBeLessThanOrEqual(phase!.toLap.value);
+      }),
+    );
+  });
+
+  it("the leader average is the leader's race time at its newest crossing over its progress, at any moment", () => {
+    fc.assert(
+      fc.property(raceArb, (race) => {
+        const all = crossingsOf(race);
+        const history = all.slice(0, 1 + Math.floor(race.cut * (all.length - 1)));
+        const out = run(viewOf(history));
+        const leader = out.intervals[0]!.carId;
+        const newest = history.findLast((m) => m.carId === leader)!;
+        const value = gapperLines(out, { kind: 'leaderAverage' }).referenceLapMs;
+        const progress = progressOf(newest);
+        if (progress === 0) {
+          expect(value).toEqual({ known: false, reason: 'insufficientData' });
+          return;
+        }
+        if (!value.known) throw new Error(`no leader average at progress ${progress}: ${value.reason}`);
+        expect(Number.isInteger(value.value)).toBe(true);
+        expect(Math.abs(value.value - newest.at / (progress / MINI_SECTORS))).toBeLessThanOrEqual(0.5);
       }),
     );
   });

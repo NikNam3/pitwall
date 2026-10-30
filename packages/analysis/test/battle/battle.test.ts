@@ -55,6 +55,8 @@ const build = (s: Scene): EngineView => {
     positionsGained: known(0, 311_600),
   });
   const gaps: GapsOutput = {
+    finished: [],
+    phases: [],
     intervals: (s.order ?? [1, 0, 3]).map(interval),
     lineTimes: Object.fromEntries(Object.entries(s.lineTimes).map(([k, v]) => [k, v])) as GapsOutput['lineTimes'],
     recent: {},

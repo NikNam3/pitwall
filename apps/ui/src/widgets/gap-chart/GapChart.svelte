@@ -16,7 +16,7 @@
 
   const ours = $derived(ourCars(data.session));
   const series = $derived(gapSeries(data.gapper, data.cars, ours));
-  const bands = $derived(phaseBands(data.phases));
+  const bands = $derived(phaseBands(data.gapper.phases));
   const header = $derived(text.referenceText(data.gapper, (id) => carCodeById(data.cars, id)));
   // The reference line takes one text row; the chart gets the rest.
   const rowPx = $derived(size.px.height / size.rows);
@@ -24,8 +24,8 @@
 </script>
 
 <div class="gap">
-  <!-- The unknown part of the line (the lap time, or the reference car's code) shows as one mark at its end. -->
-  <div class="ref" style:color={role('textDim')} style:height="{rowPx}px">{header.text}{#if header.reason}&nbsp;<UnknownMark reason={header.reason} />{/if}</div>
+  <!-- The parts of the line, a space apart; an unknown part (the lap time, or the reference car's code) shows its mark there. -->
+  <div class="ref" style:color={role('textDim')} style:height="{rowPx}px">{#each header as part, i (i)}{#if i > 0}&nbsp;{/if}{#if 'reason' in part}<UnknownMark reason={part.reason} />{:else}{part.text}{/if}{/each}</div>
   {#if series.length === 0}
     <div class="empty" style:color={role('textDim')}>{noDataYet}</div>
   {:else}

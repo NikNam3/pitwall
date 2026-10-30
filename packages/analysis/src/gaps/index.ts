@@ -1,5 +1,5 @@
 // `gaps` (spec 6.1): every gap from the mini-sector crossings; publishes `gaps.intervals`, `gaps.toCar`, `gaps.gapper`, `gaps.neighbourhood`.
-import type { Known, CarId, Interval, Neighbourhood, SessionTime } from '@pitwall/domain';
+import type { Known, CarId, GapperLines, Interval, Neighbourhood, SessionTime } from '@pitwall/domain';
 
 export type { GapperLines, GapperReference, GapToCar, Interval, Neighbourhood } from '@pitwall/domain';
 export * from './config.ts';
@@ -24,4 +24,8 @@ export type GapsOutput = {
   neighbourhood: Neighbourhood[];
   /** When the race started (the lights-out event); the gapper counts each car's race time from it. `notApplicable` outside a race, `notReceived` before lights out. */
   raceStartAt: Known<SessionTime>;
+  /** The cars that took the chequered flag: their race ended at their last line crossing, so the gapper has no `now` for them. */
+  finished: CarId[];
+  /** The race's neutralised phases in the leader's progress at their start and end (`GapperLines.phases`); `[]` outside a race. */
+  phases: GapperLines['phases'];
 };

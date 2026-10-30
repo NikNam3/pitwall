@@ -1,7 +1,9 @@
 <script lang="ts">
   // The line chart every display uses (spec 5): uPlot on a black plot with labelled axes and grids; each line is named at
   // its right end in its colour (our car bold), labels pushed apart where lines end close together; when they cannot all
-  // fit, ours and the ones nearest to ours keep theirs. A series' live end is drawn dotted (`ChartSeries.liveEnd`).
+  // fit, ours and the ones nearest to ours keep theirs. A line that ends well before the newest x (a retired or lapped
+  // car) is named at its own end instead. A series' live end is drawn dotted (`ChartSeries.liveEnd`): every series has
+  // its live line, empty when not live, so a live end that comes or goes is a data change, never a rebuild.
   // Nothing scales with the panel: more width shows more history (the x-range follows the width in cells).
   import { untrack } from 'svelte';
   import uPlot from 'uplot';
@@ -12,7 +14,8 @@
   import type { WidgetSize } from '../types.ts';
   import { buildData, clipBands, plotLines, visibleXRange } from './data.ts';
   import type { ChartSeries, PhaseBand } from './data.ts';
-  import { endLabels, placeLabels } from './labels.ts';
+  import { endLabels, endsEarly, placeLabels } from './labels.ts';
+  import type { EndLabel } from './labels.ts';
 
   type Props = {
     series: ChartSeries[];
@@ -53,7 +56,7 @@
 
   /** What changes the look of the plot but not its data or size: a change rebuilds the plot. */
   const structure = $derived(
-    JSON.stringify([series.map((s) => [s.label, s.colour, s.fresh, s.liveEnd === true]), bands, xLabel, yLabel, x.kind]),
+    JSON.stringify([series.map((s) => [s.label, s.colour, s.fresh]), bands, xLabel, yLabel, x.kind]),
   );
 
   // Structural effect: builds the plot. Data and size changes are handled below on the same instance.
@@ -79,7 +82,7 @@
       const boldWeight = token(root, '--pw-weight-bold', DEFAULT_THEME.table.boldWeight);
       // The labels sit one column gap right of the plot; the plot leaves room for the gap and the longest label.
       const cellPx = cellBox(fontPx, DEFAULT_THEME.density.lineHeight).width;
-      const labelGapPx = token(root, '--pw-col-gap', DEFAULT_THEME.density.columnGapCols) * cellPx;
+      const labelGapPx = token(root, '--pw-col-gap-cols', DEFAULT_THEME.density.columnGapCols) * cellPx;
       const labelRoomPx = labelGapPx + cellPx * series.reduce((m, s) => Math.max(m, s.label.length), 0);
       const grid = resolveRole(el, 'grid');
       const axis = { stroke: resolveRole(el, 'textDim'), font, labelFont: font, grid: { stroke: grid }, ticks: { stroke: grid } };
@@ -96,10 +99,12 @@
       }));
 
       const plotted = plotLines(series);
-      // The live segments follow the series' own lines, in their look but dotted.
+      // The live lines follow the series' own lines, in their look but dotted. A live line of one point (lap 1: no
+      // settled point yet) has no segment to draw, so it shows as a dot of its stroke.
+      const onePoint = (u: uPlot, i: number): boolean => (u.data[i] ?? []).filter((v) => v !== null && v !== undefined).length === 1;
       const liveLines = plotted.flatMap((p) => {
         const line = p.live ? lines[p.of] : undefined;
-        return line ? [{ ...line, dash: liveDash }] : [];
+        return line ? [{ ...line, dash: liveDash, points: { show: onePoint, size: 2 * line.width, fill: line.stroke, stroke: line.stroke } }] : [];
       });
       const data = buildData(plotted);
       xs = data[0] as number[];
@@ -109,25 +114,35 @@
       const redFill = resolveRole(el, 'flagRed');
       const bandList = bands ?? [];
 
-      /** Paints each line's label right of the plot, at its end (canvas px: scaled by the canvas' pixel ratio). */
+      /**
+       * Paints each line's label: right of the plot at its end, or, for a line that ends early, one gap right of its own
+       * end (canvas px: scaled by the canvas' pixel ratio).
+       */
       const drawLabels = (u: uPlot): void => {
         const ratio = uPlot.pxRatio;
         const rowPx = fontPx * ratio;
-        const labels = endLabels(untrack(() => series), visibleXRange(xs, cols, x.kind, xPerCell));
-        const ys = placeLabels(labels.map((l) => u.valToPos(l.value, 'y', true) - u.bbox.top), rowPx, u.bbox.height, labels.map((l) => l.bold));
-        const left = u.bbox.left + u.bbox.width + labelGapPx * ratio;
-        u.ctx.save();
-        u.ctx.textAlign = 'left';
-        u.ctx.textBaseline = 'middle';
-        labels.forEach((l, i) => {
+        const range = visibleXRange(xs, cols, x.kind, xPerCell);
+        const labels = endLabels(untrack(() => series), range);
+        const early = labels.filter((l) => endsEarly(l, range, x.kind));
+        const column = labels.filter((l) => !endsEarly(l, range, x.kind));
+        const ys = placeLabels(column.map((l) => u.valToPos(l.value, 'y', true) - u.bbox.top), rowPx, u.bbox.height, column.map((l) => l.bold));
+        const columnLeft = u.bbox.left + u.bbox.width + labelGapPx * ratio;
+        const draw = (l: EndLabel, left: number, y: number): void => {
           const line = lines[l.index];
-          const y = ys[i];
-          if (!line || y === undefined) return;
+          if (!line) return;
           u.ctx.font = `${l.bold ? `${boldWeight} ` : ''}${rowPx}px ${cssVar(root, '--pw-font')}`;
           u.ctx.fillStyle = line.stroke;
           u.ctx.globalAlpha = line.alpha;
-          u.ctx.fillText(l.text, left, u.bbox.top + y);
+          u.ctx.fillText(l.text, left, y);
+        };
+        u.ctx.save();
+        u.ctx.textAlign = 'left';
+        u.ctx.textBaseline = 'middle';
+        column.forEach((l, i) => {
+          const y = ys[i];
+          if (y !== undefined) draw(l, columnLeft, u.bbox.top + y);
         });
+        for (const l of early) draw(l, u.valToPos(l.x, 'x', true) + labelGapPx * ratio, u.valToPos(l.value, 'y', true));
         u.ctx.restore();
       };
 

@@ -47,6 +47,12 @@ export type GapperLines = {
      */
     now: Known<{ lap: number; gapMs: Ms }>;
   }[];
+  /**
+   * The race's neutralised phases in the leader's progress (completed laps plus the part of the current lap, from the
+   * leader's crossings at the phase start and end), on the same x as `byLap` and `now`; `toLap` `notApplicable` while
+   * the phase is open.
+   */
+  phases: { kind: 'SC' | 'VSC' | 'red'; fromLap: number; toLap: Known<number> }[];
 };
 
 /** `gaps.neighbourhood`: the cars within ±1 position or ±`neighbourhoodMs` of one of our cars. */

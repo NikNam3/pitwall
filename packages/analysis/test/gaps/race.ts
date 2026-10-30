@@ -1,5 +1,5 @@
 // Test races for `gaps`: mini-sector histories with car states that agree with them (position, lap, total distance).
-import { carId, MINI_SECTORS, type CarId, type CarState, type MiniSectorCrossing, type ResultStatus, type SessionKind } from '@pitwall/domain';
+import { carId, MINI_SECTORS, type CarId, type CarState, type FlagPhase, type MiniSectorCrossing, type ResultStatus, type SessionKind } from '@pitwall/domain';
 import { historyLengths, type EngineView } from '@pitwall/engine';
 import { carState, crossings, engineView, event } from '../../../../test-support/builders/index.ts';
 import { gapsCalculator } from '../../src/gaps/calculator.ts';
@@ -63,7 +63,8 @@ export function carsFor(miniSectors: MiniSectorCrossing[], over: Record<number, 
 
 /**
  * The race view over these crossings, every crossing new; `cars` default to `carsFor(miniSectors)`. The lights go out
- * at `lightsOutAt` (default 0, as `field` starts); `null` means not yet.
+ * at `lightsOutAt` (default 0, as `field` starts); `null` means not yet. `flagPhases` are the closed neutralised phases
+ * (history), `activeFlagPhase` the open one (default none).
  */
 export const viewOf = (
   miniSectors: MiniSectorCrossing[],
@@ -73,11 +74,22 @@ export const viewOf = (
     config = {},
     lightsOutAt = 0,
     kind = 'race',
-  }: { cars?: CarState[]; playerCar?: number; config?: EngineView['config']; lightsOutAt?: number | null; kind?: SessionKind } = {},
+    flagPhases = [],
+    activeFlagPhase,
+  }: {
+    cars?: CarState[];
+    playerCar?: number;
+    config?: EngineView['config'];
+    lightsOutAt?: number | null;
+    kind?: SessionKind;
+    flagPhases?: FlagPhase[];
+    activeFlagPhase?: EngineView['activeFlagPhase'];
+  } = {},
 ): EngineView =>
   engineView({
     cars: cars ?? carsFor(miniSectors),
-    history: { miniSectors, events: lightsOutAt === null ? [] : [event({ kind: 'lightsOut', at: lightsOutAt })] },
+    history: { miniSectors, events: lightsOutAt === null ? [] : [event({ kind: 'lightsOut', at: lightsOutAt })], flagPhases },
+    activeFlagPhase,
     playerCar,
     config,
     session: { kind },

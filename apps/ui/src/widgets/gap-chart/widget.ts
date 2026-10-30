@@ -1,8 +1,8 @@
 // Declaration of the gap-chart display (spec 8.3 V04): each car's gap to a virtual car at the reference pace, per lap.
 import type { GapperParams } from '@pitwall/contracts';
-import { declareWidget, folded, optional, topic } from '../../kit/define-widget.ts';
+import { declareWidget, optional, topic } from '../../kit/define-widget.ts';
 import { carOption, choiceOption, numberOption } from '../../kit/options.ts';
-import { gapperReference, phasesFold, REFERENCE_KINDS } from './series.ts';
+import { gapperReference, REFERENCE_KINDS } from './series.ts';
 
 export const widget = declareWidget({
   name: 'gap-chart',
@@ -15,7 +15,6 @@ export const widget = declareWidget({
         fixedLapS: options['fixedLapS'],
       }, link.primary),
     })),
-    phases: folded('flagPhases', phasesFold),
     cars: topic('cars.overview'),
     session: optional(topic('session.info')),
   },
