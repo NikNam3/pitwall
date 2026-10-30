@@ -11,6 +11,7 @@ export type BattleSide = {
   gapMs: Known<Ms>;
   /** Positive = the gap shrinks. */
   closingMsPerLap: Known<number>;
+  /** `notApplicable` while race control has DRS off (`BattleCard.drs`). */
   lapsToDrs: Known<number>;
   /** Positive = we are faster. */
   paceDeltaMs: Known<Ms>;
@@ -21,5 +22,11 @@ export type BattleSide = {
   theirErsStoreJ: Known<Joules>;
 };
 
+/** Why race control has DRS off: the game's DRSD reasons, `notEnabledYet` before a race's first DRSE, `unknown` for a reason code we don't know. */
+export type DrsOffReason = 'notEnabledYet' | 'wetTrack' | 'safetyCar' | 'redFlag' | 'minLapNotReached' | 'unknown';
+
+/** Whether race control allows DRS now, from the game's DRSE and DRSD events. */
+export type DrsStatus = { enabled: true } | { enabled: false; reason: DrsOffReason };
+
 /** `battle.cards`: one of our cars against the car ahead and the car behind; `notApplicable` where there is none. */
-export type BattleCard = { carId: CarId; ahead: Known<BattleSide>; behind: Known<BattleSide> };
+export type BattleCard = { carId: CarId; ahead: Known<BattleSide>; behind: Known<BattleSide>; drs: DrsStatus };

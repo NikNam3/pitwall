@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { carId, known, unknown } from '@pitwall/domain';
-import type { BattleCard, BattleSide, Known, RaceMoment } from '@pitwall/domain';
+import type { BattleCard, BattleSide, DrsOffReason, DrsStatus, Known, RaceMoment } from '@pitwall/domain';
 import type { CarOverview } from '@pitwall/contracts';
 import { battleHeader, battleRowText, battleRows, columnsFor } from './rows.ts';
 
@@ -19,7 +19,13 @@ const behindSide: BattleSide = {
   carId: carId(7), gapMs: k(841), closingMsPerLap: k(220), lapsToDrs: k(0), paceDeltaMs: k(-420), overtakeMarginMs: k(-1420),
   ours: { compound: 'medium', age: 12 }, theirs: { compound: 'medium', age: 1 }, theirErsStoreJ: unknown('realism'),
 };
-const card = (over: Partial<BattleCard> = {}): BattleCard => ({ carId: OURS, ahead: k(aheadSide), behind: k(behindSide), ...over });
+const card = (over: Partial<BattleCard> = {}): BattleCard => ({ carId: OURS, ahead: k(aheadSide), behind: k(behindSide), drs: { enabled: true }, ...over });
+
+/** A card as battle gives it while race control has DRS off: both sides' lapsToDrs notApplicable. */
+const drsOff = (reason: DrsOffReason, over: Partial<BattleCard> = {}): BattleCard => {
+  const drs: DrsStatus = { enabled: false, reason };
+  return card({ ahead: k({ ...aheadSide, lapsToDrs: unknown('notApplicable') }), behind: k({ ...behindSide, lapsToDrs: unknown('notApplicable') }), drs, ...over });
+};
 
 const battle = (params: Record<string, number | string> = { carId: 1, side: 'behind', lapsToDrs: 0, gapMs: 841 }): Known<RaceMoment> =>
   k({ moment: 'battle', since: unknown('notApplicable'), cause: { rule: 'battle', params }, active: ['battle'] });
@@ -100,6 +106,48 @@ describe('battleRows', () => {
     for (const m of [undefined, unknown('notApplicable')] as const) {
       expect(battleRows(card(), cars, m).some((r) => r.highlighted)).toBe(false);
     }
+  });
+});
+
+describe('battleRows while race control has DRS off', () => {
+  it('TO DRS reads "DRS off" on both rows, with the reason in its title, and no unknown reason', () => {
+    for (const row of battleRows(drsOff('wetTrack'), cars, undefined)) {
+      expect(row.cells.toDrs).toEqual({ text: 'DRS off', title: 'DRS off: wet track' });
+    }
+  });
+
+  it('every reason has its own title, each starting "DRS off"', () => {
+    const reasons: DrsOffReason[] = ['notEnabledYet', 'wetTrack', 'safetyCar', 'redFlag', 'minLapNotReached', 'unknown'];
+    const titles = reasons.map((r) => (battleRows(drsOff(r), cars, undefined)[0]!.cells.toDrs as Record<string, unknown>)['title']);
+    for (const t of titles) expect(t).toMatch(/^DRS off/);
+    expect(new Set(titles).size).toBe(reasons.length);
+  });
+
+  it('the other cells are those with DRS enabled', () => {
+    const on = battleRows(card(), cars, undefined);
+    const off = battleRows(drsOff('safetyCar'), cars, undefined);
+    off.forEach((row, i) => {
+      const { toDrs: _off, ...rest } = row.cells;
+      const { toDrs: _on, ...restOn } = on[i]!.cells;
+      expect(rest).toEqual(restOn);
+    });
+  });
+
+  it('a side that is not applicable stays a row of empty cells with the reason', () => {
+    const rows = battleRows(drsOff('wetTrack', { ahead: unknown('notApplicable') }), cars, undefined);
+    for (const cell of Object.values(rows[0]!.cells)) expect(cell).toEqual({ text: '', reason: 'notApplicable' });
+    expect(rows[1]!.cells.toDrs.text).toBe('DRS off');
+  });
+
+  it('the battle moment still lights TO DRS of its row', () => {
+    const [, behind] = battleRows(drsOff('wetTrack'), cars, battle({ carId: 1, side: 'behind', gapMs: 841 }));
+    expect(behind!.cells.toDrs).toMatchObject({ text: 'DRS off', role: 'text' });
+  });
+
+  it('full and compact rows show DRS off in the TO DRS field', () => {
+    const [ahead] = battleRows(drsOff('wetTrack'), cars, undefined);
+    expect(battleRowText('full', ahead!)).toBe('AHEAD  LEC −3.199 0.31 s/lap  DRS off  +0.29  −0.71 M12 H23 3.1 MJ');
+    expect(battleRowText('compact', ahead!)).toBe('AHEAD  LEC −3.199  DRS off');
   });
 });
 

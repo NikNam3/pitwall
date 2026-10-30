@@ -1,4 +1,4 @@
-import type { BattleCard, BattleSide, Known, RaceMoment, UnknownReason, VisualCompound } from '@pitwall/domain';
+import type { BattleCard, BattleSide, DrsStatus, Known, RaceMoment, UnknownReason, VisualCompound } from '@pitwall/domain';
 import type { CarOverview } from '@pitwall/contracts';
 import { carCodeById } from '../../kit/car/car-label.ts';
 import { gridRow, type GridColumn } from '../../kit/grid/grid.ts';
@@ -10,7 +10,8 @@ import { battleRole, type Side } from './emphasis.ts';
 import * as text from './text.ts';
 
 export type ColumnId = 'drv' | 'gap' | 'closing' | 'toDrs' | 'paceDelta' | 'margin' | 'tyres' | 'ers';
-export type Cell = { text: string; role?: Role; reason?: UnknownReason };
+/** A field: its text, its emphasis, why it is empty (`reason`) or what it means on hover (`title`). */
+export type Cell = { text: string; role?: Role; reason?: UnknownReason; title?: string };
 export type TyrePair = { ours: { compound: VisualCompound; age: number }; theirs: { compound: VisualCompound; age: number } };
 export type BattleRow = {
   label: 'AHEAD' | 'BEHIND';
@@ -47,6 +48,10 @@ const GAP_SIGN: Record<Side, 1 | -1> = { ahead: -1, behind: 1 };
 const valueCell = <T>(v: Known<T>, format: (t: T) => string): Cell =>
   v.known ? { text: format(v.value) } : { text: '', reason: v.reason };
 
+/** TO DRS: the laps to DRS range, or "DRS off" with race control's reason while DRS is off. */
+const toDrsCell = (lapsToDrs: Known<number>, drs: DrsStatus): Cell =>
+  drs.enabled ? valueCell(lapsToDrs, (n) => (n === 0 ? text.inDrs : formatLaps(n))) : { text: text.drsOff, title: text.drsOffTitle[drs.reason] };
+
 const tyreText = (side: BattleSide): string => `${compoundText(side.ours.compound, side.ours.age)} ${compoundText(side.theirs.compound, side.theirs.age)}`;
 
 function sideRow(label: BattleRow['label'], side: Side, card: BattleCard, cars: readonly CarOverview[], moment: Known<RaceMoment> | undefined): BattleRow {
@@ -61,7 +66,7 @@ function sideRow(label: BattleRow['label'], side: Side, card: BattleCard, cars: 
     drv: carCodeById(cars, s.carId),
     gap: valueCell(s.gapMs, (ms) => formatSignedSeconds(GAP_SIGN[side] * ms, 3)),
     closing: valueCell(s.closingMsPerLap, formatSecondsPerLapPlain),
-    toDrs: valueCell(s.lapsToDrs, (n) => (n === 0 ? text.inDrs : formatLaps(n))),
+    toDrs: toDrsCell(s.lapsToDrs, card.drs),
     paceDelta: valueCell(s.paceDeltaMs, (ms) => formatSignedSeconds(ms, 2)),
     margin: valueCell(s.overtakeMarginMs, (ms) => formatSignedSeconds(ms, 2)),
     tyres: { text: tyreText(s) },

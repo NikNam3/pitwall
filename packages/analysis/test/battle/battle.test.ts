@@ -1,5 +1,5 @@
 // `battle` (spec 6.3): our cars against the car ahead and behind, from `gaps` and `pace` outputs.
-import { carId, known, unknown, type CarId, type CarState, type Interval, type Known, type Ms } from '@pitwall/domain';
+import { carId, known, unknown, type BattleCard, type CarId, type CarState, type DrsOffReason, type DrsStatus, type Interval, type Known, type Ms, type RaceEvent } from '@pitwall/domain';
 import type { EngineView } from '@pitwall/engine';
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
@@ -7,7 +7,7 @@ import { BATTLE, BATTLE_CONFIG } from '../../src/battle/index.ts';
 import { battleCalculator } from '../../src/battle/calculator.ts';
 import type { GapsOutput } from '../../src/gaps/index.ts';
 import type { Pace } from '../../src/pace/index.ts';
-import { carState, engineView, realismHidden, type DeepPartial } from '../../../../test-support/builders/index.ts';
+import { carState, engineView, event, realismHidden, type DeepPartial } from '../../../../test-support/builders/index.ts';
 
 type Line = { lap: number; at: number }[];
 const id = (n: number): CarId => carId(n);
@@ -32,7 +32,12 @@ type Scene = {
   /** Overrides of a car's state, by id. */
   carOver?: Record<number, DeepPartial<CarState>>;
   config?: EngineView['config'];
+  /** The history's events; by default one DRSE, so DRS is enabled. */
+  events?: RaceEvent[];
 };
+
+const DRSE = (at = 60_000): RaceEvent => event({ kind: 'drsEnabled', at });
+const DRSD = (reason: string, at = 200_000): RaceEvent => event({ kind: 'drsDisabled', at, params: { reason } });
 
 const build = (s: Scene): EngineView => {
   const cars = s.cars.map(([n, position, timing]) => {
@@ -63,6 +68,7 @@ const build = (s: Scene): EngineView => {
     cars,
     session: { kind: s.kind ?? 'race' },
     outputs: new Map<string, unknown>([['gaps', gaps], ['pace', pace]]),
+    history: { events: s.events ?? [DRSE()] },
     ...(s.config && { config: s.config }),
   });
   return s.teammate === undefined ? view : { ...view, state: { ...view.state, teammateCar: id(s.teammate) } };
@@ -93,6 +99,10 @@ describe('battle', () => {
     expect(battleCalculator.reads).toEqual(
       expect.arrayContaining([{ calculator: 'gaps' }, { calculator: 'pace' }, 'tyres', 'energy']),
     );
+  });
+
+  it('reads the history\'s events, so a DRSE or DRSD alone makes it run', () => {
+    expect(battleCalculator.reads).toContain('events');
   });
 
   it('gap behind 2.4, 2.0, 1.6 s at the last three line crossings: closing 400 ms/lap, lapsToDrs 1.5', () => {
@@ -315,6 +325,116 @@ describe('battle: the closing rate has the sign of the gap change', () => {
         const ours = plus(ahead, gaps.map(() => 3_000));
         const view = build(base({ lineTimes: { 1: ahead, 0: ours, 3: plus(ours, gaps) } }));
         expect(Math.sign(closing(card(view).behind))).toBe(s.falling ? 1 : -1);
+      }),
+    );
+  });
+});
+
+describe('battle: race control\'s DRS status', () => {
+  const ENABLED: DrsStatus = { enabled: true };
+  const lapsToDrsOf = (c: BattleCard) => [c.ahead, c.behind].map((s) => (s.known ? s.value.lapsToDrs : s));
+
+  it('every card carries the DRS status: enabled after a DRSE', () => {
+    const out = battleCalculator.compute(build(base({ teammate: 1 })));
+    expect(Object.values(out).map((c) => [c.carId, c.drs])).toEqual([[id(0), ENABLED], [id(1), ENABLED]]);
+  });
+
+  it('a race before its first DRSE: every card has DRS off, not enabled yet', () => {
+    const out = battleCalculator.compute(build(base({ teammate: 1, events: [event({ kind: 'lightsOut' })] })));
+    for (const c of Object.values(out)) expect(c.drs).toEqual({ enabled: false, reason: 'notEnabledYet' });
+  });
+
+  it('a DRSD: every card has DRS off with its reason', () => {
+    const out = battleCalculator.compute(build(base({ teammate: 1, events: [DRSE(), DRSD('safetyCar')] })));
+    for (const c of Object.values(out)) expect(c.drs).toEqual({ enabled: false, reason: 'safetyCar' });
+  });
+
+  it('outside the race every card still carries the DRS status: enabled without DRS events', () => {
+    const out = battleCalculator.compute(build(base({ kind: 'practice', teammate: 1, events: [] })));
+    for (const c of Object.values(out)) expect(c.drs).toEqual(ENABLED);
+  });
+
+  it('without the gaps and pace outputs the card still carries the DRS status', () => {
+    const view = engineView({ cars: [carState({ id: id(0) })], history: { events: [DRSE(), DRSD('redFlag')] } });
+    expect(card(view)).toEqual({
+      carId: id(0),
+      ahead: unknown('notReceived'),
+      behind: unknown('notReceived'),
+      drs: { enabled: false, reason: 'redFlag' },
+    });
+  });
+
+  it('while DRS is off every side\'s lapsToDrs is notApplicable; the other fields are those with DRS enabled', () => {
+    const on = card(build(base()));
+    const off = card(build(base({ events: [DRSE(), DRSD('wetTrack')] })));
+    if (!on.ahead.known || !on.behind.known) throw new Error('a side unknown');
+    expect(off).toEqual({
+      carId: on.carId,
+      ahead: { ...on.ahead, value: { ...on.ahead.value, lapsToDrs: unknown('notApplicable') } },
+      behind: { ...on.behind, value: { ...on.behind.value, lapsToDrs: unknown('notApplicable') } },
+      drs: { enabled: false, reason: 'wetTrack' },
+    });
+  });
+
+  it('a side already inside DRS range while DRS is off: lapsToDrs notApplicable, not 0', () => {
+    const view = build(base({ events: [], config: { [BATTLE_CONFIG.key]: { drsRangeMs: 1600 } } }));
+    expect(lapsToDrsOf(card(view))).toEqual([unknown('notApplicable'), unknown('notApplicable')]);
+  });
+
+  it('a DRSE after a DRSD: lapsToDrs is known again', () => {
+    const c = card(build(base({ events: [DRSE(), DRSD('wetTrack'), DRSE(300_000)] })));
+    expect(c.drs).toEqual(ENABLED);
+    expect(lapsToDrsOf(c)).toEqual([
+      { known: true, value: 1.5, at: 301_600 },
+      { known: true, value: 3, at: 303_800 },
+    ]);
+  });
+
+  /** The status the newest DRS event of `events` gives in a race (the shared rule, restated for the property). */
+  const REASONS = ['wetTrack', 'safetyCar', 'redFlag', 'minLapNotReached'] as const;
+  const isReason = (r: unknown): r is DrsOffReason => (REASONS as readonly unknown[]).includes(r);
+  const expectedDrs = (events: readonly RaceEvent[]): DrsStatus => {
+    const newest = events.filter((e) => e.kind === 'drsEnabled' || e.kind === 'drsDisabled').at(-1);
+    if (newest === undefined) return { enabled: false, reason: 'notEnabledYet' };
+    if (newest.kind === 'drsEnabled') return ENABLED;
+    const reason = newest.params.reason;
+    return { enabled: false, reason: isReason(reason) ? reason : 'unknown' };
+  };
+  const drsEvents = fc
+    .array(
+      fc.oneof(
+        fc.constant<{ kind: 'drsEnabled' } | { kind: 'drsDisabled'; reason: string }>({ kind: 'drsEnabled' }),
+        fc.constantFrom<string>(...REASONS, 'somethingNew').map((reason) => ({ kind: 'drsDisabled' as const, reason })),
+        fc.constant({ kind: 'overtake' as const }),
+      ),
+      { maxLength: 8 },
+    )
+    .map((list) =>
+      list.map((e, i): RaceEvent => {
+        const at = 60_000 + i * 10_000;
+        return e.kind === 'drsDisabled' ? DRSD(e.reason, at) : event({ kind: e.kind, at });
+      }),
+    );
+
+  it('property: incremental = from scratch over a history of DRSE and DRSD, a flashback included; the card follows the newest DRS event', () => {
+    fc.assert(
+      fc.property(drsEvents, fc.nat(), (events, cut) => {
+        // one live view whose history grows event by event, then a flashback truncates it
+        const live = build(base({ events: [] }));
+        const liveEvents = live.state.history.events as RaceEvent[];
+        const check = (prefix: readonly RaceEvent[]) => {
+          const c = card(live);
+          expect(c).toEqual(card(build(base({ events: [...prefix] }))));
+          expect(c.drs).toEqual(expectedDrs(prefix));
+          if (!c.drs.enabled) expect(lapsToDrsOf(c)).toEqual([unknown('notApplicable'), unknown('notApplicable')]);
+        };
+        check([]);
+        for (const e of events) {
+          liveEvents.push(e);
+          check(events.slice(0, liveEvents.length));
+        }
+        liveEvents.length = events.length === 0 ? 0 : cut % (events.length + 1);
+        check(events.slice(0, liveEvents.length));
       }),
     );
   });
