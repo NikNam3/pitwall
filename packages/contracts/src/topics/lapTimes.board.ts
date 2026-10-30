@@ -5,4 +5,9 @@ import { defineTopic } from '../topic-def.ts';
 /** The lap board's params: the car every delta is measured to. */
 export type LapBoardParams = { referenceCarId: CarId };
 
-export default defineTopic<LapBoardParams, LapBoard>({ owner: 'lap-times', mode: 'state', maxHz: 4 });
+export default defineTopic<LapBoardParams, LapBoard>({
+  owner: 'lap-times',
+  mode: 'state',
+  maxHz: 4,
+  momentParams: (carIds) => carIds.map((referenceCarId) => ({ referenceCarId })),
+});
