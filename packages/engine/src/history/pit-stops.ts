@@ -31,6 +31,9 @@ const closeVisit = (state: EngineState, car: CarState, visit: OpenPitVisit, at: 
     penaltyServed: visit.penaltyServed,
   });
   state.open.pitVisits[car.id] = undefined;
+  // The lap on which the car leaves the pit lane is the out lap (it runs before `applyLaps`, so a pit exit at the line marks the lap it ends).
+  const cursor = state.open.laps[car.id];
+  if (cursor) cursor.outLap = true;
 };
 
 /**
