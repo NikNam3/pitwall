@@ -1,8 +1,9 @@
 // Lights out after a formation lap discards the formation's history (spec 3.2): the calculators restart and the job
 // runs under way are dropped, as on a flashback; it is no flashback to the engineer. A fall of the session time that is
-// no start changes nothing and is logged (spec 3.3). Calculators see the session phase in their view.
+// no start, and a forward jump of more than 60 s that is no post-session jump, change nothing and are logged (spec 3.3);
+// after a fall the feed's own insights are stamped on the race clock. Calculators see the session phase in their view.
 import { Writable } from 'node:stream';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { ServerMessage, TopicName } from '@pitwall/contracts';
 import type { FeedId } from '@pitwall/domain';
 import type { IncrementalCalculator, Job, QuickCalculator } from '@pitwall/engine';
@@ -41,7 +42,7 @@ const formationStart = (): { before: Prepared; after: Prepared } => {
 };
 
 /** A pipeline of `features` on a manual source, one client that records what it receives, and the log lines. */
-function setup(features: Feature[]) {
+function setup(features: Feature[], staleCheck?: { clock: () => number; everyMs: number }) {
   let pipeline: FeedPipeline | undefined = undefined;
   const hub = new TopicHub({ now: () => 0, onDemandChange: () => pipeline?.demandChanged() });
   const inbox: ServerMessage[] = [];
@@ -49,7 +50,7 @@ function setup(features: Feature[]) {
   const source = new ManualSource(F);
   const lines: Array<Record<string, unknown>> = [];
   const destination = new Writable({ write(chunk, _encoding, done) { lines.push(JSON.parse(String(chunk)) as Record<string, unknown>); done(); } });
-  pipeline = new FeedPipeline({ feedId: F, source, hub, features, log: createLogger({ level: 'info', destination }) });
+  pipeline = new FeedPipeline({ feedId: F, source, hub, features, log: createLogger({ level: 'info', destination }), ...(staleCheck && { staleCheck }) });
   pipeline.start();
   const push = (chunk: Prepared) => chunk.forEach((p) => source.push(p.bytes, p.receivedAtMs));
   return { hub, pipeline, inbox, push, lines };
@@ -150,5 +151,40 @@ describe('FeedPipeline: a fall of the session time that is no start', () => {
     await pipeline.stop();
     expect(lines.filter((l) => l['clockFall'] !== undefined)).toMatchObject([{ sessionUid: expect.any(String), clockFall: { fromMs: 2400, toMs: 1000 } }]);
     expect(inits).toHaveLength(1);
+  });
+});
+
+describe('FeedPipeline: a forward jump of the session time over 60 s that is no post-session jump', () => {
+  it('is logged with the session uid and both times, and the calculators carry on', async () => {
+    const inits: number[] = [];
+    const { pipeline, push, lines } = setup([defineFeature({ name: 'probe-events', calculators: [initProbe(inits)], topics: [] })]);
+    // lights out at frame 59, the race clock from 0.016 s; at race frame 150, after a 3 s stall, the clock jumps from
+    // 2.4 s to 92.416 s (90 s ahead): too little for the post-session simulation (60 times the 3 s)
+    push(prepared(gridStart(200, (k) => (k >= 150 ? { at: (k + 1) * STEP + 90_000, wall: (60 + k) * STEP + 3_000 } : {}))));
+    await pipeline.stop();
+    expect(lines.filter((l) => l['clockJump'] !== undefined)).toMatchObject([{ sessionUid: expect.any(String), clockJump: { fromMs: 2400, toMs: 92_416 } }]);
+    expect(lines.filter((l) => l['clockFall'] !== undefined)).toEqual([]);
+    expect(inits).toHaveLength(1);
+  });
+});
+
+// Review 3 E6: the race clock reaches the bridge. After a mid-race fall the engine stamps every entry on its race clock
+// (spec 3.3), so the feed's own insights (here feed.stale) are stamped on it too, not on the game's raw session time.
+describe('FeedPipeline: the feed insights after a mid-race fall of the session time', () => {
+  it('a feed.stale raised after the fall carries a time on the race clock, not the raw session time', async () => {
+    let now = 0;
+    const { hub, pipeline, push, inbox } = setup([defineFeature({ name: 'insights', calculators: [], topics: [bindInsights('insights')] })], { clock: () => now, everyMs: 5 });
+    hub.subscribe({ clientId: 'c', id: 'i', topic: 'insights', params: {}, feedId: F });
+    // the clock falls at race frame 150 from 2.4 s to 1 s (race clock offset 1.4 s): the frames after the fall lie at
+    // raw 1 to 1.784 s, and at 2.4 to 3.184 s on the race clock
+    const frames = prepared(gridStart(200, (k) => (k >= 150 ? { at: 1000 + (k - 150) * STEP } : {})));
+    push(frames);
+    now = frames.at(-1)!.receivedAtMs + 5_000;
+    const raisedAt = () => inbox.flatMap((m) => ('entries' in m ? ((m.entries ?? []) as Array<{ type: string; insight?: { kind: string; raisedAt: number } }>) : []))
+      .flatMap((e) => (e.type === 'raised' && e.insight?.kind === 'feed.stale' ? [e.insight.raisedAt] : []));
+    await vi.waitFor(() => expect(raisedAt()).toHaveLength(1));
+    await pipeline.stop();
+    expect(raisedAt()[0]).toBeGreaterThanOrEqual(2_400);
+    expect(raisedAt()[0]).toBeLessThanOrEqual(3_184);
   });
 });
