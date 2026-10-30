@@ -122,13 +122,13 @@ const gallery: GalleryEntry<typeof widget> = {
       }),
     },
     fixedReference: { ...base, gapper: lines({ referenceLapMs: known(100_000, 0) }) },
-    // lap 1 with a fixed reference: nobody has completed a lap, so each car's line is just its live point so far
+    // lap 1 with the default reference (the leader's mean so far over its part lap, so the leader sits on the virtual
+    // car): nobody has completed a lap, so each car's line is just its live point so far
     lapOne: {
       ...base,
       gapper: lines({
-        reference: { kind: 'fixed', carId: unknown('notApplicable') },
-        referenceLapMs: known(100_000, 0),
-        cars: [2, 3, 5, 0, 4, 1].map((id, rank) => ({ carId: carId(id), byLap: [], now: known({ lap: 0.35 - 0.02 * rank, gapMs: -500 - 400 * rank }, 0) })),
+        referenceLapMs: known(104_200, 0),
+        cars: [2, 3, 5, 0, 4, 1].map((id, rank) => ({ carId: carId(id), byLap: [], now: known({ lap: 0.35 - 0.02 * rank, gapMs: -400 * rank }, 0) })),
       }),
     },
     // a car average of a car the field lacks: the header shows the mark where the car's code goes
