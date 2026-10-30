@@ -5,7 +5,7 @@ Status: spec, approved 2026-10-30; amended the same day after the market researc
 ## 1. Context
 
 ### 1.1 What this sub-project is for
-Sub-project 3 delivered timing and car care. The strategy decisions of the race (D21 box now or later, D22 compound, D23 undercut or cover, D24/D25 box under SC/VSC, D26 weather switch) still have no computed answers. Sub-project 4a delivers them as **live race calls**: measured pit loss, a degradation fit, a forecast of the field, and the cards and views that show where we rejoin and what a stop gains. It also adds the **track map** with official turn numbers, the **radio window** and the **weather forecast**. Practice feeds the race through stored knowledge.
+Sub-project 3 delivered timing and car care. The strategy decisions of the race (D21 box now or later, D22 compound, D23 undercut or cover, D24/D25 box under SC/VSC, D26 weather switch) still have no computed answers. Sub-project 4a delivers them as **live race calls**: measured pit loss, a degradation fit, a forecast of the field, and the cards and views that show where we rejoin and what a stop gains. It also adds the **track map** with official turn numbers and flags, and the **weather forecast**. Practice feeds the race through stored knowledge.
 
 ### 1.2 Goals
 The ranked goals of the foundation spec (1.2) apply unchanged: clean code, extendable code, clean UI, intuitive UX, realism, findability, performance.
@@ -20,7 +20,7 @@ The ranked goals of the foundation spec (1.2) apply unchanged: clean code, exten
 ### 1.4 Decisions made in this brainstorm (user, 2026-10-30)
 1. **Sub-project 4 is split.** **4a, live race calls** (this spec): estimation and forecast. **4b, planning**: the DP optimiser, strategy comparison (V16), strategy overview (V06), plan board (V17), circle of doom (V01), and weather inside the strategy model (a switch at lap N from the forecast).
 2. **Weather in 4a:** a forecast strip and the crossover chart (V19).
-3. **The track map is in 4a:** per-track geometry and corners, the live map with cars, incident markers and the rejoin ghost, turn numbers in the incident feed, and the radio window (V34). Per-turn time deltas (V26) stay in sub-project 5 and reuse the corner list.
+3. **The track map is in 4a:** per-track geometry and corners, the live map with cars, incident markers and the rejoin ghost, turn numbers in the incident feed. The radio window (V34) was dropped in the mockup review (7.11). Per-turn time deltas (V26) stay in sub-project 5 and reuse the corner list.
 4. **Official turn numbers only.** Any other numbering confuses. They come from FastF1's circuit data (section 6.4); a track without a turn file shows sectors, never detected numbers.
 5. **Knowledge lifetimes:** a **track** lifetime (geometry, pit loss) across weekends, and a **weekend** lifetime (degradation, fuel sensitivity) so practice feeds the race. Every value shows where it came from and falls back to community defaults. The user may later want what real teams do (everything across weekends, weighted), so the lifetime is a property of each piece of knowledge and the aggregation is replaceable (section 4).
 6. **Rejoin ghost views:** live crossing order (V03), ghost lines on the existing gap chart (V04), and the ghost on the track map. V05 (lap slice) and V02 (gap strip) are dropped; V01 in 4b replaces V02.
@@ -165,7 +165,7 @@ Reads every car's `motion.position` and `timing.lapDistanceM`, priors `trackGeom
 
 ## 7. Analyses
 
-The `CarParams` topics are computed for our cars (`session.info` `playerCar`, `teammateCar`); one for another car answers `notApplicable`. The track and field topics cover every car. Strategy analyses run on `lapCompleted`, `pitStop` and `flagChange`, plus a `{ hz: 1 }` cadence so gaps stay current, **never per frame** (1.4 point 9).
+The `CarParams` topics are computed for our cars (`session.info` `playerCar`, `teammateCar`); one for another car answers `notApplicable`. Exception (mockups Q13, user 2026-10-30): `raisingAverage.car` and `lapOverview.car` answer every car, since they need only lap times. The track and field topics cover every car. Strategy analyses run on `lapCompleted`, `pitStop` and `flagChange`, plus a `{ hz: 1 }` cadence so gaps stay current, **never per frame** (1.4 point 9).
 
 ### 7.1 `pit-losses` → `pitLosses.track` (V33)
 The pit loss per condition with sample count and source, plus this session's stops (car, lap, condition, loss, stationary time).
@@ -206,10 +206,10 @@ Params: our car and the next compound. Per lap L from the next lap to the end of
 
 ### 7.10 `track-positions` → `trackPositions.geometry`, `trackPositions.cars`
 - `trackPositions.geometry` (state, rarely): outline, corners with official turn labels, straights, pit exit, sector starts.
-- `trackPositions.cars` (state, `maxHz` 10): per car its lap distance, map point and pit status; incident markers from `incidents.feed` (major entries of the last `markerLaps` laps) at their place. Placement is one `track-lookup` per car, budget in 10.3. Realism mode keeps positions (a real team has GPS).
+- `trackPositions.cars` (state, `maxHz` 10): per car its lap distance, map point and pit status; incident markers from `incidents.feed` (major entries of the last `markerLaps` laps) at their map point, labelled with the incident kind; the marshal zones with their flags (yellow drawn on the outline); per car its FIA flag (blue marked). Fields: the mockups README, "Contract and theme changes for Task 1". Placement is one `track-lookup` per car, budget in 10.3. Realism mode keeps positions (a real team has GPS).
 
-### 7.11 `radio-window` → `radioWindow.car` (V34)
-Per our car: on a straight now, seconds left on it, seconds until the next straight (from the car's speed and the distance; the stored median speed per bin when the car is slow).
+### 7.11 `radio-window` (dropped)
+Dropped by the user in the mockup review (2026-10-30): the track map shows where our car is. V34 is not built.
 
 ### 7.12 `weather` → `weather.forecast`
 The forecast samples of the current session type in time order, with the accuracy flag and the first sample at or above `rainPct` (`notApplicable` when none). The race moment's weather rule (SP3) is unchanged.
@@ -254,7 +254,6 @@ A display never shares its unit name with an analysis (one agent per unit, CLAUD
 | `crossing-order` (V03) | D21, D24 | `rejoin.car` | crossing order with the ghost per condition, gap ahead and behind |
 | `gap-chart` (exists) | D21, D23 | `gaps.gapper`, `rejoin.car` | adds ghost lines per condition |
 | `track-map` | D21, D33, race picture | `trackPositions.geometry`, `trackPositions.cars`, `rejoin.car` | outline with official turns, all cars, our cars white, incident markers, the ghost |
-| `radio-clock` (V34) | all calls | `radioWindow.car` | per our car: straight now / seconds to the next |
 | `undercut-card` (V13) | D23 | `undercut.car` | per neighbour: gap, Δ(1–3), margin, stop due |
 | `sc-card` (V18) | D24, D25, D29 | `scCall.car` | one line in green running; the sheet under SC/VSC |
 | `pit-sweep-table` (V15) | D21, D22 | `pitSweep.car` | one row per lap: rejoin, traffic, finish, life exceeded |
@@ -268,9 +267,11 @@ Pieces two displays share: a **track outline** canvas (map and, later, V26), a *
 ### 8.4 Mockups
 As SP3 8.5: in level 0 the supervisor makes the mockups of all displays of 8.2 with the real kit and theme, checked by screenshot with the cached headless Chromium, for **one approval session** with the user before any display's test phase. They settle layouts, size modes and the workbooks.
 
+**Approved 2026-10-30:** `docs/brainstorms/2026-10-30-sp4a-displays/` (README: decisions, sizes, column priorities). Its section "Contract and theme changes for Task 1" amends Appendix A and is binding where the two differ.
+
 ## 9. Workbooks
 Two new defaults, seeded when missing (the existing `car`, `quali`, `race` stay as the user has them):
-- **`strategy`:** track map, crossing order, gap chart with ghosts, undercut card, SC card, pit sweep, forecast strip, radio window, timing tower.
+- **`strategy`:** track map, crossing order, gap chart with ghosts, undercut card, SC card, pit sweep, forecast strip, timing tower.
 - **`longrun`:** stint scatter, raising average, lap overview, pit-loss table, crossover chart.
 The layouts come from the approved mockups, for the 24" main and the 14" side monitor.
 
@@ -323,7 +324,7 @@ Contracts and value types (Appendix A), priors and contributions (section 4), th
 | Level | Units |
 |---|---|
 | 1 | `track-lookup`, `tyre-life`, `lap-model`, `track-geometry`, `pit-loss`, `degradation`, `weather`, `raising-average`, `lap-overview` |
-| 2 | `race-forecast`, `forecast-field`, `pit-losses`, `stint-analysis`, `track-positions`, `radio-window`, `crossover`, `pit-window` with the `race-moment` change, `incidents` change |
+| 2 | `race-forecast`, `forecast-field`, `pit-losses`, `stint-analysis`, `track-positions`, `crossover`, `pit-window` with the `race-moment` change, `incidents` change |
 | 3 | `rejoin`, `undercut`, `sc-call`, `pit-sweep` |
 | 4 | `forecast-score` (its calculator, `scoreForecasts`, the output tap and `pitwall score`) |
 | displays | each right behind its analysis, after the mockups are approved |
@@ -359,6 +360,8 @@ Rivals' predicted stops and the two-dry-compound rule stay in sub-project 5 (1.5
 4. The overtaking threshold and dirty-air coefficients for F1 25 are defaults until sub-project 5 calibrates them.
 
 ## Appendix A: Contracts (sketch; the supervisor commits them as code in level 0)
+
+**Amended by the approved mockups (8.4):** the README section "Contract and theme changes for Task 1" in `docs/brainstorms/2026-10-30-sp4a-displays/` wins where it differs from this sketch.
 
 ### A.1 Domain additions
 ```ts
@@ -462,7 +465,6 @@ export function scoreForecasts(log: ScoreLog, history: DeepReadonly<History>, co
 | `pitWindow.car` | `CarParams` | state, 1 | `{ latestLap: Known<number>; earliestByCompound: { compound; lap: Known<number> }[]; window: Known<{ from: number; to: number }> }` |
 | `trackPositions.geometry` | none | state, 0.2 | `Known<TrackGeometry>` |
 | `trackPositions.cars` | none | state, 10 | `{ cars: { carId; lapDistanceM; point: MapPoint; inPit: boolean }[]; incidents: { entryId; lapDistanceM; label: string }[] }` |
-| `radioWindow.car` | `CarParams` | state, 4 | `{ onStraight: boolean; secondsLeft: Known<number>; secondsToNext: Known<number> }` |
 | `weather.forecast` | none | state, 0.2 | `{ samples: ForecastSample[]; accuracy: 'perfect' \| 'approximate'; firstRain: Known<{ offsetMin; rainPct }> }` |
 | `crossover.field` | none | state, 1 | `{ dryReferenceMs: Known<Ms>; ourRatioPct: Known<number>; byType: { type: 'slick' \| 'inter' \| 'wet'; byLap: { lap; medianMs: Ms }[] }[]; firstFaster: Known<{ carId; sector: 1 \| 2 \| 3; lap; type }>; paybackLaps: Known<number> }` |
 
