@@ -58,7 +58,7 @@ describe('damageJumps', () => {
   });
 
   it('each car has its own jumps; rises of two cars never add up', () => {
-    const events = [dmg(10_000, 'floorPct', 0, 3, car0), dmg(10_500, 'floorPct', 0, 3, car1), dmg(11_000, 'floorPct', 0, 9, car1)];
+    const events = [dmg(10_000, 'floorPct', 0, 3, car0), dmg(10_500, 'floorPct', 0, 3, car1), dmg(11_000, 'floorPct', 3, 9, car1)];
     const result = damageJumps(events, opts);
     expect(result.jumps.get(car0) ?? []).toEqual([]);
     expect(result.jumps.get(car1)).toEqual([{ at: 11_000, part: 'floorPct', deltaPct: 9 }]);

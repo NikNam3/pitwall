@@ -520,7 +520,8 @@ describe('incidents calculator', () => {
 
     it('a hit after the wing change is a new entry with its rise from the repaired value; the first one stays', () => {
       const events = [...repaired, dmg(HIT + 200_000, 'frontRightWingPct', 0, 12)];
-      const feed = run(viewOf({ miniSectors, events })).filter((e) => e.kind === 'damage');
+      // no slow run here: with the 3 s loss car 7 drops out of our neighbourhood before the second hit
+      const feed = run(viewOf({ miniSectors: race(), events })).filter((e) => e.kind === 'damage');
       expect(feed.map((e) => [e.at, e.damage])).toEqual([
         [HIT + 200_000, [{ part: 'frontRightWingPct', deltaPct: 12 }]],
         [HIT, [{ part: 'frontRightWingPct', deltaPct: 37 }]],
@@ -531,7 +532,9 @@ describe('incidents calculator', () => {
     const events = [...repaired, dmg(HIT + 200_000, 'frontRightWingPct', 0, 12), collision(6, 5)].sort((a, b) => a.at - b.at);
     // Car 7's laps: 90 s, then 93 s for the lap of the hit (lap 5), then 91 s.
     const laps = lapsOf7(8, (n) => (n <= 4 ? PACE_MS : n === 5 ? PACE_MS + 3_000 : PACE_MS + 1_000));
-    const at = (t: number) => viewOf({ miniSectors: until(miniSectors, t), events: until(events, t), laps: laps.filter((l) => l.completedAt <= t) });
+    // no slow run: car 7 stays in our neighbourhood for the second hit
+    const steady = race();
+    const at = (t: number) => viewOf({ miniSectors: until(steady, t), events: until(events, t), laps: laps.filter((l) => l.completedAt <= t) });
     const times = [...new Set([...events.map((e) => e.at), ...laps.map((l) => l.completedAt), 300_000, 700_000])].sort((a, b) => a - b);
 
     it('incremental equals from scratch through the hit, the repair and the next hit, after every event and every lap', () => {
