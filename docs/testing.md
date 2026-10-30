@@ -32,7 +32,7 @@ Real recordings (`.pwrec.gz`) enter tests only as **segments**: short cuts commi
 - **One behaviour per segment test**, named after the behaviour: "the pit exit raises numPitStops and opens a soft stint", not "race-zandvoort-pit-exit works".
 - **Cost:** a segment test runs the engine plus the units under test (1–2 s for a full lap), not the whole topic pipeline.
 
-**Whole recordings** (`recordings/`, gitignored, listed in `fixtures/index.json`) appear only in the acceptance suite, and only for properties of the whole pipeline: determinism, reprocess, decoder equality and decoder speed. The big races (`raceSingaporeWet`, `raceZandvoortUidReuse`) and the time trial stay out of the determinism set.
+**Whole recordings** (`recordings/`, gitignored, listed in `fixtures/index.json`) appear only in the acceptance suite, and only for properties of the whole pipeline: determinism, reprocess, decoder equality and decoder speed. The big races (`raceSingaporeWet`, `raceZandvoortUidReuse`, `raceWetVscMexico`) and the time trial stay out of the determinism set.
 
 When a new recording arrives: label it (index entry with verified features), then cut the segments the next sub-project needs. Don't add whole-recording tests.
 

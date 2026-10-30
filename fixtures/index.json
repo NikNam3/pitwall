@@ -210,6 +210,41 @@
         "LGOT, the formation SCAR and one DRSD carry playerCarIndex 0",
         "UID-0 bulks: 40 SessionHistory and 2 FinalClassification after our retirement, 20 SessionHistory and 1 FinalClassification at the end, then 451 LobbyInfo"
       ]
+    },
+    {
+      "id": "raceWetVscMexico",
+      "file": "2026-10-30_15-20-41_55cc94d2d5c13280.pwrec.gz",
+      "sha256": "e65d4bdfe596d6335224c08ecae2f8d96833d70349feb9b8ba6fd05ef8343c59",
+      "bytes": 564681067,
+      "track": "Mexico",
+      "trackId": 19,
+      "sessionType": "race",
+      "sessionTypeCode": 15,
+      "completedLaps": 70,
+      "durationMs": 7381256.2887,
+      "features": [
+        "offline 71-lap race, 20 cars, 1 human (index 19, teammate 12); link ids season and weekend 4096512430, session 4096512440 (a weekend of short practice and race); we start P8",
+        "no formation lap in the data (formationLap setting 1): session time stays 0 from SSTA until lights out (STLG x5, LGOT at frame 213); no session-time reset, no FLBK, frame ids rise until SEND",
+        "70 completed player laps, all valid: lap 1 106.641 s, best 95.057 s on lap 51 (FTLP; ours also on lap 34); lapped by the winner, we cross the line for P5 (10 points) at 6898.451, resultStatus finished from 6898.477",
+        "the first 4 Session packets (frames 0-55, session time 0) carry weather 0, temperatures 0 and no forecast; real values from frame 73",
+        "weather storm (5) the whole race, never changing; forecast storm, rain 91-94 %; track 29 to 24 °C, air 25 to 21 °C",
+        "every car starts on wets (actual 8 visual 8); 16 cars change to intermediates on lap 5 (405.5 to 442.6 s), cars 0, 14 and we on lap 6; car 18 stops again on lap 70 (intermediates to intermediates, 6815.7 s)",
+        "our stops: lap 5 (wets age 5 to intermediates; pit entry 508.2 s, line crossed in the pit lane at 510.539, stop 516.437, tyres change 517.346, numPitStops 1 at 522.763, pit exit 531.1 s) and lap 28 (intermediates age 23 to new intermediates, same compound; pit entry 2788.9 s, line 2791.205, stop 2797.118, tyres change 2798.547, numPitStops 2 at 2809.045, pit exit 2817.4 s)",
+        "SessionHistory and FinalClassification stint end laps are one below the last lap driven on the set: ours 4 and 27, the lap-5 stoppers 3, car 18 68",
+        "car 2 retires on lap 2 (RTMT 202.693 s, PENA retired mechanical failure), no safety car; numActiveCars 20 to 19 at 204.1 s",
+        "VSC: car 11 retires on lap 14 (RTMT 1392.829 s, PENA retired mechanical failure; numActiveCars 18 at 1394.0 s), SCAR VSC deployed 1395.877, safetyCarStatus 2 and numVirtualSafetyCarPeriods 1 from 1396.527, SCAR VSC ending (eventType 1) 1469.951, SCAR resume 1477.180, safetyCarStatus 0 from 1478.030 (our laps 14-15); no full SC, no red flag",
+        "numActiveCars 19, then 18, while car 19 (the player) still races",
+        "our PENA x6: warning small collision with car 12 (lap 1), warnings corner cutting (laps 28, 44, 63, 66), and a 3 s time penalty for multiple warnings at 6164.705 (lap 63; LapData penalties 0 to 3 at 6164.731); no DSQ",
+        "fuel 110.0 kg at start, 1.959 kg at the end of lap 70 (about 1.54 kg/lap)",
+        "tyre wear RL/RR/FL/FR: wets 12/11/4/4 % after 5 laps, first intermediates 31/28/11/10 % at the start of lap 29, second 54/49/22/20 % at the end after 41 laps",
+        "4 pauses, session time frozen: no packets for 48 s at session time 2698.585 (lap 28), 85 s at 3978.976 (lap 41), 53 s at 5329.607 (lap 55), 17 s at 6003.635 (lap 62)",
+        "finish: RCWN car 16 at 6864.172 (71 laps), no CHQF; cars turn resultStatus finished as they cross; the last frame 6898.504 (gamePaused 1) sets the rest finished and the two retired cars DNF; SEND with frame id 0",
+        "FinalClassification: 18 finish (71, 70 or 69 laps; one stop to intermediates, we and car 18 two); cars 2 and 11 DNF; resultReason 3 for finishers and 4 for the DNFs, RTMT reason 0",
+        "after SEND: 20 bulks of 20 SessionHistory and 1 FinalClassification with the session UID, frame id 0 and session time 6957.943 (the last finisher's total race time), 5 s apart",
+        "DRS never enabled in the race; DRSE x2 and DRSD x2 (wet track) only as UID-0 events after SEND",
+        "COLL x19 (ours 14), OVTK x539 (ours 55), FTLP x22 (ours 2), SPTP x1277, TMPT x1, RCWN x1, SCAR x3; no frozen headers, no garbage split times; every packet carries playerCarIndex 19",
+        "UID-0: 20 SessionHistory just before SEND, 13 events (DRSE, DRSD, BUTN) after it, and 32 BUTN among the post-race bulks"
+      ]
     }
   ],
   "segments": [
