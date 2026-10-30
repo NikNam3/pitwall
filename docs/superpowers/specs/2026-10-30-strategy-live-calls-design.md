@@ -158,7 +158,7 @@ Reads every car's `motion.position` and `timing.lapDistanceM`, priors `trackGeom
 
 All are computed for our cars (`session.info` `playerCar`, `teammateCar`); a `CarParams` topic for another car answers `notApplicable`. Strategy analyses run on `lapCompleted`, `pitStop` and `flagChange`, plus a `{ hz: 1 }` cadence so gaps stay current, **never per frame** (1.4 point 9).
 
-### 7.1 `pit-loss-table` → `pitLossTable.track` (V33)
+### 7.1 `pit-losses` → `pitLosses.track` (V33)
 The pit loss per condition with sample count and source, plus this session's stops (car, lap, condition, loss, stationary time).
 
 ### 7.2 `stint-analysis` → `stintAnalysis.car` (V07)
@@ -194,9 +194,9 @@ Params: our car and the next compound. Per lap L from the next lap to the end of
 - **The window** is from the earliest (over the allowed compounds) to the latest. Both `Known`; `insufficientData` until the fit has `minLaps`.
 - **`race-moment`** gains the moment `window` between `neutralised` and `incident` (SP3 spec 7.2): active from `earliest − windowLeadLaps` until our car stops or the window closes. `cause.params`: `earliestLap`, `latestLap`.
 
-### 7.10 `track-map` → `trackMap.geometry`, `trackMap.cars`
-- `trackMap.geometry` (state, rarely): outline, corners with official turn labels, straights, pit exit, sector starts.
-- `trackMap.cars` (state, `maxHz` 10): per car its lap distance, map point and pit status; incident markers from `incidents.feed` (major entries of the last `markerLaps` laps) at their place. Placement is one `track-lookup` per car, budget in 10.3. Realism mode keeps positions (a real team has GPS).
+### 7.10 `track-positions` → `trackPositions.geometry`, `trackPositions.cars`
+- `trackPositions.geometry` (state, rarely): outline, corners with official turn labels, straights, pit exit, sector starts.
+- `trackPositions.cars` (state, `maxHz` 10): per car its lap distance, map point and pit status; incident markers from `incidents.feed` (major entries of the last `markerLaps` laps) at their place. Placement is one `track-lookup` per car, budget in 10.3. Realism mode keeps positions (a real team has GPS).
 
 ### 7.11 `radio-window` → `radioWindow.car` (V34)
 Per our car: on a straight now, seconds left on it, seconds until the next straight (from the car's speed and the distance; the stored median speed per bin when the car is slow).
@@ -217,19 +217,21 @@ Per lap: the field's median lap time per tyre type (slick, intermediate, wet); t
 As SP3 8.1: render and format only, sizes in character cells, compact and full mode, grey by default and colour only to highlight or distinguish, numbers only and no verdicts. Every value that rests on a prior or a default shows its source on hover (`measured · 6 stops`, `default · source`).
 
 ### 8.2 The displays
+A display never shares its unit name with an analysis (one agent per unit, CLAUDE.md).
+
 | Display | Decision | Reads | Shows |
 |---|---|---|---|
-| `pit-loss-table` (V33) | D21–D25 | `pitLossTable.track` | loss per condition, samples, source; this session's stops |
+| `pit-loss-table` (V33) | D21–D25 | `pitLosses.track` | loss per condition, samples, source; this session's stops |
 | `stint-scatter` (V07) | D03, D11, D22 | `stintAnalysis.car` | lap time over tyre age per stint, excluded laps grey, fit and band |
-| `raising-average` (V08) | D01, D03 | `raisingAverage.car` | the curve for our cars and chosen rivals |
-| `lap-overview` (V09) | D03, D32 | `lapOverview.car` | one block per lap, heat within stint, in/out, bests, status strip |
+| `raising-average-chart` (V08) | D01, D03 | `raisingAverage.car` | the curve for our cars and chosen rivals |
+| `lap-overview-grid` (V09) | D03, D32 | `lapOverview.car` | one block per lap, heat within stint, in/out, bests, status strip |
 | `crossing-order` (V03) | D21, D24 | `rejoin.car` | crossing order with the ghost per condition, gap ahead and behind |
 | `gap-chart` (exists) | D21, D23 | `gaps.gapper`, `rejoin.car` | adds ghost lines per condition |
-| `track-map` | D21, D33, race picture | `trackMap.geometry`, `trackMap.cars`, `rejoin.car` | outline with official turns, all cars, our cars white, incident markers, the ghost |
-| `radio-window` (V34) | all calls | `radioWindow.car` | per our car: straight now / seconds to the next |
+| `track-map` | D21, D33, race picture | `trackPositions.geometry`, `trackPositions.cars`, `rejoin.car` | outline with official turns, all cars, our cars white, incident markers, the ghost |
+| `radio-clock` (V34) | all calls | `radioWindow.car` | per our car: straight now / seconds to the next |
 | `undercut-card` (V13) | D23 | `undercut.car` | per neighbour: gap, Δ(1–3), margin, stop due |
 | `sc-card` (V18) | D24, D25, D29 | `scCall.car` | one line in green running; the sheet under SC/VSC |
-| `pit-sweep` (V15) | D21, D22 | `pitSweep.car` | one row per lap: rejoin, traffic, finish, life exceeded |
+| `pit-sweep-table` (V15) | D21, D22 | `pitSweep.car` | one row per lap: rejoin, traffic, finish, life exceeded |
 | `forecast-strip` | D26 | `weather.forecast` | samples with type, rain %, temperatures and trend |
 | `crossover-chart` (V19) | D26 | `crossover.field` | lap times by tyre type, the 110 % line, payback laps |
 | `incident-feed` (exists) | D33 | `incidents.feed` | adds the official turn |
@@ -270,11 +272,11 @@ The layouts come from the approved mockups, for the 24" main and the 14" side mo
 | one `race-forecast` scenario | < 1 ms |
 | `pit-sweep`, all scenarios | < 20 ms |
 | each per-lap analysis | < 5 ms |
-| `track-map` placement of the field, per frame | < 50 µs |
+| `track-positions` placement of the field, per frame | < 50 µs |
 | `degradation` update per lap | < 1 ms |
 
 ### 10.4 Acceptance
-On segments of the real races (no whole-recording fact checks): the loss of a real green stop equals the TUM value computed by hand from the same laps and exceeds its pit-lane time; the geometry built from a clean lap of the field snaps every turn of the Zandvoort file; a VSC and an SC stop are classed by condition. Whole recordings only for determinism (all fixtures, pinned priors) and reprocess.
+On segments of the real races (no whole-recording fact checks): the loss of a real green stop equals the TUM value computed by hand from the same laps and exceeds its pit-lane time; the geometry built from a clean lap of the field snaps every turn of the Zandvoort file; a VSC and an SC stop are classed by condition. Whole recordings only for determinism (the determinism set of `docs/testing.md`, pinned priors) and reprocess.
 
 ## 11. Error handling
 - Missing data is `Known` (`insufficientData` below the minimum samples, `notApplicable` outside the race or for other cars, `realism` where realism hides an input). Never 0.
@@ -294,7 +296,7 @@ Contracts and value types (Appendix A), priors and contributions (section 4), th
 | Level | Units |
 |---|---|
 | 1 | `track-lookup`, `tyre-life`, `lap-model`, `track-geometry`, `pit-loss`, `degradation`, `weather`, `raising-average`, `lap-overview` |
-| 2 | `race-forecast`, `pit-loss-table`, `stint-analysis`, `track-map`, `radio-window`, `crossover`, `pit-window` with the `race-moment` change, `incidents` change |
+| 2 | `race-forecast`, `pit-losses`, `stint-analysis`, `track-positions`, `radio-window`, `crossover`, `pit-window` with the `race-moment` change, `incidents` change |
 | 3 | `rejoin`, `undercut`, `sc-call`, `pit-sweep` |
 | displays | each right behind its analysis, after the mockups are approved |
 
@@ -389,7 +391,7 @@ export function forecast(field: ForecastField, stops: readonly ForecastStop[], l
 ### A.3 Topics (value types in `packages/domain/src/analyses/`, topic files in `packages/contracts/src/topics/`)
 | Topic | Params | Mode, maxHz | Value |
 |---|---|---|---|
-| `pitLossTable.track` | none | state, 1 | `{ byCondition: …as PitLossOut; stops: PitLossSample[] }` |
+| `pitLosses.track` | none | state, 1 | `{ byCondition: …as PitLossOut; stops: PitLossSample[] }` |
 | `stintAnalysis.car` | `CarParams` | state, 1 | `{ stints: { firstLap; lastLap; compound; basis; points: { lap; tyreAge; lapMs; correctedMs; used: boolean; excludedBy: Known<string> }[]; fit: Known<{ baseMs; degMsPerLap; sdMs }> }[]; compounds: CompoundFit[] }` |
 | `raisingAverage.car` | `CarParams` | state, 1 | `{ points: { n: number; meanMs: Ms }[] }` |
 | `lapOverview.car` | `CarParams` | state, 1 | `{ laps: { lap; lapMs; stint; compound; kind: 'normal' \| 'in' \| 'out'; best: 'none' \| 'personal' \| 'session'; heat: Known<Ratio>; status: 'green' \| 'vsc' \| 'sc' }[] }` |
@@ -398,8 +400,8 @@ export function forecast(field: ForecastField, stops: readonly ForecastStop[], l
 | `scCall.car` | `CarParams` | state, 1 | `{ active: 'none' \| 'sc' \| 'vsc'; options: { condition: 'sc' \| 'vsc'; lossMs: Known<Ms>; gainVsGreenMs: Known<Ms>; position: Known<number>; alsoGain: CarId[] }[] }` |
 | `pitSweep.car` | `{ carId; compound: ActualCompound }` | state, 1 | `{ rows: { lap; position: Known<number>; trafficCarIds: CarId[]; finishMs: Known<Ms>; finishPosition: Known<number>; exceedsLife: boolean }[] }` |
 | `pitWindow.car` | `CarParams` | state, 1 | `{ latestLap: Known<number>; earliestByCompound: { compound; lap: Known<number> }[]; window: Known<{ from: number; to: number }> }` |
-| `trackMap.geometry` | none | state, 0.2 | `Known<TrackGeometry>` |
-| `trackMap.cars` | none | state, 10 | `{ cars: { carId; lapDistanceM; point: MapPoint; inPit: boolean }[]; incidents: { entryId; lapDistanceM; label: string }[] }` |
+| `trackPositions.geometry` | none | state, 0.2 | `Known<TrackGeometry>` |
+| `trackPositions.cars` | none | state, 10 | `{ cars: { carId; lapDistanceM; point: MapPoint; inPit: boolean }[]; incidents: { entryId; lapDistanceM; label: string }[] }` |
 | `radioWindow.car` | `CarParams` | state, 4 | `{ onStraight: boolean; secondsLeft: Known<number>; secondsToNext: Known<number> }` |
 | `weather.forecast` | none | state, 0.2 | `{ samples: ForecastSample[]; accuracy: 'perfect' \| 'approximate'; firstRain: Known<{ offsetMin; rainPct }> }` |
 | `crossover.field` | none | state, 1 | `{ dryReferenceMs: Known<Ms>; ourRatioPct: Known<number>; byType: { type: 'slick' \| 'inter' \| 'wet'; byLap: { lap; medianMs: Ms }[] }[]; firstFaster: Known<{ carId; sector: 1 \| 2 \| 3; lap; type }>; paybackLaps: Known<number> }` |
@@ -423,4 +425,4 @@ Sources are filled in by R3; values marked "pitwall estimate" are starting point
 | `undercut` | `undercutRangeMs` | 5000 | pitwall estimate |
 | `pit-sweep` | `trafficGapMs`, `trafficLaps` | 1350, 3 | Fieni 2026 (dirty-air range) |
 | `pit-window` | `windowLeadLaps`, `minLaps` | 2, 3 | research 06 §4 |
-| `track-map` | `markerLaps` | 2 | pitwall estimate |
+| `track-positions` | `markerLaps` | 2 | pitwall estimate |
