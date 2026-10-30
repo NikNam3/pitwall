@@ -331,7 +331,14 @@ Contracts and value types (Appendix A), priors and contributions (section 4), th
 2. expected league points
 3. minimum race time, per car (TUM's objective)
 
-It goes together with the win-probability objective of Aguad & Thraves (research 07 §2.5). How to combine the two cars and the position distribution is for the 4b brainstorm. Rivals' predicted stops and the two-dry-compound rule stay in sub-project 5 (1.5).
+It goes together with the win-probability objective of Aguad & Thraves (research 07 §2.5).
+
+Open for the 4b brainstorm:
+- **When two plans count as tied.** Expected positions are averages (4.37 against 4.41) and almost never tie exactly, so a strict order lets points and race time almost never decide. 4b sets a tie margin or weights the objectives together.
+- **Expected position is not win probability.** A safe P3 can beat a risky chance at P1 on average; 4b decides how the position distribution enters.
+- How the two cars combine.
+
+**Later (user, 2026-10-30):** the engineer can see the best plan under each of the three objectives side by side, with its numbers. Not necessarily in sub-project 4, but planned. 4b's DP spike should keep this possible: one search that can score a plan under all three, not one hard-wired objective. Rivals' predicted stops and the two-dry-compound rule stay in sub-project 5 (1.5).
 
 ## 14. Open points
 1. Does the game reuse `weekendLinkIdentifier` across weekends? Verify with the next league weekend; if it does, the weekend identity adds the date.

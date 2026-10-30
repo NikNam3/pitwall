@@ -59,7 +59,7 @@ Recommendation: **A**, a deterministic prediction (stint lengths, tyre life, com
 
 Recommendation: **A**. Points are what the league counts. Joint planning avoids double-stack conflicts and allows covering plays. Friends spin often, so a plan that collapses after one lost five seconds is a bad plan. C can stay as the inner measure.
 
-**Answer:** an ordered objective (user, 2026-10-30): first expected finishing position per car, then expected league points, then minimum race time per car, each breaking the ties of the one before. It goes together with the win-probability objective of Aguad & Thraves (research 07 §2.5). Recorded in the 4a spec §13 as input for the 4b brainstorm.
+**Answer:** an ordered objective (user, 2026-10-30): first expected finishing position per car, then expected league points, then minimum race time per car, each breaking the ties of the one before. It goes together with the win-probability objective of Aguad & Thraves (research 07 §2.5). Recorded in the 4a spec §13 as input for the 4b brainstorm, with two open points from a review: a strict order on expected values almost never reaches points or race time, so 4b needs a tie margin or weights; and expected position is not win probability. The user also wants to see the best plan under each of the three objectives side by side, later if not in SP4.
 
 ### Q5. Build a head-to-head harness against Team Center?
 
