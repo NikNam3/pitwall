@@ -14,11 +14,8 @@ const STEP = 16;
 const FORMATION_AT = 1;
 const RESET_AT = 8;
 const LIGHTS_FROM = { lights: 1, formation: RESET_AT + 1 } as const;
-/** A fall of the session time comes at least this many frames after every other beat, and not before `FALL_FROM` (past the start's settling window). */
-const FALL_AFTER_BEATS = 10;
+/** A mid-race fall of the session time comes no earlier: past every start's lights out and its settling window of 60 frames. */
 const FALL_FROM = 80;
-/** Frames past the 3 s a SCAR waits for its status: an unconfirmed deployment is dropped by then. */
-const WAIT_FRAMES = Math.ceil(3000 / STEP) + 2;
 
 /** Session-phase signals by frame index; every timeline built from the same params carries them at the same frames. */
 export type PhaseBeats = {
@@ -34,7 +31,7 @@ export type PhaseBeats = {
     | undefined;
   /** An RDFL at this frame. */
   redFlag: number | undefined;
-  /** The session time falls by `ms`, `after` frames past every other beat (frame ids keep rising, no FLBK). */
+  /** The session time falls by `ms` at frame `FALL_FROM + after`, wherever the other beats are (frame ids keep rising, no FLBK). */
   fall: { after: number; ms: number } | undefined;
 };
 
@@ -72,7 +69,7 @@ const arbPhases: fc.Arbitrary<PhaseBeats> = fc.record({
     { nil: undefined },
   ),
   redFlag: fc.option(fc.integer({ min: 15, max: 290 }), { nil: undefined, freq: 2 }),
-  fall: fc.option(fc.record({ after: fc.integer({ min: 0, max: 100 }), ms: fc.integer({ min: 100, max: 1000 }) }), { nil: undefined }),
+  fall: fc.option(fc.record({ after: fc.integer({ min: 0, max: 219 }), ms: fc.integer({ min: 100, max: 1000 }) }), { nil: undefined }),
 });
 
 export const arbRace: fc.Arbitrary<RaceParams> = fc.record({
@@ -92,12 +89,7 @@ export const arbRace: fc.Arbitrary<RaceParams> = fc.record({
 const lightsOutAt = (start: PhaseBeats['start']): number | undefined => (start === 'none' ? undefined : LIGHTS_FROM[start] + 5);
 
 /** The frame the session time falls at, if it does. */
-const fallAt = (b: PhaseBeats): number | undefined => {
-  if (!b.fall) return undefined;
-  const n = b.neutralisation;
-  const neutralisationEnd = n ? n.at + Math.max(n.confirmAfter, n.signal === 'scarOnly' ? WAIT_FRAMES : 0, (n.resumeAfter ?? 0) + 5) : 0;
-  return Math.max(FALL_FROM, Math.max(lightsOutAt(b.start) ?? 0, b.redFlag ?? 0, neutralisationEnd) + FALL_AFTER_BEATS) + b.fall.after;
-};
+const fallAt = (b: PhaseBeats): number | undefined => (b.fall ? FALL_FROM + b.fall.after : undefined);
 
 /** Session time of frame i: 16 ms a frame, from 0 again at a formation lap's reset, and lower by the fall from its frame on. */
 const timeOf = (b: PhaseBeats, i: number): number => {

@@ -121,32 +121,62 @@ describe('the settling window: 60 frames after lights out', () => {
     const { results } = fallAt(59);
     expect(results[LIGHTS_OUT + 60]!.clockFall).toBeUndefined();
   });
-  it('a fall 61 frames after lights out is no settling: it changes nothing and is reported', () => {
+  it('a fall 61 frames after lights out is no settling: it truncates nothing and is reported', () => {
     const { results } = fallAt(60);
     const r = results[LIGHTS_OUT + 61]!;
     expect([r.delta.truncated, r.clockFall]).toEqual([false, { fromMs: raceAt(59), toMs: 100 }]);
   });
 });
 
+// Spec 3.3 as amended (user ruling 2026-10-30): a fall that is no flashback and not the start is logged, and the
+// engine keeps its race clock monotonic: every entry stamped after the fall gets the fall's size as an offset.
 describe('any other fall of the session time', () => {
   const fall = 300;
-  const frames = () => script(gridStart(400, (k) => ({
-    ...(k >= fall && { at: 1000 + (k - fall) * STEP }),
+  /** The clock falls from raceAt(299) to 1 s at race frame 300; so entries after it move up by this much. */
+  const OFFSET = raceAt(fall - 1) - 1000;
+  /** Race frame k's raw session time after the fall. */
+  const rawAt = (k: number) => 1000 + (k - fall) * STEP;
+  const frames = (extra: (k: number) => Beat = () => ({})) => script(gridStart(400, (k) => ({
+    ...(k >= fall && { at: rawAt(k) }),
     ...(k === 100 && { events: [ovtk(1, 0)] }),
+    ...(k === 350 && { events: [ovtk(0, 1)] }),
     cars: (d) => lap(d, 0, { currentLapNum: 1 + Math.floor(k / 120), lapDistance: (k % 120) * 30, ...(k >= 120 && { lastLapTimeInMs: 120 * STEP }) }),
+    ...extra(k),
   })));
 
-  it('a fall mid-race without a flashback keeps every entry recorded before it and reports both times', () => {
+  it('a fall mid-race without a flashback keeps every entry recorded before it, truncates nothing and reports both raw times', () => {
     const all = frames();
-    const { runner } = run(all.slice(0, LIGHTS_OUT + 1 + fall));
+    const { runner } = run(all.slice(0, raceFrame(fall)));
     const before = structuredClone(runner.state.history);
-    const r = runner.apply(all[LIGHTS_OUT + 1 + fall]!);
+    const r = runner.apply(all[raceFrame(fall)]!);
     expect([r.delta.truncated, r.flashback, r.clockFall]).toEqual([false, undefined, { fromMs: raceAt(fall - 1), toMs: 1000 }]);
     const h = runner.state.history;
     expect({ laps: h.laps.slice(0, before.laps.length), events: h.events.slice(0, before.events.length), miniSectors: h.miniSectors.slice(0, before.miniSectors.length) })
       .toEqual({ laps: before.laps, events: before.events, miniSectors: before.miniSectors });
     expect(before.laps.length).toBeGreaterThan(0);
     expect(runner.state.open.situations.session).toEqual({ kind: 'racing', start: 0, startLeaderLap: 1 });
+  });
+  it('entries stamped after the fall continue the race clock: their raw time plus the fall’s size (an overtake, a lap)', () => {
+    const { runner } = run(frames());
+    const h = runner.state.history;
+    expect(h.events.filter((e) => e.kind === 'overtake').map((e) => e.at)).toEqual([raceAt(100), rawAt(350) + OFFSET]);
+    expect(h.laps.filter((l) => l.carId === 0).map((l) => [l.lapNumber, l.completedAt])).toEqual([[1, raceAt(120)], [2, raceAt(240)], [3, rawAt(360) + OFFSET]]);
+  });
+  it('the mini-sector crossings stay in time order across the fall', () => {
+    const at = run(frames()).runner.state.history.miniSectors.filter((m) => m.carId === 0).map((m) => m.at);
+    expect(at.filter((t, i) => i > 0 && t < at[i - 1]!)).toEqual([]);
+  });
+  it('a phase that opens after the fall starts above every phase before it, and no span ends below its start', () => {
+    // an SC from race frame 100 to 200, the fall at 300, a VSC from 330
+    const { runner } = run(frames((k) => ({
+      ...(k === 100 && { events: [ovtk(1, 0), scar(1, 0)], session: status(1) }),
+      ...(k === 200 && { events: [scar(1, 3)], session: status(0) }),
+      ...(k === 330 && { events: [scar(2, 0)], session: status(2) }),
+    })));
+    const spans = runner.state.history.sessionPhases;
+    expect(runner.state.open.situations.session).toMatchObject({ kind: 'neutralised', start: rawAt(330) + OFFSET, detail: { car: 'VSC' } });
+    expect(spans.map((p) => p.start).filter((t) => t > rawAt(330) + OFFSET)).toEqual([]);
+    expect(spans.filter((p) => p.end < p.start)).toEqual([]);
   });
 });
 
