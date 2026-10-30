@@ -272,6 +272,21 @@ describe('race-zandvoort-full-lap: the lap-end samples of the player lap', () =>
   });
 });
 
+describe('race-zandvoort-full-lap: the lap-start samples of the player lap', () => {
+  it('the ERS store and tyre wear at the lap start are those of the frame that starts the lap, the one that completes the lap before', () => {
+    const lap = playerLap();
+    const starting = run.seen.get(lap.lapNumber)!.first;
+    expect(valueOf(lap.ersStoreAtStartJ)).toBe(valueOf(starting.energy.ers).storeJ);
+    for (const k of CORNERS) expect(valueOf(lap.wearAtStartPct[k]), k).toBe(valueOf(starting.tyres.corners[k].wearPct));
+  });
+
+  it("the lap the segment joins after its start has no start samples: unknown('notReceived')", () => {
+    const joined = confirmedLap(run.state.playerCar, playerLap().lapNumber - 1)!;
+    const none = { known: false, reason: 'notReceived' };
+    expect([joined.wearAtStartPct, joined.ersStoreAtStartJ]).toEqual([{ fl: none, fr: none, rl: none, rr: none }, none]);
+  });
+});
+
 describe('race-zandvoort-full-lap: gaps from the crossings', () => {
   const gaps = () => run.last.outputs.get(GAPS) as GapsOutput;
 
