@@ -1,21 +1,27 @@
-import { carId, known, unknown, type CarBands, type DamageState, type FuelState, type Insight, type TyreWear } from '@pitwall/domain';
+import { carId, known, unknown, type CarBands, type DamageState, type ErsState, type FuelState, type Insight, type TyreWear } from '@pitwall/domain';
 import { InsightBook, type EngineView, type History } from '@pitwall/engine';
 import { describe, expect, it } from 'vitest';
 import { ALARMS } from '../../src/alarms/index.ts';
 import { alarmsCalculator } from '../../src/alarms/calculator.ts';
 import { CAR_BANDS } from '../../src/car-bands/index.ts';
+import { carBandsCalculator } from '../../src/car-bands/calculator.ts';
 import { DAMAGE } from '../../src/damage/index.ts';
+import { damageCalculator } from '../../src/damage/calculator.ts';
 import { ERS } from '../../src/ers/index.ts';
+import { ersCalculator } from '../../src/ers/calculator.ts';
 import { FUEL } from '../../src/fuel/index.ts';
+import { fuelCalculator } from '../../src/fuel/calculator.ts';
+import { SESSION_REMAINING, type SessionRemaining } from '../../src/session-remaining/index.ts';
 import { TYRE_WEAR } from '../../src/tyre-wear/index.ts';
 import { tyreWearCalculator } from '../../src/tyre-wear/calculator.ts';
-import { carState, engineView, event, lap, realismHidden } from '../../../../test-support/builders/index.ts';
+import { carState, engineView, event, lap, realismHidden, telemetryRestricted } from '../../../../test-support/builders/index.ts';
 
 // Assumptions pinned here (see the test report): key = `${kind}:${carId}:${channel}`; channel names `tyre.<surfaceC|carcassC|pressurePsi>.<corner>`,
 // `brakesC.<corner>`, `engineC`, `wear.<corner>`, `fuel`, `warnings`; `damageJump` and `penaltyNew` use the jump's / event's session time as channel;
 // `compute` returns the active alarms and `insights` returns them unchanged; raisedAt = view.state.sessionTime.
 
 const perCorner = <T>(make: () => T) => ({ fl: make(), fr: make(), rl: make(), rr: make() });
+const CORNER_IDS = ['fl', 'fr', 'rl', 'rr'] as const;
 const NOW = 12_345;
 
 const reading = (state: 'below' | 'in' | 'above', over: { outForFullLap?: boolean; value?: number } = {}) => ({
@@ -499,5 +505,62 @@ describe('alarms calculator', () => {
       expect(changes).toHaveLength(raised.length);
       expect(changes.every((c) => c.type === 'resolved' && c.at === 2_000)).toBe(true);
     });
+  });
+});
+
+describe('hidden data of one of our cars (Review Focus 5)', () => {
+  const TEAMMATE = carId(4);
+  const restricted = unknown('restricted');
+  /** Laps 1-5 of the teammate: wear 52 % rising 3 %/lap, fuel 10.5 kg falling 1.5 kg/lap. */
+  const teammateLaps = () =>
+    [1, 2, 3, 4, 5].map((n) =>
+      lap({
+        carId: TEAMMATE,
+        lapNumber: n,
+        wearAtEndPct: perCorner(() => known(49 + 3 * n, n * 90_000)),
+        fuelAtEndKg: known(12 - 1.5 * n, n * 90_000),
+      }),
+    );
+  /** As the engine records the same laps of a car whose driver withholds the telemetry: the lap-end samples are restricted too. */
+  const hiddenLaps = () =>
+    teammateLaps().map((l) => ({ ...l, wearAtEndPct: perCorner(() => restricted), fuelAtEndKg: restricted, fuelAtStartKg: restricted, ersStoreAtEndJ: restricted }));
+  /** The teammate with 65 % wear and 3 kg of fuel: 2 laps to the 70 % limit, 2 laps of fuel for 10 laps left. */
+  const teammate = () =>
+    carState({
+      id: TEAMMATE,
+      tyres: { corners: perCorner(() => ({ wearPct: known(65, 0) })) },
+      energy: { fuel: known({ kg: 3, capacityKg: 110, remainingLaps: 2, mix: 'standard' as const }, 0) },
+    });
+
+  /** The real upstream calculators over the view, then `alarms` over their outputs. */
+  const chain = (car: ReturnType<typeof carState>, laps: ReturnType<typeof lap>[]) => {
+    const remaining: SessionRemaining = { basis: 'laps', lapsLeft: known(10, 0), timeLeftMs: unknown('notApplicable') };
+    const base = engineView({ cars: [carState(), car], history: { laps }, sessionTime: NOW, outputs: new Map([[SESSION_REMAINING, remaining]]) });
+    const view: EngineView = { ...base, state: { ...base.state, teammateCar: TEAMMATE } };
+    const outputs = new Map<string, unknown>([
+      [SESSION_REMAINING, remaining],
+      [TYRE_WEAR, tyreWearCalculator.compute(view)],
+      [FUEL, fuelCalculator.compute(view)],
+      [ERS, ersCalculator.compute(view)],
+      [CAR_BANDS, carBandsCalculator.compute(view)],
+      [DAMAGE, damageCalculator.output(damageCalculator.init(view))],
+    ]);
+    const withOutputs: EngineView = { ...view, outputs };
+    return { outputs, alarms: run(withOutputs).filter((a) => a.carId === TEAMMATE) };
+  };
+
+  it('the teammate with its telemetry public raises the wear and fuel alarms (the case the next test hides)', () => {
+    expect(chain(teammate(), teammateLaps()).alarms.map((a) => a.kind).sort()).toEqual(['fuelShort', ...CORNER_IDS.map(() => 'wearLimitNear')].sort());
+  });
+
+  it("a teammate whose driver withholds the telemetry: wear, fuel and ERS stay unknown('restricted') and raise no alarm", () => {
+    const { outputs, alarms } = chain(telemetryRestricted(teammate()), hiddenLaps());
+    const wear = (outputs.get(TYRE_WEAR) as Record<number, TyreWear>)[TEAMMATE]!;
+    for (const corner of CORNER_IDS) expect(wear.corners[corner]).toEqual({ wearPct: restricted, ratePctPerLap: restricted, lapsToLimit: restricted });
+    const fuel = (outputs.get(FUEL) as Record<number, FuelState>)[TEAMMATE]!;
+    expect([fuel.kg, fuel.burnKgPerLap, fuel.lapsOfFuel, fuel.marginLaps, fuel.saveTargetKgPerLap]).toEqual([restricted, restricted, restricted, restricted, restricted]);
+    const ers = (outputs.get(ERS) as Record<number, ErsState>)[TEAMMATE]!;
+    expect([ers.storeJ, ers.storeTrendJPerLap, ers.attack]).toEqual([restricted, restricted, restricted]);
+    expect(alarms).toEqual([]);
   });
 });

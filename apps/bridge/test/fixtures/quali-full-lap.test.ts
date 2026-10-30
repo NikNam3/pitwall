@@ -1,31 +1,34 @@
 // Behaviours that only exist over a whole qualifying lap, on qualifying-singapore-full-lap (facts in fixtures/index.json):
 // in Q2, car 14 (the player) leaves the out lap at the line and runs its flying lap 1 to the line; ten other cars
-// complete a lap whose start lies before the segment. One replay through the engine and `lap-times` feeds every test.
+// complete a lap whose start lies before the segment. One replay through the engine, `lap-times` and `car-bands` feeds every test.
 import { beforeAll, describe, expect, it } from 'vitest';
-import { classifyLap, LAP_TIMES, LAP_TIMES_CONFIG, lapTimesCalculator, type LapTimesOutput } from '@pitwall/analysis';
+import { carBandsCalculator, classifyLap, LAP_TIMES, LAP_TIMES_CONFIG, lapTimesCalculator, type LapTimesOutput } from '@pitwall/analysis';
 import type { Known, LapRecord } from '@pitwall/domain';
 import type { DeepReadonly, EngineState } from '@pitwall/engine';
 import { InvariantChecker } from '../../../../packages/engine/test/support/invariants.ts';
+import { bandsAgainstPackets, type BandsAgainstPackets } from './car-bands-packets.ts';
 import { replayScheduled } from './engine-replay.ts';
 import { segmentPath } from './replay.ts';
 
 type Lap = DeepReadonly<LapRecord>;
 
-const run: { state: DeepReadonly<EngineState>; lapTimes: LapTimesOutput; invariantErrors: string[] } = {} as never;
+const run: { state: DeepReadonly<EngineState>; lapTimes: LapTimesOutput; invariantErrors: string[]; bands: BandsAgainstPackets } = {} as never;
 
 beforeAll(async () => {
   const invariantErrors: string[] = [];
   const checker = new InvariantChecker();
   let lapTimes: LapTimesOutput | undefined;
-  const runner = await replayScheduled(segmentPath('qualifying-singapore-full-lap.pwrec.gz'), [lapTimesCalculator], (r, scheduled) => {
+  const bands = bandsAgainstPackets();
+  const runner = await replayScheduled(segmentPath('qualifying-singapore-full-lap.pwrec.gz'), [lapTimesCalculator, carBandsCalculator], (r, scheduled, frame) => {
     try {
       checker.check(r);
     } catch (error) {
       if (invariantErrors.length === 0) invariantErrors.push(String(error));
     }
     lapTimes = scheduled.outputs.get(LAP_TIMES) as LapTimesOutput;
+    bands.observe(r.state, scheduled, frame);
   });
-  Object.assign(run, { state: runner.state, lapTimes: lapTimes!, invariantErrors });
+  Object.assign(run, { state: runner.state, lapTimes: lapTimes!, invariantErrors, bands: bands.seen });
 });
 
 /** The value of a `Known` the test needs; an unknown one fails the test with its reason. */
@@ -116,5 +119,12 @@ describe('qualifying-singapore-full-lap: the projection on the next lap', () => 
     const cutOff = valueOf(run.lapTimes.projections[run.state.playerCar]!.cutOff);
     expect(cutOff.position).toBe(session.numActiveCars - LAP_TIMES_CONFIG.defaults.eliminatedQ2);
     expect(cutOff.timeMs).toBe([...othersBests()].sort((a, b) => a - b)[cutOff.position - 1]);
+  });
+});
+
+describe("qualifying-singapore-full-lap: car-bands on the game's packets", () => {
+  it("on every run of car-bands, each of the player's channels and corners carries the packet value, the config band of the fitted slick and the state it gives", () => {
+    expect(run.bands.runs).toBeGreaterThan(0);
+    expect(run.bands.off).toEqual([]);
   });
 });

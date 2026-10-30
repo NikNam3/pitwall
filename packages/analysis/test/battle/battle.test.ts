@@ -1,6 +1,7 @@
 // `battle` (spec 6.3): our cars against the car ahead and behind, from `gaps` and `pace` outputs.
 import { carId, known, unknown, type CarId, type CarState, type Interval, type Known, type Ms } from '@pitwall/domain';
 import type { EngineView } from '@pitwall/engine';
+import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import { BATTLE, BATTLE_CONFIG } from '../../src/battle/index.ts';
 import { battleCalculator } from '../../src/battle/calculator.ts';
@@ -278,5 +279,43 @@ describe('battle', () => {
       expect(c.ahead).toMatchObject({ known: false, reason: 'notApplicable' });
       expect(c.behind).toMatchObject({ known: false, reason: 'notApplicable' });
     }
+  });
+});
+
+describe('battle: the closing rate has the sign of the gap change', () => {
+  /** A gap at each of `laps` line crossings that moves the same way every lap: from `start`, by one of `steps` per lap. */
+  const series = fc.record({
+    start: fc.integer({ min: 12_000, max: 20_000 }),
+    steps: fc.array(fc.integer({ min: 1, max: 2_000 }), { minLength: 2, maxLength: 6 }),
+    falling: fc.boolean(),
+  });
+  const gapsOf = ({ start, steps, falling }: { start: number; steps: number[]; falling: boolean }): number[] =>
+    [0, ...steps].map((_, i) => start + (falling ? -1 : 1) * steps.slice(0, i).reduce((a, b) => a + b, 0));
+  const closing = (side: ReturnType<typeof card>['ahead']): number => {
+    if (!side.known || !side.value.closingMsPerLap.known) throw new Error('no closing rate');
+    return side.value.closingMsPerLap.value;
+  };
+
+  it('property: a gap to the car ahead that falls every lap closes (positive), one that grows every lap opens (negative)', () => {
+    fc.assert(
+      fc.property(series, (s) => {
+        const gaps = gapsOf(s);
+        const ahead = lines(gaps.map((_, i) => (i + 1) * 100_000));
+        const view = build(base({ lineTimes: { 1: ahead, 0: plus(ahead, gaps), 3: plus(plus(ahead, gaps), gaps.map(() => 3_000)) } }));
+        expect(Math.sign(closing(card(view).ahead))).toBe(s.falling ? 1 : -1);
+      }),
+    );
+  });
+
+  it('property: a car behind whose gap falls every lap closes on us (positive), one that drops back opens (negative)', () => {
+    fc.assert(
+      fc.property(series, (s) => {
+        const gaps = gapsOf(s);
+        const ahead = lines(gaps.map((_, i) => (i + 1) * 100_000));
+        const ours = plus(ahead, gaps.map(() => 3_000));
+        const view = build(base({ lineTimes: { 1: ahead, 0: ours, 3: plus(ours, gaps) } }));
+        expect(Math.sign(closing(card(view).behind))).toBe(s.falling ? 1 : -1);
+      }),
+    );
   });
 });

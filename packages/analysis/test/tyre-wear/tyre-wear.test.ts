@@ -270,3 +270,16 @@ describe('tyre-wear calculator', () => {
     expect(out[carId(2)]).toBeUndefined();
   });
 });
+
+describe('tyre-wear rate against the lap-end samples', () => {
+  it('lap-end wear with per-lap noise of up to 0.3 % around 2 %/lap: the rate is within 0.2 %/lap of it', () => {
+    // the built trend is 2 %/lap per corner; each lap end is off it by the noise below
+    const noise = [0, 0.1, -0.1, 0.2, -0.1, 0.3, -0.3];
+    const laps = noise.map((e, i) => wornLap(i + 1, 2 * i + e));
+    const out = run(viewOf(laps, 12));
+    for (const corner of ['fl', 'fr', 'rl', 'rr'] as const) {
+      const rate = out.corners[corner].ratePctPerLap;
+      expect(rate.known && Math.abs(rate.value - 2)).toBeLessThanOrEqual(0.2);
+    }
+  });
+});

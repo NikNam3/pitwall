@@ -29,6 +29,7 @@ import {
 import { buildPacket } from '../../packages/engine/test/builders/index.ts';
 import { createCarState } from '../../packages/engine/src/step/initial-state.ts';
 import { withholdForRealism } from '../../packages/engine/src/step/realism.ts';
+import { withholdRestricted } from '../../packages/engine/src/step/restricted.ts';
 
 /** Overrides nested objects key by key; arrays and `Known` values are replaced whole. */
 export type DeepPartial<T> = T extends readonly unknown[]
@@ -286,6 +287,17 @@ export function carState(over: DeepPartial<CarState> = {}): CarState {
 export function realismHidden(car: CarState): CarState {
   const copy = structuredClone(car);
   withholdForRealism(copy);
+  return copy;
+}
+
+/**
+ * A copy of the car as the game sends a human who withholds their telemetry: its visibility is `restricted` and the
+ * engine's own `withholdRestricted` sets the restricted fields (fuel, ERS, wear, damage, tyre sets) to `unknown('restricted')`.
+ */
+export function telemetryRestricted(car: CarState): CarState {
+  const copy = structuredClone(car);
+  copy.identity.visibility = 'restricted';
+  withholdRestricted(copy);
   return copy;
 }
 

@@ -399,3 +399,21 @@ describe('neighbourhood', () => {
     );
   });
 });
+
+describe('gapper lines are continuous', () => {
+  it('every car has one point per lap it completed, laps 1 to n with none missing, a lapped car included', () => {
+    // the leader laps in 90 s, car 1 in 110 s: at 560 s the leader has completed 6 laps and car 1 5, a lap down
+    const ms = byTime([
+      ...[1, 2, 3, 4, 5, 6].flatMap((n) => crossings(carId(0), n, 90_000, (n - 1) * 90_000)),
+      { carId: carId(0), lap: 7, segment: 0, at: 540_000 },
+      ...[1, 2, 3, 4, 5].flatMap((n) => crossings(carId(1), n, 110_000, (n - 1) * 110_000)),
+      { carId: carId(1), lap: 6, segment: 0, at: 550_000 },
+    ]).filter((m) => m.at <= 560_000);
+    const out = run(viewOf(ms));
+    expect(interval(out, 1).lapsDown).toBe(1);
+    // the virtual car at 90 s: the leader stays on it, car 1 loses 20 s each lap
+    const lines = gapperLines(out, { kind: 'fixed', lapMs: 90_000 });
+    expect(line(lines, 0)).toEqual([1, 2, 3, 4, 5, 6].map((lap) => [lap, 0]));
+    expect(line(lines, 1)).toEqual([1, 2, 3, 4, 5].map((lap) => [lap, -20_000 * lap]));
+  });
+});
