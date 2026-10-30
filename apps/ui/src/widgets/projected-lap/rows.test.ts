@@ -88,6 +88,12 @@ describe('projectionRows', () => {
     for (const row of rows) expect(row).not.toHaveProperty('reason');
   });
 
+  it('a car out of the race (on its lap, every value notApplicable) shows each value\'s mark, never "out lap"', () => {
+    const rows = projectionRows(projection(), true);
+    expect(rows[0]).toMatchObject({ time: '', pos: '', delta: '', unknown: { time: 'notApplicable', pos: 'notApplicable', delta: 'notApplicable' } });
+    expect(rows[0]!.time).not.toBe('out lap');
+  });
+
   it('keeps the reason of a hidden value (realism)', () => {
     const rows = projectionRows({ ...projection(), projectedLapMs: unknown('realism'), deltaToBestMs: unknown('realism'), projectedPosition: unknown('realism') }, true);
     expect(rows[0]).toMatchObject({ time: '', pos: '', delta: '', label: '', unknown: { time: 'realism', pos: 'realism', delta: 'realism' } });
