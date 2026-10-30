@@ -23,6 +23,13 @@ describe('committed segments', () => {
     expect(s.summary).toMatchObject({ endedCleanly: true, meta: { startedAt: '2026-10-27T23:15:04.898Z', cut: { fromS: 0, toS: 0.5, contextPackets: 0 } } });
     expect(s.summary.durationMs).toBeCloseTo(8750.935, 2);
   });
+  it('race-zandvoort-uid-reuse-start: the formation start and the race start, no context packets', async () => {
+    const s = await load('race-zandvoort-uid-reuse-start.pwrec.gz');
+    expect(s.records).toHaveLength(3429);
+    expect(s.packets[0]!.packetId).toBe(3);
+    expect(s.codes).toEqual({ BUTN: 128, SSTA: 1, LGOT: 2, SCAR: 3, DRSE: 1, OVTK: 15, DRSD: 1, STLG: 5 });
+    expect(s.summary).toMatchObject({ endedCleanly: true, meta: { startedAt: '2026-10-29T22:00:37.741Z', cut: { fromS: 0, toS: 1, contextPackets: 0 } } });
+  });
   it('race-singapore-end: 20 UID-0 SessionHistory packets (cars 0-19) arrive before SEND', async () => {
     const s = await load('race-singapore-end.pwrec.gz');
     expect(s.records).toHaveLength(696);

@@ -425,6 +425,22 @@
       ]
     },
     {
+      "file": "race-zandvoort-uid-reuse-start.pwrec.gz",
+      "source": "raceZandvoortUidReuse",
+      "fromS": 0,
+      "toS": 1,
+      "records": 3429,
+      "features": [
+        "588 238 bytes; no context packets; first records SSTA (0.139), LGOT and SCAR(3,0) (0.000) before the first Session packet (frame 30, 0.390)",
+        "the formation start: safetyCarStatus 3 from 0.887; then the formation-end reset (131.714 to 0.033 at frame 7912, outside the window, so in the segment the clock falls 0.990 at frame 66 to 0.033), SCAR(0,3) frame 7913, DRSE 7914, SCAR(3,3) and OVTK x15 frame 7932, DRSD 7938, a small fall 0.819 to 0.794 at frame 7947",
+        "the start lights: hold at 0.794 for frames 7947-8370, STLG x5 frames 7992-8187, LGOT at frame 8369; after it the forward jump to 6.790 lies outside the window: 0.831 at frame 8380, the fall to 0.027 at frame 8381, then the race to 1.0 (frame 8441)",
+        "the source's LapPositions packets frozen at frame 10539, session time 33.337 (one right after every real LapPositions, from the session's start on) lie outside the window; tests put them back to check the frame assembler",
+        "the first Participants packet at frame 7938 (0.715)",
+        "SSTA x1, LGOT x2, SCAR x3, DRSE x1, OVTK x15, DRSD x1, STLG x5, BUTN x128",
+        "duration 190492.051 ms"
+      ]
+    },
+    {
       "file": "race-singapore-wet-flashback.pwrec.gz",
       "source": "raceSingaporeWet",
       "fromS": 741.5,
