@@ -169,9 +169,10 @@ export class SessionProcessor {
     try {
       const result = runner.apply(frame);
       storage?.writeConfirmed(this.#key, result.state.history, result.delta);
-      if (result.flashback) {
+      // A flashback or a clock reset discarded history: the calculators start over.
+      if (result.delta.truncated) {
         scheduler.reset();
-        // A run triggered before the flashback would land on the new timeline.
+        // A run triggered before it would land on the new timeline.
         this.#o.jobs?.flashback();
       }
       this.#o.calcStats?.atSessionTime(result.state.sessionTime);

@@ -1,6 +1,7 @@
 import { toSessionTime, type Ms, type SessionTime } from '@pitwall/domain';
 import type { EventDetails } from '@pitwall/protocol';
 import type { Frame } from '../frame/frame.ts';
+import { dropRecordedAfter } from '../history/clock-reset.ts';
 import { historyLengths, truncateHistory, type HistoryDelta } from '../history/delta.ts';
 import type { EngineState } from '../state/engine-state.ts';
 import { initialState } from '../step/initial-state.ts';
@@ -12,13 +13,23 @@ import { SnapshotStore } from './snapshots.ts';
 /** Where a flashback took the session: the game's target frame, its session time and the player's lap there. */
 export type FlashbackInfo = { targetFrameId: number; targetSessionTime: SessionTime; rewoundMs: Ms; targetLap: number };
 
-/** What applying one frame did. On a flashback `changed` holds every tag and `delta.truncated` is true. */
+/**
+ * The game set the session time back from `fromMs` to `toMs` without a flashback (at the end of the formation lap):
+ * the history recorded after `toMs` is gone, the cars carry on.
+ */
+export type ClockReset = { fromMs: SessionTime; toMs: SessionTime };
+
+/**
+ * What applying one frame did. On a flashback or a clock reset `changed` holds every tag and `delta.truncated` is
+ * true; `flashback` or `clockReset` tells which of the two it was.
+ */
 export type StepResult = {
   state: DeepReadonly<EngineState>;
   changed: Set<ChangeTag>;
   corrections: LapCorrection[];
   delta: HistoryDelta;
   flashback?: FlashbackInfo;
+  clockReset?: ClockReset;
 };
 
 export type SessionRunnerOptions = {
@@ -35,6 +46,9 @@ export type SessionRunnerOptions = {
 const MAX_FRAMES_PER_SECOND = 120;
 const framesIn = (ms: number): number => Math.ceil((ms / 1000) * MAX_FRAMES_PER_SECOND);
 
+/** A fall of the session time by more than this, with no flashback, is a clock reset. */
+const CLOCK_RESET_FALL_MS = 1000;
+
 /** The frame a flashback goes back to; without an `FLBK` event its session time is only known after the replay. */
 type Target = { frameId: number; sessionTime?: SessionTime };
 
@@ -45,7 +59,8 @@ const isFlashback = (details: EventDetails): details is FlashbackDetails => deta
  * Runs one session's frames through `step` and handles flashbacks (spec 5.4): it takes a snapshot every
  * `snapshotEveryMs` of session time and keeps the frames of the last `replayWindowMs`. A flashback restores the
  * newest snapshot at or before the target, cuts the history back, replays the kept frames up to the target and
- * then applies the game's new frame, so the discarded frames leave no trace.
+ * then applies the game's new frame, so the discarded frames leave no trace. A clock reset drops the history recorded
+ * after the new session time and every snapshot and kept frame, so no later rewind goes back before it.
  */
 export class SessionRunner {
   #state: EngineState;
@@ -84,17 +99,22 @@ export class SessionRunner {
     const before = historyLengths(this.#state.history);
     const target = this.#flashbackTarget(frame);
     const flashback = target && this.#rewind(target, frame);
+    const clockReset = target ? undefined : this.#clockReset(frame);
+    if (clockReset) dropRecordedAfter(this.#state, clockReset.toMs);
     const { changed, corrections } = step(this.#state, frame);
     this.#lastOverallFrameId = frame.overallFrameId;
     if (target) this.#rewoundTo = target.frameId;
     else if (this.#rewoundTo !== undefined && frame.frameId > this.#rewoundTo + 1) this.#rewoundTo = undefined;
-    this.#keep(frame);
+    if (clockReset) this.#restart();
+    else this.#keep(frame);
+    const truncated = flashback !== undefined || clockReset !== undefined;
     return {
       state: this.#state,
-      changed: flashback ? new Set(ALL_CHANGE_TAGS) : changed,
+      changed: truncated ? new Set(ALL_CHANGE_TAGS) : changed,
       corrections,
-      delta: { before, after: historyLengths(this.#state.history), truncated: flashback !== undefined },
+      delta: { before, after: historyLengths(this.#state.history), truncated },
       ...(flashback && { flashback }),
+      ...(clockReset && { clockReset }),
     };
   }
 
@@ -107,6 +127,17 @@ export class SessionRunner {
         ? { frameId: frame.frameId - 1 }
         : undefined;
     return target && target.frameId < this.#state.lastFrameId && target.frameId !== this.#rewoundTo ? target : undefined;
+  }
+
+  /**
+   * A clock reset: the session time falls by more than `CLOCK_RESET_FALL_MS` while the frame id does not go back and
+   * no `FLBK` comes. An `FLBK` or a frame-id drop is a flashback, also when it is a second report that is ignored.
+   */
+  #clockReset(frame: Frame): ClockReset | undefined {
+    const fromMs = this.#state.sessionTime;
+    const fell = frame.sessionTime < fromMs - CLOCK_RESET_FALL_MS;
+    const noFlashback = frame.frameId >= this.#state.lastFrameId && !frame.events.some((e) => isFlashback(e.details));
+    return fell && noFlashback ? { fromMs, toMs: frame.sessionTime } : undefined;
   }
 
   /**
@@ -131,6 +162,12 @@ export class SessionRunner {
       rewoundMs: rewoundFrom - targetSessionTime,
       targetLap: this.#state.cars[this.#state.playerCar]?.timing.lap ?? 0,
     };
+  }
+
+  /** After a clock reset: the state after its frame becomes the first snapshot, and the older ones and the kept frames go. */
+  #restart(): void {
+    this.#snapshots.restart(this.#state, this.#state.lastFrameId);
+    this.#frames = [];
   }
 
   /**

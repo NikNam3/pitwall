@@ -31,12 +31,12 @@ const snapshotOf = (state: EngineState, frameId: number): Snapshot => {
 
 /**
  * The snapshots of one session. Frame ids and session times rise from one snapshot to the next, because a rewind
- * drops every snapshot after the one it restores. The first snapshot is never dropped. Every snapshot from the
+ * drops every snapshot after the one it restores. The first snapshot is only replaced by a restart (a clock reset). Every snapshot from the
  * window's start on is kept; before it, one per `KEEP_OLDER_EVERY_MS` slot, so the count grows by two a minute.
  */
 export class SnapshotStore {
   readonly #window: SnapshotWindow;
-  readonly #first: Snapshot;
+  #first: Snapshot;
   /** Oldest first. */
   readonly #later: Snapshot[] = [];
   /** How many of `#later` lie before the window's start and are already thinned out. */
@@ -68,6 +68,13 @@ export class SnapshotStore {
   /** The newest snapshot taken at or before frame `frameId`, or the first one when none is that old. */
   newestAtOrBefore(frameId: number): Snapshot {
     return this.#later.findLast((s) => s.frameId <= frameId) ?? this.#first;
+  }
+
+  /** Starts over with the state after frame `frameId` as the first snapshot: every one taken so far is dropped. */
+  restart(state: EngineState, frameId: number): void {
+    this.#first = snapshotOf(state, frameId);
+    this.#later.length = 0;
+    this.#thinned = 0;
   }
 
   /** Drops the snapshots taken after frame `frameId`, except the first one. */

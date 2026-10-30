@@ -9,6 +9,11 @@
 html,
 body {
   margin: 0;
+  height: 100%;
+  /* The panel never scrolls as a page: a panel clips its own content, and the browser's (white) scrollbars never show. */
+  overflow: hidden;
+  /* Inner scroll areas (overlays) get dark scrollbars. */
+  color-scheme: dark;
   background: var(--pw-bg);
   color: var(--pw-text);
   font-family: var(--pw-font);
