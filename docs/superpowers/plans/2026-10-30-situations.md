@@ -12,6 +12,8 @@
 
 ## Global Constraints
 
+- **Review after every task** (user, 2026-10-30): when a task's implement phase is done, an independent reviewer checks its diff against the three gold rules: (1) did we change the architecture by accident? (2) did we cheap out on any decision? (3) did we use any ugly workarounds? Every finding is fixed (test phase, then implement phase) before the next task starts. No severity grades.
+
 - Every rule of CLAUDE.md "Rules" (units, `Known` for missing data, no `enum`, pure engine and analysis, expected problems are values, registration by convention, `packetFormat === 2025`).
 - Tests on real data: segments under 1 MB cut with `pwrec-cut` from normal sessions, one behaviour per test; whole recordings only in acceptance for whole-pipeline properties; never recording facts (`docs/testing.md`).
 - A log reads the history only (`docs/architecture.md`); every brief lists the readers of every changed output.
