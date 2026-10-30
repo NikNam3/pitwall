@@ -72,10 +72,11 @@ describe('race moment at a neutralisation', () => {
     expectNeutralisedFromThePhase(await momentRuns('race-zandvoort-vsc.pwrec.gz'), 'VSC', 914_178);
   });
 
-  // User ruling 2026-10-30 (F2, no fix): after the player's terminal damage the game keeps the frame id until the
-  // simulated session ends, so the frame holding the SCAR of 1207.667 s closes with the last header time, 5845.008 s.
-  // Nothing is left to engineer once our driver is out; this pins the behaviour so a change to it is a decision.
-  it('race-zandvoort-retire: after the player retires, the SC phase and the moment carry the time the frozen frame closes', async () => {
-    expectNeutralisedFromThePhase(await momentRuns('race-zandvoort-retire.pwrec.gz'), 'SC', 5_845_008);
+  // Situations spec 3.1 (approved 2026-10-30): the SC announced at the player's terminal damage is never confirmed by the
+  // safety car status before the session is simulated to its end, so it opens no neutralisation (it replaces the F2 pin).
+  it('race-zandvoort-retire: an SC announced just before the simulated end is never confirmed: the moment never turns neutralised', async () => {
+    const runs = await momentRuns('race-zandvoort-retire.pwrec.gz');
+    expect(runs.filter((r) => r.phase !== undefined)).toEqual([]);
+    expect(runs.filter((r) => momentOf(r) === 'neutralised')).toEqual([]);
   });
 });

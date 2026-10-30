@@ -16,7 +16,7 @@
 - Tests on real data: segments under 1 MB cut with `pwrec-cut` from normal sessions, one behaviour per test; whole recordings only in acceptance for whole-pipeline properties; never recording facts (`docs/testing.md`).
 - A log reads the history only (`docs/architecture.md`); every brief lists the readers of every changed output.
 - No module other than `history/situations/` reads `pitStatus`, `driverStatus`, `resultStatus`, `safetyCarStatus`, SCAR, STLG, LGOT, RTMT, DTSV, SGSV, RDFL, CHQF, RCWN, SEND or DRSE/DRSD to decide a situation (spec 2.1).
-- Thresholds (spec 3.3, 4.3, 11): start settling within **60 frames** after the race's LGOT; DSQ confirmed by PENA type 6 or **2 s** unchanged; neutralisation confirmed within **2 Session packets**; offline pause after **2 s** wall time without packets; post-session jump **> 60 s** forward. Each gets a source note (user ruling 2026-10-30 / inventory section).
+- Thresholds (spec 3.3, 4.3, 11): start settling within **60 frames** after the race's LGOT; DSQ confirmed by PENA type 6 or **2 s** unchanged; neutralisation confirmed within **3 s** of its SCAR (an unconfirmed one is dropped, also at SEND); offline pause after **2 s** wall time without packets; post-session jump **> 60 s** forward. Each gets a source note (user ruling 2026-10-30 / inventory section).
 - Every reader of `FlagPhase` moves to the session phases; `FlagPhase` and `history.flagPhases` are removed (spec 11, default ruling).
 - Storage schema bumps to 3 (the database is a cache; `pitwall live` rebuilds). SP4a's planned bump becomes 4: note it in `sp4a-handoff.md`.
 - Commands prefixed `nice -n 10` while the user may be testing live; `PITWALL_FIXTURES_DIR=/home/nklx/dev/personal/pitwall/recordings`.

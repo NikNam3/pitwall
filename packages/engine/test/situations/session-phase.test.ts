@@ -97,12 +97,15 @@ describe('a neutralisation (SC, VSC)', () => {
     const { runner } = race(70, { 50: { events: [scar(1, 0)] }, 60: { session: status(0) } });
     expect(current(runner)).toMatchObject({ kind: 'neutralised', start: raceAt(50) });
   });
-  it('a deployment the second Session packet confirms stands', () => {
-    const { runner } = race(120, { 50: { events: [scar(1, 0)] }, 60: { session: status(0) }, 90: { session: status(1) } });
+  // The confirmation window: the status must show the deployment within 3 s of its SCAR (recorded lags 0.5–1.31 s, inventory 1.4).
+  const WITHIN = Math.floor(2_900 / STEP);
+  const AFTER = Math.ceil(3_100 / STEP);
+  it('a deployment the status confirms within 3 s stands, after packets that still show green', () => {
+    const { runner } = race(50 + WITHIN + 10, { 50: { events: [scar(1, 0)] }, 60: { session: status(0) }, 90: { session: status(0) }, [50 + WITHIN]: { session: status(1) } });
     expect(current(runner)).toMatchObject({ kind: 'neutralised', start: raceAt(50), detail: { car: 'SC' } });
   });
-  it('a deployment two Session packets do not confirm is dropped: racing goes on as if it never opened, and no flag phase is left', () => {
-    const { runner } = race(120, { 50: { events: [scar(1, 0)] }, 60: { session: status(0) }, 90: { session: status(0) } });
+  it('a deployment the status does not confirm within 3 s is dropped: racing goes on as if it never opened, and no flag phase is left', () => {
+    const { runner } = race(50 + AFTER + 10, { 50: { events: [scar(1, 0)] }, 60: { session: status(0) }, 90: { session: status(0) }, [50 + AFTER]: { session: status(0) } });
     expect(kinds(runner)).toEqual(['preStart', 'startLights']);
     expect(current(runner)).toEqual({ kind: 'racing', start: 0, startLeaderLap: 1 });
     expect([runner.state.history.flagPhases, activeFlagPhaseOf(runner.state)]).toEqual([[], undefined]);
