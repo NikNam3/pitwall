@@ -123,7 +123,7 @@ describe('qualifying-singapore-full-lap: the projection on the next lap', () => 
 });
 
 describe("qualifying-singapore-full-lap: car-bands on the game's packets", () => {
-  it("on every run of car-bands, each of the player's channels and corners carries the packet value, the config band of the fitted slick and the live state it gives; the surface has no live state", () => {
+  it("on every run of car-bands, each of the player's channels and corners carries the packet value, the config band of the fitted slick and the live state it gives; the surface and the brakes have no live state", () => {
     expect(run.bands.runs).toBeGreaterThan(0);
     expect(run.bands.off).toEqual([]);
   });

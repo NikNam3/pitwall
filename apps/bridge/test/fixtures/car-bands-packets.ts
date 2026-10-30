@@ -1,7 +1,8 @@
 // `car-bands` against the raw packets, for the full-lap segment tests (race-full-lap, quali-full-lap): the player's
 // channels, corners and units reach the bands as the game sends them. The expected values come from the latest
-// CarTelemetry and CarStatus packets, the bands from the run's config over the defaults. The tyre surface has no live
-// state (ruling 2026-10-30: it swings 30-60 °C within a lap, so only the whole lap judges it).
+// CarTelemetry and CarStatus packets, the bands from the run's config over the defaults. The tyre surface and the
+// brakes have no live state (rulings 2026-10-30: the surface swings 30-60 °C within a lap, the brakes fall below the band
+// on many straights, so only the whole lap judges them).
 import { CAR_BANDS, CAR_BANDS_CONFIG, type BandState, type CarBandsOutput } from '@pitwall/analysis';
 import type { BandReading, CarBands } from '@pitwall/domain';
 import type { DeepReadonly, EngineState, Frame, SchedulerResult } from '@pitwall/engine';
@@ -17,7 +18,7 @@ type Band = { lo: number; hi: number };
 type Config = typeof CAR_BANDS_CONFIG.defaults;
 /**
  * One channel: our reading of it, the game's raw value, the band the config gives for the fitted tyre kind, and
- * whether it has a live state (every channel but the tyre surface).
+ * whether it has a live state (every channel but the tyre surface and the brakes).
  */
 type Channel = {
   name: string;
@@ -33,7 +34,7 @@ const CHANNELS: Channel[] = [
     { name: `surface.${corner}`, reading: (b) => b.tyres[corner].surfaceC, raw: (t) => t.tyresSurfaceTemperature[wheel]!, band: (c, k) => tyreBand(c, k, 'surface'), live: false },
     { name: `carcass.${corner}`, reading: (b) => b.tyres[corner].carcassC, raw: (t) => t.tyresInnerTemperature[wheel]!, band: (c, k) => tyreBand(c, k, 'carcass'), live: true },
     { name: `pressure.${corner}`, reading: (b) => b.tyres[corner].pressurePsi, raw: (t) => t.tyresPressure[wheel]!, band: (c) => ({ lo: c.pressureLo, hi: c.pressureHi }), live: true },
-    { name: `brakes.${corner}`, reading: (b) => b.brakesC[corner], raw: (t) => t.brakesTemperature[wheel]!, band: (c) => ({ lo: c.brakeLo, hi: c.brakeHi }), live: true },
+    { name: `brakes.${corner}`, reading: (b) => b.brakesC[corner], raw: (t) => t.brakesTemperature[wheel]!, band: (c) => ({ lo: c.brakeLo, hi: c.brakeHi }), live: false },
   ]),
   { name: 'engine', reading: (b) => b.engineC, raw: (t) => t.engineTemperature, band: (c) => ({ lo: 0, hi: c.engineHi }), live: true },
 ];

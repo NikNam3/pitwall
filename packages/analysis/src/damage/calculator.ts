@@ -1,4 +1,5 @@
-// The `damage` calculator: per car, the damage now and the jumps folded from the `damageChange` events and the laps.
+// The `damage` calculator: per car, the damage now and the jumps folded from the `damageChange` events and the laps;
+// a fall of a part (a repair) clears that part's jumps.
 import {
   addLaps,
   emptyCurrentLaps,
@@ -49,6 +50,13 @@ const settings = (view: EngineView) => ({
   window: PACE_CONFIG.read(view).window,
 });
 
+/** A fall of a part is a repair: the car's jumps of that part and its open cluster of that part are gone. */
+const repair = (acc: Acc, carId: CarId, part: keyof DamageParts, key: string): void => {
+  acc.clusters.delete(key);
+  const list = acc.jumps.get(carId);
+  if (list !== undefined) acc.jumps.set(carId, list.filter((j) => j.part !== part));
+};
+
 const foldEvents = (acc: Acc, view: EngineView): void => {
   const { events } = view.state.history;
   for (let i = acc.events; i < events.length; i++) {
@@ -56,8 +64,11 @@ const foldEvents = (acc: Acc, view: EngineView): void => {
     if (e === undefined || e.kind !== 'damageChange' || e.carId === undefined) continue;
     const { part, fromPct, toPct } = e.params as unknown as DamageChangeParams;
     const rise = toPct - fromPct;
-    if (rise <= 0) continue;
     const key = `${e.carId}:${part}`;
+    if (rise <= 0) {
+      repair(acc, e.carId, part, key);
+      continue;
+    }
     const open = acc.clusters.get(key);
     const cluster = open !== undefined && e.at - open.start <= acc.jumpWindowMs ? open : { start: e.at, sumPct: 0 };
     cluster.sumPct += rise;

@@ -208,6 +208,85 @@ describe('damage calculator', () => {
     });
   });
 
+  describe('repairs (a fall of a part)', () => {
+    it("the user's case: three hits on the front-right wing, then a change to 0 %: no jump is left and parts shows the wing at 0", () => {
+      const events = [
+        dmg(100_000, 'frontRightWingPct', 0, 37),
+        dmg(200_000, 'frontRightWingPct', 37, 70),
+        dmg(300_000, 'frontRightWingPct', 70, 100),
+        dmg(400_000, 'frontRightWingPct', 100, 0),
+      ];
+      const state = run(events, lapsOf(6, () => 90_000));
+      expect(state.jumps).toEqual([]);
+      expect(state.parts).toMatchObject({ known: true, value: { frontRightWingPct: 0 } });
+    });
+
+    it('a repair of one of two parts hit together keeps the jump of the other part', () => {
+      const events = [dmg(10_000, 'frontLeftWingPct', 0, 10), dmg(10_000, 'floorPct', 0, 8), dmg(200_000, 'frontLeftWingPct', 10, 0)];
+      const jumps = run(events).jumps;
+      expect(jumps.map((j) => [j.at, j.parts, j.deltaPct])).toEqual([[10_000, ['floorPct'], 8]]);
+    });
+
+    it('a hit after the repair is a new jump with its own deltaPct from the repaired value', () => {
+      const events = [dmg(10_000, 'frontRightWingPct', 0, 40), dmg(200_000, 'frontRightWingPct', 40, 0), dmg(300_000, 'frontRightWingPct', 0, 12)];
+      const jumps = run(events).jumps;
+      expect(jumps.map((j) => [j.at, j.parts, j.deltaPct])).toEqual([[300_000, ['frontRightWingPct'], 12]]);
+    });
+
+    it('a repair inside an open cluster drops it: a 3 % rise before and a 3 % rise after the repair are no jump', () => {
+      // all three within jumpWindowMs (2000 ms): without the repair the two rises would add up to a 6 % jump
+      const events = [dmg(10_000, 'floorPct', 0, 3), dmg(10_500, 'floorPct', 3, 0), dmg(11_000, 'floorPct', 0, 3)];
+      expect(run(events).jumps).toEqual([]);
+    });
+
+    it("a repair of one car's part leaves the same part of another car alone", () => {
+      const view = engineView({
+        cars: [carState({ id: car0 }), carState({ id: car1 })],
+        history: { events: [dmg(10_000, 'floorPct', 0, 9, car0), dmg(10_000, 'floorPct', 0, 9, car1), dmg(200_000, 'floorPct', 9, 0, car1)], laps: [] },
+      });
+      const out = damageCalculator.output(damageCalculator.init(view));
+      expect(out[car0]!.jumps.map((j) => [j.parts, j.deltaPct])).toEqual([[['floorPct'], 9]]);
+      expect(out[car1]!.jumps).toEqual([]);
+    });
+
+    // A history with hits, a repair inside a cluster and a wing change, laps of 90 s (lap n completes at n × 90 s).
+    const repairEvents = [
+      dmg(100_000, 'frontRightWingPct', 0, 20),
+      dmg(150_000, 'floorPct', 0, 3),
+      dmg(150_500, 'floorPct', 3, 0),
+      dmg(151_000, 'floorPct', 0, 3),
+      dmg(400_000, 'frontRightWingPct', 20, 0),
+      dmg(500_000, 'frontRightWingPct', 0, 9),
+    ];
+    const repairLaps = lapsOf(8, () => 90_000);
+    /** The history as of session time `t`: the events and laps up to it. */
+    const viewAt = (t: number) =>
+      engineView({
+        cars: [carState({ id: car0 })],
+        history: { events: repairEvents.filter((e) => e.at <= t), laps: repairLaps.filter((l) => l.completedAt <= t) },
+      });
+
+    it('incremental equals from scratch over a history with repairs, after every event and every lap', () => {
+      const times = [...new Set([...repairEvents.map((e) => e.at), ...repairLaps.map((l) => l.completedAt)])].sort((a, b) => a - b);
+      let acc = damageCalculator.init(viewAt(0));
+      for (const t of times) {
+        const view = viewAt(t);
+        acc = damageCalculator.update(acc, view.delta, view);
+        expect(damageCalculator.output(acc), `at ${t}`).toEqual(damageCalculator.output(damageCalculator.init(view)));
+      }
+    });
+
+    it('a flashback to before the wing change brings its jump back and equals a fresh run', () => {
+      const full = viewAt(720_000);
+      const acc = damageCalculator.update(damageCalculator.init(viewAt(0)), full.delta, full);
+      const cut = viewAt(399_999);
+      const truncated = { ...cut.delta, truncated: true };
+      const after = damageCalculator.output(damageCalculator.update(acc, truncated, { ...cut, delta: truncated }));
+      expect(after).toEqual(damageCalculator.output(damageCalculator.init(cut)));
+      expect(after[car0]!.jumps.map((j) => [j.at, j.parts, j.deltaPct])).toEqual([[100_000, ['frontRightWingPct'], 20]]);
+    });
+  });
+
   it('flashback equals fresh run', () => {
     const timeOf = (n: number) => (n <= 5 ? 90_000 : 91_000);
     const events = [dmg(100_000, 'rearWingPct', 0, 10), dmg(405_000, 'frontRightWingPct', 0, 20), dmg(480_000, 'floorPct', 0, 3), dmg(481_000, 'floorPct', 3, 6)];

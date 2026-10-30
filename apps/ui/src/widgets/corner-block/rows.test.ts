@@ -5,6 +5,7 @@ import { CAR_FIELDS, compactBrake, cornerBlockRows, fullHeader, fullRowFields, f
 
 const k = <T>(v: T): Known<T> => known(v, 0);
 const BAND = { lo: 80, hi: 100 };
+const BRAKE_BAND = { lo: 300, hi: 1000 };
 const rd = (value: Known<number>, over: Partial<BandReading> = {}): BandReading => ({
   value, state: value.known ? k('in') : value, band: BAND, outForFullLap: false, ...over,
 });
@@ -29,13 +30,14 @@ function car(over: Over = {}): CarState {
   } as unknown as CarState;
 }
 
-/** The surface has no live state, as `car-bands` gives it (judged per lap only: ruling 2026-10-30). */
+/** The surface and the brakes have no live state, as `car-bands` gives them (judged per lap only: rulings 2026-10-30). */
 const surface = (value: Known<number>, over: Partial<BandReading> = {}) => rd(value, { state: unknown('notApplicable'), ...over });
+const brake = (value: Known<number>, over: Partial<BandReading> = {}) => rd(value, { state: unknown('notApplicable'), band: BRAKE_BAND, ...over });
 
 function bands(over: { fr?: Partial<CarBands['tyres']['fr']>; brakes?: Partial<CarBands['brakesC']>; engine?: BandReading } = {}): CarBands {
   return {
     tyres: four((n) => ({ surfaceC: surface(k(98)), carcassC: rd(k(101)), pressurePsi: rd(k(23.1)), ...(n === 'fr' ? over.fr : {}) })),
-    brakesC: { ...four(() => rd(k(812))), ...over.brakes },
+    brakesC: { ...four(() => brake(k(812))), ...over.brakes },
     engineC: over.engine ?? rd(k(112)),
   };
 }
@@ -67,7 +69,7 @@ describe('cornerBlockRows', () => {
   it('takes values from car.detail and roles from the band readings; wear has no role', () => {
     const rows = cornerBlockRows(
       car(),
-      bands({ fr: { carcassC: rd(k(109), { state: k('above') }) }, brakes: { fr: rd(k(1043), { state: k('above'), outForFullLap: true }) } }),
+      bands({ fr: { carcassC: rd(k(109), { state: k('above') }) }, brakes: { fr: brake(k(1043), { outForFullLap: true }) } }),
       wear(),
     );
     expect(rows.corners.fr.carcass.role).toBe('warning');
@@ -81,6 +83,18 @@ describe('cornerBlockRows', () => {
     const rows = cornerBlockRows(car(), bands({ fr: { surfaceC: surface(k(104), { outForFullLap: true }) } }), wear());
     expect(rows.corners.fr.surface.role).toBe('critical');
     expect(rows.corners.fl.surface.role).toBeUndefined();
+  });
+
+  it('colours a brake only for a whole lap out of band: a live value outside the band no longer warns, outForFullLap gives critical', () => {
+    const rows = cornerBlockRows(
+      car({ brake: { fl: k(278), fr: k(1043), rl: k(278) } }),
+      bands({ brakes: { fl: brake(k(278)), fr: brake(k(1043)), rl: brake(k(278), { outForFullLap: true }) } }),
+      wear(),
+    );
+    expect(rows.corners.fl.brake.role).toBeUndefined();
+    expect(rows.corners.fr.brake.role).toBeUndefined();
+    expect(rows.corners.rl.brake.role).toBe('critical');
+    expect(rows.corners.rr.brake.role).toBeUndefined();
   });
 
   it('gives the engine its band role', () => {
@@ -121,7 +135,7 @@ describe('cornerBlockRows', () => {
 });
 
 describe('staleness of the car fields', () => {
-  const frOut = bands({ fr: { carcassC: rd(k(109), { state: k('above') }) }, brakes: { fr: rd(k(1043), { state: k('above'), outForFullLap: true }) } });
+  const frOut = bands({ fr: { carcassC: rd(k(109), { state: k('above') }) }, brakes: { fr: brake(k(1043), { outForFullLap: true }) } });
 
   it('lists every car field it reads, so the display can ask the panel which are stale', () => {
     expect([...CAR_FIELDS].sort()).toEqual(
@@ -173,10 +187,10 @@ describe('worstBrake', () => {
     expect(worstBrake(cooler)?.corner).toBe('rr');
   });
 
-  it('prefers a critical brake over a hotter one that is only in band', () => {
+  it('prefers a critical brake over a hotter one that was not out for a whole lap', () => {
     const rows = cornerBlockRows(
-      car({ brake: { fl: k(300), rr: k(950) } }),
-      bands({ brakes: { fl: rd(k(300), { state: k('below'), outForFullLap: true }) } }),
+      car({ brake: { fl: k(290), rr: k(950) } }),
+      bands({ brakes: { fl: brake(k(290), { outForFullLap: true }) } }),
       wear(),
     );
     expect(worstBrake(rows)?.corner).toBe('fl');
@@ -195,8 +209,8 @@ describe('worstBrake', () => {
 
   it('breaks a role tie by the hotter brake', () => {
     const rows = cornerBlockRows(
-      car({ brake: { fl: k(950), rl: k(990) } }),
-      bands({ brakes: { fl: rd(k(950), { state: k('above') }), rl: rd(k(990), { state: k('above') }) } }),
+      car({ brake: { fl: k(1050), rl: k(1090) } }),
+      bands({ brakes: { fl: brake(k(1050), { outForFullLap: true }), rl: brake(k(1090), { outForFullLap: true }) } }),
       wear(),
     );
     expect(worstBrake(rows)?.corner).toBe('rl');
@@ -221,7 +235,7 @@ describe('worstBrake', () => {
 
 describe('compactBrake', () => {
   it('names the worst brake and its compact value', () => {
-    const rows = cornerBlockRows(car(), bands({ brakes: { fr: rd(k(1043), { outForFullLap: true }) } }), wear());
+    const rows = cornerBlockRows(car(), bands({ brakes: { fr: brake(k(1043), { outForFullLap: true }) } }), wear());
     expect(compactBrake(rows)).toMatchObject({ text: 'FR 1043', cell: { role: 'critical' } });
   });
 

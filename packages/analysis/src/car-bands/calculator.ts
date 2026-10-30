@@ -17,8 +17,11 @@ const reading = (value: Known<number>, band: Band, range: DeepReadonly<Known<Ran
   outForFullLap: outFor(range, lapBand),
 });
 
-/** The tyre surface swings 30–60 °C within a lap, so a live state would flicker: only `outForFullLap` judges it. */
-const surfaceReading = (value: Known<number>, band: Band, range: DeepReadonly<Known<Range>> | undefined, lapBand: Band): BandReading => ({
+/**
+ * A channel judged per lap only: the tyre surface swings 30–60 °C within a lap and the brakes fall below the band on
+ * many straights, so a live state would flicker; only `outForFullLap` judges them.
+ */
+const lapOnlyReading = (value: Known<number>, band: Band, range: DeepReadonly<Known<Range>> | undefined, lapBand: Band): BandReading => ({
   ...reading(value, band, range, lapBand),
   state: unknown('notApplicable'),
 });
@@ -35,11 +38,11 @@ const bandsOfCar = (
   const r = counted?.channelRange;
   const l = counted === undefined ? b : bandsFor(counted.visualCompound, c);
   const tyre = (corner: 'fl' | 'fr' | 'rl' | 'rr') => ({
-    surfaceC: surfaceReading(car.tyres.corners[corner].surfaceTempC, b.surface, r?.tyres[corner].surfaceC, l.surface),
+    surfaceC: lapOnlyReading(car.tyres.corners[corner].surfaceTempC, b.surface, r?.tyres[corner].surfaceC, l.surface),
     carcassC: reading(car.tyres.corners[corner].carcassTempC, b.carcass, r?.tyres[corner].carcassC, l.carcass),
     pressurePsi: reading(car.tyres.corners[corner].pressurePsi, b.pressure, r?.tyres[corner].pressurePsi, l.pressure),
   });
-  const brake = (corner: 'fl' | 'fr' | 'rl' | 'rr') => reading(car.condition.brakes[corner].tempC, b.brakes, r?.brakesC[corner], l.brakes);
+  const brake = (corner: 'fl' | 'fr' | 'rl' | 'rr') => lapOnlyReading(car.condition.brakes[corner].tempC, b.brakes, r?.brakesC[corner], l.brakes);
   return {
     tyres: { fl: tyre('fl'), fr: tyre('fr'), rl: tyre('rl'), rr: tyre('rr') },
     brakesC: { fl: brake('fl'), fr: brake('fr'), rl: brake('rl'), rr: brake('rr') },

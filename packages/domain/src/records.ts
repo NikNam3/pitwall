@@ -90,10 +90,10 @@ export type RaceEventKind =
   | 'drsDisabled'
   | 'startLights'
   | 'lightsOut'
-  /** Recorded by the engine, not sent by the game: a damage part rose between two frames (params: `DamageChangeParams`). */
+  /** Recorded by the engine, not sent by the game: a damage part changed between two frames (params: `DamageChangeParams`). */
   | 'damageChange';
 
-/** The `params` of a `damageChange` event: which part rose, from and to what. A fall (a repair) is no event. */
+/** The `params` of a `damageChange` event: which part changed, from and to what. A rise is a hit; a fall is a repair (a part change in the pits). */
 export type DamageChangeParams = { part: keyof DamageParts; fromPct: Percent; toPct: Percent };
 
 /** One object type for every kind; the details live in `params`. */
