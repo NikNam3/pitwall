@@ -94,8 +94,8 @@ describe('incidents calculator', () => {
   });
 
   it('the neighbourhood comes from the crossings at the incident time, not from the live gaps output', () => {
-    const live: GapsOutput = {
-      finished: [],
+    // a live gaps output whose neighbourhood would put cars 0 and 1 beside the player (only the fields that matter)
+    const live: Partial<GapsOutput> = {
       phases: [],
       intervals: [],
       lineTimes: {},

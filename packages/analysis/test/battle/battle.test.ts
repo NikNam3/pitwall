@@ -54,8 +54,8 @@ const build = (s: Scene): EngineView => {
     lapsDown: 0,
     positionsGained: known(0, 311_600),
   });
-  const gaps: GapsOutput = {
-    finished: [],
+  // the fields battle may read; the rest of the output is not battle's business
+  const gaps: Pick<GapsOutput, 'phases' | 'intervals' | 'lineTimes' | 'recent' | 'neighbourhood' | 'raceStartAt'> = {
     phases: [],
     intervals: (s.order ?? [1, 0, 3]).map(interval),
     lineTimes: Object.fromEntries(Object.entries(s.lineTimes).map(([k, v]) => [k, v])) as GapsOutput['lineTimes'],
