@@ -41,12 +41,37 @@ export type LapCorrection = {
 export type ClockFall = { fromMs: SessionTime; toMs: SessionTime };
 
 /**
+ * The game's session time jumped forward from `fromMs` to `toMs` by more than `SIMULATION_JUMP_MS` with no post-session
+ * simulation (a stall while the clock runs ahead of wall time in the garage): nothing changes; it is only reported
+ * (spec 3.3).
+ */
+export type ClockJump = { fromMs: SessionTime; toMs: SessionTime };
+
+/** What a rewind needs to know of the state it leaves: its frame id, the game's session time and its last wall time. */
+export type RewindMark = { frameId: number; rawMs: SessionTime; lastWallMs: number | undefined };
+
+/**
+ * The `SessionRunner`'s decision that a frame reports a flashback, the one way it reaches the situation tracker: no
+ * session-time jump is read on the frame (spec 3.3). `rewound` when the runner rewound on it: the mark of the state it
+ * left. The runner keeps the decision with the frame and gives it again whenever a later rewind replays the frame, so
+ * the replay does what the first pass did.
+ */
+export type FlashbackReport = { rewound?: RewindMark };
+
+/**
  * What a step did besides its tags. `rewritten`: it changed history recorded by earlier steps (lights out discarding
  * the formation lap, the start's settling re-stamping it), so readers start over and no rewind may go back before it.
  * `discarded`: it took back what readers already saw without changing the history (a neutralisation dropped
  * unconfirmed), so readers start over; rewinds across it stay exact.
  */
-export type StepOutput = { changed: Set<ChangeTag>; corrections: LapCorrection[]; rewritten?: true; discarded?: true; clockFall?: ClockFall };
+export type StepOutput = {
+  changed: Set<ChangeTag>;
+  corrections: LapCorrection[];
+  rewritten?: true;
+  discarded?: true;
+  clockFall?: ClockFall;
+  clockJump?: ClockJump;
+};
 
 /** One part of `step`: reads the frame, updates its part of the state and tags what it changed. */
 export type SubStep = (state: EngineState, frame: Frame, out: StepOutput) => void;

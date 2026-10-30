@@ -35,11 +35,6 @@ export type Frame = {
    * clock): the situation tracker tells an offline pause and the post-session simulation by it.
    */
   receivedAtMs: number;
-  /**
-   * Set by the `SessionRunner` alone, which decides what a flashback is: the frame reports one (it rewound on it, or the
-   * report repeats the last rewind's), so the situation tracker reads no session-time jump on it (spec 3.3).
-   */
-  flashbackReport?: true;
   playerCarIndex: number;
   motion?: MotionPacket;
   lapData?: LapDataPacket;
