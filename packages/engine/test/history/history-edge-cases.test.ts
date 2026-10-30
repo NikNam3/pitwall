@@ -103,12 +103,12 @@ describe('flag phases', () => {
   });
   it('the safety car going away does not end a red flag phase', () => {
     const { st } = runScenario(rows([{ position: 1, lap: 1 }]).session({ safetyCarStatus: 1 }).frames(1, noop).event({ code: 'RDFL' }).frames(1, noop)
-      .session({ safetyCarStatus: 0 }).frames(1, noop).event({ code: 'LGOT' }).frames(1, noop));
+      .session({ safetyCarStatus: 0 }).frames(1, noop).event({ code: 'STLG', numLights: 1 }).frames(1, noop));
     expect(st.history.flagPhases).toMatchObject([{ kind: 'SC', start: 1000, end: 2000 }, { kind: 'red', start: 2000, end: 4000 }]);
   });
   it('the formation lap status does not end a red flag phase', () => {
     const { st } = runScenario(rows([{ position: 1, lap: 1 }]).event({ code: 'RDFL' }).frames(1, noop).session({ safetyCarStatus: 3 }).frames(1, noop)
-      .event({ code: 'LGOT' }).frames(1, noop));
+      .event({ code: 'STLG', numLights: 1 }).frames(1, noop));
     expect(st.history.flagPhases).toMatchObject([{ kind: 'red', start: 1000, end: 3000 }]);
   });
 });
