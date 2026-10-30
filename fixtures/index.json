@@ -214,20 +214,6 @@
   ],
   "segments": [
     {
-      "file": "tt-zandvoort-lap1.pwrec.gz",
-      "source": "ttZandvoort",
-      "fromS": 112,
-      "toS": 118,
-      "records": 2144,
-      "features": [
-        "2 context packets (Session, Participants) first",
-        "FTLP (car 0, 71.910 s) at session time 114.228, lap 1 to 2 at 114.234",
-        "SessionHistory car 0 with 2 laps at 114.447",
-        "FTLP x1, SPTP x1, BUTN x3",
-        "duration 5979.381 ms"
-      ]
-    },
-    {
       "file": "race-singapore-start.pwrec.gz",
       "source": "raceSingapore",
       "fromS": 0,

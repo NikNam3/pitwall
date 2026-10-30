@@ -40,12 +40,12 @@ type BandChannel = {
  * The band channels and the measure their advisory judges. Every advisory judges the car's last completed lap, never the
  * live value, so it changes at a lap's end only: the live values cross the band edges many times within a lap and a
  * calculator keeps no frame state for hysteresis (ruling R1). Within-lap swing of our cars, measured 2026-10-29 on
- * raceSingapore (lap 1, cars 19 and 14) and ttZandvoort (laps 1-15, car 0; the time trial holds tyres and engine fixed):
- * - brakes, `peak`: 500-940 °C swing per lap (TT FL 235-865 °C, 4-10 crossings of 300 °C per lap); judged under load.
- * - surface, `midRange`: 26-57 °C swing, up to 9 band crossings and 49 direction changes per lap (raceSingapore); TT 93 °C fixed.
- * - carcass, `midRange`: 1-6 °C swing in 1 °C steps, 0-3 direction changes per lap: a carcass at a band edge flickers; TT 93 °C fixed.
- * - pressure, `midRange`: 0.1-0.4 psi swing after the first 20 s, 6-24 direction changes per lap; TT 30.2 / 27.1 psi fixed.
- * - engine, `peak`: 110-116 °C (3 °C after the first 20 s) in 1 °C steps, 8 direction changes per lap; TT 110 °C fixed.
+ * raceSingapore (lap 1, cars 19 and 14):
+ * - brakes, `peak`: 500-940 °C swing per lap; judged under load.
+ * - surface, `midRange`: 26-57 °C swing, up to 9 band crossings and 49 direction changes per lap.
+ * - carcass, `midRange`: 1-6 °C swing in 1 °C steps, 0-3 direction changes per lap: a carcass at a band edge flickers.
+ * - pressure, `midRange`: 0.1-0.4 psi swing after the first 20 s, 6-24 direction changes per lap.
+ * - engine, `peak`: 110-116 °C (3 °C after the first 20 s) in 1 °C steps, 8 direction changes per lap.
  * Brake and engine temperatures are the `car` category, tyre channels `tyres`.
  */
 const bandChannels = (bands: CarBands, lap: Lap | undefined, lapBands: Bands | undefined): BandChannel[] => {

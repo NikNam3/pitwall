@@ -44,7 +44,7 @@ const field = { cars, intervals, toCar: toUs, board, moment: undefined, session:
 
 /** Synthetic cases and fit expectations for `timing-tower`. */
 const gallery: GalleryEntry<typeof widget> = {
-  moments: ['raceSingaporeStart.grid', 'ttZandvoortLap1.crossing'],
+  moments: ['raceSingaporeStart.grid', 'raceZandvoortLap10.crossing'],
   cases: {
     // Incident moment: SAR and OCO are in the incident it names, amber left bar on their rows.
     incidentMoment: {

@@ -37,7 +37,7 @@ const attackReady: ErsState = {
 
 /** Synthetic cases and fit expectations for `ers-budget`. */
 const gallery: GalleryEntry<typeof widget> = {
-  moments: ['raceSingaporeStart.grid', 'ttZandvoortLap1.crossing'],
+  moments: ['raceSingaporeStart.grid', 'raceZandvoortLap10.crossing'],
   cases: {
     // Battle moment: store, flow and "attack ready" white bold.
     battleMoment: { ers: attackReady, moment: known(battle, at) },

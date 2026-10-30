@@ -24,7 +24,7 @@ const pressure = make('bandOut', 'tyre.pressurePsi.rl', 'advisory', 'tyres', 200
 
 /** Synthetic cases and fit expectations for `alarm-list`. */
 const gallery: GalleryEntry<typeof widget> = {
-  moments: ['ttZandvoortLap1.crossing', 'raceSingaporeStart.grid'],
+  moments: ['raceZandvoortLap10.crossing', 'raceSingaporeStart.grid'],
   cases: {
     mixed: {
       insights: active(brake, fuel, carcass, warning, wing, engine),

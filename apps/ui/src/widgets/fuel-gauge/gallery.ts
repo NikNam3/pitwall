@@ -19,7 +19,7 @@ const positive: FuelState = {
 
 /** Synthetic cases and fit expectations for `fuel-gauge`. */
 const gallery: GalleryEntry<typeof widget> = {
-  moments: ['ttZandvoortLap1.crossing', 'raceSingaporeStart.grid'],
+  moments: ['raceZandvoortLap10.crossing', 'raceSingaporeStart.grid'],
   cases: {
     // Emphasis state: margin below zero (red), the save target shown.
     marginNegative: {
