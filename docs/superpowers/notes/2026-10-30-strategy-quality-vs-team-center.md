@@ -27,7 +27,7 @@ The 4a spec and plan are written. Pitwall can already replay a recording determi
 
 Recommendation: **A** if the 4a run hasn't started, otherwise **B**. Every model choice in 4a (degradation fit, dirty air, out-lap penalty) is a guess until something scores it.
 
-**Answer:** A (user, 2026-10-30). In 4a as the `forecast-score` analysis and `pitwall score` (spec 7.15, plan Task 29a).
+**Answer:** A (user, 2026-10-30). In 4a as the `forecast-score` unit (a calculator without a topic plus the pure `scoreForecasts`) and the `pitwall score` report, which collects the log through a pipeline output tap (spec 7.15, plan Task 29a).
 
 ### Q2. Does the league race under the two-dry-compound rule, and should 4a use it?
 
