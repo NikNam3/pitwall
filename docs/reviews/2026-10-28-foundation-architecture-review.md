@@ -472,6 +472,6 @@ F2 and F7 then come as the first tasks of SP 4, and F6 depends on Q-C. Recording
 | F5 laps twice | `currentLaps` / `addLaps` in domain (Task 4) |
 | F6 config | `defineConfig`, `EngineView.config`, `config.json`, session sidecar (Task 8) |
 | F7 weekend context | every driver of the player's earlier sessions; `live` rebuilds an outdated database (Task 6) |
-| F8 real-data coverage | **open:** needs the race recordings (spec 12, items 1 and 2) before sub-project 4 |
+| F8 real-data coverage | **done (2026-10-30):** segments of normal races cover a completed 20-car race lap, a pit stop and pit exit, a VSC, an SC and a retirement (`fixtures/segments/`, tests in `apps/bridge/test/fixtures/`) |
 | F9 stale values | `CarState.updatedAt` per source, `SOURCE_INTERVAL_MS`, `feed.status.cadenceMs`; `stale` removed from `UnknownReason` (Task 10) |
 | Section 5 items | unit suffixes where the spec states units; `Known` speed trap; `open` hidden from calculators; `CarId` params (Task 9). Not done: `mfdPanelIndex` (with sub-project 6). Done earlier: the research is in `docs/research/` |
