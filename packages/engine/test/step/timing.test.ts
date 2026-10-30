@@ -39,7 +39,7 @@ describe('timing from LapData', () => {
     [-300_000, known(-300_000, 0)],
     [300_001, unknown('notApplicable')],
     [-300_001, unknown('notApplicable')],
-    [15_362_703, unknown('notApplicable')],
+    [-15_362_703, unknown('notApplicable')], // what the garage bytes (255 min + 62 703 ms) decode to
   ])('a gap of %i ms reads as %o', (raw, expected) => {
     const { st } = runScenario(new ScenarioBuilder({ cars: 2 }).frames(1, (d) => {
       Object.assign(d.lapData.lapData[1]!, { deltaToCarInFrontMs: raw, deltaToRaceLeaderMs: raw });
