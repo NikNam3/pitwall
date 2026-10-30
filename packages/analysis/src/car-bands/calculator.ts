@@ -17,6 +17,12 @@ const reading = (value: Known<number>, band: Band, range: DeepReadonly<Known<Ran
   outForFullLap: outFor(range, lapBand),
 });
 
+/** The tyre surface swings 30–60 °C within a lap, so a live state would flicker: only `outForFullLap` judges it. */
+const surfaceReading = (value: Known<number>, band: Band, range: DeepReadonly<Known<Range>> | undefined, lapBand: Band): BandReading => ({
+  ...reading(value, band, range, lapBand),
+  state: unknown('notApplicable'),
+});
+
 const bandsOfCar = (
   car: DeepReadonly<CarState>,
   last: DeepReadonly<LapRecord> | undefined,
@@ -29,7 +35,7 @@ const bandsOfCar = (
   const r = counted?.channelRange;
   const l = counted === undefined ? b : bandsFor(counted.visualCompound, c);
   const tyre = (corner: 'fl' | 'fr' | 'rl' | 'rr') => ({
-    surfaceC: reading(car.tyres.corners[corner].surfaceTempC, b.surface, r?.tyres[corner].surfaceC, l.surface),
+    surfaceC: surfaceReading(car.tyres.corners[corner].surfaceTempC, b.surface, r?.tyres[corner].surfaceC, l.surface),
     carcassC: reading(car.tyres.corners[corner].carcassTempC, b.carcass, r?.tyres[corner].carcassC, l.carcass),
     pressurePsi: reading(car.tyres.corners[corner].pressurePsi, b.pressure, r?.tyres[corner].pressurePsi, l.pressure),
   });

@@ -8,6 +8,7 @@ import {
   Scheduler,
   SessionRunner,
   type Calculator,
+  type EngineView,
   type Frame,
   type SchedulerResult,
   type StepResult,
@@ -26,19 +27,21 @@ export async function replayRunner(path: string, onResult: (r: StepResult, f: Fr
 }
 
 /**
- * `replayRunner` plus a `Scheduler` over `calculators`, every one needed, on the default config and a healthy feed:
- * the engine and the units under test, without topics. A flashback resets the scheduler, as in the bridge.
+ * `replayRunner` plus a `Scheduler` over `calculators`, every one needed, on a healthy feed and `config` (by section key
+ * over the defaults; none by default): the engine and the units under test, without topics. A flashback resets the
+ * scheduler, as in the bridge.
  */
 export async function replayScheduled(
   path: string,
   calculators: readonly Calculator[],
   onStep: (r: StepResult, scheduled: SchedulerResult, f: Frame) => void = () => {},
+  config: EngineView['config'] = {},
 ): Promise<SessionRunner> {
   const scheduler = new Scheduler(CalculatorRegistry.build(calculators));
   scheduler.setNeeded(calculators.map((c) => c.id));
   return replayRunner(path, (r, f) => {
     if (r.flashback) scheduler.reset();
-    const scheduled = scheduler.run({ state: r.state, activeFlagPhase: activeFlagPhaseOf(r.state), changed: r.changed, delta: r.delta, feed: IDLE_FEED, config: {} });
+    const scheduled = scheduler.run({ state: r.state, activeFlagPhase: activeFlagPhaseOf(r.state), changed: r.changed, delta: r.delta, feed: IDLE_FEED, config });
     onStep(r, scheduled, f);
   });
 }

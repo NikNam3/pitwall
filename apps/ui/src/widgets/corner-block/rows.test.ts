@@ -29,9 +29,12 @@ function car(over: Over = {}): CarState {
   } as unknown as CarState;
 }
 
+/** The surface has no live state, as `car-bands` gives it (judged per lap only: ruling 2026-10-30). */
+const surface = (value: Known<number>, over: Partial<BandReading> = {}) => rd(value, { state: unknown('notApplicable'), ...over });
+
 function bands(over: { fr?: Partial<CarBands['tyres']['fr']>; brakes?: Partial<CarBands['brakesC']>; engine?: BandReading } = {}): CarBands {
   return {
-    tyres: four((n) => ({ surfaceC: rd(k(98)), carcassC: rd(k(101)), pressurePsi: rd(k(23.1)), ...(n === 'fr' ? over.fr : {}) })),
+    tyres: four((n) => ({ surfaceC: surface(k(98)), carcassC: rd(k(101)), pressurePsi: rd(k(23.1)), ...(n === 'fr' ? over.fr : {}) })),
     brakesC: { ...four(() => rd(k(812))), ...over.brakes },
     engineC: over.engine ?? rd(k(112)),
   };
@@ -72,6 +75,12 @@ describe('cornerBlockRows', () => {
     expect(rows.corners.fr.surface.role).toBeUndefined();
     expect(rows.corners.fr.wear.role).toBeUndefined();
     expect(rows.corners.fl.carcass.role).toBeUndefined();
+  });
+
+  it('colours the surface only for a whole lap out of band: no live state gives no role, outForFullLap gives critical', () => {
+    const rows = cornerBlockRows(car(), bands({ fr: { surfaceC: surface(k(104), { outForFullLap: true }) } }), wear());
+    expect(rows.corners.fr.surface.role).toBe('critical');
+    expect(rows.corners.fl.surface.role).toBeUndefined();
   });
 
   it('gives the engine its band role', () => {

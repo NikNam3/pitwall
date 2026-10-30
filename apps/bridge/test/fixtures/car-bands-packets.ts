@@ -1,6 +1,7 @@
 // `car-bands` against the raw packets, for the full-lap segment tests (race-full-lap, quali-full-lap): the player's
 // channels, corners and units reach the bands as the game sends them. The expected values come from the latest
-// CarTelemetry and CarStatus packets, the bands from the config defaults.
+// CarTelemetry and CarStatus packets, the bands from the run's config over the defaults. The tyre surface has no live
+// state (ruling 2026-10-30: it swings 30-60 °C within a lap, so only the whole lap judges it).
 import { CAR_BANDS, CAR_BANDS_CONFIG, type BandState, type CarBandsOutput } from '@pitwall/analysis';
 import type { BandReading, CarBands } from '@pitwall/domain';
 import type { DeepReadonly, EngineState, Frame, SchedulerResult } from '@pitwall/engine';
@@ -13,19 +14,28 @@ const TYRE_KIND: Record<number, 'Inter' | 'Wet'> = { 7: 'Inter', 8: 'Wet' };
 
 type Telemetry = CarTelemetryPacket['carTelemetryData'][number];
 type Band = { lo: number; hi: number };
-/** One channel: our reading of it, the game's raw value and the band the config gives for the fitted tyre kind. */
-type Channel = { name: string; reading: (b: CarBands) => BandReading; raw: (t: Telemetry) => number; band: (kind: 'Dry' | 'Inter' | 'Wet') => Band };
+type Config = typeof CAR_BANDS_CONFIG.defaults;
+/**
+ * One channel: our reading of it, the game's raw value, the band the config gives for the fitted tyre kind, and
+ * whether it has a live state (every channel but the tyre surface).
+ */
+type Channel = {
+  name: string;
+  reading: (b: CarBands) => BandReading;
+  raw: (t: Telemetry) => number;
+  band: (c: Config, kind: 'Dry' | 'Inter' | 'Wet') => Band;
+  live: boolean;
+};
 
-const c = CAR_BANDS_CONFIG.defaults;
-const tyreBand = (kind: 'Dry' | 'Inter' | 'Wet', channel: 'surface' | 'carcass'): Band => ({ lo: c[`${channel}${kind}Lo`], hi: c[`${channel}${kind}Hi`] });
+const tyreBand = (c: Config, kind: 'Dry' | 'Inter' | 'Wet', channel: 'surface' | 'carcass'): Band => ({ lo: c[`${channel}${kind}Lo`], hi: c[`${channel}${kind}Hi`] });
 const CHANNELS: Channel[] = [
   ...GAME_ORDER.flatMap((corner, wheel): Channel[] => [
-    { name: `surface.${corner}`, reading: (b) => b.tyres[corner].surfaceC, raw: (t) => t.tyresSurfaceTemperature[wheel]!, band: (k) => tyreBand(k, 'surface') },
-    { name: `carcass.${corner}`, reading: (b) => b.tyres[corner].carcassC, raw: (t) => t.tyresInnerTemperature[wheel]!, band: (k) => tyreBand(k, 'carcass') },
-    { name: `pressure.${corner}`, reading: (b) => b.tyres[corner].pressurePsi, raw: (t) => t.tyresPressure[wheel]!, band: () => ({ lo: c.pressureLo, hi: c.pressureHi }) },
-    { name: `brakes.${corner}`, reading: (b) => b.brakesC[corner], raw: (t) => t.brakesTemperature[wheel]!, band: () => ({ lo: c.brakeLo, hi: c.brakeHi }) },
+    { name: `surface.${corner}`, reading: (b) => b.tyres[corner].surfaceC, raw: (t) => t.tyresSurfaceTemperature[wheel]!, band: (c, k) => tyreBand(c, k, 'surface'), live: false },
+    { name: `carcass.${corner}`, reading: (b) => b.tyres[corner].carcassC, raw: (t) => t.tyresInnerTemperature[wheel]!, band: (c, k) => tyreBand(c, k, 'carcass'), live: true },
+    { name: `pressure.${corner}`, reading: (b) => b.tyres[corner].pressurePsi, raw: (t) => t.tyresPressure[wheel]!, band: (c) => ({ lo: c.pressureLo, hi: c.pressureHi }), live: true },
+    { name: `brakes.${corner}`, reading: (b) => b.brakesC[corner], raw: (t) => t.brakesTemperature[wheel]!, band: (c) => ({ lo: c.brakeLo, hi: c.brakeHi }), live: true },
   ]),
-  { name: 'engine', reading: (b) => b.engineC, raw: (t) => t.engineTemperature, band: () => ({ lo: 0, hi: c.engineHi }) },
+  { name: 'engine', reading: (b) => b.engineC, raw: (t) => t.engineTemperature, band: (c) => ({ lo: 0, hi: c.engineHi }), live: true },
 ];
 
 /** Where the config puts a value against a band; `car-bands` has no hysteresis or debounce (stateless, ruling R1). */
@@ -36,9 +46,14 @@ export type BandsAgainstPackets = { runs: number; off: string[] };
 
 /**
  * An observer for `replayScheduled` (with `carBandsCalculator` among the calculators): on every run of car-bands, each
- * of the player's channels against what the latest packets and the config give. Fills and returns `seen`.
+ * of the player's channels against what the latest packets and the config give. `override` is the run's `car-bands`
+ * config section (the same one `replayScheduled` gets). Fills and returns `seen`.
  */
-export function bandsAgainstPackets(): { seen: BandsAgainstPackets; observe: (state: DeepReadonly<EngineState>, scheduled: SchedulerResult, frame: Frame) => void } {
+export function bandsAgainstPackets(override: Partial<Config> = {}): {
+  seen: BandsAgainstPackets;
+  observe: (state: DeepReadonly<EngineState>, scheduled: SchedulerResult, frame: Frame) => void;
+} {
+  const config: Config = { ...CAR_BANDS_CONFIG.defaults, ...override };
   const seen: BandsAgainstPackets = { runs: 0, off: [] };
   let telemetry: CarTelemetryPacket | undefined;
   let status: CarStatusPacket | undefined;
@@ -53,9 +68,9 @@ export function bandsAgainstPackets(): { seen: BandsAgainstPackets; observe: (st
     for (const ch of CHANNELS) {
       const r = ch.reading(bands);
       const value = ch.raw(raw);
-      const band = ch.band(kind);
+      const band = ch.band(config, kind);
       const ours = [r.value.known ? r.value.value : r.value.reason, r.state.known ? r.state.value : r.state.reason, r.band];
-      const game = [value, expectedState(value, band), band];
+      const game = [value, ch.live ? expectedState(value, band) : 'notApplicable', band];
       if (seen.off.length < 10 && JSON.stringify(ours) !== JSON.stringify(game)) {
         seen.off.push(`${state.sessionTime} ${ch.name}: ours ${JSON.stringify(ours)} game ${JSON.stringify(game)}`);
       }

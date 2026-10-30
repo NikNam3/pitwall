@@ -8,6 +8,7 @@ export type BandState = 'below' | 'in' | 'above';
 /** One channel against its band. */
 export type BandReading = {
   value: Known<number>;
+  /** The live value against the band; the tyre surface has none (`unknown('notApplicable')`): it swings 30–60 °C within a lap, so only `outForFullLap` judges it. */
   state: Known<BandState>;
   /** The band in the channel's unit (°C or psi); tyre bands are per compound. */
   band: { lo: number; hi: number };
