@@ -83,6 +83,8 @@ describe('incidents calculator', () => {
 
   it('the neighbourhood comes from the crossings at the incident time, not from the live gaps output', () => {
     const live: GapsOutput = {
+      finished: [],
+      phases: [],
       intervals: [],
       lineTimes: {},
       recent: {},
