@@ -13,9 +13,19 @@ export const driverKeyOf = (p: ParticipantsPacket, carIndex: number): DriverKey 
     : { kind: 'human', networkId: c.networkId, name: c.name, raceNumber: c.raceNumber };
 };
 
-/** Whether the car is in the session: a slot below `numActiveCars` that the game has not marked invalid or inactive. */
-export const isActiveCar = (index: number, numActiveCars: number, resultStatus: ResultStatus): boolean =>
-  index < numActiveCars && resultStatus !== 'invalid' && resultStatus !== 'inactive';
+/** A car out of the race: the game keeps it in its slot but no longer counts it in `numActiveCars`. */
+const OUT_OF_RACE: ReadonlySet<ResultStatus> = new Set(['didNotFinish', 'disqualified', 'notClassified', 'retired']);
+
+/**
+ * The slots the session uses. Participants `numActiveCars` counts only the cars still in the race, and a car that drops
+ * out keeps its slot (the game does not renumber), so each car out of the race adds one slot to the count.
+ */
+export const slotsInUse = (state: EngineState): number =>
+  state.cars.reduce((slots, car) => (OUT_OF_RACE.has(car.timing.resultStatus) ? slots + 1 : slots), state.session.numActiveCars);
+
+/** Whether the car is in the session: a slot below `slots` (see `slotsInUse`) that the game has not marked invalid or inactive. */
+export const isActiveCar = (index: number, slots: number, resultStatus: ResultStatus): boolean =>
+  index < slots && resultStatus !== 'invalid' && resultStatus !== 'inactive';
 
 /** Participants `yourTelemetry = 0` hides a human's telemetry from everyone but themselves (Restricted data). */
 const visibilityOf = (identity: Pick<CarIdentity, 'ai' | 'telemetryPublic'>, isPlayer: boolean): Visibility => {
@@ -71,11 +81,9 @@ export const placePlayer = (state: EngineState, playerIndex: number): void => {
     }
   }
   const teamId = state.cars[playerIndex]?.identity.teamId;
+  const slots = slotsInUse(state);
   state.teammateCar = state.cars.find(
-    (car) =>
-      car.id !== playerIndex &&
-      car.identity.teamId === teamId &&
-      isActiveCar(car.id, state.session.numActiveCars, car.timing.resultStatus),
+    (car) => car.id !== playerIndex && car.identity.teamId === teamId && isActiveCar(car.id, slots, car.timing.resultStatus),
   )?.id;
 };
 
