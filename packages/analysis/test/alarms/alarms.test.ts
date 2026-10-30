@@ -411,6 +411,18 @@ describe('alarms calculator', () => {
       expect(only(viewWith({ damage }, { lap: 4 }), 'damageJump')).toEqual([]);
     });
 
+    it('a damage jump whose part is repaired on its lap goes away with the repair (through the damage calculator)', () => {
+      const change = (at: number, fromPct: number, toPct: number) =>
+        event({ kind: 'damageChange', carId: carId(0), at, params: { part: 'frontRightWingPct', fromPct, toPct } });
+      // laps 1 and 2 complete at 90 s and 180 s; the hit and the wing change are both on lap 3
+      const laps = [lap({ lapNumber: 1, completedAt: 90_000 }), lap({ lapNumber: 2, completedAt: 180_000 })];
+      const damageOf = (events: ReturnType<typeof change>[]) =>
+        damageCalculator.output(damageCalculator.init(engineView({ cars: [carState({ timing: { lap: 3 } })], history: { events, laps } })))[carId(0)]!;
+      const hit = change(200_000, 0, 40);
+      expect(only(viewWith({ damage: damageOf([hit]) }, { lap: 3 }), 'damageJump')).toHaveLength(1);
+      expect(only(viewWith({ damage: damageOf([hit, change(250_000, 40, 0)]) }, { lap: 3 }), 'damageJump')).toEqual([]);
+    });
+
     it('a penalty lasts until our car completes its next lap, then resolves; another car\'s lap does not end it', () => {
       const penalty = event({ kind: 'penalty', carId: carId(0), at: 100_000, params: { penaltyType: 4, lap: 2 } });
       const hist = (laps: ReturnType<typeof lap>[]) => ({ laps, events: [penalty] });

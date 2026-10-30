@@ -26,9 +26,9 @@ const readingOf = (car: CarState): number[] | undefined => {
 };
 
 /**
- * Appends a `damageChange` event for every damage part that rose since the car's previous reading (a fall, a repair,
- * is none). A car's first reading only sets the baseline; a frame where any part is unknown is no reading. Only Car
- * Damage changes the condition, so a frame without it is skipped.
+ * Appends a `damageChange` event for every damage part that changed since the car's previous reading: a rise is a hit,
+ * a fall a repair. A car's first reading only sets the baseline; a frame where any part is unknown is no reading. Only
+ * Car Damage changes the condition, so a frame without it is skipped.
  */
 export const applyDamageChanges = (state: EngineState, frame: Frame): void => {
   if (!frame.damage) return;
@@ -43,7 +43,7 @@ export const applyDamageChanges = (state: EngineState, frame: Frame): void => {
         const was = before[i];
         const value = now[i];
         i++;
-        if (was === undefined || value === undefined || value <= was) continue;
+        if (was === undefined || value === undefined || value === was) continue;
         const params: DamageChangeParams = { part, fromPct: was, toPct: value };
         state.history.events.push({ at: frame.sessionTime, kind: 'damageChange', carId: car.id, params });
       }
