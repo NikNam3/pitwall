@@ -69,7 +69,7 @@ const perCorner = <T>(make: () => T): Corners<T> => ({ fl: make(), fr: make(), r
 
 /**
  * A confirmed 90 s lap of car 0 (lap 1, sectors three thirds of `lapTimeMs` summing exactly to it (30 s each at 90 s), valid, soft C3, no SC), every `Known` field known at
- * `completedAt`. Lap-start fields: wear 0 % per corner, ERS store 4 MJ (as at the end). Lap-end fields: wear 0 % per corner, ERS store 4 MJ, deployed and harvested 0, no damage, channel
+ * `completedAt`. Lap-start samples: wear 0 % per corner, ERS store 4 MJ (so the lap's own wear and ERS change are 0). Lap-end fields: wear 0 % per corner, ERS store 4 MJ, deployed and harvested 0, no damage, channel
  * ranges around tyres 90 to 100 degC and 23 to 27 psi, brakes 300 to 800 degC, engine 110 degC. `completedAt` defaults
  * to `lapNumber * lapTimeMs`. Any field is overridable.
  */
@@ -156,8 +156,8 @@ export function flagPhase(over: Partial<FlagPhase> = {}): FlagPhase {
  * `cars` cars (ids 0..cars-1) each running `laps` laps from session time 0 at a constant pace: car `i` at `paceMs[i]`
  * (or the one `paceMs` for all; throws if an array is shorter than `cars`). Lap `n` (1-based) of a car is a `lap()` with
  * these defaults: it ends at `n * pace`; sectors are thirds of the pace; `fuelAtStartKg` 100 - 2 * (n - 1) and
- * `fuelAtEndKg` 2 kg less; `tyreAgeAtStart` n - 1 (one stint, soft C3); `wearAtStartPct` n - 1 % and `wearAtEndPct` n % per corner; ERS store 4 MJ
- * at every lap start and end; `positionAtEnd` is the car's order by cumulative time at the end of lap n (ties by id). No in or out
+ * `fuelAtEndKg` 2 kg less; `tyreAgeAtStart` n - 1 (one stint, soft C3); `wearAtStartPct` n - 1 and `wearAtEndPct` n % per corner (1 % a
+ * lap); ERS store 4 MJ at every lap start and end; `positionAtEnd` is the car's order by cumulative time at the end of lap n (ties by id). No in or out
  * laps and no SC share are set. `miniSectors` holds, per car, laps 1..n with segments 0..49 plus the closing line crossing (lap n + 1, segment 0) at `n * pace`, so `laps * 50 + 1` crossings per car, sorted by time (engine convention, see `crossings`).
  * The linear defaults have no physical floor or ceiling: fuel at the end of a lap goes below 0 kg after lap 50 and wear
  * above 100 % after lap 100, so a test that needs real values keeps `laps` below those or overrides them.

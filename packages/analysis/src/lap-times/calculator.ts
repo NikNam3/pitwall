@@ -17,6 +17,7 @@ import {
   type SessionKind,
 } from '@pitwall/domain';
 import type { EngineView, IncrementalCalculator } from '@pitwall/engine';
+import { LAP_CLASSES_CONFIG, type LapClassOptions } from '../lap-classes/index.ts';
 import { bestsOf, rowOf, sessionBestBoard, sessionBestsOf, type Best, type CarBests } from './lap-times.ts';
 import { LAP_TIMES, LAP_TIMES_CONFIG, type LapTimesOutput } from './index.ts';
 
@@ -32,6 +33,8 @@ type Acc = {
   cars: CarSnapshot[];
   session: { kind: SessionKind; sessionType: number; numActiveCars: number; timeLeftMs: Ms; updatedAt: number };
   eliminated: { q1: number; q2: number };
+  /** The session and the `lap-classes` config, for `classifyLap`. */
+  classes: LapClassOptions;
 };
 
 const notApplicable = unknown('notApplicable');
@@ -61,6 +64,7 @@ const snapshot = (acc: Acc, view: EngineView): void => {
   acc.session = { kind: s.kind, sessionType: s.sessionType, numActiveCars: s.numActiveCars, timeLeftMs: s.timeLeftMs, updatedAt: s.updatedAt };
   const config = LAP_TIMES_CONFIG.read(view);
   acc.eliminated = { q1: config.eliminatedQ1, q2: config.eliminatedQ2 };
+  acc.classes = { isRace: s.kind === 'race', ...LAP_CLASSES_CONFIG.read(view) };
 };
 
 const init = (view: EngineView): Acc => {
@@ -166,20 +170,19 @@ const projectionOf = (acc: Acc, car: CarSnapshot, best: Best | undefined, bests:
 };
 
 const output = (acc: Acc): LapTimesOutput => {
-  const isRace = acc.session.kind === 'race';
   const lapsByCar = new Map<CarId, LapRecord[]>();
   acc.laps.forEach((byLap, i) => {
     if (byLap !== undefined) lapsByCar.set(toCarId(i), Object.values(byLap).sort((a, b) => a.lapNumber - b.lapNumber));
   });
   const bests = new Map<CarId, CarBests>();
-  for (const [id, laps] of lapsByCar) bests.set(id, bestsOf(laps, isRace));
+  for (const [id, laps] of lapsByCar) bests.set(id, bestsOf(laps, acc.classes));
   const session = sessionBestsOf(bests);
   const rows: LapTimesOutput['rows'] = [];
   const projections: LapTimesOutput['projections'] = {};
   for (const car of acc.cars) {
     if (!car.active) continue;
     const carBests = bests.get(car.id) ?? { sectors: [undefined, undefined, undefined] };
-    rows.push(rowOf(car.id, lapsByCar.get(car.id) ?? [], carBests, session, isRace));
+    rows.push(rowOf(car.id, lapsByCar.get(car.id) ?? [], carBests, session, acc.classes));
     projections[car.id] = projectionOf(acc, car, carBests.lap, bests);
   }
   return { rows, sessionBest: sessionBestBoard(session), projections };

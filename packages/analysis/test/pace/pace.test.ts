@@ -44,6 +44,14 @@ describe('pace calculator', () => {
     expect(car.samples).toBe(3);
   });
 
+  it('a lap with under 2 s under SC (the flag lag at a restart, user ruling 2026-10-30) is a pace lap', () => {
+    // lap 4 is green but for 0.9 s: scShare 0.01 of 90 s
+    const laps = [timed(2, 92_000), timed(3, 94_000), timed(4, 90_000, { scShare: 0.01 })];
+    const car = run(raceView(laps)).byCar[carId(0)]!;
+    expect(car.recentMs).toEqual({ known: true, value: 92_000, at: laps[2]!.completedAt });
+    expect(car.samples).toBe(3);
+  });
+
   it('uses the window from the config', () => {
     const laps = [timed(2, 90_000), timed(3, 92_000), timed(4, 94_000)];
     const view = engineView({ history: { laps }, session: { kind: 'race' }, config: { [PACE_CONFIG.key]: { window: 2 } } });

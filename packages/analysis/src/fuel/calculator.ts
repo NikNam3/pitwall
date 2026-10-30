@@ -1,10 +1,10 @@
-// The `fuel` calculator: per active car, the fuel now, its burn over the current run (stint, since a refuel), and the margin against the laps left.
+// The `fuel` calculator: per active car, the fuel now, its burn over the current run (since a refuel), and the margin against the laps left.
 import { known, unknown, type CarId, type Known, type Kg, type LapRecord, type SessionTime } from '@pitwall/domain';
 import type { EngineView, QuickCalculator } from '@pitwall/engine';
-import { classifyLap } from '../lap-classes/index.ts';
-import { PER_LAP_RATE_CONFIG, perLapRate, type RateSample } from '../per-lap-rate/index.ts';
+import { classifyLap, LAP_CLASSES_CONFIG } from '../lap-classes/index.ts';
+import { PER_LAP_RATE_CONFIG, perLapGainRate, type GainSample } from '../per-lap-rate/index.ts';
 import { SESSION_REMAINING, type SessionRemaining } from '../session-remaining/index.ts';
-import { currentStintLaps } from '../shared/stint-laps.ts';
+import { carLaps } from '../shared/stint-laps.ts';
 import { FUEL, type FuelOutput, type FuelState } from './index.ts';
 
 /**
@@ -20,16 +20,23 @@ const refuelled = (lap: LapRecord, before: LapRecord | undefined): boolean => {
 };
 
 /**
- * The laps of the current run: the current stint's laps from its last refuel on. A garage visit in practice or
- * qualifying can refuel on the same set, which closes no stint.
+ * The laps of the current run: the car's laps from its last refuel on. Fuel is not tied to the tyre set, so a stop
+ * without a refuel keeps the run going; a garage visit in practice or qualifying can refuel on the same set.
  */
 const runLaps = (laps: readonly LapRecord[]): readonly LapRecord[] => laps.slice(Math.max(0, laps.findLastIndex((l, i) => refuelled(l, laps[i - 1]))));
 
-/** Fuel levels at the end of the car's counted laps of the current run (`runLaps`), by lap. */
-const levelSamples = (view: EngineView, id: CarId, isRace: boolean): RateSample[] =>
-  runLaps(currentStintLaps(view.state.history, id)).flatMap((l) =>
-    classifyLap(l, { isRace }).forRate && l.fuelAtEndKg.known ? [{ lap: l.lapNumber, value: l.fuelAtEndKg.value, at: l.completedAt }] : [],
-  );
+/**
+ * The burns (start minus end) of the car's counted laps of the current run (`runLaps`), by lap. A lap whose fuel rose
+ * was refuelled on the way, so it is no sample: a refuel never counts as negative burn.
+ */
+const burnSamples = (view: EngineView, id: CarId, isRace: boolean): GainSample[] => {
+  const classes = { isRace, ...LAP_CLASSES_CONFIG.read(view) };
+  return runLaps(carLaps(view.state.history, id)).flatMap((l) => {
+    if (!classifyLap(l, classes).forRate || !l.fuelAtStartKg.known || !l.fuelAtEndKg.known) return [];
+    const burn = l.fuelAtStartKg.value - l.fuelAtEndKg.value;
+    return burn >= 0 ? [{ lap: l.lapNumber, gain: burn, at: l.completedAt }] : [];
+  });
+};
 
 const fuelState = (view: EngineView, id: CarId, lapsLeft: Known<number>): FuelState => {
   const { state } = view;
@@ -56,8 +63,8 @@ const fuelState = (view: EngineView, id: CarId, lapsLeft: Known<number>): FuelSt
   let burn: Known<Kg>;
   if (kind === 'timeTrial') burn = known(0 as Kg, now);
   else {
-    const rate = perLapRate(levelSamples(view, id, kind === 'race'), PER_LAP_RATE_CONFIG.read(view));
-    burn = rate.known ? known((0 - rate.value.perLap) as Kg, rate.at) : rate;
+    const rate = perLapGainRate(burnSamples(view, id, kind === 'race'), PER_LAP_RATE_CONFIG.read(view));
+    burn = rate.known ? known(rate.value.perLap as Kg, rate.at) : rate;
   }
   if (!burn.known) return { ...base, burnKgPerLap: burn, lapsOfFuel: burn, marginLaps: burn, saveTargetKgPerLap: burn };
 

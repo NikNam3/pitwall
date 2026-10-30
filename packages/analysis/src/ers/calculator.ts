@@ -1,20 +1,23 @@
 import { known } from '@pitwall/domain';
 import type { CarId, CarState, ErsAttack, ErsState, Known } from '@pitwall/domain';
 import type { EngineView, QuickCalculator } from '@pitwall/engine';
-import { classifyLap } from '../lap-classes/index.ts';
-import { lapsToReach, perLapRate, PER_LAP_RATE_CONFIG } from '../per-lap-rate/index.ts';
-import type { RateSample } from '../per-lap-rate/index.ts';
-import { currentStintLaps } from '../shared/stint-laps.ts';
+import { classifyLap, LAP_CLASSES_CONFIG } from '../lap-classes/index.ts';
+import { lapsToReach, perLapGainRate, PER_LAP_RATE_CONFIG } from '../per-lap-rate/index.ts';
+import type { GainSample } from '../per-lap-rate/index.ts';
+import { carLaps } from '../shared/stint-laps.ts';
 import { ERS, ERS_CONFIG } from './index.ts';
 import type { ErsOutput } from './index.ts';
 
-type View = Pick<EngineView, 'state' | 'config'>;
-
-/** The store at the end of each lap of the current stint that counts for a rate, oldest first. */
-function trendSamples(view: View, id: CarId): RateSample[] {
-  const isRace = view.state.session.kind === 'race';
-  return currentStintLaps(view.state.history, id).flatMap((l) =>
-    classifyLap(l, { isRace }).forRate && l.ersStoreAtEndJ.known ? [{ lap: l.lapNumber, value: l.ersStoreAtEndJ.value, at: l.completedAt }] : [],
+/**
+ * The store's change (end minus start) over each of the car's laps that counts for a rate, oldest first. The store is
+ * not tied to the tyre set, so a stop keeps the samples.
+ */
+function trendSamples(view: EngineView, id: CarId): GainSample[] {
+  const classes = { isRace: view.state.session.kind === 'race', ...LAP_CLASSES_CONFIG.read(view) };
+  return carLaps(view.state.history, id).flatMap((l) =>
+    classifyLap(l, classes).forRate && l.ersStoreAtStartJ.known && l.ersStoreAtEndJ.known
+      ? [{ lap: l.lapNumber, gain: l.ersStoreAtEndJ.value - l.ersStoreAtStartJ.value, at: l.completedAt }]
+      : [],
   );
 }
 
@@ -50,7 +53,7 @@ function ersOf(view: EngineView, car: EngineView['state']['cars'][number]): ErsS
     };
   }
   const { storeJ, deployedJ, harvestedMgukJ, harvestedMguhJ, mode } = ers.value;
-  const trend = perLapRate(trendSamples(view, car.id), PER_LAP_RATE_CONFIG.read(view));
+  const trend = perLapGainRate(trendSamples(view, car.id), PER_LAP_RATE_CONFIG.read(view));
   const store = known(storeJ, ers.at);
   const lapsToLevel = lapsToReach(trend, { value: storeJ, at: ers.at }, attackLevelJ, 'rising');
   return {
@@ -65,7 +68,7 @@ function ersOf(view: EngineView, car: EngineView['state']['cars'][number]): ErsS
   };
 }
 
-/** The ERS state of every active car: store, this lap's flows, the store's trend over the stint and the attack readiness. */
+/** The ERS state of every active car: store, this lap's flows, the store's trend per lap and the attack readiness. */
 export const ersCalculator: QuickCalculator<ErsOutput> = {
   id: ERS,
   kind: 'quick',

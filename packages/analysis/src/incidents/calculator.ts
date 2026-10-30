@@ -22,6 +22,7 @@ import type { EngineView, IncrementalCalculator } from '@pitwall/engine';
 import { ALARMS_CONFIG } from '../alarms/index.ts';
 import { DAMAGE, DAMAGE_CONFIG, type DamageOutput } from '../damage/index.ts';
 import { GAPS_CONFIG } from '../gaps/index.ts';
+import { LAP_CLASSES_CONFIG } from '../lap-classes/index.ts';
 import { PACE_CONFIG } from '../pace/index.ts';
 import { paceDeltaAround } from '../pace-delta/index.ts';
 import { ourCars } from '../shared/our-cars.ts';
@@ -99,6 +100,8 @@ type Acc = {
   config: Config;
   neighbourhoodMs: Ms;
   window: number;
+  /** Neutralised time a pace lap stays below (the `lap-classes` config). */
+  maxNeutralisedMs: number;
   /** Damage jumps of a car this close to the first one are one entry. */
   jumpWindowMs: Ms;
   /** Warnings before a penalty (the alarms' config). */
@@ -117,6 +120,7 @@ const readLive = (acc: Acc, view: EngineView): void => {
   acc.warningLimit = ALARMS_CONFIG.read(view).warningsBeforePenalty;
   acc.neighbourhoodMs = GAPS_CONFIG.read(view).neighbourhoodMs;
   acc.window = PACE_CONFIG.read(view).window;
+  acc.maxNeutralisedMs = LAP_CLASSES_CONFIG.read(view).maxNeutralisedMs;
   acc.ours = ourCars(state);
   const phase = view.activeFlagPhase;
   acc.active = phase && { at: phase.start, lap: phase.startLeaderLap };
@@ -215,6 +219,7 @@ const init = (view: EngineView): Acc =>
       config: INCIDENTS_CONFIG.read(view),
       neighbourhoodMs: 0,
       window: 0,
+      maxNeutralisedMs: 0,
       jumpWindowMs: 0,
       warningLimit: 0,
     },

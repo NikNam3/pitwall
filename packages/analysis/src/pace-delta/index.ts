@@ -1,7 +1,7 @@
 // `pace-delta` (spec 4): time lost per lap after an event. A function, imported by the analyses that use it.
 import { known, unknown, type Known, type LapRecord, type Ms, type SessionTime } from '@pitwall/domain';
 import type { DeepReadonly } from '@pitwall/engine';
-import { classifyLap } from '../lap-classes/index.ts';
+import { classifyLap, LAP_CLASSES_CONFIG } from '../lap-classes/index.ts';
 
 const MIN_LAPS = 2;
 
@@ -20,14 +20,15 @@ export function paceDelta(beforeMs: Ms[], afterMs: Ms[], at: SessionTime): Known
 /**
  * `paceDelta` around lap `lap` of one car: its last `window` pace laps before the lap against its first `window` pace
  * laps after it (the lap itself in neither), as of the newest lap used. `laps` holds one record per lap (see the
- * domain's `currentLaps`), in any order.
+ * domain's `currentLaps`), in any order. `maxNeutralisedMs` is the `lap-classes` config's, its default when omitted.
  */
 export function paceDeltaAround(
   laps: readonly DeepReadonly<LapRecord>[],
   lap: number,
-  opts: { window: number; isRace: boolean },
+  opts: { window: number; isRace: boolean; maxNeutralisedMs?: number },
 ): Known<Ms> {
-  const pace = laps.filter((l) => classifyLap(l, opts).forPace).sort((a, b) => a.lapNumber - b.lapNumber);
+  const classes = { isRace: opts.isRace, maxNeutralisedMs: opts.maxNeutralisedMs ?? LAP_CLASSES_CONFIG.defaults.maxNeutralisedMs };
+  const pace = laps.filter((l) => classifyLap(l, classes).forPace).sort((a, b) => a.lapNumber - b.lapNumber);
   const before = pace.filter((l) => l.lapNumber < lap).slice(-opts.window);
   const after = pace.filter((l) => l.lapNumber > lap).slice(0, opts.window);
   const last = after[after.length - 1];

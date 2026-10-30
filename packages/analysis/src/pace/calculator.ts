@@ -1,7 +1,7 @@
 // The `pace` calculator: per car, the mean of the last `window` pace laps and of the current stint's pace laps.
 import { addLaps, emptyCurrentLaps, known, unknown, type CarId, type CurrentLaps, type LapRecord, type Ms, type StintRecord } from '@pitwall/domain';
 import type { DeepReadonly, EngineView, IncrementalCalculator } from '@pitwall/engine';
-import { classifyLap } from '../lap-classes/index.ts';
+import { classifyLap, LAP_CLASSES_CONFIG } from '../lap-classes/index.ts';
 import { stintLaps } from '../shared/stint-laps.ts';
 import { PACE, PACE_CONFIG, type Pace } from './index.ts';
 
@@ -10,6 +10,7 @@ type PaceAcc = {
   /** Each car's last closed stint (the engine records a stint when it closes). */
   lastStint: Array<DeepReadonly<StintRecord> | undefined>;
   isRace: boolean;
+  maxNeutralisedMs: number;
   window: number;
 };
 
@@ -22,7 +23,11 @@ const foldLaps = (acc: PaceAcc, view: EngineView, from: number): void => {
   addLaps(acc.laps, view.state.history.laps.slice(from) as LapRecord[]);
 };
 
-const settings = (view: EngineView) => ({ isRace: view.state.session.kind === 'race', window: PACE_CONFIG.read(view).window });
+const settings = (view: EngineView) => ({
+  isRace: view.state.session.kind === 'race',
+  ...LAP_CLASSES_CONFIG.read(view),
+  window: PACE_CONFIG.read(view).window,
+});
 
 const mean = (laps: LapRecord[]) => {
   const newest = laps[laps.length - 1] as LapRecord;
