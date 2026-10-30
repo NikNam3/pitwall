@@ -3,7 +3,8 @@ import { carId, known, unknown, type CarId, type DamageParts, type LapRecord, ty
 import { describe, expect, it } from 'vitest';
 import { carState, engineView, event, lap, realismHidden } from '../../../../test-support/builders/index.ts';
 import { damageCalculator } from '../../src/damage/calculator.ts';
-import { DAMAGE } from '../../src/damage/index.ts';
+import { DAMAGE, DAMAGE_CONFIG } from '../../src/damage/index.ts';
+import { damageJumps } from '../../src/shared/damage-jumps.ts';
 import { engineShaped } from '../engine-shaped.ts';
 
 const car0 = carId(0);
@@ -288,6 +289,16 @@ describe('damage calculator', () => {
         cars: [carState({ id: car0 })],
         history: { events: repairEvents.filter((e) => e.at <= t), laps: repairLaps.filter((l) => l.completedAt <= t) },
       });
+
+    it('shows the shared grouping\'s jumps whose part was not repaired since (the grouping keeps all, the card and alarm only these)', () => {
+      const { jumps, repairs } = damageJumps(repairEvents, DAMAGE_CONFIG.defaults);
+      const standing = (jumps.get(car0) ?? []).filter((j) => !(repairs.get(car0)?.get(j.part) ?? []).some((t) => t > j.at));
+      const shown = run(repairEvents, repairLaps).jumps;
+      expect(shown.map((j) => ({ at: j.at, part: j.parts[0], deltaPct: j.deltaPct }))).toEqual(standing);
+      // the wing hit at 100 s was changed at 400 s; the hit at 500 s after the change stays
+      expect(shown.map((j) => [j.at, j.parts, j.deltaPct])).toEqual([[500_000, ['frontRightWingPct'], 9]]);
+      expect(jumps.get(car0)?.map((j) => j.at)).toEqual([100_000, 500_000]);
+    });
 
     it('incremental equals from scratch over a history with repairs, after every event and every lap', () => {
       const times = [...new Set([...repairEvents.map((e) => e.at), ...repairLaps.map((l) => l.completedAt)])].sort((a, b) => a - b);
