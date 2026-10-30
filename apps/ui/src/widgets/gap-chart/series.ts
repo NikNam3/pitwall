@@ -42,16 +42,22 @@ export function phaseBands(phases: readonly FlagPhase[]): PhaseBand[] {
   }));
 }
 
-/** One line per car with laps: lap against -gap in seconds, so a car losing time drops; `ours` from kit `ourCars`. */
+/**
+ * One line per car with laps: lap against -gap in seconds, so a car losing time drops; `ours` from kit `ourCars`. A car
+ * with a gap now continues to it as a live (dotted) last segment.
+ */
 export function gapSeries(lines: GapperLines, cars: readonly CarOverview[], ours: ReadonlySet<CarId>): ChartSeries[] {
   const field = cars.map((c) => ({ id: c.id, teamId: c.identity.teamId, raceNumber: c.identity.raceNumber }));
   const out: ChartSeries[] = [];
   for (const line of lines.cars) {
     if (line.byLap.length === 0) continue;
     const car = cars.find((c) => c.id === line.carId);
+    const points: ChartSeries['points'] = line.byLap.map((p) => [p.lap, -p.gapMs / 1000]);
+    if (line.now.known) points.push([line.now.value.lap, -line.now.value.gapMs / 1000]);
     out.push({
       label: carCodeById(cars, line.carId).text,
-      points: line.byLap.map((p) => [p.lap, -p.gapMs / 1000]),
+      points,
+      ...(line.now.known ? { liveEnd: true } : {}),
       colour: carColour(car ? { id: car.id, teamId: car.identity.teamId, raceNumber: car.identity.raceNumber } : { id: line.carId, teamId: -1, raceNumber: 0 }, field, ours),
     });
   }
