@@ -4,7 +4,7 @@
   import CornerGrid from '../../kit/corners/CornerGrid.svelte';
   import { fitCell } from '../../kit/grid/grid.ts';
   import { cornerNames } from '../../kit/text.ts';
-  import UnknownMark from '../../kit/values/UnknownMark.svelte';
+  import TextCell from '../../kit/values/TextCell.svelte';
   import { role, roleOrUndefined } from '../../theme/index.ts';
   import { damageRows, FULL_WIDTHS as W } from './rows.ts';
   import type { Cell, JumpRow } from './rows.ts';
@@ -18,8 +18,8 @@
   const wingWidth = (i: number): number => (i === 2 ? W.wingRear : W.wing);
 </script>
 
-{#snippet value(c: Cell, width: number = W.value)}{#if c.reason}<UnknownMark reason={c.reason} cols={width} align="right" />{:else}{fitCell(c.text, width, 'right')}{/if}{/snippet}
-{#snippet jump(j: JumpRow)}<span style:color={roleOrUndefined(j.role)}>{fitCell(j.text, W.jump)}  {#if j.reason}<UnknownMark reason={j.reason} />{:else}<span title={j.title}>{j.loss}</span>{/if}</span>{/snippet}
+{#snippet value(c: Cell, width: number = W.value)}<TextCell {...c} {width} align="right" />{/snippet}
+{#snippet jump(j: JumpRow)}<span style:color={roleOrUndefined(j.role)}>{fitCell(j.text, W.jump)}  <TextCell text={j.loss} reason={j.reason} title={j.title} /></span>{/snippet}
 
 <div class="card">
   {#if full}
@@ -33,7 +33,7 @@
     {#each rows.jumps.slice(0, 2) as j (j.at)}<div class="line">{@render jump(j)}</div>{/each}
   {:else}
     <!-- The parts are known or unknown together: one mark stands for the whole line. -->
-    <div class="line">{#if rows.parts.wingL.reason}<UnknownMark reason={rows.parts.wingL.reason} />{:else}{rows.compact.parts}{/if}</div>
+    <div class="line"><TextCell text={rows.compact.parts} reason={rows.parts.wingL.reason} /></div>
     <!-- Two rows only: a fault outranks the newest jump. -->
     {#if rows.faults.length > 0}<div class="line" style:color={role('critical')}>{rows.faults.join(text.faultSeparator)}</div>
     {:else if rows.compact.jump}<div class="line" style:color={roleOrUndefined(rows.compact.jump.role)} title={rows.compact.jump.loss}>{rows.compact.jump.text}</div>{/if}

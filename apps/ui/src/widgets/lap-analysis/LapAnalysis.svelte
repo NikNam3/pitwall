@@ -3,9 +3,8 @@
   import type { WidgetProps } from '../../kit/types.ts';
   import { fitCell } from '../../kit/grid/grid.ts';
   import { fitColumns } from '../../kit/size/size.ts';
-  import UnknownMark from '../../kit/values/UnknownMark.svelte';
+  import TextCell from '../../kit/values/TextCell.svelte';
   import { ourCarRole } from '../../emphasis/index.ts';
-  import { roleOrUndefined } from '../../theme/index.ts';
   import { LAP_COLUMNS, formatCell } from './columns.ts';
   import { cellRole } from './emphasis.ts';
   import { buildRows, cellOf } from './rows.ts';
@@ -23,11 +22,13 @@
 <div class="block">
   <div class="line faint">{columns.map((c) => fitCell(text.headers[c.key], c.widthCols, c.align)).join(' ')}</div>
   {#each rows as r (r.carId)}
-    <div class="line" class:ref={r.reference}>{#each columns as c, i (c.key)}{i === 0 ? '' : ' '}{#if c.key === 'drv'}{#if r.code.reason}<UnknownMark reason={r.code.reason} cols={c.widthCols} align={c.align} />{:else}<span
-            style:color={roleOrUndefined(ourCarRole(r.ours))}>{fitCell(r.code.text, c.widthCols, c.align)}</span
-          >{/if}{:else}{@const cell = cellOf(r, c.key)}{#if cell && !cell.value.known}<UnknownMark reason={cell.value.reason} cols={c.widthCols} align={c.align} />{:else if cell}<span
-            style:color={roleOrUndefined(cellRole(cell.status))}>{fitCell(formatCell(c.key, cell), c.widthCols, c.align)}</span
-          >{/if}{/if}{/each}</div>
+    <div class="line" class:ref={r.reference}>{#each columns as c, i (c.key)}{i === 0 ? '' : ' '}{#if c.key === 'drv'}<TextCell {...r.code} role={ourCarRole(r.ours)} width={c.widthCols} align={c.align} />{:else}{@const cell = cellOf(r, c.key)}{#if cell}<TextCell
+            text={formatCell(c.key, cell)}
+            reason={cell.value.known ? undefined : cell.value.reason}
+            role={cellRole(cell.status)}
+            width={c.widthCols}
+            align={c.align}
+          />{/if}{/if}{/each}</div>
   {/each}
 </div>
 

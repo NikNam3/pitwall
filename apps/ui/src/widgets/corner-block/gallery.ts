@@ -85,7 +85,7 @@ const gallery: GalleryEntry<typeof widget> = {
       car: carOf({ ...healthy, fr }),
     },
     allInBand: { bands: bandsOf(healthy), wear: wearOf(healthy), car: carOf(healthy) },
-    // Surface-only tyre temperatures: the carcass column stays, empty, with the reason on hover.
+    // Surface-only tyre temperatures: the carcass column stays, with its reason's mark and the reason on hover.
     carcassNotApplicable: { bands: bandsOf(surfaceOnly), wear: wearOf(surfaceOnly), car: carOf(surfaceOnly) },
     // A rival linked as primary in realism mode: every value is hidden.
     realismHidden: { bands: bandsOf(healthy), wear: wearOf(healthy, false), car: carOf(healthy, 'realism') },

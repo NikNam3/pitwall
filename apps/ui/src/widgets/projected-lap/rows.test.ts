@@ -66,7 +66,7 @@ describe('projectionRows', () => {
 
   it('on the first flying lap shows the cut-off without a margin, the margin\'s reason on hover', () => {
     const p = { ...projection(), cutOff: known({ position: 15, timeMs: 84_006, marginMs: unknown('insufficientData') }, toSessionTime(0)) };
-    expect(projectionRows(p, true)[1]).toMatchObject({ time: '1:24.006', pos: 'P15', delta: '', label: '', deltaRole: undefined, reason: 'insufficientData' });
+    expect(projectionRows(p, true)[1]).toMatchObject({ time: '1:24.006', pos: 'P15', delta: '', label: '', deltaRole: undefined, unknown: { delta: 'insufficientData' } });
   });
 
   it('on an out lap without a cut-off shows the finish margin only', () => {
@@ -76,16 +76,27 @@ describe('projectionRows', () => {
     expect(rows[2]!.delta).toBe('3.9 s');
   });
 
-  it('leaves unknown values as empty cells, with the reason for the hover, and no label', () => {
+  it('gives each unknown value cell its reason (the display shows its mark), and no label', () => {
     const rows = projectionRows(projection({ lapMs: 83_900, deltaMs: 240, position: 4 }), true);
-    expect(rows[1]).toMatchObject({ time: '', pos: '', delta: '', label: '', reason: 'notApplicable' });
-    expect(rows[2]).toMatchObject({ delta: '', label: '', reason: 'notApplicable' });
-    expect(rows[0]!.reason).toBeUndefined();
+    expect(rows[1]).toMatchObject({ time: '', pos: '', delta: '', label: '', unknown: { time: 'notApplicable', pos: 'notApplicable', delta: 'notApplicable' } });
+    expect(rows[2]).toMatchObject({ delta: '', label: '', unknown: { delta: 'notApplicable' } });
+    expect(rows[0]!.unknown).toBeUndefined();
+  });
+
+  it('has no row-wide reason beside the cells\' own (review-ui finding 3)', () => {
+    const rows = projectionRows(projection({ lapMs: 83_900, deltaMs: 240, position: 4 }), true);
+    for (const row of rows) expect(row).not.toHaveProperty('reason');
+  });
+
+  it('a car out of the race (on its lap, every value notApplicable) shows each value\'s mark, never "out lap"', () => {
+    const rows = projectionRows(projection(), true);
+    expect(rows[0]).toMatchObject({ time: '', pos: '', delta: '', unknown: { time: 'notApplicable', pos: 'notApplicable', delta: 'notApplicable' } });
+    expect(rows[0]!.time).not.toBe('out lap');
   });
 
   it('keeps the reason of a hidden value (realism)', () => {
     const rows = projectionRows({ ...projection(), projectedLapMs: unknown('realism'), deltaToBestMs: unknown('realism'), projectedPosition: unknown('realism') }, true);
-    expect(rows[0]).toMatchObject({ time: '', pos: '', delta: '', label: '', reason: 'realism' });
+    expect(rows[0]).toMatchObject({ time: '', pos: '', delta: '', label: '', unknown: { time: 'realism', pos: 'realism', delta: 'realism' } });
   });
 
   it('shows the PROJ row partly when only some values are known', () => {

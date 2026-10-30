@@ -14,7 +14,7 @@ const gallery: GalleryEntry<typeof widget> = {
   cases: {
     // The mockup: the reference row in absolute times, deltas below, purple session bests (no green: every value is a personal best).
     mockup: field,
-    // A rival whose times are withheld by realism mode: empty cells, the row still renders.
+    // A rival whose times are withheld by realism mode: the realism mark in each time cell, the row still renders.
     realismHiddenRival: { ...field, board: lapBoard(1, [ours, boardRow(0, 'realism', KUH), ...others], sessionBests) },
     // Early in the session: no session bests yet and a car without a time.
     noBestsYet: { ...field, board: lapBoard(1, [ours, boardRow(2, 'noTimes', KUH)]) },

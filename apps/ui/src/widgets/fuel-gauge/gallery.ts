@@ -35,7 +35,7 @@ const gallery: GalleryEntry<typeof widget> = {
       },
     },
     marginPositive: { fuel: positive },
-    // Realism hides the fuel figures: every row is an empty cell with the reason on hover.
+    // Realism hides the fuel figures: every row shows the realism mark with the reason on hover.
     realismHidden: {
       fuel: {
         kg: unknown('realism'),

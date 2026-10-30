@@ -1,5 +1,5 @@
 // `lap-times` (spec 6.2): the board part of the calculator output, plus update and flashback over the whole output.
-import { carId, known, type LapRecord, type MiniSectorCrossing } from '@pitwall/domain';
+import { carId, known, unknown, type LapRecord, type MiniSectorCrossing, type ResultStatus } from '@pitwall/domain';
 import { historyLengths, type EngineView } from '@pitwall/engine';
 import { describe, expect, it } from 'vitest';
 import { crossings, field } from '../../../../test-support/builders/index.ts';
@@ -144,5 +144,48 @@ describe('lap-times update and flashback', () => {
     expect(after).toEqual(run(back));
     expect(rowOf(after, 0)!.bestLapMs).toEqual(known(90_000, 90_000));
     expect(after.sessionBest.lap).toEqual(known({ ms: 90_000, carId: carId(0) }, 90_000));
+  });
+});
+
+// A car out of the race sets no more times: what it lacks will not come (notApplicable), not "too few laps yet"; the
+// display shows "will not come" for it (wave 2, T7; review-ui finding 5).
+describe('lap-times board: a car out of the race', () => {
+  const notApplicable = unknown('notApplicable');
+  const OUT = ['retired', 'didNotFinish', 'disqualified'] as const satisfies readonly ResultStatus[];
+  // car 0 has a lap; car 1 has none
+  const laps = [sectorLap(0, 1, [30_000, 30_000, 30_000], 90_000)];
+
+  it.each(OUT)('%s without a lap: its times and bests will not come (notApplicable)', (resultStatus) => {
+    const row = rowOf(run(scene({ laps, cars: activeCars(2, { 1: { resultStatus } }) })), 1)!;
+    expect(row.lastLapMs).toEqual(notApplicable);
+    expect(row.lastSectorsMs).toEqual([notApplicable, notApplicable, notApplicable]);
+    expect(row.bestLapMs).toEqual(notApplicable);
+    expect(row.bestSectorsMs).toEqual([notApplicable, notApplicable, notApplicable]);
+    expect(row.theoreticalBestMs).toEqual(notApplicable);
+  });
+
+  it('a running car without a lap still waits for its times (insufficientData)', () => {
+    const row = rowOf(run(scene({ laps, cars: activeCars(2) })), 1)!;
+    expect(row.lastLapMs).toEqual(unknown('insufficientData'));
+    expect(row.bestLapMs).toEqual(unknown('insufficientData'));
+  });
+
+  it('a retired car keeps the times it set; only the bests it lacks will not come', () => {
+    // its one lap is invalid: a last lap, but no best lap and no best sectors
+    const own = [sectorLap(1, 1, [30_500, 30_500, 30_500], 91_500, { valid: { lap: false, sectors: [false, false, false] } })];
+    const row = rowOf(run(scene({ laps: [...laps, ...own], cars: activeCars(2, { 1: { resultStatus: 'retired' } }) })), 1)!;
+    expect(row.lastLapMs).toEqual(known(91_500, 91_500));
+    expect(row.bestLapMs).toEqual(notApplicable);
+    expect(row.bestSectorsMs).toEqual([notApplicable, notApplicable, notApplicable]);
+    expect(row.theoreticalBestMs).toEqual(notApplicable);
+  });
+
+  it('a car that retires between two updates: the update equals a fresh run', () => {
+    const running = scene({ laps, cars: activeCars(2) });
+    const retired = scene({ laps, cars: activeCars(2, { 1: { resultStatus: 'retired' } }) });
+    const lengths = historyLengths(running.state.history);
+    const acc = lapTimesCalculator.update(lapTimesCalculator.init(running), { before: lengths, after: lengths, truncated: false }, retired);
+    expect(lapTimesCalculator.output(acc)).toEqual(run(retired));
+    expect(rowOf(lapTimesCalculator.output(acc), 1)!.bestLapMs).toEqual(notApplicable);
   });
 });

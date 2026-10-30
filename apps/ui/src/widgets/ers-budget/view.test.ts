@@ -112,20 +112,28 @@ describe('ersView: trend and attack text', () => {
     expect(ersView(state({ attack: known({ ready: false, inLaps: 1 }, at) })).attack).toBe('attack in 1 lap');
   });
 
-  it('says nothing when the attack is not applicable (falling or flat below the level)', () => {
+  it('has an empty attack text and the reason when the attack is not applicable (falling or flat below the level)', () => {
     const v = ersView(state({ storeTrendJPerLap: known(-0.2 * MJ, at), attack: unknown('notApplicable') }));
     expect(v.attack).toBe('');
+    expect(v.reasons.attack).toBe('notApplicable');
     expect(v.attackReady).toBe(false);
   });
 
-  it('says nothing when the attack is unknown', () => {
-    expect(ersView(state({ attack: unknown('insufficientData') })).attack).toBe('');
+  it('has an empty attack text and the reason when the attack is unknown, so the display shows its mark', () => {
+    expect(ersView(state({ attack: unknown('insufficientData') })).reasons.attack).toBe('insufficientData');
     const v = ersView(state({ storeJ: unknown('realism'), attack: unknown('realism') }));
     expect(v.attack).toBe('');
+    expect(v.reasons.attack).toBe('realism');
     expect(v.attackReady).toBe(false);
+  });
+
+  it('has no attack reason for a known attack', () => {
+    expect(ersView(state()).reasons.attack).toBeUndefined();
   });
 });
 
+// The joint between trend and attack is the view's alone (review-ui finding 3): an unknown part still shows (its mark),
+// so the line is joined whenever both parts show, known or not.
 describe('ersView: trend line', () => {
   it('joins trend and attack with a separator', () => {
     const v = ersView(state({ attack: known({ ready: true, inLaps: 0 }, at) }));
@@ -134,14 +142,16 @@ describe('ersView: trend line', () => {
     expect(v.trendJoint).toBe(',\u00a0');
   });
 
-  it('has no separator when the trend is empty and the attack shows', () => {
+  it('joins an unknown trend (its mark) to the attack text', () => {
     const v = ersView(state({ storeTrendJPerLap: unknown('notReceived'), attack: known({ ready: true, inLaps: 0 }, at) }));
     expect(v.trend).toBe('');
-    expect(v.trendJoint).toBe('');
+    expect(v.reasons.trend).toBe('notReceived');
+    expect(v.trendJoint).toBe(',\u00a0');
   });
 
-  it('has no separator when there is no attack text', () => {
-    expect(ersView(state({ attack: unknown('notReceived') })).trendJoint).toBe('');
+  it('joins the trend to an unknown attack (its mark)', () => {
+    expect(ersView(state({ attack: unknown('notReceived') })).trendJoint).toBe(',\u00a0');
+    expect(ersView(state({ storeTrendJPerLap: unknown('realism'), attack: unknown('realism') })).trendJoint).toBe(',\u00a0');
   });
 
   it('prints a falling trend with the true minus and the limit in MJ', () => {

@@ -2,8 +2,8 @@
 import type { CarOverview } from '@pitwall/contracts';
 import type { CarId, IncidentEntry, IncidentForUs, IncidentKind, IncidentPenalty, Known, RaceMoment, UnknownReason } from '@pitwall/domain';
 import { carCodeById } from '../../kit/car/car-label.ts';
-import { fitCell } from '../../kit/grid/grid.ts';
-import { incidentKinds, insightText, sectorNames, separator, unknownMark, unknownReason } from '../../kit/text.ts';
+import { fitCell, fitParts, type CellPart } from '../../kit/grid/grid.ts';
+import { incidentKinds, insightText, sectorNames, separator, unknownReason } from '../../kit/text.ts';
 import type { WidgetSize } from '../../kit/types.ts';
 import { formatCount, formatDeltaPct, formatLapNumber, formatSeconds, formatSignedSeconds } from '../../kit/values/format.ts';
 import { positionPairText } from '../../kit/values/position-mark.ts';
@@ -12,7 +12,11 @@ import { incidentRole } from './emphasis.ts';
 import * as text from './text.ts';
 
 export type IncidentColumn = 'lap' | 'cars' | 'what' | 'lost' | 'forUs';
-export type IncidentCell = { text: string; reason?: UnknownReason };
+/**
+ * A cell: its plain text (no marks) and the first reason of its unknown values; `parts` when the cell places each
+ * unknown's mark at its value (the for-us cell), else the mark goes after the text.
+ */
+export type IncidentCell = { text: string; reason?: UnknownReason; parts?: CellPart[] };
 export type IncidentRow = { id: string; role?: Role | undefined; cells: Record<IncidentColumn, IncidentCell> };
 
 const signedSeconds = (ms: number): string => formatSignedSeconds(ms, 1);
@@ -28,13 +32,31 @@ function gapText(before: Known<number>, after: Known<number>): string {
   return text.pair(b, a);
 }
 
+/** A known value's text, or the unknown's part (its mark shows in place). */
+const valuePart = <T>(v: Known<T>, format: (t: T) => string): CellPart => (v.known ? { text: format(v.value) } : { text: '', reason: v.reason });
+
+/**
+ * The parts of `us P5→P4, OCO +4.1→DNF` with each unknown value in its place: `us …, OCO +4.1→…`; the gaps show (as
+ * marks) even when both are unknown, which the plain text leaves out.
+ */
+function forUsParts(f: IncidentForUs, cars: readonly CarOverview[]): CellPart[] {
+  const position: CellPart[] = f.positionBefore.known
+    ? [{ text: positionPairText(f.positionBefore.value, f.positionAfter) }, ...(f.positionAfter.known ? [] : [valuePart(f.positionAfter, String)])]
+    : [valuePart(f.positionBefore, String)];
+  const parts: CellPart[] = [{ text: text.us }, { text: ' ' }, ...position];
+  if (!f.otherCarId.known) return parts;
+  const code = carCodeById(cars, f.otherCarId.value);
+  const after = f.gapAfterMs.known || f.gapAfterMs.reason !== 'notApplicable' ? valuePart(f.gapAfterMs, signedSeconds) : { text: text.retired };
+  return [...parts, { text: text.joint }, code, { text: ' ' }, valuePart(f.gapBeforeMs, signedSeconds), { text: text.arrow }, after];
+}
+
 /** What changed for one of our cars: `us P5→P4, OCO +4.1→DNF`; the gaps are to the car the analysis names. */
 function forUsCell(f: IncidentForUs, cars: readonly CarOverview[]): IncidentCell {
   const position = f.positionBefore.known ? positionPairText(f.positionBefore.value, f.positionAfter) : '';
   const lead = position === '' ? text.us : `${text.us} ${position}`;
   if (!f.otherCarId.known) {
     const reason = firstReason(f.positionBefore, f.positionAfter);
-    return reason === undefined ? { text: lead } : { text: lead, reason };
+    return withParts(reason === undefined ? { text: lead } : { text: lead, reason }, forUsParts(f, cars));
   }
   const code = carCodeById(cars, f.otherCarId.value);
   const gap = gapText(f.gapBeforeMs, f.gapAfterMs);
@@ -42,15 +64,19 @@ function forUsCell(f: IncidentForUs, cars: readonly CarOverview[]): IncidentCell
   const reason = firstReason(f.positionBefore, f.positionAfter, f.gapBeforeMs, ...gapAfter) ?? code.reason;
   const other = [code.text, gap].filter((t) => t !== '').join(' ');
   const cellText = gap === '' ? lead : `${lead}${text.joint}${other}`;
-  return reason === undefined ? { text: cellText } : { text: cellText, reason };
+  return withParts(reason === undefined ? { text: cellText } : { text: cellText, reason }, forUsParts(f, cars));
 }
+
+/** The cell with its parts, when one of them is unknown (a known cell shows its text alone). */
+const withParts = (cell: IncidentCell, parts: CellPart[]): IncidentCell => (parts.some((p) => p.reason !== undefined) ? { ...cell, parts } : cell);
 
 /** Every one of our cars the entry concerns, one after the other; the hover gives the first reason. */
 function forUsCells(entry: IncidentEntry, cars: readonly CarOverview[]): IncidentCell {
   const cells = entry.forUs.map((f) => forUsCell(f, cars));
   const joined = cells.map((c) => c.text).join(separator);
   const reason = cells.find((c) => c.reason !== undefined)?.reason;
-  return reason === undefined ? { text: joined } : { text: joined, reason };
+  const parts = cells.flatMap((c, i) => [...(i === 0 ? [] : [{ text: separator }]), ...(c.parts ?? [{ text: c.text }])]);
+  return withParts(reason === undefined ? { text: joined } : { text: joined, reason }, parts);
 }
 
 /** The codes of the entry's cars; a car the field lacks is left out and its reason goes to the hover. */
@@ -122,18 +148,14 @@ export const COLUMN_GAP = 2;
 export const LEAD = 1;
 
 /**
- * One cell fitted to its field: the text and, for an unknown value, the reason in words for the hover and how the cell
- * shows its reason's mark: the known part (`lead`, with its space), the mark, then the padding (`trail`) to the width.
+ * One cell fitted to its field: the plain text and, for a cell with an unknown value, the reason in words for the hover
+ * and its parts fitted to the width (kit `fitParts`), each mark where its value goes.
  */
-export type FittedCell = { column: IncidentColumn; text: string; title?: string; unknown?: { reason: UnknownReason; lead: string; trail: string } };
+export type FittedCell = { column: IncidentColumn; text: string; title?: string; parts?: CellPart[] };
 
-/** Where the mark of an unknown cell goes in `width` characters: after its known part, cut to leave room for the mark. */
-function markLayout(cell: IncidentCell, reason: UnknownReason, width: number): NonNullable<FittedCell['unknown']> {
-  const mark = unknownMark[reason];
-  const room = width - mark.length - 1;
-  const lead = cell.text === '' || room <= 0 ? '' : `${fitCell(cell.text, room).trimEnd()} `;
-  return { reason, lead, trail: ' '.repeat(Math.max(0, width - lead.length - mark.length)) };
-}
+/** The parts of a cell with an unknown value: its own, or its text with the mark after it. */
+const partsOf = (cell: IncidentCell, reason: UnknownReason): CellPart[] =>
+  cell.parts ?? (cell.text === '' ? [{ text: '', reason }] : [{ text: cell.text }, { text: ' ' }, { text: '', reason }]);
 
 /**
  * The row's cells on the fixed grid of a line `cols` characters wide: each column in its width, the last one in what
@@ -146,7 +168,7 @@ export function fitRow(mode: WidgetSize['mode'], row: IncidentRow, cols: number)
     const cell = row.cells[column];
     const width = i === columns.length - 1 ? Math.max(0, cols - fixed) : widths[column];
     const fitted = { column, text: fitCell(cell.text, width) };
-    return cell.reason === undefined ? fitted : { ...fitted, title: unknownReason[cell.reason], unknown: markLayout(cell, cell.reason, width) };
+    return cell.reason === undefined ? fitted : { ...fitted, title: unknownReason[cell.reason], parts: fitParts(partsOf(cell, cell.reason), width) };
   });
 }
 

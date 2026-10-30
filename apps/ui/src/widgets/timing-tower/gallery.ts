@@ -5,7 +5,7 @@ import type { GalleryEntry } from '../../kit/gallery-types.ts';
 import { boardRow, incidentEntry, interval, lapBoard, overview, sessionInfo, toCar } from './fixtures.ts';
 import type { widget } from './widget.ts';
 
-/** Our car (id 3, KUH) is fourth; SAR is a lap down; OCO has retired; ALB is on an out lap. */
+/** Our car (id 3, KUH) is fourth; SAR is a lap down; OCO has retired (its times will not come); ALB is on an out lap. */
 const cars = [
   overview(0, { name: 'Max Verstappen', position: 1, gridPosition: 1 }),
   overview(1, { name: 'Lando Norris', position: 2, gridPosition: 3 }),
@@ -32,7 +32,7 @@ const board = lapBoard(3, [
   boardRow(4, undefined, [28_320]),
   boardRow(5, 105_660, [28_402, 41_771, 35_487]),
   boardRow(6, 106_902, [28_771, 42_004, 36_127]),
-  boardRow(7, undefined),
+  boardRow(7, 'retired'),
 ]);
 
 /** A moment whose cause names the incident entry `collision-6-7` (race-moment's incident cause carries `entryId`). */
@@ -54,7 +54,7 @@ const gallery: GalleryEntry<typeof widget> = {
     },
     // Lapped car (+1 lap) and a retired car dim at the bottom, our car marked.
     lappedAndRetired: field,
-    // A rival whose times are withheld by realism mode: empty cells, the row still renders.
+    // A rival whose times are withheld by realism mode: the realism mark in each time cell, the row still renders.
     realismHiddenRival: {
       ...field,
       board: lapBoard(3, [
@@ -73,11 +73,11 @@ const gallery: GalleryEntry<typeof widget> = {
       ...field,
       intervals: intervals.map((i) => (i.carId === carId(1) ? interval(1, 2184, 2184, 0, 19) : i.carId === carId(2) ? interval(2, 5903, 3719, 0, -19) : i)),
     },
-    // Unserved penalties: NOR a drive-through, PIA a stop-go beside a 5 s time penalty (the time in the title), LEC 5 s.
+    // Unserved penalties: NOR two drive-throughs (2DT), PIA a stop-go beside a 5 s time penalty (the time in the title), LEC 5 s.
     driveThrough: {
       ...field,
       cars: cars.map((c) =>
-        c.id === carId(1) ? overview(1, { name: 'Lando Norris', position: 2, gridPosition: 3, unservedDriveThroughs: 1 })
+        c.id === carId(1) ? overview(1, { name: 'Lando Norris', position: 2, gridPosition: 3, unservedDriveThroughs: 2 })
         : c.id === carId(5) ? overview(5, { name: 'Oscar Piastri', position: 6, gridPosition: 5, age: 15, unservedStopGos: 1, timePenaltyMs: 5000 })
         : c),
     },

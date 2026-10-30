@@ -1,8 +1,7 @@
 <script lang="ts">
   // Fuel margin in laps, burn, save target and the game's own estimate (V20, spec 8.2).
   import type { WidgetProps } from '../../kit/types.ts';
-  import UnknownMark from '../../kit/values/UnknownMark.svelte';
-  import { roleOrUndefined } from '../../theme/index.ts';
+  import TextCell from '../../kit/values/TextCell.svelte';
   import { fuelRows, type FuelRow } from './rows.ts';
   import * as text from './text.ts';
   import type { widget } from './widget.ts';
@@ -18,7 +17,7 @@
   {#each rows as row (row.key)}
     <div class="row" class:dim={row.dim} class:bold={row.bold}>
       <span class="label" style:min-width="{text.labelWidth}ch">{row.label}</span>
-      {#if row.reason}<UnknownMark reason={row.reason} />{:else}<span class="text" style:color={roleOrUndefined(row.role)}>{row.text}</span>{/if}
+      <span class="text"><TextCell text={row.text} reason={row.reason} role={row.role} /></span>
     </div>
   {/each}
 </div>

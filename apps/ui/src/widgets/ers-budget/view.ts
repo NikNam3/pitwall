@@ -1,4 +1,5 @@
-// Pure view of an ERS state for the ers-budget display: formatted texts, the bar input and the reasons of empty cells.
+// Pure view of an ERS state for the ers-budget display: formatted texts, the bar input and the reasons of unknown texts
+// (each shows its reason's mark).
 import { formatJoules, formatMJ, formatSignedMJ } from '../../kit/values/format.ts';
 import type { ErsState, Known, Joules, UnknownReason } from '@pitwall/domain';
 import * as text from './text.ts';
@@ -18,9 +19,10 @@ export type ErsView = {
   trend: string;
   attack: string;
   attackReady: boolean;
-  /** Between the trend and the attack; empty unless both are shown. */
+  /** Between the trend and the attack: both always show, as a text or an unknown's mark. */
   trendJoint: string;
-  reasons: Record<'store' | 'flow' | 'deployed' | 'harvested' | 'trend', UnknownReason | undefined>;
+  /** Why a text is empty: the display shows the reason's mark in its place. */
+  reasons: Record<'store' | 'flow' | 'deployed' | 'harvested' | 'trend' | 'attack', UnknownReason | undefined>;
 };
 
 const reasonOf = (k: Known<unknown>): UnknownReason | undefined => (k.known ? undefined : k.reason);
@@ -49,13 +51,14 @@ export function ersView(s: ErsState): ErsView {
     trend,
     attack,
     attackReady: s.attack.known && s.attack.value.ready,
-    trendJoint: trend !== '' && attack !== '' ? text.joint : '',
+    trendJoint: text.joint,
     reasons: {
       store: reasonOf(s.storeJ),
       flow: reasonOf(s.flow),
       deployed: reasonOf(s.deployedThisLapJ),
       harvested: reasonOf(s.harvestedThisLapJ),
       trend: reasonOf(s.storeTrendJPerLap),
+      attack: reasonOf(s.attack),
     },
   };
 }

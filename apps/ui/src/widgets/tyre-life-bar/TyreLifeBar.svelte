@@ -5,7 +5,7 @@
   import type { WidgetProps } from '../../kit/types.ts';
   import CompoundMark from '../../kit/compound/CompoundMark.svelte';
   import Bar from '../../kit/bar/Bar.svelte';
-  import UnknownMark from '../../kit/values/UnknownMark.svelte';
+  import TextCell from '../../kit/values/TextCell.svelte';
   import { unknownTitle } from '../../kit/values/unknown-mark.ts';
   import { roleOrUndefined } from '../../theme/index.ts';
   import { formatPercent } from '../../kit/values/format.ts';
@@ -24,7 +24,7 @@
   const sp = ' ';
 </script>
 
-{#snippet value(reason: UnknownReason | undefined, known: string)}{#if reason}<UnknownMark {reason} />{:else}{known}{/if}{/snippet}
+{#snippet value(reason: UnknownReason | undefined, known: string)}<TextCell text={known} {reason} />{/snippet}
 
 <div class="life" style:--bar="{barColumns(size.cols)}ch">
   <div class="line faint">{sp}<span class="label">{#if tyres}<CompoundMark compound={tyres.visualCompound} />{/if}</span>{sp}<span class="bar head" title={tyres === undefined ? undefined : ageText(tyres.age)}><span>{text.headers.wear}</span>{#if tyres && showAge}<span>{ageText(tyres.age)}</span>{/if}</span>{sp}<span class="now">{text.headers.now}</span>{sp}<span class="rate">{text.headers.rate}</span>{sp}<span class="laps">{text.lapsHeader(formatPercent(data.wear.limitPct))}</span>

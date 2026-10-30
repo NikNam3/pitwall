@@ -24,7 +24,7 @@ const gallery: GalleryEntry<typeof widget> = {
     finishBelowZero: { projection: projection({ lapMs: 83_900, deltaMs: 240, position: 4, finishMs: -4_100 }), session },
     // Nothing known yet (first lap of the session).
     nothingYet: { projection: projection(), session },
-    // The finish margin alone (hidden values stay empty cells).
+    // The finish margin alone (each hidden value shows its reason's mark).
     finishOnly: { projection: { ...projection({ onLap: false }), finishMarginMs: ms(12_000) }, session },
   },
   // Task 22: sizes between the modes, one at each mode's minimum plus the edges just inside it.

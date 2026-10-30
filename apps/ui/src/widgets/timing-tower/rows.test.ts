@@ -126,12 +126,13 @@ describe('buildRows', () => {
     expect(row?.stops).toBe(2);
   });
 
-  it('carries the time penalty and warnings', () => {
+  it('carries the time penalty and warnings only as the PEN cell shows them (no raw fields beside it)', () => {
     const input = base();
     input.cars = [overview(0, { name: 'Max Verstappen', position: 1, timePenaltyMs: 5000, totalWarnings: 2 })];
     const row = buildRows(input)[0];
-    expect(row?.penaltyMs).toBe(5000);
-    expect(row?.warnings).toBe(2);
+    expect(row?.penalty).toMatchObject({ text: '5s', role: 'warning' });
+    expect(row).not.toHaveProperty('penaltyMs');
+    expect(row).not.toHaveProperty('warnings');
   });
 
   describe('the PEN cell: an unserved stop-go, else a drive-through, else the time penalty (user, live test 2026-10-30)', () => {
@@ -162,6 +163,14 @@ describe('buildRows', () => {
       const sg = pen({ timePenaltyMs: 10_000, unservedStopGos: 1 });
       expect(sg).toMatchObject({ text: 'SG', role: 'warning' });
       expect(sg.title).toContain(formatPenaltyMs(10_000));
+    });
+
+    it('more than one unserved stop-go or drive-through shows the count before the code, in the 3 cells of the column', () => {
+      expect(pen({ unservedDriveThroughs: 2 })).toMatchObject({ text: '2DT', role: 'warning' });
+      expect(pen({ unservedStopGos: 2 })).toMatchObject({ text: '2SG', role: 'warning' });
+      expect(pen({ unservedStopGos: 3, unservedDriveThroughs: 1 })).toMatchObject({ text: '3SG', role: 'warning' });
+      expect(pen({ unservedStopGos: 1, unservedDriveThroughs: 2 })).toMatchObject({ text: 'SG', role: 'warning' });
+      expect(pen({ unservedDriveThroughs: 2, timePenaltyMs: 5000 }).title).toContain(formatPenaltyMs(5000));
     });
 
     it('no penalty: an empty neutral cell; warnings alone show their count, neutral, as before', () => {

@@ -2,7 +2,7 @@
   // ERS: the store against the attack level, this lap's deploy and harvest, the trend (spec 8.2, V23).
   import type { WidgetProps } from '../../kit/types.ts';
   import Bar from '../../kit/bar/Bar.svelte';
-  import UnknownMark from '../../kit/values/UnknownMark.svelte';
+  import TextCell from '../../kit/values/TextCell.svelte';
   import { roleOrUndefined } from '../../theme/index.ts';
   import { ersRole } from './emphasis.ts';
   import * as text from './text.ts';
@@ -15,11 +15,9 @@
   const full = $derived(size.mode === 'full');
   const hot = $derived(ersRole(data.moment));
   const colour = $derived(roleOrUndefined(hot));
-  // An unknown trend still shows (its mark), so it is joined to the attack text like a known one.
-  const trendJoint = $derived(view.trendJoint || (view.reasons.trend !== undefined && view.attack !== '' ? text.joint : ''));
 </script>
 
-{#snippet shown(r: keyof typeof view.reasons, known: string)}{@const reason = view.reasons[r]}{#if reason}<UnknownMark {reason} />{:else}{known}{/if}{/snippet}
+{#snippet shown(r: keyof typeof view.reasons, known: string)}<TextCell text={known} reason={view.reasons[r]} />{/snippet}
 
 <div class="ers" class:full>
   <div class="row">
@@ -38,7 +36,9 @@
   {/if}
   <div class="row">
     {#if full}<span class="label">{text.labels.trend}</span>{/if}
-    <span>{@render shown('trend', view.trend)}</span>{#if trendJoint}<span>{trendJoint}</span>{/if}{#if view.attack}<span class:hot={hot !== undefined && view.attackReady} style:color={view.attackReady ? colour : undefined}>{view.attack}</span>{/if}
+    <span>{@render shown('trend', view.trend)}</span><span>{view.trendJoint}</span><span class:hot={hot !== undefined && view.attackReady}
+      ><TextCell text={view.attack} reason={view.reasons.attack} role={view.attackReady ? hot : undefined} /></span
+    >
   </div>
 </div>
 
