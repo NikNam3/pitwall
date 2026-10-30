@@ -6,6 +6,7 @@ import {
   known,
   MAX_CARS,
   MINI_SECTORS,
+  toSessionTime,
   type CarId,
   type CarState,
   type Corners,
@@ -304,12 +305,15 @@ export function telemetryRestricted(car: CarState): CarState {
   return copy;
 }
 
+/** The view's situation by default: a race under way since session time 0, not paused. */
+export const RACING: EngineView['situation'] = { session: { kind: 'racing', start: toSessionTime(0), startLeaderLap: 1 }, paused: false };
+
 /**
  * The `EngineView` of a race session. `cars` (default: none, a 22-slot list is padded with idle cars so ids index it)
  * are placed by their `id`; `history` fills the lists you give and leaves the rest empty; `session` merges onto a
  * default race session; `config` is the effective config by section key (absent sections read their declared defaults);
- * `outputs` are the upstream calculators' outputs; `delta` defaults to "everything in `history` is new". Feed is idle and
- * healthy; `feed` overrides it. `changed` is empty.
+ * `outputs` are the upstream calculators' outputs; `delta` defaults to "everything in `history` is new"; `situation`
+ * defaults to `RACING`. Feed is idle and healthy; `feed` overrides it. `changed` is empty.
  */
 export function engineView({
   cars = [],
@@ -319,6 +323,7 @@ export function engineView({
   outputs = new Map(),
   delta,
   activeFlagPhase,
+  situation = RACING,
   feed = {},
   playerCar = 0,
   sessionTime = 0,
@@ -330,6 +335,7 @@ export function engineView({
   outputs?: ReadonlyMap<string, unknown>;
   delta?: EngineView['delta'];
   activeFlagPhase?: EngineView['activeFlagPhase'];
+  situation?: EngineView['situation'];
   feed?: Partial<FeedMetricsView>;
   playerCar?: number;
   sessionTime?: SessionTime;
@@ -341,7 +347,7 @@ export function engineView({
   });
   const slots = Array.from({ length: Math.max(MAX_CARS, ...cars.map((c) => c.id + 1)) }, (_, i) => base.cars[i] ?? createCarState(carId(i)));
   for (const c of cars) slots[c.id] = c;
-  const full: History = { laps: [], stints: [], pitStops: [], flagPhases: [], events: [], miniSectors: [], ...history };
+  const full: History = { laps: [], stints: [], pitStops: [], flagPhases: [], sessionPhases: [], pauses: [], events: [], miniSectors: [], ...history };
   const { open: _open, ...state } = {
     ...base,
     cars: slots,
@@ -354,8 +360,9 @@ export function engineView({
   return {
     state,
     activeFlagPhase,
+    situation,
     changed: new Set(),
-    delta: delta ?? { before: historyLengths({ laps: [], stints: [], pitStops: [], flagPhases: [], events: [], miniSectors: [] }), after: lengths, truncated: false },
+    delta: delta ?? { before: historyLengths({ laps: [], stints: [], pitStops: [], flagPhases: [], sessionPhases: [], pauses: [], events: [], miniSectors: [] }), after: lengths, truncated: false },
     feed: { ...IDLE_FEED, ...feed },
     outputs,
     config,
@@ -364,5 +371,5 @@ export function engineView({
 
 /** A `History` with the given lists and the rest empty: pass it to `engineView({ history })`. */
 export function history(lists: Partial<History> = {}): History {
-  return { laps: [], stints: [], pitStops: [], flagPhases: [], events: [], miniSectors: [], ...lists };
+  return { laps: [], stints: [], pitStops: [], flagPhases: [], sessionPhases: [], pauses: [], events: [], miniSectors: [], ...lists };
 }

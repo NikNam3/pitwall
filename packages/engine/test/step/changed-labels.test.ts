@@ -50,7 +50,7 @@ describe('change tags', () => {
   it('are the domain areas, in this order', () => {
     expect(CHANGE_TAGS).toEqual([
       'session', 'identity', 'timing', 'tyres', 'energy', 'condition', 'dynamics', 'ownCar',
-      'laps', 'stints', 'pitStops', 'flagPhases', 'events', 'miniSectors',
+      'sessionPhases', 'laps', 'stints', 'pitStops', 'flagPhases', 'events', 'miniSectors',
     ]);
   });
   it('ALL_CHANGE_TAGS is every tag once', () => {

@@ -25,9 +25,9 @@ function setup(features: Parameters<typeof defineFeature>[0][], subscriptions: A
 }
 
 const result = (over: Partial<SchedulerResult>): SchedulerResult => ({ ran: [], outputs: new Map(), errors: [], insights: [], ...over });
-const lengths = (over: Partial<Record<keyof History, number>>) => ({ laps: 0, stints: 0, pitStops: 0, flagPhases: 0, events: 0, miniSectors: 0, ...over });
+const lengths = (over: Partial<Record<keyof History, number>>) => ({ laps: 0, stints: 0, pitStops: 0, flagPhases: 0, sessionPhases: 0, pauses: 0, events: 0, miniSectors: 0, ...over });
 const delta = (before: number, after: number, truncated = false): HistoryDelta => ({ before: lengths({ laps: before }), after: lengths({ laps: after }), truncated });
-const historyOf = (laps: unknown[]) => ({ ...lengths({}), laps, stints: [], pitStops: [], flagPhases: [], events: [], miniSectors: [] }) as unknown as DeepReadonly<History>;
+const historyOf = (laps: unknown[]) => ({ ...lengths({}), laps, stints: [], pitStops: [], flagPhases: [], sessionPhases: [], pauses: [], events: [], miniSectors: [] }) as unknown as DeepReadonly<History>;
 const messages = (sent: ServerMessage[], id: string) => sent.filter((m) => 'id' in m && m.id === id);
 
 describe('TopicPublisher with bindState', () => {

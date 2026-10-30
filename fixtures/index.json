@@ -321,6 +321,39 @@
       ]
     },
     {
+      "file": "race-singapore-wet-start.pwrec.gz",
+      "source": "raceSingaporeWet",
+      "fromS": 0,
+      "toS": 1.6,
+      "records": 3197,
+      "features": [
+        "671 861 bytes; no context packets; first records SSTA, LGOT and SCAR(3,0) (all 0.000, frame 0) before the first Session packet; start shape S2 of t1-diagnosis.md",
+        "the grid and the formation start: the clock runs from 0, safetyCarStatus 3 from 1.008 (frame 60); the formation lap runs to 1.586 (frame 95) in the window",
+        "the formation-end reset: frame 95 (1.586) to frame 10296 at 0.000 with SCAR(3,3); the clock holds at 0 to lights out",
+        "the start lights: STLG x5 frames 10348-10545 at 0.000, safetyCarStatus 3 to 0 at frame 10361, LGOT at frame 10618 (0.000); then the race to 1.594 (frame 10717); no event after lights out",
+        "518 frames through the tracker, 8 incomplete, none late; 20 active cars; formationLap setting 0 when the status turns 3",
+        "SSTA x1, LGOT x2, SCAR x2, STLG x5, BUTN x212",
+        "duration 255206.338 ms"
+      ]
+    },
+    {
+      "file": "race-zandvoort-online-start.pwrec.gz",
+      "source": "raceZandvoortOnline",
+      "fromS": 0,
+      "toS": 2.1,
+      "records": 2397,
+      "features": [
+        "452 914 bytes; no context packets; first records LGOT and SCAR(3,0) (0.000, stale frame 16725) before the first Session packet (frame 16725, 0.065); start shape S3 of t1-diagnosis.md",
+        "the grid and the formation start from 0.065: safetyCarStatus 3 from 1.069 (frame 16757); the formation lap runs to 2.076 (frame 16789) in the window",
+        "the formation-end reset: 2.076 to 1.968 at frame 21193 (in the recording 131.495 to 1.968), with SCAR(3,3) and OVTK x24 (the grid re-ordering); the clock holds at 1.968",
+        "the start lights: STLG x5 frames 21219-21321 at 1.968, safetyCarStatus 3 to 0 at frame 21225, LGOT at frame 21406 (1.968); the race clock falls 1.968 to 0.065 at frame 21410, four frames after lights out, no FLBK; then the race to 2.094 (frame 21475); no event after lights out",
+        "cars 1-7 stand past the line and show a lap timer of 510 ms from the reset frame on; 20 active cars, 2 humans (0 is the player, 1)",
+        "348 frames through the tracker, none incomplete or late; before the situation tracker the engine kept no start event and joined cars 1-7 late (finding B1)",
+        "LGOT x2, SCAR x2, OVTK x24, STLG x5, BUTN x65",
+        "duration 255176.265 ms"
+      ]
+    },
+    {
       "file": "race-singapore-end.pwrec.gz",
       "source": "raceSingapore",
       "fromS": 61.5,

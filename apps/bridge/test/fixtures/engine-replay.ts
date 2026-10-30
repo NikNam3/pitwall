@@ -29,7 +29,7 @@ export async function replayRunner(path: string, onResult: (r: StepResult, f: Fr
 /**
  * `replayRunner` plus a `Scheduler` over `calculators`, every one needed, on a healthy feed and `config` (by section key
  * over the defaults; none by default): the engine and the units under test, without topics. A truncated step (a
- * flashback or a clock reset) resets the scheduler, as in the bridge.
+ * flashback, or lights out discarding the formation lap) resets the scheduler, as in the bridge.
  */
 export async function replayScheduled(
   path: string,
@@ -41,7 +41,7 @@ export async function replayScheduled(
   scheduler.setNeeded(calculators.map((c) => c.id));
   return replayRunner(path, (r, f) => {
     if (r.delta.truncated) scheduler.reset();
-    const scheduled = scheduler.run({ state: r.state, activeFlagPhase: activeFlagPhaseOf(r.state), changed: r.changed, delta: r.delta, feed: IDLE_FEED, config });
+    const scheduled = scheduler.run({ state: r.state, activeFlagPhase: activeFlagPhaseOf(r.state), situation: r.state.open.situations, changed: r.changed, delta: r.delta, feed: IDLE_FEED, config });
     onStep(r, scheduled, f);
   });
 }

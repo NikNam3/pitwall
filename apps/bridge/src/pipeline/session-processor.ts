@@ -6,6 +6,7 @@ import {
   historyLengths,
   Scheduler,
   SessionRunner,
+  situationOf,
   type CalculatorId,
   type CalculatorRegistry,
   type FeedMetricsView,
@@ -169,14 +170,16 @@ export class SessionProcessor {
     try {
       const result = runner.apply(frame);
       storage?.writeConfirmed(this.#key, result.state.history, result.delta);
-      // A flashback or a clock reset discarded history: the calculators start over.
+      // A session time that fell back with no flashback and no start changes nothing; it is worth knowing (spec 3.3).
+      if (result.clockFall) log.info({ feedId, sessionUid: this.#uid, clockFall: result.clockFall }, 'session time fell back');
+      // A flashback, or the race start discarding the formation lap or settling its clock, changed history: the calculators start over.
       if (result.delta.truncated) {
         scheduler.reset();
         // A run triggered before it would land on the new timeline.
         this.#o.jobs?.flashback();
       }
       this.#o.calcStats?.atSessionTime(result.state.sessionTime);
-      const scheduled = scheduler.run({ state: result.state, activeFlagPhase: activeFlagPhaseOf(result.state), changed: result.changed, delta: result.delta, feed: this.#o.feedView(), config: this.#o.config });
+      const scheduled = scheduler.run({ state: result.state, activeFlagPhase: activeFlagPhaseOf(result.state), situation: situationOf(result.state), changed: result.changed, delta: result.delta, feed: this.#o.feedView(), config: this.#o.config });
       // Each topic is published on its own: a failing feature binding never holds back the others.
       const unpublished = [
         ...publisher.publishOutputs(scheduled),
@@ -206,6 +209,7 @@ export class SessionProcessor {
     const scheduled = scheduler.run({
       state,
       activeFlagPhase: activeFlagPhaseOf(state),
+      situation: situationOf(state),
       changed: new Set(),
       delta: { before: lengths, after: lengths, truncated: false },
       feed: this.#o.feedView(),

@@ -36,8 +36,9 @@ describe('flag phases', () => {
       .session({ safetyCarStatus: 2 }).frames(1, noop).session({ safetyCarStatus: 0 }).frames(1, noop));
     expect(st.history.flagPhases.map((p) => [p.kind, p.start, p.end])).toEqual([['SC', 2000, 3000], ['VSC', 3000, 4000]]);
   });
-  it('red flag: RDFL opens, the next lights out closes', () => {
-    const { st } = runScenario(race().event({ code: 'RDFL' }).frames(2, noop).event({ code: 'LGOT' }).frames(1, noop));
+  it('red flag: RDFL opens, the first start light of the standing restart closes it (the suspension ends there)', () => {
+    const { st } = runScenario(race().event({ code: 'RDFL' }).frames(2, noop).event({ code: 'STLG', numLights: 1 }).frames(1, noop)
+      .event({ code: 'LGOT' }).frames(1, noop));
     expect(st.history.flagPhases).toMatchObject([{ kind: 'red', start: 1000, end: 3000, startLeaderLap: 3 }]);
   });
   it('red flag: a restart behind the safety car closes it', () => {

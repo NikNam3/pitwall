@@ -150,6 +150,9 @@ const startLap = (state: EngineState, car: CarState, at: SessionTime, fromStart:
   state.open.laps[car.id] = cursor;
 };
 
+/** Starts the car's lap over on this frame, seen from its start: at lights out every car stands on the grid (spec 3.2). */
+export const restartLap = (state: EngineState, car: CarState, at: SessionTime): void => startLap(state, car, at, true);
+
 const trackLap = (state: EngineState, car: CarState, at: SessionTime): void => {
   const { timing } = car;
   const cursor = state.open.laps[car.id];

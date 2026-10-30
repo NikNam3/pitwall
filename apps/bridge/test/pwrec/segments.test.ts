@@ -41,6 +41,20 @@ describe('committed segments', () => {
     expect(s.summary).toMatchObject({ endedCleanly: true, meta: { startedAt: '2026-10-27T23:16:14.670Z', cut: { fromS: 61.5, toS: 63.4, contextPackets: 2 } } });
     expect(s.summary.durationMs).toBeCloseTo(3265.341, 2);
   });
+  it('race-singapore-wet-start: the formation start, the reset to 0 and the race start, no context packets', async () => {
+    const s = await load('race-singapore-wet-start.pwrec.gz');
+    expect(s.records).toHaveLength(3197);
+    expect(s.packets[0]!.packetId).toBe(3);
+    expect(s.codes).toEqual({ BUTN: 212, SSTA: 1, LGOT: 2, SCAR: 2, STLG: 5 });
+    expect(s.summary).toMatchObject({ endedCleanly: true, meta: { startedAt: '2026-10-28T23:04:08.350Z', cut: { fromS: 0, toS: 1.6, contextPackets: 0 } } });
+  });
+  it('race-zandvoort-online-start: the formation start, the reset to 1.968 s and the race start, no context packets', async () => {
+    const s = await load('race-zandvoort-online-start.pwrec.gz');
+    expect(s.records).toHaveLength(2397);
+    expect(s.packets[0]!.packetId).toBe(3);
+    expect(s.codes).toEqual({ BUTN: 65, LGOT: 2, SCAR: 2, OVTK: 24, STLG: 5 });
+    expect(s.summary).toMatchObject({ endedCleanly: true, meta: { startedAt: '2026-10-29T21:48:50.540Z', cut: { fromS: 0, toS: 2.1, contextPackets: 0 } } });
+  });
   // Cut with pwrec-cut from the whole recordings; provenance and verified facts in fixtures/index.json.
   it.each([
     ['race-zandvoort-lap10.pwrec.gz', 1778, { OVTK: 2, SPTP: 2, FTLP: 1 }, 721, 726],

@@ -5,6 +5,9 @@ import { CadenceTracker, emptyMetrics, type FrameMetrics } from './metrics.ts';
 
 const DEFAULT_REORDER_WINDOW = 2;
 
+/** A packet and when it arrived, if the caller knows. */
+type Arrival = { packet: Packet; receivedAtMs: number | undefined };
+
 /** Stores a packet in its slot: single-instance slots keep the last packet, list slots append. */
 function place(frame: Frame, packet: Packet): void {
   frame.sessionTime = Math.max(frame.sessionTime, toSessionTime(packet.header.sessionTime));
@@ -47,7 +50,7 @@ export class FrameAssembler {
   readonly #cadence = new CadenceTracker();
   #newest: number | undefined;
   /** Packets far ahead of `#newest`, waiting for a packet of another type to confirm the jump. */
-  #held: Packet[] = [];
+  #held: Arrival[] = [];
 
   constructor(opts: { feedId: FeedId; reorderWindow?: number }) {
     this.#feedId = opts.feedId;
@@ -64,11 +67,12 @@ export class FrameAssembler {
     };
   }
 
-  /** Adds a packet; returns the frames it closed, oldest first. */
-  push(packet: Packet): Frame[] {
+  /** Adds a packet that arrived at `receivedAtMs` (wall clock, ms); returns the frames it closed, oldest first. */
+  push(packet: Packet, receivedAtMs?: number): Frame[] {
     const key = packet.header.overallFrameIdentifier;
-    if (this.#newest !== undefined && key - this.#newest > this.#reorderWindow + 1) return this.#pushAhead(packet, key);
-    return this.#accept(packet, key);
+    const arrival = { packet, receivedAtMs };
+    if (this.#newest !== undefined && key - this.#newest > this.#reorderWindow + 1) return this.#pushAhead(arrival, key);
+    return this.#accept(arrival, key);
   }
 
   /**
@@ -91,7 +95,7 @@ export class FrameAssembler {
     return this.#closeWhere(() => true);
   }
 
-  #accept(packet: Packet, key: number): Frame[] {
+  #accept({ packet, receivedAtMs }: Arrival, key: number): Frame[] {
     const newest = Math.max(this.#newest ?? key, key);
     if (newest - key > this.#reorderWindow) {
       this.#counters.latePackets++;
@@ -99,23 +103,24 @@ export class FrameAssembler {
     }
     if (newest !== this.#newest) this.#dropHeld();
     this.#newest = newest;
-    place(this.#frameFor(packet, key), packet);
+    place(this.#frameFor(packet, key, receivedAtMs), packet);
     return this.#closeWhere((k) => newest - k > this.#reorderWindow);
   }
 
   /** Holds a packet far ahead of the newest frame; a held packet of another type near it confirms the jump. */
-  #pushAhead(packet: Packet, key: number): Frame[] {
+  #pushAhead(arrival: Arrival, key: number): Frame[] {
+    const { packetId } = arrival.packet;
     const confirmed = this.#held.some(
-      (held) => held.packetId !== packet.packetId && Math.abs(held.header.overallFrameIdentifier - key) <= this.#reorderWindow,
+      ({ packet: held }) => held.packetId !== packetId && Math.abs(held.header.overallFrameIdentifier - key) <= this.#reorderWindow,
     );
     if (!confirmed) {
-      this.#held.push(packet);
+      this.#held.push(arrival);
       return [];
     }
-    const jump = [...this.#held, packet];
+    const jump = [...this.#held, arrival];
     this.#held = [];
     this.#newest = key;
-    return jump.flatMap((p) => this.push(p));
+    return jump.flatMap((a) => this.push(a.packet, a.receivedAtMs));
   }
 
   /** The stream moved on without confirming the held packets: their headers were stale. */
@@ -124,7 +129,7 @@ export class FrameAssembler {
     this.#held = [];
   }
 
-  #frameFor(packet: Packet, key: number): Frame {
+  #frameFor(packet: Packet, key: number, receivedAtMs: number | undefined): Frame {
     const existing = this.#open.get(key);
     if (existing !== undefined) return existing;
     const { header } = packet;
@@ -135,6 +140,7 @@ export class FrameAssembler {
       overallFrameId: key,
       sessionTime: toSessionTime(header.sessionTime),
       playerCarIndex: header.playerCarIndex,
+      ...(receivedAtMs !== undefined && { receivedAtMs }),
       sessionHistory: [],
       tyreSets: [],
       events: [],

@@ -2,8 +2,9 @@ import type { History, HistoryLengths } from '../state/engine-state.ts';
 import type { DeepReadonly } from '../util/deep-readonly.ts';
 
 /**
- * What one step added to the append-only history: the list lengths before and after it. `truncated` marks a
- * flashback or a clock reset, which cut the history back first, so a reader must start from 0 instead of `before`.
+ * What one step added to the append-only history: the list lengths before and after it. `truncated` marks a step that
+ * changed what was recorded before it (a flashback, lights out discarding the formation lap, the start's settling), so
+ * a reader must start from 0 instead of `before`.
  */
 export type HistoryDelta = { before: HistoryLengths; after: HistoryLengths; truncated: boolean };
 
@@ -13,6 +14,8 @@ export const historyLengths = (h: DeepReadonly<History>): HistoryLengths => ({
   stints: h.stints.length,
   pitStops: h.pitStops.length,
   flagPhases: h.flagPhases.length,
+  sessionPhases: h.sessionPhases.length,
+  pauses: h.pauses.length,
   events: h.events.length,
   miniSectors: h.miniSectors.length,
 });

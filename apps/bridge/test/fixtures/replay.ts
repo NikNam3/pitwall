@@ -12,6 +12,8 @@ export const segmentPath = (file: string): string => join(import.meta.dirname, '
 /** Every committed segment (all of normal sessions). */
 export const SEGMENT_FILES = [
   'race-singapore-start.pwrec.gz',
+  'race-singapore-wet-start.pwrec.gz',
+  'race-zandvoort-online-start.pwrec.gz',
   'race-singapore-end.pwrec.gz',
   'race-singapore-wet-flashback.pwrec.gz',
   'qualifying-singapore-end.pwrec.gz',
