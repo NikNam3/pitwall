@@ -56,7 +56,8 @@ const launchElectron = (app: string, env: Record<string, string>, flags: string[
 /**
  * The gallery of the build in `apps/ui/dist-e2e`, served by Vite's preview server (the gallery needs the path
  * `/gallery`). The page is handed over once every cell is `data-ready`, i.e. its lazily loaded parts have rendered.
- * `options.initScript` runs in the page before the gallery's own scripts.
+ * `options.initScript` runs in the page before the gallery's own scripts; `options.deviceScaleFactor` is the page's
+ * pixel ratio (`devicePixelRatio`, 1 by default).
  */
 export async function openGallery(options: GalleryOptions = {}): Promise<GalleryHandle> {
   const port = await freePort();
@@ -73,12 +74,21 @@ export async function openGallery(options: GalleryOptions = {}): Promise<Gallery
     const opened = app.waitForEvent('window');
     // Offscreen rendering: a hidden window draws no frames, so Playwright's stability check before a screenshot
     // (which waits for animation frames) never finishes; an offscreen window draws them and is never shown.
+    // An offscreen window draws at one device pixel per CSS pixel whatever the display; a pixel ratio other than 1 is a
+    // zoom factor (the window grows by it, so the page keeps its width in CSS px). Chromium keeps a zoom per host in the
+    // profile, so the window gets an in-memory session: no zoom outlives the run or reaches another gallery.
+    const ratio = options.deviceScaleFactor ?? 1;
     await app.evaluate(
-      ({ BrowserWindow }, { url, size }) => {
-        const win = new BrowserWindow({ ...size, show: false, webPreferences: { offscreen: true, backgroundThrottling: false } });
+      ({ BrowserWindow }, { url, size, ratio }) => {
+        const win = new BrowserWindow({
+          width: Math.round(size.width * ratio),
+          height: Math.round(size.height * ratio),
+          show: false,
+          webPreferences: { offscreen: true, backgroundThrottling: false, zoomFactor: ratio, partition: 'gallery' },
+        });
         void win.loadURL(url);
       },
-      { url: `http://${HOST}:${port}/gallery`, size: GALLERY_WINDOW },
+      { url: `http://${HOST}:${port}/gallery`, size: GALLERY_WINDOW, ratio },
     );
     const page = await opened;
     await page.waitForSelector('[data-gallery-id]');

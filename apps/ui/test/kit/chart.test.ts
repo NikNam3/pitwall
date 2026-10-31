@@ -17,8 +17,10 @@
 //  - a series without `colour` strokes `series1`, `series2`, ... in order of those without colour;
 //  - a series with `fresh === false` has `alpha` 0.35, all others `alpha` 1;
 //  - `opts.axes[0]` is x and `opts.axes[1]` is y: their labels are drawn from xLabel / yLabel (`AxisLabel`, the label's
-//    forms: kit/chart/labels.ts `fitAxisLabel`, review 7 R7-9); `label` is the form drawn, or a function uPlot calls at
-//    draw time as `label(u, axisIndex)` that reads only `u.bbox` (canvas px) and `uPlot.pxRatio` (1 here); `grid.stroke` and `ticks.stroke` the resolved
+//    forms: kit/chart/labels.ts `fitAxisLabel`, review 7 R7-9); `label` is a function uPlot calls at draw time as
+//    `label(u, axisIndex)`, after it has set the axis' label font on `u.ctx` (`labelFont`, its px size rounded at the pixel
+//    ratio: uPlot's `pxRatioFont`); it reads `u.bbox` (canvas px) and measures each form with `u.ctx.measureText` (review 8,
+//    R8-3: the exact width, no estimate of the font); `grid.stroke` and `ticks.stroke` the resolved
 //    `grid` colour, `stroke` the resolved `textDim`, `font` and `labelFont` contain `<--pw-font-px>px` and the `--pw-font` family;
 //  - `opts.scales.x.time === false` for both x kinds;
 //  - `opts.hooks.drawClear` holds a function that paints the bands behind the series: for each band
@@ -27,9 +29,7 @@
 //    (painted with fillRect over the whole bbox first, or by the container's inline `background-color: var(--pw-bg)`).
 import { cleanup, render } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cellBox } from '../../src/kit/size/size.ts';
 import type { WidgetSize } from '../../src/kit/types.ts';
-import { DEFAULT_THEME } from '../../src/theme/index.ts';
 
 type Fake = { opts: any; data: any; target: HTMLElement; setSize: ReturnType<typeof vi.fn>; setData: ReturnType<typeof vi.fn>; destroy: ReturnType<typeof vi.fn> };
 const { instances } = vi.hoisted(() => ({ instances: [] as any[] }));
@@ -51,6 +51,7 @@ vi.mock('uplot', () => ({
   },
 }));
 
+import uPlot from 'uplot';
 import Chart from '../../src/kit/chart/Chart.svelte';
 import { carColour } from '../../src/theme/index.ts';
 
@@ -79,10 +80,21 @@ afterEach(() => {
 const base = { xLabel: ['Lap'] as const, yLabel: ['Gap (s)'] as const, x: { kind: 'lap' as const }, size: size(400) };
 
 type Box = { left: number; top: number; width: number; height: number };
-/** What uPlot draws as `axes[index]`'s label on a plot of `bbox`: the label, or what its label function returns for it. */
-const drawnLabel = (index: number, bbox: Box): string => {
+type LabelContext = { font: string; measureText(text: string): { width: number } };
+const FONT_PX = /(\d+(?:\.\d+)?)px/;
+/**
+ * The context as uPlot hands it to a label function: the axis' label font set, its px size rounded at `ratio` (uPlot's
+ * `pxRatioFont`); `measureText` measures a font whose glyphs are `advance` em wide (0.6: the UI's monospace font).
+ */
+const labelContext = (index: number, ratio: number, advance = 0.6): LabelContext => {
+  const font = String(last().opts.axes[index].labelFont).replace(FONT_PX, (_m, px: string) => `${Math.round(Number(px) * ratio)}px`);
+  const px = Number(FONT_PX.exec(font)?.[1]);
+  return { font, measureText: (text) => ({ width: text.length * advance * px }) };
+};
+/** What uPlot draws as `axes[index]`'s label on a plot of `bbox` (canvas px): what its label function returns for it. */
+const drawnLabel = (index: number, bbox: Box, ctx: LabelContext = labelContext(index, 1)): string => {
   const label: unknown = last().opts.axes[index].label;
-  return typeof label === 'function' ? String(label({ bbox }, index)) : String(label);
+  return typeof label === 'function' ? String(label({ bbox, ctx }, index)) : String(label);
 };
 /** A plot that leaves the axes plenty of room in a 400 x 300 chart. */
 const ROOMY: Box = { left: 60, top: 10, width: 300, height: 200 };
@@ -278,12 +290,12 @@ describe('Chart: axes, font, black plot', () => {
     const forms = ['behind reference, s', 'behind ref, s', 's'] as const;
     const low: WidgetSize = { mode: 'compact', cols: 50, rows: 5, px: { width: 400, height: 90 }, dpr: 1 };
     render(Chart, { ...base, yLabel: forms, size: low, series: [{ label: 'a', points: pts(1) }] });
-    const cellPx = cellBox(13, DEFAULT_THEME.density.lineHeight).width;
     const plot: Box = { left: 60, top: 10, width: 300, height: 60 };
-    const drawn = drawnLabel(1, plot);
+    const ctx = labelContext(1, 1);
+    const drawn = drawnLabel(1, plot, ctx);
     expect(['', ...forms]).toContain(drawn);
     expect(drawn).not.toBe(forms[0]);
-    expect(drawn.length * cellPx).toBeLessThanOrEqual(plot.height);
+    expect(ctx.measureText(drawn).width).toBeLessThanOrEqual(plot.height);
   });
 
   it('uses a plain numeric x scale for both x kinds', () => {
@@ -298,6 +310,55 @@ describe('Chart: axes, font, black plot', () => {
     expect(last().target).toBeInstanceOf(HTMLElement);
     const root = container.firstElementChild as HTMLElement;
     expect(root.style.backgroundColor).toBe('var(--pw-bg)');
+  });
+});
+
+// The label fit measures what is drawn (review 8, R8-3): uPlot sets the label font on its context before it calls the
+// label function, its px size rounded at the pixel ratio (a 14 px font is drawn at 18 px at 1.25, not 17.5), and the font
+// may be wider than the grid's cell model. The form drawn is the longest whose measured width fits the plot.
+describe('Chart: the axis label is measured as drawn', () => {
+  const FORMS = ['behind reference, s', 'behind ref, s', 's'] as const;
+  /** A plot of `length` canvas px along the y axis. */
+  const tall = (length: number): Box => ({ left: 60, top: 10, width: 300, height: length });
+  const ratioOf = uPlot as unknown as { pxRatio: number };
+  afterEach(() => {
+    ratioOf.pxRatio = 1;
+  });
+
+  it('at a pixel ratio of 1, a font wider than the cell model: the form whose measured width fits', () => {
+    render(Chart, { ...base, yLabel: FORMS, series: [{ label: 'a', points: pts(1) }] });
+    // 13 px glyphs 0.7 em wide: `behind ref, s` is 13 x 9.1 = 118.3 px (13 cells of 7.8 px would be 101.4).
+    expect(drawnLabel(1, tall(118), labelContext(1, 1, 0.7))).toBe('s');
+    expect(drawnLabel(1, tall(119), labelContext(1, 1, 0.7))).toBe('behind ref, s');
+  });
+
+  it("at a pixel ratio of 1.25, a font size uPlot rounds up: 14 px drawn at 18 px", () => {
+    document.documentElement.style.setProperty('--pw-font-px', '14px');
+    ratioOf.pxRatio = 1.25;
+    render(Chart, { ...base, yLabel: FORMS, series: [{ label: 'a', points: pts(1) }] });
+    const ctx = labelContext(1, 1.25);
+    // `behind ref, s` at 18 px is 13 x 10.8 = 140.4 px; 14 px x 0.6 x 1.25 would be 136.5.
+    expect(drawnLabel(1, tall(140), ctx)).toBe('s');
+    expect(drawnLabel(1, tall(141), ctx)).toBe('behind ref, s');
+    expect(drawnLabel(1, tall(206), ctx)).toBe('behind reference, s');
+  });
+
+  it('at a pixel ratio of 1.25, a font size uPlot rounds down: 13 px drawn at 16 px', () => {
+    ratioOf.pxRatio = 1.25;
+    render(Chart, { ...base, yLabel: FORMS, series: [{ label: 'a', points: pts(1) }] });
+    const ctx = labelContext(1, 1.25);
+    // `behind ref, s` at 16 px is 13 x 9.6 = 124.8 px; 13 px x 0.6 x 1.25 would be 126.75, too long for 125.
+    expect(drawnLabel(1, tall(125), ctx)).toBe('behind ref, s');
+    expect(drawnLabel(1, tall(124), ctx)).toBe('s');
+  });
+
+  it("measures the x label against the plot's width the same way", () => {
+    ratioOf.pxRatio = 1.25;
+    render(Chart, { ...base, xLabel: ['lap number', 'lap'], series: [{ label: 'a', points: pts(1) }] });
+    const ctx = labelContext(0, 1.25);
+    // `lap number` at 16 px is 10 x 9.6 = 96 px.
+    expect(drawnLabel(0, { left: 60, top: 10, width: 96, height: 200 }, ctx)).toBe('lap number');
+    expect(drawnLabel(0, { left: 60, top: 10, width: 95, height: 200 }, ctx)).toBe('lap');
   });
 });
 

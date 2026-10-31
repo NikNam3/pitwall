@@ -7,7 +7,11 @@
 //    is the convention, not a field order (review 7, R7-6): one object literal with an empty `text` and a `reason` key,
 //    in any order, with any spacing and any other fields (a cell that extends the part spreads `unknownPart(reason)`);
 //  - no UI source restates the part's type (R7-7): an object type of exactly `text: string` and `reason?: UnknownReason`
-//    is `CellPart` (a type with more fields extends the convention and is not a restatement).
+//    is `CellPart`;
+//  - no UI source repeats the part's fields in a wider type (review 8, R8-6): an object type that holds `text: string`
+//    and `reason?: UnknownReason` among other fields is the part plus those fields, written `CellPart & { … }` (the
+//    literal after `CellPart &` holds only the other fields). `WIDENED_ELSEWHERE` names the types whose text and reason
+//    follow another convention than the part's (the reason is not that of the text).
 // The grid does not import kit/values (the dependency goes values -> grid); that is a depcruise rule, not a test here.
 import { known, unknown, type Known, type UnknownReason } from '@pitwall/domain';
 import { describe, expect, it } from 'vitest';
@@ -61,6 +65,16 @@ const REASON_FIELD = /(?<![\w$.])reason\s*\?\s*:\s*UnknownReason\s*[;,}]/;
 /** A field name of an object type: `name:` or `name?:` at the start or after `{`, `;` or `,`. */
 const FIELD_NAME = /(?:^|[{;,])\s*(?:\/\*[^]*?\*\/\s*)?([\w$]+)\s*\??\s*:/g;
 
+/** An object type literal with the name of the type it declares (`type Name = {…}` or `type Name<T> = {…}`), if any. */
+const TYPE_LITERAL = /(?:\btype\s+([\w$]+)\s*(?:<[^=]*>)?\s*=\s*)?(\{[^{}]*\})/g;
+
+/**
+ * Types that hold a `text` and a `reason` of another convention than the part's, so they do not extend it:
+ * - the incident feed's cell: the plain text with the reason's mark after it, never in its place;
+ * - the damage card's jump row: `reason` is that of the row's `loss`, drawn next to the jump's text.
+ */
+const WIDENED_ELSEWHERE = ['widgets/incident-feed/rows.ts: IncidentCell', 'widgets/damage-card/rows.ts: JumpRow'];
+
 /** The unknown part written out: one literal with an empty text and a reason, in any order. */
 const handBuilt = (code: string): string[] =>
   [...code.matchAll(LITERAL)].map((m) => m[0]).filter((lit) => EMPTY_TEXT.test(lit) && REASON_KEY.test(lit));
@@ -69,6 +83,15 @@ const restated = (code: string): string[] =>
   [...code.matchAll(LITERAL)]
     .map((m) => m[0])
     .filter((lit) => TEXT_FIELD.test(lit) && REASON_FIELD.test(lit) && [...lit.matchAll(FIELD_NAME)].length === 2);
+
+/**
+ * The part's fields repeated in a wider type: an object type literal with `text: string`, `reason?: UnknownReason` and
+ * more fields. Each is named `<type>: <literal>`, or `-: <literal>` when the literal declares no named type.
+ */
+const widened = (code: string): string[] =>
+  [...code.matchAll(TYPE_LITERAL)]
+    .filter(([, , lit = '']) => TEXT_FIELD.test(lit) && REASON_FIELD.test(lit) && [...lit.matchAll(FIELD_NAME)].length > 2)
+    .map(([, name = '-', lit = '']) => `${name}: ${lit}`);
 
 describe('the scans see the convention, not a spelling', () => {
   it.each([
@@ -111,6 +134,26 @@ describe('the scans see the convention, not a spelling', () => {
   });
 });
 
+describe('the scan of wider types sees the part repeated, not a spelling', () => {
+  it.each([
+    ['type Cell = { text: string; role?: Role; reason?: UnknownReason; title?: string };', 'Cell'],
+    ['export type Row = {\n  key: K;\n  label: string;\n  text: string;\n  reason?: UnknownReason;\n  bold?: boolean;\n};', 'Row'],
+    ['type Cell<T> = { reason?: UnknownReason; value: T; text: string };', 'Cell'],
+    ['function f(): { text: string; reason?: UnknownReason; title?: string } {', '-'],
+  ])('finds the part repeated in %j', (code, name) => {
+    expect(widened(code).map((found) => found.slice(0, found.indexOf(':')))).toEqual([name]);
+  });
+
+  it.each([
+    'type Cell = CellPart & { role?: Role; title?: string };',
+    'type Cell = { text: string; reason?: UnknownReason };',
+    'type Cells = { text: string; kinds: Kind[]; reason: UnknownReason | undefined };',
+    'type Shown = { text: string; title: string; colour: string };',
+  ])('leaves %j alone', (code) => {
+    expect(widened(code)).toEqual([]);
+  });
+});
+
 describe('one builder of the unknown part', () => {
   it('the glob finds the UI sources', () => {
     expect(SOURCES.map((p) => p.replace('../../src/', ''))).toEqual(
@@ -126,5 +169,16 @@ describe('one builder of the unknown part', () => {
   it("no UI source restates the part's type: it is CellPart", () => {
     const found = SOURCES.flatMap((p) => restated(source(p)).map((lit) => `${p.replace('../../src/', '')}: ${lit.replace(/\s+/g, ' ')}`));
     expect(found).toEqual([]);
+  });
+
+  it('no UI source repeats the part\'s fields in a wider type: it is CellPart & { … }', () => {
+    const found = SOURCES.flatMap((p) => widened(source(p)).map((w) => `${p.replace('../../src/', '')}: ${w.replace(/\s+/g, ' ')}`));
+    const named = (f: string): string => f.slice(0, f.indexOf(':', f.indexOf(':') + 1));
+    expect(found.filter((f) => !WIDENED_ELSEWHERE.includes(named(f)))).toEqual([]);
+  });
+
+  it('every type named as another convention still exists and still holds both fields (no stale exception)', () => {
+    const found = SOURCES.flatMap((p) => widened(source(p)).map((w) => `${p.replace('../../src/', '')}: ${w.slice(0, w.indexOf(':'))}`));
+    expect(found).toEqual(expect.arrayContaining(WIDENED_ELSEWHERE));
   });
 });
