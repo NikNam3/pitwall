@@ -2,15 +2,17 @@
 // runs under way are dropped, as on a flashback; it is no flashback to the engineer. A fall of the session time that is
 // no start, and a forward jump of more than 60 s that is no post-session jump, change nothing and are logged (spec 3.3);
 // after a fall the feed's own insights are stamped on the race clock. Calculators see the session phase in their view.
-// A session phase opening on a standing clock is a boundary at a shared moment (spec 3.1, ruling 2026-10-31 widened after
-// review 5): a race start on the grid's held clock restarts the calculators at the first start light and at lights out.
+// A session phase boundary that moves an entry earlier frames recorded at or after its time into or out of the phase
+// restarts the calculators (spec 3.1, "A boundary at a shared moment", ruling 2026-10-31 made exact after review 6): a
+// race start on the grid's held clock restarts them at lights out, which moves the start lights' events into racing,
+// and at the first start light only when an earlier frame recorded an entry at or after its time.
 import { Writable } from 'node:stream';
 import { describe, expect, it, vi } from 'vitest';
 import type { ServerMessage, TopicName } from '@pitwall/contracts';
 import type { FeedId } from '@pitwall/domain';
 import type { IncrementalCalculator, Job, QuickCalculator } from '@pitwall/engine';
 import { packetBytes } from '../../../../packages/engine/test/builders/index.ts';
-import { beats, gridStart, LIGHTS_OUT as GRID_LIGHTS_OUT, LGOT, scriptPackets, status, STEP, stlg, type Beat } from '../../../../packages/engine/test/situations/script.ts';
+import { beats, FIRST_LIGHT as GRID_FIRST_LIGHT, GRID_START_TRUNCATED, gridStart, LGOT, scriptPackets, status, STEP, stlg, type Beat } from '../../../../packages/engine/test/situations/script.ts';
 import { bindInsights, bindJob, defineFeature, type Feature, type TopicBinding } from '../../src/features/feature.ts';
 import { TopicHub } from '../../src/hub/topic-hub.ts';
 import { createLogger } from '../../src/log.ts';
@@ -31,23 +33,17 @@ const prepared = (beatList: Beat[]): Prepared =>
 const LIGHTS_OUT = 50;
 /** Frame of the first start light, on the clock held at 0 since frame 40. */
 const FIRST_LIGHT = 42;
-/** Frame of `gridStart`'s first start light. */
-const GRID_FIRST_LIGHT = 10;
 /**
- * The boundaries at a shared moment of `gridStart` (spec 3.1, ruling 2026-10-31 widened after review 5): its first start
- * light and its lights out open their phases on the grid's clock, held at 0 from frame 0.
+ * The grid from 0 s, the formation status at frame 5, a fastest lap in the formation (frame 20, at 0.32 s) unless
+ * `fastestLap` is false, the clock reset to 0 at frame 40 and held, five start lights at frames 42-46, lights out at
+ * frame 50, the race from 0.016 s to frame 89.
  */
-const GRID_START = [GRID_FIRST_LIGHT, GRID_LIGHTS_OUT];
-/**
- * The grid from 0 s, the formation status at frame 5, a fastest lap in the formation (frame 20), the clock reset to 0 at
- * frame 40 and held, five start lights at frames 42-46, lights out at frame 50, the race from 0.016 s to frame 89.
- */
-const formationStart = (): { before: Prepared; after: Prepared } => {
+const formationStart = (fastestLap = true): { before: Prepared; after: Prepared } => {
   const all = prepared(beats(90, (k) => ({
     at: k < 40 ? k * STEP : k <= LIGHTS_OUT ? 0 : (k - LIGHTS_OUT) * STEP,
     ...(k === 5 && { session: status(3) }),
     ...(k === 44 && { session: status(0) }),
-    events: [...(k === 20 ? [FTLP] : []), ...(k >= 42 && k <= 46 ? [stlg(k - 41)] : []), ...(k === LIGHTS_OUT ? [LGOT] : [])],
+    events: [...(fastestLap && k === 20 ? [FTLP] : []), ...(k >= 42 && k <= 46 ? [stlg(k - 41)] : []), ...(k === LIGHTS_OUT ? [LGOT] : [])],
   })));
   return { before: all.filter((p) => p.frameId < LIGHTS_OUT), after: all.filter((p) => p.frameId >= LIGHTS_OUT) };
 };
@@ -76,16 +72,26 @@ const initProbe = (inits: number[]): IncrementalCalculator<number, number> => ({
 });
 
 describe('FeedPipeline: lights out after a formation lap restarts the calculators', () => {
-  it('an incremental calculator starts again from init on the first start light and the lights-out frame (boundaries on the held clock), and on no other', async () => {
+  it('an incremental calculator starts again from init on the first start light (the formation’s fastest lap lies above the held clock) and the lights-out frame, and on no other', async () => {
     const inits: number[] = [];
     const { pipeline, push } = setup([defineFeature({ name: 'probe-events', calculators: [initProbe(inits)], topics: [] })]);
     const { before, after } = formationStart();
     push(before);
     push(after);
     await pipeline.stop();
-    // The first start light opens startLights on the clock held at 0 since frame 40, a moment earlier frames share; lights
-    // out closes the formation (spec 3.2) on the same held clock.
+    // The first start light opens startLights at 0 on the clock held since frame 40, below the fastest lap frame 20
+    // recorded at 0.32 s, which it moves out of the formation; lights out discards the formation (spec 3.2).
     expect(inits).toEqual([inits[0], FIRST_LIGHT, LIGHTS_OUT]);
+    expect(inits[0]).toBeLessThan(FIRST_LIGHT);
+  });
+  it('without an entry in the formation, the first start light moves nothing and restarts no calculator: lights out is the only restart', async () => {
+    const inits: number[] = [];
+    const { pipeline, push } = setup([defineFeature({ name: 'probe-events', calculators: [initProbe(inits)], topics: [] })]);
+    const { before, after } = formationStart(false);
+    push(before);
+    push(after);
+    await pipeline.stop();
+    expect(inits).toEqual([inits[0], LIGHTS_OUT]);
     expect(inits[0]).toBeLessThan(FIRST_LIGHT);
   });
   it('a calculator compares its first output after lights out with none from before it', async () => {
@@ -156,21 +162,21 @@ describe('FeedPipeline: the session phase in the view', () => {
 });
 
 describe('FeedPipeline: a fall of the session time that is no start', () => {
-  it('is logged with the session uid and both times, and the calculators carry on (no restart but the grid start’s shared moments)', async () => {
+  it('is logged with the session uid and both times, and the calculators carry on (no restart but the grid start’s lights out)', async () => {
     const inits: number[] = [];
     const { pipeline, push, lines } = setup([defineFeature({ name: 'probe-events', calculators: [initProbe(inits)], topics: [] })]);
     // lights out at frame 59, the race clock from 0.016 s; at race frame 150 the clock falls from 2.4 s to 1 s
     push(prepared(gridStart(200, (k) => (k >= 150 ? { at: 1000 + (k - 150) * STEP } : {}))));
     await pipeline.stop();
     expect(lines.filter((l) => l['clockFall'] !== undefined)).toMatchObject([{ sessionUid: expect.any(String), clockFall: { fromMs: 2400, toMs: 1000 } }]);
-    // The only restarts are the grid start's boundaries at a shared moment: the fall adds none.
-    expect(inits).toEqual([inits[0], ...GRID_START]);
+    // The only restart is the grid start's lights out: the fall adds none.
+    expect(inits).toEqual([inits[0], ...GRID_START_TRUNCATED]);
     expect(inits[0]).toBeLessThan(GRID_FIRST_LIGHT);
   });
 });
 
 describe('FeedPipeline: a forward jump of the session time over 60 s that is no post-session jump', () => {
-  it('is logged with the session uid and both times, and the calculators carry on (no restart but the grid start’s shared moments)', async () => {
+  it('is logged with the session uid and both times, and the calculators carry on (no restart but the grid start’s lights out)', async () => {
     const inits: number[] = [];
     const { pipeline, push, lines } = setup([defineFeature({ name: 'probe-events', calculators: [initProbe(inits)], topics: [] })]);
     // lights out at frame 59, the race clock from 0.016 s; at race frame 150, after a 3 s stall, the clock jumps from
@@ -179,8 +185,8 @@ describe('FeedPipeline: a forward jump of the session time over 60 s that is no 
     await pipeline.stop();
     expect(lines.filter((l) => l['clockJump'] !== undefined)).toMatchObject([{ sessionUid: expect.any(String), clockJump: { fromMs: 2400, toMs: 92_416 } }]);
     expect(lines.filter((l) => l['clockFall'] !== undefined)).toEqual([]);
-    // The only restarts are the grid start's boundaries at a shared moment: the jump adds none.
-    expect(inits).toEqual([inits[0], ...GRID_START]);
+    // The only restart is the grid start's lights out: the jump adds none.
+    expect(inits).toEqual([inits[0], ...GRID_START_TRUNCATED]);
     expect(inits[0]).toBeLessThan(GRID_FIRST_LIGHT);
   });
 });

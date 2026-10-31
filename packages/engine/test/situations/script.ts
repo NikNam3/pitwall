@@ -91,16 +91,27 @@ export const fuel = (d: FrameDraft, car: number, kg: number): void => {
   d.status.carStatusData[car]!.fuelInTank = kg;
 };
 
-/**
- * The start without a formation lap (shape S1, raceSingapore): the clock holds at 0 on the grid, five start lights at
- * frames 10..50, lights out at frame `LIGHTS_OUT`; the clock runs from the frame after it. `race(k)` shapes race frame
- * k (k = 0 is the frame after lights out); `n` race frames.
- */
+/** Frame of `gridStart`'s first start light; the next four follow `LIGHT_EVERY` frames apart. */
+export const FIRST_LIGHT = 10;
+const LIGHT_EVERY = 10;
+/** Frame of `gridStart`'s lights out. */
 export const LIGHTS_OUT = 59;
+/**
+ * The steps of every `gridStart` that truncate (spec 3.1, "A boundary at a shared moment", ruling 2026-10-31 made exact
+ * after review 6): lights out, which moves the start lights' events (recorded by earlier frames at the grid's held 0)
+ * from startLights into racing. The first start light opens startLights at that time too, but no earlier frame
+ * recorded an entry there.
+ */
+export const GRID_START_TRUNCATED: readonly number[] = [LIGHTS_OUT];
+/**
+ * The start without a formation lap (shape S1, raceSingapore): the clock holds at 0 on the grid, five start lights from
+ * frame `FIRST_LIGHT`, lights out at frame `LIGHTS_OUT`; the clock runs from the frame after it. `race(k)` shapes race
+ * frame k (k = 0 is the frame after lights out); `n` race frames.
+ */
 export const gridStart = (n: number, race: (k: number) => Beat = () => ({})): Beat[] => [
   ...beats(LIGHTS_OUT + 1, (k) => ({
     at: 0,
-    events: [...(k > 0 && k % 10 === 0 && k <= 50 ? [stlg(k / 10)] : []), ...(k === LIGHTS_OUT ? [LGOT] : [])],
+    events: [...[1, 2, 3, 4, 5].flatMap((light) => (k === FIRST_LIGHT + (light - 1) * LIGHT_EVERY ? [stlg(light)] : [])), ...(k === LIGHTS_OUT ? [LGOT] : [])],
   })),
   ...beats(n, (k) => ({ at: (k + 1) * STEP, ...race(k) })),
 ];

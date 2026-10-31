@@ -8,6 +8,7 @@ import type { ServerMessage } from '@pitwall/contracts';
 import type { QuickCalculator } from '@pitwall/engine';
 import { PacketId } from '@pitwall/protocol';
 import { ScenarioBuilder, buildPacket, headerFor, packetBytes } from '../../../../packages/engine/test/builders/index.ts';
+import { beats, flbk, scriptPackets, STEP } from '../../../../packages/engine/test/situations/script.ts';
 import { FEATURES } from '../../src/features/index.generated.ts';
 import { bindState, defineFeature } from '../../src/features/feature.ts';
 import sessionInfo from '../../src/features/session-info/register.ts';
@@ -258,6 +259,19 @@ describe('FeedPipeline: flashback', () => {
     expect(flashback).toEqual([expect.objectContaining({ severity: 'info', params: { targetLap: expect.any(Number), rewoundS: expect.any(Number) } })]);
     expect(flashback[0]!.params).toMatchObject({ rewoundS: expect.closeTo(0.464, 0) });
     expect(r.entries().filter((e) => e.type === 'resolved')).toEqual([{ type: 'resolved', key: flashback[0]!.key, at: flashback[0]!.raisedAt }]);
+  });
+  // Review 6 R6-1: a live join, or a cut segment, whose first frame carries an FLBK to a frame before it. The engine
+  // never saw that frame, so there is nothing to rewind: the engineer's feed shows no "flashback, lap 0".
+  it('a flashback report on the session’s first frame raises no session.flashback insight', async () => {
+    const JOIN = 10;
+    const joined = scriptPackets(beats(30, (k) => ({
+      at: k * STEP,
+      wall: 60_000 + k * STEP,
+      ...(k === JOIN && { session: {}, events: [flbk(5, 5 * STEP)] }),
+    })), { session: { sessionType: 1 } }).filter(({ packet }) => packet.header.frameIdentifier >= JOIN);
+    const r = await run(joined.map(({ packet, receivedAtMs }) => ({ bytes: packetBytes(packet), receivedAtMs })));
+    expect(r.of('session.info').some((m) => m.type === 'update')).toBe(true);
+    expect(r.raised().filter((i) => i.kind === 'session.flashback')).toEqual([]);
   });
 });
 
