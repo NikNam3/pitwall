@@ -16,10 +16,10 @@ export type FlashbackInfo = { targetFrameId: number; targetSessionTime: SessionT
 /**
  * What applying one frame did. When it changed history recorded before it (a flashback, lights out discarding the
  * formation lap, the start's settling re-stamping it) or took back what readers saw (a neutralisation dropped
- * unconfirmed; any session phase opening or closing at a moment earlier frames share), `changed` holds every tag and
- * `delta.truncated` is true; `flashback` tells a flashback. `clockFall` reports a fall of the session time that changed
- * nothing recorded, `clockJump` a forward jump that is no post-session jump (spec 3.3); both carry the game's times.
- * Every other session time is on the race clock.
+ * unconfirmed; a session phase opening or closing at or before the time of an entry earlier frames recorded), `changed`
+ * holds every tag and `delta.truncated` is true; `flashback` tells a flashback. `clockFall` reports a fall of the
+ * session time that changed nothing recorded, `clockJump` a forward jump that is no post-session jump (spec 3.3); both
+ * carry the game's times. Every other session time is on the race clock.
  */
 export type StepResult = {
   state: DeepReadonly<EngineState>;
@@ -77,6 +77,8 @@ export class SessionRunner {
    * one flashback twice (an `FLBK` event and the `frameId` drop, in different frames); this is that second report.
    */
   #rewoundTo: number | undefined;
+  /** A frame was applied. Before the first there is nothing to rewind, so no frame reports a flashback (review 6 R6-1). */
+  #applied = false;
 
   constructor(init: Parameters<typeof initialState>[0], opts: SessionRunnerOptions = {}) {
     const replayWindowMs = opts.replayWindowMs ?? 10_000;
@@ -105,6 +107,7 @@ export class SessionRunner {
     const report: FlashbackReport | undefined = reported && (target ? { rewound: rewindMarkOf(this.#state) } : {});
     const flashback = target && this.#rewind(target, frame);
     const { changed, corrections, rewritten, discarded, clockFall, clockJump } = step(this.#state, frame, report);
+    this.#applied = true;
     this.#lastOverallFrameId = frame.overallFrameId;
     if (target) this.#rewoundTo = target.frameId;
     else if (this.#rewoundTo !== undefined && frame.frameId > this.#rewoundTo + 1) this.#rewoundTo = undefined;
@@ -124,9 +127,12 @@ export class SessionRunner {
 
   /**
    * The flashback the frame reports: an `FLBK` event's target, else the frame before this one when `frameId` went back
-   * while `overallFrameId` rose. A `frameId` going back while `overallFrameId` does not rise reports none.
+   * while `overallFrameId` rose. A `frameId` going back while `overallFrameId` does not rise reports none, and so does
+   * the session's first frame (a live join, or a cut segment whose first frame carries an `FLBK` to a frame before
+   * it): the engine never saw the far side of that rewind, so the frame is applied as the session's first.
    */
   #reportedTarget(frame: Frame): Target | undefined {
+    if (!this.#applied) return undefined;
     const event = frame.events.map((e) => e.details).find(isFlashback);
     if (event) return { frameId: event.flashbackFrameIdentifier, sessionTime: toSessionTime(event.flashbackSessionTime) };
     return frame.frameId < this.#state.lastFrameId && frame.overallFrameId > this.#lastOverallFrameId ? { frameId: frame.frameId - 1 } : undefined;

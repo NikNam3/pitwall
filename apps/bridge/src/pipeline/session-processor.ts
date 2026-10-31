@@ -181,7 +181,7 @@ export class SessionProcessor {
       // changes nothing (spec 3.3); worth knowing too.
       if (result.clockJump) log.info({ feedId, sessionUid: this.#uid, clockJump: result.clockJump }, 'session time jumped forward');
       // A flashback, the race start (discarding the formation lap, settling its clock), a dropped unconfirmed neutralisation
-      // or a session-phase boundary at a moment earlier frames share changed history: the calculators start over.
+      // or a session-phase boundary that moves an entry earlier frames recorded changed history: the calculators start over.
       if (result.delta.truncated) {
         scheduler.reset();
         // A run triggered before it would land on the new timeline.
