@@ -180,8 +180,8 @@ export class SessionProcessor {
       // A forward jump of over a minute that is no post-session jump (a stall while the garage clock runs ahead): it
       // changes nothing (spec 3.3); worth knowing too.
       if (result.clockJump) log.info({ feedId, sessionUid: this.#uid, clockJump: result.clockJump }, 'session time jumped forward');
-      // A flashback, the race start (discarding the formation lap, settling its clock) or a dropped unconfirmed neutralisation
-      // changed history: the calculators start over.
+      // A flashback, the race start (discarding the formation lap, settling its clock), a dropped unconfirmed neutralisation
+      // or a neutralised/suspended boundary at a moment earlier frames share changed history: the calculators start over.
       if (result.delta.truncated) {
         scheduler.reset();
         // A run triggered before it would land on the new timeline.
