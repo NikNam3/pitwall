@@ -1,4 +1,4 @@
-import type { Corners, DamageJump, DamageParts, DamageState, Known, SessionTime, UnknownReason } from '@pitwall/domain';
+import type { Corners, DamageJump, DamageParts, DamageState, Known, SessionTime } from '@pitwall/domain';
 import { formatCount, formatDeltaPct, formatLapNumber, formatPct, formatSecondsPerLap } from '../../kit/values/format.ts';
 import { knownPart, type CellPart } from '../../kit/grid/grid.ts';
 import { insightText } from '../../kit/text.ts';
@@ -6,8 +6,11 @@ import type { Role } from '../../theme/roles.ts';
 import { jumpRole } from './emphasis.ts';
 import * as text from './text.ts';
 
-/** One listed damage jump; `at` is when it happened, the row's identity; `title` explains its loss text. */
-export type JumpRow = { at: SessionTime; text: string; loss: string; title?: string; role?: Role; reason?: UnknownReason };
+/**
+ * One listed damage jump; `at` is when it happened, the row's identity; `loss` is its lap-time cost as a cell part;
+ * `title` explains a loss that can never be measured.
+ */
+export type JumpRow = { at: SessionTime; text: string; loss: CellPart; title?: string; role?: Role };
 
 /** The full card's widths in character cells (mockup 1-car-care.html): every fixed field of its lines. */
 export const FULL_WIDTHS = {
@@ -38,16 +41,17 @@ export type DamageRows = {
 
 const cell = (k: Known<number>): CellPart => knownPart(k, formatPct);
 
+/** A jump's loss: measured, still measuring, never measurable (with why as `title`), or hidden (its reason's mark). */
+function jumpLoss(loss: Known<number>): Pick<JumpRow, 'loss' | 'title'> {
+  if (!loss.known && loss.reason === 'insufficientData') return { loss: { text: text.lossMeasuring } };
+  if (!loss.known && loss.reason === 'notApplicable') return { loss: { text: text.lossNotMeasurable }, title: text.lossNotMeasurableTitle };
+  return { loss: knownPart(loss, (ms) => text.lossMeasured(formatSecondsPerLap(ms))) };
+}
+
 function jumpRow(jump: DamageJump, newest: boolean): JumpRow {
   const parts = jump.parts.map((p) => insightText.part[p]).join(text.partSeparator);
-  const row: JumpRow = { at: jump.at, text: `${formatLapNumber(jump.lap, 2)} ${parts} ${formatDeltaPct(jump.deltaPct)}`, loss: '' };
-  const loss = jump.lossMsPerLap;
-  if (loss.known) row.loss = text.lossMeasured(formatSecondsPerLap(loss.value));
-  else if (loss.reason === 'insufficientData') row.loss = text.lossMeasuring;
-  else if (loss.reason === 'notApplicable') {
-    row.loss = text.lossNotMeasurable;
-    row.title = text.lossNotMeasurableTitle;
-  } else row.reason = loss.reason;
+  const jumpText = `${formatLapNumber(jump.lap, 2)} ${parts} ${formatDeltaPct(jump.deltaPct)}`;
+  const row: JumpRow = { at: jump.at, text: jumpText, ...jumpLoss(jump.lossMsPerLap) };
   const role = jumpRole(jump, newest);
   if (role !== undefined) row.role = role;
   return row;

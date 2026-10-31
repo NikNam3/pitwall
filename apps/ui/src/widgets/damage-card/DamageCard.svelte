@@ -4,7 +4,9 @@
   import CornerGrid from '../../kit/corners/CornerGrid.svelte';
   import { fitCell, type CellPart } from '../../kit/grid/grid.ts';
   import { cornerNames } from '../../kit/text.ts';
+  import CellParts from '../../kit/values/CellParts.svelte';
   import TextCell from '../../kit/values/TextCell.svelte';
+  import { unknownTitle } from '../../kit/values/unknown-mark.ts';
   import { role, roleOrUndefined } from '../../theme/index.ts';
   import { damageRows, FULL_WIDTHS as W } from './rows.ts';
   import type { JumpRow } from './rows.ts';
@@ -19,7 +21,10 @@
 </script>
 
 {#snippet value(c: CellPart, width: number = W.value)}<TextCell {...c} {width} align="right" />{/snippet}
-{#snippet jump(j: JumpRow)}<span style:color={roleOrUndefined(j.role)}>{fitCell(j.text, W.jump)}  <TextCell text={j.loss} reason={j.reason} title={j.title} /></span>{/snippet}
+{#snippet jump(j: JumpRow)}<span style:color={roleOrUndefined(j.role)}>{fitCell(j.text, W.jump)}  <span title={j.title}><CellParts parts={[j.loss]} /></span></span>{/snippet}
+<!-- The compact jump hovers its loss: the loss text, or the reason's hover text when the loss is unknown; no room for the
+     loss text, but a hidden loss still shows its reason's mark after the jump, never nothing. -->
+{#snippet compactJump(j: JumpRow)}<div class="line" style:color={roleOrUndefined(j.role)} title={unknownTitle(j.loss.reason) ?? j.loss.text}><span>{j.text}</span>{#if j.loss.reason !== undefined} <CellParts parts={[j.loss]} />{/if}</div>{/snippet}
 
 <div class="card">
   {#if full}
@@ -36,7 +41,7 @@
     <div class="line"><TextCell text={rows.compact.parts} reason={rows.parts.wingL.reason} /></div>
     <!-- Two rows only: a fault outranks the newest jump. -->
     {#if rows.faults.length > 0}<div class="line" style:color={role('critical')}>{rows.faults.join(text.faultSeparator)}</div>
-    {:else if rows.compact.jump}<div class="line" style:color={roleOrUndefined(rows.compact.jump.role)} title={rows.compact.jump.loss}>{rows.compact.jump.text}</div>{/if}
+    {:else if rows.compact.jump}{@render compactJump(rows.compact.jump)}{/if}
   {/if}
 </div>
 
