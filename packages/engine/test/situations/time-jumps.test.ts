@@ -478,10 +478,10 @@ describe('a frame the runner took as a flashback report stays one when a later r
   });
 });
 
-// Review 5 R1: the runner takes a flashback report on the first frame it applies when its target lies below the frame
-// id of the Session packet it started from (a live join, or a cut segment whose first frame after the Session packet
-// carries an FLBK). No frame was applied, so the rewind's mark has no wall time; the frame is applied as the session's
-// first, and the frames after it read the pause and jump rules from it.
+// Review 5 R1 and review 6 R6-1: a live join, or a cut segment whose first frame after the Session packet carries an
+// FLBK whose target lies below the Session packet's frame id. No frame was applied, so there is nothing to rewind: the
+// frame is applied as the session's first, reports no flashback, and the frames after it read the pause and jump rules
+// from it.
 describe('a flashback report on the session’s first frame', () => {
   const JOIN = 10;
   const PAUSED_AT = 30;
@@ -499,12 +499,21 @@ describe('a flashback report on the session’s first frame', () => {
   const runJoined = (flashback: boolean) => {
     const frames = joined(flashback);
     const runner = new SessionRunner(initFor(frames));
-    runner.apply(frames[0]!);
+    // The first step's result but its state (the state is compared on its own below).
+    const { state: _state, ...firstStep } = runner.apply(frames[0]!);
     const { lastFrameId, sessionTime, session, cars, history, open } = runner.state;
     // What readers see after the first frame, and the wall time it set for the pause and jump rules.
     const first = structuredClone({ lastFrameId, sessionTime, session, cars, history, situations: open.situations, lastWallMs: open.phaseBook.lastWallMs });
-    return { runner, first, rest: frames.slice(1).map((f) => runner.apply(f)) };
+    return { runner, first, firstStep, rest: frames.slice(1).map((f) => runner.apply(f)) };
   };
+
+  // Review 6 R6-1: before the first applied frame there is nothing to rewind, so the report is no flashback: the
+  // engineer's feed shows none (no "flashback, lap 0"), and readers get no discarded timeline.
+  it('the first step reports no flashback and is not truncated: its result equals the same frame’s without the FLBK', () => {
+    const { firstStep } = runJoined(true);
+    expect([firstStep.flashback, firstStep.delta.truncated]).toEqual([undefined, false]);
+    expect(firstStep).toEqual(runJoined(false).firstStep);
+  });
 
   it('the frame is applied (no throw) as the session’s first: what it leaves equals the same frame without the FLBK, its wall time set', () => {
     const frames = joined(true);

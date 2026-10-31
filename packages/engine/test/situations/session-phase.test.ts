@@ -8,6 +8,8 @@ import { expectScheduledIncremental, input, quick, sched, underNeutralisation, u
 import {
   beats,
   CHQF,
+  FIRST_LIGHT,
+  GRID_START_TRUNCATED,
   gridStart,
   lap,
   LGOT,
@@ -41,13 +43,6 @@ const raceScript = (n: number, at: Record<number, Beat>, jump?: { from: number; 
 const race = (n: number, at: Record<number, Beat>, jump?: { from: number; ms: number }) => run(raceScript(n, at, jump));
 /** The steps that discarded history (`delta.truncated`), by frame index. */
 const truncated = (results: StepResult[]) => results.flatMap((r, i) => (r.delta.truncated ? [i] : []));
-/** The frame of `gridStart`'s first start light. */
-const FIRST_LIGHT = 10;
-/**
- * The boundaries at a shared moment of every `gridStart` (spec 3.1, ruling 2026-10-31 widened after review 5): the
- * first start light and lights out open their phases on the grid's standing clock, at the time the grid frames carry.
- */
-const GRID_START = [FIRST_LIGHT, LIGHTS_OUT];
 
 describe('the start of a race without a formation lap', () => {
   it('the grid is preStart, the first start light opens startLights, lights out opens racing', () => {
@@ -58,7 +53,7 @@ describe('the start of a race without a formation lap', () => {
   it('a step that opens or closes a phase is tagged sessionPhases, and no other step is', () => {
     const { results } = run(script(gridStart(20)));
     const tagged = results.flatMap((r, i) => (i > 0 && r.changed.has('sessionPhases') ? [i] : []));
-    expect(tagged).toEqual([10, LIGHTS_OUT]);
+    expect(tagged).toEqual([FIRST_LIGHT, LIGHTS_OUT]);
   });
   it('a lights out before any start light is no race start', () => {
     const { runner } = run(script(beats(30, (k) => ({ at: 0, ...(k === 5 && { events: [LGOT] }) }))));
@@ -152,23 +147,23 @@ describe('a neutralisation dropped unconfirmed is a discarded timeline (review 2
     cars: (d) => lap(d, 0, { currentLapNum: 1 + Math.floor((10 + 40 * k) / TRACK), lapDistance: (10 + 40 * k) % TRACK }),
   });
 
-  it('a deployment that expires after 3 s: that step is truncated, and no other but the grid start’s shared moments, and it reports no flashback', () => {
+  it('a deployment that expires after 3 s: that step is truncated, and no other but the grid start’s lights out, and it reports no flashback', () => {
     const { results } = race(EXPIRY + 20, { 50: { events: [scar(1, 0)] } });
-    expect(truncated(results)).toEqual([...GRID_START, raceFrame(EXPIRY)]);
+    expect(truncated(results)).toEqual([...GRID_START_TRUNCATED, raceFrame(EXPIRY)]);
     expect(results[raceFrame(EXPIRY)]!.flashback).toBeUndefined();
   });
-  it('a deployment dropped at SEND: the SEND step is truncated, and no other but the grid start’s shared moments', () => {
+  it('a deployment dropped at SEND: the SEND step is truncated, and no other but the grid start’s lights out', () => {
     const { results } = race(200, { 190: { events: [scar(1, 0)] }, 199: { events: [SEND] } });
     // SEND and the packets after it carry frame id 0, so the assembler adds them to the frame before: race frame 198.
-    expect(truncated(results)).toEqual([...GRID_START, raceFrame(198)]);
+    expect(truncated(results)).toEqual([...GRID_START_TRUNCATED, raceFrame(198)]);
   });
-  it('a deployment dropped at the simulated end: the step of the jump is truncated, and no other but the grid start’s shared moments', () => {
+  it('a deployment dropped at the simulated end: the step of the jump is truncated, and no other but the grid start’s lights out', () => {
     const { results } = race(150, { 90: { events: [scar(2, 0)] } }, { from: 100, ms: 6_000_000 });
-    expect(truncated(results)).toEqual([...GRID_START, raceFrame(100)]);
+    expect(truncated(results)).toEqual([...GRID_START_TRUNCATED, raceFrame(100)]);
   });
-  it('a deployment the status confirms truncates no step: the only truncated steps are the grid start’s shared moments', () => {
+  it('a deployment the status confirms truncates no step: the only truncated step is the grid start’s lights out', () => {
     const { results } = race(EXPIRY + 20, { 50: { events: [scar(1, 0)] }, 60: { session: status(1) } });
-    expect(truncated(results)).toEqual(GRID_START);
+    expect(truncated(results)).toEqual(GRID_START_TRUNCATED);
   });
   it('a flashback from after the drop to the wait before it equals a run that never saw the discarded frames', () => {
     const scarAt50 = { 50: { events: [scar(1, 0)] } };
@@ -322,6 +317,14 @@ describe('a bridge that joins mid-session', () => {
     const { runner } = run(script(gridStart(20, () => ({})).map((beat, k) => (k <= LIGHTS_OUT ? { ...beat, cars: (d) => lap(d, 1, { currentLapTimeInMs: 510 }) } : beat))));
     expect(kinds(runner)).toEqual(['preStart', 'startLights']);
   });
+  // Review 6 R6-6: until a frame is applied the state carries the Session packet's time, so a phase the first frame
+  // opens lies at or below it; no earlier frame recorded anything, so nothing is moved and nothing is discarded.
+  it('a phase the session’s first frame opens (a race joined on the frame of its first start light, the clock held) truncates no step', () => {
+    const { runner, results } = run(script(beats(30, (k) => ({ at: 0, ...(k === 0 && { events: [stlg(1)] }) }))));
+    expect([closed(runner).map((p) => [p.kind, p.start, p.end]), current(runner).kind]).toEqual([[['preStart', 0, 0]], 'startLights']);
+    expect(results[0]!.changed.has('sessionPhases')).toBe(true);
+    expect(truncated(results)).toEqual([]);
+  });
   it('joining a practice mid-session: running from the first frame, marked joined', () => {
     const { runner } = run(script(beats(100, (k) => ({ at: 121_552 + k * STEP })), { session: { sessionType: 1, sessionDuration: 3600, sessionTimeLeft: 3478 } }));
     expect(kinds(runner)).toEqual([]);
@@ -408,8 +411,10 @@ describe('a neutralisation that opens at a moment an earlier frame of it already
   });
 });
 
-// Review 5 R2, R3: the closing boundary, a boundary below the previous frame's stamp, and every phase kind (spec 3.1, "A
-// boundary at a shared moment", ruling 2026-10-31 widened after review 5).
+// Review 5 R2, R3 and review 6 R6-0: the closing boundary, a boundary below the previous frame's stamp, every phase kind,
+// and the condition of the rule (spec 3.1, "A boundary at a shared moment", ruling 2026-10-31 made exact after review
+// 6): a boundary truncates when an earlier frame recorded an entry at or after its time, which the boundary moves into
+// or out of the phase; a boundary at a shared moment with no entry there truncates nothing.
 describe('a session phase boundary at a moment earlier frames share', () => {
   /** Car 0 drives 40 m a frame from lights out (a mini-sector crossing on every even race frame); `beat(k)` adds to race frame k. */
   const driving = (beat: (k: number) => Beat = () => ({})) => (k: number): Beat => ({
@@ -420,16 +425,45 @@ describe('a session phase boundary at a moment earlier frames share', () => {
   const standing = (k: number): Beat => (k >= 21 && k <= 23 ? { at: raceAt(20) } : {});
   /** The SC status from race frame 5, green again from race frame `greenAt`. */
   const sc = (greenAt?: number) => (k: number): Beat => ({ ...(k === 5 && { session: status(1) }), ...(k === greenAt && { session: status(0) }) });
+  /** The SC status from race frame `at`. */
+  const scFrom = (at: number) => (k: number): Beat => (k === at ? { session: status(1) } : {});
 
-  it('a race start on the grid’s standing clock: the first start light and lights out are boundaries at a shared moment, the only truncated steps', () => {
-    expect(truncated(run(script(gridStart(40))).results)).toEqual(GRID_START);
+  it('a race start on the grid’s held clock: lights out moves the start lights’ events, recorded at that time by earlier frames, into racing and is the only truncated step; the first start light finds no entry there', () => {
+    const { runner, results } = run(script(gridStart(40)));
+    expect(truncated(results)).toEqual([LIGHTS_OUT]);
+    expect(GRID_START_TRUNCATED).toEqual([LIGHTS_OUT]);
+    expect(closed(runner).map((p) => [p.kind, p.start, p.end])).toEqual([['preStart', 0, 0], ['startLights', 0, 0]]);
+  });
+  it('an entry an earlier grid frame recorded at the held time (an overtake at frame 5): the first start light moves it out of preStart and is truncated too', () => {
+    const frames = script(gridStart(40).map((beat, k) => (k === 5 ? { ...beat, events: [ovtk(1, 0)] } : beat)));
+    const { runner, results } = run(frames);
+    expect(runner.state.history.events.filter((e) => e.kind === 'overtake').map((e) => e.at)).toEqual([0]);
+    expect(truncated(results)).toEqual([FIRST_LIGHT, LIGHTS_OUT]);
   });
   it('a neutralisation closing on a standing clock (race frames 20 to 23 at one session time, the status green at 23): that step is truncated', () => {
     const { results } = run(script(gridStart(60, (k) => ({ ...standing(k), ...driving(sc(23))(k) }))));
-    expect(truncated(results)).toEqual([...GRID_START, raceFrame(23)]);
+    expect(truncated(results)).toEqual([...GRID_START_TRUNCATED, raceFrame(23)]);
   });
   it('a neutralisation closing on a standing clock: a reader of the crossings under the neutralisation is incremental = from scratch on every step', () => {
     expectScheduledIncremental(underNeutralisation, script(gridStart(60, (k) => ({ ...standing(k), ...driving(sc(23))(k) }))));
+  });
+  it('a neutralisation closing on a standing clock with no entry at that time (no car drives): no step but the grid start’s lights out is truncated', () => {
+    const { runner, results } = run(script(gridStart(60, (k) => ({ ...standing(k), ...sc(23)(k) }))));
+    expect(closed(runner).at(-1)).toMatchObject({ kind: 'neutralised', start: raceAt(5), end: raceAt(20) });
+    expect(truncated(results)).toEqual(GRID_START_TRUNCATED);
+  });
+  it('a neutralisation opening on a standing clock with no entry at that time (no car drives, the SC status at 23): no step but the grid start’s lights out is truncated', () => {
+    const { runner, results } = run(script(gridStart(60, (k) => ({ ...standing(k), ...scFrom(23)(k) }))));
+    expect(current(runner)).toMatchObject({ kind: 'neutralised', start: raceAt(20) });
+    expect(truncated(results)).toEqual(GRID_START_TRUNCATED);
+  });
+  it('a neutralisation opening on a standing clock after the only crossing near it, which lies before that time (the car stops at race frame 20): no step but the grid start’s lights out is truncated', () => {
+    // Race frame 20 crosses at raceAt(19) + 12 ms, below the standing time raceAt(20); the car stands from there on.
+    const stopped = (k: number): Beat => ({ cars: (d) => lap(d, 0, { currentLapNum: 1, lapDistance: 10 + 40 * Math.min(k, 20) }) });
+    const { runner, results } = run(script(gridStart(60, (k) => ({ ...standing(k), ...stopped(k), ...scFrom(23)(k) }))));
+    const crossings = runner.state.history.miniSectors.filter((m) => m.carId === 0).map((m) => m.at);
+    expect(crossings.at(-1)).toBe(raceAt(19) + 12);
+    expect(truncated(results)).toEqual(GRID_START_TRUNCATED);
   });
   it('a neutralisation closing after a rewind, in its second stale frame (the first crosses a mini-sector): that step is truncated after the rewind’s, and the reader is incremental = from scratch on every step', () => {
     // The game runs under the SC to race frame 25 and goes back to race frame 19 (frame id going back); its new timeline
@@ -440,35 +474,97 @@ describe('a session phase boundary at a moment earlier frames share', () => {
     const resumed = after(timeline(21), raceFrame(20), raceFrame(26)).slice(0, 20).map((f, i) => (i < 2 ? { ...f, sessionTime: oldMs } : f));
     const frames = [...all.slice(0, raceFrame(25) + 1), ...resumed];
     const { results } = run(frames);
-    expect(truncated(results)).toEqual([...GRID_START, raceFrame(26), raceFrame(27)]);
+    expect(truncated(results)).toEqual([...GRID_START_TRUNCATED, raceFrame(26), raceFrame(27)]);
     expect(results[raceFrame(26)]!.flashback?.targetFrameId).toBe(raceFrame(19));
     expectScheduledIncremental(underNeutralisation, frames);
+  });
+  it('the same rewind with no car driving (no entry at the rewind’s target time): only the rewind’s step is truncated, not the closing in its second stale frame', () => {
+    const timeline = (greenAt?: number) => script(gridStart(60, sc(greenAt)));
+    const all = timeline();
+    const oldMs = all[raceFrame(25)]!.sessionTime;
+    const resumed = after(timeline(21), raceFrame(20), raceFrame(26)).slice(0, 20).map((f, i) => (i < 2 ? { ...f, sessionTime: oldMs } : f));
+    const { runner, results } = run([...all.slice(0, raceFrame(25) + 1), ...resumed]);
+    expect(results[raceFrame(26)]!.flashback?.targetFrameId).toBe(raceFrame(19));
+    expect(closed(runner).at(-1)).toMatchObject({ kind: 'neutralised', end: raceAt(19) });
+    expect(truncated(results)).toEqual([...GRID_START_TRUNCATED, raceFrame(26)]);
   });
   it.each([
     ['closes', 'racing'],
     ['opens', 'finished'],
   ] as const)('a boundary of any phase kind: the chequered flag on a standing clock (at race frame 23) %s %s; a reader of the crossings under it is incremental = from scratch on every step', (_, kind) => {
     const frames = script(gridStart(60, (k) => ({ ...standing(k), ...driving((j) => (j === 23 ? { events: [CHQF] } : {}))(k) })));
-    expect(truncated(run(frames).results)).toEqual([...GRID_START, raceFrame(23)]);
+    expect(truncated(run(frames).results)).toEqual([...GRID_START_TRUNCATED, raceFrame(23)]);
     expectScheduledIncremental(underPhase(kind), frames);
   });
+  it('the chequered flag on a standing clock with no entry at that time: no step but the grid start’s lights out is truncated', () => {
+    const { runner, results } = run(script(gridStart(60, (k) => ({ ...standing(k), ...(k === 23 && { events: [CHQF] }) }))));
+    expect(current(runner)).toMatchObject({ kind: 'finished', start: raceAt(20) });
+    expect(truncated(results)).toEqual(GRID_START_TRUNCATED);
+  });
 
-  // The `<=` of the rule: a boundary below the previous frame's stamp. On the grid, before the race start, a fall of the
-  // session time keeps the game's lower time (spec 3.3; raceZandvoortUidReuse's first frames run at 57.2 s and fall to
-  // 0 at frame 7); the formation status on the fall's frame opens the formation below every earlier frame's time.
-  /** A race whose clock falls from 57.2 s to 0 at frame 7 and then runs; the formation status from frame `formationAt`. */
-  const fallen = (formationAt: number) =>
-    script(beats(40, (k) => ({ at: k < 7 ? 57_200 + k * STEP : (k - 7) * STEP, ...(k === formationAt && { session: status(3) }) })));
+  // A boundary below the previous frame's stamp. On the grid, before the race start, a fall of the session time keeps
+  // the game's lower time (spec 3.3; raceZandvoortUidReuse's first frames run at 57.2 s and fall to 0 at frame 7), so an
+  // entry recorded before the fall lies above every boundary up to 57.2 s. What truncates is that entry, not the clock.
+  /**
+   * A race whose clock falls from 57.2 s to 0 at frame 7 and then runs; the formation status from frame `formationAt`;
+   * with `overtake`, an overtake at frame 3 (57.248 s).
+   */
+  const fallen = (formationAt: number, overtake = false) =>
+    script(beats(40, (k) => ({
+      at: k < 7 ? 57_200 + k * STEP : (k - 7) * STEP,
+      ...(k === formationAt && { session: status(3) }),
+      ...(overtake && k === 3 && { events: [ovtk(1, 0)] }),
+    })));
+  const overtakesAt = (runner: SessionRunner) => runner.state.history.events.filter((e) => e.kind === 'overtake').map((e) => e.at);
 
-  it('a formation opening on the fall’s frame, below the earlier frames’ stamps: that step, and no other, is truncated', () => {
-    const { runner, results } = run(fallen(7));
+  it('a formation opening on the fall’s frame, below an entry an earlier frame recorded (an overtake at 57.248 s): that step, and no other, is truncated', () => {
+    const { runner, results } = run(fallen(7, true));
+    expect(overtakesAt(runner)).toEqual([57_200 + 3 * STEP]);
     expect(truncated(results)).toEqual([7]);
     expect(current(runner)).toMatchObject({ kind: 'formation', start: 0 });
   });
-  it('the formation opening one frame after the fall, above the previous frame’s stamp: no step is truncated', () => {
+  it('a formation opening on the fall’s frame, below the earlier frames’ stamps but with no entry there: no step is truncated', () => {
+    const { runner, results } = run(fallen(7));
+    expect(truncated(results)).toEqual([]);
+    expect(current(runner)).toMatchObject({ kind: 'formation', start: 0 });
+  });
+  it('the formation opening one frame after the fall, above the previous frame’s stamp but below the overtake at 57.248 s: that step, and no other, is truncated', () => {
+    const { runner, results } = run(fallen(8, true));
+    expect(truncated(results)).toEqual([8]);
+    expect(current(runner)).toMatchObject({ kind: 'formation', start: STEP });
+  });
+  it('the formation opening one frame after the fall, above the previous frame’s stamp, with no entry: no step is truncated', () => {
     const { runner, results } = run(fallen(8));
     expect(truncated(results)).toEqual([]);
     expect(current(runner)).toMatchObject({ kind: 'formation', start: STEP });
+  });
+});
+
+// Review 6 R6-0: the post-session simulation opens `postSession` at the last frame's time, a moment that frame shares
+// with the jump's step. Only an entry that frame (or one before it) recorded at that time is moved into the post-session.
+describe('the simulated end of a session', () => {
+  /** Car 0 drives 40 m a frame from lights out: its crossings lie between two frames' times, none at a frame's own. */
+  const drivingCar = (k: number): Beat => ({ cars: (d) => lap(d, 0, { currentLapNum: 1 + Math.floor((10 + 40 * k) / TRACK), lapDistance: (10 + 40 * k) % TRACK }) });
+  /** A race of 150 race frames whose clock jumps 6000 s ahead at race frame 100 (the simulation); `at[k]` adds to race frame k. */
+  const simulated = (at: Record<number, Beat> = {}) => race(150, Object.fromEntries(Array.from({ length: 150 }, (_, k) => [k, { ...drivingCar(k), ...at[k] }])), { from: 100, ms: 6_000_000 });
+
+  it('a race whose last frame before the jump recorded nothing at its own time: the post-session opens there, and no step but the grid start’s lights out is truncated', () => {
+    const { runner, results } = simulated();
+    expect(current(runner)).toMatchObject({ kind: 'postSession', start: raceAt(99) });
+    const { events, miniSectors } = runner.state.history;
+    expect([...events, ...miniSectors].filter((e) => e.at === raceAt(99))).toEqual([]);
+    expect(miniSectors.filter((m) => m.at < raceAt(99)).length).toBeGreaterThan(0);
+    expect(truncated(results)).toEqual(GRID_START_TRUNCATED);
+  });
+  it('an overtake on the last frame before the jump lies at the post-session’s start: the jump’s step is truncated', () => {
+    const { runner, results } = simulated({ 99: { events: [ovtk(1, 0)] } });
+    expect(runner.state.history.events.filter((e) => e.kind === 'overtake').map((e) => e.at)).toEqual([raceAt(99)]);
+    expect(truncated(results)).toEqual([...GRID_START_TRUNCATED, raceFrame(100)]);
+  });
+  it('practice whose last frame before the jump recorded nothing at its own time: no step is truncated', () => {
+    const { runner, results } = run(script(beats(150, (k) => ({ at: k < 100 ? k * STEP : 4_500_000 + k * STEP })), { session: { sessionType: 1 } }));
+    expect(current(runner)).toMatchObject({ kind: 'postSession', start: 99 * STEP });
+    expect(truncated(results)).toEqual([]);
   });
 });
 

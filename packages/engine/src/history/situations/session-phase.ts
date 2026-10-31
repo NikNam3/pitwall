@@ -96,16 +96,34 @@ const drop = (state: EngineState, out: StepOutput): void => {
 };
 
 /**
- * `next` opens where the phase in progress closes. When an earlier frame was stamped at or after that time (a clock
- * standing for a few frames, the stale frames after a rewind: one moment the frames share), what those frames recorded
- * now lies under `next` or past the closed phase's end, and readers folded it before the boundary existed. The step
- * then discarded a timeline (spec 3.1, ruling 2026-10-31, widened after review 5): readers start over, as at a dropped
- * neutralisation; lowering `delta.before` instead would fold entries twice. This holds for every phase kind, at its
- * opening and its closing (readers fold entries against any phase), so a race start on the grid's standing clock
- * restarts them at the first start light and at lights out.
+ * Whether the history holds an entry a reader may fold against the session phases at or after `boundary`: an event
+ * (`at >= boundary`), a mini-sector crossing (`at >= boundary`), a lap (`completedAt >= boundary`) or a pit stop
+ * (`pitLaneExit >= boundary`: the stop's last moment, so one only partly past the boundary counts too). Each entry's
+ * own time is compared, not the clock, so an entry recorded before a fall of the session time lies above every lower
+ * time. The phases themselves (session and flag phases), the stints (by lap, no time) and the pauses (display only,
+ * spec 3.1) are not folded against phases. Read before the frame's own entries are recorded (the situation tracker is
+ * the first history step), so every entry it finds was recorded by an earlier frame.
+ */
+const recordedAtOrAfter = (history: History, boundary: SessionTime): boolean =>
+  history.events.some((e) => e.at >= boundary) ||
+  history.miniSectors.some((c) => c.at >= boundary) ||
+  history.laps.some((l) => l.completedAt >= boundary) ||
+  history.pitStops.some((p) => p.pitLaneExit >= boundary);
+
+/**
+ * `next` opens where the phase in progress closes. Several frames can carry one moment of the race clock (a clock
+ * standing for a few frames, the stale frames after a rewind), and the clock can fall before the race start, so an
+ * earlier frame may have recorded an entry at or after that time (`recordedAtOrAfter`; spans are `[start, end)`). The
+ * boundary moves that entry out of the closed phase into `next` after readers folded it: the step discarded a timeline
+ * (spec 3.1, "A boundary at a shared moment", ruling 2026-10-31 made exact after review 6), and readers start over, as
+ * at a dropped neutralisation; lowering `delta.before` instead would fold entries twice. A boundary that moves no entry
+ * discards nothing: the grid's first start light (no grid frame recorded anything), the simulated end at the last
+ * frame's time when that frame recorded nothing there, a phase the session's first frame opens (the history is empty).
+ * The rule holds for every phase kind, at its opening and its closing: today `gaps` and `incidents` read the
+ * neutralised and suspended phases, and covering every kind keeps it exact for any reader of the phases.
  */
 const atBoundary = (state: EngineState, next: OpenSessionPhase, out: StepOutput): void => {
-  if (state.open.phaseBook.started && next.start <= state.sessionTime) out.discarded = true;
+  if (recordedAtOrAfter(state.history, next.start)) out.discarded = true;
 };
 
 /** Closes the phase in progress where `next` opens and opens `next`. */
