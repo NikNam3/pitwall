@@ -1,14 +1,17 @@
-// The before/after position pair of an incident, as cell parts (review 5, R5). Contract of
+// The before/after position pair of an incident, as cell parts (review 5, R5; review 6, R6-3). Contract of
 // `positionPairParts(from, to)` in src/kit/values/position-mark.ts (pure; it replaces `positionPairText`):
 //  - `from` and `to` are each a `Known<number>`; the result is the kit grid's `CellPart[]`;
 //  - both known: `P5→P4` in the kit position format, `—` (`positionUnchanged`) when the position held;
 //  - an unknown side is its mark in its own part (`{ text: '', reason }`), and the known side still shows: `P5→…`,
 //    `…→P4`; the arrow is notation and stays when both sides are unknown (as the incident feed's gap pair);
-//  - an unknown side never reads as held: no `—` unless both sides are known and equal.
+//  - an unknown side never reads as held: no `—` unless both sides are known and equal;
+//  - `positionUnchanged` is fixed UI text: it lives in kit/text.ts, and position-mark.ts does not re-export it.
 import { known, unknown, type Known } from '@pitwall/domain';
 import { describe, expect, it } from 'vitest';
 import type { CellPart } from '../../src/kit/grid/grid.ts';
-import { positionPairParts, positionUnchanged } from '../../src/kit/values/position-mark.ts';
+import { positionUnchanged } from '../../src/kit/text.ts';
+import * as positionMark from '../../src/kit/values/position-mark.ts';
+import { positionPairParts } from '../../src/kit/values/position-mark.ts';
 
 const k = (v: number): Known<number> => known(v, 0);
 /** The parts as one line, `‹reason›` at each mark. */
@@ -29,6 +32,10 @@ describe('positionPairParts: every known/unknown combination of before and after
   it('both known and equal: the position held', () => {
     expect(pair(k(5), k(5))).toBe(positionUnchanged);
     expect(positionUnchanged).toBe('—');
+  });
+
+  it('the held mark is kit text, read from kit/text.ts only', () => {
+    expect('positionUnchanged' in positionMark).toBe(false);
   });
 
   it('after unknown: the position before, the arrow, then the after\'s mark', () => {

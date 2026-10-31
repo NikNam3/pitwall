@@ -5,10 +5,12 @@
 //   gridRow(columns: GridColumn[], cells: string[], gap = 1): string   // cells fitted and joined by `gap` spaces;
 //                                                      // fewer cells than columns: the rest is blank; width = gridWidth
 //   gridWidth(columns: GridColumn[], gap = 1): number  // sum of widths + gap between neighbours
-//   fixed(value: number, decimals: number): string     // `toFixed` with the true minus and -0 shown as 0 (`-0.04` at 1 decimal -> `0.0`)
+// and of `fixed(value: number, decimals: number): string` in `kit/values/format.ts` (the grid does not re-export it: kit/values
+// imports kit/grid, never the other way, review 6 R6-4): `toFixed` with the true minus and -0 shown as 0 (`-0.04` at 1
+// decimal -> `0.0`).
 import { describe, expect, it } from 'vitest';
-import { fixed, fitCell, gridRow, gridWidth } from '../../src/kit/grid/grid.ts';
-import { formatLapTime } from '../../src/kit/values/format.ts';
+import { fitCell, gridRow, gridWidth } from '../../src/kit/grid/grid.ts';
+import { fixed, formatLapTime } from '../../src/kit/values/format.ts';
 
 describe('fitCell', () => {
   it('pads left text on the right', () => expect(fitCell('KUH', 5)).toBe('KUH  '));

@@ -9,8 +9,8 @@ describe('positionMarkText', () => {
     expect(positionMarkText({ change: 0 })).toBe('');
   });
 
-  it('writes a before/after pair with the kit position format, P7→ while the target is unknown', () => {
+  it('writes a before/after pair with the kit position format, P7→… (the unknown target\'s mark) while it is unknown', () => {
     expect(positionMarkText({ from: 7, to: known(9, 0) })).toBe('P7→P9');
-    expect(positionMarkText({ from: 7, to: unknown('notReceived') })).toBe('P7→');
+    expect(positionMarkText({ from: 7, to: unknown('notReceived') })).toBe('P7→…');
   });
 });
