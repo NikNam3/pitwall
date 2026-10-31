@@ -9,8 +9,6 @@ export const retired = 'DNF';
 export const us = 'us';
 /** Between our position and the other car's gaps. */
 export const joint = ', ';
-/** Between the before and after of a pair: the kit's one arrow. */
-export { arrow } from '../../kit/text.ts';
 /** The kind word and its detail: `time loss S2`, `warning 2/3`, `damage floor +8 %`. */
 export const withDetail = (kind: string, detail: string): string => `${kind} ${detail}`;
 /** A warning's count of the limit: `2/3`. */

@@ -1,5 +1,6 @@
 import type { Corners, DamageJump, DamageParts, DamageState, Known, SessionTime, UnknownReason } from '@pitwall/domain';
 import { formatCount, formatDeltaPct, formatLapNumber, formatPct, formatSecondsPerLap } from '../../kit/values/format.ts';
+import { knownPart } from '../../kit/grid/grid.ts';
 import { insightText } from '../../kit/text.ts';
 import type { Role } from '../../theme/roles.ts';
 import { jumpRole } from './emphasis.ts';
@@ -38,7 +39,7 @@ export type DamageRows = {
   compact: { parts: string; jump?: JumpRow };
 };
 
-const cell = (k: Known<number>): Cell => (k.known ? { text: formatPct(k.value) } : { text: '', reason: k.reason });
+const cell = (k: Known<number>): Cell => knownPart(k, formatPct);
 
 function jumpRow(jump: DamageJump, newest: boolean): JumpRow {
   const parts = jump.parts.map((p) => insightText.part[p]).join(text.partSeparator);
@@ -58,7 +59,7 @@ function jumpRow(jump: DamageJump, newest: boolean): JumpRow {
 /** Joins the damage state into the card's texts: parts, corners, faults, jumps (newest first) and the compact view. */
 export function damageRows(state: DamageState): DamageRows {
   const p = state.parts;
-  const part = (key: keyof DamageParts): Cell => (p.known ? cell({ ...p, value: p.value[key] }) : { text: '', reason: p.reason });
+  const part = (key: keyof DamageParts): Cell => knownPart(p, (parts) => formatPct(parts[key]));
   const corner = (c: DamageState['corners']['fl']) => ({ tyre: cell(c.tyrePct), brake: cell(c.brakePct) });
   const faults = [
     ...(state.drsFault.known && state.drsFault.value ? [text.faults.drs] : []),

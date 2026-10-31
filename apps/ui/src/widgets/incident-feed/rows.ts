@@ -2,8 +2,8 @@
 import type { CarOverview } from '@pitwall/contracts';
 import type { CarId, IncidentEntry, IncidentForUs, IncidentKind, IncidentPenalty, Known, RaceMoment, UnknownReason } from '@pitwall/domain';
 import { carCodeById } from '../../kit/car/car-label.ts';
-import { fitCell, fitParts, type CellPart } from '../../kit/grid/grid.ts';
-import { incidentKinds, insightText, sectorNames, separator, unknownReason } from '../../kit/text.ts';
+import { fitCell, fitParts, knownPart, unknownPart, type CellPart } from '../../kit/grid/grid.ts';
+import { arrow, incidentKinds, insightText, sectorNames, separator, unknownReason } from '../../kit/text.ts';
 import type { WidgetSize } from '../../kit/types.ts';
 import { formatCount, formatDeltaPct, formatLapNumber, formatSeconds, formatSignedSeconds } from '../../kit/values/format.ts';
 import { positionPairParts } from '../../kit/values/position-mark.ts';
@@ -20,9 +20,6 @@ export type IncidentCell = { text: string; reason?: UnknownReason; parts?: CellP
 export type IncidentRow = { id: string; role?: Role | undefined; cells: Record<IncidentColumn, IncidentCell> };
 
 const signedSeconds = (ms: number): string => formatSignedSeconds(ms, 1);
-
-/** A known value's text, or the unknown's part (its mark shows in place). */
-const valuePart = <T>(v: Known<T>, format: (t: T) => string): CellPart => (v.known ? { text: format(v.value) } : { text: '', reason: v.reason });
 
 /**
  * One value of the for-us cell with the separator before it: `us`, ` P5→P4`, `, OCO`, ` +4.1→DNF`. A pair is one
@@ -47,11 +44,11 @@ const pieceParts = (p: Piece): CellPart[] => (p.lead === '' ? p.value : [{ text:
 function forUsPieces(f: IncidentForUs, cars: readonly CarOverview[]): Piece[] {
   const ours: Piece[] = [{ lead: '', value: [{ text: text.us }] }, { lead: ' ', value: positionPairParts(f.positionBefore, f.positionAfter) }];
   if (!f.otherCarId.known) return ours;
-  const after = f.gapAfterMs.known || f.gapAfterMs.reason !== 'notApplicable' ? valuePart(f.gapAfterMs, signedSeconds) : { text: text.retired };
+  const after = f.gapAfterMs.known || f.gapAfterMs.reason !== 'notApplicable' ? knownPart(f.gapAfterMs, signedSeconds) : { text: text.retired };
   return [
     ...ours,
     { lead: text.joint, value: [carCodeById(cars, f.otherCarId.value)] },
-    { lead: ' ', value: [valuePart(f.gapBeforeMs, signedSeconds), { text: text.arrow }, after] },
+    { lead: ' ', value: [knownPart(f.gapBeforeMs, signedSeconds), { text: arrow }, after] },
   ];
 }
 
@@ -121,7 +118,7 @@ function whatText(entry: IncidentEntry): string {
 /** One row per entry, in feed order. */
 export function incidentRows(feed: readonly IncidentEntry[], cars: readonly CarOverview[], moment: Known<RaceMoment> | undefined): IncidentRow[] {
   return feed.map((entry) => {
-    const lost: IncidentCell = entry.timeLostMs.known ? { text: text.lost(formatSeconds(entry.timeLostMs.value, 1)) } : { text: '', reason: entry.timeLostMs.reason };
+    const lost: IncidentCell = knownPart(entry.timeLostMs, (ms) => text.lost(formatSeconds(ms, 1)));
     return {
       id: entry.id,
       role: incidentRole(moment, entry),
@@ -155,7 +152,7 @@ export type FittedCell = { column: IncidentColumn; text: string; title?: string;
 
 /** The parts of a cell with an unknown value: its own, or its text with the mark after it. */
 const partsOf = (cell: IncidentCell, reason: UnknownReason): CellPart[] =>
-  cell.parts ?? (cell.text === '' ? [{ text: '', reason }] : [{ text: cell.text }, { text: ' ' }, { text: '', reason }]);
+  cell.parts ?? (cell.text === '' ? [unknownPart(reason)] : [{ text: cell.text }, { text: ' ' }, unknownPart(reason)]);
 
 /**
  * The row's cells on the fixed grid of a line `cols` characters wide: each column in its width, the last one in what
