@@ -25,38 +25,47 @@ const signedSeconds = (ms: number): string => formatSignedSeconds(ms, 1);
 const valuePart = <T>(v: Known<T>, format: (t: T) => string): CellPart => (v.known ? { text: format(v.value) } : { text: '', reason: v.reason });
 
 /**
- * The parts of `us P5→P4, OCO +4.1→DNF` with each unknown value in its place: `us …, OCO +4.1→…`; the gaps show (as
- * marks) even when both are unknown. After the other car retired its gap after is not applicable: `DNF`.
+ * One value of the for-us cell with the separator before it: `us`, ` P5→P4`, `, OCO`, ` +4.1→DNF`. A pair is one
+ * piece; its arrow is notation, so it stays when both sides are unknown.
  */
-function forUsParts(f: IncidentForUs, cars: readonly CarOverview[]): CellPart[] {
+type Piece = { lead: string; value: CellPart[] };
+
+/** A piece whose value is wholly unknown (only marks) leaves the plain text, and its separator with it. */
+const shown = (p: Piece): boolean => p.value.some((part) => part.reason === undefined);
+
+/** A piece's plain text: its separator and its value's texts. */
+const pieceText = (p: Piece): string => p.lead + p.value.map((part) => part.text).join('');
+
+/** A piece's parts: its separator, then its value with each unknown's mark in place. */
+const pieceParts = (p: Piece): CellPart[] => (p.lead === '' ? p.value : [{ text: p.lead }, ...p.value]);
+
+/**
+ * The pieces of `us P5→P4, OCO +4.1→DNF` with each unknown value in its place: `us …, OCO +4.1→…`; an unknown
+ * position before leaves no position (`→P4` is never shown). After the other car retired its gap after is not
+ * applicable: `DNF`.
+ */
+function forUsPieces(f: IncidentForUs, cars: readonly CarOverview[]): Piece[] {
   const position: CellPart[] = f.positionBefore.known
     ? [{ text: positionPairText(f.positionBefore.value, f.positionAfter) }, ...(f.positionAfter.known ? [] : [valuePart(f.positionAfter, String)])]
     : [valuePart(f.positionBefore, String)];
-  const parts: CellPart[] = [{ text: text.us }, { text: ' ' }, ...position];
-  if (!f.otherCarId.known) return parts;
-  const code = carCodeById(cars, f.otherCarId.value);
+  const ours: Piece[] = [{ lead: '', value: [{ text: text.us }] }, { lead: ' ', value: position }];
+  if (!f.otherCarId.known) return ours;
   const after = f.gapAfterMs.known || f.gapAfterMs.reason !== 'notApplicable' ? valuePart(f.gapAfterMs, signedSeconds) : { text: text.retired };
-  return [...parts, { text: text.joint }, code, { text: ' ' }, valuePart(f.gapBeforeMs, signedSeconds), { text: text.arrow }, after];
-}
-
-/**
- * The plain text of the parts (no marks): their texts joined, where an unknown part (empty) takes the space it would
- * leave before a comma or beside another space with it: `us, OCO +4.1→DNF`, not `us , OCO +4.1→DNF`.
- */
-function plainText(parts: readonly CellPart[]): string {
-  return parts.reduce((out, p, i) => {
-    const strayBefore = parts[i - 1]?.reason !== undefined && out.endsWith(' ') && /^[ ,]/.test(p.text);
-    return (strayBefore ? out.slice(0, -1) : out) + p.text;
-  }, '');
+  return [
+    ...ours,
+    { lead: text.joint, value: [carCodeById(cars, f.otherCarId.value)] },
+    { lead: ' ', value: [valuePart(f.gapBeforeMs, signedSeconds), { text: text.arrow }, after] },
+  ];
 }
 
 /**
  * What changed for one of our cars: `us P5→P4, OCO +4.1→DNF`; the gaps are to the car the analysis names. Built once
- * from its parts: the plain text is theirs (`plainText`), the hover reason the first unknown part's.
+ * from its pieces: the plain text joins the shown ones, the parts are all of them, the hover reason the first mark's.
  */
 function forUsCell(f: IncidentForUs, cars: readonly CarOverview[]): IncidentCell {
-  const parts = forUsParts(f, cars);
-  const cellText = plainText(parts);
+  const pieces = forUsPieces(f, cars);
+  const cellText = pieces.filter(shown).map(pieceText).join('');
+  const parts = pieces.flatMap(pieceParts);
   const reason = parts.find((p) => p.reason !== undefined)?.reason;
   return withParts(reason === undefined ? { text: cellText } : { text: cellText, reason }, parts);
 }
