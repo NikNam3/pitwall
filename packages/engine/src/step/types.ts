@@ -62,7 +62,8 @@ export type FlashbackReport = { rewound?: RewindMark };
  * What a step did besides its tags. `rewritten`: it changed history recorded by earlier steps (lights out discarding
  * the formation lap, the start's settling re-stamping it), so readers start over and no rewind may go back before it.
  * `discarded`: it took back what readers already saw without changing the history (a neutralisation dropped
- * unconfirmed), so readers start over; rewinds across it stay exact.
+ * unconfirmed; a session phase opening or closing at a moment an earlier frame was stamped at, which moves that frame's
+ * entries across the boundary), so readers start over; rewinds across it stay exact.
  */
 export type StepOutput = {
   changed: Set<ChangeTag>;
