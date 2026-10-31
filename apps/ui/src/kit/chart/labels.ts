@@ -5,13 +5,13 @@ import type { ChartSeries } from './data.ts';
 export type AxisLabel = readonly [string, ...string[]];
 
 /**
- * The form of an axis label drawn in `roomPx` (the plot's length along the axis): the longest whose characters fit,
- * `charPx` each (the label font is the grid's monospace font); the first of forms of one length; none fits, no label,
+ * The form of an axis label drawn in `roomPx` (the plot's length along the axis): the longest (by characters) whose
+ * width, as `widthOf` measures it in the label font, fits; the first of forms of one length; none fits, no label,
  * never a clipped one.
  */
-export function fitAxisLabel(forms: AxisLabel, roomPx: number, charPx: number): string {
+export function fitAxisLabel(forms: AxisLabel, roomPx: number, widthOf: (form: string) => number): string {
   let best = '';
-  for (const form of forms) if (form.length > best.length && form.length * charPx <= roomPx) best = form;
+  for (const form of forms) if (form.length > best.length && widthOf(form) <= roomPx) best = form;
   return best;
 }
 

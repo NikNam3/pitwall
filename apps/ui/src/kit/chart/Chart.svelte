@@ -20,7 +20,10 @@
 
   type Props = {
     series: ChartSeries[];
-    /** Axes are always labelled: each label in its forms, the longest that fits the plot's length along its axis drawn. */
+    /**
+     * Each axis label is drawn in the longest of its forms that fits the plot's length along its axis, or not at all
+     * when none fits; give a short form that fits the compact size.
+     */
     xLabel: AxisLabel;
     yLabel: AxisLabel;
     /** Both kinds are plain numbers on the axis; the kind is for the caller's labels. */
@@ -81,9 +84,10 @@
       const labelRoomPx = labelGapPx + cellPx * series.reduce((m, s) => Math.max(m, s.label.length), 0);
       const grid = resolveRole(el, 'grid');
       const axis = { stroke: resolveRole(el, 'textDim'), font, labelFont: font, grid: { stroke: grid }, ticks: { stroke: grid } };
-      // Each axis label is the form that fits the plot's length along its axis at draw time (canvas px), so it never clips.
+      // Each axis label is the form that fits the plot's length along its axis at draw time (canvas px), so it never clips:
+      // uPlot has set the axis' label font on its context (rounded at the pixel ratio), so each form is measured as drawn.
       const labelForms = (forms: AxisLabel, along: 'width' | 'height') => (u: uPlot): string =>
-        fitAxisLabel(forms, u.bbox[along], cellPx * uPlot.pxRatio);
+        fitAxisLabel(forms, u.bbox[along], (form) => u.ctx.measureText(form).width);
 
       // A line of one point has no segment to draw (a settled point at the end of lap 1, or a live point before it), so
       // it shows as a dot of its stroke; a line of more points shows none.

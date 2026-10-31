@@ -1,16 +1,14 @@
-import type { FuelState, UnknownReason } from '@pitwall/domain';
+import type { FuelState } from '@pitwall/domain';
 import type { Role } from '../../theme/roles.ts';
-import { knownPart } from '../../kit/grid/grid.ts';
+import { knownPart, type CellPart } from '../../kit/grid/grid.ts';
 import { formatKgPerLap, formatKgUnit, formatLaps, formatSignedLaps } from '../../kit/values/format.ts';
 import { marginRole } from './emphasis.ts';
 import * as text from './text.ts';
 
-/** One line of the fuel panel; an unknown figure has empty text and its reason. */
-export type FuelRow = {
+/** One line of the fuel panel: its label and its figure, a part (an unknown figure has empty text and its reason). */
+export type FuelRow = CellPart & {
   key: keyof typeof text.labels;
   label: string;
-  text: string;
-  reason?: UnknownReason;
   role?: Role | undefined;
   bold?: boolean;
   dim?: boolean;
