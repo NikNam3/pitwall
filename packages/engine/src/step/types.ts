@@ -47,8 +47,11 @@ export type ClockFall = { fromMs: SessionTime; toMs: SessionTime };
  */
 export type ClockJump = { fromMs: SessionTime; toMs: SessionTime };
 
-/** What a rewind needs to know of the state it leaves: its frame id, the game's session time and its last wall time. */
-export type RewindMark = { frameId: number; rawMs: SessionTime; lastWallMs: number };
+/**
+ * What a rewind needs to know of the state it leaves: its frame id, the game's session time and its last wall time
+ * (unset when no frame was applied before it: a flashback report on the session's first frame).
+ */
+export type RewindMark = { frameId: number; rawMs: SessionTime; lastWallMs: number | undefined };
 
 /**
  * The `SessionRunner`'s decision that a frame reports a flashback, the one way it reaches the situation tracker: no
@@ -62,8 +65,8 @@ export type FlashbackReport = { rewound?: RewindMark };
  * What a step did besides its tags. `rewritten`: it changed history recorded by earlier steps (lights out discarding
  * the formation lap, the start's settling re-stamping it), so readers start over and no rewind may go back before it.
  * `discarded`: it took back what readers already saw without changing the history (a neutralisation dropped
- * unconfirmed; a session phase opening or closing at a moment an earlier frame was stamped at, which moves that frame's
- * entries across the boundary), so readers start over; rewinds across it stay exact.
+ * unconfirmed; any session phase opening or closing at a moment an earlier frame was stamped at, which moves that
+ * frame's entries across the boundary), so readers start over; rewinds across it stay exact.
  */
 export type StepOutput = {
   changed: Set<ChangeTag>;

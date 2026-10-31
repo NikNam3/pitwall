@@ -95,21 +95,17 @@ const drop = (state: EngineState, out: StepOutput): void => {
   out.discarded = true;
 };
 
-/** The phases readers fold entries against: those a flag phase stands for. */
-const isFlagged = (open: OpenSessionPhase): boolean => open.kind === 'neutralised' || open.kind === 'suspended';
-
 /**
  * `next` opens where the phase in progress closes. When an earlier frame was stamped at or after that time (a clock
  * standing for a few frames, the stale frames after a rewind: one moment the frames share), what those frames recorded
- * now lies under `next` or past the closed phase's end, and readers folded it before the boundary existed. If either
- * phase is a neutralisation or a suspension, the step discarded a timeline (ruling 2026-10-31): readers start over, as
- * at a dropped neutralisation; lowering `delta.before` instead would fold entries twice. No reader folds entries
- * against the other phases, and the grid's clock stands through the start lights and lights out (shape S1).
+ * now lies under `next` or past the closed phase's end, and readers folded it before the boundary existed. The step
+ * then discarded a timeline (spec 3.1, ruling 2026-10-31, widened after review 5): readers start over, as at a dropped
+ * neutralisation; lowering `delta.before` instead would fold entries twice. This holds for every phase kind, at its
+ * opening and its closing (readers fold entries against any phase), so a race start on the grid's standing clock
+ * restarts them at the first start light and at lights out.
  */
 const atBoundary = (state: EngineState, next: OpenSessionPhase, out: StepOutput): void => {
-  const { session } = state.open.situations;
-  if (!state.open.phaseBook.started || next.start > state.sessionTime) return;
-  if (isFlagged(session) || isFlagged(next)) out.discarded = true;
+  if (state.open.phaseBook.started && next.start <= state.sessionTime) out.discarded = true;
 };
 
 /** Closes the phase in progress where `next` opens and opens `next`. */

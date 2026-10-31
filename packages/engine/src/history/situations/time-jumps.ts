@@ -36,22 +36,24 @@ export const PAUSE_AFTER_WALL_MS = 2000;
 export const onRaceClock = (state: EngineState, sessionTime: SessionTime): SessionTime => sessionTime + state.open.phaseBook.clockOffsetMs;
 
 /**
- * The mark of `state`, taken by the runner before it restores a snapshot. A rewind needs applied frames, so the wall
- * time of the last one is always set; a mark without it is a bug.
+ * The mark of `state`, taken by the runner before it restores a snapshot. Its wall time is unset when the session's
+ * first applied frame carries the flashback report (a target below the Session packet's frame id): no frame was applied
+ * before it.
  */
-export const rewindMarkOf = (state: EngineState): RewindMark => {
-  const { lastWallMs, clockOffsetMs } = state.open.phaseBook;
-  if (lastWallMs === undefined) throw new Error('a rewind before the session\'s first frame');
-  return { frameId: state.lastFrameId, rawMs: state.sessionTime - clockOffsetMs, lastWallMs };
-};
+export const rewindMarkOf = (state: EngineState): RewindMark => ({
+  frameId: state.lastFrameId,
+  rawMs: state.sessionTime - state.open.phaseBook.clockOffsetMs,
+  lastWallMs: state.open.phaseBook.lastWallMs,
+});
 
 /**
  * Notes the rewind the runner took on `frame`, before the frame is applied, on its first pass and on every replay of
  * it: wall time does not go back, so an offline pause is measured from the last frame applied before the rewind
- * (`before.lastWallMs`), not the restored one. The old timeline's last session time is the new frame's own when its
- * frame id still rises (an FLBK sent on the old timeline), else the time where the rewind started. While frames carry
- * exactly that time (inventory 1.10: the game's time, whatever the race clock did), they belong to the rewind's target
- * moment (`staleRawMs`).
+ * (`before.lastWallMs`), not the restored one. With none (the report on the session's first frame) it stays unset, and
+ * the frame is the session's first for the pause and jump rules. The old timeline's last session time is the new
+ * frame's own when its frame id still rises (an FLBK sent on the old timeline), else the time where the rewind started.
+ * While frames carry exactly that time (inventory 1.10: the game's time, whatever the race clock did), they belong to
+ * the rewind's target moment (`staleRawMs`).
  */
 export const noteRewind = (state: EngineState, before: RewindMark, frame: Frame): void => {
   const book = state.open.phaseBook;

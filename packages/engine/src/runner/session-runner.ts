@@ -16,7 +16,7 @@ export type FlashbackInfo = { targetFrameId: number; targetSessionTime: SessionT
 /**
  * What applying one frame did. When it changed history recorded before it (a flashback, lights out discarding the
  * formation lap, the start's settling re-stamping it) or took back what readers saw (a neutralisation dropped
- * unconfirmed, a session phase boundary at a moment earlier frames share), `changed` holds every tag and
+ * unconfirmed; any session phase opening or closing at a moment earlier frames share), `changed` holds every tag and
  * `delta.truncated` is true; `flashback` tells a flashback. `clockFall` reports a fall of the session time that changed
  * nothing recorded, `clockJump` a forward jump that is no post-session jump (spec 3.3); both carry the game's times.
  * Every other session time is on the race clock.
