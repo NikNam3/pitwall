@@ -6,7 +6,7 @@
 // raceZandvoortUidReuse (S4).
 import { describe, expect, it } from 'vitest';
 import type { EventDetails } from '@pitwall/protocol';
-import { SessionRunner } from '../../src/index.ts';
+import { SessionRunner, type StepResult } from '../../src/index.ts';
 import { initFor } from '../support/run.ts';
 import { after } from '../support/runner.ts';
 import { beats, flbk, gridStart, lap, LGOT, LIGHTS_OUT, ovtk, raceAt, run, scar, script, status, STEP, stlg, type Beat } from './script.ts';
@@ -475,5 +475,54 @@ describe('a frame the runner took as a flashback report stays one when a later r
     expect([...first, ...results].flatMap((r, i) => (r.clockFall ? [`frame ${i}: ${JSON.stringify(r.clockFall)}`] : []))).toEqual([]);
     const fresh = run(all.slice(0, raceFrame(245) + 1)).runner;
     expect(runner.state).toEqual(fresh.state);
+  });
+});
+
+// Review 5 R1: the runner takes a flashback report on the first frame it applies when its target lies below the frame
+// id of the Session packet it started from (a live join, or a cut segment whose first frame after the Session packet
+// carries an FLBK). No frame was applied, so the rewind's mark has no wall time; the frame is applied as the session's
+// first, and the frames after it read the pause and jump rules from it.
+describe('a flashback report on the session’s first frame', () => {
+  const JOIN = 10;
+  const PAUSED_AT = 30;
+  const FALL_AT = 45;
+  /**
+   * Practice from frame 0, joined at frame `JOIN` (a Session packet there) a minute of wall time in, the FLBK to frame 5
+   * on the join's frame when `flashback`; a 3 s wall gap before frame `PAUSED_AT`, a 1 s fall of the clock at `FALL_AT`.
+   */
+  const joined = (flashback: boolean) =>
+    script(beats(60, (k) => ({
+      at: k * STEP - (k >= FALL_AT ? 1_000 : 0),
+      wall: 60_000 + k * STEP + (k >= PAUSED_AT ? 3_000 : 0),
+      ...(k === JOIN && { session: {}, ...(flashback && { events: [flbk(5, 5 * STEP)] }) }),
+    })), { session: { sessionType: 1 } }).slice(JOIN);
+  const runJoined = (flashback: boolean) => {
+    const frames = joined(flashback);
+    const runner = new SessionRunner(initFor(frames));
+    runner.apply(frames[0]!);
+    const { lastFrameId, sessionTime, session, cars, history, open } = runner.state;
+    // What readers see after the first frame, and the wall time it set for the pause and jump rules.
+    const first = structuredClone({ lastFrameId, sessionTime, session, cars, history, situations: open.situations, lastWallMs: open.phaseBook.lastWallMs });
+    return { runner, first, rest: frames.slice(1).map((f) => runner.apply(f)) };
+  };
+
+  it('the frame is applied (no throw) as the session’s first: what it leaves equals the same frame without the FLBK, its wall time set', () => {
+    const frames = joined(true);
+    expect([frames[0]!.frameId, frames[0]!.events.map((e) => e.details.code)]).toEqual([JOIN, ['FLBK']]);
+    const { first } = runJoined(true);
+    expect(first).toEqual(runJoined(false).first);
+    expect([first.lastFrameId, first.lastWallMs]).toEqual([JOIN, 60_000 + JOIN * STEP]);
+  });
+  it('a minute of wall time before the first frame is no pause; the 3 s gap later is one, measured from the frame before it', () => {
+    const { runner } = runJoined(true);
+    expect(runner.state.history.pauses).toEqual([{ start: (PAUSED_AT - 1) * STEP, wallMs: 3_000 + STEP, kind: 'offline' }]);
+  });
+  it('the frames after it read the jump rules from it: the fall is reported on its step, and every step and the final state equal a session without the FLBK', () => {
+    const withFlbk = runJoined(true);
+    const plain = runJoined(false);
+    const steps = (rest: StepResult[]) => rest.map((r) => ({ truncated: r.delta.truncated, clockFall: r.clockFall, clockJump: r.clockJump }));
+    expect(withFlbk.rest[FALL_AT - JOIN - 1]!.clockFall).toEqual({ fromMs: (FALL_AT - 1) * STEP, toMs: FALL_AT * STEP - 1_000 });
+    expect(steps(withFlbk.rest)).toEqual(steps(plain.rest));
+    expect(withFlbk.runner.state).toEqual(plain.runner.state);
   });
 });

@@ -1,6 +1,7 @@
 // Shared by the Scheduler tests: history deltas, the feed metrics and the input a scheduler runs on, a scheduler over
 // quick calculators that all count as needed, and the scheduler's incremental = from scratch check over frames.
 import { expect } from 'vitest';
+import type { SessionPhaseKind } from '@pitwall/domain';
 import {
   activeFlagPhaseOf,
   CalculatorRegistry,
@@ -50,31 +51,35 @@ export const sched = (calcs: Calculator[], needed = calcs.map((c) => c.id)) => {
   return s;
 };
 
-type Folded = { crossings: number; neutralised: number; events: number };
+type Folded = { crossings: number; under: number; events: number };
 
 /**
- * A reader that folds what happened while a neutralisation stood, as `incidents` does: it counts the mini-sector
- * crossings, those a neutralised span covers (a closed one, or the one in progress from its start on), and the events.
+ * A reader that folds what happened while a session phase of `kind` stood, as `incidents` does for a neutralisation: it
+ * counts the mini-sector crossings, those a span of `kind` covers (a closed one, or the one in progress from its start
+ * on), and the events.
  */
-export const underNeutralisation: IncrementalCalculator<Folded, Folded> = (() => {
+export const underPhase = (kind: SessionPhaseKind): IncrementalCalculator<Folded, Folded> => {
   const covered = (v: EngineView, at: number): boolean =>
-    v.state.history.sessionPhases.some((p) => p.kind === 'neutralised' && p.start <= at && at < p.end) ||
-    (v.situation.session.kind === 'neutralised' && at >= v.situation.session.start);
+    v.state.history.sessionPhases.some((p) => p.kind === kind && p.start <= at && at < p.end) ||
+    (v.situation.session.kind === kind && at >= v.situation.session.start);
   const fold = (acc: Folded, v: EngineView, from: number, to: number): Folded => {
-    let neutralised = acc.neutralised;
-    for (const c of v.state.history.miniSectors.slice(from, to)) if (covered(v, c.at)) neutralised++;
-    return { crossings: acc.crossings + to - from, neutralised, events: v.state.history.events.length };
+    let under = acc.under;
+    for (const c of v.state.history.miniSectors.slice(from, to)) if (covered(v, c.at)) under++;
+    return { crossings: acc.crossings + to - from, under, events: v.state.history.events.length };
   };
   return {
     kind: 'incremental',
-    id: 'probe.underNeutralisation',
+    id: `probe.under.${kind}`,
     reads: ['miniSectors', 'events', 'sessionPhases'],
     cadence: 'frame',
-    init: (v) => fold({ crossings: 0, neutralised: 0, events: 0 }, v, 0, v.state.history.miniSectors.length),
+    init: (v) => fold({ crossings: 0, under: 0, events: 0 }, v, 0, v.state.history.miniSectors.length),
     update: (acc, d, v) => fold(acc, v, d.before.miniSectors, d.after.miniSectors),
     output: (acc) => acc,
   };
-})();
+};
+
+/** `underPhase` of a neutralisation. */
+export const underNeutralisation = underPhase('neutralised');
 
 /**
  * Runs `frames` through a `SessionRunner` and a `Scheduler` that needs `calc` and, on every step it ran, expects its
