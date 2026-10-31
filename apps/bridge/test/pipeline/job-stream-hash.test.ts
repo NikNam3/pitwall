@@ -45,6 +45,21 @@ const jobFeature = (prepared: number[]) => {
   return defineFeature({ name: 'hash-job', calculators: [], topics: [bindTestJob(TOPIC, job)], jobs: [job] });
 };
 
+/** The same job, whose `prepare` throws: its topic goes `errored`, a message no working job's topic sends. */
+const failingJobFeature = () => {
+  const job: Job<AddRngInput, number> = {
+    kind: 'job',
+    id: 'add-rng',
+    reads: ['session'],
+    trigger: 'sessionChange',
+    prepare: () => {
+      throw new Error('prepare fails');
+    },
+    module: new URL('../jobs/fixtures/add-rng.ts', import.meta.url),
+  };
+  return defineFeature({ name: 'hash-job', calculators: [], topics: [bindTestJob(TOPIC, job)], jobs: [job] });
+};
+
 const counterFeature = () => {
   const counter: QuickCalculator<number> = { kind: 'quick', id: 'hash-counter', reads: ['session'], cadence: 'sessionChange', compute: () => ++runs };
   return defineFeature({ name: 'hash-counter', calculators: [counter], topics: [bindState(TOPIC, counter, (n) => n as unknown as SessionInfo)] });
@@ -61,6 +76,13 @@ describe('topicStreamHash and job topics', () => {
     expect(preparedB).not.toEqual([]);
     expect(a).toMatch(/^[0-9a-f]{64}$/);
     expect(b).toBe(a);
+  });
+
+  it('the replay hashes through the job filter: an errored job topic hashes as a working one (review 8 R8-1)', async () => {
+    // The status messages of the job's topic differ (errored against ok); only the filter makes the two hashes equal.
+    const working = await topicStreamHash(SEGMENT, { features: [jobFeature([])] });
+    const failing = await topicStreamHash(SEGMENT, { features: [failingJobFeature()] });
+    expect(failing).toBe(working);
   });
 
   it('control: the same changing value on a plain state topic does change the hash', async () => {
