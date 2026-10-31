@@ -16,7 +16,9 @@
 //    chart's width (nothing scales with the panel);
 //  - a series without `colour` strokes `series1`, `series2`, ... in order of those without colour;
 //  - a series with `fresh === false` has `alpha` 0.35, all others `alpha` 1;
-//  - `opts.axes[0]` is x and `opts.axes[1]` is y: `label` is xLabel / yLabel, `grid.stroke` and `ticks.stroke` the resolved
+//  - `opts.axes[0]` is x and `opts.axes[1]` is y: their labels are drawn from xLabel / yLabel (`AxisLabel`, the label's
+//    forms: kit/chart/labels.ts `fitAxisLabel`, review 7 R7-9); `label` is the form drawn, or a function uPlot calls at
+//    draw time as `label(u, axisIndex)` that reads only `u.bbox` (canvas px) and `uPlot.pxRatio` (1 here); `grid.stroke` and `ticks.stroke` the resolved
 //    `grid` colour, `stroke` the resolved `textDim`, `font` and `labelFont` contain `<--pw-font-px>px` and the `--pw-font` family;
 //  - `opts.scales.x.time === false` for both x kinds;
 //  - `opts.hooks.drawClear` holds a function that paints the bands behind the series: for each band
@@ -25,12 +27,15 @@
 //    (painted with fillRect over the whole bbox first, or by the container's inline `background-color: var(--pw-bg)`).
 import { cleanup, render } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { cellBox } from '../../src/kit/size/size.ts';
 import type { WidgetSize } from '../../src/kit/types.ts';
+import { DEFAULT_THEME } from '../../src/theme/index.ts';
 
 type Fake = { opts: any; data: any; target: HTMLElement; setSize: ReturnType<typeof vi.fn>; setData: ReturnType<typeof vi.fn>; destroy: ReturnType<typeof vi.fn> };
 const { instances } = vi.hoisted(() => ({ instances: [] as any[] }));
 vi.mock('uplot', () => ({
   default: class {
+    static pxRatio = 1;
     opts: unknown;
     data: unknown;
     target: unknown;
@@ -71,7 +76,16 @@ afterEach(() => {
   for (const k of Object.keys(VARS)) document.documentElement.style.removeProperty(k);
 });
 
-const base = { xLabel: 'Lap', yLabel: 'Gap (s)', x: { kind: 'lap' as const }, size: size(400) };
+const base = { xLabel: ['Lap'] as const, yLabel: ['Gap (s)'] as const, x: { kind: 'lap' as const }, size: size(400) };
+
+type Box = { left: number; top: number; width: number; height: number };
+/** What uPlot draws as `axes[index]`'s label on a plot of `bbox`: the label, or what its label function returns for it. */
+const drawnLabel = (index: number, bbox: Box): string => {
+  const label: unknown = last().opts.axes[index].label;
+  return typeof label === 'function' ? String(label({ bbox }, index)) : String(label);
+};
+/** A plot that leaves the axes plenty of room in a 400 x 300 chart. */
+const ROOMY: Box = { left: 60, top: 10, width: 300, height: 200 };
 
 describe('Chart: series', () => {
   it('hands uPlot the --pw-series1... values for series without a colour, in order', () => {
@@ -243,8 +257,8 @@ describe('Chart: axes, font, black plot', () => {
   it('labels both axes and draws a grid on both', () => {
     render(Chart, { ...base, series: [{ label: 'a', points: pts(1) }] });
     const [x, y] = last().opts.axes;
-    expect(x.label).toBe('Lap');
-    expect(y.label).toBe('Gap (s)');
+    expect(drawnLabel(0, ROOMY)).toBe('Lap');
+    expect(drawnLabel(1, ROOMY)).toBe('Gap (s)');
     for (const axis of [x, y]) {
       expect(axis.grid.stroke).toBe('#1c1d21');
       expect(axis.stroke).toBe('#8d9199');
@@ -253,6 +267,23 @@ describe('Chart: axes, font, black plot', () => {
       expect(axis.labelFont).toContain('13px');
       expect(axis.labelFont).toContain('JetBrains Mono');
     }
+  });
+
+  it("draws an axis label's longest form when the plot has room for it", () => {
+    render(Chart, { ...base, yLabel: ['behind reference, s', 'behind ref, s', 's'], series: [{ label: 'a', points: pts(1) }] });
+    expect(drawnLabel(1, ROOMY)).toBe('behind reference, s');
+  });
+
+  it("draws a shorter form of the y label on a low plot, one that fits the plot's height (it never clips)", () => {
+    const forms = ['behind reference, s', 'behind ref, s', 's'] as const;
+    const low: WidgetSize = { mode: 'compact', cols: 50, rows: 5, px: { width: 400, height: 90 }, dpr: 1 };
+    render(Chart, { ...base, yLabel: forms, size: low, series: [{ label: 'a', points: pts(1) }] });
+    const cellPx = cellBox(13, DEFAULT_THEME.density.lineHeight).width;
+    const plot: Box = { left: 60, top: 10, width: 300, height: 60 };
+    const drawn = drawnLabel(1, plot);
+    expect(['', ...forms]).toContain(drawn);
+    expect(drawn).not.toBe(forms[0]);
+    expect(drawn.length * cellPx).toBeLessThanOrEqual(plot.height);
   });
 
   it('uses a plain numeric x scale for both x kinds', () => {

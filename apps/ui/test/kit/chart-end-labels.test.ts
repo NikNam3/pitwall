@@ -51,7 +51,7 @@ const VARS: Record<string, string> = {
 };
 const FONT_PX = 13;
 const size: WidgetSize = { mode: 'full', cols: 50, rows: 20, px: { width: 400, height: 300 }, dpr: 1 };
-const base = { xLabel: 'Lap', yLabel: 'Gap (s)', x: { kind: 'lap' as const }, size };
+const base = { xLabel: ['Lap'] as const, yLabel: ['Gap (s)'] as const, x: { kind: 'lap' as const }, size };
 /** Three laps ending at y = `end`. */
 const pts = (end: number): Array<[number, number]> => [[1, end - 2], [2, end - 1], [3, end]];
 

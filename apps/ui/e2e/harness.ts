@@ -10,7 +10,7 @@ import { createInterface } from 'node:readline';
 import { _electron as electron } from '@playwright/test';
 import type { ElectronApplication, Page } from '@playwright/test';
 import { preview } from 'vite';
-import type { BridgeHandle, GalleryHandle, LaunchPitwallOptions, PitwallApp, StartBridgeOptions } from './harness-contract.ts';
+import type { BridgeHandle, GalleryHandle, GalleryOptions, LaunchPitwallOptions, PitwallApp, StartBridgeOptions } from './harness-contract.ts';
 
 const REPO_ROOT = path.resolve(import.meta.dirname, '../../..');
 const UI_DIR = path.join(REPO_ROOT, 'apps/ui');
@@ -56,8 +56,9 @@ const launchElectron = (app: string, env: Record<string, string>, flags: string[
 /**
  * The gallery of the build in `apps/ui/dist-e2e`, served by Vite's preview server (the gallery needs the path
  * `/gallery`). The page is handed over once every cell is `data-ready`, i.e. its lazily loaded parts have rendered.
+ * `options.initScript` runs in the page before the gallery's own scripts.
  */
-export async function openGallery(): Promise<GalleryHandle> {
+export async function openGallery(options: GalleryOptions = {}): Promise<GalleryHandle> {
   const port = await freePort();
   const server = await preview({ root: UI_DIR, configFile: false, logLevel: 'warn', build: { outDir: GALLERY_DIST }, preview: { host: HOST, port, strictPort: true } });
   // No GPU: an offscreen window's screenshot leaves out GPU-drawn canvases (the kit chart came out empty). The app's
@@ -68,6 +69,7 @@ export async function openGallery(): Promise<GalleryHandle> {
     await server.close();
   };
   try {
+    if (options.initScript !== undefined) await app.context().addInitScript(options.initScript);
     const opened = app.waitForEvent('window');
     // Offscreen rendering: a hidden window draws no frames, so Playwright's stability check before a screenshot
     // (which waits for animation frames) never finishes; an offscreen window draws them and is never shown.
