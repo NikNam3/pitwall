@@ -1,5 +1,6 @@
 import type { Known } from '@pitwall/domain';
 import type { CellPart } from '../grid/grid.ts';
+import { arrow } from '../text.ts';
 import { formatPosition } from './format.ts';
 
 /** Places gained or lost (`change`), or a before/after pair (`from`, `to`; `to` may be unknown). */
@@ -11,7 +12,7 @@ export function positionMarkText(props: PositionMarkProps): string {
     if (props.change === 0) return '';
     return props.change > 0 ? `▲${props.change}` : `▼${-props.change}`;
   }
-  return `${formatPosition(props.from)}→${props.to.known ? formatPosition(props.to.value) : ''}`;
+  return `${formatPosition(props.from)}${arrow}${props.to.known ? formatPosition(props.to.value) : ''}`;
 }
 
 /** The mark of a position that did not change in an incident. */
@@ -26,5 +27,5 @@ const sidePart = (p: Known<number>): CellPart => (p.known ? { text: formatPositi
  */
 export function positionPairParts(from: Known<number>, to: Known<number>): CellPart[] {
   if (from.known && to.known && from.value === to.value) return [{ text: positionUnchanged }];
-  return [sidePart(from), { text: '→' }, sidePart(to)];
+  return [sidePart(from), { text: arrow }, sidePart(to)];
 }
