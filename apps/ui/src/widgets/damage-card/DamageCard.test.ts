@@ -21,10 +21,12 @@ const damage = (j: DamageJump): DamageState => ({
   parts: known(PARTS, 0), corners: { fl: corner, fr: corner, rl: corner, rr: corner }, drsFault: known(false, 0), ersFault: false, jumps: [j],
 });
 
-const show = (j: DamageJump) =>
+const FULL = { mode: 'full', cols: 60, rows: 12, px: { width: 600, height: 240 }, dpr: 1 } as const;
+const COMPACT = { mode: 'compact', cols: 26, rows: 2, px: { width: 260, height: 40 }, dpr: 1 } as const;
+const show = (j: DamageJump, size: typeof FULL | typeof COMPACT = FULL) =>
   render(InPanel, {
     component: DamageCard as unknown as Component<Record<string, unknown>>,
-    widgetProps: { data: { damage: damage(j) }, options: {}, size: { mode: 'full', cols: 60, rows: 12, px: { width: 600, height: 240 }, dpr: 1 }, link: {} },
+    widgetProps: { data: { damage: damage(j) }, options: {}, size, link: {} },
     cadenceMs: 50,
   });
 /** The innermost element that shows exactly `text`. */
@@ -67,5 +69,23 @@ describe('DamageCard: jump loss', () => {
     expect(marks[0]!.style.color).toBe(role('textFaint'));
     expect(hover(marks[0]!)).toBe(unknownReason[reason]);
     expect(line!.textContent).not.toContain('loss');
+  });
+});
+
+// The compact view shows the newest jump's text and hovers its loss (supervisor ruling, wave 10): the loss text when the
+// card says it, the kit's hover text of the reason when the loss is unknown, never an empty hover.
+describe('DamageCard compact: the jump hovers its loss', () => {
+  const JUMP_TEXT = 'L02 FL wing +18 %';
+
+  it.each([
+    ['measured', known(120, 160_000), 'loss +0.12 s/lap'],
+    ['measuring', unknown('insufficientData'), 'loss: measuring'],
+    ['not measurable', unknown('notApplicable'), 'loss: not measurable'],
+    ...HIDDEN.map((reason): [string, DamageJump['lossMsPerLap'], string] => [reason, unknown(reason), unknownReason[reason]]),
+  ] as Array<[string, DamageJump['lossMsPerLap'], string]>)('a %s loss: the jump line hovers its loss text, or the reason when unknown', (_, loss, title) => {
+    const { container } = show(jump(loss), COMPACT);
+    const line = shownAs(container, JUMP_TEXT);
+    expect(line).toBeDefined();
+    expect(hover(line!)).toBe(title);
   });
 });
