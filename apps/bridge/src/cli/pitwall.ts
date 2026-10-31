@@ -3,13 +3,6 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { StartupError } from '../startup-error.ts';
 import { SchemaVersionError } from '../storage/db.ts';
-import { run as dev } from './commands/dev.ts';
-import { run as importRecording } from './commands/import.ts';
-import { run as live } from './commands/live.ts';
-import { run as replay } from './commands/replay.ts';
-import { run as reprocess } from './commands/reprocess.ts';
-import { run as tap } from './commands/tap.ts';
-import { run as where } from './commands/where.ts';
 import { defaultIo, type CliIo } from './io.ts';
 import { USAGE, UsageError } from './usage.ts';
 
@@ -33,7 +26,19 @@ const OPTIONS = {
 type Values = ReturnType<typeof parseArgs<{ options: typeof OPTIONS }>>['values'];
 type Command = (positionals: string[], values: Values, io: CliIo) => Promise<number>;
 
-const COMMANDS: Record<string, Command> = { live, replay, dev, tap, reprocess, import: importRecording, where };
+/**
+ * Each command's module, imported when it runs: a command loads only what it needs (`tap`, a WebSocket client, starts
+ * without the engine and the features the bridge commands load).
+ */
+const COMMANDS: Record<string, () => Promise<{ run: Command }>> = {
+  live: () => import('./commands/live.ts'),
+  replay: () => import('./commands/replay.ts'),
+  dev: () => import('./commands/dev.ts'),
+  tap: () => import('./commands/tap.ts'),
+  reprocess: () => import('./commands/reprocess.ts'),
+  import: () => import('./commands/import.ts'),
+  where: () => import('./commands/where.ts'),
+};
 
 /** SQLite codes of a file that is not (or no longer) a database. */
 const BROKEN_DATABASE_CODES = ['SQLITE_NOTADB', 'SQLITE_CORRUPT'];
@@ -71,7 +76,8 @@ export async function main(argv: readonly string[], io: CliIo = defaultIo()): Pr
     return 1;
   }
   try {
-    return await command(positionals, parsed.values, io);
+    const { run } = await command();
+    return await run(positionals, parsed.values, io);
   } catch (error) {
     if (error instanceof UsageError) {
       io.err(`pitwall: ${error.message}`);
