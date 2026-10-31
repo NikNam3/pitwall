@@ -6,7 +6,7 @@ import { fitCell, fitParts, type CellPart } from '../../kit/grid/grid.ts';
 import { incidentKinds, insightText, sectorNames, separator, unknownReason } from '../../kit/text.ts';
 import type { WidgetSize } from '../../kit/types.ts';
 import { formatCount, formatDeltaPct, formatLapNumber, formatSeconds, formatSignedSeconds } from '../../kit/values/format.ts';
-import { positionPairText } from '../../kit/values/position-mark.ts';
+import { positionPairParts } from '../../kit/values/position-mark.ts';
 import type { Role } from '../../theme/roles.ts';
 import { incidentRole } from './emphasis.ts';
 import * as text from './text.ts';
@@ -40,15 +40,12 @@ const pieceText = (p: Piece): string => p.lead + p.value.map((part) => part.text
 const pieceParts = (p: Piece): CellPart[] => (p.lead === '' ? p.value : [{ text: p.lead }, ...p.value]);
 
 /**
- * The pieces of `us P5→P4, OCO +4.1→DNF` with each unknown value in its place: `us …, OCO +4.1→…`; an unknown
- * position before leaves no position (`→P4` is never shown). After the other car retired its gap after is not
- * applicable: `DNF`.
+ * The pieces of `us P5→P4, OCO +4.1→DNF` with each unknown value in its place: `us …→P4, OCO +4.1→…`; the
+ * position pair follows the gap pair's rule (kit `positionPairParts`). After the other car retired its gap after is
+ * not applicable: `DNF`.
  */
 function forUsPieces(f: IncidentForUs, cars: readonly CarOverview[]): Piece[] {
-  const position: CellPart[] = f.positionBefore.known
-    ? [{ text: positionPairText(f.positionBefore.value, f.positionAfter) }, ...(f.positionAfter.known ? [] : [valuePart(f.positionAfter, String)])]
-    : [valuePart(f.positionBefore, String)];
-  const ours: Piece[] = [{ lead: '', value: [{ text: text.us }] }, { lead: ' ', value: position }];
+  const ours: Piece[] = [{ lead: '', value: [{ text: text.us }] }, { lead: ' ', value: positionPairParts(f.positionBefore, f.positionAfter) }];
   if (!f.otherCarId.known) return ours;
   const after = f.gapAfterMs.known || f.gapAfterMs.reason !== 'notApplicable' ? valuePart(f.gapAfterMs, signedSeconds) : { text: text.retired };
   return [
