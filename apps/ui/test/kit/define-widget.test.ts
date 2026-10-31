@@ -70,6 +70,31 @@ describe('registerWidget: one import of the component', () => {
     expect(load).toHaveBeenCalledTimes(1);
   });
 
+  it('a failed import is not kept: the next call imports again, and that success is then the one import', async () => {
+    // A chunk that failed to load (a dropped connection, a rebuilt bundle) must not stay failed until the page reloads.
+    const failure = new Error('chunk failed to load');
+    const load = vi.fn<() => Promise<typeof loaded>>().mockRejectedValueOnce(failure).mockResolvedValue(loaded);
+    const registered = registerWidget(decl, load);
+    await expect(registered.component()).rejects.toBe(failure);
+    const retried = registered.component();
+    expect(load).toHaveBeenCalledTimes(2);
+    expect(await retried).toBe(loaded);
+    expect(registered.component()).toBe(retried);
+    await registered.component();
+    expect(load).toHaveBeenCalledTimes(2);
+  });
+
+  it('callers waiting on a failing import all see its failure; a call after it imports again', async () => {
+    const failure = new Error('chunk failed to load');
+    const load = vi.fn<() => Promise<typeof loaded>>().mockRejectedValueOnce(failure).mockResolvedValue(loaded);
+    const registered = registerWidget(decl, load);
+    const waiting = [registered.component(), registered.component()];
+    expect(load).toHaveBeenCalledTimes(1);
+    for (const p of waiting) await expect(p).rejects.toBe(failure);
+    expect(await registered.component()).toBe(loaded);
+    expect(load).toHaveBeenCalledTimes(2);
+  });
+
   it('each registration imports its own component', () => {
     const a = vi.fn(() => Promise.resolve(loaded));
     const b = vi.fn(() => Promise.resolve(loaded));
