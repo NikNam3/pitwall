@@ -32,6 +32,8 @@ const gallery: GalleryEntry<typeof widget> = {
     undamaged: { damage: base({ parts: known(clean, at), corners: corners(0) }) },
     measuredLoss: { damage: base({ jumps: [{ ...measuring, lossMsPerLap: known(310, 300_000) }, measured] }) },
     notMeasurableLoss: { damage: base({ jumps: [notMeasurable] }) },
+    // A jump whose loss is hidden: the reason's mark stands in the loss's place.
+    hiddenLoss: { damage: base({ jumps: [{ ...measured, lossMsPerLap: unknown('realism') }] }) },
     faults: { damage: base({ drsFault: known(true, at), ersFault: true }) },
     // A rival linked as primary in realism mode: every value is hidden.
     realismHidden: {

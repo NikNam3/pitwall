@@ -7,7 +7,8 @@
 //  - `separator` (none by default) goes between neighbouring parts only: never before the first or after the last;
 //  - no parts draw nothing.
 // Also: no other Svelte source loops over cell parts itself (`{#each … as part…}`); the incident feed, the gap chart's
-// reference line and the gallery's position-pair cell draw their parts through this component.
+// reference line, the damage card's jump loss (review 9, R9-1) and the gallery's position-pair cell draw their parts
+// through this component.
 import type { UnknownReason } from '@pitwall/domain';
 import { cleanup, render } from '@testing-library/svelte';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -85,7 +86,7 @@ describe('one drawing of cell parts', () => {
     expect(SVELTE.filter((p) => PART_LOOP.test(source(p))).map((p) => p.replace('../../src/', ''))).toEqual([]);
   });
 
-  it.each(['widgets/incident-feed/IncidentFeed.svelte', 'widgets/gap-chart/GapChart.svelte', 'gallery/KitParts.svelte'])(
+  it.each(['widgets/incident-feed/IncidentFeed.svelte', 'widgets/gap-chart/GapChart.svelte', 'widgets/damage-card/DamageCard.svelte', 'gallery/KitParts.svelte'])(
     '%s draws its parts with the kit CellParts',
     (file) => {
       expect(source(`../../src/${file}`)).toMatch(/import CellParts from '[./]+kit\/values\/CellParts\.svelte'/);
