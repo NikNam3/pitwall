@@ -11,15 +11,17 @@
 //  - frame section: elements `data-gallery-id="frame/<state>"` for `noData`, `errored`, `stale`, `computed`,
 //    `unknownWidget`; kit section: at least one element `data-gallery-id` starting with `kit/`;
 //  - a ResizeObserver exists (stubbed below to 600 x 400 px); ids are unique.
-import { cleanup, render } from '@testing-library/svelte';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { mount, unmount } from 'svelte';
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MomentValues } from '../../src/gallery/moment-values.ts';
 import Gallery from '../../src/gallery/Gallery.svelte';
 import { THEMES } from '../../src/theme/index.ts';
 import gallery from '../../src/widgets/feed-status/gallery.ts';
 import { widget } from '../../src/widgets/feed-status/widget.ts';
+import { untilReady } from './render-ready.ts';
 
-// Each test renders the whole gallery (every widget, case and size), which takes seconds, more under load.
+// The first test renders the whole gallery (every widget, case and size) and waits until every cell is ready: seconds,
+// more under load.
 vi.setConfig({ testTimeout: 30_000 });
 
 beforeEach(() => {
@@ -39,7 +41,6 @@ beforeEach(() => {
   vi.stubGlobal('matchMedia', () => ({ addEventListener() {}, removeEventListener() {}, matches: false }));
 });
 afterEach(() => {
-  cleanup();
   vi.unstubAllGlobals();
 });
 
@@ -60,23 +61,39 @@ function expectedIds(): string[] {
   return sizes.flatMap((size) => data.flatMap((d) => THEMES.map((t) => `feed-status/${size}/${d}/${t.name}`)));
 }
 
+// The tests only read the gallery: the first one that needs it renders it, it is unmounted after the last.
+let shown: { container: HTMLElement; app: ReturnType<typeof mount>; ready: Promise<void> } | undefined;
+async function shownGallery(): Promise<HTMLElement> {
+  if (shown === undefined) {
+    const container = document.body.appendChild(document.createElement('div'));
+    shown = { container, app: mount(Gallery, { target: container, props: { moments } }), ready: untilReady(container) };
+  }
+  await shown.ready;
+  return shown.container;
+}
+afterAll(async () => {
+  if (shown === undefined) return;
+  await unmount(shown.app);
+  shown.container.remove();
+});
+
 describe('Gallery', () => {
-  it('renders one cell per expected data-gallery-id for feed-status, each once', () => {
-    const { container } = render(Gallery, { moments });
+  it('renders one cell per expected data-gallery-id for feed-status, each once', async () => {
+    const container = await shownGallery();
     const ids = [...container.querySelectorAll('[data-gallery-id^="feed-status/"]')].map((e) => e.getAttribute('data-gallery-id')!);
     expect(expectedIds().length).toBe(5 * 6 * THEMES.length);
     expect([...ids].sort()).toEqual([...expectedIds()].sort());
   });
 
-  it('puts a real Panel in each widget cell', () => {
-    const { container } = render(Gallery, { moments });
+  it('puts a real Panel in each widget cell', async () => {
+    const container = await shownGallery();
     const cells = container.querySelectorAll('[data-gallery-id^="feed-status/"]');
     expect(cells.length).toBeGreaterThan(0);
     for (const cell of cells) expect(cell.querySelector('header')?.textContent).toContain(widget.title);
   });
 
-  it('shows the panel frame in every state and the kit parts', () => {
-    const { container } = render(Gallery, { moments });
+  it('shows the panel frame in every state and the kit parts', async () => {
+    const container = await shownGallery();
     const ids = [...container.querySelectorAll('[data-gallery-id]')].map((e) => e.getAttribute('data-gallery-id')!);
     for (const state of ['noData', 'errored', 'stale', 'computed', 'unknownWidget']) expect(ids).toContain(`frame/${state}`);
     expect(ids.some((id) => id.startsWith('kit/'))).toBe(true);

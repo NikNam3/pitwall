@@ -19,15 +19,6 @@ import { unknownMark, unknownReason } from '../../src/kit/text.ts';
 import type { RegisteredWidget } from '../../src/kit/types.ts';
 import { DEFAULT_THEME, role } from '../../src/theme/index.ts';
 
-// jsdom has no canvas: the gap chart's plot is a no-op here (its reference line is text).
-vi.mock('uplot', () => ({
-  default: class {
-    setSize() {}
-    setData() {}
-    destroy() {}
-  },
-}));
-
 // Every widget by its register file (only the shell imports the generated index), and its gallery declaration.
 const registered = import.meta.glob<{ default: RegisteredWidget }>('../../src/widgets/*/register.ts', { eager: true });
 const WIDGETS = Object.values(registered).map((m) => m.default);
