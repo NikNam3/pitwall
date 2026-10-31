@@ -48,7 +48,7 @@ export type ClockFall = { fromMs: SessionTime; toMs: SessionTime };
 export type ClockJump = { fromMs: SessionTime; toMs: SessionTime };
 
 /** What a rewind needs to know of the state it leaves: its frame id, the game's session time and its last wall time. */
-export type RewindMark = { frameId: number; rawMs: SessionTime; lastWallMs: number | undefined };
+export type RewindMark = { frameId: number; rawMs: SessionTime; lastWallMs: number };
 
 /**
  * The `SessionRunner`'s decision that a frame reports a flashback, the one way it reaches the situation tracker: no

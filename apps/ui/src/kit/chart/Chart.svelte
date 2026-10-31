@@ -2,8 +2,9 @@
   // The line chart every display uses (spec 5): uPlot on a black plot with labelled axes and grids; each line is named at
   // its right end in its colour (our car bold), labels pushed apart where lines end close together; when they cannot all
   // fit, ours and the ones nearest to ours keep theirs. A line that ends well before the newest x (a retired or lapped
-  // car) is named at its own end instead, inside the plot. A line of one point shows as a dot. A series' live end is drawn dotted (`ChartSeries.liveEnd`): every series has
-  // its live line, empty when not live, so a live end that comes or goes is a data change, never a rebuild.
+  // car) is named at its own end instead, inside the plot. A line of one point shows as a dot. A series' live end is
+  // drawn dotted (`ChartSeries.liveEnd`): every series has its live line, empty when not live, so a live end that comes
+  // or goes is a data change, never a rebuild.
   // Nothing scales with the panel: more width shows more history (the x-range follows the width in cells).
   import { untrack } from 'svelte';
   import uPlot from 'uplot';

@@ -35,12 +35,15 @@ export const PAUSE_AFTER_WALL_MS = 2000;
 /** A session time of the game on the race clock of `state`. */
 export const onRaceClock = (state: EngineState, sessionTime: SessionTime): SessionTime => sessionTime + state.open.phaseBook.clockOffsetMs;
 
-/** The mark of `state`, taken by the runner before it restores a snapshot. */
-export const rewindMarkOf = (state: EngineState): RewindMark => ({
-  frameId: state.lastFrameId,
-  rawMs: state.sessionTime - state.open.phaseBook.clockOffsetMs,
-  lastWallMs: state.open.phaseBook.lastWallMs,
-});
+/**
+ * The mark of `state`, taken by the runner before it restores a snapshot. A rewind needs applied frames, so the wall
+ * time of the last one is always set; a mark without it is a bug.
+ */
+export const rewindMarkOf = (state: EngineState): RewindMark => {
+  const { lastWallMs, clockOffsetMs } = state.open.phaseBook;
+  if (lastWallMs === undefined) throw new Error('a rewind before the session\'s first frame');
+  return { frameId: state.lastFrameId, rawMs: state.sessionTime - clockOffsetMs, lastWallMs };
+};
 
 /**
  * Notes the rewind the runner took on `frame`, before the frame is applied, on its first pass and on every replay of

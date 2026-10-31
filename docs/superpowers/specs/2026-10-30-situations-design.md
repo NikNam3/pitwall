@@ -46,9 +46,9 @@ At `formation`'s close (the race's first LGOT after STLG), the tracker cuts the 
 - **Flashback** (FLBK, or the frame id falling while the overall frame id rises): unchanged; the runner rewinds.
 - **The start's settling** (diagnosis P4): a fall within 60 frames after the race's LGOT (seen: 4 and 12 frames, ZvR and ZvR2) is the race clock settling; entries stamped since LGOT are re-stamped to the new clock (offset by the fall), cursors' `trackedMs` too.
 - **The formation reset** (the fall at the formation lap's end, inventory 1.2): ignored by itself; the formation phase's close (3.2) handles it.
-- **Garage acceleration** (session time running ahead of wall time): no jump; nothing to do (laps are not timed in the garage).
+- **Garage acceleration** (session time running ahead of wall time, up to about 31.6×): no jump while each step stays under 60 s; a stall during acceleration that makes one step exceed 60 s is reported as a forward jump (above).
 - **Post-session jump** (3.1): opens `post-session`.
-- **Any other fall** (not a flashback, not the start): logged with the session uid and both times, and the engine keeps its race clock monotonic: every entry stamped after the fall gets the fall's size as an offset (as the start's settling does), so every time-based analysis stays consistent; the raw session time stays on the frame for diagnostics (user ruling 2026-10-30). Not seen in any recording outside the start. **Any other forward jump** (not the post-session jump): logged, no change.
+- **Any other fall** (not a flashback, not the start): logged with the session uid and both times, and the engine keeps its race clock monotonic: every entry stamped after the fall gets the fall's size as an offset (as the start's settling does), so every time-based analysis stays consistent; the raw session time stays on the frame for diagnostics (user ruling 2026-10-30). Not seen in any recording outside the start. **Any other forward jump** of more than 60 s (not the post-session jump: a stall, or a garage jump beyond the acceleration rate): reported on the step (`clockJump`) and logged, no other change; a smaller forward step is normal running or garage acceleration.
 
 ### 3.4 Race control state
 
