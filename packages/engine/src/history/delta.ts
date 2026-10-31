@@ -3,8 +3,9 @@ import type { DeepReadonly } from '../util/deep-readonly.ts';
 
 /**
  * What one step added to the append-only history: the list lengths before and after it. `truncated` marks a step that
- * changed what was recorded before it (a flashback, lights out discarding the formation lap, the start's settling), so
- * a reader must start from 0 instead of `before`.
+ * changed what was recorded before it (a flashback, lights out discarding the formation lap, the start's settling) or
+ * how a reader must read it (a dropped neutralisation, a session phase boundary at a moment earlier frames share), so a
+ * reader must start from 0 instead of `before`.
  */
 export type HistoryDelta = { before: HistoryLengths; after: HistoryLengths; truncated: boolean };
 

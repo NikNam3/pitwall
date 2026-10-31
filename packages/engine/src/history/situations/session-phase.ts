@@ -84,7 +84,8 @@ const confirm = (state: EngineState): void => {
 
 /**
  * An unconfirmed neutralisation never happened: the phase it replaced goes on as before. Readers already saw it open, so
- * the step discarded a timeline (review 2 B2, ruling 2026-10-30): they start over, as at a flashback.
+ * the step discarded a timeline (review 2 B2, ruling 2026-10-30): they start over, as at a flashback. So does a phase
+ * boundary at a shared moment (`atBoundary`).
  */
 const drop = (state: EngineState, out: StepOutput): void => {
   const book = state.open.phaseBook;
@@ -94,8 +95,26 @@ const drop = (state: EngineState, out: StepOutput): void => {
   out.discarded = true;
 };
 
+/** The phases readers fold entries against: those a flag phase stands for. */
+const isFlagged = (open: OpenSessionPhase): boolean => open.kind === 'neutralised' || open.kind === 'suspended';
+
+/**
+ * `next` opens where the phase in progress closes. When an earlier frame was stamped at or after that time (a clock
+ * standing for a few frames, the stale frames after a rewind: one moment the frames share), what those frames recorded
+ * now lies under `next` or past the closed phase's end, and readers folded it before the boundary existed. If either
+ * phase is a neutralisation or a suspension, the step discarded a timeline (ruling 2026-10-31): readers start over, as
+ * at a dropped neutralisation; lowering `delta.before` instead would fold entries twice. No reader folds entries
+ * against the other phases, and the grid's clock stands through the start lights and lights out (shape S1).
+ */
+const atBoundary = (state: EngineState, next: OpenSessionPhase, out: StepOutput): void => {
+  const { session } = state.open.situations;
+  if (!state.open.phaseBook.started || next.start > state.sessionTime) return;
+  if (isFlagged(session) || isFlagged(next)) out.discarded = true;
+};
+
 /** Closes the phase in progress where `next` opens and opens `next`. */
-const enter = (state: EngineState, next: OpenSessionPhase, restart?: 'standing' | 'rolling'): void => {
+const enter = (state: EngineState, out: StepOutput, next: OpenSessionPhase, restart?: 'standing' | 'rolling'): void => {
+  atBoundary(state, next, out);
   confirm(state);
   const { situations } = state.open;
   state.history.sessionPhases.push(closed(state, situations.session, next.start, restart));
@@ -114,14 +133,16 @@ const addStage = (state: EngineState, stage: NeutralisedStage, at: SessionTime):
  * A SCAR deployment opens the neutralisation at once, unconfirmed until the safety car status shows it (spec 3.1). An SC
  * deployed under a VSC closes the VSC; one deployed in a suspension is the rolling restart.
  */
-const deploy = (state: EngineState, car: NeutralisingCar, at: SessionTime): void => {
+const deploy = (state: EngineState, out: StepOutput, car: NeutralisingCar, at: SessionTime): void => {
   const { situations, phaseBook } = state.open;
   if (isOver(situations.session) || carOf(situations.session) === car) return;
+  const next = neutralised(state, car, at, ['deployed']);
+  atBoundary(state, next, out);
   // An earlier deployment still waiting stands: this one closes it.
   confirm(state);
   const replaced = situations.session;
   phaseBook.unconfirmed = { closed: closed(state, replaced, at, 'rolling'), replaced };
-  situations.session = neutralised(state, car, at, ['deployed']);
+  situations.session = next;
 };
 
 /**
@@ -139,10 +160,10 @@ const confirmOrExpire = (state: EngineState, at: SessionTime, out: StepOutput): 
  * The formation phase, from the grid (spec 3.1). It notes the history lengths it opens at: lights out cuts the history
  * back to them (3.2).
  */
-const openFormation = (state: EngineState, at: SessionTime): void => {
+const openFormation = (state: EngineState, out: StepOutput, at: SessionTime): void => {
   if (!isRace(state) || state.open.situations.session.kind !== 'preStart') return;
   state.open.phaseBook.formationFrom = historyLengths(state.history);
-  enter(state, phase(state, 'formation', at));
+  enter(state, out, phase(state, 'formation', at));
 };
 
 /**
@@ -150,11 +171,11 @@ const openFormation = (state: EngineState, at: SessionTime): void => {
  * phase: as the game reset the session time at the formation lap's end, that span ends on the race clock, below its
  * start.
  */
-const startLights = (state: EngineState, at: SessionTime): void => {
+const startLights = (state: EngineState, out: StepOutput, at: SessionTime): void => {
   const { kind } = state.open.situations.session;
   if (!isRace(state) || (kind !== 'preStart' && kind !== 'formation' && kind !== 'suspended')) return;
   if (kind !== 'suspended') state.open.phaseBook.startFrom = historyLengths(state.history);
-  enter(state, phase(state, 'startLights', at), 'standing');
+  enter(state, out, phase(state, 'startLights', at), 'standing');
 };
 
 /** Rebuilds the per-car lap index from the laps left in the history. */
@@ -193,7 +214,7 @@ const discardFormation = (state: EngineState, from: HistoryLengths): void => {
  */
 const lightsOut = (state: EngineState, frame: Frame, at: SessionTime, out: StepOutput): void => {
   const phaseFrom = state.history.sessionPhases.length;
-  enter(state, phase(state, 'racing', at));
+  enter(state, out, phase(state, 'racing', at));
   const book = state.open.phaseBook;
   const start = book.formationFrom ?? book.startFrom;
   if (!start) return;
@@ -211,29 +232,29 @@ const lightsOut = (state: EngineState, frame: Frame, at: SessionTime, out: StepO
   book.startFrom = undefined;
 };
 
-const applySafetyCarEvent = (state: EngineState, details: EventDetailsOf<'SCAR'>, at: SessionTime): void => {
-  if (details.safetyCarType === FORMATION_SC_TYPE && details.eventType === 0) return openFormation(state, at);
+const applySafetyCarEvent = (state: EngineState, out: StepOutput, details: EventDetailsOf<'SCAR'>, at: SessionTime): void => {
+  if (details.safetyCarType === FORMATION_SC_TYPE && details.eventType === 0) return openFormation(state, out, at);
   const car = CAR_OF_SC_TYPE[details.safetyCarType];
   const stage = STAGES[details.eventType];
   if (!car || !stage) return;
-  if (stage === 'deployed') return deploy(state, car, at);
+  if (stage === 'deployed') return deploy(state, out, car, at);
   if (carOf(state.open.situations.session) !== car) return;
   addStage(state, stage, at);
   // A resume sent twice (types 1 and 0) closes once: the second finds no neutralisation open.
-  if (stage === 'resume') enter(state, green(state, at));
+  if (stage === 'resume') enter(state, out, green(state, at));
 };
 
 /** A red flag suspends the session until its restart (not yet seen in a recording: spec principle 4). */
-const suspend = (state: EngineState, at: SessionTime): void => {
+const suspend = (state: EngineState, out: StepOutput, at: SessionTime): void => {
   const open = state.open.situations.session;
   if (isOver(open) || open.kind === 'suspended') return;
-  enter(state, { ...phase(state, 'suspended', at), detail: { kind: 'suspended', restart: unknown('notReceived') } });
+  enter(state, out, { ...phase(state, 'suspended', at), detail: { kind: 'suspended', restart: unknown('notReceived') } });
 };
 
 /** The race winner or the chequered flag, whichever first, finishes a race under way. */
-const finish = (state: EngineState, at: SessionTime): void => {
+const finish = (state: EngineState, out: StepOutput, at: SessionTime): void => {
   const { kind } = state.open.situations.session;
-  if (isRace(state) && (kind === 'racing' || kind === 'neutralised' || kind === 'suspended')) enter(state, phase(state, 'finished', at));
+  if (isRace(state) && (kind === 'racing' || kind === 'neutralised' || kind === 'suspended')) enter(state, out, phase(state, 'finished', at));
 };
 
 /** Every car in the session has finished: time over in practice or qualifying (a player who left retires instead). */
@@ -248,8 +269,8 @@ const endSession = (state: EngineState, at: SessionTime, out: StepOutput): void 
   if (state.open.situations.session.kind === 'postSession') return;
   drop(state, out);
   const open = state.open.situations.session;
-  if (!isRace(state) && !isOver(open) && everyCarFinished(state)) enter(state, phase(state, 'finished', at));
-  enter(state, phase(state, 'postSession', at));
+  if (!isRace(state) && !isOver(open) && everyCarFinished(state)) enter(state, out, phase(state, 'finished', at));
+  enter(state, out, phase(state, 'postSession', at));
 };
 
 /**
@@ -259,25 +280,25 @@ const endSession = (state: EngineState, at: SessionTime, out: StepOutput): void 
 export const enterPostSession = (state: EngineState, at: SessionTime, out: StepOutput): void => {
   if (state.open.situations.session.kind === 'postSession') return;
   drop(state, out);
-  enter(state, phase(state, 'postSession', at));
+  enter(state, out, phase(state, 'postSession', at));
 };
 
 const applyEvent = (state: EngineState, frame: Frame, details: EventDetails, out: StepOutput): void => {
   const at = frame.sessionTime;
   switch (details.code) {
     case 'SCAR':
-      return applySafetyCarEvent(state, details, at);
+      return applySafetyCarEvent(state, out, details, at);
     case 'STLG':
-      return startLights(state, at);
+      return startLights(state, out, at);
     case 'LGOT':
       // Lights out only ends the start lights: one before any start light (the formation lap's own) is none.
       if (state.open.situations.session.kind === 'startLights') lightsOut(state, frame, at, out);
       return;
     case 'RDFL':
-      return suspend(state, at);
+      return suspend(state, out, at);
     case 'RCWN':
     case 'CHQF':
-      return finish(state, at);
+      return finish(state, out, at);
     case 'SEND':
       return endSession(state, at, out);
     default:
@@ -290,21 +311,21 @@ const applyEvent = (state: EngineState, frame: Frame, details: EventDetails, out
  * shows, or opens one from any phase but the session's end (no SCAR: a late join, or a game that sent none), and out
  * of it closes the confirmed one.
  */
-const applyStatus = (state: EngineState, at: SessionTime): void => {
+const applyStatus = (state: EngineState, out: StepOutput, at: SessionTime): void => {
   const { flag } = state.session;
   const last = state.open.lastFlag;
   state.open.lastFlag = flag;
   if (flag === last) return;
-  if (flag === 'formation') return openFormation(state, at);
+  if (flag === 'formation') return openFormation(state, out, at);
   const open = state.open.situations.session;
   const entered = CAR_OF_FLAG[flag];
   if (entered) {
     if (carOf(open) === entered) return confirm(state);
-    if (!isOver(open)) enter(state, neutralised(state, entered, at, []), 'rolling');
+    if (!isOver(open)) enter(state, out, neutralised(state, entered, at, []), 'rolling');
     return;
   }
   const left = CAR_OF_FLAG[last];
-  if (left && carOf(open) === left && !state.open.phaseBook.unconfirmed) enter(state, green(state, at));
+  if (left && carOf(open) === left && !state.open.phaseBook.unconfirmed) enter(state, out, green(state, at));
 };
 
 /**
@@ -349,10 +370,10 @@ export const applyPhaseSignals = (state: EngineState, frame: Frame, out: StepOut
   const at = frame.sessionTime;
   confirmOrExpire(state, at, out);
   for (const { details } of frame.events) applyEvent(state, frame, details, out);
-  applyStatus(state, at);
+  applyStatus(state, out, at);
   if (frame.finalClassification) enterPostSession(state, at, out);
   if (state.open.situations.session.kind !== 'preStart') return;
   if (!isRace(state)) {
-    if (at > state.sessionTime) enter(state, green(state, at));
-  } else if (state.session.flag !== 'formation' && raceUnderWay(state)) enter(state, { ...phase(state, 'racing', at), joinedAt: true });
+    if (at > state.sessionTime) enter(state, out, green(state, at));
+  } else if (state.session.flag !== 'formation' && raceUnderWay(state)) enter(state, out, { ...phase(state, 'racing', at), joinedAt: true });
 };

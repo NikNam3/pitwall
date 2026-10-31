@@ -52,15 +52,15 @@ export const applySessionClock = (state: EngineState, frame: Frame, out: StepOut
 /**
  * Records the session phases (`history.sessionPhases`, the open one in `open.situations`) and the pauses. Tags
  * `sessionPhases` when a phase opened, closed or changed; marks the step `rewritten` when lights out discards the
- * formation lap, and `discarded` when a neutralisation is dropped unconfirmed.
+ * formation lap, and `discarded` when a neutralisation is dropped unconfirmed or a phase opens or closes at a moment an
+ * earlier frame was stamped at (a shared moment: a standing clock, the stale frames after a rewind).
  */
 export const applySituations: SubStep = (state, frame, out) => {
   trackPauses(state, frame);
   tagPhases(state, out, () => {
-    if (!state.open.phaseBook.started) {
-      joinSession(state, frame);
-      state.open.phaseBook.started = true;
-    }
+    const { phaseBook } = state.open;
+    if (!phaseBook.started) joinSession(state, frame);
     applyPhaseSignals(state, frame, out);
+    phaseBook.started = true;
   });
 };
