@@ -2,7 +2,7 @@
 // signal opens and closes each phase, the confirmations, the session ends, joins, pauses and a flashback across a
 // phase boundary. Closed phases are `history.sessionPhases`; the phase in progress is `open.situations.session`.
 import { describe, expect, it } from 'vitest';
-import { activeFlagPhaseOf, situationOf, type SessionRunner, type StepResult } from '../../src/index.ts';
+import { activeFlagPhaseOf, situationOf, type Frame, type SessionRunner, type StepResult } from '../../src/index.ts';
 import { after } from '../support/runner.ts';
 import { expectScheduledIncremental, input, quick, sched, underNeutralisation, underPhase } from '../support/scheduler.ts';
 import {
@@ -464,6 +464,60 @@ describe('a session phase boundary at a moment earlier frames share', () => {
     const crossings = runner.state.history.miniSectors.filter((m) => m.carId === 0).map((m) => m.at);
     expect(crossings.at(-1)).toBe(raceAt(19) + 12);
     expect(truncated(results)).toEqual(GRID_START_TRUNCATED);
+  });
+
+  // Review 7 R7-1: laps (`completedAt`) and pit stops (`pitLaneExit`) are entries the rule reads too. In each pair the
+  // only entry at or after the standing time is the lap (the pit stop): the crossings lie before it and no event does.
+  /** The standing clock with the SC status at race frame 23 (the neutralisation opens at raceAt(20)), plus `beat(k)`. */
+  const standingSc = (beat: (k: number) => Beat) => script(gridStart(60, (k) => ({ ...standing(k), ...scFrom(23)(k), ...beat(k) })));
+  /** What the boundary reads: the history the frames before its step (race frame 23) recorded. */
+  const historyBefore23 = (frames: Frame[]) => run(frames.slice(0, raceFrame(23))).runner.state.history;
+  /** The events and crossings at or after the boundary, raceAt(20), that the boundary reads. */
+  const eventsOrCrossingsFrom20 = (frames: Frame[]) => {
+    const { events, miniSectors } = historyBefore23(frames);
+    return [...events, ...miniSectors].filter((e) => e.at >= raceAt(20));
+  };
+  /**
+   * Car 0 drives 200 m a frame and reaches lap 2, 10 m past the line, on race frame `lineAt`, and stands there from then
+   * on. Its line crossing lies 8 ms after race frame `lineAt - 1`; the lap's `completedAt` is race frame `lineAt`'s time.
+   */
+  const lapEndsAt = (lineAt: number) => (k: number): Beat => ({
+    cars: (d) => lap(d, 0, k < lineAt ? { currentLapNum: 1, lapDistance: TRACK - 10 - 200 * (lineAt - 1 - k) } : { currentLapNum: 2, lapDistance: 10 }),
+  });
+  /** Car 0 stands (no crossing) in the pit lane from race frame 10 and leaves it on race frame `exitAt`. */
+  const pitExitAt = (exitAt: number) => (k: number): Beat => ({ cars: (d) => lap(d, 0, { pitStatus: k >= 10 && k < exitAt ? 1 : 0 }) });
+  const lapsOf = (frames: Frame[]) => historyBefore23(frames).laps.map((l) => [l.carId, l.lapNumber, l.completedAt]);
+  const pitStopsOf = (frames: Frame[]) => historyBefore23(frames).pitStops.map((p) => [p.carId, p.pitLaneEntry, p.pitLaneExit]);
+
+  it('a neutralisation opening on a standing clock where only a lap ends (completed on race frame 20, its line crossing before): that step is truncated', () => {
+    const frames = standingSc(lapEndsAt(20));
+    expect(lapsOf(frames)).toEqual([[0, 1, raceAt(20)]]);
+    expect(pitStopsOf(frames)).toEqual([]);
+    expect(eventsOrCrossingsFrom20(frames)).toEqual([]);
+    const { runner, results } = run(frames);
+    expect(current(runner)).toMatchObject({ kind: 'neutralised', start: raceAt(20) });
+    expect(truncated(results)).toEqual([...GRID_START_TRUNCATED, raceFrame(23)]);
+  });
+  it('a neutralisation opening on a standing clock after the only lap, which ends before that time (completed on race frame 19): no step but the grid start’s lights out is truncated', () => {
+    const frames = standingSc(lapEndsAt(19));
+    expect(lapsOf(frames)).toEqual([[0, 1, raceAt(19)]]);
+    expect(eventsOrCrossingsFrom20(frames)).toEqual([]);
+    expect(truncated(run(frames).results)).toEqual(GRID_START_TRUNCATED);
+  });
+  it('a neutralisation opening on a standing clock where only a pit stop ends (the car leaves the pit lane on race frame 20, entered before): that step is truncated', () => {
+    const frames = standingSc(pitExitAt(20));
+    expect(pitStopsOf(frames)).toEqual([[0, raceAt(10), raceAt(20)]]);
+    expect(lapsOf(frames)).toEqual([]);
+    expect(eventsOrCrossingsFrom20(frames)).toEqual([]);
+    const { runner, results } = run(frames);
+    expect(current(runner)).toMatchObject({ kind: 'neutralised', start: raceAt(20) });
+    expect(truncated(results)).toEqual([...GRID_START_TRUNCATED, raceFrame(23)]);
+  });
+  it('a neutralisation opening on a standing clock after the only pit stop, which ends before that time (the car leaves the pit lane on race frame 19): no step but the grid start’s lights out is truncated', () => {
+    const frames = standingSc(pitExitAt(19));
+    expect(pitStopsOf(frames)).toEqual([[0, raceAt(10), raceAt(19)]]);
+    expect(eventsOrCrossingsFrom20(frames)).toEqual([]);
+    expect(truncated(run(frames).results)).toEqual(GRID_START_TRUNCATED);
   });
   it('a neutralisation closing after a rewind, in its second stale frame (the first crosses a mini-sector): that step is truncated after the rewind’s, and the reader is incremental = from scratch on every step', () => {
     // The game runs under the SC to race frame 25 and goes back to race frame 19 (frame id going back); its new timeline
