@@ -1,4 +1,4 @@
-import { createWriteStream } from 'node:fs';
+import { createWriteStream, openSync } from 'node:fs';
 import { constants, createGzip } from 'node:zlib';
 import {
   HEADER_FIXED_BYTES,
@@ -13,6 +13,15 @@ import {
 export interface PwrecWriterOptions {
   /** Called once with the first file error, as it happens (the file is then abandoned). */
   readonly onError?: (error: unknown) => void;
+}
+
+/** The file opened for writing now, or undefined when that fails: the stream then opens it itself and reports the error. */
+function openNow(path: string): number | undefined {
+  try {
+    return openSync(path, 'w');
+  } catch {
+    return undefined;
+  }
 }
 
 function encodeHeader(meta: PwrecMeta): Uint8Array {
@@ -40,6 +49,8 @@ function encodeRecord(kind: number, t: number, payload: Uint8Array): Uint8Array 
 /**
  * Writes a `.pwrec.gz` file. The gzip stream is sync-flushed about once per second of recording time, so a
  * crash loses at most the last second. File errors never throw from `write`: they go to `onError` and `close()`.
+ * The file exists once `create` returns, so whatever is written next to it (a session's config sidecar) never is
+ * on disk without it.
  */
 export class PwrecWriter {
   readonly #gzip = createGzip();
@@ -53,7 +64,7 @@ export class PwrecWriter {
 
   private constructor(path: string, meta: PwrecMeta, onError: ((error: unknown) => void) | undefined) {
     this.#onError = onError;
-    this.#file = createWriteStream(path);
+    this.#file = createWriteStream(path, { fd: openNow(path) });
     this.#fileClosed = new Promise((resolve) => this.#file.once('close', () => resolve()));
     this.#file.on('error', (error) => this.#fail(error));
     this.#gzip.on('error', (error) => this.#fail(error));

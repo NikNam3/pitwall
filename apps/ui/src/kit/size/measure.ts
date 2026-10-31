@@ -11,13 +11,17 @@ function contentBox(node: HTMLElement): { width: number; height: number } {
   };
 }
 
-/** Svelte action: observes the node's size and the device pixel ratio, and calls `onMeasure` on change. */
+/**
+ * Svelte action: observes the node's size and the device pixel ratio, and calls `onMeasure` on change. The size comes
+ * from the observer, whose first report follows the next layout; the node's box is read only for a pixel ratio change
+ * before that report. Reading it when the action is applied would force a layout per mounted panel.
+ */
 export function measure(node: HTMLElement, onMeasure: (m: Measured) => void) {
   let callback = onMeasure;
-  let { width, height } = contentBox(node);
+  let box: { width: number; height: number } | undefined;
   let query: MediaQueryList | undefined;
 
-  const emit = () => callback({ px: { width, height }, dpr: window.devicePixelRatio });
+  const emit = () => callback({ px: box ?? contentBox(node), dpr: window.devicePixelRatio });
 
   const onDprChange = () => {
     emit();
@@ -30,10 +34,9 @@ export function measure(node: HTMLElement, onMeasure: (m: Measured) => void) {
   };
 
   const observer = new ResizeObserver((entries) => {
-    const box = entries[0]?.contentRect;
-    if (!box) return;
-    width = box.width;
-    height = box.height;
+    const rect = entries[0]?.contentRect;
+    if (!rect) return;
+    box = { width: rect.width, height: rect.height };
     emit();
   });
   observer.observe(node);

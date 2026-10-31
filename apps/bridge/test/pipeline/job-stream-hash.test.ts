@@ -12,7 +12,10 @@ import { bindJob, bindState, defineFeature, type TopicBinding } from '../../src/
 import { topicStreamHash } from '../../src/pipeline/stream-hash.ts';
 import type { AddRngInput } from '../jobs/fixtures/add-rng.ts';
 
-const SEGMENT = join(import.meta.dirname, '../../../../fixtures/segments/race-zandvoort-lap10.pwrec.gz');
+// Both behaviours need only a session: the counter and the job run once per session change. So the replays use the
+// shortest recording (70 records, the end of a qualifying session, about 10 ms a replay); the 5 s race segment took
+// about 250 ms a replay, four of them, and over 5 s under the full suite's load.
+const SEGMENT = join(import.meta.dirname, '../../../../fixtures/segments/qualifying-singapore-end.pwrec.gz');
 const TOPIC: TopicName = 'session.info';
 const bindTestJob = bindJob as unknown as (topic: TopicName, job: Job<unknown, unknown>) => TopicBinding;
 
