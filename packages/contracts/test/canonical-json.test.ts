@@ -33,12 +33,17 @@ describe('canonicalJson', () => {
     );
   });
 
-  it('gives JSON that parses back to the value', () => {
+  it('gives JSON that parses back to the value JSON keeps', () => {
     fc.assert(
       fc.property(fc.jsonValue(), (value) => {
-        expect(JSON.parse(canonicalJson(value))).toEqual(value);
+        expect(JSON.parse(canonicalJson(value))).toEqual(JSON.parse(JSON.stringify(value)));
       }),
     );
+  });
+
+  it('writes -0 as 0, as JSON does, so the two are one key', () => {
+    expect(canonicalJson([-0, { x: -0 }])).toBe('[0,{"x":0}]');
+    expect(canonicalJson(-0)).toBe(canonicalJson(0));
   });
 
   it('leaves out keys whose value is undefined, as JSON does', () => {
