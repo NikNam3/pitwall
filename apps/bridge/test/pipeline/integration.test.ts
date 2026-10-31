@@ -11,7 +11,13 @@ import { topicStreamHash } from '../../src/pipeline/stream-hash.ts';
 import { WsClient } from '../../src/ws/client.ts';
 import { WsServer } from '../../src/ws/server.ts';
 
-const SEGMENT = join(import.meta.dirname, '../../../../fixtures/segments/race-zandvoort-lap10.pwrec.gz');
+const segment = (name: string) => join(import.meta.dirname, '../../../../fixtures/segments', name);
+const SEGMENT = segment('race-zandvoort-lap10.pwrec.gz');
+// The stream hash encodes every feed topic for every car: about 36 MB of messages for SEGMENT's 5 s of race, ~0.8 s a
+// replay. Its behaviours need no particular moment, so they hash the shortest race segment (1.5 s, 20 cars) and the
+// shortest other recording (the end of a qualifying session).
+const HASH_SEGMENT = segment('race-zandvoort-pit-exit.pwrec.gz');
+const OTHER_HASH_SEGMENT = segment('qualifying-singapore-end.pwrec.gz');
 const F = 'replay' as FeedId;
 
 describe('PwrecSource → pipeline → WebSocket (in process)', () => {
@@ -37,11 +43,10 @@ describe('PwrecSource → pipeline → WebSocket (in process)', () => {
     c.close(); await s2.close();
   });
   it('topic stream hash is deterministic', async () => {
-    const [a, b] = [await topicStreamHash(SEGMENT), await topicStreamHash(SEGMENT)];
+    const [a, b] = [await topicStreamHash(HASH_SEGMENT), await topicStreamHash(HASH_SEGMENT)];
     expect(a).toMatch(/^[0-9a-f]{64}$/); expect(a).toBe(b);
   });
   it('topic stream hash differs between recordings', async () => {
-    const other = join(import.meta.dirname, '../../../../fixtures/segments/race-singapore-start.pwrec.gz');
-    expect(await topicStreamHash(other)).not.toBe(await topicStreamHash(SEGMENT));
+    expect(await topicStreamHash(OTHER_HASH_SEGMENT)).not.toBe(await topicStreamHash(HASH_SEGMENT));
   });
 });
