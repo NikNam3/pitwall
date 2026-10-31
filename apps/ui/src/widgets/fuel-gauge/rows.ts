@@ -1,5 +1,6 @@
-import type { FuelState, Known, UnknownReason } from '@pitwall/domain';
+import type { FuelState, UnknownReason } from '@pitwall/domain';
 import type { Role } from '../../theme/roles.ts';
+import { knownPart } from '../../kit/grid/grid.ts';
 import { formatKgPerLap, formatKgUnit, formatLaps, formatSignedLaps } from '../../kit/values/format.ts';
 import { marginRole } from './emphasis.ts';
 import * as text from './text.ts';
@@ -15,26 +16,23 @@ export type FuelRow = {
   dim?: boolean;
 };
 
-const cell = (value: Known<number>, format: (n: number) => string): { text: string; reason?: UnknownReason } =>
-  value.known ? { text: format(value.value) } : { text: '', reason: value.reason };
-
 /** The fuel rows in display order: margin, lasts, to go, burn, save target, the game's figure. */
 export function fuelRows(fuel: FuelState): FuelRow[] {
   // The laps are the figure that decides; the kg in brackets is added when known (laps known and kg unknown shows the laps alone).
   const lasts = fuel.lapsOfFuel.known
     ? { text: fuel.kg.known ? text.lasts(formatLaps(fuel.lapsOfFuel.value), formatKgUnit(fuel.kg.value)) : formatLaps(fuel.lapsOfFuel.value) }
-    : cell(fuel.lapsOfFuel, formatLaps);
+    : knownPart(fuel.lapsOfFuel, formatLaps);
   const role = marginRole(fuel.marginLaps);
   return [
-    { key: 'margin', label: text.labels.margin, ...cell(fuel.marginLaps, formatSignedLaps), role, bold: true },
+    { key: 'margin', label: text.labels.margin, ...knownPart(fuel.marginLaps, formatSignedLaps), role, bold: true },
     { key: 'lasts', label: text.labels.lasts, ...lasts },
-    { key: 'toGo', label: text.labels.toGo, ...cell(fuel.lapsLeft, formatLaps) },
-    { key: 'burn', label: text.labels.burn, ...cell(fuel.burnKgPerLap, formatKgPerLap) },
-    { key: 'save', label: text.labels.save, ...cell(fuel.saveTargetKgPerLap, formatKgPerLap) },
+    { key: 'toGo', label: text.labels.toGo, ...knownPart(fuel.lapsLeft, formatLaps) },
+    { key: 'burn', label: text.labels.burn, ...knownPart(fuel.burnKgPerLap, formatKgPerLap) },
+    { key: 'save', label: text.labels.save, ...knownPart(fuel.saveTargetKgPerLap, formatKgPerLap) },
     {
       key: 'game',
       label: text.labels.game,
-      ...cell(fuel.gameRemainingLaps, (n) => `${formatSignedLaps(n)} ${text.gameSuffix}`),
+      ...knownPart(fuel.gameRemainingLaps, (n) => `${formatSignedLaps(n)} ${text.gameSuffix}`),
       dim: true,
     },
   ];

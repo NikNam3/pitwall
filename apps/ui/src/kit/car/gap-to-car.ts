@@ -1,4 +1,5 @@
 import type { GapToCar, UnknownReason } from '@pitwall/domain';
+import { knownPart } from '../grid/grid.ts';
 import { formatGap, formatLapsDown } from '../values/format.ts';
 
 /**
@@ -7,5 +8,5 @@ import { formatGap, formatLapsDown } from '../values/format.ts';
  */
 export function gapToCarCell(gap: Pick<GapToCar, 'gapMs' | 'lapsDown'>): { text: string; reason?: UnknownReason } {
   if (gap.lapsDown !== 0) return { text: formatLapsDown(gap.lapsDown) };
-  return gap.gapMs.known ? { text: formatGap(gap.gapMs.value) } : { text: '', reason: gap.gapMs.reason };
+  return knownPart(gap.gapMs, formatGap);
 }

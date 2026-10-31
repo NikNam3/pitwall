@@ -1,7 +1,7 @@
 import type { BattleCard, BattleSide, DrsStatus, Known, RaceMoment, UnknownReason, VisualCompound } from '@pitwall/domain';
 import type { CarOverview } from '@pitwall/contracts';
 import { carCodeById } from '../../kit/car/car-label.ts';
-import { gridRow, type GridColumn } from '../../kit/grid/grid.ts';
+import { gridRow, knownPart, unknownPart, type GridColumn } from '../../kit/grid/grid.ts';
 import { compoundText } from '../../kit/compound/compound-mark.ts';
 import { formatJoules, formatLaps, formatSecondsPerLapPlain, formatSignedSeconds } from '../../kit/values/format.ts';
 import type { Role } from '../../theme/roles.ts';
@@ -45,32 +45,29 @@ export const columnsFor = (mode: WidgetSize['mode']): readonly ColumnId[] => (mo
  */
 const GAP_SIGN: Record<Side, 1 | -1> = { ahead: -1, behind: 1 };
 
-const valueCell = <T>(v: Known<T>, format: (t: T) => string): Cell =>
-  v.known ? { text: format(v.value) } : { text: '', reason: v.reason };
-
 /** TO DRS: the laps to DRS range, or "DRS off" with race control's reason while DRS is off. */
 const toDrsCell = (lapsToDrs: Known<number>, drs: DrsStatus): Cell =>
-  drs.enabled ? valueCell(lapsToDrs, (n) => (n === 0 ? text.inDrs : formatLaps(n))) : { text: text.drsOff, title: text.drsOffTitle[drs.reason] };
+  drs.enabled ? knownPart(lapsToDrs, (n) => (n === 0 ? text.inDrs : formatLaps(n))) : { text: text.drsOff, title: text.drsOffTitle[drs.reason] };
 
 const tyreText = (side: BattleSide): string => `${compoundText(side.ours.compound, side.ours.age)} ${compoundText(side.theirs.compound, side.theirs.age)}`;
 
 function sideRow(label: BattleRow['label'], side: Side, card: BattleCard, cars: readonly CarOverview[], moment: Known<RaceMoment> | undefined): BattleRow {
   const known = card[side];
   if (!known.known) {
-    const cells = Object.fromEntries(COLUMN_IDS.map((c) => [c, { text: '', reason: known.reason }])) as Record<ColumnId, Cell>;
+    const cells = Object.fromEntries(COLUMN_IDS.map((c) => [c, unknownPart(known.reason)])) as Record<ColumnId, Cell>;
     return { label, highlighted: false, cells };
   }
   const s = known.value;
   const highlight = battleRole(moment, card.carId, side);
   const cells: Record<ColumnId, Cell> = {
     drv: carCodeById(cars, s.carId),
-    gap: valueCell(s.gapMs, (ms) => formatSignedSeconds(GAP_SIGN[side] * ms, 3)),
-    closing: valueCell(s.closingMsPerLap, formatSecondsPerLapPlain),
+    gap: knownPart(s.gapMs, (ms) => formatSignedSeconds(GAP_SIGN[side] * ms, 3)),
+    closing: knownPart(s.closingMsPerLap, formatSecondsPerLapPlain),
     toDrs: toDrsCell(s.lapsToDrs, card.drs),
-    paceDelta: valueCell(s.paceDeltaMs, (ms) => formatSignedSeconds(ms, 2)),
-    margin: valueCell(s.overtakeMarginMs, (ms) => formatSignedSeconds(ms, 2)),
+    paceDelta: knownPart(s.paceDeltaMs, (ms) => formatSignedSeconds(ms, 2)),
+    margin: knownPart(s.overtakeMarginMs, (ms) => formatSignedSeconds(ms, 2)),
     tyres: { text: tyreText(s) },
-    ers: valueCell(s.theirErsStoreJ, formatJoules),
+    ers: knownPart(s.theirErsStoreJ, formatJoules),
   };
   if (highlight !== undefined) for (const c of ['drv', 'gap', 'toDrs'] as const) cells[c] = { ...cells[c], role: highlight };
   return { label, highlighted: highlight !== undefined, cells, tyres: { ours: s.ours, theirs: s.theirs } };

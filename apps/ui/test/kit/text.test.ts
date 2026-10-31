@@ -40,3 +40,26 @@ describe('unknownMark: the faint mark an unknown value shows in its cell (user r
     expect(unknownMark.notApplicable).not.toBe(unknownMark.insufficientData);
   });
 });
+
+// The UI's types have no Node, so fs is typed here.
+const FS = 'node:fs';
+const { readFileSync } = (await import(/* @vite-ignore */ FS)) as { readFileSync(path: URL, encoding: 'utf8'): string };
+
+describe('kit/text.ts: each doc comment belongs to the export below it (review 6, R6-2)', () => {
+  const lines = readFileSync(new URL('../../src/kit/text.ts', import.meta.url), 'utf8').split('\n');
+  /** The line right above `export const <name>`. */
+  const above = (name: string): string | undefined => lines[lines.findIndex((l) => l.startsWith(`export const ${name} `)) - 1];
+
+  it('no doc comment stands right above another one (a doc that lost its export)', () => {
+    const stacked = lines.flatMap((l, i) => (l.trimEnd().endsWith('*/') && lines[i + 1]?.trimStart().startsWith('/**') ? [i + 1] : []));
+    expect(stacked).toEqual([]);
+  });
+
+  it('noDataYet has its own doc, the header state of a topic with no value yet', () => {
+    expect(above('noDataYet')).toMatch(/^\/\*\* .*no value yet.*\*\/$/);
+  });
+
+  it('arrow has its own doc, the glyph between a before and an after', () => {
+    expect(above('arrow')).toMatch(/^\/\*\* Between a before and an after.*\*\/$/);
+  });
+});

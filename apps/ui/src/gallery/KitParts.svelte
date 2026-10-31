@@ -9,6 +9,8 @@
   import CornerGrid from '../kit/corners/CornerGrid.svelte';
   import InsightLine from '../kit/insight/InsightLine.svelte';
   import PositionMark from '../kit/values/PositionMark.svelte';
+  import TextCell from '../kit/values/TextCell.svelte';
+  import { positionPairParts } from '../kit/values/position-mark.ts';
   import { sectorStatusRole } from '../emphasis/index.ts';
   import Gear from '../kit/icons/Gear.svelte';
   import Table from '../kit/table/Table.svelte';
@@ -36,6 +38,8 @@
   let bandsDrawn = $state(false);
   const sectors = [['sessionBest', true], ['sessionBest', false], ['personalBest', true], ['personalBest', false], ['none', true]] as const;
   const at = 0 as SessionTime;
+  /** The kit's before/after position pair (`positionPairParts`): both known, and an unknown after with its mark. */
+  const pairs = [[known(7, at), known(9, at)], [known(7, at), unknown('notReceived')]] as const;
   let chartDrawn = $state(false);
 </script>
 
@@ -110,8 +114,9 @@
     <figcaption style:color={role('textFaint')}>kit/position-mark</figcaption>
     <div><PositionMark change={2} /></div>
     <div><PositionMark change={-1} /></div>
-    <div><PositionMark from={7} to={{ known: true, value: 9, at: 0 as SessionTime }} /></div>
-    <div><PositionMark from={7} to={unknown('notReceived')} /></div>
+    {#each pairs as [from, to], i (i)}
+      <div>{#each positionPairParts(from, to) as part, j (j)}<TextCell {...part} />{/each}</div>
+    {/each}
   </figure>
   <figure data-baseline data-gallery-id="kit/sector-status" data-ready>
     <figcaption style:color={role('textFaint')}>kit/sector-status</figcaption>

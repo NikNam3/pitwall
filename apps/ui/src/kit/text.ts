@@ -2,9 +2,6 @@
 import type { Corners, DamageParts, IncidentKind, InsightCategory, UnknownReason } from '@pitwall/domain';
 
 /** Header state while a required topic has no value yet. */
-/** Between a before and an after (positions, gaps, settings): one glyph for every display. */
-export const arrow = '→';
-
 export const noDataYet = 'no data yet';
 
 /** Header state when a required topic errored on the bridge. */
@@ -33,6 +30,16 @@ export const optionIgnored = (panelId: string, option: string): string => `${pan
 
 /** Between the items of a one-line list. */
 export const separator = ' · ';
+
+/** Between a before and an after (positions, gaps, settings): one glyph for every display. */
+export const arrow = '→';
+
+/** Before the places a car gained, in its position mark: `▲2`. */
+export const positionGained = '▲';
+/** Before the places a car lost, in its position mark: `▼1`. */
+export const positionLost = '▼';
+/** A before/after position pair whose position held. */
+export const positionUnchanged = '—';
 
 /** Shown while the window reloads after the bridge announced another contract version. */
 export const bridgeUpdated = 'bridge updated, reload';

@@ -1,6 +1,6 @@
-// Character-cell grids (brainstorm "column grids"): fixed column widths, numbers right-aligned in fixed decimals.
-// `fixed` lives in kit/values/format.ts (the only place numbers become text) and is re-exported here.
-import type { UnknownReason } from '@pitwall/domain';
+// Character-cell grids (brainstorm "column grids"): fixed column widths, numbers right-aligned in fixed decimals
+// (`fixed` in kit/values/format.ts, the only place numbers become text). kit/values builds on the grid, never the reverse.
+import type { Known, UnknownReason } from '@pitwall/domain';
 import { unknownMark } from '../text.ts';
 
 export type GridColumn = { width: number; align?: 'left' | 'right' };
@@ -13,7 +13,13 @@ export function fitCell(text: string, width: number, align: 'left' | 'right' = '
 }
 
 /** A piece of a cell that mixes known texts and unknown values: a known text, or an unknown that shows its reason's mark. */
-export type CellPart = { text: string; reason?: UnknownReason | undefined };
+export type CellPart = { text: string; reason?: UnknownReason };
+
+/** The part of an unknown value: no text, its reason's mark shows in place. The one place this part is built. */
+export const unknownPart = (reason: UnknownReason): CellPart => ({ text: '', reason });
+
+/** A `Known` value as a part: its formatted text, or the unknown's part (`format` is not called for an unknown). */
+export const knownPart = <T>(v: Known<T>, format: (t: T) => string): CellPart => (v.known ? { text: format(v.value) } : unknownPart(v.reason));
 
 /** The characters a part takes: its text, or its reason's mark. */
 const partWidth = (p: CellPart): number => (p.reason === undefined ? p.text.length : unknownMark[p.reason].length);
@@ -63,5 +69,3 @@ export const gridWidth = (columns: readonly GridColumn[], gap = 1): number =>
 /** One row: the cells fitted to their columns and joined by `gap` spaces; missing cells are blank. */
 export const gridRow = (columns: readonly GridColumn[], cells: readonly string[], gap = 1): string =>
   columns.map((c, i) => fitCell(cells[i] ?? '', c.width, c.align)).join(' '.repeat(gap));
-
-export { fixed } from '../values/format.ts';
