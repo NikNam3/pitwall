@@ -67,6 +67,16 @@ Claude manages git: workers commit on their own branches; supervisor may merge t
 - Conventional commits: `feat(protocol): ...`, `test(engine): ...`, `docs: ...`, `build: ...`.
 - Commit after every task. End every commit message with a blank line and a `Co-Authored-By: <model name> <noreply@anthropic.com>` trailer.
 
+## Reviews: ONE question (user ruling 2026-10-31, replaces the three gold rules)
+
+**THE review after every task asks only: did we change the architecture without a good reason?**
+
+- This is the only thing that decides whether the project survives long development. It replaces the earlier three questions (architecture, cheaped-out decisions, ugly workarounds): those open-ended questions made the 2026-10-30/31 run loop for eight review waves (20, 13, 5, 5, 8, 8, 10, 1 findings) without converging.
+- "The architecture" is what `docs/architecture.md`, the ADRs in `docs/decisions/` and the rules of this file fix: the packages and their dependency direction, purity of engine and analysis (no clock, no I/O), where state lives, what history is and when it is rewritten, the topic and contract shapes, displays render and analyses compute, presentation centralised, registration by convention.
+- A change to any of these is fine **with a good reason that is written down** (spec, ADR or `docs/architecture.md` changed in the same work). A change without a good reason, or not written down, is a finding and is fixed before the next task.
+- Everything else (naming, a doc sentence, a test that could be tighter, a style nit) is not a review finding and never starts a fix wave. A real bug found along the way is reported and fixed as a bug, not as a review round.
+- A finding names the concrete architecture change (file:line, which rule) and why the reason is missing or not good. A clean review is the expected, valid result.
+
 ## Where to look
 
 - `docs/superpowers/specs/2026-10-29-timing-car-monitoring-design.md`: sub-project 3 spec; dependency graph of its units: `docs/superpowers/specs/2026-10-29-timing-car-monitoring/dependency-graph.html`; run rulings: `docs/superpowers/notes/2026-10-29-sp3-run-rulings.md`
