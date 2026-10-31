@@ -178,3 +178,14 @@ describe('Canvas: the theme of its own element', () => {
     expect(api.cell.height).toBeCloseTo(DEFAULT_THEME.fontPx * DEFAULT_THEME.density.lineHeight);
   });
 });
+
+// A browser always gives a canvas a 2D context, so a canvas without one is a bug, and a bug is an exception (review 8,
+// R8-9): the canvas throws instead of silently drawing nothing.
+describe('Canvas: no 2D context', () => {
+  it('throws when the canvas gives no 2D context, and never calls draw', () => {
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
+    const draw = vi.fn();
+    expect(() => render(Canvas, { size: size(100, 50, 1), draw })).toThrow(/context/i);
+    expect(draw).not.toHaveBeenCalled();
+  });
+});

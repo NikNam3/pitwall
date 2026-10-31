@@ -4,13 +4,18 @@
 // `cols`, `rows`, `moment: MomentValues`; the cell links its panel to the moment's `session.info` `playerCar`, and its
 // `GalleryConnection` answers the panel's `{ carId }` subscription with the moment entry of those params.
 import type { SessionInfo } from '@pitwall/contracts';
-import { carId, known, toSessionTime, unknown, type FuelState } from '@pitwall/domain';
+import { carId, feedId, known, toSessionTime, unknown, type FuelState } from '@pitwall/domain';
 import { cleanup, render, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { TopicStore } from '../../src/connection/topic-store.svelte.ts';
 import GalleryCell from '../../src/gallery/GalleryCell.svelte';
+import { GalleryConnection } from '../../src/gallery/gallery-connection.ts';
 import type { MomentValues } from '../../src/gallery/moment-values.ts';
 import { registerWidget } from '../../src/kit/define-widget.ts';
+import type { ResolvedLink } from '../../src/kit/types.ts';
 import { formatLaps } from '../../src/kit/values/format.ts';
+import Panel from '../../src/shell/panel/Panel.svelte';
+import { defaultPanel } from '../../src/shell/workbooks/default-panel.ts';
 import { THEMES } from '../../src/theme/index.ts';
 import fuelGauge from '../../src/widgets/fuel-gauge/register.ts';
 import { widget } from '../../src/widgets/fuel-gauge/widget.ts';
@@ -90,8 +95,28 @@ describe('GalleryCell: one import per widget', () => {
     expect(load).toHaveBeenCalledTimes(1);
   });
 
-  it('the gallery has no import memo of its own (the registry holds it)', () => {
-    // The glob only lists files; nothing is imported.
-    expect(Object.keys(import.meta.glob('../../src/gallery/load-once.ts'))).toEqual([]);
+  it("the gallery and the app load the component through the registry's loader: one import across both", async () => {
+    // Review 8, R8-5: the gallery hands its panel the registered widget it was given, and the app's panel gets the same
+    // one, so both show what the registry's loader gives (here a probe, not the fuel gauge) from its one import. A gallery
+    // that loaded the component by another path (its own loader or memo, the widget list) would show the real fuel
+    // gauge, or import twice.
+    const load = vi.fn(() => import('./RegistryProbe.svelte'));
+    const counted = registerWidget(widget, load);
+    const probeIn = (c: HTMLElement) => c.querySelector('[data-testid="registry-probe"]');
+    const inGallery = render(GalleryCell, {
+      id: 'fuel-gauge/full/moment/a', theme: THEMES[0]!, widget: counted, widgetName: widget.name, cols: FULL.minCols, rows: FULL.minRows, moment,
+    }).container;
+    await waitFor(() => expect(probeIn(inGallery)).not.toBeNull());
+    // The app's panel: the shell's Panel on its own store, as a workbook window draws it.
+    const store = new TopicStore(new GalleryConnection(moment, []));
+    const link: ResolvedLink = { group: 1, feedId: feedId('gallery'), primary: PLAYER, compare: [], window: { kind: 'live' } };
+    const inApp = render(Panel, { store, spec: defaultPanel(counted.decl), widget: counted, link }).container;
+    try {
+      await waitFor(() => expect(probeIn(inApp)).not.toBeNull());
+      expect(inGallery.textContent).not.toContain(formatLaps(19.4));
+      expect(load).toHaveBeenCalledTimes(1);
+    } finally {
+      store.dispose();
+    }
   });
 });

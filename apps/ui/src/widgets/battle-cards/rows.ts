@@ -1,7 +1,7 @@
-import type { BattleCard, BattleSide, DrsStatus, Known, RaceMoment, UnknownReason, VisualCompound } from '@pitwall/domain';
+import type { BattleCard, BattleSide, DrsStatus, Known, RaceMoment, VisualCompound } from '@pitwall/domain';
 import type { CarOverview } from '@pitwall/contracts';
 import { carCodeById } from '../../kit/car/car-label.ts';
-import { gridRow, knownPart, unknownPart, type GridColumn } from '../../kit/grid/grid.ts';
+import { gridRow, knownPart, unknownPart, type CellPart, type GridColumn } from '../../kit/grid/grid.ts';
 import { compoundText } from '../../kit/compound/compound-mark.ts';
 import { formatJoules, formatLaps, formatSecondsPerLapPlain, formatSignedSeconds } from '../../kit/values/format.ts';
 import type { Role } from '../../theme/roles.ts';
@@ -10,8 +10,8 @@ import { battleRole, type Side } from './emphasis.ts';
 import * as text from './text.ts';
 
 export type ColumnId = 'drv' | 'gap' | 'closing' | 'toDrs' | 'paceDelta' | 'margin' | 'tyres' | 'ers';
-/** A field: its text, its emphasis, why it is unknown (`reason`: the cell shows its mark) or what it means on hover (`title`). */
-export type Cell = { text: string; role?: Role; reason?: UnknownReason; title?: string };
+/** A field: a part (its text, or why it is unknown) with its emphasis and what it means on hover (`title`). */
+export type Cell = CellPart & { role?: Role; title?: string };
 export type TyrePair = { ours: { compound: VisualCompound; age: number }; theirs: { compound: VisualCompound; age: number } };
 export type BattleRow = {
   label: 'AHEAD' | 'BEHIND';

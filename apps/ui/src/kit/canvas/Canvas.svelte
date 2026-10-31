@@ -13,7 +13,8 @@
   $effect(() => {
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    // a browser always gives a 2D context: none is a bug, never a silent blank canvas
+    if (ctx === null) throw new Error('no 2D canvas context');
     const { width, height } = size.px;
     const dpr = size.dpr;
     canvas.width = Math.round(width * dpr);
