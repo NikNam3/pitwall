@@ -1,5 +1,6 @@
-// The before/after position pair of an incident, as cell parts (review 5, R5; review 6, R6-3). Contract of
-// `positionPairParts(from, to)` in src/kit/values/position-mark.ts (pure; it replaces `positionPairText`):
+// The before/after position pair, as cell parts (review 5, R5; review 6, R6-3): the kit's one pair rendering
+// (`positionMarkText` takes no pair). Contract of `positionPairParts(from, to)` in src/kit/values/position-mark.ts (pure;
+// it replaces `positionPairText`):
 //  - `from` and `to` are each a `Known<number>`; the result is the kit grid's `CellPart[]`;
 //  - both known: `P5→P4` in the kit position format, `—` (`positionUnchanged`) when the position held;
 //  - an unknown side is its mark in its own part (`{ text: '', reason }`), and the known side still shows: `P5→…`,
