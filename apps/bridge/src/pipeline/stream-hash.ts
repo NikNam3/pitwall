@@ -1,6 +1,6 @@
 // A fingerprint of everything a client would receive while a recording is replayed: equal hashes, equal streams.
-import { createHash } from 'node:crypto';
-import { encodeMessage, TOPICS, type TopicName } from '@pitwall/contracts';
+import { createHash, type Hash } from 'node:crypto';
+import { encodeMessage, TOPICS, type ServerMessage, type TopicName } from '@pitwall/contracts';
 import { feedId, MAX_CARS } from '@pitwall/domain';
 import type { Feature } from '../features/feature.ts';
 import { FEATURES } from '../features/index.generated.ts';
@@ -59,28 +59,55 @@ const jobTopicsOf = (features: readonly Feature[]): ReadonlySet<TopicName> =>
   new Set(features.flatMap((feature) => feature.topics.flatMap((binding) => ('fromJob' in binding ? [binding.topic] : []))));
 
 /**
+ * The hash (sha256, hex) of the messages one client receives, one `encodeMessage` line each, in their order. A job
+ * topic's messages stay out: its results come from worker threads and arrive whenever a worker finishes, so the same
+ * recording may deliver them at other points of the stream.
+ */
+export class StreamHash {
+  readonly #jobTopics: ReadonlySet<TopicName>;
+  readonly #hash: Hash = createHash('sha256');
+
+  constructor(jobTopics: ReadonlySet<TopicName>) {
+    this.#jobTopics = jobTopics;
+  }
+
+  /** One message the client received, with the topic of its subscription. */
+  add(topic: TopicName, message: ServerMessage): void {
+    if (!this.#jobTopics.has(topic)) this.#hash.update(`${encodeMessage(message)}\n`);
+  }
+
+  /** sha256, hex, of every message added so far that is no job topic's. */
+  digest(): string {
+    return this.#hash.digest('hex');
+  }
+}
+
+/**
  * Replays `recordingPath` as fast as possible through the real pipeline, with the hub's clock on the record times,
- * and hashes (sha256, hex) every message one client subscribed to every feed topic receives. A topic bound with a
+ * and hashes through `StreamHash` every message one client subscribed to every feed topic receives. A topic bound with a
  * `select` is subscribed once per car with `paramsFor(car)`, so every car's value enters the hash (the player may drive
  * any car, and the analyses publish per car); a topic without one sends every subscriber the same value, so once is enough.
  * Global topics stay out: the bridge shell publishes them, not the replay.
  *
- * Job topics stay out: their results come from worker threads and arrive whenever a worker finishes, so the same
- * recording may deliver them at other points of the stream. They are not subscribed, so their jobs do not run.
- * `features` replaces the registered features (default `FEATURES`). The recording's config sidecar applies, as in a replay.
+ * Job topics are subscribed too, so their jobs run as in a session with a client, but `StreamHash` leaves their
+ * messages out. `features` replaces the registered features (default `FEATURES`). The recording's config sidecar
+ * applies, as in a replay.
  */
 export async function topicStreamHash(recordingPath: string, { features = FEATURES }: { features?: readonly Feature[] } = {}): Promise<string> {
   const id = feedId('hash');
   let nowMs = 0;
   const hub = new TopicHub({ now: () => nowMs });
-  const hash = createHash('sha256');
-  hub.addClient('hash', { send: (message) => hash.update(`${encodeMessage(message)}\n`), bufferedAmount: () => 0 });
-  const subscribe = (subscriptionId: string, topic: TopicName, carId: number) =>
+  const hash = new StreamHash(jobTopicsOf(features));
+  /** The topic of each subscription id of the hash client. */
+  const topicOf = new Map<string, TopicName>();
+  hub.addClient('hash', { send: (message) => hash.add(subscriptionTopic(topicOf, message), message), bufferedAmount: () => 0 });
+  const subscribe = (subscriptionId: string, topic: TopicName, carId: number) => {
+    topicOf.set(subscriptionId, topic);
     hub.subscribe({ clientId: 'hash', id: subscriptionId, topic, params: paramsFor(carId), feedId: id });
-  const jobTopics = jobTopicsOf(features);
+  };
   const selected = selectedTopicsOf(features);
   for (const topic of Object.keys(TOPICS) as TopicName[]) {
-    if (TOPICS[topic].scope !== 'feed' || jobTopics.has(topic)) continue;
+    if (TOPICS[topic].scope !== 'feed') continue;
     if (!selected.has(topic)) subscribe(topic, topic, 0);
     else for (let carId = 0; carId < MAX_CARS; carId++) subscribe(`${topic}:${carId}`, topic, carId);
   }
@@ -94,5 +121,12 @@ export async function topicStreamHash(recordingPath: string, { features = FEATUR
   pipeline.start();
   await pipeline.done;
   hub.tick();
-  return hash.digest('hex');
+  return hash.digest();
+}
+
+/** The topic of the subscription `message` is for; the hub sends the hash client nothing else. */
+function subscriptionTopic(topicOf: ReadonlyMap<string, TopicName>, message: ServerMessage): TopicName {
+  const topic = 'id' in message && message.id !== undefined ? topicOf.get(message.id) : undefined;
+  if (topic === undefined) throw new Error(`the hash client received a message of no subscription: ${encodeMessage(message)}`);
+  return topic;
 }
