@@ -371,6 +371,36 @@ describe('a flashback across a phase boundary', () => {
   });
 });
 
+// Wave 5 (W5-E), the counterexample of the scheduler property (seed 1759405573), shrunk by hand. The case: after a
+// rewind the game's first frames still carry the old session time, and what they record is stamped at the rewind's
+// target, so the target frame and those stale frames are one moment of the race clock. A frame of that moment records
+// a mini-sector crossing (in the counterexample the target frame, its crossing exactly at its own time; here the first
+// stale frame, which needs no exact hit); the SC status arrives in a later stale frame and opens the neutralisation at
+// the same moment. A reader from scratch counts that crossing under the neutralisation (it lies at its start); a reader
+// that folded it a step before the neutralisation opened must come to the same count. The cause is the shared moment,
+// not the rewind: a run that never had the discarded frames sees the same moment as a clock standing for a few frames.
+describe('a neutralisation that opens at a moment an earlier frame of it already recorded', () => {
+  /** Car 0 drives 40 m a frame from lights out (a mini-sector crossing on every even race frame); the SC status from race frame `scAt`. */
+  const driven = (k: number, scAt: number | undefined): Beat => ({
+    cars: (d) => lap(d, 0, { currentLapNum: 1, lapDistance: 10 + 40 * k }),
+    ...(k === scAt && { session: status(1) }),
+  });
+  const timeline = (scAt?: number) => script(gridStart(60, (k) => driven(k, scAt)));
+
+  it('a rewind whose first stale frame crosses a mini-sector and whose second brings the SC status: a reader of the crossings under the neutralisation is incremental = from scratch on every step', () => {
+    // The game runs to race frame 25 and goes back to race frame 19 (frame id going back); its new timeline has the SC
+    // status from race frame 21. Race frames 20 (a crossing) and 21 still carry race frame 25's session time.
+    const all = timeline();
+    const oldMs = all[raceFrame(25)]!.sessionTime;
+    const resumed = after(timeline(21), raceFrame(20), raceFrame(26)).slice(0, 20).map((f, i) => (i < 2 ? { ...f, sessionTime: oldMs } : f));
+    expectScheduledIncremental(underNeutralisation, [...all.slice(0, raceFrame(25) + 1), ...resumed]);
+  });
+  it('the same moment without a rewind (race frames 20 to 23 at one session time, a crossing at 22, the SC status at 23): the reader is incremental = from scratch on every step', () => {
+    const frames = script(gridStart(60, (k) => ({ ...(k >= 21 && k <= 23 && { at: raceAt(20) }), ...driven(k, 23) })));
+    expectScheduledIncremental(underNeutralisation, frames);
+  });
+});
+
 describe('the view a calculator receives', () => {
   it('carries the situation of the scheduler input', () => {
     const seen: unknown[] = [];
