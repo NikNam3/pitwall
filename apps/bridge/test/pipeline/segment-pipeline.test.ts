@@ -18,12 +18,17 @@ const SESSION = '13536157633115227668' as SessionUid;
 const F = 'replay' as FeedId;
 const tmp = () => mkdtempSync(join(tmpdir(), 'segment-'));
 
-async function datagrams(path: string): Promise<{ payloads: number[][]; startedAt: string; firstT: number }> {
-  const payloads: number[][] = []; let firstT = -1; const it = readPwrec(path);
+/**
+ * The datagrams of a recording, each as its bytes in hex: the same bytes compare equal, and the comparison of two such
+ * lists is quick. As arrays of numbers (1.9 million for the segment) the deep equality alone took 1 to 2 s, over 5 s
+ * under the full suite's load.
+ */
+async function datagrams(path: string): Promise<{ payloads: string[]; startedAt: string; firstT: number }> {
+  const payloads: string[] = []; let firstT = -1; const it = readPwrec(path);
   for (let r = await it.next(); ; r = await it.next()) {
     if (r.done) return { payloads, startedAt: r.value.meta.startedAt, firstT };
     if (firstT < 0) firstT = r.value.t;
-    payloads.push([...r.value.payload]);
+    payloads.push(Buffer.from(r.value.payload).toString('hex'));
   }
 }
 
