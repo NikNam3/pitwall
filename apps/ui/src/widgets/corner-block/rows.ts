@@ -1,6 +1,6 @@
 // Pure join of the three topics into display rows for the corner block: texts, roles, staleness and hidden reasons.
-import type { CarBands, CarState, Corners, Known, TyreWear, UnknownReason } from '@pitwall/domain';
-import { fitCell, gridRow } from '../../kit/grid/grid.ts';
+import type { CarBands, CarState, Corners, Known, TyreWear } from '@pitwall/domain';
+import { fitCell, gridRow, unknownPart, type CellPart } from '../../kit/grid/grid.ts';
 import type { GridColumn } from '../../kit/grid/grid.ts';
 import { staleRole } from '../../kit/stale/stale.ts';
 import { cornerNames } from '../../kit/text.ts';
@@ -14,7 +14,7 @@ import { columnHeaders } from './text.ts';
  * One value: the raw `value`, `text` for the full table and `compactText` for the compact view; both texts empty when
  * hidden, with the reason. `stale` when its car field fell behind; the role is then faint.
  */
-export type Cell = { value: Known<number>; text: string; compactText: string; role?: Role; reason?: UnknownReason; stale?: true };
+export type Cell = CellPart & { value: Known<number>; compactText: string; role?: Role; stale?: true };
 export type CornerRow = { surface: Cell; carcass: Cell; pressure: Cell; brake: Cell; wear: Cell };
 export type CornerBlockRows = { corners: Corners<CornerRow>; engine: Cell };
 type CornerName = keyof Corners<unknown>;
@@ -38,7 +38,7 @@ type Format = (n: number) => string;
 type Spec = { text: Format; compact: Format; role?: Role | undefined; stale?: boolean };
 
 function cell(value: Known<number>, spec: Spec): Cell {
-  if (!value.known) return { value, text: '', compactText: '', reason: value.reason };
+  if (!value.known) return { value, compactText: '', ...unknownPart(value.reason) };
   const base: Cell = { value, text: spec.text(value.value), compactText: spec.compact(value.value) };
   const stale = spec.stale === true;
   const role = staleRole(spec.role, stale);

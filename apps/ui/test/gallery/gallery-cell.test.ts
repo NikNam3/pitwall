@@ -9,6 +9,7 @@ import { cleanup, render, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import GalleryCell from '../../src/gallery/GalleryCell.svelte';
 import type { MomentValues } from '../../src/gallery/moment-values.ts';
+import { registerWidget } from '../../src/kit/define-widget.ts';
 import { formatLaps } from '../../src/kit/values/format.ts';
 import { THEMES } from '../../src/theme/index.ts';
 import fuelGauge from '../../src/widgets/fuel-gauge/register.ts';
@@ -77,14 +78,20 @@ describe('GalleryCell: one import per widget', () => {
   it("imports a widget's component once, however many cells and panels show it", async () => {
     // The gallery draws a widget in hundreds of cells, and the cell and its panel each ask for the component. Every
     // call of a built loader runs Vite's preload helper, which scans the whole page for a nonce meta tag: once per
-    // cell that grew with the page and made opening the gallery slow enough to time out under load.
-    const component = vi.fn(fuelGauge.component);
-    const counted = { decl: fuelGauge.decl, component };
+    // cell that grew with the page and made opening the gallery slow enough to time out under load. The one import is
+    // the registry's (`registerWidget`, review 7 R7-4): the gallery hands the registered widget on as it is.
+    const load = vi.fn(() => import('../../src/widgets/fuel-gauge/FuelGauge.svelte'));
+    const counted = registerWidget(widget, load);
     const cell = (id: string) =>
       render(GalleryCell, { id, theme: THEMES[0]!, widget: counted, widgetName: widget.name, cols: FULL.minCols, rows: FULL.minRows, moment });
     const views = [cell('fuel-gauge/full/moment/a'), cell('fuel-gauge/full/moment/b'), cell('fuel-gauge/full/moment/c')];
     for (const { container } of views) await waitFor(() => expect(container.querySelector('[data-ready]')).not.toBeNull());
     await waitFor(() => expect(views.every(({ container }) => container.textContent?.includes(formatLaps(19.4)))).toBe(true));
-    expect(component).toHaveBeenCalledTimes(1);
+    expect(load).toHaveBeenCalledTimes(1);
+  });
+
+  it('the gallery has no import memo of its own (the registry holds it)', () => {
+    // The glob only lists files; nothing is imported.
+    expect(Object.keys(import.meta.glob('../../src/gallery/load-once.ts'))).toEqual([]);
   });
 });

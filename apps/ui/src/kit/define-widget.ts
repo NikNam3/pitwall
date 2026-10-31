@@ -46,7 +46,18 @@ export function declareWidget<D extends Record<string, AnyDataDecl>, O extends R
   return { name: w.name, title: w.title, data: w.data, options: w.options ?? ({} as O), sizes: w.sizes };
 }
 
-/** Pairs a declaration with its lazily loaded component; the component's props must be the declaration's `WidgetProps`. */
+/**
+ * Pairs a declaration with its lazily loaded component; the component's props must be the declaration's `WidgetProps`.
+ * The component is imported once: the first call imports it and every later call gets the same promise. Every call of
+ * a built lazy loader runs Vite's preload helper, which scans the whole page, so a page with many panels of a widget
+ * (the gallery, a big workbook) would pay that per panel. A failed import is not kept: the next call imports again.
+ */
 export function registerWidget<W extends WidgetDecl<any, any>>(decl: W, component: ComponentLoader<NoInfer<W>>): RegisteredWidget {
-  return { decl, component };
+  let loaded: ReturnType<ComponentLoader<NoInfer<W>>> | undefined;
+  const once = () =>
+    (loaded ??= component().catch((error: unknown) => {
+      loaded = undefined;
+      throw error;
+    }));
+  return { decl, component: once };
 }

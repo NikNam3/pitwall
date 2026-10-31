@@ -4,7 +4,7 @@
   import { COLUMN_GAP, fitRow, incidentRows, LEAD } from './rows.ts';
   import type { widget } from './widget.ts';
   import type { WidgetProps } from '../../kit/types.ts';
-  import TextCell from '../../kit/values/TextCell.svelte';
+  import CellParts from '../../kit/values/CellParts.svelte';
 
   let { data, size }: WidgetProps<typeof widget> = $props();
 
@@ -18,7 +18,7 @@
   {#each rows as row (row.id)}
     <div class="row" style:color={roleOrUndefined(row.role)} data-testid="incident-{row.id}">{lead}{#each fitRow(size.mode, row, size.cols) as cell, i (cell.column)}{i === 0 ? '' : gap}<span
           class="cell {cell.column}"
-          title={cell.title}>{#if cell.parts}{#each cell.parts as part, j (j)}<TextCell {...part} />{/each}{:else}{cell.text}{/if}</span
+          title={cell.title}>{#if cell.parts}<CellParts parts={cell.parts} />{:else}{cell.text}{/if}</span
         >{/each}</div>
   {/each}
 </div>

@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { lapsFold } from '../../src/kit/folds.ts';
-import { declareWidget, folded, topic } from '../../src/kit/define-widget.ts';
+import { declareWidget, folded, registerWidget, topic } from '../../src/kit/define-widget.ts';
 import defineWidgetSource from '../../src/kit/define-widget.ts?raw';
 import optionsSource from '../../src/kit/options.ts?raw';
 
@@ -33,6 +33,74 @@ describe('declareWidget', () => {
   });
   it('throws when there are no sizes', () => {
     expect(() => declareWidget({ name: 'gaps', title: 'T', data, sizes: {} })).toThrow();
+  });
+});
+
+// Review 7, R7-4: every call of a built lazy loader runs Vite's preload helper, which scans the whole page, so the
+// registry imports a widget's component once for everyone that mounts it (the app's panels and the gallery's cells).
+describe('registerWidget: one import of the component', () => {
+  const decl = declareWidget({ name: 'gaps', title: 'Gaps', data, sizes });
+  const loaded = { default: (() => undefined) as never };
+
+  it('keeps the declaration', () => {
+    expect(registerWidget(decl, () => Promise.resolve(loaded)).decl).toBe(decl);
+  });
+
+  it('imports nothing before the component is first asked for', () => {
+    const load = vi.fn(() => Promise.resolve(loaded));
+    registerWidget(decl, load);
+    expect(load).not.toHaveBeenCalled();
+  });
+
+  it('imports the component on the first call and hands every later call the same promise', async () => {
+    const load = vi.fn(() => Promise.resolve(loaded));
+    const registered = registerWidget(decl, load);
+    const first = registered.component();
+    const later = [registered.component(), registered.component(), registered.component()];
+    expect(load).toHaveBeenCalledTimes(1);
+    for (const p of later) expect(p).toBe(first);
+    expect(await first).toBe(loaded);
+  });
+
+  it('a call after the import has settled imports nothing again', async () => {
+    const load = vi.fn(() => Promise.resolve(loaded));
+    const registered = registerWidget(decl, load);
+    await registered.component();
+    await registered.component();
+    expect(load).toHaveBeenCalledTimes(1);
+  });
+
+  it('a failed import is not kept: the next call imports again, and that success is then the one import', async () => {
+    // A chunk that failed to load (a dropped connection, a rebuilt bundle) must not stay failed until the page reloads.
+    const failure = new Error('chunk failed to load');
+    const load = vi.fn<() => Promise<typeof loaded>>().mockRejectedValueOnce(failure).mockResolvedValue(loaded);
+    const registered = registerWidget(decl, load);
+    await expect(registered.component()).rejects.toBe(failure);
+    const retried = registered.component();
+    expect(load).toHaveBeenCalledTimes(2);
+    expect(await retried).toBe(loaded);
+    expect(registered.component()).toBe(retried);
+    await registered.component();
+    expect(load).toHaveBeenCalledTimes(2);
+  });
+
+  it('callers waiting on a failing import all see its failure; a call after it imports again', async () => {
+    const failure = new Error('chunk failed to load');
+    const load = vi.fn<() => Promise<typeof loaded>>().mockRejectedValueOnce(failure).mockResolvedValue(loaded);
+    const registered = registerWidget(decl, load);
+    const waiting = [registered.component(), registered.component()];
+    expect(load).toHaveBeenCalledTimes(1);
+    for (const p of waiting) await expect(p).rejects.toBe(failure);
+    expect(await registered.component()).toBe(loaded);
+    expect(load).toHaveBeenCalledTimes(2);
+  });
+
+  it('each registration imports its own component', () => {
+    const a = vi.fn(() => Promise.resolve(loaded));
+    const b = vi.fn(() => Promise.resolve(loaded));
+    registerWidget(decl, a).component();
+    registerWidget(decl, b).component();
+    expect([a.mock.calls.length, b.mock.calls.length]).toEqual([1, 1]);
   });
 });
 

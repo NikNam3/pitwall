@@ -5,7 +5,7 @@
   import type { WidgetProps } from '../../kit/types.ts';
   import { ourCars } from '../../kit/car/our-cars.ts';
   import { noDataYet } from '../../kit/text.ts';
-  import TextCell from '../../kit/values/TextCell.svelte';
+  import CellParts from '../../kit/values/CellParts.svelte';
   import { formatGapTick } from '../../kit/values/format.ts';
   import { role } from '../../theme/index.ts';
   import { gapSeries, phaseBands } from './series.ts';
@@ -24,8 +24,8 @@
 </script>
 
 <div class="gap">
-  <!-- The parts of the line, a space apart; an unknown part (the lap time, or the reference car's code) is a kit text cell showing its mark there. -->
-  <div class="ref" style:color={role('textDim')} style:height="{rowPx}px">{#each header as part, i (i)}{#if i > 0}&nbsp;{/if}{#if 'reason' in part}<TextCell text="" reason={part.reason} />{:else}{part.text}{/if}{/each}</div>
+  <!-- The parts of the line, a space apart; an unknown part (the lap time, or the reference car's code) shows its mark there. -->
+  <div class="ref" style:color={role('textDim')} style:height="{rowPx}px"><CellParts parts={header} separator=" " /></div>
   {#if series.length === 0}
     <div class="empty" style:color={role('textDim')}>{noDataYet}</div>
   {:else}

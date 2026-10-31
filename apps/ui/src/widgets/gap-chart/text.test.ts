@@ -1,22 +1,23 @@
 // The reference line of the gap chart. Contract (wave 2 T6, review RU8): `referenceText` returns the line's parts in
-// order, a known part `{ text }` and an unknown part `{ reason }`; the display joins them with one space and shows the
-// unknown mark (with the reason on hover) at the unknown part's place, so the mark sits where the value is missing.
+// order as kit cell parts (review 7, R7-6/R7-8): a known part `{ text }` and an unknown part `unknownPart(reason)`; the
+// display draws them with the kit's parts component, one space apart, so the unknown mark (with the reason on hover)
+// sits where the value is missing.
 import { describe, expect, it } from 'vitest';
-import { carId, known, toSessionTime, unknown, type CarId, type Known, type UnknownReason } from '@pitwall/domain';
-import type { CarCodeCell } from '../../kit/car/car-label.ts';
+import { carId, known, toSessionTime, unknown, type CarId, type Known } from '@pitwall/domain';
+import { unknownPart, type CellPart } from '../../kit/grid/grid.ts';
 import { referenceText } from './text.ts';
 
 type Kind = 'leaderAverage' | 'carAverage' | 'fixed';
 
 describe('referenceText', () => {
   const at = toSessionTime(0);
-  const code = (id: number): CarCodeCell => (id === 5 ? { text: 'LEC' } : { text: '', reason: 'notReceived' });
+  const code = (id: number): CellPart => (id === 5 ? { text: 'LEC' } : unknownPart('notReceived'));
   const none = unknown('notApplicable');
-  const partsOf = (kind: Kind, car: Known<CarId>, lap: Known<number>): Array<{ text: string } | { reason: UnknownReason }> =>
+  const partsOf = (kind: Kind, car: Known<CarId>, lap: Known<number>): CellPart[] =>
     referenceText({ reference: { kind, carId: car }, referenceLapMs: lap }, code);
   /** The line as the display shows it: the parts joined by a space, an unknown part as `[reason]`. */
   const line = (kind: Kind, car: Known<CarId>, lap: Known<number>): string =>
-    partsOf(kind, car, lap).map((p) => ('reason' in p ? `[${p.reason}]` : p.text)).join(' ');
+    partsOf(kind, car, lap).map((p) => (p.reason === undefined ? p.text : `[${p.reason}]`)).join(' ');
 
   it('names the leader average with the reference lap time', () => {
     expect(line('leaderAverage', none, known(105_123, at))).toBe('ref leader avg 1:45.123');
@@ -44,7 +45,22 @@ describe('referenceText', () => {
   });
 
   it('has no unknown part when everything is known', () => {
-    expect(partsOf('leaderAverage', none, known(105_123, at)).filter((p) => 'reason' in p)).toEqual([]);
-    expect(partsOf('carAverage', known(carId(5), at), known(106_000, at)).filter((p) => 'reason' in p)).toEqual([]);
+    expect(partsOf('leaderAverage', none, known(105_123, at)).filter((p) => p.reason !== undefined)).toEqual([]);
+    expect(partsOf('carAverage', known(carId(5), at), known(106_000, at)).filter((p) => p.reason !== undefined)).toEqual([]);
+  });
+
+  it("builds every part as a kit cell part: a known part is its text alone, an unknown one the kit's unknown part", () => {
+    expect(partsOf('carAverage', known(carId(9), at), unknown('insufficientData'))).toStrictEqual([
+      { text: 'ref' },
+      unknownPart('notReceived'),
+      { text: 'avg' },
+      unknownPart('insufficientData'),
+    ]);
+    expect(partsOf('carAverage', unknown('notApplicable'), known(106_000, at))).toStrictEqual([
+      { text: 'ref' },
+      unknownPart('notApplicable'),
+      { text: 'avg' },
+      { text: '1:46.000' },
+    ]);
   });
 });

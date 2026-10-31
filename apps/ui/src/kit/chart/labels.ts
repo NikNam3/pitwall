@@ -1,5 +1,19 @@
-/** Pure helpers of the chart's end-of-line labels: which lines get one, and where they go without overlapping. */
+/** Pure helpers of the chart's labels: the axis label's form, and the end-of-line labels (which lines get one, where). */
 import type { ChartSeries } from './data.ts';
+
+/** An axis label in its forms, one at least, in any order (e.g. `behind reference, s`, `behind ref, s`, `s`). */
+export type AxisLabel = readonly [string, ...string[]];
+
+/**
+ * The form of an axis label drawn in `roomPx` (the plot's length along the axis): the longest whose characters fit,
+ * `charPx` each (the label font is the grid's monospace font); the first of forms of one length; none fits, no label,
+ * never a clipped one.
+ */
+export function fitAxisLabel(forms: AxisLabel, roomPx: number, charPx: number): string {
+  let best = '';
+  for (const form of forms) if (form.length > best.length && form.length * charPx <= roomPx) best = form;
+  return best;
+}
 
 /** A line's label: `index` is the series' index, `x` and `value` the x and y of its last point in the visible range. */
 export type EndLabel = { index: number; text: string; x: number; value: number; bold: boolean };
