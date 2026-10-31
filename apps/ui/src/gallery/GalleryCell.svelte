@@ -15,6 +15,7 @@
   import type { MomentValues } from './moment-values.ts';
   import { SUBPIXEL_PX } from './layout.ts';
   import { afterFrames } from './ready.ts';
+  import { loadOnce } from './load-once.ts';
   import { themed } from './theme-action.ts';
 
   type Props = {
@@ -30,9 +31,13 @@
     moment: MomentValues;
     overrides?: readonly GalleryOverride[];
   };
-  let { id, theme, widget, widgetName, baseline = false, cols, rows, moment, overrides = [] }: Props = $props();
+  let { id, theme, widget: given, widgetName, baseline = false, cols, rows, moment, overrides = [] }: Props = $props();
 
   const GALLERY_FEED = feedId('gallery');
+
+  // The cell and its panel share one import of the component with every other cell of the widget (load-once.ts).
+  /* svelte-ignore state_referenced_locally */
+  const widget = given === undefined ? undefined : loadOnce(given);
 
   // The gallery is static: everything is fixed when the cell mounts.
   /* svelte-ignore state_referenced_locally */
