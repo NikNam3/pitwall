@@ -2,12 +2,12 @@
   // Damage per part and per corner, the faults and the jumps with their lap-time loss (spec 8.2, V31).
   import type { WidgetProps } from '../../kit/types.ts';
   import CornerGrid from '../../kit/corners/CornerGrid.svelte';
-  import { fitCell } from '../../kit/grid/grid.ts';
+  import { fitCell, type CellPart } from '../../kit/grid/grid.ts';
   import { cornerNames } from '../../kit/text.ts';
   import TextCell from '../../kit/values/TextCell.svelte';
   import { role, roleOrUndefined } from '../../theme/index.ts';
   import { damageRows, FULL_WIDTHS as W } from './rows.ts';
-  import type { Cell, JumpRow } from './rows.ts';
+  import type { JumpRow } from './rows.ts';
   import * as text from './text.ts';
   import type { widget } from './widget.ts';
 
@@ -18,7 +18,7 @@
   const wingWidth = (i: number): number => (i === 2 ? W.wingRear : W.wing);
 </script>
 
-{#snippet value(c: Cell, width: number = W.value)}<TextCell {...c} {width} align="right" />{/snippet}
+{#snippet value(c: CellPart, width: number = W.value)}<TextCell {...c} {width} align="right" />{/snippet}
 {#snippet jump(j: JumpRow)}<span style:color={roleOrUndefined(j.role)}>{fitCell(j.text, W.jump)}  <TextCell text={j.loss} reason={j.reason} title={j.title} /></span>{/snippet}
 
 <div class="card">

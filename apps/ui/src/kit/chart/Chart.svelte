@@ -15,14 +15,14 @@
   import type { WidgetSize } from '../types.ts';
   import { buildData, clipBands, plotLines, visibleXRange } from './data.ts';
   import type { ChartSeries, PhaseBand } from './data.ts';
-  import { earlyLabelLeft, endLabels, endsEarly, placeLabels } from './labels.ts';
-  import type { EndLabel } from './labels.ts';
+  import { earlyLabelLeft, endLabels, endsEarly, fitAxisLabel, placeLabels } from './labels.ts';
+  import type { AxisLabel, EndLabel } from './labels.ts';
 
   type Props = {
     series: ChartSeries[];
-    /** Axes are always labelled. */
-    xLabel: string;
-    yLabel: string;
+    /** Axes are always labelled: each label in its forms, the longest that fits the plot's length along its axis drawn. */
+    xLabel: AxisLabel;
+    yLabel: AxisLabel;
     /** Both kinds are plain numbers on the axis; the kind is for the caller's labels. */
     x: { kind: 'lap' | 'sessionTime' };
     /** Safety-car, virtual-safety-car and red-flag periods, painted behind the series (clipped to the visible range). */
@@ -81,6 +81,9 @@
       const labelRoomPx = labelGapPx + cellPx * series.reduce((m, s) => Math.max(m, s.label.length), 0);
       const grid = resolveRole(el, 'grid');
       const axis = { stroke: resolveRole(el, 'textDim'), font, labelFont: font, grid: { stroke: grid }, ticks: { stroke: grid } };
+      // Each axis label is the form that fits the plot's length along its axis at draw time (canvas px), so it never clips.
+      const labelForms = (forms: AxisLabel, along: 'width' | 'height') => (u: uPlot): string =>
+        fitAxisLabel(forms, u.bbox[along], cellPx * uPlot.pxRatio);
 
       // A line of one point has no segment to draw (a settled point at the end of lap 1, or a live point before it), so
       // it shows as a dot of its stroke; a line of more points shows none.
@@ -160,7 +163,7 @@
           padding: [null, labelRoomPx, null, null],
           cursor: { show: false },
           scales: { x: { time: false, range: () => visibleXRange(xs, cols, x.kind, xPerCell) } },
-          axes: [{ ...axis, label: xLabel }, { ...axis, label: yLabel, ...(yFormat ? { values: (_u: uPlot, splits: number[]) => splits.map(yFormat) } : {}) }],
+          axes: [{ ...axis, label: labelForms(xLabel, 'width') }, { ...axis, label: labelForms(yLabel, 'height'), ...(yFormat ? { values: (_u: uPlot, splits: number[]) => splits.map(yFormat) } : {}) }],
           series: [{}, ...lines, ...liveLines],
           hooks: {
             draw: [drawLabels, () => ondraw?.()],

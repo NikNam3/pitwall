@@ -1,6 +1,7 @@
 import type { CarOverview, SessionInfo } from '@pitwall/contracts';
 import type { BestStatus, CarId, LapBoard, LapBoardRow, Known, Ms } from '@pitwall/domain';
-import { carCodeById, type CarCodeCell } from '../../kit/car/car-label.ts';
+import { carCodeById } from '../../kit/car/car-label.ts';
+import type { CellPart } from '../../kit/grid/grid.ts';
 import { ourCars } from '../../kit/car/our-cars.ts';
 import type { Cell, LapColumnKey } from './columns.ts';
 
@@ -11,7 +12,7 @@ export type LapAnalysisInput = { board: LapBoard; cars: CarOverview[]; session: 
 export type LapAnalysisRow = {
   carId: CarId;
   /** The car code; empty with the reason when the field lacks the car. */
-  code: CarCodeCell;
+  code: CellPart;
   ours: boolean;
   reference: boolean;
   best: Cell;

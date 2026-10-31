@@ -9,7 +9,7 @@
   import CornerGrid from '../kit/corners/CornerGrid.svelte';
   import InsightLine from '../kit/insight/InsightLine.svelte';
   import PositionMark from '../kit/values/PositionMark.svelte';
-  import TextCell from '../kit/values/TextCell.svelte';
+  import CellParts from '../kit/values/CellParts.svelte';
   import { positionPairParts } from '../kit/values/position-mark.ts';
   import { sectorStatusRole } from '../emphasis/index.ts';
   import Gear from '../kit/icons/Gear.svelte';
@@ -92,7 +92,7 @@
     <figcaption style:color={role('textFaint')}>kit/chart</figcaption>
     <div style:width="{size.px.width}px" style:height="{size.px.height}px">
       {#await loadChart() then { default: Chart }}
-        <Chart {series} xLabel="lap" yLabel="s" x={{ kind: 'lap' }} {size} ondraw={() => (chartDrawn = true)} />
+        <Chart {series} xLabel={['lap']} yLabel={['s']} x={{ kind: 'lap' }} {size} ondraw={() => (chartDrawn = true)} />
       {/await}
     </div>
   </figure>
@@ -100,7 +100,7 @@
     <figcaption style:color={role('textFaint')}>kit/chart-bands</figcaption>
     <div style:width="{size.px.width}px" style:height="{size.px.height}px">
       {#await loadChart() then { default: Chart }}
-        <Chart {series} {bands} xLabel="lap" yLabel="s" x={{ kind: 'lap' }} {size} ondraw={() => (bandsDrawn = true)} />
+        <Chart {series} {bands} xLabel={['lap']} yLabel={['s']} x={{ kind: 'lap' }} {size} ondraw={() => (bandsDrawn = true)} />
       {/await}
     </div>
   </figure>
@@ -115,7 +115,7 @@
     <div><PositionMark change={2} /></div>
     <div><PositionMark change={-1} /></div>
     {#each pairs as [from, to], i (i)}
-      <div>{#each positionPairParts(from, to) as part, j (j)}<TextCell {...part} />{/each}</div>
+      <div><CellParts parts={positionPairParts(from, to)} /></div>
     {/each}
   </figure>
   <figure data-baseline data-gallery-id="kit/sector-status" data-ready>
