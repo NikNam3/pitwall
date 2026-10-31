@@ -72,3 +72,19 @@ describe('GalleryCell', () => {
     expect(container.textContent).not.toContain(formatLaps(11.1));
   });
 });
+
+describe('GalleryCell: one import per widget', () => {
+  it("imports a widget's component once, however many cells and panels show it", async () => {
+    // The gallery draws a widget in hundreds of cells, and the cell and its panel each ask for the component. Every
+    // call of a built loader runs Vite's preload helper, which scans the whole page for a nonce meta tag: once per
+    // cell that grew with the page and made opening the gallery slow enough to time out under load.
+    const component = vi.fn(fuelGauge.component);
+    const counted = { decl: fuelGauge.decl, component };
+    const cell = (id: string) =>
+      render(GalleryCell, { id, theme: THEMES[0]!, widget: counted, widgetName: widget.name, cols: FULL.minCols, rows: FULL.minRows, moment });
+    const views = [cell('fuel-gauge/full/moment/a'), cell('fuel-gauge/full/moment/b'), cell('fuel-gauge/full/moment/c')];
+    for (const { container } of views) await waitFor(() => expect(container.querySelector('[data-ready]')).not.toBeNull());
+    await waitFor(() => expect(views.every(({ container }) => container.textContent?.includes(formatLaps(19.4)))).toBe(true));
+    expect(component).toHaveBeenCalledTimes(1);
+  });
+});
