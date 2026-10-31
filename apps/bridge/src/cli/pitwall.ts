@@ -2,7 +2,7 @@
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { StartupError } from '../startup-error.ts';
-import { SchemaVersionError } from '../storage/db.ts';
+import { SchemaVersionError } from '../storage/schema-version-error.ts';
 import { defaultIo, type CliIo } from './io.ts';
 import { USAGE, UsageError } from './usage.ts';
 
@@ -28,7 +28,8 @@ type Command = (positionals: string[], values: Values, io: CliIo) => Promise<num
 
 /**
  * Each command's module, imported when it runs: a command loads only what it needs (`tap`, a WebSocket client, starts
- * without the engine and the features the bridge commands load).
+ * without the engine and the features the bridge commands load). The error classes `startupMessage` checks live in
+ * modules of their own, so the classifier loads neither the storage nor SQLite.
  */
 const COMMANDS: Record<string, () => Promise<{ run: Command }>> = {
   live: () => import('./commands/live.ts'),
