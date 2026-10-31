@@ -59,9 +59,9 @@ describe('incidentRows', () => {
     expect(row!.cells.forUs.reason).toBeUndefined();
   });
 
-  it('leaves an unknown position out of the plain text, with its reason on hover (no invented position)', () => {
+  it('keeps the known position after an unknown position before, with the before\'s reason on hover (no invented position)', () => {
     const [row] = incidentRows([entry({ forUs: [forUs({ positionBefore: unknown('notReceived') })] })], cars, undefined);
-    expect(row!.cells.forUs).toMatchObject({ text: 'us, OCO +4.1→DNF', reason: 'notReceived' });
+    expect(row!.cells.forUs).toMatchObject({ text: 'us →P4, OCO +4.1→DNF', reason: 'notReceived' });
   });
 
 
@@ -95,7 +95,8 @@ describe('incidentRows', () => {
   // separator (`us`, ` P5→P4`, `, OCO`, ` +4.1→DNF`; between our cars ` · `). The parts show every piece, an unknown value
   // as its mark after its separator; the plain text joins the known pieces' texts, so an unknown value leaves with its
   // separator and nothing is patched afterwards. A pair (`P5→P4`, `+4.1→DNF`) is one piece: an unknown side leaves the
-  // arrow and the pair keeps its separator; an unknown position before leaves no position at all (no `→P4`).
+  // arrow and the pair keeps its separator; the arrow stays when both sides are unknown. The position pair and the gap
+  // pair follow one rule (review 5, R5): an unknown position before keeps the known position after (`…→P4`).
   describe('the for-us cell is built from its pieces', () => {
     /** A cell's plain text and, when it has an unknown value, its parts as one line with `‹reason›` at each mark. */
     type Expected = { text: string; parts?: string };
@@ -127,12 +128,12 @@ describe('incidentRows', () => {
     const matrix: [keyof typeof before, keyof typeof after, keyof typeof other, Expected][] = [
       ['known', 'known', 'present', { text: 'us P5→P4, OCO +4.1→DNF' }],
       ['known', 'unknown', 'present', { text: 'us P5→, OCO +4.1→DNF', parts: 'us P5→‹insufficientData›, OCO +4.1→DNF' }],
-      ['unknown', 'known', 'present', { text: 'us, OCO +4.1→DNF', parts: 'us ‹notReceived›, OCO +4.1→DNF' }],
-      ['unknown', 'unknown', 'present', { text: 'us, OCO +4.1→DNF', parts: 'us ‹notReceived›, OCO +4.1→DNF' }],
+      ['unknown', 'known', 'present', { text: 'us →P4, OCO +4.1→DNF', parts: 'us ‹notReceived›→P4, OCO +4.1→DNF' }],
+      ['unknown', 'unknown', 'present', { text: 'us →, OCO +4.1→DNF', parts: 'us ‹notReceived›→‹insufficientData›, OCO +4.1→DNF' }],
       ['known', 'known', 'absent', { text: 'us P5→P4' }],
       ['known', 'unknown', 'absent', { text: 'us P5→', parts: 'us P5→‹insufficientData›' }],
-      ['unknown', 'known', 'absent', { text: 'us', parts: 'us ‹notReceived›' }],
-      ['unknown', 'unknown', 'absent', { text: 'us', parts: 'us ‹notReceived›' }],
+      ['unknown', 'known', 'absent', { text: 'us →P4', parts: 'us ‹notReceived›→P4' }],
+      ['unknown', 'unknown', 'absent', { text: 'us →', parts: 'us ‹notReceived›→‹insufficientData›' }],
     ];
     const ofCombination = (b: keyof typeof before, a: keyof typeof after, o: keyof typeof other): IncidentForUs =>
       forUs({ positionBefore: before[b], positionAfter: after[a], ...other[o] });
@@ -176,7 +177,7 @@ describe('incidentRows', () => {
       },
       'position before and gap after unknown': {
         list: [forUs({ positionBefore: unknown('notReceived'), gapAfterMs: unknown('notReceived') })],
-        text: 'us, OCO +4.1→', parts: 'us ‹notReceived›, OCO +4.1→‹notReceived›',
+        text: 'us →P4, OCO +4.1→', parts: 'us ‹notReceived›→P4, OCO +4.1→‹notReceived›',
       },
       // the code is a value like any other: missing from the field, it leaves with its separator `, `
       'other car missing from the field, gap after unknown': {
