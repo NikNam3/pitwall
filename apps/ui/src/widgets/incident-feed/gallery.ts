@@ -75,7 +75,7 @@ const gallery: GalleryEntry<typeof widget> = {
     driveThrough: { feed: [driveThrough, stopGo, timePenalty, collision, warning], cars, moment: undefined },
     // A car missing from cars.overview shows its mark in its place, with the reason on hover.
     unknownCar: { feed: [collision], cars: cars.slice(0, 2), moment: undefined },
-    // Our position before and the gap after still to come: each mark sits where its value goes, `us …, OCO +4.1→…`.
+    // Our position before and the gap after still to come: each mark sits where its value goes, `us …→P4, OCO +4.1→…`.
     forUsPending: {
       feed: [{ ...collision, forUs: [{ ourCarId: carId(1), otherCarId: k(carId(2)), positionBefore: unknown('notReceived'), positionAfter: k(4), gapBeforeMs: k(4100), gapAfterMs: unknown('notReceived') }] }],
       cars,

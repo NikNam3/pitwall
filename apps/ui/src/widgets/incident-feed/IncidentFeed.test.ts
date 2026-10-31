@@ -50,9 +50,9 @@ const marks = (c: HTMLElement, reason: UnknownReason): HTMLElement[] =>
 const forUsText = (c: HTMLElement): string => line(c).slice(LEAD + widths.lap + widths.cars + widths.what + widths.lost + 4 * COLUMN_GAP).trimEnd();
 
 describe('IncidentFeed: the for-us cell places each mark at its unknown part', () => {
-  it('an unknown position before: the mark where the position goes', () => {
+  it('an unknown position before: the mark before the arrow, the known position after kept', () => {
     const c = show([entry({ forUs: [forUs({ positionBefore: unknown('notReceived') })] })]);
-    expect(forUsText(c)).toBe(`us ${unknownMark.notReceived}, OCO +4.1→DNF`);
+    expect(forUsText(c)).toBe(`us ${unknownMark.notReceived}→P4, OCO +4.1→DNF`);
     expect(marks(c, 'notReceived')).toHaveLength(1);
   });
 
@@ -74,7 +74,7 @@ describe('IncidentFeed: the for-us cell places each mark at its unknown part', (
 
   it('two unknown parts: two marks, each in its place', () => {
     const c = show([entry({ forUs: [forUs({ positionBefore: unknown('notReceived'), gapAfterMs: unknown('notReceived') })] })]);
-    expect(forUsText(c)).toBe(`us ${unknownMark.notReceived}, OCO +4.1→${unknownMark.notReceived}`);
+    expect(forUsText(c)).toBe(`us ${unknownMark.notReceived}→P4, OCO +4.1→${unknownMark.notReceived}`);
     expect(marks(c, 'notReceived')).toHaveLength(2);
   });
 

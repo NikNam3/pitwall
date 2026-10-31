@@ -2,6 +2,9 @@
 import type { Corners, DamageParts, IncidentKind, InsightCategory, UnknownReason } from '@pitwall/domain';
 
 /** Header state while a required topic has no value yet. */
+/** Between a before and an after (positions, gaps, settings): one glyph for every display. */
+export const arrow = '→';
+
 export const noDataYet = 'no data yet';
 
 /** Header state when a required topic errored on the bridge. */
@@ -108,7 +111,7 @@ export const commandTitles = {
 } as const;
 
 /** Notes of the key overview for entries of `keys.json` that are ignored. */
-export const keyUnknownCommand = (key: string, command: string): string => `keys.json: "${key}" → unknown command "${command}", ignored`;
+export const keyUnknownCommand = (key: string, command: string): string => `keys.json: "${key}" ${arrow} unknown command "${command}", ignored`;
 export const keyBoundTwice = (key: string, command: string): string => `keys.json: "${key}" is bound twice, "${command}" ignored`;
 export const keyNotString = (key: string): string => `keys.json: "${key}" is not bound to a command name, ignored`;
 
@@ -172,7 +175,7 @@ export const topBar = {
   realismOn: 'realism on',
   realismOff: 'realism off',
   /** The value realism takes at the next session, shown when it differs from this one. */
-  realismNext: (enabled: boolean): string => (enabled ? '→ on' : '→ off'),
+  realismNext: (enabled: boolean): string => `${arrow} ${enabled ? 'on' : 'off'}`,
   feedUnknown: 'feed —',
   feedDown: 'feed down',
   feedStale: 'feed stale',
