@@ -70,10 +70,10 @@ const TYPE_LITERAL = /(?:\btype\s+([\w$]+)\s*(?:<[^=]*>)?\s*=\s*)?(\{[^{}]*\})/g
 
 /**
  * Types that hold a `text` and a `reason` of another convention than the part's, so they do not extend it:
- * - the incident feed's cell: the plain text with the reason's mark after it, never in its place;
- * - the damage card's jump row: `reason` is that of the row's `loss`, drawn next to the jump's text.
+ * - the incident feed's cell: the plain text with the reason's mark after it, never in its place.
+ * (The damage card's jump row is no exception: its loss is a `CellPart` of its own, review 9 R9-1.)
  */
-const WIDENED_ELSEWHERE = ['widgets/incident-feed/rows.ts: IncidentCell', 'widgets/damage-card/rows.ts: JumpRow'];
+const WIDENED_ELSEWHERE = ['widgets/incident-feed/rows.ts: IncidentCell'];
 
 /** The unknown part written out: one literal with an empty text and a reason, in any order. */
 const handBuilt = (code: string): string[] =>
