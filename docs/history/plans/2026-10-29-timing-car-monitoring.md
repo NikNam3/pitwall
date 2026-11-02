@@ -12,7 +12,7 @@
 
 **Tech stack:** existing only. TypeScript (strict, type stripping), Vitest, fast-check, Stryker, Svelte 5, uPlot, Playwright, Electron. No new dependency.
 
-**Spec:** `docs/superpowers/specs/2026-10-29-timing-car-monitoring-design.md`. The contracts are its Appendix A, the config defaults its Appendix B, the build order its section 13. The dependency graph is `docs/superpowers/specs/2026-10-29-timing-car-monitoring/dependency-graph.html`.
+**Spec:** `docs/specs/2026-10-29-timing-car-monitoring-design.md`. The contracts are its Appendix A, the config defaults its Appendix B, the build order its section 13. The dependency graph is `docs/specs/2026-10-29-timing-car-monitoring/dependency-graph.html`.
 
 ## Global Constraints
 
@@ -50,7 +50,7 @@
   - Screenshot baselines are made by the implementer and checked by the supervisor against the approved mockups (Task 0).
 - **Worker env:** `PITWALL_PHASE=<test|implement> PITWALL_WORKER_UNIT=<unit> PITWALL_WORKER_SCOPE=<folders>`, one worktree per task under `../pitwall-wt/<task>`.
 - **Centralise presentation** (UI shell plan rule). Formats go in `kit/values/format.ts`, texts in `kit/text.ts` or the widget's `text.ts`, colours as theme roles. A duplicated presentational literal is an Important review finding.
-- **Questions during the run** go into `docs/superpowers/plans/2026-10-29-timing-car-monitoring-questions.md`: one heading per question, lettered options, which one was built, a recommendation, an empty `**Answer:**` line. Work continues on the built option.
+- **Questions during the run** go into `docs/history/plans/2026-10-29-timing-car-monitoring-questions.md`: one heading per question, lettered options, which one was built, a recommendation, an empty `**Answer:**` line. Work continues on the built option.
 - **Commits** end with a blank line and `Co-Authored-By: <model name> <noreply@anthropic.com>`. `CONTRACT_VERSION` is bumped by the supervisor only.
 
 ## Review Focus
@@ -112,15 +112,15 @@ Spec section 13 is the schedule. In short:
 
 **Done by:** the supervisor, with the user. Not a two-phase task.
 
-**Status: done 2026-10-29** (built from the spec's contracts before Task 3). Approved values and rules: `docs/brainstorms/2026-10-29-sp3-displays/README.md`. Display test agents read that README and the HTML pages.
+**Status: done 2026-10-29** (built from the spec's contracts before Task 3). Approved values and rules: `docs/design/2026-10-29-sp3-displays/README.md`. Display test agents read that README and the HTML pages.
 
 **Blocks:** every display's test phase (Tasks 24–35) and Task 36.
 
-- [ ] Write full HTML documents in `docs/brainstorms/2026-10-29-sp3-displays/`, one per display. Each shows compact and full mode at the theme's font size, with colour only where the spec's "Lights up" column says.
+- [ ] Write full HTML documents in `docs/design/2026-10-29-sp3-displays/`, one per display. Each shows compact and full mode at the theme's font size, with colour only where the spec's "Lights up" column says.
 - [ ] Add `0-compound-and-sectors.html` with the two open colour questions as variants: compound as a letter or a letter plus colour; purple and green for our cars only, or for every car.
 - [ ] Add `0-layouts.html` with the `car`, `quali` and `race` workbooks (spec 9) on a 24" and a 14" monitor.
 - [ ] Screenshot every document with the cached headless Chromium and check the screenshots before showing them.
-- [ ] Get the user's approval. Record the approved column priorities, size modes, colour variants and layouts in `docs/brainstorms/2026-10-29-sp3-displays/README.md`. The theme variant values go into `apps/ui/src/theme/`.
+- [ ] Get the user's approval. Record the approved column priorities, size modes, colour variants and layouts in `docs/design/2026-10-29-sp3-displays/README.md`. The theme variant values go into `apps/ui/src/theme/`.
 - [ ] Commit: `docs: approved sub-project 3 display mockups`.
 
 ---
@@ -656,7 +656,7 @@ Per display task: [ ] Test phase · [ ] Implement phase · [ ] review · [ ] mer
 - [ ] **Stryker:** add `packages/analysis` and every new `apps/ui/src/widgets/*/emphasis.ts` to the mutation scope. Run `pnpm mutation` with nothing else running. Score at least 80 %, otherwise add tests for the surviving mutants.
 - [ ] **Final review** of the whole diff from the base commit, split by area if it exceeds about 300 KB (analysis, bridge features, UI). Then a fix wave, then a re-review of the fix wave.
 - [ ] Update CLAUDE.md "Where to look" (spec, graph) and `docs/architecture.md` (the analysis layer, units of sub-project 3).
-- [ ] Write the run's rulings into `docs/superpowers/notes/2026-10-29-sp3-run-rulings.md`. Make sure the questions file holds only real questions.
+- [ ] Write the run's rulings into `docs/history/notes/2026-10-29-sp3-run-rulings.md`. Make sure the questions file holds only real questions.
 - [ ] Merge into `main`, push, delete the worktrees and branches.
 
 ---

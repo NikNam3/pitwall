@@ -1,6 +1,6 @@
 # Traceability: decisions and findings → contract clauses
 
-Status: self-check of `02-contract.md`, 2026-11-02. Every decision of the brainstorm and every finding of `01-current-architecture.md` maps to the clauses that carry it. A row without a clause would be a gap in the contract.
+Status: self-check of `docs/architecture.md`, 2026-11-02. Every decision of the brainstorm and every finding of `01-current-architecture.md` maps to the clauses that carry it. A row without a clause would be a gap in the contract.
 
 ## 1. Decisions of the brainstorm (user, 2026-11-02)
 

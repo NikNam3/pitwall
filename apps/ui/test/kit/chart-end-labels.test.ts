@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// The chart names each line at its right end (Task L; mockup docs/brainstorms/2026-10-29-sp3-displays/3-gap-chart.html:
+// The chart names each line at its right end (Task L; mockup docs/design/2026-10-29-sp3-displays/3-gap-chart.html:
 // the car code in the line's colour, our car bold). uPlot is replaced by a fake that records its options. Contract the
 // tests assume of Chart.svelte beyond chart.test.ts:
 //  - the labels are painted on the plot's canvas by a function in `opts.hooks.draw`, with `u.ctx.fillText(text, x, y)`;

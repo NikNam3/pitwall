@@ -1,6 +1,6 @@
 # UI shell run (sub-project 2): supervisor rulings and deferred minors
 
-Every decision the supervisor took on your behalf during the autonomous run of docs/superpowers/plans/2026-10-28-ui-shell.md (2026-10-28/29), in the order taken, each with its reason and what it costs if wrong. Then the minor review findings that were deferred, for later clean-up. Open questions are in docs/superpowers/plans/2026-10-28-ui-shell-questions.md.
+Every decision the supervisor took on your behalf during the autonomous run of docs/history/plans/2026-10-28-ui-shell.md (2026-10-28/29), in the order taken, each with its reason and what it costs if wrong. Then the minor review findings that were deferred, for later clean-up. Open questions are in docs/history/plans/2026-10-28-ui-shell-questions.md.
 
 ## Rulings
 

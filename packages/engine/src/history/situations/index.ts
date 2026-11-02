@@ -1,4 +1,4 @@
-// The situation tracker (spec docs/superpowers/specs/2026-10-30-situations-design.md 2, 3): the first history step.
+// The situation tracker (spec docs/history/specs/2026-10-30-situations-design.md 2, 3): the first history step.
 // It is the only module that reads the game's situation signals (SCAR, STLG, LGOT, RDFL, RCWN, CHQF, SEND, the safety
 // car status, the session clock's jumps and pauses) to decide the session phase; the others read its spans.
 import type { Frame } from '../../frame/frame.ts';

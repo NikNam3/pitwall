@@ -15,7 +15,7 @@ The ranked goals of the foundation spec (1.2) apply unchanged: clean code, exten
 - **ADR 0008** (calculator config, stored as a session sidecar): knowledge copies its mechanism (section 4).
 - **ADR 0014** (displays render, analyses compute): it foresaw **simulators** for sub-project 4.
 - **Research 06** (decisions D01–D33, displays V01–V35, numbers only, no verdicts, the game's pit window never shown) and **research 07** (the strategy layers: estimation, forecast, optimiser).
-- **Run rulings of SP3** (`docs/superpowers/notes/2026-10-29-sp3-run-rulings.md`).
+- **Run rulings of SP3** (`docs/history/notes/2026-10-29-sp3-run-rulings.md`).
 
 ### 1.4 Decisions made in this brainstorm (user, 2026-10-30)
 1. **Sub-project 4 is split.** **4a, live race calls** (this spec): estimation and forecast. **4b, planning**: the DP optimiser, strategy comparison (V16), strategy overview (V06), plan board (V17), circle of doom (V01), and weather inside the strategy model (a switch at lap N from the forecast).
@@ -31,7 +31,7 @@ The ranked goals of the foundation spec (1.2) apply unchanged: clean code, exten
 11. **Mockups for every display**, made by the supervisor as the run's first task and approved in one session, as in SP3 (8.5 there).
 
 ### 1.5 Decisions after the market research (user, 2026-10-30)
-From `docs/superpowers/notes/2026-10-30-strategy-quality-vs-team-center.md`:
+From `docs/history/notes/2026-10-30-strategy-quality-vs-team-center.md`:
 1. **A forecast scoreboard is in 4a** (Q1): the `forecast-score` unit and the `pitwall score <recording>` report (7.15). Every model guess in 4a (degradation fit, dirty air, out-lap penalty) is unchecked until something scores it.
 2. **The two-dry-compound rule is not built in 4a** (Q2). The league races under the 2025 F1 sporting regulations, so the rule applies, but 4a's rivals never stop and the engineer picks our next compound. It enters with the rival-stop prediction in sub-project 5.
 3. **Rivals' predicted stops stay in sub-project 5** (Q3). Beating Team Center is not an MVP goal; nothing is pulled forward for it.
@@ -267,7 +267,7 @@ Pieces two displays share: a **track outline** canvas (map and, later, V26), a *
 ### 8.4 Mockups
 As SP3 8.5: in level 0 the supervisor makes the mockups of all displays of 8.2 with the real kit and theme, checked by screenshot with the cached headless Chromium, for **one approval session** with the user before any display's test phase. They settle layouts, size modes and the workbooks.
 
-**Approved 2026-10-30:** `docs/brainstorms/2026-10-30-sp4a-displays/` (README: decisions, sizes, column priorities). Its section "Contract and theme changes for Task 1" amends Appendix A and is binding where the two differ.
+**Approved 2026-10-30:** `docs/design/2026-10-30-sp4a-displays/` (README: decisions, sizes, column priorities). Its section "Contract and theme changes for Task 1" amends Appendix A and is binding where the two differ.
 
 ## 9. Workbooks
 Two new defaults, seeded when missing (the existing `car`, `quali`, `race` stay as the user has them):
@@ -361,7 +361,7 @@ Rivals' predicted stops and the two-dry-compound rule stay in sub-project 5 (1.5
 
 ## Appendix A: Contracts (sketch; the supervisor commits them as code in level 0)
 
-**Amended by the approved mockups (8.4):** the README section "Contract and theme changes for Task 1" in `docs/brainstorms/2026-10-30-sp4a-displays/` wins where it differs from this sketch.
+**Amended by the approved mockups (8.4):** the README section "Contract and theme changes for Task 1" in `docs/design/2026-10-30-sp4a-displays/` wins where it differs from this sketch.
 
 ### A.1 Domain additions
 ```ts

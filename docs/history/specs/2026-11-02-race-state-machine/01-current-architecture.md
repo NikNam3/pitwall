@@ -1,8 +1,8 @@
 # The current architecture, as the race state machine meets it
 
-Status: as-is survey, 2026-11-02. Baseline: `integ/live-fixes` merged into main (situations plan Tasks 0–2 and fix waves 2–10, the `situations` code at 1e2060e). It describes what the code does, not what it should do. The contract for the target architecture is `02-contract.md` in this folder.
+Status: as-is survey, 2026-11-02. Baseline: `integ/live-fixes` merged into main (situations plan Tasks 0–2 and fix waves 2–10, the `situations` code at 1e2060e). It describes what the code does, not what it should do. The contract for the target architecture is `docs/architecture.md`.
 
-Sources: `docs/architecture.md` (the condensed architecture), ADRs 0001–0014, the situations spec `docs/superpowers/specs/2026-10-30-situations-design.md` and plan `docs/superpowers/plans/2026-10-30-situations.md`. Every `file:line` is in the merged tree.
+Sources: `docs/architecture.md` (the condensed architecture), ADRs 0001–0014, the situations spec `docs/history/specs/2026-10-30-situations-design.md` and plan `docs/history/plans/2026-10-30-situations.md`. Every `file:line` is in the merged tree.
 
 ## 1. Packages (unchanged by the tracker)
 
@@ -182,7 +182,7 @@ From the situations plan (Tasks 3–9):
 - behaviour tables per analysis and the completeness test;
 - storage schema 3.
 
-From SP4a (`docs/superpowers/specs/2026-10-30-strategy-live-calls-design.md`):
+From SP4a (`docs/history/specs/2026-10-30-strategy-live-calls-design.md`):
 - `pit-loss` and the forecast read `pitStops`, `laps`, `flagPhases`;
 - `race-moment` gains `window`;
 - a knowledge table bumps the schema;

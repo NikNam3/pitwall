@@ -8,7 +8,7 @@
 
 **Tech Stack:** TypeScript (Node type stripping), pnpm monorepo, vitest + fast-check, Svelte 5, better-sqlite3, Playwright.
 
-**Spec:** `docs/superpowers/specs/2026-10-30-situations-design.md` (approved 2026-10-30). Facts: `.superpowers/sdd/2026-10-30-storage-c-39-40/situations-inventory.md`, `t1-diagnosis.md`.
+**Spec:** `docs/history/specs/2026-10-30-situations-design.md` (approved 2026-10-30). Facts: `.superpowers/sdd/2026-10-30-storage-c-39-40/situations-inventory.md`, `t1-diagnosis.md`.
 
 ## Global Constraints
 

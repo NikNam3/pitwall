@@ -1,6 +1,8 @@
 # Pitwall: Sub-project 2 "UI shell", Design
 
-Status: built (feat/ui-shell merged 2026-10-29); acceptance in docs/acceptance/ui-shell-checklist.md, open questions in docs/superpowers/plans/2026-10-28-ui-shell-questions.md · Date: 2026-10-28 · Brainstorm: session 1 in `docs/brainstorms/2026-10-28-ui-shell.md` (visual system, shell decisions), session 2 in conversation (code structure, this document)
+> **Product intent, still in force (2026-11-02).** This spec says *what* its units do. Where it says *how* (packages, history, flags, raw statuses, topics), `docs/architecture.md` (the contract) wins; the migration plan brings the code to the contract.
+
+Status: built (feat/ui-shell merged 2026-10-29); acceptance in docs/acceptance/ui-shell-checklist.md, open questions in docs/history/plans/2026-10-28-ui-shell-questions.md · Date: 2026-10-28 · Brainstorm: session 1 in `docs/design/2026-10-28-ui-shell.md` (visual system, shell decisions), session 2 in conversation (code structure, this document)
 
 ## 1. Context
 
@@ -15,7 +17,7 @@ The working model behind that goal (user, 2026-10-28):
 The ranked goals of the foundation spec (1.2) apply unchanged: clean code, extendable code, clean UI, intuitive UX, realism, findability, performance.
 
 ### 1.3 Decisions this spec builds on
-- **Session 1 of the brainstorm** (`docs/brainstorms/2026-10-28-ui-shell.md`):
+- **Session 1 of the brainstorm** (`docs/design/2026-10-28-ui-shell.md`):
   - section 1, the visual system: grey by default, colour only to highlight or distinguish, JetBrains Mono everywhere, fixed type, value states
   - section 3, the shell decisions: stable layout, manual workbook switching, windows, link groups, fixed top bar, alerts, UI state in the bridge
 

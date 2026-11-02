@@ -11,7 +11,7 @@ const RECORDING = 'race-zandvoort-full-lap';
 /** The jump target: car 1 crosses into lap 10 at 723.368, 1.4 s into the segment. */
 const JUMP_LAP = '10';
 const SETTLE_MS = 30_000;
-/** The panels of the approved car layout (docs/brainstorms/2026-10-29-sp3-displays/4-layouts.html, "car"), in any order. */
+/** The panels of the approved car layout (docs/design/2026-10-29-sp3-displays/4-layouts.html, "car"), in any order. */
 const CAR_WIDGETS = ['alarm-list', 'corner-block', 'damage-card', 'ers-budget', 'fuel-gauge', 'tyre-life-bar'];
 
 const cleanups: Array<() => Promise<void>> = [];

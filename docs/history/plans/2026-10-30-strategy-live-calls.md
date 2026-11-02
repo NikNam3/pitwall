@@ -12,7 +12,7 @@
 
 **Tech stack:** existing only. TypeScript (strict, type stripping), Vitest, fast-check, Svelte 5, uPlot, canvas, Playwright, Electron, better-sqlite3. No new dependency in pitwall. The FastF1 import script is Python and lives in its own repo (Task 6).
 
-**Spec:** `docs/superpowers/specs/2026-10-30-strategy-live-calls-design.md`. Contracts: its Appendix A. Config defaults: Appendix B. Build order: section 12. Test rules: `docs/testing.md`.
+**Spec:** `docs/history/specs/2026-10-30-strategy-live-calls-design.md`. Contracts: its Appendix A. Config defaults: Appendix B. Build order: section 12. Test rules: `docs/testing.md`.
 
 ## Global Constraints
 
@@ -49,7 +49,7 @@
 - **Two phases per lane** (Lanes, below), one worktree per lane under `../pitwall-wt/<lane>`. Implementers never touch tests, `test-support/`, `fixtures/` or a widget's `gallery.ts`.
 - **Workers are in-process subagents** (user, 2026-10-30, as in SP3), so the `PITWALL_*` hooks don't bind them. The supervisor checks each phase's scope with `git diff --stat` against the lane's folders, and after every implement phase that `git diff --stat <test-commit>..HEAD -- '*.test.ts' '**/test/**' test-support fixtures '**/gallery.ts'` is empty.
 - **Centralise presentation:** formats in `kit/values/format.ts`, texts in `kit/text.ts` or the widget's `text.ts`, colours as theme roles.
-- **Questions during the run** go into `docs/superpowers/plans/2026-10-30-strategy-live-calls-questions.md` (lettered options, what was built, a recommendation, an empty `**Answer:**`). Work continues on the built option.
+- **Questions during the run** go into `docs/history/plans/2026-10-30-strategy-live-calls-questions.md` (lettered options, what was built, a recommendation, an empty `**Answer:**`). Work continues on the built option.
 - **Agents:** at most eight at once, reviewers included.
 - **Commits** end with a blank line and `Co-Authored-By: <model name> <noreply@anthropic.com>`. Only the supervisor bumps `CONTRACT_VERSION` and `SCHEMA_VERSION`.
 
@@ -156,10 +156,10 @@ A **lane** is what one agent builds per phase: one unit, or units of the same le
 
 **Blocks:** every display's test phase (Tasks 30–43) and Task 44.
 
-- [x] Write full HTML documents in `docs/brainstorms/2026-10-30-sp4a-displays/`, one per display of spec 8.2, plus the `gap-chart` ghost lines and the `incident-feed` turn. Each shows compact and full mode at the theme's font size, with the real theme roles, colour only to highlight or distinguish, our cars white, and the source badge on prior-based values.
+- [x] Write full HTML documents in `docs/design/2026-10-30-sp4a-displays/`, one per display of spec 8.2, plus the `gap-chart` ghost lines and the `incident-feed` turn. Each shows compact and full mode at the theme's font size, with the real theme roles, colour only to highlight or distinguish, our cars white, and the source badge on prior-based values.
 - [x] Add `0-layouts.html` with the `strategy` and `longrun` workbooks (spec 9) on the 24" and the 14" monitor.
 - [x] Screenshot every document with the cached headless Chromium (`~/.cache/ms-playwright/chromium_headless_shell-1243/chrome-headless-shell-linux64/chrome-headless-shell --no-sandbox --hide-scrollbars --window-size=1500,1500 --screenshot=<scratchpad>/x.png file://…`) and check each one before showing it.
-- [x] Get the user's approval. Record column priorities, size modes and layouts in `docs/brainstorms/2026-10-30-sp4a-displays/README.md`.
+- [x] Get the user's approval. Record column priorities, size modes and layouts in `docs/design/2026-10-30-sp4a-displays/README.md`.
 - [x] Commit: `docs: approved sub-project 4a display mockups`.
 
 ---
@@ -168,7 +168,7 @@ A **lane** is what one agent builds per phase: one unit, or units of the same le
 
 **Goal:** every interface between the parts exists as code before any unit starts (spec 3, Appendix A and B).
 
-**Approved mockups first:** apply the checklist "Contract and theme changes for Task 1" in `docs/brainstorms/2026-10-30-sp4a-displays/README.md` on top of Appendix A (it wins where they differ), including the theme role `opportunity` and the `ghostLaps` config of `rejoin`. Tick each row in the report.
+**Approved mockups first:** apply the checklist "Contract and theme changes for Task 1" in `docs/design/2026-10-30-sp4a-displays/README.md` on top of Appendix A (it wins where they differ), including the theme role `opportunity` and the `ghostLaps` config of `rejoin`. Tick each row in the report.
 
 **Done by:** one agent (lane `contracts`, single phase, supervisor-owned scope), reviewed before merge. Verified by `pnpm gen`, `pnpm typecheck`, `pnpm depcruise`, `pnpm check`.
 
@@ -841,5 +841,5 @@ Dropped by the user in the mockup review (2026-10-30): the track map shows where
   - the forecast strip and crossover in `raceSingaporeWet`, and the wets → intermediates crossover in `raceWetVscMexico` (laps 5–6)
 - [ ] Run `pitwall score` with `fixtures/priors/empty.json` on the league races in `recordings/` and put the tables in `docs/acceptance/4a.md` as the baseline 4b is judged against. This is a report for the user, not a gate.
 - [ ] Get the user's check. Their findings become fix tasks.
-- [ ] Write the run rulings to `docs/superpowers/notes/2026-10-30-sp4a-run-rulings.md`. Update CLAUDE.md: "Where to look", and `score` in the bridge CLI line of "Commands".
+- [ ] Write the run rulings to `docs/history/notes/2026-10-30-sp4a-run-rulings.md`. Update CLAUDE.md: "Where to look", and `score` in the bridge CLI line of "Commands".
 - [ ] Merge to main and push.

@@ -19,7 +19,7 @@ Recommendation: A, no panel disappears.
 
 ## Q2. Should `pitwall dev` get a checkpoint restart?
 
-After a code edit, `pitwall dev` takes about 50 s to put the windows back at the end of the full Zandvoort recording; the target is 5 s (spec 8.4). Almost all of it is the replay fast-forwarding from the start. The design (`docs/superpowers/notes/2026-10-28-dev-restart-checkpoint-design.md`): the old process saves a checkpoint, and the new one resumes from it if the engine/pipeline code didn't change.
+After a code edit, `pitwall dev` takes about 50 s to put the windows back at the end of the full Zandvoort recording; the target is 5 s (spec 8.4). Almost all of it is the replay fast-forwarding from the start. The design (`docs/history/notes/2026-10-28-dev-restart-checkpoint-design.md`): the old process saves a checkpoint, and the new one resumes from it if the engine/pipeline code didn't change.
 
 - **A.** Not now; live with ~50 s for long recordings. *(built: only a small speed-up)*
 - **B.** Build it now. About 3 s for edits to features, strategy and the UI. Edits to the engine, protocol or pipeline, and any insight calculator (the next sub-project), still take ~50 s. Checkpoints are ~35 MB. At the end of a 90-minute race the restart is still ~5 s.

@@ -1,4 +1,4 @@
-// Special situations (spec docs/superpowers/specs/2026-10-30-situations-design.md): the session phases the engine's
+// Special situations (spec docs/history/specs/2026-10-30-situations-design.md): the session phases the engine's
 // situation tracker records as spans in the history. Car situations and race control follow in later steps.
 import type { SessionTime } from './ids.ts';
 import type { Known } from './known.ts';

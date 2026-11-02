@@ -2,8 +2,8 @@
 
 Date: 2026-10-28 · Branch: `feat/groundwork` · Worktree: `../pitwall-wt/groundwork`
 
-- **Source:** `docs/reviews/2026-10-28-foundation-architecture-review.md`, findings F1–F7 and section 5.
-- **Spec:** `docs/superpowers/specs/2026-10-28-foundation-design.md`. The supervisor updates it after the tasks (docs task at the end).
+- **Source:** `docs/history/reviews/2026-10-28-foundation-architecture-review.md`, findings F1–F7 and section 5.
+- **Spec:** `docs/history/specs/2026-10-28-foundation-design.md`. The supervisor updates it after the tasks (docs task at the end).
 - **User decisions (2026-10-28):**
   - Q-A: monitoring a second car (the whole team) is **out of scope for the MVP**. Nothing built now may close that door; multi-feed serving and per-feed storage come with the second driver later.
   - Q-B: one file per topic.

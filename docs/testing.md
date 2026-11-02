@@ -1,5 +1,7 @@
 # Testing and validation
 
+> The binding rules are contract clauses C82–C88 (`docs/architecture.md`); this guide explains how to follow them.
+
 How pitwall tests its code, and how a sub-project plans its tests. Rulings this guide rests on: user, 2026-10-30 (segment tests, the time trial, replay as a test tool), and the earlier memories on slowness, screenshots and Stryker.
 
 ## 1. What a test is for
@@ -54,8 +56,12 @@ Property tests (`fast-check`) state a rule over many generated inputs. Pitwall's
 
 - **Round trip:** `encode(decode(bytes))` gives the bytes back, on generated packets and on every segment.
 - **Determinism:** the same input stream gives the same state and the same topic stream.
-- **Incremental = from scratch:** an incremental calculator's accumulator after each frame equals a fresh `init` over the same history.
-- **Flashback:** after a flashback, every output equals a fresh run over the truncated history.
+- **Incremental = from scratch:** an incremental unit's accumulator after each frame, also after every rewind, equals a fresh `init` over the same projection (C31).
+- **Rewind exactness:** after a flashback, the projection and every topic (insights included, job topics excepted) equal a run that never received the undone frames (contract C33).
+- **Shuffle within a step:** each engine step's modules in shuffled order give identical results (C11).
+- **The projection only grows,** except when a void fact appears (C28).
+- **Reprocess equals live** (C38).
+- **One property per sub-machine:** random signal sequences never produce an undeclared transition, a throw, two open spans in one scope or a gap between spans (C85).
 - **Domain symmetries:** e.g. gap(A,B) = −gap(B,A), and gap(A,C) = gap(A,B) + gap(B,C) where all three crossed.
 - **Engine invariants** (`InvariantChecker`): they hold on every frame of every segment and every generated race.
 
@@ -65,9 +71,10 @@ A new analysis states which of these apply, and adds its own domain property if 
 
 | gate | runs | holds |
 |---|---|---|
-| `pnpm check` | before every commit | typecheck, lint, depcruise, unit and property tests, segment tests; no whole recording |
-| `pnpm test:acceptance` | at merge of a sub-project, and after changes to the pipeline or the decoder | whole-pipeline properties on whole recordings; speed targets |
-| `pnpm test:ui` | when the UI changed | gallery, fit, screenshot baselines (budget in `screenshot-budget.test.ts`), Playwright e2e |
+| related tests | by the worker, during a task | `vitest related <changed files>` plus typecheck, lint and depcruise (C88) |
+| `pnpm check` | by the supervisor, before every merge | typecheck, lint, depcruise, unit and property tests, segment tests; no whole recording |
+| `pnpm test:acceptance` | at the end of each sub-project, and after changes to the pipeline or the decoder | whole-pipeline properties on whole recordings; speed targets |
+| `pnpm test:ui` | at the end of each sub-project, and when the UI changed | gallery, fit, screenshot baselines (budget in `screenshot-budget.test.ts`), Playwright e2e |
 | `pnpm mutation` | once at the MVP end | Stryker, at least 80 % on protocol, engine, analysis and UI logic |
 | human check | once per sub-project | the screenshots and the checklist in `docs/acceptance/` |
 
@@ -79,7 +86,9 @@ A new analysis states which of these apply, and adds its own domain property if 
 
 - **Two phases, two agents:** the test agent writes failing tests and commits them; the implementation agent makes them pass without touching them. The supervisor checks `git diff --stat <test-commit>..HEAD -- '*.test.ts' '**/test/**' test-support fixtures` is empty afterwards.
 - **A test that fails on current code is a finding:** keep it, change no source, report it. The supervisor rules: fix (the test becomes the fix task's test phase), or turn the test around when the behaviour is deliberate (with the ruling in a comment).
-- **Lane-only:** an agent runs only its own test files; the supervisor runs every bigger suite, never while an agent edits source.
+- **Test levels (C88):** a worker runs the tests related to its changes (`vitest related`) plus typecheck, lint and depcruise; the supervisor runs `pnpm check` before every merge and the UI and acceptance suites at a sub-project's end, never while an agent edits source. Vitest's `Errors` line is read as well as `Tests`.
+- **Sub-machine transitions (C85):** each sub-machine's test file holds a transition table, one row per declared transition and per join; completeness tests check rows and declared transitions both ways; recorded transitions also get a segment test on the produced span sequence. Adopting or widening a rule needs `pitwall scan-situations` over every recording in the report.
+- **No test reads the priors store, storage or the data dir (C84):** a test that needs priors passes them explicitly.
 - **Assumptions** the brief doesn't pin go into the test agent's report; the supervisor rules on them before the implementer starts.
 
 ## 8. A sub-project's test plan

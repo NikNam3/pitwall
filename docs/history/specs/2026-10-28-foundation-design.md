@@ -1,6 +1,6 @@
 # Pitwall: Sub-project 1 "Foundation", Design
 
-Status: approved · Date: 2026-10-28 · Revised during planning (domain package; corrections from the recordings, see the plan's "Corrections to the spec") and after the foundation review (groundwork plan `docs/superpowers/plans/2026-10-28-groundwork.md`; decisions in ADRs 0007–0009)
+Status: approved · Date: 2026-10-28 · Revised during planning (domain package; corrections from the recordings, see the plan's "Corrections to the spec") and after the foundation review (groundwork plan `docs/history/plans/2026-10-28-groundwork.md`; decisions in ADRs 0007–0009)
 
 ## 1. Context
 

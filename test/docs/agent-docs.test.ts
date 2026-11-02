@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -24,13 +24,21 @@ describe('agent docs', () => {
     expect(new Set(numbers).size, 'unique ADR numbers').toBe(numbers.length);
     for (const f of adrs) for (const h of ['## Status', '## Context', '## Decision', '## Consequences']) expect(read(`docs/decisions/${f}`), `${f}: ${h}`).toContain(h);
   });
-  it('architecture.md states every allowed dependency edge', () => {
+  it('architecture.md is the contract and states every allowed dependency edge (C1)', () => {
     const md = read('docs/architecture.md');
-    for (const edge of ['contracts → domain', 'engine → protocol, domain', 'analysis → engine, domain', 'bridge → all packages', 'ui → contracts, domain'])
+    expect(md).toContain('**C0. No change may violate the contract.**');
+    for (const edge of ['`contracts` only `domain`', '`engine` only `protocol` and `domain`', '`analysis` only `engine` and `domain`', '`bridge` all packages', '`ui` only `contracts` and `domain`'])
       expect(md).toContain(edge);
+  });
+  it('CLAUDE.md imports the contract, and every docs path it names exists', () => {
+    const md = read('CLAUDE.md');
+    expect(md).toContain('@docs/architecture.md');
+    const paths = [...md.matchAll(/`(docs\/[^`<>*]+?)`/g)].map((m) => m[1]!);
+    expect(paths.length).toBeGreaterThan(5);
+    for (const path of paths) expect(existsSync(join(ROOT, path)), path).toBe(true);
   });
   it('the task template asks for scope, interfaces, tests and the report format', () => {
     const md = read('docs/tasks/_template.md');
-    for (const h of ['## Scope', '## Interfaces', '## Tests to pass', '## Phase', '## Report', 'Requested changes to supervisor-owned files']) expect(md).toContain(h);
+    for (const h of ['## Scope', '## Contract clauses touched', '## Interfaces', '### Contract gaps', '## Tests to pass', '## Phase', '## Report', 'Requested changes to supervisor-owned files']) expect(md).toContain(h);
   });
 });

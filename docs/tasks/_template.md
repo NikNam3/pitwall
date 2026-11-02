@@ -12,6 +12,10 @@ Everything outside these repo-relative folders is read-only.
 
 Optional: `PITWALL_WORKER_UNIT=<unit>` for a task that builds one analysis or display. It additionally grants the unit's folders and topic files (ADR 0011).
 
+## Contract clauses touched
+
+<The clauses of `docs/architecture.md` this task implements or must respect, e.g. C13, C26, C44.>
+
 ## Interfaces
 
 - Consumes: <modules, types and files this task depends on, copied from the plan>
@@ -33,7 +37,7 @@ This brief is for phase: `<test|implement>`.
 
 ## Done when
 
-`pnpm check` is green in scope and the commit is made.
+The tests related to the change (`vitest related`), typecheck, lint and depcruise are green, and the commit is made (C88).
 
 ## Report
 
@@ -44,6 +48,10 @@ This brief is for phase: `<test|implement>`.
 ### Tests
 
 <Command plus pass/fail counts.>
+
+### Contract gaps
+
+<For each: what the task needs and which clause blocks it (C0). Write "none" if there are none. A gap stops the task and the sub-project.>
 
 ### Requested changes to supervisor-owned files
 

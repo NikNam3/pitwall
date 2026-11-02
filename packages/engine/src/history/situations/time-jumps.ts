@@ -1,4 +1,4 @@
-// Session time is not a timeline (spec docs/superpowers/specs/2026-10-30-situations-design.md principle 6, 3.3): it
+// Session time is not a timeline (spec docs/history/specs/2026-10-30-situations-design.md principle 6, 3.3): it
 // resets, holds, runs ahead of wall time in the garage and jumps into the post-session simulation. This is the one
 // place that reads its jumps, keeps the race clock the other steps stamp with, and reads the wall time of the frames for
 // pauses.

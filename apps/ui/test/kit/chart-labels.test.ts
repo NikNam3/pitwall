@@ -1,4 +1,4 @@
-// End-of-line labels of the chart (Task L; mockup docs/brainstorms/2026-10-29-sp3-displays/3-gap-chart.html): each line
+// End-of-line labels of the chart (Task L; mockup docs/design/2026-10-29-sp3-displays/3-gap-chart.html): each line
 // is named at its right end, and labels that end close together are pushed apart. Contract of the pure helpers in
 // src/kit/chart/labels.ts:
 //  - `endLabels(series, range)` returns one `{ index, text, value, bold }` per series that has a point with

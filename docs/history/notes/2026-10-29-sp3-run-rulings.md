@@ -1,6 +1,6 @@
 # Sub-project 3 run (timing + car monitoring): supervisor rulings and open items
 
-Decisions the supervisor took during the autonomous run of `docs/superpowers/plans/2026-10-29-timing-car-monitoring.md` (2026-10-29), grouped by area. Each: the ruling, why, cost if wrong. Source: the run ledger.
+Decisions the supervisor took during the autonomous run of `docs/history/plans/2026-10-29-timing-car-monitoring.md` (2026-10-29), grouped by area. Each: the ruling, why, cost if wrong. Source: the run ledger.
 
 ## Rulings
 

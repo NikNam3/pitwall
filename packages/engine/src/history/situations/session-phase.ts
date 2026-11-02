@@ -1,4 +1,4 @@
-// The session phase machine (spec docs/superpowers/specs/2026-10-30-situations-design.md 3.1, 3.2): which signal opens
+// The session phase machine (spec docs/history/specs/2026-10-30-situations-design.md 3.1, 3.2): which signal opens
 // and closes each phase, the confirmation of a neutralisation, the session's ends, joining a session in progress, and
 // the formation lap discarded at lights out. Facts: .superpowers/sdd/2026-10-30-storage-c-39-40/situations-inventory.md
 // section 1 and t1-diagnosis.md.

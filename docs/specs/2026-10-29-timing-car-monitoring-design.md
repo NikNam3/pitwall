@@ -1,5 +1,7 @@
 # Pitwall: Sub-project 3 "Timing + car monitoring", Design
 
+> **Product intent, still in force (2026-11-02).** This spec says *what* its units do. Where it says *how* (packages, history, flags, raw statuses, topics), `docs/architecture.md` (the contract) wins; the migration plan brings the code to the contract.
+
 Status: spec, awaiting user review · Date: 2026-10-29 · Brainstorm: in conversation (2026-10-29) · Dependency graph: [`2026-10-29-timing-car-monitoring/dependency-graph.html`](2026-10-29-timing-car-monitoring/dependency-graph.html) (open it in a browser; hover a box to see what it reads and what reads it)
 
 ## 1. Context
@@ -221,7 +223,7 @@ Each is used by two or more displays, so it is built in W0 (13.2), before any di
 | sector status emphasis | `emphasis/` | timing-tower, lap-analysis, projected-lap | timing |
 
 ### 8.5 Mockups
-**Approved 2026-10-29** (A1, B2 and the presentation rules): `docs/brainstorms/2026-10-29-sp3-displays/README.md`. Its rules (lap number vs lap count, column grids with aligned decimals, white bold for the moment) bind every display.
+**Approved 2026-10-29** (A1, B2 and the presentation rules): `docs/design/2026-10-29-sp3-displays/README.md`. Its rules (lap number vs lap count, column grids with aligned decimals, white bold for the moment) bind every display.
 
 In W0 the supervisor makes the mockups of all twelve displays with the cached headless Chromium, checked by screenshot, and the user approves them in one session before any display's test phase starts. They settle the column layout and size modes of every display, and the two open colour questions of the UI shell spec (13): **compound as a letter or a letter plus colour**, and **which personal-best sectors light up**. Both become theme variants, as the UI shell spec planned.
 

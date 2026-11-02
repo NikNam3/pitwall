@@ -1,4 +1,4 @@
-// The situation tracker's session phases (spec docs/superpowers/specs/2026-10-30-situations-design.md 3.1): which
+// The situation tracker's session phases (spec docs/history/specs/2026-10-30-situations-design.md 3.1): which
 // signal opens and closes each phase, the confirmations, the session ends, joins, pauses and a flashback across a
 // phase boundary. Closed phases are `history.sessionPhases`; the phase in progress is `open.situations.session`.
 import { describe, expect, it } from 'vitest';

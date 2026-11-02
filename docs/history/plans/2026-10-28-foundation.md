@@ -8,7 +8,7 @@
 
 **Tech Stack:** TypeScript ~6.0 (strict; not 7, because typescript-eslint and dependency-cruiser still need the TS JS API) run directly by Node ≥ 22.18 type stripping, pnpm workspaces, Vitest, fast-check, Stryker, dependency-cruiser, ESLint, `ws`, `better-sqlite3`, `pino`.
 
-**Spec:** `docs/superpowers/specs/2026-10-28-foundation-design.md` (read it alongside this plan; section numbers like "spec 5.3" refer to it). `.pwrec` format: `~/dev/personal/pitwall-recorder/FORMAT.md`. UDP structs: `external/F1 25 Telemetry Output Structures.txt` and `external/Data Output from F1 25 v3-1.pdf` (appendix tables for codes).
+**Spec:** `docs/history/specs/2026-10-28-foundation-design.md` (read it alongside this plan; section numbers like "spec 5.3" refer to it). `.pwrec` format: `~/dev/personal/pitwall-recorder/FORMAT.md`. UDP structs: `external/F1 25 Telemetry Output Structures.txt` and `external/Data Output from F1 25 v3-1.pdf` (appendix tables for codes).
 
 ## Global Constraints
 
