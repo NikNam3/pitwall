@@ -2,4 +2,4 @@
 
 The spec or plan of the work in progress lives here (`specs/`, `plans/`), written by the brainstorming and writing-plans skills. When a spec or plan is done, superseded or void, it moves to `docs/history/` and gets a row in `docs/history/README.md`. A spec that still states product intent moves to `docs/specs/`.
 
-Current: none yet; the migration plan to the contract comes next.
+Current: `plans/2026-11-02-contract-migration.md` (the migration to the contract).
