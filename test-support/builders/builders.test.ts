@@ -5,7 +5,7 @@ import { carId } from '../../packages/domain/src/index.ts';
 
 describe('builders', () => {
   it('field gives each car laps × 50 crossings in time order', () => {
-    const { laps, miniSectors } = field({ cars: 2, laps: 3, paceMs: 90_000 });
+    const { laps, crossings: miniSectors } = field({ cars: 2, laps: 3, paceMs: 90_000 });
     expect(laps).toHaveLength(6);
     expect(miniSectors).toHaveLength(2 * (3 * 50 + 1));
     expect(miniSectors.filter((m) => m.carId === 0 && m.lap === 4)).toEqual([{ carId: 0, lap: 4, segment: 0, at: 270_000, in: {} }]);
@@ -66,8 +66,8 @@ describe('builders', () => {
     expect(view.state.cars[5]!.active).toBe(true);
     expect(view.state.cars[0]!.active).toBe(false);
     expect(view.state.history.laps).toHaveLength(2);
-    expect(view.delta.after.miniSectors).toBe(101);
-    expect(view.delta.truncated).toBe(false);
+    expect(view.delta.after.crossings).toBe(101);
+    expect(view.delta.rewound).toBeUndefined();
     expect(view.outputs.get('x')).toBe(1);
     expect(view.feed.connected).toBe(true);
   });

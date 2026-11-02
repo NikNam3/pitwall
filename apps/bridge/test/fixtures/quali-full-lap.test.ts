@@ -42,7 +42,7 @@ const validLaps = (): Lap[] => confirmed().filter((l) => l.valid.lap);
 /** The player's flying lap: its lap timed from line to line in the segment. */
 const flyingLap = (): Lap => {
   const { playerCar, history } = run.state;
-  const line = (lap: number) => history.miniSectors.some((m) => m.carId === playerCar && m.lap === lap && m.segment === 0);
+  const line = (lap: number) => history.crossings.some((m) => m.carId === playerCar && m.lap === lap && m.segment === 0);
   return confirmed().find((l) => l.carId === playerCar && line(l.lapNumber) && line(l.lapNumber + 1))!;
 };
 const playerRow = () => run.lapTimes.rows.find((r) => r.carId === run.state.playerCar)!;

@@ -17,7 +17,7 @@ import {
   type SessionKind,
   type SessionState,
 } from '@pitwall/domain';
-import { historyLengths, type EngineView } from '@pitwall/engine';
+import { projectionLengths, type EngineView } from '@pitwall/engine';
 import { engineView } from '../../../../test-support/builders/index.ts';
 import { incidentsCalculator } from '../../src/incidents/calculator.ts';
 import { DAMAGE, type DamageOutput } from '../../src/damage/index.ts';
@@ -120,7 +120,7 @@ export function viewOf({
   return engineView({
     cars,
     activeFlagPhase,
-    history: { miniSectors, events, flagPhases, pitStops, laps },
+    history: { crossings: miniSectors, events, flagPhases, pitStops, laps },
     outputs,
     playerCar,
     config: { incidents: config, alarms: alarmsConfig, damage: damageConfig },
@@ -133,10 +133,10 @@ export function viewOf({
 export const run = (view: EngineView): IncidentsOutput => incidentsCalculator.output(incidentsCalculator.init(view));
 
 /** The delta from one view's history to the next one's. */
-export const deltaOf = (from: EngineView, to: EngineView, truncated = false) => ({
-  before: historyLengths(from.state.history),
-  after: historyLengths(to.state.history),
-  truncated,
+export const deltaOf = (from: EngineView, to: EngineView, rewound = false) => ({
+  before: projectionLengths(from.state.history),
+  after: projectionLengths(to.state.history),
+  ...(rewound ? { rewound: { frameId: -1, at: 0 } } : {}),
 });
 
 /** `init` over the first view, then `update` through the rest, as the scheduler does. */

@@ -27,7 +27,7 @@ beforeAll(async () => {
   let last: GapsOutput | undefined;
   const runner = await replayScheduled(segmentPath('race-zandvoort-full-lap.pwrec.gz'), [gapsCalculator], ({ state, delta }, scheduled, frame) => {
     last = scheduled.outputs.get(GAPS) as GapsOutput;
-    for (const m of state.history.miniSectors.slice(delta.before.miniSectors)) {
+    for (const m of state.history.crossings.slice(delta.before.crossings)) {
       if (m.segment === 0) lines.push({ crossing: { ...m }, ours: structuredClone(last.intervals.find((i) => i.carId === m.carId)) });
     }
     if (!frame.lapData) return;
@@ -83,7 +83,7 @@ describe("race-zandvoort-full-lap: our gaps against the game's at the line", () 
 describe('race-zandvoort-full-lap: the line times the gapper draws from', () => {
   it("each car's line times are its line crossings, one per completed lap, in lap and time order with no lap missing", () => {
     for (const car of run.state.cars.filter((c) => c.active)) {
-      const crossed = run.state.history.miniSectors.filter((m) => m.carId === car.id && m.segment === 0 && m.lap >= 2);
+      const crossed = run.state.history.crossings.filter((m) => m.carId === car.id && m.segment === 0 && m.lap >= 2);
       const times = run.last.lineTimes[car.id] ?? [];
       expect(times, `car ${car.id}`).toEqual(crossed.map((m) => ({ lap: m.lap - 1, at: m.at })));
       times.forEach((t, i) => {

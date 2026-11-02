@@ -23,13 +23,13 @@ import { initFor } from './run.ts';
 type Lengths = HistoryDelta['before'];
 
 /** History lengths: zero except those given. */
-export const len = (o: Partial<Lengths> = {}): Lengths => ({ laps: 0, stints: 0, pitStops: 0, flagPhases: 0, sessionPhases: 0, pauses: 0, events: 0, miniSectors: 0, ...o });
+export const len = (o: Partial<Lengths> = {}): Lengths => ({ laps: 0, stints: 0, pitStops: 0, flagPhases: 0, sessionPhases: 0, pauses: 0, events: 0, crossings: 0, ...o });
 
-/** The history grew (or shrank) from `before` to `after` entries in each of `fields`. */
-export const delta = (before = 0, after = before, truncated = false, fields: ReadonlyArray<keyof Lengths> = ['laps']): HistoryDelta => ({
+/** The history grew (or shrank) from `before` to `after` entries in each of `fields`; `rewound` marks a void fact (C30). */
+export const delta = (before = 0, after = before, rewound = false, fields: ReadonlyArray<keyof Lengths> = ['laps']): HistoryDelta => ({
   before: len(Object.fromEntries(fields.map((f) => [f, before]))),
   after: len(Object.fromEntries(fields.map((f) => [f, after]))),
-  truncated,
+  ...(rewound ? { rewound: { frameId: -1, at: 0 } } : {}),
 });
 
 export const feed = { framesClosed: 0, incompleteFrames: 0, latePackets: 0, droppedBeforeSession: 0, droppedUid0: 0, decodeErrors: 0, packetsPerSecond: 0, connected: true, msSinceLastPacket: 0, lossPercent: 0 } as FeedMetricsView;
@@ -38,7 +38,7 @@ export const feed = { framesClosed: 0, incompleteFrames: 0, latePackets: 0, drop
 export const RACING: SchedulerInput['situation'] = { session: { kind: 'racing', start: 0, startLeaderLap: 1 }, paused: false };
 
 /** A scheduler input at session time `t`; the state's history holds `laps` laps; `config` is the features' effective config. */
-export const input = (t: number, changed: ChangeTag[] = ['timing'], d = delta(), laps = d.after.laps, config: SchedulerInput['config'] = {}): SchedulerInput =>
+export const input = (t: number, changed: ChangeTag[] = ['timing'], d = delta(), laps = d.after.laps ?? 0, config: SchedulerInput['config'] = {}): SchedulerInput =>
   ({ activeFlagPhase: undefined, situation: RACING, state: { feedId: 'f1', sessionTime: t, history: { laps: new Array(laps).fill({}) } } as never, changed: new Set(changed), delta: d, feed, config });
 
 /** A quick calculator that reads timing, runs every frame and returns the session time, unless `o` says otherwise. */
@@ -64,7 +64,7 @@ export const underPhase = (kind: SessionPhaseKind): IncrementalCalculator<Folded
     (v.situation.session.kind === kind && at >= v.situation.session.start);
   const fold = (acc: Folded, v: EngineView, from: number, to: number): Folded => {
     let under = acc.under;
-    for (const c of v.state.history.miniSectors.slice(from, to)) if (covered(v, c.at)) under++;
+    for (const c of v.state.history.crossings.slice(from, to)) if (covered(v, c.at)) under++;
     return { crossings: acc.crossings + to - from, under, events: v.state.history.events.length };
   };
   return {
@@ -72,8 +72,8 @@ export const underPhase = (kind: SessionPhaseKind): IncrementalCalculator<Folded
     id: `probe.under.${kind}`,
     reads: ['miniSectors', 'events', 'sessionPhases'],
     cadence: 'frame',
-    init: (v) => fold({ crossings: 0, under: 0, events: 0 }, v, 0, v.state.history.miniSectors.length),
-    update: (acc, d, v) => fold(acc, v, d.before.miniSectors, d.after.miniSectors),
+    init: (v) => fold({ crossings: 0, under: 0, events: 0 }, v, 0, v.state.history.crossings.length),
+    update: (acc, d, v) => fold(acc, v, d.before.crossings ?? 0, d.after.crossings ?? 0),
     output: (acc) => acc,
   };
 };

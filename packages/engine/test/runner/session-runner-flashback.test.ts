@@ -31,7 +31,7 @@ describe('SessionRunner: recognising a flashback', () => {
     runAll(a, frames);
     const rewinding = withEvents({ ...frames[299]!, frameId: 300, overallFrameId: 300 }, flbk(200));
     const result = a.apply(rewinding);
-    expect([result.delta.truncated, result.flashback]).toEqual([true, { targetFrameId: 200, targetSessionTime: 3_200, rewoundMs: 299 * STEP - 3_200, targetLap: 2 }]);
+    expect([result.delta.rewound !== undefined, result.flashback]).toEqual([true, { targetFrameId: 200, targetSessionTime: 3_200, rewoundMs: 299 * STEP - 3_200, targetLap: 2 }]);
   });
   it('an event that is no flashback does not rewind', () => {
     const frames = original();
@@ -46,7 +46,7 @@ describe('SessionRunner: recognising a flashback', () => {
     const a = new SessionRunner(initFor(frames));
     runAll(a, frames);
     const [first] = runAll(a, continuation);
-    expect([first!.delta.truncated, first!.flashback?.targetFrameId]).toEqual([true, 200]);
+    expect([first!.delta.rewound !== undefined, first!.flashback?.targetFrameId]).toEqual([true, 200]);
   });
   it.each([
     ['the frame just applied', 299],

@@ -54,7 +54,7 @@ describe('SessionRunner retention', () => {
     const weekend: WeekendContext = { weekendId: 'w', driverKey, sessions: [{ sessionUid: '1' as SessionUid, sessionType: 1, drivers: [{ driverKey, laps: [], stints: [], pitStops: [] }] }] };
     const r = new SessionRunner({ ...initFor(original), weekend });
     runAll(r, original);
-    expect(r.apply({ ...original[201]!, overallFrameId: 300 }).delta.truncated).toBe(true);
+    expect(r.apply({ ...original[201]!, overallFrameId: 300 }).delta.rewound).toBeDefined();
     expect(r.state.weekend).toBe(weekend);
   });
 });

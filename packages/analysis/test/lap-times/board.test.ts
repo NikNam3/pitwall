@@ -1,6 +1,6 @@
 // `lap-times` (spec 6.2): the board part of the calculator output, plus update and flashback over the whole output.
 import { carId, known, unknown, type LapRecord, type MiniSectorCrossing, type ResultStatus } from '@pitwall/domain';
-import { historyLengths, type EngineView } from '@pitwall/engine';
+import { projectionLengths, type EngineView } from '@pitwall/engine';
 import { describe, expect, it } from 'vitest';
 import { crossings, field } from '../../../../test-support/builders/index.ts';
 import { lapTimesCalculator } from '../../src/lap-times/calculator.ts';
@@ -105,7 +105,7 @@ describe('lap-times update and flashback', () => {
     ...crossings(carId(id), 3, paceMs, startAt).slice(1),
     { carId: carId(id), lap: 4, segment: 0, at: startAt + paceMs, in: {} },
   ];
-  const allCrossings: MiniSectorCrossing[] = [...base.miniSectors, ...lapThree(0, 89_000, 180_000), ...lapThree(1, 91_000, 182_000)];
+  const allCrossings: MiniSectorCrossing[] = [...base.crossings, ...lapThree(0, 89_000, 180_000), ...lapThree(1, 91_000, 182_000)];
 
   /** The session as it stood at time `t`: the laps and crossings until then, each car on the lap after its last one. */
   const at = (t: number): EngineView => {
@@ -121,7 +121,7 @@ describe('lap-times update and flashback', () => {
     let acc = lapTimesCalculator.init(view);
     for (let t = 20_000; t <= 280_000; t += 20_000) {
       const next = at(t);
-      acc = lapTimesCalculator.update(acc, { before: historyLengths(view.state.history), after: historyLengths(next.state.history), truncated: false }, next);
+      acc = lapTimesCalculator.update(acc, { before: projectionLengths(view.state.history), after: projectionLengths(next.state.history) }, next);
       view = next;
       expect(lapTimesCalculator.output(acc), `t ${t}`).toEqual(run(next));
     }
@@ -137,7 +137,7 @@ describe('lap-times update and flashback', () => {
     const back = at(200_000);
     const acc = lapTimesCalculator.update(
       lapTimesCalculator.init(full),
-      { before: historyLengths(full.state.history), after: historyLengths(back.state.history), truncated: true },
+      { before: projectionLengths(full.state.history), after: projectionLengths(back.state.history), rewound: { frameId: -1, at: 0 } },
       back,
     );
     const after = lapTimesCalculator.output(acc);
@@ -194,8 +194,8 @@ describe('lap-times board: a car out of the race', () => {
   it('a car that retires between two updates: the update equals a fresh run', () => {
     const running = scene({ laps, cars: activeCars(2) });
     const retired = scene({ laps, cars: activeCars(2, { 1: { resultStatus: 'retired' } }) });
-    const lengths = historyLengths(running.state.history);
-    const acc = lapTimesCalculator.update(lapTimesCalculator.init(running), { before: lengths, after: lengths, truncated: false }, retired);
+    const lengths = projectionLengths(running.state.history);
+    const acc = lapTimesCalculator.update(lapTimesCalculator.init(running), { before: lengths, after: lengths }, retired);
     expect(lapTimesCalculator.output(acc)).toEqual(run(retired));
     expect(rowOf(lapTimesCalculator.output(acc), 1)!.bestLapMs).toEqual(notApplicable);
     expect(rowOf(lapTimesCalculator.output(acc), 1)!.outOfRace).toBe(true);

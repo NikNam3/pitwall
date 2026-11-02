@@ -20,7 +20,7 @@ import { input, quick, sched } from '../support/scheduler.ts';
 const lapCount: IncrementalCalculator<number, number> = {
   kind: 'incremental', id: 'lapCount', reads: ['laps'], cadence: 'frame',
   init: (v) => v.state.history.laps.length,
-  update: (acc, d) => acc + d.after.laps - d.before.laps,
+  update: (acc, d) => acc + (d.after.laps ?? 0) - (d.before.laps ?? 0),
   output: (acc) => acc,
 };
 const calcs = (): Calculator[] => [

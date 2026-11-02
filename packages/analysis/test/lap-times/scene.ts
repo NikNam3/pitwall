@@ -51,7 +51,7 @@ export function scene({
 }): EngineView {
   return engineView({
     cars,
-    history: { laps: [...laps].sort((a, b) => a.completedAt - b.completedAt), miniSectors: [...miniSectors].sort((a, b) => a.at - b.at) },
+    history: { laps: [...laps].sort((a, b) => a.completedAt - b.completedAt), crossings: [...miniSectors].sort((a, b) => a.at - b.at) },
     session: { numActiveCars: cars.length, ...session },
     sessionTime,
     config,

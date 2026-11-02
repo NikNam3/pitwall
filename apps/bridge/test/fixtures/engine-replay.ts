@@ -41,7 +41,7 @@ export async function replayScheduled(
   const scheduler = new Scheduler(CalculatorRegistry.build(calculators));
   scheduler.setNeeded(calculators.map((c) => c.id));
   return replayRunner(path, (r, f) => {
-    if (r.delta.truncated) scheduler.reset();
+    if (r.delta.rewound !== undefined) scheduler.reset();
     const scheduled = scheduler.run({ state: r.state, activeFlagPhase: activeFlagPhaseOf(r.state), situation: situationOf(r.state), changed: r.changed, delta: r.delta, feed: IDLE_FEED, config });
     onStep(r, scheduled, f);
   });

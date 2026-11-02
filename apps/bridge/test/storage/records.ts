@@ -1,5 +1,5 @@
 import { ActualCompound, VisualCompound, known, unknown, type CarId, type DriverKey, type FlagPhase, type LapRecord, type PitStopRecord, type RaceEvent, type SessionUid, type StintRecord } from '@pitwall/domain';
-import type { History, HistoryDelta, HistoryLengths } from '@pitwall/engine';
+import type { HistoryDelta, LogLengths, Projection } from '@pitwall/engine';
 import type { SessionKey, SessionRow } from '../../src/storage/db.ts';
 export const car = (n: number) => n as CarId;
 const none = unknown('notReceived');
@@ -17,12 +17,12 @@ export const pitStop = (c: number, lap: number): PitStopRecord => ({ carId: car(
   pitLaneTimeMs: 22_000, stationaryTimeMs: 2_500, flag: 'green', penaltyServed: false, in: {} });
 export const event = (at: number, c?: number): RaceEvent => ({ at, kind: 'overtake', ...(c === undefined ? {} : { carId: car(c) }), params: {}, in: {} });
 export const sc = (start: number): FlagPhase => ({ kind: 'SC', start, end: start + 60_000, startLeaderLap: 3, endLeaderLap: 5, scPhases: [] });
-export const history = (o: Partial<History> = {}): History => ({ laps: [], stints: [], pitStops: [], flagPhases: [], sessionPhases: [], pauses: [], events: [], miniSectors: [], ...o });
-const lengths = (h: History): HistoryLengths => ({ laps: h.laps.length, stints: h.stints.length, pitStops: h.pitStops.length,
+export const history = (o: Partial<Projection> = {}): Projection => ({ laps: [], stints: [], pitStops: [], flagPhases: [], sessionPhases: [], pauses: [], events: [], crossings: [], clock: [], spans: {}, ...o });
+const lengths = (h: Projection): LogLengths => ({ laps: h.laps.length, stints: h.stints.length, pitStops: h.pitStops.length,
   flagPhases: h.flagPhases.length, sessionPhases: h.sessionPhases.length, pauses: h.pauses.length, events: h.events.length,
-  miniSectors: h.miniSectors.length });
-export const all = (h: History): HistoryDelta => ({ before: lengths(history()), after: lengths(h), truncated: false });
-export const since = (prev: History, h: History, truncated = false): HistoryDelta => ({ before: lengths(prev), after: lengths(h), truncated });
+  crossings: h.crossings.length });
+export const all = (h: Projection): HistoryDelta => ({ before: lengths(history()), after: lengths(h) });
+export const since = (prev: Projection, h: Projection, rewound = false): HistoryDelta => ({ before: lengths(prev), after: lengths(h), ...(rewound ? { rewound: { frameId: -1, at: 0 } } : {}) });
 export const AI9: DriverKey = { kind: 'ai', driverId: 9 };
 export const HUMAN: DriverKey = { kind: 'human', networkId: 1, name: 'Driver One', raceNumber: 2 };
 export const session = (uid: string, o: Partial<SessionRow> = {}): SessionRow => ({ sessionUid: uid as SessionUid, weekendId: 'W1', seasonId: 'S1',

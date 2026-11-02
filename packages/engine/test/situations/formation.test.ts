@@ -81,11 +81,11 @@ describe('the formation lap', () => {
   });
   it('the clock reset at the formation lap’s end changes nothing by itself', () => {
     const { results } = startRun();
-    expect(results[RESET]!.delta.truncated).toBe(false);
+    expect(results[RESET]!.delta.rewound).toBeUndefined();
   });
   it('lights out after a formation lap is a truncated step: the history it discards is rewritten', () => {
     const { results } = startRun();
-    expect(results[LIGHTS_OUT]!.delta.truncated).toBe(true);
+    expect(results[LIGHTS_OUT]!.delta.rewound).toBeDefined();
   });
 });
 
@@ -106,7 +106,7 @@ describe('at lights out the formation lap is discarded', () => {
   });
   it('the formation lap’s mini-sector crossings go; lap 1 is crossed again from lights out, each boundary once', () => {
     const { runner } = startRun();
-    const lap1 = runner.state.history.miniSectors.filter((m) => m.carId === 0 && m.lap === 1);
+    const lap1 = runner.state.history.crossings.filter((m) => m.carId === 0 && m.lap === 1);
     expect(lap1.map((m) => m.segment)).toEqual(Array.from({ length: 50 }, (_, s) => s));
     expect(lap1[0]!.at).toBeLessThanOrEqual(raceAt(1));
   });

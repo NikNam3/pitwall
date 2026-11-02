@@ -67,7 +67,7 @@ function setup(features: Feature[], staleCheck?: { clock: () => number; everyMs:
 const initProbe = (inits: number[]): IncrementalCalculator<number, number> => ({
   kind: 'incremental', id: 'probe.events', reads: ['events'], cadence: 'frame',
   init: ({ state }) => { inits.push(state.lastFrameId); return state.history.events.length; },
-  update: (n, delta) => n + delta.after.events - delta.before.events,
+  update: (n, delta) => n + (delta.after.events ?? 0) - (delta.before.events ?? 0),
   output: (n) => n,
 });
 

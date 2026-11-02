@@ -10,7 +10,7 @@ export const STEP = 16;
 export const runAll = (r: SessionRunner, frames: Frame[]): StepResult[] => frames.map((f) => r.apply(f));
 
 /** How many steps rewound: reported a flashback or truncated the history. */
-export const flashbacks = (results: StepResult[]) => results.filter((r) => r.flashback !== undefined || r.delta.truncated).length;
+export const flashbacks = (results: StepResult[]) => results.filter((r) => r.flashback !== undefined || r.delta.rewound !== undefined).length;
 
 /** An FLBK event back to `frameId` (at its session time). */
 export const flbk = (frameId: number): EventDetails => ({ code: 'FLBK', flashbackFrameIdentifier: frameId, flashbackSessionTime: (frameId * STEP) / 1000 });

@@ -11,7 +11,7 @@ const insufficientData = unknown('insufficientData');
 describe('lap-times projection', () => {
   it("projection at crossing 25 of a lap 0.3 s up on the best lap's crossing 25 projects best − 300 ms", () => {
     // 3 cars with best laps of 90.0, 89.8 and 89.6 s; car 0 starts lap 3 at 180 s and is 0.3 s up at crossing 25
-    const { laps, miniSectors } = field({ cars: 3, laps: 2, paceMs: [90_000, 89_800, 89_600] });
+    const { laps, crossings: miniSectors } = field({ cars: 3, laps: 2, paceMs: [90_000, 89_800, 89_600] });
     const live = lapInProgress(0, 3, 90_000, 180_000, 25, 300);
     const latest = live[live.length - 1]!.at; // 180 000 + 45 000 − 300
     const cars = activeCars(3, { 0: { lap: 3, driverStatus: 'flyingLap', currentLapTimeMs: latest - 180_000 } });
@@ -32,7 +32,7 @@ describe('lap-times projection', () => {
 
   /** A car's lap 3 crossings up to `segment` after two laps at `paceMs`, and the car state that goes with them. */
   const lapThree = (timing: Partial<CarTiming>, lapsOver: Partial<LapRecord> = {}) => {
-    const { laps, miniSectors } = field({ cars: 1, laps: 2, paceMs: 90_000 });
+    const { laps, crossings: miniSectors } = field({ cars: 1, laps: 2, paceMs: 90_000 });
     Object.assign(laps[1]!, lapsOver); // lap 2
     const live = lapInProgress(0, 3, 90_000, 180_000, 25);
     const sessionTime = live[live.length - 1]!.at;
@@ -77,7 +77,7 @@ describe('lap-times projection', () => {
     const first = lapInProgress(0, 1, 90_000, 0, 10);
     const noBest = run(scene({ miniSectors: first, cars: activeCars(1, { 0: { lap: 1, driverStatus: 'flyingLap' } }), sessionTime: first[first.length - 1]!.at }));
     // lap 3 just started but its start line is not recorded yet: the newest crossing belongs to lap 2
-    const { laps, miniSectors: all } = field({ cars: 1, laps: 2, paceMs: 90_000 });
+    const { laps, crossings: all } = field({ cars: 1, laps: 2, paceMs: 90_000 });
     const miniSectors = all.filter((m) => m.lap <= 2);
     const noCrossing = run(scene({ laps, miniSectors, cars: activeCars(1, { 0: { lap: 3, driverStatus: 'flyingLap' } }), sessionTime: 180_000 }));
     for (const out of [noBest, noCrossing]) {
@@ -116,7 +116,7 @@ describe('lap-times cut-off', () => {
     noBest?: boolean;
   }) => {
     const paces = Array.from({ length: cars }, (_, i) => 90_000 + 100 * i);
-    const { laps: all, miniSectors } = field({ cars, laps: 2, paceMs: paces });
+    const { laps: all, crossings: miniSectors } = field({ cars, laps: 2, paceMs: paces });
     const laps = noBest ? all.filter((l) => l.carId !== carId(subject)) : all;
     const pace = paces[subject]!;
     const live = lapInProgress(subject, 3, pace, 2 * pace, 25, upMs);
@@ -209,7 +209,7 @@ describe('lap-times cut-off', () => {
 describe('lap-times finish margin', () => {
   /** Car 0 on lap 3 at crossing 25 (45 s into a 90 s best lap): 45 s of the projected lap remain. */
   const atCrossing25 = (session: { sessionType: number; kind: 'practice' | 'qualifying' | 'race' | 'timeTrial' }, timeLeftMs: number) => {
-    const { laps, miniSectors } = field({ cars: 1, laps: 2, paceMs: 90_000 });
+    const { laps, crossings: miniSectors } = field({ cars: 1, laps: 2, paceMs: 90_000 });
     const live = lapInProgress(0, 3, 90_000, 180_000, 25);
     const sessionTime = live[live.length - 1]!.at; // 225 000
     const cars = activeCars(1, { 0: { lap: 3, driverStatus: 'flyingLap', currentLapTimeMs: 45_000 } });

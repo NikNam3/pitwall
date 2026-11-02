@@ -3,13 +3,13 @@
 // (facts in fixtures/index.json): the formation lap from 2 s, then the race clock from 2 s again, frame ids rising, no
 // FLBK and no lights out in between. The engine alone; one replay feeds every test.
 import { beforeAll, describe, expect, it } from 'vitest';
-import type { History, StepResult } from '@pitwall/engine';
+import type { Projection, StepResult } from '@pitwall/engine';
 import { replayRunner } from './engine-replay.ts';
 import { segmentPath } from './replay.ts';
 
 const run: {
   /** The step whose session time fell by more than 1 s, and the history just before it. */
-  fall: { result: StepResult; before: History } | undefined;
+  fall: { result: StepResult; before: Projection } | undefined;
   /** Whether any step was truncated. */
   truncated: boolean[];
   /** Every clock fall a step reported. */
@@ -18,13 +18,13 @@ const run: {
 } = { fall: undefined, truncated: [], clockFalls: [], phases: [] };
 
 beforeAll(async () => {
-  let previous: { at: number; history: History } | undefined;
+  let previous: { at: number; history: Projection } | undefined;
   const runner = await replayRunner(segmentPath('race-zandvoort-clock-reset.pwrec.gz'), (r) => {
     const now = r.state.sessionTime;
     if (run.fall === undefined && previous !== undefined && now < previous.at - 1000) run.fall = { result: r, before: previous.history };
-    run.truncated.push(r.delta.truncated);
+    run.truncated.push(r.delta.rewound !== undefined);
     if (r.clockFall) run.clockFalls.push(r.clockFall);
-    previous = { at: now, history: structuredClone(r.state.history) as History };
+    previous = { at: now, history: structuredClone(r.state.history) as Projection };
   });
   run.phases = [...runner.state.history.sessionPhases, runner.state.open.situations.session].map((p) => p.kind);
 });
@@ -38,9 +38,9 @@ describe('a fall inside the formation phase changes nothing (the formation reset
   it('the history recorded before the fall stays as it was', () => {
     const { result, before } = run.fall!;
     const h = result.state.history;
-    expect({ events: h.events.slice(0, before.events.length), miniSectors: h.miniSectors.slice(0, before.miniSectors.length) })
-      .toEqual({ events: before.events, miniSectors: before.miniSectors });
-    expect(before.miniSectors.length).toBeGreaterThan(0);
+    expect({ events: h.events.slice(0, before.events.length), crossings: h.crossings.slice(0, before.crossings.length) })
+      .toEqual({ events: before.events, crossings: before.crossings });
+    expect(before.crossings.length).toBeGreaterThan(0);
   });
   it('the formation phase stays open: without lights out nothing closes it', () => {
     expect(run.phases).toEqual(['formation']);

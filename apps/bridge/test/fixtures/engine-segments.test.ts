@@ -39,7 +39,7 @@ describe('race-zandvoort-lap10: car 1 (the player) crosses the line into lap 10'
       if (st.cars[1]!.timing.lap === 9) seen.lastOnLap9 = st.sessionTime;
       if (st.cars[1]!.timing.lap === 10 && seen.firstOnLap10 < 0) seen.firstOnLap10 = st.sessionTime;
     });
-    const mine = state.history.miniSectors.filter((m) => m.carId === 1);
+    const mine = state.history.crossings.filter((m) => m.carId === 1);
     expect(mine.map((m) => [m.lap, m.segment])).toEqual([[9, 48], [9, 49], [10, 0], [10, 1], [10, 2]]);
     expect(mine.every((m, i) => i === 0 || m.at > mine[i - 1]!.at)).toBe(true);
     const line = mine.find((m) => m.lap === 10 && m.segment === 0)!.at;
@@ -125,7 +125,7 @@ describe('race-singapore-wet-flashback: two flashbacks on lap 7', () => {
     const after: Array<{ frameId: number; sessionTime: number }> = [];
     await run('race-singapore-wet-flashback.pwrec.gz', (r) => {
       if (flashbacks.length === 2 && after.length < 1) after.push({ frameId: r.state.lastFrameId, sessionTime: r.state.sessionTime });
-      if (r.flashback) flashbacks.push({ frameId: r.state.lastFrameId, info: r.flashback, truncated: r.delta.truncated });
+      if (r.flashback) flashbacks.push({ frameId: r.state.lastFrameId, info: r.flashback, truncated: r.delta.rewound !== undefined });
     });
     // the first FLBK (sent at 757.045 s) lies outside the segment: the frame id falls from the end of the window to 56744
     expect(flashbacks[0]).toMatchObject({ frameId: 56_744, info: { targetFrameId: 56_743, targetLap: 7 }, truncated: true });

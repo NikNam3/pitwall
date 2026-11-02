@@ -21,8 +21,8 @@ describe('SessionRunner', () => {
     const { original } = scene(true);
     const results = runAll(new SessionRunner(initFor(original)), original.slice(0, 101));
     results.slice(1).forEach((r, i) => expect(r.delta.before).toEqual(results[i]!.delta.after));
-    expect(results.every((r) => !r.delta.truncated && r.flashback === undefined)).toBe(true);
-    expect([results[100]!.delta.after.laps - results[100]!.delta.before.laps, results[100]!.changed.has('laps')]).toEqual([1, true]);
+    expect(results.every((r) => r.delta.rewound === undefined && r.flashback === undefined)).toBe(true);
+    expect([(results[100]!.delta.after.laps ?? 0) - (results[100]!.delta.before.laps ?? 0), results[100]!.changed.has('laps')]).toEqual([1, true]);
   });
   it('FLBK: rewind + continuation equals a run that never saw the discarded frames', () => {
     const { original, continuation, reference } = scene(true);
@@ -35,7 +35,7 @@ describe('SessionRunner', () => {
     const { original, continuation } = scene(true);
     const a = new SessionRunner(initFor(original)); runAll(a, original);
     const r = a.apply(continuation[0]!);
-    expect(r.delta.truncated).toBe(true);
+    expect(r.delta.rewound).toBeDefined();
     expect([r.delta.before.laps, r.delta.after.laps]).toEqual([2, 1]);                 // lap 2 (completed at frame 250) is gone
     expect(r.flashback).toEqual({ targetFrameId: 200, targetSessionTime: 3_200, rewoundMs: 299 * STEP - 3_200, targetLap: 2 });
     expect((['laps', 'timing', 'miniSectors'] as const).every((t) => r.changed.has(t))).toBe(true);
@@ -44,7 +44,7 @@ describe('SessionRunner', () => {
     const { original, continuation, reference } = scene(false);
     const a = new SessionRunner(initFor(original)); runAll(a, original);
     const [first] = runAll(a, continuation);
-    expect([first!.delta.truncated, first!.flashback?.targetFrameId, first!.flashback?.targetSessionTime]).toEqual([true, 200, 3_200]);
+    expect([first!.delta.rewound !== undefined, first!.flashback?.targetFrameId, first!.flashback?.targetSessionTime]).toEqual([true, 200, 3_200]);
     const b = new SessionRunner(initFor(original)); runAll(b, reference);
     expect(a.state).toEqual(b.state);
   });
@@ -53,7 +53,7 @@ describe('SessionRunner', () => {
     const continuation = after(timeline(200, [120], flbkAt(90)), 91, 300);
     const a = new SessionRunner(initFor(original), { snapshotEveryMs: 1000, replayWindowMs: 1000 });
     runAll(a, original);
-    expect(a.apply(continuation[0]!).delta.truncated).toBe(true);
+    expect(a.apply(continuation[0]!).delta.rewound).toBeDefined();
     expect(a.state.history.laps).toEqual([]);                                          // lap 1 ended at frame 100 > target 90
     runAll(a, continuation.slice(1));
     expect(a.state.history.laps.map((l) => [l.lapNumber, l.lapTimeMs])).toEqual([[1, 1_920]]);

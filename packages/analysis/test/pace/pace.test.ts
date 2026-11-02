@@ -1,5 +1,5 @@
 import { carId, type LapRecord, type StintRecord } from '@pitwall/domain';
-import { historyLengths, type EngineView } from '@pitwall/engine';
+import { projectionLengths, type EngineView } from '@pitwall/engine';
 import { describe, expect, it } from 'vitest';
 import { PACE, PACE_CONFIG } from '../../src/pace/index.ts';
 import { paceCalculator } from '../../src/pace/calculator.ts';
@@ -155,7 +155,7 @@ describe('pace calculator', () => {
     // the same through update: the provisional arrives first, the confirmation in the next delta
     const first = raceView([provisional]);
     const acc = paceCalculator.init(first);
-    const delta = { before: historyLengths(first.state.history), after: historyLengths(both.state.history), truncated: false };
+    const delta = { before: projectionLengths(first.state.history), after: projectionLengths(both.state.history) };
     const next = paceCalculator.update(acc, delta, both);
     expect(paceCalculator.output(next)).toEqual(run(both));
   });
@@ -163,11 +163,11 @@ describe('pace calculator', () => {
   it('update over a delta equals init over the whole history', () => {
     const { laps } = field({ cars: 3, laps: 8, paceMs: [90_000, 91_000, 92_500] });
     let acc = paceCalculator.init(raceView([]));
-    let before = historyLengths(raceView([]).state.history);
+    let before = projectionLengths(raceView([]).state.history);
     for (let n = 1; n <= laps.length; n += 3) {
       const view = raceView(laps.slice(0, n + 2));
-      const after = historyLengths(view.state.history);
-      acc = paceCalculator.update(acc, { before, after, truncated: false }, view);
+      const after = projectionLengths(view.state.history);
+      acc = paceCalculator.update(acc, { before, after }, view);
       before = after;
       expect(paceCalculator.output(acc)).toEqual(run(view));
     }
@@ -177,13 +177,12 @@ describe('pace calculator', () => {
     const { laps } = field({ cars: 3, laps: 8, paceMs: [90_000, 91_000, 92_500] });
     const full = raceView(laps);
     const acc = paceCalculator.update(paceCalculator.init(raceView(laps.slice(0, 6))), {
-      before: historyLengths(raceView(laps.slice(0, 6)).state.history),
-      after: historyLengths(full.state.history),
-      truncated: false,
+      before: projectionLengths(raceView(laps.slice(0, 6)).state.history),
+      after: projectionLengths(full.state.history),
     }, full);
     const kept = laps.filter((l) => l.lapNumber <= 4);
     const truncatedView = raceView(kept);
-    const truncated = paceCalculator.update(acc, { before: historyLengths(full.state.history), after: historyLengths(truncatedView.state.history), truncated: true }, truncatedView);
+    const truncated = paceCalculator.update(acc, { before: projectionLengths(full.state.history), after: projectionLengths(truncatedView.state.history), rewound: { frameId: -1, at: 0 } }, truncatedView);
     expect(paceCalculator.output(truncated)).toEqual(run(truncatedView));
   });
 });

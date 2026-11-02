@@ -130,7 +130,7 @@ beforeAll(async () => {
 
   /** Notes every whole-lap verdict of `car-bands` and `alarms` on a lap whose start line crossing the engine never saw. */
   const judgePartialLaps = ({ state, delta }: StepResult, scheduled: SchedulerResult): void => {
-    for (const m of state.history.miniSectors.slice(delta.before.miniSectors)) if (m.segment === 0) lineCrossed.add(`${m.carId}:${m.lap}`);
+    for (const m of state.history.crossings.slice(delta.before.crossings)) if (m.segment === 0) lineCrossed.add(`${m.carId}:${m.lap}`);
     for (const l of state.history.laps.slice(delta.before.laps)) lastLap.set(l.carId, Math.max(lastLap.get(l.carId) ?? 0, l.lapNumber));
     const withoutStart = (carId: number) => !lineCrossed.has(`${carId}:${lastLap.get(carId)}`);
     if (scheduled.ran.includes(CAR_BANDS)) {
@@ -160,8 +160,8 @@ beforeAll(async () => {
   Object.assign(run, { state: runner.state, last: last!, seen, lineBetween, partialLapEvidence, invariantErrors, bands: bands.seen });
 });
 
-const crossingsOf = (carId: number) => run.state.history.miniSectors.filter((m) => m.carId === carId);
-const lineAt = (carId: number, lap: number) => run.state.history.miniSectors.find((m) => m.carId === carId && m.lap === lap && m.segment === 0)?.at;
+const crossingsOf = (carId: number) => run.state.history.crossings.filter((m) => m.carId === carId);
+const lineAt = (carId: number, lap: number) => run.state.history.crossings.find((m) => m.carId === carId && m.lap === lap && m.segment === 0)?.at;
 const confirmedLap = (carId: number, lapNumber: number): Lap | undefined =>
   run.state.history.laps.find((l) => l.carId === carId && l.lapNumber === lapNumber && l.status === 'confirmed');
 

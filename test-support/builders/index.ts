@@ -21,11 +21,11 @@ import {
 } from '../../packages/domain/src/index.ts';
 import {
   initialState,
-  historyLengths,
+  projectionLengths,
   type EngineState,
   type EngineView,
   type FeedMetricsView,
-  type History,
+  type Projection,
 } from '../../packages/engine/src/index.ts';
 import { buildPacket } from '../../packages/engine/test/builders/index.ts';
 import { createCarState } from '../../packages/engine/src/step/initial-state.ts';
@@ -161,13 +161,13 @@ export function flagPhase(over: Partial<FlagPhase> = {}): FlagPhase {
  * these defaults: it ends at `n * pace`; sectors are thirds of the pace; `fuelAtStartKg` 100 - 2 * (n - 1) and
  * `fuelAtEndKg` 2 kg less; `tyreAgeAtStart` n - 1 (one stint, soft C3); `wearAtStartPct` n - 1 and `wearAtEndPct` n % per corner (1 % a
  * lap); ERS store 4 MJ at every lap start and end; `positionAtEnd` is the car's order by cumulative time at the end of lap n (ties by id). No in or out
- * laps and no SC share are set. `miniSectors` holds, per car, laps 1..n with segments 0..49 plus the closing line crossing (lap n + 1, segment 0) at `n * pace`, so `laps * 50 + 1` crossings per car, sorted by time (engine convention, see `crossings`).
+ * laps and no SC share are set. `crossings` holds, per car, laps 1..n with segments 0..49 plus the closing line crossing (lap n + 1, segment 0) at `n * pace`, so `laps * 50 + 1` crossings per car, sorted by time (engine convention, see `crossings`).
  * The linear defaults have no physical floor or ceiling: fuel at the end of a lap goes below 0 kg after lap 50 and wear
  * above 100 % after lap 100, so a test that needs real values keeps `laps` below those or overrides them.
  */
 export function field({ cars, laps, paceMs }: { cars: number; laps: number; paceMs: Ms | Ms[] }): {
   laps: LapRecord[];
-  miniSectors: MiniSectorCrossing[];
+  crossings: MiniSectorCrossing[];
 } {
   if (typeof paceMs !== 'number' && paceMs.length < cars) throw new Error(`field: ${paceMs.length} paces for ${cars} cars`);
   const paceOf = (i: number): Ms => (typeof paceMs === 'number' ? paceMs : paceMs[i]!);
@@ -199,7 +199,7 @@ export function field({ cars, laps, paceMs }: { cars: number; laps: number; pace
     miniSectors.push({ carId: carId(i), lap: laps + 1, segment: 0, at: laps * pace, in: {} });
   }
   miniSectors.sort((a, b) => a.at - b.at);
-  return { laps: records, miniSectors };
+  return { laps: records, crossings: miniSectors };
 }
 
 /**
@@ -331,7 +331,7 @@ export function engineView({
   sessionTime = 0,
 }: {
   cars?: CarState[];
-  history?: Partial<History>;
+  history?: Partial<Projection>;
   session?: DeepPartial<SessionState>;
   config?: EngineView['config'];
   outputs?: ReadonlyMap<string, unknown>;
@@ -349,8 +349,8 @@ export function engineView({
   });
   const slots = Array.from({ length: Math.max(MAX_CARS, ...cars.map((c) => c.id + 1)) }, (_, i) => base.cars[i] ?? createCarState(carId(i)));
   for (const c of cars) slots[c.id] = c;
-  const full: History = { laps: [], stints: [], pitStops: [], flagPhases: [], sessionPhases: [], pauses: [], events: [], miniSectors: [], ...history };
-  const { open: _open, ...state } = {
+  const full: Projection = { ...emptyProjection(), ...history };
+  const { open: _open, log: _log, ...state } = {
     ...base,
     cars: slots,
     history: full,
@@ -358,20 +358,25 @@ export function engineView({
     playerCar: carId(playerCar),
     sessionTime,
   };
-  const lengths = historyLengths(full);
+  const lengths = projectionLengths(full);
   return {
     state,
     activeFlagPhase,
     situation,
     changed: new Set(),
-    delta: delta ?? { before: historyLengths({ laps: [], stints: [], pitStops: [], flagPhases: [], sessionPhases: [], pauses: [], events: [], miniSectors: [] }), after: lengths, truncated: false },
+    delta: delta ?? { before: projectionLengths(emptyProjection()), after: lengths },
     feed: { ...IDLE_FEED, ...feed },
     outputs,
     config,
   };
 }
 
-/** A `History` with the given lists and the rest empty: pass it to `engineView({ history })`. */
-export function history(lists: Partial<History> = {}): History {
-  return { laps: [], stints: [], pitStops: [], flagPhases: [], sessionPhases: [], pauses: [], events: [], miniSectors: [], ...lists };
+/** A projection with every list empty. */
+const emptyProjection = (): Projection => ({
+  laps: [], stints: [], pitStops: [], crossings: [], events: [], clock: [], spans: {}, flagPhases: [], sessionPhases: [], pauses: [],
+});
+
+/** A projection with the given lists and the rest empty: pass it to `engineView({ history })`. */
+export function history(lists: Partial<Projection> = {}): Projection {
+  return { ...emptyProjection(), ...lists };
 }

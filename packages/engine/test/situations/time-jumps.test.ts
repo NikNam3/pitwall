@@ -17,7 +17,7 @@ const lightsAt = (k: number, first: number, every: number): EventDetails[] =>
 /** Entries stamped after `ms`: events and mini-sector crossings. */
 const after_ = (r: SessionRunner, ms: number) => [
   ...r.state.history.events.filter((e) => e.at > ms).map((e) => `${e.kind} at ${e.at}`),
-  ...r.state.history.miniSectors.filter((m) => m.at > ms).map((m) => `crossing ${m.carId}/${m.lap}/${m.segment} at ${m.at}`),
+  ...r.state.history.crossings.filter((m) => m.at > ms).map((m) => `crossing ${m.carId}/${m.lap}/${m.segment} at ${m.at}`),
 ];
 const lightsOut = (r: SessionRunner) => r.state.history.events.filter((e) => e.kind === 'lightsOut');
 /** Index of race frame k of `gridStart` among the frames. */
@@ -42,11 +42,11 @@ describe('the start settles (raceZandvoortOnline): lights out at 1.968 s, the ra
   it('nothing recorded up to the settling is stamped after the race clock: the start lights and the first crossing move too', () => {
     const { runner } = run(script(s3).slice(0, L + 5));
     expect(after_(runner, 65)).toEqual([]);
-    expect(runner.state.history.miniSectors.filter((m) => m.carId === 0)).not.toEqual([]);
+    expect(runner.state.history.crossings.filter((m) => m.carId === 0)).not.toEqual([]);
   });
   it('the settling step is truncated (its entries were re-stamped) and reports no clock fall', () => {
     const { results } = run(script(s3));
-    expect([results[L + 4]!.delta.truncated, results[L + 4]!.clockFall]).toEqual([true, undefined]);
+    expect([results[L + 4]!.delta.rewound !== undefined, results[L + 4]!.clockFall]).toEqual([true, undefined]);
   });
 });
 
@@ -88,7 +88,7 @@ describe('the start settles (raceZandvoortUidReuse): a jump forward after lights
 
   it('a fall before the formation opens changes nothing and is reported with both times', () => {
     const { runner, results } = run(script(s4).slice(0, 20));
-    expect([results[7]!.delta.truncated, results[7]!.clockFall]).toEqual([false, { fromMs: 57_200 + 6 * STEP, toMs: 0 }]);
+    expect([results[7]!.delta.rewound !== undefined, results[7]!.clockFall]).toEqual([false, { fromMs: 57_200 + 6 * STEP, toMs: 0 }]);
     expect(runner.state.open.situations.session.kind).toBe('preStart');
   });
   it('the race start is lights out on the race clock: no later than the clock after the settling, and not before 0', () => {
@@ -102,7 +102,7 @@ describe('the start settles (raceZandvoortUidReuse): a jump forward after lights
   });
   it('nothing recorded up to the settling is stamped after the race clock: the crossing inside the jump moves too', () => {
     const { runner } = run(script(s4).slice(0, SETTLED + 1));
-    expect(runner.state.history.miniSectors.filter((m) => m.carId === 0 && m.lap === 1).map((m) => m.segment)).toEqual([0]);
+    expect(runner.state.history.crossings.filter((m) => m.carId === 0 && m.lap === 1).map((m) => m.segment)).toEqual([0]);
     expect(after_(runner, 27)).toEqual([]);
   });
   it('neither fall of the settling is reported as a clock fall', () => {
@@ -126,7 +126,7 @@ describe('the settling window: 60 frames after lights out', () => {
   it('a fall 61 frames after lights out is no settling: it truncates nothing and is reported', () => {
     const { results } = fallAt(60);
     const r = results[LIGHTS_OUT + 61]!;
-    expect([r.delta.truncated, r.clockFall]).toEqual([false, { fromMs: raceAt(59), toMs: 100 }]);
+    expect([r.delta.rewound !== undefined, r.clockFall]).toEqual([false, { fromMs: raceAt(59), toMs: 100 }]);
   });
 });
 
@@ -151,10 +151,10 @@ describe('any other fall of the session time', () => {
     const { runner } = run(all.slice(0, raceFrame(fall)));
     const before = structuredClone(runner.state.history);
     const r = runner.apply(all[raceFrame(fall)]!);
-    expect([r.delta.truncated, r.flashback, r.clockFall]).toEqual([false, undefined, { fromMs: raceAt(fall - 1), toMs: 1000 }]);
+    expect([r.delta.rewound !== undefined, r.flashback, r.clockFall]).toEqual([false, undefined, { fromMs: raceAt(fall - 1), toMs: 1000 }]);
     const h = runner.state.history;
-    expect({ laps: h.laps.slice(0, before.laps.length), events: h.events.slice(0, before.events.length), miniSectors: h.miniSectors.slice(0, before.miniSectors.length) })
-      .toEqual({ laps: before.laps, events: before.events, miniSectors: before.miniSectors });
+    expect({ laps: h.laps.slice(0, before.laps.length), events: h.events.slice(0, before.events.length), crossings: h.crossings.slice(0, before.crossings.length) })
+      .toEqual({ laps: before.laps, events: before.events, crossings: before.crossings });
     expect(before.laps.length).toBeGreaterThan(0);
     expect(runner.state.open.situations.session).toEqual({ kind: 'racing', start: 0, startLeaderLap: 1 });
   });
@@ -165,7 +165,7 @@ describe('any other fall of the session time', () => {
     expect(h.laps.filter((l) => l.carId === 0).map((l) => [l.lapNumber, l.completedAt])).toEqual([[1, raceAt(120)], [2, raceAt(240)], [3, rawAt(360) + OFFSET]]);
   });
   it('the mini-sector crossings stay in time order across the fall', () => {
-    const at = run(frames()).runner.state.history.miniSectors.filter((m) => m.carId === 0).map((m) => m.at);
+    const at = run(frames()).runner.state.history.crossings.filter((m) => m.carId === 0).map((m) => m.at);
     expect(at.filter((t, i) => i > 0 && t < at[i - 1]!)).toEqual([]);
   });
   it('a phase that opens after the fall starts above every phase before it, and no span ends below its start', () => {
@@ -202,7 +202,7 @@ describe('a flashback is never a clock fall', () => {
     const all = frames();
     const { runner } = run(all.slice(0, raceFrame(200) + 1));
     const r = runner.apply({ ...all[raceFrame(100)]!, overallFrameId: all[raceFrame(200)]!.overallFrameId });
-    expect([r.flashback, r.delta.truncated, r.clockFall]).toEqual([undefined, false, { fromMs: raceAt(200), toMs: raceAt(100) }]);
+    expect([r.flashback, r.delta.rewound !== undefined, r.clockFall]).toEqual([undefined, false, { fromMs: raceAt(200), toMs: raceAt(100) }]);
   });
 
   // Inventory 1.10 (raceSingaporeWet lap 44): after a rewind the first packets carry the target's frame ids with the old
@@ -241,7 +241,7 @@ const stall = (wallMs: number, advanceMs: number) =>
   })), { session: { sessionType: 1 } }));
 /** Frames whose step reported a clock jump, a clock fall or a truncation. */
 const jumpy = (results: ReturnType<typeof run>['results']) =>
-  results.flatMap((r, i) => (r.clockJump !== undefined || r.clockFall !== undefined || r.delta.truncated ? [i] : []));
+  results.flatMap((r, i) => (r.clockJump !== undefined || r.clockFall !== undefined || r.delta.rewound !== undefined ? [i] : []));
 
 describe('garage time acceleration', () => {
   it('a session clock running at the measured peak of 31.6 times wall time is no jump, no fall and no pause', () => {
@@ -261,7 +261,7 @@ describe('garage time acceleration', () => {
   it('a 3 s stall in a clock running at the peak (a 94.8 s advance) opens no post-session, and is no fall and no pause', () => {
     const { runner, results } = stall(3_000, STALL_ADVANCE);
     expect(runner.state.open.situations.session.kind).toBe('running');
-    expect(results.flatMap((r, i) => (r.clockFall !== undefined || r.delta.truncated ? [i] : []))).toEqual([]);
+    expect(results.flatMap((r, i) => (r.clockFall !== undefined || r.delta.rewound !== undefined ? [i] : []))).toEqual([]);
     expect(runner.state.history.pauses).toEqual([]);
   });
   it('a jump of 4500 s within one frame interval is still the simulated rest of the session: the post-session opens', () => {
@@ -286,7 +286,7 @@ describe('any other forward jump of the session time', () => {
   });
   it('the reported jump changes nothing else: no fall, no truncation, no pause, the phase stays running', () => {
     const { runner, results } = stall(3_000, 94_800);
-    expect([results[100]!.clockFall, results[100]!.delta.truncated, results[100]!.changed.has('sessionPhases')]).toEqual([undefined, false, false]);
+    expect([results[100]!.clockFall, results[100]!.delta.rewound !== undefined, results[100]!.changed.has('sessionPhases')]).toEqual([undefined, false, false]);
     expect(runner.state.history.pauses).toEqual([]);
     expect([runner.state.history.sessionPhases.map((p) => p.kind), runner.state.open.situations.session.kind]).toEqual([['preStart'], 'running']);
   });
@@ -311,7 +311,7 @@ describe('any other forward jump of the session time', () => {
     expect(results.flatMap((r, i) => (r.clockJump === undefined ? [] : [{ i, ...r.clockJump }]))).toEqual([
       { i: raceFrame(300), fromMs: rawAt(299), toMs: rawAt(300) },
     ]);
-    expect([results[raceFrame(300)]!.clockFall, results[raceFrame(300)]!.delta.truncated]).toEqual([undefined, false]);
+    expect([results[raceFrame(300)]!.clockFall, results[raceFrame(300)]!.delta.rewound !== undefined]).toEqual([undefined, false]);
     expect(runner.state.history.events.filter((e) => e.kind === 'overtake').map((e) => e.at)).toEqual([rawAt(350) + OFFSET]);
     expect(runner.state.open.situations.session.kind).toBe('racing');
   });
@@ -383,17 +383,21 @@ describe('a flashback after a mid-race fall of the session time (review 2 C5)', 
     let targetAt = 0;
     let staleCrossings = { from: 0, to: 0 };
     fork.slice(0, raceFrame(target + 15) + 1).forEach((f, i) => {
-      if (i === raceFrame(target + 1)) staleCrossings.from = fresh.state.history.miniSectors.length;
+      if (i === raceFrame(target + 1)) staleCrossings.from = fresh.state.history.crossings.length;
       fresh.apply(f);
       if (i === raceFrame(target)) targetAt = fresh.state.sessionTime;
-      if (i === raceFrame(target + 2)) staleCrossings = { ...staleCrossings, to: fresh.state.history.miniSectors.length };
+      if (i === raceFrame(target + 2)) staleCrossings = { ...staleCrossings, to: fresh.state.history.crossings.length };
     });
     expect(staleCrossings.to - staleCrossings.from).toBe(1);
     // The only difference the ruling allows: what the stale frames recorded (here one crossing) is stamped at the
     // target's time, where the fresh run has the frames' own times. Nothing else is left out.
     const { history } = fresh.state;
-    const miniSectors = history.miniSectors.map((m, i) => (i >= staleCrossings.from && i < staleCrossings.to ? { ...m, at: targetAt } : m));
-    expect(runner.state).toEqual({ ...fresh.state, history: { ...history, miniSectors } });
+    const miniSectors = history.crossings.map((m, i) => (i >= staleCrossings.from && i < staleCrossings.to ? { ...m, at: targetAt } : m));
+    // The log holds the same facts as the projection here (no void, no hidden fact), so it differs in that crossing too:
+    // the projection carries the comparison.
+    const { log: _runnerLog, ...runnerState } = runner.state;
+    const { log: _freshLog, ...freshState } = fresh.state;
+    expect(runnerState).toEqual({ ...freshState, history: { ...history, crossings: miniSectors } });
   });
 });
 
@@ -511,7 +515,7 @@ describe('a flashback report on the session’s first frame', () => {
   // engineer's feed shows none (no "flashback, lap 0"), and readers get no discarded timeline.
   it('the first step reports no flashback and is not truncated: its result equals the same frame’s without the FLBK', () => {
     const { firstStep } = runJoined(true);
-    expect([firstStep.flashback, firstStep.delta.truncated]).toEqual([undefined, false]);
+    expect([firstStep.flashback, firstStep.delta.rewound !== undefined]).toEqual([undefined, false]);
     expect(firstStep).toEqual(runJoined(false).firstStep);
   });
 
@@ -529,7 +533,7 @@ describe('a flashback report on the session’s first frame', () => {
   it('the frames after it read the jump rules from it: the fall is reported on its step, and every step and the final state equal a session without the FLBK', () => {
     const withFlbk = runJoined(true);
     const plain = runJoined(false);
-    const steps = (rest: StepResult[]) => rest.map((r) => ({ truncated: r.delta.truncated, clockFall: r.clockFall, clockJump: r.clockJump }));
+    const steps = (rest: StepResult[]) => rest.map((r) => ({ truncated: r.delta.rewound !== undefined, clockFall: r.clockFall, clockJump: r.clockJump }));
     expect(withFlbk.rest[FALL_AT - JOIN - 1]!.clockFall).toEqual({ fromMs: (FALL_AT - 1) * STEP, toMs: FALL_AT * STEP - 1_000 });
     expect(steps(withFlbk.rest)).toEqual(steps(plain.rest));
     expect(withFlbk.runner.state).toEqual(plain.runner.state);

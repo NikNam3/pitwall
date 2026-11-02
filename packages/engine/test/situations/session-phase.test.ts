@@ -41,8 +41,8 @@ const raceFrame = (k: number) => LIGHTS_OUT + 1 + k;
 const raceScript = (n: number, at: Record<number, Beat>, jump?: { from: number; ms: number }) =>
   script(gridStart(n, (k) => ({ ...(jump && k >= jump.from && { at: raceAt(k) + jump.ms }), ...at[k] })));
 const race = (n: number, at: Record<number, Beat>, jump?: { from: number; ms: number }) => run(raceScript(n, at, jump));
-/** The steps that discarded history (`delta.truncated`), by frame index. */
-const truncated = (results: StepResult[]) => results.flatMap((r, i) => (r.delta.truncated ? [i] : []));
+/** The steps that discarded history (`delta.rewound` set), by frame index. */
+const truncated = (results: StepResult[]) => results.flatMap((r, i) => (r.delta.rewound !== undefined ? [i] : []));
 
 describe('the start of a race without a formation lap', () => {
   it('the grid is preStart, the first start light opens startLights, lights out opens racing', () => {
@@ -196,7 +196,7 @@ describe('a suspension (red flag)', () => {
       { kind: 'startLights', start: raceAt(100), end: raceAt(160) },
     ]);
     expect(current(runner)).toEqual({ kind: 'racing', start: raceAt(160), startLeaderLap: 1 });
-    expect(results[raceFrame(160)]!.delta.truncated).toBe(false);
+    expect(results[raceFrame(160)]!.delta.rewound).toBeUndefined();
     expect(runner.state.history.flagPhases).toMatchObject([{ kind: 'red', start: raceAt(50), end: raceAt(100) }]);
   });
   it('a rolling restart behind the safety car closes the suspension and opens the SC', () => {
@@ -461,7 +461,7 @@ describe('a session phase boundary at a moment earlier frames share', () => {
     // Race frame 20 crosses at raceAt(19) + 12 ms, below the standing time raceAt(20); the car stands from there on.
     const stopped = (k: number): Beat => ({ cars: (d) => lap(d, 0, { currentLapNum: 1, lapDistance: 10 + 40 * Math.min(k, 20) }) });
     const { runner, results } = run(script(gridStart(60, (k) => ({ ...standing(k), ...stopped(k), ...scFrom(23)(k) }))));
-    const crossings = runner.state.history.miniSectors.filter((m) => m.carId === 0).map((m) => m.at);
+    const crossings = runner.state.history.crossings.filter((m) => m.carId === 0).map((m) => m.at);
     expect(crossings.at(-1)).toBe(raceAt(19) + 12);
     expect(truncated(results)).toEqual(GRID_START_TRUNCATED);
   });
@@ -474,7 +474,7 @@ describe('a session phase boundary at a moment earlier frames share', () => {
   const historyBefore23 = (frames: Frame[]) => run(frames.slice(0, raceFrame(23))).runner.state.history;
   /** The events and crossings at or after the boundary, raceAt(20), that the boundary reads. */
   const eventsOrCrossingsFrom20 = (frames: Frame[]) => {
-    const { events, miniSectors } = historyBefore23(frames);
+    const { events, crossings: miniSectors } = historyBefore23(frames);
     return [...events, ...miniSectors].filter((e) => e.at >= raceAt(20));
   };
   /**
@@ -605,7 +605,7 @@ describe('the simulated end of a session', () => {
   it('a race whose last frame before the jump recorded nothing at its own time: the post-session opens there, and no step but the grid start’s lights out is truncated', () => {
     const { runner, results } = simulated();
     expect(current(runner)).toMatchObject({ kind: 'postSession', start: raceAt(99) });
-    const { events, miniSectors } = runner.state.history;
+    const { events, crossings: miniSectors } = runner.state.history;
     expect([...events, ...miniSectors].filter((e) => e.at === raceAt(99))).toEqual([]);
     expect(miniSectors.filter((m) => m.at < raceAt(99)).length).toBeGreaterThan(0);
     expect(truncated(results)).toEqual(GRID_START_TRUNCATED);

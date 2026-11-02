@@ -7,7 +7,7 @@ const crossings = (samples: ReadonlyArray<readonly [lap: number, distance: numbe
   const { st } = runScenario(new ScenarioBuilder({ cars: 1, stepMs: 100 }).frames(samples.length, (d) => {
     Object.assign(d.lapData.lapData[0]!, { currentLapNum: samples[d.index]![0], lapDistance: samples[d.index]![1], resultStatus: o.resultStatus ?? 2 });
   }));
-  return st.history.miniSectors.map(({ carId, lap, segment, at }) => ({ carId, lap, segment, at }));
+  return st.history.crossings.map(({ carId, lap, segment, at }) => ({ carId, lap, segment, at }));
 };
 
 describe('mini-sector crossings', () => {

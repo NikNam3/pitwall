@@ -21,13 +21,13 @@ describe('Scheduler: event cadences', () => {
   it('pitStop runs when a pit stop was added, not before', () => {
     const s = sched([quick('p', { reads: ['pitStops'], cadence: 'pitStop' })]);
     s.run(input(0, ['pitStops']));
-    expect(s.run(input(1, ['pitStops'], { before: len({ pitStops: 2 }), after: len({ pitStops: 2 }), truncated: false })).ran).toEqual([]);
-    expect(s.run(input(2, ['pitStops'], { before: len({ pitStops: 2 }), after: len({ pitStops: 3 }), truncated: false })).ran).toEqual(['p']);
+    expect(s.run(input(1, ['pitStops'], { before: len({ pitStops: 2 }), after: len({ pitStops: 2 }) })).ran).toEqual([]);
+    expect(s.run(input(2, ['pitStops'], { before: len({ pitStops: 2 }), after: len({ pitStops: 3 }) })).ran).toEqual(['p']);
   });
   it('pitStop does not run for a lap', () => {
     const s = sched([quick('p', { reads: ['laps'], cadence: 'pitStop' })]);
     s.run(input(0, ['laps']));
-    expect(s.run(input(1, ['laps'], { before: len({ laps: 2 }), after: len({ laps: 3 }), truncated: false })).ran).toEqual([]);
+    expect(s.run(input(1, ['laps'], { before: len({ laps: 2 }), after: len({ laps: 3 }) })).ran).toEqual([]);
   });
   it('flagChange runs when the flag phases changed, not for other changes', () => {
     const s = sched([quick('f', { reads: ['flagPhases', 'timing'], cadence: 'flagChange' })]);
