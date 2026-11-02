@@ -55,6 +55,8 @@ Status: self-check of `docs/architecture.md`, 2026-11-02. Every decision of the 
 | C31's undefined budget and fixture; flaky wall-time benchmarks | a deterministic count of projection entries read per frame on the long-race builder (70 laps, 20 cars): from scratch > 10× from lap 7 to lap 70, incremental ≤ 2× | C31 |
 | The rules version missed recorders and step 1 | every log writer carries a version in its own file; the rules version hashes them all; the bump is checked against the merge base | glossary, C61, C90 |
 | "The current weekend" at bridge start | the newest stored session's weekend | C61 |
+| C31's ">10×" sat exactly on linear growth; "per frame" undefined (second plan review) | at least 5 times, averaged over the frames of the lap | C31 |
+| The rules version missed helpers, frame assembly, the runner and decoding (second plan review) | the rules version is a hash of the source of every module that can change the log; no versions by hand | glossary, C15, C61, C90 |
 | Sub-machines with two scopes (flags per car and zone; DRS and compound rule) | one scope per sub-machine: `car-flags`, `zone-flags`, `race-control-*` (DRS), `compound-rule`; zone spans are not stamped | glossary, C15, C17, C26 |
 
 ## 2. Survey §7: places that decide situations outside the tracker
