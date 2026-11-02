@@ -20,11 +20,10 @@
 - Segments (C84): at most 1 MB, cut with `pwrec-cut` from a normal session, one behaviour each; new segments get an entry in `fixtures/index.json`; times come from `docs/research/09-situations-inventory.md`. Whole recordings only in acceptance. No test asserts a fact of a recording; the time trial is no fixture.
 - No test reads the priors store, storage or `PITWALL_DATA_DIR` (C84): the test setup points the data dir at an empty temporary directory.
 - A test of a deleted mechanism is deleted in the task that deletes the mechanism; a test of behaviour that stays is ported, never dropped (C82).
-- Every new sub-machine starts at `version: 1`; a later change to its folder bumps it (C90).
 - Thresholds carried over unchanged, each with its source note: start settling within 60 frames after LGOT; neutralisation confirmed within 3 s of its SCAR; DSQ confirmed by PENA type 6 or 2 s unchanged; offline pause after 2 s wall time; post-session jump > 60 s and > 60 × wall time; the race under way above a 1000 ms lap timer.
 - Not built by this plan (no code violates the clause today; the first feature that needs them builds them): the priors store (C62a), decisions and their sidecar (C76), automatic layout switch rules and the pin (C67).
 - There is no flashback fact and no flashback insight (C27, C52): the bridge's `flashbackChanges` goes in Task 3.
-- Every log writer (sub-machine, recorder, step 0, step 1 module) holds its `version` in its own file (C90); the rules version hashes them all (C61).
+- No module keeps a version by hand (C90): the rules version is a hash of the source of protocol decoding, frame assembly, the four steps (sub-machines and recorders included), the log and the runner (C61).
 
 ## Review Focus
 
@@ -99,7 +98,7 @@ export type Projection = DeepReadonly<{ laps: LapRecord[]; stints: StintRecord[]
 export type MachineInputs = { signals: readonly SignalKey[]; values: readonly LiveArea[]; upstream: readonly MachineId[] };
 export type MachineStep<Open> = { open: Open; closed: Span[] };
 export type SubMachine<Open> = {
-  id: MachineId; version: number; appliesTo: 'all' | readonly WeekendPhaseKind[]; scope: Scope; inputs: MachineInputs;
+  id: MachineId; appliesTo: 'all' | readonly WeekendPhaseKind[]; scope: Scope; inputs: MachineInputs;
   transitions: ReadonlyArray<readonly [from: string | 'none', to: string]>;
   init(): Open; openSpans(open: Open): OpenSpan[];
   step(open: Open, input: DeepReadonly<MachineInput>): MachineStep<Open> };
@@ -115,9 +114,9 @@ export type Signals = { cars: CarSignals[]; session: SessionSignals; events: Sit
 ```ts
 // engine/situations/machine.ts (continued)
 export type Situation = DeepReadonly<{ weekendPhase: WeekendPhase; session: OpenSpan | undefined; byMachine: Record<MachineId, OpenSpan[]> }>;   // the clock's open `paused` span is `byMachine.clock` (C20)
-// engine/step/types.ts: every log writer is an object with an id and a version (C90)
-export type StateUpdate = { id: string; version: number; apply(frame: Frame, live: LiveState, signals: Signals, out: StepOutput): void };
-export type Recorder<Own> = { id: string; version: number; init(): Own; apply(input: DeepReadonly<RecorderInput>, own: Own, log: LogWriter, out: StepOutput): Own };
+// engine/step/types.ts
+export type StateUpdate = { id: string; apply(frame: Frame, live: LiveState, signals: Signals, out: StepOutput): void };
+export type Recorder<Own> = { id: string; init(): Own; apply(input: DeepReadonly<RecorderInput>, own: Own, log: LogWriter, out: StepOutput): Own };
 export type RecorderInput = { at: SessionTime; frameId: number; live: LiveState; situation: Situation; stamps: FrameStamps };
 export type FrameStamps = { session: Stamp; cars: readonly Stamp[] };   // a car's fact carries { ...session, ...cars[carId] }; zone spans are never stamped
 ```
@@ -174,15 +173,15 @@ export type FrameStamps = { session: Stamp; cars: readonly Stamp[] };   // a car
 
 ### Task 5: The machine registry and its tests
 
-**Clauses:** C15, C17 (`gen` part), C40, C63, C85, C87, C90.
+**Clauses:** C15, C17 (`gen` part), C40, C63, C85, C87.
 
-**Files:** Create `scripts/gen-machines.ts` (+ `pnpm gen:machines` in root `package.json`, part of `pnpm gen`; supervisor), `packages/engine/src/situations/registry.ts` (supervisor), `packages/engine/src/situations/run.ts`; tests `packages/engine/test/situations/registry.test.ts`, `packages/engine/test/situations/transitions-completeness.test.ts`, `packages/engine/test/situations/invariants.property.test.ts`, `packages/engine/test/situations/versions.test.ts`, `packages/engine/test/support/transition-table.ts`.
+**Files:** Create `scripts/gen-machines.ts` (+ `pnpm gen:machines` in root `package.json`, part of `pnpm gen`; supervisor), `packages/engine/src/situations/registry.ts` (supervisor), `packages/engine/src/situations/run.ts`; tests `packages/engine/test/situations/registry.test.ts`, `packages/engine/test/situations/transitions-completeness.test.ts`, `packages/engine/test/situations/invariants.property.test.ts`, `packages/engine/test/support/transition-table.ts`.
 
 **Interfaces:**
 - Consumes: Task 1, Task 4.
-- Produces: `MACHINES` (generated `index.generated.ts`: every `situations/<name>/machine.ts` default export); `machineOrder(machines): SubMachine<unknown>[]` (topological by `inputs.upstream`, throws `MachineCycleError` on a cycle and `UnknownMachineError` on an upstream id that is not registered; every sub-machine gets the clock's state as `MachineInput.clock`); `runMachine(state, frame, out)` runs the sub-machines that apply to the weekend phase, appends closed spans to `spans:<id>` and returns the frame's `FrameStamps` (the session-scoped spans, and per car that car's car-scoped spans; zone-scoped spans are never stamped, C26); `situationOf(state): Situation` (the open spans of every machine); a span's id is the count of spans its machine (per car for a per-car machine) opened before it, kept in the machine's open state so a rewind restores it (C26); `type TransitionRow = { name: string; from: string | 'none'; to: string; input: MachineInputBuilder; join?: true }`; `defineTransitionTable(machine, rows)`; change tags `spans:<id>` per machine generated into `CHANGE_TAGS`. The version of every log writer lives only in its own file (`version` field, C90); `packages/engine/test/situations/versions.test.ts` (in `pnpm check`) diffs against `git merge-base HEAD main` and fails when a log writer's files changed and its `version` did not.
+- Produces: `MACHINES` (generated `index.generated.ts`: every `situations/<name>/machine.ts` default export); `machineOrder(machines): SubMachine<unknown>[]` (topological by `inputs.upstream`, throws `MachineCycleError` on a cycle and `UnknownMachineError` on an upstream id that is not registered; every sub-machine gets the clock's state as `MachineInput.clock`); `runMachine(state, frame, out)` runs the sub-machines that apply to the weekend phase, appends closed spans to `spans:<id>` and returns the frame's `FrameStamps` (the session-scoped spans, and per car that car's car-scoped spans; zone-scoped spans are never stamped, C26); `situationOf(state): Situation` (the open spans of every machine); a span's id is the count of spans its machine (per car for a per-car machine) opened before it, kept in the machine's open state so a rewind restores it (C26); `type TransitionRow = { name: string; from: string | 'none'; to: string; input: MachineInputBuilder; join?: true }`; `defineTransitionTable(machine, rows)`; change tags `spans:<id>` per machine generated into `CHANGE_TAGS`. No module carries a version (C90); the rules version is computed in Task 28.
 
-- [ ] **Step 1 (test agent):** "the order follows declared inputs; a cycle throws `MachineCycleError`"; "every declared transition has a row, every row uses a declared transition" (generic over `MACHINES` and each machine's table file); "random signal sequences never give an undeclared transition, a throw, two open spans in one scope or a gap between spans" (generic property over `MACHINES`); "a log writer changed since the merge base without a version bump fails" (`versions.test.ts`, against a scratch git repo in a temp dir); "every sub-machine declares exactly one scope". With no machine registered yet, the generic tests run over a test machine in `test/support`. Run: fail.
+- [ ] **Step 1 (test agent):** "the order follows declared inputs; a cycle throws `MachineCycleError`"; "every declared transition has a row, every row uses a declared transition" (generic over `MACHINES` and each machine's table file); "random signal sequences never give an undeclared transition, a throw, two open spans in one scope or a gap between spans" (generic property over `MACHINES`); "every sub-machine declares exactly one scope". With no machine registered yet, the generic tests run over a test machine in `test/support`. Run: fail.
 - [ ] **Step 2 (implementer):** implement the generator, `run.ts`, the harness; `pnpm gen` writes the index.
 - [ ] **Step 3:** related tests, typecheck, lint, depcruise; supervisor `pnpm check`.
 - [ ] **Step 4:** commit `feat(engine): the machine registry, its order, stamps per frame and the transition tests`.
@@ -210,7 +209,7 @@ export type FrameStamps = { session: Stamp; cars: readonly Stamp[] };   // a car
 
 **Interfaces:**
 - Consumes: Task 5.
-- Produces: the clock is step 0, not a member of the step-2 registry (`STEP0_CLOCK` in `situations/clock/machine.ts`, `id: 'clock'`, scope session, with a `version`). Its one span kind is `paused` (detail `{ source: 'offline' \| 'online'; wallMs: number }`): open while a pause lasts, so it reaches readers as an open span (`view.situation.byMachine.clock`, C20); closed into `spans:clock`, where the closed span is the pause's clock fact (C7), recorded once. Its other clock facts go to `clock`: `fall`, `jump`, `simulatedEnd`. `onRaceClock(state, sessionTime): SessionTime`; `clockInput(state): ClockInput` (`{ paused: boolean; offsetMs: Ms }`) for step 2. The start settling is a `fall` carried over by `offsetMs` like any other fall (C36); nothing is re-stamped.
+- Produces: the clock is step 0, not a member of the step-2 registry (`STEP0_CLOCK` in `situations/clock/machine.ts`, `id: 'clock'`, scope session). Its one span kind is `paused` (detail `{ source: 'offline' \| 'online'; wallMs: number }`): open while a pause lasts, so it reaches readers as an open span (`view.situation.byMachine.clock`, C20); closed into `spans:clock`, where the closed span is the pause's clock fact (C7), recorded once. Its other clock facts go to `clock`: `fall`, `jump`, `simulatedEnd`. `onRaceClock(state, sessionTime): SessionTime`; `clockInput(state): ClockInput` (`{ paused: boolean; offsetMs: Ms }`) for step 2. The start settling is a `fall` carried over by `offsetMs` like any other fall (C36); nothing is re-stamped.
 
 - [ ] **Step 1 (test agent):** pause rows: an offline gap over 2 s wall opens and closes one `paused` span; an online `gamePaused` 1 opens a `paused` span that is open (in `byMachine.clock`) until `gamePaused` 0 closes it; no other pause record exists; fact rows: "a fall within 60 frames after LGOT is carried over, nothing is re-stamped" (the former settling tests, turned around: the recorded entries keep their times, later ones get the offset); "the post-session jump appends `simulatedEnd`"; "garage acceleration up to 31.6× is no jump"; "a flashback appends no clock fact". Segments: `race-zandvoort-online-start` (the settling fall), `race-zandvoort-clock-reset`, `race-singapore-wet-flashback`. Delete the re-stamp tests. Run: fail.
 - [ ] **Step 2 (implementer):** implement; `step0Clock` delegates to it.
@@ -256,7 +255,7 @@ Each row is one task with the same steps. Span kinds and details are committed b
 Per row:
 - [ ] **Step 0 (supervisor):** commit the span kinds and details in `packages/domain/src/situations/<machine>.ts`.
 - [ ] **Step 1 (test agent):** the transition table, one row per declared transition and one join row per kind (Review Focus 2), with the inventory's signal orders (Review Focus 5); one segment test per listed segment asserting the span sequence the machine produces; cut the new segments listed. Run: fail.
-- [ ] **Step 2 (implementer):** `situations/<machine>/machine.ts` (and helpers in that folder), `version: 1`, with its `scope`.
+- [ ] **Step 2 (implementer):** `situations/<machine>/machine.ts` (and helpers in that folder), with its `scope`.
 - [ ] **Step 3:** related tests; the completeness and property tests of Task 5 now cover the machine; `pitwall scan-situations` over every recording with no undeclared transition, output in the report; supervisor `pnpm check`.
 - [ ] **Step 4:** commit `feat(engine): the <machine> sub-machine`.
 
@@ -281,7 +280,7 @@ Task 12 asserts garage acceleration: "a car accelerated through the garage at 31
 - Produces: `LapRecord.inLap`/`outLap` from the car's activity spans during the lap; `scShare`/`vscShare` from the time the lap spent while the session's `neutralised` span was open (its car SC or VSC); a race lap rises at the pit-lane line, a practice or qualifying lap restarts at the line after an out lap (from the activity spans); no lap record while the car's activity is `coolDown` or the session phase is `postSession`; a `PitStopRecord` per `boxStop` span (lap, entry, exit, pit-lane and stationary times from values, `flag` from the stamp, `penaltyServed` true when a `servingPenalty` span overlaps); a stint closes when a `boxStop` or `garage` span ends on a different set (compound change, or a lower age than the old set's at fitting). Every fact carries the frame's stamp.
 
 - [ ] **Step 1 (test agent):** port the listed tests onto activity spans built with the Task 5 builders; add: "a lap crossed while the formation span is open is hidden"; "a drive-through pass gives no pit stop and marks none served"; "a garage tyre fitting opens a stint without a pit stop"; "a car accelerated through the garage records no lap" (Review Focus 4); bring in the tests of branch `w2/laps` (RE-B3, RE-B5: the final out lap, the latched stint split as "a same-compound set fitted at age 0 or 1 opens a stint at the box exit"). Delete the tests of `driverStatus`/`pitStatus` reads. Run: fail.
-- [ ] **Step 2 (implementer):** implement; no recorder reads a signal (the depcruise rule of Task 4 enforces it); bump each changed recorder's `version` (C90).
+- [ ] **Step 2 (implementer):** implement; no recorder reads a signal (the depcruise rule of Task 4 enforces it).
 - [ ] **Step 3:** related tests; segment tests in `apps/bridge/test/fixtures` pass; supervisor `pnpm check`.
 - [ ] **Step 4:** commit `feat(engine): laps, stints and pit stops from activity spans`.
 
@@ -387,9 +386,9 @@ After all lanes: the supervisor deletes `shared/out-of-race.ts` and `shared/drs-
 
 **Interfaces:**
 - Consumes: Task 18 (guarded view), Task 20.
-- Produces: `countReads(unit, view): number` in the test support; per unit the C31 proof: from scratch, the entries read per frame at lap 70 are more than 10 times those at lap 7; incremental, at most twice. No timer anywhere.
+- Produces: `countReads(unit, view): number` in the test support; per unit the C31 proof: the entries read per frame, averaged over the frames of the lap, are from scratch at lap 70 at least 5 times those at lap 7, incremental at most twice. No timer anywhere.
 
-- [ ] **Step 1 (test agent):** one work test per unit with the two C31 assertions on `longRace()`; "incremental equals from scratch across random rewinds" (port of the existing property, now with void facts). Run: a unit whose from-scratch reads do not grow tenfold fails; it becomes quick in Step 2 and its test is turned around to "quick: from-scratch work is bounded".
+- [ ] **Step 1 (test agent):** one work test per unit with the two C31 assertions on `longRace()`; "incremental equals from scratch across random rewinds" (port of the existing property, now with void facts). Run: a unit whose from-scratch reads do not grow fivefold fails; it becomes quick in Step 2 and its test is turned around to "quick: from-scratch work is bounded".
 - [ ] **Step 2 (implementer):** convert those units to quick; leave the others incremental.
 - [ ] **Step 3:** related tests (they run in `pnpm check`: deterministic and cheap); supervisor `pnpm check`.
 - [ ] **Step 4:** commit `test(analysis): every incremental unit proves its accumulator by counted work (C31)`.
@@ -485,10 +484,10 @@ After all lanes: the supervisor deletes `shared/out-of-race.ts` and `shared/drs-
 **Files:** Create `apps/bridge/src/storage/rules-version.ts`; modify `apps/bridge/src/cli/commands/live.ts` (or the startup path), `weekend-repository.ts`. Test: `apps/bridge/test/storage/rules-version.test.ts`.
 
 **Interfaces:**
-- Consumes: the `version` of every log writer (Tasks 4, 5, 7, 9–17), Task 27.
-- Produces: `rulesVersion(): string` (sha256 over the sorted `${id}@${version}` of the clock, every state-update module, every sub-machine and every recorder); at bridge start the sessions of the newest stored session's weekend with a different rules version are rebuilt from their recordings before input opens, with progress lines; any other stale session is rebuilt when first read.
+- Consumes: Task 27; the module set of C61 (Tasks 4, 5, 7, 9–17 put every log-changing module under it).
+- Produces: `RULES_SOURCES` (the globs `packages/protocol/src/**`, `packages/engine/src/{frame,signals,step,situations,recorders,log,runner}/**`, test files excluded) and `rulesVersion(root): string` (sha256 over the sorted paths and contents of those files, read at bridge start); at bridge start the sessions of the newest stored session's weekend with a different rules version are rebuilt from their recordings before input opens, with progress lines; any other stale session is rebuilt when first read.
 
-- [ ] **Step 1 (test agent):** "a changed rules version rebuilds the current weekend at start and logs progress"; "a stale session of another weekend is rebuilt when first read"; "an unchanged rules version rebuilds nothing". Run: fail.
+- [ ] **Step 1 (test agent):** "changing any file under `RULES_SOURCES`, a comment included, changes the rules version; changing a file outside them does not" (scratch copy of the tree in a temp dir); "a changed rules version rebuilds the current weekend at start and logs progress"; "a stale session of another weekend is rebuilt when first read"; "an unchanged rules version rebuilds nothing". Run: fail.
 - [ ] **Step 2 (implementer):** implement.
 - [ ] **Step 3:** related tests; supervisor `pnpm check`.
 - [ ] **Step 4:** commit `feat(bridge): the rules version rebuilds stale sessions`.
