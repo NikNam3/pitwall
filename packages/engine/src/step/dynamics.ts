@@ -1,5 +1,5 @@
 import { known, type CarDynamics } from '@pitwall/domain';
-import type { SubStep } from './types.ts';
+import type { SubStep } from './sub-step.ts';
 
 /**
  * Driving inputs from Car Telemetry, world motion from Motion, and limits from Car Status.

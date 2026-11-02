@@ -79,6 +79,19 @@ export type CarTiming = {
   /** Fastest speed-trap value of the car; `notReceived` until it has one. */
   speedTrapFastestKmh: Known<Kmh>;
   fiaFlag: FiaFlag;
+  /**
+   * The car's laps as the game's Session History confirms them, oldest first: step 1 writes them (C8), the lap recorder
+   * confirms its provisional records from them, so it reads no packet (C6). Empty until Session History arrives.
+   */
+  confirmedLaps: ConfirmedLap[];
+};
+
+/** One lap of Session History: the confirmed lap and sector times and validity. */
+export type ConfirmedLap = {
+  lapNumber: number;
+  lapTimeMs: Ms;
+  sectorTimesMs: [Ms, Ms, Ms];
+  valid: { lap: boolean; sectors: [boolean, boolean, boolean] };
 };
 
 export type TyreCorner = {

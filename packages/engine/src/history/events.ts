@@ -2,7 +2,7 @@ import { carId, type RaceEvent } from '@pitwall/domain';
 import type { EventDetails } from '@pitwall/protocol';
 import { applyDamageChanges } from './damage-changes.ts';
 import { pick } from '../step/pick.ts';
-import type { SubStep } from '../step/types.ts';
+import type { SubStep } from '../step/sub-step.ts';
 
 // Code tables from the Event packet of the spec.
 const RETIREMENT_REASONS = [

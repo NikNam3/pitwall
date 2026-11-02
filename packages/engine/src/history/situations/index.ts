@@ -3,7 +3,8 @@
 // car status, the session clock's jumps and pauses) to decide the session phase; the others read its spans.
 import type { Frame } from '../../frame/frame.ts';
 import type { EngineState } from '../../state/engine-state.ts';
-import type { FlashbackReport, StepOutput, SubStep } from '../../step/types.ts';
+import type { FlashbackReport, StepOutput } from '../../step/types.ts';
+import type { SubStep } from '../../step/sub-step.ts';
 import { applyPhaseSignals, enterPostSession, joinSession } from './session-phase.ts';
 import { atRewindTarget, noteRewind, onRaceClock, restampStart, timeJumpOf, trackPauses } from './time-jumps.ts';
 

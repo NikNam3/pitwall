@@ -69,6 +69,7 @@ export const createCarState = (id: CarId): CarState => ({
     gridPosition: 0,
     speedTrapFastestKmh: unknown('notReceived'),
     fiaFlag: 'unknown',
+    confirmedLaps: [],
   },
   tyres: {
     actualCompound: 'unknown',

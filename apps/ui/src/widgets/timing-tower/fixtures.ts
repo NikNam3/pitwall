@@ -43,7 +43,7 @@ export function overview(id: number, o: CarOptions): CarOverview {
       pitLaneTimerActive: false, pitLaneTimeMs: 0, pitStopTimerMs: 0, shouldServePenalty: false,
       driverStatus: o.driverStatus ?? 'onTrack', resultStatus: o.resultStatus ?? 'active', timePenaltyMs: o.timePenaltyMs ?? 0,
       totalWarnings: o.totalWarnings ?? 0, cornerCuttingWarnings: 0, unservedDriveThroughs: o.unservedDriveThroughs ?? 0, unservedStopGos: o.unservedStopGos ?? 0,
-      gridPosition: o.gridPosition ?? o.position, speedTrapFastestKmh: unknown('notReceived'), fiaFlag: 'none',
+      gridPosition: o.gridPosition ?? o.position, speedTrapFastestKmh: unknown('notReceived'), fiaFlag: 'none', confirmedLaps: [],
     },
     tyres: { actualCompound: 'C3', visualCompound: o.compound ?? 'medium', age: o.age ?? 14 },
     stops: o.stops ?? o.numPitStops ?? 1,

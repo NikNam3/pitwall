@@ -1,6 +1,6 @@
 import { unknown, type CarState } from '@pitwall/domain';
 import { CORNER_NAMES } from './corners.ts';
-import type { SubStep } from './types.ts';
+import type { SubStep } from './sub-step.ts';
 
 /**
  * Sets the fields a real race engineer cannot see on a rival (research 06 section 5) to `unknown('realism')`: the one

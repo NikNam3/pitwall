@@ -1,7 +1,7 @@
 import { known } from '@pitwall/domain';
 import { CORNER_NAMES, cornersOf } from './corners.ts';
 import { knownUnlessRestricted } from './restricted.ts';
-import type { SubStep } from './types.ts';
+import type { SubStep } from './sub-step.ts';
 
 /** Damage, wear and faults from Car Damage; brake and engine temperatures from Car Telemetry. */
 export const applyCondition: SubStep = (state, frame, out) => {

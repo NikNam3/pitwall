@@ -1,6 +1,6 @@
 import { MINI_SECTORS, type CarId, type Metres, type SessionTime } from '@pitwall/domain';
 import type { EngineState } from '../state/engine-state.ts';
-import type { SubStep } from '../step/types.ts';
+import type { SubStep } from '../step/sub-step.ts';
 import { carsWithLapData } from './cars.ts';
 
 type Cursor = NonNullable<EngineState['open']['miniSectors'][number]>;

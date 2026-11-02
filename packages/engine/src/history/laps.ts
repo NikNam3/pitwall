@@ -2,7 +2,8 @@ import { known, unknown, type CarId, type CarState, type Kg, type Known, type La
 import type { SessionHistoryPacket } from '@pitwall/protocol';
 import type { Frame } from '../frame/frame.ts';
 import type { EngineState, LapCursor } from '../state/engine-state.ts';
-import type { LapCorrection, StepOutput, SubStep } from '../step/types.ts';
+import type { LapCorrection, StepOutput } from '../step/types.ts';
+import type { SubStep } from '../step/sub-step.ts';
 import { carsWithLapData } from './cars.ts';
 import { emptyChannels, lapEndSamples, lapStartSamples, observeLapFrame, unknownLapEnd } from './lap-samples.ts';
 

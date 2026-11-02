@@ -34,7 +34,7 @@ const carsOverview: QuickCalculator<CarOverview[]> = {
         tyres: { actualCompound: tyres.actualCompound, visualCompound: tyres.visualCompound, age: tyres.age },
         stops: Math.max(stops.get(id)?.length ?? 0, timing.numPitStops),
         updatedAt,
-      });
+      }) as CarOverview;
     });
   },
 };

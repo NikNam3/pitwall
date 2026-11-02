@@ -1,7 +1,7 @@
 import { known, unknown, type Known, type Ms, type SessionTime } from '@pitwall/domain';
 import { pick } from './pick.ts';
 import { ZONE_FLAG } from './session.ts';
-import type { SubStep } from './types.ts';
+import type { SubStep } from './sub-step.ts';
 
 // Code tables from the struct comments of LapData; a code the spec does not list reads as the first entry.
 const PIT_STATUS = ['none', 'pitting', 'inPitArea'] as const;

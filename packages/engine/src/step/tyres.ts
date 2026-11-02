@@ -2,7 +2,7 @@ import { actualCompoundFromCode, known, unknown, visualCompoundFromCode, type Ty
 import type { TyreSetsPacket } from '@pitwall/protocol';
 import { CORNER_NAMES, cornersOf } from './corners.ts';
 import { knownUnlessRestricted } from './restricted.ts';
-import type { SubStep } from './types.ts';
+import type { SubStep } from './sub-step.ts';
 
 type TyreSetData = TyreSetsPacket['tyreSetData'][number];
 

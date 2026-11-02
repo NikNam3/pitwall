@@ -1,5 +1,5 @@
 import type { FlagPhase, OpenSessionPhase, ScPhase } from '@pitwall/domain';
-import type { SubStep } from '../step/types.ts';
+import type { SubStep } from '../step/sub-step.ts';
 
 type OpenFlagPhase = Omit<FlagPhase, 'end' | 'endLeaderLap'>;
 

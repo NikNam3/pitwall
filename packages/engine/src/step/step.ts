@@ -16,7 +16,8 @@ import { applyRealism } from './realism.ts';
 import { applySession } from './session.ts';
 import { applyTiming } from './timing.ts';
 import { applyTyres } from './tyres.ts';
-import type { FlashbackReport, StepOutput, SubStep } from './types.ts';
+import type { FlashbackReport, StepOutput } from './types.ts';
+import type { SubStep } from './sub-step.ts';
 
 export {
   ALL_CHANGE_TAGS,
@@ -27,8 +28,8 @@ export {
   type FlashbackReport,
   type LapCorrection,
   type StepOutput,
-  type SubStep,
 } from './types.ts';
+export type { SubStep } from './sub-step.ts';
 
 /** Run in this order; a sub-step may rely on the ones before it. */
 export const SUB_STEPS: SubStep[] = [

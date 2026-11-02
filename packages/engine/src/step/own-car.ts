@@ -1,7 +1,7 @@
 import { known, type CarSetup, type OwnCarMotionEx } from '@pitwall/domain';
 import type { CarSetupsPacket, MotionExPacket } from '@pitwall/protocol';
 import { cornersOf, mapCorners } from './corners.ts';
-import type { SubStep } from './types.ts';
+import type { SubStep } from './sub-step.ts';
 
 const motionExFrom = (m: MotionExPacket): OwnCarMotionEx => {
   const suspensionPosition = cornersOf(m.suspensionPosition);

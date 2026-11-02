@@ -1,7 +1,7 @@
 import { toSessionTime, type ForecastSample, type GameSettings, type SessionKind, type SessionState } from '@pitwall/domain';
 import type { SessionPacket } from '@pitwall/protocol';
 import { pick } from './pick.ts';
-import type { SubStep } from './types.ts';
+import type { SubStep } from './sub-step.ts';
 
 // Code tables from the struct comments of the Session packet; a code the spec does not list reads as the first entry.
 const WEATHER = ['clear', 'lightCloud', 'overcast', 'lightRain', 'heavyRain', 'storm'] as const;

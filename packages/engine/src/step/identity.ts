@@ -2,7 +2,7 @@ import { carId, MAX_CARS, OUT_OF_RACE_STATUSES, unknown, type CarIdentity, type 
 import type { ParticipantsPacket } from '@pitwall/protocol';
 import type { EngineState } from '../state/engine-state.ts';
 import { withholdRestricted } from './restricted.ts';
-import type { SubStep } from './types.ts';
+import type { SubStep } from './sub-step.ts';
 
 /** The key of the driver in a slot: the AI by `driverId`, a human by `networkId`, name and race number (spec 6.2). The one rule; the weekend context reuses it. A slot the packet lacks reads as an unknown AI driver. */
 export const driverKeyOf = (p: ParticipantsPacket, carIndex: number): DriverKey => {

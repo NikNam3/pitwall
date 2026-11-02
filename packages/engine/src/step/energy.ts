@@ -1,6 +1,6 @@
 import { pick } from './pick.ts';
 import { knownUnlessRestricted } from './restricted.ts';
-import type { SubStep } from './types.ts';
+import type { SubStep } from './sub-step.ts';
 
 // Code tables from the struct comments of Car Status.
 const FUEL_MIX = ['lean', 'standard', 'rich', 'max'] as const;

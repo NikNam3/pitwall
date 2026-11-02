@@ -1,9 +1,9 @@
+// Protocol-free (C6): recorders and the bridge import these types; `SubStep` (`sub-step.ts`) and `StateUpdate`
+// (`state-update/types.ts`) hold the frame.
 import type { CarId, Ms, SessionTime, Stamp } from '@pitwall/domain';
-import type { Frame } from '../frame/frame.ts';
 import type { LogWriter } from '../log/types.ts';
-import type { Signals } from '../signals/types.ts';
-import type { LiveState, Situation } from '../situations/machine.ts';
-import type { EngineState } from '../state/engine-state.ts';
+import type { Situation } from '../situations/situation.ts';
+import type { LiveState } from '../state/live-state.ts';
 import type { DeepReadonly } from '../util/deep-readonly.ts';
 
 /** Every part of the state a frame can change; calculators and the scheduler read these. */
@@ -77,12 +77,6 @@ export type StepOutput = {
   clockFall?: ClockFall;
   clockJump?: ClockJump;
 };
-
-/** One part of `step`: reads the frame, updates its part of the state and tags what it changed. */
-export type SubStep = (state: EngineState, frame: Frame, out: StepOutput) => void;
-
-/** A step-1 module (C8): reads the frame, writes its part of the live state (values only) and the signals. */
-export type StateUpdate = { id: string; apply(frame: Frame, live: LiveState, signals: Signals, out: StepOutput): void };
 
 /** A step-3 module (C10): reads the live state, the situations and its own open state; appends facts to the log. */
 export type Recorder<Own> = {

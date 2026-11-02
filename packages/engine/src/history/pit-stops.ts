@@ -1,6 +1,6 @@
 import type { CarState, SessionState, SessionTime } from '@pitwall/domain';
 import type { EngineState, OpenPitVisit } from '../state/engine-state.ts';
-import type { SubStep } from '../step/types.ts';
+import type { SubStep } from '../step/sub-step.ts';
 import { carsWithLapData } from './cars.ts';
 
 const flagOf = (flag: SessionState['flag']): OpenPitVisit['flag'] => (flag === 'sc' || flag === 'vsc' ? flag : 'green');
