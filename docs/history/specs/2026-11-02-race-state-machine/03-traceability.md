@@ -36,7 +36,7 @@ Status: self-check of `docs/architecture.md`, 2026-11-02. Every decision of the 
 | The log's readers | the projection module, the storage writer, the runner (lengths) | C28 |
 | Append-only against rebuilds | one log per session and rules version; a rebuild replaces it whole | C24, C61 |
 | Insights from the scheduler and the bridge | `system` insights only; the flashback insight is an analysis | C52 |
-| Nobody could see a flashback | a visible flashback fact from the clock | C22, C27 |
+| Nobody could see a flashback | first a visible flashback fact; withdrawn in the plan review (1b): nothing needs to see it | C27 |
 | Signals missing from the list | SSTA, TMPT, `drsAllowed`, `networkPaused`, `isSpectating`, `spectatorCarIndex`, `aiControlled`; BUTN ignored; driver controls and setup are values | glossary, C12 |
 | Facts naming each other | fact ids (list, position) and references | C21, C25 |
 | Decision replay position | the record index, not a frame id | C76 |
@@ -46,6 +46,16 @@ Status: self-check of `docs/architecture.md`, 2026-11-02. Every decision of the 
 | D1: a decision before a flashback | voided like any fact (user: the plan rested on facts that no longer happened) | C27a, C76 |
 | D2: SP4a's knowledge store | SP4a is void under C0 and re-specced after the migration; a priors store of season-wide aggregates computed from stored projections, a cache with versions, fixed per run with a sidecar; tests never read it | C32, C38, C39, C59, C62a, C84 |
 | D3: insights in undone time | recomputed: the stream equals a run without the undone frames; the scheduler's bookkeeping is in the runner's snapshot; a re-raised insight is a new occurrence | C27, C30, C33 |
+
+## 1b. The plan review (2026-11-02)
+
+| Item | Resolution (user) | Clauses |
+|---|---|---|
+| C33 against a visible flashback fact | no flashback fact and no flashback insight: no timeline that exists contains a flashback | C27, C33, C52 |
+| C31's undefined budget and fixture; flaky wall-time benchmarks | a deterministic count of projection entries read per frame on the long-race builder (70 laps, 20 cars): from scratch > 10× from lap 7 to lap 70, incremental ≤ 2× | C31 |
+| The rules version missed recorders and step 1 | every log writer carries a version in its own file; the rules version hashes them all; the bump is checked against the merge base | glossary, C61, C90 |
+| "The current weekend" at bridge start | the newest stored session's weekend | C61 |
+| Sub-machines with two scopes (flags per car and zone; DRS and compound rule) | one scope per sub-machine: `car-flags`, `zone-flags`, `race-control-*` (DRS), `compound-rule`; zone spans are not stamped | glossary, C15, C17, C26 |
 
 ## 2. Survey §7: places that decide situations outside the tracker
 
