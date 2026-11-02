@@ -17,7 +17,7 @@ export class InvariantChecker {
     if (positions.some((p, i) => p !== i + 1)) throw new Error(`positions not a permutation of 1..${active.length} at ${at}: ${positions.join(',')}`);
     for (const c of active) {
       const prev = this.#laps.get(c.id);
-      if (prev !== undefined && c.timing.lap < prev && r.flashback === undefined) throw new Error(`car ${c.id} lap ${prev} -> ${c.timing.lap} without flashback at ${at}`);
+      if (prev !== undefined && c.timing.lap < prev && !r.delta.truncated) throw new Error(`car ${c.id} lap ${prev} -> ${c.timing.lap} without a truncated step (flashback or race start) at ${at}`);
       this.#laps.set(c.id, c.timing.lap);
     }
     if (JSON.stringify(delta.after) !== JSON.stringify(historyLengths(state.history))) throw new Error(`delta.after differs from the history lengths at ${at}`);

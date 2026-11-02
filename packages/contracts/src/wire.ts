@@ -1,4 +1,5 @@
-// The only module that touches JSON. Swap this file to change the wire format (spec 8.2).
+// The wire format of the WebSocket messages (spec 8.2): encoding and decoding live here only; swap this file to change it.
+// (`canonicalJson` gives a comparison key for params, not a wire form.)
 // Decoders take untrusted input: they return `undefined` for anything malformed and never throw.
 // Accepted messages are rebuilt from the known fields only, so unknown extras are dropped.
 import { VisualCompound, type FeedId } from '@pitwall/domain';

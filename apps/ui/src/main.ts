@@ -12,10 +12,13 @@ applyTheme(DEFAULT_THEME, document.documentElement);
 /** The gallery exists in dev builds and in builds made with `VITE_PITWALL_GALLERY=1`; production bundles drop it. */
 const galleryEnabled = import.meta.env.DEV || import.meta.env.VITE_PITWALL_GALLERY === '1';
 
-const app =
-  galleryEnabled && location.pathname === '/gallery'
-    ? import('./gallery/Gallery.svelte').then((m) => mount(m.default, { target }))
-    : Promise.resolve(mount(App, { target }));
+const isGallery = galleryEnabled && location.pathname === '/gallery';
+// The app window never scrolls as a page (theme/base.css); the gallery is a long page that does.
+if (!isGallery) document.documentElement.classList.add('pw-window');
+
+const app = isGallery
+  ? import('./gallery/Gallery.svelte').then((m) => mount(m.default, { target }))
+  : Promise.resolve(mount(App, { target }));
 
 // A hot update replaces the page's modules: close the old connection with the old App.
 import.meta.hot?.dispose(() => {

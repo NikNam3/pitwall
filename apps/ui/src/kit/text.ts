@@ -31,6 +31,16 @@ export const optionIgnored = (panelId: string, option: string): string => `${pan
 /** Between the items of a one-line list. */
 export const separator = ' · ';
 
+/** Between a before and an after (positions, gaps, settings): one glyph for every display. */
+export const arrow = '→';
+
+/** Before the places a car gained, in its position mark: `▲2`. */
+export const positionGained = '▲';
+/** Before the places a car lost, in its position mark: `▼1`. */
+export const positionLost = '▼';
+/** A before/after position pair whose position held. */
+export const positionUnchanged = '—';
+
 /** Shown while the window reloads after the bridge announced another contract version. */
 export const bridgeUpdated = 'bridge updated, reload';
 
@@ -40,13 +50,30 @@ export const addWidget = 'add widget';
 /** Accessible name of a panel's settings icon. */
 export const settings = 'settings';
 
-/** Hover text of an empty value cell: why the value is missing (spec 5; `UnknownReason`). */
+/** Hover text of an unknown value: why the value is missing (spec 5; `UnknownReason`). */
 export const unknownReason = {
   restricted: "hidden by the driver's telemetry setting",
   notReceived: 'not received yet',
   notApplicable: 'not applicable',
   realism: 'hidden by realism mode',
   insufficientData: 'too few laps or samples yet',
+} as const satisfies Record<UnknownReason, string>;
+
+/** Mark of a value still to come (measuring, not received yet): the ellipsis. */
+const markPending = '…';
+/** Mark of a value that will not come (hidden, not applicable): the en dash; the minus (U+2212) is for signed values. */
+const markAbsent = '–';
+
+/**
+ * The one-character mark an unknown value shows in its cell, in the faint role, with `unknownReason` on hover (user
+ * ruling 2026-10-30): an ellipsis while the value is still coming, an en dash when it will not come.
+ */
+export const unknownMark = {
+  restricted: markAbsent,
+  notReceived: markPending,
+  notApplicable: markAbsent,
+  realism: markAbsent,
+  insufficientData: markPending,
 } as const satisfies Record<UnknownReason, string>;
 
 /** Prefix of an estimated value in a value cell. */
@@ -91,7 +118,7 @@ export const commandTitles = {
 } as const;
 
 /** Notes of the key overview for entries of `keys.json` that are ignored. */
-export const keyUnknownCommand = (key: string, command: string): string => `keys.json: "${key}" → unknown command "${command}", ignored`;
+export const keyUnknownCommand = (key: string, command: string): string => `keys.json: "${key}" ${arrow} unknown command "${command}", ignored`;
 export const keyBoundTwice = (key: string, command: string): string => `keys.json: "${key}" is bound twice, "${command}" ignored`;
 export const keyNotString = (key: string): string => `keys.json: "${key}" is not bound to a command name, ignored`;
 
@@ -155,7 +182,7 @@ export const topBar = {
   realismOn: 'realism on',
   realismOff: 'realism off',
   /** The value realism takes at the next session, shown when it differs from this one. */
-  realismNext: (enabled: boolean): string => (enabled ? '→ on' : '→ off'),
+  realismNext: (enabled: boolean): string => `${arrow} ${enabled ? 'on' : 'off'}`,
   feedUnknown: 'feed —',
   feedDown: 'feed down',
   feedStale: 'feed stale',

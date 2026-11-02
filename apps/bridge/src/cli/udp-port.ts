@@ -7,13 +7,13 @@ export function udpPortError(port: number, error: unknown): StartupError {
   return new StartupError(`cannot listen on UDP port ${port}: ${error instanceof Error ? error.message : String(error)}`);
 }
 
-/** Binds and closes a UDP socket on `port`; throws a `StartupError` if that is impossible. */
-export async function assertUdpPortFree(port: number): Promise<void> {
+/** Binds and closes a UDP socket on `port` at `host`; throws a `StartupError` if that is impossible. */
+export async function assertUdpPortFree(port: number, host: string): Promise<void> {
   const socket = createSocket('udp4');
   try {
     await new Promise<void>((resolve, reject) => {
       socket.once('error', reject);
-      socket.bind(port, resolve);
+      socket.bind(port, host, resolve);
     });
   } catch (error) {
     throw udpPortError(port, error);

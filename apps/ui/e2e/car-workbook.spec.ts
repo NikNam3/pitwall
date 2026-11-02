@@ -80,6 +80,42 @@ test('the car workbook is seeded, shows four known surface temperatures and live
   await page.keyboard.press('Escape');
   await expect(popover).toBeHidden();
 
+  // Whatever pokes past the window's edge, the page itself never scrolls (no browser scrollbars, white by default),
+  // and inner scroll areas get the dark scheme's scrollbars (user, live test 2026-10-30).
+  const page_ = await page.evaluate(() => {
+    const probe = document.createElement('div');
+    probe.style.cssText = 'position:absolute;left:0;top:0;width:200vw;height:200vh';
+    document.body.appendChild(probe);
+    const result = {
+      scrollbars: window.innerWidth - document.documentElement.clientWidth + (window.innerHeight - document.documentElement.clientHeight),
+      colorScheme: getComputedStyle(document.documentElement).colorScheme,
+    };
+    probe.remove();
+    return result;
+  });
+  expect(page_).toEqual({ scrollbars: 0, colorScheme: 'dark' });
+
+  // The app route has the no-scroll rule (review 2, F5): the window class is set, the page clips (html and body), and
+  // even with content taller and wider than the window a programmatic scroll moves nothing. Without the rule the probe
+  // below would grow the page and scrollBy would move it.
+  const noScroll = await page.evaluate(() => {
+    const html = document.documentElement;
+    const scroller = document.scrollingElement ?? html;
+    const probe = document.createElement('div');
+    probe.style.cssText = 'width:200vw;height:200vh';
+    document.body.appendChild(probe);
+    window.scrollBy(400, 400);
+    const result = {
+      windowClass: html.classList.contains('pw-window'),
+      overflow: [getComputedStyle(html).overflow, getComputedStyle(document.body).overflow],
+      moved: [scroller.scrollLeft, scroller.scrollTop],
+    };
+    window.scrollTo(0, 0);
+    probe.remove();
+    return result;
+  });
+  expect(noScroll).toEqual({ windowClass: true, overflow: ['hidden', 'hidden'], moved: [0, 0] });
+
   // Jump to the player's line crossing (the replay stays paused): the corner block shows four known surface temperatures.
   await page.getByTestId('replay-lap').fill(JUMP_LAP);
   await page.getByTestId('replay-lap').press('Enter');

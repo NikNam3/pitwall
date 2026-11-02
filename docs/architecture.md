@@ -72,7 +72,8 @@ Three layers, built bottom-up (ADR 0014): calculators (pure maths) → analyses 
 
 - **Quick calculators** are stateless: a function of the engine view.
 - **Incremental calculators** are a fold over the history (`init`, `step`); a flashback re-runs `init`, and a test checks incremental = from scratch.
-- `packages/analysis/src/shared/` holds helpers shared by analyses (current-stint laps, our cars, penalty classes). It is not a unit.
+- `packages/analysis/src/shared/` holds helpers shared by analyses (current-stint laps, our cars, penalty classes, DRS status, damage jump grouping). It is not a unit.
+- **A log reads the history only.** An analysis that keeps a record of what happened (a feed, a history list) folds the engine history (events, laps, phases, crossings). It never reads another analysis's current-state output, which can shrink or change (a repaired part, a recomputed rate). Logic both need goes into a shared pure function over the history (as `pace-delta` and the damage jump grouping do). Why: the incident feed lost its damage entries when the damage analysis started clearing repaired jumps (2026-10-30).
 - Thresholds live in each unit's `config.ts` (features declare them; `config.json` overrides). `per-lap-rate` owns the rate config that tyre-wear, fuel, ers and battle read.
 
 ### Units and topics
@@ -121,7 +122,7 @@ The gallery renders every case of every display at every declared size and theme
 - The engine never reads the system clock. Time comes only from `sessionTime` and frame IDs.
 - Randomness only through an injected, seeded generator.
 - The same input stream always produces the same state and the same topic stream.
-- Wall-clock time (`receivedAtMs`) exists only in the shell, for diagnostics, except that `SessionTracker` compares receive times (differences only) for the `SEND` grace window, because UID-0 packets carry no usable session time.
+- Wall-clock time (`receivedAtMs`) enters the engine only as receive-time differences on frames: `SessionTracker` compares receive times for the `SEND` grace window (UID-0 packets carry no usable session time), and the situation tracker reads the wall gap between frames for offline pauses and to tell a post-session jump from garage time acceleration. A recording's record time `t` reproduces them, so a replay stays deterministic; nothing in the engine reads the clock.
 
 ## Parallel development
 

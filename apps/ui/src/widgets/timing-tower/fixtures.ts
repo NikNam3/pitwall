@@ -21,6 +21,8 @@ type CarOptions = {
   stops?: number;
   timePenaltyMs?: number;
   totalWarnings?: number;
+  unservedDriveThroughs?: number;
+  unservedStopGos?: number;
   resultStatus?: CarTiming['resultStatus'];
   pitStatus?: CarTiming['pitStatus'];
   driverStatus?: CarTiming['driverStatus'];
@@ -40,7 +42,7 @@ export function overview(id: number, o: CarOptions): CarOverview {
       gapToCarAheadMs: ms(0), safetyCarDeltaMs: 0, pitStatus: o.pitStatus ?? 'none', numPitStops: o.numPitStops ?? 1,
       pitLaneTimerActive: false, pitLaneTimeMs: 0, pitStopTimerMs: 0, shouldServePenalty: false,
       driverStatus: o.driverStatus ?? 'onTrack', resultStatus: o.resultStatus ?? 'active', timePenaltyMs: o.timePenaltyMs ?? 0,
-      totalWarnings: o.totalWarnings ?? 0, cornerCuttingWarnings: 0, unservedDriveThroughs: 0, unservedStopGos: 0,
+      totalWarnings: o.totalWarnings ?? 0, cornerCuttingWarnings: 0, unservedDriveThroughs: o.unservedDriveThroughs ?? 0, unservedStopGos: o.unservedStopGos ?? 0,
       gridPosition: o.gridPosition ?? o.position, speedTrapFastestKmh: unknown('notReceived'), fiaFlag: 'none',
     },
     tyres: { actualCompound: 'C3', visualCompound: o.compound ?? 'medium', age: o.age ?? 14 },
@@ -67,18 +69,20 @@ export const toCar = (id: number, gapMs: number | undefined, lapsDown = 0): GapT
   carId: carId(id), gapMs: gapMs === undefined ? unknown('notApplicable') : ms(gapMs), lapsDown,
 });
 
-/** A lap-board row; `last` is the last lap in ms (`undefined` = unknown, `'realism'` = withheld). */
+/**
+ * A lap-board row; `last` is the last lap in ms (`undefined` = not received yet, `'realism'` = withheld, `'retired'` = a
+ * car out of the race without a time: its times will not come and the row says it is out, as `lap-times` gives them).
+ */
 export function boardRow(
   id: number,
-  last: number | 'realism' | undefined,
+  last: number | 'realism' | 'retired' | undefined,
   sectors: [number?, number?, number?] = [],
   status: [SectorStatus, SectorStatus, SectorStatus] = ['none', 'none', 'none'],
   lapStatus: SectorStatus = 'none',
 ): LapBoardRow {
-  const time = (v: number | 'realism' | undefined) =>
-    v === 'realism' ? unknown('realism') : v === undefined ? unknown('notReceived') : ms(v);
-  const hidden = last === 'realism';
-  const s = (v: number | undefined) => (hidden ? unknown('realism') : time(v));
+  const time = (v: number | 'realism' | 'retired' | undefined) =>
+    v === 'realism' ? unknown('realism') : v === 'retired' ? unknown('notApplicable') : v === undefined ? unknown('notReceived') : ms(v);
+  const s = (v: number | undefined) => (last === 'realism' || last === 'retired' ? time(last) : time(v));
   const unknownDelta = unknown('notApplicable');
   return {
     carId: carId(id),
@@ -92,8 +96,12 @@ export function boardRow(
     bestSectorStatus: ['none', 'none', 'none'],
     theoreticalBestMs: unknown('notReceived'),
     deltaToReference: { bestLapMs: unknownDelta, bestSectorsMs: [unknownDelta, unknownDelta, unknownDelta], theoreticalBestMs: unknownDelta },
+    outOfRace: last === 'retired',
   };
 }
+
+/** The row of a car the analysis counts out of the race, whatever times it kept (a car that retired after setting laps). */
+export const outOfRaceRow = (row: LapBoardRow): LapBoardRow => ({ ...row, outOfRace: true });
 
 /** A lap board with no session bests. */
 export const lapBoard = (reference: number, rows: LapBoardRow[]): LapBoard => ({

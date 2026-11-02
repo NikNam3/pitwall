@@ -3,7 +3,8 @@ import { carId, known, unknown, type CarId, type DamageParts, type LapRecord, ty
 import { describe, expect, it } from 'vitest';
 import { carState, engineView, event, lap, realismHidden } from '../../../../test-support/builders/index.ts';
 import { damageCalculator } from '../../src/damage/calculator.ts';
-import { DAMAGE } from '../../src/damage/index.ts';
+import { DAMAGE, DAMAGE_CONFIG } from '../../src/damage/index.ts';
+import { damageJumps } from '../../src/shared/damage-jumps.ts';
 import { engineShaped } from '../engine-shaped.ts';
 
 const car0 = carId(0);
@@ -137,9 +138,32 @@ describe('damage calculator', () => {
       expect(loss.lossMsPerLap).toEqual(known(1000, laps[8]!.completedAt));
     });
 
-    it('needs two pace laps before the jump too', () => {
+    it('is notApplicable with fewer than two pace laps before the jump, however many laps follow (it can never be measured)', () => {
       const early = [dmg(100_000, 'frontRightWingPct', 0, 20)]; // lap 2: only lap 1 (no pace lap in a race) before
-      expect(run(early, lapsOf(6, timeOf)).jumps[0]!.lossMsPerLap).toEqual(unknown('insufficientData'));
+      expect(run(early, lapsOf(2, timeOf)).jumps[0]!.lap).toBe(2);
+      for (const count of [2, 3, 6, 10]) {
+        expect(run(early, lapsOf(count, timeOf)).jumps[0]!.lossMsPerLap, `${count} laps`).toEqual(unknown('notApplicable'));
+      }
+      const third = [dmg(200_000, 'frontRightWingPct', 0, 20)]; // lap 3: only lap 2 is a pace lap before
+      expect(run(third, lapsOf(8, timeOf)).jumps[0]!.lap).toBe(3);
+      expect(run(third, lapsOf(8, timeOf)).jumps[0]!.lossMsPerLap).toEqual(unknown('notApplicable'));
+    });
+
+    it('is insufficientData with two pace laps before and fewer than two after, then known', () => {
+      const fourth = [dmg(300_000, 'frontRightWingPct', 0, 20)]; // lap 4: laps 2 and 3 before
+      expect(run(fourth, lapsOf(4, timeOf)).jumps[0]!.lap).toBe(4);
+      expect(run(fourth, lapsOf(4, timeOf)).jumps[0]!.lossMsPerLap).toEqual(unknown('insufficientData'));
+      expect(run(fourth, lapsOf(5, timeOf)).jumps[0]!.lossMsPerLap).toEqual(unknown('insufficientData'));
+      const six = lapsOf(6, (n) => (n <= 4 ? 90_000 : 91_000));
+      expect(run(fourth, six).jumps[0]!.lossMsPerLap).toEqual(known(1000, six[5]!.completedAt));
+    });
+
+    it('update keeps an unmeasurable loss notApplicable as laps arrive', () => {
+      const early = [dmg(100_000, 'frontRightWingPct', 0, 20)];
+      const before = engineView({ cars: [carState({ id: car0 })], history: { events: early, laps: lapsOf(2, timeOf) } });
+      const later = engineView({ cars: [carState({ id: car0 })], history: { events: early, laps: lapsOf(7, timeOf) } });
+      const acc = damageCalculator.update(damageCalculator.init(before), later.delta, later);
+      expect(damageCalculator.output(acc)[car0]!.jumps[0]!.lossMsPerLap).toEqual(unknown('notApplicable'));
     });
 
     it('is measured per car', () => {
@@ -265,6 +289,16 @@ describe('damage calculator', () => {
         cars: [carState({ id: car0 })],
         history: { events: repairEvents.filter((e) => e.at <= t), laps: repairLaps.filter((l) => l.completedAt <= t) },
       });
+
+    it('shows the shared grouping\'s jumps whose part was not repaired since (the grouping keeps all, the card and alarm only these)', () => {
+      const { jumps, repairs } = damageJumps(repairEvents, DAMAGE_CONFIG.defaults);
+      const standing = (jumps.get(car0) ?? []).filter((j) => !(repairs.get(car0)?.get(j.part) ?? []).some((t) => t > j.at));
+      const shown = run(repairEvents, repairLaps).jumps;
+      expect(shown.map((j) => ({ at: j.at, part: j.parts[0], deltaPct: j.deltaPct }))).toEqual(standing);
+      // the wing hit at 100 s was changed at 400 s; the hit at 500 s after the change stays
+      expect(shown.map((j) => [j.at, j.parts, j.deltaPct])).toEqual([[500_000, ['frontRightWingPct'], 9]]);
+      expect(jumps.get(car0)?.map((j) => j.at)).toEqual([100_000, 500_000]);
+    });
 
     it('incremental equals from scratch over a history with repairs, after every event and every lap', () => {
       const times = [...new Set([...repairEvents.map((e) => e.at), ...repairLaps.map((l) => l.completedAt)])].sort((a, b) => a - b);

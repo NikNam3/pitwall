@@ -43,11 +43,11 @@ const gallery: GalleryEntry<typeof widget> = {
     battleMoment: { ers: attackReady, moment: known(battle, at) },
     belowLevelRising: { ers: base, moment: undefined },
     attackReadyDeploying: { ers: attackReady, moment: known(carCare, at) },
-    // Falling below the level: the attack text is empty.
+    // Falling below the level: no attack comes, its mark (not applicable) ends the trend line.
     fallingBelowLevel: { ers: { ...base, storeTrendJPerLap: known(-0.2 * MJ, at), attack: unknown('notApplicable'), flow: known('idle', at) }, moment: undefined },
     // Without raceMoment.current nothing lights up.
     noMoment: { ers: attackReady, moment: undefined },
-    // Realism hides a rival's ERS (the car's values are restricted); the cells are empty with the reason on hover.
+    // Realism hides a rival's ERS (the car's values are restricted); every value, the attack text included, shows the realism mark with the reason on hover.
     realismHidden: {
       ers: {
         ...base,

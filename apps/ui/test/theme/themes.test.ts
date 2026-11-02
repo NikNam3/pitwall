@@ -40,6 +40,14 @@ describe('THEMES', () => {
     expect(byName('quiet').chart.redBandAlpha).toBe(0.3);
   });
 
+  it('the live-segment dash is a chart token of every variant, distinct from the teammate dash', () => {
+    for (const t of THEMES) {
+      expect(t.chart.liveDash, t.name).toHaveLength(2);
+      for (const v of t.chart.liveDash) expect(v, t.name).toBeGreaterThan(0);
+      expect(t.chart.liveDash, t.name).not.toEqual(t.chart.dash);
+    }
+  });
+
   it('quiet carries the approved anchor values verbatim', () => {
     const q = byName('quiet').roles;
     expect(q.bg).toBe('#000000');
@@ -122,6 +130,15 @@ describe('applyTheme()', () => {
     const { root, props } = fakeRoot();
     applyTheme(byName('quiet'), root);
     expect(parseFloat(props.get('--pw-chart-red-alpha')!)).toBe(0.3);
+  });
+
+  it('sets the chart dash patterns as numbers, px on and px off: the teammate dash and the live-segment dash', () => {
+    const { root, props } = fakeRoot();
+    const q = byName('quiet');
+    applyTheme(q, root);
+    const numbers = (name: string) => props.get(name)?.trim().split(/\s+/).map(Number);
+    expect(numbers('--pw-chart-dash')).toEqual(q.chart.dash);
+    expect(numbers('--pw-chart-live-dash')).toEqual(q.chart.liveDash);
   });
 
   it('switching variant overwrites the density variables', () => {

@@ -4,7 +4,7 @@ import type { Frame } from '../frame/frame.ts';
 import type { EngineState, LapCursor } from '../state/engine-state.ts';
 import type { LapCorrection, StepOutput, SubStep } from '../step/types.ts';
 import { carsWithLapData } from './cars.ts';
-import { emptyChannels, lapEndSamples, observeLapFrame, unknownLapEnd } from './lap-samples.ts';
+import { emptyChannels, lapEndSamples, lapStartSamples, observeLapFrame, unknownLapEnd } from './lap-samples.ts';
 
 // Bits of `lapValidBitFlags`.
 const LAP_VALID = 0x01;
@@ -24,14 +24,29 @@ const fuelAtStart = (car: CarState, at: SessionTime, fromStart: boolean): Known<
 const lapNotBegun = (car: CarState): boolean => car.timing.lapDistanceM <= 0 || car.timing.currentLapTimeMs === 0;
 
 /**
- * An out lap that crosses the line without the lap number going up: in qualifying and practice the car leaves the garage
- * on the lap it then times from the line, so the lap restarts there.
+ * The car reached the line since the previous frame without the lap number going up: the lap distance went from below 0
+ * to at least 0 (an out lap from the garage), it wrapped (a drop of more than half the track), or the lap timer reset.
  */
-const outLapReachesLine = (cursor: LapCursor, car: CarState): boolean =>
-  cursor.outLap && cursor.lapDistanceM < 0 && car.timing.lapDistanceM >= 0;
+const crossedLine = (cursor: LapCursor, car: CarState, trackLengthM: number): boolean => {
+  const { lapDistanceM, currentLapTimeMs } = car.timing;
+  if (cursor.lapDistanceM < 0 && lapDistanceM >= 0) return true;
+  if (trackLengthM > 0 && cursor.lapDistanceM - lapDistanceM > trackLengthM / 2) return true;
+  return currentLapTimeMs < cursor.lapTimeMs;
+};
 
-/** A new lap cursor; `fromStart` = the engine sees the lap from its start (the line crossing, or the car before it). */
-const openCursor = (car: CarState, at: SessionTime, fromStart: boolean): LapCursor => {
+/**
+ * An out lap that crosses the line on track without the lap number going up: in qualifying and practice the lap number
+ * does not advance through the garage, so the car leaves it on the lap it then times from the line, and the lap restarts
+ * there. In the pit lane (which may pass the line) it does not.
+ */
+const outLapReachesLine = (state: EngineState, cursor: LapCursor, car: CarState): boolean =>
+  cursor.outLap && car.timing.pitStatus === 'none' && crossedLine(cursor, car, state.session.trackLengthM);
+
+/**
+ * A new lap cursor; `fromStart` = the engine sees the lap from its start (the line crossing, or the car before it);
+ * `firstLap` = the first lap the engine sees of the car.
+ */
+const openCursor = (car: CarState, at: SessionTime, fromStart: boolean, firstLap: boolean): LapCursor => {
   const { timing, tyres } = car;
   return {
     lap: timing.lap,
@@ -48,9 +63,13 @@ const openCursor = (car: CarState, at: SessionTime, fromStart: boolean): LapCurs
     trackedMs: 0,
     actualCompound: tyres.actualCompound,
     visualCompound: tyres.visualCompound,
-    outLap: timing.pitStatus !== 'none' || timing.driverStatus === 'outLap',
+    // Starting in the pit lane, or the first lap from the garage; leaving the pit lane later sets it too (`pit-stops.ts`).
+    // The driver status alone does not: the game turns it from "out lap" only after the line.
+    outLap: timing.pitStatus !== 'none' || (firstLap && timing.driverStatus === 'outLap'),
     fromStart,
     lapDistanceM: timing.lapDistanceM,
+    lapTimeMs: timing.currentLapTimeMs,
+    ...lapStartSamples(car, at, fromStart),
     ...emptyChannels(),
     ersDeployedJ: undefined,
     ersHarvestedJ: undefined,
@@ -96,6 +115,8 @@ const lapFromCursor = (
     positionAtEnd: car.timing.position,
     status: 'provisional',
     completedAt: at,
+    wearAtStartPct: cursor.wearAtStartPct,
+    ersStoreAtStartJ: cursor.ersStoreAtStartJ,
     ...lapEndSamples(cursor, car, at),
   };
 };
@@ -123,21 +144,25 @@ const lapFromHistoryOnly = (car: CarState, lapNumber: number, lapTimeMs: number,
 });
 
 /** Opens the car's lap cursor on this frame; the frame is the lap's first. */
-const startLap = (state: EngineState, car: CarState, at: SessionTime, fromStart: boolean): void => {
-  const cursor = openCursor(car, at, fromStart);
+const startLap = (state: EngineState, car: CarState, at: SessionTime, fromStart: boolean, firstLap = false): void => {
+  const cursor = openCursor(car, at, fromStart, firstLap);
   observeLapFrame(cursor, car);
   state.open.laps[car.id] = cursor;
 };
+
+/** Starts the car's lap over on this frame, seen from its start: at lights out every car stands on the grid (spec 3.2). */
+export const restartLap = (state: EngineState, car: CarState, at: SessionTime): void => startLap(state, car, at, true);
 
 const trackLap = (state: EngineState, car: CarState, at: SessionTime): void => {
   const { timing } = car;
   const cursor = state.open.laps[car.id];
   // The first LapData of a car, or a lap number that went down: start over without emitting.
-  if (!cursor || timing.lap < cursor.lap) return startLap(state, car, at, lapNotBegun(car));
-  // The out lap ends at the line; what the game times from there is the lap, without the out lap's part.
-  if (timing.lap === cursor.lap && outLapReachesLine(cursor, car)) return startLap(state, car, at, true);
+  if (!cursor || timing.lap < cursor.lap) return startLap(state, car, at, lapNotBegun(car), true);
+  // The out lap ends at the line; what the game times from there is the lap, without the in lap, garage and out lap before it.
+  if (timing.lap === cursor.lap && outLapReachesLine(state, cursor, car)) return startLap(state, car, at, true);
   addElapsed(state, cursor, at);
   cursor.lapDistanceM = timing.lapDistanceM;
+  cursor.lapTimeMs = timing.currentLapTimeMs;
   if (timing.lap === cursor.lap) {
     // The game resets the sectors at the line, so the last non-zero value is the lap's.
     if (timing.sector1TimeMs > 0) cursor.sector1Ms = timing.sector1TimeMs;

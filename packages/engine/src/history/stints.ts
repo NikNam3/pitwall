@@ -19,7 +19,14 @@ const closeStint = (state: EngineState, car: CarState, stint: OpenStint, lastLap
   state.history.stints.push({ carId: car.id, firstLap, lastLap, actualCompound, visualCompound, tyreAgeAtFitting });
 };
 
-/** A new set is fitted when the compound changes or the age drops (a fresh set of the same compound). */
+/**
+ * A new set is fitted when the compound changes or the age drops (a fresh set of the same compound). The old stint ends
+ * with the in lap (the lap of the pit visit) and the new one starts with the first lap that starts on the new set. Once
+ * the lap number is past the visit's lap (the pit lane passed the line), that is the next lap. Before that the change
+ * waits while the car is in the pit lane or still on its in lap: in a race that lap ends at the line; in practice and
+ * qualifying (the lap number does not advance through the garage) it restarts at the line after the out lap, on the
+ * same lap number, so no lap driven on the new set lands in the old stint.
+ */
 const trackStint = (state: EngineState, car: CarState): void => {
   const { actualCompound, age } = car.tyres;
   if (actualCompound === 'unknown') return;
@@ -32,8 +39,9 @@ const trackStint = (state: EngineState, car: CarState): void => {
     stint.lastAge = age;
     return;
   }
-  // Tyres are changed in the box, so an open pit visit tells which lap the old stint ended on.
   const visit = state.open.pitVisits[car.id];
+  const inLapDone = visit ? car.timing.lap > visit.lap : !state.open.laps[car.id]?.pitted;
+  if (!inLapDone) return;
   const lastLap = visit ? visit.lap : car.timing.lap - 1;
   closeStint(state, car, stint, lastLap);
   state.open.stints[car.id] = openStint(car, lastLap + 1);

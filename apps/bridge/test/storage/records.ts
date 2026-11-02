@@ -4,8 +4,8 @@ import type { SessionKey, SessionRow } from '../../src/storage/db.ts';
 export const car = (n: number) => n as CarId;
 const none = unknown('notReceived');
 const corners = <T>(v: T) => ({ fl: v, fr: v, rl: v, rr: v });
-/** The lap-end samples, all unknown: storage keeps them as JSON like the rest of the record. */
-const lapEnd = { wearAtEndPct: corners(none), ersStoreAtEndJ: none, ersDeployedJ: none, ersHarvestedJ: none, damageAtEnd: none,
+/** The lap-start and lap-end samples, all unknown: storage keeps them as JSON like the rest of the record. */
+const lapEnd = { wearAtStartPct: corners(none), ersStoreAtStartJ: none, wearAtEndPct: corners(none), ersStoreAtEndJ: none, ersDeployedJ: none, ersHarvestedJ: none, damageAtEnd: none,
   channelRange: { tyres: corners({ surfaceC: none, carcassC: none, pressurePsi: none }), brakesC: corners(none), engineC: none } };
 export const lap = (c: number, n: number, o: Partial<LapRecord> = {}): LapRecord => ({ carId: car(c), lapNumber: n, lapTimeMs: 90_000,
   sectorTimesMs: [30_000, 30_000, 30_000], valid: { lap: true, sectors: [true, true, true] }, actualCompound: ActualCompound.C3,
@@ -17,9 +17,10 @@ export const pitStop = (c: number, lap: number): PitStopRecord => ({ carId: car(
   pitLaneTimeMs: 22_000, stationaryTimeMs: 2_500, flag: 'green', penaltyServed: false });
 export const event = (at: number, c?: number): RaceEvent => ({ at, kind: 'overtake', ...(c === undefined ? {} : { carId: car(c) }), params: {} });
 export const sc = (start: number): FlagPhase => ({ kind: 'SC', start, end: start + 60_000, startLeaderLap: 3, endLeaderLap: 5, scPhases: [] });
-export const history = (o: Partial<History> = {}): History => ({ laps: [], stints: [], pitStops: [], flagPhases: [], events: [], miniSectors: [], ...o });
+export const history = (o: Partial<History> = {}): History => ({ laps: [], stints: [], pitStops: [], flagPhases: [], sessionPhases: [], pauses: [], events: [], miniSectors: [], ...o });
 const lengths = (h: History): HistoryLengths => ({ laps: h.laps.length, stints: h.stints.length, pitStops: h.pitStops.length,
-  flagPhases: h.flagPhases.length, events: h.events.length, miniSectors: h.miniSectors.length });
+  flagPhases: h.flagPhases.length, sessionPhases: h.sessionPhases.length, pauses: h.pauses.length, events: h.events.length,
+  miniSectors: h.miniSectors.length });
 export const all = (h: History): HistoryDelta => ({ before: lengths(history()), after: lengths(h), truncated: false });
 export const since = (prev: History, h: History, truncated = false): HistoryDelta => ({ before: lengths(prev), after: lengths(h), truncated });
 export const AI9: DriverKey = { kind: 'ai', driverId: 9 };

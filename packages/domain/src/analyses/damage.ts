@@ -22,7 +22,7 @@ export type DamageJump = {
   lap: number;
   parts: (keyof DamageParts)[];
   deltaPct: Percent;
-  /** Measured lap-time loss through `pace-delta`; `insufficientData` until two pace laps after the jump. */
+  /** Measured lap-time loss through `pace-delta`; `notApplicable` with fewer than two pace laps before the jump (it can never be measured); otherwise `insufficientData` until two pace laps after it. */
   lossMsPerLap: Known<Ms>;
 };
 

@@ -1,6 +1,6 @@
 // The maths of `lap-times` (spec 6.2): bests and sector status per car, the session bests, and the board deltas.
 import { known, unknown, type BestStatus, type CarId, type Known, type LapBoard, type LapBoardRow, type LapRecord, type Ms, type SectorStatus, type SessionBestTime } from '@pitwall/domain';
-import { classifyLap } from '../lap-classes/index.ts';
+import { classifyLap, type LapClassOptions } from '../lap-classes/index.ts';
 
 type Sectors<T> = [T, T, T];
 const SECTORS = [0, 1, 2] as const;
@@ -15,10 +15,10 @@ const faster = (a: Best | undefined, ms: Ms, lap: LapRecord): Best | undefined =
   a === undefined || ms < a.ms ? { ms, lapNumber: lap.lapNumber, completedAt: lap.completedAt } : a;
 
 /** The bests over a car's laps (in lap order); ties go to the earlier lap. */
-export function bestsOf(laps: readonly LapRecord[], isRace: boolean): CarBests {
+export function bestsOf(laps: readonly LapRecord[], classes: LapClassOptions): CarBests {
   const bests: CarBests = { sectors: [undefined, undefined, undefined] };
   for (const lap of laps) {
-    const { forBest } = classifyLap(lap, { isRace });
+    const { forBest } = classifyLap(lap, classes);
     if (forBest.lap) bests.lap = faster(bests.lap, lap.lapTimeMs, lap);
     for (const i of SECTORS) if (forBest.sectors[i]) bests.sectors[i] = faster(bests.sectors[i], lap.sectorTimesMs[i], lap);
   }
@@ -51,17 +51,28 @@ export function statusOf(valid: boolean, carId: CarId, lapNumber: number, own: B
 const bestStatusOf = (carId: CarId, own: Best | undefined, session: Holder | undefined): BestStatus =>
   own !== undefined && session?.carId === carId ? 'sessionBest' : 'none';
 
-const knownBest = (b: Best | undefined): Known<Ms> => (b === undefined ? unknown('insufficientData') : known(b.ms, b.completedAt));
+const knownBest = (b: Best | undefined, missing: Known<Ms>): Known<Ms> => (b === undefined ? missing : known(b.ms, b.completedAt));
 const knownHolder = (h: Holder | undefined): Known<SessionBestTime> => (h === undefined ? unknown('insufficientData') : known({ ms: h.ms, carId: h.carId }, h.completedAt));
 
-/** One car's board row (without deltas) from its laps and the session bests. */
-export function rowOf(carId: CarId, laps: readonly LapRecord[], bests: CarBests, session: ReturnType<typeof sessionBestsOf>, isRace: boolean): Omit<LapBoardRow, 'deltaToReference'> {
+/**
+ * One car's board row (without deltas) from its laps and the session bests. A time the car lacks is still to come
+ * (`insufficientData`), or will not come once the car is `outOfRace` (`notApplicable`).
+ */
+export function rowOf(
+  carId: CarId,
+  laps: readonly LapRecord[],
+  bests: CarBests,
+  session: ReturnType<typeof sessionBestsOf>,
+  classes: LapClassOptions,
+  outOfRace: boolean,
+): Omit<LapBoardRow, 'deltaToReference'> {
   const last = laps.length === 0 ? undefined : laps.reduce((a, b) => (b.lapNumber > a.lapNumber ? b : a));
-  const lastClass = last === undefined ? undefined : classifyLap(last, { isRace }).forBest;
-  const unknownMs = unknown('insufficientData');
+  const lastClass = last === undefined ? undefined : classifyLap(last, classes).forBest;
+  const unknownMs = unknown(outOfRace ? 'notApplicable' : 'insufficientData');
   const sectorsKnown = bests.sectors.every((s) => s !== undefined);
   return {
     carId,
+    outOfRace,
     lastLapMs: last === undefined ? unknownMs : known(last.lapTimeMs, last.completedAt),
     lastSectorsMs: last === undefined ? [unknownMs, unknownMs, unknownMs] : (last.sectorTimesMs.map((ms) => known(ms, last.completedAt)) as Sectors<Known<Ms>>),
     lastSectorStatus:
@@ -69,8 +80,8 @@ export function rowOf(carId: CarId, laps: readonly LapRecord[], bests: CarBests,
         ? ['none', 'none', 'none']
         : (SECTORS.map((i) => statusOf(lastClass.sectors[i], carId, last.lapNumber, bests.sectors[i], session.sectors[i])) as Sectors<SectorStatus>),
     lastLapStatus: last === undefined || lastClass === undefined ? 'none' : statusOf(lastClass.lap, carId, last.lapNumber, bests.lap, session.lap),
-    bestLapMs: knownBest(bests.lap),
-    bestSectorsMs: bests.sectors.map(knownBest) as Sectors<Known<Ms>>,
+    bestLapMs: knownBest(bests.lap, unknownMs),
+    bestSectorsMs: bests.sectors.map((b) => knownBest(b, unknownMs)) as Sectors<Known<Ms>>,
     bestLapStatus: bestStatusOf(carId, bests.lap, session.lap),
     bestSectorStatus: SECTORS.map((i) => bestStatusOf(carId, bests.sectors[i], session.sectors[i])) as Sectors<BestStatus>,
     theoreticalBestMs: sectorsKnown

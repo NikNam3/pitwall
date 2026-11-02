@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { gzipSync } from 'node:zlib';
@@ -47,6 +47,15 @@ describe('PwrecWriter', () => {
     const { records, summary } = await drain(path);
     expect(records.map((r) => r.t)).toEqual([0, 400, 800, 1200, 1600, 2100]);
     expect(summary).toEqual({ meta: META, endedCleanly: false });
+  });
+  it('the file exists as soon as create returns', async () => {
+    // A live session writes its config sidecar right after creating its file: the sidecar must never be on disk
+    // without the file (an asynchronous open left a window that the CLI's config test saw under load).
+    const path = join(tmp(), 'now.pwrec.gz');
+    const w = PwrecWriter.create(path, META);
+    expect(existsSync(path)).toBe(true);
+    await w.close(0);
+    expect((await drain(path)).summary).toEqual({ meta: META, endedCleanly: true, durationMs: 0 });
   });
   it('reports file errors through onError and close()', async () => {
     const onError = vi.fn();

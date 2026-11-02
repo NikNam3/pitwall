@@ -4,7 +4,7 @@ import { known, unknown, type BattleCard, type BattleSide, type CarId, type CarS
 import type { DeepReadonly, EngineView, QuickCalculator } from '@pitwall/engine';
 import type { GapsOutput } from '../gaps/index.ts';
 import type { Pace } from '../pace/index.ts';
-import { lapsToReach, perLapRate, PER_LAP_RATE_CONFIG, type RateSample } from '../per-lap-rate/index.ts';
+import { lapsToReach, perLapRate, type RateSample } from '../per-lap-rate/index.ts';
 import { drsStatus } from '../shared/drs-status.ts';
 import { ourCars } from '../shared/our-cars.ts';
 import { BATTLE, BATTLE_CONFIG, type BattleOutput } from './index.ts';
@@ -42,11 +42,11 @@ function side(view: EngineView, gaps: GapsOutput, pace: Pace, drs: DrsStatus, ou
   const interval = gaps.intervals.find((i) => i.carId === ourId);
   const gapMs = (isAhead ? interval?.toAheadMs : interval?.toBehindMs) ?? unknown('notReceived');
 
-  const { overtakeThresholdMs, drsRangeMs } = BATTLE_CONFIG.read(view);
+  const { overtakeThresholdMs, drsRangeMs, closingWindow, closingMinSamples } = BATTLE_CONFIG.read(view);
   const samples = isAhead
     ? gapSamples(gaps.lineTimes[ourId], gaps.lineTimes[theirId])
     : gapSamples(gaps.lineTimes[theirId], gaps.lineTimes[ourId]);
-  const rate = perLapRate(samples, PER_LAP_RATE_CONFIG.read(view));
+  const rate = perLapRate(samples, { window: closingWindow, minSamples: closingMinSamples });
   const closingMsPerLap: Known<number> = rate.known ? known(-rate.value.perLap, rate.at) : rate;
   // inside DRS range it is 0 as of the gap, with or without a closing rate; while race control has DRS off there is none to reach
   const lapsToDrs: Known<number> = !drs.enabled ? NOT_APPLICABLE : gapMs.known ? lapsToReach(rate, gapMs, drsRangeMs, 'falling') : gapMs;

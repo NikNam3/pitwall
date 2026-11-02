@@ -3,13 +3,11 @@
   import type { WidgetProps } from '../../kit/types.ts';
   import { fitCell } from '../../kit/grid/grid.ts';
   import { fitColumns } from '../../kit/size/size.ts';
-  import { unknownReason } from '../../kit/text.ts';
+  import TextCell from '../../kit/values/TextCell.svelte';
   import { ourCarRole } from '../../emphasis/index.ts';
-  import { roleOrUndefined } from '../../theme/index.ts';
   import { LAP_COLUMNS, formatCell } from './columns.ts';
   import { cellRole } from './emphasis.ts';
   import { buildRows, cellOf } from './rows.ts';
-  import type { Cell } from './rows.ts';
   import * as text from './text.ts';
   import type { widget } from './widget.ts';
 
@@ -19,17 +17,18 @@
   const rows = $derived(buildRows({ board: data.board, cars: data.cars, session: data.session }).slice(0, Math.max(1, size.rows - 1)));
   const kept = $derived(fitColumns(LAP_COLUMNS, size.cols, 1));
   const columns = $derived(LAP_COLUMNS.filter((c) => kept.includes(c.key)));
-  const hint = (c: Cell): string | undefined => (c.value.known ? undefined : unknownReason[c.value.reason]);
 </script>
 
 <div class="block">
   <div class="line faint">{columns.map((c) => fitCell(text.headers[c.key], c.widthCols, c.align)).join(' ')}</div>
   {#each rows as r (r.carId)}
-    <div class="line" class:ref={r.reference}>{#each columns as c, i (c.key)}{i === 0 ? '' : ' '}{#if c.key === 'drv'}<span style:color={roleOrUndefined(ourCarRole(r.ours))} title={r.code.reason === undefined ? undefined : unknownReason[r.code.reason]}
-          >{fitCell(r.code.text, c.widthCols, c.align)}</span
-        >{:else}{@const cell = cellOf(r, c.key)}{#if cell}<span style:color={roleOrUndefined(cellRole(cell.status))} title={hint(cell)}
-          >{fitCell(formatCell(c.key, cell), c.widthCols, c.align)}</span
-        >{/if}{/if}{/each}</div>
+    <div class="line" class:ref={r.reference}>{#each columns as c, i (c.key)}{i === 0 ? '' : ' '}{#if c.key === 'drv'}<TextCell {...r.code} role={ourCarRole(r.ours)} width={c.widthCols} align={c.align} />{:else}{@const cell = cellOf(r, c.key)}{#if cell}<TextCell
+            text={formatCell(c.key, cell)}
+            reason={cell.value.known ? undefined : cell.value.reason}
+            role={cellRole(cell.status)}
+            width={c.widthCols}
+            align={c.align}
+          />{/if}{/if}{/each}</div>
   {/each}
 </div>
 

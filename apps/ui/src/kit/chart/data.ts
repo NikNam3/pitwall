@@ -7,10 +7,26 @@ export type ChartSeries = {
   fresh?: boolean | undefined;
   /** A car series passes `carColour`'s result; own cars draw thicker. */
   colour?: { colour: string; dashed: boolean; ownCar: boolean } | undefined;
+  /** True when the last point is live (a value now, not a settled one): the segment to it is drawn dotted. */
+  liveEnd?: boolean | undefined;
 };
 
+/** A line uPlot draws: `of` is the index of its series; `live` marks the dotted segment to that series' live end. */
+export type PlotLine = { of: number; live: boolean; points: ChartSeries['points'] };
+
+/**
+ * The lines uPlot draws: every series in order, without its live point, then every series' live line in series order:
+ * the segment from its last settled point to its live point, or no points when it has no live end. The lines depend
+ * only on the number of series, so a live end that comes or goes changes the data, never the plot.
+ */
+export function plotLines(series: ChartSeries[]): PlotLine[] {
+  const settled = series.map((s, of) => ({ of, live: false, points: s.liveEnd === true ? s.points.slice(0, -1) : s.points }));
+  const live = series.map((s, of) => ({ of, live: true, points: s.liveEnd === true ? s.points.slice(-2) : [] }));
+  return [...settled, ...live];
+}
+
 /** uPlot data: the sorted union of all x values, then each series' y at those x (null where it has none). */
-export function buildData(series: ChartSeries[]): Array<Array<number | null>> {
+export function buildData(series: ReadonlyArray<Pick<ChartSeries, 'points'>>): Array<Array<number | null>> {
   const xs = [...new Set(series.flatMap((s) => s.points.map((p) => p[0])))].sort((a, b) => a - b);
   return [xs, ...series.map((s) => {
     const byX = new Map(s.points);

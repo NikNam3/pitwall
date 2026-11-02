@@ -41,8 +41,17 @@ describe('incidentRole', () => {
 
 describe('penaltyRole', () => {
   it('is warning (amber) for a time penalty, nothing without one', () => {
+    expect(penaltyRole(5000, 0)).toBe('warning');
+    expect(penaltyRole(0, 0)).toBeUndefined();
+  });
+
+  it('is warning for an unserved drive-through or stop-go without a time penalty', () => {
+    expect(penaltyRole(0, 1)).toBe('warning');
+  });
+
+  it('takes the unserved count from its caller: there is no default', () => {
+    // @ts-expect-error: the unserved count is required (review-ui finding 3); `pnpm typecheck` fails while it has a default
     expect(penaltyRole(5000)).toBe('warning');
-    expect(penaltyRole(0)).toBeUndefined();
   });
 });
 

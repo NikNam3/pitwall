@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { alertGroups, unknownReason } from '../../src/kit/text.ts';
+import { alertGroups, unknownMark, unknownReason } from '../../src/kit/text.ts';
+import { MINUS } from '../../src/kit/values/format.ts';
 import { INSIGHT_CATEGORIES } from '../../src/kit/folds.ts';
 
 describe('unknownReason.restricted', () => {
@@ -17,5 +18,48 @@ describe('alertGroups: one set of words for muting, shared by the top bar and th
   it('mute and unmute are the two actions of the toggle', () => {
     expect(alertGroups.mute).toBe('mute');
     expect(alertGroups.unmute).toBe('unmute');
+  });
+});
+
+describe('unknownMark: the faint mark an unknown value shows in its cell (user ruling 2026-10-30, Task P)', () => {
+  const REASONS = Object.keys(unknownReason) as Array<keyof typeof unknownReason>;
+  it('has a mark for every reason the hover names, and no other', () => {
+    expect(Object.keys(unknownMark).sort()).toEqual([...REASONS].sort());
+  });
+  it.each(REASONS)('%s: one visible character, never the minus of signed values', (reason) => {
+    const mark = unknownMark[reason];
+    expect([...mark]).toHaveLength(1);
+    expect(mark.trim()).toBe(mark);
+    expect(mark).not.toBe(MINUS);
+    expect(mark).not.toBe('-');
+  });
+  it('a value still to come (measuring, not received) has one mark; a value hidden or not applicable another', () => {
+    expect(unknownMark.notReceived).toBe(unknownMark.insufficientData);
+    expect(unknownMark.restricted).toBe(unknownMark.notApplicable);
+    expect(unknownMark.realism).toBe(unknownMark.notApplicable);
+    expect(unknownMark.notApplicable).not.toBe(unknownMark.insufficientData);
+  });
+});
+
+// The UI's types have no Node, so fs is typed here.
+const FS = 'node:fs';
+const { readFileSync } = (await import(/* @vite-ignore */ FS)) as { readFileSync(path: URL, encoding: 'utf8'): string };
+
+describe('kit/text.ts: each doc comment belongs to the export below it (review 6, R6-2)', () => {
+  const lines = readFileSync(new URL('../../src/kit/text.ts', import.meta.url), 'utf8').split('\n');
+  /** The line right above `export const <name>`. */
+  const above = (name: string): string | undefined => lines[lines.findIndex((l) => l.startsWith(`export const ${name} `)) - 1];
+
+  it('no doc comment stands right above another one (a doc that lost its export)', () => {
+    const stacked = lines.flatMap((l, i) => (l.trimEnd().endsWith('*/') && lines[i + 1]?.trimStart().startsWith('/**') ? [i + 1] : []));
+    expect(stacked).toEqual([]);
+  });
+
+  it('noDataYet has its own doc, the header state of a topic with no value yet', () => {
+    expect(above('noDataYet')).toMatch(/^\/\*\* .*no value yet.*\*\/$/);
+  });
+
+  it('arrow has its own doc, the glyph between a before and an after', () => {
+    expect(above('arrow')).toMatch(/^\/\*\* Between a before and an after.*\*\/$/);
   });
 });

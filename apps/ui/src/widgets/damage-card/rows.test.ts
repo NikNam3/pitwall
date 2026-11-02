@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { known, unknown } from '@pitwall/domain';
-import type { Corners, DamageJump, DamageParts, DamageState } from '@pitwall/domain';
+import type { Corners, DamageJump, DamageParts, DamageState, UnknownReason } from '@pitwall/domain';
+import { unknownPart } from '../../kit/grid/grid.ts';
 import { damageRows } from './rows.ts';
 
 const PARTS: DamageParts = {
@@ -12,6 +13,8 @@ const CORNERS: Corners<{ tyrePct: ReturnType<typeof known<number>>; brakePct: Re
 };
 const wing: DamageJump = { at: 200_000, lap: 14, parts: ['frontLeftWingPct'], deltaPct: 12, lossMsPerLap: unknown('insufficientData') };
 const floor: DamageJump = { at: 100_000, lap: 9, parts: ['floorPct'], deltaPct: 4, lossMsPerLap: known(120, 150_000) };
+/** The reasons of a loss the card does not say in words ("measuring", "not measurable"): it shows their mark. */
+const HIDDEN: UnknownReason[] = ['restricted', 'notReceived', 'realism'];
 
 const state = (over: Partial<DamageState> = {}): DamageState => ({
   parts: known(PARTS, 0), corners: CORNERS, drsFault: known(false, 0), ersFault: false, jumps: [], ...over,
@@ -76,21 +79,47 @@ describe('damageRows jumps', () => {
 
   it('shows "loss: measuring" and a critical role for the newest jump while the loss is unknown', () => {
     const [newest, older] = damageRows(state({ jumps: [floor, wing] })).jumps;
-    expect(newest).toMatchObject({ loss: 'loss: measuring', role: 'critical' });
-    expect(older!.loss).toBe('loss +0.12 s/lap');
+    expect(newest).toMatchObject({ loss: { text: 'loss: measuring' }, role: 'critical' });
+    expect(older!.loss).toStrictEqual({ text: 'loss +0.12 s/lap' });
     expect(older!.role).toBeUndefined();
   });
 
   it('has no role on the newest jump once its loss is measured', () => {
     const [newest] = damageRows(state({ jumps: [{ ...wing, lossMsPerLap: known(1230, 400_000) }] })).jumps;
-    expect(newest).toMatchObject({ loss: 'loss +1.23 s/lap' });
+    expect(newest!.loss).toStrictEqual({ text: 'loss +1.23 s/lap' });
     expect(newest!.role).toBeUndefined();
   });
 
-  it('shows an empty loss with the reason when the loss is hidden', () => {
-    const [row] = damageRows(state({ jumps: [{ ...wing, lossMsPerLap: unknown('realism') }] })).jumps;
-    expect(row).toMatchObject({ loss: '', reason: 'realism' });
+  it('shows "loss: not measurable" for a loss that can never be measured, titled with the reason, and no critical role', () => {
+    const [row] = damageRows(state({ jumps: [{ ...wing, lossMsPerLap: unknown('notApplicable') }] })).jumps;
+    expect(row!.loss).toStrictEqual({ text: 'loss: not measurable' });
+    expect(row!.title).toBe('too few clean laps before the hit');
     expect(row!.role).toBeUndefined();
+  });
+
+  it('keeps "loss: measuring" with no title for a loss still waiting for laps', () => {
+    const [row] = damageRows(state({ jumps: [wing] })).jumps;
+    expect(row!.loss).toStrictEqual({ text: 'loss: measuring' });
+    expect(row).not.toHaveProperty('title');
+  });
+
+  it.each(HIDDEN)('gives a %s loss as the unknown part (its mark shows in place), with no title and no role', (reason) => {
+    const [row] = damageRows(state({ jumps: [{ ...wing, lossMsPerLap: unknown(reason) }] })).jumps;
+    expect(row!.loss).toStrictEqual(unknownPart(reason));
+    expect(row).not.toHaveProperty('title');
+    expect(row!.role).toBeUndefined();
+  });
+
+  // R9-1: the loss is a CellPart; the row holds no reason of its own beside it, in any loss state.
+  const LOSSES: Array<[string, DamageJump['lossMsPerLap']]> = [
+    ['measured', known(120, 150_000)],
+    ['measuring', unknown('insufficientData')],
+    ['not measurable', unknown('notApplicable')],
+    ...HIDDEN.map((reason): [string, DamageJump['lossMsPerLap']] => [reason, unknown(reason)]),
+  ];
+  it.each(LOSSES)('keeps no reason on the row itself for a %s loss: it is the loss part\'s', (_, lossMsPerLap) => {
+    const [row] = damageRows(state({ jumps: [{ ...wing, lossMsPerLap }] })).jumps;
+    expect(row).not.toHaveProperty('reason');
   });
 
   it('joins several parts with " + " and rounds the delta to whole percent', () => {
@@ -115,7 +144,13 @@ describe('damageRows compact', () => {
     const { compact } = damageRows(state({ jumps: [floor, wing] }));
     expect(compact.parts).toBe('W12/0/0 F4 D0 S2 G8 E11');
     expect(compact.jump?.text).toBe('L14 FL wing +12 %');
-    expect(compact.jump?.loss).toBe('loss: measuring');
+    expect(compact.jump?.loss).toStrictEqual({ text: 'loss: measuring' });
+  });
+
+  it('gives the not-measurable loss of the newest jump', () => {
+    const { compact } = damageRows(state({ jumps: [floor, { ...wing, lossMsPerLap: unknown('notApplicable') }] }));
+    expect(compact.jump?.loss).toStrictEqual({ text: 'loss: not measurable' });
+    expect(compact.jump?.title).toBe('too few clean laps before the hit');
   });
 
   it('has no jump without jumps, and an empty parts line when the parts are hidden', () => {

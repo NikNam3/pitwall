@@ -76,12 +76,16 @@ export type RaceInput = {
   flagPhases?: FlagPhase[];
   pitStops?: PitStopRecord[];
   laps?: LapRecord[];
+  /** A `damage` output in the view; `incidents` must not read it (a log reads the history only). */
   damage?: DamageOutput;
-  gaps?: GapsOutput;
+  /** A `gaps` output in the view (only the fields a test sets); `incidents` must not read it either. */
+  gaps?: Partial<GapsOutput>;
   playerCar?: number;
   config?: Record<string, number | boolean>;
   /** Config of the `alarms` section (the warnings before a penalty). */
   alarmsConfig?: Record<string, number | boolean>;
+  /** Config of the `damage` section (the jump grouping's `jumpPct` and `jumpWindowMs`). */
+  damageConfig?: Record<string, number | boolean>;
   kind?: SessionKind;
   /** Merged onto the race session on `TRACK`. */
   session?: Partial<SessionState>;
@@ -103,6 +107,7 @@ export function viewOf({
   playerCar = PLAYER,
   config = {},
   alarmsConfig = {},
+  damageConfig = {},
   kind = 'race',
   session = {},
   activeFlagPhase,
@@ -118,7 +123,7 @@ export function viewOf({
     history: { miniSectors, events, flagPhases, pitStops, laps },
     outputs,
     playerCar,
-    config: { incidents: config, alarms: alarmsConfig },
+    config: { incidents: config, alarms: alarmsConfig, damage: damageConfig },
     session: { ...TRACK, kind, ...session },
     sessionTime: last?.at ?? 0,
   });

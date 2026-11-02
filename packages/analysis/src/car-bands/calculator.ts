@@ -1,7 +1,7 @@
 // `car-bands` (spec 5.4): every band channel of every active car against its band. Stateless (ruling R1).
 import { unknown, type BandReading, type CarBands, type CarState, type Known, type LapRecord, type Range } from '@pitwall/domain';
 import type { DeepReadonly, EngineView, QuickCalculator } from '@pitwall/engine';
-import { classifyLap } from '../lap-classes/index.ts';
+import { classifyLap, LAP_CLASSES_CONFIG, type LapClassOptions } from '../lap-classes/index.ts';
 import { bandsFor, lastLaps, stateOf, type Band } from './bands.ts';
 import { CAR_BANDS, CAR_BANDS_CONFIG, type CarBandsOutput } from './index.ts';
 
@@ -30,11 +30,11 @@ const bandsOfCar = (
   car: DeepReadonly<CarState>,
   last: DeepReadonly<LapRecord> | undefined,
   c: ReturnType<typeof CAR_BANDS_CONFIG.read>,
-  isRace: boolean,
+  classes: LapClassOptions,
 ): CarBands => {
   const b = bandsFor(car.tyres.visualCompound, c);
-  // only a lap at racing speed is evidence for a whole lap out of band: no SC, VSC, in or out lap
-  const counted = last !== undefined && classifyLap(last, { isRace }).forRate ? last : undefined;
+  // only a lap at racing speed is evidence for a whole lap out of band: a rate lap (no in or out lap, at most a flag lag of SC or VSC)
+  const counted = last !== undefined && classifyLap(last, classes).forRate ? last : undefined;
   const r = counted?.channelRange;
   const l = counted === undefined ? b : bandsFor(counted.visualCompound, c);
   const tyre = (corner: 'fl' | 'fr' | 'rl' | 'rr') => ({
@@ -59,9 +59,9 @@ export const carBandsCalculator: QuickCalculator<CarBandsOutput> = {
   compute(view: EngineView): CarBandsOutput {
     const config = CAR_BANDS_CONFIG.read(view);
     const lastLap = lastLaps(view.state.history.laps);
-    const isRace = view.state.session.kind === 'race';
+    const classes = { isRace: view.state.session.kind === 'race', ...LAP_CLASSES_CONFIG.read(view) };
     const out: CarBandsOutput = {};
-    for (const car of view.state.cars) if (car.active) out[car.id] = bandsOfCar(car, lastLap.get(car.id), config, isRace);
+    for (const car of view.state.cars) if (car.active) out[car.id] = bandsOfCar(car, lastLap.get(car.id), config, classes);
     return out;
   },
 };

@@ -6,6 +6,7 @@ import {
   historyLengths,
   Scheduler,
   SessionRunner,
+  situationOf,
   type CalculatorId,
   type CalculatorRegistry,
   type FeedMetricsView,
@@ -92,6 +93,11 @@ export class SessionProcessor {
     opts.storage?.upsertSession(this.#row());
   }
 
+  /** The newest applied frame's time on the engine's race clock (spec 3.3); undefined before the engine runs. */
+  get sessionTime(): SessionTime | undefined {
+    return this.#running?.runner.state.sessionTime;
+  }
+
   push(frame: Frame): void {
     if (this.#running !== undefined) {
       // A session started by the buffer cap still stores its drivers, so later sessions find it in the weekend.
@@ -169,13 +175,20 @@ export class SessionProcessor {
     try {
       const result = runner.apply(frame);
       storage?.writeConfirmed(this.#key, result.state.history, result.delta);
-      if (result.flashback) {
+      // A session time that fell back with no flashback and no start: the engine keeps its race clock monotonic (spec 3.3); worth knowing.
+      if (result.clockFall) log.info({ feedId, sessionUid: this.#uid, clockFall: result.clockFall }, 'session time fell back');
+      // A forward jump of over a minute that is no post-session jump (a stall while the garage clock runs ahead): it
+      // changes nothing (spec 3.3); worth knowing too.
+      if (result.clockJump) log.info({ feedId, sessionUid: this.#uid, clockJump: result.clockJump }, 'session time jumped forward');
+      // A flashback, the race start (discarding the formation lap, settling its clock), a dropped unconfirmed neutralisation
+      // or a session-phase boundary that moves an entry earlier frames recorded changed history: the calculators start over.
+      if (result.delta.truncated) {
         scheduler.reset();
-        // A run triggered before the flashback would land on the new timeline.
+        // A run triggered before it would land on the new timeline.
         this.#o.jobs?.flashback();
       }
       this.#o.calcStats?.atSessionTime(result.state.sessionTime);
-      const scheduled = scheduler.run({ state: result.state, activeFlagPhase: activeFlagPhaseOf(result.state), changed: result.changed, delta: result.delta, feed: this.#o.feedView(), config: this.#o.config });
+      const scheduled = scheduler.run({ state: result.state, activeFlagPhase: activeFlagPhaseOf(result.state), situation: situationOf(result.state), changed: result.changed, delta: result.delta, feed: this.#o.feedView(), config: this.#o.config });
       // Each topic is published on its own: a failing feature binding never holds back the others.
       const unpublished = [
         ...publisher.publishOutputs(scheduled),
@@ -205,6 +218,7 @@ export class SessionProcessor {
     const scheduled = scheduler.run({
       state,
       activeFlagPhase: activeFlagPhaseOf(state),
+      situation: situationOf(state),
       changed: new Set(),
       delta: { before: lengths, after: lengths, truncated: false },
       feed: this.#o.feedView(),

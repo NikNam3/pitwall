@@ -1,19 +1,11 @@
 // Keeps one window's dock and the bridge's copy of the window in step (spec 7.2 "saved automatically", Review Focus 4).
-import type { Geometry, PanelSpec, WindowId, WorkbookWindow } from '@pitwall/contracts';
+import { canonicalJson, type Geometry, type PanelSpec, type WindowId, type WorkbookWindow } from '@pitwall/contracts';
 
 /** What a dock shows: its layout and its panels. */
 export type DockContent = { layout: unknown; panels: Record<string, PanelSpec> };
 
 /** How many sent contents are remembered while their echo from the bridge is outstanding. */
 const MAX_UNCONFIRMED = 16;
-
-/** JSON with sorted object keys, so equal contents give equal text whatever their key order. */
-const canonical = (value: unknown): string =>
-  JSON.stringify(value, (_k, v: unknown) =>
-    typeof v === 'object' && v !== null && !Array.isArray(v)
-      ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
-      : v,
-  );
 
 /**
  * Local dock and geometry changes are collected for `delayMs` and sent as one whole window. The bridge's copy of this
@@ -54,15 +46,15 @@ export class WindowSync {
     this.#bridge = window;
     if (window?.fontPx === this.#fontPx) this.#fontPx = undefined;
     const content: DockContent = window === undefined ? { layout: undefined, panels: {} } : { layout: window.layout, panels: window.panels };
-    const text = canonical(content);
+    const text = canonicalJson(content);
     const unchanged = text === this.#bridgeText;
     this.#bridgeText = text;
-    if (this.#dock !== undefined && (unchanged || text === canonical(this.#dock) || this.#unconfirmed.includes(text))) {
+    if (this.#dock !== undefined && (unchanged || text === canonicalJson(this.#dock) || this.#unconfirmed.includes(text))) {
       // Nothing new for this window, or the echo of a save while the dock may have moved on: keep the dock.
       this.#confirm(text);
       if (this.#owed) {
         this.#owed = false;
-        if (text !== canonical(this.#dock)) this.#schedule();
+        if (text !== canonicalJson(this.#dock)) this.#schedule();
       }
       return false;
     }
@@ -136,7 +128,7 @@ export class WindowSync {
       this.#owed = true;
       return;
     }
-    this.#unconfirmed.push(canonical(dock));
+    this.#unconfirmed.push(canonicalJson(dock));
     if (this.#unconfirmed.length > MAX_UNCONFIRMED) this.#unconfirmed.shift();
   }
 }

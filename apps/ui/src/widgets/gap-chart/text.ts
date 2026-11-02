@@ -1,32 +1,27 @@
-import type { CarId, GapperLines, GapperReferenceKind, UnknownReason } from '@pitwall/domain';
-import type { CarCodeCell } from '../../kit/car/car-label.ts';
+import type { CarId, GapperLines } from '@pitwall/domain';
+import type { AxisLabel } from '../../kit/chart/labels.ts';
+import { knownPart, unknownPart, type CellPart } from '../../kit/grid/grid.ts';
 import { formatLapTime } from '../../kit/values/format.ts';
 
-export const xLabel = 'lap';
-export const yLabel = 'behind reference, s';
+/** The axis labels in their forms; the chart draws the longest that fits (the compact chart has room for a short one). */
+export const xLabel: AxisLabel = ['lap'];
+export const yLabel: AxisLabel = ['behind reference, s', 'behind ref, s', 's'];
 
 /** The words of the reference line. */
-export const reference = { prefix: 'ref', leaderAverage: 'leader avg', carAverage: 'car avg', fixed: 'fixed', average: 'avg' } as const;
+export const reference = { prefix: 'ref', leaderAverage: 'leader avg', fixed: 'fixed', average: 'avg' } as const;
 
-/** The reference line as text and, when a part of it is unknown, the reason for the hover. */
-export type ReferenceLine = { text: string; reason?: UnknownReason };
-
-/** Who the reference is: the leader average, a car average named by its code, or a fixed lap. */
-function referenceName(kind: GapperReferenceKind, car: CarCodeCell | undefined): string {
-  if (kind === 'leaderAverage') return reference.leaderAverage;
-  if (kind === 'fixed') return reference.fixed;
-  return car === undefined || car.text === '' ? reference.carAverage : `${car.text} ${reference.average}`;
+/** Who the reference is: the leader average, a car average named by its code (unknown for a car the field lacks), or a fixed lap. */
+function referenceName(ref: GapperLines['reference'], codeOf: (id: CarId) => CellPart): CellPart[] {
+  if (ref.kind === 'leaderAverage') return [{ text: reference.leaderAverage }];
+  if (ref.kind === 'fixed') return [{ text: reference.fixed }];
+  const car = ref.carId.known ? codeOf(ref.carId.value) : unknownPart(ref.carId.reason);
+  return [car, { text: reference.average }];
 }
 
 /**
- * The header naming the reference the gapper used, e.g. `ref leader avg 1:45.123`. An unknown lap time is left out
- * and its reason goes to the hover, as is the reason of a car code the field lacks.
+ * The header naming the reference the gapper used, in kit cell parts, e.g. `ref`, `leader avg`, `1:45.123`; the display
+ * draws them a space apart. An unknown lap time, or the code of a car the field lacks, is an unknown part at its place.
  */
-export function referenceText(gapper: Pick<GapperLines, 'reference' | 'referenceLapMs'>, codeOf: (id: CarId) => CarCodeCell): ReferenceLine {
-  const { reference: ref, referenceLapMs } = gapper;
-  const car = ref.kind === 'carAverage' && ref.carId.known ? codeOf(ref.carId.value) : undefined;
-  const parts = [reference.prefix, referenceName(ref.kind, car), referenceLapMs.known ? formatLapTime(referenceLapMs.value) : ''];
-  const reason = referenceLapMs.known ? car?.reason : referenceLapMs.reason;
-  const text = parts.filter((p) => p !== '').join(' ');
-  return reason === undefined ? { text } : { text, reason };
+export function referenceText(gapper: Pick<GapperLines, 'reference' | 'referenceLapMs'>, codeOf: (id: CarId) => CellPart): CellPart[] {
+  return [{ text: reference.prefix }, ...referenceName(gapper.reference, codeOf), knownPart(gapper.referenceLapMs, formatLapTime)];
 }

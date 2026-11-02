@@ -15,6 +15,8 @@ export type BestStatus = Extract<SectorStatus, 'sessionBest' | 'none'>;
 /** One car on the lap board. */
 export type LapBoardRow = {
   carId: CarId;
+  /** The car is out of the race: its times will not come (decided by the analysis). */
+  outOfRace: boolean;
   lastLapMs: Known<Ms>;
   lastSectorsMs: [Known<Ms>, Known<Ms>, Known<Ms>];
   lastSectorStatus: [SectorStatus, SectorStatus, SectorStatus];

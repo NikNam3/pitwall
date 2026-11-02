@@ -38,6 +38,15 @@ const damage: IncidentEntry = {
   timeLostMs: unknown('insufficientData'), forUs: [], where: { sector: k(1) }, damage: [{ part: 'frontLeftWingPct', deltaPct: 12 }],
 };
 
+// Penalties name the ruling (user, live test 2026-10-30: a drive-through read as a bare penalty).
+const ruling = (at: number, lap: number, car: number, penalty: NonNullable<IncidentEntry['penalty']>): IncidentEntry => ({
+  id: `penalty:${car}:${at}`, at: toSessionTime(at), lap, kind: 'penalty', severity: 'minor', carIds: [carId(car)],
+  timeLostMs: unknown('notApplicable'), forUs: [], where: { sector: k(2) }, penalty,
+});
+const driveThrough = ruling(250_000, 25, 4, { kind: 'driveThrough' });
+const stopGo = ruling(240_000, 24, 3, { kind: 'stopGo' });
+const timePenalty = ruling(235_000, 23, 5, { kind: 'time', timeMs: 5_000 });
+
 /** A moment; the incident moment's cause names its entry (`entryId`), as race-moment gives it. */
 const moment = (name: Moment, entryId?: string): Known<RaceMoment> =>
   k({
@@ -56,14 +65,22 @@ const gallery: GalleryEntry<typeof widget> = {
     empty: { feed: [], cars, moment: undefined },
     // Mockup: minor entries (warning, safety car) dim.
     feed: { feed: [collision, timeLoss, warning, neutralised, damage], cars, moment: undefined },
-    // The unresolved time loss of the damage entry is an empty cell.
+    // The unresolved time loss of the damage entry shows its mark (still measuring).
     unresolved: { feed: [damage], cars, moment: undefined },
     // The newest entry is minor: the moment names the major entry below it, which is amber.
     incidentMomentMinorFirst: { feed: [warning, timeLoss, neutralised], cars, moment: moment('incident', timeLoss.id) },
     // Another moment: nothing amber.
     battleMoment: { feed: [collision, warning], cars, moment: moment('battle') },
-    // A car missing from cars.overview is left out of the cell, with the reason on hover.
+    // A drive-through, a stop-go and a 5 s time penalty among the feed: each names its ruling.
+    driveThrough: { feed: [driveThrough, stopGo, timePenalty, collision, warning], cars, moment: undefined },
+    // A car missing from cars.overview shows its mark in its place, with the reason on hover.
     unknownCar: { feed: [collision], cars: cars.slice(0, 2), moment: undefined },
+    // Our position before and the gap after still to come: each mark sits where its value goes, `us …→P4, OCO +4.1→…`.
+    forUsPending: {
+      feed: [{ ...collision, forUs: [{ ourCarId: carId(1), otherCarId: k(carId(2)), positionBefore: unknown('notReceived'), positionAfter: k(4), gapBeforeMs: k(4100), gapAfterMs: unknown('notReceived') }] }],
+      cars,
+      moment: undefined,
+    },
     // Realism hides no rival value of this display (incidents are public), so there is no realism case.
   },
   fit: [

@@ -1,6 +1,7 @@
 import { carId, known, unknown, type LapRecord, type StintRecord } from '@pitwall/domain';
 import type { EngineView } from '@pitwall/engine';
 import { describe, expect, it } from 'vitest';
+import { LAP_CLASSES_CONFIG } from '../../src/lap-classes/index.ts';
 import { PER_LAP_RATE_CONFIG } from '../../src/per-lap-rate/index.ts';
 import { ERS, ERS_CONFIG } from '../../src/ers/index.ts';
 import { ersCalculator } from '../../src/ers/calculator.ts';
@@ -17,11 +18,12 @@ const stint = (over: Partial<StintRecord> & Pick<StintRecord, 'firstLap' | 'last
   ...over,
 });
 
-/** A lap of car 0 whose store at the lap end is `storeMJ`; `completedAt` is `n * 90 s`. */
-const storedLap = (n: number, storeMJ: number, over: Partial<LapRecord> = {}): LapRecord =>
-  lap({ lapNumber: n, ersStoreAtEndJ: known(storeMJ * MJ, n * 90_000), ...over });
+/** A lap of car 0 whose store goes from `startMJ` to `endMJ`; `completedAt` is `n * 90 s`. */
+const storedLap = (n: number, startMJ: number, endMJ: number, over: Partial<LapRecord> = {}): LapRecord =>
+  lap({ lapNumber: n, ersStoreAtStartJ: known(startMJ * MJ, n * 90_000), ersStoreAtEndJ: known(endMJ * MJ, n * 90_000), ...over });
 
-const laps = (stores: number[], from = 1): LapRecord[] => stores.map((s, i) => storedLap(from + i, s));
+/** Consecutive laps from `from` on with the store at their lines `levelsMJ`: lap i runs from level i to level i + 1. */
+const laps = (levelsMJ: number[], from = 1): LapRecord[] => levelsMJ.slice(1).map((end, i) => storedLap(from + i, levelsMJ[i]!, end));
 
 type Live = { storeMJ?: number; deployedMJ?: number; mguk?: number; mguh?: number; mgukW?: number; mode?: 'none' | 'medium' | 'hotlap' | 'overtake' };
 
@@ -38,6 +40,12 @@ const viewOf = (history: LapRecord[], live: Live = {}, stints: StintRecord[] = [
   engineView({ cars: [carWith(live)], history: { laps: history, stints }, config });
 
 const run = (view: EngineView) => ersCalculator.compute(view)[carId(0)]!;
+const trendOf = (view: EngineView): number => {
+  const t = run(view).storeTrendJPerLap;
+  if (!t.known) throw new Error(`expected a known trend, got ${t.reason}`);
+  return t.value;
+};
+const insufficient = { known: false, reason: 'insufficientData' };
 
 describe('ers calculator', () => {
   it('is the quick calculator `ers` at 4 Hz over laps and energy', () => {
@@ -47,13 +55,27 @@ describe('ers calculator', () => {
     expect(ersCalculator.reads).toEqual(expect.arrayContaining(['laps', 'stints', 'energy', 'session']));
   });
 
-  it('store 4.0, 3.6, 3.2 MJ at lap ends: trend -0.4 MJ/lap', () => {
+  it('store 4.0, 3.6, 3.2 MJ at the lines (two laps of -0.4 MJ): trend -0.4 MJ/lap, as of the newest lap', () => {
     const history = laps([4, 3.6, 3.2]);
-    const out = run(viewOf(history, { storeMJ: 3.2 }));
-    // the trend is as of the newest lap used
-    const trend = out.storeTrendJPerLap;
-    expect(trend).toMatchObject({ known: true, at: history[2]!.completedAt });
+    const trend = run(viewOf(history, { storeMJ: 3.2 })).storeTrendJPerLap;
+    expect(trend).toMatchObject({ known: true, at: history[1]!.completedAt });
     expect(trend.known && trend.value).toBeCloseTo(-0.4 * MJ, 3);
+  });
+
+  it('the trend is the median of the counted laps` own store changes', () => {
+    // changes -0.4, -0.2, -0.6, -0.4, -0.3 MJ: sorted -0.6, -0.4, -0.4, -0.3, -0.2
+    expect(trendOf(viewOf(laps([4, 3.6, 3.4, 2.8, 2.4, 2.1]), { storeMJ: 2.1 }))).toBeCloseTo(-0.4 * MJ, 3);
+  });
+
+  it('a lap`s change is its own end minus its own start: a jump between laps is in no lap', () => {
+    // lap 2 starts 1 MJ above lap 1's end: both laps lose 0.4 MJ
+    const history = [storedLap(1, 4, 3.6), storedLap(2, 4.6, 4.2)];
+    expect(trendOf(viewOf(history, { storeMJ: 4.2 }))).toBeCloseTo(-0.4 * MJ, 3);
+  });
+
+  it('one counted lap gives no trend; two do', () => {
+    expect(run(viewOf(laps([4, 3.6]), { storeMJ: 3.6 })).storeTrendJPerLap).toEqual(insufficient);
+    expect(trendOf(viewOf(laps([4, 3.6, 3.4]), { storeMJ: 3.4 }))).toBeCloseTo(-0.3 * MJ, 3);
   });
 
   describe('attack (ready at or above the level; while rising below it, the whole laps to it)', () => {
@@ -64,13 +86,13 @@ describe('ers calculator', () => {
     });
 
     it('is ready above the level even without a trend', () => {
-      expect(run(viewOf(laps([3]), { storeMJ: 3 })).attack).toEqual({ known: true, value: { ready: true }, at: 7_000 });
+      expect(run(viewOf([], { storeMJ: 3 })).attack).toEqual({ known: true, value: { ready: true }, at: 7_000 });
     });
 
     it('rising below the level: the laps to it rounded up to whole laps, as of the trend', () => {
       // 1 MJ to go at 0.4 MJ/lap is 2.5 laps
       const history = laps([0.6, 1.0, 1.4]);
-      expect(run(viewOf(history, { storeMJ: 1.4 })).attack).toEqual({ known: true, value: { ready: false, inLaps: 3 }, at: history[2]!.completedAt });
+      expect(run(viewOf(history, { storeMJ: 1.4 })).attack).toEqual({ known: true, value: { ready: false, inLaps: 3 }, at: history[1]!.completedAt });
       // 1.2 MJ to go at 0.4 MJ/lap is 3 laps
       expect(run(viewOf(laps([0.4, 0.8, 1.2]), { storeMJ: 1.2 })).attack).toMatchObject({ known: true, value: { ready: false, inLaps: 3 } });
     });
@@ -89,7 +111,7 @@ describe('ers calculator', () => {
     });
 
     it('below the level without a trend: insufficientData', () => {
-      expect(run(viewOf(laps([1]), { storeMJ: 1 })).attack).toEqual({ known: false, reason: 'insufficientData' });
+      expect(run(viewOf(laps([0.6, 1]), { storeMJ: 1 })).attack).toEqual(insufficient);
     });
   });
 
@@ -137,87 +159,97 @@ describe('ers calculator', () => {
     });
   });
 
-  it('the window and minimum of samples come from the per-lap-rate config', () => {
-    const history = laps([4, 3.6]);
-    expect(run(viewOf(history, { storeMJ: 3.6 })).storeTrendJPerLap).toEqual({ known: false, reason: 'insufficientData' });
-    const lenient = viewOf(history, { storeMJ: 3.6 }, [], { [PER_LAP_RATE_CONFIG.key]: { minSamples: 2 } });
-    const t = run(lenient).storeTrendJPerLap;
-    expect(t.known && t.value).toBeCloseTo(-0.4 * MJ, 3);
+  it('the minimum of samples comes from the per-lap-rate config', () => {
+    const strict = viewOf(laps([4, 3.6, 3.2]), { storeMJ: 3.2 }, [], { [PER_LAP_RATE_CONFIG.key]: { minSamples: 3 } });
+    expect(run(strict).storeTrendJPerLap).toEqual(insufficient);
   });
 
-  it('a new stint restarts the trend samples', () => {
-    // stop at the end of lap 4 (in lap 4, out lap 5): the old stint's store fell, the new one rises 0.4 MJ/lap
+  it('only the last 5 counted laps count (the window)', () => {
+    // changes +0.1 x 5, then -0.3 x 3: the median of all 8 is +0.1, of the last 5 it is -0.3
+    const history = laps([1, 1.1, 1.2, 1.3, 1.4, 1.5, 1.2, 0.9, 0.6]);
+    expect(trendOf(viewOf(history, { storeMJ: 0.6 }))).toBeCloseTo(-0.3 * MJ, 3);
+  });
+
+  it('one outlier lap among 5 leaves the trend at the other laps`', () => {
+    // changes -0.4, -0.4, +1.6 (a lift-and-coast lap), -0.4, -0.4
+    expect(trendOf(viewOf(laps([4, 3.6, 3.2, 4.8, 4.4, 4]), { storeMJ: 4 }))).toBeCloseTo(-0.4 * MJ, 3);
+  });
+
+  it('a stop keeps the trend samples: the store is not tied to the tyre set', () => {
+    // laps 1-2 lose 0.4 MJ, stop at the end of lap 3 (in lap 3, out lap 4), laps 5-6 gain 0.2 MJ: median of -0.4, -0.4, 0.2, 0.2
     const history = [
       ...laps([4, 3.6, 3.2]),
-      storedLap(4, 2.8, { inLap: true }),
-      storedLap(5, 4, { outLap: true }),
-      ...laps([1, 1.4, 1.8], 6),
+      storedLap(3, 3.2, 3.6, { inLap: true }),
+      storedLap(4, 3.6, 4, { outLap: true }),
+      ...laps([2, 2.2, 2.4], 5),
     ];
-    const out = run(viewOf(history, { storeMJ: 1.8 }, [stint({ firstLap: 1, lastLap: 4 })]));
-    const t = out.storeTrendJPerLap;
-    expect(t.known && t.value).toBeCloseTo(0.4 * MJ, 3);
-    // 0.6 MJ to go at 0.4 MJ/lap is 1.5 laps: attack in 2
-    expect(out.attack).toMatchObject({ known: true, value: { ready: false, inLaps: 2 } });
-  });
-
-  it('right after a stop the trend is insufficientData however long the previous stint was', () => {
-    const history = [...laps([4, 3.6, 3.2, 2.8, 2.4]), storedLap(6, 4, { outLap: true }), ...laps([3.6, 3.2], 7)];
-    const out = run(viewOf(history, { storeMJ: 3.2 }, [stint({ firstLap: 1, lastLap: 5 })]));
-    expect(out.storeTrendJPerLap).toEqual({ known: false, reason: 'insufficientData' });
-  });
-
-  it('a stint record that ends on the newest lap is the current stint', () => {
-    const history = [...laps([4, 3.6, 3.2]), ...laps([1, 1.4, 1.8, 2.2], 4)];
-    const stints = [stint({ firstLap: 1, lastLap: 3 }), stint({ firstLap: 4, lastLap: 7 })];
-    const t = run(viewOf(history, { storeMJ: 2.2 }, stints)).storeTrendJPerLap;
-    expect(t.known && t.value).toBeCloseTo(0.4 * MJ, 3);
-  });
-
-  describe('on engine-shaped history: every lap provisional then confirmed, no record for the open stint', () => {
-    it('a new stint restarts the trend samples', () => {
-      const history = engineShaped([
-        ...laps([4, 3.6, 3.2]),
-        storedLap(4, 2.8, { inLap: true }),
-        storedLap(5, 4, { outLap: true }),
-        ...laps([1, 1.4, 1.8], 6),
-      ]);
-      const t = run(viewOf(history, { storeMJ: 1.8 }, [stint({ firstLap: 1, lastLap: 4 })])).storeTrendJPerLap;
-      expect(t.known && t.value).toBeCloseTo(0.4 * MJ, 3);
-    });
-
-    it('a lap counts once: two laps, each written twice, are below minSamples (3)', () => {
-      const out = run(viewOf(engineShaped(laps([1.2, 1.6])), { storeMJ: 1.6 }));
-      expect(out.storeTrendJPerLap).toEqual({ known: false, reason: 'insufficientData' });
-    });
-  });
-
-  it('without a stint record the history counts as one stint', () => {
-    const t = run(viewOf(laps([4, 3.6, 3.2]), { storeMJ: 3.2 })).storeTrendJPerLap;
-    expect(t.known && t.value).toBeCloseTo(-0.4 * MJ, 3);
+    expect(trendOf(viewOf(history, { storeMJ: 2.4 }, [stint({ firstLap: 1, lastLap: 3 })]))).toBeCloseTo(-0.1 * MJ, 3);
   });
 
   it('in laps, out laps and SC laps are not trend samples', () => {
     const history = [
       ...laps([4, 3.6, 3.2]),
-      storedLap(4, 0.5, { scShare: 0.5 }),
-      storedLap(5, 0.2, { vscShare: 0.2 }),
-      storedLap(6, 4, { outLap: true }),
-      storedLap(7, 4, { inLap: true }),
+      storedLap(3, 3.2, 0.5, { scShare: 0.5 }),
+      storedLap(4, 0.5, 0.2, { vscShare: 0.2 }),
+      storedLap(5, 0.2, 4, { outLap: true }),
+      storedLap(6, 4, 4, { inLap: true }),
     ];
-    const t = run(viewOf(history, { storeMJ: 3.2 })).storeTrendJPerLap;
-    expect(t.known && t.value).toBeCloseTo(-0.4 * MJ, 3);
+    expect(trendOf(viewOf(history, { storeMJ: 3.2 }))).toBeCloseTo(-0.4 * MJ, 3);
   });
 
-  it('a lap record with an unknown store is no sample', () => {
-    const history = [storedLap(1, 4), storedLap(2, 0, { ersStoreAtEndJ: unknown('notReceived') }), storedLap(3, 3.2), storedLap(4, 2.8)];
-    const t = run(viewOf(history, { storeMJ: 2.8 })).storeTrendJPerLap;
-    expect(t.known && t.value).toBeCloseTo(-0.4 * MJ, 3);
+  it('a lap with 2 s or more under SC or VSC is no sample, and its harvest does not leak into the trend', () => {
+    // lap 1 green -0.4, laps 2-3 under SC +0.2 each, laps 4-5 green -0.4
+    const history = [
+      storedLap(1, 4, 3.6),
+      storedLap(2, 3.6, 3.8, { scShare: 1 }),
+      storedLap(3, 3.8, 4, { scShare: 0.6, vscShare: 0.4 }),
+      storedLap(4, 4, 3.6),
+      storedLap(5, 3.6, 3.2),
+    ];
+    expect(trendOf(viewOf(history, { storeMJ: 3.2 }))).toBeCloseTo(-0.4 * MJ, 3);
+  });
+
+  it('a lap with under 2 s under SC (the flag lag at a restart) is a sample; the limit comes from the lap-classes config', () => {
+    // lap 2 is green but for 0.9 s: scShare 0.01 of the builder's 90 s lap
+    const history = [storedLap(1, 4, 3.6), storedLap(2, 3.6, 3.2, { scShare: 0.01 })];
+    expect(trendOf(viewOf(history, { storeMJ: 3.2 }))).toBeCloseTo(-0.4 * MJ, 3);
+    const strict = viewOf(history, { storeMJ: 3.2 }, [], { [LAP_CLASSES_CONFIG.key]: { maxNeutralisedMs: 500 } });
+    expect(run(strict).storeTrendJPerLap).toEqual(insufficient);
+  });
+
+  it('a lap whose start or end store is unknown is no sample', () => {
+    const joined = storedLap(1, 0, 3.6, { ersStoreAtStartJ: unknown('notReceived') });
+    expect(run(viewOf([joined, storedLap(2, 3.6, 3.2)], { storeMJ: 3.2 })).storeTrendJPerLap).toEqual(insufficient);
+    const noEnd = storedLap(2, 3.6, 0, { ersStoreAtEndJ: unknown('notReceived') });
+    expect(run(viewOf([storedLap(1, 4, 3.6), noEnd], { storeMJ: 3.2 })).storeTrendJPerLap).toEqual(insufficient);
+    expect(trendOf(viewOf([storedLap(1, 4, 3.6), noEnd, storedLap(3, 3.2, 2.8)], { storeMJ: 2.8 }))).toBeCloseTo(-0.4 * MJ, 3);
+  });
+
+  describe('on engine-shaped history: every lap provisional then confirmed, no record for the open stint', () => {
+    it('a stop keeps the trend samples', () => {
+      const history = engineShaped([
+        ...laps([4, 3.6, 3.2]),
+        storedLap(3, 3.2, 3.6, { inLap: true }),
+        storedLap(4, 3.6, 4, { outLap: true }),
+        ...laps([2, 2.2, 2.4], 5),
+      ]);
+      expect(trendOf(viewOf(history, { storeMJ: 2.4 }, [stint({ firstLap: 1, lastLap: 3 })]))).toBeCloseTo(-0.1 * MJ, 3);
+    });
+
+    it('a lap counts once: one lap, written twice, is below minSamples (2)', () => {
+      expect(run(viewOf(engineShaped(laps([1.2, 1.6])), { storeMJ: 1.6 })).storeTrendJPerLap).toEqual(insufficient);
+    });
+
+    it('the confirmed record wins over the provisional one', () => {
+      const history = engineShaped(laps([4, 3.6, 3.2]), { ersStoreAtEndJ: known(0, 1) });
+      expect(trendOf(viewOf(history, { storeMJ: 3.2 }))).toBeCloseTo(-0.4 * MJ, 3);
+    });
   });
 
   it('realism: a rival`s store is unknown(`realism`)', () => {
     const hidden = unknown('realism');
     const rivalLaps = [1, 2, 3, 4].map((n) =>
-      storedLap(n, 0, { carId: carId(1), ersStoreAtEndJ: hidden, ersDeployedJ: hidden, ersHarvestedJ: hidden }),
+      storedLap(n, 0, 0, { carId: carId(1), ersStoreAtStartJ: hidden, ersStoreAtEndJ: hidden, ersDeployedJ: hidden, ersHarvestedJ: hidden }),
     );
     const view = engineView({
       cars: [carWith({ storeMJ: 3.2 }), realismHidden(carState({ id: carId(1) }))],

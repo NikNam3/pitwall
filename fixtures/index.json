@@ -245,6 +245,65 @@
         "COLL x19 (ours 14), OVTK x539 (ours 55), FTLP x22 (ours 2), SPTP x1277, TMPT x1, RCWN x1, SCAR x3; no frozen headers, no garbage split times; every packet carries playerCarIndex 19",
         "UID-0: 20 SessionHistory just before SEND, 13 events (DRSE, DRSD, BUTN) after it, and 32 BUTN among the post-race bulks"
       ]
+    },
+    {
+      "id": "practiceFriendWings",
+      "file": "2026-10-30_18-26-27_581b388bbb23c5e7.pwrec.gz",
+      "sha256": "cdf32b04e01c4826d129f3a9f236e3a28812f6f439081445f84954efaaaa101f",
+      "bytes": 55537942,
+      "track": "Miami",
+      "trackId": 30,
+      "sessionType": "practice",
+      "sessionTypeCode": 4,
+      "completedLaps": 7,
+      "durationMs": 1475426.1433,
+      "features": [
+        "offline practice of the user's friend, watched live over VPN; sessionDuration 1800 s, 20 cars, 1 human (index 19, teammate 10); link ids season, weekend and session 1545619431; same weekend as raceFriendWet",
+        "no SSTA: the file starts at session time 121.552 with car 19 on its out lap (driverStatus 3), on C3 hards (actual 18 visual 18, age 0) and 18.865 kg of fuel",
+        "7 completed player laps, all valid: 95.041, 95.301, 96.696, 102.775, 92.302 (best, FTLP), 94.384 and 97.098 s; lap 8 unfinished (PENA this lap invalidated at 1526.962)",
+        "three garage visits, numPitStops stays 0: pit entry 534.607 (lap 4), garage (driverStatus 0) 542.879, out lap 641.422, pit exit 649.872; pit entry 945.025 (lap 5), garage 953.305, out lap 1079.313, pit exit 1087.763; pit entry 1558.097 (lap 8), garage 1566.400 to the end",
+        "front-right wing of car 19 (CarDamage): 0 to 37 % at 308.694 (lap 2), 70 % at 336.482, 100 % at 528.587 (lap 4), changed to 0 in the garage at 616.783; 73 % at 821.283 (lap 4), 0 in the garage at 1034.593; 100 % at 1523.639 (lap 8), 0 in the garage at 1642.651; no COLL in the session, the front-left wing stays 0",
+        "other damage of car 19: engine 0 to 1 % at 683.480 and 2 % at 1265.141, gearbox 0 to 1 % at 919.686",
+        "set change in the second garage visit at 1044.724: C3 hards to C5 softs (actual 16 visual 16, age 0); fuel is 20.0 kg after every garage visit",
+        "tyre wear RL/RR/FL/FR: 19/21/14/22 % at the first wing change, 36/41/24/36 % on the hards at 1034.593, 38/43/29/40 % at the end on the softs",
+        "weather clear, light cloud from 903.496; track 44-46 °C, air 30-31 °C; Session totalLaps 1, then 5 from 946.646",
+        "no packets for 27 s at session time 946.587 (entering the garage) and 17 s at 1037.036 (in the garage), session time frozen",
+        "PENA x10, all ours: 9 warnings for corner cutting (infringement 7 x4, 27 x5; totalWarnings 9) and one lap invalidation (type 12) on lap 8",
+        "we leave at 1653.025: RTMT car 19 (reason 0), resultStatus retired, gamePaused 1, numActiveCars 19; 20 UID-0 SessionHistory just before SEND at 1653.061; after SEND 5 UID-0 BUTN, then 20 SessionHistory and a FinalClassification with the session UID at session time 1800.000 (frame 0; car 19 P2, 7 laps, resultStatus 7), then 2 UID-0 BUTN",
+        "OVTK x224, SPTP x113, FTLP x4 (ours laps 1 and 5), RTMT x1, SEND x1, BUTN x3381; no COLL, SCAR, FLBK; every packet with the session UID carries playerCarIndex 19"
+      ]
+    },
+    {
+      "id": "raceFriendWet",
+      "file": "2026-10-30_18-53-00_082927e692fdf2af.pwrec.gz",
+      "sha256": "993c4fd2bb1f815a669cd2dcd336b61793083768ebacc4d8e76626abaf9f9314",
+      "bytes": 186351572,
+      "track": "Miami",
+      "trackId": 30,
+      "sessionType": "race",
+      "sessionTypeCode": 15,
+      "completedLaps": 20,
+      "durationMs": 2509585.7556,
+      "features": [
+        "offline 20-lap race of the user's friend, watched live over VPN; 20 cars, 1 human (index 19, teammate 10); link ids season and weekend 1545619431, session 1545619441; same weekend as practiceFriendWings; we start P1",
+        "the first Session packets (to 1.527 s) carry aiDifficulty, carDamage and flashbackLimit 0; then 62, 3 and 3",
+        "formation lap: safetyCarStatus 3 from 1.025 s; session time resets from 169.381 to 0 (frame 5993 to 5994) for the start, without FLBK; the formation SCAR (type 3, eventType 3) at the reset carries playerCarIndex 0; STLG x5 and LGOT (frame 6257) at session time 0",
+        "20 completed player laps (SessionHistory 1-19, lap 20 from LapData): 112.615, 114.077, 131.825 and 136.240 (SC), 108.907, 113.349, 120.151, 108.052, 108.026, 108.538, 108.098, 106.806, 111.540, 120.621, 126.301 (invalid), 107.120, 105.693, 104.984 (best, FTLP), 109.169, 108.497 s; we lead laps 1-6 and finish P19",
+        "every car starts on wets (actual 8 visual 8); our stops: lap 7 (pit entry 710.893 on lap 6, line crossed in the pit lane 717.055, stop 719.640, wets to intermediates (actual 7 visual 7) at 720.641, numPitStops 1 at 725.110, pit exit 733.679) and lap 15 (pit entry 1603.226, line 1608.897, stop 1611.483, both front wings and new intermediates at 1618.536, numPitStops 2 at 1623.171, pit exit 1631.735)",
+        "SessionHistory stints of the AI (end lap one below the last lap driven on the set): cars 1, 2, 3, 8, 14, 16, 17 to intermediates with end lap 1, car 7 2, car 4 10, car 6 1 and 12 (two stops); cars 0, 5, 9-13, 15 and 18 stay on wets",
+        "VSC from SCAR 203.108 (lap 2; safetyCarStatus 2, numVirtualSafetyCarPeriods 1 from 204.172), full SC from SCAR 229.734 (status 1, numSafetyCarPeriods 1 from 230.654), returning 459.362, returned 485.606, resume 494.794 as we cross into lap 5, status 0 from 495.665",
+        "car 18 retires on lap 13: RTMT 1456.006, PENA retired (16, mechanical failure 41) 1457.021, numActiveCars 20 to 19 at 1457.159 while car 19 (the player) still races; resultStatus 4 at the end",
+        "second VSC: SCAR 1459.049, status 2 and numVirtualSafetyCarPeriods 2 from 1459.661, ending 1523.851, resume 1531.770, status 0 from 1532.647",
+        "our drive-through: PENA penaltyType 0, infringement 38 (VSC exceeding allowed pace), lap 14, at 1531.797, 27 ms after the VSC resume; numUnservedDriveThroughPens 0 to 1 at 1531.824; DTSV at 1638.850 (lap 15, 7 s after the pit exit of our second stop), back to 0 at 1638.878; pitStopShouldServePen stays 0; no other car gets a drive-through, no car a stop-go",
+        "our 3 s time penalty for multiple warnings (PENA type 4, infringement 21) at 1683.516 (lap 15); LapData penalties 0 to 3 at 1683.544",
+        "our PENA x11: 9 warnings (corner cutting 27 lap 7, 7 lap 9, 28 lap 15; small collisions with cars 17 and 1 on lap 9, car 6 lap 16, car 1 x2 lap 19 and lap 20; totalWarnings 9), the drive-through and the 3 s penalty; other PENA: car 17 and car 6 warnings, car 18 retired",
+        "damage of car 19: COLL car 2 at 892.998 (floor 13 %, sidepod 6 %); COLL car 1 at 1041.306 with front-left wing 47 % (1040.556) and front-right 51 % (1041.337), both 0 at the stop at 1618.536; COLL car 6 at 1741.064, front-left 53 then 99 % (1741.170), 100 % at 2126.169; COLL car 1 at 2146.620, floor 24 to 76 % in five steps 2147.463-2147.844, 79 % by 2221.053; engine 0 to 5 %, gearbox 0 to 2 %",
+        "weather storm (5) the whole race, forecast storm 93 % rain; track 31-35 °C, air 28-30 °C; no DRSE or DRSD",
+        "fuel 36.6 kg at start, 1.459 kg at the end (about 1.76 kg/lap); tyre wear RL/RR/FL/FR 17/19/8/10 % at the end on intermediates aged 6",
+        "no packets for 18 s at session time 1539.859 (lap 14) and 13 s at 1686.794 (lap 15), session time frozen",
+        "finish: RCWN car 13 at 2217.865, CHQF 2266.835; our lap 20 in LapData at 2270.659 (currentLapNum stays 20), resultStatus finished from 2270.688; the last frame shows every car finished but car 18; gamePaused 1 and SEND at 2270.718; 20 UID-0 SessionHistory just before SEND, 1 UID-0 BUTN after; no FinalClassification",
+        "COLL x22 (ours 14: car 1 x8, car 6 x3, cars 2, 14, 17), OVTK x361, SPTP x390, FTLP x12 (ours laps 1, 5, 17, 18), PENA x14, SCAR x9, DTSV x1, RTMT x1, RCWN x1, CHQF x1, BUTN x7170; no SSTA, FLBK or RDFL"
+      ]
     }
   ],
   "segments": [
@@ -259,6 +318,39 @@
         "everything before lights out (session time stays 0 until LGOT)",
         "SSTA x1, STLG x5, LGOT x1, BUTN x8",
         "duration 8750.935 ms"
+      ]
+    },
+    {
+      "file": "race-singapore-wet-start.pwrec.gz",
+      "source": "raceSingaporeWet",
+      "fromS": 0,
+      "toS": 1.6,
+      "records": 3197,
+      "features": [
+        "671 861 bytes; no context packets; first records SSTA, LGOT and SCAR(3,0) (all 0.000, frame 0) before the first Session packet; start shape S2 of t1-diagnosis.md",
+        "the grid and the formation start: the clock runs from 0, safetyCarStatus 3 from 1.008 (frame 60); the formation lap runs to 1.586 (frame 95) in the window",
+        "the formation-end reset: frame 95 (1.586) to frame 10296 at 0.000 with SCAR(3,3); the clock holds at 0 to lights out",
+        "the start lights: STLG x5 frames 10348-10545 at 0.000, safetyCarStatus 3 to 0 at frame 10361, LGOT at frame 10618 (0.000); then the race to 1.594 (frame 10717); no event after lights out",
+        "518 frames through the tracker, 8 incomplete, none late; 20 active cars; formationLap setting 0 when the status turns 3",
+        "SSTA x1, LGOT x2, SCAR x2, STLG x5, BUTN x212",
+        "duration 255206.338 ms"
+      ]
+    },
+    {
+      "file": "race-zandvoort-online-start.pwrec.gz",
+      "source": "raceZandvoortOnline",
+      "fromS": 0,
+      "toS": 2.1,
+      "records": 2397,
+      "features": [
+        "452 914 bytes; no context packets; first records LGOT and SCAR(3,0) (0.000, stale frame 16725) before the first Session packet (frame 16725, 0.065); start shape S3 of t1-diagnosis.md",
+        "the grid and the formation start from 0.065: safetyCarStatus 3 from 1.069 (frame 16757); the formation lap runs to 2.076 (frame 16789) in the window",
+        "the formation-end reset: 2.076 to 1.968 at frame 21193 (in the recording 131.495 to 1.968), with SCAR(3,3) and OVTK x24 (the grid re-ordering); the clock holds at 1.968",
+        "the start lights: STLG x5 frames 21219-21321 at 1.968, safetyCarStatus 3 to 0 at frame 21225, LGOT at frame 21406 (1.968); the race clock falls 1.968 to 0.065 at frame 21410, four frames after lights out, no FLBK; then the race to 2.094 (frame 21475); no event after lights out",
+        "cars 1-7 stand past the line and show a lap timer of 510 ms from the reset frame on; 20 active cars, 2 humans (0 is the player, 1)",
+        "348 frames through the tracker, none incomplete or late; before the situation tracker the engine kept no start event and joined cars 1-7 late (finding B1)",
+        "LGOT x2, SCAR x2, OVTK x24, STLG x5, BUTN x65",
+        "duration 255176.265 ms"
       ]
     },
     {
@@ -349,6 +441,39 @@
       ]
     },
     {
+      "file": "race-zandvoort-clock-reset.pwrec.gz",
+      "source": "raceZandvoortOnline",
+      "fromS": 2,
+      "toS": 9,
+      "records": 3096,
+      "features": [
+        "824 635 bytes; 2 context packets (Session, Participants) first; 20 active cars, 2 humans (0 is the player, 1), every car on lap 1 throughout",
+        "two timelines with the same session times, as pwrec-cut keeps every record in the window: the formation lap from 2.013 s (frame 16787) to 8.983 s, then the race after lights out from 2.002 s (frame 21472) to 8.980 s (frame 21702)",
+        "one formation reset: session time falls 8.983 to 2.002 at frame 21472 inside the formation phase while frameIdentifier and overallFrameIdentifier rise, no FLBK, no lights out; the engine reports no clock fall and truncates no step (a truncated step comes with a flashback, the race start or a dropped unconfirmed neutralisation); the recording's other falls, 131.495 to 0 and 1.968 to 0.065 (the start lights stand at 1.968), lie outside the window",
+        "in the formation part cars pass lap-1 mini-sector boundaries 0-2 (15 crossings, the first at 3.498 s, the last at 8.866 s); no event before the reset",
+        "in the race part every car passes lap-1 boundaries again; a run over the race part alone gives every running car a known gap to the leader and to the car ahead by the end",
+        "a window from 0 s would also take the formation start's standing cars and the start lights (about 1.5 MB uncompressed) and goes above 1 MB",
+        "OVTK x15, SPTP x20, COLL x2, BUTN x14",
+        "duration 147418.676 ms"
+      ]
+    },
+    {
+      "file": "race-zandvoort-uid-reuse-start.pwrec.gz",
+      "source": "raceZandvoortUidReuse",
+      "fromS": 0,
+      "toS": 1,
+      "records": 3429,
+      "features": [
+        "588 238 bytes; no context packets; first records SSTA (0.139), LGOT and SCAR(3,0) (0.000) before the first Session packet (frame 30, 0.390)",
+        "the formation start: safetyCarStatus 3 from 0.887; then the formation-end reset (131.714 to 0.033 at frame 7912, outside the window, so in the segment the clock falls 0.990 at frame 66 to 0.033), SCAR(0,3) frame 7913, DRSE 7914, SCAR(3,3) and OVTK x15 frame 7932, DRSD 7938, a small fall 0.819 to 0.794 at frame 7947",
+        "the start lights: hold at 0.794 for frames 7947-8370, STLG x5 frames 7992-8187, LGOT at frame 8369; after it the forward jump to 6.790 lies outside the window: 0.831 at frame 8380, the fall to 0.027 at frame 8381, then the race to 1.0 (frame 8441)",
+        "the source's LapPositions packets frozen at frame 10539, session time 33.337 (one right after every real LapPositions, from the session's start on) lie outside the window; tests put them back to check the frame assembler",
+        "the first Participants packet at frame 7938 (0.715)",
+        "SSTA x1, LGOT x2, SCAR x3, DRSE x1, OVTK x15, DRSD x1, STLG x5, BUTN x128",
+        "duration 190492.051 ms"
+      ]
+    },
+    {
       "file": "race-singapore-wet-flashback.pwrec.gz",
       "source": "raceSingaporeWet",
       "fromS": 741.5,
@@ -403,12 +528,42 @@
       "features": [
         "full-lap segment, 8 952 201 bytes (the shortest window that holds the lap and its confirmation); 2 context packets (Session, Participants) first; session time 166.408 to 259.682, rising throughout",
         "Q2 (session type 6), 15 active cars (numActiveCars 15), car 14 the player, teammate 8",
-        "car 14 starts on its out lap from the garage (lap 1, driverStatus outLap, negative lap distance), crosses the line at 166.466 and turns flyingLap on the same lap 1; lap 1 92.485 s (sectors 27.286/39.038/26.160, valid, softs) from line to line, completed at 258.966 (line 258.937), confirmed by SessionHistory at 259.649; the engine records it with outLap true",
+        "car 14 starts on its out lap from the garage (lap 1, driverStatus outLap, negative lap distance), crosses the line at 166.466 and turns flyingLap on the same lap 1; lap 1 92.485 s (sectors 27.286/39.038/26.160, valid, softs) from line to line, completed at 258.966 (line 258.937), confirmed by SessionHistory at 259.649; the engine restarts the lap at the line, so the flying lap is no out lap",
         "ten other cars complete lap 1 with its start before the segment, each confirmed; the fastest is car 8, 92.134 s (FTLP cars 6, 9, 8)",
         "lap-times: car 14's lap 1 is its personal best and holds the session-best sector 1; its projection on lap 2 is known from 258.937; the cut-off comes out at position 5 (15 active cars minus 5 + 5 eliminated)",
         "car 14 at the end of lap 1: tyre wear FL/FR/RL/RR 4/6/5/6 %, ERS store 0.148 MJ, deployed 3.209 MJ, harvested 3.035 MJ",
         "OVTK x72, SPTP x12, FTLP x3, BUTN x122",
         "duration 93278.472 ms"
+      ]
+    },
+    {
+      "file": "practice-wing-change.pwrec.gz",
+      "source": "practiceFriendWings",
+      "fromS": 615,
+      "toS": 619,
+      "records": 523,
+      "features": [
+        "2 context packets (Session, Participants) first; session time 615.245 to 618.964, rising throughout",
+        "car 19 (the player) in the garage (driverStatus 0, pitStatus 1) on lap 4, hards age 3, fuel 20.0 kg; numPitStops 0",
+        "front-right wing of car 19 (CarDamage): 4 readings at 100 % (616.027 to 616.673), then 0 % from 616.783 (23 readings); every other part of car 19 unchanged",
+        "frames 0.39 s of session time apart until 616.418, then 0.036 s",
+        "no events",
+        "duration 2665.837 ms"
+      ]
+    },
+    {
+      "file": "race-drive-through.pwrec.gz",
+      "source": "raceFriendWet",
+      "fromS": 1530.5,
+      "toS": 1534,
+      "records": 848,
+      "features": [
+        "2 context packets (Session, Participants) first; session time 1530.504 to 1533.980, rising throughout",
+        "car 19 (the player) on lap 14 at P10 on intermediates (age 7); numActiveCars 19 (car 18 retired on lap 13) while car 19 races",
+        "end of the second VSC: SCAR resume (type 2, eventType 3) at 1531.770, safetyCarStatus 2 to 0 at 1532.647",
+        "PENA drive-through (penaltyType 0, infringement 38 VSC exceeding allowed pace, lap 14) for car 19 at 1531.797; LapData numUnservedDriveThroughPens 0 to 1 at 1531.824 and 1 to the end; it is served outside the segment (DTSV 1638.850)",
+        "SCAR x1, PENA x1, BUTN x16",
+        "duration 3516.529 ms"
       ]
     }
   ]

@@ -1,5 +1,8 @@
 import Database from 'better-sqlite3';
 import type { CarId, DriverKey, SessionUid } from '@pitwall/domain';
+import { SchemaVersionError } from './schema-version-error.ts';
+
+export { SchemaVersionError };
 
 export type Db = Database.Database;
 
@@ -54,18 +57,6 @@ export type SessionRow = {
   settings: Record<string, number>;
   drivers: ReadonlyArray<{ carId: CarId; driverKey: DriverKey }>;
 };
-
-export class SchemaVersionError extends Error {
-  override readonly name = 'SchemaVersionError';
-  readonly found: number;
-  readonly expected: number;
-
-  constructor(found: number, expected: number) {
-    super(`database schema version ${found}, expected ${expected}`);
-    this.found = found;
-    this.expected = expected;
-  }
-}
 
 /** Opens (creating it if empty) the pitwall database; a database of any other schema version is refused. */
 export function openDatabase(path: string): Db {

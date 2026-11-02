@@ -6,6 +6,7 @@ import {
   known,
   MAX_CARS,
   MINI_SECTORS,
+  toSessionTime,
   type CarId,
   type CarState,
   type Corners,
@@ -69,7 +70,7 @@ const perCorner = <T>(make: () => T): Corners<T> => ({ fl: make(), fr: make(), r
 
 /**
  * A confirmed 90 s lap of car 0 (lap 1, sectors three thirds of `lapTimeMs` summing exactly to it (30 s each at 90 s), valid, soft C3, no SC), every `Known` field known at
- * `completedAt`. Lap-end fields: wear 0 % per corner, ERS store 4 MJ, deployed and harvested 0, no damage, channel
+ * `completedAt`. Lap-start samples: wear 0 % per corner, ERS store 4 MJ (so the lap's own wear and ERS change are 0). Lap-end fields: wear 0 % per corner, ERS store 4 MJ, deployed and harvested 0, no damage, channel
  * ranges around tyres 90 to 100 degC and 23 to 27 psi, brakes 300 to 800 degC, engine 110 degC. `completedAt` defaults
  * to `lapNumber * lapTimeMs`. Any field is overridable.
  */
@@ -96,6 +97,8 @@ export function lap(over: Partial<LapRecord> = {}): LapRecord {
     positionAtEnd: 1,
     status: 'confirmed',
     completedAt: at,
+    wearAtStartPct: perCorner(() => known(0, at)),
+    ersStoreAtStartJ: known(4_000_000, at),
     wearAtEndPct: perCorner(() => known(0, at)),
     ersStoreAtEndJ: known(4_000_000, at),
     ersDeployedJ: known(0, at),
@@ -154,8 +157,8 @@ export function flagPhase(over: Partial<FlagPhase> = {}): FlagPhase {
  * `cars` cars (ids 0..cars-1) each running `laps` laps from session time 0 at a constant pace: car `i` at `paceMs[i]`
  * (or the one `paceMs` for all; throws if an array is shorter than `cars`). Lap `n` (1-based) of a car is a `lap()` with
  * these defaults: it ends at `n * pace`; sectors are thirds of the pace; `fuelAtStartKg` 100 - 2 * (n - 1) and
- * `fuelAtEndKg` 2 kg less; `tyreAgeAtStart` n - 1 (one stint, soft C3); `wearAtEndPct` n % per corner; ERS store 4 MJ
- * at every lap end; `positionAtEnd` is the car's order by cumulative time at the end of lap n (ties by id). No in or out
+ * `fuelAtEndKg` 2 kg less; `tyreAgeAtStart` n - 1 (one stint, soft C3); `wearAtStartPct` n - 1 and `wearAtEndPct` n % per corner (1 % a
+ * lap); ERS store 4 MJ at every lap start and end; `positionAtEnd` is the car's order by cumulative time at the end of lap n (ties by id). No in or out
  * laps and no SC share are set. `miniSectors` holds, per car, laps 1..n with segments 0..49 plus the closing line crossing (lap n + 1, segment 0) at `n * pace`, so `laps * 50 + 1` crossings per car, sorted by time (engine convention, see `crossings`).
  * The linear defaults have no physical floor or ceiling: fuel at the end of a lap goes below 0 kg after lap 50 and wear
  * above 100 % after lap 100, so a test that needs real values keeps `laps` below those or overrides them.
@@ -185,6 +188,7 @@ export function field({ cars, laps, paceMs }: { cars: number; laps: number; pace
           tyreAgeAtStart: n - 1,
           fuelAtStartKg: known(start, at),
           fuelAtEndKg: known(start - 2, at),
+          wearAtStartPct: perCorner(() => known(n - 1, at)),
           wearAtEndPct: perCorner(() => known(n, at)),
         }),
       );
@@ -301,12 +305,15 @@ export function telemetryRestricted(car: CarState): CarState {
   return copy;
 }
 
+/** The view's situation by default: a race under way since session time 0, not paused. */
+export const RACING: EngineView['situation'] = { session: { kind: 'racing', start: toSessionTime(0), startLeaderLap: 1 }, paused: false };
+
 /**
  * The `EngineView` of a race session. `cars` (default: none, a 22-slot list is padded with idle cars so ids index it)
  * are placed by their `id`; `history` fills the lists you give and leaves the rest empty; `session` merges onto a
  * default race session; `config` is the effective config by section key (absent sections read their declared defaults);
- * `outputs` are the upstream calculators' outputs; `delta` defaults to "everything in `history` is new". Feed is idle and
- * healthy; `feed` overrides it. `changed` is empty.
+ * `outputs` are the upstream calculators' outputs; `delta` defaults to "everything in `history` is new"; `situation`
+ * defaults to `RACING`. Feed is idle and healthy; `feed` overrides it. `changed` is empty.
  */
 export function engineView({
   cars = [],
@@ -316,6 +323,7 @@ export function engineView({
   outputs = new Map(),
   delta,
   activeFlagPhase,
+  situation = RACING,
   feed = {},
   playerCar = 0,
   sessionTime = 0,
@@ -327,6 +335,7 @@ export function engineView({
   outputs?: ReadonlyMap<string, unknown>;
   delta?: EngineView['delta'];
   activeFlagPhase?: EngineView['activeFlagPhase'];
+  situation?: EngineView['situation'];
   feed?: Partial<FeedMetricsView>;
   playerCar?: number;
   sessionTime?: SessionTime;
@@ -338,7 +347,7 @@ export function engineView({
   });
   const slots = Array.from({ length: Math.max(MAX_CARS, ...cars.map((c) => c.id + 1)) }, (_, i) => base.cars[i] ?? createCarState(carId(i)));
   for (const c of cars) slots[c.id] = c;
-  const full: History = { laps: [], stints: [], pitStops: [], flagPhases: [], events: [], miniSectors: [], ...history };
+  const full: History = { laps: [], stints: [], pitStops: [], flagPhases: [], sessionPhases: [], pauses: [], events: [], miniSectors: [], ...history };
   const { open: _open, ...state } = {
     ...base,
     cars: slots,
@@ -351,8 +360,9 @@ export function engineView({
   return {
     state,
     activeFlagPhase,
+    situation,
     changed: new Set(),
-    delta: delta ?? { before: historyLengths({ laps: [], stints: [], pitStops: [], flagPhases: [], events: [], miniSectors: [] }), after: lengths, truncated: false },
+    delta: delta ?? { before: historyLengths({ laps: [], stints: [], pitStops: [], flagPhases: [], sessionPhases: [], pauses: [], events: [], miniSectors: [] }), after: lengths, truncated: false },
     feed: { ...IDLE_FEED, ...feed },
     outputs,
     config,
@@ -361,5 +371,5 @@ export function engineView({
 
 /** A `History` with the given lists and the rest empty: pass it to `engineView({ history })`. */
 export function history(lists: Partial<History> = {}): History {
-  return { laps: [], stints: [], pitStops: [], flagPhases: [], events: [], miniSectors: [], ...lists };
+  return { laps: [], stints: [], pitStops: [], flagPhases: [], sessionPhases: [], pauses: [], events: [], miniSectors: [], ...lists };
 }

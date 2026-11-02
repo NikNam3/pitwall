@@ -23,7 +23,7 @@ export type TyreLifeRow = {
   rateText: string;
   lapsText: string;
   lapsToLimit: Known<number>;
-  /** Why a cell is empty, for the hover. */
+  /** Why a value is unknown: its cell shows the reason's mark, the reason on hover. */
   reasons: { wear: UnknownReason | undefined; rate: UnknownReason | undefined; laps: UnknownReason | undefined };
 };
 

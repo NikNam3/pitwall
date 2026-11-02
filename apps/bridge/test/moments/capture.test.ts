@@ -6,7 +6,7 @@
 //  - append topics (`laps`) carry `entries`, state topics carry `value`;
 //  - deterministic: two runs give byte-identical JSON.
 import { existsSync } from 'node:fs';
-import { TOPICS, type SessionInfo, type TopicName } from '@pitwall/contracts';
+import { canonicalJson, TOPICS, type SessionInfo, type TopicName } from '@pitwall/contracts';
 import { carId, MAX_CARS, type CarId } from '@pitwall/domain';
 import { describe, expect, it } from 'vitest';
 import { FEATURES } from '../../src/features/index.generated.ts';
@@ -20,12 +20,6 @@ const LAP10 = 'race-zandvoort-lap10.pwrec.gz';
 /** The `raceZandvoortLap10.crossing` moment: just after the player's line crossing. */
 const CROSSING_MS = 3200;
 
-/** JSON with sorted object keys, so equal params give equal text. */
-const canonical = (value: unknown): string =>
-  JSON.stringify(value, (_k, v: unknown) =>
-    typeof v === 'object' && v !== null && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => a.localeCompare(b))) : v,
-  );
-
 const JOB_TOPICS = new Set<string>(FEATURES.flatMap((f) => f.topics.flatMap((b) => ('fromJob' in b ? [b.topic] : []))));
 
 /** The feed topics a moment captures with params, with their `momentParams`, from the contracts alone. */
@@ -37,7 +31,7 @@ const PARAM_TOPICS = (Object.keys(TOPICS) as TopicName[]).flatMap((topic) => {
 const activeCars = (values: MomentValues): CarId[] =>
   values.flatMap((v) => (v.topic === 'car.detail' && (v.value as { active?: boolean } | undefined)?.active === true ? [(v.params as { carId: CarId }).carId] : []));
 
-const paramsOf = (values: MomentValues, topic: string): string[] => values.filter((v) => v.topic === topic).map((v) => canonical(v.params));
+const paramsOf = (values: MomentValues, topic: string): string[] => values.filter((v) => v.topic === topic).map((v) => canonicalJson(v.params));
 
 describe('captureMoment', () => {
   it('twice gives byte-identical JSON', async () => {
@@ -70,7 +64,7 @@ describe('captureMoment', () => {
     expect(active.length).toBeGreaterThan(0);
     expect(PARAM_TOPICS.length).toBeGreaterThan(2);
     for (const { topic, momentParams } of PARAM_TOPICS) {
-      const expected = momentParams(active).map(canonical);
+      const expected = momentParams(active).map(canonicalJson);
       const got = paramsOf(values, topic);
       expect(got.length, topic).toBeGreaterThan(0);
       // a state topic without a value is left out, so the moment holds an ordered part of the expected params
@@ -93,8 +87,8 @@ describe('captureMoment', () => {
     const inactive = Array.from({ length: MAX_CARS }, (_, i) => carId(i)).filter((id) => !active.includes(id));
     expect(inactive.length).toBeGreaterThan(0);
     for (const { topic, momentParams } of PARAM_TOPICS) {
-      const allowed = new Set(momentParams(active).map(canonical));
-      const inactiveOnly = momentParams(inactive).map(canonical).filter((p) => !allowed.has(p));
+      const allowed = new Set(momentParams(active).map(canonicalJson));
+      const inactiveOnly = momentParams(inactive).map(canonicalJson).filter((p) => !allowed.has(p));
       expect(inactiveOnly.length, topic).toBeGreaterThan(0);
       for (const p of inactiveOnly) expect(paramsOf(values, topic), topic).not.toContain(p);
     }

@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { carId, known, toSessionTime, unknown } from '@pitwall/domain';
 import type { IncidentEntry, IncidentForUs, Known, RaceMoment } from '@pitwall/domain';
 import type { CarOverview } from '@pitwall/contracts';
-import { columnsFor, fitRow, incidentRowText, incidentRows } from './rows.ts';
+import type { CellPart } from '../../kit/grid/grid.ts';
+import { columnsFor, fitRow, incidentRowText, incidentRows, type IncidentCell } from './rows.ts';
 
 const k = <T>(v: T): Known<T> => known(v, 0);
 const overview = (id: number, name: string): CarOverview =>
@@ -54,17 +55,19 @@ describe('incidentRows', () => {
 
   it('shows no gap part when the entry has no other car (otherCarId notApplicable)', () => {
     const [row] = incidentRows([entry({ forUs: [forUs({ otherCarId: unknown('notApplicable'), gapBeforeMs: unknown('notApplicable') })] })], cars, undefined);
-    expect(row!.cells.forUs).toEqual({ text: 'us P5→P4' });
+    expect(row!.cells.forUs).toMatchObject({ text: 'us P5→P4' });
+    expect(row!.cells.forUs.reason).toBeUndefined();
   });
 
-  it('leaves an unknown position out, with its reason on hover (no invented position)', () => {
+  it('keeps the known position after an unknown position before, with the before\'s reason on hover (no invented position)', () => {
     const [row] = incidentRows([entry({ forUs: [forUs({ positionBefore: unknown('notReceived') })] })], cars, undefined);
-    expect(row!.cells.forUs).toEqual({ text: 'us, OCO +4.1→DNF', reason: 'notReceived' });
+    expect(row!.cells.forUs).toMatchObject({ text: 'us →P4, OCO +4.1→DNF', reason: 'notReceived' });
   });
+
 
   it('gives an unknown gap after its reason on hover; DNF (not applicable) needs none', () => {
     const [waiting] = incidentRows([entry({ forUs: [forUs({ gapAfterMs: unknown('notReceived') })] })], cars, undefined);
-    expect(waiting!.cells.forUs).toEqual({ text: 'us P5→P4, OCO +4.1→', reason: 'notReceived' });
+    expect(waiting!.cells.forUs).toMatchObject({ text: 'us P5→P4, OCO +4.1→', reason: 'notReceived' });
     const [retired] = incidentRows([entry()], cars, undefined);
     expect(retired!.cells.forUs.reason).toBeUndefined();
   });
@@ -79,12 +82,113 @@ describe('incidentRows', () => {
     expect(row!.cells.forUs.text.startsWith('us P7→,')).toBe(true);
   });
 
-  it('leaves the gap part out when both gaps are unknown, and the cell empty without forUs', () => {
+  it('keeps the other car and the arrow when both gaps are unknown, each mark in its place; the cell is empty without forUs', () => {
     const [a, b] = incidentRows(
       [entry({ forUs: [forUs({ gapBeforeMs: unknown('insufficientData'), gapAfterMs: unknown('insufficientData') })] }), minor()],
       cars, undefined);
-    expect(a!.cells.forUs.text).toBe('us P5→P4');
+    expect(a!.cells.forUs).toMatchObject({ text: 'us P5→P4, OCO →', reason: 'insufficientData' });
+    expect(a!.cells.forUs.parts?.filter((p) => p.reason !== undefined).map((p) => p.reason)).toEqual(['insufficientData', 'insufficientData']);
     expect(b!.cells.forUs.text).toBe('');
+  });
+
+  // One builder of the for-us cell (review 2, F7; review 4, W2): the cell is pieces, each a value with its own leading
+  // separator (`us`, ` P5→P4`, `, OCO`, ` +4.1→DNF`; between our cars ` · `). The parts show every piece, an unknown value
+  // as its mark after its separator; the plain text joins the known pieces' texts, so an unknown value leaves with its
+  // separator and nothing is patched afterwards. A pair (`P5→P4`, `+4.1→DNF`) is one piece: an unknown side leaves the
+  // arrow and the pair keeps its separator; the arrow stays when both sides are unknown. The position pair and the gap
+  // pair follow one rule (review 5, R5): an unknown position before keeps the known position after (`…→P4`).
+  describe('the for-us cell is built from its pieces', () => {
+    /** A cell's plain text and, when it has an unknown value, its parts as one line with `‹reason›` at each mark. */
+    type Expected = { text: string; parts?: string };
+    const marked = (parts: readonly CellPart[]): string => parts.map((p) => (p.reason === undefined ? p.text : `‹${p.reason}›`)).join('');
+    const cellOf = (list: IncidentForUs[]): IncidentCell => incidentRows([entry({ forUs: list })], cars, undefined)[0]!.cells.forUs;
+
+    const expectCell = (cell: IncidentCell, { text, parts }: Expected): void => {
+      expect(cell.text).toBe(text);
+      expect(cell.text, 'no leading, trailing or double space').not.toMatch(/^ | $| {2}/);
+      if (parts === undefined) {
+        expect(cell.parts, 'a known cell shows its text alone').toBeUndefined();
+        expect(cell.reason).toBeUndefined();
+        return;
+      }
+      expect(cell.parts, 'an unknown value has its part').toBeDefined();
+      expect(marked(cell.parts!)).toBe(parts);
+      expect(cell.parts!.filter((p) => p.reason !== undefined).every((p) => p.text === ''), 'a mark stands alone in its part').toBe(true);
+      expect(cell.reason, 'the hover gives the first mark\'s reason').toBe(/‹(\w+)›/.exec(parts)?.[1]);
+    };
+
+    const none = unknown('notApplicable');
+    const before = { known: k(5), unknown: unknown('notReceived') };
+    const after = { known: k(4), unknown: unknown('insufficientData') };
+    const other = {
+      present: { otherCarId: k(carId(2)), gapBeforeMs: k(4100), gapAfterMs: none },
+      absent: { otherCarId: none, gapBeforeMs: none, gapAfterMs: none },
+    };
+    /** Every combination of the position before and after, and the other car, for one of our cars. */
+    const matrix: [keyof typeof before, keyof typeof after, keyof typeof other, Expected][] = [
+      ['known', 'known', 'present', { text: 'us P5→P4, OCO +4.1→DNF' }],
+      ['known', 'unknown', 'present', { text: 'us P5→, OCO +4.1→DNF', parts: 'us P5→‹insufficientData›, OCO +4.1→DNF' }],
+      ['unknown', 'known', 'present', { text: 'us →P4, OCO +4.1→DNF', parts: 'us ‹notReceived›→P4, OCO +4.1→DNF' }],
+      ['unknown', 'unknown', 'present', { text: 'us →, OCO +4.1→DNF', parts: 'us ‹notReceived›→‹insufficientData›, OCO +4.1→DNF' }],
+      ['known', 'known', 'absent', { text: 'us P5→P4' }],
+      ['known', 'unknown', 'absent', { text: 'us P5→', parts: 'us P5→‹insufficientData›' }],
+      ['unknown', 'known', 'absent', { text: 'us →P4', parts: 'us ‹notReceived›→P4' }],
+      ['unknown', 'unknown', 'absent', { text: 'us →', parts: 'us ‹notReceived›→‹insufficientData›' }],
+    ];
+    const ofCombination = (b: keyof typeof before, a: keyof typeof after, o: keyof typeof other): IncidentForUs =>
+      forUs({ positionBefore: before[b], positionAfter: after[a], ...other[o] });
+
+    it.each(matrix)('position before %s, after %s, other car %s: one of our cars', (b, a, o, expected) => {
+      expectCell(cellOf([ofCombination(b, a, o)]), expected);
+    });
+
+    /** The second of our cars, known and alone: `us —`. */
+    const teammate = forUs({ ourCarId: carId(5), positionBefore: k(7), positionAfter: k(7), ...other.absent });
+    const teammateExpected: Expected = { text: 'us —' };
+    /** Two of our cars one after the other: each its own, ` · ` between them. */
+    const joined = (x: Expected, y: Expected): Expected => {
+      const text = `${x.text} · ${y.text}`;
+      return x.parts === undefined && y.parts === undefined ? { text } : { text, parts: `${x.parts ?? x.text} · ${y.parts ?? y.text}` };
+    };
+
+    it.each(matrix)('position before %s, after %s, other car %s: first of our two cars', (b, a, o, expected) => {
+      expectCell(cellOf([ofCombination(b, a, o), teammate]), joined(expected, teammateExpected));
+    });
+
+    it.each(matrix)('position before %s, after %s, other car %s: second of our two cars', (b, a, o, expected) => {
+      expectCell(cellOf([teammate, { ...ofCombination(b, a, o), ourCarId: carId(5) }]), joined(teammateExpected, expected));
+    });
+
+    it.each(matrix)('position before %s, after %s, other car %s: both of our two cars', (b, a, o, expected) => {
+      expectCell(cellOf([ofCombination(b, a, o), { ...ofCombination(b, a, o), ourCarId: carId(5) }]), joined(expected, expected));
+    });
+
+    // the other car's piece and its gap pair
+    const gapCases: Record<string, { list: IncidentForUs[] } & Expected> = {
+      'gap after not received': {
+        list: [forUs({ gapAfterMs: unknown('notReceived') })], text: 'us P5→P4, OCO +4.1→', parts: 'us P5→P4, OCO +4.1→‹notReceived›',
+      },
+      'gap before unknown': {
+        list: [forUs({ gapBeforeMs: unknown('insufficientData'), gapAfterMs: k(5800) })], text: 'us P5→P4, OCO →+5.8', parts: 'us P5→P4, OCO ‹insufficientData›→+5.8',
+      },
+      'both gaps unknown': {
+        list: [forUs({ gapBeforeMs: unknown('insufficientData'), gapAfterMs: unknown('realism') })],
+        text: 'us P5→P4, OCO →', parts: 'us P5→P4, OCO ‹insufficientData›→‹realism›',
+      },
+      'position before and gap after unknown': {
+        list: [forUs({ positionBefore: unknown('notReceived'), gapAfterMs: unknown('notReceived') })],
+        text: 'us →P4, OCO +4.1→', parts: 'us ‹notReceived›→P4, OCO +4.1→‹notReceived›',
+      },
+      // the code is a value like any other: missing from the field, it leaves with its separator `, `
+      'other car missing from the field, gap after unknown': {
+        list: [forUs({ otherCarId: k(carId(9)), gapAfterMs: unknown('notReceived') })],
+        text: 'us P5→P4 +4.1→', parts: 'us P5→P4, ‹notReceived› +4.1→‹notReceived›',
+      },
+    };
+
+    it.each(Object.entries(gapCases))('%s', (_name, { list, ...expected }) => {
+      expectCell(cellOf(list), expected);
+    });
   });
 
   it('renders an unresolved time loss as an empty cell with its reason on hover', () => {
@@ -146,6 +250,34 @@ describe('the incident detail in the what cell (mockup: time loss (T7), damage F
   it('other kinds show no sector', () => {
     expect(what({ kind: 'penalty', where: { sector: k(1) } })).toBe('penalty');
     expect(what({ kind: 'neutralised', where: { sector: unknown('notApplicable') } })).toBe('neutralised');
+  });
+
+  describe('a penalty entry names the penalty given (the PEN kind from incidents)', () => {
+    const penalty = (detail: IncidentEntry['penalty']): string =>
+      what({ kind: 'penalty', severity: 'minor', timeLostMs: unknown('notApplicable'), where: { sector: k(2) }, ...(detail && { penalty: detail }) });
+
+    it('beside the kind word when both fit the what column: stop-go, a time penalty with the kit time, grid', () => {
+      expect(penalty({ kind: 'stopGo' })).toBe('penalty stop-go');
+      expect(penalty({ kind: 'time', timeMs: 5_000 })).toBe('penalty +5 s');
+      expect(penalty({ kind: 'time', timeMs: 10_000 })).toBe('penalty +10 s');
+      expect(penalty({ kind: 'grid' })).toBe('penalty grid');
+    });
+
+    it('alone when kind word and name do not fit: the name says it is a penalty', () => {
+      expect(penalty({ kind: 'driveThrough' })).toBe('drive-through');
+      expect(penalty({ kind: 'disqualified' })).toBe('disqualified');
+      expect(penalty({ kind: 'tyreRegulations' })).toBe('tyre regulations');
+    });
+
+    it('a time penalty without its time, or an entry without the kind, is a bare penalty (no invented time)', () => {
+      expect(penalty({ kind: 'time' })).toBe('penalty');
+      expect(penalty(undefined)).toBe('penalty');
+    });
+
+    it('a full row of a drive-through keeps the grid', () => {
+      const [row] = incidentRows([minor({ id: 'penalty:5:210000', kind: 'penalty', penalty: { kind: 'driveThrough' } })], cars, undefined);
+      expect(incidentRowText('full', row!).trimEnd()).toBe(' L21  PIA      drive-through');
+    });
   });
 
   it('full rows keep the grid with the detail, as the mockup', () => {

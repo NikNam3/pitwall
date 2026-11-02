@@ -93,7 +93,7 @@ export class SessionTracker {
     this.#dropOldPending(receivedAtMs);
     const uid = packet.header.sessionUid;
     if (uid === current.uid) {
-      if (!isSessionEnd(packet)) return framesOf(current.uid, current.assembler.push(packet));
+      if (!isSessionEnd(packet)) return framesOf(current.uid, current.assembler.push(packet, receivedAtMs));
       // Frame ids of the waiting packets and of SEND are unreliable; they join the newest frame.
       for (const waiting of this.#pending) current.assembler.attach(waiting.packet);
       current.assembler.attach(packet);
@@ -126,7 +126,7 @@ export class SessionTracker {
     const assembler = new FrameAssembler({ feedId: this.#feedId });
     this.#assemblers.push(assembler);
     this.#current = { uid: sessionUid, assembler };
-    return [{ type: 'sessionStarted', sessionUid, session, receivedAtMs }, ...framesOf(sessionUid, assembler.push(session))];
+    return [{ type: 'sessionStarted', sessionUid, session, receivedAtMs }, ...framesOf(sessionUid, assembler.push(session, receivedAtMs))];
   }
 
   /** Flushes the current session's frames and ends it; waiting UID-0 packets never saw SEND and are dropped. */

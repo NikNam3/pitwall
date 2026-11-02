@@ -4,6 +4,7 @@ import { applyFlagPhases } from '../history/flags.ts';
 import { applyLaps } from '../history/laps.ts';
 import { applyMiniSectors } from '../history/mini-sectors.ts';
 import { applyPitStops } from '../history/pit-stops.ts';
+import { applySessionClock, applySituations } from '../history/situations/index.ts';
 import { applyStints } from '../history/stints.ts';
 import type { EngineState } from '../state/engine-state.ts';
 import { applyCondition } from './condition.ts';
@@ -15,9 +16,19 @@ import { applyRealism } from './realism.ts';
 import { applySession } from './session.ts';
 import { applyTiming } from './timing.ts';
 import { applyTyres } from './tyres.ts';
-import type { StepOutput, SubStep } from './types.ts';
+import type { FlashbackReport, StepOutput, SubStep } from './types.ts';
 
-export { ALL_CHANGE_TAGS, CHANGE_TAGS, type ChangeTag, type LapCorrection, type StepOutput, type SubStep } from './types.ts';
+export {
+  ALL_CHANGE_TAGS,
+  CHANGE_TAGS,
+  type ChangeTag,
+  type ClockFall,
+  type ClockJump,
+  type FlashbackReport,
+  type LapCorrection,
+  type StepOutput,
+  type SubStep,
+} from './types.ts';
 
 /** Run in this order; a sub-step may rely on the ones before it. */
 export const SUB_STEPS: SubStep[] = [
@@ -30,6 +41,8 @@ export const SUB_STEPS: SubStep[] = [
   applyDynamics,
   applyOwnCar,
   applyRealism,
+  // The first history step: the others read the session phase it records.
+  applySituations,
   applyPitStops,
   applyLaps,
   applyStints,
@@ -45,9 +58,14 @@ const refreshActive = (state: EngineState): void => {
   }
 };
 
-/** Applies one frame to the state in place (spec 6.1). */
-export function step(state: EngineState, frame: Frame): StepOutput {
+/**
+ * Applies one frame to the state in place (spec 6.1). The situation tracker reads the session time's jump first, and
+ * every sub-step stamps with the frame's time on its race clock (spec 3.3). `report`: the `SessionRunner` took the
+ * frame as a flashback report.
+ */
+export function step(state: EngineState, received: Frame, report?: FlashbackReport): StepOutput {
   const out: StepOutput = { changed: new Set(), corrections: [] };
+  const frame = applySessionClock(state, received, out, report);
   for (const subStep of SUB_STEPS) subStep(state, frame, out);
   if (out.changed.has('identity') || out.changed.has('timing')) refreshActive(state);
   state.lastFrameId = frame.frameId;

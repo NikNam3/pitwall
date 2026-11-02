@@ -5,7 +5,7 @@ import type { GalleryEntry } from '../../kit/gallery-types.ts';
 import { boardRow, incidentEntry, interval, lapBoard, overview, sessionInfo, toCar } from './fixtures.ts';
 import type { widget } from './widget.ts';
 
-/** Our car (id 3, KUH) is fourth; SAR is a lap down; OCO has retired; ALB is on an out lap. */
+/** Our car (id 3, KUH) is fourth; SAR is a lap down; OCO has retired (its times will not come); ALB is on an out lap. */
 const cars = [
   overview(0, { name: 'Max Verstappen', position: 1, gridPosition: 1 }),
   overview(1, { name: 'Lando Norris', position: 2, gridPosition: 3 }),
@@ -19,7 +19,8 @@ const cars = [
 
 const intervals = [
   interval(0), interval(1, 2184, 2184, 0, 1), interval(2, 5903, 3719, 0, -1), interval(3, 9102, 3199),
-  interval(4, 14_880, 5778, 0, 2), interval(5, 16_025, 1145, 0, -1), interval(6, 70_000, 5000, 1), interval(7),
+  interval(4, 14_880, 5778, 0, 2), interval(5, 16_025, 1145, 0, -1), interval(6, 70_000, 5000, 1),
+  // no interval for OCO (7): `gaps` leaves out-of-race cars out of the intervals
 ];
 const toUs = [
   toCar(0, -9102), toCar(1, -6918), toCar(2, -3199), toCar(3, undefined), toCar(4, 5778), toCar(5, 6923), toCar(6, undefined, 1), toCar(7, undefined),
@@ -32,7 +33,7 @@ const board = lapBoard(3, [
   boardRow(4, undefined, [28_320]),
   boardRow(5, 105_660, [28_402, 41_771, 35_487]),
   boardRow(6, 106_902, [28_771, 42_004, 36_127]),
-  boardRow(7, undefined),
+  boardRow(7, 'retired'),
 ]);
 
 /** A moment whose cause names the incident entry `collision-6-7` (race-moment's incident cause carries `entryId`). */
@@ -54,7 +55,7 @@ const gallery: GalleryEntry<typeof widget> = {
     },
     // Lapped car (+1 lap) and a retired car dim at the bottom, our car marked.
     lappedAndRetired: field,
-    // A rival whose times are withheld by realism mode: empty cells, the row still renders.
+    // A rival whose times are withheld by realism mode: the realism mark in each time cell, the row still renders.
     realismHiddenRival: {
       ...field,
       board: lapBoard(3, [
@@ -72,6 +73,14 @@ const gallery: GalleryEntry<typeof widget> = {
     bigMoves: {
       ...field,
       intervals: intervals.map((i) => (i.carId === carId(1) ? interval(1, 2184, 2184, 0, 19) : i.carId === carId(2) ? interval(2, 5903, 3719, 0, -19) : i)),
+    },
+    // Unserved penalties: NOR two drive-throughs (2DT), PIA a stop-go beside a 5 s time penalty (the time in the title), LEC 5 s.
+    driveThrough: {
+      ...field,
+      cars: cars.map((c) =>
+        c.id === carId(1) ? overview(1, { name: 'Lando Norris', position: 2, gridPosition: 3, unservedDriveThroughs: 2 })
+        : c.id === carId(5) ? overview(5, { name: 'Oscar Piastri', position: 6, gridPosition: 5, age: 15, unservedStopGos: 1, timePenaltyMs: 5000 })
+        : c),
     },
     // Outside the race the moment is not applicable.
     noMoment: { ...field, moment: unknown('notApplicable') },

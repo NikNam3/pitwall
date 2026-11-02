@@ -116,6 +116,8 @@
   .grid {
     display: flex;
     flex-wrap: wrap;
+    /* Cells keep their own height: a neighbour's case must never change another cell's screenshot. */
+    align-items: flex-start;
     gap: var(--pw-panel-gap);
   }
 </style>

@@ -6,15 +6,15 @@
   import { gapToCarCell } from '../../kit/car/gap-to-car.ts';
   import CompoundMark from '../../kit/compound/CompoundMark.svelte';
   import Value from '../../kit/values/Value.svelte';
-  import { unknownReason } from '../../kit/text.ts';
+  import TextCell from '../../kit/values/TextCell.svelte';
   import { positionMarkText } from '../../kit/values/position-mark.ts';
-  import { formatCount, formatDeltaMs, formatGap, formatLapNumber, formatLapsDown, formatLapTime, formatPenaltyMs, formatPlace, formatSector, formatWarnings } from '../../kit/values/format.ts';
+  import { formatCount, formatDeltaMs, formatGap, formatLapNumber, formatLapsDown, formatLapTime, formatPlace, formatSector } from '../../kit/values/format.ts';
   import { sectorStatusRole } from '../../emphasis/index.ts';
   import { roleOrUndefined } from '../../theme/index.ts';
   import type { Role } from '../../theme/roles.ts';
   import type { SectorStatus } from '@pitwall/domain';
   import { TOWER_COLUMNS } from './columns.ts';
-  import { incidentRole, penaltyRole } from './emphasis.ts';
+  import { incidentRole } from './emphasis.ts';
   import { buildRows, visibleRows, type TowerRow } from './rows.ts';
   import * as text from './text.ts';
   import type { widget } from './widget.ts';
@@ -31,7 +31,6 @@
     const colour = roleOrUndefined(r);
     return colour === undefined ? undefined : `inset 2px 0 0 ${colour}`;
   };
-  const penalty = (r: TowerRow) => (r.penaltyMs > 0 ? formatPenaltyMs(r.penaltyMs) : r.warnings > 0 ? formatWarnings(r.warnings) : '');
 </script>
 
 {#snippet position(r: TowerRow)}
@@ -43,13 +42,13 @@
 {#snippet car(r: TowerRow)}<CarLabel identity={r.overview.identity} ours={r.ours} />{/snippet}
 {#snippet gap(r: TowerRow)}{#if r.retired}{text.dnf}{:else if r.lapsDown > 0}{formatLapsDown(r.lapsDown)}{:else}<Value value={r.gapToLeader} format={formatGap} />{/if}{/snippet}
 {#snippet interval(r: TowerRow)}{#if r.retired}{formatLapNumber(r.retiredAtLap ?? NaN)}{:else if r.lapsDown === 0}<Value value={r.interval} format={formatDeltaMs} />{/if}{/snippet}
-{#snippet toUs(r: TowerRow)}{#if !r.retired}{@const c = gapToCarCell(r.toUs)}<span title={c.reason === undefined ? undefined : unknownReason[c.reason]}>{c.text}</span>{/if}{/snippet}
+{#snippet toUs(r: TowerRow)}<TextCell {...gapToCarCell(r.toUs)} />{/snippet}
 {#snippet last(r: TowerRow)}<span style:color={colourOf(r.lastLapStatus, r.ours)}><Value value={r.lastLap} format={formatLapTime} /></span>{/snippet}
 {#snippet sector(r: TowerRow, i: number)}{@const s = r.sectors[i]}{#if s}<span style:color={colourOf(s.status, r.ours)}><Value value={s.timeMs} format={formatSector} /></span>{/if}{/snippet}
 {#snippet compound(r: TowerRow)}<CompoundMark compound={r.compound} />{/snippet}
 {#snippet age(r: TowerRow)}{formatCount(r.age)}{/snippet}
 {#snippet stops(r: TowerRow)}{formatCount(r.stops)}{/snippet}
-{#snippet pen(r: TowerRow)}<span style:color={roleOrUndefined(penaltyRole(r.penaltyMs))}>{penalty(r)}</span>{/snippet}
+{#snippet pen(r: TowerRow)}<TextCell {...r.penalty} />{/snippet}
 {#snippet pit(r: TowerRow)}{r.pit === undefined ? '' : text.pit[r.pit]}{/snippet}
 
 {#snippet s1(r: TowerRow)}{@render sector(r, 0)}{/snippet}

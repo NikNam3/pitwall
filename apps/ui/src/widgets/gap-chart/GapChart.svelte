@@ -1,10 +1,11 @@
 <script lang="ts">
-  // The gap chart (V04): each car's gap to a virtual car at the reference pace, per lap.
+  // The gap chart (V04): each car's gap to a virtual car at the reference pace, per lap, then dotted to its gap now.
   import { carCodeById } from '../../kit/car/car-label.ts';
   import Chart from '../../kit/chart/Chart.svelte';
   import type { WidgetProps } from '../../kit/types.ts';
   import { ourCars } from '../../kit/car/our-cars.ts';
-  import { noDataYet, unknownReason } from '../../kit/text.ts';
+  import { noDataYet } from '../../kit/text.ts';
+  import CellParts from '../../kit/values/CellParts.svelte';
   import { formatGapTick } from '../../kit/values/format.ts';
   import { role } from '../../theme/index.ts';
   import { gapSeries, phaseBands } from './series.ts';
@@ -15,7 +16,7 @@
 
   const ours = $derived(ourCars(data.session));
   const series = $derived(gapSeries(data.gapper, data.cars, ours));
-  const bands = $derived(phaseBands(data.phases));
+  const bands = $derived(phaseBands(data.gapper.phases));
   const header = $derived(text.referenceText(data.gapper, (id) => carCodeById(data.cars, id)));
   // The reference line takes one text row; the chart gets the rest.
   const rowPx = $derived(size.px.height / size.rows);
@@ -23,7 +24,8 @@
 </script>
 
 <div class="gap">
-  <div class="ref" style:color={role('textDim')} style:height="{rowPx}px" title={header.reason === undefined ? undefined : unknownReason[header.reason]}>{header.text}</div>
+  <!-- The parts of the line, a space apart; an unknown part (the lap time, or the reference car's code) shows its mark there. -->
+  <div class="ref" style:color={role('textDim')} style:height="{rowPx}px"><CellParts parts={header} separator=" " /></div>
   {#if series.length === 0}
     <div class="empty" style:color={role('textDim')}>{noDataYet}</div>
   {:else}

@@ -1,6 +1,6 @@
-// Pure helpers of the gap chart: the reference option, the folded flag phases, the bands and one line per car.
-import type { CarOverview, Fold } from '@pitwall/contracts';
-import type { CarId, FlagPhase, GapperLines, GapperReference } from '@pitwall/domain';
+// Pure helpers of the gap chart: the reference option, the bands and one line per car.
+import type { CarOverview } from '@pitwall/contracts';
+import type { CarId, GapperLines, GapperReference } from '@pitwall/domain';
 import { carCodeById } from '../../kit/car/car-label.ts';
 import type { ChartSeries, PhaseBand } from '../../kit/chart/data.ts';
 import { carColour } from '../../theme/index.ts';
@@ -22,36 +22,37 @@ export function gapperReference(
   return { kind: 'leaderAverage' };
 }
 
-/** Flag phases ordered by start; a phase that arrives again (it ended or grew) replaces the old one. */
-export const phasesFold: Fold<FlagPhase, FlagPhase[]> = {
-  init: () => [],
-  add: (acc, incoming) => {
-    const kept = acc.filter((p) => !incoming.some((n) => n.start === p.start));
-    return [...kept, ...incoming].sort((a, b) => a.start - b.start);
-  },
-};
-
 const BAND_KIND = { SC: 'sc', VSC: 'vsc', red: 'red' } as const;
 
-/** The phases as chart bands over the leader's laps, at least one lap wide. */
-export function phaseBands(phases: readonly FlagPhase[]): PhaseBand[] {
+/** The narrowest band in laps, so a phase under which the field stood still (a red flag) still shows. */
+export const MIN_BAND_LAPS = 0.25;
+
+/** The gapper's phases as chart bands on its x; an open phase runs to the right edge of the plot. */
+export function phaseBands(phases: GapperLines['phases']): PhaseBand[] {
   return phases.map((p) => ({
-    from: p.startLeaderLap,
-    to: Math.max(p.endLeaderLap, p.startLeaderLap + 1),
+    from: p.fromLap,
+    to: Math.max(p.toLap.known ? p.toLap.value : Number.POSITIVE_INFINITY, p.fromLap + MIN_BAND_LAPS),
     kind: BAND_KIND[p.kind],
   }));
 }
 
-/** One line per car with laps: lap against -gap in seconds, so a car losing time drops; `ours` from kit `ourCars`. */
+/**
+ * One line per car with laps or a gap now: lap against -gap in seconds, so a car losing time drops; `ours` from kit
+ * `ourCars`. A car with a gap now continues to it as a live (dotted) last segment; in lap 1, before any completed lap,
+ * its line is just that live point.
+ */
 export function gapSeries(lines: GapperLines, cars: readonly CarOverview[], ours: ReadonlySet<CarId>): ChartSeries[] {
   const field = cars.map((c) => ({ id: c.id, teamId: c.identity.teamId, raceNumber: c.identity.raceNumber }));
   const out: ChartSeries[] = [];
   for (const line of lines.cars) {
-    if (line.byLap.length === 0) continue;
+    if (line.byLap.length === 0 && !line.now.known) continue;
     const car = cars.find((c) => c.id === line.carId);
+    const points: ChartSeries['points'] = line.byLap.map((p) => [p.lap, -p.gapMs / 1000]);
+    if (line.now.known) points.push([line.now.value.lap, -line.now.value.gapMs / 1000]);
     out.push({
       label: carCodeById(cars, line.carId).text,
-      points: line.byLap.map((p) => [p.lap, -p.gapMs / 1000]),
+      points,
+      ...(line.now.known ? { liveEnd: true } : {}),
       colour: carColour(car ? { id: car.id, teamId: car.identity.teamId, raceNumber: car.identity.raceNumber } : { id: line.carId, teamId: -1, raceNumber: 0 }, field, ours),
     });
   }

@@ -2,7 +2,7 @@
   // ERS: the store against the attack level, this lap's deploy and harvest, the trend (spec 8.2, V23).
   import type { WidgetProps } from '../../kit/types.ts';
   import Bar from '../../kit/bar/Bar.svelte';
-  import { unknownReason } from '../../kit/text.ts';
+  import TextCell from '../../kit/values/TextCell.svelte';
   import { roleOrUndefined } from '../../theme/index.ts';
   import { ersRole } from './emphasis.ts';
   import * as text from './text.ts';
@@ -15,30 +15,30 @@
   const full = $derived(size.mode === 'full');
   const hot = $derived(ersRole(data.moment));
   const colour = $derived(roleOrUndefined(hot));
-  const why = (r: keyof typeof view.reasons): string | undefined => {
-    const reason = view.reasons[r];
-    return reason === undefined ? undefined : unknownReason[reason];
-  };
 </script>
+
+{#snippet shown(r: keyof typeof view.reasons, known: string)}<TextCell text={known} reason={view.reasons[r]} />{/snippet}
 
 <div class="ers" class:full>
   <div class="row">
     <span class="label">{text.labels.store}</span>
-    <span class="bar" title={text.attackLevel(view.level)}><Bar {...view.bar} cols={full ? BAR_COLS.full : BAR_COLS.compact} role="text" /></span>&nbsp;<span class="num" class:hot={hot !== undefined} style:color={colour} title={why('store')}>{view.store}</span>&nbsp;<span class="flow" class:hot={hot !== undefined} style:color={colour} title={why('flow')}>{view.flow}</span>
+    <span class="bar" title={text.attackLevel(view.level)}><Bar {...view.bar} cols={full ? BAR_COLS.full : BAR_COLS.compact} role="text" /></span>&nbsp;<span class="num" class:hot={hot !== undefined} style:color={colour}>{@render shown('store', view.store)}</span>&nbsp;<span class="flow" class:hot={hot !== undefined} style:color={colour}>{@render shown('flow', view.flow)}</span>
   </div>
   {#if full}
     <div class="row between">
       <span><span class="label">{text.labels.deploy}</span>{text.labels.thisLap}</span>
-      <span title={why('deployed')}>{view.deployed}{view.deployed ? text.joint : ''}{text.labels.limit} {view.deployLimit}</span>
+      <span>{@render shown('deployed', view.deployed)}{text.joint}{text.labels.limit} {view.deployLimit}</span>
     </div>
     <div class="row between">
       <span><span class="label">{text.labels.harvest}</span>{text.labels.thisLap}</span>
-      <span title={why('harvested')}>{view.harvested}</span>
+      <span>{@render shown('harvested', view.harvested)}</span>
     </div>
   {/if}
   <div class="row">
     {#if full}<span class="label">{text.labels.trend}</span>{/if}
-    <span title={why('trend')}>{view.trend}</span>{#if view.trendJoint}<span>{view.trendJoint}</span>{/if}{#if view.attack}<span class:hot={hot !== undefined && view.attackReady} style:color={view.attackReady ? colour : undefined}>{view.attack}</span>{/if}
+    <span>{@render shown('trend', view.trend)}</span><span>{text.joint}</span><span class:hot={hot !== undefined && view.attackReady}
+      ><TextCell text={view.attack} reason={view.reasons.attack} role={view.attackReady ? hot : undefined} /></span
+    >
   </div>
 </div>
 

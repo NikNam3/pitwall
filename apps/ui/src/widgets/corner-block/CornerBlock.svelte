@@ -4,8 +4,8 @@
   import CornerGrid from '../../kit/corners/CornerGrid.svelte';
   import { fitCell } from '../../kit/grid/grid.ts';
   import { useStaleCarFields } from '../../kit/stale/panel-stale.ts';
-  import { cornerNames, unknownReason } from '../../kit/text.ts';
-  import { roleOrUndefined } from '../../theme/index.ts';
+  import { cornerNames } from '../../kit/text.ts';
+  import TextCell from '../../kit/values/TextCell.svelte';
   import { CAR_FIELDS, compactBrake, cornerBlockRows, fullHeader, fullRowFields } from './rows.ts';
   import type { Cell } from './rows.ts';
   import * as text from './text.ts';
@@ -18,10 +18,11 @@
   const brake = $derived(compactBrake(rows));
   const full = $derived(size.mode === 'full');
   const order = ['fl', 'fr', 'rl', 'rr'] as const;
-  const hint = (c: Cell): string | undefined => (c.reason === undefined ? undefined : unknownReason[c.reason]);
 </script>
 
-{#snippet value(c: Cell, shown: string)}<span style:color={roleOrUndefined(c.role)} title={hint(c)}>{shown}</span>{/snippet}
+<!-- `shown` is the cell's text fitted to its column: an unknown keeps that width, its mark right-aligned like the numbers
+     (an unfitted unknown, '', is the mark alone). -->
+{#snippet value(c: Cell, shown: string)}<TextCell text={shown} reason={c.reason} role={c.role} width={shown.length || undefined} align="right" />{/snippet}
 
 <div class="block">
   {#if full}

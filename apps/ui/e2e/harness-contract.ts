@@ -5,6 +5,13 @@ import type { Page } from '@playwright/test';
 /** The gallery (`/gallery` of a build made with `VITE_PITWALL_GALLERY=1`, moments generated) open in an Electron window. */
 export type GalleryHandle = { page: Page; close(): Promise<void> };
 
+export type GalleryOptions = {
+  /** Runs in the gallery page before any of its own scripts (Playwright's init script), e.g. to record what it draws. */
+  initScript?: (() => void) | undefined;
+  /** The gallery page's pixel ratio (`devicePixelRatio`: device pixels per CSS pixel); 1 by default. */
+  deviceScaleFactor?: number | undefined;
+};
+
 export type StartBridgeOptions = {
   /** A fixture name from `fixtures/index.json`, replayed with `pitwall replay <fixture> --paused`. */
   recording: string;

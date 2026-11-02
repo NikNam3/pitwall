@@ -4,9 +4,10 @@ import { unknown } from '@pitwall/domain';
 import { ScenarioBuilder, type FrameDraft } from '../builders/index.ts';
 import { runScenario } from '../support/run.ts';
 
-// The lap-end samples are pinned in lap-end-samples.test.ts; here they only have to be there.
-const lapEnd = { wearAtEndPct: expect.anything(), ersStoreAtEndJ: expect.anything(), ersDeployedJ: expect.anything(),
-  ersHarvestedJ: expect.anything(), damageAtEnd: expect.anything(), channelRange: expect.anything() };
+// The lap-start and lap-end samples are pinned in lap-start-samples.test.ts and lap-end-samples.test.ts; here they only have to be there.
+const lapEnd = { wearAtStartPct: expect.anything(), ersStoreAtStartJ: expect.anything(), wearAtEndPct: expect.anything(),
+  ersStoreAtEndJ: expect.anything(), ersDeployedJ: expect.anything(), ersHarvestedJ: expect.anything(), damageAtEnd: expect.anything(),
+  channelRange: expect.anything() };
 const car = (d: FrameDraft, id = 0) => d.lapData.lapData[id]!;
 const entry = (lapTimeInMs: number, s1: number, s2: number, s3: number, lapValidBitFlags = 0b1111) => ({
   lapTimeInMs, sector1TimeMs: s1, sector2TimeMs: s2, sector3TimeMs: s3, lapValidBitFlags,
@@ -87,7 +88,14 @@ describe('lap validity', () => {
 });
 
 describe('in-laps and out-laps', () => {
-  it('a lap that starts with the driver status "out lap" is an out-lap, also outside the pit lane', () => {
+  /** `[lap, pitStatus, driverStatus]` per frame (pit status 0 none, 1 pitting, 2 in the box; driver status 2 in lap, 3 out lap, 4 on track). */
+  const statuses = (seq: ReadonlyArray<readonly [number, number, number]>) =>
+    runScenario(new ScenarioBuilder({ cars: 1 }).frames(seq.length, (d) => {
+      const [currentLapNum, pitStatus, driverStatus] = seq[d.index]!;
+      Object.assign(car(d), { currentLapNum, pitStatus, driverStatus, lastLapTimeInMs: 80_000 });
+    })).st.history.laps.map((l) => [l.lapNumber, l.inLap, l.outLap]);
+
+  it('the first lap the engine sees, starting with the driver status "out lap" (from the garage), is an out-lap, also outside the pit lane', () => {
     const { st } = runScenario(new ScenarioBuilder({ cars: 1 }).frames(3, (d) => {
       Object.assign(car(d), { driverStatus: d.index === 0 ? 3 : 4, pitStatus: 0 });
       if (d.index === 2) Object.assign(car(d), { currentLapNum: 2, lastLapTimeInMs: 90_000 });
@@ -97,6 +105,26 @@ describe('in-laps and out-laps', () => {
   it('a lap that starts on track is neither', () => {
     const { st } = runScenario(firstLap(2, () => {}));
     expect(st.history.laps.map((l) => [l.inLap, l.outLap])).toEqual([[false, false]]);
+  });
+  it('the lap after the out lap is no out lap, though the driver status still says "out lap" on its first frame', () => {
+    // in lap 6, the line in the pit lane, out lap 7 leaves the pit lane; the game turns the driver status only after the line
+    expect(statuses([[6, 0, 4], [6, 1, 2], [7, 1, 2], [7, 2, 3], [7, 1, 3], [7, 0, 3], [8, 0, 3], [8, 0, 4], [9, 0, 4]]))
+      .toEqual([[6, true, false], [7, false, true], [8, false, false]]);
+  });
+  it('a lap during which the car leaves the pit lane is the out lap, also when it started on track; the next lap is not', () => {
+    // pit entry, box and pit exit all on lap 3 (the pit exit comes before the line)
+    expect(statuses([[3, 0, 4], [3, 1, 2], [3, 2, 3], [3, 1, 3], [3, 0, 3], [4, 0, 3], [4, 0, 4], [5, 0, 4]]))
+      .toEqual([[3, true, true], [4, false, false]]);
+  });
+  it('the timed lap after the out lap from the garage at the session start is no out lap, though the driver status lags at the line', () => {
+    // negative lap distance before the line; the lap number stays 1 at the line, the game times lap 1 from there
+    const seq = [[-1_500, 3, 10_000], [-20, 3, 40_000], [5, 3, 100], [2_500, 1, 45_000]] as const;
+    const { st } = runScenario(new ScenarioBuilder({ cars: 1 }).frames(seq.length + 1, (d) => {
+      const [lapDistance, driverStatus, currentLapTimeInMs] = seq[d.index] ?? [5, 1, 100];
+      Object.assign(car(d), { lapDistance, driverStatus, currentLapTimeInMs, pitStatus: 0 });
+      if (d.index === seq.length) Object.assign(car(d), { currentLapNum: 2, lastLapTimeInMs: 90_000 });
+    }));
+    expect(st.history.laps.map((l) => [l.lapNumber, l.inLap, l.outLap])).toEqual([[1, false, false]]);
   });
 });
 
@@ -181,7 +209,8 @@ describe('confirming laps from Session History', () => {
       carId: 0, lapNumber: 1, lapTimeMs: 81_000, sectorTimesMs: [26_000, 27_000, 28_000], valid: { lap: true, sectors: [true, true, true] },
       actualCompound: 'unknown', visualCompound: 'unknown', tyreAgeAtStart: 0, fuelAtStartKg: unknown('notReceived'), fuelAtEndKg: unknown('notReceived'),
       scShare: 0, vscShare: 0, inLap: false, outLap: false, positionAtEnd: 0, status: 'confirmed', completedAt: st.history.laps.at(-1)!.completedAt,
-      ...lapEnd,
+      ...lapEnd, wearAtStartPct: { fl: unknown('notReceived'), fr: unknown('notReceived'), rl: unknown('notReceived'), rr: unknown('notReceived') },
+      ersStoreAtStartJ: unknown('notReceived'),
     });
   });
   it('a lap swallowed by a jump is confirmed once, however often the packet comes', () => {

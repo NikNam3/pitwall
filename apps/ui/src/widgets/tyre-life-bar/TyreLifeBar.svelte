@@ -5,7 +5,8 @@
   import type { WidgetProps } from '../../kit/types.ts';
   import CompoundMark from '../../kit/compound/CompoundMark.svelte';
   import Bar from '../../kit/bar/Bar.svelte';
-  import { unknownReason } from '../../kit/text.ts';
+  import TextCell from '../../kit/values/TextCell.svelte';
+  import { unknownTitle } from '../../kit/values/unknown-mark.ts';
   import { roleOrUndefined } from '../../theme/index.ts';
   import { formatPercent } from '../../kit/values/format.ts';
   import { lapsToLimitRole } from './emphasis.ts';
@@ -21,15 +22,16 @@
   const showAge = $derived(barColumns(size.cols) >= AGE_MIN_BAR_COLUMNS);
 
   const sp = ' ';
-  const hover = (reason: UnknownReason | undefined): string | undefined => (reason === undefined ? undefined : unknownReason[reason]);
 </script>
+
+{#snippet value(reason: UnknownReason | undefined, known: string)}<TextCell text={known} {reason} />{/snippet}
 
 <div class="life" style:--bar="{barColumns(size.cols)}ch">
   <div class="line faint">{sp}<span class="label">{#if tyres}<CompoundMark compound={tyres.visualCompound} />{/if}</span>{sp}<span class="bar head" title={tyres === undefined ? undefined : ageText(tyres.age)}><span>{text.headers.wear}</span>{#if tyres && showAge}<span>{ageText(tyres.age)}</span>{/if}</span>{sp}<span class="now">{text.headers.now}</span>{sp}<span class="rate">{text.headers.rate}</span>{sp}<span class="laps">{text.lapsHeader(formatPercent(data.wear.limitPct))}</span>
   </div>
   {#each rows as row (row.corner)}
     {@const light = lapsToLimitRole(row.lapsToLimit, data.wear.warnLaps)}
-    <div class="line">{sp}<span class="label">{row.label}</span>{sp}<span class="bar" title={hover(row.reasons.wear)}><Bar {...row.barInput} role="text" /></span>{sp}<span class="now" title={hover(row.reasons.wear)}>{row.wearText}</span>{sp}<span class="rate" title={hover(row.reasons.rate)}>{row.rateText}</span>{sp}<span class="laps" title={hover(row.reasons.laps)} style:color={roleOrUndefined(light)}>{row.lapsText}</span>
+    <div class="line">{sp}<span class="label">{row.label}</span>{sp}<span class="bar" title={unknownTitle(row.reasons.wear)}><Bar {...row.barInput} role="text" /></span>{sp}<span class="now">{@render value(row.reasons.wear, row.wearText)}</span>{sp}<span class="rate">{@render value(row.reasons.rate, row.rateText)}</span>{sp}<span class="laps" style:color={roleOrUndefined(light)}>{@render value(row.reasons.laps, row.lapsText)}</span>
     </div>
   {/each}
 </div>

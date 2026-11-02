@@ -22,6 +22,12 @@ export type ResultStatus =
   | 'disqualified'
   | 'notClassified'
   | 'retired';
+/**
+ * The result statuses of a car out of the race (retired, did not finish, disqualified, not classified): it will set no
+ * more times. The one set: the engine's slot count and the analyses (`outOfRace`) read it; displays get the result
+ * from the analyses (e.g. `LapBoardRow.outOfRace`).
+ */
+export const OUT_OF_RACE_STATUSES: ReadonlySet<ResultStatus> = new Set<ResultStatus>(['retired', 'didNotFinish', 'disqualified', 'notClassified']);
 export type Vec3 = { x: number; y: number; z: number };
 
 export type CarIdentity = {

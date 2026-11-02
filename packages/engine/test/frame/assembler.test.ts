@@ -5,8 +5,11 @@ import { FrameAssembler, type Frame } from '../../src/index.ts';
 import { menuGroup, stub } from './stub-packet.ts';
 
 const feedId = 'test' as FeedId;
-const pushAll = (a: FrameAssembler, ps: Packet[]) => ps.flatMap((p) => a.push(p));
+/** Pushes a packet received at its own header session time (wall clock = session time unless a test says otherwise). */
+const push = (a: FrameAssembler, p: Packet, receivedAtMs = p.header.sessionTime * 1000) => a.push(p, receivedAtMs);
+const pushAll = (a: FrameAssembler, ps: Packet[]) => ps.flatMap((p) => push(a, p));
 const ids = (fs: Frame[]) => fs.map((f) => f.frameId);
+const range = (from: number, to: number) => Array.from({ length: to - from + 1 }, (_, i) => from + i);
 
 describe('FrameAssembler', () => {
   it('groups one frame into named slots', () => {
@@ -18,10 +21,17 @@ describe('FrameAssembler', () => {
     expect(f.damage).toBeUndefined();
     expect([f.sessionHistory, f.tyreSets, f.events]).toEqual([[], [], []]);
   });
+  it('a frame carries the receive time of its first packet', () => {
+    const a = new FrameAssembler({ feedId });
+    push(a, stub('motion', 10, 1.0), 5_000);
+    push(a, stub('lapData', 10, 1.0), 5_004);
+    push(a, stub('motion', 11, 1.016), 5_016);
+    expect(a.flush().map((f) => [f.frameId, f.receivedAtMs])).toEqual([[10, 5_000], [11, 5_016]]);
+  });
   it('closes frame N only when a packet for N+3 arrives', () => {
     const a = new FrameAssembler({ feedId });
     expect(pushAll(a, [...menuGroup(10, 1.0), ...menuGroup(11, 1.016), ...menuGroup(12, 1.032)])).toEqual([]);
-    expect(ids(a.push(stub('lapData', 13, 1.048)))).toEqual([10]);
+    expect(ids(push(a, stub('lapData', 13, 1.048)))).toEqual([10]);
   });
   it('merges a packet for N that arrives after N+1 and N+2', () => {
     const a = new FrameAssembler({ feedId });
@@ -32,8 +42,8 @@ describe('FrameAssembler', () => {
   it('drops and counts a packet more than 2 behind the newest; 2 behind is still accepted', () => {
     const a = new FrameAssembler({ feedId });
     pushAll(a, [...menuGroup(10, 1.0), stub('motion', 13, 1.048)]);
-    expect(a.push(stub('lapData', 10, 1.0))).toEqual([]);
-    a.push(stub('lapData', 11, 1.016));
+    expect(push(a, stub('lapData', 10, 1.0))).toEqual([]);
+    push(a, stub('lapData', 11, 1.016));
     expect(a.metrics.latePackets).toBe(1);
     expect(ids(a.flush())).toEqual([11, 13]);
   });
@@ -84,6 +94,59 @@ describe('FrameAssembler', () => {
     const out = [40, 41, 42].flatMap((n, i) => pushAll(a, menuGroup(n, 0.7 + i * 0.016, { overall: 102 + i })));
     expect([...out, ...a.flush()].map((f) => [f.frameId, f.overallFrameId])).toEqual([[100, 100], [101, 101], [40, 102], [41, 103], [42, 104]]);
     expect(a.metrics.latePackets).toBe(0);
+  });
+  // raceZandvoortUidReuse (a reused session uid): right after every real LapPositions packet (1 Hz) the game sends one
+  // whose header is frozen at frame 10539, session time 33.337 s, from the start of the session on.
+  describe('a packet type with a frozen header far ahead of the others', () => {
+    const FROZEN = 10_539;
+    const frozen = (overall = FROZEN) => stub('lapPositions', overall, 33.337, { overall });
+    /** Frames `from`..`to` at 16 ms; on every `lapEvery`-th frame a real LapPositions, then the frozen one. */
+    const stream = (from: number, to: number, o: { lapEvery: number; frozenAt?: number }) =>
+      range(from, to).flatMap((n) => [
+        ...menuGroup(n, n * 0.016),
+        ...(n % o.lapEvery === 0 ? [stub('lapPositions', n, n * 0.016), frozen(o.frozenAt)] : []),
+      ]);
+    const all = (a: FrameAssembler, ps: Packet[]) => [...pushAll(a, ps), ...a.flush()];
+    /** The frames that carry a LapPositions packet, with that packet's header frame id. */
+    const lapPositionsOf = (fs: Frame[]) =>
+      fs.flatMap((f) => (f.lapPositions ? [[f.overallFrameId, f.lapPositions.header.overallFrameIdentifier]] : []));
+
+    it("packets whose header frame id lags behind a stale packet type's frozen header are not dropped as late", () => {
+      const a = new FrameAssembler({ feedId });
+      const fs = all(a, [stub('session', 0, 0), ...stream(0, 129, { lapEvery: 60 })]);
+      expect(ids(fs)).toEqual(range(0, 129));
+      expect(a.metrics).toMatchObject({ framesClosed: 130, incompleteFrames: 0 });
+      // each LapPositions slot holds the frame's own packet, never the frozen one
+      expect(lapPositionsOf(fs)).toEqual([[0, 0], [60, 60], [120, 120]]);
+    });
+    it("a frozen packet right after a session's first packet does not hide the frames after it", () => {
+      const a = new FrameAssembler({ feedId });
+      const fs = all(a, [stub('session', 0, 0), frozen(), ...stream(0, 69, { lapEvery: 60 })]);
+      expect(ids(fs)).toEqual(range(0, 69));
+      expect(a.metrics).toMatchObject({ framesClosed: 70, incompleteFrames: 0 });
+      expect(lapPositionsOf(fs)).toEqual([[0, 0], [60, 60]]);
+    });
+    it('frames still close while the frozen packets keep coming: frame N once a packet for N+3 arrived', () => {
+      const a = new FrameAssembler({ feedId });
+      pushAll(a, stream(0, 60, { lapEvery: 60 }));
+      expect(ids(pushAll(a, menuGroup(61, 0.976)))).toEqual([58]);
+    });
+    it('once the others pass the frozen frame id, the frozen packets are late; no frame takes one in', () => {
+      const a = new FrameAssembler({ feedId });
+      const fs = all(a, stream(0, 200, { lapEvery: 30, frozenAt: 100 }));
+      expect(ids(fs)).toEqual(range(0, 200));
+      expect(a.metrics).toMatchObject({ framesClosed: 201, incompleteFrames: 0 });
+      expect(lapPositionsOf(fs)).toEqual([0, 30, 60, 90, 120, 150, 180].map((n) => [n, n]));
+    });
+  });
+  it('a jump of every packet type is no frozen header: the frames before it close, the ones after it are whole, a straggler is late', () => {
+    const a = new FrameAssembler({ feedId });
+    const closed = pushAll(a, [...menuGroup(10, 1.0), ...menuGroup(11, 1.016), ...menuGroup(500, 8.856), ...menuGroup(501, 8.872)]);
+    expect(ids(closed)).toEqual([10, 11]);
+    expect(push(a, stub('lapData', 11, 1.016))).toEqual([]);
+    expect(a.metrics.latePackets).toBe(1);
+    expect(ids(a.flush())).toEqual([500, 501]);
+    expect(a.metrics).toMatchObject({ framesClosed: 4, incompleteFrames: 0 });
   });
   it('attach() merges into the newest open frame whatever the packet frame id', () => {
     const a = new FrameAssembler({ feedId });

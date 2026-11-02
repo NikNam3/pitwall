@@ -41,7 +41,7 @@ Dependency direction (enforced by dependency-cruiser): `protocol` and `domain` i
 - The engine and analysis are pure: no clock (`Date`, `performance`), no `Math.random`, no I/O.
 - Expected problems are values (`DecodeResult`, `Known`, `topicStatus`); exceptions are bugs.
 - Registration by convention: a feature is a folder `apps/bridge/src/features/<name>/register.ts`; no central lists.
-- Ports and paths come from env: `PITWALL_WS_PORT`, `PITWALL_UDP_PORT`, `PITWALL_UI_PORT`, `PITWALL_DATA_DIR`, `PITWALL_FIXTURES_DIR`.
+- Ports and paths come from env: `PITWALL_WS_PORT`, `PITWALL_UDP_PORT`, `PITWALL_UDP_HOST` (UDP bind address, default `0.0.0.0`), `PITWALL_UI_PORT`, `PITWALL_DATA_DIR`, `PITWALL_FIXTURES_DIR`.
 - Only `packetFormat === 2025`. Wheel order in protocol stays RL, RR, FL, FR; it becomes `Corners` once, in the engine.
 - Tests on real data use short segments (`fixtures/segments/`, at most 1 MB, except at most three full-lap segments of about 8 MB; cut from normal sessions with `pwrec-cut`), each targeting one behaviour of our code. Whole recordings only serve whole-pipeline properties in the acceptance suite (determinism, reprocess, decoder equality and speed). Never test facts of a recording ("15 laps", "fuel stays 10 kg"); the time trial is no test fixture. Guide: `docs/testing.md`.
 - Goals, highest first: clean code, extendable code, clean UI, intuitive UX, realism, findability, performance.
@@ -58,7 +58,7 @@ Each task has two phases, done by two separate agents: a test agent writes the f
 - After every implement phase the supervisor checks that `git diff --stat <test-commit>..HEAD -- '*.test.ts' '**/test/**' test-support` is empty.
 - Units: an analysis (shared calculation) or a display (one widget) is a unit with a kebab-case name, e.g. `undercut-card`. `PITWALL_WORKER_UNIT=<name>` additionally grants `apps/ui/src/widgets/<name>/`, `apps/bridge/src/features/<name>/`, `apps/bridge/test/features/<name>/`, `packages/analysis/src/<name>/`, `packages/analysis/test/<name>/` and `packages/contracts/src/topics/<camelName>.*.ts`. One agent per unit; analyses are built before the displays that read them (ADR 0011). In the implement phase, a widget's `gallery.ts` is read-only like a test.
 - Displays render, analyses compute; anything two parallel workers would share is built first (ADR 0014).
-- Supervisor-owned files: `packages/domain/**`, `packages/contracts/**` (except a unit's own topic files), the UI kit, shell, connection, theme and emphasis (`apps/ui/src/{kit,shell,connection,theme,emphasis}/**`), every `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `packages/engine/src/state/**`, root configs. Workers never edit them; they list the change (file, exact change, why) under "Requested changes to supervisor-owned files" in their report.
+- Supervisor-owned files: `packages/domain/**`, `packages/contracts/**` (except a unit's own topic files), the UI kit, shell, connection, theme and emphasis (`apps/ui/src/{kit,shell,connection,theme,emphasis}/**`), every `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `packages/engine/src/state/**`, root configs. Workers never edit them; they list the change (file, exact change, why) under "Requested changes to supervisor-owned files" in their report. The supervisor may delegate one named change to a supervisor-owned path to one agent: the brief names the path and the change ("delegated"); nothing else of that path changes.
 
 ## Git
 

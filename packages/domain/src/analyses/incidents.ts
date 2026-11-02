@@ -39,6 +39,12 @@ export type IncidentDamagePart = { part: keyof DamageParts; deltaPct: Percent };
  */
 export type IncidentWarning = { count: number; limit: number };
 
+/** A penalty's ruling, from the PENA `penaltyType` codes the shared penalty classes count as penalties. */
+export type PenaltyKind = 'driveThrough' | 'stopGo' | 'grid' | 'time' | 'disqualified' | 'tyreRegulations';
+
+/** Penalty entries: what was given; `timeMs` for a time penalty (the PENA `time`). */
+export type IncidentPenalty = { kind: PenaltyKind; timeMs?: Ms };
+
 /** One entry of `incidents.feed` (newest first); it updates as its time lost resolves. */
 export type IncidentEntry = {
   /** Stable across updates: kind + cars + session time. */
@@ -57,4 +63,6 @@ export type IncidentEntry = {
   damage?: IncidentDamagePart[];
   /** Warning entries only. */
   warning?: IncidentWarning;
+  /** Penalty entries only. */
+  penalty?: IncidentPenalty;
 };

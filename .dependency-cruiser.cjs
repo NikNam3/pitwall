@@ -45,6 +45,13 @@ module.exports = {
       to: { path: '^apps/ui/src/', pathNot: '^apps/ui/src/(kit|theme|emphasis)/' },
     },
     {
+      name: 'ui-kit-grid-not-values',
+      comment: 'kit/values builds on kit/grid (TextCell fits its cell, the pair builds cell parts); the grid never imports kit/values, so the two depend one way (review 6, R6-4).',
+      severity: 'error',
+      from: { path: '^apps/ui/src/kit/grid/' },
+      to: { path: '^apps/ui/src/kit/values/' },
+    },
+    {
       name: 'ui-connection-only-contracts-domain',
       severity: 'error',
       from: { path: '^apps/ui/src/connection/' },
