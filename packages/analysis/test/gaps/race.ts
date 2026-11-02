@@ -27,7 +27,7 @@ export function offsetRace(offsetsMs: number[], laps: number, paceMs = 90_000): 
   const list: MiniSectorCrossing[] = [];
   offsetsMs.forEach((offset, i) => {
     for (let n = 1; n <= laps; n++) list.push(...crossings(carId(i), n, paceMs, offset + (n - 1) * paceMs));
-    list.push({ carId: carId(i), lap: laps + 1, segment: 0, at: offset + laps * paceMs });
+    list.push({ carId: carId(i), lap: laps + 1, segment: 0, at: offset + laps * paceMs, in: {} });
   });
   return byTime(list);
 }

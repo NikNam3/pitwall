@@ -118,6 +118,7 @@ const lapFromCursor = (
     wearAtStartPct: cursor.wearAtStartPct,
     ersStoreAtStartJ: cursor.ersStoreAtStartJ,
     ...lapEndSamples(cursor, car, at),
+    in: {},
   };
 };
 
@@ -141,6 +142,7 @@ const lapFromHistoryOnly = (car: CarState, lapNumber: number, lapTimeMs: number,
   status: 'provisional',
   completedAt: at,
   ...unknownLapEnd(),
+  in: {},
 });
 
 /** Opens the car's lap cursor on this frame; the frame is the lap's first. */

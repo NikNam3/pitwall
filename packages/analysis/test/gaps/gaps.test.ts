@@ -255,7 +255,7 @@ describe('gaps to one car', () => {
     };
     const ms = byTime(
       [0, 1, 2].flatMap((i) =>
-        Array.from({ length: 50 }, (_, segment) => ({ carId: carId(i), lap: 1, segment, at: times[i]!(segment) })),
+        Array.from({ length: 50 }, (_, segment) => ({ carId: carId(i), lap: 1, segment, at: times[i]!(segment), in: {} })),
       ),
     ).filter((m) => m.at <= 60_000);
     const out = run(viewOf(ms));
@@ -346,9 +346,9 @@ describe('gapper', () => {
       ...crossings(carId(0), 1, 90_000, 0),
       ...crossings(carId(0), 2, 90_000, 90_000),
       ...crossings(carId(0), 3, 96_000, 180_000),
-      { carId: carId(0), lap: 4, segment: 0, at: 276_000 },
+      { carId: carId(0), lap: 4, segment: 0, at: 276_000, in: {} },
       ...[1, 2, 3].flatMap((n) => crossings(carId(1), n, 93_000, (n - 1) * 93_000)),
-      { carId: carId(1), lap: 4, segment: 0, at: 279_000 },
+      { carId: carId(1), lap: 4, segment: 0, at: 279_000, in: {} },
     ]);
     const lines = gapperLines(run(viewOf(ms)), { kind: 'leaderAverage' });
     expect(v(lines.referenceLapMs)).toBe(92_000);
@@ -363,7 +363,7 @@ describe('gapper', () => {
     const ms = byTime(
       [0, 1, 2].flatMap((i) => [
         ...[1, 2, 3].flatMap((n) => crossings(carId(i), n, pace(i), start + (n - 1) * pace(i))),
-        { carId: carId(i), lap: 4, segment: 0, at: start + 3 * pace(i) },
+        { carId: carId(i), lap: 4, segment: 0, at: start + 3 * pace(i), in: {} },
       ]),
     );
     const out = run(viewOf(ms, { lightsOutAt: start }));
@@ -441,9 +441,9 @@ describe('gapper lines are continuous', () => {
     // the leader laps in 90 s, car 1 in 110 s: at 560 s the leader has completed 6 laps and car 1 5, a lap down
     const ms = byTime([
       ...[1, 2, 3, 4, 5, 6].flatMap((n) => crossings(carId(0), n, 90_000, (n - 1) * 90_000)),
-      { carId: carId(0), lap: 7, segment: 0, at: 540_000 },
+      { carId: carId(0), lap: 7, segment: 0, at: 540_000, in: {} },
       ...[1, 2, 3, 4, 5].flatMap((n) => crossings(carId(1), n, 110_000, (n - 1) * 110_000)),
-      { carId: carId(1), lap: 6, segment: 0, at: 550_000 },
+      { carId: carId(1), lap: 6, segment: 0, at: 550_000, in: {} },
     ]).filter((m) => m.at <= 560_000);
     const out = run(viewOf(ms));
     expect(interval(out, 1).lapsDown).toBe(1);
@@ -524,9 +524,9 @@ describe("the gapper's live point (now)", () => {
   it('is notApplicable before the car\'s first crossing after lights out', () => {
     // the lights go out at 10 s: car 0 crossed the line before them only, car 1 has crossed mini-sector 5 since
     const ms = byTime([
-      { carId: carId(0), lap: 1, segment: 0, at: 0 },
-      { carId: carId(1), lap: 1, segment: 0, at: 0 },
-      { carId: carId(1), lap: 1, segment: 5, at: 19_000 },
+      { carId: carId(0), lap: 1, segment: 0, at: 0, in: {} },
+      { carId: carId(1), lap: 1, segment: 0, at: 0, in: {} },
+      { carId: carId(1), lap: 1, segment: 5, at: 19_000, in: {} },
     ]);
     const lines = gapperLines(run(viewOf(ms, { lightsOutAt: 10_000 })), { kind: 'fixed', lapMs: 90_000 });
     expect(nowOf(lines, 0)).toBe('notApplicable');
@@ -565,7 +565,7 @@ describe('the gapper line of a finished car', () => {
     return byTime([
       ...[1, 2].flatMap((n) => crossings(carId(0), n, 90_000, (n - 1) * 90_000)),
       ...crossings(carId(0), 3, 96_000, 180_000),
-      ...(atLine ? [{ carId: carId(0), lap: 4, segment: 0, at: 276_000 }] : []),
+      ...(atLine ? [{ carId: carId(0), lap: 4, segment: 0, at: 276_000, in: {} }] : []),
       ...[1, 2, 3].flatMap((n) => crossings(carId(1), n, 95_000, (n - 1) * 95_000)).filter((m) => m.at <= end),
     ]);
   };
@@ -782,7 +782,7 @@ describe('the leader average over the leader\'s progress', () => {
     const lineAt = (l: number) => start + laps.slice(0, l).reduce((a, b) => a + b, 0);
     const ms = byTime([
       ...laps.flatMap((pace, i) => crossings(carId(0), i + 1, pace, lineAt(i))),
-      { carId: carId(0), lap: 4, segment: 0, at: lineAt(3) },
+      { carId: carId(0), lap: 4, segment: 0, at: lineAt(3), in: {} },
     ]);
     for (const l of [1, 2, 3]) {
       const lines = gapperLines(run(viewOf(ms.filter((m) => m.at <= lineAt(l)), { lightsOutAt: start })), leader);
@@ -792,7 +792,7 @@ describe('the leader average over the leader\'s progress', () => {
 
   it("is insufficientData while the leader's only crossing after lights out is the start line: no distance yet", () => {
     // the lights go out at 5 s; the leader crosses the start line (1, 0) at 6 s and nothing more
-    const ms = [{ carId: carId(0), lap: 1, segment: 0, at: 6_000 }];
+    const ms = [{ carId: carId(0), lap: 1, segment: 0, at: 6_000, in: {} }];
     expect(ref(gapperLines(run(viewOf(ms, { lightsOutAt: 5_000 })), leader))).toBe('insufficientData');
   });
 

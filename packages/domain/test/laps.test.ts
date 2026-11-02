@@ -26,6 +26,7 @@ const lap = (car: number, lapNumber: number, status: LapRecord['status'], lapTim
   status,
   completedAt: lapNumber * 70_000,
   ...lapEnd,
+  in: {},
 });
 
 describe('addLaps', () => {

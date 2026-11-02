@@ -43,7 +43,7 @@ const trackCar = (state: EngineState, carId: CarId, lap: number, distanceM: Metr
     if (!isAfter(crossing, last.lap, last.segment)) continue;
     last = crossing;
     const crossedAt = path === 0 ? cursor.at : Math.round(cursor.at + ((at - cursor.at) * crossing.pathM) / path);
-    state.history.miniSectors.push({ carId, lap: crossing.lap, segment: crossing.segment, at: crossedAt });
+    state.history.miniSectors.push({ carId, lap: crossing.lap, segment: crossing.segment, at: crossedAt, in: {} });
   }
   sample.segment = last.lap === lap ? last.segment : -1;
 };

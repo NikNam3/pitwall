@@ -210,7 +210,7 @@ describe('confirming laps from Session History', () => {
       actualCompound: 'unknown', visualCompound: 'unknown', tyreAgeAtStart: 0, fuelAtStartKg: unknown('notReceived'), fuelAtEndKg: unknown('notReceived'),
       scShare: 0, vscShare: 0, inLap: false, outLap: false, positionAtEnd: 0, status: 'confirmed', completedAt: st.history.laps.at(-1)!.completedAt,
       ...lapEnd, wearAtStartPct: { fl: unknown('notReceived'), fr: unknown('notReceived'), rl: unknown('notReceived'), rr: unknown('notReceived') },
-      ersStoreAtStartJ: unknown('notReceived'),
+      ersStoreAtStartJ: unknown('notReceived'), in: {},
     });
   });
   it('a lap swallowed by a jump is confirmed once, however often the packet comes', () => {

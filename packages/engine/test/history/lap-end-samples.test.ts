@@ -103,7 +103,7 @@ describe('damageChange events', () => {
   /** Runs one car whose front-left wing reads `plan[i]` % in frame i. */
   const wingPlan = (plan: number[]) => runScenario(new ScenarioBuilder({ cars: 1 }).frames(plan.length, (d) => wing(plan[d.index]!)(d)));
   const wingChange = (at: number, fromPct: number, toPct: number) =>
-    ({ at, kind: 'damageChange', carId: 0, params: { part: 'frontLeftWingPct', fromPct, toPct } });
+    ({ at, kind: 'damageChange', carId: 0, params: { part: 'frontLeftWingPct', fromPct, toPct }, in: {} });
 
   it('a front-left wing rise from 0 to 12 % appends one damageChange event', () => {
     const { st, frames, results } = wingPlan([0, 12]);

@@ -95,8 +95,8 @@ describe('the stint boundary follows the restarted lap', () => {
   it('a set fitted in the garage on lap N whose timed lap is also lap N: the old stint ends at N - 1, lap N is on the new set', () => {
     const { st } = runScenario(practice(GARAGE, { newSetAt: 6 }).event({ code: 'SEND' }));
     expect(st.history.stints).toEqual([
-      { carId: 0, firstLap: 2, lastLap: 2, actualCompound: 'C3', visualCompound: 'medium', tyreAgeAtFitting: 3 },
-      { carId: 0, firstLap: 3, lastLap: 3, actualCompound: 'C2', visualCompound: 'hard', tyreAgeAtFitting: 0 }]);
+      { carId: 0, firstLap: 2, lastLap: 2, actualCompound: 'C3', visualCompound: 'medium', tyreAgeAtFitting: 3, in: {} },
+      { carId: 0, firstLap: 3, lastLap: 3, actualCompound: 'C2', visualCompound: 'hard', tyreAgeAtFitting: 0, in: {} }]);
     expect(provisional(st.history.laps).find((l) => l.lapNumber === 3)).toMatchObject({ actualCompound: 'C2', visualCompound: 'hard', tyreAgeAtStart: 0 });
   });
 });

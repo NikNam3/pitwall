@@ -30,7 +30,7 @@ describe('race-zandvoort-lap10: car 1 (the player) crosses the line into lap 10'
 
   it('FTLP becomes a fastestLap event with the lap time', async () => {
     const { state } = await run('race-zandvoort-lap10.pwrec.gz');
-    expect(state.history.events.filter((e) => e.kind === 'fastestLap')).toEqual([{ at: 723_381, kind: 'fastestLap', carId: 1, params: { lapTimeMs: 74_655 } }]);
+    expect(state.history.events.filter((e) => e.kind === 'fastestLap')).toEqual([{ at: 723_381, kind: 'fastestLap', carId: 1, params: { lapTimeMs: 74_655 }, in: {} }]);
   });
 
   it('mini-sector crossings come in order, and the line crossing lies between the last frame of lap 9 and the first of lap 10', async () => {
@@ -77,7 +77,7 @@ describe('race-singapore-start: start lights and lights out', () => {
 describe('race-zandvoort-pit-stop: car 1 enters the pits, starts lap 8 in the pit lane and changes mediums for softs', () => {
   it('closes the medium stint at the in-lap and opens a soft stint on the next lap', async () => {
     const { state } = await run('race-zandvoort-pit-stop.pwrec.gz');
-    expect(state.history.stints.filter((s) => s.carId === 1)).toEqual([{ carId: 1, firstLap: 7, lastLap: 7, actualCompound: 'C3', visualCompound: 'medium', tyreAgeAtFitting: 6 }]);
+    expect(state.history.stints.filter((s) => s.carId === 1)).toEqual([{ carId: 1, firstLap: 7, lastLap: 7, actualCompound: 'C3', visualCompound: 'medium', tyreAgeAtFitting: 6, in: {} }]);
     expect(state.cars[1]!.tyres).toMatchObject({ actualCompound: 'C4', visualCompound: 'soft', age: 0 });
     expect(state.history.laps.find((l) => l.carId === 1 && l.lapNumber === 7)).toMatchObject({ inLap: true, actualCompound: 'C3' });
   });

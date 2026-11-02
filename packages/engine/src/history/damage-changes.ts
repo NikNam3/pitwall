@@ -45,7 +45,7 @@ export const applyDamageChanges = (state: EngineState, frame: Frame): void => {
         i++;
         if (was === undefined || value === undefined || value === was) continue;
         const params: DamageChangeParams = { part, fromPct: was, toPct: value };
-        state.history.events.push({ at: frame.sessionTime, kind: 'damageChange', carId: car.id, params });
+        state.history.events.push({ at: frame.sessionTime, kind: 'damageChange', carId: car.id, params, in: {} });
       }
     }
     previous[car.id] = now;

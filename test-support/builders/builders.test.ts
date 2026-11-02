@@ -8,7 +8,7 @@ describe('builders', () => {
     const { laps, miniSectors } = field({ cars: 2, laps: 3, paceMs: 90_000 });
     expect(laps).toHaveLength(6);
     expect(miniSectors).toHaveLength(2 * (3 * 50 + 1));
-    expect(miniSectors.filter((m) => m.carId === 0 && m.lap === 4)).toEqual([{ carId: 0, lap: 4, segment: 0, at: 270_000 }]);
+    expect(miniSectors.filter((m) => m.carId === 0 && m.lap === 4)).toEqual([{ carId: 0, lap: 4, segment: 0, at: 270_000, in: {} }]);
     const times = miniSectors.map((m) => m.at);
     expect(times).toEqual([...times].sort((a, b) => a - b));
   });
@@ -45,7 +45,7 @@ describe('builders', () => {
   });
 
   it('event and flagPhase fill defaults', () => {
-    expect(event({ kind: 'overtake', at: 5 })).toEqual({ at: 5, kind: 'overtake', params: {} });
+    expect(event({ kind: 'overtake', at: 5 })).toEqual({ at: 5, kind: 'overtake', params: {}, in: {} });
     expect(flagPhase({ kind: 'VSC' })).toMatchObject({ kind: 'VSC', start: 0, end: 60_000 });
   });
 

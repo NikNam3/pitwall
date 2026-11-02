@@ -6,6 +6,8 @@ export * from './compounds.ts';
 export * from './session.ts';
 export * from './car.ts';
 export * from './records.ts';
+export * from './facts.ts';
+export * from './weekend-phase.ts';
 export * from './situations.ts';
 export * from './insight.ts';
 export * from './laps.ts';

@@ -23,7 +23,7 @@ const DRS_DISABLED_REASONS = ['wetTrack', 'safetyCar', 'redFlag', 'minLapNotReac
 /** The game sends 255 for "no car" and for "no value" in the penalty time. */
 const NONE = 255;
 
-type EventBody = Omit<RaceEvent, 'at'>;
+type EventBody = Omit<RaceEvent, 'at' | 'in'>;
 
 const cars = (first: number, second: number = NONE): Pick<EventBody, 'carId' | 'otherCarId'> => ({
   ...(first !== NONE && { carId: carId(first) }),
@@ -83,7 +83,7 @@ export const applyEvents: SubStep = (state, frame, out) => {
   const before = state.history.events.length;
   for (const { details } of frame.events) {
     const body = raceEventOf(details);
-    if (body) state.history.events.push({ at: frame.sessionTime, ...body });
+    if (body) state.history.events.push({ at: frame.sessionTime, ...body, in: {} });
   }
   applyDamageChanges(state, frame);
   if (state.history.events.length > before) out.changed.add('events');

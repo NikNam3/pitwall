@@ -125,6 +125,7 @@ export function lap(over: Partial<LapRecord> = {}): LapRecord {
       brakesC: perCorner(() => known(range(300, 800), at)),
       engineC: known(range(110, 110), at),
     },
+    in: {},
     ...over,
   };
 }
@@ -140,12 +141,13 @@ export function crossings(car: CarId, lapNumber: number, lapTimeMs: Ms, startAt:
     lap: lapNumber,
     segment,
     at: startAt + Math.round((segment * lapTimeMs) / MINI_SECTORS),
+    in: {},
   }));
 }
 
 /** An event at session time 0 with empty `params` and the given `kind`; override `at`, `carId`, `otherCarId`, `params`. */
 export function event(over: Partial<RaceEvent> & { kind: RaceEventKind }): RaceEvent {
-  return { at: 0, params: {}, ...over };
+  return { at: 0, params: {}, in: {}, ...over };
 }
 
 /** A safety-car phase from 0 to 60 s, leader lap 1 to 2, no SC sub-phases; override any field. */
@@ -194,7 +196,7 @@ export function field({ cars, laps, paceMs }: { cars: number; laps: number; pace
       );
       miniSectors.push(...crossings(carId(i), n, pace, (n - 1) * pace));
     }
-    miniSectors.push({ carId: carId(i), lap: laps + 1, segment: 0, at: laps * pace });
+    miniSectors.push({ carId: carId(i), lap: laps + 1, segment: 0, at: laps * pace, in: {} });
   }
   miniSectors.sort((a, b) => a.at - b.at);
   return { laps: records, miniSectors };

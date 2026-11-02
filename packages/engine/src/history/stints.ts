@@ -16,7 +16,7 @@ const openStint = (car: CarState, firstLap: number): OpenStint => ({
 const closeStint = (state: EngineState, car: CarState, stint: OpenStint, lastLap: number): void => {
   if (lastLap < stint.firstLap) return;
   const { firstLap, actualCompound, visualCompound, tyreAgeAtFitting } = stint;
-  state.history.stints.push({ carId: car.id, firstLap, lastLap, actualCompound, visualCompound, tyreAgeAtFitting });
+  state.history.stints.push({ carId: car.id, firstLap, lastLap, actualCompound, visualCompound, tyreAgeAtFitting, in: {} });
 };
 
 /**

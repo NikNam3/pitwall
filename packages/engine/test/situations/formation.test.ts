@@ -93,16 +93,16 @@ describe('at lights out the formation lap is discarded', () => {
   it('every event of the formation goes (overtakes, the retirement, the DRS notice); the start lights and lights out stay', () => {
     const { runner } = startRun();
     expect(events(runner)).toEqual([
-      ...[1, 2, 3, 4, 5].map((lights) => ({ at: 0, kind: 'startLights', params: { lights } })),
-      { at: 0, kind: 'lightsOut', params: {} },
-      { at: raceAt(40), kind: 'overtake', carId: 1, otherCarId: 0, params: {} },
+      ...[1, 2, 3, 4, 5].map((lights) => ({ at: 0, kind: 'startLights', params: { lights }, in: {} })),
+      { at: 0, kind: 'lightsOut', params: {}, in: {} },
+      { at: raceAt(40), kind: 'overtake', carId: 1, otherCarId: 0, params: {}, in: {} },
     ]);
   });
   it('a lights-out event during the formation lap, before any start light, is no race start and goes with the formation', () => {
     const { runner } = run(script(formationStart((k) => (k === FORMATION + 5 ? [LGOT] : []))));
     expect(runner.state.history.sessionPhases.map((p) => p.kind)).toEqual(['preStart', 'formation', 'startLights']);
     expect(runner.state.open.situations.session).toEqual({ kind: 'racing', start: 0, startLeaderLap: 1 });
-    expect(events(runner).filter((e) => e.kind === 'lightsOut')).toEqual([{ at: 0, kind: 'lightsOut', params: {} }]);
+    expect(events(runner).filter((e) => e.kind === 'lightsOut')).toEqual([{ at: 0, kind: 'lightsOut', params: {}, in: {} }]);
   });
   it('the formation lap’s mini-sector crossings go; lap 1 is crossed again from lights out, each boundary once', () => {
     const { runner } = startRun();

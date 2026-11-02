@@ -29,7 +29,7 @@ const crossingsOf = ({ laps, startsMs, segmentsMs }: Race): MiniSectorCrossing[]
       let at = start;
       return Array.from({ length: laps * MINI_SECTORS }, (_, k) => {
         at += segmentsMs[i]![k]!;
-        return { carId: carId(i), lap: Math.floor(k / MINI_SECTORS) + 1, segment: k % MINI_SECTORS, at };
+        return { carId: carId(i), lap: Math.floor(k / MINI_SECTORS) + 1, segment: k % MINI_SECTORS, at, in: {} };
       });
     }),
   );

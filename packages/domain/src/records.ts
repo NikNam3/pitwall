@@ -2,6 +2,7 @@
 import type { DamageParts } from './analyses/damage.ts';
 import type { ActualCompound, VisualCompound } from './compounds.ts';
 import type { Corners } from './corners.ts';
+import type { Stamp } from './facts.ts';
 import type { CarId, SessionTime } from './ids.ts';
 import type { Known } from './known.ts';
 import type { Joules, Kg, Ms, Percent, Ratio } from './units.ts';
@@ -51,6 +52,8 @@ export type LapRecord = {
   damageAtEnd: Known<DamageParts>;
   /** Min and max of every band channel over the lap. */
   channelRange: ChannelRange;
+  /** The spans open when the record was appended (C26). */
+  in: Stamp;
 };
 
 export type StintRecord = {
@@ -60,6 +63,7 @@ export type StintRecord = {
   actualCompound: ActualCompound;
   visualCompound: VisualCompound;
   tyreAgeAtFitting: number;
+  in: Stamp;
 };
 
 export type PitStopRecord = {
@@ -71,6 +75,7 @@ export type PitStopRecord = {
   stationaryTimeMs: Ms;
   flag: 'green' | 'sc' | 'vsc';
   penaltyServed: boolean;
+  in: Stamp;
 };
 
 export type ScPhase = { phase: 'deployed' | 'returning' | 'returned' | 'resume'; at: SessionTime };
@@ -109,6 +114,18 @@ export type RaceEvent = {
   carId?: CarId;
   otherCarId?: CarId;
   params: Record<string, number | string>;
+  in: Stamp;
+};
+
+/**
+ * A game event of the frame that is a value, not a signal (OVTK, COLL, FTLP, SPTP): written into the live state by step 1
+ * (`LiveState.frameEvents`), so no recorder reads a packet (C6). Times and speeds in domain units.
+ */
+export type FrameEvent = {
+  kind: 'overtake' | 'collision' | 'fastestLap' | 'speedTrap';
+  carId?: CarId;
+  otherCarId?: CarId;
+  params: Record<string, number | string>;
 };
 
 /** The lap is split into this many segments of equal length by distance. */
@@ -119,4 +136,4 @@ export const MINI_SECTORS = 50;
  * boundary is at `s × trackLength / 50`, so segment 0 is the start/finish line at the start of the lap, and the line
  * that completes lap L is `(L + 1, 0)`.
  */
-export type MiniSectorCrossing = { carId: CarId; lap: number; segment: number; at: SessionTime };
+export type MiniSectorCrossing = { carId: CarId; lap: number; segment: number; at: SessionTime; in: Stamp };

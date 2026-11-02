@@ -60,7 +60,7 @@ export function race({ cars = CARS, laps = LAPS, delays = [] }: { cars?: number;
         if (lap === laps + 1 && segment > 0) break;
         // A delay in mini-sector k moves boundary k + 1 and everything after it.
         const late = own.filter((d) => index(d.lap, d.segment) < index(lap, segment)).reduce((sum, d) => sum + d.ms, 0);
-        list.push({ carId: carId(i), lap, segment, at: boundaryAt(i, lap, segment) + late });
+        list.push({ carId: carId(i), lap, segment, at: boundaryAt(i, lap, segment) + late, in: {} });
       }
     }
   }
@@ -178,4 +178,5 @@ export const pitStop = (id: CarId, lap: number, pitLaneEntry: number, pitLaneExi
   stationaryTimeMs: 2_500,
   flag: 'green',
   penaltyServed: false,
+  in: {},
 });

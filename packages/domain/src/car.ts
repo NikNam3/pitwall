@@ -266,3 +266,9 @@ export type CarState = {
   /** Player car only; moves when the player changes. */
   ownCar?: OwnCarState | undefined;
 };
+
+/**
+ * The identity values of the session's participants the weekend context needs (`contextFor`, C61): the player's slot and,
+ * per slot the session uses, its driver key. Built by the engine from Participants, so the bridge reads no packet for it.
+ */
+export type ParticipantsValues = { playerCar: CarId; drivers: Array<{ carId: CarId; driverKey: DriverKey }> };
