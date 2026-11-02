@@ -1,7 +1,7 @@
 // Turns what one frame produced into hub messages, following the features' topic bindings (spec 3.3, 8).
 import type { Computed, TopicName } from '@pitwall/contracts';
 import type { FeedId } from '@pitwall/domain';
-import type { DeepReadonly, History, HistoryDelta, InsightChange, SchedulerResult } from '@pitwall/engine';
+import type { HistoryDelta, InsightChange, Projection, ProjectedList, SchedulerResult } from '@pitwall/engine';
 import type { Feature, TopicBinding } from '../features/feature.ts';
 import type { TopicHub, ValueFor } from '../hub/topic-hub.ts';
 import { jobCalculatorId } from '../jobs/feed-jobs.ts';
@@ -9,7 +9,7 @@ import type { JobResult } from '../jobs/job-runner.ts';
 import type { Logger } from '../log.ts';
 
 type StateBinding = Extract<TopicBinding, { from: string }>;
-type HistoryBinding = Extract<TopicBinding, { fromHistory: keyof History }>;
+type HistoryBinding = Extract<TopicBinding, { fromHistory: ProjectedList }>;
 type JobBinding = Extract<TopicBinding, { fromJob: string }>;
 
 /** A topic that could not be published: a feature's `select` threw, or the hub did. The topic is marked `errored`. */
@@ -88,14 +88,16 @@ export class TopicPublisher {
     });
   }
 
-  /** Appends what the history lists gained; after a flashback (truncated delta) the lists are sent again whole. */
-  publishHistory(history: DeepReadonly<History>, delta: HistoryDelta): PublishError[] {
+  /** Appends what the history lists gained; after a rewind (`delta.rewound`) the lists are sent again whole. */
+  publishHistory(history: Projection, delta: HistoryDelta): PublishError[] {
     return this.#collecting(() => {
       for (const { topic, fromHistory: list } of this.#history) {
         const entries = history[list];
-        if (delta.truncated) this.#guarded(topic, () => this.#hub.resetAppend(this.#feedId, topic, entries.slice()));
-        else if (delta.after[list] > delta.before[list]) {
-          this.#guarded(topic, () => this.#hub.publishAppend(this.#feedId, topic, entries.slice(delta.before[list], delta.after[list])));
+        const before = delta.before[list] ?? 0;
+        const after = delta.after[list] ?? 0;
+        if (delta.rewound !== undefined) this.#guarded(topic, () => this.#hub.resetAppend(this.#feedId, topic, entries.slice()));
+        else if (after > before) {
+          this.#guarded(topic, () => this.#hub.publishAppend(this.#feedId, topic, entries.slice(before, after)));
         }
       }
     });

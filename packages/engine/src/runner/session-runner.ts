@@ -1,11 +1,14 @@
-import { toSessionTime, type Ms, type SessionTime } from '@pitwall/domain';
+import { toSessionTime, type Ms, type SessionTime, type VoidFact } from '@pitwall/domain';
 import type { EventDetails } from '@pitwall/protocol';
 import type { Frame } from '../frame/frame.ts';
-import { historyLengths, truncateHistory, type HistoryDelta } from '../history/delta.ts';
 import { onRaceClock, rewindMarkOf } from '../history/situations/time-jumps.ts';
+import { truncateLog } from '../log/log.ts';
+import { projectionLengths } from '../log/projection.ts';
+import type { HistoryDelta } from '../log/types.ts';
+import { emptySituation } from '../situations/situation.ts';
 import type { EngineState } from '../state/engine-state.ts';
 import { initialState } from '../step/initial-state.ts';
-import { ALL_CHANGE_TAGS, step, type ChangeTag, type ClockFall, type ClockJump, type FlashbackReport, type LapCorrection } from '../step/step.ts';
+import { ALL_CHANGE_TAGS, projectionTrackerOf, step, type ChangeTag, type ClockFall, type ClockJump, type FlashbackReport, type LapCorrection } from '../step/step.ts';
 import { copyPlain } from '../util/copy-plain.ts';
 import type { DeepReadonly } from '../util/deep-readonly.ts';
 import { SnapshotStore } from './snapshots.ts';
@@ -14,10 +17,17 @@ import { SnapshotStore } from './snapshots.ts';
 export type FlashbackInfo = { targetFrameId: number; targetSessionTime: SessionTime; rewoundMs: Ms; targetLap: number };
 
 /**
+ * Where a step of an old mechanism that cuts or rewrites what was recorded sends readers back to: the session's start.
+ * Until the runner appends void facts (Task 3) and the situation tracker stops rewriting (Task 9), each of them is
+ * `delta.rewound` with this target.
+ */
+const LEGACY_REWIND: VoidFact['target'] = { frameId: -1, at: toSessionTime(0) };
+
+/**
  * What applying one frame did. When it changed history recorded before it (a flashback, lights out discarding the
  * formation lap, the start's settling re-stamping it) or took back what readers saw (a neutralisation dropped
  * unconfirmed; a session phase opening or closing at or before the time of an entry earlier frames recorded), `changed`
- * holds every tag and `delta.truncated` is true; `flashback` tells a flashback. `clockFall` reports a fall of the
+ * holds every tag and `delta.rewound` is set (`LEGACY_REWIND`); `flashback` tells a flashback. `clockFall` reports a fall of the
  * session time that changed nothing recorded, `clockJump` a forward jump that is no post-session jump (spec 3.3); both
  * carry the game's times. Every other session time is on the race clock.
  */
@@ -100,7 +110,7 @@ export class SessionRunner {
   }
 
   apply(frame: Frame): StepResult {
-    const before = historyLengths(this.#state.history);
+    const before = projectionLengths(this.#state.history);
     const reported = this.#reportedTarget(frame);
     const target = reported && this.#takes(reported) ? reported : undefined;
     // The runner's decision on the frame; a rewind's mark is of the state it leaves, so taken before restoring.
@@ -113,12 +123,12 @@ export class SessionRunner {
     else if (this.#rewoundTo !== undefined && frame.frameId > this.#rewoundTo + 1) this.#rewoundTo = undefined;
     if (rewritten) this.#restart();
     else this.#keep({ frame, ...(report && { report }) });
-    const truncated = flashback !== undefined || rewritten === true || discarded === true;
+    const rewound = flashback !== undefined || rewritten === true || discarded === true;
     return {
       state: this.#state,
-      changed: truncated ? new Set(ALL_CHANGE_TAGS) : changed,
+      changed: rewound ? new Set(ALL_CHANGE_TAGS) : changed,
       corrections,
-      delta: { before, after: historyLengths(this.#state.history), truncated },
+      delta: { before, after: projectionLengths(this.#state.history), ...(rewound && { rewound: { ...LEGACY_REWIND } }) },
       ...(flashback && { flashback }),
       ...(clockFall && { clockFall }),
       ...(clockJump && { clockJump }),
@@ -153,9 +163,10 @@ export class SessionRunner {
     const replayTo = Math.min(target.frameId, frame.frameId - 1);
     const snapshot = this.#snapshots.newestAtOrBefore(replayTo);
     this.#snapshots.dropAfter(snapshot.frameId);
-    const { history, weekend } = this.#state;
-    truncateHistory(history, snapshot.lengths);
-    this.#state = { ...copyPlain(snapshot.state), history, ...(weekend && { weekend }) };
+    const { log, history, weekend } = this.#state;
+    truncateLog(log, snapshot.lengths);
+    this.#state = { ...copyPlain(snapshot.state), log, history, ...(weekend && { weekend }) };
+    projectionTrackerOf(this.#state).rebuild(emptySituation());
     // A target older than the window has no kept frames after its snapshot: the snapshot's state stands for it.
     for (const { frame: f, report } of this.#frames) if (f.frameId > snapshot.frameId && f.frameId <= replayTo) step(this.#state, f, report);
     this.#frames = this.#frames.filter(({ frame: f }) => f.frameId <= replayTo);

@@ -4,3 +4,6 @@ import type { DeepReadonly } from '../util/deep-readonly.ts';
 
 /** The machine's open spans (C20); the clock's open `paused` span is `byMachine.clock`. */
 export type Situation = DeepReadonly<{ weekendPhase: WeekendPhase; session: OpenSpan | undefined; byMachine: Record<MachineId, OpenSpan[]> }>;
+
+/** No open span, the weekend phase still pending: what the engine passes the projection until the machine runs (Task 5). */
+export const emptySituation = (): Situation => ({ weekendPhase: { kind: 'pending' }, session: undefined, byMachine: {} });

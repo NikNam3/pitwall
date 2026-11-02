@@ -4,6 +4,7 @@ import type { Frame } from '../frame/frame.ts';
 import type { EngineState, LapCursor } from '../state/engine-state.ts';
 import type { LapCorrection, StepOutput } from '../step/types.ts';
 import type { SubStep } from '../step/sub-step.ts';
+import { logWriter } from '../log/log.ts';
 import { carsWithLapData } from './cars.ts';
 import { emptyChannels, lapEndSamples, lapStartSamples, observeLapFrame, unknownLapEnd } from './lap-samples.ts';
 
@@ -180,8 +181,8 @@ const trackLap = (state: EngineState, car: CarState, at: SessionTime): void => {
   if (indexOfLap) for (let skipped = cursor.lap; skipped < lapNumber; skipped++) indexOfLap[skipped] ??= { confirmed: false };
   // Session History may already have confirmed this lap (a final lap the game never rolled over).
   if (!indexOfLap?.[lapNumber]?.confirmed) {
-    if (indexOfLap) indexOfLap[lapNumber] = { provisional: state.history.laps.length, confirmed: false };
-    state.history.laps.push(lapFromCursor(car, cursor, lapNumber, timing.lastLapTimeMs, at));
+    const { index } = logWriter(state.log).append('laps', lapFromCursor(car, cursor, lapNumber, timing.lastLapTimeMs, at));
+    if (indexOfLap) indexOfLap[lapNumber] = { provisional: index, confirmed: false };
   }
   // The completing frame belongs to the next lap's ranges and totals, not to the one it ends.
   startLap(state, car, at, true);
@@ -218,7 +219,7 @@ const validFrom = (flags: number): LapRecord['valid'] => ({
 const unconfirmedLap = (state: EngineState, packet: SessionHistoryPacket, lapNumber: number, entry: LapEntry, at: SessionTime) => {
   const slot = state.open.lapIndex[packet.carIdx]?.[lapNumber];
   if (slot?.provisional !== undefined) {
-    const stored = state.history.laps[slot.provisional];
+    const stored = state.log.laps[slot.provisional];
     return stored && { lap: stored, reported: true };
   }
   const car = state.cars[packet.carIdx];
@@ -233,6 +234,7 @@ const unconfirmedLap = (state: EngineState, packet: SessionHistoryPacket, lapNum
  * has a provisional is compared with it; one that had none is created from the history entry.
  */
 const confirmLaps = (state: EngineState, packet: SessionHistoryPacket, at: SessionTime, out: StepOutput): void => {
+  const log = logWriter(state.log);
   const indexOfLap = state.open.lapIndex[packet.carIdx];
   if (!indexOfLap) return;
   for (let i = 0; i < packet.numLaps; i++) {
@@ -251,7 +253,7 @@ const confirmLaps = (state: EngineState, packet: SessionHistoryPacket, at: Sessi
       completedAt: before.reported ? before.lap.completedAt : at,
     };
     if (before.reported) out.corrections.push(...corrections(before.lap, confirmed));
-    state.history.laps.push(confirmed);
+    log.append('laps', confirmed);
     const slot = indexOfLap[lapNumber];
     if (slot) slot.confirmed = true;
     else indexOfLap[lapNumber] = { confirmed: true };
@@ -263,12 +265,12 @@ const confirmLaps = (state: EngineState, packet: SessionHistoryPacket, at: Sessi
  * Session History holds the lap (a lap that never got a provisional is appended confirmed). The confirmed record wins; what differed is reported as corrections.
  */
 export const applyLaps: SubStep = (state, frame: Frame, out) => {
-  const before = state.history.laps.length;
+  const before = state.log.laps.length;
   for (const car of carsWithLapData(state, frame)) trackLap(state, car, frame.sessionTime);
   for (const packet of frame.sessionHistory) {
     const car = state.cars[packet.carIdx];
     if (car) car.updatedAt.sessionHistory = frame.sessionTime;
     confirmLaps(state, packet, frame.sessionTime, out);
   }
-  if (state.history.laps.length > before) out.changed.add('laps');
+  if (state.log.laps.length > before) out.changed.add('laps');
 };

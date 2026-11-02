@@ -1,6 +1,5 @@
 import type {
   OpenSessionPhase,
-  PauseSpan,
   SessionPhaseSpan,
   ActualCompound,
   CarId,
@@ -11,39 +10,23 @@ import type {
   Known,
   LapRecord,
   Metres,
-  MiniSectorCrossing,
   Ms,
   PitStatus,
-  PitStopRecord,
-  RaceEvent,
   SessionFlag,
   SessionState,
   SessionTime,
   SessionUid,
-  StintRecord,
   VisualCompound,
 } from '@pitwall/domain';
+import type { ProjectionBook } from '../log/projection.ts';
+import type { Log, ProjectionState } from '../log/types.ts';
 import type { WeekendContext } from './weekend-context.ts';
 
-/** Append-only (spec 6.3). */
-export type History = {
-  /**
-   * Every lap record ever emitted, so one (car, lap) can appear twice (provisional, then confirmed).
-   * Read it through `currentLaps` / `addLaps` from `@pitwall/domain`, not directly.
-   */
-  laps: LapRecord[];
-  stints: StintRecord[];
-  pitStops: PitStopRecord[];
-  flagPhases: FlagPhase[];
-  /** Closed session phases, oldest first (spec 3.1); the phase in progress is `open.situations.session`. */
-  sessionPhases: SessionPhaseSpan[];
-  /** Pauses, oldest first (display only). */
-  pauses: PauseSpan[];
-  events: RaceEvent[];
-  miniSectors: MiniSectorCrossing[];
-};
-
-export type HistoryLengths = { [K in keyof History]: number };
+/**
+ * The lengths of the log's lists that the situation tracker notes (the formation's and the start's first entries) to cut
+ * back or re-stamp them; goes with those mechanisms (Tasks 7, 9).
+ */
+export type TrackerLengths = Record<'laps' | 'stints' | 'pitStops' | 'crossings' | 'events' | 'flagPhases' | 'sessionPhases' | 'pauses', number>;
 
 /** The lap a car is on, collected until the lap completes and becomes a `LapRecord`. */
 export type LapCursor = {
@@ -113,14 +96,14 @@ export type PhaseBook = {
    */
   unconfirmed?: { closed: SessionPhaseSpan; replaced: OpenSessionPhase } | undefined;
   /** The history lengths when the formation phase opened: lights out cuts the history back to them (spec 3.2). */
-  formationFrom?: HistoryLengths | undefined;
+  formationFrom?: TrackerLengths | undefined;
   /** The history lengths when the race's start lights began (not a restart's): where the start's entries begin. */
-  startFrom?: HistoryLengths | undefined;
+  startFrom?: TrackerLengths | undefined;
   /**
    * The race's lights out: its frame id (the start settles within a window after it) and the start's entries that the
    * settling re-stamps: history from `from`, phases from index `phaseFrom` (the start lights) on (spec 3.3).
    */
-  lightsOut?: { frameId: number; from: HistoryLengths; phaseFrom: number } | undefined;
+  lightsOut?: { frameId: number; from: TrackerLengths; phaseFrom: number } | undefined;
   /**
    * How far the race clock runs ahead of the game's session time: the sum of the unexplained falls since the race start
    * (spec 3.3, user ruling 2026-10-30). Every frame is stamped at its session time plus this, so the race clock never
@@ -165,12 +148,14 @@ export type OpenTrackers = {
       }
     | undefined
   >;
-  /** Per car: lap number to the index of its provisional record in `history.laps`, and whether it is confirmed. */
+  /** Per car: lap number to the index of its provisional record in `log.laps`, and whether it is confirmed. */
   lapIndex: Array<Record<number, { provisional?: number; confirmed: boolean }>>;
   /** Per car: the pit status of the previous frame. */
   pitStatus: Array<PitStatus | undefined>;
   /** Per car: the eight damage percentages of the previous reading (order of `PARTS` in damage-changes.ts); for `damageChange` events. */
   damage: Array<number[] | undefined>;
+  /** The projection's bookkeeping (`log/projection.ts`): what of the log it has projected and what hides facts. */
+  projection: ProjectionBook;
 };
 
 /** The engine's whole model of one session (spec 6.1). `cars` is indexed by `CarId`. */
@@ -179,7 +164,10 @@ export type EngineState = {
   sessionUid: SessionUid;
   session: SessionState;
   cars: CarState[];
-  history: History;
+  /** The append-only log (C21): read only by the projection, the runner and the storage writer (C28). */
+  log: Log;
+  /** The projection of the log (C28): what readers see as the history. */
+  history: ProjectionState;
   playerCar: CarId;
   teammateCar?: CarId | undefined;
   lastFrameId: number;

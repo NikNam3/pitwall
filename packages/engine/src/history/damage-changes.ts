@@ -1,4 +1,5 @@
 import type { CarState, DamageChangeParams } from '@pitwall/domain';
+import { logWriter } from '../log/log.ts';
 import type { EngineState } from '../state/engine-state.ts';
 import type { Frame } from '../frame/frame.ts';
 
@@ -33,6 +34,7 @@ const readingOf = (car: CarState): number[] | undefined => {
 export const applyDamageChanges = (state: EngineState, frame: Frame): void => {
   if (!frame.damage) return;
   const previous = state.open.damage;
+  const log = logWriter(state.log);
   for (const car of state.cars) {
     const now = readingOf(car);
     if (now === undefined) continue;
@@ -45,7 +47,7 @@ export const applyDamageChanges = (state: EngineState, frame: Frame): void => {
         i++;
         if (was === undefined || value === undefined || value === was) continue;
         const params: DamageChangeParams = { part, fromPct: was, toPct: value };
-        state.history.events.push({ at: frame.sessionTime, kind: 'damageChange', carId: car.id, params, in: {} });
+        log.append('events', { at: frame.sessionTime, kind: 'damageChange', carId: car.id, params, in: {} });
       }
     }
     previous[car.id] = now;

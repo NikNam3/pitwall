@@ -25,7 +25,7 @@ const NOT_APPLICABLE = unknown('notApplicable');
  * outputs hold them: one new `recent` window per car that crossed something.
  */
 function foldCrossings(acc: Table, view: EngineView, from: number): void {
-  const list = view.state.history.miniSectors;
+  const list = view.state.history.crossings;
   if (from >= list.length) return;
   let lineTimes = acc.lineTimes;
   const crossed = new Set<CarId>();
@@ -167,9 +167,9 @@ export const gapsCalculator: IncrementalCalculator<GapsAcc, GapsOutput> = {
   cadence: 'frame',
   init,
   update(acc, delta, view) {
-    if (delta.truncated) return init(view);
-    foldCrossings(acc, view, delta.before.miniSectors);
-    foldEvents(acc, view, delta.before.events);
+    if (delta.rewound !== undefined) return init(view);
+    foldCrossings(acc, view, delta.before.crossings ?? 0);
+    foldEvents(acc, view, delta.before.events ?? 0);
     acc.out = build(acc, view);
     return acc;
   },

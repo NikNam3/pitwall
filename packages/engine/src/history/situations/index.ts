@@ -10,11 +10,11 @@ import { atRewindTarget, noteRewind, onRaceClock, restampStart, timeJumpOf, trac
 
 /** Runs `apply` and tags `sessionPhases` when it opened, closed or changed a phase. */
 const tagPhases = (state: EngineState, out: StepOutput, apply: () => void): void => {
-  const { history, open } = state;
-  const phasesBefore = history.sessionPhases.length;
+  const { log, open } = state;
+  const phasesBefore = log.sessionPhases.length;
   const openBefore = open.situations.session;
   apply();
-  if (history.sessionPhases.length !== phasesBefore || open.situations.session !== openBefore) out.changed.add('sessionPhases');
+  if (log.sessionPhases.length !== phasesBefore || open.situations.session !== openBefore) out.changed.add('sessionPhases');
 };
 
 /**

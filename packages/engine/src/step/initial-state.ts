@@ -11,7 +11,9 @@ import {
   type Vec3,
 } from '@pitwall/domain';
 import type { SessionPacket } from '@pitwall/protocol';
-import type { EngineState, History, OpenTrackers } from '../state/engine-state.ts';
+import { newHistory, type ProjectionBook } from '../log/projection.ts';
+import { emptySituation } from '../situations/situation.ts';
+import type { EngineState, OpenTrackers } from '../state/engine-state.ts';
 import type { WeekendContext } from '../state/weekend-context.ts';
 import { placePlayer } from './identity.ts';
 import { sessionStateFrom } from './session.ts';
@@ -106,12 +108,10 @@ export const createCarState = (id: CarId): CarState => ({
   updatedAt: {},
 });
 
-const emptyHistory = (): History => ({ laps: [], stints: [], pitStops: [], flagPhases: [], sessionPhases: [], pauses: [], events: [], miniSectors: [] });
-
 const perCar = <T>(make: () => T): T[] => Array.from({ length: MAX_CARS }, make);
 
 /** Nothing opened yet; per-car arrays hold `MAX_CARS` entries. */
-const emptyTrackers = (lastFlag: OpenTrackers['lastFlag']): OpenTrackers => ({
+const emptyTrackers = (lastFlag: OpenTrackers['lastFlag'], projection: ProjectionBook): OpenTrackers => ({
   situations: { session: { kind: 'preStart', start: toSessionTime(0), startLeaderLap: 0 } },
   phaseBook: { started: false, clockOffsetMs: 0 },
   laps: perCar(() => undefined),
@@ -122,6 +122,7 @@ const emptyTrackers = (lastFlag: OpenTrackers['lastFlag']): OpenTrackers => ({
   lapIndex: perCar(() => ({})),
   pitStatus: perCar(() => undefined),
   damage: perCar(() => undefined),
+  projection,
 });
 
 /** The state at the start of a session: the first Session packet is known, every car's data is not. */
@@ -134,16 +135,18 @@ export function initialState(init: {
 }): EngineState {
   const { header } = init.session;
   const session = sessionStateFrom(init.session, 0);
+  const { log, projection, book } = newHistory(emptySituation());
   const state: EngineState = {
     feedId: init.feedId,
     sessionUid: sessionUidString(init.sessionUid),
     session,
     cars: Array.from({ length: MAX_CARS }, (_, i) => createCarState(carId(i))),
-    history: emptyHistory(),
+    log,
+    history: projection,
     playerCar: carId(header.playerCarIndex),
     lastFrameId: header.frameIdentifier,
     sessionTime: toSessionTime(header.sessionTime),
-    open: emptyTrackers(session.flag),
+    open: emptyTrackers(session.flag, book),
     realism: init.realism ?? false,
     ...(init.weekend && { weekend: init.weekend }),
   };

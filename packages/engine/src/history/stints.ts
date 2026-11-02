@@ -1,4 +1,5 @@
 import type { CarState } from '@pitwall/domain';
+import { logWriter } from '../log/log.ts';
 import type { EngineState, OpenStint } from '../state/engine-state.ts';
 import type { SubStep } from '../step/sub-step.ts';
 import { carsWithLapData } from './cars.ts';
@@ -16,7 +17,7 @@ const openStint = (car: CarState, firstLap: number): OpenStint => ({
 const closeStint = (state: EngineState, car: CarState, stint: OpenStint, lastLap: number): void => {
   if (lastLap < stint.firstLap) return;
   const { firstLap, actualCompound, visualCompound, tyreAgeAtFitting } = stint;
-  state.history.stints.push({ carId: car.id, firstLap, lastLap, actualCompound, visualCompound, tyreAgeAtFitting, in: {} });
+  logWriter(state.log).append('stints', { carId: car.id, firstLap, lastLap, actualCompound, visualCompound, tyreAgeAtFitting, in: {} });
 };
 
 /**
@@ -49,7 +50,7 @@ const trackStint = (state: EngineState, car: CarState): void => {
 
 /** Stints come from Car Status; `SEND` closes the stint every car is still on, at its last recorded lap (so it runs after `applyLaps`). */
 export const applyStints: SubStep = (state, frame, out) => {
-  const before = state.history.stints.length;
+  const before = state.log.stints.length;
   for (const car of carsWithLapData(state, frame)) trackStint(state, car);
   if (frame.events.some(({ details }) => details.code === 'SEND')) {
     for (const car of state.cars) {
@@ -59,5 +60,5 @@ export const applyStints: SubStep = (state, frame, out) => {
       state.open.stints[car.id] = undefined;
     }
   }
-  if (state.history.stints.length > before) out.changed.add('stints');
+  if (state.log.stints.length > before) out.changed.add('stints');
 };

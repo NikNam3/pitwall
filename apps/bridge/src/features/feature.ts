@@ -1,6 +1,6 @@
 import type { Computed, InsightEntry, TopicName, TopicValue } from '@pitwall/contracts';
 import type { CarId } from '@pitwall/domain';
-import type { Calculator, CalculatorId, ConfigKey, ConfigValue, History, IncrementalCalculator, Job, QuickCalculator } from '@pitwall/engine';
+import type { Calculator, CalculatorId, ConfigKey, ConfigValue, IncrementalCalculator, Job, ProjectedList, ProjectionState, QuickCalculator } from '@pitwall/engine';
 
 declare const bindingBrand: unique symbol;
 
@@ -8,8 +8,8 @@ declare const bindingBrand: unique symbol;
 type BindingShape =
   /** The output of a calculator, optionally narrowed by the subscription's params. */
   | { topic: TopicName; from: CalculatorId; select?: (out: unknown, params: object) => unknown }
-  /** One of the append-only history lists. */
-  | { topic: TopicName; fromHistory: keyof History }
+  /** One of the projection's lists. */
+  | { topic: TopicName; fromHistory: ProjectedList }
   /** The active insights. */
   | { topic: TopicName; fromInsights: true }
   /** The results of the job with this id, as `Computed` values. */
@@ -52,10 +52,10 @@ export function selectCar<V>(out: Readonly<Record<CarId, V>>, params: object): V
   return typeof carId === 'number' && Number.isInteger(carId) && Object.hasOwn(out, carId) ? out[carId as CarId] : undefined;
 }
 
-/** Binds a topic to a history list whose records are the topic's value. */
-export const bindHistory = <T extends TopicName, L extends keyof History>(
+/** Binds a topic to a list of the projection whose records are the topic's value. */
+export const bindHistory = <T extends TopicName, L extends ProjectedList>(
   topic: T,
-  list: History[L][number] extends TopicValue<T> ? L : never,
+  list: ProjectionState[L][number] extends TopicValue<T> ? L : never,
 ): TopicBinding => binding({ topic, fromHistory: list });
 
 /** Binds a topic to the insight entries; the topic's value must be `InsightEntry`. */

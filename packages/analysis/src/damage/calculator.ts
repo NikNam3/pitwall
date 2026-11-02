@@ -94,7 +94,7 @@ export const damageCalculator: IncrementalCalculator<Acc, DamageOutput> = {
   reads: ['condition', 'tyres', 'events', 'laps'],
   cadence: { hz: 4 },
   init,
-  update: (acc, delta, view) => (delta.truncated ? init(view) : fold(acc, view)),
+  update: (acc, delta, view) => (delta.rewound !== undefined ? init(view) : fold(acc, view)),
   output(acc) {
     const out: DamageOutput = {};
     for (const [id, { state, lap }] of acc.now) {

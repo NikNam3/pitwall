@@ -1,17 +1,19 @@
 import type { SessionTime } from '@pitwall/domain';
-import { historyLengths } from '../history/delta.ts';
-import type { EngineState, HistoryLengths } from '../state/engine-state.ts';
+import { logLengths } from '../log/log.ts';
+import type { LogLengths } from '../log/types.ts';
+import type { EngineState } from '../state/engine-state.ts';
 import { copyPlain } from '../util/copy-plain.ts';
 
 /**
- * The state after frame `frameId`. The append-only history is kept by its lengths only (spec 5.4); the read-only
- * weekend context is not kept at all, a restore carries the current one over.
+ * The state after frame `frameId`. The append-only log is kept by its lengths only (spec 5.4) and the projection not at
+ * all (a restore projects the log again); the read-only weekend context is not kept either, a restore carries the
+ * current one over.
  */
 export type Snapshot = {
   frameId: number;
   sessionTime: SessionTime;
-  lengths: HistoryLengths;
-  state: Omit<EngineState, 'history' | 'weekend'>;
+  lengths: LogLengths;
+  state: Omit<EngineState, 'log' | 'history' | 'weekend'>;
 };
 
 /**
@@ -25,8 +27,8 @@ export const KEEP_OLDER_EVERY_MS = 30_000;
 const slotOf = (s: Snapshot): number => Math.floor(s.sessionTime / KEEP_OLDER_EVERY_MS);
 
 const snapshotOf = (state: EngineState, frameId: number): Snapshot => {
-  const { history, weekend: _readOnly, ...rest } = state;
-  return { frameId, sessionTime: state.sessionTime, lengths: historyLengths(history), state: copyPlain(rest) };
+  const { log, history: _projected, weekend: _readOnly, ...rest } = state;
+  return { frameId, sessionTime: state.sessionTime, lengths: logLengths(log), state: copyPlain(rest) };
 };
 
 /**

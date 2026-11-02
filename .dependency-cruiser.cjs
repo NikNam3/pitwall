@@ -92,6 +92,17 @@ module.exports = {
       from: { path: '^(packages|apps)/([^/]+)/src/' },
       to: { dependencyTypes: ['local'], path: '^(packages|apps)/', pathNot: '^$1/$2/' },
     },
+    {
+      name: 'log-only-writers-and-projection',
+      comment:
+        'C28: readers see the projection, never the log. Only the projection, the runner, step, the history writers that append (until the recorders, Task 17), the storage writer and the engine tests import log/log.ts.',
+      severity: 'error',
+      from: {
+        pathNot:
+          '^packages/engine/src/(log/projection\\.ts|runner/|step/step\\.ts|history/)|^apps/bridge/src/storage/|^packages/engine/test/',
+      },
+      to: { path: '^packages/engine/src/log/log\\.ts$' },
+    },
     { name: 'no-circular', severity: 'error', from: {}, to: { circular: true } },
     {
       name: 'not-to-unresolvable',

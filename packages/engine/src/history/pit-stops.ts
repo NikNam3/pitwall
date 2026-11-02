@@ -1,4 +1,5 @@
 import type { CarState, SessionState, SessionTime } from '@pitwall/domain';
+import { logWriter } from '../log/log.ts';
 import type { EngineState, OpenPitVisit } from '../state/engine-state.ts';
 import type { SubStep } from '../step/sub-step.ts';
 import { carsWithLapData } from './cars.ts';
@@ -19,7 +20,7 @@ const openVisit = (state: EngineState, car: CarState, at: SessionTime): void => 
 };
 
 const closeVisit = (state: EngineState, car: CarState, visit: OpenPitVisit, at: SessionTime): void => {
-  state.history.pitStops.push({
+  logWriter(state.log).append('pitStops', {
     carId: car.id,
     lap: visit.lap,
     pitLaneEntry: visit.entry,
@@ -42,7 +43,7 @@ const closeVisit = (state: EngineState, car: CarState, visit: OpenPitVisit, at: 
  * (the first status seen is already not `none`) is no visit.
  */
 export const applyPitStops: SubStep = (state, frame, out) => {
-  const before = state.history.pitStops.length;
+  const before = state.log.pitStops.length;
   const at = frame.sessionTime;
   for (const { details } of frame.events) {
     if (details.code !== 'DTSV' && details.code !== 'SGSV') continue;
@@ -60,5 +61,5 @@ export const applyPitStops: SubStep = (state, frame, out) => {
     visit.stationaryTimeMs = Math.max(visit.stationaryTimeMs, pitStopTimerMs);
     if (pitStatus === 'none') closeVisit(state, car, visit, at);
   }
-  if (state.history.pitStops.length > before) out.changed.add('pitStops');
+  if (state.log.pitStops.length > before) out.changed.add('pitStops');
 };

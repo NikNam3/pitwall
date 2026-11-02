@@ -1,4 +1,5 @@
 import { MINI_SECTORS, type CarId, type Metres, type SessionTime } from '@pitwall/domain';
+import { logWriter } from '../log/log.ts';
 import type { EngineState } from '../state/engine-state.ts';
 import type { SubStep } from '../step/sub-step.ts';
 import { carsWithLapData } from './cars.ts';
@@ -39,11 +40,12 @@ const trackCar = (state: EngineState, carId: CarId, lap: number, distanceM: Metr
   let last = { lap: cursor.lap, segment: cursor.segment };
   const { trackLengthM } = state.session;
   const path = lap === cursor.lap ? distanceM - cursor.distanceM : trackLengthM - cursor.distanceM + distanceM;
+  const log = logWriter(state.log);
   for (const crossing of crossingsBetween(cursor, lap, distanceM, trackLengthM)) {
     if (!isAfter(crossing, last.lap, last.segment)) continue;
     last = crossing;
     const crossedAt = path === 0 ? cursor.at : Math.round(cursor.at + ((at - cursor.at) * crossing.pathM) / path);
-    state.history.miniSectors.push({ carId, lap: crossing.lap, segment: crossing.segment, at: crossedAt, in: {} });
+    log.append('crossings', { carId, lap: crossing.lap, segment: crossing.segment, at: crossedAt, in: {} });
   }
   sample.segment = last.lap === lap ? last.segment : -1;
 };
@@ -54,9 +56,9 @@ const trackCar = (state: EngineState, carId: CarId, lap: number, distanceM: Metr
  */
 export const applyMiniSectors: SubStep = (state, frame, out) => {
   if (state.session.trackLengthM <= 0) return;
-  const before = state.history.miniSectors.length;
+  const before = state.log.crossings.length;
   for (const car of carsWithLapData(state, frame)) {
     trackCar(state, car.id, car.timing.lap, car.timing.lapDistanceM, frame.sessionTime);
   }
-  if (state.history.miniSectors.length > before) out.changed.add('miniSectors');
+  if (state.log.crossings.length > before) out.changed.add('miniSectors');
 };

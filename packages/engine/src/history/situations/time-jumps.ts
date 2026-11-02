@@ -152,7 +152,8 @@ const shiftCursor = (cursor: LapCursor, shift: Shift): void => {
  * place, since readers may hold them.
  */
 export const restampStart = (state: EngineState, offsetMs: Ms): void => {
-  const { history, open } = state;
+  // Rewrites the log in place (an old mechanism; Task 9 replaces it): the step is `rewritten`, so the projection is rebuilt.
+  const { log, open } = state;
   const start = open.phaseBook.lightsOut;
   if (!start) return;
   const shift: Shift = (at) => Math.max(0, at - offsetMs);
@@ -162,21 +163,21 @@ export const restampStart = (state: EngineState, offsetMs: Ms): void => {
   const each = <T>(list: T[], fromIndex: number, move: (entry: T) => T): void => {
     list.splice(fromIndex, list.length - fromIndex, ...list.slice(fromIndex).map(move));
   };
-  each(history.laps, from.laps, (lap) => ({ ...lap, completedAt: shift(lap.completedAt) }));
-  each(history.pitStops, from.pitStops, (stop) => ({ ...stop, pitLaneEntry: shift(stop.pitLaneEntry), pitLaneExit: shift(stop.pitLaneExit) }));
-  each(history.events, from.events, (event) => ({ ...event, at: shift(event.at) }));
-  each(history.miniSectors, from.miniSectors, (crossing) => ({ ...crossing, at: shift(crossing.at) }));
-  each(history.pauses, from.pauses, (pause) => ({ ...pause, start: shift(pause.start) }));
-  each(history.flagPhases, from.flagPhases, (p) => ({
+  each(log.laps, from.laps, (lap) => ({ ...lap, completedAt: shift(lap.completedAt) }));
+  each(log.pitStops, from.pitStops, (stop) => ({ ...stop, pitLaneEntry: shift(stop.pitLaneEntry), pitLaneExit: shift(stop.pitLaneExit) }));
+  each(log.events, from.events, (event) => ({ ...event, at: shift(event.at) }));
+  each(log.crossings, from.crossings, (crossing) => ({ ...crossing, at: shift(crossing.at) }));
+  each(log.pauses, from.pauses, (pause) => ({ ...pause, start: shift(pause.start) }));
+  each(log.flagPhases, from.flagPhases, (p) => ({
     ...p,
     start: shift(p.start),
     end: shift(p.end),
     scPhases: p.scPhases.map((s) => ({ ...s, at: shift(s.at) })),
   }));
   // The phase before the start lights ends where they begin; from the start lights on, the whole spans move.
-  const before = history.sessionPhases[phaseFrom - 1];
-  if (before) history.sessionPhases[phaseFrom - 1] = { ...before, end: shift(before.end) };
-  each(history.sessionPhases, phaseFrom, (span) => shiftSpan(span, shift));
+  const before = log.sessionPhases[phaseFrom - 1];
+  if (before) log.sessionPhases[phaseFrom - 1] = { ...before, end: shift(before.end) };
+  each(log.sessionPhases, phaseFrom, (span) => shiftSpan(span, shift));
   open.situations.session = shiftOpen(open.situations.session, shift);
   const { unconfirmed, onlinePause } = open.phaseBook;
   if (unconfirmed) open.phaseBook.unconfirmed = { ...unconfirmed, closed: shiftSpan(unconfirmed.closed, shift), replaced: shiftOpen(unconfirmed.replaced, shift) };
@@ -192,7 +193,7 @@ export const restampStart = (state: EngineState, offsetMs: Ms): void => {
  * `phaseBook.onlinePause` while it lasts. Garage acceleration (session time ahead of wall time) is none.
  */
 export const trackPauses = (state: EngineState, frame: Frame): void => {
-  const { history, open } = state;
+  const { log, open } = state;
   const book = open.phaseBook;
   const wall = frame.receivedAtMs;
   if (state.session.networkGame) {
@@ -201,13 +202,13 @@ export const trackPauses = (state: EngineState, frame: Frame): void => {
       book.onlinePause = { start: frame.sessionTime, wallMs: wall };
     } else if (paused === 0 && book.onlinePause) {
       const { start, wallMs } = book.onlinePause;
-      history.pauses.push({ start, wallMs: Math.max(0, Math.round(wall - wallMs)), kind: 'online' });
+      log.pauses.push({ start, wallMs: Math.max(0, Math.round(wall - wallMs)), kind: 'online' });
       book.onlinePause = undefined;
     }
   } else if (book.lastWallMs !== undefined) {
     const gap = wall - book.lastWallMs;
     if (gap - Math.max(0, frame.sessionTime - state.sessionTime) > PAUSE_AFTER_WALL_MS) {
-      history.pauses.push({ start: state.sessionTime, wallMs: Math.round(gap), kind: 'offline' });
+      log.pauses.push({ start: state.sessionTime, wallMs: Math.round(gap), kind: 'offline' });
     }
   }
   book.lastWallMs = wall;

@@ -32,7 +32,8 @@ const mirrors = (flag: OpenFlagPhase | undefined, phase: OpenSessionPhase): bool
  * tag `flagPhases`.
  */
 export const applyFlagPhases: SubStep = (state, _frame, out) => {
-  const { sessionPhases, flagPhases } = state.history;
+  // Legacy lists (`LegacyList`): written in the log directly until Task 19 removes flag phases.
+  const { sessionPhases, flagPhases } = state.log;
   const recorded = flagPhases.length;
   let mirrored = 0;
   for (const span of sessionPhases) {

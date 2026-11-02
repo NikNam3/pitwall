@@ -3,11 +3,14 @@ import type {
   ClockFact,
   FactList,
   FactRef,
+  FlagPhase,
   LapRecord,
   MachineId,
   MiniSectorCrossing,
+  PauseSpan,
   PitStopRecord,
   RaceEvent,
+  SessionPhaseSpan,
   Span,
   StintRecord,
   VoidFact,
@@ -31,8 +34,14 @@ export type FactOf<L extends FactList> = L extends 'laps'
               ? VoidFact
               : Span;
 
-/** The length of every list that has facts. */
-export type LogLengths = Partial<Record<FactList, number>>;
+/**
+ * The old mechanisms' lists, not facts: written by the situation tracker as before, never hidden, in the log and the
+ * projection until the task that replaces each (`flagPhases` Task 19, `sessionPhases` Task 9, `pauses` Task 7).
+ */
+export type LegacyList = 'flagPhases' | 'sessionPhases' | 'pauses';
+
+/** The length of every list that has facts (and of the legacy lists, until they go). */
+export type LogLengths = Partial<Record<FactList | LegacyList, number>>;
 /** What a frame changed in the log (C30): the lengths before and after; `rewound` when a void fact appeared. */
 export type HistoryDelta = { before: LogLengths; after: LogLengths; rewound?: VoidFact['target'] };
 
@@ -42,8 +51,8 @@ export interface LogWriter {
   lengths(): LogLengths;
 }
 
-/** The log as readers see it (C28): every hidden fact skipped. */
-export type Projection = DeepReadonly<{
+/** The lists of the log as readers see them; `spans` holds `spans:<machine>` by machine. */
+type Lists = {
   laps: LapRecord[];
   stints: StintRecord[];
   pitStops: PitStopRecord[];
@@ -51,4 +60,26 @@ export type Projection = DeepReadonly<{
   events: RaceEvent[];
   clock: ClockFact[];
   spans: Record<MachineId, Span[]>;
-}>;
+  /** Legacy (`LegacyList`): removed by Task 19. */
+  flagPhases: FlagPhase[];
+  /** Legacy (`LegacyList`): closed session phases, oldest first; removed by Task 9. */
+  sessionPhases: SessionPhaseSpan[];
+  /** Legacy (`LegacyList`): pauses, oldest first (display only); removed by Task 7. */
+  pauses: PauseSpan[];
+};
+
+/**
+ * The append-only log (C21): one list per fact type, the void facts and one span list per sub-machine, plus the legacy
+ * lists. Plain data (snapshots copy it). Written through a `LogWriter` (`log/log.ts`); read only by the projection,
+ * the runner and the storage writer (C28).
+ */
+export type Log = Lists & { voids: VoidFact[] };
+
+/** The projection as the engine keeps it (`EngineState.history`): written only by `log/projection.ts`. */
+export type ProjectionState = Lists;
+
+/** The log as readers see it (C28): every hidden fact skipped. */
+export type Projection = DeepReadonly<ProjectionState>;
+
+/** A list of the projection that holds records (every key but `spans`). */
+export type ProjectedList = Exclude<keyof ProjectionState, 'spans'>;

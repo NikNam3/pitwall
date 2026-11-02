@@ -1,5 +1,5 @@
 import { driverKeyString } from '@pitwall/domain';
-import type { DeepReadonly, History, HistoryDelta } from '@pitwall/engine';
+import type { HistoryDelta, ProjectedList, Projection } from '@pitwall/engine';
 import type { Db, SessionKey, SessionRow } from './db.ts';
 
 export interface StorageWriterOptions {
@@ -74,25 +74,26 @@ export class StorageWriter {
   }
 
   /**
-   * Writes the history entries `delta` adds (confirmed laps only). A truncated delta (flashback) first drops the
-   * session's stored history and rewrites everything up to `delta.after`.
+   * Writes the history entries `delta` adds (confirmed laps only). A rewound delta (a flashback, the race start) first
+   * drops the session's stored history and rewrites everything up to `delta.after` (until Task 27 stores the log).
    */
-  writeConfirmed(key: SessionKey, history: DeepReadonly<History>, delta: HistoryDelta): void {
-    const from = (list: keyof History) => (delta.truncated ? 0 : delta.before[list]);
-    const added = <T>(list: keyof History, items: readonly T[]) => items.slice(from(list), delta.after[list]);
+  writeConfirmed(key: SessionKey, history: Projection, delta: HistoryDelta): void {
+    const rewound = delta.rewound !== undefined;
+    const from = (list: ProjectedList) => (rewound ? 0 : (delta.before[list] ?? 0));
+    const added = <T>(list: ProjectedList, items: readonly T[]) => items.slice(from(list), delta.after[list] ?? 0);
     const laps = added('laps', history.laps).filter((l) => l.status === 'confirmed');
     const stints = added('stints', history.stints);
     const pitStops = added('pitStops', history.pitStops);
     const flagPhases = added('flagPhases', history.flagPhases);
     const events = added('events', history.events);
     const nothingToWrite = [laps, stints, pitStops, flagPhases, events].every((list) => list.length === 0);
-    if (nothingToWrite && !delta.truncated) return;
+    if (nothingToWrite && !rewound) return;
 
     this.guarded(() =>
       this.db.transaction(() => {
         const s = this.statements;
         const { sessionUid, weekendId } = key;
-        if (delta.truncated) for (const clear of s.clear) clear.run({ sessionUid, weekendId });
+        if (rewound) for (const clear of s.clear) clear.run({ sessionUid, weekendId });
         for (const lap of laps) {
           s.upsertLap.run({ sessionUid, weekendId, carId: lap.carId, lapNumber: lap.lapNumber, lapTimeMs: lap.lapTimeMs, record: JSON.stringify(lap) });
         }

@@ -1,5 +1,5 @@
 import type { Insight, SessionTime } from '@pitwall/domain';
-import type { HistoryDelta } from '../history/delta.ts';
+import type { HistoryDelta } from '../log/types.ts';
 import type { ChangeTag } from '../step/step.ts';
 import { InsightBook } from './insight-book.ts';
 import { RegistryError, type CalculatorRegistry } from './registry.ts';
@@ -42,28 +42,25 @@ const freshSlot = (): Slot => ({
   prevOutput: undefined,
 });
 
-/** Adds a frame to what is pending: the oldest `before`, the newest `after`, truncated if any frame was. */
+/** Adds a frame to what is pending: the oldest `before`, the newest `after`, rewound if any frame was (to the newest target). */
 const absorb = (pending: Pending | undefined, input: SchedulerInput): Pending => {
   if (pending === undefined) return { changed: new Set(input.changed), delta: input.delta };
   for (const tag of input.changed) pending.changed.add(tag);
-  pending.delta = {
-    before: pending.delta.before,
-    after: input.delta.after,
-    truncated: pending.delta.truncated || input.delta.truncated,
-  };
+  const rewound = input.delta.rewound ?? pending.delta.rewound;
+  pending.delta = { before: pending.delta.before, after: input.delta.after, ...(rewound && { rewound }) };
   return pending;
 };
 
 const isDue = (cadence: Cadence, lastRunAt: SessionTime, pending: Pending, now: SessionTime): boolean => {
   if (cadence === 'frame') return true;
   if (typeof cadence === 'object') return now < lastRunAt || now - lastRunAt >= 1000 / cadence.hz;
-  const { before, after, truncated } = pending.delta;
-  // A flashback discards history, so event calculators run again to catch up with it.
+  const { before, after, rewound } = pending.delta;
+  // A rewind discards history, so event calculators run again to catch up with it.
   switch (cadence) {
     case 'lapCompleted':
-      return truncated || after.laps > before.laps;
+      return rewound !== undefined || (after.laps ?? 0) > (before.laps ?? 0);
     case 'pitStop':
-      return truncated || after.pitStops > before.pitStops;
+      return rewound !== undefined || (after.pitStops ?? 0) > (before.pitStops ?? 0);
     case 'flagChange':
       return pending.changed.has('flagPhases');
     case 'sessionChange':
@@ -95,7 +92,7 @@ const evaluate = (calc: Calculator, slot: Slot, view: EngineView, hook: OnCalcul
     output = hook(calc.id, () => calc.compute(view));
   } else {
     const next = hook(calc.id, () =>
-      slot.acc === undefined || view.delta.truncated ? calc.init(view) : calc.update(slot.acc.value, view.delta, view),
+      slot.acc === undefined || view.delta.rewound !== undefined ? calc.init(view) : calc.update(slot.acc.value, view.delta, view),
     );
     acc = { value: next };
     output = hook(calc.id, () => calc.output(next));

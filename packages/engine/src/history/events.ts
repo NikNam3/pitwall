@@ -1,6 +1,7 @@
 import { carId, type RaceEvent } from '@pitwall/domain';
 import type { EventDetails } from '@pitwall/protocol';
 import { applyDamageChanges } from './damage-changes.ts';
+import { logWriter } from '../log/log.ts';
 import { pick } from '../step/pick.ts';
 import type { SubStep } from '../step/sub-step.ts';
 
@@ -80,11 +81,12 @@ const raceEventOf = (details: EventDetails): EventBody | undefined => {
 
 /** The game's events that belong to the race history, in the order they arrived. */
 export const applyEvents: SubStep = (state, frame, out) => {
-  const before = state.history.events.length;
+  const before = state.log.events.length;
+  const log = logWriter(state.log);
   for (const { details } of frame.events) {
     const body = raceEventOf(details);
-    if (body) state.history.events.push({ at: frame.sessionTime, ...body, in: {} });
+    if (body) log.append('events', { at: frame.sessionTime, ...body, in: {} });
   }
   applyDamageChanges(state, frame);
-  if (state.history.events.length > before) out.changed.add('events');
+  if (state.log.events.length > before) out.changed.add('events');
 };

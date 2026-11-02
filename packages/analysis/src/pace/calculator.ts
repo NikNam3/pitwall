@@ -49,10 +49,10 @@ export const paceCalculator: IncrementalCalculator<PaceAcc, Pace> = {
   cadence: 'lapCompleted',
   init,
   update(acc, delta, view) {
-    if (delta.truncated) return init(view);
+    if (delta.rewound !== undefined) return init(view);
     Object.assign(acc, settings(view));
-    foldLaps(acc, view, delta.before.laps);
-    foldStints(acc, view, delta.before.stints);
+    foldLaps(acc, view, delta.before.laps ?? 0);
+    foldStints(acc, view, delta.before.stints ?? 0);
     return acc;
   },
   output(acc) {

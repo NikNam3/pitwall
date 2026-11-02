@@ -80,7 +80,7 @@ type CarEvent = {
 type Acc = {
   /** How much of each history list is folded. */
   events: number;
-  miniSectors: number;
+  crossings: number;
   flagPhases: number;
   pitStops: number;
   laps: number;
@@ -143,7 +143,7 @@ const readLive = (acc: Acc, view: EngineView): void => {
 
 /** Folds the new spans and crossings; a new span re-evaluates the crossings it may cover (all cars for a flag phase). */
 const foldCrossings = (acc: Acc, view: EngineView): void => {
-  const { flagPhases, pitStops, miniSectors } = view.state.history;
+  const { flagPhases, pitStops, crossings } = view.state.history;
   const reset = new Set<number>();
   let resetAll = false;
   for (const p of flagPhases.slice(acc.flagPhases)) {
@@ -157,12 +157,12 @@ const foldCrossings = (acc: Acc, view: EngineView): void => {
     reset.add(s.carId);
   }
   acc.pitStops = pitStops.length;
-  for (const c of miniSectors.slice(acc.miniSectors)) {
+  for (const c of crossings.slice(acc.crossings)) {
     if (c.lap < 1) continue;
     addCrossing((acc.tracks[c.carId] ??= emptyTrack()), c);
     if (c.at > acc.newestAt) acc.newestAt = c.at;
   }
-  acc.miniSectors = miniSectors.length;
+  acc.crossings = crossings.length;
 
   const open: Span[] = acc.active === undefined ? [] : [{ start: acc.active.at, end: Infinity }];
   acc.tracks.forEach((track, id) => {
@@ -221,7 +221,7 @@ const init = (view: EngineView): Acc =>
   fold(
     {
       events: 0,
-      miniSectors: 0,
+      crossings: 0,
       flagPhases: 0,
       pitStops: 0,
       laps: 0,
@@ -490,6 +490,6 @@ export const incidentsCalculator: IncrementalCalculator<Acc, IncidentsOutput> = 
   reads: ['session', 'identity', 'timing', 'events', 'flagPhases', 'miniSectors', 'pitStops', 'laps'],
   cadence: { hz: 4 },
   init,
-  update: (acc, delta, view) => (delta.truncated ? init(view) : fold(acc, view)),
+  update: (acc, delta, view) => (delta.rewound !== undefined ? init(view) : fold(acc, view)),
   output,
 };

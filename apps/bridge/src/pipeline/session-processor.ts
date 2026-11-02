@@ -3,7 +3,7 @@ import { sessionUidString, type FeedId, type Insight, type SessionTime, type Ses
 import {
   activeFlagPhaseOf,
   driverKeyOf,
-  historyLengths,
+  projectionLengths,
   Scheduler,
   SessionRunner,
   situationOf,
@@ -182,7 +182,7 @@ export class SessionProcessor {
       if (result.clockJump) log.info({ feedId, sessionUid: this.#uid, clockJump: result.clockJump }, 'session time jumped forward');
       // A flashback, the race start (discarding the formation lap, settling its clock), a dropped unconfirmed neutralisation
       // or a session-phase boundary that moves an entry earlier frames recorded changed history: the calculators start over.
-      if (result.delta.truncated) {
+      if (result.delta.rewound !== undefined) {
         scheduler.reset();
         // A run triggered before it would land on the new timeline.
         this.#o.jobs?.flashback();
@@ -214,13 +214,13 @@ export class SessionProcessor {
     const { feedId, publisher, log } = this.#o;
     const { state } = runner;
     this.#o.calcStats?.atSessionTime(state.sessionTime);
-    const lengths = historyLengths(state.history);
+    const lengths = projectionLengths(state.history);
     const scheduled = scheduler.run({
       state,
       activeFlagPhase: activeFlagPhaseOf(state),
       situation: situationOf(state),
       changed: new Set(),
-      delta: { before: lengths, after: lengths, truncated: false },
+      delta: { before: lengths, after: lengths },
       feed: this.#o.feedView(),
       config: this.#o.config,
     }, { only });

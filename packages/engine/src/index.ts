@@ -39,6 +39,7 @@ export {
   type StepOutput,
   type SubStep,
 } from './step/step.ts';
-export { historyLengths, type HistoryDelta } from './history/delta.ts';
+export { projectionLengths } from './log/projection.ts';
+export type { HistoryDelta, LogLengths, Projection, ProjectedList, ProjectionState } from './log/types.ts';
 export { unknownLapEnd, type LapEndSamples } from './history/lap-samples.ts';
 export { SessionRunner, type FlashbackInfo, type SessionRunnerOptions, type StepResult } from './runner/session-runner.ts';

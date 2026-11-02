@@ -1,6 +1,6 @@
 // The derived storage layer for one session (spec 9.2, 9.3): its row, its confirmed history, its weekend context.
 import { carId, type DriverKey, type SessionUid } from '@pitwall/domain';
-import { driverKeyOf, type DeepReadonly, type History, type HistoryDelta, type WeekendContext } from '@pitwall/engine';
+import { driverKeyOf, type HistoryDelta, type Projection, type WeekendContext } from '@pitwall/engine';
 import type { ParticipantsPacket, SessionPacket } from '@pitwall/protocol';
 import type { Logger } from '../log.ts';
 import type { Db, SessionKey, SessionRow } from '../storage/db.ts';
@@ -62,7 +62,7 @@ export class SessionStorage {
     this.#access?.writer.upsertSession(row);
   }
 
-  writeConfirmed(key: SessionKey, history: DeepReadonly<History>, delta: HistoryDelta): void {
+  writeConfirmed(key: SessionKey, history: Projection, delta: HistoryDelta): void {
     this.#access?.writer.writeConfirmed(key, history, delta);
   }
 
