@@ -27,6 +27,26 @@ Status: self-check of `02-contract.md`, 2026-11-02. Every decision of the brains
 | — | Review question: did this change violate the contract | C89 |
 | — | Test levels: related tests per task, `pnpm check` per merge, UI and acceptance per sub-project | C88 |
 
+## 1a. The contract review (2026-11-02)
+
+| Item | Resolution | Clauses |
+|---|---|---|
+| Replayed frames would append their facts twice | the void starts at the snapshot's lengths; the replay re-appends | C27 |
+| Span ids after a rewind | counted in the projection | C26 |
+| The log's readers | the projection module, the storage writer, the runner (lengths) | C28 |
+| Append-only against rebuilds | one log per session and rules version; a rebuild replaces it whole | C24, C61 |
+| Insights from the scheduler and the bridge | `system` insights only; the flashback insight is an analysis | C52 |
+| Nobody could see a flashback | a visible flashback fact from the clock | C22, C27 |
+| Signals missing from the list | SSTA, TMPT, `drsAllowed`, `networkPaused`, `isSpectating`, `spectatorCarIndex`, `aiControlled`; BUTN ignored; driver controls and setup are values | glossary, C12 |
+| Facts naming each other | fact ids (list, position) and references | C21, C25 |
+| Decision replay position | the record index, not a frame id | C76 |
+| Rules of the old architecture missing | several feeds, realism in step 1, freshness, feed health | C1a, C8, C37 |
+| When rebuilds run | the current weekend at bridge start, the rest when first read | C61 |
+| Time trial and unknown sessions | weekend phase `none`, shared sub-machines only | C14 |
+| D1: a decision before a flashback | voided like any fact (user: the plan rested on facts that no longer happened) | C27a, C76 |
+| D2: SP4a's knowledge store | SP4a is void under C0 and re-specced after the migration; a priors store of season-wide aggregates computed from stored projections, a cache with versions, fixed per run with a sidecar; tests never read it | C32, C38, C39, C59, C62a, C84 |
+| D3: insights in undone time | recomputed: the stream equals a run without the undone frames; the scheduler's bookkeeping is in the runner's snapshot; a re-raised insight is a new occurrence | C27, C30, C33 |
+
 ## 2. Survey §7: places that decide situations outside the tracker
 
 | Place today | Forbidden or replaced by |
@@ -97,4 +117,6 @@ Built by the migration plan, before the clauses that name them can be checked:
 - **Gallery timeout:** `apps/ui/test/gallery/gallery.test.ts` mounts the gallery in jsdom in about 28 s against a 30 s limit and failed once under load (2026-11-02). A slowness bug: profile and fix, never raise the timeout.
 - **Tooling and hook tests** (about 144 s of the suite's 720 s of work) could move from `pnpm check` to the merge gate; a later decision.
 - **ADR numbering:** this contract's ADR takes 0015; SP4a's planned priors ADR becomes 0016.
+- **SP4a:** void under C0; re-specced against the contract after the migration. Its knowledge store becomes the priors store (C62a).
+- **Clause numbers:** clauses added in the review carry letter suffixes (C1a, C27a, C62a); the compression pass renumbers them.
 - **Migration plan:** a separate plan (writing-plans) after the contract is approved, ordered by C81; it replaces the remaining situations plan Tasks 3–9 and precedes SP4a.
