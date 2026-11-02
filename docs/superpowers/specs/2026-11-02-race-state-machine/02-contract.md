@@ -4,7 +4,7 @@ Status: draft for the user's review, 2026-11-02. On approval this text replaces 
 
 This document is the architecture. Every clause binds every change. Tags say how a clause is enforced: `[type]` a compile error, `[depcruise]` a dependency rule, `[lint]`, `[gen]` a generator check, `[hooks]` the worker hooks, `[test]` or `[test: name]` a test, `[review]` the review question (C89).
 
-**C0. No change may violate the contract.** A task that needs a different contract stops, and its worker reports the need under "Contract gaps": what the task needs and which clause blocks it. The contract changes only with the user's approval, and then in this order: the contract and its ADR line change, existing code is adapted, and only then is further code written. Code written before this contract is migrated by its plan; a change may neither add a violation nor keep one in code it touches. `[review]`
+**C0. No change may violate the contract.** A task that needs a different contract stops, and its worker reports the need under "Contract gaps": what the task needs and which clause blocks it. Every other task of the sub-project stops too, at its next commit, whether the change touches it or not. The contract changes only with the user's approval, and then in this order: the contract and its ADR line change, the existing code is adapted, and only then is further code written. A rejected change sends the task back to be re-briefed within the contract. Approving this contract is such a change: the migration plan adapts the existing code, and no other code is written until it is done. `[review]`
 
 ## Glossary
 
