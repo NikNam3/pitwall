@@ -618,6 +618,45 @@
         "zone 8 blue at 6764.7, none at 6773.2; zone 9 blue at 6770.7, blue to the end",
         "duration 10996 ms"
       ]
+    },
+    {
+      "file": "practice-miami-invalid.pwrec.gz",
+      "source": "practiceFriendWings",
+      "fromS": 1525,
+      "toS": 1550,
+      "records": 5400,
+      "features": [
+        "2 context packets (Session, Participants) first; session time 1525.016 to 1549.9, rising throughout; short practice (session type 4)",
+        "car 19 (the player) on lap 8 with totalWarnings 9 and cornerCuttingWarnings 9 throughout; currentLapInvalid 0 until 1526.992",
+        "PENA lap invalidation (penaltyType 12 this lap invalidated without reason, infringement 7, lap 8, placesGained 255) for car 19 at 1526.992, in the same frame as LapData currentLapInvalid 0 to 1",
+        "the flag stays set to the end of the segment (it clears at the line at 1563.605, outside)",
+        "duration 24986.809 ms"
+      ]
+    },
+    {
+      "file": "practice-miami-warning.pwrec.gz",
+      "source": "practiceFriendWings",
+      "fromS": 214,
+      "toS": 218,
+      "records": 907,
+      "features": [
+        "2 context packets (Session, Participants) first; session time 214 to 217.9, rising throughout; short practice (session type 4)",
+        "car 19 (the player) on lap 1 with no warning until 215.595",
+        "PENA warning (penaltyType 5, infringement 7, lap 1) for car 19 at 215.595, in the same frame as LapData totalWarnings 0 to 1 and cornerCuttingWarnings 0 to 1",
+        "duration 3966.312 ms"
+      ]
+    },
+    {
+      "file": "practice-zandvoort-warning-late.pwrec.gz",
+      "source": "practiceZandvoortOnline",
+      "fromS": 45,
+      "toS": 47.5,
+      "records": 516,
+      "features": [
+        "2 context packets (Session, Participants) first; session time 45 to 47.5, rising throughout; short practice (session type 4)",
+        "PENA warning (penaltyType 5, infringement 10, lap 1) for car 1 at 45.542; LapData totalWarnings 0 to 1 for car 1 follows 16 frames (0.543 s) later, at 46.085; cornerCuttingWarnings stays 0",
+        "duration 2464.578 ms"
+      ]
     }
   ]
 }

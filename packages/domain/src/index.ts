@@ -11,6 +11,8 @@ export * from './weekend-phase.ts';
 export * from './span-scopes.ts';
 export { spans as carFlagsSpans } from './situations/car-flags.ts';
 export { spans as zoneFlagsSpans, type ZoneFlagDetail } from './situations/zone-flags.ts';
+export { spans as lapValiditySpans, type InvalidLapDetail } from './situations/lap-validity.ts';
+export { spans as warningsSpans, type WarnedDetail } from './situations/warnings.ts';
 export { spans as clockSpans, type PausedDetail } from './situations/clock.ts';
 export {
   spans as sessionPhaseRaceSpans,
