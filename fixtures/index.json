@@ -565,6 +565,18 @@
         "SCAR x1, PENA x1, BUTN x16",
         "duration 3516.529 ms"
       ]
+    },
+    {
+      "file": "race-sprint-start.pwrec.gz",
+      "source": "raceSprint",
+      "fromS": 0,
+      "toS": 2.5,
+      "records": 3894,
+      "features": [
+        "no context packets; session type 15 (race) throughout; the first Session packet (session time 0) carries numSessionsInWeekend 0 and an empty weekend structure",
+        "a later Session packet (session time 1.505) carries numSessionsInWeekend 2 and the structure [15, 16]: this race is the sprint of its weekend",
+        "duration 205782.375 ms"
+      ]
     }
   ]
 }
