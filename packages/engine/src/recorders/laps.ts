@@ -183,8 +183,8 @@ const corrections = (provisional: LapRecord, confirmed: LapRecord): LapCorrectio
 
 /**
  * The lap before Session History confirms it: the stored provisional, the car's open lap (a final lap the game never
- * rolled over) or a lap skipped by a lap-number jump. Laps from before the engine saw the car stay unknown. A stored
- * provisional keeps its stamp; a lap made now is stamped `stamp`.
+ * rolled over) or a lap skipped by a lap-number jump. Laps from before the engine saw the car stay unknown. A lap made
+ * now is stamped `stamp`.
  */
 const unconfirmedLap = (own: LapsOwn, car: LiveCar, entry: DeepReadonly<ConfirmedLap>, at: SessionTime, stamp: Stamp) => {
   const { lapNumber } = entry;
@@ -206,7 +206,8 @@ const confirmLaps = (own: LapsOwn, car: LiveCar, f: LapsPass): void => {
   for (const entry of car.timing.confirmedLaps) {
     const { lapNumber } = entry;
     if (recorded[lapNumber]?.confirmed) continue;
-    const before = unconfirmedLap(own, car, entry, f.at, stampOf(f.stamps, car.id));
+    const stamp = stampOf(f.stamps, car.id);
+    const before = unconfirmedLap(own, car, entry, f.at, stamp);
     if (!before) continue;
     const confirmed: LapRecord = {
       ...before.lap,
@@ -216,6 +217,8 @@ const confirmLaps = (own: LapsOwn, car: LiveCar, f: LapsPass): void => {
       status: 'confirmed',
       // the line crossing, not the Session History cycle that confirmed it (up to ~24 s later)
       completedAt: before.reported ? before.lap.completedAt : f.at,
+      // a new fact, recorded on this frame: the spans open now (C26), not the provisional's
+      in: stamp,
     };
     if (before.reported) f.out.corrections.push(...corrections(before.lap, confirmed));
     f.log.append('laps', confirmed);

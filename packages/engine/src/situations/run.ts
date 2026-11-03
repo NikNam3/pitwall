@@ -3,7 +3,7 @@
 // open spans its upstreams have after this frame. Their closed spans are appended to `spans:<id>`, stamped like the
 // recorders' facts, and the frame's stamps go to the recorders. Each sub-machine's open state is kept in
 // `open.machines[id]`, so snapshots carry it and a rewind restores its span count with it (C26).
-import { MAX_CARS, type MachineId, type OpenSpan, type SessionTime, type Span, type WeekendPhase } from '@pitwall/domain';
+import { MAX_CARS, type MachineId, type OpenSpan, type SessionTime, type WeekendPhase } from '@pitwall/domain';
 import type { Frame } from '../frame/frame.ts';
 import { logWriter } from '../log/log.ts';
 import type { EngineState } from '../state/engine-state.ts';
@@ -65,8 +65,7 @@ const stampsOf = (state: DeepReadonly<EngineState>): FrameStamps => {
 const appendClosed = (state: EngineState, closed: ReadonlyArray<{ machine: MachineId; spans: Closed }>, stamps: FrameStamps): void => {
   const log = logWriter(state.log);
   for (const { machine, spans } of closed) {
-    // The log's span lists hold every sub-machine's spans, whatever their detail (`Span` in log/types.ts).
-    for (const span of spans) log.append(`spans:${machine}`, { ...span, in: stampOf(stamps, span.carId) } as Span);
+    for (const span of spans) log.append(`spans:${machine}`, { ...span, in: stampOf(stamps, span.carId) });
   }
 };
 

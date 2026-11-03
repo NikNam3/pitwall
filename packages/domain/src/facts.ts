@@ -15,7 +15,7 @@ export type FactList = 'laps' | 'stints' | 'pitStops' | 'crossings' | 'events' |
 export type FactRef = { list: FactList; index: number };
 
 /** One situation from its start to its end, closed: a fact of `spans:<machine>` (C9, C18). `joinedAt`: the engine joined the session while it was open. */
-export type Span<K extends string = string, D = undefined> = {
+export type Span<K extends string = string, D = unknown> = {
   machine: MachineId;
   id: SpanId;
   carId?: CarId;
@@ -28,7 +28,7 @@ export type Span<K extends string = string, D = undefined> = {
   in: Stamp;
 };
 /** A span still in progress: a sub-machine's open state as readers see it (`view.situation`, C20). */
-export type OpenSpan<K extends string = string, D = undefined> = Omit<Span<K, D>, 'end' | 'in'>;
+export type OpenSpan<K extends string = string, D = unknown> = Omit<Span<K, D>, 'end' | 'in'>;
 
 /** The fact a flashback appends (C27): the target, and per list the range `[from, to)` of positions that never happened. */
 export type VoidFact = {
