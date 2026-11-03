@@ -1,12 +1,15 @@
 // The car-location transition table (contract C15, C17, C85): per car, where it physically is, from the signals
 // `driverStatus` and `pitStatus` alone. `garage` while the driver status is in the garage (ds 0), whatever the pit status
 // (inventory §2.1: some cars show ps 0 in the garage); otherwise `pitLane` while the pit status is pitting or in the pit
-// area (ps 1, 2); otherwise `track`. A car has a span from the session's first frame on (lane-common: every car slot),
-// so `none -> <kind>` is the first frame (a join row: the span has `joinedAt`, Review Focus 2); after it every change
-// of the car's location closes its span and opens the next. No kind goes to `none`. The declared transitions:
-//   none -> garage      the session's first frame, a car in the garage (join; every slot before its first LapData)
-//   none -> pitLane     the session's first frame, a car in the pit lane (join)
-//   none -> track       the session's first frame, a car on track (join)
+// area (ps 1, 2); otherwise `track`. Until a car's Participants data is in the live state (`updatedAt.participants`, a
+// value of the identity area) nobody knows whether its slot holds a car (C3, supervisor ruling, Task 10 round 2), so a
+// car's first span opens on the first frame that data is there, with `joinedAt` (a join row, Review Focus 2): `none ->
+// <kind>`. After it every change of the car's location closes its span and opens the next. No kind goes to `none`.
+// The declared transitions:
+//   none -> garage      the first frame with the car's Participants data, the car in the garage (join; a slot before its
+//                       first LapData)
+//   none -> pitLane     the first frame with the car's Participants data, the car in the pit lane (join)
+//   none -> track       the first frame with the car's Participants data, the car on track (join)
 //   garage -> pitLane   leaving the garage: ds 0 -> 3 with ps still 1 (§2.2; MiP 641.422)
 //   garage -> track     leaving the garage under time acceleration: ds 0 -> 3 and ps 1 -> 0 in one frame (§2.2; SgQ 138.968)
 //   pitLane -> track    the pit exit: ps 1 -> 0 (§2.2, §2.5; MiP 649.872)
@@ -17,11 +20,11 @@
 import type { DriverStatus, PitStatus } from '@pitwall/domain';
 import type { MachineInput } from '../../../src/situations/machine.ts';
 import machine from '../../../src/situations/car-location/machine.ts';
-import { car } from '../../support/car-edits.ts';
+import { all, car, participants } from '../../support/car-edits.ts';
 import { defineTransitionTable, inputs, type InputEdit, type TransitionRow } from '../../support/transition-table.ts';
 
-/** Car `index` shows driver status `ds` and pit status `ps` from this frame on. */
-export const at = (index: number, driverStatus: DriverStatus, pitStatus: PitStatus): InputEdit => car(index, { driverStatus, pitStatus });
+/** Car `index` shows driver status `ds` and pit status `ps` from this frame on, the Participants data in (`participants`). */
+export const at = (index: number, driverStatus: DriverStatus, pitStatus: PitStatus): InputEdit => all(participants, car(index, { driverStatus, pitStatus }));
 
 /** Car 0 in the garage, in the pit lane on its out lap, on track on a flying lap. */
 export const inGarage = at(0, 'inGarage', 'pitting');
@@ -29,9 +32,9 @@ export const outOfGarage = at(0, 'outLap', 'pitting');
 export const onTrack = at(0, 'flyingLap', 'none');
 
 const rows: TransitionRow<MachineInput>[] = [
-  { name: 'the session’s first frame, a car in the garage: garage (join)', from: 'none', to: 'garage', input: inputs().frame(inGarage), join: true },
-  { name: 'the session’s first frame, a car in the pit lane: pitLane (join)', from: 'none', to: 'pitLane', input: inputs().frame(outOfGarage), join: true },
-  { name: 'the session’s first frame, a car on track: track (join)', from: 'none', to: 'track', input: inputs().frame(onTrack), join: true },
+  { name: 'the first frame with Participants data, a car in the garage: garage (join)', from: 'none', to: 'garage', input: inputs().frame(inGarage), join: true },
+  { name: 'the first frame with Participants data, a car in the pit lane: pitLane (join)', from: 'none', to: 'pitLane', input: inputs().frame(outOfGarage), join: true },
+  { name: 'the first frame with Participants data, a car on track: track (join)', from: 'none', to: 'track', input: inputs().frame(onTrack), join: true },
   {
     name: 'leaving the garage, ds 0 -> 3 with ps still 1 (MiP 641.422): garage -> pitLane',
     from: 'garage',

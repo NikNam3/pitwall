@@ -1,28 +1,33 @@
-// The car-location sub-machine (contract C9, C12, C15, C16, C17, C19, C26, C85): per car, where it physically is
-// (garage, pit lane, track), from the signals `driverStatus` and `pitStatus` alone; shared by every weekend phase; its
-// spans declared in domain (`carLocationSpans`); one span per car slot from the session's first frame on, a new span on
-// every change of the location, none withdrawn (C18). The facts behind each rule: docs/research/09-situations-inventory.md
-// §2.1-2.5. Transition rows: car-location.transitions.ts. Segments: the player leaving the garage through the pit lane
-// onto the track (practice-garage-exit, new), a race pit entry (race-zandvoort-pit-stop), a car in its garage for the
-// whole segment (practice-wing-change), a retired car already in its garage (race-zandvoort-retire).
+// The car-location sub-machine (contract C3, C9, C12, C15, C16, C17, C19, C26, C85): per car, where it physically is
+// (garage, pit lane, track), from the signals `driverStatus` and `pitStatus`; shared by every weekend phase; its spans
+// declared in domain (`carLocationSpans`); a new span on every change of the location, none withdrawn (C18). A car's
+// first span opens, with `joinedAt`, on the first frame its Participants data is in the live state (`updatedAt.
+// participants`, the identity area): before it nobody knows whether the slot holds a car (C3; supervisor ruling, Task 10
+// round 2). The facts behind each rule: docs/research/09-situations-inventory.md §2.1-2.5. Transition rows:
+// car-location.transitions.ts. Segments (their first frame carries Participants): the player leaving the garage through
+// the pit lane onto the track (practice-garage-exit, new), a race pit entry (race-zandvoort-pit-stop), a car in its
+// garage for the whole segment (practice-wing-change), a retired car already in its garage (race-zandvoort-retire).
 import { beforeAll, describe, expect, it } from 'vitest';
 import { carLocationSpans, type OpenSpan, type Span } from '@pitwall/domain';
 import machine from '../../../src/situations/car-location/machine.ts';
 import type { CarSignals } from '../../../src/signals/types.ts';
 import { replaySegment, type SegmentRun } from '../../support/segment-run.ts';
+import { car, participants } from '../../support/car-edits.ts';
 import { FRAME_MS, inputs } from '../../support/transition-table.ts';
 import { at, inGarage, onTrack, outOfGarage } from './car-location.transitions.ts';
 
-type Run = { open: Array<OpenSpan | undefined>; closed: Array<Array<Omit<Span, 'endFrame'>>> };
+type Run = { open: Array<OpenSpan | undefined>; closed: Array<Array<Omit<Span, 'endFrame'>>>; all: OpenSpan[][] };
 
-/** Steps the machine through the frames: car `index`'s open span after each, and the spans of the car each frame closed. */
+/** Steps the machine through the frames: car `index`'s open span after each, the spans of the car each frame closed, and every open span after each. */
 const run = (builder: ReturnType<typeof inputs>, index = 0): Run => {
   let open = machine.init();
-  const result: Run = { open: [], closed: [] };
+  const result: Run = { open: [], closed: [], all: [] };
   for (const input of builder.build()) {
     const step = machine.step(open, input);
     open = step.open;
-    result.open.push(machine.openSpans(open).find((s) => s.carId === index));
+    const spans = machine.openSpans(open);
+    result.all.push(spans);
+    result.open.push(spans.find((s) => s.carId === index));
     result.closed.push(step.closed.filter((s) => s.carId === index));
   }
   return result;
@@ -35,22 +40,28 @@ describe('car-location: id, span declaration, applies to, inputs', () => {
     expect(machine.spans.scope).toBe('car');
     expect([...carLocationSpans.kinds].sort()).toEqual(['garage', 'pitLane', 'track']);
   });
-  it('reads the signals driverStatus and pitStatus, no value and no upstream sub-machine', () => {
+  it('reads the signals driverStatus and pitStatus and the identity area (the Participants data’s arrival), no upstream sub-machine', () => {
     expect([...machine.inputs.signals].sort()).toEqual(['driverStatus', 'pitStatus']);
-    expect([machine.inputs.values, machine.inputs.upstream]).toEqual([[], []]);
+    expect([machine.inputs.values, machine.inputs.upstream]).toEqual([['identity'], []]);
   });
 });
 
-describe('car-location: every car slot has a span from the first frame on', () => {
-  it('opens a span for every car slot the signals hold on the first frame, joined, on frame number 1, id 0, confirmed', () => {
-    const [first] = inputs().frame().build();
-    const spans = machine.openSpans(machine.step(machine.init(), first!).open);
-    expect(spans.map((s) => s.carId)).toEqual(first!.signals.cars.map((_, i) => i));
-    for (const s of spans) expect([s.machine, s.id, s.start, s.startFrame, s.joinedAt, s.confirmed]).toEqual(['car-location', 0, 0, 1, true, true]);
+describe('car-location: a car’s first span opens with its Participants data (C3)', () => {
+  it('opens no span before the Participants data is in the live state, whatever the signals say', () => {
+    const r = run(inputs().frames(3, car(0, { driverStatus: 'flyingLap', pitStatus: 'none' })));
+    expect(r.all.map((spans) => spans.length)).toEqual([0, 0, 0]);
+    expect(r.closed.flat()).toEqual([]);
+  });
+  it('opens a span for every slot on the frame the Participants data arrives, joined, on that frame number, id 0, confirmed', () => {
+    const r = run(inputs().frames(3).frame(participants));
+    const spans = r.all[3]!;
+    expect(spans.map((s) => s.carId)).toEqual(Array.from({ length: spans.length }, (_, i) => i));
+    expect(spans.length).toBeGreaterThan(0);
+    for (const s of spans) expect([s.machine, s.id, s.start, s.startFrame, s.joinedAt, s.confirmed]).toEqual(['car-location', 0, 3 * FRAME_MS, 4, true, true]);
   });
   it('a slot before its first LapData (driver status in the garage, pit status none) is in the garage', () => {
-    const [first] = inputs().frame().build();
-    expect(new Set(machine.openSpans(machine.step(machine.init(), first!).open).map((s) => s.kind))).toEqual(new Set(['garage']));
+    const r = run(inputs().frame(participants));
+    expect(new Set(r.all[0]!.map((s) => s.kind))).toEqual(new Set(['garage']));
   });
   it('holds the span while the location holds, without closing anything', () => {
     const r = run(inputs().frames(6, onTrack));
@@ -96,7 +107,7 @@ describe('car-location: the driver status decides the garage, the pit status the
     expect(new Set(r.open.slice(2, 8).map((s) => s?.id))).toEqual(new Set([1]));
   });
   it('a car’s location does not touch another car’s spans', () => {
-    const r = run(inputs().frames(2).frame(onTrack).frames(2), 1);
+    const r = run(inputs().frames(2, participants).frame(onTrack).frames(2), 1);
     expect(kinds(r)).toEqual(Array(5).fill('garage'));
     expect(r.closed.flat()).toEqual([]);
   });

@@ -106,12 +106,14 @@ describe('a sub-machine reads only its declared inputs (C15)', () => {
       it('on random signal sequences, in its weekend phase', () => {
         const phase = phaseFor(machine);
         fc.assert(
-          fc.property(arbSignalSequence(initialSignals), (sequence) => {
+          fc.property(arbSignalSequence(initialSignals), fc.nat({ max: 20 }), (sequence, participantsAt) => {
             const frames = inputs()
               .frames(sequence.length, (i, k) => {
                 i.signals = structuredClone(sequence[k]!);
                 i.weekendPhase = phase;
                 i.upstream = upstreamFor(phase);
+                // the Participants data arrives on frame `participantsAt` (a car sub-machine waits for it, C3)
+                if (k === participantsAt) for (const car of i.live.cars) car.updatedAt.participants = i.at;
               })
               .build();
             expect(undeclaredReads(machine, frames), `${machine.id} declares ${JSON.stringify(machine.inputs)}`).toEqual([]);

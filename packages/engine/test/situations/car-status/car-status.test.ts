@@ -1,19 +1,21 @@
-// The car-status sub-machine (contract C9, C12, C15, C16, C17, C18, C19, C26, C43, C85): per car slot, whether a car
+// The car-status sub-machine (contract C3, C9, C12, C15, C16, C17, C18, C19, C26, C43, C85): per car slot, whether a car
 // still competes in the session (competing, retired with its cause, disqualified, absent); shared by every weekend phase;
-// its spans declared in domain (`carStatusSpans`, `RetiredDetail`); one span per car slot from the session's first frame
-// on. It is the one decider of which cars are in the session (C43): a slot is `absent` while no car of the session holds
-// it (`isActiveCar` over `slotsInUse`, now in `situations/car-status/`), and a car is in the session while its status is
-// not `absent`. Signals out of order (Review Focus 5, inventory §2.9, §2.11): the RTMT comes a frame before the result
-// status, PENA 16/42 up to 4 s before the RTMT, PENA 16/41 about 1 s after it; a pending cause and a pending
-// confirmation are the machine's open state, and no span is withdrawn (C18). A disqualification is confirmed by a PENA
-// of type 6 or by 2 s of the result status unchanged (plan Global Constraints, carried over). Transition rows:
+// its spans declared in domain (`carStatusSpans`, `RetiredDetail`). It is the one decider of which cars are in the
+// session (C43): a slot is `absent` while no car of the session holds it (`isActiveCar` over `slotsInUse`, now in
+// `situations/car-status/`), and a car is in the session while its status is not `absent`. A car's first span opens,
+// with `joinedAt`, on the first frame its Participants data is in the live state (`updatedAt.participants`, the identity
+// area); no span opens before it (C3; supervisor ruling, Task 10 round 2). Signals out of order (Review Focus 5,
+// inventory §2.9, §2.11): `retired` opens on the earliest of a PENA 16, an RTMT and the result status, with the cause
+// known on that frame, never rewritten (C18): PENA 16/42 up to 4 s before the RTMT opens it; PENA 16/41 about 1 s after
+// the RTMT changes nothing. A disqualification is confirmed by a PENA of type 6 or by 2 s of the result status unchanged
+// (plan Global Constraints, carried over); a pending confirmation is the machine's open state (C18). Transition rows:
 // car-status.transitions.ts. Segments: the player's terminal damage with a car retired earlier (race-zandvoort-retire),
 // and a full field competing (race-zandvoort-pit-stop, practice-wing-change, practice-garage-exit).
 import { beforeAll, describe, expect, it } from 'vitest';
-import { carStatusSpans, known, unknown, type OpenSpan, type RetiredDetail, type Span } from '@pitwall/domain';
+import { carStatusSpans, known, unknown, type Known, type OpenSpan, type RetiredDetail, type Span } from '@pitwall/domain';
 import type { StepResult } from '../../../src/index.ts';
 import machine from '../../../src/situations/car-status/machine.ts';
-import type { Signals } from '../../../src/signals/types.ts';
+import type { RetirementReason, Signals } from '../../../src/signals/types.ts';
 import { all, events, pena } from '../../support/car-edits.ts';
 import { replaySegment, type SegmentRun } from '../../support/segment-run.ts';
 import { FRAME_MS, inputs } from '../../support/transition-table.ts';
@@ -40,7 +42,7 @@ const kinds = (r: Run) => r.open.map((s) => s?.kind);
 const slots = (r: Run, k: number) => r.all[k]!.map((s) => s.kind);
 const causeOf = (span: { detail: unknown } | undefined) => (span?.detail as RetiredDetail | undefined)?.cause;
 
-/** Two cars in the session. */
+/** Two cars in the session (the Participants data in the live state). */
 const field = inSession(2);
 /** One second of frames (63 frames, 1008 ms). */
 const SECOND = Math.ceil(1000 / FRAME_MS);
@@ -51,18 +53,29 @@ describe('car-status: id, span declaration, applies to, inputs', () => {
     expect(machine.spans.scope).toBe('car');
     expect([...carStatusSpans.kinds].sort()).toEqual(['absent', 'competing', 'disqualified', 'retired']);
   });
-  it('reads the signals resultStatus, numActiveCars, aiControlled and the events (RTMT, PENA), no value and no upstream sub-machine', () => {
-    expect(machine.inputs.signals).toEqual(expect.arrayContaining(['resultStatus', 'numActiveCars', 'aiControlled', 'events']));
-    expect([machine.inputs.values, machine.inputs.upstream]).toEqual([[], []]);
+  it('reads the signals resultStatus, numActiveCars and the events (RTMT, PENA), the identity area (the Participants data’s arrival), no upstream', () => {
+    expect([...machine.inputs.signals].sort()).toEqual(['events', 'numActiveCars', 'resultStatus']);
+    expect([machine.inputs.values, machine.inputs.upstream]).toEqual([['identity'], []]);
   });
 });
 
-describe('car-status: every car slot has a span from the first frame on', () => {
-  it('opens a span for every slot on the first frame, joined, on frame number 1, id 0: the cars of the session competing, the other slots absent', () => {
-    const r = run(inputs().frame(field));
-    expect(r.all[0]!.map((s) => s.carId)).toEqual(Array.from({ length: r.all[0]!.length }, (_, i) => i));
-    for (const s of r.all[0]!) expect([s.machine, s.id, s.start, s.startFrame, s.joinedAt]).toEqual(['car-status', 0, 0, 1, true]);
-    expect(slots(r, 0)).toEqual(['competing', 'competing', ...Array(r.all[0]!.length - 2).fill('absent')]);
+describe('car-status: a car’s first span opens with its Participants data (C3)', () => {
+  it('opens no span, absent included, before the Participants data is in the live state, whatever the signals say', () => {
+    const r = run(
+      inputs().frames(3, (i) => {
+        i.signals.session.numActiveCars = 2;
+      }),
+    );
+    expect(r.all.map((spans) => spans.length)).toEqual([0, 0, 0]);
+    expect(r.closed.flat()).toEqual([]);
+  });
+  it('opens a span for every slot on the frame the data arrives, joined, on that frame number, id 0: the cars of the session competing, the other slots absent', () => {
+    const r = run(inputs().frames(3).frame(field));
+    const spans = r.all[3]!;
+    expect(spans.map((s) => s.carId)).toEqual(Array.from({ length: spans.length }, (_, i) => i));
+    for (const s of spans) expect([s.machine, s.id, s.start, s.startFrame, s.joinedAt]).toEqual(['car-status', 0, 3 * FRAME_MS, 4, true]);
+    expect(slots(r, 3)).toEqual(['competing', 'competing', ...Array(spans.length - 2).fill('absent')]);
+    expect(r.closed.flat()).toEqual([]);
   });
   it('holds the span while the status holds, without closing anything', () => {
     const r = run(inputs().frames(6, field));
@@ -72,13 +85,6 @@ describe('car-status: every car slot has a span from the first frame on', () => 
 });
 
 describe('car-status decides which cars are in the session (C43): absent is the status of a slot no car of the session holds', () => {
-  it('before the first Participants (numActiveCars 0) every slot is absent; the first Participants opens competing on its frame', () => {
-    const r = run(inputs().frames(3).frame(field));
-    expect(new Set(slots(r, 2))).toEqual(new Set(['absent']));
-    expect(slots(r, 3).slice(0, 3)).toEqual(['competing', 'competing', 'absent']);
-    expect(r.open[3]).toMatchObject({ kind: 'competing', id: 1, start: 3 * FRAME_MS, startFrame: 4 });
-    expect(r.closed[3]).toMatchObject([{ kind: 'absent', id: 0, startFrame: 1, joinedAt: true }]);
-  });
   it('a slot out of the race keeps its place: numActiveCars 19 with car 2 retired (race-zandvoort-retire) puts 20 slots in the session', () => {
     const r = run(inputs().frame(all(inSession(19), result(2, 'retired'))));
     expect(slots(r, 0)).toEqual([...Array(2).fill('competing'), 'retired', ...Array(17).fill('competing'), ...Array(r.all[0]!.length - 20).fill('absent')]);
@@ -99,8 +105,8 @@ describe('car-status decides which cars are in the session (C43): absent is the 
   });
 });
 
-describe('car-status: a retirement opens on the RTMT, a frame before the result status follows (Review Focus 5)', () => {
-  it('the RTMT opens retired on its frame (C26), the cause unknown(notReceived) while none is known (C3); rs 7 a frame later changes nothing', () => {
+describe('car-status: a retirement opens on its earliest signal, with the cause known then (C18, Review Focus 5)', () => {
+  it('the RTMT opens retired on its frame (C26), a frame before the result status follows; rs 7 then changes nothing', () => {
     const r = run(inputs().frames(3, field).frame(retires(0)).frames(3, result(0, 'retired')));
     expect(kinds(r)).toEqual([...Array(3).fill('competing'), ...Array(4).fill('retired')]);
     expect(r.open[3]).toMatchObject({ machine: 'car-status', carId: 0, kind: 'retired', id: 1, start: 3 * FRAME_MS, startFrame: 4, confirmed: true });
@@ -110,44 +116,78 @@ describe('car-status: a retirement opens on the RTMT, a frame before the result 
     for (const s of r.open.slice(4)) expect(s).toEqual(r.open[3]);
     expect(r.closed.slice(4).flat()).toEqual([]);
   });
-  it('the result status retired with no RTMT opens retired on its frame', () => {
-    const r = run(inputs().frames(3, field).frame(result(0, 'retired')));
-    expect(r.open[3]).toMatchObject({ kind: 'retired', id: 1, startFrame: 4 });
-    expect(causeOf(r.open[3])).toEqual(unknown('notReceived'));
-  });
-  it('an AI mechanical failure (RTMT, rs 7, PENA 16/41 about 1 s later, MxR, SgW, MiR): the open span takes the cause on the PENA’s frame, the same span', () => {
-    const penaAt = 4 + SECOND;
+  it('AI mechanical failure (RTMT, rs 7 a frame later, PENA 16/41 about 1 s later; MxR, SgW, MiR): retired from the RTMT, its cause as known then; the PENA rewrites nothing', () => {
     const r = run(inputs().frames(3, field).frame(retires(0)).frame(result(0, 'retired')).frames(SECOND - 1).frame(events(pena(0, 16, 41))).frames(3));
-    expect(causeOf(r.open[penaAt - 1])).toEqual(unknown('notReceived'));
-    expect(r.open[penaAt]).toMatchObject({ kind: 'retired', id: 1, start: 3 * FRAME_MS, startFrame: 4 });
-    expect(causeOf(r.open[penaAt])).toEqual(known('mechanical', penaAt * FRAME_MS));
-    expect(causeOf(r.open.at(-1))).toEqual(known('mechanical', penaAt * FRAME_MS));
+    expect(r.open[3]).toMatchObject({ kind: 'retired', id: 1, start: 3 * FRAME_MS, startFrame: 4 });
+    expect(causeOf(r.open[3])).toEqual(unknown('notReceived'));
+    for (const s of r.open.slice(4)) expect(s).toEqual(r.open[3]);
     expect(r.closed.flat().map((s) => s.kind)).toEqual(['competing']);
   });
-  it('terminal damage with PENA 16/42 4 s before the RTMT (ZvR2 car 2, 912.011 / 916.028): competing until the RTMT, then retired with the cause', () => {
-    const rtmtAt = 3 + 4 * SECOND;
-    const r = run(inputs().frames(3, field).frame(events(pena(0, 16, 42))).frames(4 * SECOND - 1).frame(retires(0)).frame(result(0, 'retired')));
-    expect(kinds(r).slice(0, rtmtAt)).toEqual(Array(rtmtAt).fill('competing'));
-    expect(r.closed.slice(0, rtmtAt).flat()).toEqual([]);
-    expect(r.open[rtmtAt]).toMatchObject({ kind: 'retired', id: 1, start: rtmtAt * FRAME_MS, startFrame: rtmtAt + 1 });
-    expect(causeOf(r.open[rtmtAt])).toEqual(known('terminalDamage', 3 * FRAME_MS));
+  it('terminal damage, PENA 16/42 4 s before the RTMT (ZvR2 car 2, 912.011 / 916.028): retired from the PENA’s frame, cause terminal damage; the RTMT and rs 7 open nothing', () => {
+    const r = run(inputs().frames(3, field).frame(events(pena(0, 16, 42))).frames(4 * SECOND - 1).frame(retires(0)).frame(result(0, 'retired')).frames(2));
+    expect(kinds(r)).toEqual([...Array(3).fill('competing'), ...Array(r.open.length - 3).fill('retired')]);
+    expect(r.open[3]).toMatchObject({ kind: 'retired', id: 1, start: 3 * FRAME_MS, startFrame: 4 });
+    expect(causeOf(r.open[3])).toEqual(known('terminalDamage', 3 * FRAME_MS));
+    for (const s of r.open.slice(4)) expect(s).toEqual(r.open[3]);
+    expect(r.closed.flat().map((s) => s.kind)).toEqual(['competing']);
   });
   it('the player’s terminal damage, PENA 16/42 and the RTMT on one frame (SgW, ZvP, ZvP2, ZvR, ZvR2): retired with the cause from that frame', () => {
     const r = run(inputs().frames(3, field).frame(events(pena(0, 16, 42), rtmt(0))).frames(2));
     expect(r.open[3]).toMatchObject({ kind: 'retired', id: 1, startFrame: 4 });
     expect(causeOf(r.open[3])).toEqual(known('terminalDamage', 3 * FRAME_MS));
   });
+  it.each([
+    [41, 'mechanical'],
+    [42, 'terminalDamage'],
+    [7, 'other'],
+  ] as const)('the cause from a PENA 16 with infringement %i: %s', (infringement, cause) => {
+    const r = run(inputs().frames(3, field).frame(events(pena(0, 16, infringement))));
+    expect(causeOf(r.open[3])).toEqual(known(cause, 3 * FRAME_MS));
+  });
+  it.each<[RetirementReason, Known<'mechanical' | 'terminalDamage' | 'other'>]>([
+    ['invalid', unknown('notReceived')],
+    ['retired', known('other', 3 * FRAME_MS)],
+    ['finished', known('other', 3 * FRAME_MS)],
+    ['terminalDamage', known('terminalDamage', 3 * FRAME_MS)],
+    ['inactive', known('other', 3 * FRAME_MS)],
+    ['notEnoughLapsCompleted', known('other', 3 * FRAME_MS)],
+    ['blackFlagged', known('other', 3 * FRAME_MS)],
+    ['redFlagged', known('other', 3 * FRAME_MS)],
+    ['mechanicalFailure', known('mechanical', 3 * FRAME_MS)],
+    ['sessionSkipped', known('other', 3 * FRAME_MS)],
+    ['sessionSimulated', known('other', 3 * FRAME_MS)],
+  ])('the cause from an RTMT with reason %s and no PENA 16 (the spec’s reasons; every recording sends invalid, C19)', (reason, cause) => {
+    const r = run(inputs().frames(3, field).frame(retires(0, reason)));
+    expect(r.open[3]).toMatchObject({ kind: 'retired', id: 1, startFrame: 4 });
+    expect(causeOf(r.open[3])).toEqual(cause);
+  });
+  it('a PENA 16 on the RTMT’s frame gives the cause before the RTMT reason: PENA 16/41 with reason terminal damage is mechanical', () => {
+    const r = run(inputs().frames(3, field).frame(events(rtmt(0, 'terminalDamage'), pena(0, 16, 41))));
+    expect(causeOf(r.open[3])).toEqual(known('mechanical', 3 * FRAME_MS));
+  });
+  it('the result status retired with no RTMT or PENA opens retired on its frame, cause unknown(notReceived)', () => {
+    const r = run(inputs().frames(3, field).frame(result(0, 'retired')));
+    expect(r.open[3]).toMatchObject({ kind: 'retired', id: 1, startFrame: 4 });
+    expect(causeOf(r.open[3])).toEqual(unknown('notReceived'));
+  });
+  // Not yet seen (C19): no recording shows result status 6; mapped from the spec's "not classified".
+  it('the result status not classified opens retired, cause unknown(notReceived) (not yet seen, C19)', () => {
+    const r = run(inputs().frames(3, field).frame(result(0, 'notClassified')).frames(2));
+    expect(r.open[3]).toMatchObject({ kind: 'retired', id: 1, startFrame: 4 });
+    expect(causeOf(r.open[3])).toEqual(unknown('notReceived'));
+  });
   it('the player retiring from the menu (MiP: RTMT reason 0, rs 7 in the last frame, no PENA): the cause stays unknown(notReceived)', () => {
     const r = run(inputs().frames(3, field).frame(retires(0)).frame(result(0, 'retired')).frames(2 * SECOND));
     expect(causeOf(r.open.at(-1))).toEqual(unknown('notReceived'));
   });
-  it('a PENA 16 of another car is not this car’s cause', () => {
-    const r = run(inputs().frames(3, field).frame(all(events(pena(1, 16, 42)), retires(0))).frames(2));
-    expect(causeOf(r.open.at(-1))).toEqual(unknown('notReceived'));
+  it('a PENA 16 of car 1 retires car 1, not car 0, and gives car 0’s RTMT no cause', () => {
+    const builder = inputs().frames(3, field).frame(all(events(pena(1, 16, 42)), retires(0))).frames(2);
+    expect(causeOf(run(builder, 0).open.at(-1))).toEqual(unknown('notReceived'));
+    expect(run(builder, 1).open.at(-1)).toMatchObject({ kind: 'retired', id: 1, startFrame: 4, detail: { cause: known('terminalDamage', 3 * FRAME_MS) } });
   });
-  it('an RTMT for a car already retired (the game resends them after a flashback, SgW 4581.839) opens nothing', () => {
-    const r = run(inputs().frames(3, field).frame(retires(0)).frame(result(0, 'retired')).frames(3).frame(retires(0)).frames(2));
-    expect(new Set(r.open.slice(3).map((s) => s?.id))).toEqual(new Set([1]));
+  it('an RTMT or a PENA 16 for a car already retired (the game resends RTMT after a flashback, SgW 4581.839) opens nothing', () => {
+    const r = run(inputs().frames(3, field).frame(retires(0)).frame(result(0, 'retired')).frames(3).frame(retires(0)).frame(events(pena(0, 16, 41))).frames(2));
+    for (const s of r.open.slice(4)) expect(s).toEqual(r.open[3]);
     expect(r.closed.flat().map((s) => s.kind)).toEqual(['competing']);
   });
   it('the result status retired -> did not finish in the last frame before SEND (MxR, MiR) keeps the retired span', () => {
@@ -230,8 +270,8 @@ describe('car-status: race-zandvoort-retire (ZvR2 1205 s to the end: car 2 retir
   beforeAll(async () => {
     seg = await replaySegment('race-zandvoort-retire.pwrec.gz', frameEvents);
   });
-  it('car 1 (the player) is competing, then retired from the frame of its RTMT and PENA 16/42, its cause terminal damage, to the end', () => {
-    const retirement = seg.frames.find((f) => f.value.some((e) => e.code === 'RTMT' && e.carId === 1))!.frameNumber;
+  it('car 1 (the player) is competing, then retired from the frame of its PENA 16/42 and RTMT, its cause terminal damage, to the end', () => {
+    const retirement = seg.frames.find((f) => f.value.some((e) => e.code === 'PENA' && e.carId === 1 && e.penaltyType === 16))!.frameNumber;
     expect(retirement).toBeGreaterThan(1);
     expect(spansOf(seg, 1)).toMatchObject([
       { kind: 'competing', joinedAt: true, startFrame: 1, endFrame: retirement },
@@ -248,7 +288,7 @@ describe('car-status: race-zandvoort-retire (ZvR2 1205 s to the end: car 2 retir
   });
 });
 
-describe('car-status: a full field competing for the whole segment', () => {
+describe('car-status: a full field competing for the whole segment (each segment’s first frame carries Participants)', () => {
   it.each(['race-zandvoort-pit-stop.pwrec.gz', 'practice-wing-change.pwrec.gz', 'practice-garage-exit.pwrec.gz'])('%s: cars 0-19 competing, slots 20 and 21 absent', async (file) => {
     expectFullField(await replaySegment(file, frameEvents), TWENTY);
   });
