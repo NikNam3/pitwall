@@ -113,8 +113,15 @@ export class SessionRunner {
   readonly #snapshotEveryFrames = framesIn(SNAPSHOT_EVERY_MS);
   readonly #attach: Snapshotable<unknown> | undefined;
   readonly #contextFor: SessionRunnerOptions['contextFor'];
-  /** The frames of the identity wait, until it ends; then `undefined`. */
-  #held: Frame[] | undefined = [];
+  /** The identity wait lasts: frames are held until Participants or `IDENTITY_WAIT_FRAMES`. */
+  #waiting = true;
+  /**
+   * Frames to apply, oldest first: the identity wait's, then the frames given since. Each leaves the queue before its
+   * step, so one that throws is skipped and the next `apply` or `end` applies the rest.
+   */
+  readonly #queue: Frame[] = [];
+  /** The frame whose step runs, or threw: `undefined` once it was applied. */
+  #applying: Frame | undefined;
   /** Applied frames, ids strictly rising; they hold every frame after the snapshot at the replay window's start. */
   #frames: Kept[] = [];
   #lastOverallFrameId: number;
@@ -145,31 +152,46 @@ export class SessionRunner {
     return { snapshots: this.#snapshots.size, frames: this.#frames.length };
   }
 
+  /** The frame being applied: after `apply` or `end` threw, the frame whose step threw (it is skipped). */
+  get applying(): Frame | undefined {
+    return this.#applying;
+  }
+
   /**
    * Applies the frame, or holds it while the identity wait lasts; the frame that ends the wait applies every held
-   * frame, in order. `onResult` gets each applied frame's result right after its step (`result.state` is the state
-   * after that frame).
+   * frame, in order, and so does the next call after a step threw. `onResult` gets each applied frame's result right
+   * after its step (`result.state` is the state after that frame).
    */
   apply(frame: Frame, onResult?: OnResult): void {
-    const held = this.#held;
-    if (held === undefined) return this.#applyNow(frame, onResult);
-    held.push(frame);
-    if (frame.participants !== undefined) this.#endWait(participantsOf(frame, frame.participants), onResult);
-    else if (held.length >= IDENTITY_WAIT_FRAMES) this.#endWait(undefined, onResult);
+    this.#queue.push(frame);
+    if (this.#waiting) {
+      if (frame.participants !== undefined) this.#endWait(participantsOf(frame, frame.participants));
+      else if (this.#queue.length >= IDENTITY_WAIT_FRAMES) this.#endWait(undefined);
+      else return;
+    }
+    this.#drain(onResult);
   }
 
   /** The session ended: the frames still held (no Participants came) are applied, with no weekend context. */
   end(onResult?: OnResult): void {
-    if (this.#held !== undefined && this.#held.length > 0) this.#endWait(undefined, onResult);
+    if (this.#waiting && this.#queue.length > 0) this.#endWait(undefined);
+    if (!this.#waiting) this.#drain(onResult);
   }
 
-  /** Asks `contextFor` once, then applies the held frames in order. */
-  #endWait(participants: ParticipantsValues | undefined, onResult: OnResult | undefined): void {
-    const held = this.#held ?? [];
-    this.#held = undefined;
+  /** Asks `contextFor` once: the held frames are then applied. */
+  #endWait(participants: ParticipantsValues | undefined): void {
+    this.#waiting = false;
     const weekend = this.#contextFor?.(participants);
     if (weekend !== undefined) this.#state.weekend = weekend;
-    for (const frame of held) this.#applyNow(frame, onResult);
+  }
+
+  /** Applies the queued frames in order; each leaves the queue before its step. */
+  #drain(onResult: OnResult | undefined): void {
+    for (let frame = this.#queue.shift(); frame !== undefined; frame = this.#queue.shift()) {
+      this.#applying = frame;
+      this.#applyNow(frame, onResult);
+      this.#applying = undefined;
+    }
   }
 
   #applyNow(frame: Frame, onResult: OnResult | undefined): void {
@@ -224,7 +246,8 @@ export class SessionRunner {
   /**
    * Restores the state after the target frame, or after the frame before `frame` when the game sends `frame` with an
    * id at or below the target: the state never runs ahead of the frame applied next. The void fact covers what the log
-   * gained since the restored snapshot; its target is the frame restored to, at its time on the race clock. Each
+   * gained since the restored snapshot; its target is the frame restored to, at its time on the race clock (the
+   * snapshot's own when the target is older than the replay window; `flashback` keeps the game's target). Each
    * replayed frame gets the runner's decision it got when first applied and appends its facts again after the void.
    */
   #rewind(target: Target, frame: Frame): { flashback: FlashbackInfo; target: LogVoidFact['target'] } {
@@ -237,9 +260,9 @@ export class SessionRunner {
     this.#frames = this.#frames.filter(({ frame: f }) => f.frameId <= replayTo);
     const { log, history, weekend } = this.#state;
     this.#state = { ...copyPlain(snapshot.state), log, history, ...(weekend && { weekend }) };
+    // The frame restored to: the last replayed one, or the snapshot's when the target is older than the window.
     const last = replayed.at(-1);
-    const at = last?.at ?? (target.sessionTime === undefined ? snapshot.sessionTime : onRaceClock(this.#state, target.sessionTime));
-    const voidTarget = { frameId: replayTo, at };
+    const voidTarget = last === undefined ? { frameId: snapshot.frameId, at: snapshot.sessionTime } : { frameId: last.frame.frameId, at: last.at };
     logWriter(log).append('voids', voidFactOf(log, snapshot.lengths, voidTarget));
     // The new void fact projects the log again (C30), before the replayed frames extend it.
     projectionTrackerOf(this.#state).update(emptySituation());

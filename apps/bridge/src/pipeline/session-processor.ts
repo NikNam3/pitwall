@@ -55,9 +55,10 @@ export type SessionProcessorOptions = {
  * Runs one session (spec 5.4, 7.3). The runner holds the frames until the first Participants packet, which names the
  * player's `DriverKey` and so the weekend context (spec 9.3, C61); this processor supplies that context from storage
  * (`contextFor`). The scheduler is attached to the runner, so a flashback rewinds its bookkeeping with the state
- * (C27). An exception on a frame skips that frame; a topic that fails to
- * publish is marked errored while the other topics go out. Either way the failure is logged and, up to
- * `MAX_DUMPS_PER_SESSION` times, the frame is dumped with its place in the session file (spec 10.1).
+ * (C27). An exception on a frame skips that frame, also among the held frames the runner releases after its identity
+ * wait (the rest stay queued for the next call); a topic that fails to publish is marked errored while the other topics
+ * go out. Either way the failure is logged and, up to `MAX_DUMPS_PER_SESSION` times, the frame is dumped with its place
+ * in the session file (spec 10.1).
  */
 export class SessionProcessor {
   readonly sessionUid: bigint;
@@ -80,7 +81,9 @@ export class SessionProcessor {
     this.#key = { sessionUid: this.#uid, weekendId: String(opts.session.weekendLinkIdentifier) };
     opts.storage?.upsertSession(this.#row());
     const { feedId, sessionUid, session, registry } = opts;
-    this.#scheduler = new Scheduler(registry, opts.calcStats && { onCalculatorRun: opts.calcStats.hook });
+    // `PITWALL_FREEZE_OUTPUTS=1` (the test runs set it) freezes every output, so a unit that changes one after returning it fails.
+    const freezeOutputs = process.env.PITWALL_FREEZE_OUTPUTS === '1';
+    this.#scheduler = new Scheduler(registry, { freezeOutputs, ...(opts.calcStats && { onCalculatorRun: opts.calcStats.hook }) });
     this.#runner = new SessionRunner(
       { feedId, sessionUid, session, realism: opts.config.realism?.enabled === true },
       { attach: this.#scheduler, contextFor: (participants) => this.#contextFor(participants) },
@@ -144,13 +147,17 @@ export class SessionProcessor {
     this.#o.storage?.upsertSession(this.#row(participants));
   }
 
-  /** Runs `work` (the runner applying frames); a step that throws skips its frame and is reported with `frame`. */
+  /**
+   * Runs `work` (the runner applying frames). A step that throws skips its frame (`runner.applying`), which is reported;
+   * the frames still queued behind it are applied by the next call.
+   */
   #applying(frame: Frame | undefined, work: () => void): void {
     try {
       work();
     } catch (error) {
-      if (frame === undefined) this.#o.log.error({ feedId: this.#o.feedId, sessionUid: this.#uid, err: error }, 'frame skipped: processing failed');
-      else this.#report(frame, 'frame skipped: processing failed', [{ error }]);
+      const failed = this.#runner.applying ?? frame;
+      if (failed === undefined) this.#o.log.error({ feedId: this.#o.feedId, sessionUid: this.#uid, err: error }, 'frame skipped: processing failed');
+      else this.#report(failed, 'frame skipped: processing failed', [{ error }]);
     }
   }
 
@@ -169,6 +176,8 @@ export class SessionProcessor {
       // A forward jump of over a minute that is no post-session jump (a stall while the garage clock runs ahead): it
       // changes nothing (spec 3.3); worth knowing too.
       if (result.clockJump) log.info({ feedId, sessionUid: this.#uid, clockJump: result.clockJump }, 'session time jumped forward');
+      // A flashback is no fact (C27): a diagnostic line, with the game's target and the player's lap there.
+      if (result.flashback) log.info({ feedId, sessionUid: this.#uid, flashback: result.flashback }, 'flashback');
       const { rewound } = result.delta;
       const unpublished: PublishError[] = [];
       if (rewound !== undefined) {

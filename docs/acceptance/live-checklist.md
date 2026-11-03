@@ -35,7 +35,8 @@ Every line must parse as JSON. `feed.status` must show `connected: true` and `lo
 Keep `pnpm -s pitwall tap insights` and `pnpm -s pitwall tap laps` running in two terminals from before the start of lap 3.
 
 - Scenario: Practice: 2 clean laps. Cross the line into lap 4, and within 3 s flash back about 5 s, to before the line. Drive on and complete lap 3 again.
-- Expected on `tap insights`: exactly one `raised` `session.flashback` with `targetLap: 3` and `rewoundS` ≈ 5.
+- Expected on `tap insights`: no flashback insight (a flashback records no fact, C27), but one `snapshot` line right after it: the insights topic sent again whole (C30). `tap laps` gets one such `snapshot` too.
+- Expected in the bridge's log: exactly one `flashback` line whose `flashback` has `targetLap: 3` and `rewoundMs` ≈ 5000.
 - Expected on `tap laps`: the lap-3 entry appended before the flashback is absent from the snapshot sent right after it, and lap 3 appears again later.
 - Consistency check:
   1. After the session has ended (driver in the menu, more than 10 s after the end) and before the next session starts, run `timeout 3 pnpm -s pitwall tap laps | sed -n 2p > live-laps.json`.
@@ -46,7 +47,7 @@ Keep `pnpm -s pitwall tap insights` and `pnpm -s pitwall tap laps` running in tw
 ## 4. Keep the recording
 
 - Copy the session file into `recordings/` and request `FIXTURES.practiceFlashback` and a `fixtures/index.json` entry from the supervisor.
-- Take `t = raisedAt / 1000` (seconds; `raisedAt` is in ms) from the `session.flashback` line of `tap insights`, then run `pnpm pwrec-cut <file> fixtures/segments/practice-flashback.pwrec.gz --from <t-5> --to <t+5>`. This is spec 12, recording 3.
+- Take `t = flashback.targetSessionTime / 1000` (seconds; the field is in ms) from the bridge log's `flashback` line, then run `pnpm pwrec-cut <file> fixtures/segments/practice-flashback.pwrec.gz --from <t-5> --to <t+5>`. This is spec 12, recording 3.
 
 ## Results
 

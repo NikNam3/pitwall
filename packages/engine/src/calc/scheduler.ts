@@ -70,7 +70,7 @@ type SlotBookkeeping = Pick<Slot, 'lastRunAt' | 'pending' | 'ranDependencies' | 
 /**
  * What the scheduler knows of the frames it ran on (`Scheduler.snapshot`): per calculator its last run, what is pending
  * and its previous output; the last outputs, the active insights and the failed calculators. Outputs are shared, not
- * copied: no unit changes an output after returning it (frozen under test, see `FREEZE_OUTPUTS`).
+ * copied: no unit changes an output after returning it (`freezeOutputs` makes one that does fail).
  */
 export type SchedulerBookkeeping = {
   slots: ReadonlyMap<CalculatorId, SlotBookkeeping>;
@@ -79,12 +79,6 @@ export type SchedulerBookkeeping = {
   failed: ReadonlySet<CalculatorId>;
 };
 
-/**
- * Under vitest every output is frozen deep, so a unit that changes an output after returning it fails its tests: the
- * scheduler's snapshots share the outputs (C27). A production run does not pay for the freeze.
- */
-// eslint-disable-next-line no-restricted-globals -- whether tests run, which shapes no result (supervisor ruling, Task 3)
-const FREEZE_OUTPUTS = typeof process !== 'undefined' && process.env['VITEST'] !== undefined;
 
 const isDue = (cadence: Cadence, lastRunAt: SessionTime, pending: Pending, now: SessionTime): boolean => {
   if (cadence === 'frame') return true;
@@ -115,7 +109,14 @@ const isAffected = (calc: Calculator, slot: Slot, pending: Pending): boolean =>
  */
 export type OnCalculatorRun = <T>(id: CalculatorId, run: () => T) => T;
 
-export type SchedulerOptions = { onCalculatorRun?: OnCalculatorRun };
+export type SchedulerOptions = {
+  onCalculatorRun?: OnCalculatorRun;
+  /**
+   * Freezes every output deep once its calculator returned it, so a unit that changes an output afterwards throws (and
+   * is reported as a calculator error): the bookkeeping's snapshots share the outputs (C27). For test runs; off by default.
+   */
+  freezeOutputs?: boolean;
+};
 
 const direct: OnCalculatorRun = (_id, run) => run();
 
@@ -158,11 +159,13 @@ export class Scheduler implements Snapshotable<SchedulerBookkeeping> {
   /** Calculators whose last attempt threw, or that were skipped because a dependency did; cleared when they succeed. */
   readonly #failed = new Set<CalculatorId>();
   readonly #hook: OnCalculatorRun;
+  readonly #freezeOutputs: boolean;
   #needed: ReadonlySet<CalculatorId> = new Set();
 
   constructor(registry: CalculatorRegistry, opts: SchedulerOptions = {}) {
     this.#registry = registry;
     this.#hook = opts.onCalculatorRun ?? direct;
+    this.#freezeOutputs = opts.freezeOutputs === true;
     this.#entries = registry.order.map((calc) => ({ calc, slot: freshSlot() }));
     this.#slots = new Map(this.#entries.map(({ calc, slot }) => [calc.id, slot]));
   }
@@ -268,6 +271,7 @@ export class Scheduler implements Snapshotable<SchedulerBookkeeping> {
       let evaluation: Evaluation;
       try {
         evaluation = evaluate(calc, slot, view, this.#hook);
+        if (this.#freezeOutputs) deepFreeze(evaluation.output);
       } catch (error) {
         this.#outputs.delete(calc.id);
         this.#failed.add(calc.id);
@@ -275,7 +279,6 @@ export class Scheduler implements Snapshotable<SchedulerBookkeeping> {
         insights.push(...this.#book.apply(`error:${calc.id}`, [calculatorError(calc.id, error, input)], now));
         continue;
       }
-      if (FREEZE_OUTPUTS) deepFreeze(evaluation.output);
       slot.acc = evaluation.acc;
       slot.prevOutput = { value: evaluation.output };
       slot.lastRunAt = now;
