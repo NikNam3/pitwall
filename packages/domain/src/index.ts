@@ -10,6 +10,8 @@ export * from './facts.ts';
 export * from './weekend-phase.ts';
 export * from './situations.ts';
 export * from './span-scopes.ts';
+export { spans as lapValiditySpans, type InvalidLapDetail } from './situations/lap-validity.ts';
+export { spans as warningsSpans, type WarnedDetail } from './situations/warnings.ts';
 export { spans as clockSpans, type PausedDetail } from './situations/clock.ts';
 export { spans as weekendPhaseSpans, type PracticePhaseDetail, type QualifyingPhaseDetail, type RacePhaseDetail } from './situations/weekend-phase.ts';
 export * from './insight.ts';
