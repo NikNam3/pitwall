@@ -166,7 +166,7 @@ describe('damageChange events', () => {
     expect(damageEventsOf(st).map((e) => e.params)).toEqual([{ part: 'frontLeftWingPct', fromPct: 0, toPct: 30 }]);
   });
 
-  it('a flashback truncates damageChange events like every other event', () => {
+  it('a flashback voids damageChange events like every other event', () => {
     const withDamage = (frames: ReturnType<typeof timeline>, at: number, pct: number) =>
       frames.map((f, i) => (i === 0 ? { ...f, damage: buildPacket('carDamage') } : i === at
         ? { ...f, damage: buildPacket('carDamage', { carDamageData: { 0: { frontLeftWingDamage: pct } } }) } : f));

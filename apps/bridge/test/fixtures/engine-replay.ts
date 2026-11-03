@@ -17,13 +17,18 @@ import {
 import { IDLE_FEED } from '../../../../test-support/builders/index.ts';
 import { trackFile } from './replay.ts';
 
+/**
+ * `onResult` gets each frame the runner applied with its result, in order: the frames before the first Participants
+ * wait in the runner (its identity wait) and come once it ends, or at the end of the file.
+ */
 export async function replayRunner(path: string, onResult: (r: StepResult, f: Frame) => void = () => {}): Promise<SessionRunner> {
   const box: { runner?: SessionRunner } = {};
   await trackFile(path, (f) => {
     if (!box.runner && f.session) box.runner = new SessionRunner({ feedId: basename(path) as FeedId, sessionUid: f.sessionUid, session: f.session });
-    if (box.runner) onResult(box.runner.apply(f), f);
+    box.runner?.apply(f, onResult);
   });
   if (!box.runner) throw new Error(`${path}: no frame carried a session`);
+  box.runner.end(onResult);
   return box.runner;
 }
 

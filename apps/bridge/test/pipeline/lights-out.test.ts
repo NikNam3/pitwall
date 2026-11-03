@@ -132,17 +132,6 @@ describe('FeedPipeline: lights out after a formation lap restarts the calculator
     expect(values).toEqual([]);
     await pipeline.stop();
   });
-  it('lights out raises no session.flashback insight', async () => {
-    const { hub, pipeline, inbox, push } = setup([defineFeature({ name: 'insights', calculators: [], topics: [bindInsights('insights')] })]);
-    hub.subscribe({ clientId: 'c', id: 'i', topic: 'insights', params: {}, feedId: F });
-    const { before, after } = formationStart();
-    push(before);
-    push(after);
-    await pipeline.stop();
-    const kinds = inbox.flatMap((m) => ('entries' in m ? ((m.entries ?? []) as Array<{ type: string; insight?: { kind: string } }>) : []))
-      .flatMap((e) => (e.type === 'raised' && e.insight ? [e.insight.kind] : []));
-    expect(kinds.filter((k) => k === 'session.flashback')).toEqual([]);
-  });
 });
 
 describe('FeedPipeline: the session phase in the view', () => {

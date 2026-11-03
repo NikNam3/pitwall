@@ -17,6 +17,7 @@ import {
   type IncrementalCalculator,
   type QuickCalculator,
   type SchedulerInput,
+  type StepResult,
 } from '../../src/index.ts';
 import { initFor } from './run.ts';
 
@@ -89,10 +90,13 @@ export const underNeutralisation = underPhase('neutralised');
 export function expectScheduledIncremental<Acc, Out>(calc: IncrementalCalculator<Acc, Out>, frames: readonly Frame[]): void {
   const runner = new SessionRunner(initFor([...frames]));
   const scheduler = sched([calc as Calculator]);
-  frames.forEach((frame, i) => {
-    const r = runner.apply(frame);
+  let i = 0;
+  const check = (r: StepResult) => {
     const view = { state: r.state, activeFlagPhase: activeFlagPhaseOf(r.state), situation: situationOf(r.state), changed: r.changed, delta: r.delta, feed, config: {} };
     const { ran, outputs } = scheduler.run(view);
     if (ran.includes(calc.id)) expect(outputs.get(calc.id), `frame ${i}`).toEqual(calc.output(calc.init({ ...view, outputs: new Map() })));
-  });
+    i++;
+  };
+  for (const frame of frames) runner.apply(frame, check);
+  runner.end(check);
 }

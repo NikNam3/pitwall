@@ -38,15 +38,16 @@ function incidentsRuns(all: Frame[]): Array<{ frame: number; scheduled: Incident
   const runner = new SessionRunner(initFor(all));
   const scheduler = new Scheduler(CalculatorRegistry.build([incidentsCalculator]));
   scheduler.setNeeded([INCIDENTS]);
-  return all.flatMap((f, frame) => {
-    const r = runner.apply(f);
+  const runs: Array<{ frame: number; scheduled: IncidentsOutput; fresh: IncidentsOutput }> = [];
+  all.forEach((f, frame) => runner.apply(f, (r) => {
     if (r.delta.rewound !== undefined) scheduler.reset();
     const input = { state: r.state, activeFlagPhase: activeFlagPhaseOf(r.state), situation: situationOf(r.state), changed: r.changed, delta: r.delta, feed: IDLE_FEED, config: {} };
     const { ran, outputs } = scheduler.run(input);
-    if (!ran.includes(INCIDENTS)) return [];
+    if (!ran.includes(INCIDENTS)) return;
     const fresh = incidentsCalculator.output(incidentsCalculator.init({ ...input, outputs: new Map() }));
-    return [{ frame, scheduled: outputs.get(INCIDENTS) as IncidentsOutput, fresh }];
-  });
+    runs.push({ frame, scheduled: outputs.get(INCIDENTS) as IncidentsOutput, fresh });
+  }));
+  return runs;
 }
 
 /** Scheduled and fresh feeds are equal on every run, and the last feed has the player's time loss. */

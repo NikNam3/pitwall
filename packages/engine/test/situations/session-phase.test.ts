@@ -3,7 +3,7 @@
 // phase boundary. Closed phases are `history.sessionPhases`; the phase in progress is `open.situations.session`.
 import { describe, expect, it } from 'vitest';
 import { activeFlagPhaseOf, situationOf, type Frame, type SessionRunner, type StepResult } from '../../src/index.ts';
-import { after } from '../support/runner.ts';
+import { after, applyOne, runAll, shown } from '../support/runner.ts';
 import { expectScheduledIncremental, input, quick, sched, underNeutralisation, underPhase } from '../support/scheduler.ts';
 import {
   beats,
@@ -170,9 +170,9 @@ describe('a neutralisation dropped unconfirmed is a discarded timeline (review 2
     const first = raceScript(EXPIRY + 40, scarAt50);
     const fork = raceScript(EXPIRY + 40, { ...scarAt50, [EXPIRY - 20]: { events: [ovtk(1, 0)] } });
     const { runner } = run(first.slice(0, raceFrame(EXPIRY + 20) + 1));
-    const results = after(fork, raceFrame(EXPIRY - 29), raceFrame(EXPIRY + 21)).map((f) => runner.apply(f));
+    const results = runAll(runner, after(fork, raceFrame(EXPIRY - 29), raceFrame(EXPIRY + 21)));
     expect(results[0]!.flashback?.targetFrameId).toBe(raceFrame(EXPIRY - 30));
-    expect(runner.state).toEqual(run(fork).runner.state);
+    expect(shown(runner.state)).toEqual(shown(run(fork).runner.state));
   });
   it.each([
     ['its 3 s expiry', EXPIRY + 40, undefined],
@@ -370,7 +370,7 @@ describe('a flashback across a phase boundary', () => {
     const first = sc(150).slice(0, raceFrame(200) + 1);
     const fork = sc(180);
     const { runner } = run(first);
-    const rewind = runner.apply(after(fork, raceFrame(81), raceFrame(201))[0]!);
+    const rewind = applyOne(runner, after(fork, raceFrame(81), raceFrame(201))[0]!);
     expect(rewind.flashback?.targetFrameId).toBe(raceFrame(80));
     expect(kinds(runner)).toEqual(['preStart', 'startLights', 'racing']);
     expect(current(runner)).toMatchObject({ kind: 'neutralised', start: raceAt(50), detail: { stages: [{ stage: 'deployed', at: raceAt(50) }] } });
