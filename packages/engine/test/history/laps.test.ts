@@ -24,7 +24,7 @@ describe('laps', () => {
     expect(st.history.laps).toEqual([{ carId: 0, lapNumber: 1, lapTimeMs: 90_500, sectorTimesMs: [30_000, 31_000, 29_500],
       valid: { lap: true, sectors: [true, true, true] }, actualCompound: 'C3', visualCompound: 'medium', tyreAgeAtStart: 3,
       fuelAtStartKg: known(50, 0), fuelAtEndKg: known(48.5, end), scShare: 0, vscShare: 0, inLap: false, outLap: false,
-      positionAtEnd: 1, status: 'provisional', completedAt: end, ...lapEnd, in: {} }]);
+      positionAtEnd: 1, status: 'provisional', completedAt: end, ...lapEnd, frame: 4 }]);
     expect(results.map((r) => r.changed.has('laps'))).toEqual([false, false, false, true, false]);
   });
   it('a lost frame cannot swallow a lap: without the frame where the lap number changes there is still exactly one lap', () => {

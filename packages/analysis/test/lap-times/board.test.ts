@@ -103,7 +103,7 @@ describe('lap-times update and flashback', () => {
   // engine convention: `field` already holds each car's lap-3 start line (3, 0); lap 3 adds segments 1..49 and the closing (4, 0)
   const lapThree = (id: number, paceMs: number, startAt: number): MiniSectorCrossing[] => [
     ...crossings(carId(id), 3, paceMs, startAt).slice(1),
-    { carId: carId(id), lap: 4, segment: 0, at: startAt + paceMs, in: {} },
+    { carId: carId(id), lap: 4, segment: 0, at: startAt + paceMs, frame: 0 },
   ];
   const allCrossings: MiniSectorCrossing[] = [...base.crossings, ...lapThree(0, 89_000, 180_000), ...lapThree(1, 91_000, 182_000)];
 

@@ -1,6 +1,7 @@
 // One generic property over the registry (contract C85, C87): random signal sequences, run through step 2's
 // `runMachine` frame by frame and closed by `closeSession`, never give an undeclared transition, a throw, two open spans
-// in one scope, a scope left without its open span or a gap between spans; span ids count the spans opened before them.
+// in one scope, a scope left without its open span or a gap between spans (in time and in frames); span ids count the
+// spans opened before them; the spans closed by the session's end cover its last frame.
 // The registry is `MACHINES` plus the test machines (`test/support/test-machines.ts`) while no sub-machine is registered.
 import fc from 'fast-check';
 import { describe, expect, it, vi } from 'vitest';
@@ -33,6 +34,7 @@ describe('every sub-machine (C85)', () => {
         let before = situationOf(state).byMachine;
         sequence.forEach((signals, index) => {
           state.signals = signals;
+          state.frameNumber = index + 1;
           const out: StepOutput = { changed: new Set(), corrections: [] };
           runMachine(state, frameAt(index), out);
           const after = situationOf(state).byMachine;
@@ -45,7 +47,10 @@ describe('every sub-machine (C85)', () => {
           const spans = state.log.spans[m.id] ?? [];
           problems.push(...spanListProblems(m, spans));
           const last = new Map(spans.map((s) => [scopeKey(m.scope, s), s]));
-          for (const [scope, span] of last) if (span.end !== end) problems.push(`${m.id}: ${scope} ends at ${span.end}, not at the session's close ${end}`);
+          for (const [scope, span] of last) {
+            if (span.end !== end) problems.push(`${m.id}: ${scope} ends at ${span.end}, not at the session's close ${end}`);
+            if (span.endFrame !== sequence.length + 1) problems.push(`${m.id}: ${scope} ends on frame ${span.endFrame}, not after the last frame ${sequence.length}`);
+          }
         }
         expect(problems).toEqual([]);
       }),

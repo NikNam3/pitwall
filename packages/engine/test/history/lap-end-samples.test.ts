@@ -1,7 +1,7 @@
 // Lap-end samples (spec 3.3, A.1): wear, ERS and damage at the lap end, the lap's channel ranges and damageChange events.
 import { describe, expect, it } from 'vitest';
 import { known, unknown, type RaceEvent } from '@pitwall/domain';
-import { initialState, SessionRunner, step, type EngineState, type StepOutput } from '../../src/index.ts';
+import { initialState, SessionRunner, step, type EngineState, type Frame, type StepOutput } from '../../src/index.ts';
 import type { LogWriter } from '../../src/log/types.ts';
 import { emptySituation } from '../../src/situations/situation.ts';
 import { RECORDERS } from '../../src/step/step.ts';
@@ -103,30 +103,31 @@ describe('damageChange events', () => {
 
   /** Runs one car whose front-left wing reads `plan[i]` % in frame i. */
   const wingPlan = (plan: number[]) => runScenario(new ScenarioBuilder({ cars: 1 }).frames(plan.length, (d) => wing(plan[d.index]!)(d)));
-  const wingChange = (at: number, fromPct: number, toPct: number) =>
-    ({ at, kind: 'damageChange', carId: 0, params: { part: 'frontLeftWingPct', fromPct, toPct }, in: {} });
+  /** The damageChange of frame `i` of `frames`: at its time, describing its frame number `i + 1` (C26). */
+  const wingChange = (frames: readonly Frame[], i: number, fromPct: number, toPct: number) =>
+    ({ at: frames[i]!.sessionTime, kind: 'damageChange', carId: 0, params: { part: 'frontLeftWingPct', fromPct, toPct }, frame: i + 1 });
 
   it('a front-left wing rise from 0 to 12 % appends one damageChange event', () => {
     const { st, frames, results } = wingPlan([0, 12]);
-    expect(st.history.events).toEqual([wingChange(frames[1]!.sessionTime, 0, 12)]);
+    expect(st.history.events).toEqual([wingChange(frames, 1, 0, 12)]);
     expect(results.map((r) => r.changed.has('events'))).toEqual([false, true]);
   });
 
   it('a fall of the front-left wing from 12 to 0 % (a repair) appends a damageChange with fromPct above toPct', () => {
     const { st, frames, results } = wingPlan([0, 12, 0]);
-    expect(st.history.events).toEqual([wingChange(frames[1]!.sessionTime, 0, 12), wingChange(frames[2]!.sessionTime, 12, 0)]);
+    expect(st.history.events).toEqual([wingChange(frames, 1, 0, 12), wingChange(frames, 2, 12, 0)]);
     expect(results.map((r) => r.changed.has('events'))).toEqual([false, true, true]);
   });
 
   it('a reading equal to the previous one appends no event', () => {
     const { st, frames, results } = wingPlan([0, 7, 7, 7]);
-    expect(st.history.events).toEqual([wingChange(frames[1]!.sessionTime, 0, 7)]);
+    expect(st.history.events).toEqual([wingChange(frames, 1, 0, 7)]);
     expect(results.map((r) => r.changed.has('events'))).toEqual([false, true, false, false]);
   });
 
   it("a car's first reading only sets the baseline: a wing already at 30 % is no event, the next change counts from 30", () => {
     const { st, frames } = wingPlan([30, 30, 40]);
-    expect(st.history.events).toEqual([wingChange(frames[2]!.sessionTime, 30, 40)]);
+    expect(st.history.events).toEqual([wingChange(frames, 2, 30, 40)]);
   });
 
   it('every rising part is one event of its own, named as in DamageParts', () => {
@@ -157,7 +158,7 @@ describe('damageChange events', () => {
   const record = (st: EngineState, damage: boolean) => {
     const recorder = RECORDERS.find((r) => r.id === 'events')!;
     if (damage) st.cars[0]!.updatedAt.damage = AT;
-    const input = { at: AT, frameId: 999, live: { ...st, frameEvents: [] }, situation: emptySituation(), stamps: { session: {}, cars: [] } };
+    const input = { at: AT, frameId: 999, live: { ...st, frameEvents: [] }, situation: emptySituation(), frameNumber: 2 };
     const out: StepOutput = { changed: new Set(), corrections: [] };
     st.open.recorders['events'] = recorder.apply(input, st.open.recorders['events'], writerOf(st), out);
   };

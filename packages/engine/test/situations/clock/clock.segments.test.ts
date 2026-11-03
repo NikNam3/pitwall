@@ -1,5 +1,5 @@
 // Step 0, the clock, on committed segments (contract C7, C36; facts in fixtures/index.json): every fall that is no
-// flashback is carried over, never re-stamped, and the race clock never falls: the settling after lights out and the
+// flashback is carried over, never re-timed, and the race clock never falls: the settling after lights out and the
 // formation reset before it (race-zandvoort-online-start), a fall inside the formation (race-zandvoort-clock-reset); a
 // flashback appends no clock fact (race-singapore-wet-flashback). One replay per segment, from its first frame that carries a Session packet.
 import { beforeAll, describe, expect, it } from 'vitest';
@@ -77,7 +77,7 @@ describe('race-zandvoort-online-start: the race clock settles after lights out (
     ]);
     expect([steps[fall]!.rewound, steps[fall]!.flashback]).toEqual([false, false]);
   });
-  it('nothing recorded is re-stamped: the facts recorded before the fall keep their times, lights out the time of its frame', () => {
+  it('nothing recorded is re-timed: the facts recorded before the fall keep their times, lights out the time of its frame', () => {
     const { runner, steps } = run;
     const { before, now } = prefixes(steps[fall]!.before!, runner.state.history);
     expect(now).toEqual(before);
@@ -113,7 +113,7 @@ describe('race-zandvoort-clock-reset: a fall of the session time inside the form
   it('is no flashback and rewinds nothing', () => {
     expect([fall > 0, run.steps[fall]!.flashback, run.steps.filter((s) => s.rewound)]).toEqual([true, false, []]);
   });
-  it('re-stamps nothing: the facts recorded before it keep their times', () => {
+  it('re-times nothing: the facts recorded before it keep their times', () => {
     const { before, now } = prefixes(run.steps[fall]!.before!, run.runner.state.history);
     expect(now).toEqual(before);
     expect(before.crossings.length).toBeGreaterThan(0);

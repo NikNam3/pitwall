@@ -1,7 +1,7 @@
 // Lights out after a formation lap discards the formation's history (spec 3.2): the calculators restart and the job
 // runs under way are dropped, as on a flashback; it is no flashback to the engineer. A fall of the session time that is
 // no start, and a forward jump of more than 60 s that is no post-session jump, change nothing and are logged (spec 3.3);
-// after a fall the feed's own insights are stamped on the race clock. Calculators see the session phase in their view.
+// after a fall the feed's own insights are timed on the race clock. Calculators see the session phase in their view.
 // A session phase boundary that moves an entry earlier frames recorded at or after its time into or out of the phase
 // restarts the calculators (spec 3.1, "A boundary at a shared moment", ruling 2026-10-31 made exact after review 6): a
 // race start on the grid's held clock restarts them at lights out, which moves the start lights' events into racing,
@@ -181,8 +181,8 @@ describe('FeedPipeline: a forward jump of the session time over 60 s that is no 
   });
 });
 
-// Review 3 E6: the race clock reaches the bridge. After a mid-race fall the engine stamps every entry on its race clock
-// (spec 3.3), so the feed's own insights (here feed.stale) are stamped on it too, not on the game's raw session time.
+// Review 3 E6: the race clock reaches the bridge. After a mid-race fall the engine times every entry on its race clock
+// (spec 3.3), so the feed's own insights (here feed.stale) are timed on it too, not on the game's raw session time.
 describe('FeedPipeline: the feed insights after a mid-race fall of the session time', () => {
   it('a feed.stale raised after the fall carries a time on the race clock, not the raw session time', async () => {
     let now = 0;

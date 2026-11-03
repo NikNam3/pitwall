@@ -11,7 +11,7 @@ const stint = (over: Partial<StintRecord> & Pick<StintRecord, 'firstLap' | 'last
   actualCompound: 'C3',
   visualCompound: 'soft',
   tyreAgeAtFitting: 0,
-  in: {},
+  frame: 0,
   ...over,
 });
 

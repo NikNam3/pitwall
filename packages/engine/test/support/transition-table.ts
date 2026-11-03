@@ -27,14 +27,15 @@ const baseInput = (() => {
       const { open: _open, history: _history, weekend: _weekend, signals, log: _log, ...live } = initialState(
         initFor(new ScenarioBuilder({ cars: 2 }).frames(1, () => {}).build()),
       );
-      base = { at: 0, frameId: 0, signals, live, clock: { paused: false, offsetMs: 0 }, upstream: {}, weekendPhase: { kind: 'pending' } };
+      base = { at: 0, frameId: 0, frameNumber: 0, signals, live, clock: { paused: false, offsetMs: 0 }, upstream: {}, weekendPhase: { kind: 'pending' } };
     }
     return structuredClone(base);
   };
 })();
 
 /**
- * The inputs a sub-machine steps through, one per frame, `FRAME_MS` apart from race-clock time 0 with frame ids from 0.
+ * The inputs a sub-machine steps through, one per frame, `FRAME_MS` apart from race-clock time 0 with frame ids from 0
+ * and frame numbers from 1 (C26).
  * Each frame starts as the previous one left it (signals, live state, clock, upstream spans, weekend phase), without
  * the previous frame's events, and is then edited; the first starts from a fresh session (`weekendPhase` pending).
  */
@@ -60,6 +61,7 @@ export class MachineInputBuilder {
       const input = structuredClone(previous);
       input.at = index * FRAME_MS;
       input.frameId = index;
+      input.frameNumber = index + 1;
       input.signals.events = [];
       edit(input, index);
       built.push(input);

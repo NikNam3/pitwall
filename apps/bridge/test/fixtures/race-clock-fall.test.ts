@@ -1,5 +1,5 @@
 // A fall of the session time inside the formation phase (the formation reset) is carried over like any fall that is no
-// flashback (C36, supervisor ruling Task 7 round 2): it re-stamps nothing, truncates no step, and the race clock never
+// flashback (C36, supervisor ruling Task 7 round 2): it re-times nothing, truncates no step, and the race clock never
 // falls over it. On race-zandvoort-clock-reset (facts in fixtures/index.json): the formation lap from 2 s, then the race
 // clock from 2 s again, frame ids rising, no FLBK and no lights out in between. The engine alone; one replay feeds every
 // test.

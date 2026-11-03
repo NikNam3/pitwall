@@ -1,11 +1,12 @@
-// Step 2, the machine (contract C9, C14, C18, C20, C26, C40): `runMachine` runs the sub-machines that apply to the
-// weekend phase in their order, appends their closed spans to `spans:<id>` and returns the frame's stamps;
-// `situationOf` gives every machine's open spans; `closeSession` closes every open span, so every log is complete; a
-// span's id counts the spans its machine opened before it, also across a rewind. The registry here is the test
+// Step 2, the machine (contract C9, C14, C18, C20, C25, C26, C40): `runMachine` runs the sub-machines that apply to the
+// weekend phase in their order and appends their closed spans to `spans:<id>`, each with the frame numbers it opened
+// and closed on; `situationOf` gives every machine's open spans; `closeSession` closes every open span after the last
+// applied frame, so every log is complete; a span's id counts the spans its machine opened before it, also across a
+// rewind; a confirmed lap belongs to the spans open at its crossing (`membershipOf`). The registry here is the test
 // machines (`test/support/test-machines.ts`) and a race-only one, so these tests hold whatever else is registered.
 import { describe, expect, it, vi } from 'vitest';
-import { MAX_CARS, type OpenSpan, type Span } from '@pitwall/domain';
-import { initialState, SessionRunner, type DeepReadonly, type Frame, type StepOutput } from '../../src/index.ts';
+import { MAX_CARS, type OpenSpan } from '@pitwall/domain';
+import { initialState, membershipOf, SessionRunner, situationAt, type DeepReadonly, type Frame, type StepOutput } from '../../src/index.ts';
 import type { Signals } from '../../src/signals/types.ts';
 import { clockInput } from '../../src/situations/clock/clock.ts';
 import { closeSession, runMachine, situationOf } from '../../src/situations/run.ts';
@@ -26,23 +27,23 @@ const fresh = () => initialState(initFor([first]));
 type State = ReturnType<typeof fresh>;
 
 /**
- * Step 2 on frame `index` (race-clock time `index * FRAME_MS`): the signals as the previous frame left them, without
- * its events, edited by `edit`, as step 1 would leave them.
+ * Step 2 on frame `index` (race-clock time `index * FRAME_MS`, frame number `index + 1`, as step leaves it): the
+ * signals as the previous frame left them, without its events, edited by `edit`, as step 1 would leave them.
  */
 const machineFrame = (state: State, index: number, edit: (s: Signals) => void = () => {}) => {
   const signals = structuredClone(state.signals);
   signals.events = [];
   edit(signals);
   state.signals = signals;
+  state.frameNumber = index + 1;
   const out: StepOutput = { changed: new Set(), corrections: [] };
-  const stamps = runMachine(state, { ...first, frameId: index, sessionTime: index * FRAME_MS }, out);
-  return { stamps, out };
+  runMachine(state, { ...first, frameId: index, sessionTime: index * FRAME_MS }, out);
+  return { out };
 };
 
-const withoutStamp = ({ in: _in, ...span }: DeepReadonly<Span>) => span;
 const spanTags = (out: StepOutput): string[] => [...out.changed].filter((tag) => tag.startsWith('spans:')).sort();
 
-/** Frame 0: zone 0 yellow, car 1 in the pit lane; frame 1: the safety car out, car 1 back on track. */
+/** Frame 0 (number 1): zone 0 yellow, car 1 in the pit lane; frame 1 (number 2): the safety car out, car 1 back on track. */
 const twoFrames = (state: State) => {
   const zero = machineFrame(state, 0, (s) => {
     s.session.marshalZones = [{ startFraction: 0, flag: 'yellow' }];
@@ -56,22 +57,31 @@ const twoFrames = (state: State) => {
 };
 
 describe('runMachine', () => {
-  it("the frame's stamps hold the session-scoped spans and each car's own spans; zone spans are never stamped", () => {
-    const { one } = twoFrames(fresh());
-    expect(one.stamps.session).toEqual({ 'test-session': 1, 'test-probe': 1 });
-    expect(one.stamps.cars[0]).toEqual({ 'test-car': 0 });
-    expect(one.stamps.cars[1]).toEqual({ 'test-car': 1 });
-    expect(one.stamps.cars.map((stamp) => Object.keys(stamp))).toEqual(Array.from({ length: MAX_CARS }, () => ['test-car']));
+  it('a span records the frame numbers it opened and closed on', () => {
+    const state = fresh();
+    twoFrames(state);
+    machineFrame(state, 2, (s) => {
+      s.session.marshalZones = [{ startFraction: 0, flag: 'green' }];
+    });
+    // opened on frame 1 and closed on frame 2: the span covers frame 1 only; its successor opens on frame 2
+    expect(state.log.spans['test-session']).toEqual([
+      { machine: 'test-session', id: 0, kind: 'green', start: 0, end: FRAME_MS, confirmed: true, joinedAt: true, detail: undefined, startFrame: 1, endFrame: 2 },
+    ]);
+    expect(state.log.spans['test-car']).toEqual([
+      { machine: 'test-car', id: 0, carId: 1, kind: 'pit', start: 0, end: FRAME_MS, confirmed: true, joinedAt: true, detail: undefined, startFrame: 1, endFrame: 2 },
+    ]);
+    expect(state.log.spans['test-zone']).toEqual([
+      { machine: 'test-zone', id: 0, kind: 'yellow', start: 0, end: 2 * FRAME_MS, confirmed: true, joinedAt: true, detail: { zone: 0 }, startFrame: 1, endFrame: 3 },
+    ]);
+    expect(situationOf(state).byMachine['test-session']).toEqual([
+      { machine: 'test-session', id: 1, kind: 'neutralised', start: FRAME_MS, confirmed: true, detail: undefined, startFrame: 2 },
+    ]);
   });
   it('appends the spans a frame closed to spans:<id>', () => {
     const state = fresh();
     twoFrames(state);
-    expect(state.log.spans['test-session']?.map(withoutStamp)).toEqual([
-      { machine: 'test-session', id: 0, kind: 'green', start: 0, end: FRAME_MS, confirmed: true, joinedAt: true, detail: undefined },
-    ]);
-    expect(state.log.spans['test-car']?.map(withoutStamp)).toEqual([
-      { machine: 'test-car', id: 0, carId: 1, kind: 'pit', start: 0, end: FRAME_MS, confirmed: true, joinedAt: true, detail: undefined },
-    ]);
+    expect(state.log.spans['test-session']?.map((s) => [s.kind, s.id])).toEqual([['green', 0]]);
+    expect(state.log.spans['test-car']?.map((s) => [s.carId, s.kind, s.id])).toEqual([[1, 'pit', 0]]);
     expect(state.log.spans['test-zone']).toBeUndefined();
   });
   it('a machine reads the open spans its upstream machine has after this frame, and the clock’s state (clockInput)', () => {
@@ -80,7 +90,7 @@ describe('runMachine', () => {
     machineFrame(state, 1, (s) => {
       s.session.safetyCarStatus = 'sc';
     });
-    const detail: ProbeDetail = { at: FRAME_MS, frameId: 1, clock: clockInput(state), upstream: ['neutralised'] };
+    const detail: ProbeDetail = { at: FRAME_MS, frameId: 1, frameNumber: 2, clock: clockInput(state), upstream: ['neutralised'] };
     expect(situationOf(state).byMachine['test-probe']?.map((s) => s.detail)).toEqual([detail]);
     expect(detail.clock).toEqual({ paused: false, offsetMs: 0 });
   });
@@ -120,13 +130,13 @@ describe('situationOf', () => {
     const state = fresh();
     twoFrames(state);
     const situation = situationOf(state);
-    expect(situation.byMachine['test-session']).toEqual([{ machine: 'test-session', id: 1, kind: 'neutralised', start: FRAME_MS, confirmed: true, detail: undefined }]);
+    expect(situation.byMachine['test-session']).toEqual([{ machine: 'test-session', id: 1, kind: 'neutralised', start: FRAME_MS, confirmed: true, detail: undefined, startFrame: 2 }]);
     expect(situation.byMachine['test-car']?.filter((s) => (s.carId ?? 0) < 2)).toEqual([
-      { machine: 'test-car', id: 0, carId: 0, kind: 'track', start: 0, confirmed: true, joinedAt: true, detail: undefined },
-      { machine: 'test-car', id: 1, carId: 1, kind: 'track', start: FRAME_MS, confirmed: true, detail: undefined },
+      { machine: 'test-car', id: 0, carId: 0, kind: 'track', start: 0, confirmed: true, joinedAt: true, detail: undefined, startFrame: 1 },
+      { machine: 'test-car', id: 1, carId: 1, kind: 'track', start: FRAME_MS, confirmed: true, detail: undefined, startFrame: 2 },
     ]);
     expect(situation.byMachine['test-car']?.map((s) => s.carId)).toEqual(Array.from({ length: MAX_CARS }, (_, i) => i));
-    expect(situation.byMachine['test-zone']).toEqual([{ machine: 'test-zone', id: 0, kind: 'yellow', start: 0, confirmed: true, joinedAt: true, detail: { zone: 0 } }]);
+    expect(situation.byMachine['test-zone']).toEqual([{ machine: 'test-zone', id: 0, kind: 'yellow', start: 0, confirmed: true, joinedAt: true, detail: { zone: 0 }, startFrame: 1 }]);
   });
 });
 
@@ -141,14 +151,28 @@ describe('closeSession', () => {
     });
     const open = situationOf(state).byMachine;
     closeSession(state, 5_000);
-    expect(state.log.spans['test-session']?.map(withoutStamp)).toEqual([
-      { machine: 'test-session', id: 0, kind: 'green', start: 0, end: FRAME_MS, confirmed: true, joinedAt: true, detail: undefined },
-      { machine: 'test-session', id: 1, kind: 'neutralised', start: FRAME_MS, end: 5_000, confirmed: false, detail: undefined },
+    expect(state.log.spans['test-session']).toEqual([
+      { machine: 'test-session', id: 0, kind: 'green', start: 0, end: FRAME_MS, confirmed: true, joinedAt: true, detail: undefined, startFrame: 1, endFrame: 2 },
+      { machine: 'test-session', id: 1, kind: 'neutralised', start: FRAME_MS, end: 5_000, confirmed: false, detail: undefined, startFrame: 2, endFrame: 3 },
     ]);
-    expect(state.log.spans['test-zone']?.map(withoutStamp)).toEqual([
-      { machine: 'test-zone', id: 0, kind: 'clear', start: 0, end: 5_000, confirmed: true, joinedAt: true, detail: { zone: 0 } },
+    expect(state.log.spans['test-zone']).toEqual([
+      { machine: 'test-zone', id: 0, kind: 'clear', start: 0, end: 5_000, confirmed: true, joinedAt: true, detail: { zone: 0 }, startFrame: 1, endFrame: 3 },
     ]);
-    expect(state.log.spans['test-car']?.map(withoutStamp)).toEqual(open['test-car']!.map((s) => ({ ...s, end: 5_000 })));
+    expect(state.log.spans['test-car']).toEqual(open['test-car']!.map((s) => ({ ...s, end: 5_000, endFrame: 3 })));
+  });
+  it('closeSession closes a span after the last applied frame', () => {
+    const state = fresh();
+    twoFrames(state);
+    machineFrame(state, 2);
+    const open = Object.values(situationOf(state).byMachine).flat();
+    closeSession(state, 3 * FRAME_MS);
+    // the last applied frame is number 3: every span closed by the session's end still covers it
+    const key = (s: DeepReadonly<OpenSpan>) => `${s.machine} ${s.carId ?? '-'} #${s.id}`;
+    const closed = Object.values(state.log.spans).flat().filter((s) => s.end === 3 * FRAME_MS);
+    expect(closed.map(key).sort()).toEqual(open.map(key).sort());
+    expect([...new Set(closed.map((s) => s.endFrame))]).toEqual([4]);
+    const covering = Object.values(situationAt({ history: { ...state.history, spans: state.log.spans } }, 3)).flat();
+    for (const span of closed) expect(covering).toContainEqual(span);
   });
 });
 
@@ -197,15 +221,15 @@ describe('SessionRunner.finish', () => {
     const logged = Object.values(runner.state.log.spans).flat();
     for (const span of open) {
       const closed = logged.find((s) => s.machine === span.machine && s.id === span.id && s.carId === span.carId);
-      expect(closed && withoutStamp(closed), `${span.machine} #${span.id}`).toEqual({ ...span, end });
+      expect(closed, `${span.machine} #${span.id}`).toEqual({ ...span, end, endFrame: runner.state.frameNumber + 1 });
     }
   });
 });
 
-describe('stamps of superseding facts (C25, C26)', () => {
-  it('a confirmed lap carries the stamp of the frame that confirms it', () => {
-    // frames 0-2 lap 1, frame 3 lap 2 begins (the provisional lap 1); the safety car out from frame 5; Session History
-    // confirms lap 1 on frame 8
+describe('membership of superseding facts (C25, C26)', () => {
+  it('a confirmed lap belongs to the span open at its crossing', () => {
+    // frames 0-2 (numbers 1-3) lap 1, frame 3 (number 4) lap 2 begins: the provisional lap 1, under green; the safety
+    // car out from frame 5 (number 6) opens `neutralised`; Session History confirms lap 1 on frame 8 (number 9)
     const history = { carIdx: 0, numLaps: 2, lapHistoryData: [
       { lapTimeInMs: 90_520, sector1TimeMs: 30_000, sector2TimeMs: 31_010, sector3TimeMs: 29_509, lapValidBitFlags: 0b1111 },
       { lapValidBitFlags: 0b1111 }] };
@@ -218,6 +242,11 @@ describe('stamps of superseding facts (C25, C26)', () => {
     b.session({ safetyCarStatus: 1 }).frames(3, () => {}).frames(1, (d) => { d.add('sessionHistory', history); });
     const { st } = runScenario(b);
     const laps = st.history.laps.filter((l) => l.carId === 0 && l.lapNumber === 1);
-    expect(laps.map((l) => [l.status, l.in['test-session'], l.in['test-probe']])).toEqual([['provisional', 0, 3], ['confirmed', 1, 8]]);
+    expect(laps.map((l) => [l.status, l.frame])).toEqual([['provisional', 4], ['confirmed', 4]]);
+    const source = { history: st.history, situation: situationOf(st) };
+    const member = (fact: (typeof laps)[number]) =>
+      Object.fromEntries(Object.entries(membershipOf(source, fact)).map(([machine, span]) => [machine, [span.kind, span.id]]));
+    expect(member(laps[1]!)).toEqual({ 'test-session': ['green', 0], 'test-probe': ['seen', 3], 'test-car': ['track', 0] });
+    expect(member(laps[1]!)).toEqual(member(laps[0]!));
   });
 });

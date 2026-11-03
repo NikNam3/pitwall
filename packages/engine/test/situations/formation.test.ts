@@ -16,7 +16,7 @@ const FORMATION = 10;
 const RESET = 110;
 const LIGHTS = [120, 130, 140, 150, 160];
 const LIGHTS_OUT = 209;
-/** Race frame k is frame `LIGHTS_OUT + k`; frame 0 of the race is lights out. */
+/** Race frame k is frame `LIGHTS_OUT + k` (frame number `LIGHTS_OUT + k + 1`, C26); frame 0 of the race is lights out. */
 const RACE_FRAMES = 121;
 /** The reset's size: the formation lap's last session time, the race clock's offset from the reset on. */
 const FORMATION_MS = (RESET - 1) * STEP;
@@ -97,16 +97,16 @@ describe('at lights out the formation lap is discarded', () => {
   it('every event of the formation goes (overtakes, the retirement, the DRS notice); the start lights and lights out stay', () => {
     const { runner } = startRun();
     expect(events(runner)).toEqual([
-      ...[1, 2, 3, 4, 5].map((lights) => ({ at: raceAt(0), kind: 'startLights', params: { lights }, in: {} })),
-      { at: raceAt(0), kind: 'lightsOut', params: {}, in: {} },
-      { at: raceAt(40), kind: 'overtake', carId: 1, otherCarId: 0, params: {}, in: {} },
+      ...LIGHTS.map((k, i) => ({ at: raceAt(0), kind: 'startLights', params: { lights: i + 1 }, frame: k + 1 })),
+      { at: raceAt(0), kind: 'lightsOut', params: {}, frame: LIGHTS_OUT + 1 },
+      { at: raceAt(40), kind: 'overtake', carId: 1, otherCarId: 0, params: {}, frame: LIGHTS_OUT + 41 },
     ]);
   });
   it('a lights-out event during the formation lap, before any start light, is no race start and goes with the formation', () => {
     const { runner } = run(script(formationStart((k) => (k === FORMATION + 5 ? [LGOT] : []))));
     expect(runner.state.history.sessionPhases.map((p) => p.kind)).toEqual(['preStart', 'formation', 'startLights']);
     expect(runner.state.open.situations.session).toEqual({ kind: 'racing', start: raceAt(0), startLeaderLap: 1 });
-    expect(events(runner).filter((e) => e.kind === 'lightsOut')).toEqual([{ at: raceAt(0), kind: 'lightsOut', params: {}, in: {} }]);
+    expect(events(runner).filter((e) => e.kind === 'lightsOut')).toEqual([{ at: raceAt(0), kind: 'lightsOut', params: {}, frame: LIGHTS_OUT + 1 }]);
   });
   it('the formation lap’s mini-sector crossings go; lap 1 is crossed again from lights out, each boundary once', () => {
     const { runner } = startRun();

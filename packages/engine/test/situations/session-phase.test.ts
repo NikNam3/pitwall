@@ -356,7 +356,7 @@ describe('a flashback across a phase boundary', () => {
 });
 
 // Wave 5 (W5-E), the counterexample of the scheduler property (seed 1759405573), shrunk by hand. The case: after a
-// rewind the game's first frames still carry the old session time, and what they record is stamped at the rewind's
+// rewind the game's first frames still carry the old session time, and what they record is timed at the rewind's
 // target, so the target frame and those stale frames are one moment of the race clock. A frame of that moment records
 // a mini-sector crossing (in the counterexample the target frame, its crossing exactly at its own time; here the first
 // stale frame, which needs no exact hit); the SC status arrives in a later stale frame and opens the neutralisation at
@@ -385,7 +385,7 @@ describe('a neutralisation that opens at a moment an earlier frame of it already
   });
 });
 
-// Review 5 R2, R3 and review 6 R6-0: the closing boundary, a boundary below the previous frame's stamp, every phase kind,
+// Review 5 R2, R3 and review 6 R6-0: the closing boundary, a boundary below the previous frame's time, every phase kind,
 // and the condition of the rule (spec 3.1, "A boundary at a shared moment", ruling 2026-10-31 made exact after review
 // 6): a boundary truncates when an earlier frame recorded an entry at or after its time, which the boundary moves into
 // or out of the phase; a boundary at a shared moment with no entry there truncates nothing.
