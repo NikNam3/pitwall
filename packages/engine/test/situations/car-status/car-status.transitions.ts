@@ -6,9 +6,12 @@
 // `retired` (not classified, rs 6: not yet seen, mapped from the spec, C19), disqualified `disqualified`.
 // `retired` opens on the earliest reliable signal for the car (C18): a PENA of type 16 (retired), an RTMT, or the result
 // status, whichever comes first; its cause is the one known on its opening frame and is never rewritten: from the PENA 16
-// infringement (41 mechanical, 42 terminal damage, any other `other`), else from the RTMT reason (the spec's: mechanical
-// failure, terminal damage, `invalid` none, any other `other`), else `unknown('notReceived')` (supervisor ruling, Task 10
-// round 2). Until a car's Participants data is in the live state (`updatedAt.participants`, the identity area) nobody
+// infringement (41 mechanical, 42 terminal damage, any other `other`), else from the RTMT reason, else
+// `unknown('notReceived')` (supervisor rulings, Task 10 rounds 2 and 3). The RTMT reason, per the spec's list:
+// mechanical failure `retired` (mechanical); terminal damage `retired` (terminal damage); retired, not enough laps
+// completed, red flagged, inactive `retired` (other); invalid (0, every recording's) `retired` with no cause; black
+// flagged `disqualified`; finished, session skipped, session simulated no change of status (a finish is car activity's,
+// a simulated session the session's end). Every reason but invalid is not yet seen (C19). Until a car's Participants data is in the live state (`updatedAt.participants`, the identity area) nobody
 // knows whether its slot holds a car (C3): the car's first span opens on the first frame that data is there, with
 // `joinedAt` (a join row, Review Focus 2), and no span opens before it. No kind goes to `none`. The declared
 // transitions, every pair of kinds:
@@ -18,9 +21,10 @@
 //   none -> disqualified          the first frame with Participants data, a car disqualified (join)
 //   none -> absent                the first frame with Participants data, a slot past numActiveCars (join)
 //   competing -> retired          a PENA 16 (ZvR2 car 2: PENA 16/42 4 s before its RTMT), an RTMT (AI mechanical: the
-//                                 RTMT, rs 7 a frame later, PENA 16/41 about 1 s later; the player's retirement), or the
-//                                 result status retired, did not finish or not classified
-//   competing -> disqualified     the result status disqualified (§2.11, ZvR formation lap)
+//                                 RTMT, rs 7 a frame later, PENA 16/41 about 1 s later; the player's retirement; a
+//                                 retiring RTMT reason), or the result status retired, did not finish or not classified
+//   competing -> disqualified     the result status disqualified (§2.11, ZvR formation lap), or an RTMT with reason black
+//                                 flagged (not yet seen, C19)
 //   competing -> absent           the game marks the slot inactive or invalid (not yet seen, C19)
 //   retired -> competing          the result status active again (not yet seen, C19)
 //   retired -> disqualified       an RTMT, then the result status disqualified a frame later (ZvR 125.339 / 125.371)
@@ -89,7 +93,7 @@ const rows: TransitionRow<MachineInput>[] = [
     input: inputs().frames(3, field).frame(events(pena(0, 16, 42))),
   },
   {
-    name: 'the RTMT opens it, rs 7 a frame later and PENA 16/41 about 1 s later (AI mechanical failure, MxR, SgW, MiR): competing -> retired',
+    name: 'the RTMT, reason invalid (0), opens it, rs 7 a frame later and PENA 16/41 about 1 s later (AI mechanical failure, MxR, SgW, MiR): competing -> retired',
     from: 'competing',
     to: 'retired',
     input: inputs().frames(3, field).frame(retires(0)),
@@ -101,21 +105,27 @@ const rows: TransitionRow<MachineInput>[] = [
     input: inputs().frames(3, field).frame(events(pena(0, 16, 42), rtmt(0))),
   },
   {
-    name: 'an RTMT with reason mechanical failure (not yet seen: every recording sends 0): competing -> retired',
+    name: 'an RTMT with reason mechanical failure, cause mechanical (not yet seen: every recording sends 0): competing -> retired',
     from: 'competing',
     to: 'retired',
     input: inputs().frames(3, field).frame(retires(0, 'mechanicalFailure')),
   },
   {
-    name: 'an RTMT with reason terminal damage (not yet seen): competing -> retired',
+    name: 'an RTMT with reason terminal damage, cause terminal damage (not yet seen): competing -> retired',
     from: 'competing',
     to: 'retired',
     input: inputs().frames(3, field).frame(retires(0, 'terminalDamage')),
   },
   {
-    name: 'an RTMT with reason black flagged (not yet seen): competing -> retired',
+    name: 'an RTMT with reason retired, not enough laps completed, red flagged or inactive, cause other (not yet seen): competing -> retired',
     from: 'competing',
     to: 'retired',
+    input: inputs().frames(3, field).frame(retires(0, 'notEnoughLapsCompleted')),
+  },
+  {
+    name: 'an RTMT with reason black flagged (not yet seen): competing -> disqualified',
+    from: 'competing',
+    to: 'disqualified',
     input: inputs().frames(3, field).frame(retires(0, 'blackFlagged')),
   },
   {

@@ -144,22 +144,38 @@ describe('car-status: a retirement opens on its earliest signal, with the cause 
     const r = run(inputs().frames(3, field).frame(events(pena(0, 16, infringement))));
     expect(causeOf(r.open[3])).toEqual(known(cause, 3 * FRAME_MS));
   });
+  // The RTMT reason, per the spec's list (supervisor ruling, Task 10 round 3); every recording sends invalid (0), every
+  // other reason is not yet seen (C19).
   it.each<[RetirementReason, Known<'mechanical' | 'terminalDamage' | 'other'>]>([
-    ['invalid', unknown('notReceived')],
-    ['retired', known('other', 3 * FRAME_MS)],
-    ['finished', known('other', 3 * FRAME_MS)],
-    ['terminalDamage', known('terminalDamage', 3 * FRAME_MS)],
-    ['inactive', known('other', 3 * FRAME_MS)],
-    ['notEnoughLapsCompleted', known('other', 3 * FRAME_MS)],
-    ['blackFlagged', known('other', 3 * FRAME_MS)],
-    ['redFlagged', known('other', 3 * FRAME_MS)],
     ['mechanicalFailure', known('mechanical', 3 * FRAME_MS)],
-    ['sessionSkipped', known('other', 3 * FRAME_MS)],
-    ['sessionSimulated', known('other', 3 * FRAME_MS)],
-  ])('the cause from an RTMT with reason %s and no PENA 16 (the spec’s reasons; every recording sends invalid, C19)', (reason, cause) => {
+    ['terminalDamage', known('terminalDamage', 3 * FRAME_MS)],
+    ['retired', known('other', 3 * FRAME_MS)],
+    ['notEnoughLapsCompleted', known('other', 3 * FRAME_MS)],
+    ['redFlagged', known('other', 3 * FRAME_MS)],
+    ['inactive', known('other', 3 * FRAME_MS)],
+    ['invalid', unknown('notReceived')],
+  ])('an RTMT with reason %s and no PENA 16 opens retired with its cause', (reason, cause) => {
     const r = run(inputs().frames(3, field).frame(retires(0, reason)));
     expect(r.open[3]).toMatchObject({ kind: 'retired', id: 1, startFrame: 4 });
     expect(causeOf(r.open[3])).toEqual(cause);
+  });
+  it('an RTMT with reason black flagged opens disqualified on its frame (not yet seen, C19)', () => {
+    const r = run(inputs().frames(3, field).frame(retires(0, 'blackFlagged')));
+    expect(r.open[3]).toMatchObject({ kind: 'disqualified', id: 1, startFrame: 4 });
+    expect(r.closed[3]).toMatchObject([{ kind: 'competing', id: 0 }]);
+  });
+  it.each(['finished', 'sessionSkipped', 'sessionSimulated'] as const)(
+    'an RTMT with reason %s changes no status: the car stays competing, nothing closes (not yet seen, C19)',
+    (reason) => {
+      const r = run(inputs().frames(3, field).frame(retires(0, reason)).frames(2));
+      expect(r.open.map((s) => [s?.kind, s?.id])).toEqual(Array(6).fill(['competing', 0]));
+      expect(r.closed.flat()).toEqual([]);
+    },
+  );
+  it('an RTMT with reason invalid after a PENA 16 gave the cause (ZvR2 car 2) keeps the cause the PENA gave', () => {
+    const r = run(inputs().frames(3, field).frame(events(pena(0, 16, 42))).frames(3).frame(retires(0)).frames(2));
+    expect(r.open.at(-1)).toMatchObject({ kind: 'retired', id: 1, startFrame: 4 });
+    expect(causeOf(r.open.at(-1))).toEqual(known('terminalDamage', 3 * FRAME_MS));
   });
   it('a PENA 16 on the RTMT’s frame gives the cause before the RTMT reason: PENA 16/41 with reason terminal damage is mechanical', () => {
     const r = run(inputs().frames(3, field).frame(events(rtmt(0, 'terminalDamage'), pena(0, 16, 41))));
