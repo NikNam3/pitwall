@@ -1,6 +1,6 @@
 import type { DamageChangeParams } from '@pitwall/domain';
 import type { LogWriter } from '../log/types.ts';
-import type { RecorderInput } from '../step/types.ts';
+import { stampOf, type RecorderInput } from '../step/types.ts';
 import type { DeepReadonly } from '../util/deep-readonly.ts';
 import type { LiveCar } from './cars.ts';
 
@@ -52,7 +52,7 @@ export const recordDamageChanges = (input: DeepReadonly<RecorderInput>, previous
         i++;
         if (was === undefined || value === undefined || value === was) continue;
         const params: DamageChangeParams = { part, fromPct: was, toPct: value };
-        log.append('events', { at, kind: 'damageChange', carId: car.id, params, in: {} });
+        log.append('events', { at, kind: 'damageChange', carId: car.id, params, in: stampOf(input.stamps, car.id) });
         appended = true;
       }
     }

@@ -95,10 +95,10 @@ module.exports = {
     {
       name: 'log-only-writers-and-projection',
       comment:
-        'C28: readers see the projection, never the log. Only the projection, the runner, step (it hands the recorders their LogWriter), the storage writer and the log tests import log/log.ts.',
+        'C28: readers see the projection, never the log. Only the projection, the runner, step (it hands the recorders their LogWriter), the machine (situations/run.ts appends the spans, C22), the storage writer and the log tests import log/log.ts.',
       severity: 'error',
       from: {
-        pathNot: '^packages/engine/src/(log/projection\\.ts|runner/|step/step\\.ts$)|^apps/bridge/src/storage/|^packages/engine/test/log/',
+        pathNot: '^packages/engine/src/(log/projection\\.ts|runner/|step/step\\.ts$|situations/run\\.ts$)|^apps/bridge/src/storage/|^packages/engine/test/log/',
       },
       to: { path: '^packages/engine/src/log/log\\.ts$' },
     },

@@ -8,8 +8,11 @@ export type { Situation } from './situation.ts';
 
 /** What a sub-machine reads (C15): signals, live-state areas and the open spans of named upstream sub-machines. */
 export type MachineInputs = { signals: readonly SignalKey[]; values: readonly LiveArea[]; upstream: readonly MachineId[] };
-/** A sub-machine's step: its new open state and the spans it closed. */
-export type MachineStep<Open> = { open: Open; closed: Span[] };
+/**
+ * A sub-machine's step: its new open state and the spans it closed, of any kind and detail (its span types are in
+ * `domain`, C15); step 2 stamps them as it appends them (C26).
+ */
+export type MachineStep<Open> = { open: Open; closed: Array<Omit<Span<string, unknown>, 'in'>> };
 
 /** One registered part of the machine, a folder `situations/<id>/` (C15). */
 export type SubMachine<Open> = {
@@ -19,6 +22,7 @@ export type SubMachine<Open> = {
   inputs: MachineInputs;
   transitions: ReadonlyArray<readonly [from: string | 'none', to: string]>;
   init(): Open;
+  /** The open spans of `open`, at most one per scope (the session, a car or a zone). */
   openSpans(open: Open): OpenSpan[];
   step(open: Open, input: DeepReadonly<MachineInput>): MachineStep<Open>;
 };

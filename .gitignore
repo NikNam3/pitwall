@@ -11,6 +11,8 @@ reports/
 apps/ui/dist/
 apps/ui/dist-e2e/
 apps/ui/src/widgets/index.generated.ts
+packages/engine/src/situations/index.generated.ts
+packages/engine/src/situations/span-tags.generated.ts
 catalogue.generated.json
 test-support/moments/
 apps/bridge/src/dev/.dev-restart-touch.ts

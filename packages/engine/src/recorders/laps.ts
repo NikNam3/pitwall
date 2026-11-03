@@ -1,6 +1,6 @@
-import { known, MAX_CARS, unknown, type ConfirmedLap, type Kg, type Known, type LapRecord, type SessionFlag, type SessionTime } from '@pitwall/domain';
+import { known, MAX_CARS, unknown, type ConfirmedLap, type Kg, type Known, type LapRecord, type SessionFlag, type SessionTime, type Stamp } from '@pitwall/domain';
 import type { LogWriter } from '../log/types.ts';
-import type { LapCorrection, Recorder, StepOutput } from '../step/types.ts';
+import { stampOf, type FrameStamps, type LapCorrection, type Recorder, type StepOutput } from '../step/types.ts';
 import type { DeepReadonly } from '../util/deep-readonly.ts';
 import { carsWithLapData, type LiveCar } from './cars.ts';
 import { lapMarkOf, lapNotBegun, lapStepOf, markPitLane } from './lap-boundary.ts';
@@ -66,8 +66,8 @@ const addElapsed = (flag: SessionFlag, cursor: LapCursor, at: SessionTime): void
 
 const share = (part: number, whole: number): number => (whole > 0 ? part / whole : 0);
 
-/** A lap of this cursor as the values LapData can give: sector 3 is what is left of the lap time. */
-const lapFromCursor = (car: LiveCar, cursor: LapCursor, lapNumber: number, lapTimeMs: number, at: SessionTime): LapRecord => {
+/** A lap of this cursor as the values LapData can give, stamped `stamp`: sector 3 is what is left of the lap time. */
+const lapFromCursor = (car: LiveCar, cursor: LapCursor, lapNumber: number, lapTimeMs: number, at: SessionTime, stamp: Stamp): LapRecord => {
   const hasSectors = cursor.lap === lapNumber && cursor.sector1Ms > 0 && cursor.sector2Ms > 0;
   const valid = !cursor.invalid;
   return {
@@ -91,12 +91,12 @@ const lapFromCursor = (car: LiveCar, cursor: LapCursor, lapNumber: number, lapTi
     wearAtStartPct: cursor.wearAtStartPct,
     ersStoreAtStartJ: cursor.ersStoreAtStartJ,
     ...lapEndSamples(cursor, car, at),
-    in: {},
+    in: stamp,
   };
 };
 
-/** A lap LapData never showed us: only Session History has it, so what LapData would have given is unknown. */
-const lapFromHistoryOnly = (car: LiveCar, lapNumber: number, lapTimeMs: number, at: SessionTime): LapRecord => ({
+/** A lap LapData never showed us, stamped `stamp`: only Session History has it, so what LapData would have given is unknown. */
+const lapFromHistoryOnly = (car: LiveCar, lapNumber: number, lapTimeMs: number, at: SessionTime, stamp: Stamp): LapRecord => ({
   carId: car.id,
   lapNumber,
   lapTimeMs,
@@ -115,7 +115,7 @@ const lapFromHistoryOnly = (car: LiveCar, lapNumber: number, lapTimeMs: number, 
   status: 'provisional',
   completedAt: at,
   ...unknownLapEnd(),
-  in: {},
+  in: stamp,
 });
 
 /** Opens the car's lap cursor on this frame; the frame is the lap's first. */
@@ -132,7 +132,7 @@ const startLap = (own: LapsOwn, car: LiveCar, at: SessionTime, fromStart: boolea
 export const restartLap = (own: LapsOwn, car: LiveCar, at: SessionTime): void => startLap(own, car, at, true);
 
 /** What one frame of the recorder writes to: the log, the step's output and whether a lap was appended. */
-type LapsPass = { at: SessionTime; flag: SessionFlag; trackLengthM: number; log: LogWriter; out: StepOutput; appended: boolean };
+type LapsPass = { at: SessionTime; stamps: DeepReadonly<FrameStamps>; flag: SessionFlag; trackLengthM: number; log: LogWriter; out: StepOutput; appended: boolean };
 
 const trackLap = (own: LapsOwn, car: LiveCar, f: LapsPass): void => {
   const { timing } = car;
@@ -159,7 +159,7 @@ const trackLap = (own: LapsOwn, car: LiveCar, f: LapsPass): void => {
   if (recorded) for (let skipped = cursor.lap; skipped < lapNumber; skipped++) recorded[skipped] ??= { confirmed: false };
   // Session History may already have confirmed this lap (a final lap the game never rolled over).
   if (!recorded?.[lapNumber]?.confirmed) {
-    const provisional = lapFromCursor(car, cursor, lapNumber, timing.lastLapTimeMs, at);
+    const provisional = lapFromCursor(car, cursor, lapNumber, timing.lastLapTimeMs, at, stampOf(f.stamps, car.id));
     f.log.append('laps', provisional);
     f.appended = true;
     if (recorded) recorded[lapNumber] = { provisional, confirmed: false };
@@ -183,15 +183,16 @@ const corrections = (provisional: LapRecord, confirmed: LapRecord): LapCorrectio
 
 /**
  * The lap before Session History confirms it: the stored provisional, the car's open lap (a final lap the game never
- * rolled over) or a lap skipped by a lap-number jump. Laps from before the engine saw the car stay unknown.
+ * rolled over) or a lap skipped by a lap-number jump. Laps from before the engine saw the car stay unknown. A stored
+ * provisional keeps its stamp; a lap made now is stamped `stamp`.
  */
-const unconfirmedLap = (own: LapsOwn, car: LiveCar, entry: DeepReadonly<ConfirmedLap>, at: SessionTime) => {
+const unconfirmedLap = (own: LapsOwn, car: LiveCar, entry: DeepReadonly<ConfirmedLap>, at: SessionTime, stamp: Stamp) => {
   const { lapNumber } = entry;
   const slot = own.recorded[car.id]?.[lapNumber];
   if (slot?.provisional !== undefined) return { lap: slot.provisional, reported: true };
   const cursor = own.cursors[car.id];
-  if (cursor?.lap === lapNumber) return { lap: lapFromCursor(car, cursor, lapNumber, entry.lapTimeMs, at), reported: false };
-  return slot ? { lap: lapFromHistoryOnly(car, lapNumber, entry.lapTimeMs, at), reported: false } : undefined;
+  if (cursor?.lap === lapNumber) return { lap: lapFromCursor(car, cursor, lapNumber, entry.lapTimeMs, at, stamp), reported: false };
+  return slot ? { lap: lapFromHistoryOnly(car, lapNumber, entry.lapTimeMs, at, stamp), reported: false } : undefined;
 };
 
 /**
@@ -205,7 +206,7 @@ const confirmLaps = (own: LapsOwn, car: LiveCar, f: LapsPass): void => {
   for (const entry of car.timing.confirmedLaps) {
     const { lapNumber } = entry;
     if (recorded[lapNumber]?.confirmed) continue;
-    const before = unconfirmedLap(own, car, entry, f.at);
+    const before = unconfirmedLap(own, car, entry, f.at, stampOf(f.stamps, car.id));
     if (!before) continue;
     const confirmed: LapRecord = {
       ...before.lap,
@@ -269,7 +270,7 @@ export const lapsRecorder: Recorder<LapsOwn> = {
   }),
   apply(input, own, log, out) {
     const { at, live } = input;
-    const f: LapsPass = { at, flag: live.session.flag, trackLengthM: live.session.trackLengthM, log, out, appended: false };
+    const f: LapsPass = { at, stamps: input.stamps, flag: live.session.flag, trackLengthM: live.session.trackLengthM, log, out, appended: false };
     for (const car of carsWithLapData(input)) {
       const pit = pitLaneStep(own.pitLanes[car.id], car.timing.pitStatus, car.timing.lap);
       own.pitLanes[car.id] = pit.lane;

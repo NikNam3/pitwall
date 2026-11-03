@@ -1,6 +1,6 @@
-import { MAX_CARS, MINI_SECTORS, type CarId, type Metres, type SessionTime } from '@pitwall/domain';
+import { MAX_CARS, MINI_SECTORS, type CarId, type Metres, type SessionTime, type Stamp } from '@pitwall/domain';
 import type { LogWriter } from '../log/types.ts';
-import type { Recorder } from '../step/types.ts';
+import { stampOf, type Recorder } from '../step/types.ts';
 import { carsWithLapData } from './cars.ts';
 
 /** Where a car was on its previous LapData frame, and the last segment it crossed in that lap (-1 = none). */
@@ -36,7 +36,7 @@ const isAfter = (crossing: Crossing, lap: number, segment: number): boolean =>
   crossing.lap > lap || (crossing.lap === lap && crossing.segment > segment);
 
 /** Records the car's crossings since its previous sample; whether it appended one. */
-const trackCar = (own: MiniSectorsOwn, sample: { carId: CarId; lap: number; distanceM: Metres; at: SessionTime }, trackLengthM: Metres, log: LogWriter): boolean => {
+const trackCar = (own: MiniSectorsOwn, sample: { carId: CarId; lap: number; distanceM: Metres; at: SessionTime; in: Stamp }, trackLengthM: Metres, log: LogWriter): boolean => {
   const { carId, lap, distanceM, at } = sample;
   const cursor = own.cursors[carId];
   const next: MiniSectorCursor = { lap, segment: -1, distanceM, at };
@@ -50,7 +50,7 @@ const trackCar = (own: MiniSectorsOwn, sample: { carId: CarId; lap: number; dist
     if (!isAfter(crossing, last.lap, last.segment)) continue;
     last = crossing;
     const crossedAt = path === 0 ? cursor.at : Math.round(cursor.at + ((at - cursor.at) * crossing.pathM) / path);
-    log.append('crossings', { carId, lap: crossing.lap, segment: crossing.segment, at: crossedAt, in: {} });
+    log.append('crossings', { carId, lap: crossing.lap, segment: crossing.segment, at: crossedAt, in: sample.in });
     appended = true;
   }
   next.segment = last.lap === lap ? last.segment : -1;
@@ -74,7 +74,7 @@ export const miniSectorsRecorder: Recorder<MiniSectorsOwn> = {
     if (trackLengthM <= 0) return own;
     let appended = false;
     for (const car of carsWithLapData(input)) {
-      const sample = { carId: car.id, lap: car.timing.lap, distanceM: car.timing.lapDistanceM, at: input.at };
+      const sample = { carId: car.id, lap: car.timing.lap, distanceM: car.timing.lapDistanceM, at: input.at, in: stampOf(input.stamps, car.id) };
       appended = trackCar(own, sample, trackLengthM, log) || appended;
     }
     if (appended) out.changed.add('miniSectors');

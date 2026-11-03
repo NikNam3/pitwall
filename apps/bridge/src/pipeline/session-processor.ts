@@ -131,9 +131,13 @@ export class SessionProcessor {
     if (only.size > 0) this.#evaluateNow(only);
   }
 
-  /** Runs whatever still waits for Participants, then closes the session file. `demandChanged()` still answers afterwards. */
+  /**
+   * The session ended (`sessionEnded`: SEND, a new session, the end of input): runs whatever still waits for
+   * Participants, closes every open span (`finish`, so the log is complete), then closes the session file.
+   * `demandChanged()` still answers afterwards.
+   */
   async end(receivedAtMs: number): Promise<void> {
-    this.#applying(undefined, () => this.#runner.end(this.#onResult));
+    this.#applying(undefined, () => this.#runner.finish(this.#onResult));
     await this.#o.file?.close(receivedAtMs);
   }
 

@@ -9,7 +9,7 @@ import { miniSectorsRecorder } from '../recorders/mini-sectors.ts';
 import { pitStopsRecorder } from '../recorders/pit-stops.ts';
 import { stintsRecorder } from '../recorders/stints.ts';
 import { readSignals } from '../signals/read.ts';
-import { emptySituation } from '../situations/situation.ts';
+import { runMachine, situationOf } from '../situations/run.ts';
 import { trackedEventsOf } from '../situations/tracked-events.ts';
 import type { EngineState } from '../state/engine-state.ts';
 import { conditionUpdate } from './state-update/condition.ts';
@@ -82,10 +82,12 @@ const record = (state: EngineState, input: RecorderInput, out: StepOutput): void
 /**
  * Applies one frame to the state in place (spec 6.1, C7-C10), in four steps: step 0, the clock (the situation tracker
  * reads the session time's jump and returns the frame on the race clock, `report`: the `SessionRunner` took the frame
- * as a flashback report); step 1, the state update; step 2, the machine's slot (until the machine runs, Task 5: the
- * situation tracker and the flag phases it mirrors; it also decides `tracked`, what the frame's situation events tell
- * the recorders); step 3, the recorders. Last, the projection takes in what the frame appended; a step that rewrote the
- * log in place (`rewritten`) projects it again. Until the machine runs no span is open, so nothing is hidden by a stamp.
+ * as a flashback report); step 1, the state update; step 2, the machine (`runMachine`: the registered sub-machines,
+ * their closed spans and the frame's stamps), after the situation tracker and the flag phases it mirrors, which keep
+ * step 2's slot until Tasks 7/9 port them (the tracker also decides `tracked`, what the frame's situation events tell
+ * the recorders); step 3, the recorders, with the stamps and the machine's situation. Last, the projection takes in
+ * what the frame appended, resolving stamps with the open spans; a step that rewrote the log in place (`rewritten`)
+ * projects it again.
  */
 export function step(state: EngineState, received: Frame, report?: FlashbackReport): StepOutput {
   const out: StepOutput = { changed: new Set(), corrections: [] };
@@ -93,9 +95,10 @@ export function step(state: EngineState, received: Frame, report?: FlashbackRepo
   updateState(state, frame, out);
   applySituations(state, frame, out);
   applyFlagPhases(state, out);
-  const situation = emptySituation();
+  const stamps = runMachine(state, frame, out);
+  const situation = situationOf(state);
   const tracked = trackedEventsOf(state.signals.events);
-  record(state, { at: frame.sessionTime, frameId: frame.frameId, live: state, situation, stamps: { session: {}, cars: [] }, tracked }, out);
+  record(state, { at: frame.sessionTime, frameId: frame.frameId, live: state, situation, stamps, tracked }, out);
   const projection = projectionTrackerOf(state);
   if (out.rewritten) projection.rebuild(situation);
   else projection.update(situation);

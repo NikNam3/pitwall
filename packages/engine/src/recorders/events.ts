@@ -1,5 +1,5 @@
 import { MAX_CARS } from '@pitwall/domain';
-import type { Recorder } from '../step/types.ts';
+import { stampOf, type Recorder } from '../step/types.ts';
 import { recordDamageChanges, type DamageReadings } from './damage-changes.ts';
 
 /** The events recorder's own open state (C10): the damage readings `damageChange` compares with. */
@@ -15,7 +15,7 @@ export const eventsRecorder: Recorder<EventsOwn> = {
   apply(input, own, log, out) {
     const { at } = input;
     const bodies = [...(input.tracked?.raceEvents ?? []), ...input.live.frameEvents];
-    for (const body of bodies) log.append('events', { at, ...body, in: {} });
+    for (const body of bodies) log.append('events', { at, ...body, in: stampOf(input.stamps, body.carId) });
     if (recordDamageChanges(input, own.damage, log) || bodies.length > 0) out.changed.add('events');
     return own;
   },

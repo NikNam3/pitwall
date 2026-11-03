@@ -4,7 +4,7 @@ import { onRaceClock, rewindMarkOf } from '../history/situations/time-jumps.ts';
 import { logWriter, voidFactOf } from '../log/log.ts';
 import { projectionLengths } from '../log/projection.ts';
 import type { HistoryDelta, LogVoidFact } from '../log/types.ts';
-import { emptySituation } from '../situations/situation.ts';
+import { closeSession, situationOf } from '../situations/run.ts';
 import type { EngineState } from '../state/engine-state.ts';
 import type { WeekendContext } from '../state/weekend-context.ts';
 import { participantsValuesOf } from '../step/state-update/identity.ts';
@@ -168,6 +168,17 @@ export class SessionRunner {
     if (!this.#waiting) this.#drain(onResult);
   }
 
+  /**
+   * The session is over (the bridge calls it on `sessionEnded`: SEND, a new session, the end of input): the frames
+   * still held are applied (`end`), then every open span is closed at the last frame's time (`closeSession`, C18), so
+   * the log is complete, and the projection takes the closed spans in.
+   */
+  finish(onResult?: OnResult): void {
+    this.end(onResult);
+    closeSession(this.#state, this.#state.sessionTime);
+    projectionTrackerOf(this.#state).update(situationOf(this.#state));
+  }
+
   /** Asks `contextFor` once: the held frames are then applied. */
   #endWait(participants: ParticipantsValues | undefined): void {
     this.#waiting = false;
@@ -254,7 +265,7 @@ export class SessionRunner {
     const voidTarget = last === undefined ? { frameId: snapshot.frameId, at: snapshot.sessionTime } : { frameId: last.frame.frameId, at: last.at };
     logWriter(log).append('voids', voidFactOf(log, snapshot.lengths, voidTarget));
     // The new void fact projects the log again (C30), before the replayed frames extend it.
-    projectionTrackerOf(this.#state).update(emptySituation());
+    projectionTrackerOf(this.#state).update(situationOf(this.#state));
     for (const { frame: f, report } of replayed) step(this.#state, f, report);
     this.#attach?.restore(last === undefined ? snapshot.attached : last.attached);
     const targetSessionTime = target.sessionTime === undefined ? this.#state.sessionTime : onRaceClock(this.#state, target.sessionTime);

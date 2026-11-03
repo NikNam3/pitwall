@@ -1,6 +1,6 @@
-import { MAX_CARS, type ActualCompound, type CarId, type VisualCompound } from '@pitwall/domain';
+import { MAX_CARS, type ActualCompound, type CarId, type Stamp, type VisualCompound } from '@pitwall/domain';
 import type { LogWriter } from '../log/types.ts';
-import type { Recorder } from '../step/types.ts';
+import { stampOf, type Recorder } from '../step/types.ts';
 import { carsWithLapData, type LiveCar } from './cars.ts';
 import { lapMarkOf, lapStepOf, markPitLane, type LapMark } from './lap-boundary.ts';
 import { endVisits, pitLaneStep, type PitLane } from './pit-lane.ts';
@@ -36,11 +36,11 @@ const openStint = (car: LiveCar, firstLap: number): OpenStint => ({
   lastAge: car.tyres.age,
 });
 
-/** Records the stint; one without a completed lap (the tyres changed before the first lap ended) is dropped. */
-const closeStint = (log: LogWriter, carId: CarId, stint: OpenStint, lastLap: number): boolean => {
+/** Records the stint, stamped `stamp`; one without a completed lap (the tyres changed before the first lap ended) is dropped. */
+const closeStint = (log: LogWriter, carId: CarId, stint: OpenStint, lastLap: number, stamp: Stamp): boolean => {
   if (lastLap < stint.firstLap) return false;
   const { firstLap, actualCompound, visualCompound, tyreAgeAtFitting } = stint;
-  log.append('stints', { carId, firstLap, lastLap, actualCompound, visualCompound, tyreAgeAtFitting, in: {} });
+  log.append('stints', { carId, firstLap, lastLap, actualCompound, visualCompound, tyreAgeAtFitting, in: stamp });
   return true;
 };
 
@@ -65,7 +65,7 @@ const trackLap = (own: StintsOwn, car: LiveCar, trackLengthM: number): void => {
  * qualifying (the lap number does not advance through the garage) it restarts at the line after the out lap, on the
  * same lap number, so no lap driven on the new set lands in the old stint.
  */
-const trackStint = (own: StintsOwn, car: LiveCar, log: LogWriter): boolean => {
+const trackStint = (own: StintsOwn, car: LiveCar, log: LogWriter, stamp: Stamp): boolean => {
   const { actualCompound, age } = car.tyres;
   if (actualCompound === 'unknown') return false;
   const stint = own.stints[car.id];
@@ -82,7 +82,7 @@ const trackStint = (own: StintsOwn, car: LiveCar, log: LogWriter): boolean => {
   if (!inLapDone) return false;
   const lastLap = visitLap ?? car.timing.lap - 1;
   own.stints[car.id] = openStint(car, lastLap + 1);
-  return closeStint(log, car.id, stint, lastLap);
+  return closeStint(log, car.id, stint, lastLap, stamp);
 };
 
 /** The newest recorded lap of each car rebuilt from `laps`, the laps left in the history: the situation tracker's formation discard (until Task 9). */
@@ -127,12 +127,12 @@ export const stintsRecorder: Recorder<StintsOwn> = {
         own.recordedLap[car.id] = Math.max(own.recordedLap[car.id] ?? 0, lap);
       }
     }
-    for (const car of carsWithLapData(input)) closed = trackStint(own, car, log) || closed;
+    for (const car of carsWithLapData(input)) closed = trackStint(own, car, log, stampOf(input.stamps, car.id)) || closed;
     if (input.tracked?.sessionEnded) {
       for (const car of live.cars) {
         const stint = own.stints[car.id];
         if (!stint) continue;
-        closed = closeStint(log, car.id, stint, own.recordedLap[car.id] ?? 0) || closed;
+        closed = closeStint(log, car.id, stint, own.recordedLap[car.id] ?? 0, stampOf(input.stamps, car.id)) || closed;
         own.stints[car.id] = undefined;
       }
     }
