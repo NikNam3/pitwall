@@ -15,7 +15,7 @@ import { arbSignalSequence } from '../support/arb-signals.ts';
 import { guardedInput, UndeclaredReadError } from '../support/guarded-input.ts';
 import { initFor } from '../support/run.ts';
 import { TEST_TABLES } from '../support/test-machines.transitions.ts';
-import { inputs, loadTransitionTables } from '../support/transition-table.ts';
+import { FRAME_MS, inputs, loadTransitionTables } from '../support/transition-table.ts';
 
 vi.mock('../../src/situations/index.generated.ts', async (importOriginal) => {
   const registered = await importOriginal<{ MACHINES: ReadonlyArray<SubMachine<unknown>> }>();
@@ -25,6 +25,8 @@ vi.mock('../../src/situations/index.generated.ts', async (importOriginal) => {
 
 const tables = [...(await loadTransitionTables()), ...TEST_TABLES];
 const [first] = new ScenarioBuilder({ cars: 2 }).frames(1, () => {}).build() as [Frame];
+/** One built frame; the random frames share it (machines read inputs, never write them), so none is cloned per frame. */
+const [base] = inputs().frame().build() as [MachineInput];
 const initialSignals = initialState(initFor([first])).signals;
 
 /** A weekend phase of each kind, for a machine of that phase. */
@@ -105,15 +107,18 @@ describe('a sub-machine reads only its declared inputs (C15)', () => {
       });
       it('on random signal sequences, in its weekend phase', () => {
         const phase = phaseFor(machine);
+        const upstream = upstreamFor(phase);
         fc.assert(
           fc.property(arbSignalSequence(initialSignals), (sequence) => {
-            const frames = inputs()
-              .frames(sequence.length, (i, k) => {
-                i.signals = structuredClone(sequence[k]!);
-                i.weekendPhase = phase;
-                i.upstream = upstreamFor(phase);
-              })
-              .build();
+            const frames = sequence.map((signals, k): MachineInput => ({
+              ...base,
+              at: k * FRAME_MS,
+              frameId: k,
+              frameNumber: k + 1,
+              signals,
+              weekendPhase: phase,
+              upstream,
+            }));
             expect(undeclaredReads(machine, frames), `${machine.id} declares ${JSON.stringify(machine.inputs)}`).toEqual([]);
           }),
           { numRuns: 50 },
