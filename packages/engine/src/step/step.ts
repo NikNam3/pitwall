@@ -41,8 +41,8 @@ export {
  * Step 0 (C7): the clock reads the session time's jump and returns the frame on the race clock with its clock facts;
  * `report`: the `SessionRunner` took the frame as a flashback report. Every fall is reported as `clockFall` and every
  * other forward jump as `clockJump`, with the game's times; the simulated end opens the post-session (C36). The clock
- * facts describe the frame's number and its paused span opens and closes on it (C26). Its tags follow step 2's rule
- * (C40): `clock` when it appends a clock fact, `spans:clock` when its open spans changed or it closed a paused span.
+ * facts describe the frame's number and its spans open and close on it (C26). Its tags follow step 2's rule (C40):
+ * `clock` when it appends a clock fact, `spans:clock` when its open spans changed or it closed a span.
  */
 const step0Clock = (state: EngineState, received: Frame, report: FlashbackReport | undefined, out: StepOutput): ClockStep => {
   const before = STEP0_CLOCK.openSpans(state.open.clock);
@@ -64,7 +64,7 @@ const step0Clock = (state: EngineState, received: Frame, report: FlashbackReport
   return clock;
 };
 
-/** Appends step 0's clock facts to `clock` and its closed paused span to `spans:clock` (C22). */
+/** Appends step 0's clock facts to `clock` and its closed spans to `spans:clock` (C22). */
 const appendClock = (state: EngineState, clock: ClockStep): void => {
   const log = logWriter(state.log);
   for (const fact of clock.facts) log.append('clock', fact);

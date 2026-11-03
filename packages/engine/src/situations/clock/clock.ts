@@ -10,8 +10,8 @@ import type { FlashbackReport, RewindMark } from '../../step/types.ts';
 import type { DeepReadonly } from '../../util/deep-readonly.ts';
 import type { ClockInput } from '../machine.ts';
 import { jumpOf } from './jumps.ts';
-import { pauseSoFar, trackPause } from './pauses.ts';
-import { CLOCK_MACHINE, type ClockOpen, type PausedSpan } from './types.ts';
+import { clockSpanSoFar, trackPause } from './pauses.ts';
+import { CLOCK_MACHINE, clockPaused, type ClockOpen, type ClockSpan } from './types.ts';
 
 /** What the clock reads of one frame besides its own open state. */
 export type ClockStepInput = {
@@ -22,15 +22,15 @@ export type ClockStepInput = {
   lastRaceMs: SessionTime;
   /** An online session: the game's `gamePaused` pauses it, not a gap in the packets. */
   networkGame: boolean;
-  /** The frame's number (C26): the clock facts describe it, and a paused span opens and closes on it. */
+  /** The frame's number (C26): the clock facts describe it, and the clock's spans open and close on it. */
   frameNumber: FrameNumber;
 };
 
 /**
  * One step of the clock: its new open state, the frame on the race clock, the clock facts for `clock` (`fall`, `jump`,
- * `simulatedEnd`, each describing this frame) and the paused span it closed (for `spans:clock`, closed on this frame).
+ * `simulatedEnd`, each describing this frame) and the spans it closed, in order (for `spans:clock`, closed on this frame).
  */
-export type ClockStep = { open: ClockOpen; frame: Frame; facts: ClockFact[]; closed: PausedSpan[] };
+export type ClockStep = { open: ClockOpen; frame: Frame; facts: ClockFact[]; closed: ClockSpan[] };
 
 const onClock = (frame: Frame, offsetMs: number): Frame => (offsetMs === 0 ? frame : { ...frame, sessionTime: frame.sessionTime + offsetMs });
 
@@ -89,28 +89,31 @@ const clockFrame = (open: ClockOpen, input: ClockStepInput, facts: ClockFact[]):
 };
 
 /**
- * The clock: step 0 (C7), a sub-machine outside `MACHINES`; its span declaration in domain (C15): session scope, its
- * one span kind `paused`. Its transitions (C15, C85): a pause opens from none and closes to none (an offline pause on
- * the frame it opened on).
+ * The clock: step 0 (C7), a sub-machine outside `MACHINES`; its span declaration in domain (C15): session scope, the
+ * kinds `running` and `paused`, which tile the session (C85). Its transitions (C15, C85): the session's first frame
+ * opens `running`, or `paused` when it is already an online pause; then `running` and `paused` alternate (an offline
+ * pause opens and closes on the frame after its gap, between two `running` spans).
  */
 export const STEP0_CLOCK = {
   id: CLOCK_MACHINE,
   spans: clockSpans,
   transitions: [
+    ['none', 'running'],
     ['none', 'paused'],
-    ['paused', 'none'],
+    ['running', 'paused'],
+    ['paused', 'running'],
   ],
   init: (): ClockOpen => ({ offsetMs: 0, opened: 0, ended: false }),
-  /** The pause in progress, its wall time so far: `view.situation.byMachine.clock` (C20). */
+  /** The open span, `running` or a pause with its wall time so far: `view.situation.byMachine.clock` (C20). */
   openSpans: (open: DeepReadonly<ClockOpen>): OpenSpan[] =>
-    open.pause ? [pauseSoFar(open.pause as NonNullable<ClockOpen['pause']>, open.lastWallMs ?? open.pause.sinceWallMs)] : [],
+    open.current ? [clockSpanSoFar(open.current as NonNullable<ClockOpen['current']>, open.lastWallMs ?? open.current.sinceWallMs)] : [],
   step(previous: DeepReadonly<ClockOpen>, input: ClockStepInput): ClockStep {
     const open: ClockOpen = { ...(previous as ClockOpen) };
     const { frame, report } = input;
     if (report?.rewound) noteRewind(open, report.rewound, frame);
     const facts: ClockFact[] = [];
     const clocked = clockFrame(open, input, facts);
-    const pause = trackPause(open, {
+    const closed = trackPause(open, {
       networkGame: input.networkGame,
       gamePaused: frame.session?.gamePaused,
       wallMs: frame.receivedAtMs,
@@ -119,16 +122,16 @@ export const STEP0_CLOCK = {
       frameNumber: input.frameNumber,
     });
     open.lastWallMs = frame.receivedAtMs;
-    return { open, frame: clocked, facts, closed: pause ? [pause] : [] };
+    return { open, frame: clocked, facts, closed };
   },
 } as const;
 
 /** A session time of the game on the race clock of `state`. */
 export const onRaceClock = (state: DeepReadonly<EngineState>, sessionTime: SessionTime): SessionTime => sessionTime + state.open.clock.offsetMs;
 
-/** Step 0's clock as the sub-machines read it (`MachineInput.clock`): a pause in progress and the race clock's offset. */
+/** Step 0's clock as the sub-machines read it (`MachineInput.clock`): whether its open span is `paused`, and the race clock's offset. */
 export const clockInput = (state: DeepReadonly<EngineState>): ClockInput => ({
-  paused: state.open.clock.pause !== undefined,
+  paused: clockPaused(state.open.clock),
   offsetMs: state.open.clock.offsetMs,
 });
 

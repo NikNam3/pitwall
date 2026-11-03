@@ -77,7 +77,7 @@ export function runMachine(state: EngineState, frame: Frame, out: StepOutput): v
   appendClosed(state, closed, state.frameNumber);
 }
 
-/** The machine's open spans (C20): the clock's (a pause in progress), every registered sub-machine's, and the weekend phase. */
+/** The machine's open spans (C20): the clock's (`running` or a pause in progress), every registered sub-machine's, and the weekend phase. */
 export function situationOf(state: DeepReadonly<EngineState>): Situation {
   const byMachine: Record<MachineId, OpenSpan[]> = { [STEP0_CLOCK.id]: STEP0_CLOCK.openSpans(state.open.clock) };
   for (const machine of MACHINE_ORDER) byMachine[machine.id] = openSpansOf(state, machine);
@@ -87,7 +87,7 @@ export function situationOf(state: DeepReadonly<EngineState>): Situation {
 /**
  * The session ended (C18): every open span of every sub-machine is closed as a fact at `at`, on the frame after the last
  * applied one (`endFrame`, so it still covers that frame, C26); a pending confirmation closes as it stands,
- * `confirmed: false`. The clock's pause in progress closes too. The open states go, so every log is complete and no
+ * `confirmed: false`. The clock's open span (`running` or `paused`) closes too. The open states go, so every log is complete and no
  * span stays open.
  */
 export function closeSession(state: EngineState, at: SessionTime): void {
@@ -97,6 +97,6 @@ export function closeSession(state: EngineState, at: SessionTime): void {
     ...MACHINE_ORDER.map((machine) => closeAll(machine.id, openSpansOf(state, machine))),
   ];
   appendClosed(state, closed, state.frameNumber + 1);
-  state.open.clock = { ...state.open.clock, pause: undefined };
+  state.open.clock = { ...state.open.clock, current: undefined };
   state.open.machines = {};
 }

@@ -34,12 +34,34 @@ const listOf = <L extends FactList>(log: Log, list: L): Array<FactOf<L>> => {
   return (log.spans[machine] ??= []) as Array<FactOf<L>>;
 };
 
-/** The writer of `log` (C22): appends a fact to the end of its list and returns its id. */
+/**
+ * The id of the fact at log position `position` of `list` (C21): the number of facts of the list before it in the
+ * current timeline, those no void range covers. Void ranges are log positions; two may overlap (a later rewind to a
+ * target before an earlier one's), so each voided position counts once.
+ */
+const currentIndexOf = (log: Log, list: FactList, position: number): number => {
+  const ranges = log.voids.flatMap((v) => (v.ranges[list] ? [v.ranges[list]] : [])).sort((a, b) => a[0] - b[0]);
+  let voided = 0;
+  let reached = 0;
+  for (const [from, to] of ranges) {
+    const lo = Math.max(from, reached);
+    const hi = Math.min(to, position);
+    if (hi > lo) voided += hi - lo;
+    reached = Math.max(reached, to);
+  }
+  return position - voided;
+};
+
+/**
+ * The writer of `log` (C22): appends a fact to the end of its list and returns its id (C21): its list and the number of
+ * the list's facts before it in the current timeline, so after a rewind a replayed fact gets the id a run without the
+ * rewind gives it (C33).
+ */
 export const logWriter = (log: Log): LogWriter => ({
   append<L extends FactList>(list: L, fact: FactOf<L>) {
     const facts = listOf(log, list);
     facts.push(fact);
-    return { list, index: facts.length - 1 };
+    return { list, index: currentIndexOf(log, list, facts.length - 1) };
   },
   lengths: () => logLengths(log),
 });

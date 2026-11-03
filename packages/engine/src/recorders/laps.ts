@@ -1,4 +1,4 @@
-import { known, MAX_CARS, unknown, type ConfirmedLap, type Kg, type Known, type LapRecord, type FrameNumber, type SessionFlag, type SessionTime } from '@pitwall/domain';
+import { known, MAX_CARS, unknown, type ConfirmedLap, type FactRef, type Kg, type Known, type LapRecord, type FrameNumber, type SessionFlag, type SessionTime } from '@pitwall/domain';
 import type { LogWriter } from '../log/types.ts';
 import type { LapCorrection, Recorder, StepOutput } from '../step/types.ts';
 import type { DeepReadonly } from '../util/deep-readonly.ts';
@@ -8,8 +8,11 @@ import type { LapCursor } from './lap-cursor.ts';
 import { emptyChannels, lapEndSamples, lapStartSamples, observeLapFrame, unknownLapEnd } from './lap-samples.ts';
 import { endVisits, pitLaneStep, type PitLane } from './pit-lane.ts';
 
-/** A lap that has a record: its provisional one until Session History confirms it, and whether it is confirmed. */
-export type RecordedLap = { provisional?: LapRecord; confirmed: boolean };
+/**
+ * A lap that has a record: its provisional one with the id the log gave it (C21) until Session History confirms it, and
+ * whether it is confirmed.
+ */
+export type RecordedLap = { provisional?: { lap: LapRecord; id: FactRef }; confirmed: boolean };
 
 /** The laps recorder's own open state (C10); per-car arrays are indexed by `CarId`. */
 export type LapsOwn = {
@@ -160,9 +163,9 @@ const trackLap = (own: LapsOwn, car: LiveCar, f: LapsPass): void => {
   // Session History may already have confirmed this lap (a final lap the game never rolled over).
   if (!recorded?.[lapNumber]?.confirmed) {
     const provisional = lapFromCursor(car, cursor, lapNumber, timing.lastLapTimeMs, at, f.frameNumber);
-    f.log.append('laps', provisional);
+    const id = f.log.append('laps', provisional);
     f.appended = true;
-    if (recorded) recorded[lapNumber] = { provisional, confirmed: false };
+    if (recorded) recorded[lapNumber] = { provisional: { lap: provisional, id }, confirmed: false };
   }
   // The completing frame belongs to the next lap's ranges and totals, not to the one it ends.
   startLap(own, car, at, true);
@@ -182,14 +185,21 @@ const corrections = (provisional: LapRecord, confirmed: LapRecord): LapCorrectio
 };
 
 /**
- * The lap before Session History confirms it: the stored provisional, the car's open lap (a final lap the game never
- * rolled over) or a lap skipped by a lap-number jump. Laps from before the engine saw the car stay unknown. A lap made
- * now describes frame `frame`, the current one.
+ * The lap before Session History confirms it: the stored provisional (with its id, which the confirmed lap names, C25),
+ * the car's open lap (a final lap the game never rolled over) or a lap skipped by a lap-number jump; these two have no
+ * provisional in the log, so the confirmed lap names none. Laps from before the engine saw the car stay unknown. A lap
+ * made now describes frame `frame`, the current one.
  */
-const unconfirmedLap = (own: LapsOwn, car: LiveCar, entry: DeepReadonly<ConfirmedLap>, at: SessionTime, frame: FrameNumber) => {
+const unconfirmedLap = (
+  own: LapsOwn,
+  car: LiveCar,
+  entry: DeepReadonly<ConfirmedLap>,
+  at: SessionTime,
+  frame: FrameNumber,
+): { lap: LapRecord; reported: boolean; supersedes?: FactRef } | undefined => {
   const { lapNumber } = entry;
   const slot = own.recorded[car.id]?.[lapNumber];
-  if (slot?.provisional !== undefined) return { lap: slot.provisional, reported: true };
+  if (slot?.provisional !== undefined) return { lap: slot.provisional.lap, reported: true, supersedes: slot.provisional.id };
   const cursor = own.cursors[car.id];
   if (cursor?.lap === lapNumber) return { lap: lapFromCursor(car, cursor, lapNumber, entry.lapTimeMs, at, frame), reported: false };
   return slot ? { lap: lapFromHistoryOnly(car, lapNumber, entry.lapTimeMs, at, frame), reported: false } : undefined;
@@ -208,6 +218,7 @@ const confirmLaps = (own: LapsOwn, car: LiveCar, f: LapsPass): void => {
     if (recorded[lapNumber]?.confirmed) continue;
     const before = unconfirmedLap(own, car, entry, f.at, f.frameNumber);
     if (!before) continue;
+    const { supersedes } = before;
     const confirmed: LapRecord = {
       ...before.lap,
       lapTimeMs: entry.lapTimeMs,
@@ -218,6 +229,8 @@ const confirmLaps = (own: LapsOwn, car: LiveCar, f: LapsPass): void => {
       completedAt: before.reported ? before.lap.completedAt : f.at,
       // the frame it describes is its provisional's, the crossing (C25, C26); a provisional made now describes this frame
       frame: before.lap.frame,
+      // the provisional it supersedes, by its id in the current timeline (C21, C25)
+      ...(supersedes !== undefined && { supersedes }),
     };
     if (before.reported) f.out.corrections.push(...corrections(before.lap, confirmed));
     f.log.append('laps', confirmed);
@@ -227,16 +240,20 @@ const confirmLaps = (own: LapsOwn, car: LiveCar, f: LapsPass): void => {
 };
 
 /**
- * The cars' recorded laps rebuilt from `laps`, the laps left in the history: for the situation tracker's formation
- * discard, which changes the log in place (until Task 9).
+ * The cars' recorded laps rebuilt from `laps`, the laps of the current timeline left in the log: for the situation
+ * tracker's formation discard, which changes the log in place (until Task 9). A lap's position in `laps` is its id
+ * (C21), so a provisional keeps the id a confirmed lap names.
  */
 export const reindexLaps = (own: LapsOwn, laps: readonly LapRecord[]): void => {
   own.recorded = own.recorded.map(() => ({}));
-  for (const lap of laps) {
+  laps.forEach((lap, index) => {
     const recorded = own.recorded[lap.carId];
-    if (!recorded) continue;
-    recorded[lap.lapNumber] = lap.status === 'confirmed' ? { confirmed: true } : { provisional: lap, confirmed: recorded[lap.lapNumber]?.confirmed ?? false };
-  }
+    if (!recorded) return;
+    recorded[lap.lapNumber] =
+      lap.status === 'confirmed'
+        ? { confirmed: true }
+        : { provisional: { lap, id: { list: 'laps', index } }, confirmed: recorded[lap.lapNumber]?.confirmed ?? false };
+  });
 };
 
 /** No pit visit in progress: the situation tracker's formation discard (spec 3.2, until Task 9). */
