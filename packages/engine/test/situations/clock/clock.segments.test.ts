@@ -8,6 +8,8 @@ import { SessionRunner, SessionTracker, type DeepReadonly, type EngineState, typ
 import { segmentPackets } from '../../../../../test-support/segments.ts';
 
 type History = DeepReadonly<EngineState['history']>;
+/** The fact lists a fall could re-time, from the projection or from the log as stored. */
+type Facts = Pick<History, 'events' | 'crossings' | 'laps'>;
 /** One applied frame: the game's session time, the race clock after it, and what the step did. */
 type Step = {
   raw: number;
@@ -19,6 +21,8 @@ type Step = {
   logClock: number;
   /** The history before the step, kept only for a step on which the session time fell. */
   before?: History;
+  /** The log's facts as stored before the step, kept with `before` (C24: a recorded fact is never changed). */
+  beforeLog?: Facts;
 };
 type Replay = { runner: SessionRunner; steps: Step[] };
 
@@ -31,6 +35,8 @@ async function replay(file: string): Promise<Replay> {
   const runner = new SessionRunner({ feedId: feedId(file), sessionUid: first.sessionUid, session: first.session! });
   const steps: Step[] = [];
   let history: History = structuredClone(runner.state.history);
+  const logFacts = (): Facts => structuredClone({ events: runner.state.log.events, crossings: runner.state.log.crossings, laps: runner.state.log.laps });
+  let log = logFacts();
   const onResult = (r: StepResult, f: Frame) => {
     const previous = steps.at(-1);
     steps.push({
@@ -40,9 +46,10 @@ async function replay(file: string): Promise<Replay> {
       rewound: r.delta.rewound !== undefined,
       flashback: r.flashback !== undefined,
       logClock: r.state.log.clock.length,
-      ...(previous !== undefined && f.sessionTime < previous.raw && { before: history }),
+      ...(previous !== undefined && f.sessionTime < previous.raw && { before: history, beforeLog: log }),
     });
     history = structuredClone(r.state.history);
+    log = logFacts();
   };
   for (const f of frames.slice(frames.indexOf(first))) runner.apply(f, onResult);
   runner.end(onResult);
@@ -50,7 +57,7 @@ async function replay(file: string): Promise<Replay> {
 }
 
 /** The facts recorded before a step, as readers saw them then, and the same positions now. */
-const prefixes = (before: History, now: History) => ({
+const prefixes = (before: Facts, now: Facts) => ({
   before: { events: before.events, crossings: before.crossings, laps: before.laps },
   now: { events: now.events.slice(0, before.events.length), crossings: now.crossings.slice(0, before.crossings.length), laps: now.laps.slice(0, before.laps.length) },
 });
@@ -113,10 +120,13 @@ describe('race-zandvoort-clock-reset: a fall of the session time inside the form
   it('is no flashback and rewinds nothing', () => {
     expect([fall > 0, run.steps[fall]!.flashback, run.steps.filter((s) => s.rewound)]).toEqual([true, false, []]);
   });
-  it('re-times nothing: the facts recorded before it keep their times', () => {
-    const { before, now } = prefixes(run.steps[fall]!.before!, run.runner.state.history);
+  it('re-times nothing: the facts recorded before it keep their times in the log as stored (C24)', () => {
+    // The segment joins in the formation lap and no start light closes it: C29 hides every crossing from the projection,
+    // so the facts are compared as the log stores them.
+    const { before, now } = prefixes(run.steps[fall]!.beforeLog!, run.runner.state.log);
     expect(now).toEqual(before);
     expect(before.crossings.length).toBeGreaterThan(0);
+    expect(run.runner.state.history.crossings).toEqual([]);
   });
   it('is carried over: one fall fact with the game’s times of the frames around it, and the race clock never falls', () => {
     const { runner, steps } = run;

@@ -21,11 +21,15 @@ describe('pit stops', () => {
   it.each([
     ['a virtual safety car', 2, 'vsc'],
     ['a safety car', 1, 'sc'],
-    ['the formation lap', 3, 'green'],
     ['green', 0, 'green'],
   ] as const)('a stop under %s is flagged %s', (_, safetyCarStatus, flag) => {
     const { st } = visit({ before: (b) => b.session({ safetyCarStatus }) });
     expect(st.history.pitStops).toMatchObject([{ flag }]);
+  });
+  it('a stop under the formation lap is flagged green in the log as stored; its frame lies in the race’s formation span, so the projection hides it (C24, C29)', () => {
+    const { st } = visit({ before: (b) => b.session({ safetyCarStatus: 3 }) });
+    expect(st.log.pitStops).toMatchObject([{ flag: 'green' }]);
+    expect(st.history.pitStops).toEqual([]);
   });
   it('without a pit lane timer from the game, the pit lane time is how long the car was seen in the pit lane', () => {
     const { st } = visit();

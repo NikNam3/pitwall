@@ -219,11 +219,15 @@ describe('the formation-lap reset', () => {
     events: [...(k >= 42 && k <= 46 ? [stlg(k - 41)] : []), ...(k === OUT ? [LGOT] : []), ...(k === OUT + 30 ? [ovtk(1, 0)] : [])],
   })));
 
-  it('is carried over: one fall fact with the game’s times, and the reset step rewinds nothing', () => {
+  it('is carried over: one fall fact with the game’s times, describing the reset frame, and the reset step rewinds nothing', () => {
     const { runner, results } = run(formation());
-    expect(runner.state.log.clock).toMatchObject([{ kind: 'fall', at: LAP_MS, fromMs: LAP_MS, toMs: 0, offsetMs: LAP_MS }]);
-    expect(clockSteps(results)).toEqual([RESET]);
+    expect(runner.state.log.clock).toMatchObject([{ kind: 'fall', at: LAP_MS, fromMs: LAP_MS, toMs: 0, offsetMs: LAP_MS, frame: RESET + 1 }]);
     expect(results[RESET]!.delta.rewound).toBeUndefined();
+  });
+  it('the fall fact describes a frame of the formation span, so the projection hides it like every fact that is no span (C29)', () => {
+    const { runner } = run(formation());
+    expect(runner.state.history.spans['session-phase-race']?.find((s) => s.kind === 'formation')).toMatchObject({ startFrame: 6, endFrame: 43 });
+    expect([runner.state.log.clock.length, runner.state.history.clock]).toEqual([1, []]);
   });
   it('the race clock never falls: it holds at the formation lap’s last time through the start lights, and runs on from there', () => {
     const frames = formation();

@@ -8,9 +8,10 @@
 // session-phase-race.segments.test.ts; the formation lap's hiding in ../formation.test.ts.
 import { describe, expect, it } from 'vitest';
 import { sessionPhaseRaceSpans } from '@pitwall/domain';
-import { activeFlagPhaseOf, type SessionRunner, type StepResult } from '../../../src/index.ts';
+import { activeFlagPhaseOf, SessionRunner, type StepResult } from '../../../src/index.ts';
 import machine from '../../../src/situations/session-phase-race/machine.ts';
 import { situationOf } from '../../../src/situations/run.ts';
+import { initFor } from '../../support/run.ts';
 import { after, applyOne, runAll, shown } from '../../support/runner.ts';
 import { expectScheduledIncremental, input, quick, sched, underNeutralisation, underPhase } from '../../support/scheduler.ts';
 import {
@@ -338,11 +339,20 @@ describe('a bridge that joins mid-race (Review Focus 2)', () => {
   it('while the weekend phase is pending no session-phase span opens; the first frame it is decided opens the current phase (C14)', () => {
     const frames = script(beats(40, (k) => ({ at: 200_000 + k * STEP, ...(k === 20 && { session: { numSessionsInWeekend: 1, weekendStructure: [15] } }),
       cars: (d) => lap(d, 0, { currentLapNum: 3, currentLapTimeInMs: 30_000 + k * STEP }) })), { session: { numSessionsInWeekend: 0, weekendStructure: [] } });
-    const { runner, results } = run(frames);
-    const opened = results.findIndex((r) => (situationOf(r.state).byMachine[MACHINE] ?? []).length > 0);
-    expect(situationOf(runner.state).byMachine['weekend-phase']).toMatchObject([{ kind: 'race', startFrame: opened + 1 }]);
-    expect(opened).toBeGreaterThan(0);
-    expect(current(runner)).toMatchObject({ id: 0, kind: 'racing', startFrame: opened + 1, joinedAt: true });
+    // The runner keeps one state for every result: the open spans are copied on each step, in its callback.
+    const runner = new SessionRunner(initFor(frames));
+    const steps: Array<{ frameNumber: number; weekend: unknown[]; phase: unknown[] }> = [];
+    for (const f of frames) {
+      runner.apply(f, (r) => {
+        const { byMachine } = situationOf(r.state);
+        steps.push(structuredClone({ frameNumber: r.state.frameNumber, weekend: [...(byMachine['weekend-phase'] ?? [])], phase: [...(byMachine[MACHINE] ?? [])] }));
+      });
+    }
+    const decided = steps.find((s) => s.weekend.length > 0)!;
+    expect(decided.frameNumber).toBeGreaterThan(1);
+    expect(steps.filter((s) => s.frameNumber < decided.frameNumber).flatMap((s) => s.phase)).toEqual([]);
+    expect(decided.weekend).toMatchObject([{ kind: 'race', startFrame: decided.frameNumber }]);
+    expect(decided.phase).toMatchObject([{ id: 0, kind: 'racing', startFrame: decided.frameNumber, joinedAt: true }]);
   });
 });
 
