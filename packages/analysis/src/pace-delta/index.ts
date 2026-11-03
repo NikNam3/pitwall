@@ -1,6 +1,6 @@
 // `pace-delta` (spec 4): time lost per lap after an event. A function, imported by the analyses that use it.
 import { known, unknown, type Known, type LapRecord, type Ms, type SessionTime } from '@pitwall/domain';
-import type { DeepReadonly } from '@pitwall/engine';
+import type { DeepReadonly } from '@pitwall/engine/readers';
 import { classifyLap, type LapClassOptions } from '../lap-classes/index.ts';
 
 const MIN_LAPS = 2;

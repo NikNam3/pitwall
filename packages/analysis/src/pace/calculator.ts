@@ -1,6 +1,6 @@
 // The `pace` calculator: per car, the mean of the last `window` pace laps and of the current stint's pace laps.
 import { addLaps, emptyCurrentLaps, known, unknown, type CarId, type CurrentLaps, type LapRecord, type Ms, type StintRecord } from '@pitwall/domain';
-import type { DeepReadonly, EngineView, IncrementalCalculator } from '@pitwall/engine';
+import type { DeepReadonly, EngineView, IncrementalCalculator } from '@pitwall/engine/readers';
 import { classifyLap, LAP_CLASSES_CONFIG } from '../lap-classes/index.ts';
 import { stintLaps } from '../shared/stint-laps.ts';
 import { PACE, PACE_CONFIG, type Pace } from './index.ts';

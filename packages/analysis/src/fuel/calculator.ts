@@ -1,6 +1,6 @@
 // The `fuel` calculator: per active car, the fuel now, its burn over the current run (since a refuel), and the margin against the laps left.
 import { known, unknown, type CarId, type Known, type Kg, type LapRecord, type SessionTime } from '@pitwall/domain';
-import type { EngineView, QuickCalculator } from '@pitwall/engine';
+import type { EngineView, QuickCalculator } from '@pitwall/engine/readers';
 import { classifyLap, LAP_CLASSES_CONFIG } from '../lap-classes/index.ts';
 import { PER_LAP_RATE_CONFIG, perLapGainRate, type GainSample } from '../per-lap-rate/index.ts';
 import { SESSION_REMAINING, type SessionRemaining } from '../session-remaining/index.ts';

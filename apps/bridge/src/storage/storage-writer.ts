@@ -1,5 +1,5 @@
 import { driverKeyString } from '@pitwall/domain';
-import type { HistoryDelta, ProjectedList, Projection } from '@pitwall/engine';
+import type { HistoryDelta, ProjectedList, Projection } from '@pitwall/engine/readers';
 import type { Db, SessionKey, SessionRow } from './db.ts';
 
 export interface StorageWriterOptions {

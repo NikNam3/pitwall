@@ -1,5 +1,5 @@
 import { known, unknown, type CarId, type CarState, type Corners, type Known, type LapRecord, type TyreSet } from '@pitwall/domain';
-import type { DeepReadonly, EngineView, QuickCalculator } from '@pitwall/engine';
+import type { DeepReadonly, EngineView, QuickCalculator } from '@pitwall/engine/readers';
 import { ALARMS_CONFIG } from '../alarms/config.ts';
 import { classifyLap, LAP_CLASSES_CONFIG } from '../lap-classes/index.ts';
 import { lapsToReach, PER_LAP_RATE_CONFIG, perLapGainRate, type GainSample } from '../per-lap-rate/index.ts';

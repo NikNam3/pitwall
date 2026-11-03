@@ -1,5 +1,5 @@
 import { driverKeyString, type CarId, type DriverKey, type FlagPhase, type LapRecord, type PitStopRecord, type RaceEvent, type SessionUid, type StintRecord } from '@pitwall/domain';
-import { unknownLapEnd, type WeekendContext } from '@pitwall/engine';
+import { unknownLapEnd, type WeekendContext } from '@pitwall/engine/readers';
 import type { Db, SessionKey, SessionRow } from './db.ts';
 
 type SessionDbRow = {

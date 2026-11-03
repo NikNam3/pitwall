@@ -20,7 +20,7 @@ import {
   type Ms,
   type SessionTime,
 } from '@pitwall/domain';
-import type { EngineView, IncrementalCalculator } from '@pitwall/engine';
+import type { EngineView, IncrementalCalculator } from '@pitwall/engine/readers';
 import { ALARMS_CONFIG } from '../alarms/index.ts';
 import { DAMAGE_CONFIG } from '../damage/index.ts';
 import { GAPS_CONFIG } from '../gaps/index.ts';

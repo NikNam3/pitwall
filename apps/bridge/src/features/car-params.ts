@@ -1,4 +1,4 @@
-import { copyPlain, type DeepReadonly, type EngineView } from '@pitwall/engine';
+import { copyPlain, type DeepReadonly, type EngineView } from '@pitwall/engine/readers';
 
 /** The cars as a calculator sees them: every slot of the game, read-only. */
 export type ViewCars = EngineView['state']['cars'];

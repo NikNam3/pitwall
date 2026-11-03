@@ -1,5 +1,5 @@
 import type { TopicValue } from '@pitwall/contracts';
-import { copyPlain, type QuickCalculator } from '@pitwall/engine';
+import { copyPlain, type QuickCalculator } from '@pitwall/engine/readers';
 import { bindState, defineFeature } from '../feature.ts';
 import { selectCarSlot, type ViewCars } from '../car-params.ts';
 

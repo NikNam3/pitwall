@@ -1,7 +1,7 @@
 // The `alarms` calculator: the conditions that hold now for our cars, as insights (spec 5.6). Stateless; the InsightBook raises and resolves.
 // Band advisories judge the last completed lap (see `bandChannels`), so they change at a lap's end only.
 import type { BandReading, CarBands, CarId, DamageState, FuelState, Insight, InsightCategory, Known, LapRecord, Range, TyreWear } from '@pitwall/domain';
-import type { DeepReadonly, EngineView, QuickCalculator } from '@pitwall/engine';
+import type { DeepReadonly, EngineView, QuickCalculator } from '@pitwall/engine/readers';
 import { bandsFor, lastLaps, stateOf, type Band, type Bands } from '../car-bands/bands.ts';
 import { CAR_BANDS, CAR_BANDS_CONFIG } from '../car-bands/index.ts';
 import { DAMAGE } from '../damage/index.ts';

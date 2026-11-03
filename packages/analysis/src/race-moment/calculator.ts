@@ -13,7 +13,7 @@ import {
   type RaceMoment,
   type SessionTime,
 } from '@pitwall/domain';
-import type { QuickCalculator } from '@pitwall/engine';
+import type { QuickCalculator } from '@pitwall/engine/readers';
 import { ALARMS } from '../alarms/index.ts';
 import { BATTLE, BATTLE_CONFIG, type BattleOutput } from '../battle/index.ts';
 import { INCIDENTS } from '../incidents/index.ts';

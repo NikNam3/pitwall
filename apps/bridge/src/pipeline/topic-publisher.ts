@@ -1,7 +1,7 @@
 // Turns what one frame produced into hub messages, following the features' topic bindings (spec 3.3, 8).
 import type { Computed, TopicName } from '@pitwall/contracts';
 import type { FeedId } from '@pitwall/domain';
-import type { HistoryDelta, InsightChange, Projection, ProjectedList, SchedulerResult } from '@pitwall/engine';
+import type { HistoryDelta, InsightChange, Projection, ProjectedList, SchedulerResult } from '@pitwall/engine/readers';
 import type { Feature, TopicBinding } from '../features/feature.ts';
 import type { TopicHub, ValueFor } from '../hub/topic-hub.ts';
 import { jobCalculatorId } from '../jobs/feed-jobs.ts';

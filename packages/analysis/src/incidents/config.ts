@@ -1,5 +1,5 @@
 // Defaults of `incidents` (spec Appendix B). Which kinds are major is one boolean per kind; only major ones set the race moment (spec 7.3).
-import { defineConfig } from '@pitwall/engine';
+import { defineConfig } from '@pitwall/engine/readers';
 
 export const INCIDENTS_CONFIG = defineConfig('incidents', {
   /** A mini-sector this much slower than the car's median for the segment is a time loss. Source: pitwall estimate. */

@@ -1,5 +1,5 @@
 import type { FeedStatus } from '@pitwall/contracts';
-import type { QuickCalculator } from '@pitwall/engine';
+import type { QuickCalculator } from '@pitwall/engine/readers';
 import { bindState, defineFeature } from '../feature.ts';
 import { feedStatusOf } from './feed-status.ts';
 

@@ -1,6 +1,6 @@
 import type { CarOverview } from '@pitwall/contracts';
 import type { CarId } from '@pitwall/domain';
-import { copyPlain, type QuickCalculator } from '@pitwall/engine';
+import { copyPlain, type QuickCalculator } from '@pitwall/engine/readers';
 import { bindState, defineFeature } from '../feature.ts';
 
 /** Every car's entries, by car id, of a history list (each car's latest last). */

@@ -16,7 +16,7 @@ import {
   type Projection,
   type SessionKind,
 } from '@pitwall/domain';
-import type { EngineView, IncrementalCalculator } from '@pitwall/engine';
+import type { EngineView, IncrementalCalculator } from '@pitwall/engine/readers';
 import { LAP_CLASSES_CONFIG, type LapClassOptions } from '../lap-classes/index.ts';
 import { outOfRace } from '../shared/out-of-race.ts';
 import { bestsOf, rowOf, sessionBestBoard, sessionBestsOf, type Best, type CarBests } from './lap-times.ts';

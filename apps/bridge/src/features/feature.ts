@@ -1,6 +1,6 @@
 import type { Computed, InsightEntry, TopicName, TopicValue } from '@pitwall/contracts';
 import type { CarId } from '@pitwall/domain';
-import type { Calculator, CalculatorId, ConfigKey, ConfigValue, IncrementalCalculator, Job, ProjectedList, ProjectionState, QuickCalculator } from '@pitwall/engine';
+import type { Calculator, CalculatorId, ConfigKey, ConfigValue, IncrementalCalculator, Job, ProjectedList, ProjectionState, QuickCalculator } from '@pitwall/engine/readers';
 
 declare const bindingBrand: unique symbol;
 

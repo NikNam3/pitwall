@@ -1,6 +1,6 @@
 // The derived storage layer for one session (spec 9.2, 9.3): its row, its confirmed history, its weekend context.
 import type { DriverKey, ParticipantsValues, SessionState, SessionUid } from '@pitwall/domain';
-import type { HistoryDelta, Projection, WeekendContext } from '@pitwall/engine';
+import type { HistoryDelta, Projection, WeekendContext } from '@pitwall/engine/readers';
 import type { Logger } from '../log.ts';
 import type { Db, SessionKey, SessionRow } from '../storage/db.ts';
 import { StorageWriter } from '../storage/storage-writer.ts';

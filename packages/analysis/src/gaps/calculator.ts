@@ -1,6 +1,6 @@
 // The `gaps` calculator (spec 6.1): a fold over the mini-sector crossings; the order and our cars come from the car state.
 import { known, MINI_SECTORS, unknown, type CarId, type FlagPhase, type Interval, type Known, type Ms, type Neighbourhood, type SessionTime } from '@pitwall/domain';
-import type { EngineView, IncrementalCalculator } from '@pitwall/engine';
+import type { EngineView, IncrementalCalculator } from '@pitwall/engine/readers';
 import { ourCars } from '../shared/our-cars.ts';
 import { outOfRace } from '../shared/out-of-race.ts';
 import { gapBehind, lapsBehind, latestTime, progressAt, progressOf, recentOf, type CarCrossings } from './gaps.ts';

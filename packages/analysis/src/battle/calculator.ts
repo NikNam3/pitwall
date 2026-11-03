@@ -1,7 +1,7 @@
 // `battle` (spec 6.3): each of our cars against the car ahead and the car behind. Stateless: the gap now is from `gaps.intervals`,
 // the closing rate from the line times, the pace from `pace`, the DRS status from race control's DRSE and DRSD events.
 import { known, unknown, type BattleCard, type BattleSide, type CarId, type CarState, type DrsStatus, type Known, type Ms } from '@pitwall/domain';
-import type { DeepReadonly, EngineView, QuickCalculator } from '@pitwall/engine';
+import type { DeepReadonly, EngineView, QuickCalculator } from '@pitwall/engine/readers';
 import type { GapsOutput } from '../gaps/index.ts';
 import type { Pace } from '../pace/index.ts';
 import { lapsToReach, perLapRate, type RateSample } from '../per-lap-rate/index.ts';

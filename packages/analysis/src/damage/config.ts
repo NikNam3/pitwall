@@ -1,5 +1,5 @@
 // Defaults of `damage` (spec Appendix B).
-import { defineConfig } from '@pitwall/engine';
+import { defineConfig } from '@pitwall/engine/readers';
 
 export const DAMAGE_CONFIG = defineConfig('damage', {
   /** Rises within the window that add up to at least this are a jump, in %. Source: pitwall estimate. */

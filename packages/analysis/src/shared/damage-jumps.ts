@@ -1,7 +1,7 @@
 // The damage jump grouping from the history's `damageChange` events, shared by `damage` (the card and the alarm: the
 // jumps not repaired since) and `incidents` (the feed, a log: every jump).
 import type { CarId, DamageChangeParams, DamageJump, DamageParts, LapRecord, RaceEvent, SessionTime } from '@pitwall/domain';
-import type { DeepReadonly } from '@pitwall/engine';
+import type { DeepReadonly } from '@pitwall/engine/readers';
 import { paceDeltaAround, type PaceDeltaOptions } from '../pace-delta/index.ts';
 
 /** The `damage` config's thresholds of a jump. */

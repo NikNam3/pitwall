@@ -1,5 +1,5 @@
 // Defaults of `alarms` (spec Appendix B).
-import { defineConfig } from '@pitwall/engine';
+import { defineConfig } from '@pitwall/engine/readers';
 
 export const ALARMS_CONFIG = defineConfig('alarms', {
   /** Laps until the wear limit below which the wear alarm is raised. Source: pitwall estimate. */

@@ -1,6 +1,6 @@
 import { Worker } from 'node:worker_threads';
 import type { Computed } from '@pitwall/contracts';
-import type { Job } from '@pitwall/engine';
+import type { Job } from '@pitwall/engine/readers';
 
 /** Where a result was computed: the player's lap and the frame that triggered the job. */
 export type ComputedFor = Computed<unknown>['computedFor'];

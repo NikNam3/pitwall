@@ -1,5 +1,5 @@
 // The jobs of one feed (review F2): declared in features, triggered by the scheduler, run in worker threads.
-import type { CalculatorId, Job, QuickCalculator, SchedulerResult } from '@pitwall/engine';
+import type { CalculatorId, Job, QuickCalculator, SchedulerResult } from '@pitwall/engine/readers';
 import type { Feature } from '../features/feature.ts';
 import { JobRunner, type ComputedFor, type JobResult } from './job-runner.ts';
 

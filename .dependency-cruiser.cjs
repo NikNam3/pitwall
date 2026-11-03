@@ -113,9 +113,11 @@ module.exports = {
     {
       name: 'readers-never-reach-the-game',
       comment:
-        'C6: the recorders, the log and projection, the scheduler and calculator types, and the UI see only domain and contracts types: they never reach a protocol type or the frame, directly or through another module. A packet value a recorder needs becomes a value in step 1 first.',
+        'C6: the recorders, the log and projection, the scheduler and calculator types, the analyses, the bridge\'s storage, hub, features and publishing, and the UI see only domain and contracts types: they never reach a protocol type or the frame, directly or through another module (readers import the engine as `@pitwall/engine/readers`). A packet value a recorder needs becomes a value in step 1 first. Tests stay out.',
       severity: 'error',
-      from: { path: '^packages/engine/src/(recorders|log|calc)/|^apps/ui/src/' },
+      from: {
+        path: '^packages/engine/src/(recorders|log|calc)/|^packages/engine/src/readers\\.ts$|^packages/analysis/src/|^apps/bridge/src/(storage|hub|features)/|^apps/bridge/src/pipeline/(topic-publisher|session-storage)\\.ts$|^apps/ui/src/',
+      },
       to: { path: '^packages/protocol/|^packages/engine/src/frame/frame\\.ts$', reachable: true },
     },
     {

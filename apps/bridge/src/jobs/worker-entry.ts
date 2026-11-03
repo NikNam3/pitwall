@@ -1,5 +1,5 @@
 import { parentPort, workerData } from 'node:worker_threads';
-import { createRng } from '@pitwall/engine';
+import { createRng } from '@pitwall/engine/readers';
 import type { WorkerMessage } from './job-runner.ts';
 
 type WorkerInput = { moduleHref: string; input: unknown; seed: number };

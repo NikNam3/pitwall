@@ -86,7 +86,7 @@ export type Recorder<Own> = {
 };
 /**
  * What a recorder reads of the frame (C10): its time on the race clock and id, the live state, the situations and the
- * stamps; never the frame or a signal (C6, C13). `tracked`: see `TrackedEvents`.
+ * stamps; never the frame or a signal (C6, C13). `tracked`: transitional, deleted by Tasks 9, 11/17 and 21 (`TrackedEvents`).
  */
 export type RecorderInput = {
   at: SessionTime;
@@ -101,11 +101,13 @@ export type RecorderInput = {
 export type RaceEventBody = Omit<RaceEvent, 'at' | 'in'>;
 
 /**
- * Until the machine's spans carry them, step 2's slot (the situation tracker, the one reader of signals besides the
- * machine, C13) hands the recorders what this frame's situation events decided: the cars whose drive-through or
- * stop-go was served (DTSV, SGSV; Task 11's `servingPenalty` spans replace it), whether the session ended (SEND; Task 9's
- * `postSession`), and the situation events still recorded as race events, in arrival order (PENA, RTMT, DRSE, DRSD,
- * STLG, LGOT; Task 21 removes them). Absent: none of them.
+ * Transitional (accepted ruling, Task 4): until the machine's spans carry them, step 2's slot (the situation tracker,
+ * the one reader of signals besides the machine, C13) hands the recorders what this frame's situation events decided,
+ * so no recorder reads a signal. `penaltyServed`: the cars whose drive-through or stop-go was served (DTSV, SGSV);
+ * Task 11's `servingPenalty` spans and Task 17's activity spans delete it. `sessionEnded`: the session ended (SEND);
+ * Task 9's `postSession` deletes it. `raceEvents`: the situation events still recorded as race events, in arrival order
+ * (PENA, RTMT, DRSE, DRSD, STLG, LGOT); Task 21 deletes them. With all three gone, `RecorderInput.tracked` goes.
+ * Absent: none of them.
  */
 export type TrackedEvents = { penaltyServed: readonly CarId[]; sessionEnded: boolean; raceEvents: readonly RaceEventBody[] };
 /** This frame's stamps (C26): a car's fact carries `{ ...session, ...cars[carId] }`; zone spans are never stamped. */
