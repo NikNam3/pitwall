@@ -16,7 +16,7 @@ import {
   type Projection,
   type SessionKind,
 } from '@pitwall/domain';
-import type { EngineView, IncrementalCalculator } from '@pitwall/engine';
+import type { EngineView, IncrementalCalculator } from '@pitwall/engine/readers';
 import { LAP_CLASSES_CONFIG, type LapClassOptions } from '../lap-classes/index.ts';
 import { outOfRace } from '../shared/out-of-race.ts';
 import { bestsOf, rowOf, sessionBestBoard, sessionBestsOf, type Best, type CarBests } from './lap-times.ts';
@@ -46,7 +46,7 @@ const foldLaps = (acc: Acc, view: EngineView, from: number): void => {
 };
 
 const foldCrossings = (acc: Acc, view: EngineView, from: number): void => {
-  const list = view.state.history.miniSectors;
+  const list = view.state.history.crossings;
   for (let i = from; i < list.length; i++) {
     const m = list[i] as MiniSectorCrossing;
     const byLap = (acc.crossings[m.carId] ??= new Map());
@@ -200,10 +200,10 @@ export const lapTimesCalculator: IncrementalCalculator<Acc, LapTimesOutput> = {
   cadence: 'frame',
   init,
   update(acc, delta, view) {
-    if (delta.truncated) return init(view);
+    if (delta.rewound !== undefined) return init(view);
     snapshot(acc, view);
-    foldLaps(acc, view, delta.before.laps);
-    foldCrossings(acc, view, delta.before.miniSectors);
+    foldLaps(acc, view, delta.before.laps ?? 0);
+    foldCrossings(acc, view, delta.before.crossings ?? 0);
     return acc;
   },
   output,

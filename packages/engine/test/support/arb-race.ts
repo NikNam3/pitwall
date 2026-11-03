@@ -107,6 +107,22 @@ const arbFlashback = (frames: number): fc.Arbitrary<RaceParams['flashback']> =>
     { nil: undefined },
   );
 
+/** The frames a rewind lands on (its target's next frame): the first one, and the second one's as `raceFrames` computes it. */
+const landingFrames = (fb: NonNullable<RaceParams['flashback']>): number[] => {
+  const first = fb.at - fb.back;
+  return [first + 1, ...(fb.then ? [first + 1 + fb.stale + fb.then.after - fb.then.back + 1] : [])];
+};
+
+/**
+ * No non-flashback fall of the session time lands on a rewind's landing frame (C27: the landing frame's session time
+ * belongs to the flashback). The game lands imprecisely, below the target, so a fall on that very frame cannot be told
+ * from the landing and is no observable case; a fall on the frame before or after it, or anywhere else, is generated.
+ */
+const fallAvoidsLanding = (p: RaceParams): boolean => {
+  const fall = fallAt(p.phases);
+  return fall === undefined || p.flashback === undefined || !landingFrames(p.flashback).includes(fall);
+};
+
 export const arbRace: fc.Arbitrary<RaceParams> = fc.integer({ min: 60, max: 300 }).chain((frames) =>
   fc.record({
     cars: fc.integer({ min: 1, max: 6 }),
@@ -117,7 +133,7 @@ export const arbRace: fc.Arbitrary<RaceParams> = fc.integer({ min: 60, max: 300 
     truncation: fc.array(fc.integer({ min: 0, max: 2 }), { minLength: 1, maxLength: 5 }),
     flashback: arbFlashback(frames),
     phases: arbPhases,
-  }),
+  }).filter(fallAvoidsLanding),
 );
 
 /** The frame of lights out, if the race starts with lights. */
@@ -298,7 +314,7 @@ export function raceFrames(p: RaceParams): { frames: Frame[]; reference: Frame[]
   });
 
   // the last timeline from its start; a stale frame a later rewind discarded is not in it
-  let reference = timeline.map((f) => ({ ...f, events: f.events.filter((e) => e.details.code !== 'FLBK') }));
+  let reference = timeline.map(({ flashback: _flashback, ...f }) => ({ ...f, events: f.events.filter((e) => e.details.code !== 'FLBK') }));
   rewinds.forEach((r, k) => {
     const kept = Math.min(staleCounts[k]!, (rewinds[k + 1]?.target ?? Infinity) - r.target);
     if (kept > 0) reference = carrying(reference, r.target + 1, kept, reference[r.target]!.sessionTime);

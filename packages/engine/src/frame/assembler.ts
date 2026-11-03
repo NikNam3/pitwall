@@ -26,7 +26,13 @@ function place(frame: Frame, packet: Packet): void {
     case PacketId.timeTrial: frame.timeTrial = packet; break;
     case PacketId.sessionHistory: frame.sessionHistory.push(packet); break;
     case PacketId.tyreSets: frame.tyreSets.push(packet); break;
-    case PacketId.event: frame.events.push(packet); break;
+    case PacketId.event:
+      frame.events.push(packet);
+      // The flashback report the runner reads (the frame's first FLBK), so it needs no packet type.
+      if (packet.details.code === 'FLBK' && !frame.flashback) {
+        frame.flashback = { targetFrameId: packet.details.flashbackFrameIdentifier, targetSessionTime: toSessionTime(packet.details.flashbackSessionTime) };
+      }
+      break;
     case PacketId.lobbyInfo: break;
   }
 }

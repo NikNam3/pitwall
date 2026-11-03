@@ -1,5 +1,5 @@
 // Defaults of `pace` (spec Appendix B).
-import { defineConfig } from '@pitwall/engine';
+import { defineConfig } from '@pitwall/engine/readers';
 
 export const PACE_CONFIG = defineConfig('pace', {
   /** Pace laps in the recent mean. Source: pitwall estimate. */

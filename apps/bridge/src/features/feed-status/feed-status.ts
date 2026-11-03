@@ -1,6 +1,6 @@
 import type { FeedStatus } from '@pitwall/contracts';
 import type { FeedId, Insight, SessionTime } from '@pitwall/domain';
-import type { FeedMetricsView } from '@pitwall/engine';
+import type { FeedMetricsView } from '@pitwall/engine/readers';
 
 /** No packets for this long and the feed is stale. */
 export const FEED_STALE_MS = 2000;

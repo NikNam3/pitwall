@@ -2,10 +2,11 @@
 import { describe, expect, it } from 'vitest';
 import { unknown, type CarState } from '@pitwall/domain';
 import { initialState, step, type EngineState, type Frame } from '../../src/index.ts';
-import { applyRealism, withholdForRealism } from '../../src/step/realism.ts';
-import { SUB_STEPS } from '../../src/step/step.ts';
-import { applyOwnCar } from '../../src/step/own-car.ts';
+import { withholdForRealism } from '../../src/step/state-update/realism.ts';
+import type { StepOutput } from '../../src/step/types.ts';
+import { STATE_UPDATE } from '../../src/step/step.ts';
 import { ScenarioBuilder } from '../builders/index.ts';
+import { inOrder } from '../support/module-order.ts';
 import { initFor } from '../support/run.ts';
 
 const REALISM = unknown('realism');
@@ -49,11 +50,12 @@ describe('EngineState.realism', () => {
   });
 });
 
-describe('applyRealism', () => {
-  it('runs right after applyOwnCar', () => {
-    const at = SUB_STEPS.indexOf(applyOwnCar);
-    expect(at).toBeGreaterThanOrEqual(0);
-    expect(SUB_STEPS[at + 1]).toBe(applyRealism);
+describe('realism in step 1', () => {
+  // Was "runs right after applyOwnCar": an order inside step 1, which C11 forbids. What it guarded stays: no step-1
+  // module writes a hidden value past the mask, whatever order they run in.
+  it('masks the rivals whatever order the step-1 modules run in (here reversed)', () => {
+    const { st } = inOrder(STATE_UPDATE, [...STATE_UPDATE].reverse(), () => run(frames(1), true));
+    for (const [path, value] of hiddenFields(st.cars[3]!)) expect([path, value]).toEqual([path, REALISM]);
   });
 
   it('control: without realism the rival car 3 has every hidden field known', () => {
@@ -103,6 +105,63 @@ describe('applyRealism', () => {
   it('adds no change tag', () => {
     const fs = frames();
     expect(run(fs, true).changed).toEqual(run(fs, false).changed);
+  });
+});
+
+/** The hidden fields of `hiddenFields` by the step-1 module that writes them (its area). */
+const AREA_FIELDS = {
+  energy: (c: CarState) => [c.energy.fuel, c.energy.ers, c.energy.power],
+  tyres: (c: CarState) => [
+    c.tyres.sets,
+    ...CORNERS.flatMap((w) => {
+      const t = c.tyres.corners[w];
+      return [t.surfaceTempC, t.carcassTempC, t.pressurePsi, t.wearPct, t.damagePct, t.blistersPct];
+    }),
+  ],
+  condition: (c: CarState) => [
+    c.condition.bodywork, c.condition.powerUnit, c.condition.drsFault, c.condition.engineTempC,
+    ...CORNERS.flatMap((w) => [c.condition.brakes[w].tempC, c.condition.brakes[w].damagePct]),
+  ],
+  dynamics: (c: CarState) => [c.dynamics],
+} as const;
+
+const allHidden = (c: CarState): boolean => hiddenFields(c).every(([, v]) => v === REALISM || (v as { reason?: string }).reason === 'realism');
+const noneHidden = (c: CarState): boolean => hiddenFields(c).every(([, v]) => (v as { known: boolean }).known);
+
+// Ruling (Task 4 review F1, C11): each step-1 module masks its own fields, with the player, the teammate and realism of
+// the previous frame's live state; placing the player is the identity module's own output. So no pass after the
+// modules reads their same-frame output, and a change of player or teammate shows in the masking one frame later.
+describe('realism: masked by each module, from the previous frame', () => {
+  it.each(Object.keys(AREA_FIELDS) as Array<keyof typeof AREA_FIELDS>)('with realism, the %s module hides its rival fields', (area) => {
+    const [first, second] = frames(2);
+    const st = initialState({ ...initFor([first!]), realism: true });
+    step(st, first!);
+    // this module alone, on a frame that carries every packet: the values it writes for the rival are masked by itself
+    const update = STATE_UPDATE.find((m) => m.id === area)!;
+    const out: StepOutput = { changed: new Set(), corrections: [] };
+    update.apply(second!, st, st.signals, out);
+    expect(AREA_FIELDS[area](st.cars[3]!).map((v) => (v as { known: boolean; reason?: string }).reason)).toEqual(AREA_FIELDS[area](st.cars[3]!).map(() => 'realism'));
+  });
+
+  it("on the session's first frame the initial state's player decides: the teammate Participants names is masked until the next frame", () => {
+    const fs = frames(2);
+    const st = initialState({ ...initFor(fs), realism: true });
+    step(st, fs[0]!);
+    expect([st.teammateCar, noneHidden(st.cars[0]!), allHidden(st.cars[1]!)]).toEqual([1, true, true]);
+    step(st, fs[1]!);
+    expect([noneHidden(st.cars[0]!), noneHidden(st.cars[1]!), allHidden(st.cars[3]!)]).toEqual([true, true, true]);
+  });
+
+  it('a player change takes effect on realism masking one frame later', () => {
+    // player 0 (teammate 1) on frames 0 and 1; the game's player is car 3 from frame 2 on (its teammate is car 2)
+    const fs = frames(4).map((f, i) => (i >= 2 ? { ...f, playerCarIndex: 3 } : f));
+    const st = initialState({ ...initFor(fs), realism: true });
+    for (const f of fs.slice(0, 3)) step(st, f);
+    // frame 2: car 3 is the player now, but the masking still follows frame 1's player and teammate
+    expect([st.playerCar, st.teammateCar, allHidden(st.cars[3]!), noneHidden(st.cars[0]!), noneHidden(st.cars[1]!)]).toEqual([3, 2, true, true, true]);
+    step(st, fs[3]!);
+    // frame 3: the masking follows frame 2's player (3) and teammate (2)
+    expect([noneHidden(st.cars[3]!), allHidden(st.cars[0]!), allHidden(st.cars[1]!)]).toEqual([true, true, true]);
   });
 });
 

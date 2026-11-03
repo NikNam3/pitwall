@@ -1,44 +1,22 @@
-export type * from './state/engine-state.ts';
-export type * from './state/weekend-context.ts';
-export type * from './util/deep-readonly.ts';
+// The engine's main entry: the readers' view (`readers.ts`, also `@pitwall/engine/readers`) and the adapter side, which
+// knows the game (frames, `step`, the runner; C6).
+export * from './readers.ts';
 export { FrameAssembler } from './frame/assembler.ts';
 export { MENU_RATE_SLOTS, type Frame } from './frame/frame.ts';
-export type { FrameMetrics } from './frame/metrics.ts';
 export { SessionTracker, type TrackerEvent } from './frame/session-tracker.ts';
-export { CalculatorRegistry, RegistryError, type RegistryErrorReason } from './calc/registry.ts';
-export { defineConfig, type ConfigKey, type ConfigShape, type ConfigValue } from './calc/config.ts';
-export { activeFlagPhaseOf } from './calc/active-flag-phase.ts';
-export { situationOf } from './calc/situation.ts';
-export { InsightBook } from './calc/insight-book.ts';
-export { Scheduler, type OnCalculatorRun, type SchedulerInput, type SchedulerOptions, type SchedulerResult } from './calc/scheduler.ts';
-export type {
-  Cadence,
-  Calculator,
-  CalculatorId,
-  Dependency,
-  EngineView,
-  FeedMetricsView,
-  IncrementalCalculator,
-  InsightChange,
-  Job,
-  QuickCalculator,
-} from './calc/types.ts';
-export { createRng, type Rng } from './util/rng.ts';
-export { copyPlain } from './util/copy-plain.ts';
-export { initialState } from './step/initial-state.ts';
-export { driverKeyOf } from './step/identity.ts';
+export { Scheduler } from './calc/scheduler.ts';
+export { initialState } from './step/state-update/initial.ts';
+export { driverKeyOf, participantsValuesOf } from './step/state-update/identity.ts';
+export { step, type FlashbackReport } from './step/step.ts';
 export {
-  ALL_CHANGE_TAGS,
-  CHANGE_TAGS,
-  step,
-  type ChangeTag,
-  type ClockFall,
-  type ClockJump,
-  type FlashbackReport,
-  type LapCorrection,
-  type StepOutput,
-  type SubStep,
-} from './step/step.ts';
-export { historyLengths, type HistoryDelta } from './history/delta.ts';
-export { unknownLapEnd, type LapEndSamples } from './history/lap-samples.ts';
-export { SessionRunner, type FlashbackInfo, type SessionRunnerOptions, type StepResult } from './runner/session-runner.ts';
+  IDENTITY_WAIT_FRAMES,
+  SessionRunner,
+  type FlashbackInfo,
+  type OnResult,
+  type SessionRunnerOptions,
+  type Snapshotable,
+  type StepResult,
+} from './runner/session-runner.ts';
+// The registered sub-machines and their type, for tools that run step 2 on their own (`pitwall scan-situations`).
+export { MACHINES } from './situations/index.generated.ts';
+export type { SubMachine } from './situations/machine.ts';

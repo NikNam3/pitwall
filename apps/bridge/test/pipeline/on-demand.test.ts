@@ -232,7 +232,7 @@ describe('FeedPipeline: calculators on demand', () => {
       const sum: IncrementalCalculator<number, number> = {
         kind: 'incremental', id: 'probe.sum', reads: ['feed'], cadence: 'frame',
         init: ({ state }) => state.history.events.length,
-        update: (acc, delta) => acc + (delta.after.events - delta.before.events),
+        update: (acc, delta) => acc + ((delta.after.events ?? 0) - (delta.before.events ?? 0)),
         output: (acc) => (last = acc),
       };
       const features = [defineFeature({ name: 'probe-sum', calculators: [sum], topics: [bindState('cars.overview', sum, () => undefined)] })];

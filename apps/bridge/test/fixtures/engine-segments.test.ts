@@ -30,7 +30,7 @@ describe('race-zandvoort-lap10: car 1 (the player) crosses the line into lap 10'
 
   it('FTLP becomes a fastestLap event with the lap time', async () => {
     const { state } = await run('race-zandvoort-lap10.pwrec.gz');
-    expect(state.history.events.filter((e) => e.kind === 'fastestLap')).toEqual([{ at: 723_381, kind: 'fastestLap', carId: 1, params: { lapTimeMs: 74_655 } }]);
+    expect(state.history.events.filter((e) => e.kind === 'fastestLap')).toEqual([{ at: 723_381, kind: 'fastestLap', carId: 1, params: { lapTimeMs: 74_655 }, frame: 164 }]);
   });
 
   it('mini-sector crossings come in order, and the line crossing lies between the last frame of lap 9 and the first of lap 10', async () => {
@@ -39,7 +39,7 @@ describe('race-zandvoort-lap10: car 1 (the player) crosses the line into lap 10'
       if (st.cars[1]!.timing.lap === 9) seen.lastOnLap9 = st.sessionTime;
       if (st.cars[1]!.timing.lap === 10 && seen.firstOnLap10 < 0) seen.firstOnLap10 = st.sessionTime;
     });
-    const mine = state.history.miniSectors.filter((m) => m.carId === 1);
+    const mine = state.history.crossings.filter((m) => m.carId === 1);
     expect(mine.map((m) => [m.lap, m.segment])).toEqual([[9, 48], [9, 49], [10, 0], [10, 1], [10, 2]]);
     expect(mine.every((m, i) => i === 0 || m.at > mine[i - 1]!.at)).toBe(true);
     const line = mine.find((m) => m.lap === 10 && m.segment === 0)!.at;
@@ -77,7 +77,7 @@ describe('race-singapore-start: start lights and lights out', () => {
 describe('race-zandvoort-pit-stop: car 1 enters the pits, starts lap 8 in the pit lane and changes mediums for softs', () => {
   it('closes the medium stint at the in-lap and opens a soft stint on the next lap', async () => {
     const { state } = await run('race-zandvoort-pit-stop.pwrec.gz');
-    expect(state.history.stints.filter((s) => s.carId === 1)).toEqual([{ carId: 1, firstLap: 7, lastLap: 7, actualCompound: 'C3', visualCompound: 'medium', tyreAgeAtFitting: 6 }]);
+    expect(state.history.stints.filter((s) => s.carId === 1)).toEqual([{ carId: 1, firstLap: 7, lastLap: 7, actualCompound: 'C3', visualCompound: 'medium', tyreAgeAtFitting: 6, frame: 444 }]);
     expect(state.cars[1]!.tyres).toMatchObject({ actualCompound: 'C4', visualCompound: 'soft', age: 0 });
     expect(state.history.laps.find((l) => l.carId === 1 && l.lapNumber === 7)).toMatchObject({ inLap: true, actualCompound: 'C3' });
   });
@@ -125,7 +125,7 @@ describe('race-singapore-wet-flashback: two flashbacks on lap 7', () => {
     const after: Array<{ frameId: number; sessionTime: number }> = [];
     await run('race-singapore-wet-flashback.pwrec.gz', (r) => {
       if (flashbacks.length === 2 && after.length < 1) after.push({ frameId: r.state.lastFrameId, sessionTime: r.state.sessionTime });
-      if (r.flashback) flashbacks.push({ frameId: r.state.lastFrameId, info: r.flashback, truncated: r.delta.truncated });
+      if (r.flashback) flashbacks.push({ frameId: r.state.lastFrameId, info: r.flashback, truncated: r.delta.rewound !== undefined });
     });
     // the first FLBK (sent at 757.045 s) lies outside the segment: the frame id falls from the end of the window to 56744
     expect(flashbacks[0]).toMatchObject({ frameId: 56_744, info: { targetFrameId: 56_743, targetLap: 7 }, truncated: true });

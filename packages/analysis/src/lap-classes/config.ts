@@ -1,5 +1,5 @@
 // Defaults of `lap-classes` (spec 4); the analyses that call `classifyLap` read them and pass them as `opts`.
-import { defineConfig } from '@pitwall/engine';
+import { defineConfig } from '@pitwall/engine/readers';
 
 export const LAP_CLASSES_CONFIG = defineConfig('lap-classes', {
   /**

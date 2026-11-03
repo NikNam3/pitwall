@@ -16,8 +16,8 @@ describe('stints', () => {
       Object.assign(d.status.carStatusData[0]!, fresh ? NEW : OLD);
     }).event({ code: 'SEND' }));                                                  // attaches to the last frame (Task 11)
     expect(st.history.stints).toEqual([
-      { carId: 0, firstLap: 1, lastLap: 5, actualCompound: 'C3', visualCompound: 'medium', tyreAgeAtFitting: 3 },
-      { carId: 0, firstLap: 6, lastLap: 6, actualCompound: 'C2', visualCompound: 'hard', tyreAgeAtFitting: 0 }]);
+      { carId: 0, firstLap: 1, lastLap: 5, actualCompound: 'C3', visualCompound: 'medium', tyreAgeAtFitting: 3, frame: 8 },
+      { carId: 0, firstLap: 6, lastLap: 6, actualCompound: 'C2', visualCompound: 'hard', tyreAgeAtFitting: 0, frame: 10 }]);
     expect(results.filter((r) => r.changed.has('stints'))).toHaveLength(2);
   });
   it('a fresh set of the same compound (age drops) also starts a new stint', () => {
@@ -44,7 +44,7 @@ describe('pit stops', () => {
   it('records entry, exit, the game’s pit-lane time and the stationary time', () => {
     const { st, results } = stop();
     expect(st.history.pitStops).toEqual([{ carId: 0, lap: 5, pitLaneEntry: 6_000, pitLaneExit: 30_000, pitLaneTimeMs: 21_800,
-      stationaryTimeMs: 2_400, flag: 'green', penaltyServed: false }]);
+      stationaryTimeMs: 2_400, flag: 'green', penaltyServed: false, frame: 6 }]);
     expect(results[5]!.changed.has('pitStops')).toBe(true);
   });
   it('takes the flag at pit entry and marks a served penalty (DTSV/SGSV)', () => {

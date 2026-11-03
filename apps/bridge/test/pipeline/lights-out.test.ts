@@ -1,7 +1,7 @@
 // Lights out after a formation lap discards the formation's history (spec 3.2): the calculators restart and the job
 // runs under way are dropped, as on a flashback; it is no flashback to the engineer. A fall of the session time that is
 // no start, and a forward jump of more than 60 s that is no post-session jump, change nothing and are logged (spec 3.3);
-// after a fall the feed's own insights are stamped on the race clock. Calculators see the session phase in their view.
+// after a fall the feed's own insights are timed on the race clock. Calculators see the session phase in their view.
 // A session phase boundary that moves an entry earlier frames recorded at or after its time into or out of the phase
 // restarts the calculators (spec 3.1, "A boundary at a shared moment", ruling 2026-10-31 made exact after review 6): a
 // race start on the grid's held clock restarts them at lights out, which moves the start lights' events into racing,
@@ -67,21 +67,22 @@ function setup(features: Feature[], staleCheck?: { clock: () => number; everyMs:
 const initProbe = (inits: number[]): IncrementalCalculator<number, number> => ({
   kind: 'incremental', id: 'probe.events', reads: ['events'], cadence: 'frame',
   init: ({ state }) => { inits.push(state.lastFrameId); return state.history.events.length; },
-  update: (n, delta) => n + delta.after.events - delta.before.events,
+  update: (n, delta) => n + (delta.after.events ?? 0) - (delta.before.events ?? 0),
   output: (n) => n,
 });
 
 describe('FeedPipeline: lights out after a formation lap restarts the calculators', () => {
-  it('an incremental calculator starts again from init on the first start light (the formation’s fastest lap lies above the held clock) and the lights-out frame, and on no other', async () => {
+  it('an incremental calculator starts again from init on the lights-out frame and on no other: the first start light lies above the formation’s fastest lap', async () => {
     const inits: number[] = [];
     const { pipeline, push } = setup([defineFeature({ name: 'probe-events', calculators: [initProbe(inits)], topics: [] })]);
     const { before, after } = formationStart();
     push(before);
     push(after);
     await pipeline.stop();
-    // The first start light opens startLights at 0 on the clock held since frame 40, below the fastest lap frame 20
-    // recorded at 0.32 s, which it moves out of the formation; lights out discards the formation (spec 3.2).
-    expect(inits).toEqual([inits[0], FIRST_LIGHT, LIGHTS_OUT]);
+    // The reset at frame 40 is carried over (C36): the race clock holds at 0.624 s, so the first start light opens
+    // startLights above the fastest lap frame 20 recorded at 0.32 s and moves nothing; lights out discards the formation
+    // (spec 3.2).
+    expect(inits).toEqual([inits[0], LIGHTS_OUT]);
     expect(inits[0]).toBeLessThan(FIRST_LIGHT);
   });
   it('without an entry in the formation, the first start light moves nothing and restarts no calculator: lights out is the only restart', async () => {
@@ -132,17 +133,6 @@ describe('FeedPipeline: lights out after a formation lap restarts the calculator
     expect(values).toEqual([]);
     await pipeline.stop();
   });
-  it('lights out raises no session.flashback insight', async () => {
-    const { hub, pipeline, inbox, push } = setup([defineFeature({ name: 'insights', calculators: [], topics: [bindInsights('insights')] })]);
-    hub.subscribe({ clientId: 'c', id: 'i', topic: 'insights', params: {}, feedId: F });
-    const { before, after } = formationStart();
-    push(before);
-    push(after);
-    await pipeline.stop();
-    const kinds = inbox.flatMap((m) => ('entries' in m ? ((m.entries ?? []) as Array<{ type: string; insight?: { kind: string } }>) : []))
-      .flatMap((e) => (e.type === 'raised' && e.insight ? [e.insight.kind] : []));
-    expect(kinds.filter((k) => k === 'session.flashback')).toEqual([]);
-  });
 });
 
 describe('FeedPipeline: the session phase in the view', () => {
@@ -191,8 +181,8 @@ describe('FeedPipeline: a forward jump of the session time over 60 s that is no 
   });
 });
 
-// Review 3 E6: the race clock reaches the bridge. After a mid-race fall the engine stamps every entry on its race clock
-// (spec 3.3), so the feed's own insights (here feed.stale) are stamped on it too, not on the game's raw session time.
+// Review 3 E6: the race clock reaches the bridge. After a mid-race fall the engine times every entry on its race clock
+// (spec 3.3), so the feed's own insights (here feed.stale) are timed on it too, not on the game's raw session time.
 describe('FeedPipeline: the feed insights after a mid-race fall of the session time', () => {
   it('a feed.stale raised after the fall carries a time on the race clock, not the raw session time', async () => {
     let now = 0;

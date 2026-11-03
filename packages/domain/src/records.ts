@@ -2,6 +2,7 @@
 import type { DamageParts } from './analyses/damage.ts';
 import type { ActualCompound, VisualCompound } from './compounds.ts';
 import type { Corners } from './corners.ts';
+import type { FactRef, FrameNumber } from './facts.ts';
 import type { CarId, SessionTime } from './ids.ts';
 import type { Known } from './known.ts';
 import type { Joules, Kg, Ms, Percent, Ratio } from './units.ts';
@@ -35,6 +36,8 @@ export type LapRecord = {
   /** `provisional` from LapData, `confirmed` once SessionHistory contains the lap. */
   status: 'provisional' | 'confirmed';
   completedAt: SessionTime;
+  /** On a confirmed lap: the provisional lap record it supersedes (its fact id in the log, C21, C25); absent when this session's log holds no provisional of the lap. */
+  supersedes?: FactRef;
   /**
    * Sampled at the lap start from the car state of the frame that starts the lap; `unknown('notReceived')` for a lap the
    * engine joined after its start. With the lap-end samples they give the lap's own wear and ERS change (rates per lap).
@@ -51,6 +54,8 @@ export type LapRecord = {
   damageAtEnd: Known<DamageParts>;
   /** Min and max of every band channel over the lap. */
   channelRange: ChannelRange;
+  /** The frame the record describes (C26): the frame that completed the lap. */
+  frame: FrameNumber;
 };
 
 export type StintRecord = {
@@ -60,6 +65,8 @@ export type StintRecord = {
   actualCompound: ActualCompound;
   visualCompound: VisualCompound;
   tyreAgeAtFitting: number;
+  /** The frame the record describes (C26). */
+  frame: FrameNumber;
 };
 
 export type PitStopRecord = {
@@ -71,6 +78,8 @@ export type PitStopRecord = {
   stationaryTimeMs: Ms;
   flag: 'green' | 'sc' | 'vsc';
   penaltyServed: boolean;
+  /** The frame the record describes (C26). */
+  frame: FrameNumber;
 };
 
 export type ScPhase = { phase: 'deployed' | 'returning' | 'returned' | 'resume'; at: SessionTime };
@@ -109,6 +118,19 @@ export type RaceEvent = {
   carId?: CarId;
   otherCarId?: CarId;
   params: Record<string, number | string>;
+  /** The frame the record describes (C26). */
+  frame: FrameNumber;
+};
+
+/**
+ * A game event of the frame that is a value, not a signal (OVTK, COLL, FTLP, SPTP): written into the live state by step 1
+ * (`LiveState.frameEvents`), so no recorder reads a packet (C6). Times and speeds in domain units.
+ */
+export type FrameEvent = {
+  kind: 'overtake' | 'collision' | 'fastestLap' | 'speedTrap';
+  carId?: CarId;
+  otherCarId?: CarId;
+  params: Record<string, number | string>;
 };
 
 /** The lap is split into this many segments of equal length by distance. */
@@ -119,4 +141,4 @@ export const MINI_SECTORS = 50;
  * boundary is at `s × trackLength / 50`, so segment 0 is the start/finish line at the start of the lap, and the line
  * that completes lap L is `(L + 1, 0)`.
  */
-export type MiniSectorCrossing = { carId: CarId; lap: number; segment: number; at: SessionTime };
+export type MiniSectorCrossing = { carId: CarId; lap: number; segment: number; at: SessionTime; frame: FrameNumber };

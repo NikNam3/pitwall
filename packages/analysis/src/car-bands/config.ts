@@ -1,6 +1,6 @@
 // Defaults of `car-bands` (spec Appendix B): one `lo`/`hi` pair per band, in °C or psi. Tyre temperature bands are per compound kind.
 // The wet carcass window is the community's F1 24 inner-temperature window (F1 25 has no published table); the dry and inter bands come from our recordings.
-import { defineConfig } from '@pitwall/engine';
+import { defineConfig } from '@pitwall/engine/readers';
 
 export const CAR_BANDS_CONFIG = defineConfig('car-bands', {
   /** Slick surface. Source: pitwall recordings 2026-10-29/30, p5–p95 of the player's racing laps (qualifyingSingapore, practiceZandvoortOnline, raceZandvoortUidReuse, raceSingaporeWet); soft 6 laps, hard 1 lap. */

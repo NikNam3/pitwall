@@ -27,11 +27,16 @@ type Replayed = {
   gaps: GapsOutput;
   /** The race events the frames from the lights-out frame on carry, the lights out itself excluded. */
   raceKinds: string[];
-  /** The lowest session time of the frames from lights out on. */
+  /** The lowest race-clock time (C35) of the frames from lights out on. */
   lowestAfterLightsOut: number;
 };
 
 const replayed = new Map<string, Replayed>();
+
+/** The lap recorder's open laps by car (its own state, `open.recorders.laps`, C10): the lap a car is on and how it began. */
+type LapCursorView = { lap: number; fromStart: boolean; startedAt: number };
+const lapCursors = (state: DeepReadonly<EngineState>): ReadonlyArray<LapCursorView | undefined> =>
+  (state.open.recorders['laps'] as unknown as { cursors: ReadonlyArray<LapCursorView | undefined> }).cursors;
 
 beforeAll(async () => {
   for (const [, file] of SHAPES) {
@@ -39,11 +44,11 @@ beforeAll(async () => {
     let out = false;
     const raceKinds: string[] = [];
     let lowest = Infinity;
-    const runner = await replayScheduled(segmentPath(file), [gapsCalculator], (_r, scheduled, f) => {
+    const runner = await replayScheduled(segmentPath(file), [gapsCalculator], (r, scheduled, f) => {
       const codes = f.events.map((e) => e.details.code);
       if (!out && codes.includes('LGOT')) out = true;
       else if (out) raceKinds.push(...codes.flatMap((c) => (KIND_OF[c] ? [KIND_OF[c]] : [])));
-      if (out) lowest = Math.min(lowest, f.sessionTime);
+      if (out) lowest = Math.min(lowest, r.state.sessionTime);
       gaps = scheduled.outputs.get(GAPS) as GapsOutput;
     });
     replayed.set(file, { state: runner.state, gaps: structuredClone(gaps!), raceKinds, lowestAfterLightsOut: lowest });
@@ -71,7 +76,7 @@ describe.each(SHAPES)('the race start, shape %s (%s)', (_, file) => {
     const { state } = replayed.get(file)!;
     const start = raceStart(state);
     const off = state.cars.filter((c) => c.active).flatMap((c) => {
-      const cursor = state.open.laps[c.id];
+      const cursor = lapCursors(state)[c.id];
       return cursor && cursor.lap === 1 && cursor.fromStart && cursor.startedAt === start ? [] : [`car ${c.id}: ${JSON.stringify(cursor && { lap: cursor.lap, fromStart: cursor.fromStart, startedAt: cursor.startedAt })}`];
     });
     expect(off).toEqual([]);

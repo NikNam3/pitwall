@@ -1,7 +1,7 @@
 import { SOURCE_INTERVAL_MS, type CarId } from '@pitwall/domain';
 // A cross-package test import: the engine's own builder is the single definition of "every field of a car".
 // (Tests may reach other packages' builders; the dependency-cruiser layer rule for apps/ui must allow this file.)
-import { createCarState } from '../../../../packages/engine/src/step/initial-state.ts';
+import { createCarState } from '../../../../packages/engine/src/step/state-update/initial.ts';
 import { describe, expect, it } from 'vitest';
 import { CAR_FIELD_SOURCE } from '../../src/kit/values/car-sources.ts';
 

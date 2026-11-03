@@ -1,6 +1,6 @@
 import { known } from '@pitwall/domain';
 import type { CarId, CarState, ErsAttack, ErsState, Known } from '@pitwall/domain';
-import type { EngineView, QuickCalculator } from '@pitwall/engine';
+import type { EngineView, QuickCalculator } from '@pitwall/engine/readers';
 import { classifyLap, LAP_CLASSES_CONFIG } from '../lap-classes/index.ts';
 import { lapsToReach, perLapGainRate, PER_LAP_RATE_CONFIG } from '../per-lap-rate/index.ts';
 import type { GainSample } from '../per-lap-rate/index.ts';

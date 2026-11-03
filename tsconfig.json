@@ -11,6 +11,7 @@
     "test",
     "test-support",
     "vitest.config.ts",
+    "vitest.global-setup.ts",
     "vitest.acceptance.config.ts"
   ]
 }

@@ -1,5 +1,5 @@
 // Defaults of `per-lap-rate` (spec Appendix B); the analyses that call `perLapGainRate` read them and pass them as `opts`.
-import { defineConfig } from '@pitwall/engine';
+import { defineConfig } from '@pitwall/engine/readers';
 
 export const PER_LAP_RATE_CONFIG = defineConfig('per-lap-rate', {
   /** Gain samples (laps) the median is taken over, the newest last. Source: pitwall estimate. */

@@ -314,7 +314,7 @@ describe('damage calculator', () => {
       const full = viewAt(720_000);
       const acc = damageCalculator.update(damageCalculator.init(viewAt(0)), full.delta, full);
       const cut = viewAt(399_999);
-      const truncated = { ...cut.delta, truncated: true };
+      const truncated = { ...cut.delta, rewound: { frameId: -1, at: 0 } };
       const after = damageCalculator.output(damageCalculator.update(acc, truncated, { ...cut, delta: truncated }));
       expect(after).toEqual(damageCalculator.output(damageCalculator.init(cut)));
       expect(after[car0]!.jumps.map((j) => [j.at, j.parts, j.deltaPct])).toEqual([[100_000, ['frontRightWingPct'], 20]]);
@@ -334,7 +334,7 @@ describe('damage calculator', () => {
       cars: [carState({ id: car0 })],
       history: { events: events.slice(0, 1), laps: laps.slice(0, 3) },
     });
-    const truncated = { ...cut.delta, truncated: true };
+    const truncated = { ...cut.delta, rewound: { frameId: -1, at: 0 } };
     const after = damageCalculator.update(acc, truncated, { ...cut, delta: truncated });
     expect(damageCalculator.output(after)).toEqual(damageCalculator.output(damageCalculator.init(cut)));
     expect(damageCalculator.output(after)[car0]!.jumps).toHaveLength(1);

@@ -3,7 +3,8 @@
 // car 1 drive, an overtake, car 1's retirement and disqualification transient); the clock reset to 0 at frame 110 with
 // the formation's resume and the grid re-ordering overtake; the clock holds at 0 through a DRS notice, five start
 // lights and lights out at frame 209; the race runs from the frame after it, both cars complete lap 1 and an overtake
-// comes at race frame 40. Car 1 stands past the line with its lap timer at 510 ms from the reset on, as raceZandvoortOnline's
+// comes at race frame 40. The reset is carried over like any fall that is no flashback (C36, supervisor ruling Task 7
+// round 2): from the reset on the race clock runs ahead of the session time by the formation lap's last time. Car 1 stands past the line with its lap timer at 510 ms from the reset on, as raceZandvoortOnline's
 // cars 1-7 do.
 import { describe, expect, it } from 'vitest';
 import type { EventDetails } from '@pitwall/protocol';
@@ -15,9 +16,12 @@ const FORMATION = 10;
 const RESET = 110;
 const LIGHTS = [120, 130, 140, 150, 160];
 const LIGHTS_OUT = 209;
-/** Race frame k is frame `LIGHTS_OUT + k`; frame 0 of the race is lights out. */
+/** Race frame k is frame `LIGHTS_OUT + k` (frame number `LIGHTS_OUT + k + 1`, C26); frame 0 of the race is lights out. */
 const RACE_FRAMES = 121;
-const raceAt = (k: number): number => k * STEP;
+/** The reset's size: the formation lap's last session time, the race clock's offset from the reset on. */
+const FORMATION_MS = (RESET - 1) * STEP;
+/** Race frame k's time on the race clock. */
+const raceAt = (k: number): number => FORMATION_MS + k * STEP;
 
 const RTMT: EventDetails = { code: 'RTMT', vehicleIdx: 1, reason: 0 };
 const DRSD: EventDetails = { code: 'DRSD', reason: 0 };
@@ -36,7 +40,7 @@ const drive = (k: number, car: number, gridM: number, from: number, timed: boole
 /** The formation start of the file comment; `extra` adds events per frame, `cars` shapes the cars further. */
 const formationStart = (extra: (k: number) => EventDetails[] = () => [], cars: (k: number, d: Parameters<NonNullable<Beat['cars']>>[0]) => void = () => {}): Beat[] =>
   beats(LIGHTS_OUT + RACE_FRAMES, (k) => ({
-    at: k < RESET ? k * STEP : k <= LIGHTS_OUT ? 0 : raceAt(k - LIGHTS_OUT),
+    at: k < RESET ? k * STEP : k <= LIGHTS_OUT ? 0 : (k - LIGHTS_OUT) * STEP,
     ...(k === FORMATION && { session: status(3) }),
     ...(k === 125 && { session: status(0) }),
     events: [
@@ -74,18 +78,18 @@ describe('the formation lap', () => {
     const { runner } = startRun();
     expect(runner.state.history.sessionPhases.map((p) => [p.kind, p.start, p.end])).toEqual([
       ['preStart', 0, FORMATION * STEP],
-      ['formation', FORMATION * STEP, 0],
-      ['startLights', 0, 0],
+      ['formation', FORMATION * STEP, raceAt(0)],
+      ['startLights', raceAt(0), raceAt(0)],
     ]);
-    expect(runner.state.open.situations.session).toEqual({ kind: 'racing', start: 0, startLeaderLap: 1 });
+    expect(runner.state.open.situations.session).toEqual({ kind: 'racing', start: raceAt(0), startLeaderLap: 1 });
   });
   it('the clock reset at the formation lap’s end changes nothing by itself', () => {
     const { results } = startRun();
-    expect(results[RESET]!.delta.truncated).toBe(false);
+    expect(results[RESET]!.delta.rewound).toBeUndefined();
   });
   it('lights out after a formation lap is a truncated step: the history it discards is rewritten', () => {
     const { results } = startRun();
-    expect(results[LIGHTS_OUT]!.delta.truncated).toBe(true);
+    expect(results[LIGHTS_OUT]!.delta.rewound).toBeDefined();
   });
 });
 
@@ -93,20 +97,20 @@ describe('at lights out the formation lap is discarded', () => {
   it('every event of the formation goes (overtakes, the retirement, the DRS notice); the start lights and lights out stay', () => {
     const { runner } = startRun();
     expect(events(runner)).toEqual([
-      ...[1, 2, 3, 4, 5].map((lights) => ({ at: 0, kind: 'startLights', params: { lights } })),
-      { at: 0, kind: 'lightsOut', params: {} },
-      { at: raceAt(40), kind: 'overtake', carId: 1, otherCarId: 0, params: {} },
+      ...LIGHTS.map((k, i) => ({ at: raceAt(0), kind: 'startLights', params: { lights: i + 1 }, frame: k + 1 })),
+      { at: raceAt(0), kind: 'lightsOut', params: {}, frame: LIGHTS_OUT + 1 },
+      { at: raceAt(40), kind: 'overtake', carId: 1, otherCarId: 0, params: {}, frame: LIGHTS_OUT + 41 },
     ]);
   });
   it('a lights-out event during the formation lap, before any start light, is no race start and goes with the formation', () => {
     const { runner } = run(script(formationStart((k) => (k === FORMATION + 5 ? [LGOT] : []))));
     expect(runner.state.history.sessionPhases.map((p) => p.kind)).toEqual(['preStart', 'formation', 'startLights']);
-    expect(runner.state.open.situations.session).toEqual({ kind: 'racing', start: 0, startLeaderLap: 1 });
-    expect(events(runner).filter((e) => e.kind === 'lightsOut')).toEqual([{ at: 0, kind: 'lightsOut', params: {} }]);
+    expect(runner.state.open.situations.session).toEqual({ kind: 'racing', start: raceAt(0), startLeaderLap: 1 });
+    expect(events(runner).filter((e) => e.kind === 'lightsOut')).toEqual([{ at: raceAt(0), kind: 'lightsOut', params: {}, frame: LIGHTS_OUT + 1 }]);
   });
   it('the formation lap’s mini-sector crossings go; lap 1 is crossed again from lights out, each boundary once', () => {
     const { runner } = startRun();
-    const lap1 = runner.state.history.miniSectors.filter((m) => m.carId === 0 && m.lap === 1);
+    const lap1 = runner.state.history.crossings.filter((m) => m.carId === 0 && m.lap === 1);
     expect(lap1.map((m) => m.segment)).toEqual(Array.from({ length: 50 }, (_, s) => s));
     expect(lap1[0]!.at).toBeLessThanOrEqual(raceAt(1));
   });

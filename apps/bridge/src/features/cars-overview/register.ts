@@ -1,6 +1,6 @@
 import type { CarOverview } from '@pitwall/contracts';
 import type { CarId } from '@pitwall/domain';
-import { copyPlain, type QuickCalculator } from '@pitwall/engine';
+import { copyPlain, type QuickCalculator } from '@pitwall/engine/readers';
 import { bindState, defineFeature } from '../feature.ts';
 
 /** Every car's entries, by car id, of a history list (each car's latest last). */
@@ -34,7 +34,7 @@ const carsOverview: QuickCalculator<CarOverview[]> = {
         tyres: { actualCompound: tyres.actualCompound, visualCompound: tyres.visualCompound, age: tyres.age },
         stops: Math.max(stops.get(id)?.length ?? 0, timing.numPitStops),
         updatedAt,
-      });
+      }) as CarOverview;
     });
   },
 };

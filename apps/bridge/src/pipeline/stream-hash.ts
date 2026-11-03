@@ -50,9 +50,13 @@ class ObservedSource implements PacketSource {
  */
 const paramsFor = (carId: number) => ({ carId, referenceCarId: carId, reference: { kind: 'leaderAverage' } });
 
-/** The topics a feature binds with a `select`: only their value depends on the params. */
+/** The topics a feature binds with a `select` (a calculator's with one, or any `bindLive`): only their value depends on the params. */
 const selectedTopicsOf = (features: readonly Feature[]): ReadonlySet<TopicName> =>
-  new Set(features.flatMap((feature) => feature.topics.flatMap((binding) => ('from' in binding && binding.select !== undefined ? [binding.topic] : []))));
+  new Set(
+    features.flatMap((feature) =>
+      feature.topics.flatMap((binding) => (('from' in binding && binding.select !== undefined) || 'fromLive' in binding ? [binding.topic] : [])),
+    ),
+  );
 
 /** The topics bound to a job's results. */
 const jobTopicsOf = (features: readonly Feature[]): ReadonlySet<TopicName> =>
@@ -85,7 +89,7 @@ export class StreamHash {
 /**
  * Replays `recordingPath` as fast as possible through the real pipeline, with the hub's clock on the record times,
  * and hashes through `StreamHash` every message one client subscribed to every feed topic receives. A topic bound with a
- * `select` is subscribed once per car with `paramsFor(car)`, so every car's value enters the hash (the player may drive
+ * `select` (every `bindLive` topic too) is subscribed once per car with `paramsFor(car)`, so every car's value enters the hash (the player may drive
  * any car, and the analyses publish per car); a topic without one sends every subscriber the same value, so once is enough.
  * Global topics stay out: the bridge shell publishes them, not the replay.
  *

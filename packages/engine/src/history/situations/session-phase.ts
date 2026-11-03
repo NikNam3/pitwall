@@ -14,11 +14,15 @@ import {
 } from '@pitwall/domain';
 import type { EventDetails, EventDetailsOf } from '@pitwall/protocol';
 import type { Frame } from '../../frame/frame.ts';
-import type { EngineState, History, HistoryLengths } from '../../state/engine-state.ts';
-import { isActiveCar, slotsInUse } from '../../step/identity.ts';
+import type { Log } from '../../log/types.ts';
+import type { EngineState, TrackerLengths } from '../../state/engine-state.ts';
+import { endLapVisits, lapsRecorder, reindexLaps, restartLap } from '../../recorders/laps.ts';
+import { restartMiniSectors, miniSectorsRecorder } from '../../recorders/mini-sectors.ts';
+import { ownStateOf } from '../../recorders/own-state.ts';
+import { endPitVisits, pitStopsRecorder } from '../../recorders/pit-stops.ts';
+import { endStintVisits, reindexStintLaps, restartStintLap, stintsRecorder } from '../../recorders/stints.ts';
+import { isActiveCar, slotsInUse } from '../../step/active-cars.ts';
 import type { StepOutput } from '../../step/types.ts';
-import { historyLengths } from '../delta.ts';
-import { restartLap } from '../laps.ts';
 
 type NeutralisingCar = 'SC' | 'VSC';
 
@@ -39,8 +43,45 @@ const CONFIRM_WITHIN_MS = 3000;
  * the line in raceZandvoortOnline's hold (t1-diagnosis.md S3).
  */
 const UNDER_WAY_LAP_TIME_MS = 1000;
-/** What the formation discard cuts back; the phases, flag phases and pauses stay (spec 3.2). */
-const DISCARDED = ['laps', 'stints', 'pitStops', 'events', 'miniSectors'] as const satisfies ReadonlyArray<keyof History>;
+/** What the formation discard cuts back; the phases and flag phases stay (spec 3.2). */
+const DISCARDED = ['laps', 'stints', 'pitStops', 'events', 'crossings'] as const satisfies ReadonlyArray<keyof TrackerLengths>;
+
+type Discarded = (typeof DISCARDED)[number];
+
+/**
+ * Whether a void fact (C27, a flashback) covers position `index` of `list`. The tracker reads and cuts the log itself (an
+ * old mechanism, until Task 9), so it skips what a flashback undid, as the projection does.
+ */
+const isVoided = (log: Log, list: Discarded, index: number): boolean =>
+  log.voids.some((v) => {
+    const range = v.ranges[list];
+    return range !== undefined && index >= range[0] && index < range[1];
+  });
+
+/** The facts of `list` no flashback undid. */
+export const unvoided = <K extends Discarded>(log: Log, list: K): Log[K] =>
+  log.voids.length === 0 ? log[list] : (log[list].filter((_, i) => !isVoided(log, list, i)) as Log[K]);
+
+/** The log's lists after the discard cut `list` back to `length`: void ranges past it named facts that are gone, so they go too. */
+const cutVoids = (log: Log, list: Discarded, length: number): void => {
+  log.voids.forEach((v, i) => {
+    const range = v.ranges[list];
+    if (range === undefined || range[1] <= length) return;
+    const { [list]: _cut, ...rest } = v.ranges;
+    log.voids[i] = { ...v, ranges: range[0] < length ? { ...rest, [list]: [range[0], length] as const } : rest };
+  });
+};
+
+/** The lengths of the log's lists the tracker cuts back. */
+const trackerLengths = (log: Log): TrackerLengths => ({
+  laps: log.laps.length,
+  stints: log.stints.length,
+  pitStops: log.pitStops.length,
+  crossings: log.crossings.length,
+  events: log.events.length,
+  flagPhases: log.flagPhases.length,
+  sessionPhases: log.sessionPhases.length,
+});
 
 /** The lap of the car in first place; 0 when no car in the session holds it. */
 const leaderLap = (state: EngineState): number => {
@@ -78,7 +119,7 @@ const closed = (state: EngineState, open: OpenSessionPhase, at: SessionTime, res
 const confirm = (state: EngineState): void => {
   const book = state.open.phaseBook;
   if (!book.unconfirmed) return;
-  state.history.sessionPhases.push(book.unconfirmed.closed);
+  state.log.sessionPhases.push(book.unconfirmed.closed);
   book.unconfirmed = undefined;
 };
 
@@ -100,15 +141,15 @@ const drop = (state: EngineState, out: StepOutput): void => {
  * (`at >= boundary`), a mini-sector crossing (`at >= boundary`), a lap (`completedAt >= boundary`) or a pit stop
  * (`pitLaneExit >= boundary`: the stop's last moment, so one only partly past the boundary counts too). Each entry's
  * own time is compared, not the clock, so an entry recorded before a fall of the session time lies above every lower
- * time. The phases themselves (session and flag phases), the stints (by lap, no time) and the pauses (display only,
- * spec 3.1) are not folded against phases. Read before the frame's own entries are recorded (the situation tracker is
+ * time. The phases themselves (session and flag phases), the stints (by lap, no time) and the clock's facts (pauses,
+ * falls) are not folded against phases. Read before the frame's own entries are recorded (the situation tracker is
  * the first history step), so every entry it finds was recorded by an earlier frame.
  */
-const recordedAtOrAfter = (history: History, boundary: SessionTime): boolean =>
-  history.events.some((e) => e.at >= boundary) ||
-  history.miniSectors.some((c) => c.at >= boundary) ||
-  history.laps.some((l) => l.completedAt >= boundary) ||
-  history.pitStops.some((p) => p.pitLaneExit >= boundary);
+const recordedAtOrAfter = (log: Log, boundary: SessionTime): boolean =>
+  unvoided(log, 'events').some((e) => e.at >= boundary) ||
+  unvoided(log, 'crossings').some((c) => c.at >= boundary) ||
+  unvoided(log, 'laps').some((l) => l.completedAt >= boundary) ||
+  unvoided(log, 'pitStops').some((p) => p.pitLaneExit >= boundary);
 
 /**
  * `next` opens where the phase in progress closes. Several frames can carry one moment of the race clock (a clock
@@ -123,7 +164,7 @@ const recordedAtOrAfter = (history: History, boundary: SessionTime): boolean =>
  * neutralised and suspended phases, and covering every kind keeps it exact for any reader of the phases.
  */
 const atBoundary = (state: EngineState, next: OpenSessionPhase, out: StepOutput): void => {
-  if (recordedAtOrAfter(state.history, next.start)) out.discarded = true;
+  if (recordedAtOrAfter(state.log, next.start)) out.discarded = true;
 };
 
 /** Closes the phase in progress where `next` opens and opens `next`. */
@@ -131,7 +172,7 @@ const enter = (state: EngineState, out: StepOutput, next: OpenSessionPhase, rest
   atBoundary(state, next, out);
   confirm(state);
   const { situations } = state.open;
-  state.history.sessionPhases.push(closed(state, situations.session, next.start, restart));
+  state.log.sessionPhases.push(closed(state, situations.session, next.start, restart));
   situations.session = next;
 };
 
@@ -176,7 +217,7 @@ const confirmOrExpire = (state: EngineState, at: SessionTime, out: StepOutput): 
  */
 const openFormation = (state: EngineState, out: StepOutput, at: SessionTime): void => {
   if (!isRace(state) || state.open.situations.session.kind !== 'preStart') return;
-  state.open.phaseBook.formationFrom = historyLengths(state.history);
+  state.open.phaseBook.formationFrom = trackerLengths(state.log);
   enter(state, out, phase(state, 'formation', at));
 };
 
@@ -188,46 +229,48 @@ const openFormation = (state: EngineState, out: StepOutput, at: SessionTime): vo
 const startLights = (state: EngineState, out: StepOutput, at: SessionTime): void => {
   const { kind } = state.open.situations.session;
   if (!isRace(state) || (kind !== 'preStart' && kind !== 'formation' && kind !== 'suspended')) return;
-  if (kind !== 'suspended') state.open.phaseBook.startFrom = historyLengths(state.history);
+  if (kind !== 'suspended') state.open.phaseBook.startFrom = trackerLengths(state.log);
   enter(state, out, phase(state, 'startLights', at), 'standing');
 };
 
-/** Rebuilds the per-car lap index from the laps left in the history. */
-const reindexLaps = (state: EngineState): void => {
-  const { history, open } = state;
-  open.lapIndex = open.lapIndex.map(() => ({}));
-  history.laps.forEach((lap, i) => {
-    const index = open.lapIndex[lap.carId];
-    if (!index) return;
-    const slot = (index[lap.lapNumber] ??= { confirmed: false });
-    if (lap.status === 'confirmed') slot.confirmed = true;
-    else slot.provisional = i;
-  });
+/**
+ * Rebuilds what the lap and stint recorders keep of the recorded laps from the laps left in the history: the discard
+ * cut the log in place (an old mechanism; Task 9 removes it), so their own state follows it.
+ */
+const reindexRecordedLaps = (state: EngineState): void => {
+  const laps = unvoided(state.log, 'laps');
+  reindexLaps(ownStateOf(state, lapsRecorder), laps);
+  reindexStintLaps(ownStateOf(state, stintsRecorder), laps);
 };
 
 /**
  * Lights out after a formation lap discards what the formation recorded (spec 3.2): the history goes back to its
- * lengths when the formation opened, but for the start lights; the phases, flag phases and pauses stay. Mini-sector
+ * lengths when the formation opened, but for the start lights; the phases and flag phases stay. Mini-sector
  * cursors start over. Open pit visits go: a car in the pit lane at lights out starts from it, which is no pit stop, as
  * a car leaving the garage makes none (review 2 B4).
  */
-const discardFormation = (state: EngineState, from: HistoryLengths): void => {
-  const { history, open } = state;
-  const lights = history.events.slice(from.events).filter((e) => e.kind === 'startLights');
-  for (const key of DISCARDED) history[key].splice(from[key]);
-  history.events.push(...lights);
-  reindexLaps(state);
-  open.miniSectors.fill(undefined);
-  open.pitVisits.fill(undefined);
+const discardFormation = (state: EngineState, from: TrackerLengths): void => {
+  // Cuts the log in place (an old mechanism; Task 9 replaces it with hiding by stamp): the step is `rewritten`.
+  const { log } = state;
+  const lights = log.events.slice(from.events).filter((e, i) => e.kind === 'startLights' && !isVoided(log, 'events', from.events + i));
+  for (const key of DISCARDED) {
+    log[key].splice(from[key]);
+    cutVoids(log, key, from[key]);
+  }
+  log.events.push(...lights);
+  reindexRecordedLaps(state);
+  restartMiniSectors(ownStateOf(state, miniSectorsRecorder));
+  endPitVisits(ownStateOf(state, pitStopsRecorder));
+  endLapVisits(ownStateOf(state, lapsRecorder));
+  endStintVisits(ownStateOf(state, stintsRecorder));
 };
 
 /**
  * Lights out ends the start lights and opens racing; the race's first lights out is the race start. There every car's
- * lap starts over from its start, the formation lap (if any) is discarded, and the settling window opens (3.3). A
- * restart after a red flag is no race start.
+ * lap starts over from its start and the formation lap (if any) is discarded. A restart after a red flag is no race
+ * start.
  */
-const lightsOut = (state: EngineState, frame: Frame, at: SessionTime, out: StepOutput): void => {
-  const phaseFrom = state.history.sessionPhases.length;
+const lightsOut = (state: EngineState, at: SessionTime, out: StepOutput): void => {
   enter(state, out, phase(state, 'racing', at));
   const book = state.open.phaseBook;
   const start = book.formationFrom ?? book.startFrom;
@@ -237,11 +280,12 @@ const lightsOut = (state: EngineState, frame: Frame, at: SessionTime, out: StepO
     out.rewritten = true;
   }
   const slots = slotsInUse(state);
+  const laps = ownStateOf(state, lapsRecorder), stints = ownStateOf(state, stintsRecorder);
   for (const car of state.cars) {
-    if (isActiveCar(car.id, slots, car.timing.resultStatus) && car.updatedAt.lapData !== undefined) restartLap(state, car, at);
+    if (!isActiveCar(car.id, slots, car.timing.resultStatus) || car.updatedAt.lapData === undefined) continue;
+    restartLap(laps, car, at);
+    restartStintLap(stints, car);
   }
-  // The start's entries: the start lights (all that is left from before lights out) and everything from here on.
-  book.lightsOut = { frameId: frame.frameId, from: { ...historyLengths(state.history), events: start.events }, phaseFrom };
   book.formationFrom = undefined;
   book.startFrom = undefined;
 };
@@ -306,7 +350,7 @@ const applyEvent = (state: EngineState, frame: Frame, details: EventDetails, out
       return startLights(state, out, at);
     case 'LGOT':
       // Lights out only ends the start lights: one before any start light (the formation lap's own) is none.
-      if (state.open.situations.session.kind === 'startLights') lightsOut(state, frame, at, out);
+      if (state.open.situations.session.kind === 'startLights') lightsOut(state, at, out);
       return;
     case 'RDFL':
       return suspend(state, out, at);
@@ -368,7 +412,7 @@ export const joinSession = (state: EngineState, frame: Frame): void => {
   if (kind === 'timeTrial') open = phase(state, 'running', at);
   else if (car) open = joined(neutralised(state, car, at, []));
   else if (kind === 'race' && flag === 'formation') {
-    state.open.phaseBook.formationFrom = historyLengths(state.history);
+    state.open.phaseBook.formationFrom = trackerLengths(state.log);
     open = joined(phase(state, 'formation', at));
   } else if (kind === 'race') open = raceUnderWay(state) ? joined(phase(state, 'racing', at)) : phase(state, 'preStart', at);
   else open = timeLeftMs < durationMs ? joined(phase(state, 'running', at)) : phase(state, 'preStart', at);

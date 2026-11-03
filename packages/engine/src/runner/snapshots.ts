@@ -1,17 +1,20 @@
 import type { SessionTime } from '@pitwall/domain';
-import { historyLengths } from '../history/delta.ts';
-import type { EngineState, HistoryLengths } from '../state/engine-state.ts';
+import { logLengths } from '../log/log.ts';
+import type { LogLengths } from '../log/types.ts';
+import type { EngineState } from '../state/engine-state.ts';
 import { copyPlain } from '../util/copy-plain.ts';
 
 /**
- * The state after frame `frameId`. The append-only history is kept by its lengths only (spec 5.4); the read-only
- * weekend context is not kept at all, a restore carries the current one over.
+ * The state after frame `frameId`. The append-only log is kept by its lengths only (spec 5.4) and the projection not at
+ * all (a restore projects the log again); the read-only weekend context is not kept either, a restore carries the
+ * current one over. `attached`: the attached bookkeeping as it stood once the frame's result was handed out (C27).
  */
 export type Snapshot = {
   frameId: number;
   sessionTime: SessionTime;
-  lengths: HistoryLengths;
-  state: Omit<EngineState, 'history' | 'weekend'>;
+  lengths: LogLengths;
+  state: Omit<EngineState, 'log' | 'history' | 'weekend'>;
+  attached: unknown;
 };
 
 /**
@@ -24,9 +27,9 @@ export type SnapshotWindow = { ms: number; frames: number };
 export const KEEP_OLDER_EVERY_MS = 30_000;
 const slotOf = (s: Snapshot): number => Math.floor(s.sessionTime / KEEP_OLDER_EVERY_MS);
 
-const snapshotOf = (state: EngineState, frameId: number): Snapshot => {
-  const { history, weekend: _readOnly, ...rest } = state;
-  return { frameId, sessionTime: state.sessionTime, lengths: historyLengths(history), state: copyPlain(rest) };
+const snapshotOf = (state: EngineState, frameId: number, attached: unknown): Snapshot => {
+  const { log, history: _projected, weekend: _readOnly, ...rest } = state;
+  return { frameId, sessionTime: state.sessionTime, lengths: logLengths(log), state: copyPlain(rest), attached };
 };
 
 /**
@@ -44,9 +47,9 @@ export class SnapshotStore {
   /** How many of `#later` lie before the window's start and are already thinned out. */
   #thinned = 0;
 
-  constructor(first: EngineState, frameId: number, window: SnapshotWindow) {
+  constructor(first: EngineState, frameId: number, window: SnapshotWindow, attached: unknown) {
     this.#window = window;
-    this.#first = snapshotOf(first, frameId);
+    this.#first = snapshotOf(first, frameId, attached);
   }
 
   get newest(): Snapshot {
@@ -62,8 +65,8 @@ export class SnapshotStore {
     return this.#later[this.#windowStartIndex()] ?? this.#first;
   }
 
-  take(state: EngineState, frameId: number): void {
-    this.#later.push(snapshotOf(state, frameId));
+  take(state: EngineState, frameId: number, attached: unknown): void {
+    this.#later.push(snapshotOf(state, frameId, attached));
     this.#thinOutBeforeWindow();
   }
 
@@ -73,8 +76,8 @@ export class SnapshotStore {
   }
 
   /** Starts over with the state after frame `frameId` as the first snapshot: every one taken so far is dropped. */
-  restart(state: EngineState, frameId: number): void {
-    this.#first = snapshotOf(state, frameId);
+  restart(state: EngineState, frameId: number, attached: unknown): void {
+    this.#first = snapshotOf(state, frameId, attached);
     this.#later.length = 0;
     this.#thinned = 0;
   }

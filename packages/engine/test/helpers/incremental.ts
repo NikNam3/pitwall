@@ -1,7 +1,7 @@
 // Every incremental calculator's test calls this: updating step by step must equal initialising from scratch (spec 7.3).
 import { feedId } from '@pitwall/domain';
 import { expect } from 'vitest';
-import { SessionRunner, situationOf, type EngineView, type FeedMetricsView, type Frame, type IncrementalCalculator } from '../../src/index.ts';
+import { SessionRunner, situationOf, type EngineView, type FeedMetricsView, type Frame, type IncrementalCalculator, type StepResult } from '../../src/index.ts';
 
 export const IDLE_FEED: FeedMetricsView = {
   framesClosed: 0,
@@ -27,10 +27,14 @@ export function expectIncrementalEqualsFromScratch<Acc, Out>(
   const runner = new SessionRunner({ feedId: feedId('test'), sessionUid: first.sessionUid, session: first.session });
 
   let acc: { value: Acc } | undefined;
-  frames.forEach((frame, i) => {
-    const { state, changed, delta } = runner.apply(frame);
+  let i = 0;
+  const check = ({ state, changed, delta }: StepResult) => {
     const view: EngineView = { state, activeFlagPhase: undefined, situation: situationOf(state), changed, delta, feed, outputs: new Map(), config: {} };
-    acc = acc === undefined || delta.truncated ? { value: calc.init(view) } : { value: calc.update(acc.value, delta, view) };
+    acc = acc === undefined || delta.rewound !== undefined ? { value: calc.init(view) } : { value: calc.update(acc.value, delta, view) };
     expect(calc.output(acc.value), `frame ${i}`).toEqual(calc.output(calc.init(view)));
-  });
+    i++;
+  };
+  // the frames before the first Participants wait in the runner (its identity wait); `end` applies what still waits
+  for (const frame of frames) runner.apply(frame, check);
+  runner.end(check);
 }

@@ -7,6 +7,7 @@ import { SessionRunner, SessionTracker, type Frame, type StepResult } from '../.
 import { ScenarioBuilder, type FrameDraft } from '../builders/index.ts';
 import type { DeepPartial } from '../builders/packet.ts';
 import { initFor } from '../support/run.ts';
+import { runAll } from '../support/runner.ts';
 
 /** Session time and wall time per frame unless a beat says otherwise, in ms. */
 export const STEP = 16;
@@ -63,7 +64,7 @@ export const beats = (n: number, make: (k: number) => Beat = () => ({})): Beat[]
 /** A runner over `frames` and every step's result. */
 export function run(frames: Frame[]): { runner: SessionRunner; results: StepResult[] } {
   const runner = new SessionRunner(initFor(frames));
-  return { runner, results: frames.map((f) => runner.apply(f)) };
+  return { runner, results: runAll(runner, frames) };
 }
 
 // Events as the game sends them.

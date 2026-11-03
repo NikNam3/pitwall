@@ -14,13 +14,14 @@ import {
 } from '../../src/index.ts';
 import { IDLE_FEED } from '../helpers/incremental.ts';
 import { arbRace, NO_PHASES, raceFrames } from '../support/arb-race.ts';
+import { applyOne } from '../support/runner.ts';
 import { input, quick, sched } from '../support/scheduler.ts';
 
 // Quick and incremental calculators over real frames: every frame, a rate, an event cadence and a dependent.
 const lapCount: IncrementalCalculator<number, number> = {
   kind: 'incremental', id: 'lapCount', reads: ['laps'], cadence: 'frame',
   init: (v) => v.state.history.laps.length,
-  update: (acc, d) => acc + d.after.laps - d.before.laps,
+  update: (acc, d) => acc + (d.after.laps ?? 0) - (d.before.laps ?? 0),
   output: (acc) => acc,
 };
 const calcs = (): Calculator[] => [
@@ -31,7 +32,7 @@ const calcs = (): Calculator[] => [
     compute: (v) => (v.outputs.get('clock') as number) + (v.outputs.get('lapCount') as number) } as QuickCalculator<number>,
 ];
 const make = (onCalculatorRun?: <T>(id: CalculatorId, run: () => T) => T) => {
-  const s = new Scheduler(CalculatorRegistry.build(calcs()), onCalculatorRun === undefined ? undefined : { onCalculatorRun });
+  const s = new Scheduler(CalculatorRegistry.build(calcs()), { freezeOutputs: true, ...(onCalculatorRun && { onCalculatorRun }) });
   s.setNeeded(['sum', 'slow']);
   return s;
 };
@@ -48,8 +49,8 @@ describe('Scheduler onCalculatorRun', () => {
         const ra = runnerFor(frames);
         const rb = runnerFor(frames);
         for (const f of frames) {
-          const a = ra.apply(f);
-          const b = rb.apply(f);
+          const a = applyOne(ra, f);
+          const b = applyOne(rb, f);
           calls.length = 0;
           const withHook = hooked.run({ state: a.state, activeFlagPhase: undefined, situation: situationOf(a.state), changed: a.changed, delta: a.delta, feed: IDLE_FEED, config: {} });
           const without = plain.run({ state: b.state, activeFlagPhase: undefined, situation: situationOf(b.state), changed: b.changed, delta: b.delta, feed: IDLE_FEED, config: {} });
@@ -68,13 +69,14 @@ describe('Scheduler onCalculatorRun', () => {
     const s = make((id, run) => { seen.push(id); return run(); });
     const frames = raceFrames({ cars: 2, frames: 60, speeds: [30, 30, 30, 30, 30, 30], jitter: [0], truncation: [0], flashback: undefined, phases: NO_PHASES }).frames;
     const r = runnerFor(frames);
-    for (const f of frames) { const x = r.apply(f); s.run({ state: x.state, activeFlagPhase: undefined, situation: situationOf(x.state), changed: x.changed, delta: x.delta, feed: IDLE_FEED, config: {} }); }
+    for (const f of frames) { const x = applyOne(r, f); s.run({ state: x.state, activeFlagPhase: undefined, situation: situationOf(x.state), changed: x.changed, delta: x.delta, feed: IDLE_FEED, config: {} }); }
     expect(seen.filter((id) => id === 'lapCount').length).toBeGreaterThanOrEqual(2);
     expect(seen.filter((id) => id === 'lapCount').length % 2).toBe(0);
   });
 
   it('the hook receives the calculator work as a thunk and its return value is the calculator result', () => {
     const s = new Scheduler(CalculatorRegistry.build([quick('a'), quick('b', { compute: () => 'real' })]), {
+      freezeOutputs: true,
       onCalculatorRun: <T,>(id: CalculatorId, run: () => T): T => (id === 'a' ? (99 as T) : run()),
     });
     s.setNeeded(['a', 'b']);
@@ -84,6 +86,7 @@ describe('Scheduler onCalculatorRun', () => {
 
   it('an exception thrown inside the run propagates through the hook and is reported as a calculator error', () => {
     const s = new Scheduler(CalculatorRegistry.build([quick('a', { compute: () => { throw new Error('boom'); } }), quick('b')]), {
+      freezeOutputs: true,
       onCalculatorRun: (_id, run) => run(),
     });
     s.setNeeded(['a', 'b']);

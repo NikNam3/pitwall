@@ -1,6 +1,6 @@
 // `lap-classes` (spec 4): the one definition of which laps count. A function, imported by the analyses that use it.
 import type { LapRecord } from '@pitwall/domain';
-import type { DeepReadonly } from '@pitwall/engine';
+import type { DeepReadonly } from '@pitwall/engine/readers';
 
 export * from './config.ts';
 

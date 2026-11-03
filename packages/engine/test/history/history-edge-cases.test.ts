@@ -128,7 +128,7 @@ describe('mini-sector crossings', () => {
     const { st, results } = runScenario(new ScenarioBuilder({ cars: 1, stepMs: 100 }).session(session).frames(samples.length, (d) => {
       Object.assign(d.lapData.lapData[0]!, { currentLapNum: samples[d.index]![0], lapDistance: samples[d.index]![1] });
     }));
-    return { found: st.history.miniSectors.map(({ lap, segment, at }) => [lap, segment, at]), results };
+    return { found: st.history.crossings.map(({ lap, segment, at }) => [lap, segment, at]), results };
   };
 
   it('a lap wrap also crosses the boundaries that were left on the old lap', () => {

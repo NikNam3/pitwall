@@ -4,15 +4,12 @@ import { SessionRunner, type Frame, type StepResult } from '../../src/index.ts';
 import { arbRace, NO_PHASES, raceFrames, type RaceParams } from '../support/arb-race.ts';
 import { InvariantChecker } from '../support/invariants.ts';
 import { initFor } from '../support/run.ts';
+import { shown } from '../support/runner.ts';
 import { expectScheduledIncremental, underNeutralisation } from '../support/scheduler.ts';
 
 const run = (frames: Frame[], each?: (r: StepResult) => void) => {
   const runner = new SessionRunner(initFor(frames));
-  for (const f of frames) {
-    // applied whether or not `each` is given: an optional call skips evaluating its argument
-    const result = runner.apply(f);
-    each?.(result);
-  }
+  for (const f of frames) runner.apply(f, (result) => each?.(result));
   return runner;
 };
 const OPTS = { numRuns: 40 };
@@ -30,11 +27,12 @@ describe('engine invariants (spec 10.2)', () => {
     );
   });
 
+  // The log keeps the undone facts behind a void fact (C27): the state readers see is compared.
   it('a flashback (FLBK, or frameId going back) yields the state of a run that never had the discarded frames', () => {
     fc.assert(
       fc.property(arbRace, (p) => {
         const { frames, reference } = raceFrames(p);
-        expect(run(frames).state).toEqual(run(reference).state);
+        expect(shown(run(frames).state)).toEqual(shown(run(reference).state));
       }),
       OPTS,
     );

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { FeedId } from '@pitwall/domain';
 import { PacketId, type Packet } from '@pitwall/protocol';
 import { FrameAssembler, type Frame } from '../../src/index.ts';
+import { buildPacket } from '../builders/index.ts';
 import { menuGroup, stub } from './stub-packet.ts';
 
 const feedId = 'test' as FeedId;
@@ -158,5 +159,25 @@ describe('FrameAssembler', () => {
     expect(fs[1]!.events.map((e) => e.details.code)).toEqual(['SEND']);
     expect(fs[1]!.sessionHistory[0]!.header.sessionUid).toBe(0n);
     expect(a.metrics.latePackets).toBe(0);
+  });
+});
+
+describe('FrameAssembler: the flashback report', () => {
+  /** An FLBK event of frame `frameId` back to frame 7 at 0.5 s. */
+  const flbk = (frameId: number, sessionTimeS: number) =>
+    buildPacket('event', {
+      header: { sessionUid: 7n, sessionTime: sessionTimeS, frameIdentifier: frameId, overallFrameIdentifier: frameId },
+      details: { code: 'FLBK', flashbackFrameIdentifier: 7, flashbackSessionTime: 0.5 },
+    });
+
+  it("a frame with an FLBK event carries its target: the game's frame id and session time in ms", () => {
+    const a = new FrameAssembler({ feedId });
+    pushAll(a, [...menuGroup(10, 1.0), flbk(10, 1.0)]);
+    expect(a.flush()[0]!.flashback).toEqual({ targetFrameId: 7, targetSessionTime: 500 });
+  });
+  it('a frame without one carries none', () => {
+    const a = new FrameAssembler({ feedId });
+    pushAll(a, [...menuGroup(10, 1.0), stub('event', 10, 1.0, { code: 'SSTA' })]);
+    expect(a.flush()[0]!.flashback).toBeUndefined();
   });
 });

@@ -1,6 +1,6 @@
 // A car's laps and those of its current stint, one record per lap: the one rule for the analyses that rate or average them.
 import { currentLaps, type CarId, type LapRecord, type StintRecord } from '@pitwall/domain';
-import type { EngineView } from '@pitwall/engine';
+import type { EngineView } from '@pitwall/engine/readers';
 
 type History = Pick<EngineView['state']['history'], 'laps' | 'stints'>;
 

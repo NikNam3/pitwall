@@ -3,6 +3,8 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   test: {
     passWithNoTests: true,
+    // C84: a fresh, empty data dir per run; runs once for every project.
+    globalSetup: ['./vitest.global-setup.ts'],
     projects: [
       'packages/*/vitest.config.ts',
       'apps/*/vitest.config.ts',

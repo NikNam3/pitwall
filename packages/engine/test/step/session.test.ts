@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { FeedId } from '@pitwall/domain';
 import { initialState, step } from '../../src/index.ts';
-import { sessionKindOf } from '../../src/step/session.ts';
+import { sessionKindOf } from '../../src/step/state-update/session.ts';
 import { buildPacket, ScenarioBuilder } from '../builders/index.ts';
 
 const feedId = 'test' as FeedId;
@@ -33,7 +33,8 @@ describe('session state', () => {
     const st = initialState({ feedId, sessionUid: 0xb3cd07e2790bdcben, session: buildPacket('session', { header: { playerCarIndex: 4, frameIdentifier: 9 } }) });
     expect(st.cars.map((c) => c.id)).toEqual([...Array(22).keys()]);
     expect([st.feedId, st.sessionUid, st.playerCar, st.teammateCar, st.lastFrameId]).toEqual([feedId, '12956020372289608894', 4, undefined, 9]);
-    expect(Object.values(st.history).every((h) => h.length === 0)).toBe(true);
+    const { spans, ...lists } = st.history;
+    expect([...Object.values(lists), ...Object.values(spans)].every((h) => h.length === 0)).toBe(true);
     expect(st.cars[4]!.ownCar).toEqual({ motionEx: nr, setup: nr, brakeBiasPct: nr });
     expect([st.cars[3]!.ownCar, st.cars[3]!.energy.fuel, st.cars[3]!.active]).toEqual([undefined, nr, false]);
   });

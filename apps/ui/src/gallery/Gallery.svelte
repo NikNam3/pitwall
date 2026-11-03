@@ -20,8 +20,10 @@
   type Props = {
     /** Moment name to its values; the default is every file `pnpm gen:moments` wrote. */
     moments?: Record<string, MomentValues> | undefined;
+    /** The widgets whose sections are drawn; the default is every widget. Frame, kit and shell cells are always drawn. */
+    widgets?: readonly string[] | undefined;
   };
-  let { moments: given }: Props = $props();
+  let { moments: given, widgets: only }: Props = $props();
 
   const files = import.meta.glob<{ default: Declared }>('../widgets/*/gallery.ts', { eager: true });
   const momentFiles = import.meta.glob<MomentValues>('../../../../test-support/moments/*.json', { eager: true, import: 'default' });
@@ -39,6 +41,7 @@
   }
 
   const sections = WIDGETS.flatMap((widget) => {
+    if (only !== undefined && !only.includes(widget.decl.name)) return [];
     const entry = entryOf(widget.decl.name);
     return entry === undefined ? [] : [{ widget, cells: widgetCells(widget, entry, THEMES), entry }];
   });

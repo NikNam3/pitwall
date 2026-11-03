@@ -1,6 +1,6 @@
 import type { SessionInfo } from '@pitwall/contracts';
 import type { SessionState } from '@pitwall/domain';
-import type { QuickCalculator } from '@pitwall/engine';
+import type { QuickCalculator } from '@pitwall/engine/readers';
 import { bindState, defineFeature } from '../feature.ts';
 
 const sessionInfo: QuickCalculator<SessionInfo> = {

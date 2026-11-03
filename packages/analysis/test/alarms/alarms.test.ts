@@ -1,5 +1,5 @@
 import { carId, known, unknown, type CarBands, type DamageState, type ErsState, type FuelState, type Insight, type TyreWear } from '@pitwall/domain';
-import { InsightBook, type EngineView, type History } from '@pitwall/engine';
+import { InsightBook, type EngineView, type Projection } from '@pitwall/engine';
 import { describe, expect, it } from 'vitest';
 import { ALARMS } from '../../src/alarms/index.ts';
 import { alarmsCalculator } from '../../src/alarms/calculator.ts';
@@ -90,7 +90,7 @@ const outputsOf = (perCar: ReturnType<typeof outputsFor>[]): ReadonlyMap<string,
   ]);
 };
 
-type ViewOpts = { warnings?: number; lap?: number; history?: Partial<History>; config?: EngineView['config']; playerCar?: number };
+type ViewOpts = { warnings?: number; lap?: number; history?: Partial<Projection>; config?: EngineView['config']; playerCar?: number };
 const viewWith = (parts: Parts, o: ViewOpts = {}): EngineView =>
   engineView({
     cars: [carState({ timing: { cornerCuttingWarnings: o.warnings ?? 0, lap: o.lap ?? 1 } })],

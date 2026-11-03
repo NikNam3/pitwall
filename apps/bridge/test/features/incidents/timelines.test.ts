@@ -1,6 +1,6 @@
 // `incidents` stays incremental = from scratch where the session time is no timeline (spec 3.3): across a
 // neutralisation the status never confirms (dropped 3 s after its SCAR; the dropping step discards a timeline,
-// `delta.truncated`, review 2 B2), and across an unexplained mid-race fall of the clock (the engine keeps its race clock
+// `delta.rewound`, review 2 B2), and across an unexplained mid-race fall of the clock (the engine keeps its race clock
 // monotonic by an offset, user ruling 2026-10-30). Builder frames, the engine and the calculator under a scheduler that
 // restarts on a truncated step, as the bridge's does. The player laps a 1000 m track in 25 frames and stands still for
 // 2.3 s in lap 5: a time loss.
@@ -36,17 +36,18 @@ const frames = (n: number, beat: (k: number) => Beat = () => ({})): Frame[] =>
 /** Every scheduled output of `incidents`, each with a fresh `init` over the same view. */
 function incidentsRuns(all: Frame[]): Array<{ frame: number; scheduled: IncidentsOutput; fresh: IncidentsOutput }> {
   const runner = new SessionRunner(initFor(all));
-  const scheduler = new Scheduler(CalculatorRegistry.build([incidentsCalculator]));
+  const scheduler = new Scheduler(CalculatorRegistry.build([incidentsCalculator]), { freezeOutputs: true });
   scheduler.setNeeded([INCIDENTS]);
-  return all.flatMap((f, frame) => {
-    const r = runner.apply(f);
-    if (r.delta.truncated) scheduler.reset();
+  const runs: Array<{ frame: number; scheduled: IncidentsOutput; fresh: IncidentsOutput }> = [];
+  all.forEach((f, frame) => runner.apply(f, (r) => {
+    if (r.delta.rewound !== undefined) scheduler.reset();
     const input = { state: r.state, activeFlagPhase: activeFlagPhaseOf(r.state), situation: situationOf(r.state), changed: r.changed, delta: r.delta, feed: IDLE_FEED, config: {} };
     const { ran, outputs } = scheduler.run(input);
-    if (!ran.includes(INCIDENTS)) return [];
+    if (!ran.includes(INCIDENTS)) return;
     const fresh = incidentsCalculator.output(incidentsCalculator.init({ ...input, outputs: new Map() }));
-    return [{ frame, scheduled: outputs.get(INCIDENTS) as IncidentsOutput, fresh }];
-  });
+    runs.push({ frame, scheduled: outputs.get(INCIDENTS) as IncidentsOutput, fresh });
+  }));
+  return runs;
 }
 
 /** Scheduled and fresh feeds are equal on every run, and the last feed has the player's time loss. */

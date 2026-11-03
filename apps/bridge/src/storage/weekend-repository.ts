@@ -1,5 +1,5 @@
 import { driverKeyString, type CarId, type DriverKey, type FlagPhase, type LapRecord, type PitStopRecord, type RaceEvent, type SessionUid, type StintRecord } from '@pitwall/domain';
-import { unknownLapEnd, type WeekendContext } from '@pitwall/engine';
+import { unknownLapEnd, type WeekendContext } from '@pitwall/engine/readers';
 import type { Db, SessionKey, SessionRow } from './db.ts';
 
 type SessionDbRow = {
@@ -135,7 +135,7 @@ export class WeekendRepository {
       trackId: row.track_id,
       startedAt: row.started_at,
       pwrecPath: row.pwrec_path,
-      settings: JSON.parse(row.settings) as Record<string, number>,
+      settings: JSON.parse(row.settings) as SessionRow['settings'],
       drivers: this.driversOf(keyOf(row)),
     };
   }

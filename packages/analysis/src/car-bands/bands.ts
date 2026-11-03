@@ -1,6 +1,6 @@
 // The bands of `car-bands` and the lap they judge, shared with `alarms`, which judges the last completed lap's aggregates against them.
 import type { BandState, CarId, LapRecord, VisualCompound } from '@pitwall/domain';
-import type { DeepReadonly } from '@pitwall/engine';
+import type { DeepReadonly } from '@pitwall/engine/readers';
 import type { CAR_BANDS_CONFIG } from './config.ts';
 
 /** One band, in the channel's unit (°C or psi). */

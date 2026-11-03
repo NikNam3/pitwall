@@ -1,4 +1,4 @@
-import { defineConfig } from '@pitwall/engine';
+import { defineConfig } from '@pitwall/engine/readers';
 import { defineFeature } from '../feature.ts';
 
 /**

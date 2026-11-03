@@ -28,7 +28,7 @@ module.exports = {
       name: 'ui-tests-only-contracts-domain-engine-state',
       severity: 'error',
       from: { path: '^apps/ui/test/' },
-      to: { path: '^(packages|apps)/', pathNot: '^(apps/ui|packages/contracts|packages/domain|packages/engine/src/(state|step/initial-state\\.ts))/?' },
+      to: { path: '^(packages|apps)/', pathNot: '^(apps/ui|packages/contracts|packages/domain|packages/engine/src/(state|step/state-update/initial\\.ts))/?' },
     },
     {
       name: 'ui-widgets-isolated',
@@ -91,6 +91,44 @@ module.exports = {
       severity: 'error',
       from: { path: '^(packages|apps)/([^/]+)/src/' },
       to: { dependencyTypes: ['local'], path: '^(packages|apps)/', pathNot: '^$1/$2/' },
+    },
+    {
+      name: 'log-only-writers-and-projection',
+      comment:
+        'C28: readers see the projection, never the log. Only the projection, the runner, step (it hands the recorders their LogWriter), the machine (situations/run.ts appends the spans, C22), the storage writer and the log tests import log/log.ts.',
+      severity: 'error',
+      from: {
+        pathNot: '^packages/engine/src/(log/projection\\.ts|runner/|step/step\\.ts$|situations/run\\.ts$)|^apps/bridge/src/storage/|^packages/engine/test/log/',
+      },
+      to: { path: '^packages/engine/src/log/log\\.ts$' },
+    },
+    {
+      name: 'protocol-only-in-the-adapter',
+      comment:
+        'C6: in the engine, protocol types are imported only by frame assembly (frame/), step 0 and step 1 (step/state-update/, signals/) and the machine (situations/); the situation tracker (history/situations/) holds step 0 and the machine\'s slot until Tasks 7 and 9 move them.',
+      severity: 'error',
+      from: { path: '^packages/engine/src/', pathNot: '^packages/engine/src/(frame|step/state-update|signals|situations|history/situations)/' },
+      to: { path: '^packages/protocol/' },
+    },
+    {
+      name: 'readers-never-reach-the-game',
+      comment:
+        'C6: the recorders, the log and projection, the scheduler and calculator types, the analyses, the bridge\'s storage, hub, features and publishing, and the UI see only domain and contracts types: they never reach a protocol type or the frame, directly or through another module (readers import the engine as `@pitwall/engine/readers`). A packet value a recorder needs becomes a value in step 1 first. Tests stay out.',
+      severity: 'error',
+      from: {
+        path: '^packages/engine/src/(recorders|log|calc)/|^packages/engine/src/readers\\.ts$|^packages/analysis/src/|^apps/bridge/src/(storage|hub|features)/|^apps/bridge/src/pipeline/(topic-publisher|session-storage)\\.ts$|^apps/ui/src/',
+      },
+      to: { path: '^packages/protocol/|^packages/engine/src/frame/frame\\.ts$', reachable: true },
+    },
+    {
+      name: 'signals-only-for-the-machine',
+      comment:
+        'C13: the signals module is read only by the machine (situations/); step 1 (step/state-update/) writes it, step.ts hands it over and the engine state holds it. The signals tests read it too.',
+      severity: 'error',
+      from: {
+        pathNot: '^packages/engine/src/(signals|situations|step/state-update)/|^packages/engine/src/(step/step|state/engine-state)\\.ts$|^packages/engine/test/',
+      },
+      to: { path: '^packages/engine/src/signals/' },
     },
     { name: 'no-circular', severity: 'error', from: {}, to: { circular: true } },
     {

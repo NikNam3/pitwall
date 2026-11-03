@@ -8,10 +8,10 @@ import { carState, engineView } from '../../../../../test-support/builders/index
 const calculator = carsOverview.calculators[0] as QuickCalculator<CarOverview[]>;
 
 const stop = (id: number, lap: number): PitStopRecord => ({
-  carId: carId(id), lap, pitLaneEntry: 0, pitLaneExit: 0, pitLaneTimeMs: 20_000, stationaryTimeMs: 2_500, flag: 'green', penaltyServed: false,
+  carId: carId(id), lap, pitLaneEntry: 0, pitLaneExit: 0, pitLaneTimeMs: 20_000, stationaryTimeMs: 2_500, flag: 'green', penaltyServed: false, frame: 0,
 });
 const stint = (id: number, visualCompound: VisualCompound): StintRecord => ({
-  carId: carId(id), firstLap: 1, lastLap: 10, actualCompound: 'C3', visualCompound, tyreAgeAtFitting: 0,
+  carId: carId(id), firstLap: 1, lastLap: 10, actualCompound: 'C3', visualCompound, tyreAgeAtFitting: 0, frame: 0,
 });
 
 /** Car 0 with the game's stop count and live compound, over the given records. */

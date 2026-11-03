@@ -1,6 +1,6 @@
 // Test races for `gaps`: mini-sector histories with car states that agree with them (position, lap, total distance).
 import { carId, MINI_SECTORS, type CarId, type CarState, type FlagPhase, type MiniSectorCrossing, type ResultStatus, type SessionKind } from '@pitwall/domain';
-import { historyLengths, type EngineView } from '@pitwall/engine';
+import { projectionLengths, type EngineView } from '@pitwall/engine';
 import { carState, crossings, engineView, event } from '../../../../test-support/builders/index.ts';
 import { gapsCalculator } from '../../src/gaps/calculator.ts';
 import type { GapsOutput } from '../../src/gaps/index.ts';
@@ -27,7 +27,7 @@ export function offsetRace(offsetsMs: number[], laps: number, paceMs = 90_000): 
   const list: MiniSectorCrossing[] = [];
   offsetsMs.forEach((offset, i) => {
     for (let n = 1; n <= laps; n++) list.push(...crossings(carId(i), n, paceMs, offset + (n - 1) * paceMs));
-    list.push({ carId: carId(i), lap: laps + 1, segment: 0, at: offset + laps * paceMs });
+    list.push({ carId: carId(i), lap: laps + 1, segment: 0, at: offset + laps * paceMs, frame: 0 });
   });
   return byTime(list);
 }
@@ -88,7 +88,7 @@ export const viewOf = (
 ): EngineView =>
   engineView({
     cars: cars ?? carsFor(miniSectors),
-    history: { miniSectors, events: lightsOutAt === null ? [] : [event({ kind: 'lightsOut', at: lightsOutAt })], flagPhases },
+    history: { crossings: miniSectors, events: lightsOutAt === null ? [] : [event({ kind: 'lightsOut', at: lightsOutAt })], flagPhases },
     activeFlagPhase,
     playerCar,
     config,
@@ -99,10 +99,10 @@ export const viewOf = (
 export const run = (view: EngineView): GapsOutput => gapsCalculator.output(gapsCalculator.init(view));
 
 /** The delta from one view's history to the next one's. */
-export const deltaOf = (from: EngineView, to: EngineView, truncated = false) => ({
-  before: historyLengths(from.state.history),
-  after: historyLengths(to.state.history),
-  truncated,
+export const deltaOf = (from: EngineView, to: EngineView, rewound = false) => ({
+  before: projectionLengths(from.state.history),
+  after: projectionLengths(to.state.history),
+  ...(rewound ? { rewound: { frameId: -1, at: 0 } } : {}),
 });
 
 /** Turns -0 into 0 so `toEqual` compares the number, not its sign bit. */

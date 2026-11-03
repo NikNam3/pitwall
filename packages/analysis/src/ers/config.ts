@@ -1,5 +1,5 @@
 // Defaults of `ers` (spec Appendix B).
-import { defineConfig } from '@pitwall/engine';
+import { defineConfig } from '@pitwall/engine/readers';
 
 export const ERS_CONFIG = defineConfig('ers', {
   /** Per-lap MGU-K deploy limit, 4 MJ. Source: FIA Formula 1 Technical Regulations 2014–2025 (ES to MGU-K), used by F1 25. */

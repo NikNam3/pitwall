@@ -1,7 +1,8 @@
-import { copyPlain, type DeepReadonly, type EngineView } from '@pitwall/engine';
+import { copyPlain, type DeepReadonly } from '@pitwall/engine/readers';
+import type { LiveView } from './feature.ts';
 
-/** The cars as a calculator sees them: every slot of the game, read-only. */
-export type ViewCars = EngineView['state']['cars'];
+/** One car slot of the live state, read-only. */
+type LiveCar = LiveView['cars'][number];
 
 /** The car slot a subscription asks for: `params.carId` must be an own integer property in `0 .. carCount - 1`. */
 const carIdOf = (params: unknown, carCount: number): number | undefined => {
@@ -11,14 +12,15 @@ const carIdOf = (params: unknown, carCount: number): number | undefined => {
 };
 
 /**
- * A `select` for the `{ carId }` topics that read the engine's car slots: copies (`copyPlain`, the engine state is plain
- * data) what `pick` takes from the requested car, or gives `undefined` for params that do not name a car. Everything
- * but `carId` in the params is ignored; the params are never changed. For an output keyed by car id, see `selectCar`.
+ * A `bindLive` select for the `{ carId }` topics that read the live state's car slots: copies (`copyPlain`, the engine
+ * state is plain data and changes in place) only what `pick` takes from the requested car, or gives `undefined` for
+ * params that do not name a car. Everything but `carId` in the params is ignored; the params are never changed. For a
+ * calculator output keyed by car id, see `selectCar`.
  */
 export const selectCarSlot =
-  <T>(pick: (car: ViewCars[number]) => DeepReadonly<NoInfer<T>>) =>
-  (cars: ViewCars, params: object): T | undefined => {
-    const carId = carIdOf(params, cars.length);
-    const car = carId === undefined ? undefined : cars[carId];
+  <T>(pick: (car: LiveCar) => DeepReadonly<NoInfer<T>>) =>
+  (live: LiveView, params: object): T | undefined => {
+    const carId = carIdOf(params, live.cars.length);
+    const car = carId === undefined ? undefined : live.cars[carId];
     return car === undefined ? undefined : (copyPlain(pick(car)) as T);
   };

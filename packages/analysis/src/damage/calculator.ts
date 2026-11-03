@@ -11,7 +11,7 @@ import {
   type DamageState,
   type LapRecord,
 } from '@pitwall/domain';
-import type { EngineView, IncrementalCalculator } from '@pitwall/engine';
+import type { EngineView, IncrementalCalculator } from '@pitwall/engine/readers';
 import { LAP_CLASSES_CONFIG } from '../lap-classes/index.ts';
 import { PACE_CONFIG } from '../pace/index.ts';
 import { emptyDamageJumps, finishJump, foldDamageJumps, repairedSince, type DamageJumpFold } from '../shared/damage-jumps.ts';
@@ -94,7 +94,7 @@ export const damageCalculator: IncrementalCalculator<Acc, DamageOutput> = {
   reads: ['condition', 'tyres', 'events', 'laps'],
   cadence: { hz: 4 },
   init,
-  update: (acc, delta, view) => (delta.truncated ? init(view) : fold(acc, view)),
+  update: (acc, delta, view) => (delta.rewound !== undefined ? init(view) : fold(acc, view)),
   output(acc) {
     const out: DamageOutput = {};
     for (const [id, { state, lap }] of acc.now) {

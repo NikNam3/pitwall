@@ -1,8 +1,8 @@
 import type { FlagPhase, Insight, OpenSessionPhase, SessionTime } from '@pitwall/domain';
 import type { FrameMetrics } from '../frame/metrics.ts';
-import type { HistoryDelta } from '../history/delta.ts';
+import type { HistoryDelta } from '../log/types.ts';
 import type { EngineState } from '../state/engine-state.ts';
-import type { ChangeTag } from '../step/step.ts';
+import type { ChangeTag } from '../step/types.ts';
 import type { DeepReadonly } from '../util/deep-readonly.ts';
 
 export type CalculatorId = string;
@@ -29,8 +29,11 @@ export type FeedMetricsView = FrameMetrics & {
 
 /** Everything a calculator may look at: read-only. */
 export type EngineView = {
-  /** The settled state; the in-progress `open` trackers are not part of the view. */
-  state: DeepReadonly<Omit<EngineState, 'open'>>;
+  /**
+   * The settled state; the in-progress `open` trackers, the log and the signals are not part of the view: `history` is
+   * the projection (C28), and only the machine reads signals (C13).
+   */
+  state: DeepReadonly<Omit<EngineState, 'open' | 'log' | 'signals'>>;
   /** The neutralised phase in progress, if any; it moves to `history.flagPhases` when it ends. */
   activeFlagPhase: DeepReadonly<Omit<FlagPhase, 'end' | 'endLeaderLap'>> | undefined;
   /** The situation tracker's open state: the session phase in progress (closed ones are `history.sessionPhases`) and whether the session is paused. */

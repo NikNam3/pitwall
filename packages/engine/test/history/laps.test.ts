@@ -24,7 +24,7 @@ describe('laps', () => {
     expect(st.history.laps).toEqual([{ carId: 0, lapNumber: 1, lapTimeMs: 90_500, sectorTimesMs: [30_000, 31_000, 29_500],
       valid: { lap: true, sectors: [true, true, true] }, actualCompound: 'C3', visualCompound: 'medium', tyreAgeAtStart: 3,
       fuelAtStartKg: known(50, 0), fuelAtEndKg: known(48.5, end), scShare: 0, vscShare: 0, inLap: false, outLap: false,
-      positionAtEnd: 1, status: 'provisional', completedAt: end, ...lapEnd }]);
+      positionAtEnd: 1, status: 'provisional', completedAt: end, ...lapEnd, frame: 4 }]);
     expect(results.map((r) => r.changed.has('laps'))).toEqual([false, false, false, true, false]);
   });
   it('a lost frame cannot swallow a lap: without the frame where the lap number changes there is still exactly one lap', () => {
@@ -44,6 +44,28 @@ describe('laps', () => {
       { carId: 0, lapNumber: 1, field: 'lapTimeMs', provisional: 90_500, confirmed: 90_520 },
       { carId: 0, lapNumber: 1, field: 'sector2Ms', provisional: 31_000, confirmed: 31_010 }]);
     expect(results[6]!.corrections).toEqual([]);
+  });
+  it('a confirmed lap names the provisional it supersedes by its id (C21, C25); both stay in the log and the projection', () => {
+    const history = { carIdx: 0, numLaps: 2, lapHistoryData: [
+      { lapTimeInMs: 90_520, sector1TimeMs: 30_000, sector2TimeMs: 31_010, sector3TimeMs: 29_509, lapValidBitFlags: 0b1111 }, { lapValidBitFlags: 0b1111 }] };
+    const { st } = runScenario(lapOne().frames(2, (d) => { d.add('sessionHistory', history); }));
+    expect(st.history.laps.map((l) => [l.status, l.supersedes])).toEqual([['provisional', undefined], ['confirmed', { list: 'laps', index: 0 }]]);
+    expect(st.log.laps).toEqual(st.history.laps);
+    expect(st.history.laps[0]).not.toHaveProperty('supersedes');
+  });
+  it('the confirmed lap names its own car’s provisional, wherever the other cars’ laps put it in the list', () => {
+    // car 1 completes lap 1 on frame 2, car 0 on frame 3: car 0's provisional is the list's second lap (id 1)
+    const b = new ScenarioBuilder({ cars: 2 }).frames(5, (d) => {
+      if (d.index >= 2) Object.assign(d.lapData.lapData[1]!, { currentLapNum: 2, lastLapTimeInMs: 88_000 });
+      if (d.index >= 3) Object.assign(car0(d), { currentLapNum: 2, lastLapTimeInMs: 90_500 });
+      if (d.index === 4) d.add('sessionHistory', { carIdx: 0, numLaps: 2, lapHistoryData: [{ lapTimeInMs: 90_500, lapValidBitFlags: 0b1111 }, { lapValidBitFlags: 0b1111 }] });
+    });
+    const { st } = runScenario(b);
+    expect(st.history.laps.map((l) => [l.carId, l.status, l.supersedes])).toEqual([
+      [1, 'provisional', undefined],
+      [0, 'provisional', undefined],
+      [0, 'confirmed', { list: 'laps', index: 1 }],
+    ]);
   });
   it('a confirmed lap keeps the time it was completed, not the time Session History confirmed it', () => {
     const history = { carIdx: 0, numLaps: 2, lapHistoryData: [

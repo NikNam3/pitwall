@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { SessionRunner, type Frame, type WeekendContext } from '../../src/index.ts';
 import { ScenarioBuilder } from '../builders/index.ts';
 import { initFor } from '../support/run.ts';
-import { after, flashbacks, runAll, STEP, timeline } from '../support/runner.ts';
+import { after, applyOne, flashbacks, runAll, shown, STEP, timeline } from '../support/runner.ts';
 
 // an FLBK event packet with target frame 200 (t = 3200 ms), as the decoder yields it
 const flbk200 = (() => {
@@ -34,7 +34,7 @@ describe('SessionRunner retention', () => {
     const back = (target: number) => {
       const r = new SessionRunner(initFor(frames));
       runAll(r, frames);
-      return r.apply({ ...frames[target + 1]!, overallFrameId: 901 }).flashback?.targetSessionTime;   // frameId drop, no FLBK
+      return applyOne(r, { ...frames[target + 1]!, overallFrameId: 901 }).flashback?.targetSessionTime;   // frameId drop, no FLBK
     };
     expect(back(605)).toBe(600_000);                                                   // the first snapshot of the 600–630 s slot
     expect(back(895)).toBe(895_000);
@@ -52,9 +52,9 @@ describe('SessionRunner retention', () => {
     const original = timeline(300, [100, 250]);
     const driverKey = { kind: 'ai', driverId: 1 } as const;
     const weekend: WeekendContext = { weekendId: 'w', driverKey, sessions: [{ sessionUid: '1' as SessionUid, sessionType: 1, drivers: [{ driverKey, laps: [], stints: [], pitStops: [] }] }] };
-    const r = new SessionRunner({ ...initFor(original), weekend });
+    const r = new SessionRunner(initFor(original), { contextFor: () => weekend });
     runAll(r, original);
-    expect(r.apply({ ...original[201]!, overallFrameId: 300 }).delta.truncated).toBe(true);
+    expect(applyOne(r, { ...original[201]!, overallFrameId: 300 }).delta.rewound).toBeDefined();
     expect(r.state.weekend).toBe(weekend);
   });
 });
@@ -66,7 +66,7 @@ describe('SessionRunner: one flashback, reported in more than one way', () => {
   const reference = () => {
     const b = new SessionRunner(initFor(original));
     runAll(b, fork);
-    return b.state;
+    return shown(b.state);
   };
 
   it('FLBK in a frame that still carries the old high frameId: one rewind', () => {
@@ -76,7 +76,7 @@ describe('SessionRunner: one flashback, reported in more than one way', () => {
     runAll(a, original);
     const results = runAll(a, [stale, ...after(fork, 201, 301)]);
     expect(flashbacks(results)).toBe(1);
-    expect(a.state).toEqual(reference());
+    expect(shown(a.state)).toEqual(reference());
   });
 
   it('frameId drop at T+1, then FLBK at T+2: one rewind, frame T+1 kept', () => {
@@ -86,7 +86,7 @@ describe('SessionRunner: one flashback, reported in more than one way', () => {
     runAll(a, original);
     const results = runAll(a, continuation);
     expect([flashbacks(results), results[0]!.flashback?.targetFrameId]).toEqual([1, 200]);
-    expect(a.state).toEqual(reference());
+    expect(shown(a.state)).toEqual(reference());
   });
 
   it('FLBK in a frame whose own id is at or below the target: one rewind, replayed only up to that frame', () => {
@@ -99,6 +99,6 @@ describe('SessionRunner: one flashback, reported in more than one way', () => {
     expect(flashbacks(results)).toBe(1);
     const b = new SessionRunner(initFor(original));
     runAll(b, early);
-    expect(a.state).toEqual(b.state);
+    expect(shown(a.state)).toEqual(shown(b.state));
   });
 });

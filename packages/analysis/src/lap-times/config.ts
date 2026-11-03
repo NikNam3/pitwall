@@ -1,5 +1,5 @@
 // Defaults of `lap-times` (spec Appendix B).
-import { defineConfig } from '@pitwall/engine';
+import { defineConfig } from '@pitwall/engine/readers';
 
 export const LAP_TIMES_CONFIG = defineConfig('lap-times', {
   /** Cars knocked out in Q1. Source: F1 qualifying format with 20 cars (FIA Sporting Regulations). */

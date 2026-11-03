@@ -1,6 +1,6 @@
 import { known, unknown } from '@pitwall/domain';
 import type { Known, Ms } from '@pitwall/domain';
-import type { QuickCalculator } from '@pitwall/engine';
+import type { QuickCalculator } from '@pitwall/engine/readers';
 import { SESSION_REMAINING } from './index.ts';
 import type { SessionRemaining } from './index.ts';
 

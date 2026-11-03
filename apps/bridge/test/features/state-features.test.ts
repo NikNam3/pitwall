@@ -1,7 +1,7 @@
 // apps/bridge/test/features/state-features.test.ts
 import { describe, expect, it } from 'vitest';
 import type { CarState } from '@pitwall/domain';
-import type { QuickCalculator } from '@pitwall/engine';
+import type { EngineView, QuickCalculator } from '@pitwall/engine';
 import type { Feature, TopicBinding } from '../../src/features/feature.ts';
 import sessionInfo from '../../src/features/session-info/register.ts';
 import carsOverview from '../../src/features/cars-overview/register.ts';
@@ -15,8 +15,12 @@ import { viewFrom } from '../helpers/view.ts';
 
 const view = viewFrom(new ScenarioBuilder({ sessionUid: 1896528710553860228n, cars: 3, player: 2 }).session().participants().frames(3, () => {}).build());
 const out = (f: Feature, id: string) => (f.calculators.find((c) => c.id === id) as QuickCalculator<unknown>).compute(view);
+/** What a `bindLive` binding holds: the select the hub runs on the feed's live state at flush (C55). */
+type LiveBinding = { topic: string; fromLive: (live: EngineView['state'], params: object) => unknown };
+/** The value of `topic` for `params` as `f` binds it: from the live state, or from a calculator's output. */
 const select = (f: Feature, topic: string, params: object) => {
-  const b = f.topics.find((t) => t.topic === topic) as Extract<TopicBinding, { from: string }>;
+  const b = f.topics.find((t) => t.topic === topic) as unknown as LiveBinding | Extract<TopicBinding, { from: string }>;
+  if ('fromLive' in b) return b.fromLive(view.state, params);
   return b.select ? b.select(out(f, b.from), params) : out(f, b.from);
 };
 
@@ -59,6 +63,21 @@ describe('base state features', () => {
     expect(select(carTelemetry, 'car.telemetry', { carId: 2 })).toEqual({ motion: car.motion, dynamics: car.dynamics });
     expect(select(carTelemetry, 'car.telemetry', { carId: 99 })).toBeUndefined();
   });
+  it('car.telemetry copies only the motion and the dynamics, so nothing it sends is the engine state', () => {
+    const car = view.state.cars[2]!;
+    const telemetry = select(carTelemetry, 'car.telemetry', { carId: 2 }) as { motion: object; dynamics: object };
+    expect(Object.keys(telemetry).sort()).toEqual(['dynamics', 'motion']);
+    expect(telemetry.motion).not.toBe(car.motion);
+    expect(telemetry.dynamics).not.toBe(car.dynamics);
+    expect((telemetry.motion as typeof car.motion).position).not.toBe(car.motion.position);
+  });
+  // C55, C54: the two per-car topics publish the live state as it is (core topics); no calculator copies the cars per frame.
+  it('car.detail and car.telemetry are bound with bindLive and run no calculator', () => {
+    expect(carDetail.calculators).toEqual([]);
+    expect(carTelemetry.calculators).toEqual([]);
+    expect(carDetail.topics).toEqual([{ topic: 'car.detail', fromLive: expect.any(Function) }]);
+    expect(carTelemetry.topics).toEqual([{ topic: 'car.telemetry', fromLive: expect.any(Function) }]);
+  });
   it('history and insights bindings', () => {
     expect(history.calculators).toEqual([]);
     expect(history.topics).toEqual(['laps', 'stints', 'pitStops', 'flagPhases', 'events'].map((k) => ({ topic: k, fromHistory: k })));
@@ -69,15 +88,13 @@ describe('base state features', () => {
 describe('what the features read (domain areas)', () => {
   const readsOf = (f: Feature, id: string) => (f.calculators.find((c) => c.id === id) as QuickCalculator<unknown>).reads;
   it.each([
-    ['car.telemetry', carTelemetry, 'cars.dynamics', ['dynamics']],
     ['session.info', sessionInfo, 'session.info', ['session', 'identity']],
     ['feed.status', feedStatus, 'feed.status', ['feed']],
   ] as const)('%s', (_, feature, id, reads) => {
     expect(readsOf(feature, id)).toEqual(reads);
   });
-  // `updatedAt` moves with every source, so these two may read more tags than they show fields of; never fewer.
+  // `updatedAt` moves with every source, so this one may read more tags than it shows fields of; never fewer.
   it.each([
-    ['car.detail', carDetail, 'cars.state', ['identity', 'timing', 'tyres', 'energy', 'condition', 'dynamics', 'ownCar', 'stints']],
     ['cars.overview', carsOverview, 'cars.overview', ['identity', 'timing', 'tyres', 'stints', 'pitStops']],
   ] as const)('%s reads at least the areas of its fields', (_, feature, id, reads) => {
     expect(readsOf(feature, id)).toEqual(expect.arrayContaining([...reads]));

@@ -1,6 +1,6 @@
 // `car-bands` (spec 5.4): every band channel of every active car against its band. Stateless (ruling R1).
 import { unknown, type BandReading, type CarBands, type CarState, type Known, type LapRecord, type Range } from '@pitwall/domain';
-import type { DeepReadonly, EngineView, QuickCalculator } from '@pitwall/engine';
+import type { DeepReadonly, EngineView, QuickCalculator } from '@pitwall/engine/readers';
 import { classifyLap, LAP_CLASSES_CONFIG, type LapClassOptions } from '../lap-classes/index.ts';
 import { bandsFor, lastLaps, stateOf, type Band } from './bands.ts';
 import { CAR_BANDS, CAR_BANDS_CONFIG, type CarBandsOutput } from './index.ts';

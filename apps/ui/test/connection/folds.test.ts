@@ -25,6 +25,7 @@ const lap = (n: number, status: LapRecord['status']): LapRecord => ({
   status,
   completedAt: n * 70_000,
   ...lapEnd,
+  frame: 0,
 });
 
 describe('lapsFold', () => {
