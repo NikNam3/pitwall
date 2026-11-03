@@ -16,6 +16,6 @@ describe('EngineView', () => {
   });
   it('keeps every other part of the engine state readable', () => {
     expectTypeOf<EngineView['state']['sessionTime']>().toEqualTypeOf<EngineState['sessionTime']>();
-    expectTypeOf<keyof EngineView['state']>().toEqualTypeOf<Exclude<keyof EngineState, 'open' | 'log'>>();
+    expectTypeOf<keyof EngineView['state']>().toEqualTypeOf<Exclude<keyof EngineState, 'open' | 'log' | 'signals'>>();
   });
 });

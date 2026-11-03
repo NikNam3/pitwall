@@ -25,9 +25,15 @@ const overtake: EventDetails = { code: 'OVTK', overtakingVehicleIdx: 0, beingOve
 /** The shared timeline with an overtake in every frame, before the events `extra` names for its index. */
 const timeline = (frames: number, lapStarts: number[], extra: (index: number) => EventDetails[] = () => []) =>
   plainTimeline(frames, lapStarts, (i) => [overtake, ...extra(i)]);
-const eventsOf = (details: EventDetails) =>
-  new ScenarioBuilder({ cars: 2, stepMs: STEP }).session({ trackLength: 4000 }).frames(1, () => {}).event(details).frames(1, () => {}).build()[1]!.events;
-const withEvents = (frame: Frame, details: EventDetails): Frame => ({ ...frame, events: [...frame.events, ...eventsOf(details)] });
+/** A frame assembled with the event: its events and, for an FLBK, the flashback report frame assembly puts on it. */
+const carrierOf = (details: EventDetails): Frame =>
+  new ScenarioBuilder({ cars: 2, stepMs: STEP }).session({ trackLength: 4000 }).frames(1, () => {}).event(details).frames(1, () => {}).build()[1]!;
+/** `frame` with the event added as frame assembly adds it: the frame keeps its first FLBK's report. */
+const withEvents = (frame: Frame, details: EventDetails): Frame => {
+  const carrier = carrierOf(details);
+  const flashback = frame.flashback ?? carrier.flashback;
+  return { ...frame, events: [...frame.events, ...carrier.events], ...(flashback && { flashback }) };
+};
 /** What a run that only ever had `frames` shows (see `shown`). */
 const sameAs = (frames: Frame[]) => {
   const reference = new SessionRunner(initFor(frames));

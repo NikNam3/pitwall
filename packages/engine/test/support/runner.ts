@@ -29,13 +29,18 @@ export const flashbacks = (results: StepResult[]) => results.filter((r) => r.fla
  * bookkeeping, the situation tracker's noted lengths and phase index). A flashback appends a void fact and keeps the
  * undone facts (C27), so after one the log, and positions in it, differ from a run that never had the undone frames;
  * everything readers see (the projection, the live state) equals it. The recorders' own state (`open.recorders`) holds
- * no log position (a recorder reads no log, C10), so it is shown whole.
+ * no log position (a recorder reads no log, C10), so it is shown whole. The last frame's FLBK signal is left out: a run
+ * that never had the undone frames never had the flashback either.
  */
 export const shown = (state: DeepReadonly<EngineState>) => {
-  const { log: _log, open, ...rest } = state;
+  const { log: _log, open, signals, ...rest } = state;
   const { projection: _projection, phaseBook, ...trackers } = open;
   const { formationFrom: _formationFrom, startFrom: _startFrom, lightsOut, ...book } = phaseBook;
-  return { ...rest, open: { ...trackers, phaseBook: { ...book, lightsOutFrameId: lightsOut?.frameId } } };
+  return {
+    ...rest,
+    signals: { ...signals, events: signals.events.filter((e) => e.code !== 'FLBK') },
+    open: { ...trackers, phaseBook: { ...book, lightsOutFrameId: lightsOut?.frameId } },
+  };
 };
 
 /** The fact types of the log; with the span list of each sub-machine (`spans:<machine>`) they are its fact lists. */

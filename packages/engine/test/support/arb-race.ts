@@ -298,7 +298,7 @@ export function raceFrames(p: RaceParams): { frames: Frame[]; reference: Frame[]
   });
 
   // the last timeline from its start; a stale frame a later rewind discarded is not in it
-  let reference = timeline.map((f) => ({ ...f, events: f.events.filter((e) => e.details.code !== 'FLBK') }));
+  let reference = timeline.map(({ flashback: _flashback, ...f }) => ({ ...f, events: f.events.filter((e) => e.details.code !== 'FLBK') }));
   rewinds.forEach((r, k) => {
     const kept = Math.min(staleCounts[k]!, (rewinds[k + 1]?.target ?? Infinity) - r.target);
     if (kept > 0) reference = carrying(reference, r.target + 1, kept, reference[r.target]!.sessionTime);
