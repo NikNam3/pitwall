@@ -1,6 +1,6 @@
 // Protocol-free (C6): recorders and the bridge import these types; `StateUpdate` (`state-update/types.ts`) holds the
 // frame.
-import type { CarId, Ms, RaceEvent, SessionTime, Stamp } from '@pitwall/domain';
+import type { CarId, FrameNumber, Ms, RaceEvent, SessionTime } from '@pitwall/domain';
 import type { LogWriter } from '../log/types.ts';
 import { SPAN_TAGS } from '../situations/span-tags.generated.ts';
 import type { Situation } from '../situations/situation.ts';
@@ -90,20 +90,21 @@ export type Recorder<Own> = {
   apply(input: DeepReadonly<RecorderInput>, own: Own, log: LogWriter, out: StepOutput): Own;
 };
 /**
- * What a recorder reads of the frame (C10): its time on the race clock and id, the live state, the situations and the
- * stamps; never the frame or a signal (C6, C13). `tracked`: transitional, deleted by Tasks 9, 11/17 and 21 (`TrackedEvents`).
+ * What a recorder reads of the frame (C10): its time on the race clock, its id and number, the live state and the
+ * situations; never the frame or a signal (C6, C13). A fact records the frame it describes (C26), this frame's
+ * `frameNumber` unless it describes an earlier one. `tracked`: transitional, deleted by Tasks 9, 11/17 and 21 (`TrackedEvents`).
  */
 export type RecorderInput = {
   at: SessionTime;
   frameId: number;
+  frameNumber: FrameNumber;
   live: LiveState;
   situation: Situation;
-  stamps: FrameStamps;
   tracked?: TrackedEvents;
 };
 
-/** A race event as recorded, before its time and stamp. */
-export type RaceEventBody = Omit<RaceEvent, 'at' | 'in'>;
+/** A race event as recorded, before its time and the frame it describes. */
+export type RaceEventBody = Omit<RaceEvent, 'at' | 'frame'>;
 
 /**
  * Transitional (accepted ruling, Task 4): until the machine's spans carry them, step 2's slot (the situation tracker,
@@ -115,8 +116,3 @@ export type RaceEventBody = Omit<RaceEvent, 'at' | 'in'>;
  * Absent: none of them.
  */
 export type TrackedEvents = { penaltyServed: readonly CarId[]; sessionEnded: boolean; raceEvents: readonly RaceEventBody[] };
-/** This frame's stamps (C26): a car's fact carries `{ ...session, ...cars[carId] }`; zone spans are never stamped. */
-export type FrameStamps = { session: Stamp; cars: readonly Stamp[] };
-
-/** A fact's stamp (C26): the frame's session-scoped spans and, for a car's fact, that car's spans. */
-export const stampOf = (stamps: DeepReadonly<FrameStamps>, carId?: CarId): Stamp => ({ ...stamps.session, ...(carId !== undefined && stamps.cars[carId]) });

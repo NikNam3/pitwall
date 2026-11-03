@@ -11,7 +11,8 @@ import {
   type Vec3,
 } from '@pitwall/domain';
 import type { SessionPacket } from '@pitwall/protocol';
-import { newHistory, type ProjectionBook } from '../../log/projection.ts';
+import { newHistory } from '../../log/projection.ts';
+import type { ProjectionBook } from '../../log/types.ts';
 import { initialSignals } from '../../signals/read.ts';
 import { STEP0_CLOCK } from '../../situations/clock/clock.ts';
 import { emptySituation } from '../../situations/situation.ts';
@@ -144,6 +145,7 @@ export function initialState(init: {
     frameEvents: [],
     playerCar: carId(header.playerCarIndex),
     lastFrameId: header.frameIdentifier,
+    frameNumber: 0,
     sessionTime: toSessionTime(header.sessionTime),
     open: emptyTrackers(session.flag, book),
     realism: init.realism ?? false,

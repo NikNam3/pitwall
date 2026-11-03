@@ -1,6 +1,6 @@
 // The append-only log (contract C21-C24): one list per fact type, the void facts and one span list per sub-machine.
 // Only the projection, the runner, step, the history writers and the storage writer import this module (C28).
-import type { FactList, MachineId } from '@pitwall/domain';
+import type { FactList, FrameNumber, MachineId } from '@pitwall/domain';
 import type { DeepReadonly } from '../util/deep-readonly.ts';
 import type { FactOf, LegacyList, Log, LogLengths, LogVoidFact, LogWriter } from './types.ts';
 
@@ -59,9 +59,9 @@ const isLegacy = (list: string): list is LegacyList => (LEGACY_LISTS as readonly
 /**
  * The void fact of a rewind (C27): every list that grew since `since` (the lengths at the restored snapshot) is voided
  * from its length then to its length now, the legacy lists too (in `legacy`); `target` is the frame the state was
- * restored to. Nothing is removed: the log only grows (C24).
+ * restored to and `frame` its frame number (C26). Nothing is removed: the log only grows (C24).
  */
-export const voidFactOf = (log: DeepReadonly<Log>, since: LogLengths, target: LogVoidFact['target']): LogVoidFact => {
+export const voidFactOf = (log: DeepReadonly<Log>, since: LogLengths, target: LogVoidFact['target'], frame: FrameNumber): LogVoidFact => {
   const ranges: LogVoidFact['ranges'] = {};
   const legacy: NonNullable<LogVoidFact['legacy']> = {};
   for (const [list, now] of Object.entries(logLengths(log)) as Array<[FactList | LegacyList, number]>) {
@@ -70,5 +70,5 @@ export const voidFactOf = (log: DeepReadonly<Log>, since: LogLengths, target: Lo
     if (isLegacy(list)) legacy[list] = [from, now];
     else ranges[list] = [from, now];
   }
-  return { target, ranges, ...(Object.keys(legacy).length > 0 && { legacy }), in: {} };
+  return { target, ranges, ...(Object.keys(legacy).length > 0 && { legacy }), frame };
 };

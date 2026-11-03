@@ -247,8 +247,10 @@ export class SessionRunner {
    * Restores the state after the target frame, or after the frame before `frame` when the game sends `frame` with an
    * id at or below the target: the state never runs ahead of the frame applied next. The void fact covers what the log
    * gained since the restored snapshot; its target is the frame restored to, at its time on the race clock (the
-   * snapshot's own when the target is older than the replay window; `flashback` keeps the game's target). Each
-   * replayed frame gets the runner's decision it got when first applied and appends its facts again after the void.
+   * snapshot's own when the target is older than the replay window; `flashback` keeps the game's target), and its frame
+   * number (C26). The restored state carries the snapshot's frame number, so each replayed frame counts again and gets
+   * the number of its first pass (C33). Each replayed frame gets the runner's decision it got when first applied and
+   * appends its facts again after the void.
    */
   #rewind(target: Target, frame: Frame): { flashback: FlashbackInfo; target: LogVoidFact['target'] } {
     const rewoundFrom = this.#state.sessionTime;
@@ -260,10 +262,11 @@ export class SessionRunner {
     this.#frames = this.#frames.filter(({ frame: f }) => f.frameId <= replayTo);
     const { log, history, weekend } = this.#state;
     this.#state = { ...copyPlain(snapshot.state), log, history, ...(weekend && { weekend }) };
-    // The frame restored to: the last replayed one, or the snapshot's when the target is older than the window.
+    // The frame restored to: the last replayed one, or the snapshot's when the target is older than the window. Its
+    // frame number: the snapshot's, counted on by each replayed frame (C26).
     const last = replayed.at(-1);
     const voidTarget = last === undefined ? { frameId: snapshot.frameId, at: snapshot.sessionTime } : { frameId: last.frame.frameId, at: last.at };
-    logWriter(log).append('voids', voidFactOf(log, snapshot.lengths, voidTarget));
+    logWriter(log).append('voids', voidFactOf(log, snapshot.lengths, voidTarget, snapshot.state.frameNumber + replayed.length));
     // The new void fact projects the log again (C30), before the replayed frames extend it.
     projectionTrackerOf(this.#state).update(situationOf(this.#state));
     for (const { frame: f, report } of replayed) step(this.#state, f, report);

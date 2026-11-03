@@ -24,7 +24,7 @@ import { refreshActiveCarsUntilCarStatus } from './state-update/active-cars-unti
 import { timingUpdate } from './state-update/timing.ts';
 import type { StateUpdate } from './state-update/types.ts';
 import { tyresUpdate } from './state-update/tyres.ts';
-import type { FlashbackReport, FrameStamps, Recorder, RecorderInput, StepOutput } from './types.ts';
+import type { FlashbackReport, Recorder, RecorderInput, StepOutput } from './types.ts';
 
 export {
   ALL_CHANGE_TAGS,
@@ -40,10 +40,17 @@ export {
 /**
  * Step 0 (C7): the clock reads the session time's jump and returns the frame on the race clock with its clock facts;
  * `report`: the `SessionRunner` took the frame as a flashback report. Every fall is reported as `clockFall` and every
- * other forward jump as `clockJump`, with the game's times; the simulated end opens the post-session (C36).
+ * other forward jump as `clockJump`, with the game's times; the simulated end opens the post-session (C36). The clock
+ * facts describe the frame's number and its paused span opens and closes on it (C26).
  */
 const step0Clock = (state: EngineState, received: Frame, report: FlashbackReport | undefined, out: StepOutput): ClockStep => {
-  const clock = STEP0_CLOCK.step(state.open.clock, { frame: received, report, lastRaceMs: state.sessionTime, networkGame: state.session.networkGame });
+  const clock = STEP0_CLOCK.step(state.open.clock, {
+    frame: received,
+    report,
+    lastRaceMs: state.sessionTime,
+    networkGame: state.session.networkGame,
+    frameNumber: state.frameNumber,
+  });
   state.open.clock = clock.open;
   for (const fact of clock.facts) {
     if (fact.kind === 'fall') out.clockFall = { fromMs: fact.fromMs, toMs: fact.toMs };
@@ -53,11 +60,11 @@ const step0Clock = (state: EngineState, received: Frame, report: FlashbackReport
   return clock;
 };
 
-/** Appends step 0's clock facts to `clock` and its closed paused span to `spans:clock`, stamped with the frame's session spans (C26). */
-const appendClock = (state: EngineState, clock: ClockStep, stamps: FrameStamps): void => {
+/** Appends step 0's clock facts to `clock` and its closed paused span to `spans:clock` (C22). */
+const appendClock = (state: EngineState, clock: ClockStep): void => {
   const log = logWriter(state.log);
-  for (const fact of clock.facts) log.append('clock', { ...fact, in: stamps.session });
-  for (const span of clock.closed) log.append(`spans:${STEP0_CLOCK.id}`, { ...span, in: stamps.session });
+  for (const fact of clock.facts) log.append('clock', fact);
+  for (const span of clock.closed) log.append(`spans:${STEP0_CLOCK.id}`, span);
 };
 
 /** Step 1's modules (C8): each reads the frame and writes its part of the live state; in any order (C11). */
@@ -104,26 +111,29 @@ const record = (state: EngineState, input: RecorderInput, out: StepOutput): void
 };
 
 /**
- * Applies one frame to the state in place (spec 6.1, C7-C10), in four steps: step 0, the clock (`step0Clock`: the frame
- * on the race clock and its clock facts, appended after step 2 with the frame's stamps); step 1, the state update;
- * step 2, the machine (`runMachine`: the registered sub-machines, their closed spans and the frame's stamps), after the
- * situation tracker and the flag phases it mirrors, which keep step 2's slot until Tasks 9/19 port them (the tracker
- * also decides `tracked`, what the frame's situation events tell the recorders); step 3, the recorders, with the stamps and the machine's situation. Last, the projection takes in
- * what the frame appended, resolving stamps with the open spans; a step that rewrote the log in place (`rewritten`, the
- * legacy formation discard until Task 9) projects it again.
+ * Applies one frame to the state in place (spec 6.1, C7-C10). First it counts the frame (`frameNumber`, C26): every
+ * step of frame N sees `state.frameNumber` N, and each fact records the frame it describes, each span the frames it
+ * opened and closed on. Then four steps: step 0, the clock (`step0Clock`: the frame on the race clock and its clock
+ * facts, appended after step 2); step 1, the state update; step 2, the machine (`runMachine`: the registered
+ * sub-machines and their closed spans), after the situation tracker and the flag phases it mirrors, which keep step 2's
+ * slot until Tasks 9/19 port them (the tracker also decides `tracked`, what the frame's situation events tell the
+ * recorders); step 3, the recorders, with the frame's number and the machine's situation. Last, the projection takes
+ * in what the frame appended, computing membership from frame numbers with the open spans; a step that rewrote the log
+ * in place (`rewritten`, the legacy formation discard until Task 9) projects it again.
  */
 export function step(state: EngineState, received: Frame, report?: FlashbackReport): StepOutput {
   const out: StepOutput = { changed: new Set(), corrections: [] };
+  state.frameNumber += 1;
   const clock = step0Clock(state, received, report, out);
   const { frame } = clock;
   updateState(state, frame, out);
   applySituations(state, frame, out);
   applyFlagPhases(state, out);
-  const stamps = runMachine(state, frame, out);
-  appendClock(state, clock, stamps);
+  runMachine(state, frame, out);
+  appendClock(state, clock);
   const situation = situationOf(state);
   const tracked = trackedEventsOf(state.signals.events);
-  record(state, { at: frame.sessionTime, frameId: frame.frameId, live: state, situation, stamps, tracked }, out);
+  record(state, { at: frame.sessionTime, frameId: frame.frameId, frameNumber: state.frameNumber, live: state, situation, tracked }, out);
   const projection = projectionTrackerOf(state);
   if (out.rewritten) projection.rebuild(situation);
   else projection.update(situation);

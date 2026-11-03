@@ -1,9 +1,9 @@
 // Step 0, the clock (contract C7, C20, C35-C37): it reads the frame's session time, the runner's flashback report and
 // the receive-time differences, and returns the frame on the race clock with its clock facts. Every fall that is no
 // flashback is carried over by an offset, so the race clock never falls but at a flashback, and nothing recorded is
-// re-stamped (C36). The clock is no member of the step-2 registry (`MACHINES`): step 0 runs before every other step,
+// re-timed (C36). The clock is no member of the step-2 registry (`MACHINES`): step 0 runs before every other step,
 // and the sub-machines read its state as `MachineInput.clock` (`clockInput`), not as an upstream.
-import type { OpenSpan, SessionTime } from '@pitwall/domain';
+import type { ClockFact, FrameNumber, OpenSpan, SessionTime } from '@pitwall/domain';
 import type { Frame } from '../../frame/frame.ts';
 import type { EngineState } from '../../state/engine-state.ts';
 import type { FlashbackReport, RewindMark } from '../../step/types.ts';
@@ -11,7 +11,7 @@ import type { DeepReadonly } from '../../util/deep-readonly.ts';
 import type { ClockInput } from '../machine.ts';
 import { jumpOf } from './jumps.ts';
 import { pauseSoFar, trackPause } from './pauses.ts';
-import type { ClockFactBody, ClockOpen, PausedSpan } from './types.ts';
+import { CLOCK_MACHINE, type ClockOpen, type PausedSpan } from './types.ts';
 
 /** What the clock reads of one frame besides its own open state. */
 export type ClockStepInput = {
@@ -22,13 +22,15 @@ export type ClockStepInput = {
   lastRaceMs: SessionTime;
   /** An online session: the game's `gamePaused` pauses it, not a gap in the packets. */
   networkGame: boolean;
+  /** The frame's number (C26): the clock facts describe it, and a paused span opens and closes on it. */
+  frameNumber: FrameNumber;
 };
 
 /**
  * One step of the clock: its new open state, the frame on the race clock, the clock facts for `clock` (`fall`, `jump`,
- * `simulatedEnd`) and the paused span it closed (for `spans:clock`), both before step 2 stamps them.
+ * `simulatedEnd`, each describing this frame) and the paused span it closed (for `spans:clock`, closed on this frame).
  */
-export type ClockStep = { open: ClockOpen; frame: Frame; facts: ClockFactBody[]; closed: PausedSpan[] };
+export type ClockStep = { open: ClockOpen; frame: Frame; facts: ClockFact[]; closed: PausedSpan[] };
 
 const onClock = (frame: Frame, offsetMs: number): Frame => (offsetMs === 0 ? frame : { ...frame, sessionTime: frame.sessionTime + offsetMs });
 
@@ -47,7 +49,7 @@ const noteRewind = (open: ClockOpen, before: RewindMark, frame: Frame): void => 
 };
 
 /**
- * The frame stamped at the rewind's target moment (the previous frame's time on the race clock) while it still carries
+ * The frame timed at the rewind's target moment (the previous frame's time on the race clock) while it still carries
  * the pre-rewind session time (supervisor ruling 2026-10-31): what it records belongs there, and it is no jump. The
  * mark ends at the first frame on another time; undefined from then on.
  */
@@ -60,12 +62,12 @@ const atRewindTarget = (open: ClockOpen, frame: Frame, lastRaceMs: SessionTime):
 
 /**
  * The frame on the race clock and the jump facts of the session time to it. No frame before it (the session's first),
- * a flashback report and the simulated end read no jump; a frame still on the pre-rewind session time is stamped at the
+ * a flashback report and the simulated end read no jump; a frame still on the pre-rewind session time is timed at the
  * rewind's target. The simulation of the rest of the session appends `simulatedEnd` (the session-phase signal, C36),
  * any other forward jump of more than a minute a `jump`, and every fall a `fall` whose size the race clock continues over.
  */
-const clockFrame = (open: ClockOpen, input: ClockStepInput, facts: ClockFactBody[]): Frame => {
-  const { frame, report, lastRaceMs } = input;
+const clockFrame = (open: ClockOpen, input: ClockStepInput, facts: ClockFact[]): Frame => {
+  const { frame, report, lastRaceMs, frameNumber } = input;
   const stale = atRewindTarget(open, frame, lastRaceMs);
   if (stale) return stale;
   const clocked = onClock(frame, open.offsetMs);
@@ -73,11 +75,11 @@ const clockFrame = (open: ClockOpen, input: ClockStepInput, facts: ClockFactBody
   const jump = jumpOf(lastRaceMs, clocked.sessionTime, frame.receivedAtMs - open.lastWallMs);
   const fromMs = lastRaceMs - open.offsetMs;
   if (jump.kind === 'simulated') {
-    facts.push({ kind: 'simulatedEnd', at: lastRaceMs });
+    facts.push({ kind: 'simulatedEnd', at: lastRaceMs, frame: frameNumber });
     open.ended = true;
-  } else if (jump.kind === 'forward') facts.push({ kind: 'jump', at: lastRaceMs, fromMs, toMs: frame.sessionTime });
+  } else if (jump.kind === 'forward') facts.push({ kind: 'jump', at: lastRaceMs, fromMs, toMs: frame.sessionTime, frame: frameNumber });
   else if (jump.kind === 'fall') {
-    facts.push({ kind: 'fall', at: lastRaceMs, fromMs, toMs: frame.sessionTime, offsetMs: jump.offsetMs });
+    facts.push({ kind: 'fall', at: lastRaceMs, fromMs, toMs: frame.sessionTime, offsetMs: jump.offsetMs, frame: frameNumber });
     open.offsetMs += jump.offsetMs;
     return onClock(frame, open.offsetMs);
   }
@@ -86,7 +88,7 @@ const clockFrame = (open: ClockOpen, input: ClockStepInput, facts: ClockFactBody
 
 /** The clock: step 0 (C7), session scope, its one span kind `paused`. */
 export const STEP0_CLOCK = {
-  id: 'clock',
+  id: CLOCK_MACHINE,
   scope: 'session',
   init: (): ClockOpen => ({ offsetMs: 0, opened: 0, ended: false }),
   /** The pause in progress, its wall time so far: `view.situation.byMachine.clock` (C20). */
@@ -96,7 +98,7 @@ export const STEP0_CLOCK = {
     const open: ClockOpen = { ...(previous as ClockOpen) };
     const { frame, report } = input;
     if (report?.rewound) noteRewind(open, report.rewound, frame);
-    const facts: ClockFactBody[] = [];
+    const facts: ClockFact[] = [];
     const clocked = clockFrame(open, input, facts);
     const pause = trackPause(open, {
       networkGame: input.networkGame,
@@ -104,6 +106,7 @@ export const STEP0_CLOCK = {
       wallMs: frame.receivedAtMs,
       fromMs: input.lastRaceMs,
       atMs: clocked.sessionTime,
+      frameNumber: input.frameNumber,
     });
     open.lastWallMs = frame.receivedAtMs;
     return { open, frame: clocked, facts, closed: pause ? [pause] : [] };

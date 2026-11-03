@@ -6,14 +6,14 @@ import type {
   FeedId,
   FlagPhase,
   FrameEvent,
+  FrameNumber,
   MachineId,
   SessionFlag,
   SessionState,
   SessionTime,
   SessionUid,
 } from '@pitwall/domain';
-import type { ProjectionBook } from '../log/projection.ts';
-import type { Log, ProjectionState } from '../log/types.ts';
+import type { Log, ProjectionBook, ProjectionState } from '../log/types.ts';
 import type { Signals } from '../signals/types.ts';
 import type { ClockOpen } from '../situations/clock/types.ts';
 import type { WeekendContext } from './weekend-context.ts';
@@ -83,6 +83,12 @@ export type EngineState = {
   playerCar: CarId;
   teammateCar?: CarId | undefined;
   lastFrameId: number;
+  /**
+   * The frames applied in the session (C26): 0 in a new session's state; `step` counts each frame first, so while frame N
+   * is applied every step sees N. Snapshots carry it and a rewind restores it, so the replayed and later frames get the
+   * numbers a run without the undone frames gives them (C27, C33). Nothing else writes it.
+   */
+  frameNumber: FrameNumber;
   /** The last frame's time on the race clock: its session time plus `open.clock.offsetMs`. */
   sessionTime: SessionTime;
   open: OpenTrackers;
