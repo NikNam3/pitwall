@@ -2,7 +2,7 @@
 // Only the projection, the runner, step, the history writers and the storage writer import this module (C28).
 import type { FactList, MachineId } from '@pitwall/domain';
 import type { DeepReadonly } from '../util/deep-readonly.ts';
-import type { FactOf, LegacyList, Log, LogLengths, LogWriter } from './types.ts';
+import type { FactOf, LegacyList, Log, LogLengths, LogVoidFact, LogWriter } from './types.ts';
 
 /** The lists of the log that hold one fact type each; the span lists are `spans:<machine>`. */
 export const FACT_LISTS = ['laps', 'stints', 'pitStops', 'crossings', 'events', 'clock'] as const satisfies readonly FactList[];
@@ -55,11 +55,21 @@ export const logLengths = (log: DeepReadonly<Log>): LogLengths => {
   return lengths;
 };
 
+const isLegacy = (list: string): list is LegacyList => (LEGACY_LISTS as readonly string[]).includes(list);
+
 /**
- * Cuts every list back to its length in `to` (a list missing in `to` is emptied). Only the runner's flashback calls it,
- * until Task 3 replaces the cut with a void fact; the log is otherwise append-only (C24).
+ * The void fact of a rewind (C27): every list that grew since `since` (the lengths at the restored snapshot) is voided
+ * from its length then to its length now, the legacy lists too (in `legacy`); `target` is the frame the state was
+ * restored to. Nothing is removed: the log only grows (C24).
  */
-export const truncateLog = (log: Log, to: LogLengths): void => {
-  for (const list of [...FACT_LISTS, 'voids', ...LEGACY_LISTS] as const) log[list].splice(to[list] ?? 0);
-  for (const [machine, spans] of Object.entries(log.spans)) spans.splice(to[`${SPANS}${machine}`] ?? 0);
+export const voidFactOf = (log: DeepReadonly<Log>, since: LogLengths, target: LogVoidFact['target']): LogVoidFact => {
+  const ranges: LogVoidFact['ranges'] = {};
+  const legacy: NonNullable<LogVoidFact['legacy']> = {};
+  for (const [list, now] of Object.entries(logLengths(log)) as Array<[FactList | LegacyList, number]>) {
+    const from = since[list] ?? 0;
+    if (list === 'voids' || now <= from) continue;
+    if (isLegacy(list)) legacy[list] = [from, now];
+    else ranges[list] = [from, now];
+  }
+  return { target, ranges, ...(Object.keys(legacy).length > 0 && { legacy }), in: {} };
 };

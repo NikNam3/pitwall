@@ -1,21 +1,22 @@
 // The projection (contract C28-C30): the log as readers see it, every hidden fact skipped. The only module that
 // computes it. A fact is hidden when a void range covers its position (C27) or, for a fact that is no span, when its
 // stamp holds a span of a hiding kind (`formation`, C29); spans are never hidden by a stamp.
-import type { CarId, FactList, MachineId, OpenSpan, Span, Stamp, VoidFact } from '@pitwall/domain';
+import type { CarId, FactList, MachineId, OpenSpan, Span, Stamp } from '@pitwall/domain';
 import type { Situation } from '../situations/situation.ts';
 import type { DeepReadonly } from '../util/deep-readonly.ts';
 import { createLog, FACT_LISTS, LEGACY_LISTS } from './log.ts';
-import type { HistoryDelta, Log, LogLengths, Projection, ProjectionState } from './types.ts';
+import type { HistoryDelta, LegacyList, Log, LogLengths, LogVoidFact, Projection, ProjectionState } from './types.ts';
 
 /** The span kind whose stamp hides a fact (C29): what the formation lap recorded did not happen in the race. */
 const HIDING_KIND = 'formation';
 
 /**
- * What hides facts: per list the void ranges `[from, to)` of log positions (C27, from the void facts), and the closed
- * spans of the hiding kind by `spanKey` (the open ones come with each update's situation).
+ * What hides facts: per list the void ranges `[from, to)` of log positions (C27, from the void facts; the legacy lists'
+ * from their `legacy` ranges), and the closed spans of the hiding kind by `spanKey` (the open ones come with each
+ * update's situation).
  */
 export type HiddenRanges = {
-  voided: Partial<Record<FactList, Array<readonly [from: number, to: number]>>>;
+  voided: Partial<Record<FactList | LegacyList, Array<readonly [from: number, to: number]>>>;
   hidingSpans: Record<string, true>;
 };
 
@@ -61,7 +62,7 @@ export const projectionLengths = (p: Projection): LogLengths => {
 };
 
 /** A void range covers position `index` of `list` (C27). */
-export const isVoided = (list: FactList, index: number, hidden: HiddenRanges): boolean =>
+export const isVoided = (list: FactList | LegacyList, index: number, hidden: HiddenRanges): boolean =>
   hidden.voided[list]?.some(([from, to]) => index >= from && index < to) ?? false;
 
 /** A fact of `list` is hidden by its stamp: it is no span and its stamp holds a span of the hiding kind (C29). */
@@ -74,11 +75,11 @@ export const isHidden = (fact: { in: Stamp }, list: FactList, hidden: HiddenRang
   return false;
 };
 
-/** The void ranges of every void fact, each range once. */
-const voidedBy = (voids: readonly DeepReadonly<VoidFact>[]): HiddenRanges['voided'] => {
+/** The void ranges of every void fact, the legacy lists' too, each range once. */
+const voidedBy = (voids: readonly DeepReadonly<LogVoidFact>[]): HiddenRanges['voided'] => {
   const voided: HiddenRanges['voided'] = {};
   for (const v of voids) {
-    for (const [list, range] of Object.entries(v.ranges) as Array<[FactList, readonly [number, number]]>) {
+    for (const [list, range] of Object.entries({ ...v.ranges, ...v.legacy }) as Array<[FactList | LegacyList, readonly [number, number]]>) {
       const ranges = (voided[list] ??= []);
       if (!ranges.some(([from, to]) => from === range[0] && to === range[1])) ranges.push([range[0], range[1]]);
     }
@@ -148,8 +149,8 @@ export class ProjectionTracker {
   }
 
   /**
-   * Projects the whole log again. For the old mechanisms that cut or rewrite the log in place (the runner's flashback
-   * cut until Task 3, the situation tracker's formation discard and start re-stamp until Task 9).
+   * Projects the whole log again. For the old mechanisms that cut or rewrite the log in place (the situation tracker's
+   * formation discard and start re-stamp, until Task 9).
    */
   rebuild(open: Situation): void {
     this.#rebuild(open);
@@ -182,9 +183,9 @@ export class ProjectionTracker {
     }
     const hiding = withOpen(hidden, open);
     for (const list of FACT_LISTS) this.#projectList(list, hiding);
-    // The legacy lists are never hidden: the projection reads them as they are.
+    // The legacy lists are hidden by void ranges only (no stamps).
     for (const list of LEGACY_LISTS) {
-      (p[list] as unknown[]) = log[list];
+      (p[list] as unknown[]) = project(p[list] as unknown[], log[list] as unknown[], seen[list] ?? 0, (i) => !isVoided(list, i, hidden));
       seen[list] = log[list].length;
     }
     seen.voids = log.voids.length;

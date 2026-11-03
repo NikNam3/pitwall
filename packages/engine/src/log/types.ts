@@ -31,14 +31,20 @@ export type FactOf<L extends FactList> = L extends 'laps'
           : L extends 'clock'
             ? ClockFact
             : L extends 'voids'
-              ? VoidFact
+              ? LogVoidFact
               : Span;
 
 /**
- * The old mechanisms' lists, not facts: written by the situation tracker as before, never hidden, in the log and the
- * projection until the task that replaces each (`flagPhases` Task 19, `sessionPhases` Task 9, `pauses` Task 7).
+ * The old mechanisms' lists, not facts: written by the situation tracker as before, hidden only by a void fact's
+ * `legacy` ranges (no stamps), in the log and the projection until the task that replaces each (`flagPhases` Task 19, `sessionPhases` Task 9, `pauses` Task 7).
  */
 export type LegacyList = 'flagPhases' | 'sessionPhases' | 'pauses';
+
+/**
+ * A void fact as the log stores it: the domain's `VoidFact` plus the void ranges of the legacy lists, which are no fact
+ * lists. Internal to the engine; `legacy` goes with the lists (Tasks 7, 9 and 19 remove it).
+ */
+export type LogVoidFact = VoidFact & { legacy?: Partial<Record<LegacyList, readonly [from: number, to: number]>> };
 
 /** The length of every list that has facts (and of the legacy lists, until they go). */
 export type LogLengths = Partial<Record<FactList | LegacyList, number>>;
@@ -73,7 +79,7 @@ type Lists = {
  * lists. Plain data (snapshots copy it). Written through a `LogWriter` (`log/log.ts`); read only by the projection,
  * the runner and the storage writer (C28).
  */
-export type Log = Lists & { voids: VoidFact[] };
+export type Log = Lists & { voids: LogVoidFact[] };
 
 /** The projection as the engine keeps it (`EngineState.history`): written only by `log/projection.ts`. */
 export type ProjectionState = Lists;

@@ -1,7 +1,9 @@
 import type { Insight, SessionTime } from '@pitwall/domain';
 import type { HistoryDelta } from '../log/types.ts';
+import type { Snapshotable } from '../runner/session-runner.ts';
 import type { ChangeTag } from '../step/step.ts';
-import { InsightBook } from './insight-book.ts';
+import { deepFreeze } from '../util/deep-freeze.ts';
+import { InsightBook, type InsightBookState } from './insight-book.ts';
 import { RegistryError, type CalculatorRegistry } from './registry.ts';
 import type { Cadence, Calculator, CalculatorId, EngineView, InsightChange } from './types.ts';
 
@@ -42,14 +44,47 @@ const freshSlot = (): Slot => ({
   prevOutput: undefined,
 });
 
-/** Adds a frame to what is pending: the oldest `before`, the newest `after`, rewound if any frame was (to the newest target). */
+type Rewound = NonNullable<HistoryDelta['rewound']>;
+
+/** The earlier of two rewind targets: everything after it changed since a calculator last ran (Task 2 review F2). */
+const earlier = (a: Rewound | undefined, b: Rewound | undefined): Rewound | undefined => {
+  if (a === undefined || b === undefined) return a ?? b;
+  return b.at < a.at || (b.at === a.at && b.frameId < a.frameId) ? b : a;
+};
+
+/** Adds a frame to what is pending: the oldest `before`, the newest `after`, rewound if any frame was (to the earliest target). */
 const absorb = (pending: Pending | undefined, input: SchedulerInput): Pending => {
   if (pending === undefined) return { changed: new Set(input.changed), delta: input.delta };
   for (const tag of input.changed) pending.changed.add(tag);
-  const rewound = input.delta.rewound ?? pending.delta.rewound;
+  const rewound = earlier(pending.delta.rewound, input.delta.rewound);
   pending.delta = { before: pending.delta.before, after: input.delta.after, ...(rewound && { rewound }) };
   return pending;
 };
+
+/** A copy `absorb` cannot change: it adds to `changed` and replaces `delta`. */
+const copyPending = (pending: Pending | undefined): Pending | undefined => pending && { changed: new Set(pending.changed), delta: pending.delta };
+
+/** A calculator's slot as a snapshot keeps it: no accumulator (a rewind rebuilds it with `init`, C30), the previous output shared. */
+type SlotBookkeeping = Pick<Slot, 'lastRunAt' | 'pending' | 'ranDependencies' | 'prevOutput'>;
+
+/**
+ * What the scheduler knows of the frames it ran on (`Scheduler.snapshot`): per calculator its last run, what is pending
+ * and its previous output; the last outputs, the active insights and the failed calculators. Outputs are shared, not
+ * copied: no unit changes an output after returning it (frozen under test, see `FREEZE_OUTPUTS`).
+ */
+export type SchedulerBookkeeping = {
+  slots: ReadonlyMap<CalculatorId, SlotBookkeeping>;
+  outputs: ReadonlyMap<CalculatorId, unknown>;
+  insights: InsightBookState;
+  failed: ReadonlySet<CalculatorId>;
+};
+
+/**
+ * Under vitest every output is frozen deep, so a unit that changes an output after returning it fails its tests: the
+ * scheduler's snapshots share the outputs (C27). A production run does not pay for the freeze.
+ */
+// eslint-disable-next-line no-restricted-globals -- whether tests run, which shapes no result (supervisor ruling, Task 3)
+const FREEZE_OUTPUTS = typeof process !== 'undefined' && process.env['VITEST'] !== undefined;
 
 const isDue = (cadence: Cadence, lastRunAt: SessionTime, pending: Pending, now: SessionTime): boolean => {
   if (cadence === 'frame') return true;
@@ -114,7 +149,7 @@ const calculatorError = (id: CalculatorId, error: unknown, input: SchedulerInput
  * Runs the needed calculators on each frame, in dependency order, when they are due and affected (spec 7.3).
  * A calculator that throws is reported, not propagated: its dependents are skipped and the rest run on.
  */
-export class Scheduler {
+export class Scheduler implements Snapshotable<SchedulerBookkeeping> {
   readonly #registry: CalculatorRegistry;
   readonly #entries: readonly Entry[];
   readonly #slots: ReadonlyMap<CalculatorId, Slot>;
@@ -159,6 +194,36 @@ export class Scheduler {
     };
     for (const id of ids) visit(id);
     return found;
+  }
+
+  /** The bookkeeping now (C27); later runs leave it as it is. */
+  snapshot(): SchedulerBookkeeping {
+    const slots = new Map<CalculatorId, SlotBookkeeping>();
+    for (const { calc, slot } of this.#entries) {
+      const { lastRunAt, pending, ranDependencies, prevOutput } = slot;
+      slots.set(calc.id, { lastRunAt, pending: copyPending(pending), ranDependencies: new Set(ranDependencies), prevOutput });
+    }
+    return { slots, outputs: new Map(this.#outputs), insights: this.#book.snapshot(), failed: new Set(this.#failed) };
+  }
+
+  /**
+   * Puts the bookkeeping of `s` back. The accumulators stay as they are: the rewind that restores a snapshot reaches
+   * every calculator as `delta.rewound`, and `init` rebuilds them (C30).
+   */
+  restore(s: SchedulerBookkeeping): void {
+    for (const { calc, slot } of this.#entries) {
+      const saved = s.slots.get(calc.id);
+      if (saved === undefined) continue;
+      slot.lastRunAt = saved.lastRunAt;
+      slot.pending = copyPending(saved.pending);
+      slot.ranDependencies = new Set(saved.ranDependencies);
+      slot.prevOutput = saved.prevOutput;
+    }
+    this.#outputs.clear();
+    for (const [id, output] of s.outputs) this.#outputs.set(id, output);
+    this.#book.restore(s.insights);
+    this.#failed.clear();
+    for (const id of s.failed) this.#failed.add(id);
   }
 
   /** Forgets accumulators, previous outputs and run times, so every needed calculator starts over. Outputs stay. */
@@ -210,6 +275,7 @@ export class Scheduler {
         insights.push(...this.#book.apply(`error:${calc.id}`, [calculatorError(calc.id, error, input)], now));
         continue;
       }
+      if (FREEZE_OUTPUTS) deepFreeze(evaluation.output);
       slot.acc = evaluation.acc;
       slot.prevOutput = { value: evaluation.output };
       slot.lastRunAt = now;

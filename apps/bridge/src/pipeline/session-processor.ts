@@ -1,8 +1,7 @@
 // One session of a feed: frames → SessionRunner → Scheduler → topics, plus its session file and its storage.
-import { sessionUidString, type FeedId, type Insight, type SessionTime, type SessionUid } from '@pitwall/domain';
+import { sessionUidString, type FeedId, type ParticipantsValues, type SessionTime, type SessionUid } from '@pitwall/domain';
 import {
   activeFlagPhaseOf,
-  driverKeyOf,
   projectionLengths,
   Scheduler,
   SessionRunner,
@@ -10,9 +9,7 @@ import {
   type CalculatorId,
   type CalculatorRegistry,
   type FeedMetricsView,
-  type FlashbackInfo,
   type Frame,
-  type InsightChange,
   type StepResult,
   type WeekendContext,
 } from '@pitwall/engine';
@@ -26,10 +23,7 @@ import type { SessionKey, SessionRow } from '../storage/db.ts';
 import type { SessionFile } from '../storage/session-files.ts';
 import { MAX_DUMPS_PER_SESSION, writeDebugDump } from './debug-dump.ts';
 import { sessionRowOf, type SessionStorage } from './session-storage.ts';
-import type { TopicPublisher } from './topic-publisher.ts';
-
-/** Frames waiting for the first Participants packet (about 10 s at 60 Hz); then the session starts without a weekend. */
-export const MAX_BUFFERED_FRAMES = 600;
+import type { PublishError, TopicPublisher } from './topic-publisher.ts';
 
 export type SessionProcessorOptions = {
   feedId: FeedId;
@@ -57,19 +51,11 @@ export type SessionProcessorOptions = {
   calcStats?: CalcStats;
 };
 
-type Running = { runner: SessionRunner; scheduler: Scheduler };
-
-/** The flashback as an info insight that is raised and resolved at once: an entry in the insight log, nothing active. */
-const flashbackChanges = (feedId: FeedId, flashback: FlashbackInfo, at: SessionTime): InsightChange[] => {
-  const kind = 'session.flashback';
-  const params = { targetLap: flashback.targetLap, rewoundS: flashback.rewoundMs / 1000 };
-  const insight: Insight = { key: kind, severity: 'info', category: 'race', feedId, kind, params, raisedAt: at };
-  return [{ type: 'raised', insight }, { type: 'resolved', key: kind, at }];
-};
-
 /**
- * Runs one session (spec 5.4, 7.3). Frames wait until the first Participants packet, which names the player's
- * `DriverKey` and so the weekend context (spec 9.3). An exception on a frame skips that frame; a topic that fails to
+ * Runs one session (spec 5.4, 7.3). The runner holds the frames until the first Participants packet, which names the
+ * player's `DriverKey` and so the weekend context (spec 9.3, C61); this processor supplies that context from storage
+ * (`contextFor`). The scheduler is attached to the runner, so a flashback rewinds its bookkeeping with the state
+ * (C27). An exception on a frame skips that frame; a topic that fails to
  * publish is marked errored while the other topics go out. Either way the failure is logged and, up to
  * `MAX_DUMPS_PER_SESSION` times, the frame is dumped with its place in the session file (spec 10.1).
  */
@@ -79,8 +65,10 @@ export class SessionProcessor {
   /** The session's storage key: the game reuses session uids across weekends. */
   readonly #key: SessionKey;
   readonly #o: SessionProcessorOptions;
-  #running: Running | undefined;
-  #buffered: Frame[] = [];
+  readonly #runner: SessionRunner;
+  readonly #scheduler: Scheduler;
+  /** The runner applied a frame: its identity wait is over. */
+  #started = false;
   #driversStored = false;
   #dumps = 0;
   #lastReceivedAtMs = 0;
@@ -91,23 +79,24 @@ export class SessionProcessor {
     this.#uid = sessionUidString(opts.sessionUid);
     this.#key = { sessionUid: this.#uid, weekendId: String(opts.session.weekendLinkIdentifier) };
     opts.storage?.upsertSession(this.#row());
+    const { feedId, sessionUid, session, registry } = opts;
+    this.#scheduler = new Scheduler(registry, opts.calcStats && { onCalculatorRun: opts.calcStats.hook });
+    this.#runner = new SessionRunner(
+      { feedId, sessionUid, session, realism: opts.config.realism?.enabled === true },
+      { attach: this.#scheduler, contextFor: (participants) => this.#contextFor(participants) },
+    );
   }
 
   /** The newest applied frame's time on the engine's race clock (spec 3.3); undefined before the engine runs. */
   get sessionTime(): SessionTime | undefined {
-    return this.#running?.runner.state.sessionTime;
+    return this.#started ? this.#runner.state.sessionTime : undefined;
   }
 
   push(frame: Frame): void {
-    if (this.#running !== undefined) {
-      // A session started by the buffer cap still stores its drivers, so later sessions find it in the weekend.
-      if (frame.participants !== undefined && !this.#driversStored) this.#storeDrivers(frame.participants);
-      this.#apply(this.#running, frame);
-      return;
-    }
-    this.#buffered.push(frame);
-    if (frame.participants !== undefined) this.#begin(frame.participants, frame.playerCarIndex);
-    else if (this.#buffered.length >= MAX_BUFFERED_FRAMES) this.#begin();
+    // The drivers are stored before the runner asks for the weekend context; a session started by the identity wait's
+    // cap still stores them, so later sessions find it in the weekend.
+    if (frame.participants !== undefined && !this.#driversStored) this.#storeDrivers(frame.participants);
+    this.#applying(frame, () => this.#runner.apply(frame, this.#onResult));
   }
 
   /**
@@ -127,42 +116,27 @@ export class SessionProcessor {
    * waiting for the next frame, or after the session ended. Before the runner starts, nothing to do yet.
    */
   demandChanged(): void {
-    const running = this.#running;
-    if (running === undefined) return;
-    const { scheduler } = running;
+    if (!this.#started) return;
+    const scheduler = this.#scheduler;
     const needed = [...this.#o.needed()];
     const added = scheduler.setNeeded(needed);
     // Job triggers, and what only they read, sit the pass out: a job runs for a frame (`computedFor`), so the next due
     // frame starts it, and an event-cadence trigger is not used up before then.
     const forTopics = scheduler.withDependencies(needed.filter((id) => this.#o.jobs?.isTrigger(id) !== true));
     const only = new Set(added.filter((id) => forTopics.has(id)));
-    if (only.size > 0) this.#evaluateNow(running, only);
+    if (only.size > 0) this.#evaluateNow(only);
   }
 
   /** Runs whatever still waits for Participants, then closes the session file. `demandChanged()` still answers afterwards. */
   async end(receivedAtMs: number): Promise<void> {
-    if (this.#running === undefined && this.#buffered.length > 0) this.#begin();
+    this.#applying(undefined, () => this.#runner.end(this.#onResult));
     await this.#o.file?.close(receivedAtMs);
   }
 
-  /** Starts the runner, with the weekend context when Participants arrived, and applies the buffered frames. */
-  #begin(participants?: ParticipantsPacket, playerCarIndex = 0): void {
-    const { feedId, sessionUid, session, registry } = this.#o;
-    const weekend = participants && this.#identify(participants, playerCarIndex);
-    const scheduler = new Scheduler(registry, this.#o.calcStats && { onCalculatorRun: this.#o.calcStats.hook });
-    scheduler.setNeeded(this.#o.needed());
-    const running = { runner: new SessionRunner({ feedId, sessionUid, session, realism: this.#o.config.realism?.enabled === true, ...(weekend && { weekend }) }), scheduler };
-    this.#running = running;
-    const frames = this.#buffered;
-    this.#buffered = [];
-    for (const frame of frames) this.#apply(running, frame);
-  }
-
-  /** Stores the session's drivers and loads the player's earlier sessions of the weekend, with every driver in them. */
-  #identify(participants: ParticipantsPacket, playerCarIndex: number): WeekendContext | undefined {
-    this.#storeDrivers(participants);
-    const driverKey = driverKeyOf(participants, playerCarIndex);
-    return this.#o.storage?.weekendContext(this.#key, driverKey);
+  /** The player's earlier sessions of the weekend, with every driver in them; none without Participants. */
+  #contextFor(participants: ParticipantsValues | undefined): WeekendContext | undefined {
+    const driverKey = participants?.drivers.find((d) => d.carId === participants.playerCar)?.driverKey;
+    return driverKey && this.#o.storage?.weekendContext(this.#key, driverKey);
   }
 
   #storeDrivers(participants: ParticipantsPacket): void {
@@ -170,31 +144,51 @@ export class SessionProcessor {
     this.#o.storage?.upsertSession(this.#row(participants));
   }
 
-  #apply({ runner, scheduler }: Running, frame: Frame): void {
-    const { feedId, publisher, storage, log } = this.#o;
+  /** Runs `work` (the runner applying frames); a step that throws skips its frame and is reported with `frame`. */
+  #applying(frame: Frame | undefined, work: () => void): void {
     try {
-      const result = runner.apply(frame);
+      work();
+    } catch (error) {
+      if (frame === undefined) this.#o.log.error({ feedId: this.#o.feedId, sessionUid: this.#uid, err: error }, 'frame skipped: processing failed');
+      else this.#report(frame, 'frame skipped: processing failed', [{ error }]);
+    }
+  }
+
+  /** Each frame the runner applied: storage, the scheduler and the topics. */
+  readonly #onResult = (result: StepResult, frame: Frame): void => {
+    const { feedId, publisher, storage, log } = this.#o;
+    const scheduler = this.#scheduler;
+    if (!this.#started) {
+      this.#started = true;
+      scheduler.setNeeded(this.#o.needed());
+    }
+    try {
       storage?.writeConfirmed(this.#key, result.state.history, result.delta);
       // A session time that fell back with no flashback and no start: the engine keeps its race clock monotonic (spec 3.3); worth knowing.
       if (result.clockFall) log.info({ feedId, sessionUid: this.#uid, clockFall: result.clockFall }, 'session time fell back');
       // A forward jump of over a minute that is no post-session jump (a stall while the garage clock runs ahead): it
       // changes nothing (spec 3.3); worth knowing too.
       if (result.clockJump) log.info({ feedId, sessionUid: this.#uid, clockJump: result.clockJump }, 'session time jumped forward');
-      // A flashback, the race start (discarding the formation lap, settling its clock), a dropped unconfirmed neutralisation
-      // or a session-phase boundary that moves an entry earlier frames recorded changed history: the calculators start over.
-      if (result.delta.rewound !== undefined) {
-        scheduler.reset();
+      const { rewound } = result.delta;
+      const unpublished: PublishError[] = [];
+      if (rewound !== undefined) {
+        // A flashback restored the scheduler's bookkeeping with the state (C27). The old mechanisms' rewinds (the race
+        // start discarding the formation lap or settling its clock, a dropped unconfirmed neutralisation, a phase
+        // boundary that moves an entry earlier frames recorded; target frame -1 until Task 9) undo no frame: there the
+        // calculators start over.
+        if (rewound.frameId < 0) scheduler.reset();
         // A run triggered before it would land on the new timeline.
         this.#o.jobs?.flashback();
+        unpublished.push(...publisher.resendInsights(rewound));
       }
       this.#o.calcStats?.atSessionTime(result.state.sessionTime);
       const scheduled = scheduler.run({ state: result.state, activeFlagPhase: activeFlagPhaseOf(result.state), situation: situationOf(result.state), changed: result.changed, delta: result.delta, feed: this.#o.feedView(), config: this.#o.config });
       // Each topic is published on its own: a failing feature binding never holds back the others.
-      const unpublished = [
+      unpublished.push(
         ...publisher.publishOutputs(scheduled),
         ...publisher.publishHistory(result.state.history, result.delta),
-        ...publisher.publishInsights([...this.#flashbackOf(result), ...scheduled.insights]),
-      ];
+        ...publisher.publishInsights(scheduled.insights, { frameId: frame.frameId }),
+      );
       const { cars, playerCar } = result.state;
       this.#o.jobs?.triggerRan(scheduled, { lap: cars[playerCar]?.timing.lap ?? 0, frameId: frame.frameId });
       for (const correction of result.corrections) log.info({ feedId, sessionUid: this.#uid, correction }, 'lap time corrected');
@@ -202,7 +196,7 @@ export class SessionProcessor {
     } catch (error) {
       this.#report(frame, 'frame skipped: processing failed', [{ error }]);
     }
-  }
+  };
 
   /**
    * One scheduler pass on the current state with nothing changed and an empty history delta, restricted to the newly
@@ -210,9 +204,10 @@ export class SessionProcessor {
    * readers included (re-running `feed.status` on the last packet's time would undo a stale status). The outputs and
    * insights are published; history topics have nothing new.
    */
-  #evaluateNow({ runner, scheduler }: Running, only: ReadonlySet<CalculatorId>): void {
+  #evaluateNow(only: ReadonlySet<CalculatorId>): void {
     const { feedId, publisher, log } = this.#o;
-    const { state } = runner;
+    const scheduler = this.#scheduler;
+    const { state } = this.#runner;
     this.#o.calcStats?.atSessionTime(state.sessionTime);
     const lengths = projectionLengths(state.history);
     const scheduled = scheduler.run({
@@ -224,14 +219,11 @@ export class SessionProcessor {
       feed: this.#o.feedView(),
       config: this.#o.config,
     }, { only });
-    const unpublished = [...publisher.publishOutputs(scheduled), ...publisher.publishInsights(scheduled.insights)];
+    // A pass between frames: a flashback to the frame before it undoes it too.
+    const unpublished = [...publisher.publishOutputs(scheduled), ...publisher.publishInsights(scheduled.insights, { frameId: state.lastFrameId, between: true })];
     for (const { error, topic } of unpublished) {
       log.error({ feedId, sessionUid: this.#uid, ...(topic && { topic }), err: error }, 'topic not published on a demand change, marked errored');
     }
-  }
-
-  #flashbackOf(result: StepResult): InsightChange[] {
-    return result.flashback ? flashbackChanges(this.#o.feedId, result.flashback, result.state.sessionTime) : [];
   }
 
   /** Logs every failure of the frame and dumps the frame once, with the first failure. */

@@ -222,6 +222,7 @@ export class FeedPipeline {
     this.#ended = undefined;
     this.#alerts.clearWriteFailures(this.#sessionTime());
     hub.resetFeed(feedId);
+    this.#publisher.sessionStarted();
     this.#publishInsights(this.#alerts.active.map((insight) => ({ type: 'raised', insight })));
     const startedAt = this.#sessionClock(event.receivedAtMs);
     const db = this.#o.storage?.db;

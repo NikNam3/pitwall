@@ -16,6 +16,12 @@ type JobBinding = Extract<TopicBinding, { fromJob: string }>;
 export type PublishError = { topic: TopicName; error: unknown };
 
 /**
+ * Which pass of the session produced an insight change: the frame `frameId`'s, or with `between` a pass after that frame
+ * and before the next (a demand change). The feed's own changes have none: no flashback undoes them.
+ */
+export type InsightOrigin = { frameId: number; between?: true };
+
+/**
  * Publishes one feed's calculator outputs, history appends, insight changes and job results to the topics bound to them.
  * Every binding is contained: a failing one is marked `errored` and never stops the others.
  *
@@ -35,6 +41,8 @@ export class TopicPublisher {
   readonly #failing = new Set<TopicName>();
   /** Set while a `publish*` call runs: its failures go back to the caller instead of the log. */
   #caught: PublishError[] | undefined;
+  /** The insight changes of the session so far with their origin, oldest first: what a resend sends (C32). */
+  #insightLog: Array<{ change: InsightChange; origin: InsightOrigin | undefined }> = [];
 
   constructor(opts: { feedId: FeedId; hub: TopicHub; features: readonly Feature[]; log: Logger }) {
     this.#feedId = opts.feedId;
@@ -103,9 +111,33 @@ export class TopicPublisher {
     });
   }
 
-  publishInsights(changes: readonly InsightChange[]): PublishError[] {
+  /** A new session: its insight changes start over, as the hub's topics do. */
+  sessionStarted(): void {
+    this.#insightLog = [];
+  }
+
+  /** Appends insight changes to the insights topics; `origin`: the pass of the session that produced them. */
+  publishInsights(changes: readonly InsightChange[], origin?: InsightOrigin): PublishError[] {
+    for (const change of changes) this.#insightLog.push({ change, origin });
     return this.#collecting(() => {
       for (const topic of this.#insights) this.#guarded(topic, () => this.#hub.publishAppend(this.#feedId, topic, [...changes]));
+    });
+  }
+
+  /**
+   * After a rewind (`delta.rewound`, C30) the insights topics are sent again whole. A flashback's target drops the
+   * changes of the passes after it, which the undone frames produced (C33); the old mechanisms' rewinds (target frame
+   * -1, until Task 9) undo no frame and drop nothing.
+   */
+  resendInsights(target: NonNullable<HistoryDelta['rewound']>): PublishError[] {
+    if (target.frameId >= 0) {
+      const kept = ({ origin }: { origin: InsightOrigin | undefined }) =>
+        origin === undefined || origin.frameId < target.frameId || (origin.frameId === target.frameId && origin.between === undefined);
+      this.#insightLog = this.#insightLog.filter(kept);
+    }
+    const entries = this.#insightLog.map(({ change }) => change);
+    return this.#collecting(() => {
+      for (const topic of this.#insights) this.#guarded(topic, () => this.#hub.resetAppend(this.#feedId, topic, entries));
     });
   }
 

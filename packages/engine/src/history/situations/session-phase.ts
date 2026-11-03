@@ -42,6 +42,32 @@ const UNDER_WAY_LAP_TIME_MS = 1000;
 /** What the formation discard cuts back; the phases, flag phases and pauses stay (spec 3.2). */
 const DISCARDED = ['laps', 'stints', 'pitStops', 'events', 'crossings'] as const satisfies ReadonlyArray<keyof TrackerLengths>;
 
+type Discarded = (typeof DISCARDED)[number];
+
+/**
+ * Whether a void fact (C27, a flashback) covers position `index` of `list`. The tracker reads and cuts the log itself (an
+ * old mechanism, until Task 9), so it skips what a flashback undid, as the projection does.
+ */
+const isVoided = (log: Log, list: Discarded, index: number): boolean =>
+  log.voids.some((v) => {
+    const range = v.ranges[list];
+    return range !== undefined && index >= range[0] && index < range[1];
+  });
+
+/** The facts of `list` no flashback undid. */
+const unvoided = <K extends Discarded>(log: Log, list: K): Log[K] =>
+  log.voids.length === 0 ? log[list] : (log[list].filter((_, i) => !isVoided(log, list, i)) as Log[K]);
+
+/** The log's lists after the discard cut `list` back to `length`: void ranges past it named facts that are gone, so they go too. */
+const cutVoids = (log: Log, list: Discarded, length: number): void => {
+  log.voids.forEach((v, i) => {
+    const range = v.ranges[list];
+    if (range === undefined || range[1] <= length) return;
+    const { [list]: _cut, ...rest } = v.ranges;
+    log.voids[i] = { ...v, ranges: range[0] < length ? { ...rest, [list]: [range[0], length] as const } : rest };
+  });
+};
+
 /** The lengths of the log's lists the tracker cuts back or re-stamps. */
 const trackerLengths = (log: Log): TrackerLengths => ({
   laps: log.laps.length,
@@ -117,10 +143,10 @@ const drop = (state: EngineState, out: StepOutput): void => {
  * the first history step), so every entry it finds was recorded by an earlier frame.
  */
 const recordedAtOrAfter = (log: Log, boundary: SessionTime): boolean =>
-  log.events.some((e) => e.at >= boundary) ||
-  log.crossings.some((c) => c.at >= boundary) ||
-  log.laps.some((l) => l.completedAt >= boundary) ||
-  log.pitStops.some((p) => p.pitLaneExit >= boundary);
+  unvoided(log, 'events').some((e) => e.at >= boundary) ||
+  unvoided(log, 'crossings').some((c) => c.at >= boundary) ||
+  unvoided(log, 'laps').some((l) => l.completedAt >= boundary) ||
+  unvoided(log, 'pitStops').some((p) => p.pitLaneExit >= boundary);
 
 /**
  * `next` opens where the phase in progress closes. Several frames can carry one moment of the race clock (a clock
@@ -210,6 +236,7 @@ const reindexLaps = (state: EngineState): void => {
   open.lapIndex = open.lapIndex.map(() => ({}));
   log.laps.forEach((lap, i) => {
     const index = open.lapIndex[lap.carId];
+    if (isVoided(log, 'laps', i)) return;
     if (!index) return;
     const slot = (index[lap.lapNumber] ??= { confirmed: false });
     if (lap.status === 'confirmed') slot.confirmed = true;
@@ -226,8 +253,11 @@ const reindexLaps = (state: EngineState): void => {
 const discardFormation = (state: EngineState, from: TrackerLengths): void => {
   // Cuts the log in place (an old mechanism; Task 9 replaces it with hiding by stamp): the step is `rewritten`.
   const { log, open } = state;
-  const lights = log.events.slice(from.events).filter((e) => e.kind === 'startLights');
-  for (const key of DISCARDED) log[key].splice(from[key]);
+  const lights = log.events.slice(from.events).filter((e, i) => e.kind === 'startLights' && !isVoided(log, 'events', from.events + i));
+  for (const key of DISCARDED) {
+    log[key].splice(from[key]);
+    cutVoids(log, key, from[key]);
+  }
   log.events.push(...lights);
   reindexLaps(state);
   open.miniSectors.fill(undefined);

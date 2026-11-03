@@ -10,7 +10,14 @@ export { defineConfig, type ConfigKey, type ConfigShape, type ConfigValue } from
 export { activeFlagPhaseOf } from './calc/active-flag-phase.ts';
 export { situationOf } from './calc/situation.ts';
 export { InsightBook } from './calc/insight-book.ts';
-export { Scheduler, type OnCalculatorRun, type SchedulerInput, type SchedulerOptions, type SchedulerResult } from './calc/scheduler.ts';
+export {
+  Scheduler,
+  type OnCalculatorRun,
+  type SchedulerBookkeeping,
+  type SchedulerInput,
+  type SchedulerOptions,
+  type SchedulerResult,
+} from './calc/scheduler.ts';
 export type {
   Cadence,
   Calculator,
@@ -42,4 +49,12 @@ export {
 export { projectionLengths } from './log/projection.ts';
 export type { HistoryDelta, LogLengths, Projection, ProjectedList, ProjectionState } from './log/types.ts';
 export { unknownLapEnd, type LapEndSamples } from './history/lap-samples.ts';
-export { SessionRunner, type FlashbackInfo, type SessionRunnerOptions, type StepResult } from './runner/session-runner.ts';
+export {
+  IDENTITY_WAIT_FRAMES,
+  SessionRunner,
+  type FlashbackInfo,
+  type OnResult,
+  type SessionRunnerOptions,
+  type Snapshotable,
+  type StepResult,
+} from './runner/session-runner.ts';

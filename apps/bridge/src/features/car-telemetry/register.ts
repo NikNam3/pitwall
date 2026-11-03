@@ -1,15 +1,15 @@
 import type { TopicValue } from '@pitwall/contracts';
-import type { QuickCalculator } from '@pitwall/engine';
+import { copyPlain, type QuickCalculator } from '@pitwall/engine';
 import { bindState, defineFeature } from '../feature.ts';
 import { selectCarSlot, type ViewCars } from '../car-params.ts';
 
-/** Every car, by reference; the topic's `select` clones the dynamics of the one car a subscription asks for. */
+/** Every car, copied: an output never changes once returned, and the engine changes its cars in place. */
 const carsDynamics: QuickCalculator<ViewCars> = {
   id: 'cars.dynamics',
   kind: 'quick',
   reads: ['dynamics'],
   cadence: 'frame',
-  compute: ({ state }) => state.cars,
+  compute: ({ state }) => copyPlain(state.cars),
 };
 
 export default defineFeature({
