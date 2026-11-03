@@ -35,9 +35,9 @@ describe('penalties: id, span declaration, applies to, inputs', () => {
     expect([machine.id, machine.spans, machine.appliesTo]).toEqual(['penalties', penaltiesSpans, ['race']]);
     expect(machine.spans.scope).toBe('car');
   });
-  it('reads the events, the unserved counts and the time penalties, no value and no upstream sub-machine', () => {
+  it('reads the events, the unserved counts and the time penalties, no value, and weekend-phase upstream (C14, C15)', () => {
     expect(machine.inputs.signals).toEqual(expect.arrayContaining(['events', 'unservedDriveThroughs', 'unservedStopGos', 'timePenaltyMs']));
-    expect([machine.inputs.values, machine.inputs.upstream]).toEqual([[], []]);
+    expect([machine.inputs.values, machine.inputs.upstream]).toEqual([[], ['weekend-phase']]);
   });
 });
 

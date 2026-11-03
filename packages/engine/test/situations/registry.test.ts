@@ -63,6 +63,13 @@ describe('the registered sub-machines', () => {
       if (m.appliesTo !== 'all') for (const phase of m.appliesTo) expect(['practice', 'qualifying', 'race'], m.id).toContain(phase);
     }
   });
+  it('every per-phase sub-machine has weekend-phase upstream (C14)', () => {
+    const upstreamOf = (id: string, seen = new Set<string>()): Set<string> => {
+      for (const up of MACHINES.find((m) => m.id === id)?.inputs.upstream ?? []) if (!seen.has(up)) upstreamOf(up, seen.add(up));
+      return seen;
+    };
+    for (const m of MACHINES.filter((x) => x.appliesTo !== 'all')) expect([...upstreamOf(m.id)], m.id).toContain('weekend-phase');
+  });
   it('every registered sub-machine is the folder situations/<id>/ with its machine.ts, each id once', () => {
     const situations = join(import.meta.dirname, '..', '..', 'src', 'situations');
     for (const m of MACHINES) expect(existsSync(join(situations, m.id, 'machine.ts')), m.id).toBe(true);
