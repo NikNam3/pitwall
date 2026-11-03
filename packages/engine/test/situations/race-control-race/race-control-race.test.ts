@@ -28,8 +28,8 @@ describe('race-control-race: id, span declaration, applies to, inputs', () => {
     expect([machine.id, machine.spans, machine.appliesTo]).toEqual(['race-control-race', raceControlRaceSpans, ['race']]);
     expect(machine.spans.scope).toBe('session');
   });
-  it('reads the DRSE and DRSD events and drsAllowed, and the upstream session-phase-race', () => {
-    expect(machine.inputs.signals).toEqual(expect.arrayContaining(['events', 'drsAllowed']));
+  it('reads the DRSE and DRSD events and the upstream session-phase-race', () => {
+    expect(machine.inputs.signals).toEqual(expect.arrayContaining(['events']));
     expect(machine.inputs.upstream).toEqual(['session-phase-race']);
   });
 });
@@ -95,6 +95,15 @@ describe('race-control-race: joining a race in progress (C26: the first frame, j
     expect(r.open[0]).toMatchObject({ kind: 'drsOn', id: 0, startFrame: 1, joinedAt: true });
     for (const s of r.open) expect(s).toEqual(r.open[0]);
     expect(r.closed.flat()).toEqual([]);
+  });
+  it.each([['neutralised', 'safetyCar'], ['suspended', 'redFlag']] as const)('a race joined while the session phase is %s opens drsOff with reason %s, joined', (kind, reason) => {
+    const r = run(inputs().frames(3, phase(kind)));
+    expect(r.open[0]).toMatchObject({ kind: 'drsOff', id: 0, startFrame: 1, joinedAt: true, detail: { reason } });
+    expect(r.open[2]).toEqual(r.open[0]);
+  });
+  it('a race joined under a safety car turns drsOn at the DRSE that ends it', () => {
+    const r = run(inputs().frames(2, phase('neutralised')).frame(inRace('racing', events(DRSE))));
+    expect(r.open.map((s) => [s?.kind, reasonOf(s)])).toEqual([['drsOff', 'safetyCar'], ['drsOff', 'safetyCar'], ['drsOn', undefined]]);
   });
   it('a race that goes on under a safety car after the join: the DRSD turns it off, the DRSE back on', () => {
     const r = run(inputs().frames(2, phase('racing')).frame(inRace('neutralised', events(DRSD('safetyCar')))).frames(2).frame(inRace('racing', events(DRSE))));

@@ -4,8 +4,10 @@
 // list, C3) and `drsOn`. The declared transitions are
 //   none -> drsOff     the session's first frame before the lights out: `notEnabledYet` (on the grid: the session's
 //                      start; in the formation lap or at the start lights: a join, `joinedAt`)
-//   none -> drsOn      the session's first frame after the lights out, a race joined in progress (join): DRS counts as
-//                      on until a DRSD (the rule of the old `drsStatus`, battle's DRS test of w2/drs 479ec09)
+//   none -> drsOff     (also) a race joined after the lights out under a safety car or VSC (`neutralised`): reason
+//                      `safetyCar`; under a red flag (`suspended`): reason `redFlag` (supervisor ruling, round 2)
+//   none -> drsOn      the session's first frame after the lights out otherwise, a race joined in progress (join): DRS
+//                      counts as on until a DRSD (the rule of the old `drsStatus`, w2/drs 479ec09)
 //   drsOff -> drsOn    DRSE after the lights out
 //   drsOn -> drsOff    DRSD after the lights out, with its reason
 //   drsOff -> drsOff   a DRSD after the lights out while DRS is off with another reason (`notEnabledYet` included)
@@ -36,6 +38,8 @@ const rows: TransitionRow<MachineInput>[] = [
   { name: 'the first frame on the grid: drsOff, not enabled yet', from: 'none', to: 'drsOff', input: inputs().frame(phase('grid')) },
   { name: 'the first frame in the formation lap: drsOff, not enabled yet (join)', from: 'none', to: 'drsOff', input: inputs().frame(phase('formation')), join: true },
   { name: 'the first frame at the start lights: drsOff, not enabled yet (join)', from: 'none', to: 'drsOff', input: inputs().frame(phase('startLights')), join: true },
+  { name: 'a race joined under a safety car: drsOff, reason safetyCar (join)', from: 'none', to: 'drsOff', input: inputs().frame(phase('neutralised')), join: true },
+  { name: 'a race joined under a red flag: drsOff, reason redFlag (join)', from: 'none', to: 'drsOff', input: inputs().frame(phase('suspended')), join: true },
   { name: 'a race joined after the lights out: drsOn (join)', from: 'none', to: 'drsOn', input: inputs().frame(phase('racing')), join: true },
   {
     name: 'DRSE after the lights out: drsOff -> drsOn',

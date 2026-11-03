@@ -28,9 +28,9 @@ describe('compound-rule: id, span declaration, applies to, inputs', () => {
     expect([machine.id, machine.spans, machine.appliesTo]).toEqual(['compound-rule', compoundRuleSpans, ['race']]);
     expect(machine.spans.scope).toBe('car');
   });
-  it('reads the tyres values (the visual compound), no signal and no upstream sub-machine', () => {
+  it('reads the tyres values (the visual compound), the upstream session-phase-race and no signal', () => {
     expect(machine.inputs.values).toEqual(expect.arrayContaining(['tyres']));
-    expect([machine.inputs.signals, machine.inputs.upstream]).toEqual([[], []]);
+    expect([machine.inputs.signals, machine.inputs.upstream]).toEqual([[], ['session-phase-race']]);
   });
 });
 
@@ -51,6 +51,22 @@ describe('compound-rule: the first lap on intermediates or wets waives the rule'
     expect(r.open[3]!.joinedAt).toBeUndefined();
     expect(r.closed[3]).toMatchObject([{ kind: 'required', id: 0, start: 0, end: 3 * FRAME_MS, startFrame: 1 }]);
     expect(r.open[5]).toEqual(r.open[3]);
+  });
+  it('grid and formation laps on intermediates waive nothing before the lights out; the lights out waives on its frame (C26)', () => {
+    const r = run(inputs().frames(2, race('inter', 1, 'grid')).frames(2, race('inter', 1, 'formation')).frame(race('inter', 1, 'startLights')).frame(race('inter', 1, 'racing')).frames(2, race('inter', 1)));
+    expect(r.open.slice(0, 5).map((s) => [s?.id, s?.kind])).toEqual(Array(5).fill([0, 'required']));
+    expect(r.open[5]).toMatchObject({ kind: 'waived', id: 1, startFrame: 6 });
+    expect(r.open[5]!.joinedAt).toBeUndefined();
+    expect(r.closed[5]).toMatchObject([{ kind: 'required', id: 0, startFrame: 1 }]);
+  });
+  it('wets in the formation lap, back to a dry compound before the lights out: still required', () => {
+    const r = run(inputs().frames(2, race('wet', 1, 'formation')).frames(2, race('soft', 1, 'startLights')).frames(2, race('soft')));
+    expect(r.open.map((s) => [s?.id, s?.kind])).toEqual(Array(6).fill([0, 'required']));
+  });
+  it('dry all race: required to the end, one span', () => {
+    const r = run(inputs().frames(2, race('soft', 1, 'formation')).frames(2, race('soft')).frames(3, race('hard', 20)).frames(2, race('medium', 40, 'neutralised')).frame(race('medium', 41, 'finished')));
+    expect(r.open.map((s) => [s?.id, s?.kind])).toEqual(Array(10).fill([0, 'required']));
+    expect(r.closed.flat()).toEqual([]);
   });
   it('a change between dry compounds changes nothing: one required span', () => {
     const r = run(inputs().frames(2, race('soft', 1)).frames(2, race('hard', 2)).frames(2, race('medium', 3)));
