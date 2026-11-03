@@ -142,6 +142,13 @@ describe('the formation lap’s facts are hidden, never discarded (C24, C29)', (
     const { runner } = startRun();
     expect(runner.state.history.laps.filter((l) => l.lapNumber === 1 && l.carId === 0)).toMatchObject([{ fuelAtStartKg: { known: true, value: 98.5 } }]);
   });
+  // Review 2 B4: a car that enters the pit lane during the formation lap starts the race from the pit lane; that start is
+  // no pit stop, and a stop after it is one (spec 3.2). Ported (C82): the behaviour stays without the discard.
+  it('a pit-lane start is no pit stop: the car in the pit lane from the formation lap to after lights out records none; its later stop is recorded', () => {
+    const pitLane = (k: number) => (k >= 80 && k < LIGHTS_OUT + 30) || (k >= LIGHTS_OUT + 80 && k < LIGHTS_OUT + 100);
+    const { runner } = run(script(formationStart(() => [], (k, d) => lap(d, 0, { pitStatus: pitLane(k) ? 1 : 0 }))));
+    expect(runner.state.history.pitStops.filter((s) => s.carId === 0)).toMatchObject([{ pitLaneEntry: raceAt(80), pitLaneExit: raceAt(100) }]);
+  });
   it('a car whose lap timer already runs on the grid starts lap 1 from its start at lights out too', () => {
     const { runner } = startRun();
     expect(runner.state.history.laps.filter((l) => l.lapNumber === 1 && l.carId === 1)).toMatchObject([{ fuelAtStartKg: { known: true, value: 98.5 } }]);

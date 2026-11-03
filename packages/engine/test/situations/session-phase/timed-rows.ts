@@ -23,6 +23,8 @@ export const timedSessionRows = (phase: WeekendPhase): TransitionRow[] => {
     { name: 'the first frame before the session clock runs opens grid', from: 'none', to: 'grid', input: onGrid() },
     { name: 'joins a session in progress: the time left below the duration (MiP, 121.6 s)', from: 'none', to: 'running', input: running(), join: true },
     { name: 'the session clock starts: grid closes and running opens', from: 'grid', to: 'running', input: onGrid().frame(frame(clockRuns)) },
+    // A red flag in qualifying or practice: not yet seen in any recording, and no restart signal is known (inventory
+    // §1.12, §4; C19). A suspension therefore has no restart transition: it ends only with finished or the post-session.
     { name: 'a red flag suspends the session', from: 'running', to: 'suspended', input: suspended() },
     { name: 'time over: SEND with every car finished closes running with finished (SgQ)', from: 'running', to: 'finished', input: running().frame(timeOver) },
     { name: 'time over under a red flag: SEND with every car finished closes the suspension with finished', from: 'suspended', to: 'finished', input: suspended().frame(timeOver) },
