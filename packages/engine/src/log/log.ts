@@ -6,7 +6,7 @@ import type { FactOf, LegacyList, Log, LogLengths, LogVoidFact, LogWriter } from
 
 /** The lists of the log that hold one fact type each; the span lists are `spans:<machine>`. */
 export const FACT_LISTS = ['laps', 'stints', 'pitStops', 'crossings', 'events', 'clock'] as const satisfies readonly FactList[];
-export const LEGACY_LISTS = ['flagPhases', 'sessionPhases', 'pauses'] as const satisfies readonly LegacyList[];
+export const LEGACY_LISTS = ['flagPhases', 'sessionPhases'] as const satisfies readonly LegacyList[];
 
 const SPANS = 'spans:';
 
@@ -25,7 +25,6 @@ export const createLog = (): Log => ({
   spans: {},
   flagPhases: [],
   sessionPhases: [],
-  pauses: [],
 });
 
 /** The array of a list; a span list a sub-machine has not written yet is created. */

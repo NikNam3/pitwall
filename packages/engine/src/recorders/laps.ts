@@ -229,7 +229,7 @@ const confirmLaps = (own: LapsOwn, car: LiveCar, f: LapsPass): void => {
 
 /**
  * The cars' recorded laps rebuilt from `laps`, the laps left in the history: for the situation tracker's formation
- * discard and start re-stamp, which change the log in place (until Task 9).
+ * discard, which changes the log in place (until Task 9).
  */
 export const reindexLaps = (own: LapsOwn, laps: readonly LapRecord[]): void => {
   own.recorded = own.recorded.map(() => ({}));
@@ -238,22 +238,6 @@ export const reindexLaps = (own: LapsOwn, laps: readonly LapRecord[]): void => {
     if (!recorded) continue;
     recorded[lap.lapNumber] = lap.status === 'confirmed' ? { confirmed: true } : { provisional: lap, confirmed: recorded[lap.lapNumber]?.confirmed ?? false };
   }
-};
-
-/**
- * The provisional laps the recorder keeps, as the situation tracker's start re-stamp left them in the history (`laps`,
- * the laps left there; until Task 9): each is the newest provisional record of its car and lap.
- */
-export const restampProvisionalLaps = (own: LapsOwn, laps: readonly LapRecord[]): void => {
-  const newest = new Map<string, LapRecord>();
-  for (const lap of laps) if (lap.status === 'provisional') newest.set(`${lap.carId}:${lap.lapNumber}`, lap);
-  own.recorded.forEach((recorded, carId) => {
-    for (const slot of Object.entries(recorded)) {
-      const [lapNumber, { provisional }] = slot;
-      const restamped = provisional && newest.get(`${carId}:${lapNumber}`);
-      if (restamped) recorded[Number(lapNumber)] = { ...slot[1], provisional: restamped };
-    }
-  });
 };
 
 /** No pit visit in progress: the situation tracker's formation discard (spec 3.2, until Task 9). */

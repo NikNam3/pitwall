@@ -7,7 +7,6 @@ import type {
   LapRecord,
   MachineId,
   MiniSectorCrossing,
-  PauseSpan,
   PitStopRecord,
   RaceEvent,
   SessionPhaseSpan,
@@ -36,13 +35,13 @@ export type FactOf<L extends FactList> = L extends 'laps'
 
 /**
  * The old mechanisms' lists, not facts: written by the situation tracker as before, hidden only by a void fact's
- * `legacy` ranges (no stamps), in the log and the projection until the task that replaces each (`flagPhases` Task 19, `sessionPhases` Task 9, `pauses` Task 7).
+ * `legacy` ranges (no stamps), in the log and the projection until the task that replaces each (`flagPhases` Task 19, `sessionPhases` Task 9).
  */
-export type LegacyList = 'flagPhases' | 'sessionPhases' | 'pauses';
+export type LegacyList = 'flagPhases' | 'sessionPhases';
 
 /**
  * A void fact as the log stores it: the domain's `VoidFact` plus the void ranges of the legacy lists, which are no fact
- * lists. Internal to the engine; `legacy` goes with the lists (Tasks 7, 9 and 19 remove it).
+ * lists. Internal to the engine; `legacy` goes with the lists (Tasks 9 and 19 remove it).
  */
 export type LogVoidFact = VoidFact & { legacy?: Partial<Record<LegacyList, readonly [from: number, to: number]>> };
 
@@ -70,8 +69,6 @@ type Lists = {
   flagPhases: FlagPhase[];
   /** Legacy (`LegacyList`): closed session phases, oldest first; removed by Task 9. */
   sessionPhases: SessionPhaseSpan[];
-  /** Legacy (`LegacyList`): pauses, oldest first (display only); removed by Task 7. */
-  pauses: PauseSpan[];
 };
 
 /**

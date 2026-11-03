@@ -9,7 +9,8 @@ import { logWriter } from '../log/log.ts';
 import type { EngineState } from '../state/engine-state.ts';
 import { stampOf, type ChangeTag, type FrameStamps, type StepOutput } from '../step/types.ts';
 import type { DeepReadonly } from '../util/deep-readonly.ts';
-import type { ClockInput, MachineStep, SubMachine } from './machine.ts';
+import { clockInput, STEP0_CLOCK } from './clock/clock.ts';
+import type { MachineStep, SubMachine } from './machine.ts';
 import { MACHINE_ORDER } from './registry.ts';
 import type { Situation } from './situation.ts';
 
@@ -20,12 +21,6 @@ const spanTag = (machine: MachineId): ChangeTag => `spans:${machine}` as ChangeT
 
 /** The weekend phase: `pending` until the weekend-phase sub-machine decides it (C14, Task 8). */
 const weekendPhaseOf = (_state: DeepReadonly<EngineState>): WeekendPhase => ({ kind: 'pending' });
-
-/** Step 0's clock as the sub-machines read it (the situation tracker's clock until Task 7 makes it step 0). */
-const clockInputOf = (state: EngineState): ClockInput => ({
-  paused: state.open.phaseBook.onlinePause !== undefined,
-  offsetMs: state.open.phaseBook.clockOffsetMs,
-});
 
 /** A sub-machine runs in a weekend phase it applies to; a per-phase one never while the phase is pending or `none` (C14). */
 const applies = (machine: SubMachine<unknown>, phase: WeekendPhase): boolean =>
@@ -76,7 +71,7 @@ const appendClosed = (state: EngineState, closed: ReadonlyArray<{ machine: Machi
  */
 export function runMachine(state: EngineState, frame: Frame, out: StepOutput): FrameStamps {
   const weekendPhase = weekendPhaseOf(state);
-  const clock = clockInputOf(state);
+  const clock = clockInput(state);
   const after: Record<MachineId, OpenSpan[]> = {};
   const closed: Array<{ machine: MachineId; spans: Closed }> = [];
   for (const machine of MACHINE_ORDER) {
@@ -95,21 +90,26 @@ export function runMachine(state: EngineState, frame: Frame, out: StepOutput): F
   return stamps;
 }
 
-/** The machine's open spans (C20): every registered sub-machine's, and the weekend phase. */
+/** The machine's open spans (C20): the clock's (a pause in progress), every registered sub-machine's, and the weekend phase. */
 export function situationOf(state: DeepReadonly<EngineState>): Situation {
-  const byMachine: Record<MachineId, OpenSpan[]> = {};
+  const byMachine: Record<MachineId, OpenSpan[]> = { [STEP0_CLOCK.id]: STEP0_CLOCK.openSpans(state.open.clock) };
   for (const machine of MACHINE_ORDER) byMachine[machine.id] = openSpansOf(state, machine);
   return { weekendPhase: weekendPhaseOf(state), session: undefined, byMachine };
 }
 
 /**
  * The session ended (C18): every open span of every sub-machine is closed as a fact at `at`, stamped with the spans open
- * then; a pending confirmation closes as it stands, `confirmed: false`. The open states go, so every log is complete
- * and no span stays open. The clock's paused span joins once the clock is step 0 (Task 7).
+ * then; a pending confirmation closes as it stands, `confirmed: false`. The clock's pause in progress closes too. The
+ * open states go, so every log is complete and no span stays open.
  */
 export function closeSession(state: EngineState, at: SessionTime): void {
   const stamps = stampsOf(state);
-  const closed = MACHINE_ORDER.map((machine) => ({ machine: machine.id, spans: openSpansOf(state, machine).map((span) => ({ ...span, end: at })) }));
+  const closeAll = (machine: MachineId, open: readonly DeepReadonly<OpenSpan>[]) => ({ machine, spans: open.map((span) => ({ ...span, end: at })) });
+  const closed = [
+    closeAll(STEP0_CLOCK.id, STEP0_CLOCK.openSpans(state.open.clock)),
+    ...MACHINE_ORDER.map((machine) => closeAll(machine.id, openSpansOf(state, machine))),
+  ];
   appendClosed(state, closed, stamps);
+  state.open.clock = { ...state.open.clock, pause: undefined };
   state.open.machines = {};
 }

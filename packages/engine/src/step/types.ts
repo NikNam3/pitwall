@@ -44,14 +44,14 @@ export type LapCorrection = {
 };
 
 /**
- * The game's session time fell from `fromMs` to `toMs` with no flashback and no start settling (spec 3.3): nothing
- * recorded changes, and from the race start on the race clock continues over the fall (user ruling 2026-10-30).
+ * The game's session time fell from `fromMs` to `toMs` with no flashback (a `fall` clock fact, C36): nothing recorded
+ * changes, and the race clock continues over the fall.
  */
 export type ClockFall = { fromMs: SessionTime; toMs: SessionTime };
 
 /**
  * The game's session time jumped forward from `fromMs` to `toMs` by more than `SIMULATION_JUMP_MS` with no post-session
- * simulation (a stall while the clock runs ahead of wall time in the garage): nothing changes; it is only reported
+ * simulation (a stall while the clock runs ahead of wall time in the garage; a `jump` clock fact): nothing else changes
  * (spec 3.3).
  */
 export type ClockJump = { fromMs: SessionTime; toMs: SessionTime };
@@ -60,7 +60,7 @@ export type ClockJump = { fromMs: SessionTime; toMs: SessionTime };
 export type RewindMark = { frameId: number; rawMs: SessionTime; lastWallMs: number | undefined };
 
 /**
- * The `SessionRunner`'s decision that a frame reports a flashback, the one way it reaches the situation tracker: no
+ * The `SessionRunner`'s decision that a frame reports a flashback, the one way it reaches the clock (step 0): no
  * session-time jump is read on the frame (spec 3.3). `rewound` when the runner rewound on it: the mark of the state it
  * left. The runner keeps the decision with the frame and gives it again whenever a later rewind replays the frame, so
  * the replay does what the first pass did.
@@ -69,7 +69,7 @@ export type FlashbackReport = { rewound?: RewindMark };
 
 /**
  * What a step did besides its tags. `rewritten`: it changed history recorded by earlier steps (lights out discarding
- * the formation lap, the start's settling re-stamping it), so readers start over and no rewind may go back before it.
+ * the formation lap; the legacy discard, deleted by Task 9), so readers start over and no rewind may go back before it.
  * `discarded`: it took back what readers already saw without changing the history (a neutralisation dropped
  * unconfirmed; a session phase opening or closing at or before the time of an entry an earlier frame recorded, which
  * moves that entry across the boundary), so readers start over; rewinds across it stay exact.

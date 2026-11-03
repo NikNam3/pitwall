@@ -44,7 +44,6 @@ const emptyProjection = (): ProjectionState => ({
   spans: {},
   flagPhases: [],
   sessionPhases: [],
-  pauses: [],
 });
 
 /** A span's key: its machine and id, and its car for a car sub-machine's span (span ids count per car there, C26). */
@@ -150,7 +149,7 @@ export class ProjectionTracker {
 
   /**
    * Projects the whole log again. For the old mechanisms that cut or rewrite the log in place (the situation tracker's
-   * formation discard and start re-stamp, until Task 9).
+   * formation discard, until Task 9).
    */
   rebuild(open: Situation): void {
     this.#rebuild(open);

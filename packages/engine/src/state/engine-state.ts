@@ -7,7 +7,6 @@ import type {
   FlagPhase,
   FrameEvent,
   MachineId,
-  Ms,
   SessionFlag,
   SessionState,
   SessionTime,
@@ -16,17 +15,19 @@ import type {
 import type { ProjectionBook } from '../log/projection.ts';
 import type { Log, ProjectionState } from '../log/types.ts';
 import type { Signals } from '../signals/types.ts';
+import type { ClockOpen } from '../situations/clock/types.ts';
 import type { WeekendContext } from './weekend-context.ts';
 
 /**
  * The lengths of the log's lists that the situation tracker notes (the formation's and the start's first entries) to cut
- * back or re-stamp them; goes with those mechanisms (Tasks 7, 9).
+ * them back; goes with that mechanism (Task 9).
  */
-export type TrackerLengths = Record<'laps' | 'stints' | 'pitStops' | 'crossings' | 'events' | 'flagPhases' | 'sessionPhases' | 'pauses', number>;
+export type TrackerLengths = Record<'laps' | 'stints' | 'pitStops' | 'crossings' | 'events' | 'flagPhases' | 'sessionPhases', number>;
 
 /**
- * The situation tracker's bookkeeping behind `OpenTrackers.situations` (`history/situations/`, spec 3.1-3.3): what a
- * later frame needs to confirm, discard or re-stamp what an earlier one recorded.
+ * The situation tracker's bookkeeping behind `OpenTrackers.situations` (`history/situations/`, spec 3.1, 3.2): what a
+ * later frame needs to confirm or discard what an earlier one recorded. The clock's fields moved to `open.clock` (Task 7);
+ * Task 9 deletes the rest.
  */
 export type PhaseBook = {
   /** A frame was applied, so the next one is not the session's first (where the tracker joins the session). */
@@ -41,29 +42,6 @@ export type PhaseBook = {
   formationFrom?: TrackerLengths | undefined;
   /** The history lengths when the race's start lights began (not a restart's): where the start's entries begin. */
   startFrom?: TrackerLengths | undefined;
-  /**
-   * The race's lights out: its frame id (the start settles within a window after it) and the start's entries that the
-   * settling re-stamps: history from `from`, phases from index `phaseFrom` (the start lights) on (spec 3.3).
-   */
-  lightsOut?: { frameId: number; from: TrackerLengths; phaseFrom: number } | undefined;
-  /**
-   * How far the race clock runs ahead of the game's session time: the sum of the unexplained falls since the race start
-   * (spec 3.3, user ruling 2026-10-30). Every frame is stamped at its session time plus this, so the race clock never
-   * falls but at a flashback or the start's own rules.
-   */
-  clockOffsetMs: Ms;
-  /**
-   * The receive time of the previous frame (wall clock, ms), for offline pauses and the post-session jump; unset only
-   * before the session's first frame.
-   */
-  lastWallMs?: number | undefined;
-  /**
-   * Set by a rewind whose frame still carried the pre-rewind session time (inventory 1.10): the game's session time
-   * (not the race clock) the frames right after the rewind carry while they still belong to its target moment.
-   */
-  staleRawMs?: SessionTime | undefined;
-  /** An online pause (`gamePaused`) in progress: its session time and receive time. */
-  onlinePause?: { start: SessionTime; wallMs: number } | undefined;
 };
 
 /**
@@ -71,9 +49,11 @@ export type PhaseBook = {
  * Plain data only, so `structuredClone` can snapshot it.
  */
 export type OpenTrackers = {
-  /** The situation tracker's open state (`history/situations/`): the phase in progress (paused: `phaseBook.onlinePause`). */
+  /** The situation tracker's open state (`history/situations/`): the phase in progress. */
   situations: { session: OpenSessionPhase };
   phaseBook: PhaseBook;
+  /** Step 0's open state (`situations/clock/`, C7): the race clock's offset, the last receive time, a pause in progress. */
+  clock: ClockOpen;
   /** The flag phase in progress (`history/flags.ts`, the tracker's mirror until Task 19). */
   flagPhase?: Omit<FlagPhase, 'end' | 'endLeaderLap'> | undefined;
   /** `session.flag` after the previous frame. */
@@ -103,7 +83,7 @@ export type EngineState = {
   playerCar: CarId;
   teammateCar?: CarId | undefined;
   lastFrameId: number;
-  /** The last frame's time on the race clock: its session time plus `open.phaseBook.clockOffsetMs`. */
+  /** The last frame's time on the race clock: its session time plus `open.clock.offsetMs`. */
   sessionTime: SessionTime;
   open: OpenTrackers;
   weekend?: WeekendContext | undefined;
