@@ -2,12 +2,13 @@ import { MAX_CARS, MINI_SECTORS, type CarId, type FrameNumber, type Metres, type
 import type { LogWriter } from '../log/types.ts';
 import type { Recorder } from '../step/types.ts';
 import { carsWithLapData } from './cars.ts';
+import { initialRaceStartMark, raceStartStep, type RaceStartMark } from './race-start.ts';
 
 /** Where a car was on its previous LapData frame, and the last segment it crossed in that lap (-1 = none). */
 export type MiniSectorCursor = { lap: number; segment: number; distanceM: Metres; at: SessionTime };
 
-/** The mini-sector recorder's own open state (C10): per car, indexed by `CarId`. */
-export type MiniSectorsOwn = { cursors: Array<MiniSectorCursor | undefined> };
+/** The mini-sector recorder's own open state (C10): per car, indexed by `CarId`; where the race start is (its own copy, C11). */
+export type MiniSectorsOwn = { cursors: Array<MiniSectorCursor | undefined>; raceStart: RaceStartMark };
 
 /** A boundary the car passed between two samples, and how far along the path between them that was. */
 type Crossing = { lap: number; segment: number; pathM: Metres };
@@ -57,19 +58,19 @@ const trackCar = (own: MiniSectorsOwn, sample: { carId: CarId; lap: number; dist
   return appended;
 };
 
-/** No car's crossings carry on: the situation tracker's formation discard starts them over (spec 3.2, until Task 9). */
-export const restartMiniSectors = (own: MiniSectorsOwn): void => {
-  own.cursors.fill(undefined);
-};
-
 /**
  * The time each active car passes each of the 50 equal-length segments of the lap, interpolated linearly in
- * distance between two frames. A crossing is recorded once, however the car jitters around the boundary.
+ * distance between two frames. A crossing is recorded once, however the car jitters around the boundary. At the race
+ * start (`raceStartStep`) no car's crossings carry on: the formation lap crossed lap 1's boundaries already, and lap 1
+ * is crossed again from lights out (spec 3.2; what the formation lap recorded stays, hidden, C29).
  */
 export const miniSectorsRecorder: Recorder<MiniSectorsOwn> = {
   id: 'miniSectors',
-  init: () => ({ cursors: Array.from({ length: MAX_CARS }, () => undefined) }),
+  init: () => ({ cursors: Array.from({ length: MAX_CARS }, () => undefined), raceStart: initialRaceStartMark() }),
   apply(input, own, log, out) {
+    const start = raceStartStep(own.raceStart, input.situation);
+    own.raceStart = start.mark;
+    if (start.started) own.cursors.fill(undefined);
     const { trackLengthM } = input.live.session;
     if (trackLengthM <= 0) return own;
     let appended = false;

@@ -1,12 +1,13 @@
 import { known, MAX_CARS, unknown, type ConfirmedLap, type FactRef, type Kg, type Known, type LapRecord, type FrameNumber, type SessionFlag, type SessionTime } from '@pitwall/domain';
 import type { LogWriter } from '../log/types.ts';
-import type { LapCorrection, Recorder, StepOutput } from '../step/types.ts';
+import type { LapCorrection, Recorder, RecorderInput, StepOutput } from '../step/types.ts';
 import type { DeepReadonly } from '../util/deep-readonly.ts';
-import { carsWithLapData, type LiveCar } from './cars.ts';
+import { carsInSession, carsWithLapData, type LiveCar } from './cars.ts';
 import { lapMarkOf, lapNotBegun, lapStepOf, markPitLane } from './lap-boundary.ts';
 import type { LapCursor } from './lap-cursor.ts';
 import { emptyChannels, lapEndSamples, lapStartSamples, observeLapFrame, unknownLapEnd } from './lap-samples.ts';
 import { endVisits, pitLaneStep, type PitLane } from './pit-lane.ts';
+import { initialRaceStartMark, raceStartStep, type RaceStartMark } from './race-start.ts';
 
 /**
  * A lap that has a record: its provisional one with the id the log gave it (C21) until Session History confirms it, and
@@ -21,6 +22,8 @@ export type LapsOwn = {
   recorded: Array<Record<number, RecordedLap>>;
   /** Per car: the pit lane, for the in and out laps (its own copy, C11). */
   pitLanes: Array<PitLane | undefined>;
+  /** Where the race start is (its own copy, C11). */
+  raceStart: RaceStartMark;
 };
 
 const fuelAt = (car: LiveCar, at: SessionTime): Known<Kg> =>
@@ -129,10 +132,14 @@ const startLap = (own: LapsOwn, car: LiveCar, at: SessionTime, fromStart: boolea
 };
 
 /**
- * Starts the car's lap over on this frame, seen from its start: at lights out every car stands on the grid (spec 3.2).
- * Called by the situation tracker (`history/situations/`) until Task 9 moves the race start into the machine.
+ * The race start (`raceStartStep`): every car in the session that has had LapData starts its lap over on this frame,
+ * seen from its start, as at lights out every car stands on the grid (spec 3.2); no pit visit goes on (a car in the pit
+ * lane starts the race from it, which is no in lap). What the laps recorded stays as recorded (C24).
  */
-export const restartLap = (own: LapsOwn, car: LiveCar, at: SessionTime): void => startLap(own, car, at, true);
+const restartLaps = (own: LapsOwn, input: DeepReadonly<RecorderInput>): void => {
+  for (const car of carsInSession(input.live)) if (car.updatedAt.lapData !== undefined) startLap(own, car, input.at, true);
+  endVisits(own.pitLanes);
+};
 
 /** What one frame of the recorder writes to: the log, the step's output and whether a lap was appended. */
 type LapsPass = { at: SessionTime; frameNumber: FrameNumber; flag: SessionFlag; trackLengthM: number; log: LogWriter; out: StepOutput; appended: boolean };
@@ -240,26 +247,6 @@ const confirmLaps = (own: LapsOwn, car: LiveCar, f: LapsPass): void => {
 };
 
 /**
- * The cars' recorded laps rebuilt from `laps`, the laps of the current timeline left in the log: for the situation
- * tracker's formation discard, which changes the log in place (until Task 9). A lap's position in `laps` is its id
- * (C21), so a provisional keeps the id a confirmed lap names.
- */
-export const reindexLaps = (own: LapsOwn, laps: readonly LapRecord[]): void => {
-  own.recorded = own.recorded.map(() => ({}));
-  laps.forEach((lap, index) => {
-    const recorded = own.recorded[lap.carId];
-    if (!recorded) return;
-    recorded[lap.lapNumber] =
-      lap.status === 'confirmed'
-        ? { confirmed: true }
-        : { provisional: { lap, id: { list: 'laps', index } }, confirmed: recorded[lap.lapNumber]?.confirmed ?? false };
-  });
-};
-
-/** No pit visit in progress: the situation tracker's formation discard (spec 3.2, until Task 9). */
-export const endLapVisits = (own: LapsOwn): void => endVisits(own.pitLanes);
-
-/**
  * Laps are appended twice, never changed: provisional when the lap number goes up (from LapData), confirmed when
  * Session History holds the lap (a lap that never got a provisional is appended confirmed). The confirmed record wins;
  * what differed is reported as corrections.
@@ -270,9 +257,13 @@ export const lapsRecorder: Recorder<LapsOwn> = {
     cursors: Array.from({ length: MAX_CARS }, () => undefined),
     recorded: Array.from({ length: MAX_CARS }, () => ({})),
     pitLanes: Array.from({ length: MAX_CARS }, () => undefined),
+    raceStart: initialRaceStartMark(),
   }),
   apply(input, own, log, out) {
     const { at, live } = input;
+    const start = raceStartStep(own.raceStart, input.situation);
+    own.raceStart = start.mark;
+    if (start.started) restartLaps(own, input);
     const f: LapsPass = { at, frameNumber: input.frameNumber, flag: live.session.flag, trackLengthM: live.session.trackLengthM, log, out, appended: false };
     for (const car of carsWithLapData(input)) {
       const pit = pitLaneStep(own.pitLanes[car.id], car.timing.pitStatus, car.timing.lap);

@@ -189,12 +189,8 @@ export class SessionProcessor {
       const { rewound } = result.delta;
       const unpublished: PublishError[] = [];
       if (rewound !== undefined) {
-        // A flashback restored the scheduler's bookkeeping with the state (C27). The old mechanisms' rewinds (the race
-        // start discarding the formation lap or settling its clock, a dropped unconfirmed neutralisation, a phase
-        // boundary that moves an entry earlier frames recorded; target frame -1 until Task 9) undo no frame: there the
-        // calculators start over.
-        if (rewound.frameId < 0) scheduler.reset();
-        // A run triggered before it would land on the new timeline.
+        // A flashback (the only rewind, C30) restored the scheduler's bookkeeping with the state (C27), also one to the
+        // first snapshot (target frame -1). A run triggered before it would land on the new timeline.
         this.#o.jobs?.flashback();
         unpublished.push(...publisher.resendInsights(rewound));
       }

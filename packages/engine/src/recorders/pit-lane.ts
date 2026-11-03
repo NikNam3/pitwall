@@ -16,7 +16,7 @@ export const pitLaneStep = (prev: PitLane | undefined, status: PitStatus, lap: n
   return { lane: { status, ...(visitLap !== undefined && !left && { visitLap }) }, entered, left };
 };
 
-/** The lanes with no visit in progress (the formation discard, spec 3.2); the statuses stay. */
+/** The lanes with no visit in progress (the race start, spec 3.2); the statuses stay. */
 export const endVisits = (lanes: Array<PitLane | undefined>): void => {
   lanes.forEach((lane, i) => {
     if (lane) lanes[i] = { status: lane.status };

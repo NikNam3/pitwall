@@ -17,6 +17,8 @@ export {
   type Snapshotable,
   type StepResult,
 } from './runner/session-runner.ts';
-// The registered sub-machines and their type, for tools that run step 2 on their own (`pitwall scan-situations`).
+// The registered sub-machines, step 0's clock and their type, for tools that read the machine's spans on their own
+// (`pitwall scan-situations`).
 export { MACHINES } from './situations/index.generated.ts';
+export { STEP0_CLOCK } from './situations/clock/clock.ts';
 export type { SubMachine } from './situations/machine.ts';

@@ -147,16 +147,14 @@ export class TopicPublisher {
   }
 
   /**
-   * After a rewind (`delta.rewound`, C30) the insights topics are sent again whole. A flashback's target drops the
-   * changes of the passes after it, which the undone frames produced (C33); the old mechanisms' rewinds (target frame
-   * -1, until Task 9) undo no frame and drop nothing.
+   * After a rewind (`delta.rewound`, C30: a flashback, the only rewind) the insights topics are sent again whole. Its
+   * target drops the changes of the passes after it, which the undone frames produced (C33); a target frame id of -1 (a
+   * flashback to the first snapshot, before the session's first frame) drops every change of a pass.
    */
   resendInsights(target: NonNullable<HistoryDelta['rewound']>): PublishError[] {
-    if (target.frameId >= 0) {
-      const kept = ({ origin }: { origin: InsightOrigin | undefined }) =>
-        origin === undefined || origin.frameId < target.frameId || (origin.frameId === target.frameId && origin.between === undefined);
-      this.#insightLog = this.#insightLog.filter(kept);
-    }
+    const kept = ({ origin }: { origin: InsightOrigin | undefined }) =>
+      origin === undefined || origin.frameId < target.frameId || (origin.frameId === target.frameId && origin.between === undefined);
+    this.#insightLog = this.#insightLog.filter(kept);
     const entries = this.#insightLog.map(({ change }) => change);
     return this.#collecting(() => {
       for (const topic of this.#insights) this.#guarded(topic, () => this.#hub.resetAppend(this.#feedId, topic, entries));

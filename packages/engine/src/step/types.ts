@@ -20,8 +20,6 @@ export const CHANGE_TAGS = [
   'condition',
   'dynamics',
   'ownCar',
-  /** A session phase opened, closed or changed (`history.sessionPhases`, `open.situations`). */
-  'sessionPhases',
   'laps',
   'stints',
   'pitStops',
@@ -72,17 +70,13 @@ export type RewindMark = { frameId: number; rawMs: SessionTime; lastWallMs: numb
 export type FlashbackReport = { rewound?: RewindMark };
 
 /**
- * What a step did besides its tags. `rewritten`: it changed history recorded by earlier steps (lights out discarding
- * the formation lap; the legacy discard, deleted by Task 9), so readers start over and no rewind may go back before it.
- * `discarded`: it took back what readers already saw without changing the history (a neutralisation dropped
- * unconfirmed; a session phase opening or closing at or before the time of an entry an earlier frame recorded, which
- * moves that entry across the boundary), so readers start over; rewinds across it stay exact.
+ * What a step did besides its tags: the provisional lap values Session History corrected, and a fall or a forward jump
+ * of the session time step 0 read. No step changes or takes back what an earlier one recorded (C24): only a flashback
+ * rewinds, and that is the runner's (C27).
  */
 export type StepOutput = {
   changed: Set<ChangeTag>;
   corrections: LapCorrection[];
-  rewritten?: true;
-  discarded?: true;
   clockFall?: ClockFall;
   clockJump?: ClockJump;
 };
@@ -96,7 +90,7 @@ export type Recorder<Own> = {
 /**
  * What a recorder reads of the frame (C10): its time on the race clock, its id and number, the live state and the
  * situations; never the frame or a signal (C6, C13). A fact records the frame it describes (C26), this frame's
- * `frameNumber` unless it describes an earlier one. `tracked`: transitional, deleted by Tasks 9, 11/17 and 21 (`TrackedEvents`).
+ * `frameNumber` unless it describes an earlier one. `tracked`: transitional, deleted by Tasks 11/17 and 21 (`TrackedEvents`).
  */
 export type RecorderInput = {
   at: SessionTime;
@@ -111,12 +105,10 @@ export type RecorderInput = {
 export type RaceEventBody = Omit<RaceEvent, 'at' | 'frame'>;
 
 /**
- * Transitional (accepted ruling, Task 4): until the machine's spans carry them, step 2's slot (the situation tracker,
- * the one reader of signals besides the machine, C13) hands the recorders what this frame's situation events decided,
- * so no recorder reads a signal. `penaltyServed`: the cars whose drive-through or stop-go was served (DTSV, SGSV);
- * Task 11's `servingPenalty` spans and Task 17's activity spans delete it. `sessionEnded`: the session ended (SEND);
- * Task 9's `postSession` deletes it. `raceEvents`: the situation events still recorded as race events, in arrival order
- * (PENA, RTMT, DRSE, DRSD, STLG, LGOT); Task 21 deletes them. With all three gone, `RecorderInput.tracked` goes.
- * Absent: none of them.
+ * Transitional (accepted ruling, Task 4): until the machine's spans carry them, step 2's slot hands the recorders what
+ * this frame's situation events decided, so no recorder reads a signal (C13). `penaltyServed`: the cars whose
+ * drive-through or stop-go was served (DTSV, SGSV); Task 11's `servingPenalty` spans and Task 17's activity spans delete
+ * it. `raceEvents`: the situation events still recorded as race events, in arrival order (PENA, RTMT, DRSE, DRSD, STLG,
+ * LGOT); Task 21 deletes them. With both gone, `RecorderInput.tracked` goes. Absent: none of them.
  */
-export type TrackedEvents = { penaltyServed: readonly CarId[]; sessionEnded: boolean; raceEvents: readonly RaceEventBody[] };
+export type TrackedEvents = { penaltyServed: readonly CarId[]; raceEvents: readonly RaceEventBody[] };

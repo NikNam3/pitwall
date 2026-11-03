@@ -113,11 +113,8 @@ export const createCarState = (id: CarId): CarState => ({
 });
 
 /** Nothing opened yet: every recorder's own state as its `init` gives it. */
-const emptyTrackers = (lastFlag: OpenTrackers['lastFlag'], projection: ProjectionBook): OpenTrackers => ({
-  situations: { session: { kind: 'preStart', start: toSessionTime(0), startLeaderLap: 0 } },
-  phaseBook: { started: false },
+const emptyTrackers = (projection: ProjectionBook): OpenTrackers => ({
   clock: STEP0_CLOCK.init(),
-  lastFlag,
   recorders: Object.fromEntries(RECORDERS.map((recorder) => [recorder.id, recorder.init()])),
   machines: {},
   projection,
@@ -147,7 +144,7 @@ export function initialState(init: {
     lastFrameId: header.frameIdentifier,
     frameNumber: 0,
     sessionTime: toSessionTime(header.sessionTime),
-    open: emptyTrackers(session.flag, book),
+    open: emptyTrackers(book),
     realism: init.realism ?? false,
     masking: { player: carId(header.playerCarIndex), teammate: undefined, realism: init.realism ?? false },
     ...(init.weekend && { weekend: init.weekend }),

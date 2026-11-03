@@ -1,5 +1,5 @@
-// Which slots hold a car of the session: the one rule, read by step 1 (`active`, the teammate), the recorders and the
-// situation tracker. Protocol-free, so recorders reach no packet type through it (C6).
+// Which slots hold a car of the session: the one rule, read by step 1 (`active`, the teammate), the recorders, the flag
+// phases and the session-phase sub-machines. Protocol-free, so recorders reach no packet type through it (C6).
 import { OUT_OF_RACE_STATUSES, type CarTiming, type ResultStatus, type SessionState } from '@pitwall/domain';
 import type { DeepReadonly } from '../util/deep-readonly.ts';
 

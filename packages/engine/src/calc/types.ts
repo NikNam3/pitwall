@@ -1,4 +1,4 @@
-import type { FlagPhase, Insight, OpenSessionPhase, SessionTime } from '@pitwall/domain';
+import type { FlagPhase, Insight, SessionTime } from '@pitwall/domain';
 import type { FrameMetrics } from '../frame/metrics.ts';
 import type { HistoryDelta } from '../log/types.ts';
 import type { EngineState } from '../state/engine-state.ts';
@@ -36,8 +36,11 @@ export type EngineView = {
   state: DeepReadonly<Omit<EngineState, 'open' | 'log' | 'signals'>>;
   /** The neutralised phase in progress, if any; it moves to `history.flagPhases` when it ends. */
   activeFlagPhase: DeepReadonly<Omit<FlagPhase, 'end' | 'endLeaderLap'>> | undefined;
-  /** The situation tracker's open state: the session phase in progress (closed ones are `history.sessionPhases`) and whether the session is paused. */
-  situation: DeepReadonly<{ session: OpenSessionPhase; paused: boolean }>;
+  /**
+   * Whether the session is paused (the clock's open span is `paused`). The session phases are the machine's spans: the
+   * closed ones in `state.history.spans`, by sub-machine (C20).
+   */
+  situation: DeepReadonly<{ paused: boolean }>;
   changed: ReadonlySet<ChangeTag>;
   delta: HistoryDelta;
   feed: FeedMetricsView;

@@ -6,7 +6,7 @@ import type { FactOf, LegacyList, Log, LogLengths, LogVoidFact, LogWriter } from
 
 /** The lists of the log that hold one fact type each; the span lists are `spans:<machine>`. */
 export const FACT_LISTS = ['laps', 'stints', 'pitStops', 'crossings', 'events', 'clock'] as const satisfies readonly FactList[];
-export const LEGACY_LISTS = ['flagPhases', 'sessionPhases'] as const satisfies readonly LegacyList[];
+export const LEGACY_LISTS = ['flagPhases'] as const satisfies readonly LegacyList[];
 
 const SPANS = 'spans:';
 
@@ -24,7 +24,6 @@ export const createLog = (): Log => ({
   voids: [],
   spans: {},
   flagPhases: [],
-  sessionPhases: [],
 });
 
 /** The array of a list; a span list a sub-machine has not written yet is created. */
@@ -52,15 +51,22 @@ const currentIndexOf = (log: Log, list: FactList, position: number): number => {
   return position - voided;
 };
 
+/** `value` and every array and object it holds, frozen (C24): plain data, so the walk ends. */
+const deepFreeze = <T>(value: T): T => {
+  if (typeof value !== 'object' || value === null || Object.isFrozen(value)) return value;
+  for (const child of Object.values(value)) deepFreeze(child);
+  return Object.freeze(value);
+};
+
 /**
- * The writer of `log` (C22): appends a fact to the end of its list and returns its id (C21): its list and the number of
- * the list's facts before it in the current timeline, so after a rewind a replayed fact gets the id a run without the
- * rewind gives it (C33).
+ * The writer of `log` (C22): appends a fact to the end of its list, read-only all the way down (C24: no one changes it
+ * after), and returns its id (C21): its list and the number of the list's facts before it in the current timeline, so
+ * after a rewind a replayed fact gets the id a run without the rewind gives it (C33).
  */
 export const logWriter = (log: Log): LogWriter => ({
   append<L extends FactList>(list: L, fact: FactOf<L>) {
     const facts = listOf(log, list);
-    facts.push(fact);
+    facts.push(deepFreeze(fact));
     return { list, index: currentIndexOf(log, list, facts.length - 1) };
   },
   lengths: () => logLengths(log),

@@ -1,32 +1,52 @@
 import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { feedId, type MachineId, type Span } from '@pitwall/domain';
-import { MACHINES, SessionRunner, SessionTracker, type Frame, type TrackerEvent } from '@pitwall/engine';
+import { MACHINES, SessionRunner, SessionTracker, STEP0_CLOCK, type Frame, type TrackerEvent } from '@pitwall/engine';
 import { decode } from '@pitwall/protocol';
 import { readPwrec } from '../../pwrec/reader.ts';
 import { StartupError } from '../../startup-error.ts';
 import type { CliIo } from '../io.ts';
 
-/** Transition counts of every sub-machine, keyed by `<from> -> <to>`. */
-type Counts = Map<MachineId, Map<string, number>>;
+/** Per sub-machine: transition counts keyed by `<from> -> <to>`, and the spans the session's end closed, by kind. */
+type Counts = Map<MachineId, { transitions: Map<string, number>; closedAtEnd: Map<string, number> }>;
 
 const NONE = 'none';
 
-/** Adds the transitions of `spans` (closed, so complete) to `counts`: per sub-machine and car, each span follows the one before. */
-function countTransitions(spans: Record<MachineId, readonly Span[]>, counts: Counts): void {
+const add = (counts: Map<string, number>, key: string): void => {
+  counts.set(key, (counts.get(key) ?? 0) + 1);
+};
+
+/**
+ * Adds the transitions of one session's spans (closed, so complete: `closeSession` closed the open ones on the frame
+ * after the last, `endFrame`) to `counts`, per sub-machine and scope (the session or a car), by frame number (C26): a
+ * span's successor opens on the frame it closed on (`<kind> -> <next>`); a span closed with no successor on its frame
+ * is `<kind> -> none` (and the next one, if any, `none -> <next>`). The spans the session's end closed are no
+ * sub-machine's decision: counted apart, by kind.
+ */
+function countTransitions(spans: Record<MachineId, readonly Span[]>, endFrame: number, counts: Counts): void {
   for (const [machine, list] of Object.entries(spans)) {
-    const byMachine = counts.get(machine) ?? new Map<string, number>();
+    const byMachine = counts.get(machine) ?? { transitions: new Map<string, number>(), closedAtEnd: new Map<string, number>() };
     counts.set(machine, byMachine);
-    const last = new Map<number | undefined, string>();
-    for (const span of [...list].sort((a, b) => a.start - b.start || a.id - b.id)) {
-      const key = `${last.get(span.carId) ?? NONE} -> ${span.kind}`;
-      byMachine.set(key, (byMachine.get(key) ?? 0) + 1);
-      last.set(span.carId, span.kind);
+    const byScope = new Map<number | undefined, Span[]>();
+    for (const span of list) byScope.set(span.carId, [...(byScope.get(span.carId) ?? []), span]);
+    for (const scoped of byScope.values()) {
+      let last: Span | undefined;
+      for (const span of [...scoped].sort((a, b) => a.startFrame - b.startFrame || a.id - b.id)) {
+        if (last !== undefined && last.endFrame !== span.startFrame) {
+          add(byMachine.transitions, `${last.kind} -> ${NONE}`);
+          last = undefined;
+        }
+        add(byMachine.transitions, `${last?.kind ?? NONE} -> ${span.kind}`);
+        last = span;
+      }
+      if (last === undefined) continue;
+      if (last.endFrame === endFrame) add(byMachine.closedAtEnd, last.kind);
+      else add(byMachine.transitions, `${last.kind} -> ${NONE}`);
     }
   }
 }
 
-/** Runs one recording's datagrams through frame assembly and steps 0-2, session by session, counting the transitions. */
+/** Runs one recording's datagrams through frame assembly and the engine, session by session, counting the transitions. */
 async function scanRecording(path: string, counts: Counts, signal: AbortSignal): Promise<void> {
   const tracker = new SessionTracker({ feedId: feedId('replay') });
   let runner: SessionRunner | undefined;
@@ -37,7 +57,7 @@ async function scanRecording(path: string, counts: Counts, signal: AbortSignal):
       runner?.apply(event.frame satisfies Frame);
     } else if (runner) {
       runner.finish();
-      countTransitions(runner.state.history.spans, counts);
+      countTransitions(runner.state.history.spans, runner.state.frameNumber + 1, counts);
       runner = undefined;
     }
   };
@@ -55,10 +75,13 @@ async function scanRecording(path: string, counts: Counts, signal: AbortSignal):
 }
 
 /**
- * `pitwall scan-situations [dir]`: runs frame assembly and steps 0-2 over every `.pwrec.gz` of `dir` (default
- * `PITWALL_FIXTURES_DIR`) and prints, per sub-machine, each transition with its count (`<machine> <from> -> <to> <n>`),
- * each declared transition never seen (`<machine> never seen <from> -> <to>`) and each undeclared one
- * (`<machine> undeclared <from> -> <to> <n>`). Exit code 1 when a transition occurred that its machine does not declare.
+ * `pitwall scan-situations [dir]`: runs frame assembly and the engine over every `.pwrec.gz` of `dir` (default
+ * `PITWALL_FIXTURES_DIR`) and prints, per sub-machine and for step 0's clock, each transition with its count
+ * (`<machine> <from> -> <to> <n>`), each declared transition never seen (`<machine> never seen <from> -> <to>`), each
+ * undeclared one (`<machine> undeclared <from> -> <to> <n>`) and, apart from the transitions, the spans the session's
+ * end closed per kind (`<machine> closed at session end <kind> <n>`). A span a sub-machine closed with no successor on
+ * its frame is `<kind> -> none`, undeclared (every sub-machine covers its scope without gaps). Exit code 1 when a
+ * transition occurred that its machine does not declare.
  */
 export async function run(
   positionals: string[],
@@ -72,17 +95,18 @@ export async function run(
   for (const file of files) await scanRecording(join(dir, file), counts, io.signal);
 
   let undeclared = 0;
-  for (const machine of MACHINES) {
-    const seen = counts.get(machine.id) ?? new Map<string, number>();
+  for (const machine of [STEP0_CLOCK, ...MACHINES]) {
+    const seen = counts.get(machine.id) ?? { transitions: new Map<string, number>(), closedAtEnd: new Map<string, number>() };
     const declared = new Set(machine.transitions.map(([from, to]) => `${from} -> ${to}`));
-    for (const [transition, n] of seen) {
+    for (const [transition, n] of seen.transitions) {
       if (declared.has(transition)) io.out(`${machine.id} ${transition} ${n}`);
       else {
         undeclared++;
         io.out(`${machine.id} undeclared ${transition} ${n}`);
       }
     }
-    for (const transition of declared) if (!seen.has(transition)) io.out(`${machine.id} never seen ${transition}`);
+    for (const transition of declared) if (!seen.transitions.has(transition)) io.out(`${machine.id} never seen ${transition}`);
+    for (const [kind, n] of seen.closedAtEnd) io.out(`${machine.id} closed at session end ${kind} ${n}`);
   }
   return undeclared > 0 ? 1 : 0;
 }
