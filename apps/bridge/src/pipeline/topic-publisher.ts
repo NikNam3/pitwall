@@ -2,7 +2,7 @@
 import type { Computed, TopicName } from '@pitwall/contracts';
 import type { FeedId } from '@pitwall/domain';
 import type { HistoryDelta, InsightChange, Projection, ProjectedList, SchedulerResult } from '@pitwall/engine/readers';
-import type { Feature, TopicBinding } from '../features/feature.ts';
+import type { Feature, LiveView, TopicBinding } from '../features/feature.ts';
 import type { TopicHub, ValueFor } from '../hub/topic-hub.ts';
 import { jobCalculatorId } from '../jobs/feed-jobs.ts';
 import type { JobResult } from '../jobs/job-runner.ts';
@@ -11,6 +11,7 @@ import type { Logger } from '../log.ts';
 type StateBinding = Extract<TopicBinding, { from: string }>;
 type HistoryBinding = Extract<TopicBinding, { fromHistory: ProjectedList }>;
 type JobBinding = Extract<TopicBinding, { fromJob: string }>;
+type LiveBinding = Extract<TopicBinding, { fromLive: unknown }>;
 
 /** A topic that could not be published: a feature's `select` threw, or the hub did. The topic is marked `errored`. */
 export type PublishError = { topic: TopicName; error: unknown };
@@ -22,7 +23,8 @@ export type PublishError = { topic: TopicName; error: unknown };
 export type InsightOrigin = { frameId: number; between?: true };
 
 /**
- * Publishes one feed's calculator outputs, history appends, insight changes and job results to the topics bound to them.
+ * Publishes one feed's calculator outputs, history appends, insight changes, job results and live state to the topics
+ * bound to them.
  * Every binding is contained: a failing one is marked `errored` and never stops the others.
  *
  * The `publish*` methods return the failures caught while they ran, so the caller can report them with its own
@@ -37,6 +39,7 @@ export class TopicPublisher {
   readonly #history: HistoryBinding[] = [];
   readonly #insights: TopicName[] = [];
   readonly #jobs: JobBinding[] = [];
+  readonly #live: LiveBinding[] = [];
   /** Topics whose failure is already reported; a topic leaves the set when its `select` succeeds again. */
   readonly #failing = new Set<TopicName>();
   /** Set while a `publish*` call runs: its failures go back to the caller instead of the log. */
@@ -53,6 +56,7 @@ export class TopicPublisher {
       else if ('fromHistory' in binding) this.#history.push(binding);
       else if ('fromInsights' in binding) this.#insights.push(binding.topic);
       else if ('fromJob' in binding) this.#jobs.push(binding);
+      else if ('fromLive' in binding) this.#live.push(binding);
       else throw new Error(`unknown topic binding ${JSON.stringify(binding satisfies never)}`);
     }
   }
@@ -69,7 +73,9 @@ export class TopicPublisher {
       for (const binding of this.#state) {
         const { topic, from } = binding;
         if (ran.has(from)) {
-          const valueFor = this.#valueFor(binding, result.outputs.get(from));
+          const out = result.outputs.get(from);
+          const { select } = binding;
+          const valueFor = select === undefined ? () => out : this.#valueFor(topic, (params) => select(out, params));
           this.#guarded(topic, () => this.#hub.publishState(this.#feedId, topic, valueFor));
         } else if (failed.has(from)) {
           this.#guarded(topic, () => this.#hub.setStatus(this.#feedId, topic, 'errored'));
@@ -92,6 +98,22 @@ export class TopicPublisher {
           const computed: Computed<unknown> = { computedFor: result.computedFor, value: result.value };
           this.#guarded(topic, () => this.#hub.publishState(this.#feedId, topic, () => computed));
         }
+      }
+    });
+  }
+
+  /**
+   * The feed's live state changed (a frame was applied): every `bindLive` topic has a new value. Nothing is copied
+   * here: the hub runs the `select` on `live()`, the state at that moment, only when it sends a subscription a value
+   * (at once if the throttle allows, else on a later tick; at most `maxHz`, only for subscribed params). `live` reads
+   * the runner's current state, so after the session ended a late subscriber still gets the last frame's, and after a
+   * flashback the restored one (C27).
+   */
+  publishLive(live: () => LiveView): PublishError[] {
+    return this.#collecting(() => {
+      for (const { topic, fromLive: select } of this.#live) {
+        const valueFor = this.#valueFor(topic, (params) => select(live(), params));
+        this.#guarded(topic, () => this.#hub.publishState(this.#feedId, topic, valueFor));
       }
     });
   }
@@ -162,15 +184,14 @@ export class TopicPublisher {
 
   /**
    * What the hub asks for a subscription's value. It never throws, wherever the hub calls it: a throwing `select`
-   * reports once per output and gives `undefined`, and the topic stays `errored` (clients keep their last value)
-   * until a later output selects without throwing.
+   * reports once per published value and gives `undefined`, and the topic stays `errored` (clients keep their last
+   * value) until a later value selects without throwing.
    */
-  #valueFor({ topic, select }: StateBinding, out: unknown): ValueFor {
-    if (select === undefined) return () => out;
+  #valueFor(topic: TopicName, select: (params: object) => unknown): ValueFor {
     let reported = false;
     return (params) => {
       try {
-        const value = select(out, params);
+        const value = select(params);
         this.#failing.delete(topic);
         return value;
       } catch (error) {

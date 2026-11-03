@@ -166,6 +166,9 @@ export class SessionProcessor {
     }
   }
 
+  /** The live state as it is now (C39's `live`): what a `bindLive` topic's select reads when the hub sends its value. */
+  readonly #live = () => this.#runner.state;
+
   /** Each frame the runner applied: storage, the scheduler and the topics. */
   readonly #onResult = (result: StepResult, frame: Frame): void => {
     const { feedId, publisher, storage, log } = this.#o;
@@ -200,6 +203,7 @@ export class SessionProcessor {
       // Each topic is published on its own: a failing feature binding never holds back the others.
       unpublished.push(
         ...publisher.publishOutputs(scheduled),
+        ...publisher.publishLive(this.#live),
         ...publisher.publishHistory(result.state.history, result.delta),
         ...publisher.publishInsights(scheduled.insights, { frameId: frame.frameId }),
       );
