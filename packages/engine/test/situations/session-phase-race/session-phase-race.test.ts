@@ -12,6 +12,8 @@ import { activeFlagPhaseOf, SessionRunner, type StepResult } from '../../../src/
 import machine from '../../../src/situations/session-phase-race/machine.ts';
 import { situationOf } from '../../../src/situations/run.ts';
 import { initFor } from '../../support/run.ts';
+import { inputs } from '../../support/transition-table.ts';
+import { all, carStatus, inPhase, RACE, timerOfCar1 } from '../session-phase/inputs.ts';
 import { after, applyOne, runAll, shown } from '../../support/runner.ts';
 import { expectScheduledIncremental, input, quick, sched, underNeutralisation, underPhase } from '../../support/scheduler.ts';
 import {
@@ -57,7 +59,7 @@ describe('session-phase-race: id, span declaration, inputs', () => {
   it('is the sub-machine session-phase-race, its spans the session-scoped declaration in domain, for the race phase only, after the weekend phase', () => {
     expect([machine.id, machine.spans, machine.appliesTo]).toEqual(['session-phase-race', sessionPhaseRaceSpans, ['race']]);
     expect(machine.spans.scope).toBe('session');
-    expect(machine.inputs.upstream).toEqual(['weekend-phase']);
+    expect(machine.inputs.upstream).toEqual(['weekend-phase', 'car-status']);
   });
 });
 
@@ -280,6 +282,20 @@ describe('the end of a race', () => {
     const { runner, results } = race(150, Object.fromEntries(Array.from({ length: 150 }, (_, k) => [k, { ...drivingCar(k), ...(k === 99 && { events: [ovtk(1, 0)] }) }])), { from: 100, ms: 6_000_000 });
     expect(current(runner)).toMatchObject({ kind: 'postSession', start: raceAt(99) });
     expect(rewound(results)).toEqual([]);
+  });
+});
+
+describe('the cars in the session are car-status’s (C43)', () => {
+  /** The span the machine opens on a race's first frame with `edit`. */
+  const joined = (...edits: Parameters<typeof all>) => {
+    const [first] = inputs().frame(all(inPhase(RACE), ...edits)).build();
+    return machine.openSpans(machine.step(machine.init(), first!).open)[0];
+  };
+  it('a race joined with car 1’s lap timer past 1000 ms is under way while car 1 competes', () => {
+    expect(joined(timerOfCar1(30_000))).toMatchObject({ kind: 'racing', joinedAt: true });
+  });
+  it('a slot car-status holds absent does not put the race under way: its lap timer is no car’s of the session (grid)', () => {
+    expect(joined(timerOfCar1(30_000), carStatus(1, 'absent'))).toMatchObject({ kind: 'grid' });
   });
 });
 

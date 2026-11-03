@@ -12,7 +12,9 @@ import { after, applyOne, drive, flbk, runAll, STEP, timeline } from '../support
 
 vi.mock('../../src/situations/index.generated.ts', async () => {
   const { TEST_MACHINES } = await import('../support/test-machines.ts');
-  return { MACHINES: TEST_MACHINES };
+  // car-status decides which cars are in the session, so the recorders record laps (Task 10, C43)
+  const { default: carStatus } = await import('../../src/situations/car-status/machine.ts');
+  return { MACHINES: [carStatus, ...TEST_MACHINES] };
 });
 
 /**

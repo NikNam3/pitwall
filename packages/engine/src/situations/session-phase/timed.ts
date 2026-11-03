@@ -6,6 +6,7 @@
 // time left below the duration, MiP at 121.6 s) opens `running` with `joinedAt`. The session's end is a signal, never
 // the final classification's arrival (user ruling, Task 9).
 import { unknown, type SpanDeclaration, type WeekendPhaseKind } from '@pitwall/domain';
+import { CAR_STATUS } from '../car-status/in-session.ts';
 import type { SubMachine } from '../machine.ts';
 import { draftOf, enter, eventsOf, everyCarFinished, initialPhaseOpen, isPostSession, kindOf, simulatedEnd, stepOf, type PhaseDraft, type PhaseOpen } from './phases.ts';
 
@@ -29,7 +30,7 @@ export const timedSessionMachine = (spans: SpanDeclaration, phase: WeekendPhaseK
   id: spans.machine,
   appliesTo: [phase],
   spans,
-  inputs: { signals: ['events', 'resultStatus', 'numActiveCars'], values: ['session'], upstream: ['weekend-phase'] },
+  inputs: { signals: ['events', 'resultStatus'], values: ['session'], upstream: ['weekend-phase', CAR_STATUS] },
   transitions: [
     ['none', 'grid'],
     ['none', 'running'],

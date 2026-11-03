@@ -657,6 +657,20 @@
         "PENA warning (penaltyType 5, infringement 10, lap 1) for car 1 at 45.542; LapData totalWarnings 0 to 1 for car 1 follows 16 frames (0.543 s) later, at 46.085; cornerCuttingWarnings stays 0",
         "duration 2464.578 ms"
       ]
+    },
+    {
+      "file": "practice-garage-exit.pwrec.gz",
+      "source": "practiceFriendWings",
+      "fromS": 640.5,
+      "toS": 651,
+      "records": 2271,
+      "features": [
+        "445 482 bytes; 2 context packets (Session, Participants) first; session time 640.511 to 650.994; short practice (session type 4); numActiveCars 20, slots 20 and 21 resultStatus 0",
+        "car 19 (the player) in its garage box (driverStatus 0, pitStatus 1, d49) until 641.422: driverStatus 0 to 3 with pitStatus still 1 (d69); the pit exit at 649.872: pitStatus 1 to 0 (d256)",
+        "cars 0, 1, 5-9, 12, 14, 18 in the garage (driverStatus 0, pitStatus 1) throughout; car 2 ends its out lap at the line at 645.636 (driverStatus 3 to 1); every car resultStatus 2",
+        "BUTN x48, no other event",
+        "duration 10489.438 ms"
+      ]
     }
   ]
 }

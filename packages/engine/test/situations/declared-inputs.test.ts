@@ -28,6 +28,11 @@ const [first] = new ScenarioBuilder({ cars: 2 }).frames(1, () => {}).build() as 
 /** One built frame; the random frames share it (machines read inputs, never write them), so none is cloned per frame. */
 const [base] = inputs().frame().build() as [MachineInput];
 const initialSignals = initialState(initFor([first])).signals;
+/** The base live state with every car's Participants data updated at `at`; the base's areas are shared, not cloned. */
+const liveWithParticipants = (at: number): MachineInput['live'] => ({
+  ...base.live,
+  cars: base.live.cars.map((car) => ({ ...car, updatedAt: { ...car.updatedAt, participants: at } })),
+});
 
 /** A weekend phase of each kind, for a machine of that phase. */
 const PHASE_OF: Readonly<Partial<Record<WeekendPhaseKind, WeekendPhase>>> = {
@@ -109,13 +114,17 @@ describe('a sub-machine reads only its declared inputs (C15)', () => {
         const phase = phaseFor(machine);
         const upstream = upstreamFor(phase);
         fc.assert(
-          fc.property(arbSignalSequence(initialSignals), (sequence) => {
+          fc.property(arbSignalSequence(initialSignals), fc.nat({ max: 20 }), (sequence, participantsAt) => {
+            // the Participants data arrives on frame `participantsAt` and stays (a car sub-machine waits for it, C3):
+            // the frames from it on share a second base live state with it, built once per run
+            const withParticipants = liveWithParticipants(participantsAt * FRAME_MS);
             const frames = sequence.map((signals, k): MachineInput => ({
               ...base,
               at: k * FRAME_MS,
               frameId: k,
               frameNumber: k + 1,
               signals,
+              live: k >= participantsAt ? withParticipants : base.live,
               weekendPhase: phase,
               upstream,
             }));

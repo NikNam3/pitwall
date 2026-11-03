@@ -30,3 +30,11 @@ export const events = (...list: SituationEvent[]): InputEdit => (input) => {
 export const all = (...edits: InputEdit[]): InputEdit => (input, index) => {
   for (const edit of edits) edit(input, index);
 };
+
+/**
+ * The frame carries Participants data for every slot, unless an earlier frame did: each car's `updatedAt.participants`
+ * (a value of the identity area, C8) set to the frame's time. Until then nobody knows whether a slot holds a car (C3).
+ */
+export const participants: InputEdit = (input) => {
+  for (const c of input.live.cars) c.updatedAt.participants ??= input.at;
+};

@@ -5,7 +5,7 @@
 import type { FlagPhase, NeutralisedDetail, OpenSpan, ScPhase } from '@pitwall/domain';
 import type { Situation } from '../situations/situation.ts';
 import type { EngineState } from '../state/engine-state.ts';
-import { isActiveCar, slotsInUse } from '../step/active-cars.ts';
+import { CAR_STATUS, carsInSessionOf } from '../situations/car-status/in-session.ts';
 import type { StepOutput } from '../step/types.ts';
 import type { DeepReadonly } from '../util/deep-readonly.ts';
 
@@ -15,11 +15,9 @@ type PhaseSpan = DeepReadonly<OpenSpan>;
 /** The sub-machine whose spans the flag phases mirror. */
 const RACE_PHASES = 'session-phase-race';
 
-/** The lap of the car in first place; 0 when no car in the session holds it. */
-const leaderLap = (state: DeepReadonly<EngineState>): number => {
-  const slots = slotsInUse(state);
-  return state.cars.find((car) => car.timing.position === 1 && isActiveCar(car.id, slots, car.timing.resultStatus))?.timing.lap ?? 0;
-};
+/** The lap of the car in first place; 0 when no car in the session (car-status's, C43) holds it. */
+const leaderLap = (state: DeepReadonly<EngineState>, situation: Situation): number =>
+  carsInSessionOf(situation.byMachine[CAR_STATUS]).flatMap((id) => state.cars[id] ?? []).find((car) => car.timing.position === 1)?.timing.lap ?? 0;
 
 /** The flag phase a span stands for: a neutralisation by its car, a suspension as red; none for the other kinds. */
 const flagKindOf = (span: PhaseSpan | undefined): FlagPhase['kind'] | undefined => {
@@ -48,7 +46,7 @@ const startLapOf = (own: FlagsOwn, span: PhaseSpan, now: number): number =>
  * each tag `flagPhases`. Returns whether it appended.
  */
 export const applyFlagPhases = (state: EngineState, situation: Situation, out: StepOutput): boolean => {
-  const lap = leaderLap(state);
+  const lap = leaderLap(state, situation);
   const own = (state.open.recorders[OWN] ?? {}) as FlagsOwn;
   const spans = state.history.spans[RACE_PHASES] ?? [];
   let appended = false;
