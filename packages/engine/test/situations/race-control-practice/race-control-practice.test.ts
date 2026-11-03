@@ -11,8 +11,8 @@ describe('race-control-practice', () => {
     expect([machine.id, machine.spans, machine.appliesTo]).toEqual(['race-control-practice', raceControlPracticeSpans, ['practice']]);
     expect(machine.spans.scope).toBe('session');
   });
-  it('reads no signal, no value and no upstream sub-machine', () => {
-    expect([machine.inputs.signals, machine.inputs.values, machine.inputs.upstream]).toEqual([[], [], []]);
+  it('reads no signal and no value, and the upstream weekend-phase (C14: it runs only once the weekend phase is decided)', () => {
+    expect([machine.inputs.signals, machine.inputs.values, machine.inputs.upstream]).toEqual([[], [], ['weekend-phase']]);
   });
   it('opens one drsFree span on the first frame, frame number 1, and holds it for the whole session without closing anything', () => {
     let open = machine.init();
