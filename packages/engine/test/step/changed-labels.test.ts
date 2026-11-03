@@ -62,7 +62,7 @@ describe('change tags', () => {
       'session', 'identity', 'timing', 'tyres', 'energy', 'condition', 'dynamics', 'ownCar',
       'laps', 'stints', 'pitStops', 'flagPhases', 'events', 'miniSectors',
       'clock', 'spans:clock',
-      'spans:car-flags', 'spans:lap-validity', 'spans:session-phase-practice', 'spans:session-phase-qualifying', 'spans:session-phase-race',
+      'spans:car-flags', 'spans:lap-validity', 'spans:penalties', 'spans:session-phase-practice', 'spans:session-phase-qualifying', 'spans:session-phase-race',
       'spans:warnings', 'spans:weekend-phase', 'spans:zone-flags',
     ]);
   });
