@@ -530,9 +530,9 @@ describe('a session phase boundary at a moment earlier frames share', () => {
     expect(truncated(results)).toEqual(GRID_START_TRUNCATED);
   });
 
-  // A boundary below the previous frame's stamp. On the grid, before the race start, a fall of the session time keeps
-  // the game's lower time (spec 3.3; raceZandvoortUidReuse's first frames run at 57.2 s and fall to 0 at frame 7), so an
-  // entry recorded before the fall lies above every boundary up to 57.2 s. What truncates is that entry, not the clock.
+  // A pre-start fall (raceZandvoortUidReuse's first frames run at 57.2 s and fall to 0 at frame 7) is carried over like
+  // any fall that is no flashback (C36, supervisor ruling Task 7 round 2): the race clock runs on from 57.296 s, so a
+  // boundary after the fall never lies below an entry an earlier frame recorded, and nothing truncates.
   /**
    * A race whose clock falls from 57.2 s to 0 at frame 7 and then runs; the formation status from frame `formationAt`;
    * with `overtake`, an overtake at frame 3 (57.248 s).
@@ -544,27 +544,29 @@ describe('a session phase boundary at a moment earlier frames share', () => {
       ...(overtake && k === 3 && { events: [ovtk(1, 0)] }),
     })));
   const overtakesAt = (runner: SessionRunner) => runner.state.history.events.filter((e) => e.kind === 'overtake').map((e) => e.at);
+  /** Frame k's race-clock time after the fall: the session time plus the fall's size. */
+  const continued = (k: number) => 57_200 + 6 * STEP + (k - 7) * STEP;
 
-  it('a formation opening on the fall’s frame, below an entry an earlier frame recorded (an overtake at 57.248 s): that step, and no other, is truncated', () => {
+  it('a formation opening on the fall’s frame lies above the overtake an earlier frame recorded (57.248 s): no step is truncated', () => {
     const { runner, results } = run(fallen(7, true));
     expect(overtakesAt(runner)).toEqual([57_200 + 3 * STEP]);
-    expect(truncated(results)).toEqual([7]);
-    expect(current(runner)).toMatchObject({ kind: 'formation', start: 0 });
+    expect(truncated(results)).toEqual([]);
+    expect(current(runner)).toMatchObject({ kind: 'formation', start: continued(7) });
   });
-  it('a formation opening on the fall’s frame, below the earlier frames’ stamps but with no entry there: no step is truncated', () => {
+  it('a formation opening on the fall’s frame with no entry before it: no step is truncated', () => {
     const { runner, results } = run(fallen(7));
     expect(truncated(results)).toEqual([]);
-    expect(current(runner)).toMatchObject({ kind: 'formation', start: 0 });
+    expect(current(runner)).toMatchObject({ kind: 'formation', start: continued(7) });
   });
-  it('the formation opening one frame after the fall, above the previous frame’s stamp but below the overtake at 57.248 s: that step, and no other, is truncated', () => {
+  it('the formation opening one frame after the fall lies above the overtake at 57.248 s: no step is truncated', () => {
     const { runner, results } = run(fallen(8, true));
-    expect(truncated(results)).toEqual([8]);
-    expect(current(runner)).toMatchObject({ kind: 'formation', start: STEP });
+    expect(truncated(results)).toEqual([]);
+    expect(current(runner)).toMatchObject({ kind: 'formation', start: continued(8) });
   });
-  it('the formation opening one frame after the fall, above the previous frame’s stamp, with no entry: no step is truncated', () => {
+  it('the formation opening one frame after the fall, with no entry: no step is truncated', () => {
     const { runner, results } = run(fallen(8));
     expect(truncated(results)).toEqual([]);
-    expect(current(runner)).toMatchObject({ kind: 'formation', start: STEP });
+    expect(current(runner)).toMatchObject({ kind: 'formation', start: continued(8) });
   });
 });
 

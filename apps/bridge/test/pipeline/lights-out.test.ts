@@ -72,16 +72,17 @@ const initProbe = (inits: number[]): IncrementalCalculator<number, number> => ({
 });
 
 describe('FeedPipeline: lights out after a formation lap restarts the calculators', () => {
-  it('an incremental calculator starts again from init on the first start light (the formation’s fastest lap lies above the held clock) and the lights-out frame, and on no other', async () => {
+  it('an incremental calculator starts again from init on the lights-out frame and on no other: the first start light lies above the formation’s fastest lap', async () => {
     const inits: number[] = [];
     const { pipeline, push } = setup([defineFeature({ name: 'probe-events', calculators: [initProbe(inits)], topics: [] })]);
     const { before, after } = formationStart();
     push(before);
     push(after);
     await pipeline.stop();
-    // The first start light opens startLights at 0 on the clock held since frame 40, below the fastest lap frame 20
-    // recorded at 0.32 s, which it moves out of the formation; lights out discards the formation (spec 3.2).
-    expect(inits).toEqual([inits[0], FIRST_LIGHT, LIGHTS_OUT]);
+    // The reset at frame 40 is carried over (C36): the race clock holds at 0.624 s, so the first start light opens
+    // startLights above the fastest lap frame 20 recorded at 0.32 s and moves nothing; lights out discards the formation
+    // (spec 3.2).
+    expect(inits).toEqual([inits[0], LIGHTS_OUT]);
     expect(inits[0]).toBeLessThan(FIRST_LIGHT);
   });
   it('without an entry in the formation, the first start light moves nothing and restarts no calculator: lights out is the only restart', async () => {

@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { MAX_CARS, type OpenSpan, type Span } from '@pitwall/domain';
 import { initialState, SessionRunner, type DeepReadonly, type Frame, type StepOutput } from '../../src/index.ts';
 import type { Signals } from '../../src/signals/types.ts';
-import { clockInput } from '../../src/situations/clock/machine.ts';
+import { clockInput } from '../../src/situations/clock/clock.ts';
 import { closeSession, runMachine, situationOf } from '../../src/situations/run.ts';
 import { ScenarioBuilder } from '../builders/index.ts';
 import { initFor, runScenario } from '../support/run.ts';

@@ -1,6 +1,7 @@
-// Step 0, the clock (contract C7, C20, C35-C37; ported from time-jumps.test.ts and session-phase.test.ts's pauses): the
-// start's settling after lights out is a fall carried over by an offset like any other fall (nothing recorded is
-// re-stamped; later frames lie on the race clock), each fall is a `fall` fact with the game's times, a flashback stays a
+// Step 0, the clock (contract C7, C20, C35-C37; ported from time-jumps.test.ts and session-phase.test.ts's pauses): every
+// fall of the session time that is no flashback (the start's settling after lights out, the formation-lap reset and
+// pre-start falls included) is carried over by an offset (nothing recorded is re-stamped; later frames lie on the race
+// clock, which never falls), each fall is a `fall` fact with the game's times, a flashback stays a
 // flashback (the runner decides what is one, and a replay keeps its decision) and appends no clock fact, a flashback
 // after a fall restores the state by frame id, the frames a rewind stamps at its target keep that stamp on every replay,
 // garage acceleration is no jump, any other forward jump of more than 60 s is a `jump` fact, the post-session jump
@@ -9,7 +10,7 @@
 import { describe, expect, it } from 'vitest';
 import type { EventDetails } from '@pitwall/protocol';
 import { SessionRunner, situationOf, type Frame, type StepResult } from '../../../src/index.ts';
-import { clockInput, onRaceClock, STEP0_CLOCK } from '../../../src/situations/clock/machine.ts';
+import { clockInput, onRaceClock, STEP0_CLOCK } from '../../../src/situations/clock/clock.ts';
 import { MACHINE_ORDER } from '../../../src/situations/registry.ts';
 import { situationOf as machineSituationOf } from '../../../src/situations/run.ts';
 import { initFor } from '../../support/run.ts';
@@ -131,32 +132,43 @@ describe('the start settles (raceZandvoortUidReuse): a jump forward after lights
         ? lap(d, 0, { currentLapNum: 1, lapDistance: distanceOf(k), currentLapTimeInMs: Math.max(0, k - L) * STEP })
         : lap(d, 0, { currentLapNum: 2, lapDistance: distanceOf(k) - 4000, currentLapTimeInMs: 0, lastLapTimeInMs: 1600 }),
   }));
-  /** The race clock after the two falls: 6.918 s at frame `SETTLED`, ahead of the session time by both falls. */
-  const OFFSET = 6_918 - 27;
+  /** The race clock of frame k (C36): its session time plus every fall before it (pre-start, formation reset, hold, settling). */
+  const raceOf = (k: number): number => {
+    let offset = 0;
+    for (let j = 1; j <= k; j++) offset += Math.max(0, atOf(j - 1) - atOf(j));
+    return atOf(k) + offset;
+  };
+  /** The frames whose session time falls: the pre-start fall, the formation reset, the small fall in the hold, the settling's two. */
+  const FALLS = [7, 110, 160, L + 11, SETTLED];
+  const fallFact = (k: number) => ({ kind: 'fall', at: raceOf(k - 1), fromMs: atOf(k - 1), toMs: atOf(k), offsetMs: atOf(k - 1) - atOf(k) });
 
-  it('a fall before the formation opens rewinds nothing and appends a fall fact with both times', () => {
+  it('a pre-start fall (before the formation opens) is carried over too: it rewinds nothing and appends a fall fact with both times', () => {
     const { runner, results } = run(script(s4).slice(0, 20));
     expect(results[7]!.delta.rewound).toBeUndefined();
-    expect(runner.state.log.clock).toMatchObject([{ kind: 'fall', fromMs: 57_200 + 6 * STEP, toMs: 0 }]);
+    expect(runner.state.log.clock).toMatchObject([{ kind: 'fall', at: 57_200 + 6 * STEP, fromMs: 57_200 + 6 * STEP, toMs: 0, offsetMs: 57_200 + 6 * STEP }]);
+    expect(runner.state.sessionTime).toBe(57_200 + 6 * STEP + 12 * STEP);
     expect(runner.state.open.situations.session.kind).toBe('preStart');
   });
-  it('both falls of the settling are carried over: two fall facts with the game’s times, the race clock runs on from 6.918 s', () => {
+  it('every fall before lights out is carried over: the pre-start fall, the formation reset and the small fall in the hold are fall facts', () => {
+    const { runner } = run(script(s4).slice(0, L + 1));
+    expect(runner.state.log.clock).toMatchObject(FALLS.slice(0, 3).map(fallFact));
+  });
+  it('both falls of the settling are carried over: two fall facts with the game’s times, the race clock runs on', () => {
     const frames = script(s4);
     const { runner } = run(frames.slice(0, L + 1));
     const before = runner.state.log.clock.length;
     runAll(runner, frames.slice(L + 1));
-    expect(runner.state.log.clock.slice(before)).toMatchObject([
-      { kind: 'fall', at: 6_918, fromMs: 6_918, toMs: 831, offsetMs: 6_918 - 831 },
-      { kind: 'fall', at: 6_918, fromMs: 831, toMs: 27, offsetMs: 831 - 27 },
-    ]);
-    expect(runner.state.sessionTime).toBe(frames.at(-1)!.sessionTime + OFFSET);
+    expect(runner.state.log.clock.slice(before)).toMatchObject([fallFact(L + 11), fallFact(SETTLED)]);
+    expect(fallFact(SETTLED)).toMatchObject({ fromMs: 831, toMs: 27 });
+    expect(runner.state.sessionTime).toBe(raceOf(s4.length - 1));
   });
-  it('the race start is lights out at the time it was recorded; the race clock never falls after it', () => {
+  it('the race clock never falls; the race start is lights out at the race-clock time of its frame', () => {
     const { runner, times } = raceClockOf(script(s4));
     const start = runner.state.history.sessionPhases.find((p) => p.kind === 'racing')?.start ?? runner.state.open.situations.session.start;
-    expect(lightsOut(runner).map((e) => e.at)).toEqual([794]);
-    expect(start).toBe(794);
-    expect(fallsIn(times.slice(L))).toEqual([]);
+    expect(fallsIn(times)).toEqual([]);
+    expect(times).toEqual(s4.map((_, k) => raceOf(k)));
+    expect(lightsOut(runner).map((e) => e.at)).toEqual([raceOf(L)]);
+    expect(start).toBe(raceOf(L));
   });
   it('nothing recorded up to the settling is re-stamped: the crossing inside the jump keeps its time', () => {
     const frames = script(s4);
@@ -167,6 +179,44 @@ describe('the start settles (raceZandvoortUidReuse): a jump forward after lights
     expect(before.crossings.filter((m) => m.carId === 0 && m.lap === 1).map((m) => m.segment)).toEqual([0]);
     expect({ events: h.events.slice(0, before.events.length), crossings: h.crossings.slice(0, before.crossings.length) })
       .toEqual({ events: before.events, crossings: before.crossings });
+  });
+});
+
+// C36 literally (supervisor ruling, Task 7 round 2): the formation-lap reset is a fall like any other, carried over by
+// its size, so the race after a formation lap lies on the continued clock, not from 0.
+describe('the formation-lap reset', () => {
+  const RESET = 40;
+  const OUT = 59;
+  /** The reset's size: the formation lap's last session time. */
+  const LAP_MS = (RESET - 1) * STEP;
+  /**
+   * The grid from 0 s, the formation status at frame 5; the clock reset to 0 at frame `RESET` and held through five start
+   * lights (frames 42-46) and lights out at frame `OUT`; the race runs from the frame after it, an overtake 30 frames in.
+   */
+  const formation = () => script(beats(120, (k) => ({
+    at: k < RESET ? k * STEP : k <= OUT ? 0 : (k - OUT) * STEP,
+    ...(k === 5 && { session: status(3) }),
+    ...(k === 44 && { session: status(0) }),
+    events: [...(k >= 42 && k <= 46 ? [stlg(k - 41)] : []), ...(k === OUT ? [LGOT] : []), ...(k === OUT + 30 ? [ovtk(1, 0)] : [])],
+  })));
+
+  it('is carried over: one fall fact with the game’s times, and the reset step rewinds nothing', () => {
+    const { runner, results } = run(formation());
+    expect(runner.state.log.clock).toMatchObject([{ kind: 'fall', at: LAP_MS, fromMs: LAP_MS, toMs: 0, offsetMs: LAP_MS }]);
+    expect(clockSteps(results)).toEqual([RESET]);
+    expect(results[RESET]!.delta.rewound).toBeUndefined();
+  });
+  it('the race clock never falls: it holds at the formation lap’s last time through the start lights, and runs on from there', () => {
+    const frames = formation();
+    const { times } = raceClockOf(frames);
+    expect(fallsIn(times)).toEqual([]);
+    expect(times.slice(RESET)).toEqual(frames.slice(RESET).map((f) => f.sessionTime + LAP_MS));
+  });
+  it('what the race records lies on the continued clock: lights out and the race start at the formation lap’s last time, a later overtake after it', () => {
+    const { runner } = run(formation());
+    expect(lightsOut(runner).map((e) => e.at)).toEqual([LAP_MS]);
+    expect(runner.state.open.situations.session).toEqual({ kind: 'racing', start: LAP_MS, startLeaderLap: 1 });
+    expect(runner.state.history.events.filter((e) => e.kind === 'overtake').map((e) => e.at)).toEqual([LAP_MS + 30 * STEP]);
   });
 });
 
