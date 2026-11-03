@@ -131,7 +131,7 @@ Every clause uses these words in exactly these meanings.
 
 ### The four steps
 
-- **C7. Step 0, clock.** The clock sub-machine reads the frame's session time, the runner's flashback report and receive-time differences, and returns the frame on the race clock together with clock facts (a fall carried over, a forward jump, a pause, the simulated end). It runs before every other step. `[test]`
+- **C7. Step 0, clock.** The clock sub-machine reads the frame's session time, the runner's flashback report, receive-time differences, the game's pause signal (`gamePaused`, from the frame) and whether the session is online (from the previous frame's live state), and returns the frame on the race clock together with clock facts (a fall carried over, a forward jump, a pause, the simulated end). It runs before every other step. `[test]`
 - **C8. Step 1, state update.** Reads the frame; writes the live state (values only) and the signals. Decides no situation. Each value carries when it was last updated (`updatedAt` per data source). Realism is applied here: a rival's hidden value is `unknown('realism')` in the live state, and so in every fact built from it; situations stay public. `[test]`
 - **C9. Step 2, machine.** Reads signals, values and its own open spans; writes open spans, with the frame number each opened on, and closed spans, with the frame numbers each opened and closed on. `[test]`
 - **C10. Step 3, recorders.** Read the live state, the situations and their own open state; append facts to the log. A decision committed by the user enters the engine as an input with the frame it was committed at, and the decision recorder appends it, describing that frame. `[test]`
