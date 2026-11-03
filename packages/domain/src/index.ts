@@ -13,6 +13,10 @@ export { spans as carFlagsSpans } from './situations/car-flags.ts';
 export { spans as zoneFlagsSpans, type ZoneFlagDetail } from './situations/zone-flags.ts';
 export { spans as lapValiditySpans, type InvalidLapDetail } from './situations/lap-validity.ts';
 export { spans as warningsSpans, type WarnedDetail } from './situations/warnings.ts';
+export { spans as compoundRuleSpans } from './situations/compound-rule.ts';
+export { spans as raceControlPracticeSpans } from './situations/race-control-practice.ts';
+export { spans as raceControlQualifyingSpans } from './situations/race-control-qualifying.ts';
+export { spans as raceControlRaceSpans, type DrsOffDetail, type DrsOffReason } from './situations/race-control-race.ts';
 export { spans as clockSpans, type PausedDetail } from './situations/clock.ts';
 export {
   spans as sessionPhaseRaceSpans,
