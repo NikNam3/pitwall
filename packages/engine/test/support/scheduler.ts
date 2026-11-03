@@ -46,8 +46,9 @@ export const input = (t: number, changed: ChangeTag[] = ['timing'], d = delta(),
 export const quick = (id: string, o: Partial<QuickCalculator<unknown>> = {}): Calculator =>
   ({ kind: 'quick', id, reads: ['timing'], cadence: 'frame', compute: (v) => v.state.sessionTime, ...o }) as Calculator;
 
+/** A scheduler over `calcs` that needs `needed`; outputs frozen, as in every test (a unit never changes an output it returned). */
 export const sched = (calcs: Calculator[], needed = calcs.map((c) => c.id)) => {
-  const s = new Scheduler(CalculatorRegistry.build(calcs));
+  const s = new Scheduler(CalculatorRegistry.build(calcs), { freezeOutputs: true });
   s.setNeeded(needed);
   return s;
 };

@@ -73,7 +73,7 @@ const CALCULATORS = [lapsPerCar, order, crossings, lapTimes] as Calculator[];
 
 /** A run of `frames`: the runner's projection, the last outputs, the active insights and the insight changes it keeps. */
 function run(frames: Frame[]) {
-  const scheduler = new Scheduler(CalculatorRegistry.build(CALCULATORS));
+  const scheduler = new Scheduler(CalculatorRegistry.build(CALCULATORS), { freezeOutputs: true });
   scheduler.setNeeded(CALCULATORS.map((c) => c.id));
   const runner = new SessionRunner(initFor(frames), { attach: scheduler });
   let outputs: ReadonlyMap<string, unknown> = new Map();

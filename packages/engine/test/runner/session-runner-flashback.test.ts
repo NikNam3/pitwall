@@ -187,7 +187,7 @@ describe('SessionRunner: the attached bookkeeping rewinds with the state (C27, C
   };
 
   it('after a flashback the scheduler’s bookkeeping is the snapshot’s: an insight raised after the target is gone, one raised before it stays', () => {
-    const scheduler = new Scheduler(CalculatorRegistry.build([lapProbe]));
+    const scheduler = new Scheduler(CalculatorRegistry.build([lapProbe]), { freezeOutputs: true });
     scheduler.setNeeded([lapProbe.id]);
     const runner = new SessionRunner(initFor(original()), { attach: scheduler });
     const changes: InsightChange[] = [];
@@ -204,6 +204,47 @@ describe('SessionRunner: the attached bookkeeping rewinds with the state (C27, C
     expect(atRewind?.map((i) => [i.key, i.raisedAt])).toEqual([['lap2', 100 * STEP]]);
     // nothing of the undone timeline is taken back (`lap3` never happened); the fork's lap 3 raises it anew at frame 330
     expect(changes.slice(before)).toEqual([{ type: 'raised', insight: { ...insight('lap3'), raisedAt: 330 * STEP } }]);
+  });
+});
+
+// Review F3 of Task 3: a target older than the replay window has no kept frames after its snapshot, so the state and the
+// bookkeeping are the snapshot's; the rewind targets that snapshot, and the insight changes a publisher keeps up to the
+// target (C30) are then what the scheduler holds.
+describe('SessionRunner: a rewind deeper than the replay window', () => {
+  const laps = Array.from({ length: 9 }, (_, k) => 100 * (k + 1));
+  // 1000 frames (16 s) run the 10 s window past frame 90; the game goes back to it (frame id drop, no FLBK)
+  const original = () => timeline(1000, laps);
+  const continuation = () => after(timeline(201, laps), 91, 1000);
+  const insight = (key: string): Insight => ({ key, severity: 'info', category: 'race', feedId: feedId('test'), kind: key, params: {}, raisedAt: toSessionTime(0) });
+  /** `a` holds from 1100 ms on (raised at frame 69: after the snapshot of frame 63, before the target 90), `b` from 5000 ms. */
+  const clockProbe: QuickCalculator<number> = {
+    kind: 'quick', id: 'probe.clock', reads: ['feed'], cadence: 'frame',
+    compute: (v) => v.state.sessionTime,
+    insights: (t) => [...(t >= 1100 ? [insight('a')] : []), ...(t >= 5000 ? [insight('b')] : [])],
+  };
+
+  it('targets the snapshot’s frame and time, and the insight changes kept up to the target are the scheduler’s active insights', () => {
+    const scheduler = new Scheduler(CalculatorRegistry.build([clockProbe]), { freezeOutputs: true });
+    scheduler.setNeeded([clockProbe.id]);
+    const runner = new SessionRunner(initFor(original()), { attach: scheduler });
+    let kept: Array<{ frameId: number; change: InsightChange }> = [];
+    const rewinds: unknown[] = [];
+    const schedule = (r: StepResult, applied: Frame) => {
+      const target = r.delta.rewound;
+      if (target !== undefined) {
+        rewinds.push(target);
+        kept = kept.filter((k) => k.frameId <= target.frameId);
+      }
+      const input = { state: r.state, activeFlagPhase: activeFlagPhaseOf(r.state), situation: situationOf(r.state), changed: r.changed, delta: r.delta, feed: IDLE_FEED, config: {} };
+      kept.push(...scheduler.run(input).insights.map((change) => ({ frameId: applied.frameId, change })));
+    };
+    for (const f of [...original(), ...continuation()]) runner.apply(f, schedule);
+    expect(rewinds).toEqual([{ frameId: 63, at: 63 * STEP }]);
+    // the kept changes as a client folds them: a raise adds, a resolve removes
+    const held = kept.reduce<Insight[]>((active, { change }) =>
+      (change.type === 'raised' ? [...active, change.insight] : active.filter((i) => i.key !== change.key)), []);
+    expect(held).toEqual(scheduler.activeInsights);
+    expect(held.map((i) => [i.key, i.raisedAt])).toEqual([['a', 91 * STEP]]);                // raised anew on the rewinding frame
   });
 });
 

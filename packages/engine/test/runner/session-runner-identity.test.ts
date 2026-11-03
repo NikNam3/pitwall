@@ -90,6 +90,39 @@ describe('SessionRunner: the identity wait', () => {
     expect(runner.state.weekend).toBeUndefined();
   });
 
+  // Review F2 of Task 3: an exception on a frame skips that frame (the bridge reports it, naming `applying`), also in the
+  // release of the held frames; the frames after it stay held and the next call applies them first.
+  describe('a step that throws while held frames are released', () => {
+    /** Frames 0..9, Participants in frame 5, and frame 2 one that `step` cannot take (lap data without its cars). */
+    const withBrokenFrame = () =>
+      framesWithParticipantsAt(10, 5).map((f) => (f.frameId === 2 ? { ...f, lapData: { ...f.lapData!, lapData: null as never } } : f));
+    const releaseThrowing = () => {
+      const frames = withBrokenFrame();
+      const seen: Array<{ frameId: number; stateFrameId: number; weekend: unknown }> = [];
+      const contextFor = vi.fn(() => WEEKEND);
+      const runner = new SessionRunner(initFor(frames), { contextFor });
+      applyNoting(runner, frames.slice(0, 5), seen);
+      expect(() => applyNoting(runner, frames.slice(5, 6), seen)).toThrow(TypeError);
+      return { frames, seen, contextFor, runner };
+    };
+
+    it('a step that throws while held frames are released skips only that frame; the rest are applied', () => {
+      const { frames, seen, contextFor, runner } = releaseThrowing();
+      // the frame that threw is the one being applied, for the report; the frames before it were applied
+      expect(runner.applying?.frameId).toBe(2);
+      expect(seen.map((s) => s.frameId)).toEqual([0, 1]);
+      // the next call applies the frames still held first, each on its own state, then its own frame
+      applyNoting(runner, frames.slice(6), seen);
+      expect(seen).toEqual([0, 1, 3, 4, 5, 6, 7, 8, 9].map((id) => ({ frameId: id, stateFrameId: id, weekend: WEEKEND })));
+      expect(contextFor).toHaveBeenCalledTimes(1);
+    });
+    it('`end()` applies the frames still held after the throw', () => {
+      const { seen, runner } = releaseThrowing();
+      runner.end((r, applied) => seen.push({ frameId: applied.frameId, stateFrameId: r.state.lastFrameId, weekend: r.state.weekend }));
+      expect(seen.map((s) => s.frameId)).toEqual([0, 1, 3, 4, 5]);
+    });
+  });
+
   it('frames still held when the session ends are applied by `end()`, with no weekend context', () => {
     const frames = framesWithParticipantsAt(10, undefined);
     const seen: Array<{ frameId: number; stateFrameId: number; weekend: unknown }> = [];

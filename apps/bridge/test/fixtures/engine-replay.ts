@@ -43,7 +43,7 @@ export async function replayScheduled(
   onStep: (r: StepResult, scheduled: SchedulerResult, f: Frame) => void = () => {},
   config: EngineView['config'] = {},
 ): Promise<SessionRunner> {
-  const scheduler = new Scheduler(CalculatorRegistry.build(calculators));
+  const scheduler = new Scheduler(CalculatorRegistry.build(calculators), { freezeOutputs: true });
   scheduler.setNeeded(calculators.map((c) => c.id));
   return replayRunner(path, (r, f) => {
     if (r.delta.rewound !== undefined) scheduler.reset();

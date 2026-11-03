@@ -36,7 +36,7 @@ const frames = (n: number, beat: (k: number) => Beat = () => ({})): Frame[] =>
 /** Every scheduled output of `incidents`, each with a fresh `init` over the same view. */
 function incidentsRuns(all: Frame[]): Array<{ frame: number; scheduled: IncidentsOutput; fresh: IncidentsOutput }> {
   const runner = new SessionRunner(initFor(all));
-  const scheduler = new Scheduler(CalculatorRegistry.build([incidentsCalculator]));
+  const scheduler = new Scheduler(CalculatorRegistry.build([incidentsCalculator]), { freezeOutputs: true });
   scheduler.setNeeded([INCIDENTS]);
   const runs: Array<{ frame: number; scheduled: IncidentsOutput; fresh: IncidentsOutput }> = [];
   all.forEach((f, frame) => runner.apply(f, (r) => {

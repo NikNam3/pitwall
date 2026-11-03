@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { feedId, toSessionTime, type Insight } from '@pitwall/domain';
-import type { Cadence, ChangeTag, HistoryDelta } from '../../src/index.ts';
+import { CalculatorRegistry, Scheduler, type Cadence, type ChangeTag, type HistoryDelta } from '../../src/index.ts';
 import { delta as lapDelta, input, quick, sched } from '../support/scheduler.ts';
 
 // laps and pit stops move together, so one delta serves both cadences
@@ -69,5 +69,28 @@ describe('Scheduler bookkeeping (Snapshotable, C27)', () => {
     const copy = structuredClone(saved);
     s.run(input(1100));
     expect(saved).toEqual(copy);
+  });
+});
+
+// The bookkeeping's snapshots share the outputs (C27), so no unit may change an output after returning it. Tests make
+// a breach fail: the bridge sets the option from `PITWALL_FREEZE_OUTPUTS`, the engine's test supports pass it.
+describe('Scheduler freezeOutputs', () => {
+  /** Returns a fresh object each run and, on its next run, changes the one it returned before. */
+  const mutating = () => {
+    let last: { laps: number[] } | undefined;
+    return quick('m', { compute: () => { last?.laps.push(1); last = { laps: [] }; return last; } });
+  };
+  const secondRunErrors = (freezeOutputs: boolean) => {
+    const s = new Scheduler(CalculatorRegistry.build([mutating()]), { freezeOutputs });
+    s.setNeeded(['m']);
+    s.run(input(0));
+    return s.run(input(16)).errors;
+  };
+
+  it('with freezeOutputs a unit that mutates its returned output throws; without it, it does not', () => {
+    const frozen = secondRunErrors(true);
+    expect(frozen.map((e) => e.id)).toEqual(['m']);
+    expect(frozen[0]!.error).toBeInstanceOf(TypeError);
+    expect(secondRunErrors(false)).toEqual([]);
   });
 });

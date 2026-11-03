@@ -42,12 +42,12 @@ const probeFeature = defineFeature({ name: 'probe-clock', calculators: [probe], 
 type Entry = { type: 'raised'; insight: Insight } | { type: 'resolved'; key: string; at: number };
 
 /** Runs `packets` with one client subscribed to `insights`; returns the insights messages it received. */
-async function insightsMessages(packets: PreparedPacket[]): Promise<ServerMessage[]> {
+async function insightsMessages(packets: PreparedPacket[], probeOf = probeFeature): Promise<ServerMessage[]> {
   const hub = new TopicHub({ now: () => 0 });
   const inbox: ServerMessage[] = [];
   hub.addClient('c', { send: (m) => inbox.push(m), bufferedAmount: () => 0 });
   hub.subscribe({ clientId: 'c', id: 'insights', topic: 'insights', params: {}, feedId: F });
-  const pipeline = new FeedPipeline({ feedId: F, source: new ArraySource(F, packets), hub, features: [insightsFeature, probeFeature], log: createLogger({ level: 'silent' }) });
+  const pipeline = new FeedPipeline({ feedId: F, source: new ArraySource(F, packets), hub, features: [insightsFeature, probeOf], log: createLogger({ level: 'silent' }) });
   pipeline.start();
   await pipeline.done;
   return inbox.filter((m) => 'id' in m && m.id === 'insights');
@@ -74,5 +74,27 @@ describe('FeedPipeline: the insights topic after a flashback', () => {
     // the client then holds what a run that never received the undone frames gives it: `late` raised anew at frame 44
     expect(held(messages)).toEqual(held(await insightsMessages(straight())));
     expect(held(messages)).toEqual([raised('early', 7 * 16), raised('late', 44 * 16)]);
+  });
+});
+
+// Review F3 of Task 3: a rewind deeper than the replay window (10 s) restores the snapshot at or before its target (the
+// one after frame 63, 1008 ms), the state and the scheduler's bookkeeping with it; the resend keeps the changes up to
+// that snapshot, so the topic holds what the scheduler holds.
+describe('FeedPipeline: the insights topic after a rewind deeper than the replay window', () => {
+  /** `a` holds from 1100 ms on: raised at frame 69, after the snapshot of frame 63 and before the target, frame 90. */
+  const deepProbe = defineFeature({ name: 'probe-deep', topics: [], calculators: [{ ...probe, id: 'probe.deep', insights: (t: number) => (t >= 1100 ? [insight('a')] : []) }] });
+  /** Frames 0..999 (16 s), then the game rewinds to frame 90 and plays frames 91..200. */
+  const deepFlashback = (): PreparedPacket[] => {
+    const continuation = frames(201).packets().filter((p) => p.packet.header.frameIdentifier > 90);
+    const rewound = continuation.map(({ packet, receivedAtMs }) => ({
+      packet: { ...packet, header: { ...packet.header, overallFrameIdentifier: packet.header.frameIdentifier + 909 } },
+      receivedAtMs: receivedAtMs + 909 * 16,
+    }));
+    return [...toPrepared(frames(1000).packets()), ...toPrepared(rewound)];
+  };
+
+  it('after a rewind deeper than the replay window the insights topic equals the scheduler’s state: `a` once, raised anew on the rewinding frame', async () => {
+    const messages = await insightsMessages(deepFlashback(), deepProbe);
+    expect(held(messages)).toEqual([raised('a', 91 * 16)]);
   });
 });

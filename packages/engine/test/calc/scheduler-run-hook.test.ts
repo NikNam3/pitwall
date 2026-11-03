@@ -32,7 +32,7 @@ const calcs = (): Calculator[] => [
     compute: (v) => (v.outputs.get('clock') as number) + (v.outputs.get('lapCount') as number) } as QuickCalculator<number>,
 ];
 const make = (onCalculatorRun?: <T>(id: CalculatorId, run: () => T) => T) => {
-  const s = new Scheduler(CalculatorRegistry.build(calcs()), onCalculatorRun === undefined ? undefined : { onCalculatorRun });
+  const s = new Scheduler(CalculatorRegistry.build(calcs()), { freezeOutputs: true, ...(onCalculatorRun && { onCalculatorRun }) });
   s.setNeeded(['sum', 'slow']);
   return s;
 };
@@ -76,6 +76,7 @@ describe('Scheduler onCalculatorRun', () => {
 
   it('the hook receives the calculator work as a thunk and its return value is the calculator result', () => {
     const s = new Scheduler(CalculatorRegistry.build([quick('a'), quick('b', { compute: () => 'real' })]), {
+      freezeOutputs: true,
       onCalculatorRun: <T,>(id: CalculatorId, run: () => T): T => (id === 'a' ? (99 as T) : run()),
     });
     s.setNeeded(['a', 'b']);
@@ -85,6 +86,7 @@ describe('Scheduler onCalculatorRun', () => {
 
   it('an exception thrown inside the run propagates through the hook and is reported as a calculator error', () => {
     const s = new Scheduler(CalculatorRegistry.build([quick('a', { compute: () => { throw new Error('boom'); } }), quick('b')]), {
+      freezeOutputs: true,
       onCalculatorRun: (_id, run) => run(),
     });
     s.setNeeded(['a', 'b']);

@@ -49,14 +49,17 @@ describe('SessionRunner', () => {
     expect(shown(a.state)).toEqual(shown(b.state));
   });
   // The replay window is 10 s of session time (an engine constant): 1000 frames of 16 ms run past it, so frame 90
-  // lies before it; the newest snapshot at or before it is the one after frame 63 (1008 ms).
-  it('a target older than the replay window restores the newest snapshot at or before it; the lap is detected again, once', () => {
+  // lies before it; the newest snapshot at or before it is the one after frame 63 (1008 ms). The state and the attached
+  // bookkeeping go back there, so the rewind targets that snapshot's frame and time (review F3 of Task 3); the
+  // flashback info keeps the game's target.
+  it('a target older than the replay window restores the newest snapshot at or before it and targets it; the lap is detected again, once', () => {
     const laps = Array.from({ length: 9 }, (_, k) => 100 * (k + 1));
     const original = timeline(1000, laps);
     const continuation = after(timeline(200, [120], flbkAt(90)), 91, 1000);
     const a = new SessionRunner(initFor(original));
     runAll(a, original);
-    expect(applyOne(a, continuation[0]!).delta.rewound).toEqual({ frameId: 90, at: 1_440 });
+    const r = applyOne(a, continuation[0]!);
+    expect([r.delta.rewound, a.state.log.voids.at(-1)?.target, r.flashback?.targetFrameId]).toEqual([{ frameId: 63, at: 1_008 }, { frameId: 63, at: 1_008 }, 90]);
     expect(a.state.history.laps).toEqual([]);                                          // lap 1 ended at frame 100 > target 90
     runAll(a, continuation.slice(1));
     expect(a.state.history.laps.map((l) => [l.lapNumber, l.lapTimeMs])).toEqual([[1, 1_920]]);
