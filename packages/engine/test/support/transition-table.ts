@@ -1,15 +1,18 @@
-// The transition-table harness (contract C85). A sub-machine's table file, `test/situations/<id>/<id>.transitions.ts`,
+// The transition-table harness (contract C15, C85). A sub-machine's table file, `test/situations/<id>/<id>.transitions.ts`,
 // default-exports `defineTransitionTable(machine, rows)`: one row per declared transition and one join row per way of
-// joining a session in progress. The generic tests in `test/situations/` load every table file and the registry, then run
-// every row (`transitions-completeness.test.ts`), check rows and declared transitions both ways (`tableProblems`) and
-// feed every machine random signal sequences (`invariants.property.test.ts`). A sub-machine's own test files add its
+// joining a session in progress. What a table drives is `Steppable`: a registered sub-machine stepped with
+// `MachineInput`s (`inputs()`), or step 0's clock (C7), which is a sub-machine outside the registry, stepped with its own
+// inputs (`test/support/clock-inputs.ts`); each row carries the builder of its machine's inputs. The generic tests in
+// `test/situations/` load every table file and the registry, then run every row (`transitions-completeness.test.ts`),
+// check rows and declared transitions both ways (`tableProblems`) and feed every machine random sequences
+// (`invariants.property.test.ts`, the clock's `clock/clock.property.test.ts`). A sub-machine's own test files add its
 // segment tests; they need no other wiring.
 import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import type { OpenSpan, Scope } from '@pitwall/domain';
+import type { CarId, MachineId, OpenSpan, Scope, Span, SpanDeclaration } from '@pitwall/domain';
 import { initialState } from '../../src/index.ts';
-import type { MachineInput, SubMachine } from '../../src/situations/machine.ts';
+import type { MachineInput } from '../../src/situations/machine.ts';
 import { ScenarioBuilder } from '../builders/index.ts';
 import { initFor } from './run.ts';
 
@@ -74,24 +77,46 @@ export class MachineInputBuilder {
 /** A new, empty `MachineInputBuilder`. */
 export const inputs = (): MachineInputBuilder => new MachineInputBuilder();
 
+/** A span a step closed, as the harness reads it: which span it was, of what kind, in which scope. */
+export type ClosedSpan = Pick<Span, 'id' | 'kind' | 'detail' | 'joinedAt'> & { carId?: CarId | undefined };
+
+/**
+ * What a transition table drives (C15): a sub-machine with its declared transitions, its open state `Open` and the
+ * inputs `Input` it steps with. A registered `SubMachine` is one (its inputs are `MachineInput`s); so is step 0's clock
+ * (`clockStepper`). `none` in a transition: no span open in the scope, before (`from`) or after (`to`).
+ */
+export type Steppable<Open = unknown, Input = unknown> = {
+  id: MachineId;
+  spans: SpanDeclaration;
+  transitions: ReadonlyArray<readonly [from: string | 'none', to: string | 'none']>;
+  init(): Open;
+  openSpans(open: Open): OpenSpan[];
+  step(open: Open, input: Input): { open: Open; closed: readonly ClosedSpan[] };
+};
+
+/** What builds a row's frames: one input per frame, in order. */
+export type InputBuilder<Input> = { build(): Input[] };
+
 /**
  * One transition of a sub-machine: stepping `machine.init()` through the inputs `input` builds, the last frame turns
- * an open span of kind `from` into one of kind `to` in one of the machine's scopes (a car, a zone or the session).
- * `from: 'none'`: no span was open there before. `join`: the session's first frame opens `to` as the current situation
- * of a session in progress, so the span has `joinedAt`; every other row's new span has none.
+ * the scope's situation `from` into `to` in one of the machine's scopes (a car, a zone or the session). `none`: no span
+ * open there (`from`: before the frame; `to`: after it, the span closed with no successor). A span may open and close
+ * on the same frame (C26): that frame gives both `none -> kind` and `kind -> none`. `join`: the session's first frame
+ * opens `to` as the current situation of a session in progress, so the span has `joinedAt`; every other row's new span
+ * has none.
  */
-export type TransitionRow = { name: string; from: string | 'none'; to: string; input: MachineInputBuilder; join?: true };
+export type TransitionRow<Input = MachineInput> = { name: string; from: string | 'none'; to: string | 'none'; input: InputBuilder<Input>; join?: true };
 
-/** A sub-machine and its rows. */
-export type TransitionTable = { machine: SubMachine<unknown>; rows: readonly TransitionRow[] };
+/** A machine and its rows. */
+export type TransitionTable = { machine: Steppable; rows: readonly TransitionRow<unknown>[] };
 
 /** A sub-machine's transition table; what its table file default-exports. */
-export const defineTransitionTable = <Open>(machine: SubMachine<Open>, rows: readonly TransitionRow[]): TransitionTable => ({
-  machine: machine as SubMachine<unknown>,
-  rows,
+export const defineTransitionTable = <Open, Input>(machine: Steppable<Open, Input>, rows: readonly TransitionRow<NoInfer<Input>>[]): TransitionTable => ({
+  machine: machine as unknown as Steppable,
+  rows: rows as readonly TransitionRow<unknown>[],
 });
 
-const declared = (machine: SubMachine<unknown>, from: string, to: string): boolean => machine.transitions.some(([f, t]) => f === from && t === to);
+const declared = (machine: Steppable, from: string, to: string): boolean => machine.transitions.some(([f, t]) => f === from && t === to);
 
 /**
  * What is wrong with a table (C85, both ways), one sentence each: a declared transition without a row, a row of an
@@ -105,32 +130,53 @@ export const tableProblems = ({ machine, rows }: TransitionTable): string[] => [
 ];
 
 /**
- * Where an open span lives: the session, its car (`carId`) or its zone (`detail.zone`, which a zone sub-machine's spans
+ * Where a span lives: the session, its car (`carId`) or its zone (`detail.zone`, which a zone sub-machine's spans
  * carry). A scope holds at most one open span; a span's successor in its scope starts where it ends.
  */
 export const scopeKey = (scope: Scope, span: { carId?: number | undefined; detail: unknown }): string =>
   scope === 'session' ? 'session' : scope === 'car' ? `car ${span.carId}` : `zone ${(span.detail as { zone?: number } | undefined)?.zone}`;
 
-/** A change of a scope's open span between two frames: `from` the kind before (`none`: no span), `to` the new span. */
-export type ObservedTransition = { scope: string; from: string; to: OpenSpan };
+/**
+ * A change of a scope's situation in one frame: `from` the kind before, `to` the kind after (`none`: no span), `span`
+ * the span `to` names (the new open span, or one that opened and closed on the frame); none for `to: none`.
+ */
+export type ObservedTransition = { scope: string; from: string; to: string; span?: OpenSpan | ClosedSpan };
 
-/** The transitions between the open spans before and after a step: per scope, a new span id is a transition. */
-export const transitionsOf = (scope: Scope, before: readonly OpenSpan[], after: readonly OpenSpan[]): ObservedTransition[] => {
-  const previous = new Map(before.map((s) => [scopeKey(scope, s), s]));
-  return after.flatMap((span) => {
-    const key = scopeKey(scope, span);
-    const was = previous.get(key);
-    return was?.id === span.id ? [] : [{ scope: key, from: was?.kind ?? 'none', to: span }];
+type Passed = OpenSpan | ClosedSpan | undefined;
+
+/**
+ * The transitions of one frame, per scope: from the open span before it, through every span that opened and closed on
+ * it (`closed`, in order), to the open span after it; `none` where no span is open. A new span id is a transition, and
+ * so is a span that closed without a successor (`kind -> none`).
+ */
+export const transitionsOf = (
+  scope: Scope,
+  before: readonly OpenSpan[],
+  after: readonly OpenSpan[],
+  closed: readonly ClosedSpan[] = [],
+): ObservedTransition[] => {
+  const keys = [...new Set([...before, ...after, ...closed].map((s) => scopeKey(scope, s)))];
+  return keys.flatMap((key) => {
+    const inScope = (s: { carId?: number | undefined; detail: unknown }) => scopeKey(scope, s) === key;
+    const was = before.find(inScope);
+    const now = after.find(inScope);
+    const passed: Passed[] = [was, ...closed.filter((s) => inScope(s) && s.id !== was?.id && s.id !== now?.id), now];
+    return passed.slice(1).flatMap((to, i): ObservedTransition[] => {
+      const from = passed[i];
+      if (from?.id === to?.id) return [];
+      return [{ scope: key, from: from?.kind ?? 'none', to: to?.kind ?? 'none', ...(to && { span: to }) }];
+    });
   });
 };
 
 /** What a row's last frame did: the machine's transitions on it, after stepping `init()` through the frames before. */
-export const runRow = (machine: SubMachine<unknown>, row: TransitionRow): ObservedTransition[] => {
+export const runRow = (machine: Steppable, row: TransitionRow<unknown>): ObservedTransition[] => {
   const frames = row.input.build();
   const last = frames.pop();
   if (last === undefined) throw new Error(`row "${row.name}" builds no frame`);
   const open = frames.reduce((o, input) => machine.step(o, input).open, machine.init());
-  return transitionsOf(machine.spans.scope, machine.openSpans(open), machine.openSpans(machine.step(open, last).open));
+  const next = machine.step(open, last);
+  return transitionsOf(machine.spans.scope, machine.openSpans(open), machine.openSpans(next.open), next.closed);
 };
 
 const SITUATIONS_TESTS = join(import.meta.dirname, '..', 'situations');

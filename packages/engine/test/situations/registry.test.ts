@@ -68,8 +68,8 @@ describe('the registered sub-machines', () => {
     for (const m of MACHINES) expect(existsSync(join(situations, m.id, 'machine.ts')), m.id).toBe(true);
     expect(new Set(ids(MACHINES)).size).toBe(MACHINES.length);
   });
-  it('every registered sub-machine has its change tag spans:<id>', () => {
-    for (const m of MACHINES) expect(CHANGE_TAGS as readonly string[]).toContain(`spans:${m.id}`);
+  it('every registered sub-machine, and the clock, has its change tag spans:<id>', () => {
+    for (const m of [...MACHINES, STEP0_CLOCK]) expect(CHANGE_TAGS as readonly string[]).toContain(`spans:${m.id}`);
   });
 });
 

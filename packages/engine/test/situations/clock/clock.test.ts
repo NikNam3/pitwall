@@ -5,11 +5,12 @@
 // flashback (the runner decides what is one, and a replay keeps its decision) and appends no clock fact, a flashback
 // after a fall restores the state by frame id, the frames a rewind times at its target keep that time on every replay,
 // garage acceleration is no jump, any other forward jump of more than 60 s is a `jump` fact, the post-session jump
-// appends `simulatedEnd`, and a pause is the clock's `paused` span (open in the situation while it lasts, closed into
-// `spans:clock`). The two online start shapes follow raceZandvoortOnline (S3) and raceZandvoortUidReuse (S4).
+// appends `simulatedEnd` (once: falls and jumps after it are read as before it), a pause is the clock's `paused` span
+// (open in the situation while it lasts, closed into `spans:clock`), and the frames that append to `clock` or
+// `spans:clock` carry those change tags (C40). The two online start shapes follow raceZandvoortOnline (S3) and raceZandvoortUidReuse (S4).
 import { describe, expect, it } from 'vitest';
 import type { EventDetails } from '@pitwall/protocol';
-import { SessionRunner, situationOf, type Frame, type StepResult } from '../../../src/index.ts';
+import { CHANGE_TAGS, SessionRunner, situationOf, type Frame, type StepResult } from '../../../src/index.ts';
 import { clockInput, onRaceClock, STEP0_CLOCK } from '../../../src/situations/clock/clock.ts';
 import { MACHINE_ORDER } from '../../../src/situations/registry.ts';
 import { situationOf as machineSituationOf } from '../../../src/situations/run.ts';
@@ -650,6 +651,68 @@ describe('a flashback report on the session’s first frame', () => {
     expect(rewoundSteps(withFlbk.rest)).toEqual(rewoundSteps(plain.rest));
     expect(clockSteps(withFlbk.rest)).toEqual(clockSteps(plain.rest));
     expect(withFlbk.runner.state).toEqual(plain.runner.state);
+  });
+});
+
+// C36 has no post-session exception (Task 7 review F1, ruling): after the simulated end the clock still reads every
+// fall (carried over, a `fall` fact) and every forward jump (a `jump` fact); a second simulation-sized jump appends no
+// second `simulatedEnd` but a `jump`.
+describe('after the simulated end', () => {
+  /** Practice at the peak whose session time jumps to 4500 s at frame 100 (the simulated end); `then(k)` for frames 150 on. */
+  const ENDED_MS = 4_500_000;
+  const ended = (then: (k: number) => Beat) =>
+    script(beats(200, (k) => (k < 100 ? { at: atPeak(k) } : k < 150 ? { at: ENDED_MS + (k - 100) * STEP } : then(k))), { session: { sessionType: 1 } });
+  /** The session time on frame 149, the last before `then`. */
+  const BEFORE_MS = ENDED_MS + 49 * STEP;
+
+  it('a fall after the simulated end is carried over and recorded: a fall fact with the game’s times, and the race clock does not fall', () => {
+    const frames = ended((k) => ({ at: 1_000 + (k - 150) * STEP }));
+    const { runner, times } = raceClockOf(frames);
+    expect(runner.state.log.clock).toMatchObject([{ kind: 'simulatedEnd' }, { kind: 'fall', fromMs: BEFORE_MS, toMs: 1_000, offsetMs: BEFORE_MS - 1_000 }]);
+    expect(fallsIn(times)).toEqual([]);
+    expect(clockSteps(run(frames).results)).toEqual([100, 150]);
+  });
+  it('a forward jump after the simulated end is a jump fact with the game’s times', () => {
+    // a 3 s stall at frame 150 with a 94.8 s advance: more than 60 s, less than 60 times the wall gap
+    const { runner, results } = run(ended((k) => ({ at: BEFORE_MS + 94_800 + (k - 149) * STEP, ...(k === 150 && { wall: 149 * STEP + 3_000 }) })));
+    expect(runner.state.log.clock).toMatchObject([{ kind: 'simulatedEnd' }, { kind: 'jump', fromMs: BEFORE_MS, toMs: BEFORE_MS + 94_800 + STEP }]);
+    expect(clockSteps(results)).toEqual([100, 150]);
+  });
+  it('a second simulation jump appends no second simulatedEnd: it is a jump fact', () => {
+    const { runner, results } = run(ended((k) => ({ at: BEFORE_MS + 4_500_000 + (k - 149) * STEP })));
+    expect(clockKinds(runner)).toEqual(['simulatedEnd', 'jump']);
+    expect(runner.state.log.clock[1]).toMatchObject({ kind: 'jump', fromMs: BEFORE_MS, toMs: BEFORE_MS + 4_500_000 + STEP });
+    expect(clockSteps(results)).toEqual([100, 150]);
+  });
+});
+
+// C40: one change tag per fact list and one per sub-machine (Task 7 review F2, ruling): `clock` on a frame that appends
+// a clock fact, `spans:clock` on a frame on which a paused span opens or closes. Practice sessions, so no legacy
+// rewind tags every list.
+describe('the clock’s change tags', () => {
+  /** The frames whose step result carries `tag`, by frame index. */
+  const tagged = (results: StepResult[], tag: string) => results.flatMap((r, i) => ((r.changed as ReadonlySet<string>).has(tag) ? [i] : []));
+  const practice = (make: (k: number) => Beat, session: Record<string, number> = {}) => run(script(beats(150, make), { session: { sessionType: 1, ...session } }));
+
+  it('clock and spans:clock are change tags', () => {
+    expect(CHANGE_TAGS as readonly string[]).toEqual(expect.arrayContaining(['clock', 'spans:clock']));
+  });
+  it.each([
+    ['a fall', (k: number) => ({ at: k < 100 ? k * STEP : 1_000 + (k - 100) * STEP })],
+    ['a forward jump', (k: number) => ({ at: k < 100 ? atPeak(k) : atPeak(99) + 94_800 + atPeak(k - 99) - atPeak(1), wall: k * STEP + (k >= 100 ? 3_000 - STEP : 0) })],
+    ['the simulated end', (k: number) => ({ at: k < 100 ? atPeak(k) : 4_500_000 + k * STEP })],
+  ] as const)('%s tags clock on the frame that appends it, and on no other', (_, make) => {
+    const { results } = practice(make);
+    expect([rewoundSteps(results), clockSteps(results), tagged(results, 'clock')]).toEqual([[], [100], [100]]);
+  });
+  it('an online pause tags spans:clock on the frame it opens on and on the frame it closes on, and on no other', () => {
+    const { results } = practice((k) => (k === 50 ? { session: { gamePaused: 1 } } : k === 100 ? { session: { gamePaused: 0 } } : {}), { networkGame: 1 });
+    expect([rewoundSteps(results), tagged(results, 'spans:clock'), tagged(results, 'clock')]).toEqual([[], [50, 100], []]);
+  });
+  it('an offline pause tags spans:clock on the frame after the gap, which opens and closes it, and on no other', () => {
+    const { runner, results } = practice((k) => (k === 50 ? { wall: 49 * STEP + 3_000 } : {}));
+    expect(pauses(runner)).toHaveLength(1);
+    expect([rewoundSteps(results), tagged(results, 'spans:clock'), tagged(results, 'clock')]).toEqual([[], [50], []]);
   });
 });
 
