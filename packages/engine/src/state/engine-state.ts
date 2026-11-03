@@ -109,4 +109,10 @@ export type EngineState = {
   weekend?: WeekendContext | undefined;
   /** Realism mode (spec 7.9): rival cars' hidden fields stay `unknown('realism')`. Fixed for the session. */
   realism: boolean;
+  /**
+   * Whom realism masks on this frame: the player, the teammate and realism as the previous frame left them. `step` sets
+   * it before step 1, and the step-1 modules read only this, never `playerCar`/`teammateCar`, which the identity module
+   * changes during the frame (C11). A player change shows in the masking one frame later.
+   */
+  masking: Readonly<{ player: CarId; teammate: CarId | undefined; realism: boolean }>;
 };

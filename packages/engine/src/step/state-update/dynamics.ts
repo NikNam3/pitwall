@@ -1,4 +1,5 @@
 import { known, type CarDynamics } from '@pitwall/domain';
+import { maskForRealism } from './realism.ts';
 import type { StateUpdate } from './types.ts';
 
 /**
@@ -60,4 +61,5 @@ export const dynamicsUpdate: StateUpdate = { id: 'dynamics', apply: (frame, live
     }
     out.changed.add('dynamics');
   }
+  maskForRealism(live, 'dynamics');
 } };

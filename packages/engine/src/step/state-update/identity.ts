@@ -1,9 +1,12 @@
-import { carId, MAX_CARS, unknown, type CarIdentity, type DriverKey, type OwnCarState, type ParticipantsValues, type Visibility } from '@pitwall/domain';
+import { carId, MAX_CARS, unknown, type CarIdentity, type CarState, type DriverKey, type OwnCarState, type ParticipantsValues, type ResultStatus, type Visibility } from '@pitwall/domain';
 import type { ParticipantsPacket } from '@pitwall/protocol';
 import type { Frame } from '../../frame/frame.ts';
 import type { LiveState } from '../../state/live-state.ts';
 import { isActiveCar, slotsInUse } from '../active-cars.ts';
+import { pick } from '../pick.ts';
+import { maskCarForRealism } from './realism.ts';
 import { withholdRestricted } from './restricted.ts';
+import { RESULT_STATUS } from './timing.ts';
 import type { StateUpdate } from './types.ts';
 
 export { isActiveCar, slotsInUse } from '../active-cars.ts';
@@ -29,7 +32,17 @@ const visibilityOf = (identity: Pick<CarIdentity, 'ai' | 'telemetryPublic'>, isP
   return identity.ai || identity.telemetryPublic ? 'public' : 'restricted';
 };
 
-/** The slot's identity from Participants. It keeps the car's current `visibility`: `placePlayer` derives the new one after step 1's modules, so it sees the change. */
+/**
+ * The car's visibility after this frame, from the frame's Participants and player (else the car's identity as it was):
+ * what the identity module will set, so the other step-1 modules read it from their input in any order (C11).
+ */
+export const visibilityIn = (frame: Frame, car: CarState): Visibility => {
+  const c = frame.participants?.participants[car.id];
+  const identity = c ? { ai: c.aiControlled === 1, telemetryPublic: c.yourTelemetry === 1 } : car.identity;
+  return visibilityOf(identity, car.id === frame.playerCarIndex);
+};
+
+/** The slot's identity from Participants. It keeps the car's current `visibility`: `placePlayer` derives the new one, so it sees the change. */
 const identityFrom = (p: ParticipantsPacket, index: number, visibility: Visibility): CarIdentity | undefined => {
   const c = p.participants[index];
   if (!c) return undefined;
@@ -60,16 +73,19 @@ export const createOwnCarState = (): OwnCarState => ({
 });
 
 /**
- * Makes `playerIndex` the player: `ownCar` and `own` visibility move to its car, and the teammate is found again.
- * A car that turns restricted loses what was stored while it looked public (packets before Participants). Runs after
- * every step-1 module (C11), so it reads the frame's identities and result statuses whatever order they ran in.
+ * Makes `playerIndex` the player: `ownCar` and `own` visibility move to its car, and the teammate is found again among
+ * the active cars (`resultStatus`: each car's after this frame). A car that turns restricted loses what was stored while
+ * it looked public (packets before Participants); realism's masks stay on it.
  */
-export const placePlayer = (state: LiveState, playerIndex: number): void => {
+export const placePlayer = (state: LiveState, playerIndex: number, resultStatus = (car: CarState): ResultStatus => car.timing.resultStatus): void => {
   state.playerCar = carId(playerIndex);
   for (const car of state.cars) {
     const isPlayer = car.id === playerIndex;
     const visibility = visibilityOf(car.identity, isPlayer);
-    if (visibility === 'restricted' && car.identity.visibility !== 'restricted') withholdRestricted(car);
+    if (visibility === 'restricted' && car.identity.visibility !== 'restricted') {
+      withholdRestricted(car);
+      maskCarForRealism(state, car);
+    }
     car.identity.visibility = visibility;
     if (!isPlayer) {
       if (car.ownCar) car.ownCar = undefined;
@@ -78,13 +94,16 @@ export const placePlayer = (state: LiveState, playerIndex: number): void => {
     }
   }
   const teamId = state.cars[playerIndex]?.identity.teamId;
-  const slots = slotsInUse(state);
+  const slots = slotsInUse({ session: state.session, cars: state.cars.map((car) => ({ timing: { resultStatus: resultStatus(car) } })) });
   state.teammateCar = state.cars.find(
-    (car) => car.id !== playerIndex && car.identity.teamId === teamId && isActiveCar(car.id, slots, car.timing.resultStatus),
+    (car) => car.id !== playerIndex && car.identity.teamId === teamId && isActiveCar(car.id, slots, resultStatus(car)),
   )?.id;
 };
 
-/** The identities from Participants; tags `identity` when they arrive or the player changes (step 1 then places the player). */
+/**
+ * The identities from Participants, and the player placed when they arrive or the player changes (tagged `identity`).
+ * The teammate's activity reads the frame's LapData result statuses, not the timing module's write (C11).
+ */
 export const identityUpdate: StateUpdate = {
   id: 'identity',
   apply(frame, live, _signals, out) {
@@ -101,6 +120,12 @@ export const identityUpdate: StateUpdate = {
         car.updatedAt.participants = frame.sessionTime;
       }
     }
-    if (p || playerChanged) out.changed.add('identity');
+    if (!p && !playerChanged) return;
+    const lapData = frame.lapData?.lapData;
+    placePlayer(live, frame.playerCarIndex, (car) => {
+      const l = lapData?.[car.id];
+      return l ? pick(RESULT_STATUS, l.resultStatus) : car.timing.resultStatus;
+    });
+    out.changed.add('identity');
   },
 };

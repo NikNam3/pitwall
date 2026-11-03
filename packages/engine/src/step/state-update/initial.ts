@@ -145,8 +145,10 @@ export function initialState(init: {
     sessionTime: toSessionTime(header.sessionTime),
     open: emptyTrackers(session.flag, book),
     realism: init.realism ?? false,
+    masking: { player: carId(header.playerCarIndex), teammate: undefined, realism: init.realism ?? false },
     ...(init.weekend && { weekend: init.weekend }),
   };
   placePlayer(state, header.playerCarIndex);
+  state.masking = { player: state.playerCar, teammate: state.teammateCar, realism: state.realism };
   return state;
 }

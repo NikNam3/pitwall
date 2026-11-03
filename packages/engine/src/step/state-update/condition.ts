@@ -1,6 +1,8 @@
 import { known } from '@pitwall/domain';
 import { CORNER_NAMES, cornersOf } from '../corners.ts';
 import { knownUnlessRestricted } from './restricted.ts';
+import { maskForRealism } from './realism.ts';
+import { visibilityIn } from './identity.ts';
 import type { StateUpdate } from './types.ts';
 
 /** Damage, wear and faults from Car Damage; brake and engine temperatures from Car Telemetry. */
@@ -14,7 +16,7 @@ export const conditionUpdate: StateUpdate = { id: 'condition', apply: (frame, li
       car.updatedAt.damage = at;
       const { condition } = car;
       condition.bodywork = knownUnlessRestricted(
-        car,
+        visibilityIn(frame, car),
         {
           frontLeftWingPct: d.frontLeftWingDamage,
           frontRightWingPct: d.frontRightWingDamage,
@@ -26,7 +28,7 @@ export const conditionUpdate: StateUpdate = { id: 'condition', apply: (frame, li
         at,
       );
       condition.powerUnit = knownUnlessRestricted(
-        car,
+        visibilityIn(frame, car),
         {
           engineDamagePct: d.engineDamage,
           gearboxDamagePct: d.gearBoxDamage,
@@ -39,13 +41,13 @@ export const conditionUpdate: StateUpdate = { id: 'condition', apply: (frame, li
         },
         at,
       );
-      condition.drsFault = knownUnlessRestricted(car, d.drsFault === 1, at);
+      condition.drsFault = knownUnlessRestricted(visibilityIn(frame, car), d.drsFault === 1, at);
       condition.ersFault = d.ersFault === 1;
       condition.engineBlown = d.engineBlown === 1;
       condition.engineSeized = d.engineSeized === 1;
       const brakeDamage = cornersOf(d.brakesDamage);
       for (const corner of CORNER_NAMES) {
-        condition.brakes[corner].damagePct = knownUnlessRestricted(car, brakeDamage[corner], at);
+        condition.brakes[corner].damagePct = knownUnlessRestricted(visibilityIn(frame, car), brakeDamage[corner], at);
       }
     }
     out.changed.add('condition');
@@ -60,4 +62,5 @@ export const conditionUpdate: StateUpdate = { id: 'condition', apply: (frame, li
     }
     out.changed.add('condition');
   }
+  maskForRealism(live, 'condition');
 } };

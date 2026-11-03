@@ -3,6 +3,8 @@ import type { TyreSetsPacket } from '@pitwall/protocol';
 import { CORNER_NAMES, cornersOf } from '../corners.ts';
 import { knownUnlessRestricted } from './restricted.ts';
 import { surfaceOnly as surfaceOnlyIn } from './session.ts';
+import { maskForRealism } from './realism.ts';
+import { visibilityIn } from './identity.ts';
 import type { StateUpdate } from './types.ts';
 
 type TyreSetData = TyreSetsPacket['tyreSetData'][number];
@@ -64,8 +66,8 @@ export const tyresUpdate: StateUpdate = { id: 'tyres', apply: (frame, live, _sig
       const blisters = cornersOf(d.tyreBlisters);
       for (const corner of CORNER_NAMES) {
         const tyre = car.tyres.corners[corner];
-        tyre.wearPct = knownUnlessRestricted(car, wear[corner], at);
-        tyre.damagePct = knownUnlessRestricted(car, tyreDamage[corner], at);
+        tyre.wearPct = knownUnlessRestricted(visibilityIn(frame, car), wear[corner], at);
+        tyre.damagePct = knownUnlessRestricted(visibilityIn(frame, car), tyreDamage[corner], at);
         tyre.blistersPct = known(blisters[corner], at);
       }
     }
@@ -76,10 +78,11 @@ export const tyresUpdate: StateUpdate = { id: 'tyres', apply: (frame, live, _sig
     if (!car) continue;
     car.updatedAt.tyreSets = at;
     car.tyres.sets = knownUnlessRestricted(
-      car,
+      visibilityIn(frame, car),
       { sets: packet.tyreSetData.map(tyreSetFrom), fittedIdx: packet.fittedIdx },
       at,
     );
   }
   if (tyreSets.length > 0) out.changed.add('tyres');
+  maskForRealism(live, 'tyres');
 } };
