@@ -32,8 +32,8 @@ const applies = (machine: SubMachine<unknown>, phase: WeekendPhase): boolean =>
 const openSpansOf = (state: DeepReadonly<EngineState>, machine: SubMachine<unknown>): OpenSpan[] =>
   machine.id in state.open.machines ? machine.openSpans(state.open.machines[machine.id]) : [];
 
-/** Two plain values are equal: the same primitives, arrays and objects all the way down. */
-const samePlain = (a: unknown, b: unknown): boolean => {
+/** Two plain values are equal: the same primitives, arrays and objects all the way down (also step 0's tag rule). */
+export const samePlain = (a: unknown, b: unknown): boolean => {
   if (a === b) return true;
   if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null || Array.isArray(a) !== Array.isArray(b)) return false;
   const keys = Object.keys(a);

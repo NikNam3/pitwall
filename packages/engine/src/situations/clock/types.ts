@@ -27,6 +27,6 @@ export type ClockOpen = {
   pause?: { span: OpenPausedSpan; sinceWallMs: number } | undefined;
   /** The paused spans opened so far: the next one's id (C26). */
   opened: number;
-  /** The clock read the simulated end of the session: it reads no jump after it. */
+  /** The clock read the simulated end of the session: a later simulation-sized jump is a `jump`, no second `simulatedEnd`. */
   ended: boolean;
 };

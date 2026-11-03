@@ -10,7 +10,7 @@ import { pitStopsRecorder } from '../recorders/pit-stops.ts';
 import { stintsRecorder } from '../recorders/stints.ts';
 import { readSignals } from '../signals/read.ts';
 import { STEP0_CLOCK, type ClockStep } from '../situations/clock/clock.ts';
-import { runMachine, situationOf } from '../situations/run.ts';
+import { runMachine, samePlain, situationOf } from '../situations/run.ts';
 import { trackedEventsOf } from '../situations/tracked-events.ts';
 import type { EngineState } from '../state/engine-state.ts';
 import { conditionUpdate } from './state-update/condition.ts';
@@ -41,9 +41,11 @@ export {
  * Step 0 (C7): the clock reads the session time's jump and returns the frame on the race clock with its clock facts;
  * `report`: the `SessionRunner` took the frame as a flashback report. Every fall is reported as `clockFall` and every
  * other forward jump as `clockJump`, with the game's times; the simulated end opens the post-session (C36). The clock
- * facts describe the frame's number and its paused span opens and closes on it (C26).
+ * facts describe the frame's number and its paused span opens and closes on it (C26). Its tags follow step 2's rule
+ * (C40): `clock` when it appends a clock fact, `spans:clock` when its open spans changed or it closed a paused span.
  */
 const step0Clock = (state: EngineState, received: Frame, report: FlashbackReport | undefined, out: StepOutput): ClockStep => {
+  const before = STEP0_CLOCK.openSpans(state.open.clock);
   const clock = STEP0_CLOCK.step(state.open.clock, {
     frame: received,
     report,
@@ -52,6 +54,8 @@ const step0Clock = (state: EngineState, received: Frame, report: FlashbackReport
     frameNumber: state.frameNumber,
   });
   state.open.clock = clock.open;
+  if (clock.facts.length > 0) out.changed.add('clock');
+  if (clock.closed.length > 0 || !samePlain(before, STEP0_CLOCK.openSpans(clock.open))) out.changed.add('spans:clock');
   for (const fact of clock.facts) {
     if (fact.kind === 'fall') out.clockFall = { fromMs: fact.fromMs, toMs: fact.toMs };
     else if (fact.kind === 'jump') out.clockJump = { fromMs: fact.fromMs, toMs: fact.toMs };

@@ -61,23 +61,25 @@ const atRewindTarget = (open: ClockOpen, frame: Frame, lastRaceMs: SessionTime):
 };
 
 /**
- * The frame on the race clock and the jump facts of the session time to it. No frame before it (the session's first),
- * a flashback report and the simulated end read no jump; a frame still on the pre-rewind session time is timed at the
- * rewind's target. The simulation of the rest of the session appends `simulatedEnd` (the session-phase signal, C36),
- * any other forward jump of more than a minute a `jump`, and every fall a `fall` whose size the race clock continues over.
+ * The frame on the race clock and the jump facts of the session time to it. No frame before it (the session's first)
+ * and a flashback report read no jump; a frame still on the pre-rewind session time is timed at the rewind's target.
+ * The simulation of the rest of the session appends `simulatedEnd` once (the session-phase signal, C36), any other
+ * forward jump of more than a minute a `jump` (a simulation-sized one after the simulated end too), and every fall a
+ * `fall` whose size the race clock continues over, after the simulated end as before it (C36 has no post-session
+ * exception).
  */
 const clockFrame = (open: ClockOpen, input: ClockStepInput, facts: ClockFact[]): Frame => {
   const { frame, report, lastRaceMs, frameNumber } = input;
   const stale = atRewindTarget(open, frame, lastRaceMs);
   if (stale) return stale;
   const clocked = onClock(frame, open.offsetMs);
-  if (open.lastWallMs === undefined || report || open.ended) return clocked;
+  if (open.lastWallMs === undefined || report) return clocked;
   const jump = jumpOf(lastRaceMs, clocked.sessionTime, frame.receivedAtMs - open.lastWallMs);
   const fromMs = lastRaceMs - open.offsetMs;
-  if (jump.kind === 'simulated') {
+  if (jump.kind === 'simulated' && !open.ended) {
     facts.push({ kind: 'simulatedEnd', at: lastRaceMs, frame: frameNumber });
     open.ended = true;
-  } else if (jump.kind === 'forward') facts.push({ kind: 'jump', at: lastRaceMs, fromMs, toMs: frame.sessionTime, frame: frameNumber });
+  } else if (jump.kind === 'simulated' || jump.kind === 'forward') facts.push({ kind: 'jump', at: lastRaceMs, fromMs, toMs: frame.sessionTime, frame: frameNumber });
   else if (jump.kind === 'fall') {
     facts.push({ kind: 'fall', at: lastRaceMs, fromMs, toMs: frame.sessionTime, offsetMs: jump.offsetMs, frame: frameNumber });
     open.offsetMs += jump.offsetMs;
@@ -86,10 +88,18 @@ const clockFrame = (open: ClockOpen, input: ClockStepInput, facts: ClockFact[]):
   return clocked;
 };
 
-/** The clock: step 0 (C7); its span declaration in domain (C15): session scope, its one span kind `paused`. */
+/**
+ * The clock: step 0 (C7), a sub-machine outside `MACHINES`; its span declaration in domain (C15): session scope, its
+ * one span kind `paused`. Its transitions (C15, C85): a pause opens from none and closes to none (an offline pause on
+ * the frame it opened on).
+ */
 export const STEP0_CLOCK = {
   id: CLOCK_MACHINE,
   spans: clockSpans,
+  transitions: [
+    ['none', 'paused'],
+    ['paused', 'none'],
+  ],
   init: (): ClockOpen => ({ offsetMs: 0, opened: 0, ended: false }),
   /** The pause in progress, its wall time so far: `view.situation.byMachine.clock` (C20). */
   openSpans: (open: DeepReadonly<ClockOpen>): OpenSpan[] =>
