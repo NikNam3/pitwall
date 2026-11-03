@@ -38,7 +38,7 @@ export const spanListProblems = (machine: SubMachine<unknown>, spans: readonly D
   for (const span of spans) {
     if (span.machine !== id) problems.push(`${id}: span #${span.id} names machine ${span.machine}`);
     if (span.end < span.start) problems.push(`${id}: span #${span.id} ends before it starts`);
-    if (span.endFrame <= span.startFrame) problems.push(`${id}: span #${span.id} covers no frame (${span.startFrame} to ${span.endFrame})`);
+    if (span.endFrame < span.startFrame) problems.push(`${id}: span #${span.id} ends before it starts (frames ${span.startFrame} to ${span.endFrame})`);
     const key = scopeKey(scope, span);
     byScope.set(key, [...(byScope.get(key) ?? []), span]);
     const counter = scope === 'car' ? key : 'machine';
