@@ -686,9 +686,9 @@ describe('after the simulated end', () => {
   });
 });
 
-// C40: one change tag per fact list and one per sub-machine (Task 7 review F2, ruling): `clock` on a frame that appends
-// a clock fact, `spans:clock` on a frame on which a paused span opens or closes. Practice sessions, so no legacy
-// rewind tags every list.
+// C40: one change tag per fact list and one per sub-machine (Task 7 review F2, rulings): `clock` on a frame that appends
+// a clock fact; `spans:clock` by the rule of every step-2 sub-machine, on a frame where the clock's open spans change or
+// a paused span closes. Practice sessions, so no legacy rewind tags every list.
 describe('the clock’s change tags', () => {
   /** The frames whose step result carries `tag`, by frame index. */
   const tagged = (results: StepResult[], tag: string) => results.flatMap((r, i) => ((r.changed as ReadonlySet<string>).has(tag) ? [i] : []));
@@ -705,9 +705,10 @@ describe('the clock’s change tags', () => {
     const { results } = practice(make);
     expect([rewoundSteps(results), clockSteps(results), tagged(results, 'clock')]).toEqual([[], [100], [100]]);
   });
-  it('an online pause tags spans:clock on the frame it opens on and on the frame it closes on, and on no other', () => {
+  it('an online pause tags spans:clock on every frame its open span changes (it opens, its wall time so far grows) and on the frame it closes, and on no other', () => {
     const { results } = practice((k) => (k === 50 ? { session: { gamePaused: 1 } } : k === 100 ? { session: { gamePaused: 0 } } : {}), { networkGame: 1 });
-    expect([rewoundSteps(results), tagged(results, 'spans:clock'), tagged(results, 'clock')]).toEqual([[], [50, 100], []]);
+    const whilePaused = Array.from({ length: 51 }, (_, i) => 50 + i);
+    expect([rewoundSteps(results), tagged(results, 'spans:clock'), tagged(results, 'clock')]).toEqual([[], whilePaused, []]);
   });
   it('an offline pause tags spans:clock on the frame after the gap, which opens and closes it, and on no other', () => {
     const { runner, results } = practice((k) => (k === 50 ? { wall: 49 * STEP + 3_000 } : {}));
