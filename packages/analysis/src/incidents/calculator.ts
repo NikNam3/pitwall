@@ -141,11 +141,15 @@ const readLive = (acc: Acc, view: EngineView): void => {
   acc.pitting = new Set(state.cars.filter((c) => c.timing.pitStatus !== 'none').map((c) => c.id));
 };
 
-/** Folds the new spans and crossings; a new span re-evaluates the crossings it may cover (all cars for a flag phase). */
-const foldCrossings = (acc: Acc, view: EngineView): void => {
+/**
+ * Folds the new spans and crossings; a new span re-evaluates the crossings it may cover (all cars for a flag phase), and
+ * so does a change of the active flag phase (`activeChanged`: it started, its start changed, or it went, also without a
+ * closed flag phase, as a neutralisation never confirmed does, C18), so the fold equals a run from scratch (C31).
+ */
+const foldCrossings = (acc: Acc, view: EngineView, activeChanged: boolean): void => {
   const { flagPhases, pitStops, crossings } = view.state.history;
   const reset = new Set<number>();
-  let resetAll = false;
+  let resetAll = activeChanged;
   for (const p of flagPhases.slice(acc.flagPhases)) {
     acc.phases.push({ start: p.start, end: p.end });
     acc.phaseStarts.push({ at: p.start, lap: p.startLeaderLap });
@@ -210,8 +214,9 @@ const foldLaps = (acc: Acc, view: EngineView): void => {
 };
 
 const fold = (acc: Acc, view: EngineView): Acc => {
+  const activeBefore = acc.active?.at;
   readLive(acc, view);
-  foldCrossings(acc, view);
+  foldCrossings(acc, view, acc.active?.at !== activeBefore);
   foldEvents(acc, view);
   foldLaps(acc, view);
   return acc;
