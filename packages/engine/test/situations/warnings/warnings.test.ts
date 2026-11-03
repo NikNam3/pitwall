@@ -6,7 +6,7 @@
 // frames before the rise (practice-zandvoort-warning-late), a car that holds warnings when the session is joined
 // (practice-wing-change).
 import { beforeAll, describe, expect, it } from 'vitest';
-import { warningsSpans, type OpenSpan, type Span } from '@pitwall/domain';
+import { known, unknown, warningsSpans, type OpenSpan, type Span } from '@pitwall/domain';
 import machine from '../../../src/situations/warnings/machine.ts';
 import { all, car, events, pena } from '../../support/car-edits.ts';
 import { replaySegment, type SegmentRun } from '../../support/segment-run.ts';
@@ -56,7 +56,7 @@ describe('warnings: every car slot has a span from the first frame on', () => {
 describe('warnings: a warning opens a warned span when totalWarnings rises', () => {
   it('PENA and rise on one frame: warned with the count and the PENA’s infringement, on the frame of the rise (C26)', () => {
     const r = run(inputs().frames(3).frame(all(warning(7), total(1))).frames(2));
-    expect(r.open[3]).toMatchObject({ machine: 'warnings', carId: 0, kind: 'warned', id: 1, start: 3 * FRAME_MS, startFrame: 4, confirmed: true, detail: { count: 1, infringement: 7 } });
+    expect(r.open[3]).toMatchObject({ machine: 'warnings', carId: 0, kind: 'warned', id: 1, start: 3 * FRAME_MS, startFrame: 4, confirmed: true, detail: { count: 1, infringement: known(7, 3 * FRAME_MS) } });
     expect(r.open[3]!.joinedAt).toBeUndefined();
     expect(r.open[5]).toEqual(r.open[3]);
   });
@@ -67,25 +67,25 @@ describe('warnings: a warning opens a warned span when totalWarnings rises', () 
   it('the PENA 16 frames before the rise (practice-zandvoort-warning-late): no span until the rise, then its infringement', () => {
     const r = run(inputs().frames(3).frame(warning(10)).frames(15).frame(total(1)));
     expect(r.open.slice(0, 19).map((s) => s?.kind)).toEqual(Array(19).fill('noWarning'));
-    expect(r.open[19]).toMatchObject({ kind: 'warned', startFrame: 20, detail: { count: 1, infringement: 10 } });
+    expect(r.open[19]).toMatchObject({ kind: 'warned', startFrame: 20, detail: { count: 1, infringement: known(10, 3 * FRAME_MS) } });
   });
   it('the PENA of a collision names each car’s own infringement: the other car’s PENA is not taken', () => {
     const builder = inputs().frames(2).frame(all(events(pena(0, 5, 4, 1), pena(1, 5, 4, 0)), total(1), car(1, { totalWarnings: 1 }))).frame(
       all(events(pena(1, 5, 7)), car(1, { totalWarnings: 2 })),
     );
     const [zero, one] = [run(builder, 0), run(builder, 1)];
-    expect(zero.open[2]).toMatchObject({ kind: 'warned', detail: { count: 1, infringement: 4 } });
-    expect(one.open[2]).toMatchObject({ kind: 'warned', detail: { count: 1, infringement: 4 } });
-    expect(one.open[3]).toMatchObject({ kind: 'warned', detail: { count: 2, infringement: 7 } });
+    expect(zero.open[2]).toMatchObject({ kind: 'warned', detail: { count: 1, infringement: known(4, 2 * FRAME_MS) } });
+    expect(one.open[2]).toMatchObject({ kind: 'warned', detail: { count: 1, infringement: known(4, 2 * FRAME_MS) } });
+    expect(one.open[3]).toMatchObject({ kind: 'warned', detail: { count: 2, infringement: known(7, 3 * FRAME_MS) } });
     expect(zero.open[3]).toEqual(zero.open[2]);
   });
   it('only a PENA of type 5 is a warning: a time penalty on the same frame (MiR: 5/28 with 4/21) gives its infringement to nobody', () => {
     const r = run(inputs().frames(2).frame(all(events({ ...pena(0, 4, 21), timeMs: 3000 }, pena(0, 5, 28)), total(1))));
-    expect(r.open[2]).toMatchObject({ kind: 'warned', detail: { count: 1, infringement: 28 } });
+    expect(r.open[2]).toMatchObject({ kind: 'warned', detail: { count: 1, infringement: known(28, 2 * FRAME_MS) } });
   });
-  it('a rise with no PENA opens the span all the same, with the count (the infringement is not asserted)', () => {
+  it('a rise with no PENA pending opens the span all the same: the count, and the infringement unknown(notReceived), never 0 (C3)', () => {
     const r = run(inputs().frames(2).frame(total(1)));
-    expect(r.open[2]).toMatchObject({ kind: 'warned', id: 1, startFrame: 3, detail: { count: 1 } });
+    expect(r.open[2]).toMatchObject({ kind: 'warned', id: 1, startFrame: 3, detail: { count: 1, infringement: unknown('notReceived') } });
   });
   it('a PENA of type 5 with no rise opens nothing (the span follows the count)', () => {
     const r = run(inputs().frames(2).frame(warning(7)).frames(30));
@@ -94,14 +94,12 @@ describe('warnings: a warning opens a warned span when totalWarnings rises', () 
   });
   it('a PENA of another car is not this car’s warning', () => {
     const r = run(inputs().frames(2).frame(all(events(pena(1, 5, 7)), total(1))));
-    expect(r.open[2]).toMatchObject({ kind: 'warned', detail: { count: 1 } });
-    expect((r.open[2]!.detail as { infringement: number }).infringement).not.toBe(7);
+    expect(r.open[2]).toMatchObject({ kind: 'warned', detail: { count: 1, infringement: unknown('notReceived') } });
   });
   it('a PENA is used once: the next rise with no PENA does not repeat its infringement', () => {
     const r = run(inputs().frames(2).frame(all(warning(7), total(1))).frames(3).frame(total(2)));
-    expect(r.open[2]).toMatchObject({ detail: { count: 1, infringement: 7 } });
-    expect(r.open[6]).toMatchObject({ kind: 'warned', detail: { count: 2 } });
-    expect((r.open[6]!.detail as { infringement: number }).infringement).not.toBe(7);
+    expect(r.open[2]).toMatchObject({ detail: { count: 1, infringement: known(7, 2 * FRAME_MS) } });
+    expect(r.open[6]).toMatchObject({ kind: 'warned', detail: { count: 2, infringement: unknown('notReceived') } });
   });
 });
 
@@ -114,7 +112,7 @@ describe('warnings: one warned span per count', () => {
       [2, 'warned', 2],
       [3, 'warned', 3],
     ]);
-    expect(r.closed[6]).toMatchObject([{ kind: 'warned', id: 1, start: 2 * FRAME_MS, end: 6 * FRAME_MS, startFrame: 3, detail: { count: 1, infringement: 7 } }]);
+    expect(r.closed[6]).toMatchObject([{ kind: 'warned', id: 1, start: 2 * FRAME_MS, end: 6 * FRAME_MS, startFrame: 3, detail: { count: 1, infringement: known(7, 2 * FRAME_MS) } }]);
   });
   it('a car’s warnings do not touch another car’s spans', () => {
     const r = run(inputs().frames(2).frame(all(warning(7), total(1))).frames(2), 1);
@@ -123,10 +121,31 @@ describe('warnings: one warned span per count', () => {
   });
 });
 
+describe('warnings: any change of the count opens a span with the new count', () => {
+  it('a rise of more than 1 opens one warned span with the new count and the latest pending PENA (a rise of 2: PENA 5/7, then 5/27)', () => {
+    const r = run(inputs().frames(2).frame(warning(7)).frame(warning(27)).frame(total(2)));
+    expect(r.open.slice(4).map((s) => [s?.kind, s?.id])).toEqual([['warned', 1]]);
+    expect(r.open[4]).toMatchObject({ startFrame: 5, detail: { count: 2, infringement: known(27, 3 * FRAME_MS) } });
+    expect(r.closed[4]).toMatchObject([{ kind: 'noWarning', id: 0 }]);
+  });
+  // Not yet seen (C19): no recording shows the count falling; implemented from the game's spec (an accumulated count).
+  it('a fall to a lower count opens a warned span with it, infringement unknown(notReceived) (not yet seen, C19)', () => {
+    const r = run(inputs().frames(2).frame(all(warning(7), total(3))).frames(2).frame(total(2)));
+    expect(r.open[2]).toMatchObject({ kind: 'warned', id: 1, detail: { count: 3 } });
+    expect(r.open[5]).toMatchObject({ kind: 'warned', id: 2, startFrame: 6, detail: { count: 2, infringement: unknown('notReceived') } });
+    expect(r.closed[5]).toMatchObject([{ kind: 'warned', id: 1, detail: { count: 3 } }]);
+  });
+  it('a fall to 0 opens noWarning (not yet seen, C19)', () => {
+    const r = run(inputs().frames(2).frame(all(warning(7), total(1))).frames(2).frame(total(0)));
+    expect(r.open[5]).toMatchObject({ kind: 'noWarning', id: 2, startFrame: 6 });
+    expect(r.closed[5]).toMatchObject([{ kind: 'warned', id: 1, detail: { count: 1 } }]);
+  });
+});
+
 describe('warnings: joining a session in progress (C26: the first frame, joinedAt)', () => {
-  it('a car that already holds 3 warnings opens warned with count 3, joined, and keeps the span while the count holds', () => {
+  it('a car that already holds 3 warnings opens warned with count 3, infringement unknown(notReceived), joined, and keeps the span while the count holds', () => {
     const r = run(inputs().frames(5, total(3)));
-    expect(r.open[0]).toMatchObject({ kind: 'warned', id: 0, startFrame: 1, joinedAt: true, detail: { count: 3 } });
+    expect(r.open[0]).toMatchObject({ kind: 'warned', id: 0, startFrame: 1, joinedAt: true, detail: { count: 3, infringement: unknown('notReceived') } });
     for (const s of r.open) expect(s).toEqual(r.open[0]);
     expect(r.closed.flat()).toEqual([]);
   });
@@ -148,7 +167,7 @@ describe('warnings: practice-miami-warning (the player’s first warning, PENA 5
     expect(rise).toBeGreaterThan(1);
     expect(spansOf(seg, 19)).toMatchObject([
       { kind: 'noWarning', joinedAt: true, startFrame: 1, endFrame: rise },
-      { kind: 'warned', detail: { count: 1, infringement: 7 }, startFrame: rise, endFrame: seg.frames.at(-1)!.frameNumber + 1 },
+      { kind: 'warned', detail: { count: 1, infringement: { known: true, value: 7 } }, startFrame: rise, endFrame: seg.frames.at(-1)!.frameNumber + 1 },
     ]);
   });
 });
@@ -162,7 +181,7 @@ describe('warnings: practice-zandvoort-warning-late (the PENA 5/10 of car 1, the
     const rise = reached(seg, 1, 1);
     expect(spansOf(seg, 1)).toMatchObject([
       { kind: 'noWarning', joinedAt: true, startFrame: 1, endFrame: rise },
-      { kind: 'warned', detail: { count: 1, infringement: 10 }, startFrame: rise },
+      { kind: 'warned', detail: { count: 1, infringement: { known: true, value: 10 } }, startFrame: rise },
     ]);
   });
 });
@@ -170,6 +189,6 @@ describe('warnings: practice-zandvoort-warning-late (the PENA 5/10 of car 1, the
 describe('warnings: practice-wing-change (car 19 holds 3 warnings when the segment starts)', () => {
   it('car 19 is one warned span, count 3, joined, for the whole segment', async () => {
     const seg = await replaySegment('practice-wing-change.pwrec.gz', totals);
-    expect(spansOf(seg, 19)).toMatchObject([{ kind: 'warned', detail: { count: 3 }, joinedAt: true, startFrame: 1, endFrame: seg.frames.at(-1)!.frameNumber + 1 }]);
+    expect(spansOf(seg, 19)).toMatchObject([{ kind: 'warned', detail: { count: 3, infringement: unknown('notReceived') }, joinedAt: true, startFrame: 1, endFrame: seg.frames.at(-1)!.frameNumber + 1 }]);
   });
 });

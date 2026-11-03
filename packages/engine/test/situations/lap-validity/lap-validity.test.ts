@@ -1,11 +1,11 @@
 // The lap-validity sub-machine (contract C9, C12, C15, C17, C18, C26): per car, `valid` while `currentLapInvalid` is
 // clear and `invalid` (detail `{ reason, scope }`) while it is set. The PENA of types 10-15 gives `reason` (its
 // infringement) and `scope` (10, 12 this lap; 11, 13 this and the next; 14, 15 this and the previous); a flag with no such
-// PENA is `invalid` with scope `this`. The PENA comes on the frame the flag rises (the order the recordings show) or
+// PENA is `invalid` with reason and scope unknown('notReceived') (C3); a PENA after the flag never changes the open span (C18). The PENA comes on the frame the flag rises (the order the recordings show) or
 // a frame before; it waits in the machine's open state (C18). Transition rows: lap-validity.transitions.ts. Segment:
 // practice-miami-invalid (PENA 12/7 and the flag on one frame), practice-wing-change (a valid lap throughout).
 import { beforeAll, describe, expect, it } from 'vitest';
-import { lapValiditySpans, type InvalidLapDetail, type OpenSpan, type Span } from '@pitwall/domain';
+import { known, lapValiditySpans, unknown, type OpenSpan, type Span } from '@pitwall/domain';
 import machine from '../../../src/situations/lap-validity/machine.ts';
 import { all, events, pena } from '../../support/car-edits.ts';
 import { replaySegment, type SegmentRun } from '../../support/segment-run.ts';
@@ -55,12 +55,12 @@ describe('lap-validity: every car slot has a span from the first frame on', () =
 describe('lap-validity: the flag rises, the PENA gives the reason and the scope', () => {
   it('PENA 12/7 and the flag on one frame (MiP): invalid, reason 7, this lap, from the frame of the flag (C26)', () => {
     const r = run(inputs().frames(3).frame(all(invalidation(12, 7), flag(true))).frames(2));
-    expect(r.open[3]).toMatchObject({ machine: 'lap-validity', carId: 0, kind: 'invalid', id: 1, start: 3 * FRAME_MS, startFrame: 4, confirmed: true, detail: { reason: 7, scope: 'this' } });
+    expect(r.open[3]).toMatchObject({ machine: 'lap-validity', carId: 0, kind: 'invalid', id: 1, start: 3 * FRAME_MS, startFrame: 4, confirmed: true, detail: { reason: known(7, 3 * FRAME_MS), scope: known('this', 3 * FRAME_MS) } });
     expect(r.open[3]!.joinedAt).toBeUndefined();
     expect(r.open[5]).toEqual(r.open[3]);
     expect(r.closed[3]).toMatchObject([{ kind: 'valid', id: 0, start: 0, end: 3 * FRAME_MS, startFrame: 1 }]);
   });
-  const SCOPES: ReadonlyArray<[type: number, scope: InvalidLapDetail['scope']]> = [
+  const SCOPES: ReadonlyArray<[type: number, scope: 'this' | 'thisAndNext' | 'thisAndPrevious']> = [
     [10, 'this'],
     [11, 'thisAndNext'],
     [12, 'this'],
@@ -70,21 +70,20 @@ describe('lap-validity: the flag rises, the PENA gives the reason and the scope'
   ];
   it.each(SCOPES)('PENA type %i gives the scope %s and the infringement as the reason (the game’s spec, C19)', (type, scope) => {
     const r = run(inputs().frames(2).frame(all(invalidation(type, 26), flag(true))));
-    expect(r.open[2]).toMatchObject({ kind: 'invalid', detail: { reason: 26, scope } });
+    expect(r.open[2]).toMatchObject({ kind: 'invalid', detail: { reason: known(26, 2 * FRAME_MS), scope: known(scope, 2 * FRAME_MS) } });
   });
   it('the PENA a frame before the flag: matched when the flag rises, the span opens on the flag’s frame', () => {
     const r = run(inputs().frames(2).frame(invalidation(13, 26)).frame(flag(true)));
     expect(r.open.map((s) => s?.kind)).toEqual(['valid', 'valid', 'valid', 'invalid']);
-    expect(r.open[3]).toMatchObject({ startFrame: 4, detail: { reason: 26, scope: 'thisAndNext' } });
+    expect(r.open[3]).toMatchObject({ startFrame: 4, detail: { reason: known(26, 2 * FRAME_MS), scope: known('thisAndNext', 2 * FRAME_MS) } });
   });
-  it('a flag with no invalidating PENA (MiR: 5/28 and 4/21 on the frame) is invalid for this lap', () => {
+  it('a flag with no invalidating PENA (MiR: 5/28 and 4/21 on the frame) is invalid, reason and scope unknown(notReceived), never 0 (C3)', () => {
     const r = run(inputs().frames(2).frame(all(events(pena(0, 5, 28), { ...pena(0, 4, 21), timeMs: 3000 }), flag(true))));
-    expect(r.open[2]).toMatchObject({ kind: 'invalid', id: 1, startFrame: 3, detail: { scope: 'this' } });
+    expect(r.open[2]).toMatchObject({ kind: 'invalid', id: 1, startFrame: 3, detail: { reason: unknown('notReceived'), scope: unknown('notReceived') } });
   });
   it('only this car’s PENA counts: another car’s invalidation gives this car no reason or scope', () => {
     const r = run(inputs().frames(2).frame(all(events(pena(1, 13, 26)), flag(true))));
-    expect(r.open[2]).toMatchObject({ kind: 'invalid', detail: { scope: 'this' } });
-    expect((r.open[2]!.detail as InvalidLapDetail).reason).not.toBe(26);
+    expect(r.open[2]).toMatchObject({ kind: 'invalid', detail: { reason: unknown('notReceived'), scope: unknown('notReceived') } });
   });
   it('a PENA with no flag opens nothing: the span follows the flag', () => {
     const r = run(inputs().frames(2).frame(invalidation(12, 7)).frames(20));
@@ -92,9 +91,17 @@ describe('lap-validity: the flag rises, the PENA gives the reason and the scope'
   });
   it('a PENA is used once: the next invalidation with no PENA does not repeat its reason or scope', () => {
     const r = run(inputs().frames(2).frame(all(invalidation(13, 26), flag(true))).frames(2).frame(flag(false)).frames(2).frame(flag(true)));
-    expect(r.open[2]).toMatchObject({ detail: { reason: 26, scope: 'thisAndNext' } });
-    expect(r.open[8]).toMatchObject({ kind: 'invalid', detail: { scope: 'this' } });
-    expect((r.open[8]!.detail as InvalidLapDetail).reason).not.toBe(26);
+    expect(r.open[2]).toMatchObject({ detail: { reason: known(26, 2 * FRAME_MS), scope: known('thisAndNext', 2 * FRAME_MS) } });
+    expect(r.open[8]).toMatchObject({ kind: 'invalid', detail: { reason: unknown('notReceived'), scope: unknown('notReceived') } });
+  });
+  // Not seen in any recording (C18, C19): synthetic. The span opens on the flag; a matching PENA within the 16 frames the
+  // scan found for warnings, on a later frame, never changes or withdraws the open span.
+  it('a PENA after the flag, within 16 frames, changes nothing: the span stays as opened, its detail unknown (never rewritten)', () => {
+    const r = run(inputs().frames(2).frame(flag(true)).frames(2).frame(invalidation(13, 26)).frames(10));
+    const opened = r.open[2]!;
+    expect(opened).toMatchObject({ kind: 'invalid', id: 1, startFrame: 3, detail: { reason: unknown('notReceived'), scope: unknown('notReceived') } });
+    for (const s of r.open.slice(2)) expect(s).toEqual(opened);
+    expect(r.closed.flat()).toMatchObject([{ kind: 'valid' }]);
   });
 });
 
@@ -104,12 +111,12 @@ describe('lap-validity: invalid while the flag is set, valid when it clears', ()
     const invalid = r.open[2]!;
     expect(r.open.slice(2, 43).map((s) => s?.id)).toEqual(Array(41).fill(invalid.id));
     expect(r.open[43]).toMatchObject({ kind: 'valid', id: 2, start: 43 * FRAME_MS, startFrame: 44 });
-    expect(r.closed[43]).toMatchObject([{ kind: 'invalid', id: 1, start: 2 * FRAME_MS, end: 43 * FRAME_MS, startFrame: 3, detail: { reason: 26, scope: 'thisAndNext' } }]);
+    expect(r.closed[43]).toMatchObject([{ kind: 'invalid', id: 1, start: 2 * FRAME_MS, end: 43 * FRAME_MS, startFrame: 3, detail: { reason: known(26, 2 * FRAME_MS), scope: known('thisAndNext', 2 * FRAME_MS) } }]);
     expect(r.open.slice(43).map((s) => s?.kind)).toEqual(['valid', 'valid', 'valid']);
   });
   it('a second invalid lap after the flag cleared is a new span with its own reason', () => {
     const r = run(inputs().frames(2).frame(all(invalidation(12, 7), flag(true))).frame(flag(false)).frames(2).frame(all(invalidation(10, 25), flag(true))));
-    expect(r.open[6]).toMatchObject({ kind: 'invalid', id: 3, detail: { reason: 25, scope: 'this' } });
+    expect(r.open[6]).toMatchObject({ kind: 'invalid', id: 3, detail: { reason: known(25, 6 * FRAME_MS), scope: known('this', 6 * FRAME_MS) } });
   });
   it('a car’s flag does not touch another car’s spans', () => {
     const r = run(inputs().frames(2).frame(all(invalidation(12, 7), flag(true))).frames(2), 1);
@@ -119,9 +126,9 @@ describe('lap-validity: invalid while the flag is set, valid when it clears', ()
 });
 
 describe('lap-validity: joining a session in progress (C26: the first frame, joinedAt)', () => {
-  it('a car whose lap is already invalid opens invalid, joined, scope this, and keeps the span while the flag holds', () => {
+  it('a car whose lap is already invalid opens invalid, joined, reason and scope unknown(notReceived), and keeps the span while the flag holds', () => {
     const r = run(inputs().frames(5, flag(true)));
-    expect(r.open[0]).toMatchObject({ kind: 'invalid', id: 0, startFrame: 1, joinedAt: true, detail: { scope: 'this' } });
+    expect(r.open[0]).toMatchObject({ kind: 'invalid', id: 0, startFrame: 1, joinedAt: true, detail: { reason: unknown('notReceived'), scope: unknown('notReceived') } });
     for (const s of r.open) expect(s).toEqual(r.open[0]);
   });
 });
@@ -141,7 +148,7 @@ describe('lap-validity: practice-miami-invalid (PENA 12/7 and the flag on one fr
     expect(rise).toBeGreaterThan(1);
     expect(spansOf(seg, 19)).toMatchObject([
       { kind: 'valid', joinedAt: true, startFrame: 1, endFrame: rise },
-      { kind: 'invalid', detail: { reason: 7, scope: 'this' }, startFrame: rise, endFrame: seg.frames.at(-1)!.frameNumber + 1 },
+      { kind: 'invalid', detail: { reason: { known: true, value: 7 }, scope: { known: true, value: 'this' } }, startFrame: rise, endFrame: seg.frames.at(-1)!.frameNumber + 1 },
     ]);
   });
 });
