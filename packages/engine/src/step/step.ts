@@ -9,6 +9,8 @@ import { miniSectorsRecorder } from '../recorders/mini-sectors.ts';
 import { pitStopsRecorder } from '../recorders/pit-stops.ts';
 import { stintsRecorder } from '../recorders/stints.ts';
 import { readSignals } from '../signals/read.ts';
+import type { SubMachine } from '../situations/machine.ts';
+import { MACHINE_ORDER } from '../situations/registry.ts';
 import { runMachine, situationOf } from '../situations/run.ts';
 import { trackedEventsOf } from '../situations/tracked-events.ts';
 import type { EngineState } from '../state/engine-state.ts';
@@ -89,14 +91,14 @@ const record = (state: EngineState, input: RecorderInput, out: StepOutput): void
  * what the frame appended, resolving stamps with the open spans; a step that rewrote the log in place (`rewritten`)
  * projects it again.
  */
-export function step(state: EngineState, received: Frame, report?: FlashbackReport): StepOutput {
+export function step(state: EngineState, received: Frame, report?: FlashbackReport, machines: ReadonlyArray<SubMachine<unknown>> = MACHINE_ORDER): StepOutput {
   const out: StepOutput = { changed: new Set(), corrections: [] };
   const frame = applySessionClock(state, received, out, report);
   updateState(state, frame, out);
   applySituations(state, frame, out);
   applyFlagPhases(state, out);
-  const stamps = runMachine(state, frame, out);
-  const situation = situationOf(state);
+  const stamps = runMachine(state, frame, out, machines);
+  const situation = situationOf(state, machines);
   const tracked = trackedEventsOf(state.signals.events);
   record(state, { at: frame.sessionTime, frameId: frame.frameId, live: state, situation, stamps, tracked }, out);
   const projection = projectionTrackerOf(state);

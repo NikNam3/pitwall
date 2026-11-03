@@ -39,6 +39,7 @@ const COMMANDS: Record<string, () => Promise<{ run: Command }>> = {
   reprocess: () => import('./commands/reprocess.ts'),
   import: () => import('./commands/import.ts'),
   where: () => import('./commands/where.ts'),
+  'scan-situations': () => import('./commands/scan-situations.ts'),
 };
 
 /** SQLite codes of a file that is not (or no longer) a database. */

@@ -16,6 +16,9 @@ export const USAGE = `usage: pitwall <live|replay|tap|reprocess|import> …
   where <unit> | --topic <name> [--catalogue <file>]
                             print the folders, files and links of a unit, or who binds and reads a topic
                             (reads catalogue.generated.json, written by pnpm gen)
+  scan-situations [dir]     run steps 0-2 over every recording of dir (default PITWALL_FIXTURES_DIR) and print each
+                            sub-machine's transitions with their counts, the declared ones never seen and the undeclared
+                            ones (exit code 1 on those)
 
 The WebSocket server listens on 127.0.0.1 only. Ports, the UDP bind address and the data directory
 come from PITWALL_WS_PORT, PITWALL_UDP_PORT, PITWALL_UDP_HOST (default 0.0.0.0) and PITWALL_DATA_DIR.`;
