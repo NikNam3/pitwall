@@ -7,12 +7,14 @@ import { describe, expect, it, vi } from 'vitest';
 import { MAX_CARS, type OpenSpan, type Span } from '@pitwall/domain';
 import { initialState, SessionRunner, type DeepReadonly, type Frame, type StepOutput } from '../../src/index.ts';
 import type { Signals } from '../../src/signals/types.ts';
+import { clockInput } from '../../src/situations/clock/machine.ts';
 import { closeSession, runMachine, situationOf } from '../../src/situations/run.ts';
 import { ScenarioBuilder } from '../builders/index.ts';
 import { initFor, runScenario } from '../support/run.ts';
 import { after, drive, runAll, STEP } from '../support/runner.ts';
 import type { ProbeDetail } from '../support/test-machines.ts';
 import { FRAME_MS } from '../support/transition-table.ts';
+import { beats, script } from './script.ts';
 
 vi.mock('../../src/situations/index.generated.ts', async () => {
   const { TEST_MACHINES, raceOnlyMachine } = await import('../support/test-machines.ts');
@@ -72,15 +74,31 @@ describe('runMachine', () => {
     ]);
     expect(state.log.spans['test-zone']).toBeUndefined();
   });
-  it('a machine reads the open spans its upstream machine has after this frame, and the clock’s state', () => {
+  it('a machine reads the open spans its upstream machine has after this frame, and the clock’s state (clockInput)', () => {
     const state = fresh();
     machineFrame(state, 0);
-    state.open.phaseBook.clockOffsetMs = 250;
     machineFrame(state, 1, (s) => {
       s.session.safetyCarStatus = 'sc';
     });
-    const detail: ProbeDetail = { at: FRAME_MS, frameId: 1, clock: { paused: false, offsetMs: 250 }, upstream: ['neutralised'] };
+    const detail: ProbeDetail = { at: FRAME_MS, frameId: 1, clock: clockInput(state), upstream: ['neutralised'] };
     expect(situationOf(state).byMachine['test-probe']?.map((s) => s.detail)).toEqual([detail]);
+    expect(detail.clock).toEqual({ paused: false, offsetMs: 0 });
+  });
+  it('a machine reads the clock as step 0 left it on the frame: the offset after a fall, paused while an online pause lasts', () => {
+    // online practice: the session time falls from 0.304 s to 0 at frame 20; the game pauses at frame 25
+    const frames = script(beats(30, (k) => ({ at: k < 20 ? k * STEP : (k - 20) * STEP, ...(k === 25 && { session: { gamePaused: 1 } }) })), {
+      session: { sessionType: 1, networkGame: 1 },
+    });
+    const runner = new SessionRunner(initFor(frames));
+    const seen: Array<ProbeDetail['clock']> = [];
+    for (const f of frames) runner.apply(f, (r) => seen.push((situationOf(r.state).byMachine['test-probe']![0]!.detail as ProbeDetail).clock));
+    expect([seen[19], seen[20], seen[24], seen[25]]).toEqual([
+      { paused: false, offsetMs: 0 },
+      { paused: false, offsetMs: 19 * STEP },
+      { paused: false, offsetMs: 19 * STEP },
+      { paused: true, offsetMs: 19 * STEP },
+    ]);
+    expect(seen.at(-1)).toEqual(clockInput(runner.state));
   });
   it('while the weekend phase is pending, a machine of one weekend phase does not run (C14)', () => {
     const state = fresh();

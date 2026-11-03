@@ -1,8 +1,9 @@
 // The situation tracker's session phases (spec docs/history/specs/2026-10-30-situations-design.md 3.1): which
-// signal opens and closes each phase, the confirmations, the session ends, joins, pauses and a flashback across a
-// phase boundary. Closed phases are `history.sessionPhases`; the phase in progress is `open.situations.session`.
+// signal opens and closes each phase, the confirmations, the session ends, joins and a flashback across a phase
+// boundary (the pauses are the clock's, `clock/clock.test.ts`). Closed phases are `history.sessionPhases`; the phase
+// in progress is `open.situations.session`.
 import { describe, expect, it } from 'vitest';
-import { activeFlagPhaseOf, situationOf, type Frame, type SessionRunner, type StepResult } from '../../src/index.ts';
+import { activeFlagPhaseOf, type Frame, type SessionRunner, type StepResult } from '../../src/index.ts';
 import { after, applyOne, runAll, shown } from '../support/runner.ts';
 import { expectScheduledIncremental, input, quick, sched, underNeutralisation, underPhase } from '../support/scheduler.ts';
 import {
@@ -329,33 +330,6 @@ describe('a bridge that joins mid-session', () => {
     const { runner } = run(script(beats(100, (k) => ({ at: 121_552 + k * STEP })), { session: { sessionType: 1, sessionDuration: 3600, sessionTimeLeft: 3478 } }));
     expect(kinds(runner)).toEqual([]);
     expect(current(runner)).toMatchObject({ kind: 'running', start: 121_552, joinedAt: true });
-  });
-});
-
-describe('pauses', () => {
-  /** A race whose race frame 50 arrives `gapMs` of wall time after the one before (no packets in between). */
-  const gap = (gapMs: number) => race(100, { 50: { wall: raceFrame(50) * STEP + gapMs } });
-
-  it('offline: no packets for more than 2 s with a frozen session time is a pause; it changes no phase', () => {
-    const { runner } = gap(3_000);
-    const [pause] = runner.state.history.pauses;
-    expect(runner.state.history.pauses).toMatchObject([{ start: raceAt(49), kind: 'offline' }]);
-    expect(pause!.wallMs).toBeGreaterThanOrEqual(3_000);
-    expect(pause!.wallMs).toBeLessThanOrEqual(3_000 + STEP);
-    expect(current(runner)).toEqual({ kind: 'racing', start: 0, startLeaderLap: 1 });
-  });
-  it('offline: a gap of 2 s or less is no pause', () => {
-    expect(gap(2_000 - STEP).runner.state.history.pauses).toEqual([]);
-  });
-  it('online: the game paused from one Session packet to the next is a pause; paused while it lasts', () => {
-    const beatsOf = (n: number) => script(gridStart(n, (k) => (k === 50 ? { session: { gamePaused: 1 } } : k === 100 ? { session: { gamePaused: 0 } } : {})),
-      { session: { networkGame: 1 } });
-    const during = run(beatsOf(80)).runner;
-    expect([situationOf(during.state).paused, during.state.history.pauses]).toEqual([true, []]);
-    const { runner } = run(beatsOf(150));
-    expect(situationOf(runner.state).paused).toBe(false);
-    expect(runner.state.history.pauses).toEqual([{ start: raceAt(50), wallMs: 50 * STEP, kind: 'online' }]);
-    expect(current(runner)).toEqual({ kind: 'racing', start: 0, startLeaderLap: 1 });
   });
 });
 

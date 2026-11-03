@@ -24,7 +24,7 @@ import { initFor } from './run.ts';
 type Lengths = HistoryDelta['before'];
 
 /** History lengths: zero except those given. */
-export const len = (o: Partial<Lengths> = {}): Lengths => ({ laps: 0, stints: 0, pitStops: 0, flagPhases: 0, sessionPhases: 0, pauses: 0, events: 0, crossings: 0, ...o });
+export const len = (o: Partial<Lengths> = {}): Lengths => ({ laps: 0, stints: 0, pitStops: 0, flagPhases: 0, sessionPhases: 0, events: 0, crossings: 0, ...o });
 
 /** The history grew (or shrank) from `before` to `after` entries in each of `fields`; `rewound` marks a void fact (C30). */
 export const delta = (before = 0, after = before, rewound = false, fields: ReadonlyArray<keyof Lengths> = ['laps']): HistoryDelta => ({

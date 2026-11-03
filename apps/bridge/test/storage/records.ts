@@ -17,9 +17,9 @@ export const pitStop = (c: number, lap: number): PitStopRecord => ({ carId: car(
   pitLaneTimeMs: 22_000, stationaryTimeMs: 2_500, flag: 'green', penaltyServed: false, in: {} });
 export const event = (at: number, c?: number): RaceEvent => ({ at, kind: 'overtake', ...(c === undefined ? {} : { carId: car(c) }), params: {}, in: {} });
 export const sc = (start: number): FlagPhase => ({ kind: 'SC', start, end: start + 60_000, startLeaderLap: 3, endLeaderLap: 5, scPhases: [] });
-export const history = (o: Partial<Projection> = {}): Projection => ({ laps: [], stints: [], pitStops: [], flagPhases: [], sessionPhases: [], pauses: [], events: [], crossings: [], clock: [], spans: {}, ...o });
+export const history = (o: Partial<Projection> = {}): Projection => ({ laps: [], stints: [], pitStops: [], flagPhases: [], sessionPhases: [], events: [], crossings: [], clock: [], spans: {}, ...o });
 const lengths = (h: Projection): LogLengths => ({ laps: h.laps.length, stints: h.stints.length, pitStops: h.pitStops.length,
-  flagPhases: h.flagPhases.length, sessionPhases: h.sessionPhases.length, pauses: h.pauses.length, events: h.events.length,
+  flagPhases: h.flagPhases.length, sessionPhases: h.sessionPhases.length, events: h.events.length,
   crossings: h.crossings.length });
 export const all = (h: Projection): HistoryDelta => ({ before: lengths(history()), after: lengths(h) });
 export const since = (prev: Projection, h: Projection, rewound = false): HistoryDelta => ({ before: lengths(prev), after: lengths(h), ...(rewound ? { rewound: { frameId: -1, at: 0 } } : {}) });

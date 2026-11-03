@@ -27,7 +27,7 @@ type Replayed = {
   gaps: GapsOutput;
   /** The race events the frames from the lights-out frame on carry, the lights out itself excluded. */
   raceKinds: string[];
-  /** The lowest session time of the frames from lights out on. */
+  /** The lowest race-clock time (C35) of the frames from lights out on. */
   lowestAfterLightsOut: number;
 };
 
@@ -44,11 +44,11 @@ beforeAll(async () => {
     let out = false;
     const raceKinds: string[] = [];
     let lowest = Infinity;
-    const runner = await replayScheduled(segmentPath(file), [gapsCalculator], (_r, scheduled, f) => {
+    const runner = await replayScheduled(segmentPath(file), [gapsCalculator], (r, scheduled, f) => {
       const codes = f.events.map((e) => e.details.code);
       if (!out && codes.includes('LGOT')) out = true;
       else if (out) raceKinds.push(...codes.flatMap((c) => (KIND_OF[c] ? [KIND_OF[c]] : [])));
-      if (out) lowest = Math.min(lowest, f.sessionTime);
+      if (out) lowest = Math.min(lowest, r.state.sessionTime);
       gaps = scheduled.outputs.get(GAPS) as GapsOutput;
     });
     replayed.set(file, { state: runner.state, gaps: structuredClone(gaps!), raceKinds, lowestAfterLightsOut: lowest });
