@@ -36,7 +36,7 @@ const asClosed = (span: Detailed, end: number): Closed => ({ ...span, end }) as 
  */
 const follow = (
   slot: Slot,
-  next: { machine: string; kind: string; at: number; frame: FrameNumber; carId?: CarId; confirmed?: boolean; detail?: unknown; renew?: boolean },
+  next: { machine: string; kind: string; at: number; frame: FrameNumber; carId?: CarId; zone?: number; confirmed?: boolean; detail?: unknown; renew?: boolean },
 ): { slot: Slot; closed: Closed[] } => {
   const { span } = slot;
   const confirmed = next.confirmed ?? true;
@@ -47,6 +47,7 @@ const follow = (
     machine: next.machine,
     id: slot.opened,
     ...(next.carId !== undefined && { carId: next.carId }),
+    ...(next.zone !== undefined && { zone: next.zone }),
     kind: next.kind,
     start: next.at,
     confirmed,
@@ -138,7 +139,7 @@ export const carMachine: SubMachine<{ cars: Slot[] }> = {
   },
 };
 
-/** Zone scope: per marshal zone `clear`, or `yellow` while its flag is yellow (detail `{ zone }`). Span ids count per machine. */
+/** Zone scope: per marshal zone `clear`, or `yellow` while its flag is yellow (`zone` names the zone). Span ids count per machine. */
 export const zoneMachine: SubMachine<{ zones: Array<Detailed | undefined>; opened: number }> = {
   id: 'test-zone',
   appliesTo: 'all',
@@ -157,7 +158,7 @@ export const zoneMachine: SubMachine<{ zones: Array<Detailed | undefined>; opene
     const closedSpans: Closed[] = [];
     let opened = open.opened;
     input.signals.session.marshalZones.forEach((z, zone) => {
-      const r = follow({ span: zones[zone], opened }, { machine: 'test-zone', kind: z.flag === 'yellow' ? 'yellow' : 'clear', at: input.at, frame: input.frameNumber, detail: { zone } });
+      const r = follow({ span: zones[zone], opened }, { machine: 'test-zone', kind: z.flag === 'yellow' ? 'yellow' : 'clear', at: input.at, frame: input.frameNumber, zone });
       zones[zone] = r.slot.span;
       opened = r.slot.opened;
       closedSpans.push(...r.closed);

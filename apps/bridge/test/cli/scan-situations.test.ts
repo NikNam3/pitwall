@@ -2,6 +2,7 @@ import { copyFileSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
+import type { OpenSpan, SpanDeclaration } from '@pitwall/domain';
 import type { SubMachine } from '@pitwall/engine';
 import { carMachine, probeMachine, sessionMachine } from '../../../../packages/engine/test/support/test-machines.ts';
 import { segmentPath } from '../../../../test-support/segments.ts';
@@ -35,7 +36,57 @@ async function scan(machines: ReadonlyArray<SubMachine<unknown>>, positionals: s
 /** The lines of `machine` that mention `text`. */
 const lines = (out: string[], machine: string, text: string) => out.filter((l) => l.includes(machine) && l.includes(text));
 
+/**
+ * A machine of `scope` (car or zone) with two scopes whose spans alternate `a`/`b` in opposite phase on every frame. Read
+ * as one chain (ignoring the scope) its spans give `b -> b` and `a -> a`; read per scope, only `none -> a|b`, `a -> b`
+ * and `b -> a`, which it declares.
+ */
+function alternating(scope: 'car' | 'zone'): SubMachine<{ n: number; opened: number; open: OpenSpan[] }> {
+  const id = `alternating-${scope}`;
+  const spans: SpanDeclaration = { machine: id, scope, kinds: ['a', 'b'] };
+  const at = (index: number) => (scope === 'car' ? { carId: index as never } : { zone: index });
+  return {
+    id,
+    appliesTo: 'all',
+    spans,
+    inputs: { signals: [], values: [], upstream: [] },
+    transitions: [['none', 'a'], ['none', 'b'], ['a', 'b'], ['b', 'a']],
+    init: () => ({ n: 0, opened: 0, open: [] }),
+    openSpans: (open) => open.open,
+    step(open, input) {
+      const next: OpenSpan[] = [];
+      const closed = [];
+      let opened = open.opened;
+      for (const index of [0, 1]) {
+        const kind = (open.n + index) % 2 === 0 ? 'a' : 'b';
+        const was = open.open.find((s) => (scope === 'car' ? s.carId === index : s.zone === index));
+        if (was?.kind === kind) next.push(was);
+        else {
+          if (was) closed.push({ ...was, end: input.at });
+          next.push({ machine: id, id: scope === 'car' ? (was?.id ?? -1) + 1 : opened++, ...at(index), kind, start: input.at, confirmed: true, detail: undefined, startFrame: input.frameNumber, ...(was ? {} : { joinedAt: true as const }) });
+        }
+      }
+      return { open: { n: open.n + 1, opened, open: next }, closed };
+    },
+  };
+}
+
 describe('pitwall scan-situations', () => {
+  it('zone spans are sequenced per zone: two zones changing alternately give only declared transitions', { timeout: 60_000 }, async () => {
+    const r = await scan([alternating('zone')]);
+    expect(r.code).toBe(0);
+    expect(lines(r.out, 'alternating-zone', 'undeclared')).toEqual([]);
+    expect(lines(r.out, 'alternating-zone', 'a -> b')).toContainEqual(expect.stringMatching(/[1-9]\d*\s*$/));
+    expect(lines(r.out, 'alternating-zone', 'b -> a')).toContainEqual(expect.stringMatching(/[1-9]\d*\s*$/));
+  });
+
+  it('car spans are still sequenced per car', { timeout: 60_000 }, async () => {
+    const r = await scan([alternating('car')]);
+    expect(r.code).toBe(0);
+    expect(lines(r.out, 'alternating-car', 'undeclared')).toEqual([]);
+    expect(lines(r.out, 'alternating-car', 'a -> b')).toContainEqual(expect.stringMatching(/[1-9]\d*\s*$/));
+  });
+
   it("prints each sub-machine's transition counts", { timeout: 60_000 }, async () => {
     const r = await scan([sessionMachine, carMachine, probeMachine]);
     expect(r.code).toBe(0);

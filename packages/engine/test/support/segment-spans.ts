@@ -30,7 +30,7 @@ export const sequenceOf = (spans: readonly Span[], pick: (s: Span) => boolean): 
 /** The spans of one car. */
 export const ofCar = (car: number) => (s: Span): boolean => s.carId === (car as CarId);
 /** The spans of one marshal zone. */
-export const ofZone = (zone: number) => (s: Span): boolean => (s.detail as { zone: number }).zone === zone;
+export const ofZone = (zone: number) => (s: Span): boolean => s.zone === zone;
 
 /**
  * Expects the sequence to have the kinds of `expected` in order, each span after the first starting within `toleranceS`

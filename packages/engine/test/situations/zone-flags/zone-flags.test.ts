@@ -25,7 +25,7 @@ const run = (builder: ReturnType<typeof inputs>) => {
   return { after, closed };
 };
 const detailOf = (s: { detail: unknown }): ZoneFlagDetail => s.detail as ZoneFlagDetail;
-const byZone = <T extends { detail: unknown }>(spans: readonly T[]): T[] => [...spans].sort((a, b) => detailOf(a).zone - detailOf(b).zone);
+const byZone = <T extends { zone?: number | undefined }>(spans: readonly T[]): T[] => [...spans].sort((a, b) => a.zone! - b.zone!);
 
 describe('zone-flags: id, span declaration, inputs, applies to', () => {
   it('is the sub-machine zone-flags, its spans the zone-scoped declaration in domain, shared by every phase, reading the marshalZones signal', () => {
@@ -39,13 +39,13 @@ describe('zone-flags: id, span declaration, inputs, applies to', () => {
 });
 
 describe('zone-flags: one span per listed zone, from the first frame that lists it', () => {
-  it('opens a span per listed zone with its zone and start on the lap as detail, the frame and the zone’s flag', () => {
+  it('opens a span per listed zone with its zone (`Span.zone`) and its start on the lap as detail, the frame and the zone’s flag', () => {
     const { after } = run(inputs().frame(lists('noFlag', 'yellow', 'green')));
     const opened = byZone(after[0]!);
-    expect(opened.map((s) => [s.kind, s.detail, s.id, s.start, s.startFrame, s.confirmed, s.joinedAt])).toEqual([
-      ['noFlag', { zone: 0, startFraction: startOf(0, 3) }, 0, 0, 1, true, true],
-      ['yellow', { zone: 1, startFraction: startOf(1, 3) }, 1, 0, 1, true, true],
-      ['green', { zone: 2, startFraction: startOf(2, 3) }, 2, 0, 1, true, true],
+    expect(opened.map((s) => [s.kind, s.zone, s.detail, s.id, s.start, s.startFrame, s.confirmed, s.joinedAt])).toEqual([
+      ['noFlag', 0, { startFraction: startOf(0, 3) }, 0, 0, 1, true, true],
+      ['yellow', 1, { startFraction: startOf(1, 3) }, 1, 0, 1, true, true],
+      ['green', 2, { startFraction: startOf(2, 3) }, 2, 0, 1, true, true],
     ]);
   });
   it('opens no span while no zone is listed; a zone listed later opens on that frame, without joinedAt', () => {
@@ -59,7 +59,7 @@ describe('zone-flags: one span per listed zone, from the first frame that lists 
   it('a zone that appears while others are open opens with the next id of the machine; the open ones are untouched', () => {
     const { after, closed } = run(inputs().frame(lists('noFlag', 'noFlag')).frame(lists('noFlag', 'noFlag', 'blue')));
     expect(closed).toEqual([]);
-    expect(byZone(after[1]!).map((s) => [detailOf(s).zone, s.id, s.kind, s.startFrame])).toEqual([[0, 0, 'noFlag', 1], [1, 1, 'noFlag', 1], [2, 2, 'blue', 2]]);
+    expect(byZone(after[1]!).map((s) => [s.zone, s.id, s.kind, s.startFrame])).toEqual([[0, 0, 'noFlag', 1], [1, 1, 'noFlag', 1], [2, 2, 'blue', 2]]);
   });
 });
 
@@ -67,18 +67,18 @@ describe('zone-flags: a new span on every change of the zone’s flag', () => {
   it('a change closes the zone’s span on that frame, opens the next with its zone and start, and leaves the other zones alone', () => {
     const { after, closed } = run(inputs().frames(2, lists('noFlag', 'noFlag')).frame(lists('noFlag', 'yellow')).frame(lists('noFlag', 'yellow')).frame(lists('noFlag', 'green')));
     expect(closed).toEqual([
-      { machine: 'zone-flags', id: 1, kind: 'noFlag', start: 0, end: 2 * FRAME_MS, confirmed: true, detail: { zone: 1, startFraction: startOf(1, 2) }, startFrame: 1, joinedAt: true },
-      { machine: 'zone-flags', id: 2, kind: 'yellow', start: 2 * FRAME_MS, end: 4 * FRAME_MS, confirmed: true, detail: { zone: 1, startFraction: startOf(1, 2) }, startFrame: 3 },
+      { machine: 'zone-flags', id: 1, kind: 'noFlag', start: 0, end: 2 * FRAME_MS, confirmed: true, zone: 1, detail: { startFraction: startOf(1, 2) }, startFrame: 1, joinedAt: true },
+      { machine: 'zone-flags', id: 2, kind: 'yellow', start: 2 * FRAME_MS, end: 4 * FRAME_MS, confirmed: true, zone: 1, detail: { startFraction: startOf(1, 2) }, startFrame: 3 },
     ]);
-    expect(byZone(after.at(-1)!).map((s) => [detailOf(s).zone, s.id, s.kind, s.startFrame])).toEqual([[0, 0, 'noFlag', 1], [1, 3, 'green', 5]]);
+    expect(byZone(after.at(-1)!).map((s) => [s.zone, s.id, s.kind, s.startFrame])).toEqual([[0, 0, 'noFlag', 1], [1, 3, 'green', 5]]);
   });
   // Not yet seen (C19): synthetic, no recording lists fewer zones later in a session.
   it('not yet seen: a zone a later packet no longer lists turns unknown with its detail unchanged; listed again, its flag opens the next span', () => {
     const { after, closed } = run(inputs().frames(2, lists('green', 'yellow')).frame(lists('green')).frame(lists('green')).frame(lists('green', 'blue')));
-    const detail = { zone: 1, startFraction: startOf(1, 2) };
-    expect(closed.map((s) => [detailOf(s).zone, s.kind, s.start, s.end])).toEqual([[1, 'yellow', 0, 2 * FRAME_MS], [1, 'unknown', 2 * FRAME_MS, 4 * FRAME_MS]]);
+    const detail = { startFraction: startOf(1, 2) };
+    expect(closed.map((s) => [s.zone, s.kind, s.start, s.end])).toEqual([[1, 'yellow', 0, 2 * FRAME_MS], [1, 'unknown', 2 * FRAME_MS, 4 * FRAME_MS]]);
     expect(after.map((open) => byZone(open).map((s) => s.kind))).toEqual([['green', 'yellow'], ['green', 'yellow'], ['green', 'unknown'], ['green', 'unknown'], ['green', 'blue']]);
-    expect(byZone(after[2]!)[1]).toMatchObject({ detail, startFrame: 3, id: 2 });
+    expect(byZone(after[2]!)[1]).toMatchObject({ zone: 1, detail, startFrame: 3, id: 2 });
     // the zone stays covered: still listed zones are untouched
     expect(byZone(after[4]!)[0]).toMatchObject({ id: 0, startFrame: 1 });
   });
@@ -101,10 +101,9 @@ describe('zone-flags: practice-miami-yellow (MiP: zone 10 yellow 135.5, green 14
     expectSequence(sequenceOf(spans, ofZone(10)), [['noFlag', 130], ['yellow', 135.5], ['green', 144.7], ['noFlag', 149.7]]);
     expectSequence(sequenceOf(spans, ofZone(11)), [['noFlag', 130], ['green', 135.5], ['noFlag', 144.7]]);
   });
-  it('the 12 listed zones are each a scope; the other ten stay noFlag in one span; each span carries its zone and start on the lap', () => {
-    const zones = [...new Set(spans.map((s) => detailOf(s).zone))].sort((a, b) => a - b);
+  it('the 12 listed zones are each a scope; each span carries its zone and start on the lap', () => {
+    const zones = [...new Set(spans.map((s) => s.zone!))].sort((a, b) => a - b);
     expect(zones).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
-    for (const zone of zones.filter((z) => z < 10)) expect(sequenceOf(spans, ofZone(zone)).map(([kind]) => kind), `zone ${zone}`).toEqual(['noFlag']);
     for (const zone of zones) {
       const fractions = new Set(spans.filter(ofZone(zone)).map((s) => detailOf(s).startFraction));
       expect(fractions.size, `zone ${zone}`).toBe(1);
@@ -121,9 +120,8 @@ describe('zone-flags: race-mexico-blue (MxR: zone 8 blue 6764.7 to 6773.2 s, zon
     expectSequence(sequenceOf(spans, ofZone(8)), [['noFlag', 6763.7], ['blue', 6764.7], ['noFlag', 6773.2]]);
     expectSequence(sequenceOf(spans, ofZone(9)), [['noFlag', 6763.7], ['blue', 6770.7]]);
   });
-  it('the 13 listed zones: every other one stays noFlag in one span', () => {
-    const zones = [...new Set(spans.map((s) => detailOf(s).zone))].sort((a, b) => a - b);
+  it('the 13 listed zones are each a scope', () => {
+    const zones = [...new Set(spans.map((s) => s.zone!))].sort((a, b) => a - b);
     expect(zones).toEqual(Array.from({ length: 13 }, (_, i) => i));
-    for (const zone of zones.filter((z) => z !== 8 && z !== 9)) expect(sequenceOf(spans, ofZone(zone)).map(([kind]) => kind), `zone ${zone}`).toEqual(['noFlag']);
   });
 });

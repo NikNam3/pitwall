@@ -12,8 +12,8 @@ import { event, openSpan, situation, span } from '../support/log-facts.ts';
 // Car 0 shows yellow over frames 3-8, then (open) noFlag from 8; zone 2 shows yellow over frames 2-9, then (open) green from 9.
 const carYellow = span('car-flags', 1, 'yellow', 200, 700, { startFrame: 3, endFrame: 8, carId: car(0) });
 const carRest = openSpan('car-flags', 2, 'noFlag', 700, { startFrame: 8, carId: car(0) });
-const zoneYellow = { ...span('zone-flags', 4, 'yellow', 100, 800, { startFrame: 2, endFrame: 9 }), detail: { zone: 2, startFraction: 0.5 } };
-const zoneGreen: OpenSpan = { ...openSpan('zone-flags', 5, 'green', 800, { startFrame: 9 }), detail: { zone: 2, startFraction: 0.5 } };
+const zoneYellow = { ...span('zone-flags', 4, 'yellow', 100, 800, { startFrame: 2, endFrame: 9 }), zone: 2, detail: { startFraction: 0.5 } };
+const zoneGreen: OpenSpan = { ...openSpan('zone-flags', 5, 'green', 800, { startFrame: 9 }), zone: 2, detail: { startFraction: 0.5 } };
 
 const source = (): MembershipSource => {
   const log = createLog();
