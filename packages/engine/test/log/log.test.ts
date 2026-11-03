@@ -1,6 +1,7 @@
 // The append-only log (C21, C22, C24): a writer appends facts to lists and every fact's id is its list and the number of
 // facts of that list before it in the current timeline (the log without the facts a void fact covers), so a fact
-// appended after a flashback gets the id a run without the rewind gives it (C33). Void ranges stay log positions.
+// appended after a flashback gets the id a run without the rewind gives it (C33). Void ranges stay log positions. An
+// appended fact is read-only, all the way down (C24).
 import { describe, expect, it } from 'vitest';
 import { carId } from '@pitwall/domain';
 import { createLog, logLengths, logWriter } from '../../src/log/log.ts';
@@ -83,5 +84,26 @@ describe('log', () => {
     for (const empty of ['laps', 'stints', 'pitStops', 'crossings'] as const) expect(lengths[empty] ?? 0).toBe(0);
     // The writer reads the same lengths as `logLengths` (the runner reads them through either, C28).
     expect(writer.lengths()).toEqual(lengths);
+  });
+  it('an appended fact is read-only: the fact, and every array and object it holds, is frozen (C24)', () => {
+    const log = createLog();
+    const writer = logWriter(log);
+    const stages = [{ stage: 'deployed', at: 1000 }];
+    writer.append('spans:session-phase-race', { ...span('session-phase-race', 0, 'neutralised', 1000, 3000), detail: { car: 'SC', stages } });
+    writer.append('events', { ...event(1000), params: { lights: 1 } });
+    writer.append('voids', voidFact(7, 1500, { events: [0, 1] }));
+    const [stored] = log.spans['session-phase-race']!;
+    const [recorded] = log.events;
+    const [voided] = log.voids;
+    for (const frozen of [stored, stored!.detail, (stored!.detail as { stages: unknown[] }).stages, stages[0], recorded, recorded!.params, voided, voided!.ranges, voided!.target]) {
+      expect(Object.isFrozen(frozen)).toBe(true);
+    }
+    expect(() => {
+      (stored as { kind: string }).kind = 'racing';
+    }).toThrow(TypeError);
+    expect(() => {
+      (stored!.detail as { stages: unknown[] }).stages.push({ stage: 'resume', at: 2000 });
+    }).toThrow(TypeError);
+    expect(stored).toMatchObject({ kind: 'neutralised', detail: { car: 'SC', stages: [{ stage: 'deployed', at: 1000 }] } });
   });
 });

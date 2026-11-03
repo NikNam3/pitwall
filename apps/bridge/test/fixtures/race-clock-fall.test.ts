@@ -29,7 +29,9 @@ beforeAll(async () => {
     previous = { raw: f.sessionTime, history: structuredClone(r.state.history) as Projection };
   });
   run.clockKinds = runner.state.log.clock.map((c) => c.kind);
-  run.phases = [...runner.state.history.sessionPhases, runner.state.open.situations.session].map((p) => p.kind);
+  // The session's end closes every open span (C18): the race's session phases are then all in the projection.
+  runner.finish();
+  run.phases = (runner.state.history.spans['session-phase-race'] ?? []).map((s) => `${s.kind}${s.joinedAt ? ' (joined)' : ''} until ${s.endFrame === runner.state.frameNumber + 1 ? 'the end' : s.endFrame}`);
 });
 
 describe('a fall inside the formation phase is carried over (the formation reset, C36)', () => {
@@ -48,7 +50,7 @@ describe('a fall inside the formation phase is carried over (the formation reset
       .toEqual({ events: before.events, crossings: before.crossings });
     expect(before.crossings.length).toBeGreaterThan(0);
   });
-  it('the formation phase stays open: without lights out nothing closes it', () => {
-    expect(run.phases).toEqual(['formation']);
+  it('the formation span stays open: without a start light nothing closes it before the session’s end', () => {
+    expect(run.phases).toEqual(['formation (joined) until the end']);
   });
 });

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ScenarioBuilder, type FrameDraft } from '../builders/index.ts';
+import { gridStart, lap, LIGHTS_OUT, raceAt, run, script } from '../situations/script.ts';
 import { runScenario } from '../support/run.ts';
 
 const car0 = (d: FrameDraft) => d.lapData.lapData[0]!;
@@ -9,7 +10,7 @@ describe('stints', () => {
   it.each([
     ['line in the pit lane before the box', [[1, 0, 0], [2, 0, 0], [3, 0, 0], [4, 0, 0], [5, 0, 0], [5, 1, 0], [6, 1, 0], [6, 2, 1], [6, 0, 1], [7, 0, 1]]],
     ['box before the line', [[1, 0, 0], [2, 0, 0], [3, 0, 0], [4, 0, 0], [5, 0, 0], [5, 1, 0], [5, 2, 1], [6, 1, 1], [6, 0, 1], [7, 0, 1]]],
-  ] as const)('closes on a tyre change (%s); SEND closes the open stint', (_, seq) => {
+  ] as const)('closes on a tyre change (%s); the post-session (SEND) closes the open stint on the frame it opens', (_, seq) => {
     const { st, results } = runScenario(new ScenarioBuilder({ cars: 1 }).frames(seq.length, (d) => {
       const [lap, pitStatus, fresh] = seq[d.index]!;
       Object.assign(car0(d), { currentLapNum: lap, pitStatus, lastLapTimeInMs: 80_000 });
@@ -26,6 +27,17 @@ describe('stints', () => {
       Object.assign(d.status.carStatusData[0]!, { ...OLD, tyresAgeLaps: d.index === 0 ? 7 : 0 });
     }));
     expect(st.history.stints).toMatchObject([{ firstLap: 4, lastLap: 4, tyreAgeAtFitting: 7 }]);
+  });
+  it('the simulated end (the online shape, no SEND) closes the open stint on the frame the post-session opens (C10, C36)', () => {
+    // Car 0 completes lap 1 at race frame 30 and lap 2 at race frame 60; the clock jumps 6000 s ahead at race frame 100.
+    const { runner } = run(script(gridStart(150, (k) => ({
+      ...(k >= 100 && { at: raceAt(k) + 6_000_000 }),
+      cars: (d) => {
+        lap(d, 0, { currentLapNum: k < 30 ? 1 : k < 60 ? 2 : 3, lastLapTimeInMs: 80_000 });
+        Object.assign(d.status.carStatusData[0]!, OLD);
+      },
+    }))));
+    expect(runner.state.history.stints.filter((s) => s.carId === 0)).toMatchObject([{ firstLap: 1, frame: LIGHTS_OUT + 1 + 100 + 1 }]);
   });
 });
 

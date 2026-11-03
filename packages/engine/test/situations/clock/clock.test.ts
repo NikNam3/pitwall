@@ -33,6 +33,12 @@ const pauses = (r: SessionRunner) => clockSpans(r).filter((s) => s.kind === 'pau
 const openClock = (r: SessionRunner) => machineSituationOf(r.state).byMachine['clock'] ?? [];
 /** The clock's open span when it is a pause in progress. */
 const openPause = (r: SessionRunner) => openClock(r).filter((s) => s.kind === 'paused');
+/** The session-phase sub-machine of the weekend phase (C14, C17): `session-phase-race`, `-qualifying` or `-practice`. */
+const phaseMachine = (r: SessionRunner) => `session-phase-${machineSituationOf(r.state).weekendPhase.kind}`;
+/** The session phase in progress (C20): the open span of the weekend phase's session-phase sub-machine. */
+const openPhase = (r: SessionRunner) => machineSituationOf(r.state).byMachine[phaseMachine(r)]?.[0];
+/** The closed session phases readers see: the projection's spans of that sub-machine. */
+const closedPhases = (r: SessionRunner) => r.state.history.spans[phaseMachine(r)] ?? [];
 /** A span list as kind, id and the frame numbers it opened and closed on (C26). */
 const tiles = (spans: readonly { kind: string; id: number; startFrame: number; endFrame?: number }[]) => spans.map((s) => [s.kind, s.id, s.startFrame, s.endFrame]);
 /** The steps that appended a clock fact readers see (`clock`), by frame index. */
@@ -89,7 +95,7 @@ describe('the start settles (raceZandvoortOnline): lights out at 1.968 s, the se
   it('lights out and the race start keep the time they were recorded at', () => {
     const { runner } = run(script(s3));
     expect(lightsOut(runner).map((e) => e.at)).toEqual([1968]);
-    expect(runner.state.open.situations.session).toEqual({ kind: 'racing', start: 1968, startLeaderLap: 1 });
+    expect(openPhase(runner)).toMatchObject({ kind: 'racing', start: 1968 });
   });
   it('nothing recorded before the fall is re-timed; what later frames record lies on the race clock, not below 1.968 s', () => {
     const frames = script(s3);
@@ -160,7 +166,7 @@ describe('the start settles (raceZandvoortUidReuse): a jump forward after lights
     expect(results[7]!.delta.rewound).toBeUndefined();
     expect(runner.state.log.clock).toMatchObject([{ kind: 'fall', at: 57_200 + 6 * STEP, fromMs: 57_200 + 6 * STEP, toMs: 0, offsetMs: 57_200 + 6 * STEP }]);
     expect(runner.state.sessionTime).toBe(57_200 + 6 * STEP + 12 * STEP);
-    expect(runner.state.open.situations.session.kind).toBe('preStart');
+    expect(openPhase(runner)?.kind).toBe('grid');
   });
   it('every fall before lights out is carried over: the pre-start fall, the formation reset and the small fall in the hold are fall facts', () => {
     const { runner } = run(script(s4).slice(0, L + 1));
@@ -177,7 +183,7 @@ describe('the start settles (raceZandvoortUidReuse): a jump forward after lights
   });
   it('the race clock never falls; the race start is lights out at the race-clock time of its frame', () => {
     const { runner, times } = raceClockOf(script(s4));
-    const start = runner.state.history.sessionPhases.find((p) => p.kind === 'racing')?.start ?? runner.state.open.situations.session.start;
+    const start = [...closedPhases(runner), openPhase(runner)].find((p) => p?.kind === 'racing')?.start;
     expect(fallsIn(times)).toEqual([]);
     expect(times).toEqual(s4.map((_, k) => raceOf(k)));
     expect(lightsOut(runner).map((e) => e.at)).toEqual([raceOf(L)]);
@@ -228,7 +234,7 @@ describe('the formation-lap reset', () => {
   it('what the race records lies on the continued clock: lights out and the race start at the formation lap’s last time, a later overtake after it', () => {
     const { runner } = run(formation());
     expect(lightsOut(runner).map((e) => e.at)).toEqual([LAP_MS]);
-    expect(runner.state.open.situations.session).toEqual({ kind: 'racing', start: LAP_MS, startLeaderLap: 1 });
+    expect(openPhase(runner)).toMatchObject({ kind: 'racing', start: LAP_MS });
     expect(runner.state.history.events.filter((e) => e.kind === 'overtake').map((e) => e.at)).toEqual([LAP_MS + 30 * STEP]);
   });
 });
@@ -274,7 +280,7 @@ describe('any other fall of the session time', () => {
     expect({ laps: h.laps.slice(0, before.laps.length), events: h.events.slice(0, before.events.length), crossings: h.crossings.slice(0, before.crossings.length) })
       .toEqual({ laps: before.laps, events: before.events, crossings: before.crossings });
     expect(before.laps.length).toBeGreaterThan(0);
-    expect(runner.state.open.situations.session).toEqual({ kind: 'racing', start: 0, startLeaderLap: 1 });
+    expect(openPhase(runner)).toMatchObject({ kind: 'racing', start: 0 });
   });
   it('entries timed after the fall continue the race clock: their raw time plus the fall’s size (an overtake, a lap)', () => {
     const { runner } = run(frames());
@@ -293,8 +299,8 @@ describe('any other fall of the session time', () => {
       ...(k === 200 && { events: [scar(1, 3)], session: status(0) }),
       ...(k === 330 && { events: [scar(2, 0)], session: status(2) }),
     })));
-    const spans = runner.state.history.sessionPhases;
-    expect(runner.state.open.situations.session).toMatchObject({ kind: 'neutralised', start: rawAt(330) + OFFSET, detail: { car: 'VSC' } });
+    const spans = closedPhases(runner);
+    expect(openPhase(runner)).toMatchObject({ kind: 'neutralised', start: rawAt(330) + OFFSET, detail: { car: 'VSC' } });
     expect(spans.map((p) => p.start).filter((t) => t > rawAt(330) + OFFSET)).toEqual([]);
     expect(spans.filter((p) => p.end < p.start)).toEqual([]);
   });
@@ -372,7 +378,7 @@ describe('garage time acceleration', () => {
   it('a session clock running at the measured peak of 31.6 times wall time is no jump: no clock fact, no pause, no rewind', () => {
     const { runner, results } = run(script(beats(200, (k) => ({ at: atPeak(k), wall: k * STEP })), { session: { sessionType: 1 } }));
     expect([rewoundSteps(results), runner.state.log.clock, pauses(runner)]).toEqual([[], [], []]);
-    expect(runner.state.open.situations.session.kind).toBe('running');
+    expect(openPhase(runner)?.kind).toBe('running');
   });
 
   // Review 2 B3: a stall of a few seconds while the clock runs ahead of wall time gives one advance above 60 s. A
@@ -384,19 +390,19 @@ describe('garage time acceleration', () => {
 
   it('a 3 s stall in a clock running at the peak (a 94.8 s advance) opens no post-session, and is no fall, no simulated end and no pause', () => {
     const { runner, results } = stall(3_000, STALL_ADVANCE);
-    expect(runner.state.open.situations.session.kind).toBe('running');
+    expect(openPhase(runner)?.kind).toBe('running');
     expect([rewoundSteps(results), clockKinds(runner).filter((k) => k !== 'jump'), pauses(runner)]).toEqual([[], [], []]);
   });
   it('a jump of 4500 s within one frame interval is still the simulated rest of the session: the post-session opens and simulatedEnd is appended', () => {
     const { runner } = stall(STEP, 4_500_000);
-    expect([runner.state.open.situations.session.kind, clockKinds(runner)]).toEqual(['postSession', ['simulatedEnd']]);
+    expect([openPhase(runner)?.kind, clockKinds(runner)]).toEqual(['postSession', ['simulatedEnd']]);
   });
   it.each([
     [179_000, 'running', []],
     [181_000, 'postSession', ['simulatedEnd']],
   ] as const)('after a 3 s stall, an advance of %i ms leaves the phase %s: the jump must outrun 60 times the wall gap', (advanceMs, kind, ends) => {
     const { runner } = stall(3_000, advanceMs);
-    expect([runner.state.open.situations.session.kind, clockKinds(runner).filter((k) => k === 'simulatedEnd')]).toEqual([kind, ends]);
+    expect([openPhase(runner)?.kind, clockKinds(runner).filter((k) => k === 'simulatedEnd')]).toEqual([kind, ends]);
   });
 });
 
@@ -410,9 +416,9 @@ describe('any other forward jump of the session time', () => {
   });
   it('the jump changes nothing else: no fall, no rewind, no pause, the phase stays running', () => {
     const { runner, results } = stall(3_000, 94_800);
-    expect([clockKinds(runner), results[100]!.delta.rewound !== undefined, results[100]!.changed.has('sessionPhases')]).toEqual([['jump'], false, false]);
+    expect([clockKinds(runner), results[100]!.delta.rewound !== undefined, results[100]!.changed.has('spans:session-phase-practice')]).toEqual([['jump'], false, false]);
     expect(pauses(runner)).toEqual([]);
-    expect([runner.state.history.sessionPhases.map((p) => p.kind), runner.state.open.situations.session.kind]).toEqual([['preStart'], 'running']);
+    expect([closedPhases(runner).map((p) => p.kind), openPhase(runner)?.kind]).toEqual([['grid'], 'running']);
   });
   it('a forward jump of exactly 60 s appends no clock fact', () => {
     const { runner, results } = stall(3_000, 60_000);
@@ -420,7 +426,7 @@ describe('any other forward jump of the session time', () => {
   });
   it('the post-session jump appends simulatedEnd and no jump: it opens the post-session instead', () => {
     const { runner } = run(script(beats(150, (k) => ({ at: k < 100 ? atPeak(k) : 4_500_000 + k * STEP })), { session: { sessionType: 1 } }));
-    expect(runner.state.open.situations.session.kind).toBe('postSession');
+    expect(openPhase(runner)?.kind).toBe('postSession');
     expect(clockKinds(runner)).toEqual(['simulatedEnd']);
   });
   it('a forward jump in a race after a mid-race fall is a jump fact with the game’s times, and the race clock keeps its offset', () => {
@@ -440,7 +446,7 @@ describe('any other forward jump of the session time', () => {
     expect(clockSteps(results)).toEqual([raceFrame(200), raceFrame(300)]);
     expect(results[raceFrame(300)]!.delta.rewound).toBeUndefined();
     expect(runner.state.history.events.filter((e) => e.kind === 'overtake').map((e) => e.at)).toEqual([rawAt(350) + OFFSET]);
-    expect(runner.state.open.situations.session.kind).toBe('racing');
+    expect(openPhase(runner)?.kind).toBe('racing');
   });
 });
 
@@ -633,9 +639,9 @@ describe('a flashback report on the session’s first frame', () => {
     const runner = new SessionRunner(initFor(frames));
     // The first step's result but its state (the state is compared on its own below).
     const { state: _state, ...firstStep } = applyOne(runner, frames[0]!);
-    const { lastFrameId, sessionTime, session, cars, history, open } = runner.state;
+    const { lastFrameId, sessionTime, session, cars, history } = runner.state;
     // What readers see after the first frame, and the clock's state it left for the pause and jump rules.
-    const first = structuredClone({ lastFrameId, sessionTime, session, cars, history, situations: open.situations, clock: clockInput(runner.state) });
+    const first = structuredClone({ lastFrameId, sessionTime, session, cars, history, situation: machineSituationOf(runner.state), clock: clockInput(runner.state) });
     return { runner, first, firstStep, rest: runAll(runner, frames.slice(1)) };
   };
 
@@ -756,7 +762,7 @@ describe('pauses', () => {
     expect((pause!.detail as { wallMs: number }).wallMs).toBeLessThanOrEqual(3_000 + STEP);
     expect(pause!.end).toBeGreaterThanOrEqual(pause!.start);
     expect(openPause(runner)).toEqual([]);
-    expect(runner.state.open.situations.session).toEqual({ kind: 'racing', start: 0, startLeaderLap: 1 });
+    expect(openPhase(runner)).toMatchObject({ kind: 'racing', start: 0 });
   });
   it('offline: running closes where the pause starts (the frame before the gap’s time) on the frame after the gap; the pause opens and closes on that frame; running opens there at its time (C26)', () => {
     const { runner } = gap(3_000);
@@ -785,7 +791,7 @@ describe('pauses', () => {
     expect(pauses(runner)).toMatchObject([{ machine: 'clock', id: 1, kind: 'paused', start: raceAt(50), end: raceAt(100), detail: { source: 'online', wallMs: 50 * STEP } }]);
     expect(openClock(runner)).toMatchObject([{ machine: 'clock', id: 2, kind: 'running', start: raceAt(100), detail: undefined }]);
     expect([openPause(runner), situationOf(runner.state).paused, clockInput(runner.state).paused]).toEqual([[], false, false]);
-    expect(runner.state.open.situations.session).toEqual({ kind: 'racing', start: 0, startLeaderLap: 1 });
+    expect(openPhase(runner)).toMatchObject({ kind: 'racing', start: 0 });
   });
   it('online: the clock’s spans tile the session: running, paused, running, each opening on the frame its predecessor closed on (C26, C85)', () => {
     const { runner } = online(150);

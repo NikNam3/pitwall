@@ -1,17 +1,22 @@
-// The formation lap is discarded at lights out (spec 3.2; diagnosis t1-diagnosis.md P2/P3, shape S2 of
-// raceSingaporeWet). The script: the grid from 0 s; the formation status at frame 10; the formation lap (car 0 and
-// car 1 drive, an overtake, car 1's retirement and disqualification transient); the clock reset to 0 at frame 110 with
-// the formation's resume and the grid re-ordering overtake; the clock holds at 0 through a DRS notice, five start
-// lights and lights out at frame 209; the race runs from the frame after it, both cars complete lap 1 and an overtake
-// comes at race frame 40. The reset is carried over like any fall that is no flashback (C36, supervisor ruling Task 7
-// round 2): from the reset on the race clock runs ahead of the session time by the formation lap's last time. Car 1 stands past the line with its lap timer at 510 ms from the reset on, as raceZandvoortOnline's
-// cars 1-7 do.
+// The formation lap is hidden, never discarded (contract C24, C26, C29; diagnosis t1-diagnosis.md P2/P3, shape S2 of
+// raceSingaporeWet): the recorders record during the formation lap as always; the projection never shows a fact that is
+// no span whose described frame lies in the `formation` span of `session-phase-race`, whenever it was recorded; every
+// span stays visible; at lights out nothing changes and no reader restarts. The script: the grid from 0 s; the
+// formation status at frame 10; the formation lap (car 0 and car 1 drive, an overtake, car 1's retirement and
+// disqualification transient); the clock reset to 0 at frame 110 with the formation's resume and the grid re-ordering
+// overtake; the clock holds at 0 through a DRS notice, five start lights (the first closes the formation span) and
+// lights out at frame 209; the race runs from the frame after it, both cars complete lap 1 and an overtake comes at
+// race frame 40. The reset is carried over like any fall that is no flashback (C36): from the reset on the race clock
+// runs ahead of the session time by the formation lap's last time. Car 1 stands past the line with its lap timer at
+// 510 ms from the reset on, as raceZandvoortOnline's cars 1-7 do.
 import { describe, expect, it } from 'vitest';
 import type { EventDetails } from '@pitwall/protocol';
 import type { SessionRunner } from '../../src/index.ts';
+import { situationOf } from '../../src/situations/run.ts';
 import { after } from '../support/runner.ts';
 import { beats, fuel, lap, LGOT, ovtk, run, scar, script, status, STEP, stlg, TRACK, type Beat } from './script.ts';
 
+const MACHINE = 'session-phase-race';
 const FORMATION = 10;
 const RESET = 110;
 const LIGHTS = [120, 130, 140, 150, 160];
@@ -72,57 +77,70 @@ const formationStart = (extra: (k: number) => EventDetails[] = () => [], cars: (
 
 const startRun = () => run(script(formationStart()));
 const events = (r: SessionRunner) => r.state.history.events;
+const spans = (r: SessionRunner) => r.state.history.spans[MACHINE] ?? [];
+const current = (r: SessionRunner) => situationOf(r.state).byMachine[MACHINE]?.[0];
+/** The frames the formation span covers (C26): from the frame it opened on up to, not including, the one it closed on. */
+const FORMATION_FRAMES = { startFrame: FORMATION + 1, endFrame: LIGHTS[0]! + 1 };
+const inFormation = (fact: { frame: number }) => fact.frame >= FORMATION_FRAMES.startFrame && fact.frame < FORMATION_FRAMES.endFrame;
 
 describe('the formation lap', () => {
   it('opens on the formation status and gives way to the start lights at the first light; racing opens at lights out', () => {
     const { runner } = startRun();
-    expect(runner.state.history.sessionPhases.map((p) => [p.kind, p.start, p.end])).toEqual([
-      ['preStart', 0, FORMATION * STEP],
-      ['formation', FORMATION * STEP, raceAt(0)],
-      ['startLights', raceAt(0), raceAt(0)],
+    expect(spans(runner).map((s) => [s.kind, s.start, s.end, s.startFrame, s.endFrame])).toEqual([
+      ['grid', 0, FORMATION * STEP, 1, FORMATION_FRAMES.startFrame],
+      ['formation', FORMATION * STEP, raceAt(0), FORMATION_FRAMES.startFrame, FORMATION_FRAMES.endFrame],
+      ['startLights', raceAt(0), raceAt(0), FORMATION_FRAMES.endFrame, LIGHTS_OUT + 1],
     ]);
-    expect(runner.state.open.situations.session).toEqual({ kind: 'racing', start: raceAt(0), startLeaderLap: 1 });
+    expect(current(runner)).toMatchObject({ kind: 'racing', start: raceAt(0), startFrame: LIGHTS_OUT + 1 });
   });
   it('the clock reset at the formation lap’s end changes nothing by itself', () => {
     const { results } = startRun();
     expect(results[RESET]!.delta.rewound).toBeUndefined();
   });
-  it('lights out after a formation lap is a truncated step: the history it discards is rewritten', () => {
+  it('lights out after a formation lap rewinds nothing: no step sets delta.rewound, and no reader restarts (C29, C30)', () => {
     const { results } = startRun();
-    expect(results[LIGHTS_OUT]!.delta.rewound).toBeDefined();
+    expect(results.filter((r) => r.delta.rewound !== undefined)).toEqual([]);
   });
 });
 
-describe('at lights out the formation lap is discarded', () => {
-  it('every event of the formation goes (overtakes, the retirement, the DRS notice); the start lights and lights out stay', () => {
+describe('the formation lap’s facts are hidden, never discarded (C24, C29)', () => {
+  it('a formation lap’s facts are hidden, and the formation span is visible', () => {
     const { runner } = startRun();
     expect(events(runner)).toEqual([
       ...LIGHTS.map((k, i) => ({ at: raceAt(0), kind: 'startLights', params: { lights: i + 1 }, frame: k + 1 })),
       { at: raceAt(0), kind: 'lightsOut', params: {}, frame: LIGHTS_OUT + 1 },
       { at: raceAt(40), kind: 'overtake', carId: 1, otherCarId: 0, params: {}, frame: LIGHTS_OUT + 41 },
     ]);
+    expect(spans(runner).filter((s) => s.kind === 'formation')).toHaveLength(1);
   });
-  it('a lights-out event during the formation lap, before any start light, is no race start and goes with the formation', () => {
+  it('the log keeps every fact the formation lap recorded, as recorded (the overtakes, the retirement, the DRS notice): none is removed or changed', () => {
+    const { runner } = startRun();
+    const hidden = runner.state.log.events.filter(inFormation);
+    expect(hidden.map((e) => [e.kind, e.frame])).toEqual([
+      ['overtake', 51],
+      ['retirement', 61],
+      ['overtake', RESET + 1],
+      ['drsDisabled', 116],
+    ]);
+    expect(runner.state.log.events.filter((e) => !inFormation(e))).toEqual(events(runner));
+  });
+  it('a lights-out event during the formation lap, before any start light, is no race start and is hidden with the formation', () => {
     const { runner } = run(script(formationStart((k) => (k === FORMATION + 5 ? [LGOT] : []))));
-    expect(runner.state.history.sessionPhases.map((p) => p.kind)).toEqual(['preStart', 'formation', 'startLights']);
-    expect(runner.state.open.situations.session).toEqual({ kind: 'racing', start: raceAt(0), startLeaderLap: 1 });
+    expect(spans(runner).map((s) => s.kind)).toEqual(['grid', 'formation', 'startLights']);
+    expect(current(runner)).toMatchObject({ kind: 'racing', start: raceAt(0) });
     expect(events(runner).filter((e) => e.kind === 'lightsOut')).toEqual([{ at: raceAt(0), kind: 'lightsOut', params: {}, frame: LIGHTS_OUT + 1 }]);
+    expect(runner.state.log.events.filter((e) => e.kind === 'lightsOut')).toHaveLength(2);
   });
-  it('the formation lap’s mini-sector crossings go; lap 1 is crossed again from lights out, each boundary once', () => {
+  it('the formation lap’s mini-sector crossings are hidden; lap 1 is crossed again from lights out, each boundary once', () => {
     const { runner } = startRun();
     const lap1 = runner.state.history.crossings.filter((m) => m.carId === 0 && m.lap === 1);
     expect(lap1.map((m) => m.segment)).toEqual(Array.from({ length: 50 }, (_, s) => s));
     expect(lap1[0]!.at).toBeLessThanOrEqual(raceAt(1));
+    expect(runner.state.log.crossings.filter(inFormation).length).toBeGreaterThan(0);
   });
   it('lap 1 starts at lights out from its start: its fuel at the start is the fuel at lights out', () => {
     const { runner } = startRun();
     expect(runner.state.history.laps.filter((l) => l.lapNumber === 1 && l.carId === 0)).toMatchObject([{ fuelAtStartKg: { known: true, value: 98.5 } }]);
-  });
-  // Review 2 B4: a car that enters the pit lane during the formation lap starts from the pit lane (spec 3.2).
-  it('a pit-lane start is no pit stop: the car in the pit lane from the formation lap to after lights out records none; its later stop is recorded', () => {
-    const pitLane = (k: number) => (k >= 80 && k < LIGHTS_OUT + 30) || (k >= LIGHTS_OUT + 80 && k < LIGHTS_OUT + 100);
-    const { runner } = run(script(formationStart(() => [], (k, d) => lap(d, 0, { pitStatus: pitLane(k) ? 1 : 0 }))));
-    expect(runner.state.history.pitStops.filter((s) => s.carId === 0)).toMatchObject([{ pitLaneEntry: raceAt(80), pitLaneExit: raceAt(100) }]);
   });
   it('a car whose lap timer already runs on the grid starts lap 1 from its start at lights out too', () => {
     const { runner } = startRun();
@@ -130,16 +148,54 @@ describe('at lights out the formation lap is discarded', () => {
   });
 });
 
-describe('a flashback after lights out', () => {
-  it('never reaches back into the formation lap: no formation event comes back', () => {
-    const frames = script(formationStart());
-    const { runner } = run(frames.slice(0, LIGHTS_OUT + 100));
-    // the game goes back to frame 150, in the hold before lights out (it cannot, but no rewind may restore the formation)
-    runner.apply(after(frames, 151, LIGHTS_OUT + 100)[0]!);
-    const kinds = events(runner).map((e) => e.kind);
-    expect(kinds.filter((k) => k === 'retirement' || k === 'drsDisabled' || k === 'overtake')).toEqual([]);
+// C25, C26, C29: a confirmed lap describes its provisional's frame, the crossing. Car 0 drives 100 m a frame from the
+// formation status on and crosses the line inside the formation lap (frame 21); after the reset it stands on the grid
+// again; Session History confirms the lap on race frame 20, after lights out.
+describe('a lap crossed in the formation lap and confirmed after lights out', () => {
+  const RESET_AT = 40;
+  const LIGHTS_AT = [42, 43, 44, 45, 46];
+  const OUT = 50;
+  const CONFIRMED = OUT + 20;
+  const lapScript = () => script(beats(OUT + 40, (k) => ({
+    at: k < RESET_AT ? k * STEP : k <= OUT ? 0 : (k - OUT) * STEP,
+    ...(k === FORMATION && { session: status(3) }),
+    ...(k === 43 && { session: status(0) }),
+    events: [...LIGHTS_AT.flatMap((at, i) => (k === at ? [stlg(i + 1)] : [])), ...(k === OUT ? [LGOT] : [])],
+    cars: (d) => {
+      if (k >= FORMATION && k < 20) lap(d, 0, { currentLapNum: 1, lapDistance: 3000 + (k - FORMATION) * 100 });
+      else if (k >= 20 && k < RESET_AT) lap(d, 0, { currentLapNum: 2, lapDistance: (k - 20) * 100 + 10, lastLapTimeInMs: 50_000 });
+      else if (k >= RESET_AT) lap(d, 0, { currentLapNum: 1, lapDistance: -6 });
+      if (k === CONFIRMED) {
+        d.add('sessionHistory', { carIdx: 0, numLaps: 1, lapHistoryData: [{ lapTimeInMs: 50_100, sector1TimeMs: 16_000, sector2TimeMs: 17_000, sector3TimeMs: 17_100, lapValidBitFlags: 0b1111 }] });
+      }
+    },
+  })));
+
+  it('a confirmed lap recorded after lights out whose crossing lies in the formation span is hidden, as its provisional is', () => {
+    const { runner } = run(lapScript());
+    const lap1 = runner.state.log.laps.filter((l) => l.carId === 0 && l.lapNumber === 1);
+    expect(lap1.map((l) => [l.status, l.frame])).toEqual([['provisional', 21], ['confirmed', 21]]);
+    expect(spans(runner).find((s) => s.kind === 'formation')).toMatchObject({ startFrame: FORMATION + 1, endFrame: LIGHTS_AT[0]! + 1 });
+    expect(runner.state.history.laps.filter((l) => l.carId === 0 && l.lapNumber === 1)).toEqual([]);
   });
-  it('a rewind within the race equals a run that never saw the discarded frames', () => {
+});
+
+describe('a flashback across lights out (Review Focus 1)', () => {
+  it('a flashback from racing into the formation lap voids everything after its target; the formation span is open again, and the projection equals a run that never received the undone frames', () => {
+    const frames = script(formationStart());
+    const fork = script(formationStart((k) => (k === 95 ? [ovtk(0, 1)] : k === LIGHTS_OUT + 50 ? [ovtk(0, 1)] : [])));
+    const { runner } = run(frames.slice(0, LIGHTS_OUT + 100));
+    const [first, ...rest] = after(fork, 91, LIGHTS_OUT + 100);
+    const results: Array<{ rewound: boolean; open: string | undefined }> = [];
+    runner.apply(first!, (r) => results.push({ rewound: r.delta.rewound !== undefined, open: situationOf(r.state).byMachine[MACHINE]?.[0]?.kind }));
+    expect(results).toEqual([{ rewound: true, open: 'formation' }]);
+    expect(spans(runner).map((s) => s.kind)).toEqual(['grid']);
+    for (const f of rest) runner.apply(f);
+    const fresh = run(fork).runner;
+    expect(runner.state.history).toEqual(fresh.state.history);
+    expect(situationOf(runner.state).byMachine[MACHINE]).toEqual(situationOf(fresh.state).byMachine[MACHINE]);
+  });
+  it('a rewind within the race equals a run that never saw the undone frames', () => {
     const frames = script(formationStart());
     const fork = script(formationStart((k) => (k === LIGHTS_OUT + 70 ? [ovtk(0, 1)] : [])));
     const { runner } = run(frames.slice(0, LIGHTS_OUT + 110));

@@ -51,9 +51,13 @@ describe('pit stops', () => {
 });
 
 describe('flag phases', () => {
+  /**
+   * A race under way (every lap timer 30 s in, so `session-phase-race` joins it racing): flag phases mirror its
+   * neutralised and suspended spans.
+   */
   const rows = (cars: ReadonlyArray<{ position: number; lap: number; resultStatus?: number }>) =>
     new ScenarioBuilder({ cars: cars.length, stepMs: 1000 }).frames(1, (d) => {
-      cars.forEach((c, i) => Object.assign(d.lapData.lapData[i]!, { carPosition: c.position, currentLapNum: c.lap, resultStatus: c.resultStatus ?? 2 }));
+      cars.forEach((c, i) => Object.assign(d.lapData.lapData[i]!, { carPosition: c.position, currentLapNum: c.lap, currentLapTimeInMs: 30_000, resultStatus: c.resultStatus ?? 2 }));
     });
   const scar = (safetyCarType: number, eventType: number): EventDetails => ({ code: 'SCAR', safetyCarType, eventType });
 
@@ -88,7 +92,7 @@ describe('flag phases', () => {
     it('a return or a resume without a deployment opens no phase', () => {
       expect(phases(scar(1, 1), scar(1, 2), scar(1, 3))).toEqual([]);
     });
-    /** An SC deployed and confirmed by the status a frame later (an unconfirmed one is dropped at SEND), then `events`. */
+    /** An SC deployed and confirmed by the status a frame later (an unconfirmed one leaves no flag phase), then `events`. */
     const confirmedPhases = (...events: EventDetails[]) => {
       const b = rows([{ position: 1, lap: 1 }]).event(scar(1, 0)).frames(1, noop).session({ safetyCarStatus: 1 }).frames(1, noop);
       for (const e of events) b.event(e).frames(1, noop);
@@ -100,7 +104,7 @@ describe('flag phases', () => {
     it('an event of the other kind is not recorded in the open phase', () => {
       expect(confirmedPhases(scar(2, 1))).toMatchObject([{ kind: 'SC', scPhases: [{ phase: 'deployed', at: 1000 }] }]);
     });
-    it('a deployment still unconfirmed at SEND is dropped', () => {
+    it('a deployment still unconfirmed at SEND leaves no flag phase', () => {
       expect(phases(scar(1, 0))).toEqual([]);
     });
   });

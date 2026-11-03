@@ -34,8 +34,8 @@ export async function replayRunner(path: string, onResult: (r: StepResult, f: Fr
 
 /**
  * `replayRunner` plus a `Scheduler` over `calculators`, every one needed, on a healthy feed and `config` (by section key
- * over the defaults; none by default): the engine and the units under test, without topics. A truncated step (a
- * flashback, or lights out discarding the formation lap) resets the scheduler, as in the bridge.
+ * over the defaults; none by default): the engine and the units under test, without topics. A flashback (`delta.rewound`,
+ * the only rewind, C30) resets the scheduler: nothing restores its bookkeeping here, as the bridge's runner does.
  */
 export async function replayScheduled(
   path: string,

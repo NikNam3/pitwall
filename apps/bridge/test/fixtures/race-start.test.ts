@@ -6,6 +6,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { GAPS, gapsCalculator, type GapsOutput } from '@pitwall/analysis';
 import type { RaceEvent } from '@pitwall/domain';
 import type { EngineState, DeepReadonly } from '@pitwall/engine';
+import { situationOf } from '../../../../packages/engine/src/situations/run.ts';
 import { replayScheduled } from './engine-replay.ts';
 import { segmentPath } from './replay.ts';
 
@@ -55,9 +56,9 @@ beforeAll(async () => {
   }
 });
 
-/** The race start: the opening of the first racing phase, closed or still open. */
+/** The race start: the opening of the first racing span of `session-phase-race`, closed or still open (C20). */
 const raceStart = (state: DeepReadonly<EngineState>): number | undefined =>
-  [...state.history.sessionPhases, state.open.situations.session].find((p) => p.kind === 'racing')?.start;
+  [...(state.history.spans['session-phase-race'] ?? []), ...(situationOf(state).byMachine['session-phase-race'] ?? [])].find((s) => s.kind === 'racing')?.start;
 
 describe.each(SHAPES)('the race start, shape %s (%s)', (_, file) => {
   it('the race start is lights out on the race clock: one lights out, the racing phase opens at it, no later than any frame after it', () => {
@@ -68,7 +69,7 @@ describe.each(SHAPES)('the race start, shape %s (%s)', (_, file) => {
     expect(start).toBeGreaterThanOrEqual(0);
     expect(start).toBeLessThanOrEqual(lowestAfterLightsOut);
   });
-  it('nothing recorded before lights out survives but the start lights and lights out', () => {
+  it('nothing recorded before lights out is shown but the start lights and lights out: the formation lap is hidden (C29)', () => {
     const { state, raceKinds } = replayed.get(file)!;
     expect(state.history.events.map((e) => e.kind)).toEqual([...new Array(5).fill('startLights'), 'lightsOut', ...raceKinds]);
   });

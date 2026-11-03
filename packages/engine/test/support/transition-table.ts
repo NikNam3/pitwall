@@ -30,7 +30,7 @@ const baseInput = (() => {
       const { open: _open, history: _history, weekend: _weekend, signals, log: _log, ...live } = initialState(
         initFor(new ScenarioBuilder({ cars: 2 }).frames(1, () => {}).build()),
       );
-      base = { at: 0, frameId: 0, frameNumber: 0, signals, live, clock: { paused: false, offsetMs: 0 }, upstream: {}, weekendPhase: { kind: 'pending' } };
+      base = { at: 0, frameId: 0, frameNumber: 0, signals, live, clock: { paused: false, offsetMs: 0, simulatedEnd: undefined }, upstream: {}, weekendPhase: { kind: 'pending' } };
     }
     return structuredClone(base);
   };

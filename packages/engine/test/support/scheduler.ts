@@ -1,7 +1,6 @@
 // Shared by the Scheduler tests: history deltas, the feed metrics and the input a scheduler runs on, a scheduler over
 // quick calculators that all count as needed, and the scheduler's incremental = from scratch check over frames.
 import { expect } from 'vitest';
-import type { SessionPhaseKind } from '@pitwall/domain';
 import {
   activeFlagPhaseOf,
   CalculatorRegistry,
@@ -24,7 +23,7 @@ import { initFor } from './run.ts';
 type Lengths = HistoryDelta['before'];
 
 /** History lengths: zero except those given. */
-export const len = (o: Partial<Lengths> = {}): Lengths => ({ laps: 0, stints: 0, pitStops: 0, flagPhases: 0, sessionPhases: 0, events: 0, crossings: 0, ...o });
+export const len = (o: Partial<Lengths> = {}): Lengths => ({ laps: 0, stints: 0, pitStops: 0, flagPhases: 0, events: 0, crossings: 0, ...o });
 
 /** The history grew (or shrank) from `before` to `after` entries in each of `fields`; `rewound` marks a void fact (C30). */
 export const delta = (before = 0, after = before, rewound = false, fields: ReadonlyArray<keyof Lengths> = ['laps']): HistoryDelta => ({
@@ -35,8 +34,8 @@ export const delta = (before = 0, after = before, rewound = false, fields: Reado
 
 export const feed = { framesClosed: 0, incompleteFrames: 0, latePackets: 0, droppedBeforeSession: 0, droppedUid0: 0, decodeErrors: 0, packetsPerSecond: 0, connected: true, msSinceLastPacket: 0, lossPercent: 0 } as FeedMetricsView;
 
-/** The situation of the scheduler inputs: a race under way since session time 0. */
-export const RACING: SchedulerInput['situation'] = { session: { kind: 'racing', start: 0, startLeaderLap: 1 }, paused: false };
+/** The situation of the scheduler inputs: the session not paused (the session phase is in the projection's spans, C20). */
+export const RACING: SchedulerInput['situation'] = { paused: false };
 
 /** A scheduler input at session time `t`; the state's history holds `laps` laps; `config` is the features' effective config. */
 export const input = (t: number, changed: ChangeTag[] = ['timing'], d = delta(), laps = d.after.laps ?? 0, config: SchedulerInput['config'] = {}): SchedulerInput =>
@@ -55,27 +54,39 @@ export const sched = (calcs: Calculator[], needed = calcs.map((c) => c.id)) => {
 
 type Folded = { crossings: number; under: number; events: number };
 
+/** The race's session-phase sub-machine, whose spans `underPhase` reads. */
+const RACE_PHASES = 'session-phase-race';
+
+/** A span covers the frame a fact describes (C26): from the frame it opened on up to, not including, the one it closed on. */
+const covers = (span: { startFrame: number; endFrame: number }, frame: number): boolean => span.startFrame <= frame && frame < span.endFrame;
+
 /**
  * A reader that folds what happened while a session phase of `kind` stood, as `incidents` does for a neutralisation: it
- * counts the mini-sector crossings, those a span of `kind` covers (a closed one, or the one in progress from its start
- * on), and the events.
+ * counts the mini-sector crossings, those a closed span of `kind` of `session-phase-race` covers (by the frame each
+ * crossing describes, C26), and the events. A pure fold over projection entries (C31): new crossings against every
+ * closed span, newly closed spans against the crossings folded before.
  */
-export const underPhase = (kind: SessionPhaseKind): IncrementalCalculator<Folded, Folded> => {
-  const covered = (v: EngineView, at: number): boolean =>
-    v.state.history.sessionPhases.some((p) => p.kind === kind && p.start <= at && at < p.end) ||
-    (v.situation.session.kind === kind && at >= v.situation.session.start);
-  const fold = (acc: Folded, v: EngineView, from: number, to: number): Folded => {
-    let under = acc.under;
-    for (const c of v.state.history.crossings.slice(from, to)) if (covered(v, c.at)) under++;
-    return { crossings: acc.crossings + to - from, under, events: v.state.history.events.length };
+export const underPhase = (kind: string): IncrementalCalculator<Folded, Folded> => {
+  const spansOf = (v: EngineView) => v.state.history.spans[RACE_PHASES] ?? [];
+  const count = (crossings: ReadonlyArray<{ frame: number }>, spans: ReadonlyArray<{ kind: string; startFrame: number; endFrame: number }>): number =>
+    crossings.reduce((n, c) => n + spans.filter((s) => s.kind === kind && covers(s, c.frame)).length, 0);
+  const fold = (acc: Folded, v: EngineView, d: { crossings: [number, number]; spans: [number, number] }): Folded => {
+    const { crossings } = v.state.history;
+    const spans = spansOf(v);
+    const under = acc.under + count(crossings.slice(d.crossings[0], d.crossings[1]), spans) + count(crossings.slice(0, d.crossings[0]), spans.slice(d.spans[0], d.spans[1]));
+    return { crossings: acc.crossings + d.crossings[1] - d.crossings[0], under, events: v.state.history.events.length };
   };
   return {
     kind: 'incremental',
     id: `probe.under.${kind}`,
-    reads: ['miniSectors', 'events', 'sessionPhases'],
+    reads: ['miniSectors', 'events', `spans:${RACE_PHASES}` as ChangeTag],
     cadence: 'frame',
-    init: (v) => fold({ crossings: 0, under: 0, events: 0 }, v, 0, v.state.history.crossings.length),
-    update: (acc, d, v) => fold(acc, v, d.before.crossings ?? 0, d.after.crossings ?? 0),
+    init: (v) => fold({ crossings: 0, under: 0, events: 0 }, v, { crossings: [0, v.state.history.crossings.length], spans: [0, 0] }),
+    update: (acc, d, v) =>
+      fold(acc, v, {
+        crossings: [d.before.crossings ?? 0, d.after.crossings ?? 0],
+        spans: [d.before[`spans:${RACE_PHASES}`] ?? 0, d.after[`spans:${RACE_PHASES}`] ?? 0],
+      }),
     output: (acc) => acc,
   };
 };
@@ -86,7 +97,7 @@ export const underNeutralisation = underPhase('neutralised');
 /**
  * Runs `frames` through a `SessionRunner` and a `Scheduler` that needs `calc` and, on every step it ran, expects its
  * output to equal a fresh `init` over that step's view (incremental = from scratch, docs/testing.md section 5). The
- * scheduler is never reset by hand: a step that discarded history must say so in its delta.
+ * scheduler is never reset by hand: only a flashback rewinds (`delta.rewound`, C30).
  */
 export function expectScheduledIncremental<Acc, Out>(calc: IncrementalCalculator<Acc, Out>, frames: readonly Frame[]): void {
   const runner = new SessionRunner(initFor([...frames]));

@@ -577,6 +577,21 @@
         "a later Session packet (session time 1.505) carries numSessionsInWeekend 2 and the structure [15, 16]: this race is the sprint of its weekend",
         "duration 205782.375 ms"
       ]
+    },
+    {
+      "file": "race-singapore-wet-formation-end.pwrec.gz",
+      "source": "raceSingaporeWet",
+      "fromS": 60,
+      "toS": 61.5,
+      "records": 1071,
+      "features": [
+        "332 388 bytes; 2 context packets (Session, Participants) first; the Session packet carries the weekend structure [4, 5, 6, 7, 15], so the weekend phase (race) is known on the first frame",
+        "two timelines with the same session times, as pwrec-cut keeps every record in the window: the formation lap from 60.004 s (frame 3601, safetyCarStatus 3) to 61.485 s, then 175 s of wall time later the race's lap 1 from 60.006 s (frame 14394, safetyCarStatus 0) to 61.5 s; frame ids rise, no FLBK",
+        "no start light and no lights out in the window (they lie at session time 0 after the formation reset at 169.566 s): to the engine the session ends inside the formation lap, the formation span joined on the first frame and open to the last",
+        "every car drives: mini-sector crossings in both parts",
+        "BUTN x3",
+        "duration 178100.263 ms"
+      ]
     }
   ]
 }

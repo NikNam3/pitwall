@@ -6,7 +6,6 @@ import {
   known,
   MAX_CARS,
   MINI_SECTORS,
-  toSessionTime,
   type CarId,
   type CarState,
   type Corners,
@@ -308,8 +307,8 @@ export function telemetryRestricted(car: CarState): CarState {
   return copy;
 }
 
-/** The view's situation by default: a race under way since session time 0, not paused. */
-export const RACING: EngineView['situation'] = { session: { kind: 'racing', start: toSessionTime(0), startLeaderLap: 1 }, paused: false };
+/** The view's situation by default: not paused (the session phase is in the projection's spans, C20). */
+export const RACING: EngineView['situation'] = { paused: false };
 
 /**
  * The `EngineView` of a race session. `cars` (default: none, a 22-slot list is padded with idle cars so ids index it)
@@ -374,7 +373,7 @@ export function engineView({
 
 /** A projection with every list empty. */
 const emptyProjection = (): Projection => ({
-  laps: [], stints: [], pitStops: [], crossings: [], events: [], clock: [], spans: {}, flagPhases: [], sessionPhases: [],
+  laps: [], stints: [], pitStops: [], crossings: [], events: [], clock: [], spans: {}, flagPhases: [],
 });
 
 /** A projection with the given lists and the rest empty: pass it to `engineView({ history })`. */

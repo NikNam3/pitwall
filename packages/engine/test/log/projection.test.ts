@@ -1,5 +1,5 @@
 // The projection (C26, C28-C30): the log without hidden facts. A void range hides its facts; a non-span fact whose
-// described frame lies in a formation span (the session's, or its own car's) is hidden, whether that span is still open
+// described frame lies in the formation span of `session-phase-race` is hidden (C29), whether that span is still open
 // or already closed and whenever the fact was recorded; spans are never hidden that way.
 import { carId as car, type FactList } from '@pitwall/domain';
 import fc from 'fast-check';
@@ -53,7 +53,7 @@ describe('projection', () => {
     const tracker = new ProjectionTracker(log);
 
     // Formation: the session-phase span 0 of kind `formation` opened on frame 10, so it is only in the situation.
-    const formationOpen = situation(openSpan('session-phase', 0, 'formation', 1000, { startFrame: 10 }));
+    const formationOpen = situation(openSpan('session-phase-race', 0, 'formation', 1000, { startFrame: 10 }));
     const beforeFormation = event(900, 9);
     const onItsFirstFrame = event(1000, 10);
     const duringFormation = event(2000, 15, car(0));
@@ -68,14 +68,14 @@ describe('projection', () => {
     expect(tracker.projection.clock).toEqual([]);
 
     // Lights out on frame 20: the formation span closes into the log, covering frames 10 to 19, and racing opens.
-    const formation = span('session-phase', 0, 'formation', 1000, 3000, { startFrame: 10, endFrame: 20 });
-    writer.append('spans:session-phase', formation);
+    const formation = span('session-phase-race', 0, 'formation', 1000, 3000, { startFrame: 10, endFrame: 20 });
+    writer.append('spans:session-phase-race', formation);
     // A fact recorded after lights out that describes a frame inside the formation (a confirmed lap of its crossing).
     const late = event(2900, 19, car(1));
     const atLightsOut = event(3000, 20);
     writer.append('events', late);
     writer.append('events', atLightsOut);
-    const racingOpen = situation(openSpan('session-phase', 1, 'racing', 3000, { startFrame: 20 }));
+    const racingOpen = situation(openSpan('session-phase-race', 1, 'racing', 3000, { startFrame: 20 }));
     const closed = tracker.update(racingOpen);
     expect(closed.rewound).toBeUndefined();
     expect(len(closed.before, 'events')).toBe(1);
@@ -102,42 +102,35 @@ describe('projection', () => {
     const tracker = new ProjectionTracker(log);
     const flagDuringFormation = span('flags', 0, 'yellow', 1800, 2400, { startFrame: 12, endFrame: 18 });
     writer.append('spans:flags', flagDuringFormation);
-    tracker.update(situation(openSpan('session-phase', 0, 'formation', 1000, { startFrame: 10 })));
+    tracker.update(situation(openSpan('session-phase-race', 0, 'formation', 1000, { startFrame: 10 })));
     expect(tracker.projection.spans['flags']).toEqual([flagDuringFormation]);
 
-    const formation = span('session-phase', 0, 'formation', 1000, 3000, { startFrame: 10, endFrame: 20 });
-    writer.append('spans:session-phase', formation);
-    tracker.update(situation(openSpan('session-phase', 1, 'racing', 3000, { startFrame: 20 })));
-    expect(tracker.projection.spans['session-phase']).toEqual([formation]);
+    const formation = span('session-phase-race', 0, 'formation', 1000, 3000, { startFrame: 10, endFrame: 20 });
+    writer.append('spans:session-phase-race', formation);
+    tracker.update(situation(openSpan('session-phase-race', 1, 'racing', 3000, { startFrame: 20 })));
+    expect(tracker.projection.spans['session-phase-race']).toEqual([formation]);
     expect(tracker.projection.spans['flags']).toEqual([flagDuringFormation]);
   });
 
-  it("a car's formation span hides only that car's facts", () => {
+  it('only the formation span of session-phase-race hides: a span of kind formation of another sub-machine, a car\'s too, hides nothing (C29)', () => {
     const log = createLog();
     const writer = logWriter(log);
     const tracker = new ProjectionTracker(log);
-    // Car 3's activity is `formation` from frame 10 (open), car 4's from frame 30 to 40 (closed).
     const carThree = situation(openSpan('car-activity', 0, 'formation', 1000, { startFrame: 10, carId: car(3) }));
     writer.append('spans:car-activity', span('car-activity', 0, 'formation', 3000, 4000, { startFrame: 30, endFrame: 40, carId: car(4) }));
-    const ownCar = event(1500, 15, car(3));
-    const ownCrossing = crossing(car(3), 1500, 15);
-    const otherCar = event(1500, 15, car(4));
-    const otherCrossing = crossing(car(4), 1500, 15);
-    const sessionFact = event(1500, 15);
-    const carFourInside = event(3500, 35, car(4));
-    const carThreeLater = event(3500, 35, car(3));
-    const carFiveInside = event(3500, 35, car(5));
-    for (const e of [ownCar, otherCar, sessionFact, carFourInside, carThreeLater, carFiveInside]) writer.append('events', e);
-    for (const c of [ownCrossing, otherCrossing]) writer.append('crossings', c);
+    writer.append('spans:other-session', span('other-session', 0, 'formation', 3000, 4000, { startFrame: 30, endFrame: 40 }));
+    const facts = [event(1500, 15, car(3)), event(1500, 15), event(3500, 35, car(4)), event(3500, 35)];
+    for (const e of facts) writer.append('events', e);
+    writer.append('crossings', crossing(car(3), 1500, 15));
     tracker.update(carThree);
-    expect(tracker.projection.events).toEqual([otherCar, sessionFact, carFiveInside]);
-    expect(tracker.projection.crossings).toEqual([otherCrossing]);
+    expect(tracker.projection.events).toEqual(facts);
+    expect(tracker.projection.crossings).toEqual([crossing(car(3), 1500, 15)]);
   });
 
   it('without a void the projection only grows', () => {
-    type Append = { list: 'events' | 'clock' | 'spans:flags' | 'spans:session-phase'; at: number };
+    type Append = { list: 'events' | 'clock' | 'spans:flags' | 'spans:session-phase-race'; at: number };
     const arbAppend: fc.Arbitrary<Append> = fc.record({
-      list: fc.constantFrom('events', 'clock', 'spans:flags', 'spans:session-phase'),
+      list: fc.constantFrom('events', 'clock', 'spans:flags', 'spans:session-phase-race'),
       at: fc.integer({ min: 0, max: 3_600_000 }),
     });
     // Each inner array is one frame's appends, followed by one `update`.
@@ -146,7 +139,7 @@ describe('projection', () => {
         const log = createLog();
         const writer = logWriter(log);
         const tracker = new ProjectionTracker(log);
-        const ids = { flags: 0, 'session-phase': 0 };
+        const ids = { flags: 0, 'session-phase-race': 0 };
         const appended = new Map<FactList, number>();
         let previous: LogLengths = {};
         for (const frame of frames) {
@@ -154,7 +147,7 @@ describe('projection', () => {
             if (a.list === 'events') writer.append('events', event(a.at));
             else if (a.list === 'clock') writer.append('clock', clockJump(a.at));
             else if (a.list === 'spans:flags') writer.append('spans:flags', span('flags', ids.flags++, 'yellow', a.at, a.at + 1));
-            else writer.append('spans:session-phase', span('session-phase', ids['session-phase']++, 'racing', a.at, a.at + 1));
+            else writer.append('spans:session-phase-race', span('session-phase-race', ids['session-phase-race']++, 'racing', a.at, a.at + 1));
             appended.set(a.list, (appended.get(a.list) ?? 0) + 1);
           }
           const delta = tracker.update(NOTHING_OPEN);
