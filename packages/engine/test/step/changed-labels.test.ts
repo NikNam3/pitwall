@@ -62,7 +62,7 @@ describe('change tags', () => {
       'session', 'identity', 'timing', 'tyres', 'energy', 'condition', 'dynamics', 'ownCar',
       'sessionPhases', 'laps', 'stints', 'pitStops', 'flagPhases', 'events', 'miniSectors',
       'clock', 'spans:clock',
-      'spans:weekend-phase',
+      'spans:car-flags', 'spans:weekend-phase', 'spans:zone-flags',
     ]);
   });
   it('ALL_CHANGE_TAGS is every tag once', () => {

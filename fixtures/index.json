@@ -577,6 +577,32 @@
         "a later Session packet (session time 1.505) carries numSessionsInWeekend 2 and the structure [15, 16]: this race is the sprint of its weekend",
         "duration 205782.375 ms"
       ]
+    },
+    {
+      "file": "practice-miami-yellow.pwrec.gz",
+      "source": "MiP (2026-10-30_18-26-27_581b388bbb23c5e7, short practice, not in fixtures)",
+      "fromS": 130,
+      "toS": 152,
+      "records": 4806,
+      "features": [
+        "525 597 bytes; 2 context packets; 12 marshal zones, 22 car slots, every flag none at the first frame",
+        "the player (car 19): FIA flag yellow at 134.6, green at 143.8, none at 148.0",
+        "zone 10 yellow at 135.5, green at 144.7, none at 149.7; zone 11 green at 135.5, none at 144.7",
+        "duration 24084 ms"
+      ]
+    },
+    {
+      "file": "race-mexico-blue.pwrec.gz",
+      "source": "raceWetVscMexico",
+      "fromS": 6763.7,
+      "toS": 6774.7,
+      "records": 2759,
+      "features": [
+        "993 272 bytes; 2 context packets; 13 marshal zones, every flag none at the first frame",
+        "blue flags: car 18 blue at 6763.9, none at 6774.5; car 15 blue at 6768.6 and car 19 (the player) at 6768.9, both still blue at the end",
+        "zone 8 blue at 6764.7, none at 6773.2; zone 9 blue at 6770.7, blue to the end",
+        "duration 10996 ms"
+      ]
     }
   ]
 }
