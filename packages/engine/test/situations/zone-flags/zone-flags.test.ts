@@ -72,6 +72,20 @@ describe('zone-flags: a new span on every change of the zone’s flag', () => {
     ]);
     expect(byZone(after.at(-1)!).map((s) => [detailOf(s).zone, s.id, s.kind, s.startFrame])).toEqual([[0, 0, 'noFlag', 1], [1, 3, 'green', 5]]);
   });
+  // Not yet seen (C19): synthetic, no recording lists fewer zones later in a session.
+  it('not yet seen: a zone a later packet no longer lists turns unknown with its detail unchanged; listed again, its flag opens the next span', () => {
+    const { after, closed } = run(inputs().frames(2, lists('green', 'yellow')).frame(lists('green')).frame(lists('green')).frame(lists('green', 'blue')));
+    const detail = { zone: 1, startFraction: startOf(1, 2) };
+    expect(closed.map((s) => [detailOf(s).zone, s.kind, s.start, s.end])).toEqual([[1, 'yellow', 0, 2 * FRAME_MS], [1, 'unknown', 2 * FRAME_MS, 4 * FRAME_MS]]);
+    expect(after.map((open) => byZone(open).map((s) => s.kind))).toEqual([['green', 'yellow'], ['green', 'yellow'], ['green', 'unknown'], ['green', 'unknown'], ['green', 'blue']]);
+    expect(byZone(after[2]!)[1]).toMatchObject({ detail, startFrame: 3, id: 2 });
+    // the zone stays covered: still listed zones are untouched
+    expect(byZone(after[4]!)[0]).toMatchObject({ id: 0, startFrame: 1 });
+  });
+  it('not yet seen: a zone that is unknown already and is no longer listed keeps its span', () => {
+    const { closed } = run(inputs().frame(lists('unknown')).frame(lists()));
+    expect(closed).toEqual([]);
+  });
   it('withdraws nothing: every span it closes or holds is confirmed (C18)', () => {
     const { after, closed } = run(inputs().frames(2, lists('blue')).frame(lists('unknown')).frame(lists('green')));
     expect([...closed, ...after.flat()].every((s) => s.confirmed)).toBe(true);
