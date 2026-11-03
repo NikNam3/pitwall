@@ -9,7 +9,7 @@ import { initialState, SessionRunner, type DeepReadonly, type Frame, type StepOu
 import type { Signals } from '../../src/signals/types.ts';
 import { closeSession, runMachine, situationOf } from '../../src/situations/run.ts';
 import { ScenarioBuilder } from '../builders/index.ts';
-import { initFor } from '../support/run.ts';
+import { initFor, runScenario } from '../support/run.ts';
 import { after, drive, runAll, STEP } from '../support/runner.ts';
 import type { ProbeDetail } from '../support/test-machines.ts';
 import { FRAME_MS } from '../support/transition-table.ts';
@@ -181,5 +181,25 @@ describe('SessionRunner.finish', () => {
       const closed = logged.find((s) => s.machine === span.machine && s.id === span.id && s.carId === span.carId);
       expect(closed && withoutStamp(closed), `${span.machine} #${span.id}`).toEqual({ ...span, end });
     }
+  });
+});
+
+describe('stamps of superseding facts (C25, C26)', () => {
+  it('a confirmed lap carries the stamp of the frame that confirms it', () => {
+    // frames 0-2 lap 1, frame 3 lap 2 begins (the provisional lap 1); the safety car out from frame 5; Session History
+    // confirms lap 1 on frame 8
+    const history = { carIdx: 0, numLaps: 2, lapHistoryData: [
+      { lapTimeInMs: 90_520, sector1TimeMs: 30_000, sector2TimeMs: 31_010, sector3TimeMs: 29_509, lapValidBitFlags: 0b1111 },
+      { lapValidBitFlags: 0b1111 }] };
+    const b = new ScenarioBuilder({ cars: 1 }).frames(5, (d) => {
+      const car = d.lapData.lapData[0]!;
+      if (d.index === 1) car.sector1TimeMs = 30_000;
+      if (d.index === 2) car.sector2TimeMs = 31_000;
+      if (d.index === 3) Object.assign(car, { currentLapNum: 2, lastLapTimeInMs: 90_500, sector1TimeMs: 0, sector2TimeMs: 0 });
+    });
+    b.session({ safetyCarStatus: 1 }).frames(3, () => {}).frames(1, (d) => { d.add('sessionHistory', history); });
+    const { st } = runScenario(b);
+    const laps = st.history.laps.filter((l) => l.carId === 0 && l.lapNumber === 1);
+    expect(laps.map((l) => [l.status, l.in['test-session'], l.in['test-probe']])).toEqual([['provisional', 0, 3], ['confirmed', 1, 8]]);
   });
 });
