@@ -9,7 +9,7 @@ type Held = { id: number; kind: string; start: number; startFrame: number; detai
 /** The open span per zone (by index) and how many spans the machine has opened (a span's id is that count, C26). */
 type Open = { frames: number; opened: number; zones: Held[] };
 
-const toSpan = (held: Held, zone: number): OpenSpan => ({ machine: 'zone-flags', id: held.id, kind: held.kind, start: held.start, startFrame: held.startFrame, confirmed: true, detail: { zone, startFraction: held.detail.startFraction }, ...(held.joinedAt ? { joinedAt: true as const } : {}) });
+const toSpan = (held: Held, zone: number): OpenSpan => ({ machine: 'zone-flags', id: held.id, kind: held.kind, start: held.start, startFrame: held.startFrame, zone, confirmed: true, detail: { startFraction: held.detail.startFraction }, ...(held.joinedAt ? { joinedAt: true as const } : {}) });
 
 const machine: SubMachine<Open> = {
   id: 'zone-flags',
@@ -36,7 +36,7 @@ const machine: SubMachine<Open> = {
       }
       if (before !== undefined) closed.push({ ...toSpan(before, zone), end: input.at });
       const startFraction: Ratio = before?.detail.startFraction ?? (entry as NonNullable<typeof entry>).startFraction;
-      zones.push({ id: opened++, kind, start: input.at, startFrame: input.frameNumber, detail: { zone, startFraction }, ...(frames === 1 ? { joinedAt: true as const } : {}) });
+      zones.push({ id: opened++, kind, start: input.at, startFrame: input.frameNumber, detail: { startFraction }, ...(frames === 1 ? { joinedAt: true as const } : {}) });
     }
     return { open: { frames, opened, zones }, closed };
   },

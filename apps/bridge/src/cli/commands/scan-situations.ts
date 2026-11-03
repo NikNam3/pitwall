@@ -12,16 +12,19 @@ type Counts = Map<MachineId, Map<string, number>>;
 
 const NONE = 'none';
 
-/** Adds the transitions of `spans` (closed, so complete) to `counts`: per sub-machine and car, each span follows the one before. */
+/** The scope a span is about: a car, a zone or the session. */
+const scopeKey = (span: Span): string => (span.carId !== undefined ? `car:${span.carId}` : span.zone !== undefined ? `zone:${span.zone}` : 'session');
+
+/** Adds the transitions of `spans` (closed, so complete) to `counts`: per sub-machine and scope (the session, a car by `carId`, a zone by `zone`), each span follows the one before. */
 function countTransitions(spans: Record<MachineId, readonly Span[]>, counts: Counts): void {
   for (const [machine, list] of Object.entries(spans)) {
     const byMachine = counts.get(machine) ?? new Map<string, number>();
     counts.set(machine, byMachine);
-    const last = new Map<number | undefined, string>();
+    const last = new Map<string, string>();
     for (const span of [...list].sort((a, b) => a.start - b.start || a.id - b.id)) {
-      const key = `${last.get(span.carId) ?? NONE} -> ${span.kind}`;
+      const key = `${last.get(scopeKey(span)) ?? NONE} -> ${span.kind}`;
       byMachine.set(key, (byMachine.get(key) ?? 0) + 1);
-      last.set(span.carId, span.kind);
+      last.set(scopeKey(span), span.kind);
     }
   }
 }
