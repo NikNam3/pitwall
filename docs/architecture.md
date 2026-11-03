@@ -55,10 +55,11 @@ Every clause uses these words in exactly these meanings.
 | car status | Whether a car still competes in the session: competing, retired (with cause), disqualified, absent. Shared. |
 | car activity | What a car is doing by its weekend phase's rules (race: racing lap, in lap, box stop, serving penalty, out lap, finished, cool-down; qualifying and practice: out lap, push or flying lap, in lap, garage, finished). Per phase. |
 | recorder | A step-3 module that turns values and situations into facts. |
-| fact | A recorded, immutable entry of the log: a closed span, a lap, a stint, a pit stop, a crossing, an event, a penalty record, a decision, a clock fact, a void fact. Its id is its list and its position in the log. It records the frame number it describes. |
+| fact | A recorded, immutable entry of the log: a closed span, a lap, a stint, a pit stop, a crossing, an event, a penalty record, a decision, a clock fact, a void fact. Its id is its list and its position in the current timeline (C21). It records the frame number it describes. |
 | membership | The spans a fact belongs to: those open at the frame it describes. Computed only by the projection (C26). |
 | log | Every fact recorded in a session, in order. Append-only in memory and in storage. |
 | void fact | The fact a flashback appends: per list, the range of positions that never happened. |
+| current timeline | The log without the facts a void fact covers. Hidden facts of the formation lap belong to it. |
 | projection | The log as readers see it: every hidden fact skipped. It also answers membership (C26). |
 | hidden fact | A fact the projection skips: inside a void range, or a non-span fact whose described frame lies in a formation span. |
 | flashback | The game's rewind. Everything after its target never happened. |
@@ -166,7 +167,7 @@ Every clause uses these words in exactly these meanings.
 
 ## 3. The log, the projection and time
 
-- **C21. The log is the session's record of facts.** One list per fact type and one span list per sub-machine (`spans[machineId]`). A new session starts an empty log. A fact's id is its list and its position; a fact may reference earlier facts by id (a served drive-through names its penalty and its pit visit). `[type]`
+- **C21. The log is the session's record of facts.** One list per fact type and one span list per sub-machine (`spans[machineId]`). A new session starts an empty log. A fact's id is its list and the number of facts of that list before it in the current timeline; a fact may reference earlier facts by id (a served drive-through names its penalty and its pit visit). `[type]`
 - **C22. Who appends.** Only the machine (spans, clock facts), the recorders (facts, decisions) and the runner (void facts) append to the log. `[type: only they receive a writable log]`
 - **C23. Facts only.** The log holds no judgement, no intermediate value, no output of a unit. `[type]`
 - **C24. Append-only, without exception.** A fact, once appended, is never changed, replaced, reordered or removed, in memory or in storage. Storage holds one log per session and rules version: a rebuild (C61) produces the session's log again from its recording and replaces the cached one as a whole, so nothing is lost. `[type: read-only entries; test]`
@@ -214,7 +215,7 @@ Every clause uses these words in exactly these meanings.
 
 - **C53. One file per topic** in `packages/contracts/src/topics/<name>.ts`, collected by a generated index. A topic declares its owner (a unit or `core`), its mode (`state` or `append`), `maxHz` and its params. `[gen]`
 - **C54. Two kinds.** A core topic publishes projection lists, sub-machine spans (open and closed) or parts of the live state, as they are. An analysis topic publishes one analysis's output. No topic value contains a signal. `[type]`
-- **C55. Typed bindings only:** `bindState` (a unit's output), `bindHistory` (a projection list), `bindSituation` (a sub-machine's spans), `bindInsights`, `bindJob`. A binding compiles only when the source type matches the topic's. `[type]`
+- **C55. Typed bindings only:** `bindState` (a unit's output), `bindHistory` (a projection list), `bindSituation` (a sub-machine's spans), `bindLive` (a part of the live state), `bindInsights`, `bindJob`. A binding compiles only when the source type matches the topic's. `[type]`
 - **C56. Names follow owners.** A unit's topics carry its camelCase name as a prefix (`battle-cards` owns `battleCards.*`); core topics carry none. `[gen: catalogue]`
 - **C57. Append topics follow the projection.** They append new projection entries; on `rewound` the whole topic is resent. `[test]`
 
