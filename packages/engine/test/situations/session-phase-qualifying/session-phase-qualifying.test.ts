@@ -24,7 +24,7 @@ describe('session-phase-qualifying: id, span declaration, inputs', () => {
   it('is the sub-machine session-phase-qualifying, its spans the session-scoped declaration in domain, for the qualifying phase only, after the weekend phase', () => {
     expect([machine.id, machine.spans, machine.appliesTo]).toEqual(['session-phase-qualifying', sessionPhaseQualifyingSpans, ['qualifying']]);
     expect(machine.spans.scope).toBe('session');
-    expect(machine.inputs.upstream).toEqual(['weekend-phase']);
+    expect(machine.inputs.upstream).toEqual(['weekend-phase', 'car-status']);
   });
 });
 

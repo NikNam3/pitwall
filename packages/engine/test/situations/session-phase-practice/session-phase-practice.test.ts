@@ -9,6 +9,8 @@ import type { SessionRunner } from '../../../src/index.ts';
 import machine from '../../../src/situations/session-phase-practice/machine.ts';
 import { situationOf } from '../../../src/situations/run.ts';
 import { beats, lap, run, script, SEND, STEP, type Beat } from '../script.ts';
+import { inputs, type InputEdit } from '../../support/transition-table.ts';
+import { all, carStatus, clockRuns, events, inPhase, PRACTICE, SEND as SEND_EVENT } from '../session-phase/inputs.ts';
 
 const MACHINE = 'session-phase-practice';
 const closed = (r: SessionRunner) => r.state.history.spans[MACHINE] ?? [];
@@ -22,7 +24,27 @@ describe('session-phase-practice: id, span declaration, inputs', () => {
   it('is the sub-machine session-phase-practice, its spans the session-scoped declaration in domain, for the practice phase only, after the weekend phase', () => {
     expect([machine.id, machine.spans, machine.appliesTo]).toEqual(['session-phase-practice', sessionPhasePracticeSpans, ['practice']]);
     expect(machine.spans.scope).toBe('session');
-    expect(machine.inputs.upstream).toEqual(['weekend-phase']);
+    expect(machine.inputs.upstream).toEqual(['weekend-phase', 'car-status']);
+  });
+});
+
+describe('practice: the cars in the session are car-status’s (C43)', () => {
+  /** The kinds of the spans the machine closes on a running practice's SEND frame, which also applies `last`. */
+  const closedAtSend = (last: InputEdit) => {
+    const built = inputs().frames(3, all(inPhase(PRACTICE), clockRuns)).frame(all(inPhase(PRACTICE), clockRuns, last, events(SEND_EVENT))).build();
+    const open = built.slice(0, -1).reduce((o, input) => machine.step(o, input).open, machine.init());
+    return machine.step(open, built.at(-1)!).closed.map((s) => s.kind);
+  };
+  /** Car `car` finished (its result status, a signal, and the live value). */
+  const finished = (car: number): InputEdit => (i) => {
+    i.signals.cars[car]!.resultStatus = 'finished';
+    i.live.cars[car]!.timing.resultStatus = 'finished';
+  };
+  it('time over: every car whose status is not absent finished; a slot car-status holds absent does not hold back finished', () => {
+    expect(closedAtSend(all(finished(0), carStatus(1, 'absent')))).toEqual(['running', 'finished']);
+  });
+  it('time over: a car still competing that has not finished holds back finished', () => {
+    expect(closedAtSend(finished(0))).toEqual(['running']);
   });
 });
 
