@@ -2,7 +2,7 @@
 import type { DamageParts } from './analyses/damage.ts';
 import type { ActualCompound, VisualCompound } from './compounds.ts';
 import type { Corners } from './corners.ts';
-import type { FrameNumber } from './facts.ts';
+import type { FactRef, FrameNumber } from './facts.ts';
 import type { CarId, SessionTime } from './ids.ts';
 import type { Known } from './known.ts';
 import type { Joules, Kg, Ms, Percent, Ratio } from './units.ts';
@@ -36,6 +36,8 @@ export type LapRecord = {
   /** `provisional` from LapData, `confirmed` once SessionHistory contains the lap. */
   status: 'provisional' | 'confirmed';
   completedAt: SessionTime;
+  /** On a confirmed lap: the provisional lap record it supersedes (its fact id in the log, C21, C25); absent when this session's log holds no provisional of the lap. */
+  supersedes?: FactRef;
   /**
    * Sampled at the lap start from the car state of the frame that starts the lap; `unknown('notReceived')` for a lap the
    * engine joined after its start. With the lap-end samples they give the lap's own wear and ERS change (rates per lap).
