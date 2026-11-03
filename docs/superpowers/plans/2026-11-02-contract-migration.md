@@ -255,9 +255,9 @@ Each row is one task with the same steps. Span kinds and details are committed b
 | 16 | `race-control-race`, `race-control-qualifying`, `race-control-practice` (scope session); `compound-rule` (scope car, race only) | race / qualifying / practice | DRSE DRSD, `drsAllowed` / values: visual compound, lap; upstream `session-phase-race` | race control race: `drsOff` (detail `{ reason: 'notEnabledYet' \| 'wetTrack' \| 'safetyCar' \| 'redFlag' \| 'minLapNotReached' \| 'unknown' }`), `drsOn`; qualifying and practice: `drsFree`; compound rule: `required`, `waived` (from the first race lap on intermediates or wets) | §1.4, §4 | `race-zandvoort-vsc`; brings in the tests of branch `w2/drs` |
 
 Per row:
-- [ ] **Step 0 (supervisor):** commit the span kinds and details in `packages/domain/src/situations/<machine>.ts`.
+- [ ] **Step 0 (supervisor):** commit the span kinds, details and the scope declaration (`export const spans = defineSpans({ machine, scope, kinds })`, C15) in `packages/domain/src/situations/<machine>.ts`, exported from `packages/domain/src/index.ts`.
 - [ ] **Step 1 (test agent):** the transition table, one row per declared transition and one join row per kind (Review Focus 2), with the inventory's signal orders (Review Focus 5); one segment test per listed segment asserting the span sequence the machine produces; cut the new segments listed. Run: fail.
-- [ ] **Step 2 (implementer):** `situations/<machine>/machine.ts` (and helpers in that folder), with its `scope`; every span it opens has `startFrame: input.frameNumber` (C26).
+- [ ] **Step 2 (implementer):** `situations/<machine>/machine.ts` (and helpers in that folder), with `spans` from its domain declaration (C15); every span it opens has `startFrame: input.frameNumber` (C26).
 - [ ] **Step 3:** related tests; the completeness and property tests of Task 5 now cover the machine; `pitwall scan-situations` over every recording with no undeclared transition, output in the report; supervisor `pnpm check`.
 - [ ] **Step 4:** commit `feat(engine): the <machine> sub-machine`.
 
