@@ -59,6 +59,12 @@ Status: self-check of `docs/architecture.md`, 2026-11-02. Every decision of the 
 | The rules version missed helpers, frame assembly, the runner and decoding (second plan review) | the rules version is a hash of the source of every module that can change the log; no versions by hand | glossary, C15, C61, C90 |
 | Sub-machines with two scopes (flags per car and zone; DRS and compound rule) | one scope per sub-machine: `car-flags`, `zone-flags`, `race-control-*` (DRS), `compound-rule`; zone spans are not stamped | glossary, C15, C17, C26 |
 
+## 1c. The frame-membership change (2026-11-03)
+
+| Item | Resolution | Clauses |
+|---|---|---|
+| A late fact (confirmed lap, served penalty) took the spans open when it was recorded (the run's Q1) | no stamps (user): every fact records the frame number it describes, every span the frame numbers it opened and closed on; the projection alone computes membership (`situationAt`, `membershipOf`) and hides facts described in a formation span; frame numbers, never times; replaces Q4 | glossary, C9, C10, C20, C25, C26, C27, C28, C29, C33, C39 |
+
 ## 2. Survey §7: places that decide situations outside the tracker
 
 | Place today | Forbidden or replaced by |
