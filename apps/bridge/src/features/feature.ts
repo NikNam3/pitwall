@@ -1,8 +1,26 @@
 import type { Computed, InsightEntry, TopicName, TopicValue } from '@pitwall/contracts';
 import type { CarId } from '@pitwall/domain';
-import type { Calculator, CalculatorId, ConfigKey, ConfigValue, IncrementalCalculator, Job, ProjectedList, ProjectionState, QuickCalculator } from '@pitwall/engine/readers';
+import type {
+  Calculator,
+  CalculatorId,
+  ConfigKey,
+  ConfigValue,
+  DeepReadonly,
+  IncrementalCalculator,
+  Job,
+  LiveState,
+  ProjectedList,
+  ProjectionState,
+  QuickCalculator,
+} from '@pitwall/engine/readers';
 
 declare const bindingBrand: unique symbol;
+
+/** The live state as a `bindLive` select reads it (C39's `live`): the current values only, read-only. */
+export type LiveView = DeepReadonly<LiveState>;
+
+/** A `bindLive` select: the topic value for `params` (client input), or `undefined` for no data. */
+export type LiveSelect<V> = (live: LiveView, params: object) => V | undefined;
 
 /** The runtime shapes of a binding; the publisher reads these fields. */
 type BindingShape =
@@ -13,9 +31,11 @@ type BindingShape =
   /** The active insights. */
   | { topic: TopicName; fromInsights: true }
   /** The results of the job with this id, as `Computed` values. */
-  | { topic: TopicName; fromJob: CalculatorId };
+  | { topic: TopicName; fromJob: CalculatorId }
+  /** A part of the feed's live state, read when the hub sends a value. */
+  | { topic: TopicName; fromLive: LiveSelect<unknown> };
 
-/** Where a topic's value comes from. Opaque: only `bindState`, `bindHistory`, `bindInsights` and `bindJob` make one. */
+/** Where a topic's value comes from. Opaque: only `bindState`, `bindHistory`, `bindInsights`, `bindJob` and `bindLive` make one. */
 export type TopicBinding = BindingShape & { readonly [bindingBrand]: true };
 
 // The helpers are the only place that vouches for a binding's types, hence the cast to the brand.
@@ -71,6 +91,14 @@ export const bindJob = <T extends TopicName, Out>(
   topic: Computed<Out> extends TopicValue<T> ? T : never,
   job: Job<unknown, Out>,
 ): TopicBinding => binding({ topic, fromJob: job.id });
+
+/**
+ * Binds a core topic to a part of the live state (C55), with no calculator between. The hub reads it from the feed's
+ * current live state whenever it sends a subscription a value (at most `maxHz`), never per frame. `select` copies what
+ * it returns, since the engine changes its state in place, and validates `params`, which is client input.
+ */
+export const bindLive = <T extends TopicName>(topic: T, select: LiveSelect<TopicValue<T>>): TopicBinding =>
+  binding({ topic, fromLive: select });
 
 /** A folder under `features/` with a `register.ts` whose default export is a feature. */
 export type Feature = {

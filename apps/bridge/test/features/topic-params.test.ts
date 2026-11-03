@@ -1,17 +1,18 @@
 // Supervisor ruling: each feature validates its subscribe params in `select`; bad params give `undefined` and never throw.
 import { describe, expect, it } from 'vitest';
-import type { QuickCalculator } from '@pitwall/engine';
-import type { Feature, TopicBinding } from '../../src/features/feature.ts';
+import type { EngineView } from '@pitwall/engine';
+import type { Feature } from '../../src/features/feature.ts';
 import carDetail from '../../src/features/car-detail/register.ts';
 import carTelemetry from '../../src/features/car-telemetry/register.ts';
 import { ScenarioBuilder } from '../../../../packages/engine/test/builders/index.ts';
 import { viewFrom } from '../helpers/view.ts';
 
 const view = viewFrom(new ScenarioBuilder({ cars: 3, player: 2 }).session().participants().frames(3, () => {}).build());
+/** What a `bindLive` binding holds: the select the hub runs on the feed's live state at flush (C55). */
+type LiveBinding = { topic: string; fromLive: (live: EngineView['state'], params: object) => unknown };
 const select = (f: Feature, topic: string, params: unknown): unknown => {
-  const b = f.topics.find((t) => t.topic === topic) as Extract<TopicBinding, { from: string }>;
-  const calc = f.calculators.find((c) => c.id === b.from) as QuickCalculator<unknown>;
-  return b.select?.(calc.compute(view), params as object);
+  const b = f.topics.find((t) => t.topic === topic) as unknown as LiveBinding;
+  return b.fromLive(view.state, params as object);
 };
 
 const cases = [
