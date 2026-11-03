@@ -14,6 +14,8 @@
 //  - the car care pieces of the kit section (plan Task 6): `kit/bar` shows a known bar, a bar with limit, marker and
 //    reserve, and an unknown one (its `.bar` has a title); `kit/compound-mark` shows soft, medium and hard with an age;
 //    `kit/corner-grid` shows four `[data-corner]` cells; `kit/insight-line` an unacknowledged and an acknowledged line;
+//  - optional prop `widgets?: readonly string[]` limits the widget sections drawn (default: every widget); the frame and
+//    kit sections are drawn regardless. The test mounts only `feed-status`, so it runs under vitest's default 5 s;
 //  - a ResizeObserver exists (stubbed below to 600 x 400 px); ids are unique.
 import { mount, unmount } from 'svelte';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -23,10 +25,6 @@ import { THEMES } from '../../src/theme/index.ts';
 import gallery from '../../src/widgets/feed-status/gallery.ts';
 import { widget } from '../../src/widgets/feed-status/widget.ts';
 import { untilReady } from './render-ready.ts';
-
-// The first test renders the whole gallery (every widget, case and size) and waits until every cell is ready: seconds,
-// more under load.
-vi.setConfig({ testTimeout: 30_000 });
 
 beforeEach(() => {
   vi.stubGlobal(
@@ -78,7 +76,7 @@ let shown: { container: HTMLElement; app: ReturnType<typeof mount>; ready: Promi
 async function shownGallery(): Promise<HTMLElement> {
   if (shown === undefined) {
     const container = document.body.appendChild(document.createElement('div'));
-    shown = { container, app: mount(Gallery, { target: container, props: { moments } }), ready: untilReady(container) };
+    shown = { container, app: mount(Gallery, { target: container, props: { moments, widgets: ['feed-status'] } }), ready: untilReady(container) };
   }
   await shown.ready;
   return shown.container;
@@ -95,6 +93,16 @@ describe('Gallery', () => {
     const ids = [...container.querySelectorAll('[data-gallery-id^="feed-status/"]')].map((e) => e.getAttribute('data-gallery-id')!);
     expect(expectedIds().length).toBe(5 * 6 * THEMES.length);
     expect([...ids].sort()).toEqual([...expectedIds()].sort());
+  });
+
+  it('with `widgets`, only the listed widgets\' sections are drawn', async () => {
+    const container = await shownGallery();
+    const ids = [...container.querySelectorAll('[data-gallery-id]')].map((e) => e.getAttribute('data-gallery-id')!);
+    const owners = new Set(ids.map((id) => id.split('/')[0]!));
+    for (const owner of owners) expect(['feed-status', 'frame', 'kit', 'shell']).toContain(owner);
+    expect(owners.has('feed-status')).toBe(true);
+    const headings = [...container.querySelectorAll('section > h2')].map((h) => h.textContent?.trim());
+    expect(headings).toContain('feed-status');
   });
 
   it('puts a real Panel in each widget cell', async () => {
