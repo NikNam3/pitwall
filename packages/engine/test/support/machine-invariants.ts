@@ -1,11 +1,11 @@
 // The invariants every sub-machine keeps (contract C15, C18, C26, C85), as problem lists: empty when they hold. A frame
-// gives no undeclared transition (a scope left without its open span is the transition `kind -> none`, undeclared
-// unless the machine declares it, as the clock does) and at most one open span per scope; a span changes neither kind
-// nor start (nor the frame it opened on) while open. A complete span list (after `closeSession`) is contiguous per scope,
-// in time and in frames (a span's successor opens on the frame it closed on, C26); a machine that declares a transition
-// to `none` may leave a scope without a span between two, so there a successor opens at or after its predecessor's end,
-// never before it. A span may open and close on the same frame (FM-1). Span ids count the spans opened before them (per
-// car for a car sub-machine).
+// gives no undeclared transition (a scope left without its open span is the transition `kind -> none`, undeclared like
+// any other) and at most one open span per scope; a span changes neither kind nor start (nor the frame it opened on)
+// while open. A complete span list (after `closeSession`) is contiguous per scope, for every sub-machine without
+// exception (user ruling 2026-11-03: a sub-machine with a rest state has a resting kind), in time and in frames (a
+// span's successor opens where and on the frame its predecessor closed, C26). A span may open and close on the same
+// frame (FM-1); only one that closes before it opens is a problem. Span ids count the spans opened before them (per car
+// for a car sub-machine).
 import type { OpenSpan, Span } from '@pitwall/domain';
 import type { DeepReadonly } from '../../src/util/deep-readonly.ts';
 import { scopeKey, transitionsOf, type ClosedSpan, type Steppable } from './transition-table.ts';
@@ -30,11 +30,9 @@ export const frameProblems = (machine: Steppable, before: readonly Open[], after
   return problems;
 };
 
-/** What is wrong with a machine's complete span list (log order): gaps, reversed spans, ids that do not count. */
+/** What is wrong with a machine's complete span list (log order): gaps or overlaps, reversed spans, ids that do not count. */
 export const spanListProblems = (machine: Steppable, spans: readonly DeepReadonly<Span>[]): string[] => {
   const { id, spans: { scope } } = machine;
-  /** The machine may leave a scope without a span (it declares `kind -> none`): a successor opens at or after the end. */
-  const gaps = machine.transitions.some(([, to]) => to === 'none');
   const problems: string[] = [];
   const byScope = new Map<string, DeepReadonly<Span>[]>();
   const idsByCounter = new Map<string, number[]>();
@@ -50,11 +48,9 @@ export const spanListProblems = (machine: Steppable, spans: readonly DeepReadonl
   for (const [key, list] of byScope) {
     list.slice(1).forEach((span, i) => {
       const prev = list[i]!;
-      if (gaps ? span.start < prev.end : span.start !== prev.end) {
-        problems.push(`${id}: ${gaps ? 'overlap' : 'gap'} in ${key} between #${prev.id} (end ${prev.end}) and #${span.id} (start ${span.start})`);
-      }
-      if (gaps ? span.startFrame < prev.endFrame : span.startFrame !== prev.endFrame) {
-        problems.push(`${id}: frame ${gaps ? 'overlap' : 'gap'} in ${key} between #${prev.id} (end frame ${prev.endFrame}) and #${span.id} (start frame ${span.startFrame})`);
+      if (span.start !== prev.end) problems.push(`${id}: gap in ${key} between #${prev.id} (end ${prev.end}) and #${span.id} (start ${span.start})`);
+      if (span.startFrame !== prev.endFrame) {
+        problems.push(`${id}: frame gap in ${key} between #${prev.id} (end frame ${prev.endFrame}) and #${span.id} (start frame ${span.startFrame})`);
       }
       if (span.id <= prev.id) problems.push(`${id}: ids fall in ${key}: #${prev.id} then #${span.id}`);
     });

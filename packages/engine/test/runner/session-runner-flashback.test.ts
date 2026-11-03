@@ -2,7 +2,7 @@
 // bookkeeping it restores, and what a rewind keeps. Every frame of the scenarios here carries a race event, so a frame
 // replayed twice or lost in a replay shows in the history.
 import { describe, expect, it } from 'vitest';
-import { feedId, toSessionTime, type Insight } from '@pitwall/domain';
+import { currentLaps, feedId, toSessionTime, type Insight, type LapRecord } from '@pitwall/domain';
 import type { EventDetails } from '@pitwall/protocol';
 import {
   activeFlagPhaseOf,
@@ -10,6 +10,7 @@ import {
   Scheduler,
   SessionRunner,
   situationOf,
+  type DeepReadonly,
   type Frame,
   type InsightChange,
   type QuickCalculator,
@@ -19,7 +20,7 @@ import {
 import { buildPacket, ScenarioBuilder } from '../builders/index.ts';
 import { IDLE_FEED } from '../helpers/incremental.ts';
 import { initFor } from '../support/run.ts';
-import { after, applyOne, factLengths, factLists, flashbacks, flbk, runAll, shown, STEP, timeline as plainTimeline } from '../support/runner.ts';
+import { after, applyOne, drive, factLengths, factLists, flashbacks, flbk, runAll, shown, STEP, timeline as plainTimeline } from '../support/runner.ts';
 
 const overtake: EventDetails = { code: 'OVTK', overtakingVehicleIdx: 0, beingOvertakenVehicleIdx: 1 };
 /** The shared timeline with an overtake in every frame, before the events `extra` names for its index. */
@@ -366,5 +367,78 @@ describe('SessionRunner: what a rewind keeps', () => {
     const r = new SessionRunner(initFor(frames));
     runAll(r, frames);
     expect(r.retained.frames).toBe(5000 - (4919 - 1200));                              // the window is 1200 frames, it starts at snapshot 3719
+  });
+});
+
+// C21, C25, C33 (Task M1-R): a fact's id counts the facts of its list before it in the current timeline (the log without
+// the voided facts), so a confirmed lap names its provisional by the id a run without the rewind gives it, though the
+// log keeps the voided provisional before it.
+describe('SessionRunner: a confirmed lap names its provisional across a flashback (C21, C25)', () => {
+  /** Car 0's laps begin at `lapStarts`; Session History confirms laps 1 and 2 at frame 300; an FLBK to frame 200 in frame 201 when `flashback`. */
+  const laps = (frames: number, lapStarts: number[], flashback: boolean) => {
+    const b = new ScenarioBuilder({ cars: 2, stepMs: STEP }).session({ trackLength: 4000 });
+    for (let i = 0; i < frames; i++) {
+      if (flashback && i === 201) b.event(flbk(200));
+      b.frame((d) => {
+        drive(lapStarts)(d);
+        if (i === 300) {
+          d.add('sessionHistory', { carIdx: 0, numLaps: 3, lapHistoryData: [
+            { lapTimeInMs: 100 * STEP, lapValidBitFlags: 0b1111 }, { lapTimeInMs: 140 * STEP, lapValidBitFlags: 0b1111 }, { lapValidBitFlags: 0b1111 }] });
+        }
+      });
+    }
+    return b.build();
+  };
+  // original: frames 0..259, laps begin at 100 and 230 (lap 2's provisional at 230, after the snapshot of frame 189);
+  // the game goes back to frame 200 and lap 2 now ends at 240; a run without the rewind has only the fork's frames
+  const original = () => laps(260, [100, 230], false);
+  const continuation = () => after(laps(320, [100, 240], true), 201, 260);
+  const rewound = () => {
+    const runner = new SessionRunner(initFor(original()));
+    runAll(runner, [...original(), ...continuation()]);
+    return runner;
+  };
+  const straight = () => {
+    const frames = laps(320, [100, 240], false);
+    const runner = new SessionRunner(initFor(frames));
+    runAll(runner, frames);
+    return runner;
+  };
+  const summary = (l: DeepReadonly<LapRecord>) => [l.lapNumber, l.status, l.supersedes];
+
+  it('the log keeps the voided provisional; the replayed provisional and its confirmation carry the ids of a run without the rewind', () => {
+    const { state } = rewound();
+    expect(state.log.voids.at(-1)!.ranges.laps).toEqual([1, 2]);
+    expect(state.log.laps.map(summary)).toEqual([
+      [1, 'provisional', undefined],
+      [2, 'provisional', undefined],
+      [2, 'provisional', undefined],
+      [1, 'confirmed', { list: 'laps', index: 0 }],
+      [2, 'confirmed', { list: 'laps', index: 1 }],
+    ]);
+    expect(straight().state.log.laps.map(summary)).toEqual([
+      [1, 'provisional', undefined],
+      [2, 'provisional', undefined],
+      [1, 'confirmed', { list: 'laps', index: 0 }],
+      [2, 'confirmed', { list: 'laps', index: 1 }],
+    ]);
+  });
+  it('a fact recorded after a void gets the id counted without the voided facts: the confirmed lap 2 names id 1, its provisional at log position 2', () => {
+    const { state } = rewound();
+    const confirmed = state.log.laps.find((l) => l.lapNumber === 2 && l.status === 'confirmed')!;
+    expect(confirmed.supersedes).toEqual({ list: 'laps', index: 1 });
+    expect(state.log.laps[2]).toMatchObject({ lapNumber: 2, status: 'provisional', frame: confirmed.frame });
+    expect(state.history.laps[1]).toBe(state.log.laps[2]);
+  });
+  it('the projection’s laps, their references included, equal a run without the rewind (C33)', () => {
+    expect(rewound().state.history.laps).toEqual(straight().state.history.laps);
+  });
+  it('currentLaps keeps exactly the laps no supersedes names (no formation here: a projection lap’s index is its id)', () => {
+    for (const { state } of [rewound(), straight()]) {
+      const history = state.history.laps as LapRecord[];
+      const named = new Set(history.flatMap((l) => (l.supersedes ? [l.supersedes.index] : [])));
+      expect([...named]).toEqual([0, 1]);
+      expect(currentLaps(history)).toEqual(history.filter((_, id) => !named.has(id)));
+    }
   });
 });

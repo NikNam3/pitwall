@@ -251,7 +251,8 @@ describe('membership of superseding facts (C25, C26)', () => {
     const source = { history: st.history, situation: situationOf(st) };
     const member = (fact: (typeof laps)[number]) =>
       Object.fromEntries(Object.entries(membershipOf(source, fact)).map(([machine, span]) => [machine, [span.kind, span.id]]));
-    expect(member(laps[1]!)).toEqual({ 'test-session': ['green', 0], 'test-probe': ['seen', 3], 'test-car': ['track', 0] });
+    // the clock's spans tile the session (C85): its `running` span from the first frame covers the crossing too
+    expect(member(laps[1]!)).toEqual({ clock: ['running', 0], 'test-session': ['green', 0], 'test-probe': ['seen', 3], 'test-car': ['track', 0] });
     expect(member(laps[1]!)).toEqual(member(laps[0]!));
   });
 });

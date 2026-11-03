@@ -21,6 +21,11 @@ describe('laps that LapData did not record', () => {
     expect(st.history.laps.map((l) => [l.lapNumber, l.status, l.lapTimeMs])).toEqual([[1, 'provisional', 90_000], [1, 'confirmed', 90_000], [2, 'confirmed', 91_000]]);
     expect(st.history.laps[2]).toMatchObject({ sectorTimesMs: [30_100, 31_200, 29_700], valid: { lap: true, sectors: [true, true, true] } });
   });
+  it('a lap confirmed from the open lap (no provisional in the log) names no lap it supersedes; the one with a provisional names it (C25)', () => {
+    const { st } = runScenario(finalLap());
+    expect(st.history.laps.map((l) => [l.lapNumber, l.status, l.supersedes])).toEqual([[1, 'provisional', undefined], [1, 'confirmed', { list: 'laps', index: 0 }], [2, 'confirmed', undefined]]);
+    expect(st.history.laps[2]).not.toHaveProperty('supersedes');
+  });
   it('ends the last stint on the final lap', () => {
     expect(runScenario(finalLap()).st.history.stints).toMatchObject([{ firstLap: 1, lastLap: 2 }]);
   });
@@ -32,6 +37,15 @@ describe('laps that LapData did not record', () => {
     const confirmed = st.history.laps.filter((l) => l.status === 'confirmed');
     expect(confirmed.map((l) => [l.lapNumber, l.lapTimeMs])).toEqual([[1, 81_000], [2, 80_000]]);
     expect(confirmed[0]).toMatchObject({ fuelAtStartKg: unknown('notReceived'), actualCompound: 'unknown', positionAtEnd: 0 });
+  });
+  it('a lap swallowed by a lap-number jump, confirmed from history only, names no lap it supersedes; the lap after it names its provisional', () => {
+    const { st } = runScenario(new ScenarioBuilder({ cars: 1 }).frames(3, (d) => {
+      Object.assign(car0(d), { currentLapNum: d.index === 0 ? 1 : 3, lastLapTimeInMs: 80_000 });
+      if (d.index === 2) d.add('sessionHistory', { carIdx: 0, numLaps: 3, lapHistoryData: [entry(81_000, 27_000, 27_000, 27_000), entry(80_000, 26_000, 27_000, 27_000)] });
+    }));
+    // lap 2's provisional (the jump from lap 1 to 3 completes it) is the list's first lap; lap 1 has none
+    expect(st.history.laps.map((l) => [l.lapNumber, l.status, l.supersedes])).toEqual([[2, 'provisional', undefined], [1, 'confirmed', undefined], [2, 'confirmed', { list: 'laps', index: 0 }]]);
+    expect(st.history.laps[1]).not.toHaveProperty('supersedes');
   });
   it('reports no sector corrections when the provisional sectors were missing', () => {
     const { results } = runScenario(new ScenarioBuilder({ cars: 1 }).frames(3, (d) => {

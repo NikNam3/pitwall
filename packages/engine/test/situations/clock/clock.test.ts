@@ -5,9 +5,10 @@
 // flashback (the runner decides what is one, and a replay keeps its decision) and appends no clock fact, a flashback
 // after a fall restores the state by frame id, the frames a rewind times at its target keep that time on every replay,
 // garage acceleration is no jump, any other forward jump of more than 60 s is a `jump` fact, the post-session jump
-// appends `simulatedEnd` (once: falls and jumps after it are read as before it), a pause is the clock's `paused` span
-// (open in the situation while it lasts, closed into `spans:clock`), and the frames that append to `clock` or
-// `spans:clock` carry those change tags (C40). The two online start shapes follow raceZandvoortOnline (S3) and raceZandvoortUidReuse (S4).
+// appends `simulatedEnd` (once: falls and jumps after it are read as before it), the clock's spans tile the session
+// (C85): `running` from the session's first frame, a pause its `paused` span (open in the situation while it lasts,
+// closed into `spans:clock`), `running` again after it, and the frames that append to `clock` or change or close a
+// `spans:clock` span carry those change tags (C40). The two online start shapes follow raceZandvoortOnline (S3) and raceZandvoortUidReuse (S4).
 import { describe, expect, it } from 'vitest';
 import type { EventDetails } from '@pitwall/protocol';
 import { CHANGE_TAGS, SessionRunner, situationOf, type Frame, type StepResult } from '../../../src/index.ts';
@@ -24,10 +25,16 @@ const lightsAt = (k: number, first: number, every: number): EventDetails[] =>
 const lightsOut = (r: SessionRunner) => r.state.history.events.filter((e) => e.kind === 'lightsOut');
 /** Index of race frame k of `gridStart` among the frames. */
 const raceFrame = (k: number) => LIGHTS_OUT + 1 + k;
-/** The pauses readers see: the clock's closed `paused` spans (`spans:clock`, C7). */
-const pauses = (r: SessionRunner) => r.state.history.spans['clock'] ?? [];
-/** The clock's open spans (C20): a pause in progress. */
-const openPause = (r: SessionRunner) => machineSituationOf(r.state).byMachine['clock'] ?? [];
+/** The clock's closed spans readers see (`spans:clock`, C7, C20). */
+const clockSpans = (r: SessionRunner) => r.state.history.spans['clock'] ?? [];
+/** The pauses readers see: the clock's closed `paused` spans. */
+const pauses = (r: SessionRunner) => clockSpans(r).filter((s) => s.kind === 'paused');
+/** The clock's open span (C20): `running`, or a pause in progress. */
+const openClock = (r: SessionRunner) => machineSituationOf(r.state).byMachine['clock'] ?? [];
+/** The clock's open span when it is a pause in progress. */
+const openPause = (r: SessionRunner) => openClock(r).filter((s) => s.kind === 'paused');
+/** A span list as kind, id and the frame numbers it opened and closed on (C26). */
+const tiles = (spans: readonly { kind: string; id: number; startFrame: number; endFrame?: number }[]) => spans.map((s) => [s.kind, s.id, s.startFrame, s.endFrame]);
 /** The steps that appended a clock fact readers see (`clock`), by frame index. */
 const clockSteps = (results: StepResult[]) => results.flatMap((r, i) => ((r.delta.after.clock ?? 0) > (r.delta.before.clock ?? 0) ? [i] : []));
 /** The steps that rewound (`delta.rewound` set), by frame index. */
@@ -43,9 +50,9 @@ const raceClockOf = (frames: Frame[]) => {
 const fallsIn = (times: readonly number[]) => times.filter((t, i) => i > 0 && t < times[i - 1]!);
 
 describe('step 0, the clock', () => {
-  it('is no member of the step-2 registry: step 0, id clock, scope session', () => {
+  it('is no member of the step-2 registry: step 0, id clock, scope session, the kinds running and paused', () => {
     expect([STEP0_CLOCK.id, STEP0_CLOCK.spans.scope]).toEqual(['clock', 'session']);
-    expect(STEP0_CLOCK.spans).toEqual({ machine: 'clock', scope: 'session', kinds: ['paused'] });
+    expect(STEP0_CLOCK.spans).toEqual({ machine: 'clock', scope: 'session', kinds: ['running', 'paused'] });
     expect(MACHINE_ORDER.map((m) => m.id)).not.toContain('clock');
   });
 });
@@ -649,7 +656,7 @@ describe('a flashback report on the session’s first frame', () => {
   });
   it('a minute of wall time before the first frame is no pause; the 3 s gap later is one paused span, measured from the frame before it', () => {
     const { runner } = runJoined(true);
-    expect(pauses(runner)).toMatchObject([{ machine: 'clock', id: 0, kind: 'paused', start: (PAUSED_AT - 1) * STEP, detail: { source: 'offline', wallMs: 3_000 + STEP } }]);
+    expect(pauses(runner)).toMatchObject([{ machine: 'clock', id: 1, kind: 'paused', start: (PAUSED_AT - 1) * STEP, detail: { source: 'offline', wallMs: 3_000 + STEP } }]);
   });
   it('the frames after it read the jump rules from it: the fall is a fact of its step, and every step and the final state equal a session without the FLBK', () => {
     const withFlbk = runJoined(true);
@@ -696,7 +703,8 @@ describe('after the simulated end', () => {
 
 // C40: one change tag per fact list and one per sub-machine (Task 7 review F2, rulings): `clock` on a frame that appends
 // a clock fact; `spans:clock` by the rule of every step-2 sub-machine, on a frame where the clock's open spans change or
-// a paused span closes. Practice sessions, so no legacy rewind tags every list.
+// a span closes: the first frame (it opens `running`), and the frames a pause opens, grows (its wall time so far) and
+// closes; an open `running` span does not change. Practice sessions, so no legacy rewind tags every list.
 describe('the clock’s change tags', () => {
   /** The frames whose step result carries `tag`, by frame index. */
   const tagged = (results: StepResult[], tag: string) => results.flatMap((r, i) => ((r.changed as ReadonlySet<string>).has(tag) ? [i] : []));
@@ -713,21 +721,26 @@ describe('the clock’s change tags', () => {
     const { results } = practice(make);
     expect([rewoundSteps(results), clockSteps(results), tagged(results, 'clock')]).toEqual([[], [100], [100]]);
   });
-  it('an online pause tags spans:clock on every frame its open span changes (it opens, its wall time so far grows) and on the frame it closes, and on no other', () => {
+  it('a session without a pause tags spans:clock on its first frame, which opens running, and on no other', () => {
+    const { results } = practice(() => ({}));
+    expect([rewoundSteps(results), tagged(results, 'spans:clock'), tagged(results, 'clock')]).toEqual([[], [0], []]);
+  });
+  it('an online pause tags spans:clock on the first frame, on every frame the pause’s open span changes (running closes and it opens, its wall time so far grows) and on the frame it closes and running opens, and on no other', () => {
     const { results } = practice((k) => (k === 50 ? { session: { gamePaused: 1 } } : k === 100 ? { session: { gamePaused: 0 } } : {}), { networkGame: 1 });
     const whilePaused = Array.from({ length: 51 }, (_, i) => 50 + i);
-    expect([rewoundSteps(results), tagged(results, 'spans:clock'), tagged(results, 'clock')]).toEqual([[], whilePaused, []]);
+    expect([rewoundSteps(results), tagged(results, 'spans:clock'), tagged(results, 'clock')]).toEqual([[], [0, ...whilePaused], []]);
   });
-  it('an offline pause tags spans:clock on the frame after the gap, which opens and closes it, and on no other', () => {
+  it('an offline pause tags spans:clock on the first frame and on the frame after the gap (running closes, the pause opens and closes, running opens), and on no other', () => {
     const { runner, results } = practice((k) => (k === 50 ? { wall: 49 * STEP + 3_000 } : {}));
     expect(pauses(runner)).toHaveLength(1);
-    expect([rewoundSteps(results), tagged(results, 'spans:clock'), tagged(results, 'clock')]).toEqual([[], [50], []]);
+    expect([rewoundSteps(results), tagged(results, 'spans:clock'), tagged(results, 'clock')]).toEqual([[], [0, 50], []]);
   });
 });
 
-// Pauses (spec 3.1, C7, C20; ported from session-phase.test.ts): the clock's one span kind, `paused`. Offline: no
-// frame for over 2 s of wall time beyond what the session time advanced opens and closes one paused span. Online: the
-// Session packet's `gamePaused` 1 opens one that stays open in the situation until `gamePaused` 0 closes it.
+// Pauses (spec 3.1, C7, C20; ported from session-phase.test.ts): the clock's span kind `paused`, between two `running`
+// spans (C85: the clock's spans tile the session). Offline: no frame for over 2 s of wall time beyond what the session
+// time advanced opens and closes one paused span on the frame after the gap. Online: the Session packet's `gamePaused`
+// 1 opens one that stays open in the situation until `gamePaused` 0 closes it.
 describe('pauses', () => {
   /** A race whose race frame 50 arrives `gapMs` of wall time after the one before (no packets in between). */
   const gap = (gapMs: number) => run(script(gridStart(100, (k) => (k === 50 ? { wall: raceFrame(50) * STEP + gapMs } : {}))));
@@ -738,26 +751,54 @@ describe('pauses', () => {
   it('offline: no packets for more than 2 s opens and closes one paused span; it changes no phase', () => {
     const { runner } = gap(3_000);
     const [pause] = pauses(runner);
-    expect(pauses(runner)).toMatchObject([{ machine: 'clock', id: 0, kind: 'paused', start: raceAt(49), detail: { source: 'offline' } }]);
+    expect(pauses(runner)).toMatchObject([{ machine: 'clock', id: 1, kind: 'paused', start: raceAt(49), detail: { source: 'offline' } }]);
     expect((pause!.detail as { wallMs: number }).wallMs).toBeGreaterThanOrEqual(3_000);
     expect((pause!.detail as { wallMs: number }).wallMs).toBeLessThanOrEqual(3_000 + STEP);
     expect(pause!.end).toBeGreaterThanOrEqual(pause!.start);
     expect(openPause(runner)).toEqual([]);
     expect(runner.state.open.situations.session).toEqual({ kind: 'racing', start: 0, startLeaderLap: 1 });
   });
+  it('offline: running closes where the pause starts (the frame before the gap’s time) on the frame after the gap; the pause opens and closes on that frame; running opens there at its time (C26)', () => {
+    const { runner } = gap(3_000);
+    const at = raceFrame(50) + 1;
+    expect(tiles(clockSpans(runner))).toEqual([['running', 0, 1, at], ['paused', 1, at, at]]);
+    expect(clockSpans(runner).map((s) => [s.start, s.end])).toEqual([[0, raceAt(49)], [raceAt(49), raceAt(50)]]);
+    expect(openClock(runner)).toMatchObject([{ machine: 'clock', id: 2, kind: 'running', start: raceAt(50), startFrame: at, detail: undefined }]);
+    expect(openClock(runner)[0]).not.toHaveProperty('joinedAt');
+  });
   it('offline: a gap of 2 s or less is no pause', () => {
     expect(pauses(gap(2_000 - STEP).runner)).toEqual([]);
   });
-  it('online: gamePaused 1 opens a paused span, open in the situation (byMachine.clock) while the pause lasts', () => {
+  it('before a pause the open clock span is running, from the session’s first frame (joined, C26), and the view reads no pause', () => {
+    const { runner } = online(40);
+    expect(openClock(runner)).toEqual([{ machine: 'clock', id: 0, kind: 'running', start: 0, confirmed: true, joinedAt: true, detail: undefined, startFrame: 1 }]);
+    expect([situationOf(runner.state).paused, clockInput(runner.state).paused, clockSpans(runner)]).toEqual([false, false, []]);
+  });
+  it('online: gamePaused 1 closes running and opens a paused span, open in the situation (byMachine.clock) while the pause lasts', () => {
     const { runner } = online(80);
-    expect(openPause(runner)).toMatchObject([{ machine: 'clock', id: 0, kind: 'paused', start: raceAt(50), detail: { source: 'online' } }]);
+    expect(openClock(runner)).toMatchObject([{ machine: 'clock', id: 1, kind: 'paused', start: raceAt(50), detail: { source: 'online' } }]);
+    expect(clockSpans(runner)).toMatchObject([{ machine: 'clock', id: 0, kind: 'running', start: 0, end: raceAt(50), joinedAt: true, detail: undefined }]);
     expect([situationOf(runner.state).paused, clockInput(runner.state).paused, pauses(runner)]).toEqual([true, true, []]);
   });
-  it('online: gamePaused 0 closes the span into spans:clock with the pause’s wall time; it changes no phase', () => {
+  it('online: gamePaused 0 closes the span into spans:clock with the pause’s wall time and opens running; it changes no phase', () => {
     const { runner } = online(150);
-    expect(pauses(runner)).toMatchObject([{ machine: 'clock', id: 0, kind: 'paused', start: raceAt(50), end: raceAt(100), detail: { source: 'online', wallMs: 50 * STEP } }]);
+    expect(pauses(runner)).toMatchObject([{ machine: 'clock', id: 1, kind: 'paused', start: raceAt(50), end: raceAt(100), detail: { source: 'online', wallMs: 50 * STEP } }]);
+    expect(openClock(runner)).toMatchObject([{ machine: 'clock', id: 2, kind: 'running', start: raceAt(100), detail: undefined }]);
     expect([openPause(runner), situationOf(runner.state).paused, clockInput(runner.state).paused]).toEqual([[], false, false]);
     expect(runner.state.open.situations.session).toEqual({ kind: 'racing', start: 0, startLeaderLap: 1 });
+  });
+  it('online: the clock’s spans tile the session: running, paused, running, each opening on the frame its predecessor closed on (C26, C85)', () => {
+    const { runner } = online(150);
+    expect([...tiles(clockSpans(runner)), ...tiles(openClock(runner))]).toEqual([
+      ['running', 0, 1, raceFrame(50) + 1],
+      ['paused', 1, raceFrame(50) + 1, raceFrame(100) + 1],
+      ['running', 2, raceFrame(100) + 1, undefined],
+    ]);
+  });
+  it('online: a session whose first frame is already paused opens paused at once (joined), and running when the game resumes', () => {
+    const { runner } = run(script(beats(60, (k) => (k === 0 ? { session: { sessionType: 1, gamePaused: 1, networkGame: 1 } } : k === 30 ? { session: { gamePaused: 0 } } : {})), { session: { sessionType: 1, networkGame: 1 } }));
+    expect(pauses(runner)).toMatchObject([{ machine: 'clock', id: 0, kind: 'paused', start: 0, end: 30 * STEP, joinedAt: true, detail: { source: 'online' }, startFrame: 1, endFrame: 31 }]);
+    expect(openClock(runner)).toMatchObject([{ machine: 'clock', id: 1, kind: 'running', start: 30 * STEP, startFrame: 31 }]);
   });
   it('no other pause record exists: the log and the projection have no pauses list', () => {
     const { runner } = online(150);
@@ -771,13 +812,20 @@ describe('pauses', () => {
   it('the session’s end closes the clock’s open paused span after the last applied frame', () => {
     const { runner } = online(80);
     runner.finish();
-    expect(runner.state.log.spans['clock']?.map((p) => [p.startFrame, p.endFrame])).toEqual([[raceFrame(50) + 1, runner.state.frameNumber + 1]]);
+    expect(tiles(runner.state.log.spans['clock'] ?? [])).toEqual([['running', 0, 1, raceFrame(50) + 1], ['paused', 1, raceFrame(50) + 1, runner.state.frameNumber + 1]]);
   });
   it('the session’s end (closeSession) closes the clock’s open paused span at the last frame’s time', () => {
     const { runner } = online(80);
     const end = runner.state.sessionTime;
     runner.finish();
-    expect(runner.state.log.spans['clock']).toMatchObject([{ machine: 'clock', id: 0, kind: 'paused', start: raceAt(50), end, detail: { source: 'online' } }]);
-    expect(openPause(runner)).toEqual([]);
+    expect(runner.state.log.spans['clock']?.[1]).toMatchObject({ machine: 'clock', id: 1, kind: 'paused', start: raceAt(50), end, detail: { source: 'online' } });
+    expect(openClock(runner)).toEqual([]);
+  });
+  it('the session’s end (closeSession) closes the clock’s open running span at the last frame’s time, after the last applied frame', () => {
+    const { runner } = online(150);
+    const end = runner.state.sessionTime;
+    runner.finish();
+    expect(runner.state.log.spans['clock']?.[2]).toMatchObject({ machine: 'clock', id: 2, kind: 'running', start: raceAt(100), end, endFrame: runner.state.frameNumber + 1 });
+    expect(openClock(runner)).toEqual([]);
   });
 });

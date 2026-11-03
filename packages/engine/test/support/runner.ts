@@ -29,7 +29,8 @@ export const flashbacks = (results: StepResult[]) => results.filter((r) => r.fla
  * bookkeeping, the situation tracker's noted lengths). A flashback appends a void fact and keeps the
  * undone facts (C27), so after one the log, and positions in it, differ from a run that never had the undone frames;
  * everything readers see (the projection, the live state) equals it. The recorders' own state (`open.recorders`) holds
- * no log position (a recorder reads no log, C10), so it is shown whole. The last frame's FLBK signal is left out: a run
+ * no log position (a recorder reads no log, C10); the fact ids it keeps (a provisional lap's, C25) count the current
+ * timeline (C21), so they equal a run without the rewind's, and it is shown whole. The last frame's FLBK signal is left out: a run
  * that never had the undone frames never had the flashback either.
  */
 export const shown = (state: DeepReadonly<EngineState>) => {

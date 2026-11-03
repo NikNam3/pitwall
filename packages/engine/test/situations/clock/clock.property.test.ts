@@ -2,9 +2,10 @@
 // gets its own property on the invariants every sub-machine keeps (`test/support/machine-invariants.ts`). Random clock
 // sequences (session time steps with falls and forward jumps up to the simulated end and beyond, receive-time gaps over
 // and under 2 s, `gamePaused` toggles, online and offline, flashback reports) never give an undeclared transition, a
-// throw or two open paused spans; the complete span list (the pause still open closed after the last frame, as
-// `closeSession` does) is contiguous per C26 (a pause may open and close on one frame) and its ids count; and the race
-// clock never falls but on a frame the runner reported as a flashback.
+// throw or two open spans; the complete span list (the span still open closed after the last frame, as `closeSession`
+// does) tiles the session: contiguous in time and in frames per C26 (a pause may open and close on one frame), with no
+// gap (C85, user ruling 2026-11-03), and its ids count; and the race clock never falls but on a frame the runner
+// reported as a flashback.
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import type { Span } from '@pitwall/domain';
@@ -99,7 +100,7 @@ const problemsOf = (session: Session): string[] => {
 };
 
 describe('the clock (C85)', () => {
-  it('random clock sequences never give an undeclared transition, a throw, two open paused spans or overlapping spans, and the race clock never falls', () => {
+  it('random clock sequences never give an undeclared transition, a throw, two open spans, a gap or an overlap between spans, and the race clock never falls', () => {
     fc.assert(
       fc.property(arbSession(false), (session) => {
         expect(problemsOf(session)).toEqual([]);
@@ -107,11 +108,12 @@ describe('the clock (C85)', () => {
       { numRuns: 200 },
     );
   });
-  it('with flashback reports, the race clock falls only on a reported frame, and no frame gives an undeclared transition, a throw or two open paused spans', () => {
+  it('with flashback reports, the race clock falls only on a reported frame, no frame gives an undeclared transition, a throw or two open spans, and the spans stay contiguous', () => {
     fc.assert(
       fc.property(arbSession(true), (session) => {
-        // A rewind restores the race clock to its target, so in time (not in frames) a span may lie before an earlier one.
-        expect(problemsOf(session).filter((p) => !p.includes(': overlap in ') && !/ends before it starts$/.test(p))).toEqual([]);
+        // A rewind sets the race clock back to its target while a span is open (this harness restores no snapshot), so in
+        // time (not in frames) that span may close before it opened; its successor still opens where it closed.
+        expect(problemsOf(session).filter((p) => !/ends before it starts$/.test(p))).toEqual([]);
       }),
       { numRuns: 200 },
     );

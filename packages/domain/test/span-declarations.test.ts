@@ -17,8 +17,8 @@ describe('span declarations (C15)', () => {
     expect(declared).toBe(d);
   });
 
-  it('the clock declares its one session-scoped kind, paused', () => {
-    expect(SPAN_DECLARATIONS.find((d) => d.machine === 'clock')).toEqual({ machine: 'clock', scope: 'session', kinds: ['paused'] });
+  it('the clock declares its session-scoped kinds, running and paused (C85: its spans tile the session)', () => {
+    expect(SPAN_DECLARATIONS.find((d) => d.machine === 'clock')).toEqual({ machine: 'clock', scope: 'session', kinds: ['running', 'paused'] });
   });
 
   it('SPAN_DECLARATIONS is sorted by machine id, each machine once', () => {
