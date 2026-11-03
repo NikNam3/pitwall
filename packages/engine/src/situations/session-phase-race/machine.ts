@@ -7,14 +7,14 @@
 // too); `suspended` (a red flag); `finished` (the race winner or the chequered flag); `postSession` (SEND, or the clock's
 // simulated end, C36). A session joined in progress opens its current phase with `joinedAt` (Review Focus 2). The end
 // of a session is a signal, never the final classification's arrival (user ruling, Task 9).
-import { known, sessionPhaseRaceSpans, unknown, type NeutralisedDetail, type NeutralisedStage, type SessionFlag, type SuspendedDetail } from '@pitwall/domain';
+import { known, sessionPhaseRaceSpans, unknown, type NeutralisedDetail, type NeutralisedStage, type SessionFlag, type SessionTime, type SuspendedDetail } from '@pitwall/domain';
 import type { SituationEvent } from '../../signals/types.ts';
 import type { DeepReadonly } from '../../util/deep-readonly.ts';
-import type { MachineInput, SubMachine } from '../machine.ts';
+import type { MachineInput, MachineStep, SubMachine } from '../machine.ts';
 import {
   carsInSession,
   draftOf,
-  enter,
+  enter as enterPhase,
   eventsOf,
   initialPhaseOpen,
   isPostSession,
@@ -22,10 +22,35 @@ import {
   simulatedEnd,
   stepOf,
   withDetail,
-  type NeutralisingCar,
   type PhaseDraft,
   type PhaseOpen,
 } from '../session-phase/phases.ts';
+
+/** The car of a neutralisation. */
+type NeutralisingCar = 'SC' | 'VSC';
+
+/**
+ * A neutralisation opened on its SCAR deployment and not yet confirmed by the safety car status (C18): the machine's
+ * pending confirmation. `replaced`: the span the deployment closed, as it was open, which goes on if the deployment is
+ * never confirmed in time.
+ */
+type PendingDeployment = { car: NeutralisingCar; deployedAt: SessionTime; replaced: { kind: string; detail: unknown } };
+
+/** The race's open state: the shared one plus its safety car bookkeeping (C9). */
+type RaceOpen = PhaseOpen & {
+  /** The safety car status (a signal, C12) on the previous frame. */
+  lastStatus: SessionFlag | undefined;
+  /** The deployment the open neutralisation waits to see confirmed. */
+  pending?: PendingDeployment | undefined;
+};
+
+type Draft = PhaseDraft<RaceOpen>;
+
+/** Opens the next span (`session-phase/phases.ts`); a pending confirmation belongs to the span that closes: it goes. */
+const enter = (d: Draft, kind: string, at: SessionTime, opening?: Parameters<typeof enterPhase>[3], closingDetail?: unknown): void => {
+  enterPhase(d, kind, at, opening, closingDetail);
+  if (d.open.pending !== undefined) d.open = { ...d.open, pending: undefined };
+};
 
 /**
  * Session time after a SCAR deployment within which the safety car status must show its car: the status follows the
@@ -51,25 +76,28 @@ const neutralisedDetail = (car: NeutralisingCar, stages: NeutralisedDetail['stag
 const suspendedDetail = (restart: SuspendedDetail['restart']): SuspendedDetail => ({ restart });
 
 /** The car of the neutralisation in progress, if one is. */
-const carOf = (d: PhaseDraft): NeutralisingCar | undefined =>
+const carOf = (d: Draft): NeutralisingCar | undefined =>
   kindOf(d) === 'neutralised' ? (d.open.span?.detail as NeutralisedDetail | undefined)?.car : undefined;
 
 /** A suspension closed by its restart records how it restarted; any other span closes as it is. */
-const closingFor = (d: PhaseDraft, restart: 'standing' | 'rolling'): SuspendedDetail | undefined =>
+const closingFor = (d: Draft, restart: 'standing' | 'rolling'): SuspendedDetail | undefined =>
   kindOf(d) === 'suspended' ? suspendedDetail(known(restart, d.input.at)) : undefined;
 
 /** The lap of the car in first place; 0 when no car in the session holds it. */
-const leaderLap = (input: DeepReadonly<MachineInput>): number => carsInSession(input).find((car) => car.timing.position === 1)?.timing.lap ?? 0;
+/** The timing (a value, C8) of the cars in the session. */
+const timingsInSession = (input: DeepReadonly<MachineInput>) => carsInSession(input).flatMap((id) => input.live.cars[id]?.timing ?? []);
+
+const leaderLap = (input: DeepReadonly<MachineInput>): number => timingsInSession(input).find((timing) => timing.position === 1)?.lap ?? 0;
 
 /** The race is under way: the leader past lap 1, or a lap timer running past `UNDER_WAY_LAP_TIME_MS`. */
 const raceUnderWay = (input: DeepReadonly<MachineInput>): boolean =>
-  leaderLap(input) > 1 || carsInSession(input).some((car) => car.timing.currentLapTimeMs > UNDER_WAY_LAP_TIME_MS);
+  leaderLap(input) > 1 || timingsInSession(input).some((timing) => timing.currentLapTimeMs > UNDER_WAY_LAP_TIME_MS);
 
 /**
  * The first frame the machine runs (C14; Review Focus 2): a race joined in progress opens its current phase there,
  * marked `joinedAt` (an SC or VSC status, the formation status, a race under way); otherwise the grid.
  */
-const join = (d: PhaseDraft): void => {
+const join = (d: Draft): void => {
   const { input } = d;
   const status = input.signals.session.safetyCarStatus;
   const car = CAR_OF_STATUS[status];
@@ -82,13 +110,13 @@ const join = (d: PhaseDraft): void => {
 };
 
 /** Racing again where a neutralisation ends. */
-const green = (d: PhaseDraft): void => enter(d, 'racing', d.input.at);
+const green = (d: Draft): void => enter(d, 'racing', d.input.at);
 
 /**
  * A deployment stands once the safety car status shows its car (the open span turns confirmed); when it has not within
  * `CONFIRM_WITHIN_MS` of the SCAR, the span closes `confirmed: false` and the phase it replaced goes on (C18).
  */
-const confirmOrExpire = (d: PhaseDraft): void => {
+const confirmOrExpire = (d: Draft): void => {
   const { pending, span } = d.open;
   if (!pending || !span) return;
   if (CAR_OF_STATUS[d.input.signals.session.safetyCarStatus] === pending.car) d.open = { ...d.open, span: { ...span, confirmed: true }, pending: undefined };
@@ -99,7 +127,7 @@ const confirmOrExpire = (d: PhaseDraft): void => {
  * A SCAR deployment opens the neutralisation at once, unconfirmed until the safety car status shows it (C18). An SC
  * deployed under a VSC closes the VSC; one deployed in a suspension is the rolling restart.
  */
-const deploy = (d: PhaseDraft, car: NeutralisingCar): void => {
+const deploy = (d: Draft, car: NeutralisingCar): void => {
   const kind = kindOf(d);
   if (kind === undefined || !NEUTRALISABLE.has(kind) || carOf(d) === car) return;
   const { span, pending } = d.open;
@@ -110,7 +138,7 @@ const deploy = (d: PhaseDraft, car: NeutralisingCar): void => {
 };
 
 /** The open neutralisation of `car` with one more stage; a resume closes it and racing opens. */
-const stage = (d: PhaseDraft, car: NeutralisingCar, next: NeutralisedStage): void => {
+const stage = (d: Draft, car: NeutralisingCar, next: NeutralisedStage): void => {
   if (carOf(d) !== car) return;
   const detail = d.open.span?.detail as NeutralisedDetail;
   withDetail(d, neutralisedDetail(car, [...detail.stages, { stage: next, at: d.input.at }]));
@@ -119,11 +147,11 @@ const stage = (d: PhaseDraft, car: NeutralisingCar, next: NeutralisedStage): voi
 };
 
 /** The formation lap, from the grid (its status or its SCAR). */
-const formation = (d: PhaseDraft): void => {
+const formation = (d: Draft): void => {
   if (kindOf(d) === 'grid') enter(d, 'formation', d.input.at);
 };
 
-const applyEvent = (d: PhaseDraft, event: DeepReadonly<SituationEvent>): void => {
+const applyEvent = (d: Draft, event: DeepReadonly<SituationEvent>): void => {
   const kind = kindOf(d) ?? '';
   const { at } = d.input;
   switch (event.code) {
@@ -159,7 +187,7 @@ const applyEvent = (d: PhaseDraft, event: DeepReadonly<SituationEvent>): void =>
  * A change of the safety car status: into the formation lap opens it; into SC or VSC confirms the neutralisation it
  * shows, or opens one (no SCAR: a late join, or a game that sent none); out of it closes the confirmed one.
  */
-const applyStatus = (d: PhaseDraft): void => {
+const applyStatus = (d: Draft): void => {
   const status = d.input.signals.session.safetyCarStatus;
   const last = d.open.lastStatus;
   if (status === last) return;
@@ -178,7 +206,7 @@ const applyStatus = (d: PhaseDraft): void => {
   if (left && carOf(d) === left && !d.open.pending) green(d);
 };
 
-const machine: SubMachine<PhaseOpen> = {
+const machine: SubMachine<RaceOpen> = {
   id: sessionPhaseRaceSpans.machine,
   appliesTo: ['race'],
   spans: sessionPhaseRaceSpans,
@@ -211,7 +239,7 @@ const machine: SubMachine<PhaseOpen> = {
     ['suspended', 'postSession'],
     ['finished', 'postSession'],
   ],
-  init: initialPhaseOpen,
+  init: (): RaceOpen => ({ ...initialPhaseOpen(), lastStatus: undefined }),
   openSpans: (open) => (open.span ? [open.span] : []),
   /**
    * The frame's phase signals, in order: the join on the first frame; the clock's simulated end (step 0's, C7); the
@@ -220,14 +248,15 @@ const machine: SubMachine<PhaseOpen> = {
    * light saw none, review 2 B1).
    */
   step(previous, input) {
-    const d = draftOf(sessionPhaseRaceSpans.machine, previous, input);
+    const d = draftOf<RaceOpen>(sessionPhaseRaceSpans.machine, previous, input);
     if (d.open.span === undefined) join(d);
-    simulatedEnd(d);
+    simulatedEnd(d, enter);
     confirmOrExpire(d);
     for (const event of eventsOf(input)) applyEvent(d, event);
     applyStatus(d);
     if (kindOf(d) === 'grid' && input.signals.session.safetyCarStatus !== 'formation' && raceUnderWay(input)) enter(d, 'racing', input.at);
-    return stepOf(d);
+    const step: MachineStep<RaceOpen> = stepOf(d);
+    return { ...step, open: { ...step.open, lastStatus: input.signals.session.safetyCarStatus } };
   },
 };
 
