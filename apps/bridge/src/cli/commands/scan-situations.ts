@@ -1,7 +1,7 @@
 import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { feedId, type MachineId, type Span } from '@pitwall/domain';
-import { MACHINES, machineOrder, SessionRunner, SessionTracker, type Frame, type SubMachine, type TrackerEvent } from '@pitwall/engine';
+import { MACHINES, SessionRunner, SessionTracker, type Frame, type TrackerEvent } from '@pitwall/engine';
 import { decode } from '@pitwall/protocol';
 import { readPwrec } from '../../pwrec/reader.ts';
 import { StartupError } from '../../startup-error.ts';
@@ -26,24 +26,13 @@ function countTransitions(spans: Record<MachineId, readonly Span[]>, counts: Cou
   }
 }
 
-/**
- * The machines in step 2's order. A machine whose upstream is not among them runs without it (it reads no spans from
- * it), so a single machine can be scanned on its own.
- */
-function orderOf(machines: ReadonlyArray<SubMachine<unknown>>): Array<SubMachine<unknown>> {
-  const ids = new Set(machines.map((m) => m.id));
-  const pruned = machines.map((m) => ({ ...m, inputs: { ...m.inputs, upstream: m.inputs.upstream.filter((id) => ids.has(id)) } }));
-  const order = machineOrder(pruned).map((m) => m.id);
-  return order.map((id) => machines.find((m) => m.id === id) as SubMachine<unknown>);
-}
-
 /** Runs one recording's datagrams through frame assembly and steps 0-2, session by session, counting the transitions. */
-async function scanRecording(path: string, machines: ReadonlyArray<SubMachine<unknown>>, counts: Counts, signal: AbortSignal): Promise<void> {
+async function scanRecording(path: string, counts: Counts, signal: AbortSignal): Promise<void> {
   const tracker = new SessionTracker({ feedId: feedId('replay') });
   let runner: SessionRunner | undefined;
   const handle = (event: TrackerEvent): void => {
     if (event.type === 'sessionStarted') {
-      runner = new SessionRunner({ feedId: feedId('replay'), sessionUid: event.sessionUid, session: event.session, realism: false }, { machines });
+      runner = new SessionRunner({ feedId: feedId('replay'), sessionUid: event.sessionUid, session: event.session, realism: false });
     } else if (event.type === 'frame') {
       runner?.apply(event.frame satisfies Frame);
     } else if (runner) {
@@ -75,17 +64,15 @@ export async function run(
   positionals: string[],
   _values: unknown,
   io: CliIo,
-  machines: ReadonlyArray<SubMachine<unknown>> = MACHINES,
 ): Promise<number> {
   const dir = positionals[0] ?? io.env.PITWALL_FIXTURES_DIR;
   if (dir === undefined) throw new StartupError('scan-situations needs a directory: give one or set PITWALL_FIXTURES_DIR');
   const files = readdirSync(dir, { recursive: true, encoding: 'utf8' }).filter((f) => /\.pwrec(\.gz)?$/.test(f)).sort();
   const counts: Counts = new Map();
-  const order = orderOf(machines);
-  for (const file of files) await scanRecording(join(dir, file), order, counts, io.signal);
+  for (const file of files) await scanRecording(join(dir, file), counts, io.signal);
 
   let undeclared = 0;
-  for (const machine of machines) {
+  for (const machine of MACHINES) {
     const seen = counts.get(machine.id) ?? new Map<string, number>();
     const declared = new Set(machine.transitions.map(([from, to]) => `${from} -> ${to}`));
     for (const [transition, n] of seen) {

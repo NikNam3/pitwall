@@ -13,8 +13,6 @@ import type { ClockInput, MachineStep, SubMachine } from './machine.ts';
 import { MACHINE_ORDER } from './registry.ts';
 import type { Situation } from './situation.ts';
 
-/** The sub-machines in step 2's order; the registered ones unless a tool (`pitwall scan-situations`) runs others. */
-type Machines = ReadonlyArray<SubMachine<unknown>>;
 type Closed = MachineStep<unknown>['closed'];
 
 /** A sub-machine's change tag (C40); `SPAN_TAGS` holds the registered ones' as literals. */
@@ -50,10 +48,10 @@ const samePlain = (a: unknown, b: unknown): boolean => {
  * The stamps of the open spans (C26): the session-scoped spans, and per car that car's car-scoped spans. Zone-scoped
  * spans are never stamped.
  */
-const stampsOf = (state: DeepReadonly<EngineState>, order: Machines): FrameStamps => {
+const stampsOf = (state: DeepReadonly<EngineState>): FrameStamps => {
   const session: Record<MachineId, number> = {};
   const cars: Array<Record<MachineId, number>> = Array.from({ length: MAX_CARS }, () => ({}));
-  for (const machine of order) {
+  for (const machine of MACHINE_ORDER) {
     if (machine.scope === 'zone') continue;
     for (const span of openSpansOf(state, machine)) {
       const stamp = machine.scope === 'session' ? session : span.carId !== undefined ? cars[span.carId] : undefined;
@@ -76,12 +74,12 @@ const appendClosed = (state: EngineState, closed: ReadonlyArray<{ machine: Machi
  * appends the spans they closed to `spans:<id>`, tags `spans:<id>` when a machine's spans changed (C40) and returns
  * the frame's stamps.
  */
-export function runMachine(state: EngineState, frame: Frame, out: StepOutput, order: Machines = MACHINE_ORDER): FrameStamps {
+export function runMachine(state: EngineState, frame: Frame, out: StepOutput): FrameStamps {
   const weekendPhase = weekendPhaseOf(state);
   const clock = clockInputOf(state);
   const after: Record<MachineId, OpenSpan[]> = {};
   const closed: Array<{ machine: MachineId; spans: Closed }> = [];
-  for (const machine of order) {
+  for (const machine of MACHINE_ORDER) {
     if (!applies(machine, weekendPhase)) continue;
     const before = openSpansOf(state, machine);
     const open = machine.id in state.open.machines ? state.open.machines[machine.id] : machine.init();
@@ -92,15 +90,15 @@ export function runMachine(state: EngineState, frame: Frame, out: StepOutput, or
     if (step.closed.length > 0) closed.push({ machine: machine.id, spans: step.closed });
     if (step.closed.length > 0 || !samePlain(before, after[machine.id])) out.changed.add(spanTag(machine.id));
   }
-  const stamps = stampsOf(state, order);
+  const stamps = stampsOf(state);
   appendClosed(state, closed, stamps);
   return stamps;
 }
 
 /** The machine's open spans (C20): every registered sub-machine's, and the weekend phase. */
-export function situationOf(state: DeepReadonly<EngineState>, order: Machines = MACHINE_ORDER): Situation {
+export function situationOf(state: DeepReadonly<EngineState>): Situation {
   const byMachine: Record<MachineId, OpenSpan[]> = {};
-  for (const machine of order) byMachine[machine.id] = openSpansOf(state, machine);
+  for (const machine of MACHINE_ORDER) byMachine[machine.id] = openSpansOf(state, machine);
   return { weekendPhase: weekendPhaseOf(state), session: undefined, byMachine };
 }
 
@@ -109,9 +107,9 @@ export function situationOf(state: DeepReadonly<EngineState>, order: Machines = 
  * then; a pending confirmation closes as it stands, `confirmed: false`. The open states go, so every log is complete
  * and no span stays open. The clock's paused span joins once the clock is step 0 (Task 7).
  */
-export function closeSession(state: EngineState, at: SessionTime, order: Machines = MACHINE_ORDER): void {
-  const stamps = stampsOf(state, order);
-  const closed = order.map((machine) => ({ machine: machine.id, spans: openSpansOf(state, machine).map((span) => ({ ...span, end: at })) }));
+export function closeSession(state: EngineState, at: SessionTime): void {
+  const stamps = stampsOf(state);
+  const closed = MACHINE_ORDER.map((machine) => ({ machine: machine.id, spans: openSpansOf(state, machine).map((span) => ({ ...span, end: at })) }));
   appendClosed(state, closed, stamps);
   state.open.machines = {};
 }

@@ -4,8 +4,6 @@ import { onRaceClock, rewindMarkOf } from '../history/situations/time-jumps.ts';
 import { logWriter, voidFactOf } from '../log/log.ts';
 import { projectionLengths } from '../log/projection.ts';
 import type { HistoryDelta, LogVoidFact } from '../log/types.ts';
-import type { SubMachine } from '../situations/machine.ts';
-import { MACHINE_ORDER } from '../situations/registry.ts';
 import { closeSession, situationOf } from '../situations/run.ts';
 import type { EngineState } from '../state/engine-state.ts';
 import type { WeekendContext } from '../state/weekend-context.ts';
@@ -59,8 +57,6 @@ export type SessionRunnerOptions = {
   attach?: Snapshotable<unknown>;
   /** The weekend context of the session's player, asked once when the identity wait ends (the caller reads storage). */
   contextFor?: (participants: ParticipantsValues | undefined) => WeekendContext | undefined;
-  /** The sub-machines step 2 runs instead of the registered ones, already in step 2's order (`pitwall scan-situations` gives its own). */
-  machines?: ReadonlyArray<SubMachine<unknown>>;
 };
 
 /**
@@ -107,7 +103,6 @@ export class SessionRunner {
   readonly #snapshotEveryFrames = framesIn(SNAPSHOT_EVERY_MS);
   readonly #attach: Snapshotable<unknown> | undefined;
   readonly #contextFor: SessionRunnerOptions['contextFor'];
-  readonly #machines: ReadonlyArray<SubMachine<unknown>>;
   /** The identity wait lasts: frames are held until Participants or `IDENTITY_WAIT_FRAMES`. */
   #waiting = true;
   /**
@@ -132,7 +127,6 @@ export class SessionRunner {
     this.#state = initialState(init);
     this.#attach = opts.attach;
     this.#contextFor = opts.contextFor;
-    this.#machines = opts.machines ?? MACHINE_ORDER;
     const window = { ms: REPLAY_WINDOW_MS, frames: framesIn(REPLAY_WINDOW_MS) };
     this.#snapshots = new SnapshotStore(this.#state, -1, window, this.#attach?.snapshot());
     this.#lastOverallFrameId = init.session.header.overallFrameIdentifier;
@@ -181,8 +175,8 @@ export class SessionRunner {
    */
   finish(onResult?: OnResult): void {
     this.end(onResult);
-    closeSession(this.#state, this.#state.sessionTime, this.#machines);
-    projectionTrackerOf(this.#state).update(situationOf(this.#state, this.#machines));
+    closeSession(this.#state, this.#state.sessionTime);
+    projectionTrackerOf(this.#state).update(situationOf(this.#state));
   }
 
   /** Asks `contextFor` once: the held frames are then applied. */
@@ -208,7 +202,7 @@ export class SessionRunner {
     // The runner's decision on the frame; a rewind's mark is of the state it leaves, so taken before restoring.
     const report: FlashbackReport | undefined = reported && (target ? { rewound: rewindMarkOf(this.#state) } : {});
     const rewind = target && this.#rewind(target, frame);
-    const { changed, corrections, rewritten, discarded, clockFall, clockJump } = step(this.#state, frame, report, this.#machines);
+    const { changed, corrections, rewritten, discarded, clockFall, clockJump } = step(this.#state, frame, report);
     this.#applied = true;
     this.#lastOverallFrameId = frame.overallFrameId;
     if (target) this.#rewoundTo = target.frameId;
@@ -271,8 +265,8 @@ export class SessionRunner {
     const voidTarget = last === undefined ? { frameId: snapshot.frameId, at: snapshot.sessionTime } : { frameId: last.frame.frameId, at: last.at };
     logWriter(log).append('voids', voidFactOf(log, snapshot.lengths, voidTarget));
     // The new void fact projects the log again (C30), before the replayed frames extend it.
-    projectionTrackerOf(this.#state).update(situationOf(this.#state, this.#machines));
-    for (const { frame: f, report } of replayed) step(this.#state, f, report, this.#machines);
+    projectionTrackerOf(this.#state).update(situationOf(this.#state));
+    for (const { frame: f, report } of replayed) step(this.#state, f, report);
     this.#attach?.restore(last === undefined ? snapshot.attached : last.attached);
     const targetSessionTime = target.sessionTime === undefined ? this.#state.sessionTime : onRaceClock(this.#state, target.sessionTime);
     const flashback = {
