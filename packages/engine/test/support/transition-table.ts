@@ -130,7 +130,7 @@ export const runRow = (machine: SubMachine<unknown>, row: TransitionRow): Observ
   const last = frames.pop();
   if (last === undefined) throw new Error(`row "${row.name}" builds no frame`);
   const open = frames.reduce((o, input) => machine.step(o, input).open, machine.init());
-  return transitionsOf(machine.scope, machine.openSpans(open), machine.openSpans(machine.step(open, last).open));
+  return transitionsOf(machine.spans.scope, machine.openSpans(open), machine.openSpans(machine.step(open, last).open));
 };
 
 const SITUATIONS_TESTS = join(import.meta.dirname, '..', 'situations');

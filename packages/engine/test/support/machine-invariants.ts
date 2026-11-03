@@ -12,7 +12,7 @@ type Open = DeepReadonly<OpenSpan>;
 
 /** What is wrong with a machine's open spans going from `before` to `after` in one frame. */
 export const frameProblems = (machine: SubMachine<unknown>, before: readonly Open[], after: readonly Open[]): string[] => {
-  const { id, scope } = machine;
+  const { id, spans: { scope } } = machine;
   const problems: string[] = [];
   const keys = after.map((s) => scopeKey(scope, s));
   keys.forEach((key, i) => keys.indexOf(key) !== i && problems.push(`${id}: two open spans in ${key}`));
@@ -31,7 +31,7 @@ export const frameProblems = (machine: SubMachine<unknown>, before: readonly Ope
 
 /** What is wrong with a machine's complete span list (log order): gaps, reversed spans, ids that do not count. */
 export const spanListProblems = (machine: SubMachine<unknown>, spans: readonly DeepReadonly<Span>[]): string[] => {
-  const { id, scope } = machine;
+  const { id, spans: { scope } } = machine;
   const problems: string[] = [];
   const byScope = new Map<string, DeepReadonly<Span>[]>();
   const idsByCounter = new Map<string, number[]>();

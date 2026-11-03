@@ -2,9 +2,11 @@
 // every visible span covering a frame, the closed ones of the projection and the open ones of the situation (a span
 // covers the frames from the one it opened on up to, not including, the one it closed on); `membershipOf` gives a
 // fact's session-scoped spans and, for a car's fact, its car's spans, never a zone's. Both are readers' API
-// (`@pitwall/engine/readers`). The registry here is the test machines (`test/support/test-machines.ts`): `test-session`
-// is session-scoped, `test-car` car-scoped, `test-zone` zone-scoped; the clock counts as session-scoped.
-import { carId as car, type MachineId, type OpenSpan } from '@pitwall/domain';
+// (`@pitwall/engine/readers`). The projection reads each machine's scope from its span declaration in domain (C15),
+// never from the registry: the domain index here adds the test machines' declarations (`test/support/test-machines.ts`)
+// to domain's own, so `test-session` is session-scoped, `test-car` car-scoped, `test-zone` zone-scoped, and the clock is
+// session-scoped by its own declaration. The registry is not mocked: no test machine is registered.
+import { carId as car, type MachineId, type OpenSpan, type SpanDeclaration } from '@pitwall/domain';
 import { describe, expect, it, vi } from 'vitest';
 import { createLog, logWriter } from '../../src/log/log.ts';
 import { ProjectionTracker } from '../../src/log/projection.ts';
@@ -12,9 +14,9 @@ import { membershipOf, situationAt, type MembershipSource } from '../../src/read
 import type { DeepReadonly } from '../../src/util/deep-readonly.ts';
 import { event, openSpan, situation, span } from '../support/log-facts.ts';
 
-vi.mock('../../src/situations/index.generated.ts', async () => {
-  const { TEST_MACHINES } = await import('../support/test-machines.ts');
-  return { MACHINES: TEST_MACHINES };
+vi.mock('../../../domain/src/situations/index.generated.ts', async (importOriginal) => {
+  const { withTestSpans } = await import('../support/test-machines.ts');
+  return withTestSpans(await importOriginal<{ SPAN_DECLARATIONS: readonly SpanDeclaration[] }>());
 });
 
 // The session green over frames 1-9, neutralised from 10 (open). Car 0 on track over frames 1-4, in the pit lane from 5
@@ -67,6 +69,17 @@ describe('situationAt (C26)', () => {
 });
 
 describe('membershipOf (C26)', () => {
+  it('a machine without a span declaration in domain gives no membership', () => {
+    const on = span('undeclared', 0, 'on', 0, 900, { startFrame: 1, endFrame: 10 });
+    const log = createLog();
+    logWriter(log).append('spans:undeclared', on);
+    const tracker = new ProjectionTracker(log);
+    tracker.update(situation());
+    const history = tracker.projection;
+    expect(situationAt({ history }, 4)).toEqual({ undeclared: [on] });
+    expect(membershipOf({ history }, event(300, 4, car(0)))).toEqual({});
+  });
+
   it('membershipOf gives session spans and the fact’s car’s spans, never zone spans', () => {
     const at = source();
     expect(membershipOf(at, event(300, 4))).toEqual({ 'test-session': green });

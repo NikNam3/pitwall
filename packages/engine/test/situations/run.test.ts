@@ -3,9 +3,10 @@
 // and closed on; `situationOf` gives every machine's open spans; `closeSession` closes every open span after the last
 // applied frame, so every log is complete; a span's id counts the spans its machine opened before it, also across a
 // rewind; a confirmed lap belongs to the spans open at its crossing (`membershipOf`). The registry here is the test
-// machines (`test/support/test-machines.ts`) and a race-only one, so these tests hold whatever else is registered.
+// machines (`test/support/test-machines.ts`) and a race-only one, so these tests hold whatever else is registered;
+// their scopes come from their span declarations, added to the domain index (C15).
 import { describe, expect, it, vi } from 'vitest';
-import { MAX_CARS, type OpenSpan } from '@pitwall/domain';
+import { MAX_CARS, type OpenSpan, type SpanDeclaration } from '@pitwall/domain';
 import { initialState, membershipOf, SessionRunner, situationAt, type DeepReadonly, type Frame, type StepOutput } from '../../src/index.ts';
 import type { Signals } from '../../src/signals/types.ts';
 import { clockInput } from '../../src/situations/clock/clock.ts';
@@ -20,6 +21,10 @@ import { beats, script } from './script.ts';
 vi.mock('../../src/situations/index.generated.ts', async () => {
   const { TEST_MACHINES, raceOnlyMachine } = await import('../support/test-machines.ts');
   return { MACHINES: [...TEST_MACHINES, raceOnlyMachine] };
+});
+vi.mock('../../../domain/src/situations/index.generated.ts', async (importOriginal) => {
+  const { withTestSpans } = await import('../support/test-machines.ts');
+  return withTestSpans(await importOriginal<{ SPAN_DECLARATIONS: readonly SpanDeclaration[] }>());
 });
 
 const [first] = new ScenarioBuilder({ cars: 2 }).frames(1, () => {}).build() as [Frame];

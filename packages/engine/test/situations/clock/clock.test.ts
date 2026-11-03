@@ -43,7 +43,8 @@ const fallsIn = (times: readonly number[]) => times.filter((t, i) => i > 0 && t 
 
 describe('step 0, the clock', () => {
   it('is no member of the step-2 registry: step 0, id clock, scope session', () => {
-    expect([STEP0_CLOCK.id, STEP0_CLOCK.scope]).toEqual(['clock', 'session']);
+    expect([STEP0_CLOCK.id, STEP0_CLOCK.spans.scope]).toEqual(['clock', 'session']);
+    expect(STEP0_CLOCK.spans).toEqual({ machine: 'clock', scope: 'session', kinds: ['paused'] });
     expect(MACHINE_ORDER.map((m) => m.id)).not.toContain('clock');
   });
 });

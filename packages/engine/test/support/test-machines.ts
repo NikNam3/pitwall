@@ -1,10 +1,12 @@
 // Sub-machines that exist only for the tests of the machine itself (registry, run, generic transition tests), one per
-// scope plus one with an upstream; their tables are in `test-machines.transitions.ts`. This module imports types only,
-// so a `vi.mock` factory of the registry can import it without reaching the registry itself. Small on purpose: each
+// scope plus one with an upstream; their tables are in `test-machines.transitions.ts`. Each declares its span kinds and
+// scope as domain declares a sub-machine's (`spans`, C15); the tests put these declarations into a mocked domain index
+// (`withTestSpans`), as they put the machines into a mocked registry. This module imports types only, so a `vi.mock`
+// factory of the registry or of the domain index can import it without reaching either itself. Small on purpose: each
 // follows one signal. Every sub-machine keeps the count of spans it opened (per car for the car one) in its open state,
 // so a span's id is the number of spans opened before it and a rewind restores the count with the state (C26). A span
 // opens with the frame number it opened on (`input.frameNumber`); step 2 sets the one it closes on (C9).
-import type { CarId, FrameNumber, OpenSpan, Span } from '@pitwall/domain';
+import type { CarId, FrameNumber, OpenSpan, Span, SpanDeclaration } from '@pitwall/domain';
 import type { MachineInput, SubMachine } from '../../src/situations/machine.ts';
 import type { DeepReadonly } from '../../src/util/deep-readonly.ts';
 
@@ -55,6 +57,25 @@ const follow = (
   return { slot: { span: opened, opened: slot.opened + 1 }, closed: span ? [asClosed(span, next.at)] : [] };
 };
 
+/** The span declarations of the test machines, as each would be in `packages/domain/src/situations/<id>.ts` (C15). */
+export const sessionSpans: SpanDeclaration = { machine: 'test-session', scope: 'session', kinds: ['green', 'neutralised'] };
+export const carSpans: SpanDeclaration = { machine: 'test-car', scope: 'car', kinds: ['track', 'pit'] };
+export const zoneSpans: SpanDeclaration = { machine: 'test-zone', scope: 'zone', kinds: ['clear', 'yellow'] };
+export const probeSpans: SpanDeclaration = { machine: 'test-probe', scope: 'session', kinds: ['seen'] };
+export const raceOnlySpans: SpanDeclaration = { machine: 'test-race-only', scope: 'session', kinds: ['on'] };
+
+/** Every test machine's span declaration, sorted by machine id as the generated domain index sorts them. */
+export const TEST_SPAN_DECLARATIONS: readonly SpanDeclaration[] = [carSpans, probeSpans, raceOnlySpans, sessionSpans, zoneSpans];
+
+/**
+ * The domain index (`packages/domain/src/situations/index.generated.ts`) with the test machines' declarations added,
+ * sorted by machine id: for a `vi.mock` factory of that index, which passes the original module (`importOriginal`).
+ */
+export const withTestSpans = <T extends { SPAN_DECLARATIONS: readonly SpanDeclaration[] }>(domain: T): T => ({
+  ...domain,
+  SPAN_DECLARATIONS: [...domain.SPAN_DECLARATIONS, ...TEST_SPAN_DECLARATIONS].sort((a, b) => (a.machine < b.machine ? -1 : a.machine > b.machine ? 1 : 0)),
+});
+
 const spansOf = (slots: readonly Slot[]): OpenSpan[] => asOpen(slots.flatMap((s) => (s.span ? [s.span] : [])));
 
 /**
@@ -65,7 +86,7 @@ const spansOf = (slots: readonly Slot[]): OpenSpan[] => asOpen(slots.flatMap((s)
 export const sessionMachine: SubMachine<Slot> = {
   id: 'test-session',
   appliesTo: 'all',
-  scope: 'session',
+  spans: sessionSpans,
   inputs: { signals: ['safetyCarStatus', 'events'], values: [], upstream: [] },
   transitions: [
     ['none', 'green'],
@@ -99,7 +120,7 @@ export const sessionMachine: SubMachine<Slot> = {
 export const carMachine: SubMachine<{ cars: Slot[] }> = {
   id: 'test-car',
   appliesTo: 'all',
-  scope: 'car',
+  spans: carSpans,
   inputs: { signals: ['pitStatus'], values: [], upstream: [] },
   transitions: [
     ['none', 'track'],
@@ -121,7 +142,7 @@ export const carMachine: SubMachine<{ cars: Slot[] }> = {
 export const zoneMachine: SubMachine<{ zones: Array<Detailed | undefined>; opened: number }> = {
   id: 'test-zone',
   appliesTo: 'all',
-  scope: 'zone',
+  spans: zoneSpans,
   inputs: { signals: ['marshalZones'], values: [], upstream: [] },
   transitions: [
     ['none', 'clear'],
@@ -155,7 +176,7 @@ export type ProbeDetail = { at: number; frameId: number; frameNumber: FrameNumbe
 export const probeMachine: SubMachine<Slot> = {
   id: 'test-probe',
   appliesTo: 'all',
-  scope: 'session',
+  spans: probeSpans,
   inputs: { signals: [], values: [], upstream: ['test-session'] },
   transitions: [
     ['none', 'seen'],
@@ -180,7 +201,7 @@ export const probeMachine: SubMachine<Slot> = {
 export const raceOnlyMachine: SubMachine<Slot> = {
   id: 'test-race-only',
   appliesTo: ['race'],
-  scope: 'session',
+  spans: raceOnlySpans,
   inputs: { signals: [], values: [], upstream: [] },
   transitions: [['none', 'on']],
   init: () => NO_SLOT,

@@ -1,10 +1,13 @@
 // The machine registry (contract C15, C40, C63): sub-machines are collected by a generated index (`MACHINES`), each
-// declares one scope, and step 2 runs them in the order their declared upstream inputs give; a cycle or an upstream
-// that is not registered is an error, not an order.
+// has exactly one scope, declared in domain with its span kinds (`spans`, one file `domain/src/situations/<id>.ts` per
+// sub-machine and one for the clock, collected by the generated `SPAN_DECLARATIONS`), and step 2 runs them in the order
+// their declared upstream inputs give; a cycle or an upstream that is not registered is an error, not an order.
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { SPAN_DECLARATIONS } from '@pitwall/domain';
 import { CHANGE_TAGS } from '../../src/index.ts';
+import { STEP0_CLOCK } from '../../src/situations/clock/clock.ts';
 import { MACHINES } from '../../src/situations/index.generated.ts';
 import type { SubMachine } from '../../src/situations/machine.ts';
 import { MachineCycleError, machineOrder, UnknownMachineError } from '../../src/situations/registry.ts';
@@ -14,7 +17,7 @@ import { TEST_MACHINES } from '../support/test-machines.ts';
 const stub = (id: string, upstream: string[] = []): SubMachine<unknown> => ({
   id,
   appliesTo: 'all',
-  scope: 'session',
+  spans: { machine: id, scope: 'session', kinds: [] },
   inputs: { signals: [], values: [], upstream },
   transitions: [],
   init: () => undefined,
@@ -52,7 +55,7 @@ describe('the registered sub-machines', () => {
     expect([...ids(machineOrder(all))].sort()).toEqual([...ids(all)].sort());
   });
   it('every sub-machine declares exactly one scope', () => {
-    for (const m of all) expect(['session', 'car', 'zone'], m.id).toContain(m.scope);
+    for (const m of all) expect(['session', 'car', 'zone'], m.id).toContain(m.spans.scope);
   });
   it('every sub-machine applies to all or to a list of weekend phases', () => {
     for (const m of all) {
@@ -67,5 +70,44 @@ describe('the registered sub-machines', () => {
   });
   it('every registered sub-machine has its change tag spans:<id>', () => {
     for (const m of MACHINES) expect(CHANGE_TAGS as readonly string[]).toContain(`spans:${m.id}`);
+  });
+});
+
+describe('span declarations in domain (C15)', () => {
+  const all = [...MACHINES, ...TEST_MACHINES];
+  const domainSituations = join(import.meta.dirname, '..', '..', '..', 'domain', 'src', 'situations');
+
+  it('every registered sub-machine has a span declaration in domain with its id', () => {
+    for (const m of MACHINES) {
+      const declared = SPAN_DECLARATIONS.filter((d) => d.machine === m.id);
+      expect(declared, m.id).toHaveLength(1);
+      // the machine carries domain's declaration itself, not a copy of it
+      expect(m.spans, m.id).toBe(declared[0]);
+    }
+    for (const m of all) expect(m.spans.machine, m.id).toBe(m.id);
+  });
+  it('every span declaration in domain belongs to a registered sub-machine or the clock', () => {
+    const owners = [...ids(MACHINES), STEP0_CLOCK.id];
+    for (const d of SPAN_DECLARATIONS) expect(owners, d.machine).toContain(d.machine);
+    expect(new Set(SPAN_DECLARATIONS.map((d) => d.machine)).size).toBe(SPAN_DECLARATIONS.length);
+  });
+  it('the clock carries its span declaration in domain', () => {
+    expect(STEP0_CLOCK.spans).toBe(SPAN_DECLARATIONS.find((d) => d.machine === STEP0_CLOCK.id));
+  });
+  it('every span declaration is the file situations/<machine>.ts of domain, with one scope and its kinds', () => {
+    for (const d of SPAN_DECLARATIONS) {
+      expect(existsSync(join(domainSituations, `${d.machine}.ts`)), d.machine).toBe(true);
+      expect(['session', 'car', 'zone'], d.machine).toContain(d.scope);
+      expect(d.kinds.length, d.machine).toBeGreaterThan(0);
+      expect(new Set(d.kinds).size, d.machine).toBe(d.kinds.length);
+    }
+  });
+  it("every kind in a sub-machine's transitions (except `none`) is a kind of its declaration", () => {
+    for (const m of all) {
+      for (const [from, to] of m.transitions) {
+        if (from !== 'none') expect(m.spans.kinds, `${m.id}: ${from} -> ${to}`).toContain(from);
+        expect(m.spans.kinds, `${m.id}: ${from} -> ${to}`).toContain(to);
+      }
+    }
   });
 });

@@ -46,7 +46,7 @@ describe('every sub-machine (C85)', () => {
         for (const m of MACHINES) {
           const spans = state.log.spans[m.id] ?? [];
           problems.push(...spanListProblems(m, spans));
-          const last = new Map(spans.map((s) => [scopeKey(m.scope, s), s]));
+          const last = new Map(spans.map((s) => [scopeKey(m.spans.scope, s), s]));
           for (const [scope, span] of last) {
             if (span.end !== end) problems.push(`${m.id}: ${scope} ends at ${span.end}, not at the session's close ${end}`);
             if (span.endFrame !== sequence.length + 1) problems.push(`${m.id}: ${scope} ends on frame ${span.endFrame}, not after the last frame ${sequence.length}`);
