@@ -11,6 +11,14 @@ export * from './weekend-phase.ts';
 export * from './situations.ts';
 export * from './span-scopes.ts';
 export { spans as clockSpans, type PausedDetail } from './situations/clock.ts';
+export {
+  spans as sessionPhaseRaceSpans,
+  type NeutralisedDetail,
+  type NeutralisedStage,
+  type SuspendedDetail,
+} from './situations/session-phase-race.ts';
+export { spans as sessionPhaseQualifyingSpans } from './situations/session-phase-qualifying.ts';
+export { spans as sessionPhasePracticeSpans } from './situations/session-phase-practice.ts';
 export { spans as weekendPhaseSpans, type PracticePhaseDetail, type QualifyingPhaseDetail, type RacePhaseDetail } from './situations/weekend-phase.ts';
 export * from './insight.ts';
 export * from './laps.ts';

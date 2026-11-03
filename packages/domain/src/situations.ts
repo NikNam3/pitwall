@@ -2,6 +2,7 @@
 // situation tracker records as spans in the history. Car situations and race control follow in later steps.
 import type { SessionTime } from './ids.ts';
 import type { Known } from './known.ts';
+import type { NeutralisedStage } from './situations/session-phase-race.ts';
 
 /** The phase a session is in (spec 3.1); practice and qualifying use `running` where a race uses `racing`. */
 export type SessionPhaseKind =
@@ -14,9 +15,6 @@ export type SessionPhaseKind =
   | 'suspended'
   | 'finished'
   | 'postSession';
-
-/** The stages of a neutralisation, in the game's SCAR order; a VSC has no `returned`. */
-export type NeutralisedStage = 'deployed' | 'returning' | 'returned' | 'resume';
 
 /** What a phase adds to its kind: the neutralising car with its stages, or how a suspension restarts. */
 export type SessionPhaseDetail =

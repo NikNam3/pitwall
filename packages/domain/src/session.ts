@@ -1,4 +1,5 @@
 import type { SessionTime } from './ids.ts';
+import type { Known } from './known.ts';
 import type { Celsius, Kmh, Metres, Ms, Percent, Ratio } from './units.ts';
 
 export type SessionKind = 'unknown' | 'practice' | 'qualifying' | 'sprintShootout' | 'race' | 'timeTrial';
@@ -70,5 +71,10 @@ export type SessionState = {
   numActiveCars: number;
   link: { season: number; weekend: number; session: number };
   weekendStructure: number[];
+  /**
+   * The race-clock time the last FinalClassification packet of the session arrived (a value, C12): unknown
+   * (`notReceived`) until one does. The packet's rows are not read yet.
+   */
+  classifiedAt: Known<SessionTime>;
   updatedAt: SessionTime;
 };

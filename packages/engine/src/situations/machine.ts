@@ -30,8 +30,12 @@ export type SubMachine<Open> = {
   step(open: Open, input: DeepReadonly<MachineInput>): MachineStep<Open>;
 };
 
-/** Step 0's clock as the sub-machines see it: from step 0, not an upstream (the clock is not in the registry). */
-export type ClockInput = { paused: boolean; offsetMs: Ms };
+/**
+ * Step 0's clock as the sub-machines see it: from step 0, not an upstream (the clock is not in the registry).
+ * `simulatedEnd`: on the frame the clock appended its `simulatedEnd` fact, that fact's time (the session-phase signal of
+ * the post-session simulation, C36); otherwise undefined.
+ */
+export type ClockInput = { paused: boolean; offsetMs: Ms; simulatedEnd: SessionTime | undefined };
 
 /**
  * A sub-machine reads signals, values and the live state only (C9): of the frame, just its race-clock time, its id and
