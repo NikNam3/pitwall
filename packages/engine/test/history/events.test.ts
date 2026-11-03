@@ -18,7 +18,13 @@ const cases: Array<[EventDetails, Omit<RaceEvent, 'at'>]> = [
   [{ code: 'SPTP', vehicleIdx: 1, speed: 321.5, isOverallFastestInSession: 1, isDriverFastestInSession: 0, fastestVehicleIdxInSession: 0, fastestSpeedInSession: 330.25 },
     { kind: 'speedTrap', carId: car(1), params: { speedKmh: 321.5, overallFastest: 1, driverFastest: 0, fastestCarId: 0, fastestSpeedKmh: 330.25 }, frame: 2 }],
   [{ code: 'DRSE' }, { kind: 'drsEnabled', params: {}, frame: 2 }],
+  [{ code: 'DRSD', reason: 0 }, { kind: 'drsDisabled', params: { reason: 'wetTrack' }, frame: 2 }],
   [{ code: 'DRSD', reason: 1 }, { kind: 'drsDisabled', params: { reason: 'safetyCar' }, frame: 2 }],
+  [{ code: 'DRSD', reason: 2 }, { kind: 'drsDisabled', params: { reason: 'redFlag' }, frame: 2 }],
+  [{ code: 'DRSD', reason: 3 }, { kind: 'drsDisabled', params: { reason: 'minLapNotReached' }, frame: 2 }],
+  // a reason code the spec does not list is `unknown`, never read as one of the listed reasons
+  [{ code: 'DRSD', reason: 4 }, { kind: 'drsDisabled', params: { reason: 'unknown' }, frame: 2 }],
+  [{ code: 'DRSD', reason: 255 }, { kind: 'drsDisabled', params: { reason: 'unknown' }, frame: 2 }],
   [{ code: 'STLG', numLights: 3 }, { kind: 'startLights', params: { lights: 3 }, frame: 2 }],
   [{ code: 'LGOT' }, { kind: 'lightsOut', params: {}, frame: 2 }],
 ];
