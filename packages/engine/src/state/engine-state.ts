@@ -1,25 +1,21 @@
 import type {
   OpenSessionPhase,
   SessionPhaseSpan,
-  ActualCompound,
   CarId,
   CarState,
   FeedId,
   FlagPhase,
-  Kg,
-  Known,
-  LapRecord,
-  Metres,
+  FrameEvent,
+  MachineId,
   Ms,
-  PitStatus,
   SessionFlag,
   SessionState,
   SessionTime,
   SessionUid,
-  VisualCompound,
 } from '@pitwall/domain';
 import type { ProjectionBook } from '../log/projection.ts';
 import type { Log, ProjectionState } from '../log/types.ts';
+import type { Signals } from '../signals/types.ts';
 import type { WeekendContext } from './weekend-context.ts';
 
 /**
@@ -27,60 +23,6 @@ import type { WeekendContext } from './weekend-context.ts';
  * back or re-stamp them; goes with those mechanisms (Tasks 7, 9).
  */
 export type TrackerLengths = Record<'laps' | 'stints' | 'pitStops' | 'crossings' | 'events' | 'flagPhases' | 'sessionPhases' | 'pauses', number>;
-
-/** The lap a car is on, collected until the lap completes and becomes a `LapRecord`. */
-export type LapCursor = {
-  lap: number;
-  startedAt: SessionTime;
-  fuelAtStartKg: Known<Kg>;
-  tyreAgeAtStart: number;
-  scMs: Ms;
-  vscMs: Ms;
-  /** The car entered the pits on this lap (in-lap). */
-  pitted: boolean;
-  sector1Ms: Ms;
-  sector2Ms: Ms;
-  invalid: boolean;
-  lastSeenAt: SessionTime;
-  trackedMs: Ms;
-  actualCompound: ActualCompound;
-  visualCompound: VisualCompound;
-  outLap: boolean;
-  /** The engine saw the lap from its start; false when it joined the car mid-lap, so ranges and fuel at start would cover part of it only. */
-  fromStart: boolean;
-  /** The car's lap distance on the lap's newest LapData frame; negative before the line (an out lap from the garage). */
-  lapDistanceM: Metres;
-  /** The lap timer on the lap's newest LapData frame; a drop tells the line after an out lap on the same lap number. */
-  lapTimeMs: Ms;
-  /** Wear and ERS store from the frame that starts the lap; `unknown('notReceived')` when the engine joined the lap after its start. */
-  wearAtStartPct: LapRecord['wearAtStartPct'];
-  ersStoreAtStartJ: LapRecord['ersStoreAtStartJ'];
-  /** Per band channel (the order of `CHANNELS` in `history/lap-samples.ts`): lowest and highest value of the lap's frames; min above max = none seen. */
-  channelMin: number[];
-  channelMax: number[];
-  /** The last in-lap ERS totals (the game resets them at the line); `undefined` = none seen. */
-  ersDeployedJ: number | undefined;
-  ersHarvestedJ: number | undefined;
-};
-
-/** The stint a car is on, until it becomes a `StintRecord`. */
-export type OpenStint = {
-  firstLap: number;
-  actualCompound: ActualCompound;
-  visualCompound: VisualCompound;
-  tyreAgeAtFitting: number;
-  lastAge: number;
-};
-
-/** A pit visit in progress, until it becomes a `PitStopRecord`. */
-export type OpenPitVisit = {
-  lap: number;
-  entry: SessionTime;
-  flag: 'green' | 'sc' | 'vsc';
-  penaltyServed: boolean;
-  pitLaneTimeMs: Ms;
-  stationaryTimeMs: Ms;
-};
 
 /**
  * The situation tracker's bookkeeping behind `OpenTrackers.situations` (`history/situations/`, spec 3.1-3.3): what a
@@ -132,28 +74,14 @@ export type OpenTrackers = {
   /** The situation tracker's open state (`history/situations/`): the phase in progress (paused: `phaseBook.onlinePause`). */
   situations: { session: OpenSessionPhase };
   phaseBook: PhaseBook;
-  laps: Array<LapCursor | undefined>;
-  stints: Array<OpenStint | undefined>;
-  pitVisits: Array<OpenPitVisit | undefined>;
+  /** The flag phase in progress (`history/flags.ts`, the tracker's mirror until Task 19). */
   flagPhase?: Omit<FlagPhase, 'end' | 'endLeaderLap'> | undefined;
   /** `session.flag` after the previous frame. */
   lastFlag: SessionFlag;
-  miniSectors: Array<
-    | {
-        lap: number;
-        /** The last segment emitted in that lap; -1 = none. */
-        segment: number;
-        distanceM: Metres;
-        at: SessionTime;
-      }
-    | undefined
-  >;
-  /** Per car: lap number to the index of its provisional record in `log.laps`, and whether it is confirmed. */
-  lapIndex: Array<Record<number, { provisional?: number; confirmed: boolean }>>;
-  /** Per car: the pit status of the previous frame. */
-  pitStatus: Array<PitStatus | undefined>;
-  /** Per car: the eight damage percentages of the previous reading (order of `PARTS` in damage-changes.ts); for `damageChange` events. */
-  damage: Array<number[] | undefined>;
+  /** Each recorder's own open state by recorder id (C10, C11): only that recorder reads it. */
+  recorders: Record<string, unknown>;
+  /** Each sub-machine's open state by machine id (C9); empty until the machine runs (Task 5). */
+  machines: Record<MachineId, unknown>;
   /** The projection's bookkeeping (`log/projection.ts`): what of the log it has projected and what hides facts. */
   projection: ProjectionBook;
 };
@@ -168,6 +96,10 @@ export type EngineState = {
   log: Log;
   /** The projection of the log (C28): what readers see as the history. */
   history: ProjectionState;
+  /** This frame's signals (C12, C13): written by step 1, read only by the machine; never part of the live state or the view. */
+  signals: Signals;
+  /** This frame's value events (OVTK, COLL, FTLP, SPTP), written by step 1 (C8). */
+  frameEvents: FrameEvent[];
   playerCar: CarId;
   teammateCar?: CarId | undefined;
   lastFrameId: number;

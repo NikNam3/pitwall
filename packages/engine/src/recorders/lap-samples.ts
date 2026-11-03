@@ -1,11 +1,12 @@
-import { known, unknown, type CarState, type ChannelRange, type DamageParts, type Known, type LapRecord, type SessionTime } from '@pitwall/domain';
-import type { LapCursor } from '../state/engine-state.ts';
+import { known, unknown, type ChannelRange, type DamageParts, type Known, type LapRecord, type SessionTime } from '@pitwall/domain';
 import { CORNER_NAMES, mapCorners } from '../step/corners.ts';
+import type { LiveCar } from './cars.ts';
+import type { LapCursor } from './lap-cursor.ts';
 
 export type LapStartSamples = Pick<LapRecord, 'wearAtStartPct' | 'ersStoreAtStartJ'>;
 export type LapEndSamples = Pick<LapRecord, 'wearAtEndPct' | 'ersStoreAtEndJ' | 'ersDeployedJ' | 'ersHarvestedJ' | 'damageAtEnd' | 'channelRange'>;
 
-type Reading = (car: CarState) => Known<number>;
+type Reading = (car: LiveCar) => Known<number>;
 
 /** Every band channel in the order of the cursor's `channelMin`/`channelMax`: 3 per tyre corner, 1 per brake, then the engine. */
 const CHANNELS: readonly Reading[] = [
@@ -30,7 +31,7 @@ export const emptyChannels = (): Pick<LapCursor, 'channelMin' | 'channelMax'> =>
 });
 
 /** Folds the frame's channel values and ERS totals into the lap. Runs per car and frame: comparisons only, no allocation. */
-export const observeLapFrame = (cursor: LapCursor, car: CarState): void => {
+export const observeLapFrame = (cursor: LapCursor, car: LiveCar): void => {
   const { channelMin, channelMax } = cursor;
   for (let i = 0; i < CHANNELS.length; i++) {
     const reading = CHANNELS[i]?.(car);
@@ -46,7 +47,7 @@ export const observeLapFrame = (cursor: LapCursor, car: CarState): void => {
 };
 
 /** The car's damage as one value; unknown when any of the eight parts is. */
-export const damageOf = (car: CarState, at: SessionTime): Known<DamageParts> => {
+export const damageOf = (car: LiveCar, at: SessionTime): Known<DamageParts> => {
   const { bodywork, powerUnit } = car.condition;
   if (!bodywork.known) return unknown(bodywork.reason);
   if (!powerUnit.known) return unknown(powerUnit.reason);
@@ -54,13 +55,13 @@ export const damageOf = (car: CarState, at: SessionTime): Known<DamageParts> => 
 };
 
 /** A total seen during the lap, or why there is none: the car's own reason, `notReceived` if it never had a value. */
-const total = (value: number | undefined, ers: CarState['energy']['ers'], at: SessionTime): Known<number> => {
+const total = (value: number | undefined, ers: LiveCar['energy']['ers'], at: SessionTime): Known<number> => {
   if (value !== undefined) return known(value, at);
   return unknown(ers.known ? 'notReceived' : ers.reason);
 };
 
 /** A channel's range over the lap; unknown when no frame had it or the engine joined the lap after its start (part of a lap is no lap). */
-const rangeAt = (cursor: LapCursor, i: number, car: CarState, at: SessionTime): Known<{ min: number; max: number }> => {
+const rangeAt = (cursor: LapCursor, i: number, car: LiveCar, at: SessionTime): Known<{ min: number; max: number }> => {
   const min = cursor.channelMin[i] ?? Infinity;
   const max = cursor.channelMax[i] ?? -Infinity;
   if (cursor.fromStart && min <= max) return known({ min, max }, at);
@@ -68,7 +69,7 @@ const rangeAt = (cursor: LapCursor, i: number, car: CarState, at: SessionTime): 
   return unknown(reading && !reading.known ? reading.reason : 'notReceived');
 };
 
-const channelRange = (cursor: LapCursor, car: CarState, at: SessionTime): ChannelRange => {
+const channelRange = (cursor: LapCursor, car: LiveCar, at: SessionTime): ChannelRange => {
   const range = (i: number) => rangeAt(cursor, i, car, at);
   const tyres = mapCorners((corner) => {
     const first = TYRE_CHANNELS_PER_CORNER * CORNER_NAMES.indexOf(corner);
@@ -78,7 +79,7 @@ const channelRange = (cursor: LapCursor, car: CarState, at: SessionTime): Channe
   return { tyres, brakesC, engineC: range(ENGINE_CHANNEL) };
 };
 
-const ersStoreOf = (car: CarState, at: SessionTime): Known<number> =>
+const ersStoreOf = (car: LiveCar, at: SessionTime): Known<number> =>
   car.energy.ers.known ? known(car.energy.ers.value.storeJ, at) : unknown(car.energy.ers.reason);
 
 const unknownLapStart = (): LapStartSamples => {
@@ -87,7 +88,7 @@ const unknownLapStart = (): LapStartSamples => {
 };
 
 /** Wear and ERS store from the car state of the frame that starts the lap; `notReceived` when the engine joined the lap after its start. */
-export const lapStartSamples = (car: CarState, at: SessionTime, fromStart: boolean): LapStartSamples => {
+export const lapStartSamples = (car: LiveCar, at: SessionTime, fromStart: boolean): LapStartSamples => {
   if (!fromStart) return unknownLapStart();
   return { wearAtStartPct: mapCorners((corner) => car.tyres.corners[corner].wearPct), ersStoreAtStartJ: ersStoreOf(car, at) };
 };
@@ -97,7 +98,7 @@ export const lapStartSamples = (car: CarState, at: SessionTime, fromStart: boole
  * of the completing frame; the totals and ranges come from the frames of the lap. The completing frame itself is
  * not part of the lap's ranges and totals: its values belong to the next lap (the game has already reset the per-lap ERS counters in it).
  */
-export const lapEndSamples = (cursor: LapCursor, car: CarState, at: SessionTime): LapEndSamples => ({
+export const lapEndSamples = (cursor: LapCursor, car: LiveCar, at: SessionTime): LapEndSamples => ({
   wearAtEndPct: mapCorners((corner) => car.tyres.corners[corner].wearPct),
   ersStoreAtEndJ: ersStoreOf(car, at),
   ersDeployedJ: total(cursor.ersDeployedJ, car.energy.ers, at),

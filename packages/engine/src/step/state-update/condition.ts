@@ -1,14 +1,14 @@
 import { known } from '@pitwall/domain';
-import { CORNER_NAMES, cornersOf } from './corners.ts';
+import { CORNER_NAMES, cornersOf } from '../corners.ts';
 import { knownUnlessRestricted } from './restricted.ts';
-import type { SubStep } from './sub-step.ts';
+import type { StateUpdate } from './types.ts';
 
 /** Damage, wear and faults from Car Damage; brake and engine temperatures from Car Telemetry. */
-export const applyCondition: SubStep = (state, frame, out) => {
+export const conditionUpdate: StateUpdate = { id: 'condition', apply: (frame, live, _signals, out) => {
   const { damage, telemetry } = frame;
   const at = frame.sessionTime;
   if (damage) {
-    for (const car of state.cars) {
+    for (const car of live.cars) {
       const d = damage.carDamageData[car.id];
       if (!d) continue;
       car.updatedAt.damage = at;
@@ -51,7 +51,7 @@ export const applyCondition: SubStep = (state, frame, out) => {
     out.changed.add('condition');
   }
   if (telemetry) {
-    for (const car of state.cars) {
+    for (const car of live.cars) {
       const t = telemetry.carTelemetryData[car.id];
       if (!t) continue;
       const brakeTemp = cornersOf(t.brakesTemperature);
@@ -60,4 +60,4 @@ export const applyCondition: SubStep = (state, frame, out) => {
     }
     out.changed.add('condition');
   }
-};
+} };

@@ -4,9 +4,15 @@
 // pauses.
 import type { Known, Ms, OpenSessionPhase, SessionPhaseDetail, SessionPhaseSpan, SessionTime } from '@pitwall/domain';
 import type { Frame } from '../../frame/frame.ts';
-import type { EngineState, LapCursor } from '../../state/engine-state.ts';
+import type { LapCursor } from '../../recorders/lap-cursor.ts';
+import { lapsRecorder, restampProvisionalLaps } from '../../recorders/laps.ts';
+import { miniSectorsRecorder } from '../../recorders/mini-sectors.ts';
+import { ownStateOf } from '../../recorders/own-state.ts';
+import { pitStopsRecorder } from '../../recorders/pit-stops.ts';
+import type { EngineState } from '../../state/engine-state.ts';
 import { mapCorners } from '../../step/corners.ts';
 import type { ClockFall, ClockJump, RewindMark } from '../../step/types.ts';
+import { unvoided } from './session-phase.ts';
 
 /**
  * A fall of the session time at most this many frames after the race's lights out is the race clock settling: seen 4
@@ -182,9 +188,12 @@ export const restampStart = (state: EngineState, offsetMs: Ms): void => {
   const { unconfirmed, onlinePause } = open.phaseBook;
   if (unconfirmed) open.phaseBook.unconfirmed = { ...unconfirmed, closed: shiftSpan(unconfirmed.closed, shift), replaced: shiftOpen(unconfirmed.replaced, shift) };
   if (onlinePause) open.phaseBook.onlinePause = { ...onlinePause, start: shift(onlinePause.start) };
-  for (const cursor of open.laps) if (cursor) shiftCursor(cursor, shift);
-  open.miniSectors = open.miniSectors.map((cursor) => cursor && { ...cursor, at: shift(cursor.at) });
-  open.pitVisits = open.pitVisits.map((visit) => visit && { ...visit, entry: shift(visit.entry) });
+  // The recorders' open laps, crossings and pit visits; the provisional laps they keep follow the re-stamped log.
+  const laps = ownStateOf(state, lapsRecorder), miniSectors = ownStateOf(state, miniSectorsRecorder), pitStops = ownStateOf(state, pitStopsRecorder);
+  for (const cursor of laps.cursors) if (cursor) shiftCursor(cursor, shift);
+  miniSectors.cursors = miniSectors.cursors.map((cursor) => cursor && { ...cursor, at: shift(cursor.at) });
+  pitStops.visits = pitStops.visits.map((visit) => visit && { ...visit, entry: shift(visit.entry) });
+  restampProvisionalLaps(laps, unvoided(log, 'laps'));
 };
 
 /**

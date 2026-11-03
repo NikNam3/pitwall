@@ -1,25 +1,29 @@
 import type { Frame } from '../frame/frame.ts';
-import { applyEvents } from '../history/events.ts';
 import { applyFlagPhases } from '../history/flags.ts';
-import { applyLaps } from '../history/laps.ts';
-import { applyMiniSectors } from '../history/mini-sectors.ts';
-import { applyPitStops } from '../history/pit-stops.ts';
 import { applySessionClock, applySituations } from '../history/situations/index.ts';
-import { applyStints } from '../history/stints.ts';
+import { logWriter } from '../log/log.ts';
 import { ProjectionTracker } from '../log/projection.ts';
+import { eventsRecorder } from '../recorders/events.ts';
+import { lapsRecorder } from '../recorders/laps.ts';
+import { miniSectorsRecorder } from '../recorders/mini-sectors.ts';
+import { pitStopsRecorder } from '../recorders/pit-stops.ts';
+import { stintsRecorder } from '../recorders/stints.ts';
+import { readSignals } from '../signals/read.ts';
 import { emptySituation } from '../situations/situation.ts';
+import { trackedEventsOf } from '../situations/tracked-events.ts';
 import type { EngineState } from '../state/engine-state.ts';
-import { applyCondition } from './condition.ts';
-import { applyDynamics } from './dynamics.ts';
-import { applyEnergy } from './energy.ts';
-import { applyIdentity, isActiveCar, slotsInUse } from './identity.ts';
-import { applyOwnCar } from './own-car.ts';
-import { applyRealism } from './realism.ts';
-import { applySession } from './session.ts';
-import { applyTiming } from './timing.ts';
-import { applyTyres } from './tyres.ts';
-import type { FlashbackReport, StepOutput } from './types.ts';
-import type { SubStep } from './sub-step.ts';
+import { conditionUpdate } from './state-update/condition.ts';
+import { dynamicsUpdate } from './state-update/dynamics.ts';
+import { energyUpdate } from './state-update/energy.ts';
+import { frameEventsUpdate } from './state-update/frame-events.ts';
+import { identityUpdate } from './state-update/identity.ts';
+import { ownCarUpdate } from './state-update/own-car.ts';
+import { sessionUpdate } from './state-update/session.ts';
+import { settleLiveState } from './state-update/settle.ts';
+import { timingUpdate } from './state-update/timing.ts';
+import type { StateUpdate } from './state-update/types.ts';
+import { tyresUpdate } from './state-update/tyres.ts';
+import type { FlashbackReport, Recorder, RecorderInput, StepOutput } from './types.ts';
 
 export {
   ALL_CHANGE_TAGS,
@@ -31,54 +35,66 @@ export {
   type LapCorrection,
   type StepOutput,
 } from './types.ts';
-export type { SubStep } from './sub-step.ts';
 
-/** Run in this order; a sub-step may rely on the ones before it. */
-export const SUB_STEPS: SubStep[] = [
-  applySession,
-  applyIdentity,
-  applyTiming,
-  applyTyres,
-  applyEnergy,
-  applyCondition,
-  applyDynamics,
-  applyOwnCar,
-  applyRealism,
-  // The first history step: the others read the session phase it records.
-  applySituations,
-  applyPitStops,
-  applyLaps,
-  applyStints,
-  applyFlagPhases,
-  applyEvents,
-  applyMiniSectors,
+/** Step 1's modules (C8): each reads the frame and writes its part of the live state; in any order (C11). */
+export const STATE_UPDATE: StateUpdate[] = [
+  sessionUpdate,
+  identityUpdate,
+  timingUpdate,
+  tyresUpdate,
+  energyUpdate,
+  conditionUpdate,
+  dynamicsUpdate,
+  ownCarUpdate,
+  frameEventsUpdate,
 ];
 
-const refreshActive = (state: EngineState): void => {
-  const slots = slotsInUse(state);
-  for (const car of state.cars) {
-    car.active = isActiveCar(car.id, slots, car.timing.resultStatus);
-  }
-};
+/** Step 3's modules (C10): each reads the live state, the situations and its own open state, and appends facts; in any order (C11). */
+export const RECORDERS: Array<Recorder<unknown>> = [
+  lapsRecorder,
+  pitStopsRecorder,
+  stintsRecorder,
+  eventsRecorder,
+  miniSectorsRecorder,
+];
 
 /** The projection of the state's log, kept in the state (`history`, `open.projection`). */
 export const projectionTrackerOf = (state: EngineState): ProjectionTracker =>
   new ProjectionTracker(state.log, { projection: state.history, book: state.open.projection });
 
+/** Step 1 (C8): the signals, then every module, then what follows from their writes (`settleLiveState`). */
+const updateState = (state: EngineState, frame: Frame, out: StepOutput): void => {
+  state.signals = readSignals(frame, state.signals);
+  for (const update of STATE_UPDATE) update.apply(frame, state, state.signals, out);
+  settleLiveState(state, frame, out);
+};
+
+/** Step 3 (C10): every recorder with this frame's input and its own open state. */
+const record = (state: EngineState, input: RecorderInput, out: StepOutput): void => {
+  const log = logWriter(state.log);
+  for (const recorder of RECORDERS) state.open.recorders[recorder.id] = recorder.apply(input, state.open.recorders[recorder.id], log, out);
+};
+
 /**
- * Applies one frame to the state in place (spec 6.1). The situation tracker reads the session time's jump first, and
- * every sub-step stamps with the frame's time on its race clock (spec 3.3). `report`: the `SessionRunner` took the
- * frame as a flashback report. Last, the projection takes in what the frame appended; a step that rewrote the log in
- * place (`rewritten`) projects it again. Until the machine runs (Task 5) no span is open, so nothing is hidden by a stamp.
+ * Applies one frame to the state in place (spec 6.1, C7-C10), in four steps: step 0, the clock (the situation tracker
+ * reads the session time's jump and returns the frame on the race clock, `report`: the `SessionRunner` took the frame
+ * as a flashback report); step 1, the state update; step 2, the machine's slot (until the machine runs, Task 5: the
+ * situation tracker and the flag phases it mirrors; it also decides `tracked`, what the frame's situation events tell
+ * the recorders); step 3, the recorders. Last, the projection takes in what the frame appended; a step that rewrote the
+ * log in place (`rewritten`) projects it again. Until the machine runs no span is open, so nothing is hidden by a stamp.
  */
 export function step(state: EngineState, received: Frame, report?: FlashbackReport): StepOutput {
   const out: StepOutput = { changed: new Set(), corrections: [] };
   const frame = applySessionClock(state, received, out, report);
-  for (const subStep of SUB_STEPS) subStep(state, frame, out);
-  if (out.changed.has('identity') || out.changed.has('timing')) refreshActive(state);
+  updateState(state, frame, out);
+  applySituations(state, frame, out);
+  applyFlagPhases(state, out);
+  const situation = emptySituation();
+  const tracked = trackedEventsOf(state.signals.events);
+  record(state, { at: frame.sessionTime, frameId: frame.frameId, live: state, situation, stamps: { session: {}, cars: [] }, tracked }, out);
   const projection = projectionTrackerOf(state);
-  if (out.rewritten) projection.rebuild(emptySituation());
-  else projection.update(emptySituation());
+  if (out.rewritten) projection.rebuild(situation);
+  else projection.update(situation);
   state.lastFrameId = frame.frameId;
   state.sessionTime = frame.sessionTime;
   return out;

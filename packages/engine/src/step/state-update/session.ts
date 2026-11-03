@@ -1,14 +1,14 @@
 import { toSessionTime, type ForecastSample, type GameSettings, type SessionKind, type SessionState } from '@pitwall/domain';
 import type { SessionPacket } from '@pitwall/protocol';
-import { pick } from './pick.ts';
-import type { SubStep } from './sub-step.ts';
+import { pick } from '../pick.ts';
+import type { StateUpdate } from './types.ts';
 
 // Code tables from the struct comments of the Session packet; a code the spec does not list reads as the first entry.
 const WEATHER = ['clear', 'lightCloud', 'overcast', 'lightRain', 'heavyRain', 'storm'] as const;
 const TREND = ['up', 'down', 'flat'] as const;
 /** Indexed by `zoneFlag + 1`: the game sends -1 for unknown. */
 export const ZONE_FLAG = ['unknown', 'none', 'green', 'blue', 'yellow'] as const;
-const SAFETY_CAR_STATUS = ['green', 'sc', 'vsc', 'formation'] as const;
+export const SAFETY_CAR_STATUS = ['green', 'sc', 'vsc', 'formation'] as const;
 const FORECAST_ACCURACY = ['perfect', 'approximate'] as const;
 const LEVEL = ['off', 'reduced', 'standard', 'increased'] as const;
 const CAR_DAMAGE = ['off', 'reduced', 'standard', 'simulation'] as const;
@@ -84,9 +84,7 @@ export const sessionStateFrom = (p: SessionPacket, numActiveCars: number): Sessi
   forecast: p.weatherForecastSamples.slice(0, p.numWeatherForecastSamples).map(forecastFrom),
   forecastAccuracy: pick(FORECAST_ACCURACY, p.forecastAccuracy),
   flag: pick(SAFETY_CAR_STATUS, p.safetyCarStatus),
-  marshalZones: p.marshalZones
-    .slice(0, p.numMarshalZones)
-    .map((z) => ({ startFraction: z.zoneStart, flag: pick(ZONE_FLAG, z.zoneFlag + 1) })),
+  marshalZones: marshalZonesOf(p),
   periods: { sc: p.numSafetyCarPeriods, vsc: p.numVirtualSafetyCarPeriods, red: p.numRedFlagPeriods },
   pitWindow: {
     idealLap: p.pitStopWindowIdealLap,
@@ -101,8 +99,19 @@ export const sessionStateFrom = (p: SessionPacket, numActiveCars: number): Sessi
   updatedAt: toSessionTime(p.header.sessionTime),
 });
 
-export const applySession: SubStep = (state, frame, out) => {
-  if (!frame.session) return;
-  state.session = sessionStateFrom(frame.session, state.session.numActiveCars);
-  out.changed.add('session');
+/** The game simulates only the tyre surface: the carcass temperature does not apply (`settings.tyreTemperature`). */
+export const surfaceOnly = (p: SessionPacket): boolean => pick(TYRE_TEMPERATURE, p.tyreTemperature) === 'surfaceOnly';
+
+/** The marshal zones the Session packet sends, in its order. */
+export const marshalZonesOf = (p: SessionPacket): SessionState['marshalZones'] =>
+  p.marshalZones.slice(0, p.numMarshalZones).map((z) => ({ startFraction: z.zoneStart, flag: pick(ZONE_FLAG, z.zoneFlag + 1) }));
+
+/** The session from the Session packet; `numActiveCars` from the frame's Participants, else as it was (C11: not identity's write). */
+export const sessionUpdate: StateUpdate = {
+  id: 'session',
+  apply(frame, live, _signals, out) {
+    if (!frame.session) return;
+    live.session = sessionStateFrom(frame.session, frame.participants?.numActiveCars ?? live.session.numActiveCars);
+    out.changed.add('session');
+  },
 };

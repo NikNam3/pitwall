@@ -1,16 +1,16 @@
 import { known, type CarDynamics } from '@pitwall/domain';
-import type { SubStep } from './sub-step.ts';
+import type { StateUpdate } from './types.ts';
 
 /**
  * Driving inputs from Car Telemetry, world motion from Motion, and limits from Car Status.
  * Speed is km/h; world position, velocity and G-forces stay as the game sends them (m, m/s, g).
  * `dynamics` is `notReceived` until Car Telemetry arrives; the Car Status limits fill into it from then on.
  */
-export const applyDynamics: SubStep = (state, frame, out) => {
+export const dynamicsUpdate: StateUpdate = { id: 'dynamics', apply: (frame, live, _signals, out) => {
   const { telemetry, motion, status } = frame;
   const at = frame.sessionTime;
   if (telemetry) {
-    for (const car of state.cars) {
+    for (const car of live.cars) {
       const t = telemetry.carTelemetryData[car.id];
       if (!t) continue;
       car.updatedAt.telemetry = at;
@@ -34,7 +34,7 @@ export const applyDynamics: SubStep = (state, frame, out) => {
     out.changed.add('dynamics');
   }
   if (motion) {
-    for (const car of state.cars) {
+    for (const car of live.cars) {
       const m = motion.carMotionData[car.id];
       if (!m) continue;
       car.updatedAt.motion = at;
@@ -48,7 +48,7 @@ export const applyDynamics: SubStep = (state, frame, out) => {
     out.changed.add('dynamics');
   }
   if (status) {
-    for (const car of state.cars) {
+    for (const car of live.cars) {
       const s = status.carStatusData[car.id];
       if (!s || !car.dynamics.known) continue;
       Object.assign(car.dynamics.value, {
@@ -60,4 +60,4 @@ export const applyDynamics: SubStep = (state, frame, out) => {
     }
     out.changed.add('dynamics');
   }
-};
+} };

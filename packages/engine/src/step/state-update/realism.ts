@@ -1,6 +1,6 @@
 import { unknown, type CarState } from '@pitwall/domain';
-import { CORNER_NAMES } from './corners.ts';
-import type { SubStep } from './sub-step.ts';
+import type { LiveState } from '../../state/live-state.ts';
+import { CORNER_NAMES } from '../corners.ts';
 
 /**
  * Sets the fields a real race engineer cannot see on a rival (research 06 section 5) to `unknown('realism')`: the one
@@ -30,10 +30,13 @@ export const withholdForRealism = (car: CarState): void => {
   car.dynamics = hidden;
 };
 
-/** With realism on, every car but the player's and the teammate's is masked, on every frame, so no later step or calculator sees the values. Adds no change tag. */
-export const applyRealism: SubStep = (state) => {
-  if (!state.realism) return;
-  for (const car of state.cars) {
-    if (car.id !== state.playerCar && car.id !== state.teammateCar) withholdForRealism(car);
+/**
+ * With realism on, every car but the player's and the teammate's is masked, on every frame, after every step-1 module
+ * (C8), so no later step or calculator sees the values. Adds no change tag.
+ */
+export const applyRealism = (live: LiveState): void => {
+  if (!live.realism) return;
+  for (const car of live.cars) {
+    if (car.id !== live.playerCar && car.id !== live.teammateCar) withholdForRealism(car);
   }
 };

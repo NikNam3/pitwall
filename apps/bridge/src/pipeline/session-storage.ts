@@ -1,42 +1,33 @@
 // The derived storage layer for one session (spec 9.2, 9.3): its row, its confirmed history, its weekend context.
-import { carId, type DriverKey, type SessionUid } from '@pitwall/domain';
-import { driverKeyOf, type HistoryDelta, type Projection, type WeekendContext } from '@pitwall/engine';
-import type { ParticipantsPacket, SessionPacket } from '@pitwall/protocol';
+import type { DriverKey, ParticipantsValues, SessionState, SessionUid } from '@pitwall/domain';
+import type { HistoryDelta, Projection, WeekendContext } from '@pitwall/engine';
 import type { Logger } from '../log.ts';
 import type { Db, SessionKey, SessionRow } from '../storage/db.ts';
 import { StorageWriter } from '../storage/storage-writer.ts';
 import { WeekendRepository } from '../storage/weekend-repository.ts';
 
-/** The game settings stored with a session, as the Session packet sends them. */
-const SETTINGS = [
-  'safetyCar', 'redFlags', 'carDamage', 'carDamageRate', 'tyreTemperature', 'lowFuelMode', 'recoveryMode', 'flashbackLimit',
-  'surfaceType', 'collisions', 'pitLaneTyreSim', 'parcFermeRules', 'equalCarPerformance', 'formationLap', 'aiDifficulty',
-  'gameMode', 'ruleSet',
-] as const satisfies ReadonlyArray<keyof SessionPacket>;
-
-const driversOf = (participants: ParticipantsPacket | undefined): SessionRow['drivers'] =>
-  participants === undefined
-    ? []
-    : Array.from({ length: participants.numActiveCars }, (_, i) => ({ carId: carId(i), driverKey: driverKeyOf(participants, i) }));
-
+/**
+ * A session row from the engine's values (C6: storage sees no packet type): the live state's session and, once
+ * Participants named them, the driver of each slot the session uses.
+ */
 export type SessionRowInput = {
   sessionUid: SessionUid;
-  session: SessionPacket;
+  session: Pick<SessionState, 'link' | 'sessionType' | 'trackId' | 'settings'>;
   startedAt: string;
   pwrecPath: string | null;
-  participants?: ParticipantsPacket;
+  drivers?: ParticipantsValues['drivers'];
 };
 
 export const sessionRowOf = (s: SessionRowInput): SessionRow => ({
   sessionUid: s.sessionUid,
-  weekendId: String(s.session.weekendLinkIdentifier),
-  seasonId: String(s.session.seasonLinkIdentifier),
+  weekendId: String(s.session.link.weekend),
+  seasonId: String(s.session.link.season),
   sessionType: s.session.sessionType,
   trackId: s.session.trackId,
   startedAt: s.startedAt,
   pwrecPath: s.pwrecPath,
-  settings: Object.fromEntries(SETTINGS.map((name) => [name, s.session[name]])),
-  drivers: driversOf(s.participants),
+  settings: { ...s.session.settings },
+  drivers: s.drivers ?? [],
 });
 
 /**

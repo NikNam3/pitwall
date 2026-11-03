@@ -32,8 +32,8 @@ export type {
 } from './calc/types.ts';
 export { createRng, type Rng } from './util/rng.ts';
 export { copyPlain } from './util/copy-plain.ts';
-export { initialState } from './step/initial-state.ts';
-export { driverKeyOf } from './step/identity.ts';
+export { initialState } from './step/state-update/initial.ts';
+export { driverKeyOf, participantsValuesOf } from './step/state-update/identity.ts';
 export {
   ALL_CHANGE_TAGS,
   CHANGE_TAGS,
@@ -44,11 +44,10 @@ export {
   type FlashbackReport,
   type LapCorrection,
   type StepOutput,
-  type SubStep,
 } from './step/step.ts';
 export { projectionLengths } from './log/projection.ts';
 export type { HistoryDelta, LogLengths, Projection, ProjectedList, ProjectionState } from './log/types.ts';
-export { unknownLapEnd, type LapEndSamples } from './history/lap-samples.ts';
+export { unknownLapEnd, type LapEndSamples } from './recorders/lap-samples.ts';
 export {
   IDENTITY_WAIT_FRAMES,
   SessionRunner,

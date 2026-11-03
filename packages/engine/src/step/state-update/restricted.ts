@@ -1,5 +1,5 @@
 import { known, unknown, type CarState, type Known, type SessionTime } from '@pitwall/domain';
-import { CORNER_NAMES } from './corners.ts';
+import { CORNER_NAMES } from '../corners.ts';
 
 /**
  * The value as `Known` since `at`, or `unknown('restricted')` when the car's driver withholds their telemetry

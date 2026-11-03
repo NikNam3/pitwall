@@ -1,17 +1,17 @@
-import { pick } from './pick.ts';
+import { pick } from '../pick.ts';
 import { knownUnlessRestricted } from './restricted.ts';
-import type { SubStep } from './sub-step.ts';
+import type { StateUpdate } from './types.ts';
 
 // Code tables from the struct comments of Car Status.
 const FUEL_MIX = ['lean', 'standard', 'rich', 'max'] as const;
 const ERS_DEPLOY_MODE = ['none', 'medium', 'hotlap', 'overtake'] as const;
 
 /** Fuel, ERS and power unit output from Car Status (kg, J, W as sent). Restricted for a human who withholds their telemetry. */
-export const applyEnergy: SubStep = (state, frame, out) => {
+export const energyUpdate: StateUpdate = { id: 'energy', apply: (frame, live, _signals, out) => {
   const { status } = frame;
   if (!status) return;
   const at = frame.sessionTime;
-  for (const car of state.cars) {
+  for (const car of live.cars) {
     const s = status.carStatusData[car.id];
     if (!s) continue;
     car.updatedAt.status = at;
@@ -36,4 +36,4 @@ export const applyEnergy: SubStep = (state, frame, out) => {
     };
   }
   out.changed.add('energy');
-};
+} };

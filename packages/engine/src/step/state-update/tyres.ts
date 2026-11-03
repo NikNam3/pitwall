@@ -1,8 +1,9 @@
 import { actualCompoundFromCode, known, unknown, visualCompoundFromCode, type TyreSet } from '@pitwall/domain';
 import type { TyreSetsPacket } from '@pitwall/protocol';
-import { CORNER_NAMES, cornersOf } from './corners.ts';
+import { CORNER_NAMES, cornersOf } from '../corners.ts';
 import { knownUnlessRestricted } from './restricted.ts';
-import type { SubStep } from './sub-step.ts';
+import { surfaceOnly as surfaceOnlyIn } from './session.ts';
+import type { StateUpdate } from './types.ts';
 
 type TyreSetData = TyreSetsPacket['tyreSetData'][number];
 
@@ -23,11 +24,11 @@ const tyreSetFrom = (s: TyreSetData): TyreSet => ({
  * from Car Damage, and the tyre sets from Tyre Sets. Carcass temperature does not apply when the game only
  * simulates the surface.
  */
-export const applyTyres: SubStep = (state, frame, out) => {
+export const tyresUpdate: StateUpdate = { id: 'tyres', apply: (frame, live, _signals, out) => {
   const { status, telemetry, damage, tyreSets } = frame;
   const at = frame.sessionTime;
   if (status) {
-    for (const car of state.cars) {
+    for (const car of live.cars) {
       const s = status.carStatusData[car.id];
       if (!s) continue;
       car.tyres.actualCompound = actualCompoundFromCode(s.actualTyreCompound);
@@ -37,8 +38,9 @@ export const applyTyres: SubStep = (state, frame, out) => {
     out.changed.add('tyres');
   }
   if (telemetry) {
-    const surfaceOnly = state.session.settings.tyreTemperature === 'surfaceOnly';
-    for (const car of state.cars) {
+    // The frame's own Session packet, if any, else the setting as it was (C11: not the session module's write).
+    const surfaceOnly = frame.session ? surfaceOnlyIn(frame.session) : live.session.settings.tyreTemperature === 'surfaceOnly';
+    for (const car of live.cars) {
       const t = telemetry.carTelemetryData[car.id];
       if (!t) continue;
       const surface = cornersOf(t.tyresSurfaceTemperature);
@@ -54,7 +56,7 @@ export const applyTyres: SubStep = (state, frame, out) => {
     out.changed.add('tyres');
   }
   if (damage) {
-    for (const car of state.cars) {
+    for (const car of live.cars) {
       const d = damage.carDamageData[car.id];
       if (!d) continue;
       const wear = cornersOf(d.tyresWear);
@@ -70,7 +72,7 @@ export const applyTyres: SubStep = (state, frame, out) => {
     out.changed.add('tyres');
   }
   for (const packet of tyreSets) {
-    const car = state.cars[packet.carIdx];
+    const car = live.cars[packet.carIdx];
     if (!car) continue;
     car.updatedAt.tyreSets = at;
     car.tyres.sets = knownUnlessRestricted(
@@ -80,4 +82,4 @@ export const applyTyres: SubStep = (state, frame, out) => {
     );
   }
   if (tyreSets.length > 0) out.changed.add('tyres');
-};
+} };

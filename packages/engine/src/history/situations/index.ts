@@ -4,7 +4,6 @@
 import type { Frame } from '../../frame/frame.ts';
 import type { EngineState } from '../../state/engine-state.ts';
 import type { FlashbackReport, StepOutput } from '../../step/types.ts';
-import type { SubStep } from '../../step/sub-step.ts';
 import { applyPhaseSignals, enterPostSession, joinSession } from './session-phase.ts';
 import { atRewindTarget, noteRewind, onRaceClock, restampStart, timeJumpOf, trackPauses } from './time-jumps.ts';
 
@@ -57,7 +56,7 @@ export const applySessionClock = (state: EngineState, frame: Frame, out: StepOut
  * the time of an entry an earlier frame recorded (a moment frames share: a standing clock such as the grid's, the stale
  * frames after a rewind; or a fall of the clock before the race start).
  */
-export const applySituations: SubStep = (state, frame, out) => {
+export const applySituations = (state: EngineState, frame: Frame, out: StepOutput): void => {
   trackPauses(state, frame);
   tagPhases(state, out, () => {
     const { phaseBook } = state.open;

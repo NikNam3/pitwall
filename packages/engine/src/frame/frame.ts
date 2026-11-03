@@ -36,6 +36,8 @@ export type Frame = {
    */
   receivedAtMs: number;
   playerCarIndex: number;
+  /** The frame's first FLBK event, as the game's target frame id and session time (ms): what the `SessionRunner` reads. */
+  flashback?: { targetFrameId: number; targetSessionTime: SessionTime };
   motion?: MotionPacket;
   lapData?: LapDataPacket;
   telemetry?: CarTelemetryPacket;

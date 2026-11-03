@@ -54,7 +54,8 @@ export type SessionRow = {
   /** ISO 8601. */
   startedAt: string;
   pwrecPath: string | null;
-  settings: Record<string, number>;
+  /** The game settings as the engine reads them (`GameSettings`). */
+  settings: Record<string, string | number | boolean>;
   drivers: ReadonlyArray<{ carId: CarId; driverKey: DriverKey }>;
 };
 

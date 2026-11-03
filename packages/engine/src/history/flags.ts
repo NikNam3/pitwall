@@ -1,5 +1,6 @@
 import type { FlagPhase, OpenSessionPhase, ScPhase } from '@pitwall/domain';
-import type { SubStep } from '../step/sub-step.ts';
+import type { EngineState } from '../state/engine-state.ts';
+import type { StepOutput } from '../step/types.ts';
 
 type OpenFlagPhase = Omit<FlagPhase, 'end' | 'endLeaderLap'>;
 
@@ -31,7 +32,7 @@ const mirrors = (flag: OpenFlagPhase | undefined, phase: OpenSessionPhase): bool
  * appended; the phase in progress is the view's `activeFlagPhase`. Appending, opening, closing and a new SC stage each
  * tag `flagPhases`.
  */
-export const applyFlagPhases: SubStep = (state, _frame, out) => {
+export const applyFlagPhases = (state: EngineState, out: StepOutput): void => {
   // Legacy lists (`LegacyList`): written in the log directly until Task 19 removes flag phases.
   const { sessionPhases, flagPhases } = state.log;
   const recorded = flagPhases.length;

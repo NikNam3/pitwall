@@ -1,5 +1,4 @@
-import { carId, toSessionTime, type Ms, type ParticipantsValues, type SessionTime } from '@pitwall/domain';
-import type { EventDetails, ParticipantsPacket } from '@pitwall/protocol';
+import { toSessionTime, type Ms, type ParticipantsValues, type SessionTime } from '@pitwall/domain';
 import type { Frame } from '../frame/frame.ts';
 import { onRaceClock, rewindMarkOf } from '../history/situations/time-jumps.ts';
 import { logWriter, voidFactOf } from '../log/log.ts';
@@ -8,11 +7,12 @@ import type { HistoryDelta, LogVoidFact } from '../log/types.ts';
 import { emptySituation } from '../situations/situation.ts';
 import type { EngineState } from '../state/engine-state.ts';
 import type { WeekendContext } from '../state/weekend-context.ts';
-import { driverKeyOf } from '../step/identity.ts';
-import { initialState } from '../step/initial-state.ts';
+import { participantsValuesOf } from '../step/state-update/identity.ts';
+import { initialState } from '../step/state-update/initial.ts';
 import { ALL_CHANGE_TAGS, projectionTrackerOf, step, type ChangeTag, type ClockFall, type ClockJump, type FlashbackReport, type LapCorrection } from '../step/step.ts';
 import { copyPlain } from '../util/copy-plain.ts';
 import type { DeepReadonly } from '../util/deep-readonly.ts';
+import type { Snapshotable } from './snapshotable.ts';
 import { SnapshotStore } from './snapshots.ts';
 
 /** Where a flashback took the session: the game's target frame, its time on the race clock and the player's lap there. */
@@ -44,8 +44,7 @@ export type StepResult = {
   clockJump?: ClockJump;
 };
 
-/** State a runner can save with each snapshot and put back on a rewind (C27): the bookkeeping of what reads its results. */
-export type Snapshotable<S> = { snapshot(): S; restore(s: S): void };
+export type { Snapshotable } from './snapshotable.ts';
 
 /** Called once for each frame the runner applies, in order, right after that frame's step. */
 export type OnResult = (result: StepResult, frame: Frame) => void;
@@ -85,15 +84,6 @@ type Target = { frameId: number; sessionTime?: SessionTime };
  * session time on the race clock after it; `attached`: the attached bookkeeping once its result was handed out.
  */
 type Kept = { frame: Frame; report?: FlashbackReport; at: SessionTime; attached: unknown };
-
-/** What the identity wait hands `contextFor`: the player's slot and the driver of each slot the session uses. */
-const participantsOf = (frame: Frame, p: ParticipantsPacket): ParticipantsValues => ({
-  playerCar: carId(frame.playerCarIndex),
-  drivers: Array.from({ length: Math.min(p.numActiveCars, p.participants.length) }, (_, i) => ({ carId: carId(i), driverKey: driverKeyOf(p, i) })),
-});
-
-type FlashbackDetails = Extract<EventDetails, { code: 'FLBK' }>;
-const isFlashback = (details: EventDetails): details is FlashbackDetails => details.code === 'FLBK';
 
 /**
  * Runs one session's frames through `step` and handles flashbacks (spec 5.4). Frames wait until the first Participants
@@ -165,7 +155,7 @@ export class SessionRunner {
   apply(frame: Frame, onResult?: OnResult): void {
     this.#queue.push(frame);
     if (this.#waiting) {
-      if (frame.participants !== undefined) this.#endWait(participantsOf(frame, frame.participants));
+      if (frame.participants !== undefined) this.#endWait(participantsValuesOf(frame, frame.participants));
       else if (this.#queue.length >= IDENTITY_WAIT_FRAMES) this.#endWait(undefined);
       else return;
     }
@@ -226,15 +216,14 @@ export class SessionRunner {
   }
 
   /**
-   * The flashback the frame reports: an `FLBK` event's target, else the frame before this one when `frameId` went back
+   * The flashback the frame reports: an `FLBK` event's target (`frame.flashback`, from frame assembly), else the frame before this one when `frameId` went back
    * while `overallFrameId` rose. A `frameId` going back while `overallFrameId` does not rise reports none, and so does
    * the session's first frame (a live join, or a cut segment whose first frame carries an `FLBK` to a frame before
    * it): the engine never saw the far side of that rewind, so the frame is applied as the session's first.
    */
   #reportedTarget(frame: Frame): Target | undefined {
     if (!this.#applied) return undefined;
-    const event = frame.events.map((e) => e.details).find(isFlashback);
-    if (event) return { frameId: event.flashbackFrameIdentifier, sessionTime: toSessionTime(event.flashbackSessionTime) };
+    if (frame.flashback) return { frameId: frame.flashback.targetFrameId, sessionTime: frame.flashback.targetSessionTime };
     return frame.frameId < this.#state.lastFrameId && frame.overallFrameId > this.#lastOverallFrameId ? { frameId: frame.frameId - 1 } : undefined;
   }
 

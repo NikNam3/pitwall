@@ -2,6 +2,7 @@
 import { sessionUidString, type FeedId, type ParticipantsValues, type SessionTime, type SessionUid } from '@pitwall/domain';
 import {
   activeFlagPhaseOf,
+  participantsValuesOf,
   projectionLengths,
   Scheduler,
   SessionRunner,
@@ -14,7 +15,7 @@ import {
   type WeekendContext,
 } from '@pitwall/engine';
 import type { TopicName } from '@pitwall/contracts';
-import { peekHeader, type ParticipantsPacket, type SessionPacket } from '@pitwall/protocol';
+import { peekHeader, type SessionPacket } from '@pitwall/protocol';
 import type { CalcStats } from '../dev/calc-stats.ts';
 import type { FeatureConfig } from '../feature-config.ts';
 import type { FeedJobs } from '../jobs/feed-jobs.ts';
@@ -79,7 +80,6 @@ export class SessionProcessor {
     this.sessionUid = opts.sessionUid;
     this.#uid = sessionUidString(opts.sessionUid);
     this.#key = { sessionUid: this.#uid, weekendId: String(opts.session.weekendLinkIdentifier) };
-    opts.storage?.upsertSession(this.#row());
     const { feedId, sessionUid, session, registry } = opts;
     // `PITWALL_FREEZE_OUTPUTS=1` (the test runs set it) freezes every output, so a unit that changes one after returning it fails.
     const freezeOutputs = process.env.PITWALL_FREEZE_OUTPUTS === '1';
@@ -88,6 +88,7 @@ export class SessionProcessor {
       { feedId, sessionUid, session, realism: opts.config.realism?.enabled === true },
       { attach: this.#scheduler, contextFor: (participants) => this.#contextFor(participants) },
     );
+    opts.storage?.upsertSession(this.#row());
   }
 
   /** The newest applied frame's time on the engine's race clock (spec 3.3); undefined before the engine runs. */
@@ -98,7 +99,7 @@ export class SessionProcessor {
   push(frame: Frame): void {
     // The drivers are stored before the runner asks for the weekend context; a session started by the identity wait's
     // cap still stores them, so later sessions find it in the weekend.
-    if (frame.participants !== undefined && !this.#driversStored) this.#storeDrivers(frame.participants);
+    if (frame.participants !== undefined && !this.#driversStored) this.#storeDrivers(participantsValuesOf(frame, frame.participants).drivers);
     this.#applying(frame, () => this.#runner.apply(frame, this.#onResult));
   }
 
@@ -142,9 +143,9 @@ export class SessionProcessor {
     return driverKey && this.#o.storage?.weekendContext(this.#key, driverKey);
   }
 
-  #storeDrivers(participants: ParticipantsPacket): void {
+  #storeDrivers(drivers: ParticipantsValues['drivers']): void {
     this.#driversStored = true;
-    this.#o.storage?.upsertSession(this.#row(participants));
+    this.#o.storage?.upsertSession(this.#row(drivers));
   }
 
   /**
@@ -257,8 +258,9 @@ export class SessionProcessor {
     }
   }
 
-  #row(participants?: ParticipantsPacket): SessionRow {
-    const { session, startedAt, pwrecPath } = this.#o;
-    return sessionRowOf({ sessionUid: this.#uid, session, startedAt, pwrecPath, ...(participants && { participants }) });
+  /** The session's row from the engine's values: the session as the state holds it (the first Session packet's until a frame was applied). */
+  #row(drivers?: ParticipantsValues['drivers']): SessionRow {
+    const { startedAt, pwrecPath } = this.#o;
+    return sessionRowOf({ sessionUid: this.#uid, session: this.#runner.state.session, startedAt, pwrecPath, ...(drivers && { drivers }) });
   }
 }

@@ -11,10 +11,12 @@ import {
   type Vec3,
 } from '@pitwall/domain';
 import type { SessionPacket } from '@pitwall/protocol';
-import { newHistory, type ProjectionBook } from '../log/projection.ts';
-import { emptySituation } from '../situations/situation.ts';
-import type { EngineState, OpenTrackers } from '../state/engine-state.ts';
-import type { WeekendContext } from '../state/weekend-context.ts';
+import { newHistory, type ProjectionBook } from '../../log/projection.ts';
+import { initialSignals } from '../../signals/read.ts';
+import { emptySituation } from '../../situations/situation.ts';
+import type { EngineState, OpenTrackers } from '../../state/engine-state.ts';
+import type { WeekendContext } from '../../state/weekend-context.ts';
+import { RECORDERS } from '../step.ts';
 import { placePlayer } from './identity.ts';
 import { sessionStateFrom } from './session.ts';
 
@@ -108,20 +110,13 @@ export const createCarState = (id: CarId): CarState => ({
   updatedAt: {},
 });
 
-const perCar = <T>(make: () => T): T[] => Array.from({ length: MAX_CARS }, make);
-
-/** Nothing opened yet; per-car arrays hold `MAX_CARS` entries. */
+/** Nothing opened yet: every recorder's own state as its `init` gives it. */
 const emptyTrackers = (lastFlag: OpenTrackers['lastFlag'], projection: ProjectionBook): OpenTrackers => ({
   situations: { session: { kind: 'preStart', start: toSessionTime(0), startLeaderLap: 0 } },
   phaseBook: { started: false, clockOffsetMs: 0 },
-  laps: perCar(() => undefined),
-  stints: perCar(() => undefined),
-  pitVisits: perCar(() => undefined),
   lastFlag,
-  miniSectors: perCar(() => undefined),
-  lapIndex: perCar(() => ({})),
-  pitStatus: perCar(() => undefined),
-  damage: perCar(() => undefined),
+  recorders: Object.fromEntries(RECORDERS.map((recorder) => [recorder.id, recorder.init()])),
+  machines: {},
   projection,
 });
 
@@ -143,6 +138,8 @@ export function initialState(init: {
     cars: Array.from({ length: MAX_CARS }, (_, i) => createCarState(carId(i))),
     log,
     history: projection,
+    signals: initialSignals(init.session),
+    frameEvents: [],
     playerCar: carId(header.playerCarIndex),
     lastFrameId: header.frameIdentifier,
     sessionTime: toSessionTime(header.sessionTime),

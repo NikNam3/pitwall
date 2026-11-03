@@ -135,7 +135,7 @@ export class WeekendRepository {
       trackId: row.track_id,
       startedAt: row.started_at,
       pwrecPath: row.pwrec_path,
-      settings: JSON.parse(row.settings) as Record<string, number>,
+      settings: JSON.parse(row.settings) as SessionRow['settings'],
       drivers: this.driversOf(keyOf(row)),
     };
   }

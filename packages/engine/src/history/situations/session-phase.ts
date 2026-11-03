@@ -16,9 +16,13 @@ import type { EventDetails, EventDetailsOf } from '@pitwall/protocol';
 import type { Frame } from '../../frame/frame.ts';
 import type { Log } from '../../log/types.ts';
 import type { EngineState, TrackerLengths } from '../../state/engine-state.ts';
-import { isActiveCar, slotsInUse } from '../../step/identity.ts';
+import { endLapVisits, lapsRecorder, reindexLaps, restartLap } from '../../recorders/laps.ts';
+import { restartMiniSectors, miniSectorsRecorder } from '../../recorders/mini-sectors.ts';
+import { ownStateOf } from '../../recorders/own-state.ts';
+import { endPitVisits, pitStopsRecorder } from '../../recorders/pit-stops.ts';
+import { endStintVisits, reindexStintLaps, restartStintLap, stintsRecorder } from '../../recorders/stints.ts';
+import { isActiveCar, slotsInUse } from '../../step/active-cars.ts';
 import type { StepOutput } from '../../step/types.ts';
-import { restartLap } from '../laps.ts';
 
 type NeutralisingCar = 'SC' | 'VSC';
 
@@ -55,7 +59,7 @@ const isVoided = (log: Log, list: Discarded, index: number): boolean =>
   });
 
 /** The facts of `list` no flashback undid. */
-const unvoided = <K extends Discarded>(log: Log, list: K): Log[K] =>
+export const unvoided = <K extends Discarded>(log: Log, list: K): Log[K] =>
   log.voids.length === 0 ? log[list] : (log[list].filter((_, i) => !isVoided(log, list, i)) as Log[K]);
 
 /** The log's lists after the discard cut `list` back to `length`: void ranges past it named facts that are gone, so they go too. */
@@ -230,18 +234,14 @@ const startLights = (state: EngineState, out: StepOutput, at: SessionTime): void
   enter(state, out, phase(state, 'startLights', at), 'standing');
 };
 
-/** Rebuilds the per-car lap index from the laps left in the history. */
-const reindexLaps = (state: EngineState): void => {
-  const { log, open } = state;
-  open.lapIndex = open.lapIndex.map(() => ({}));
-  log.laps.forEach((lap, i) => {
-    const index = open.lapIndex[lap.carId];
-    if (isVoided(log, 'laps', i)) return;
-    if (!index) return;
-    const slot = (index[lap.lapNumber] ??= { confirmed: false });
-    if (lap.status === 'confirmed') slot.confirmed = true;
-    else slot.provisional = i;
-  });
+/**
+ * Rebuilds what the lap and stint recorders keep of the recorded laps from the laps left in the history: the discard
+ * cut the log in place (an old mechanism; Task 9 removes it), so their own state follows it.
+ */
+const reindexRecordedLaps = (state: EngineState): void => {
+  const laps = unvoided(state.log, 'laps');
+  reindexLaps(ownStateOf(state, lapsRecorder), laps);
+  reindexStintLaps(ownStateOf(state, stintsRecorder), laps);
 };
 
 /**
@@ -252,16 +252,18 @@ const reindexLaps = (state: EngineState): void => {
  */
 const discardFormation = (state: EngineState, from: TrackerLengths): void => {
   // Cuts the log in place (an old mechanism; Task 9 replaces it with hiding by stamp): the step is `rewritten`.
-  const { log, open } = state;
+  const { log } = state;
   const lights = log.events.slice(from.events).filter((e, i) => e.kind === 'startLights' && !isVoided(log, 'events', from.events + i));
   for (const key of DISCARDED) {
     log[key].splice(from[key]);
     cutVoids(log, key, from[key]);
   }
   log.events.push(...lights);
-  reindexLaps(state);
-  open.miniSectors.fill(undefined);
-  open.pitVisits.fill(undefined);
+  reindexRecordedLaps(state);
+  restartMiniSectors(ownStateOf(state, miniSectorsRecorder));
+  endPitVisits(ownStateOf(state, pitStopsRecorder));
+  endLapVisits(ownStateOf(state, lapsRecorder));
+  endStintVisits(ownStateOf(state, stintsRecorder));
 };
 
 /**
@@ -280,8 +282,11 @@ const lightsOut = (state: EngineState, frame: Frame, at: SessionTime, out: StepO
     out.rewritten = true;
   }
   const slots = slotsInUse(state);
+  const laps = ownStateOf(state, lapsRecorder), stints = ownStateOf(state, stintsRecorder);
   for (const car of state.cars) {
-    if (isActiveCar(car.id, slots, car.timing.resultStatus) && car.updatedAt.lapData !== undefined) restartLap(state, car, at);
+    if (!isActiveCar(car.id, slots, car.timing.resultStatus) || car.updatedAt.lapData === undefined) continue;
+    restartLap(laps, car, at);
+    restartStintLap(stints, car);
   }
   // The start's entries: the start lights (all that is left from before lights out) and everything from here on.
   book.lightsOut = { frameId: frame.frameId, from: { ...trackerLengths(state.log), events: start.events }, phaseFrom };

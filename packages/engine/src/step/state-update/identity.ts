@@ -1,8 +1,12 @@
-import { carId, MAX_CARS, OUT_OF_RACE_STATUSES, unknown, type CarIdentity, type DriverKey, type OwnCarState, type ResultStatus, type Visibility } from '@pitwall/domain';
+import { carId, MAX_CARS, unknown, type CarIdentity, type DriverKey, type OwnCarState, type ParticipantsValues, type Visibility } from '@pitwall/domain';
 import type { ParticipantsPacket } from '@pitwall/protocol';
-import type { EngineState } from '../state/engine-state.ts';
+import type { Frame } from '../../frame/frame.ts';
+import type { LiveState } from '../../state/live-state.ts';
+import { isActiveCar, slotsInUse } from '../active-cars.ts';
 import { withholdRestricted } from './restricted.ts';
-import type { SubStep } from './sub-step.ts';
+import type { StateUpdate } from './types.ts';
+
+export { isActiveCar, slotsInUse } from '../active-cars.ts';
 
 /** The key of the driver in a slot: the AI by `driverId`, a human by `networkId`, name and race number (spec 6.2). The one rule; the weekend context reuses it. A slot the packet lacks reads as an unknown AI driver. */
 export const driverKeyOf = (p: ParticipantsPacket, carIndex: number): DriverKey => {
@@ -13,17 +17,11 @@ export const driverKeyOf = (p: ParticipantsPacket, carIndex: number): DriverKey 
     : { kind: 'human', networkId: c.networkId, name: c.name, raceNumber: c.raceNumber };
 };
 
-/**
- * The slots the session uses. Participants `numActiveCars` counts only the cars still in the race, and a car that drops
- * out keeps its slot (the game does not renumber), so each car out of the race (`OUT_OF_RACE_STATUSES`) adds one slot
- * to the count.
- */
-export const slotsInUse = (state: EngineState): number =>
-  state.cars.reduce((slots, car) => (OUT_OF_RACE_STATUSES.has(car.timing.resultStatus) ? slots + 1 : slots), state.session.numActiveCars);
-
-/** Whether the car is in the session: a slot below `slots` (see `slotsInUse`) that the game has not marked invalid or inactive. */
-export const isActiveCar = (index: number, slots: number, resultStatus: ResultStatus): boolean =>
-  index < slots && resultStatus !== 'invalid' && resultStatus !== 'inactive';
+/** What the identity wait hands the runner's `contextFor` (C61): the player's slot and the driver of each slot the session uses. */
+export const participantsValuesOf = (frame: Frame, p: ParticipantsPacket): ParticipantsValues => ({
+  playerCar: carId(frame.playerCarIndex),
+  drivers: Array.from({ length: Math.min(p.numActiveCars, p.participants.length) }, (_, i) => ({ carId: carId(i), driverKey: driverKeyOf(p, i) })),
+});
 
 /** Participants `yourTelemetry = 0` hides a human's telemetry from everyone but themselves (Restricted data). */
 const visibilityOf = (identity: Pick<CarIdentity, 'ai' | 'telemetryPublic'>, isPlayer: boolean): Visibility => {
@@ -31,7 +29,7 @@ const visibilityOf = (identity: Pick<CarIdentity, 'ai' | 'telemetryPublic'>, isP
   return identity.ai || identity.telemetryPublic ? 'public' : 'restricted';
 };
 
-/** The slot's identity from Participants. It keeps the car's current `visibility`: `placePlayer` derives the new one, so it sees the change. */
+/** The slot's identity from Participants. It keeps the car's current `visibility`: `placePlayer` derives the new one after step 1's modules, so it sees the change. */
 const identityFrom = (p: ParticipantsPacket, index: number, visibility: Visibility): CarIdentity | undefined => {
   const c = p.participants[index];
   if (!c) return undefined;
@@ -63,9 +61,10 @@ export const createOwnCarState = (): OwnCarState => ({
 
 /**
  * Makes `playerIndex` the player: `ownCar` and `own` visibility move to its car, and the teammate is found again.
- * A car that turns restricted loses what was stored while it looked public (packets before Participants).
+ * A car that turns restricted loses what was stored while it looked public (packets before Participants). Runs after
+ * every step-1 module (C11), so it reads the frame's identities and result statuses whatever order they ran in.
  */
-export const placePlayer = (state: EngineState, playerIndex: number): void => {
+export const placePlayer = (state: LiveState, playerIndex: number): void => {
   state.playerCar = carId(playerIndex);
   for (const car of state.cars) {
     const isPlayer = car.id === playerIndex;
@@ -85,21 +84,23 @@ export const placePlayer = (state: EngineState, playerIndex: number): void => {
   )?.id;
 };
 
-export const applyIdentity: SubStep = (state, frame, out) => {
-  const p = frame.participants;
-  const playerChanged = frame.playerCarIndex !== state.playerCar;
-  if (p) {
-    state.session.numActiveCars = p.numActiveCars;
-    for (let i = 0; i < MAX_CARS; i++) {
-      const car = state.cars[i];
-      if (!car) continue;
-      const identity = identityFrom(p, i, car.identity.visibility);
-      if (!identity) continue;
-      car.identity = identity;
-      car.updatedAt.participants = frame.sessionTime;
+/** The identities from Participants; tags `identity` when they arrive or the player changes (step 1 then places the player). */
+export const identityUpdate: StateUpdate = {
+  id: 'identity',
+  apply(frame, live, _signals, out) {
+    const p = frame.participants;
+    const playerChanged = frame.playerCarIndex !== live.playerCar;
+    if (p) {
+      live.session.numActiveCars = p.numActiveCars;
+      for (let i = 0; i < MAX_CARS; i++) {
+        const car = live.cars[i];
+        if (!car) continue;
+        const identity = identityFrom(p, i, car.identity.visibility);
+        if (!identity) continue;
+        car.identity = identity;
+        car.updatedAt.participants = frame.sessionTime;
+      }
     }
-  }
-  if (!p && !playerChanged) return;
-  placePlayer(state, frame.playerCarIndex);
-  out.changed.add('identity');
+    if (p || playerChanged) out.changed.add('identity');
+  },
 };

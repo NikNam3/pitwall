@@ -1,7 +1,7 @@
 import type { Insight, SessionTime } from '@pitwall/domain';
 import type { HistoryDelta } from '../log/types.ts';
-import type { Snapshotable } from '../runner/session-runner.ts';
-import type { ChangeTag } from '../step/step.ts';
+import type { Snapshotable } from '../runner/snapshotable.ts';
+import type { ChangeTag } from '../step/types.ts';
 import { deepFreeze } from '../util/deep-freeze.ts';
 import { InsightBook, type InsightBookState } from './insight-book.ts';
 import { RegistryError, type CalculatorRegistry } from './registry.ts';

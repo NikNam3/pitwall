@@ -1,7 +1,8 @@
 import { known, type CarSetup, type OwnCarMotionEx } from '@pitwall/domain';
 import type { CarSetupsPacket, MotionExPacket } from '@pitwall/protocol';
-import { cornersOf, mapCorners } from './corners.ts';
-import type { SubStep } from './sub-step.ts';
+import { cornersOf, mapCorners } from '../corners.ts';
+import { createOwnCarState } from './identity.ts';
+import type { StateUpdate } from './types.ts';
 
 const motionExFrom = (m: MotionExPacket): OwnCarMotionEx => {
   const suspensionPosition = cornersOf(m.suspensionPosition);
@@ -71,26 +72,30 @@ const setupFrom = (s: CarSetupsPacket['carSetupData'][number]): CarSetup => ({
   fuelLoadKg: s.fuelLoad,
 });
 
-/** What the game sends for the player's car only: MotionEx, the setup and the live brake bias. */
-export const applyOwnCar: SubStep = (state, frame, out) => {
-  const player = state.cars[state.playerCar];
-  const own = player?.ownCar;
-  if (!player || !own) return;
+/**
+ * What the game sends for the player's car only: MotionEx, the setup and the live brake bias. The player is the frame's
+ * (C11: not identity's write); a new player's own data starts here, and placing the player keeps it.
+ */
+export const ownCarUpdate: StateUpdate = { id: 'ownCar', apply: (frame, live, _signals, out) => {
+  const playerCar = frame.playerCarIndex;
+  const player = live.cars[playerCar];
+  if (!player) return;
   const at = frame.sessionTime;
+  const ownOf = () => (player.ownCar ??= createOwnCarState());
   if (frame.motionEx) {
-    own.motionEx = known(motionExFrom(frame.motionEx), at);
+    ownOf().motionEx = known(motionExFrom(frame.motionEx), at);
     player.updatedAt.motionEx = at;
     out.changed.add('ownCar');
   }
-  const setup = frame.setups?.carSetupData[state.playerCar];
+  const setup = frame.setups?.carSetupData[playerCar];
   if (setup) {
-    own.setup = known(setupFrom(setup), at);
+    ownOf().setup = known(setupFrom(setup), at);
     player.updatedAt.setups = at;
     out.changed.add('ownCar');
   }
-  const status = frame.status?.carStatusData[state.playerCar];
+  const status = frame.status?.carStatusData[playerCar];
   if (status) {
-    own.brakeBiasPct = known(status.frontBrakeBias, at);
+    ownOf().brakeBiasPct = known(status.frontBrakeBias, at);
     out.changed.add('ownCar');
   }
-};
+} };

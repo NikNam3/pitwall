@@ -1,12 +1,13 @@
-import { known, unknown, type Known, type Ms, type SessionTime } from '@pitwall/domain';
-import { pick } from './pick.ts';
+import { known, unknown, type ConfirmedLap, type Known, type Ms, type SessionTime } from '@pitwall/domain';
+import type { SessionHistoryPacket } from '@pitwall/protocol';
+import { pick } from '../pick.ts';
 import { ZONE_FLAG } from './session.ts';
-import type { SubStep } from './sub-step.ts';
+import type { StateUpdate } from './types.ts';
 
 // Code tables from the struct comments of LapData; a code the spec does not list reads as the first entry.
-const PIT_STATUS = ['none', 'pitting', 'inPitArea'] as const;
-const DRIVER_STATUS = ['inGarage', 'flyingLap', 'inLap', 'outLap', 'onTrack'] as const;
-const RESULT_STATUS = [
+export const PIT_STATUS = ['none', 'pitting', 'inPitArea'] as const;
+export const DRIVER_STATUS = ['inGarage', 'flyingLap', 'inLap', 'outLap', 'onTrack'] as const;
+export const RESULT_STATUS = [
   'invalid',
   'inactive',
   'active',
@@ -27,12 +28,39 @@ const MAX_GAP_MS = 300_000;
 
 const gap = (ms: Ms, at: SessionTime): Known<Ms> => (Math.abs(ms) > MAX_GAP_MS ? unknown('notApplicable') : known(ms, at));
 
-/** Timing from LapData; the FIA flag comes from Car Status. Gaps are kept as sent: a car just ahead can show a small negative delta. */
-export const applyTiming: SubStep = (state, frame, out) => {
-  const { lapData, status } = frame;
+// Bits of `lapValidBitFlags`.
+const LAP_VALID = 0x01;
+const SECTOR_VALID = [0x02, 0x04, 0x08] as const;
+
+/** The laps Session History completes (an entry with a lap time), oldest first, numbered from 1. */
+const confirmedLapsOf = (p: SessionHistoryPacket): ConfirmedLap[] =>
+  p.lapHistoryData.slice(0, p.numLaps).flatMap((entry, i): ConfirmedLap[] =>
+    entry.lapTimeInMs > 0
+      ? [{
+          lapNumber: i + 1,
+          lapTimeMs: entry.lapTimeInMs,
+          sectorTimesMs: [entry.sector1TimeMs, entry.sector2TimeMs, entry.sector3TimeMs],
+          valid: {
+            lap: (entry.lapValidBitFlags & LAP_VALID) !== 0,
+            sectors: [
+              (entry.lapValidBitFlags & SECTOR_VALID[0]) !== 0,
+              (entry.lapValidBitFlags & SECTOR_VALID[1]) !== 0,
+              (entry.lapValidBitFlags & SECTOR_VALID[2]) !== 0,
+            ],
+          },
+        }]
+      : [],
+  );
+
+/**
+ * Timing from LapData; the FIA flag comes from Car Status, the confirmed laps from Session History. Gaps are kept as
+ * sent: a car just ahead can show a small negative delta.
+ */
+export const timingUpdate: StateUpdate = { id: 'timing', apply: (frame, live, _signals, out) => {
+  const { lapData, status, sessionHistory } = frame;
+  const at = frame.sessionTime;
   if (lapData) {
-    const at = frame.sessionTime;
-    for (const car of state.cars) {
+    for (const car of live.cars) {
       const l = lapData.lapData[car.id];
       if (!l) continue;
       car.updatedAt.lapData = at;
@@ -70,11 +98,18 @@ export const applyTiming: SubStep = (state, frame, out) => {
     out.changed.add('timing');
   }
   if (status) {
-    for (const car of state.cars) {
+    for (const car of live.cars) {
       const s = status.carStatusData[car.id];
       // The game sends -1 for an unknown flag, then 0 none, 1 green, 2 blue, 3 yellow.
       if (s) car.timing.fiaFlag = pick(ZONE_FLAG, s.vehicleFiaFlags + 1);
     }
     out.changed.add('timing');
   }
-};
+  for (const packet of sessionHistory) {
+    const car = live.cars[packet.carIdx];
+    if (!car) continue;
+    car.updatedAt.sessionHistory = at;
+    car.timing.confirmedLaps = confirmedLapsOf(packet);
+    out.changed.add('timing');
+  }
+} };
