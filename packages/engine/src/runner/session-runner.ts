@@ -1,9 +1,9 @@
 import { toSessionTime, type Ms, type ParticipantsValues, type SessionTime } from '@pitwall/domain';
 import type { Frame } from '../frame/frame.ts';
-import { onRaceClock, rewindMarkOf } from '../history/situations/time-jumps.ts';
 import { logWriter, voidFactOf } from '../log/log.ts';
 import { projectionLengths } from '../log/projection.ts';
 import type { HistoryDelta, LogVoidFact } from '../log/types.ts';
+import { onRaceClock, rewindMarkOf } from '../situations/clock/clock.ts';
 import { closeSession, situationOf } from '../situations/run.ts';
 import type { EngineState } from '../state/engine-state.ts';
 import type { WeekendContext } from '../state/weekend-context.ts';
@@ -27,11 +27,11 @@ const LEGACY_REWIND: LogVoidFact['target'] = { frameId: -1, at: toSessionTime(0)
 
 /**
  * What applying one frame did. When it changed history recorded before it (a flashback, lights out discarding the
- * formation lap, the start's settling re-stamping it) or took back what readers saw (a neutralisation dropped
+ * formation lap) or took back what readers saw (a neutralisation dropped
  * unconfirmed; a session phase opening or closing at or before the time of an entry earlier frames recorded), `changed`
  * holds every tag and `delta.rewound` is set: a flashback's void target (the frame restored to, at its time on the race
  * clock), else `LEGACY_REWIND`; `flashback` tells a flashback. `clockFall` reports a fall of the
- * session time that changed nothing recorded, `clockJump` a forward jump that is no post-session jump (spec 3.3); both
+ * session time that changed nothing recorded (carried over, C36), `clockJump` a forward jump that is no post-session jump (spec 3.3); both
  * carry the game's times. Every other session time is on the race clock.
  */
 export type StepResult = {
@@ -92,10 +92,10 @@ type Kept = { frame: Frame; report?: FlashbackReport; at: SessionTime; attached:
  * `REPLAY_WINDOW_MS`. A flashback restores the newest snapshot at or before the target, appends one void fact over what
  * the log gained since (C27; nothing is removed), replays the kept frames up to the target, restores the attached
  * bookkeeping as it stood there and then applies the game's new frame, so the discarded frames leave no trace in what
- * readers see. A step that rewrote earlier history (the situation tracker at the race start) drops every snapshot and
+ * readers see. A step that rewrote earlier history (the situation tracker's formation discard) drops every snapshot and
  * kept frame, so no later rewind goes back before it. The runner alone decides what reports a flashback; it hands that
  * decision to `step` with the frame (a `FlashbackReport`) and keeps it with the frame for every replay. Every other
- * session-time jump is the situation tracker's (`history/situations/`).
+ * session-time jump is the clock's (step 0, `situations/clock/`).
  */
 export class SessionRunner {
   #state: EngineState;
@@ -247,8 +247,10 @@ export class SessionRunner {
    * Restores the state after the target frame, or after the frame before `frame` when the game sends `frame` with an
    * id at or below the target: the state never runs ahead of the frame applied next. The void fact covers what the log
    * gained since the restored snapshot; its target is the frame restored to, at its time on the race clock (the
-   * snapshot's own when the target is older than the replay window; `flashback` keeps the game's target). Each
-   * replayed frame gets the runner's decision it got when first applied and appends its facts again after the void.
+   * snapshot's own when the target is older than the replay window; `flashback` keeps the game's target), and its frame
+   * number (C26). The restored state carries the snapshot's frame number, so each replayed frame counts again and gets
+   * the number of its first pass (C33). Each replayed frame gets the runner's decision it got when first applied and
+   * appends its facts again after the void.
    */
   #rewind(target: Target, frame: Frame): { flashback: FlashbackInfo; target: LogVoidFact['target'] } {
     const rewoundFrom = this.#state.sessionTime;
@@ -260,10 +262,11 @@ export class SessionRunner {
     this.#frames = this.#frames.filter(({ frame: f }) => f.frameId <= replayTo);
     const { log, history, weekend } = this.#state;
     this.#state = { ...copyPlain(snapshot.state), log, history, ...(weekend && { weekend }) };
-    // The frame restored to: the last replayed one, or the snapshot's when the target is older than the window.
+    // The frame restored to: the last replayed one, or the snapshot's when the target is older than the window. Its
+    // frame number: the snapshot's, counted on by each replayed frame (C26).
     const last = replayed.at(-1);
     const voidTarget = last === undefined ? { frameId: snapshot.frameId, at: snapshot.sessionTime } : { frameId: last.frame.frameId, at: last.at };
-    logWriter(log).append('voids', voidFactOf(log, snapshot.lengths, voidTarget));
+    logWriter(log).append('voids', voidFactOf(log, snapshot.lengths, voidTarget, snapshot.state.frameNumber + replayed.length));
     // The new void fact projects the log again (C30), before the replayed frames extend it.
     projectionTrackerOf(this.#state).update(situationOf(this.#state));
     for (const { frame: f, report } of replayed) step(this.#state, f, report);

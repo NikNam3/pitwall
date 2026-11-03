@@ -41,6 +41,3 @@ export type SessionPhaseSpan = {
 
 /** The phase in progress. */
 export type OpenSessionPhase = Omit<SessionPhaseSpan, 'end' | 'endLeaderLap'>;
-
-/** A pause: offline, no packets with a frozen session time (spec 3.1, over 2 s wall time); online, `gamePaused`. */
-export type PauseSpan = { start: SessionTime; wallMs: number; kind: 'offline' | 'online' };

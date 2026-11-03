@@ -1,7 +1,7 @@
-// Step 0, the clock, on committed segments (contract C7, C36; facts in fixtures/index.json): the race clock settling
-// after lights out is a fall carried over, never re-stamped (race-zandvoort-online-start); a fall inside the formation
-// is no flashback and changes nothing recorded (race-zandvoort-clock-reset); a flashback appends no clock fact
-// (race-singapore-wet-flashback). One replay per segment, from its first frame that carries a Session packet.
+// Step 0, the clock, on committed segments (contract C7, C36; facts in fixtures/index.json): every fall that is no
+// flashback is carried over, never re-timed, and the race clock never falls: the settling after lights out and the
+// formation reset before it (race-zandvoort-online-start), a fall inside the formation (race-zandvoort-clock-reset); a
+// flashback appends no clock fact (race-singapore-wet-flashback). One replay per segment, from its first frame that carries a Session packet.
 import { beforeAll, describe, expect, it } from 'vitest';
 import { feedId } from '@pitwall/domain';
 import { SessionRunner, SessionTracker, type DeepReadonly, type EngineState, type Frame, type StepResult } from '../../../src/index.ts';
@@ -77,22 +77,31 @@ describe('race-zandvoort-online-start: the race clock settles after lights out (
     ]);
     expect([steps[fall]!.rewound, steps[fall]!.flashback]).toEqual([false, false]);
   });
-  it('nothing recorded is re-stamped: the facts recorded before the fall keep their times, lights out the time of its frame', () => {
+  it('nothing recorded is re-timed: the facts recorded before the fall keep their times, lights out the time of its frame', () => {
     const { runner, steps } = run;
     const { before, now } = prefixes(steps[fall]!.before!, runner.state.history);
     expect(now).toEqual(before);
     expect(runner.state.history.events.filter((e) => e.kind === 'lightsOut').map((e) => e.at)).toEqual([steps[lgot]!.race]);
   });
-  it('the frames after the fall lie on the race clock: their session time plus the offset, and the race clock never falls from lights out on', () => {
+  it('the frames after the fall lie on the race clock: their session time plus the offset, and the race clock never falls', () => {
     const { steps } = run;
     const offset = steps[fall]!.race - steps[fall]!.raw;
     expect(offset).toBe(steps[fall - 1]!.raw - steps[fall]!.raw + (steps[fall - 1]!.race - steps[fall - 1]!.raw));
     expect(steps.slice(fall).filter((s) => s.race !== s.raw + offset)).toEqual([]);
-    expect(fallsIn(steps.slice(lgot).map((s) => s.race))).toEqual([]);
+    expect(fallsIn(steps.map((s) => s.race))).toEqual([]);
+  });
+  it('the formation reset before lights out is carried over too: every fall of the session time is a fall fact on its step', () => {
+    const { runner, steps } = run;
+    const falls = steps.flatMap((s, i) => (s.before !== undefined ? [i] : []));
+    expect(falls.length).toBeGreaterThan(1);
+    expect(falls.filter((i) => i < lgot)).not.toEqual([]);
+    expect(runner.state.log.clock.filter((f) => f.kind === 'fall')).toMatchObject(
+      falls.map((i) => ({ kind: 'fall', at: steps[i - 1]!.race, fromMs: steps[i - 1]!.raw, toMs: steps[i]!.raw, offsetMs: steps[i - 1]!.raw - steps[i]!.raw })),
+    );
   });
 });
 
-describe('race-zandvoort-clock-reset: a fall of the session time inside the formation, no FLBK, no lights out', () => {
+describe('race-zandvoort-clock-reset: a fall of the session time inside the formation, no FLBK, no lights out (C36: carried over)', () => {
   let run: Replay;
   /** The first step whose session time fell by more than 1 s. */
   let fall: number;
@@ -104,13 +113,16 @@ describe('race-zandvoort-clock-reset: a fall of the session time inside the form
   it('is no flashback and rewinds nothing', () => {
     expect([fall > 0, run.steps[fall]!.flashback, run.steps.filter((s) => s.rewound)]).toEqual([true, false, []]);
   });
-  it('re-stamps nothing: the facts recorded before it keep their times', () => {
+  it('re-times nothing: the facts recorded before it keep their times', () => {
     const { before, now } = prefixes(run.steps[fall]!.before!, run.runner.state.history);
     expect(now).toEqual(before);
     expect(before.crossings.length).toBeGreaterThan(0);
   });
-  it('appends no jump and no simulated end', () => {
-    expect(run.runner.state.log.clock.filter((f) => f.kind !== 'fall')).toEqual([]);
+  it('is carried over: one fall fact with the game’s times of the frames around it, and the race clock never falls', () => {
+    const { runner, steps } = run;
+    const [from, to] = [steps[fall - 1]!.raw, steps[fall]!.raw];
+    expect(runner.state.log.clock).toMatchObject([{ kind: 'fall', at: steps[fall - 1]!.race, fromMs: from, toMs: to, offsetMs: from - to }]);
+    expect(fallsIn(steps.map((s) => s.race))).toEqual([]);
   });
 });
 

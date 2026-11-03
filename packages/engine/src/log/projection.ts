@@ -1,38 +1,21 @@
-// The projection (contract C28-C30): the log as readers see it, every hidden fact skipped. The only module that
-// computes it. A fact is hidden when a void range covers its position (C27) or, for a fact that is no span, when its
-// stamp holds a span of a hiding kind (`formation`, C29); spans are never hidden by a stamp.
-import type { CarId, FactList, MachineId, OpenSpan, Span, Stamp } from '@pitwall/domain';
+// The projection (contract C26, C28-C30): the log as readers see it, every hidden fact skipped. The only module that
+// computes it, and the only one that computes membership: which spans a fact belongs to, from the frame number it
+// describes and the frame numbers each span opened and closed on (`situationAt`, `membershipOf`), never from times. A
+// fact is hidden when a void range covers its position (C27) or, for a fact that is no span, when the frame it describes
+// lies in a span of a hiding kind (`formation`, C29): the session's, or its own car's. Spans are never hidden that way.
+import { scopeOf, type CarId, type FactList, type FrameNumber, type MachineId, type OpenSpan, type Span } from '@pitwall/domain';
 import type { Situation } from '../situations/situation.ts';
 import type { DeepReadonly } from '../util/deep-readonly.ts';
 import { createLog, FACT_LISTS, LEGACY_LISTS } from './log.ts';
-import type { HistoryDelta, LegacyList, Log, LogLengths, LogVoidFact, Projection, ProjectionState } from './types.ts';
+import type { HiddenRanges, HidingFrames, HistoryDelta, LegacyList, Log, LogLengths, LogVoidFact, Projection, ProjectionBook, ProjectionState } from './types.ts';
 
-/** The span kind whose stamp hides a fact (C29): what the formation lap recorded did not happen in the race. */
+/** The span kind that hides the facts describing a frame it covers (C29): what the formation lap recorded did not happen in the race. */
 const HIDING_KIND = 'formation';
-
-/**
- * What hides facts: per list the void ranges `[from, to)` of log positions (C27, from the void facts; the legacy lists'
- * from their `legacy` ranges), and the closed spans of the hiding kind by `spanKey` (the open ones come with each
- * update's situation).
- */
-export type HiddenRanges = {
-  voided: Partial<Record<FactList | LegacyList, Array<readonly [from: number, to: number]>>>;
-  hidingSpans: Record<string, true>;
-};
-
-/** The tracker's bookkeeping, kept in the engine state (`open.projection`) so snapshots carry it. Plain data. */
-export type ProjectionBook = {
-  /** The log's lengths projected so far. */
-  seen: LogLengths;
-  /** The projection's lengths after the last update: the next update's `before`. */
-  lengths: LogLengths;
-  hidden: HiddenRanges;
-};
 
 /** The projection and its bookkeeping, as the engine state holds them (`history`, `open.projection`). */
 export type ProjectionHolder = { projection: ProjectionState; book: ProjectionBook };
 
-const emptyBook = (): ProjectionBook => ({ seen: {}, lengths: {}, hidden: { voided: {}, hidingSpans: {} } });
+const emptyBook = (): ProjectionBook => ({ seen: {}, lengths: {}, hidden: { voided: {}, hiding: [] } });
 
 const emptyProjection = (): ProjectionState => ({
   laps: [],
@@ -44,11 +27,7 @@ const emptyProjection = (): ProjectionState => ({
   spans: {},
   flagPhases: [],
   sessionPhases: [],
-  pauses: [],
 });
-
-/** A span's key: its machine and id, and its car for a car sub-machine's span (span ids count per car there, C26). */
-const spanKey = (machine: MachineId, id: number, carId?: CarId): string => (carId === undefined ? `${machine}#${id}` : `${machine}#${carId}#${id}`);
 
 const spanList = (machine: MachineId): FactList => `spans:${machine}`;
 
@@ -65,14 +44,24 @@ export const projectionLengths = (p: Projection): LogLengths => {
 export const isVoided = (list: FactList | LegacyList, index: number, hidden: HiddenRanges): boolean =>
   hidden.voided[list]?.some(([from, to]) => index >= from && index < to) ?? false;
 
-/** A fact of `list` is hidden by its stamp: it is no span and its stamp holds a span of the hiding kind (C29). */
-export const isHidden = (fact: { in: Stamp }, list: FactList, hidden: HiddenRanges): boolean => {
+/** The frames a span covers (C26): from the one it opened on up to, not including, the one it closed on; an open span every frame from its first. */
+const covers = (span: { startFrame: FrameNumber; endFrame?: FrameNumber }, frame: FrameNumber): boolean =>
+  span.startFrame <= frame && (span.endFrame === undefined || frame < span.endFrame);
+
+/** A span of the hiding kind as the frames it hides: its car's facts only for a car's span. */
+const hidingFramesOf = (span: DeepReadonly<OpenSpan> & { endFrame?: FrameNumber }): HidingFrames => ({
+  startFrame: span.startFrame,
+  ...(span.endFrame !== undefined && { endFrame: span.endFrame }),
+  ...(span.carId !== undefined && { carId: span.carId }),
+});
+
+/**
+ * A fact of `list` is hidden by formation (C29): it is no span and the frame it describes lies in a span of the hiding
+ * kind that is the session's (no car) or its own car's, whenever the fact was recorded.
+ */
+export const isHidden = (fact: { frame: FrameNumber; carId?: CarId }, list: FactList, hidden: HiddenRanges): boolean => {
   if (list.startsWith('spans:')) return false;
-  const carId = (fact as { carId?: CarId }).carId;
-  for (const [machine, id] of Object.entries(fact.in)) {
-    if (hidden.hidingSpans[spanKey(machine, id)] || (carId !== undefined && hidden.hidingSpans[spanKey(machine, id, carId)])) return true;
-  }
-  return false;
+  return hidden.hiding.some((h) => covers(h, fact.frame) && (h.carId === undefined || h.carId === fact.carId));
 };
 
 /** The void ranges of every void fact, the legacy lists' too, each range once. */
@@ -87,14 +76,12 @@ const voidedBy = (voids: readonly DeepReadonly<LogVoidFact>[]): HiddenRanges['vo
   return voided;
 };
 
-/** The hidden ranges with the open spans of the hiding kind added: a stamp can name a span that is still open. */
+/** The hidden ranges with the open spans of the hiding kind added: a fact can describe a frame of a span still open. */
 const withOpen = (hidden: HiddenRanges, open: Situation): HiddenRanges => {
   const spans: DeepReadonly<OpenSpan>[] = [...Object.values(open.byMachine).flat(), ...(open.session ? [open.session] : [])];
   const hiding = spans.filter((s) => s.kind === HIDING_KIND);
   if (hiding.length === 0) return hidden;
-  const hidingSpans = { ...hidden.hidingSpans };
-  for (const s of hiding) hidingSpans[spanKey(s.machine, s.id, s.carId)] = true;
-  return { voided: hidden.voided, hidingSpans };
+  return { voided: hidden.voided, hiding: [...hidden.hiding, ...hiding.map(hidingFramesOf)] };
 };
 
 /**
@@ -136,7 +123,7 @@ export class ProjectionTracker {
     return this.#projection;
   }
 
-  /** Projects what the log gained since the last update; `open`: the open spans, to resolve stamps naming them. */
+  /** Projects what the log gained since the last update; `open`: the open spans, whose frames can hide facts too. */
   update(open: Situation): HistoryDelta {
     const before = this.#book.lengths;
     const fresh = this.#log.voids.slice(this.#book.seen.voids ?? 0);
@@ -150,7 +137,7 @@ export class ProjectionTracker {
 
   /**
    * Projects the whole log again. For the old mechanisms that cut or rewrite the log in place (the situation tracker's
-   * formation discard and start re-stamp, until Task 9).
+   * formation discard, until Task 9).
    */
   rebuild(open: Situation): void {
     this.#rebuild(open);
@@ -162,7 +149,7 @@ export class ProjectionTracker {
     for (const list of [...FACT_LISTS, ...LEGACY_LISTS]) p[list] = [];
     p.spans = {};
     this.#book.seen = {};
-    this.#book.hidden = { voided: voidedBy(this.#log.voids), hidingSpans: {} };
+    this.#book.hidden = { voided: voidedBy(this.#log.voids), hiding: [] };
     this.#extend(open);
   }
 
@@ -170,20 +157,20 @@ export class ProjectionTracker {
     const log = this.#log;
     const p = this.#projection;
     const { seen, hidden } = this.#book;
-    // Spans first: a closed span of the hiding kind hides the facts stamped with it, also those of this update.
+    // Spans first: a closed span of the hiding kind hides the facts describing a frame it covers, also those of this update.
     for (const [machine, spans] of Object.entries(log.spans)) {
       const list = spanList(machine);
       const from = seen[list] ?? 0;
       for (let i = from; i < spans.length; i++) {
         const s = spans[i] as Span;
-        if (s.kind === HIDING_KIND && !isVoided(list, i, hidden)) hidden.hidingSpans[spanKey(s.machine, s.id, s.carId)] = true;
+        if (s.kind === HIDING_KIND && !isVoided(list, i, hidden)) hidden.hiding.push(hidingFramesOf(s));
       }
       p.spans[machine] = project(p.spans[machine], spans, from, (i) => !isVoided(list, i, hidden));
       seen[list] = spans.length;
     }
     const hiding = withOpen(hidden, open);
     for (const list of FACT_LISTS) this.#projectList(list, hiding);
-    // The legacy lists are hidden by void ranges only (no stamps).
+    // The legacy lists are hidden by void ranges only (they describe no frame).
     for (const list of LEGACY_LISTS) {
       (p[list] as unknown[]) = project(p[list] as unknown[], log[list] as unknown[], seen[list] ?? 0, (i) => !isVoided(list, i, hidden));
       seen[list] = log[list].length;
@@ -192,10 +179,10 @@ export class ProjectionTracker {
   }
 
   #projectList<L extends (typeof FACT_LISTS)[number]>(list: L, hiding: HiddenRanges): void {
-    const source = this.#log[list] as Array<{ in: Stamp }>;
-    const current = this.#projection[list] as Array<{ in: Stamp }>;
+    const source = this.#log[list] as Array<{ frame: FrameNumber; carId?: CarId }>;
+    const current = this.#projection[list] as Array<{ frame: FrameNumber; carId?: CarId }>;
     const from = this.#book.seen[list] ?? 0;
-    const visible = (i: number) => !isVoided(list, i, hiding) && !isHidden(source[i] as { in: Stamp }, list, hiding);
+    const visible = (i: number) => !isVoided(list, i, hiding) && !isHidden(source[i] as { frame: FrameNumber; carId?: CarId }, list, hiding);
     (this.#projection[list] as unknown[]) = project(current, source, from, visible);
     this.#book.seen[list] = source.length;
   }
@@ -208,3 +195,41 @@ export const newHistory = (open: Situation): { log: Log } & ProjectionHolder => 
   new ProjectionTracker(log, holder).rebuild(open);
   return { log, ...holder };
 };
+
+/**
+ * Where a reader finds spans (C20): the projection's closed spans and, for a running session, the open ones of the
+ * situation. The view satisfies it; a stored or weekend projection passes `history` only (all its spans are closed).
+ */
+export type MembershipSource = { history: DeepReadonly<Projection>; situation?: Situation };
+
+/**
+ * Every visible span covering `frame` (C26): the closed ones of `source.history.spans` (`startFrame <= frame <
+ * endFrame`) and the open ones of `source.situation` (`startFrame <= frame`), the clock's included, by machine. A
+ * machine with no span covering the frame is absent.
+ */
+export function situationAt(source: MembershipSource, frame: FrameNumber): Readonly<Record<MachineId, readonly DeepReadonly<OpenSpan>[]>> {
+  const at: Record<MachineId, DeepReadonly<OpenSpan>[]> = {};
+  const add = (machine: MachineId, spans: readonly DeepReadonly<OpenSpan & { endFrame?: FrameNumber }>[]) => {
+    const covering = spans.filter((s) => covers(s, frame));
+    if (covering.length > 0) (at[machine] ??= []).push(...covering);
+  };
+  for (const [machine, spans] of Object.entries(source.history.spans)) add(machine, spans);
+  for (const [machine, spans] of Object.entries(source.situation?.byMachine ?? {})) add(machine, spans);
+  return at;
+}
+
+/**
+ * The spans a fact belongs to (C26), from the frame it describes: of `situationAt(source, fact.frame)`, the spans of
+ * session-scoped machines (the clock's included) and, for a car's fact, its car's spans of car-scoped machines. Each
+ * machine's scope is its span declaration's in domain (`scopeOf`, C15); a machine without one, and zone spans, never
+ * belong to a fact.
+ */
+export function membershipOf(source: MembershipSource, fact: { frame: FrameNumber; carId?: CarId }): Readonly<Record<MachineId, DeepReadonly<OpenSpan>>> {
+  const member: Record<MachineId, DeepReadonly<OpenSpan>> = {};
+  for (const [machine, spans] of Object.entries(situationAt(source, fact.frame))) {
+    const scope = scopeOf(machine);
+    const span = scope === 'session' ? spans[0] : scope === 'car' && fact.carId !== undefined ? spans.find((s) => s.carId === fact.carId) : undefined;
+    if (span) member[machine] = span;
+  }
+  return member;
+}

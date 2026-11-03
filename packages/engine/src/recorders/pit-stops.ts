@@ -1,5 +1,5 @@
 import { MAX_CARS, type Ms, type PitStatus, type SessionState, type SessionTime } from '@pitwall/domain';
-import { stampOf, type Recorder } from '../step/types.ts';
+import type { Recorder } from '../step/types.ts';
 import { carsWithLapData } from './cars.ts';
 import { pitLaneStep } from './pit-lane.ts';
 
@@ -65,7 +65,7 @@ export const pitStopsRecorder: Recorder<PitStopsOwn> = {
         stationaryTimeMs: visit.stationaryTimeMs,
         flag: visit.flag,
         penaltyServed: visit.penaltyServed,
-        in: stampOf(input.stamps, car.id),
+        frame: input.frameNumber,
       });
       own.visits[car.id] = undefined;
       out.changed.add('pitStops');

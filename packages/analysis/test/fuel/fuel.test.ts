@@ -64,7 +64,7 @@ const stint = (firstLap: number, lastLap: number): StintRecord => ({
   actualCompound: "C3",
   visualCompound: "soft",
   tyreAgeAtFitting: 0,
-  in: {},
+  frame: 0,
 });
 
 const fuelCar = (

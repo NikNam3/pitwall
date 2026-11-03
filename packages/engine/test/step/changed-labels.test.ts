@@ -57,10 +57,11 @@ const tagsOf = (update: StateUpdate, keep: readonly PacketField[]): ChangeTag[] 
 };
 
 describe('change tags', () => {
-  it('are the domain areas, in this order', () => {
+  it('are the domain areas, the fact lists, then the clock’s list and its spans (C40), in this order', () => {
     expect(CHANGE_TAGS).toEqual([
       'session', 'identity', 'timing', 'tyres', 'energy', 'condition', 'dynamics', 'ownCar',
       'sessionPhases', 'laps', 'stints', 'pitStops', 'flagPhases', 'events', 'miniSectors',
+      'clock', 'spans:clock',
     ]);
   });
   it('ALL_CHANGE_TAGS is every tag once', () => {

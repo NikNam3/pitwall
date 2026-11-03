@@ -1,7 +1,9 @@
 // One generic property over the registry (contract C85, C87): random signal sequences, run through step 2's
-// `runMachine` frame by frame and closed by `closeSession`, never give an undeclared transition, a throw, two open spans
-// in one scope, a scope left without its open span or a gap between spans; span ids count the spans opened before them.
-// The registry is `MACHINES` plus the test machines (`test/support/test-machines.ts`) while no sub-machine is registered.
+// `runMachine` frame by frame and closed by `closeSession`, never give an undeclared transition (a scope left without
+// its open span included), a throw, two open spans in one scope or a gap between spans (in time and in frames); span
+// ids count the spans opened before them; the spans closed by the session's end cover its last frame.
+// The registry is `MACHINES` plus the test machines (`test/support/test-machines.ts`). Step 0's clock, a sub-machine
+// outside the registry (C7), has its own property on the same invariants (`clock/clock.property.test.ts`).
 import fc from 'fast-check';
 import { describe, expect, it, vi } from 'vitest';
 import { initialState, type Frame, type StepOutput } from '../../src/index.ts';
@@ -33,10 +35,15 @@ describe('every sub-machine (C85)', () => {
         let before = situationOf(state).byMachine;
         sequence.forEach((signals, index) => {
           state.signals = signals;
+          state.frameNumber = index + 1;
           const out: StepOutput = { changed: new Set(), corrections: [] };
+          const lengths = new Map(MACHINES.map((m) => [m.id, state.log.spans[m.id]?.length ?? 0]));
           runMachine(state, frameAt(index), out);
           const after = situationOf(state).byMachine;
-          for (const m of MACHINES) problems.push(...frameProblems(m, before[m.id] ?? [], after[m.id] ?? []).map((p) => `frame ${index}: ${p}`));
+          for (const m of MACHINES) {
+            const closed = (state.log.spans[m.id] ?? []).slice(lengths.get(m.id));
+            problems.push(...frameProblems(m, before[m.id] ?? [], after[m.id] ?? [], closed).map((p) => `frame ${index}: ${p}`));
+          }
           before = after;
         });
         const end = sequence.length * FRAME_MS;
@@ -44,8 +51,11 @@ describe('every sub-machine (C85)', () => {
         for (const m of MACHINES) {
           const spans = state.log.spans[m.id] ?? [];
           problems.push(...spanListProblems(m, spans));
-          const last = new Map(spans.map((s) => [scopeKey(m.scope, s), s]));
-          for (const [scope, span] of last) if (span.end !== end) problems.push(`${m.id}: ${scope} ends at ${span.end}, not at the session's close ${end}`);
+          const last = new Map(spans.map((s) => [scopeKey(m.spans.scope, s), s]));
+          for (const [scope, span] of last) {
+            if (span.end !== end) problems.push(`${m.id}: ${scope} ends at ${span.end}, not at the session's close ${end}`);
+            if (span.endFrame !== sequence.length + 1) problems.push(`${m.id}: ${scope} ends on frame ${span.endFrame}, not after the last frame ${sequence.length}`);
+          }
         }
         expect(problems).toEqual([]);
       }),

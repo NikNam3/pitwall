@@ -11,7 +11,7 @@ const stint = (firstLap: number, lastLap: number, car = 0): StintRecord => ({
   actualCompound: 'C3',
   visualCompound: 'soft',
   tyreAgeAtFitting: 0,
-  in: {},
+  frame: 0,
 });
 
 const laps = (from: number, to: number, over: Partial<LapRecord> = {}): LapRecord[] =>

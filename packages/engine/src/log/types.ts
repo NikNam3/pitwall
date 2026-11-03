@@ -1,13 +1,14 @@
 // The log and the projection (contract C21-C30): one list per fact type and one span list per sub-machine.
 import type {
+  CarId,
   ClockFact,
   FactList,
   FactRef,
   FlagPhase,
+  FrameNumber,
   LapRecord,
   MachineId,
   MiniSectorCrossing,
-  PauseSpan,
   PitStopRecord,
   RaceEvent,
   SessionPhaseSpan,
@@ -36,13 +37,13 @@ export type FactOf<L extends FactList> = L extends 'laps'
 
 /**
  * The old mechanisms' lists, not facts: written by the situation tracker as before, hidden only by a void fact's
- * `legacy` ranges (no stamps), in the log and the projection until the task that replaces each (`flagPhases` Task 19, `sessionPhases` Task 9, `pauses` Task 7).
+ * `legacy` ranges (never by formation), in the log and the projection until the task that replaces each (`flagPhases` Task 19, `sessionPhases` Task 9).
  */
-export type LegacyList = 'flagPhases' | 'sessionPhases' | 'pauses';
+export type LegacyList = 'flagPhases' | 'sessionPhases';
 
 /**
  * A void fact as the log stores it: the domain's `VoidFact` plus the void ranges of the legacy lists, which are no fact
- * lists. Internal to the engine; `legacy` goes with the lists (Tasks 7, 9 and 19 remove it).
+ * lists. Internal to the engine; `legacy` goes with the lists (Tasks 9 and 19 remove it).
  */
 export type LogVoidFact = VoidFact & { legacy?: Partial<Record<LegacyList, readonly [from: number, to: number]>> };
 
@@ -70,8 +71,6 @@ type Lists = {
   flagPhases: FlagPhase[];
   /** Legacy (`LegacyList`): closed session phases, oldest first; removed by Task 9. */
   sessionPhases: SessionPhaseSpan[];
-  /** Legacy (`LegacyList`): pauses, oldest first (display only); removed by Task 7. */
-  pauses: PauseSpan[];
 };
 
 /**
@@ -89,3 +88,28 @@ export type Projection = DeepReadonly<ProjectionState>;
 
 /** A list of the projection that holds records (every key but `spans`). */
 export type ProjectedList = Exclude<keyof ProjectionState, 'spans'>;
+
+/**
+ * A span of the hiding kind as the frames it covers (C26, C29): `startFrame <= f < endFrame`, every frame from
+ * `startFrame` while it is open (no `endFrame`). A car's span (`carId`) hides only that car's facts.
+ */
+export type HidingFrames = { startFrame: FrameNumber; endFrame?: FrameNumber; carId?: CarId };
+
+/**
+ * What hides facts: per list the void ranges `[from, to)` of log positions (C27, from the void facts; the legacy lists'
+ * from their `legacy` ranges), and the frames of the closed spans of the hiding kind (the open ones come with each
+ * update's situation).
+ */
+export type HiddenRanges = {
+  voided: Partial<Record<FactList | LegacyList, Array<readonly [from: number, to: number]>>>;
+  hiding: HidingFrames[];
+};
+
+/** The projection's bookkeeping (`log/projection.ts`), kept in the engine state (`open.projection`) so snapshots carry it. Plain data. */
+export type ProjectionBook = {
+  /** The log's lengths projected so far. */
+  seen: LogLengths;
+  /** The projection's lengths after the last update: the next update's `before`. */
+  lengths: LogLengths;
+  hidden: HiddenRanges;
+};

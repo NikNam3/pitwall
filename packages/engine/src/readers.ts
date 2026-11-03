@@ -26,6 +26,6 @@ export type {
 export { createRng, type Rng } from './util/rng.ts';
 export { copyPlain } from './util/copy-plain.ts';
 export { ALL_CHANGE_TAGS, CHANGE_TAGS, type ChangeTag, type ClockFall, type ClockJump, type LapCorrection, type StepOutput } from './step/types.ts';
-export { projectionLengths } from './log/projection.ts';
+export { membershipOf, projectionLengths, situationAt, type MembershipSource } from './log/projection.ts';
 export type { HistoryDelta, LogLengths, Projection, ProjectedList, ProjectionState } from './log/types.ts';
 export { unknownLapEnd, type LapEndSamples } from './recorders/lap-samples.ts';

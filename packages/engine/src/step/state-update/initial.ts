@@ -11,8 +11,10 @@ import {
   type Vec3,
 } from '@pitwall/domain';
 import type { SessionPacket } from '@pitwall/protocol';
-import { newHistory, type ProjectionBook } from '../../log/projection.ts';
+import { newHistory } from '../../log/projection.ts';
+import type { ProjectionBook } from '../../log/types.ts';
 import { initialSignals } from '../../signals/read.ts';
+import { STEP0_CLOCK } from '../../situations/clock/clock.ts';
 import { emptySituation } from '../../situations/situation.ts';
 import type { EngineState, OpenTrackers } from '../../state/engine-state.ts';
 import type { WeekendContext } from '../../state/weekend-context.ts';
@@ -113,7 +115,8 @@ export const createCarState = (id: CarId): CarState => ({
 /** Nothing opened yet: every recorder's own state as its `init` gives it. */
 const emptyTrackers = (lastFlag: OpenTrackers['lastFlag'], projection: ProjectionBook): OpenTrackers => ({
   situations: { session: { kind: 'preStart', start: toSessionTime(0), startLeaderLap: 0 } },
-  phaseBook: { started: false, clockOffsetMs: 0 },
+  phaseBook: { started: false },
+  clock: STEP0_CLOCK.init(),
   lastFlag,
   recorders: Object.fromEntries(RECORDERS.map((recorder) => [recorder.id, recorder.init()])),
   machines: {},
@@ -142,6 +145,7 @@ export function initialState(init: {
     frameEvents: [],
     playerCar: carId(header.playerCarIndex),
     lastFrameId: header.frameIdentifier,
+    frameNumber: 0,
     sessionTime: toSessionTime(header.sessionTime),
     open: emptyTrackers(session.flag, book),
     realism: init.realism ?? false,

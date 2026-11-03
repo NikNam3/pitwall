@@ -29,7 +29,7 @@ describe('a wing change on real data', () => {
   it('practice-wing-change: the change is one damageChange of frontRightWingPct from 100 to 0', async () => {
     const { state } = await replayRunner(segmentPath(FILE));
     const changes = state.history.events.filter((e) => e.kind === 'damageChange' && e.carId === CAR);
-    expect(changes).toEqual([{ at: CHANGE_AT, kind: 'damageChange', carId: CAR, params: { part: 'frontRightWingPct', fromPct: 100, toPct: 0 }, in: {} }]);
+    expect(changes).toEqual([{ at: CHANGE_AT, kind: 'damageChange', carId: CAR, params: { part: 'frontRightWingPct', fromPct: 100, toPct: 0 }, frame: 14 }]);
   });
 
   it('practice-wing-change: the damage state shows the front-right wing at 100 on the last run before the change and at 0 from it on', async () => {

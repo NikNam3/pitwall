@@ -72,7 +72,7 @@ const perCorner = <T>(make: () => T): Corners<T> => ({ fl: make(), fr: make(), r
  * A confirmed 90 s lap of car 0 (lap 1, sectors three thirds of `lapTimeMs` summing exactly to it (30 s each at 90 s), valid, soft C3, no SC), every `Known` field known at
  * `completedAt`. Lap-start samples: wear 0 % per corner, ERS store 4 MJ (so the lap's own wear and ERS change are 0). Lap-end fields: wear 0 % per corner, ERS store 4 MJ, deployed and harvested 0, no damage, channel
  * ranges around tyres 90 to 100 degC and 23 to 27 psi, brakes 300 to 800 degC, engine 110 degC. `completedAt` defaults
- * to `lapNumber * lapTimeMs`. Any field is overridable.
+ * to `lapNumber * lapTimeMs`. It describes frame 0, no applied frame (C26): set `frame` where membership matters. Any field is overridable.
  */
 export function lap(over: Partial<LapRecord> = {}): LapRecord {
   const lapNumber = over.lapNumber ?? 1;
@@ -125,7 +125,7 @@ export function lap(over: Partial<LapRecord> = {}): LapRecord {
       brakesC: perCorner(() => known(range(300, 800), at)),
       engineC: known(range(110, 110), at),
     },
-    in: {},
+    frame: 0,
     ...over,
   };
 }
@@ -133,7 +133,8 @@ export function lap(over: Partial<LapRecord> = {}): LapRecord {
 /**
  * The `MINI_SECTORS` (50) crossings of one lap, evenly spaced, in the engine's convention: segment `i` is at
  * `startAt + round(i * lapTimeMs / 50)`, so segment 0 is the start/finish line at the start of the lap. The line that
- * completes the lap is the next lap's segment 0 (`crossings(car, lap + 1, ..., startAt + lapTimeMs)[0]`).
+ * completes the lap is the next lap's segment 0 (`crossings(car, lap + 1, ..., startAt + lapTimeMs)[0]`). Each describes
+ * frame 0, no applied frame (C26).
  */
 export function crossings(car: CarId, lapNumber: number, lapTimeMs: Ms, startAt: SessionTime): MiniSectorCrossing[] {
   return Array.from({ length: MINI_SECTORS }, (_, segment) => ({
@@ -141,13 +142,13 @@ export function crossings(car: CarId, lapNumber: number, lapTimeMs: Ms, startAt:
     lap: lapNumber,
     segment,
     at: startAt + Math.round((segment * lapTimeMs) / MINI_SECTORS),
-    in: {},
+    frame: 0,
   }));
 }
 
-/** An event at session time 0 with empty `params` and the given `kind`; override `at`, `carId`, `otherCarId`, `params`. */
+/** An event at session time 0 of frame 0 with empty `params` and the given `kind`; override `at`, `frame`, `carId`, `otherCarId`, `params`. */
 export function event(over: Partial<RaceEvent> & { kind: RaceEventKind }): RaceEvent {
-  return { at: 0, params: {}, in: {}, ...over };
+  return { at: 0, params: {}, frame: 0, ...over };
 }
 
 /** A safety-car phase from 0 to 60 s, leader lap 1 to 2, no SC sub-phases; override any field. */
@@ -196,7 +197,7 @@ export function field({ cars, laps, paceMs }: { cars: number; laps: number; pace
       );
       miniSectors.push(...crossings(carId(i), n, pace, (n - 1) * pace));
     }
-    miniSectors.push({ carId: carId(i), lap: laps + 1, segment: 0, at: laps * pace, in: {} });
+    miniSectors.push({ carId: carId(i), lap: laps + 1, segment: 0, at: laps * pace, frame: 0 });
   }
   miniSectors.sort((a, b) => a.at - b.at);
   return { laps: records, crossings: miniSectors };
