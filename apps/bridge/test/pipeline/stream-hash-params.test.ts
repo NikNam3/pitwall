@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 import type { TopicName } from '@pitwall/contracts';
 import { carId, type CarId } from '@pitwall/domain';
 import type { QuickCalculator } from '@pitwall/engine';
-import { bindState, defineFeature, type TopicBinding } from '../../src/features/feature.ts';
+import { bindLive, bindState, defineFeature, type TopicBinding } from '../../src/features/feature.ts';
 import { topicStreamHash } from '../../src/pipeline/stream-hash.ts';
 
 const SEGMENT = join(import.meta.dirname, '../../../../fixtures/segments/race-zandvoort-lap10.pwrec.gz');
@@ -39,6 +39,17 @@ describe('topicStreamHash subscribes per car and with every param', () => {
   it('gaps.gapper is hashed with the leader-average reference', async () => {
     const leaderAverage = (p: Record<string, unknown>) => (p['reference'] as { kind?: unknown } | undefined)?.kind === 'leaderAverage';
     expect(await changesTheHash(probe('gaps.gapper', (n, p) => (leaderAverage(p) ? { n } : undefined)))).toBe(true);
+  });
+
+  // C55: a per-car topic bound with `bindLive` (car.detail, car.telemetry) is hashed for every car as well.
+  it('a bindLive per-car topic is hashed for car 19, not only car 0', async () => {
+    const car19: CarId = carId(19);
+    const live = defineFeature({
+      name: 'probe-live',
+      calculators: [],
+      topics: [bindLive('car.detail', (_live, params) => ((params as { carId?: unknown }).carId === car19 ? ({ n: ++runs } as never) : undefined))],
+    });
+    expect(await changesTheHash(live)).toBe(true);
   });
 
   it('control: a value no subscription selects leaves the hash as it is', async () => {
