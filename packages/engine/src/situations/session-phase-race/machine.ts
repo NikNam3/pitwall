@@ -10,6 +10,7 @@
 import { known, sessionPhaseRaceSpans, unknown, type NeutralisedDetail, type NeutralisedStage, type SessionFlag, type SessionTime, type SuspendedDetail } from '@pitwall/domain';
 import type { SituationEvent } from '../../signals/types.ts';
 import type { DeepReadonly } from '../../util/deep-readonly.ts';
+import { CAR_STATUS } from '../car-status/in-session.ts';
 import type { MachineInput, MachineStep, SubMachine } from '../machine.ts';
 import {
   carsInSession,
@@ -83,10 +84,10 @@ const carOf = (d: Draft): NeutralisingCar | undefined =>
 const closingFor = (d: Draft, restart: 'standing' | 'rolling'): SuspendedDetail | undefined =>
   kindOf(d) === 'suspended' ? suspendedDetail(known(restart, d.input.at)) : undefined;
 
-/** The lap of the car in first place; 0 when no car in the session holds it. */
-/** The timing (a value, C8) of the cars in the session. */
+/** The timing (a value, C8) of the cars in the session (car-status's, C43). */
 const timingsInSession = (input: DeepReadonly<MachineInput>) => carsInSession(input).flatMap((id) => input.live.cars[id]?.timing ?? []);
 
+/** The lap of the car in first place; 0 when no car in the session holds it. */
 const leaderLap = (input: DeepReadonly<MachineInput>): number => timingsInSession(input).find((timing) => timing.position === 1)?.lap ?? 0;
 
 /** The race is under way: the leader past lap 1, or a lap timer running past `UNDER_WAY_LAP_TIME_MS`. */
@@ -210,7 +211,7 @@ const machine: SubMachine<RaceOpen> = {
   id: sessionPhaseRaceSpans.machine,
   appliesTo: ['race'],
   spans: sessionPhaseRaceSpans,
-  inputs: { signals: ['events', 'safetyCarStatus', 'resultStatus', 'numActiveCars'], values: ['timing'], upstream: ['weekend-phase'] },
+  inputs: { signals: ['events', 'safetyCarStatus'], values: ['timing'], upstream: ['weekend-phase', CAR_STATUS] },
   transitions: [
     ['none', 'grid'],
     ['none', 'formation'],

@@ -137,7 +137,7 @@ const startLap = (own: LapsOwn, car: LiveCar, at: SessionTime, fromStart: boolea
  * lane starts the race from it, which is no in lap). What the laps recorded stays as recorded (C24).
  */
 const restartLaps = (own: LapsOwn, input: DeepReadonly<RecorderInput>): void => {
-  for (const car of carsInSession(input.live)) if (car.updatedAt.lapData !== undefined) startLap(own, car, input.at, true);
+  for (const car of carsInSession(input)) if (car.updatedAt.lapData !== undefined) startLap(own, car, input.at, true);
   endVisits(own.pitLanes);
 };
 

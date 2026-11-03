@@ -1,9 +1,9 @@
 // Shared by the three session-phase sub-machines (contract C9, C14, C15, C17, C26): their open state, how a span opens
-// and closes, the session's end and the cars in the session (from the signals they declare). No `machine.ts` here, so the generator registers nothing of
+// and closes, the session's end and the cars in the session (car-status's, their declared upstream, C43). No `machine.ts` here, so the generator registers nothing of
 // this folder (C15). Ported from the legacy tracker (`history/situations/session-phase.ts`, Task 9); the facts behind
 // each rule: docs/research/09-situations-inventory.md §1, §7.
-import { carId, type CarId, type MachineId, type OpenSpan, type SessionTime, type Span } from '@pitwall/domain';
-import { isActiveCar, slotsInUse } from '../../step/active-cars.ts';
+import type { CarId, MachineId, OpenSpan, SessionTime, Span } from '@pitwall/domain';
+import { CAR_STATUS, carsInSessionOf } from '../car-status/in-session.ts';
 import type { DeepReadonly } from '../../util/deep-readonly.ts';
 import type { MachineInput, MachineStep } from '../machine.ts';
 
@@ -98,12 +98,8 @@ export const simulatedEnd = <O extends PhaseOpen>(
   if (at !== undefined && span !== undefined && !isPostSession(d)) enterPhase(d, 'postSession', Math.max(at, span.start));
 };
 
-/** The cars in the session, by id: from the signals `resultStatus` and `numActiveCars` alone (C12, `isActiveCar`). */
-export const carsInSession = (input: DeepReadonly<MachineInput>): CarId[] => {
-  const { signals } = input;
-  const slots = slotsInUse({ cars: signals.cars.map((c) => ({ timing: { resultStatus: c.resultStatus } })), session: signals.session });
-  return signals.cars.flatMap((c, i) => (isActiveCar(i, slots, c.resultStatus) ? [carId(i)] : []));
-};
+/** The cars in the session, by id: those whose car-status span is not `absent` (the upstream `car-status`, C43). */
+export const carsInSession = (input: DeepReadonly<MachineInput>): CarId[] => carsInSessionOf(input.upstream[CAR_STATUS]);
 
 /** Every car in the session has finished: time over in practice or qualifying (a player who left retires instead). */
 export const everyCarFinished = (input: DeepReadonly<MachineInput>): boolean => {

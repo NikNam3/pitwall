@@ -1,7 +1,9 @@
-// Which slots hold a car of the session: the one rule, read by step 1 (`active`, the teammate), the recorders, the flag
-// phases and the session-phase sub-machines. Protocol-free, so recorders reach no packet type through it (C6).
+// Which slots hold a car of the session (contract C43): the one rule, car-status's. car-status opens `absent` for a slot
+// it gives false. Transitional until Task 24: step 1's `car.active` (`refreshActiveCarsUntilCarStatus`) and the identity
+// module's teammate import it from here. Protocol-free and signal-free (C6, C13): it reads plain result statuses and the
+// slot count, whoever holds them.
 import { OUT_OF_RACE_STATUSES, type CarTiming, type ResultStatus, type SessionState } from '@pitwall/domain';
-import type { DeepReadonly } from '../util/deep-readonly.ts';
+import type { DeepReadonly } from '../../util/deep-readonly.ts';
 
 /** What the rule reads: the cars' result status and the session's `numActiveCars`. */
 type Slots = DeepReadonly<{ cars: Array<{ timing: Pick<CarTiming, 'resultStatus'> }>; session: Pick<SessionState, 'numActiveCars'> }>;

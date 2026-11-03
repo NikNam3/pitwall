@@ -94,8 +94,8 @@ const trackStint = (own: StintsOwn, car: LiveCar, log: LogWriter, frame: FrameNu
  * recorder's does; no pit visit goes on (a pit-lane start), and no lap of the formation lap counts as recorded (its
  * records are hidden, C29). The stints stay as they are.
  */
-const restartLaps = (own: StintsOwn, live: DeepReadonly<RecorderInput>['live']): void => {
-  for (const car of carsInSession(live)) if (car.updatedAt.lapData !== undefined) own.laps[car.id] = lapMarkOf(car, false);
+const restartLaps = (own: StintsOwn, input: DeepReadonly<RecorderInput>): void => {
+  for (const car of carsInSession(input)) if (car.updatedAt.lapData !== undefined) own.laps[car.id] = lapMarkOf(car, false);
   endVisits(own.pitLanes);
   own.recordedLap.fill(0);
 };
@@ -118,7 +118,7 @@ export const stintsRecorder: Recorder<StintsOwn> = {
     let closed = false;
     const start = raceStartStep(own.raceStart, input.situation);
     own.raceStart = start.mark;
-    if (start.started) restartLaps(own, live);
+    if (start.started) restartLaps(own, input);
     for (const car of carsWithLapData(input)) {
       const pit = pitLaneStep(own.pitLanes[car.id], car.timing.pitStatus, car.timing.lap);
       own.pitLanes[car.id] = pit.lane;

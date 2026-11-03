@@ -2,14 +2,12 @@ import { carId, MAX_CARS, unknown, type CarIdentity, type CarState, type DriverK
 import type { ParticipantsPacket } from '@pitwall/protocol';
 import type { Frame } from '../../frame/frame.ts';
 import type { LiveState } from '../../state/live-state.ts';
-import { isActiveCar, slotsInUse } from '../active-cars.ts';
+import { isActiveCar, slotsInUse } from '../../situations/car-status/slots.ts';
 import { pick } from '../pick.ts';
 import { maskCarForRealism } from './realism.ts';
 import { withholdRestricted } from './restricted.ts';
 import { RESULT_STATUS } from './timing.ts';
 import type { StateUpdate } from './types.ts';
-
-export { isActiveCar, slotsInUse } from '../active-cars.ts';
 
 /** The key of the driver in a slot: the AI by `driverId`, a human by `networkId`, name and race number (spec 6.2). The one rule; the weekend context reuses it. A slot the packet lacks reads as an unknown AI driver. */
 export const driverKeyOf = (p: ParticipantsPacket, carIndex: number): DriverKey => {
