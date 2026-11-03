@@ -89,7 +89,7 @@ export type RetirementReason =
   | 'sessionSkipped'
   | 'sessionSimulated';
 /** DRSD's reason, in the game's code order. */
-export type DrsDisabledReason = 'wetTrack' | 'safetyCar' | 'redFlag' | 'minLapNotReached';
+export type DrsDisabledReason = 'wetTrack' | 'safetyCar' | 'redFlag' | 'minLapNotReached' | 'unknown';
 
 /**
  * A C12 event of the frame (BUTN is ignored; OVTK, COLL, FTLP and SPTP are values, `FrameEvent`), converted by step 1:
