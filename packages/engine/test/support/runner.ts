@@ -25,14 +25,15 @@ export const applyOne = (r: SessionRunner, frame: Frame): StepResult => {
 export const flashbacks = (results: StepResult[]) => results.filter((r) => r.flashback !== undefined || r.delta.rewound !== undefined).length;
 
 /**
- * What a run shows: the state without the log and without the open trackers' positions in it (the provisional laps'
- * indexes, the projection's bookkeeping, the situation tracker's noted lengths and phase index). A flashback appends a
- * void fact and keeps the undone facts (C27), so after one the log, and positions in it, differ from a run that never
- * had the undone frames; everything readers see (the projection, the live state) equals it.
+ * What a run shows: the state without the log and without the open trackers' positions in it (the projection's
+ * bookkeeping, the situation tracker's noted lengths and phase index). A flashback appends a void fact and keeps the
+ * undone facts (C27), so after one the log, and positions in it, differ from a run that never had the undone frames;
+ * everything readers see (the projection, the live state) equals it. The recorders' own state (`open.recorders`) holds
+ * no log position (a recorder reads no log, C10), so it is shown whole.
  */
 export const shown = (state: DeepReadonly<EngineState>) => {
   const { log: _log, open, ...rest } = state;
-  const { lapIndex: _lapIndex, projection: _projection, phaseBook, ...trackers } = open;
+  const { projection: _projection, phaseBook, ...trackers } = open;
   const { formationFrom: _formationFrom, startFrom: _startFrom, lightsOut, ...book } = phaseBook;
   return { ...rest, open: { ...trackers, phaseBook: { ...book, lightsOutFrameId: lightsOut?.frameId } } };
 };

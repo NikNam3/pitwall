@@ -33,6 +33,11 @@ type Replayed = {
 
 const replayed = new Map<string, Replayed>();
 
+/** The lap recorder's open laps by car (its own state, `open.recorders.laps`, C10): the lap a car is on and how it began. */
+type LapCursorView = { lap: number; fromStart: boolean; startedAt: number };
+const lapCursors = (state: DeepReadonly<EngineState>): ReadonlyArray<LapCursorView | undefined> =>
+  (state.open.recorders['laps'] as unknown as { cursors: ReadonlyArray<LapCursorView | undefined> }).cursors;
+
 beforeAll(async () => {
   for (const [, file] of SHAPES) {
     let gaps: GapsOutput | undefined;
@@ -71,7 +76,7 @@ describe.each(SHAPES)('the race start, shape %s (%s)', (_, file) => {
     const { state } = replayed.get(file)!;
     const start = raceStart(state);
     const off = state.cars.filter((c) => c.active).flatMap((c) => {
-      const cursor = state.open.laps[c.id];
+      const cursor = lapCursors(state)[c.id];
       return cursor && cursor.lap === 1 && cursor.fromStart && cursor.startedAt === start ? [] : [`car ${c.id}: ${JSON.stringify(cursor && { lap: cursor.lap, fromStart: cursor.fromStart, startedAt: cursor.startedAt })}`];
     });
     expect(off).toEqual([]);

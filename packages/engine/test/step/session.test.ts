@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { FeedId } from '@pitwall/domain';
 import { initialState, step } from '../../src/index.ts';
-import { sessionKindOf } from '../../src/step/session.ts';
+import { sessionKindOf } from '../../src/step/state-update/session.ts';
 import { buildPacket, ScenarioBuilder } from '../builders/index.ts';
 
 const feedId = 'test' as FeedId;

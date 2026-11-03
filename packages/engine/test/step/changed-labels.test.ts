@@ -1,16 +1,11 @@
-// The change tags a sub-step reports (the scheduler picks calculators by them) and the session and tyre-set fields
+// The change tags a step-1 module reports (the scheduler picks calculators by them) and the session and tyre-set fields
 // that the main tests leave at their defaults.
 import { describe, expect, it } from 'vitest';
 import type { FeedId } from '@pitwall/domain';
-import { ALL_CHANGE_TAGS, CHANGE_TAGS, initialState, step, type ChangeTag, type Frame, type StepOutput, type SubStep } from '../../src/index.ts';
-import { applyCondition } from '../../src/step/condition.ts';
-import { applyDynamics } from '../../src/step/dynamics.ts';
-import { applyEnergy } from '../../src/step/energy.ts';
-import { applyIdentity } from '../../src/step/identity.ts';
-import { applyOwnCar } from '../../src/step/own-car.ts';
-import { applySession, sessionStateFrom } from '../../src/step/session.ts';
-import { applyTiming } from '../../src/step/timing.ts';
-import { applyTyres } from '../../src/step/tyres.ts';
+import { ALL_CHANGE_TAGS, CHANGE_TAGS, initialState, step, type ChangeTag, type Frame, type StepOutput } from '../../src/index.ts';
+import { sessionStateFrom } from '../../src/step/state-update/session.ts';
+import type { StateUpdate } from '../../src/step/state-update/types.ts';
+import { STATE_UPDATE } from '../../src/step/step.ts';
 import { buildPacket, ScenarioBuilder } from '../builders/index.ts';
 import { initFor } from '../support/run.ts';
 
@@ -18,7 +13,7 @@ import { initFor } from '../support/run.ts';
 const PACKETS = ['motion', 'lapData', 'telemetry', 'status', 'motionEx', 'session', 'damage', 'setups', 'participants'] as const;
 type PacketField = (typeof PACKETS)[number] | 'tyreSets';
 
-/** One frame that carries every packet, so any sub-step has something to read. */
+/** One frame that carries every packet, so any step-1 module has something to read. */
 const fullFrame = (): Frame =>
   new ScenarioBuilder({ cars: 2 }).frames(1, (d) => {
     d.add('carDamage');
@@ -36,13 +31,28 @@ const only = (frame: Frame, keep: readonly PacketField[]): Frame => {
   return bare;
 };
 
-/** The tags `subStep` reports for `frame`, on a state that already took the full frame (so the player's own car exists). */
-const tagsOf = (subStep: SubStep, keep: readonly PacketField[]): ChangeTag[] => {
+/** The step-1 module with this id (`STATE_UPDATE`). */
+const updateOf = (id: string): StateUpdate => {
+  const update = STATE_UPDATE.find((m) => m.id === id);
+  if (!update) throw new Error(`no step-1 module ${id}`);
+  return update;
+};
+const applySession = updateOf('session');
+const applyIdentity = updateOf('identity');
+const applyTiming = updateOf('timing');
+const applyTyres = updateOf('tyres');
+const applyEnergy = updateOf('energy');
+const applyCondition = updateOf('condition');
+const applyDynamics = updateOf('dynamics');
+const applyOwnCar = updateOf('ownCar');
+
+/** The tags `update` reports for `frame`, on a state that already took the full frame (so the player's own car exists). */
+const tagsOf = (update: StateUpdate, keep: readonly PacketField[]): ChangeTag[] => {
   const full = fullFrame();
   const st = initialState(initFor([full]));
   step(st, full);
   const out: StepOutput = { changed: new Set(), corrections: [] };
-  subStep(st, only(full, keep), out);
+  update.apply(only(full, keep), st, st.signals, out);
   return [...out.changed].sort();
 };
 
@@ -59,7 +69,7 @@ describe('change tags', () => {
   });
 });
 
-describe('sub-steps: each tags its own area, only when it wrote something', () => {
+describe('step-1 modules: each tags its own area, only when it wrote something', () => {
   it.each([
     ['applySession', applySession, ['session'], ['session']],
     ['applyIdentity', applyIdentity, ['participants'], ['identity']],
@@ -78,8 +88,8 @@ describe('sub-steps: each tags its own area, only when it wrote something', () =
     ['applyOwnCar (MotionEx)', applyOwnCar, ['motionEx'], ['ownCar']],
     ['applyOwnCar (setup)', applyOwnCar, ['setups'], ['ownCar']],
     ['applyOwnCar (brake bias from Car Status)', applyOwnCar, ['status'], ['ownCar']],
-  ] as const)('%s', (_, subStep, keep, expected) => {
-    expect(tagsOf(subStep, keep)).toEqual([...expected]);
+  ] as const)('%s', (_, update, keep, expected) => {
+    expect(tagsOf(update, keep)).toEqual([...expected]);
   });
 
   it.each([
@@ -91,11 +101,11 @@ describe('sub-steps: each tags its own area, only when it wrote something', () =
     ['applyCondition', applyCondition],
     ['applyDynamics', applyDynamics],
     ['applyOwnCar', applyOwnCar],
-  ] as const)('%s adds no tag for a frame without its packets', (_, subStep) => {
-    expect(tagsOf(subStep, [])).toEqual([]);
+  ] as const)('%s adds no tag for a frame without its packets', (_, update) => {
+    expect(tagsOf(update, [])).toEqual([]);
   });
 
-  it('a sub-step ignores the packets of the other areas', () => {
+  it('a step-1 module ignores the packets of the other areas', () => {
     expect(tagsOf(applyEnergy, ['lapData', 'motion', 'telemetry', 'motionEx', 'damage', 'setups', 'tyreSets'])).toEqual([]);
     expect(tagsOf(applyTiming, ['motion', 'telemetry', 'motionEx', 'damage', 'setups', 'tyreSets'])).toEqual([]);
     expect(tagsOf(applyTyres, ['lapData', 'motion', 'motionEx', 'setups'])).toEqual([]);

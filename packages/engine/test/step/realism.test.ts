@@ -2,10 +2,10 @@
 import { describe, expect, it } from 'vitest';
 import { unknown, type CarState } from '@pitwall/domain';
 import { initialState, step, type EngineState, type Frame } from '../../src/index.ts';
-import { applyRealism, withholdForRealism } from '../../src/step/realism.ts';
-import { SUB_STEPS } from '../../src/step/step.ts';
-import { applyOwnCar } from '../../src/step/own-car.ts';
+import { withholdForRealism } from '../../src/step/state-update/realism.ts';
+import { STATE_UPDATE } from '../../src/step/step.ts';
 import { ScenarioBuilder } from '../builders/index.ts';
+import { inOrder } from '../support/module-order.ts';
 import { initFor } from '../support/run.ts';
 
 const REALISM = unknown('realism');
@@ -49,11 +49,12 @@ describe('EngineState.realism', () => {
   });
 });
 
-describe('applyRealism', () => {
-  it('runs right after applyOwnCar', () => {
-    const at = SUB_STEPS.indexOf(applyOwnCar);
-    expect(at).toBeGreaterThanOrEqual(0);
-    expect(SUB_STEPS[at + 1]).toBe(applyRealism);
+describe('realism in step 1', () => {
+  // Was "runs right after applyOwnCar": an order inside step 1, which C11 forbids. What it guarded stays: no step-1
+  // module writes a hidden value past the mask, whatever order they run in.
+  it('masks the rivals whatever order the step-1 modules run in (here reversed)', () => {
+    const { st } = inOrder(STATE_UPDATE, [...STATE_UPDATE].reverse(), () => run(frames(1), true));
+    for (const [path, value] of hiddenFields(st.cars[3]!)) expect([path, value]).toEqual([path, REALISM]);
   });
 
   it('control: without realism the rival car 3 has every hidden field known', () => {

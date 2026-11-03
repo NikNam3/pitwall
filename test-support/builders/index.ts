@@ -28,9 +28,9 @@ import {
   type Projection,
 } from '../../packages/engine/src/index.ts';
 import { buildPacket } from '../../packages/engine/test/builders/index.ts';
-import { createCarState } from '../../packages/engine/src/step/initial-state.ts';
-import { withholdForRealism } from '../../packages/engine/src/step/realism.ts';
-import { withholdRestricted } from '../../packages/engine/src/step/restricted.ts';
+import { createCarState } from '../../packages/engine/src/step/state-update/initial.ts';
+import { withholdForRealism } from '../../packages/engine/src/step/state-update/realism.ts';
+import { withholdRestricted } from '../../packages/engine/src/step/state-update/restricted.ts';
 
 /** Overrides nested objects key by key; arrays and `Known` values are replaced whole. */
 export type DeepPartial<T> = T extends readonly unknown[]

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { OUT_OF_RACE_STATUSES, type FeedId, type ResultStatus } from '@pitwall/domain';
 import { initialState, step } from '../../src/index.ts';
-import { driverKeyOf, isActiveCar } from '../../src/step/identity.ts';
+import { driverKeyOf, isActiveCar } from '../../src/step/state-update/identity.ts';
 import { ScenarioBuilder } from '../builders/index.ts';
 
 const run = (b: ScenarioBuilder) => {
