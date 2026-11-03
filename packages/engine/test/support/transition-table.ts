@@ -78,7 +78,7 @@ export class MachineInputBuilder {
 export const inputs = (): MachineInputBuilder => new MachineInputBuilder();
 
 /** A span a step closed, as the harness reads it: which span it was, of what kind, in which scope. */
-export type ClosedSpan = Pick<Span, 'id' | 'kind' | 'detail' | 'joinedAt'> & { carId?: CarId | undefined };
+export type ClosedSpan = Pick<Span, 'id' | 'kind' | 'detail' | 'joinedAt'> & { carId?: CarId | undefined; zone?: number | undefined };
 
 /**
  * What a transition table drives (C15): a sub-machine with its declared transitions, its open state `Open` and the
@@ -130,11 +130,11 @@ export const tableProblems = ({ machine, rows }: TransitionTable): string[] => [
 ];
 
 /**
- * Where a span lives: the session, its car (`carId`) or its zone (`detail.zone`, which a zone sub-machine's spans
+ * Where a span lives: the session, its car (`carId`) or its zone (`zone`, which a zone sub-machine's spans
  * carry). A scope holds at most one open span; a span's successor in its scope starts where it ends.
  */
-export const scopeKey = (scope: Scope, span: { carId?: number | undefined; detail: unknown }): string =>
-  scope === 'session' ? 'session' : scope === 'car' ? `car ${span.carId}` : `zone ${(span.detail as { zone?: number } | undefined)?.zone}`;
+export const scopeKey = (scope: Scope, span: { carId?: number | undefined; zone?: number | undefined }): string =>
+  scope === 'session' ? 'session' : scope === 'car' ? `car ${span.carId}` : `zone ${span.zone}`;
 
 /**
  * A change of a scope's situation in one frame: `from` the kind before, `to` the kind after (`none`: no span), `span`
@@ -157,7 +157,7 @@ export const transitionsOf = (
 ): ObservedTransition[] => {
   const keys = [...new Set([...before, ...after, ...closed].map((s) => scopeKey(scope, s)))];
   return keys.flatMap((key) => {
-    const inScope = (s: { carId?: number | undefined; detail: unknown }) => scopeKey(scope, s) === key;
+    const inScope = (s: { carId?: number | undefined; zone?: number | undefined }) => scopeKey(scope, s) === key;
     const was = before.find(inScope);
     const now = after.find(inScope);
     const passed: Passed[] = [was, ...closed.filter((s) => inScope(s) && s.id !== was?.id && s.id !== now?.id), now];

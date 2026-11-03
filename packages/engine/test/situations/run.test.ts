@@ -76,7 +76,7 @@ describe('runMachine', () => {
       { machine: 'test-car', id: 0, carId: 1, kind: 'pit', start: 0, end: FRAME_MS, confirmed: true, joinedAt: true, detail: undefined, startFrame: 1, endFrame: 2 },
     ]);
     expect(state.log.spans['test-zone']).toEqual([
-      { machine: 'test-zone', id: 0, kind: 'yellow', start: 0, end: 2 * FRAME_MS, confirmed: true, joinedAt: true, detail: { zone: 0 }, startFrame: 1, endFrame: 3 },
+      { machine: 'test-zone', id: 0, kind: 'yellow', start: 0, end: 2 * FRAME_MS, confirmed: true, joinedAt: true, zone: 0, startFrame: 1, endFrame: 3 },
     ]);
     expect(situationOf(state).byMachine['test-session']).toEqual([
       { machine: 'test-session', id: 1, kind: 'neutralised', start: FRAME_MS, confirmed: true, detail: undefined, startFrame: 2 },
@@ -141,7 +141,7 @@ describe('situationOf', () => {
       { machine: 'test-car', id: 1, carId: 1, kind: 'track', start: FRAME_MS, confirmed: true, detail: undefined, startFrame: 2 },
     ]);
     expect(situation.byMachine['test-car']?.map((s) => s.carId)).toEqual(Array.from({ length: MAX_CARS }, (_, i) => i));
-    expect(situation.byMachine['test-zone']).toEqual([{ machine: 'test-zone', id: 0, kind: 'yellow', start: 0, confirmed: true, joinedAt: true, detail: { zone: 0 }, startFrame: 1 }]);
+    expect(situation.byMachine['test-zone']).toEqual([{ machine: 'test-zone', id: 0, kind: 'yellow', start: 0, confirmed: true, joinedAt: true, zone: 0, startFrame: 1 }]);
   });
 });
 
@@ -161,7 +161,7 @@ describe('closeSession', () => {
       { machine: 'test-session', id: 1, kind: 'neutralised', start: FRAME_MS, end: 5_000, confirmed: false, detail: undefined, startFrame: 2, endFrame: 3 },
     ]);
     expect(state.log.spans['test-zone']).toEqual([
-      { machine: 'test-zone', id: 0, kind: 'clear', start: 0, end: 5_000, confirmed: true, joinedAt: true, detail: { zone: 0 }, startFrame: 1, endFrame: 3 },
+      { machine: 'test-zone', id: 0, kind: 'clear', start: 0, end: 5_000, confirmed: true, joinedAt: true, zone: 0, startFrame: 1, endFrame: 3 },
     ]);
     expect(state.log.spans['test-car']).toEqual(open['test-car']!.map((s) => ({ ...s, end: 5_000, endFrame: 3 })));
   });

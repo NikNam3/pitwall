@@ -16,19 +16,22 @@ const add = (counts: Map<string, number>, key: string): void => {
   counts.set(key, (counts.get(key) ?? 0) + 1);
 };
 
+/** The scope a span is about: a car, a zone or the session. */
+const scopeKey = (span: Span): string => (span.carId !== undefined ? `car:${span.carId}` : span.zone !== undefined ? `zone:${span.zone}` : 'session');
+
 /**
  * Adds the transitions of one session's spans (closed, so complete: `closeSession` closed the open ones on the frame
- * after the last, `endFrame`) to `counts`, per sub-machine and scope (the session or a car), by frame number (C26): a
- * span's successor opens on the frame it closed on (`<kind> -> <next>`); a span closed with no successor on its frame
- * is `<kind> -> none` (and the next one, if any, `none -> <next>`). The spans the session's end closed are no
- * sub-machine's decision: counted apart, by kind.
+ * after the last, `endFrame`) to `counts`, per sub-machine and scope (the session, a car by `carId`, a zone by `zone`),
+ * by frame number (C26): a span's successor opens on the frame it closed on (`<kind> -> <next>`); a span closed with no
+ * successor on its frame is `<kind> -> none` (and the next one, if any, `none -> <next>`). The spans the session's end
+ * closed are no sub-machine's decision: counted apart, by kind.
  */
 function countTransitions(spans: Record<MachineId, readonly Span[]>, endFrame: number, counts: Counts): void {
   for (const [machine, list] of Object.entries(spans)) {
     const byMachine = counts.get(machine) ?? { transitions: new Map<string, number>(), closedAtEnd: new Map<string, number>() };
     counts.set(machine, byMachine);
-    const byScope = new Map<number | undefined, Span[]>();
-    for (const span of list) byScope.set(span.carId, [...(byScope.get(span.carId) ?? []), span]);
+    const byScope = new Map<string, Span[]>();
+    for (const span of list) byScope.set(scopeKey(span), [...(byScope.get(scopeKey(span)) ?? []), span]);
     for (const scoped of byScope.values()) {
       let last: Span | undefined;
       for (const span of [...scoped].sort((a, b) => a.startFrame - b.startFrame || a.id - b.id)) {

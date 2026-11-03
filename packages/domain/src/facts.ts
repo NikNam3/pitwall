@@ -27,6 +27,8 @@ export type Span<K extends string = string, D = unknown> = {
   machine: MachineId;
   id: SpanId;
   carId?: CarId;
+  /** The marshal zone (its index in the Session packet) of a zone sub-machine's span. */
+  zone?: number;
   kind: K;
   start: SessionTime;
   end: SessionTime;
@@ -56,7 +58,7 @@ export type ClockFact =
   | { kind: 'simulatedEnd'; at: SessionTime; frame: FrameNumber };
 
 /** A span, open or closed: its sub-machine, its car for a car sub-machine, and its id. */
-export type SpanRef = { machine: MachineId; carId?: CarId; spanId: SpanId };
+export type SpanRef = { machine: MachineId; carId?: CarId; zone?: number; spanId: SpanId };
 /** What a sub-machine's spans are about (C15). */
 export type Scope = 'session' | 'car' | 'zone';
 
