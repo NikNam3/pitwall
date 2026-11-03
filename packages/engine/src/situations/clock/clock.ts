@@ -3,7 +3,7 @@
 // flashback is carried over by an offset, so the race clock never falls but at a flashback, and nothing recorded is
 // re-timed (C36). The clock is no member of the step-2 registry (`MACHINES`): step 0 runs before every other step,
 // and the sub-machines read its state as `MachineInput.clock` (`clockInput`), not as an upstream.
-import type { ClockFact, FrameNumber, OpenSpan, SessionTime } from '@pitwall/domain';
+import { clockSpans, type ClockFact, type FrameNumber, type OpenSpan, type SessionTime } from '@pitwall/domain';
 import type { Frame } from '../../frame/frame.ts';
 import type { EngineState } from '../../state/engine-state.ts';
 import type { FlashbackReport, RewindMark } from '../../step/types.ts';
@@ -86,10 +86,10 @@ const clockFrame = (open: ClockOpen, input: ClockStepInput, facts: ClockFact[]):
   return clocked;
 };
 
-/** The clock: step 0 (C7), session scope, its one span kind `paused`. */
+/** The clock: step 0 (C7); its span declaration in domain (C15): session scope, its one span kind `paused`. */
 export const STEP0_CLOCK = {
   id: CLOCK_MACHINE,
-  scope: 'session',
+  spans: clockSpans,
   init: (): ClockOpen => ({ offsetMs: 0, opened: 0, ended: false }),
   /** The pause in progress, its wall time so far: `view.situation.byMachine.clock` (C20). */
   openSpans: (open: DeepReadonly<ClockOpen>): OpenSpan[] =>

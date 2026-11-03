@@ -1,5 +1,5 @@
 // The machine's interfaces (contract C9, C14-C20): sub-machines turn signals and values into open and closed spans.
-import type { FrameNumber, MachineId, Ms, OpenSpan, Scope, SessionTime, Span, WeekendPhase, WeekendPhaseKind } from '@pitwall/domain';
+import type { FrameNumber, MachineId, Ms, OpenSpan, SessionTime, Span, SpanDeclaration, WeekendPhase, WeekendPhaseKind } from '@pitwall/domain';
 import type { SignalKey, Signals } from '../signals/types.ts';
 import type { LiveArea, LiveState } from '../state/live-state.ts';
 import type { DeepReadonly } from '../util/deep-readonly.ts';
@@ -14,11 +14,14 @@ export type MachineInputs = { signals: readonly SignalKey[]; values: readonly Li
  */
 export type MachineStep<Open> = { open: Open; closed: Array<Omit<Span, 'endFrame'>> };
 
-/** One registered part of the machine, a folder `situations/<id>/` (C15). */
+/**
+ * One registered part of the machine, a folder `situations/<id>/` (C15). `spans`: its span declaration in domain
+ * (`domain/src/situations/<id>.ts`, `spans.machine === id`), which holds its one scope and its span kinds.
+ */
 export type SubMachine<Open> = {
   id: MachineId;
   appliesTo: 'all' | readonly WeekendPhaseKind[];
-  scope: Scope;
+  spans: SpanDeclaration;
   inputs: MachineInputs;
   transitions: ReadonlyArray<readonly [from: string | 'none', to: string]>;
   init(): Open;

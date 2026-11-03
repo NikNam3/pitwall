@@ -59,3 +59,11 @@ export type ClockFact =
 export type SpanRef = { machine: MachineId; carId?: CarId; spanId: SpanId };
 /** What a sub-machine's spans are about (C15). */
 export type Scope = 'session' | 'car' | 'zone';
+
+/**
+ * A sub-machine's span declaration (C15): its id, its one scope and its span kinds, declared in domain beside its span
+ * types so every reader can read them (`scopeOf`). One file `situations/<machine>.ts` each, its named export `spans`.
+ */
+export type SpanDeclaration<K extends string = string> = { machine: MachineId; scope: Scope; kinds: readonly K[] };
+/** A span declaration, its kinds kept as literals. */
+export const defineSpans = <const K extends string>(d: SpanDeclaration<K>): SpanDeclaration<K> => d;

@@ -9,6 +9,8 @@ export * from './records.ts';
 export * from './facts.ts';
 export * from './weekend-phase.ts';
 export * from './situations.ts';
+export * from './span-scopes.ts';
+export { spans as clockSpans, type PausedDetail } from './situations/clock.ts';
 export * from './insight.ts';
 export * from './laps.ts';
 export * from './freshness.ts';

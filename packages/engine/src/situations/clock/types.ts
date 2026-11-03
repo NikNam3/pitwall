@@ -1,12 +1,9 @@
 // The clock's open state and its span (contract C7, C20, C36): plain data, so snapshots carry it. Imports only domain,
-// so the engine state can hold it.
-import type { Ms, OpenSpan, SessionTime, Span } from '@pitwall/domain';
+// so the engine state can hold it. Its span declaration (scope, kinds) and the paused detail live in domain (C15).
+import { clockSpans, type Ms, type OpenSpan, type PausedDetail, type SessionTime, type Span } from '@pitwall/domain';
 
-/** The clock's id, its spans' `machine` (`spans:clock`, `situation.byMachine.clock`); it is session-scoped (C26). */
-export const CLOCK_MACHINE = 'clock';
-
-/** The detail of the clock's one span kind, `paused`: what paused the session and how long it lasted in wall time. */
-export type PausedDetail = { source: 'offline' | 'online'; wallMs: number };
+/** The clock's id, its spans' `machine` (`spans:clock`, `situation.byMachine.clock`): its declaration's (C15). */
+export const CLOCK_MACHINE = clockSpans.machine;
 /** A pause in progress (`view.situation.byMachine.clock`); its `wallMs` is the wall time so far. */
 export type OpenPausedSpan = OpenSpan<'paused', PausedDetail>;
 /** A pause that ended: the pause's span in `spans:clock` (C7), with the frame numbers it opened and closed on (C26). */

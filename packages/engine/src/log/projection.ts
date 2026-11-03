@@ -3,9 +3,7 @@
 // describes and the frame numbers each span opened and closed on (`situationAt`, `membershipOf`), never from times. A
 // fact is hidden when a void range covers its position (C27) or, for a fact that is no span, when the frame it describes
 // lies in a span of a hiding kind (`formation`, C29): the session's, or its own car's. Spans are never hidden that way.
-import type { CarId, FactList, FrameNumber, MachineId, OpenSpan, Scope, Span } from '@pitwall/domain';
-import { CLOCK_MACHINE } from '../situations/clock/types.ts';
-import { MACHINES } from '../situations/index.generated.ts';
+import { scopeOf, type CarId, type FactList, type FrameNumber, type MachineId, type OpenSpan, type Span } from '@pitwall/domain';
 import type { Situation } from '../situations/situation.ts';
 import type { DeepReadonly } from '../util/deep-readonly.ts';
 import { createLog, FACT_LISTS, LEGACY_LISTS } from './log.ts';
@@ -204,9 +202,6 @@ export const newHistory = (open: Situation): { log: Log } & ProjectionHolder => 
  */
 export type MembershipSource = { history: DeepReadonly<Projection>; situation?: Situation };
 
-/** A machine's registered scope (C15); the clock, step 0 and no member of the registry, is session-scoped. */
-const scopeOf = (machine: MachineId): Scope | undefined => (machine === CLOCK_MACHINE ? 'session' : MACHINES.find((m) => m.id === machine)?.scope);
-
 /**
  * Every visible span covering `frame` (C26): the closed ones of `source.history.spans` (`startFrame <= frame <
  * endFrame`) and the open ones of `source.situation` (`startFrame <= frame`), the clock's included, by machine. A
@@ -225,8 +220,9 @@ export function situationAt(source: MembershipSource, frame: FrameNumber): Reado
 
 /**
  * The spans a fact belongs to (C26), from the frame it describes: of `situationAt(source, fact.frame)`, the spans of
- * session-scoped machines (the clock's included) and, for a car's fact, its car's spans of car-scoped machines. Zone
- * spans never belong to a fact.
+ * session-scoped machines (the clock's included) and, for a car's fact, its car's spans of car-scoped machines. Each
+ * machine's scope is its span declaration's in domain (`scopeOf`, C15); a machine without one, and zone spans, never
+ * belong to a fact.
  */
 export function membershipOf(source: MembershipSource, fact: { frame: FrameNumber; carId?: CarId }): Readonly<Record<MachineId, DeepReadonly<OpenSpan>>> {
   const member: Record<MachineId, DeepReadonly<OpenSpan>> = {};
