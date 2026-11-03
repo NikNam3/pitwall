@@ -1,14 +1,16 @@
-// The weekend-phase sub-machine (contract C14): the phase and format each session type decides, pending until the
-// weekend structure arrives, fixed for the session; and the committed segment race-sprint-start, whose first Session
-// packet has an empty structure and a later one [15, 16] (a sprint). The transition rows are in weekend-phase.transitions.ts.
+// The weekend-phase sub-machine (contract C14, C15, C26): the phase and format each session type decides, pending until
+// the weekend structure arrives, fixed for the session; its spans declared in domain (`weekendPhaseSpans`); its span
+// records the frame it opened on and, closed at the session's end, the frame after the last; and the committed segment
+// race-sprint-start, whose first Session packet has an empty structure and a later one [15, 16] (a sprint). The
+// transition rows are in weekend-phase.transitions.ts.
 import { beforeAll, describe, expect, it } from 'vitest';
-import { feedId, type OpenSpan, type WeekendPhase } from '@pitwall/domain';
+import { feedId, weekendPhaseSpans, type FrameNumber, type OpenSpan, type Span, type WeekendPhase } from '@pitwall/domain';
 import { SessionRunner, SessionTracker, type Frame } from '../../../src/index.ts';
 import type { MachineInput } from '../../../src/situations/machine.ts';
 import { situationOf } from '../../../src/situations/run.ts';
 import machine from '../../../src/situations/weekend-phase/machine.ts';
 import { segmentPackets } from '../../../../../test-support/segments.ts';
-import { inputs } from '../../support/transition-table.ts';
+import { FRAME_MS, inputs } from '../../support/transition-table.ts';
 import { PHASE_CASES, UNKNOWN_TYPES } from './weekend-phase.transitions.ts';
 
 const session = (sessionType: number, structure: number[]) => (i: MachineInput): void => {
@@ -29,9 +31,10 @@ const run = (builder: ReturnType<typeof inputs>): Array<OpenSpan | undefined> =>
   });
 };
 
-describe('weekend-phase: id, scope, applies to', () => {
-  it('is the session-scope sub-machine weekend-phase and applies to every phase', () => {
-    expect([machine.id, machine.scope, machine.appliesTo]).toEqual(['weekend-phase', 'session', 'all']);
+describe('weekend-phase: id, span declaration, applies to', () => {
+  it('is the sub-machine weekend-phase, its spans the session-scoped declaration in domain, and applies to every phase', () => {
+    expect([machine.id, machine.spans, machine.appliesTo]).toEqual(['weekend-phase', weekendPhaseSpans, 'all']);
+    expect(machine.spans.scope).toBe('session');
   });
 });
 
@@ -57,6 +60,14 @@ describe('weekend-phase: pending until the structure arrives, then fixed for the
     expect(phaseOf(opened)).toEqual({ kind: 'race', format: 'sprint' });
     expect(spans.slice(5).map((s) => s?.id)).toEqual([opened.id, opened.id]);
   });
+  it('the span records the frame it opened on (C26): the fifth frame, the first with the structure', () => {
+    const opened = run(inputs().frames(4, session(15, [])).frames(3, session(15, [15, 16])))[4]!;
+    expect([opened.startFrame, opened.start]).toEqual([5, 4 * FRAME_MS]);
+  });
+  it('none, decided at once, opens on the session\'s first frame (C26)', () => {
+    const opened = run(inputs().frames(2, session(18, [])))[0]!;
+    expect([opened.startFrame, opened.start]).toEqual([1, 0]);
+  });
   it('a later change of the session type or the structure does not change the phase', () => {
     const spans = run(inputs().frames(2, session(5, [5])).frame(session(15, [15, 16])).frame(session(18, [])).frame(session(6, [6, 7])));
     const first = spans[0]!;
@@ -81,6 +92,8 @@ describe('weekend-phase: pending until the structure arrives, then fixed for the
 
 describe('weekend-phase: race-sprint-start (a sprint weekend, first Session packet without a structure)', () => {
   let phases: WeekendPhase[];
+  let frameNumbers: FrameNumber[];
+  let closed: readonly Span[];
   beforeAll(async () => {
     const file = 'race-sprint-start.pwrec.gz';
     const tracker = new SessionTracker({ feedId: feedId(file) });
@@ -89,9 +102,14 @@ describe('weekend-phase: race-sprint-start (a sprint weekend, first Session pack
     const first = frames.find((f) => f.session !== undefined)!;
     const runner = new SessionRunner({ feedId: feedId(file), sessionUid: first.sessionUid, session: first.session! });
     phases = [];
-    const onResult = (r: { state: Parameters<typeof situationOf>[0] }, _f: Frame) => void phases.push(situationOf(r.state).weekendPhase);
+    frameNumbers = [];
+    const onResult = (r: { state: Parameters<typeof situationOf>[0] }, _f: Frame) => {
+      phases.push(situationOf(r.state).weekendPhase);
+      frameNumbers.push(r.state.frameNumber);
+    };
     for (const f of frames.slice(frames.indexOf(first))) runner.apply(f, onResult);
-    runner.end(onResult);
+    runner.finish(onResult);
+    closed = runner.state.history.spans['weekend-phase'] ?? [];
   });
   it('is pending on the first packet', () => {
     expect(phases[0]).toEqual({ kind: 'pending' });
@@ -101,5 +119,11 @@ describe('weekend-phase: race-sprint-start (a sprint weekend, first Session pack
     expect(decided).toBeGreaterThan(0);
     expect(phases.slice(0, decided).every((p) => p.kind === 'pending')).toBe(true);
     expect(phases.slice(decided)).toEqual(Array(phases.length - decided).fill({ kind: 'race', format: 'sprint' }));
+  });
+  it('the session end closes the one span: from the frame it was decided on to the frame after the last (C26)', () => {
+    const decided = phases.findIndex((p) => p.kind !== 'pending');
+    expect(closed.map((s) => [s.kind, s.detail, s.startFrame, s.endFrame])).toEqual([
+      ['race', { format: 'sprint' }, frameNumbers[decided], frameNumbers.at(-1)! + 1],
+    ]);
   });
 });
