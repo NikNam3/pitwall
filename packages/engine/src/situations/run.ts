@@ -12,14 +12,18 @@ import type { DeepReadonly } from '../util/deep-readonly.ts';
 import type { ClockInput, MachineStep, SubMachine } from './machine.ts';
 import { MACHINE_ORDER } from './registry.ts';
 import type { Situation } from './situation.ts';
+import { phaseOfSpan } from './weekend-phase/machine.ts';
 
 type Closed = MachineStep<unknown>['closed'];
 
 /** A sub-machine's change tag (C40); `SPAN_TAGS` holds the registered ones' as literals. */
 const spanTag = (machine: MachineId): ChangeTag => `spans:${machine}` as ChangeTag;
 
-/** The weekend phase: `pending` until the weekend-phase sub-machine decides it (C14, Task 8). */
-const weekendPhaseOf = (_state: DeepReadonly<EngineState>): WeekendPhase => ({ kind: 'pending' });
+/** The weekend phase: the open span of the weekend-phase sub-machine, `pending` while none is open (C14). */
+const weekendPhaseOf = (state: DeepReadonly<EngineState>): WeekendPhase => {
+  const machine = MACHINE_ORDER.find((m) => m.id === 'weekend-phase');
+  return phaseOfSpan(machine === undefined ? undefined : openSpansOf(state, machine)[0]);
+};
 
 /** Step 0's clock as the sub-machines read it (the situation tracker's clock until Task 7 makes it step 0). */
 const clockInputOf = (state: EngineState): ClockInput => ({
