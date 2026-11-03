@@ -337,6 +337,14 @@ describe('a flashback appends no clock fact', () => {
     runAll(runner, resumed(frames(), raceFrame(202), raceAt(201)));
     expect(runner.state.log.clock).toEqual([]);
   });
+  // C27: the game lands imprecisely (below the target), so a fall on the landing frame cannot be told from the landing.
+  it('the landing frame’s time is the flashback’s: a fall on it is no fall fact', () => {
+    const all = frames();
+    const { runner } = run(all.slice(0, raceFrame(200) + 1));
+    const results = runAll(runner, after(all, raceFrame(101), raceFrame(201)).slice(0, 50).map((f) => ({ ...f, sessionTime: f.sessionTime - 300 })));
+    expect(results[0]!.flashback?.targetFrameId).toBe(raceFrame(100));
+    expect(runner.state.log.clock).toEqual([]);
+  });
 });
 
 // Garage acceleration peaks at about 31.6 times wall time: inventory 1.9, raceSingaporeWet qualifying (SgQ) frames
