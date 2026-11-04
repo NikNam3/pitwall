@@ -82,17 +82,25 @@ export type PitStopRecord = {
   frame: FrameNumber;
 };
 
+/**
+ * A penalty race control gave a car (the glossary's penalty record), recorded from the `penalties` sub-machine's spans,
+ * never from a signal (C13): one record per added drive-through, stop-go or time penalty. `infringement` is unknown when
+ * no PENA explained it (C3); `timeMs` is set for a time penalty only. `frame`: the frame its span opened on (C26).
+ */
+export type PenaltyRecord = {
+  carId: CarId;
+  kind: 'driveThrough' | 'stopGo' | 'time';
+  infringement: Known<number>;
+  timeMs: Ms | undefined;
+  at: SessionTime;
+  frame: FrameNumber;
+};
+
 export type RaceEventKind =
-  | 'penalty'
   | 'overtake'
   | 'collision'
-  | 'retirement'
   | 'fastestLap'
   | 'speedTrap'
-  | 'drsEnabled'
-  | 'drsDisabled'
-  | 'startLights'
-  | 'lightsOut'
   /** Recorded by the engine, not sent by the game: a damage part changed between two frames (params: `DamageChangeParams`). */
   | 'damageChange';
 
