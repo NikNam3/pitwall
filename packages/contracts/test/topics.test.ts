@@ -1,5 +1,5 @@
 import { describe, expect, expectTypeOf, it } from 'vitest';
-import type { CarDynamics, CarId, CarMotion, CarState, FeedId, GapperReference, Interval, Known, LapRecord, OpenSpan, RaceMoment, Span } from '@pitwall/domain';
+import type { CarDynamics, CarId, CarMotion, CarState, FeedId, GapperReference, Interval, Known, LapRecord, OpenSpan, RaceMoment } from '@pitwall/domain';
 import type { CarTelemetry } from '../src/topics/car.telemetry.ts';
 import {
   CONTRACT_VERSION,
@@ -91,7 +91,7 @@ describe('TOPICS', () => {
   it.each(['ui.workbooks', 'ui.linkGroups', 'ui.alerts', 'ui.settings'] as const)('has the global topic %s: owner core, state', (name) => {
     expect(TOPICS[name]).toMatchObject({ name, owner: 'core', scope: 'global', mode: 'state' });
   });
-  it('exports the contract version', () => { expect(CONTRACT_VERSION).toBe(10); });
+  it('exports the contract version', () => { expect(CONTRACT_VERSION).toBe(11); });
 });
 
 describe('defineTopic', () => {
@@ -138,7 +138,7 @@ describe('topic types', () => {
       | 'situation.sessionPhasePractice' | 'situation.sessionPhaseQualifying' | 'situation.sessionPhaseRace' | 'situation.warnings'
       | 'situation.weekendPhase' | 'situation.zoneFlags'
     >();
-    expectTypeOf<MachineSpans>().toEqualTypeOf<{ open: OpenSpan[]; closed: Span[] }>();
+    expectTypeOf<MachineSpans>().toEqualTypeOf<{ open: OpenSpan[] }>();
     expectTypeOf<TopicValue<'situation.clock'>>().toEqualTypeOf<MachineSpans>();
     expectTypeOf<TopicValue<'situation.carActivityRace'>>().toEqualTypeOf<MachineSpans>();
     expectTypeOf<TopicParams<'situation.clock'>>().toEqualTypeOf<Record<string, never>>();

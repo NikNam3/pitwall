@@ -2,7 +2,8 @@
 // slow path is fixed to a tested target, never to a timeout): on the 20-car full-lap race segment, with every situation
 // topic but one subscribed, the hub's clock on the record times and a flush after every packet (as `topicStreamHash`
 // runs it), the publisher hands the hub at most one value per frame for each subscribed topic (frames x subscribed
-// topics in all), nothing for the topic no one subscribed, and the scheduler runs no unit for them.
+// topics in all), nothing for the topic no one subscribed, and the scheduler runs no unit for them. A value carries the
+// machine's open spans only (contracts 0f4caa8): closed-span lists resent at 4 Hz reached 181-205 kB/s.
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { ServerMessage, TopicName } from '@pitwall/contracts';
 import { SPAN_DECLARATIONS, type FeedId, type MachineId } from '@pitwall/domain';
@@ -66,16 +67,28 @@ let hub: CountingHub;
 let frames: number;
 /** The values sent per subscription (its id is the topic's name). */
 let sent: Map<string, number>;
+/** Per situation topic, the keys its values had and the spans in them that had ended (none may). */
+let keys: Map<string, Set<string>>;
+let ended: number;
 let stats: CalcStat[];
 
 beforeAll(async () => {
   frames = (await trackFile(SEGMENT)).frames;
   sent = new Map();
+  keys = new Map();
+  ended = 0;
   let nowMs = 0;
   hub = new CountingHub({ now: () => nowMs });
   hub.addClient('c', {
     send: (m: ServerMessage) => {
-      if ((m.type === 'snapshot' || m.type === 'update') && 'value' in m) sent.set(m.id, (sent.get(m.id) ?? 0) + 1);
+      if ((m.type !== 'snapshot' && m.type !== 'update') || !('value' in m)) return;
+      sent.set(m.id, (sent.get(m.id) ?? 0) + 1);
+      const value = m.value as Record<string, unknown>;
+      const seen = keys.get(m.id) ?? new Set<string>();
+      for (const key of Object.keys(value)) seen.add(key);
+      keys.set(m.id, seen);
+      const open = Array.isArray(value['open']) ? (value['open'] as object[]) : [];
+      ended += open.filter((span) => 'end' in span || 'endFrame' in span).length;
     },
     bufferedAmount: () => 0,
   });
@@ -111,6 +124,12 @@ describe('the situation topics on a 20-car race lap, every topic but one subscri
     }
     expect(total).toBeGreaterThan(0);
     expect(total).toBeLessThanOrEqual(PUBLISHES_PER_FRAME * frames * SUBSCRIBED.length);
+  });
+
+  it('every value sent carries the open spans only: the one key open, no span that has ended', () => {
+    expect(keys.size).toBeGreaterThan(0);
+    for (const [topic, seen] of keys) expect([...seen], topic).toEqual(['open']);
+    expect(ended).toBe(0);
   });
 
   it('the topic no one subscribed is never published and its value never built', () => {
