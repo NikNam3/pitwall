@@ -1,8 +1,10 @@
 // Every incremental unit is incremental = from scratch at every step of random races with rewinds (contract C31.3, C33;
 // ruling Task 22 round 6). The races are made once for the file: 8 random races of 300 frames whose run rewinds (once, or
-// twice back to back), which appends a void fact (C27), run once through the engine and every step recorded frozen. Each
-// unit then runs a scheduler over the recorded steps and compares its output with a fresh `init` and `output` at every
-// step it ran, on frozen unguarded views (C41 is the guarded-view completeness test's and the units' own tests').
+// twice back to back), which appends a void fact (C27), run once through the engine and every step's projection recorded
+// frozen. Each unit then runs a scheduler over the recorded steps and, at every step it ran, also after every rewind,
+// its accumulator equals `init` over that step's view (ruling Task 22 round 7): the projection and the config alone,
+// the live state and the situation throwing on any read (C31.2), no guard (C41 is the guarded-view completeness test's
+// and the units' own tests').
 import fc from 'fast-check';
 import type { SchedulerInput } from '@pitwall/engine/readers';
 import { beforeAll, describe, expect, it } from 'vitest';
@@ -25,9 +27,6 @@ const SEED = fc.sample(fc.integer(), 1)[0]!;
 
 const races: Array<{ params: RaceParams; steps: SchedulerInput[] }> = [];
 
-/** What the units read together: each step records the live state they may see (C41). */
-const READS = INCREMENTAL.flatMap((c) => c.reads);
-
 /** Races drawn at most, to find `RACES` whose run rewinds (a drawn rewind lands before the race start and is dropped). */
 const DRAWN = 4 * RACES;
 
@@ -37,7 +36,7 @@ beforeAll(() => {
     const { frames } = raceFrames({ ...params, frames: FRAMES });
     // a drawn rewind that lands before the race start is dropped: its frames never go back
     if (!frames.some((f, i) => i > 0 && f.frameId <= frames[i - 1]!.frameId)) continue;
-    const steps = recordRun(frames, READS);
+    const steps = recordRun(frames);
     if (steps.some((step) => step.delta.rewound !== undefined)) races.push({ params, steps });
   }
 });
@@ -49,7 +48,7 @@ describe('every incremental unit is incremental = from scratch across random rew
   });
 
   for (const calc of INCREMENTAL) {
-    it(`${calc.id}: incremental equals from scratch at every step of every race, each with a void fact`, () => {
+    it(`${calc.id}: its accumulator equals init over the projection at every step of every race, each with a void fact`, () => {
       if (calc.kind !== 'incremental') throw new Error(`${calc.id} is not incremental`);
       races.forEach(({ params, steps }, i) => expectIncrementalOverSteps(calc, steps, `race ${i} (seed ${SEED}, ${JSON.stringify(params)}), `));
     });

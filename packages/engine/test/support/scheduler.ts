@@ -468,113 +468,86 @@ const frozenList = <T>(list: readonly T[]): readonly T[] => {
   return copy;
 };
 
-/**
- * A deep-frozen copy of `raw` that shares every part equal to `prev` (the copy of the step before): the engine changes
- * its live state in place, so a step is copied, but only the parts that changed are new. Plain objects and arrays are
- * copied part by part; anything else (a Map, a Set, a class instance) is cloned whole.
- */
-const sharedCopy = (prev: unknown, raw: unknown): unknown => {
-  if (typeof raw !== 'object' || raw === null) return raw;
-  if (Array.isArray(raw)) {
-    const before = Array.isArray(prev) ? prev : undefined;
-    let same = before !== undefined && before.length === raw.length;
-    const out = new Array<unknown>(raw.length);
-    for (let i = 0; i < raw.length; i++) {
-      const part = sharedCopy(before?.[i], raw[i]);
-      if (same && part !== before![i]) same = false;
-      out[i] = part;
-    }
-    return same ? before : Object.freeze(out);
+/** A read of a part of a projection-only view (C31.2, C31.3): an accumulator comes from the projection and the config alone. */
+export class NotInTheProjectionError extends Error {
+  constructor(path: string) {
+    super(`a fold read ${path}: an accumulator is a fold over projection entries and config alone (C31.2)`);
+    this.name = 'NotInTheProjectionError';
   }
-  const proto = Object.getPrototypeOf(raw);
-  if (proto !== Object.prototype && proto !== null) {
-    if (prev !== undefined && isDeepStrictEqual(prev, raw)) return prev;
-    const copy = structuredClone(raw);
-    freezeOnce(copy);
-    return copy;
-  }
-  const before = typeof prev === 'object' && prev !== null && !Array.isArray(prev) ? (prev as Record<string, unknown>) : undefined;
-  const source = raw as Record<string, unknown>;
-  const keys = Object.keys(source);
-  const out: Record<string, unknown> = {};
-  let same = before !== undefined && Object.keys(before).length === keys.length;
-  for (let i = 0; i < keys.length; i++) {
-    const key = keys[i]!;
-    const was = before?.[key];
-    const part = sharedCopy(was, source[key]);
-    if (same && (part !== was || (was === undefined && !(key in before!)))) same = false;
-    out[key] = part;
-  }
-  if (same) return before;
-  return Object.freeze(out);
-};
+}
+
+/** A stand-in for a part of a projection-only view: every read throws, but those of `allowed` (the scheduler's own). */
+const throwing = (path: string, allowed: Readonly<Record<string, unknown>> = {}): object =>
+  new Proxy(
+    {},
+    {
+      get: (_, key) => {
+        if (typeof key === 'string' && Object.prototype.hasOwnProperty.call(allowed, key)) return allowed[key];
+        throw new NotInTheProjectionError(`${path}.${String(key)}`);
+      },
+      has: (_, key) => {
+        throw new NotInTheProjectionError(`${path}.${String(key)}`);
+      },
+      ownKeys: () => {
+        throw new NotInTheProjectionError(path);
+      },
+    },
+  );
 
 /**
- * The part of the live state units declaring `reads` may see (C41): the free fields (`FREE_LIVE`, `FREE_CAR`) and those
- * of their declared live areas (`LIVE_AREA_FIELDS`), a shallow pick, nothing the engine keeps besides (C8, C13, C28).
+ * A step's scheduler input as the C31.3 property needs it (ruling Task 22 round 7), frozen: the projection (frozen copies
+ * of its lists, a list copied again only once it has grown: it only grows, except at a void, where the step's lists
+ * are taken as they are), the delta and the change tags. The live state and the situation throw on any read, but the
+ * live state's feed id and race-clock time, which the scheduler reads for its cadences; no live state is copied.
  */
-const declaredLive = (state: Record<string, unknown>, reads: readonly Dependency[]): Record<string, unknown> => {
-  const areas = (Object.keys(LIVE_AREA_FIELDS) as LiveArea[]).filter((area) => reads.includes(area));
-  const stateFields = [...FREE_LIVE, ...areas.flatMap((area) => LIVE_AREA_FIELDS[area].state)];
-  const carFields = [...FREE_CAR, ...areas.flatMap((area) => LIVE_AREA_FIELDS[area].car)];
-  const pick = (from: Record<string, unknown>, fields: readonly string[]) => Object.fromEntries(fields.filter((f) => f in from).map((f) => [f, from[f]]));
-  const live = pick(state, stateFields);
-  if (areas.some((area) => LIVE_AREA_FIELDS[area].car.length > 0)) live['cars'] = (state['cars'] as Array<Record<string, unknown>>).map((car) => pick(car, carFields));
-  return live;
-};
-
-/**
- * A step's scheduler input recorded for later, frozen (ruling Task 22 rounds 5 and 6): a deep-frozen copy of the live
- * state units declaring `reads` may see (`declaredLive`; the engine changes its own in place on the next step; the parts equal to those of `before`, the step before,
- * are shared with its copy, `sharedCopy`), frozen copies of the projection's lists (the log's own
- * arrays keep growing; a list is copied again only once it has grown; its entries the log froze), the situation
- * deep-frozen, the change tags and the delta copied. No guard: C41 is the guarded-view completeness test's and the
- * units' own tests'.
- */
-export function recordedInput(r: Pick<StepResult, 'state' | 'changed' | 'delta'>, reads: readonly Dependency[], before?: SchedulerInput): SchedulerInput {
-  const input = inputOf(r);
-  const copy = sharedCopy(before?.live, declaredLive(r.state as unknown as Record<string, unknown>, reads));
-  const { spans, ...lists } = input.history;
+export function projectionStep(r: Pick<StepResult, 'state' | 'changed' | 'delta'>): SchedulerInput {
+  const { spans, ...lists } = r.state.history;
   const history = Object.freeze({
     ...Object.fromEntries(Object.entries(lists).map(([name, list]) => [name, frozenList(list as readonly unknown[])])),
     spans: Object.freeze(Object.fromEntries(Object.entries(spans).map(([machine, list]) => [machine, frozenList(list)]))),
-  }) as unknown as EngineView['history'];
-  freezeOnce(input.situation);
+  }) as unknown as SchedulerInput['history'];
   return Object.freeze({
-    ...input,
-    live: copy as unknown as SchedulerInput['live'],
+    live: throwing('live', { feedId: r.state.feedId, sessionTime: r.state.sessionTime }) as SchedulerInput['live'],
+    situation: throwing('situation') as SchedulerInput['situation'],
     history,
-    changed: Object.freeze(new Set(input.changed)),
-    delta: structuredClone(input.delta),
+    changed: Object.freeze(new Set(r.changed)),
+    delta: structuredClone(r.delta),
+    weekend: undefined,
+    feed: throwing('feed') as SchedulerInput['feed'],
+    config: {},
+    priors: {},
   });
 }
 
-/**
- * Every step's recorded input (`recordedInput`) of a run of `frames` through a `SessionRunner`, flashbacks included,
- * with the live state units declaring `reads` may see (the union of the readers' `reads`).
- */
-export function recordRun(frames: readonly Frame[], reads: readonly Dependency[]): SchedulerInput[] {
+/** Every step's projection-only input (`projectionStep`) of a run of `frames` through a `SessionRunner`, flashbacks included. */
+export function recordRun(frames: readonly Frame[]): SchedulerInput[] {
   const runner = new SessionRunner(initFor([...frames]));
   const steps: SchedulerInput[] = [];
-  const record = (r: StepResult) => steps.push(recordedInput(r, reads, steps.at(-1)));
+  const record = (r: StepResult) => steps.push(projectionStep(r));
   for (const frame of frames) runner.apply(frame, record);
   runner.end(record);
   return steps;
 }
 
 /**
- * C31.3 over recorded steps (`recordRun`): a `Scheduler` that needs `calc` runs every step, and on every step it ran
- * its output equals a fresh `init` and `output` over that step's frozen view. The scheduler is never reset by hand:
- * only a flashback rewinds (`delta.rewound`, C30). Neither side is guarded (ruling Task 22 rounds 5 and 6).
+ * C31.3 over recorded steps (`recordRun`): a `Scheduler` that needs `calc` runs every step by its cadence, and on every
+ * step it ran, also after every rewind, the accumulator equals `init` over that step's view, projection and config alone
+ * (ruling Task 22 round 7). The scheduler is never reset by hand: only a flashback rewinds (`delta.rewound`, C30). To
+ * reach the accumulator the unit runs with `output` giving it and without insights; outputs are not frozen, as the
+ * accumulator is the unit's own to fold. A throw of the unit, which the scheduler contains (C48), fails the check.
  */
 export function expectIncrementalOverSteps<Acc, Out>(calc: IncrementalCalculator<Acc, Out>, steps: readonly SchedulerInput[], label = ''): void {
-  const scheduler = new Scheduler(CalculatorRegistry.build([calc as Calculator]), { freezeOutputs: true });
+  const { insights: _insights, ...fold } = calc;
+  const probe: Calculator = { ...fold, output: (acc: unknown) => acc } as Calculator;
+  const scheduler = new Scheduler(CalculatorRegistry.build([probe]));
   scheduler.setNeeded([calc.id]);
   steps.forEach((input, i) => {
-    const { ran, outputs } = scheduler.run(input);
+    const { ran, outputs, errors } = scheduler.run(input);
+    // the scheduler contains a unit's throw (C48): here it is the failure
+    if (errors.length > 0) throw errors[0]!.error;
     if (!ran.includes(calc.id)) return;
     const fresh: EngineView = Object.freeze({ ...input, outputs: new Map() });
-    expectEqual(outputs.get(calc.id), calc.output(calc.init(fresh), fresh), `${label}frame ${i}`);
+    expectEqual(outputs.get(calc.id), calc.init(fresh), `${label}frame ${i}`);
   });
 }
 
