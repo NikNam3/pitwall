@@ -2,20 +2,33 @@
 import { carId, known, toSessionTime, unknown } from '@pitwall/domain';
 import type { RaceMoment } from '@pitwall/domain';
 import type { GalleryEntry } from '../../kit/gallery-types.ts';
-import { boardRow, incidentEntry, interval, lapBoard, overview, sessionInfo, toCar } from './fixtures.ts';
+import {
+  boardRow, incidentEntry, interval, lapBoard, overview, pendingPenalty, servingPenalty, sessionInfo, situations, timePenalty, toCar,
+  type CarSituation,
+} from './fixtures.ts';
 import type { widget } from './widget.ts';
 
 /** Our car (id 3, KUH) is fourth; SAR is a lap down; OCO has retired (its times will not come); ALB is on an out lap. */
 const cars = [
   overview(0, { name: 'Max Verstappen', position: 1, gridPosition: 1 }),
   overview(1, { name: 'Lando Norris', position: 2, gridPosition: 3 }),
-  overview(2, { name: 'Charles Leclerc', position: 3, gridPosition: 2, compound: 'hard', age: 23, numPitStops: 0, timePenaltyMs: 5000 }),
+  overview(2, { name: 'Charles Leclerc', position: 3, gridPosition: 2, compound: 'hard', age: 23, stops: 0 }),
   overview(3, { name: 'Nikolas Kuhnlein', position: 4, gridPosition: 4, ours: true, age: 12 }),
-  overview(4, { name: 'Alexander Albon', position: 5, gridPosition: 7, compound: 'hard', age: 1, driverStatus: 'outLap' }),
+  overview(4, { name: 'Alexander Albon', position: 5, gridPosition: 7, compound: 'hard', age: 1 }),
   overview(5, { name: 'Oscar Piastri', position: 6, gridPosition: 5, age: 15 }),
-  overview(6, { name: 'Carlos Sainz', position: 7, gridPosition: 7, compound: 'hard', age: 30, numPitStops: 0, lap: 22 }),
-  overview(7, { name: 'Esteban Ocon', position: 8, gridPosition: 8, resultStatus: 'didNotFinish', lap: 23 }),
+  overview(6, { name: 'Carlos Sainz', position: 7, gridPosition: 7, compound: 'hard', age: 30, stops: 0, lap: 22 }),
+  overview(7, { name: 'Esteban Ocon', position: 8, gridPosition: 8, lap: 23 }),
 ];
+const ids = cars.map((c) => c.id);
+
+/** The field's situations: LEC holds a 5 s time penalty, ALB is on an out lap, OCO has retired to the garage. */
+const fieldSituations: Readonly<Record<number, CarSituation>> = {
+  2: { penalty: timePenalty(5000) },
+  4: { activity: 'outLap' },
+  7: { status: 'retired', activity: 'notCompeting', location: 'garage' },
+};
+/** The field's situations with `of` laid over them, car by car. */
+const situated = (of: Readonly<Record<number, CarSituation>>) => situations(ids, { ...fieldSituations, ...of });
 
 const intervals = [
   interval(0), interval(1, 2184, 2184, 0, 1), interval(2, 5903, 3719, 0, -1), interval(3, 9102, 3199),
@@ -41,7 +54,7 @@ const moment = (m: RaceMoment['moment']): RaceMoment => ({
   moment: m, since: known(toSessionTime(900), toSessionTime(900)), cause: { rule: 'majorIncident', params: { entryId: 'collision-6-7' } }, active: [m],
 });
 
-const field = { cars, intervals, toCar: toUs, board, moment: undefined, session: sessionInfo(3), incidents: undefined };
+const field = { cars, intervals, toCar: toUs, board, moment: undefined, session: sessionInfo(3), incidents: undefined, ...situated({}) };
 
 /** Synthetic cases and fit expectations for `timing-tower`. */
 const gallery: GalleryEntry<typeof widget> = {
@@ -77,10 +90,42 @@ const gallery: GalleryEntry<typeof widget> = {
     // Unserved penalties: NOR two drive-throughs (2DT), PIA a stop-go beside a 5 s time penalty (the time in the title), LEC 5 s.
     driveThrough: {
       ...field,
-      cars: cars.map((c) =>
-        c.id === carId(1) ? overview(1, { name: 'Lando Norris', position: 2, gridPosition: 3, unservedDriveThroughs: 2 })
-        : c.id === carId(5) ? overview(5, { name: 'Oscar Piastri', position: 6, gridPosition: 5, age: 15, unservedStopGos: 1, timePenaltyMs: 5000 })
-        : c),
+      ...situated({
+        1: { penalty: pendingPenalty('driveThroughPending', { driveThroughs: 2 }) },
+        5: { penalty: pendingPenalty('stopGoPending', { stopGos: 1, totalMs: 5000 }) },
+      }),
+    },
+    // A pit visit: our car at its box (BOX), PIA in the pit lane on its in lap (PIT), SAR on its in lap on track (IN).
+    boxStop: {
+      ...field,
+      ...situated({
+        3: { location: 'pitLane', activity: 'boxStop' },
+        5: { location: 'pitLane', activity: 'inLap' },
+        6: { activity: 'inLap' },
+      }),
+    },
+    // NOR serves its drive-through in the pit lane (DT in the situation column and the PEN cell), PIA a stop-go (SG).
+    servingPenalty: {
+      ...field,
+      ...situated({
+        1: { location: 'pitLane', activity: servingPenalty(1, 'driveThrough'), penalty: pendingPenalty('driveThroughPending', { driveThroughs: 1 }) },
+        5: { location: 'pitLane', activity: servingPenalty(5, 'stopGo'), penalty: pendingPenalty('stopGoPending', { stopGos: 1 }) },
+      }),
+    },
+    // Two cars out of the race: OCO retired (RET), SAR disqualified (DSQ); both sink below the running cars.
+    retired: {
+      ...field,
+      intervals: intervals.filter((i) => i.carId !== carId(6)),
+      ...situated({ 6: { status: 'disqualified', activity: 'notCompeting' } }),
+    },
+    // The chequered flag: VER and NOR have finished (FIN), LEC cools down in the pit lane (FIN), the rest still race.
+    finished: {
+      ...field,
+      ...situated({
+        0: { activity: 'finished' },
+        1: { activity: 'coolDown' },
+        2: { location: 'pitLane', activity: 'coolDown', penalty: timePenalty(5000) },
+      }),
     },
     // Outside the race the moment is not applicable.
     noMoment: { ...field, moment: unknown('notApplicable') },

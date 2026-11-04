@@ -10,7 +10,7 @@ describe('TOWER_COLUMNS', () => {
   it('lists the full grid in order, widths from the mockup', () => {
     expect(TOWER_COLUMNS.map((c) => [c.key, c.widthCols])).toEqual([
       ['position', 2], ['change', 3], ['car', 3], ['gap', 7], ['interval', 6], ['toUs', 6], ['last', 8],
-      ['s1', 6], ['s2', 6], ['s3', 6], ['compound', 1], ['age', 3], ['stops', 2], ['penalty', 3], ['pit', 3],
+      ['s1', 6], ['s2', 6], ['s3', 6], ['compound', 1], ['age', 3], ['stops', 2], ['penalty', 3], ['situation', 6],
     ]);
   });
 
@@ -22,7 +22,7 @@ describe('TOWER_COLUMNS', () => {
     expect(kept(30)).toEqual(['position', 'change', 'car', 'interval', 'last']);
   });
 
-  it('drops pit, penalty, stops, age, compound and S3 (62 cells needed) at 60, then the sectors, TO US and GAP as it narrows', () => {
+  it('drops situation, penalty, stops, age, compound and S3 (62 cells needed) at 60, then the sectors, TO US and GAP as it narrows', () => {
     expect(kept(60)).toEqual(['position', 'change', 'car', 'gap', 'interval', 'toUs', 'last', 's1', 's2']);
     expect(kept(41)).toEqual(['position', 'change', 'car', 'gap', 'interval', 'toUs', 'last']);
     expect(kept(40)).toEqual(['position', 'change', 'car', 'gap', 'interval', 'last']);
@@ -33,8 +33,13 @@ describe('TOWER_COLUMNS', () => {
     for (const places of [19, -19]) expect(positionMarkText({ change: places }).length).toBeLessThanOrEqual(change?.widthCols ?? 0);
   });
 
-  it('right-aligns the numbers and left-aligns the car, change, compound and pit columns', () => {
+  it('the situation column holds its widest code, GARAGE (Task 25)', () => {
+    const situation = TOWER_COLUMNS.find((c) => c.key === 'situation');
+    for (const code of ['GARAGE', 'PIT', 'BOX', 'DT', 'SG', 'OUT', 'IN', 'RET', 'DSQ', 'FIN']) expect(code.length).toBeLessThanOrEqual(situation?.widthCols ?? 0);
+  });
+
+  it('right-aligns the numbers and left-aligns the car, change, compound and situation columns', () => {
     const left = TOWER_COLUMNS.filter((c) => c.align === 'left').map((c) => c.key);
-    expect(left).toEqual(['change', 'car', 'compound', 'pit']);
+    expect(left).toEqual(['change', 'car', 'compound', 'situation']);
   });
 });

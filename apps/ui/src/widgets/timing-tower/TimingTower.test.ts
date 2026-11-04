@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import InPanel from '../../../test/kit/InPanel.svelte';
 import { unknownMark, unknownReason } from '../../kit/text.ts';
 import { role } from '../../theme/index.ts';
-import { boardRow, interval, lapBoard, overview, sessionInfo, toCar } from './fixtures.ts';
+import { boardRow, interval, lapBoard, overview, sessionInfo, situations, toCar } from './fixtures.ts';
 import TimingTower from './TimingTower.svelte';
 
 afterEach(cleanup);
@@ -17,7 +17,7 @@ const data = {
   cars: [
     overview(0, { name: 'Max Verstappen', position: 1 }),
     overview(1, { name: 'Kuh Driver', position: 2, ours: true }),
-    overview(2, { name: 'Esteban Ocon', position: 3, lap: 22, resultStatus: 'didNotFinish' }),
+    overview(2, { name: 'Esteban Ocon', position: 3, lap: 22 }),
   ],
   intervals: [interval(0), interval(1, 2184, 2184)],
   toCar: [toCar(0, -2184), toCar(1, undefined), toCar(2, undefined)],
@@ -25,6 +25,8 @@ const data = {
   moment: undefined,
   session: sessionInfo(1),
   incidents: undefined,
+  // OCO (2) has retired (car-status); our car (1) is at its box (car-activity-race).
+  ...situations([0, 1, 2], { 1: { location: 'pitLane', activity: 'boxStop' }, 2: { status: 'retired', activity: 'notCompeting', location: 'garage' } }),
 };
 
 const show = () =>
@@ -46,5 +48,15 @@ describe('TimingTower: a retired car', () => {
     const cell = show().querySelector<HTMLElement>('[data-row="0"] [data-col="toUs"]');
     expect(cell?.textContent?.trim()).not.toBe('');
     expect(cell?.textContent).not.toContain(unknownMark.notApplicable);
+  });
+});
+
+describe('TimingTower: the situation column', () => {
+  it("shows each car's code from its situation: BOX at the box, RET for a retired car, nothing on a racing lap", () => {
+    const tower = show();
+    const cell = (row: number) => tower.querySelector<HTMLElement>(`[data-row="${row}"] [data-col="situation"]`)?.textContent?.trim();
+    expect(cell(0)).toBe('');
+    expect(cell(1)).toBe('BOX');
+    expect(cell(2)).toBe('RET');
   });
 });

@@ -79,23 +79,27 @@ const tableOf = (folder: string): PresentationTable | undefined =>
 const WIDGETS = Object.entries(declared).map(([path, mod]) => ({ folder: folderOf(path), name: mod.widget.name, ...readsOf(mod.widget.data) }));
 const READERS = WIDGETS.filter((w) => w.machines.length > 0 || w.moments);
 
-/**
- * The widgets that read a sub-machine or the moments without a presentation table today (Task 25 Step 0): their test is
- * marked `it.fails` until Task 25 adds the table, which turns the mark red, so Task 25's test phase removes the widget
- * from this list.
- */
-const TABLE_BY_TASK: Readonly<Record<string, string>> = {
-  'battle-cards': 'Task 25',
-  'ers-budget': 'Task 25',
-  'incident-feed': 'Task 25',
-  'timing-tower': 'Task 25',
-};
-
 describe('presentation tables (C66)', () => {
   it('finds the widgets and what they read', () => {
     expect(WIDGETS.map((w) => w.folder)).toEqual(expect.arrayContaining(['timing-tower', 'battle-cards', 'feed-status']));
     expect(WIDGETS.every((w) => w.folder === w.name)).toBe(true);
-    expect(READERS.map((w) => w.folder)).toEqual(expect.arrayContaining(['timing-tower']));
+    expect(READERS.map((w) => w.folder)).toEqual(expect.arrayContaining(['timing-tower', 'battle-cards', 'ers-budget', 'incident-feed', 'feed-status']));
+  });
+
+  // Task 25: the tower reads the situations it shows from their topics (no signal field, C13, C54): where a car is,
+  // whether it competes, what it does by the weekend phase's rules, what it owes; feed-status reads the weekend phase.
+  it('the timing tower reads car location, car status, every car-activity machine, penalties, warnings and the weekend phase', () => {
+    const tower = WIDGETS.find((w) => w.folder === 'timing-tower');
+    expect([...(tower?.machines ?? [])].sort()).toEqual(
+      ['car-activity-practice', 'car-activity-qualifying', 'car-activity-race', 'car-location', 'car-status', 'penalties', 'warnings', 'weekend-phase'],
+    );
+    expect(tower?.moments).toBe(true);
+  });
+
+  it('feed-status reads the weekend phase and no moment', () => {
+    const feed = WIDGETS.find((w) => w.folder === 'feed-status');
+    expect(feed?.machines).toEqual(['weekend-phase']);
+    expect(feed?.moments).toBe(false);
   });
 
   it('every situation topic a widget declares is the topic of a declared sub-machine', () => {
@@ -108,8 +112,7 @@ describe('presentation tables (C66)', () => {
   });
 
   for (const w of READERS) {
-    const task = TABLE_BY_TASK[w.folder];
-    (task === undefined ? it : it.fails)(`${w.folder}'s presentation table covers every kind it reads, and nothing else${task === undefined ? '' : ` (no table yet, added by ${task})`}`, () => {
+    it(`${w.folder}'s presentation table covers every kind it reads, and nothing else`, () => {
       expect(tableProblems(w.folder, w, tableOf(w.folder))).toEqual([]);
     });
   }
