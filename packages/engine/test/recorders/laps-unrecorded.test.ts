@@ -1,3 +1,7 @@
+// Laps LapData never completed: the final lap the game never rolls over and laps a lap-number jump swallowed, confirmed
+// from Session History (contract C10, C25, C26). The final lap's Session History arrives with the session's end (SEND,
+// the postSession span): a confirmation of a lap driven before is still recorded then (ruling 4 of migration Task 17
+// stops only new laps). Ported from test/history/laps-unrecorded.test.ts.
 import { describe, expect, it } from 'vitest';
 import { unknown } from '@pitwall/domain';
 import { ScenarioBuilder, type FrameDraft } from '../builders/index.ts';
