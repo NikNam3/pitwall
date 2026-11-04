@@ -1,6 +1,8 @@
 // `session-remaining` (spec 4): a shared calculator without topics; others read it through `{ calculator: SESSION_REMAINING }`.
 import type { Known, Ms } from '@pitwall/domain';
 
+export * from './behaviour.ts';
+
 /** The calculator id. */
 export const SESSION_REMAINING = 'session-remaining';
 
