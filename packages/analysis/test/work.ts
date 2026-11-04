@@ -10,6 +10,12 @@ import { engineView, IDLE_FEED } from '../../../test-support/builders/index.ts';
 import { longRace } from '../../../test-support/builders/long-race.ts';
 import { CALCULATORS } from './units.ts';
 
+/**
+ * The counts of C31.1 run on views whose projection lists count, without the guard (ruling Task 22 round 8): C41 is the
+ * guarded-view completeness test's and the units' own tests'; the counts are as exact.
+ */
+const UNGUARDED = { guarded: false } as const;
+
 /** The laps C31.1 compares. */
 export const EARLY_LAP = 7;
 export const LATE_LAP = 70;
@@ -71,7 +77,7 @@ const withFrameBefore = (lap: number): number[] => {
 export function fromScratchReads<A, O>(calc: IncrementalCalculator<A, O>, lap: number): number {
   return mean(
     [...viewsFor(calc as Calculator, longRace().framesOfLap(lap))].map((view) =>
-      countReads(calc as Calculator, view, (v) => calc.output(calc.init(v), v)),
+      countReads(calc as Calculator, view, (v) => calc.output(calc.init(v), v), UNGUARDED),
     ),
   );
 }
@@ -85,10 +91,15 @@ export function incrementalReads<A, O>(calc: IncrementalCalculator<A, O>, lap: n
   let acc = calc.init(guardedView(before!, calc.reads, { unit: calc.id }));
   return mean(
     views.map((view) =>
-      countReads(calc as Calculator, view, (v) => {
-        acc = calc.update(acc, v.delta, v);
-        return calc.output(acc, v);
-      }),
+      countReads(
+        calc as Calculator,
+        view,
+        (v) => {
+          acc = calc.update(acc, v.delta, v);
+          return calc.output(acc, v);
+        },
+        UNGUARDED,
+      ),
     ),
   );
 }
@@ -138,17 +149,17 @@ const FOLD_LAPS = [29, 30, 31, 32, 33, 34];
 
 /**
  * `calc`'s accumulator after it folded the long race's frames of `FOLD_LAPS` (initialised on the frame before, every
- * view whole, each output taken as the scheduler does), and `init` over the last frame's projection alone
+ * view whole, each output taken as the scheduler does; no guard), and `init` over the last frame's projection alone
  * (`projectionOnly`).
  */
 export function foldedAndFromProjection<A, O>(calc: IncrementalCalculator<A, O>): { folded: A; fromProjection: A } {
   const frames = FOLD_LAPS.flatMap((lap) => longRace().framesOfLap(lap));
   const [before, ...views] = [...viewsFor(calc as Calculator, [frames[0]! - 1, ...frames])];
-  const guard = (view: EngineView) => guardedView(view, calc.reads, { unit: calc.id });
-  let acc = calc.init(guard(before!));
+  // unguarded (ruling Task 22 round 8): C41 is the guarded-view completeness test's and the units' own tests'
+  let acc = calc.init(before!);
   for (const view of views) {
-    acc = calc.update(acc, view.delta, guard(view));
-    calc.output(acc, guard(view));
+    acc = calc.update(acc, view.delta, view);
+    calc.output(acc, view);
   }
   return { folded: acc, fromProjection: calc.init(projectionOnly(calc as Calculator, views.at(-1)!)) };
 }

@@ -129,7 +129,24 @@ export type GuardOptions = {
    * entries. `countReads` counts the entries a unit reads with it (C31.1).
    */
   onEntry?: (list: string, index: number) => void;
+  /**
+   * Faster form of `onEntry`: asked once per projection list (its path and length), it returns what each read of an entry
+   * of that list (its index) is given to. `countReads` uses it; `onEntry`, when given, is called as well.
+   */
+  onList?: (list: string, length: number) => (index: number) => void;
 };
+
+/** The handler of a projection list that hands every read of an entry (an array index) to `mark`. */
+const markingEntries = (mark: (index: number) => void): ProxyHandler<object> => ({
+  get(t, key) {
+    // an array index: what Array methods and indexing read (`length`, method names and symbols are none)
+    if (typeof key === 'string') {
+      const c = key.charCodeAt(0);
+      if (c >= 48 && c <= 57) mark(+key);
+    }
+    return (t as Record<PropertyKey, unknown>)[key];
+  },
+});
 
 const readOnly = (path: string): never => {
   throw new TypeError(`${path} is read-only: no unit changes its view (C20, C28)`);
@@ -188,7 +205,7 @@ const refuseWrites = <T extends object>(path: string): ProxyHandler<T> => ({
  * read-only (they are the log's own arrays, which cannot be frozen; the log freezes their entries): a unit that changes
  * either throws a `TypeError`. The view itself is not changed: the guard reads through to it.
  */
-export function guardedView(view: EngineView, reads: readonly Dependency[], { unit = 'unit', onRead, onEntry }: GuardOptions = {}): EngineView {
+export function guardedView(view: EngineView, reads: readonly Dependency[], { unit = 'unit', onRead, onEntry, onList }: GuardOptions = {}): EngineView {
   const tags = new Set<string>(reads.filter((r): r is ChangeTag => typeof r === 'string'));
   const calculators = new Set(reads.flatMap((r) => (typeof r === 'object' ? [r.calculator] : [])));
   /** The sub-machines whose spans the unit declares (`spans:<id>`). */
@@ -222,19 +239,15 @@ export function guardedView(view: EngineView, reads: readonly Dependency[], { un
 
   /** The projection's lists, read-only, one proxy per list and view; a read of an entry of the projection goes to `onEntry`. */
   const lists = new WeakMap<object, unknown>();
-  const entries = (path: string): ProxyHandler<object> =>
-    onEntry === undefined || !path.startsWith('history.')
-      ? {}
-      : {
-          get(t, key, receiver) {
-            // an array index: what Array methods and indexing read (`length`, method names and symbols are none)
-            if (typeof key === 'string' && key.charCodeAt(0) >= 48 && key.charCodeAt(0) <= 57) onEntry(path, Number(key));
-            return Reflect.get(t, key, receiver);
-          },
-        };
+  const entries = (path: string, length: number): ProxyHandler<object> => {
+    if ((onEntry === undefined && onList === undefined) || !path.startsWith('history.')) return {};
+    const listed = onList?.(path, length);
+    const mark = onEntry === undefined ? listed! : listed === undefined ? (i: number) => onEntry(path, i) : (i: number) => (listed(i), onEntry(path, i));
+    return markingEntries(mark);
+  };
   const readOnlyList = (list: unknown, path: string): unknown => {
     if (typeof list !== 'object' || list === null) return list;
-    if (!lists.has(list)) lists.set(list, new Proxy(list, { ...refuseWrites(path), ...entries(path) }));
+    if (!lists.has(list)) lists.set(list, new Proxy(list, { ...refuseWrites(path), ...entries(path, (list as unknown[]).length) }));
     return lists.get(list);
   };
 
@@ -366,30 +379,84 @@ export const fromScratch =
   (view: EngineView): unknown =>
     unit.kind === 'quick' ? unit.compute(view) : unit.init(view);
 
-/**
- * The projection entries `run` reads through `unit`'s guarded view of `view` (C31.1, C41): every entry of a projection
- * list (`history.crossings[i]`, `history.spans.<id>[i]` ...) it reads counts once, however often it reads it; open spans,
- * the live state and the outputs are no entries. `run` defaults to the unit's from-scratch computation (`fromScratch`);
- * an incremental unit's fold is `(v) => unit.update(acc, v.delta, v)`. Work is counted in entries, never timed.
- */
-export function countReads(unit: Calculator, view: EngineView, run: (view: EngineView) => unknown = fromScratch(unit)): number {
-  /** Per list, a mark per entry read. */
-  const read = new Map<string, Uint8Array>();
-  let count = 0;
-  const onEntry = (list: string, index: number): void => {
-    let marks = read.get(list);
-    if (marks === undefined || index >= marks.length) {
-      const grown = new Uint8Array(Math.max(1024, 2 * (index + 1)));
-      if (marks !== undefined) grown.set(marks);
-      read.set(list, (marks = grown));
-    }
-    if (marks[index] === 0) {
-      marks[index] = 1;
-      count++;
-    }
+/** The marks of a count: per list path one mark per entry read, and how many are set. */
+type Marks = { byList: Map<string, Uint8Array>; count: number };
+
+/** The marks of `path`, at least `length` long; lists of one path share them. */
+const marksOf = (marks: Marks, path: string, length: number): Uint8Array => {
+  let own = marks.byList.get(path);
+  if (own === undefined || own.length < length) {
+    const grown = new Uint8Array(length);
+    if (own !== undefined) grown.set(own);
+    marks.byList.set(path, (own = grown));
+  }
+  return own;
+};
+
+/** `onList` over `marks`: an entry read twice counts once, a read past a list's end is no entry. */
+const onListOf =
+  (marks: Marks) =>
+  (path: string, length: number): ((index: number) => void) => {
+    const m = marksOf(marks, path, length);
+    return (index) => {
+      if (index < m.length && m[index] === 0) {
+        m[index] = 1;
+        marks.count++;
+      }
+    };
   };
-  run(guardedView(view, unit.reads, { unit: unit.id, onEntry }));
-  return count;
+
+/** A read-only list proxy that marks each entry read in `m` (counted in `marks`), the marking inlined in its trap. */
+const countingList = (list: object, path: string, m: Uint8Array, marks: Marks): object =>
+  new Proxy(list, {
+    ...refuseWrites(path),
+    get(t, key) {
+      // an array index: what Array methods and indexing read (`length`, method names and symbols are none)
+      if (typeof key === 'string') {
+        const c = key.charCodeAt(0);
+        if (c >= 48 && c <= 57) {
+          const i = +key;
+          if (i < m.length && m[i] === 0) {
+            m[i] = 1;
+            marks.count++;
+          }
+        }
+      }
+      return (t as Record<PropertyKey, unknown>)[key];
+    },
+  });
+
+/**
+ * `view` with every projection list (`history.<list>`, `history.spans.<id>`) behind a read-only proxy that marks each
+ * entry read, and nothing else changed: no guard (C41 is the guarded-view completeness test's and the units' own
+ * tests'). Counts as exactly as `guardedView`'s lists, at a fraction of its cost (ruling Task 22 round 8).
+ */
+const countingView = (view: EngineView, marks: Marks): EngineView => {
+  const list = (value: unknown, path: string): unknown => (Array.isArray(value) ? countingList(value, path, marksOf(marks, path, value.length), marks) : value);
+  const { spans, ...lists } = view.history as unknown as Record<string, unknown> & { spans: Record<string, unknown> };
+  const history = {
+    ...Object.fromEntries(Object.entries(lists).map(([name, value]) => [name, list(value, `history.${name}`)])),
+    spans: Object.fromEntries(Object.entries(spans).map(([machine, value]) => [machine, list(value, `history.spans.${machine}`)])),
+  };
+  return { ...view, history: history as unknown as EngineView['history'] };
+};
+
+/**
+ * The projection entries `run` reads of `view` (C31.1): every entry of a projection list (`history.crossings[i]`,
+ * `history.spans.<id>[i]` ...) it reads counts once, however often it reads it; open spans, the live state and the
+ * outputs are no entries. `run` defaults to the unit's from-scratch computation (`fromScratch`); an incremental unit's
+ * fold is `(v) => unit.update(acc, v.delta, v)`. Work is counted in entries, never timed. Through `unit`'s guarded view
+ * (C41) unless `guarded` is false: then only the lists are proxied, to count (`countingView`).
+ */
+export function countReads(
+  unit: Calculator,
+  view: EngineView,
+  run: (view: EngineView) => unknown = fromScratch(unit),
+  { guarded = true }: { guarded?: boolean } = {},
+): number {
+  const marks: Marks = { byList: new Map(), count: 0 };
+  run(guarded ? guardedView(view, unit.reads, { unit: unit.id, onList: onListOf(marks) }) : countingView(view, marks));
+  return marks.count;
 }
 
 /** A quick calculator that reads timing, runs every frame and returns the session time, unless `o` says otherwise. */

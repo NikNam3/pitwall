@@ -32,7 +32,7 @@ export type BuilderRace = {
    * The view after frame `frame`: every fact recorded by then in the projection (in the order the engine appends them),
    * the spans closed by then in the projection's `spans`, those open in the situation, the cars as they are then. Its
    * delta is from the view after frame `from` (default the frame before); `outputs` are the upstream units' outputs.
-   * Every change tag is set.
+   * Every change tag is set. Built once per frame and `from`: the parts are shared by every call (units only read them).
    */
   viewAt(frame: FrameNumber, o?: { from?: FrameNumber; outputs?: ReadonlyMap<string, unknown> }): EngineView;
 };
@@ -330,6 +330,8 @@ function build(): BuilderRace {
     };
   };
   const lengthsAt = (frame: FrameNumber): LogLengths => projectionLengths(projectionAt(frame));
+  /** The views built so far, by frame and the frame their delta is from: a frame's view is built once. */
+  const views = new Map<string, EngineView>();
 
   const situationAt = (frame: FrameNumber): EngineView['situation'] => {
     const byMachine: Record<MachineId, OpenSpan[]> = {};
@@ -365,18 +367,22 @@ function build(): BuilderRace {
     laps: LAPS,
     lastFrame,
     framesOfLap: (n) => Array.from({ length: lastFrame }, (_, i) => i + 1).filter((frame) => leaderLap(frame) === n),
-    viewAt(frame, { from = frame - 1, outputs = new Map() } = {}) {
-      const history = projectionAt(frame);
-      const view = engineView({
-        cars: carsAt(frame),
-        sessionTime: timeAfter(frame),
-        session: { totalLaps: LAPS, trackLengthM: TRACK_M, timeLeftMs: 7_200_000 - timeAfter(frame) },
-        history,
-        situation: situationAt(frame),
-        delta: { before: lengthsAt(from), after: projectionLengths(history), ...(from > frame && { rewound: { frameId: frame, at: timeAfter(frame) } }) },
-        outputs,
-      });
-      return { ...view, changed: new Set(ALL_CHANGE_TAGS) };
+    viewAt(frame, { from = frame - 1, outputs } = {}) {
+      const key = `${frame}:${from}`;
+      let view = views.get(key);
+      if (view === undefined) {
+        const history = projectionAt(frame);
+        const built = engineView({
+          cars: carsAt(frame),
+          sessionTime: timeAfter(frame),
+          session: { totalLaps: LAPS, trackLengthM: TRACK_M, timeLeftMs: 7_200_000 - timeAfter(frame) },
+          history,
+          situation: situationAt(frame),
+          delta: { before: lengthsAt(from), after: projectionLengths(history), ...(from > frame && { rewound: { frameId: frame, at: timeAfter(frame) } }) },
+        });
+        views.set(key, (view = { ...built, changed: new Set(ALL_CHANGE_TAGS) }));
+      }
+      return { ...view, outputs: outputs ?? new Map() };
     },
   };
 }
