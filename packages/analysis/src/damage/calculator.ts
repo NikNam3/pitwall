@@ -4,6 +4,7 @@ import {
   addLaps,
   emptyCurrentLaps,
   known,
+  unknown,
   type CarId,
   type Corners,
   type CurrentLaps,
@@ -14,7 +15,10 @@ import {
 import type { EngineView, IncrementalCalculator } from '@pitwall/engine/readers';
 import { LAP_CLASSES_CONFIG } from '../lap-classes/index.ts';
 import { PACE_CONFIG } from '../pace/index.ts';
+import { behaviourFor } from '../shared/behaviour.ts';
+import { CAR_STATUS_READS } from '../shared/car-status.ts';
 import { emptyDamageJumps, finishJump, foldDamageJumps, repairedSince, type DamageJumpFold } from '../shared/damage-jumps.ts';
+import { DAMAGE_BEHAVIOUR, type DamageEffect } from './behaviour.ts';
 import { DAMAGE, DAMAGE_CONFIG, type DamageOutput } from './index.ts';
 
 const CORNERS = ['fl', 'fr', 'rl', 'rr'] as const;
@@ -26,18 +30,16 @@ type Acc = {
   lapCount: number;
   /** One record per (car, lap): confirmed over provisional. */
   laps: CurrentLaps;
-  /** Per active car: its state now without the jumps, and its current lap. */
-  now: Map<CarId, { state: Omit<DamageState, 'jumps'>; lap: number }>;
+  /** Per car in the session: its state now without the jumps, its current lap, and its rows (`DAMAGE_BEHAVIOUR`). */
+  now: Map<CarId, { state: Omit<DamageState, 'jumps'>; lap: number; effect: DamageEffect }>;
   jumpPct: number;
   jumpWindowMs: number;
-  isRace: boolean;
   maxNeutralisedMs: number;
   window: number;
 };
 
 const settings = (view: EngineView) => ({
   ...DAMAGE_CONFIG.read(view),
-  isRace: view.live.session.kind === 'race',
   ...LAP_CLASSES_CONFIG.read(view),
   window: PACE_CONFIG.read(view).window,
 });
@@ -48,10 +50,14 @@ const foldLaps = (acc: Acc, view: EngineView): void => {
   acc.lapCount = laps.length;
 };
 
+/** A pending weekend phase has no span yet and reads as the race's grid (C14): its row is the race's. */
+const GRID = DAMAGE_BEHAVIOUR['weekend-phase']?.race;
+
 const foldCars = (acc: Acc, view: EngineView): void => {
   acc.now.clear();
   for (const car of view.live.cars) {
-    if (!car.active) continue;
+    const effect: DamageEffect = Object.assign({}, GRID, ...behaviourFor(DAMAGE_BEHAVIOUR, view, car.id));
+    if (effect.inSession !== true) continue;
     const { bodywork, powerUnit } = car.condition;
     const parts: DamageState['parts'] = !bodywork.known
       ? bodywork
@@ -69,6 +75,7 @@ const foldCars = (acc: Acc, view: EngineView): void => {
     acc.now.set(car.id, {
       state: { parts, corners, drsFault: car.condition.drsFault, ersFault: car.condition.ersFault },
       lap: car.timing.lap,
+      effect,
     });
   }
 };
@@ -87,22 +94,27 @@ const init = (view: EngineView): Acc =>
     view,
   );
 
-/** Damage now and its jumps not repaired since per active car; a jump's loss is `pace-delta` over the pace laps around it. */
+/**
+ * Damage now and its jumps not repaired since, per car in the session; a jump's loss is `pace-delta` over the pace laps
+ * around it, `notApplicable` where the weekend phase has none to measure (`DAMAGE_BEHAVIOUR`).
+ */
 export const damageCalculator: IncrementalCalculator<Acc, DamageOutput> = {
   id: DAMAGE,
   kind: 'incremental',
-  reads: ['condition', 'tyres', 'events', 'laps'],
+  reads: ['condition', 'tyres', 'timing', 'events', 'laps', CAR_STATUS_READS, 'spans:car-location', 'spans:weekend-phase'],
   cadence: { hz: 4 },
   init,
   update: (acc, delta, view) => (delta.rewound !== undefined ? init(view) : fold(acc, view)),
   output(acc) {
     const out: DamageOutput = {};
-    for (const [id, { state, lap }] of acc.now) {
+    for (const [id, { state, lap, effect }] of acc.now) {
       // integer keys iterate in ascending order: the car's laps by lap number
       const laps = Object.values(acc.laps[id] ?? {});
+      const opts = { ...acc, isRace: effect.isRace === true };
       const jumps = (acc.grouping.jumps.get(id) ?? [])
         .filter((raw) => !repairedSince(acc.grouping, id, raw))
-        .map((raw) => finishJump(raw, laps, lap, acc));
+        .map((raw) => finishJump(raw, laps, lap, opts))
+        .map((jump) => (effect.measured === true ? jump : { ...jump, lossMsPerLap: unknown('notApplicable') }));
       out[id] = { ...state, jumps };
     }
     return out;

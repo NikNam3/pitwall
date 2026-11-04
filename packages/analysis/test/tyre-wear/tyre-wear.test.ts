@@ -3,10 +3,14 @@ import type { EngineView } from '@pitwall/engine';
 import { describe, expect, it } from 'vitest';
 import { LAP_CLASSES_CONFIG } from '../../src/lap-classes/index.ts';
 import { PER_LAP_RATE_CONFIG } from '../../src/per-lap-rate/index.ts';
-import { TYRE_WEAR, TYRE_WEAR_CONFIG } from '../../src/tyre-wear/index.ts';
+import { TYRE_WEAR, TYRE_WEAR_BEHAVIOUR, TYRE_WEAR_CONFIG } from '../../src/tyre-wear/index.ts';
 import { tyreWearCalculator } from '../../src/tyre-wear/calculator.ts';
-import { carState, engineView, lap, realismHidden } from '../../../../test-support/builders/index.ts';
+import { carState, lap, realismHidden } from '../../../../test-support/builders/index.ts';
 import { engineShaped } from '../engine-shaped.ts';
+import { guardedQuick, NONE, PRACTICE, QUALIFYING, situatedView } from '../situated.ts';
+
+/** The calculator through its guarded view (C41): every case fails on a read it does not declare. */
+const calc = guardedQuick(tyreWearCalculator);
 
 const CORNERS = ['fl', 'fr', 'rl', 'rr'] as const;
 
@@ -51,18 +55,19 @@ const carWithWear = (now: number, set: { age?: number; actualCompound?: ActualCo
 /** Car 0 with wear `now`, on a set as old as its newest lap (fitted new at the start of lap 1), over `laps`. */
 const viewOf = (laps: LapRecord[], now: number, stints: StintRecord[] = [], config: EngineView['config'] = {}): EngineView => {
   const age = Math.max(0, ...laps.filter((l) => l.carId === carId(0)).map((l) => l.lapNumber));
-  return engineView({ cars: [carWithWear(now, { age })], history: { laps, stints }, config });
+  return situatedView({ cars: [carWithWear(now, { age })], history: { laps, stints }, config });
 };
 
-const run = (view: EngineView) => tyreWearCalculator.compute(view)[carId(0)]!;
+const run = (view: EngineView) => calc.compute(view)[carId(0)]!;
 const insufficient = { known: false, reason: 'insufficientData' };
 
 describe('tyre-wear calculator', () => {
-  it('is the quick calculator `tyre-wear` at 4 Hz over laps, stints and tyres', () => {
+  it('is the quick calculator `tyre-wear` at 4 Hz over laps, stints, tyres and car-status, not the session', () => {
     expect(tyreWearCalculator.id).toBe(TYRE_WEAR);
     expect(tyreWearCalculator.kind).toBe('quick');
     expect(tyreWearCalculator.cadence).toEqual({ hz: 4 });
-    expect(tyreWearCalculator.reads).toEqual(expect.arrayContaining(['laps', 'stints', 'tyres']));
+    expect(tyreWearCalculator.reads).toEqual(expect.arrayContaining(['laps', 'stints', 'tyres', 'spans:car-status']));
+    expect(tyreWearCalculator.reads).not.toContain('session');
   });
 
   it('the rate is the median of the counted laps` own wear gains: gains 2, 2, 3, 2, 2 % give 2 %/lap, 29.5 laps from 11 % to 70 %', () => {
@@ -189,7 +194,7 @@ describe('tyre-wear calculator', () => {
       ...chain([2, 2, 2], { from: 6, startPct: 1 }).map((l, i) => ({ ...l, tyreAgeAtStart: i + 1 })),
     ];
     const closed = [stint({ firstLap: 1, lastLap: 4 })]; // the open stint (lap 5 on) is not a record yet
-    const view = engineView({ cars: [carWithWear(7, { age: 4 })], history: { laps, stints: closed } });
+    const view = situatedView({ cars: [carWithWear(7, { age: 4 })], history: { laps, stints: closed } });
     const out = run(view);
     expect(out.corners.fl.ratePctPerLap).toMatchObject({ known: true, value: 2 });
     expect(out.corners.fl.lapsToLimit).toMatchObject({ known: true, value: 31.5 });
@@ -213,7 +218,7 @@ describe('tyre-wear calculator', () => {
     // laps 1-4 on soft C3 from new (age 0 to 3 at the lap starts) wear 3 %/lap
     const oldSet = () => chain([3, 3, 3, 3]).map((l, i) => ({ ...l, tyreAgeAtStart: i }));
     const withCar = (laps: LapRecord[], set: Parameters<typeof carWithWear>[1], stints: StintRecord[] = []) =>
-      run(engineView({ cars: [carWithWear(0, set)], history: { laps, stints } }));
+      run(situatedView({ cars: [carWithWear(0, set)], history: { laps, stints } }));
 
     it('a new set fitted at a stop whose in lap has not been followed by a completed lap: insufficientData, not the old set`s rate', () => {
       // the stint record reaches the newest lap (the in lap 5), so the closed stint is still the current one
@@ -297,13 +302,13 @@ describe('tyre-wear calculator', () => {
     const car = carState({
       tyres: { sets: known({ sets: [set({}), set({ fitted: true, lifeSpanLaps: 22 }), set({ lifeSpanLaps: 14 })], fittedIdx: 1 }, 1_000) },
     });
-    const view = engineView({ cars: [car], history: { laps: chain([1]) } });
+    const view = situatedView({ cars: [car], history: { laps: chain([1]) } });
     expect(run(view).gameLifeSpanLaps).toEqual({ known: true, value: 22, at: 1_000 });
   });
 
   it('gameLifeSpanLaps is unknown without a fitted set in the list', () => {
     // the builder's car has `sets` known with an empty list
-    const view = engineView({ cars: [carState()], history: { laps: chain([1]) } });
+    const view = situatedView({ cars: [carState()], history: { laps: chain([1]) } });
     expect(run(view).gameLifeSpanLaps).toEqual({ known: false, reason: 'notReceived' });
   });
 
@@ -312,11 +317,11 @@ describe('tyre-wear calculator', () => {
     const rivalLaps = [1, 2, 3, 4].map((n) =>
       wornLap(n, 0, 0, { carId: carId(1), wearAtStartPct: everyCorner(() => hidden), wearAtEndPct: everyCorner(() => hidden) }),
     );
-    const view = engineView({
+    const view = situatedView({
       cars: [carWithWear(6, { age: 3 }), realismHidden(carState({ id: carId(1) }))],
       history: { laps: [...chain([2, 2, 2]), ...rivalLaps] },
     });
-    const out = tyreWearCalculator.compute(view);
+    const out = calc.compute(view);
     for (const corner of CORNERS) {
       expect(out[carId(1)]!.corners[corner]).toEqual({
         wearPct: hidden,
@@ -329,12 +334,49 @@ describe('tyre-wear calculator', () => {
     expect(out[carId(0)]!.corners.fl.ratePctPerLap).toMatchObject({ known: true, value: 2 });
   });
 
-  it('keeps cars apart and gives no entry to an inactive slot', () => {
+  it('keeps cars apart and gives no entry to a slot without a car in the session (no car-status span)', () => {
     const second = carState({ id: carId(1), tyres: { age: 2, corners: everyCorner(() => ({ wearPct: known(9 as Percent, 0) })) } });
     const laps = [...chain([2, 2]), ...chain([3, 3], { over: { carId: carId(1) } })];
-    const out = tyreWearCalculator.compute(engineView({ cars: [carWithWear(4, { age: 2 }), second], history: { laps } }));
+    const out = calc.compute(situatedView({ cars: [carWithWear(4, { age: 2 }), second], history: { laps } }));
     expect(out[carId(0)]!.corners.fl.ratePctPerLap).toMatchObject({ value: 2 });
     expect(out[carId(1)]!.corners.fl.ratePctPerLap).toMatchObject({ value: 3 });
     expect(out[carId(2)]).toBeUndefined();
+  });
+
+  describe('behaviour table (C44): a row per car-status kind', () => {
+    it('exports TYRE_WEAR_BEHAVIOUR over car-status alone, the one sub-machine it reads (laps by activity come from the lap records)', () => {
+      expect(Object.keys(TYRE_WEAR_BEHAVIOUR)).toEqual(['car-status']);
+    });
+
+    // car 0 on a set as old as its three laps of 2 %/lap; the live state's transitional `active` says the opposite of
+    // car-status in every case, so only car-status decides (C43)
+    const statusView = (kind: string, active: boolean) =>
+      situatedView({ cars: [{ ...carWithWear(6, { age: 3 }), active }], history: { laps: chain([2, 2, 2]) }, status: { 0: kind } });
+
+    it('competing: the car has its wear, rate and laps to the limit', () => {
+      const out = calc.compute(statusView('competing', false))[carId(0)];
+      expect(out?.corners.fl.wearPct).toEqual({ known: true, value: 6, at: 0 });
+      expect(out?.corners.fl.ratePctPerLap).toMatchObject({ known: true, value: 2 });
+      expect(out?.corners.fl.lapsToLimit).toMatchObject({ known: true, value: 32 });
+    });
+
+    it('retired: the car is still in the session and keeps its entry, its rate as of its laps', () => {
+      expect(calc.compute(statusView('retired', false))[carId(0)]?.corners.fl.ratePctPerLap).toMatchObject({ known: true, value: 2 });
+    });
+
+    it('disqualified: the car is still in the session and keeps its entry', () => {
+      expect(calc.compute(statusView('disqualified', false))[carId(0)]?.corners.fl.ratePctPerLap).toMatchObject({ known: true, value: 2 });
+    });
+
+    it('absent: no entry, though the slot has laps and the live state calls it active', () => {
+      expect(calc.compute(statusView('absent', true))[carId(0)]).toBeUndefined();
+    });
+  });
+
+  it('runs in every weekend phase without reading the session: practice, qualifying and none give the race`s rate (no lap 1 rule for a rate)', () => {
+    const laps = chain([2, 2, 2]);
+    for (const phase of [PRACTICE, QUALIFYING, NONE]) {
+      expect(run(situatedView({ cars: [carWithWear(6, { age: 3 })], history: { laps }, phase })).corners.fl.ratePctPerLap, phase.kind).toMatchObject({ known: true, value: 2 });
+    }
   });
 });

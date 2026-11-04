@@ -5,10 +5,15 @@ import type { QuickCalculator } from '@pitwall/engine';
 import type { TopicBinding } from '../../../src/features/feature.ts';
 import carBandsFeature from '../../../src/features/car-bands/register.ts';
 import { carState, engineView } from '../../../../../test-support/builders/index.ts';
-import { carId } from '../../../../../packages/domain/src/index.ts';
+import { carId, type OpenSpan } from '../../../../../packages/domain/src/index.ts';
 
 const binding = carBandsFeature.topics.find((t) => t.topic === 'carBands.car') as Extract<TopicBinding, { from: string }>;
-const view = engineView({ cars: [carState({ id: carId(0) }), carState({ id: carId(1) })] });
+/** Car `car` in the session: its open car-status span (C17, C20), which car-bands reads instead of `car.active`. */
+const competing = (car: number): OpenSpan => ({ machine: 'car-status', id: 0, kind: 'competing', start: 0, confirmed: true, detail: undefined, startFrame: 1, carId: carId(car) });
+const view = engineView({
+  cars: [carState({ id: carId(0) }), carState({ id: carId(1) })],
+  situation: { weekendPhase: { kind: 'race', format: 'grandPrix' }, byMachine: { 'car-status': [competing(0), competing(1)] } },
+});
 const output = (carBandsFeature.calculators.find((c) => c.id === CAR_BANDS) as QuickCalculator<Record<number, CarBands>>).compute(view);
 
 describe('car-bands feature', () => {
@@ -21,6 +26,7 @@ describe('car-bands feature', () => {
   });
 
   it('select returns the bands of params.carId', () => {
+    expect(output[1]).toBeDefined();
     expect(binding.select!(output, { carId: 1 })).toEqual(output[1]);
     expect(binding.select!(output, { carId: 0 })).toEqual(output[0]);
   });
