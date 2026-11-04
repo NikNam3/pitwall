@@ -5,11 +5,11 @@ import { zoneFlagsSpans, type OpenSpan, type Ratio, type ZoneFlagDetail } from '
 import { FLAG_TRANSITIONS, flagKind } from '../flag-kind.ts';
 import type { MachineStep, SubMachine } from '../machine.ts';
 
-type Held = { id: number; kind: string; start: number; startFrame: number; detail: ZoneFlagDetail; joinedAt?: true };
-/** The open span per zone (by index) and how many spans the machine has opened (a span's id is that count, C26). */
-type Open = { frames: number; opened: number; zones: Held[] };
-
-const toSpan = (held: Held, zone: number): OpenSpan => ({ machine: 'zone-flags', id: held.id, kind: held.kind, start: held.start, startFrame: held.startFrame, zone, confirmed: true, detail: { startFraction: held.detail.startFraction }, ...(held.joinedAt ? { joinedAt: true as const } : {}) });
+/**
+ * The open span per zone (by index; the same object while it holds, C40) and how many spans the machine has opened (a
+ * span's id is that count, C26).
+ */
+type Open = { frames: number; opened: number; zones: Array<OpenSpan<string, ZoneFlagDetail>> };
 
 const machine: SubMachine<Open> = {
   id: 'zone-flags',
@@ -18,13 +18,13 @@ const machine: SubMachine<Open> = {
   inputs: { signals: ['marshalZones'], values: [], upstream: [] },
   transitions: FLAG_TRANSITIONS,
   init: () => ({ frames: 0, opened: 0, zones: [] }),
-  openSpans: (open) => open.zones.map(toSpan),
+  openSpans: (open) => [...open.zones],
   step(open, input): MachineStep<Open> {
     const frames = open.frames + 1;
     const listed = input.signals.session.marshalZones;
     const count = Math.max(listed.length, open.zones.length);
     const closed: MachineStep<Open>['closed'] = [];
-    const zones: Held[] = [];
+    const zones: Array<OpenSpan<string, ZoneFlagDetail>> = [];
     let opened = open.opened;
     for (let zone = 0; zone < count; zone++) {
       const before = open.zones[zone];
@@ -34,9 +34,9 @@ const machine: SubMachine<Open> = {
         zones.push(before);
         continue;
       }
-      if (before !== undefined) closed.push({ ...toSpan(before, zone), end: input.at });
+      if (before !== undefined) closed.push({ ...before, end: input.at });
       const startFraction: Ratio = before?.detail.startFraction ?? (entry as NonNullable<typeof entry>).startFraction;
-      zones.push({ id: opened++, kind, start: input.at, startFrame: input.frameNumber, detail: { startFraction }, ...(frames === 1 ? { joinedAt: true as const } : {}) });
+      zones.push({ machine: 'zone-flags', id: opened++, kind, start: input.at, startFrame: input.frameNumber, zone, confirmed: true, detail: { startFraction }, ...(frames === 1 ? { joinedAt: true as const } : {}) });
     }
     return { open: { frames, opened, zones }, closed };
   },

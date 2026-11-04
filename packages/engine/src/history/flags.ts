@@ -2,10 +2,9 @@
 // of the race's session-phase spans (`neutralised`, `suspended`) for the readers that still read them. No signal of
 // their own: a step-3 module, it reads the projection's closed spans, the machine's situation, the live state and its
 // own open state (C10, C20, C28).
-import type { FlagPhase, NeutralisedDetail, OpenSpan, ScPhase } from '@pitwall/domain';
+import type { CarId, FlagPhase, NeutralisedDetail, OpenSpan, ScPhase } from '@pitwall/domain';
 import type { Situation } from '../situations/situation.ts';
 import type { EngineState } from '../state/engine-state.ts';
-import { CAR_STATUS, carsInSessionOf } from '../situations/car-status/in-session.ts';
 import type { StepOutput } from '../step/types.ts';
 import type { DeepReadonly } from '../util/deep-readonly.ts';
 
@@ -16,8 +15,8 @@ type PhaseSpan = DeepReadonly<OpenSpan>;
 const RACE_PHASES = 'session-phase-race';
 
 /** The lap of the car in first place; 0 when no car in the session (car-status's, C43) holds it. */
-const leaderLap = (state: DeepReadonly<EngineState>, situation: Situation): number =>
-  carsInSessionOf(situation.byMachine[CAR_STATUS]).flatMap((id) => state.cars[id] ?? []).find((car) => car.timing.position === 1)?.timing.lap ?? 0;
+const leaderLap = (state: DeepReadonly<EngineState>, carsInSession: readonly CarId[]): number =>
+  carsInSession.flatMap((id) => state.cars[id] ?? []).find((car) => car.timing.position === 1)?.timing.lap ?? 0;
 
 /** The flag phase a span stands for: a neutralisation by its car, a suspension as red; none for the other kinds. */
 const flagKindOf = (span: PhaseSpan | undefined): FlagPhase['kind'] | undefined => {
@@ -43,10 +42,11 @@ const startLapOf = (own: FlagsOwn, span: PhaseSpan, now: number): number =>
  * took in on this frame (closed on it, C26), with the leader's lap on the frames it opened and closed; a span never
  * confirmed (C18) is none. The span in progress is the open flag phase, the view's `activeFlagPhase`, from its opening
  * on (a SCAR deployment opens it early, while its confirmation waits). Appending, opening, closing and a new SC stage
- * each tag `flagPhases`. Returns whether it appended.
+ * each tag `flagPhases`. `carsInSession`: the frame's cars in the session (step 3's `RecorderInput.carsInSession`, C43).
+ * Returns whether it appended.
  */
-export const applyFlagPhases = (state: EngineState, situation: Situation, out: StepOutput): boolean => {
-  const lap = leaderLap(state, situation);
+export const applyFlagPhases = (state: EngineState, situation: Situation, carsInSession: readonly CarId[], out: StepOutput): boolean => {
+  const lap = leaderLap(state, carsInSession);
   const own = (state.open.recorders[OWN] ?? {}) as FlagsOwn;
   const spans = state.history.spans[RACE_PHASES] ?? [];
   let appended = false;

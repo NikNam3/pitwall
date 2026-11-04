@@ -6,7 +6,7 @@
 // before; a fall serves the oldest of its type. DTSV and SGSV are never read: they open, close and rewrite nothing (C18).
 // It reads the weekend phase as upstream (C14): it runs from the frame the phase is decided on.
 // Stop-gos and both kinds at once are not yet seen in any recording (C19): implemented from the game's spec.
-import { known, unknown, type CarId, type Known, type OpenSpan, type PendingPenaltyDetail, penaltiesSpans, type SessionTime, type TimePenaltyDetail } from '@pitwall/domain';
+import { known, unknown, type CarId, type FrameNumber, type Known, type OpenSpan, type PendingPenaltyDetail, penaltiesSpans, type SessionTime, type TimePenaltyDetail } from '@pitwall/domain';
 import type { MachineStep, SubMachine } from '../machine.ts';
 
 /** How many frames a PENA waits for the rise it explains. */
@@ -18,8 +18,11 @@ const STOP_GO = 1;
 type Kind = 'clear' | 'timePenalty' | 'driveThroughPending' | 'stopGoPending';
 type Pena = { type: number; infringement: number; at: SessionTime; frameNumber: number };
 type Owed = { type: 'dt' | 'sg'; infringement: Known<number> };
-type Held = { id: number; kind: Kind; key: string; start: SessionTime; startFrame: number; detail: object; joinedAt?: true };
-type CarOpen = { span: Held; dt: number; sg: number; queue: Owed[]; penas: Pena[] };
+/**
+ * Per car slot: the open span (the same object while it holds, C40) and its key (kind and detail), the unserved counts
+ * of the frame before, the penalties owed in order and the PENAs waiting for a rise.
+ */
+type CarOpen = { span: OpenSpan; key: string; dt: number; sg: number; queue: Owed[]; penas: Pena[] };
 type Open = { cars: CarOpen[] };
 
 const take = (penas: Pena[], type: number): Known<number> => {
@@ -38,9 +41,13 @@ const describe = (queue: Owed[], dt: number, sg: number, totalMs: number): { kin
   return { kind: named === 'dt' ? 'driveThroughPending' : 'stopGoPending', detail };
 };
 
-const opened = (id: number, queue: Owed[], dt: number, sg: number, totalMs: number, at: SessionTime, frameNumber: number, joined: boolean): Held => {
-  const { kind, detail } = describe(queue, dt, sg, totalMs);
-  return { id, kind, key: kind + JSON.stringify(detail), start: at, startFrame: frameNumber, detail, ...(joined ? { joinedAt: true as const } : {}) };
+/** A span's key: its kind and detail, which a new span opens on every change of (C18). */
+const keyOf = (described: { kind: Kind; detail: object }): string => described.kind + JSON.stringify(described.detail);
+
+const opened = (id: number, index: number, described: { kind: Kind; detail: object }, at: SessionTime, frameNumber: FrameNumber, joined: boolean): Pick<CarOpen, 'span' | 'key'> => {
+  const { kind, detail } = described;
+  const span: OpenSpan = { machine: 'penalties', id, carId: index as CarId, kind, start: at, startFrame: frameNumber, confirmed: true, detail, ...(joined ? { joinedAt: true as const } : {}) };
+  return { span, key: keyOf(described) };
 };
 
 const machine: SubMachine<Open> = {
@@ -53,18 +60,7 @@ const machine: SubMachine<Open> = {
     ...(['clear', 'timePenalty', 'driveThroughPending', 'stopGoPending'] as const).filter((from) => !(from === 'clear' && to === 'clear')).map((from) => [from, to] as const),
   ]),
   init: () => ({ cars: [] }),
-  openSpans: (open) =>
-    open.cars.map(({ span }, index): OpenSpan => ({
-      machine: 'penalties',
-      id: span.id,
-      carId: index as CarId,
-      kind: span.kind,
-      start: span.start,
-      startFrame: span.startFrame,
-      confirmed: true,
-      detail: span.detail,
-      ...(span.joinedAt ? { joinedAt: true as const } : {}),
-    })),
+  openSpans: (open) => open.cars.map(({ span }) => span),
   step(open, input): MachineStep<Open> {
     const closed: MachineStep<Open>['closed'] = [];
     const cars = input.signals.cars.map((signals, index): CarOpen => {
@@ -77,7 +73,7 @@ const machine: SubMachine<Open> = {
           ...Array.from({ length: dt }, (): Owed => ({ type: 'dt', infringement: unknown('notReceived') })),
           ...Array.from({ length: sg }, (): Owed => ({ type: 'sg', infringement: unknown('notReceived') })),
         ];
-        return { span: opened(0, queue, dt, sg, totalMs, input.at, input.frameNumber, true), dt, sg, queue, penas: [] };
+        return { ...opened(0, index, describe(queue, dt, sg, totalMs), input.at, input.frameNumber, true), dt, sg, queue, penas: [] };
       }
       const penas = car.penas.filter((p) => input.frameNumber - p.frameNumber <= PENDING_FRAMES);
       for (const event of input.signals.events) {
@@ -96,20 +92,9 @@ const machine: SubMachine<Open> = {
       for (let n = car.dt; n < dt; n++) queue.push({ type: 'dt', infringement: take(penas, DRIVE_THROUGH) });
       for (let n = car.sg; n < sg; n++) queue.push({ type: 'sg', infringement: take(penas, STOP_GO) });
       const current = describe(queue, dt, sg, totalMs);
-      if (car.span.key === current.kind + JSON.stringify(current.detail)) return { span: car.span, dt, sg, queue, penas };
-      closed.push({
-        machine: 'penalties',
-        id: car.span.id,
-        carId: index as CarId,
-        kind: car.span.kind,
-        start: car.span.start,
-        end: input.at,
-        startFrame: car.span.startFrame,
-        confirmed: true,
-        detail: car.span.detail,
-        ...(car.span.joinedAt ? { joinedAt: true as const } : {}),
-      });
-      return { span: opened(car.span.id + 1, queue, dt, sg, totalMs, input.at, input.frameNumber, false), dt, sg, queue, penas };
+      if (car.key === keyOf(current)) return { span: car.span, key: car.key, dt, sg, queue, penas };
+      closed.push({ ...car.span, end: input.at });
+      return { ...opened(car.span.id + 1, index, current, input.at, input.frameNumber, false), dt, sg, queue, penas };
     });
     return { open: { cars }, closed };
   },

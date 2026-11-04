@@ -92,7 +92,8 @@ export type Recorder<Own> = {
  * situations; never the frame or a signal (C6, C13). A fact records the frame it describes (C26), this frame's
  * `frameNumber` unless it describes an earlier one. `closed`: the spans step 2 closed on this frame, per sub-machine
  * (C9, C10), with how each closed (`confirmed`); a machine that closed none has no entry, and absent means none closed.
- * `tracked`: transitional, deleted
+ * `carsInSession`: the cars in the session by the situation's car-status spans (`carsInSessionOf`, C43), worked out
+ * once per frame by `step`; absent, a recorder works them out from `situation`. `tracked`: transitional, deleted
  * by Task 21 (`TrackedEvents`).
  */
 export type RecorderInput = {
@@ -102,6 +103,7 @@ export type RecorderInput = {
   live: LiveState;
   situation: Situation;
   closed?: Readonly<Record<MachineId, readonly Span[]>>;
+  carsInSession?: readonly CarId[];
   tracked?: TrackedEvents;
 };
 

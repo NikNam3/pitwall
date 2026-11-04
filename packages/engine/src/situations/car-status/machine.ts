@@ -100,32 +100,24 @@ const kindOfEvents = (events: CarEvents): Kind | undefined => {
   return events.rtmt === undefined ? undefined : KIND_OF_REASON[events.rtmt.reason];
 };
 
-type Held = { id: number; kind: Kind; start: SessionTime; startFrame: number; confirmed: boolean; detail: RetiredDetail | undefined; joinedAt?: true };
-/** Per car slot: the open span, the spans the car has had, and the result status of the frame before. */
-type CarOpen = { held: Held; opened: number; resultStatus: ResultStatus };
+/**
+ * Per car slot: the open span (the same object while it holds, C40), the spans the car has had, and the result status
+ * of the frame before.
+ */
+type CarOpen = { span: OpenSpan; opened: number; resultStatus: ResultStatus };
 type Open = { cars: Array<CarOpen | undefined> };
 
 /** The status of a slot on this frame given the one before (`before` undefined on its first span). */
 const nextKind = (before: CarOpen | undefined, active: boolean, resultStatus: ResultStatus, events: CarEvents): Kind => {
   if (!active) return 'absent';
   const byResult = KIND_OF_RESULT[resultStatus];
-  if (before === undefined || before.held.kind === 'absent') return byResult;
-  if (resultStatus !== before.resultStatus && byResult !== before.held.kind) return byResult;
-  if (before.held.kind === 'competing') return kindOfEvents(events) ?? 'competing';
-  return before.held.kind;
+  if (before === undefined) return byResult;
+  const kind = before.span.kind as Kind;
+  if (kind === 'absent') return byResult;
+  if (resultStatus !== before.resultStatus && byResult !== kind) return byResult;
+  if (kind === 'competing') return kindOfEvents(events) ?? 'competing';
+  return kind;
 };
-
-const toOpenSpan = (held: Held, index: number): OpenSpan => ({
-  machine: 'car-status',
-  id: held.id,
-  carId: toCarId(index),
-  kind: held.kind,
-  start: held.start,
-  startFrame: held.startFrame,
-  confirmed: held.confirmed,
-  detail: held.detail,
-  ...(held.joinedAt ? { joinedAt: true as const } : {}),
-});
 
 const machine: SubMachine<Open> = {
   id: 'car-status',
@@ -151,7 +143,7 @@ const machine: SubMachine<Open> = {
     ['absent', 'disqualified'],
   ],
   init: () => ({ cars: [] }),
-  openSpans: (open) => open.cars.flatMap((car, index): OpenSpan[] => (car === undefined ? [] : [toOpenSpan(car.held, index)])),
+  openSpans: (open) => open.cars.flatMap((car): OpenSpan[] => (car === undefined ? [] : [car.span])),
   step(open, input): MachineStep<Open> {
     const { signals, at, frameNumber } = input;
     const closed: MachineStep<Open>['closed'] = [];
@@ -161,22 +153,24 @@ const machine: SubMachine<Open> = {
       if (before === undefined && input.live.cars[index]?.updatedAt.participants === undefined) return undefined;
       const events = carEventsOf(signals.events, index);
       const kind = nextKind(before, isActiveCar(index, slots, car.resultStatus), car.resultStatus, events);
-      if (before !== undefined && kind === before.held.kind) {
-        const confirms = !before.held.confirmed && (events.disqualifiedPena || at - before.held.start >= DSQ_CONFIRM_MS);
-        return { held: confirms ? { ...before.held, confirmed: true } : before.held, opened: before.opened, resultStatus: car.resultStatus };
+      if (before !== undefined && kind === before.span.kind) {
+        const confirms = !before.span.confirmed && (events.disqualifiedPena || at - before.span.start >= DSQ_CONFIRM_MS);
+        return { span: confirms ? { ...before.span, confirmed: true } : before.span, opened: before.opened, resultStatus: car.resultStatus };
       }
-      if (before !== undefined) closed.push({ ...toOpenSpan(before.held, index), end: at });
+      if (before !== undefined) closed.push({ ...before.span, end: at });
       const id = before?.opened ?? 0;
-      const held: Held = {
+      const span: OpenSpan = {
+        machine: 'car-status',
         id,
+        carId: toCarId(index),
         kind,
         start: at,
         startFrame: frameNumber,
         confirmed: kind !== 'disqualified' || events.disqualifiedPena,
-        detail: kind === 'retired' ? { cause: causeOf(events, at) } : undefined,
+        detail: kind === 'retired' ? ({ cause: causeOf(events, at) } satisfies RetiredDetail) : undefined,
         ...(before === undefined ? { joinedAt: true as const } : {}),
       };
-      return { held, opened: id + 1, resultStatus: car.resultStatus };
+      return { span, opened: id + 1, resultStatus: car.resultStatus };
     });
     return { open: { cars }, closed };
   },

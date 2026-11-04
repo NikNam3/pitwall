@@ -17,7 +17,7 @@
 //   to finished mid-lap is not finished by that alone: its push ends, `inLap`.
 // Every `finished` transition and every return from `notCompeting` is not yet seen (C19). The facts behind each rule:
 // docs/research/09-situations-inventory.md §1.9, §2.1-2.4, §2.10.
-import { carId as toCarId, type Metres, type MachineId, type OpenSpan, type SessionTime, type SpanDeclaration, type WeekendPhaseKind } from '@pitwall/domain';
+import { carId as toCarId, type FrameNumber, type Metres, type MachineId, type OpenSpan, type SessionTime, type SpanDeclaration, type WeekendPhaseKind } from '@pitwall/domain';
 import type { CarSignals } from '../../signals/types.ts';
 import type { DeepReadonly } from '../../util/deep-readonly.ts';
 import { CAR_STATUS } from '../car-status/in-session.ts';
@@ -30,9 +30,11 @@ type Push = 'pushLap' | 'flyingLap';
 type Kind<P extends Push> = 'outLap' | P | 'inLap' | 'garage' | 'finished' | 'notCompeting';
 type Location = 'garage' | 'pitLane' | 'track';
 
-type Held = { id: number; kind: string; start: SessionTime; startFrame: number; joinedAt?: true };
-/** Per car slot: the open span, how many spans the car has had, and what the frame before showed of the car. */
-type CarOpen = { held: Held; opened: number; location: Location; lapDistanceM: Metres; ended: boolean };
+/**
+ * Per car slot: the open span (the same object while it holds, C40), how many spans the car has had, and what the frame
+ * before showed of the car.
+ */
+type CarOpen = { span: OpenSpan; opened: number; location: Location; lapDistanceM: Metres; ended: boolean };
 type Open = { cars: Array<CarOpen | undefined> };
 
 /** What the machine reads of one car on one frame. */
@@ -71,7 +73,7 @@ const rulesOf = <P extends Push>(push: P) => {
 
   /** The kind on this frame given the frame before. */
   const nextKind = (before: CarOpen, now: CarNow, trackLengthM: Metres): Kind<P> => {
-    const kind = before.held.kind as Kind<P>;
+    const kind = before.span.kind as Kind<P>;
     if (now.status !== 'competing') return 'notCompeting';
     if (now.location === 'garage') return 'garage';
     if (kind === 'notCompeting') return kindOnJoin(now);
@@ -98,16 +100,16 @@ export const timedActivityMachine = <P extends Push>(spans: SpanDeclaration, pha
   const kinds: ReadonlyArray<Kind<P>> = ['garage', 'outLap', push, 'inLap', 'finished', 'notCompeting'];
   const competing: ReadonlyArray<Kind<P>> = kinds.filter((k) => k !== 'notCompeting');
 
-  const toOpenSpan = (held: Held, index: number): OpenSpan => ({
+  const opening = (id: number, index: number, kind: string, start: SessionTime, startFrame: FrameNumber, joined: boolean): OpenSpan => ({
     machine: spans.machine,
-    id: held.id,
+    id,
     carId: toCarId(index),
-    kind: held.kind,
-    start: held.start,
-    startFrame: held.startFrame,
+    kind,
+    start,
+    startFrame,
     confirmed: true,
     detail: undefined,
-    ...(held.joinedAt ? { joinedAt: true as const } : {}),
+    ...(joined ? { joinedAt: true as const } : {}),
   });
 
   /** What the machine reads of car `index`; none before its first car-location span. */
@@ -138,7 +140,7 @@ export const timedActivityMachine = <P extends Push>(spans: SpanDeclaration, pha
       ...(['outLap', push, 'inLap'] as const).map((k) => [k, 'finished'] as const),
     ],
     init: () => ({ cars: [] }),
-    openSpans: (open) => open.cars.flatMap((car, index): OpenSpan[] => (car === undefined ? [] : [toOpenSpan(car.held, index)])),
+    openSpans: (open) => open.cars.flatMap((car): OpenSpan[] => (car === undefined ? [] : [car.span])),
     step(open, input): MachineStep<Open> {
       const closed: MachineStep<Open>['closed'] = [];
       const sessionEnded = isSessionEnd(input.upstream[sessionPhase]?.[0]?.kind);
@@ -149,10 +151,10 @@ export const timedActivityMachine = <P extends Push>(spans: SpanDeclaration, pha
         if (now === undefined) return before;
         const kind = before === undefined ? kindOnJoin(now) : nextKind(before, now, trackLengthM);
         const seen = { location: now.location, lapDistanceM: now.lapDistanceM, ended: now.ended };
-        if (before !== undefined && before.held.kind === kind) return { ...before, ...seen };
-        if (before !== undefined) closed.push({ ...toOpenSpan(before.held, index), end: input.at });
+        if (before !== undefined && before.span.kind === kind) return { ...before, ...seen };
+        if (before !== undefined) closed.push({ ...before.span, end: input.at });
         const id = before?.opened ?? 0;
-        return { held: { id, kind, start: input.at, startFrame: input.frameNumber, ...(before === undefined ? { joinedAt: true as const } : {}) }, opened: id + 1, ...seen };
+        return { span: opening(id, index, kind, input.at, input.frameNumber, before === undefined), opened: id + 1, ...seen };
       });
       return { open: { cars }, closed };
     },

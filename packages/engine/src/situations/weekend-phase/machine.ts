@@ -1,12 +1,13 @@
 // The weekend-phase sub-machine (contract C14): the phase and format a session type decides, one span per session. The
 // span opens once the phase is decided (types 0, 18 and above 18 at once; the others when the weekend structure
 // arrives) and never changes; until then no span is open and the weekend phase is pending.
-import { weekendPhaseSpans, type PracticeFormat, type QualifyingFormat, type WeekendPhase } from '@pitwall/domain';
+import { weekendPhaseSpans, type OpenSpan, type PracticeFormat, type QualifyingFormat, type WeekendPhase } from '@pitwall/domain';
 import type { MachineStep, SubMachine } from '../machine.ts';
 
 type Segment = 1 | 2 | 3 | undefined;
 type Decided = { kind: string; detail: object };
-type Open = { frames: number; span: { id: number; start: number; startFrame: number; kind: string; detail: object; joinedAt?: true } | undefined };
+/** The frames the machine has run and the session's one span, once decided (the same object from then on, C40). */
+type Open = { frames: number; span: OpenSpan | undefined };
 
 const PRACTICE: Record<number, [PracticeFormat, Segment]> = { 1: ['practice', 1], 2: ['practice', 2], 3: ['practice', 3], 4: ['shortPractice', undefined] };
 const QUALIFYING: Record<number, [QualifyingFormat, Segment]> = {
@@ -33,16 +34,13 @@ const machine: SubMachine<Open> = {
   inputs: { signals: ['sessionType', 'weekendStructure'], values: [], upstream: [] },
   transitions: [['none', 'practice'], ['none', 'qualifying'], ['none', 'race'], ['none', 'none']],
   init: () => ({ frames: 0, span: undefined }),
-  openSpans: (open) =>
-    open.span === undefined
-      ? []
-      : [{ machine: 'weekend-phase', id: open.span.id, kind: open.span.kind, start: open.span.start, startFrame: open.span.startFrame, confirmed: true, detail: open.span.detail, ...(open.span.joinedAt ? { joinedAt: true as const } : {}) }],
+  openSpans: (open) => (open.span === undefined ? [] : [open.span]),
   step(open, input): MachineStep<Open> {
     const frames = open.frames + 1;
     if (open.span !== undefined) return { open: { frames, span: open.span }, closed: [] };
     const decided = decide(input.signals.session.sessionType, input.signals.session.weekendStructure);
     if (decided === undefined) return { open: { frames, span: undefined }, closed: [] };
-    const span = { id: 0, start: input.at, startFrame: input.frameNumber, kind: decided.kind, detail: decided.detail, ...(frames === 1 ? { joinedAt: true as const } : {}) };
+    const span: OpenSpan = { machine: 'weekend-phase', id: 0, kind: decided.kind, start: input.at, startFrame: input.frameNumber, confirmed: true, detail: decided.detail, ...(frames === 1 ? { joinedAt: true as const } : {}) };
     return { open: { frames, span }, closed: [] };
   },
 };
