@@ -10,10 +10,11 @@ import { describe, expect, it } from 'vitest';
 import { known, toSessionTime, unknown, type Known, type RaceMoment } from '@pitwall/domain';
 import { formatPenaltyMs } from '../../kit/values/format.ts';
 import {
-  boardRow, incidentEntry, interval, lapBoard, ms, outOfRaceRow, overview, pendingPenalty, servingPenalty, sessionInfo, situations,
+  boardRow, incidentEntry, interval, lapBoard, ms, outOfRaceRow, overview, pendingPenalty, pitStopCounts, servingPenalty, sessionInfo, situations,
   timePenalty, toCar, type CarSituation, type PhaseKind,
 } from './fixtures.ts';
 import { buildRows, type TowerInput } from './rows.ts';
+import { widget } from './widget.ts';
 
 /** The incident moment naming entry `entryId`, as race-moment gives it. */
 const incidentMoment = (entryId: string): Known<RaceMoment> =>
@@ -25,6 +26,7 @@ const base = (): TowerInput => ({
     overview(0, { name: 'Max Verstappen', position: 1, gridPosition: 1 }),
     overview(1, { name: 'Kuh Driver', position: 2, gridPosition: 1, ours: true }),
   ],
+  pitStops: pitStopCounts({ 0: 1, 1: 1, 2: 1 }),
   intervals: [interval(0), interval(1, 2184, 2184, 0, -1), interval(2, 5903, 3719, 0, 2)],
   toCar: [toCar(0, -2184), toCar(1, undefined), toCar(2, 3719)],
   board: lapBoard(1, [
@@ -46,6 +48,14 @@ const withSituations = (of: Readonly<Record<number, CarSituation>>, phase: Phase
 
 /** Car 0's row (the leader) with car 0 in situation `s`, in weekend phase `phase`. */
 const leader = (s: CarSituation, phase: PhaseKind = 'race') => buildRows(withSituations({ 0: s }, phase)).find((r) => r.carId === 0)!;
+
+describe('the tower declaration', () => {
+  // M7-R (final review F2): the stops come from the analysis topic, not from cars.overview (C54)
+  it('reads each car\'s stops from pitStopCount.byCar', () => {
+    expect(widget.data.pitStops).toMatchObject({ topic: 'pitStopCount.byCar', kind: 'state' });
+    expect(widget.data.pitStops).not.toHaveProperty('optional');
+  });
+});
 
 describe('buildRows', () => {
   it('orders the cars by position', () => {
@@ -138,13 +148,28 @@ describe('buildRows', () => {
     expect(buildRows(input)[2]?.lapsDown).toBe(1);
   });
 
-  it('takes compound, age and the reconciled stops from the overview', () => {
+  it('takes compound and age from the overview', () => {
     const input = base();
-    input.cars = [overview(0, { name: 'Max Verstappen', position: 1, compound: 'hard', age: 23, stops: 2 })];
+    input.cars = [overview(0, { name: 'Max Verstappen', position: 1, compound: 'hard', age: 23 })];
     const row = buildRows(input)[0];
     expect(row?.compound).toBe('hard');
     expect(row?.age).toBe(23);
-    expect(row?.stops).toBe(2);
+  });
+
+  // M7-R (final review F2, C54, C65): the stop count is pit-stop-count's (`pitStopCount.byCar`); the tower joins it by car
+  // id, no count of its own
+  it("takes each car's stops from pitStopCount.byCar by car id", () => {
+    const input = base();
+    input.pitStops = pitStopCounts({ 0: 2, 1: 0, 2: 3 });
+    expect(buildRows(input).map((r) => [r.carId, r.stops])).toEqual([[0, 2], [1, 0], [2, 3]]);
+  });
+
+  it('a car pitStopCount.byCar does not list has no stops, never a made-up 0 (C3)', () => {
+    const input = base();
+    input.pitStops = pitStopCounts({ 0: 2, 2: 1 });
+    expect(buildRows(input).map((r) => [r.carId, r.stops])).toEqual([[0, 2], [1, undefined], [2, 1]]);
+    input.pitStops = pitStopCounts({});
+    expect(buildRows(input).map((r) => r.stops)).toEqual([undefined, undefined, undefined]);
   });
 
   it('carries the time penalty and warnings only as the PEN cell shows them (no raw fields beside it)', () => {

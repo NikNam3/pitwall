@@ -3,7 +3,7 @@ import { carId, known, toSessionTime, unknown } from '@pitwall/domain';
 import type { RaceMoment } from '@pitwall/domain';
 import type { GalleryEntry } from '../../kit/gallery-types.ts';
 import {
-  boardRow, incidentEntry, interval, lapBoard, overview, pendingPenalty, servingPenalty, sessionInfo, situations, timePenalty, toCar,
+  boardRow, incidentEntry, interval, lapBoard, overview, pendingPenalty, pitStopCounts, servingPenalty, sessionInfo, situations, timePenalty, toCar,
   type CarSituation,
 } from './fixtures.ts';
 import type { widget } from './widget.ts';
@@ -12,14 +12,16 @@ import type { widget } from './widget.ts';
 const cars = [
   overview(0, { name: 'Max Verstappen', position: 1, gridPosition: 1 }),
   overview(1, { name: 'Lando Norris', position: 2, gridPosition: 3 }),
-  overview(2, { name: 'Charles Leclerc', position: 3, gridPosition: 2, compound: 'hard', age: 23, stops: 0 }),
+  overview(2, { name: 'Charles Leclerc', position: 3, gridPosition: 2, compound: 'hard', age: 23 }),
   overview(3, { name: 'Nikolas Kuhnlein', position: 4, gridPosition: 4, ours: true, age: 12 }),
   overview(4, { name: 'Alexander Albon', position: 5, gridPosition: 7, compound: 'hard', age: 1 }),
   overview(5, { name: 'Oscar Piastri', position: 6, gridPosition: 5, age: 15 }),
-  overview(6, { name: 'Carlos Sainz', position: 7, gridPosition: 7, compound: 'hard', age: 30, stops: 0, lap: 22 }),
+  overview(6, { name: 'Carlos Sainz', position: 7, gridPosition: 7, compound: 'hard', age: 30, lap: 22 }),
   overview(7, { name: 'Esteban Ocon', position: 8, gridPosition: 8, lap: 23 }),
 ];
 const ids = cars.map((c) => c.id);
+/** Each car's stops (`pitStopCount.byCar`): LEC and SAR have not stopped yet, every other car once. */
+const pitStops = pitStopCounts({ 0: 1, 1: 1, 2: 0, 3: 1, 4: 1, 5: 1, 6: 0, 7: 1 });
 
 /** The field's situations: LEC holds a 5 s time penalty, ALB is on an out lap, OCO has retired to the garage. */
 const fieldSituations: Readonly<Record<number, CarSituation>> = {
@@ -54,7 +56,7 @@ const moment = (m: RaceMoment['moment']): RaceMoment => ({
   moment: m, since: known(toSessionTime(900), toSessionTime(900)), cause: { rule: 'majorIncident', params: { entryId: 'collision-6-7' } }, active: [m],
 });
 
-const field = { cars, intervals, toCar: toUs, board, moment: undefined, session: sessionInfo(3), incidents: undefined, ...situated({}) };
+const field = { cars, pitStops, intervals, toCar: toUs, board, moment: undefined, session: sessionInfo(3), incidents: undefined, ...situated({}) };
 
 /** Synthetic cases and fit expectations for `timing-tower`. */
 const gallery: GalleryEntry<typeof widget> = {

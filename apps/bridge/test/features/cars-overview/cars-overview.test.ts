@@ -21,17 +21,17 @@ const overviewOf = (o: { compound?: VisualCompound; pitStops?: PitStopRecord[]; 
   return calculator.compute(view)[0]!;
 };
 
-describe('cars.overview: the stops recorded, live compound', () => {
-  it('reads the pit-stop records', () => {
-    expect(calculator.reads).toEqual(expect.arrayContaining(['pitStops', 'stints']));
+describe('cars.overview: live state as it is, live compound', () => {
+  it('reads the stint records and not the pit-stop records', () => {
+    expect(calculator.reads).toEqual(expect.arrayContaining(['stints']));
+    expect(calculator.reads).not.toContain('pitStops');
   });
 
-  // Task 24 (C13, C43): the game's count (numPitStops) is a signal, so it neither reaches the topic nor counts; the
-  // stops are the car's pit-stop records
-  it('stops: the car`s pit-stop records', () => {
-    expect(overviewOf({ pitStops: [stop(0, 10), stop(0, 18), stop(1, 5)] }).stops).toBe(2);
-    expect(overviewOf({ pitStops: [] }).stops).toBe(0);
-    expect(overviewOf({ pitStops: [stop(0, 10)] }).stops).toBe(1);
+  // M7-R (final review F2, C43, C54): a core topic publishes live state as it is, and the bridge makes no judgement; a
+  // car's stop count is the analysis pit-stop-count's (`pitStopCount.byCar`)
+  it('carries no stop count, whatever pit-stop records the projection holds', () => {
+    expect(overviewOf({ pitStops: [stop(0, 10), stop(0, 18), stop(1, 5)] })).not.toHaveProperty('stops');
+    expect(overviewOf({ pitStops: [] })).not.toHaveProperty('stops');
   });
 
   // decisions.md (Task 24 reshapes cars.overview): the confirmed laps leave the topic's timing
