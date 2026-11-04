@@ -9,6 +9,7 @@ import {
   type CarId,
   type CarState,
   type Corners,
+  type Known,
   type LapRecord,
   type MachineId,
   type MiniSectorCrossing,
@@ -70,18 +71,33 @@ export const IDLE_FEED: FeedMetricsView = {
 
 const range = (min: number, max: number) => ({ min, max });
 const perCorner = <T>(make: () => T): Corners<T> => ({ fl: make(), fr: make(), rl: make(), rr: make() });
+const mapCorners = <T, U>(c: Corners<T>, f: (v: T) => U): Corners<U> => ({ fl: f(c.fl), fr: f(c.fr), rl: f(c.rl), rr: f(c.rr) });
+
+/** One `lap()`'s own gain (end minus start) by default: it burns 2 kg of fuel, and its wear and ERS store do not change. */
+export const LAP_GAIN = { fuelKg: -2, wearPct: 0, ersStoreJ: 0 } as const;
 
 /**
  * A confirmed 90 s lap of car 0 (lap 1, sectors three thirds of `lapTimeMs` summing exactly to it (30 s each at 90 s), valid, soft C3, no SC), every `Known` field known at
- * `completedAt`. Lap-start samples: wear 0 % per corner, ERS store 4 MJ (so the lap's own wear and ERS change are 0). Lap-end fields: wear 0 % per corner, ERS store 4 MJ, deployed and harvested 0, no damage, channel
+ * `completedAt`. Lap-start samples: fuel 100 kg, wear 0 % per corner, ERS store 4 MJ. Lap-end fields: fuel 98 kg, wear 0 % per corner, ERS store 4 MJ, deployed and harvested 0, no damage, channel
  * ranges around tyres 90 to 100 degC and 23 to 27 psi, brakes 300 to 800 degC, engine 110 degC. `completedAt` defaults
  * to `lapNumber * lapTimeMs`. It describes frame 0, no applied frame (C26): set `frame` where membership matters. Any field is overridable.
+ *
+ * One lap's gain (end minus start) defaults to `LAP_GAIN`: fuel -2 kg, wear and ERS store 0. A lap-end sample set
+ * without its lap-start sample (`fuelAtEndKg` without `fuelAtStartKg`, and so on) gets a start that is the end minus that
+ * default gain, as of the end's `at`, per corner for wear (an unknown end gives the same unknown start). So a cumulative
+ * end value (wear 30 % after many laps) is never read as one lap's gain; a test of a lap's own gain sets both samples.
  */
 export function lap(over: Partial<LapRecord> = {}): LapRecord {
   const lapNumber = over.lapNumber ?? 1;
   const lapTimeMs = over.lapTimeMs ?? 90_000;
   const at = over.completedAt ?? lapNumber * lapTimeMs;
   const third = Math.floor(lapTimeMs / 3);
+  const startOf = <T extends number>(end: Known<T>, gain: number): Known<T> => (end.known ? known((end.value - gain) as T, end.at) : end);
+  const starts: Partial<LapRecord> = {
+    ...(over.fuelAtEndKg && !over.fuelAtStartKg && { fuelAtStartKg: startOf(over.fuelAtEndKg, LAP_GAIN.fuelKg) }),
+    ...(over.wearAtEndPct && !over.wearAtStartPct && { wearAtStartPct: mapCorners(over.wearAtEndPct, (w) => startOf(w, LAP_GAIN.wearPct)) }),
+    ...(over.ersStoreAtEndJ && !over.ersStoreAtStartJ && { ersStoreAtStartJ: startOf(over.ersStoreAtEndJ, LAP_GAIN.ersStoreJ) }),
+  };
   return {
     carId: carId(0),
     lapNumber,
@@ -129,6 +145,7 @@ export function lap(over: Partial<LapRecord> = {}): LapRecord {
       engineC: known(range(110, 110), at),
     },
     frame: 0,
+    ...starts,
     ...over,
   };
 }

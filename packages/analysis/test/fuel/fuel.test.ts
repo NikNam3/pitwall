@@ -9,16 +9,17 @@ import type {
   SessionTime,
   StintRecord,
 } from "@pitwall/domain";
+import type { WeekendPhase } from "@pitwall/domain";
 import {
   carState,
-  engineView,
   lap,
 } from "../../../../test-support/builders/index.ts";
 import { engineShaped } from "../engine-shaped.ts";
+import { guardedQuick, NONE, PRACTICE, QUALIFYING, situatedView } from "../situated.ts";
 import { fuelCalculator } from "../../src/fuel/calculator.ts";
 import { LAP_CLASSES_CONFIG } from "../../src/lap-classes/index.ts";
 import { PER_LAP_RATE_CONFIG } from "../../src/per-lap-rate/index.ts";
-import { FUEL, type FuelOutput } from "../../src/fuel/index.ts";
+import { FUEL, FUEL_BEHAVIOUR, type FuelOutput } from "../../src/fuel/index.ts";
 import {
   SESSION_REMAINING,
   type SessionRemaining,
@@ -26,6 +27,9 @@ import {
 
 const NOW = 500_000 as SessionTime;
 const car0 = carId(0);
+
+/** The calculator through its guarded view (C41): every case fails on a read it does not declare. */
+const calc = guardedQuick(fuelCalculator);
 
 const remaining = (
   lapsLeft: Known<number>,
@@ -94,7 +98,7 @@ function run({
   laps,
   stints = [],
   left = known(18, 1),
-  session,
+  phase,
   withRemaining = true,
   car,
   config = {},
@@ -103,7 +107,8 @@ function run({
   laps: LapRecord[];
   stints?: StintRecord[];
   left?: Known<number>;
-  session?: "timeTrial" | "practice";
+  /** The weekend phase (C14); a race by default. */
+  phase?: WeekendPhase;
   withRemaining?: boolean;
   car?: CarState;
   config?: EngineView["config"];
@@ -112,17 +117,17 @@ function run({
   if (withRemaining)
     outputs.set(
       SESSION_REMAINING,
-      remaining(left, session === "practice" ? "time" : "laps"),
+      remaining(left, phase !== undefined && phase.kind !== "race" ? "time" : "laps"),
     );
-  const view = engineView({
+  const view = situatedView({
     cars: [car ?? fuelCar(kg)],
     history: { laps, stints },
     outputs,
     config,
     sessionTime: NOW,
-    ...(session && { session: { kind: session } }),
+    ...(phase && { phase }),
   });
-  const out = fuelCalculator.compute(view);
+  const out = calc.compute(view);
   const state = out[car0];
   if (!state) throw new Error("no fuel state for car 0");
   return state;
@@ -136,18 +141,13 @@ const fuelLap = (n: number, startKg: number, endKg: number, over: Partial<LapRec
   lap({ lapNumber: n, completedAt: n * 1000, fuelAtStartKg: known(startKg, n * 1000), fuelAtEndKg: known(endKg, n * 1000), ...over });
 
 describe("fuel calculator", () => {
-  it("is a quick calculator at 4 Hz that reads laps, stints, energy and session-remaining", () => {
+  it("is a quick calculator at 4 Hz that reads laps, energy, car-status, the weekend phase and session-remaining, not stints or the session", () => {
     expect(fuelCalculator.id).toBe(FUEL);
     expect(fuelCalculator.kind).toBe("quick");
     expect(fuelCalculator.cadence).toEqual({ hz: 4 });
-    expect(fuelCalculator.reads).toEqual(
-      expect.arrayContaining([
-        "laps",
-        "stints",
-        "energy",
-        { calculator: SESSION_REMAINING },
-      ]),
-    );
+    const reads = ["laps", "energy", "spans:car-status", "spans:weekend-phase", { calculator: SESSION_REMAINING }];
+    expect(fuelCalculator.reads).toEqual(expect.arrayContaining(reads));
+    expect(fuelCalculator.reads).toHaveLength(reads.length);
   });
 
   it("burn 1.5 kg/lap, 30 kg left, 18 laps left: lapsOfFuel 20, margin +2, save target notApplicable", () => {
@@ -216,36 +216,22 @@ describe("fuel calculator", () => {
     expect(valueOf(f.burnKgPerLap)).toBeCloseTo(1.5, 9);
   });
 
-  it("a refuel at a stop restarts the burn samples", () => {
-    // laps 1-3 burn 3 kg/lap, the car stops after lap 4 and leaves with 110 kg, laps 6-7 burn 1.5 kg/lap
+  it("a refuel at a stop does not restart the burn samples: the laps before it stay in the window", () => {
+    // laps 1-3 burn 3 kg/lap, the car stops after lap 4 and leaves with 110 kg, laps 6-7 burn 1.5 kg/lap:
+    // the in and out laps are no samples, the median of 3, 3, 3, 1.5, 1.5 is 3
     const laps = [
       ...burnLaps(1, 3, 3, 100),
       fuelLap(4, 91, 88, { inLap: true }),
       fuelLap(5, 110, 108, { outLap: true }),
       ...burnLaps(6, 7, 1.5, 108),
     ];
-    expect(valueOf(run({ kg: 105, laps, stints: [stint(1, 4)] }).burnKgPerLap)).toBeCloseTo(1.5, 9);
-  });
-
-  it("after a refuel, one lap of the new run gives no burn, not the old run's", () => {
-    const laps = [
-      ...burnLaps(1, 3, 3, 100),
-      fuelLap(4, 91, 88, { inLap: true }),
-      fuelLap(5, 110, 108, { outLap: true }),
-      fuelLap(6, 108, 106.5),
-    ];
-    const f = run({ kg: 106.5, laps, stints: [stint(1, 4)], left: known(18, 1) });
-    expect(f.burnKgPerLap).toEqual(insufficient);
-    expect(f.lapsOfFuel).toEqual(insufficient);
-    expect(f.marginLaps).toEqual(insufficient);
-    expect(f.saveTargetKgPerLap).toEqual(insufficient);
-    expect(valueOf(f.kg)).toBe(106.5);
+    expect(valueOf(run({ kg: 105, laps, stints: [stint(1, 4)] }).burnKgPerLap)).toBeCloseTo(3, 9);
   });
 
   it("a lap on which fuel was added is no sample: a refuel never counts as negative burn", () => {
     // practice: the in lap 3 runs through the garage, which refuels from 97 to 110 kg before the lap ends
     const laps = [...burnLaps(1, 2, 1.5, 100), fuelLap(3, 97, 110, { inLap: true }), ...burnLaps(4, 5, 1.5, 110)];
-    const f = run({ kg: 107, laps, session: "practice", left: unknown("notApplicable") });
+    const f = run({ kg: 107, laps, phase: PRACTICE, left: unknown("notApplicable") });
     expect(valueOf(f.burnKgPerLap)).toBeCloseTo(1.5, 9);
   });
 
@@ -288,15 +274,6 @@ describe("fuel calculator", () => {
   });
 
   describe("on engine-shaped history: every lap provisional then confirmed, no record for the open stint", () => {
-    it("after a refuel the burn is the new run's 1.5 kg/lap", () => {
-      const stop = [fuelLap(4, 91, 88, { inLap: true }), fuelLap(5, 110, 108, { outLap: true })];
-      const laps = engineShaped([...burnLaps(1, 3, 3, 100), ...stop, ...burnLaps(6, 7, 1.5, 108)]);
-      expect(valueOf(run({ kg: 105, laps, stints: [stint(1, 4)] }).burnKgPerLap)).toBeCloseTo(1.5, 9);
-      // one lap into the new run: too few samples, not a mix with the old run
-      const early = engineShaped([...burnLaps(1, 3, 3, 100), ...stop, fuelLap(6, 108, 106.5)]);
-      expect(run({ kg: 106.5, laps: early, stints: [stint(1, 4)] }).burnKgPerLap).toEqual(insufficient);
-    });
-
     it("a lap counts once: one lap, written twice, is below minSamples (2)", () => {
       const f = run({ kg: 30, laps: engineShaped(burnLaps(1, 1, 1.5, 100)) });
       expect(f.burnKgPerLap).toEqual(insufficient);
@@ -326,26 +303,11 @@ describe("fuel calculator", () => {
     expect(valueOf(run({ kg: 30, laps }).burnKgPerLap)).toBeCloseTo(1.5, 9);
   });
 
-  it("time trial fuel constant at 10 kg: burn 0, margin follows lapsLeft (notApplicable in TT)", () => {
-    const f = run({
-      kg: 10,
-      laps: burnLaps(1, 5, 0, 10),
-      session: "timeTrial",
-      left: unknown("notApplicable"),
-    });
-    expect(valueOf(f.burnKgPerLap)).toBeCloseTo(0, 9);
-    const na = { known: false, reason: "notApplicable" };
-    expect(f.lapsOfFuel).toEqual(na);
-    expect(f.lapsLeft).toEqual(na);
-    expect(f.marginLaps).toEqual(na);
-    expect(f.saveTargetKgPerLap).toEqual(na);
-  });
-
   it("a timed session (lapsLeft notApplicable): lapsOfFuel stays known, margin and save target notApplicable", () => {
     const f = run({
       kg: 30,
       laps: burnLaps(1, 5, 1.5, 100),
-      session: "practice",
+      phase: PRACTICE,
       left: unknown("notApplicable"),
     });
     expect(valueOf(f.lapsOfFuel)).toBeCloseTo(20, 9);
@@ -419,25 +381,96 @@ describe("fuel calculator", () => {
     });
   });
 
-  it("publishes one entry per active car, keyed by car id", () => {
-    const view = engineView({
-      cars: [fuelCar(30), carState({ id: carId(3) })],
+  it("publishes one entry per car in the session, keyed by car id", () => {
+    const view = situatedView({
+      cars: [fuelCar(30), carState({ id: carId(3) }), carState({ id: carId(5) })],
       history: { laps: burnLaps(1, 5, 1.5, 100) },
       outputs: new Map([[SESSION_REMAINING, remaining(known(18, 1))]]),
+      status: { 5: "absent" },
     });
-    const out = fuelCalculator.compute(view);
+    const out = calc.compute(view);
     expect(Object.keys(out).sort()).toEqual(["0", "3"]);
+  });
+
+  describe("behaviour table (C44): a row per weekend-phase and car-status kind", () => {
+    it("exports FUEL_BEHAVIOUR over the weekend phase and car-status (laps by activity come from the lap records)", () => {
+      expect(Object.keys(FUEL_BEHAVIOUR).sort()).toEqual(["car-status", "weekend-phase"]);
+    });
+
+    const na = { known: false, reason: "notApplicable" };
+    const burning = { kg: 30, laps: burnLaps(1, 5, 1.5, 100) };
+
+    it("weekend phase race: the burn over the race's laps, and the margin against session-remaining's laps left", () => {
+      const f = run({ ...burning, left: known(18, 1) });
+      expect(valueOf(f.burnKgPerLap)).toBeCloseTo(1.5, 9);
+      expect(valueOf(f.marginLaps)).toBeCloseTo(2, 9);
+    });
+
+    it("weekend phase practice: the burn as in the race; a timed session's laps left leave margin and save target notApplicable", () => {
+      const f = run({ ...burning, phase: PRACTICE, left: unknown("notApplicable") });
+      expect(valueOf(f.burnKgPerLap)).toBeCloseTo(1.5, 9);
+      expect(valueOf(f.lapsOfFuel)).toBeCloseTo(20, 9);
+      expect(f.marginLaps).toEqual(na);
+    });
+
+    it("weekend phase qualifying: the burn as in the race", () => {
+      const f = run({ ...burning, phase: QUALIFYING, left: unknown("notApplicable") });
+      expect(valueOf(f.burnKgPerLap)).toBeCloseTo(1.5, 9);
+      expect(valueOf(f.lapsOfFuel)).toBeCloseTo(20, 9);
+    });
+
+    it("weekend phase none (a time trial, C14): burn, laps of fuel, margin and save target notApplicable; the readings stay", () => {
+      const f = run({ ...burning, phase: NONE, left: unknown("notApplicable"), car: fuelCar(30, { remainingLaps: 17.4, mix: "rich" }) });
+      expect(f.burnKgPerLap).toEqual(na);
+      expect(f.lapsOfFuel).toEqual(na);
+      expect(f.marginLaps).toEqual(na);
+      expect(f.saveTargetKgPerLap).toEqual(na);
+      expect(f.lapsLeft).toEqual(na);
+      expect(f.kg).toEqual({ known: true, value: 30, at: 7 });
+      expect(f.gameRemainingLaps).toEqual({ known: true, value: 17.4, at: 7 });
+      expect(f.mix).toEqual({ known: true, value: "rich", at: 7 });
+    });
+
+    // the live state's transitional `active` says the opposite of car-status in every case, so only car-status decides (C43)
+    const statusRun = (kind: string, active: boolean) =>
+      calc.compute(
+        situatedView({
+          cars: [{ ...fuelCar(30), active }],
+          history: { laps: burnLaps(1, 5, 1.5, 100) },
+          outputs: new Map([[SESSION_REMAINING, remaining(known(18, 1))]]),
+          sessionTime: NOW,
+          status: { 0: kind },
+        }),
+      )[car0];
+
+    it("car-status competing: the car has its fuel state", () => {
+      expect(valueOf(statusRun("competing", false)?.burnKgPerLap ?? unknown("notReceived"))).toBeCloseTo(1.5, 9);
+    });
+
+    it("car-status retired: the car is still in the session and keeps its fuel state", () => {
+      expect(valueOf(statusRun("retired", false)?.burnKgPerLap ?? unknown("notReceived"))).toBeCloseTo(1.5, 9);
+    });
+
+    it("car-status disqualified: the car is still in the session and keeps its fuel state", () => {
+      expect(valueOf(statusRun("disqualified", false)?.burnKgPerLap ?? unknown("notReceived"))).toBeCloseTo(1.5, 9);
+    });
+
+    it("car-status absent: no entry, though the slot has laps and the live state calls it active", () => {
+      expect(statusRun("absent", true)).toBeUndefined();
+    });
   });
 });
 
 describe("fuel burn in practice", () => {
-  it("a refuel in the garage on the same set restarts the burn samples: the burn is the new run's", () => {
-    // out lap 1, laps 2-4 and in lap 5 burn 3 kg/lap from 30 kg; the garage refuels to 30 kg without new tyres
-    // (no stint record), then out lap 6 and laps 7-8 burn 1.5 kg/lap
-    const run1 = burnLaps(1, 5, 3, 30);
-    const run2 = burnLaps(6, 8, 1.5, 30);
-    const laps = [...run1, ...run2].map((l) => ({ ...l, outLap: l.lapNumber === 1 || l.lapNumber === 6, inLap: l.lapNumber === 5 }));
-    const f = run({ kg: 27, laps, session: "practice", left: unknown("notApplicable") });
+  it("a lap restarted at the line after a garage refuel (neither in nor out lap) gives its own post-refuel burn only", () => {
+    // lap 1 burns 1.5 kg from 30 kg; the car goes to the garage, is refuelled to 100 kg, and the engine restarts its
+    // lap at the line: lap 2 has no in or out flag and runs 100 to 98.5 kg. The rise to 100 kg is in no lap, so the
+    // samples are 1.5 and 1.5, not a restart (one sample: too few) and not a negative burn
+    const laps = [fuelLap(1, 30, 28.5), fuelLap(2, 100, 98.5)];
+    const f = run({ kg: 98.5, laps, phase: PRACTICE, left: unknown("notApplicable") });
     expect(valueOf(f.burnKgPerLap)).toBeCloseTo(1.5, 9);
+    // on engine-shaped history too: each lap provisional then confirmed
+    const shaped = run({ kg: 98.5, laps: engineShaped(laps), phase: PRACTICE, left: unknown("notApplicable") });
+    expect(valueOf(shaped.burnKgPerLap)).toBeCloseTo(1.5, 9);
   });
 });

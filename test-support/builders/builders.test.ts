@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { carState, crossings, engineView, event, field, history, lap, neutralisation, openNeutralisation, phaseSpans, realismHidden } from './index.ts';
+import { carState, crossings, engineView, event, field, history, lap, LAP_GAIN, neutralisation, openNeutralisation, phaseSpans, realismHidden } from './index.ts';
 import { defineConfig } from '../../packages/engine/src/index.ts';
-import { carId } from '../../packages/domain/src/index.ts';
+import { carId, known, unknown } from '../../packages/domain/src/index.ts';
 
 describe('builders', () => {
   it('field gives each car laps × 50 crossings in time order', () => {
@@ -34,6 +34,43 @@ describe('builders', () => {
     expect(l.ersStoreAtStartJ).toEqual({ known: true, value: 4_000_000, at: 240_000 });
     expect(l.wearAtStartPct).toEqual(l.wearAtEndPct);
     expect(lap({ wearAtEndPct: { fl: { known: false, reason: 'notReceived' }, fr: l.wearAtEndPct.fr, rl: l.wearAtEndPct.rl, rr: l.wearAtEndPct.rr } }).wearAtEndPct.fl.known).toBe(false);
+  });
+
+  describe('lap: an end sample set without its start sample', () => {
+    const corners = <T>(v: T) => ({ fl: v, fr: v, rl: v, rr: v });
+    const valueOf = (k: { known: boolean; value?: number }) => (k.known ? k.value : undefined);
+
+    it('gets a start one default lap gain before it, as of the end: a cumulative end value is never one lap`s gain', () => {
+      const l = lap({ lapNumber: 12, fuelAtEndKg: known(50, 7), wearAtEndPct: corners(known(30, 7)), ersStoreAtEndJ: known(2_500_000, 7) });
+      expect(l.fuelAtStartKg).toEqual(known(52, 7));
+      expect(l.wearAtStartPct).toEqual(corners(known(30, 7)));
+      expect(l.ersStoreAtStartJ).toEqual(known(2_500_000, 7));
+    });
+
+    it('the default gain is LAP_GAIN, the same as a default lap`s own', () => {
+      const d = lap();
+      expect(LAP_GAIN).toEqual({ fuelKg: -2, wearPct: 0, ersStoreJ: 0 });
+      expect(valueOf(d.fuelAtEndKg)! - valueOf(d.fuelAtStartKg)!).toBe(LAP_GAIN.fuelKg);
+      expect(valueOf(d.wearAtEndPct.fl)! - valueOf(d.wearAtStartPct.fl)!).toBe(LAP_GAIN.wearPct);
+      expect(valueOf(d.ersStoreAtEndJ)! - valueOf(d.ersStoreAtStartJ)!).toBe(LAP_GAIN.ersStoreJ);
+    });
+
+    it('follows per corner for wear; an unknown end gives the same unknown start', () => {
+      const wear = { fl: known(40, 3), fr: unknown('notReceived'), rl: known(20, 3), rr: unknown('restricted') };
+      expect(lap({ wearAtEndPct: wear }).wearAtStartPct).toEqual(wear);
+      expect(lap({ fuelAtEndKg: unknown('notReceived') }).fuelAtStartKg).toEqual(unknown('notReceived'));
+      expect(lap({ ersStoreAtEndJ: unknown('realism') }).ersStoreAtStartJ).toEqual(unknown('realism'));
+    });
+
+    it('a start sample the caller sets wins, known or not', () => {
+      const l = lap({ fuelAtStartKg: known(100, 1), fuelAtEndKg: known(50, 2), ersStoreAtStartJ: unknown('notReceived'), ersStoreAtEndJ: known(1_000_000, 2) });
+      expect(l.fuelAtStartKg).toEqual(known(100, 1));
+      expect(l.ersStoreAtStartJ).toEqual(unknown('notReceived'));
+    });
+
+    it('a start set without an end leaves the end at its default', () => {
+      expect(lap({ fuelAtStartKg: known(60, 90_000) }).fuelAtEndKg).toEqual(known(98, 90_000));
+    });
   });
 
   it('crossings are 50 evenly spaced segments, segment 0 at the lap start', () => {
