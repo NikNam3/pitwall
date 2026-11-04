@@ -1,9 +1,9 @@
 // The top bar's items in order (mockup 9-top-bar). A segment is `segments/<Name>.svelte`; adding, removing or moving one is a line here.
 
 /** The file name of a segment without extension, lower case: `session` is `segments/Session.svelte`. */
-export type SegmentName = 'workbook' | 'session' | 'flag' | 'moment' | 'alerts' | 'replay' | 'feed' | 'realism';
+export type SegmentName = 'workbook' | 'session' | 'flag' | 'phase' | 'moment' | 'alerts' | 'replay' | 'feed' | 'realism';
 
 export const TOP_BAR: { left: SegmentName[]; right: SegmentName[] } = {
-  left: ['workbook', 'session', 'flag', 'moment'],
+  left: ['workbook', 'session', 'flag', 'phase', 'moment'],
   right: ['alerts', 'replay', 'feed', 'realism'],
 };
