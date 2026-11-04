@@ -6,9 +6,8 @@ import { SPAN_DECLARATIONS } from '@pitwall/domain';
 import type { EngineView } from '@pitwall/engine';
 import { describe, expect, it } from 'vitest';
 import { field, neutralisation, openNeutralisation } from '../../../../test-support/builders/index.ts';
-import { gapsCalculator } from '../../src/gaps/calculator.ts';
 import { GAPS_BEHAVIOUR } from '../../src/gaps/index.ts';
-import { carsFor, deltaOf, guarded, offsetRace, run, viewOf, type Phase, type StatusKind } from './race.ts';
+import { carsFor, deltaOf, gaps, guarded, offsetRace, run, viewOf, type Phase, type StatusKind } from './race.ts';
 
 const kindsOf = (machine: string): readonly string[] => SPAN_DECLARATIONS.find((d) => d.machine === machine)?.kinds ?? [];
 
@@ -29,10 +28,11 @@ describe('gaps behaviour table (C44)', () => {
   });
 
   it('declares what it reads: the spans of those sub-machines, and no game event any more (the race start is a span)', () => {
-    expect(gapsCalculator.reads).toEqual(
+    // Restated in Task 22 round 2 (C31.2): what `gaps` and its fold `gaps-history` read together.
+    expect(gaps.reads()).toEqual(
       expect.arrayContaining(['spans:weekend-phase', 'spans:car-status', 'spans:session-phase-race', 'spans:session-phase-qualifying', 'spans:session-phase-practice']),
     );
-    expect(gapsCalculator.reads).not.toContain('events');
+    expect(gaps.reads()).not.toContain('events');
   });
 });
 
@@ -204,8 +204,8 @@ describe('car-status rows (C17, C43)', () => {
   it('a car that retires between two frames leaves the intervals: update equals init (C31)', () => {
     const before = viewOf(race);
     const after = viewOf(race, { status: { 3: 'retired' } });
-    const acc = gapsCalculator.init(guarded(before));
-    const updated = gapsCalculator.output(gapsCalculator.update(acc, deltaOf(before, after), guarded(after)));
+    const acc = gaps.init(guarded(before));
+    const updated = gaps.output(gaps.update(acc, deltaOf(before, after), guarded(after)));
     expect(updated.outOfRace).toEqual([3]);
     expect(updated).toEqual(run(after));
   });

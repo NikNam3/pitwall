@@ -18,6 +18,7 @@ import {
 } from '@pitwall/domain';
 import { event, lap, neutralisation, openNeutralisation } from '../../../../test-support/builders/index.ts';
 import { incidentsCalculator } from '../../src/incidents/calculator.ts';
+import { incidentsHistoryCalculator } from '../../src/index.ts';
 import * as unit from '../../src/incidents/index.ts';
 import { DAMAGE } from '../../src/damage/index.ts';
 import type { GapsOutput } from '../../src/gaps/index.ts';
@@ -109,11 +110,16 @@ const MACHINES = [
 ] as const;
 
 describe('incidents calculator', () => {
-  it('is incremental over events, the situations it reads, mini-sectors and laps, and reads no damage output (a log reads the history only)', () => {
+  // Restated in Task 22 round 2 (C31.2): `incidents` is quick and reads its fold `incidents-history`, which folds the
+  // events, the closed spans, the mini-sectors and the laps; the reads are the two parts' together.
+  it('is quick over its incremental fold of events, the situations it reads, mini-sectors and laps (`incidents-history`), and reads no damage output (a log reads the history only)', () => {
     expect(incidentsCalculator.id).toBe(INCIDENTS);
-    expect(incidentsCalculator.kind).toBe('incremental');
-    expect(incidentsCalculator.reads).toEqual(expect.arrayContaining(['events', 'miniSectors', 'laps', ...MACHINES.map((m) => `spans:${m}`)]));
-    expect(incidentsCalculator.reads).not.toContainEqual({ calculator: DAMAGE });
+    expect(incidentsCalculator.kind).toBe('quick');
+    expect(incidentsCalculator.reads).toContainEqual({ calculator: 'incidents-history' });
+    expect(incidentsHistoryCalculator.kind).toBe('incremental');
+    expect(incidentsHistoryCalculator.reads).toEqual(expect.arrayContaining(['events', 'miniSectors', 'laps']));
+    expect(incidents.reads()).toEqual(expect.arrayContaining(['events', 'miniSectors', 'laps', ...MACHINES.map((m) => `spans:${m}`)]));
+    expect(incidents.reads()).not.toContainEqual({ calculator: DAMAGE });
   });
 
   it('a collision of the player car is a major entry with both cars', () => {

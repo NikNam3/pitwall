@@ -1,15 +1,27 @@
 // `damage` (spec 5.5, ruling R1): per-part damage, corners, faults and the jumps from `damageChange` events.
 import { carId, known, unknown, type CarId, type DamageParts, type LapRecord, type RaceEvent } from '@pitwall/domain';
+import { projectionLengths, type EngineView } from '@pitwall/engine/readers';
 import { describe, expect, it } from 'vitest';
 import { carState, event, lap, realismHidden } from '../../../../test-support/builders/index.ts';
-import { damageCalculator as unguarded } from '../../src/damage/calculator.ts';
+import { damageCalculator } from '../../src/damage/calculator.ts';
 import { DAMAGE, DAMAGE_BEHAVIOUR, DAMAGE_CONFIG } from '../../src/damage/index.ts';
+import { damageHistoryCalculator } from '../../src/index.ts';
 import { damageJumps } from '../../src/shared/damage-jumps.ts';
 import { engineShaped } from '../engine-shaped.ts';
-import { guardedIncremental, NONE, openSpan, PRACTICE, QUALIFYING, RACE, situatedView } from '../situated.ts';
+import { NONE, openSpan, PRACTICE, QUALIFYING, RACE, situatedView } from '../situated.ts';
+import { split } from '../split.ts';
 
-/** The calculator through its guarded view (C41): every init and update fails on a read it does not declare. */
-const damageCalculator = guardedIncremental(unguarded);
+/**
+ * `damage` and its fold `damage-history`, each part through its own guarded view (C31.2, C41): every init and update
+ * fails on a read it does not declare.
+ */
+const damage = split(damageCalculator, damageHistoryCalculator);
+
+/**
+ * The delta from one view's history to the next one's (restated in Task 22 round 2: the builder's default delta is from
+ * an empty history, which a fold over the delta would count twice).
+ */
+const deltaOf = (from: EngineView, to: EngineView) => ({ before: projectionLengths(from.history), after: projectionLengths(to.history) });
 
 const car0 = carId(0);
 const car1 = carId(1);
@@ -33,18 +45,23 @@ const run = (events: RaceEvent[], laps: LapRecord[] = [], extra: Parameters<type
     outputs: new Map([['pace', { byCar: {} }]]),
     ...extra,
   });
-  return damageCalculator.output(damageCalculator.init(view))[car0]!;
+  return damage.output(damage.init(view))[car0]!;
 };
 
 describe('damage calculator', () => {
   it('has the id damage and reads condition, tyres, events, laps, car-status, car-location and the weekend phase (not pace, not the session)', () => {
+    // Restated in Task 22 round 2 (C31.2): `damage` is quick and reads its fold `damage-history` of the events and laps;
+    // the reads are the two parts' together.
     expect(damageCalculator.id).toBe(DAMAGE);
-    expect(damageCalculator.kind).toBe('incremental');
-    expect(damageCalculator.reads).toEqual(
+    expect(damageCalculator.kind).toBe('quick');
+    expect(damageCalculator.reads).toContainEqual({ calculator: 'damage-history' });
+    expect(damageHistoryCalculator.kind).toBe('incremental');
+    expect(damageHistoryCalculator.reads).toEqual(expect.arrayContaining(['events', 'laps']));
+    expect(damage.reads()).toEqual(
       expect.arrayContaining(['condition', 'tyres', 'events', 'laps', 'spans:car-status', 'spans:car-location', 'spans:weekend-phase']),
     );
-    expect(damageCalculator.reads).not.toContainEqual({ calculator: 'pace' });
-    expect(damageCalculator.reads).not.toContain('session');
+    expect(damage.reads()).not.toContainEqual({ calculator: 'pace' });
+    expect(damage.reads()).not.toContain('session');
   });
 
   it('a damageChange of the front-left wing 0 → 12 % is one jump with deltaPct 12', () => {
@@ -85,7 +102,7 @@ describe('damage calculator', () => {
       cars: [carState({ id: car0 }), carState({ id: car1 })],
       history: { events: [dmg(10_000, 'floorPct', 0, 9, car1)], laps: [] },
     });
-    const out = damageCalculator.output(damageCalculator.init(view));
+    const out = damage.output(damage.init(view));
     expect(out[car0]!.jumps).toEqual([]);
     expect(out[car1]!.jumps).toHaveLength(1);
   });
@@ -104,7 +121,7 @@ describe('damage calculator', () => {
       cars: [carState({ id: car0, timing: { lap: 4 } })],
       history: { events: [dmg(300_000, 'floorPct', 0, 9)], laps: lapsOf(3, () => 90_000) },
     });
-    expect(damageCalculator.output(damageCalculator.init(view))[car0]!.jumps[0]!.lap).toBe(4);
+    expect(damage.output(damage.init(view))[car0]!.jumps[0]!.lap).toBe(4);
   });
 
   describe('lossMsPerLap', () => {
@@ -169,8 +186,8 @@ describe('damage calculator', () => {
       const early = [dmg(100_000, 'frontRightWingPct', 0, 20)];
       const before = situatedView({ cars: [carState({ id: car0 })], history: { events: early, laps: lapsOf(2, timeOf) } });
       const later = situatedView({ cars: [carState({ id: car0 })], history: { events: early, laps: lapsOf(7, timeOf) } });
-      const acc = damageCalculator.update(damageCalculator.init(before), later.delta, later);
-      expect(damageCalculator.output(acc)[car0]!.jumps[0]!.lossMsPerLap).toEqual(unknown('notApplicable'));
+      const acc = damage.update(damage.init(before), deltaOf(before, later), later);
+      expect(damage.output(acc)[car0]!.jumps[0]!.lossMsPerLap).toEqual(unknown('notApplicable'));
     });
 
     it('is measured per car', () => {
@@ -178,7 +195,7 @@ describe('damage calculator', () => {
         cars: [carState({ id: car0 }), carState({ id: car1 })],
         history: { events: jump, laps: [...lapsOf(7, timeOf), ...lapsOf(7, () => 80_000, car1)] },
       });
-      const out = damageCalculator.output(damageCalculator.init(view));
+      const out = damage.output(damage.init(view));
       expect(out[car0]!.jumps[0]!.lossMsPerLap).toMatchObject({ known: true, value: 1000 });
       expect(out[car1]!.jumps).toEqual([]);
     });
@@ -186,8 +203,8 @@ describe('damage calculator', () => {
     it('update recomputes it when laps arrive without a new event', () => {
       const early = situatedView({ cars: [carState({ id: car0 })], history: { events: jump, laps: lapsOf(6, timeOf) } });
       const late = situatedView({ cars: [carState({ id: car0 })], history: { events: jump, laps: lapsOf(7, timeOf) } });
-      const acc = damageCalculator.update(damageCalculator.init(early), late.delta, late);
-      expect(damageCalculator.output(acc)[car0]!.jumps[0]!.lossMsPerLap).toMatchObject({ known: true, value: 1000 });
+      const acc = damage.update(damage.init(early), deltaOf(early, late), late);
+      expect(damage.output(acc)[car0]!.jumps[0]!.lossMsPerLap).toMatchObject({ known: true, value: 1000 });
     });
   });
 
@@ -200,7 +217,7 @@ describe('damage calculator', () => {
           powerUnit: known({ engineDamagePct: 8, gearboxDamagePct: 7, mguhWearPct: 0, esWearPct: 0, ceWearPct: 0, iceWearPct: 0, mgukWearPct: 0, tcWearPct: 0 }, 4100),
         },
       });
-      const out = damageCalculator.output(damageCalculator.init(situatedView({ cars: [car], sessionTime: 5000 })))[car0]!;
+      const out = damage.output(damage.init(situatedView({ cars: [car], sessionTime: 5000 })))[car0]!;
       expect(out.parts).toEqual(
         known(
           { frontLeftWingPct: 1, frontRightWingPct: 2, rearWingPct: 3, floorPct: 4, diffuserPct: 5, sidepodPct: 6, gearboxPct: 7, enginePct: 8 },
@@ -215,7 +232,7 @@ describe('damage calculator', () => {
         tyres: { corners: { fl: { damagePct: known(11, 0) }, rr: { damagePct: known(22, 0) } } },
         condition: { brakes: { fr: { damagePct: known(33, 0) }, rl: { damagePct: known(44, 0) } }, drsFault: known(true, 0), ersFault: true },
       });
-      const out = damageCalculator.output(damageCalculator.init(situatedView({ cars: [car] })))[car0]!;
+      const out = damage.output(damage.init(situatedView({ cars: [car] })))[car0]!;
       expect(out.corners.fl.tyrePct).toEqual(known(11, 0));
       expect(out.corners.rr.tyrePct).toEqual(known(22, 0));
       expect(out.corners.fr.tyrePct).toEqual(known(0, 0));
@@ -227,14 +244,14 @@ describe('damage calculator', () => {
 
     it('a rival hidden by realism mode has unknown parts, brakes and drsFault, never 0', () => {
       const hidden = realismHidden(carState({ id: car0 }));
-      const out = damageCalculator.output(damageCalculator.init(situatedView({ cars: [hidden] })))[car0]!;
+      const out = damage.output(damage.init(situatedView({ cars: [hidden] })))[car0]!;
       expect(out.parts).toMatchObject({ known: false, reason: 'realism' });
       expect(out.drsFault).toMatchObject({ known: false, reason: 'realism' });
       expect(out.corners.fl.brakePct).toMatchObject({ known: false, reason: 'realism' });
     });
 
     it('only cars in the session get an entry: a slot without a car-status span has none', () => {
-      const out = damageCalculator.output(damageCalculator.init(situatedView({ cars: [carState({ id: car1 })] })));
+      const out = damage.output(damage.init(situatedView({ cars: [carState({ id: car1 })] })));
       expect(Object.keys(out)).toEqual(['1']);
     });
   });
@@ -275,7 +292,7 @@ describe('damage calculator', () => {
         cars: [carState({ id: car0 }), carState({ id: car1 })],
         history: { events: [dmg(10_000, 'floorPct', 0, 9, car0), dmg(10_000, 'floorPct', 0, 9, car1), dmg(200_000, 'floorPct', 9, 0, car1)], laps: [] },
       });
-      const out = damageCalculator.output(damageCalculator.init(view));
+      const out = damage.output(damage.init(view));
       expect(out[car0]!.jumps.map((j) => [j.parts, j.deltaPct])).toEqual([[['floorPct'], 9]]);
       expect(out[car1]!.jumps).toEqual([]);
     });
@@ -309,21 +326,23 @@ describe('damage calculator', () => {
 
     it('incremental equals from scratch over a history with repairs, after every event and every lap', () => {
       const times = [...new Set([...repairEvents.map((e) => e.at), ...repairLaps.map((l) => l.completedAt)])].sort((a, b) => a - b);
-      let acc = damageCalculator.init(viewAt(0));
+      let acc = damage.init(viewAt(0));
+      let before = viewAt(0);
       for (const t of times) {
         const view = viewAt(t);
-        acc = damageCalculator.update(acc, view.delta, view);
-        expect(damageCalculator.output(acc), `at ${t}`).toEqual(damageCalculator.output(damageCalculator.init(view)));
+        acc = damage.update(acc, deltaOf(before, view), view);
+        before = view;
+        expect(damage.output(acc), `at ${t}`).toEqual(damage.output(damage.init(view)));
       }
     });
 
     it('a flashback to before the wing change brings its jump back and equals a fresh run', () => {
       const full = viewAt(720_000);
-      const acc = damageCalculator.update(damageCalculator.init(viewAt(0)), full.delta, full);
+      const acc = damage.update(damage.init(viewAt(0)), full.delta, full);
       const cut = viewAt(399_999);
       const truncated = { ...cut.delta, rewound: { frameId: -1, at: 0 } };
-      const after = damageCalculator.output(damageCalculator.update(acc, truncated, { ...cut, delta: truncated }));
-      expect(after).toEqual(damageCalculator.output(damageCalculator.init(cut)));
+      const after = damage.output(damage.update(acc, truncated, { ...cut, delta: truncated }));
+      expect(after).toEqual(damage.output(damage.init(cut)));
       expect(after[car0]!.jumps.map((j) => [j.at, j.parts, j.deltaPct])).toEqual([[100_000, ['frontRightWingPct'], 20]]);
     });
   });
@@ -333,8 +352,8 @@ describe('damage calculator', () => {
     const events = [dmg(100_000, 'rearWingPct', 0, 10), dmg(405_000, 'frontRightWingPct', 0, 20), dmg(480_000, 'floorPct', 0, 3), dmg(481_000, 'floorPct', 3, 6)];
     const laps = lapsOf(8, timeOf);
     const full = situatedView({ cars: [carState({ id: car0 })], history: { events, laps } });
-    const acc = damageCalculator.update(damageCalculator.init(situatedView({ cars: [carState({ id: car0 })] })), full.delta, full);
-    expect(damageCalculator.output(acc)).toEqual(damageCalculator.output(damageCalculator.init(full)));
+    const acc = damage.update(damage.init(situatedView({ cars: [carState({ id: car0 })] })), full.delta, full);
+    expect(damage.output(acc)).toEqual(damage.output(damage.init(full)));
 
     // flashback to just after lap 3: later events and laps are gone
     const cut = situatedView({
@@ -342,9 +361,9 @@ describe('damage calculator', () => {
       history: { events: events.slice(0, 1), laps: laps.slice(0, 3) },
     });
     const truncated = { ...cut.delta, rewound: { frameId: -1, at: 0 } };
-    const after = damageCalculator.update(acc, truncated, { ...cut, delta: truncated });
-    expect(damageCalculator.output(after)).toEqual(damageCalculator.output(damageCalculator.init(cut)));
-    expect(damageCalculator.output(after)[car0]!.jumps).toHaveLength(1);
+    const after = damage.update(acc, truncated, { ...cut, delta: truncated });
+    expect(damage.output(after)).toEqual(damage.output(damage.init(cut)));
+    expect(damage.output(after)[car0]!.jumps).toHaveLength(1);
   });
 
   describe('behaviour table (C44): a row per car-status, car-location and weekend-phase kind', () => {
@@ -355,7 +374,7 @@ describe('damage calculator', () => {
     // laps 1..7, the jump during lap 5, the laps after it a second slower: before 2..4 (or 1..4 outside a race), after 6, 7
     const timeOf = (n: number) => (n <= 5 ? 90_000 : 91_000);
     const jump = [dmg(405_000, 'frontRightWingPct', 0, 20)];
-    const outIn = (o: Parameters<typeof situatedView>[0]) => damageCalculator.output(damageCalculator.init(situatedView(o)))[car0];
+    const outIn = (o: Parameters<typeof situatedView>[0]) => damage.output(damage.init(situatedView(o)))[car0];
 
     it('weekend phase race: lap 1 of the race is no pace lap, so a jump in lap 3 can never be measured', () => {
       const early = [dmg(200_000, 'frontRightWingPct', 0, 20)];

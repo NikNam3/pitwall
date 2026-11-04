@@ -7,6 +7,7 @@ import { CAR_BANDS, CAR_BANDS_CONFIG } from '../../src/car-bands/index.ts';
 import { carBandsCalculator } from '../../src/car-bands/calculator.ts';
 import { DAMAGE } from '../../src/damage/index.ts';
 import { damageCalculator } from '../../src/damage/calculator.ts';
+import { damageHistoryCalculator } from '../../src/index.ts';
 import { ERS } from '../../src/ers/index.ts';
 import { ersCalculator } from '../../src/ers/calculator.ts';
 import { FUEL } from '../../src/fuel/index.ts';
@@ -15,6 +16,10 @@ import { SESSION_REMAINING, type SessionRemaining } from '../../src/session-rema
 import { TYRE_WEAR } from '../../src/tyre-wear/index.ts';
 import { tyreWearCalculator } from '../../src/tyre-wear/calculator.ts';
 import { situatedView } from '../situated.ts';
+import { split } from '../split.ts';
+
+/** `damage` and its fold `damage-history` (C31.2), as the scheduler runs them. */
+const damage = split(damageCalculator, damageHistoryCalculator);
 import { carState, engineView, event, lap, RACING, realismHidden, telemetryRestricted } from '../../../../test-support/builders/index.ts';
 
 // Assumptions pinned here (see the test report): key = `${kind}:${carId}:${channel}`; channel names `tyre.<surfaceC|carcassC|pressurePsi>.<corner>`,
@@ -461,7 +466,7 @@ describe('alarms calculator', () => {
       // laps 1 and 2 complete at 90 s and 180 s; the hit and the wing change are both on lap 3
       const laps = [lap({ lapNumber: 1, completedAt: 90_000 }), lap({ lapNumber: 2, completedAt: 180_000 })];
       const damageOf = (events: ReturnType<typeof change>[]) =>
-        damageCalculator.output(damageCalculator.init(situatedView({ cars: [carState({ timing: { lap: 3 } })], history: { events, laps } })))[carId(0)]!;
+        damage.output(damage.init(situatedView({ cars: [carState({ timing: { lap: 3 } })], history: { events, laps } })))[carId(0)]!;
       const hit = change(200_000, 0, 40);
       expect(only(viewWith({ damage: damageOf([hit]) }, { lap: 3 }), 'damageJump')).toHaveLength(1);
       expect(only(viewWith({ damage: damageOf([hit, change(250_000, 40, 0)]) }, { lap: 3 }), 'damageJump')).toEqual([]);
@@ -609,7 +614,7 @@ describe('hidden data of one of our cars (Review Focus 5)', () => {
       [FUEL, fuelCalculator.compute(view)],
       [ERS, ersCalculator.compute(view)],
       [CAR_BANDS, carBandsCalculator.compute(view)],
-      [DAMAGE, damageCalculator.output(damageCalculator.init(view))],
+      [DAMAGE, damage.output(damage.init(view))],
     ]);
     const withOutputs: EngineView = { ...view, outputs };
     return { outputs, alarms: run(withOutputs).filter((a) => a.carId === TEAMMATE) };

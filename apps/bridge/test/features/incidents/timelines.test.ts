@@ -5,7 +5,7 @@
 // restarts on a truncated step, as the bridge's does. The player laps a 1000 m track in 25 frames and stands still for
 // 2.3 s in lap 5: a time loss.
 import { describe, expect, it } from 'vitest';
-import { INCIDENTS, incidentsCalculator, type IncidentsOutput } from '@pitwall/analysis';
+import { INCIDENTS, incidentsCalculator, incidentsHistoryCalculator, type IncidentsOutput } from '@pitwall/analysis';
 import { CalculatorRegistry, Scheduler, SessionRunner, situationOf, type Frame } from '@pitwall/engine';
 import { IDLE_FEED } from '../../../../../test-support/builders/index.ts';
 import { initFor } from '../../../../../packages/engine/test/support/run.ts';
@@ -36,7 +36,8 @@ const frames = (n: number, beat: (k: number) => Beat = () => ({})): Frame[] =>
 /** Every scheduled output of `incidents`, each with a fresh `init` over the same view. */
 function incidentsRuns(all: Frame[]): Array<{ frame: number; scheduled: IncidentsOutput; fresh: IncidentsOutput }> {
   const runner = new SessionRunner(initFor(all));
-  const scheduler = new Scheduler(CalculatorRegistry.build([incidentsCalculator]), { freezeOutputs: true });
+  // `incidents` reads its fold `incidents-history` (C31.2, Task 22 round 2): both are scheduled
+  const scheduler = new Scheduler(CalculatorRegistry.build([incidentsHistoryCalculator, incidentsCalculator]), { freezeOutputs: true });
   scheduler.setNeeded([INCIDENTS]);
   const runs: Array<{ frame: number; scheduled: IncidentsOutput; fresh: IncidentsOutput }> = [];
   all.forEach((f, frame) => runner.apply(f, (r) => {
@@ -44,7 +45,8 @@ function incidentsRuns(all: Frame[]): Array<{ frame: number; scheduled: Incident
     const input = { live: r.state, situation: situationOf(r.state), history: r.state.history, changed: r.changed, delta: r.delta, weekend: r.state.weekend, feed: IDLE_FEED, config: {}, priors: {} };
     const { ran, outputs } = scheduler.run(input);
     if (!ran.includes(INCIDENTS)) return;
-    const fresh = incidentsCalculator.output(incidentsCalculator.init({ ...input, outputs: new Map() }));
+    const fold = incidentsHistoryCalculator.output(incidentsHistoryCalculator.init({ ...input, outputs: new Map() }));
+    const fresh = incidentsCalculator.compute({ ...input, outputs: new Map([[incidentsHistoryCalculator.id, fold]]) });
     runs.push({ frame, scheduled: outputs.get(INCIDENTS) as IncidentsOutput, fresh });
   }));
   return runs;

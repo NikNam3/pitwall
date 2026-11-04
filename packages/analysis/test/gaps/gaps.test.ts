@@ -4,8 +4,9 @@ import { describe, expect, it } from 'vitest';
 import { GAPS, GAPS_CONFIG, type GapsOutput } from '../../src/gaps/index.ts';
 import { gapsCalculator } from '../../src/gaps/calculator.ts';
 import { gapperLines, gapsToCar } from '../../src/gaps/gaps.ts';
+import { gapsHistoryCalculator } from '../../src/index.ts';
 import { crossings, field, neutralisation, openNeutralisation } from '../../../../test-support/builders/index.ts';
-import { byTime, carsFor, deltaOf, guarded, offsetRace, plain, progressOf, run, viewOf } from './race.ts';
+import { byTime, carsFor, deltaOf, gaps, guarded, offsetRace, plain, progressOf, run, viewOf } from './race.ts';
 
 /** A known value (with -0 as 0), or the reason it is unknown. */
 const v = (k: Known<number>): number | string => (k.known ? plain(k.value) : k.reason);
@@ -22,11 +23,15 @@ const neighbours = (out: GapsOutput, our: number) => out.neighbourhood.find((n) 
 const threeCars = () => field({ cars: 3, laps: 5, paceMs: [90_000, 91_000, 92_000] }).crossings;
 
 describe('gaps calculator', () => {
-  it('is the incremental calculator `gaps` over the mini-sectors and timing, due every frame', () => {
+  // Restated in Task 22 round 2 (C31.2): `gaps` is quick and reads its fold `gaps-history`, which folds the mini-sectors.
+  it('is the quick calculator `gaps` over its fold of the mini-sectors (`gaps-history`, incremental) and timing, due every frame', () => {
     expect(gapsCalculator.id).toBe(GAPS);
-    expect(gapsCalculator.kind).toBe('incremental');
+    expect(gapsCalculator.kind).toBe('quick');
     expect(gapsCalculator.cadence).toBe('frame');
-    expect(gapsCalculator.reads).toEqual(expect.arrayContaining(['miniSectors', 'timing']));
+    expect(gapsCalculator.reads).toContainEqual({ calculator: 'gaps-history' });
+    expect(gapsHistoryCalculator.kind).toBe('incremental');
+    expect(gapsHistoryCalculator.reads).toContain('miniSectors');
+    expect(gaps.reads()).toEqual(expect.arrayContaining(['miniSectors', 'timing']));
   });
 
   it('reads identity, so a playerCar change re-runs it', () => {
@@ -40,10 +45,10 @@ describe('gaps calculator', () => {
 
   it('raceStartAt is notReceived before the race starts and follows the `racing` span when it opens', () => {
     const before = viewOf([], { lightsOutAt: null });
-    const acc = gapsCalculator.init(guarded(before));
-    expect(gapsCalculator.output(acc).raceStartAt).toEqual({ known: false, reason: 'notReceived' });
+    const acc = gaps.init(guarded(before));
+    expect(gaps.output(acc).raceStartAt).toEqual({ known: false, reason: 'notReceived' });
     const after = viewOf([], { lightsOutAt: 12_000 });
-    const out = gapsCalculator.output(gapsCalculator.update(acc, deltaOf(before, after), guarded(after)));
+    const out = gaps.output(gaps.update(acc, deltaOf(before, after), guarded(after)));
     expect(out.raceStartAt).toMatchObject({ known: true, value: 12_000 });
     expect(out).toEqual(run(after));
   });
@@ -74,14 +79,14 @@ describe('gaps calculator', () => {
     // car 1 completes lap 2 at (3, 0) at 182 s, 2 s behind car 0
     let n = all.findIndex((m) => m.carId === 1 && m.lap === 3 && m.segment === 0) + 1;
     let view = viewOf(all.slice(0, n));
-    let acc = gapsCalculator.init(guarded(view));
-    expect(v(interval(gapsCalculator.output(acc), 1).toLeaderMs)).toBe(2_000);
+    let acc = gaps.init(guarded(view));
+    expect(v(interval(gaps.output(acc), 1).toLeaderMs)).toBe(2_000);
     const seen: (number | string)[] = [];
     for (; n < all.length; n++) {
       const next = viewOf(all.slice(0, n + 1));
-      acc = gapsCalculator.update(acc, deltaOf(view, next), guarded(next));
+      acc = gaps.update(acc, deltaOf(view, next), guarded(next));
       view = next;
-      if (all[n]!.carId === 1) seen.push(v(interval(gapsCalculator.output(acc), 1).toLeaderMs));
+      if (all[n]!.carId === 1) seen.push(v(interval(gaps.output(acc), 1).toLeaderMs));
     }
     // lap 3, segment s (1..49, then the line at (4, 0) as s = 50): car 1 at 182 000 + 1820 s, car 0 at 180 000 + 1800 s
     expect(seen).toEqual(Array.from({ length: 50 }, (_, k) => 2_000 + 20 * (k + 1)));
@@ -183,11 +188,11 @@ describe('gaps calculator', () => {
   it('an output taken before an update keeps its old window', () => {
     const all = field({ cars: 2, laps: 3, paceMs: [90_000, 91_000] }).crossings;
     const early = viewOf(all.slice(0, 200));
-    const acc = gapsCalculator.init(guarded(early));
-    const before = gapsCalculator.output(acc);
+    const acc = gaps.init(guarded(early));
+    const before = gaps.output(acc);
     const copy = structuredClone(before);
     const full = viewOf(all);
-    const after = gapsCalculator.output(gapsCalculator.update(acc, deltaOf(early, full), guarded(full)));
+    const after = gaps.output(gaps.update(acc, deltaOf(early, full), guarded(full)));
     expect(before).toEqual(copy);
     expect(after.recent).not.toEqual(copy.recent);
   });
@@ -195,12 +200,12 @@ describe('gaps calculator', () => {
   it('update over deltas equals init over the whole history', () => {
     const all = field({ cars: 3, laps: 4, paceMs: [90_000, 91_000, 92_500] }).crossings;
     let view = viewOf([]);
-    let acc = gapsCalculator.init(guarded(view));
+    let acc = gaps.init(guarded(view));
     for (let n = 37; n < all.length + 37; n += 37) {
       const next = viewOf(all.slice(0, n));
-      acc = gapsCalculator.update(acc, deltaOf(view, next), guarded(next));
+      acc = gaps.update(acc, deltaOf(view, next), guarded(next));
       view = next;
-      expect(gapsCalculator.output(acc)).toEqual(run(next));
+      expect(gaps.output(acc)).toEqual(run(next));
     }
   });
 
@@ -208,10 +213,10 @@ describe('gaps calculator', () => {
     const all = field({ cars: 3, laps: 6, paceMs: [90_000, 91_000, 92_500] }).crossings;
     const early = viewOf(all.slice(0, 400));
     const full = viewOf(all);
-    const acc = gapsCalculator.update(gapsCalculator.init(guarded(early)), deltaOf(early, full), guarded(full));
+    const acc = gaps.update(gaps.init(guarded(early)), deltaOf(early, full), guarded(full));
     const truncated = viewOf(all.slice(0, 250));
-    const back = gapsCalculator.update(acc, deltaOf(full, truncated, true), guarded(truncated));
-    expect(gapsCalculator.output(back)).toEqual(run(truncated));
+    const back = gaps.update(acc, deltaOf(full, truncated, true), guarded(truncated));
+    expect(gaps.output(back)).toEqual(run(truncated));
   });
 });
 
@@ -397,11 +402,11 @@ describe('neighbourhood', () => {
 
   it('the neighbourhood follows a playerCar change', () => {
     const first = viewFor(0);
-    const acc = gapsCalculator.init(guarded(first));
-    expect(gapsCalculator.output(acc).neighbourhood).toEqual([{ ourCarId: 0, carIds: [1] }]);
+    const acc = gaps.init(guarded(first));
+    expect(gaps.output(acc).neighbourhood).toEqual([{ ourCarId: 0, carIds: [1] }]);
     // the same history, a new player car: no crossing is new
     const next = viewFor(5);
-    const moved = gapsCalculator.output(gapsCalculator.update(acc, deltaOf(first, next), guarded(next)));
+    const moved = gaps.output(gaps.update(acc, deltaOf(first, next), guarded(next)));
     expect(moved.neighbourhood).toEqual([{ ourCarId: 5, carIds: [4] }]);
   });
 
@@ -587,9 +592,9 @@ describe('the gapper line of a finished car', () => {
   it('a car that takes the flag without a new crossing keeps its live point through an update', () => {
     const ms = finish(false);
     const racing = viewOf(ms);
-    const acc = gapsCalculator.init(guarded(racing));
+    const acc = gaps.init(guarded(racing));
     const flagged = viewOf(ms, { now: 'finished' });
-    const out = gapsCalculator.output(gapsCalculator.update(acc, deltaOf(racing, flagged), guarded(flagged)));
+    const out = gaps.output(gaps.update(acc, deltaOf(racing, flagged), guarded(flagged)));
     expect(nowOf(gapperLines(out, fixed), 0)).toEqual(known({ lap: 2.98, gapMs: -5_880 }, 274_080));
   });
 });
@@ -645,7 +650,7 @@ describe('the gapper phases', () => {
   const fixed = { kind: 'fixed', lapMs: 90_000 } as const;
 
   it('reads the session phases of every weekend phase, so a neutralisation or suspension that opens or closes re-runs it (C41)', () => {
-    expect(gapsCalculator.reads).toEqual(expect.arrayContaining(['spans:session-phase-race', 'spans:session-phase-qualifying', 'spans:session-phase-practice']));
+    expect(gaps.reads()).toEqual(expect.arrayContaining(['spans:session-phase-race', 'spans:session-phase-qualifying', 'spans:session-phase-practice']));
   });
 
   it("places a phase at the leader's newest crossing at its start and at its end: completed laps + mini-sectors / 50", () => {
@@ -717,9 +722,9 @@ describe('the gapper phases', () => {
     const ms = eightLaps();
     const waiting = viewOf(ms.filter((m) => m.at <= 202_000), { open: openNeutralisation({ kind: 'SC', start: 200_500, confirmed: false }) });
     const dropped = viewOf(ms.filter((m) => m.at <= 210_000), { phases: [neutralisation({ kind: 'SC', start: 200_500, end: 203_500, confirmed: false })] });
-    const acc = gapsCalculator.init(guarded(waiting));
-    expect(phasesOf(gapperLines(gapsCalculator.output(acc), fixed))).toEqual([['SC', 2.22, 'notApplicable']]);
-    const updated = gapsCalculator.output(gapsCalculator.update(acc, deltaOf(waiting, dropped), guarded(dropped)));
+    const acc = gaps.init(guarded(waiting));
+    expect(phasesOf(gapperLines(gaps.output(acc), fixed))).toEqual([['SC', 2.22, 'notApplicable']]);
+    const updated = gaps.output(gaps.update(acc, deltaOf(waiting, dropped), guarded(dropped)));
     expect(updated).toEqual(run(dropped));
     expect(gapperLines(updated, fixed).phases).toEqual([]);
   });
@@ -730,9 +735,9 @@ describe('the gapper phases', () => {
     const opening = viewOf(early, { open: openNeutralisation({ kind: 'SC', start: 200_500 }) });
     const sc = neutralisation({ kind: 'SC', start: 200_500, end: 299_999 });
     const closed = viewOf(ms, { phases: [sc] });
-    const acc = gapsCalculator.init(guarded(opening));
-    expect(phasesOf(gapperLines(gapsCalculator.output(acc), fixed))).toEqual([['SC', 2.22, 'notApplicable']]);
-    const updated = gapsCalculator.output(gapsCalculator.update(acc, deltaOf(opening, closed), guarded(closed)));
+    const acc = gaps.init(guarded(opening));
+    expect(phasesOf(gapperLines(gaps.output(acc), fixed))).toEqual([['SC', 2.22, 'notApplicable']]);
+    const updated = gaps.output(gaps.update(acc, deltaOf(opening, closed), guarded(closed)));
     expect(gapperLines(updated, fixed).phases).toEqual(gapperLines(run(closed), fixed).phases);
     expect(phasesOf(gapperLines(updated, fixed))).toEqual([['SC', 2.22, 3.32]]);
   });
@@ -742,8 +747,8 @@ describe('the gapper phases', () => {
     const sc = neutralisation({ kind: 'SC', start: 200_500, end: 299_999 });
     const full = viewOf(ms, { phases: [sc] });
     const back = viewOf(ms.filter((m) => m.at <= 190_000));
-    const acc = gapsCalculator.init(guarded(full));
-    const truncated = gapsCalculator.output(gapsCalculator.update(acc, deltaOf(full, back, true), guarded(back)));
+    const acc = gaps.init(guarded(full));
+    const truncated = gaps.output(gaps.update(acc, deltaOf(full, back, true), guarded(back)));
     expect(gapperLines(truncated, fixed).phases).toEqual([]);
     expect(truncated).toEqual(run(back));
   });

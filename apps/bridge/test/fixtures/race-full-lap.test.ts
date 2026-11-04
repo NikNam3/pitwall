@@ -9,9 +9,11 @@ import {
   CAR_BANDS_CONFIG,
   carBandsCalculator,
   damageCalculator,
+  damageHistoryCalculator,
   fuelCalculator,
   GAPS,
   gapsCalculator,
+  gapsHistoryCalculator,
   gapsToCar,
   sessionRemainingCalculator,
   tyreWearCalculator,
@@ -145,7 +147,7 @@ beforeAll(async () => {
     }
   };
 
-  const calculators = [gapsCalculator, carBandsCalculator, alarmsCalculator, tyreWearCalculator, fuelCalculator, damageCalculator, sessionRemainingCalculator];
+  const calculators = [gapsHistoryCalculator, gapsCalculator, carBandsCalculator, alarmsCalculator, tyreWearCalculator, fuelCalculator, damageHistoryCalculator, damageCalculator, sessionRemainingCalculator];
   const runner = await replayScheduled(segmentPath('race-zandvoort-full-lap.pwrec.gz'), calculators, (r, scheduled, frame) => {
     try {
       checker.check(r);

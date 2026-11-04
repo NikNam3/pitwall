@@ -5,19 +5,25 @@ import { describe, expect, it } from 'vitest';
 import { crossings, field } from '../../../../test-support/builders/index.ts';
 import { lapTimesCalculator } from '../../src/lap-times/calculator.ts';
 import { LAP_TIMES } from '../../src/lap-times/index.ts';
-import { activeCars, guarded, rowOf, run, scene, sectorLap } from './scene.ts';
+import { lapTimesHistoryCalculator } from '../../src/index.ts';
+import { activeCars, guarded, lapTimes, rowOf, run, scene, sectorLap } from './scene.ts';
 
 describe('lap-times calculator', () => {
-  it('is the incremental calculator `lap-times` over the laps and the mini-sectors', () => {
+  // Restated in Task 22 round 2 (C31.2): `lap-times` is quick and reads its fold `lap-times-history` of the laps and the
+  // mini-sectors; the reads below are the two parts' together.
+  it('is the quick calculator `lap-times` over its fold of the laps and the mini-sectors (`lap-times-history`, incremental)', () => {
     expect(lapTimesCalculator.id).toBe(LAP_TIMES);
-    expect(lapTimesCalculator.kind).toBe('incremental');
-    expect(lapTimesCalculator.reads).toEqual(expect.arrayContaining(['laps', 'miniSectors', 'timing', 'session']));
+    expect(lapTimesCalculator.kind).toBe('quick');
+    expect(lapTimesCalculator.reads).toContainEqual({ calculator: 'lap-times-history' });
+    expect(lapTimesHistoryCalculator.kind).toBe('incremental');
+    expect(lapTimesHistoryCalculator.reads).toEqual(expect.arrayContaining(['laps', 'miniSectors']));
+    expect(lapTimes.reads()).toEqual(expect.arrayContaining(['laps', 'miniSectors', 'timing', 'session']));
     // the situations it takes its behaviour from (C41, C44): the table covers each of these machines
     expect(lapTimesCalculator.reads).toEqual(
       expect.arrayContaining(['spans:weekend-phase', 'spans:car-status', 'spans:car-location', 'spans:car-activity-race', 'spans:car-activity-qualifying', 'spans:car-activity-practice']),
     );
     // nothing in the outputs needs the pace calculator
-    expect(lapTimesCalculator.reads).not.toContainEqual({ calculator: 'pace' });
+    expect(lapTimes.reads()).not.toContainEqual({ calculator: 'pace' });
   });
 
   it('has a row per car in the session (car-status not absent), whatever `car.active` says', () => {
@@ -132,12 +138,12 @@ describe('lap-times update and flashback', () => {
 
   it('update over a delta equals init over the whole history', () => {
     let view = at(0);
-    let acc = lapTimesCalculator.init(guarded(view));
+    let acc = lapTimes.init(guarded(view));
     for (let t = 20_000; t <= 280_000; t += 20_000) {
       const next = at(t);
-      acc = lapTimesCalculator.update(acc, { before: projectionLengths(view.history), after: projectionLengths(next.history) }, guarded(next));
+      acc = lapTimes.update(acc, { before: projectionLengths(view.history), after: projectionLengths(next.history) }, guarded(next));
       view = next;
-      expect(lapTimesCalculator.output(acc), `t ${t}`).toEqual(run(next));
+      expect(lapTimes.output(acc), `t ${t}`).toEqual(run(next));
     }
   });
 
@@ -149,12 +155,12 @@ describe('lap-times update and flashback', () => {
 
     // a flashback to 200 s takes car 0's lap 3 away
     const back = at(200_000);
-    const acc = lapTimesCalculator.update(
-      lapTimesCalculator.init(guarded(full)),
+    const acc = lapTimes.update(
+      lapTimes.init(guarded(full)),
       { before: projectionLengths(full.history), after: projectionLengths(back.history), rewound: { frameId: -1, at: 0 } },
       guarded(back),
     );
-    const after = lapTimesCalculator.output(acc);
+    const after = lapTimes.output(acc);
     expect(after).toEqual(run(back));
     expect(rowOf(after, 0)!.bestLapMs).toEqual(known(90_000, 90_000));
     expect(after.sessionBest.lap).toEqual(known({ ms: 90_000, carId: carId(0) }, 90_000));
@@ -222,9 +228,9 @@ describe('lap-times board: car-status rows', () => {
     const running = scene({ laps, cars: activeCars(2) });
     const retired = scene({ laps, cars: activeCars(2), kinds: { 1: { status: 'retired' } } });
     const lengths = projectionLengths(running.history);
-    const acc = lapTimesCalculator.update(lapTimesCalculator.init(guarded(running)), { before: lengths, after: lengths }, guarded(retired));
-    expect(lapTimesCalculator.output(acc)).toEqual(run(retired));
-    expect(rowOf(lapTimesCalculator.output(acc), 1)!.bestLapMs).toEqual(notApplicable);
-    expect(rowOf(lapTimesCalculator.output(acc), 1)!.outOfRace).toBe(true);
+    const acc = lapTimes.update(lapTimes.init(guarded(running)), { before: lengths, after: lengths }, guarded(retired));
+    expect(lapTimes.output(acc)).toEqual(run(retired));
+    expect(rowOf(lapTimes.output(acc), 1)!.bestLapMs).toEqual(notApplicable);
+    expect(rowOf(lapTimes.output(acc), 1)!.outOfRace).toBe(true);
   });
 });

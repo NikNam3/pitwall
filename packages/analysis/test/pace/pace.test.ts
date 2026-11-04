@@ -2,13 +2,18 @@ import { carId, unknown, type LapRecord, type StintRecord, type WeekendPhase } f
 import { projectionLengths, type EngineView } from '@pitwall/engine';
 import { describe, expect, it } from 'vitest';
 import { PACE, PACE_BEHAVIOUR, PACE_CONFIG } from '../../src/pace/index.ts';
-import { paceCalculator as unguarded } from '../../src/pace/calculator.ts';
+import { paceCalculator } from '../../src/pace/calculator.ts';
+import { paceHistoryCalculator } from '../../src/index.ts';
 import { field, lap } from '../../../../test-support/builders/index.ts';
 import { engineShaped } from '../engine-shaped.ts';
-import { guardedIncremental, NONE, PRACTICE, QUALIFYING, RACE, situatedView } from '../situated.ts';
+import { NONE, PRACTICE, QUALIFYING, RACE, situatedView } from '../situated.ts';
+import { split } from '../split.ts';
 
-/** The calculator through its guarded view (C41): every init and update fails on a read it does not declare. */
-const paceCalculator = guardedIncremental(unguarded);
+/**
+ * `pace` and its fold `pace-history`, each part through its own guarded view (C31.2, C41): every init and update fails
+ * on a read it does not declare.
+ */
+const pace = split(paceCalculator, paceHistoryCalculator);
 
 const stint = (over: Partial<StintRecord> & Pick<StintRecord, 'firstLap' | 'lastLap'>): StintRecord => ({
   carId: carId(0),
@@ -23,17 +28,22 @@ const raceView = (laps: LapRecord[], stints: StintRecord[] = [], phase: WeekendP
   situatedView({ history: { laps, stints }, phase });
 
 /** `init` over the laps, as the scheduler does on a fresh run. */
-const run = (view: EngineView) => paceCalculator.output(paceCalculator.init(view));
+const run = (view: EngineView) => pace.output(pace.init(view));
 
 const timed = (n: number, lapTimeMs: number, over: Partial<LapRecord> = {}) => lap({ lapNumber: n, lapTimeMs, ...over });
 
 describe('pace calculator', () => {
-  it('is the incremental calculator `pace` over laps, stints and the weekend phase, due when a lap completes; not the session', () => {
+  // Restated in Task 22 round 2 (C31.2): `pace` is quick and reads its fold `pace-history` of the laps and stints; the
+  // reads are the two parts' together.
+  it('is the quick calculator `pace` over its fold of laps and stints (`pace-history`, incremental) and the weekend phase, due when a lap completes; not the session', () => {
     expect(paceCalculator.id).toBe(PACE);
-    expect(paceCalculator.kind).toBe('incremental');
+    expect(paceCalculator.kind).toBe('quick');
     expect(paceCalculator.cadence).toBe('lapCompleted');
-    expect(paceCalculator.reads).toEqual(expect.arrayContaining(['laps', 'stints', 'spans:weekend-phase']));
-    expect(paceCalculator.reads).not.toContain('session');
+    expect(paceCalculator.reads).toContainEqual({ calculator: 'pace-history' });
+    expect(paceHistoryCalculator.kind).toBe('incremental');
+    expect(paceHistoryCalculator.reads).toEqual(expect.arrayContaining(['laps', 'stints']));
+    expect(pace.reads()).toEqual(expect.arrayContaining(['laps', 'stints', 'spans:weekend-phase']));
+    expect(pace.reads()).not.toContain('session');
   });
 
   it('recent is the mean of the last 3 pace laps; an SC lap in between is skipped', () => {
@@ -153,36 +163,36 @@ describe('pace calculator', () => {
 
     // the same through update: the provisional arrives first, the confirmation in the next delta
     const first = raceView([provisional]);
-    const acc = paceCalculator.init(first);
+    const acc = pace.init(first);
     const delta = { before: projectionLengths(first.history), after: projectionLengths(both.history) };
-    const next = paceCalculator.update(acc, delta, both);
-    expect(paceCalculator.output(next)).toEqual(run(both));
+    const next = pace.update(acc, delta, both);
+    expect(pace.output(next)).toEqual(run(both));
   });
 
   it('update over a delta equals init over the whole history', () => {
     const { laps } = field({ cars: 3, laps: 8, paceMs: [90_000, 91_000, 92_500] });
-    let acc = paceCalculator.init(raceView([]));
+    let acc = pace.init(raceView([]));
     let before = projectionLengths(raceView([]).history);
     for (let n = 1; n <= laps.length; n += 3) {
       const view = raceView(laps.slice(0, n + 2));
       const after = projectionLengths(view.history);
-      acc = paceCalculator.update(acc, { before, after }, view);
+      acc = pace.update(acc, { before, after }, view);
       before = after;
-      expect(paceCalculator.output(acc)).toEqual(run(view));
+      expect(pace.output(acc)).toEqual(run(view));
     }
   });
 
   it('flashback equals fresh run', () => {
     const { laps } = field({ cars: 3, laps: 8, paceMs: [90_000, 91_000, 92_500] });
     const full = raceView(laps);
-    const acc = paceCalculator.update(paceCalculator.init(raceView(laps.slice(0, 6))), {
+    const acc = pace.update(pace.init(raceView(laps.slice(0, 6))), {
       before: projectionLengths(raceView(laps.slice(0, 6)).history),
       after: projectionLengths(full.history),
     }, full);
     const kept = laps.filter((l) => l.lapNumber <= 4);
     const truncatedView = raceView(kept);
-    const truncated = paceCalculator.update(acc, { before: projectionLengths(full.history), after: projectionLengths(truncatedView.history), rewound: { frameId: -1, at: 0 } }, truncatedView);
-    expect(paceCalculator.output(truncated)).toEqual(run(truncatedView));
+    const truncated = pace.update(acc, { before: projectionLengths(full.history), after: projectionLengths(truncatedView.history), rewound: { frameId: -1, at: 0 } }, truncatedView);
+    expect(pace.output(truncated)).toEqual(run(truncatedView));
   });
 
   describe('behaviour table (C44): a row per weekend-phase kind', () => {
@@ -222,8 +232,8 @@ describe('pace calculator', () => {
     it('none: update over a delta equals init over the whole history', () => {
       const first = raceView(laps.slice(0, 1), [], NONE);
       const all = raceView(laps, [], NONE);
-      const acc = paceCalculator.update(paceCalculator.init(first), { before: projectionLengths(first.history), after: projectionLengths(all.history) }, all);
-      expect(paceCalculator.output(acc)).toEqual(run(all));
+      const acc = pace.update(pace.init(first), { before: projectionLengths(first.history), after: projectionLengths(all.history) }, all);
+      expect(pace.output(acc)).toEqual(run(all));
     });
   });
 });

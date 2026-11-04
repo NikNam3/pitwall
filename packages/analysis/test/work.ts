@@ -1,9 +1,9 @@
-// The counted-work proofs of contract C31 for the calculators of one unit folder, on the long race
-// (`test-support/builders/long-race.ts`): an incremental calculator proves its accumulator (C31.1 both ways, C31.2, and
-// C31.3 across random rewinds with void facts); a quick one proves it needs none (its from-scratch work does not grow
-// fivefold, C31.1). Work is the projection entries a unit reads per frame (`countReads`), averaged over the frames of a
+// The counted-work proofs of contract C31 on the long race (`test-support/builders/long-race.ts`), for a unit split into a
+// fold and a quick reader (ruling Task 22 round 2): the fold `<unit>-history` proves its accumulator (C31.1 both ways,
+// C31.2, and C31.3 across random rewinds with void facts); the quick `<unit>` proves it needs none (its from-scratch work
+// does not grow fivefold, C31.1). Work is the projection entries a unit reads per frame (`countReads`), averaged over the frames of a
 // lap; no timer anywhere.
-import { readdirSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { CalculatorRegistry, type Calculator, type CalculatorId, type EngineView, type IncrementalCalculator } from '@pitwall/engine/readers';
@@ -20,9 +20,9 @@ const SRC = fileURLToPath(new URL('../src/', import.meta.url));
 export const EARLY_LAP = 7;
 export const LATE_LAP = 70;
 
-/** The `.ts` files of a folder and its subfolders, tests excluded. */
+/** The `.ts` files of a folder and its subfolders, tests excluded; none of a folder that is not there. */
 const modulesOf = (dir: string): string[] =>
-  readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+  !existsSync(dir) ? [] : readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const path = join(dir, entry.name);
     if (entry.isDirectory()) return modulesOf(path);
     return entry.name.endsWith('.ts') && !entry.name.endsWith('.test.ts') ? [path] : [];
@@ -153,62 +153,92 @@ export function foldedAndFromProjection<A, O>(calc: IncrementalCalculator<A, O>)
   return { folded: acc, fromProjection: calc.init(projectionOnly(calc as Calculator, views.at(-1)!)) };
 }
 
-/** Runs of the C31.3 property per unit: every run is a race of 60 to 300 frames through the runner and the scheduler. */
-const REWIND_RUNS = 5;
+/** Runs of the C31.3 property per fold: every run is a race of 300 frames through the runner and the scheduler. */
+const REWIND_RUNS = 8;
 
 /** The generated races with a rewind (perhaps two back to back): each appends a void fact (C27). */
 const WITH_REWINDS = arbRace.filter((p) => p.flashback !== undefined);
 
+/** The registered calculator `id` (`CALCULATORS`), or a failure that names what is missing. */
+const unitOf = (id: CalculatorId): Calculator => {
+  const calc = CALCULATORS.find((c) => c.id === id);
+  if (calc === undefined) throw new Error(`no registered calculator ${id}: the package's index exports none (C63)`);
+  return calc;
+};
+
+/** The registered calculator `id`, which must be incremental. */
+const foldOf = (id: CalculatorId): IncrementalCalculator<unknown, unknown> => {
+  const calc = unitOf(id);
+  if (calc.kind !== 'incremental') throw new Error(`${id} is ${calc.kind}, not incremental`);
+  return calc;
+};
+
 /**
- * The C31 proofs of every calculator `src/<folder>/` defines (C31, C41, C87). An incremental one: its from-scratch reads
- * per frame grow at least fivefold from lap 7 to lap 70 while its fold's at most double (C31.1); its accumulator after a
- * run equals `init` over the projection and the config alone (C31.2); it equals `init` at every step of random races
- * with rewinds, which append void facts (C31.3). A quick one: its from-scratch reads do not grow fivefold, so it needs
- * no accumulator (C31.1).
+ * The C31 proofs of the fold `id` (`<unit>-history`, ruling Task 22 round 2), the incremental calculator of its own folder
+ * `src/<id>/` (C80): its from-scratch reads per frame grow at least fivefold from lap 7 to lap 70 while its fold's at
+ * most double (C31.1); it reads no other unit's output and its accumulator after a run equals `init` over the projection
+ * and the config alone (C31.2); it equals `init` at every step of random races with rewinds, which append void facts
+ * (C31.3).
  */
-export async function describeWork(folder: string): Promise<void> {
-  const calcs = await calculatorsOf(folder);
-  describe(`${folder}: every calculator justifies its kind by counted work on the long race (C31)`, () => {
-    it(`src/${folder}/ defines a registered calculator`, () => {
-      expect(calcs.map((c) => c.id)).not.toEqual([]);
+export function describeFold(id: CalculatorId): void {
+  describe(`${id}: an incremental fold over the projection justifies its accumulator by counted work on the long race (C31)`, () => {
+    it(`is a registered incremental calculator of its own folder src/${id}/ that reads no other unit's output (C31.2, C80)`, async () => {
+      const fold = foldOf(id);
+      expect((await calculatorsOf(id)).map((c) => c.id)).toContain(id);
+      expect(fold.reads.filter((r) => typeof r === 'object')).toEqual([]);
     });
 
-    for (const calc of calcs) {
-      if (calc.kind === 'quick') {
-        it(`${calc.id} is quick: its from-scratch reads per frame do not grow fivefold from lap ${EARLY_LAP} to lap ${LATE_LAP} (C31.1)`, () => {
-          const early = fromScratchReads(calc, EARLY_LAP);
-          const late = fromScratchReads(calc, LATE_LAP);
-          expect(late > early && late >= 5 * early, `from scratch: ${early} entries a frame at lap ${EARLY_LAP}, ${late} at lap ${LATE_LAP}`).toBe(false);
-        });
-        continue;
-      }
+    it(`its from-scratch reads per frame at lap ${LATE_LAP} are at least five times those at lap ${EARLY_LAP} (C31.1)`, () => {
+      const fold = foldOf(id) as Calculator;
+      const early = fromScratchReads(fold, EARLY_LAP);
+      const late = fromScratchReads(fold, LATE_LAP);
+      expect(late, `from scratch: ${early} entries a frame at lap ${EARLY_LAP}`).toBeGreaterThan(early);
+      expect(late, `from scratch: ${early} entries a frame at lap ${EARLY_LAP}`).toBeGreaterThanOrEqual(5 * early);
+    });
 
-      it(`${calc.id}: its from-scratch reads per frame at lap ${LATE_LAP} are at least five times those at lap ${EARLY_LAP} (C31.1)`, () => {
-        const early = fromScratchReads(calc, EARLY_LAP);
-        const late = fromScratchReads(calc, LATE_LAP);
-        expect(late, `from scratch: ${early} entries a frame at lap ${EARLY_LAP}`).toBeGreaterThan(early);
-        expect(late, `from scratch: ${early} entries a frame at lap ${EARLY_LAP}`).toBeGreaterThanOrEqual(5 * early);
-      });
+    it(`its incremental reads per frame at lap ${LATE_LAP} are at most twice those at lap ${EARLY_LAP} (C31.1)`, () => {
+      const fold = foldOf(id);
+      const early = incrementalReads(fold, EARLY_LAP);
+      const late = incrementalReads(fold, LATE_LAP);
+      expect(late, `incremental: ${early} entries a frame at lap ${EARLY_LAP}`).toBeLessThanOrEqual(2 * early);
+    });
 
-      it(`${calc.id}: its incremental reads per frame at lap ${LATE_LAP} are at most twice those at lap ${EARLY_LAP} (C31.1)`, () => {
-        const early = incrementalReads(calc, EARLY_LAP);
-        const late = incrementalReads(calc, LATE_LAP);
-        expect(late, `incremental: ${early} entries a frame at lap ${EARLY_LAP}`).toBeLessThanOrEqual(2 * early);
-      });
+    it('its accumulator after a run equals init over the projection and the config alone, no live state, situation, output or feed (C31.2)', () => {
+      const { folded, fromProjection } = foldedAndFromProjection(foldOf(id));
+      expect(folded).toEqual(fromProjection);
+    });
 
-      it(`${calc.id}: its accumulator after a run equals init over the projection and the config alone, no live state, situation, output or feed (C31.2)`, () => {
-        const { folded, fromProjection } = foldedAndFromProjection(calc);
-        expect(folded).toEqual(fromProjection);
-      });
+    it('incremental equals from scratch at every step of random races with rewinds, each a void fact (C31.3)', () => {
+      const fold = foldOf(id);
+      fc.assert(
+        fc.property(WITH_REWINDS, (p) => {
+          expectScheduledIncremental(fold, raceFrames({ ...p, frames: 300 }).frames);
+        }),
+        { numRuns: REWIND_RUNS },
+      );
+    });
+  });
+}
 
-      it(`${calc.id}: incremental equals from scratch at every step of random races with rewinds, each a void fact (C31.3)`, () => {
-        fc.assert(
-          fc.property(WITH_REWINDS, (p) => {
-            expectScheduledIncremental(calc, raceFrames(p).frames);
-          }),
-          { numRuns: REWIND_RUNS },
-        );
-      });
-    }
+/**
+ * The C31.1 proof of the quick unit `id` (ruling Task 22 round 2): it reads its fold `<id>-history` through
+ * `view.outputs`, and the projection entries it reads itself per frame do not grow fivefold from lap 7 to lap 70: it needs
+ * no accumulator.
+ */
+export function describeQuick(id: CalculatorId): void {
+  describe(`${id}: a quick reader of its fold ${id}-history justifies its kind by counted work on the long race (C31)`, () => {
+    it(`is a quick calculator that reads ${id}-history (C31.2)`, () => {
+      const calc = unitOf(id);
+      expect(calc.kind).toBe('quick');
+      expect(calc.reads).toContainEqual({ calculator: `${id}-history` });
+    });
+
+    it(`quick: its from-scratch reads per frame do not grow fivefold from lap ${EARLY_LAP} to lap ${LATE_LAP} (C31.1)`, () => {
+      const calc = unitOf(id);
+      if (calc.kind !== 'quick') throw new Error(`${id} is ${calc.kind}, not quick`);
+      const early = fromScratchReads(calc, EARLY_LAP);
+      const late = fromScratchReads(calc, LATE_LAP);
+      expect(late > early && late >= 5 * early, `from scratch: ${early} entries a frame at lap ${EARLY_LAP}, ${late} at lap ${LATE_LAP}`).toBe(false);
+    });
   });
 }

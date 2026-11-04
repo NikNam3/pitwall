@@ -22,12 +22,13 @@ import {
   unknown,
 } from '@pitwall/domain';
 import { projectionLengths, type EngineView } from '@pitwall/engine';
-import { guarded } from '../../../engine/test/support/scheduler.ts';
 import { engineView, lap as lapRecord } from '../../../../test-support/builders/index.ts';
 import { incidentsCalculator } from '../../src/incidents/calculator.ts';
 import { DAMAGE, type DamageOutput } from '../../src/damage/index.ts';
 import { GAPS, type GapsOutput } from '../../src/gaps/index.ts';
 import type { IncidentsOutput } from '../../src/incidents/index.ts';
+import { incidentsHistoryCalculator } from '../../src/index.ts';
+import { split } from '../split.ts';
 
 export const PACE_MS = 90_000;
 /** One mini-sector at 90 s a lap. */
@@ -85,10 +86,10 @@ export const leaderLaps = (n: number): LapRecord[] =>
 export const until = <T extends { at: number }>(list: T[], t: number): T[] => list.filter((x) => x.at <= t);
 
 /**
- * The calculator as every test runs it: through its guarded view (C41), so a read it does not declare throws. Its
- * `init` and `update` see the view a unit sees.
+ * The calculator as every test runs it: `incidents` and its fold `incidents-history` (C31.2), each part through its own
+ * guarded view (C41), so a read it does not declare throws. Its `init` and `update` see the view a unit sees.
  */
-export const incidents = guarded(incidentsCalculator) as typeof incidentsCalculator;
+export const incidents = split(incidentsCalculator, incidentsHistoryCalculator);
 
 /** One step of a car's (or the session's) contiguous spans of one sub-machine: its kind, from `at`, on frame `frame`. */
 export type SpanStep = { kind: string; at: number; detail?: unknown; confirmed?: boolean; joinedAt?: boolean; frame?: number };

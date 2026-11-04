@@ -3,11 +3,12 @@
 // The live session keeps the builder's defaults (a race): the unit must take the phase from the situation, not from
 // `session.kind` or a session type code.
 import { carId, type CarId, type CarState, type CarTiming, type LapRecord, type MachineId, type MiniSectorCrossing, type OpenSpan, type SessionState, type WeekendPhase } from '@pitwall/domain';
-import { guardedView } from '../../../engine/test/support/scheduler.ts';
 import type { EngineView } from '@pitwall/engine';
 import { carState, crossings, engineView, lap, type DeepPartial } from '../../../../test-support/builders/index.ts';
 import { lapTimesCalculator } from '../../src/lap-times/calculator.ts';
 import type { LapTimesOutput } from '../../src/lap-times/index.ts';
+import { lapTimesHistoryCalculator } from '../../src/index.ts';
+import { split } from '../split.ts';
 
 /** Weekend phases (`view.situation.weekendPhase`, C14) with the formats and segments the unit tells apart. */
 export const PRACTICE: WeekendPhase = { kind: 'practice', format: 'practice', segment: undefined };
@@ -111,11 +112,14 @@ export function scene({
   });
 }
 
-/** The view as `lap-times` may see it: through its guarded view, so an undeclared read throws (C41). */
-export const guarded = (view: EngineView): EngineView => guardedView(view, lapTimesCalculator.reads, { unit: 'lap-times' });
+/** `lap-times` and its fold `lap-times-history`, run as the scheduler runs them, each part through its own guarded view (C31.2, C41). */
+export const lapTimes = split(lapTimesCalculator, lapTimesHistoryCalculator);
+
+/** The view as `lap-times` may see it: as it is, since `lapTimes` guards each of its two parts by its own reads (C41). */
+export const guarded = (view: EngineView): EngineView => view;
 
 /** `init` over the view, as the scheduler does on a fresh run, through the guarded view. */
-export const run = (view: EngineView): LapTimesOutput => lapTimesCalculator.output(lapTimesCalculator.init(guarded(view)));
+export const run = (view: EngineView): LapTimesOutput => lapTimes.output(lapTimes.init(guarded(view)));
 
 /** The row of one car. */
 export const rowOf = (out: LapTimesOutput, id: number) => out.rows.find((r) => r.carId === (id as CarId));

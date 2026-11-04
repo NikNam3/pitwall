@@ -1,7 +1,7 @@
 // Timing on race-zandvoort-full-lap (facts in fixtures/index.json): our gaps at the line against the game's, and the
 // line times the gapper draws its lines from. One replay through the engine and `gaps` feeds every test.
 import { beforeAll, describe, expect, it } from 'vitest';
-import { GAPS, gapperLines, gapsCalculator, type GapsOutput } from '@pitwall/analysis';
+import { GAPS, gapperLines, gapsCalculator, gapsHistoryCalculator, type GapsOutput } from '@pitwall/analysis';
 import type { CarId, Interval, MiniSectorCrossing } from '@pitwall/domain';
 import type { DeepReadonly, EngineState } from '@pitwall/engine';
 import { replayScheduled } from './engine-replay.ts';
@@ -25,7 +25,7 @@ beforeAll(async () => {
   const refreshes = new Map<string, Refresh[]>();
   const lines: LineCrossing[] = [];
   let last: GapsOutput | undefined;
-  const runner = await replayScheduled(segmentPath('race-zandvoort-full-lap.pwrec.gz'), [gapsCalculator], ({ state, delta }, scheduled, frame) => {
+  const runner = await replayScheduled(segmentPath('race-zandvoort-full-lap.pwrec.gz'), [gapsHistoryCalculator, gapsCalculator], ({ state, delta }, scheduled, frame) => {
     last = scheduled.outputs.get(GAPS) as GapsOutput;
     for (const m of state.history.crossings.slice(delta.before.crossings)) {
       if (m.segment === 0) lines.push({ crossing: { ...m }, ours: structuredClone(last.intervals.find((i) => i.carId === m.carId)) });

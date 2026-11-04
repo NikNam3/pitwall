@@ -3,7 +3,7 @@
 // the race clock settling after lights out (race-zandvoort-online-start), S4 resets, a small fall and the settling
 // after lights out (race-zandvoort-uid-reuse-start). The engine and `gaps` only; one replay per segment.
 import { beforeAll, describe, expect, it } from 'vitest';
-import { GAPS, gapsCalculator, type GapsOutput } from '@pitwall/analysis';
+import { GAPS, gapsCalculator, gapsHistoryCalculator, type GapsOutput } from '@pitwall/analysis';
 import type { RaceEvent } from '@pitwall/domain';
 import type { EngineState, DeepReadonly } from '@pitwall/engine';
 import { situationOf } from '../../../../packages/engine/src/situations/run.ts';
@@ -46,7 +46,7 @@ beforeAll(async () => {
     let out = false;
     const raceKinds: string[] = [];
     let lowest = Infinity;
-    const runner = await replayScheduled(segmentPath(file), [gapsCalculator], (r, scheduled, f) => {
+    const runner = await replayScheduled(segmentPath(file), [gapsHistoryCalculator, gapsCalculator], (r, scheduled, f) => {
       const codes = f.events.map((e) => e.details.code);
       if (!out && codes.includes('LGOT')) out = true;
       else if (out) raceKinds.push(...codes.flatMap((c) => (KIND_OF[c] ? [KIND_OF[c]] : [])));
