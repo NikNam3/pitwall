@@ -2,6 +2,7 @@
 import type { CarId, LapBoard, LapBoardRow, Projection } from '@pitwall/domain';
 
 export type { BestStatus, LapBoard, LapBoardRow, Projection, SectorStatus, SessionBestTime } from '@pitwall/domain';
+export * from './behaviour.ts';
 export * from './config.ts';
 
 /** The calculator id. */
