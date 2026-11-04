@@ -15,6 +15,12 @@ describe('generated feature set', () => {
     const reg = CalculatorRegistry.build(FEATURES.flatMap((f) => f.calculators));
     for (const b of bindings) if ('from' in b) expect(reg.get(b.from), b.topic).toBeDefined();
   });
+  it('cars.overview is bound live, and no registered calculator has its id (C42, C55)', () => {
+    const ids = FEATURES.flatMap((f) => f.calculators).map((c) => c.id as string);
+    expect(ids).not.toContain('cars.overview');
+    expect(bindings.find((b) => b.topic === 'cars.overview')).toHaveProperty('fromLive');
+    expect(bindings.find((b) => b.topic === 'cars.overview')).not.toHaveProperty('from');
+  });
   it('binds every feed topic exactly once, core and analysis alike (global topics are published by the bridge shell, replay.status by the ReplayController; neither is bound by features)', () => {
     const feedTopics = Object.entries(TOPICS).filter(([name, d]) => d.scope === 'feed' && name !== 'replay.status').map(([name]) => name);
     const bound = bindings.map((b) => b.topic);
