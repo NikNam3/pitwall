@@ -28,13 +28,11 @@ const origin = (): Vec3 => ({ x: 0, y: 0, z: 0 });
 /** A car nothing is known about yet: unknown data is `notReceived`, everything else 0 or false. */
 export const createCarState = (id: CarId): CarState => ({
   id,
-  active: false,
   identity: {
     name: '',
     teamId: 255,
     raceNumber: 0,
     nationality: 0,
-    ai: true,
     driverId: 255,
     networkId: 255,
     myTeam: false,
@@ -53,28 +51,14 @@ export const createCarState = (id: CarId): CarState => ({
     sector: 1,
     sector1TimeMs: 0,
     sector2TimeMs: 0,
-    currentLapInvalid: false,
     gapToLeaderMs: unknown('notReceived'),
     gapToCarAheadMs: unknown('notReceived'),
     safetyCarDeltaMs: 0,
-    pitStatus: 'none',
-    numPitStops: 0,
-    pitLaneTimerActive: false,
     pitLaneTimeMs: 0,
     pitStopTimerMs: 0,
-    shouldServePenalty: false,
-    driverStatus: 'inGarage',
-    // Assumed until the first LapData, so the car is not taken for inactive.
-    resultStatus: 'active',
-    timePenaltyMs: 0,
-    totalWarnings: 0,
-    cornerCuttingWarnings: 0,
-    unservedDriveThroughs: 0,
-    unservedStopGos: 0,
     // 0 until the first LapData; from there on 1 for pole.
     gridPosition: 0,
     speedTrapFastestKmh: unknown('notReceived'),
-    fiaFlag: 'unknown',
     confirmedLaps: [],
   },
   tyres: {
@@ -129,7 +113,7 @@ export function initialState(init: {
   realism?: boolean;
 }): EngineState {
   const { header } = init.session;
-  const session = sessionStateFrom(init.session, 0);
+  const session = sessionStateFrom(init.session);
   const { log, projection, book } = newHistory(emptySituation());
   const state: EngineState = {
     feedId: init.feedId,
@@ -149,7 +133,7 @@ export function initialState(init: {
     masking: { player: carId(header.playerCarIndex), teammate: undefined, realism: init.realism ?? false },
     ...(init.weekend && { weekend: init.weekend }),
   };
-  placePlayer(state, header.playerCarIndex);
+  placePlayer(state, header.playerCarIndex, state.signals);
   state.masking = { player: state.playerCar, teammate: state.teammateCar, realism: state.realism };
   return state;
 }

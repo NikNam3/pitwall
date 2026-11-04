@@ -1,5 +1,5 @@
 // Named moments (spec 9.1): the topic values a client would hold at one point of a recording.
-import { canonicalJson, TOPICS, type MomentValues, type ServerMessage, type TopicName } from '@pitwall/contracts';
+import { canonicalJson, TOPICS, type MachineSpans, type MomentValues, type ServerMessage, type TopicName } from '@pitwall/contracts';
 import { carId, feedId, MAX_CARS, type CarId } from '@pitwall/domain';
 import { effectiveConfig, recordingConfig } from '../feature-config.ts';
 import { FEATURES } from '../features/index.generated.ts';
@@ -70,7 +70,8 @@ class StopAfterSource implements PacketSource {
 /**
  * Replays `segmentPath` through the real pipeline up to the records `atMs` after its first one (receive time) and
  * returns what one client subscribed to every feed topic holds then: each topic with the params its `momentParams` gives
- * for the active cars (`car.detail` `active`), in that order, or with `{}` when it has none. The hub's clock is the recorded time, so its throttle sees the recording's
+ * for the cars in the session (car-status's open spans in `situation.carStatus` that are not `absent`, C43), in that
+ * order, or with `{}` when it has none. The hub's clock is the recorded time, so its throttle sees the recording's
  * pace and the run needs no real waiting. Deterministic: the same segment and `atMs` give the same JSON.
  */
 export async function captureMoment(segmentPath: string, atMs: number): Promise<MomentValues> {
@@ -112,9 +113,9 @@ export async function captureMoment(segmentPath: string, atMs: number): Promise<
   nowMs += 60_000; // every throttled value is due now
   hub.tick();
 
-  const isActive = (car: CarId): boolean =>
-    (values.get(subscriptionId('car.detail', { carId: car })) as { active?: boolean } | undefined)?.active === true;
-  const active = ALL_CARS.filter(isActive);
+  const carStatus = values.get(subscriptionId('situation.carStatus', {})) as MachineSpans | undefined;
+  const inSession = new Set((carStatus?.open ?? []).flatMap((span) => (span.kind !== 'absent' && span.carId !== undefined ? [span.carId] : [])));
+  const active = ALL_CARS.filter((car) => inSession.has(car));
   const moment: MomentValues = [];
   for (const topic of topics) {
     for (const params of paramsFor(topic, active)) {

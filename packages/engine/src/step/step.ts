@@ -19,7 +19,6 @@ import { frameEventsUpdate } from './state-update/frame-events.ts';
 import { identityUpdate } from './state-update/identity.ts';
 import { ownCarUpdate } from './state-update/own-car.ts';
 import { sessionUpdate } from './state-update/session.ts';
-import { refreshActiveCarsUntilCarStatus } from './state-update/active-cars-until-car-status.ts';
 import { timingUpdate } from './state-update/timing.ts';
 import type { StateUpdate } from './state-update/types.ts';
 import { tyresUpdate } from './state-update/tyres.ts';
@@ -97,15 +96,11 @@ export const RECORDERS: Array<Recorder<unknown>> = [
 export const projectionTrackerOf = (state: EngineState): ProjectionTracker =>
   new ProjectionTracker(state.log, { projection: state.history, book: state.open.projection });
 
-/**
- * Step 1 (C8): whom realism masks (the previous frame's player and teammate), the signals, then every module; last the
- * transitional `active` refresh (until Task 10).
- */
+/** Step 1 (C8): whom realism masks (the previous frame's player and teammate), the signals, then every module. */
 const updateState = (state: EngineState, frame: Frame, out: StepOutput): void => {
   state.masking = { player: state.playerCar, teammate: state.teammateCar, realism: state.realism };
   state.signals = readSignals(frame, state.signals);
   for (const update of STATE_UPDATE) update.apply(frame, state, state.signals, out);
-  refreshActiveCarsUntilCarStatus(state, out);
 };
 
 /** Step 3 (C10): every recorder with this frame's input and its own open state. */

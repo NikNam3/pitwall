@@ -176,7 +176,6 @@ export const topBar = {
   laps: (count: string): string => `${count} laps`,
   /** The player's current lap, of the session's total when it has one: `L23/62`. */
   lapOf: (lap: string, total: string | undefined): string => (total === undefined ? `L${lap}` : `L${lap}/${total}`),
-  flag: { green: 'green', sc: 'SC', vsc: 'VSC', formation: 'formation' },
   /** The session phase in the top bar (race control's situation); resting phases show nothing. */
   phase: { formation: 'FORMATION', startLights: 'START', sc: 'SC', vsc: 'VSC', red: 'RED', finished: 'FINISHED', paused: 'PAUSED' },
   /** The latest stage of a safety car period. */

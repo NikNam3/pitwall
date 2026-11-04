@@ -1,7 +1,10 @@
 // The signals (contract C12, C13): the closed list of game fields and events that state a status, permission, obligation
 // or transition. Step 1 writes them, only the machine reads them; no signal reaches the live state, a fact or a topic.
 // Protocol-free and in domain units (C4): step 1 converts the packets into these.
-import type { CarId, DriverStatus, FiaFlag, Ms, NeutralisedStage, PitStatus, ResultStatus, SessionFlag, SessionState, SessionTime } from '@pitwall/domain';
+import type { CarId, DriverStatus, FiaFlag, Ms, NeutralisedStage, PitStatus, Ratio, ResultStatus, SessionTime, ZoneFlag } from '@pitwall/domain';
+
+/** From `safetyCarStatus`. A red flag is a `suspended` span of a session-phase sub-machine, not a session flag. */
+export type SessionFlag = 'green' | 'sc' | 'vsc' | 'formation';
 
 /** Every signal of C12, by the name its field has in `CarSignals`, `SessionSignals` or `Signals`. */
 export type SignalKey =
@@ -61,7 +64,8 @@ export type CarSignals = {
 /** The session's signals (C12: Session, Participants `numActiveCars`), in domain units. */
 export type SessionSignals = {
   safetyCarStatus: SessionFlag;
-  marshalZones: SessionState['marshalZones'];
+  /** The marshal zones in the packet's order, each with its flag. */
+  marshalZones: Array<{ startFraction: Ratio; flag: ZoneFlag }>;
   /** `numSafetyCarPeriods`, `numVirtualSafetyCarPeriods`, `numRedFlagPeriods`. */
   periods: { sc: number; vsc: number; red: number };
   sessionType: number;

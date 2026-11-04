@@ -1,5 +1,5 @@
 // The derived storage layer for one session (spec 9.2, 9.3): its row, its confirmed history, its weekend context.
-import type { DriverKey, ParticipantsValues, SessionState, SessionUid } from '@pitwall/domain';
+import type { DriverKey, ParticipantsValues, SessionState, SessionUid, WeekendPhase } from '@pitwall/domain';
 import type { HistoryDelta, Projection, WeekendContext } from '@pitwall/engine/readers';
 import type { Logger } from '../log.ts';
 import type { Db, SessionKey, SessionRow } from '../storage/db.ts';
@@ -7,22 +7,30 @@ import { StorageWriter } from '../storage/storage-writer.ts';
 import { WeekendRepository } from '../storage/weekend-repository.ts';
 
 /**
- * A session row from the engine's values (C6: storage sees no packet type): the live state's session and, once
- * Participants named them, the driver of each slot the session uses.
+ * A session row from the engine's values (C6: storage sees no packet type): the live state's session, the weekend phase
+ * as the machine decided it (C13: no signal) and, once Participants named them, the driver of each slot the session uses.
  */
 export type SessionRowInput = {
   sessionUid: SessionUid;
-  session: Pick<SessionState, 'link' | 'sessionType' | 'trackId' | 'settings'>;
+  session: Pick<SessionState, 'link' | 'trackId' | 'settings'>;
+  weekendPhase: WeekendPhase;
   startedAt: string;
   pwrecPath: string | null;
   drivers?: ParticipantsValues['drivers'];
+};
+
+/** The weekend phase as the session row stores it: `kind`, then `:format` and `:segment` where the phase has them (`qualifying:grandPrix:2`). */
+export const weekendPhaseText = (phase: WeekendPhase): string => {
+  if (phase.kind === 'pending' || phase.kind === 'none') return phase.kind;
+  if (phase.kind === 'race' || phase.segment === undefined) return `${phase.kind}:${phase.format}`;
+  return `${phase.kind}:${phase.format}:${phase.segment}`;
 };
 
 export const sessionRowOf = (s: SessionRowInput): SessionRow => ({
   sessionUid: s.sessionUid,
   weekendId: String(s.session.link.weekend),
   seasonId: String(s.session.link.season),
-  sessionType: s.session.sessionType,
+  sessionType: weekendPhaseText(s.weekendPhase),
   trackId: s.session.trackId,
   startedAt: s.startedAt,
   pwrecPath: s.pwrecPath,

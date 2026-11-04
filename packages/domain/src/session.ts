@@ -1,15 +1,13 @@
 import type { SessionTime } from './ids.ts';
-import type { Celsius, Kmh, Metres, Ms, Percent, Ratio } from './units.ts';
+import type { Celsius, Kmh, Metres, Ms, Percent } from './units.ts';
 
 export type SessionKind = 'unknown' | 'practice' | 'qualifying' | 'sprintShootout' | 'race' | 'timeTrial';
 export type Weather = 'clear' | 'lightCloud' | 'overcast' | 'lightRain' | 'heavyRain' | 'storm';
 export type Trend = 'up' | 'down' | 'flat';
 export type ZoneFlag = 'unknown' | 'none' | 'green' | 'blue' | 'yellow';
-/** From `safetyCarStatus`. A red flag is a `suspended` span of a session-phase sub-machine, not a session flag. */
-export type SessionFlag = 'green' | 'sc' | 'vsc' | 'formation';
 
+/** One forecast sample of this session (step 1 keeps only these). */
 export type ForecastSample = {
-  sessionType: number;
   offsetMin: number;
   weather: Weather;
   trackTempC: Celsius;
@@ -39,14 +37,11 @@ export type GameSettings = {
   formationLap: boolean;
   aiDifficulty: number;
   gameMode: number;
-  ruleSet: number;
 };
 
-/** The session as the Session packet describes it (spec 6.1); `numActiveCars` comes from Participants. */
+/** The session's values as the Session packet describes them (spec 6.1); its signals are no part of it (C13). */
 export type SessionState = {
   trackId: number;
-  sessionType: number;
-  kind: SessionKind;
   formula: number;
   totalLaps: number;
   trackLengthM: Metres;
@@ -60,15 +55,10 @@ export type SessionState = {
   airTempC: Celsius;
   forecast: ForecastSample[];
   forecastAccuracy: 'perfect' | 'approximate';
-  flag: SessionFlag;
-  marshalZones: Array<{ startFraction: Ratio; flag: ZoneFlag }>;
-  periods: { sc: number; vsc: number; red: number };
   /** The player's strategy; 0 = none. */
   pitWindow: { idealLap: number; latestLap: number; rejoinPosition: number };
   settings: GameSettings;
   networkGame: boolean;
-  numActiveCars: number;
   link: { season: number; weekend: number; session: number };
-  weekendStructure: number[];
   updatedAt: SessionTime;
 };

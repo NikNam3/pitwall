@@ -70,10 +70,8 @@ export const raceMomentCalculator: QuickCalculator<RaceMomentOutput> = {
       holding.push(['incident', { since: known(newest.at as SessionTime, now), cause: { rule: 'majorIncident', params: { entryId: newest.id, kind: newest.kind, ageMs: now - newest.at } } }]);
     }
 
-    // the game sends the forecast of every session of the weekend: only this session's samples count
-    const rainy = session.forecast.find(
-      (s) => s.sessionType === session.sessionType && s.offsetMin >= 0 && s.offsetMin <= cfg.weatherHorizonMin && s.rainPct >= cfg.weatherRainPct,
-    );
+    // the forecast holds this session's samples only (step 1 selects them)
+    const rainy = session.forecast.find((s) => s.offsetMin >= 0 && s.offsetMin <= cfg.weatherHorizonMin && s.rainPct >= cfg.weatherRainPct);
     if (rainy !== undefined) {
       holding.push(['weather', { since: NOT_APPLICABLE, cause: { rule: 'forecastRain', params: { rainPct: rainy.rainPct, offsetMin: rainy.offsetMin } } }]);
     }

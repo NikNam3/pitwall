@@ -1,7 +1,6 @@
 import { known, unknown, type ConfirmedLap, type Known, type Ms, type SessionTime } from '@pitwall/domain';
 import type { SessionHistoryPacket } from '@pitwall/protocol';
 import { pick } from '../pick.ts';
-import { ZONE_FLAG } from './session.ts';
 import type { StateUpdate } from './types.ts';
 
 // Code tables from the struct comments of LapData; a code the spec does not list reads as the first entry.
@@ -53,11 +52,11 @@ const confirmedLapsOf = (p: SessionHistoryPacket): ConfirmedLap[] =>
   );
 
 /**
- * Timing from LapData; the FIA flag comes from Car Status, the confirmed laps from Session History. Gaps are kept as
+ * Timing from LapData (its values; its signals go to `Signals`, C13), the confirmed laps from Session History. Gaps are kept as
  * sent: a car just ahead can show a small negative delta.
  */
 export const timingUpdate: StateUpdate = { id: 'timing', apply: (frame, live, _signals, out) => {
-  const { lapData, status, sessionHistory } = frame;
+  const { lapData, sessionHistory } = frame;
   const at = frame.sessionTime;
   if (lapData) {
     for (const car of live.cars) {
@@ -74,34 +73,14 @@ export const timingUpdate: StateUpdate = { id: 'timing', apply: (frame, live, _s
         sector: pick(SECTOR, l.sector),
         sector1TimeMs: l.sector1TimeMs,
         sector2TimeMs: l.sector2TimeMs,
-        currentLapInvalid: l.currentLapInvalid === 1,
         gapToLeaderMs: gap(l.deltaToRaceLeaderMs, at),
         gapToCarAheadMs: gap(l.deltaToCarInFrontMs, at),
         safetyCarDeltaMs: Math.round(l.safetyCarDelta * 1000),
-        pitStatus: pick(PIT_STATUS, l.pitStatus),
-        numPitStops: l.numPitStops,
-        pitLaneTimerActive: l.pitLaneTimerActive === 1,
         pitLaneTimeMs: l.pitLaneTimeInLaneInMs,
         pitStopTimerMs: l.pitStopTimerInMs,
-        shouldServePenalty: l.pitStopShouldServePen === 1,
-        driverStatus: pick(DRIVER_STATUS, l.driverStatus),
-        resultStatus: pick(RESULT_STATUS, l.resultStatus),
-        timePenaltyMs: l.penalties * 1000,
-        totalWarnings: l.totalWarnings,
-        cornerCuttingWarnings: l.cornerCuttingWarnings,
-        unservedDriveThroughs: l.numUnservedDriveThroughPens,
-        unservedStopGos: l.numUnservedStopGoPens,
         gridPosition: l.gridPosition + GRID_FROM_ONE,
         speedTrapFastestKmh: l.speedTrapFastestLap === NO_SPEED_TRAP_LAP ? unknown('notReceived') : known(l.speedTrapFastestSpeed, at),
       });
-    }
-    out.changed.add('timing');
-  }
-  if (status) {
-    for (const car of live.cars) {
-      const s = status.carStatusData[car.id];
-      // The game sends -1 for an unknown flag, then 0 none, 1 green, 2 blue, 3 yellow.
-      if (s) car.timing.fiaFlag = pick(ZONE_FLAG, s.vehicleFiaFlags + 1);
     }
     out.changed.add('timing');
   }

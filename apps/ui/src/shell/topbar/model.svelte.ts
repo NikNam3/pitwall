@@ -1,7 +1,7 @@
 // What the top bar's segments read: the topics of one feed plus the global alert and settings topics.
 import type { AlertsState, CarOverview, FeedStatus, ReplayControl, ReplayStatus, SessionInfo, UiAction, UiSettings } from '@pitwall/contracts';
 import type { MachineSpans } from '@pitwall/contracts';
-import type { FeedId, Insight, Known, Moment, NeutralisedDetail, NeutralisedStage, RaceMoment } from '@pitwall/domain';
+import type { FeedId, Insight, Known, Moment, NeutralisedDetail, NeutralisedStage, OpenSpan, RaceMoment } from '@pitwall/domain';
 import type { EntryState, TopicStore } from '../../connection/topic-store.svelte.ts';
 import { openSpanOf } from '../../kit/situation.ts';
 import * as text from '../../kit/text.ts';
@@ -69,6 +69,10 @@ export class TopBarModel {
     const player = this.session?.playerCar;
     return player === undefined ? undefined : okValue(this.#cars)?.find((car) => car.id === player)?.timing?.lap;
   }
+  /** The weekend phase's open span (`situation.weekendPhase`); undefined while the phase is pending or not published. */
+  get weekendPhase(): OpenSpan | undefined {
+    return openSpanOf(okValue(this.#weekend));
+  }
   /** The race moment; undefined while it is unknown or not published. */
   get moment(): Moment | undefined {
     const current = okValue(this.#moment);
@@ -79,7 +83,7 @@ export class TopBarModel {
    * weekend phase through its presentation table. Undefined while hidden, pending or `none`.
    */
   get phase(): { label: string; role: Role | undefined; stage: NeutralisedStage | undefined } | undefined {
-    const weekend = openSpanOf(okValue(this.#weekend))?.kind;
+    const weekend = this.weekendPhase?.kind;
     if (weekend !== 'race' && weekend !== 'qualifying' && weekend !== 'practice') return undefined;
     if (openSpanOf(okValue(this.#clock))?.kind === 'paused') return { label: text.topBar.phase.paused, role: undefined, stage: undefined };
     const machine: PhaseMachine = weekend === 'race' ? 'session-phase-race' : weekend === 'qualifying' ? 'session-phase-qualifying' : 'session-phase-practice';

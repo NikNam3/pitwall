@@ -6,7 +6,7 @@ export { SchemaVersionError };
 
 export type Db = Database.Database;
 
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 /** Every per-session table refers to its session by both key columns. */
 const SESSION_REF = `session_uid TEXT NOT NULL, weekend_id TEXT NOT NULL`;
@@ -20,7 +20,7 @@ CREATE TABLE weekends (weekend_id TEXT PRIMARY KEY, season_id TEXT NOT NULL, tra
  */
 CREATE TABLE sessions (
   session_uid TEXT NOT NULL, weekend_id TEXT NOT NULL REFERENCES weekends(weekend_id),
-  session_type INTEGER NOT NULL, track_id INTEGER NOT NULL, started_at TEXT NOT NULL,
+  session_type TEXT NOT NULL /* the weekend phase, weekendPhaseText */, track_id INTEGER NOT NULL, started_at TEXT NOT NULL,
   pwrec_path TEXT, settings TEXT NOT NULL /* JSON */, PRIMARY KEY (session_uid, weekend_id)) STRICT;
 CREATE INDEX sessions_by_weekend ON sessions (weekend_id, started_at);
 CREATE TABLE drivers (
@@ -49,7 +49,8 @@ export type SessionRow = {
   weekendId: string;
   /** Decimal `seasonLinkIdentifier`. */
   seasonId: string;
-  sessionType: number;
+  /** The weekend phase as the machine decided it, as text (`kind[:format[:segment]]`, `weekendPhaseText`); `pending` until then. */
+  sessionType: string;
   trackId: number;
   /** ISO 8601. */
   startedAt: string;

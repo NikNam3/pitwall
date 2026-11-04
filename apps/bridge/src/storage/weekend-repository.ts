@@ -6,7 +6,7 @@ type SessionDbRow = {
   session_uid: string;
   weekend_id: string;
   season_id: string;
-  session_type: number;
+  session_type: string;
   track_id: number;
   started_at: string;
   pwrec_path: string | null;
