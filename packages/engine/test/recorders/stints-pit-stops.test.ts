@@ -3,8 +3,10 @@
 // during which the car stopped in its box (the pit-stop timer); it describes its pit exit (car-location's pitLane ->
 // track) even when recorded later, its flag comes from the spans open then (`membershipOf`), and it is `penaltyServed`
 // when its `servingPenalty` span closed confirmed. A stint closes when a `boxStop` or `garage` span (or a stop-in-box
-// `servingPenalty`) ends on a different set: a compound change, or a lower age than the old set's; the session's end
-// (its `postSession` span) closes the open stints. Ported from test/history/stints-pit-stops.test.ts; the rows of the
+// `servingPenalty`) ends on a different set: a compound change, or a lower age than the old set's; a stint closed by a
+// stop-in-box `servingPenalty` describes that visit's pit exit (car-location's pitLane -> track, C26), recorded when
+// known and at the latest on the frame the span closes (round 2 ruling 5); the session's end (its `postSession` span)
+// closes the open stints. Ported from test/history/stints-pit-stops.test.ts; the rows of the
 // served-penalty marks by DTSV/SGSV events (`RecorderInput.tracked`) are replaced by the servingPenalty rows below.
 import { describe, expect, it } from 'vitest';
 import type { EventDetails, SessionPacket } from '@pitwall/protocol';
@@ -198,11 +200,16 @@ describe('a drive-through served on a visit (rulings 1, 2, 8)', () => {
     expect(st.history.spans['car-location']?.find((s) => s.carId === 0 && s.kind === 'pitLane')).toMatchObject({ startFrame: 4, endFrame: 8 });
   });
   it('a drive-through served on a visit that changed tyres is one pit stop with penaltyServed, and its stint changes', () => {
-    const { st } = servedOnAStop();
+    const { st, results } = servedOnAStop();
     expect(st.history.pitStops).toEqual([{ carId: 0, lap: 5, pitLaneEntry: 3_000, pitLaneExit: 7_000, pitLaneTimeMs: 4_000, stationaryTimeMs: 2_400,
       flag: 'vsc', penaltyServed: true, frame: 8 }]);
+    // the old stint describes the pit exit (frame 7, number 8), recorded there or at the latest on the DTSV frame (frame 8)
+    const tagged = results.flatMap((r, i) => (r.changed.has('stints') ? [i] : []));
+    expect(tagged).toHaveLength(2);
+    expect([7, 8]).toContain(tagged[0]);
+    expect(tagged[1]).toBe(10);
     expect(st.history.stints).toEqual([
-      { carId: 0, firstLap: 5, lastLap: 5, actualCompound: 'C3', visualCompound: 'medium', tyreAgeAtFitting: 3, frame: 9 },
+      { carId: 0, firstLap: 5, lastLap: 5, actualCompound: 'C3', visualCompound: 'medium', tyreAgeAtFitting: 3, frame: 8 },
       { carId: 0, firstLap: 6, lastLap: 6, actualCompound: 'C2', visualCompound: 'hard', tyreAgeAtFitting: 0, frame: 11 }]);
   });
   it('a pit stop whose drive-through is confirmed after the exit describes the exit frame and belongs to the spans open then', () => {
@@ -224,6 +231,11 @@ describe('a drive-through served on a visit (rulings 1, 2, 8)', () => {
     expect(st.history.pitStops).toEqual([{ carId: 0, lap: 5, pitLaneEntry: 3_000, pitLaneExit: 7_000, pitLaneTimeMs: 4_000, stationaryTimeMs: 2_400,
       flag: 'green', penaltyServed: false, frame: 8 }]);
     expect(results.findIndex((r) => r.changed.has('pitStops'))).toBe(18);
+    // its stint closes on the new set, describing the pit exit, recorded at the latest on the frame the span closes
+    expect(st.history.stints).toEqual([{ carId: 0, firstLap: 5, lastLap: 5, actualCompound: 'C3', visualCompound: 'medium', tyreAgeAtFitting: 3, frame: 8 }]);
+    const tagged = results.findIndex((r) => r.changed.has('stints'));
+    expect(tagged).toBeGreaterThanOrEqual(7);
+    expect(tagged).toBeLessThanOrEqual(18);
   });
   it('a drive-through pass gives no pit stop and marks none served', () => {
     // a box stop on lap 3 (no penalty), then the drive-through given on lap 4 and served by a pass: pit status 1 only, the stop timer 0
