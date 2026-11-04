@@ -1,7 +1,7 @@
-import { carId, known, unknown, type CarBands, type DamageState, type ErsState, type FuelState, type Insight, type TyreWear } from '@pitwall/domain';
+import { carId, known, unknown, type CarBands, type CarId, type DamageState, type ErsState, type FuelState, type Insight, type OpenSpan, type TyreWear } from '@pitwall/domain';
 import { InsightBook, type EngineView, type Projection } from '@pitwall/engine';
 import { describe, expect, it } from 'vitest';
-import { ALARMS } from '../../src/alarms/index.ts';
+import { ALARMS, ALARMS_BEHAVIOUR } from '../../src/alarms/index.ts';
 import { alarmsCalculator } from '../../src/alarms/calculator.ts';
 import { CAR_BANDS, CAR_BANDS_CONFIG } from '../../src/car-bands/index.ts';
 import { carBandsCalculator } from '../../src/car-bands/calculator.ts';
@@ -14,10 +14,10 @@ import { fuelCalculator } from '../../src/fuel/calculator.ts';
 import { SESSION_REMAINING, type SessionRemaining } from '../../src/session-remaining/index.ts';
 import { TYRE_WEAR } from '../../src/tyre-wear/index.ts';
 import { tyreWearCalculator } from '../../src/tyre-wear/calculator.ts';
-import { carState, engineView, event, lap, realismHidden, telemetryRestricted } from '../../../../test-support/builders/index.ts';
+import { carState, engineView, event, lap, RACING, realismHidden, telemetryRestricted } from '../../../../test-support/builders/index.ts';
 
 // Assumptions pinned here (see the test report): key = `${kind}:${carId}:${channel}`; channel names `tyre.<surfaceC|carcassC|pressurePsi>.<corner>`,
-// `brakesC.<corner>`, `engineC`, `wear.<corner>`, `fuel`, `warnings`; `damageJump` and `penaltyNew` use the jump's / event's session time as channel;
+// `brakesC.<corner>`, `engineC`, `wear.<corner>`, `fuel`, `warnings`; `damageJump` uses the jump's session time as channel and `penaltyNew` the id of the `penalties` span;
 // `compute` returns the active alarms and `insights` returns them unchanged; raisedAt = view.state.sessionTime.
 
 const perCorner = <T>(make: () => T) => ({ fl: make(), fr: make(), rl: make(), rr: make() });
@@ -90,12 +90,54 @@ const outputsOf = (perCar: ReturnType<typeof outputsFor>[]): ReadonlyMap<string,
   ]);
 };
 
-type ViewOpts = { warnings?: number; lap?: number; history?: Partial<Projection>; config?: EngineView['config']; playerCar?: number };
+/** An open span of `machine` of `kind` for car `car` (C20): what `view.situation` holds, the only source of warnings and penalties here. */
+const open = (machine: string, kind: string, car: number, over: Partial<OpenSpan> = {}): OpenSpan => ({
+  machine,
+  id: 0,
+  kind,
+  start: 1_000,
+  confirmed: true,
+  detail: undefined,
+  startFrame: 1,
+  carId: carId(car),
+  ...over,
+});
+/** The car's `warnings` span: `warned` with the count held, or `noWarning` at 0. */
+const warned = (count: number, car = 0): OpenSpan =>
+  count === 0
+    ? open('warnings', 'noWarning', car)
+    : open('warnings', 'warned', car, { detail: { count, infringement: unknown('notReceived') } });
+type Owes = { kind: 'clear' | 'timePenalty' | 'driveThroughPending' | 'stopGoPending'; id?: number; startFrame?: number; infringement?: number };
+/** The car's `penalties` span: what it owes race control now, with the details the machine records. */
+const owes = ({ kind, id = 0, startFrame = 50, infringement }: Owes, car = 0): OpenSpan =>
+  open('penalties', kind, car, {
+    id,
+    startFrame,
+    detail:
+      kind === 'clear'
+        ? undefined
+        : kind === 'timePenalty'
+          ? { totalMs: 5000 }
+          : {
+              driveThroughs: kind === 'driveThroughPending' ? 1 : 0,
+              stopGos: kind === 'stopGoPending' ? 1 : 0,
+              infringement: infringement === undefined ? unknown('notReceived') : known(infringement, 0),
+              totalMs: 0,
+            },
+  });
+const situationOf = (spans: readonly OpenSpan[]): EngineView['situation'] => {
+  const byMachine: Record<string, OpenSpan[]> = {};
+  for (const span of spans) (byMachine[span.machine] ??= []).push(span);
+  return { ...RACING, byMachine };
+};
+
+type ViewOpts = { warnings?: number; owes?: Owes; spans?: OpenSpan[]; lap?: number; history?: Partial<Projection>; config?: EngineView['config']; playerCar?: number };
 const viewWith = (parts: Parts, o: ViewOpts = {}): EngineView =>
   engineView({
-    cars: [carState({ timing: { cornerCuttingWarnings: o.warnings ?? 0, lap: o.lap ?? 1 } })],
+    cars: [carState({ timing: { lap: o.lap ?? 1 } })],
     outputs: outputsOf([outputsFor(0, parts)]),
     sessionTime: NOW,
+    situation: situationOf([...(o.warnings === undefined ? [] : [warned(o.warnings)]), ...(o.owes === undefined ? [] : [owes(o.owes)]), ...(o.spans ?? [])]),
     ...(o.history && { history: o.history }),
     config: { [CAR_BANDS_CONFIG.key]: TEST_BANDS, ...o.config },
     ...(o.playerCar !== undefined && { playerCar: o.playerCar }),
@@ -128,7 +170,9 @@ describe('alarms calculator', () => {
     );
     // no ERS alarm exists, so ERS is no input: a new ERS output must not re-run the alarms
     expect(alarmsCalculator.reads).not.toContainEqual({ calculator: ERS });
-    expect(alarmsCalculator.reads).toEqual(expect.arrayContaining(['timing', 'events', 'laps']));
+    expect(alarmsCalculator.reads).toEqual(expect.arrayContaining(['timing', 'laps', 'identity', 'spans:warnings', 'spans:penalties']));
+    // warnings and penalties come from the machine's spans, not from the events list (C20)
+    expect(alarmsCalculator.reads).not.toContain('events');
   });
 
   it('raises nothing when everything is in order', () => {
@@ -258,17 +302,16 @@ describe('alarms calculator', () => {
       });
     });
 
-    it('a new penalty for our car: critical, race, penaltyNew with the event params', () => {
-      const penalty = event({ kind: 'penalty', carId: carId(0), at: 100_000, params: { penaltyType: 4, infringementType: 7, timeMs: 5000, lap: 2 } });
-      const [a, ...rest] = run(viewWith({}, { history: { laps: [lap({ lapNumber: 1 })], events: [penalty] } }));
+    it('a new penalty for our car: critical, race, penaltyNew with the span\'s details, keyed by the span', () => {
+      const [a, ...rest] = run(viewWith({}, { owes: { kind: 'driveThroughPending', id: 3, infringement: 7 }, history: { laps: [lap({ lapNumber: 1 })] } }));
       expect(rest).toEqual([]);
       expect(a).toMatchObject({
         kind: 'penaltyNew',
         severity: 'critical',
         category: 'race',
         carId: carId(0),
-        key: 'penaltyNew:0:100000',
-        params: { penaltyType: 4, infringementType: 7, timeMs: 5000, lap: 2 },
+        key: 'penaltyNew:0:3',
+        params: { penalty: 'driveThrough', driveThroughs: 1, stopGos: 0, totalMs: 0, infringement: 7 },
       });
     });
   });
@@ -423,38 +466,28 @@ describe('alarms calculator', () => {
       expect(only(viewWith({ damage: damageOf([hit, change(250_000, 40, 0)]) }, { lap: 3 }), 'damageJump')).toEqual([]);
     });
 
-    it('a penalty lasts until our car completes its next lap, then resolves; another car\'s lap does not end it', () => {
-      const penalty = event({ kind: 'penalty', carId: carId(0), at: 100_000, params: { penaltyType: 4, lap: 2 } });
-      const hist = (laps: ReturnType<typeof lap>[]) => ({ laps, events: [penalty] });
-      const before = [lap({ lapNumber: 1 })];
-      expect(only(viewWith({}, { history: hist(before) }), 'penaltyNew')).toHaveLength(1);
-      expect(only(viewWith({}, { history: hist([...before, lap({ carId: carId(5), lapNumber: 2, completedAt: 180_000 })]) }), 'penaltyNew')).toHaveLength(1);
-      expect(only(viewWith({}, { history: hist([...before, lap({ lapNumber: 2 })]) }), 'penaltyNew')).toEqual([]);
+    it('a penalty lasts until our car completes its next lap (by frame), then resolves; another car\'s lap does not end it', () => {
+      const owed: Owes = { kind: 'timePenalty', startFrame: 150 };
+      const before = [lap({ lapNumber: 1, frame: 100 })];
+      expect(only(viewWith({}, { owes: owed, history: { laps: before } }), 'penaltyNew')).toHaveLength(1);
+      expect(only(viewWith({}, { owes: owed, history: { laps: [...before, lap({ carId: carId(5), lapNumber: 2, frame: 200 })] } }), 'penaltyNew')).toHaveLength(1);
+      expect(only(viewWith({}, { owes: owed, history: { laps: [...before, lap({ lapNumber: 2, frame: 200 })] } }), 'penaltyNew')).toEqual([]);
+    });
+
+    it('membership is by frame, never by time: a lap completed later on the clock but on an earlier frame does not end it', () => {
+      const owed: Owes = { kind: 'timePenalty', startFrame: 150 };
+      const early = lap({ lapNumber: 1, frame: 100, completedAt: 900_000 });
+      expect(only(viewWith({}, { owes: owed, history: { laps: [early] } }), 'penaltyNew')).toHaveLength(1);
     });
 
     it('a penalty before our first completed lap counts as new', () => {
-      const penalty = event({ kind: 'penalty', carId: carId(0), at: 1_000, params: { penaltyType: 0, lap: 1 } });
-      expect(only(viewWith({}, { history: { events: [penalty] } }), 'penaltyNew')).toHaveLength(1);
+      expect(only(viewWith({}, { owes: { kind: 'driveThroughPending' } }), 'penaltyNew')).toHaveLength(1);
     });
 
-    it('a warning, a reminder, a lap invalidation or the black-flag timer is no penaltyNew; a real penalty is', () => {
-      // F1 25 penalty types: 5 warning, 3 reminder, 10-15 lap invalidated, 17 black-flag timer; 4 time penalty, 6 disqualified
-      for (const penaltyType of [3, 5, 10, 11, 12, 13, 14, 15, 17]) {
-        const e = event({ kind: 'penalty', carId: carId(0), at: 100_000, params: { penaltyType, infringementType: 7, lap: 2 } });
-        expect(only(viewWith({}, { history: { laps: [lap()], events: [e] } }), 'penaltyNew')).toEqual([]);
-      }
-      for (const penaltyType of [0, 1, 2, 4, 6, 9]) {
-        const e = event({ kind: 'penalty', carId: carId(0), at: 100_000, params: { penaltyType, infringementType: 7, lap: 2 } });
-        expect(only(viewWith({}, { history: { laps: [lap()], events: [e] } }), 'penaltyNew')).toHaveLength(1);
-      }
-    });
-
-    it('two penalties in one lap are two alarms with different keys', () => {
-      const events = [
-        event({ kind: 'penalty', carId: carId(0), at: 100_000, params: { penaltyType: 4, lap: 2 } }),
-        event({ kind: 'penalty', carId: carId(0), at: 120_000, params: { penaltyType: 1, lap: 2 } }),
-      ];
-      expect(only(viewWith({}, { history: { laps: [lap()], events } }), 'penaltyNew').map((i) => i.key)).toEqual(['penaltyNew:0:100000', 'penaltyNew:0:120000']);
+    it('a new span of what the car owes is a new alarm with another key (the spans of one car follow one another)', () => {
+      const keyOf = (id: number, kind: Owes['kind']) => only(viewWith({}, { owes: { kind, id } }), 'penaltyNew').map((i) => i.key);
+      expect(keyOf(0, 'timePenalty')).toEqual(['penaltyNew:0:0']);
+      expect(keyOf(1, 'stopGoPending')).toEqual(['penaltyNew:0:1']);
     });
   });
 
@@ -466,11 +499,11 @@ describe('alarms calculator', () => {
       wear.corners.fl.lapsToLimit = known(1, 0);
       return { bands, wear, fuel: { ...fuelOk(), marginLaps: known(-2, 0) } };
     };
-    const rivalView = (parts: Parts, rivalCar = carState({ id: carId(5), timing: { cornerCuttingWarnings: 2 } })): EngineView =>
+    const rivalView = (parts: Parts, rivalCar = carState({ id: carId(5) })): EngineView =>
       engineView({
         cars: [carState(), rivalCar],
         outputs: outputsOf([outputsFor(0), outputsFor(5, parts)]),
-        history: { events: [event({ kind: 'penalty', carId: carId(5), at: 1_000, params: { penaltyType: 4, lap: 1 } })] },
+        situation: situationOf([warned(2, 5), owes({ kind: 'timePenalty' }, 5)]),
         sessionTime: NOW,
       });
 
@@ -515,9 +548,9 @@ describe('alarms calculator', () => {
 
     it('after a playerCar change the old car\'s alarms are resolved', () => {
       const parts = badEverything();
-      const cars = [carState({ timing: { cornerCuttingWarnings: 2 } }), carState({ id: carId(1) })];
+      const cars = [carState(), carState({ id: carId(1) })];
       const outputs = outputsOf([outputsFor(0, parts), outputsFor(1)]);
-      const make = (playerCar: number) => engineView({ cars, outputs, playerCar, sessionTime: NOW });
+      const make = (playerCar: number) => engineView({ cars, outputs, playerCar, sessionTime: NOW, situation: situationOf([warned(2, 0), warned(0, 1)]) });
       const book = new InsightBook();
       const raised = book.apply(ALARMS, run(make(0)), 1_000);
       expect(raised.length).toBeGreaterThan(0);
@@ -594,5 +627,78 @@ describe('hidden data of one of our cars (Review Focus 5)', () => {
     const ers = (outputs.get(ERS) as Record<number, ErsState>)[TEAMMATE]!;
     expect([ers.storeJ, ers.storeTrendJPerLap, ers.attack]).toEqual([restricted, restricted, restricted]);
     expect(alarms).toEqual([]);
+  });
+});
+
+describe('alarms behaviour table (C44)', () => {
+  const config = { alarms: { warningsBeforePenalty: 3 } };
+
+  it('has a row for exactly the kinds of the warnings and penalties sub-machines it reads', () => {
+    expect(Object.keys(ALARMS_BEHAVIOUR).sort()).toEqual(['penalties', 'warnings']);
+    expect(Object.keys(ALARMS_BEHAVIOUR['warnings']!).sort()).toEqual(['noWarning', 'warned']);
+    expect(Object.keys(ALARMS_BEHAVIOUR['penalties']!).sort()).toEqual(['clear', 'driveThroughPending', 'stopGoPending', 'timePenalty']);
+  });
+
+  describe('warnings', () => {
+    it('noWarning: no warning alarm', () => {
+      expect(only(viewWith({}, { warnings: 0, config }), 'warningLast')).toEqual([]);
+    });
+
+    it('warned: warningLast when one warning is left before the penalty, by the count the span holds', () => {
+      expect(only(viewWith({}, { warnings: 2, config }), 'warningLast')).toHaveLength(1);
+      expect(only(viewWith({}, { warnings: 1, config }), 'warningLast')).toEqual([]);
+    });
+
+    it('no span open: nothing (a car the machine has not covered yet raises no warning, never a zero reading)', () => {
+      expect(only(viewWith({}, { config }), 'warningLast')).toEqual([]);
+    });
+
+    it('reads the span of the car, not the game field: a count only on the car\'s timing is no warning', () => {
+      const view = engineView({ cars: [carState({ timing: { cornerCuttingWarnings: 2 } })], outputs: outputsOf([outputsFor(0)]), config, sessionTime: NOW });
+      expect(only(view, 'warningLast')).toEqual([]);
+    });
+  });
+
+  describe('penalties', () => {
+    const penalties = (kind: Owes['kind']) => only(viewWith({}, { owes: { kind } }), 'penaltyNew');
+
+    it('clear: no penalty alarm', () => {
+      expect(penalties('clear')).toEqual([]);
+    });
+
+    it('timePenalty: penaltyNew naming the time penalties in total', () => {
+      expect(penalties('timePenalty').map((i) => i.params)).toEqual([{ penalty: 'time', totalMs: 5000 }]);
+    });
+
+    it('driveThroughPending: penaltyNew naming the drive-through, with the infringement when known', () => {
+      expect(penalties('driveThroughPending').map((i) => i.params)).toEqual([{ penalty: 'driveThrough', driveThroughs: 1, stopGos: 0, totalMs: 0 }]);
+    });
+
+    it('stopGoPending: penaltyNew naming the stop-go', () => {
+      expect(penalties('stopGoPending').map((i) => i.params)).toEqual([{ penalty: 'stopGo', driveThroughs: 0, stopGos: 1, totalMs: 0 }]);
+    });
+
+    it('no span open: nothing', () => {
+      expect(only(viewWith({}), 'penaltyNew')).toEqual([]);
+    });
+
+    it('reads the span of the car: an event in the projection is no penalty alarm', () => {
+      const penalty = event({ kind: 'penalty', carId: carId(0), at: 100_000, params: { penaltyType: 4, lap: 2 } });
+      expect(only(viewWith({}, { history: { events: [penalty] } }), 'penaltyNew')).toEqual([]);
+    });
+  });
+
+  it('judges each of our cars by its own spans', () => {
+    const own = (id: number): CarId => carId(id);
+    const view = engineView({
+      cars: [carState(), carState({ id: own(1) })],
+      outputs: outputsOf([outputsFor(0), outputsFor(1)]),
+      playerCar: 0,
+      sessionTime: NOW,
+      config,
+      situation: situationOf([warned(2, 1), owes({ kind: 'clear' }, 0), owes({ kind: 'timePenalty' }, 1)]),
+    });
+    const withTeammate: EngineView = { ...view, live: { ...view.live, teammateCar: own(1) } };
+    expect(run(withTeammate).map((i) => i.key).sort()).toEqual(['penaltyNew:1:0', 'warningLast:1:warnings']);
   });
 });
