@@ -1,11 +1,12 @@
 // The `gaps` calculator (spec 6.1): a fold over the mini-sector crossings; the order and our cars come from the car state.
-import { known, MINI_SECTORS, unknown, type CarId, type Interval, type Known, type Ms, type Neighbourhood, type SessionTime } from '@pitwall/domain';
+import { known, MINI_SECTORS, sessionPhaseRaceSpans, unknown, type CarId, type Interval, type Known, type Ms, type Neighbourhood, type SessionTime } from '@pitwall/domain';
 import type { EngineView, IncrementalCalculator } from '@pitwall/engine/readers';
+import { behaviourFor } from '../shared/behaviour.ts';
+import { CAR_STATUS_READS } from '../shared/car-status.ts';
 import { isClosed, NEUTRALISATION_READS, neutralisationKind, neutralisedSpans, type NeutralisationKind } from '../shared/neutralised.ts';
 import { ourCars } from '../shared/our-cars.ts';
-import { outOfRace } from '../shared/out-of-race.ts';
 import { gapBehind, lapsBehind, latestTime, progressAt, progressOf, recentOf, type CarCrossings } from './gaps.ts';
-import { GAPS, GAPS_CONFIG, type GapsOutput } from './index.ts';
+import { GAPS, GAPS_BEHAVIOUR, GAPS_CONFIG, type GapsOutput } from './index.ts';
 
 /** What the crossings and events so far add up to. */
 type Table = {
@@ -13,13 +14,16 @@ type Table = {
   tracks: Array<CarCrossings | undefined>;
   lineTimes: GapsOutput['lineTimes'];
   recent: GapsOutput['recent'];
-  /** The newest lights-out event. */
-  lightsOutAt: SessionTime | undefined;
+  /** The start of the first `racing` span of the race: the race start. */
+  raceStart: SessionTime | undefined;
 };
 
 type GapsAcc = Table & { out: GapsOutput };
 
 const NOT_APPLICABLE = unknown('notApplicable');
+
+/** The car-status rows alone: a car's standing (C17, C43). */
+const STATUS_BEHAVIOUR = { 'car-status': GAPS_BEHAVIOUR['car-status'] } as typeof GAPS_BEHAVIOUR;
 
 /**
  * Adds the crossings from index `from` on. `lineTimes` and `recent` are replaced, never changed, as earlier
@@ -50,13 +54,24 @@ function foldCrossings(acc: Table, view: EngineView, from: number): void {
   acc.recent = recent;
 }
 
-function foldEvents(acc: Table, view: EngineView, from: number): void {
-  for (const e of view.history.events.slice(from)) if (e.kind === 'lightsOut') acc.lightsOutAt = e.at;
+const RACE_PHASE = sessionPhaseRaceSpans.machine;
+
+/** The race start (C26): the start of the first `racing` span, closed in the projection from index `from` on, or open now; fixed once seen. */
+function foldRaceStart(acc: Table, view: EngineView, from: number): void {
+  if (acc.raceStart !== undefined) return;
+  const racing = (view.history.spans[RACE_PHASE] ?? []).slice(from).find((s) => s.kind === 'racing') ?? (view.situation.byMachine[RACE_PHASE] ?? []).find((s) => s.kind === 'racing');
+  if (racing !== undefined) acc.raceStart = racing.start;
 }
 
-const raceStartAt = (acc: Table, view: EngineView): Known<SessionTime> => {
-  if (view.live.session.kind !== 'race') return NOT_APPLICABLE;
-  return acc.lightsOutAt === undefined ? unknown('notReceived') : known(acc.lightsOutAt, acc.lightsOutAt);
+/** The race-only parts apply: every row of the weekend phase and the session phases open now says so (C14, C44); none open yet: they do not. */
+const raceOnly = (view: EngineView): boolean => {
+  const rows = behaviourFor(GAPS_BEHAVIOUR, view).flatMap((row) => ('race' in row ? [row.race] : []));
+  return rows.length > 0 && rows.every(Boolean);
+};
+
+const raceStartAt = (acc: Table, race: boolean): Known<SessionTime> => {
+  if (!race) return NOT_APPLICABLE;
+  return acc.raceStart === undefined ? unknown('notReceived') : known(acc.raceStart, acc.raceStart);
 };
 
 /** The gap of `a` to the car ahead of it in the order: the time since that car passed where `a` is now. */
@@ -69,8 +84,8 @@ const leaderGap = (leader: CarCrossings | undefined): Known<Ms> => {
 };
 
 /** Grid position minus position; the grid position is 0 until the first LapData (the engine counts it from 1). */
-const positionsGained = (timing: { gridPosition: number; position: number }, view: EngineView): Known<number> => {
-  if (view.live.session.kind !== 'race') return NOT_APPLICABLE;
+const positionsGained = (timing: { gridPosition: number; position: number }, race: boolean, view: EngineView): Known<number> => {
+  if (!race) return NOT_APPLICABLE;
   if (timing.gridPosition === 0) return unknown('notReceived');
   return known(timing.gridPosition - timing.position, view.live.sessionTime);
 };
@@ -97,8 +112,8 @@ const leaderLapAt = (acc: Table, t: SessionTime): number => {
 };
 
 /** The phases on the gapper's x: the leader's progress at their start and end. */
-const phasesOf = (acc: Table, view: EngineView): GapsOutput['phases'] => {
-  if (view.live.session.kind !== 'race') return [];
+const phasesOf = (acc: Table, race: boolean, view: EngineView): GapsOutput['phases'] => {
+  if (!race) return [];
   return neutralisedPhases(view).map(({ kind, start, end }) => ({
     kind,
     fromLap: leaderLapAt(acc, start),
@@ -108,9 +123,13 @@ const phasesOf = (acc: Table, view: EngineView): GapsOutput['phases'] => {
 
 /** The running cars in position order (ties by id), their intervals, the cars around each of ours, and the cars out of the race. */
 function build(acc: Table, view: EngineView): GapsOutput {
-  const active = view.live.cars.filter((c) => c.active);
-  const running = active
-    .filter((c) => !outOfRace(c)) // out of the race: no gaps, no neighbour
+  const race = raceOnly(view);
+  const standing = new Map<CarId, 'running' | 'out'>();
+  for (const { id } of view.live.cars) {
+    for (const row of behaviourFor(STATUS_BEHAVIOUR, view, id)) if ('car' in row && row.car !== 'absent') standing.set(id, row.car);
+  }
+  const running = view.live.cars
+    .filter((c) => standing.get(c.id) === 'running') // out of the race: no gaps, no neighbour
     .sort((a, b) => a.timing.position - b.timing.position || a.id - b.id);
   const order = running.map((c) => c.id);
   const tracks = order.map((id) => acc.tracks[id]);
@@ -125,7 +144,7 @@ function build(acc: Table, view: EngineView): GapsOutput {
       toAheadMs: toAhead[i] ?? NOT_APPLICABLE,
       toBehindMs: toAhead[i + 1] ?? NOT_APPLICABLE,
       lapsDown,
-      positionsGained: positionsGained(timing, view),
+      positionsGained: positionsGained(timing, race, view),
     };
   });
 
@@ -144,16 +163,16 @@ function build(acc: Table, view: EngineView): GapsOutput {
     lineTimes: acc.lineTimes,
     recent: acc.recent,
     neighbourhood,
-    raceStartAt: raceStartAt(acc, view),
-    outOfRace: active.filter((c) => outOfRace(c)).map((c) => c.id).sort((a, b) => a - b),
-    phases: phasesOf(acc, view),
+    raceStartAt: raceStartAt(acc, race),
+    outOfRace: view.live.cars.filter((c) => standing.get(c.id) === 'out').map((c) => c.id).sort((a, b) => a - b),
+    phases: phasesOf(acc, race, view),
   };
 }
 
 const init = (view: EngineView): GapsAcc => {
-  const table: Table = { tracks: [], lineTimes: {}, recent: {}, lightsOutAt: undefined };
+  const table: Table = { tracks: [], lineTimes: {}, recent: {}, raceStart: undefined };
   foldCrossings(table, view, 0);
-  foldEvents(table, view, 0);
+  foldRaceStart(table, view, 0);
   return { ...table, out: build(table, view) };
 };
 
@@ -165,13 +184,13 @@ const init = (view: EngineView): GapsAcc => {
 export const gapsCalculator: IncrementalCalculator<GapsAcc, GapsOutput> = {
   id: GAPS,
   kind: 'incremental',
-  reads: ['miniSectors', 'timing', 'identity', 'events', ...NEUTRALISATION_READS],
+  reads: ['miniSectors', 'timing', 'identity', 'spans:weekend-phase', CAR_STATUS_READS, ...NEUTRALISATION_READS],
   cadence: 'frame',
   init,
   update(acc, delta, view) {
     if (delta.rewound !== undefined) return init(view);
     foldCrossings(acc, view, delta.before.crossings ?? 0);
-    foldEvents(acc, view, delta.before.events ?? 0);
+    foldRaceStart(acc, view, delta.before[`spans:${RACE_PHASE}`] ?? 0);
     acc.out = build(acc, view);
     return acc;
   },
