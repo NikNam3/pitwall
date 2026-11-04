@@ -2,6 +2,7 @@
 // session or still competes, instead of `car.active` or the game's result status. They decide nothing again.
 import { carStatusSpans, known, unknown, type CarId, type Known } from '@pitwall/domain';
 import { openSpansOf, type ChangeTag, type EngineView } from '@pitwall/engine/readers';
+import { openSpansByCar } from './behaviour.ts';
 
 /** A car's status: competing, retired, disqualified or absent. */
 export type CarStatusKind = (typeof carStatusSpans.kinds)[number];
@@ -28,4 +29,13 @@ export function inSession(view: EngineView, carId: CarId): boolean {
 export function competing(view: EngineView, carId: CarId): boolean {
   const kind = carStatusKind(view, carId);
   return kind.known && kind.value === 'competing';
+}
+
+/** `inSession` for every car of one view: car-status's open spans read once (`spans:car-status`, C41). */
+export function inSessionByCar(view: EngineView): (carId: CarId) => boolean {
+  const byCar = openSpansByCar(view, carStatusSpans.machine);
+  return (carId) => {
+    const kind = byCar.get(carId)?.[0]?.kind;
+    return kind !== undefined && kind !== 'absent';
+  };
 }

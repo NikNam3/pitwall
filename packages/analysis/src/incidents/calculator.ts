@@ -5,7 +5,8 @@
 // matched to a mini-sector by frames (C26). Positions and gaps before and after, and the sector, come from the
 // crossings, so a flashback reproduces them. A log: it reads the history only, never another analysis's output (C45);
 // its damage entries come from the shared jump grouping over the `damageChange` events (`shared/damage-jumps.ts`) and
-// stay through a repair.
+// stay through a repair. The accumulator folds the projection's lists and closed spans and the config alone (C31.2);
+// `output` adds the open spans and the live state (our cars, the track layout).
 import {
   addLaps,
   emptyCurrentLaps,
@@ -23,9 +24,11 @@ import {
   type Known,
   type LapRecord,
   type MachineId,
+  type MiniSectorCrossing,
   type Ms,
   type OpenSpan,
   type PendingPenaltyDetail,
+  type RaceEvent,
   type SessionTime,
   type Span,
   type WarnedDetail,
@@ -38,7 +41,7 @@ import { LAP_CLASSES_CONFIG } from '../lap-classes/index.ts';
 import { PACE_CONFIG } from '../pace/index.ts';
 import { paceDeltaAround } from '../pace-delta/index.ts';
 import { emptyDamageJumps, finishJump, foldDamageJumps, type DamageJumpFold } from '../shared/damage-jumps.ts';
-import { isClosed, leaderLapAt, NEUTRALISATION_READS, neutralisedSpans } from '../shared/neutralised.ts';
+import { isNeutralisation, leaderLapAt, NEUTRALISATION_MACHINES, NEUTRALISATION_READS } from '../shared/neutralised.ts';
 import { behaviourFor } from '../shared/behaviour.ts';
 import { ourCars } from '../shared/our-cars.ts';
 import { warningInCycle } from '../shared/penalties.ts';
@@ -111,6 +114,13 @@ type Owed = { driveThroughs: number; stopGos: number; totalMs: Ms };
 
 type CarSpan = DeepReadonly<Span> | DeepReadonly<OpenSpan>;
 
+/** A closed neutralisation: its start and the frames it covers, `startFrame <= f < endFrame` (C26). */
+type ClosedNeutralised = Omit<Neutralised, 'lap'>;
+
+/**
+ * The accumulator: a pure fold over the projection's events, crossings, laps and closed spans, and the config (C31.2).
+ * The open spans and the live state are read by `output` (`Now`), never kept here.
+ */
 type Acc = {
   /** How much of each history list is folded. */
   events: number;
@@ -118,35 +128,32 @@ type Acc = {
   laps: number;
   /** How many closed spans of each car sub-machine are folded. */
   closed: Record<CarMachine, number>;
-  /** Per car id. */
+  /** How many closed spans of each session-phase sub-machine are folded. */
+  closedPhases: Record<MachineId, number>;
+  /**
+   * Per car id; each mini-sector evaluated against the closed neutralisations and visits. One that an open span covers
+   * too is `excluded` only in `output`, which knows the open spans (`cutOf`).
+   */
   tracks: (Track | undefined)[];
-  /** The neutralisations, closed then open, as of the latest fold. */
-  neutralised: Neutralised[];
+  /** The closed neutralisations by session-phase sub-machine, in their order. */
+  neutralised: Record<MachineId, ClosedNeutralised[]>;
+  /** Every lap folded so far: its number and the frame it describes, for the leader's lap at a frame (C26). */
+  lapFrames: Pick<LapRecord, 'lapNumber' | 'frame'>[];
   /** Per car id, its closed pit visits and garage spells, by frame. */
   visits: Visit[][];
-  /** Per car id, the start frame of its open pit visit or garage spell, as of the latest fold. */
-  openVisits: (FrameNumber | undefined)[];
-  /** The collisions (events) and the entries of the closed spans. */
-  carEvents: CarEvent[];
-  /** The entries of the open spans, as of the latest fold. */
-  openEvents: CarEvent[];
+  /** The entries of the closed spans, by car sub-machine. */
+  spanEvents: Record<CarMachine, CarEvent[]>;
+  /** The collisions (events). */
+  collisions: CarEvent[];
   /** Per car id, what it owed in its latest closed penalties span. */
   owed: (Owed | undefined)[];
   /** Per car id, the frame its first closed retired span opened on. */
   retiredFrom: (FrameNumber | undefined)[];
-  /** Per car id, the frame its open retired span opened on, as of the latest fold. */
-  openRetiredFrom: (FrameNumber | undefined)[];
   current: CurrentLaps;
   /** The shared jump grouping over the events folded so far: every jump, repaired or not. */
   grouping: DamageJumpFold;
   /** The newest crossing time; a moment up to it is final in the history. */
   newestAt: SessionTime;
-  /** Positions at final moments. */
-  snapshots: Map<SessionTime, Snapshot>;
-  // From the latest view.
-  ours: CarId[];
-  isRace: boolean;
-  layout: TrackLayout;
   config: Config;
   neighbourhoodMs: Ms;
   window: number;
@@ -160,49 +167,61 @@ type Acc = {
   warningLimit: number;
 };
 
+/** What `output` reads from the view (the live state and the open spans, C20) beside the fold. */
+type Now = {
+  /** The weekend phase's row is `feed` (C14): the race, where lap 1 is no pace lap (`lap-classes`). */
+  isRace: true;
+  ours: CarId[];
+  layout: TrackLayout;
+  /** The neutralisations, closed then open, with the leader's lap at each start. */
+  neutralisedNow: Neutralised[];
+  /** The start frame of the open neutralisation, if one is open. */
+  openNeutralisedFrom: FrameNumber | undefined;
+  /** Per car id, the start frame of its open pit visit or garage spell. */
+  openVisits: (FrameNumber | undefined)[];
+  /** Per car id, the frame its open retired span opened on. */
+  openRetiredFrom: (FrameNumber | undefined)[];
+  /** The entries of the open spans. */
+  openEvents: CarEvent[];
+  /** Positions at final moments, for this output only. */
+  snapshots: Map<SessionTime, Snapshot>;
+};
+
+/** The fold and the view's now, as `output` combines them. */
+type Board = Acc & Now;
+
 /** The mini-sector from crossing `from` to crossing `to` covers frames `from.frame <= f < to.frame`: it shares one with `span` (C26). */
 const sharesFrame = (from: Point, to: Point, span: { startFrame: FrameNumber; endFrame: FrameNumber }): boolean =>
   from.frame < span.endFrame && to.frame > span.startFrame;
 
-const readLive = (acc: Acc, view: EngineView): void => {
-  const { live } = view;
-  acc.isRace = behaviourFor(WEEKEND_PHASE, view).includes('feed');
-  const { trackLengthM, sector2StartM, sector3StartM } = live.session;
-  acc.layout = { trackLengthM, sector2StartM, sector3StartM };
-  acc.config = INCIDENTS_CONFIG.read(view);
+/** The config sections the feed reads (C47), fixed for the run. */
+const settings = (view: EngineView) => {
   const { jumpPct, jumpWindowMs } = DAMAGE_CONFIG.read(view);
-  acc.jumpPct = jumpPct;
-  acc.jumpWindowMs = jumpWindowMs;
-  acc.warningLimit = ALARMS_CONFIG.read(view).warningsBeforePenalty;
-  acc.neighbourhoodMs = GAPS_CONFIG.read(view).neighbourhoodMs;
-  acc.window = PACE_CONFIG.read(view).window;
-  acc.maxNeutralisedMs = LAP_CLASSES_CONFIG.read(view).maxNeutralisedMs;
-  acc.ours = ourCars(live);
+  return {
+    config: INCIDENTS_CONFIG.read(view),
+    jumpPct,
+    jumpWindowMs,
+    warningLimit: ALARMS_CONFIG.read(view).warningsBeforePenalty,
+    neighbourhoodMs: GAPS_CONFIG.read(view).neighbourhoodMs,
+    window: PACE_CONFIG.read(view).window,
+    maxNeutralisedMs: LAP_CLASSES_CONFIG.read(view).maxNeutralisedMs,
+  };
 };
 
-/**
- * The neutralisations of the view (`shared/neutralised.ts`); whether the frames they cover changed (one opened, closed,
- * or went, as a neutralisation never confirmed does, C18). A neutralisation's leader lap is taken from the projection's
- * laps once, then raised by the laps folded after it that describe a frame up to its start, so it equals
- * `leaderLapAt` over the whole projection (C31).
- */
+/** Folds the new closed neutralisations (`shared/neutralised.ts`); whether there were any, so the tracks are evaluated again. */
 const foldNeutralised = (acc: Acc, view: EngineView): boolean => {
-  const { laps } = view.history;
-  const fresh = laps.slice(acc.laps);
-  const before = acc.neutralised;
-  const lapAt = new Map(before.map((n) => [n.startFrame, n.lap]));
-  const spans = neutralisedSpans(view.history, view.situation).filter((span) => behaviourOf(span.machine, span.kind) === 'neutralised');
-  acc.neutralised = spans.map((span) => {
-    const folded = lapAt.get(span.startFrame);
-    return {
-      at: span.start,
-      lap: folded === undefined ? leaderLapAt(laps, span.startFrame) : Math.max(folded, leaderLapAt(fresh, span.startFrame)),
-      startFrame: span.startFrame,
-      endFrame: isClosed(span) ? span.endFrame : Infinity,
-    };
-  });
-  const now = acc.neutralised;
-  return now.length !== before.length || now.some((n, i) => n.startFrame !== before[i]?.startFrame || n.endFrame !== before[i]?.endFrame);
+  let changed = false;
+  for (const machine of NEUTRALISATION_MACHINES) {
+    const list = view.history.spans[machine] ?? [];
+    for (let i = acc.closedPhases[machine] ?? 0; i < list.length; i++) {
+      const span = list[i] as DeepReadonly<Span>;
+      if (!isNeutralisation(machine, span) || behaviourOf(machine, span.kind) !== 'neutralised') continue;
+      (acc.neutralised[machine] ??= []).push({ at: span.start, startFrame: span.startFrame, endFrame: span.endFrame });
+      changed = true;
+    }
+    acc.closedPhases[machine] = list.length;
+  }
+  return changed;
 };
 
 /** What the car owes in a penalties span: its detail's counts and total, none of them in `clear`. */
@@ -244,14 +263,15 @@ const entriesOf = (machine: CarMachine, span: CarSpan, before: Owed | undefined)
 
 /**
  * Folds the closed spans of the car sub-machines new in the projection, in their order (a car's spans are contiguous, so
- * each one's predecessor is the car's latest folded one), and reads the open ones of the situation (C20). Returns the
- * cars whose pit visits or garage spells changed.
+ * each one's predecessor is the car's latest folded one). Returns the cars whose closed pit visits or garage spells
+ * changed.
  */
 const foldCarSpans = (acc: Acc, view: EngineView): Set<CarId> => {
   const changed = new Set<CarId>();
   for (const machine of CAR_MACHINES) {
     const list = view.history.spans[machine] ?? [];
-    for (const span of list.slice(acc.closed[machine])) {
+    for (let i = acc.closed[machine]; i < list.length; i++) {
+      const span = list[i] as DeepReadonly<Span>;
       const id = span.carId;
       if (id === undefined) continue;
       const row = behaviourOf(machine, span.kind);
@@ -260,55 +280,39 @@ const foldCarSpans = (acc: Acc, view: EngineView): Set<CarId> => {
         changed.add(id);
       }
       if (row === 'retirement' && span.confirmed) acc.retiredFrom[id] ??= span.startFrame;
-      acc.carEvents.push(...entriesOf(machine, span, acc.owed[id]));
+      acc.spanEvents[machine].push(...entriesOf(machine, span, acc.owed[id]));
       if (machine === 'penalties') acc.owed[id] = owedOf(span);
     }
     acc.closed[machine] = list.length;
   }
-
-  const openVisits: (FrameNumber | undefined)[] = [];
-  acc.openRetiredFrom = [];
-  acc.openEvents = [];
-  for (const machine of CAR_MACHINES) {
-    for (const span of openSpansOf(view, machine)) {
-      const id = span.carId;
-      if (id === undefined) continue;
-      const row = behaviourOf(machine, span.kind);
-      if (row === 'noTimeLoss') openVisits[id] = span.startFrame;
-      if (row === 'retirement') acc.openRetiredFrom[id] = span.startFrame;
-      acc.openEvents.push(...entriesOf(machine, span, acc.owed[id]));
-    }
-  }
-  const cars = Math.max(openVisits.length, acc.openVisits.length);
-  for (let id = 0; id < cars; id++) if (openVisits[id] !== acc.openVisits[id]) changed.add(id as CarId);
-  acc.openVisits = openVisits;
   return changed;
 };
 
 /**
- * Folds the new crossings; a change of a car's pit visits or garage spells (`visitsChanged`) re-evaluates its
- * crossings, and a change of the neutralisations (`neutralisedChanged`) every car's, so the fold equals a run from
- * scratch (C31). A mini-sector is no time loss when it shares a frame with a neutralisation or one of its car's visits
- * (C26).
+ * Folds the new crossings; a new closed pit visit or garage spell of a car (`visitsChanged`) re-evaluates its crossings,
+ * and a new closed neutralisation (`neutralisedChanged`) every car's, so the fold equals a run from scratch (C31). A
+ * mini-sector is no time loss when it shares a frame with a closed neutralisation or one of its car's closed visits
+ * (C26); the open ones are applied by `output`.
  */
 const foldCrossings = (acc: Acc, view: EngineView, neutralisedChanged: boolean, visitsChanged: ReadonlySet<CarId>): void => {
   const { crossings } = view.history;
-  for (const c of crossings.slice(acc.crossings)) {
+  for (let i = acc.crossings; i < crossings.length; i++) {
+    const c = crossings[i] as MiniSectorCrossing;
     if (c.lap < 1) continue;
     addCrossing((acc.tracks[c.carId] ??= emptyTrack()), c);
     if (c.at > acc.newestAt) acc.newestAt = c.at;
   }
   acc.crossings = crossings.length;
 
+  const neutralised = NEUTRALISATION_MACHINES.flatMap((machine) => acc.neutralised[machine] ?? []);
   acc.tracks.forEach((track, id) => {
     if (track === undefined) return;
     if (neutralisedChanged || visitsChanged.has(id as CarId)) resetTrack(track);
-    const open = acc.openVisits[id];
-    const visits = open === undefined ? (acc.visits[id] ?? []) : [...(acc.visits[id] ?? []), { startFrame: open, endFrame: Infinity }];
+    const visits = acc.visits[id] ?? [];
     evaluate(
       track,
       acc.config.timeLossMs,
-      (from, to) => acc.neutralised.some((n) => sharesFrame(from, to, n)) || visits.some((v) => sharesFrame(from, to, v)),
+      (from, to) => neutralised.some((n) => sharesFrame(from, to, n)) || visits.some((v) => sharesFrame(from, to, v)),
     );
   });
 };
@@ -316,10 +320,11 @@ const foldCrossings = (acc: Acc, view: EngineView, neutralisedChanged: boolean, 
 /** Folds the new collisions and damage changes; retirements, penalties and warnings come from the spans (C13, C20). */
 const foldEvents = (acc: Acc, view: EngineView): void => {
   const { events } = view.history;
-  for (const e of events.slice(acc.events)) {
+  for (let i = acc.events; i < events.length; i++) {
+    const e = events[i] as DeepReadonly<RaceEvent>;
     if (e.carId === undefined || e.kind !== 'collision') continue;
     const carIds = e.otherCarId === undefined ? [e.carId] : [e.carId, e.otherCarId];
-    acc.carEvents.push({ kind: 'collision', at: e.at, carIds });
+    acc.collisions.push({ kind: 'collision', at: e.at, carIds });
   }
   acc.events = events.length;
   foldDamageJumps(acc.grouping, events, acc);
@@ -327,12 +332,13 @@ const foldEvents = (acc: Acc, view: EngineView): void => {
 
 const foldLaps = (acc: Acc, view: EngineView): void => {
   const { laps } = view.history;
-  addLaps(acc.current, laps.slice(acc.laps) as LapRecord[]);
+  const fresh = laps.slice(acc.laps) as LapRecord[];
+  addLaps(acc.current, fresh);
+  for (const { lapNumber, frame } of fresh) acc.lapFrames.push({ lapNumber, frame });
   acc.laps = laps.length;
 };
 
 const fold = (acc: Acc, view: EngineView): Acc => {
-  readLive(acc, view);
   const neutralisedChanged = foldNeutralised(acc, view);
   foldCrossings(acc, view, neutralisedChanged, foldCarSpans(acc, view));
   foldEvents(acc, view);
@@ -347,32 +353,66 @@ const init = (view: EngineView): Acc =>
       crossings: 0,
       laps: 0,
       closed: { 'car-location': 0, 'car-status': 0, penalties: 0, warnings: 0 },
+      closedPhases: Object.fromEntries(NEUTRALISATION_MACHINES.map((machine) => [machine, 0])),
       tracks: [],
-      neutralised: [],
+      neutralised: Object.fromEntries(NEUTRALISATION_MACHINES.map((machine) => [machine, []])),
+      lapFrames: [],
       visits: [],
-      openVisits: [],
-      carEvents: [],
-      openEvents: [],
+      spanEvents: { 'car-location': [], 'car-status': [], penalties: [], warnings: [] },
+      collisions: [],
       owed: [],
       retiredFrom: [],
-      openRetiredFrom: [],
       current: emptyCurrentLaps(),
       grouping: emptyDamageJumps(),
       newestAt: -Infinity,
-      snapshots: new Map(),
-      ours: [],
-      isRace: false,
-      layout: { trackLengthM: 0, sector2StartM: 0, sector3StartM: 0 },
-      config: INCIDENTS_CONFIG.read(view),
-      neighbourhoodMs: 0,
-      window: 0,
-      maxNeutralisedMs: 0,
-      jumpPct: 0,
-      jumpWindowMs: 0,
-      warningLimit: 0,
+      ...settings(view),
     },
     view,
   );
+
+/**
+ * What the view adds to the fold in the race (its weekend phase's row is `feed`): our cars and the track layout (the live state), the open spans of the car
+ * sub-machines and the open neutralisation (C20), and every neutralisation's leader lap from the folded laps (C26).
+ */
+const nowOf = (acc: Acc, view: EngineView): Now => {
+  const { live } = view;
+  const openVisits: (FrameNumber | undefined)[] = [];
+  const openRetiredFrom: (FrameNumber | undefined)[] = [];
+  const openEvents: CarEvent[] = [];
+  for (const machine of CAR_MACHINES) {
+    for (const span of openSpansOf(view, machine)) {
+      const id = span.carId;
+      if (id === undefined) continue;
+      const row = behaviourOf(machine, span.kind);
+      if (row === 'noTimeLoss') openVisits[id] = span.startFrame;
+      if (row === 'retirement') openRetiredFrom[id] = span.startFrame;
+      openEvents.push(...entriesOf(machine, span, acc.owed[id]));
+    }
+  }
+  const open = NEUTRALISATION_MACHINES.flatMap((machine) =>
+    openSpansOf(view, machine).filter((span) => isNeutralisation(machine, span) && behaviourOf(machine, span.kind) === 'neutralised'),
+  );
+  const closed = NEUTRALISATION_MACHINES.flatMap((machine) => acc.neutralised[machine] ?? []);
+  const spans = [...closed, ...open.map((span) => ({ at: span.start, startFrame: span.startFrame, endFrame: Infinity }))];
+  const { trackLengthM, sector2StartM, sector3StartM } = live.session;
+  return {
+    isRace: true,
+    ours: ourCars(live),
+    layout: { trackLengthM, sector2StartM, sector3StartM },
+    neutralisedNow: spans.map((n) => ({ ...n, lap: leaderLapAt(acc.lapFrames, n.startFrame) })),
+    openNeutralisedFrom: open.reduce<FrameNumber | undefined>((min, span) => (min === undefined || span.startFrame < min ? span.startFrame : min), undefined),
+    openVisits,
+    openRetiredFrom,
+    openEvents,
+    snapshots: new Map(),
+  };
+};
+
+/**
+ * The frame after which the open spans exclude the car's mini-sectors: an open neutralisation or pit visit covers every
+ * frame from its start on, so a mini-sector ending after it shares a frame with it (C26); `Infinity` with none open.
+ */
+const cutOf = (b: Board, id: CarId): FrameNumber => Math.min(b.openNeutralisedFrom ?? Infinity, b.openVisits[id] ?? Infinity);
 
 /** A feed entry before its neighbourhood, forUs and pace are resolved. */
 type Candidate = {
@@ -402,7 +442,7 @@ const candidate = (kind: IncidentKind, at: SessionTime, carIds: CarId[], extra: 
   ...extra,
 });
 
-const snapshot = (acc: Acc, t: SessionTime): Snapshot => {
+const snapshot = (acc: Board, t: SessionTime): Snapshot => {
   if (t > acc.newestAt) return snapshotAt(acc.tracks, t);
   let snap = acc.snapshots.get(t);
   if (snap === undefined) acc.snapshots.set(t, (snap = snapshotAt(acc.tracks, t)));
@@ -410,22 +450,26 @@ const snapshot = (acc: Acc, t: SessionTime): Snapshot => {
 };
 
 /** The car's lap at `t` from its crossings; lap 1 before its first one. */
-const crossingLap = (acc: Acc, id: CarId, t: SessionTime): number => {
+const crossingLap = (acc: Board, id: CarId, t: SessionTime): number => {
   const point = snapshot(acc, t).latest[id];
   return point === undefined ? 1 : lapOfProgress(point.progress);
 };
 
-/** The time loss runs that stand, minus those still running into a pit visit or garage spell the car is in now (its open span). */
-const standingRuns = (acc: Acc): SlowRun[] =>
+/**
+ * The time loss runs that stand: of the slow mini-sectors no open span covers (`cutOf`), minus those still running into
+ * a pit visit or garage spell the car is in now (its open span).
+ */
+const standingRuns = (acc: Board): SlowRun[] =>
   acc.tracks.flatMap((track, id) => {
     if (track === undefined) return [];
-    const runs = slowRuns(id as CarId, track);
+    const cut = cutOf(acc, id as CarId);
+    const runs = slowRuns(id as CarId, cut === Infinity ? track.slow : track.slow.filter((s) => s.endFrame <= cut));
     const newest = track.points[track.points.length - 1]?.progress;
     return acc.openVisits[id] !== undefined ? runs.filter((r) => r.endProgress !== newest) : runs;
   });
 
 /** Every damage jump of every car, repaired or not, with its lap and loss (the lap from the crossings without a lap record). */
-const allJumps = (acc: Acc): { carId: CarId; jump: DamageJump }[] =>
+const allJumps = (acc: Board): { carId: CarId; jump: DamageJump }[] =>
   [...acc.grouping.jumps].flatMap(([carId, raws]) => {
     // integer keys iterate in ascending order: the car's laps by lap number
     const laps = Object.values(acc.current[carId] ?? {});
@@ -433,7 +477,7 @@ const allJumps = (acc: Acc): { carId: CarId; jump: DamageJump }[] =>
   });
 
 /** Each car's damage jumps grouped: a jump within `jumpWindowMs` of a group's first one joins it (one incident, several parts). */
-const damageGroups = (acc: Acc): { carId: CarId; jumps: DamageJump[] }[] => {
+const damageGroups = (acc: Board): { carId: CarId; jumps: DamageJump[] }[] => {
   const groups: { carId: CarId; jumps: DamageJump[] }[] = [];
   const open = new Map<CarId, { carId: CarId; jumps: DamageJump[] }>();
   const sorted = allJumps(acc).sort((a, b) => a.jump.at - b.jump.at || a.carId - b.carId);
@@ -452,8 +496,9 @@ const damageGroups = (acc: Acc): { carId: CarId; jumps: DamageJump[] }[] => {
 };
 
 /** Every entry the history gives, with each time loss merged into a collision or damage entry of its car close by. */
-const candidates = (acc: Acc): Candidate[] => {
-  const list = [...acc.carEvents, ...acc.openEvents].map((e) =>
+const candidates = (acc: Board): Candidate[] => {
+  const closed = CAR_MACHINES.flatMap((machine) => acc.spanEvents[machine]);
+  const list = [...closed, ...acc.collisions, ...acc.openEvents].map((e) =>
     candidate(e.kind, e.at, e.carIds, {
       ...(e.warnings !== undefined && { warnings: e.warnings }),
       ...(e.penalty !== undefined && { penalty: e.penalty }),
@@ -470,7 +515,7 @@ const candidates = (acc: Acc): Candidate[] => {
     for (const c of into) c.merged.push(run);
     if (into.length === 0) list.push(candidate('timeLoss', run.at, [run.carId], { lap: lapOfProgress(run.startProgress), run }));
   }
-  for (const { at, lap } of acc.neutralised) list.push(candidate('neutralised', at, [], { lap }));
+  for (const { at, lap } of acc.neutralisedNow) list.push(candidate('neutralised', at, [], { lap }));
   return list;
 };
 
@@ -480,19 +525,19 @@ const runsLoss = (runs: SlowRun[]): Known<Ms> =>
     Math.max(...runs.map((r) => r.endAt)),
   );
 
-/** The loss of the car's mini-sector that holds `t`, against its median. */
-const segmentLoss = (acc: Acc, id: CarId, t: SessionTime): Known<Ms> => {
+/** The loss of the car's mini-sector that holds `t`, against its median; none where an open span covers it (`cutOf`). */
+const segmentLoss = (acc: Board, id: CarId, t: SessionTime): Known<Ms> => {
   const track = acc.tracks[id];
   const point = track && latestAt(track, t);
   const loss = point && track?.loss[point.progress];
-  if (loss === undefined) return unknown('notReceived');
-  if (loss === 'excluded') return unknown('notApplicable');
+  if (track === undefined || point === undefined || loss === undefined) return unknown('notReceived');
+  if (loss === 'excluded' || (track.lossFrame[point.progress] as FrameNumber) > cutOf(acc, id)) return unknown('notApplicable');
   if (loss === 'fewLaps') return unknown('insufficientData');
   return known(loss.lossMs, loss.end);
 };
 
 /** `pace-delta` over the car's pace laps around `lap` (the lap itself excluded). */
-const paceAround = (acc: Acc, id: CarId, lap: number): Known<Ms> => paceDeltaAround(Object.values(acc.current[id] ?? {}), lap, acc);
+const paceAround = (acc: Board, id: CarId, lap: number): Known<Ms> => paceDeltaAround(Object.values(acc.current[id] ?? {}), lap, acc);
 
 /** Kinds with no time lost: the car is out, the field is neutralised, or the entry is a ruling, not a loss. */
 const NO_TIME_LOST: ReadonlySet<IncidentKind> = new Set(['retirement', 'neutralised', 'warning', 'penalty']);
@@ -501,7 +546,7 @@ const NO_TIME_LOST: ReadonlySet<IncidentKind> = new Set(['retirement', 'neutrali
  * From the mini-sector at once, then from `pace-delta` once there are laps (spec 6.4). The loss is of the car that
  * lost time: the first car, unless only the other car of a collision has a merged time loss.
  */
-const timeLost = (acc: Acc, c: Candidate, lap: number): Known<Ms> => {
+const timeLost = (acc: Board, c: Candidate, lap: number): Known<Ms> => {
   const first = c.carIds[0];
   if (first === undefined || NO_TIME_LOST.has(c.kind)) return unknown('notApplicable');
   if (c.jump?.lossMsPerLap.known) return c.jump.lossMsPerLap;
@@ -516,7 +561,7 @@ const timeLost = (acc: Acc, c: Candidate, lap: number): Known<Ms> => {
   return segmentLoss(acc, car, c.at);
 };
 
-const gapKnown = (acc: Acc, snap: Snapshot, ours: CarId, other: CarId, at: SessionTime): Known<Ms> => {
+const gapKnown = (acc: Board, snap: Snapshot, ours: CarId, other: CarId, at: SessionTime): Known<Ms> => {
   const gap = gapIn(acc.tracks, snap, ours, other);
   return gap === undefined ? unknown('notReceived') : known(gap, at);
 };
@@ -533,19 +578,19 @@ const frameOf = (after: Snapshot | undefined): FrameNumber => {
 };
 
 /** Whether `id`'s retired span (car-status) opened on or before `frame` (C26). */
-const retiredBy = (acc: Acc, id: CarId, frame: FrameNumber): boolean => {
+const retiredBy = (acc: Board, id: CarId, frame: FrameNumber): boolean => {
   const from = acc.retiredFrom[id] ?? acc.openRetiredFrom[id];
   return from !== undefined && from <= frame;
 };
 
 /** Our gap to `other` after the incident: none once it retired, `notReceived` until the after moment is in the history. */
-const gapAfter = (acc: Acc, after: Snapshot | undefined, ours: CarId, other: CarId, afterAt: SessionTime): Known<Ms> => {
+const gapAfter = (acc: Board, after: Snapshot | undefined, ours: CarId, other: CarId, afterAt: SessionTime): Known<Ms> => {
   if (retiredBy(acc, other, frameOf(after))) return unknown('notApplicable');
   return after === undefined ? unknown('notReceived') : gapKnown(acc, after, ours, other, afterAt);
 };
 
 /** Per our car that is involved or has an involved car in its neighbourhood: its position and gap before and after. */
-const forUsOf = (acc: Acc, c: Candidate): IncidentForUs[] => {
+const forUsOf = (acc: Board, c: Candidate): IncidentForUs[] => {
   const before = snapshot(acc, c.at);
   const afterAt = c.at + AFTER_MS;
   const after = acc.newestAt >= afterAt ? snapshot(acc, afterAt) : undefined;
@@ -569,7 +614,7 @@ const forUsOf = (acc: Acc, c: Candidate): IncidentForUs[] => {
   return items;
 };
 
-const lapOf = (acc: Acc, c: Candidate): number => {
+const lapOf = (acc: Board, c: Candidate): number => {
   if (c.lap !== undefined) return c.lap;
   const primary = c.carIds[0];
   return primary === undefined ? 1 : crossingLap(acc, primary, c.at);
@@ -583,7 +628,7 @@ const damageParts = (jumps: readonly DamageJump[]): IncidentDamagePart[] => {
 };
 
 /** The detail only some kinds have: a damage entry's parts, a warning's count of the limit, a penalty's ruling. */
-const detailOf = (acc: Acc, c: Candidate): Pick<IncidentEntry, 'damage' | 'warning' | 'penalty'> => {
+const detailOf = (acc: Board, c: Candidate): Pick<IncidentEntry, 'damage' | 'warning' | 'penalty'> => {
   if (c.jumps !== undefined) return { damage: damageParts(c.jumps) };
   if (c.warnings !== undefined) return { warning: { count: warningInCycle(c.warnings, acc.warningLimit), limit: acc.warningLimit } };
   if (c.penalty !== undefined) return { penalty: { ...c.penalty } };
@@ -591,8 +636,9 @@ const detailOf = (acc: Acc, c: Candidate): Pick<IncidentEntry, 'damage' | 'warni
 };
 
 /** Newest first, ties by id; only entries of our cars or their neighbourhood, cut at `feedLength`. */
-const output = (acc: Acc): IncidentsOutput => {
-  if (!acc.isRace) return [];
+const output = (fold: Acc, view: EngineView): IncidentsOutput => {
+  if (!behaviourFor(WEEKEND_PHASE, view).includes('feed')) return [];
+  const acc: Board = { ...fold, ...nowOf(fold, view) };
   const byId = new Map<string, Candidate>();
   for (const c of candidates(acc)) if (!byId.has(c.id)) byId.set(c.id, c);
   const sorted = [...byId.values()].sort((a, b) => b.at - a.at || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));

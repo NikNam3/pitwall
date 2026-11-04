@@ -16,8 +16,8 @@ import {
 } from '@pitwall/domain';
 import type { EngineView, IncrementalCalculator } from '@pitwall/engine/readers';
 import { LAP_CLASSES_CONFIG, type LapClassOptions } from '../lap-classes/index.ts';
-import { behaviourFor } from '../shared/behaviour.ts';
-import { inSession } from '../shared/car-status.ts';
+import { behaviourByCar } from '../shared/behaviour.ts';
+import { inSessionByCar } from '../shared/car-status.ts';
 import { bestsOf, rowOf, sessionBestBoard, sessionBestsOf, type Best, type CarBests } from './lap-times.ts';
 import { LAP_TIMES_BEHAVIOUR, type LapTimesEffect } from './behaviour.ts';
 import { LAP_TIMES, LAP_TIMES_CONFIG, type LapTimesOutput } from './index.ts';
@@ -25,19 +25,27 @@ import { LAP_TIMES, LAP_TIMES_CONFIG, type LapTimesOutput } from './index.ts';
 /** The crossings of one lap of one car: time by segment, and the newest. */
 type LapCrossings = { at: number[]; latest: { segment: number; at: number } };
 
-/** A car at the latest view: its lap and what the situations open for it say (their rows merged, C44). `inSession` is car-status not absent. */
+/** A car at the view: its lap and what the situations open for it say (their rows merged, C44). `inSession` is car-status not absent. */
 type CarSnapshot = { id: CarId; inSession: boolean; lap: number; effect: LapTimesEffect };
 
+/** The accumulator: a pure fold over the laps and the crossings (C31.2). */
 type Acc = {
   laps: CurrentLaps;
   /** Per car, then lap number. */
   crossings: Array<Map<number, LapCrossings>>;
+};
+
+/** What the view shows right now: cars, session and config; read by `output`, never kept in the accumulator (C31.2). */
+type Now = {
   cars: CarSnapshot[];
   session: { phase: WeekendPhase; timeLeftMs: Ms; updatedAt: number };
   eliminated: { q1: number; q2: number };
   /** The session and the `lap-classes` config, for `classifyLap`. */
   classes: LapClassOptions;
 };
+
+/** The fold and the view's now, as `output` combines them. */
+type Board = Acc & Now;
 
 const notApplicable = unknown('notApplicable');
 const insufficientData = unknown('insufficientData');
@@ -48,37 +56,44 @@ const foldLaps = (acc: Acc, view: EngineView, from: number): void => {
 
 const foldCrossings = (acc: Acc, view: EngineView, from: number): void => {
   const list = view.history.crossings;
-  for (let i = from; i < list.length; i++) {
+  const length = list.length;
+  for (let i = from; i < length; i++) {
     const m = list[i] as MiniSectorCrossing;
     const byLap = (acc.crossings[m.carId] ??= new Map());
     let lap = byLap.get(m.lap);
     if (lap === undefined) byLap.set(m.lap, (lap = { at: [], latest: { segment: m.segment, at: m.at } }));
     lap.at[m.segment] = m.at;
-    lap.latest = { segment: m.segment, at: m.at };
+    // the accumulator's own object: no output holds it
+    lap.latest.segment = m.segment;
+    lap.latest.at = m.at;
   }
 };
 
-/** What the view shows right now: cars, session and config (the history is folded separately). */
-const snapshot = (acc: Acc, view: EngineView): void => {
+/** What the view shows right now: cars, session and config. Each machine's open spans are read once, by car. */
+const nowOf = (view: EngineView): Now => {
   const { live } = view;
   const phase = view.situation.weekendPhase;
-  acc.cars = live.cars.map((c) => ({
+  const rowsOf = behaviourByCar(LAP_TIMES_BEHAVIOUR, view);
+  const inSession = inSessionByCar(view);
+  const cars = live.cars.map((c) => ({
     id: c.id,
-    inSession: inSession(view, c.id),
+    inSession: inSession(c.id),
     lap: c.timing.lap,
     // a pending phase has no span and nothing is projected until it is decided (C14, C3)
-    effect: Object.assign({}, ...behaviourFor(LAP_TIMES_BEHAVIOUR, view, c.id), phase.kind === 'pending' ? { offLap: true } : {}),
+    effect: Object.assign({}, ...rowsOf(c.id), phase.kind === 'pending' ? { offLap: true } : {}) as LapTimesEffect,
   }));
   const s = live.session;
-  acc.session = { phase, timeLeftMs: s.timeLeftMs, updatedAt: s.updatedAt };
   const config = LAP_TIMES_CONFIG.read(view);
-  acc.eliminated = { q1: config.eliminatedQ1, q2: config.eliminatedQ2 };
-  acc.classes = { isRace: phase.kind === 'race', ...LAP_CLASSES_CONFIG.read(view) };
+  return {
+    cars,
+    session: { phase, timeLeftMs: s.timeLeftMs, updatedAt: s.updatedAt },
+    eliminated: { q1: config.eliminatedQ1, q2: config.eliminatedQ2 },
+    classes: { isRace: phase.kind === 'race', ...LAP_CLASSES_CONFIG.read(view) },
+  };
 };
 
 const init = (view: EngineView): Acc => {
-  const acc = { laps: emptyCurrentLaps(), crossings: [] } as unknown as Acc;
-  snapshot(acc, view);
+  const acc: Acc = { laps: emptyCurrentLaps(), crossings: [] };
   foldLaps(acc, view, 0);
   foldCrossings(acc, view, 0);
   return acc;
@@ -89,7 +104,7 @@ const init = (view: EngineView): Acc => {
  * sprint shootout qualifying (the weekend phase's format and segment, C14); the last part and the short and one-shot
  * variants have none. Each part's cut-off counts the cars still in the session (`inSession`).
  */
-const eliminatedIn = (acc: Acc): number | undefined => {
+const eliminatedIn = (acc: Board): number | undefined => {
   const { phase } = acc.session;
   if (phase.kind !== 'qualifying' || (phase.format !== 'grandPrix' && phase.format !== 'sprintShootout')) return undefined;
   if (phase.segment === 1) return acc.eliminated.q1;
@@ -119,14 +134,14 @@ const noProjection = (carId: CarId, cutOff: Projection['cutOff'], reason: Known<
 });
 
 /** The best laps of the active cars other than `id`. */
-const othersBests = (acc: Acc, id: CarId, bests: Map<CarId, CarBests>): Best[] =>
+const othersBests = (acc: Board, id: CarId, bests: Map<CarId, CarBests>): Best[] =>
   [...bests].filter(([other, b]) => other !== id && b.lap !== undefined && acc.cars[other]?.inSession === true).map(([, b]) => b.lap as Best);
 
 /**
  * The quali cut-off from the other cars' bests alone, so it stands on an out lap and on the first flying lap too;
  * known since the newest of those bests. `margin` is the car's: from its projection, or why there is none.
  */
-const cutOffOf = (acc: Acc, others: readonly Best[], margin: (timeMs: Ms) => Known<Ms>): Projection['cutOff'] => {
+const cutOffOf = (acc: Board, others: readonly Best[], margin: (timeMs: Ms) => Known<Ms>): Projection['cutOff'] => {
   const eliminated = eliminatedIn(acc);
   if (eliminated === undefined) return notApplicable;
   const cutPosition = acc.cars.filter((c) => c.inSession).length - eliminated;
@@ -137,7 +152,7 @@ const cutOffOf = (acc: Acc, others: readonly Best[], margin: (timeMs: Ms) => Kno
   return known({ position: cutPosition, timeMs, marginMs: margin(timeMs) }, at);
 };
 
-const projectionOf = (acc: Acc, car: CarSnapshot, best: Best | undefined, bests: Map<CarId, CarBests>): Projection => {
+const projectionOf = (acc: Board, car: CarSnapshot, best: Best | undefined, bests: Map<CarId, CarBests>): Projection => {
   const id = car.id;
   const others = othersBests(acc, id, bests);
   const byLap = acc.laps[id] ?? {};
@@ -178,7 +193,8 @@ const projectionOf = (acc: Acc, car: CarSnapshot, best: Best | undefined, bests:
   };
 };
 
-const output = (acc: Acc): LapTimesOutput => {
+const output = (fold: Acc, view: EngineView): LapTimesOutput => {
+  const acc: Board = { ...fold, ...nowOf(view) };
   const lapsByCar = new Map<CarId, LapRecord[]>();
   acc.laps.forEach((byLap, i) => {
     if (byLap !== undefined) lapsByCar.set(toCarId(i), Object.values(byLap).sort((a, b) => a.lapNumber - b.lapNumber));
@@ -197,7 +213,7 @@ const output = (acc: Acc): LapTimesOutput => {
   return { rows, sessionBest: sessionBestBoard(session), projections };
 };
 
-/** `lap-times`: a fold over the laps and the mini-sector crossings; the cars and session are read from the latest view. */
+/** `lap-times`: a fold over the laps and the mini-sector crossings; `output` reads the cars and session from the view. */
 export const lapTimesCalculator: IncrementalCalculator<Acc, LapTimesOutput> = {
   id: LAP_TIMES,
   kind: 'incremental',
@@ -206,7 +222,6 @@ export const lapTimesCalculator: IncrementalCalculator<Acc, LapTimesOutput> = {
   init,
   update(acc, delta, view) {
     if (delta.rewound !== undefined) return init(view);
-    snapshot(acc, view);
     foldLaps(acc, view, delta.before.laps ?? 0);
     foldCrossings(acc, view, delta.before.crossings ?? 0);
     return acc;

@@ -129,7 +129,7 @@ const evaluate = (calc: Calculator, slot: Slot, view: EngineView, hook: OnCalcul
       slot.acc === undefined || view.delta.rewound !== undefined ? calc.init(view) : calc.update(slot.acc.value, view.delta, view),
     );
     acc = { value: next };
-    output = hook(calc.id, () => calc.output(next));
+    output = hook(calc.id, () => calc.output(next, view));
   }
   return { acc, output, raised: calc.insights?.(output, slot.prevOutput?.value, view) };
 };

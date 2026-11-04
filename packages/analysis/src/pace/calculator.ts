@@ -11,11 +11,6 @@ type PaceAcc = {
   laps: CurrentLaps;
   /** Each car's last closed stint (the engine records a stint when it closes). */
   lastStint: Array<DeepReadonly<StintRecord> | undefined>;
-  isRace: boolean;
-  /** The weekend phase has no pace (`none`, C14). */
-  notApplicable: boolean;
-  maxNeutralisedMs: number;
-  window: number;
 };
 
 const foldStints = (acc: PaceAcc, view: EngineView, from: number): void => {
@@ -28,8 +23,9 @@ const foldLaps = (acc: PaceAcc, view: EngineView, from: number): void => {
 };
 
 /**
- * The weekend phase's row (`PACE_BEHAVIOUR`) and the config. A pending weekend phase has no span yet and reads as the
- * race's grid (C14): its row is the race's.
+ * The weekend phase's row (`PACE_BEHAVIOUR`; `notApplicable` when the phase has no pace, C14) and the config. A pending
+ * weekend phase has no span yet and reads as the race's grid (C14): its row is the race's. Read by `output`, never kept
+ * in the accumulator (C31.2).
  */
 const settings = (view: EngineView) => ({
   ...(Object.assign({}, PACE_BEHAVIOUR['weekend-phase']?.race, ...behaviourFor(PACE_BEHAVIOUR, view)) as Required<PaceEffect>),
@@ -44,7 +40,7 @@ const mean = (laps: LapRecord[]) => {
 };
 
 const init = (view: EngineView): PaceAcc => {
-  const acc: PaceAcc = { laps: emptyCurrentLaps(), lastStint: [], ...settings(view) };
+  const acc: PaceAcc = { laps: emptyCurrentLaps(), lastStint: [] };
   foldLaps(acc, view, 0);
   foldStints(acc, view, 0);
   return acc;
@@ -58,25 +54,25 @@ export const paceCalculator: IncrementalCalculator<PaceAcc, Pace> = {
   init,
   update(acc, delta, view) {
     if (delta.rewound !== undefined) return init(view);
-    Object.assign(acc, settings(view));
     foldLaps(acc, view, delta.before.laps ?? 0);
     foldStints(acc, view, delta.before.stints ?? 0);
     return acc;
   },
-  output(acc) {
+  output(acc, view) {
+    const set = settings(view);
     const byCar: Pace['byCar'] = {};
     acc.laps.forEach((byLap, id) => {
       if (byLap === undefined) return;
       const all = Object.values(byLap).sort((a, b) => a.lapNumber - b.lapNumber);
       if (all.length === 0) return;
-      if (acc.notApplicable) {
+      if (set.notApplicable) {
         const na = unknown('notApplicable');
         byCar[id as CarId] = { recentMs: na, stintMs: na, samples: 0 };
         return;
       }
-      const pace = all.filter((l) => classifyLap(l, acc).forPace);
-      const stint = stintLaps(all, acc.lastStint[id]).filter((l) => classifyLap(l, acc).forPace);
-      const recent = pace.slice(-acc.window);
+      const pace = all.filter((l) => classifyLap(l, set).forPace);
+      const stint = stintLaps(all, acc.lastStint[id]).filter((l) => classifyLap(l, set).forPace);
+      const recent = pace.slice(-set.window);
       byCar[id as CarId] = {
         recentMs: recent.length > 0 ? mean(recent) : unknown('insufficientData'),
         stintMs: stint.length > 0 ? mean(stint) : unknown('insufficientData'),

@@ -14,6 +14,9 @@ const NEUTRALISING: Readonly<Record<MachineId, readonly string[]>> = {
 /** The session-phase sub-machines `neutralisedSpans` reads: what a reader declares as `spans:<machine>`. */
 export const NEUTRALISATION_READS = ['spans:session-phase-race', 'spans:session-phase-qualifying', 'spans:session-phase-practice'] as const;
 
+/** The session-phase sub-machines whose spans can be a neutralisation, in the order `neutralisedSpans` reads them. */
+export const NEUTRALISATION_MACHINES: readonly MachineId[] = Object.keys(NEUTRALISING);
+
 /** A neutralisation, closed (from the projection) or open (from the situation, no `end` and no `endFrame`). */
 export type Neutralisation = DeepReadonly<Span> | DeepReadonly<OpenSpan>;
 
@@ -35,13 +38,22 @@ export const neutralisationKind = (span: Neutralisation): NeutralisationKind =>
 export function neutralisedSpans(projection: Pick<EngineView['history'], 'spans'>, situation: EngineView['situation']): ReadonlyArray<Neutralisation> {
   const closed: Neutralisation[] = [];
   const open: Neutralisation[] = [];
-  for (const [machine, kinds] of Object.entries(NEUTRALISING)) {
-    for (const span of projection.spans[machine] ?? []) {
-      if (kinds.includes(span.kind) && (span.confirmed || span.kind !== 'neutralised')) closed.push(span);
-    }
-    for (const span of situation.byMachine[machine] ?? []) if (kinds.includes(span.kind)) open.push(span);
+  for (const machine of NEUTRALISATION_MACHINES) {
+    for (const span of projection.spans[machine] ?? []) if (isNeutralisation(machine, span)) closed.push(span);
+    for (const span of situation.byMachine[machine] ?? []) if (isNeutralisation(machine, span)) open.push(span);
   }
   return [...closed, ...open];
+}
+
+
+/**
+ * Whether a span of `machine` is a neutralisation, as `neutralisedSpans` counts it: a neutralising kind, and for a
+ * `neutralised` span closed with `confirmed: false`, none (C18).
+ */
+export function isNeutralisation(machine: MachineId, span: Neutralisation): boolean {
+  const kinds = NEUTRALISING[machine];
+  if (kinds === undefined || !kinds.includes(span.kind)) return false;
+  return !isClosed(span) || span.confirmed || span.kind !== 'neutralised';
 }
 
 /**

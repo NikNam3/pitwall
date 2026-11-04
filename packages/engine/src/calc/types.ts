@@ -68,13 +68,16 @@ export type QuickCalculator<Out> = CalculatorBase & {
   insights?(out: Out, prev: Out | undefined, view: EngineView): Insight[];
 };
 
-/** State allowed, but always a fold over a history prefix: `init` over the history equals `update` step by step. */
+/**
+ * State allowed only as an accumulator (C31): a pure fold over projection entries and config, so `init` over the
+ * projection equals `update` step by step. `output` combines the fold with the frame's view (live state, open spans).
+ */
 export type IncrementalCalculator<Acc, Out> = CalculatorBase & {
   kind: 'incremental';
-  /** From scratch over the existing history. */
+  /** From scratch over the existing projection. */
   init(view: EngineView): Acc;
   update(acc: Acc, delta: HistoryDelta, view: EngineView): Acc;
-  output(acc: Acc): Out;
+  output(acc: Acc, view: EngineView): Out;
   insights?(out: Out, prev: Out | undefined, view: EngineView): Insight[];
 };
 

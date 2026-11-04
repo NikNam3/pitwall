@@ -30,8 +30,6 @@ type Acc = {
   lapCount: number;
   /** One record per (car, lap): confirmed over provisional. */
   laps: CurrentLaps;
-  /** Per car in the session: its state now without the jumps, its current lap, and its rows (`DAMAGE_BEHAVIOUR`). */
-  now: Map<CarId, { state: Omit<DamageState, 'jumps'>; lap: number; effect: DamageEffect }>;
   jumpPct: number;
   jumpWindowMs: number;
   maxNeutralisedMs: number;
@@ -53,8 +51,12 @@ const foldLaps = (acc: Acc, view: EngineView): void => {
 /** A pending weekend phase has no span yet and reads as the race's grid (C14): its row is the race's. */
 const GRID = DAMAGE_BEHAVIOUR['weekend-phase']?.race;
 
-const foldCars = (acc: Acc, view: EngineView): void => {
-  acc.now.clear();
+/**
+ * Per car in the session: its state now without the jumps, its current lap, and its rows (`DAMAGE_BEHAVIOUR`), from the
+ * live state and the open spans. Read by `output`, never kept in the accumulator (C31.2).
+ */
+const carsNow = (view: EngineView): Map<CarId, { state: Omit<DamageState, 'jumps'>; lap: number; effect: DamageEffect }> => {
+  const now = new Map<CarId, { state: Omit<DamageState, 'jumps'>; lap: number; effect: DamageEffect }>();
   for (const car of view.live.cars) {
     const effect: DamageEffect = Object.assign({}, GRID, ...behaviourFor(DAMAGE_BEHAVIOUR, view, car.id));
     if (effect.inSession !== true) continue;
@@ -72,27 +74,24 @@ const foldCars = (acc: Acc, view: EngineView): void => {
       brakePct: car.condition.brakes[c].damagePct,
     });
     const corners = Object.fromEntries(CORNERS.map((c) => [c, corner(c)])) as Corners<DamageState['corners']['fl']>;
-    acc.now.set(car.id, {
+    now.set(car.id, {
       state: { parts, corners, drsFault: car.condition.drsFault, ersFault: car.condition.ersFault },
       lap: car.timing.lap,
       effect,
     });
   }
+  return now;
 };
 
+/** A pure fold over the events, the laps and the config (C31.2). */
 const fold = (acc: Acc, view: EngineView): Acc => {
-  Object.assign(acc, settings(view));
   foldDamageJumps(acc.grouping, view.history.events, acc);
   foldLaps(acc, view);
-  foldCars(acc, view);
   return acc;
 };
 
 const init = (view: EngineView): Acc =>
-  fold(
-    { grouping: emptyDamageJumps(), lapCount: 0, laps: emptyCurrentLaps(), now: new Map(), ...settings(view) },
-    view,
-  );
+  fold({ grouping: emptyDamageJumps(), lapCount: 0, laps: emptyCurrentLaps(), ...settings(view) }, view);
 
 /**
  * Damage now and its jumps not repaired since, per car in the session; a jump's loss is `pace-delta` over the pace laps
@@ -105,9 +104,9 @@ export const damageCalculator: IncrementalCalculator<Acc, DamageOutput> = {
   cadence: { hz: 4 },
   init,
   update: (acc, delta, view) => (delta.rewound !== undefined ? init(view) : fold(acc, view)),
-  output(acc) {
+  output(acc, view) {
     const out: DamageOutput = {};
-    for (const [id, { state, lap, effect }] of acc.now) {
+    for (const [id, { state, lap, effect }] of carsNow(view)) {
       // integer keys iterate in ascending order: the car's laps by lap number
       const laps = Object.values(acc.laps[id] ?? {});
       const opts = { ...acc, isRace: effect.isRace === true };
