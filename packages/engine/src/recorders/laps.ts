@@ -7,7 +7,7 @@ import { lapMarkOf, lapNotBegun, lapStepOf, markActivity } from './lap-boundary.
 import type { LapCursor } from './lap-cursor.ts';
 import { emptyChannels, lapEndSamples, lapStartSamples, observeLapFrame, unknownLapEnd } from './lap-samples.ts';
 import { initialRaceStartMark, raceStartStep, type RaceStartMark } from './race-start.ts';
-import { activityOf, lapInvalid, neutralisedBy, recordsNoLap, type SituationSpan } from './spans.ts';
+import { activityOf, lapInvalid, neutralisedBy, RACE_ACTIVITY, recordsNoLap, type SituationSpan } from './spans.ts';
 
 /**
  * A lap that has a record: its provisional one with the id the log gave it (C21) until Session History confirms it, and
@@ -20,6 +20,12 @@ export type LapsOwn = {
   cursors: Array<LapCursor | undefined>;
   /** Per car: lap number to what is recorded of it. */
   recorded: Array<Record<number, RecordedLap>>;
+  /**
+   * Per car: the lap as it stood at the newest crossing of the line on the same lap number (the lap distance fell, the
+   * lap number stayed), describing that frame; appended when the race activity's `finished` opens on that frame or the
+   * next (a finisher's final lap: the game does not raise the lap number at the chequered flag).
+   */
+  crossings: Array<LapRecord | undefined>;
   /** Where the race start is (its own copy, C11). */
   raceStart: RaceStartMark;
 };
@@ -48,6 +54,7 @@ const openCursor = (car: LiveCar, at: SessionTime, fromStart: boolean): LapCurso
     sector2Ms: timing.sector2TimeMs,
     invalid: false,
     lastSeenAt: at,
+    lapDistanceM: timing.lapDistanceM,
     trackedMs: 0,
     actualCompound: tyres.actualCompound,
     visualCompound: tyres.visualCompound,
@@ -172,6 +179,9 @@ const addFrame = (own: LapsOwn, car: LiveCar, cursor: LapCursor, completed: bool
   const { at } = f;
   addElapsed(f.neutralised, cursor, at);
   if (!completed) {
+    // A crossing on the same lap number: the lap as it ends here, kept in case it is the final lap (`finishLap`).
+    if (timing.lapDistanceM < cursor.lapDistanceM) own.crossings[car.id] = lapFromCursor(car, cursor, cursor.lap, timing.lastLapTimeMs, at, f.frameNumber);
+    cursor.lapDistanceM = timing.lapDistanceM;
     // The game resets the sectors at the line, so the last non-zero value is the lap's.
     if (timing.sector1TimeMs > 0) cursor.sector1Ms = timing.sector1TimeMs;
     if (timing.sector2TimeMs > 0) cursor.sector2Ms = timing.sector2TimeMs;
@@ -191,6 +201,24 @@ const addFrame = (own: LapsOwn, car: LiveCar, cursor: LapCursor, completed: bool
   }
   // The completing frame belongs to the next lap's ranges and totals, not to the one it ends.
   return startLap(own, car, at, true);
+};
+
+/**
+ * The race activity's `finished` opened on this frame: the car took the chequered flag at a crossing on this frame or the
+ * one before (car-activity-race). Its final lap, which the game never rolls over, is the provisional of that crossing and
+ * describes its frame (C26); Session History's confirmed version supersedes it (C25). The car's lap ends there.
+ */
+const finishLap = (own: LapsOwn, car: LiveCar, activity: SituationSpan | undefined, f: LapsPass): void => {
+  if (activity?.machine !== RACE_ACTIVITY || activity.kind !== 'finished' || activity.startFrame !== f.frameNumber) return;
+  const lap = own.crossings[car.id];
+  own.crossings[car.id] = undefined;
+  if (!lap || lap.frame < f.frameNumber - 1) return;
+  own.cursors[car.id] = undefined;
+  const recorded = own.recorded[car.id];
+  if (!recorded || recorded[lap.lapNumber]?.confirmed) return;
+  const id = f.log.append('laps', lap);
+  f.appended = true;
+  recorded[lap.lapNumber] = { provisional: { lap, id }, confirmed: false };
 };
 
 /** Corrections for what LapData got wrong; a sector LapData never had (0) is not a correction. */
@@ -267,7 +295,8 @@ const confirmLaps = (own: LapsOwn, car: LiveCar, f: LapsPass): void => {
  * what differed is reported as corrections. In lap, out lap and the restart at the line come from the car's activity
  * spans, the SC and VSC shares from the session's `neutralised` span (C10, C20); no signal is read (C13). While the car's
  * activity is `coolDown` or `notCompeting`, or the session is over (`postSession`), its lap stands still and no lap is
- * recorded; Session History still confirms a lap driven before (a finisher's final lap). Without an activity
+ * recorded. A race finisher's final lap is recorded at its crossing, when its activity turns `finished`, and Session
+ * History confirms it later (`finishLap`). Without an activity
  * sub-machine (a time trial, a pending weekend phase) laps are recorded at each crossing, neither in lap nor out lap.
  */
 export const lapsRecorder: Recorder<LapsOwn> = {
@@ -275,6 +304,7 @@ export const lapsRecorder: Recorder<LapsOwn> = {
   init: () => ({
     cursors: Array.from({ length: MAX_CARS }, () => undefined),
     recorded: Array.from({ length: MAX_CARS }, () => ({})),
+    crossings: Array.from({ length: MAX_CARS }, () => undefined),
     raceStart: initialRaceStartMark(),
   }),
   apply(input, own, log, out) {
@@ -285,7 +315,9 @@ export const lapsRecorder: Recorder<LapsOwn> = {
     const f: LapsPass = { at, frameNumber: input.frameNumber, neutralised: neutralisedBy(situation), log, out, appended: false };
     for (const car of carsWithLapData(input)) {
       if (recordsNoLap(situation, car.id, input.frameNumber)) continue;
-      trackLap(own, car, activityOf(situation, car.id), lapInvalid(situation, car.id), f);
+      const activity = activityOf(situation, car.id);
+      trackLap(own, car, activity, lapInvalid(situation, car.id), f);
+      finishLap(own, car, activity, f);
     }
     for (const car of live.cars) if (car.updatedAt.sessionHistory === at) confirmLaps(own, car, f);
     if (f.appended) out.changed.add('laps');

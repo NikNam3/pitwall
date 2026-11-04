@@ -4,7 +4,7 @@ import type { Recorder, RecorderInput } from '../step/types.ts';
 import type { DeepReadonly } from '../util/deep-readonly.ts';
 import { carsInSession, type LiveCar } from './cars.ts';
 import { initialRaceStartMark, postSessionOpened, raceStartStep, type RaceStartMark } from './race-start.ts';
-import { activityOf, locationOf, recordsNoLap } from './spans.ts';
+import { activityOf, locationOf, RACE_ACTIVITY, recordsNoLap } from './spans.ts';
 
 /** A set of tyres as Car Status shows it. */
 type TyreSet = { actualCompound: ActualCompound; visualCompound: VisualCompound; age: number };
@@ -129,6 +129,11 @@ const trackLap = (own: StintsOwn, car: LiveCar, input: DeepReadonly<RecorderInpu
   const lap = own.laps[car.id];
   if (lap !== undefined && car.timing.lap > lap) own.recordedLap[car.id] = Math.max(own.recordedLap[car.id] ?? 0, car.timing.lap - 1);
   own.laps[car.id] = car.timing.lap;
+  // A race finisher's final lap has its record once its activity turns `finished` (the laps recorder's `finishLap`).
+  const activity = activityOf(input.situation, car.id);
+  if (activity?.machine === RACE_ACTIVITY && activity.kind === 'finished' && activity.startFrame === input.frameNumber) {
+    own.recordedLap[car.id] = Math.max(own.recordedLap[car.id] ?? 0, car.timing.lap);
+  }
 };
 
 /**
