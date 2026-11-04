@@ -156,4 +156,33 @@ describe('WeekendRepository.weekendContext (C39, C62)', () => {
     expect(p!.projection.spans['weekend-phase']).toEqual(practiceLog.spans['weekend-phase']);
     expect(p).not.toHaveProperty('sessionType');
   });
+
+  // The game reuses a session uid across weekends (C60's key holds the weekend): ported from the DriverKey tests at
+  // 3364669 (Task 27 fix round 1, C82)
+  it('a session\'s cars and projection come from its own weekend when the same uid also exists in another weekend', () => {
+    const { db, put } = storage();
+    const inW1 = session('1', { playerCar: car(0), cars: [{ carId: car(0), carKey: FERRARI_16 }] });
+    const inW2 = session('1', { weekendId: 'W2', playerCar: car(0), cars: [{ carId: car(0), carKey: MERCEDES_44 }, { carId: car(1), carKey: FERRARI_16 }] });
+    const w1Log = log({ laps: [lap(0, 1)] });
+    put(inW1, w1Log);
+    put(inW2, log({ laps: [lap(0, 1, { lapTimeMs: 91_000 }), lap(1, 1)] }));
+    const current = session('R', { startedAt: '2026-10-27T22:00:00.000Z', playerCar: car(0), cars: [{ carId: car(0), carKey: FERRARI_16 }] });
+    put(current);
+    const repo = new WeekendRepository(db);
+    expect(repo.weekendContext('W1', FERRARI_16, keyOf(current))).toEqual({
+      context: { weekendId: 'W1', player: FERRARI_16, sessions: [storedSession(inW1, w1Log)] },
+      incomplete: [],
+    });
+    // MERCEDES_44 was the player car only of the W2 session
+    expect(repo.weekendContext('W1', MERCEDES_44, keyOf(current)).context.sessions).toEqual([]);
+  });
+
+  it('`before`\'s start time comes from its own weekend, not from the same uid in another weekend', () => {
+    const { db, put } = storage();
+    put(session('P', { weekendId: 'W2', startedAt: '2026-10-27T20:00:00.000Z' }));
+    const q = session('Q', { weekendId: 'W2', startedAt: '2026-10-27T21:00:00.000Z' });
+    put(q);
+    put(session('Q', { weekendId: 'W1', startedAt: '2026-10-20T19:00:00.000Z' }));   // the same uid, an earlier weekend
+    expect(new WeekendRepository(db).weekendContext('W2', FERRARI_16, keyOf(q)).context.sessions.map((s) => s.sessionUid)).toEqual(['P']);
+  });
 });
