@@ -1,5 +1,6 @@
-// The value of a situation topic (contract C54, C55): one sub-machine's spans as they are — the open ones (`view.situation`)
-// and the closed ones (the projection's `spans[machine]`), each with its frames (C26). Bound with `bindSituation`.
-import type { OpenSpan, Span } from '@pitwall/domain';
+// The value of a situation topic (contract C54, C55): one sub-machine's open spans as they are (`view.situation`), each with
+// the frame it opened on (C26). Bound with `bindSituation`. Closed spans are not resent at the topic's rate: a display that
+// needs a machine's closed spans gets an append topic of its own.
+import type { OpenSpan } from '@pitwall/domain';
 
-export type MachineSpans = { open: OpenSpan[]; closed: Span[] };
+export type MachineSpans = { open: OpenSpan[] };

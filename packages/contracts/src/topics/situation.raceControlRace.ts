@@ -1,4 +1,4 @@
-// The `race-control-race` sub-machine's spans, open and closed, as they are (C54); bound with `bindSituation` (C55).
+// The `race-control-race` sub-machine's open spans, as they are (C54); bound with `bindSituation` (C55).
 import type { MachineSpans } from '../situation-spans.ts';
 import { defineTopic, type NoParams } from '../topic-def.ts';
 
