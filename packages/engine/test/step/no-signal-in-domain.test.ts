@@ -1,6 +1,6 @@
 // C13: no signal appears in the live state, a fact, the view or a topic, and no `domain` type has a signal field. The
-// signals of the closed list (C12) live only in `Signals` (`state.signals`), which step 1 writes and only the machine
-// reads (C8, C9). Two rows: the types (every domain type the live state, the projection, the span details and the
+// signals of the closed list (C12) live only in `Signals` (`state.signals`), which step 1 writes and the machine reads
+// (C9); step 1 may read the signals it writes, to shape the values it writes; it decides no situation (C8). Two rows: the types (every domain type the live state, the projection, the span details and the
 // analyses' values are built from), and the live state at runtime on every frame of every committed segment of at most
 // 1 MB.
 import { readdirSync, statSync } from 'node:fs';
