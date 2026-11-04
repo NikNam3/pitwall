@@ -424,6 +424,8 @@ After all lanes: the supervisor deletes `shared/out-of-race.ts` and `shared/drs-
 
 **Files:** Modify `packages/domain/src/car.ts` (`CarTiming` loses `pitStatus`, `driverStatus`, `pitLaneTimerActive`, `resultStatus`, `numPitStops`, `shouldServePenalty`, `unservedDriveThroughs`, `unservedStopGos`, `timePenaltyMs`, `totalWarnings`, `cornerCuttingWarnings`, `currentLapInvalid`, `fiaFlag`), `packages/domain/src/session.ts` (`SessionState` loses `flag`, `marshalZones`, `periods`, `sessionType`, `kind`, `weekendStructure`, `numActiveCars`), the state-update modules (write `Signals` only), `apps/bridge/src/features/cars-overview/register.ts` (`stops` = the car's pit-stop records), `apps/bridge/src/pipeline/session-storage.ts` (the `session_type` column from the weekend phase, the driver rows from `car-status`), `apps/ui/src/kit/values/car-sources.ts`, every reader the compiler names. Test: `packages/engine/test/step/no-signal-in-domain.test.ts`.
 
+Also (M2 review, 2026-11-04): `CarState.drsAllowed` (`domain/src/car.ts`), `GameSettings.ruleSet` (`domain/src/session.ts`, also written to the session row) and the transitional judgement `CarState.active` with `refreshActiveCarsUntilCarStatus` (Task 10 ruling; its readers in analysis, bridge and step 1's identity read `car-status` instead).
+
 - [ ] **Step 1 (test agent):** "no `domain` type has a C12 field" (a type-level test with `expectTypeOf`); "the live state of every segment frame holds no C12 field" (runtime key scan). Run: fail.
 - [ ] **Step 2 (implementer, delegated paths named in the brief):** remove the fields; fix every compile error by reading the situation instead; `session.kind` readers read `view.situation.weekendPhase`.
 - [ ] **Step 3:** supervisor `pnpm check`.
