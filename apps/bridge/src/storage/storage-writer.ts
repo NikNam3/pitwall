@@ -64,6 +64,22 @@ export class StorageWriter {
     this.#guarded(() => this.#db.transaction(() => this.#writeRow(row, this.#rulesVersion, false))());
   }
 
+  /**
+   * A live session starts under `row`'s key: in one transaction the log stored under that key, if any (the bridge
+   * restarted mid-session), is replaced by an empty one, and the row (not complete, pointing at the new recording) and
+   * its cars are written. The newest run wins; its log is then appended from position 0.
+   */
+  startSession(row: SessionRow): void {
+    const key = keyParams(row);
+    this.#guarded(() => {
+      this.#db.transaction(() => {
+        this.#statements.deleteFacts.run(key);
+        this.#writeRow(row, this.#rulesVersion, false);
+      })();
+      this.#written.set(keyString(row), new Map());
+    });
+  }
+
   /** Appends what each list of `log` gained since this writer's last write for `key`; nothing new writes nothing (C24). */
   writeLog(key: SessionKey, log: DeepReadonly<Log>): void {
     const written = this.#written.get(keyString(key)) ?? new Map<string, number>();

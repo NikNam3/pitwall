@@ -92,7 +92,7 @@ export class SessionProcessor {
       { feedId, sessionUid, session, realism: opts.config.realism?.enabled === true },
       { attach: this.#scheduler, contextFor: (participants) => this.#contextFor(participants) },
     );
-    opts.storage?.upsertSession(this.#row());
+    opts.storage?.start(this.#row());
   }
 
   /** The newest applied frame's time on the engine's race clock (spec 3.3); undefined before the engine runs. */

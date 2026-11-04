@@ -74,7 +74,12 @@ export class SessionStorage {
     }
   }
 
-  /** The session's row and cars, at its start and whenever its identity changed (the newest wins); live only. */
+  /** The session starts: live, its row and cars are written and a log stored under its key is replaced (the newest run wins). */
+  start(row: SessionRow): void {
+    if (this.#o.mode === 'append') this.#access?.writer.startSession(row);
+  }
+
+  /** The session's row and cars whenever its identity changed (the newest wins); live only. */
   upsertSession(row: SessionRow): void {
     if (this.#o.mode === 'append') this.#access?.writer.upsertSession(row);
   }
