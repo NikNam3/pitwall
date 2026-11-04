@@ -141,6 +141,8 @@ describe("race-moment calculator", () => {
     expect(raceMomentCalculator.reads).toEqual(
       expect.arrayContaining([
         "spans:session-phase-race",
+        "spans:session-phase-qualifying",
+        "spans:session-phase-practice",
         "session",
         { calculator: INCIDENTS },
         { calculator: BATTLE },

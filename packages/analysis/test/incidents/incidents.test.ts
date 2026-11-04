@@ -73,7 +73,7 @@ describe('incidents calculator', () => {
   it("is incremental over events, the race's session phases, mini-sectors, pit stops and laps, and reads no damage output (a log reads the history only)", () => {
     expect(incidentsCalculator.id).toBe(INCIDENTS);
     expect(incidentsCalculator.kind).toBe('incremental');
-    expect(incidentsCalculator.reads).toEqual(expect.arrayContaining(['events', 'spans:session-phase-race', 'miniSectors', 'pitStops', 'laps']));
+    expect(incidentsCalculator.reads).toEqual(expect.arrayContaining(['events', 'spans:session-phase-race', 'spans:session-phase-qualifying', 'spans:session-phase-practice', 'miniSectors', 'pitStops', 'laps']));
     expect(incidentsCalculator.reads).not.toContainEqual({ calculator: DAMAGE });
   });
 

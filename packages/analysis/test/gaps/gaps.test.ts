@@ -662,8 +662,8 @@ describe('the gapper phases', () => {
   const round = (x: number) => Math.round(x * 1e6) / 1e6;
   const fixed = { kind: 'fixed', lapMs: 90_000 } as const;
 
-  it("reads the race's session phases, so a neutralisation that opens or closes re-runs it", () => {
-    expect(gapsCalculator.reads).toContain('spans:session-phase-race');
+  it('reads the session phases of every weekend phase, so a neutralisation or suspension that opens or closes re-runs it (C41)', () => {
+    expect(gapsCalculator.reads).toEqual(expect.arrayContaining(['spans:session-phase-race', 'spans:session-phase-qualifying', 'spans:session-phase-practice']));
   });
 
   it("places a phase at the leader's newest crossing at its start and at its end: completed laps + mini-sectors / 50", () => {

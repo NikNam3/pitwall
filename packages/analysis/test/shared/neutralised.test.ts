@@ -68,6 +68,15 @@ describe('neutralisedSpans', () => {
     const again = openNeutralisation({ kind: 'red', start: 500_000, id: 3, machine: 'session-phase-qualifying' });
     expect(of([red], again, qualifying)).toEqual([red, again]);
   });
+
+  it("and a practice's suspensions, closed and open; the other kinds of either are none", () => {
+    const practice = { kind: 'practice', format: 'practice', segment: 1 } as const;
+    const machine = 'session-phase-practice';
+    const running = { ...neutralisation({ start: 0, end: 100_000, id: 0, machine }), kind: 'running', detail: undefined };
+    const red = neutralisation({ kind: 'red', start: 100_000, end: 400_000, id: 1, machine });
+    const again = openNeutralisation({ kind: 'red', start: 500_000, id: 3, machine });
+    expect(of([running, red], again, practice)).toEqual([red, again]);
+  });
 });
 
 describe('leaderLapAt', () => {
@@ -107,8 +116,10 @@ describe('gaps, incidents and race-moment read the same neutralisations', () => 
   const pending = openNeutralisation({ kind: 'VSC', start: 600_000, confirmed: false, id: 6 });
   const view = viewOf({ miniSectors: race(), phases: [sc, never], open: pending, laps: leaderLaps(LAPS) });
 
-  it('each declares the race\'s session phases', () => {
-    for (const unit of [gapsCalculator, incidentsCalculator, raceMomentCalculator]) expect(unit.reads, unit.id).toContain('spans:session-phase-race');
+  it('each declares the spans of the three session-phase sub-machines that neutralisedSpans reads (C41)', () => {
+    for (const unit of [gapsCalculator, incidentsCalculator, raceMomentCalculator]) {
+      expect(unit.reads, unit.id).toEqual(expect.arrayContaining(['spans:session-phase-race', 'spans:session-phase-qualifying', 'spans:session-phase-practice']));
+    }
   });
 
   it('the confirmed SC and the pending VSC; the SC never confirmed in none of them', () => {
