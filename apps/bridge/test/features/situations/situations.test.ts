@@ -128,6 +128,24 @@ async function run(source: PacketSource, o: { stored?: boolean } = {}) {
 const closedAs = (span: MachineSpans['open'][number]) => expect.objectContaining({ machine: span.machine, id: span.id, kind: span.kind,
   startFrame: span.startFrame, endFrame: expect.any(Number), ...(span.carId !== undefined && { carId: span.carId }), ...(span.zone !== undefined && { zone: span.zone }) });
 
+/**
+ * Runs `packets` through a live-like pipeline (a `ManualSource`) like `run`, and notes each situation topic's last value
+ * while the input lasts, before the source stops and the session ends.
+ */
+async function runBeforeEnd(packets: PreparedPacket[]) {
+  let now = 0;
+  const c = client(() => (now += 1000));
+  for (const topic of SITUATION_TOPICS) c.subscribe(topic);
+  const probe = spansProbe();
+  const source = new ManualSource(F);
+  const pipeline = new FeedPipeline({ feedId: F, source, hub: c.hub, features: [situationsFeature(), probe.feature], log: silent });
+  pipeline.start();
+  for (const p of packets) source.push(p.bytes, p.receivedAtMs);
+  const lastBeforeEnd = Object.fromEntries(SITUATION_TOPICS.map((topic) => [topic, structuredClone(c.values(topic).at(-1))])) as Record<TopicName, MachineSpans | undefined>;
+  await pipeline.stop();
+  return { ...c, seen: probe.seen, lastBeforeEnd };
+}
+
 type Timed = ReturnType<ScenarioBuilder['packets']>;
 const toPrepared = (packets: Timed): PreparedPacket[] => packets.map(({ packet, receivedAtMs }) => ({ bytes: packetBytes(packet), receivedAtMs }));
 
@@ -239,13 +257,17 @@ describe('bindSituation publishes (C55; the rows moved over from Task 18)', () =
   });
 
   it('after a flashback every situation topic\'s open spans equal a run that never received the undone frames (C33): the undone yellow is gone', async () => {
-    const rewound = await run(new ArraySource(F, withFlashback()));
-    const straight = await run(new ArraySource(F, toPrepared(scenario(80).packets())));
+    // Task 27 round 2b: the values compared are those the topics carried before the session end (which closes every
+    // span, rule 4): read while the input lasts, before the source stops
+    const rewound = await runBeforeEnd(withFlashback());
+    const straight = await runBeforeEnd(toPrepared(scenario(80).packets()));
     // the engine agrees on both runs (C33), and the undone frames' yellow reached the topic before the flashback
     expect(rewound.seen.at(-1)).toEqual(straight.seen.at(-1));
     expect(rewound.values(topicOf('car-flags')).some(hasYellow)).toBe(true);
-    for (const topic of SITUATION_TOPICS) expect(rewound.values(topic).at(-1), topic).toEqual(straight.values(topic).at(-1));
-    expect(hasYellow(rewound.values(topicOf('car-flags')).at(-1))).toBe(false);
+    // car-flags has open spans on both runs then: the comparison is of real values, not of the end's empty ones
+    expect(straight.lastBeforeEnd[topicOf('car-flags')]?.open.length).toBeGreaterThan(0);
+    for (const topic of SITUATION_TOPICS) expect(rewound.lastBeforeEnd[topic], topic).toEqual(straight.lastBeforeEnd[topic]);
+    expect(hasYellow(rewound.lastBeforeEnd[topicOf('car-flags')])).toBe(false);
   });
 });
 
