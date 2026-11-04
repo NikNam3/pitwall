@@ -14,6 +14,7 @@ import { fuelCalculator } from '../../src/fuel/calculator.ts';
 import { SESSION_REMAINING, type SessionRemaining } from '../../src/session-remaining/index.ts';
 import { TYRE_WEAR } from '../../src/tyre-wear/index.ts';
 import { tyreWearCalculator } from '../../src/tyre-wear/calculator.ts';
+import { situatedView } from '../situated.ts';
 import { carState, engineView, event, lap, RACING, realismHidden, telemetryRestricted } from '../../../../test-support/builders/index.ts';
 
 // Assumptions pinned here (see the test report): key = `${kind}:${carId}:${channel}`; channel names `tyre.<surfaceC|carcassC|pressurePsi>.<corner>`,
@@ -251,7 +252,7 @@ describe('alarms calculator', () => {
 
     it('a tyre past the wear limit keeps wearLimitNear raised: tyre-wear gives 0 laps to the limit there', () => {
       const corners = perCorner(() => ({ wearPct: known(76, 0) }));
-      const wearView = engineView({ cars: [carState({ tyres: { corners } })], history: { laps: [64, 68, 72].map((w, i) => lap({ lapNumber: i + 1, wearAtEndPct: perCorner(() => known(w, 0)) })) } });
+      const wearView = situatedView({ cars: [carState({ tyres: { corners } })], history: { laps: [64, 68, 72].map((w, i) => lap({ lapNumber: i + 1, wearAtEndPct: perCorner(() => known(w, 0)) })) } });
       const wear = tyreWearCalculator.compute(wearView)[carId(0)]!;
       expect(wear.corners.fl.lapsToLimit).toMatchObject({ known: true, value: 0 });
       expect(only(viewWith({ wear }), 'wearLimitNear').map((i) => i.key)).toEqual(['wearLimitNear:0:wear.fl', 'wearLimitNear:0:wear.fr', 'wearLimitNear:0:wear.rl', 'wearLimitNear:0:wear.rr']);
@@ -460,7 +461,7 @@ describe('alarms calculator', () => {
       // laps 1 and 2 complete at 90 s and 180 s; the hit and the wing change are both on lap 3
       const laps = [lap({ lapNumber: 1, completedAt: 90_000 }), lap({ lapNumber: 2, completedAt: 180_000 })];
       const damageOf = (events: ReturnType<typeof change>[]) =>
-        damageCalculator.output(damageCalculator.init(engineView({ cars: [carState({ timing: { lap: 3 } })], history: { events, laps } })))[carId(0)]!;
+        damageCalculator.output(damageCalculator.init(situatedView({ cars: [carState({ timing: { lap: 3 } })], history: { events, laps } })))[carId(0)]!;
       const hit = change(200_000, 0, 40);
       expect(only(viewWith({ damage: damageOf([hit]) }, { lap: 3 }), 'damageJump')).toHaveLength(1);
       expect(only(viewWith({ damage: damageOf([hit, change(250_000, 40, 0)]) }, { lap: 3 }), 'damageJump')).toEqual([]);
@@ -600,7 +601,7 @@ describe('hidden data of one of our cars (Review Focus 5)', () => {
   /** The real upstream calculators over the view, then `alarms` over their outputs. */
   const chain = (car: ReturnType<typeof carState>, laps: ReturnType<typeof lap>[]) => {
     const remaining: SessionRemaining = { basis: 'laps', lapsLeft: known(10, 0), timeLeftMs: unknown('notApplicable') };
-    const base = engineView({ cars: [carState(), car], history: { laps }, sessionTime: NOW, outputs: new Map([[SESSION_REMAINING, remaining]]) });
+    const base = situatedView({ cars: [carState(), car], history: { laps }, sessionTime: NOW, outputs: new Map([[SESSION_REMAINING, remaining]]) });
     const view: EngineView = { ...base, live: { ...base.live, teammateCar: TEAMMATE } };
     const outputs = new Map<string, unknown>([
       [SESSION_REMAINING, remaining],
