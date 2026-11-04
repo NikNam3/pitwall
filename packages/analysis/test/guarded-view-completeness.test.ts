@@ -76,9 +76,8 @@ function undeclaredReads(calc: Calculator): string[] {
  * - `gaps` (lane a): `live.session` (`session.kind`);
  * - `battle` (lane d): `live.session` (`session.kind`, `drsStatus`) and `live.playerCar` (`identity`);
  * - `tyre-wear` (lane g): `live.session` (`session.kind`);
- * - `alarms` (lane e): `live.playerCar` (`identity`).
  */
-const FIXED_BY_LANE: Readonly<Record<CalculatorId, string>> = { damage: 'g', gaps: 'a', battle: 'd', 'tyre-wear': 'g', alarms: 'e' };
+const FIXED_BY_LANE: Readonly<Record<CalculatorId, string>> = { damage: 'g', gaps: 'a', battle: 'd', 'tyre-wear': 'g' };
 
 describe('every unit reads only what it declares (C41, C87)', () => {
   it('the package registers its calculators and analyses', () => {
