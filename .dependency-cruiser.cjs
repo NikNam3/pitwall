@@ -95,12 +95,19 @@ module.exports = {
     {
       name: 'log-only-writers-and-projection',
       comment:
-        'C28: readers see the projection, never the log. Only the projection, the runner, step (it hands the recorders their LogWriter), the machine (situations/run.ts appends the spans, C22), the storage writer and the log tests import log/log.ts.',
+        'C28: readers see the projection, never the log. Only the projection, the runner, step (it hands the recorders their LogWriter), the machine (situations/run.ts appends the spans, C22), the storage entry (log-entry.ts), the storage writer and the log tests import log/log.ts.',
       severity: 'error',
       from: {
-        pathNot: '^packages/engine/src/(log/projection\\.ts|runner/|step/step\\.ts$|situations/run\\.ts$)|^apps/bridge/src/storage/|^packages/engine/test/log/',
+        pathNot: '^packages/engine/src/(log/projection\\.ts|runner/|step/step\\.ts$|situations/run\\.ts$|log-entry\\.ts$)|^apps/bridge/src/storage/|^packages/engine/test/log/',
       },
       to: { path: '^packages/engine/src/log/log\\.ts$' },
+    },
+    {
+      name: 'log-entry-only-storage',
+      comment: 'C28, C34: the engine entry of the log (`@pitwall/engine/log`: the Log type, its lengths, a stored log\'s projection) is imported only by the bridge\'s storage.',
+      severity: 'error',
+      from: { pathNot: '^apps/bridge/src/storage/' },
+      to: { path: '^packages/engine/src/log-entry\\.ts$' },
     },
     {
       name: 'protocol-only-in-the-adapter',

@@ -10,11 +10,13 @@ import { StartupError } from '../startup-error.ts';
 import type { Db } from '../storage/db.ts';
 
 /**
- * Runs one recording through the pipeline as fast as possible, storing its sessions in `db`. Nobody listens to the hub.
+ * Runs one recording through the pipeline as fast as possible, storing its sessions in `db`: each session's log is
+ * written once, at its end, and replaces the stored one in one transaction (C24, C61; a run stopped early writes
+ * nothing). Nobody listens to the hub.
  * `config` is the calculator config it runs with (the recording's own, see `recordingConfig`).
  * An aborted `signal` (also one aborted before the call) stops the run, and it throws a `StartupError`.
  */
-export async function processRecording(path: string, db: Db, log: Logger, signal: AbortSignal, config: FeatureConfig): Promise<void> {
+export async function processRecording(path: string, db: Db, log: Logger, signal: AbortSignal, config: FeatureConfig, rulesVersion: string): Promise<void> {
   if (signal.aborted) throw new StartupError('interrupted');
   const id = feedId('replay');
   const pipeline = new FeedPipeline({
@@ -30,7 +32,7 @@ export async function processRecording(path: string, db: Db, log: Logger, signal
     features: FEATURES,
     config,
     log,
-    storage: { db, sourcePath: path },
+    storage: { db, sourcePath: path, rulesVersion, mode: 'replace' },
   });
   const stop = () => void pipeline.stop();
   signal.addEventListener('abort', stop, { once: true });

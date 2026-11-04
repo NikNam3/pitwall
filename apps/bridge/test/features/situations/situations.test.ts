@@ -7,6 +7,9 @@
 //
 // What the open spans are is the engine's, read here by a probe unit with an `insights` hook (so it always runs) that
 // reads every `spans:<machine>` tag and keeps a copy of each machine's open spans whenever any machine's spans changed.
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { TOPICS, type MachineSpans, type ServerMessage, type TopicName } from '@pitwall/contracts';
 import { SPAN_DECLARATIONS, type FeedId, type MachineId } from '@pitwall/domain';
@@ -19,6 +22,8 @@ import type { PacketSource } from '../../../src/input/packet-source.ts';
 import { PwrecSource } from '../../../src/input/pwrec-source.ts';
 import { createLogger } from '../../../src/log.ts';
 import { FeedPipeline } from '../../../src/pipeline/feed-pipeline.ts';
+import { openDatabase } from '../../../src/storage/db.ts';
+import { WeekendRepository } from '../../../src/storage/weekend-repository.ts';
 import { segmentPath } from '../../fixtures/replay.ts';
 import { ArraySource, type PreparedPacket } from '../../helpers/array-source.ts';
 import { ManualSource } from '../../helpers/manual-source.ts';
@@ -94,16 +99,51 @@ function client(now: () => number, onDemandChange?: () => void) {
   return { hub, inbox, subscribe, values };
 }
 
-/** Runs `source` through a pipeline with the situations feature and the probe, every situation topic subscribed. */
-async function run(source: PacketSource) {
+/**
+ * Runs `source` through a pipeline with the situations feature and the probe, every situation topic subscribed. With
+ * `stored`, the session is also stored (a temporary database, C84), and `closed()` reads its projection's spans.
+ */
+async function run(source: PacketSource, o: { stored?: boolean } = {}) {
   let now = 0;
   const c = client(() => (now += 1000)); // every publish is due: nothing is throttled away
   for (const topic of SITUATION_TOPICS) c.subscribe(topic);
   const probe = spansProbe();
-  const pipeline = new FeedPipeline({ feedId: F, source, hub: c.hub, features: [situationsFeature(), probe.feature], log: silent });
+  const db = o.stored === true ? openDatabase(join(mkdtempSync(join(tmpdir(), 'situations-')), 's.db')) : undefined;
+  const pipeline = new FeedPipeline({ feedId: F, source, hub: c.hub, features: [situationsFeature(), probe.feature], log: silent,
+    ...(db && { storage: { db, rulesVersion: 'unversioned' } }) });
   pipeline.start();
   await pipeline.done;
-  return { ...c, seen: probe.seen };
+  /** The stored session's projection's spans: every span the session end closed is there (C28). */
+  const closed = async () => {
+    if (db === undefined) throw new Error('run without storage');
+    const weekendId = db.prepare('SELECT weekend_id FROM sessions').pluck().get() as string;
+    const [row] = new WeekendRepository(db).sessionsOf(weekendId);
+    const projection = await new WeekendRepository(db).projectionOf({ sessionUid: row!.sessionUid, weekendId, playerCar: row!.playerCar });
+    return projection!.spans;
+  };
+  return { ...c, seen: probe.seen, closed };
+}
+
+/** `span` as a closed span matches it: the same machine, id, kind, car and zone (Task 27, rule 4). */
+const closedAs = (span: MachineSpans['open'][number]) => expect.objectContaining({ machine: span.machine, id: span.id, kind: span.kind,
+  startFrame: span.startFrame, endFrame: expect.any(Number), ...(span.carId !== undefined && { carId: span.carId }), ...(span.zone !== undefined && { zone: span.zone }) });
+
+/**
+ * Runs `packets` through a live-like pipeline (a `ManualSource`) like `run`, and notes each situation topic's last value
+ * while the input lasts, before the source stops and the session ends.
+ */
+async function runBeforeEnd(packets: PreparedPacket[]) {
+  let now = 0;
+  const c = client(() => (now += 1000));
+  for (const topic of SITUATION_TOPICS) c.subscribe(topic);
+  const probe = spansProbe();
+  const source = new ManualSource(F);
+  const pipeline = new FeedPipeline({ feedId: F, source, hub: c.hub, features: [situationsFeature(), probe.feature], log: silent });
+  pipeline.start();
+  for (const p of packets) source.push(p.bytes, p.receivedAtMs);
+  const lastBeforeEnd = Object.fromEntries(SITUATION_TOPICS.map((topic) => [topic, structuredClone(c.values(topic).at(-1))])) as Record<TopicName, MachineSpans | undefined>;
+  await pipeline.stop();
+  return { ...c, seen: probe.seen, lastBeforeEnd };
 }
 
 type Timed = ReturnType<ScenarioBuilder['packets']>;
@@ -132,7 +172,7 @@ const withFlashback = (): PreparedPacket[] => {
 
 /** The race segment's run, shared by the rows that read it. */
 let segment: ReturnType<typeof run> | undefined;
-const segmentRun = () => (segment ??= run(new PwrecSource({ feedId: F, path: segmentPath('race-drive-through-served.pwrec.gz'), mode: 'asFastAsPossible' })));
+const segmentRun = () => (segment ??= run(new PwrecSource({ feedId: F, path: segmentPath('race-drive-through-served.pwrec.gz'), mode: 'asFastAsPossible' }), { stored: true }));
 
 const hasYellow = (value: MachineSpans | undefined): boolean =>
   value !== undefined && value.open.some((span) => span.kind === 'yellow');
@@ -153,19 +193,29 @@ describe('the situations feature (C53, C55, C63)', () => {
 });
 
 describe('each situation topic carries the open spans of its machine and no signal field (C20, C54, C13)', () => {
-  it('on a race segment (a drive-through served): the last value of every topic is its machine\'s open spans as the engine holds them', async () => {
+  // Task 27 (rule 4, C54): until the session ends a topic's value is its machine's open spans as the engine holds them;
+  // the session end (finish()) closes every span, so the last value has no open span and the closed spans are in the
+  // projection
+  it('on a race segment (a drive-through served): before the session end every topic carries its machine\'s open spans; after it none, and they are in the projection', async () => {
     const r = await segmentRun();
     const expected = r.seen.at(-1)!;
     expect(expected).toBeDefined();
     const withSpans = MACHINES.filter((machine) => expected[machine]!.open.length > 0);
     // the segment is a race: the shared and race sub-machines have open spans
     expect(withSpans).toEqual(expect.arrayContaining(['clock', 'car-location', 'car-status', 'car-flags', 'car-activity-race', 'penalties', 'session-phase-race']));
+    const closed = await r.closed();
     for (const machine of MACHINES) {
       const topic = topicOf(machine);
-      const last = r.values(topic).at(-1);
-      if (withSpans.includes(machine)) expect(last, topic).toEqual(expected[machine]);
-      // a machine that does not run in this phase has no spans: its topic carries none, or nothing at all
-      else expect(last ?? { open: [] }, topic).toEqual({ open: [] });
+      const values = r.values(topic);
+      if (withSpans.includes(machine)) {
+        // the value of the last frame, then the session end's
+        expect(values.at(-2), topic).toEqual(expected[machine]);
+        expect(values.at(-1), topic).toEqual({ open: [] });
+        for (const span of expected[machine]!.open) expect(closed[machine], topic).toContainEqual(closedAs(span));
+      } else {
+        // a machine that does not run in this phase has no spans: its topic carries none, or nothing at all
+        expect(values.at(-1) ?? { open: [] }, topic).toEqual({ open: [] });
+      }
     }
   });
 
@@ -189,11 +239,16 @@ describe('each situation topic carries the open spans of its machine and no sign
 
 describe('bindSituation publishes (C55; the rows moved over from Task 18)', () => {
   it('publishes a machine\'s open spans: car 0\'s yellow opens a car-flags span and its end opens the next, and the topic follows them', async () => {
-    const r = await run(new ArraySource(F, toPrepared(scenario(30, { from: 10, to: 20 }).packets())));
+    const r = await run(new ArraySource(F, toPrepared(scenario(30, { from: 10, to: 20 }).packets())), { stored: true });
     const values = r.values(topicOf('car-flags'));
     expect(values.some((value) => value.open.some((span) => span.carId === 0 && span.kind === 'yellow'))).toBe(true);
-    const last = values.at(-1)!;
+    // the last frame's value is the engine's open spans; the session end then closes them all (Task 27, rule 4)
+    const last = values.at(-2)!;
     expect(last).toEqual(r.seen.at(-1)!['car-flags']);
+    expect(values.at(-1)).toEqual({ open: [] });
+    const closed = await r.closed();
+    for (const span of last.open) expect(closed['car-flags']).toContainEqual(closedAs(span));
+    expect(closed['car-flags']).toContainEqual(expect.objectContaining({ carId: 0, kind: 'yellow' }));
     // car 0's yellow has ended by then, and every car slot has one open span (car-flags covers every slot)
     const openCars = last.open.map((span) => span.carId);
     expect(new Set(openCars).size).toBe(openCars.length);
@@ -202,13 +257,17 @@ describe('bindSituation publishes (C55; the rows moved over from Task 18)', () =
   });
 
   it('after a flashback every situation topic\'s open spans equal a run that never received the undone frames (C33): the undone yellow is gone', async () => {
-    const rewound = await run(new ArraySource(F, withFlashback()));
-    const straight = await run(new ArraySource(F, toPrepared(scenario(80).packets())));
+    // Task 27 round 2b: the values compared are those the topics carried before the session end (which closes every
+    // span, rule 4): read while the input lasts, before the source stops
+    const rewound = await runBeforeEnd(withFlashback());
+    const straight = await runBeforeEnd(toPrepared(scenario(80).packets()));
     // the engine agrees on both runs (C33), and the undone frames' yellow reached the topic before the flashback
     expect(rewound.seen.at(-1)).toEqual(straight.seen.at(-1));
     expect(rewound.values(topicOf('car-flags')).some(hasYellow)).toBe(true);
-    for (const topic of SITUATION_TOPICS) expect(rewound.values(topic).at(-1), topic).toEqual(straight.values(topic).at(-1));
-    expect(hasYellow(rewound.values(topicOf('car-flags')).at(-1))).toBe(false);
+    // car-flags has open spans on both runs then: the comparison is of real values, not of the end's empty ones
+    expect(straight.lastBeforeEnd[topicOf('car-flags')]?.open.length).toBeGreaterThan(0);
+    for (const topic of SITUATION_TOPICS) expect(rewound.lastBeforeEnd[topic], topic).toEqual(straight.lastBeforeEnd[topic]);
+    expect(hasYellow(rewound.lastBeforeEnd[topicOf('car-flags')])).toBe(false);
   });
 });
 

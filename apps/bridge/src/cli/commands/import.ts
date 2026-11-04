@@ -5,6 +5,7 @@ import { FEATURES } from '../../features/index.generated.ts';
 import { StartupError } from '../../startup-error.ts';
 import { dataDir } from '../../storage/data-dir.ts';
 import { openDatabase } from '../../storage/db.ts';
+import { rulesVersion, SOURCE_ROOT } from '../../storage/rules-version.ts';
 import { cliLogger, EXIT_INTERRUPTED, type CliIo } from '../io.ts';
 import { processRecording } from '../process-recording.ts';
 import { UsageError } from '../usage.ts';
@@ -23,12 +24,13 @@ export async function run(positionals: string[], _values: object, io: CliIo): Pr
   // The config the recording came with, if it has one next to it, travels with it.
   const config = recordingConfig(file, FEATURES, loadFeatureConfig(dirs.root, FEATURES), cliLogger(io, 'warn'));
 
+  const version = await rulesVersion(SOURCE_ROOT);
   const db = openDatabase(dirs.dbPath);
   try {
     try {
       copyFileSync(file, target);
       if (existsSync(sessionConfigPath(file))) copyFileSync(sessionConfigPath(file), sessionConfigPath(target));
-      await processRecording(target, db, cliLogger(io, 'warn'), io.signal, config);
+      await processRecording(target, db, cliLogger(io, 'warn'), io.signal, config, version);
     } catch (error) {
       // a recording that cannot be copied or processed (or was interrupted) is not imported, with nothing left behind
       rmSync(target, { force: true });

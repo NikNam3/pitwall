@@ -3,7 +3,7 @@ import { mkdtempSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import type { FeedId, SessionUid } from '@pitwall/domain';
+import { currentLaps, type FeedId, type SessionUid } from '@pitwall/domain';
 import { FEATURES } from '../../src/features/index.generated.ts';
 import { TopicHub } from '../../src/hub/topic-hub.ts';
 import { PwrecSource } from '../../src/input/pwrec-source.ts';
@@ -35,12 +35,12 @@ async function datagrams(path: string): Promise<{ payloads: string[]; startedAt:
 async function replay(storage: object): Promise<void> {
   const hub = new TopicHub({ now: () => performance.now() });
   const p = new FeedPipeline({ feedId: F, source: new PwrecSource({ feedId: F, path: SEGMENT, mode: 'asFastAsPossible' }), hub, features: FEATURES,
-    log: createLogger({ level: 'silent' }), storage: storage as never });
+    log: createLogger({ level: 'silent' }), storage: { rulesVersion: 'unversioned', ...storage } as never });
   p.start(); await p.done;
 }
 
 describe('FeedPipeline over the Zandvoort race segment', () => {
-  it('stores the session, its drivers and the confirmed laps', async () => {
+  it('stores the session, its cars and its log, complete; its projection holds the confirmed laps', async () => {
     const db = openDatabase(join(tmp(), 'segment.db'));
     const source = await datagrams(SEGMENT);
     await replay({ db, sourcePath: SEGMENT });
@@ -48,16 +48,18 @@ describe('FeedPipeline over the Zandvoort race segment', () => {
     const [row] = db.prepare('SELECT weekend_id FROM sessions WHERE session_uid = ?').all(SESSION) as Array<{ weekend_id: string }>;
     expect(row).toBeDefined();
     const [session] = repo.sessionsOf(row!.weekend_id);
-    expect(session).toMatchObject({ sessionUid: SESSION, pwrecPath: SEGMENT });
-    expect(session!.drivers.length).toBeGreaterThan(0);
+    // the player car is the player car index of the session's first frame (C60's key)
+    expect(session).toMatchObject({ sessionUid: SESSION, pwrecPath: SEGMENT, playerCar: 1, complete: true });
+    expect(session!.cars.length).toBeGreaterThan(0);
     expect(Date.parse(session!.startedAt)).toBeGreaterThanOrEqual(Date.parse(source.startedAt) + source.firstT);
-    const laps = repo.lapsOf({ sessionUid: SESSION, weekendId: row!.weekend_id });
-    expect(laps.length).toBeGreaterThan(0); expect(laps.every((l) => l.status === 'confirmed' && l.lapTimeMs > 0)).toBe(true);
+    const projection = await repo.projectionOf({ sessionUid: SESSION, weekendId: row!.weekend_id, playerCar: session!.playerCar });
+    const confirmed = currentLaps(projection!.laps).filter((l) => l.status === 'confirmed');
+    expect(confirmed.length).toBeGreaterThan(0); expect(confirmed.every((l) => l.lapTimeMs > 0)).toBe(true);
   });
   it('writes a session file with the datagrams of the segment, in order', async () => {
     const recordings = tmp();
     await replay({ db: openDatabase(join(tmp(), 'copy.db')), recordingsDir: recordings, sourcePath: SEGMENT });
-    const files = readdirSync(recordings).filter((name) => name.endsWith('.pwrec.gz')); expect(files).toHaveLength(1); expect(files[0]).toMatch(/_bbda17a651868614\.pwrec\.gz$/);
+    const files = readdirSync(recordings).filter((name) => name.endsWith('.pwrec.gz')); expect(files).toHaveLength(1); expect(files[0]).toMatch(/_bbda17a651868614_car01\.pwrec\.gz$/);
     const written = (await datagrams(join(recordings, files[0]!))).payloads; const source = (await datagrams(SEGMENT)).payloads;
     expect(written.length).toBeGreaterThan(0);
     expect(source.slice(source.length - written.length)).toEqual(written);

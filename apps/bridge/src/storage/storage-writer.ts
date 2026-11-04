@@ -1,125 +1,145 @@
-import { driverKeyString } from '@pitwall/domain';
-import type { HistoryDelta, ProjectedList, Projection } from '@pitwall/engine/readers';
+import type { Log } from '@pitwall/engine/log';
+import type { DeepReadonly } from '@pitwall/engine/readers';
 import type { Db, SessionKey, SessionRow } from './db.ts';
+import { logRows } from './log-rows.ts';
 
 export interface StorageWriterOptions {
   /** Called with every failed write; the writer itself never throws, so storage cannot stop the live feed. */
   readonly onError: (error: unknown) => void;
+  /** The rules version a live session's row is stored with (C61). */
+  readonly rulesVersion: string;
 }
 
-/** History lists that are written to storage, in the order of `writeConfirmed`'s statements. */
-const STORED_TABLES = ['laps', 'stints', 'pit_stops', 'events'] as const;
-/** Tables no longer written that rows of an older database may still fill: deleted with their session (Task 27 drops them). */
-const UNWRITTEN_TABLES = ['flag_phases'] as const;
+/** The rows of one stored session, bound to `@sessionUid`, `@weekendId` and `@playerCar`. */
+const OF_SESSION = 'session_uid = @sessionUid AND weekend_id = @weekendId AND player_car = @playerCar';
 
-/** The rows of one stored session, bound to `@sessionUid` and `@weekendId`. */
-const OF_SESSION = 'session_uid = @sessionUid AND weekend_id = @weekendId';
+/** The named parameters of a key; a caller's key object may carry more fields than a statement binds. */
+const keyParams = ({ sessionUid, weekendId, playerCar }: SessionKey) => ({ sessionUid, weekendId, playerCar });
+const keyString = ({ sessionUid, weekendId, playerCar }: SessionKey): string => `${sessionUid}/${weekendId}/${playerCar}`;
 
-/** Writes sessions and the confirmed part of the engine history; idempotent, one transaction per call. */
+/**
+ * Writes each session's log as it is (C24, C60), one transaction per call. A live session appends what each list of its
+ * log gained since the writer's last write (`writeLog`) and is marked complete once its closing spans are written
+ * (`complete`); no fact row is ever changed or removed. A rebuild replaces a session's log as a whole (`replaceLog`).
+ */
 export class StorageWriter {
-  private readonly db: Db;
-  private readonly onError: (error: unknown) => void;
-  private readonly statements;
+  readonly #db: Db;
+  readonly #onError: (error: unknown) => void;
+  readonly #rulesVersion: string;
+  readonly #statements;
+  /** Per session key, the log positions written so far, by list (`voids` and `spans:<machine>` included). */
+  readonly #written = new Map<string, Map<string, number>>();
 
   constructor(db: Db, options: StorageWriterOptions) {
-    this.db = db;
-    this.onError = options.onError;
-    const upsertBySeq = (table: string, columns: string) => {
-      const names = columns.split(', ');
-      const updates = names.map((c) => `${c} = excluded.${c}`).join(', ');
-      return db.prepare(
-        `INSERT INTO ${table} (session_uid, weekend_id, seq, ${columns})
-         VALUES (@sessionUid, @weekendId, @seq, ${names.map((c) => `@${c}`).join(', ')})
-         ON CONFLICT (session_uid, weekend_id, seq) DO UPDATE SET ${updates}`,
-      );
-    };
-    this.statements = {
+    this.#db = db;
+    this.#onError = options.onError;
+    this.#rulesVersion = options.rulesVersion;
+    this.#statements = {
       insertWeekend: db.prepare('INSERT OR IGNORE INTO weekends (weekend_id, season_id, track_id) VALUES (?, ?, ?)'),
       upsertSession: db.prepare(
-        `INSERT INTO sessions (session_uid, weekend_id, session_type, track_id, started_at, pwrec_path, settings)
-         VALUES (@sessionUid, @weekendId, @sessionType, @trackId, @startedAt, @pwrecPath, @settings)
-         ON CONFLICT (session_uid, weekend_id) DO UPDATE SET session_type = excluded.session_type,
-           track_id = excluded.track_id, started_at = excluded.started_at, pwrec_path = excluded.pwrec_path, settings = excluded.settings`,
+        `INSERT INTO sessions (session_uid, weekend_id, player_car, track_id, started_at, pwrec_path, settings, rules_version, complete)
+         VALUES (@sessionUid, @weekendId, @playerCar, @trackId, @startedAt, @pwrecPath, @settings, @rulesVersion, @complete)
+         ON CONFLICT (session_uid, weekend_id, player_car) DO UPDATE SET track_id = excluded.track_id, started_at = excluded.started_at,
+           pwrec_path = excluded.pwrec_path, settings = excluded.settings, rules_version = excluded.rules_version, complete = excluded.complete`,
       ),
-      deleteDrivers: db.prepare('DELETE FROM drivers WHERE session_uid = @sessionUid AND weekend_id = @weekendId'),
-      insertDriver: db.prepare(
-        `INSERT INTO drivers (session_uid, weekend_id, car_id, driver_key, key_json) VALUES (@sessionUid, @weekendId, @carId, @driverKey, @keyJson)`,
+      deleteCars: db.prepare(`DELETE FROM cars WHERE ${OF_SESSION}`),
+      insertCar: db.prepare(
+        `INSERT INTO cars (session_uid, weekend_id, player_car, car_id, team_id, race_number)
+         VALUES (@sessionUid, @weekendId, @playerCar, @carId, @teamId, @raceNumber)`,
       ),
-      upsertLap: db.prepare(
-        `INSERT INTO laps (session_uid, weekend_id, car_id, lap_number, lap_time_ms, record)
-         VALUES (@sessionUid, @weekendId, @carId, @lapNumber, @lapTimeMs, @record)
-         ON CONFLICT (session_uid, weekend_id, car_id, lap_number) DO UPDATE SET lap_time_ms = excluded.lap_time_ms, record = excluded.record`,
+      insertFact: db.prepare(
+        `INSERT INTO facts (session_uid, weekend_id, player_car, list, seq, car_id, record)
+         VALUES (@sessionUid, @weekendId, @playerCar, @list, @seq, @carId, @record)`,
       ),
-      upsertStint: upsertBySeq('stints', 'car_id, record'),
-      upsertPitStop: upsertBySeq('pit_stops', 'car_id, record'),
-      upsertEvent: upsertBySeq('events', 'car_id, record'),
-      clear: STORED_TABLES.map((table) => db.prepare(`DELETE FROM ${table} WHERE ${OF_SESSION}`)),
-      deleteSession: [...STORED_TABLES, ...UNWRITTEN_TABLES, 'drivers', 'sessions'].map((table) => db.prepare(`DELETE FROM ${table} WHERE ${OF_SESSION}`)),
+      deleteFacts: db.prepare(`DELETE FROM facts WHERE ${OF_SESSION}`),
+      complete: db.prepare(`UPDATE sessions SET complete = 1 WHERE ${OF_SESSION}`),
     };
-  }
-
-  /** Inserts the weekend if new, upserts the session by its key (uid + weekend) and replaces its drivers. */
-  upsertSession(row: SessionRow): void {
-    this.guarded(() =>
-      this.db.transaction(() => {
-        const s = this.statements;
-        s.insertWeekend.run(row.weekendId, row.seasonId, row.trackId);
-        const key = { sessionUid: row.sessionUid, weekendId: row.weekendId };
-        s.upsertSession.run({ ...row, settings: JSON.stringify(row.settings) });
-        s.deleteDrivers.run(key);
-        for (const d of row.drivers) {
-          s.insertDriver.run({ ...key, carId: d.carId, driverKey: driverKeyString(d.driverKey), keyJson: JSON.stringify(d.driverKey) });
-        }
-      })(),
-    );
   }
 
   /**
-   * Writes the history entries `delta` adds (confirmed laps only). A rewound delta (a flashback, the race start) first
-   * drops the session's stored history and rewrites everything up to `delta.after` (until Task 27 stores the log).
+   * Inserts the weekend if new, writes the session's row (not complete, with this writer's rules version) and replaces
+   * its cars: the newest Participants win.
    */
-  writeConfirmed(key: SessionKey, history: Projection, delta: HistoryDelta): void {
-    const rewound = delta.rewound !== undefined;
-    const from = (list: ProjectedList) => (rewound ? 0 : (delta.before[list] ?? 0));
-    const added = <T>(list: ProjectedList, items: readonly T[]) => items.slice(from(list), delta.after[list] ?? 0);
-    const laps = added('laps', history.laps).filter((l) => l.status === 'confirmed');
-    const stints = added('stints', history.stints);
-    const pitStops = added('pitStops', history.pitStops);
-    const events = added('events', history.events);
-    const nothingToWrite = [laps, stints, pitStops, events].every((list) => list.length === 0);
-    if (nothingToWrite && !rewound) return;
-
-    this.guarded(() =>
-      this.db.transaction(() => {
-        const s = this.statements;
-        const { sessionUid, weekendId } = key;
-        if (rewound) for (const clear of s.clear) clear.run({ sessionUid, weekendId });
-        for (const lap of laps) {
-          s.upsertLap.run({ sessionUid, weekendId, carId: lap.carId, lapNumber: lap.lapNumber, lapTimeMs: lap.lapTimeMs, record: JSON.stringify(lap) });
-        }
-        stints.forEach((r, i) => s.upsertStint.run({ sessionUid, weekendId, seq: from('stints') + i, car_id: r.carId, record: JSON.stringify(r) }));
-        pitStops.forEach((r, i) => s.upsertPitStop.run({ sessionUid, weekendId, seq: from('pitStops') + i, car_id: r.carId, record: JSON.stringify(r) }));
-        events.forEach((r, i) => s.upsertEvent.run({ sessionUid, weekendId, seq: from('events') + i, car_id: r.carId ?? null, record: JSON.stringify(r) }));
-      })(),
-    );
+  upsertSession(row: SessionRow): void {
+    this.#guarded(() => this.#db.transaction(() => this.#writeRow(row, this.#rulesVersion, false))());
   }
 
-  /** Deletes the sessions and everything stored for them (children first, for the foreign keys), in one transaction. */
-  deleteSessions(keys: readonly SessionKey[]): void {
-    this.guarded(() =>
-      this.db.transaction(() => {
-        for (const { sessionUid, weekendId } of keys) {
-          for (const remove of this.statements.deleteSession) remove.run({ sessionUid, weekendId });
-        }
-      })(),
-    );
+  /**
+   * A live session starts under `row`'s key: in one transaction the log stored under that key, if any (the bridge
+   * restarted mid-session), is replaced by an empty one, and the row (not complete, pointing at the new recording) and
+   * its cars are written. The newest run wins; its log is then appended from position 0.
+   */
+  startSession(row: SessionRow): void {
+    const key = keyParams(row);
+    this.#guarded(() => {
+      this.#db.transaction(() => {
+        this.#statements.deleteFacts.run(key);
+        this.#writeRow(row, this.#rulesVersion, false);
+      })();
+      this.#written.set(keyString(row), new Map());
+    });
   }
 
-  private guarded(write: () => void): void {
+  /** Appends what each list of `log` gained since this writer's last write for `key`; nothing new writes nothing (C24). */
+  writeLog(key: SessionKey, log: DeepReadonly<Log>): void {
+    const written = this.#written.get(keyString(key)) ?? new Map<string, number>();
+    const rows = logRows(log, (list) => written.get(list) ?? 0);
+    if (rows.length === 0) return;
+    this.#guarded(() => {
+      this.#db.transaction(() => {
+        for (const row of rows) this.#statements.insertFact.run({ ...keyParams(key), ...row });
+      })();
+      for (const row of rows) written.set(row.list, row.seq + 1);
+      this.#written.set(keyString(key), written);
+    });
+  }
+
+  /** The session's log is complete: its closing spans are written (C61). */
+  complete(key: SessionKey): void {
+    this.#guarded(() => this.#statements.complete.run(keyParams(key)));
+  }
+
+  /**
+   * A rebuild (C24, C61): in one transaction, deletes the session's fact and car rows and writes `log` whole, the cars
+   * and the row, complete, with `rulesVersion`. A failure leaves the old log and row as they were.
+   */
+  replaceLog(row: SessionRow, log: DeepReadonly<Log>, rulesVersion: string): void {
+    const key = keyParams(row);
+    const rows = logRows(log, () => 0);
+    this.#guarded(() => {
+      this.#db.transaction(() => {
+        this.#statements.deleteFacts.run(key);
+        this.#writeRow(row, rulesVersion, true);
+        for (const fact of rows) this.#statements.insertFact.run({ ...key, ...fact });
+      })();
+      const written = new Map<string, number>();
+      for (const fact of rows) written.set(fact.list, fact.seq + 1);
+      this.#written.set(keyString(row), written);
+    });
+  }
+
+  #writeRow(row: SessionRow, rulesVersion: string, complete: boolean): void {
+    const s = this.#statements;
+    const key = keyParams(row);
+    s.insertWeekend.run(row.weekendId, row.seasonId, row.trackId);
+    s.upsertSession.run({
+      ...key,
+      trackId: row.trackId,
+      startedAt: row.startedAt,
+      pwrecPath: row.pwrecPath,
+      settings: JSON.stringify(row.settings),
+      rulesVersion,
+      complete: complete ? 1 : 0,
+    });
+    s.deleteCars.run(key);
+    for (const { carId, carKey } of row.cars) s.insertCar.run({ ...key, carId, teamId: carKey.teamId, raceNumber: carKey.raceNumber });
+  }
+
+  #guarded(write: () => void): void {
     try {
       write();
     } catch (error) {
-      this.onError(error);
+      this.#onError(error);
     }
   }
 }

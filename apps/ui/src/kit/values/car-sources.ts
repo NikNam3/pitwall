@@ -12,7 +12,6 @@ export const CAR_FIELD_SOURCE = {
   'identity.driverId': 'participants',
   'identity.networkId': 'participants',
   'identity.platform': 'participants',
-  'identity.driverKey.networkId': 'participants',
   'timing.position': 'lapData',
   'timing.lap': 'lapData',
   'timing.lapDistanceM': 'lapData',

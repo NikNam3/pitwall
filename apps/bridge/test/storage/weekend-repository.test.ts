@@ -1,122 +1,286 @@
-import { known, unknown, type DriverKey, type LapRecord, type StintRecord } from '@pitwall/domain';
-import { describe, expect, it } from 'vitest';
-import { openDatabase } from '../../src/storage/db.ts';
+// The read side of storage (Task 27): the sessions of a weekend (the rows), and the one read API, a stored session's
+// projection (C28, C34), computed from its stored log by the engine's projection module. A session whose log is not
+// complete is never served (C61): `projectionOf` rebuilds it from its recording first, `weekendContext` skips it. The
+// weekend context matches a car across sessions by its team and race number (C62).
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { Writable } from 'node:stream';
+import { describe, expect, it, vi } from 'vitest';
+import { createLogger } from '../../src/log.ts';
+import { openDatabase, type SessionRow } from '../../src/storage/db.ts';
 import { StorageWriter } from '../../src/storage/storage-writer.ts';
 import { WeekendRepository } from '../../src/storage/weekend-repository.ts';
-import { AI9, HUMAN, all, car, event, history, key, lap, pitStop, session, stint } from './records.ts';
+import {
+  ASTON_14, FERRARI_16, MERCEDES_44, car, event, factRows, key, keyOf, lap, log, projected, session, span, stint, stored, type Log,
+} from './records.ts';
+
+/** A logger whose lines the test reads. */
+function captured() {
+  const lines: Array<Record<string, unknown>> = [];
+  const logger = createLogger({ level: 'debug', destination: new Writable({ write(c, _e, cb) { lines.push(JSON.parse(String(c)) as Record<string, unknown>); cb(); } }) });
+  return { logger, warnings: () => lines.filter((l) => l['level'] === 40) };
+}
+
+/** A recording file that exists (its content is never read here: the injected rebuild stands for the real one). */
+const recording = (): string => {
+  const path = join(mkdtempSync(join(tmpdir(), 'repo-')), 'session.pwrec.gz');
+  writeFileSync(path, '');
+  return path;
+};
 
 function storage() {
   const db = openDatabase(':memory:');
-  return { w: new StorageWriter(db, { onError: (e) => { throw e; } }), repo: new WeekendRepository(db) };
-}
-
-function weekend() {
-  const db = openDatabase(':memory:');
-  const w = new StorageWriter(db, { onError: (e) => { throw e; } });
-  w.upsertSession(session('2', { sessionType: 'qualifying:grandPrix:1', startedAt: '2026-10-27T21:00:00.000Z', drivers: [{ carId: car(3), driverKey: AI9 }] }));
-  w.upsertSession(session('1', { sessionType: 'practice:practice:1' }));                                         // 20:00, AI9 = car 0, HUMAN = car 1
-  w.upsertSession(session('3', { weekendId: 'W2', startedAt: '2026-10-27T19:00:00.000Z' }));
-  const h1 = history({ laps: [lap(0, 1), lap(1, 1)], stints: [stint(0, 1), stint(1, 1)] });
-  const h2 = history({ laps: [lap(3, 1)] });
-  w.writeConfirmed(key('1'), h1, all(h1)); w.writeConfirmed(key('2'), h2, all(h2)); w.writeConfirmed(key('3', 'W2'), h1, all(h1));
-  return new WeekendRepository(db);
-}
-
-describe('WeekendRepository', () => {
-  it('sessionsOf returns the weekend sessions in start order', () => {
-    expect(weekend().sessionsOf('W1')).toEqual([session('1', { sessionType: 'practice:practice:1' }),
-      session('2', { sessionType: 'qualifying:grandPrix:1', startedAt: '2026-10-27T21:00:00.000Z', drivers: [{ carId: car(3), driverKey: AI9 }] })]);
-  });
-  it('lapsOf filters by DriverKey through the drivers table', () => {
-    const repo = weekend();
-    expect(repo.lapsOf(key('1'))).toEqual([lap(0, 1), lap(1, 1)]);
-    expect(repo.lapsOf(key('1'), HUMAN)).toEqual([lap(1, 1)]);
-  });
-  /** The laps of a stored session whose lap 1 record is `record` (as an older version wrote it). */
-  const storedAs = (record: object) => {
-    const db = openDatabase(':memory:');
-    const w = new StorageWriter(db, { onError: (e) => { throw e; } });
-    w.upsertSession(session('1'));
-    const h = history({ laps: [lap(0, 1)] });
-    w.writeConfirmed(key('1'), h, all(h));
-    db.prepare('UPDATE laps SET record = ? WHERE session_uid = ?').run(JSON.stringify(record), '1');
-    return new WeekendRepository(db).lapsOf(key('1'));
+  const writer = new StorageWriter(db, { onError: (e) => { throw e; }, rulesVersion: 'unversioned' });
+  /** Stores `row` with `l` as its log, complete unless told otherwise. */
+  const put = (row: SessionRow, l: Log = log(), complete = true) => {
+    writer.upsertSession(row);
+    writer.writeLog(keyOf(row), l);
+    if (complete) writer.complete(keyOf(row));
   };
-  it('a lap stored before the lap-start and lap-end samples existed reads with those fields as unknown("notReceived")', () => {
-    const { wearAtStartPct, ersStoreAtStartJ, wearAtEndPct, ersStoreAtEndJ, ersDeployedJ, ersHarvestedJ, damageAtEnd, channelRange, ...old } = lap(0, 1);
-    void [wearAtStartPct, ersStoreAtStartJ, wearAtEndPct, ersStoreAtEndJ, ersDeployedJ, ersHarvestedJ, damageAtEnd, channelRange];
-    const [read] = storedAs(old);
-    expect(read).toEqual(lap(0, 1));                    // the helper's samples are all unknown('notReceived')
-    expect(read!.damageAtEnd).toEqual(unknown('notReceived'));
-    expect(read!.channelRange.tyres.fl.surfaceC).toEqual(unknown('notReceived'));
+  return { db, writer, put };
+}
+
+describe('WeekendRepository.sessionsOf', () => {
+  it('returns the weekend\'s rows in start order, each with its cars by car id, its rules version and whether it is complete', () => {
+    const { db, put } = storage();
+    const q = session('2', { startedAt: '2026-10-27T21:00:00.000Z', playerCar: car(3), cars: [{ carId: car(3), carKey: FERRARI_16 }, { carId: car(0), carKey: MERCEDES_44 }] });
+    put(q, log(), false);
+    put(session('1'));
+    put(session('3', { weekendId: 'W2', startedAt: '2026-10-27T19:00:00.000Z' }));
+    expect(new WeekendRepository(db).sessionsOf('W1')).toEqual([
+      stored(session('1'), true),
+      stored({ ...q, cars: [{ carId: car(0), carKey: MERCEDES_44 }, { carId: car(3), carKey: FERRARI_16 }] }, false),
+    ]);
   });
-  it('a lap stored with the lap-end samples but before the lap-start samples existed reads with the start samples as unknown("notReceived")', () => {
-    const wear = { fl: known(8, 90_000), fr: known(7, 90_000), rl: known(6, 90_000), rr: known(5, 90_000) };
-    const { wearAtStartPct, ersStoreAtStartJ, ...old } = lap(0, 1, { wearAtEndPct: wear, ersStoreAtEndJ: known(3_000_000, 90_000) });
-    void [wearAtStartPct, ersStoreAtStartJ];
-    const [read] = storedAs(old);
-    expect(read).toEqual({ ...old, wearAtStartPct: lap(0, 1).wearAtStartPct, ersStoreAtStartJ: unknown('notReceived') });
+});
+
+describe('WeekendRepository.projectionOf: the one read API (C34)', () => {
+  it('is the stored log\'s projection; a key nothing is stored under has none', async () => {
+    const { db, put } = storage();
+    const l = log({ laps: [lap(1, 1)], stints: [stint(1, 1)], spans: { 'weekend-phase': [span('weekend-phase', 'practice', { detail: { format: 'practice', segment: 1 } })] } });
+    put(session('1'), l);
+    const repo = new WeekendRepository(db);
+    expect(await repo.projectionOf(key('1'))).toEqual(projected(l));
+    expect(await repo.projectionOf(key('1', 'W1', car(0)))).toBeUndefined();
+    expect(await repo.projectionOf(key('9'))).toBeUndefined();
   });
-  it('weekendContext: the player\'s sessions of the weekend, every stored driver with their own records, whatever its car index per session', () => {
-    const dr = (driverKey: DriverKey, laps: LapRecord[], stints: StintRecord[] = []) => ({ driverKey, laps, stints, pitStops: [] });
-    expect(weekend().weekendContext('W1', AI9)).toEqual({ weekendId: 'W1', driverKey: AI9, sessions: [
-      { sessionUid: '1', sessionType: 'practice:practice:1', drivers: [dr(AI9, [lap(0, 1)], [stint(0, 1)]), dr(HUMAN, [lap(1, 1)], [stint(1, 1)])] },
-      { sessionUid: '2', sessionType: 'qualifying:grandPrix:1', drivers: [dr(AI9, [lap(3, 1)])] }] });
-    expect(weekend().weekendContext('W1', HUMAN).sessions.map((s) => s.sessionUid)).toEqual(['1']);
-    expect(weekend().weekendContext('W1', HUMAN).sessions[0]!.drivers.map((d) => d.driverKey)).toEqual([AI9, HUMAN]);
+
+  it('a session stored without complete is rebuilt from its recording before it is read, once', async () => {
+    const { db, writer, put } = storage();
+    const row = session('1', { pwrecPath: recording() });
+    put(row, log({ laps: [lap(1, 1)] }), false);                        // the bridge was killed before the session ended
+    const full = log({ laps: [lap(1, 1), lap(1, 2)], events: [event(3)] });
+    const rebuild = vi.fn(async (r: SessionRow) => { writer.replaceLog(r, full, 'unversioned'); });
+    const repo = new WeekendRepository(db, { log: captured().logger, rebuild });
+    expect(await repo.projectionOf(keyOf(row))).toEqual(projected(full));
+    expect(rebuild).toHaveBeenCalledOnce();
+    expect(rebuild.mock.calls[0]![0]).toMatchObject({ sessionUid: '1', weekendId: 'W1', playerCar: 1, pwrecPath: row.pwrecPath });
+    expect(repo.sessionsOf('W1')).toEqual([stored(row, true)]);
+    expect(await repo.projectionOf(keyOf(row))).toEqual(projected(full));
+    expect(rebuild).toHaveBeenCalledOnce();
   });
-  it('weekendContext: drivers are ordered by car id and a driver without records is still listed', () => {
+
+  it('an incomplete session whose recording is missing is neither served nor deleted, with a warning (C24, C61)', async () => {
+    const { db, put } = storage();
+    const row = session('1', { pwrecPath: join(mkdtempSync(join(tmpdir(), 'repo-')), 'gone.pwrec.gz') });
+    put(row, log({ laps: [lap(1, 1)] }), false);
+    const before = factRows(db, keyOf(row));
+    const rebuild = vi.fn(async () => {});
+    const { logger, warnings } = captured();
+    const repo = new WeekendRepository(db, { log: logger, rebuild });
+    expect(await repo.projectionOf(keyOf(row))).toBeUndefined();
+    expect(rebuild).not.toHaveBeenCalled();
+    expect(warnings()).toEqual([expect.objectContaining({ sessionUid: '1', weekendId: 'W1' })]);
+    expect(repo.sessionsOf('W1')).toEqual([stored(row, false)]);
+    expect(factRows(db, keyOf(row))).toEqual(before);
+  });
+});
+
+describe('WeekendRepository.weekendContext (C39, C62)', () => {
+  // The player's car is FERRARI_16. Practice: player in slot 1. Qualifying: the same car in slot 3 (the slots differ).
+  // A second feed of qualifying whose player is MERCEDES_44. The race (the current session) puts the player in slot 5.
+  const practice = session('P', { startedAt: '2026-10-27T20:00:00.000Z' });
+  const qualifying = session('Q', { startedAt: '2026-10-27T21:00:00.000Z', playerCar: car(3),
+    cars: [{ carId: car(0), carKey: MERCEDES_44 }, { carId: car(3), carKey: FERRARI_16 }, { carId: car(4), carKey: ASTON_14 }] });
+  const otherFeed = session('Q', { startedAt: '2026-10-27T21:00:00.000Z', playerCar: car(0), cars: qualifying.cars });
+  const race = session('R', { startedAt: '2026-10-27T22:00:00.000Z', playerCar: car(5), cars: [{ carId: car(5), carKey: FERRARI_16 }] });
+  const later = session('L', { startedAt: '2026-10-27T23:00:00.000Z' });
+  const elsewhere = session('X', { weekendId: 'W2', startedAt: '2026-10-27T19:00:00.000Z' });
+  const practiceLog = log({ laps: [lap(1, 1), lap(0, 1)], spans: { 'weekend-phase': [span('weekend-phase', 'practice', { detail: { format: 'practice', segment: 1 } })] } });
+  const qualifyingLog = log({ laps: [lap(3, 1)], spans: { 'weekend-phase': [span('weekend-phase', 'qualifying', { detail: { format: 'grandPrix', segment: 1 } })] } });
+
+  function weekend(o: { qualifyingComplete?: boolean } = {}) {
+    const { db, put } = storage();
+    put(practice, practiceLog);
+    // an incomplete session's recording exists, so it can be rebuilt
+    put(o.qualifyingComplete === false ? { ...qualifying, pwrecPath: recording() } : qualifying, qualifyingLog, o.qualifyingComplete ?? true);
+    put(otherFeed, log({ laps: [lap(0, 1)] }));
+    put(race);
+    put(later, log({ laps: [lap(1, 1)] }));
+    put(elsewhere, log({ laps: [lap(1, 1)] }));
+    return db;
+  }
+  const storedSession = (row: SessionRow, l: Log) => ({
+    sessionUid: row.sessionUid, playerCar: row.playerCar, cars: [...row.cars].sort((a, b) => a.carId - b.carId), projection: projected(l),
+  });
+
+  it('matches cars by team and race number when the slots differ between sessions: the player\'s earlier sessions, oldest first', () => {
+    const repo = new WeekendRepository(weekend());
+    expect(repo.weekendContext('W1', FERRARI_16, keyOf(race))).toEqual({
+      context: { weekendId: 'W1', player: FERRARI_16, sessions: [storedSession(practice, practiceLog), storedSession(qualifying, qualifyingLog)] },
+      incomplete: [],
+    });
+  });
+  it('an earlier session is the player\'s when its own player car had the player\'s key, whatever its slot', () => {
+    const repo = new WeekendRepository(weekend());
+    expect(repo.weekendContext('W1', MERCEDES_44, keyOf(race)).context.sessions.map((s) => [s.sessionUid, s.playerCar])).toEqual([['Q', 0]]);
+    expect(repo.weekendContext('W1', ASTON_14, keyOf(race)).context.sessions).toEqual([]);
+  });
+  it('holds only sessions that started before the current one, of its own weekend', () => {
+    const repo = new WeekendRepository(weekend());
+    expect(repo.weekendContext('W1', FERRARI_16, keyOf(qualifying)).context.sessions.map((s) => s.sessionUid)).toEqual(['P']);
+    expect(repo.weekendContext('W1', FERRARI_16, keyOf(practice)).context.sessions).toEqual([]);
+  });
+  it('skips a session whose log is not complete, warns and returns its key for a rebuild', () => {
+    const { logger, warnings } = captured();
+    const repo = new WeekendRepository(weekend({ qualifyingComplete: false }), { log: logger });
+    const { context, incomplete } = repo.weekendContext('W1', FERRARI_16, keyOf(race));
+    expect(context.sessions.map((s) => s.sessionUid)).toEqual(['P']);
+    expect(incomplete).toEqual([keyOf(qualifying)]);
+    expect(warnings()).toEqual([expect.objectContaining({ sessionUid: 'Q', weekendId: 'W1' })]);
+  });
+  it('the weekend phase of a stored session is its projection\'s weekend-phase span; no text copy exists', () => {
+    const repo = new WeekendRepository(weekend());
+    const [p] = repo.weekendContext('W1', FERRARI_16, keyOf(race)).context.sessions;
+    expect(p!.projection.spans['weekend-phase']).toEqual(practiceLog.spans['weekend-phase']);
+    expect(p).not.toHaveProperty('sessionType');
+  });
+
+  // The game reuses a session uid across weekends (C60's key holds the weekend): ported from the DriverKey tests at
+  // 3364669 (Task 27 fix round 1, C82)
+  it('a session\'s cars and projection come from its own weekend when the same uid also exists in another weekend', () => {
+    const { db, put } = storage();
+    const inW1 = session('1', { playerCar: car(0), cars: [{ carId: car(0), carKey: FERRARI_16 }] });
+    const inW2 = session('1', { weekendId: 'W2', playerCar: car(0), cars: [{ carId: car(0), carKey: MERCEDES_44 }, { carId: car(1), carKey: FERRARI_16 }] });
+    const w1Log = log({ laps: [lap(0, 1)] });
+    put(inW1, w1Log);
+    put(inW2, log({ laps: [lap(0, 1, { lapTimeMs: 91_000 }), lap(1, 1)] }));
+    const current = session('R', { startedAt: '2026-10-27T22:00:00.000Z', playerCar: car(0), cars: [{ carId: car(0), carKey: FERRARI_16 }] });
+    put(current);
+    const repo = new WeekendRepository(db);
+    expect(repo.weekendContext('W1', FERRARI_16, keyOf(current))).toEqual({
+      context: { weekendId: 'W1', player: FERRARI_16, sessions: [storedSession(inW1, w1Log)] },
+      incomplete: [],
+    });
+    // MERCEDES_44 was the player car only of the W2 session
+    expect(repo.weekendContext('W1', MERCEDES_44, keyOf(current)).context.sessions).toEqual([]);
+  });
+
+  it('`before`\'s start time comes from its own weekend, not from the same uid in another weekend', () => {
+    const { db, put } = storage();
+    put(session('P', { weekendId: 'W2', startedAt: '2026-10-27T20:00:00.000Z' }));
+    const q = session('Q', { weekendId: 'W2', startedAt: '2026-10-27T21:00:00.000Z' });
+    put(q);
+    put(session('Q', { weekendId: 'W1', startedAt: '2026-10-20T19:00:00.000Z' }));   // the same uid, an earlier weekend
+    expect(new WeekendRepository(db).weekendContext('W2', FERRARI_16, keyOf(q)).context.sessions.map((s) => s.sessionUid)).toEqual(['P']);
+  });
+});
+
+// Task 28 (C61): the repository knows the current rules version (`rulesVersion`). A session stored under another one is
+// stale and treated like an incomplete one wherever completeness is checked: never served, rebuilt first, skipped by the
+// weekend context. An unchanged, complete session is served as it is.
+describe('WeekendRepository: a stale rules version (C61)', () => {
+  const OLD = 'old-rules';
+  const NEW = 'new-rules';
+
+  /** Storage whose rows are written under `OLD`: an earlier bridge stored them. */
+  function staleStorage() {
     const db = openDatabase(':memory:');
-    const w = new StorageWriter(db, { onError: (e) => { throw e; } });
-    const other: DriverKey = { name: 'DRIVER 4', networkId: 255 };
-    w.upsertSession(session('7', { weekendId: 'W3', drivers: [{ carId: car(5), driverKey: HUMAN }, { carId: car(2), driverKey: AI9 }, { carId: car(4), driverKey: other }] }));
-    const h = history({ laps: [lap(5, 1), lap(2, 1), lap(2, 2)] });
-    w.writeConfirmed(key('7', 'W3'), h, all(h));
-    const [s] = new WeekendRepository(db).weekendContext('W3', HUMAN).sessions;
-    expect(s!.drivers.map((d) => d.driverKey)).toEqual([AI9, other, HUMAN]);
-    expect(s!.drivers.map((d) => d.laps)).toEqual([[lap(2, 1), lap(2, 2)], [], [lap(5, 1)]]);
+    const old = new StorageWriter(db, { onError: (e) => { throw e; }, rulesVersion: OLD });
+    const current = new StorageWriter(db, { onError: (e) => { throw e; }, rulesVersion: NEW });
+    /** Stores `row` complete with `l` as its log, under `OLD` unless `version` says `NEW`. */
+    const put = (row: SessionRow, l: Log = log(), version: typeof OLD | typeof NEW = OLD) => {
+      const writer = version === OLD ? old : current;
+      writer.upsertSession(row);
+      writer.writeLog(keyOf(row), l);
+      writer.complete(keyOf(row));
+    };
+    return { db, current, put };
+  }
+
+  it('a complete session of another rules version is rebuilt from its recording before it is read, once', async () => {
+    const { db, current, put } = staleStorage();
+    const row = session('1', { pwrecPath: recording() });
+    put(row, log({ laps: [lap(1, 1)] }));
+    const rebuiltLog = log({ laps: [lap(1, 1)], events: [event(3)] });
+    const rebuild = vi.fn(async (r: SessionRow) => { current.replaceLog(r, rebuiltLog, NEW); });
+    const repo = new WeekendRepository(db, { log: captured().logger, rebuild, rulesVersion: NEW });
+    expect(await repo.projectionOf(keyOf(row))).toEqual(projected(rebuiltLog));
+    expect(rebuild).toHaveBeenCalledOnce();
+    expect(rebuild.mock.calls[0]![0]).toMatchObject({ sessionUid: '1', weekendId: 'W1', playerCar: 1, rulesVersion: OLD, complete: true });
+    expect(repo.sessionsOf('W1')).toEqual([stored(row, true, NEW)]);
+    expect(await repo.projectionOf(keyOf(row))).toEqual(projected(rebuiltLog));
+    expect(rebuild).toHaveBeenCalledOnce();
   });
-  it('weekendContext with before: only sessions that started earlier', () => {
-    expect(weekend().weekendContext('W1', AI9, { before: '2' }).sessions.map((s) => s.sessionUid)).toEqual(['1']);
+
+  it('an unchanged rules version rebuilds nothing: a complete session of the current version is served as stored', async () => {
+    const { db, put } = staleStorage();
+    const row = session('1', { pwrecPath: recording() });
+    const l = log({ laps: [lap(1, 1)] });
+    put(row, l, NEW);
+    const before = factRows(db, keyOf(row));
+    const rebuild = vi.fn(async () => {});
+    const repo = new WeekendRepository(db, { rebuild, rulesVersion: NEW });
+    expect(await repo.projectionOf(keyOf(row))).toEqual(projected(l));
+    expect(rebuild).not.toHaveBeenCalled();
+    expect(factRows(db, keyOf(row))).toEqual(before);
   });
-  it('each per-session read returns only the keyed session\'s records when another weekend holds the same uid', () => {
-    const { w, repo } = storage();
-    const h1 = history({ laps: [lap(0, 1)], stints: [stint(0, 1)], pitStops: [pitStop(0, 3)], events: [event(5, 0)] });
-    const h2 = history({ laps: [lap(1, 1), lap(1, 2)], stints: [stint(1, 1)], pitStops: [pitStop(1, 2)], events: [event(6)] });
-    w.upsertSession(session('1')); w.upsertSession(session('1', { weekendId: 'W2' }));
-    w.writeConfirmed(key('1'), h1, all(h1)); w.writeConfirmed(key('1', 'W2'), h2, all(h2));
-    for (const [k, h] of [[key('1'), h1], [key('1', 'W2'), h2]] as const) {
-      expect([repo.lapsOf(k), repo.stintsOf(k), repo.pitStopsOf(k), repo.eventsOf(k)])
-        .toEqual([h.laps, h.stints, h.pitStops, h.events]);
-    }
+
+  it('a stale session whose recording is missing is kept and not served, with a warning (C24)', async () => {
+    const { db, put } = staleStorage();
+    const row = session('1', { pwrecPath: join(mkdtempSync(join(tmpdir(), 'repo-')), 'gone.pwrec.gz') });
+    put(row, log({ laps: [lap(1, 1)] }));
+    const before = factRows(db, keyOf(row));
+    const rebuild = vi.fn(async () => {});
+    const { logger, warnings } = captured();
+    const repo = new WeekendRepository(db, { log: logger, rebuild, rulesVersion: NEW });
+    expect(await repo.projectionOf(keyOf(row))).toBeUndefined();
+    expect(rebuild).not.toHaveBeenCalled();
+    expect(warnings()).toEqual([expect.objectContaining({ sessionUid: '1', weekendId: 'W1' })]);
+    expect(repo.sessionsOf('W1')).toEqual([stored(row, true, OLD)]);
+    expect(factRows(db, keyOf(row))).toEqual(before);
   });
-  it('a read by driver key matches the driver of the keyed session, not the same car of the same uid in another weekend', () => {
-    const { w, repo } = storage();
-    w.upsertSession(session('1'));                                                             // car 0 = AI9, car 1 = HUMAN
-    w.upsertSession(session('1', { weekendId: 'W2', drivers: [{ carId: car(0), driverKey: HUMAN }, { carId: car(1), driverKey: AI9 }] }));
-    const h = history({ laps: [lap(0, 1), lap(1, 1)], stints: [stint(0, 1), stint(1, 1)], pitStops: [pitStop(0, 3), pitStop(1, 4)] });
-    w.writeConfirmed(key('1'), h, all(h)); w.writeConfirmed(key('1', 'W2'), h, all(h));
-    expect([repo.lapsOf(key('1'), HUMAN), repo.stintsOf(key('1'), HUMAN), repo.pitStopsOf(key('1'), HUMAN)])
-      .toEqual([[lap(1, 1)], [stint(1, 1)], [pitStop(1, 4)]]);
-    expect([repo.lapsOf(key('1', 'W2'), HUMAN), repo.stintsOf(key('1', 'W2'), HUMAN), repo.pitStopsOf(key('1', 'W2'), HUMAN)])
-      .toEqual([[lap(0, 1)], [stint(0, 1)], [pitStop(0, 3)]]);
+
+  it('a rebuild that no longer produces the session keeps the stored row and log, never serves it, and warns once (C24)', async () => {
+    const { db, put } = staleStorage();
+    const row = session('1', { pwrecPath: recording() });
+    put(row, log({ laps: [lap(1, 1)] }));
+    const before = factRows(db, keyOf(row));
+    // the recording now yields no such session: the rebuild writes nothing under its key
+    const rebuild = vi.fn(async () => {});
+    const { logger, warnings } = captured();
+    const repo = new WeekendRepository(db, { log: logger, rebuild, rulesVersion: NEW });
+    expect(await repo.projectionOf(keyOf(row))).toBeUndefined();
+    expect(await repo.projectionOf(keyOf(row))).toBeUndefined();
+    expect(warnings()).toEqual([expect.objectContaining({ sessionUid: '1', weekendId: 'W1' })]);
+    expect(repo.sessionsOf('W1')).toEqual([stored(row, true, OLD)]);
+    expect(factRows(db, keyOf(row))).toEqual(before);
   });
-  it('weekendContext: a session\'s drivers and records are those of its own weekend when the uid also exists in another', () => {
-    const { w, repo } = storage();
-    w.upsertSession(session('1', { drivers: [{ carId: car(0), driverKey: AI9 }] }));
-    w.upsertSession(session('1', { weekendId: 'W2', drivers: [{ carId: car(0), driverKey: HUMAN }, { carId: car(1), driverKey: AI9 }] }));
-    const h1 = history({ laps: [lap(0, 1)] });
-    const h2 = history({ laps: [lap(0, 1, { lapTimeMs: 91_000 }), lap(1, 1)] });
-    w.writeConfirmed(key('1'), h1, all(h1)); w.writeConfirmed(key('1', 'W2'), h2, all(h2));
-    expect(repo.weekendContext('W1', AI9)).toEqual({ weekendId: 'W1', driverKey: AI9, sessions: [
-      { sessionUid: '1', sessionType: 'practice:practice:1', drivers: [{ driverKey: AI9, laps: [lap(0, 1)], stints: [], pitStops: [] }] }] });
-    expect(repo.weekendContext('W1', HUMAN).sessions).toEqual([]);                             // HUMAN drove only the W2 session
-  });
-  it('weekendContext with before: the start time is that of the before session in its own weekend, not of its uid in another', () => {
-    const { w, repo } = storage();
-    w.upsertSession(session('P', { weekendId: 'W2', startedAt: '2026-10-27T20:00:00.000Z' }));
-    w.upsertSession(session('Q', { weekendId: 'W2', startedAt: '2026-10-27T21:00:00.000Z' }));
-    w.upsertSession(session('Q', { weekendId: 'W1', startedAt: '2026-10-20T19:00:00.000Z' }));  // same uid, an earlier weekend
-    expect(repo.weekendContext('W2', AI9, { before: 'Q' }).sessions.map((s) => s.sessionUid)).toEqual(['P']);
+
+  it('weekendContext skips a session of another rules version, warns and returns its key for a rebuild', () => {
+    const { db, put } = staleStorage();
+    const practice = session('P', { startedAt: '2026-10-27T20:00:00.000Z' });
+    const qualifying = session('Q', { startedAt: '2026-10-27T21:00:00.000Z' });
+    const race = session('R', { startedAt: '2026-10-27T22:00:00.000Z' });
+    put(practice, log({ laps: [lap(1, 1)] }), NEW);
+    put(qualifying, log({ laps: [lap(1, 1)] }));
+    put(race, log(), NEW);
+    const { logger, warnings } = captured();
+    const repo = new WeekendRepository(db, { log: logger, rulesVersion: NEW });
+    const { context, incomplete } = repo.weekendContext('W1', FERRARI_16, keyOf(race));
+    expect(context.sessions.map((s) => s.sessionUid)).toEqual(['P']);
+    expect(incomplete).toEqual([keyOf(qualifying)]);
+    expect(warnings()).toEqual([expect.objectContaining({ sessionUid: 'Q', weekendId: 'W1' })]);
   });
 });

@@ -13,7 +13,7 @@ import { pruneEndedAcknowledgements } from '../ui-state/ack-pruning.ts';
 import { DEFAULT_WORKBOOKS_DIR, seedDefaultWorkbooks } from '../ui-state/default-workbooks.ts';
 import { UiState } from '../ui-state/ui-state.ts';
 import { StartupError } from '../startup-error.ts';
-import type { Db } from '../storage/db.ts';
+import type { Db, StoredSessionRow } from '../storage/db.ts';
 import { WsServer } from '../ws/server.ts';
 import { cliLogger, whenAborted, type CliIo } from './io.ts';
 
@@ -32,8 +32,11 @@ type ServeBase = {
    * Without it `uiAction` messages are answered with `notSupported`.
    */
   uiDir?: string;
-  /** Opened by the caller, closed by `serve` (also when it fails). */
-  storage?: { db: Db; recordingsDir: string };
+  /**
+   * Opened by the caller, closed by `serve` (also when it fails). `rulesVersion`: the logs are stored with it (C61);
+   * `rebuild`: rebuilds a stored session found incomplete, in the background.
+   */
+  storage?: { db: Db; recordingsDir: string; rulesVersion: string; rebuild?: (row: StoredSessionRow) => Promise<void> };
   staleCheck?: FeedPipelineOptions['staleCheck'];
   /** For a source that binds a socket: resolves once it is bound, rejects with a `StartupError` if it cannot be. */
   bound?: () => Promise<void>;
@@ -144,7 +147,14 @@ export async function serve(opts: ServeOptions): Promise<number> {
       ...(opts.config && { config: opts.config }),
       log: cliLogger(io, 'info'),
       dumpsDir: opts.dumpsDir,
-      ...(opts.storage && { storage: { db: opts.storage.db, recordingsDir: opts.storage.recordingsDir } }),
+      ...(opts.storage && {
+        storage: {
+          db: opts.storage.db,
+          recordingsDir: opts.storage.recordingsDir,
+          rulesVersion: opts.storage.rulesVersion,
+          ...(opts.storage.rebuild && { rebuild: opts.storage.rebuild }),
+        },
+      }),
       ...(opts.staleCheck && { staleCheck: opts.staleCheck }),
       ...(calcStats && { calcStats }),
       // Live only: a replay reproduces the realism its sidecar recorded (spec 7.9), whatever the UI prefers next.

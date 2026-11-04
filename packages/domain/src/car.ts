@@ -4,7 +4,7 @@
 import type { ActualCompound, VisualCompound } from './compounds.ts';
 import type { Corners } from './corners.ts';
 import type { DataSource } from './freshness.ts';
-import type { CarId, DriverKey, SessionTime } from './ids.ts';
+import type { CarId, CarKey, SessionTime } from './ids.ts';
 import type { Known } from './known.ts';
 import type { ZoneFlag } from './session.ts';
 import type { Celsius, Joules, Kg, Kmh, Metres, Ms, Percent, Psi, Radians, Ratio, Watts } from './units.ts';
@@ -44,7 +44,6 @@ export type CarIdentity = {
   platform: number;
   /** Participants `yourTelemetry = 1`. */
   telemetryPublic: boolean;
-  driverKey: DriverKey;
   visibility: Visibility;
 };
 
@@ -268,8 +267,8 @@ export type CarState = {
 };
 
 /**
- * The identity values of the session's participants the weekend context needs (`contextFor`, C61): the player's slot and,
- * per slot the Participants packet carries, its driver key (no signal caps the list, C13). Built by the engine from
- * Participants, so the bridge reads no packet for it.
+ * The identity values of the session's participants the weekend context needs (`contextFor`, C61, C62): the player's
+ * slot and, per slot the Participants packet carries, its car key (team and race number; no signal caps the list, C13).
+ * Built by the engine from Participants, so the bridge reads no packet for it.
  */
-export type ParticipantsValues = { playerCar: CarId; drivers: Array<{ carId: CarId; driverKey: DriverKey }> };
+export type ParticipantsValues = { playerCar: CarId; cars: Array<{ carId: CarId; carKey: CarKey }> };

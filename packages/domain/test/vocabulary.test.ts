@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   actualCompoundFromCode,
+  carKeyOf,
+  carKeyString,
   cornersFromGameOrder,
-  driverKeyString,
   known,
   sessionUidString,
   toSessionTime,
@@ -65,12 +66,17 @@ describe('compounds (appendix codes)', () => {
 });
 
 describe('ids and units', () => {
-  // Task 24 (user): a DriverKey is the name and the network id only (`aiControlled` is a signal, C12, C13)
-  it('driverKeyString: one string per name and network id', () => {
-    const hamilton = driverKeyString({ name: 'HAMILTON', networkId: 255 });
-    expect(driverKeyString({ name: 'HAMILTON', networkId: 255 })).toBe(hamilton);
-    expect(driverKeyString({ name: 'HAMILTON', networkId: 1 })).not.toBe(hamilton);
-    expect(driverKeyString({ name: 'RUSSELL', networkId: 255 })).not.toBe(hamilton);
+  // Task 27 (user, 2026-11-04): a car is matched across a weekend by its team and race number (C62); no player identity
+  it('carKeyString: one string per team and race number', () => {
+    const mercedes44 = carKeyString({ teamId: 0, raceNumber: 44 });
+    expect(carKeyString({ teamId: 0, raceNumber: 44 })).toBe(mercedes44);
+    expect(mercedes44).toBe('0:44');
+    expect(carKeyString({ teamId: 1, raceNumber: 44 })).not.toBe(mercedes44);
+    expect(carKeyString({ teamId: 0, raceNumber: 63 })).not.toBe(mercedes44);
+  });
+  it('carKeyOf takes the team and race number of an identity, nothing else', () => {
+    const identity = { name: 'LECLERC', teamId: 3, raceNumber: 16, networkId: 255 };
+    expect(carKeyOf(identity)).toEqual({ teamId: 3, raceNumber: 16 });
   });
 
   it('sessionUidString is the decimal u64', () =>

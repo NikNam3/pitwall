@@ -6,12 +6,16 @@ import type { PwrecMeta } from '../pwrec/types.ts';
 
 const pad2 = (n: number): string => String(n).padStart(2, '0');
 
-/** `YYYY-MM-DD_HH-MM-SS_<uid as 16 hex digits>.pwrec.gz` in local time, as the recorder names its files. */
-export function sessionRecordingName(startedAtMs: number, sessionUid: bigint): string {
+/**
+ * `YYYY-MM-DD_HH-MM-SS_<uid as 16 hex digits>_car<NN>.pwrec.gz` in local time, as the recorder names its files, plus
+ * the feed's player car in two digits: one file per feed of a session (C1a, C59). Older names without the player car
+ * stay readable; a rebuild takes the player car from the frames, never from the name.
+ */
+export function sessionRecordingName(startedAtMs: number, sessionUid: bigint, playerCar: number): string {
   const d = new Date(startedAtMs);
   const date = `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
   const time = `${pad2(d.getHours())}-${pad2(d.getMinutes())}-${pad2(d.getSeconds())}`;
-  return `${date}_${time}_${sessionUid.toString(16).padStart(16, '0')}.pwrec.gz`;
+  return `${date}_${time}_${sessionUid.toString(16).padStart(16, '0')}_car${pad2(playerCar)}.pwrec.gz`;
 }
 
 /** Where a session file stands: its path and the time of the last datagram written to it. */

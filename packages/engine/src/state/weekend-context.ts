@@ -1,17 +1,25 @@
-import type { DriverKey, LapRecord, PitStopRecord, SessionUid, StintRecord } from '@pitwall/domain';
+import type { CarId, CarKey, SessionUid } from '@pitwall/domain';
+import type { Projection } from '../log/types.ts';
+
+/** A stored earlier session of the weekend, as `view.weekend` carries it (C39, C62). */
+export type StoredSession = {
+  sessionUid: SessionUid;
+  /** The feed's player car in that session (C60's key). */
+  playerCar: CarId;
+  /** Team and race number per slot, as the session's Participants last named them (C62). */
+  cars: ReadonlyArray<{ carId: CarId; carKey: CarKey }>;
+  /** The session's projection; every span in it is closed (C28, C34). */
+  projection: Projection;
+};
 
 /**
- * The player's earlier sessions of this weekend with every driver's records in them: read-only input the bridge loads
- * from storage (spec 9.3). `sessions` are oldest first; `drivers` are ordered by car id.
+ * The player's earlier sessions of this weekend: read-only input the bridge loads from storage (C62). The weekend phase
+ * of a stored session is its projection's `weekend-phase` span; no text copy of it exists (C13, C32).
  */
 export type WeekendContext = {
   weekendId: string;
-  /** The player. */
-  driverKey: DriverKey;
-  sessions: Array<{
-    sessionUid: SessionUid;
-    /** The session's weekend phase as storage keeps it (`kind[:format[:segment]]`); no signal (C13). */
-    sessionType: string;
-    drivers: Array<{ driverKey: DriverKey; laps: LapRecord[]; stints: StintRecord[]; pitStops: PitStopRecord[] }>;
-  }>;
+  /** The player car's team and race number in this session (C62). */
+  player: CarKey;
+  /** The player's earlier sessions of the weekend, oldest first: those whose player car had `player`'s key (C62). */
+  sessions: StoredSession[];
 };

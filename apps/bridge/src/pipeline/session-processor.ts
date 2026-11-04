@@ -1,5 +1,5 @@
 // One session of a feed: frames → SessionRunner → Scheduler → topics, plus its session file and its storage.
-import { sessionUidString, type FeedId, type MachineId, type ParticipantsValues, type SessionTime, type SessionUid } from '@pitwall/domain';
+import { carId, sessionUidString, type CarId, type FeedId, type MachineId, type ParticipantsValues, type SessionTime, type SessionUid } from '@pitwall/domain';
 import {
   projectionLengths,
   Scheduler,
@@ -22,8 +22,11 @@ import type { Logger } from '../log.ts';
 import type { SessionKey, SessionRow } from '../storage/db.ts';
 import type { SessionFile } from '../storage/session-files.ts';
 import { MAX_DUMPS_PER_SESSION, writeDebugDump } from './debug-dump.ts';
-import { driversInSession, sessionRowOf, type SessionStorage } from './session-storage.ts';
+import { carsOf, sessionRowOf, type SessionStorage } from './session-storage.ts';
 import type { PublishError, SpansOf, TopicPublisher } from './topic-publisher.ts';
+
+/** The feed's player car in a session (C60's key): the player car index of its first frame, whose Session packet starts it. */
+export const playerCarOf = (session: SessionPacket): CarId => carId(session.header.playerCarIndex);
 
 export type SessionProcessorOptions = {
   feedId: FeedId;
@@ -53,8 +56,8 @@ export type SessionProcessorOptions = {
 
 /**
  * Runs one session (spec 5.4, 7.3). The runner holds the frames until the first Participants packet, which names the
- * player's `DriverKey` and so the weekend context (spec 9.3, C61); this processor supplies that context from storage
- * (`contextFor`). The scheduler is attached to the runner, so a flashback rewinds its bookkeeping with the state
+ * player's car (its team and race number) and so the weekend context (C61, C62); this processor supplies that context
+ * from storage (`contextFor`). The scheduler is attached to the runner, so a flashback rewinds its bookkeeping with the state
  * (C27). An exception on a frame skips that frame, also among the held frames the runner releases after its identity
  * wait (the rest stay queued for the next call); a topic that fails to publish is marked errored while the other topics
  * go out. Either way the failure is logged and, up to `MAX_DUMPS_PER_SESSION` times, the frame is dumped with its place
@@ -63,7 +66,10 @@ export type SessionProcessorOptions = {
 export class SessionProcessor {
   readonly sessionUid: bigint;
   readonly #uid: SessionUid;
-  /** The session's storage key: the game reuses session uids across weekends. */
+  /**
+   * The session's storage key (C1a, C60): the game reuses session uids across weekends, and each feed's player car has
+   * its own log. The player car is the player car index of the session's first frame (its Session packet's).
+   */
   readonly #key: SessionKey;
   readonly #o: SessionProcessorOptions;
   readonly #runner: SessionRunner;
@@ -77,7 +83,7 @@ export class SessionProcessor {
     this.#o = opts;
     this.sessionUid = opts.sessionUid;
     this.#uid = sessionUidString(opts.sessionUid);
-    this.#key = { sessionUid: this.#uid, weekendId: String(opts.session.weekendLinkIdentifier) };
+    this.#key = { sessionUid: this.#uid, weekendId: String(opts.session.weekendLinkIdentifier), playerCar: playerCarOf(opts.session) };
     const { feedId, sessionUid, session, registry } = opts;
     // `PITWALL_FREEZE_OUTPUTS=1` (the test runs set it) freezes every output, so a unit that changes one after returning it fails.
     const freezeOutputs = process.env.PITWALL_FREEZE_OUTPUTS === '1';
@@ -86,7 +92,7 @@ export class SessionProcessor {
       { feedId, sessionUid, session, realism: opts.config.realism?.enabled === true },
       { attach: this.#scheduler, contextFor: (participants) => this.#contextFor(participants) },
     );
-    opts.storage?.upsertSession(this.#row());
+    opts.storage?.start(this.#row());
   }
 
   /** The newest applied frame's time on the engine's race clock (spec 3.3); undefined before the engine runs. */
@@ -132,18 +138,34 @@ export class SessionProcessor {
 
   /**
    * The session ended (`sessionEnded`: SEND, a new session, the end of input): runs whatever still waits for
-   * Participants, closes every open span (`finish`, so the log is complete), then closes the session file.
-   * `demandChanged()` still answers afterwards.
+   * Participants and closes every open span (`finish`, so the log is complete). The closing result goes to storage (the
+   * closing spans are written, then the session is complete) and to the topics (the situation topics publish the spans
+   * closed, C54). Then the session file is closed. `interrupted`: the input was stopped before its end (a rebuild then
+   * leaves the stored log as it was, and the topics are not published again). `demandChanged()` still answers afterwards.
    */
-  async end(receivedAtMs: number): Promise<void> {
-    this.#applying(undefined, () => this.#runner.finish(this.#onResult));
+  async end(receivedAtMs: number, opts: { interrupted?: boolean } = {}): Promise<void> {
+    this.#applying(undefined, () => this.#onClosed(this.#runner.finish(this.#onResult), opts.interrupted === true));
     await this.#o.file?.close(receivedAtMs);
   }
 
-  /** The player's earlier sessions of the weekend, with every driver in them; none without Participants. */
+  /** The player's earlier sessions of the weekend (C62): those whose player car had this player's team and race number; none without Participants. */
   #contextFor(participants: ParticipantsValues | undefined): WeekendContext | undefined {
-    const driverKey = participants?.drivers.find((d) => d.carId === participants.playerCar)?.driverKey;
-    return driverKey && this.#o.storage?.weekendContext(this.#key, driverKey);
+    const player = participants?.cars.find((c) => c.carId === participants.playerCar)?.carKey;
+    return player && this.#o.storage?.weekendContext(this.#row(), player);
+  }
+
+  /**
+   * The closing result of `finish`: storage, then the situation and history topics. A stopped input did not end the
+   * session in the recording, so its topics keep what they held at the stop.
+   */
+  #onClosed(result: StepResult, interrupted: boolean): void {
+    const { publisher, storage } = this.#o;
+    storage?.finish(this.#row(), result.state.log, { interrupted });
+    if (interrupted) return;
+    const unpublished = [...publisher.publishSituations(this.#spansOf, result.changed), ...publisher.publishHistory(result.state.history, result.delta)];
+    for (const { error, topic } of unpublished) {
+      this.#o.log.error({ feedId: this.#o.feedId, sessionUid: this.#uid, ...(topic && { topic }), err: error }, 'topic not published at the session end, marked errored');
+    }
   }
 
   /**
@@ -178,10 +200,10 @@ export class SessionProcessor {
       scheduler.setNeeded(this.#o.needed());
     }
     try {
-      // The row stores the weekend phase and the drivers of the cars car-status has in the session: whenever the machine
-      // changes either (a rewind included), the row follows.
-      if (result.changed.has('spans:weekend-phase') || result.changed.has('spans:car-status')) storage?.upsertSession(this.#row());
-      storage?.writeConfirmed(this.#key, result.state.history, result.delta);
+      // The row stores every slot's car key from the live identity: whenever the identity changes (a rewind included),
+      // the row follows (the newest wins). Then the log's new facts are appended (C24).
+      if (result.changed.has('identity')) storage?.upsertSession(this.#row());
+      storage?.writeLog(this.#key, result.state.log);
       // A session time that fell back with no flashback and no start: the engine keeps its race clock monotonic (spec 3.3); worth knowing.
       if (result.clockFall) log.info({ feedId, sessionUid: this.#uid, clockFall: result.clockFall }, 'session time fell back');
       // A forward jump of over a minute that is no post-session jump (a stall while the garage clock runs ahead): it
@@ -277,14 +299,12 @@ export class SessionProcessor {
   }
 
   /**
-   * The session's row from the engine's values: the session as the state holds it (the first Session packet's until a
-   * frame was applied), its weekend phase (`pending` until the machine decided it) and the drivers of the cars car-status
-   * has in the session (none before it opened a span).
+   * The session's row from the engine's values and the recording's: the session as the state holds it (the first
+   * Session packet's until a frame was applied), the feed's player car and every slot's car key from the live identity.
    */
   #row(): SessionRow {
     const { startedAt, pwrecPath } = this.#o;
     const { state } = this.#runner;
-    const situation = situationOf(state);
-    return sessionRowOf({ sessionUid: this.#uid, session: state.session, weekendPhase: situation.weekendPhase, startedAt, pwrecPath, drivers: driversInSession(state, situation) });
+    return sessionRowOf({ sessionUid: this.#uid, session: state.session, playerCar: this.#key.playerCar, startedAt, pwrecPath, cars: carsOf(state) });
   }
 }

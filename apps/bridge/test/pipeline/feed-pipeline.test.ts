@@ -52,7 +52,7 @@ function harness(source: PacketSource, o: Options = {}) {
     hub.subscribe({ clientId: 'c', id: topic, topic: topic as never, params, feedId: F });
   const log = createLogger({ level: 'debug', destination: new Writable({ write(c, _e, cb) { logs.push(String(c)); cb(); } }) });
   const pipeline = new FeedPipeline({ feedId: F, source, hub, features: o.features ?? FEATURES, log,
-    ...(o.storage ? { storage: o.storage as never } : {}), ...(o.dumpsDir ? { dumpsDir: o.dumpsDir } : {}),
+    ...(o.storage ? { storage: { rulesVersion: 'unversioned', ...o.storage } as never } : {}), ...(o.dumpsDir ? { dumpsDir: o.dumpsDir } : {}),
     ...(o.wallClock ? { wallClock: o.wallClock } : {}), ...(o.staleCheck ? { staleCheck: o.staleCheck } : {}) });
   const of = (id: string) => sent.filter((m) => 'id' in m && m.id === id);
   type Entry = { type: string; key?: string; at?: number; insight?: { key: string; kind: string; severity: string; params: object; raisedAt: number } };
@@ -101,7 +101,7 @@ describe('FeedPipeline', () => {
   it('writes one .pwrec per session when recordingsDir is set', async () => {
     const dir = tmp(); const packets = scenario();
     await run(packets, { storage: { db: openDatabase(join(tmp(), 'p.db')), recordingsDir: dir } });
-    const files = recordingsOf(dir); expect(files).toHaveLength(1); expect(files[0]).toMatch(/^\d{4}-\d\d-\d\d_\d\d-\d\d-\d\d_000000000000004d\.pwrec\.gz$/);
+    const files = recordingsOf(dir); expect(files).toHaveLength(1); expect(files[0]).toMatch(/^\d{4}-\d\d-\d\d_\d\d-\d\d-\d\d_000000000000004d_car00\.pwrec\.gz$/);
     let n = 0; for await (const _ of readPwrec(join(dir, files[0]!))) n++;
     expect(n).toBe(packets.length);
   });
@@ -167,52 +167,122 @@ describe('FeedPipeline: session start', () => {
     return toPrepared(packets.filter((_, i) => i !== defaultParticipants));
   };
 
-  it('stores the session with its drivers once Participants arrived', async () => {
+  it('stores the session with its cars once Participants arrived', async () => {
     const db = openDatabase(join(tmp(), 'late.db'));
     await run(lateParticipants(5), { storage: { db } });
     const [row] = new WeekendRepository(db).sessionsOf('0');
-    expect(row).toMatchObject({ sessionUid: '77', pwrecPath: null });
-    expect(row!.drivers.map((d) => d.carId)).toEqual([0, 1]);
+    expect(row).toMatchObject({ sessionUid: '77', playerCar: 0, pwrecPath: null, complete: true });
+    expect(row!.cars.slice(0, 2)).toEqual([{ carId: 0, carKey: { teamId: 0, raceNumber: 1 } }, { carId: 1, carKey: { teamId: 0, raceNumber: 2 } }]);
   });
 });
 
-// The stored driver rows are the cars car-status has in the session (status not `absent`, C43), read through the
-// engine's in-session helper; no signal (numActiveCars) decides them (C13). They are stored again whenever car-status
-// changes, as the weekend phase is (Task 24 fix round 1, review F1).
-describe("FeedPipeline: the session's driver rows", () => {
-  /** The car ids of the stored session's driver rows after the packets ran through the pipeline. */
-  const storedDrivers = async (packets: PreparedPacket[]): Promise<number[]> => {
-    const db = openDatabase(join(tmp(), 'drivers.db'));
+// Task 27 (B2, C13, C32, C62): the stored cars are every slot's team and race number from the live identity, with no
+// car-status filter, written at session start and again whenever the identity changes (the newest wins). A car that
+// turns absent keeps its stored facts and its row; which cars were in the session is read from the stored spans.
+describe("FeedPipeline: the session's car rows", () => {
+  /** The stored session after the packets ran through the pipeline: its row and its projection. */
+  const storedSession = async (packets: PreparedPacket[]) => {
+    const db = openDatabase(join(tmp(), 'cars.db'));
     await run(packets, { storage: { db } });
-    const [row] = new WeekendRepository(db).sessionsOf('0');
-    return row!.drivers.map((d) => d.carId);
+    const repo = new WeekendRepository(db);
+    const [row] = repo.sessionsOf('0');
+    return { row: row!, projection: (await repo.projectionOf({ sessionUid: row!.sessionUid, weekendId: row!.weekendId, playerCar: row!.playerCar }))! };
   };
   /** Car `car`'s LapData result status on every frame from here on (1: inactive, the slot holds no car of the session). */
   const inactive = (car: number) => (d: { lapData: { lapData: Array<{ resultStatus: number }> } }) => { d.lapData.lapData[car]!.resultStatus = 1; };
+  const SLOTS = Array.from({ length: 22 }, (_, i) => i);
 
-  it('the session\'s driver rows are the cars car-status has in the session', async () => {
-    // numActiveCars counts 3 slots; car 1 is inactive in its slot, so car-status has it absent
+  it('the session\'s car rows are every slot the Participants packet carries, whatever car-status says', async () => {
+    // numActiveCars counts 3 slots; car 1 is inactive in its slot, so car-status has it absent: its row stays
     const packets = prepared(new ScenarioBuilder({ sessionUid: 77n, cars: 3 }).session().participants().frames(10, inactive(1)));
-    expect(await storedDrivers(packets)).toEqual([0, 2]);
+    const { row } = await storedSession(packets);
+    expect(row.cars.map((c) => c.carId)).toEqual(SLOTS);
+    expect(row.cars.slice(0, 3).map((c) => c.carKey)).toEqual([{ teamId: 0, raceNumber: 1 }, { teamId: 0, raceNumber: 2 }, { teamId: 1, raceNumber: 3 }]);
   });
 
-  it('a car that becomes absent leaves no new driver row; one that joins is added', async () => {
-    const running = () => new ScenarioBuilder({ sessionUid: 77n, cars: 3 }).session().participants().frames(10, () => {});
-    expect(await storedDrivers(prepared(running()))).toEqual([0, 1, 2]);
-    // car 1 turns inactive: car-status has it absent, and the rows stored again hold it no more
-    expect(await storedDrivers(prepared(running().frames(10, inactive(1))))).toEqual([0, 2]);
-    // two slots in use, then Participants counts a third: car 2 joins the session and the rows add it
-    const joining = new ScenarioBuilder({ sessionUid: 77n, cars: 3 }).session().participants({ numActiveCars: 2 }).frames(10, () => {})
-      .participants({ numActiveCars: 3 }).frames(10, () => {});
-    expect(await storedDrivers(prepared(joining))).toEqual([0, 1, 2]);
+  it('a car that turns absent keeps its stored facts and its cars row (B2)', async () => {
+    const packets = prepared(new ScenarioBuilder({ sessionUid: 77n, cars: 3 }).session().participants().frames(10, () => {}).frames(10, inactive(1)));
+    const { row, projection } = await storedSession(packets);
+    expect(row.cars.find((c) => c.carId === 1)).toEqual({ carId: 1, carKey: { teamId: 0, raceNumber: 2 } });
+    const car1 = (projection.spans['car-status'] ?? []).filter((s) => s.carId === 1).map((s) => s.kind);
+    expect(car1).toContain('competing');
+    expect(car1.at(-1)).toBe('absent');
+  });
+
+  it('a new Participants that renames a slot\'s car stores the newest key', async () => {
+    const packets = prepared(new ScenarioBuilder({ sessionUid: 77n, cars: 3 }).session().participants().frames(10, () => {})
+      .participants({ participants: { 2: { teamId: 7, raceNumber: 31 } } }).frames(10, () => {}));
+    const { row } = await storedSession(packets);
+    expect(row.cars.find((c) => c.carId === 2)).toEqual({ carId: 2, carKey: { teamId: 7, raceNumber: 31 } });
+  });
+});
+
+// Task 27 (C24, C54, C61): finish() hands out its closing result: storage writes the closing spans, then marks the
+// session complete, and the situation topics publish the spans closed.
+describe('FeedPipeline: the session end', () => {
+  it("finish()'s closing spans are stored and published", async () => {
+    const db = openDatabase(join(tmp(), 'finish.db'));
+    const r = await run(scenario(), { storage: { db }, topics: [['situation.carStatus', {}]] });
+    const values = r.of('situation.carStatus').flatMap((m) => ((m.type === 'snapshot' || m.type === 'update') && 'value' in m ? [m.value as { open: unknown[] }] : []));
+    expect(values.some((v) => v.open.length > 0)).toBe(true);
+    expect(values.at(-1)).toEqual({ open: [] });
+    const repo = new WeekendRepository(db);
+    const [row] = repo.sessionsOf('0');
+    expect(row).toMatchObject({ complete: true });
+    const projection = (await repo.projectionOf({ sessionUid: row!.sessionUid, weekendId: row!.weekendId, playerCar: row!.playerCar }))!;
+    // every car's car-status span was open until the end: each is stored, closed
+    expect(new Set((projection.spans['car-status'] ?? []).map((s) => s.carId))).toEqual(new Set(Array.from({ length: 22 }, (_, i) => i)));
+  });
+
+  it('the next session of the weekend starts with the earlier one\'s projection as its weekend context (C39, C62)', async () => {
+    const seen: unknown[] = [];
+    const probe: QuickCalculator<number> = { kind: 'quick', id: 'probe.weekend', reads: ['session'], cadence: 'frame',
+      compute: ({ weekend }) => { seen.push(weekend === undefined ? undefined : structuredClone(weekend)); return seen.length; }, insights: () => [] };
+    const db = openDatabase(join(tmp(), 'weekend.db'));
+    let wall = Date.UTC(2026, 10, 4, 12, 0, 0);
+    await run([...scenario(77n), ...shifted(scenario(78n), 60_000)], {
+      features: [...FEATURES, defineFeature({ name: 'probe-weekend', calculators: [probe], topics: [] })], storage: { db }, wallClock: () => (wall += 60_000),
+    });
+    const repo = new WeekendRepository(db);
+    const first = repo.sessionsOf('0').find((s) => s.sessionUid === '77')!;
+    const firstProjection = await repo.projectionOf({ sessionUid: '77', weekendId: '0', playerCar: first.playerCar });
+    expect(seen.at(-1)).toEqual({
+      weekendId: '0', player: { teamId: 0, raceNumber: 1 },
+      sessions: [{ sessionUid: '77', playerCar: 0, cars: first.cars, projection: firstProjection }],
+    });
+  });
+});
+
+// Task 27 round 2 (supervisor ruling 5, C24, C61): the bridge restarted mid-session, so a live run comes under a key
+// storage already holds. It replaces the stored log when it starts, in one transaction: the newest run wins, the row
+// points at the new recording, and storage stays on.
+describe('FeedPipeline: a live run under a stored key', () => {
+  it('a live run under a stored key replaces its log; storage stays on', async () => {
+    const db = openDatabase(join(tmp(), 'restart.db'));
+    const before = tmp(); const after = tmp();
+    // the first run records the fastest lap; the restarted one (same session, weekend and player car) does not
+    await run(scenario(), { storage: { db, recordingsDir: before } });
+    const second = () => prepared(new ScenarioBuilder({ sessionUid: 77n, cars: 2 }).session().participants().frames(12, () => {}));
+    const r = await run(second(), { storage: { db, recordingsDir: after } });
+    expect(r.raised().map((i) => i.kind)).not.toContain('system.storageWriteFailed');
+    const repo = new WeekendRepository(db);
+    const rows = repo.sessionsOf('0');
+    expect(rows).toEqual([expect.objectContaining({ sessionUid: '77', playerCar: 0, complete: true, pwrecPath: join(after, recordingsOf(after)[0]!) })]);
+    const key = { sessionUid: '77', weekendId: '0', playerCar: rows[0]!.playerCar };
+    // the stored log is the restarted run's alone: as if it had been stored into an empty database
+    const fresh = openDatabase(join(tmp(), 'fresh.db'));
+    await run(second(), { storage: { db: fresh, recordingsDir: tmp() } });
+    const stored = await repo.projectionOf(key);
+    expect(stored?.events).toEqual([]);
+    expect(stored).toEqual(await new WeekendRepository(fresh).projectionOf(key));
   });
 });
 
 describe('FeedPipeline: session files', () => {
-  it('names the file after wallClock() and the session uid, with the bridge as recorder', async () => {
+  it('names the file after wallClock(), the session uid and the player car, with the bridge as recorder', async () => {
     const dir = tmp(); const at = new Date(2026, 9, 28, 13, 5, 9);
     await run(scenario(), { storage: { db: openDatabase(join(tmp(), 'n.db')), recordingsDir: dir }, wallClock: () => at.getTime() });
-    expect(recordingsOf(dir)).toEqual(['2026-10-28_13-05-09_000000000000004d.pwrec.gz']);
+    expect(recordingsOf(dir)).toEqual(['2026-10-28_13-05-09_000000000000004d_car00.pwrec.gz']);
     const { meta, endedCleanly } = await readAll(join(dir, recordingsOf(dir)[0]!));
     expect(meta).toMatchObject({ recorderVersion: 'pitwall-bridge', startedAt: at.toISOString(), listenPort: 0 });
     expect(endedCleanly).toBe(true);
@@ -221,8 +291,8 @@ describe('FeedPipeline: session files', () => {
     const dir = tmp(); const first = scenario(77n); const second = shifted(scenario(78n), 60_000);
     await run([...first, ...second], { storage: { db: openDatabase(join(tmp(), 'two.db')), recordingsDir: dir } });
     const files = recordingsOf(dir).sort(); expect(files).toHaveLength(2);
-    const a = await readAll(join(dir, files.find((f) => f.endsWith('_000000000000004d.pwrec.gz'))!));
-    const b = await readAll(join(dir, files.find((f) => f.endsWith('_000000000000004e.pwrec.gz'))!));
+    const a = await readAll(join(dir, files.find((f) => f.endsWith('_000000000000004d_car00.pwrec.gz'))!));
+    const b = await readAll(join(dir, files.find((f) => f.endsWith('_000000000000004e_car00.pwrec.gz'))!));
     expect([a.records.length, b.records.length]).toEqual([first.length, second.length]);
     expect(a.endedCleanly && b.endedCleanly).toBe(true);
     expect(a.records[0]!.t).toBe(0); expect(b.records[0]!.t).toBe(0);

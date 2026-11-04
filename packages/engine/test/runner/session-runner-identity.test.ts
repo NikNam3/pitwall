@@ -1,5 +1,5 @@
 // SessionRunner: the identity wait (C61; moved from the bridge's session processor). Frames wait for the first
-// Participants, which names the player's driver and so the weekend context; the runner asks the injected `contextFor`
+// Participants, which names the player's car and so the weekend context; the runner asks the injected `contextFor`
 // for it once, then applies the frames it held, in order. Without Participants it starts after IDENTITY_WAIT_FRAMES
 // frames (about 10 s at 60 Hz), and at the session's end, with no weekend context.
 import { describe, expect, it, vi } from 'vitest';
@@ -9,8 +9,10 @@ import { ScenarioBuilder } from '../builders/index.ts';
 import { initFor } from '../support/run.ts';
 import { applyOne, timeline } from '../support/runner.ts';
 
-const driverKey = { name: 'DRIVER 1', networkId: 255 };
-const WEEKEND: WeekendContext = { weekendId: 'w', driverKey, sessions: [{ sessionUid: '1' as SessionUid, sessionType: 'practice:practice:1', drivers: [{ driverKey, laps: [], stints: [], pitStops: [] }] }] };
+const player = { teamId: 0, raceNumber: 1 };
+/** One earlier session (Task 27: its projection and the car key of each slot, C62); empty, the runner never reads it. */
+const WEEKEND: WeekendContext = { weekendId: 'w', player, sessions: [{ sessionUid: '1' as SessionUid, playerCar: carId(0),
+  cars: [{ carId: carId(0), carKey: player }], projection: { laps: [], stints: [], pitStops: [], crossings: [], events: [], penalties: [], clock: [], spans: {} } }] };
 
 /** The frame without its Participants packet. */
 const withoutParticipants = ({ participants: _participants, ...frame }: Frame): Frame => frame;
@@ -45,16 +47,18 @@ describe('SessionRunner: the identity wait', () => {
     applyNoting(runner, frames.slice(0, 5), seen);
     expect([seen, asked]).toEqual([[], []]);
     applyNoting(runner, frames.slice(5, 6), seen);
-    // asked once, before any frame was applied, with the player's slot and the driver of every slot the Participants
-    // packet carries: no signal (numActiveCars) caps the list (M5 review B1, C13); car-status decides who is in the session
+    // asked once, before any frame was applied, with the player's slot and the car key (team, race number) of every slot
+    // the Participants packet carries: no signal (numActiveCars) caps the list (M5 review B1, C13); car-status decides
+    // who is in the session
     const slots = frames[5]!.participants!.participants.length;
     expect(asked).toHaveLength(1);
     expect(asked[0]!.resultsBefore).toBe(0);
     expect(asked[0]!.participants!.playerCar).toBe(carId(0));
-    expect(asked[0]!.participants!.drivers.map((d) => d.carId)).toEqual(Array.from({ length: slots }, (_, i) => carId(i)));
-    expect(asked[0]!.participants!.drivers.slice(0, 2)).toEqual([
-      { carId: carId(0), driverKey: { name: 'DRIVER 0', networkId: 0 } },
-      { carId: carId(1), driverKey: { name: 'DRIVER 1', networkId: 255 } },
+    expect(asked[0]!.participants!.cars.map((c) => c.carId)).toEqual(Array.from({ length: slots }, (_, i) => carId(i)));
+    // the shared timeline has 2 cars; the slots after them carry what the packet carries
+    expect(asked[0]!.participants!.cars.slice(0, 2)).toEqual([
+      { carId: carId(0), carKey: { teamId: 0, raceNumber: 1 } },
+      { carId: carId(1), carKey: { teamId: 0, raceNumber: 2 } },
     ]);
     // then every held frame and the Participants frame, in order, each on its own state and with the weekend context
     expect(seen).toEqual([0, 1, 2, 3, 4, 5].map((id) => ({ frameId: id, stateFrameId: id, weekend: WEEKEND })));
@@ -65,13 +69,13 @@ describe('SessionRunner: the identity wait', () => {
     expect(asked).toHaveLength(1);
   });
 
-  // M5 review B1 (C13): the driver list is every slot the Participants packet carries, so the player's driver is in it
+  // M5 review B1 (C13): the car list is every slot the Participants packet carries, so the player's car is in it
   // wherever its slot is; which cars are in the session stays car-status's (C43)
   it('a player in a slot at or above numActiveCars gets its weekend context', () => {
     const frames = new ScenarioBuilder({ cars: 4, player: 3 }).participants({ numActiveCars: 2 }).frames(3, () => {}).build();
-    // as the bridge looks the weekend up: by the player's driver key in the list
+    // as the bridge looks the weekend up: by the player's car key in the list
     const contextFor = (participants: ParticipantsValues | undefined): WeekendContext | undefined =>
-      participants?.drivers.some((d) => d.carId === participants.playerCar) === true ? WEEKEND : undefined;
+      participants?.cars.some((c) => c.carId === participants.playerCar) === true ? WEEKEND : undefined;
     const runner = new SessionRunner(initFor(frames), { contextFor });
     for (const f of frames) runner.apply(f);
     expect([frames[0]!.participants!.numActiveCars, frames[0]!.playerCarIndex]).toEqual([2, 3]);

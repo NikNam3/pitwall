@@ -223,6 +223,9 @@ importers:
       better-sqlite3:
         specifier: ^13.0.3
         version: 13.0.3
+      dependency-cruiser:
+        specifier: ^18.7.0
+        version: 18.7.0
       pino:
         specifier: ^10.4.0
         version: 10.4.0

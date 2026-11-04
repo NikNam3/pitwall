@@ -1,6 +1,6 @@
 // SessionRunner beyond the brief's cases: bounded snapshots and frames, the weekend context, and one flashback that
 // the game reports twice or in a frame with an unexpected id.
-import type { SessionUid } from '@pitwall/domain';
+import { carId, type SessionUid } from '@pitwall/domain';
 import { describe, expect, it } from 'vitest';
 import { SessionRunner, type Frame, type WeekendContext } from '../../src/index.ts';
 import { ScenarioBuilder } from '../builders/index.ts';
@@ -50,8 +50,9 @@ describe('SessionRunner retention', () => {
 
   it('carries the read-only weekend context over a rewind by reference', () => {
     const original = timeline(300, [100, 250]);
-    const driverKey = { name: 'DRIVER 1', networkId: 255 };
-    const weekend: WeekendContext = { weekendId: 'w', driverKey, sessions: [{ sessionUid: '1' as SessionUid, sessionType: 'practice:practice:1', drivers: [{ driverKey, laps: [], stints: [], pitStops: [] }] }] };
+    const player = { teamId: 0, raceNumber: 1 };
+    const projection = { laps: [], stints: [], pitStops: [], crossings: [], events: [], penalties: [], clock: [], spans: {} };
+    const weekend: WeekendContext = { weekendId: 'w', player, sessions: [{ sessionUid: '1' as SessionUid, playerCar: carId(0), cars: [{ carId: carId(0), carKey: player }], projection }] };
     const r = new SessionRunner(initFor(original), { contextFor: () => weekend });
     runAll(r, original);
     expect(applyOne(r, { ...original[201]!, overallFrameId: 300 }).delta.rewound).toBeDefined();

@@ -13,15 +13,15 @@ import type { PacketSource, RawPacket } from '../input/packet-source.ts';
 import { FeedJobs } from '../jobs/feed-jobs.ts';
 import type { JobResult } from '../jobs/job-runner.ts';
 import type { Logger } from '../log.ts';
-import type { Db } from '../storage/db.ts';
+import type { Db, StoredSessionRow } from '../storage/db.ts';
 import { SessionFile, sessionRecordingName } from '../storage/session-files.ts';
 import { FeedAlerts, type WriteFailure } from './feed-alerts.ts';
 import { demandOf } from './demand.ts';
 import type { CalcStats } from '../dev/calc-stats.ts';
 import { FeedMonitor } from './feed-monitor.ts';
 import { sessionClock, type SessionClock } from './session-clock.ts';
-import { SessionProcessor } from './session-processor.ts';
-import { SessionStorage } from './session-storage.ts';
+import { playerCarOf, SessionProcessor } from './session-processor.ts';
+import { SessionStorage, type StorageMode } from './session-storage.ts';
 import { TopicPublisher } from './topic-publisher.ts';
 
 export type FeedPipelineOptions = {
@@ -43,9 +43,19 @@ export type FeedPipelineOptions = {
   /**
    * The database; with `recordingsDir` also one `.pwrec.gz` per session. `sourcePath` is the recording being
    * processed: its start dates the sessions, so a replay stores the same times on every run, and its absolute path
-   * is stored as the sessions' recording (`reprocess` reads them from there).
+   * is stored as the sessions' recording (`reprocess` reads them from there). `rulesVersion`: the rules version the logs
+   * are stored with (C61). `mode`: `append` (default, live) appends each session's log as it grows; `replace` (a
+   * rebuild of a recording) writes it once, at the session's end, replacing the stored one (C24). `rebuild`: rebuilds,
+   * in the background, an earlier session of the weekend whose stored log is not complete (C61).
    */
-  storage?: { db: Db; recordingsDir?: string; sourcePath?: string };
+  storage?: {
+    db: Db;
+    rulesVersion: string;
+    mode?: StorageMode;
+    recordingsDir?: string;
+    sourcePath?: string;
+    rebuild?: (row: StoredSessionRow) => Promise<void>;
+  };
   /** Where debug dumps go; without it none are written. */
   dumpsDir?: string;
   /** Names the session files and dates live sessions. Default `Date.now`. */
@@ -102,6 +112,8 @@ export class FeedPipeline {
   #position: FeedPosition | undefined;
   #staleTimer: NodeJS.Timeout | undefined;
   #started = false;
+  /** `stop()` was called: the sessions still open end before their input did. */
+  #stopped = false;
 
   constructor(opts: FeedPipelineOptions) {
     this.#o = opts;
@@ -152,6 +164,7 @@ export class FeedPipeline {
 
   /** Stops the source and resolves once `done` has settled; the feed's job runner is closed by then. */
   async stop(): Promise<void> {
+    this.#stopped = true;
     if (!this.#started) {
       this.#started = true;
       this.#done.resolve();
@@ -225,8 +238,7 @@ export class FeedPipeline {
     this.#publisher.sessionStarted();
     this.#publishInsights(this.#alerts.active.map((insight) => ({ type: 'raised', insight })));
     const startedAt = this.#sessionClock(event.receivedAtMs);
-    const db = this.#o.storage?.db;
-    const storage = db && new SessionStorage(db, { log, onError: (error) => this.#writeFailed('storage', error) });
+    const storage = this.#sessionStorage();
     const config = this.#sessionConfig();
     const file = this.#openSessionFile(event, startedAt, config);
     // A session processed from a recording points at that recording (so `reprocess` finds it), a live one at its own file.
@@ -252,6 +264,19 @@ export class FeedPipeline {
     });
   }
 
+  /** A new session's storage, if the pipeline stores. */
+  #sessionStorage(): SessionStorage | undefined {
+    const storage = this.#o.storage;
+    if (storage === undefined) return undefined;
+    return new SessionStorage(storage.db, {
+      log: this.#log,
+      onError: (error) => this.#writeFailed('storage', error),
+      rulesVersion: storage.rulesVersion,
+      mode: storage.mode ?? 'append',
+      ...(storage.rebuild && { rebuild: storage.rebuild }),
+    });
+  }
+
   /** The run's config with `realism.enabled` taken from the live hook, if any; fixed for the whole session. */
   #sessionConfig(): FeatureConfig {
     const { realismNextSession } = this.#o;
@@ -264,7 +289,7 @@ export class FeedPipeline {
     if (dir === undefined) return undefined;
     const file = new SessionFile({
       dir,
-      name: sessionRecordingName(this.#wallClock(), event.sessionUid),
+      name: sessionRecordingName(this.#wallClock(), event.sessionUid, playerCarOf(event.session)),
       meta: { recorderVersion: 'pitwall-bridge', startedAt, listenPort: 0 },
       originMs: event.receivedAtMs,
       onError: (error) => this.#writeFailed('pwrec', error),
@@ -288,7 +313,7 @@ export class FeedPipeline {
     this.#session = undefined;
     this.#ended = session;
     this.#jobs.sessionEnded();
-    const closing = session.end(receivedAtMs).finally(() => this.#closing.delete(closing));
+    const closing = session.end(receivedAtMs, { interrupted: this.#stopped }).finally(() => this.#closing.delete(closing));
     this.#closing.add(closing);
   }
 

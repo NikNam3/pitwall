@@ -68,6 +68,10 @@ const REPLAY_WINDOW_MS = 10_000;
 const MAX_FRAMES_PER_SECOND = 120;
 const framesIn = (ms: number): number => Math.ceil((ms / 1000) * MAX_FRAMES_PER_SECOND);
 
+/** The length of every span list of the log, by machine. */
+const spanLengths = (state: DeepReadonly<EngineState>): Record<string, number> =>
+  Object.fromEntries(Object.entries(state.log.spans).map(([machine, spans]) => [machine, spans.length]));
+
 /** The frame a flashback goes back to; without an `FLBK` event its session time is only known after the replay. */
 type Target = { frameId: number; sessionTime?: SessionTime };
 
@@ -161,13 +165,22 @@ export class SessionRunner {
 
   /**
    * The session is over (the bridge calls it on `sessionEnded`: SEND, a new session, the end of input): the frames
-   * still held are applied (`end`), then every open span is closed at the last frame's time (`closeSession`, C18), so
-   * the log is complete, and the projection takes the closed spans in.
+   * still held are applied (`end`, through `onResult`), then every open span is closed at the last frame's time
+   * (`closeSession`, C18), so the log is complete, and the projection takes the closed spans in. Returns the closing
+   * result: `changed` holds the `spans:<machine>` tag of every span list of the log that grew (the clock's included),
+   * `delta` the projection's update, so storage writes the closing spans and the situation topics publish them (C54).
    */
-  finish(onResult?: OnResult): void {
+  finish(onResult?: OnResult): StepResult {
     this.end(onResult);
+    const spansBefore = spanLengths(this.#state);
     closeSession(this.#state, this.#state.sessionTime);
-    projectionTrackerOf(this.#state).update(situationOf(this.#state));
+    const delta = projectionTrackerOf(this.#state).update(situationOf(this.#state));
+    const spansAfter = spanLengths(this.#state);
+    const changed = new Set<ChangeTag>();
+    for (const [machine, length] of Object.entries(spansAfter)) {
+      if (length > (spansBefore[machine] ?? 0)) changed.add(`spans:${machine}` as ChangeTag);
+    }
+    return { state: this.#state, changed, corrections: [], delta };
   }
 
   /** Asks `contextFor` once: the held frames are then applied. */
