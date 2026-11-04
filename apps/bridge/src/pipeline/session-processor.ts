@@ -174,13 +174,10 @@ export class SessionProcessor {
   readonly #live = () => this.#runner.state;
 
   /**
-   * A sub-machine's spans as they are now (C20): what a `bindSituation` topic carries when the hub sends its value,
-   * never built per frame. Copies of the open spans of the view's situation and of the projection's closed spans.
+   * A sub-machine's open spans as they are now (C20): what a `bindSituation` topic carries when the hub sends its value,
+   * never built per frame. A copy of the view's situation's open spans; closed spans are not resent (C54).
    */
-  readonly #spansOf: SpansOf = (machine: MachineId) => {
-    const state = this.#runner.state;
-    return { open: [...(situationOf(state).byMachine[machine] ?? [])], closed: [...(state.history.spans[machine] ?? [])] };
-  };
+  readonly #spansOf: SpansOf = (machine: MachineId) => ({ open: [...(situationOf(this.#runner.state).byMachine[machine] ?? [])] });
 
   /** Each frame the runner applied: storage, the scheduler and the topics. */
   readonly #onResult = (result: StepResult, frame: Frame): void => {
