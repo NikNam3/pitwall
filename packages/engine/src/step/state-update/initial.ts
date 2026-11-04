@@ -38,7 +38,7 @@ export const createCarState = (id: CarId): CarState => ({
     myTeam: false,
     platform: 255,
     telemetryPublic: false,
-    driverKey: { kind: 'ai', driverId: 255 },
+    driverKey: { name: '', networkId: 255 },
     visibility: 'public',
   },
   timing: {

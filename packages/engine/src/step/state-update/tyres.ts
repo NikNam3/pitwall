@@ -26,7 +26,7 @@ const tyreSetFrom = (s: TyreSetData): TyreSet => ({
  * from Car Damage, and the tyre sets from Tyre Sets. Carcass temperature does not apply when the game only
  * simulates the surface.
  */
-export const tyresUpdate: StateUpdate = { id: 'tyres', apply: (frame, live, _signals, out) => {
+export const tyresUpdate: StateUpdate = { id: 'tyres', apply: (frame, live, signals, out) => {
   const { status, telemetry, damage, tyreSets } = frame;
   const at = frame.sessionTime;
   if (status) {
@@ -66,8 +66,8 @@ export const tyresUpdate: StateUpdate = { id: 'tyres', apply: (frame, live, _sig
       const blisters = cornersOf(d.tyreBlisters);
       for (const corner of CORNER_NAMES) {
         const tyre = car.tyres.corners[corner];
-        tyre.wearPct = knownUnlessRestricted(visibilityIn(frame, car), wear[corner], at);
-        tyre.damagePct = knownUnlessRestricted(visibilityIn(frame, car), tyreDamage[corner], at);
+        tyre.wearPct = knownUnlessRestricted(visibilityIn(frame, car, signals), wear[corner], at);
+        tyre.damagePct = knownUnlessRestricted(visibilityIn(frame, car, signals), tyreDamage[corner], at);
         tyre.blistersPct = known(blisters[corner], at);
       }
     }
@@ -78,7 +78,7 @@ export const tyresUpdate: StateUpdate = { id: 'tyres', apply: (frame, live, _sig
     if (!car) continue;
     car.updatedAt.tyreSets = at;
     car.tyres.sets = knownUnlessRestricted(
-      visibilityIn(frame, car),
+      visibilityIn(frame, car, signals),
       { sets: packet.tyreSetData.map(tyreSetFrom), fittedIdx: packet.fittedIdx },
       at,
     );

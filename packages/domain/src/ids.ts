@@ -10,15 +10,16 @@ export type SessionTime = Ms;
 
 export const MAX_CARS = 22;
 
-/** Identifies a driver across the sessions of a weekend (spec 6.2). */
-export type DriverKey =
-  | { kind: 'ai'; driverId: number }
-  | { kind: 'human'; networkId: number; name: string; raceNumber: number };
+/**
+ * Identifies a driver across the sessions of a weekend (spec 6.2): its name and network id, AI or human alike (whether
+ * the AI drives is a signal, C12, C13).
+ */
+export type DriverKey = { name: string; networkId: number };
 
 export const feedId = (s: string): FeedId => s as FeedId;
 export const carId = (i: number): CarId => i as CarId;
 export const sessionUidString = (uid: bigint): SessionUid => uid.toString();
 export const toSessionTime = (seconds: number): SessionTime => Math.round(seconds * 1000);
 
-export const driverKeyString = (k: DriverKey): string =>
-  k.kind === 'ai' ? `ai:${k.driverId}` : `human:${k.networkId}:${k.raceNumber}:${k.name}`;
+/** One string per driver key: the network id, then the name. */
+export const driverKeyString = (k: DriverKey): string => `${k.networkId}:${k.name}`;

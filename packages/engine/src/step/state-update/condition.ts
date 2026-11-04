@@ -6,7 +6,7 @@ import { visibilityIn } from './identity.ts';
 import type { StateUpdate } from './types.ts';
 
 /** Damage, wear and faults from Car Damage; brake and engine temperatures from Car Telemetry. */
-export const conditionUpdate: StateUpdate = { id: 'condition', apply: (frame, live, _signals, out) => {
+export const conditionUpdate: StateUpdate = { id: 'condition', apply: (frame, live, signals, out) => {
   const { damage, telemetry } = frame;
   const at = frame.sessionTime;
   if (damage) {
@@ -16,7 +16,7 @@ export const conditionUpdate: StateUpdate = { id: 'condition', apply: (frame, li
       car.updatedAt.damage = at;
       const { condition } = car;
       condition.bodywork = knownUnlessRestricted(
-        visibilityIn(frame, car),
+        visibilityIn(frame, car, signals),
         {
           frontLeftWingPct: d.frontLeftWingDamage,
           frontRightWingPct: d.frontRightWingDamage,
@@ -28,7 +28,7 @@ export const conditionUpdate: StateUpdate = { id: 'condition', apply: (frame, li
         at,
       );
       condition.powerUnit = knownUnlessRestricted(
-        visibilityIn(frame, car),
+        visibilityIn(frame, car, signals),
         {
           engineDamagePct: d.engineDamage,
           gearboxDamagePct: d.gearBoxDamage,
@@ -41,13 +41,13 @@ export const conditionUpdate: StateUpdate = { id: 'condition', apply: (frame, li
         },
         at,
       );
-      condition.drsFault = knownUnlessRestricted(visibilityIn(frame, car), d.drsFault === 1, at);
+      condition.drsFault = knownUnlessRestricted(visibilityIn(frame, car, signals), d.drsFault === 1, at);
       condition.ersFault = d.ersFault === 1;
       condition.engineBlown = d.engineBlown === 1;
       condition.engineSeized = d.engineSeized === 1;
       const brakeDamage = cornersOf(d.brakesDamage);
       for (const corner of CORNER_NAMES) {
-        condition.brakes[corner].damagePct = knownUnlessRestricted(visibilityIn(frame, car), brakeDamage[corner], at);
+        condition.brakes[corner].damagePct = knownUnlessRestricted(visibilityIn(frame, car, signals), brakeDamage[corner], at);
       }
     }
     out.changed.add('condition');
