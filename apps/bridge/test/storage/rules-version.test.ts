@@ -2,8 +2,9 @@
 // kept by hand. Its sources are every `.ts` file the dependency-cruiser walk reaches from the four entries (the step,
 // the runner, the frame assembler and the session tracker), through `@pitwall/protocol` and `@pitwall/domain`, the
 // gitignored generated indexes the walk reaches included. The version rows change files in a scratch copy of the tree
-// in a temp dir, never in the worktree (C84).
-import { appendFileSync, cpSync, existsSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
+// in a temp dir, never in the worktree (C84). Every computation runs on a scratch tree with an empty `node_modules` of its
+// own, so the walk's cache (`<root>/node_modules/.cache/pitwall/`) is never the worktree's and never shared by two trees.
+import { appendFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -75,12 +76,13 @@ const copied = (src: string): boolean => {
 
 /**
  * A scratch copy of the tree in a temp dir: the files the walk can reach (the gitignored generated indexes as they are
- * in the worktree), each package's workspace links, and the root `node_modules` as a link. It has no `.git`.
+ * in the worktree), each package's workspace links, and an empty root `node_modules` of its own (its cache stays in the
+ * temp dir). It has no `.git`.
  */
 function scratchTree(): string {
   const root = mkdtempSync(join(tmpdir(), 'rules-version-'));
   for (const path of COPIED) cpSync(join(REPO, path), join(root, path), { recursive: true, verbatimSymlinks: true, filter: copied });
-  symlinkSync(join(REPO, 'node_modules'), join(root, 'node_modules'));
+  mkdirSync(join(root, 'node_modules'));
   return root;
 }
 
@@ -99,9 +101,12 @@ async function versionWith(root: string, path: string, change: (file: string) =>
 const appendComment = (file: string): void => appendFileSync(file, '\n// a comment, nothing else\n');
 
 describe('rulesSources: the files of every module that can change the log (C61)', () => {
+  // on a scratch copy of the worktree as it is: the same files, so the same sources
+  let root: string;
   let sources: string[];
   beforeAll(async () => {
-    sources = await rulesSources(REPO);
+    root = scratchTree();
+    sources = await rulesSources(root);
   });
 
   it('holds the four entries, `packages/domain/src/ids.ts` and `packages/engine/src/util/deep-readonly.ts`, and no file of `packages/analysis` or `apps/`', () => {
@@ -117,7 +122,7 @@ describe('rulesSources: the files of every module that can change the log (C61)'
     expect(sources).toEqual([...new Set(sources)].sort());
     expect(sources.filter((path) => !/^packages\/[a-z-]+\/src\/.+\.ts$/.test(path))).toEqual([]);
     expect(sources.filter((path) => path.includes('node_modules') || path.endsWith('.test.ts'))).toEqual([]);
-    expect(sources.filter((path) => !existsSync(join(REPO, path)))).toEqual([]);
+    expect(sources.filter((path) => !existsSync(join(root, path)))).toEqual([]);
   });
 
   it('holds every reached file the version rows change, and none of the outside ones', () => {
@@ -136,7 +141,7 @@ describe('rulesVersion: a sha256 over the sorted paths and contents of rulesSour
 
   it('is a sha256, and the same tree gives the same version wherever it lies (the paths are repo-relative)', async () => {
     expect(base).toMatch(/^[0-9a-f]{64}$/);
-    expect(await rulesVersion(REPO)).toBe(base);
+    expect(await rulesVersion(scratchTree())).toBe(base);
     expect(await rulesVersion(root)).toBe(base);
   });
 
