@@ -1,0 +1,78 @@
+// Every behaviour table is complete (contract C44, C87): one generic test over every unit folder whose `index.ts` exports
+// `<UNIT>_BEHAVIOUR`. Its table has a row for every kind (from the domain's span declarations, `SPAN_DECLARATIONS`) of
+// every sub-machine the unit's calculator declares in `reads` (`spans:<machine>`), and no row for a machine it does not
+// declare or a kind its machine does not declare. It passes while no unit exports a table yet; the second half ("every
+// unit that reads a sub-machine exports a table") follows once every lane has its tables (Task 20).
+import { SPAN_DECLARATIONS, type SpanDeclaration } from '@pitwall/domain';
+import type { Calculator } from '@pitwall/engine/readers';
+import { describe, expect, it } from 'vitest';
+import type { BehaviourTable } from '../src/shared/behaviour.ts';
+import { behaviourExport, CALCULATORS, loadUnitFolders } from './units.ts';
+
+/** The sub-machines a unit declares in `reads` (`spans:<machine>`). */
+const machinesRead = (calc: Calculator): string[] =>
+  calc.reads.flatMap((read) => (typeof read === 'string' && read.startsWith('spans:') ? [read.slice('spans:'.length)] : []));
+
+/**
+ * What is wrong with `unit`'s table against its calculator (`calc`) and the span declarations: a kind of a machine it
+ * reads without a row, a row of a machine it does not read, a row of a kind its machine does not declare; a table of a
+ * unit without a registered calculator.
+ */
+function tableProblems(
+  unit: string,
+  table: BehaviourTable<unknown>,
+  calc: Calculator | undefined,
+  declarations: readonly SpanDeclaration[] = SPAN_DECLARATIONS,
+): string[] {
+  if (calc === undefined) return [`${unit}: exports ${behaviourExport(unit)} but no calculator ${unit} is registered`];
+  const read = machinesRead(calc);
+  const kindsOf = (machine: string): readonly string[] | undefined => declarations.find((d) => d.machine === machine)?.kinds;
+  const problems: string[] = [];
+  for (const machine of read) {
+    const kinds = kindsOf(machine) ?? [];
+    const rows = table[machine] ?? {};
+    for (const kind of kinds) if (!Object.hasOwn(rows, kind)) problems.push(`${unit}: no row for ${machine} ${kind}`);
+  }
+  for (const [machine, rows] of Object.entries(table)) {
+    if (!read.includes(machine)) {
+      problems.push(`${unit}: a row for ${machine}, which it does not read`);
+      continue;
+    }
+    const kinds = kindsOf(machine) ?? [];
+    for (const kind of Object.keys(rows)) if (!kinds.includes(kind)) problems.push(`${unit}: a row for ${machine} ${kind}, which ${machine} does not declare`);
+  }
+  return problems;
+}
+
+const folders = await loadUnitFolders();
+
+describe('behaviour tables (C44)', () => {
+  it('every exported table covers every kind of every sub-machine its unit reads, and nothing else', () => {
+    const problems = folders.flatMap(({ unit, table }) => (table === undefined ? [] : tableProblems(unit, table, CALCULATORS.find((c) => c.id === unit))));
+    expect(problems).toEqual([]);
+  });
+
+  it('the check names a missing row, a row of an unread machine, a row of an undeclared kind and a table without a unit', () => {
+    const declarations: SpanDeclaration[] = [
+      { machine: 'car-location', scope: 'car', kinds: ['garage', 'pitLane', 'track'] },
+      { machine: 'weekend-phase', scope: 'session', kinds: ['practice', 'qualifying', 'race', 'none'] },
+    ];
+    const calc = { kind: 'quick', id: 'probe', reads: ['timing', 'spans:car-location'], cadence: 'frame', compute: () => 0 } as Calculator;
+    const table: BehaviourTable<string> = {
+      'car-location': { garage: 'off', track: 'on', boxStop: 'off' },
+      'weekend-phase': { none: 'notApplicable' },
+    };
+    expect(tableProblems('probe', table, calc, declarations)).toEqual([
+      'probe: no row for car-location pitLane',
+      'probe: a row for car-location boxStop, which car-location does not declare',
+      'probe: a row for weekend-phase, which it does not read',
+    ]);
+    expect(tableProblems('probe', table, undefined, declarations)).toEqual(['probe: exports PROBE_BEHAVIOUR but no calculator probe is registered']);
+    expect(tableProblems('probe', { 'car-location': { garage: 'off', pitLane: 'off', track: 'on' } }, calc, declarations)).toEqual([]);
+  });
+
+  it('finds the unit folders and their tables by name', () => {
+    expect(folders.map((f) => f.unit)).toEqual(expect.arrayContaining(['gaps', 'lap-times', 'race-moment']));
+    expect(behaviourExport('race-moment')).toBe('RACE_MOMENT_BEHAVIOUR');
+  });
+});
