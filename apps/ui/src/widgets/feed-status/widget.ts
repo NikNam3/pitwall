@@ -5,7 +5,12 @@ import { boolOption } from '../../kit/options.ts';
 export const widget = declareWidget({
   name: 'feed-status',
   title: 'Feed',
-  data: { feed: topic('feed.status'), session: optional(topic('session.info')) },
+  data: {
+    feed: topic('feed.status'),
+    session: optional(topic('session.info')),
+    // The weekend phase beside the track (its open span; none while pending).
+    phase: optional(topic('situation.weekendPhase')),
+  },
   options: { details: boolOption(false, 'Show packet details') },
   sizes: { compact: { minCols: 24, minRows: 3 }, full: { minCols: 48, minRows: 8 } },
 });

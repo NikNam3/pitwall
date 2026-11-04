@@ -17,6 +17,17 @@ export const widget = declareWidget({
     // Our cars (player and teammate) and the incidents of the incident moment.
     session: topic('session.info'),
     incidents: optional(topic('incidents.feed')),
+    // The situations each row shows (open spans only, C54): which car-activity machine runs, where a car is, whether it
+    // still competes, what it does by the phase's rules, what it owes.
+    phase: topic('situation.weekendPhase'),
+    location: topic('situation.carLocation'),
+    status: topic('situation.carStatus'),
+    warnings: topic('situation.warnings'),
+    // Each runs in its weekend phase only (penalties in the race).
+    raceActivity: optional(topic('situation.carActivityRace')),
+    qualifyingActivity: optional(topic('situation.carActivityQualifying')),
+    practiceActivity: optional(topic('situation.carActivityPractice')),
+    penalties: optional(topic('situation.penalties')),
   },
   options: { showRetired: boolOption(true, 'Show retired cars') },
   sizes: { compact: { minCols: 30, minRows: 6 }, full: { minCols: 84, minRows: 9 } },

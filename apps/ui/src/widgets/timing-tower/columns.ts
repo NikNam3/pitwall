@@ -3,7 +3,7 @@ import * as text from './text.ts';
 
 export type TowerColumnKey =
   | 'position' | 'change' | 'car' | 'gap' | 'interval' | 'toUs' | 'last' | 's1' | 's2' | 's3'
-  | 'compound' | 'age' | 'stops' | 'penalty' | 'pit';
+  | 'compound' | 'age' | 'stops' | 'penalty' | 'situation';
 
 export type TowerColumn = { key: TowerColumnKey; label: string; widthCols: number; priority: number; align: 'left' | 'right' };
 
@@ -24,5 +24,6 @@ export const TOWER_COLUMNS: TowerColumn[] = [
   { key: 'age', label: text.headers.age, widthCols: 3, priority: 5, align: 'right' },
   { key: 'stops', label: text.headers.stops, widthCols: 2, priority: 6, align: 'right' },
   { key: 'penalty', label: text.headers.penalty, widthCols: 3, priority: 6, align: 'right' },
-  { key: 'pit', label: text.headers.pit, widthCols: 3, priority: 6, align: 'left' },
+  // 6 cells: the widest code, GARAGE.
+  { key: 'situation', label: text.headers.situation, widthCols: 6, priority: 6, align: 'left' },
 ];

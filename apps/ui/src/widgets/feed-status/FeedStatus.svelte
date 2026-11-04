@@ -3,10 +3,12 @@
   import { unknown } from '@pitwall/domain';
   import type { WidgetProps } from '../../kit/types.ts';
   import Value from '../../kit/values/Value.svelte';
-  import { formatCarNumber, formatCount, formatSessionKind, formatTrack, formatLoss, formatMillis, formatRate } from '../../kit/values/format.ts';
+  import { formatCarNumber, formatCount, formatTrack, formatLoss, formatMillis, formatRate } from '../../kit/values/format.ts';
+  import { openSpanOf } from '../../kit/situation.ts';
   import { roleOrUndefined } from '../../theme/index.ts';
   import { separator, stale as staleText } from '../../kit/text.ts';
   import { connectionRole } from './emphasis.ts';
+  import { phaseLabel } from './presentation.ts';
   import * as text from './text.ts';
   import type { widget } from './widget.ts';
 
@@ -16,6 +18,7 @@
   const colour = $derived(roleOrUndefined(connectionRole(feed)));
   const state = $derived(!feed.connected ? text.disconnected : feed.stale ? staleText() : text.connected);
   const full = $derived(size.mode === 'full');
+  const phase = $derived(phaseLabel(openSpanOf(data.phase)));
 </script>
 
 <div class="feed">
@@ -28,11 +31,7 @@
   </div>
   {#if data.session}
     <div class="line dim">
-      <Value value={data.session.session.kind} format={formatSessionKind} align="left" />{separator}<Value
-        value={data.session.session.trackId}
-        format={formatTrack}
-        align="left"
-      />
+      {#if phase !== undefined}{phase}{separator}{/if}<Value value={data.session.session.trackId} format={formatTrack} align="left" />
     </div>
   {/if}
   {#if full}

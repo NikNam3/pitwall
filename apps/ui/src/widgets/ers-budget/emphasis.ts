@@ -1,7 +1,8 @@
 import type { Known, RaceMoment } from '@pitwall/domain';
 import type { Role } from '../../theme/roles.ts';
+import { presentation } from './presentation.ts';
 
-/** White bold (`text`) for store, flow and "attack ready" only while the battle moment is current. */
+/** Store, flow and "attack ready" in the current moment's row emphasis (`presentation.ts`); nothing without a moment. */
 export function ersRole(moment: Known<RaceMoment> | undefined): Role | undefined {
-  return moment?.known && moment.value.moment === 'battle' ? 'text' : undefined;
+  return moment?.known === true ? presentation.moments[moment.value.moment].emphasis : undefined;
 }
