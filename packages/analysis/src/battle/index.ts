@@ -3,6 +3,7 @@ import type { CarId, BattleCard } from '@pitwall/domain';
 
 export type { BattleCard, BattleSide } from '@pitwall/domain';
 export * from './config.ts';
+export * from './behaviour.ts';
 
 /** The calculator id. */
 export const BATTLE = 'battle';
