@@ -286,7 +286,7 @@ export function carState(over: DeepPartial<CarState> = {}): CarState {
   const at = 0;
   const id = (over.id ?? carId(0)) as CarId;
   const base = createCarState(id);
-  base.identity = { ...base.identity, name: `Car ${id}`, raceNumber: id + 1, driverId: id, driverKey: { name: `Car ${id}`, networkId: 255 } };
+  base.identity = { ...base.identity, name: `Car ${id}`, raceNumber: id + 1, driverId: id };
   base.timing = {
     ...base.timing,
     position: id + 1,

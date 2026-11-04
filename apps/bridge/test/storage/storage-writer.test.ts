@@ -1,78 +1,37 @@
+// The storage writer (Task 27): each session's log, as it is, in generic tables (C24, C60), per feed (C1a). A live
+// session appends what each list gained (C24: no row is ever changed or removed); a rebuild replaces a session's log as
+// a whole in one transaction (C61). Every read goes through the one read API, the projection (C28, C34).
 import { describe, expect, it, vi } from 'vitest';
-import { openDatabase, type SessionKey } from '../../src/storage/db.ts';
+import { openDatabase, type Db } from '../../src/storage/db.ts';
 import { StorageWriter } from '../../src/storage/storage-writer.ts';
 import { WeekendRepository } from '../../src/storage/weekend-repository.ts';
-import { HUMAN, all, car, event, history, key, lap, pitStop, session, since, stint } from './records.ts';
+import {
+  ASTON_14, FERRARI_16, MERCEDES_44, car, event, factRows, forbidFactRewrites, key, keyOf, lap, log, pitStop, projected, session, span, stint, stored, voidFact,
+} from './records.ts';
 
 const K = key('1');
 
 function setup() {
   const db = openDatabase(':memory:');
   const onError = vi.fn();
-  const writer = new StorageWriter(db, { onError });
+  const writer = new StorageWriter(db, { onError, rulesVersion: 'unversioned' });
   writer.upsertSession(session('1'));
   return { db, onError, writer, repo: new WeekendRepository(db) };
 }
 
-/** Session '1' of weekend W1 (the `setup` one) and a session of the same uid in weekend W2, each with its own history. */
-const W2 = key('1', 'W2');
-const w2Session = session('1', { weekendId: 'W2', sessionType: 'qualifying:grandPrix:1', startedAt: '2026-11-03T20:00:00.000Z', drivers: [{ carId: car(0), driverKey: HUMAN }] });
-const w1History = history({ laps: [lap(0, 1), lap(1, 1)], stints: [stint(0, 1)], pitStops: [pitStop(1, 3)], events: [event(5, 0)] });
-const w2History = history({ laps: [lap(0, 1, { lapTimeMs: 91_000 })], stints: [stint(0, 4)], pitStops: [pitStop(0, 2)], events: [event(8), event(9, 0)] });
-function sameUidTwoWeekends() {
-  const s = setup();
-  s.writer.upsertSession(w2Session);
-  s.writer.writeConfirmed(K, w1History, all(w1History));
-  s.writer.writeConfirmed(W2, w2History, all(w2History));
-  return s;
-}
-/** What storage reads back for `k`, as the history lists it was written from (every lap here is confirmed). */
-const storedOf = (repo: WeekendRepository, k: SessionKey) =>
-  history({ laps: repo.lapsOf(k), stints: repo.stintsOf(k), pitStops: repo.pitStopsOf(k), events: repo.eventsOf(k) });
+const tables = (db: Db) => db.prepare("SELECT name FROM sqlite_master WHERE type IN ('table', 'index') ORDER BY name").pluck().all();
 
-describe('StorageWriter', () => {
-  it('writes only confirmed laps; provisional ones are ignored until confirmed', () => {
-    const { writer, repo, onError } = setup();
-    const h1 = history({ laps: [lap(0, 1, { status: 'provisional' }), lap(0, 1), lap(0, 2, { status: 'provisional' })] });
-    writer.writeConfirmed(K, h1, all(h1));
-    expect(repo.lapsOf(K)).toEqual([lap(0, 1)]);
-    const h2 = history({ laps: [...h1.laps, lap(0, 2)] });
-    writer.writeConfirmed(K, h2, since(h1, h2));
-    expect(repo.lapsOf(K)).toEqual([lap(0, 1), lap(0, 2)]);
+describe('StorageWriter: the session row and its cars', () => {
+  it('upsertSession stores the row with the storage\'s rules version, not complete, and every car with its key', () => {
+    const { repo, onError } = setup();
+    expect(repo.sessionsOf('W1')).toEqual([stored(session('1'), false)]);
     expect(onError).not.toHaveBeenCalled();
   });
-  it('upserts by (session, car, lap): the last confirmed value wins', () => {
+  it('upsertSession again (the identity changed) replaces the cars: the newest wins', () => {
     const { writer, repo } = setup();
-    const h = history({ laps: [lap(0, 1, { lapTimeMs: 90_100 }), lap(0, 1, { lapTimeMs: 90_000 })] });
-    writer.writeConfirmed(K, h, all(h));
-    expect(repo.lapsOf(K).map((l) => l.lapTimeMs)).toEqual([90_000]);
-  });
-  it('is idempotent', () => {
-    const { db, writer, repo } = setup();
-    const h = history({ laps: [lap(0, 1)], stints: [stint(0, 1)], events: [event(5, 0), event(6)] });
-    writer.writeConfirmed(K, h, all(h));
-    writer.writeConfirmed(K, h, all(h));
-    expect(db.prepare('SELECT count(*) FROM events').pluck().get()).toBe(2);
-    expect(repo.stintsOf(K)).toEqual([stint(0, 1)]);
-    expect(repo.eventsOf(K)).toEqual([event(5, 0), event(6)]);
-  });
-  it('a truncated delta (flashback) rewrites the session history', () => {
-    const { writer, repo } = setup();
-    const h1 = history({ laps: [lap(0, 1), lap(0, 2)], events: [event(1), event(2), event(3)] });
-    writer.writeConfirmed(K, h1, all(h1));
-    const h2 = history({ laps: [lap(0, 1)], events: [event(1), event(9)] });
-    writer.writeConfirmed(K, h2, since(h1, h2, true));
-    expect(repo.lapsOf(K)).toEqual([lap(0, 1)]);
-    expect(repo.eventsOf(K)).toEqual([event(1), event(9)]);
-  });
-  it('one transaction per call: a failure rolls back the batch, calls onError and does not throw', () => {
-    const { db, writer, onError } = setup();
-    db.exec("CREATE TRIGGER fail_events BEFORE INSERT ON events BEGIN SELECT RAISE(ABORT, 'boom'); END;");
-    const h = history({ laps: [lap(0, 1)], events: [event(1)] });
-    expect(() => writer.writeConfirmed(K, h, all(h))).not.toThrow();
-    expect(onError).toHaveBeenCalledOnce();
-    expect(String(onError.mock.calls[0]![0])).toContain('boom');
-    expect(db.prepare('SELECT count(*) FROM laps').pluck().get()).toBe(0);
+    const cars = [{ carId: car(0), carKey: ASTON_14 }, { carId: car(1), carKey: FERRARI_16 }, { carId: car(2), carKey: MERCEDES_44 }];
+    writer.upsertSession(session('1', { cars }));
+    expect(repo.sessionsOf('W1')).toEqual([stored(session('1', { cars }), false)]);
   });
   it('a closed database is reported through onError', () => {
     const { db, writer, onError } = setup();
@@ -80,29 +39,171 @@ describe('StorageWriter', () => {
     expect(() => writer.upsertSession(session('2'))).not.toThrow();
     expect(onError).toHaveBeenCalledOnce();
   });
-  it('two sessions with the same uid in different weekends are stored side by side, each with its own row, drivers and records', () => {
-    const { repo, onError } = sameUidTwoWeekends();
-    expect(repo.sessionsOf('W1')).toEqual([session('1')]);
-    expect(repo.sessionsOf('W2')).toEqual([w2Session]);
-    expect(storedOf(repo, K)).toEqual(w1History);
-    expect(storedOf(repo, W2)).toEqual(w2History);
+});
+
+describe('StorageWriter: a live session appends its log', () => {
+  it('stores every list of the log by its name and log position, with the car of a car\'s fact', () => {
+    const { db, writer, onError } = setup();
+    const l = log({
+      laps: [lap(0, 1, { status: 'provisional' }), lap(0, 1)], stints: [stint(1, 1)], pitStops: [pitStop(1, 3)], events: [event(5)],
+      clock: [{ kind: 'simulatedEnd', at: 9_000, frame: 90 }],
+      spans: { 'car-status': [span('car-status', 'competing', { carId: car(1) })], 'weekend-phase': [span('weekend-phase', 'race', { detail: { format: 'grandPrix' } })] },
+    });
+    writer.writeLog(K, l);
+    // the log as it is (C24): provisional laps too, superseded only by a later fact (C25)
+    expect(factRows(db, K)).toEqual([
+      { list: 'clock', seq: 0, carId: null, record: l.clock[0] },
+      { list: 'events', seq: 0, carId: null, record: l.events[0] },
+      { list: 'laps', seq: 0, carId: 0, record: l.laps[0] },
+      { list: 'laps', seq: 1, carId: 0, record: l.laps[1] },
+      { list: 'pitStops', seq: 0, carId: 1, record: l.pitStops[0] },
+      { list: 'spans:car-status', seq: 0, carId: 1, record: l.spans['car-status']![0] },
+      { list: 'spans:weekend-phase', seq: 0, carId: null, record: l.spans['weekend-phase']![0] },
+      { list: 'stints', seq: 0, carId: 1, record: l.stints[0] },
+    ]);
     expect(onError).not.toHaveBeenCalled();
   });
-  it('a flashback of one session clears only its records, not those of the same uid in another weekend', () => {
-    const { writer, repo, onError } = sameUidTwoWeekends();
-    const h = history({ laps: [], events: [event(8)] });
-    writer.writeConfirmed(W2, h, since(w2History, h, true));
-    expect(storedOf(repo, W2)).toEqual(h);
-    expect(storedOf(repo, K)).toEqual(w1History);
+  it('each write appends only what each list gained since the writer\'s last write; a write with nothing new adds no row', () => {
+    const { db, writer } = setup();
+    forbidFactRewrites(db);
+    const l = log({ laps: [lap(0, 1)], events: [event(1)] });
+    writer.writeLog(K, l);
+    l.laps.push(lap(0, 2));
+    l.events.push(event(2), event(3));
+    writer.writeLog(K, l);
+    writer.writeLog(K, l);
+    expect(factRows(db, K).map((r) => [r.list, r.seq])).toEqual([['events', 0], ['events', 1], ['events', 2], ['laps', 0], ['laps', 1]]);
+    expect(factRows(db, K).map((r) => r.record)).toEqual([event(1), event(2), event(3), lap(0, 1), lap(0, 2)]);
+  });
+  it('a flashback writes its void and deletes no row (C24, C27)', async () => {
+    const { db, writer, repo, onError } = setup();
+    forbidFactRewrites(db);
+    const l = log({ laps: [lap(0, 1), lap(0, 2)], events: [event(1), event(2), event(3)] });
+    writer.writeLog(K, l);
+    const before = factRows(db, K);
+    // the game rewinds: lap 2 and the third event never happened; the replayed frames record a lap 2 again, then a new event
+    l.voids.push(voidFact({ laps: [1, 2], events: [2, 3] }));
+    l.laps.push(lap(0, 2, { lapTimeMs: 91_000 }));
+    l.events.push(event(9));
+    writer.writeLog(K, l);
+    expect(onError).not.toHaveBeenCalled();
+    const after = factRows(db, K);
+    for (const row of before) expect(after).toContainEqual(row);
+    expect(after.filter((r) => r.list === 'voids')).toEqual([{ list: 'voids', seq: 0, carId: null, record: l.voids[0] }]);
+    expect(after).toHaveLength(before.length + 3);
+    writer.complete(K);
+    // read back through the projection: the voided positions are skipped (C28)
+    expect(await repo.projectionOf(K)).toEqual(projected(log({ laps: [lap(0, 1), lap(0, 2, { lapTimeMs: 91_000 })], events: [event(1), event(2), event(9)] })));
+  });
+  it('complete marks the session complete; then its projection is served', async () => {
+    const { writer, repo } = setup();
+    const l = log({ laps: [lap(0, 1)], spans: { 'car-status': [span('car-status', 'competing', { carId: car(0) })] } });
+    writer.writeLog(K, l);
+    writer.complete(K);
+    expect(repo.sessionsOf('W1')).toEqual([stored(session('1'), true)]);
+    expect(await repo.projectionOf(K)).toEqual(projected(l));
+  });
+  it('formation facts are stored and not returned (C29)', async () => {
+    const { db, writer, repo } = setup();
+    const formation = span('session-phase-race', 'formation', { id: 0, startFrame: 1, endFrame: 50 });
+    const racing = span('session-phase-race', 'racing', { id: 1, startFrame: 50, endFrame: 900 });
+    // lap 0 is recorded on the formation lap (frame 20), lap 1 in the race (frame 120)
+    const l = log({ laps: [lap(0, 0, { frame: 20 }), lap(0, 1, { frame: 120 })], events: [event(3, 0, 30), event(7, 0, 200)], spans: { 'session-phase-race': [formation, racing] } });
+    writer.writeLog(K, l);
+    writer.complete(K);
+    expect(factRows(db, K).filter((r) => r.list === 'laps').map((r) => r.record)).toEqual(l.laps);
+    expect(await repo.projectionOf(K)).toEqual(projected(log({ laps: [lap(0, 1, { frame: 120 })], events: [event(7, 0, 200)], spans: { 'session-phase-race': [formation, racing] } })));
+  });
+  it('a new sub-machine\'s spans need no schema change: they are rows of its own span list', async () => {
+    const { db, writer, repo } = setup();
+    const schema = tables(db);
+    const l = log({ spans: { 'test-new-machine': [span('test-new-machine', 'one', { detail: { n: 1 } }), span('test-new-machine', 'two', { id: 1, startFrame: 10, endFrame: 20 })] } });
+    writer.writeLog(K, l);
+    writer.complete(K);
+    expect(tables(db)).toEqual(schema);
+    expect(factRows(db, K).map((r) => [r.list, r.seq])).toEqual([['spans:test-new-machine', 0], ['spans:test-new-machine', 1]]);
+    expect(await repo.projectionOf(K)).toEqual(projected(l));
+  });
+  it('one transaction per call: a failure rolls back the batch, calls onError and does not throw', () => {
+    const { db, writer, onError } = setup();
+    db.exec("CREATE TRIGGER fail_events BEFORE INSERT ON facts WHEN NEW.list = 'events' BEGIN SELECT RAISE(ABORT, 'boom'); END;");
+    const l = log({ laps: [lap(0, 1)], events: [event(1)] });
+    expect(() => writer.writeLog(K, l)).not.toThrow();
+    expect(onError).toHaveBeenCalledOnce();
+    expect(String(onError.mock.calls[0]![0])).toContain('boom');
+    expect(factRows(db, K)).toEqual([]);
+  });
+});
+
+describe('StorageWriter: sessions side by side', () => {
+  it('two feeds of one session are stored side by side, each with its row, cars and log (C1a)', async () => {
+    const { writer, repo, onError } = setup();
+    const second = session('1', { playerCar: car(0), cars: [{ carId: car(0), carKey: MERCEDES_44 }, { carId: car(1), carKey: FERRARI_16 }] });
+    writer.upsertSession(second);
+    const mine = log({ laps: [lap(1, 1)] });
+    const theirs = log({ laps: [lap(0, 1), lap(0, 2)] });
+    writer.writeLog(K, mine);
+    writer.writeLog(keyOf(second), theirs);
+    writer.complete(K);
+    writer.complete(keyOf(second));
+    expect(repo.sessionsOf('W1')).toEqual(expect.arrayContaining([stored(session('1'), true), stored(second, true)]));
+    expect(repo.sessionsOf('W1')).toHaveLength(2);
+    expect(await repo.projectionOf(K)).toEqual(projected(mine));
+    expect(await repo.projectionOf(keyOf(second))).toEqual(projected(theirs));
     expect(onError).not.toHaveBeenCalled();
   });
-  it('deleteSessions of one key keeps the session with the same uid in another weekend', () => {
-    const { writer, repo, onError } = sameUidTwoWeekends();
-    writer.deleteSessions([W2]);
-    expect(repo.sessionsOf('W2')).toEqual([]);
-    expect(storedOf(repo, W2)).toEqual(history());
-    expect(repo.sessionsOf('W1')).toEqual([session('1')]);
-    expect(storedOf(repo, K)).toEqual(w1History);
+  it('two sessions with the same uid in different weekends are stored side by side', async () => {
+    const { writer, repo } = setup();
+    const w2 = session('1', { weekendId: 'W2', startedAt: '2026-11-03T20:00:00.000Z' });
+    writer.upsertSession(w2);
+    const l1 = log({ events: [event(5, 0)] });
+    const l2 = log({ events: [event(8), event(9, 0)] });
+    writer.writeLog(K, l1);
+    writer.writeLog(keyOf(w2), l2);
+    writer.complete(K);
+    writer.complete(keyOf(w2));
+    expect(repo.sessionsOf('W1')).toEqual([stored(session('1'), true)]);
+    expect(repo.sessionsOf('W2')).toEqual([stored(w2, true)]);
+    expect(await repo.projectionOf(K)).toEqual(projected(l1));
+    expect(await repo.projectionOf(keyOf(w2))).toEqual(projected(l2));
+  });
+});
+
+describe('StorageWriter: a rebuild replaces a session\'s log as a whole (C24, C61)', () => {
+  it('replaceLog writes the log, the cars and the row, complete, with the given rules version; the session\'s old rows are gone', async () => {
+    const { db, writer, repo, onError } = setup();
+    writer.writeLog(K, log({ laps: [lap(0, 1)], events: [event(1), event(2)] }));
+    const cars = [{ carId: car(1), carKey: FERRARI_16 }, { carId: car(3), carKey: ASTON_14 }];
+    const rebuilt = log({ laps: [lap(0, 1, { lapTimeMs: 89_000 })], stints: [stint(0, 1)] });
+    writer.replaceLog(session('1', { cars, trackId: 27 }), rebuilt, 'rules-2');
     expect(onError).not.toHaveBeenCalled();
+    expect(repo.sessionsOf('W1')).toEqual([stored(session('1', { cars, trackId: 27 }), true, 'rules-2')]);
+    expect(factRows(db, K).map((r) => [r.list, r.seq])).toEqual([['laps', 0], ['stints', 0]]);
+    expect(await repo.projectionOf(K)).toEqual(projected(rebuilt));
+  });
+  it('replaceLog of one session keeps the others: the same uid in another weekend, another feed', async () => {
+    const { writer, repo } = setup();
+    const w2 = session('1', { weekendId: 'W2' });
+    const feed2 = session('1', { playerCar: car(0) });
+    const other = log({ events: [event(4)] });
+    for (const row of [w2, feed2]) {
+      writer.upsertSession(row);
+      writer.writeLog(keyOf(row), other);
+      writer.complete(keyOf(row));
+    }
+    writer.replaceLog(session('1'), log({ laps: [lap(1, 1)] }), 'unversioned');
+    expect(await repo.projectionOf(keyOf(w2))).toEqual(projected(other));
+    expect(await repo.projectionOf(keyOf(feed2))).toEqual(projected(other));
+  });
+  it('a replaceLog that fails leaves the old log and row as they were', async () => {
+    const { db, writer, repo, onError } = setup();
+    const old = log({ laps: [lap(0, 1)], events: [event(1)] });
+    writer.writeLog(K, old);
+    writer.complete(K);
+    db.exec("CREATE TRIGGER fail_stints BEFORE INSERT ON facts WHEN NEW.list = 'stints' BEGIN SELECT RAISE(ABORT, 'boom'); END;");
+    writer.replaceLog(session('1', { trackId: 27 }), log({ laps: [lap(0, 1, { lapTimeMs: 89_000 })], stints: [stint(0, 1)] }), 'rules-2');
+    expect(onError).toHaveBeenCalledOnce();
+    expect(repo.sessionsOf('W1')).toEqual([stored(session('1'), true)]);
+    expect(await repo.projectionOf(K)).toEqual(projected(old));
   });
 });

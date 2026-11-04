@@ -44,7 +44,7 @@ async function replay(o: { features: Feature[]; now: () => number; packets?: Pre
   }
   const log = createLogger({ level: 'debug', destination: new Writable({ write(c, _e, cb) { logs.push(JSON.parse(String(c))); cb(); } }) });
   const pipeline = new FeedPipeline({ feedId: F, source: new ArraySource(F, o.packets ?? scenario()), hub, features: o.features, log,
-    ...(o.storage ? { storage: o.storage as never } : {}) });
+    ...(o.storage ? { storage: { rulesVersion: 'unversioned', ...o.storage } as never } : {}) });
   pipeline.start(); await pipeline.done;
   const of = (id: string) => sent.filter((m) => 'id' in m && m.id === id);
   return { hub, of, logs };
@@ -81,7 +81,7 @@ describe('FeedPipeline: a throwing select', () => {
 });
 
 describe('FeedPipeline: a session started by the buffer cap', () => {
-  it('stores its drivers once Participants arrives', async () => {
+  it('stores its cars once Participants arrives', async () => {
     const all = new ScenarioBuilder({ sessionUid: 77n, cars: 2 }).session().frames(610, () => {}).participants().frames(5, () => {}).packets();
     const first = all.findIndex((p) => p.packet.header.packetId === PacketId.participants);
     const packets = all.filter((_, i) => i !== first).map(({ packet, receivedAtMs }) => ({ bytes: packetBytes(packet), receivedAtMs }));
@@ -89,6 +89,6 @@ describe('FeedPipeline: a session started by the buffer cap', () => {
     let t = 0;
     await replay({ features: FEATURES, now: () => (t += 1000), packets, storage: { db } });
     const [row] = new WeekendRepository(db).sessionsOf('0');
-    expect(row!.drivers.map((d) => d.carId)).toEqual([0, 1]);
+    expect(row!.cars.slice(0, 2)).toEqual([{ carId: 0, carKey: { teamId: 0, raceNumber: 1 } }, { carId: 1, carKey: { teamId: 0, raceNumber: 2 } }]);
   });
 });

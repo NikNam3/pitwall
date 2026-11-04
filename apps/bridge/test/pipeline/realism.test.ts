@@ -58,7 +58,7 @@ function live() {
   const recordingsDir = join(dir, 'rec');
   mkdirSync(recordingsDir);
   const pipeline = new FeedPipeline({
-    feedId: F, source, hub, features, log, storage: { db: openDatabase(join(dir, 'p.db')), recordingsDir },
+    feedId: F, source, hub, features, log, storage: { rulesVersion: 'unversioned', db: openDatabase(join(dir, 'p.db')), recordingsDir },
     realismNextSession: () => uiState.realismNextSession(),
   } as ConstructorParameters<typeof FeedPipeline>[0]);
   pipeline.start();
@@ -167,7 +167,7 @@ describe('FeedPipeline: realism between sessions', () => {
     const source = new ManualSource(F);
     const pipeline = new FeedPipeline({
       feedId: F, source, hub, features, log, config: { realism: { enabled: true } },
-      storage: { db: openDatabase(join(dir, 'p.db')), recordingsDir: dir },
+      storage: { rulesVersion: 'unversioned', db: openDatabase(join(dir, 'p.db')), recordingsDir: dir },
     });
     pipeline.start();
     for (const p of session(77n, 0)) source.push(p.bytes, p.receivedAtMs);

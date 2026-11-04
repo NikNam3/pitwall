@@ -51,17 +51,16 @@ describe('race-zandvoort-lap10: car 1 (the player) crosses the line into lap 10'
   });
 
   // Task 24 (C13): the session type, kind and numActiveCars are signals (`state.signals`); the race is the weekend phase
-  it('session and identity: online race, two humans, the player at index 1, every car keyed by its name and network id', async () => {
+  it('session and identity: online race, two humans, the player at index 1, every car keyed by its team and race number', async () => {
     const { state } = await run('race-zandvoort-lap10.pwrec.gz');
     expect(state.session).toMatchObject({ trackId: 26, totalLaps: 72, trackLengthM: 4258, networkGame: true });
     expect(situationOf(state).weekendPhase).toMatchObject({ kind: 'race' });
     expect([state.signals.session.sessionType, state.signals.session.numActiveCars]).toEqual([15, 20]);
     expect([state.playerCar, state.teammateCar]).toEqual([1, 4]);
-    expect(state.cars[1]!.identity).toMatchObject({ visibility: 'own', driverKey: { networkId: 1 } });
-    expect(state.cars[0]!.identity).toMatchObject({ visibility: 'public', driverKey: { networkId: 0 } });
-    // Task 24 (user): the key is the name and the network id, AI or human (`aiControlled` is a signal)
-    const { name, networkId, driverKey } = state.cars[2]!.identity;
-    expect(driverKey).toEqual({ name, networkId });
+    expect(state.cars[1]!.identity).toMatchObject({ visibility: 'own', networkId: 1 });
+    expect(state.cars[0]!.identity).toMatchObject({ visibility: 'public', networkId: 0 });
+    // Task 27 (user, 2026-11-04): pitwall stores no player identity; a car is its team and race number (C62)
+    expect(state.cars[2]!.identity).not.toHaveProperty('driverKey');
     expect(inSession(state)).toEqual(Array.from({ length: 20 }, (_, i) => i));
   });
 

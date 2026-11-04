@@ -65,7 +65,7 @@ async function run(source: PacketSource, features: Feature[], opts: { config?: o
   const pipeline = new FeedPipeline({
     feedId: F, source, hub, features, log: createLogger({ level: 'silent' }),
     ...(opts.config && { config: opts.config as never }),
-    ...(opts.dir && { storage: { db: openDatabase(join(tmp(), 'p.db')), recordingsDir: dir } }),
+    ...(opts.dir && { storage: { rulesVersion: 'unversioned', db: openDatabase(join(tmp(), 'p.db')), recordingsDir: dir } }),
   });
   pipeline.start();
   await pipeline.done;
@@ -134,7 +134,7 @@ describe('FeedPipeline: the config travels with the session file', () => {
       stop: async () => open.resolve(),
     };
     const hub = new TopicHub({ now: () => 0 });
-    const pipeline = new FeedPipeline({ feedId: F, source, hub, features, log: createLogger({ level: 'silent' }), storage: { db: openDatabase(join(tmp(), 'o.db')), recordingsDir: dir } });
+    const pipeline = new FeedPipeline({ feedId: F, source, hub, features, log: createLogger({ level: 'silent' }), storage: { rulesVersion: 'unversioned', db: openDatabase(join(tmp(), 'o.db')), recordingsDir: dir } });
     pipeline.start();
     expect(readdirSync(dir).filter((n) => n.endsWith('.config.json'))).toHaveLength(1);
     await pipeline.stop();
@@ -144,7 +144,7 @@ describe('FeedPipeline: the config travels with the session file', () => {
     const features = [...watcher().features, sessionInfo];
     const dir = tmp();
     const at = new Date(2026, 9, 28, 13, 5, 9).getTime();
-    const sessionFile = join(dir, '2026-10-28_13-05-09_000000000000004d.pwrec.gz');
+    const sessionFile = join(dir, '2026-10-28_13-05-09_000000000000004d_car00.pwrec.gz');
     mkdirSync(sessionConfigPath(sessionFile)); // a directory where the sidecar belongs
     const packets = packetsOf();
     const hub = new TopicHub({ now: () => 0 });
@@ -153,7 +153,7 @@ describe('FeedPipeline: the config travels with the session file', () => {
     hub.subscribe({ clientId: 'c', id: 'info', topic: 'session.info', params: {}, feedId: F });
     const pipeline = new FeedPipeline({
       feedId: F, source: new ArraySource(F, packets), hub, features, log: createLogger({ level: 'silent' }), wallClock: () => at,
-      storage: { db: openDatabase(join(tmp(), 'f.db')), recordingsDir: dir },
+      storage: { rulesVersion: 'unversioned', db: openDatabase(join(tmp(), 'f.db')), recordingsDir: dir },
     });
     pipeline.start();
     await pipeline.done;
@@ -166,7 +166,7 @@ describe('FeedPipeline: the config travels with the session file', () => {
     const { features } = watcher();
     const dir = tmp();
     const hub = new TopicHub({ now: () => 0 });
-    const pipeline = new FeedPipeline({ feedId: F, source: new ArraySource(F, packetsOf()), hub, features, log: createLogger({ level: 'silent' }), storage: { db: openDatabase(join(tmp(), 'r.db')), sourcePath: join(dir, 'x.pwrec.gz') } });
+    const pipeline = new FeedPipeline({ feedId: F, source: new ArraySource(F, packetsOf()), hub, features, log: createLogger({ level: 'silent' }), storage: { rulesVersion: 'unversioned', db: openDatabase(join(tmp(), 'r.db')), sourcePath: join(dir, 'x.pwrec.gz') } });
     pipeline.start();
     await pipeline.done;
     expect(readdirSync(dir)).toEqual([]);

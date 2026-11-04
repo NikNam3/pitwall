@@ -25,7 +25,7 @@ const overview = (c: Car): CarOverview => ({
   identity: {
     name: c.name, teamId: c.teamId, raceNumber: c.raceNumber, nationality: 0, driverId: c.id,
     networkId: 255, myTeam: false, platform: 0, telemetryPublic: true,
-    driverKey: { name: c.name, networkId: 255 }, visibility: 'public',
+    visibility: 'public',
   } as unknown as CarOverview['identity'],
   timing: {} as CarOverview['timing'],
   tyres: {} as CarOverview['tyres'],

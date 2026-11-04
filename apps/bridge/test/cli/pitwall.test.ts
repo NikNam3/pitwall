@@ -11,7 +11,7 @@ import { runCli, SEGMENT, startCli } from '../helpers/cli.ts';
 
 const tmp = () => mkdtempSync(join(tmpdir(), 'pitwall-cli-'));
 const dump = (dir: string) => { const db = new Database(dataDir({ PITWALL_DATA_DIR: dir }).dbPath, { readonly: true });
-  const r = Object.fromEntries(['sessions', 'laps', 'events'].map((t) => [t, db.prepare(`SELECT * FROM ${t} ORDER BY rowid`).all()])); db.close(); return r; };
+  const r = Object.fromEntries(['sessions', 'cars', 'facts'].map((t) => [t, db.prepare(`SELECT * FROM ${t} ORDER BY rowid`).all()])); db.close(); return r; };
 
 describe('pitwall CLI', { timeout: 30_000 }, () => {
   it('unknown command → usage, exit 1', async () => {
@@ -80,7 +80,8 @@ describe('pitwall CLI', { timeout: 30_000 }, () => {
       expect(db.pragma('user_version', { simple: true })).toBe(SCHEMA_VERSION);
       expect(db.prepare("SELECT count(*) FROM sqlite_master WHERE name = 'foreign_table'").pluck().get()).toBe(0);
       expect(db.prepare('SELECT count(*) FROM sessions').pluck().get()).toBe(1);
-      expect(db.prepare('SELECT count(*) FROM laps').pluck().get()).toBeGreaterThan(0);
+      expect(db.prepare("SELECT count(*) FROM facts WHERE list = 'laps'").pluck().get()).toBeGreaterThan(0);
+      expect(db.prepare('SELECT complete FROM sessions').pluck().get()).toBe(1);
     } finally { db.close(); }
   });
   it('live: a new database is created empty, not filled from the recordings', async () => {
