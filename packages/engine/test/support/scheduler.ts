@@ -107,6 +107,12 @@ const NEVER_LIVE: ReadonlySet<string> = new Set(['open', 'log', 'signals', 'hist
 /** Every sub-machine's id, step 0's clock included: a read of one is guarded whether or not the record holds its spans. */
 const MACHINE_IDS: ReadonlySet<string> = new Set([STEP0_CLOCK.id, ...MACHINES.map((m) => m.id)]);
 
+/**
+ * What membership matches on every span (C26, ruling F1): its frames, its car or zone and its machine and id. Of a span of
+ * an undeclared sub-machine these alone are readable.
+ */
+const IDENTITY_FIELDS: ReadonlySet<string> = new Set(['startFrame', 'endFrame', 'carId', 'zone', 'machine', 'id']);
+
 /** A car's fields every unit that reads any car area may read: its slot, whether it is active (transitional, Task 24), its freshness. */
 const FREE_CAR: ReadonlySet<string> = new Set(['id', 'active', 'updatedAt']);
 
@@ -145,9 +151,10 @@ const refuseWrites = <T extends object>(path: string): ProxyHandler<T> => ({
  *   (`history.spans[id]`) only with `spans:<id>`;
  * - `situation`: a sub-machine's open spans (`situation.byMachine[id]`, so `openSpansOf(view, id)`) only with
  *   `spans:<id>`; the weekend phase always (C14);
- * - membership (`situationAt(view, frame)`, `membershipOf(view, fact)`, C26) reads `history` and `situation` as a whole
- *   (ruling 4): enumerating `history.spans` or `situation.byMachine`, which both do, is noted as a read of `history` or
- *   `situation` and lets each enumerated sub-machine's spans be read once after it, whatever is declared;
+ * - membership (`situationAt(view, frame)`, `membershipOf(view, fact)`, C26) needs no declaration in what it matches
+ *   (ruling 4, F1): listing `history.spans` or `situation.byMachine`, which both do, is noted as a read of `history` or
+ *   `situation`, and of a listed undeclared sub-machine's spans only the frames and identity (`IDENTITY_FIELDS`) can be
+ *   read; any other field of them (`kind`, `detail`, ...) throws. Listing frees nothing else;
  * - `outputs`: the declared calculators' outputs only (`get`, `has`), never the whole map;
  * - `feed` only with `feed`; `activeFlagPhase` (transitional, Task 19) only with `flagPhases`;
  * - `delta`, `changed`, `weekend`, `config` and `priors` always.
@@ -192,21 +199,48 @@ export function guardedView(view: EngineView, reads: readonly Dependency[], { un
   };
 
   /**
-   * A record of spans by sub-machine (`history.spans`, `situation.byMachine`): a machine's spans with `spans:<id>`, or
-   * once after an enumeration of the record (membership, ruling 4), which is a read of `whole`.
+   * A span of a sub-machine the unit does not declare, as membership may match it (ruling F1): its frames and identity
+   * (`IDENTITY_FIELDS`) read through, any other field (`kind`, `detail`, `start`, `confirmed` ...) throws.
+   */
+  const identityOnly = (span: object, path: string): object =>
+    new Proxy(span, {
+      ...refuseWrites(path),
+      get(t, key, receiver) {
+        if (typeof key === 'symbol' || IDENTITY_FIELDS.has(key) || !Object.prototype.hasOwnProperty.call(t, key)) return Reflect.get(t, key, receiver);
+        return read(`${path}.${key}`, false);
+      },
+    });
+
+  /**
+   * A record of spans by sub-machine (`history.spans`, `situation.byMachine`): a machine's spans with `spans:<id>`.
+   * Listing the record frees nothing: it is noted as a read of `whole` (membership, ruling 4), and each listed
+   * undeclared machine's spans may then be taken once (as `situationAt` and `membershipOf` do), but only their frames
+   * and identity can be read (`identityOnly`). Any other read of an undeclared machine throws.
    */
   const byMachine = (record: object, path: string, whole: string, wrap: (value: unknown, key: string) => unknown): object => {
-    const released = new Set<string>();
-    const allowed = (machine: string): boolean => tags.has(`spans:${machine}`) || released.delete(machine);
-    return new Proxy(guard({ ...record }, path, allowed, wrap, MACHINE_IDS), {
+    const listed = new Set<string>();
+    const declared = (machine: string): boolean => tags.has(`spans:${machine}`);
+    const target: Record<string, unknown> = { ...record };
+    const guarded = (key: string): boolean => MACHINE_IDS.has(key) || Object.prototype.hasOwnProperty.call(target, key);
+    return new Proxy(target, {
+      ...refuseWrites(path),
+      get(t, key, receiver) {
+        if (typeof key === 'symbol' || !guarded(key)) return Reflect.get(t, key, receiver);
+        const value = Reflect.get(t, key, receiver);
+        if (declared(key)) return (onRead(`${path}.${key}`), wrap(value, key));
+        if (!listed.delete(key)) return read(`${path}.${key}`, false);
+        onRead(`${path}.${key}`);
+        const spans = Array.isArray(value) ? value.map((span: object, i: number) => identityOnly(span, `${path}.${key}[${i}]`)) : value;
+        return readOnlyList(spans, `${path}.${key}`);
+      },
       ownKeys(t) {
         onRead(whole);
         const keys = Reflect.ownKeys(t);
-        for (const key of keys) if (typeof key === 'string') released.add(key);
+        for (const key of keys) if (typeof key === 'string' && !declared(key)) listed.add(key);
         return keys;
       },
       has(t, key) {
-        if (typeof key === 'string' && (MACHINE_IDS.has(key) || Object.prototype.hasOwnProperty.call(t, key))) read(`${path}.${key}`, allowed(key));
+        if (typeof key === 'string' && guarded(key) && !declared(key) && !listed.has(key)) read(`${path}.${key}`, false);
         return Reflect.has(t, key);
       },
     });

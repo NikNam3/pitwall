@@ -8,7 +8,7 @@
 // session-phase-race.segments.test.ts; the formation lap's hiding in ../formation.test.ts.
 import { describe, expect, it } from 'vitest';
 import { sessionPhaseRaceSpans } from '@pitwall/domain';
-import { activeFlagPhaseOf, SessionRunner, type StepResult } from '../../../src/index.ts';
+import { activeFlagPhaseOf, SessionRunner, type ChangeTag, type StepResult } from '../../../src/index.ts';
 import machine from '../../../src/situations/session-phase-race/machine.ts';
 import { situationOf } from '../../../src/situations/run.ts';
 import type { Situation } from '../../../src/situations/situation.ts';
@@ -483,7 +483,7 @@ describe('a session phase boundary at a moment earlier frames share', () => {
 describe('the view a calculator receives', () => {
   it('carries the situation of the scheduler input: the open spans, the clock\'s pause and the session phase among them (C20)', () => {
     const seen: unknown[] = [];
-    const s = sched([quick('probe', { compute: (v) => { seen.push(v.situation); return 0; } })]);
+    const s = sched([quick('probe', { reads: ['timing', 'spans:clock', 'spans:session-phase-race' as ChangeTag], compute: (v) => { seen.push(v.situation); return 0; } })]);
     const paused = { machine: 'clock', id: 1, kind: 'paused', start: 900, confirmed: true, detail: { source: 'online' }, startFrame: 50 };
     const racing = { machine: 'session-phase-race', id: 2, kind: 'racing', start: 0, confirmed: true, detail: undefined, startFrame: 1 };
     const situation: Situation = { weekendPhase: { kind: 'race', format: 'grandPrix' }, byMachine: { clock: [paused], 'session-phase-race': [racing] } };

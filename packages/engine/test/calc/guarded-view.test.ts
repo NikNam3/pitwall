@@ -130,17 +130,52 @@ describe('guardedView throws on an undeclared read and passes a declared one (C4
   });
 });
 
-describe('membership on a guarded view reads the projection and the situation as a whole (ruling 4)', () => {
-  it('situationAt and membershipOf pass whatever the unit declares, give what they give on the view, and count as reads of history and situation', () => {
+/** What membership matches of a span (C26): its machine, id, car, zone and frames; nothing else is read. */
+const identity = (s: { machine: string; id: number; carId?: number; zone?: number; startFrame: number; endFrame?: number }) =>
+  [s.machine, s.id, s.carId, s.zone, s.startFrame, s.endFrame];
+const identities = (byMachine: Readonly<Record<string, readonly unknown[]>>) =>
+  Object.fromEntries(Object.entries(byMachine).map(([m, spans]) => [m, (spans as Parameters<typeof identity>[0][]).map(identity)]));
+
+describe('membership on a guarded view needs no declaration in what it matches (ruling 4, F1)', () => {
+  it('situationAt and membershipOf pass whatever the unit declares, match what they match on the view, and count as reads of history and situation', () => {
     const view = raceView();
     const noted: string[] = [];
     const g = guardedView(view, ['timing'], { unit: 'probe', onRead: (path) => noted.push(path) });
     for (const frame of [1, 30, 61, 100]) {
-      expect(situationAt(g, frame), `frame ${frame}`).toEqual(situationAt(view, frame));
-      expect(membershipOf(g, { frame, carId: 1 as CarId }), `frame ${frame}`).toEqual(membershipOf(view, { frame, carId: 1 as CarId }));
+      expect(identities(situationAt(g, frame)), `frame ${frame}`).toEqual(identities(situationAt(view, frame)));
+      const member = membershipOf(g, { frame, carId: 1 as CarId });
+      expect(Object.keys(member), `frame ${frame}`).toEqual(Object.keys(membershipOf(view, { frame, carId: 1 as CarId })));
     }
     expect(noted).toContain('history');
     expect(noted).toContain('situation');
+  });
+
+  it('(a) a unit that reads the kind of an undeclared sub-machine\'s span from membershipOf throws', () => {
+    const g = guardedBy(['timing']);
+    const member = membershipOf(g, { frame: 100, carId: 1 as CarId });
+    expect(member['session-phase-race']).toBeDefined();
+    expect(undeclared(() => member['session-phase-race']!.kind)).toMatch(/^(history\.spans|situation\.byMachine)\.session-phase-race\[\d+\]\.kind$/);
+    expect(undeclared(() => member['session-phase-race']!.detail)).toMatch(/\.detail$/);
+    expect(undeclared(() => member['session-phase-race']!.start)).toMatch(/\.start$/);
+    expect(undeclared(() => member['car-location']!.confirmed)).toMatch(/\.confirmed$/);
+  });
+
+  it('(b) the same unit with that sub-machine declared reads its kind', () => {
+    const view = raceView();
+    const g = guardedBy(['timing', 'spans:session-phase-race' as ChangeTag], view);
+    const member = membershipOf(g, { frame: 100, carId: 1 as CarId });
+    expect(member['session-phase-race']!.kind).toBe(membershipOf(view, { frame: 100, carId: 1 as CarId })['session-phase-race']!.kind);
+    expect(undeclared(() => member['car-location']!.kind)).toMatch(/car-location\[\d+\]\.kind$/);
+  });
+
+  it('(c) listing the keys of situation.byMachine or history.spans frees no undeclared sub-machine', () => {
+    const g = guardedBy(['timing']);
+    expect(Object.keys(g.situation.byMachine)).toContain('clock');
+    expect(undeclared(() => g.situation.byMachine['clock']![0]!.kind)).toBe('situation.byMachine.clock[0].kind');
+    expect(undeclared(() => g.situation.byMachine['clock'])).toBe('situation.byMachine.clock');
+    expect(Object.keys(g.history.spans)).toContain('session-phase-race');
+    expect(undeclared(() => g.history.spans['session-phase-race']![0]!.kind)).toBe('history.spans.session-phase-race[0].kind');
+    expect(undeclared(() => Object.values(g.situation.byMachine).flat().map((s) => s.kind))).toMatch(/\.kind$/);
   });
 
   it('a membership read lets no later direct read of an undeclared sub-machine through', () => {
