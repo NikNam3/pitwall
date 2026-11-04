@@ -1,5 +1,6 @@
 export * from './version.ts';
 export * from './topics.ts';
+export type { MachineSpans } from './situation-spans.ts';
 export * from './feeds.ts';
 export * from './commands.ts';
 export * from './messages.ts';

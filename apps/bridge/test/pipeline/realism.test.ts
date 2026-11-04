@@ -99,8 +99,8 @@ describe('session.info.realism', () => {
     const state = (on: boolean) => ({
       feedId: F, sessionUid: '1', playerCar: 0, realism: on, session: { trackId: 1 },
     });
-    expect(calc.compute({ state: state(true) }).realism).toBe(true);
-    expect(calc.compute({ state: state(false) }).realism).toBe(false);
+    expect(calc.compute({ live: state(true) }).realism).toBe(true);
+    expect(calc.compute({ live: state(false) }).realism).toBe(false);
   });
 });
 

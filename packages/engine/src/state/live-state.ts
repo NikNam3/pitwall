@@ -4,10 +4,11 @@ import type { EngineState } from './engine-state.ts';
 
 /**
  * Today's `EngineState` without its open trackers, its history, the weekend context (the view's own `weekend`, C39; no
- * recorder reads stored data, C10, C38), the signals (only the machine reads them, C13) and the log (C28). It holds the
- * frame's value events (`frameEvents`, written by step 1).
+ * recorder reads stored data, C10, C38), the signals (only the machine reads them, C13), the log (C28) and the frame
+ * number (the engine's count of frames, C26; recorders get it as `RecorderInput.frameNumber`). It holds the frame's value
+ * events (`frameEvents`, written by step 1).
  */
-export type LiveState = Omit<EngineState, 'open' | 'history' | 'weekend' | 'signals' | 'log'>;
+export type LiveState = Omit<EngineState, 'open' | 'history' | 'weekend' | 'signals' | 'log' | 'frameNumber'>;
 
 /** A live-state area: the change tags of `CHANGE_TAGS` (`step/types.ts`) that are not history lists. */
 export type LiveArea = 'session' | 'identity' | 'timing' | 'tyres' | 'energy' | 'condition' | 'dynamics' | 'ownCar';

@@ -90,8 +90,6 @@ const isDue = (cadence: Cadence, lastRunAt: SessionTime, pending: Pending, now: 
       return rewound !== undefined || (after.laps ?? 0) > (before.laps ?? 0);
     case 'pitStop':
       return rewound !== undefined || (after.pitStops ?? 0) > (before.pitStops ?? 0);
-    case 'flagChange':
-      return pending.changed.has('flagPhases');
     case 'sessionChange':
       return pending.changed.has('session');
   }
@@ -131,7 +129,7 @@ const evaluate = (calc: Calculator, slot: Slot, view: EngineView, hook: OnCalcul
       slot.acc === undefined || view.delta.rewound !== undefined ? calc.init(view) : calc.update(slot.acc.value, view.delta, view),
     );
     acc = { value: next };
-    output = hook(calc.id, () => calc.output(next));
+    output = hook(calc.id, () => calc.output(next, view));
   }
   return { acc, output, raised: calc.insights?.(output, slot.prevOutput?.value, view) };
 };
@@ -140,10 +138,10 @@ const calculatorError = (id: CalculatorId, error: unknown, input: SchedulerInput
   key: `system.calculatorError:${id}`,
   severity: 'advisory',
   category: 'system',
-  feedId: input.state.feedId,
+  feedId: input.live.feedId,
   kind: 'system.calculatorError',
   params: { calculatorId: id, message: error instanceof Error ? error.message : String(error) },
-  raisedAt: input.state.sessionTime,
+  raisedAt: input.live.sessionTime,
 });
 
 /**
@@ -240,7 +238,7 @@ export class Scheduler implements Snapshotable<SchedulerBookkeeping> {
    * they neither run nor note what they missed (for a pass that adds nothing, like a demand change between frames).
    */
   run(input: SchedulerInput, opts: { only?: ReadonlySet<CalculatorId> } = {}): SchedulerResult {
-    const now = input.state.sessionTime;
+    const now = input.live.sessionTime;
     const ran = new Set<CalculatorId>();
     const errors: SchedulerResult['errors'] = [];
     const insights: InsightChange[] = [];
@@ -259,14 +257,16 @@ export class Scheduler implements Snapshotable<SchedulerBookkeeping> {
       if (!due || (slot.lastRunAt !== undefined && !isAffected(calc, slot, pending))) continue;
 
       const view: EngineView = {
-        state: input.state,
-        activeFlagPhase: input.activeFlagPhase,
+        live: input.live,
         situation: input.situation,
-        changed: pending.changed,
+        history: input.history,
         delta: pending.delta,
+        changed: pending.changed,
+        weekend: input.weekend,
+        config: input.config,
+        priors: input.priors,
         feed: input.feed,
         outputs: this.#outputs,
-        config: input.config,
       };
       let evaluation: Evaluation;
       try {

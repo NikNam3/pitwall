@@ -3,10 +3,14 @@ import type { EngineView } from '@pitwall/engine';
 import { describe, expect, it } from 'vitest';
 import { LAP_CLASSES_CONFIG } from '../../src/lap-classes/index.ts';
 import { PER_LAP_RATE_CONFIG } from '../../src/per-lap-rate/index.ts';
-import { ERS, ERS_CONFIG } from '../../src/ers/index.ts';
+import { ERS, ERS_BEHAVIOUR, ERS_CONFIG } from '../../src/ers/index.ts';
 import { ersCalculator } from '../../src/ers/calculator.ts';
-import { carState, engineView, lap, realismHidden } from '../../../../test-support/builders/index.ts';
+import { carState, lap, realismHidden } from '../../../../test-support/builders/index.ts';
 import { engineShaped } from '../engine-shaped.ts';
+import { guardedQuick, NONE, PRACTICE, QUALIFYING, situatedView } from '../situated.ts';
+
+/** The calculator through its guarded view (C41): every case fails on a read it does not declare. */
+const calc = guardedQuick(ersCalculator);
 
 const MJ = 1_000_000;
 
@@ -38,9 +42,9 @@ const carWith = ({ storeMJ = 4, deployedMJ = 0, mguk = 0, mguh = 0, mgukW = 0, m
   });
 
 const viewOf = (history: LapRecord[], live: Live = {}, stints: StintRecord[] = [], config: EngineView['config'] = {}): EngineView =>
-  engineView({ cars: [carWith(live)], history: { laps: history, stints }, config });
+  situatedView({ cars: [carWith(live)], history: { laps: history, stints }, config });
 
-const run = (view: EngineView) => ersCalculator.compute(view)[carId(0)]!;
+const run = (view: EngineView) => calc.compute(view)[carId(0)]!;
 const trendOf = (view: EngineView): number => {
   const t = run(view).storeTrendJPerLap;
   if (!t.known) throw new Error(`expected a known trend, got ${t.reason}`);
@@ -49,11 +53,12 @@ const trendOf = (view: EngineView): number => {
 const insufficient = { known: false, reason: 'insufficientData' };
 
 describe('ers calculator', () => {
-  it('is the quick calculator `ers` at 4 Hz over laps and energy', () => {
+  it('is the quick calculator `ers` at 4 Hz over laps, energy and car-status, not stints or the session', () => {
     expect(ersCalculator.id).toBe(ERS);
     expect(ersCalculator.kind).toBe('quick');
     expect(ersCalculator.cadence).toEqual({ hz: 4 });
-    expect(ersCalculator.reads).toEqual(expect.arrayContaining(['laps', 'stints', 'energy', 'session']));
+    expect(ersCalculator.reads).toEqual(expect.arrayContaining(['laps', 'energy', 'spans:car-status']));
+    expect(ersCalculator.reads).toHaveLength(3);
   });
 
   it('store 4.0, 3.6, 3.2 MJ at the lines (two laps of -0.4 MJ): trend -0.4 MJ/lap, as of the newest lap', () => {
@@ -155,7 +160,7 @@ describe('ers calculator', () => {
     });
     it('unknown power: the flow is unknown with the same reason', () => {
       const car = carState({ energy: { power: unknown('notReceived') } });
-      const out = ersCalculator.compute(engineView({ cars: [car] }))[carId(0)]!;
+      const out = calc.compute(situatedView({ cars: [car] }))[carId(0)]!;
       expect(out.flow).toEqual({ known: false, reason: 'notReceived' });
     });
   });
@@ -252,11 +257,11 @@ describe('ers calculator', () => {
     const rivalLaps = [1, 2, 3, 4].map((n) =>
       storedLap(n, 0, 0, { carId: carId(1), ersStoreAtStartJ: hidden, ersStoreAtEndJ: hidden, ersDeployedJ: hidden, ersHarvestedJ: hidden }),
     );
-    const view = engineView({
+    const view = situatedView({
       cars: [carWith({ storeMJ: 3.2 }), realismHidden(carState({ id: carId(1) }))],
       history: { laps: [...laps([4, 3.6, 3.2]), ...rivalLaps] },
     });
-    const out = ersCalculator.compute(view);
+    const out = calc.compute(view);
     const rival = out[carId(1)]!;
     for (const field of ['storeJ', 'deployedThisLapJ', 'harvestedThisLapJ', 'storeTrendJPerLap', 'attack', 'mode', 'flow'] as const) {
       expect(rival[field]).toEqual(hidden);
@@ -269,11 +274,11 @@ describe('ers calculator', () => {
     expect(out[carId(0)]!.storeTrendJPerLap).toMatchObject({ known: true });
   });
 
-  it('keeps cars apart and gives no entry to an inactive slot', () => {
+  it('keeps cars apart and gives no entry to a slot without a car in the session (no car-status span)', () => {
     const second = carWith({ storeMJ: 2 });
     second.id = carId(1);
     const history = [...laps([4, 3.6, 3.2]), ...laps([1, 1.5, 2]).map((l) => ({ ...l, carId: carId(1) }))];
-    const out = ersCalculator.compute(engineView({ cars: [carWith({ storeMJ: 3.2 }), second], history: { laps: history } }));
+    const out = calc.compute(situatedView({ cars: [carWith({ storeMJ: 3.2 }), second], history: { laps: history } }));
     const a = out[carId(0)]!.storeTrendJPerLap;
     const b = out[carId(1)]!.storeTrendJPerLap;
     expect(a.known && a.value).toBeCloseTo(-0.4 * MJ, 3);
@@ -283,6 +288,41 @@ describe('ers calculator', () => {
 
   it('is stateless: the same view gives the same output', () => {
     const view = viewOf(laps([4, 3.6, 3.2]), { storeMJ: 3.2 });
-    expect(ersCalculator.compute(view)).toEqual(ersCalculator.compute(view));
+    expect(calc.compute(view)).toEqual(calc.compute(view));
+  });
+
+  describe('behaviour table (C44): a row per car-status kind', () => {
+    it('exports ERS_BEHAVIOUR over car-status alone, the one sub-machine it reads (laps by activity come from the lap records)', () => {
+      expect(Object.keys(ERS_BEHAVIOUR)).toEqual(['car-status']);
+    });
+
+    // the live state's transitional `active` says the opposite of car-status in every case, so only car-status decides (C43)
+    const statusRun = (kind: string, active: boolean) =>
+      calc.compute(situatedView({ cars: [{ ...carWith({ storeMJ: 3.2 }), active }], history: { laps: laps([4, 3.6, 3.2]) }, status: { 0: kind } }))[carId(0)];
+
+    it('competing: the car has its store and its trend', () => {
+      const ers = statusRun('competing', false);
+      expect(ers?.storeJ).toEqual(known(3.2 * MJ, 7_000));
+      expect(ers?.storeTrendJPerLap).toMatchObject({ known: true });
+    });
+
+    it('retired: the car is still in the session and keeps its entry', () => {
+      expect(statusRun('retired', false)?.storeTrendJPerLap).toMatchObject({ known: true });
+    });
+
+    it('disqualified: the car is still in the session and keeps its entry', () => {
+      expect(statusRun('disqualified', false)?.storeTrendJPerLap).toMatchObject({ known: true });
+    });
+
+    it('absent: no entry, though the slot has laps and the live state calls it active', () => {
+      expect(statusRun('absent', true)).toBeUndefined();
+    });
+  });
+
+  it('runs in every weekend phase without reading the session: practice, qualifying and none give the race`s trend', () => {
+    const history = laps([4, 3.6, 3.2]);
+    for (const phase of [PRACTICE, QUALIFYING, NONE]) {
+      expect(trendOf(situatedView({ cars: [carWith({ storeMJ: 3.2 })], history: { laps: history }, phase })), phase.kind).toBeCloseTo(-0.4 * MJ, 3);
+    }
   });
 });

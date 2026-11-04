@@ -1,10 +1,18 @@
-import { carId, type LapRecord, type StintRecord } from '@pitwall/domain';
+import { carId, unknown, type LapRecord, type StintRecord, type WeekendPhase } from '@pitwall/domain';
 import { projectionLengths, type EngineView } from '@pitwall/engine';
 import { describe, expect, it } from 'vitest';
-import { PACE, PACE_CONFIG } from '../../src/pace/index.ts';
-import { paceCalculator } from '../../src/pace/calculator.ts';
-import { engineView, field, lap } from '../../../../test-support/builders/index.ts';
+import { PACE, PACE_BEHAVIOUR, PACE_CONFIG } from '../../src/pace/index.ts';
+import { paceCalculator as unguarded } from '../../src/pace/calculator.ts';
+import { field, lap } from '../../../../test-support/builders/index.ts';
 import { engineShaped } from '../engine-shaped.ts';
+import { guardedIncremental, NONE, PRACTICE, QUALIFYING, RACE, situatedView } from '../situated.ts';
+import { scheduled } from '../scheduled.ts';
+
+/** The calculator through its guarded view (C41): every init, update and output fails on a read it does not declare. */
+const paceCalculator = guardedIncremental(unguarded);
+
+/** `pace` stepped by its tests: its output reads the view its accumulator was last folded on (C31.2). */
+const pace = scheduled(paceCalculator);
 
 const stint = (over: Partial<StintRecord> & Pick<StintRecord, 'firstLap' | 'lastLap'>): StintRecord => ({
   carId: carId(0),
@@ -15,20 +23,21 @@ const stint = (over: Partial<StintRecord> & Pick<StintRecord, 'firstLap' | 'last
   ...over,
 });
 
-const raceView = (laps: LapRecord[], stints: StintRecord[] = [], kind: 'race' | 'practice' = 'race'): EngineView =>
-  engineView({ history: { laps, stints }, session: { kind } });
+const raceView = (laps: LapRecord[], stints: StintRecord[] = [], phase: WeekendPhase = RACE): EngineView =>
+  situatedView({ history: { laps, stints }, phase });
 
 /** `init` over the laps, as the scheduler does on a fresh run. */
-const run = (view: EngineView) => paceCalculator.output(paceCalculator.init(view));
+const run = (view: EngineView) => pace.output(pace.init(view));
 
 const timed = (n: number, lapTimeMs: number, over: Partial<LapRecord> = {}) => lap({ lapNumber: n, lapTimeMs, ...over });
 
 describe('pace calculator', () => {
-  it('is the incremental calculator `pace` over laps, due when a lap completes', () => {
+  it('is the incremental calculator `pace` over laps, stints and the weekend phase, due when a lap completes; not the session', () => {
     expect(paceCalculator.id).toBe(PACE);
     expect(paceCalculator.kind).toBe('incremental');
     expect(paceCalculator.cadence).toBe('lapCompleted');
-    expect(paceCalculator.reads).toContain('laps');
+    expect(paceCalculator.reads).toEqual(expect.arrayContaining(['laps', 'stints', 'spans:weekend-phase']));
+    expect(paceCalculator.reads).not.toContain('session');
   });
 
   it('recent is the mean of the last 3 pace laps; an SC lap in between is skipped', () => {
@@ -55,7 +64,7 @@ describe('pace calculator', () => {
 
   it('uses the window from the config', () => {
     const laps = [timed(2, 90_000), timed(3, 92_000), timed(4, 94_000)];
-    const view = engineView({ history: { laps }, session: { kind: 'race' }, config: { [PACE_CONFIG.key]: { window: 2 } } });
+    const view = situatedView({ history: { laps }, config: { [PACE_CONFIG.key]: { window: 2 } } });
     const car = run(view).byCar[carId(0)]!;
     expect(car.recentMs).toMatchObject({ known: true, value: 93_000 });
     expect(car.samples).toBe(2);
@@ -127,12 +136,6 @@ describe('pace calculator', () => {
     expect(car.samples).toBe(0);
   });
 
-  it('lap 1 is a pace lap in practice, so the race flag comes from the session kind', () => {
-    const laps = [timed(1, 100_000)];
-    expect(run(raceView(laps, [], 'practice')).byCar[carId(0)]!.samples).toBe(1);
-    expect(run(raceView(laps, [], 'race')).byCar[carId(0)]!.samples).toBe(0);
-  });
-
   it('a car without any lap has no entry', () => {
     expect(run(raceView([timed(2, 90_000)])).byCar[carId(1)]).toBeUndefined();
   });
@@ -154,35 +157,77 @@ describe('pace calculator', () => {
 
     // the same through update: the provisional arrives first, the confirmation in the next delta
     const first = raceView([provisional]);
-    const acc = paceCalculator.init(first);
-    const delta = { before: projectionLengths(first.state.history), after: projectionLengths(both.state.history) };
-    const next = paceCalculator.update(acc, delta, both);
-    expect(paceCalculator.output(next)).toEqual(run(both));
+    const acc = pace.init(first);
+    const delta = { before: projectionLengths(first.history), after: projectionLengths(both.history) };
+    const next = pace.update(acc, delta, both);
+    expect(pace.output(next)).toEqual(run(both));
   });
 
   it('update over a delta equals init over the whole history', () => {
     const { laps } = field({ cars: 3, laps: 8, paceMs: [90_000, 91_000, 92_500] });
-    let acc = paceCalculator.init(raceView([]));
-    let before = projectionLengths(raceView([]).state.history);
+    let acc = pace.init(raceView([]));
+    let before = projectionLengths(raceView([]).history);
     for (let n = 1; n <= laps.length; n += 3) {
       const view = raceView(laps.slice(0, n + 2));
-      const after = projectionLengths(view.state.history);
-      acc = paceCalculator.update(acc, { before, after }, view);
+      const after = projectionLengths(view.history);
+      acc = pace.update(acc, { before, after }, view);
       before = after;
-      expect(paceCalculator.output(acc)).toEqual(run(view));
+      expect(pace.output(acc)).toEqual(run(view));
     }
   });
 
   it('flashback equals fresh run', () => {
     const { laps } = field({ cars: 3, laps: 8, paceMs: [90_000, 91_000, 92_500] });
     const full = raceView(laps);
-    const acc = paceCalculator.update(paceCalculator.init(raceView(laps.slice(0, 6))), {
-      before: projectionLengths(raceView(laps.slice(0, 6)).state.history),
-      after: projectionLengths(full.state.history),
+    const acc = pace.update(pace.init(raceView(laps.slice(0, 6))), {
+      before: projectionLengths(raceView(laps.slice(0, 6)).history),
+      after: projectionLengths(full.history),
     }, full);
     const kept = laps.filter((l) => l.lapNumber <= 4);
     const truncatedView = raceView(kept);
-    const truncated = paceCalculator.update(acc, { before: projectionLengths(full.state.history), after: projectionLengths(truncatedView.state.history), rewound: { frameId: -1, at: 0 } }, truncatedView);
-    expect(paceCalculator.output(truncated)).toEqual(run(truncatedView));
+    const truncated = pace.update(acc, { before: projectionLengths(full.history), after: projectionLengths(truncatedView.history), rewound: { frameId: -1, at: 0 } }, truncatedView);
+    expect(pace.output(truncated)).toEqual(run(truncatedView));
+  });
+
+  describe('behaviour table (C44): a row per weekend-phase kind', () => {
+    it('exports PACE_BEHAVIOUR over the weekend phase alone (laps by activity come from the lap records)', () => {
+      expect(Object.keys(PACE_BEHAVIOUR)).toEqual(['weekend-phase']);
+    });
+
+    // lap 1 at 100 s, laps 2 and 3 at 90 s
+    const laps = [timed(1, 100_000), timed(2, 90_000), timed(3, 90_000)];
+
+    it('race: lap 1 of the race is no pace lap', () => {
+      const car = run(raceView(laps, [], RACE)).byCar[carId(0)]!;
+      expect(car.samples).toBe(2);
+      expect(car.recentMs).toMatchObject({ known: true, value: 90_000 });
+    });
+
+    it('practice: lap 1 is a pace lap like any other', () => {
+      const car = run(raceView(laps, [], PRACTICE)).byCar[carId(0)]!;
+      expect(car.samples).toBe(3);
+      expect(car.recentMs).toMatchObject({ known: true, value: 93_333 });
+    });
+
+    it('qualifying: lap 1 is a pace lap like any other', () => {
+      const car = run(raceView(laps, [], QUALIFYING)).byCar[carId(0)]!;
+      expect(car.samples).toBe(3);
+      expect(car.stintMs).toMatchObject({ known: true, value: 93_333 });
+    });
+
+    it('none (a time trial, C14): every car with laps has recent and stint pace notApplicable, no samples', () => {
+      const both = [...laps, timed(2, 80_000, { carId: carId(1) })];
+      const out = run(raceView(both, [], NONE));
+      for (const id of [carId(0), carId(1)]) {
+        expect(out.byCar[id]).toEqual({ recentMs: unknown('notApplicable'), stintMs: unknown('notApplicable'), samples: 0 });
+      }
+    });
+
+    it('none: update over a delta equals init over the whole history', () => {
+      const first = raceView(laps.slice(0, 1), [], NONE);
+      const all = raceView(laps, [], NONE);
+      const acc = pace.update(pace.init(first), { before: projectionLengths(first.history), after: projectionLengths(all.history) }, all);
+      expect(pace.output(acc)).toEqual(run(all));
+    });
   });
 });

@@ -127,7 +127,7 @@ describe('energy, condition, dynamics', () => {
   });
   it('tags the areas that the packets in the first frame feed', () => {
     const { results } = runScenario(new ScenarioBuilder({ cars: 1 }).frames(1, (d) => d.drop('motionEx')));
-    const present: ChangeTag[] = ['session', 'identity', 'timing', 'tyres', 'energy', 'condition', 'dynamics', 'ownCar'], absent: ChangeTag[] = ['events', 'pitStops', 'flagPhases'];
+    const present: ChangeTag[] = ['session', 'identity', 'timing', 'tyres', 'energy', 'condition', 'dynamics', 'ownCar'], absent: ChangeTag[] = ['events', 'pitStops'];
     expect([present.filter((t) => !results[0]!.changed.has(t)), absent.filter((t) => results[0]!.changed.has(t))]).toEqual([[], []]);
   });
 });

@@ -34,7 +34,7 @@ const insight = (key: string): Insight => ({ key, severity: 'info', category: 'r
 /** On every frame: `early` holds from 100 ms on (raised at frame 7, before the target), `late` from 700 ms (frame 44, after it). */
 const probe: QuickCalculator<number> = {
   kind: 'quick', id: 'probe.clock', reads: ['feed'], cadence: 'frame',
-  compute: (v) => v.state.sessionTime,
+  compute: (v) => v.live.sessionTime,
   insights: (t) => [...(t >= 100 ? [insight('early')] : []), ...(t >= 700 ? [insight('late')] : [])],
 };
 const probeFeature = defineFeature({ name: 'probe-clock', calculators: [probe], topics: [] });

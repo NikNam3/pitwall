@@ -2,6 +2,7 @@
 import type { CarId, FuelState } from '@pitwall/domain';
 
 export type { FuelState } from '@pitwall/domain';
+export * from './behaviour.ts';
 
 /** The calculator id. */
 export const FUEL = 'fuel';

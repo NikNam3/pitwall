@@ -22,7 +22,8 @@ import { beats, flbk, gridStart, lap, LGOT, LIGHTS_OUT, ovtk, raceAt, run, scar,
 const FORMATION_STATUS = (k: number, at: number) => (k === at ? { session: status(3) } : {});
 const lightsAt = (k: number, first: number, every: number): EventDetails[] =>
   [1, 2, 3, 4, 5].flatMap((n) => (k === first + (n - 1) * every ? [stlg(n)] : []));
-const lightsOut = (r: SessionRunner) => r.state.history.events.filter((e) => e.kind === 'lightsOut');
+/** Lights out (C20; a span since Task 21, no race event): the race-clock time each closed `startLights` span of the race ended on, where `racing` opened. */
+const lightsOut = (r: SessionRunner) => (r.state.history.spans['session-phase-race'] ?? []).filter((s) => s.kind === 'startLights').map((s) => ({ at: s.end }));
 /** Index of race frame k of `gridStart` among the frames. */
 const raceFrame = (k: number) => LIGHTS_OUT + 1 + k;
 /** The clock's closed spans readers see (`spans:clock`, C7, C20). */
@@ -33,6 +34,8 @@ const pauses = (r: SessionRunner) => clockSpans(r).filter((s) => s.kind === 'pau
 const openClock = (r: SessionRunner) => machineSituationOf(r.state).byMachine['clock'] ?? [];
 /** The clock's open span when it is a pause in progress. */
 const openPause = (r: SessionRunner) => openClock(r).filter((s) => s.kind === 'paused');
+/** Whether the view's situation (`situationOf`, C39) holds a pause in progress: the clock's open span is `paused`. */
+const pausedInView = (r: SessionRunner) => situationOf(r.state).byMachine['clock']?.some((s) => s.kind === 'paused') ?? false;
 /** The session-phase sub-machine of the weekend phase (C14, C17): `session-phase-race`, `-qualifying` or `-practice`. */
 const phaseMachine = (r: SessionRunner) => `session-phase-${machineSituationOf(r.state).weekendPhase.kind}`;
 /** The session phase in progress (C20): the open span of the weekend phase's session-phase sub-machine. */
@@ -782,19 +785,19 @@ describe('pauses', () => {
   it('before a pause the open clock span is running, from the session’s first frame (joined, C26), and the view reads no pause', () => {
     const { runner } = online(40);
     expect(openClock(runner)).toEqual([{ machine: 'clock', id: 0, kind: 'running', start: 0, confirmed: true, joinedAt: true, detail: undefined, startFrame: 1 }]);
-    expect([situationOf(runner.state).paused, clockInput(runner.state).paused, clockSpans(runner)]).toEqual([false, false, []]);
+    expect([pausedInView(runner), clockInput(runner.state).paused, clockSpans(runner)]).toEqual([false, false, []]);
   });
   it('online: gamePaused 1 closes running and opens a paused span, open in the situation (byMachine.clock) while the pause lasts', () => {
     const { runner } = online(80);
     expect(openClock(runner)).toMatchObject([{ machine: 'clock', id: 1, kind: 'paused', start: raceAt(50), detail: { source: 'online' } }]);
     expect(clockSpans(runner)).toMatchObject([{ machine: 'clock', id: 0, kind: 'running', start: 0, end: raceAt(50), joinedAt: true, detail: undefined }]);
-    expect([situationOf(runner.state).paused, clockInput(runner.state).paused, pauses(runner)]).toEqual([true, true, []]);
+    expect([pausedInView(runner), clockInput(runner.state).paused, pauses(runner)]).toEqual([true, true, []]);
   });
   it('online: gamePaused 0 closes the span into spans:clock with the pause’s wall time and opens running; it changes no phase', () => {
     const { runner } = online(150);
     expect(pauses(runner)).toMatchObject([{ machine: 'clock', id: 1, kind: 'paused', start: raceAt(50), end: raceAt(100), detail: { source: 'online', wallMs: 50 * STEP } }]);
     expect(openClock(runner)).toMatchObject([{ machine: 'clock', id: 2, kind: 'running', start: raceAt(100), detail: undefined }]);
-    expect([openPause(runner), situationOf(runner.state).paused, clockInput(runner.state).paused]).toEqual([[], false, false]);
+    expect([openPause(runner), pausedInView(runner), clockInput(runner.state).paused]).toEqual([[], false, false]);
     expect(openPhase(runner)).toMatchObject({ kind: 'racing', start: 0 });
   });
   it('online: the clock’s spans tile the session: running, paused, running, each opening on the frame its predecessor closed on (C26, C85)', () => {

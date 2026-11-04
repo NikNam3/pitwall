@@ -1,11 +1,11 @@
-import { carId, known, unknown, type Interval, type Known, type ResultStatus } from '@pitwall/domain';
+import { carId, known, unknown, type Interval, type Known } from '@pitwall/domain';
 import type { EngineView } from '@pitwall/engine';
 import { describe, expect, it } from 'vitest';
 import { GAPS, GAPS_CONFIG, type GapsOutput } from '../../src/gaps/index.ts';
 import { gapsCalculator } from '../../src/gaps/calculator.ts';
 import { gapperLines, gapsToCar } from '../../src/gaps/gaps.ts';
-import { crossings, field, flagPhase } from '../../../../test-support/builders/index.ts';
-import { byTime, carsFor, deltaOf, offsetRace, plain, progressOf, run, viewOf } from './race.ts';
+import { crossings, field, neutralisation, openNeutralisation } from '../../../../test-support/builders/index.ts';
+import { byTime, carsFor, deltaOf, gaps, guarded, offsetRace, plain, progressOf, run, viewOf } from './race.ts';
 
 /** A known value (with -0 as 0), or the reason it is unknown. */
 const v = (k: Known<number>): number | string => (k.known ? plain(k.value) : k.reason);
@@ -33,17 +33,17 @@ describe('gaps calculator', () => {
     expect(gapsCalculator.reads).toContain('identity');
   });
 
-  it('raceStartAt is the lights-out time', () => {
+  it('raceStartAt is the start of the race session phase `racing`, the lights-out time', () => {
     expect(run(viewOf(threeCars(), { lightsOutAt: 0 })).raceStartAt).toMatchObject({ known: true, value: 0 });
     expect(run(viewOf(offsetRace([0, 1_000], 1, 90_000), { lightsOutAt: 4_200 })).raceStartAt).toMatchObject({ known: true, value: 4_200 });
   });
 
-  it('raceStartAt is notReceived before lights out and follows the event when it arrives', () => {
+  it('raceStartAt is notReceived before the race starts and follows the `racing` span when it opens', () => {
     const before = viewOf([], { lightsOutAt: null });
-    const acc = gapsCalculator.init(before);
-    expect(gapsCalculator.output(acc).raceStartAt).toEqual({ known: false, reason: 'notReceived' });
+    const acc = gaps.init(guarded(before));
+    expect(gaps.output(acc).raceStartAt).toEqual({ known: false, reason: 'notReceived' });
     const after = viewOf([], { lightsOutAt: 12_000 });
-    const out = gapsCalculator.output(gapsCalculator.update(acc, deltaOf(before, after), after));
+    const out = gaps.output(gaps.update(acc, deltaOf(before, after), guarded(after)));
     expect(out.raceStartAt).toMatchObject({ known: true, value: 12_000 });
     expect(out).toEqual(run(after));
   });
@@ -74,14 +74,14 @@ describe('gaps calculator', () => {
     // car 1 completes lap 2 at (3, 0) at 182 s, 2 s behind car 0
     let n = all.findIndex((m) => m.carId === 1 && m.lap === 3 && m.segment === 0) + 1;
     let view = viewOf(all.slice(0, n));
-    let acc = gapsCalculator.init(view);
-    expect(v(interval(gapsCalculator.output(acc), 1).toLeaderMs)).toBe(2_000);
+    let acc = gaps.init(guarded(view));
+    expect(v(interval(gaps.output(acc), 1).toLeaderMs)).toBe(2_000);
     const seen: (number | string)[] = [];
     for (; n < all.length; n++) {
       const next = viewOf(all.slice(0, n + 1));
-      acc = gapsCalculator.update(acc, deltaOf(view, next), next);
+      acc = gaps.update(acc, deltaOf(view, next), guarded(next));
       view = next;
-      if (all[n]!.carId === 1) seen.push(v(interval(gapsCalculator.output(acc), 1).toLeaderMs));
+      if (all[n]!.carId === 1) seen.push(v(interval(gaps.output(acc), 1).toLeaderMs));
     }
     // lap 3, segment s (1..49, then the line at (4, 0) as s = 50): car 1 at 182 000 + 1820 s, car 0 at 180 000 + 1800 s
     expect(seen).toEqual(Array.from({ length: 50 }, (_, k) => 2_000 + 20 * (k + 1)));
@@ -110,37 +110,20 @@ describe('gaps calculator', () => {
     expect(interval(out, 2).toAheadMs.known).toBe(false);
   });
 
-  it.each(['retired', 'didNotFinish', 'disqualified'] as const)('a %s car is not in the intervals or the neighbourhood', (resultStatus) => {
+  it.each(['retired', 'disqualified'] as const)('a %s car is not in the intervals or the neighbourhood', (status) => {
     // car 3 ran two laps at 90.5 s and stopped; the car state still has it at P2
     const ms = byTime([
       ...threeCars(),
       ...crossings(carId(3), 1, 90_500, 0),
       ...crossings(carId(3), 2, 90_500, 90_500),
     ]);
-    const cars = carsFor(ms, { 3: { position: 2, resultStatus }, 1: { position: 3 }, 2: { position: 4 } });
-    const out = run(viewOf(ms, { cars }));
+    const cars = carsFor(ms, { 3: { position: 2 }, 1: { position: 3 }, 2: { position: 4 } });
+    const out = run(viewOf(ms, { cars, status: { 3: status } }));
     expect(out.intervals.map((i) => i.carId)).toEqual([0, 1, 2]);
     expect(v(interval(out, 1).toAheadMs)).toBe(5_000);
     expect(v(interval(out, 0).toBehindMs)).toBe(5_000);
     expect(out.neighbourhood.map((n) => n.ourCarId)).toEqual([0]);
     expect(neighbours(out, 0)).not.toContain(3);
-  });
-
-  it('a not-classified car leaves the intervals like a retired one (the shared out-of-race set)', () => {
-    // car 3 ran two laps at 90.5 s and stopped; the car state still has it at P2
-    const ms = byTime([
-      ...threeCars(),
-      ...crossings(carId(3), 1, 90_500, 0),
-      ...crossings(carId(3), 2, 90_500, 90_500),
-    ]);
-    const outWith = (resultStatus: 'retired' | 'notClassified') =>
-      run(viewOf(ms, { cars: carsFor(ms, { 3: { position: 2, resultStatus }, 1: { position: 3 }, 2: { position: 4 } }) }));
-    const notClassified = outWith('notClassified');
-    const retired = outWith('retired');
-    expect(notClassified.intervals.map((i) => i.carId)).toEqual([0, 1, 2]);
-    expect(neighbours(notClassified, 0)).not.toContain(3);
-    expect(notClassified.intervals).toEqual(retired.intervals);
-    expect(notClassified.neighbourhood).toEqual(retired.neighbourhood);
   });
 
   it('lineTimes holds the line crossing of every completed lap', () => {
@@ -165,7 +148,7 @@ describe('gaps calculator', () => {
     const ms = offsetRace([0, 1_000, 2_000, 3_000, 4_000], 1);
     const gridded = (grid: number) =>
       carsFor(ms).map((c) => (c.id === 2 ? { ...c, timing: { ...c.timing, gridPosition: grid } } : c));
-    const gained = (kind: 'race' | 'practice', grid: number) => interval(run(viewOf(ms, { cars: gridded(grid), kind })), 2).positionsGained;
+    const gained = (kind: 'race' | 'practice' | 'qualifying' | 'none', grid: number) => interval(run(viewOf(ms, { cars: gridded(grid), kind })), 2).positionsGained;
 
     it('in a race is the grid position minus the position now: from P5 to P3 is 2', () => {
       expect(gained('race', 5)).toMatchObject({ known: true, value: 2 });
@@ -200,11 +183,11 @@ describe('gaps calculator', () => {
   it('an output taken before an update keeps its old window', () => {
     const all = field({ cars: 2, laps: 3, paceMs: [90_000, 91_000] }).crossings;
     const early = viewOf(all.slice(0, 200));
-    const acc = gapsCalculator.init(early);
-    const before = gapsCalculator.output(acc);
+    const acc = gaps.init(guarded(early));
+    const before = gaps.output(acc);
     const copy = structuredClone(before);
     const full = viewOf(all);
-    const after = gapsCalculator.output(gapsCalculator.update(acc, deltaOf(early, full), full));
+    const after = gaps.output(gaps.update(acc, deltaOf(early, full), guarded(full)));
     expect(before).toEqual(copy);
     expect(after.recent).not.toEqual(copy.recent);
   });
@@ -212,12 +195,12 @@ describe('gaps calculator', () => {
   it('update over deltas equals init over the whole history', () => {
     const all = field({ cars: 3, laps: 4, paceMs: [90_000, 91_000, 92_500] }).crossings;
     let view = viewOf([]);
-    let acc = gapsCalculator.init(view);
+    let acc = gaps.init(guarded(view));
     for (let n = 37; n < all.length + 37; n += 37) {
       const next = viewOf(all.slice(0, n));
-      acc = gapsCalculator.update(acc, deltaOf(view, next), next);
+      acc = gaps.update(acc, deltaOf(view, next), guarded(next));
       view = next;
-      expect(gapsCalculator.output(acc)).toEqual(run(next));
+      expect(gaps.output(acc)).toEqual(run(next));
     }
   });
 
@@ -225,10 +208,10 @@ describe('gaps calculator', () => {
     const all = field({ cars: 3, laps: 6, paceMs: [90_000, 91_000, 92_500] }).crossings;
     const early = viewOf(all.slice(0, 400));
     const full = viewOf(all);
-    const acc = gapsCalculator.update(gapsCalculator.init(early), deltaOf(early, full), full);
+    const acc = gaps.update(gaps.init(guarded(early)), deltaOf(early, full), guarded(full));
     const truncated = viewOf(all.slice(0, 250));
-    const back = gapsCalculator.update(acc, deltaOf(full, truncated, true), truncated);
-    expect(gapsCalculator.output(back)).toEqual(run(truncated));
+    const back = gaps.update(acc, deltaOf(full, truncated, true), guarded(truncated));
+    expect(gaps.output(back)).toEqual(run(truncated));
   });
 });
 
@@ -290,18 +273,18 @@ describe('gaps to one car', () => {
 
   // The analysis decides the reason of a car out of the race (review 2, F6): its gap will not come, so the display
   // shows the analysis' reason and keeps no rule of its own.
-  it.each(['retired', 'didNotFinish', 'disqualified', 'notClassified'] as const)('gives a %s car notApplicable: its gap will not come', (resultStatus) => {
+  it.each(['retired', 'disqualified'] as const)('gives a %s car notApplicable: its gap will not come', (status) => {
     // car 3 ran two laps at 90.5 s and stopped; the car state still has it at P2
     const ms = byTime([...threeCars(), ...crossings(carId(3), 1, 90_500, 0), ...crossings(carId(3), 2, 90_500, 90_500)]);
-    const out = run(viewOf(ms, { cars: carsFor(ms, { 3: { position: 2, resultStatus }, 1: { position: 3 }, 2: { position: 4 } }) }));
+    const out = run(viewOf(ms, { cars: carsFor(ms, { 3: { position: 2 }, 1: { position: 3 }, 2: { position: 4 } }), status: { 3: status } }));
     expect(gapsToCar(out, carId(1))!.find((g) => g.carId === carId(3))).toEqual({ carId: carId(3), gapMs: unknown('notApplicable'), lapsDown: 0 });
   });
 
   it("lists every car out of the race, one without a crossing too, beside the running cars' gaps", () => {
     // car 3 retired after two laps, car 4 was disqualified before its first crossing
     const ms = byTime([...threeCars(), ...crossings(carId(3), 1, 90_500, 0), ...crossings(carId(3), 2, 90_500, 90_500)]);
-    const cars = carsFor(ms, { 3: { position: 2, resultStatus: 'retired' }, 4: { position: 5, resultStatus: 'disqualified' }, 1: { position: 3 }, 2: { position: 4 } });
-    const toCar1 = gapsToCar(run(viewOf(ms, { cars })), carId(1))!;
+    const cars = carsFor(ms, { 3: { position: 2 }, 4: { position: 5 }, 1: { position: 3 }, 2: { position: 4 } });
+    const toCar1 = gapsToCar(run(viewOf(ms, { cars, status: { 3: 'retired', 4: 'disqualified' } })), carId(1))!;
     expect(toCar1.map((g) => g.carId).sort((a, b) => a - b)).toEqual([0, 1, 2, 3, 4]);
     expect(toCar1.filter((g) => g.gapMs.known).map((g) => [g.carId, v(g.gapMs)])).toEqual([[0, -5_000], [2, 5_000]]);
     expect(toCar1.find((g) => g.carId === carId(4))?.gapMs).toEqual(unknown('notApplicable'));
@@ -414,17 +397,17 @@ describe('neighbourhood', () => {
 
   it('the neighbourhood follows a playerCar change', () => {
     const first = viewFor(0);
-    const acc = gapsCalculator.init(first);
-    expect(gapsCalculator.output(acc).neighbourhood).toEqual([{ ourCarId: 0, carIds: [1] }]);
+    const acc = gaps.init(guarded(first));
+    expect(gaps.output(acc).neighbourhood).toEqual([{ ourCarId: 0, carIds: [1] }]);
     // the same history, a new player car: no crossing is new
     const next = viewFor(5);
-    const moved = gapsCalculator.output(gapsCalculator.update(acc, deltaOf(first, next), next));
+    const moved = gaps.output(gaps.update(acc, deltaOf(first, next), guarded(next)));
     expect(moved.neighbourhood).toEqual([{ ourCarId: 5, carIds: [4] }]);
   });
 
   it('has one entry per our car: the player and the teammate', () => {
     const base = viewFor(3);
-    const view: EngineView = { ...base, state: { ...base.state, teammateCar: carId(0) } };
+    const view: EngineView = { ...base, live: { ...base.live, teammateCar: carId(0) } };
     const out = run(view);
     expect(out.neighbourhood).toHaveLength(2);
     expect(out.neighbourhood).toEqual(
@@ -569,13 +552,12 @@ describe('the gapper line of a finished car', () => {
       ...[1, 2, 3].flatMap((n) => crossings(carId(1), n, 95_000, (n - 1) * 95_000)).filter((m) => m.at <= end),
     ]);
   };
-  const finished = (ms: ReturnType<typeof finish>) => carsFor(ms, { 0: { resultStatus: 'finished' } });
   const fixed = { kind: 'fixed', lapMs: 90_000 } as const;
   const nowOf = (lines: ReturnType<typeof gapperLines>, id: number) => lines.cars.find((c) => c.carId === id)?.now;
 
   it('keeps the live point of a finisher whose crossings end before the line: its final lap stays on the chart', () => {
     const ms = finish(false);
-    const lines = gapperLines(run(viewOf(ms, { cars: finished(ms) })), fixed);
+    const lines = gapperLines(run(viewOf(ms, { now: 'finished' })), fixed);
     expect(line(lines, 0)).toEqual([[1, 0], [2, 0]]);
     // progress 149 (lap 3, mini-sector 49): 149 / 50 laps at 90 s is 268 200, its race time 274 080
     expect(nowOf(lines, 0)).toEqual(known({ lap: 2.98, gapMs: -5_880 }, 274_080));
@@ -583,31 +565,31 @@ describe('the gapper line of a finished car', () => {
 
   it('settles the final lap of a finisher whose crossings end at the finish line, with no live point at the line', () => {
     const ms = finish(true);
-    const lines = gapperLines(run(viewOf(ms, { cars: finished(ms) })), fixed);
+    const lines = gapperLines(run(viewOf(ms, { now: 'finished' })), fixed);
     expect(line(lines, 0)).toEqual([[1, 0], [2, 0], [3, -6_000]]);
     expect(nowOf(lines, 0)).toEqual(unknown('notApplicable'));
   });
 
   it("takes a finished leader's average at its newest crossing, its final lap included", () => {
     const ms = finish(false);
-    const lines = gapperLines(run(viewOf(ms, { cars: finished(ms) })), { kind: 'leaderAverage' });
+    const lines = gapperLines(run(viewOf(ms, { now: 'finished' })), { kind: 'leaderAverage' });
     // race time 274 080 over progress 149: 91 973.15 ms a lap (its last line crossing alone would give 90 000)
     expect(lines.referenceLapMs).toEqual(known(91_973, 274_080));
   });
 
-  it.each([false, true])('the finished status alone changes nothing: the lines equal those of the car still racing (at the line: %s)', (atLine) => {
+  it.each([false, true])('the flag alone changes nothing: the lines equal those of the car still racing (at the line: %s)', (atLine) => {
     const ms = finish(atLine);
     for (const reference of [fixed, { kind: 'leaderAverage' } as const]) {
-      expect(gapperLines(run(viewOf(ms, { cars: finished(ms) })), reference)).toEqual(gapperLines(run(viewOf(ms)), reference));
+      expect(gapperLines(run(viewOf(ms, { now: 'finished' })), reference)).toEqual(gapperLines(run(viewOf(ms)), reference));
     }
   });
 
   it('a car that takes the flag without a new crossing keeps its live point through an update', () => {
     const ms = finish(false);
     const racing = viewOf(ms);
-    const acc = gapsCalculator.init(racing);
-    const flagged = viewOf(ms, { cars: finished(ms) });
-    const out = gapsCalculator.output(gapsCalculator.update(acc, deltaOf(racing, flagged), flagged));
+    const acc = gaps.init(guarded(racing));
+    const flagged = viewOf(ms, { now: 'finished' });
+    const out = gaps.output(gaps.update(acc, deltaOf(racing, flagged), guarded(flagged)));
     expect(nowOf(gapperLines(out, fixed), 0)).toEqual(known({ lap: 2.98, gapMs: -5_880 }, 274_080));
   });
 });
@@ -622,11 +604,11 @@ describe('the gapper line of a car out of the race', () => {
     ...crossings(carId(3), 2, 90_500, 90_500),
     ...crossings(carId(3), 3, 90_500, 181_000).filter((m) => m.segment <= 10),
   ]);
-  const out = (resultStatus: ResultStatus) =>
-    run(viewOf(ms, { cars: carsFor(ms, { 3: { position: 2, resultStatus }, 1: { position: 3 }, 2: { position: 4 } }) }));
+  const out = (status: 'retired' | 'disqualified') =>
+    run(viewOf(ms, { cars: carsFor(ms, { 3: { position: 2 }, 1: { position: 3 }, 2: { position: 4 } }), status: { 3: status } }));
 
-  it.each(['retired', 'didNotFinish', 'disqualified', 'notClassified'] as const)('keeps a %s car\'s completed laps, with no live point', (resultStatus) => {
-    const lines = gapperLines(out(resultStatus), { kind: 'fixed', lapMs: 90_000 });
+  it.each(['retired', 'disqualified'] as const)('keeps a %s car\'s completed laps, with no live point', (status) => {
+    const lines = gapperLines(out(status), { kind: 'fixed', lapMs: 90_000 });
     expect(lines.cars.find((c) => c.carId === carId(3))).toEqual({
       carId: carId(3),
       byLap: [{ lap: 1, gapMs: -500 }, { lap: 2, gapMs: -1_000 }],
@@ -643,13 +625,16 @@ describe('the gapper line of a car out of the race', () => {
   it('lists no line for a car out of the race without a completed race lap', () => {
     // car 4 stopped at mini-sector 20 of lap 1
     const early = byTime([...threeCars(), ...crossings(carId(4), 1, 91_000, 0).filter((m) => m.segment <= 20)]);
-    const lines = gapperLines(run(viewOf(early, { cars: carsFor(early, { 4: { resultStatus: 'retired' } }) })), { kind: 'fixed', lapMs: 90_000 });
+    const lines = gapperLines(run(viewOf(early, { cars: carsFor(early), status: { 4: 'retired' } })), { kind: 'fixed', lapMs: 90_000 });
     expect(lines.cars.map((c) => c.carId).sort((a, b) => a - b)).toEqual([0, 1, 2]);
   });
 });
 
-// Phase bands in the leader's progress (review RU4, wave 2 T6): the gapper carries the race's SC, VSC and red-flag
-// phases on the chart's x, from the crossings at the phase start and end, so a band that ended mid-lap ends there.
+// Phase bands in the leader's progress (review RU4, wave 2 T6): the gapper carries the race's neutralisations (SC, VSC)
+// and suspensions (red flag) on the chart's x, from the crossings at the span's start and end, so a band that ended
+// mid-lap ends there. Since Task 19 they are the session-phase spans (C20): the closed `neutralised` and `suspended`
+// spans of the projection plus the open one of the situation (`shared/neutralised.ts`); a `neutralised` span closed
+// with `confirmed: false` is no neutralisation (C18, C43), an open one still waiting for its confirmation is one.
 describe('the gapper phases', () => {
   /** Car 0 laps in 90 s (a mini-sector every 1.8 s) and leads throughout; car 1 laps in 92 s. 8 laps from 0. */
   const eightLaps = () => field({ cars: 2, laps: 8, paceMs: [90_000, 92_000] }).crossings;
@@ -659,31 +644,31 @@ describe('the gapper phases', () => {
   const round = (x: number) => Math.round(x * 1e6) / 1e6;
   const fixed = { kind: 'fixed', lapMs: 90_000 } as const;
 
-  it('reads the flag phases, so a phase that opens or closes re-runs it', () => {
-    expect(gapsCalculator.reads).toContain('flagPhases');
+  it('reads the session phases of every weekend phase, so a neutralisation or suspension that opens or closes re-runs it (C41)', () => {
+    expect(gapsCalculator.reads).toEqual(expect.arrayContaining(['spans:session-phase-race', 'spans:session-phase-qualifying', 'spans:session-phase-practice']));
   });
 
   it("places a phase at the leader's newest crossing at its start and at its end: completed laps + mini-sectors / 50", () => {
     // SC from 200 500 to 299 999: the leader last crossed (3, 11) at 199 800 and (4, 16) at 298 800
-    const sc = flagPhase({ kind: 'SC', start: 200_500, end: 299_999, startLeaderLap: 3, endLeaderLap: 4 });
-    const lines = gapperLines(run(viewOf(eightLaps(), { flagPhases: [sc] })), fixed);
+    const sc = neutralisation({ kind: 'SC', start: 200_500, end: 299_999 });
+    const lines = gapperLines(run(viewOf(eightLaps(), { phases: [sc] })), fixed);
     expect(phasesOf(lines)).toEqual([['SC', 2.22, 3.32]]);
   });
 
   it('places a phase that ended laps ago from the crossings of that time, not the recent ones', () => {
     // the race is at the end of lap 8; the VSC ran from (2, 5) at 99 000 to (2, 40) at 162 000
-    const vsc = flagPhase({ kind: 'VSC', start: 99_000, end: 162_000, startLeaderLap: 2, endLeaderLap: 2 });
-    const lines = gapperLines(run(viewOf(eightLaps(), { flagPhases: [vsc] })), fixed);
+    const vsc = neutralisation({ kind: 'VSC', start: 99_000, end: 162_000 });
+    const lines = gapperLines(run(viewOf(eightLaps(), { phases: [vsc] })), fixed);
     expect(phasesOf(lines)).toEqual([['VSC', 1.1, 1.8]]);
   });
 
   it('gives the open phase its start and toLap notApplicable, after the closed ones in their order', () => {
-    // up to 560 s: an SC and a red flag closed, a VSC open since 500 000, where the leader last crossed (6, 27) at 498 600
+    // up to 560 s: an SC and a red flag (a suspension) closed, a VSC open since 500 000, where the leader last crossed (6, 27) at 498 600
     const ms = eightLaps().filter((m) => m.at <= 560_000);
-    const sc = flagPhase({ kind: 'SC', start: 199_800, end: 298_800, startLeaderLap: 3, endLeaderLap: 4 });
-    const red = flagPhase({ kind: 'red', start: 360_000, end: 405_000, startLeaderLap: 5, endLeaderLap: 5 });
-    const open = { kind: 'VSC', start: 500_000, startLeaderLap: 6, scPhases: [] } as const;
-    const lines = gapperLines(run(viewOf(ms, { flagPhases: [sc, red], activeFlagPhase: open })), fixed);
+    const sc = neutralisation({ kind: 'SC', start: 199_800, end: 298_800, id: 3 });
+    const red = neutralisation({ kind: 'red', start: 360_000, end: 405_000, id: 5 });
+    const open = openNeutralisation({ kind: 'VSC', start: 500_000, id: 7 });
+    const lines = gapperLines(run(viewOf(ms, { phases: [sc, red], open })), fixed);
     expect(phasesOf(lines)).toEqual([
       ['SC', 2.22, 3.32],
       ['red', 4, 4.5],
@@ -698,15 +683,15 @@ describe('the gapper phases', () => {
       ...[1, 2, 3, 4, 5].flatMap((n) => crossings(carId(0), n, 90_000, (n - 1) * 90_000)),
       ...[1, 2, 3, 4, 5].flatMap((n) => crossings(carId(1), n, 85_000, 3_000 + (n - 1) * 85_000)),
     ]).filter((m) => m.at <= 400_000);
-    const sc = flagPhase({ kind: 'SC', start: 30_000, end: 300_000, startLeaderLap: 1, endLeaderLap: 4 });
-    const out = run(viewOf(ms, { flagPhases: [sc] }));
+    const sc = neutralisation({ kind: 'SC', start: 30_000, end: 300_000 });
+    const out = run(viewOf(ms, { phases: [sc] }));
     expect(out.intervals[0]?.carId).toBe(1);
     expect(phasesOf(gapperLines(out, fixed))).toEqual([['SC', 0.32, 3.48]]);
   });
 
   it('is the same for every reference: the phases do not depend on the virtual car', () => {
-    const sc = flagPhase({ kind: 'SC', start: 200_500, end: 299_999 });
-    const out = run(viewOf(eightLaps(), { flagPhases: [sc] }));
+    const sc = neutralisation({ kind: 'SC', start: 200_500, end: 299_999 });
+    const out = run(viewOf(eightLaps(), { phases: [sc] }));
     expect(gapperLines(out, { kind: 'leaderAverage' }).phases).toEqual(gapperLines(out, fixed).phases);
     expect(gapperLines(out, { kind: 'carAverage', carId: carId(1) }).phases).toEqual(gapperLines(out, fixed).phases);
   });
@@ -715,26 +700,50 @@ describe('the gapper phases', () => {
     expect(gapperLines(run(viewOf(eightLaps())), fixed).phases).toEqual([]);
   });
 
+  it('a `neutralised` span with `confirmed: false` is not a neutralisation for the gapper (C18, C43)', () => {
+    const never = neutralisation({ kind: 'SC', start: 200_500, end: 203_500, confirmed: false });
+    expect(gapperLines(run(viewOf(eightLaps(), { phases: [never] })), fixed).phases).toEqual([]);
+    const vsc = neutralisation({ kind: 'VSC', start: 99_000, end: 162_000, id: 2 });
+    expect(phasesOf(gapperLines(run(viewOf(eightLaps(), { phases: [never, vsc] })), fixed))).toEqual([['VSC', 1.1, 1.8]]);
+  });
+
+  it('an open neutralisation still waiting for its confirmation is on the gapper from its start (ruling 2: the earliest reliable signal, C18)', () => {
+    const ms = eightLaps().filter((m) => m.at <= 250_000);
+    const pending = openNeutralisation({ kind: 'SC', start: 200_500, confirmed: false });
+    expect(phasesOf(gapperLines(run(viewOf(ms, { open: pending })), fixed))).toEqual([['SC', 2.22, 'notApplicable']]);
+  });
+
+  it('a pending neutralisation that closes unconfirmed leaves the gapper: update equals init (C18, C31)', () => {
+    const ms = eightLaps();
+    const waiting = viewOf(ms.filter((m) => m.at <= 202_000), { open: openNeutralisation({ kind: 'SC', start: 200_500, confirmed: false }) });
+    const dropped = viewOf(ms.filter((m) => m.at <= 210_000), { phases: [neutralisation({ kind: 'SC', start: 200_500, end: 203_500, confirmed: false })] });
+    const acc = gaps.init(guarded(waiting));
+    expect(phasesOf(gapperLines(gaps.output(acc), fixed))).toEqual([['SC', 2.22, 'notApplicable']]);
+    const updated = gaps.output(gaps.update(acc, deltaOf(waiting, dropped), guarded(dropped)));
+    expect(updated).toEqual(run(dropped));
+    expect(gapperLines(updated, fixed).phases).toEqual([]);
+  });
+
   it('update over deltas equals init over the whole history: a phase that opens, then closes', () => {
     const ms = eightLaps();
     const early = ms.filter((m) => m.at <= 250_000);
-    const opening = viewOf(early, { activeFlagPhase: { kind: 'SC', start: 200_500, startLeaderLap: 3, scPhases: [] } });
-    const sc = flagPhase({ kind: 'SC', start: 200_500, end: 299_999, startLeaderLap: 3, endLeaderLap: 4 });
-    const closed = viewOf(ms, { flagPhases: [sc] });
-    const acc = gapsCalculator.init(opening);
-    expect(phasesOf(gapperLines(gapsCalculator.output(acc), fixed))).toEqual([['SC', 2.22, 'notApplicable']]);
-    const updated = gapsCalculator.output(gapsCalculator.update(acc, deltaOf(opening, closed), closed));
+    const opening = viewOf(early, { open: openNeutralisation({ kind: 'SC', start: 200_500 }) });
+    const sc = neutralisation({ kind: 'SC', start: 200_500, end: 299_999 });
+    const closed = viewOf(ms, { phases: [sc] });
+    const acc = gaps.init(guarded(opening));
+    expect(phasesOf(gapperLines(gaps.output(acc), fixed))).toEqual([['SC', 2.22, 'notApplicable']]);
+    const updated = gaps.output(gaps.update(acc, deltaOf(opening, closed), guarded(closed)));
     expect(gapperLines(updated, fixed).phases).toEqual(gapperLines(run(closed), fixed).phases);
     expect(phasesOf(gapperLines(updated, fixed))).toEqual([['SC', 2.22, 3.32]]);
   });
 
   it('flashback equals fresh run: a phase the flashback took back is gone', () => {
     const ms = eightLaps();
-    const sc = flagPhase({ kind: 'SC', start: 200_500, end: 299_999 });
-    const full = viewOf(ms, { flagPhases: [sc] });
+    const sc = neutralisation({ kind: 'SC', start: 200_500, end: 299_999 });
+    const full = viewOf(ms, { phases: [sc] });
     const back = viewOf(ms.filter((m) => m.at <= 190_000));
-    const acc = gapsCalculator.init(full);
-    const truncated = gapsCalculator.output(gapsCalculator.update(acc, deltaOf(full, back, true), back));
+    const acc = gaps.init(guarded(full));
+    const truncated = gaps.output(gaps.update(acc, deltaOf(full, back, true), guarded(back)));
     expect(gapperLines(truncated, fixed).phases).toEqual([]);
     expect(truncated).toEqual(run(back));
   });

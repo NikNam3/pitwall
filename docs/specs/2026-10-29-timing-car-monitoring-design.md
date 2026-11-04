@@ -200,7 +200,7 @@ A display may read `raceMoment.current` as an optional topic, and its emphasis f
 | Display | Sessions | Reads | Shows | Lights up |
 |---|---|---|---|---|
 | `timing-tower` (V29) | all | `cars.overview`, `gaps.intervals`, `gaps.toCar`, `lapTimes.board`, `stints`, `pitStops`, `raceMoment.current` (optional) | position and change, car, interval, gap to our car, last lap, compound and age, stops, warnings and penalties, pit status | sector and lap status (rule from the mockups), our cars, the neighbourhood in the incident moment |
-| `gap-chart` (V04) | race | `gaps.gapper`, `flagPhases` | gapper line per car with SC/VSC phase bands; the reference in the panel header | our cars white, every other car in its team colour (UI shell rule) |
+| `gap-chart` (V04) | race | `gaps.gapper` (its `phases`: the neutralised and suspended session-phase spans) | gapper line per car with SC/VSC phase bands; the reference in the panel header | our cars white, every other car in its team colour (UI shell rule) |
 | `lap-analysis` (V28) | all | `lapTimes.board` | best lap and sectors per car as deltas to the reference car, theoretical best | session and personal bests |
 | `projected-lap` (V10, V11) | practice, quali | `lapTimes.projection`, `session.info` | projected lap, delta to best, projected position; in quali the cut-off and our margin; in timed sessions the finish margin | projection beyond the cut-off (critical), finish margin below zero |
 | `battle-cards` (V14) | race | `battle.cards`, `raceMoment.current` (optional) | ahead and behind: gap, closing rate, laps to DRS, pace delta and its margin, tyres, rival ERS | in the battle moment: the card at or below `battleLaps` |
@@ -386,8 +386,7 @@ export type DamageParts = {
 // packages/domain/src/insight.ts: InsightCategory gains 'car' (brake and engine temperatures)
 export type InsightCategory = 'strategy' | 'tyres' | 'energy' | 'damage' | 'race' | 'feed' | 'system' | 'car';
 
-// packages/engine (EngineView): the neutralised phase in progress, which moves to history.flagPhases when it ends
-activeFlagPhase: Omit<FlagPhase, 'end' | 'endLeaderLap'> | undefined;
+// packages/engine (EngineView): the open session-phase spans are in view.situation (C20); closed ones in the projection
 ```
 
 ### A.2 Shared calculator outputs and functions (`packages/analysis`)

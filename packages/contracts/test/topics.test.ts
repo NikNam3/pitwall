@@ -1,5 +1,5 @@
 import { describe, expect, expectTypeOf, it } from 'vitest';
-import type { CarDynamics, CarId, CarMotion, CarState, FeedId, GapperReference, Interval, Known, LapRecord, RaceMoment } from '@pitwall/domain';
+import type { CarDynamics, CarId, CarMotion, CarState, FeedId, GapperReference, Interval, Known, LapRecord, OpenSpan, RaceMoment, Span } from '@pitwall/domain';
 import type { CarTelemetry } from '../src/topics/car.telemetry.ts';
 import {
   CONTRACT_VERSION,
@@ -8,6 +8,7 @@ import {
   type FeedInfo,
   type FeedStatus,
   type InsightEntry,
+  type MachineSpans,
   type ReplayJump,
   type ReplayStatus,
   type ReservedCommand,
@@ -16,15 +17,15 @@ import {
   type TopicParams,
   type TopicValue,
 } from '../src/index.ts';
-import { carId } from '@pitwall/domain';
+import { carId, SPAN_DECLARATIONS } from '@pitwall/domain';
 import { defineTopic, eachCar, type CarParams, type TopicOwner } from '../src/topic-def.ts';
 import carDetail from '../src/topics/car.detail.ts';
 import laps from '../src/topics/laps.ts';
 
 describe('TOPICS', () => {
-  it('has exactly the 12 feed topics (spec 8.4 and replay.status of 8.5) with their modes and rates', () => {
+  it('has exactly the 11 feed topics besides the situation topics (spec 8.4 and replay.status of 8.5) with their modes and rates', () => {
     const table = Object.entries(TOPICS)
-      .filter(([, d]) => d.scope === 'feed' && d.owner === 'core')
+      .filter(([key, d]) => d.scope === 'feed' && d.owner === 'core' && !key.startsWith('situation.'))
       .map(([key, d]) => [key, d.name, d.mode, d.maxHz] as const)
       .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
     expect(table).toEqual([
@@ -33,7 +34,6 @@ describe('TOPICS', () => {
       ['cars.overview', 'cars.overview', 'state', 10],
       ['events', 'events', 'append', Infinity],
       ['feed.status', 'feed.status', 'state', 2],
-      ['flagPhases', 'flagPhases', 'append', Infinity],
       ['insights', 'insights', 'append', Infinity],
       ['laps', 'laps', 'append', Infinity],
       ['pitStops', 'pitStops', 'append', Infinity],
@@ -42,9 +42,22 @@ describe('TOPICS', () => {
       ['stints', 'stints', 'append', Infinity],
     ]);
   });
+  it('has one situation topic per sub-machine (C53, C54): situation.<camelMachineId>, core, feed, state, 4 Hz', () => {
+    const camel = (machine: string) => machine.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase());
+    const table = Object.entries(TOPICS)
+      .filter(([key]) => key.startsWith('situation.'))
+      .map(([key, d]) => [key, d.name, d.owner, d.scope, d.mode, d.maxHz] as const)
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+    expect(table).toEqual(
+      SPAN_DECLARATIONS.map((d) => `situation.${camel(d.machine)}`)
+        .sort()
+        .map((name) => [name, name, 'core', 'feed', 'state', 4]),
+    );
+    expect(table).toHaveLength(19);
+  });
   it('gives every core topic outside dev and ui scope feed', () => {
     const core = Object.entries(TOPICS).filter(([name, d]) => d.owner === 'core' && !/^(dev|ui)\./.test(name));
-    expect(core).toHaveLength(12);
+    expect(core).toHaveLength(11 + 19);
     for (const [, d] of core) expect(d.scope).toBe('feed');
   });
   it('has the analysis topics of sub-project 3 (spec A.3): owner, mode and rate', () => {
@@ -78,7 +91,7 @@ describe('TOPICS', () => {
   it.each(['ui.workbooks', 'ui.linkGroups', 'ui.alerts', 'ui.settings'] as const)('has the global topic %s: owner core, state', (name) => {
     expect(TOPICS[name]).toMatchObject({ name, owner: 'core', scope: 'global', mode: 'state' });
   });
-  it('exports the contract version', () => { expect(CONTRACT_VERSION).toBe(8); });
+  it('exports the contract version', () => { expect(CONTRACT_VERSION).toBe(10); });
 });
 
 describe('defineTopic', () => {
@@ -114,12 +127,21 @@ describe('topic types', () => {
   it('keep TopicName, TopicParams and TopicValue', () => {
     expectTypeOf<TopicName>().toEqualTypeOf<
       | 'feed.status' | 'session.info' | 'cars.overview' | 'car.detail' | 'car.telemetry' | 'laps'
-      | 'stints' | 'pitStops' | 'flagPhases' | 'events' | 'insights' | 'dev.calcStats' | 'dev.catalogue'
+      | 'stints' | 'pitStops' | 'events' | 'insights' | 'dev.calcStats' | 'dev.catalogue'
       | 'replay.status' | 'ui.workbooks' | 'ui.linkGroups' | 'ui.alerts' | 'ui.settings'
       | 'tyreWear.car' | 'fuel.car' | 'ers.car' | 'carBands.car' | 'damage.car' | 'gaps.intervals' | 'gaps.toCar'
       | 'gaps.gapper' | 'gaps.neighbourhood' | 'lapTimes.board' | 'lapTimes.projection' | 'battle.cards'
       | 'incidents.feed' | 'raceMoment.current'
+      | 'situation.carActivityPractice' | 'situation.carActivityQualifying' | 'situation.carActivityRace' | 'situation.carFlags'
+      | 'situation.carLocation' | 'situation.carStatus' | 'situation.clock' | 'situation.compoundRule' | 'situation.lapValidity'
+      | 'situation.penalties' | 'situation.raceControlPractice' | 'situation.raceControlQualifying' | 'situation.raceControlRace'
+      | 'situation.sessionPhasePractice' | 'situation.sessionPhaseQualifying' | 'situation.sessionPhaseRace' | 'situation.warnings'
+      | 'situation.weekendPhase' | 'situation.zoneFlags'
     >();
+    expectTypeOf<MachineSpans>().toEqualTypeOf<{ open: OpenSpan[]; closed: Span[] }>();
+    expectTypeOf<TopicValue<'situation.clock'>>().toEqualTypeOf<MachineSpans>();
+    expectTypeOf<TopicValue<'situation.carActivityRace'>>().toEqualTypeOf<MachineSpans>();
+    expectTypeOf<TopicParams<'situation.clock'>>().toEqualTypeOf<Record<string, never>>();
     expectTypeOf<TopicParams<'gaps.gapper'>>().toEqualTypeOf<{ reference: GapperReference }>();
     expectTypeOf<TopicParams<'lapTimes.board'>>().toEqualTypeOf<{ referenceCarId: CarId }>();
     expectTypeOf<TopicParams<'battle.cards'>>().toEqualTypeOf<{ carId: CarId }>();

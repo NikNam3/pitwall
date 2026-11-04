@@ -8,8 +8,7 @@ export type * from './util/deep-readonly.ts';
 export type { FrameMetrics } from './frame/metrics.ts';
 export { CalculatorRegistry, RegistryError, type RegistryErrorReason } from './calc/registry.ts';
 export { defineConfig, type ConfigKey, type ConfigShape, type ConfigValue } from './calc/config.ts';
-export { activeFlagPhaseOf } from './calc/active-flag-phase.ts';
-export { situationOf } from './calc/situation.ts';
+export { openSpansOf } from './calc/situation.ts';
 export { InsightBook } from './calc/insight-book.ts';
 export type { OnCalculatorRun, SchedulerBookkeeping, SchedulerInput, SchedulerOptions, SchedulerResult } from './calc/scheduler.ts';
 export type {

@@ -29,20 +29,6 @@ describe('Scheduler: event cadences', () => {
     s.run(input(0, ['laps']));
     expect(s.run(input(1, ['laps'], { before: len({ laps: 2 }), after: len({ laps: 3 }) })).ran).toEqual([]);
   });
-  it('flagChange runs when the flag phases changed, not for other changes', () => {
-    const s = sched([quick('f', { reads: ['flagPhases', 'timing'], cadence: 'flagChange' })]);
-    s.run(input(0));
-    expect(s.run(input(1, ['timing'])).ran).toEqual([]);
-    expect(s.run(input(2, ['session'])).ran).toEqual([]);
-    expect(s.run(input(3, ['flagPhases'])).ran).toEqual(['f']);
-    expect(s.run(input(4, ['timing'])).ran).toEqual([]);
-  });
-  it('flagChange remembers a flag change that came while the calculator was not affected by it', () => {
-    const s = sched([quick('f', { reads: ['laps'], cadence: 'flagChange' })]);
-    s.run(input(0));
-    expect(s.run(input(1, ['flagPhases'])).ran).toEqual([]);                           // due, but it reads nothing that changed
-    expect(s.run(input(2, ['laps'])).ran).toEqual(['f']);
-  });
 });
 
 describe('Scheduler: what a calculator reads', () => {

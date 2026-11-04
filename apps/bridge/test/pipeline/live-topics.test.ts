@@ -64,8 +64,8 @@ function liveProbe() {
   const seen: number[] = [];
   const probe: QuickCalculator<number> = {
     kind: 'quick', id: 'probe.live', reads: ['dynamics'], cadence: 'frame',
-    compute: ({ state }) => {
-      const dynamics = state.cars[1]!.dynamics;
+    compute: ({ live }) => {
+      const dynamics = live.cars[1]!.dynamics;
       const speed = dynamics.known ? dynamics.value.speedKmh : -1;
       seen.push(speed);
       return speed;

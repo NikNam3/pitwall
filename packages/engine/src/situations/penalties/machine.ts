@@ -1,9 +1,10 @@
 // The penalties sub-machine (contract C9, C12, C15, C17, C18, C19, C26): per car, race only, one span for what the car
-// owes now: `clear`, `timePenalty` (`{ totalMs }`), `driveThroughPending` or `stopGoPending` (`{ driveThroughs, stopGos,
-// infringement, totalMs }`), named after the oldest unserved penalty. A new span on every change of what it owes. The
-// unserved counts decide: a rise queues a penalty (a drive-through before a stop-go on one frame), taking the infringement
-// of the oldest unused PENA of its type (type 0 drive-through, 1 stop-go) of the same frame or up to PENDING_FRAMES
-// before; a fall serves the oldest of its type. DTSV and SGSV are never read: they open, close and rewrite nothing (C18).
+// owes now: `clear`, `timePenalty` (`{ totalMs, infringement }`), `driveThroughPending` or `stopGoPending`
+// (`{ driveThroughs, stopGos, infringement, totalMs }`), named after the oldest unserved penalty. A new span on every
+// change of what it owes. The unserved counts decide: a rise queues a penalty (a drive-through before a stop-go on one
+// frame), taking the infringement of the oldest unused PENA of its type (type 0 drive-through, 1 stop-go) of the same
+// frame or up to PENDING_FRAMES before; a fall serves the oldest of its type. A rise of the time penalties' total takes
+// the infringement of a PENA of type 4 the same way; a `timePenalty` span names it while that total stands. DTSV and SGSV are never read: they open, close and rewrite nothing (C18).
 // It reads the weekend phase as upstream (C14): it runs from the frame the phase is decided on.
 // Stop-gos and both kinds at once are not yet seen in any recording (C19): implemented from the game's spec.
 import { known, unknown, type CarId, type FrameNumber, type Known, type OpenSpan, type PendingPenaltyDetail, penaltiesSpans, type SessionTime, type TimePenaltyDetail } from '@pitwall/domain';
@@ -14,15 +15,19 @@ export const PENDING_FRAMES = 16;
 /** The PENA types that give a penalty to serve. */
 const DRIVE_THROUGH = 0;
 const STOP_GO = 1;
+/** The PENA type of a time penalty. */
+const TIME_PENALTY = 4;
+const WAITING_TYPES: ReadonlySet<number> = new Set([DRIVE_THROUGH, STOP_GO, TIME_PENALTY]);
 
 type Kind = 'clear' | 'timePenalty' | 'driveThroughPending' | 'stopGoPending';
 type Pena = { type: number; infringement: number; at: SessionTime; frameNumber: number };
 type Owed = { type: 'dt' | 'sg'; infringement: Known<number> };
 /**
  * Per car slot: the open span (the same object while it holds, C40) and its key (kind and detail), the unserved counts
- * of the frame before, the penalties owed in order and the PENAs waiting for a rise.
+ * and the time penalties' total of the frame before, the penalties owed in order, the infringement of the PENA that
+ * last raised the total, and the PENAs waiting for a rise.
  */
-type CarOpen = { span: OpenSpan; key: string; dt: number; sg: number; queue: Owed[]; penas: Pena[] };
+type CarOpen = { span: OpenSpan; key: string; dt: number; sg: number; totalMs: number; queue: Owed[]; timeInfringement: Known<number>; penas: Pena[] };
 type Open = { cars: CarOpen[] };
 
 const take = (penas: Pena[], type: number): Known<number> => {
@@ -33,9 +38,11 @@ const take = (penas: Pena[], type: number): Known<number> => {
   return known(pena.infringement, pena.at);
 };
 
-const describe = (queue: Owed[], dt: number, sg: number, totalMs: number): { kind: Kind; detail: object } => {
+const describe = (queue: Owed[], dt: number, sg: number, totalMs: number, timeInfringement: Known<number>): { kind: Kind; detail: object } => {
   const head = queue[0];
-  if (dt === 0 && sg === 0) return totalMs === 0 ? { kind: 'clear', detail: {} } : { kind: 'timePenalty', detail: { totalMs } satisfies TimePenaltyDetail };
+  if (dt === 0 && sg === 0) {
+    return totalMs === 0 ? { kind: 'clear', detail: {} } : { kind: 'timePenalty', detail: { totalMs, infringement: timeInfringement } satisfies TimePenaltyDetail };
+  }
   const detail: PendingPenaltyDetail = { driveThroughs: dt, stopGos: sg, infringement: head?.infringement ?? unknown('notReceived'), totalMs };
   const named = head?.type ?? (dt > 0 ? 'dt' : 'sg');
   return { kind: named === 'dt' ? 'driveThroughPending' : 'stopGoPending', detail };
@@ -73,11 +80,12 @@ const machine: SubMachine<Open> = {
           ...Array.from({ length: dt }, (): Owed => ({ type: 'dt', infringement: unknown('notReceived') })),
           ...Array.from({ length: sg }, (): Owed => ({ type: 'sg', infringement: unknown('notReceived') })),
         ];
-        return { ...opened(0, index, describe(queue, dt, sg, totalMs), input.at, input.frameNumber, true), dt, sg, queue, penas: [] };
+        const timeInfringement = unknown('notReceived');
+        return { ...opened(0, index, describe(queue, dt, sg, totalMs, timeInfringement), input.at, input.frameNumber, true), dt, sg, totalMs, queue, timeInfringement, penas: [] };
       }
       const penas = car.penas.filter((p) => input.frameNumber - p.frameNumber <= PENDING_FRAMES);
       for (const event of input.signals.events) {
-        if (event.code === 'PENA' && event.carId === index && (event.penaltyType === DRIVE_THROUGH || event.penaltyType === STOP_GO)) {
+        if (event.code === 'PENA' && event.carId === index && WAITING_TYPES.has(event.penaltyType)) {
           penas.push({ type: event.penaltyType, infringement: event.infringementType, at: input.at, frameNumber: input.frameNumber });
         }
       }
@@ -91,10 +99,12 @@ const machine: SubMachine<Open> = {
       // A rise queues after what is already owed: the drive-throughs first (the game lists it first).
       for (let n = car.dt; n < dt; n++) queue.push({ type: 'dt', infringement: take(penas, DRIVE_THROUGH) });
       for (let n = car.sg; n < sg; n++) queue.push({ type: 'sg', infringement: take(penas, STOP_GO) });
-      const current = describe(queue, dt, sg, totalMs);
-      if (car.key === keyOf(current)) return { span: car.span, key: car.key, dt, sg, queue, penas };
+      const timeInfringement = totalMs > car.totalMs ? take(penas, TIME_PENALTY) : car.timeInfringement;
+      const current = describe(queue, dt, sg, totalMs, timeInfringement);
+      const kept = { dt, sg, totalMs, queue, timeInfringement, penas };
+      if (car.key === keyOf(current)) return { span: car.span, key: car.key, ...kept };
       closed.push({ ...car.span, end: input.at });
-      return { ...opened(car.span.id + 1, index, current, input.at, input.frameNumber, false), dt, sg, queue, penas };
+      return { ...opened(car.span.id + 1, index, current, input.at, input.frameNumber, false), ...kept };
     });
     return { open: { cars }, closed };
   },

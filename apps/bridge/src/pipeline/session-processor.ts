@@ -1,7 +1,6 @@
 // One session of a feed: frames → SessionRunner → Scheduler → topics, plus its session file and its storage.
-import { sessionUidString, type FeedId, type ParticipantsValues, type SessionTime, type SessionUid } from '@pitwall/domain';
+import { sessionUidString, type FeedId, type MachineId, type ParticipantsValues, type SessionTime, type SessionUid } from '@pitwall/domain';
 import {
-  activeFlagPhaseOf,
   participantsValuesOf,
   projectionLengths,
   Scheduler,
@@ -11,6 +10,7 @@ import {
   type CalculatorRegistry,
   type FeedMetricsView,
   type Frame,
+  type SchedulerInput,
   type StepResult,
   type WeekendContext,
 } from '@pitwall/engine';
@@ -24,7 +24,7 @@ import type { SessionKey, SessionRow } from '../storage/db.ts';
 import type { SessionFile } from '../storage/session-files.ts';
 import { MAX_DUMPS_PER_SESSION, writeDebugDump } from './debug-dump.ts';
 import { sessionRowOf, type SessionStorage } from './session-storage.ts';
-import type { PublishError, TopicPublisher } from './topic-publisher.ts';
+import type { PublishError, SpansOf, TopicPublisher } from './topic-publisher.ts';
 
 export type SessionProcessorOptions = {
   feedId: FeedId;
@@ -129,6 +129,10 @@ export class SessionProcessor {
     const forTopics = scheduler.withDependencies(needed.filter((id) => this.#o.jobs?.isTrigger(id) !== true));
     const only = new Set(added.filter((id) => forTopics.has(id)));
     if (only.size > 0) this.#evaluateNow(only);
+    // A newly subscribed situation topic gets its machine's spans at once (C49).
+    for (const { error, topic } of this.#o.publisher.publishNewSituations(this.#spansOf)) {
+      this.#o.log.error({ feedId: this.#o.feedId, sessionUid: this.#uid, topic, err: error }, 'topic not published on a demand change, marked errored');
+    }
   }
 
   /**
@@ -169,6 +173,15 @@ export class SessionProcessor {
   /** The live state as it is now (C39's `live`): what a `bindLive` topic's select reads when the hub sends its value. */
   readonly #live = () => this.#runner.state;
 
+  /**
+   * A sub-machine's spans as they are now (C20): what a `bindSituation` topic carries when the hub sends its value,
+   * never built per frame. Copies of the open spans of the view's situation and of the projection's closed spans.
+   */
+  readonly #spansOf: SpansOf = (machine: MachineId) => {
+    const state = this.#runner.state;
+    return { open: [...(situationOf(state).byMachine[machine] ?? [])], closed: [...(state.history.spans[machine] ?? [])] };
+  };
+
   /** Each frame the runner applied: storage, the scheduler and the topics. */
   readonly #onResult = (result: StepResult, frame: Frame): void => {
     const { feedId, publisher, storage, log } = this.#o;
@@ -195,11 +208,12 @@ export class SessionProcessor {
         unpublished.push(...publisher.resendInsights(rewound));
       }
       this.#o.calcStats?.atSessionTime(result.state.sessionTime);
-      const scheduled = scheduler.run({ state: result.state, activeFlagPhase: activeFlagPhaseOf(result.state), situation: situationOf(result.state), changed: result.changed, delta: result.delta, feed: this.#o.feedView(), config: this.#o.config });
+      const scheduled = scheduler.run(this.#schedulerInput(result.state, result.changed, result.delta));
       // Each topic is published on its own: a failing feature binding never holds back the others.
       unpublished.push(
         ...publisher.publishOutputs(scheduled),
         ...publisher.publishLive(this.#live),
+        ...publisher.publishSituations(this.#spansOf, result.changed, rewound !== undefined),
         ...publisher.publishHistory(result.state.history, result.delta),
         ...publisher.publishInsights(scheduled.insights, { frameId: frame.frameId }),
       );
@@ -213,6 +227,24 @@ export class SessionProcessor {
   };
 
   /**
+   * The scheduler's input for `state` (C39): its live state, situation and projection, the weekend's earlier sessions, the
+   * run's config and the feed health; no priors (`{}` until the priors store exists, C62a).
+   */
+  #schedulerInput(state: StepResult['state'], changed: SchedulerInput['changed'], delta: SchedulerInput['delta']): SchedulerInput {
+    return {
+      live: state,
+      situation: situationOf(state),
+      history: state.history,
+      changed,
+      delta,
+      weekend: state.weekend,
+      feed: this.#o.feedView(),
+      config: this.#o.config,
+      priors: {},
+    };
+  }
+
+  /**
    * One scheduler pass on the current state with nothing changed and an empty history delta, restricted to the newly
    * needed calculators `only`: one that never ran is due and runs. Every other calculator stays untouched, `feed`
    * readers included (re-running `feed.status` on the last packet's time would undo a stale status). The outputs and
@@ -224,15 +256,7 @@ export class SessionProcessor {
     const { state } = this.#runner;
     this.#o.calcStats?.atSessionTime(state.sessionTime);
     const lengths = projectionLengths(state.history);
-    const scheduled = scheduler.run({
-      state,
-      activeFlagPhase: activeFlagPhaseOf(state),
-      situation: situationOf(state),
-      changed: new Set(),
-      delta: { before: lengths, after: lengths },
-      feed: this.#o.feedView(),
-      config: this.#o.config,
-    }, { only });
+    const scheduled = scheduler.run(this.#schedulerInput(state, new Set(), { before: lengths, after: lengths }), { only });
     // A pass between frames: a flashback to the frame before it undoes it too.
     const unpublished = [...publisher.publishOutputs(scheduled), ...publisher.publishInsights(scheduled.insights, { frameId: state.lastFrameId, between: true })];
     for (const { error, topic } of unpublished) {

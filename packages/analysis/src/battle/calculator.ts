@@ -1,13 +1,13 @@
 // `battle` (spec 6.3): each of our cars against the car ahead and the car behind. Stateless: the gap now is from `gaps.intervals`,
-// the closing rate from the line times, the pace from `pace`, the DRS status from race control's DRSE and DRSD events.
-import { known, unknown, type BattleCard, type BattleSide, type CarId, type CarState, type DrsStatus, type Known, type Ms } from '@pitwall/domain';
-import type { DeepReadonly, EngineView, QuickCalculator } from '@pitwall/engine/readers';
+// the closing rate from the line times, the pace from `pace`, the DRS status from race control's spans.
+import { known, unknown, type BattleCard, type BattleSide, type CarId, type CarState, type DrsOffReason, type DrsStatus, type Known, type Ms } from '@pitwall/domain';
+import { openSpansOf, type DeepReadonly, type EngineView, type QuickCalculator } from '@pitwall/engine/readers';
 import type { GapsOutput } from '../gaps/index.ts';
 import type { Pace } from '../pace/index.ts';
 import { lapsToReach, perLapRate, type RateSample } from '../per-lap-rate/index.ts';
-import { drsStatus } from '../shared/drs-status.ts';
+import { behaviourFor } from '../shared/behaviour.ts';
 import { ourCars } from '../shared/our-cars.ts';
-import { BATTLE, BATTLE_CONFIG, type BattleOutput } from './index.ts';
+import { BATTLE, BATTLE_BEHAVIOUR, BATTLE_CONFIG, type BattleOutput } from './index.ts';
 
 const NOT_APPLICABLE = unknown('notApplicable');
 type Car = DeepReadonly<CarState>;
@@ -35,7 +35,7 @@ function paceDelta(ours: Known<Ms> | undefined, theirs: Known<Ms> | undefined): 
 }
 
 function side(view: EngineView, gaps: GapsOutput, pace: Pace, drs: DrsStatus, ourId: CarId, theirId: CarId, isAhead: boolean): Known<BattleSide> {
-  const { cars } = view.state;
+  const { cars } = view.live;
   const ours = cars[ourId];
   const theirs = cars[theirId];
   if (ours === undefined || theirs === undefined) return NOT_APPLICABLE;
@@ -67,13 +67,23 @@ function side(view: EngineView, gaps: GapsOutput, pace: Pace, drs: DrsStatus, ou
       theirs: tyre(theirs),
       theirErsStoreJ: ers.known ? known(ers.value.storeJ, ers.at) : ers,
     },
-    view.state.sessionTime,
+    view.live.sessionTime,
   );
 }
 
+/** Race control's DRS now; outside a race nothing restricts it, in a race before any span it is `notEnabledYet`. */
+function drsOf(view: EngineView, race: boolean): DrsStatus {
+  if (!race) return { enabled: true };
+  const row = behaviourFor({ 'race-control-race': BATTLE_BEHAVIOUR['race-control-race'] }, view)[0];
+  if (row === undefined) return { enabled: false, reason: 'notEnabledYet' };
+  if (row.drs === 'enabled') return { enabled: true };
+  const detail = openSpansOf(view, 'race-control-race')[0]?.detail as { reason?: DrsOffReason } | undefined;
+  return { enabled: false, reason: detail?.reason ?? 'unknown' };
+}
+
 /** One of our cars against its neighbours in the order of `gaps.intervals`. */
-function cardOf(view: EngineView, gaps: GapsOutput | undefined, pace: Pace | undefined, drs: DrsStatus, ourId: CarId): BattleCard {
-  if (view.state.session.kind !== 'race') return { carId: ourId, ahead: NOT_APPLICABLE, behind: NOT_APPLICABLE, drs };
+function cardOf(view: EngineView, gaps: GapsOutput | undefined, pace: Pace | undefined, drs: DrsStatus, computed: boolean, ourId: CarId): BattleCard {
+  if (!computed) return { carId: ourId, ahead: NOT_APPLICABLE, behind: NOT_APPLICABLE, drs };
   if (gaps === undefined || pace === undefined) return { carId: ourId, ahead: unknown('notReceived'), behind: unknown('notReceived'), drs };
   const at = gaps.intervals.findIndex((i) => i.carId === ourId);
   const neighbour = (index: number) => (at < 0 ? undefined : gaps.intervals[index]?.carId);
@@ -91,14 +101,17 @@ function cardOf(view: EngineView, gaps: GapsOutput | undefined, pace: Pace | und
 export const battleCalculator: QuickCalculator<BattleOutput> = {
   id: BATTLE,
   kind: 'quick',
-  reads: [{ calculator: 'gaps' }, { calculator: 'pace' }, 'tyres', 'energy', 'events'],
+  reads: [{ calculator: 'gaps' }, { calculator: 'pace' }, 'tyres', 'energy', 'identity', 'spans:race-control-race', 'spans:weekend-phase'],
   cadence: { hz: 2 },
   compute(view) {
     const gaps = view.outputs.get('gaps') as GapsOutput | undefined;
     const pace = view.outputs.get('pace') as Pace | undefined;
-    const drs = drsStatus(view.state);
+    const phase = behaviourFor({ 'weekend-phase': BATTLE_BEHAVIOUR['weekend-phase'] }, view)[0];
+    // a pending weekend phase (no span yet) reads as a race grid (C14): the cards are computed, DRS is not enabled yet
+    const computed = phase === undefined || phase.cards === 'computed';
+    const drs = drsOf(view, phase?.cards !== 'notApplicable');
     const out: BattleOutput = {};
-    for (const id of ourCars(view.state)) out[id] = cardOf(view, gaps, pace, drs, id);
+    for (const id of ourCars(view.live)) out[id] = cardOf(view, gaps, pace, drs, computed, id);
     return out;
   },
 };

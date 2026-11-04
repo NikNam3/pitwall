@@ -9,14 +9,19 @@ import {
   type CarId,
   type CarState,
   type Corners,
-  type FlagPhase,
+  type Known,
   type LapRecord,
+  type MachineId,
   type MiniSectorCrossing,
   type Ms,
+  type NeutralisedDetail,
+  type OpenSpan,
   type RaceEvent,
   type RaceEventKind,
   type SessionState,
   type SessionTime,
+  type Span,
+  type SuspendedDetail,
 } from '../../packages/domain/src/index.ts';
 import {
   initialState,
@@ -66,18 +71,33 @@ export const IDLE_FEED: FeedMetricsView = {
 
 const range = (min: number, max: number) => ({ min, max });
 const perCorner = <T>(make: () => T): Corners<T> => ({ fl: make(), fr: make(), rl: make(), rr: make() });
+const mapCorners = <T, U>(c: Corners<T>, f: (v: T) => U): Corners<U> => ({ fl: f(c.fl), fr: f(c.fr), rl: f(c.rl), rr: f(c.rr) });
+
+/** One `lap()`'s own gain (end minus start) by default: it burns 2 kg of fuel, and its wear and ERS store do not change. */
+export const LAP_GAIN = { fuelKg: -2, wearPct: 0, ersStoreJ: 0 } as const;
 
 /**
  * A confirmed 90 s lap of car 0 (lap 1, sectors three thirds of `lapTimeMs` summing exactly to it (30 s each at 90 s), valid, soft C3, no SC), every `Known` field known at
- * `completedAt`. Lap-start samples: wear 0 % per corner, ERS store 4 MJ (so the lap's own wear and ERS change are 0). Lap-end fields: wear 0 % per corner, ERS store 4 MJ, deployed and harvested 0, no damage, channel
+ * `completedAt`. Lap-start samples: fuel 100 kg, wear 0 % per corner, ERS store 4 MJ. Lap-end fields: fuel 98 kg, wear 0 % per corner, ERS store 4 MJ, deployed and harvested 0, no damage, channel
  * ranges around tyres 90 to 100 degC and 23 to 27 psi, brakes 300 to 800 degC, engine 110 degC. `completedAt` defaults
  * to `lapNumber * lapTimeMs`. It describes frame 0, no applied frame (C26): set `frame` where membership matters. Any field is overridable.
+ *
+ * One lap's gain (end minus start) defaults to `LAP_GAIN`: fuel -2 kg, wear and ERS store 0. A lap-end sample set
+ * without its lap-start sample (`fuelAtEndKg` without `fuelAtStartKg`, and so on) gets a start that is the end minus that
+ * default gain, as of the end's `at`, per corner for wear (an unknown end gives the same unknown start). So a cumulative
+ * end value (wear 30 % after many laps) is never read as one lap's gain; a test of a lap's own gain sets both samples.
  */
 export function lap(over: Partial<LapRecord> = {}): LapRecord {
   const lapNumber = over.lapNumber ?? 1;
   const lapTimeMs = over.lapTimeMs ?? 90_000;
   const at = over.completedAt ?? lapNumber * lapTimeMs;
   const third = Math.floor(lapTimeMs / 3);
+  const startOf = <T extends number>(end: Known<T>, gain: number): Known<T> => (end.known ? known((end.value - gain) as T, end.at) : end);
+  const starts: Partial<LapRecord> = {
+    ...(over.fuelAtEndKg && !over.fuelAtStartKg && { fuelAtStartKg: startOf(over.fuelAtEndKg, LAP_GAIN.fuelKg) }),
+    ...(over.wearAtEndPct && !over.wearAtStartPct && { wearAtStartPct: mapCorners(over.wearAtEndPct, (w) => startOf(w, LAP_GAIN.wearPct)) }),
+    ...(over.ersStoreAtEndJ && !over.ersStoreAtStartJ && { ersStoreAtStartJ: startOf(over.ersStoreAtEndJ, LAP_GAIN.ersStoreJ) }),
+  };
   return {
     carId: carId(0),
     lapNumber,
@@ -125,6 +145,7 @@ export function lap(over: Partial<LapRecord> = {}): LapRecord {
       engineC: known(range(110, 110), at),
     },
     frame: 0,
+    ...starts,
     ...over,
   };
 }
@@ -150,9 +171,62 @@ export function event(over: Partial<RaceEvent> & { kind: RaceEventKind }): RaceE
   return { at: 0, params: {}, frame: 0, ...over };
 }
 
-/** A safety-car phase from 0 to 60 s, leader lap 1 to 2, no SC sub-phases; override any field. */
-export function flagPhase(over: Partial<FlagPhase> = {}): FlagPhase {
-  return { kind: 'SC', start: 0, end: 60_000, startLeaderLap: 1, endLeaderLap: 2, scPhases: [], ...over };
+/** The race's session-phase sub-machine: its `neutralised` and `suspended` spans are the neutralisations (C17, C20). */
+export const RACE_PHASES: MachineId = 'session-phase-race';
+
+/** What a neutralisation is: an SC or a VSC (a `neutralised` span, its `detail.car`), or a red flag (a `suspended` span). */
+export type NeutralisationOver = {
+  kind?: 'SC' | 'VSC' | 'red';
+  start?: SessionTime;
+  end?: SessionTime;
+  confirmed?: boolean;
+  id?: number;
+  machine?: MachineId;
+  startFrame?: number;
+  endFrame?: number;
+};
+
+/**
+ * A closed span of a session-phase sub-machine standing for a neutralisation (C17, C20): by default a confirmed SC
+ * (`neutralised`, deployed at its start) of `session-phase-race` from 0 to 60 s, span id 0; `kind: 'red'` is a
+ * `suspended` span whose restart is not yet known. Its frames default to its times (`startFrame = start`,
+ * `endFrame = end`): tests that give their crossings and laps `frame = at` keep frames and times in one order (C26).
+ */
+export function neutralisation({
+  kind = 'SC',
+  start = 0,
+  end = 60_000,
+  confirmed = true,
+  id = 0,
+  machine = RACE_PHASES,
+  startFrame = start,
+  endFrame = end,
+}: NeutralisationOver = {}): Span {
+  const detail: NeutralisedDetail | SuspendedDetail =
+    kind === 'red' ? { restart: { known: false, reason: 'notReceived' } } : { car: kind, stages: [{ stage: 'deployed', at: start }] };
+  return { machine, id, kind: kind === 'red' ? 'suspended' : 'neutralised', start, end, confirmed, detail, startFrame, endFrame };
+}
+
+/** The same span still open, as `view.situation` holds it (C20): no `end`, no `endFrame`. */
+export function openNeutralisation(over: Omit<NeutralisationOver, 'end' | 'endFrame'> = {}): OpenSpan {
+  const { end: _end, endFrame: _endFrame, ...open } = neutralisation(over);
+  return open;
+}
+
+/**
+ * The view parts of these session-phase spans (C20): the closed ones in the projection's `spans`, the open one in the
+ * situation's `byMachine`, each under its machine; the situation is a race (`RACING`) unless `situation` says otherwise.
+ * Pass `spans` in `engineView({ history })` and `situation` as `engineView({ situation })`.
+ */
+export function phaseSpans(
+  closed: readonly Span[] = [],
+  open?: OpenSpan,
+  situation: EngineView['situation'] = RACING,
+): { spans: Record<MachineId, Span[]>; situation: EngineView['situation'] } {
+  const spans: Record<MachineId, Span[]> = {};
+  for (const span of closed) (spans[span.machine] ??= []).push(span);
+  const byMachine = open === undefined ? situation.byMachine : { ...situation.byMachine, [open.machine]: [open] };
+  return { spans, situation: { ...situation, byMachine } };
 }
 
 /**
@@ -307,15 +381,15 @@ export function telemetryRestricted(car: CarState): CarState {
   return copy;
 }
 
-/** The view's situation by default: not paused (the session phase is in the projection's spans, C20). */
-export const RACING: EngineView['situation'] = { paused: false };
+/** The view's situation by default: a race, no span open (the session phase is in the projection's spans, C20). */
+export const RACING: EngineView['situation'] = { weekendPhase: { kind: 'race', format: 'grandPrix' }, byMachine: {} };
 
 /**
  * The `EngineView` of a race session. `cars` (default: none, a 22-slot list is padded with idle cars so ids index it)
  * are placed by their `id`; `history` fills the lists you give and leaves the rest empty; `session` merges onto a
  * default race session; `config` is the effective config by section key (absent sections read their declared defaults);
  * `outputs` are the upstream calculators' outputs; `delta` defaults to "everything in `history` is new"; `situation`
- * defaults to `RACING`. Feed is idle and healthy; `feed` overrides it. `changed` is empty.
+ * defaults to `RACING`. Feed is idle and healthy; `feed` overrides it. `changed` is empty; no weekend context, no priors.
  */
 export function engineView({
   cars = [],
@@ -324,7 +398,6 @@ export function engineView({
   config = {},
   outputs = new Map(),
   delta,
-  activeFlagPhase,
   situation = RACING,
   feed = {},
   playerCar = 0,
@@ -336,7 +409,6 @@ export function engineView({
   config?: EngineView['config'];
   outputs?: ReadonlyMap<string, unknown>;
   delta?: EngineView['delta'];
-  activeFlagPhase?: EngineView['activeFlagPhase'];
   situation?: EngineView['situation'];
   feed?: Partial<FeedMetricsView>;
   playerCar?: number;
@@ -350,30 +422,31 @@ export function engineView({
   const slots = Array.from({ length: Math.max(MAX_CARS, ...cars.map((c) => c.id + 1)) }, (_, i) => base.cars[i] ?? createCarState(carId(i)));
   for (const c of cars) slots[c.id] = c;
   const full: Projection = { ...emptyProjection(), ...history };
-  const { open: _open, log: _log, ...state } = {
+  const { open: _open, log: _log, history: _history, weekend: _weekend, signals: _signals, frameNumber: _frameNumber, ...live } = {
     ...base,
     cars: slots,
-    history: full,
     session: merge(base.session, session) as SessionState,
     playerCar: carId(playerCar),
     sessionTime,
   };
   const lengths = projectionLengths(full);
   return {
-    state,
-    activeFlagPhase,
+    live,
     situation,
+    history: full,
     changed: new Set(),
     delta: delta ?? { before: projectionLengths(emptyProjection()), after: lengths },
+    weekend: undefined,
     feed: { ...IDLE_FEED, ...feed },
     outputs,
     config,
+    priors: {},
   };
 }
 
 /** A projection with every list empty. */
 const emptyProjection = (): Projection => ({
-  laps: [], stints: [], pitStops: [], crossings: [], events: [], clock: [], spans: {}, flagPhases: [],
+  laps: [], stints: [], pitStops: [], crossings: [], events: [], penalties: [], clock: [], spans: {},
 });
 
 /** A projection with the given lists and the rest empty: pass it to `engineView({ history })`. */

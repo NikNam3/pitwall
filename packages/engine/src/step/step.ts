@@ -1,17 +1,16 @@
 import type { Frame } from '../frame/frame.ts';
-import { applyFlagPhases } from '../history/flags.ts';
 import { logWriter } from '../log/log.ts';
 import { ProjectionTracker } from '../log/projection.ts';
 import { eventsRecorder } from '../recorders/events.ts';
 import { lapsRecorder } from '../recorders/laps.ts';
 import { miniSectorsRecorder } from '../recorders/mini-sectors.ts';
+import { penaltiesRecorder } from '../recorders/penalties.ts';
 import { pitStopsRecorder } from '../recorders/pit-stops.ts';
 import { stintsRecorder } from '../recorders/stints.ts';
 import { readSignals } from '../signals/read.ts';
 import { CAR_STATUS, carsInSessionOf } from '../situations/car-status/in-session.ts';
 import { STEP0_CLOCK, type ClockStep } from '../situations/clock/clock.ts';
 import { runMachine, samePlain, situationOf } from '../situations/run.ts';
-import { trackedEventsOf } from '../situations/tracked-events.ts';
 import type { EngineState } from '../state/engine-state.ts';
 import { conditionUpdate } from './state-update/condition.ts';
 import { dynamicsUpdate } from './state-update/dynamics.ts';
@@ -91,6 +90,7 @@ export const RECORDERS: Array<Recorder<unknown>> = [
   stintsRecorder,
   eventsRecorder,
   miniSectorsRecorder,
+  penaltiesRecorder,
 ];
 
 /** The projection of the state's log, kept in the state (`history`, `open.projection`). */
@@ -119,12 +119,10 @@ const record = (state: EngineState, input: RecorderInput, out: StepOutput): void
  * step of frame N sees `state.frameNumber` N, and each fact records the frame it describes, each span the frames it
  * opened and closed on. Then four steps: step 0, the clock (`step0Clock`: the frame on the race clock and its clock
  * facts, appended after step 2); step 1, the state update; step 2, the machine (`runMachine`: the registered
- * sub-machines, with step 0's clock, and their closed spans; `tracked`, what the frame's situation events tell the
- * recorders); step 3, the recorders, with the frame's number, the machine's situation (its open spans and the spans
- * it closed on the frame) and the cars in the session it gives, worked out once for the frame. Then the projection takes in what the frame appended, computing membership from frame
- * numbers with the open spans. Last the flag phases, the
- * legacy mirror of the race's session-phase spans (until Task 19), read the projection's closed spans, the situation
- * and the live state (C10), and the projection takes in what they appended.
+ * sub-machines, with step 0's clock, and their closed spans); step 3, the recorders, with the frame's number, the
+ * machine's situation (its open spans and the spans it closed on the frame) and the cars in the session it gives,
+ * worked out once for the frame. Last the projection takes in what the frame appended, computing membership from frame
+ * numbers with the open spans.
  */
 export function step(state: EngineState, received: Frame, report?: FlashbackReport): StepOutput {
   const out: StepOutput = { changed: new Set(), corrections: [] };
@@ -136,11 +134,8 @@ export function step(state: EngineState, received: Frame, report?: FlashbackRepo
   appendClock(state, clock);
   const situation = situationOf(state);
   const carsInSession = carsInSessionOf(situation.byMachine[CAR_STATUS]);
-  const tracked = trackedEventsOf(state.signals.events);
-  record(state, { at: frame.sessionTime, frameId: frame.frameId, frameNumber: state.frameNumber, live: state, situation, closed, carsInSession, tracked }, out);
-  const projection = projectionTrackerOf(state);
-  projection.update(situation);
-  if (applyFlagPhases(state, situation, carsInSession, out)) projection.update(situation);
+  record(state, { at: frame.sessionTime, frameId: frame.frameId, frameNumber: state.frameNumber, live: state, situation, closed, carsInSession }, out);
+  projectionTrackerOf(state).update(situation);
   state.lastFrameId = frame.frameId;
   state.sessionTime = frame.sessionTime;
   return out;

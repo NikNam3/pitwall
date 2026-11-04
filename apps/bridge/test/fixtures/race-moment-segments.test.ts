@@ -16,7 +16,8 @@ import {
   tyreWearCalculator,
   type RaceMomentOutput,
 } from '@pitwall/analysis';
-import { activeFlagPhaseOf } from '@pitwall/engine';
+import type { NeutralisedDetail } from '@pitwall/domain';
+import { situationOf } from '@pitwall/engine';
 import { replayScheduled } from './engine-replay.ts';
 import { segmentPath } from './replay.ts';
 
@@ -34,7 +35,17 @@ const CALCULATORS = [
   carBandsCalculator,
 ];
 
-/** One run of race-moment: its output and the flag phase open on that frame (its kind and start), if any. */
+/**
+ * The race's neutralisation or suspension open on that frame (the open `session-phase-race` span, C20), by the kind
+ * race-moment names it (SC, VSC, red), and its start.
+ */
+const openPhaseOf = (state: Parameters<typeof situationOf>[0]): { kind: string; start: number } | undefined => {
+  const open = situationOf(state).byMachine['session-phase-race']?.[0];
+  if (open?.kind === 'neutralised') return { kind: (open.detail as NeutralisedDetail).car, start: open.start };
+  return open?.kind === 'suspended' ? { kind: 'red', start: open.start } : undefined;
+};
+
+/** One run of race-moment: its output and the neutralisation open on that frame (its kind and start), if any. */
 type MomentRun = { moment: RaceMomentOutput; phase: { kind: string; start: number } | undefined };
 
 /** Every run of race-moment over the segment, in order. */
@@ -42,8 +53,7 @@ async function momentRuns(file: string): Promise<MomentRun[]> {
   const runs: MomentRun[] = [];
   await replayScheduled(segmentPath(file), CALCULATORS, ({ state }, scheduled) => {
     if (!scheduled.ran.includes(RACE_MOMENT)) return;
-    const open = activeFlagPhaseOf(state);
-    runs.push({ moment: structuredClone(scheduled.outputs.get(RACE_MOMENT) as RaceMomentOutput), phase: open && { kind: open.kind, start: open.start } });
+    runs.push({ moment: structuredClone(scheduled.outputs.get(RACE_MOMENT) as RaceMomentOutput), phase: openPhaseOf(state) });
   });
   return runs;
 }

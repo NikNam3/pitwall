@@ -1,9 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { carId, known, unknown, type CarState, type ChannelRange, type LapRecord } from '../../../domain/src/index.ts';
 import type { EngineView } from '@pitwall/engine';
+import type { OpenSpan } from '../../../domain/src/index.ts';
 import { carBandsCalculator } from '../../src/car-bands/calculator.ts';
-import { CAR_BANDS, CAR_BANDS_CONFIG, type CarBands } from '../../src/car-bands/index.ts';
-import { carState, engineView, lap, realismHidden } from '../../../../test-support/builders/index.ts';
+import { CAR_BANDS, CAR_BANDS_BEHAVIOUR, CAR_BANDS_CONFIG, type CarBands } from '../../src/car-bands/index.ts';
+import { carState, lap, realismHidden } from '../../../../test-support/builders/index.ts';
+import { guardedQuick, openSpan, situatedView } from '../situated.ts';
+
+/** The calculator through its guarded view (C41): every case fails on a read it does not declare. */
+const calc = guardedQuick(carBandsCalculator);
 
 // Every case runs on TEST_BANDS, a fixed config (the defaults before 2026-10-30), so no case depends on the defaults;
 // only 'the default bands' pins those. Soft is a dry compound. The engine band's lo is pinned to 0 (engineHi only).
@@ -20,10 +25,21 @@ const withSurface = (c: number) =>
   carState({
     tyres: { corners: { fl: { surfaceTempC: known(c, 0) }, fr: { surfaceTempC: known(c, 0) }, rl: { surfaceTempC: known(c, 0) }, rr: { surfaceTempC: known(c, 0) } } },
   });
-const bandsOf = (car: CarState, laps: LapRecord[] = [], opts: { config?: EngineView['config']; session?: object } = {}): CarBands => {
+const bandsOf = (
+  car: CarState,
+  laps: LapRecord[] = [],
+  opts: { config?: EngineView['config']; session?: object; status?: string; spans?: OpenSpan[] } = {},
+): CarBands => {
   const config = opts.config ?? { [CAR_BANDS_CONFIG.key]: TEST_BANDS };
-  const view = engineView({ cars: [car], history: { laps }, config, ...(opts.session && { session: opts.session }) });
-  const out = carBandsCalculator.compute(view);
+  const view = situatedView({
+    cars: [car],
+    history: { laps },
+    config,
+    ...(opts.session && { session: opts.session }),
+    ...(opts.status && { status: { [car.id]: opts.status } }),
+    ...(opts.spans && { spans: opts.spans }),
+  });
+  const out = calc.compute(view);
   return out[car.id]!;
 };
 const perCorner = <T>(make: () => T) => ({ fl: make(), fr: make(), rl: make(), rr: make() });
@@ -33,11 +49,12 @@ const surfaceRange = (min: number, max: number): ChannelRange['tyres'] =>
   perCorner(() => ({ surfaceC: known({ min, max }, 0), carcassC: known({ min: 90, max: 100 }, 0), pressurePsi: known({ min: 23, max: 27 }, 0) }));
 
 describe('car-bands calculator', () => {
-  it('is a quick calculator at 4 Hz that reads tyres, condition and laps', () => {
+  it('is a quick calculator at 4 Hz that reads tyres, condition, laps, car-status and the race activity, not the session', () => {
     expect(carBandsCalculator.id).toBe(CAR_BANDS);
     expect(carBandsCalculator.kind).toBe('quick');
     expect(carBandsCalculator.cadence).toEqual({ hz: 4 });
-    expect(carBandsCalculator.reads).toEqual(expect.arrayContaining(['tyres', 'condition', 'laps']));
+    expect(carBandsCalculator.reads).toEqual(expect.arrayContaining(['tyres', 'condition', 'laps', 'spans:car-status', 'spans:car-activity-race']));
+    expect(carBandsCalculator.reads).not.toContain('session');
   });
 
   it('the default bands: dry, inter and wet tyre bands; one band each for pressure, brakes and engine', () => {
@@ -221,7 +238,82 @@ describe('car-bands calculator', () => {
   });
 
   it('is stateless: the same view gives the same output twice', () => {
-    const view = engineView({ cars: [withSurface(110)], history: { laps: [lap({ lapNumber: 2 })] }, config: { [CAR_BANDS_CONFIG.key]: TEST_BANDS } });
-    expect(carBandsCalculator.compute(view)).toEqual(carBandsCalculator.compute(view));
+    const view = situatedView({ cars: [withSurface(110)], history: { laps: [lap({ lapNumber: 2 })] }, config: { [CAR_BANDS_CONFIG.key]: TEST_BANDS } });
+    expect(calc.compute(view)).toEqual(calc.compute(view));
+  });
+
+  describe('behaviour table (C44): a row per car-status and race-activity kind', () => {
+    it('exports CAR_BANDS_BEHAVIOUR over car-status and the race activity', () => {
+      expect(Object.keys(CAR_BANDS_BEHAVIOUR).sort()).toEqual(['car-activity-race', 'car-status']);
+    });
+
+    // carcass, pressure and engine above their bands now; the last lap a rate lap whose carcass was above the band all lap
+    const hot = carState({
+      tyres: { corners: perCorner(() => ({ carcassTempC: known(120, 0), pressurePsi: known(32, 0) })) },
+      condition: { engineTempC: known(130, 0) },
+    });
+    const hotLap = lap({
+      lapNumber: 2,
+      channelRange: rangeOf({
+        tyres: perCorner(() => ({ surfaceC: known({ min: 90, max: 100 }, 0), carcassC: known({ min: 115, max: 125 }, 0), pressurePsi: known({ min: 23, max: 27 }, 0) })),
+      }),
+    });
+    const above = { known: true, value: 'above', at: 0 };
+    const activity = (kind: string) => [openSpan('car-activity-race', kind, { car: 0 })];
+
+    for (const kind of ['racingLap', 'inLap', 'servingPenalty', 'outLap', 'finished', 'coolDown', 'notCompeting']) {
+      it(`race activity ${kind}: carcass, pressure and engine have their live state; the last lap is judged`, () => {
+        const b = bandsOf(hot, [hotLap], { spans: activity(kind) });
+        for (const corner of corners) {
+          expect([b.tyres[corner].carcassC.state, b.tyres[corner].pressurePsi.state]).toEqual([above, above]);
+          expect(b.tyres[corner].carcassC.outForFullLap).toBe(true);
+        }
+        expect(b.engineC.state).toEqual(above);
+      });
+    }
+
+    it('race activity boxStop: the bands are off, every live state notApplicable; values, bands and the last lap`s judgement stay', () => {
+      const b = bandsOf(hot, [hotLap], { spans: activity('boxStop') });
+      for (const corner of corners) {
+        for (const channel of ['surfaceC', 'carcassC', 'pressurePsi'] as const) expect(b.tyres[corner][channel].state).toEqual(NO_LIVE_STATE);
+        expect(b.brakesC[corner].state).toEqual(NO_LIVE_STATE);
+        expect(b.tyres[corner].carcassC).toMatchObject({ value: known(120, 0), band: { lo: 85, hi: 110 }, outForFullLap: true });
+        expect(b.tyres[corner].pressurePsi).toMatchObject({ value: known(32, 0), band: { lo: 20, hi: 31 } });
+      }
+      expect(b.engineC).toEqual({ value: known(130, 0), state: NO_LIVE_STATE, band: { lo: 0, hi: 125 }, outForFullLap: false });
+    });
+
+    it('only the car in its box stop is off: another car racing reads its live state', () => {
+      const other = { ...hot, id: carId(1) };
+      const view = situatedView({
+        cars: [hot, other],
+        history: { laps: [hotLap] },
+        config: { [CAR_BANDS_CONFIG.key]: TEST_BANDS },
+        spans: [openSpan('car-activity-race', 'boxStop', { car: 0 }), openSpan('car-activity-race', 'racingLap', { car: 1 })],
+      });
+      const out = calc.compute(view);
+      expect(out[carId(0)]!.engineC.state).toEqual(NO_LIVE_STATE);
+      expect(out[carId(1)]!.engineC.state).toEqual(above);
+    });
+
+    // the live state's transitional `active` says the opposite of car-status in every case, so only car-status decides (C43)
+    const statusOut = (kind: string, active: boolean) =>
+      calc.compute(situatedView({ cars: [{ ...hot, active }], config: { [CAR_BANDS_CONFIG.key]: TEST_BANDS }, status: { 0: kind } }))[carId(0)];
+
+    it('car-status competing: the car has its bands', () => {
+      expect(statusOut('competing', false)?.engineC.state).toEqual(above);
+    });
+
+    it('car-status retired: the car is still in the session and keeps its bands', () => {
+      expect(statusOut('retired', false)?.engineC.state).toEqual(above);
+    });
+
+    it('car-status disqualified: the car is still in the session and keeps its bands', () => {
+      expect(statusOut('disqualified', false)?.engineC.state).toEqual(above);
+    });
+
+    it('car-status absent: no entry, though the live state calls the slot active', () => {
+      expect(statusOut('absent', true)).toBeUndefined();
+    });
   });
 });

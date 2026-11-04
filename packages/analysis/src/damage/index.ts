@@ -2,6 +2,7 @@
 import type { CarId, DamageState } from '@pitwall/domain';
 
 export type { DamageJump, DamageParts, DamageState } from '@pitwall/domain';
+export * from './behaviour.ts';
 export * from './config.ts';
 
 /** The calculator id. */

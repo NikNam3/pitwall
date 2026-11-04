@@ -42,12 +42,12 @@ export type IncidentWarning = { count: number; limit: number };
 /** A penalty's ruling, from the PENA `penaltyType` codes the shared penalty classes count as penalties. */
 export type PenaltyKind = 'driveThrough' | 'stopGo' | 'grid' | 'time' | 'disqualified' | 'tyreRegulations';
 
-/** Penalty entries: what was given; `timeMs` for a time penalty (the PENA `time`). */
-export type IncidentPenalty = { kind: PenaltyKind; timeMs?: Ms };
+/** A penalty entry's penalty: its kind, its time for a time penalty, and the infringement its record names (unknown without one, C3). */
+export type IncidentPenalty = { kind: PenaltyKind; timeMs?: Ms; infringement?: Known<number> };
 
 /** One entry of `incidents.feed` (newest first); it updates as its time lost resolves. */
 export type IncidentEntry = {
-  /** Stable across updates: kind + cars + session time. */
+  /** Stable across updates: kind + cars + session time; a penalty entry's id names its penalty record. */
   id: string;
   at: SessionTime;
   lap: number;

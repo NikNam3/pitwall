@@ -7,7 +7,7 @@ import { lapMarkOf, lapNotBegun, lapStepOf, markActivity } from './lap-boundary.
 import type { LapCursor } from './lap-cursor.ts';
 import { emptyChannels, lapEndSamples, lapStartSamples, observeLapFrame, unknownLapEnd } from './lap-samples.ts';
 import { initialRaceStartMark, raceStartStep, type RaceStartMark } from './race-start.ts';
-import { activityOf, lapInvalid, neutralisedBy, RACE_ACTIVITY, recordsNoLap, type SituationSpan } from './spans.ts';
+import { activityOf, finishOpened, lapInvalid, neutralisedBy, recordsNoLap, type SituationSpan } from './spans.ts';
 
 /**
  * A lap that has a record: its provisional one with the id the log gave it (C21) until Session History confirms it, and
@@ -209,7 +209,7 @@ const addFrame = (own: LapsOwn, car: LiveCar, cursor: LapCursor, completed: bool
  * describes its frame (C26); Session History's confirmed version supersedes it (C25). The car's lap ends there.
  */
 const finishLap = (own: LapsOwn, car: LiveCar, activity: SituationSpan | undefined, f: LapsPass): void => {
-  if (activity?.machine !== RACE_ACTIVITY || activity.kind !== 'finished' || activity.startFrame !== f.frameNumber) return;
+  if (!finishOpened(activity, f.frameNumber)) return;
   const lap = own.crossings[car.id];
   own.crossings[car.id] = undefined;
   if (!lap || lap.frame < f.frameNumber - 1) return;

@@ -2,11 +2,10 @@
 // Only the projection, the runner, step, the history writers and the storage writer import this module (C28).
 import type { FactList, FrameNumber, MachineId } from '@pitwall/domain';
 import type { DeepReadonly } from '../util/deep-readonly.ts';
-import type { FactOf, LegacyList, Log, LogLengths, LogVoidFact, LogWriter } from './types.ts';
+import type { FactOf, Log, LogLengths, LogVoidFact, LogWriter } from './types.ts';
 
 /** The lists of the log that hold one fact type each; the span lists are `spans:<machine>`. */
-export const FACT_LISTS = ['laps', 'stints', 'pitStops', 'crossings', 'events', 'clock'] as const satisfies readonly FactList[];
-export const LEGACY_LISTS = ['flagPhases'] as const satisfies readonly LegacyList[];
+export const FACT_LISTS = ['laps', 'stints', 'pitStops', 'crossings', 'events', 'penalties', 'clock'] as const satisfies readonly FactList[];
 
 const SPANS = 'spans:';
 
@@ -20,10 +19,10 @@ export const createLog = (): Log => ({
   pitStops: [],
   crossings: [],
   events: [],
+  penalties: [],
   clock: [],
   voids: [],
   spans: {},
-  flagPhases: [],
 });
 
 /** The array of a list; a span list a sub-machine has not written yet is created. */
@@ -78,25 +77,20 @@ export const logLengths = (log: DeepReadonly<Log>): LogLengths => {
   for (const list of FACT_LISTS) lengths[list] = log[list].length;
   lengths.voids = log.voids.length;
   for (const [machine, spans] of Object.entries(log.spans)) lengths[`${SPANS}${machine}`] = spans.length;
-  for (const list of LEGACY_LISTS) lengths[list] = log[list].length;
   return lengths;
 };
 
-const isLegacy = (list: string): list is LegacyList => (LEGACY_LISTS as readonly string[]).includes(list);
-
 /**
  * The void fact of a rewind (C27): every list that grew since `since` (the lengths at the restored snapshot) is voided
- * from its length then to its length now, the legacy lists too (in `legacy`); `target` is the frame the state was
- * restored to and `frame` its frame number (C26). Nothing is removed: the log only grows (C24).
+ * from its length then to its length now; `target` is the frame the state was restored to and `frame` its frame
+ * number (C26). Nothing is removed: the log only grows (C24).
  */
 export const voidFactOf = (log: DeepReadonly<Log>, since: LogLengths, target: LogVoidFact['target'], frame: FrameNumber): LogVoidFact => {
   const ranges: LogVoidFact['ranges'] = {};
-  const legacy: NonNullable<LogVoidFact['legacy']> = {};
-  for (const [list, now] of Object.entries(logLengths(log)) as Array<[FactList | LegacyList, number]>) {
+  for (const [list, now] of Object.entries(logLengths(log)) as Array<[FactList, number]>) {
     const from = since[list] ?? 0;
     if (list === 'voids' || now <= from) continue;
-    if (isLegacy(list)) legacy[list] = [from, now];
-    else ranges[list] = [from, now];
+    ranges[list] = [from, now];
   }
-  return { target, ranges, ...(Object.keys(legacy).length > 0 && { legacy }), frame };
+  return { target, ranges, frame };
 };

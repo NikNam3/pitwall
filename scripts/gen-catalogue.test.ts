@@ -7,7 +7,7 @@ import { buildCatalogue, checkCatalogue, findAnalysisFolders } from './gen-catal
 //    features folder, the contracts topics folder and, optionally, the analysis folder). Defaults are the repo's own.
 //  - Fixture files are plain objects without imports (so tsc, eslint and depcruise may read them): a widget
 //    register.ts exports `{ decl, component }`, a feature register.ts a feature (`calculators`, `topics` as binding
-//    shapes `{ topic, from | fromHistory | fromInsights | fromJob }`, `jobs`, `config`), a topic file the topic
+//    shapes `{ topic, from | fromHistory | fromInsights | fromJob | fromLive | fromSituation }`, `jobs`, `config`), a topic file the topic
 //    definition (the topic name is the file name).
 //  - Paths in the catalogue are what the directories above give; the tests only compare their tails.
 const TREES = join(import.meta.dirname, 'fixtures', 'catalogue');
@@ -67,6 +67,17 @@ describe('buildCatalogue on the clean tree', () => {
     expect(feature('undercut-card').analysisFolder).toBeUndefined();
     expect(feature('feed-status').private).toBe(true);
     expect(feature('session-info').private).toBe(false);
+  });
+});
+
+describe('buildCatalogue labels every binding kind (Task 23 ruling 4)', () => {
+  it('a bindSituation topic is a situation of its machine, a bindLive topic live, beside history and insights', async () => {
+    const c = await buildCatalogue(tree('binding-kinds'));
+    const binding = (name: string) => c.topics.find((t) => t.name === name)?.binding;
+    expect(binding('situation.clock')).toEqual({ kind: 'situation', source: 'clock', feature: 'situations' });
+    expect(binding('car.detail')).toEqual({ kind: 'live', source: 'car.detail', feature: 'car-detail' });
+    expect(binding('laps')).toEqual({ kind: 'history', source: 'laps', feature: 'history' });
+    expect(binding('insights')).toEqual({ kind: 'insights', source: 'insights', feature: 'insights' });
   });
 });
 

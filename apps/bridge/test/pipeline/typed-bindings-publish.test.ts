@@ -25,9 +25,9 @@ function setup(features: Parameters<typeof defineFeature>[0][], subscriptions: A
 }
 
 const result = (over: Partial<SchedulerResult>): SchedulerResult => ({ ran: [], outputs: new Map(), errors: [], insights: [], ...over });
-const lengths = (over: LogLengths) => ({ laps: 0, stints: 0, pitStops: 0, flagPhases: 0, events: 0, crossings: 0, ...over });
+const lengths = (over: LogLengths) => ({ laps: 0, stints: 0, pitStops: 0, events: 0, crossings: 0, ...over });
 const delta = (before: number, after: number, rewound = false): HistoryDelta => ({ before: lengths({ laps: before }), after: lengths({ laps: after }), ...(rewound ? { rewound: { frameId: -1, at: 0 } } : {}) });
-const historyOf = (laps: unknown[]) => ({ ...lengths({}), laps, stints: [], pitStops: [], flagPhases: [], events: [], crossings: [], clock: [], spans: {} }) as unknown as Projection;
+const historyOf = (laps: unknown[]) => ({ ...lengths({}), laps, stints: [], pitStops: [], events: [], crossings: [], penalties: [], clock: [], spans: {} }) as unknown as Projection;
 const messages = (sent: ServerMessage[], id: string) => sent.filter((m) => 'id' in m && m.id === id);
 
 describe('TopicPublisher with bindState', () => {

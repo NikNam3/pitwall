@@ -1,5 +1,5 @@
-import type { Computed, InsightEntry, TopicName, TopicValue } from '@pitwall/contracts';
-import type { CarId } from '@pitwall/domain';
+import type { Computed, InsightEntry, MachineSpans, TopicName, TopicValue } from '@pitwall/contracts';
+import type { CarId, MachineId } from '@pitwall/domain';
 import type {
   Calculator,
   CalculatorId,
@@ -33,9 +33,14 @@ type BindingShape =
   /** The results of the job with this id, as `Computed` values. */
   | { topic: TopicName; fromJob: CalculatorId }
   /** A part of the feed's live state, read when the hub sends a value. */
-  | { topic: TopicName; fromLive: LiveSelect<unknown> };
+  | { topic: TopicName; fromLive: LiveSelect<unknown> }
+  /** A sub-machine's spans: its open spans in the situation and its closed spans in the projection (C20). */
+  | { topic: TopicName; fromSituation: MachineId };
 
-/** Where a topic's value comes from. Opaque: only `bindState`, `bindHistory`, `bindInsights`, `bindJob` and `bindLive` make one. */
+/**
+ * Where a topic's value comes from. Opaque: only `bindState`, `bindHistory`, `bindSituation`, `bindInsights`, `bindJob` and
+ * `bindLive` make one (C55).
+ */
 export type TopicBinding = BindingShape & { readonly [bindingBrand]: true };
 
 // The helpers are the only place that vouches for a binding's types, hence the cast to the brand.
@@ -77,6 +82,17 @@ export const bindHistory = <T extends TopicName, L extends ProjectedList>(
   topic: T,
   list: ProjectionState[L][number] extends TopicValue<T> ? L : never,
 ): TopicBinding => binding({ topic, fromHistory: list });
+
+/**
+ * Binds a core topic to a sub-machine's spans (C54, C55): its open spans (`view.situation`) and its closed spans (the
+ * projection's `spans[machine]`). The topic's value must be `MachineSpans`. The hub reads them when it sends a
+ * subscription a value (at most `maxHz`), never per frame; a topic no one subscribed is never published (C49). The
+ * machine is not tied to its topic by type: `MachineId` is a string.
+ */
+export const bindSituation = <T extends TopicName>(
+  topic: MachineSpans extends TopicValue<T> ? T : never,
+  machine: MachineId,
+): TopicBinding => binding({ topic, fromSituation: machine });
 
 /** Binds a topic to the insight entries; the topic's value must be `InsightEntry`. */
 export const bindInsights = <T extends TopicName>(

@@ -3,7 +3,7 @@ import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import type { GapsOutput } from '../../src/gaps/index.ts';
 import { gapperLines, gapsToCar } from '../../src/gaps/gaps.ts';
-import { flagPhase } from '../../../../test-support/builders/index.ts';
+import { neutralisation } from '../../../../test-support/builders/index.ts';
 import { byTime, plain, progressOf, run, viewOf } from './race.ts';
 
 /**
@@ -133,7 +133,7 @@ describe('gap properties', () => {
         const last = history.at(-1)!.at;
         const [start, end] = [a, b].map((f) => Math.round(first + f * (last - first))).sort((x, y) => x - y) as [number, number];
         const leaderAt = (t: number) => Math.max(...history.filter((m) => m.at <= t).map(progressOf)) / MINI_SECTORS;
-        const lines = gapperLines(run(viewOf(history, { flagPhases: [flagPhase({ start, end })] })), { kind: 'fixed', lapMs: 90_000 });
+        const lines = gapperLines(run(viewOf(history, { phases: [neutralisation({ start, end })] })), { kind: 'fixed', lapMs: 90_000 });
         expect(lines.phases).toHaveLength(1);
         const [phase] = lines.phases;
         expect(phase!.fromLap).toBeCloseTo(leaderAt(start), 9);

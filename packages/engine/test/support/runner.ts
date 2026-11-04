@@ -44,7 +44,7 @@ export const shown = (state: DeepReadonly<EngineState>) => {
 };
 
 /** The fact types of the log; with the span list of each sub-machine (`spans:<machine>`) they are its fact lists. */
-const FACT_TYPES = ['laps', 'stints', 'pitStops', 'crossings', 'events', 'clock'] as const;
+const FACT_TYPES = ['laps', 'stints', 'pitStops', 'crossings', 'events', 'penalties', 'clock'] as const;
 
 /** The facts of every fact list of the log by list name (`spans:<machine>` for a span list); no void facts, no legacy list. */
 export const factLists = (log: DeepReadonly<EngineState['log']>): Record<string, readonly unknown[]> => ({

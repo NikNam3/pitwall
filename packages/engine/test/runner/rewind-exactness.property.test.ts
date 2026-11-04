@@ -8,11 +8,9 @@ import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import { feedId, toSessionTime, type CarId, type Insight } from '@pitwall/domain';
 import {
-  activeFlagPhaseOf,
   CalculatorRegistry,
   Scheduler,
   SessionRunner,
-  situationOf,
   type Calculator,
   type Frame,
   type IncrementalCalculator,
@@ -22,6 +20,7 @@ import {
 import { IDLE_FEED } from '../helpers/incremental.ts';
 import { arbRace, raceFrames } from '../support/arb-race.ts';
 import { initFor } from '../support/run.ts';
+import { inputOf } from '../support/scheduler.ts';
 
 const F = feedId('test');
 const insight = (key: string, params: Insight['params'] = {}): Insight => ({ key, severity: 'info', category: 'race', feedId: F, kind: key.split(':')[0]!, params, raisedAt: toSessionTime(0) });
@@ -31,7 +30,7 @@ const lapsPerCar: QuickCalculator<Record<number, number>> = {
   kind: 'quick', id: 'probe.lapsPerCar', reads: ['laps'], cadence: 'frame',
   compute: (v) => {
     const out: Record<number, number> = {};
-    for (const l of v.state.history.laps) out[l.carId] = (out[l.carId] ?? 0) + 1;
+    for (const l of v.history.laps) out[l.carId] = (out[l.carId] ?? 0) + 1;
     return out;
   },
   insights: (out) => Object.entries(out).flatMap(([car, n]) => (n >= 2 ? [insight(`laps:${car}`)] : [])),
@@ -40,17 +39,17 @@ const lapsPerCar: QuickCalculator<Record<number, number>> = {
 /** The race order at 4 Hz; raises `leader:<car>` for the car in P1, so a change of leader resolves one and raises another. */
 const order: QuickCalculator<CarId[]> = {
   kind: 'quick', id: 'probe.order', reads: ['timing'], cadence: { hz: 4 },
-  compute: (v) => v.state.cars.filter((c) => c.active).sort((a, b) => a.timing.position - b.timing.position).map((c) => c.id),
+  compute: (v) => v.live.cars.filter((c) => c.active).sort((a, b) => a.timing.position - b.timing.position).map((c) => c.id),
   insights: (out) => (out[0] === undefined ? [] : [insight(`leader:${out[0]}`)]),
 };
 
 /** Mini-sector crossings per car, folded every frame; raises `crossings:<car>` from the 20th on. */
 const crossings: IncrementalCalculator<Record<number, number>, Record<number, number>> = {
   kind: 'incremental', id: 'probe.crossings', reads: ['miniSectors'], cadence: 'frame',
-  init: (v) => crossings.update({}, { before: { crossings: 0 }, after: { crossings: v.state.history.crossings.length } }, v),
+  init: (v) => crossings.update({}, { before: { crossings: 0 }, after: { crossings: v.history.crossings.length } }, v),
   update: (acc, d, v) => {
     const next = { ...acc };
-    for (const c of v.state.history.crossings.slice(d.before.crossings ?? 0, d.after.crossings ?? 0)) next[c.carId] = (next[c.carId] ?? 0) + 1;
+    for (const c of v.history.crossings.slice(d.before.crossings ?? 0, d.after.crossings ?? 0)) next[c.carId] = (next[c.carId] ?? 0) + 1;
     return next;
   },
   output: (acc) => acc,
@@ -60,10 +59,10 @@ const crossings: IncrementalCalculator<Record<number, number>, Record<number, nu
 /** The sum of the lap times per car, folded on each completed lap. */
 const lapTimes: IncrementalCalculator<Record<number, number>, Record<number, number>> = {
   kind: 'incremental', id: 'probe.lapTimes', reads: ['laps'], cadence: 'lapCompleted',
-  init: (v) => lapTimes.update({}, { before: { laps: 0 }, after: { laps: v.state.history.laps.length } }, v),
+  init: (v) => lapTimes.update({}, { before: { laps: 0 }, after: { laps: v.history.laps.length } }, v),
   update: (acc, d, v) => {
     const next = { ...acc };
-    for (const l of v.state.history.laps.slice(d.before.laps ?? 0, d.after.laps ?? 0)) next[l.carId] = (next[l.carId] ?? 0) + l.lapTimeMs;
+    for (const l of v.history.laps.slice(d.before.laps ?? 0, d.after.laps ?? 0)) next[l.carId] = (next[l.carId] ?? 0) + l.lapTimeMs;
     return next;
   },
   output: (acc) => acc,
@@ -84,7 +83,7 @@ function run(frames: Frame[]) {
       // The old mechanisms that still rewrite the log in place (the situation tracker's, target frame -1 until Task 9)
       // append no void fact: they undo no frame, so they drop no change.
       if (target !== undefined && target.frameId >= 0) kept = kept.filter((k) => k.frameId <= target.frameId);
-      const input = { state: r.state, activeFlagPhase: activeFlagPhaseOf(r.state), situation: situationOf(r.state), changed: r.changed, delta: r.delta, feed: IDLE_FEED, config: {} };
+      const input = inputOf(r, { feed: IDLE_FEED });
       const scheduled = scheduler.run(input);
       outputs = scheduled.outputs;
       kept.push(...scheduled.insights.map((change) => ({ frameId: applied.frameId, change })));

@@ -4,8 +4,8 @@ import { defineSpans } from '../facts.ts';
 import type { Known } from '../known.ts';
 import type { Ms } from '../units.ts';
 
-/** The detail of a `timePenalty` span: the car's time penalties in total. */
-export type TimePenaltyDetail = { totalMs: Ms };
+/** The detail of a `timePenalty` span: the car's time penalties in total, and the infringement of the PENA that raised it (unknown without one, C3). */
+export type TimePenaltyDetail = { totalMs: Ms; infringement: Known<number> };
 
 /**
  * The detail of a `driveThroughPending` or `stopGoPending` span: the unserved drive-throughs and stop-gos, the

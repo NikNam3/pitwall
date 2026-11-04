@@ -8,13 +8,13 @@ const sessionInfo: QuickCalculator<SessionInfo> = {
   kind: 'quick',
   reads: ['session', 'identity'],
   cadence: 'sessionChange',
-  compute: ({ state }) => ({
-    feedId: state.feedId,
-    sessionUid: state.sessionUid,
-    playerCar: state.playerCar,
-    ...(state.teammateCar !== undefined && { teammateCar: state.teammateCar }),
-    realism: state.realism,
-    session: structuredClone(state.session) as SessionState,
+  compute: ({ live }) => ({
+    feedId: live.feedId,
+    sessionUid: live.sessionUid,
+    playerCar: live.playerCar,
+    ...(live.teammateCar !== undefined && { teammateCar: live.teammateCar }),
+    realism: live.realism,
+    session: structuredClone(live.session) as SessionState,
   }),
 };
 

@@ -1,12 +1,15 @@
 // The engine on committed segments of normal sessions, one behaviour per segment (facts verified in fixtures/index.json).
 import { describe, expect, it } from 'vitest';
 import { currentLaps, driverKeyString, type LapRecord } from '@pitwall/domain';
-import type { FlashbackInfo, StepResult } from '@pitwall/engine';
+import { situationOf, type FlashbackInfo, type StepResult } from '@pitwall/engine';
 import { InvariantChecker } from '../../../../packages/engine/test/support/invariants.ts';
 import { replayRunner } from './engine-replay.ts';
 import { SEGMENT_FILES, segmentPath } from './replay.ts';
 
 const run = (file: string, onResult?: (r: StepResult) => void) => replayRunner(segmentPath(file), onResult);
+/** The cars seen retiring: a `retired` car-status span, closed or open (C20), that opened in the segment (not on joining it). */
+const retired = (state: StepResult['state']): number[] =>
+  [...(state.history.spans['car-status'] ?? []), ...(situationOf(state).byMachine['car-status'] ?? [])].filter((s) => s.kind === 'retired' && s.joinedAt !== true).map((s) => s.carId!);
 
 describe('race-zandvoort-lap10: car 1 (the player) crosses the line into lap 10', () => {
   it('records lap 9 as provisional from LapData, then confirmed from SessionHistory, with 74 655 ms', async () => {
@@ -66,11 +69,15 @@ describe('race-zandvoort-lap10: car 1 (the player) crosses the line into lap 10'
   });
 });
 
+// The start lights and lights out are the race's session-phase spans (C13, C20), never race events (Task 21).
 describe('race-singapore-start: start lights and lights out', () => {
-  it('STLG x5 become startLights events with the light count, then LGOT lightsOut, all at session time 0', async () => {
+  it('STLG x5 then LGOT: one startLights span from the first light to lights out, where racing opens, all at session time 0', async () => {
     const { state } = await run('race-singapore-start.pwrec.gz');
-    expect(state.history.events.filter((e) => e.kind === 'startLights').map((e) => [e.at, e.params['lights']])).toEqual([[0, 1], [0, 2], [0, 3], [0, 4], [0, 5]]);
-    expect(state.history.events.filter((e) => e.kind === 'lightsOut').map((e) => e.at)).toEqual([0]);
+    const closed = state.history.spans['session-phase-race'] ?? [];
+    const lights = closed.filter((s) => s.kind === 'startLights');
+    expect(lights.map((s) => [s.start, s.end])).toEqual([[0, 0]]);
+    const racing = [...closed, ...(situationOf(state).byMachine['session-phase-race'] ?? [])].find((s) => s.kind === 'racing');
+    expect(racing).toMatchObject({ start: 0, startFrame: lights[0]!.endFrame });
   });
 });
 
@@ -100,27 +107,28 @@ describe('race-zandvoort-pit-exit: car 1 still in the pit lane after its stop', 
 });
 
 describe('race-zandvoort-vsc: car 2 stops with terminal damage and the VSC comes out', () => {
-  it('SCAR opens a VSC flag phase, then the Session packet sets the vsc flag and counts the period', async () => {
+  it('SCAR opens a VSC neutralisation of the race, then the Session packet sets the vsc flag and counts the period', async () => {
     const flags: string[] = [];
     const { state } = await run('race-zandvoort-vsc.pwrec.gz', ({ state: st }) => {
       if (flags.at(-1) !== st.session.flag) flags.push(st.session.flag);
     });
-    expect(state.open.flagPhase).toMatchObject({ kind: 'VSC', start: 914_178, scPhases: [{ phase: 'deployed', at: 914_178 }] });
+    expect(situationOf(state).byMachine['session-phase-race']).toMatchObject([{ kind: 'neutralised', start: 914_178, detail: { car: 'VSC', stages: [{ stage: 'deployed', at: 914_178 }] } }]);
     expect(flags).toEqual(['green', 'vsc']);
     expect(state.session.periods).toEqual({ sc: 0, vsc: 1, red: 0 });
   });
 
-  it('the retirement shows in car 2: an event and the retired result status', async () => {
+  // A retirement is car-status's `retired` span (C13, C20), never a race event (Task 21).
+  it('the retirement shows in car 2: a retired car-status span and the retired result status', async () => {
     const { state } = await run('race-zandvoort-vsc.pwrec.gz');
-    expect(state.history.events.filter((e) => e.kind === 'retirement').map((e) => e.carId)).toEqual([2]);
+    expect(retired(state)).toEqual([2]);
     expect(state.cars[2]!.timing.resultStatus).toBe('retired');
   });
 });
 
 describe('race-zandvoort-retire: car 1 (the player) retires with terminal damage', () => {
-  it('records the retirement of car 1', async () => {
+  it('records the retirement of car 1: its retired car-status span', async () => {
     const { state } = await run('race-zandvoort-retire.pwrec.gz');
-    expect(state.history.events.filter((e) => e.kind === 'retirement').map((e) => e.carId)).toEqual([1]);
+    expect(retired(state)).toEqual([1]);
   });
 });
 

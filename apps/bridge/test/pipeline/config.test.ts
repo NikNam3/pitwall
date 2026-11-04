@@ -34,12 +34,12 @@ function watcher(seen: number[] = []) {
     id: 'test.watcher',
     reads: ['timing'],
     cadence: 'frame',
-    compute: (view) => view.state.cars.length,
+    compute: (view) => view.live.cars.length,
     insights: (out, _prev, view): Insight[] => {
       const { limit, label } = threshold.read(view);
       seen.push(limit);
       if (out <= limit) return [];
-      return [{ key: 'test.over', severity: 'advisory', category: 'race', feedId: view.state.feedId, kind: 'test.over', params: { limit, label }, raisedAt: view.state.sessionTime }];
+      return [{ key: 'test.over', severity: 'advisory', category: 'race', feedId: view.live.feedId, kind: 'test.over', params: { limit, label }, raisedAt: view.live.sessionTime }];
     },
   };
   const features: Feature[] = [

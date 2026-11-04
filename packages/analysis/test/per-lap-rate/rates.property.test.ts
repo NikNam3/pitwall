@@ -1,4 +1,6 @@
 // Properties of the three per-lap-gain rates (tyre wear, fuel burn, ERS store trend) on generated stints.
+// The three calculators are stateless quick calculators (one compute over the view), so incremental = from scratch and
+// flashback hold by construction and have no property here (docs/testing.md section 5: incremental calculators only).
 import { carId, known, unknown, type Corners, type LapRecord, type Percent } from '@pitwall/domain';
 import type { EngineView } from '@pitwall/engine';
 import fc from 'fast-check';
@@ -7,7 +9,13 @@ import { ersCalculator } from '../../src/ers/calculator.ts';
 import { fuelCalculator } from '../../src/fuel/calculator.ts';
 import { SESSION_REMAINING, type SessionRemaining } from '../../src/session-remaining/index.ts';
 import { tyreWearCalculator } from '../../src/tyre-wear/calculator.ts';
-import { carState, engineView, lap } from '../../../../test-support/builders/index.ts';
+import { carState, lap } from '../../../../test-support/builders/index.ts';
+import { guardedQuick, situatedView } from '../situated.ts';
+
+/** The three calculators through their guarded views (C41), on views with car 0 in the session (its car-status span). */
+const tyreWearCalc = guardedQuick(tyreWearCalculator);
+const fuelCalc = guardedQuick(fuelCalculator);
+const ersCalc = guardedQuick(ersCalculator);
 
 const MJ = 1_000_000;
 const corners = <T>(v: T): Corners<T> => ({ fl: v, fr: v, rl: v, rr: v });
@@ -81,36 +89,19 @@ function viewOf(laps: LapRecord[]): EngineView {
       ers: known({ storeJ: ers, mode: 'medium' as const, harvestedMgukJ: 0, harvestedMguhJ: 0, deployedJ: 0 }, 0),
     },
   });
-  return engineView({ cars: [car], history: { laps }, outputs: new Map([[SESSION_REMAINING, remaining]]) });
+  return situatedView({ cars: [car], history: { laps }, outputs: new Map([[SESSION_REMAINING, remaining]]) });
 }
 
 /** The three rates of car 0. */
 const rates = (view: EngineView) => ({
-  wear: tyreWearCalculator.compute(view)[carId(0)]!.corners,
-  fuel: fuelCalculator.compute(view)[carId(0)]!.burnKgPerLap,
-  ers: ersCalculator.compute(view)[carId(0)]!.storeTrendJPerLap,
+  wear: tyreWearCalc.compute(view)[carId(0)]!.corners,
+  fuel: fuelCalc.compute(view)[carId(0)]!.burnKgPerLap,
+  ers: ersCalc.compute(view)[carId(0)]!.storeTrendJPerLap,
 });
 
 const stintArb = fc.array(genLap, { minLength: 0, maxLength: 9 });
 
 describe('per-lap-gain rates: properties', () => {
-  it('property: incremental = from scratch and flashback: after any sequence of views, a history gives what a fresh compute over it gives', () => {
-    fc.assert(
-      fc.property(stintArb, fc.nat(), (gen, cutSeed) => {
-        const laps = lapsOf(gen);
-        const prefixes = Array.from({ length: laps.length + 1 }, (_, k) => laps.slice(0, k));
-        // fresh: each prefix on its own, before anything else ran
-        const fresh = prefixes.map((p) => rates(viewOf(p)));
-        // incremental: lap by lap, in order
-        prefixes.forEach((p, k) => expect(rates(viewOf(p)), `lap ${k}`).toEqual(fresh[k]));
-        // flashback: from the whole history back to a shorter one
-        const cut = cutSeed % prefixes.length;
-        rates(viewOf(laps));
-        expect(rates(viewOf(prefixes[cut]!)), `flashback to lap ${cut}`).toEqual(fresh[cut]);
-      }),
-    );
-  });
-
   it('property: a lap under SC for 2 s or more never changes the wear or ERS rate, whatever its own samples', () => {
     fc.assert(
       fc.property(

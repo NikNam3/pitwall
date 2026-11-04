@@ -5,7 +5,7 @@ export type SessionKind = 'unknown' | 'practice' | 'qualifying' | 'sprintShootou
 export type Weather = 'clear' | 'lightCloud' | 'overcast' | 'lightRain' | 'heavyRain' | 'storm';
 export type Trend = 'up' | 'down' | 'flat';
 export type ZoneFlag = 'unknown' | 'none' | 'green' | 'blue' | 'yellow';
-/** From `safetyCarStatus`. Red flags are `FlagPhase`s, not a session flag. */
+/** From `safetyCarStatus`. A red flag is a `suspended` span of a session-phase sub-machine, not a session flag. */
 export type SessionFlag = 'green' | 'sc' | 'vsc' | 'formation';
 
 export type ForecastSample = {

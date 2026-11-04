@@ -5,6 +5,7 @@ import {
   MINI_SECTORS,
   unknown,
   type CarId,
+  type FrameNumber,
   type Known,
   type MiniSectorCrossing,
   type Ms,
@@ -18,14 +19,11 @@ export const MEDIAN_LAPS = 5;
 /** ...and needs at least this many. */
 export const MEDIAN_MIN_LAPS = 3;
 
-/** A stretch of session time that is no racing for a car: a neutralised phase (an open one ends at `Infinity`) or a pit visit. */
-export type Span = { start: SessionTime; end: SessionTime };
+/** A crossing; "progress" counts mini-sector boundaries from the race start (gaps' `progressOf`); `frame`: the frame it describes (C26). */
+export type Point = { at: SessionTime; progress: number; frame: FrameNumber };
 
-/** A crossing; "progress" counts mini-sector boundaries from the race start (gaps' `progressOf`). */
-export type Point = { at: SessionTime; progress: number };
-
-/** One mini-sector against the car's median for its segment: `lossMs` negative = faster. */
-export type MiniSector = { start: SessionTime; end: SessionTime; progress: number; lossMs: Ms };
+/** One mini-sector against the car's median for its segment: `lossMs` negative = faster; `endFrame`: its end crossing's frame (C26). */
+export type MiniSector = { start: SessionTime; end: SessionTime; endFrame: FrameNumber; progress: number; lossMs: Ms };
 
 /** What one complete mini-sector gave: a loss, or why there is none. */
 export type SegmentLoss = MiniSector | 'excluded' | 'fewLaps';
@@ -41,6 +39,8 @@ export type Track = {
   samples: Ms[][];
   /** By the progress of a mini-sector's start; absent until the mini-sector is complete. */
   loss: SegmentLoss[];
+  /** By the progress of a mini-sector's start: the frame of its end crossing (C26), set with its `loss`. */
+  lossFrame: FrameNumber[];
   /** Every slow mini-sector, in order. */
   slow: MiniSector[];
 };
@@ -53,19 +53,20 @@ export type Snapshot = { latest: (Point | undefined)[]; position: (number | unde
 
 export const lapOfProgress = (progress: number): number => Math.floor(progress / MINI_SECTORS) + 1;
 
-export const emptyTrack = (): Track => ({ points: [], atByProgress: [], evaluated: 0, samples: [], loss: [], slow: [] });
+export const emptyTrack = (): Track => ({ points: [], atByProgress: [], evaluated: 0, samples: [], loss: [], lossFrame: [], slow: [] });
 
 /** Forgets what was folded from the crossings, so the next `evaluate` starts over with the current exclusions. */
 export function resetTrack(track: Track): void {
   track.evaluated = 0;
   track.samples = [];
   track.loss = [];
+  track.lossFrame = [];
   track.slow = [];
 }
 
 export function addCrossing(track: Track, c: MiniSectorCrossing): void {
   const progress = progressOf(c);
-  track.points.push({ at: c.at, progress });
+  track.points.push({ at: c.at, progress, frame: c.frame });
   track.atByProgress[progress] = c.at;
 }
 
@@ -89,25 +90,26 @@ const median = (values: readonly Ms[]): Ms => {
 };
 
 /**
- * Evaluates the mini-sectors completed since the last call: one `excluded` covers is neither a loss nor a sample;
- * otherwise its loss is its duration minus the median of the segment's samples, and it is slow above `timeLossMs`.
- * A gap in the crossings (a skipped segment) is no mini-sector.
+ * Evaluates the mini-sectors completed since the last call, each from its start crossing to its end crossing: one
+ * `excluded` covers is neither a loss nor a sample; otherwise its loss is its duration minus the median of the
+ * segment's samples, and it is slow above `timeLossMs`. A gap in the crossings (a skipped segment) is no mini-sector.
  */
-export function evaluate(track: Track, timeLossMs: Ms, excluded: (start: SessionTime, end: SessionTime) => boolean): void {
+export function evaluate(track: Track, timeLossMs: Ms, excluded: (from: Point, to: Point) => boolean): void {
   let from = track.points[track.evaluated - 1];
   for (const to of track.points.slice(track.evaluated)) {
     const prev = from;
     from = to;
     if (prev === undefined || to.progress !== prev.progress + 1) continue;
     const { progress, at: start } = prev;
-    if (excluded(start, to.at)) {
+    track.lossFrame[progress] = to.frame;
+    if (excluded(prev, to)) {
       track.loss[progress] = 'excluded';
       continue;
     }
     const samples = (track.samples[progress % MINI_SECTORS] ??= []);
     const ms = to.at - start;
     if (samples.length >= MEDIAN_MIN_LAPS) {
-      const sector = { start, end: to.at, progress, lossMs: ms - median(samples) };
+      const sector = { start, end: to.at, endFrame: to.frame, progress, lossMs: ms - median(samples) };
       track.loss[progress] = sector;
       if (sector.lossMs > timeLossMs) track.slow.push(sector);
     } else track.loss[progress] = 'fewLaps';
@@ -117,11 +119,11 @@ export function evaluate(track: Track, timeLossMs: Ms, excluded: (start: Session
   track.evaluated = track.points.length;
 }
 
-/** The car's slow mini-sectors grouped into runs of consecutive ones. */
-export function slowRuns(carId: CarId, track: Track): SlowRun[] {
+/** The car's slow mini-sectors (in order) grouped into runs of consecutive ones. */
+export function slowRuns(carId: CarId, slow: readonly MiniSector[]): SlowRun[] {
   const runs: SlowRun[] = [];
   let run: SlowRun | undefined;
-  for (const s of track.slow) {
+  for (const s of slow) {
     if (run !== undefined && run.endProgress === s.progress) {
       run.endProgress = s.progress + 1;
       run.endAt = s.end;

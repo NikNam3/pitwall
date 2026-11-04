@@ -8,7 +8,7 @@ const feedStatus: QuickCalculator<FeedStatus> = {
   kind: 'quick',
   reads: ['feed'],
   cadence: 'frame',
-  compute: (view) => feedStatusOf(view.state.feedId, view.feed),
+  compute: (view) => feedStatusOf(view.live.feedId, view.feed),
 };
 
 export default defineFeature({

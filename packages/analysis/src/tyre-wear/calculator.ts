@@ -3,7 +3,10 @@ import type { DeepReadonly, EngineView, QuickCalculator } from '@pitwall/engine/
 import { ALARMS_CONFIG } from '../alarms/config.ts';
 import { classifyLap, LAP_CLASSES_CONFIG } from '../lap-classes/index.ts';
 import { lapsToReach, PER_LAP_RATE_CONFIG, perLapGainRate, type GainSample } from '../per-lap-rate/index.ts';
+import { behaviourFor } from '../shared/behaviour.ts';
+import { CAR_STATUS_READS } from '../shared/car-status.ts';
 import { currentStintLaps } from '../shared/stint-laps.ts';
+import { TYRE_WEAR_BEHAVIOUR, type TyreWearEffect } from './behaviour.ts';
 import { TYRE_WEAR, TYRE_WEAR_CONFIG, type TyreWear, type TyreWearOutput } from './index.ts';
 
 const CORNERS = ['fl', 'fr', 'rl', 'rr'] as const;
@@ -35,23 +38,25 @@ function onFittedSet(laps: readonly LapRecord[], tyres: DeepReadonly<CarState['t
 
 /**
  * Wear now, its rate (the median of the rate laps' own wear gains, over the current stint's laps on the fitted set) and
- * the laps until the wear limit (0 at or past it), per corner and car.
+ * the laps until the wear limit (0 at or past it), per corner and car in the session (its rows, `TYRE_WEAR_BEHAVIOUR`).
  */
 export const tyreWearCalculator: QuickCalculator<TyreWearOutput> = {
   id: TYRE_WEAR,
   kind: 'quick',
-  reads: ['laps', 'stints', 'tyres'],
+  reads: ['laps', 'stints', 'tyres', CAR_STATUS_READS],
   cadence: { hz: 4 },
   compute: (view: EngineView): TyreWearOutput => {
     const { limitPct } = TYRE_WEAR_CONFIG.read(view);
     const { wearLapsWarning: warnLaps } = ALARMS_CONFIG.read(view);
     const rateOpts = PER_LAP_RATE_CONFIG.read(view);
-    const classes = { isRace: view.state.session.kind === 'race', ...LAP_CLASSES_CONFIG.read(view) };
+    // only `forRate` is read, and a rate lap has no lap-1 rule: the weekend phase changes nothing here
+    const classes = { isRace: false, ...LAP_CLASSES_CONFIG.read(view) };
     const out: Record<CarId, TyreWear> = {};
-    for (const car of view.state.cars) {
-      if (!car.active) continue;
+    for (const car of view.live.cars) {
+      const effect: TyreWearEffect = Object.assign({}, ...behaviourFor(TYRE_WEAR_BEHAVIOUR, view, car.id));
+      if (effect.inSession !== true) continue;
       const own = onFittedSet(
-        currentStintLaps(view.state.history, car.id).filter((l) => classifyLap(l, classes).forRate),
+        currentStintLaps(view.history, car.id).filter((l) => classifyLap(l, classes).forRate),
         car.tyres,
       );
       const corner = (c: (typeof CORNERS)[number]): TyreWear['corners']['fl'] => {

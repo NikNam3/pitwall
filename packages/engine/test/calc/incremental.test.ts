@@ -8,8 +8,8 @@ type Counts = Record<string, number>;
 const fold = (acc: Counts, events: ReadonlyArray<{ kind: string }>) => { const n = { ...acc }; for (const e of events) n[e.kind] = (n[e.kind] ?? 0) + 1; return n; };
 const eventCounter: IncrementalCalculator<Counts, Counts> = {
   kind: 'incremental', id: 'eventCounts', reads: ['events'], cadence: 'frame',
-  init: (v) => fold({}, v.state.history.events),
-  update: (acc, d, v) => fold(acc, v.state.history.events.slice(d.before.events, d.after.events)),
+  init: (v) => fold({}, v.history.events),
+  update: (acc, d, v) => fold(acc, v.history.events.slice(d.before.events, d.after.events)),
   output: (acc) => acc,
 };
 const scenario = (gaps: Array<[number, number]>) => {

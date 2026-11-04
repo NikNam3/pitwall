@@ -1,85 +1,75 @@
-// Flag phases and mini-sector crossings beyond the main cases: guards, defaults and change tags (the pit stops moved to
-// test/recorders/pit-stops.test.ts, migration Task 17).
+// The race's neutralisations and suspensions (the `neutralised` and `suspended` spans of `session-phase-race`, which
+// replaced the flag phases in Task 19) and mini-sector crossings beyond the main cases: guards and defaults (the pit
+// stops moved to test/recorders/pit-stops.test.ts, migration Task 17; the leader's lap of a neutralisation is the
+// readers' `leaderLapAt`, packages/analysis/test/shared/neutralised.test.ts).
 import { describe, expect, it } from 'vitest';
 import type { EventDetails } from '@pitwall/protocol';
 import { ScenarioBuilder } from '../builders/index.ts';
 import { runScenario } from '../support/run.ts';
+import type { EngineState } from '../../src/index.ts';
 
 const noop = () => {};
 
-describe('flag phases', () => {
+describe('neutralisations and suspensions (session-phase-race spans)', () => {
   /**
-   * A race under way (every lap timer 30 s in, so `session-phase-race` joins it racing): flag phases mirror its
-   * neutralised and suspended spans.
+   * A race under way (every lap timer 30 s in, so `session-phase-race` joins it racing): its neutralised and suspended
+   * spans are the neutralisations readers see (C20).
    */
   const rows = (cars: ReadonlyArray<{ position: number; lap: number; resultStatus?: number }>) =>
     new ScenarioBuilder({ cars: cars.length, stepMs: 1000 }).frames(1, (d) => {
       cars.forEach((c, i) => Object.assign(d.lapData.lapData[i]!, { carPosition: c.position, currentLapNum: c.lap, currentLapTimeInMs: 30_000, resultStatus: c.resultStatus ?? 2 }));
     });
   const scar = (safetyCarType: number, eventType: number): EventDetails => ({ code: 'SCAR', safetyCarType, eventType });
-
-  it('the leader lap is the lap of the car in first place', () => {
-    const { st } = runScenario(rows([{ position: 2, lap: 3 }, { position: 1, lap: 5 }]).session({ safetyCarStatus: 1 }).frames(1, noop).session({ safetyCarStatus: 0 }).frames(1, noop));
-    expect(st.history.flagPhases).toMatchObject([{ kind: 'SC', startLeaderLap: 5, endLeaderLap: 5 }]);
-  });
-  it('a car in first place that is not in the session is not the leader', () => {
-    const { st } = runScenario(rows([{ position: 1, lap: 9, resultStatus: 1 }, { position: 1, lap: 5 }, { position: 2, lap: 4 }])
-      .session({ safetyCarStatus: 1 }).frames(1, noop).session({ safetyCarStatus: 0 }).frames(1, noop));
-    expect(st.history.flagPhases).toMatchObject([{ startLeaderLap: 5 }]);
-  });
-  it('without a leader in the session the leader lap is 0', () => {
-    const { st } = runScenario(rows([{ position: 1, lap: 9, resultStatus: 1 }, { position: 2, lap: 4 }]).session({ safetyCarStatus: 1 }).frames(1, noop)
-      .session({ safetyCarStatus: 0 }).frames(1, noop));
-    expect(st.history.flagPhases).toMatchObject([{ startLeaderLap: 0, endLeaderLap: 0 }]);
-  });
+  /** The closed `neutralised` and `suspended` spans of the race. */
+  const neutralisations = (st: EngineState) => (st.history.spans['session-phase-race'] ?? []).filter((s) => s.kind === 'neutralised' || s.kind === 'suspended');
 
   describe('safety car events', () => {
     const phases = (...events: EventDetails[]) => {
       const b = rows([{ position: 1, lap: 1 }]);
       for (const e of events) b.event(e).frames(1, noop);
-      return runScenario(b.event({ code: 'SEND' }).frames(1, noop)).st.history.flagPhases;
+      return neutralisations(runScenario(b.event({ code: 'SEND' }).frames(1, noop)).st);
     };
     it.each([
       ['no safety car', scar(0, 0)],
       ['the formation lap safety car', scar(3, 0)],
       ['a safety car type the game does not have', scar(7, 0)],
-    ])('%s: a deployment opens no phase', (_, event) => {
+    ])('%s: a deployment opens no neutralisation', (_, event) => {
       expect(phases(event)).toEqual([]);
     });
-    it('a return or a resume without a deployment opens no phase', () => {
+    it('a return or a resume without a deployment opens no neutralisation', () => {
       expect(phases(scar(1, 1), scar(1, 2), scar(1, 3))).toEqual([]);
     });
-    /** An SC deployed and confirmed by the status a frame later (an unconfirmed one leaves no flag phase), then `events`. */
+    /** An SC deployed and confirmed by the status a frame later, then `events`. */
     const confirmedPhases = (...events: EventDetails[]) => {
       const b = rows([{ position: 1, lap: 1 }]).event(scar(1, 0)).frames(1, noop).session({ safetyCarStatus: 1 }).frames(1, noop);
       for (const e of events) b.event(e).frames(1, noop);
-      return runScenario(b.event({ code: 'SEND' }).frames(1, noop)).st.history.flagPhases;
+      return neutralisations(runScenario(b.event({ code: 'SEND' }).frames(1, noop)).st);
     };
     it('an event phase the game does not have is not recorded', () => {
-      expect(confirmedPhases(scar(1, 9))).toMatchObject([{ kind: 'SC', scPhases: [{ phase: 'deployed', at: 1000 }] }]);
+      expect(confirmedPhases(scar(1, 9))).toMatchObject([{ kind: 'neutralised', confirmed: true, detail: { car: 'SC', stages: [{ stage: 'deployed', at: 1000 }] } }]);
     });
-    it('an event of the other kind is not recorded in the open phase', () => {
-      expect(confirmedPhases(scar(2, 1))).toMatchObject([{ kind: 'SC', scPhases: [{ phase: 'deployed', at: 1000 }] }]);
+    it('an event of the other kind is not recorded in the open neutralisation', () => {
+      expect(confirmedPhases(scar(2, 1))).toMatchObject([{ kind: 'neutralised', confirmed: true, detail: { car: 'SC', stages: [{ stage: 'deployed', at: 1000 }] } }]);
     });
-    it('a deployment still unconfirmed at SEND leaves no flag phase', () => {
-      expect(phases(scar(1, 0))).toEqual([]);
+    it('a deployment still unconfirmed at SEND closes as a neutralisation with `confirmed: false` (C18)', () => {
+      expect(phases(scar(1, 0))).toMatchObject([{ kind: 'neutralised', confirmed: false, detail: { car: 'SC' } }]);
     });
   });
 
-  it('lights out does not end a safety car phase', () => {
+  it('lights out does not end a safety car neutralisation', () => {
     const { st } = runScenario(rows([{ position: 1, lap: 1 }]).session({ safetyCarStatus: 1 }).frames(1, noop).event({ code: 'LGOT' }).frames(1, noop)
       .session({ safetyCarStatus: 0 }).frames(1, noop));
-    expect(st.history.flagPhases).toMatchObject([{ kind: 'SC', start: 1000, end: 3000 }]);
+    expect(neutralisations(st)).toMatchObject([{ kind: 'neutralised', start: 1000, end: 3000, detail: { car: 'SC' } }]);
   });
-  it('the safety car going away does not end a red flag phase', () => {
+  it('the safety car going away does not end a suspension', () => {
     const { st } = runScenario(rows([{ position: 1, lap: 1 }]).session({ safetyCarStatus: 1 }).frames(1, noop).event({ code: 'RDFL' }).frames(1, noop)
       .session({ safetyCarStatus: 0 }).frames(1, noop).event({ code: 'STLG', numLights: 1 }).frames(1, noop));
-    expect(st.history.flagPhases).toMatchObject([{ kind: 'SC', start: 1000, end: 2000 }, { kind: 'red', start: 2000, end: 4000 }]);
+    expect(neutralisations(st)).toMatchObject([{ kind: 'neutralised', start: 1000, end: 2000, detail: { car: 'SC' } }, { kind: 'suspended', start: 2000, end: 4000 }]);
   });
-  it('the formation lap status does not end a red flag phase', () => {
+  it('the formation lap status does not end a suspension', () => {
     const { st } = runScenario(rows([{ position: 1, lap: 1 }]).event({ code: 'RDFL' }).frames(1, noop).session({ safetyCarStatus: 3 }).frames(1, noop)
       .event({ code: 'STLG', numLights: 1 }).frames(1, noop));
-    expect(st.history.flagPhases).toMatchObject([{ kind: 'red', start: 1000, end: 3000 }]);
+    expect(neutralisations(st)).toMatchObject([{ kind: 'suspended', start: 1000, end: 3000 }]);
   });
 });
 

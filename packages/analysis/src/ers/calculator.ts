@@ -4,7 +4,10 @@ import type { EngineView, QuickCalculator } from '@pitwall/engine/readers';
 import { classifyLap, LAP_CLASSES_CONFIG } from '../lap-classes/index.ts';
 import { lapsToReach, perLapGainRate, PER_LAP_RATE_CONFIG } from '../per-lap-rate/index.ts';
 import type { GainSample } from '../per-lap-rate/index.ts';
+import { behaviourFor } from '../shared/behaviour.ts';
+import { CAR_STATUS_READS } from '../shared/car-status.ts';
 import { carLaps } from '../shared/stint-laps.ts';
+import { ERS_BEHAVIOUR, type ErsEffect } from './behaviour.ts';
 import { ERS, ERS_CONFIG } from './index.ts';
 import type { ErsOutput } from './index.ts';
 
@@ -13,8 +16,9 @@ import type { ErsOutput } from './index.ts';
  * not tied to the tyre set, so a stop keeps the samples.
  */
 function trendSamples(view: EngineView, id: CarId): GainSample[] {
-  const classes = { isRace: view.state.session.kind === 'race', ...LAP_CLASSES_CONFIG.read(view) };
-  return carLaps(view.state.history, id).flatMap((l) =>
+  // only `forRate` is read, and a rate lap has no lap-1 rule: the weekend phase changes nothing here
+  const classes = { isRace: false, ...LAP_CLASSES_CONFIG.read(view) };
+  return carLaps(view.history, id).flatMap((l) =>
     classifyLap(l, classes).forRate && l.ersStoreAtStartJ.known && l.ersStoreAtEndJ.known
       ? [{ lap: l.lapNumber, gain: l.ersStoreAtEndJ.value - l.ersStoreAtStartJ.value, at: l.completedAt }]
       : [],
@@ -35,7 +39,7 @@ function attackOf(storeJ: Known<number>, attackLevelJ: number, lapsToLevel: Know
   return known({ ready: false, inLaps: Math.max(1, Math.ceil(lapsToLevel.value)) }, lapsToLevel.at);
 }
 
-function ersOf(view: EngineView, car: EngineView['state']['cars'][number]): ErsState {
+function ersOf(view: EngineView, car: EngineView['live']['cars'][number]): ErsState {
   const { deployLimitJ, capacityJ, attackLevelJ } = ERS_CONFIG.read(view);
   const constants = { capacityJ, deployLimitJ, attackLevelJ };
   const ers = car.energy.ers;
@@ -68,15 +72,21 @@ function ersOf(view: EngineView, car: EngineView['state']['cars'][number]): ErsS
   };
 }
 
-/** The ERS state of every active car: store, this lap's flows, the store's trend per lap and the attack readiness. */
+/**
+ * The ERS state of every car in the session (its rows, `ERS_BEHAVIOUR`): store, this lap's flows, the store's trend per
+ * lap and the attack readiness.
+ */
 export const ersCalculator: QuickCalculator<ErsOutput> = {
   id: ERS,
   kind: 'quick',
-  reads: ['laps', 'stints', 'energy', 'session'],
+  reads: ['laps', 'energy', CAR_STATUS_READS],
   cadence: { hz: 4 },
   compute: (view): ErsOutput => {
     const out: ErsOutput = {};
-    for (const car of view.state.cars) if (car.active) out[car.id] = ersOf(view, car);
+    for (const car of view.live.cars) {
+      const effect: ErsEffect = Object.assign({}, ...behaviourFor(ERS_BEHAVIOUR, view, car.id));
+      if (effect.inSession === true) out[car.id] = ersOf(view, car);
+    }
     return out;
   },
 };

@@ -39,7 +39,7 @@ describe('feed insights', () => {
   it('feed.status topic value', () => {
     const calc = feedStatus.calculators.find((c) => c.id === 'feed.status') as QuickCalculator<unknown>;
     const v = viewFrom(frames, { msSinceLastPacket: 2500, lossPercent: 1.5, latePackets: 3, packetsPerSecond: 58 });
-    expect(calc.compute(v)).toEqual({ feedId: v.state.feedId, connected: true, stale: true, lossPercent: 1.5, latePackets: 3, decodeErrors: 0, packetsPerSecond: 58 });
+    expect(calc.compute(v)).toEqual({ feedId: v.live.feedId, connected: true, stale: true, lossPercent: 1.5, latePackets: 3, decodeErrors: 0, packetsPerSecond: 58 });
     expect(feedStatus.topics).toEqual([{ topic: 'feed.status', from: 'feed.status' }]);
   });
 });

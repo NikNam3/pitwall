@@ -39,7 +39,10 @@ type WidgetModule = {
     sizes: object;
   };
 };
-type BindingShape = { topic: string } & Partial<Record<'from' | 'fromHistory' | 'fromJob', string>> & { fromInsights?: true };
+type BindingShape = { topic: string } & Partial<Record<'from' | 'fromHistory' | 'fromJob' | 'fromSituation', string>> & {
+  fromInsights?: true;
+  fromLive?: unknown;
+};
 type FeatureModule = {
   calculators: Array<{ id: string; reads: ReadonlyArray<string | { calculator: string }>; cadence: string | { hz: number } }>;
   topics: BindingShape[];
@@ -58,6 +61,9 @@ function bindingOf(shape: BindingShape, feature: string): NonNullable<Catalogue[
   if (shape.from !== undefined) return { kind: 'calculator', source: shape.from, feature };
   if (shape.fromHistory !== undefined) return { kind: 'history', source: shape.fromHistory, feature };
   if (shape.fromJob !== undefined) return { kind: 'job', source: shape.fromJob, feature };
+  if (shape.fromSituation !== undefined) return { kind: 'situation', source: shape.fromSituation, feature };
+  // A live select has no name: the topic names its source, as for the insights.
+  if (shape.fromLive !== undefined) return { kind: 'live', source: shape.topic, feature };
   return { kind: 'insights', source: shape.topic, feature };
 }
 
