@@ -16,6 +16,8 @@ type Table = {
   recent: GapsOutput['recent'];
   /** The start of the first `racing` span of the race: the race start. */
   raceStart: SessionTime | undefined;
+  /** The first `racing` span was joined mid-session (`joinedAt`): the true start is not known (C3). */
+  joined: boolean;
 };
 
 type GapsAcc = Table & { out: GapsOutput };
@@ -60,7 +62,9 @@ const RACE_PHASE = sessionPhaseRaceSpans.machine;
 function foldRaceStart(acc: Table, view: EngineView, from: number): void {
   if (acc.raceStart !== undefined) return;
   const racing = (view.history.spans[RACE_PHASE] ?? []).slice(from).find((s) => s.kind === 'racing') ?? (view.situation.byMachine[RACE_PHASE] ?? []).find((s) => s.kind === 'racing');
-  if (racing !== undefined) acc.raceStart = racing.start;
+  if (racing === undefined) return;
+  acc.raceStart = racing.start;
+  acc.joined = racing.joinedAt === true;
 }
 
 /** The race-only parts apply: every row of the weekend phase and the session phases open now says so (C14, C44); none open yet: they do not. */
@@ -71,7 +75,7 @@ const raceOnly = (view: EngineView): boolean => {
 
 const raceStartAt = (acc: Table, race: boolean): Known<SessionTime> => {
   if (!race) return NOT_APPLICABLE;
-  return acc.raceStart === undefined ? unknown('notReceived') : known(acc.raceStart, acc.raceStart);
+  return acc.raceStart === undefined || acc.joined ? unknown('notReceived') : known(acc.raceStart, acc.raceStart);
 };
 
 /** The gap of `a` to the car ahead of it in the order: the time since that car passed where `a` is now. */
@@ -170,7 +174,7 @@ function build(acc: Table, view: EngineView): GapsOutput {
 }
 
 const init = (view: EngineView): GapsAcc => {
-  const table: Table = { tracks: [], lineTimes: {}, recent: {}, raceStart: undefined };
+  const table: Table = { tracks: [], lineTimes: {}, recent: {}, raceStart: undefined, joined: false };
   foldCrossings(table, view, 0);
   foldRaceStart(table, view, 0);
   return { ...table, out: build(table, view) };
