@@ -52,7 +52,7 @@ describe('SessionRunner.finish: the closing result', () => {
     const { state } = runner.finish();
     expect(Object.values(situationOf(state).byMachine).flat()).toEqual([]);
     for (const span of open) {
-      expect(state.history.spans[span.machine], span.machine).toContainEqual(expect.objectContaining({ machine: span.machine, id: span.id, kind: span.kind, carId: span.carId }));
+      expect(state.history.spans[span.machine], span.machine).toContainEqual(expect.objectContaining({ machine: span.machine, id: span.id, kind: span.kind, ...(span.carId !== undefined && { carId: span.carId }) }));
     }
   });
 

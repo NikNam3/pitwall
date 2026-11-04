@@ -253,6 +253,31 @@ describe('FeedPipeline: the session end', () => {
   });
 });
 
+// Task 27 round 2 (supervisor ruling 5, C24, C61): the bridge restarted mid-session, so a live run comes under a key
+// storage already holds. It replaces the stored log when it starts, in one transaction: the newest run wins, the row
+// points at the new recording, and storage stays on.
+describe('FeedPipeline: a live run under a stored key', () => {
+  it('a live run under a stored key replaces its log; storage stays on', async () => {
+    const db = openDatabase(join(tmp(), 'restart.db'));
+    const before = tmp(); const after = tmp();
+    // the first run records the fastest lap; the restarted one (same session, weekend and player car) does not
+    await run(scenario(), { storage: { db, recordingsDir: before } });
+    const second = () => prepared(new ScenarioBuilder({ sessionUid: 77n, cars: 2 }).session().participants().frames(12, () => {}));
+    const r = await run(second(), { storage: { db, recordingsDir: after } });
+    expect(r.raised().map((i) => i.kind)).not.toContain('system.storageWriteFailed');
+    const repo = new WeekendRepository(db);
+    const rows = repo.sessionsOf('0');
+    expect(rows).toEqual([expect.objectContaining({ sessionUid: '77', playerCar: 0, complete: true, pwrecPath: join(after, recordingsOf(after)[0]!) })]);
+    const key = { sessionUid: '77', weekendId: '0', playerCar: rows[0]!.playerCar };
+    // the stored log is the restarted run's alone: as if it had been stored into an empty database
+    const fresh = openDatabase(join(tmp(), 'fresh.db'));
+    await run(second(), { storage: { db: fresh, recordingsDir: tmp() } });
+    const stored = await repo.projectionOf(key);
+    expect(stored?.events).toEqual([]);
+    expect(stored).toEqual(await new WeekendRepository(fresh).projectionOf(key));
+  });
+});
+
 describe('FeedPipeline: session files', () => {
   it('names the file after wallClock(), the session uid and the player car, with the bridge as recorder', async () => {
     const dir = tmp(); const at = new Date(2026, 9, 28, 13, 5, 9);

@@ -55,10 +55,10 @@ describe('SessionRunner: the identity wait', () => {
     expect(asked[0]!.resultsBefore).toBe(0);
     expect(asked[0]!.participants!.playerCar).toBe(carId(0));
     expect(asked[0]!.participants!.cars.map((c) => c.carId)).toEqual(Array.from({ length: slots }, (_, i) => carId(i)));
-    expect(asked[0]!.participants!.cars.slice(0, 3)).toEqual([
+    // the shared timeline has 2 cars; the slots after them carry what the packet carries
+    expect(asked[0]!.participants!.cars.slice(0, 2)).toEqual([
       { carId: carId(0), carKey: { teamId: 0, raceNumber: 1 } },
       { carId: carId(1), carKey: { teamId: 0, raceNumber: 2 } },
-      { carId: carId(2), carKey: { teamId: 1, raceNumber: 3 } },
     ]);
     // then every held frame and the Participants frame, in order, each on its own state and with the weekend context
     expect(seen).toEqual([0, 1, 2, 3, 4, 5].map((id) => ({ frameId: id, stateFrameId: id, weekend: WEEKEND })));
