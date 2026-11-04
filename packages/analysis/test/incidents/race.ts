@@ -13,7 +13,9 @@ import {
   type LapRecord,
   type MachineId,
   type MiniSectorCrossing,
+  type Known,
   type OpenSpan,
+  type PenaltyRecord,
   type PitStopRecord,
   type RaceEvent,
   type SessionState,
@@ -169,6 +171,18 @@ export const owedStep = ({ at, dt = 0, sg = 0, totalMs = 0, joinedAt }: Owed): S
 export const owes = (car: number, steps: Owed[]): Array<Span | OpenSpan> =>
   chain('penalties', car, [owedStep({ at: 0, joinedAt: true }), ...steps.map(owedStep)]);
 
+/**
+ * A penalty record of car `car` (the penalties recorder's fact, C10, C21): `kind` given at `at`, describing the frame
+ * numbered by that time (as `race` numbers its crossings, C26); a time penalty's `timeMs` (5 s by default); the
+ * infringement 7, known, unless `infringement` says otherwise (C3).
+ */
+export const penaltyRecord = (
+  car: number,
+  kind: PenaltyRecord['kind'],
+  at: number,
+  { timeMs = 5_000, infringement = known(7, at) }: { timeMs?: number; infringement?: Known<number> } = {},
+): PenaltyRecord => ({ carId: carId(car), kind, infringement, timeMs: kind === 'time' ? timeMs : undefined, at, frame: at });
+
 /** The race of a grand prix: the weekend phase the tests run in unless they say otherwise (C14). */
 export const RACE: WeekendPhase = { kind: 'race', format: 'grandPrix' };
 
@@ -187,6 +201,8 @@ export type RaceInput = {
   /** Spans of any sub-machine, closed (in the projection) or open (in the situation), C20: `chain` and its helpers build them. */
   spans?: Array<Span | OpenSpan>;
   pitStops?: PitStopRecord[];
+  /** The penalty records of the projection (`penaltyRecord` builds them), in their order. */
+  penalties?: PenaltyRecord[];
   laps?: LapRecord[];
   /** A `damage` output in the view; `incidents` must not read it (a log reads the history only). */
   damage?: DamageOutput;
@@ -217,6 +233,7 @@ export function viewOf({
   phases = [],
   spans: given = [],
   pitStops = [],
+  penalties = [],
   laps = [],
   damage,
   gaps,
@@ -242,7 +259,7 @@ export function viewOf({
   for (const list of Object.values(closed)) list.sort((a, b) => a.endFrame - b.endFrame);
   return engineView({
     situation: { weekendPhase, byMachine },
-    history: { crossings: miniSectors, events, spans: closed, pitStops, laps },
+    history: { crossings: miniSectors, events, spans: closed, pitStops, penalties, laps },
     outputs,
     playerCar,
     config: { incidents: config, alarms: alarmsConfig, damage: damageConfig },

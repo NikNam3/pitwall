@@ -59,6 +59,26 @@ describe('weekend-phase rows (C14)', () => {
   });
 });
 
+describe('a pending weekend phase (C3, C14)', () => {
+  // before the first Session packet with a weekend structure: no weekend-phase span and no session-phase span (no
+  // per-phase sub-machine runs, C14); the session is on the grid, and whether it is a race is not known yet
+  const pending = (): EngineView => {
+    const cars = carsFor(ms()).map((c) => (c.id === 2 ? { ...c, timing: { ...c.timing, gridPosition: 5 } } : c));
+    const view = viewOf(ms(), { cars, kind: 'none' });
+    const { 'weekend-phase': _phase, ...byMachine } = view.situation.byMachine;
+    return { ...view, situation: { ...view.situation, weekendPhase: { kind: 'pending' }, byMachine } };
+  };
+
+  it('the race start and positions gained are notReceived, no phase is on the chart; the gaps are still computed', () => {
+    const out = run(pending());
+    expect(out.raceStartAt).toEqual(unknown('notReceived'));
+    expect(out.intervals.find((i) => i.carId === 2)?.positionsGained).toEqual(unknown('notReceived'));
+    expect(out.phases).toEqual([]);
+    expect(out.intervals.map((i) => i.carId)).toEqual([0, 1, 2]);
+    expect(out.intervals[2]?.toLeaderMs).toMatchObject({ known: true, value: 2_000 });
+  });
+});
+
 describe('session-phase-race rows (C17, C20)', () => {
   const base = () => ({ cars: carsFor(ms()) });
 

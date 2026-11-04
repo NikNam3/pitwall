@@ -483,6 +483,13 @@ describe("race-moment calculator", () => {
       expect(run({ kind })).toEqual(na);
     });
 
+    it("weekend-phase pending (no span yet): notReceived, the phase is not known yet (C3, C14)", () => {
+      // before the first Session packet with a weekend structure: no weekend-phase span, nothing per phase runs (C14)
+      const pending = { weekendPhase: { kind: "pending" }, byMachine: {} } as unknown as EngineView["situation"];
+      const view = engineView({ situation: pending, sessionTime: NOW });
+      expect(raceMomentCalculator.compute(guardedView(view, raceMomentCalculator.reads, { unit: RACE_MOMENT }))).toEqual(unknown("notReceived"));
+    });
+
     it("weekend-phase race: applicable, carCare when nothing else holds", () => {
       expect(value(run({ kind: "race" })).moment).toBe("carCare");
     });
