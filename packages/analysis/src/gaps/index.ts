@@ -3,6 +3,7 @@ import type { Known, CarId, GapperLines, Interval, Neighbourhood, SessionTime } 
 
 export type { GapperLines, GapperReference, GapToCar, Interval, Neighbourhood } from '@pitwall/domain';
 export * from './config.ts';
+export { GAPS_BEHAVIOUR, type GapsRow } from './behaviour.ts';
 
 /** The calculator id. */
 export const GAPS = 'gaps';
@@ -22,7 +23,7 @@ export type GapsOutput = {
    */
   recent: Record<CarId, { fromProgress: number; at: SessionTime[] }>;
   neighbourhood: Neighbourhood[];
-  /** When the race started (the lights-out event); the gapper counts each car's race time from it. `notApplicable` outside a race, `notReceived` before lights out. */
+  /** When the race started; the gapper counts each car's race time from it. `notApplicable` outside a race, `notReceived` before the first `racing` span. */
   raceStartAt: Known<SessionTime>;
   /**
    * The cars out of the race (retired, did not finish, disqualified, not classified), by id; they are not in
