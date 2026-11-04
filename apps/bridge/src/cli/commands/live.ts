@@ -4,9 +4,9 @@ import { loadFeatureConfig } from '../../feature-config.ts';
 import { FEATURES } from '../../features/index.generated.ts';
 import { UdpSource } from '../../input/udp-source.ts';
 import { dataDir, type DataDir } from '../../storage/data-dir.ts';
-import { openDatabase, SchemaVersionError, type Db } from '../../storage/db.ts';
+import { openDatabase, SchemaVersionError, UNVERSIONED_RULES, type Db } from '../../storage/db.ts';
 import { EXIT_INTERRUPTED, type CliIo } from '../io.ts';
-import { rebuildDatabase } from '../rebuild-database.ts';
+import { rebuildDatabase, sessionRebuilder } from '../rebuild-database.ts';
 import { serve } from '../serve.ts';
 import { assertUdpPortFree, udpPortError } from '../udp-port.ts';
 
@@ -41,7 +41,7 @@ export async function run(_positionals: string[], values: { dev?: boolean | unde
     dumpsDir: dirs.dumps,
     uiDir: dirs.ui,
     config,
-    storage: { db, recordingsDir: dirs.recordings },
+    storage: { db, recordingsDir: dirs.recordings, rulesVersion: UNVERSIONED_RULES, rebuild: sessionRebuilder(db, config, io) },
     staleCheck: { clock: () => performance.now(), everyMs: 500 },
     // The port was free a moment ago; this catches the race and any other bind failure.
     bound: () => source.listening.catch((error: unknown) => Promise.reject(udpPortError(udpPort, error))),

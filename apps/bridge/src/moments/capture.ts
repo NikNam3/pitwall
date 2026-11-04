@@ -27,25 +27,30 @@ const paramsFor = (topic: TopicName, carIds: readonly CarId[]): object[] => {
 
 const subscriptionId = (topic: TopicName, params: object): string => `${topic}:${canonicalJson(params)}`;
 
-/** Hands packets on (with hooks around each) until one lies past `untilMs` (receive time from the first record), then stops the inner source. */
+/**
+ * Hands packets on (with hooks around each) until one lies past `untilMs` (receive time from the first record) or the
+ * segment ends, then calls `stop` (the pipeline's). A moment is a point inside its session: the session is cut there,
+ * not ended, so its topics keep what they held.
+ */
 class StopAfterSource implements PacketSource {
   readonly #inner: PacketSource;
   readonly #untilMs: number;
-  readonly #hooks: { before: (offsetMs: number) => void; after: () => void };
+  readonly #hooks: { before: (offsetMs: number) => void; after: () => void; stop: () => Promise<void> };
+  readonly done: Promise<void>;
   #firstMs: number | undefined;
 
-  constructor(inner: PacketSource, untilMs: number, hooks: { before: (offsetMs: number) => void; after: () => void }) {
+  constructor(inner: PacketSource, untilMs: number, hooks: { before: (offsetMs: number) => void; after: () => void; stop: () => Promise<void> }) {
     this.#inner = inner;
     this.#untilMs = untilMs;
     this.#hooks = hooks;
+    // Not awaited: the pipeline's stop waits for the pipeline, which waits for this.
+    this.done = inner.done.then(() => {
+      void hooks.stop();
+    });
   }
 
   get feedId() {
     return this.#inner.feedId;
-  }
-
-  get done(): Promise<void> {
-    return this.#inner.done;
   }
 
   start(onPacket: (packet: RawPacket) => void): void {
@@ -53,7 +58,7 @@ class StopAfterSource implements PacketSource {
       this.#firstMs ??= packet.receivedAtMs;
       const offsetMs = packet.receivedAtMs - this.#firstMs;
       if (offsetMs > this.#untilMs) {
-        void this.#inner.stop();
+        void this.#hooks.stop();
         return;
       }
       this.#hooks.before(offsetMs);
@@ -99,6 +104,7 @@ export async function captureMoment(segmentPath: string, atMs: number): Promise<
       nowMs = offsetMs;
     },
     after: () => hub.tick(),
+    stop: (): Promise<void> => pipeline.stop(),
   });
   const pipeline = new FeedPipeline({
     feedId: id,

@@ -1,100 +1,136 @@
-// The derived storage layer for one session (spec 9.2, 9.3): its row, its confirmed history, its weekend context.
-import type { DriverKey, ParticipantsValues, SessionState, SessionUid, WeekendPhase } from '@pitwall/domain';
-import { CAR_STATUS, carsInSessionOf, type DeepReadonly, type HistoryDelta, type LiveState, type Projection, type Situation, type WeekendContext } from '@pitwall/engine/readers';
+// The storage of one session (C24, C59–C62): its row and cars, its log, its weekend context.
+import { carKeyOf, type CarId, type CarKey, type SessionState, type SessionUid } from '@pitwall/domain';
+import type { DeepReadonly, EngineState, WeekendContext } from '@pitwall/engine/readers';
 import type { Logger } from '../log.ts';
-import type { Db, SessionKey, SessionRow } from '../storage/db.ts';
+import type { Db, SessionKey, SessionRow, StoredSessionRow } from '../storage/db.ts';
 import { StorageWriter } from '../storage/storage-writer.ts';
 import { WeekendRepository } from '../storage/weekend-repository.ts';
 
 /**
- * A session row from the engine's values (C6: storage sees no packet type): the live state's session, the weekend phase
- * as the machine decided it (C13: no signal) and, once Participants named them, the driver of each slot the session uses.
+ * A session row from the engine's values (C6: storage sees no packet type) and the recording's: the session as the live
+ * state holds it, the feed's player car, and every slot's team and race number from the live identity (C62). No
+ * situation and no signal shapes it (C13, C32).
  */
 export type SessionRowInput = {
   sessionUid: SessionUid;
   session: Pick<SessionState, 'link' | 'trackId' | 'settings'>;
-  weekendPhase: WeekendPhase;
+  playerCar: CarId;
   startedAt: string;
   pwrecPath: string | null;
-  drivers?: ParticipantsValues['drivers'];
+  cars: SessionRow['cars'];
 };
-
-/** The weekend phase as the session row stores it: `kind`, then `:format` and `:segment` where the phase has them (`qualifying:grandPrix:2`). */
-export const weekendPhaseText = (phase: WeekendPhase): string => {
-  if (phase.kind === 'pending' || phase.kind === 'none') return phase.kind;
-  if (phase.kind === 'race' || phase.segment === undefined) return `${phase.kind}:${phase.format}`;
-  return `${phase.kind}:${phase.format}:${phase.segment}`;
-};
-
-/**
- * The session's drivers as the row stores them: the cars car-status has in the session (not `absent`, C43), each with
- * its driver key from the live state; no signal decides them (C13).
- */
-export const driversInSession = (live: DeepReadonly<Pick<LiveState, 'cars'>>, situation: Situation): ParticipantsValues['drivers'] =>
-  carsInSessionOf(situation.byMachine[CAR_STATUS]).flatMap((carId) => {
-    const driverKey = live.cars[carId]?.identity.driverKey;
-    return driverKey === undefined ? [] : [{ carId, driverKey: { ...driverKey } }];
-  });
 
 export const sessionRowOf = (s: SessionRowInput): SessionRow => ({
   sessionUid: s.sessionUid,
   weekendId: String(s.session.link.weekend),
   seasonId: String(s.session.link.season),
-  sessionType: weekendPhaseText(s.weekendPhase),
+  playerCar: s.playerCar,
   trackId: s.session.trackId,
   startedAt: s.startedAt,
   pwrecPath: s.pwrecPath,
   settings: { ...s.session.settings },
-  drivers: s.drivers ?? [],
+  cars: s.cars,
 });
+
+/** Every slot's car key from the live identity, with no car-status filter (C62; B2). */
+export const carsOf = (live: DeepReadonly<Pick<EngineState, 'cars'>>): SessionRow['cars'] =>
+  live.cars.map((car) => ({ carId: car.id, carKey: carKeyOf(car.identity) }));
+
+/**
+ * How a session reaches storage: `append` (live) appends its log frame by frame and marks it complete at its end;
+ * `replace` (a rebuild, reprocess or import of a recording) writes it once, at its end, replacing the stored one (C24).
+ */
+export type StorageMode = 'append' | 'replace';
+
+export type SessionStorageOptions = {
+  log: Logger;
+  onError: (error: unknown) => void;
+  /** The rules version the session's log is stored with (C61). */
+  rulesVersion: string;
+  mode: StorageMode;
+  /** Rebuilds a stored session the weekend context skipped as incomplete, in the background (C61). */
+  rebuild?: (row: StoredSessionRow) => Promise<void>;
+};
+
+const keyOf = (row: SessionKey): SessionKey => ({ sessionUid: row.sessionUid, weekendId: row.weekendId, playerCar: row.playerCar });
 
 /**
  * One session's access to the database. Never throws: the first failure goes to `onError` and turns storage off
  * for the rest of the session, so the live topics carry on without it.
  */
 export class SessionStorage {
-  readonly #log: Logger;
-  readonly #onError: (error: unknown) => void;
+  readonly #o: SessionStorageOptions;
   #access: { writer: StorageWriter; repo: WeekendRepository } | undefined;
 
-  constructor(db: Db, opts: { log: Logger; onError: (error: unknown) => void }) {
-    this.#log = opts.log;
-    this.#onError = opts.onError;
+  constructor(db: Db, opts: SessionStorageOptions) {
+    this.#o = opts;
     try {
-      this.#access = { writer: new StorageWriter(db, { onError: (error) => this.#fail(error) }), repo: new WeekendRepository(db) };
+      this.#access = {
+        writer: new StorageWriter(db, { onError: (error) => this.#fail(error), rulesVersion: opts.rulesVersion }),
+        repo: new WeekendRepository(db, { log: opts.log }),
+      };
     } catch (error) {
       this.#fail(error);
     }
   }
 
+  /** The session's row and cars, at its start and whenever its identity changed (the newest wins); live only. */
   upsertSession(row: SessionRow): void {
-    this.#access?.writer.upsertSession(row);
+    if (this.#o.mode === 'append') this.#access?.writer.upsertSession(row);
   }
 
-  writeConfirmed(key: SessionKey, history: Projection, delta: HistoryDelta): void {
-    this.#access?.writer.writeConfirmed(key, history, delta);
+  /** What the session's log gained since the last write; live only. */
+  writeLog(key: SessionKey, log: DeepReadonly<EngineState['log']>): void {
+    if (this.#o.mode === 'append') this.#access?.writer.writeLog(key, log);
   }
 
-  /** The player's earlier sessions of the weekend with every driver's records; `undefined` when storage is off or this session was never stored. */
-  weekendContext({ sessionUid, weekendId }: SessionKey, driverKey: DriverKey): WeekendContext | undefined {
+  /**
+   * The session ended with `log` complete (its closing spans in it): live, the rest is appended and the session marked
+   * complete; a rebuild replaces the stored log whole. `interrupted`: a rebuild that was stopped before the recording's
+   * end writes nothing, so the stored log stays as it was (C24).
+   */
+  finish(row: SessionRow, log: DeepReadonly<EngineState['log']>, opts: { interrupted: boolean }): void {
+    const writer = this.#access?.writer;
+    if (writer === undefined) return;
+    if (this.#o.mode === 'append') {
+      writer.writeLog(keyOf(row), log);
+      if (this.#access !== undefined) writer.complete(keyOf(row));
+    } else if (!opts.interrupted) {
+      writer.replaceLog(row, log, this.#o.rulesVersion);
+    }
+  }
+
+  /**
+   * The player's earlier sessions of the weekend (C62); `undefined` when storage is off. Those not complete are left out
+   * and handed to `rebuild`, in the background.
+   */
+  weekendContext(row: SessionRow, player: CarKey): WeekendContext | undefined {
     const repo = this.#access?.repo;
     if (repo === undefined) return undefined;
     try {
-      // Asked with an unknown `before`, the repository finds no earlier sessions: say so instead of losing them quietly.
-      if (!repo.sessionsOf(weekendId).some((row) => row.sessionUid === sessionUid)) {
-        this.#log.warn({ sessionUid, weekendId }, 'session not stored, starting without its weekend context');
-        return undefined;
-      }
-      return repo.weekendContext(weekendId, driverKey, { before: sessionUid });
+      const { context, incomplete } = repo.weekendContext(row.weekendId, player, keyOf(row), { startedAt: row.startedAt });
+      if (incomplete.length > 0) this.#rebuildInBackground(repo, row.weekendId, incomplete);
+      return context;
     } catch (error) {
       this.#fail(error);
       return undefined;
     }
   }
 
+  #rebuildInBackground(repo: WeekendRepository, weekendId: string, keys: readonly SessionKey[]): void {
+    const { rebuild, log } = this.#o;
+    if (rebuild === undefined) return;
+    const same = (a: SessionKey, b: SessionKey) => a.sessionUid === b.sessionUid && a.weekendId === b.weekendId && a.playerCar === b.playerCar;
+    for (const stored of repo.sessionsOf(weekendId).filter((s) => keys.some((k) => same(k, s)))) {
+      rebuild(stored).catch((error: unknown) => {
+        log.error({ sessionUid: stored.sessionUid, weekendId: stored.weekendId, playerCar: stored.playerCar, err: error }, 'stored session not rebuilt');
+      });
+    }
+  }
+
   /** Storage is off from the first failure on, so `onError` is called at most once. */
   #fail(error: unknown): void {
     this.#access = undefined;
-    this.#onError(error);
+    this.#o.onError(error);
   }
 }

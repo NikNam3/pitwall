@@ -6,7 +6,7 @@ export { MENU_RATE_SLOTS, type Frame } from './frame/frame.ts';
 export { SessionTracker, type TrackerEvent } from './frame/session-tracker.ts';
 export { Scheduler } from './calc/scheduler.ts';
 export { initialState } from './step/state-update/initial.ts';
-export { driverKeyOf, participantsValuesOf } from './step/state-update/identity.ts';
+export { participantsValuesOf } from './step/state-update/identity.ts';
 export { step, type FlashbackReport } from './step/step.ts';
 export {
   IDENTITY_WAIT_FRAMES,

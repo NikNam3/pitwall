@@ -1,4 +1,4 @@
-import { carId, MAX_CARS, unknown, type CarIdentity, type CarState, type DriverKey, type OwnCarState, type ParticipantsValues, type Visibility } from '@pitwall/domain';
+import { carId, carKeyOf, MAX_CARS, unknown, type CarIdentity, type CarState, type OwnCarState, type ParticipantsValues, type Visibility } from '@pitwall/domain';
 import type { ParticipantsPacket } from '@pitwall/protocol';
 import type { Frame } from '../../frame/frame.ts';
 import type { LiveState } from '../../state/live-state.ts';
@@ -9,21 +9,13 @@ import { withholdRestricted } from './restricted.ts';
 import type { StateUpdate } from './types.ts';
 
 /**
- * The key of the driver in a slot: its name and network id, AI or human alike (spec 6.2; `aiControlled` is a signal,
- * C12, C13). The one rule; the weekend context reuses it. A slot the packet lacks reads as no name on network id 255.
- */
-export const driverKeyOf = (p: ParticipantsPacket, carIndex: number): DriverKey => {
-  const c = p.participants[carIndex];
-  return c ? { name: c.name, networkId: c.networkId } : { name: '', networkId: 255 };
-};
-
-/**
- * What the identity wait hands the runner's `contextFor` (C61): the player's slot and the driver of every slot the
- * Participants packet carries. No signal caps the list (C13): which cars are in the session is car-status's (C43).
+ * What the identity wait hands the runner's `contextFor` (C61, C62): the player's slot and the car key (team and race
+ * number) of every slot the Participants packet carries. No signal caps the list (C13): which cars are in the session
+ * is car-status's (C43).
  */
 export const participantsValuesOf = (frame: Frame, p: ParticipantsPacket): ParticipantsValues => ({
   playerCar: carId(frame.playerCarIndex),
-  drivers: p.participants.map((_, i) => ({ carId: carId(i), driverKey: driverKeyOf(p, i) })),
+  cars: p.participants.map((c, i) => ({ carId: carId(i), carKey: carKeyOf(c) })),
 });
 
 /**
@@ -63,7 +55,6 @@ const identityFrom = (p: ParticipantsPacket, index: number, visibility: Visibili
     myTeam: c.myTeam === 1,
     platform: c.platform,
     telemetryPublic: c.yourTelemetry === 1,
-    driverKey: driverKeyOf(p, index),
     visibility,
   };
 };
