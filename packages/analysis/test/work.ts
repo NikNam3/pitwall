@@ -1,13 +1,11 @@
 // The counted-work proofs of contract C31 for an incremental unit, on the long race (`test-support/builders/long-race.ts`;
 // ruling Task 22 round 3): its accumulator is a fold over projection entries and config, and `output(acc, view)`
-// combines it with the view's live state and open spans. The unit proves C31.1 both ways, C31.2 and C31.3 across random
-// rewinds with void facts. Work is the projection entries a unit reads per frame (`countReads`), averaged over the frames
+// combines it with the view's live state and open spans. The unit proves C31.1 both ways and C31.2 here; C31.3 is in
+// `incremental-rewind.property.test.ts`. Work is the projection entries a unit reads per frame (`countReads`), averaged over the frames
 // of a lap; no timer anywhere.
 import { CalculatorRegistry, type Calculator, type CalculatorId, type EngineView, type IncrementalCalculator } from '@pitwall/engine/readers';
-import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
-import { arbRace, raceFrames } from '../../engine/test/support/arb-race.ts';
-import { countReads, expectScheduledIncremental, guardedView } from '../../engine/test/support/scheduler.ts';
+import { countReads, guardedView } from '../../engine/test/support/scheduler.ts';
 import { engineView, IDLE_FEED } from '../../../test-support/builders/index.ts';
 import { longRace } from '../../../test-support/builders/long-race.ts';
 import { CALCULATORS } from './units.ts';
@@ -155,14 +153,8 @@ export function foldedAndFromProjection<A, O>(calc: IncrementalCalculator<A, O>)
   return { folded: acc, fromProjection: calc.init(projectionOnly(calc as Calculator, views.at(-1)!)) };
 }
 
-/** Runs of the C31.3 property per unit: every run is a race of 300 frames through the runner and the scheduler. */
-const REWIND_RUNS = 8;
-
-/** The generated races with a rewind (perhaps two back to back): each appends a void fact (C27). */
-const WITH_REWINDS = arbRace.filter((p) => p.flashback !== undefined);
-
 /** The registered calculator `id`, which must be incremental. */
-const incrementalOf = (id: CalculatorId): IncrementalCalculator<unknown, unknown> => {
+export const incrementalOf = (id: CalculatorId): IncrementalCalculator<unknown, unknown> => {
   const calc = CALCULATORS.find((c) => c.id === id);
   if (calc === undefined) throw new Error(`no registered calculator ${id}`);
   if (calc.kind !== 'incremental') throw new Error(`${id} is ${calc.kind}, not incremental`);
@@ -172,8 +164,8 @@ const incrementalOf = (id: CalculatorId): IncrementalCalculator<unknown, unknown
 /**
  * The C31 proofs of the incremental unit `id` (C31, C41): its from-scratch reads per frame grow at least fivefold from
  * lap 7 to lap 70 while its incremental reads at most double (C31.1); its accumulator after a run equals `init` over the
- * projection alone, the live state and situation replaced by empty values (C31.2); it equals `init` at every step of
- * random races with rewinds, which append void facts (C31.3).
+ * projection alone, the live state and situation replaced by empty values (C31.2). Its C31.3 property is in
+ * `incremental-rewind.property.test.ts`, over races shared by every incremental unit.
  */
 export function describeWork(id: CalculatorId): void {
   describe(`${id}: an incremental unit justifies its accumulator by counted work on the long race (C31)`, () => {
@@ -206,17 +198,6 @@ export function describeWork(id: CalculatorId): void {
       const calc = incrementalOf(id);
       const last = longRace().framesOfLap(34).at(-1)!;
       expect(() => calc.init(readsOnlyTheProjection(calc as Calculator, longRace().viewAt(last)))).not.toThrow();
-    });
-
-    it('incremental equals from scratch at every step of random races with rewinds, each a void fact (C31.3)', () => {
-      const calc = incrementalOf(id);
-      fc.assert(
-        fc.property(WITH_REWINDS, (p) => {
-          // both sides unguarded (ruling Task 22 round 5): C41 is the guarded-view completeness test's
-          expectScheduledIncremental(calc, raceFrames({ ...p, frames: 300 }).frames, { guardScheduled: false });
-        }),
-        { numRuns: REWIND_RUNS },
-      );
     });
   });
 }

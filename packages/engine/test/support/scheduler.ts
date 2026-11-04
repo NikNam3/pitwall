@@ -395,13 +395,6 @@ export function countReads(unit: Calculator, view: EngineView, run: (view: Engin
 export const quick = (id: string, o: Partial<QuickCalculator<unknown>> = {}): Calculator =>
   ({ kind: 'quick', id, reads: ['timing'], cadence: 'frame', compute: (v) => v.live.sessionTime, ...o }) as Calculator;
 
-/** A scheduler that needs `calc` alone, run on the view as it is (no guard); outputs frozen, as in every test. */
-const unguardedSched = (calc: Calculator): Scheduler => {
-  const s = new Scheduler(CalculatorRegistry.build([calc]), { freezeOutputs: true });
-  s.setNeeded([calc.id]);
-  return s;
-};
-
 /**
  * A scheduler over `calcs`, each run through its guarded view (C41), that needs `needed`; outputs frozen, as in every
  * test (a unit never changes an output it returned).
@@ -475,43 +468,130 @@ const frozenList = <T>(list: readonly T[]): readonly T[] => {
 };
 
 /**
- * The view of `input` as the from-scratch side of the C31.3 property sees it (ruling Task 22 round 5): no guard (C41 is
- * the guarded-view completeness test's and the units' own tests'), frozen instead. The view and its projection are
- * frozen copies (the projection's lists are the log's own arrays, which keep growing: a copy of each is frozen; their
- * entries the log froze), the situation is deep-frozen; the live state is the engine's own and is changed by the next
- * step, so it is handed as it is.
+ * A deep-frozen copy of `raw` that shares every part equal to `prev` (the copy of the step before): the engine changes
+ * its live state in place, so a step is copied, but only the parts that changed are new. Plain objects and arrays are
+ * copied part by part; anything else (a Map, a Set, a class instance) is cloned whole.
  */
-export function frozenView(input: SchedulerInput): EngineView {
+const sharedCopy = (prev: unknown, raw: unknown): unknown => {
+  if (typeof raw !== 'object' || raw === null) return raw;
+  if (Array.isArray(raw)) {
+    const before = Array.isArray(prev) ? prev : undefined;
+    let same = before !== undefined && before.length === raw.length;
+    const out = new Array<unknown>(raw.length);
+    for (let i = 0; i < raw.length; i++) {
+      const part = sharedCopy(before?.[i], raw[i]);
+      if (same && part !== before![i]) same = false;
+      out[i] = part;
+    }
+    return same ? before : Object.freeze(out);
+  }
+  const proto = Object.getPrototypeOf(raw);
+  if (proto !== Object.prototype && proto !== null) {
+    if (prev !== undefined && isDeepStrictEqual(prev, raw)) return prev;
+    const copy = structuredClone(raw);
+    freezeOnce(copy);
+    return copy;
+  }
+  const before = typeof prev === 'object' && prev !== null && !Array.isArray(prev) ? (prev as Record<string, unknown>) : undefined;
+  const source = raw as Record<string, unknown>;
+  const keys = Object.keys(source);
+  const out: Record<string, unknown> = {};
+  let same = before !== undefined && Object.keys(before).length === keys.length;
+  for (let i = 0; i < keys.length; i++) {
+    const key = keys[i]!;
+    const was = before?.[key];
+    const part = sharedCopy(was, source[key]);
+    if (same && (part !== was || (was === undefined && !(key in before!)))) same = false;
+    out[key] = part;
+  }
+  if (same) return before;
+  return Object.freeze(out);
+};
+
+/**
+ * The part of the live state units declaring `reads` may see (C41): the free fields (`FREE_LIVE`, `FREE_CAR`) and those
+ * of their declared live areas (`LIVE_AREA_FIELDS`), a shallow pick, nothing the engine keeps besides (C8, C13, C28).
+ */
+const declaredLive = (state: Record<string, unknown>, reads: readonly Dependency[]): Record<string, unknown> => {
+  const areas = (Object.keys(LIVE_AREA_FIELDS) as LiveArea[]).filter((area) => reads.includes(area));
+  const stateFields = [...FREE_LIVE, ...areas.flatMap((area) => LIVE_AREA_FIELDS[area].state)];
+  const carFields = [...FREE_CAR, ...areas.flatMap((area) => LIVE_AREA_FIELDS[area].car)];
+  const pick = (from: Record<string, unknown>, fields: readonly string[]) => Object.fromEntries(fields.filter((f) => f in from).map((f) => [f, from[f]]));
+  const live = pick(state, stateFields);
+  if (areas.some((area) => LIVE_AREA_FIELDS[area].car.length > 0)) live['cars'] = (state['cars'] as Array<Record<string, unknown>>).map((car) => pick(car, carFields));
+  return live;
+};
+
+/**
+ * A step's scheduler input recorded for later, frozen (ruling Task 22 rounds 5 and 6): a deep-frozen copy of the live
+ * state units declaring `reads` may see (`declaredLive`; the engine changes its own in place on the next step; the parts equal to those of `before`, the step before,
+ * are shared with its copy, `sharedCopy`), frozen copies of the projection's lists (the log's own
+ * arrays keep growing; a list is copied again only once it has grown; its entries the log froze), the situation
+ * deep-frozen, the change tags and the delta copied. No guard: C41 is the guarded-view completeness test's and the
+ * units' own tests'.
+ */
+export function recordedInput(r: Pick<StepResult, 'state' | 'changed' | 'delta'>, reads: readonly Dependency[], before?: SchedulerInput): SchedulerInput {
+  const input = inputOf(r);
+  const copy = sharedCopy(before?.live, declaredLive(r.state as unknown as Record<string, unknown>, reads));
   const { spans, ...lists } = input.history;
   const history = Object.freeze({
     ...Object.fromEntries(Object.entries(lists).map(([name, list]) => [name, frozenList(list as readonly unknown[])])),
     spans: Object.freeze(Object.fromEntries(Object.entries(spans).map(([machine, list]) => [machine, frozenList(list)]))),
   }) as unknown as EngineView['history'];
   freezeOnce(input.situation);
-  return Object.freeze({ ...input, history, outputs: new Map() });
+  return Object.freeze({
+    ...input,
+    live: copy as unknown as SchedulerInput['live'],
+    history,
+    changed: Object.freeze(new Set(input.changed)),
+    delta: structuredClone(input.delta),
+  });
+}
+
+/**
+ * Every step's recorded input (`recordedInput`) of a run of `frames` through a `SessionRunner`, flashbacks included,
+ * with the live state units declaring `reads` may see (the union of the readers' `reads`).
+ */
+export function recordRun(frames: readonly Frame[], reads: readonly Dependency[]): SchedulerInput[] {
+  const runner = new SessionRunner(initFor([...frames]));
+  const steps: SchedulerInput[] = [];
+  const record = (r: StepResult) => steps.push(recordedInput(r, reads, steps.at(-1)));
+  for (const frame of frames) runner.apply(frame, record);
+  runner.end(record);
+  return steps;
+}
+
+/**
+ * C31.3 over recorded steps (`recordRun`): a `Scheduler` that needs `calc` runs every step, and on every step it ran
+ * its output equals a fresh `init` and `output` over that step's frozen view. The scheduler is never reset by hand:
+ * only a flashback rewinds (`delta.rewound`, C30). Neither side is guarded (ruling Task 22 rounds 5 and 6).
+ */
+export function expectIncrementalOverSteps<Acc, Out>(calc: IncrementalCalculator<Acc, Out>, steps: readonly SchedulerInput[], label = ''): void {
+  const scheduler = new Scheduler(CalculatorRegistry.build([calc as Calculator]), { freezeOutputs: true });
+  scheduler.setNeeded([calc.id]);
+  steps.forEach((input, i) => {
+    const { ran, outputs } = scheduler.run(input);
+    if (!ran.includes(calc.id)) return;
+    const fresh: EngineView = Object.freeze({ ...input, outputs: new Map() });
+    expectEqual(outputs.get(calc.id), calc.output(calc.init(fresh), fresh), `${label}frame ${i}`);
+  });
 }
 
 /**
  * Runs `frames` through a `SessionRunner` and a `Scheduler` that needs `calc` and, on every step it ran, expects its
  * output to equal a fresh `init` and `output` over that step's view (incremental = from scratch, C31.3, docs/testing.md
- * section 5). The scheduler is never reset by hand: only a flashback rewinds (`delta.rewound`, C30). The fresh side sees a
- * frozen, unguarded view (`frozenView`, ruling Task 22 round 5); the scheduled side the guarded view (C41), unless
- * `guardScheduled` is false: the C31.3 property of the analysis units runs both sides unguarded within its time budget,
- * C41 being the guarded-view completeness test's and the units' own tests'.
+ * section 5). The scheduler is never reset by hand: only a flashback rewinds (`delta.rewound`, C30). Both see the
+ * guarded view (C41).
  */
-export function expectScheduledIncremental<Acc, Out>(
-  calc: IncrementalCalculator<Acc, Out>,
-  frames: readonly Frame[],
-  { guardScheduled = true }: { guardScheduled?: boolean } = {},
-): void {
+export function expectScheduledIncremental<Acc, Out>(calc: IncrementalCalculator<Acc, Out>, frames: readonly Frame[]): void {
   const runner = new SessionRunner(initFor([...frames]));
-  const scheduler = guardScheduled ? sched([calc as Calculator]) : unguardedSched(calc as Calculator);
+  const scheduler = sched([calc as Calculator]);
   let i = 0;
   const check = (r: StepResult) => {
     const input = inputOf(r);
     const { ran, outputs } = scheduler.run(input);
     if (ran.includes(calc.id)) {
-      const fresh = frozenView(input);
+      const fresh = guardedView({ ...input, outputs: new Map() }, calc.reads, { unit: calc.id });
       expectEqual(outputs.get(calc.id), calc.output(calc.init(fresh), fresh), `frame ${i}`);
     }
     i++;
