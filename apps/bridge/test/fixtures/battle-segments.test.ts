@@ -1,5 +1,6 @@
-// The battle cards follow race control's DRS status, on race-zandvoort-vsc (DRSD, wet track, at 914.178 s with the
-// VSC); facts in fixtures/index.json. The engine plus battle and the calculators it reads.
+// The battle cards follow race control's DRS status (race-control-race's spans), on race-zandvoort-vsc (DRSD, wet
+// track, at 914.178 s with the VSC; cut mid-race, so the race is joined after the lights out); facts in
+// fixtures/index.json. The engine plus battle and the calculators it reads.
 import { describe, expect, it } from 'vitest';
 import { BATTLE, battleCalculator, gapsCalculator, paceCalculator, type BattleOutput } from '@pitwall/analysis';
 import type { DrsStatus } from '@pitwall/domain';
@@ -20,12 +21,16 @@ async function drsRuns(file: string): Promise<{ at: number; drs: DrsStatus[] }[]
 }
 
 describe('battle on real data', () => {
-  it('race-zandvoort-vsc: every card turns DRS off with reason wetTrack from the DRSD frame on, not before', async () => {
+  it('race-zandvoort-vsc: joined after the lights out, every card has DRS enabled until the DRSD, then off with reason wetTrack', async () => {
     const runs = await drsRuns('race-zandvoort-vsc.pwrec.gz');
     const first = runs.findIndex((r) => r.at >= DRSD_AT);
     expect(first).toBeGreaterThan(0);
+    const enabled: DrsStatus = { enabled: true };
     const wet: DrsStatus = { enabled: false, reason: 'wetTrack' };
-    for (const r of runs.slice(0, first)) expect(r.drs, `at ${r.at}`).not.toContainEqual(wet);
+    for (const r of runs.slice(0, first)) {
+      expect(r.drs.length).toBeGreaterThan(0);
+      expect(r.drs, `at ${r.at}`).toEqual(r.drs.map(() => enabled));
+    }
     for (const r of runs.slice(first)) {
       expect(r.drs.length).toBeGreaterThan(0);
       expect(r.drs, `at ${r.at}`).toEqual(r.drs.map(() => wet));

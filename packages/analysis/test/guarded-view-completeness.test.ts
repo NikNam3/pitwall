@@ -74,11 +74,10 @@ function undeclaredReads(calc: Calculator): string[] {
  * marked `it.fails` until the lane's fix lands, which turns the mark red, so the lane removes the unit from this list.
  * - `damage` (lane g): `live.session` (`session.kind`) and `live.cars[].timing`;
  * - `gaps` (lane a): `live.session` (`session.kind`);
- * - `battle` (lane d): `live.session` (`session.kind`, `drsStatus`) and `live.playerCar` (`identity`);
  * - `tyre-wear` (lane g): `live.session` (`session.kind`);
  * - `alarms` (lane e): `live.playerCar` (`identity`).
  */
-const FIXED_BY_LANE: Readonly<Record<CalculatorId, string>> = { damage: 'g', gaps: 'a', battle: 'd', 'tyre-wear': 'g', alarms: 'e' };
+const FIXED_BY_LANE: Readonly<Record<CalculatorId, string>> = { damage: 'g', gaps: 'a', 'tyre-wear': 'g', alarms: 'e' };
 
 describe('every unit reads only what it declares (C41, C87)', () => {
   it('the package registers its calculators and analyses', () => {
