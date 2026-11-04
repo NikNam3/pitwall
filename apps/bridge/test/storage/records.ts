@@ -16,7 +16,7 @@ export const stint = (c: number, firstLap: number): StintRecord => ({ carId: car
 export const pitStop = (c: number, lap: number): PitStopRecord => ({ carId: car(c), lap, pitLaneEntry: lap * 90_000, pitLaneExit: lap * 90_000 + 22_000,
   pitLaneTimeMs: 22_000, stationaryTimeMs: 2_500, flag: 'green', penaltyServed: false, frame: 0 });
 export const event = (at: number, c?: number): RaceEvent => ({ at, kind: 'overtake', ...(c === undefined ? {} : { carId: car(c) }), params: {}, frame: 0 });
-export const history = (o: Partial<Projection> = {}): Projection => ({ laps: [], stints: [], pitStops: [], events: [], crossings: [], clock: [], spans: {}, ...o });
+export const history = (o: Partial<Projection> = {}): Projection => ({ laps: [], stints: [], pitStops: [], events: [], crossings: [], penalties: [], clock: [], spans: {}, ...o });
 const lengths = (h: Projection): LogLengths => ({ laps: h.laps.length, stints: h.stints.length, pitStops: h.pitStops.length,
   events: h.events.length,
   crossings: h.crossings.length });

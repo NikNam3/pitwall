@@ -439,12 +439,6 @@ describe('battle: the behaviour table (C44), one test per row', () => {
       expect(late.drs).toEqual(ENABLED);
     });
 
-    it('DRS events in the history do not decide: a DRSD event beside an open drsOn span leaves DRS enabled (C20)', () => {
-      const view = build(base({ drs: 'drsOn' }));
-      const events = [{ kind: 'drsDisabled' as const, at: 100_000, frame: 1, params: { reason: 'safetyCar' } }];
-      const withEvents = { ...view, history: { ...view.history, events } };
-      expect(card(withEvents).drs).toEqual(ENABLED);
-    });
 
     it('a race without the gaps and pace outputs: the card still carries the DRS status', () => {
       const view = engineView({ cars: [carState({ id: id(0) })], situation: situationOf('race', { off: 'redFlag' }) });

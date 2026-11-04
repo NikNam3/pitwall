@@ -173,12 +173,10 @@ const buildPitStops = (): Appended<PitStopRecord>[] =>
     };
   }).sort(byAppend);
 
-/** The start, a speed trap per car and lap, the collision and its damage. */
+/** A speed trap per car and lap, the collision and its damage (the start lights and lights out are the race's session-phase spans, Task 21). */
 function buildEvents(): Appended<RaceEvent>[] {
   const at = (e: RaceEvent): Appended<RaceEvent> => ({ fact: e, on: e.frame });
   const list = [
-    at(event({ kind: 'startLights', at: 0, frame: frameAt(0), params: { lights: 5 } })),
-    at(event({ kind: 'lightsOut', at: START, frame: frameAt(START) })),
     at(event({ kind: 'collision', at: COLLISION.at, frame: frameAt(COLLISION.at), carId: COLLISION.car, otherCarId: COLLISION.other })),
     at(
       event({
@@ -326,6 +324,7 @@ function build(): BuilderRace {
       stints: facts.stints.slice(0, countBy(lists.stints, frame)),
       pitStops: facts.pitStops.slice(0, countBy(lists.pitStops, frame)),
       events: facts.events.slice(0, countBy(lists.events, frame)),
+      penalties: [],
       clock: [],
       spans: spansAt,
     };

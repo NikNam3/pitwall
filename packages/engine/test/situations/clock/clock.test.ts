@@ -22,7 +22,8 @@ import { beats, flbk, gridStart, lap, LGOT, LIGHTS_OUT, ovtk, raceAt, run, scar,
 const FORMATION_STATUS = (k: number, at: number) => (k === at ? { session: status(3) } : {});
 const lightsAt = (k: number, first: number, every: number): EventDetails[] =>
   [1, 2, 3, 4, 5].flatMap((n) => (k === first + (n - 1) * every ? [stlg(n)] : []));
-const lightsOut = (r: SessionRunner) => r.state.history.events.filter((e) => e.kind === 'lightsOut');
+/** Lights out (C20; a span since Task 21, no race event): the race-clock time each closed `startLights` span of the race ended on, where `racing` opened. */
+const lightsOut = (r: SessionRunner) => (r.state.history.spans['session-phase-race'] ?? []).filter((s) => s.kind === 'startLights').map((s) => ({ at: s.end }));
 /** Index of race frame k of `gridStart` among the frames. */
 const raceFrame = (k: number) => LIGHTS_OUT + 1 + k;
 /** The clock's closed spans readers see (`spans:clock`, C7, C20). */

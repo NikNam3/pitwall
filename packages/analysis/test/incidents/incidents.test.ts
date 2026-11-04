@@ -61,14 +61,6 @@ const AFTER_MS = 5_000;
 const valueOf = <T>(k: Known<T>): T | undefined => (k.known ? k.value : undefined);
 
 const collision = (a: number, b: number, at = T): RaceEvent => event({ kind: 'collision', at, carId: car(a), otherCarId: car(b) });
-/** A PENA event, as the engine recorded it before Task 21: a signal (C12, C13), which `incidents` never reads. */
-const penaltyEvent = (id: number, penaltyType: number, at = T): RaceEvent =>
-  event({ kind: 'penalty', at, carId: car(id), params: { penaltyType, infringementType: 7, timeMs: 5_000, lap: 5, placesGained: 0 } });
-
-/** The F1 25 `penaltyType` codes of a PENA (Event packet, "Penalty types" appendix of the data-output spec). */
-const WARNING = 5;
-const TIME_PENALTY = 4;
-
 /** A `damageChange` event of car `id` (car 7 by default): `part` goes from `fromPct` to `toPct`. */
 const dmg = (at: number, part: keyof DamageParts, fromPct: number, toPct: number, id = 7): RaceEvent =>
   event({ kind: 'damageChange', at, carId: car(id), params: { part, fromPct, toPct } });
@@ -793,7 +785,7 @@ describe('incidents behaves per situation by its behaviour table (C44)', () => {
   });
 
   describe('car-status', () => {
-    const feedWith = (spans: ReturnType<typeof status>, events: RaceEvent[] = []) => run(viewOf({ miniSectors: race(), spans, events }));
+    const feedWith = (spans: ReturnType<typeof status>) => run(viewOf({ miniSectors: race(), spans }));
 
     it('competing: no entry', () => {
       expect(feedWith([...status(7), ...status(8)])).toEqual([]);
@@ -823,9 +815,6 @@ describe('incidents behaves per situation by its behaviour table (C44)', () => {
       expect(feedWith(status(8, [{ kind: 'absent', at: T }]))).toEqual([]);
     });
 
-    it('a retirement event without the car-status span is no entry: retirements come from car-status (C13, C20)', () => {
-      expect(feedWith(status(8), [event({ kind: 'retirement', at: T, carId: car(8), params: { reason: 'retired' } })])).toEqual([]);
-    });
   });
 
   describe('penalties', () => {
@@ -872,9 +861,6 @@ describe('incidents behaves per situation by its behaviour table (C44)', () => {
       expect(penalties(chain('penalties', 7, [owedStep({ at: T, totalMs: 5_000, joinedAt: true })]))).toEqual([]);
     });
 
-    it('a PENA penalty event without a penalties span is no entry: penalties come from the spans (C13, C20)', () => {
-      expect(run(viewOf({ miniSectors: race(), spans: owes(7, []), events: [penaltyEvent(7, TIME_PENALTY)] }))).toEqual([]);
-    });
   });
 
   describe('warnings', () => {
@@ -892,8 +878,5 @@ describe('incidents behaves per situation by its behaviour table (C44)', () => {
       expect(run(viewOf({ miniSectors: race(), spans }))).toEqual([]);
     });
 
-    it('a PENA warning event without a warned span is no entry: warnings come from the spans (C13, C20)', () => {
-      expect(run(viewOf({ miniSectors: race(), spans: warned(7, []), events: [penaltyEvent(7, WARNING)] }))).toEqual([]);
-    });
   });
 });

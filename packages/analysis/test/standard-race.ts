@@ -70,8 +70,6 @@ const pitStops: PitStopRecord[] = [
 ];
 
 const events: RaceEvent[] = [
-  event({ kind: 'startLights', at: 0, frame: frameAt(0), params: { lights: 5 } }),
-  event({ kind: 'lightsOut', at: 1_000, frame: frameAt(1_000) }),
   event({ kind: 'overtake', at: 95_000, frame: frameAt(95_000), carId: carId(2), otherCarId: carId(1) }),
   event({ kind: 'speedTrap', at: 120_000, frame: frameAt(120_000), carId: carId(0), params: { speedKmh: 322 } }),
   event({ kind: 'collision', at: 190_000, frame: frameAt(190_000), carId: carId(3), otherCarId: carId(2) }),

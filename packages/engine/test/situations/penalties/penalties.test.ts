@@ -89,6 +89,42 @@ describe('penalties: a time penalty', () => {
   });
 });
 
+// Migration Task 21 (ruling 1, C3, C13): a timePenalty span names the infringement of the PENA (type 4) that raised the
+// total, as a pending span names its PENA's; without one it is unknown('notReceived'), never 0.
+describe('penalties: a time penalty names the infringement of the PENA that raised the total', () => {
+  const timed = (totalMs: number, infringement: object) => ({ totalMs, infringement });
+  it('PENA 4 one frame before the rise (the recorded order): the span names its infringement', () => {
+    const r = run(inputs().frames(3).frame(timePena(21)).frame(time(3000)).frames(2));
+    expect(r.open[4]).toMatchObject({ kind: 'timePenalty', startFrame: 5 });
+    expect(r.open[4]!.detail).toEqual(timed(3000, known(21, 3 * FRAME_MS)));
+    expect(r.open[6]).toEqual(r.open[4]);
+  });
+  it('PENA 4 on the frame of the rise gives the same infringement', () => {
+    expect(run(inputs().frames(3).frame(all(timePena(21), time(3000)))).open[3]!.detail).toEqual(timed(3000, known(21, 3 * FRAME_MS)));
+  });
+  it('a rise with no PENA: the infringement is unknown(notReceived), never 0 (C3)', () => {
+    expect(run(inputs().frames(2).frame(time(3000))).open[2]!.detail).toEqual(timed(3000, unknown('notReceived')));
+  });
+  it('the PENA of another car, or of another type (a warning, a drive-through), is not taken', () => {
+    const r = run(inputs().frames(2).frame(all(events(pena(1, 4, 21), pena(0, 5, 7), pena(0, 0, 38)), time(3000))));
+    expect(r.open[2]!.detail).toEqual(timed(3000, unknown('notReceived')));
+  });
+  it('a further time penalty names its own PENA; a PENA is used once: a later rise with no PENA does not repeat it', () => {
+    const r = run(inputs().frames(2).frame(timePena(21)).frame(time(3000)).frames(2).frame(timePena(7)).frame(time(8000)).frames(2).frame(time(13000)));
+    expect(r.open[3]!.detail).toEqual(timed(3000, known(21, 2 * FRAME_MS)));
+    expect(r.open[7]).toMatchObject({ kind: 'timePenalty', id: 2, detail: timed(8000, known(7, 6 * FRAME_MS)) });
+    expect(r.open[10]).toMatchObject({ kind: 'timePenalty', id: 3, detail: timed(13000, unknown('notReceived')) });
+  });
+  it('joined holding time penalties: the infringement is unknown(notReceived)', () => {
+    expect(run(inputs().frames(3, time(3000))).open[0]).toMatchObject({ kind: 'timePenalty', joinedAt: true, detail: timed(3000, unknown('notReceived')) });
+  });
+  it('serving a drive-through while the time penalty stands: timePenalty again, naming the infringement that raised the total', () => {
+    const r = run(inputs().frames(2).frame(timePena(21)).frame(time(3000)).frame(dtPena(38)).frame(dt(1)).frames(2).frame(all(dtsv(), dt(0))));
+    expect(r.open[3]!.detail).toEqual(timed(3000, known(21, 2 * FRAME_MS)));
+    expect(r.open[8]).toMatchObject({ kind: 'timePenalty', startFrame: 9, detail: timed(3000, known(21, 2 * FRAME_MS)) });
+  });
+});
+
 describe('penalties: a drive-through is pending from the rise of the unserved count', () => {
   it('PENA one frame before the rise (the recorded order): the span opens on the rise with the PENA’s infringement, closing clear', () => {
     const r = run(inputs().frames(3).frame(dtPena(38)).frame(dt(1)).frames(2));

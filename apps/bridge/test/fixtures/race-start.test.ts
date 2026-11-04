@@ -17,10 +17,9 @@ const SHAPES = [
   ['S4', 'race-zandvoort-uid-reuse-start.pwrec.gz'],
 ] as const;
 
-/** The game's event codes that become race events, and their kinds. */
+/** The game's event codes that become race events, and their kinds; the situation events (PENA, RTMT, DRSE, DRSD, STLG, LGOT) are spans (C13, Task 21). */
 const KIND_OF: Readonly<Record<string, RaceEvent['kind']>> = {
-  PENA: 'penalty', OVTK: 'overtake', COLL: 'collision', RTMT: 'retirement', FTLP: 'fastestLap', SPTP: 'speedTrap',
-  DRSE: 'drsEnabled', DRSD: 'drsDisabled', STLG: 'startLights', LGOT: 'lightsOut',
+  OVTK: 'overtake', COLL: 'collision', FTLP: 'fastestLap', SPTP: 'speedTrap',
 };
 
 type Replayed = {
@@ -64,16 +63,17 @@ const raceStart = (state: DeepReadonly<EngineState>): number | undefined =>
 describe.each(SHAPES)('the race start, shape %s (%s)', (_, file) => {
   it('the race start is lights out on the race clock: one lights out, the racing phase opens at it, no later than any frame after it', () => {
     const { state, lowestAfterLightsOut } = replayed.get(file)!;
-    const lightsOut = state.history.events.filter((e) => e.kind === 'lightsOut').map((e) => e.at);
+    // lights out: where the race's startLights span closed (C20; a span since Task 21, no race event)
+    const lightsOut = (state.history.spans['session-phase-race'] ?? []).filter((s) => s.kind === 'startLights').map((s) => s.end);
     const start = raceStart(state);
     expect(lightsOut).toEqual([start]);
     expect(start).toBeGreaterThanOrEqual(0);
     expect(start).toBeLessThanOrEqual(lowestAfterLightsOut);
   });
   // S4 (race-zandvoort-uid-reuse-start) has its own row below: its weekend phase is decided inside the formation lap.
-  it.runIf(file !== S4)('nothing recorded before lights out is shown but the start lights and lights out: the formation lap is hidden (C29)', () => {
+  it.runIf(file !== S4)('nothing recorded before lights out is shown: the formation lap is hidden (C29); the start lights are spans, no race events', () => {
     const { state, raceKinds } = replayed.get(file)!;
-    expect(state.history.events.map((e) => e.kind)).toEqual([...new Array(5).fill('startLights'), 'lightsOut', ...raceKinds]);
+    expect(state.history.events.map((e) => e.kind)).toEqual(raceKinds);
   });
   it('every running car is on lap 1, seen from its start at lights out', () => {
     const { state } = replayed.get(file)!;
@@ -101,11 +101,14 @@ describe('the race start, shape S4: the weekend phase decided inside the formati
     const decided = situationOf(state).byMachine['weekend-phase']?.[0]?.startFrame;
     const formation = (state.history.spans['session-phase-race'] ?? []).find((s) => s.kind === 'formation');
     expect(formation).toMatchObject({ startFrame: decided, joinedAt: true });
-    const before = state.log.events.filter((e) => e.frame < decided!);
-    const inFormation = state.log.events.filter((e) => e.frame >= formation!.startFrame && e.frame < formation!.endFrame);
+    // the race events, the mini-sector crossings and the clock facts (the start lights, lights out and the DRS notices are spans since Task 21)
+    type Lists = { events: readonly { frame: number }[]; crossings: readonly { frame: number }[]; clock: readonly { frame: number }[] };
+    const facts = (lists: Lists) => [...lists.events, ...lists.crossings, ...lists.clock];
+    const before = facts(state.log).filter((e) => e.frame < decided!);
+    const inFormation = facts(state.log).filter((e) => e.frame >= formation!.startFrame && e.frame < formation!.endFrame);
     expect(before.length).toBeGreaterThan(0);
     expect(inFormation.length).toBeGreaterThan(0);
-    expect(state.history.events.filter((e) => e.frame < decided!)).toEqual(before);
-    expect(state.history.events.filter((e) => e.frame >= formation!.startFrame && e.frame < formation!.endFrame)).toEqual([]);
+    expect(facts(state.history).filter((e) => e.frame < decided!)).toEqual(before);
+    expect(facts(state.history).filter((e) => e.frame >= formation!.startFrame && e.frame < formation!.endFrame)).toEqual([]);
   });
 });

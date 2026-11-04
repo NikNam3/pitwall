@@ -92,6 +92,7 @@ const LIST_TAGS: Readonly<Record<string, ChangeTag>> = {
   pitStops: 'pitStops',
   events: 'events',
   crossings: 'miniSectors',
+  penalties: 'penalties',
   clock: 'clock',
 };
 

@@ -24,7 +24,7 @@ const OPEN: OpenSpan = { machine: 'car-status', id: 2, kind: 'competing', start:
 const VIEW: EngineView = {
   live: { feedId: 'f1', sessionTime: 0 } as never,
   situation: { ...RACING, byMachine: { 'car-status': [OPEN] } },
-  history: { laps: [], stints: [], pitStops: [], events: [], clock: [], crossings: [0, 1, 2, 3, 4].map(crossing), spans: { 'car-status': [span(0, 1, 5), span(1, 5, 9)] } },
+  history: { laps: [], stints: [], pitStops: [], events: [], penalties: [], clock: [], crossings: [0, 1, 2, 3, 4].map(crossing), spans: { 'car-status': [span(0, 1, 5), span(1, 5, 9)] } },
   changed: new Set(),
   delta: { before: { crossings: 3 }, after: { crossings: 5 } },
   weekend: undefined,

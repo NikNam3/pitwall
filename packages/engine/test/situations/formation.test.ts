@@ -106,30 +106,28 @@ describe('the formation lap', () => {
 describe('the formation lap’s facts are hidden, never discarded (C24, C29)', () => {
   it('a formation lap’s facts are hidden, and the formation span is visible', () => {
     const { runner } = startRun();
+    // the start lights and lights out are spans, never race events (C13, Task 21)
     expect(events(runner)).toEqual([
-      ...LIGHTS.map((k, i) => ({ at: raceAt(0), kind: 'startLights', params: { lights: i + 1 }, frame: k + 1 })),
-      { at: raceAt(0), kind: 'lightsOut', params: {}, frame: LIGHTS_OUT + 1 },
       { at: raceAt(40), kind: 'overtake', carId: 1, otherCarId: 0, params: {}, frame: LIGHTS_OUT + 41 },
     ]);
     expect(spans(runner).filter((s) => s.kind === 'formation')).toHaveLength(1);
   });
-  it('the log keeps every fact the formation lap recorded, as recorded (the overtakes, the retirement, the DRS notice): none is removed or changed', () => {
+  // The retirement and the DRS notice are spans since Task 21 (car-status, race-control-race), never race events (C13).
+  it('the log keeps every fact the formation lap recorded, as recorded (the overtakes): none is removed or changed', () => {
     const { runner } = startRun();
     const hidden = runner.state.log.events.filter(inFormation);
     expect(hidden.map((e) => [e.kind, e.frame])).toEqual([
       ['overtake', 51],
-      ['retirement', 61],
       ['overtake', RESET + 1],
-      ['drsDisabled', 116],
     ]);
     expect(runner.state.log.events.filter((e) => !inFormation(e))).toEqual(events(runner));
   });
   it('a lights-out event during the formation lap, before any start light, is no race start and is hidden with the formation', () => {
     const { runner } = run(script(formationStart((k) => (k === FORMATION + 5 ? [LGOT] : []))));
     expect(spans(runner).map((s) => s.kind)).toEqual(['grid', 'formation', 'startLights']);
-    expect(current(runner)).toMatchObject({ kind: 'racing', start: raceAt(0) });
-    expect(events(runner).filter((e) => e.kind === 'lightsOut')).toEqual([{ at: raceAt(0), kind: 'lightsOut', params: {}, frame: LIGHTS_OUT + 1 }]);
-    expect(runner.state.log.events.filter((e) => e.kind === 'lightsOut')).toHaveLength(2);
+    // lights out is the racing span's opening (C20; no race event since Task 21): at the race's lights out, not the formation's
+    expect(current(runner)).toMatchObject({ kind: 'racing', start: raceAt(0), startFrame: LIGHTS_OUT + 1 });
+    expect(spans(runner).filter((s) => s.kind === 'startLights').map((s) => [s.end, s.endFrame])).toEqual([[raceAt(0), LIGHTS_OUT + 1]]);
   });
   it('the formation lap’s mini-sector crossings are hidden; lap 1 is crossed again from lights out, each boundary once', () => {
     const { runner } = startRun();

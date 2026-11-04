@@ -446,7 +446,7 @@ export function engineView({
 
 /** A projection with every list empty. */
 const emptyProjection = (): Projection => ({
-  laps: [], stints: [], pitStops: [], crossings: [], events: [], clock: [], spans: {},
+  laps: [], stints: [], pitStops: [], crossings: [], events: [], penalties: [], clock: [], spans: {},
 });
 
 /** A projection with the given lists and the rest empty: pass it to `engineView({ history })`. */

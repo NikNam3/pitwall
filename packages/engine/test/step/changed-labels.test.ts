@@ -60,7 +60,8 @@ describe('change tags', () => {
   it('are the domain areas, the fact lists, the clock’s list and its spans, then the registered sub-machines’ spans (C40), in this order', () => {
     expect(CHANGE_TAGS).toEqual([
       'session', 'identity', 'timing', 'tyres', 'energy', 'condition', 'dynamics', 'ownCar',
-      'laps', 'stints', 'pitStops', 'events', 'miniSectors',
+      // `penalties`: the penalty records' list (Task 21, C40: one tag per fact list)
+      'laps', 'stints', 'pitStops', 'events', 'miniSectors', 'penalties',
       'clock', 'spans:clock',
       'spans:car-activity-practice', 'spans:car-activity-qualifying', 'spans:car-activity-race', 'spans:car-flags', 'spans:car-location',
       'spans:car-status', 'spans:compound-rule', 'spans:lap-validity', 'spans:penalties',

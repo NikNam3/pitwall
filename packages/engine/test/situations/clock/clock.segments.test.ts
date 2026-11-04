@@ -88,7 +88,8 @@ describe('race-zandvoort-online-start: the race clock settles after lights out (
     const { runner, steps } = run;
     const { before, now } = prefixes(steps[fall]!.before!, runner.state.history);
     expect(now).toEqual(before);
-    expect(runner.state.history.events.filter((e) => e.kind === 'lightsOut').map((e) => e.at)).toEqual([steps[lgot]!.race]);
+    // lights out is where the race's startLights span closed (C20; a span since Task 21, no race event)
+    expect(runner.state.history.spans['session-phase-race']?.filter((s) => s.kind === 'startLights').map((s) => s.end)).toEqual([steps[lgot]!.race]);
   });
   it('the frames after the fall lie on the race clock: their session time plus the offset, and the race clock never falls', () => {
     const { steps } = run;

@@ -687,10 +687,6 @@ describe('alarms behaviour table (C44)', () => {
       expect(only(viewWith({}), 'penaltyNew')).toEqual([]);
     });
 
-    it('reads the span of the car: an event in the projection is no penalty alarm', () => {
-      const penalty = event({ kind: 'penalty', carId: carId(0), at: 100_000, params: { penaltyType: 4, lap: 2 } });
-      expect(only(viewWith({}, { history: { events: [penalty] } }), 'penaltyNew')).toEqual([]);
-    });
   });
 
   it('judges each of our cars by its own spans', () => {
