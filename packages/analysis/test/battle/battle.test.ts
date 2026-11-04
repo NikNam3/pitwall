@@ -55,7 +55,14 @@ const closedDrs = (id: number, drs: Drs, start: number, end: number): Span => ({
 });
 /** The view's situation: the weekend phase and race control's DRS as open spans, the weekend phase also as `weekendPhase`. */
 const situationOf = (phase: NonNullable<Scene['phase']>, drs: Drs | 'none'): EngineView['situation'] => ({
-  weekendPhase: phase === 'none' ? { kind: 'none' } : phase === 'race' ? { kind: 'race', format: 'grandPrix' } : { kind: phase, format: phase === 'practice' ? 'practice' : 'grandPrix', segment: undefined },
+  weekendPhase:
+    phase === 'none'
+      ? { kind: 'none' }
+      : phase === 'race'
+        ? { kind: 'race', format: 'grandPrix' }
+        : phase === 'practice'
+          ? { kind: 'practice', format: 'practice', segment: undefined }
+          : { kind: 'qualifying', format: 'grandPrix', segment: undefined },
   byMachine: {
     [WP]: [open(WP, 0, phase, phase === 'none' ? undefined : { format: phase === 'practice' ? 'practice' : 'grandPrix' })],
     ...(drs === 'none' ? {} : { [RC]: [drs === 'drsOn' ? open(RC, 1, 'drsOn') : open(RC, 1, 'drsOff', { reason: drs.off })] }),
