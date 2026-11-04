@@ -9,5 +9,5 @@ export const labels = {
   cadence: 'cadence',
   wrongFormat: 'wrong format',
 } as const;
-/** The weekend phase on the session line, by its kind; a time trial or unknown session (`none`) shows none. */
-export const phase = { practice: 'practice', qualifying: 'qualifying', race: 'race' } as const;
+/** The session's name on the session line, by its weekend phase and format; a time trial or unknown session (`none`) shows none. */
+export const phase = { practice: 'practice', qualifying: 'qualifying', sprintShootout: 'sprint shootout', race: 'race', sprint: 'sprint' } as const;
