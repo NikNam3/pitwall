@@ -4,7 +4,8 @@ import type { EngineState } from './engine-state.ts';
 
 /**
  * Today's `EngineState` without its open trackers, its history, the weekend context (the view's own `weekend`, C39; no
- * recorder reads stored data, C10, C38), the signals (only the machine reads them, C13), the log (C28) and the frame
+ * recorder reads stored data, C10, C38), the signals (the machine reads them; step 1 may read the signals it writes, to
+ * shape the values it writes; it decides no situation, C8, C13), the log (C28) and the frame
  * number (the engine's count of frames, C26; recorders get it as `RecorderInput.frameNumber`). It holds the frame's value
  * events (`frameEvents`, written by step 1).
  */

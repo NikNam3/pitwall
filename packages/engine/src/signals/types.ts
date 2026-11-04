@@ -1,5 +1,6 @@
 // The signals (contract C12, C13): the closed list of game fields and events that state a status, permission, obligation
-// or transition. Step 1 writes them, only the machine reads them; no signal reaches the live state, a fact or a topic.
+// or transition. Step 1 writes them and the machine reads them; step 1 may read the signals it writes, to shape the
+// values it writes; it decides no situation (C8). No signal reaches the live state, a fact or a topic.
 // Protocol-free and in domain units (C4): step 1 converts the packets into these.
 import type { CarId, DriverStatus, FiaFlag, Ms, NeutralisedStage, PitStatus, Ratio, ResultStatus, SessionTime, ZoneFlag } from '@pitwall/domain';
 

@@ -10,8 +10,9 @@ import type { ZoneFlag } from './session.ts';
 import type { Celsius, Joules, Kg, Kmh, Metres, Ms, Percent, Psi, Radians, Ratio, Watts } from './units.ts';
 
 export type Visibility = 'own' | 'public' | 'restricted';
-// The value sets of the signals of the closed list (C12): step 1 writes them into `Signals`, only the machine reads them
-// (C13); no domain field holds one.
+// The value sets of the signals of the closed list (C12): step 1 writes them into `Signals` and the machine reads them
+// (C13); step 1 may read the signals it writes, to shape the values it writes; it decides no situation (C8). No domain
+// field holds one.
 export type PitStatus = 'none' | 'pitting' | 'inPitArea';
 export type DriverStatus = 'inGarage' | 'flyingLap' | 'inLap' | 'outLap' | 'onTrack';
 export type FiaFlag = ZoneFlag;
@@ -268,6 +269,7 @@ export type CarState = {
 
 /**
  * The identity values of the session's participants the weekend context needs (`contextFor`, C61): the player's slot and,
- * per slot the session uses, its driver key. Built by the engine from Participants, so the bridge reads no packet for it.
+ * per slot the Participants packet carries, its driver key (no signal caps the list, C13). Built by the engine from
+ * Participants, so the bridge reads no packet for it.
  */
 export type ParticipantsValues = { playerCar: CarId; drivers: Array<{ carId: CarId; driverKey: DriverKey }> };

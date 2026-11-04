@@ -17,10 +17,13 @@ export const driverKeyOf = (p: ParticipantsPacket, carIndex: number): DriverKey 
   return c ? { name: c.name, networkId: c.networkId } : { name: '', networkId: 255 };
 };
 
-/** What the identity wait hands the runner's `contextFor` (C61): the player's slot and the driver of each slot the session uses. */
+/**
+ * What the identity wait hands the runner's `contextFor` (C61): the player's slot and the driver of every slot the
+ * Participants packet carries. No signal caps the list (C13): which cars are in the session is car-status's (C43).
+ */
 export const participantsValuesOf = (frame: Frame, p: ParticipantsPacket): ParticipantsValues => ({
   playerCar: carId(frame.playerCarIndex),
-  drivers: Array.from({ length: Math.min(p.numActiveCars, p.participants.length) }, (_, i) => ({ carId: carId(i), driverKey: driverKeyOf(p, i) })),
+  drivers: p.participants.map((_, i) => ({ carId: carId(i), driverKey: driverKeyOf(p, i) })),
 });
 
 /**
