@@ -2,6 +2,7 @@
 import type { CarId, ErsState } from '@pitwall/domain';
 
 export type { ErsState } from '@pitwall/domain';
+export * from './behaviour.ts';
 export * from './config.ts';
 
 /** The calculator id. */

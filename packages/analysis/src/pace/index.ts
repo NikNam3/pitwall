@@ -1,6 +1,7 @@
 // `pace` (spec 4): a shared calculator without topics, reading `lap-classes`; others read it through `{ calculator: PACE }`.
 import type { CarId, Known, Ms } from '@pitwall/domain';
 
+export * from './behaviour.ts';
 export * from './config.ts';
 
 /** The calculator id. */
