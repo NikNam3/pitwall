@@ -3,6 +3,7 @@ import type { IncidentEntry } from '@pitwall/domain';
 
 export type { IncidentEntry, IncidentForUs, IncidentKind } from '@pitwall/domain';
 export * from './config.ts';
+export { INCIDENTS_BEHAVIOUR, type IncidentsBehaviour } from './behaviour.ts';
 
 /** The calculator id. */
 export const INCIDENTS = 'incidents';

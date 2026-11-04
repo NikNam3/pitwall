@@ -19,9 +19,6 @@ export const MEDIAN_LAPS = 5;
 /** ...and needs at least this many. */
 export const MEDIAN_MIN_LAPS = 3;
 
-/** A stretch of session time that is no racing for a car: a pit visit. */
-export type Span = { start: SessionTime; end: SessionTime };
-
 /** A crossing; "progress" counts mini-sector boundaries from the race start (gaps' `progressOf`); `frame`: the frame it describes (C26). */
 export type Point = { at: SessionTime; progress: number; frame: FrameNumber };
 
