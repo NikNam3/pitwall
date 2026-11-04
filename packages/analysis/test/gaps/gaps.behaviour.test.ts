@@ -1,7 +1,7 @@
 // `gaps` behaves per situation (contract C14, C17, C20, C26, C43, C44): one test per row of its behaviour table, on a
 // view whose spans are the only thing that differs. The table (`GAPS_BEHAVIOUR`) is the unit's one lookup of what a
 // situation means for it; no game signal and no `car.active` is read. Every view goes through the guarded view (C41).
-import { carId, unknown, type OpenSpan } from '@pitwall/domain';
+import { carId, unknown, type OpenSpan, type Span } from '@pitwall/domain';
 import { SPAN_DECLARATIONS } from '@pitwall/domain';
 import type { EngineView } from '@pitwall/engine';
 import { describe, expect, it } from 'vitest';
@@ -103,6 +103,61 @@ describe('session-phase-race rows (C17, C20)', () => {
   it('a race phase the table has no row for is a bug, not a silent default (C3)', () => {
     const view = withOpen(viewOf(ms()), 'session-phase-race', 'noSuchKind');
     expect(() => run(view)).toThrow(/no row for session-phase-race noSuchKind/);
+  });
+});
+
+// The race start is known only when the engine saw the lights go out: the first `racing` span follows a `startLights` span
+// directly. A span the engine joined in the middle (`joinedAt`) never tells it (C3).
+describe('the race start is known only when lights out was seen (C3)', () => {
+  type Step = { kind: string; start: number; end?: number; joinedAt?: true };
+  /** The race view whose session-phase-race spans are these steps in order; the last without `end` is open. */
+  const raceWith = (steps: Step[]): EngineView => {
+    const base = viewOf(ms());
+    const spans = steps.map((st, id): Span | OpenSpan => ({
+      machine: 'session-phase-race',
+      id,
+      kind: st.kind,
+      start: st.start,
+      confirmed: true,
+      detail: st.kind === 'neutralised' ? { car: 'SC', stages: [] } : undefined,
+      startFrame: st.start,
+      ...(st.end === undefined ? {} : { end: st.end, endFrame: st.end }),
+      ...(st.joinedAt === undefined ? {} : { joinedAt: true as const }),
+    }));
+    const closed = spans.filter((sp): sp is Span => 'endFrame' in sp);
+    const open = spans.filter((sp) => !('endFrame' in sp)) as OpenSpan[];
+    return {
+      ...base,
+      history: { ...base.history, spans: { ...base.history.spans, 'session-phase-race': closed } },
+      situation: { ...base.situation, byMachine: { ...base.situation.byMachine, 'session-phase-race': open } },
+    };
+  };
+  const startOf = (steps: Step[]) => run(raceWith(steps)).raceStartAt;
+
+  it('(a) joined under a safety car, then racing: not received, the restart is no race start', () => {
+    expect(startOf([{ kind: 'neutralised', start: 5_000, end: 20_000, joinedAt: true }, { kind: 'racing', start: 20_000 }])).toEqual(unknown('notReceived'));
+  });
+
+  it('(b) joined in racing: not received', () => {
+    expect(startOf([{ kind: 'racing', start: 5_000, joinedAt: true }])).toEqual(unknown('notReceived'));
+  });
+
+  it('(c) joined in the formation, then start lights, then racing: the start of the racing span', () => {
+    expect(
+      startOf([{ kind: 'formation', start: 0, end: 3_000, joinedAt: true }, { kind: 'startLights', start: 3_000, end: 8_000 }, { kind: 'racing', start: 8_000 }]),
+    ).toMatchObject({ known: true, value: 8_000 });
+  });
+
+  it('(d) seen from the grid: the start of the racing span', () => {
+    expect(
+      startOf([
+        { kind: 'grid', start: 0, end: 1_000 },
+        { kind: 'formation', start: 1_000, end: 3_000 },
+        { kind: 'startLights', start: 3_000, end: 8_000 },
+        { kind: 'racing', start: 8_000, end: 30_000 },
+        { kind: 'neutralised', start: 30_000 },
+      ]),
+    ).toMatchObject({ known: true, value: 8_000 });
   });
 });
 
