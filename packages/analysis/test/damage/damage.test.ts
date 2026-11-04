@@ -409,24 +409,24 @@ describe('damage calculator', () => {
       });
     }
 
-    // the live state's transitional `active` says the opposite of car-status in every case, so only car-status decides (C43)
-    const statusOut = (kind: string, active: boolean) =>
-      outIn({ cars: [{ ...carState({ id: car0 }), active }], history: { events: jump, laps: lapsOf(7, timeOf) }, status: { 0: kind } });
+    // car-status decides (C43); Task 24 removed the transitional `car.active` these cases contradicted
+    const statusOut = (kind: string) =>
+      outIn({ cars: [carState({ id: car0 })], history: { events: jump, laps: lapsOf(7, timeOf) }, status: { 0: kind } });
 
     it('car-status competing: the car has its damage and jumps', () => {
-      expect(statusOut('competing', false)?.jumps[0]!.lossMsPerLap).toMatchObject({ known: true, value: 1000 });
+      expect(statusOut('competing')?.jumps[0]!.lossMsPerLap).toMatchObject({ known: true, value: 1000 });
     });
 
     it('car-status retired: the car is still in the session and keeps its damage and jumps', () => {
-      expect(statusOut('retired', false)?.jumps).toHaveLength(1);
+      expect(statusOut('retired')?.jumps).toHaveLength(1);
     });
 
     it('car-status disqualified: the car is still in the session and keeps its damage and jumps', () => {
-      expect(statusOut('disqualified', false)?.jumps).toHaveLength(1);
+      expect(statusOut('disqualified')?.jumps).toHaveLength(1);
     });
 
-    it('car-status absent: no entry, though the live state calls the slot active and it has a jump', () => {
-      expect(statusOut('absent', true)).toBeUndefined();
+    it('car-status absent: no entry, though the slot has a jump', () => {
+      expect(statusOut('absent')).toBeUndefined();
     });
   });
 });

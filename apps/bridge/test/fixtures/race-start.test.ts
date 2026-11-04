@@ -7,7 +7,7 @@ import { GAPS, gapsCalculator, type GapsOutput } from '@pitwall/analysis';
 import type { RaceEvent } from '@pitwall/domain';
 import type { EngineState, DeepReadonly } from '@pitwall/engine';
 import { situationOf } from '../../../../packages/engine/src/situations/run.ts';
-import { replayScheduled } from './engine-replay.ts';
+import { carsInSession, replayScheduled } from './engine-replay.ts';
 import { segmentPath } from './replay.ts';
 
 const SHAPES = [
@@ -78,7 +78,7 @@ describe.each(SHAPES)('the race start, shape %s (%s)', (_, file) => {
   it('every running car is on lap 1, seen from its start at lights out', () => {
     const { state } = replayed.get(file)!;
     const start = raceStart(state);
-    const off = state.cars.filter((c) => c.active).flatMap((c) => {
+    const off = carsInSession(state).map((id) => state.cars[id]!).flatMap((c) => {
       const cursor = lapCursors(state)[c.id];
       return cursor && cursor.lap === 1 && cursor.fromStart && cursor.startedAt === start ? [] : [`car ${c.id}: ${JSON.stringify(cursor && { lap: cursor.lap, fromStart: cursor.fromStart, startedAt: cursor.startedAt })}`];
     });

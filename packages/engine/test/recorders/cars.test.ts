@@ -42,7 +42,8 @@ describe('the cars recorder records exactly the cars whose status is not absent 
   });
   it('reads car-status from the situation, not the live state: a slot the game’s fields count is out when its status is absent', () => {
     const live = liveOfFourCars();
-    expect(live.session.numActiveCars).toBe(4);
+    // the game's count is a signal (Task 24, C13): `state.signals`, never the live state
+    expect(runScenario(new ScenarioBuilder({ cars: 4 }).frames(1, () => {})).st.signals.session.numActiveCars).toBe(4);
     expect(carsInSession(inputOf(live, ['competing', 'absent', 'competing', 'competing'])).map((c) => c.id)).toEqual([0, 2, 3]);
   });
   it('carsWithLapData: of the cars in the session, those whose LapData this frame carried', () => {

@@ -277,7 +277,7 @@ export function field({ cars, laps, paceMs }: { cars: number; laps: number; pace
 }
 
 /**
- * A complete, valid car: every `Known` field is known, so a test overrides only what it checks. Defaults: car 0, active,
+ * A complete, valid car: every `Known` field is known, so a test overrides only what it checks. Defaults: car 0,
  * lap 1 (sector 1, lap distance 0) on soft C3, position `id + 1`, no tyre sets (`sets` is known with an empty list), wear 0 %, tyres 95 degC and 25 psi, brakes 500 degC, engine 110 degC, 50 kg
  * fuel, ERS store 4 MJ, no damage. `over` merges key by key; a `Known` or an array is replaced whole. To hide a rival's
  * values the way realism mode does, wrap the result in `realismHidden`.
@@ -286,7 +286,6 @@ export function carState(over: DeepPartial<CarState> = {}): CarState {
   const at = 0;
   const id = (over.id ?? carId(0)) as CarId;
   const base = createCarState(id);
-  base.active = true;
   base.identity = { ...base.identity, name: `Car ${id}`, raceNumber: id + 1, driverId: id, driverKey: { kind: 'ai', driverId: id } };
   base.timing = {
     ...base.timing,
@@ -295,7 +294,6 @@ export function carState(over: DeepPartial<CarState> = {}): CarState {
     lapDistanceM: 0,
     sector: 1,
     speedTrapFastestKmh: known(320, at),
-    driverStatus: 'onTrack',
     gridPosition: id + 1,
   };
   base.tyres = {
@@ -354,7 +352,6 @@ export function carState(over: DeepPartial<CarState> = {}): CarState {
       maxRpm: 13_000,
       revLightsPct: 50,
       drs: false,
-      drsAllowed: false,
       drsActivationDistanceM: 0,
       pitLimiter: false,
     },

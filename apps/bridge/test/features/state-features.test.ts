@@ -35,9 +35,11 @@ describe('base state features', () => {
     const list = out(carsOverview, 'cars.overview') as Array<Record<string, unknown>>;
     expect(list).toHaveLength(view.live.cars.length);
     const car = view.live.cars[1]!;
-    expect(list[1]).toEqual({ id: car.id, identity: car.identity, timing: car.timing,
+    // Task 24: the stops are the car's pit-stop records (none here); the confirmed laps leave the topic (decisions.md)
+    const { confirmedLaps: _confirmed, ...timing } = car.timing;
+    expect(list[1]).toEqual({ id: car.id, identity: car.identity, timing,
       tyres: { actualCompound: car.tyres.actualCompound, visualCompound: car.tyres.visualCompound, age: car.tyres.age },
-      stops: car.timing.numPitStops, updatedAt: car.updatedAt });
+      stops: 0, updatedAt: car.updatedAt });
     expect(list[1]!['timing']).not.toBe(car.timing);
     expect(list[1]!['updatedAt']).not.toBe(car.updatedAt);
   });

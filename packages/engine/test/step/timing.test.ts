@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { known, unknown } from '@pitwall/domain';
+import { carId, known, unknown } from '@pitwall/domain';
+import { situationOf } from '../../src/index.ts';
+import { carsInSessionOf } from '../../src/situations/car-status/in-session.ts';
 import { ScenarioBuilder } from '../builders/index.ts';
 import { runScenario } from '../support/run.ts';
 
@@ -14,10 +16,13 @@ describe('timing from LapData', () => {
       d.status.carStatusData[1]!.vehicleFiaFlags = 3;
     }));
     expect(st.cars[1]!.timing).toEqual({ position: 3, lap: 5, lapDistanceM: 1234.5, totalDistanceM: 20_000.25, currentLapTimeMs: 45_678,
-      lastLapTimeMs: 91_234, sector: 3, sector1TimeMs: 30_123, sector2TimeMs: 31_456, currentLapInvalid: true, gapToLeaderMs: known(65_432, 0),
-      gapToCarAheadMs: known(1_250, 0), safetyCarDeltaMs: -1_500, pitStatus: 'pitting', numPitStops: 1, pitLaneTimerActive: true, pitLaneTimeMs: 4_200,
-      pitStopTimerMs: 0, shouldServePenalty: true, driverStatus: 'outLap', resultStatus: 'didNotFinish', timePenaltyMs: 5_000, totalWarnings: 2,
-      cornerCuttingWarnings: 1, unservedDriveThroughs: 1, unservedStopGos: 0, gridPosition: 8, speedTrapFastestKmh: known(312.5, 0), fiaFlag: 'yellow', confirmedLaps: [] });
+      lastLapTimeMs: 91_234, sector: 3, sector1TimeMs: 30_123, sector2TimeMs: 31_456, gapToLeaderMs: known(65_432, 0),
+      gapToCarAheadMs: known(1_250, 0), safetyCarDeltaMs: -1_500, pitLaneTimeMs: 4_200,
+      pitStopTimerMs: 0, gridPosition: 8, speedTrapFastestKmh: known(312.5, 0), confirmedLaps: [] });
+    // Task 24 (C13): the LapData and Car Status signals reach `state.signals`, not the timing
+    expect(st.signals.cars[1]).toMatchObject({ currentLapInvalid: true, pitStatus: 'pitting', numPitStops: 1, pitLaneTimerActive: true,
+      shouldServePenalty: true, driverStatus: 'outLap', resultStatus: 'didNotFinish', timePenaltyMs: 5_000, totalWarnings: 2,
+      cornerCuttingWarnings: 1, unservedDriveThroughs: 1, unservedStopGos: 0, fiaFlag: 'yellow' });
   });
   it('counts the grid position from 1 like the race position: the game sends it from 0, pole is 0', () => {
     const { st } = runScenario(new ScenarioBuilder({ cars: 2 }).frames(1, (d) => {
@@ -62,10 +67,12 @@ describe('timing from LapData', () => {
     }));
     expect([st.cars[0]!.timing.lap, results[1]!.changed.has('timing')]).toEqual([4, false]);
   });
-  it('LapData resultStatus drives car.active (invalid/inactive are not active)', () => {
+  // Task 24: which cars are in the session is car-status's (C43), read through `carsInSessionOf`, no longer `car.active`
+  it('LapData resultStatus decides which cars are in the session (invalid/inactive are not)', () => {
     const { st } = runScenario(new ScenarioBuilder({ cars: 3 }).frames(1, (d) => {
       d.lapData.lapData[1]!.resultStatus = 1; d.lapData.lapData[2]!.resultStatus = 7;
     }));
-    expect(st.cars.slice(0, 4).map((c) => c.active)).toEqual([true, false, true, false]);
+    const inSession = carsInSessionOf(situationOf(st).byMachine['car-status']);
+    expect([0, 1, 2, 3].map((i) => inSession.includes(carId(i)))).toEqual([true, false, true, false]);
   });
 });

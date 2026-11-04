@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { FeedId } from '@pitwall/domain';
-import { initialState, step } from '../../src/index.ts';
+import { initialState, situationOf, step } from '../../src/index.ts';
+import { carsInSessionOf } from '../../src/situations/car-status/in-session.ts';
 import { sessionKindOf } from '../../src/step/state-update/session.ts';
 import { buildPacket, ScenarioBuilder } from '../builders/index.ts';
 
@@ -17,11 +18,14 @@ const packet = buildPacket('session', { header: { sessionTime: 12.5 }, weather: 
 describe('session state', () => {
   it('maps the Session packet', () => {
     const s = initialState({ feedId, sessionUid: 9n, session: packet }).session;
-    expect(s).toMatchObject({ trackId: 3, sessionType: 15, kind: 'race', totalLaps: 57, trackLengthM: 5412, sector2StartM: 1800.5, sector3StartM: 3600.25,
-      durationMs: 7_200_000, timeLeftMs: 7_000_000, pitSpeedLimitKmh: 80, weather: 'lightRain', trackTempC: 31, airTempC: 24, flag: 'vsc',
-      networkGame: true, forecastAccuracy: 'approximate', periods: { sc: 1, vsc: 0, red: 0 }, link: { weekend: 77 }, numActiveCars: 0, updatedAt: 12500 });
-    expect(s.marshalZones).toEqual([{ startFraction: 0.125, flag: 'yellow' }, { startFraction: 0.5, flag: 'unknown' }]);
-    expect(s.forecast).toEqual([{ sessionType: 15, offsetMin: 5, weather: 'heavyRain', trackTempC: 30, trackTempTrend: 'down', airTempC: 23,
+    // Task 24 (C13): the session type, kind, flag, marshal zones, periods and numActiveCars are signals: `state.signals`
+    expect(s).toMatchObject({ trackId: 3, totalLaps: 57, trackLengthM: 5412, sector2StartM: 1800.5, sector3StartM: 3600.25,
+      durationMs: 7_200_000, timeLeftMs: 7_000_000, pitSpeedLimitKmh: 80, weather: 'lightRain', trackTempC: 31, airTempC: 24,
+      networkGame: true, forecastAccuracy: 'approximate', link: { weekend: 77 }, updatedAt: 12500 });
+    expect(initialState({ feedId, sessionUid: 9n, session: packet }).signals.session.marshalZones).toEqual([
+      { startFraction: 0.125, flag: 'yellow' }, { startFraction: 0.5, flag: 'unknown' },
+    ]);
+    expect(s.forecast).toEqual([{ offsetMin: 5, weather: 'heavyRain', trackTempC: 30, trackTempTrend: 'down', airTempC: 23,
       airTempTrend: 'flat', rainPct: 60 }, expect.objectContaining({ offsetMin: 10, weather: 'storm' })]);
     expect(s.settings).toMatchObject({ tyreTemperature: 'surfaceOnly', safetyCar: 'increased', redFlags: 'reduced', carDamage: 'standard',
       carDamageRate: 'simulation', lowFuelMode: 'hard', recoveryMode: 'flashbacks', flashbackLimit: 'unlimited', surfaceType: 'realistic',
@@ -36,12 +40,23 @@ describe('session state', () => {
     const { spans, ...lists } = st.history;
     expect([...Object.values(lists), ...Object.values(spans)].every((h) => h.length === 0)).toBe(true);
     expect(st.cars[4]!.ownCar).toEqual({ motionEx: nr, setup: nr, brakeBiasPct: nr });
-    expect([st.cars[3]!.ownCar, st.cars[3]!.energy.fuel, st.cars[3]!.active]).toEqual([undefined, nr, false]);
+    // no car is in the session before car-status opened a span (Task 24: car-status, not `car.active`)
+    expect([st.cars[3]!.ownCar, st.cars[3]!.energy.fuel, carsInSessionOf(situationOf(st).byMachine['car-status'])]).toEqual([undefined, nr, []]);
   });
   it('step updates the session only on frames with a Session packet', () => {
     const fs = new ScenarioBuilder({ cars: 2 }).frames(2, () => {}).session({ totalLaps: 5, safetyCarStatus: 1 }).frames(1, () => {}).build();
     const st = initialState({ feedId, sessionUid: fs[0]!.sessionUid, session: fs[0]!.session! });
     expect(fs.map((f) => step(st, f).changed.has('session'))).toEqual([true, false, true]);
-    expect([st.session.totalLaps, st.session.flag, st.session.numActiveCars, st.lastFrameId, st.sessionTime]).toEqual([5, 'sc', 2, 2, 32]);
+    expect([st.session.totalLaps, st.signals.session.safetyCarStatus, st.signals.session.numActiveCars, st.lastFrameId, st.sessionTime]).toEqual([5, 'sc', 2, 2, 32]);
+  });
+  // Task 24 ruling 3 (C8, C13): the game sends the forecast of every session of the weekend, each sample with its session
+  // type (a signal). Step 1 selects the values of this session; no sample keeps a session type.
+  it("the forecast holds the samples of this session only, in the packet's order, without their session type", () => {
+    const mixed = buildPacket('session', { sessionType: 15, numWeatherForecastSamples: 4, weatherForecastSamples: {
+      0: { sessionType: 13, timeOffset: 0, weather: 1 }, 1: { sessionType: 15, timeOffset: 0, weather: 2 },
+      2: { sessionType: 13, timeOffset: 5, weather: 3 }, 3: { sessionType: 15, timeOffset: 5, weather: 4 } } });
+    const forecast = initialState({ feedId, sessionUid: 9n, session: mixed }).session.forecast;
+    expect(forecast.map((f) => [f.offsetMin, f.weather])).toEqual([[0, 'overcast'], [5, 'heavyRain']]);
+    expect(forecast.every((f) => !('sessionType' in f))).toBe(true);
   });
 });

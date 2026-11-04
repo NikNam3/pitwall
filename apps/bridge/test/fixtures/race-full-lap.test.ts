@@ -23,7 +23,7 @@ import { currentLaps, type BandReading, type CarBands, type CarState, type Chann
 import type { DeepReadonly, EngineState, SchedulerResult, StepResult } from '@pitwall/engine';
 import { InvariantChecker } from '../../../../packages/engine/test/support/invariants.ts';
 import { bandsAgainstPackets, type BandsAgainstPackets } from './car-bands-packets.ts';
-import { replayScheduled } from './engine-replay.ts';
+import { carsInSession, replayScheduled } from './engine-replay.ts';
 import { segmentPath } from './replay.ts';
 
 type Car = DeepReadonly<CarState>;
@@ -103,8 +103,9 @@ beforeAll(async () => {
 
   /** Laps, crossings and the lap ranges move on the frames that carry LapData only, so only those are observed. */
   const observeLapData = ({ state }: StepResult, scheduled: SchedulerResult): void => {
+    const inSession = new Set(carsInSession(state));
     for (const car of state.cars) {
-      if (!car.active) continue;
+      if (!inSession.has(car.id)) continue;
       const before = previous.get(car.id);
       if (before && car.timing.lap === before.lap + 1) lineBetween.set(`${car.id}:${car.timing.lap}`, { from: before.at, to: state.sessionTime });
       previous.set(car.id, { lap: car.timing.lap, at: state.sessionTime });
@@ -194,7 +195,7 @@ describe('race-zandvoort-full-lap: the engine over a whole lap', () => {
 
   it("every car's mini-sector crossings come one per mini-sector, in order of track position and of time", () => {
     const disorder: string[] = [];
-    for (const car of run.state.cars.filter((c) => c.active)) {
+    for (const car of carsInSession(run.state).map((id) => run.state.cars[id]!)) {
       const mine = crossingsOf(car.id);
       mine.forEach((m, i) => {
         const before = mine[i - 1];
@@ -233,7 +234,7 @@ describe('race-zandvoort-full-lap: the engine over a whole lap', () => {
     const provisional = laps.filter((l) => l.status === 'provisional').map(key).sort();
     expect(laps.filter((l) => l.status === 'confirmed').map(key).sort()).toEqual(provisional);
     expect(currentLaps(laps as LapRecord[]).every((l) => l.status === 'confirmed')).toBe(true);
-    expect(new Set(laps.map((l) => l.carId))).toEqual(new Set(run.state.cars.filter((c) => c.active).map((c) => c.id)));
+    expect(new Set(laps.map((l) => l.carId))).toEqual(new Set(carsInSession(run.state).map((id) => run.state.cars[id]!).map((c) => c.id)));
   });
 });
 

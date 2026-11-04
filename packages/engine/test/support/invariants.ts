@@ -1,6 +1,7 @@
 // Spec 10.2 invariants, checked on every StepResult. Sector sums follow spec correction 4: lapTime − 2 ≤ Σ sectors ≤ lapTime.
 import type { LogLengths, StepResult } from '../../src/index.ts';
-import { projectionLengths } from '../../src/index.ts';
+import { projectionLengths, situationOf } from '../../src/index.ts';
+import { carsInSessionOf } from '../../src/situations/car-status/in-session.ts';
 
 const key = (m: { carId: number; lap: number; segment: number }) => `${m.carId}/${m.lap}/${m.segment}`;
 
@@ -13,7 +14,9 @@ export class InvariantChecker {
     const { state, delta } = r;
     const rewound = delta.rewound !== undefined;
     const at = `frame ${state.lastFrameId}`;
-    const active = state.cars.filter((c) => c.active);
+    // the cars in the session: car-status's (C43), no longer `car.active` (Task 24)
+    const inSession = new Set(carsInSessionOf(situationOf(state).byMachine['car-status']));
+    const active = state.cars.filter((c) => inSession.has(c.id));
     const positions = active.map((c) => c.timing.position).sort((a, b) => a - b);
     if (positions.some((p, i) => p !== i + 1)) throw new Error(`positions not a permutation of 1..${active.length} at ${at}: ${positions.join(',')}`);
     for (const c of active) {

@@ -23,8 +23,6 @@ const { latencyMs: _latency, ...withoutLatency } = healthyFeed;
 
 const session: SessionState = {
   trackId: 10,
-  sessionType: 8,
-  kind: 'race',
   formula: 0,
   totalLaps: 5,
   trackLengthM: 5000,
@@ -38,9 +36,6 @@ const session: SessionState = {
   airTempC: 25,
   forecast: [],
   forecastAccuracy: 'perfect',
-  flag: 'green',
-  marshalZones: [],
-  periods: { sc: 0, vsc: 0, red: 0 },
   pitWindow: { idealLap: 0, latestLap: 0, rejoinPosition: 0 },
   settings: {
     safetyCar: 'standard',
@@ -59,12 +54,9 @@ const session: SessionState = {
     formationLap: true,
     aiDifficulty: 90,
     gameMode: 0,
-    ruleSet: 0,
   },
   networkGame: false,
-  numActiveCars: 20,
   link: { season: 1, weekend: 1, session: 1 },
-  weekendStructure: [],
   updatedAt: toSessionTime(10),
 };
 

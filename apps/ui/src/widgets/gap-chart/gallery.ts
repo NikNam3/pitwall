@@ -39,7 +39,7 @@ const sessionInfo = {
   sessionUid: '1',
   playerCar: carId(0),
   teammateCar: carId(1),
-  session: { kind: 'race', totalLaps: 12 } as unknown as SessionState,
+  session: { totalLaps: 12 } as unknown as SessionState,
   realism: false,
 } as unknown as SessionInfo;
 

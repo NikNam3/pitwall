@@ -23,11 +23,7 @@ const span = (machine: string, kind: string, car?: number, detail?: unknown): Op
   ...(car !== undefined && { carId: carId(car) }),
 });
 
-const leader = (lap: number, lapDistanceM: number, resultStatus?: CarState['timing']['resultStatus']): CarState => {
-  const car = carState({ id: 0 as CarState['id'], timing: { position: 1, lap, lapDistanceM } });
-  if (resultStatus) car.timing.resultStatus = resultStatus;
-  return car;
-};
+const leader = (lap: number, lapDistanceM: number): CarState => carState({ id: 0 as CarState['id'], timing: { position: 1, lap, lapDistanceM } });
 
 /** A view in `phase` whose leader (car 0) has this race activity open (none for another phase). */
 const view = (phase: WeekendPhase, cars: CarState[], session: Parameters<typeof engineView>[0] extends infer O ? (O extends { session?: infer S } ? S : never) : never, activity?: string) =>
@@ -46,7 +42,7 @@ const view = (phase: WeekendPhase, cars: CarState[], session: Parameters<typeof 
 /** `compute` through the guarded view: a read the calculator does not declare throws (C41). */
 const compute = (v: ReturnType<typeof view>) => sessionRemainingCalculator.compute(guardedView(v, sessionRemainingCalculator.reads, { unit: 'session-remaining' }));
 
-const RACE_SESSION = { kind: 'race', totalLaps: 50, trackLengthM: 5000 } as const;
+const RACE_SESSION = { totalLaps: 50, trackLengthM: 5000 } as const;
 
 describe('session-remaining', () => {
   it('has the id session-remaining and reads the weekend phase and the leader\'s race activity (C41)', () => {
@@ -86,8 +82,9 @@ describe('session-remaining', () => {
       expect(out.lapsLeft.known && out.lapsLeft.value).toBeCloseTo(0.02, 6);
     });
 
-    it('the game\'s result status is no signal here: a leader with resultStatus finished but still racing has laps left', () => {
-      const out = compute(view(RACE, [leader(50, 4900, 'finished')], RACE_SESSION, 'racingLap'));
+    // Task 24 (C13): the game's result status left the live state; the leader's race activity is the one input
+    it('a leader still on its racing lap at the end of the last lap has laps left', () => {
+      const out = compute(view(RACE, [leader(50, 4900)], RACE_SESSION, 'racingLap'));
       expect(out.lapsLeft.known && out.lapsLeft.value).toBeCloseTo(0.02, 6);
     });
 

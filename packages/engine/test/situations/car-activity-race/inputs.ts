@@ -66,7 +66,6 @@ export const race = (phase: SessionPhaseRaceKind = 'racing'): InputEdit => (i) =
   const { kind, ...detail } = RACE;
   i.upstream['weekend-phase'] = [{ machine: 'weekend-phase', id: 0, kind, start: 0, startFrame: 1, confirmed: true, detail }];
   i.upstream[SESSION_PHASE] = [upstreamSpan(SESSION_PHASE, phase, undefined, 0, {})];
-  i.live.session.kind = 'race';
   if (i.upstream[CAR_STATUS] !== undefined) return;
   i.signals.cars.forEach((signals, car) => {
     const competing = IN_SESSION.includes(car);
@@ -77,7 +76,7 @@ export const race = (phase: SessionPhaseRaceKind = 'racing'): InputEdit => (i) =
     signals.pitLaneTimerActive = false;
     signals.resultStatus = competing ? 'active' : 'invalid';
     const timing = i.live.cars[car]!.timing;
-    Object.assign(timing, { lap: 1, lapDistanceM: 3000, pitStatus: 'none', pitLaneTimerActive: false, pitLaneTimeMs: 0, pitStopTimerMs: 0, resultStatus: signals.resultStatus });
+    Object.assign(timing, { lap: 1, lapDistanceM: 3000, pitLaneTimeMs: 0, pitStopTimerMs: 0 });
   });
 };
 
@@ -86,13 +85,12 @@ export const all = (...edits: InputEdit[]): InputEdit => (i, index) => {
   for (const edit of edits) edit(i, index);
 };
 
-/** Where car `car` is: its car-location span, its pit status and pit lane timer (signals, C12) and their live values. */
+/** Where car `car` is: its car-location span, its pit status and pit lane timer (signals, C12). */
 const where = (car: number, location: LocationKind, pitStatus: PitStatus, timerActive: boolean): InputEdit => (i) => {
   setCarSpan(i, CAR_LOCATION, car, location, undefined);
   const signals = i.signals.cars[car]!;
   signals.pitStatus = pitStatus;
   signals.pitLaneTimerActive = timerActive;
-  Object.assign(i.live.cars[car]!.timing, { pitStatus, pitLaneTimerActive: timerActive });
 };
 
 /** On track (pit status none): from the pit lane, the pit exit; the pit timers read 0 again (inventory §2.5). */
@@ -127,10 +125,9 @@ export const lateInLap = (car = 0): InputEdit => distance(car, LATE_IN_LAP_M);
 /** Car `car` drives on just past the line (after a crossing). */
 export const pastLine = (car = 0, m = 4): InputEdit => distance(car, m);
 
-/** Car `car`'s result status from this frame on (a signal, C12, and the live value step 1 writes). */
+/** Car `car`'s result status from this frame on (a signal, C12). */
 export const result = (car: number, status: ResultStatus): InputEdit => (i) => {
   i.signals.cars[car]!.resultStatus = status;
-  i.live.cars[car]!.timing.resultStatus = status;
 };
 /** Car `car`'s car-status span is of `kind` from this frame on (the upstream car-status, C43). */
 export const status = (car: number, kind: CarStatusKind): InputEdit => (i) => setCarSpan(i, CAR_STATUS, car, kind, {});

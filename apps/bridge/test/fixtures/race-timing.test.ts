@@ -4,7 +4,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { GAPS, gapperLines, gapsCalculator, type GapsOutput } from '@pitwall/analysis';
 import type { CarId, Interval, MiniSectorCrossing } from '@pitwall/domain';
 import type { DeepReadonly, EngineState } from '@pitwall/engine';
-import { replayScheduled } from './engine-replay.ts';
+import { carsInSession, replayScheduled } from './engine-replay.ts';
 import { segmentPath } from './replay.ts';
 
 /** A LapData frame on which the game sent a new value of one of a car's gaps, and the car's position then. */
@@ -31,8 +31,9 @@ beforeAll(async () => {
       if (m.segment === 0) lines.push({ crossing: { ...m }, ours: structuredClone(last.intervals.find((i) => i.carId === m.carId)) });
     }
     if (!frame.lapData) return;
+    const inSession = new Set(carsInSession(state));
     for (const car of state.cars) {
-      if (!car.active) continue;
+      if (!inSession.has(car.id)) continue;
       for (const field of ['gapToCarAheadMs', 'gapToLeaderMs'] as const) {
         const gap = car.timing[field];
         if (!gap.known) continue;
@@ -82,7 +83,7 @@ describe("race-zandvoort-full-lap: our gaps against the game's at the line", () 
 
 describe('race-zandvoort-full-lap: the line times the gapper draws from', () => {
   it("each car's line times are its line crossings, one per completed lap, in lap and time order with no lap missing", () => {
-    for (const car of run.state.cars.filter((c) => c.active)) {
+    for (const car of carsInSession(run.state).map((id) => run.state.cars[id]!)) {
       const crossed = run.state.history.crossings.filter((m) => m.carId === car.id && m.segment === 0 && m.lap >= 2);
       const times = run.last.lineTimes[car.id] ?? [];
       expect(times, `car ${car.id}`).toEqual(crossed.map((m) => ({ lap: m.lap - 1, at: m.at })));

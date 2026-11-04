@@ -20,11 +20,10 @@ describe('lap-times calculator', () => {
     expect(lapTimesCalculator.reads).not.toContainEqual({ calculator: 'pace' });
   });
 
-  it('has a row per car in the session (car-status not absent), whatever `car.active` says', () => {
+  // Task 24: the transitional `car.active` left the live state; car-status alone says who is in the session (C43)
+  it('has a row per car in the session (car-status not absent)', () => {
     const { laps } = field({ cars: 2, laps: 2, paceMs: [90_000, 91_000] });
-    const cars = activeCars(4);
-    cars[2]!.active = false; // competing by its span: has a row
-    cars[3]!.active = true; // absent by its span: has none
+    const cars = activeCars(4); // car 2 competing by its span: has a row; car 3 absent by its span: has none
     const out = run(scene({ laps, cars, kinds: { 3: { status: 'absent' } } }));
     expect(out.rows.map((r) => r.carId).sort()).toEqual([0, 1, 2]);
     expect(Object.keys(out.projections).map(Number).sort()).toEqual([0, 1, 2]);
@@ -168,8 +167,9 @@ describe('lap-times board: car-status rows', () => {
   const notApplicable = unknown('notApplicable');
   // car 0 has a lap; car 1 has none
   const laps = [sectorLap(0, 1, [30_000, 30_000, 30_000], 90_000)];
-  const withStatus = (status: string, resultStatus: 'active' | 'retired' = 'active') =>
-    run(scene({ laps, cars: activeCars(2, { 1: { resultStatus } }), kinds: { 1: { status } } }));
+  // Task 24 (C13): the result status left the live state; car-status's span is the one input
+  const withStatus = (status: string) =>
+    run(scene({ laps, cars: activeCars(2), kinds: { 1: { status } } }));
 
   it.each(['retired', 'disqualified'])('row car-status %s: the car is out; its times and bests it lacks will not come (notApplicable)', (status) => {
     const out = withStatus(status);
@@ -188,8 +188,8 @@ describe('lap-times board: car-status rows', () => {
     expect(withStatus('retired')).toEqual(withStatus('disqualified'));
   });
 
-  it('row car-status competing: the car waits for its times (insufficientData), whatever its result status says', () => {
-    const row = rowOf(withStatus('competing', 'retired'), 1)!;
+  it('row car-status competing: the car waits for its times (insufficientData)', () => {
+    const row = rowOf(withStatus('competing'), 1)!;
     expect(row.outOfRace).toBe(false);
     expect(row.lastLapMs).toEqual(unknown('insufficientData'));
     expect(row.bestLapMs).toEqual(unknown('insufficientData'));

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { currentLaps, driverKeyString, type LapRecord } from '@pitwall/domain';
 import { situationOf, type FlashbackInfo, type StepResult } from '@pitwall/engine';
 import { InvariantChecker } from '../../../../packages/engine/test/support/invariants.ts';
-import { replayRunner } from './engine-replay.ts';
+import { carsInSession as inSession, replayRunner } from './engine-replay.ts';
 import { SEGMENT_FILES, segmentPath } from './replay.ts';
 
 const run = (file: string, onResult?: (r: StepResult) => void) => replayRunner(segmentPath(file), onResult);
@@ -50,20 +50,22 @@ describe('race-zandvoort-lap10: car 1 (the player) crosses the line into lap 10'
     expect(line).toBeLessThanOrEqual(seen.firstOnLap10);
   });
 
+  // Task 24 (C13): the session type, kind and numActiveCars are signals (`state.signals`); the race is the weekend phase
   it('session and identity: online race, two humans, the player at index 1, AI cars keyed by driver id', async () => {
     const { state } = await run('race-zandvoort-lap10.pwrec.gz');
-    expect(state.session).toMatchObject({ kind: 'race', sessionType: 15, trackId: 26, totalLaps: 72, trackLengthM: 4258, numActiveCars: 20, networkGame: true });
+    expect(state.session).toMatchObject({ trackId: 26, totalLaps: 72, trackLengthM: 4258, networkGame: true });
+    expect(situationOf(state).weekendPhase).toMatchObject({ kind: 'race' });
+    expect([state.signals.session.sessionType, state.signals.session.numActiveCars]).toEqual([15, 20]);
     expect([state.playerCar, state.teammateCar]).toEqual([1, 4]);
-    expect(state.cars[1]!.identity).toMatchObject({ ai: false, visibility: 'own', driverKey: { kind: 'human', networkId: 1 } });
-    expect(state.cars[0]!.identity).toMatchObject({ ai: false, visibility: 'public', driverKey: { kind: 'human', networkId: 0 } });
+    expect(state.cars[1]!.identity).toMatchObject({ visibility: 'own', driverKey: { kind: 'human', networkId: 1 } });
+    expect(state.cars[0]!.identity).toMatchObject({ visibility: 'public', driverKey: { kind: 'human', networkId: 0 } });
     expect(driverKeyString(state.cars[2]!.identity.driverKey)).toBe('ai:112');
-    expect(state.cars.filter((c) => c.active)).toHaveLength(20);
-    expect([state.cars[20]!.active, state.cars[21]!.active]).toEqual([false, false]);
+    expect(inSession(state)).toEqual(Array.from({ length: 20 }, (_, i) => i));
   });
 
   it('grid positions count from 1 like the positions: the grid is P1 to P20, and the field gained as many places as it lost', async () => {
     const { state } = await run('race-zandvoort-lap10.pwrec.gz');
-    const cars = state.cars.filter((c) => c.active);
+    const cars = inSession(state).map((id) => state.cars[id]!);
     expect(cars.map((c) => c.timing.gridPosition).sort((a, b) => a - b)).toEqual(Array.from({ length: 20 }, (_, i) => i + 1));
     expect(cars.reduce((sum, c) => sum + c.timing.gridPosition - c.timing.position, 0)).toBe(0);
   });
@@ -96,10 +98,11 @@ describe('race-zandvoort-pit-stop: car 1 enters the pits, starts lap 8 in the pi
 });
 
 describe('race-zandvoort-pit-exit: car 1 still in the pit lane after its stop', () => {
+  // Task 24 (C13): numPitStops is a signal (`state.signals`)
   it('numPitStops goes from 0 to 1', async () => {
     const counts: number[] = [];
     await run('race-zandvoort-pit-exit.pwrec.gz', ({ state }) => {
-      const n = state.cars[1]!.timing.numPitStops;
+      const n = state.signals.cars[1]!.numPitStops;
       if (counts.at(-1) !== n) counts.push(n);
     });
     expect(counts).toEqual([0, 1]);
@@ -109,19 +112,20 @@ describe('race-zandvoort-pit-exit: car 1 still in the pit lane after its stop', 
 describe('race-zandvoort-vsc: car 2 stops with terminal damage and the VSC comes out', () => {
   it('SCAR opens a VSC neutralisation of the race, then the Session packet sets the vsc flag and counts the period', async () => {
     const flags: string[] = [];
+    // Task 24 (C13): the safety car status and the periods are signals (`state.signals`)
     const { state } = await run('race-zandvoort-vsc.pwrec.gz', ({ state: st }) => {
-      if (flags.at(-1) !== st.session.flag) flags.push(st.session.flag);
+      if (flags.at(-1) !== st.signals.session.safetyCarStatus) flags.push(st.signals.session.safetyCarStatus);
     });
     expect(situationOf(state).byMachine['session-phase-race']).toMatchObject([{ kind: 'neutralised', start: 914_178, detail: { car: 'VSC', stages: [{ stage: 'deployed', at: 914_178 }] } }]);
     expect(flags).toEqual(['green', 'vsc']);
-    expect(state.session.periods).toEqual({ sc: 0, vsc: 1, red: 0 });
+    expect(state.signals.session.periods).toEqual({ sc: 0, vsc: 1, red: 0 });
   });
 
   // A retirement is car-status's `retired` span (C13, C20), never a race event (Task 21).
   it('the retirement shows in car 2: a retired car-status span and the retired result status', async () => {
     const { state } = await run('race-zandvoort-vsc.pwrec.gz');
     expect(retired(state)).toEqual([2]);
-    expect(state.cars[2]!.timing.resultStatus).toBe('retired');
+    expect(state.signals.cars[2]!.resultStatus).toBe('retired');
   });
 });
 

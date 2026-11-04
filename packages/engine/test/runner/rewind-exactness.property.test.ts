@@ -17,6 +17,7 @@ import {
   type InsightChange,
   type QuickCalculator,
 } from '../../src/index.ts';
+import { carsInSessionOf } from '../../src/situations/car-status/in-session.ts';
 import { IDLE_FEED } from '../helpers/incremental.ts';
 import { arbRace, raceFrames } from '../support/arb-race.ts';
 import { initFor } from '../support/run.ts';
@@ -36,10 +37,16 @@ const lapsPerCar: QuickCalculator<Record<number, number>> = {
   insights: (out) => Object.entries(out).flatMap(([car, n]) => (n >= 2 ? [insight(`laps:${car}`)] : [])),
 };
 
-/** The race order at 4 Hz; raises `leader:<car>` for the car in P1, so a change of leader resolves one and raises another. */
+/**
+ * The race order of the cars in the session (car-status's, Task 24) at 4 Hz; raises `leader:<car>` for the car in P1, so
+ * a change of leader resolves one and raises another.
+ */
 const order: QuickCalculator<CarId[]> = {
-  kind: 'quick', id: 'probe.order', reads: ['timing'], cadence: { hz: 4 },
-  compute: (v) => v.live.cars.filter((c) => c.active).sort((a, b) => a.timing.position - b.timing.position).map((c) => c.id),
+  kind: 'quick', id: 'probe.order', reads: ['timing', 'spans:car-status'], cadence: { hz: 4 },
+  compute: (v) => {
+    const inSession = new Set(carsInSessionOf(v.situation.byMachine['car-status']));
+    return v.live.cars.filter((c) => inSession.has(c.id)).sort((a, b) => a.timing.position - b.timing.position).map((c) => c.id);
+  },
   insights: (out) => (out[0] === undefined ? [] : [insight(`leader:${out[0]}`)]),
 };
 

@@ -14,7 +14,7 @@ export function overview(id: number, name: string): CarOverview {
   return {
     id: carId(id),
     identity: {
-      name, teamId: 0, raceNumber: id + 1, nationality: 0, ai: true, driverId: id, networkId: 255, myTeam: false,
+      name, teamId: 0, raceNumber: id + 1, nationality: 0, driverId: id, networkId: 255, myTeam: false,
       platform: 0, telemetryPublic: true, driverKey: { kind: 'ai', driverId: id }, visibility: 'public',
     },
     timing: {} as CarOverview['timing'],

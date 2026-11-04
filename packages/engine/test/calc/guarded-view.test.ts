@@ -52,10 +52,11 @@ describe('guardedView throws on an undeclared read and passes a declared one (C4
     expect(undeclared(() => guardedBy(['session'], view).live.cars)).toBe('live.cars');
   });
 
-  it('live: a car\'s slot, activity and freshness with any car area; the feed, session uid, race clock, last frame id and realism always', () => {
+  // Task 24: `car.active` left the live state (car-status decides which cars are in the session, C43)
+  it('live: a car\'s slot and freshness with any car area; the feed, session uid, race clock, last frame id and realism always', () => {
     const view = raceView();
     const car = guardedBy(['tyres'], view).live.cars[0]!;
-    expect([car.id, car.active, car.updatedAt]).toEqual([view.live.cars[0]!.id, view.live.cars[0]!.active, view.live.cars[0]!.updatedAt]);
+    expect([car.id, car.updatedAt]).toEqual([view.live.cars[0]!.id, view.live.cars[0]!.updatedAt]);
     const g = guardedBy([], view);
     expect([g.live.feedId, g.live.sessionUid, g.live.sessionTime, g.live.lastFrameId, g.live.realism]).toEqual([
       view.live.feedId, view.live.sessionUid, view.live.sessionTime, view.live.lastFrameId, view.live.realism,

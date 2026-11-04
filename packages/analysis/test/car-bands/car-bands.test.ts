@@ -296,24 +296,24 @@ describe('car-bands calculator', () => {
       expect(out[carId(1)]!.engineC.state).toEqual(above);
     });
 
-    // the live state's transitional `active` says the opposite of car-status in every case, so only car-status decides (C43)
-    const statusOut = (kind: string, active: boolean) =>
-      calc.compute(situatedView({ cars: [{ ...hot, active }], config: { [CAR_BANDS_CONFIG.key]: TEST_BANDS }, status: { 0: kind } }))[carId(0)];
+    // car-status decides (C43); Task 24 removed the transitional `car.active` these cases contradicted
+    const statusOut = (kind: string) =>
+      calc.compute(situatedView({ cars: [hot], config: { [CAR_BANDS_CONFIG.key]: TEST_BANDS }, status: { 0: kind } }))[carId(0)];
 
     it('car-status competing: the car has its bands', () => {
-      expect(statusOut('competing', false)?.engineC.state).toEqual(above);
+      expect(statusOut('competing')?.engineC.state).toEqual(above);
     });
 
     it('car-status retired: the car is still in the session and keeps its bands', () => {
-      expect(statusOut('retired', false)?.engineC.state).toEqual(above);
+      expect(statusOut('retired')?.engineC.state).toEqual(above);
     });
 
     it('car-status disqualified: the car is still in the session and keeps its bands', () => {
-      expect(statusOut('disqualified', false)?.engineC.state).toEqual(above);
+      expect(statusOut('disqualified')?.engineC.state).toEqual(above);
     });
 
-    it('car-status absent: no entry, though the live state calls the slot active', () => {
-      expect(statusOut('absent', true)).toBeUndefined();
+    it('car-status absent: no entry', () => {
+      expect(statusOut('absent')).toBeUndefined();
     });
   });
 });

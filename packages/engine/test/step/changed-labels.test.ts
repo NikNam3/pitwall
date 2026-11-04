@@ -1,9 +1,9 @@
 // The change tags a step-1 module reports (the scheduler picks calculators by them) and the session and tyre-set fields
 // that the main tests leave at their defaults.
 import { describe, expect, it } from 'vitest';
-import type { FeedId } from '@pitwall/domain';
-import { ALL_CHANGE_TAGS, CHANGE_TAGS, initialState, step, type ChangeTag, type Frame, type StepOutput } from '../../src/index.ts';
-import { sessionStateFrom } from '../../src/step/state-update/session.ts';
+import { carId, type FeedId } from '@pitwall/domain';
+import { ALL_CHANGE_TAGS, CHANGE_TAGS, initialState, situationOf, step, type ChangeTag, type EngineState, type Frame, type StepOutput } from '../../src/index.ts';
+import { carsInSessionOf } from '../../src/situations/car-status/in-session.ts';
 import type { StateUpdate } from '../../src/step/state-update/types.ts';
 import { STATE_UPDATE } from '../../src/step/step.ts';
 import { buildPacket, ScenarioBuilder } from '../builders/index.ts';
@@ -169,7 +169,9 @@ describe('tyre sets', () => {
 });
 
 describe('session fields', () => {
-  const state = (o: Parameters<typeof buildPacket<'session'>>[1]) => sessionStateFrom(buildPacket('session', o), 0);
+  // the session and the signals as the initial state maps them from the packet
+  const initial = (o: Parameters<typeof buildPacket<'session'>>[1]) => initialState({ feedId: 'test' as FeedId, sessionUid: 1n, session: buildPacket('session', o) });
+  const state = (o: Parameters<typeof buildPacket<'session'>>[1]) => initial(o).session;
 
   it('the on/off switches read as booleans, both ways', () => {
     const on = state({ pitLaneTyreSim: 0, parcFermeRules: 1, equalCarPerformance: 1, formationLap: 1, networkGame: 1 });
@@ -180,12 +182,19 @@ describe('session fields', () => {
   it('the pit window', () => {
     expect(state({ pitStopWindowIdealLap: 18, pitStopWindowLatestLap: 24, pitStopRejoinPosition: 7 }).pitWindow).toEqual({ idealLap: 18, latestLap: 24, rejoinPosition: 7 });
   });
+  // Task 24 (C13): the weekend structure is a signal: `state.signals`
   it('the weekend structure is as long as the number of sessions in the weekend', () => {
-    expect(state({ numSessionsInWeekend: 3, weekendStructure: { 0: 1, 1: 8, 2: 15, 3: 16, 4: 17 } }).weekendStructure).toEqual([1, 8, 15]);
+    expect(initial({ numSessionsInWeekend: 3, weekendStructure: { 0: 1, 1: 8, 2: 15, 3: 16, 4: 17 } }).signals.session.weekendStructure).toEqual([1, 8, 15]);
   });
 });
 
-describe('step: which cars are active', () => {
+/** Whether each of the first `n` slots holds a car of the session: car-status's decision (C43), no longer `car.active` (Task 24). */
+const inSession = (st: EngineState, n: number): boolean[] => {
+  const cars = carsInSessionOf(situationOf(st).byMachine['car-status']);
+  return Array.from({ length: n }, (_, i) => cars.includes(carId(i)));
+};
+
+describe('step: which cars are in the session', () => {
   const run = (arrange: (b: ScenarioBuilder) => ScenarioBuilder) => {
     const frames = arrange(new ScenarioBuilder({ cars: 3 }).frames(1, () => {})).build();
     const st = initialState({ feedId: 'test' as FeedId, sessionUid: frames[0]!.sessionUid, session: frames[0]!.session! });
@@ -193,14 +202,14 @@ describe('step: which cars are active', () => {
     return { st, results };
   };
 
-  it('a frame with only Participants (no LapData, no Car Status) refreshes who is active', () => {
+  it('a frame with only Participants (no LapData, no Car Status) refreshes who is in the session', () => {
     const { st, results } = run((b) => b.participants({ numActiveCars: 2 }).frames(1, (d) => { d.drop('lapData'); d.drop('status'); }));
     expect([results[1]!.changed.has('identity'), results[1]!.changed.has('timing')]).toEqual([true, false]);
-    expect(st.cars.slice(0, 3).map((c) => c.active)).toEqual([true, true, false]);
+    expect(inSession(st, 3)).toEqual([true, true, false]);
   });
-  it('a frame with only LapData refreshes who is active', () => {
+  it('a frame with only LapData refreshes who is in the session', () => {
     const { st, results } = run((b) => b.frames(1, (d) => { d.lapData.lapData[1]!.resultStatus = 0; }));
     expect([results[1]!.changed.has('identity'), results[1]!.changed.has('timing')]).toEqual([false, true]);
-    expect(st.cars.slice(0, 3).map((c) => c.active)).toEqual([true, false, true]);
+    expect(inSession(st, 3)).toEqual([true, false, true]);
   });
 });
