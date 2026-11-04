@@ -395,6 +395,13 @@ export function countReads(unit: Calculator, view: EngineView, run: (view: Engin
 export const quick = (id: string, o: Partial<QuickCalculator<unknown>> = {}): Calculator =>
   ({ kind: 'quick', id, reads: ['timing'], cadence: 'frame', compute: (v) => v.live.sessionTime, ...o }) as Calculator;
 
+/** A scheduler that needs `calc` alone, run on the view as it is (no guard); outputs frozen, as in every test. */
+const unguardedSched = (calc: Calculator): Scheduler => {
+  const s = new Scheduler(CalculatorRegistry.build([calc]), { freezeOutputs: true });
+  s.setNeeded([calc.id]);
+  return s;
+};
+
 /**
  * A scheduler over `calcs`, each run through its guarded view (C41), that needs `needed`; outputs frozen, as in every
  * test (a unit never changes an output it returned).
@@ -455,20 +462,58 @@ const expectEqual = (actual: unknown, expected: unknown, message: string): void 
   if (!isDeepStrictEqual(actual, expected)) expect(actual, message).toEqual(expected);
 };
 
+/** The frozen copy of each projection list, as of its length: a list that did not grow since is not copied again. */
+const COPIES = new WeakMap<readonly unknown[], { length: number; copy: readonly unknown[] }>();
+
+/** A frozen copy of a projection list: a unit that writes to it throws, and the engine's own list stays as it is. */
+const frozenList = <T>(list: readonly T[]): readonly T[] => {
+  const seen = COPIES.get(list);
+  if (seen !== undefined && seen.length === list.length) return seen.copy as readonly T[];
+  const copy = Object.freeze(list.slice());
+  COPIES.set(list, { length: list.length, copy });
+  return copy;
+};
+
+/**
+ * The view of `input` as the from-scratch side of the C31.3 property sees it (ruling Task 22 round 5): no guard (C41 is
+ * the guarded-view completeness test's and the units' own tests'), frozen instead. The view and its projection are
+ * frozen copies (the projection's lists are the log's own arrays, which keep growing: a copy of each is frozen; their
+ * entries the log froze), the situation is deep-frozen; the live state is the engine's own and is changed by the next
+ * step, so it is handed as it is.
+ */
+export function frozenView(input: SchedulerInput): EngineView {
+  const { spans, ...lists } = input.history;
+  const history = Object.freeze({
+    ...Object.fromEntries(Object.entries(lists).map(([name, list]) => [name, frozenList(list as readonly unknown[])])),
+    spans: Object.freeze(Object.fromEntries(Object.entries(spans).map(([machine, list]) => [machine, frozenList(list)]))),
+  }) as unknown as EngineView['history'];
+  freezeOnce(input.situation);
+  return Object.freeze({ ...input, history, outputs: new Map() });
+}
+
 /**
  * Runs `frames` through a `SessionRunner` and a `Scheduler` that needs `calc` and, on every step it ran, expects its
- * output to equal a fresh `init` over that step's view (incremental = from scratch, docs/testing.md section 5). The
- * scheduler is never reset by hand: only a flashback rewinds (`delta.rewound`, C30). Both see the guarded view (C41).
+ * output to equal a fresh `init` and `output` over that step's view (incremental = from scratch, C31.3, docs/testing.md
+ * section 5). The scheduler is never reset by hand: only a flashback rewinds (`delta.rewound`, C30). The fresh side sees a
+ * frozen, unguarded view (`frozenView`, ruling Task 22 round 5); the scheduled side the guarded view (C41), unless
+ * `guardScheduled` is false: the C31.3 property of the analysis units runs both sides unguarded within its time budget,
+ * C41 being the guarded-view completeness test's and the units' own tests'.
  */
-export function expectScheduledIncremental<Acc, Out>(calc: IncrementalCalculator<Acc, Out>, frames: readonly Frame[]): void {
+export function expectScheduledIncremental<Acc, Out>(
+  calc: IncrementalCalculator<Acc, Out>,
+  frames: readonly Frame[],
+  { guardScheduled = true }: { guardScheduled?: boolean } = {},
+): void {
   const runner = new SessionRunner(initFor([...frames]));
-  const scheduler = sched([calc as Calculator]);
+  const scheduler = guardScheduled ? sched([calc as Calculator]) : unguardedSched(calc as Calculator);
   let i = 0;
   const check = (r: StepResult) => {
     const input = inputOf(r);
     const { ran, outputs } = scheduler.run(input);
-    const fresh = guardedView({ ...input, outputs: new Map() }, calc.reads, { unit: calc.id });
-    if (ran.includes(calc.id)) expectEqual(outputs.get(calc.id), calc.output(calc.init(fresh), fresh), `frame ${i}`);
+    if (ran.includes(calc.id)) {
+      const fresh = frozenView(input);
+      expectEqual(outputs.get(calc.id), calc.output(calc.init(fresh), fresh), `frame ${i}`);
+    }
     i++;
   };
   for (const frame of frames) runner.apply(frame, check);

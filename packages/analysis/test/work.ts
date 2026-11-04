@@ -212,7 +212,8 @@ export function describeWork(id: CalculatorId): void {
       const calc = incrementalOf(id);
       fc.assert(
         fc.property(WITH_REWINDS, (p) => {
-          expectScheduledIncremental(calc, raceFrames({ ...p, frames: 300 }).frames);
+          // both sides unguarded (ruling Task 22 round 5): C41 is the guarded-view completeness test's
+          expectScheduledIncremental(calc, raceFrames({ ...p, frames: 300 }).frames, { guardScheduled: false });
         }),
         { numRuns: REWIND_RUNS },
       );
