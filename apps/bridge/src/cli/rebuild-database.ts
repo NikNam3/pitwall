@@ -4,7 +4,7 @@ import { loadFeatureConfig, recordingConfig, type FeatureConfig } from '../featu
 import { FEATURES } from '../features/index.generated.ts';
 import type { Logger } from '../log.ts';
 import type { DataDir } from '../storage/data-dir.ts';
-import { openDatabase, SCHEMA_VERSION, type Db, type StoredSessionRow } from '../storage/db.ts';
+import { openDatabase, SCHEMA_VERSION, SchemaVersionError, type Db, type StoredSessionRow } from '../storage/db.ts';
 import { WeekendRepository } from '../storage/weekend-repository.ts';
 import { cliLogger, type CliIo } from './io.ts';
 import { processRecording } from './process-recording.ts';
@@ -73,6 +73,40 @@ export async function rebuildDatabase(dirs: DataDir, io: CliIo, rulesVersion: st
     return { db, recordings: files.length };
   } catch (error) {
     db.close();
+    throw error;
+  }
+}
+
+/**
+ * `pitwall reprocess` of every recording. On a database of the current schema nothing is deleted (C24): every recording
+ * runs into the open database, each session's log replaced in one transaction, so an interrupted run leaves the
+ * sessions it did not reach as they were, and a session without a recording is kept. Only a missing database or one of
+ * an older schema (which cannot be read) is rebuilt from scratch (`rebuildDatabase`). Returns the number of recordings,
+ * or undefined when `io.signal` stopped it (the user has been told).
+ */
+export async function reprocessAll(dirs: DataDir, io: CliIo, rulesVersion: string): Promise<number | undefined> {
+  const current = existsSync(dirs.dbPath) ? openCurrent(dirs.dbPath) : undefined;
+  if (current === undefined) {
+    const rebuilt = await rebuildDatabase(dirs, io, rulesVersion);
+    rebuilt?.db.close();
+    return rebuilt?.recordings;
+  }
+  try {
+    const files = allRecordings(dirs.recordings);
+    const jobs = recordingJobs(files, dirs, cliLogger(io, 'warn'));
+    const done = await processRecordings(jobs, current, io, rulesVersion, 'pitwall: interrupted; the sessions not reprocessed keep their stored logs');
+    return done ? files.length : undefined;
+  } finally {
+    current.close();
+  }
+}
+
+/** The database at `path` when it has the current schema; undefined for an older one. */
+function openCurrent(path: string): Db | undefined {
+  try {
+    return openDatabase(path);
+  } catch (error) {
+    if (error instanceof SchemaVersionError) return undefined;
     throw error;
   }
 }

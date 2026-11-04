@@ -6,7 +6,7 @@ import { rulesVersion, SOURCE_ROOT } from '../../storage/rules-version.ts';
 import { WeekendRepository } from '../../storage/weekend-repository.ts';
 import type { Logger } from '../../log.ts';
 import { cliLogger, EXIT_INTERRUPTED, type CliIo } from '../io.ts';
-import { processRecordings, rebuildDatabase, recordingJobs, type RecordingJob } from '../rebuild-database.ts';
+import { processRecordings, recordingJobs, reprocessAll, type RecordingJob } from '../rebuild-database.ts';
 
 /**
  * The recordings the stored sessions of one weekend came from, with their configs. Nothing is deleted: each run replaces
@@ -23,15 +23,14 @@ function weekendJobs(db: Db, weekendId: string, dirs: DataDir, log: Logger): Rec
   return recordingJobs([...new Set(paths)], dirs, log);
 }
 
-/** `pitwall reprocess [--weekend id]`: rebuilds the database from the recordings, all of them or one weekend's. */
+/** `pitwall reprocess [--weekend id]`: reprocesses the recordings, all of them or one weekend's, into the database. */
 export async function run(_positionals: string[], values: { weekend?: string | undefined }, io: CliIo): Promise<number> {
   const dirs = dataDir(io.env);
   const version = await rulesVersion(SOURCE_ROOT);
   if (values.weekend === undefined) {
-    const rebuilt = await rebuildDatabase(dirs, io, version);
-    if (rebuilt === undefined) return EXIT_INTERRUPTED;
-    rebuilt.db.close();
-    io.out(`reprocessed ${rebuilt.recordings} recordings`);
+    const recordings = await reprocessAll(dirs, io, version);
+    if (recordings === undefined) return EXIT_INTERRUPTED;
+    io.out(`reprocessed ${recordings} recordings`);
     return 0;
   }
   const db = openDatabase(dirs.dbPath);
