@@ -107,7 +107,7 @@ export const battleCalculator: QuickCalculator<BattleOutput> = {
     const gaps = view.outputs.get('gaps') as GapsOutput | undefined;
     const pace = view.outputs.get('pace') as Pace | undefined;
     const phase = behaviourFor({ 'weekend-phase': BATTLE_BEHAVIOUR['weekend-phase'] }, view)[0];
-    // a pending weekend phase (no span yet) reads as a race grid (C14): no battles, DRS not enabled yet
+    // a pending weekend phase (no span yet) reads as a race grid (C14): the cards are computed, DRS is not enabled yet
     const computed = phase === undefined || phase.cards === 'computed';
     const drs = drsOf(view, phase?.cards !== 'notApplicable');
     const out: BattleOutput = {};

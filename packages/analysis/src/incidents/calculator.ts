@@ -1,8 +1,8 @@
 // The `incidents` calculator (spec 6.4): a fold over the events, the spans of the sub-machines it reads (C20), laps and
 // mini-sector crossings into `incidents.feed`, by its behaviour table (`behaviour.ts`, C44): the race from the weekend
 // phase (C14), the neutralisations from the session-phase spans (through `shared/neutralised.ts`), pit visits from
-// car-location, retirements and disqualifications from car-status, penalties and warnings from their spans. A span is
-// matched to a mini-sector by frames (C26). Positions and gaps before and after, and the sector, come from the
+// car-location, retirements and disqualifications from car-status, warnings from their spans, penalties given from the
+// projection's penalty records, one entry per record (C25, C45). A span is matched to a mini-sector by frames (C26). Positions and gaps before and after, and the sector, come from the
 // crossings, so a flashback reproduces them. A log: it reads the history only, never another analysis's output (C45);
 // its damage entries come from the shared jump grouping over the `damageChange` events (`shared/damage-jumps.ts`) and
 // stay through a repair. The accumulator folds the projection's lists and closed spans and the config alone (C31.2);
@@ -27,7 +27,7 @@ import {
   type MiniSectorCrossing,
   type Ms,
   type OpenSpan,
-  type PendingPenaltyDetail,
+  type PenaltyRecord,
   type RaceEvent,
   type SessionTime,
   type Span,
@@ -84,8 +84,12 @@ const MAJOR = {
   neutralised: 'neutralisedMajor',
 } as const satisfies Record<IncidentKind, keyof Config>;
 
-/** `warnings`: on a warning, the warned span's count of the car's warnings; `penalty`: on a penalty, its ruling. */
+/**
+ * `warnings`: on a warning, the warned span's count of the car's warnings; `penalty`: on a penalty, its ruling; `id`: the
+ * entry's own id where kind, cars and time do not tell it apart (a penalty record's).
+ */
 type CarEvent = {
+  id?: string;
   kind: 'collision' | 'retirement' | 'warning' | 'penalty';
   at: SessionTime;
   carIds: CarId[];
@@ -100,7 +104,7 @@ type CarEvent = {
 type Neutralised = { at: SessionTime; lap: number; startFrame: FrameNumber; endFrame: FrameNumber };
 
 /** The car-scoped sub-machines whose spans `incidents` folds (C20). */
-const CAR_MACHINES = ['car-location', 'car-status', 'penalties', 'warnings'] as const satisfies readonly MachineId[];
+const CAR_MACHINES = ['car-location', 'car-status', 'warnings'] as const satisfies readonly MachineId[];
 type CarMachine = (typeof CAR_MACHINES)[number];
 
 /** The weekend phase's rows alone: whether the feed holds anything (C14). */
@@ -108,9 +112,6 @@ const WEEKEND_PHASE = { 'weekend-phase': INCIDENTS_BEHAVIOUR['weekend-phase'] };
 
 /** A car's span of row `noTimeLoss` (a pit visit, a garage spell): the frames it covers, `startFrame <= f < endFrame` (C26). */
 type Visit = { startFrame: FrameNumber; endFrame: FrameNumber };
-
-/** What a car owes in a penalties span (its detail; none of it in `clear`). */
-type Owed = { driveThroughs: number; stopGos: number; totalMs: Ms };
 
 type CarSpan = DeepReadonly<Span> | DeepReadonly<OpenSpan>;
 
@@ -126,6 +127,7 @@ type Acc = {
   events: number;
   crossings: number;
   laps: number;
+  penalties: number;
   /** How many closed spans of each car sub-machine are folded. */
   closed: Record<CarMachine, number>;
   /** How many closed spans of each session-phase sub-machine are folded. */
@@ -145,8 +147,10 @@ type Acc = {
   spanEvents: Record<CarMachine, CarEvent[]>;
   /** The collisions (events). */
   collisions: CarEvent[];
-  /** Per car id, what it owed in its latest closed penalties span. */
-  owed: (Owed | undefined)[];
+  /** The penalties given (the penalty records), one per record. */
+  given: CarEvent[];
+  /** How many records of each car, kind and time are folded: the ordinal in a record entry's id. */
+  givenCount: Map<string, number>;
   /** Per car id, the frame its first closed retired span opened on. */
   retiredFrom: (FrameNumber | undefined)[];
   current: CurrentLaps;
@@ -224,27 +228,11 @@ const foldNeutralised = (acc: Acc, view: EngineView): boolean => {
   return changed;
 };
 
-/** What the car owes in a penalties span: its detail's counts and total, none of them in `clear`. */
-const owedOf = (span: CarSpan): Owed => {
-  const detail = (span.detail ?? {}) as Partial<PendingPenaltyDetail>;
-  return { driveThroughs: detail.driveThroughs ?? 0, stopGos: detail.stopGos ?? 0, totalMs: detail.totalMs ?? 0 };
-};
-
-/** The penalties given between the car's previous penalties span (`before`) and this one: each count or total that rose. */
-const risesOf = (before: Owed | undefined, now: Owed): IncidentPenalty[] => {
-  const was = before ?? { driveThroughs: 0, stopGos: 0, totalMs: 0 };
-  const given: IncidentPenalty[] = [];
-  if (now.driveThroughs > was.driveThroughs) given.push({ kind: 'driveThrough' });
-  if (now.stopGos > was.stopGos) given.push({ kind: 'stopGo' });
-  if (now.totalMs > was.totalMs) given.push({ kind: 'time', timeMs: now.totalMs - was.totalMs });
-  return given;
-};
-
 /**
  * The entries a car's span gives by its row (C44), at its start: none for a span the engine joined in (its incident was
- * not seen) or one closed unconfirmed (C18); a penalties span's from what rose over the car's previous one (`before`).
+ * not seen) or one closed unconfirmed (C18).
  */
-const entriesOf = (machine: CarMachine, span: CarSpan, before: Owed | undefined): CarEvent[] => {
+const entriesOf = (machine: CarMachine, span: CarSpan): CarEvent[] => {
   if (span.carId === undefined || span.joinedAt === true || ('endFrame' in span && !span.confirmed)) return [];
   const base = { at: span.start, carIds: [span.carId] };
   switch (behaviourOf(machine, span.kind)) {
@@ -254,17 +242,14 @@ const entriesOf = (machine: CarMachine, span: CarSpan, before: Owed | undefined)
       return [{ kind: 'penalty', ...base, penalty: { kind: 'disqualified' } }];
     case 'warning':
       return [{ kind: 'warning', ...base, warnings: (span.detail as WarnedDetail).count }];
-    case 'penalty':
-      return risesOf(before, owedOf(span)).map((penalty) => ({ kind: 'penalty', ...base, penalty }));
     default:
       return [];
   }
 };
 
 /**
- * Folds the closed spans of the car sub-machines new in the projection, in their order (a car's spans are contiguous, so
- * each one's predecessor is the car's latest folded one). Returns the cars whose closed pit visits or garage spells
- * changed.
+ * Folds the closed spans of the car sub-machines new in the projection, in their order. Returns the cars whose closed
+ * pit visits or garage spells changed.
  */
 const foldCarSpans = (acc: Acc, view: EngineView): Set<CarId> => {
   const changed = new Set<CarId>();
@@ -280,8 +265,7 @@ const foldCarSpans = (acc: Acc, view: EngineView): Set<CarId> => {
         changed.add(id);
       }
       if (row === 'retirement' && span.confirmed) acc.retiredFrom[id] ??= span.startFrame;
-      acc.spanEvents[machine].push(...entriesOf(machine, span, acc.owed[id]));
-      if (machine === 'penalties') acc.owed[id] = owedOf(span);
+      acc.spanEvents[machine].push(...entriesOf(machine, span));
     }
     acc.closed[machine] = list.length;
   }
@@ -317,7 +301,7 @@ const foldCrossings = (acc: Acc, view: EngineView, neutralisedChanged: boolean, 
   });
 };
 
-/** Folds the new collisions and damage changes; retirements, penalties and warnings come from the spans (C13, C20). */
+/** Folds the new collisions and damage changes; retirements and warnings come from the spans (C13, C20), penalties from their records. */
 const foldEvents = (acc: Acc, view: EngineView): void => {
   const { events } = view.history;
   for (let i = acc.events; i < events.length; i++) {
@@ -328,6 +312,29 @@ const foldEvents = (acc: Acc, view: EngineView): void => {
   }
   acc.events = events.length;
   foldDamageJumps(acc.grouping, events, acc);
+};
+
+/** The ruling of a penalty record: its kind, its time for a time penalty, and its infringement (unknown stays unknown, C3). */
+const penaltyOf = (record: DeepReadonly<PenaltyRecord>): IncidentPenalty => ({
+  kind: record.kind,
+  ...(record.timeMs !== undefined && { timeMs: record.timeMs }),
+  infringement: record.infringement as Known<number>,
+});
+
+/**
+ * Folds the new penalty records, one penalty entry each (C25, C45). Its id is the car, kind and time with the record's
+ * ordinal among the folded records of the same car, kind and time, so two records given at once are two entries.
+ */
+const foldPenalties = (acc: Acc, view: EngineView): void => {
+  const { penalties } = view.history;
+  for (let i = acc.penalties; i < penalties.length; i++) {
+    const record = penalties[i] as DeepReadonly<PenaltyRecord>;
+    const key = `${record.kind}:${record.carId}:${record.at}`;
+    const n = acc.givenCount.get(key) ?? 0;
+    acc.givenCount.set(key, n + 1);
+    acc.given.push({ id: `penalty:${key}:${n}`, kind: 'penalty', at: record.at, carIds: [record.carId], penalty: penaltyOf(record) });
+  }
+  acc.penalties = penalties.length;
 };
 
 const foldLaps = (acc: Acc, view: EngineView): void => {
@@ -342,6 +349,7 @@ const fold = (acc: Acc, view: EngineView): Acc => {
   const neutralisedChanged = foldNeutralised(acc, view);
   foldCrossings(acc, view, neutralisedChanged, foldCarSpans(acc, view));
   foldEvents(acc, view);
+  foldPenalties(acc, view);
   foldLaps(acc, view);
   return acc;
 };
@@ -352,15 +360,17 @@ const init = (view: EngineView): Acc =>
       events: 0,
       crossings: 0,
       laps: 0,
-      closed: { 'car-location': 0, 'car-status': 0, penalties: 0, warnings: 0 },
+      penalties: 0,
+      closed: { 'car-location': 0, 'car-status': 0, warnings: 0 },
       closedPhases: Object.fromEntries(NEUTRALISATION_MACHINES.map((machine) => [machine, 0])),
       tracks: [],
       neutralised: Object.fromEntries(NEUTRALISATION_MACHINES.map((machine) => [machine, []])),
       lapFrames: [],
       visits: [],
-      spanEvents: { 'car-location': [], 'car-status': [], penalties: [], warnings: [] },
+      spanEvents: { 'car-location': [], 'car-status': [], warnings: [] },
       collisions: [],
-      owed: [],
+      given: [],
+      givenCount: new Map(),
       retiredFrom: [],
       current: emptyCurrentLaps(),
       grouping: emptyDamageJumps(),
@@ -386,7 +396,7 @@ const nowOf = (acc: Acc, view: EngineView): Now => {
       const row = behaviourOf(machine, span.kind);
       if (row === 'noTimeLoss') openVisits[id] = span.startFrame;
       if (row === 'retirement') openRetiredFrom[id] = span.startFrame;
-      openEvents.push(...entriesOf(machine, span, acc.owed[id]));
+      openEvents.push(...entriesOf(machine, span));
     }
   }
   const open = NEUTRALISATION_MACHINES.flatMap((machine) =>
@@ -498,8 +508,9 @@ const damageGroups = (acc: Board): { carId: CarId; jumps: DamageJump[] }[] => {
 /** Every entry the history gives, with each time loss merged into a collision or damage entry of its car close by. */
 const candidates = (acc: Board): Candidate[] => {
   const closed = CAR_MACHINES.flatMap((machine) => acc.spanEvents[machine]);
-  const list = [...closed, ...acc.collisions, ...acc.openEvents].map((e) =>
+  const list = [...closed, ...acc.collisions, ...acc.given, ...acc.openEvents].map((e) =>
     candidate(e.kind, e.at, e.carIds, {
+      ...(e.id !== undefined && { id: e.id }),
       ...(e.warnings !== undefined && { warnings: e.warnings }),
       ...(e.penalty !== undefined && { penalty: e.penalty }),
     }),
@@ -677,6 +688,7 @@ export const incidentsCalculator: IncrementalCalculator<Acc, IncidentsOutput> = 
     'spans:weekend-phase',
     'miniSectors',
     'laps',
+    'penalties',
   ],
   cadence: { hz: 4 },
   init,

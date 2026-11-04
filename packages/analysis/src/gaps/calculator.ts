@@ -1,6 +1,6 @@
 // The `gaps` calculator (spec 6.1): a fold over the mini-sector crossings; the order and our cars come from the car state.
-import { carStatusSpans, known, MINI_SECTORS, sessionPhaseRaceSpans, unknown, type CarId, type Interval, type Known, type MiniSectorCrossing, type Ms, type Neighbourhood, type SessionTime } from '@pitwall/domain';
-import type { EngineView, IncrementalCalculator } from '@pitwall/engine/readers';
+import { carStatusSpans, known, weekendPhaseSpans, MINI_SECTORS, sessionPhaseRaceSpans, unknown, type CarId, type Interval, type Known, type MiniSectorCrossing, type Ms, type Neighbourhood, type SessionTime } from '@pitwall/domain';
+import { openSpansOf, type EngineView, type IncrementalCalculator } from '@pitwall/engine/readers';
 import { behaviourByCar, behaviourFor, openSpansByCar } from '../shared/behaviour.ts';
 import { CAR_STATUS_READS } from '../shared/car-status.ts';
 import { isClosed, NEUTRALISATION_READS, neutralisationKind, neutralisedSpans, type NeutralisationKind } from '../shared/neutralised.ts';
@@ -93,14 +93,24 @@ const raceStartNow = (acc: Table, view: EngineView): RaceStart | undefined => {
   return open === undefined ? undefined : raceStartOf(open, acc.lastRaceSpanKind);
 };
 
-/** The race-only parts apply: every row of the weekend phase and the session phases open now says so (C14, C44); none open yet: they do not. */
-const raceOnly = (view: EngineView): boolean => {
+/**
+ * Whether the race-only parts apply: `pending` while no weekend-phase span is open yet (C14: the phase is not known, so
+ * they are `notReceived`, C3); else `race` when every row of the weekend phase and the session phases open now says so
+ * (C44), `other` when one does not.
+ */
+type RaceParts = 'race' | 'other' | 'pending';
+
+const racePartsOf = (view: EngineView): RaceParts => {
+  if (openSpansOf(view, weekendPhaseSpans.machine).length === 0) return 'pending';
   const rows = behaviourFor(GAPS_BEHAVIOUR, view).flatMap((row) => ('race' in row ? [row.race] : []));
-  return rows.length > 0 && rows.every(Boolean);
+  return rows.length > 0 && rows.every(Boolean) ? 'race' : 'other';
 };
 
-const raceStartAt = (start: RaceStart | undefined, race: boolean): Known<SessionTime> => {
-  if (!race) return NOT_APPLICABLE;
+/** A race-only part where it does not apply: `notReceived` while the weekend phase is pending, else `notApplicable`. */
+const notRace = (race: Exclude<RaceParts, 'race'>): Known<never> => (race === 'pending' ? unknown('notReceived') : NOT_APPLICABLE);
+
+const raceStartAt = (start: RaceStart | undefined, race: RaceParts): Known<SessionTime> => {
+  if (race !== 'race') return notRace(race);
   return start === undefined || !start.lightsOutSeen ? unknown('notReceived') : known(start.at, start.at);
 };
 
@@ -114,8 +124,8 @@ const leaderGap = (leader: CarCrossings | undefined): Known<Ms> => {
 };
 
 /** Grid position minus position; the grid position is 0 until the first LapData (the engine counts it from 1). */
-const positionsGained = (timing: { gridPosition: number; position: number }, race: boolean, view: EngineView): Known<number> => {
-  if (!race) return NOT_APPLICABLE;
+const positionsGained = (timing: { gridPosition: number; position: number }, race: RaceParts, view: EngineView): Known<number> => {
+  if (race !== 'race') return notRace(race);
   if (timing.gridPosition === 0) return unknown('notReceived');
   return known(timing.gridPosition - timing.position, view.live.sessionTime);
 };
@@ -142,8 +152,8 @@ const leaderLapAt = (acc: Table, t: SessionTime): number => {
 };
 
 /** The phases on the gapper's x: the leader's progress at their start and end. */
-const phasesOf = (acc: Table, race: boolean, view: EngineView): GapsOutput['phases'] => {
-  if (!race) return [];
+const phasesOf = (acc: Table, race: RaceParts, view: EngineView): GapsOutput['phases'] => {
+  if (race !== 'race') return [];
   return neutralisedPhases(view).map(({ kind, start, end }) => ({
     kind,
     fromLap: leaderLapAt(acc, start),
@@ -153,7 +163,7 @@ const phasesOf = (acc: Table, race: boolean, view: EngineView): GapsOutput['phas
 
 /** The running cars in position order (ties by id), their intervals, the cars around each of ours, and the cars out of the race. */
 function build(acc: Table, view: EngineView): GapsOutput {
-  const race = raceOnly(view);
+  const race = racePartsOf(view);
   // only the cars car-status has a span open for can stand in the order: the other slots are not read
   const statusRows = behaviourByCar(STATUS_BEHAVIOUR, view);
   const running: (typeof view.live.cars)[number][] = [];

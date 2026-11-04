@@ -1,9 +1,9 @@
 // The behaviour table of `incidents` (contract C14, C43, C44): what each kind of every sub-machine it reads gives the
-// feed. The machine decides the situation; `incidents` only looks up the row of each span, open or closed.
+// feed. The machine decides the situation; `incidents` only looks up the row of each span, open or closed. Penalties
+// given are no row: they are the projection's penalty records (C25, C45).
 import {
   carLocationSpans,
   carStatusSpans,
-  penaltiesSpans,
   sessionPhasePracticeSpans,
   sessionPhaseQualifyingSpans,
   sessionPhaseRaceSpans,
@@ -29,8 +29,6 @@ export type IncidentsBehaviour =
   | 'retirement'
   /** A penalty entry of kind `disqualified` when the span opens. */
   | 'disqualification'
-  /** A penalty entry per penalty that rose over the car's previous span (a drive-through, a stop-go, a time). */
-  | 'penalty'
   /** A warning entry with the span's count of the limit. */
   | 'warning';
 
@@ -65,7 +63,6 @@ export const INCIDENTS_BEHAVIOUR = {
   }),
   'car-location': rows(carLocationSpans, { track: 'none', pitLane: 'noTimeLoss', garage: 'noTimeLoss' }),
   'car-status': rows(carStatusSpans, { competing: 'none', retired: 'retirement', disqualified: 'disqualification', absent: 'none' }),
-  penalties: rows(penaltiesSpans, { clear: 'none', timePenalty: 'penalty', driveThroughPending: 'penalty', stopGoPending: 'penalty' }),
   warnings: rows(warningsSpans, { noWarning: 'none', warned: 'warning' }),
 } satisfies BehaviourTable<IncidentsBehaviour>;
 

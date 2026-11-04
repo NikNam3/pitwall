@@ -47,6 +47,8 @@ export const raceMomentCalculator: QuickCalculator<RaceMomentOutput> = {
   cadence: { hz: 4 },
   compute(view) {
     const { session, sessionTime: now } = view.live;
+    // a pending weekend phase (no span yet, C14): whether the session is a race is not known yet (C3)
+    if (openSpansOf(view, 'weekend-phase').length === 0) return unknown('notReceived');
     const rows = behaviourFor(RACE_MOMENT_BEHAVIOUR, view);
     if (!rows.some((row) => row.applicable === true)) return NOT_APPLICABLE;
     const cfg = RACE_MOMENT_CONFIG.read(view);
