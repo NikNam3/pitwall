@@ -1,5 +1,5 @@
-import type { Computed, InsightEntry, TopicName, TopicValue } from '@pitwall/contracts';
-import type { CarId, MachineId, OpenSpan, Span } from '@pitwall/domain';
+import type { Computed, InsightEntry, MachineSpans, TopicName, TopicValue } from '@pitwall/contracts';
+import type { CarId, MachineId } from '@pitwall/domain';
 import type {
   Calculator,
   CalculatorId,
@@ -83,12 +83,11 @@ export const bindHistory = <T extends TopicName, L extends ProjectedList>(
   list: ProjectionState[L][number] extends TopicValue<T> ? L : never,
 ): TopicBinding => binding({ topic, fromHistory: list });
 
-/** A sub-machine's spans as a topic carries them (C54): the open ones and the closed ones, as they are. */
-export type MachineSpans = { open: OpenSpan[]; closed: Span[] };
-
 /**
  * Binds a core topic to a sub-machine's spans (C54, C55): its open spans (`view.situation`) and its closed spans (the
- * projection's `spans[machine]`). The topic's value must be `MachineSpans`.
+ * projection's `spans[machine]`). The topic's value must be `MachineSpans`. The hub reads them when it sends a
+ * subscription a value (at most `maxHz`), never per frame; a topic no one subscribed is never published (C49). The
+ * machine is not tied to its topic by type: `MachineId` is a string.
  */
 export const bindSituation = <T extends TopicName>(
   topic: MachineSpans extends TopicValue<T> ? T : never,

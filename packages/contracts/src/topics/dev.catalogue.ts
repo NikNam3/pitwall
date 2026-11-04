@@ -3,7 +3,7 @@ import { defineTopic, type NoParams } from '../topic-def.ts';
 /** One data entry of a widget, as the catalogue records it; `kind` is `state` or `folded`. */
 export type CatalogueWidgetTopic = { topic: string; kind: string; optional: boolean };
 
-/** Where a topic's value comes from; `kind` is `calculator`, `history`, `insights` or `job`. */
+/** Where a topic's value comes from; `kind` is `calculator`, `history`, `insights`, `job`, `live` or `situation`. */
 export type CatalogueBinding = { kind: string; source: string; feature: string };
 
 /** The code map `scripts/gen-catalogue.ts` writes (spec 8.1): who declares, binds and reads what, and where the files are. Paths are relative to the repo root. */

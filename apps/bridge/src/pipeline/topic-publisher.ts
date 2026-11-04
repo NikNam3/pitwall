@@ -1,6 +1,6 @@
 // Turns what one frame produced into hub messages, following the features' topic bindings (spec 3.3, 8).
-import type { Computed, TopicName } from '@pitwall/contracts';
-import type { FeedId } from '@pitwall/domain';
+import type { Computed, MachineSpans, TopicName } from '@pitwall/contracts';
+import type { FeedId, MachineId } from '@pitwall/domain';
 import type { HistoryDelta, InsightChange, Projection, ProjectedList, SchedulerResult } from '@pitwall/engine/readers';
 import type { Feature, LiveView, TopicBinding } from '../features/feature.ts';
 import type { TopicHub, ValueFor } from '../hub/topic-hub.ts';
@@ -12,6 +12,17 @@ type StateBinding = Extract<TopicBinding, { from: string }>;
 type HistoryBinding = Extract<TopicBinding, { fromHistory: ProjectedList }>;
 type JobBinding = Extract<TopicBinding, { fromJob: string }>;
 type LiveBinding = Extract<TopicBinding, { fromLive: unknown }>;
+type SituationBinding = Extract<TopicBinding, { fromSituation: MachineId }>;
+
+/**
+ * A sub-machine's spans as they are now (C20): its open spans in the view's situation and its closed spans in the
+ * projection, copied, since the engine changes its state in place.
+ */
+export type SpansOf = (machine: MachineId) => MachineSpans;
+
+/** A situation topic's value holds no span, open or closed; no value (its `spansOf` threw) is not such a value. */
+const hasNoSpan = (value: unknown): boolean =>
+  value !== undefined && (value as MachineSpans).open.length === 0 && (value as MachineSpans).closed.length === 0;
 
 /** A topic that could not be published: a feature's `select` threw, or the hub did. The topic is marked `errored`. */
 export type PublishError = { topic: TopicName; error: unknown };
@@ -23,8 +34,8 @@ export type PublishError = { topic: TopicName; error: unknown };
 export type InsightOrigin = { frameId: number; between?: true };
 
 /**
- * Publishes one feed's calculator outputs, history appends, insight changes, job results and live state to the topics
- * bound to them.
+ * Publishes one feed's calculator outputs, history appends, insight changes, job results, live state and sub-machine
+ * spans to the topics bound to them.
  * Every binding is contained: a failing one is marked `errored` and never stops the others.
  *
  * The `publish*` methods return the failures caught while they ran, so the caller can report them with its own
@@ -40,6 +51,9 @@ export class TopicPublisher {
   readonly #insights: TopicName[] = [];
   readonly #jobs: JobBinding[] = [];
   readonly #live: LiveBinding[] = [];
+  readonly #situations: Array<SituationBinding & { tag: string }> = [];
+  /** The situation topics published in this session: the ones a client may hold a value of. */
+  #situationsPublished = new Set<TopicName>();
   /** Topics whose failure is already reported; a topic leaves the set when its `select` succeeds again. */
   readonly #failing = new Set<TopicName>();
   /** Set while a `publish*` call runs: its failures go back to the caller instead of the log. */
@@ -57,8 +71,7 @@ export class TopicPublisher {
       else if ('fromInsights' in binding) this.#insights.push(binding.topic);
       else if ('fromJob' in binding) this.#jobs.push(binding);
       else if ('fromLive' in binding) this.#live.push(binding);
-      // No topic carries a sub-machine's spans yet: the first one (Task 23) brings their publishing and its tests.
-      else if ('fromSituation' in binding) throw new Error(`topic ${binding.topic}: situation bindings are not published yet`);
+      else if ('fromSituation' in binding) this.#situations.push({ ...binding, tag: `spans:${binding.fromSituation}` });
       else throw new Error(`unknown topic binding ${JSON.stringify(binding satisfies never)}`);
     }
   }
@@ -120,6 +133,43 @@ export class TopicPublisher {
     });
   }
 
+  /**
+   * The situation topics (`bindSituation`, C55) of the machines whose spans changed on a frame (their `spans:<machine>`
+   * tag): each has a new value. Only subscribed topics are published (C49), and nothing is copied here: the hub calls
+   * `spansOf` when it sends a subscription a value (at once if the throttle allows, else on a later tick; at most
+   * `maxHz`). It reads the runner's current state, so after a flashback (`rewound`, every tag set) the restored one: a
+   * state topic, recomputed, never resent as a log (C57). Then a topic not published yet in the session whose machine
+   * has no span stays unpublished, as in a run that never received the undone frames (C33).
+   */
+  publishSituations(spansOf: SpansOf, changed: ReadonlySet<string>, rewound = false): PublishError[] {
+    return this.#collecting(() => {
+      for (const { topic, fromSituation: machine, tag } of this.#situations) {
+        if (!changed.has(tag)) continue;
+        if (!this.#hub.isSubscribed(this.#feedId, topic)) continue;
+        const valueFor = this.#valueFor(topic, () => spansOf(machine));
+        if (rewound && !this.#situationsPublished.has(topic) && hasNoSpan(valueFor({}))) continue;
+        this.#situationsPublished.add(topic);
+        this.#guarded(topic, () => this.#hub.publishState(this.#feedId, topic, valueFor));
+      }
+    });
+  }
+
+  /**
+   * The subscriptions changed (a demand change): a subscribed situation topic not published yet in the session gets its
+   * machine's spans now, so a new subscriber has them at once (C49). One published before needs nothing: the hub reads
+   * its value from the current state whenever it sends one.
+   */
+  publishNewSituations(spansOf: SpansOf): PublishError[] {
+    return this.#collecting(() => {
+      for (const { topic, fromSituation: machine } of this.#situations) {
+        if (this.#situationsPublished.has(topic) || !this.#hub.isSubscribed(this.#feedId, topic)) continue;
+        this.#situationsPublished.add(topic);
+        const valueFor = this.#valueFor(topic, () => spansOf(machine));
+        this.#guarded(topic, () => this.#hub.publishState(this.#feedId, topic, valueFor));
+      }
+    });
+  }
+
   /** Appends what the history lists gained; after a rewind (`delta.rewound`) the lists are sent again whole. */
   publishHistory(history: Projection, delta: HistoryDelta): PublishError[] {
     return this.#collecting(() => {
@@ -135,9 +185,10 @@ export class TopicPublisher {
     });
   }
 
-  /** A new session: its insight changes start over, as the hub's topics do. */
+  /** A new session: its insight changes and its published situation topics start over, as the hub's topics do. */
   sessionStarted(): void {
     this.#insightLog = [];
+    this.#situationsPublished = new Set();
   }
 
   /** Appends insight changes to the insights topics; `origin`: the pass of the session that produced them. */

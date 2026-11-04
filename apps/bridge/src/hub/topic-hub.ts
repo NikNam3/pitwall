@@ -91,6 +91,11 @@ export class TopicHub {
     return new Set([...this.entriesOfFeed(feedId)].map((entry) => entry.subscription.topic));
   }
 
+  /** At least one subscription asks for `topic` of the feed; cheap enough for every frame. */
+  isSubscribed(feedId: FeedId, topic: TopicName): boolean {
+    return (this.subscribers.get(feedId)?.get(topic)?.size ?? 0) > 0;
+  }
+
   /**
    * Replaces a subscription with the same `(clientId, id)`. Subscriptions of unknown clients are ignored. The demand
    * change comes before the snapshot, so a value the owner publishes in reply to it is already in the snapshot.

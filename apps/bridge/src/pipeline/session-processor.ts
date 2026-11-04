@@ -1,5 +1,5 @@
 // One session of a feed: frames → SessionRunner → Scheduler → topics, plus its session file and its storage.
-import { sessionUidString, type FeedId, type ParticipantsValues, type SessionTime, type SessionUid } from '@pitwall/domain';
+import { sessionUidString, type FeedId, type MachineId, type ParticipantsValues, type SessionTime, type SessionUid } from '@pitwall/domain';
 import {
   participantsValuesOf,
   projectionLengths,
@@ -24,7 +24,7 @@ import type { SessionKey, SessionRow } from '../storage/db.ts';
 import type { SessionFile } from '../storage/session-files.ts';
 import { MAX_DUMPS_PER_SESSION, writeDebugDump } from './debug-dump.ts';
 import { sessionRowOf, type SessionStorage } from './session-storage.ts';
-import type { PublishError, TopicPublisher } from './topic-publisher.ts';
+import type { PublishError, SpansOf, TopicPublisher } from './topic-publisher.ts';
 
 export type SessionProcessorOptions = {
   feedId: FeedId;
@@ -129,6 +129,10 @@ export class SessionProcessor {
     const forTopics = scheduler.withDependencies(needed.filter((id) => this.#o.jobs?.isTrigger(id) !== true));
     const only = new Set(added.filter((id) => forTopics.has(id)));
     if (only.size > 0) this.#evaluateNow(only);
+    // A newly subscribed situation topic gets its machine's spans at once (C49).
+    for (const { error, topic } of this.#o.publisher.publishNewSituations(this.#spansOf)) {
+      this.#o.log.error({ feedId: this.#o.feedId, sessionUid: this.#uid, topic, err: error }, 'topic not published on a demand change, marked errored');
+    }
   }
 
   /**
@@ -169,6 +173,15 @@ export class SessionProcessor {
   /** The live state as it is now (C39's `live`): what a `bindLive` topic's select reads when the hub sends its value. */
   readonly #live = () => this.#runner.state;
 
+  /**
+   * A sub-machine's spans as they are now (C20): what a `bindSituation` topic carries when the hub sends its value,
+   * never built per frame. Copies of the open spans of the view's situation and of the projection's closed spans.
+   */
+  readonly #spansOf: SpansOf = (machine: MachineId) => {
+    const state = this.#runner.state;
+    return { open: [...(situationOf(state).byMachine[machine] ?? [])], closed: [...(state.history.spans[machine] ?? [])] };
+  };
+
   /** Each frame the runner applied: storage, the scheduler and the topics. */
   readonly #onResult = (result: StepResult, frame: Frame): void => {
     const { feedId, publisher, storage, log } = this.#o;
@@ -200,6 +213,7 @@ export class SessionProcessor {
       unpublished.push(
         ...publisher.publishOutputs(scheduled),
         ...publisher.publishLive(this.#live),
+        ...publisher.publishSituations(this.#spansOf, result.changed, rewound !== undefined),
         ...publisher.publishHistory(result.state.history, result.delta),
         ...publisher.publishInsights(scheduled.insights, { frameId: frame.frameId }),
       );
