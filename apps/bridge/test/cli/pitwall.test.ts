@@ -4,6 +4,7 @@ import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import Database from 'better-sqlite3';
+import { CONTRACT_VERSION } from '@pitwall/contracts';
 import { describe, expect, it } from 'vitest';
 import { dataDir } from '../../src/storage/data-dir.ts';
 import { SCHEMA_VERSION } from '../../src/storage/db.ts';
@@ -26,7 +27,7 @@ describe('pitwall CLI', { timeout: 30_000 }, () => {
     const tap = startCli(['tap', 'session.info', '--url', `ws://127.0.0.1:${port}`], {});
     await tap.waitFor(/"sessionUid":"13536157633115227668"/);
     const lines = tap.stdout().trim().split('\n').map((l) => JSON.parse(l));
-    expect(lines[0]).toMatchObject({ type: 'hello', contractVersion: 11 });
+    expect(lines[0]).toMatchObject({ type: 'hello', contractVersion: CONTRACT_VERSION });
     expect(lines.some((m) => m.type === 'snapshot' || m.type === 'update')).toBe(true);
     expect(await tap.stop()).toBe(0); expect(await replay.stop()).toBe(0);
   });

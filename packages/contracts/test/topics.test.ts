@@ -9,6 +9,7 @@ import {
   type FeedStatus,
   type InsightEntry,
   type MachineSpans,
+  type PitStopCounts,
   type ReplayJump,
   type ReplayStatus,
   type ReservedCommand,
@@ -78,6 +79,7 @@ describe('TOPICS', () => {
       ['incidents.feed', 'incidents', 'feed', 'state', 4],
       ['lapTimes.board', 'lap-times', 'feed', 'state', 4],
       ['lapTimes.projection', 'lap-times', 'feed', 'state', 10],
+      ['pitStopCount.byCar', 'pit-stop-count', 'feed', 'state', 4],
       ['raceMoment.current', 'race-moment', 'feed', 'state', 4],
       ['tyreWear.car', 'tyre-wear', 'feed', 'state', 4],
     ]);
@@ -91,7 +93,8 @@ describe('TOPICS', () => {
   it.each(['ui.workbooks', 'ui.linkGroups', 'ui.alerts', 'ui.settings'] as const)('has the global topic %s: owner core, state', (name) => {
     expect(TOPICS[name]).toMatchObject({ name, owner: 'core', scope: 'global', mode: 'state' });
   });
-  it('exports the contract version', () => { expect(CONTRACT_VERSION).toBe(11); });
+  // M7-R: cars.overview lost `stops`, pitStopCount.byCar is new
+  it('exports the contract version', () => { expect(CONTRACT_VERSION).toBe(12); });
 });
 
 describe('defineTopic', () => {
@@ -131,7 +134,7 @@ describe('topic types', () => {
       | 'replay.status' | 'ui.workbooks' | 'ui.linkGroups' | 'ui.alerts' | 'ui.settings'
       | 'tyreWear.car' | 'fuel.car' | 'ers.car' | 'carBands.car' | 'damage.car' | 'gaps.intervals' | 'gaps.toCar'
       | 'gaps.gapper' | 'gaps.neighbourhood' | 'lapTimes.board' | 'lapTimes.projection' | 'battle.cards'
-      | 'incidents.feed' | 'raceMoment.current'
+      | 'incidents.feed' | 'raceMoment.current' | 'pitStopCount.byCar'
       | 'situation.carActivityPractice' | 'situation.carActivityQualifying' | 'situation.carActivityRace' | 'situation.carFlags'
       | 'situation.carLocation' | 'situation.carStatus' | 'situation.clock' | 'situation.compoundRule' | 'situation.lapValidity'
       | 'situation.penalties' | 'situation.raceControlPractice' | 'situation.raceControlQualifying' | 'situation.raceControlRace'
@@ -158,11 +161,19 @@ describe('topic types', () => {
     expectTypeOf<TopicValue<'feed.status'>>().toEqualTypeOf<FeedStatus>();
     expectTypeOf<TopicValue<'session.info'>>().toEqualTypeOf<SessionInfo>();
     expectTypeOf<TopicValue<'cars.overview'>>().toEqualTypeOf<CarOverview[]>();
+    expectTypeOf<TopicValue<'pitStopCount.byCar'>>().toEqualTypeOf<PitStopCounts>();
+    expectTypeOf<TopicParams<'pitStopCount.byCar'>>().toEqualTypeOf<Record<string, never>>();
+    expectTypeOf<PitStopCounts>().toEqualTypeOf<{ byCar: ReadonlyArray<{ carId: CarId; stops: number }> }>();
     expectTypeOf<TopicValue<'insights'>>().toEqualTypeOf<InsightEntry>();
     expectTypeOf<TopicValue<'replay.status'>>().toEqualTypeOf<ReplayStatus>();
     expectTypeOf<TopicParams<'replay.status'>>().toEqualTypeOf<Record<string, never>>();
     expectTypeOf<ReplayStatus>().toEqualTypeOf<{ paused: boolean; speed: number; sessionTimeMs: number; playerLap: number; atEnd: boolean; note?: 'beyondEnd'; unpaced?: true; jumpingTo?: ReplayJump }>();
     expectTypeOf<ReplayJump>().toEqualTypeOf<{ kind: 'lap'; lap: number } | { kind: 'time'; sessionTimeMs: number }>();
+  });
+  // M7-R (F2, C54): a core topic publishes live state as it is; the stop count is pit-stop-count's (pitStopCount.byCar)
+  it('cars.overview carries no stop count', () => {
+    expectTypeOf<CarOverview>().not.toHaveProperty('stops');
+    expectTypeOf<keyof CarOverview>().toEqualTypeOf<'id' | 'identity' | 'timing' | 'tyres' | 'updatedAt'>();
   });
   it('carry what the UI needs to grey out stale values', () => {
     expectTypeOf<CarOverview['updatedAt']>().toEqualTypeOf<CarState['updatedAt']>();

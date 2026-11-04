@@ -80,7 +80,9 @@ describe('behaviour tables (C44)', () => {
   });
 
   it('finds the unit folders and their tables by name', () => {
-    expect(folders.map((f) => f.unit)).toEqual(expect.arrayContaining(['gaps', 'lap-times', 'race-moment']));
+    expect(folders.map((f) => f.unit)).toEqual(expect.arrayContaining(['gaps', 'lap-times', 'pit-stop-count', 'race-moment']));
+    // M7-R: pit-stop-count reads car-status, so it holds a table over every car-status kind (C44)
+    expect(folders.find((f) => f.unit === 'pit-stop-count')?.table).toHaveProperty('car-status');
     expect(behaviourExport('race-moment')).toBe('RACE_MOMENT_BEHAVIOUR');
   });
 });

@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import InPanel from '../../../test/kit/InPanel.svelte';
 import { unknownMark, unknownReason } from '../../kit/text.ts';
 import { role } from '../../theme/index.ts';
-import { boardRow, interval, lapBoard, overview, sessionInfo, situations, toCar } from './fixtures.ts';
+import { boardRow, interval, lapBoard, overview, pitStopCounts, sessionInfo, situations, toCar } from './fixtures.ts';
 import TimingTower from './TimingTower.svelte';
 
 afterEach(cleanup);
@@ -19,6 +19,8 @@ const data = {
     overview(1, { name: 'Kuh Driver', position: 2, ours: true }),
     overview(2, { name: 'Esteban Ocon', position: 3, lap: 22 }),
   ],
+  // pit-stop-count lists VER (2 stops) and our car (none), not OCO
+  pitStops: pitStopCounts({ 0: 2, 1: 0 }),
   intervals: [interval(0), interval(1, 2184, 2184)],
   toCar: [toCar(0, -2184), toCar(1, undefined), toCar(2, undefined)],
   board: lapBoard(1, [boardRow(0, 104_912), boardRow(1, 104_876), boardRow(2, 'retired')]),
@@ -58,5 +60,17 @@ describe('TimingTower: the situation column', () => {
     expect(cell(0)).toBe('');
     expect(cell(1)).toBe('BOX');
     expect(cell(2)).toBe('RET');
+  });
+});
+
+// M7-R (final review F2, C3, C65): STOPS shows each car's count from pitStopCount.byCar; a car the topic does not list
+// shows the formatted empty value, never a made-up 0.
+describe('TimingTower: the STOPS column', () => {
+  it("shows each car's stops from pitStopCount.byCar, and nothing for a car it does not list", () => {
+    const tower = show();
+    const cell = (row: number) => tower.querySelector<HTMLElement>(`[data-row="${row}"] [data-col="stops"]`)?.textContent?.trim();
+    expect(cell(0)).toBe('2');
+    expect(cell(1)).toBe('0');
+    expect(cell(2)).toBe('');
   });
 });

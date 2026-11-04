@@ -32,14 +32,14 @@ describe('base state features', () => {
     expect(JSON.parse(JSON.stringify(info))).toEqual(info);
   });
   it('cars.overview: one entry per car, picked fields, cloned', () => {
-    const list = out(carsOverview, 'cars.overview') as Array<Record<string, unknown>>;
+    const list = select(carsOverview, 'cars.overview', {}) as Array<Record<string, unknown>>;
     expect(list).toHaveLength(view.live.cars.length);
     const car = view.live.cars[1]!;
-    // Task 24: the stops are the car's pit-stop records (none here); the confirmed laps leave the topic (decisions.md)
+    // Task 24: the confirmed laps leave the topic (decisions.md); M7-R (F2, C54): the stop count leaves it for pitStopCount.byCar
     const { confirmedLaps: _confirmed, ...timing } = car.timing;
     expect(list[1]).toEqual({ id: car.id, identity: car.identity, timing,
       tyres: { actualCompound: car.tyres.actualCompound, visualCompound: car.tyres.visualCompound, age: car.tyres.age },
-      stops: 0, updatedAt: car.updatedAt });
+      updatedAt: car.updatedAt });
     expect(list[1]!['timing']).not.toBe(car.timing);
     expect(list[1]!['updatedAt']).not.toBe(car.updatedAt);
   });
@@ -47,7 +47,7 @@ describe('base state features', () => {
     const car = view.live.cars[1]!;
     // the scenario sends the menu-rate packets (no MotionEx for another car) and one Participants packet, at the session times of its frames
     expect(car.updatedAt).toEqual({ participants: 0, lapData: 32, motion: 32, telemetry: 32, status: 32 });
-    expect((out(carsOverview, 'cars.overview') as Array<{ updatedAt: object }>)[1]!.updatedAt).toEqual(car.updatedAt);
+    expect((select(carsOverview, 'cars.overview', {}) as Array<{ updatedAt: object }>)[1]!.updatedAt).toEqual(car.updatedAt);
     expect((select(carDetail, 'car.detail', { carId: 1 }) as CarState).updatedAt).toEqual(car.updatedAt);
   });
   it('car.detail selects one car by carId', () => {
@@ -74,7 +74,9 @@ describe('base state features', () => {
     expect((telemetry.motion as typeof car.motion).position).not.toBe(car.motion.position);
   });
   // C55, C54: the two per-car topics publish the live state as it is (core topics); no calculator copies the cars per frame.
-  it('car.detail and car.telemetry are bound with bindLive and run no calculator', () => {
+  it('cars.overview, car.detail and car.telemetry are bound with bindLive and run no calculator', () => {
+    expect(carsOverview.calculators).toEqual([]);
+    expect(carsOverview.topics).toEqual([{ topic: 'cars.overview', fromLive: expect.any(Function) }]);
     expect(carDetail.calculators).toEqual([]);
     expect(carTelemetry.calculators).toEqual([]);
     expect(carDetail.topics).toEqual([{ topic: 'car.detail', fromLive: expect.any(Function) }]);
@@ -94,11 +96,5 @@ describe('what the features read (domain areas)', () => {
     ['feed.status', feedStatus, 'feed.status', ['feed']],
   ] as const)('%s', (_, feature, id, reads) => {
     expect(readsOf(feature, id)).toEqual(reads);
-  });
-  // `updatedAt` moves with every source, so this one may read more tags than it shows fields of; never fewer.
-  it.each([
-    ['cars.overview', carsOverview, 'cars.overview', ['identity', 'timing', 'tyres', 'stints', 'pitStops']],
-  ] as const)('%s reads at least the areas of its fields', (_, feature, id, reads) => {
-    expect(readsOf(feature, id)).toEqual(expect.arrayContaining([...reads]));
   });
 });

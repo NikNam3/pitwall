@@ -1,6 +1,6 @@
 # Contract Migration Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. In this repo every task has two phases by two agents (contract C82): a test agent writes the failing tests and commits them, an implementation agent makes them pass without touching them. Supervisor steps (marked **supervisor**) commit contract-first types (C81) and run gates.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking. In this repo every task has two phases by two agents (contract C82): a test agent writes the failing tests and commits them, an implementation agent makes them pass without touching them. Supervisor steps (marked **supervisor**) commit contract-first types (C81) and run gates.
 
 **Goal:** The existing code follows every clause of `docs/architecture.md` (the contract), so that new work (SP4a and later) can start under C0.
 
@@ -123,9 +123,9 @@ export type FrameStamps = { session: Stamp; cars: readonly Stamp[] };   // a car
 ```
 `LiveState` is today's `EngineState` session plus cars without `open`, plus `frameEvents: FrameEvent[]` (the frame's OVTK, COLL, FTLP and SPTP as domain values, written by step 1) and `timing.confirmedLaps` (Session History values, written by step 1), so no recorder receives a frame or a packet (C6); `LiveArea` is today's change tag set minus the history tags; `FrameOnClock` is `Frame` with `sessionTime` on the race clock. `SituationEvent` holds the C12 events with their decoded details.
 
-- [ ] **Step 1 (supervisor):** add the types; `in: Stamp` on the five records defaults to `{}` in every existing constructor (engine recorders, `test-support/builders`, gallery fixtures). Add a vitest `globalSetup` to `vitest.config.ts` that sets `PITWALL_DATA_DIR` to a fresh temporary directory per run (C84); tests that set it themselves keep doing so.
-- [ ] **Step 2:** `nice -n 10 pnpm check` passes (types only; no behaviour changed).
-- [ ] **Step 3:** commit `feat(domain): fact, span, stamp, void and weekend-phase types; engine log, machine and signal interfaces (contract-first)`.
+- [x] **Step 1 (supervisor):** add the types; `in: Stamp` on the five records defaults to `{}` in every existing constructor (engine recorders, `test-support/builders`, gallery fixtures). Add a vitest `globalSetup` to `vitest.config.ts` that sets `PITWALL_DATA_DIR` to a fresh temporary directory per run (C84); tests that set it themselves keep doing so.
+- [x] **Step 2:** `nice -n 10 pnpm check` passes (types only; no behaviour changed).
+- [x] **Step 3:** commit `feat(domain): fact, span, stamp, void and weekend-phase types; engine log, machine and signal interfaces (contract-first)`.
 
 ### Task 2: The log and the projection
 
@@ -137,10 +137,10 @@ export type FrameStamps = { session: Stamp; cars: readonly Stamp[] };   // a car
 - Consumes: Task 1.
 - Produces (C28: `.dependency-cruiser.cjs` allows importing `log/log.ts` only from `log/projection.ts`, `runner/`, `step/step.ts` and `apps/bridge/src/storage/`; supervisor): `createLog(): Log`; `logWriter(log: Log): LogWriter`; `logLengths(log: DeepReadonly<Log>): LogLengths`; `class ProjectionTracker { constructor(log: DeepReadonly<Log>); get projection(): Projection; update(open: Situation): { before: LogLengths; after: LogLengths; rewound?: VoidFact['target'] } }`: a stamp can name a span that is still open, so the tracker resolves a stamp's span kinds from the closed spans in the log and the open spans it is given; `isHidden(fact: { in: Stamp }, list: FactList, hidden: HiddenRanges): boolean`. The projection hides a fact inside a void range and a non-span fact whose stamp holds a span of kind `formation` (C29); spans are never hidden by a stamp. While `truncated` still has producers (the runner until Task 3, the tracker until Task 9), the runner maps them to `rewound` with target `{ frameId: -1, at: 0 }`.
 
-- [ ] **Step 1 (test agent):** `log.test.ts`: "append returns the fact's ref (list, index)"; "lengths count every list" (the read-only assertion comes in Task 9, once no old mechanism edits facts). `projection.test.ts`: "a void range hides its facts and the projection shrinks once" (`update().rewound` set, lengths drop); "a fact stamped with a formation span is hidden while that span is still open, and stays hidden after it closes; the formation span itself is not"; "without a void the projection only grows" (fast-check: random appends, `after ≥ before` per list); "two voids over the same range hide it once". Run: fail.
-- [ ] **Step 2 (implementer):** implement the log and the tracker (incremental: appends extend the projected arrays; a new void rebuilds the projection once); move every history writer to `append`; rename `truncated` to `rewound` in scheduler, storage writer, publisher and jobs with no behaviour change; port the tests that assert `truncated` to `rewound`.
-- [ ] **Step 3:** `nice -n 10 pnpm vitest related` on the changed files, typecheck, lint, depcruise; supervisor: `nice -n 10 pnpm check`.
-- [ ] **Step 4:** commit `feat(engine): an append-only log and its projection; HistoryDelta.rewound replaces truncated`.
+- [x] **Step 1 (test agent):** `log.test.ts`: "append returns the fact's ref (list, index)"; "lengths count every list" (the read-only assertion comes in Task 9, once no old mechanism edits facts). `projection.test.ts`: "a void range hides its facts and the projection shrinks once" (`update().rewound` set, lengths drop); "a fact stamped with a formation span is hidden while that span is still open, and stays hidden after it closes; the formation span itself is not"; "without a void the projection only grows" (fast-check: random appends, `after ≥ before` per list); "two voids over the same range hide it once". Run: fail.
+- [x] **Step 2 (implementer):** implement the log and the tracker (incremental: appends extend the projected arrays; a new void rebuilds the projection once); move every history writer to `append`; rename `truncated` to `rewound` in scheduler, storage writer, publisher and jobs with no behaviour change; port the tests that assert `truncated` to `rewound`.
+- [x] **Step 3:** `nice -n 10 pnpm vitest related` on the changed files, typecheck, lint, depcruise; supervisor: `nice -n 10 pnpm check`.
+- [x] **Step 4:** commit `feat(engine): an append-only log and its projection; HistoryDelta.rewound replaces truncated`.
 
 ### Task 3: A flashback appends a void fact
 
@@ -153,10 +153,10 @@ export type FrameStamps = { session: Stamp; cars: readonly Stamp[] };   // a car
 - Produces: `SessionRunner` takes `{ attach?: Snapshotable<unknown> }` where `type Snapshotable<S> = { snapshot(): S; restore(s: S): void }`; `Scheduler implements Snapshotable<SchedulerBookkeeping>` (`lastRunAt`, `prevOutput`, the insight book, failed set); the runner appends one `VoidFact` with ranges `[length at the snapshot, length now)` and the target; `StepResult.delta.rewound` carries the target; the replayed frames re-append their facts after the void.
 
 - Also produces (C61: the runner decides everything that shapes the log): the identity wait moves from `apps/bridge/src/pipeline/session-processor.ts` into the runner. `SessionRunner` holds frames until the first frame with Participants or `IDENTITY_WAIT_FRAMES` (600, today's cap of about 10 s at 60 Hz), then calls the injected `contextFor(participants: ParticipantsValues | undefined): WeekendContext | undefined` once (the bridge supplies it and does the storage read) and applies the held frames. `snapshotEveryMs` (1000) and `replayWindowMs` (10 000) become engine constants in `runner/`; the bridge passes no runner options.
-- [ ] **Step 1 (test agent):** "a flashback appends one void fact and removes nothing" (log lengths only grow); "the void starts at the snapshot's lengths, and the replayed frames re-append the facts between the snapshot and the target"; "after a flashback the scheduler's bookkeeping is the snapshot's: an insight raised after the target is gone, one raised before it stays"; property (fast-check over builder races with random flashbacks): "the projection and every calculator output and insight equal a run that never received the undone frames" (C33); `insights-rewind.test.ts`: "on `rewound` the insights topic is resent whole, without the changes after the target" (the publisher keeps the session's insight changes in memory with their frame ids, C32). "frames before the first Participants are held and applied after `contextFor` returns, in order"; "without Participants the runner starts after 600 frames with no weekend context" (both ported from the session-processor tests, which are deleted). Port the existing flashback tests from truncation to the void. Run: fail.
-- [ ] **Step 2 (implementer):** implement; delete history truncation from the runner (`truncateHistory`).
-- [ ] **Step 3:** related tests, typecheck, lint, depcruise; supervisor `pnpm check`.
-- [ ] **Step 4:** commit `feat(engine): a flashback appends a void fact; the scheduler's bookkeeping rewinds with the runner`.
+- [x] **Step 1 (test agent):** "a flashback appends one void fact and removes nothing" (log lengths only grow); "the void starts at the snapshot's lengths, and the replayed frames re-append the facts between the snapshot and the target"; "after a flashback the scheduler's bookkeeping is the snapshot's: an insight raised after the target is gone, one raised before it stays"; property (fast-check over builder races with random flashbacks): "the projection and every calculator output and insight equal a run that never received the undone frames" (C33); `insights-rewind.test.ts`: "on `rewound` the insights topic is resent whole, without the changes after the target" (the publisher keeps the session's insight changes in memory with their frame ids, C32). "frames before the first Participants are held and applied after `contextFor` returns, in order"; "without Participants the runner starts after 600 frames with no weekend context" (both ported from the session-processor tests, which are deleted). Port the existing flashback tests from truncation to the void. Run: fail.
+- [x] **Step 2 (implementer):** implement; delete history truncation from the runner (`truncateHistory`).
+- [x] **Step 3:** related tests, typecheck, lint, depcruise; supervisor `pnpm check`.
+- [x] **Step 4:** commit `feat(engine): a flashback appends a void fact; the scheduler's bookkeeping rewinds with the runner`.
 
 ### Task 4: Four steps and the signals module
 
@@ -168,10 +168,10 @@ export type FrameStamps = { session: Stamp; cars: readonly Stamp[] };   // a car
 - Consumes: Task 1 (`Signals`), Task 2.
 - Produces: `step(state, frame, report)` runs `step0Clock` (today's `applySessionClock`), then `STATE_UPDATE: StateUpdate[]`, then `runMachine(state, frame)` (Task 5; until then the tracker's `applySituations`), then `RECORDERS: Recorder<unknown>[]` (types from Task 1; recorders get `RecorderInput`, never a frame); `readSignals(frame: Frame, prev: Signals): Signals` fills every C12 field; `step/initial-state.ts` moves to `step/state-update/initial.ts` (it reads the Session packet). The runner stops importing protocol types: frame assembly puts a flashback report on the frame as `frame.flashback?: { targetFrameId: number; targetSessionTime: SessionTime }`, and the runner is generic over `F extends RunnerFrame` (`{ frameId; overallFrameId; sessionTime; receivedAtMs; flashback? }`, declared in `runner/` without protocol). `apps/bridge/src/pipeline/session-storage.ts` builds session rows from `LiveState` values, not from `SessionPacket`/`ParticipantsPacket`. Signal fields stay mirrored in `CarState`/`SessionState` until Task 24.
 
-- [ ] **Step 1 (test agent):** `signals.test.ts`: "every C12 field and event reaches `Signals`" (builder packets, one assertion per field); `shuffle.test.ts`: "the modules of step 1 and of step 3 in shuffled order give identical state, log and step output" (step 2's order is the declared exception, C11) (fast-check permutations, `numRuns: 20`, on three segments: `race-zandvoort-pit-stop`, `race-singapore-start`, `practice-wing-change`); "no engine module outside the adapter reaches a protocol type" (the depcruise rules). Run: fail.
-- [ ] **Step 2 (implementer):** restructure; the Session History packet's confirmed lap and sector times become values in step 1 (`live.cars[i].timing.confirmedLaps`), so `recorders/laps.ts` imports no protocol type (C6); remove the couplings between recorders (`pit-stops.ts` setting `open.laps` flags; `stints.ts` reading `open.pitVisits`) by giving each recorder its own open state holding what it needs (C10: recorders read the live state, the situations and their own open state only; Task 17 replaces the remaining cross-recorder needs with activity spans). The shuffle test pins it.
-- [ ] **Step 3:** related tests, typecheck, lint, depcruise (the new rule); supervisor `pnpm check`.
-- [ ] **Step 4:** commit `refactor(engine): four steps; the signals module; recorders without coupling`.
+- [x] **Step 1 (test agent):** `signals.test.ts`: "every C12 field and event reaches `Signals`" (builder packets, one assertion per field); `shuffle.test.ts`: "the modules of step 1 and of step 3 in shuffled order give identical state, log and step output" (step 2's order is the declared exception, C11) (fast-check permutations, `numRuns: 20`, on three segments: `race-zandvoort-pit-stop`, `race-singapore-start`, `practice-wing-change`); "no engine module outside the adapter reaches a protocol type" (the depcruise rules). Run: fail.
+- [x] **Step 2 (implementer):** restructure; the Session History packet's confirmed lap and sector times become values in step 1 (`live.cars[i].timing.confirmedLaps`), so `recorders/laps.ts` imports no protocol type (C6); remove the couplings between recorders (`pit-stops.ts` setting `open.laps` flags; `stints.ts` reading `open.pitVisits`) by giving each recorder its own open state holding what it needs (C10: recorders read the live state, the situations and their own open state only; Task 17 replaces the remaining cross-recorder needs with activity spans). The shuffle test pins it.
+- [x] **Step 3:** related tests, typecheck, lint, depcruise (the new rule); supervisor `pnpm check`.
+- [x] **Step 4:** commit `refactor(engine): four steps; the signals module; recorders without coupling`.
 
 ### Task 5: The machine registry and its tests
 
@@ -183,10 +183,10 @@ export type FrameStamps = { session: Stamp; cars: readonly Stamp[] };   // a car
 - Consumes: Task 1, Task 4.
 - Produces: `MACHINES` (generated `index.generated.ts`: every `situations/<name>/machine.ts` default export); `machineOrder(machines): SubMachine<unknown>[]` (topological by `inputs.upstream`, throws `MachineCycleError` on a cycle and `UnknownMachineError` on an upstream id that is not registered; every sub-machine gets the clock's state as `MachineInput.clock`); `runMachine(state, frame, out)` runs the sub-machines that apply to the weekend phase, appends closed spans to `spans:<id>` and returns the frame's `FrameStamps` (the session-scoped spans, and per car that car's car-scoped spans; zone-scoped spans are never stamped, C26); `situationOf(state): Situation` (the open spans of every machine); `closeSession(state, at: SessionTime): void` closes every open span of every sub-machine (and the clock's) as facts at `at`, a pending confirmation closing `confirmed: false` (C18), so every log is complete; the runner calls it from `SessionRunner.finish()`, which the bridge calls on `sessionEnded` (SEND, a new session, the end of input); a span's id is the count of spans its machine (per car for a per-car machine) opened before it, kept in the machine's open state so a rewind restores it (C26); `type TransitionRow = { name: string; from: string | 'none'; to: string; input: MachineInputBuilder; join?: true }`; `defineTransitionTable(machine, rows)`; change tags `spans:<id>` per machine generated into `CHANGE_TAGS`. No module carries a version (C90); the rules version is computed in Task 28.
 
-- [ ] **Step 1 (test agent):** "the order follows declared inputs; a cycle throws `MachineCycleError`"; "every declared transition has a row, every row uses a declared transition" (generic over `MACHINES` and each machine's table file); "random signal sequences never give an undeclared transition, a throw, two open spans in one scope or a gap between spans" (generic property over `MACHINES`); "every sub-machine declares exactly one scope". With no machine registered yet, the generic tests run over a test machine in `test/support`. Run: fail.
-- [ ] **Step 2 (implementer):** implement the generator, `run.ts`, the harness; `pnpm gen` writes the index.
-- [ ] **Step 3:** related tests, typecheck, lint, depcruise; supervisor `pnpm check`.
-- [ ] **Step 4:** commit `feat(engine): the machine registry, its order, stamps per frame and the transition tests`.
+- [x] **Step 1 (test agent):** "the order follows declared inputs; a cycle throws `MachineCycleError`"; "every declared transition has a row, every row uses a declared transition" (generic over `MACHINES` and each machine's table file); "random signal sequences never give an undeclared transition, a throw, two open spans in one scope or a gap between spans" (generic property over `MACHINES`); "every sub-machine declares exactly one scope". With no machine registered yet, the generic tests run over a test machine in `test/support`. Run: fail.
+- [x] **Step 2 (implementer):** implement the generator, `run.ts`, the harness; `pnpm gen` writes the index.
+- [x] **Step 3:** related tests, typecheck, lint, depcruise; supervisor `pnpm check`.
+- [x] **Step 4:** commit `feat(engine): the machine registry, its order, stamps per frame and the transition tests`.
 
 ### Task 6: `pitwall scan-situations`
 
@@ -198,10 +198,10 @@ export type FrameStamps = { session: Stamp; cars: readonly Stamp[] };   // a car
 - Consumes: Task 5 (`MACHINES`, `runMachine`).
 - Produces: `pitwall scan-situations [dir]` (default `PITWALL_FIXTURES_DIR`): runs steps 0–2 over every `.pwrec` and prints, per sub-machine, every transition with its count, the declared transitions never seen, and every undeclared transition (none expected); exit code 1 if an undeclared transition occurs.
 
-- [ ] **Step 1 (test agent):** on two segments: "prints each sub-machine's transition counts"; "a declared transition never seen is listed"; "an undeclared transition exits 1" (a test machine that declares too little). Run: fail.
-- [ ] **Step 2 (implementer):** implement.
-- [ ] **Step 3:** related tests; supervisor `pnpm check`.
-- [ ] **Step 4:** commit `feat(bridge): pitwall scan-situations reports every sub-machine's transitions over the recordings`.
+- [x] **Step 1 (test agent):** on two segments: "prints each sub-machine's transition counts"; "a declared transition never seen is listed"; "an undeclared transition exits 1" (a test machine that declares too little). Run: fail.
+- [x] **Step 2 (implementer):** implement.
+- [x] **Step 3:** related tests; supervisor `pnpm check`.
+- [x] **Step 4:** commit `feat(bridge): pitwall scan-situations reports every sub-machine's transitions over the recordings`.
 
 ### Task 7: The clock sub-machine
 
@@ -213,10 +213,10 @@ export type FrameStamps = { session: Stamp; cars: readonly Stamp[] };   // a car
 - Consumes: Task 5.
 - Produces: the clock is step 0, not a member of the step-2 registry (`STEP0_CLOCK` in `situations/clock/machine.ts`, `id: 'clock'`, scope session). Its one span kind is `paused` (detail `{ source: 'offline' \| 'online'; wallMs: number }`): open while a pause lasts, so it reaches readers as an open span (`view.situation.byMachine.clock`, C20); closed into `spans:clock`, where the closed span is the pause's clock fact (C7), recorded once. Its other clock facts go to `clock`: `fall`, `jump`, `simulatedEnd`. `onRaceClock(state, sessionTime): SessionTime`; `clockInput(state): ClockInput` (`{ paused: boolean; offsetMs: Ms }`) for step 2. The start settling is a `fall` carried over by `offsetMs` like any other fall (C36); nothing is re-stamped.
 
-- [ ] **Step 1 (test agent):** pause rows: an offline gap over 2 s wall opens and closes one `paused` span; an online `gamePaused` 1 opens a `paused` span that is open (in `byMachine.clock`) until `gamePaused` 0 closes it; no other pause record exists; fact rows: "a fall within 60 frames after LGOT is carried over, nothing is re-stamped" (the former settling tests, turned around: the recorded entries keep their times, later ones get the offset); "the post-session jump appends `simulatedEnd`"; "garage acceleration up to 31.6× is no jump"; "a flashback appends no clock fact". Segments: `race-zandvoort-online-start` (the settling fall), `race-zandvoort-clock-reset`, `race-singapore-wet-flashback`. Delete the re-stamp tests. Run: fail.
-- [ ] **Step 2 (implementer):** implement; `step0Clock` delegates to it.
-- [ ] **Step 3:** related tests; `pitwall scan-situations` over every recording, output into the report (C85); supervisor `pnpm check`.
-- [ ] **Step 4:** commit `feat(engine): the clock sub-machine; the start settling is carried over, never re-stamped`.
+- [x] **Step 1 (test agent):** pause rows: an offline gap over 2 s wall opens and closes one `paused` span; an online `gamePaused` 1 opens a `paused` span that is open (in `byMachine.clock`) until `gamePaused` 0 closes it; no other pause record exists; fact rows: "a fall within 60 frames after LGOT is carried over, nothing is re-stamped" (the former settling tests, turned around: the recorded entries keep their times, later ones get the offset); "the post-session jump appends `simulatedEnd`"; "garage acceleration up to 31.6× is no jump"; "a flashback appends no clock fact". Segments: `race-zandvoort-online-start` (the settling fall), `race-zandvoort-clock-reset`, `race-singapore-wet-flashback`. Delete the re-stamp tests. Run: fail.
+- [x] **Step 2 (implementer):** implement; `step0Clock` delegates to it.
+- [x] **Step 3:** related tests; `pitwall scan-situations` over every recording, output into the report (C85); supervisor `pnpm check`.
+- [x] **Step 4:** commit `feat(engine): the clock sub-machine; the start settling is carried over, never re-stamped`.
 
 ### Task 8: The weekend-phase sub-machine
 
@@ -228,10 +228,10 @@ export type FrameStamps = { session: Stamp; cars: readonly Stamp[] };   // a car
 - Consumes: Task 5.
 - Produces: machine id `weekend-phase`, `appliesTo: 'all'`, one span per session; `view.situation.weekendPhase: WeekendPhase` (Task 20 exposes it; until then `state.open.machines`). Mapping: types 1–3 practice segment 1–3, 4 `shortPractice`; 5–7 qualifying segment 1–3, 8 `short`, 9 `oneShot`; 10–12 `sprintShootout` segment 1–3, 13 `shortSprintShootout`, 14 `oneShotSprintShootout`; 15–17 race, format `sprint` when the weekend structure lists a later race session than this one, else `grandPrix`; 0, 18 and any type above 18 are `none` from the session type alone, at once; for the others `pending` until a Session packet carries `numSessionsInWeekend` > 0.
 
-- [ ] **Step 1 (test agent):** one row per session type 0–19 (19 stands for any unknown type); "pending until the structure arrives, then fixed for the session"; "type 15 in [15, 16] is the sprint; 16 in [15, 16] is the grand prix"; segment `race-sprint-start`: pending on the first packet, then race/sprint. Run: fail.
-- [ ] **Step 2 (implementer):** implement.
-- [ ] **Step 3:** related tests; scan output in the report; supervisor `pnpm check`.
-- [ ] **Step 4:** commit `feat(engine): the weekend phase and its format`.
+- [x] **Step 1 (test agent):** one row per session type 0–19 (19 stands for any unknown type); "pending until the structure arrives, then fixed for the session"; "type 15 in [15, 16] is the sprint; 16 in [15, 16] is the grand prix"; segment `race-sprint-start`: pending on the first packet, then race/sprint. Run: fail.
+- [x] **Step 2 (implementer):** implement.
+- [x] **Step 3:** related tests; scan output in the report; supervisor `pnpm check`.
+- [x] **Step 4:** commit `feat(engine): the weekend phase and its format`.
 
 **M1 end gate (supervisor):** `pnpm check`, `pnpm test:ui`, `pnpm test:acceptance`; merge.
 
@@ -255,11 +255,11 @@ Each row is one task with the same steps. Span kinds and details are committed b
 | 16 | `race-control-race`, `race-control-qualifying`, `race-control-practice` (scope session); `compound-rule` (scope car, race only) | race / qualifying / practice | DRSE DRSD, `drsAllowed` / values: visual compound, lap; upstream `session-phase-race` | race control race: `drsOff` (detail `{ reason: 'notEnabledYet' \| 'wetTrack' \| 'safetyCar' \| 'redFlag' \| 'minLapNotReached' \| 'unknown' }`), `drsOn`; qualifying and practice: `drsFree`; compound rule: `required`, `waived` (from the first race lap on intermediates or wets) | §1.4, §4 | `race-zandvoort-vsc`; brings in the tests of branch `w2/drs` |
 
 Per row:
-- [ ] **Step 0 (supervisor):** commit the span kinds, details and the scope declaration (`export const spans = defineSpans({ machine, scope, kinds })`, C15) in `packages/domain/src/situations/<machine>.ts`, exported from `packages/domain/src/index.ts`.
-- [ ] **Step 1 (test agent):** the transition table, one row per declared transition and one join row per kind (Review Focus 2), with the inventory's signal orders (Review Focus 5); one segment test per listed segment asserting the span sequence the machine produces; cut the new segments listed. Run: fail.
-- [ ] **Step 2 (implementer):** `situations/<machine>/machine.ts` (and helpers in that folder), with `spans` from its domain declaration (C15); every span it opens has `startFrame: input.frameNumber` (C26).
-- [ ] **Step 3:** related tests; the completeness and property tests of Task 5 now cover the machine; `pitwall scan-situations` over every recording with no undeclared transition, output in the report; supervisor `pnpm check`.
-- [ ] **Step 4:** commit `feat(engine): the <machine> sub-machine`.
+- [x] **Step 0 (supervisor):** commit the span kinds, details and the scope declaration (`export const spans = defineSpans({ machine, scope, kinds })`, C15) in `packages/domain/src/situations/<machine>.ts`, exported from `packages/domain/src/index.ts`.
+- [x] **Step 1 (test agent):** the transition table, one row per declared transition and one join row per kind (Review Focus 2), with the inventory's signal orders (Review Focus 5); one segment test per listed segment asserting the span sequence the machine produces; cut the new segments listed. Run: fail.
+- [x] **Step 2 (implementer):** `situations/<machine>/machine.ts` (and helpers in that folder), with `spans` from its domain declaration (C15); every span it opens has `startFrame: input.frameNumber` (C26).
+- [x] **Step 3:** related tests; the completeness and property tests of Task 5 now cover the machine; `pitwall scan-situations` over every recording with no undeclared transition, output in the report; supervisor `pnpm check`.
+- [x] **Step 4:** commit `feat(engine): the <machine> sub-machine`.
 
 Task 9 also makes appended facts read-only (`Object.freeze` in `log.ts`; test "an appended fact is read-only", C24), now that no old mechanism edits facts, and deletes, with their tests (C82): the formation discard (`discardFormation`), the dropped neutralisation (`drop`; an unconfirmed SCAR closes `confirmed: false`), `atBoundary` and `recordedAtOrAfter`, `StepOutput.discarded`, `phaseBook`, and `history/situations/`. Its tests assert: "a session that ends mid-formation closes the formation span at the last frame, and its facts stay hidden in the log as stored" (a segment cut to end inside the formation lap of `raceSingaporeWet`, under 1 MB); "a formation lap's facts are hidden, and the formation span is visible"; "a confirmed lap recorded after lights out whose crossing lies in the formation span is hidden" (C29) (Review Focus 1 across lights out: a flashback from racing into the formation lap); "an SCAR never confirmed within 3 s closes as `neutralised` with `confirmed: false`"; the six session-end shapes (Review Focus 3).
 
@@ -283,10 +283,10 @@ Task 12 asserts garage acceleration: "a car accelerated through the garage at 31
 - Consumes: Tasks 9–12 (`car-activity-*`, `car-location`, `session-phase-*`), Task 15 (`penalties`).
 - Produces: `LapRecord.inLap`/`outLap` from the car's activity spans during the lap; `scShare`/`vscShare` from the time the lap spent while the session's `neutralised` span was open (its car SC or VSC); a race lap rises at the pit-lane line, a practice or qualifying lap restarts at the line after an out lap (from the activity spans); no lap record while the car's activity is `coolDown` or the session phase is `postSession`; a `PitStopRecord` per `boxStop` span (lap, entry, exit, pit-lane and stationary times from values, `flag` from its membership (`membershipOf`, C26), `penaltyServed` true when a `servingPenalty` span overlaps); a stint closes when a `boxStop` or `garage` span ends on a different set (compound change, or a lower age than the old set's at fitting). Every fact records the frame it describes (C26): a lap its crossing (a confirmed lap its provisional's), a pit stop its pit exit even when recorded later (a DTSV up to 10 s after the exit), a stint the frame it closed on.
 
-- [ ] **Step 1 (test agent):** port the listed tests onto activity spans built with the Task 5 builders; add: "a lap crossed while the formation span is open is hidden"; "a pit stop whose drive-through is confirmed after the exit describes the exit frame and belongs to the spans open then"; "a drive-through pass gives no pit stop and marks none served"; "a garage tyre fitting opens a stint without a pit stop"; "a car accelerated through the garage records no lap" (Review Focus 4); bring in the tests of branch `w2/laps` (RE-B3, RE-B5: the final out lap, the latched stint split as "a same-compound set fitted at age 0 or 1 opens a stint at the box exit"). Delete the tests of `driverStatus`/`pitStatus` reads. Run: fail.
-- [ ] **Step 2 (implementer):** implement; no recorder reads a signal (the depcruise rule of Task 4 enforces it).
-- [ ] **Step 3:** related tests; segment tests in `apps/bridge/test/fixtures` pass; supervisor `pnpm check`.
-- [ ] **Step 4:** commit `feat(engine): laps, stints and pit stops from activity spans`.
+- [x] **Step 1 (test agent):** port the listed tests onto activity spans built with the Task 5 builders; add: "a lap crossed while the formation span is open is hidden"; "a pit stop whose drive-through is confirmed after the exit describes the exit frame and belongs to the spans open then"; "a drive-through pass gives no pit stop and marks none served"; "a garage tyre fitting opens a stint without a pit stop"; "a car accelerated through the garage records no lap" (Review Focus 4); bring in the tests of branch `w2/laps` (RE-B3, RE-B5: the final out lap, the latched stint split as "a same-compound set fitted at age 0 or 1 opens a stint at the box exit"). Delete the tests of `driverStatus`/`pitStatus` reads. Run: fail.
+- [x] **Step 2 (implementer):** implement; no recorder reads a signal (the depcruise rule of Task 4 enforces it).
+- [x] **Step 3:** related tests; segment tests in `apps/bridge/test/fixtures` pass; supervisor `pnpm check`.
+- [x] **Step 4:** commit `feat(engine): laps, stints and pit stops from activity spans`.
 
 **M3 end gate (supervisor):** `pnpm check`, `pnpm test:ui`, `pnpm test:acceptance`; merge.
 
@@ -314,10 +314,10 @@ Task 12 asserts garage acceleration: "a car accelerated through the garage at 31
   ```
   `view.state` is removed; units read `view.live` and `view.history`. `priors` is `{}` until the priors store exists. Membership: units call `situationAt(view, frame)` and `membershipOf(view, fact)` from `@pitwall/engine/readers` (the view is a `MembershipSource`, C26); a guarded view counts them as reads of `history` and `situation`. The test harness in `packages/engine/test/support/scheduler.ts` runs every unit through `guardedView`.
 
-- [ ] **Step 1 (test agent):** "the view holds exactly the C39 parts"; "`guardedView` throws on an undeclared read and passes a declared one"; "`bindSituation` publishes a machine's open and closed spans and compiles only for a matching topic type". Run: fail.
-- [ ] **Step 2 (implementer):** implement; move every unit from `view.state` to `view.live`/`view.history` mechanically (no behaviour change; the behaviour moves in Task 22).
-- [ ] **Step 3:** related tests; supervisor `pnpm check`.
-- [ ] **Step 4:** commit `refactor(engine): the view is live, situation and projection; a guarded view in tests`.
+- [x] **Step 1 (test agent):** "the view holds exactly the C39 parts"; "`guardedView` throws on an undeclared read and passes a declared one"; "`bindSituation` publishes a machine's open and closed spans and compiles only for a matching topic type". Run: fail.
+- [x] **Step 2 (implementer):** implement; move every unit from `view.state` to `view.live`/`view.history` mechanically (no behaviour change; the behaviour moves in Task 22).
+- [x] **Step 3:** related tests; supervisor `pnpm check`.
+- [x] **Step 4:** commit `refactor(engine): the view is live, situation and projection; a guarded view in tests`.
 
 ### Task 19: Flag phases go
 
@@ -329,10 +329,10 @@ Task 12 asserts garage acceleration: "a car accelerated through the garage at 31
 - Consumes: Task 9, Task 18 (`view.situation`).
 - Produces: none new; the readers `gaps`, `incidents`, `race-moment` move in this task to `session-phase-*` spans through a shared helper `neutralisedSpans(projection): Span[]` in `packages/analysis/src/shared/neutralised.ts` (closed `neutralised` and `suspended` spans plus the open one from the view), so no reader breaks; Task 20 gives them their behaviour tables.
 
-- [ ] **Step 1 (test agent):** restate the three readers' flag-phase tests on session-phase spans; "a `neutralised` span with `confirmed: false` is not a neutralisation for the gapper". Run: fail.
-- [ ] **Step 2 (implementer):** implement and delete.
-- [ ] **Step 3:** `git grep -n "FlagPhase\|flagPhases\|activeFlagPhase"` outside `docs/history` is empty; supervisor `pnpm check`.
-- [ ] **Step 4:** commit `refactor: flag phases removed; readers use session-phase spans`.
+- [x] **Step 1 (test agent):** restate the three readers' flag-phase tests on session-phase spans; "a `neutralised` span with `confirmed: false` is not a neutralisation for the gapper". Run: fail.
+- [x] **Step 2 (implementer):** implement and delete.
+- [x] **Step 3:** `git grep -n "FlagPhase\|flagPhases\|activeFlagPhase"` outside `docs/history` is empty; supervisor `pnpm check`.
+- [x] **Step 4:** commit `refactor: flag phases removed; readers use session-phase spans`.
 
 ### Task 20: Analyses on situations, with behaviour tables (lanes)
 
@@ -360,10 +360,10 @@ Lanes (one agent each, disjoint units; `PITWALL_WORKER_UNIT=<unit>`):
 | g | `tyre-wear`, `fuel`, `ers`, `pace`, `pace-delta`, `per-lap-rate`, `lap-classes`, `car-bands`, `damage` | behaviour tables for the machines they read (laps by activity via `LapRecord`; `car-bands` off while `boxStop`; `damage` live in `garage`/`pitLane`); brings in the test commit of branch `w2/rates` (64b6780: a refuel keeps the fuel burn window; fuel and ERS read no stints; the builder's `lap()` derives start samples) |
 
 Per lane:
-- [ ] **Step 1 (test agent):** port the unit's tests off removed concepts; one test per behaviour-table row (builder views with the span set); the completeness test covers the unit. Run: fail.
-- [ ] **Step 2 (implementer):** the table in `<unit>/behaviour.ts`, read by the calculator; no signal read (compile error once Task 24 lands; until then `git grep` in the unit's folder for the C12 names is empty).
-- [ ] **Step 3:** related tests; supervisor `pnpm check` after merging the lane.
-- [ ] **Step 4:** commit `feat(analysis): <unit> behaves per situation by its behaviour table`.
+- [x] **Step 1 (test agent):** port the unit's tests off removed concepts; one test per behaviour-table row (builder views with the span set); the completeness test covers the unit. Run: fail.
+- [x] **Step 2 (implementer):** the table in `<unit>/behaviour.ts`, read by the calculator; no signal read (compile error once Task 24 lands; until then `git grep` in the unit's folder for the C12 names is empty).
+- [x] **Step 3:** related tests; supervisor `pnpm check` after merging the lane.
+- [x] **Step 4:** commit `feat(analysis): <unit> behaves per situation by its behaviour table`.
 
 After all lanes: the supervisor deletes `shared/out-of-race.ts` and `shared/drs-status.ts`. A unit that needs a weekend phase reads `view.situation.weekendPhase`; under `none` its output is `notApplicable` (C14), one row in its behaviour table.
 
@@ -377,10 +377,10 @@ After all lanes: the supervisor deletes `shared/out-of-race.ts` and `shared/drs-
 - Consumes: Task 4, Tasks 9–16, Task 20 (every reader of the removed kinds has moved to spans).
 - Produces: `events` holds `overtake`, `collision`, `fastestLap`, `speedTrap`, `damageChange` only; no crossing in `coolDown`; a finisher's final line crossing is recorded at the lap-distance wrap (`(lap + 1, 0)`).
 
-- [ ] **Step 1 (test agent):** "situation events never become `RaceEvent`s"; "no crossing while the car's activity is `coolDown`"; "every finisher's final lap has its line crossing" (segment `race-miami-finish`). Run: fail.
-- [ ] **Step 2 (implementer):** implement; `git grep` for the removed kinds outside `docs/history` is empty.
-- [ ] **Step 3:** related tests; supervisor `pnpm check`.
-- [ ] **Step 4:** commit `refactor(engine): situation events are spans, not race events`.
+- [x] **Step 1 (test agent):** "situation events never become `RaceEvent`s"; "no crossing while the car's activity is `coolDown`"; "every finisher's final lap has its line crossing" (segment `race-miami-finish`). Run: fail.
+- [x] **Step 2 (implementer):** implement; `git grep` for the removed kinds outside `docs/history` is empty.
+- [x] **Step 3:** related tests; supervisor `pnpm check`.
+- [x] **Step 4:** commit `refactor(engine): situation events are spans, not race events`.
 
 ### Task 22: Incremental units justify their accumulator
 
@@ -392,10 +392,10 @@ After all lanes: the supervisor deletes `shared/out-of-race.ts` and `shared/drs-
 - Consumes: Task 18 (guarded view), Task 20.
 - Produces: `countReads(unit, view): number` in the test support; per unit the C31 proof: the entries read per frame, averaged over the frames of the lap, are from scratch at lap 70 at least 5 times those at lap 7, incremental at most twice. No timer anywhere.
 
-- [ ] **Step 1 (test agent):** one work test per unit with the two C31 assertions on `longRace()`; "incremental equals from scratch across random rewinds" (port of the existing property, now with void facts). Run: a unit whose from-scratch reads do not grow fivefold fails; it becomes quick in Step 2 and its test is turned around to "quick: from-scratch work is bounded".
-- [ ] **Step 2 (implementer):** convert those units to quick; leave the others incremental.
-- [ ] **Step 3:** related tests (they run in `pnpm check`: deterministic and cheap); supervisor `pnpm check`.
-- [ ] **Step 4:** commit `test(analysis): every incremental unit proves its accumulator by counted work (C31)`.
+- [x] **Step 1 (test agent):** one work test per unit with the two C31 assertions on `longRace()`; "incremental equals from scratch across random rewinds" (port of the existing property, now with void facts). Run: a unit whose from-scratch reads do not grow fivefold fails; it becomes quick in Step 2 and its test is turned around to "quick: from-scratch work is bounded".
+- [x] **Step 2 (implementer):** convert those units to quick; leave the others incremental.
+- [x] **Step 3:** related tests (they run in `pnpm check`: deterministic and cheap); supervisor `pnpm check`.
+- [x] **Step 4:** commit `test(analysis): every incremental unit proves its accumulator by counted work (C31)`.
 
 ### Task 23: Situation topics
 
@@ -407,10 +407,10 @@ After all lanes: the supervisor deletes `shared/out-of-race.ts` and `shared/drs-
 - Consumes: Task 18 (`bindSituation`).
 - Produces: `session.phase` (state: the open session-phase span, the clock's open `paused` span if any, and the weekend phase); `session.phases` (append: closed session-phase spans); `cars.situation` (state, per car: `{ location, status, activity, penalties, warnings, flag }`, each the open span's kind and detail).
 
-- [ ] **Step 1 (test agent):** "each topic carries the open span of its machine and no signal field". Run: fail.
-- [ ] **Step 2 (implementer):** bindings.
-- [ ] **Step 3:** related tests; supervisor `pnpm check`.
-- [ ] **Step 4:** commit `feat(bridge): situation topics`.
+- [x] **Step 1 (test agent):** "each topic carries the open span of its machine and no signal field". Run: fail.
+- [x] **Step 2 (implementer):** bindings.
+- [x] **Step 3:** related tests; supervisor `pnpm check`.
+- [x] **Step 4:** commit `feat(bridge): situation topics`.
 
 **M4 end gate (supervisor):** `pnpm check`, `pnpm test:ui`, `pnpm test:acceptance`; merge.
 
@@ -426,10 +426,10 @@ After all lanes: the supervisor deletes `shared/out-of-race.ts` and `shared/drs-
 
 Also (M2 review, 2026-11-04): `CarState.drsAllowed` (`domain/src/car.ts`), `GameSettings.ruleSet` (`domain/src/session.ts`, also written to the session row) and the transitional judgement `CarState.active` with `refreshActiveCarsUntilCarStatus` (Task 10 ruling; its readers in analysis, bridge and step 1's identity read `car-status` instead).
 
-- [ ] **Step 1 (test agent):** "no `domain` type has a C12 field" (a type-level test with `expectTypeOf`); "the live state of every segment frame holds no C12 field" (runtime key scan). Run: fail.
-- [ ] **Step 2 (implementer, delegated paths named in the brief):** remove the fields; fix every compile error by reading the situation instead; `session.kind` readers read `view.situation.weekendPhase`.
-- [ ] **Step 3:** supervisor `pnpm check`.
-- [ ] **Step 4:** commit `refactor(domain): signals leave the live state`.
+- [x] **Step 1 (test agent):** "no `domain` type has a C12 field" (a type-level test with `expectTypeOf`); "the live state of every segment frame holds no C12 field" (runtime key scan). Run: fail.
+- [x] **Step 2 (implementer, delegated paths named in the brief):** remove the fields; fix every compile error by reading the situation instead; `session.kind` readers read `view.situation.weekendPhase`.
+- [x] **Step 3:** supervisor `pnpm check`.
+- [x] **Step 4:** commit `refactor(domain): signals leave the live state`.
 
 ### Task 25: The timing tower renders situations
 
@@ -441,11 +441,11 @@ Also (M2 review, 2026-11-04): `CarState.drsAllowed` (`domain/src/car.ts`), `Game
 - Consumes: Task 23 (`cars.situation`).
 - Produces: the situation column codes `GARAGE`, `PIT`, `BOX`, `DT`, `SG`, `OUT`, `IN`, `RET`, `FIN` (empty on a racing, flying or push lap) from `presentation.ts`; the PEN cell from `penalties` and `warnings`; unused and retired rows from `car-status`.
 
-- [ ] **Step 0 (supervisor):** `presentation-completeness.test.ts` over every widget whose `widget.ts` declares a situation topic or `raceMoment.current`.
-- [ ] **Step 1 (test agent):** one row test per situation kind the tower shows; gallery cases for `boxStop`, `servingPenalty`, `retired`, `finished`. Run: fail.
-- [ ] **Step 2 (implementer):** implement.
-- [ ] **Step 3:** related tests; supervisor `pnpm check`, `pnpm test:ui` (baselines looked at before updating).
-- [ ] **Step 4:** commit `feat(ui): the timing tower renders car situations`.
+- [x] **Step 0 (supervisor):** `presentation-completeness.test.ts` over every widget whose `widget.ts` declares a situation topic or `raceMoment.current`.
+- [x] **Step 1 (test agent):** one row test per situation kind the tower shows; gallery cases for `boxStop`, `servingPenalty`, `retired`, `finished`. Run: fail.
+- [x] **Step 2 (implementer):** implement.
+- [x] **Step 3:** related tests; supervisor `pnpm check`, `pnpm test:ui` (baselines looked at before updating).
+- [x] **Step 4:** commit `feat(ui): the timing tower renders car situations`.
 
 ### Task 26: The top bar shows the session phase (supervisor-delegated shell change)
 
@@ -457,10 +457,10 @@ Also (M2 review, 2026-11-04): `CarState.drsAllowed` (`domain/src/car.ts`), `Game
 - Consumes: Task 23 (`session.phase`), Task 20 lane f (moments without `neutralised`).
 - Produces: labels `FORMATION`, `START`, `SC`/`VSC` with its stage, `RED`, `FINISHED`, and `PAUSED` while `session.phase` carries an open `paused` span; hidden while `racing`/`running`; SC, VSC and RED in the attention role, the rest grey.
 
-- [ ] **Step 1 (test agent):** one test per label; "hidden while racing". Run: fail.
-- [ ] **Step 2 (implementer):** implement.
-- [ ] **Step 3:** related tests; supervisor `pnpm check`, `pnpm test:ui`.
-- [ ] **Step 4:** commit `feat(ui): the top bar shows the session phase`.
+- [x] **Step 1 (test agent):** one test per label; "hidden while racing". Run: fail.
+- [x] **Step 2 (implementer):** implement.
+- [x] **Step 3:** related tests; supervisor `pnpm check`, `pnpm test:ui`.
+- [x] **Step 4:** commit `feat(ui): the top bar shows the session phase`.
 
 **M5 end gate (supervisor):** `pnpm check`, `pnpm test:ui`, `pnpm test:acceptance`; merge.
 
@@ -480,10 +480,10 @@ Also (M2 review, 2026-11-04): `CarState.drsAllowed` (`domain/src/car.ts`), `Game
 - Consumes: Task 2 (log, projection, `HistoryDelta`), Task 3 (void facts), Tasks 19 and 21 (no flag phases, no situation event kinds).
 - Produces: tables `weekends`, `sessions` (+ `rules_version TEXT NOT NULL`, `complete INTEGER NOT NULL`: set once `finish()`'s closing spans are written), `drivers`, `facts (session_uid, weekend_id, list TEXT, seq INTEGER, car_id INTEGER NULL, record TEXT, PRIMARY KEY (session_uid, weekend_id, list, seq))`; `writeLog(key, log, delta)` appends `[before, after)` per list and never deletes; `replaceLog(key, log, rulesVersion)` is used only by a rebuild (C24): one transaction deletes the session's fact rows and writes the rebuilt log; `projectionOf(key): Projection` (built with the engine's `ProjectionTracker` over a complete log: every span is closed, so no open situation is needed); a session whose log is not complete (the bridge was killed) is rebuilt from its recording when first read, like a stale rules version; `weekendContext` built from projections; the old per-list tables go.
 
-- [ ] **Step 1 (test agent):** "a flashback writes its void and deletes no row"; "the stored projection equals the live projection" (segment with a flashback: `race-singapore-wet-flashback`); "formation facts are stored and not returned"; "membership over a stored projection (`membershipOf` with `history` only) equals the live one" (C26; facts store `frame`, spans `startFrame`/`endFrame`); "a session stored without `complete` is rebuilt from its recording before it is read"; "a new sub-machine's spans need no schema change" (a test machine's spans round-trip); "two feeds of one session are stored side by side"; "a car that turns `absent` keeps its stored facts" (B2); "the weekend context matches cars by team and race number when the slots differ between sessions"; "`finish()`'s closing spans are stored and published"; "an interrupted reprocess leaves the old log". Run: fail.
-- [ ] **Step 2 (implementer):** implement; `pitwall live` rebuilds a database of any older schema (2 or 3) from the recordings as today.
-- [ ] **Step 3:** related tests; supervisor `pnpm check`.
-- [ ] **Step 4:** commit `feat(bridge): storage holds append-only logs; one read API returns projections`.
+- [x] **Step 1 (test agent):** "a flashback writes its void and deletes no row"; "the stored projection equals the live projection" (segment with a flashback: `race-singapore-wet-flashback`); "formation facts are stored and not returned"; "membership over a stored projection (`membershipOf` with `history` only) equals the live one" (C26; facts store `frame`, spans `startFrame`/`endFrame`); "a session stored without `complete` is rebuilt from its recording before it is read"; "a new sub-machine's spans need no schema change" (a test machine's spans round-trip); "two feeds of one session are stored side by side"; "a car that turns `absent` keeps its stored facts" (B2); "the weekend context matches cars by team and race number when the slots differ between sessions"; "`finish()`'s closing spans are stored and published"; "an interrupted reprocess leaves the old log". Run: fail.
+- [x] **Step 2 (implementer):** implement; `pitwall live` rebuilds a database of any older schema (2 or 3) from the recordings as today.
+- [x] **Step 3:** related tests; supervisor `pnpm check`.
+- [x] **Step 4:** commit `feat(bridge): storage holds append-only logs; one read API returns projections`.
 
 ### Task 28: The rules version rebuilds stale sessions
 
@@ -495,10 +495,10 @@ Also (M2 review, 2026-11-04): `CarState.drsAllowed` (`domain/src/car.ts`), `Game
 - Consumes: Task 27; the module set of C61 (Tasks 4, 5, 7, 9–17 put every log-changing module under it).
 - Produces: `rulesSources(root): string[]`: the git-tracked `.ts` files (plus the generated machine index) reached by following every import, transitively, from `packages/engine/src/step/step.ts`, `packages/engine/src/runner/session-runner.ts`, `packages/engine/src/frame/assembler.ts` and `packages/engine/src/frame/session-tracker.ts`, through `@pitwall/protocol`, `@pitwall/domain` and the engine's `util/` and `state/` (the dependency-cruiser graph, so the set cannot drift from the code), the three gitignored generated indexes the walk reaches included (engine `situations/index.generated.ts` and `span-tags.generated.ts`, domain `situations/index.generated.ts`; M2 N7); `rulesVersion(root): string` (sha256 over the sorted paths and contents of those files), computed when `pitwall live`, `import` or `reprocess` opens the database; at bridge start the sessions of the newest stored session's weekend with a different rules version are rebuilt from their recordings before input opens, with progress lines; any other stale session is rebuilt when first read.
 
-- [ ] **Step 1 (test agent):** "changing any file in `rulesSources`, a comment included, changes the rules version; changing a file outside it does not" (scratch copy of the tree in a temp dir); "`rulesSources` holds `packages/domain/src/ids.ts` and `packages/engine/src/util/deep-readonly.ts`, and no file of `packages/analysis` or `apps/`"; "a file no import reaches changes nothing, a generated index the walk reaches does"; "`pitwall replay` and `pitwall dev` open no database, so they never rebuild"; "a changed rules version rebuilds the current weekend at start and logs progress"; "a stale session of another weekend is rebuilt when first read"; "an unchanged rules version rebuilds nothing". Run: fail.
-- [ ] **Step 2 (implementer):** implement.
-- [ ] **Step 3:** related tests; supervisor `pnpm check`.
-- [ ] **Step 4:** commit `feat(bridge): the rules version rebuilds stale sessions`.
+- [x] **Step 1 (test agent):** "changing any file in `rulesSources`, a comment included, changes the rules version; changing a file outside it does not" (scratch copy of the tree in a temp dir); "`rulesSources` holds `packages/domain/src/ids.ts` and `packages/engine/src/util/deep-readonly.ts`, and no file of `packages/analysis` or `apps/`"; "a file no import reaches changes nothing, a generated index the walk reaches does"; "`pitwall replay` and `pitwall dev` open no database, so they never rebuild"; "a changed rules version rebuilds the current weekend at start and logs progress"; "a stale session of another weekend is rebuilt when first read"; "an unchanged rules version rebuilds nothing". Run: fail.
+- [x] **Step 2 (implementer):** implement.
+- [x] **Step 3:** related tests; supervisor `pnpm check`.
+- [x] **Step 4:** commit `feat(bridge): the rules version rebuilds stale sessions`.
 
 **M6 end gate (supervisor):** `pnpm check`, `pnpm test:acceptance` (reprocess equals live); merge.
 
@@ -512,14 +512,14 @@ Also (M2 review, 2026-11-04): `CarState.drsAllowed` (`domain/src/car.ts`), `Game
 
 **Files:** Create `docs/research/10-situations-catalogue.md`; modify `docs/architecture.md` C17 (supervisor, under C0: the catalogue path), `docs/research/README.md`, CLAUDE.md "What to read" (sub-machine row), `docs/testing.md` §3 (the new segments).
 
-- [ ] **Step 1 (one docs agent):** one section per sub-machine: its kinds and transitions (from `transitions`), the signals and their times (from the inventory), the test rows and segments, "seen in" or "not yet seen" from the final `pitwall scan-situations` output, and the recording checklist for every "not yet seen" situation (red flag with both restarts, stop-go, a restart behind the SC, a stop under VSC, Q1 → Q2 → Q3, a full sprint weekend, a session restarted from the menu, an online pause, a car joining, a pit-lane start).
-- [ ] **Step 2 (supervisor):** review against the code; the docs test (`test/docs/agent-docs.test.ts`) passes.
-- [ ] **Step 3:** commit `docs: the situations catalogue`.
+- [x] **Step 1 (one docs agent):** one section per sub-machine: its kinds and transitions (from `transitions`), the signals and their times (from the inventory), the test rows and segments, "seen in" or "not yet seen" from the final `pitwall scan-situations` output, and the recording checklist for every "not yet seen" situation (red flag with both restarts, stop-go, a restart behind the SC, a stop under VSC, Q1 → Q2 → Q3, a full sprint weekend, a session restarted from the menu, an online pause, a car joining, a pit-lane start).
+- [x] **Step 2 (supervisor):** review against the code; the docs test (`test/docs/agent-docs.test.ts`) passes.
+- [x] **Step 3:** commit `docs: the situations catalogue`.
 
 ### Task 30: Final gates and the clean-contract check
 
-- [ ] **Step 1 (supervisor):** `git grep` outside `docs/history` for every removed name is empty: `FlagPhase`, `flagPhases`, `activeFlagPhase`, `truncated`, `rewritten`, `discarded`, `restampStart`, `Stamp`, `stampOf`, `FrameStamps`, `discardFormation`, `recordedAtOrAfter`, `outOfRace(`, `drsStatus(`, `flashbackChanges`, `session.flashback`, and the C12 field names outside `packages/engine/src/{signals,situations,step/state-update}` and `packages/protocol`.
-- [ ] **Step 1b (supervisor):** remove the time trial from `fixtures/index.json` and `test-support/fixtures.ts` (C84), the unreferenced `test-support/moments/ttZandvoortLap1.crossing.json`, and every test reference to them.
-- [ ] **Step 2 (supervisor):** walk `03-traceability.md` §2 and §3: each of the 12 decision sites and 7 rules is gone; §5: each enforcement exists and is tested.
-- [ ] **Step 3 (supervisor):** `pnpm check`, `pnpm test:ui` (baselines shown to the user), `pnpm test:acceptance`, all green with empty `Errors` lines; a review with C89's question over the whole migration diff; merge to main, push; tell the user to restart for a live test.
-- [ ] **Step 4:** commit the plan's ticks `docs: contract migration done`; move this plan to `docs/history/plans/` with a row in `docs/history/README.md`.
+- [x] **Step 1 (supervisor):** `git grep` outside `docs/history` for every removed name is empty: `FlagPhase`, `flagPhases`, `activeFlagPhase`, `truncated`, `rewritten`, `discarded`, `restampStart`, `Stamp`, `stampOf`, `FrameStamps`, `discardFormation`, `recordedAtOrAfter`, `outOfRace(`, `drsStatus(`, `flashbackChanges`, `session.flashback`, and the C12 field names outside `packages/engine/src/{signals,situations,step/state-update}` and `packages/protocol`.
+- [x] **Step 1b (supervisor):** remove the time trial from `fixtures/index.json` and `test-support/fixtures.ts` (C84), the unreferenced `test-support/moments/ttZandvoortLap1.crossing.json`, and every test reference to them.
+- [x] **Step 2 (supervisor):** walk `03-traceability.md` §2 and §3: each of the 12 decision sites and 7 rules is gone; §5: each enforcement exists and is tested.
+- [x] **Step 3 (supervisor):** `pnpm check`, `pnpm test:ui` (baselines shown to the user), `pnpm test:acceptance`, all green with empty `Errors` lines; a review with C89's question over the whole migration diff; merge to main, push; tell the user to restart for a live test.
+- [x] **Step 4:** commit the plan's ticks `docs: contract migration done`; move this plan to `docs/history/plans/` with a row in `docs/history/README.md`.

@@ -22,10 +22,10 @@ Sections 1–5: the inventory of 2026-10-30. Section 6: additions of 2026-11-02.
 | ZvP2 | practiceZandvoortUidReuse | 2026-10-29_22-54-58 | short practice, online | Zandvoort | retired, then simulated |
 | ZvR2 | raceZandvoortUidReuse | 2026-10-29_23-00-37 | race, online, 72 laps | Zandvoort | VSC then SC; retired lap 15 |
 | MxR | raceWetVscMexico | 2026-10-30_15-20-41 | race, offline, 71 laps | Mexico | VSC, 4 pauses, finished (lapped) |
-| MiP | *(not in index.json)* | 2026-10-30_18-26-27_581b388bbb23c5e7 | short practice (type 4, 1800 s), offline | Miami (trackId 30) | starts mid-session; 3 garage visits; player retires from the menu |
-| MiR | *(not in index.json)* | 2026-10-30_18-53-00_082927e692fdf2af | race (type 15), offline, 20 laps | Miami (trackId 30) | formation lap, VSC→SC, 2nd VSC, drive-through, RCWN+CHQF, finished |
+| MiP | practiceFriendWings | 2026-10-30_18-26-27_581b388bbb23c5e7 | short practice (type 4, 1800 s), offline | Miami (trackId 30) | starts mid-session; 3 garage visits; player retires from the menu |
+| MiR | raceFriendWet | 2026-10-30_18-53-00_082927e692fdf2af | race (type 15), offline, 20 laps | Miami (trackId 30) | formation lap, VSC→SC, 2nd VSC, drive-through, RCWN+CHQF, finished |
 
-The skipped files are ttZandvoort, menuOnly and lobbyOnly. ttZandvoort was scanned and shows only time-trial lap restarts: `lapDistance` jumps, `currentLapInvalid` from PENA 13/26, and ghost participant names changing. MiP and MiR are the two newest recordings. They are not in `fixtures/index.json` yet.
+The skipped files are ttZandvoort, menuOnly and lobbyOnly. ttZandvoort was scanned and shows only time-trial lap restarts: `lapDistance` jumps, `currentLapInvalid` from PENA 13/26, and ghost participant names changing. MiP and MiR are the two newest recordings of that scan; they are `practiceFriendWings` and `raceFriendWet` in `fixtures/index.json`.
 
 ### What the engine reads today
 

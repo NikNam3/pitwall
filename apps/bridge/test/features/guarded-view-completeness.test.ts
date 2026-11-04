@@ -1,5 +1,5 @@
 // Every calculator a bridge feature registers reads only what it declares (contract C41, C87): one generic test over
-// the feature registry (`FEATURES`), the bridge's own units (cars.overview, session.info, feed.status) and the analyses
+// the feature registry (`FEATURES`), the bridge's own units (session.info, feed.status) and the analyses
 // it wires alike. Each runs on the standard builder race (`packages/analysis/test/standard-race.ts`: a stop and a safety
 // car) through its guarded view (`guardedView`): a quick unit computes on the view during the SC and on the one after
 // the race, an incremental one inits on the first, folds the delta into the second, gives its output on each and inits
@@ -73,7 +73,9 @@ function undeclaredReads(calc: Calculator): string[] {
 
 describe("every calculator a bridge feature registers reads only what it declares (C41, C87)", () => {
   it('the feature registry registers the bridge units and the analyses it wires', () => {
-    expect(ORDER.map((c) => c.id)).toEqual(expect.arrayContaining(['cars.overview', 'session.info', 'feed.status', 'gaps', 'incidents', 'race-moment']));
+    // M7-R2: cars.overview is a live binding (C55), so no calculator of that id is registered
+    expect(ORDER.map((c) => c.id)).not.toContain('cars.overview');
+    expect(ORDER.map((c) => c.id)).toEqual(expect.arrayContaining(['session.info', 'feed.status', 'gaps', 'incidents', 'race-moment']));
   });
 
   for (const calc of ORDER) {

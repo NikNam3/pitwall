@@ -6,8 +6,10 @@ export const widget = declareWidget({
   name: 'timing-tower',
   title: 'Timing',
   data: {
-    // Stops and compound arrive reconciled with the stint and pit-stop records.
+    // The compound arrives reconciled with the stint records.
     cars: topic('cars.overview'),
+    // Each car's stops, counted by pit-stop-count (C54); a car it does not list shows no count.
+    pitStops: topic('pitStopCount.byCar'),
     intervals: topic('gaps.intervals'),
     // TO US: every car's gap to the link group's primary car; that car's own entry is notApplicable (its mark shows).
     toCar: topic('gaps.toCar', ({ link }) => ({ carId: link.primary })),

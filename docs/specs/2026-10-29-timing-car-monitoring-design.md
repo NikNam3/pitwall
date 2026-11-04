@@ -117,7 +117,7 @@ Alarms are raised for our cars only. Each is resolved when its condition ends. B
 ## 6. Timing analyses
 
 ### 6.1 `gaps`
-Reads the mini-sector history (`MiniSectorCrossing`, 50 per lap) and the car state. **All gaps come from the crossings**, never from the game's `gapToCarAheadMs`: the game gives only "to ahead" and "to leader", and two sources would show two numbers for the same gap. The gap of car A behind car B is A's crossing time minus B's crossing time at the same lap and segment, taken at A's latest crossing. A car ahead has a negative gap. It updates 50× per lap and works for any pair. A car B has not yet reached is behind. Laps down follow from the total distance. Runs in every session. It is an incremental calculator over the history delta and handles `truncated` (flashback) by restarting from the truncated history.
+Reads the mini-sector history (`MiniSectorCrossing`, 50 per lap) and the car state. **All gaps come from the crossings**, never from the game's `gapToCarAheadMs`: the game gives only "to ahead" and "to leader", and two sources would show two numbers for the same gap. The gap of car A behind car B is A's crossing time minus B's crossing time at the same lap and segment, taken at A's latest crossing. A car ahead has a negative gap. It updates 50× per lap and works for any pair. A car B has not yet reached is behind. Laps down follow from the total distance. Runs in every session. It is an incremental calculator over the history delta and handles `rewound` (flashback) by restarting from the projection after the flashback.
 
 Topics:
 - `gaps.intervals`: per car, to the leader, to the car ahead, to the car behind, laps down, and the positions gained since the start (race only). A gap is signed by the car's side: a car ahead is negative.
@@ -252,15 +252,15 @@ A test builds a pit stop, an SC or a collision by overriding fields or appending
 | Layer | Tests |
 |---|---|
 | Shared functions and calculators | Unit tests and fast-check properties. `per-lap-rate`: a linear series gives its slope; adding a constant changes nothing; one outlier changes little; `insufficientData` below the minimum. `lap-classes`: an SC lap never counts for pace or rate. `pace-delta`: symmetric in sign. |
-| Analyses | Unit tests on builder data. Property tests: `gaps` gives gap(A,B) = −gap(B,A), and gap(A,C) = gap(A,B) + gap(B,C) at a segment all three have crossed. For every incremental analysis, **after a flashback the output equals a fresh run over the truncated history**. Replay determinism: the same recording and config sidecar give the same topics. |
+| Analyses | Unit tests on builder data. Property tests: `gaps` gives gap(A,B) = −gap(B,A), and gap(A,C) = gap(A,B) + gap(B,C) at a segment all three have crossed. For every incremental analysis, **after a flashback the output equals a fresh run over the projection after the flashback**. Replay determinism: the same recording and config sidecar give the same topics. |
 | Displays | As in the UI shell: gallery cases (typed by the committed contracts), emphasis tests, fit tests at every size mode, screenshot baselines through Electron. |
 | Mutation | Stryker over `packages/analysis` and the new `emphasis.ts` files, at least 80 %. Once at the end of the run, not per task. |
-| End-to-end | Milestone "car": bridge + `ttZandvoort` replay → the `car` workbook shows the corner block with values. Milestone "race": `raceSingapore` → the `race` workbook shows a tower with 20 rows and incident entries. |
+| End-to-end | Milestone "car": bridge + `ttZandvoort` replay (the time trial is no fixture since 2026-11-04, C84) → the `car` workbook shows the corner block with values. Milestone "race": `raceSingapore` → the `race` workbook shows a tower with 20 rows and incident entries. |
 
 ### 11.3 Acceptance on real recordings
-**What the time trial holds fixed** (checked 2026-10-29 by replaying `ttZandvoort` lap by lap): tyre wear 0 %, tyre surface and carcass temperature 93 °C from lap 2, pressure 30.16 psi, engine temperature 110 °C, ERS store 4 MJ with nothing deployed or harvested, fuel 10.0 kg. Only the lap and sector times and the brake temperatures (309–355 °C) change. So it cannot check the car care model.
+**What the time trial holds fixed** (checked 2026-10-29 by replaying `ttZandvoort` lap by lap; the time trial is no fixture since 2026-11-04, C84): tyre wear 0 %, tyre surface and carcass temperature 93 °C from lap 2, pressure 30.16 psi, engine temperature 110 °C, ERS store 4 MJ with nothing deployed or harvested, fuel 10.0 kg. Only the lap and sector times and the brake temperatures (309–355 °C) change. So it cannot check the car care model.
 
-- **Now:** `ttZandvoort` (15 laps, one car) covers lap times, the projection and the brake temperature band, and checks that every car care analysis gives a zero rate and a steady state on fixed inputs (no false alarm, no division by zero). `raceSingapore` (79 s, 20 cars) covers gaps at the start and incidents: its COLL ×4 and PENA ×6 events appear as feed entries of the right kind and severity.
+- **Now:** `ttZandvoort` (the time trial is no fixture since 2026-11-04, C84; 15 laps, one car) covers lap times, the projection and the brake temperature band, and checks that every car care analysis gives a zero rate and a steady state on fixed inputs (no false alarm, no division by zero). `raceSingapore` (79 s, 20 cars) covers gaps at the start and incidents: its COLL ×4 and PENA ×6 events appear as feed entries of the right kind and severity.
 - **When the user's practice recording arrives** (10–15 laps on one set, normal fuel and wear): wear rate and laps to the limit, fuel burn and margin, the ERS trend, temperature and pressure bands against the defaults, so Appendix B's car care defaults can be compared with what the game actually sends. Until then this task is open.
 - **When the user's race recording arrives:** our gaps against the game's `gapToCarAheadMs` and `gapToLeaderMs` within a tolerance, the gapper lines, battle closing rates, race-moment transitions, and the car care checks again over a full race. Until then this task is open.
 - The plan merges without these open tasks.
@@ -268,7 +268,7 @@ A test builds a pit stop, an SC or a collision by overriding fields or appending
 ## 12. Error handling
 - Expected gaps are values: `insufficientData` (too few laps), `notApplicable` (wrong session, carcass temperature in surface-only mode, save target with a positive margin), `realism`, `notReceived`.
 - A calculator that throws is a bug. The scheduler already marks it failed and skips the calculators that read it, and the panel header shows `errored`, never old or invented numbers.
-- A session change resets every analysis. A flashback truncates the history, and every incremental analysis restarts from the truncated history (11.2).
+- A session change resets every analysis. A flashback voids the facts after its target, and every incremental analysis restarts from the projection after the flashback (11.2).
 - Config: new keys follow ADR 0008. A wrong value in `config.json` stops the bridge with a clear message; sidecars are read leniently.
 
 ## 13. Build order and parallel agents

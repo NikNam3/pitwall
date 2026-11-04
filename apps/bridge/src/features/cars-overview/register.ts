@@ -1,46 +1,24 @@
 import type { CarOverview } from '@pitwall/contracts';
-import type { CarId } from '@pitwall/domain';
-import { copyPlain, type QuickCalculator } from '@pitwall/engine/readers';
-import { bindState, defineFeature } from '../feature.ts';
-
-/** Every car's entries, by car id, of a history list (each car's latest last). */
-function byCar<T extends { carId: CarId }>(records: readonly T[]): Map<CarId, T[]> {
-  const out = new Map<CarId, T[]>();
-  for (const r of records) {
-    const list = out.get(r.carId);
-    if (list === undefined) out.set(r.carId, [r]);
-    else list.push(r);
-  }
-  return out;
-}
+import { copyPlain } from '@pitwall/engine/readers';
+import { bindLive, defineFeature, type LiveView } from '../feature.ts';
 
 /**
- * Every car's identity, timing (without its confirmed laps) and tyres, and its stops: the car's pit-stop records. The
- * compound is the live one only: the stint records hold closed stints, so the latest is the previous set.
+ * Every car's identity, timing (without its confirmed laps) and tyres, as the live state holds them: a core topic (C54,
+ * C55), no calculator, copied when the hub sends it. A car's stop count is `pit-stop-count`'s (`pitStopCount.byCar`).
  */
-const carsOverview: QuickCalculator<CarOverview[]> = {
-  id: 'cars.overview',
-  kind: 'quick',
-  // `updatedAt` moves with every source, so it reads every area a source feeds.
-  reads: ['identity', 'timing', 'tyres', 'condition', 'dynamics', 'ownCar', 'laps', 'stints', 'pitStops'],
-  cadence: { hz: 10 },
-  compute: ({ live, history }) => {
-    const stops = byCar(history.pitStops);
-    return live.cars.map(({ id, identity, timing: { confirmedLaps: _confirmedLaps, ...timing }, tyres, updatedAt }) => {
-      return copyPlain({
-        id,
-        identity,
-        timing,
-        tyres: { actualCompound: tyres.actualCompound, visualCompound: tyres.visualCompound, age: tyres.age },
-        stops: stops.get(id)?.length ?? 0,
-        updatedAt,
-      }) as CarOverview;
-    });
-  },
-};
+const selectCarsOverview = (live: LiveView): CarOverview[] =>
+  live.cars.map(({ id, identity, timing: { confirmedLaps: _confirmedLaps, ...timing }, tyres, updatedAt }) => {
+    return copyPlain({
+      id,
+      identity,
+      timing,
+      tyres: { actualCompound: tyres.actualCompound, visualCompound: tyres.visualCompound, age: tyres.age },
+      updatedAt,
+    }) as CarOverview;
+  });
 
 export default defineFeature({
   name: 'cars-overview',
-  calculators: [carsOverview],
-  topics: [bindState('cars.overview', carsOverview)],
+  calculators: [],
+  topics: [bindLive('cars.overview', selectCarsOverview)],
 });

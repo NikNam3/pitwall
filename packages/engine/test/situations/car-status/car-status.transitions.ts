@@ -27,7 +27,7 @@
 //                                 flagged (not yet seen, C19)
 //   competing -> absent           the game marks the slot inactive or invalid (not yet seen, C19)
 //   retired -> competing          the result status active again (not yet seen, C19)
-//   retired -> disqualified       an RTMT, then the result status disqualified a frame later (ZvR 125.339 / 125.371)
+//   retired -> disqualified       an RTMT, then the result status disqualified a frame later (not yet seen, from the game's specification, C19)
 //   retired -> absent             the result status invalid (not yet seen, C19)
 //   disqualified -> competing     the result status active again: the ZvR formation reset (rs 5 -> 2 at st 1.968)
 //   disqualified -> retired       the result status retired (not yet seen, C19)
@@ -159,7 +159,7 @@ const rows: TransitionRow<MachineInput>[] = [
     input: inputs().frames(3, all(field, result(0, 'retired'))).frame(result(0, 'active')),
   },
   {
-    name: 'an RTMT, then the result status disqualified a frame later (ZvR 125.339 / 125.371): retired -> disqualified',
+    name: 'an RTMT, then the result status disqualified a frame later (not yet seen, from the game’s specification): retired -> disqualified',
     from: 'retired',
     to: 'disqualified',
     input: inputs().frames(3, field).frame(retires(0)).frame(result(0, 'disqualified')),

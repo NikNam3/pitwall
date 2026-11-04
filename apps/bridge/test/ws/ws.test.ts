@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import WebSocket from 'ws';
 import type { FeedId } from '@pitwall/domain';
-import type { FeedInfo, ServerMessage } from '@pitwall/contracts';
+import { CONTRACT_VERSION, type FeedInfo, type ServerMessage } from '@pitwall/contracts';
 import { TopicHub } from '../../src/hub/topic-hub.ts';
 import { WsServer } from '../../src/ws/server.ts';
 import { WsClient } from '../../src/ws/client.ts';
@@ -26,7 +26,7 @@ describe('WsServer / WsClient', () => {
   it('sends hello with the contract version and feeds on connect', async () => {
     const s = await server(newHub()); const hellos: unknown[] = [];
     client(s.port).onHello((m) => hellos.push(m));
-    await vi.waitFor(() => expect(hellos).toEqual([{ type: 'hello', contractVersion: 11, feeds: feeds() }]));
+    await vi.waitFor(() => expect(hellos).toEqual([{ type: 'hello', contractVersion: CONTRACT_VERSION, feeds: feeds() }]));
   });
   it('routes subscribe/unsubscribe to the hub (default feed = first feed)', async () => {
     const hub = newHub(); hub.publishAppend(F, 'laps', [{ n: 1 }]);

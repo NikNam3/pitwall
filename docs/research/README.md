@@ -1,6 +1,6 @@
 # Research
 
-Race-engineering research done on 2026-10-27/28; 01–05 before the foundation spec, 06–07 before the strategy and UI work; 08 (market landscape) on 2026-10-30; 09 (situations inventory) on 2026-10-30, extended 2026-11-02. These files keep its findings in the repo. Which file to read for which work: CLAUDE.md "What to read".
+Race-engineering research done on 2026-10-27/28; 01–05 before the foundation spec, 06–07 before the strategy and UI work; 08 (market landscape) on 2026-10-30; 09 (situations inventory) on 2026-10-30, extended 2026-11-02; 10 (situations catalogue) on 2026-11-04, during the contract migration. These files keep its findings in the repo. Which file to read for which work: CLAUDE.md "What to read".
 
 | File | Content |
 |---|---|
@@ -13,6 +13,7 @@ Race-engineering research done on 2026-10-27/28; 01–05 before the foundation s
 | [07-strategy-literature.md](07-strategy-literature.md) | Literature map of strategy models (DP/SDP, MILP, MINLP, RL, game theory, state-space degradation, dirty air): what each adds and how they combine into pitwall's strategy layer |
 | [08-market-landscape.md](08-market-landscape.md) | Other race-engineer tools (F1 25 apps, iRacing/LMU/ACC team platforms, real-F1 timing apps): what to take, where pitwall is ahead and behind, the 2026 Season Pack format risk |
 | [09-situations-inventory.md](09-situations-inventory.md) | Every situation signal as our recordings show it (session phases, car situations, flags, penalties, the sprint, race starts), with times; the facts the machine's sub-machines are built on |
+| [10-situations-catalogue.md](10-situations-catalogue.md) | The situations catalogue (contract C17, C19): one section per sub-machine with its scope, kinds, transitions, signals and their timing, test rows, segments and "seen" or "not yet seen" from `pitwall scan-situations`; the recording checklist for every situation not yet seen |
 
 ## Provenance
 

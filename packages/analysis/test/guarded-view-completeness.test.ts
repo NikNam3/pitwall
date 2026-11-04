@@ -78,7 +78,7 @@ const FIXED_BY_LANE: Readonly<Record<CalculatorId, string>> = {};
 
 describe('every unit reads only what it declares (C41, C87)', () => {
   it('the package registers its calculators and analyses', () => {
-    expect(ORDER.map((c) => c.id)).toEqual(expect.arrayContaining(['gaps', 'lap-times', 'incidents', 'race-moment']));
+    expect(ORDER.map((c) => c.id)).toEqual(expect.arrayContaining(['gaps', 'lap-times', 'incidents', 'pit-stop-count', 'race-moment']));
   });
 
   for (const calc of ORDER) {

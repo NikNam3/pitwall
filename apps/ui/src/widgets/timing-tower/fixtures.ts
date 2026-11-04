@@ -1,5 +1,5 @@
 // Builders shared by the timing-tower gallery and its row tests (test-phase file: the implementer does not edit it).
-import type { CarOverview, MachineSpans, SessionInfo } from '@pitwall/contracts';
+import type { CarOverview, MachineSpans, PitStopCounts, SessionInfo } from '@pitwall/contracts';
 import { feedId, carId, known, toSessionTime, unknown } from '@pitwall/domain';
 import type {
   IncidentEntry, CarId, Interval, GapToCar, LapBoard, LapBoardRow, MachineId, Ms, OpenSpan, PendingPenaltyDetail, SectorStatus,
@@ -18,8 +18,6 @@ type CarOptions = {
   ours?: boolean;
   compound?: VisualCompound;
   age?: number;
-  /** The reconciled stop count. */
-  stops?: number;
 };
 
 /**
@@ -41,10 +39,19 @@ export function overview(id: number, o: CarOptions): CarOverview {
       gridPosition: o.gridPosition ?? o.position, speedTrapFastestKmh: unknown('notReceived'),
     } as CarOverview['timing'],
     tyres: { actualCompound: 'C3', visualCompound: o.compound ?? 'medium', age: o.age ?? 14 },
-    stops: o.stops ?? 1,
     updatedAt: {},
   };
 }
+
+/**
+ * A `pitStopCount.byCar` value (M7-R, C54): each car's stops by car id, as `pit-stop-count` gives them (ordered by car
+ * id). A car left out is one the analysis does not list.
+ */
+export const pitStopCounts = (stops: Readonly<Record<number, number>>): PitStopCounts => ({
+  byCar: Object.entries(stops)
+    .map(([id, n]) => ({ carId: carId(Number(id)), stops: n }))
+    .sort((a, b) => a.carId - b.carId),
+});
 
 /** A `gaps.intervals` entry; times in ms, `undefined` = unknown (the leader has no car ahead). */
 // `positionsGained` (gridPosition - position, computed by `gaps`) is a `Known`; `'unknown'` = unknown.
