@@ -1,13 +1,13 @@
-import { known, MAX_CARS, unknown, type ConfirmedLap, type FactRef, type Kg, type Known, type LapRecord, type FrameNumber, type SessionFlag, type SessionTime } from '@pitwall/domain';
+import { known, MAX_CARS, unknown, type ConfirmedLap, type FactRef, type Kg, type Known, type LapRecord, type FrameNumber, type SessionTime } from '@pitwall/domain';
 import type { LogWriter } from '../log/types.ts';
 import type { LapCorrection, Recorder, RecorderInput, StepOutput } from '../step/types.ts';
 import type { DeepReadonly } from '../util/deep-readonly.ts';
 import { carsInSession, carsWithLapData, type LiveCar } from './cars.ts';
-import { lapMarkOf, lapNotBegun, lapStepOf, markPitLane } from './lap-boundary.ts';
+import { lapMarkOf, lapNotBegun, lapStepOf, markActivity } from './lap-boundary.ts';
 import type { LapCursor } from './lap-cursor.ts';
 import { emptyChannels, lapEndSamples, lapStartSamples, observeLapFrame, unknownLapEnd } from './lap-samples.ts';
-import { endVisits, pitLaneStep, type PitLane } from './pit-lane.ts';
 import { initialRaceStartMark, raceStartStep, type RaceStartMark } from './race-start.ts';
+import { activityOf, lapInvalid, neutralisedBy, RACE_ACTIVITY, recordsNoLap, type SituationSpan } from './spans.ts';
 
 /**
  * A lap that has a record: its provisional one with the id the log gave it (C21) until Session History confirms it, and
@@ -20,8 +20,12 @@ export type LapsOwn = {
   cursors: Array<LapCursor | undefined>;
   /** Per car: lap number to what is recorded of it. */
   recorded: Array<Record<number, RecordedLap>>;
-  /** Per car: the pit lane, for the in and out laps (its own copy, C11). */
-  pitLanes: Array<PitLane | undefined>;
+  /**
+   * Per car: the lap as it stood at the newest crossing of the line on the same lap number (the lap distance fell, the
+   * lap number stayed), describing that frame; appended when the race activity's `finished` opens on that frame or the
+   * next (a finisher's final lap: the game does not raise the lap number at the chequered flag).
+   */
+  crossings: Array<LapRecord | undefined>;
   /** Where the race start is (its own copy, C11). */
   raceStart: RaceStartMark;
 };
@@ -37,10 +41,10 @@ const fuelAtStart = (car: LiveCar, at: SessionTime, fromStart: boolean): Known<K
  * A new lap cursor; `fromStart` = the engine sees the lap from its start (the line crossing, or the car before it);
  * `firstLap` = the first lap the engine sees of the car.
  */
-const openCursor = (car: LiveCar, at: SessionTime, fromStart: boolean, firstLap: boolean): LapCursor => {
+const openCursor = (car: LiveCar, at: SessionTime, fromStart: boolean): LapCursor => {
   const { timing, tyres } = car;
   return {
-    ...lapMarkOf(car, firstLap),
+    ...lapMarkOf(car),
     startedAt: at,
     fuelAtStartKg: fuelAtStart(car, at, fromStart),
     tyreAgeAtStart: tyres.age,
@@ -48,8 +52,9 @@ const openCursor = (car: LiveCar, at: SessionTime, fromStart: boolean, firstLap:
     vscMs: 0,
     sector1Ms: timing.sector1TimeMs,
     sector2Ms: timing.sector2TimeMs,
-    invalid: timing.currentLapInvalid,
+    invalid: false,
     lastSeenAt: at,
+    lapDistanceM: timing.lapDistanceM,
     trackedMs: 0,
     actualCompound: tyres.actualCompound,
     visualCompound: tyres.visualCompound,
@@ -61,12 +66,12 @@ const openCursor = (car: LiveCar, at: SessionTime, fromStart: boolean, firstLap:
   };
 };
 
-/** Adds the time since the last frame to the lap, split by the safety car status of this frame. */
-const addElapsed = (flag: SessionFlag, cursor: LapCursor, at: SessionTime): void => {
+/** Adds the time since the last frame to the lap, split by the car neutralising the session on this frame (its `neutralised` span). */
+const addElapsed = (neutralised: 'SC' | 'VSC' | undefined, cursor: LapCursor, at: SessionTime): void => {
   const dt = Math.max(0, at - cursor.lastSeenAt);
   cursor.trackedMs += dt;
-  if (flag === 'sc') cursor.scMs += dt;
-  if (flag === 'vsc') cursor.vscMs += dt;
+  if (neutralised === 'SC') cursor.scMs += dt;
+  if (neutralised === 'VSC') cursor.vscMs += dt;
   cursor.lastSeenAt = at;
 };
 
@@ -125,43 +130,63 @@ const lapFromHistoryOnly = (car: LiveCar, lapNumber: number, lapTimeMs: number, 
 });
 
 /** Opens the car's lap cursor on this frame; the frame is the lap's first. */
-const startLap = (own: LapsOwn, car: LiveCar, at: SessionTime, fromStart: boolean, firstLap = false): void => {
-  const cursor = openCursor(car, at, fromStart, firstLap);
+const startLap = (own: LapsOwn, car: LiveCar, at: SessionTime, fromStart: boolean): LapCursor => {
+  const cursor = openCursor(car, at, fromStart);
   observeLapFrame(cursor, car);
   own.cursors[car.id] = cursor;
+  return cursor;
 };
 
 /**
  * The race start (`raceStartStep`): every car in the session that has had LapData starts its lap over on this frame,
- * seen from its start, as at lights out every car stands on the grid (spec 3.2); no pit visit goes on (a car in the pit
- * lane starts the race from it, which is no in lap). What the laps recorded stays as recorded (C24).
+ * seen from its start, as at lights out every car stands on the grid (spec 3.2); a car in the pit lane starts the race
+ * from it (its activity opens `outLap`, which is no in lap). What the laps recorded stays as recorded (C24).
  */
 const restartLaps = (own: LapsOwn, input: DeepReadonly<RecorderInput>): void => {
   for (const car of carsInSession(input)) if (car.updatedAt.lapData !== undefined) startLap(own, car, input.at, true);
-  endVisits(own.pitLanes);
 };
 
 /** What one frame of the recorder writes to: the log, the step's output and whether a lap was appended. */
-type LapsPass = { at: SessionTime; frameNumber: FrameNumber; flag: SessionFlag; trackLengthM: number; log: LogWriter; out: StepOutput; appended: boolean };
+type LapsPass = {
+  at: SessionTime;
+  frameNumber: FrameNumber;
+  neutralised: 'SC' | 'VSC' | undefined;
+  log: LogWriter;
+  out: StepOutput;
+  appended: boolean;
+};
 
-const trackLap = (own: LapsOwn, car: LiveCar, f: LapsPass): void => {
+/**
+ * The car's lap on this frame, with its activity span (`activity`, none without an activity sub-machine) and whether its
+ * lap-validity span is `invalid`: the lap it is on takes the frame, or the lap completes and the next one begins on it.
+ * The activity marks the lap the frame belongs to as in lap or out lap; an invalid frame makes the lap invalid.
+ */
+const trackLap = (own: LapsOwn, car: LiveCar, activity: SituationSpan | undefined, invalid: boolean, f: LapsPass): void => {
+  const cursor = own.cursors[car.id];
+  const lapStep = lapStepOf(cursor, car, activity, f.frameNumber);
+  // The first lap seen, or the out lap's end at the line (practice, qualifying): what the game times from there is the
+  // lap, without the in lap, garage and out lap before it.
+  const lap = !cursor || lapStep === 'first' || lapStep === 'restart'
+    ? startLap(own, car, f.at, lapStep === 'restart' || lapNotBegun(car))
+    : addFrame(own, car, cursor, lapStep === 'next', f);
+  markActivity(lap, activity, f.frameNumber);
+  lap.invalid ||= invalid;
+};
+
+/** Adds the frame to the car's lap and returns it, or completes the lap (`completed`) and returns the next one, which the frame begins. */
+const addFrame = (own: LapsOwn, car: LiveCar, cursor: LapCursor, completed: boolean, f: LapsPass): LapCursor => {
   const { timing } = car;
   const { at } = f;
-  const cursor = own.cursors[car.id];
-  const lapStep = lapStepOf(cursor, car, f.trackLengthM);
-  if (!cursor || lapStep === 'first') return startLap(own, car, at, lapNotBegun(car), true);
-  // The out lap ends at the line; what the game times from there is the lap, without the in lap, garage and out lap before it.
-  if (lapStep === 'restart') return startLap(own, car, at, true);
-  addElapsed(f.flag, cursor, at);
-  cursor.lapDistanceM = timing.lapDistanceM;
-  cursor.lapTimeMs = timing.currentLapTimeMs;
-  if (lapStep === 'same') {
+  addElapsed(f.neutralised, cursor, at);
+  if (!completed) {
+    // A crossing on the same lap number: the lap as it ends here, kept in case it is the final lap (`finishLap`).
+    if (timing.lapDistanceM < cursor.lapDistanceM) own.crossings[car.id] = lapFromCursor(car, cursor, cursor.lap, timing.lastLapTimeMs, at, f.frameNumber);
+    cursor.lapDistanceM = timing.lapDistanceM;
     // The game resets the sectors at the line, so the last non-zero value is the lap's.
     if (timing.sector1TimeMs > 0) cursor.sector1Ms = timing.sector1TimeMs;
     if (timing.sector2TimeMs > 0) cursor.sector2Ms = timing.sector2TimeMs;
-    cursor.invalid ||= timing.currentLapInvalid;
     observeLapFrame(cursor, car);
-    return;
+    return cursor;
   }
   const lapNumber = timing.lap - 1;
   const recorded = own.recorded[car.id];
@@ -175,7 +200,25 @@ const trackLap = (own: LapsOwn, car: LiveCar, f: LapsPass): void => {
     if (recorded) recorded[lapNumber] = { provisional: { lap: provisional, id }, confirmed: false };
   }
   // The completing frame belongs to the next lap's ranges and totals, not to the one it ends.
-  startLap(own, car, at, true);
+  return startLap(own, car, at, true);
+};
+
+/**
+ * The race activity's `finished` opened on this frame: the car took the chequered flag at a crossing on this frame or the
+ * one before (car-activity-race). Its final lap, which the game never rolls over, is the provisional of that crossing and
+ * describes its frame (C26); Session History's confirmed version supersedes it (C25). The car's lap ends there.
+ */
+const finishLap = (own: LapsOwn, car: LiveCar, activity: SituationSpan | undefined, f: LapsPass): void => {
+  if (activity?.machine !== RACE_ACTIVITY || activity.kind !== 'finished' || activity.startFrame !== f.frameNumber) return;
+  const lap = own.crossings[car.id];
+  own.crossings[car.id] = undefined;
+  if (!lap || lap.frame < f.frameNumber - 1) return;
+  own.cursors[car.id] = undefined;
+  const recorded = own.recorded[car.id];
+  if (!recorded || recorded[lap.lapNumber]?.confirmed) return;
+  const id = f.log.append('laps', lap);
+  f.appended = true;
+  recorded[lap.lapNumber] = { provisional: { lap, id }, confirmed: false };
 };
 
 /** Corrections for what LapData got wrong; a sector LapData never had (0) is not a correction. */
@@ -249,27 +292,32 @@ const confirmLaps = (own: LapsOwn, car: LiveCar, f: LapsPass): void => {
 /**
  * Laps are appended twice, never changed: provisional when the lap number goes up (from LapData), confirmed when
  * Session History holds the lap (a lap that never got a provisional is appended confirmed). The confirmed record wins;
- * what differed is reported as corrections.
+ * what differed is reported as corrections. In lap, out lap and the restart at the line come from the car's activity
+ * spans, the SC and VSC shares from the session's `neutralised` span (C10, C20); no signal is read (C13). While the car's
+ * activity is `coolDown` or `notCompeting`, or the session is over (`postSession`), its lap stands still and no lap is
+ * recorded. A race finisher's final lap is recorded at its crossing, when its activity turns `finished`, and Session
+ * History confirms it later (`finishLap`). Without an activity
+ * sub-machine (a time trial, a pending weekend phase) laps are recorded at each crossing, neither in lap nor out lap.
  */
 export const lapsRecorder: Recorder<LapsOwn> = {
   id: 'laps',
   init: () => ({
     cursors: Array.from({ length: MAX_CARS }, () => undefined),
     recorded: Array.from({ length: MAX_CARS }, () => ({})),
-    pitLanes: Array.from({ length: MAX_CARS }, () => undefined),
+    crossings: Array.from({ length: MAX_CARS }, () => undefined),
     raceStart: initialRaceStartMark(),
   }),
   apply(input, own, log, out) {
-    const { at, live } = input;
-    const start = raceStartStep(own.raceStart, input.situation);
+    const { at, live, situation } = input;
+    const start = raceStartStep(own.raceStart, situation);
     own.raceStart = start.mark;
     if (start.started) restartLaps(own, input);
-    const f: LapsPass = { at, frameNumber: input.frameNumber, flag: live.session.flag, trackLengthM: live.session.trackLengthM, log, out, appended: false };
+    const f: LapsPass = { at, frameNumber: input.frameNumber, neutralised: neutralisedBy(situation), log, out, appended: false };
     for (const car of carsWithLapData(input)) {
-      const pit = pitLaneStep(own.pitLanes[car.id], car.timing.pitStatus, car.timing.lap);
-      own.pitLanes[car.id] = pit.lane;
-      markPitLane(own.cursors[car.id], pit);
-      trackLap(own, car, f);
+      if (recordsNoLap(situation, car.id, input.frameNumber)) continue;
+      const activity = activityOf(situation, car.id);
+      trackLap(own, car, activity, lapInvalid(situation, car.id), f);
+      finishLap(own, car, activity, f);
     }
     for (const car of live.cars) if (car.updatedAt.sessionHistory === at) confirmLaps(own, car, f);
     if (f.appended) out.changed.add('laps');

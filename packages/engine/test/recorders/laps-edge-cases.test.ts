@@ -1,4 +1,5 @@
-// Lap records beyond the main cases: sector bookkeeping, validity, out-laps and the per-car lap index.
+// Lap records beyond the main cases: sector bookkeeping, validity, out-laps and the per-car lap index (contract C10, C13:
+// in lap and out lap from the car's activity spans; ported from test/history/laps-edge-cases.test.ts, migration Task 17).
 import { describe, expect, it } from 'vitest';
 import { unknown } from '@pitwall/domain';
 import { ScenarioBuilder, type FrameDraft } from '../builders/index.ts';
@@ -87,16 +88,20 @@ describe('lap validity', () => {
   });
 });
 
-describe('in-laps and out-laps', () => {
-  /** `[lap, pitStatus, driverStatus]` per frame (pit status 0 none, 1 pitting, 2 in the box; driver status 2 in lap, 3 out lap, 4 on track). */
+describe('in-laps and out-laps (from the activity spans)', () => {
+  /**
+   * `[lap, pitStatus, driverStatus]` per frame of a race (pit status 0 none, 1 pitting, 2 in the box; driver status 2 in
+   * lap, 3 out lap, 4 on track): the race's activity reads no driver status, so a lagging one changes nothing.
+   */
   const statuses = (seq: ReadonlyArray<readonly [number, number, number]>) =>
     runScenario(new ScenarioBuilder({ cars: 1 }).frames(seq.length, (d) => {
       const [currentLapNum, pitStatus, driverStatus] = seq[d.index]!;
       Object.assign(car(d), { currentLapNum, pitStatus, driverStatus, lastLapTimeInMs: 80_000 });
     })).st.history.laps.map((l) => [l.lapNumber, l.inLap, l.outLap]);
 
-  it('the first lap the engine sees, starting with the driver status "out lap" (from the garage), is an out-lap, also outside the pit lane', () => {
-    const { st } = runScenario(new ScenarioBuilder({ cars: 1 }).frames(3, (d) => {
+  // Practice: the car's first activity span is outLap when its driver status says out lap on track (the timed activity's join).
+  it('in practice the first lap the engine sees, its activity joined as outLap (from the garage, on track), is an out-lap', () => {
+    const { st } = runScenario(new ScenarioBuilder({ cars: 1 }).session({ sessionType: 1 }).frames(3, (d) => {
       Object.assign(car(d), { driverStatus: d.index === 0 ? 3 : 4, pitStatus: 0 });
       if (d.index === 2) Object.assign(car(d), { currentLapNum: 2, lastLapTimeInMs: 90_000 });
     }));
@@ -116,10 +121,11 @@ describe('in-laps and out-laps', () => {
     expect(statuses([[3, 0, 4], [3, 1, 2], [3, 2, 3], [3, 1, 3], [3, 0, 3], [4, 0, 3], [4, 0, 4], [5, 0, 4]]))
       .toEqual([[3, true, true], [4, false, false]]);
   });
-  it('the timed lap after the out lap from the garage at the session start is no out lap, though the driver status lags at the line', () => {
-    // negative lap distance before the line; the lap number stays 1 at the line, the game times lap 1 from there
+  it('in practice the timed lap after the out lap from the garage at the session start is no out lap, though the driver status lags at the line', () => {
+    // negative lap distance before the line; the lap number stays 1 at the line, where the activity's out lap ends and
+    // the game times lap 1 (a timed session: a race never restarts a lap at the line)
     const seq = [[-1_500, 3, 10_000], [-20, 3, 40_000], [5, 3, 100], [2_500, 1, 45_000]] as const;
-    const { st } = runScenario(new ScenarioBuilder({ cars: 1 }).frames(seq.length + 1, (d) => {
+    const { st } = runScenario(new ScenarioBuilder({ cars: 1 }).session({ sessionType: 1 }).frames(seq.length + 1, (d) => {
       const [lapDistance, driverStatus, currentLapTimeInMs] = seq[d.index] ?? [5, 1, 100];
       Object.assign(car(d), { lapDistance, driverStatus, currentLapTimeInMs, pitStatus: 0 });
       if (d.index === seq.length) Object.assign(car(d), { currentLapNum: 2, lastLapTimeInMs: 90_000 });

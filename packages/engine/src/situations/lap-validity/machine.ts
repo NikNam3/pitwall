@@ -3,7 +3,7 @@
 // this and the previous) gives the `reason` and the `scope`; it arrives on the frame the flag rises or a frame before, so
 // it waits in the open state until the flag takes it (used once). A flag with no such PENA opens `invalid` with the
 // detail unknown(notReceived) (C3); a PENA after the flag never changes the open span (C18).
-import { known, lapValiditySpans, unknown, type CarId, type InvalidLapDetail, type OpenSpan, type SessionTime } from '@pitwall/domain';
+import { known, lapValiditySpans, unknown, type CarId, type FrameNumber, type InvalidLapDetail, type OpenSpan, type SessionTime } from '@pitwall/domain';
 import type { MachineStep, SubMachine } from '../machine.ts';
 
 /** How many frames a PENA waits for the flag it explains. */
@@ -14,15 +14,18 @@ type Scope = 'this' | 'thisAndNext' | 'thisAndPrevious';
 const SCOPES: Record<number, Scope> = { 10: 'this', 11: 'thisAndNext', 12: 'this', 13: 'thisAndNext', 14: 'thisAndPrevious', 15: 'thisAndPrevious' };
 
 type Pending = { infringement: number; scope: Scope; at: SessionTime; frameNumber: number };
-type Held = { id: number; kind: 'valid' | 'invalid'; start: SessionTime; startFrame: number; detail: object; joinedAt?: true };
-type CarOpen = { span: Held; invalid: boolean; pending: Pending | undefined };
+/** Per car slot: the open span (the same object while it holds, C40), the flag of the frame before and a waiting PENA. */
+type CarOpen = { span: OpenSpan; invalid: boolean; pending: Pending | undefined };
 type Open = { cars: CarOpen[] };
 
-const opened = (id: number, invalid: boolean, at: SessionTime, frameNumber: number, pending: Pending | undefined, joinedAt: boolean): Held => ({
+const opened = (id: number, index: number, invalid: boolean, at: SessionTime, frameNumber: FrameNumber, pending: Pending | undefined, joinedAt: boolean): OpenSpan => ({
+  machine: 'lap-validity',
   id,
+  carId: index as CarId,
   kind: invalid ? 'invalid' : 'valid',
   start: at,
   startFrame: frameNumber,
+  confirmed: true,
   detail: !invalid
     ? {}
     : ({
@@ -39,18 +42,7 @@ const machine: SubMachine<Open> = {
   inputs: { signals: ['events', 'currentLapInvalid'], values: [], upstream: [] },
   transitions: [['none', 'valid'], ['none', 'invalid'], ['valid', 'invalid'], ['invalid', 'valid']],
   init: () => ({ cars: [] }),
-  openSpans: (open) =>
-    open.cars.map(({ span }, index): OpenSpan => ({
-      machine: 'lap-validity',
-      id: span.id,
-      carId: index as CarId,
-      kind: span.kind,
-      start: span.start,
-      startFrame: span.startFrame,
-      confirmed: true,
-      detail: span.detail,
-      ...(span.joinedAt ? { joinedAt: true as const } : {}),
-    })),
+  openSpans: (open) => open.cars.map(({ span }) => span),
   step(open, input): MachineStep<Open> {
     const closed: MachineStep<Open>['closed'] = [];
     const cars = input.signals.cars.map((signals, index): CarOpen => {
@@ -64,21 +56,10 @@ const machine: SubMachine<Open> = {
       }
       if (pending !== undefined && input.frameNumber - pending.frameNumber > PENDING_FRAMES) pending = undefined;
       const invalid = signals.currentLapInvalid;
-      if (car === undefined) return { span: opened(0, invalid, input.at, input.frameNumber, pending, true), invalid, pending: invalid ? undefined : pending };
+      if (car === undefined) return { span: opened(0, index, invalid, input.at, input.frameNumber, pending, true), invalid, pending: invalid ? undefined : pending };
       if (invalid === car.invalid) return { span: car.span, invalid, pending };
-      closed.push({
-        machine: 'lap-validity',
-        id: car.span.id,
-        carId: index as CarId,
-        kind: car.span.kind,
-        start: car.span.start,
-        end: input.at,
-        startFrame: car.span.startFrame,
-        confirmed: true,
-        detail: car.span.detail,
-        ...(car.span.joinedAt ? { joinedAt: true as const } : {}),
-      });
-      return { span: opened(car.span.id + 1, invalid, input.at, input.frameNumber, pending, false), invalid, pending: invalid ? undefined : pending };
+      closed.push({ ...car.span, end: input.at });
+      return { span: opened(car.span.id + 1, index, invalid, input.at, input.frameNumber, pending, false), invalid, pending: invalid ? undefined : pending };
     });
     return { open: { cars }, closed };
   },

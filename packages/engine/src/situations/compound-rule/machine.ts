@@ -6,8 +6,20 @@
 import { compoundRuleSpans, type FrameNumber, carId as toCarId, type OpenSpan, type SessionTime } from '@pitwall/domain';
 import type { MachineStep, SubMachine } from '../machine.ts';
 
-type Held = { id: number; kind: 'required' | 'waived'; start: SessionTime; startFrame: number; joinedAt?: true };
-type Open = { cars: Array<Held | undefined> };
+/** Per car slot: the open span, the same object while it holds (C40). */
+type Open = { cars: Array<OpenSpan | undefined> };
+
+const opening = (id: number, carId: number, kind: 'required' | 'waived', start: SessionTime, startFrame: FrameNumber, joined: boolean): OpenSpan => ({
+  machine: 'compound-rule',
+  id,
+  carId: toCarId(carId),
+  kind,
+  start,
+  startFrame,
+  confirmed: true,
+  detail: undefined,
+  ...(joined ? { joinedAt: true as const } : {}),
+});
 
 const BEFORE_LIGHTS_OUT = ['grid', 'formation', 'startLights'];
 
@@ -22,21 +34,18 @@ const machine: SubMachine<Open> = {
     ['required', 'waived'],
   ],
   init: () => ({ cars: [] }),
-  openSpans: (open) =>
-    open.cars.flatMap((held, carId): OpenSpan[] =>
-      held === undefined ? [] : [{ machine: 'compound-rule', id: held.id, carId: toCarId(carId), kind: held.kind, start: held.start, startFrame: held.startFrame as FrameNumber, confirmed: true, detail: undefined, ...(held.joinedAt ? { joinedAt: true as const } : {}) }],
-    ),
+  openSpans: (open) => open.cars.flatMap((span): OpenSpan[] => (span === undefined ? [] : [span])),
   step(open, input): MachineStep<Open> {
     const afterLightsOut = !BEFORE_LIGHTS_OUT.includes(input.upstream['session-phase-race']?.[0]?.kind ?? 'grid');
     const closed: MachineStep<Open>['closed'] = [];
-    const cars = input.live.cars.map((car, carId): Held => {
-      const held = open.cars[carId];
+    const cars = input.live.cars.map((car, carId): OpenSpan => {
+      const span = open.cars[carId];
       const compound = car.tyres.visualCompound;
       const wet = afterLightsOut && (compound === 'inter' || compound === 'wet');
-      if (held === undefined) return { id: 0, kind: wet ? 'waived' : 'required', start: input.at, startFrame: input.frameNumber as number, joinedAt: true };
-      if (held.kind === 'waived' || !wet) return held;
-      closed.push({ machine: 'compound-rule', id: held.id, carId: toCarId(carId), kind: held.kind, start: held.start, end: input.at, confirmed: true, detail: undefined, startFrame: held.startFrame as FrameNumber, ...(held.joinedAt ? { joinedAt: true as const } : {}) });
-      return { id: held.id + 1, kind: 'waived', start: input.at, startFrame: input.frameNumber as number };
+      if (span === undefined) return opening(0, carId, wet ? 'waived' : 'required', input.at, input.frameNumber, true);
+      if (span.kind === 'waived' || !wet) return span;
+      closed.push({ ...span, end: input.at });
+      return opening(span.id + 1, carId, 'waived', input.at, input.frameNumber, false);
     });
     return { open: { cars }, closed };
   },

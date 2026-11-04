@@ -1,58 +1,11 @@
-// Pit stops, flag phases and mini-sector crossings beyond the main cases: guards, defaults and change tags.
+// Flag phases and mini-sector crossings beyond the main cases: guards, defaults and change tags (the pit stops moved to
+// test/recorders/pit-stops.test.ts, migration Task 17).
 import { describe, expect, it } from 'vitest';
 import type { EventDetails } from '@pitwall/protocol';
-import { ScenarioBuilder, type FrameDraft } from '../builders/index.ts';
+import { ScenarioBuilder } from '../builders/index.ts';
 import { runScenario } from '../support/run.ts';
 
 const noop = () => {};
-
-describe('pit stops', () => {
-  const car0 = (d: FrameDraft) => d.lapData.lapData[0]!;
-  // t = 0, 1000 (entry), 2000, 3000 (exit); `before` is queued ahead of the entry frame
-  const visit = (o: { before?: (b: ScenarioBuilder) => void; during?: EventDetails; laneTimes?: boolean } = {}) => {
-    const b = new ScenarioBuilder({ cars: 1, stepMs: 1000 }).frames(1, noop);
-    o.before?.(b);
-    b.frames(1, (d) => Object.assign(car0(d), { pitStatus: 1, ...(o.laneTimes && { pitLaneTimeInLaneInMs: 500 }) }));
-    if (o.during) b.event(o.during);
-    b.frames(1, (d) => Object.assign(car0(d), { pitStatus: 2, ...(o.laneTimes && { pitLaneTimeInLaneInMs: 1_800, pitStopTimerInMs: 900 }) }));
-    return runScenario(b.frames(1, (d) => Object.assign(car0(d), { pitStatus: 0, pitLaneTimeInLaneInMs: 0, pitStopTimerInMs: 0 })));
-  };
-
-  it.each([
-    ['a virtual safety car', 2, 'vsc'],
-    ['a safety car', 1, 'sc'],
-    ['green', 0, 'green'],
-  ] as const)('a stop under %s is flagged %s', (_, safetyCarStatus, flag) => {
-    const { st } = visit({ before: (b) => b.session({ safetyCarStatus }) });
-    expect(st.history.pitStops).toMatchObject([{ flag }]);
-  });
-  it('a stop under the formation lap is flagged green in the log as stored; its frame lies in the race’s formation span, so the projection hides it (C24, C29)', () => {
-    const { st } = visit({ before: (b) => b.session({ safetyCarStatus: 3 }) });
-    expect(st.log.pitStops).toMatchObject([{ flag: 'green' }]);
-    expect(st.history.pitStops).toEqual([]);
-  });
-  it('without a pit lane timer from the game, the pit lane time is how long the car was seen in the pit lane', () => {
-    const { st } = visit();
-    expect(st.history.pitStops).toMatchObject([{ pitLaneEntry: 1_000, pitLaneExit: 3_000, pitLaneTimeMs: 2_000, stationaryTimeMs: 0 }]);
-  });
-  it('with a pit lane timer from the game, that time wins', () => {
-    const { st } = visit({ laneTimes: true });
-    expect(st.history.pitStops).toMatchObject([{ pitLaneTimeMs: 1_800, stationaryTimeMs: 900 }]);
-  });
-  it.each([
-    ['a drive-through', { code: 'DTSV', vehicleIdx: 0 }, true],
-    ['a stop-go', { code: 'SGSV', vehicleIdx: 0, stopTime: 10 }, true],
-    ['the car’s fastest lap', { code: 'FTLP', vehicleIdx: 0, lapTime: 80 }, false],
-    ['an overtake by the car', { code: 'OVTK', overtakingVehicleIdx: 0, beingOvertakenVehicleIdx: 1 }, false],
-  ] as const)('%s during the visit: penalty served = %s', (_, during, penaltyServed) => {
-    const { st } = visit({ during });
-    expect(st.history.pitStops).toMatchObject([{ penaltyServed }]);
-  });
-  it('tags pitStops on the frame the car leaves the pit lane and on no other', () => {
-    const { results } = visit();
-    expect(results.map((r) => r.changed.has('pitStops'))).toEqual([false, false, false, true]);
-  });
-});
 
 describe('flag phases', () => {
   /**

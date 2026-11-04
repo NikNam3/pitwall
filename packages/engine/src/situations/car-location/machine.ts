@@ -5,13 +5,12 @@
 // with `joinedAt`, on the first frame its Participants data is in the live state (`updatedAt.participants`, the identity
 // area): before it nobody knows whether the slot holds a car (C3). The facts behind each rule:
 // docs/research/09-situations-inventory.md §2.1-2.5.
-import { carId as toCarId, carLocationSpans, type DriverStatus, type OpenSpan, type PitStatus, type SessionTime } from '@pitwall/domain';
+import { carId as toCarId, carLocationSpans, type DriverStatus, type FrameNumber, type OpenSpan, type PitStatus, type SessionTime } from '@pitwall/domain';
 import type { MachineStep, SubMachine } from '../machine.ts';
 
 type Kind = 'garage' | 'pitLane' | 'track';
-type Held = { id: number; kind: Kind; start: SessionTime; startFrame: number; joinedAt?: true };
-/** Per car slot: the open span and how many spans the car has had. */
-type Open = { cars: Array<{ held: Held; opened: number } | undefined> };
+/** Per car slot: the open span (the same object while it holds, C40) and how many spans the car has had. */
+type Open = { cars: Array<{ span: OpenSpan; opened: number } | undefined> };
 
 /** Where a car is by its driver and pit status. */
 const kindOf = (driverStatus: DriverStatus, pitStatus: PitStatus): Kind => {
@@ -19,16 +18,16 @@ const kindOf = (driverStatus: DriverStatus, pitStatus: PitStatus): Kind => {
   return pitStatus === 'none' ? 'track' : 'pitLane';
 };
 
-const toOpenSpan = (held: Held, index: number): OpenSpan => ({
+const opening = (id: number, index: number, kind: Kind, start: SessionTime, startFrame: FrameNumber, joined: boolean): OpenSpan => ({
   machine: 'car-location',
-  id: held.id,
+  id,
   carId: toCarId(index),
-  kind: held.kind,
-  start: held.start,
-  startFrame: held.startFrame,
+  kind,
+  start,
+  startFrame,
   confirmed: true,
   detail: undefined,
-  ...(held.joinedAt ? { joinedAt: true as const } : {}),
+  ...(joined ? { joinedAt: true as const } : {}),
 });
 
 const machine: SubMachine<Open> = {
@@ -48,17 +47,17 @@ const machine: SubMachine<Open> = {
     ['track', 'garage'],
   ],
   init: () => ({ cars: [] }),
-  openSpans: (open) => open.cars.flatMap((car, index): OpenSpan[] => (car === undefined ? [] : [toOpenSpan(car.held, index)])),
+  openSpans: (open) => open.cars.flatMap((car): OpenSpan[] => (car === undefined ? [] : [car.span])),
   step(open, input): MachineStep<Open> {
     const closed: MachineStep<Open>['closed'] = [];
     const cars = input.signals.cars.map((signals, index) => {
       const before = open.cars[index];
       if (before === undefined && input.live.cars[index]?.updatedAt.participants === undefined) return undefined;
       const kind = kindOf(signals.driverStatus, signals.pitStatus);
-      if (before !== undefined && before.held.kind === kind) return before;
-      if (before !== undefined) closed.push({ ...toOpenSpan(before.held, index), end: input.at });
+      if (before !== undefined && before.span.kind === kind) return before;
+      if (before !== undefined) closed.push({ ...before.span, end: input.at });
       const id = before?.opened ?? 0;
-      return { held: { id, kind, start: input.at, startFrame: input.frameNumber, ...(before === undefined ? { joinedAt: true as const } : {}) }, opened: id + 1 };
+      return { span: opening(id, index, kind, input.at, input.frameNumber, before === undefined), opened: id + 1 };
     });
     return { open: { cars }, closed };
   },

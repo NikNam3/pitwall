@@ -75,9 +75,14 @@ describe('race-singapore-start: start lights and lights out', () => {
 });
 
 describe('race-zandvoort-pit-stop: car 1 enters the pits, starts lap 8 in the pit lane and changes mediums for softs', () => {
-  it('closes the medium stint at the in-lap and opens a soft stint on the next lap', async () => {
+  // A stint closes when the box stop ends on the new set, a pit stop is recorded at the pit exit (migration Task 17,
+  // ruling 3): the car is still in its box when the segment ends, so neither is recorded yet.
+  it('lap 7 is the in lap on mediums; the softs are fitted in the box, whose stop has not ended: no stint closes and no pit stop is recorded yet', async () => {
     const { state } = await run('race-zandvoort-pit-stop.pwrec.gz');
-    expect(state.history.stints.filter((s) => s.carId === 1)).toEqual([{ carId: 1, firstLap: 7, lastLap: 7, actualCompound: 'C3', visualCompound: 'medium', tyreAgeAtFitting: 6, frame: 444 }]);
+    // the activity's closed spans of car 1: racingLap and inLap; its boxStop is still open
+    expect(state.history.spans['car-activity-race']?.filter((s) => s.carId === 1).map((s) => s.kind)).toEqual(['racingLap', 'inLap']);
+    expect(state.history.stints.filter((s) => s.carId === 1)).toEqual([]);
+    expect(state.history.pitStops.filter((s) => s.carId === 1)).toEqual([]);
     expect(state.cars[1]!.tyres).toMatchObject({ actualCompound: 'C4', visualCompound: 'soft', age: 0 });
     expect(state.history.laps.find((l) => l.carId === 1 && l.lapNumber === 7)).toMatchObject({ inLap: true, actualCompound: 'C3' });
   });

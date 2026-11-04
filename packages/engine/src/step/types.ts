@@ -1,6 +1,6 @@
 // Protocol-free (C6): recorders and the bridge import these types; `StateUpdate` (`state-update/types.ts`) holds the
 // frame.
-import type { CarId, FrameNumber, Ms, RaceEvent, SessionTime } from '@pitwall/domain';
+import type { CarId, FrameNumber, MachineId, Ms, RaceEvent, SessionTime, Span } from '@pitwall/domain';
 import type { LogWriter } from '../log/types.ts';
 import { SPAN_TAGS } from '../situations/span-tags.generated.ts';
 import type { Situation } from '../situations/situation.ts';
@@ -90,7 +90,11 @@ export type Recorder<Own> = {
 /**
  * What a recorder reads of the frame (C10): its time on the race clock, its id and number, the live state and the
  * situations; never the frame or a signal (C6, C13). A fact records the frame it describes (C26), this frame's
- * `frameNumber` unless it describes an earlier one. `tracked`: transitional, deleted by Tasks 11/17 and 21 (`TrackedEvents`).
+ * `frameNumber` unless it describes an earlier one. `closed`: the spans step 2 closed on this frame, per sub-machine
+ * (C9, C10), with how each closed (`confirmed`); a machine that closed none has no entry, and absent means none closed.
+ * `carsInSession`: the cars in the session by the situation's car-status spans (`carsInSessionOf`, C43), worked out
+ * once per frame by `step`; absent, a recorder works them out from `situation`. `tracked`: transitional, deleted
+ * by Task 21 (`TrackedEvents`).
  */
 export type RecorderInput = {
   at: SessionTime;
@@ -98,6 +102,8 @@ export type RecorderInput = {
   frameNumber: FrameNumber;
   live: LiveState;
   situation: Situation;
+  closed?: Readonly<Record<MachineId, readonly Span[]>>;
+  carsInSession?: readonly CarId[];
   tracked?: TrackedEvents;
 };
 
@@ -106,9 +112,8 @@ export type RaceEventBody = Omit<RaceEvent, 'at' | 'frame'>;
 
 /**
  * Transitional (accepted ruling, Task 4): until the machine's spans carry them, step 2's slot hands the recorders what
- * this frame's situation events decided, so no recorder reads a signal (C13). `penaltyServed`: the cars whose
- * drive-through or stop-go was served (DTSV, SGSV); Task 11's `servingPenalty` spans and Task 17's activity spans delete
- * it. `raceEvents`: the situation events still recorded as race events, in arrival order (PENA, RTMT, DRSE, DRSD, STLG,
- * LGOT); Task 21 deletes them. With both gone, `RecorderInput.tracked` goes. Absent: none of them.
+ * this frame's situation events decided, so no recorder reads a signal (C13). `raceEvents`: the situation events still
+ * recorded as race events, in arrival order (PENA, RTMT, DRSE, DRSD, STLG, LGOT); Task 21 deletes them, and with them
+ * `RecorderInput.tracked`. Absent: none.
  */
-export type TrackedEvents = { penaltyServed: readonly CarId[]; raceEvents: readonly RaceEventBody[] };
+export type TrackedEvents = { raceEvents: readonly RaceEventBody[] };

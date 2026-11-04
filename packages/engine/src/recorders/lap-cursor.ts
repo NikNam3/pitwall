@@ -1,4 +1,4 @@
-import type { ActualCompound, Kg, Known, LapRecord, Ms, SessionTime, VisualCompound } from '@pitwall/domain';
+import type { ActualCompound, Kg, Known, LapRecord, Metres, Ms, SessionTime, VisualCompound } from '@pitwall/domain';
 import type { LapMark } from './lap-boundary.ts';
 
 /** The lap a car is on, collected until the lap completes and becomes a `LapRecord`. */
@@ -12,6 +12,8 @@ export type LapCursor = LapMark & {
   sector2Ms: Ms;
   invalid: boolean;
   lastSeenAt: SessionTime;
+  /** The car's lap distance on the lap's newest LapData frame: a fall on the same lap number is a crossing of the line. */
+  lapDistanceM: Metres;
   trackedMs: Ms;
   actualCompound: ActualCompound;
   visualCompound: VisualCompound;

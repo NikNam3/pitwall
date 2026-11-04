@@ -7,11 +7,11 @@ import type { DeepReadonly } from '../util/deep-readonly.ts';
 export type LiveCar = DeepReadonly<CarState>;
 
 /**
- * The cars in the session: those whose car-status span is not `absent`, read from the frame's situation (C10, C20);
- * car-status is the one decider (C43).
+ * The cars in the session: those whose car-status span is not `absent`, read from the frame's situation (C10, C20), as
+ * `step` worked them out once for the frame (`input.carsInSession`); car-status is the one decider (C43).
  */
 export const carsInSession = (input: DeepReadonly<RecorderInput>): LiveCar[] =>
-  carsInSessionOf(input.situation.byMachine[CAR_STATUS]).flatMap((id) => input.live.cars[id] ?? []);
+  (input.carsInSession ?? carsInSessionOf(input.situation.byMachine[CAR_STATUS])).flatMap((id) => input.live.cars[id] ?? []);
 
 /**
  * The cars in the session that have LapData in this frame: step 1 stamped their timing at the frame's time (C10: a
