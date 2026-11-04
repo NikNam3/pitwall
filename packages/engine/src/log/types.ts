@@ -7,6 +7,7 @@ import type {
   LapRecord,
   MachineId,
   MiniSectorCrossing,
+  PenaltyRecord,
   PitStopRecord,
   RaceEvent,
   Span,
@@ -26,11 +27,13 @@ export type FactOf<L extends FactList> = L extends 'laps'
         ? MiniSectorCrossing
         : L extends 'events'
           ? RaceEvent
-          : L extends 'clock'
-            ? ClockFact
-            : L extends 'voids'
-              ? LogVoidFact
-              : Span;
+          : L extends 'penalties'
+            ? PenaltyRecord
+            : L extends 'clock'
+              ? ClockFact
+              : L extends 'voids'
+                ? LogVoidFact
+                : Span;
 
 /** A void fact as the log stores it (C27). */
 export type LogVoidFact = VoidFact;
@@ -53,6 +56,7 @@ type Lists = {
   pitStops: PitStopRecord[];
   crossings: MiniSectorCrossing[];
   events: RaceEvent[];
+  penalties: PenaltyRecord[];
   clock: ClockFact[];
   spans: Record<MachineId, Span[]>;
 };

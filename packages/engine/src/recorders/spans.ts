@@ -58,6 +58,10 @@ export const recordsNoLap = (situation: Situation, carId: CarId, frameNumber: nu
   return (kind !== undefined && NO_LAP_KINDS.has(kind)) || sessionOver(situation, frameNumber);
 };
 
+/** The car's race activity opened `finished` on this frame (frame number `frameNumber`): it took the chequered flag. */
+export const finishOpened = (activity: SituationSpan | undefined, frameNumber: number): boolean =>
+  activity?.machine === RACE_ACTIVITY && activity.kind === 'finished' && activity.startFrame === frameNumber;
+
 /** The push kinds of the timed activities: the lap from the line after an out lap. */
 const PUSH_KINDS: ReadonlySet<string> = new Set(['pushLap', 'flyingLap']);
 
