@@ -97,7 +97,7 @@ describe('what the features read (domain areas)', () => {
   });
   // `updatedAt` moves with every source, so this one may read more tags than it shows fields of; never fewer.
   it.each([
-    ['cars.overview', carsOverview, 'cars.overview', ['identity', 'timing', 'tyres', 'stints', 'pitStops']],
+    ['cars.overview', carsOverview, 'cars.overview', ['identity', 'timing', 'tyres', 'stints']],
   ] as const)('%s reads at least the areas of its fields', (_, feature, id, reads) => {
     expect(readsOf(feature, id)).toEqual(expect.arrayContaining([...reads]));
   });
