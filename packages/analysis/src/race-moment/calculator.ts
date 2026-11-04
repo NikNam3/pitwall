@@ -13,12 +13,13 @@ import {
   type RaceMoment,
   type SessionTime,
 } from '@pitwall/domain';
-import type { QuickCalculator } from '@pitwall/engine/readers';
+import { openSpansOf, type QuickCalculator } from '@pitwall/engine/readers';
 import { ALARMS } from '../alarms/index.ts';
 import { BATTLE, BATTLE_CONFIG, type BattleOutput } from '../battle/index.ts';
 import { INCIDENTS } from '../incidents/index.ts';
-import { isClosed, NEUTRALISATION_READS, neutralisationKind, neutralisedSpans } from '../shared/neutralised.ts';
-import { RACE_MOMENT, RACE_MOMENT_CONFIG, type RaceMomentOutput } from './index.ts';
+import { behaviourFor } from '../shared/behaviour.ts';
+import { neutralisationKind } from '../shared/neutralised.ts';
+import { RACE_MOMENT, RACE_MOMENT_BEHAVIOUR, RACE_MOMENT_CONFIG, type RaceMomentOutput } from './index.ts';
 
 type Cause = Pick<RaceMoment, 'since' | 'cause'>;
 const NOT_APPLICABLE = unknown('notApplicable');
@@ -42,16 +43,17 @@ const valueOf = (k: Known<number>): number | undefined => (k.known ? k.value : u
 export const raceMomentCalculator: QuickCalculator<RaceMomentOutput> = {
   id: RACE_MOMENT,
   kind: 'quick',
-  reads: [...NEUTRALISATION_READS, 'session', { calculator: INCIDENTS }, { calculator: BATTLE }, { calculator: ALARMS }],
+  reads: ['spans:weekend-phase', 'spans:session-phase-race', 'session', { calculator: INCIDENTS }, { calculator: BATTLE }, { calculator: ALARMS }],
   cadence: { hz: 4 },
   compute(view) {
     const { session, sessionTime: now } = view.live;
-    if (session.kind !== 'race') return NOT_APPLICABLE;
+    const rows = behaviourFor(RACE_MOMENT_BEHAVIOUR, view);
+    if (!rows.some((row) => row.applicable === true)) return NOT_APPLICABLE;
     const cfg = RACE_MOMENT_CONFIG.read(view);
     const holding: Holding[] = [];
 
-    // the neutralisation open now (`shared/neutralised.ts`, C20), pending its confirmation or not
-    const open = neutralisedSpans(view.history, view.situation).find((span) => !isClosed(span));
+    // the neutralisation open now: the machine's situation (C46), pending its confirmation or not
+    const open = rows.some((row) => row.neutralised === true) ? openSpansOf(view, 'session-phase-race')[0] : undefined;
     if (open !== undefined) {
       holding.push(['neutralised', { since: known(open.start, now), cause: { rule: 'flagPhase', params: { kind: neutralisationKind(open) } } }]);
     }

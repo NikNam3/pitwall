@@ -117,15 +117,19 @@ describe('gaps, incidents and race-moment read the same neutralisations', () => 
   const view = viewOf({ miniSectors: race(), phases: [sc, never], open: pending, laps: leaderLaps(LAPS) });
 
   it('each declares the spans of the three session-phase sub-machines that neutralisedSpans reads (C41)', () => {
-    for (const unit of [gapsCalculator, incidentsCalculator, raceMomentCalculator]) {
+    for (const unit of [gapsCalculator, incidentsCalculator]) {
       expect(unit.reads, unit.id).toEqual(expect.arrayContaining(['spans:session-phase-race', 'spans:session-phase-qualifying', 'spans:session-phase-practice']));
     }
+    // race-moment is race only (C14, C46): it reads the weekend phase and the race's session phase
+    expect(raceMomentCalculator.reads).toEqual(expect.arrayContaining(['spans:weekend-phase', 'spans:session-phase-race']));
   });
 
   it('the confirmed SC and the pending VSC; the SC never confirmed in none of them', () => {
     expect(gapsCalculator.output(gapsCalculator.init(view)).phases.map((p) => p.kind)).toEqual(['SC', 'VSC']);
     const feed = incidentsCalculator.output(incidentsCalculator.init(view));
     expect(feed.filter((e) => e.kind === 'neutralised').map((e) => e.at)).toEqual([600_000, 100_000]);
-    expect(raceMomentCalculator.compute(view)).toMatchObject({ known: true, value: { moment: 'neutralised', cause: { params: { kind: 'VSC' } }, since: { value: 600_000 } } });
+    const racing: OpenSpan = { machine: 'weekend-phase', id: 0, kind: 'race', start: 0, confirmed: true, detail: { format: 'grandPrix' }, startFrame: 1 };
+    const raceView = { ...view, situation: { ...view.situation, byMachine: { ...view.situation.byMachine, 'weekend-phase': [racing] } } };
+    expect(raceMomentCalculator.compute(raceView)).toMatchObject({ known: true, value: { moment: 'neutralised', cause: { params: { kind: 'VSC' } }, since: { value: 600_000 } } });
   });
 });
