@@ -1,7 +1,7 @@
 // A wing change in the garage on real data, on practice-wing-change (car 19's front-right wing 100 % to 0 % at
 // 616.783 s); facts in fixtures/index.json. The engine plus the damage calculator.
 import { describe, expect, it } from 'vitest';
-import { DAMAGE, damageCalculator, damageHistoryCalculator, type DamageOutput } from '@pitwall/analysis';
+import { DAMAGE, damageCalculator, type DamageOutput } from '@pitwall/analysis';
 import type { CarId } from '@pitwall/domain';
 import { replayRunner, replayScheduled } from './engine-replay.ts';
 import { segmentPath } from './replay.ts';
@@ -13,7 +13,7 @@ const CHANGE_AT = 616_783;
 /** The session time and car 19's front-right wing, of each damage run over the segment. */
 async function damageRuns(): Promise<{ at: number; frontRightWingPct: number | undefined }[]> {
   const runs: { at: number; frontRightWingPct: number | undefined }[] = [];
-  await replayScheduled(segmentPath(FILE), [damageHistoryCalculator, damageCalculator], ({ state }, scheduled) => {
+  await replayScheduled(segmentPath(FILE), [damageCalculator], ({ state }, scheduled) => {
     if (!scheduled.ran.includes(DAMAGE)) return;
     const car = (scheduled.outputs.get(DAMAGE) as DamageOutput)[CAR];
     if (car === undefined) return;

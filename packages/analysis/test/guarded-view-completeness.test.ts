@@ -1,8 +1,8 @@
 // Every unit reads only what it declares (contract C41, C87): one generic test over every calculator and analysis the
 // package registers (`CALCULATORS`). Each runs on the standard race (`standard-race.ts`: a stop and a safety car) through
 // its guarded view (`guardedView`): a quick unit computes on the view during the SC and on the one after the race, an
-// incremental one inits on the first, folds the delta into the second and inits on the second; both raise their
-// insights. Upstream outputs come from the units before it in the registry's order, computed on the same view.
+// incremental one inits on the first, folds the delta into the second, gives its output on each (`output(acc, view)`)
+// and inits on the second; both raise their insights. Upstream outputs come from the units before it in the registry's order, computed on the same view.
 import { CalculatorRegistry, type Calculator, type CalculatorId, type EngineView } from '@pitwall/engine/readers';
 import { describe, expect, it } from 'vitest';
 import { UndeclaredReadError } from '../../engine/test/support/guarded-input.ts';
@@ -13,7 +13,7 @@ import { CALCULATORS } from './units.ts';
 const ORDER = CalculatorRegistry.build(CALCULATORS).order;
 
 /** What a unit gives on a view, unguarded: its output, or its accumulator's. */
-const outputOf = (calc: Calculator, view: EngineView): unknown => (calc.kind === 'quick' ? calc.compute(view) : calc.output(calc.init(view)));
+const outputOf = (calc: Calculator, view: EngineView): unknown => (calc.kind === 'quick' ? calc.compute(view) : calc.output(calc.init(view), view));
 
 /**
  * The race's view at `at` with every unit's output, unguarded, in the registry's order: the upstream outputs a unit
@@ -62,9 +62,9 @@ function undeclaredReads(calc: Calculator): string[] {
   }
   const acc = attempt('init (during the SC)', () => calc.init(g(during)));
   const folded = acc === undefined ? undefined : attempt('update (to after the race)', () => calc.update(acc, after.delta, g(after)));
-  const first = acc === undefined ? undefined : calc.output(acc);
+  const first = acc === undefined ? undefined : attempt('output (during the SC)', () => calc.output(acc, g(during)));
   insights('insights (during the SC)', first, undefined, during);
-  insights('insights (after the race)', folded === undefined ? undefined : calc.output(folded), first, after);
+  insights('insights (after the race)', folded === undefined ? undefined : attempt('output (after the race)', () => calc.output(folded, g(after))), first, after);
   attempt('init (after the race)', () => calc.init(g(after)));
   return reads;
 }

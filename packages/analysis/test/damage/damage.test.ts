@@ -3,22 +3,21 @@ import { carId, known, unknown, type CarId, type DamageParts, type LapRecord, ty
 import { projectionLengths, type EngineView } from '@pitwall/engine/readers';
 import { describe, expect, it } from 'vitest';
 import { carState, event, lap, realismHidden } from '../../../../test-support/builders/index.ts';
-import { damageCalculator } from '../../src/damage/calculator.ts';
+import { damageCalculator as unguarded } from '../../src/damage/calculator.ts';
 import { DAMAGE, DAMAGE_BEHAVIOUR, DAMAGE_CONFIG } from '../../src/damage/index.ts';
-import { damageHistoryCalculator } from '../../src/index.ts';
 import { damageJumps } from '../../src/shared/damage-jumps.ts';
 import { engineShaped } from '../engine-shaped.ts';
-import { NONE, openSpan, PRACTICE, QUALIFYING, RACE, situatedView } from '../situated.ts';
-import { split } from '../split.ts';
+import { guardedIncremental, NONE, openSpan, PRACTICE, QUALIFYING, RACE, situatedView } from '../situated.ts';
+import { scheduled } from '../scheduled.ts';
+
+/** The calculator through its guarded view (C41): every init, update and output fails on a read it does not declare. */
+const damageCalculator = guardedIncremental(unguarded);
+
+/** `damage` stepped by its tests: its output reads the view its accumulator was last folded on (C31.2). */
+const damage = scheduled(damageCalculator);
 
 /**
- * `damage` and its fold `damage-history`, each part through its own guarded view (C31.2, C41): every init and update
- * fails on a read it does not declare.
- */
-const damage = split(damageCalculator, damageHistoryCalculator);
-
-/**
- * The delta from one view's history to the next one's (restated in Task 22 round 2: the builder's default delta is from
+ * The delta from one view's history to the next one's (restated in Task 22: the builder's default delta is from
  * an empty history, which a fold over the delta would count twice).
  */
 const deltaOf = (from: EngineView, to: EngineView) => ({ before: projectionLengths(from.history), after: projectionLengths(to.history) });
@@ -50,18 +49,13 @@ const run = (events: RaceEvent[], laps: LapRecord[] = [], extra: Parameters<type
 
 describe('damage calculator', () => {
   it('has the id damage and reads condition, tyres, events, laps, car-status, car-location and the weekend phase (not pace, not the session)', () => {
-    // Restated in Task 22 round 2 (C31.2): `damage` is quick and reads its fold `damage-history` of the events and laps;
-    // the reads are the two parts' together.
     expect(damageCalculator.id).toBe(DAMAGE);
-    expect(damageCalculator.kind).toBe('quick');
-    expect(damageCalculator.reads).toContainEqual({ calculator: 'damage-history' });
-    expect(damageHistoryCalculator.kind).toBe('incremental');
-    expect(damageHistoryCalculator.reads).toEqual(expect.arrayContaining(['events', 'laps']));
-    expect(damage.reads()).toEqual(
+    expect(damageCalculator.kind).toBe('incremental');
+    expect(damageCalculator.reads).toEqual(
       expect.arrayContaining(['condition', 'tyres', 'events', 'laps', 'spans:car-status', 'spans:car-location', 'spans:weekend-phase']),
     );
-    expect(damage.reads()).not.toContainEqual({ calculator: 'pace' });
-    expect(damage.reads()).not.toContain('session');
+    expect(damageCalculator.reads).not.toContainEqual({ calculator: 'pace' });
+    expect(damageCalculator.reads).not.toContain('session');
   });
 
   it('a damageChange of the front-left wing 0 → 12 % is one jump with deltaPct 12', () => {

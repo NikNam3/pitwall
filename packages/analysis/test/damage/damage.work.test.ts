@@ -1,5 +1,5 @@
-// `damage` is quick (contract C31, ruling Task 22 round 2): it reads its fold `damage-history`, and its own from-scratch reads do
-// not grow fivefold from lap 7 to lap 70 (C31.1).
-import { describeQuick } from '../work.ts';
+// `damage` justifies its accumulator by counted work on the long race (contract C31): its reads at lap 7 and lap 70
+// (C31.1), its accumulator from the projection alone (C31.2) and incremental = from scratch across rewinds (C31.3).
+import { describeWork } from '../work.ts';
 
-describeQuick('damage');
+describeWork('damage');

@@ -6,6 +6,7 @@ import { SPAN_DECLARATIONS } from '@pitwall/domain';
 import type { EngineView } from '@pitwall/engine';
 import { describe, expect, it } from 'vitest';
 import { field, neutralisation, openNeutralisation } from '../../../../test-support/builders/index.ts';
+import { gapsCalculator } from '../../src/gaps/calculator.ts';
 import { GAPS_BEHAVIOUR } from '../../src/gaps/index.ts';
 import { carsFor, deltaOf, gaps, guarded, offsetRace, run, viewOf, type Phase, type StatusKind } from './race.ts';
 
@@ -28,11 +29,10 @@ describe('gaps behaviour table (C44)', () => {
   });
 
   it('declares what it reads: the spans of those sub-machines, and no game event any more (the race start is a span)', () => {
-    // Restated in Task 22 round 2 (C31.2): what `gaps` and its fold `gaps-history` read together.
-    expect(gaps.reads()).toEqual(
+    expect(gapsCalculator.reads).toEqual(
       expect.arrayContaining(['spans:weekend-phase', 'spans:car-status', 'spans:session-phase-race', 'spans:session-phase-qualifying', 'spans:session-phase-practice']),
     );
-    expect(gaps.reads()).not.toContain('events');
+    expect(gapsCalculator.reads).not.toContain('events');
   });
 });
 

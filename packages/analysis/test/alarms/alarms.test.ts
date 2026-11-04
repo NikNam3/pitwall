@@ -7,7 +7,6 @@ import { CAR_BANDS, CAR_BANDS_CONFIG } from '../../src/car-bands/index.ts';
 import { carBandsCalculator } from '../../src/car-bands/calculator.ts';
 import { DAMAGE } from '../../src/damage/index.ts';
 import { damageCalculator } from '../../src/damage/calculator.ts';
-import { damageHistoryCalculator } from '../../src/index.ts';
 import { ERS } from '../../src/ers/index.ts';
 import { ersCalculator } from '../../src/ers/calculator.ts';
 import { FUEL } from '../../src/fuel/index.ts';
@@ -16,10 +15,10 @@ import { SESSION_REMAINING, type SessionRemaining } from '../../src/session-rema
 import { TYRE_WEAR } from '../../src/tyre-wear/index.ts';
 import { tyreWearCalculator } from '../../src/tyre-wear/calculator.ts';
 import { situatedView } from '../situated.ts';
-import { split } from '../split.ts';
+import { scheduled } from '../scheduled.ts';
 
-/** `damage` and its fold `damage-history` (C31.2), as the scheduler runs them. */
-const damage = split(damageCalculator, damageHistoryCalculator);
+/** `damage` stepped: its output reads the view its accumulator was folded on (C31.2). */
+const damage = scheduled(damageCalculator);
 import { carState, engineView, event, lap, RACING, realismHidden, telemetryRestricted } from '../../../../test-support/builders/index.ts';
 
 // Assumptions pinned here (see the test report): key = `${kind}:${carId}:${channel}`; channel names `tyre.<surfaceC|carcassC|pressurePsi>.<corner>`,

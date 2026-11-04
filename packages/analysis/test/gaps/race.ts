@@ -2,10 +2,10 @@
 import { carId, MINI_SECTORS, unknown, type CarId, type CarState, type MiniSectorCrossing, type OpenSpan, type Span, type WeekendPhase } from '@pitwall/domain';
 import { projectionLengths, type EngineView } from '@pitwall/engine';
 import { carState, crossings, engineView, phaseSpans } from '../../../../test-support/builders/index.ts';
+import { guardedView } from '../../../engine/test/support/scheduler.ts';
 import { gapsCalculator } from '../../src/gaps/calculator.ts';
 import type { GapsOutput } from '../../src/gaps/index.ts';
-import { gapsHistoryCalculator } from '../../src/index.ts';
-import { split } from '../split.ts';
+import { scheduled } from '../scheduled.ts';
 
 /** The default race session's track length (`engineView`). */
 export const TRACK_M = 5000;
@@ -171,14 +171,11 @@ export const viewOf = (
   });
 };
 
-/** `gaps` and its fold `gaps-history`, run as the scheduler runs them, each part through its own guarded view (C31.2, C41). */
-export const gaps = split(gapsCalculator, gapsHistoryCalculator);
+/** The view as the scheduler hands it to `gaps`: through its guarded view, so a read it does not declare throws (C41). */
+export const guarded = (view: EngineView): EngineView => guardedView(view, gapsCalculator.reads, { unit: 'gaps' });
 
-/**
- * The view as the scheduler hands it to `gaps`: as it is, since `gaps` guards each of its two parts by its own reads, so
- * a read either does not declare throws (C41).
- */
-export const guarded = (view: EngineView): EngineView => view;
+/** `gaps` stepped by its tests: its output reads the view its accumulator was last folded on (C31.2). */
+export const gaps = scheduled(gapsCalculator);
 
 /** `init` over the guarded view, as on a fresh run. */
 export const run = (view: EngineView): GapsOutput => gaps.output(gaps.init(guarded(view)));

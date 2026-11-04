@@ -24,7 +24,7 @@ const view = engineView({
   },
 });
 const calc = gaps.calculators.find((c) => c.id === GAPS) as IncrementalCalculator<unknown, GapsOutput>;
-const out = calc.output(calc.init(view));
+const out = calc.output(calc.init(view), view);
 
 const select = (topic: string, params: object): unknown => {
   const b = gaps.topics.find((t) => t.topic === topic) as Extract<TopicBinding, { from: string }> | undefined;

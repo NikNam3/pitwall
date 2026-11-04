@@ -2,7 +2,7 @@
 // in Q2, car 14 (the player) leaves the out lap at the line and runs its flying lap 1 to the line; ten other cars
 // complete a lap whose start lies before the segment. One replay through the engine, `lap-times` and `car-bands` feeds every test.
 import { beforeAll, describe, expect, it } from 'vitest';
-import { carBandsCalculator, classifyLap, LAP_CLASSES_CONFIG, LAP_TIMES, LAP_TIMES_CONFIG, lapTimesCalculator, lapTimesHistoryCalculator, type LapTimesOutput } from '@pitwall/analysis';
+import { carBandsCalculator, classifyLap, LAP_CLASSES_CONFIG, LAP_TIMES, LAP_TIMES_CONFIG, lapTimesCalculator, type LapTimesOutput } from '@pitwall/analysis';
 import type { Known, LapRecord } from '@pitwall/domain';
 import type { DeepReadonly, EngineState } from '@pitwall/engine';
 import { InvariantChecker } from '../../../../packages/engine/test/support/invariants.ts';
@@ -19,7 +19,7 @@ beforeAll(async () => {
   const checker = new InvariantChecker();
   let lapTimes: LapTimesOutput | undefined;
   const bands = bandsAgainstPackets();
-  const runner = await replayScheduled(segmentPath('qualifying-singapore-full-lap.pwrec.gz'), [lapTimesHistoryCalculator, lapTimesCalculator, carBandsCalculator], (r, scheduled, frame) => {
+  const runner = await replayScheduled(segmentPath('qualifying-singapore-full-lap.pwrec.gz'), [lapTimesCalculator, carBandsCalculator], (r, scheduled, frame) => {
     try {
       checker.check(r);
     } catch (error) {

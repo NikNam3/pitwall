@@ -4,7 +4,6 @@ import { describe, expect, it } from 'vitest';
 import { GAPS, GAPS_CONFIG, type GapsOutput } from '../../src/gaps/index.ts';
 import { gapsCalculator } from '../../src/gaps/calculator.ts';
 import { gapperLines, gapsToCar } from '../../src/gaps/gaps.ts';
-import { gapsHistoryCalculator } from '../../src/index.ts';
 import { crossings, field, neutralisation, openNeutralisation } from '../../../../test-support/builders/index.ts';
 import { byTime, carsFor, deltaOf, gaps, guarded, offsetRace, plain, progressOf, run, viewOf } from './race.ts';
 
@@ -23,15 +22,11 @@ const neighbours = (out: GapsOutput, our: number) => out.neighbourhood.find((n) 
 const threeCars = () => field({ cars: 3, laps: 5, paceMs: [90_000, 91_000, 92_000] }).crossings;
 
 describe('gaps calculator', () => {
-  // Restated in Task 22 round 2 (C31.2): `gaps` is quick and reads its fold `gaps-history`, which folds the mini-sectors.
-  it('is the quick calculator `gaps` over its fold of the mini-sectors (`gaps-history`, incremental) and timing, due every frame', () => {
+  it('is the incremental calculator `gaps` over the mini-sectors and timing, due every frame', () => {
     expect(gapsCalculator.id).toBe(GAPS);
-    expect(gapsCalculator.kind).toBe('quick');
+    expect(gapsCalculator.kind).toBe('incremental');
     expect(gapsCalculator.cadence).toBe('frame');
-    expect(gapsCalculator.reads).toContainEqual({ calculator: 'gaps-history' });
-    expect(gapsHistoryCalculator.kind).toBe('incremental');
-    expect(gapsHistoryCalculator.reads).toContain('miniSectors');
-    expect(gaps.reads()).toEqual(expect.arrayContaining(['miniSectors', 'timing']));
+    expect(gapsCalculator.reads).toEqual(expect.arrayContaining(['miniSectors', 'timing']));
   });
 
   it('reads identity, so a playerCar change re-runs it', () => {
@@ -650,7 +645,7 @@ describe('the gapper phases', () => {
   const fixed = { kind: 'fixed', lapMs: 90_000 } as const;
 
   it('reads the session phases of every weekend phase, so a neutralisation or suspension that opens or closes re-runs it (C41)', () => {
-    expect(gaps.reads()).toEqual(expect.arrayContaining(['spans:session-phase-race', 'spans:session-phase-qualifying', 'spans:session-phase-practice']));
+    expect(gapsCalculator.reads).toEqual(expect.arrayContaining(['spans:session-phase-race', 'spans:session-phase-qualifying', 'spans:session-phase-practice']));
   });
 
   it("places a phase at the leader's newest crossing at its start and at its end: completed laps + mini-sectors / 50", () => {

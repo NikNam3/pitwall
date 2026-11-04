@@ -5,25 +5,19 @@ import { describe, expect, it } from 'vitest';
 import { crossings, field } from '../../../../test-support/builders/index.ts';
 import { lapTimesCalculator } from '../../src/lap-times/calculator.ts';
 import { LAP_TIMES } from '../../src/lap-times/index.ts';
-import { lapTimesHistoryCalculator } from '../../src/index.ts';
 import { activeCars, guarded, lapTimes, rowOf, run, scene, sectorLap } from './scene.ts';
 
 describe('lap-times calculator', () => {
-  // Restated in Task 22 round 2 (C31.2): `lap-times` is quick and reads its fold `lap-times-history` of the laps and the
-  // mini-sectors; the reads below are the two parts' together.
-  it('is the quick calculator `lap-times` over its fold of the laps and the mini-sectors (`lap-times-history`, incremental)', () => {
+  it('is the incremental calculator `lap-times` over the laps and the mini-sectors', () => {
     expect(lapTimesCalculator.id).toBe(LAP_TIMES);
-    expect(lapTimesCalculator.kind).toBe('quick');
-    expect(lapTimesCalculator.reads).toContainEqual({ calculator: 'lap-times-history' });
-    expect(lapTimesHistoryCalculator.kind).toBe('incremental');
-    expect(lapTimesHistoryCalculator.reads).toEqual(expect.arrayContaining(['laps', 'miniSectors']));
-    expect(lapTimes.reads()).toEqual(expect.arrayContaining(['laps', 'miniSectors', 'timing', 'session']));
+    expect(lapTimesCalculator.kind).toBe('incremental');
+    expect(lapTimesCalculator.reads).toEqual(expect.arrayContaining(['laps', 'miniSectors', 'timing', 'session']));
     // the situations it takes its behaviour from (C41, C44): the table covers each of these machines
     expect(lapTimesCalculator.reads).toEqual(
       expect.arrayContaining(['spans:weekend-phase', 'spans:car-status', 'spans:car-location', 'spans:car-activity-race', 'spans:car-activity-qualifying', 'spans:car-activity-practice']),
     );
     // nothing in the outputs needs the pace calculator
-    expect(lapTimes.reads()).not.toContainEqual({ calculator: 'pace' });
+    expect(lapTimesCalculator.reads).not.toContainEqual({ calculator: 'pace' });
   });
 
   it('has a row per car in the session (car-status not absent), whatever `car.active` says', () => {

@@ -315,7 +315,7 @@ export function guarded(calc: Calculator, onRead?: (path: string) => void): Calc
   const insights = calc.insights;
   const withInsights = insights && { insights: (out: unknown, prev: unknown, view: EngineView) => insights(out, prev, g(view)) };
   if (calc.kind === 'quick') return { ...calc, compute: (view) => calc.compute(g(view)), ...withInsights };
-  return { ...calc, init: (view) => calc.init(g(view)), update: (acc, d, view) => calc.update(acc, d, g(view)), ...withInsights };
+  return { ...calc, init: (view) => calc.init(g(view)), update: (acc, d, view) => calc.update(acc, d, g(view)), output: (acc, view) => calc.output(acc, g(view)), ...withInsights };
 }
 
 /** A unit's from-scratch computation (C31.1): `compute` of a quick unit, `init` of an incremental one. */
@@ -419,7 +419,7 @@ export function expectScheduledIncremental<Acc, Out>(calc: IncrementalCalculator
     const input = inputOf(r);
     const { ran, outputs } = scheduler.run(input);
     const fresh = guardedView({ ...input, outputs: new Map() }, calc.reads, { unit: calc.id });
-    if (ran.includes(calc.id)) expect(outputs.get(calc.id), `frame ${i}`).toEqual(calc.output(calc.init(fresh)));
+    if (ran.includes(calc.id)) expect(outputs.get(calc.id), `frame ${i}`).toEqual(calc.output(calc.init(fresh), fresh));
     i++;
   };
   for (const frame of frames) runner.apply(frame, check);

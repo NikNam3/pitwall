@@ -2,7 +2,7 @@
 // track, at 914.178 s with the VSC; cut mid-race, so the race is joined after the lights out); facts in
 // fixtures/index.json. The engine plus battle and the calculators it reads.
 import { describe, expect, it } from 'vitest';
-import { BATTLE, battleCalculator, gapsCalculator, gapsHistoryCalculator, paceCalculator, paceHistoryCalculator, type BattleOutput } from '@pitwall/analysis';
+import { BATTLE, battleCalculator, gapsCalculator, paceCalculator, type BattleOutput } from '@pitwall/analysis';
 import type { DrsStatus } from '@pitwall/domain';
 import { replayScheduled } from './engine-replay.ts';
 import { segmentPath } from './replay.ts';
@@ -12,7 +12,7 @@ const DRSD_AT = 914_178;
 /** The session time and every card's DRS status of each battle run over the segment, in order. */
 async function drsRuns(file: string): Promise<{ at: number; drs: DrsStatus[] }[]> {
   const runs: { at: number; drs: DrsStatus[] }[] = [];
-  await replayScheduled(segmentPath(file), [battleCalculator, gapsHistoryCalculator, gapsCalculator, paceHistoryCalculator, paceCalculator], ({ state }, scheduled) => {
+  await replayScheduled(segmentPath(file), [battleCalculator, gapsCalculator, paceCalculator], ({ state }, scheduled) => {
     if (!scheduled.ran.includes(BATTLE)) return;
     const out = scheduled.outputs.get(BATTLE) as BattleOutput;
     runs.push({ at: state.sessionTime, drs: structuredClone(Object.values(out).map((c) => c.drs)) });

@@ -31,7 +31,7 @@ export function expectIncrementalEqualsFromScratch<Acc, Out>(
   const check = ({ state, changed, delta }: StepResult) => {
     const view: EngineView = { live: state, situation: situationOf(state), history: state.history, changed, delta, weekend: state.weekend, feed, config: {}, priors: {}, outputs: new Map() };
     acc = acc === undefined || delta.rewound !== undefined ? { value: calc.init(view) } : { value: calc.update(acc.value, delta, view) };
-    expect(calc.output(acc.value), `frame ${i}`).toEqual(calc.output(calc.init(view)));
+    expect(calc.output(acc.value, view), `frame ${i}`).toEqual(calc.output(calc.init(view), view));
     i++;
   };
   // the frames before the first Participants wait in the runner (its identity wait); `end` applies what still waits
