@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { carId, OUT_OF_RACE_STATUSES, type FeedId, type ResultStatus } from '@pitwall/domain';
+import { carId, driverKeyString, OUT_OF_RACE_STATUSES, type FeedId, type ResultStatus } from '@pitwall/domain';
 import { initialState, situationOf, step, type EngineState, type StepOutput } from '../../src/index.ts';
 import { readSignals } from '../../src/signals/read.ts';
 import { carsInSessionOf } from '../../src/situations/car-status/in-session.ts';
@@ -19,26 +19,36 @@ const inSession = (st: EngineState, n: number): boolean[] => {
 };
 
 describe('car identity', () => {
-  it('AI: DriverKey by driverId, public', () => {
+  // Task 24 (user): `aiControlled` is a signal (C12, C13), so a DriverKey is the driver's name and network id only
+  it('AI: DriverKey by name and network id, public', () => {
     const { st } = run(new ScenarioBuilder({ cars: 4 }).frames(1, () => {}));
-    expect(st.cars[2]!.identity).toMatchObject({ name: 'DRIVER 2', teamId: 1,raceNumber: 3, driverKey: { kind: 'ai', driverId: 2 }, visibility: 'public' });
+    expect(st.cars[2]!.identity).toMatchObject({ name: 'DRIVER 2', teamId: 1, raceNumber: 3, driverKey: { name: 'DRIVER 2', networkId: 255 }, visibility: 'public' });
   });
   it('player = header.playerCarIndex: human DriverKey, own, holds ownCar', () => {
     const { st } = run(new ScenarioBuilder({ cars: 4, player: 3 }).frames(1, () => {}));
     expect(st.playerCar).toBe(3);
-    expect(st.cars[3]!.identity).toMatchObject({ driverKey: { kind: 'human', networkId: 0, name: 'DRIVER 3', raceNumber: 4 }, visibility: 'own' });
+    expect(st.cars[3]!.identity).toMatchObject({ driverKey: { name: 'DRIVER 3', networkId: 0 }, visibility: 'own' });
     expect([st.cars[3]!.ownCar !== undefined, st.cars[0]!.ownCar]).toEqual([true, undefined]);
   });
   it('human non-player with yourTelemetry 0 is restricted; 1 is public; AI is public regardless', () => {
     const { st } = run(new ScenarioBuilder({ cars: 4 }).participants({ participants: { 1: { aiControlled: 0, networkId: 5, yourTelemetry: 0 },
       2: { aiControlled: 0, networkId: 6, yourTelemetry: 1 }, 3: { yourTelemetry: 0 } } }).frames(1, () => {}));
     expect([1, 2, 3].map((i) => st.cars[i]!.identity.visibility)).toEqual(['restricted', 'public', 'public']);
-    expect(st.cars[1]!.identity.driverKey).toEqual({ kind: 'human', networkId: 5, name: 'DRIVER 1', raceNumber: 2 });
+    expect(st.cars[1]!.identity.driverKey).toEqual({ name: 'DRIVER 1', networkId: 5 });
   });
-  it('driverKeyOf is the one DriverKey rule: AI by driverId, human by networkId, name and raceNumber', () => {
+  it('driverKeyOf is the one DriverKey rule: the name and the network id, AI or human', () => {
     const p = new ScenarioBuilder({ cars: 4, player: 3 }).frames(1, () => {}).build()[0]!.participants!;
-    expect(driverKeyOf(p, 2)).toEqual({ kind: 'ai', driverId: 2 });
-    expect(driverKeyOf(p, 3)).toEqual({ kind: 'human', networkId: 0, name: 'DRIVER 3', raceNumber: 4 });
+    expect(driverKeyOf(p, 2)).toEqual({ name: 'DRIVER 2', networkId: 255 });
+    expect(driverKeyOf(p, 3)).toEqual({ name: 'DRIVER 3', networkId: 0 });
+  });
+  it('two drivers with the same name and network id share one key (an AI and a human alike)', () => {
+    const p = new ScenarioBuilder({ cars: 4 }).participants({ participants: {
+      1: { aiControlled: 1, name: 'SAME', networkId: 7, driverId: 3, raceNumber: 10 },
+      2: { aiControlled: 0, name: 'SAME', networkId: 7, driverId: 4, raceNumber: 20 },
+    } }).frames(1, () => {}).build()[0]!.participants!;
+    expect(driverKeyOf(p, 1)).toEqual({ name: 'SAME', networkId: 7 });
+    expect(driverKeyOf(p, 2)).toEqual(driverKeyOf(p, 1));
+    expect(driverKeyString(driverKeyOf(p, 2))).toBe(driverKeyString(driverKeyOf(p, 1)));
   });
   it('the cars in the session follow numActiveCars', () => {
     const { st } = run(new ScenarioBuilder({ cars: 4 }).participants({ numActiveCars: 3 }).frames(1, () => {}));

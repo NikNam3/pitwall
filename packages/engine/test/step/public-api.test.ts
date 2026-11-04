@@ -4,9 +4,10 @@ import { buildPacket } from '../builders/index.ts';
 
 describe('step public API', () => {
   it('the package index exports the one driverKeyOf', () => {
-    const p = buildPacket('participants', { participants: { 0: { aiControlled: 1, driverId: 9 } } });
-    expect(driverKeyOf(p, 0)).toEqual({ kind: 'ai', driverId: 9 });
-    expect(driverKeyOf(p, 99)).toEqual({ kind: 'ai', driverId: 255 });
+    // Task 24 (user): a DriverKey is the name and the network id; a slot the packet lacks reads as no name on 255
+    const p = buildPacket('participants', { participants: { 0: { aiControlled: 1, driverId: 9, name: 'NINE', networkId: 255 } } });
+    expect(driverKeyOf(p, 0)).toEqual({ name: 'NINE', networkId: 255 });
+    expect(driverKeyOf(p, 99)).toEqual({ name: '', networkId: 255 });
   });
   it('CHANGE_TAGS lists each tag once and is the source of ChangeTag', () => {
     expect(new Set(CHANGE_TAGS).size).toBe(CHANGE_TAGS.length);

@@ -50,8 +50,8 @@ describe('SessionRunner retention', () => {
 
   it('carries the read-only weekend context over a rewind by reference', () => {
     const original = timeline(300, [100, 250]);
-    const driverKey = { kind: 'ai', driverId: 1 } as const;
-    const weekend: WeekendContext = { weekendId: 'w', driverKey, sessions: [{ sessionUid: '1' as SessionUid, sessionType: 1, drivers: [{ driverKey, laps: [], stints: [], pitStops: [] }] }] };
+    const driverKey = { name: 'DRIVER 1', networkId: 255 };
+    const weekend: WeekendContext = { weekendId: 'w', driverKey, sessions: [{ sessionUid: '1' as SessionUid, sessionType: 'practice:practice:1', drivers: [{ driverKey, laps: [], stints: [], pitStops: [] }] }] };
     const r = new SessionRunner(initFor(original), { contextFor: () => weekend });
     runAll(r, original);
     expect(applyOne(r, { ...original[201]!, overallFrameId: 300 }).delta.rewound).toBeDefined();

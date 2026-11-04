@@ -81,7 +81,6 @@ describe('step-1 modules: each tags its own area, only when it wrote something',
     ['applySession', applySession, ['session'], ['session']],
     ['applyIdentity', applyIdentity, ['participants'], ['identity']],
     ['applyTiming (LapData)', applyTiming, ['lapData'], ['timing']],
-    ['applyTiming (the FIA flag from Car Status)', applyTiming, ['status'], ['timing']],
     ['applyTyres (compound and age from Car Status)', applyTyres, ['status'], ['tyres']],
     ['applyTyres (temperatures and pressures from Car Telemetry)', applyTyres, ['telemetry'], ['tyres']],
     ['applyTyres (wear, damage and blisters from Car Damage)', applyTyres, ['damage'], ['tyres']],
@@ -133,8 +132,9 @@ describe('step: the tags of a whole frame', () => {
   it('a frame without packets sets no tag', () => {
     expect(tagsOfStep([])).toEqual([]);
   });
+  // Task 24: the FIA flag, timing's only Car Status field, is a signal; Car Status feeds no timing value
   it('Car Status alone tags every area it feeds', () => {
-    expect(tagsOfStep(['status'])).toEqual(['dynamics', 'energy', 'ownCar', 'timing', 'tyres']);
+    expect(tagsOfStep(['status'])).toEqual(['dynamics', 'energy', 'ownCar', 'tyres']);
   });
   it('Car Telemetry alone tags tyres, condition and dynamics', () => {
     expect(tagsOfStep(['telemetry'])).toEqual(['condition', 'dynamics', 'tyres']);

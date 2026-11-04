@@ -121,7 +121,9 @@ describe('energy, condition, dynamics', () => {
         worldVelocityZ: -4.5, gForceLateral: 1.5, gForceLongitudinal: -2, gForceVertical: 0.5, yaw: 0.5, pitch: 0.25, roll: -0.125 });
     }));
     expect(st.cars[1]!.dynamics).toEqual(known({ speedKmh: 312, throttle: 0.75, brake: 0.25, steer: -0.5, clutchPct: 0, gear: 7, rpm: 11_500, maxRpm: 13_000,
-      revLightsPct: 80, drs: true, drsAllowed: true, drsActivationDistanceM: 120, pitLimiter: true }, 0));
+      revLightsPct: 80, drs: true, drsActivationDistanceM: 120, pitLimiter: true }, 0));
+    // Task 24 (C13): drsAllowed is a signal: `state.signals`, not the dynamics
+    expect(st.signals.cars[1]!.drsAllowed).toBe(true);
     expect(st.cars[1]!.motion).toEqual({ position: { x: 100.5, y: 2.25, z: -30 },
       velocityMps: { x: 80, y: 0, z: -4.5 }, gForce: { lateral: 1.5, longitudinal: -2, vertical: 0.5 }, orientation: { yawRad: 0.5, pitchRad: 0.25, rollRad: -0.125 } });
   });

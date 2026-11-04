@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import type { FeedId } from '@pitwall/domain';
 import { initialState, situationOf, step } from '../../src/index.ts';
 import { carsInSessionOf } from '../../src/situations/car-status/in-session.ts';
-import { sessionKindOf } from '../../src/step/state-update/session.ts';
 import { buildPacket, ScenarioBuilder } from '../builders/index.ts';
 
 const feedId = 'test' as FeedId;
@@ -31,8 +30,6 @@ describe('session state', () => {
       carDamageRate: 'simulation', lowFuelMode: 'hard', recoveryMode: 'flashbacks', flashbackLimit: 'unlimited', surfaceType: 'realistic',
       collisions: 'playerToPlayerOff', pitLaneTyreSim: true, parcFerme: true });
   });
-  it.each([[0, 'unknown'], [1, 'practice'], [4, 'practice'], [5, 'qualifying'], [9, 'qualifying'], [10, 'sprintShootout'], [14, 'sprintShootout'],
-    [15, 'race'], [17, 'race'], [18, 'timeTrial'], [19, 'unknown']] as const)('sessionType %i is %s', (code, kind) => expect(sessionKindOf(code)).toBe(kind));
   it('initialState: 22 cars by id, player from the header, unknown data, empty history', () => {
     const st = initialState({ feedId, sessionUid: 0xb3cd07e2790bdcben, session: buildPacket('session', { header: { playerCarIndex: 4, frameIdentifier: 9 } }) });
     expect(st.cars.map((c) => c.id)).toEqual([...Array(22).keys()]);

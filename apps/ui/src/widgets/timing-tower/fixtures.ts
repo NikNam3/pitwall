@@ -32,7 +32,7 @@ export function overview(id: number, o: CarOptions): CarOverview {
     id: carId(id),
     identity: {
       name: o.name, teamId: 0, raceNumber: id + 1, nationality: 0, driverId: id, networkId: 255, myTeam: false,
-      platform: 0, telemetryPublic: true, driverKey: { kind: 'ai', driverId: id }, visibility: o.ours === true ? 'own' : 'public',
+      platform: 0, telemetryPublic: true, driverKey: { name: o.name, networkId: 255 }, visibility: o.ours === true ? 'own' : 'public',
     } as CarOverview['identity'],
     timing: {
       position: o.position, lap: o.lap ?? 23, lapDistanceM: 1000, totalDistanceM: 100_000, currentLapTimeMs: 30_000,

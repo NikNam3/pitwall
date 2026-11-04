@@ -1,6 +1,6 @@
 // The engine on committed segments of normal sessions, one behaviour per segment (facts verified in fixtures/index.json).
 import { describe, expect, it } from 'vitest';
-import { currentLaps, driverKeyString, type LapRecord } from '@pitwall/domain';
+import { currentLaps, type LapRecord } from '@pitwall/domain';
 import { situationOf, type FlashbackInfo, type StepResult } from '@pitwall/engine';
 import { InvariantChecker } from '../../../../packages/engine/test/support/invariants.ts';
 import { carsInSession as inSession, replayRunner } from './engine-replay.ts';
@@ -51,15 +51,17 @@ describe('race-zandvoort-lap10: car 1 (the player) crosses the line into lap 10'
   });
 
   // Task 24 (C13): the session type, kind and numActiveCars are signals (`state.signals`); the race is the weekend phase
-  it('session and identity: online race, two humans, the player at index 1, AI cars keyed by driver id', async () => {
+  it('session and identity: online race, two humans, the player at index 1, every car keyed by its name and network id', async () => {
     const { state } = await run('race-zandvoort-lap10.pwrec.gz');
     expect(state.session).toMatchObject({ trackId: 26, totalLaps: 72, trackLengthM: 4258, networkGame: true });
     expect(situationOf(state).weekendPhase).toMatchObject({ kind: 'race' });
     expect([state.signals.session.sessionType, state.signals.session.numActiveCars]).toEqual([15, 20]);
     expect([state.playerCar, state.teammateCar]).toEqual([1, 4]);
-    expect(state.cars[1]!.identity).toMatchObject({ visibility: 'own', driverKey: { kind: 'human', networkId: 1 } });
-    expect(state.cars[0]!.identity).toMatchObject({ visibility: 'public', driverKey: { kind: 'human', networkId: 0 } });
-    expect(driverKeyString(state.cars[2]!.identity.driverKey)).toBe('ai:112');
+    expect(state.cars[1]!.identity).toMatchObject({ visibility: 'own', driverKey: { networkId: 1 } });
+    expect(state.cars[0]!.identity).toMatchObject({ visibility: 'public', driverKey: { networkId: 0 } });
+    // Task 24 (user): the key is the name and the network id, AI or human (`aiControlled` is a signal)
+    const { name, networkId, driverKey } = state.cars[2]!.identity;
+    expect(driverKey).toEqual({ name, networkId });
     expect(inSession(state)).toEqual(Array.from({ length: 20 }, (_, i) => i));
   });
 

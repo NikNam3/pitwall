@@ -8,8 +8,8 @@ import { IDENTITY_WAIT_FRAMES, SessionRunner, type Frame, type WeekendContext } 
 import { initFor } from '../support/run.ts';
 import { applyOne, timeline } from '../support/runner.ts';
 
-const driverKey = { kind: 'ai', driverId: 1 } as const;
-const WEEKEND: WeekendContext = { weekendId: 'w', driverKey, sessions: [{ sessionUid: '1' as SessionUid, sessionType: 1, drivers: [{ driverKey, laps: [], stints: [], pitStops: [] }] }] };
+const driverKey = { name: 'DRIVER 1', networkId: 255 };
+const WEEKEND: WeekendContext = { weekendId: 'w', driverKey, sessions: [{ sessionUid: '1' as SessionUid, sessionType: 'practice:practice:1', drivers: [{ driverKey, laps: [], stints: [], pitStops: [] }] }] };
 
 /** The frame without its Participants packet. */
 const withoutParticipants = ({ participants: _participants, ...frame }: Frame): Frame => frame;
@@ -49,8 +49,8 @@ describe('SessionRunner: the identity wait', () => {
       participants: {
         playerCar: carId(0),
         drivers: [
-          { carId: carId(0), driverKey: { kind: 'human', networkId: 0, name: 'DRIVER 0', raceNumber: 1 } },
-          { carId: carId(1), driverKey: { kind: 'ai', driverId: 1 } },
+          { carId: carId(0), driverKey: { name: 'DRIVER 0', networkId: 0 } },
+          { carId: carId(1), driverKey: { name: 'DRIVER 1', networkId: 255 } },
         ],
       },
       resultsBefore: 0,
