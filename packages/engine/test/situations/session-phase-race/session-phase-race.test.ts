@@ -8,7 +8,7 @@
 // session-phase-race.segments.test.ts; the formation lap's hiding in ../formation.test.ts.
 import { describe, expect, it } from 'vitest';
 import { sessionPhaseRaceSpans } from '@pitwall/domain';
-import { activeFlagPhaseOf, SessionRunner, type ChangeTag, type StepResult } from '../../../src/index.ts';
+import { SessionRunner, type ChangeTag, type StepResult } from '../../../src/index.ts';
 import machine from '../../../src/situations/session-phase-race/machine.ts';
 import { situationOf } from '../../../src/situations/run.ts';
 import type { Situation } from '../../../src/situations/situation.ts';
@@ -148,9 +148,10 @@ describe('a neutralisation (SC, VSC)', () => {
     ]);
     expect(current(runner)).toMatchObject({ kind: 'racing', start: raceAt(EXPIRY), startFrame: raceFrame(EXPIRY) + 1, confirmed: true });
   });
-  it('a deployment never confirmed leaves no flag phase', () => {
+  it('a deployment never confirmed leaves only a neutralised span with `confirmed: false`, and none open (C18)', () => {
     const { runner } = race(EXPIRY + 10, { 50: { events: [scar(1, 0)] } });
-    expect([runner.state.history.flagPhases, activeFlagPhaseOf(runner.state)]).toEqual([[], undefined]);
+    expect(closed(runner).filter((s) => s.kind === 'neutralised').map((s) => s.confirmed)).toEqual([false]);
+    expect(current(runner)?.kind).toBe('racing');
   });
   it('an SC deployed while a VSC is on closes the VSC and opens the SC at the same time', () => {
     const { runner } = race(150, { 50: { events: [scar(2, 0)] }, 60: { session: status(2) }, 100: { events: [scar(1, 0)] },
@@ -167,11 +168,14 @@ describe('a neutralisation (SC, VSC)', () => {
       detail: { stages: [{ stage: 'deployed' }, { stage: 'resume', at: raceAt(100) }] } }]);
     expect(current(runner)).toMatchObject({ kind: 'racing', start: raceAt(100) });
   });
-  it('the flag phases readers still get come from the neutralised span, with the leader laps of the frames it opened and closed on', () => {
+  it('readers get the neutralisation as the span with its stages, and the leader laps from the projection\'s laps between its frames (Task 19, ruling 3)', () => {
     const { runner } = race(200, { 50: { events: [scar(1, 0)] }, 60: { session: status(1) }, 120: { cars: (d) => lap(d, 0, { currentLapNum: 2, lastLapTimeInMs: 100_000 }) },
       150: { events: [scar(1, 3)] }, 160: { session: status(0) } });
-    expect(runner.state.history.flagPhases).toMatchObject([{ kind: 'SC', start: raceAt(50), end: raceAt(150), startLeaderLap: 1, endLeaderLap: 2,
-      scPhases: [{ phase: 'deployed', at: raceAt(50) }, { phase: 'resume', at: raceAt(150) }] }]);
+    const sc = closed(runner).filter((s) => s.kind === 'neutralised');
+    expect(sc).toMatchObject([{ start: raceAt(50), end: raceAt(150), confirmed: true,
+      detail: { car: 'SC', stages: [{ stage: 'deployed', at: raceAt(50) }, { stage: 'resume', at: raceAt(150) }] } }]);
+    const [span] = sc;
+    expect(runner.state.history.laps.filter((l) => l.carId === 0 && l.lapNumber === 1).map((l) => span!.startFrame <= l.frame && l.frame < span!.endFrame)).toEqual([true]);
   });
 });
 
@@ -224,7 +228,6 @@ describe('a suspension (red flag)', () => {
     ]);
     expect(current(runner)).toMatchObject({ kind: 'racing', start: raceAt(160) });
     expect(results[raceFrame(160)]!.delta.rewound).toBeUndefined();
-    expect(runner.state.history.flagPhases).toMatchObject([{ kind: 'red', start: raceAt(50), end: raceAt(100) }]);
   });
   it('while it lasts the suspension does not know its restart', () => {
     const { runner } = race(80, { 50: { events: [RDFL] } });
@@ -390,8 +393,8 @@ describe('a flashback across a span boundary (Review Focus 1)', () => {
     expect(current(runner)).toMatchObject({ id: 3, kind: 'neutralised', start: raceAt(50), confirmed: true, detail: { stages: [{ stage: 'deployed', at: raceAt(50) }] } });
     for (const f of after(fork, raceFrame(82), raceFrame(202))) runner.apply(f);
     const fresh = run(fork).runner;
-    expect({ spans: closed(runner), open: situationOf(runner.state).byMachine[MACHINE], flags: runner.state.history.flagPhases })
-      .toEqual({ spans: closed(fresh), open: situationOf(fresh.state).byMachine[MACHINE], flags: fresh.state.history.flagPhases });
+    expect({ spans: closed(runner), open: situationOf(runner.state).byMachine[MACHINE] })
+      .toEqual({ spans: closed(fresh), open: situationOf(fresh.state).byMachine[MACHINE] });
   });
 });
 

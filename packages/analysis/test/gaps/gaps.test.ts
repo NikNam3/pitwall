@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { GAPS, GAPS_CONFIG, type GapsOutput } from '../../src/gaps/index.ts';
 import { gapsCalculator } from '../../src/gaps/calculator.ts';
 import { gapperLines, gapsToCar } from '../../src/gaps/gaps.ts';
-import { crossings, field, flagPhase } from '../../../../test-support/builders/index.ts';
+import { crossings, field, neutralisation, openNeutralisation } from '../../../../test-support/builders/index.ts';
 import { byTime, carsFor, deltaOf, offsetRace, plain, progressOf, run, viewOf } from './race.ts';
 
 /** A known value (with -0 as 0), or the reason it is unknown. */
@@ -648,8 +648,11 @@ describe('the gapper line of a car out of the race', () => {
   });
 });
 
-// Phase bands in the leader's progress (review RU4, wave 2 T6): the gapper carries the race's SC, VSC and red-flag
-// phases on the chart's x, from the crossings at the phase start and end, so a band that ended mid-lap ends there.
+// Phase bands in the leader's progress (review RU4, wave 2 T6): the gapper carries the race's neutralisations (SC, VSC)
+// and suspensions (red flag) on the chart's x, from the crossings at the span's start and end, so a band that ended
+// mid-lap ends there. Since Task 19 they are the session-phase spans (C20): the closed `neutralised` and `suspended`
+// spans of the projection plus the open one of the situation (`shared/neutralised.ts`); a `neutralised` span closed
+// with `confirmed: false` is no neutralisation (C18, C43), an open one still waiting for its confirmation is one.
 describe('the gapper phases', () => {
   /** Car 0 laps in 90 s (a mini-sector every 1.8 s) and leads throughout; car 1 laps in 92 s. 8 laps from 0. */
   const eightLaps = () => field({ cars: 2, laps: 8, paceMs: [90_000, 92_000] }).crossings;
@@ -659,31 +662,31 @@ describe('the gapper phases', () => {
   const round = (x: number) => Math.round(x * 1e6) / 1e6;
   const fixed = { kind: 'fixed', lapMs: 90_000 } as const;
 
-  it('reads the flag phases, so a phase that opens or closes re-runs it', () => {
-    expect(gapsCalculator.reads).toContain('flagPhases');
+  it("reads the race's session phases, so a neutralisation that opens or closes re-runs it", () => {
+    expect(gapsCalculator.reads).toContain('spans:session-phase-race');
   });
 
   it("places a phase at the leader's newest crossing at its start and at its end: completed laps + mini-sectors / 50", () => {
     // SC from 200 500 to 299 999: the leader last crossed (3, 11) at 199 800 and (4, 16) at 298 800
-    const sc = flagPhase({ kind: 'SC', start: 200_500, end: 299_999, startLeaderLap: 3, endLeaderLap: 4 });
-    const lines = gapperLines(run(viewOf(eightLaps(), { flagPhases: [sc] })), fixed);
+    const sc = neutralisation({ kind: 'SC', start: 200_500, end: 299_999 });
+    const lines = gapperLines(run(viewOf(eightLaps(), { phases: [sc] })), fixed);
     expect(phasesOf(lines)).toEqual([['SC', 2.22, 3.32]]);
   });
 
   it('places a phase that ended laps ago from the crossings of that time, not the recent ones', () => {
     // the race is at the end of lap 8; the VSC ran from (2, 5) at 99 000 to (2, 40) at 162 000
-    const vsc = flagPhase({ kind: 'VSC', start: 99_000, end: 162_000, startLeaderLap: 2, endLeaderLap: 2 });
-    const lines = gapperLines(run(viewOf(eightLaps(), { flagPhases: [vsc] })), fixed);
+    const vsc = neutralisation({ kind: 'VSC', start: 99_000, end: 162_000 });
+    const lines = gapperLines(run(viewOf(eightLaps(), { phases: [vsc] })), fixed);
     expect(phasesOf(lines)).toEqual([['VSC', 1.1, 1.8]]);
   });
 
   it('gives the open phase its start and toLap notApplicable, after the closed ones in their order', () => {
-    // up to 560 s: an SC and a red flag closed, a VSC open since 500 000, where the leader last crossed (6, 27) at 498 600
+    // up to 560 s: an SC and a red flag (a suspension) closed, a VSC open since 500 000, where the leader last crossed (6, 27) at 498 600
     const ms = eightLaps().filter((m) => m.at <= 560_000);
-    const sc = flagPhase({ kind: 'SC', start: 199_800, end: 298_800, startLeaderLap: 3, endLeaderLap: 4 });
-    const red = flagPhase({ kind: 'red', start: 360_000, end: 405_000, startLeaderLap: 5, endLeaderLap: 5 });
-    const open = { kind: 'VSC', start: 500_000, startLeaderLap: 6, scPhases: [] } as const;
-    const lines = gapperLines(run(viewOf(ms, { flagPhases: [sc, red], activeFlagPhase: open })), fixed);
+    const sc = neutralisation({ kind: 'SC', start: 199_800, end: 298_800, id: 3 });
+    const red = neutralisation({ kind: 'red', start: 360_000, end: 405_000, id: 5 });
+    const open = openNeutralisation({ kind: 'VSC', start: 500_000, id: 7 });
+    const lines = gapperLines(run(viewOf(ms, { phases: [sc, red], open })), fixed);
     expect(phasesOf(lines)).toEqual([
       ['SC', 2.22, 3.32],
       ['red', 4, 4.5],
@@ -698,15 +701,15 @@ describe('the gapper phases', () => {
       ...[1, 2, 3, 4, 5].flatMap((n) => crossings(carId(0), n, 90_000, (n - 1) * 90_000)),
       ...[1, 2, 3, 4, 5].flatMap((n) => crossings(carId(1), n, 85_000, 3_000 + (n - 1) * 85_000)),
     ]).filter((m) => m.at <= 400_000);
-    const sc = flagPhase({ kind: 'SC', start: 30_000, end: 300_000, startLeaderLap: 1, endLeaderLap: 4 });
-    const out = run(viewOf(ms, { flagPhases: [sc] }));
+    const sc = neutralisation({ kind: 'SC', start: 30_000, end: 300_000 });
+    const out = run(viewOf(ms, { phases: [sc] }));
     expect(out.intervals[0]?.carId).toBe(1);
     expect(phasesOf(gapperLines(out, fixed))).toEqual([['SC', 0.32, 3.48]]);
   });
 
   it('is the same for every reference: the phases do not depend on the virtual car', () => {
-    const sc = flagPhase({ kind: 'SC', start: 200_500, end: 299_999 });
-    const out = run(viewOf(eightLaps(), { flagPhases: [sc] }));
+    const sc = neutralisation({ kind: 'SC', start: 200_500, end: 299_999 });
+    const out = run(viewOf(eightLaps(), { phases: [sc] }));
     expect(gapperLines(out, { kind: 'leaderAverage' }).phases).toEqual(gapperLines(out, fixed).phases);
     expect(gapperLines(out, { kind: 'carAverage', carId: carId(1) }).phases).toEqual(gapperLines(out, fixed).phases);
   });
@@ -715,12 +718,36 @@ describe('the gapper phases', () => {
     expect(gapperLines(run(viewOf(eightLaps())), fixed).phases).toEqual([]);
   });
 
+  it('a `neutralised` span with `confirmed: false` is not a neutralisation for the gapper (C18, C43)', () => {
+    const never = neutralisation({ kind: 'SC', start: 200_500, end: 203_500, confirmed: false });
+    expect(gapperLines(run(viewOf(eightLaps(), { phases: [never] })), fixed).phases).toEqual([]);
+    const vsc = neutralisation({ kind: 'VSC', start: 99_000, end: 162_000, id: 2 });
+    expect(phasesOf(gapperLines(run(viewOf(eightLaps(), { phases: [never, vsc] })), fixed))).toEqual([['VSC', 1.1, 1.8]]);
+  });
+
+  it('an open neutralisation still waiting for its confirmation is on the gapper from its start (ruling 2: the earliest reliable signal, C18)', () => {
+    const ms = eightLaps().filter((m) => m.at <= 250_000);
+    const pending = openNeutralisation({ kind: 'SC', start: 200_500, confirmed: false });
+    expect(phasesOf(gapperLines(run(viewOf(ms, { open: pending })), fixed))).toEqual([['SC', 2.22, 'notApplicable']]);
+  });
+
+  it('a pending neutralisation that closes unconfirmed leaves the gapper: update equals init (C18, C31)', () => {
+    const ms = eightLaps();
+    const waiting = viewOf(ms.filter((m) => m.at <= 202_000), { open: openNeutralisation({ kind: 'SC', start: 200_500, confirmed: false }) });
+    const dropped = viewOf(ms.filter((m) => m.at <= 210_000), { phases: [neutralisation({ kind: 'SC', start: 200_500, end: 203_500, confirmed: false })] });
+    const acc = gapsCalculator.init(waiting);
+    expect(phasesOf(gapperLines(gapsCalculator.output(acc), fixed))).toEqual([['SC', 2.22, 'notApplicable']]);
+    const updated = gapsCalculator.output(gapsCalculator.update(acc, deltaOf(waiting, dropped), dropped));
+    expect(updated).toEqual(run(dropped));
+    expect(gapperLines(updated, fixed).phases).toEqual([]);
+  });
+
   it('update over deltas equals init over the whole history: a phase that opens, then closes', () => {
     const ms = eightLaps();
     const early = ms.filter((m) => m.at <= 250_000);
-    const opening = viewOf(early, { activeFlagPhase: { kind: 'SC', start: 200_500, startLeaderLap: 3, scPhases: [] } });
-    const sc = flagPhase({ kind: 'SC', start: 200_500, end: 299_999, startLeaderLap: 3, endLeaderLap: 4 });
-    const closed = viewOf(ms, { flagPhases: [sc] });
+    const opening = viewOf(early, { open: openNeutralisation({ kind: 'SC', start: 200_500 }) });
+    const sc = neutralisation({ kind: 'SC', start: 200_500, end: 299_999 });
+    const closed = viewOf(ms, { phases: [sc] });
     const acc = gapsCalculator.init(opening);
     expect(phasesOf(gapperLines(gapsCalculator.output(acc), fixed))).toEqual([['SC', 2.22, 'notApplicable']]);
     const updated = gapsCalculator.output(gapsCalculator.update(acc, deltaOf(opening, closed), closed));
@@ -730,8 +757,8 @@ describe('the gapper phases', () => {
 
   it('flashback equals fresh run: a phase the flashback took back is gone', () => {
     const ms = eightLaps();
-    const sc = flagPhase({ kind: 'SC', start: 200_500, end: 299_999 });
-    const full = viewOf(ms, { flagPhases: [sc] });
+    const sc = neutralisation({ kind: 'SC', start: 200_500, end: 299_999 });
+    const full = viewOf(ms, { phases: [sc] });
     const back = viewOf(ms.filter((m) => m.at <= 190_000));
     const acc = gapsCalculator.init(full);
     const truncated = gapsCalculator.output(gapsCalculator.update(acc, deltaOf(full, back, true), back));

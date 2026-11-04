@@ -9,14 +9,18 @@ import {
   type CarId,
   type CarState,
   type Corners,
-  type FlagPhase,
   type LapRecord,
+  type MachineId,
   type MiniSectorCrossing,
   type Ms,
+  type NeutralisedDetail,
+  type OpenSpan,
   type RaceEvent,
   type RaceEventKind,
   type SessionState,
   type SessionTime,
+  type Span,
+  type SuspendedDetail,
 } from '../../packages/domain/src/index.ts';
 import {
   initialState,
@@ -150,9 +154,62 @@ export function event(over: Partial<RaceEvent> & { kind: RaceEventKind }): RaceE
   return { at: 0, params: {}, frame: 0, ...over };
 }
 
-/** A safety-car phase from 0 to 60 s, leader lap 1 to 2, no SC sub-phases; override any field. */
-export function flagPhase(over: Partial<FlagPhase> = {}): FlagPhase {
-  return { kind: 'SC', start: 0, end: 60_000, startLeaderLap: 1, endLeaderLap: 2, scPhases: [], ...over };
+/** The race's session-phase sub-machine: its `neutralised` and `suspended` spans are the neutralisations (C17, C20). */
+export const RACE_PHASES: MachineId = 'session-phase-race';
+
+/** What a neutralisation is: an SC or a VSC (a `neutralised` span, its `detail.car`), or a red flag (a `suspended` span). */
+export type NeutralisationOver = {
+  kind?: 'SC' | 'VSC' | 'red';
+  start?: SessionTime;
+  end?: SessionTime;
+  confirmed?: boolean;
+  id?: number;
+  machine?: MachineId;
+  startFrame?: number;
+  endFrame?: number;
+};
+
+/**
+ * A closed span of a session-phase sub-machine standing for a neutralisation (C17, C20): by default a confirmed SC
+ * (`neutralised`, deployed at its start) of `session-phase-race` from 0 to 60 s, span id 0; `kind: 'red'` is a
+ * `suspended` span whose restart is not yet known. Its frames default to its times (`startFrame = start`,
+ * `endFrame = end`): tests that give their crossings and laps `frame = at` keep frames and times in one order (C26).
+ */
+export function neutralisation({
+  kind = 'SC',
+  start = 0,
+  end = 60_000,
+  confirmed = true,
+  id = 0,
+  machine = RACE_PHASES,
+  startFrame = start,
+  endFrame = end,
+}: NeutralisationOver = {}): Span {
+  const detail: NeutralisedDetail | SuspendedDetail =
+    kind === 'red' ? { restart: { known: false, reason: 'notReceived' } } : { car: kind, stages: [{ stage: 'deployed', at: start }] };
+  return { machine, id, kind: kind === 'red' ? 'suspended' : 'neutralised', start, end, confirmed, detail, startFrame, endFrame };
+}
+
+/** The same span still open, as `view.situation` holds it (C20): no `end`, no `endFrame`. */
+export function openNeutralisation(over: Omit<NeutralisationOver, 'end' | 'endFrame'> = {}): OpenSpan {
+  const { end: _end, endFrame: _endFrame, ...open } = neutralisation(over);
+  return open;
+}
+
+/**
+ * The view parts of these session-phase spans (C20): the closed ones in the projection's `spans`, the open one in the
+ * situation's `byMachine`, each under its machine; the situation is a race (`RACING`) unless `situation` says otherwise.
+ * Pass `spans` in `engineView({ history })` and `situation` as `engineView({ situation })`.
+ */
+export function phaseSpans(
+  closed: readonly Span[] = [],
+  open?: OpenSpan,
+  situation: EngineView['situation'] = RACING,
+): { spans: Record<MachineId, Span[]>; situation: EngineView['situation'] } {
+  const spans: Record<MachineId, Span[]> = {};
+  for (const span of closed) (spans[span.machine] ??= []).push(span);
+  const byMachine = open === undefined ? situation.byMachine : { ...situation.byMachine, [open.machine]: [open] };
+  return { spans, situation: { ...situation, byMachine } };
 }
 
 /**
@@ -324,7 +381,6 @@ export function engineView({
   config = {},
   outputs = new Map(),
   delta,
-  activeFlagPhase,
   situation = RACING,
   feed = {},
   playerCar = 0,
@@ -336,7 +392,6 @@ export function engineView({
   config?: EngineView['config'];
   outputs?: ReadonlyMap<string, unknown>;
   delta?: EngineView['delta'];
-  activeFlagPhase?: EngineView['activeFlagPhase'];
   situation?: EngineView['situation'];
   feed?: Partial<FeedMetricsView>;
   playerCar?: number;
@@ -362,7 +417,6 @@ export function engineView({
     live,
     situation,
     history: full,
-    activeFlagPhase,
     changed: new Set(),
     delta: delta ?? { before: projectionLengths(emptyProjection()), after: lengths },
     weekend: undefined,
@@ -375,7 +429,7 @@ export function engineView({
 
 /** A projection with every list empty. */
 const emptyProjection = (): Projection => ({
-  laps: [], stints: [], pitStops: [], crossings: [], events: [], clock: [], spans: {}, flagPhases: [],
+  laps: [], stints: [], pitStops: [], crossings: [], events: [], clock: [], spans: {},
 });
 
 /** A projection with the given lists and the rest empty: pass it to `engineView({ history })`. */

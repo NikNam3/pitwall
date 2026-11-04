@@ -14,13 +14,13 @@ describe('bindSituation: the topic must carry a sub-machine\'s spans (C55)', () 
     const laps = bindSituation('laps', 'clock');
     // @ts-expect-error session.info carries SessionInfo
     const info = bindSituation('session.info', 'clock');
-    // @ts-expect-error flagPhases carries the legacy flag phases, not spans
-    const flags = bindSituation('flagPhases', 'session-phase-race');
+    // @ts-expect-error stints carries StintRecords, not spans
+    const stints = bindSituation('stints', 'session-phase-race');
     // @ts-expect-error car.detail carries a car's live state
     const car = bindSituation('car.detail', 'car-location');
     // @ts-expect-error an analysis topic carries its analysis's output
     const moment = bindSituation('raceMoment.current', 'session-phase-race');
-    expect([laps, info, flags, car, moment].map((b) => b.topic)).toEqual(['laps', 'session.info', 'flagPhases', 'car.detail', 'raceMoment.current']);
+    expect([laps, info, stints, car, moment].map((b) => b.topic)).toEqual(['laps', 'session.info', 'stints', 'car.detail', 'raceMoment.current']);
   });
 
   it('the binding is a TopicBinding that names the topic and the machine', () => {

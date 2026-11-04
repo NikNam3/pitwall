@@ -51,8 +51,8 @@ describe('Scheduler onCalculatorRun', () => {
           const a = applyOne(ra, f);
           const b = applyOne(rb, f);
           calls.length = 0;
-          const withHook = hooked.run(inputOf(a, { feed: IDLE_FEED, activeFlagPhase: undefined }));
-          const without = plain.run(inputOf(b, { feed: IDLE_FEED, activeFlagPhase: undefined }));
+          const withHook = hooked.run(inputOf(a, { feed: IDLE_FEED }));
+          const without = plain.run(inputOf(b, { feed: IDLE_FEED }));
           expect(withHook).toEqual(without);
           for (const id of ['clock', 'slow', 'sum']) expect(calls.filter((c) => c === id).length).toBe(withHook.ran.includes(id) ? 1 : 0);
           expect(calls.filter((c) => c === 'lapCount').length).toBe(withHook.ran.includes('lapCount') ? 2 : 0);
@@ -68,7 +68,7 @@ describe('Scheduler onCalculatorRun', () => {
     const s = make((id, run) => { seen.push(id); return run(); });
     const frames = raceFrames({ cars: 2, frames: 60, speeds: [30, 30, 30, 30, 30, 30], jitter: [0], truncation: [0], flashback: undefined, phases: NO_PHASES }).frames;
     const r = runnerFor(frames);
-    for (const f of frames) { const x = applyOne(r, f); s.run(inputOf(x, { feed: IDLE_FEED, activeFlagPhase: undefined })); }
+    for (const f of frames) { const x = applyOne(r, f); s.run(inputOf(x, { feed: IDLE_FEED })); }
     expect(seen.filter((id) => id === 'lapCount').length).toBeGreaterThanOrEqual(2);
     expect(seen.filter((id) => id === 'lapCount').length % 2).toBe(0);
   });

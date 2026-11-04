@@ -1,4 +1,4 @@
-import { ActualCompound, VisualCompound, known, unknown, type CarId, type DriverKey, type FlagPhase, type LapRecord, type PitStopRecord, type RaceEvent, type SessionUid, type StintRecord } from '@pitwall/domain';
+import { ActualCompound, VisualCompound, known, unknown, type CarId, type DriverKey, type LapRecord, type PitStopRecord, type RaceEvent, type SessionUid, type StintRecord } from '@pitwall/domain';
 import type { HistoryDelta, LogLengths, Projection } from '@pitwall/engine';
 import type { SessionKey, SessionRow } from '../../src/storage/db.ts';
 export const car = (n: number) => n as CarId;
@@ -16,10 +16,9 @@ export const stint = (c: number, firstLap: number): StintRecord => ({ carId: car
 export const pitStop = (c: number, lap: number): PitStopRecord => ({ carId: car(c), lap, pitLaneEntry: lap * 90_000, pitLaneExit: lap * 90_000 + 22_000,
   pitLaneTimeMs: 22_000, stationaryTimeMs: 2_500, flag: 'green', penaltyServed: false, frame: 0 });
 export const event = (at: number, c?: number): RaceEvent => ({ at, kind: 'overtake', ...(c === undefined ? {} : { carId: car(c) }), params: {}, frame: 0 });
-export const sc = (start: number): FlagPhase => ({ kind: 'SC', start, end: start + 60_000, startLeaderLap: 3, endLeaderLap: 5, scPhases: [] });
-export const history = (o: Partial<Projection> = {}): Projection => ({ laps: [], stints: [], pitStops: [], flagPhases: [], events: [], crossings: [], clock: [], spans: {}, ...o });
+export const history = (o: Partial<Projection> = {}): Projection => ({ laps: [], stints: [], pitStops: [], events: [], crossings: [], clock: [], spans: {}, ...o });
 const lengths = (h: Projection): LogLengths => ({ laps: h.laps.length, stints: h.stints.length, pitStops: h.pitStops.length,
-  flagPhases: h.flagPhases.length, events: h.events.length,
+  events: h.events.length,
   crossings: h.crossings.length });
 export const all = (h: Projection): HistoryDelta => ({ before: lengths(history()), after: lengths(h) });
 export const since = (prev: Projection, h: Projection, rewound = false): HistoryDelta => ({ before: lengths(prev), after: lengths(h), ...(rewound ? { rewound: { frameId: -1, at: 0 } } : {}) });

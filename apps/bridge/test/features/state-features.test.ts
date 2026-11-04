@@ -80,7 +80,7 @@ describe('base state features', () => {
   });
   it('history and insights bindings', () => {
     expect(history.calculators).toEqual([]);
-    expect(history.topics).toEqual(['laps', 'stints', 'pitStops', 'flagPhases', 'events'].map((k) => ({ topic: k, fromHistory: k })));
+    expect(history.topics).toEqual(['laps', 'stints', 'pitStops', 'events'].map((k) => ({ topic: k, fromHistory: k })));
     expect(insights.topics).toEqual([{ topic: 'insights', fromInsights: true }]);
   });
 });

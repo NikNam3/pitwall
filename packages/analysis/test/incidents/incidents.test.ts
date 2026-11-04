@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { carId, known, unknown, type CarId, type DamageParts, type IncidentEntry, type Known, type LapRecord, type RaceEvent } from '@pitwall/domain';
-import { carState, event, flagPhase, lap } from '../../../../test-support/builders/index.ts';
+import { carState, event, lap, neutralisation, openNeutralisation } from '../../../../test-support/builders/index.ts';
 import { incidentsCalculator } from '../../src/incidents/calculator.ts';
 import { INCIDENTS, INCIDENTS_CONFIG } from '../../src/incidents/index.ts';
 import { DAMAGE } from '../../src/damage/index.ts';
@@ -9,6 +9,8 @@ import {
   boundaryAt,
   damageState,
   deltaOf,
+  leaderLaps,
+  LAPS,
   PACE_MS,
   SEGMENT_MS,
   pitStop,
@@ -68,10 +70,10 @@ const slow7 = (ms: number, segment = 10): Delay => ({ carId: car(7), lap: 5, seg
 const SLOW_START = boundaryAt(7, 5, 10);
 
 describe('incidents calculator', () => {
-  it('is incremental over events, flag phases, mini-sectors, pit stops and laps, and reads no damage output (a log reads the history only)', () => {
+  it("is incremental over events, the race's session phases, mini-sectors, pit stops and laps, and reads no damage output (a log reads the history only)", () => {
     expect(incidentsCalculator.id).toBe(INCIDENTS);
     expect(incidentsCalculator.kind).toBe('incremental');
-    expect(incidentsCalculator.reads).toEqual(expect.arrayContaining(['events', 'flagPhases', 'miniSectors', 'pitStops', 'laps']));
+    expect(incidentsCalculator.reads).toEqual(expect.arrayContaining(['events', 'spans:session-phase-race', 'miniSectors', 'pitStops', 'laps']));
     expect(incidentsCalculator.reads).not.toContainEqual({ calculator: DAMAGE });
   });
 
@@ -145,11 +147,35 @@ describe('incidents calculator', () => {
     expect(entry.damage).toEqual([{ part: 'floorPct', deltaPct: 3 }]);
   });
 
-  it('an SC phase start is a minor neutralised entry with no cars', () => {
+  it('an SC start is a minor neutralised entry with no cars', () => {
     const start = 400_000;
-    const entry = only(run(viewOf({ miniSectors: race(), flagPhases: [flagPhase({ kind: 'SC', start, end: 460_000, startLeaderLap: 5, endLeaderLap: 6 })] })), 'neutralised');
+    const sc = neutralisation({ kind: 'SC', start, end: 460_000 });
+    const entry = only(run(viewOf({ miniSectors: race(), phases: [sc], laps: leaderLaps(LAPS) })), 'neutralised');
     expect(entry).toMatchObject({ id: `neutralised::${start}`, at: start, lap: 5, severity: 'minor', carIds: [] });
     expect(entry.timeLostMs).toEqual(unknown('notApplicable'));
+  });
+
+  // Ruling 3 (Task 19): the leader's lap of a neutralisation comes from the projection's laps at the frame its span opened
+  // on (C26, C45): one more than the most laps any car completed by that frame, that frame included.
+  describe("the neutralised entry's lap: the leader's lap at the span's start frame, from the projection's laps", () => {
+    const start = 400_000;
+    const entryLap = (laps: LapRecord[], startFrame = start) =>
+      only(run(viewOf({ miniSectors: race(), phases: [neutralisation({ kind: 'VSC', start, end: 460_000, startFrame })], laps })), 'neutralised').lap;
+
+    it('counts the laps completed by that frame, not those after it', () => {
+      expect(entryLap(leaderLaps(LAPS))).toBe(5);
+      expect(entryLap(leaderLaps(LAPS), 360_000)).toBe(5);
+      expect(entryLap(leaderLaps(LAPS), 359_999)).toBe(4);
+    });
+    it('is the most laps any car completed by then, whichever car: a lapped car does not lower it', () => {
+      const ahead = [1, 2, 3, 4].map((n) => lap({ carId: car(9), lapNumber: n, completedAt: n * 85_000, frame: n * 85_000 }));
+      const lapped = [1, 2].map((n) => lap({ carId: car(8), lapNumber: n, completedAt: n * 150_000, frame: n * 150_000 }));
+      expect(entryLap([...leaderLaps(3), ...ahead, ...lapped])).toBe(5);
+      expect(entryLap([...leaderLaps(3), ...lapped])).toBe(4);
+    });
+    it('is lap 1 before any lap is completed', () => {
+      expect(entryLap([])).toBe(1);
+    });
   });
 
   describe('time loss', () => {
@@ -167,10 +193,10 @@ describe('incidents calculator', () => {
       expect(valueOf(entry.timeLostMs)).toBe(5_000);
     });
 
-    it('a slow mini-sector inside an SC phase or a pit stop is no timeLoss', () => {
+    it('a slow mini-sector inside an SC or a pit stop is no timeLoss', () => {
       const miniSectors = race({ delays: [slow7(2_500)] });
-      const sc = flagPhase({ kind: 'SC', start: SLOW_START - 10_000, end: SLOW_START + 30_000, startLeaderLap: 5, endLeaderLap: 6 });
-      const underSc = run(viewOf({ miniSectors, flagPhases: [sc] }));
+      const sc = neutralisation({ kind: 'SC', start: SLOW_START - 10_000, end: SLOW_START + 30_000 });
+      const underSc = run(viewOf({ miniSectors, phases: [sc] }));
       expect(underSc.filter((e) => e.kind === 'timeLoss')).toEqual([]);
 
       const stop = pitStop(car(7), 5, SLOW_START - 1_000, SLOW_START + 20_000);
@@ -210,8 +236,8 @@ describe('incidents calculator', () => {
     });
 
     it('a neutralised entry concerns us with no other car: otherCarId and the gaps are notApplicable', () => {
-      const phase = flagPhase({ kind: 'SC', start: T, end: T + 60_000, startLeaderLap: 5, endLeaderLap: 6 });
-      const us = only(run(viewOf({ miniSectors: race(), flagPhases: [phase] })), 'neutralised').forUs[0]!;
+      const phase = neutralisation({ kind: 'SC', start: T, end: T + 60_000 });
+      const us = only(run(viewOf({ miniSectors: race(), phases: [phase] })), 'neutralised').forUs[0]!;
       expect(us.otherCarId).toEqual(unknown('notApplicable'));
       expect(us.gapBeforeMs).toEqual(unknown('notApplicable'));
       expect(us.gapAfterMs).toEqual(unknown('notApplicable'));
@@ -280,31 +306,61 @@ describe('incidents calculator', () => {
     expect(run(viewOf({ miniSectors: race(), events: [collision(6, 5)], kind: 'practice' }))).toEqual([]);
   });
 
-  describe('open phases (ruling 1)', () => {
-    const open = (start: number, kind: 'SC' | 'VSC' | 'red' = 'VSC') => ({ kind, start, startLeaderLap: 5, scPhases: [] });
+  describe('open spans (ruling 1): the session-phase span open in the situation (C20)', () => {
+    const open = (start: number, kind: 'SC' | 'VSC' | 'red' = 'VSC', confirmed = true) => openNeutralisation({ kind, start, confirmed });
 
-    it('the neutralised entry appears when the phase starts and keeps its id when it closes', () => {
+    it('the neutralised entry appears when the span opens and keeps its id when it closes', () => {
       const miniSectors = race();
       const start = 400_000;
-      const running = viewOf({ miniSectors: until(miniSectors, 420_000), activeFlagPhase: open(start) });
+      const running = viewOf({ miniSectors: until(miniSectors, 420_000), open: open(start), laps: leaderLaps(4) });
       const during = only(run(running), 'neutralised');
       expect(during).toMatchObject({ id: `neutralised::${start}`, at: start, lap: 5, severity: 'minor', carIds: [] });
 
       const closed = viewOf({
         miniSectors: until(miniSectors, 470_000),
-        flagPhases: [flagPhase({ kind: 'VSC', start, end: 460_000, startLeaderLap: 5, endLeaderLap: 6 })],
+        phases: [neutralisation({ kind: 'VSC', start, end: 460_000 })],
+        laps: leaderLaps(5),
       });
       const after = runSteps([running, closed]);
       expect(only(after, 'neutralised').id).toBe(during.id);
       expect(after).toEqual(run(closed));
     });
 
-    it('a slow mini-sector inside an open neutralised phase is no timeLoss', () => {
+    it('a slow mini-sector inside an open neutralisation or suspension is no timeLoss', () => {
       const miniSectors = until(race({ delays: [slow7(2_500)] }), SLOW_START + 20_000);
       for (const kind of ['SC', 'VSC', 'red'] as const) {
-        const feed = run(viewOf({ miniSectors, activeFlagPhase: open(SLOW_START - 10_000, kind) }));
+        const feed = run(viewOf({ miniSectors, open: open(SLOW_START - 10_000, kind) }));
         expect(feed.filter((e) => e.kind === 'timeLoss'), kind).toEqual([]);
       }
+    });
+
+    it('an open neutralisation still waiting for its confirmation counts: a neutralised entry, and no timeLoss inside it (ruling 2, C18)', () => {
+      const miniSectors = until(race({ delays: [slow7(2_500)] }), SLOW_START + 20_000);
+      const feed = run(viewOf({ miniSectors, open: open(SLOW_START - 1_000, 'SC', false) }));
+      expect(feed.filter((e) => e.kind === 'neutralised').map((e) => e.at)).toEqual([SLOW_START - 1_000]);
+      expect(feed.filter((e) => e.kind === 'timeLoss')).toEqual([]);
+    });
+  });
+
+  // C18, C43 (Task 19, ruling 2): a `neutralised` span closed with `confirmed: false` is no neutralisation for any reader.
+  describe('a neutralisation never confirmed', () => {
+    const miniSectors = race({ delays: [slow7(2_500)] });
+    const never = neutralisation({ kind: 'SC', start: SLOW_START - 1_000, end: SLOW_START + 2_000, confirmed: false });
+
+    it('is no neutralised entry, and a slow mini-sector inside it is a timeLoss', () => {
+      const feed = run(viewOf({ miniSectors, phases: [never] }));
+      expect(feed.filter((e) => e.kind === 'neutralised')).toEqual([]);
+      expect(only(feed, 'timeLoss')).toMatchObject({ at: SLOW_START, carIds: [car(7)] });
+    });
+
+    it('a pending neutralisation that closes unconfirmed: its entry goes and the timeLoss stands; update equals init (C31)', () => {
+      const waiting = viewOf({ miniSectors: until(miniSectors, SLOW_START + 1_500), open: openNeutralisation({ kind: 'SC', start: SLOW_START - 1_000, confirmed: false }) });
+      const dropped = viewOf({ miniSectors: until(miniSectors, SLOW_START + 20_000), phases: [never] });
+      expect(run(waiting).filter((e) => e.kind === 'neutralised')).toHaveLength(1);
+      const after = runSteps([waiting, dropped]);
+      expect(after).toEqual(run(dropped));
+      expect(after.filter((e) => e.kind === 'neutralised')).toEqual([]);
+      expect(only(after, 'timeLoss').at).toBe(SLOW_START);
     });
   });
 
@@ -410,8 +466,8 @@ describe('incidents calculator', () => {
     });
 
     it('no invented sector: notApplicable without a car, notReceived before a crossing or without the sector distances', () => {
-      const sc = flagPhase({ kind: 'SC', start: T, end: T + 60_000, startLeaderLap: 5, endLeaderLap: 6 });
-      expect(only(run(viewOf({ miniSectors: race(), flagPhases: [sc] })), 'neutralised').where.sector).toEqual(unknown('notApplicable'));
+      const sc = neutralisation({ kind: 'SC', start: T, end: T + 60_000 });
+      expect(only(run(viewOf({ miniSectors: race(), phases: [sc] })), 'neutralised').where.sector).toEqual(unknown('notApplicable'));
       // our car (6) crosses its first boundary at 4 200 ms; the collision is at 1 000 ms
       const early = only(run(viewOf({ miniSectors: until(race(), 3_000), events: [collision(6, 5, 1_000)] })), 'collision');
       expect(early.where.sector).toEqual(unknown('notReceived'));

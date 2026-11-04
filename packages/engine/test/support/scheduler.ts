@@ -3,7 +3,6 @@
 // guarded view (C41): every unit this harness runs sees its view through `guardedView`.
 import { expect } from 'vitest';
 import {
-  activeFlagPhaseOf,
   CalculatorRegistry,
   MACHINES,
   Scheduler,
@@ -32,7 +31,7 @@ import { initFor } from './run.ts';
 type Lengths = HistoryDelta['before'];
 
 /** History lengths: zero except those given. */
-export const len = (o: Partial<Lengths> = {}): Lengths => ({ laps: 0, stints: 0, pitStops: 0, flagPhases: 0, events: 0, crossings: 0, ...o });
+export const len = (o: Partial<Lengths> = {}): Lengths => ({ laps: 0, stints: 0, pitStops: 0, events: 0, crossings: 0, ...o });
 
 /** The history grew (or shrank) from `before` to `after` entries in each of `fields`; `rewound` marks a void fact (C30). */
 export const delta = (before = 0, after = before, rewound = false, fields: ReadonlyArray<keyof Lengths> = ['laps']): HistoryDelta => ({
@@ -51,7 +50,6 @@ export const input = (t: number, changed: ChangeTag[] = ['timing'], d = delta(),
   live: { feedId: 'f1', sessionTime: t } as never,
   situation: RACING,
   history: { laps: new Array(laps).fill({}) } as never,
-  activeFlagPhase: undefined,
   changed: new Set(changed),
   delta: d,
   weekend: undefined,
@@ -63,16 +61,15 @@ export const input = (t: number, changed: ChangeTag[] = ['timing'], d = delta(),
 /**
  * The scheduler input of a step's result (C39): its live state, its situation (`situationOf`), its projection and its
  * weekend context, with the change tags and the delta of the step; no priors (`{}` until the priors store exists).
- * `activeFlagPhase` defaults to the state's (`activeFlagPhaseOf`, transitional until Task 19), `feed` to a healthy feed.
+ * `feed` defaults to a healthy feed.
  */
 export const inputOf = (
   { state, changed, delta: d }: Pick<StepResult, 'state' | 'changed' | 'delta'>,
-  o: { feed?: FeedMetricsView; config?: SchedulerInput['config']; activeFlagPhase?: SchedulerInput['activeFlagPhase'] } = {},
+  o: { feed?: FeedMetricsView; config?: SchedulerInput['config'] } = {},
 ): SchedulerInput => ({
   live: state,
   situation: situationOf(state),
   history: state.history,
-  activeFlagPhase: 'activeFlagPhase' in o ? o.activeFlagPhase : activeFlagPhaseOf(state),
   changed,
   delta: d,
   weekend: state.weekend,
@@ -92,7 +89,6 @@ const LIST_TAGS: Readonly<Record<string, ChangeTag>> = {
   laps: 'laps',
   stints: 'stints',
   pitStops: 'pitStops',
-  flagPhases: 'flagPhases',
   events: 'events',
   crossings: 'miniSectors',
   clock: 'clock',
@@ -156,7 +152,7 @@ const refuseWrites = <T extends object>(path: string): ProxyHandler<T> => ({
  *   `situation`, and of a listed undeclared sub-machine's spans only the frames and identity (`IDENTITY_FIELDS`) can be
  *   read; any other field of them (`kind`, `detail`, ...) throws. Listing frees nothing else;
  * - `outputs`: the declared calculators' outputs only (`get`, `has`), never the whole map;
- * - `feed` only with `feed`; `activeFlagPhase` (transitional, Task 19) only with `flagPhases`;
+ * - `feed` only with `feed`;
  * - `delta`, `changed`, `weekend`, `config` and `priors` always.
  * The situation is deep-frozen where it is (its spans are step 2's own, ruling 6); the projection's lists are handed out
  * read-only (they are the log's own arrays, which cannot be frozen; the log freezes their entries): a unit that changes
@@ -292,7 +288,7 @@ export function guardedView(view: EngineView, reads: readonly Dependency[], { un
   return guard(
     { ...view, live, history, situation, outputs, feed: guard({ ...view.feed }, 'feed', () => tags.has('feed')) } as EngineView,
     'view',
-    (k) => k !== 'activeFlagPhase' || tags.has('flagPhases'),
+    () => true,
   );
 }
 

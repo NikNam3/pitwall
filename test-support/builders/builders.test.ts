@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { carState, crossings, engineView, event, field, flagPhase, history, lap, realismHidden } from './index.ts';
+import { carState, crossings, engineView, event, field, history, lap, neutralisation, openNeutralisation, phaseSpans, realismHidden } from './index.ts';
 import { defineConfig } from '../../packages/engine/src/index.ts';
 import { carId } from '../../packages/domain/src/index.ts';
 
@@ -44,9 +44,29 @@ describe('builders', () => {
     expect(c[49]!.at).toBe(98_200);
   });
 
-  it('event and flagPhase fill defaults', () => {
+  it('event fills defaults', () => {
     expect(event({ kind: 'overtake', at: 5 })).toEqual({ at: 5, kind: 'overtake', params: {}, frame: 0 });
-    expect(flagPhase({ kind: 'VSC' })).toMatchObject({ kind: 'VSC', start: 0, end: 60_000 });
+  });
+
+  it('neutralisation is a closed session-phase-race span: neutralised for SC and VSC, suspended for red, frames = times by default', () => {
+    expect(neutralisation({ kind: 'VSC' })).toEqual({
+      machine: 'session-phase-race', id: 0, kind: 'neutralised', start: 0, end: 60_000, confirmed: true, startFrame: 0, endFrame: 60_000,
+      detail: { car: 'VSC', stages: [{ stage: 'deployed', at: 0 }] },
+    });
+    expect(neutralisation({ kind: 'red', start: 5, end: 9, confirmed: false })).toMatchObject({ kind: 'suspended', start: 5, end: 9, confirmed: false, startFrame: 5, endFrame: 9 });
+    expect(openNeutralisation({ start: 7 })).toEqual({
+      machine: 'session-phase-race', id: 0, kind: 'neutralised', start: 7, confirmed: true, startFrame: 7, detail: { car: 'SC', stages: [{ stage: 'deployed', at: 7 }] },
+    });
+  });
+
+  it('phaseSpans puts the closed spans in the projection and the open one in the situation, by machine (C20)', () => {
+    const sc = neutralisation();
+    const open = openNeutralisation({ kind: 'VSC', start: 90_000, id: 1 });
+    const { spans, situation } = phaseSpans([sc], open);
+    expect(spans).toEqual({ 'session-phase-race': [sc] });
+    expect(situation).toEqual({ weekendPhase: { kind: 'race', format: 'grandPrix' }, byMachine: { 'session-phase-race': [open] } });
+    const view = engineView({ history: { spans }, situation });
+    expect([view.history.spans['session-phase-race'], view.situation.byMachine['session-phase-race']]).toEqual([[sc], [open]]);
   });
 
   it('carState is complete, merges deeply and can be hidden for realism', () => {

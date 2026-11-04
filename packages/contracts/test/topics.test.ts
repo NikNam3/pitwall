@@ -22,7 +22,7 @@ import carDetail from '../src/topics/car.detail.ts';
 import laps from '../src/topics/laps.ts';
 
 describe('TOPICS', () => {
-  it('has exactly the 12 feed topics (spec 8.4 and replay.status of 8.5) with their modes and rates', () => {
+  it('has exactly the 11 feed topics (spec 8.4 and replay.status of 8.5) with their modes and rates', () => {
     const table = Object.entries(TOPICS)
       .filter(([, d]) => d.scope === 'feed' && d.owner === 'core')
       .map(([key, d]) => [key, d.name, d.mode, d.maxHz] as const)
@@ -33,7 +33,6 @@ describe('TOPICS', () => {
       ['cars.overview', 'cars.overview', 'state', 10],
       ['events', 'events', 'append', Infinity],
       ['feed.status', 'feed.status', 'state', 2],
-      ['flagPhases', 'flagPhases', 'append', Infinity],
       ['insights', 'insights', 'append', Infinity],
       ['laps', 'laps', 'append', Infinity],
       ['pitStops', 'pitStops', 'append', Infinity],
@@ -44,7 +43,7 @@ describe('TOPICS', () => {
   });
   it('gives every core topic outside dev and ui scope feed', () => {
     const core = Object.entries(TOPICS).filter(([name, d]) => d.owner === 'core' && !/^(dev|ui)\./.test(name));
-    expect(core).toHaveLength(12);
+    expect(core).toHaveLength(11);
     for (const [, d] of core) expect(d.scope).toBe('feed');
   });
   it('has the analysis topics of sub-project 3 (spec A.3): owner, mode and rate', () => {
@@ -114,7 +113,7 @@ describe('topic types', () => {
   it('keep TopicName, TopicParams and TopicValue', () => {
     expectTypeOf<TopicName>().toEqualTypeOf<
       | 'feed.status' | 'session.info' | 'cars.overview' | 'car.detail' | 'car.telemetry' | 'laps'
-      | 'stints' | 'pitStops' | 'flagPhases' | 'events' | 'insights' | 'dev.calcStats' | 'dev.catalogue'
+      | 'stints' | 'pitStops' | 'events' | 'insights' | 'dev.calcStats' | 'dev.catalogue'
       | 'replay.status' | 'ui.workbooks' | 'ui.linkGroups' | 'ui.alerts' | 'ui.settings'
       | 'tyreWear.car' | 'fuel.car' | 'ers.car' | 'carBands.car' | 'damage.car' | 'gaps.intervals' | 'gaps.toCar'
       | 'gaps.gapper' | 'gaps.neighbourhood' | 'lapTimes.board' | 'lapTimes.projection' | 'battle.cards'

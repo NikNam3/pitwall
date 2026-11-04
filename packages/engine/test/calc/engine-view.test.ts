@@ -1,6 +1,6 @@
 // The view (C39): everything a calculator or analysis may see is the live state, the situation (the open spans, C20),
 // the projection with its membership (C26, C28), the delta, the change tags, the weekend's earlier sessions, the config,
-// the priors, the feed health and the outputs of the units it reads. `activeFlagPhase` is transitional (Task 19).
+// the priors, the feed health and the outputs of the units it reads. Nothing else.
 import { describe, expect, expectTypeOf, it } from 'vitest';
 import type { CarId } from '@pitwall/domain';
 import {
@@ -23,8 +23,8 @@ import type { LiveState } from '../../src/state/live-state.ts';
 import { gridStart, run, script } from '../situations/script.ts';
 import { input, inputOf, viewOf } from '../support/scheduler.ts';
 
-/** The parts of the view (C39), plus the transitional `activeFlagPhase` (removed by Task 19). */
-const PARTS = ['live', 'situation', 'history', 'delta', 'changed', 'weekend', 'config', 'priors', 'feed', 'outputs', 'activeFlagPhase'] as const;
+/** The parts of the view (C39). */
+const PARTS = ['live', 'situation', 'history', 'delta', 'changed', 'weekend', 'config', 'priors', 'feed', 'outputs'] as const;
 type Part = (typeof PARTS)[number];
 
 /** A race from the grid to 60 frames after lights out: closed session-phase spans, open ones, every car's spans. */
@@ -34,7 +34,7 @@ const race = () => {
 };
 
 describe('EngineView: the C39 parts', () => {
-  it('the view has exactly the C39 parts (and the transitional activeFlagPhase); there is no `state`', () => {
+  it('the view has exactly the C39 parts; there is no `state`', () => {
     expectTypeOf<keyof EngineView>().toEqualTypeOf<Part>();
     const calc: QuickCalculator<number> = {
       kind: 'quick', id: 'x', reads: ['timing'], cadence: 'frame',

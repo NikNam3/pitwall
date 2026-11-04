@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { carId, known, unknown } from "@pitwall/domain";
-import type { EngineView } from "@pitwall/engine";
 import type {
   BattleCard,
   BattleSide,
@@ -15,7 +14,9 @@ import type {
 } from "@pitwall/domain";
 import {
   engineView,
-  flagPhase,
+  neutralisation,
+  openNeutralisation,
+  phaseSpans,
 } from "../../../../test-support/builders/index.ts";
 import { raceMomentCalculator } from "../../src/race-moment/calculator.ts";
 import {
@@ -83,15 +84,9 @@ const alarm = (over: Partial<Insight> = {}): Insight =>
     ...over,
   }) as Insight;
 
-const openPhase = (
-  kind: "SC" | "VSC" | "red",
-  start: number,
-): NonNullable<EngineView["activeFlagPhase"]> => ({
-  kind,
-  start: start as SessionTime,
-  startLeaderLap: 3,
-  scPhases: [],
-});
+/** The session-phase span open in the situation (C20): a neutralisation (SC, VSC) or a suspension (red). */
+const openPhase = (kind: "SC" | "VSC" | "red", start: number, confirmed = true) =>
+  openNeutralisation({ kind, start: start as SessionTime, confirmed });
 
 const rain = (offsetMin: number, rainPct: number): ForecastSample =>
   ({
@@ -111,8 +106,8 @@ function run({
   forecast = [],
 }: {
   kind?: "race" | "practice" | "qualifying";
-  phases?: ReturnType<typeof flagPhase>[];
-  active?: EngineView["activeFlagPhase"];
+  phases?: ReturnType<typeof neutralisation>[];
+  active?: ReturnType<typeof openNeutralisation>;
   incidents?: IncidentEntry[];
   battle?: Record<CarId, BattleCard>;
   alarms?: Insight[];
@@ -122,10 +117,11 @@ function run({
   if (incidents) outputs.set(INCIDENTS, incidents);
   if (battle) outputs.set(BATTLE, battle);
   if (alarms) outputs.set(ALARMS, alarms);
+  const { spans, situation } = phaseSpans(phases, active);
   const view = engineView({
     session: { kind, forecast },
-    history: { flagPhases: phases },
-    activeFlagPhase: active,
+    history: { spans },
+    situation,
     outputs,
     sessionTime: NOW,
   });
@@ -144,7 +140,7 @@ describe("race-moment calculator", () => {
     expect(raceMomentCalculator.cadence).toEqual({ hz: 4 });
     expect(raceMomentCalculator.reads).toEqual(
       expect.arrayContaining([
-        "flagPhases",
+        "spans:session-phase-race",
         "session",
         { calculator: INCIDENTS },
         { calculator: BATTLE },
@@ -165,7 +161,7 @@ describe("race-moment calculator", () => {
       expect(value(run()).moment).toBe("carCare");
     });
 
-    it("neutralised: an active flag phase", () => {
+    it("neutralised: an open neutralisation of the race's session phases", () => {
       const v = value(
         run({
           active: openPhase("VSC", NOW - 20_000),
@@ -177,10 +173,32 @@ describe("race-moment calculator", () => {
       expect(v.active).toEqual(["neutralised", "carCare"]);
     });
 
-    it("a closed flag phase in history alone gives no neutralised moment", () => {
+    it("neutralised: an open suspension (red flag), its kind red", () => {
+      const v = value(run({ active: openPhase("red", NOW - 20_000) }));
+      expect(v.moment).toBe("neutralised");
+      expect(v.cause).toEqual({ rule: "flagPhase", params: { kind: "red" } });
+    });
+
+    it("neutralised: an open neutralisation still waiting for its confirmation counts (ruling 2, C18)", () => {
+      const v = value(run({ active: openPhase("SC", NOW - 1_000, false) }));
+      expect(v.moment).toBe("neutralised");
+      expect(v.cause).toEqual({ rule: "flagPhase", params: { kind: "SC" } });
+      expect(v.since).toEqual(known(NOW - 1_000, expect.anything()));
+    });
+
+    it("a closed neutralisation in the projection alone gives no neutralised moment", () => {
       const v = value(
         run({
-          phases: [flagPhase({ start: NOW - 90_000, end: NOW - 30_000 })],
+          phases: [neutralisation({ start: NOW - 90_000, end: NOW - 30_000 })],
+        }),
+      );
+      expect(v.moment).toBe("carCare");
+    });
+
+    it("a neutralisation closed with confirmed: false gives no neutralised moment (C18, C43)", () => {
+      const v = value(
+        run({
+          phases: [neutralisation({ start: NOW - 4_000, end: NOW - 1_000, confirmed: false })],
         }),
       );
       expect(v.moment).toBe("carCare");
@@ -372,7 +390,7 @@ describe("race-moment calculator", () => {
   });
 
   describe("since", () => {
-    it("is the flag phase start when neutralised", () => {
+    it("is the start of the open span when neutralised", () => {
       const v = value(run({ active: openPhase("SC", NOW - 20_000) }));
       expect(v.since).toEqual(known(NOW - 20_000, expect.anything()));
     });

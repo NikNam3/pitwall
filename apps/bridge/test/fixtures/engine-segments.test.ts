@@ -1,7 +1,7 @@
 // The engine on committed segments of normal sessions, one behaviour per segment (facts verified in fixtures/index.json).
 import { describe, expect, it } from 'vitest';
 import { currentLaps, driverKeyString, type LapRecord } from '@pitwall/domain';
-import type { FlashbackInfo, StepResult } from '@pitwall/engine';
+import { situationOf, type FlashbackInfo, type StepResult } from '@pitwall/engine';
 import { InvariantChecker } from '../../../../packages/engine/test/support/invariants.ts';
 import { replayRunner } from './engine-replay.ts';
 import { SEGMENT_FILES, segmentPath } from './replay.ts';
@@ -100,12 +100,12 @@ describe('race-zandvoort-pit-exit: car 1 still in the pit lane after its stop', 
 });
 
 describe('race-zandvoort-vsc: car 2 stops with terminal damage and the VSC comes out', () => {
-  it('SCAR opens a VSC flag phase, then the Session packet sets the vsc flag and counts the period', async () => {
+  it('SCAR opens a VSC neutralisation of the race, then the Session packet sets the vsc flag and counts the period', async () => {
     const flags: string[] = [];
     const { state } = await run('race-zandvoort-vsc.pwrec.gz', ({ state: st }) => {
       if (flags.at(-1) !== st.session.flag) flags.push(st.session.flag);
     });
-    expect(state.open.flagPhase).toMatchObject({ kind: 'VSC', start: 914_178, scPhases: [{ phase: 'deployed', at: 914_178 }] });
+    expect(situationOf(state).byMachine['session-phase-race']).toMatchObject([{ kind: 'neutralised', start: 914_178, detail: { car: 'VSC', stages: [{ stage: 'deployed', at: 914_178 }] } }]);
     expect(flags).toEqual(['green', 'vsc']);
     expect(state.session.periods).toEqual({ sc: 0, vsc: 1, red: 0 });
   });

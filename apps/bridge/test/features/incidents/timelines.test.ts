@@ -6,7 +6,7 @@
 // 2.3 s in lap 5: a time loss.
 import { describe, expect, it } from 'vitest';
 import { INCIDENTS, incidentsCalculator, type IncidentsOutput } from '@pitwall/analysis';
-import { activeFlagPhaseOf, CalculatorRegistry, Scheduler, SessionRunner, situationOf, type Frame } from '@pitwall/engine';
+import { CalculatorRegistry, Scheduler, SessionRunner, situationOf, type Frame } from '@pitwall/engine';
 import { IDLE_FEED } from '../../../../../test-support/builders/index.ts';
 import { initFor } from '../../../../../packages/engine/test/support/run.ts';
 import { gridStart, lap, scar, script, status, STEP, type Beat } from '../../../../../packages/engine/test/situations/script.ts';
@@ -41,7 +41,7 @@ function incidentsRuns(all: Frame[]): Array<{ frame: number; scheduled: Incident
   const runs: Array<{ frame: number; scheduled: IncidentsOutput; fresh: IncidentsOutput }> = [];
   all.forEach((f, frame) => runner.apply(f, (r) => {
     if (r.delta.rewound !== undefined) scheduler.reset();
-    const input = { live: r.state, situation: situationOf(r.state), history: r.state.history, activeFlagPhase: activeFlagPhaseOf(r.state), changed: r.changed, delta: r.delta, weekend: r.state.weekend, feed: IDLE_FEED, config: {}, priors: {} };
+    const input = { live: r.state, situation: situationOf(r.state), history: r.state.history, changed: r.changed, delta: r.delta, weekend: r.state.weekend, feed: IDLE_FEED, config: {}, priors: {} };
     const { ran, outputs } = scheduler.run(input);
     if (!ran.includes(INCIDENTS)) return;
     const fresh = incidentsCalculator.output(incidentsCalculator.init({ ...input, outputs: new Map() }));

@@ -9,16 +9,17 @@ import {
   type CarId,
   type CarState,
   type DamageState,
-  type FlagPhase,
   type LapRecord,
   type MiniSectorCrossing,
+  type OpenSpan,
   type PitStopRecord,
   type RaceEvent,
   type SessionKind,
   type SessionState,
+  type Span,
 } from '@pitwall/domain';
 import { projectionLengths, type EngineView } from '@pitwall/engine';
-import { engineView } from '../../../../test-support/builders/index.ts';
+import { engineView, lap as lapRecord, phaseSpans } from '../../../../test-support/builders/index.ts';
 import { incidentsCalculator } from '../../src/incidents/calculator.ts';
 import { DAMAGE, type DamageOutput } from '../../src/damage/index.ts';
 import { GAPS, type GapsOutput } from '../../src/gaps/index.ts';
@@ -48,7 +49,8 @@ export const boundaryAt = (id: number, lap: number, segment: number): number =>
 
 /**
  * Every car runs `laps` laps at 90 s from `startOf(i)`: boundaries (1, 0) .. (laps, 49) plus the closing (laps + 1, 0).
- * `delays` slow a car down in one mini-sector; the list is sorted by time, ties by car id.
+ * `delays` slow a car down in one mini-sector; the list is sorted by time, ties by car id. Each crossing describes the
+ * frame numbered by its time (`frame = at`), as `neutralisation` spans and `leaderLaps` do, so frames and times agree.
  */
 export function race({ cars = CARS, laps = LAPS, delays = [] }: { cars?: number; laps?: number; delays?: Delay[] } = {}): MiniSectorCrossing[] {
   const list: MiniSectorCrossing[] = [];
@@ -60,12 +62,20 @@ export function race({ cars = CARS, laps = LAPS, delays = [] }: { cars?: number;
         if (lap === laps + 1 && segment > 0) break;
         // A delay in mini-sector k moves boundary k + 1 and everything after it.
         const late = own.filter((d) => index(d.lap, d.segment) < index(lap, segment)).reduce((sum, d) => sum + d.ms, 0);
-        list.push({ carId: carId(i), lap, segment, at: boundaryAt(i, lap, segment) + late, frame: 0 });
+        const at = boundaryAt(i, lap, segment) + late;
+        list.push({ carId: carId(i), lap, segment, at, frame: at });
       }
     }
   }
   return list.sort((a, b) => a.at - b.at || a.carId - b.carId);
 }
+
+/**
+ * The leader's (car 0's) lap records of laps 1..n, at 90 s from 0: lap k completes at k × 90 000 and describes the frame
+ * numbered by that time (`frame = completedAt`), as `race` numbers its crossings.
+ */
+export const leaderLaps = (n: number): LapRecord[] =>
+  Array.from({ length: n }, (_, i) => lapRecord({ carId: carId(0), lapNumber: i + 1, completedAt: (i + 1) * PACE_MS, frame: (i + 1) * PACE_MS }));
 
 /** The history up to and including session time `t` (a prefix of each time-sorted list). */
 export const until = <T extends { at: number }>(list: T[], t: number): T[] => list.filter((x) => x.at <= t);
@@ -73,7 +83,8 @@ export const until = <T extends { at: number }>(list: T[], t: number): T[] => li
 export type RaceInput = {
   miniSectors: MiniSectorCrossing[];
   events?: RaceEvent[];
-  flagPhases?: FlagPhase[];
+  /** The session-phase spans closed in the projection (`neutralisation` builds them, C20). */
+  phases?: Span[];
   pitStops?: PitStopRecord[];
   laps?: LapRecord[];
   /** A `damage` output in the view; `incidents` must not read it (a log reads the history only). */
@@ -89,8 +100,8 @@ export type RaceInput = {
   kind?: SessionKind;
   /** Merged onto the race session on `TRACK`. */
   session?: Partial<SessionState>;
-  /** The neutralised phase in progress (not yet in `flagPhases`). */
-  activeFlagPhase?: EngineView['activeFlagPhase'];
+  /** The session-phase span open in the situation (`openNeutralisation`), not yet in `phases` (C20). */
+  open?: OpenSpan;
   /** Live car states; none by default (the calculator works from the history). */
   cars?: CarState[];
 };
@@ -99,7 +110,7 @@ export type RaceInput = {
 export function viewOf({
   miniSectors,
   events = [],
-  flagPhases = [],
+  phases = [],
   pitStops = [],
   laps = [],
   damage,
@@ -110,17 +121,18 @@ export function viewOf({
   damageConfig = {},
   kind = 'race',
   session = {},
-  activeFlagPhase,
+  open,
   cars = [],
 }: RaceInput): EngineView {
   const outputs = new Map<string, unknown>();
   if (damage) outputs.set(DAMAGE, damage);
   if (gaps) outputs.set(GAPS, gaps);
   const last = miniSectors[miniSectors.length - 1];
+  const { spans, situation } = phaseSpans(phases, open);
   return engineView({
     cars,
-    activeFlagPhase,
-    history: { crossings: miniSectors, events, flagPhases, pitStops, laps },
+    situation,
+    history: { crossings: miniSectors, events, spans, pitStops, laps },
     outputs,
     playerCar,
     config: { incidents: config, alarms: alarmsConfig, damage: damageConfig },

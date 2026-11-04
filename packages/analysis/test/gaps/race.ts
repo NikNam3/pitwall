@@ -1,7 +1,7 @@
 // Test races for `gaps`: mini-sector histories with car states that agree with them (position, lap, total distance).
-import { carId, MINI_SECTORS, type CarId, type CarState, type FlagPhase, type MiniSectorCrossing, type ResultStatus, type SessionKind } from '@pitwall/domain';
+import { carId, MINI_SECTORS, type CarId, type CarState, type MiniSectorCrossing, type OpenSpan, type ResultStatus, type SessionKind, type Span } from '@pitwall/domain';
 import { projectionLengths, type EngineView } from '@pitwall/engine';
-import { carState, crossings, engineView, event } from '../../../../test-support/builders/index.ts';
+import { carState, crossings, engineView, event, phaseSpans } from '../../../../test-support/builders/index.ts';
 import { gapsCalculator } from '../../src/gaps/calculator.ts';
 import type { GapsOutput } from '../../src/gaps/index.ts';
 
@@ -63,8 +63,8 @@ export function carsFor(miniSectors: MiniSectorCrossing[], over: Record<number, 
 
 /**
  * The race view over these crossings, every crossing new; `cars` default to `carsFor(miniSectors)`. The lights go out
- * at `lightsOutAt` (default 0, as `field` starts); `null` means not yet. `flagPhases` are the closed neutralised phases
- * (history), `activeFlagPhase` the open one (default none).
+ * at `lightsOutAt` (default 0, as `field` starts); `null` means not yet. `phases` are the session-phase spans closed
+ * in the projection (`neutralisation` builds them), `open` the one open in the situation (default none, C20).
  */
 export const viewOf = (
   miniSectors: MiniSectorCrossing[],
@@ -74,26 +74,28 @@ export const viewOf = (
     config = {},
     lightsOutAt = 0,
     kind = 'race',
-    flagPhases = [],
-    activeFlagPhase,
+    phases = [],
+    open,
   }: {
     cars?: CarState[];
     playerCar?: number;
     config?: EngineView['config'];
     lightsOutAt?: number | null;
     kind?: SessionKind;
-    flagPhases?: FlagPhase[];
-    activeFlagPhase?: EngineView['activeFlagPhase'];
+    phases?: Span[];
+    open?: OpenSpan;
   } = {},
-): EngineView =>
-  engineView({
+): EngineView => {
+  const { spans, situation } = phaseSpans(phases, open);
+  return engineView({
     cars: cars ?? carsFor(miniSectors),
-    history: { crossings: miniSectors, events: lightsOutAt === null ? [] : [event({ kind: 'lightsOut', at: lightsOutAt })], flagPhases },
-    activeFlagPhase,
+    history: { crossings: miniSectors, events: lightsOutAt === null ? [] : [event({ kind: 'lightsOut', at: lightsOutAt })], spans },
+    situation,
     playerCar,
     config,
     session: { kind },
   });
+};
 
 /** `init` over the view, as on a fresh run. */
 export const run = (view: EngineView): GapsOutput => gapsCalculator.output(gapsCalculator.init(view));

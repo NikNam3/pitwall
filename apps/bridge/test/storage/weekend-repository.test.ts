@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { openDatabase } from '../../src/storage/db.ts';
 import { StorageWriter } from '../../src/storage/storage-writer.ts';
 import { WeekendRepository } from '../../src/storage/weekend-repository.ts';
-import { AI9, HUMAN, all, car, event, history, key, lap, pitStop, sc, session, stint } from './records.ts';
+import { AI9, HUMAN, all, car, event, history, key, lap, pitStop, session, stint } from './records.ts';
 
 function storage() {
   const db = openDatabase(':memory:');
@@ -81,13 +81,13 @@ describe('WeekendRepository', () => {
   });
   it('each per-session read returns only the keyed session\'s records when another weekend holds the same uid', () => {
     const { w, repo } = storage();
-    const h1 = history({ laps: [lap(0, 1)], stints: [stint(0, 1)], pitStops: [pitStop(0, 3)], flagPhases: [sc(1000)], events: [event(5, 0)] });
-    const h2 = history({ laps: [lap(1, 1), lap(1, 2)], stints: [stint(1, 1)], pitStops: [pitStop(1, 2)], flagPhases: [sc(4000)], events: [event(6)] });
+    const h1 = history({ laps: [lap(0, 1)], stints: [stint(0, 1)], pitStops: [pitStop(0, 3)], events: [event(5, 0)] });
+    const h2 = history({ laps: [lap(1, 1), lap(1, 2)], stints: [stint(1, 1)], pitStops: [pitStop(1, 2)], events: [event(6)] });
     w.upsertSession(session('1')); w.upsertSession(session('1', { weekendId: 'W2' }));
     w.writeConfirmed(key('1'), h1, all(h1)); w.writeConfirmed(key('1', 'W2'), h2, all(h2));
     for (const [k, h] of [[key('1'), h1], [key('1', 'W2'), h2]] as const) {
-      expect([repo.lapsOf(k), repo.stintsOf(k), repo.pitStopsOf(k), repo.flagPhasesOf(k), repo.eventsOf(k)])
-        .toEqual([h.laps, h.stints, h.pitStops, h.flagPhases, h.events]);
+      expect([repo.lapsOf(k), repo.stintsOf(k), repo.pitStopsOf(k), repo.eventsOf(k)])
+        .toEqual([h.laps, h.stints, h.pitStops, h.events]);
     }
   });
   it('a read by driver key matches the driver of the keyed session, not the same car of the same uid in another weekend', () => {

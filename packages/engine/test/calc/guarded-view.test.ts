@@ -111,12 +111,10 @@ describe('guardedView throws on an undeclared read and passes a declared one (C4
     expect(undeclared(() => g.outputs.size)).toBe('outputs');
   });
 
-  it('feed only with `feed`; the transitional activeFlagPhase only with flagPhases', () => {
+  it('feed only with `feed`', () => {
     const view = raceView();
     expect(guardedBy(['feed'], view).feed.connected).toBe(view.feed.connected);
     expect(undeclared(() => guardedBy(['timing'], view).feed.connected)).toBe('feed.connected');
-    expect(guardedBy(['flagPhases'], view).activeFlagPhase).toEqual(view.activeFlagPhase);
-    expect(undeclared(() => guardedBy(['timing'], view).activeFlagPhase)).toBe('view.activeFlagPhase');
   });
 
   it('delta, changed, weekend, config and priors are every unit\'s', () => {
