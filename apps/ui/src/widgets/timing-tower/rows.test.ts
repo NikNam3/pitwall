@@ -154,8 +154,10 @@ describe('buildRows', () => {
     expect(row).not.toHaveProperty('warnings');
   });
 
-  // The PEN cell from the `penalties` span (race only) and the `warnings` span: the span's kind names what the car owes
-  // (the machine decides which penalty comes first, C43); its detail gives the counts and the time beside it.
+  // The PEN cell from the `penalties` span (race only) and the `warnings` span. An open driveThroughPending or
+  // stopGoPending span shows SG while its detail counts a stop-go, else DT (the user's rule, live test 2026-10-30: a
+  // stop-go before a drive-through): a presentation choice over the detail the machine gives, no situation decided
+  // (C66, supervisor ruling, Task 25 round 2). The detail gives the counts and the time beside it.
   describe('the PEN cell: the penalties span, else the warnings span', () => {
     const pen = (s: CarSituation, phase: PhaseKind = 'race') => leader(s, phase).penalty;
 
@@ -176,20 +178,24 @@ describe('buildRows', () => {
       expect(pen({ penalty: timePenalty(10_000), warnings: 1 })).toMatchObject({ text: '10s', role: 'warning' });
     });
 
-    it('driveThroughPending shows DT, stopGoPending SG, both in the penalty role', () => {
+    it('an unserved drive-through shows DT, an unserved stop-go SG, both in the penalty role', () => {
       expect(pen({ penalty: pendingPenalty('driveThroughPending', { driveThroughs: 1 }) })).toMatchObject({ text: 'DT', role: 'warning' });
       expect(pen({ penalty: pendingPenalty('stopGoPending', { stopGos: 1 }) })).toMatchObject({ text: 'SG', role: 'warning' });
     });
 
-    it('owing both, the cell names the penalty the span names, not a precedence of its own', () => {
-      expect(pen({ penalty: pendingPenalty('driveThroughPending', { driveThroughs: 1, stopGos: 1 }) })).toMatchObject({ text: 'DT', role: 'warning' });
+    it('a stop-go comes before a drive-through', () => {
       expect(pen({ penalty: pendingPenalty('stopGoPending', { driveThroughs: 1, stopGos: 1 }) })).toMatchObject({ text: 'SG', role: 'warning' });
     });
 
-    it('more than one of the named kind shows the count before the code, in the 3 cells of the column', () => {
+    it('a drive-through head with a stop-go also pending shows SG', () => {
+      expect(pen({ penalty: pendingPenalty('driveThroughPending', { driveThroughs: 1, stopGos: 1 }) })).toMatchObject({ text: 'SG', role: 'warning' });
+    });
+
+    it('more than one unserved stop-go or drive-through shows the count before the code, in the 3 cells of the column', () => {
       expect(pen({ penalty: pendingPenalty('driveThroughPending', { driveThroughs: 2 }) })).toMatchObject({ text: '2DT', role: 'warning' });
       expect(pen({ penalty: pendingPenalty('stopGoPending', { stopGos: 2 }) })).toMatchObject({ text: '2SG', role: 'warning' });
       expect(pen({ penalty: pendingPenalty('stopGoPending', { stopGos: 3, driveThroughs: 1 }) })).toMatchObject({ text: '3SG', role: 'warning' });
+      expect(pen({ penalty: pendingPenalty('driveThroughPending', { stopGos: 1, driveThroughs: 2 }) })).toMatchObject({ text: 'SG', role: 'warning' });
     });
 
     it('a time penalty beside a drive-through or stop-go goes to the title, in the time format of the cell', () => {
