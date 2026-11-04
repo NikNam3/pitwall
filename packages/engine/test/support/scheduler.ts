@@ -2,6 +2,7 @@
 // quick calculators that all count as needed, the scheduler's incremental = from scratch check over frames, and the
 // guarded view (C41): every unit this harness runs sees its view through `guardedView`, which also counts the projection
 // entries a unit reads (`countReads`, C31.1).
+import { isDeepStrictEqual } from 'node:util';
 import { expect } from 'vitest';
 import {
   CalculatorRegistry,
@@ -25,7 +26,6 @@ import {
 } from '../../src/index.ts';
 import type { Situation } from '../../src/situations/situation.ts';
 import type { LiveArea } from '../../src/state/live-state.ts';
-import { deepFreeze } from '../../src/util/deep-freeze.ts';
 import { LIVE_AREA_FIELDS, UndeclaredReadError } from './guarded-input.ts';
 import { initFor } from './run.ts';
 
@@ -134,6 +134,28 @@ const readOnly = (path: string): never => {
   throw new TypeError(`${path} is read-only: no unit changes its view (C20, C28)`);
 };
 
+/**
+ * Everything the guards deep-froze: a scheduler hands one situation to several guards of a frame, and an open span stays
+ * the same object from frame to frame, so each is frozen once.
+ */
+const FROZEN = new WeakSet<object>();
+
+/** `deepFreeze` that skips what it froze before: the same objects frozen, each once. */
+const freezeOnce = (value: unknown): void => {
+  if (typeof value !== 'object' || value === null || FROZEN.has(value)) return;
+  FROZEN.add(value);
+  if (value instanceof Map) {
+    for (const [k, v] of value) {
+      freezeOnce(k);
+      freezeOnce(v);
+    }
+  } else if (value instanceof Set) {
+    for (const v of value) freezeOnce(v);
+  }
+  for (const v of Object.values(value)) freezeOnce(v);
+  Object.freeze(value);
+};
+
 /** Proxy traps that refuse every write, freezing included: the target is the engine's own, or a copy only the guard holds. */
 const refuseWrites = <T extends object>(path: string): ProxyHandler<T> => ({
   set: () => readOnly(path),
@@ -165,12 +187,16 @@ const refuseWrites = <T extends object>(path: string): ProxyHandler<T> => ({
  * read-only (they are the log's own arrays, which cannot be frozen; the log freezes their entries): a unit that changes
  * either throws a `TypeError`. The view itself is not changed: the guard reads through to it.
  */
-export function guardedView(view: EngineView, reads: readonly Dependency[], { unit = 'unit', onRead = () => {}, onEntry }: GuardOptions = {}): EngineView {
+export function guardedView(view: EngineView, reads: readonly Dependency[], { unit = 'unit', onRead, onEntry }: GuardOptions = {}): EngineView {
   const tags = new Set<string>(reads.filter((r): r is ChangeTag => typeof r === 'string'));
   const calculators = new Set(reads.flatMap((r) => (typeof r === 'object' ? [r.calculator] : [])));
-  const read = (path: string, declared: boolean): void => {
-    onRead(path);
-    if (!declared) throw new UndeclaredReadError(unit, path, 'C41');
+  /** The sub-machines whose spans the unit declares (`spans:<id>`). */
+  const machines = new Set([...tags].flatMap((tag) => (tag.startsWith('spans:') ? [tag.slice('spans:'.length)] : [])));
+  /** A read of `base.key`: noted, and refused when undeclared; its path is built only when someone needs it. */
+  const note = (base: string, key: string): void => onRead?.(`${base}.${key}`);
+  const read = (base: string, key: string, declared: boolean): void => {
+    note(base, key);
+    if (!declared) throw new UndeclaredReadError(unit, `${base}.${key}`, 'C41');
   };
 
   /**
@@ -188,7 +214,7 @@ export function guardedView(view: EngineView, reads: readonly Dependency[], { un
       ...refuseWrites<T>(path),
       get(t, key, receiver) {
         if (typeof key === 'symbol' || (!guarded.has(key) && !Object.prototype.hasOwnProperty.call(t, key))) return Reflect.get(t, key, receiver);
-        read(`${path}.${key}`, allowed(key));
+        read(path, key, allowed(key));
         return wrap(Reflect.get(t, key, receiver), key);
       },
     });
@@ -220,7 +246,7 @@ export function guardedView(view: EngineView, reads: readonly Dependency[], { un
       ...refuseWrites(path),
       get(t, key, receiver) {
         if (typeof key === 'symbol' || IDENTITY_FIELDS.has(key) || !Object.prototype.hasOwnProperty.call(t, key)) return Reflect.get(t, key, receiver);
-        return read(`${path}.${key}`, false);
+        return read(path, key, false);
       },
     });
 
@@ -232,7 +258,7 @@ export function guardedView(view: EngineView, reads: readonly Dependency[], { un
    */
   const byMachine = (record: object, path: string, whole: string, wrap: (value: unknown, key: string) => unknown): object => {
     const listed = new Set<string>();
-    const declared = (machine: string): boolean => tags.has(`spans:${machine}`);
+    const declared = (machine: string): boolean => machines.has(machine);
     const target: Record<string, unknown> = { ...record };
     const guarded = (key: string): boolean => MACHINE_IDS.has(key) || Object.prototype.hasOwnProperty.call(target, key);
     return new Proxy(target, {
@@ -240,20 +266,20 @@ export function guardedView(view: EngineView, reads: readonly Dependency[], { un
       get(t, key, receiver) {
         if (typeof key === 'symbol' || !guarded(key)) return Reflect.get(t, key, receiver);
         const value = Reflect.get(t, key, receiver);
-        if (declared(key)) return (onRead(`${path}.${key}`), wrap(value, key));
-        if (!listed.delete(key)) return read(`${path}.${key}`, false);
-        onRead(`${path}.${key}`);
+        if (declared(key)) return (note(path, key), wrap(value, key));
+        if (!listed.delete(key)) return read(path, key, false);
+        note(path, key);
         const spans = Array.isArray(value) ? value.map((span: object, i: number) => identityOnly(span, `${path}.${key}[${i}]`)) : value;
         return readOnlyList(spans, `${path}.${key}`);
       },
       ownKeys(t) {
-        onRead(whole);
+        onRead?.(whole);
         const keys = Reflect.ownKeys(t);
         for (const key of keys) if (typeof key === 'string' && !declared(key)) listed.add(key);
         return keys;
       },
       has(t, key) {
-        if (typeof key === 'string' && guarded(key) && !declared(key) && !listed.has(key)) read(`${path}.${key}`, false);
+        if (typeof key === 'string' && guarded(key) && !declared(key) && !listed.has(key)) read(path, key, false);
         return Reflect.has(t, key);
       },
     });
@@ -265,8 +291,17 @@ export function guardedView(view: EngineView, reads: readonly Dependency[], { un
   const carFields = new Set(areas.flatMap((area) => LIVE_AREA_FIELDS[area].car));
   const liveTarget: Record<string, unknown> = { ...view.live };
   if (carFields.size > 0 && Array.isArray(view.live.cars)) {
-    const cars = view.live.cars.map((car, i) => guard({ ...car }, `live.cars[${i}]`, (k) => FREE_CAR.has(k) || carFields.has(k)));
-    liveTarget['cars'] = new Proxy(cars, refuseWrites('live.cars'));
+    // each car's guard is made when the unit first reads the car: most units read a few cars of a frame, or none
+    const source = view.live.cars;
+    const made: unknown[] = [];
+    const carAt = (i: number): unknown => (made[i] ??= guard({ ...source[i]! }, `live.cars[${i}]`, (k) => FREE_CAR.has(k) || carFields.has(k)));
+    liveTarget['cars'] = new Proxy([...source], {
+      ...refuseWrites('live.cars'),
+      get(t, key, receiver) {
+        if (typeof key === 'string' && key.charCodeAt(0) >= 48 && key.charCodeAt(0) <= 57 && Number(key) < source.length) return carAt(Number(key));
+        return Reflect.get(t, key, receiver);
+      },
+    });
   }
   const live = guard(liveTarget, 'live', (k) => FREE_LIVE.has(k) || stateFields.has(k) || (k === 'cars' && carFields.size > 0), undefined, NEVER_LIVE);
 
@@ -281,17 +316,17 @@ export function guardedView(view: EngineView, reads: readonly Dependency[], { un
   );
 
   // situation
-  deepFreeze(view.situation);
+  freezeOnce(view.situation);
   const situation = guard({ ...view.situation, byMachine: byMachine(view.situation.byMachine, 'situation.byMachine', 'situation', (v) => v) }, 'situation', () => true);
 
   // outputs
   const whole = (): never => {
-    read('outputs', false);
-    throw new Error('unreachable');
+    onRead?.('outputs');
+    throw new UndeclaredReadError(unit, 'outputs', 'C41');
   };
   const outputs = {
-    get: (id: CalculatorId) => (read(`outputs.${id}`, calculators.has(id)), view.outputs.get(id)),
-    has: (id: CalculatorId) => (read(`outputs.${id}`, calculators.has(id)), view.outputs.has(id)),
+    get: (id: CalculatorId) => (read('outputs', id, calculators.has(id)), view.outputs.get(id)),
+    has: (id: CalculatorId) => (read('outputs', id, calculators.has(id)), view.outputs.has(id)),
     get size(): number {
       return whole();
     },
@@ -311,7 +346,13 @@ export function guardedView(view: EngineView, reads: readonly Dependency[], { un
 
 /** `calc` with every call given its guarded view (`guardedView` with its own `reads`), so an undeclared read throws (C41). */
 export function guarded(calc: Calculator, onRead?: (path: string) => void): Calculator {
-  const g = (view: EngineView) => guardedView(view, calc.reads, { unit: calc.id, ...(onRead && { onRead }) });
+  // one guard per view: the scheduler hands `update`, `output` and `insights` of a frame the same view
+  const views = new WeakMap<EngineView, EngineView>();
+  const g = (view: EngineView): EngineView => {
+    let seen = views.get(view);
+    if (seen === undefined) views.set(view, (seen = guardedView(view, calc.reads, { unit: calc.id, ...(onRead && { onRead }) })));
+    return seen;
+  };
   const insights = calc.insights;
   const withInsights = insights && { insights: (out: unknown, prev: unknown, view: EngineView) => insights(out, prev, g(view)) };
   if (calc.kind === 'quick') return { ...calc, compute: (view) => calc.compute(g(view)), ...withInsights };
@@ -407,6 +448,14 @@ export const underPhase = (kind: string): IncrementalCalculator<Folded, Folded> 
 export const underNeutralisation = underPhase('neutralised');
 
 /**
+ * `expect(actual).toEqual(expected)`, asked only when the two are not deep-strictly equal: strict equality implies
+ * `toEqual`'s, so the verdict is `toEqual`'s, at the cost of a native comparison where they agree.
+ */
+const expectEqual = (actual: unknown, expected: unknown, message: string): void => {
+  if (!isDeepStrictEqual(actual, expected)) expect(actual, message).toEqual(expected);
+};
+
+/**
  * Runs `frames` through a `SessionRunner` and a `Scheduler` that needs `calc` and, on every step it ran, expects its
  * output to equal a fresh `init` over that step's view (incremental = from scratch, docs/testing.md section 5). The
  * scheduler is never reset by hand: only a flashback rewinds (`delta.rewound`, C30). Both see the guarded view (C41).
@@ -419,7 +468,7 @@ export function expectScheduledIncremental<Acc, Out>(calc: IncrementalCalculator
     const input = inputOf(r);
     const { ran, outputs } = scheduler.run(input);
     const fresh = guardedView({ ...input, outputs: new Map() }, calc.reads, { unit: calc.id });
-    if (ran.includes(calc.id)) expect(outputs.get(calc.id), `frame ${i}`).toEqual(calc.output(calc.init(fresh), fresh));
+    if (ran.includes(calc.id)) expectEqual(outputs.get(calc.id), calc.output(calc.init(fresh), fresh), `frame ${i}`);
     i++;
   };
   for (const frame of frames) runner.apply(frame, check);
