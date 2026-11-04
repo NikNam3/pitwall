@@ -91,7 +91,7 @@ const rows: TransitionRow<MachineInput>[] = [
   },
   { name: 'the box (pit status pitting -> in the pit area): inLap -> boxStop', from: 'inLap', to: 'boxStop', input: onInLap().frames(2).frame(inBox(0)) },
   { name: 'leaving the box (pit status in the pit area -> pitting): boxStop -> outLap', from: 'boxStop', to: 'outLap', input: leftTheBox() },
-  { name: 'the pit exit without a stop (not yet seen, C19): inLap -> outLap', from: 'inLap', to: 'outLap', input: onInLap().frames(3).frame(onTrack(0)) },
+  { name: 'the pit exit without a stop (seen 9 times in the scan): inLap -> outLap', from: 'inLap', to: 'outLap', input: onInLap().frames(3).frame(onTrack(0)) },
   { name: 'the first lap rise on track after the pit exit: outLap -> racingLap', from: 'outLap', to: 'racingLap', input: outOnTrack().frame(lap(0, 2)) },
   { name: 'a pit entry on the out lap (not yet seen, C19): outLap -> inLap', from: 'outLap', to: 'inLap', input: outOnTrack().frame(inPitLane(0)) },
   {

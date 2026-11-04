@@ -28,13 +28,13 @@ const notes: string[] = [];
 const info = vi.spyOn(console, 'info').mockImplementation((m: unknown) => { notes.push(String(m)); });
 const saved = process.env['PITWALL_FIXTURES_DIR'];
 process.env['PITWALL_FIXTURES_DIR'] = mkdtempSync(join(tmpdir(), 'fx-empty-'));
-describeWithFixture('ttZandvoort', 'a suite whose fixture is missing', () => {
+describeWithFixture('raceSingapore', 'a suite whose fixture is missing', () => {
   it('is skipped, never run', () => { throw new Error('must be skipped'); });
 });
 if (saved === undefined) delete process.env['PITWALL_FIXTURES_DIR']; else process.env['PITWALL_FIXTURES_DIR'] = saved;
 info.mockRestore();
 it('prints a note naming the missing file', () => {
-  expect(notes).toEqual([expect.stringContaining('2026-10-27_23-31-43_1a4f5531395c7884.pwrec.gz')]);
+  expect(notes).toEqual([expect.stringContaining('2026-10-28_00-15-04_b3cd07e2790bdcbe.pwrec.gz')]);
 });
 
 for (const f of index.fixtures) {

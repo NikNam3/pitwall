@@ -17,7 +17,7 @@ Before writing a test, name the behaviour in one sentence: "a car that retires k
 | `protocol` | unit and property tests: decode, encode, round trip | hand-built bytes, `fast-check` arbitraries, committed segments | `packages/protocol/test/arbitraries.ts`, `test-support/reference-decoder.ts` |
 | `domain` | unit tests of the pure helpers | literals | none |
 | `engine` | scenario tests per step; property tests on generated races | `ScenarioBuilder` frames | `packages/engine/test/builders/`, `test/support/{arb-race,invariants,run}.ts` |
-| `analysis` | unit tests per calculator; incremental = from scratch; flashback = fresh run over the truncated history | builder data | `test-support/builders/` (`lap`, `crossings`, `field`, `carState`, `engineView`, `history`), `expectIncrementalEqualsFromScratch` |
+| `analysis` | unit tests per calculator; incremental = from scratch; flashback (`rewound`) = a fresh run over the projection after the void | builder data | `test-support/builders/` (`lap`, `crossings`, `field`, `carState`, `engineView`, `history`), `expectIncrementalEqualsFromScratch` |
 | `bridge` | pipeline and feature tests; engine and tracker on real data | committed segments | `apps/bridge/test/fixtures/replay.ts` (`segmentPath`, `trackFile`), `engine-replay.ts` (`replayRunner`) |
 | `ui` | gallery cases per display; `fit.spec` (no overflow at any size or theme); a few screenshot baselines; Playwright e2e per workflow | synthetic topic values in `gallery.ts`; moments captured from segments | `apps/ui/test/gallery/`, `apps/ui/e2e/harness.ts` |
 

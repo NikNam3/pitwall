@@ -122,7 +122,7 @@ const rows: TransitionRow[] = [
   },
   { name: 'SEND under the safety car opens the post-session', from: 'neutralised', to: 'postSession', input: underSc().frame(race(events(SEND))) },
   {
-    name: 'the simulated end while a deployment waits: the neutralisation closes confirmed false and the post-session opens (ZvR2)',
+    name: 'the simulated end while a deployment waits: the neutralisation closes confirmed false and the post-session opens (not yet seen, from the game’s specification)',
     from: 'neutralised',
     to: 'postSession',
     input: racing().frame(race(events(scar('SC', 'deployed')))).frame(race(simulatedEnd)),

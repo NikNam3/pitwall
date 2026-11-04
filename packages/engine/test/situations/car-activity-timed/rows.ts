@@ -87,7 +87,7 @@ export const timedActivityRows = (t: Timed, push: 'pushLap' | 'flyingLap'): Tran
       input: inputs().frames(2, f(onOutLap(2_500, 3))).frame(f(onOutLap(4_950, 3))).frame(f(car0({ ds: 'outLap', ps: 'none', d: 3, lap: 3, timerMs: 50 }))),
     },
     // the in lap
-    { name: 'into the pit lane on the out lap (not yet seen): outLap -> inLap', from: 'outLap', to: 'inLap', input: onOut().frame(f(car0({ ds: 'outLap', ps: 'pitting', d: 2_700 }))) },
+    { name: 'into the pit lane on the out lap (seen once in practice, not yet seen in qualifying): outLap -> inLap', from: 'outLap', to: 'inLap', input: onOut().frame(f(car0({ ds: 'outLap', ps: 'pitting', d: 2_700 }))) },
     { name: 'the session’s end on the out lap: the result status finished mid-lap (not yet seen): outLap -> inLap', from: 'outLap', to: 'inLap', input: onOut().frame(f(car0({ ds: 'outLap', ps: 'none', d: 2_600, rs: 'finished' }))) },
     { name: `the in-lap driver status on track, a frame after the line (SgQ car 8 at 221.986): ${push} -> inLap`, from: push, to: 'inLap', input: inputs().frames(2, f(pushing(4_920, 1))).frame(f(pushing(1, 2, 0))).frame(f(inLapOnTrack(2, 2, 33))) },
     { name: `the pit entry with the driver status still flying (ps 0 -> 1): ${push} -> inLap`, from: push, to: 'inLap', input: onPush().frame(f(car0({ ds: 'flyingLap', ps: 'pitting', d: 4_960, lap: 2 }))) },
