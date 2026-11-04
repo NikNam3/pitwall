@@ -21,6 +21,8 @@ export { paceCalculator } from './pace/calculator.ts';
 export { fuelCalculator } from './fuel/calculator.ts';
 export * from './pace-delta/index.ts';
 export * from './per-lap-rate/index.ts';
+export * from './pit-stop-count/index.ts';
+export { pitStopCountCalculator } from './pit-stop-count/calculator.ts';
 export * from './race-moment/index.ts';
 export * from './session-remaining/index.ts';
 export { sessionRemainingCalculator } from './session-remaining/calculator.ts';

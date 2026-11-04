@@ -1,7 +1,7 @@
 // Joins the topics the timing tower reads into one row per car (no arithmetic: the numbers, stops and compound included,
-// come from the topics). Where a car is, what it does, what it owes and whether it still competes come from the situation
+// come from the topics; the stops are joined by car id from `pitStopCount.byCar`). Where a car is, what it does, what it owes and whether it still competes come from the situation
 // topics' open spans, each kind mapped to its cell by the presentation table (C65, C66).
-import type { CarOverview, MachineSpans, SessionInfo } from '@pitwall/contracts';
+import type { CarOverview, MachineSpans, PitStopCounts, SessionInfo } from '@pitwall/contracts';
 import { unknown } from '@pitwall/domain';
 import { ourCars } from '../../kit/car/our-cars.ts';
 import { openSpanOf } from '../../kit/situation.ts';
@@ -17,6 +17,8 @@ import type {
 
 export type TowerInput = {
   cars: CarOverview[];
+  /** Each car's stops (`pit-stop-count`). */
+  pitStops: PitStopCounts;
   intervals: Interval[];
   toCar: GapToCar[];
   board: LapBoard;
@@ -61,7 +63,8 @@ export type TowerRow = {
   sectors: Array<{ timeMs: Known<Ms>; status: SectorStatus }>;
   compound: VisualCompound;
   age: number;
-  stops: number;
+  /** The car's stops from `pitStopCount.byCar`; undefined for a car it does not list (shown empty, C3). */
+  stops: number | undefined;
   /** The PEN cell as it shows: `SG`, `DT`, the time penalty (`5s`) or the warnings (`2w`); a time beside SG/DT in the title. */
   penalty: { text: string; role?: Role | undefined; title?: string };
   /** The situation column as it shows: GARAGE, PIT, BOX, DT, SG, OUT, IN, RET, DSQ, FIN, or nothing. */
@@ -132,6 +135,7 @@ export function buildRows(input: TowerInput): TowerRow[] {
   const intervals = new Map(input.intervals.map((i) => [i.carId, i]));
   const toCar = new Map(input.toCar.map((g) => [g.carId, g]));
   const board = new Map(input.board.rows.map((r) => [r.carId, r]));
+  const stops = new Map(input.pitStops.byCar.map((s) => [s.carId, s.stops]));
   const incident = momentIncident(input.moment, input.incidents);
   const ours = ourCars(input.session);
   const activityKey = rowOf(presentation.situations['weekend-phase'], openSpanOf(input.phase))?.activity;
@@ -164,7 +168,7 @@ export function buildRows(input: TowerInput): TowerRow[] {
       sectors: sectorsOf(lap),
       compound: c.tyres.visualCompound,
       age: c.tyres.age,
-      stops: c.stops,
+      stops: stops.get(id),
       penalty: penaltyCell(openSpanOf(input.penalties, id), openSpanOf(input.warnings, id)),
       situation: situationCell(status, openSpanOf(activities, id), activityRows, openSpanOf(input.location, id)),
       overview: c,

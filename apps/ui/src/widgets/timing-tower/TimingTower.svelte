@@ -47,7 +47,7 @@
 {#snippet sector(r: TowerRow, i: number)}{@const s = r.sectors[i]}{#if s}<span style:color={colourOf(s.status, r.ours)}><Value value={s.timeMs} format={formatSector} /></span>{/if}{/snippet}
 {#snippet compound(r: TowerRow)}<CompoundMark compound={r.compound} />{/snippet}
 {#snippet age(r: TowerRow)}{formatCount(r.age)}{/snippet}
-{#snippet stops(r: TowerRow)}{formatCount(r.stops)}{/snippet}
+{#snippet stops(r: TowerRow)}{r.stops === undefined ? '' : formatCount(r.stops)}{/snippet}
 {#snippet pen(r: TowerRow)}<TextCell {...r.penalty} />{/snippet}
 {#snippet situation(r: TowerRow)}<TextCell {...r.situation} />{/snippet}
 

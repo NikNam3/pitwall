@@ -8,8 +8,6 @@ export type CarOverview = {
   timing: Omit<CarState['timing'], 'confirmedLaps'>;
   /** `visualCompound` is the live one, or the car's latest stint record's while the game sends `unknown`. */
   tyres: Pick<CarState['tyres'], 'actualCompound' | 'visualCompound' | 'age'>;
-  /** Pit stops so far: the car's pit-stop records. */
-  stops: number;
   updatedAt: CarState['updatedAt'];
 };
 
