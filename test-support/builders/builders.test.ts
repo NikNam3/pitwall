@@ -63,9 +63,9 @@ describe('builders', () => {
   it('engineView places cars by id, carries history, delta and outputs', () => {
     const laps = field({ cars: 1, laps: 2, paceMs: 90_000 });
     const view = engineView({ cars: [carState({ id: carId(5) })], history: history(laps), outputs: new Map([['x', 1]]) });
-    expect(view.state.cars[5]!.active).toBe(true);
-    expect(view.state.cars[0]!.active).toBe(false);
-    expect(view.state.history.laps).toHaveLength(2);
+    expect(view.live.cars[5]!.active).toBe(true);
+    expect(view.live.cars[0]!.active).toBe(false);
+    expect(view.history.laps).toHaveLength(2);
     expect(view.delta.after.crossings).toBe(101);
     expect(view.delta.rewound).toBeUndefined();
     expect(view.outputs.get('x')).toBe(1);

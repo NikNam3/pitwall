@@ -47,7 +47,7 @@ export async function replayScheduled(
   scheduler.setNeeded(calculators.map((c) => c.id));
   return replayRunner(path, (r, f) => {
     if (r.delta.rewound !== undefined) scheduler.reset();
-    const scheduled = scheduler.run({ state: r.state, activeFlagPhase: activeFlagPhaseOf(r.state), situation: situationOf(r.state), changed: r.changed, delta: r.delta, feed: IDLE_FEED, config });
+    const scheduled = scheduler.run({ live: r.state, situation: situationOf(r.state), history: r.state.history, activeFlagPhase: activeFlagPhaseOf(r.state), changed: r.changed, delta: r.delta, weekend: r.state.weekend, feed: IDLE_FEED, config, priors: {} });
     onStep(r, scheduled, f);
   });
 }

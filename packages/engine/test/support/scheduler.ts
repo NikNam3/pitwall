@@ -1,14 +1,19 @@
 // Shared by the Scheduler tests: history deltas, the feed metrics and the input a scheduler runs on, a scheduler over
-// quick calculators that all count as needed, and the scheduler's incremental = from scratch check over frames.
+// quick calculators that all count as needed, the scheduler's incremental = from scratch check over frames, and the
+// guarded view (C41): every unit this harness runs sees its view through `guardedView`.
 import { expect } from 'vitest';
 import {
   activeFlagPhaseOf,
   CalculatorRegistry,
+  MACHINES,
   Scheduler,
   SessionRunner,
   situationOf,
+  STEP0_CLOCK,
   type Calculator,
+  type CalculatorId,
   type ChangeTag,
+  type Dependency,
   type EngineView,
   type FeedMetricsView,
   type Frame,
@@ -18,6 +23,10 @@ import {
   type SchedulerInput,
   type StepResult,
 } from '../../src/index.ts';
+import type { Situation } from '../../src/situations/situation.ts';
+import type { LiveArea } from '../../src/state/live-state.ts';
+import { deepFreeze } from '../../src/util/deep-freeze.ts';
+import { LIVE_AREA_FIELDS, UndeclaredReadError } from './guarded-input.ts';
 import { initFor } from './run.ts';
 
 type Lengths = HistoryDelta['before'];
@@ -34,20 +43,244 @@ export const delta = (before = 0, after = before, rewound = false, fields: Reado
 
 export const feed = { framesClosed: 0, incompleteFrames: 0, latePackets: 0, droppedBeforeSession: 0, droppedUid0: 0, decodeErrors: 0, packetsPerSecond: 0, connected: true, msSinceLastPacket: 0, lossPercent: 0 } as FeedMetricsView;
 
-/** The situation of the scheduler inputs: the session not paused (the session phase is in the projection's spans, C20). */
-export const RACING: SchedulerInput['situation'] = { paused: false };
+/** The situation of the scheduler inputs: a race, no span open (the session phase is in the projection's spans, C20). */
+export const RACING: Situation = { weekendPhase: { kind: 'race', format: 'grandPrix' }, byMachine: {} };
 
-/** A scheduler input at session time `t`; the state's history holds `laps` laps; `config` is the features' effective config. */
-export const input = (t: number, changed: ChangeTag[] = ['timing'], d = delta(), laps = d.after.laps ?? 0, config: SchedulerInput['config'] = {}): SchedulerInput =>
-  ({ activeFlagPhase: undefined, situation: RACING, state: { feedId: 'f1', sessionTime: t, history: { laps: new Array(laps).fill({}) } } as never, changed: new Set(changed), delta: d, feed, config });
+/** A scheduler input at session time `t`; the history holds `laps` laps; `config` is the features' effective config. */
+export const input = (t: number, changed: ChangeTag[] = ['timing'], d = delta(), laps = d.after.laps ?? 0, config: SchedulerInput['config'] = {}): SchedulerInput => ({
+  live: { feedId: 'f1', sessionTime: t } as never,
+  situation: RACING,
+  history: { laps: new Array(laps).fill({}) } as never,
+  activeFlagPhase: undefined,
+  changed: new Set(changed),
+  delta: d,
+  weekend: undefined,
+  feed,
+  config,
+  priors: {},
+});
+
+/**
+ * The scheduler input of a step's result (C39): its live state, its situation (`situationOf`), its projection and its
+ * weekend context, with the change tags and the delta of the step; no priors (`{}` until the priors store exists).
+ * `activeFlagPhase` defaults to the state's (`activeFlagPhaseOf`, transitional until Task 19), `feed` to a healthy feed.
+ */
+export const inputOf = (
+  { state, changed, delta: d }: Pick<StepResult, 'state' | 'changed' | 'delta'>,
+  o: { feed?: FeedMetricsView; config?: SchedulerInput['config']; activeFlagPhase?: SchedulerInput['activeFlagPhase'] } = {},
+): SchedulerInput => ({
+  live: state,
+  situation: situationOf(state),
+  history: state.history,
+  activeFlagPhase: 'activeFlagPhase' in o ? o.activeFlagPhase : activeFlagPhaseOf(state),
+  changed,
+  delta: d,
+  weekend: state.weekend,
+  feed: o.feed ?? feed,
+  config: o.config ?? {},
+  priors: {},
+});
+
+/** The view of a step's result, as a unit gets it with no outputs before it (`inputOf`). */
+export const viewOf = (result: Pick<StepResult, 'state' | 'changed' | 'delta'>, o: Parameters<typeof inputOf>[1] = {}): EngineView => ({ ...inputOf(result, o), outputs: new Map() });
+
+// ---------------------------------------------------------------------------------------------------------------------
+// The guarded view (C41): a unit reads only what it declares in `reads`.
+
+/** The change tag of each projection list (C40); `spans` is by sub-machine (`spans:<id>`). */
+const LIST_TAGS: Readonly<Record<string, ChangeTag>> = {
+  laps: 'laps',
+  stints: 'stints',
+  pitStops: 'pitStops',
+  flagPhases: 'flagPhases',
+  events: 'events',
+  crossings: 'miniSectors',
+  clock: 'clock',
+};
+
+/** The live state's fields every unit may read: which feed and session, the race clock's time, the last frame id, realism. */
+const FREE_LIVE: ReadonlySet<string> = new Set(['feedId', 'sessionUid', 'sessionTime', 'lastFrameId', 'realism']);
+
+/** What the engine state holds besides the live state (C8, C13, C28): never readable in `live`, present or not. */
+const NEVER_LIVE: ReadonlySet<string> = new Set(['open', 'log', 'signals', 'history', 'weekend', 'frameNumber', 'masking', 'frameEvents']);
+
+/** Every sub-machine's id, step 0's clock included: a read of one is guarded whether or not the record holds its spans. */
+const MACHINE_IDS: ReadonlySet<string> = new Set([STEP0_CLOCK.id, ...MACHINES.map((m) => m.id)]);
+
+/** A car's fields every unit that reads any car area may read: its slot, whether it is active (transitional, Task 24), its freshness. */
+const FREE_CAR: ReadonlySet<string> = new Set(['id', 'active', 'updatedAt']);
+
+export type GuardOptions = {
+  /** The unit's id, for the error. */
+  unit?: CalculatorId;
+  /**
+   * Every read of a guarded part, declared or not, by its path: `live.cars[1].timing`, `history.laps`,
+   * `history.spans.clock`, `situation.byMachine.clock`, `outputs.a`, `feed.connected`; an enumeration of every
+   * sub-machine's spans (membership) as `history` and `situation`.
+   */
+  onRead?: (path: string) => void;
+};
+
+const readOnly = (path: string): never => {
+  throw new TypeError(`${path} is read-only: no unit changes its view (C20, C28)`);
+};
+
+/** Proxy traps that refuse every write, freezing included: the target is the engine's own, or a copy only the guard holds. */
+const refuseWrites = <T extends object>(path: string): ProxyHandler<T> => ({
+  set: () => readOnly(path),
+  defineProperty: () => readOnly(path),
+  deleteProperty: () => readOnly(path),
+  preventExtensions: () => readOnly(path),
+  setPrototypeOf: () => readOnly(path),
+});
+
+/**
+ * `view` as a unit that declares `reads` may see it (C39, C41). A read outside the declaration throws an
+ * `UndeclaredReadError`:
+ * - `live`: the declared live areas only, by the fields step 1's module of each area writes (`LIVE_AREA_FIELDS`); a
+ *   car's `id`, `active` and `updatedAt` with any car area, `live.cars` only when a car area is declared; the feed id,
+ *   the session uid, the race clock's time, the last frame id and realism always. Nothing else the engine state holds
+ *   (its open trackers, log, signals, history, weekend context, frame number, masking, frame events) is readable there;
+ * - `history`: a list only with its change tag (`crossings` with `miniSectors`), a sub-machine's closed spans
+ *   (`history.spans[id]`) only with `spans:<id>`;
+ * - `situation`: a sub-machine's open spans (`situation.byMachine[id]`, so `openSpansOf(view, id)`) only with
+ *   `spans:<id>`; the weekend phase always (C14);
+ * - membership (`situationAt(view, frame)`, `membershipOf(view, fact)`, C26) reads `history` and `situation` as a whole
+ *   (ruling 4): enumerating `history.spans` or `situation.byMachine`, which both do, is noted as a read of `history` or
+ *   `situation` and lets each enumerated sub-machine's spans be read once after it, whatever is declared;
+ * - `outputs`: the declared calculators' outputs only (`get`, `has`), never the whole map;
+ * - `feed` only with `feed`; `activeFlagPhase` (transitional, Task 19) only with `flagPhases`;
+ * - `delta`, `changed`, `weekend`, `config` and `priors` always.
+ * The situation is deep-frozen where it is (its spans are step 2's own, ruling 6); the projection's lists are handed out
+ * read-only (they are the log's own arrays, which cannot be frozen; the log freezes their entries): a unit that changes
+ * either throws a `TypeError`. The view itself is not changed: the guard reads through to it.
+ */
+export function guardedView(view: EngineView, reads: readonly Dependency[], { unit = 'unit', onRead = () => {} }: GuardOptions = {}): EngineView {
+  const tags = new Set<string>(reads.filter((r): r is ChangeTag => typeof r === 'string'));
+  const calculators = new Set(reads.flatMap((r) => (typeof r === 'object' ? [r.calculator] : [])));
+  const read = (path: string, declared: boolean): void => {
+    onRead(path);
+    if (!declared) throw new UndeclaredReadError(unit, path, 'C41');
+  };
+
+  /**
+   * `target` behind a read-only proxy whose own string keys, and the `guarded` ones, pass only when `allowed`; other keys
+   * (an inspection's `asymmetricMatch`, `then`) read through. `wrap` maps what passes.
+   */
+  const guard = <T extends object>(
+    target: T,
+    path: string,
+    allowed: (key: string) => boolean,
+    wrap: (value: unknown, key: string) => unknown = (v) => v,
+    guarded: ReadonlySet<string> = new Set(),
+  ): T =>
+    new Proxy<T>(target, {
+      ...refuseWrites<T>(path),
+      get(t, key, receiver) {
+        if (typeof key === 'symbol' || (!guarded.has(key) && !Object.prototype.hasOwnProperty.call(t, key))) return Reflect.get(t, key, receiver);
+        read(`${path}.${key}`, allowed(key));
+        return wrap(Reflect.get(t, key, receiver), key);
+      },
+    });
+
+  /** The projection's lists, read-only, one proxy per list and view. */
+  const lists = new WeakMap<object, unknown>();
+  const readOnlyList = (list: unknown, path: string): unknown => {
+    if (typeof list !== 'object' || list === null) return list;
+    if (!lists.has(list)) lists.set(list, new Proxy(list, refuseWrites(path)));
+    return lists.get(list);
+  };
+
+  /**
+   * A record of spans by sub-machine (`history.spans`, `situation.byMachine`): a machine's spans with `spans:<id>`, or
+   * once after an enumeration of the record (membership, ruling 4), which is a read of `whole`.
+   */
+  const byMachine = (record: object, path: string, whole: string, wrap: (value: unknown, key: string) => unknown): object => {
+    const released = new Set<string>();
+    const allowed = (machine: string): boolean => tags.has(`spans:${machine}`) || released.delete(machine);
+    return new Proxy(guard({ ...record }, path, allowed, wrap, MACHINE_IDS), {
+      ownKeys(t) {
+        onRead(whole);
+        const keys = Reflect.ownKeys(t);
+        for (const key of keys) if (typeof key === 'string') released.add(key);
+        return keys;
+      },
+      has(t, key) {
+        if (typeof key === 'string' && (MACHINE_IDS.has(key) || Object.prototype.hasOwnProperty.call(t, key))) read(`${path}.${key}`, allowed(key));
+        return Reflect.has(t, key);
+      },
+    });
+  };
+
+  // live
+  const areas = (Object.keys(LIVE_AREA_FIELDS) as LiveArea[]).filter((area) => tags.has(area));
+  const stateFields = new Set(areas.flatMap((area) => LIVE_AREA_FIELDS[area].state));
+  const carFields = new Set(areas.flatMap((area) => LIVE_AREA_FIELDS[area].car));
+  const liveTarget: Record<string, unknown> = { ...view.live };
+  if (carFields.size > 0 && Array.isArray(view.live.cars)) {
+    const cars = view.live.cars.map((car, i) => guard({ ...car }, `live.cars[${i}]`, (k) => FREE_CAR.has(k) || carFields.has(k)));
+    liveTarget['cars'] = new Proxy(cars, refuseWrites('live.cars'));
+  }
+  const live = guard(liveTarget, 'live', (k) => FREE_LIVE.has(k) || stateFields.has(k) || (k === 'cars' && carFields.size > 0), undefined, NEVER_LIVE);
+
+  // history
+  const projection = view.history as unknown as Record<string, unknown>;
+  const spans = byMachine({ ...(projection['spans'] as object | undefined) }, 'history.spans', 'history', (list, machine) => readOnlyList(list, `history.spans.${machine}`));
+  const history = guard(
+    { ...projection, spans },
+    'history',
+    (k) => k === 'spans' || (LIST_TAGS[k] !== undefined && tags.has(LIST_TAGS[k])),
+    (list, k) => (k === 'spans' ? list : readOnlyList(list, `history.${k}`)),
+  );
+
+  // situation
+  deepFreeze(view.situation);
+  const situation = guard({ ...view.situation, byMachine: byMachine(view.situation.byMachine, 'situation.byMachine', 'situation', (v) => v) }, 'situation', () => true);
+
+  // outputs
+  const whole = (): never => {
+    read('outputs', false);
+    throw new Error('unreachable');
+  };
+  const outputs = {
+    get: (id: CalculatorId) => (read(`outputs.${id}`, calculators.has(id)), view.outputs.get(id)),
+    has: (id: CalculatorId) => (read(`outputs.${id}`, calculators.has(id)), view.outputs.has(id)),
+    get size(): number {
+      return whole();
+    },
+    forEach: whole,
+    entries: whole,
+    keys: whole,
+    values: whole,
+    [Symbol.iterator]: whole,
+  } as unknown as ReadonlyMap<CalculatorId, unknown>;
+
+  return guard(
+    { ...view, live, history, situation, outputs, feed: guard({ ...view.feed }, 'feed', () => tags.has('feed')) } as EngineView,
+    'view',
+    (k) => k !== 'activeFlagPhase' || tags.has('flagPhases'),
+  );
+}
+
+/** `calc` with every call given its guarded view (`guardedView` with its own `reads`), so an undeclared read throws (C41). */
+export function guarded(calc: Calculator, onRead?: (path: string) => void): Calculator {
+  const g = (view: EngineView) => guardedView(view, calc.reads, { unit: calc.id, ...(onRead && { onRead }) });
+  const insights = calc.insights;
+  const withInsights = insights && { insights: (out: unknown, prev: unknown, view: EngineView) => insights(out, prev, g(view)) };
+  if (calc.kind === 'quick') return { ...calc, compute: (view) => calc.compute(g(view)), ...withInsights };
+  return { ...calc, init: (view) => calc.init(g(view)), update: (acc, d, view) => calc.update(acc, d, g(view)), ...withInsights };
+}
 
 /** A quick calculator that reads timing, runs every frame and returns the session time, unless `o` says otherwise. */
 export const quick = (id: string, o: Partial<QuickCalculator<unknown>> = {}): Calculator =>
-  ({ kind: 'quick', id, reads: ['timing'], cadence: 'frame', compute: (v) => v.state.sessionTime, ...o }) as Calculator;
+  ({ kind: 'quick', id, reads: ['timing'], cadence: 'frame', compute: (v) => v.live.sessionTime, ...o }) as Calculator;
 
-/** A scheduler over `calcs` that needs `needed`; outputs frozen, as in every test (a unit never changes an output it returned). */
+/**
+ * A scheduler over `calcs`, each run through its guarded view (C41), that needs `needed`; outputs frozen, as in every
+ * test (a unit never changes an output it returned).
+ */
 export const sched = (calcs: Calculator[], needed = calcs.map((c) => c.id)) => {
-  const s = new Scheduler(CalculatorRegistry.build(calcs), { freezeOutputs: true });
+  const s = new Scheduler(CalculatorRegistry.build(calcs.map((calc) => guarded(calc))), { freezeOutputs: true });
   s.setNeeded(needed);
   return s;
 };
@@ -67,21 +300,21 @@ const covers = (span: { startFrame: number; endFrame: number }, frame: number): 
  * closed span, newly closed spans against the crossings folded before.
  */
 export const underPhase = (kind: string): IncrementalCalculator<Folded, Folded> => {
-  const spansOf = (v: EngineView) => v.state.history.spans[RACE_PHASES] ?? [];
+  const spansOf = (v: EngineView) => v.history.spans[RACE_PHASES] ?? [];
   const count = (crossings: ReadonlyArray<{ frame: number }>, spans: ReadonlyArray<{ kind: string; startFrame: number; endFrame: number }>): number =>
     crossings.reduce((n, c) => n + spans.filter((s) => s.kind === kind && covers(s, c.frame)).length, 0);
   const fold = (acc: Folded, v: EngineView, d: { crossings: [number, number]; spans: [number, number] }): Folded => {
-    const { crossings } = v.state.history;
+    const { crossings } = v.history;
     const spans = spansOf(v);
     const under = acc.under + count(crossings.slice(d.crossings[0], d.crossings[1]), spans) + count(crossings.slice(0, d.crossings[0]), spans.slice(d.spans[0], d.spans[1]));
-    return { crossings: acc.crossings + d.crossings[1] - d.crossings[0], under, events: v.state.history.events.length };
+    return { crossings: acc.crossings + d.crossings[1] - d.crossings[0], under, events: v.history.events.length };
   };
   return {
     kind: 'incremental',
     id: `probe.under.${kind}`,
     reads: ['miniSectors', 'events', `spans:${RACE_PHASES}` as ChangeTag],
     cadence: 'frame',
-    init: (v) => fold({ crossings: 0, under: 0, events: 0 }, v, { crossings: [0, v.state.history.crossings.length], spans: [0, 0] }),
+    init: (v) => fold({ crossings: 0, under: 0, events: 0 }, v, { crossings: [0, v.history.crossings.length], spans: [0, 0] }),
     update: (acc, d, v) =>
       fold(acc, v, {
         crossings: [d.before.crossings ?? 0, d.after.crossings ?? 0],
@@ -97,16 +330,17 @@ export const underNeutralisation = underPhase('neutralised');
 /**
  * Runs `frames` through a `SessionRunner` and a `Scheduler` that needs `calc` and, on every step it ran, expects its
  * output to equal a fresh `init` over that step's view (incremental = from scratch, docs/testing.md section 5). The
- * scheduler is never reset by hand: only a flashback rewinds (`delta.rewound`, C30).
+ * scheduler is never reset by hand: only a flashback rewinds (`delta.rewound`, C30). Both see the guarded view (C41).
  */
 export function expectScheduledIncremental<Acc, Out>(calc: IncrementalCalculator<Acc, Out>, frames: readonly Frame[]): void {
   const runner = new SessionRunner(initFor([...frames]));
   const scheduler = sched([calc as Calculator]);
   let i = 0;
   const check = (r: StepResult) => {
-    const view = { state: r.state, activeFlagPhase: activeFlagPhaseOf(r.state), situation: situationOf(r.state), changed: r.changed, delta: r.delta, feed, config: {} };
-    const { ran, outputs } = scheduler.run(view);
-    if (ran.includes(calc.id)) expect(outputs.get(calc.id), `frame ${i}`).toEqual(calc.output(calc.init({ ...view, outputs: new Map() })));
+    const input = inputOf(r);
+    const { ran, outputs } = scheduler.run(input);
+    const fresh = guardedView({ ...input, outputs: new Map() }, calc.reads, { unit: calc.id });
+    if (ran.includes(calc.id)) expect(outputs.get(calc.id), `frame ${i}`).toEqual(calc.output(calc.init(fresh)));
     i++;
   };
   for (const frame of frames) runner.apply(frame, check);

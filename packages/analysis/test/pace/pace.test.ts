@@ -155,7 +155,7 @@ describe('pace calculator', () => {
     // the same through update: the provisional arrives first, the confirmation in the next delta
     const first = raceView([provisional]);
     const acc = paceCalculator.init(first);
-    const delta = { before: projectionLengths(first.state.history), after: projectionLengths(both.state.history) };
+    const delta = { before: projectionLengths(first.history), after: projectionLengths(both.history) };
     const next = paceCalculator.update(acc, delta, both);
     expect(paceCalculator.output(next)).toEqual(run(both));
   });
@@ -163,10 +163,10 @@ describe('pace calculator', () => {
   it('update over a delta equals init over the whole history', () => {
     const { laps } = field({ cars: 3, laps: 8, paceMs: [90_000, 91_000, 92_500] });
     let acc = paceCalculator.init(raceView([]));
-    let before = projectionLengths(raceView([]).state.history);
+    let before = projectionLengths(raceView([]).history);
     for (let n = 1; n <= laps.length; n += 3) {
       const view = raceView(laps.slice(0, n + 2));
-      const after = projectionLengths(view.state.history);
+      const after = projectionLengths(view.history);
       acc = paceCalculator.update(acc, { before, after }, view);
       before = after;
       expect(paceCalculator.output(acc)).toEqual(run(view));
@@ -177,12 +177,12 @@ describe('pace calculator', () => {
     const { laps } = field({ cars: 3, laps: 8, paceMs: [90_000, 91_000, 92_500] });
     const full = raceView(laps);
     const acc = paceCalculator.update(paceCalculator.init(raceView(laps.slice(0, 6))), {
-      before: projectionLengths(raceView(laps.slice(0, 6)).state.history),
-      after: projectionLengths(full.state.history),
+      before: projectionLengths(raceView(laps.slice(0, 6)).history),
+      after: projectionLengths(full.history),
     }, full);
     const kept = laps.filter((l) => l.lapNumber <= 4);
     const truncatedView = raceView(kept);
-    const truncated = paceCalculator.update(acc, { before: projectionLengths(full.state.history), after: projectionLengths(truncatedView.state.history), rewound: { frameId: -1, at: 0 } }, truncatedView);
+    const truncated = paceCalculator.update(acc, { before: projectionLengths(full.history), after: projectionLengths(truncatedView.history), rewound: { frameId: -1, at: 0 } }, truncatedView);
     expect(paceCalculator.output(truncated)).toEqual(run(truncatedView));
   });
 });

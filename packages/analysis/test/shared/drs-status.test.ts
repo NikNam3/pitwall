@@ -8,7 +8,10 @@ const enabled = (at = 0): RaceEvent => event({ kind: 'drsEnabled', at });
 const disabled = (reason: number | string | undefined, at = 0): RaceEvent =>
   event({ kind: 'drsDisabled', at, params: reason === undefined ? {} : { reason } });
 
-const statusOf = (events: RaceEvent[], kind: SessionKind = 'race') => drsStatus(engineView({ session: { kind }, history: { events } }).state);
+const statusOf = (events: RaceEvent[], kind: SessionKind = 'race') => {
+  const view = engineView({ session: { kind }, history: { events } });
+  return drsStatus({ session: view.live.session, history: view.history });
+};
 
 describe('drsStatus', () => {
   it('a race without DRSE or DRSD: off, not enabled yet', () => {

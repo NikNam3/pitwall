@@ -8,7 +8,7 @@ import { bindHistory, bindInsights, bindLive, bindState, defineFeature, type Top
 import { selectCarSlot } from '../../src/features/car-params.ts';
 
 /** Every car slot as the engine holds it, read-only. */
-type ViewCars = EngineView['state']['cars'];
+type ViewCars = EngineView['live']['cars'];
 
 /** A calculator of the given output type; `compute` is never called here. */
 const quick = <Out>(id: string, out: Out): QuickCalculator<Out> => ({ id, kind: 'quick', reads: ['timing'], cadence: 'frame', compute: () => out });

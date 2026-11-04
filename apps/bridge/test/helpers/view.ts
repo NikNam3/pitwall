@@ -17,5 +17,17 @@ export const viewFrom = (frames: readonly Frame[], feed: Partial<FeedMetricsView
   // what still waits for Participants (the runner's identity wait) is applied at the end
   runner.end((r) => results.push(r));
   const last = results.at(-1)!;
-  return { state: last.state, activeFlagPhase: activeFlagPhaseOf(runner.state), situation: situationOf(runner.state), changed: last.changed, delta: last.delta, feed: { ...IDLE_FEED, ...feed }, outputs: new Map(), config };
+  return {
+    live: last.state,
+    situation: situationOf(runner.state),
+    history: last.state.history,
+    activeFlagPhase: activeFlagPhaseOf(runner.state),
+    changed: last.changed,
+    delta: last.delta,
+    weekend: last.state.weekend,
+    feed: { ...IDLE_FEED, ...feed },
+    outputs: new Map(),
+    config,
+    priors: {},
+  };
 };

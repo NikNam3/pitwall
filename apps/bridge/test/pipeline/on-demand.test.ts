@@ -231,7 +231,7 @@ describe('FeedPipeline: calculators on demand', () => {
       let last: number | undefined;
       const sum: IncrementalCalculator<number, number> = {
         kind: 'incremental', id: 'probe.sum', reads: ['feed'], cadence: 'frame',
-        init: ({ state }) => state.history.events.length,
+        init: ({ history }) => history.events.length,
         update: (acc, delta) => acc + ((delta.after.events ?? 0) - (delta.before.events ?? 0)),
         output: (acc) => (last = acc),
       };

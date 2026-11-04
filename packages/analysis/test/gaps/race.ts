@@ -100,8 +100,8 @@ export const run = (view: EngineView): GapsOutput => gapsCalculator.output(gapsC
 
 /** The delta from one view's history to the next one's. */
 export const deltaOf = (from: EngineView, to: EngineView, rewound = false) => ({
-  before: projectionLengths(from.state.history),
-  after: projectionLengths(to.state.history),
+  before: projectionLengths(from.history),
+  after: projectionLengths(to.history),
   ...(rewound ? { rewound: { frameId: -1, at: 0 } } : {}),
 });
 

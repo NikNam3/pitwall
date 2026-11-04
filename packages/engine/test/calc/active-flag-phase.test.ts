@@ -22,7 +22,7 @@ describe('activeFlagPhaseOf', () => {
 describe('the view a calculator receives', () => {
   it('carries the active flag phase of the scheduler input', () => {
     const seen: unknown[] = [];
-    const s = sched([quick('probe', { compute: (v) => { seen.push(v.activeFlagPhase); return 0; } })]);
+    const s = sched([quick('probe', { reads: ['timing', 'flagPhases'], compute: (v) => { seen.push(v.activeFlagPhase); return 0; } })]);
     const phase = { kind: 'SC', start: 1000, startLeaderLap: 3, scPhases: [] } as const;
     s.run({ ...input(1000), activeFlagPhase: phase });
     s.run({ ...input(2000), activeFlagPhase: undefined });

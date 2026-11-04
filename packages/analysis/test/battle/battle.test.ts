@@ -73,7 +73,7 @@ const build = (s: Scene): EngineView => {
     history: { events: s.events ?? [DRSE()] },
     ...(s.config && { config: s.config }),
   });
-  return s.teammate === undefined ? view : { ...view, state: { ...view.state, teammateCar: id(s.teammate) } };
+  return s.teammate === undefined ? view : { ...view, live: { ...view.live, teammateCar: id(s.teammate) } };
 };
 
 /** Car 0 (ours, P3) between car 1 (P2, ahead) and car 3 (P4, behind); gaps 2.4, 2.0, 1.6 s ahead and 3.0, 2.6, 2.2 s behind. */
@@ -423,7 +423,7 @@ describe('battle: race control\'s DRS status', () => {
       fc.property(drsEvents, fc.nat(), (events, cut) => {
         // one live view whose history grows event by event, then a flashback truncates it
         const live = build(base({ events: [] }));
-        const liveEvents = live.state.history.events as RaceEvent[];
+        const liveEvents = live.history.events as RaceEvent[];
         const check = (prefix: readonly RaceEvent[]) => {
           const c = card(live);
           expect(c).toEqual(card(build(base({ events: [...prefix] }))));

@@ -60,7 +60,7 @@ function setup(features: Feature[], staleCheck?: { clock: () => number; everyMs:
 /** An incremental calculator on the events that notes the frame of every `init`. */
 const initProbe = (inits: number[]): IncrementalCalculator<number, number> => ({
   kind: 'incremental', id: 'probe.events', reads: ['events'], cadence: 'frame',
-  init: ({ state }) => { inits.push(state.lastFrameId); return state.history.events.length; },
+  init: ({ live, history }) => { inits.push(live.lastFrameId); return history.events.length; },
   update: (n, delta) => n + (delta.after.events ?? 0) - (delta.before.events ?? 0),
   output: (n) => n,
 });
@@ -91,8 +91,8 @@ describe('FeedPipeline: lights out after a formation lap restarts no calculator 
     const seen = new Map<number, number | undefined>();
     const clock: QuickCalculator<number> = {
       kind: 'quick', id: 'probe.clock', reads: ['timing'], cadence: 'frame',
-      compute: ({ state }) => state.sessionTime,
-      insights: (_out, prev, { state }) => { seen.set(state.lastFrameId, prev); return []; },
+      compute: ({ live }) => live.sessionTime,
+      insights: (_out, prev, { live }) => { seen.set(live.lastFrameId, prev); return []; },
     };
     const { pipeline, push } = setup([defineFeature({ name: 'probe-clock', calculators: [clock], topics: [] })]);
     const { before, after } = formationStart();
@@ -108,7 +108,7 @@ describe('FeedPipeline: the session phases in the view', () => {
     const seen = new Map<number, string[]>();
     const probe: QuickCalculator<number> = {
       kind: 'quick', id: 'probe.phase', reads: ['timing'], cadence: 'frame',
-      compute: ({ state }) => { seen.set(state.lastFrameId, (state.history.spans['session-phase-race'] ?? []).map((s) => s.kind)); return 0; },
+      compute: ({ live, history }) => { seen.set(live.lastFrameId, (history.spans['session-phase-race'] ?? []).map((s) => s.kind)); return 0; },
     };
     const { pipeline, push } = setup([defineFeature({ name: 'probe-phase', calculators: [probe], topics: [] })]);
     const { before, after } = formationStart();

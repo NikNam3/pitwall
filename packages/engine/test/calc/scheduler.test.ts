@@ -63,7 +63,7 @@ describe('Scheduler', () => {
     const calls: string[] = [];
     const counter = (o: Partial<IncrementalCalculator<number, number>> = {}): Calculator => ({
       kind: 'incremental', id: 'n', reads: ['laps'], cadence: 'frame',
-      init: (v) => { calls.push('init'); return v.state.history.laps.length; },
+      init: (v) => { calls.push('init'); return v.history.laps.length; },
       update: (acc: number, d) => { calls.push(`update ${d.before.laps}->${d.after.laps}`); return acc + (d.after.laps ?? 0) - (d.before.laps ?? 0); },
       output: (acc) => acc, ...o,
     } as Calculator);

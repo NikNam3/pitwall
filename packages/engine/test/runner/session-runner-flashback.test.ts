@@ -5,11 +5,9 @@ import { describe, expect, it } from 'vitest';
 import { currentLaps, feedId, toSessionTime, type Insight, type LapRecord } from '@pitwall/domain';
 import type { EventDetails } from '@pitwall/protocol';
 import {
-  activeFlagPhaseOf,
   CalculatorRegistry,
   Scheduler,
   SessionRunner,
-  situationOf,
   type DeepReadonly,
   type Frame,
   type InsightChange,
@@ -20,6 +18,7 @@ import {
 import { buildPacket, ScenarioBuilder } from '../builders/index.ts';
 import { IDLE_FEED } from '../helpers/incremental.ts';
 import { initFor } from '../support/run.ts';
+import { inputOf } from '../support/scheduler.ts';
 import { after, applyOne, drive, factLengths, factLists, flashbacks, flbk, runAll, shown, STEP, timeline as plainTimeline } from '../support/runner.ts';
 
 const overtake: EventDetails = { code: 'OVTK', overtakingVehicleIdx: 0, beingOvertakenVehicleIdx: 1 };
@@ -189,7 +188,7 @@ describe('SessionRunner: the attached bookkeeping rewinds with the state (C27, C
   // car 0's lap; an insight per lap from lap 2 on: `lap2` raised at frame 100, before the target, `lap3` at frame 250, after it
   const lapProbe: QuickCalculator<number> = {
     kind: 'quick', id: 'probe.lap', reads: ['timing'], cadence: 'frame',
-    compute: (v) => v.state.cars[0]!.timing.lap,
+    compute: (v) => v.live.cars[0]!.timing.lap,
     insights: (lap) => [...(lap >= 2 ? [insight('lap2')] : []), ...(lap >= 3 ? [insight('lap3')] : [])],
   };
 
@@ -201,7 +200,7 @@ describe('SessionRunner: the attached bookkeeping rewinds with the state (C27, C
     let atRewind: Insight[] | undefined;
     const schedule = (r: StepResult) => {
       if (r.delta.rewound !== undefined) atRewind = scheduler.activeInsights;
-      const input = { state: r.state, activeFlagPhase: activeFlagPhaseOf(r.state), situation: situationOf(r.state), changed: r.changed, delta: r.delta, feed: IDLE_FEED, config: {} };
+      const input = inputOf(r, { feed: IDLE_FEED });
       changes.push(...scheduler.run(input).insights);
     };
     for (const f of original()) runner.apply(f, schedule);
@@ -226,7 +225,7 @@ describe('SessionRunner: a rewind deeper than the replay window', () => {
   /** `a` holds from 1100 ms on (raised at frame 69: after the snapshot of frame 63, before the target 90), `b` from 5000 ms. */
   const clockProbe: QuickCalculator<number> = {
     kind: 'quick', id: 'probe.clock', reads: ['feed'], cadence: 'frame',
-    compute: (v) => v.state.sessionTime,
+    compute: (v) => v.live.sessionTime,
     insights: (t) => [...(t >= 1100 ? [insight('a')] : []), ...(t >= 5000 ? [insight('b')] : [])],
   };
 
@@ -242,7 +241,7 @@ describe('SessionRunner: a rewind deeper than the replay window', () => {
         rewinds.push(target);
         kept = kept.filter((k) => k.frameId <= target.frameId);
       }
-      const input = { state: r.state, activeFlagPhase: activeFlagPhaseOf(r.state), situation: situationOf(r.state), changed: r.changed, delta: r.delta, feed: IDLE_FEED, config: {} };
+      const input = inputOf(r, { feed: IDLE_FEED });
       kept.push(...scheduler.run(input).insights.map((change) => ({ frameId: applied.frameId, change })));
     };
     for (const f of [...original(), ...continuation()]) runner.apply(f, schedule);

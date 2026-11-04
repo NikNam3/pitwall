@@ -508,7 +508,7 @@ describe('alarms calculator', () => {
 
     it('the teammate car is one of ours', () => {
       const view = rivalView(badEverything());
-      const withTeammate: EngineView = { ...view, state: { ...view.state, teammateCar: carId(5) } };
+      const withTeammate: EngineView = { ...view, live: { ...view.live, teammateCar: carId(5) } };
       expect(run(withTeammate).every((i) => i.carId === carId(5))).toBe(true);
       expect(run(withTeammate).map((i) => i.kind).sort()).toEqual(['bandOutLap', 'fuelShort', 'penaltyNew', 'warningLast', 'wearLimitNear']);
     });
@@ -568,7 +568,7 @@ describe('hidden data of one of our cars (Review Focus 5)', () => {
   const chain = (car: ReturnType<typeof carState>, laps: ReturnType<typeof lap>[]) => {
     const remaining: SessionRemaining = { basis: 'laps', lapsLeft: known(10, 0), timeLeftMs: unknown('notApplicable') };
     const base = engineView({ cars: [carState(), car], history: { laps }, sessionTime: NOW, outputs: new Map([[SESSION_REMAINING, remaining]]) });
-    const view: EngineView = { ...base, state: { ...base.state, teammateCar: TEAMMATE } };
+    const view: EngineView = { ...base, live: { ...base.live, teammateCar: TEAMMATE } };
     const outputs = new Map<string, unknown>([
       [SESSION_REMAINING, remaining],
       [TYRE_WEAR, tyreWearCalculator.compute(view)],

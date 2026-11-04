@@ -307,15 +307,15 @@ export function telemetryRestricted(car: CarState): CarState {
   return copy;
 }
 
-/** The view's situation by default: not paused (the session phase is in the projection's spans, C20). */
-export const RACING: EngineView['situation'] = { paused: false };
+/** The view's situation by default: a race, no span open (the session phase is in the projection's spans, C20). */
+export const RACING: EngineView['situation'] = { weekendPhase: { kind: 'race', format: 'grandPrix' }, byMachine: {} };
 
 /**
  * The `EngineView` of a race session. `cars` (default: none, a 22-slot list is padded with idle cars so ids index it)
  * are placed by their `id`; `history` fills the lists you give and leaves the rest empty; `session` merges onto a
  * default race session; `config` is the effective config by section key (absent sections read their declared defaults);
  * `outputs` are the upstream calculators' outputs; `delta` defaults to "everything in `history` is new"; `situation`
- * defaults to `RACING`. Feed is idle and healthy; `feed` overrides it. `changed` is empty.
+ * defaults to `RACING`. Feed is idle and healthy; `feed` overrides it. `changed` is empty; no weekend context, no priors.
  */
 export function engineView({
   cars = [],
@@ -350,24 +350,26 @@ export function engineView({
   const slots = Array.from({ length: Math.max(MAX_CARS, ...cars.map((c) => c.id + 1)) }, (_, i) => base.cars[i] ?? createCarState(carId(i)));
   for (const c of cars) slots[c.id] = c;
   const full: Projection = { ...emptyProjection(), ...history };
-  const { open: _open, log: _log, ...state } = {
+  const { open: _open, log: _log, history: _history, weekend: _weekend, signals: _signals, frameNumber: _frameNumber, ...live } = {
     ...base,
     cars: slots,
-    history: full,
     session: merge(base.session, session) as SessionState,
     playerCar: carId(playerCar),
     sessionTime,
   };
   const lengths = projectionLengths(full);
   return {
-    state,
-    activeFlagPhase,
+    live,
     situation,
+    history: full,
+    activeFlagPhase,
     changed: new Set(),
     delta: delta ?? { before: projectionLengths(emptyProjection()), after: lengths },
+    weekend: undefined,
     feed: { ...IDLE_FEED, ...feed },
     outputs,
     config,
+    priors: {},
   };
 }
 

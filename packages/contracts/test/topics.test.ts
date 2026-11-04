@@ -22,7 +22,7 @@ import carDetail from '../src/topics/car.detail.ts';
 import laps from '../src/topics/laps.ts';
 
 describe('TOPICS', () => {
-  it('has exactly the 12 feed topics (spec 8.4 and replay.status of 8.5) with their modes and rates', () => {
+  it('has exactly the 13 feed topics (spec 8.4, replay.status of 8.5, session.clock of bindSituation) with their modes and rates', () => {
     const table = Object.entries(TOPICS)
       .filter(([, d]) => d.scope === 'feed' && d.owner === 'core')
       .map(([key, d]) => [key, d.name, d.mode, d.maxHz] as const)
@@ -38,13 +38,14 @@ describe('TOPICS', () => {
       ['laps', 'laps', 'append', Infinity],
       ['pitStops', 'pitStops', 'append', Infinity],
       ['replay.status', 'replay.status', 'state', 4],
+      ['session.clock', 'session.clock', 'state', 4],
       ['session.info', 'session.info', 'state', 2],
       ['stints', 'stints', 'append', Infinity],
     ]);
   });
   it('gives every core topic outside dev and ui scope feed', () => {
     const core = Object.entries(TOPICS).filter(([name, d]) => d.owner === 'core' && !/^(dev|ui)\./.test(name));
-    expect(core).toHaveLength(12);
+    expect(core).toHaveLength(13);
     for (const [, d] of core) expect(d.scope).toBe('feed');
   });
   it('has the analysis topics of sub-project 3 (spec A.3): owner, mode and rate', () => {
@@ -118,7 +119,7 @@ describe('topic types', () => {
       | 'replay.status' | 'ui.workbooks' | 'ui.linkGroups' | 'ui.alerts' | 'ui.settings'
       | 'tyreWear.car' | 'fuel.car' | 'ers.car' | 'carBands.car' | 'damage.car' | 'gaps.intervals' | 'gaps.toCar'
       | 'gaps.gapper' | 'gaps.neighbourhood' | 'lapTimes.board' | 'lapTimes.projection' | 'battle.cards'
-      | 'incidents.feed' | 'raceMoment.current'
+      | 'incidents.feed' | 'raceMoment.current' | 'session.clock'
     >();
     expectTypeOf<TopicParams<'gaps.gapper'>>().toEqualTypeOf<{ reference: GapperReference }>();
     expectTypeOf<TopicParams<'lapTimes.board'>>().toEqualTypeOf<{ referenceCarId: CarId }>();

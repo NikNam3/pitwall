@@ -5,7 +5,6 @@ import {
   CalculatorRegistry,
   Scheduler,
   SessionRunner,
-  situationOf,
   type Calculator,
   type CalculatorId,
   type Frame,
@@ -15,18 +14,18 @@ import {
 import { IDLE_FEED } from '../helpers/incremental.ts';
 import { arbRace, NO_PHASES, raceFrames } from '../support/arb-race.ts';
 import { applyOne } from '../support/runner.ts';
-import { input, quick, sched } from '../support/scheduler.ts';
+import { input, inputOf, quick, sched } from '../support/scheduler.ts';
 
 // Quick and incremental calculators over real frames: every frame, a rate, an event cadence and a dependent.
 const lapCount: IncrementalCalculator<number, number> = {
   kind: 'incremental', id: 'lapCount', reads: ['laps'], cadence: 'frame',
-  init: (v) => v.state.history.laps.length,
+  init: (v) => v.history.laps.length,
   update: (acc, d) => acc + (d.after.laps ?? 0) - (d.before.laps ?? 0),
   output: (acc) => acc,
 };
 const calcs = (): Calculator[] => [
-  { kind: 'quick', id: 'clock', reads: ['timing'], cadence: 'frame', compute: (v) => v.state.sessionTime } as QuickCalculator<number>,
-  { kind: 'quick', id: 'slow', reads: ['timing'], cadence: { hz: 2 }, compute: (v) => v.state.sessionTime } as QuickCalculator<number>,
+  { kind: 'quick', id: 'clock', reads: ['timing'], cadence: 'frame', compute: (v) => v.live.sessionTime } as QuickCalculator<number>,
+  { kind: 'quick', id: 'slow', reads: ['timing'], cadence: { hz: 2 }, compute: (v) => v.live.sessionTime } as QuickCalculator<number>,
   lapCount,
   { kind: 'quick', id: 'sum', reads: [{ calculator: 'clock' }, { calculator: 'lapCount' }], cadence: 'frame',
     compute: (v) => (v.outputs.get('clock') as number) + (v.outputs.get('lapCount') as number) } as QuickCalculator<number>,
@@ -52,8 +51,8 @@ describe('Scheduler onCalculatorRun', () => {
           const a = applyOne(ra, f);
           const b = applyOne(rb, f);
           calls.length = 0;
-          const withHook = hooked.run({ state: a.state, activeFlagPhase: undefined, situation: situationOf(a.state), changed: a.changed, delta: a.delta, feed: IDLE_FEED, config: {} });
-          const without = plain.run({ state: b.state, activeFlagPhase: undefined, situation: situationOf(b.state), changed: b.changed, delta: b.delta, feed: IDLE_FEED, config: {} });
+          const withHook = hooked.run(inputOf(a, { feed: IDLE_FEED, activeFlagPhase: undefined }));
+          const without = plain.run(inputOf(b, { feed: IDLE_FEED, activeFlagPhase: undefined }));
           expect(withHook).toEqual(without);
           for (const id of ['clock', 'slow', 'sum']) expect(calls.filter((c) => c === id).length).toBe(withHook.ran.includes(id) ? 1 : 0);
           expect(calls.filter((c) => c === 'lapCount').length).toBe(withHook.ran.includes('lapCount') ? 2 : 0);
@@ -69,7 +68,7 @@ describe('Scheduler onCalculatorRun', () => {
     const s = make((id, run) => { seen.push(id); return run(); });
     const frames = raceFrames({ cars: 2, frames: 60, speeds: [30, 30, 30, 30, 30, 30], jitter: [0], truncation: [0], flashback: undefined, phases: NO_PHASES }).frames;
     const r = runnerFor(frames);
-    for (const f of frames) { const x = applyOne(r, f); s.run({ state: x.state, activeFlagPhase: undefined, situation: situationOf(x.state), changed: x.changed, delta: x.delta, feed: IDLE_FEED, config: {} }); }
+    for (const f of frames) { const x = applyOne(r, f); s.run(inputOf(x, { feed: IDLE_FEED, activeFlagPhase: undefined })); }
     expect(seen.filter((id) => id === 'lapCount').length).toBeGreaterThanOrEqual(2);
     expect(seen.filter((id) => id === 'lapCount').length % 2).toBe(0);
   });

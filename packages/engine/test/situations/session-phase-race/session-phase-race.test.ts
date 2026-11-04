@@ -11,6 +11,7 @@ import { sessionPhaseRaceSpans } from '@pitwall/domain';
 import { activeFlagPhaseOf, SessionRunner, type StepResult } from '../../../src/index.ts';
 import machine from '../../../src/situations/session-phase-race/machine.ts';
 import { situationOf } from '../../../src/situations/run.ts';
+import type { Situation } from '../../../src/situations/situation.ts';
 import { initFor } from '../../support/run.ts';
 import { inputs } from '../../support/transition-table.ts';
 import { all, carStatus, inPhase, RACE, timerOfCar1 } from '../session-phase/inputs.ts';
@@ -480,10 +481,12 @@ describe('a session phase boundary at a moment earlier frames share', () => {
 });
 
 describe('the view a calculator receives', () => {
-  it('carries the situation of the scheduler input: whether the session is paused (the phase is in the projection’s spans, C20)', () => {
+  it('carries the situation of the scheduler input: the open spans, the clock\'s pause and the session phase among them (C20)', () => {
     const seen: unknown[] = [];
     const s = sched([quick('probe', { compute: (v) => { seen.push(v.situation); return 0; } })]);
-    const situation = { paused: true } as const;
+    const paused = { machine: 'clock', id: 1, kind: 'paused', start: 900, confirmed: true, detail: { source: 'online' }, startFrame: 50 };
+    const racing = { machine: 'session-phase-race', id: 2, kind: 'racing', start: 0, confirmed: true, detail: undefined, startFrame: 1 };
+    const situation: Situation = { weekendPhase: { kind: 'race', format: 'grandPrix' }, byMachine: { clock: [paused], 'session-phase-race': [racing] } };
     s.run({ ...input(1000), situation });
     expect(seen).toEqual([situation]);
   });

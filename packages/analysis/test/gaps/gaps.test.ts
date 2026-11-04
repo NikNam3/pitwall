@@ -424,7 +424,7 @@ describe('neighbourhood', () => {
 
   it('has one entry per our car: the player and the teammate', () => {
     const base = viewFor(3);
-    const view: EngineView = { ...base, state: { ...base.state, teammateCar: carId(0) } };
+    const view: EngineView = { ...base, live: { ...base.live, teammateCar: carId(0) } };
     const out = run(view);
     expect(out.neighbourhood).toHaveLength(2);
     expect(out.neighbourhood).toEqual(

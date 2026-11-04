@@ -38,8 +38,8 @@ function addRng(o: { trigger?: Cadence; reads?: Dependency[]; input?: Partial<Ad
     id: 'add-rng',
     reads: o.reads ?? ['timing'],
     trigger: o.trigger ?? 'frame',
-    prepare: ({ state }) => {
-      prepared.push({ lap: state.cars[state.playerCar]!.timing.lap, frameId: state.lastFrameId });
+    prepare: ({ live }) => {
+      prepared.push({ lap: live.cars[live.playerCar]!.timing.lap, frameId: live.lastFrameId });
       return { base: 1000, ...o.input };
     },
     module: new URL('../jobs/fixtures/add-rng.ts', import.meta.url),

@@ -30,12 +30,15 @@ const SESSION_SIGNALS: ReadonlySet<string> = new Set([
   'safetyCarStatus', 'marshalZones', 'periods', 'sessionType', 'weekendStructure', 'ruleSet', 'gamePaused', 'isSpectating', 'spectatorCarIndex', 'numActiveCars',
 ]);
 
-/** A sub-machine read an input it does not declare (C15). */
+/**
+ * A sub-machine read an input it does not declare (C15), or a unit a part of its view (C41, `guardedView` in
+ * `scheduler.ts`): `reader` is the machine's or the unit's id.
+ */
 export class UndeclaredReadError extends Error {
   readonly path: string;
 
-  constructor(machine: MachineId, path: string) {
-    super(`${machine} reads ${path}, which it does not declare (C15)`);
+  constructor(reader: MachineId, path: string, clause: 'C15' | 'C41' = 'C15') {
+    super(`${reader} reads ${path}, which it does not declare (${clause})`);
     this.path = path;
   }
 }

@@ -29,7 +29,7 @@ function probe() {
   const runs = { clock: 0, feedReader: 0 };
   const clock: QuickCalculator<number> = {
     kind: 'quick', id: 'probe.clock', reads: ['timing'], cadence: 'frame',
-    compute: ({ state }) => { runs.clock++; return state.sessionTime; },
+    compute: ({ live }) => { runs.clock++; return live.sessionTime; },
   };
   // Nothing references it, so it always runs; it reads `feed`, so every pass it takes part in runs it.
   const feedReader: QuickCalculator<number> = { kind: 'quick', id: 'probe.feedReader', reads: ['feed'], cadence: 'frame', compute: () => ++runs.feedReader };

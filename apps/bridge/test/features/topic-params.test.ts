@@ -9,15 +9,15 @@ import { viewFrom } from '../helpers/view.ts';
 
 const view = viewFrom(new ScenarioBuilder({ cars: 3, player: 2 }).session().participants().frames(3, () => {}).build());
 /** What a `bindLive` binding holds: the select the hub runs on the feed's live state at flush (C55). */
-type LiveBinding = { topic: string; fromLive: (live: EngineView['state'], params: object) => unknown };
+type LiveBinding = { topic: string; fromLive: (live: EngineView['live'], params: object) => unknown };
 const select = (f: Feature, topic: string, params: unknown): unknown => {
   const b = f.topics.find((t) => t.topic === topic) as unknown as LiveBinding;
-  return b.fromLive(view.state, params as object);
+  return b.fromLive(view.live, params as object);
 };
 
 const cases = [
-  { feature: carDetail, topic: 'car.detail', expected: (id: number) => view.state.cars[id] },
-  { feature: carTelemetry, topic: 'car.telemetry', expected: (id: number) => ({ motion: view.state.cars[id]!.motion, dynamics: view.state.cars[id]!.dynamics }) },
+  { feature: carDetail, topic: 'car.detail', expected: (id: number) => view.live.cars[id] },
+  { feature: carTelemetry, topic: 'car.telemetry', expected: (id: number) => ({ motion: view.live.cars[id]!.motion, dynamics: view.live.cars[id]!.dynamics }) },
 ];
 
 // `state.cars` holds every slot of the game (22), so the valid range is 0 .. cars.length - 1.
@@ -25,10 +25,10 @@ describe.each(cases)('$topic params', ({ feature, topic, expected }) => {
   const pick = (params: unknown) => select(feature, topic, params);
 
   it('accepts every carId in range', () => {
-    for (const id of [0, 1, 2, view.state.cars.length - 1]) expect(pick({ carId: id })).toEqual(expected(id));
+    for (const id of [0, 1, 2, view.live.cars.length - 1]) expect(pick({ carId: id })).toEqual(expected(id));
   });
   it.each([
-    ['one past the last slot', { carId: view.state.cars.length }],
+    ['one past the last slot', { carId: view.live.cars.length }],
     ['negative', { carId: -1 }],
     ['fractional', { carId: 1.5 }],
     ['NaN', { carId: Number.NaN }],

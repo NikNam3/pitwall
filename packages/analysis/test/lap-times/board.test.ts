@@ -121,7 +121,7 @@ describe('lap-times update and flashback', () => {
     let acc = lapTimesCalculator.init(view);
     for (let t = 20_000; t <= 280_000; t += 20_000) {
       const next = at(t);
-      acc = lapTimesCalculator.update(acc, { before: projectionLengths(view.state.history), after: projectionLengths(next.state.history) }, next);
+      acc = lapTimesCalculator.update(acc, { before: projectionLengths(view.history), after: projectionLengths(next.history) }, next);
       view = next;
       expect(lapTimesCalculator.output(acc), `t ${t}`).toEqual(run(next));
     }
@@ -137,7 +137,7 @@ describe('lap-times update and flashback', () => {
     const back = at(200_000);
     const acc = lapTimesCalculator.update(
       lapTimesCalculator.init(full),
-      { before: projectionLengths(full.state.history), after: projectionLengths(back.state.history), rewound: { frameId: -1, at: 0 } },
+      { before: projectionLengths(full.history), after: projectionLengths(back.history), rewound: { frameId: -1, at: 0 } },
       back,
     );
     const after = lapTimesCalculator.output(acc);
@@ -194,7 +194,7 @@ describe('lap-times board: a car out of the race', () => {
   it('a car that retires between two updates: the update equals a fresh run', () => {
     const running = scene({ laps, cars: activeCars(2) });
     const retired = scene({ laps, cars: activeCars(2, { 1: { resultStatus: 'retired' } }) });
-    const lengths = projectionLengths(running.state.history);
+    const lengths = projectionLengths(running.history);
     const acc = lapTimesCalculator.update(lapTimesCalculator.init(running), { before: lengths, after: lengths }, retired);
     expect(lapTimesCalculator.output(acc)).toEqual(run(retired));
     expect(rowOf(lapTimesCalculator.output(acc), 1)!.bestLapMs).toEqual(notApplicable);

@@ -41,7 +41,7 @@ function incidentsRuns(all: Frame[]): Array<{ frame: number; scheduled: Incident
   const runs: Array<{ frame: number; scheduled: IncidentsOutput; fresh: IncidentsOutput }> = [];
   all.forEach((f, frame) => runner.apply(f, (r) => {
     if (r.delta.rewound !== undefined) scheduler.reset();
-    const input = { state: r.state, activeFlagPhase: activeFlagPhaseOf(r.state), situation: situationOf(r.state), changed: r.changed, delta: r.delta, feed: IDLE_FEED, config: {} };
+    const input = { live: r.state, situation: situationOf(r.state), history: r.state.history, activeFlagPhase: activeFlagPhaseOf(r.state), changed: r.changed, delta: r.delta, weekend: r.state.weekend, feed: IDLE_FEED, config: {}, priors: {} };
     const { ran, outputs } = scheduler.run(input);
     if (!ran.includes(INCIDENTS)) return;
     const fresh = incidentsCalculator.output(incidentsCalculator.init({ ...input, outputs: new Map() }));
