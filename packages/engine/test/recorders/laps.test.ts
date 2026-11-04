@@ -6,6 +6,7 @@
 import { describe, expect, it } from 'vitest';
 import { known, unknown } from '@pitwall/domain';
 import { ScenarioBuilder, type FrameDraft } from '../builders/index.ts';
+import { membershipOf } from '../../src/readers.ts';
 import { situationOf } from '../../src/situations/run.ts';
 import { gridStart, lap as lapOf, raceAt, run, script } from '../situations/script.ts';
 import { runFrames, runScenario } from '../support/run.ts';
@@ -145,10 +146,10 @@ describe('no lap while the car cools down, competes no more or the session is ov
   const FINISH: readonly Row[] = [[5, 4_900, 2], [5, 5, 3], [5, 300, 3], [5, 2_500, 3]];
   const activity = (st: ReturnType<typeof runScenario>['st']) => st.history.spans['car-activity-race']?.filter((s) => s.carId === 0).map((s) => s.kind);
 
-  it('a lap number that goes up during the cool-down records no lap', () => {
+  it('a lap number that goes up during the cool-down records no lap (only the final lap, at its crossing on frame 1)', () => {
     const { st } = runScenario(race([...FINISH, [6, 10, 3], [6, 400, 3]]));
     expect(activity(st)).toEqual(['racingLap', 'finished']);
-    expect(st.history.laps).toEqual([]);
+    expect(st.history.laps.map((l) => [l.lapNumber, l.status, l.frame])).toEqual([[5, 'provisional', 2]]);
   });
   it('Session History confirms the final lap during the cool-down', () => {
     const entry = { lapTimeInMs: 90_100, sector1TimeMs: 30_000, sector2TimeMs: 30_000, sector3TimeMs: 30_100, lapValidBitFlags: 0b1111 };
@@ -157,7 +158,8 @@ describe('no lap while the car cools down, competes no more or the session is ov
       d.add('sessionHistory', { carIdx: 0, numLaps: 5, lapHistoryData: Array.from({ length: 5 }, () => entry) });
     }));
     expect(activity(st)).toEqual(['racingLap', 'finished']);
-    expect(st.history.laps.map((l) => [l.lapNumber, l.status, l.lapTimeMs])).toEqual([[5, 'confirmed', 90_100]]);
+    // the final lap's provisional at its crossing (frame 1, number 2), its confirmed version from the cool-down frame
+    expect(st.history.laps.map((l) => [l.lapNumber, l.status, l.lapTimeMs, l.frame])).toEqual([[5, 'provisional', 90_000, 2], [5, 'confirmed', 90_100, 2]]);
   });
   it('a retired car (notCompeting) whose lap number goes up records no lap', () => {
     const { st } = runScenario(race([[3, 1_000, 2], [3, 1_200, 7], [4, 10, 7], [4, 300, 7]], 2));
@@ -192,5 +194,41 @@ describe('laps without activity spans', () => {
     const activity = [...Object.entries(st.history.spans), ...Object.entries(situationOf(st).byMachine)].filter(([m, spans]) => m.startsWith('car-activity') && spans.length > 0);
     expect(activity).toEqual([]);
     expect(st.history.laps.map((l) => [l.lapNumber, l.inLap, l.outLap])).toEqual([[2, false, false], [3, false, false], [4, false, false]]);
+  });
+});
+
+// Fix round 1 of Task 17 (M3 review B1, C25, C26): the game does not raise the lap number at the chequered flag, so a
+// finisher's final lap ends at a crossing seen in the values and situations: the lap distance falls while its race
+// activity is racingLap (the result status turns finished on that frame or one frame later, inventory §2.10). Both the
+// provisional final lap and its confirmed version from Session History (in the cool-down) describe that crossing, and
+// the confirmed one supersedes the provisional; its membership is the spans open at the crossing, never coolDown.
+describe('a finisher’s final lap describes its crossing (C25, C26)', () => {
+  /** [lap distance, result status] per frame, one a second, on lap 5 of a race under way; 3 = finished. */
+  type Row = readonly [distanceM: number, resultStatus: number];
+  const entry = { lapTimeInMs: 90_100, sector1TimeMs: 30_000, sector2TimeMs: 30_000, sector3TimeMs: 30_100, lapValidBitFlags: 0b1111 };
+  /** `rows`, then a frame that confirms laps 1-5 from Session History (lap 5 the final lap, its time 90.1 s). */
+  const finisher = (rows: readonly Row[]) => runScenario(new ScenarioBuilder({ cars: 1, stepMs: 1000 }).frames(rows.length + 1, (d) => {
+    const [lapDistance, resultStatus] = rows[d.index] ?? [2_600, 3];
+    Object.assign(car0(d), { currentLapNum: 5, lapDistance, resultStatus, currentLapTimeInMs: 30_000, lastLapTimeInMs: 90_000 });
+    if (d.index === rows.length) d.add('sessionHistory', { carIdx: 0, numLaps: 5, lapHistoryData: Array.from({ length: 5 }, () => entry) });
+  }));
+  const CROSSING = 1;
+
+  it.each([
+    // the crossing (4900 m to 5 m) on frame 1, the result status finished on it; the activity finished from frame 1
+    ['on the crossing frame', [[4_900, 2], [5, 3], [300, 3], [2_500, 3]], 'finished'],
+    // the crossing on frame 1, the result status finished one frame later (race-miami-finish); finished from frame 2
+    ['one frame after the crossing', [[4_900, 2], [5, 2], [300, 3], [2_500, 3]], 'racingLap'],
+  ] as const)('the result status finished %s: the provisional and the confirmed final lap describe the crossing; the confirmed one supersedes it', (_, rows, atCrossing) => {
+    const { st, frames } = finisher(rows);
+    const crossing = { frame: CROSSING + 1, completedAt: frames[CROSSING]!.sessionTime };
+    const laps = st.history.laps.filter((l) => l.lapNumber === 5);
+    expect(laps.map((l) => [l.status, l.lapTimeMs])).toEqual([['provisional', 90_000], ['confirmed', 90_100]]);
+    expect(laps[0]).toMatchObject(crossing);
+    expect(laps[0]).not.toHaveProperty('supersedes');
+    expect(laps[1]).toMatchObject({ ...crossing, supersedes: { list: 'laps', index: st.history.laps.indexOf(laps[0]!) } });
+    // the final lap belongs to the activity span open at its crossing, never to the cool-down (Session History confirmed it in the cool-down)
+    expect(situationOf(st).byMachine['car-activity-race']?.find((s) => s.carId === 0)?.kind).toBe('coolDown');
+    for (const lap of laps) expect(membershipOf({ history: st.history, situation: situationOf(st) }, lap)['car-activity-race']?.kind).toBe(atCrossing);
   });
 });
