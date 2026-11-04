@@ -6,6 +6,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { GAPS, gapsCalculator, type GapsOutput } from '@pitwall/analysis';
 import type { RaceEvent } from '@pitwall/domain';
 import type { EngineState, DeepReadonly } from '@pitwall/engine';
+import { situationOf } from '../../../../packages/engine/src/situations/run.ts';
 import { replayScheduled } from './engine-replay.ts';
 import { segmentPath } from './replay.ts';
 
@@ -32,6 +33,7 @@ type Replayed = {
 };
 
 const replayed = new Map<string, Replayed>();
+const S4 = 'race-zandvoort-uid-reuse-start.pwrec.gz';
 
 /** The lap recorder's open laps by car (its own state, `open.recorders.laps`, C10): the lap a car is on and how it began. */
 type LapCursorView = { lap: number; fromStart: boolean; startedAt: number };
@@ -55,9 +57,9 @@ beforeAll(async () => {
   }
 });
 
-/** The race start: the opening of the first racing phase, closed or still open. */
+/** The race start: the opening of the first racing span of `session-phase-race`, closed or still open (C20). */
 const raceStart = (state: DeepReadonly<EngineState>): number | undefined =>
-  [...state.history.sessionPhases, state.open.situations.session].find((p) => p.kind === 'racing')?.start;
+  [...(state.history.spans['session-phase-race'] ?? []), ...(situationOf(state).byMachine['session-phase-race'] ?? [])].find((s) => s.kind === 'racing')?.start;
 
 describe.each(SHAPES)('the race start, shape %s (%s)', (_, file) => {
   it('the race start is lights out on the race clock: one lights out, the racing phase opens at it, no later than any frame after it', () => {
@@ -68,7 +70,8 @@ describe.each(SHAPES)('the race start, shape %s (%s)', (_, file) => {
     expect(start).toBeGreaterThanOrEqual(0);
     expect(start).toBeLessThanOrEqual(lowestAfterLightsOut);
   });
-  it('nothing recorded before lights out survives but the start lights and lights out', () => {
+  // S4 (race-zandvoort-uid-reuse-start) has its own row below: its weekend phase is decided inside the formation lap.
+  it.runIf(file !== S4)('nothing recorded before lights out is shown but the start lights and lights out: the formation lap is hidden (C29)', () => {
     const { state, raceKinds } = replayed.get(file)!;
     expect(state.history.events.map((e) => e.kind)).toEqual([...new Array(5).fill('startLights'), 'lightsOut', ...raceKinds]);
   });
@@ -84,5 +87,25 @@ describe.each(SHAPES)('the race start, shape %s (%s)', (_, file) => {
   it('the gapper has the race start', () => {
     const { state, gaps } = replayed.get(file)!;
     expect(gaps.raceStartAt).toMatchObject({ known: true, value: raceStart(state) });
+  });
+});
+
+// C14: pending = on the grid; ruled 2026-11-03. In race-zandvoort-uid-reuse-start the first Session packet has no
+// weekend structure, which arrives only in the formation lap. While the weekend phase is pending no per-phase sub-machine
+// runs, so no formation span covers those frames: their facts stay visible (C29 hides only what a formation span
+// covers). From the frame the weekend phase is decided, the formation span opens and hides what follows until the start
+// lights.
+describe('the race start, shape S4: the weekend phase decided inside the formation lap (C14, C29)', () => {
+  it('facts recorded before the weekend phase is decided are visible; facts from the frame the formation span opens are hidden', () => {
+    const { state } = replayed.get(S4)!;
+    const decided = situationOf(state).byMachine['weekend-phase']?.[0]?.startFrame;
+    const formation = (state.history.spans['session-phase-race'] ?? []).find((s) => s.kind === 'formation');
+    expect(formation).toMatchObject({ startFrame: decided, joinedAt: true });
+    const before = state.log.events.filter((e) => e.frame < decided!);
+    const inFormation = state.log.events.filter((e) => e.frame >= formation!.startFrame && e.frame < formation!.endFrame);
+    expect(before.length).toBeGreaterThan(0);
+    expect(inFormation.length).toBeGreaterThan(0);
+    expect(state.history.events.filter((e) => e.frame < decided!)).toEqual(before);
+    expect(state.history.events.filter((e) => e.frame >= formation!.startFrame && e.frame < formation!.endFrame)).toEqual([]);
   });
 });

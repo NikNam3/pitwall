@@ -26,8 +26,8 @@ const neutralised = openSpan('test-session', 1, 'neutralised', 900, { startFrame
 const carZeroTrack = span('test-car', 0, 'track', 0, 400, { startFrame: 1, endFrame: 5, carId: car(0) });
 const carZeroPit = openSpan('test-car', 1, 'pit', 400, { startFrame: 5, carId: car(0) });
 const carOneTrack = openSpan('test-car', 0, 'track', 0, { startFrame: 1, carId: car(1) });
-const yellow = { ...span('test-zone', 0, 'yellow', 200, 700, { startFrame: 3, endFrame: 8 }), detail: { zone: 0 } };
-const clear = { ...openSpan('test-zone', 1, 'clear', 700, { startFrame: 8 }), detail: { zone: 0 } };
+const yellow = { ...span('test-zone', 0, 'yellow', 200, 700, { startFrame: 3, endFrame: 8 }), zone: 0 };
+const clear = { ...openSpan('test-zone', 1, 'clear', 700, { startFrame: 8 }), zone: 0 };
 const paused = span('clock', 0, 'paused', 500, 500, { startFrame: 6, endFrame: 7 });
 
 /** The view's two sources of spans: the projection of a log holding the closed spans, and the situation of the open ones. */

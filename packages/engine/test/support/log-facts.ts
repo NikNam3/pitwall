@@ -48,7 +48,7 @@ const RACE: WeekendPhase = { kind: 'race', format: 'grandPrix' };
 export const situation = (...open: OpenSpan[]): Situation => {
   const byMachine: Record<MachineId, OpenSpan[]> = {};
   for (const s of open) (byMachine[s.machine] ??= []).push(s);
-  return { weekendPhase: RACE, session: undefined, byMachine };
+  return { weekendPhase: RACE, byMachine };
 };
 
 export const NOTHING_OPEN: Situation = situation();

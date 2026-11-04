@@ -98,3 +98,29 @@ describe('FeedPipeline: the insights topic after a rewind deeper than the replay
     expect(held(messages)).toEqual([raised('a', 91 * 16)]);
   });
 });
+
+// Brief ruling 9 of Task 9 (M1 review N3): with the old mechanisms' rewinds gone, a rewind target's frame id -1 is a
+// flashback to the first snapshot (the state before the session's first frame), nothing else: every change after it
+// was undone (C30, C33), and the scheduler's bookkeeping is the restored snapshot's, not reset by hand.
+describe('FeedPipeline: the insights topic after a flashback to the first snapshot', () => {
+  /** The session's frames carry frame ids from 100; the game then goes back to frame 50, before every one of them. */
+  const SHIFT = 100;
+  const shifted = (packets: Timed, by: number, overallBy: number): Timed =>
+    packets.map(({ packet, receivedAtMs }) => ({
+      packet: { ...packet, header: { ...packet.header, frameIdentifier: packet.header.frameIdentifier + by, overallFrameIdentifier: packet.header.overallFrameIdentifier + overallBy } },
+      receivedAtMs,
+    }));
+  /** Frames 100..159 (session time 0 to 944 ms), then frames 50..79 (session time 800 to 1264 ms) with `overallFrameIdentifier` rising. */
+  const toFirstSnapshot = (): PreparedPacket[] => {
+    const first = shifted(frames(60).packets(), SHIFT, SHIFT);
+    const later = frames(80).packets().filter((p) => p.packet.header.frameIdentifier >= 50);
+    const rewound = shifted(later, 0, SHIFT + 60).map(({ packet, receivedAtMs }) => ({ packet, receivedAtMs: receivedAtMs + 60 * 16 }));
+    return [...toPrepared(first), ...toPrepared(rewound)];
+  };
+
+  it('a flashback to the first snapshot drops the undone insights and keeps the restored bookkeeping: both are raised anew on the first frame after it', async () => {
+    const messages = await insightsMessages(toFirstSnapshot());
+    // the first run raised `early` (frame 107) and `late` (frame 144); the rewind undoes both, the first new frame (50, 800 ms) raises both again
+    expect(held(messages)).toEqual([raised('early', 50 * 16), raised('late', 50 * 16)]);
+  });
+});

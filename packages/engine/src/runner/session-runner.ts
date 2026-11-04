@@ -1,4 +1,4 @@
-import { toSessionTime, type Ms, type ParticipantsValues, type SessionTime } from '@pitwall/domain';
+import type { Ms, ParticipantsValues, SessionTime } from '@pitwall/domain';
 import type { Frame } from '../frame/frame.ts';
 import { logWriter, voidFactOf } from '../log/log.ts';
 import { projectionLengths } from '../log/projection.ts';
@@ -19,20 +19,12 @@ import { SnapshotStore } from './snapshots.ts';
 export type FlashbackInfo = { targetFrameId: number; targetSessionTime: SessionTime; rewoundMs: Ms; targetLap: number };
 
 /**
- * Where a step of an old mechanism that cuts or rewrites what was recorded sends readers back to: the session's start.
- * It undoes no frame. Until the situation tracker stops rewriting (Task 9), each of them is `delta.rewound` with this
- * target.
- */
-const LEGACY_REWIND: LogVoidFact['target'] = { frameId: -1, at: toSessionTime(0) };
-
-/**
- * What applying one frame did. When it changed history recorded before it (a flashback, lights out discarding the
- * formation lap) or took back what readers saw (a neutralisation dropped
- * unconfirmed; a session phase opening or closing at or before the time of an entry earlier frames recorded), `changed`
- * holds every tag and `delta.rewound` is set: a flashback's void target (the frame restored to, at its time on the race
- * clock), else `LEGACY_REWIND`; `flashback` tells a flashback. `clockFall` reports a fall of the
- * session time that changed nothing recorded (carried over, C36), `clockJump` a forward jump that is no post-session jump (spec 3.3); both
- * carry the game's times. Every other session time is on the race clock.
+ * What applying one frame did. On a flashback (C27, the only rewind: no step changes what was recorded, C24) `changed`
+ * holds every tag, `delta.rewound` is the void fact's target (the frame restored to, at its time on the race clock; its
+ * frame id is -1 for a flashback to the first snapshot, the state before the session's first frame) and `flashback`
+ * tells where the game went. `clockFall` reports a fall of the session time that changed nothing recorded (carried over,
+ * C36), `clockJump` a forward jump that is no post-session jump (spec 3.3); both carry the game's times. Every other
+ * session time is on the race clock.
  */
 export type StepResult = {
   state: DeepReadonly<EngineState>;
@@ -92,8 +84,7 @@ type Kept = { frame: Frame; report?: FlashbackReport; at: SessionTime; attached:
  * `REPLAY_WINDOW_MS`. A flashback restores the newest snapshot at or before the target, appends one void fact over what
  * the log gained since (C27; nothing is removed), replays the kept frames up to the target, restores the attached
  * bookkeeping as it stood there and then applies the game's new frame, so the discarded frames leave no trace in what
- * readers see. A step that rewrote earlier history (the situation tracker's formation discard) drops every snapshot and
- * kept frame, so no later rewind goes back before it. The runner alone decides what reports a flashback; it hands that
+ * readers see. The runner alone decides what reports a flashback; it hands that
  * decision to `step` with the frame (a `FlashbackReport`) and keeps it with the frame for every replay. Every other
  * session-time jump is the clock's (step 0, `situations/clock/`).
  */
@@ -202,12 +193,12 @@ export class SessionRunner {
     // The runner's decision on the frame; a rewind's mark is of the state it leaves, so taken before restoring.
     const report: FlashbackReport | undefined = reported && (target ? { rewound: rewindMarkOf(this.#state) } : {});
     const rewind = target && this.#rewind(target, frame);
-    const { changed, corrections, rewritten, discarded, clockFall, clockJump } = step(this.#state, frame, report);
+    const { changed, corrections, clockFall, clockJump } = step(this.#state, frame, report);
     this.#applied = true;
     this.#lastOverallFrameId = frame.overallFrameId;
     if (target) this.#rewoundTo = target.frameId;
     else if (this.#rewoundTo !== undefined && frame.frameId > this.#rewoundTo + 1) this.#rewoundTo = undefined;
-    const rewound = rewind?.target ?? (rewritten === true || discarded === true ? { ...LEGACY_REWIND } : undefined);
+    const rewound = rewind?.target;
     onResult?.(
       {
         state: this.#state,
@@ -222,8 +213,7 @@ export class SessionRunner {
     );
     // After the result was handed out: the attached bookkeeping has taken the frame in.
     const attached = this.#attach?.snapshot();
-    if (rewritten) this.#restart(attached);
-    else this.#keep({ frame, ...(report && { report }), at: this.#state.sessionTime, attached });
+    this.#keep({ frame, ...(report && { report }), at: this.#state.sessionTime, attached });
   }
 
   /**
@@ -279,12 +269,6 @@ export class SessionRunner {
       targetLap: this.#state.cars[this.#state.playerCar]?.timing.lap ?? 0,
     };
     return { flashback, target: voidTarget };
-  }
-
-  /** After a step that rewrote history: the state after its frame becomes the first snapshot, and the older ones and the kept frames go. */
-  #restart(attached: unknown): void {
-    this.#snapshots.restart(this.#state, this.#state.lastFrameId, attached);
-    this.#frames = [];
   }
 
   /**

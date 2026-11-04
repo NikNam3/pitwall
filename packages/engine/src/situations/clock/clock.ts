@@ -129,10 +129,14 @@ export const STEP0_CLOCK = {
 /** A session time of the game on the race clock of `state`. */
 export const onRaceClock = (state: DeepReadonly<EngineState>, sessionTime: SessionTime): SessionTime => sessionTime + state.open.clock.offsetMs;
 
-/** Step 0's clock as the sub-machines read it (`MachineInput.clock`): whether its open span is `paused`, and the race clock's offset. */
-export const clockInput = (state: DeepReadonly<EngineState>): ClockInput => ({
+/**
+ * Step 0's clock as the sub-machines read it (`MachineInput.clock`): whether its open span is `paused`, the race clock's
+ * offset and, on the frame step 0 appended its `simulatedEnd` fact (`facts`, the frame's clock facts), that fact's time.
+ */
+export const clockInput = (state: DeepReadonly<EngineState>, facts: readonly ClockFact[] = []): ClockInput => ({
   paused: clockPaused(state.open.clock),
   offsetMs: state.open.clock.offsetMs,
+  simulatedEnd: facts.find((f) => f.kind === 'simulatedEnd')?.at,
 });
 
 /** The mark of `state`, taken by the runner before it restores a snapshot (after the session's first frame). */

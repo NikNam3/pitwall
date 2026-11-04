@@ -67,6 +67,7 @@ describe('committed segments', () => {
     ['qualifying-singapore-end.pwrec.gz', 70, { SPTP: 1, SEND: 1, BUTN: 6 }, 899, 900.6],
     ['practice-wing-change.pwrec.gz', 523, {}, 615, 619],
     ['race-drive-through.pwrec.gz', 848, { SCAR: 1, PENA: 1, BUTN: 16 }, 1530.5, 1534],
+    ['practice-garage-exit.pwrec.gz', 2271, { BUTN: 48 }, 640.5, 651],
   ] as const)('%s: %i records, context (Session, Participants) first, these events, clean end', async (file, records, codes, fromS, toS) => {
     const s = await load(file);
     expect(s.records).toHaveLength(records);

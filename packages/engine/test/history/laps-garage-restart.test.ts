@@ -1,5 +1,6 @@
 // A garage visit on the same lap number (practice, qualifying): the game does not advance the lap number through the
-// garage, so the lap restarts at the line after the pit exit, and the stint boundary follows the restarted lap.
+// garage, so the lap restarts at the line after the pit exit, and the stint boundary follows the restarted lap. The
+// restart holds in practice, qualifying and a sprint shootout (brought in from branch w2/laps, migration Task 12).
 import { describe, expect, it } from 'vitest';
 import type { LapRecord } from '@pitwall/domain';
 import { ScenarioBuilder, type FrameDraft } from '../builders/index.ts';
@@ -35,9 +36,12 @@ const GARAGE: readonly Row[] = [
 ];
 const RESTART = 11;
 
-/** `rows` as frames; frame `i` has fuel `60 - i` kg, wear RL/RR/FL/FR `i`..`i + 3` % and an ERS store of `1 MJ + i * 0.1 MJ`. */
-const practice = (rows: readonly Row[], o: { newSetAt?: number } = {}) =>
-  new ScenarioBuilder({ cars: 1, stepMs: 1000 }).session({ sessionType: 1 }).frames(rows.length, (d) => {
+/**
+ * `rows` as frames of a session of `sessionType` (1 practice, 5 qualifying, 10 a sprint shootout); frame `i` has fuel
+ * `60 - i` kg, wear RL/RR/FL/FR `i`..`i + 3` % and an ERS store of `1 MJ + i * 0.1 MJ`.
+ */
+const scenario = (sessionType: number, rows: readonly Row[], o: { newSetAt?: number } = {}) =>
+  new ScenarioBuilder({ cars: 1, stepMs: 1000 }).session({ sessionType }).frames(rows.length, (d) => {
     const [lap, lapDistance, currentLapTimeInMs, pitStatus, driverStatus] = rows[d.index]!;
     Object.assign(car0(d), { currentLapNum: lap, lapDistance, currentLapTimeInMs, pitStatus, driverStatus, lastLapTimeInMs: lap === 4 ? 90_500 : 90_000 });
     const i = d.index;
@@ -45,6 +49,7 @@ const practice = (rows: readonly Row[], o: { newSetAt?: number } = {}) =>
     Object.assign(d.status.carStatusData[0]!, { ...set, fuelInTank: 60 - i, ersStoreEnergy: 1_000_000 + i * 100_000 });
     d.add('carDamage', { carDamageData: { 0: { tyresWear: [i, i + 1, i + 2, i + 3] } } });
   });
+const practice = (rows: readonly Row[], o: { newSetAt?: number } = {}) => scenario(1, rows, o);
 const withRows = (changes: Record<number, Partial<Record<'distanceM' | 'lapTimeMs', number>>>): Row[] =>
   GARAGE.map((row, i) => {
     const c = changes[i];
@@ -53,8 +58,8 @@ const withRows = (changes: Record<number, Partial<Record<'distanceM' | 'lapTimeM
 const provisional = <L extends Pick<LapRecord, 'status'>>(laps: readonly L[]) => laps.filter((l) => l.status === 'provisional');
 
 describe('a lap restarts at the line after a garage visit on the same lap number', () => {
-  it('the timed lap from the line is its own lap record, neither in lap nor out lap; the in lap, garage and out lap before it are none', () => {
-    const { st, frames } = runScenario(practice(GARAGE));
+  it.each([['practice', 1], ['qualifying', 5], ['a sprint shootout', 10]])('in %s the timed lap from the line is its own lap record, neither in lap nor out lap; the in lap, garage and out lap before it are none', (_, sessionType) => {
+    const { st, frames } = runScenario(scenario(sessionType, GARAGE));
     const laps = provisional(st.history.laps);
     expect(laps.map((l) => l.lapNumber)).toEqual([2, 3]);
     expect(laps[1]).toMatchObject({ lapNumber: 3, lapTimeMs: 90_500, inLap: false, outLap: false, fuelAtStartKg: val(60 - RESTART),

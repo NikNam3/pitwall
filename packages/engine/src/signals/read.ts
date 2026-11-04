@@ -84,7 +84,7 @@ const situationEventOf = (details: EventDetails): SituationEvent | undefined => 
     case 'DRSE':
       return { code: details.code };
     case 'DRSD':
-      return { code: 'DRSD', reason: pick(DRS_DISABLED_REASONS, details.reason) };
+      return { code: 'DRSD', reason: pick(DRS_DISABLED_REASONS, details.reason, 'unknown') };
     case 'STLG':
       return { code: 'STLG', lights: details.numLights };
     case 'SCAR':

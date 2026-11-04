@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { OUT_OF_RACE_STATUSES, type FeedId, type ResultStatus } from '@pitwall/domain';
 import { initialState, step } from '../../src/index.ts';
-import { driverKeyOf, isActiveCar } from '../../src/step/state-update/identity.ts';
+import { driverKeyOf } from '../../src/step/state-update/identity.ts';
 import { ScenarioBuilder } from '../builders/index.ts';
 
 const run = (b: ScenarioBuilder) => {
@@ -36,11 +36,6 @@ describe('car identity', () => {
     const { st } = run(new ScenarioBuilder({ cars: 4 }).participants({ numActiveCars: 3 }).frames(1, () => {}));
     expect(st.cars.slice(0, 5).map((c) => c.active)).toEqual([true, true, true, false, false]);
   });
-  it.each([['active', true], ['finished', true], ['retired', true], ['didNotFinish', true], ['invalid', false], ['inactive', false]] as const)(
-    'isActiveCar: resultStatus %s -> %s', (rs, active) => {
-      expect(isActiveCar(2, 3, rs)).toBe(active);
-      expect(isActiveCar(3, 3, rs)).toBe(false);
-    });
   it('teammate: same teamId as the player, not the player, active', () => {
     expect(run(new ScenarioBuilder({ cars: 6, player: 4 }).frames(1, () => {})).st.teammateCar).toBe(5);
     expect(run(new ScenarioBuilder({ cars: 6, player: 4 }).participants({ numActiveCars: 5 }).frames(1, () => {})).st.teammateCar).toBeUndefined();

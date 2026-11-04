@@ -20,7 +20,9 @@ import { beats, script } from './script.ts';
 
 vi.mock('../../src/situations/index.generated.ts', async () => {
   const { TEST_MACHINES, raceOnlyMachine } = await import('../support/test-machines.ts');
-  return { MACHINES: [...TEST_MACHINES, raceOnlyMachine] };
+  // car-status decides which cars are in the session, so the recorders record laps (Task 10, C43)
+  const { default: carStatus } = await import('../../src/situations/car-status/machine.ts');
+  return { MACHINES: [carStatus, ...TEST_MACHINES, raceOnlyMachine] };
 });
 vi.mock('../../../domain/src/situations/index.generated.ts', async (importOriginal) => {
   const { withTestSpans } = await import('../support/test-machines.ts');
@@ -76,7 +78,7 @@ describe('runMachine', () => {
       { machine: 'test-car', id: 0, carId: 1, kind: 'pit', start: 0, end: FRAME_MS, confirmed: true, joinedAt: true, detail: undefined, startFrame: 1, endFrame: 2 },
     ]);
     expect(state.log.spans['test-zone']).toEqual([
-      { machine: 'test-zone', id: 0, kind: 'yellow', start: 0, end: 2 * FRAME_MS, confirmed: true, joinedAt: true, detail: { zone: 0 }, startFrame: 1, endFrame: 3 },
+      { machine: 'test-zone', id: 0, kind: 'yellow', start: 0, end: 2 * FRAME_MS, confirmed: true, joinedAt: true, zone: 0, startFrame: 1, endFrame: 3 },
     ]);
     expect(situationOf(state).byMachine['test-session']).toEqual([
       { machine: 'test-session', id: 1, kind: 'neutralised', start: FRAME_MS, confirmed: true, detail: undefined, startFrame: 2 },
@@ -141,7 +143,7 @@ describe('situationOf', () => {
       { machine: 'test-car', id: 1, carId: 1, kind: 'track', start: FRAME_MS, confirmed: true, detail: undefined, startFrame: 2 },
     ]);
     expect(situation.byMachine['test-car']?.map((s) => s.carId)).toEqual(Array.from({ length: MAX_CARS }, (_, i) => i));
-    expect(situation.byMachine['test-zone']).toEqual([{ machine: 'test-zone', id: 0, kind: 'yellow', start: 0, confirmed: true, joinedAt: true, detail: { zone: 0 }, startFrame: 1 }]);
+    expect(situation.byMachine['test-zone']).toEqual([{ machine: 'test-zone', id: 0, kind: 'yellow', start: 0, confirmed: true, joinedAt: true, zone: 0, startFrame: 1 }]);
   });
 });
 
@@ -161,7 +163,7 @@ describe('closeSession', () => {
       { machine: 'test-session', id: 1, kind: 'neutralised', start: FRAME_MS, end: 5_000, confirmed: false, detail: undefined, startFrame: 2, endFrame: 3 },
     ]);
     expect(state.log.spans['test-zone']).toEqual([
-      { machine: 'test-zone', id: 0, kind: 'clear', start: 0, end: 5_000, confirmed: true, joinedAt: true, detail: { zone: 0 }, startFrame: 1, endFrame: 3 },
+      { machine: 'test-zone', id: 0, kind: 'clear', start: 0, end: 5_000, confirmed: true, joinedAt: true, zone: 0, startFrame: 1, endFrame: 3 },
     ]);
     expect(state.log.spans['test-car']).toEqual(open['test-car']!.map((s) => ({ ...s, end: 5_000, endFrame: 3 })));
   });
@@ -252,7 +254,7 @@ describe('membership of superseding facts (C25, C26)', () => {
     const member = (fact: (typeof laps)[number]) =>
       Object.fromEntries(Object.entries(membershipOf(source, fact)).map(([machine, span]) => [machine, [span.kind, span.id]]));
     // the clock's spans tile the session (C85): its `running` span from the first frame covers the crossing too
-    expect(member(laps[1]!)).toEqual({ clock: ['running', 0], 'test-session': ['green', 0], 'test-probe': ['seen', 3], 'test-car': ['track', 0] });
+    expect(member(laps[1]!)).toEqual({ clock: ['running', 0], 'test-session': ['green', 0], 'test-probe': ['seen', 3], 'test-car': ['track', 0], 'car-status': ['competing', 0] });
     expect(member(laps[1]!)).toEqual(member(laps[0]!));
   });
 });

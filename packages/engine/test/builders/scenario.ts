@@ -45,8 +45,14 @@ type Timed = { packet: Packet; receivedAtMs: number };
 type Menu = Pick<FrameDraft, MenuSlot>;
 type Options = { sessionUid?: bigint; cars?: number; player?: number; stepMs?: number };
 
+/**
+ * A race alone in its weekend: the weekend structure lists it, so the weekend phase (race) is decided on the first
+ * frame and the session-phase sub-machines run (C14).
+ */
 const SESSION_DEFAULTS = {
   sessionType: 15,
+  numSessionsInWeekend: 1,
+  weekendStructure: [15],
   trackId: 0,
   totalLaps: 10,
   trackLength: 5000,

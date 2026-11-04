@@ -92,6 +92,11 @@ describe('readSignals: every C12 field and event reaches Signals', () => {
     expect(read(signalsOf(signalFrame()))).toEqual(expected);
   });
 
+  it('a DRSD reason code the spec does not list is unknown, never one of the listed reasons (w2/drs f9a9c07)', () => {
+    const frame = new ScenarioBuilder({ cars: 6 }).event({ code: 'DRSD', reason: 4 }).event({ code: 'DRSD', reason: 255 }).frame(() => {}).build()[0]!;
+    expect(signalsOf(frame).events).toEqual([{ code: 'DRSD', reason: 'unknown' }, { code: 'DRSD', reason: 'unknown' }]);
+  });
+
   it('spectatorCarIndex 255 (no spectated car) is undefined', () => {
     const frame = new ScenarioBuilder({ cars: 6 }).session({ spectatorCarIndex: 255 }).frame(() => {}).build()[0]!;
     expect(signalsOf(frame).session.spectatorCarIndex).toBeUndefined();

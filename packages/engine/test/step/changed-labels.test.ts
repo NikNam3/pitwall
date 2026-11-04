@@ -60,9 +60,13 @@ describe('change tags', () => {
   it('are the domain areas, the fact lists, the clock’s list and its spans, then the registered sub-machines’ spans (C40), in this order', () => {
     expect(CHANGE_TAGS).toEqual([
       'session', 'identity', 'timing', 'tyres', 'energy', 'condition', 'dynamics', 'ownCar',
-      'sessionPhases', 'laps', 'stints', 'pitStops', 'flagPhases', 'events', 'miniSectors',
+      'laps', 'stints', 'pitStops', 'flagPhases', 'events', 'miniSectors',
       'clock', 'spans:clock',
-      'spans:weekend-phase',
+      'spans:car-activity-practice', 'spans:car-activity-qualifying', 'spans:car-activity-race', 'spans:car-flags', 'spans:car-location',
+      'spans:car-status', 'spans:compound-rule', 'spans:lap-validity', 'spans:penalties',
+      'spans:race-control-practice', 'spans:race-control-qualifying', 'spans:race-control-race', 'spans:session-phase-practice',
+      'spans:session-phase-qualifying', 'spans:session-phase-race',
+      'spans:warnings', 'spans:weekend-phase', 'spans:zone-flags',
     ]);
   });
   it('ALL_CHANGE_TAGS is every tag once', () => {

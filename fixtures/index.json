@@ -567,6 +567,20 @@
       ]
     },
     {
+      "file": "race-drive-through-served.pwrec.gz",
+      "source": "raceFriendWet",
+      "fromS": 1631,
+      "toS": 1639.2,
+      "records": 1802,
+      "features": [
+        "601 313 bytes; 2 context packets (Session, Participants) first; session time 1631.025 to 1639.176, rising throughout",
+        "car 19 (the player) on lap 15 in the pit lane past its box on the drive-through visit of race-drive-through (pitStatus 1, pitStopTimer 8542 ms, numUnservedDriveThroughPens 1); the pit exit at 1631.735 (pitStatus 1 to 0, d256)",
+        "DTSV car 19 at 1638.850 (d512), 7.1 s after the pit exit; numUnservedDriveThroughPens 1 to 0 one frame later (1638.878)",
+        "DTSV x1, BUTN x7",
+        "duration 8154.651 ms"
+      ]
+    },
+    {
       "file": "race-sprint-start.pwrec.gz",
       "source": "raceSprint",
       "fromS": 0,
@@ -576,6 +590,115 @@
         "no context packets; session type 15 (race) throughout; the first Session packet (session time 0) carries numSessionsInWeekend 0 and an empty weekend structure",
         "a later Session packet (session time 1.505) carries numSessionsInWeekend 2 and the structure [15, 16]: this race is the sprint of its weekend",
         "duration 205782.375 ms"
+      ]
+    },
+    {
+      "file": "race-singapore-wet-formation-end.pwrec.gz",
+      "source": "raceSingaporeWet",
+      "fromS": 60,
+      "toS": 61.5,
+      "records": 1071,
+      "features": [
+        "332 388 bytes; 2 context packets (Session, Participants) first; the Session packet carries the weekend structure [4, 5, 6, 7, 15], so the weekend phase (race) is known on the first frame",
+        "two timelines with the same session times, as pwrec-cut keeps every record in the window: the formation lap from 60.004 s (frame 3601, safetyCarStatus 3) to 61.485 s, then 175 s of wall time later the race's lap 1 from 60.006 s (frame 14394, safetyCarStatus 0) to 61.5 s; frame ids rise, no FLBK",
+        "no start light and no lights out in the window (they lie at session time 0 after the formation reset at 169.566 s): to the engine the session ends inside the formation lap, the formation span joined on the first frame and open to the last",
+        "every car drives: mini-sector crossings in both parts",
+        "BUTN x3",
+        "duration 178100.263 ms"
+      ]
+    },
+    {
+      "file": "practice-miami-yellow.pwrec.gz",
+      "source": "MiP (2026-10-30_18-26-27_581b388bbb23c5e7, short practice, not in fixtures)",
+      "fromS": 130,
+      "toS": 152,
+      "records": 4806,
+      "features": [
+        "525 597 bytes; 2 context packets; 12 marshal zones, 22 car slots, every flag none at the first frame",
+        "the player (car 19): FIA flag yellow at 134.6, green at 143.8, none at 148.0",
+        "zone 10 yellow at 135.5, green at 144.7, none at 149.7; zone 11 green at 135.5, none at 144.7",
+        "duration 24084 ms"
+      ]
+    },
+    {
+      "file": "race-mexico-blue.pwrec.gz",
+      "source": "raceWetVscMexico",
+      "fromS": 6763.7,
+      "toS": 6774.7,
+      "records": 2759,
+      "features": [
+        "993 272 bytes; 2 context packets; 13 marshal zones, every flag none at the first frame",
+        "blue flags: car 18 blue at 6763.9, none at 6774.5; car 15 blue at 6768.6 and car 19 (the player) at 6768.9, both still blue at the end",
+        "zone 8 blue at 6764.7, none at 6773.2; zone 9 blue at 6770.7, blue to the end",
+        "duration 10996 ms"
+      ]
+    },
+    {
+      "file": "practice-miami-invalid.pwrec.gz",
+      "source": "practiceFriendWings",
+      "fromS": 1525,
+      "toS": 1550,
+      "records": 5400,
+      "features": [
+        "2 context packets (Session, Participants) first; session time 1525.016 to 1549.9, rising throughout; short practice (session type 4)",
+        "car 19 (the player) on lap 8 with totalWarnings 9 and cornerCuttingWarnings 9 throughout; currentLapInvalid 0 until 1526.992",
+        "PENA lap invalidation (penaltyType 12 this lap invalidated without reason, infringement 7, lap 8, placesGained 255) for car 19 at 1526.992, in the same frame as LapData currentLapInvalid 0 to 1",
+        "the flag stays set to the end of the segment (it clears at the line at 1563.605, outside)",
+        "duration 24986.809 ms"
+      ]
+    },
+    {
+      "file": "practice-miami-warning.pwrec.gz",
+      "source": "practiceFriendWings",
+      "fromS": 214,
+      "toS": 218,
+      "records": 907,
+      "features": [
+        "2 context packets (Session, Participants) first; session time 214 to 217.9, rising throughout; short practice (session type 4)",
+        "car 19 (the player) on lap 1 with no warning until 215.595",
+        "PENA warning (penaltyType 5, infringement 7, lap 1) for car 19 at 215.595, in the same frame as LapData totalWarnings 0 to 1 and cornerCuttingWarnings 0 to 1",
+        "duration 3966.312 ms"
+      ]
+    },
+    {
+      "file": "practice-zandvoort-warning-late.pwrec.gz",
+      "source": "practiceZandvoortOnline",
+      "fromS": 45,
+      "toS": 47.5,
+      "records": 516,
+      "features": [
+        "2 context packets (Session, Participants) first; session time 45 to 47.5, rising throughout; short practice (session type 4)",
+        "PENA warning (penaltyType 5, infringement 10, lap 1) for car 1 at 45.542; LapData totalWarnings 0 to 1 for car 1 follows 16 frames (0.543 s) later, at 46.085; cornerCuttingWarnings stays 0",
+        "duration 2464.578 ms"
+      ]
+    },
+    {
+      "file": "practice-garage-exit.pwrec.gz",
+      "source": "practiceFriendWings",
+      "fromS": 640.5,
+      "toS": 651,
+      "records": 2271,
+      "features": [
+        "445 482 bytes; 2 context packets (Session, Participants) first; session time 640.511 to 650.994; short practice (session type 4); numActiveCars 20, slots 20 and 21 resultStatus 0",
+        "car 19 (the player) in its garage box (driverStatus 0, pitStatus 1, d49) until 641.422: driverStatus 0 to 3 with pitStatus still 1 (d69); the pit exit at 649.872: pitStatus 1 to 0 (d256)",
+        "cars 0, 1, 5-9, 12, 14, 18 in the garage (driverStatus 0, pitStatus 1) throughout; car 2 ends its out lap at the line at 645.636 (driverStatus 3 to 1); every car resultStatus 2",
+        "BUTN x48, no other event",
+        "duration 10489.438 ms"
+      ]
+    },
+    {
+      "file": "race-miami-finish.pwrec.gz",
+      "source": "raceFriendWet",
+      "fromS": 2266.5,
+      "toS": 2271,
+      "records": 983,
+      "features": [
+        "316 361 bytes; 2 context packets (Session, Participants) first; session time 2266.514 to 2270.718; the last lap (lap 20)",
+        "15 cars already finished (resultStatus 3) at the first frame; car 18 retired in its garage (resultStatus 7, to 4 on the last frame); slots 20 and 21 hold no car",
+        "CHQF at 2266.835; car 9 crosses the line at 2267.670 (lapDistance 5410 to 2, lap timer to 0, the lap number stays 20) and turns resultStatus 3 one frame later at 2267.698",
+        "car 19 (the player) crosses at 2270.659 and turns resultStatus 3 at 2270.688; the last frame 2270.718 sets cars 1 and 6 resultStatus 3 mid-lap (d5289, d5249, lap timer 29 ms) and carries SEND",
+        "CHQF x1, SEND x1, BUTN x21",
+        "duration 5239.535 ms"
       ]
     }
   ]

@@ -1,9 +1,11 @@
 import { MAX_CARS, type ActualCompound, type CarId, type FrameNumber, type VisualCompound } from '@pitwall/domain';
 import type { LogWriter } from '../log/types.ts';
-import type { Recorder } from '../step/types.ts';
-import { carsWithLapData, type LiveCar } from './cars.ts';
+import type { Recorder, RecorderInput } from '../step/types.ts';
+import type { DeepReadonly } from '../util/deep-readonly.ts';
+import { carsInSession, carsWithLapData, type LiveCar } from './cars.ts';
 import { lapMarkOf, lapStepOf, markPitLane, type LapMark } from './lap-boundary.ts';
 import { endVisits, pitLaneStep, type PitLane } from './pit-lane.ts';
+import { initialRaceStartMark, postSessionOpened, raceStartStep, type RaceStartMark } from './race-start.ts';
 
 /** The stint a car is on, until it becomes a `StintRecord`. */
 export type OpenStint = {
@@ -24,8 +26,10 @@ export type StintsOwn = {
   pitLanes: Array<PitLane | undefined>;
   /** Per car: the lap it is on, by the laps recorder's rule (`lap-boundary.ts`). */
   laps: Array<LapMark | undefined>;
-  /** Per car: the newest lap that has a record (provisional or confirmed), 0 if none: where `SEND` closes the stint. */
+  /** Per car: the newest lap that has a record (provisional or confirmed), 0 if none: where the session's end closes the stint. */
   recordedLap: number[];
+  /** Where the race start is (its own copy, C11). */
+  raceStart: RaceStartMark;
 };
 
 const openStint = (car: LiveCar, firstLap: number): OpenStint => ({
@@ -85,23 +89,20 @@ const trackStint = (own: StintsOwn, car: LiveCar, log: LogWriter, frame: FrameNu
   return closeStint(log, car.id, stint, lastLap, frame);
 };
 
-/** The newest recorded lap of each car rebuilt from `laps`, the laps left in the history: the situation tracker's formation discard (until Task 9). */
-export const reindexStintLaps = (own: StintsOwn, laps: ReadonlyArray<{ carId: CarId; lapNumber: number }>): void => {
-  own.recordedLap = own.recordedLap.map(() => 0);
-  for (const { carId, lapNumber } of laps) own.recordedLap[carId] = Math.max(own.recordedLap[carId] ?? 0, lapNumber);
-};
-
-/** No pit visit in progress: the situation tracker's formation discard (spec 3.2, until Task 9). */
-export const endStintVisits = (own: StintsOwn): void => endVisits(own.pitLanes);
-
-/** The car's lap starts over at lights out, as the laps recorder's does (the situation tracker, until Task 9). */
-export const restartStintLap = (own: StintsOwn, car: LiveCar): void => {
-  own.laps[car.id] = lapMarkOf(car, false);
+/**
+ * The race start (`raceStartStep`): every car in the session that has had LapData starts its lap over, as the laps
+ * recorder's does; no pit visit goes on (a pit-lane start), and no lap of the formation lap counts as recorded (its
+ * records are hidden, C29). The stints stay as they are.
+ */
+const restartLaps = (own: StintsOwn, input: DeepReadonly<RecorderInput>): void => {
+  for (const car of carsInSession(input)) if (car.updatedAt.lapData !== undefined) own.laps[car.id] = lapMarkOf(car, false);
+  endVisits(own.pitLanes);
+  own.recordedLap.fill(0);
 };
 
 /**
- * Stints come from Car Status; the session's end (`SEND`, step 2's `tracked.sessionEnded`) closes the stint every car
- * is still on, at its last recorded lap.
+ * Stints come from Car Status; the session's end (the frame a `postSession` span opens, C10: SEND or the clock's
+ * simulated end) closes the stint every car is still on, at its last recorded lap.
  */
 export const stintsRecorder: Recorder<StintsOwn> = {
   id: 'stints',
@@ -110,10 +111,14 @@ export const stintsRecorder: Recorder<StintsOwn> = {
     pitLanes: Array.from({ length: MAX_CARS }, () => undefined),
     laps: Array.from({ length: MAX_CARS }, () => undefined),
     recordedLap: Array.from({ length: MAX_CARS }, () => 0),
+    raceStart: initialRaceStartMark(),
   }),
   apply(input, own, log, out) {
     const { at, live } = input;
     let closed = false;
+    const start = raceStartStep(own.raceStart, input.situation);
+    own.raceStart = start.mark;
+    if (start.started) restartLaps(own, input);
     for (const car of carsWithLapData(input)) {
       const pit = pitLaneStep(own.pitLanes[car.id], car.timing.pitStatus, car.timing.lap);
       own.pitLanes[car.id] = pit.lane;
@@ -128,7 +133,7 @@ export const stintsRecorder: Recorder<StintsOwn> = {
       }
     }
     for (const car of carsWithLapData(input)) closed = trackStint(own, car, log, input.frameNumber) || closed;
-    if (input.tracked?.sessionEnded) {
+    if (postSessionOpened(input.situation, input.frameNumber)) {
       for (const car of live.cars) {
         const stint = own.stints[car.id];
         if (!stint) continue;

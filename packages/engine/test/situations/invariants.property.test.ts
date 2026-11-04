@@ -1,7 +1,8 @@
 // One generic property over the registry (contract C85, C87): random signal sequences, run through step 2's
 // `runMachine` frame by frame and closed by `closeSession`, never give an undeclared transition (a scope left without
 // its open span included), a throw, two open spans in one scope or a gap between spans (in time and in frames); span
-// ids count the spans opened before them; the spans closed by the session's end cover its last frame.
+// ids count the spans opened before them; the spans closed by the session's end cover its last frame. The Participants
+// data (`updatedAt.participants`) arrives on a random frame, as a car sub-machine opens a car's first span with it.
 // The registry is `MACHINES` plus the test machines (`test/support/test-machines.ts`). Step 0's clock, a sub-machine
 // outside the registry (C7), has its own property on the same invariants (`clock/clock.property.test.ts`).
 import fc from 'fast-check';
@@ -26,15 +27,19 @@ const [first] = new ScenarioBuilder({ cars: 2 }).frames(1, () => {}).build() as 
 const initial = initialState(initFor([first])).signals;
 const frameAt = (index: number): Frame => ({ ...first, frameId: index, sessionTime: index * FRAME_MS });
 
+// 100 runs in four shards of 25 (each shard draws its own sequences): one test stays under 2 s, the registry is walked on every frame.
+const SHARDS = 4;
 describe('every sub-machine (C85)', () => {
-  it('random signal sequences never give an undeclared transition, a throw, two open spans in one scope or a gap between spans', () => {
+  it.each(Array.from({ length: SHARDS }, (_, i) => i + 1))('random signal sequences (shard %i) never give an undeclared transition, a throw, two open spans in one scope or a gap between spans', () => {
     fc.assert(
-      fc.property(arbSignalSequence(initial), (sequence) => {
+      fc.property(arbSignalSequence(initial), fc.nat({ max: 20 }), (sequence, participantsAt) => {
         const state = initialState(initFor([first]));
         const problems: string[] = [];
         let before = situationOf(state).byMachine;
         sequence.forEach((signals, index) => {
           state.signals = signals;
+          // Participants data arrives on frame `participantsAt` (the car sub-machines open a car's first span then, C3)
+          if (index === participantsAt) for (const car of state.cars) car.updatedAt.participants = index * FRAME_MS;
           state.frameNumber = index + 1;
           const out: StepOutput = { changed: new Set(), corrections: [] };
           const lengths = new Map(MACHINES.map((m) => [m.id, state.log.spans[m.id]?.length ?? 0]));
@@ -59,7 +64,7 @@ describe('every sub-machine (C85)', () => {
         }
         expect(problems).toEqual([]);
       }),
-      { numRuns: 100 },
+      { numRuns: 100 / SHARDS },
     );
   });
 });

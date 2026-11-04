@@ -5,7 +5,7 @@
 // `endFrame` the frame that closed them. Which spans a fact belongs to is computed by the projection alone, from frame
 // numbers (C28). Each sub-machine's open state is kept in `open.machines[id]`, so snapshots carry it and a rewind
 // restores its span count with it (C26).
-import type { FrameNumber, MachineId, OpenSpan, SessionTime, WeekendPhase } from '@pitwall/domain';
+import type { ClockFact, FrameNumber, MachineId, OpenSpan, SessionTime, WeekendPhase } from '@pitwall/domain';
 import type { Frame } from '../frame/frame.ts';
 import { logWriter } from '../log/log.ts';
 import type { EngineState } from '../state/engine-state.ts';
@@ -22,9 +22,12 @@ type Closed = MachineStep<unknown>['closed'];
 /** A sub-machine's change tag (C40); `SPAN_TAGS` holds the registered ones' as literals. */
 const spanTag = (machine: MachineId): ChangeTag => `spans:${machine}` as ChangeTag;
 
+/** The sub-machine that decides the weekend phase (C14). */
+const WEEKEND_PHASE: MachineId = 'weekend-phase';
+
 /** The weekend phase: the open span of the weekend-phase sub-machine, `pending` while none is open (C14). */
 const weekendPhaseOf = (state: DeepReadonly<EngineState>): WeekendPhase => {
-  const machine = MACHINE_ORDER.find((m) => m.id === 'weekend-phase');
+  const machine = MACHINE_ORDER.find((m) => m.id === WEEKEND_PHASE);
   return phaseOfSpan(machine === undefined ? undefined : openSpansOf(state, machine)[0]);
 };
 
@@ -55,12 +58,15 @@ const appendClosed = (state: EngineState, closed: ReadonlyArray<{ machine: Machi
 
 /**
  * Step 2 on one frame (C9): runs every registered sub-machine that applies to the weekend phase, in `MACHINE_ORDER`,
- * with the frame's number (`state.frameNumber`, set by `step`), appends the spans they closed to `spans:<id>`, each
- * closed on this frame, and tags `spans:<id>` when a machine's spans changed (C40).
+ * with the frame's number (`state.frameNumber`, set by `step`) and step 0's clock (`clockFacts`: the clock facts step 0
+ * gave the frame, C7), appends the spans they closed to `spans:<id>`, each closed on this frame, and tags `spans:<id>`
+ * when a machine's spans changed (C40). The weekend phase is the one the weekend-phase sub-machine decided on this
+ * frame, once it ran: a per-phase sub-machine (ordered after it, its upstream) runs from the frame the phase is decided
+ * on (C14).
  */
-export function runMachine(state: EngineState, frame: Frame, out: StepOutput): void {
-  const weekendPhase = weekendPhaseOf(state);
-  const clock = clockInput(state);
+export function runMachine(state: EngineState, frame: Frame, out: StepOutput, clockFacts: readonly ClockFact[] = []): void {
+  let weekendPhase = weekendPhaseOf(state);
+  const clock = clockInput(state, clockFacts);
   const after: Record<MachineId, OpenSpan[]> = {};
   const closed: Array<{ machine: MachineId; spans: Closed }> = [];
   for (const machine of MACHINE_ORDER) {
@@ -73,15 +79,16 @@ export function runMachine(state: EngineState, frame: Frame, out: StepOutput): v
     after[machine.id] = machine.openSpans(step.open);
     if (step.closed.length > 0) closed.push({ machine: machine.id, spans: step.closed });
     if (step.closed.length > 0 || !samePlain(before, after[machine.id])) out.changed.add(spanTag(machine.id));
+    if (machine.id === WEEKEND_PHASE) weekendPhase = phaseOfSpan(after[machine.id]?.[0]);
   }
   appendClosed(state, closed, state.frameNumber);
 }
 
-/** The machine's open spans (C20): the clock's (`running` or a pause in progress), every registered sub-machine's, and the weekend phase. */
+/** The machine's open spans (C20): the clock's (`running` or `paused`), every registered sub-machine's, and the weekend phase. */
 export function situationOf(state: DeepReadonly<EngineState>): Situation {
   const byMachine: Record<MachineId, OpenSpan[]> = { [STEP0_CLOCK.id]: STEP0_CLOCK.openSpans(state.open.clock) };
   for (const machine of MACHINE_ORDER) byMachine[machine.id] = openSpansOf(state, machine);
-  return { weekendPhase: weekendPhaseOf(state), session: undefined, byMachine };
+  return { weekendPhase: weekendPhaseOf(state), byMachine };
 }
 
 /**

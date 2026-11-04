@@ -1,6 +1,5 @@
 import type { Frame } from '../frame/frame.ts';
 import { applyFlagPhases } from '../history/flags.ts';
-import { applySimulatedEnd, applySituations } from '../history/situations/index.ts';
 import { logWriter } from '../log/log.ts';
 import { ProjectionTracker } from '../log/projection.ts';
 import { eventsRecorder } from '../recorders/events.ts';
@@ -40,7 +39,8 @@ export {
 /**
  * Step 0 (C7): the clock reads the session time's jump and returns the frame on the race clock with its clock facts;
  * `report`: the `SessionRunner` took the frame as a flashback report. Every fall is reported as `clockFall` and every
- * other forward jump as `clockJump`, with the game's times; the simulated end opens the post-session (C36). The clock
+ * other forward jump as `clockJump`, with the game's times; the simulated end reaches the sub-machines as
+ * `MachineInput.clock.simulatedEnd` (C36). The clock
  * facts describe the frame's number and its spans open and close on it (C26). Its tags follow step 2's rule (C40):
  * `clock` when it appends a clock fact, `spans:clock` when its open spans changed or it closed a span.
  */
@@ -59,7 +59,6 @@ const step0Clock = (state: EngineState, received: Frame, report: FlashbackReport
   for (const fact of clock.facts) {
     if (fact.kind === 'fall') out.clockFall = { fromMs: fact.fromMs, toMs: fact.toMs };
     else if (fact.kind === 'jump') out.clockJump = { fromMs: fact.fromMs, toMs: fact.toMs };
-    else applySimulatedEnd(state, out);
   }
   return clock;
 };
@@ -119,11 +118,11 @@ const record = (state: EngineState, input: RecorderInput, out: StepOutput): void
  * step of frame N sees `state.frameNumber` N, and each fact records the frame it describes, each span the frames it
  * opened and closed on. Then four steps: step 0, the clock (`step0Clock`: the frame on the race clock and its clock
  * facts, appended after step 2); step 1, the state update; step 2, the machine (`runMachine`: the registered
- * sub-machines and their closed spans), after the situation tracker and the flag phases it mirrors, which keep step 2's
- * slot until Tasks 9/19 port them (the tracker also decides `tracked`, what the frame's situation events tell the
- * recorders); step 3, the recorders, with the frame's number and the machine's situation. Last, the projection takes
- * in what the frame appended, computing membership from frame numbers with the open spans; a step that rewrote the log
- * in place (`rewritten`, the legacy formation discard until Task 9) projects it again.
+ * sub-machines, with step 0's clock, and their closed spans; `tracked`, what the frame's situation events tell the
+ * recorders); step 3, the recorders, with the frame's number and the machine's situation. Then the projection takes in
+ * what the frame appended, computing membership from frame numbers with the open spans. Last the flag phases, the
+ * legacy mirror of the race's session-phase spans (until Task 19), read the projection's closed spans, the situation
+ * and the live state (C10), and the projection takes in what they appended.
  */
 export function step(state: EngineState, received: Frame, report?: FlashbackReport): StepOutput {
   const out: StepOutput = { changed: new Set(), corrections: [] };
@@ -131,16 +130,14 @@ export function step(state: EngineState, received: Frame, report?: FlashbackRepo
   const clock = step0Clock(state, received, report, out);
   const { frame } = clock;
   updateState(state, frame, out);
-  applySituations(state, frame, out);
-  applyFlagPhases(state, out);
-  runMachine(state, frame, out);
+  runMachine(state, frame, out, clock.facts);
   appendClock(state, clock);
   const situation = situationOf(state);
   const tracked = trackedEventsOf(state.signals.events);
   record(state, { at: frame.sessionTime, frameId: frame.frameId, frameNumber: state.frameNumber, live: state, situation, tracked }, out);
   const projection = projectionTrackerOf(state);
-  if (out.rewritten) projection.rebuild(situation);
-  else projection.update(situation);
+  projection.update(situation);
+  if (applyFlagPhases(state, situation, out)) projection.update(situation);
   state.lastFrameId = frame.frameId;
   state.sessionTime = frame.sessionTime;
   return out;

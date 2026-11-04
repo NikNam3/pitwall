@@ -32,7 +32,7 @@ export type Frame = {
   sessionTime: SessionTime;
   /**
    * When the frame's first packet arrived (wall clock, ms, as the source stamped it; only compared, never read from a
-   * clock): the situation tracker tells an offline pause and the post-session simulation by it.
+   * clock): step 0's clock tells an offline pause and the post-session simulation by it.
    */
   receivedAtMs: number;
   playerCarIndex: number;

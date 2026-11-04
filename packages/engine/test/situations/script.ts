@@ -1,6 +1,7 @@
-// Scripted sessions for the situation tracker's tests. Each beat is one frame: its session time, its receive (wall)
-// time, the events and the Session packet it carries, and what the cars do. Session time and wall time are set on the
-// packets before a SessionTracker assembles them, so the frames carry them as the game's would.
+// Scripted sessions for the tests of the session-phase sub-machines and of others that need a race start. Each beat
+// is one frame: its session time, its receive (wall) time, the events and the Session packet it carries, and what the
+// cars do. Session time and wall time are set on the packets before a SessionTracker assembles them, so the frames
+// carry them as the game's would.
 import { feedId } from '@pitwall/domain';
 import type { EventDetails, Packet, SessionPacket } from '@pitwall/protocol';
 import { SessionRunner, SessionTracker, type Frame, type StepResult } from '../../src/index.ts';
@@ -27,14 +28,17 @@ export type Beat = {
 
 export type ScriptOptions = {
   cars?: number;
-  /** Session packet fields of every Session packet, under the beats' own. Default a race on a 4000 m track. */
+  /**
+   * Session packet fields of every Session packet, under the beats' own. Default a race on a 4000 m track, alone in its
+   * weekend: the weekend structure holds the session's type, so the weekend phase is decided on the first frame (C14).
+   */
   session?: DeepPartial<SessionPacket>;
 };
 
 /** The packets of `beats` as the game sends them, each with its receive time. */
 export function scriptPackets(beats: readonly Beat[], o: ScriptOptions = {}): Array<{ packet: Packet; receivedAtMs: number }> {
   const b = new ScenarioBuilder({ cars: o.cars ?? 2, stepMs: STEP });
-  let session: DeepPartial<SessionPacket> = { trackLength: TRACK, ...o.session };
+  let session: DeepPartial<SessionPacket> = { trackLength: TRACK, numSessionsInWeekend: 1, weekendStructure: [o.session?.sessionType ?? 15], ...o.session };
   b.session(session);
   const at: number[] = [];
   const wall: number[] = [];
@@ -97,13 +101,6 @@ export const FIRST_LIGHT = 10;
 const LIGHT_EVERY = 10;
 /** Frame of `gridStart`'s lights out. */
 export const LIGHTS_OUT = 59;
-/**
- * The steps of every `gridStart` that truncate (spec 3.1, "A boundary at a shared moment", ruling 2026-10-31 made exact
- * after review 6): lights out, which moves the start lights' events (recorded by earlier frames at the grid's held 0)
- * from startLights into racing. The first start light opens startLights at that time too, but no earlier frame
- * recorded an entry there.
- */
-export const GRID_START_TRUNCATED: readonly number[] = [LIGHTS_OUT];
 /**
  * The start without a formation lap (shape S1, raceSingapore): the clock holds at 0 on the grid, five start lights from
  * frame `FIRST_LIGHT`, lights out at frame `LIGHTS_OUT`; the clock runs from the frame after it. `race(k)` shapes race

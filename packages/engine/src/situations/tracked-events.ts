@@ -43,6 +43,5 @@ const raceEventOf = (event: SituationEvent): RaceEventBody | undefined => {
 /** What the frame's situation events (`signals.events`) tell the recorders. */
 export const trackedEventsOf = (events: readonly SituationEvent[]): TrackedEvents => ({
   penaltyServed: events.flatMap((e) => ((e.code === 'DTSV' || e.code === 'SGSV') && e.carId !== undefined ? [e.carId] : [])),
-  sessionEnded: events.some((e) => e.code === 'SEND'),
   raceEvents: events.flatMap((e) => raceEventOf(e) ?? []),
 });

@@ -30,7 +30,7 @@ const baseInput = (() => {
       const { open: _open, history: _history, weekend: _weekend, signals, log: _log, ...live } = initialState(
         initFor(new ScenarioBuilder({ cars: 2 }).frames(1, () => {}).build()),
       );
-      base = { at: 0, frameId: 0, frameNumber: 0, signals, live, clock: { paused: false, offsetMs: 0 }, upstream: {}, weekendPhase: { kind: 'pending' } };
+      base = { at: 0, frameId: 0, frameNumber: 0, signals, live, clock: { paused: false, offsetMs: 0, simulatedEnd: undefined }, upstream: {}, weekendPhase: { kind: 'pending' } };
     }
     return structuredClone(base);
   };
@@ -78,7 +78,7 @@ export class MachineInputBuilder {
 export const inputs = (): MachineInputBuilder => new MachineInputBuilder();
 
 /** A span a step closed, as the harness reads it: which span it was, of what kind, in which scope. */
-export type ClosedSpan = Pick<Span, 'id' | 'kind' | 'detail' | 'joinedAt'> & { carId?: CarId | undefined };
+export type ClosedSpan = Pick<Span, 'id' | 'kind' | 'detail' | 'joinedAt'> & { carId?: CarId | undefined; zone?: number | undefined };
 
 /**
  * What a transition table drives (C15): a sub-machine with its declared transitions, its open state `Open` and the
@@ -130,11 +130,11 @@ export const tableProblems = ({ machine, rows }: TransitionTable): string[] => [
 ];
 
 /**
- * Where a span lives: the session, its car (`carId`) or its zone (`detail.zone`, which a zone sub-machine's spans
+ * Where a span lives: the session, its car (`carId`) or its zone (`zone`, which a zone sub-machine's spans
  * carry). A scope holds at most one open span; a span's successor in its scope starts where it ends.
  */
-export const scopeKey = (scope: Scope, span: { carId?: number | undefined; detail: unknown }): string =>
-  scope === 'session' ? 'session' : scope === 'car' ? `car ${span.carId}` : `zone ${(span.detail as { zone?: number } | undefined)?.zone}`;
+export const scopeKey = (scope: Scope, span: { carId?: number | undefined; zone?: number | undefined }): string =>
+  scope === 'session' ? 'session' : scope === 'car' ? `car ${span.carId}` : `zone ${span.zone}`;
 
 /**
  * A change of a scope's situation in one frame: `from` the kind before, `to` the kind after (`none`: no span), `span`
@@ -155,12 +155,25 @@ export const transitionsOf = (
   after: readonly OpenSpan[],
   closed: readonly ClosedSpan[] = [],
 ): ObservedTransition[] => {
-  const keys = [...new Set([...before, ...after, ...closed].map((s) => scopeKey(scope, s)))];
+  // Group by scope once (a scan per scope is quadratic in the cars); the first span of a scope is its open one.
+  const group = (spans: readonly (OpenSpan | ClosedSpan)[]) => {
+    const byKey = new Map<string, (OpenSpan | ClosedSpan)[]>();
+    for (const s of spans) {
+      const key = scopeKey(scope, s);
+      const list = byKey.get(key);
+      if (list) list.push(s);
+      else byKey.set(key, [s]);
+    }
+    return byKey;
+  };
+  const wasBy = group(before);
+  const nowBy = group(after);
+  const closedBy = group(closed);
+  const keys = [...new Set([...wasBy.keys(), ...nowBy.keys(), ...closedBy.keys()])];
   return keys.flatMap((key) => {
-    const inScope = (s: { carId?: number | undefined; detail: unknown }) => scopeKey(scope, s) === key;
-    const was = before.find(inScope);
-    const now = after.find(inScope);
-    const passed: Passed[] = [was, ...closed.filter((s) => inScope(s) && s.id !== was?.id && s.id !== now?.id), now];
+    const was = wasBy.get(key)?.[0] as OpenSpan | undefined;
+    const now = nowBy.get(key)?.[0] as OpenSpan | undefined;
+    const passed: Passed[] = [was, ...((closedBy.get(key) ?? []) as ClosedSpan[]).filter((s) => s.id !== was?.id && s.id !== now?.id), now];
     return passed.slice(1).flatMap((to, i): ObservedTransition[] => {
       const from = passed[i];
       if (from?.id === to?.id) return [];
