@@ -77,7 +77,7 @@ describe('TOPICS', () => {
   it.each(['ui.workbooks', 'ui.linkGroups', 'ui.alerts', 'ui.settings'] as const)('has the global topic %s: owner core, state', (name) => {
     expect(TOPICS[name]).toMatchObject({ name, owner: 'core', scope: 'global', mode: 'state' });
   });
-  it('exports the contract version', () => { expect(CONTRACT_VERSION).toBe(8); });
+  it('exports the contract version', () => { expect(CONTRACT_VERSION).toBe(9); });
 });
 
 describe('defineTopic', () => {
