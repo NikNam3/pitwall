@@ -1,5 +1,5 @@
 // Situations as displays read them (contract C20, C54, C65): a `situation.<machine>` topic carries one sub-machine's
-// spans, open and closed, as they are. Picking the open span of the session or of one car is selection, nothing else:
+// open spans, as they are. Picking the open span of the session or of one car is selection, nothing else:
 // the machine decided the situation; a display maps its kind through its presentation table (C66).
 import type { MachineSpans } from '@pitwall/contracts';
 import type { CarId, OpenSpan } from '@pitwall/domain';
