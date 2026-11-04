@@ -155,12 +155,25 @@ export const transitionsOf = (
   after: readonly OpenSpan[],
   closed: readonly ClosedSpan[] = [],
 ): ObservedTransition[] => {
-  const keys = [...new Set([...before, ...after, ...closed].map((s) => scopeKey(scope, s)))];
+  // Group by scope once (a scan per scope is quadratic in the cars); the first span of a scope is its open one.
+  const group = (spans: readonly (OpenSpan | ClosedSpan)[]) => {
+    const byKey = new Map<string, (OpenSpan | ClosedSpan)[]>();
+    for (const s of spans) {
+      const key = scopeKey(scope, s);
+      const list = byKey.get(key);
+      if (list) list.push(s);
+      else byKey.set(key, [s]);
+    }
+    return byKey;
+  };
+  const wasBy = group(before);
+  const nowBy = group(after);
+  const closedBy = group(closed);
+  const keys = [...new Set([...wasBy.keys(), ...nowBy.keys(), ...closedBy.keys()])];
   return keys.flatMap((key) => {
-    const inScope = (s: { carId?: number | undefined; zone?: number | undefined }) => scopeKey(scope, s) === key;
-    const was = before.find(inScope);
-    const now = after.find(inScope);
-    const passed: Passed[] = [was, ...closed.filter((s) => inScope(s) && s.id !== was?.id && s.id !== now?.id), now];
+    const was = wasBy.get(key)?.[0] as OpenSpan | undefined;
+    const now = nowBy.get(key)?.[0] as OpenSpan | undefined;
+    const passed: Passed[] = [was, ...((closedBy.get(key) ?? []) as ClosedSpan[]).filter((s) => s.id !== was?.id && s.id !== now?.id), now];
     return passed.slice(1).flatMap((to, i): ObservedTransition[] => {
       const from = passed[i];
       if (from?.id === to?.id) return [];

@@ -17,12 +17,21 @@ export const frameProblems = (machine: Steppable, before: readonly Open[], after
   const { id, spans: { scope } } = machine;
   const problems: string[] = [];
   const keys = after.map((s) => scopeKey(scope, s));
-  keys.forEach((key, i) => keys.indexOf(key) !== i && problems.push(`${id}: two open spans in ${key}`));
+  const seen = new Set<string>();
+  for (const key of keys) {
+    if (seen.has(key)) problems.push(`${id}: two open spans in ${key}`);
+    seen.add(key);
+  }
+  // Nothing opened, closed or changed (the common frame): no transition and no change to check.
+  const same = (a: Open, b: Open) => a.id === b.id && a.kind === b.kind && a.start === b.start && a.startFrame === b.startFrame && a.carId === b.carId && a.zone === b.zone;
+  if (closed.length === 0 && before.length === after.length && before.every((b, i) => same(b, after[i]!))) return problems;
   for (const t of transitionsOf(scope, before as OpenSpan[], after as OpenSpan[], closed as ClosedSpan[])) {
     if (!machine.transitions.some(([f, to]) => f === t.from && to === t.to)) problems.push(`${id}: undeclared ${t.from} -> ${t.to} in ${t.scope}`);
   }
+  const nowByKey = new Map<string, Open>();
+  after.forEach((s, i) => !nowByKey.has(keys[i]!) && nowByKey.set(keys[i]!, s));
   for (const was of before) {
-    const now = after.find((s) => scopeKey(scope, s) === scopeKey(scope, was));
+    const now = nowByKey.get(scopeKey(scope, was));
     if (now?.id === was.id && (now.kind !== was.kind || now.start !== was.start || now.startFrame !== was.startFrame)) {
       problems.push(`${id}: open span #${was.id} changed kind or start`);
     }

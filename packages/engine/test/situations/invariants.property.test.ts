@@ -27,8 +27,10 @@ const [first] = new ScenarioBuilder({ cars: 2 }).frames(1, () => {}).build() as 
 const initial = initialState(initFor([first])).signals;
 const frameAt = (index: number): Frame => ({ ...first, frameId: index, sessionTime: index * FRAME_MS });
 
+// 100 runs in four shards of 25 (each shard draws its own sequences): one test stays under 2 s, the registry is walked on every frame.
+const SHARDS = 4;
 describe('every sub-machine (C85)', () => {
-  it('random signal sequences never give an undeclared transition, a throw, two open spans in one scope or a gap between spans', () => {
+  it.each(Array.from({ length: SHARDS }, (_, i) => i + 1))('random signal sequences (shard %i) never give an undeclared transition, a throw, two open spans in one scope or a gap between spans', () => {
     fc.assert(
       fc.property(arbSignalSequence(initial), fc.nat({ max: 20 }), (sequence, participantsAt) => {
         const state = initialState(initFor([first]));
@@ -62,7 +64,7 @@ describe('every sub-machine (C85)', () => {
         }
         expect(problems).toEqual([]);
       }),
-      { numRuns: 100 },
+      { numRuns: 100 / SHARDS },
     );
   });
 });
