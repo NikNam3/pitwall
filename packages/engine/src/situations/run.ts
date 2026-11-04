@@ -5,7 +5,7 @@
 // `endFrame` the frame that closed them. Which spans a fact belongs to is computed by the projection alone, from frame
 // numbers (C28). Each sub-machine's open state is kept in `open.machines[id]`, so snapshots carry it and a rewind
 // restores its span count with it (C26).
-import type { ClockFact, FrameNumber, MachineId, OpenSpan, SessionTime, WeekendPhase } from '@pitwall/domain';
+import type { ClockFact, FrameNumber, MachineId, OpenSpan, SessionTime, Span, WeekendPhase } from '@pitwall/domain';
 import type { Frame } from '../frame/frame.ts';
 import { logWriter } from '../log/log.ts';
 import type { EngineState } from '../state/engine-state.ts';
@@ -48,12 +48,16 @@ export const samePlain = (a: unknown, b: unknown): boolean => {
   return keys.every((k) => k in b && samePlain((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k]));
 };
 
-/** Appends closed spans to `spans:<id>` (C22), each closed on frame `endFrame` (C26). */
-const appendClosed = (state: EngineState, closed: ReadonlyArray<{ machine: MachineId; spans: Closed }>, endFrame: FrameNumber): void => {
+/** Appends closed spans to `spans:<id>` (C22), each closed on frame `endFrame` (C26); returns them as appended, by machine. */
+const appendClosed = (state: EngineState, closed: ReadonlyArray<{ machine: MachineId; spans: Closed }>, endFrame: FrameNumber): Record<MachineId, Span[]> => {
   const log = logWriter(state.log);
+  const appended: Record<MachineId, Span[]> = {};
   for (const { machine, spans } of closed) {
-    for (const span of spans) log.append(`spans:${machine}`, { ...span, endFrame });
+    const list = spans.map((span): Span => ({ ...span, endFrame }));
+    for (const span of list) log.append(`spans:${machine}`, span);
+    appended[machine] = list;
   }
+  return appended;
 };
 
 /**
@@ -62,9 +66,10 @@ const appendClosed = (state: EngineState, closed: ReadonlyArray<{ machine: Machi
  * gave the frame, C7), appends the spans they closed to `spans:<id>`, each closed on this frame, and tags `spans:<id>`
  * when a machine's spans changed (C40). The weekend phase is the one the weekend-phase sub-machine decided on this
  * frame, once it ran: a per-phase sub-machine (ordered after it, its upstream) runs from the frame the phase is decided
- * on (C14).
+ * on (C14). Returns the spans it closed on the frame, by machine, as appended: step 2's closed spans, which step 3
+ * reads (C9, C10).
  */
-export function runMachine(state: EngineState, frame: Frame, out: StepOutput, clockFacts: readonly ClockFact[] = []): void {
+export function runMachine(state: EngineState, frame: Frame, out: StepOutput, clockFacts: readonly ClockFact[] = []): Record<MachineId, Span[]> {
   let weekendPhase = weekendPhaseOf(state);
   const clock = clockInput(state, clockFacts);
   const after: Record<MachineId, OpenSpan[]> = {};
@@ -81,7 +86,7 @@ export function runMachine(state: EngineState, frame: Frame, out: StepOutput, cl
     if (step.closed.length > 0 || !samePlain(before, after[machine.id])) out.changed.add(spanTag(machine.id));
     if (machine.id === WEEKEND_PHASE) weekendPhase = phaseOfSpan(after[machine.id]?.[0]);
   }
-  appendClosed(state, closed, state.frameNumber);
+  return appendClosed(state, closed, state.frameNumber);
 }
 
 /** The machine's open spans (C20): the clock's (`running` or `paused`), every registered sub-machine's, and the weekend phase. */

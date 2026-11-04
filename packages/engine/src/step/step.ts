@@ -119,8 +119,9 @@ const record = (state: EngineState, input: RecorderInput, out: StepOutput): void
  * opened and closed on. Then four steps: step 0, the clock (`step0Clock`: the frame on the race clock and its clock
  * facts, appended after step 2); step 1, the state update; step 2, the machine (`runMachine`: the registered
  * sub-machines, with step 0's clock, and their closed spans; `tracked`, what the frame's situation events tell the
- * recorders); step 3, the recorders, with the frame's number and the machine's situation. Then the projection takes in
- * what the frame appended, computing membership from frame numbers with the open spans. Last the flag phases, the
+ * recorders); step 3, the recorders, with the frame's number and the machine's situation (its open spans and the spans
+ * it closed on the frame). Then the projection takes in what the frame appended, computing membership from frame
+ * numbers with the open spans. Last the flag phases, the
  * legacy mirror of the race's session-phase spans (until Task 19), read the projection's closed spans, the situation
  * and the live state (C10), and the projection takes in what they appended.
  */
@@ -130,11 +131,11 @@ export function step(state: EngineState, received: Frame, report?: FlashbackRepo
   const clock = step0Clock(state, received, report, out);
   const { frame } = clock;
   updateState(state, frame, out);
-  runMachine(state, frame, out, clock.facts);
+  const closed = runMachine(state, frame, out, clock.facts);
   appendClock(state, clock);
   const situation = situationOf(state);
   const tracked = trackedEventsOf(state.signals.events);
-  record(state, { at: frame.sessionTime, frameId: frame.frameId, frameNumber: state.frameNumber, live: state, situation, tracked }, out);
+  record(state, { at: frame.sessionTime, frameId: frame.frameId, frameNumber: state.frameNumber, live: state, situation, closed, tracked }, out);
   const projection = projectionTrackerOf(state);
   projection.update(situation);
   if (applyFlagPhases(state, situation, out)) projection.update(situation);

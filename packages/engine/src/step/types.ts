@@ -91,7 +91,8 @@ export type Recorder<Own> = {
  * What a recorder reads of the frame (C10): its time on the race clock, its id and number, the live state and the
  * situations; never the frame or a signal (C6, C13). A fact records the frame it describes (C26), this frame's
  * `frameNumber` unless it describes an earlier one. `closed`: the spans step 2 closed on this frame, per sub-machine
- * (C9), how a span closed (`confirmed`) once it is no longer open; absent: none known. `tracked`: transitional, deleted
+ * (C9, C10), with how each closed (`confirmed`); a machine that closed none has no entry, and absent means none closed.
+ * `tracked`: transitional, deleted
  * by Task 21 (`TrackedEvents`).
  */
 export type RecorderInput = {
