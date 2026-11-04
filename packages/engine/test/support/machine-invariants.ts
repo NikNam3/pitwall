@@ -7,6 +7,7 @@
 // frame (FM-1); only one that closes before it opens is a problem. Span ids count the spans opened before them (per car
 // for a car sub-machine).
 import type { OpenSpan, Span } from '@pitwall/domain';
+import { samePlain } from '../../src/situations/run.ts';
 import type { DeepReadonly } from '../../src/util/deep-readonly.ts';
 import { scopeKey, transitionsOf, type ClosedSpan, type Steppable } from './transition-table.ts';
 
@@ -37,6 +38,21 @@ export const frameProblems = (machine: Steppable, before: readonly Open[], after
     }
   }
   return problems;
+};
+
+/**
+ * What is wrong with a machine's open spans going from `before` to `after` in one frame by identity (Task PERF, C40): a
+ * span that did not change (in its scope, `samePlain`-equal to the previous frame's, step 2's tag rule) is the same
+ * object as on the previous frame, so step 2 decides its `spans:<id>` tag without walking it.
+ */
+export const identityProblems = (machine: Steppable, before: readonly Open[], after: readonly Open[]): string[] => {
+  const { id, spans: { scope } } = machine;
+  const was = new Map(before.map((s) => [scopeKey(scope, s), s]));
+  return after.flatMap((now) => {
+    const key = scopeKey(scope, now);
+    const prev = was.get(key);
+    return prev !== undefined && prev !== now && samePlain(prev, now) ? [`${id}: unchanged open span #${now.id} in ${key} is a new object`] : [];
+  });
 };
 
 /** What is wrong with a machine's complete span list (log order): gaps or overlaps, reversed spans, ids that do not count. */

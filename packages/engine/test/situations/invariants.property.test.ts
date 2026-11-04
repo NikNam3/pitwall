@@ -4,7 +4,9 @@
 // ids count the spans opened before them; the spans closed by the session's end cover its last frame. The Participants
 // data (`updatedAt.participants`) arrives on a random frame, as a car sub-machine opens a car's first span with it.
 // The registry is `MACHINES` plus the test machines (`test/support/test-machines.ts`). Step 0's clock, a sub-machine
-// outside the registry (C7), has its own property on the same invariants (`clock/clock.property.test.ts`).
+// outside the registry (C7), has its own property on the same invariants (`clock/clock.property.test.ts`). Every
+// registered sub-machine (`MACHINES` without the test machines) also keeps an unchanged open span the same object from
+// one frame to the next (Task PERF, C40: step 2 builds and compares each frame's spans once).
 import fc from 'fast-check';
 import { describe, expect, it, vi } from 'vitest';
 import { initialState, type Frame, type StepOutput } from '../../src/index.ts';
@@ -13,7 +15,8 @@ import type { SubMachine } from '../../src/situations/machine.ts';
 import { closeSession, runMachine, situationOf } from '../../src/situations/run.ts';
 import { ScenarioBuilder } from '../builders/index.ts';
 import { arbSignalSequence } from '../support/arb-signals.ts';
-import { frameProblems, spanListProblems } from '../support/machine-invariants.ts';
+import { frameProblems, identityProblems, spanListProblems } from '../support/machine-invariants.ts';
+import { TEST_MACHINES } from '../support/test-machines.ts';
 import { initFor } from '../support/run.ts';
 import { FRAME_MS, scopeKey } from '../support/transition-table.ts';
 
@@ -23,6 +26,9 @@ vi.mock('../../src/situations/index.generated.ts', async (importOriginal) => {
   return { ...registered, MACHINES: [...registered.MACHINES, ...TEST_MACHINES] };
 });
 
+/** The registered sub-machines, without the test machines the mock adds. */
+const REGISTERED = MACHINES.filter((m) => !TEST_MACHINES.includes(m));
+
 const [first] = new ScenarioBuilder({ cars: 2 }).frames(1, () => {}).build() as [Frame];
 const initial = initialState(initFor([first])).signals;
 const frameAt = (index: number): Frame => ({ ...first, frameId: index, sessionTime: index * FRAME_MS });
@@ -30,7 +36,7 @@ const frameAt = (index: number): Frame => ({ ...first, frameId: index, sessionTi
 // 100 runs in four shards of 25 (each shard draws its own sequences): one test stays under 2 s, the registry is walked on every frame.
 const SHARDS = 4;
 describe('every sub-machine (C85)', () => {
-  it.each(Array.from({ length: SHARDS }, (_, i) => i + 1))('random signal sequences (shard %i) never give an undeclared transition, a throw, two open spans in one scope or a gap between spans', () => {
+  it.each(Array.from({ length: SHARDS }, (_, i) => i + 1))('random signal sequences (shard %i) never give an undeclared transition, a throw, two open spans in one scope, a gap between spans or an unchanged span rebuilt', () => {
     fc.assert(
       fc.property(arbSignalSequence(initial), fc.nat({ max: 20 }), (sequence, participantsAt) => {
         const state = initialState(initFor([first]));
@@ -49,6 +55,7 @@ describe('every sub-machine (C85)', () => {
             const closed = (state.log.spans[m.id] ?? []).slice(lengths.get(m.id));
             problems.push(...frameProblems(m, before[m.id] ?? [], after[m.id] ?? [], closed).map((p) => `frame ${index}: ${p}`));
           }
+          for (const m of REGISTERED) problems.push(...identityProblems(m, before[m.id] ?? [], after[m.id] ?? []).map((p) => `frame ${index}: ${p}`));
           before = after;
         });
         const end = sequence.length * FRAME_MS;
