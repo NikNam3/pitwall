@@ -176,6 +176,38 @@ describe('FeedPipeline: session start', () => {
   });
 });
 
+// The stored driver rows are the cars car-status has in the session (status not `absent`, C43), read through the
+// engine's in-session helper; no signal (numActiveCars) decides them (C13). They are stored again whenever car-status
+// changes, as the weekend phase is (Task 24 fix round 1, review F1).
+describe("FeedPipeline: the session's driver rows", () => {
+  /** The car ids of the stored session's driver rows after the packets ran through the pipeline. */
+  const storedDrivers = async (packets: PreparedPacket[]): Promise<number[]> => {
+    const db = openDatabase(join(tmp(), 'drivers.db'));
+    await run(packets, { storage: { db } });
+    const [row] = new WeekendRepository(db).sessionsOf('0');
+    return row!.drivers.map((d) => d.carId);
+  };
+  /** Car `car`'s LapData result status on every frame from here on (1: inactive, the slot holds no car of the session). */
+  const inactive = (car: number) => (d: { lapData: { lapData: Array<{ resultStatus: number }> } }) => { d.lapData.lapData[car]!.resultStatus = 1; };
+
+  it('the session\'s driver rows are the cars car-status has in the session', async () => {
+    // numActiveCars counts 3 slots; car 1 is inactive in its slot, so car-status has it absent
+    const packets = prepared(new ScenarioBuilder({ sessionUid: 77n, cars: 3 }).session().participants().frames(10, inactive(1)));
+    expect(await storedDrivers(packets)).toEqual([0, 2]);
+  });
+
+  it('a car that becomes absent leaves no new driver row; one that joins is added', async () => {
+    const running = () => new ScenarioBuilder({ sessionUid: 77n, cars: 3 }).session().participants().frames(10, () => {});
+    expect(await storedDrivers(prepared(running()))).toEqual([0, 1, 2]);
+    // car 1 turns inactive: car-status has it absent, and the rows stored again hold it no more
+    expect(await storedDrivers(prepared(running().frames(10, inactive(1))))).toEqual([0, 2]);
+    // two slots in use, then Participants counts a third: car 2 joins the session and the rows add it
+    const joining = new ScenarioBuilder({ sessionUid: 77n, cars: 3 }).session().participants({ numActiveCars: 2 }).frames(10, () => {})
+      .participants({ numActiveCars: 3 }).frames(10, () => {});
+    expect(await storedDrivers(prepared(joining))).toEqual([0, 1, 2]);
+  });
+});
+
 describe('FeedPipeline: session files', () => {
   it('names the file after wallClock() and the session uid, with the bridge as recorder', async () => {
     const dir = tmp(); const at = new Date(2026, 9, 28, 13, 5, 9);
