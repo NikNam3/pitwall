@@ -34,6 +34,38 @@ Real recordings (`.pwrec.gz`) enter tests only as **segments**: short cuts commi
 - **One behaviour per segment test**, named after the behaviour: "the pit exit raises numPitStops and opens a soft stint", not "race-zandvoort-pit-exit works".
 - **Cost:** a segment test runs the engine plus the units under test (1–2 s for a full lap), not the whole topic pipeline.
 
+The committed segments (`fixtures/index.json`, `segments`; the verified facts are there). Which sub-machine test uses which segment: `docs/research/10-situations-catalogue.md`.
+
+| Segment | Source, window (s) | Holds |
+|---|---|---|
+| `race-singapore-start` | raceSingapore, 0–0.5 | the grid without a formation lap: STLG ×5 and LGOT at session time 0 (start shape S1) |
+| `race-singapore-wet-start` | raceSingaporeWet, 0–1.6 | the formation start, the formation-end reset to 0, the start lights and lights out (start shape S2) |
+| `race-zandvoort-online-start` | raceZandvoortOnline, 0–2.1 | the formation start, the reset to 1.968 s, the start lights, lights out and the fall after it (start shape S3) |
+| `race-zandvoort-uid-reuse-start` | raceZandvoortUidReuse, 0–1 | the formation start, resets and a small fall, the start lights, lights out and the fall after it (start shape S4, part) |
+| `race-singapore-wet-formation-end` | raceSingaporeWet, 60–61.5 | a session that, to the engine, ends inside the formation lap |
+| `race-zandvoort-clock-reset` | raceZandvoortOnline, 2–9 | a fall of the session time inside the formation, no FLBK, no lights out |
+| `race-singapore-end` | raceSingapore, 61.5–63.4 | a race left with SEND, no classification |
+| `race-zandvoort-lap10` | raceZandvoortUidReuse, 721–726 | the player's line crossing into lap 10 and its SessionHistory confirmation |
+| `race-zandvoort-full-lap` | raceZandvoortUidReuse, 722–801 | full-lap segment: a 20-car race lap |
+| `race-zandvoort-pit-stop` | raceZandvoortUidReuse, 548.2–555 | the player's pit entry, the line in the pit lane, the box and the tyre change |
+| `race-zandvoort-pit-exit` | raceZandvoortUidReuse, 564.5–566 | the player in the pit lane past its box; `numPitStops` 0 → 1 |
+| `race-zandvoort-vsc` | raceZandvoortUidReuse, 913.5–916.5 | a VSC deployment with its DRSD, the status a Session packet later, an RTMT |
+| `race-zandvoort-retire` | raceZandvoortUidReuse, 1205–5846 | the player's terminal damage and the jump into the post-session simulation |
+| `race-singapore-wet-flashback` | raceSingaporeWet, 741.5–744.5 | flashbacks on lap 7: three passes through the window |
+| `race-drive-through` | raceFriendWet, 1530.5–1534 | the end of the second VSC; a drive-through given (PENA 0/38, the count a frame later) |
+| `race-drive-through-served` | raceFriendWet, 1631–1639.2 | the drive-through visit's pit exit and its DTSV 7.1 s later |
+| `race-miami-finish` | raceFriendWet, 2266.5–2271 | the chequered flag, finishes on the line, the last frame before SEND |
+| `race-mexico-blue` | raceWetVscMexico, 6763.7–6774.7 | blue flags for lapped cars, on cars and marshal zones |
+| `race-sprint-start` | raceSprint (2026-11-02_15-17-14), 0–2.5 | a sprint: the first Session packet without a weekend structure, a later one with [15, 16] |
+| `qualifying-singapore-end` | qualifyingSingapore, 899–900.6 | time over: every car finished, SEND, the classification |
+| `qualifying-singapore-full-lap` | qualifyingSingapore, 166.4–259.7 | full-lap segment: a qualifying flying lap from the garage |
+| `practice-garage-exit` | practiceFriendWings, 640.5–651 | the player leaving the garage and the pit lane; a car ending its out lap at the line |
+| `practice-wing-change` | practiceFriendWings, 615–619 | the player in the garage; a front-wing change |
+| `practice-miami-yellow` | practiceFriendWings, 130–152 | yellow and green flags, on the player's car and marshal zones |
+| `practice-miami-invalid` | practiceFriendWings, 1525–1550 | a lap invalidated: PENA 12/7 and `currentLapInvalid` on one frame |
+| `practice-miami-warning` | practiceFriendWings, 214–218 | a warning: PENA 5/7 and the rise of `totalWarnings` on one frame |
+| `practice-zandvoort-warning-late` | practiceZandvoortOnline, 45–47.5 | a warning whose rise follows its PENA by 16 frames |
+
 **Whole recordings** (`recordings/`, gitignored, listed in `fixtures/index.json`) appear only in the acceptance suite, and only for properties of the whole pipeline: determinism, reprocess, decoder equality and decoder speed. The big races (`raceSingaporeWet`, `raceZandvoortUidReuse`, `raceWetVscMexico`, `raceFriendWet`), recordings over about 50 MB (`practiceFriendWings`) and the time trial stay out of the determinism and decoder-equality sets.
 
 When a new recording arrives: label it (index entry with verified features), then cut the segments the next sub-project needs. Don't add whole-recording tests.

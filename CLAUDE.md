@@ -12,7 +12,7 @@ Besides this file and the contract (both always loaded):
 
 | You work on | Read |
 |---|---|
-| a sub-machine (`packages/engine/src/situations/<name>/`) | `docs/research/09-situations-inventory.md`, `docs/research/04-f1-25-data-mapping.md` |
+| a sub-machine (`packages/engine/src/situations/<name>/`) | `docs/research/10-situations-catalogue.md`, `docs/research/09-situations-inventory.md`, `docs/research/04-f1-25-data-mapping.md` |
 | the adapter (protocol, frame assembly, step 0/1) | `docs/research/04-f1-25-data-mapping.md`, `external/F1 25 Telemetry Output Structures.txt` |
 | an analysis or calculator | the unit's section of its product spec in `docs/specs/`; for strategy `docs/research/03-strategy-models.md`, `06-engineer-decisions.md`, `07-strategy-literature.md` |
 | a display or the shell | `docs/design/<sub-project>/` (approved mockups), the unit's section in `docs/specs/` |
