@@ -274,7 +274,8 @@ describe('battle', () => {
     const view = build(
       base({
         // positions: car 2 P1, car 1 P2 (retired), car 0 P3 (ours), car 3 P4 (disqualified), car 4 P5
-        cars: [[2, 1], [1, 2, { resultStatus: 'retired' }], [0, 3], [3, 4, { resultStatus: 'disqualified' }], [4, 5]],
+        // (Task 24: the result status left the live state; gaps.intervals' order alone leaves cars 1 and 3 out)
+        cars: [[2, 1], [1, 2], [0, 3], [3, 4], [4, 5]],
         lineTimes: { 2: AHEAD_LINES, 1: AHEAD_LINES, 0: ours, 3: plus(ours, [500, 500, 500]), 4: plus(ours, [3000, 2600, 2200]) },
         order: [2, 0, 4],
         pace: { 0: known(90_000, 1), 1: known(90_000, 1), 2: known(92_500, 1), 3: known(90_000, 1), 4: known(90_000, 1) },
@@ -288,7 +289,7 @@ describe('battle', () => {
   });
 
   it('when every car ahead is retired there is no car ahead', () => {
-    const view = build(base({ cars: [[0, 2], [1, 1, { resultStatus: 'retired' }], [3, 3]], order: [0, 3] }));
+    const view = build(base({ cars: [[0, 2], [1, 1], [3, 3]], order: [0, 3] }));
     expect(card(view).ahead).toMatchObject({ known: false, reason: 'notApplicable' });
   });
 
@@ -396,9 +397,9 @@ describe('battle: the behaviour table (C44), one test per row', () => {
       });
     }
 
-    it('a phase decides alone, not the live session kind: the table, not session.kind, makes a practice not applicable', () => {
+    // Task 24 (C13): the live state has no session kind; the weekend phase is the one source
+    it('a phase decides alone: the table makes a practice not applicable', () => {
       const view = build(base({ phase: 'practice', drs: 'none' }));
-      expect(view.live.session.kind).toBe('race');
       expect(card(view).ahead).toEqual(unknown('notApplicable'));
     });
   });

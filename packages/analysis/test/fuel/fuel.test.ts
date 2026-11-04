@@ -431,11 +431,11 @@ describe("fuel calculator", () => {
       expect(f.mix).toEqual({ known: true, value: "rich", at: 7 });
     });
 
-    // the live state's transitional `active` says the opposite of car-status in every case, so only car-status decides (C43)
-    const statusRun = (kind: string, active: boolean) =>
+    // car-status decides (C43); Task 24 removed the transitional `car.active` these cases contradicted
+    const statusRun = (kind: string) =>
       calc.compute(
         situatedView({
-          cars: [{ ...fuelCar(30), active }],
+          cars: [fuelCar(30)],
           history: { laps: burnLaps(1, 5, 1.5, 100) },
           outputs: new Map([[SESSION_REMAINING, remaining(known(18, 1))]]),
           sessionTime: NOW,
@@ -444,19 +444,19 @@ describe("fuel calculator", () => {
       )[car0];
 
     it("car-status competing: the car has its fuel state", () => {
-      expect(valueOf(statusRun("competing", false)?.burnKgPerLap ?? unknown("notReceived"))).toBeCloseTo(1.5, 9);
+      expect(valueOf(statusRun("competing")?.burnKgPerLap ?? unknown("notReceived"))).toBeCloseTo(1.5, 9);
     });
 
     it("car-status retired: the car is still in the session and keeps its fuel state", () => {
-      expect(valueOf(statusRun("retired", false)?.burnKgPerLap ?? unknown("notReceived"))).toBeCloseTo(1.5, 9);
+      expect(valueOf(statusRun("retired")?.burnKgPerLap ?? unknown("notReceived"))).toBeCloseTo(1.5, 9);
     });
 
     it("car-status disqualified: the car is still in the session and keeps its fuel state", () => {
-      expect(valueOf(statusRun("disqualified", false)?.burnKgPerLap ?? unknown("notReceived"))).toBeCloseTo(1.5, 9);
+      expect(valueOf(statusRun("disqualified")?.burnKgPerLap ?? unknown("notReceived"))).toBeCloseTo(1.5, 9);
     });
 
-    it("car-status absent: no entry, though the slot has laps and the live state calls it active", () => {
-      expect(statusRun("absent", true)).toBeUndefined();
+    it("car-status absent: no entry, though the slot has laps", () => {
+      expect(statusRun("absent")).toBeUndefined();
     });
   });
 });

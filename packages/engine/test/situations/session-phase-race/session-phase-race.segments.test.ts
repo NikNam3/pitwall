@@ -11,7 +11,7 @@ import { segmentPackets } from '../../../../../test-support/segments.ts';
 
 const MACHINE = 'session-phase-race';
 
-/** One applied frame: its number (C26), its event codes, the session flag and race-clock time after it, whether it rewound. */
+/** One applied frame: its number (C26), its event codes, the safety car status (a signal, C12) and race-clock time after it, whether it rewound. */
 type Step = { frameNumber: number; codes: string[]; flag: string; at: number; rewound: boolean };
 type Replay = { runner: SessionRunner; steps: Step[]; weekendFrame: number | undefined };
 
@@ -24,7 +24,7 @@ async function replay(file: string): Promise<Replay> {
   const runner = new SessionRunner({ feedId: feedId(file), sessionUid: first.sessionUid, session: first.session! });
   const steps: Step[] = [];
   const onResult = (r: StepResult, f: Frame) =>
-    steps.push({ frameNumber: r.state.frameNumber, codes: f.events.map((e) => e.details.code), flag: r.state.session.flag, at: r.state.sessionTime, rewound: r.delta.rewound !== undefined });
+    steps.push({ frameNumber: r.state.frameNumber, codes: f.events.map((e) => e.details.code), flag: r.state.signals.session.safetyCarStatus, at: r.state.sessionTime, rewound: r.delta.rewound !== undefined });
   for (const f of frames.slice(frames.indexOf(first))) runner.apply(f, onResult);
   runner.end(onResult);
   const weekendFrame = situationOf(runner.state).byMachine['weekend-phase']?.[0]?.startFrame;

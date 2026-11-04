@@ -31,12 +31,12 @@ describe('lap-times projection', () => {
   });
 
   /** A car's lap 3 crossings up to crossing 25 after two laps at 90 s, in `phase` with the subject's spans `kinds`. */
-  const lapThree = (kinds: CarKinds, { phase = Q1, lapsOver = {}, resultStatus = 'active' }: { phase?: WeekendPhase; lapsOver?: Partial<LapRecord>; resultStatus?: 'active' | 'retired' } = {}) => {
+  const lapThree = (kinds: CarKinds, { phase = Q1, lapsOver = {} }: { phase?: WeekendPhase; lapsOver?: Partial<LapRecord> } = {}) => {
     const { laps, crossings: miniSectors } = field({ cars: 1, laps: 2, paceMs: 90_000 });
     Object.assign(laps[1]!, lapsOver); // lap 2
     const live = lapInProgress(0, 3, 90_000, 180_000, 25);
     const sessionTime = live[live.length - 1]!.at;
-    return scene({ laps, miniSectors: [...miniSectors, ...live], cars: activeCars(1, { 0: { lap: 3, resultStatus } }), phase, kinds: { 0: kinds }, sessionTime });
+    return scene({ laps, miniSectors: [...miniSectors, ...live], cars: activeCars(1, { 0: { lap: 3 } }), phase, kinds: { 0: kinds }, sessionTime });
   };
 
   const NOT_ON_LAP = {
@@ -105,8 +105,9 @@ describe('lap-times projection', () => {
       const p = projected(lapThree({ status }));
       expect(p).toMatchObject({ onLap: true, projectedLapMs: notApplicable, deltaToBestMs: notApplicable, projectedPosition: notApplicable, finishMarginMs: notApplicable });
     });
-    it('competing: projected, whatever the result status says', () => {
-      onLap(projected(lapThree({ status: 'competing' }, { resultStatus: 'retired' })));
+    // Task 24 (C13): the result status left the live state; car-status's span is the one input
+    it('competing: projected', () => {
+      onLap(projected(lapThree({ status: 'competing' })));
     });
     it('absent: no projection at all', () => expect(run(lapThree({ status: 'absent' })).projections[carId(0)]).toBeUndefined());
   });

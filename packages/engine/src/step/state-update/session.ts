@@ -1,5 +1,6 @@
-import { toSessionTime, type ForecastSample, type GameSettings, type SessionKind, type SessionState } from '@pitwall/domain';
+import { toSessionTime, type ForecastSample, type GameSettings, type SessionState } from '@pitwall/domain';
 import type { SessionPacket } from '@pitwall/protocol';
+import type { SessionSignals } from '../../signals/types.ts';
 import { pick } from '../pick.ts';
 import type { StateUpdate } from './types.ts';
 
@@ -20,21 +21,7 @@ const FLASHBACK_LIMIT = ['low', 'medium', 'high', 'unlimited'] as const;
 const SURFACE_TYPE = ['simplified', 'realistic'] as const;
 const COLLISIONS = ['off', 'playerToPlayerOff', 'on'] as const;
 
-/** The last session type code of each kind (appendix "Session types"), in ascending order. */
-const KIND_BY_LAST_CODE: ReadonlyArray<readonly [lastCode: number, kind: SessionKind]> = [
-  [0, 'unknown'],
-  [4, 'practice'],
-  [9, 'qualifying'],
-  [14, 'sprintShootout'],
-  [17, 'race'],
-  [18, 'timeTrial'],
-];
-
-export const sessionKindOf = (sessionType: number): SessionKind =>
-  KIND_BY_LAST_CODE.find(([lastCode]) => sessionType <= lastCode)?.[1] ?? 'unknown';
-
 const forecastFrom = (s: SessionPacket['weatherForecastSamples'][number]): ForecastSample => ({
-  sessionType: s.sessionType,
   offsetMin: s.timeOffset,
   weather: pick(WEATHER, s.weather),
   trackTempC: s.trackTemperature,
@@ -62,14 +49,21 @@ const settingsFrom = (p: SessionPacket): GameSettings => ({
   formationLap: p.formationLap === 1,
   aiDifficulty: p.aiDifficulty,
   gameMode: p.gameMode,
-  ruleSet: p.ruleSet,
 });
 
-/** The session as the Session packet describes it; `numActiveCars` comes from Participants, so the caller passes it in. */
-export const sessionStateFrom = (p: SessionPacket, numActiveCars: number): SessionState => ({
+/**
+ * The forecast of this session: the game sends the samples of every session of the weekend, each with its session type
+ * (a signal, C12); step 1 keeps the values of the samples whose session type is this session's, in the packet's order.
+ */
+const forecastOf = (p: SessionPacket): ForecastSample[] =>
+  p.weatherForecastSamples
+    .slice(0, p.numWeatherForecastSamples)
+    .filter((s) => s.sessionType === p.sessionType)
+    .map(forecastFrom);
+
+/** The session's values as the Session packet describes them; its signals go to `Signals` (C8, C13). */
+export const sessionStateFrom = (p: SessionPacket): SessionState => ({
   trackId: p.trackId,
-  sessionType: p.sessionType,
-  kind: sessionKindOf(p.sessionType),
   formula: p.formula,
   totalLaps: p.totalLaps,
   trackLengthM: p.trackLength,
@@ -81,11 +75,8 @@ export const sessionStateFrom = (p: SessionPacket, numActiveCars: number): Sessi
   weather: pick(WEATHER, p.weather),
   trackTempC: p.trackTemperature,
   airTempC: p.airTemperature,
-  forecast: p.weatherForecastSamples.slice(0, p.numWeatherForecastSamples).map(forecastFrom),
+  forecast: forecastOf(p),
   forecastAccuracy: pick(FORECAST_ACCURACY, p.forecastAccuracy),
-  flag: pick(SAFETY_CAR_STATUS, p.safetyCarStatus),
-  marshalZones: marshalZonesOf(p),
-  periods: { sc: p.numSafetyCarPeriods, vsc: p.numVirtualSafetyCarPeriods, red: p.numRedFlagPeriods },
   pitWindow: {
     idealLap: p.pitStopWindowIdealLap,
     latestLap: p.pitStopWindowLatestLap,
@@ -93,25 +84,23 @@ export const sessionStateFrom = (p: SessionPacket, numActiveCars: number): Sessi
   },
   settings: settingsFrom(p),
   networkGame: p.networkGame === 1,
-  numActiveCars,
   link: { season: p.seasonLinkIdentifier, weekend: p.weekendLinkIdentifier, session: p.sessionLinkIdentifier },
-  weekendStructure: p.weekendStructure.slice(0, p.numSessionsInWeekend),
   updatedAt: toSessionTime(p.header.sessionTime),
 });
 
 /** The game simulates only the tyre surface: the carcass temperature does not apply (`settings.tyreTemperature`). */
 export const surfaceOnly = (p: SessionPacket): boolean => pick(TYRE_TEMPERATURE, p.tyreTemperature) === 'surfaceOnly';
 
-/** The marshal zones the Session packet sends, in its order. */
-export const marshalZonesOf = (p: SessionPacket): SessionState['marshalZones'] =>
+/** The marshal zones the Session packet sends, in its order (a signal, C12). */
+export const marshalZonesOf = (p: SessionPacket): SessionSignals['marshalZones'] =>
   p.marshalZones.slice(0, p.numMarshalZones).map((z) => ({ startFraction: z.zoneStart, flag: pick(ZONE_FLAG, z.zoneFlag + 1) }));
 
-/** The session from the Session packet; `numActiveCars` from the frame's Participants, else as it was (C11: not identity's write). */
+/** The session from the Session packet. */
 export const sessionUpdate: StateUpdate = {
   id: 'session',
   apply(frame, live, _signals, out) {
     if (!frame.session) return;
-    live.session = sessionStateFrom(frame.session, frame.participants?.numActiveCars ?? live.session.numActiveCars);
+    live.session = sessionStateFrom(frame.session);
     out.changed.add('session');
   },
 };

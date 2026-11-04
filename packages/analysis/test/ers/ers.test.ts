@@ -296,26 +296,26 @@ describe('ers calculator', () => {
       expect(Object.keys(ERS_BEHAVIOUR)).toEqual(['car-status']);
     });
 
-    // the live state's transitional `active` says the opposite of car-status in every case, so only car-status decides (C43)
-    const statusRun = (kind: string, active: boolean) =>
-      calc.compute(situatedView({ cars: [{ ...carWith({ storeMJ: 3.2 }), active }], history: { laps: laps([4, 3.6, 3.2]) }, status: { 0: kind } }))[carId(0)];
+    // car-status decides (C43); Task 24 removed the transitional `car.active` these cases contradicted
+    const statusRun = (kind: string) =>
+      calc.compute(situatedView({ cars: [carWith({ storeMJ: 3.2 })], history: { laps: laps([4, 3.6, 3.2]) }, status: { 0: kind } }))[carId(0)];
 
     it('competing: the car has its store and its trend', () => {
-      const ers = statusRun('competing', false);
+      const ers = statusRun('competing');
       expect(ers?.storeJ).toEqual(known(3.2 * MJ, 7_000));
       expect(ers?.storeTrendJPerLap).toMatchObject({ known: true });
     });
 
     it('retired: the car is still in the session and keeps its entry', () => {
-      expect(statusRun('retired', false)?.storeTrendJPerLap).toMatchObject({ known: true });
+      expect(statusRun('retired')?.storeTrendJPerLap).toMatchObject({ known: true });
     });
 
     it('disqualified: the car is still in the session and keeps its entry', () => {
-      expect(statusRun('disqualified', false)?.storeTrendJPerLap).toMatchObject({ known: true });
+      expect(statusRun('disqualified')?.storeTrendJPerLap).toMatchObject({ known: true });
     });
 
-    it('absent: no entry, though the slot has laps and the live state calls it active', () => {
-      expect(statusRun('absent', true)).toBeUndefined();
+    it('absent: no entry, though the slot has laps', () => {
+      expect(statusRun('absent')).toBeUndefined();
     });
   });
 

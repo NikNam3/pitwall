@@ -5,11 +5,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import { carId, type ParticipantsValues, type SessionUid } from '@pitwall/domain';
 import { IDENTITY_WAIT_FRAMES, SessionRunner, type Frame, type WeekendContext } from '../../src/index.ts';
+import { ScenarioBuilder } from '../builders/index.ts';
 import { initFor } from '../support/run.ts';
 import { applyOne, timeline } from '../support/runner.ts';
 
-const driverKey = { kind: 'ai', driverId: 1 } as const;
-const WEEKEND: WeekendContext = { weekendId: 'w', driverKey, sessions: [{ sessionUid: '1' as SessionUid, sessionType: 1, drivers: [{ driverKey, laps: [], stints: [], pitStops: [] }] }] };
+const driverKey = { name: 'DRIVER 1', networkId: 255 };
+const WEEKEND: WeekendContext = { weekendId: 'w', driverKey, sessions: [{ sessionUid: '1' as SessionUid, sessionType: 'practice:practice:1', drivers: [{ driverKey, laps: [], stints: [], pitStops: [] }] }] };
 
 /** The frame without its Participants packet. */
 const withoutParticipants = ({ participants: _participants, ...frame }: Frame): Frame => frame;
@@ -44,17 +45,17 @@ describe('SessionRunner: the identity wait', () => {
     applyNoting(runner, frames.slice(0, 5), seen);
     expect([seen, asked]).toEqual([[], []]);
     applyNoting(runner, frames.slice(5, 6), seen);
-    // asked once, before any frame was applied, with the player's slot and the driver of every slot the session uses
-    expect(asked).toEqual([{
-      participants: {
-        playerCar: carId(0),
-        drivers: [
-          { carId: carId(0), driverKey: { kind: 'human', networkId: 0, name: 'DRIVER 0', raceNumber: 1 } },
-          { carId: carId(1), driverKey: { kind: 'ai', driverId: 1 } },
-        ],
-      },
-      resultsBefore: 0,
-    }]);
+    // asked once, before any frame was applied, with the player's slot and the driver of every slot the Participants
+    // packet carries: no signal (numActiveCars) caps the list (M5 review B1, C13); car-status decides who is in the session
+    const slots = frames[5]!.participants!.participants.length;
+    expect(asked).toHaveLength(1);
+    expect(asked[0]!.resultsBefore).toBe(0);
+    expect(asked[0]!.participants!.playerCar).toBe(carId(0));
+    expect(asked[0]!.participants!.drivers.map((d) => d.carId)).toEqual(Array.from({ length: slots }, (_, i) => carId(i)));
+    expect(asked[0]!.participants!.drivers.slice(0, 2)).toEqual([
+      { carId: carId(0), driverKey: { name: 'DRIVER 0', networkId: 0 } },
+      { carId: carId(1), driverKey: { name: 'DRIVER 1', networkId: 255 } },
+    ]);
     // then every held frame and the Participants frame, in order, each on its own state and with the weekend context
     expect(seen).toEqual([0, 1, 2, 3, 4, 5].map((id) => ({ frameId: id, stateFrameId: id, weekend: WEEKEND })));
     expect(runner.state.weekend).toBe(WEEKEND);
@@ -62,6 +63,19 @@ describe('SessionRunner: the identity wait', () => {
     applyNoting(runner, frames.slice(6), seen);
     expect(seen.map((s) => s.frameId)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
     expect(asked).toHaveLength(1);
+  });
+
+  // M5 review B1 (C13): the driver list is every slot the Participants packet carries, so the player's driver is in it
+  // wherever its slot is; which cars are in the session stays car-status's (C43)
+  it('a player in a slot at or above numActiveCars gets its weekend context', () => {
+    const frames = new ScenarioBuilder({ cars: 4, player: 3 }).participants({ numActiveCars: 2 }).frames(3, () => {}).build();
+    // as the bridge looks the weekend up: by the player's driver key in the list
+    const contextFor = (participants: ParticipantsValues | undefined): WeekendContext | undefined =>
+      participants?.drivers.some((d) => d.carId === participants.playerCar) === true ? WEEKEND : undefined;
+    const runner = new SessionRunner(initFor(frames), { contextFor });
+    for (const f of frames) runner.apply(f);
+    expect([frames[0]!.participants!.numActiveCars, frames[0]!.playerCarIndex]).toEqual([2, 3]);
+    expect(runner.state.weekend).toBe(WEEKEND);
   });
 
   it('a session whose first frame carries Participants starts at once', () => {

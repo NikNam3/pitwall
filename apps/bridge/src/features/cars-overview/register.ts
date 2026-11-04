@@ -15,8 +15,8 @@ function byCar<T extends { carId: CarId }>(records: readonly T[]): Map<CarId, T[
 }
 
 /**
- * Every car's identity, timing and tyres, with the stop count reconciled: the game's count can lag a recorded stop.
- * The compound is the live one only: the stint records hold closed stints, so the latest is the previous set.
+ * Every car's identity, timing (without its confirmed laps) and tyres, and its stops: the car's pit-stop records. The
+ * compound is the live one only: the stint records hold closed stints, so the latest is the previous set.
  */
 const carsOverview: QuickCalculator<CarOverview[]> = {
   id: 'cars.overview',
@@ -26,13 +26,13 @@ const carsOverview: QuickCalculator<CarOverview[]> = {
   cadence: { hz: 10 },
   compute: ({ live, history }) => {
     const stops = byCar(history.pitStops);
-    return live.cars.map(({ id, identity, timing, tyres, updatedAt }) => {
+    return live.cars.map(({ id, identity, timing: { confirmedLaps: _confirmedLaps, ...timing }, tyres, updatedAt }) => {
       return copyPlain({
         id,
         identity,
         timing,
         tyres: { actualCompound: tyres.actualCompound, visualCompound: tyres.visualCompound, age: tyres.age },
-        stops: Math.max(stops.get(id)?.length ?? 0, timing.numPitStops),
+        stops: stops.get(id)?.length ?? 0,
         updatedAt,
       }) as CarOverview;
     });

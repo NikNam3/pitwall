@@ -67,7 +67,7 @@ describe('EngineView: the C39 parts', () => {
     const seen: EngineView[] = [];
     const s = new Scheduler(CalculatorRegistry.build([{ kind: 'quick', id: 'probe', reads: ['timing'], cadence: 'frame', compute: (v) => (seen.push(v), 0) }]));
     s.setNeeded(['probe']);
-    const given = { ...input(1000), priors: { 'pace.model': { k: 1 } }, weekend: { weekendId: 'w', driverKey: { kind: 'ai', driverId: 1 }, sessions: [] } as never };
+    const given = { ...input(1000), priors: { 'pace.model': { k: 1 } }, weekend: { weekendId: 'w', driverKey: { name: 'DRIVER 1', networkId: 255 }, sessions: [] } as never };
     s.run(given);
     const [view] = seen;
     expect(Object.keys(view!).sort()).toEqual([...PARTS].sort());

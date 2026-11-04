@@ -22,10 +22,12 @@ const lengths = (h: Projection): LogLengths => ({ laps: h.laps.length, stints: h
   crossings: h.crossings.length });
 export const all = (h: Projection): HistoryDelta => ({ before: lengths(history()), after: lengths(h) });
 export const since = (prev: Projection, h: Projection, rewound = false): HistoryDelta => ({ before: lengths(prev), after: lengths(h), ...(rewound ? { rewound: { frameId: -1, at: 0 } } : {}) });
-export const AI9: DriverKey = { kind: 'ai', driverId: 9 };
-export const HUMAN: DriverKey = { kind: 'human', networkId: 1, name: 'Driver One', raceNumber: 2 };
+/** Two drivers, by name and network id (Task 24: no AI or human kind): an AI driver (network id 255) and a human. */
+export const AI9: DriverKey = { name: 'DRIVER 9', networkId: 255 };
+export const HUMAN: DriverKey = { name: 'Driver One', networkId: 1 };
+/** A session row; its session type is the weekend phase as text (`weekendPhaseText`, Task 24), a practice by default. */
 export const session = (uid: string, o: Partial<SessionRow> = {}): SessionRow => ({ sessionUid: uid as SessionUid, weekendId: 'W1', seasonId: 'S1',
-  sessionType: 1, trackId: 26, startedAt: '2026-10-27T20:00:00.000Z', pwrecPath: `/rec/${uid}.pwrec.gz`, settings: { tyreTemperature: 1 },
+  sessionType: 'practice:practice:1', trackId: 26, startedAt: '2026-10-27T20:00:00.000Z', pwrecPath: `/rec/${uid}.pwrec.gz`, settings: { tyreTemperature: 1 },
   drivers: [{ carId: car(0), driverKey: AI9 }, { carId: car(1), driverKey: HUMAN }], ...o });
 /** The storage key of `session(uid, { weekendId })`. */
 export const key = (uid: string, weekendId = 'W1'): SessionKey => ({ sessionUid: uid as SessionUid, weekendId });

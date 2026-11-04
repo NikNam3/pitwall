@@ -1,5 +1,5 @@
 // Gallery declaration of the feed-status display (spec 9.1). Test-phase file: the implementer does not edit it.
-import type { FeedStatus, SessionInfo } from '@pitwall/contracts';
+import type { FeedStatus, MachineSpans, SessionInfo } from '@pitwall/contracts';
 import { carId, feedId, toSessionTime } from '@pitwall/domain';
 import type { SessionState } from '@pitwall/domain';
 import type { GalleryEntry } from '../../kit/gallery-types.ts';
@@ -23,8 +23,6 @@ const { latencyMs: _latency, ...withoutLatency } = healthyFeed;
 
 const session: SessionState = {
   trackId: 10,
-  sessionType: 8,
-  kind: 'race',
   formula: 0,
   totalLaps: 5,
   trackLengthM: 5000,
@@ -38,9 +36,6 @@ const session: SessionState = {
   airTempC: 25,
   forecast: [],
   forecastAccuracy: 'perfect',
-  flag: 'green',
-  marshalZones: [],
-  periods: { sc: 0, vsc: 0, red: 0 },
   pitWindow: { idealLap: 0, latestLap: 0, rejoinPosition: 0 },
   settings: {
     safetyCar: 'standard',
@@ -59,12 +54,9 @@ const session: SessionState = {
     formationLap: true,
     aiDifficulty: 90,
     gameMode: 0,
-    ruleSet: 0,
   },
   networkGame: false,
-  numActiveCars: 20,
   link: { season: 1, weekend: 1, session: 1 },
-  weekendStructure: [],
   updatedAt: toSessionTime(10),
 };
 
@@ -76,6 +68,14 @@ const sessionInfo: SessionInfo = {
   realism: false,
 };
 
+/** The weekend phase (`situation.weekendPhase`, open spans only): a grand prix race; a sprint shootout, the widest wording. */
+const race: MachineSpans = {
+  open: [{ machine: 'weekend-phase', id: 0, kind: 'race', start: toSessionTime(0), confirmed: true, detail: { format: 'grandPrix' }, startFrame: 1 }],
+};
+const sprintShootout: MachineSpans = {
+  open: [{ machine: 'weekend-phase', id: 0, kind: 'qualifying', start: toSessionTime(0), confirmed: true, detail: { format: 'sprintShootout', segment: 1 }, startFrame: 1 }],
+};
+
 /** Synthetic cases and fit expectations for `feed-status`. */
 const gallery: GalleryEntry<typeof widget> = {
   moments: ['raceZandvoortLap10.crossing', 'raceSingaporeStart.grid'],
@@ -83,19 +83,24 @@ const gallery: GalleryEntry<typeof widget> = {
     lossy: {
       feed: { ...healthyFeed, lossPercent: 8.5, latePackets: 17, decodeErrors: 3, packetsPerSecond: 48 },
       session: sessionInfo,
+      phase: race,
     },
     // the widest line: a loss shown as 100% and a three-digit packet rate (a 20-car race sends about 360 per second)
     heavyLoss: {
       feed: { ...healthyFeed, lossPercent: 99.6, latePackets: 999, decodeErrors: 999, packetsPerSecond: 999 },
       session: sessionInfo,
+      phase: sprintShootout,
     },
     disconnected: {
       feed: { ...withoutLatency, connected: false, packetsPerSecond: 0 },
       session: undefined,
+      phase: undefined,
     },
+    // The weekend phase still pending (no open span): the track alone.
     wrongFormat: {
       feed: { ...healthyFeed, wrongFormat: 42 },
       session: sessionInfo,
+      phase: { open: [] },
     },
   },
   // Task 22: sizes between the modes, one at each mode's minimum plus the edges just inside it.

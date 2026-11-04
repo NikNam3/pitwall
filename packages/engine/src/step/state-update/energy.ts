@@ -9,7 +9,7 @@ const FUEL_MIX = ['lean', 'standard', 'rich', 'max'] as const;
 const ERS_DEPLOY_MODE = ['none', 'medium', 'hotlap', 'overtake'] as const;
 
 /** Fuel, ERS and power unit output from Car Status (kg, J, W as sent). Restricted for a human who withholds their telemetry. */
-export const energyUpdate: StateUpdate = { id: 'energy', apply: (frame, live, _signals, out) => {
+export const energyUpdate: StateUpdate = { id: 'energy', apply: (frame, live, signals, out) => {
   const { status } = frame;
   if (!status) return maskForRealism(live, 'energy');
   const at = frame.sessionTime;
@@ -19,12 +19,12 @@ export const energyUpdate: StateUpdate = { id: 'energy', apply: (frame, live, _s
     car.updatedAt.status = at;
     car.energy = {
       fuel: knownUnlessRestricted(
-        visibilityIn(frame, car),
+        visibilityIn(frame, car, signals),
         { kg: s.fuelInTank, capacityKg: s.fuelCapacity, remainingLaps: s.fuelRemainingLaps, mix: pick(FUEL_MIX, s.fuelMix) },
         at,
       ),
       ers: knownUnlessRestricted(
-        visibilityIn(frame, car),
+        visibilityIn(frame, car, signals),
         {
           storeJ: s.ersStoreEnergy,
           mode: pick(ERS_DEPLOY_MODE, s.ersDeployMode),
@@ -34,7 +34,7 @@ export const energyUpdate: StateUpdate = { id: 'energy', apply: (frame, live, _s
         },
         at,
       ),
-      power: knownUnlessRestricted(visibilityIn(frame, car), { iceW: s.enginePowerIce, mgukW: s.enginePowerMguk }, at),
+      power: knownUnlessRestricted(visibilityIn(frame, car, signals), { iceW: s.enginePowerIce, mgukW: s.enginePowerMguk }, at),
     };
   }
   out.changed.add('energy');

@@ -35,10 +35,9 @@ describe('practice: the cars in the session are car-status’s (C43)', () => {
     const open = built.slice(0, -1).reduce((o, input) => machine.step(o, input).open, machine.init());
     return machine.step(open, built.at(-1)!).closed.map((s) => s.kind);
   };
-  /** Car `car` finished (its result status, a signal, and the live value). */
+  /** Car `car` finished (its result status, a signal). */
   const finished = (car: number): InputEdit => (i) => {
     i.signals.cars[car]!.resultStatus = 'finished';
-    i.live.cars[car]!.timing.resultStatus = 'finished';
   };
   it('time over: every car whose status is not absent finished; a slot car-status holds absent does not hold back finished', () => {
     expect(closedAtSend(all(finished(0), carStatus(1, 'absent')))).toEqual(['running', 'finished']);

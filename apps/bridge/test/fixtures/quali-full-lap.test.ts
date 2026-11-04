@@ -114,7 +114,8 @@ describe('qualifying-singapore-full-lap: the projection on the next lap', () => 
   });
 
   it('the Q2 cut-off is the place of the last car through to Q3: the active cars of Q2 minus the cars it knocks out', () => {
-    const { session } = run.state;
+    // Task 24 (C13): the session type and numActiveCars are signals (`state.signals`)
+    const { session } = run.state.signals;
     expect(session.sessionType).toBe(6);
     const cutOff = valueOf(run.lapTimes.projections[run.state.playerCar]!.cutOff);
     expect(cutOff.position).toBe(session.numActiveCars - LAP_TIMES_CONFIG.defaults.eliminatedQ2);

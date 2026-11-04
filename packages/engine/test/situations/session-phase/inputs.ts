@@ -39,22 +39,18 @@ const carStatusOf = (i: MachineInput): readonly OpenSpan[] =>
   i.upstream['car-status'] ?? i.signals.cars.map((_, car) => carStatusSpan(car, CARS.includes(car as CarId) ? 'competing' : 'absent'));
 
 /**
- * The frame lies in `phase` (C14): the weekend phase decided, its weekend-phase span the upstream, the session's kind
- * and duration, two cars in the session on lap 1 with their lap timers at 0. Every row starts each frame with it. The
+ * The frame lies in `phase` (C14): the weekend phase decided, its weekend-phase span the upstream, the session's
+ * duration, two cars in the session on lap 1 with their lap timers at 0. Every row starts each frame with it. The
  * car-status upstream: cars 0 and 1 competing, every other slot absent, unless a frame before set it (`carStatus`).
  */
 export const inPhase = (phase: WeekendPhase): InputEdit => (i) => {
   i.weekendPhase = phase;
   const { kind, ...detail } = phase;
   i.upstream = { 'weekend-phase': [{ machine: 'weekend-phase', id: 0, kind, start: 0, startFrame: 1, confirmed: true, detail }], 'car-status': carStatusOf(i) };
-  i.live.session.kind = kind === 'race' ? 'race' : kind === 'qualifying' ? 'qualifying' : 'practice';
   i.live.session.durationMs = DURATION_MS;
   i.signals.session.numActiveCars = CARS.length;
-  i.live.session.numActiveCars = CARS.length;
   CARS.forEach((id, k) => {
-    const car = i.live.cars[id]!;
-    car.active = true;
-    car.timing.position = k + 1;
+    i.live.cars[id]!.timing.position = k + 1;
   });
 };
 
@@ -89,13 +85,12 @@ export const timerOfCar1 = (ms: number): InputEdit => (i) => {
 };
 
 /**
- * Both cars' result status (a signal, C12, and the live value step 1 writes), from this frame on, and their car-status
- * spans as car-status decides them (retired for a retired car, competing otherwise).
+ * Both cars' result status (a signal, C12), from this frame on, and their car-status spans as car-status decides them
+ * (retired for a retired car, competing otherwise).
  */
 export const results = (car0: 'active' | 'finished' | 'retired', car1: 'active' | 'finished' | 'retired'): InputEdit => (i, index) => {
   [car0, car1].forEach((status, id) => {
     i.signals.cars[id]!.resultStatus = status;
-    i.live.cars[id]!.timing.resultStatus = status;
     carStatus(id, status === 'retired' ? 'retired' : 'competing')(i, index);
   });
 };

@@ -1,13 +1,14 @@
-// `bindSituation` (C55): a core topic of a sub-machine's spans (C54), open and closed, as they are. Checked twice:
+// `bindSituation` (C55): a core topic of a sub-machine's open spans (C54), as they are. Checked twice:
 // `pnpm typecheck` compiles this file, so the `@ts-expect-error` lines are the compiler tests (an expectation on a line
 // that compiles is itself an error); vitest runs the same calls and checks the runtime shape of what the helper returns.
 //
 // The situation topics (`situation.<camelMachineId>`, Task 23) carry `MachineSpans` and compile; every other topic
-// carries another value and does not. That the binding publishes a machine's open and closed spans, and what a client
+// carries another value and does not. That the binding publishes a machine's open spans, and what a client
 // holds after a flashback, is in `situations/situations.test.ts`. The binding does not tie the machine to its topic:
 // `MachineId` is a string, so a situation topic compiles with any machine (Task 23 ruling 5).
 import { describe, expect, expectTypeOf, it } from 'vitest';
 import type { MachineSpans, TopicValue } from '@pitwall/contracts';
+import type { OpenSpan } from '@pitwall/domain';
 import { bindSituation, defineFeature, type TopicBinding } from '../../src/features/feature.ts';
 
 describe('bindSituation: the topic must carry a sub-machine\'s spans (C55)', () => {
@@ -25,7 +26,8 @@ describe('bindSituation: the topic must carry a sub-machine\'s spans (C55)', () 
     expect([laps, info, stints, car, moment].map((b) => b.topic)).toEqual(['laps', 'session.info', 'stints', 'car.detail', 'raceMoment.current']);
   });
 
-  it('a situation topic compiles: its value is MachineSpans', () => {
+  it('a situation topic compiles: its value is MachineSpans, the open spans only', () => {
+    expectTypeOf<MachineSpans>().toEqualTypeOf<{ open: OpenSpan[] }>();
     expectTypeOf<TopicValue<'situation.clock'>>().toEqualTypeOf<MachineSpans>();
     expectTypeOf<TopicValue<'situation.carActivityRace'>>().toEqualTypeOf<MachineSpans>();
     const clock = bindSituation('situation.clock', 'clock');

@@ -42,7 +42,7 @@ describeWithFixture('menuOnly', 'the pipeline over the menu-only recording', (pa
 describe('race-zandvoort-lap10 through the pipeline', () => {
   it('session.info names the session and the player; positions gained are known and net to zero over the field', async () => {
     const r = await replayTopics(segmentPath('race-zandvoort-lap10.pwrec.gz'), SUBS);
-    expect(r.value('info')).toMatchObject({ sessionUid: '13536157633115227668', playerCar: 1, session: { trackId: 26, sessionType: 15, numActiveCars: 20 } });
+    expect(r.value('info')).toMatchObject({ sessionUid: '13536157633115227668', playerCar: 1, session: { trackId: 26 } });
     const gained = (r.value('intervals') as Interval[]).map((i) => i.positionsGained);
     expect(gained).toHaveLength(20);
     expect(gained.every((g) => g.known)).toBe(true);

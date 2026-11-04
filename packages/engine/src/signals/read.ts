@@ -1,5 +1,6 @@
 // Step 1's reading of the signals (contract C8, C12): every field and event of the closed list, from the frame's
-// packets into domain units. Only the machine reads what it returns (C13).
+// packets into domain units. The machine reads what it returns (C9, C13); step 1 may read the signals it writes, to
+// shape the values it writes; it decides no situation (C8).
 import { carId, MAX_CARS, toSessionTime, type CarId, type NeutralisedStage } from '@pitwall/domain';
 import type { EventDetails, SessionPacket } from '@pitwall/protocol';
 import type { Frame } from '../frame/frame.ts';

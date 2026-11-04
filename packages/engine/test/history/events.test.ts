@@ -1,7 +1,7 @@
 // The events recorder (contract C10, C12, C13, C26; migration Task 21): `events` holds the frame's value events
 // (overtake, collision, fastest lap, speed trap, from `live.frameEvents`) and the damage changes, never a situation
-// event. PENA, RTMT, DRSE, DRSD, STLG and LGOT are signals (C12): only the machine reads them, and they reach readers as
-// spans (C13, C20; penalties, car-status, race-control, session-phase), never as `RaceEvent`s. Ported from the race
+// event. PENA, RTMT, DRSE, DRSD, STLG and LGOT are signals (C12): the machine reads them (step 1 may read the signals it
+// writes, to shape the values it writes; it decides no situation, C8), and they reach readers as spans (C13, C20; penalties, car-status, race-control, session-phase), never as `RaceEvent`s. Ported from the race
 // events cases of before Task 21: the situation events' rows moved to "situation events never become RaceEvents".
 import { describe, expect, it } from 'vitest';
 import type { CarId, RaceEvent } from '@pitwall/domain';

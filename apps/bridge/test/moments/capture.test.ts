@@ -1,12 +1,13 @@
 // Named moments (spec 9.1, Task 21). Contract assumed of `captureMoment(segmentPath, atMs)`:
 //  - `atMs` is the receive-time offset from the segment's first record; records at or before it are processed;
 //  - the result is `Array<{ topic, params, value?, entries? }>`: every feed topic without params with `{}`, and every
-//    feed topic with params once per params its `momentParams` gives for the active cars (`car.detail` `active`), in
-//    that order (Task M); job topics stay out; a state topic without a value is left out;
+//    feed topic with params once per params its `momentParams` gives for the active cars (the cars in the session:
+//    car-status's open spans not `absent`, Task 24), in that order (Task M); job topics stay out; a state topic without a
+//    value is left out;
 //  - append topics (`laps`) carry `entries`, state topics carry `value`;
 //  - deterministic: two runs give byte-identical JSON.
 import { existsSync } from 'node:fs';
-import { canonicalJson, TOPICS, type SessionInfo, type TopicName } from '@pitwall/contracts';
+import { canonicalJson, TOPICS, type MachineSpans, type SessionInfo, type TopicName } from '@pitwall/contracts';
 import { carId, MAX_CARS, type CarId } from '@pitwall/domain';
 import { describe, expect, it } from 'vitest';
 import { FEATURES } from '../../src/features/index.generated.ts';
@@ -28,8 +29,11 @@ const PARAM_TOPICS = (Object.keys(TOPICS) as TopicName[]).flatMap((topic) => {
   return def.scope === 'feed' && !JOB_TOPICS.has(topic) && def.momentParams !== undefined ? [{ topic, momentParams: def.momentParams }] : [];
 });
 
+/** The cars in the session at the moment: the car-status spans open and not `absent` (C43; Task 24: no `car.active`). */
 const activeCars = (values: MomentValues): CarId[] =>
-  values.flatMap((v) => (v.topic === 'car.detail' && (v.value as { active?: boolean } | undefined)?.active === true ? [(v.params as { carId: CarId }).carId] : []));
+  ((find(values, 'situation.carStatus')?.value as MachineSpans | undefined)?.open ?? [])
+    .flatMap((s) => (s.kind !== 'absent' && s.carId !== undefined ? [s.carId] : []))
+    .sort((a, b) => a - b);
 
 const paramsOf = (values: MomentValues, topic: string): string[] => values.filter((v) => v.topic === topic).map((v) => canonicalJson(v.params));
 

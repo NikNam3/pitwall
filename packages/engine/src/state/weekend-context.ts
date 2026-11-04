@@ -10,7 +10,8 @@ export type WeekendContext = {
   driverKey: DriverKey;
   sessions: Array<{
     sessionUid: SessionUid;
-    sessionType: number;
+    /** The session's weekend phase as storage keeps it (`kind[:format[:segment]]`); no signal (C13). */
+    sessionType: string;
     drivers: Array<{ driverKey: DriverKey; laps: LapRecord[]; stints: StintRecord[]; pitStops: PitStopRecord[] }>;
   }>;
 };

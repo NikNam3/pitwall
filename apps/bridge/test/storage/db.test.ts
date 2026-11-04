@@ -10,7 +10,8 @@ describe('openDatabase', () => {
     expect(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").pluck().all())
       .toEqual(['drivers', 'events', 'flag_phases', 'laps', 'pit_stops', 'sessions', 'stints', 'weekends']);
     expect(db.pragma('user_version', { simple: true })).toBe(SCHEMA_VERSION);
-    expect(SCHEMA_VERSION).toBe(2);
+    // Task 24: the session type column holds the weekend phase as text
+    expect(SCHEMA_VERSION).toBe(3);
     expect(db.pragma('foreign_keys', { simple: true })).toBe(1);
     const key = (table: string) => db.prepare(`SELECT name FROM pragma_table_info('${table}') WHERE pk > 0 ORDER BY pk`).pluck().all();
     expect(key('sessions')).toEqual(['session_uid', 'weekend_id']);

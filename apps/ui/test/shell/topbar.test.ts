@@ -44,7 +44,7 @@ const info = (realism: boolean) => ({
   sessionUid: '1',
   playerCar: carId(5),
   realism,
-  session: { kind: 'race', totalLaps: 62, timeLeftMs: 0, flag: 'green' },
+  session: { totalLaps: 62, timeLeftMs: 0 },
 });
 const replayStatus = (paused: boolean) => ({ paused, speed: 1, sessionTimeMs: 1000, playerLap: 5, atEnd: false });
 

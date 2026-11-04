@@ -111,8 +111,8 @@ const MACHINE_IDS: ReadonlySet<string> = new Set([STEP0_CLOCK.id, ...MACHINES.ma
  */
 const IDENTITY_FIELDS: ReadonlySet<string> = new Set(['startFrame', 'endFrame', 'carId', 'zone', 'machine', 'id']);
 
-/** A car's fields every unit that reads any car area may read: its slot, whether it is active (transitional, Task 24), its freshness. */
-const FREE_CAR: ReadonlySet<string> = new Set(['id', 'active', 'updatedAt']);
+/** A car's fields every unit that reads any car area may read: its slot and its freshness. */
+const FREE_CAR: ReadonlySet<string> = new Set(['id', 'updatedAt']);
 
 export type GuardOptions = {
   /** The unit's id, for the error. */
@@ -187,7 +187,7 @@ const refuseWrites = <T extends object>(path: string): ProxyHandler<T> => ({
  * `view` as a unit that declares `reads` may see it (C39, C41). A read outside the declaration throws an
  * `UndeclaredReadError`:
  * - `live`: the declared live areas only, by the fields step 1's module of each area writes (`LIVE_AREA_FIELDS`); a
- *   car's `id`, `active` and `updatedAt` with any car area, `live.cars` only when a car area is declared; the feed id,
+ *   car's `id` and `updatedAt` with any car area, `live.cars` only when a car area is declared; the feed id,
  *   the session uid, the race clock's time, the last frame id and realism always. Nothing else the engine state holds
  *   (its open trackers, log, signals, history, weekend context, frame number, masking, frame events) is readable there;
  * - `history`: a list only with its change tag (`crossings` with `miniSectors`), a sub-machine's closed spans

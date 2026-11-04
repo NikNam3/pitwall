@@ -1,13 +1,15 @@
 // Folds a recording or segment through `SessionRunner.apply`, from the first frame that carries a Session, so history,
 // deltas and flashbacks are part of the run.
 import { basename } from 'node:path';
-import type { FeedId } from '@pitwall/domain';
+import type { CarId, FeedId } from '@pitwall/domain';
 import {
   CalculatorRegistry,
   Scheduler,
   SessionRunner,
   situationOf,
   type Calculator,
+  type DeepReadonly,
+  type EngineState,
   type EngineView,
   type Frame,
   type SchedulerResult,
@@ -15,6 +17,13 @@ import {
 } from '@pitwall/engine';
 import { IDLE_FEED } from '../../../../test-support/builders/index.ts';
 import { trackFile } from './replay.ts';
+
+/**
+ * The cars in the session after a step: the slots whose car-status span is open and not `absent` (C43), in slot order.
+ * Task 24: the one source, as `car.active` left the live state.
+ */
+export const carsInSession = (state: DeepReadonly<EngineState>): CarId[] =>
+  (situationOf(state).byMachine['car-status'] ?? []).flatMap((s) => (s.kind !== 'absent' && s.carId !== undefined ? [s.carId] : [])).sort((a, b) => a - b);
 
 /**
  * `onResult` gets each frame the runner applied with its result, in order: the frames before the first Participants

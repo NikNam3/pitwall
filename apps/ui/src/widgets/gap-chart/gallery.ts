@@ -23,9 +23,9 @@ const CARS: Car[] = [
 const overview = (c: Car): CarOverview => ({
   id: carId(c.id),
   identity: {
-    name: c.name, teamId: c.teamId, raceNumber: c.raceNumber, nationality: 0, ai: c.id > 0, driverId: c.id,
+    name: c.name, teamId: c.teamId, raceNumber: c.raceNumber, nationality: 0, driverId: c.id,
     networkId: 255, myTeam: false, platform: 0, telemetryPublic: true,
-    driverKey: { kind: 'game', driverId: c.id }, visibility: 'public',
+    driverKey: { name: c.name, networkId: 255 }, visibility: 'public',
   } as unknown as CarOverview['identity'],
   timing: {} as CarOverview['timing'],
   tyres: {} as CarOverview['tyres'],
@@ -39,7 +39,7 @@ const sessionInfo = {
   sessionUid: '1',
   playerCar: carId(0),
   teammateCar: carId(1),
-  session: { kind: 'race', totalLaps: 12 } as unknown as SessionState,
+  session: { totalLaps: 12 } as unknown as SessionState,
   realism: false,
 } as unknown as SessionInfo;
 

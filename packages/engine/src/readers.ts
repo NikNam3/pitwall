@@ -29,3 +29,5 @@ export { ALL_CHANGE_TAGS, CHANGE_TAGS, type ChangeTag, type ClockFall, type Cloc
 export { membershipOf, projectionLengths, situationAt, type MembershipSource } from './log/projection.ts';
 export type { HistoryDelta, LogLengths, Projection, ProjectedList, ProjectionState } from './log/types.ts';
 export { unknownLapEnd, type LapEndSamples } from './recorders/lap-samples.ts';
+export { CAR_STATUS, carsInSessionOf } from './situations/car-status/in-session.ts';
+export type { Situation } from './situations/situation.ts';

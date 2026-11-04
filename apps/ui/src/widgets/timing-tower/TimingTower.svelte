@@ -49,7 +49,7 @@
 {#snippet age(r: TowerRow)}{formatCount(r.age)}{/snippet}
 {#snippet stops(r: TowerRow)}{formatCount(r.stops)}{/snippet}
 {#snippet pen(r: TowerRow)}<TextCell {...r.penalty} />{/snippet}
-{#snippet pit(r: TowerRow)}{r.pit === undefined ? '' : text.pit[r.pit]}{/snippet}
+{#snippet situation(r: TowerRow)}<TextCell {...r.situation} />{/snippet}
 
 {#snippet s1(r: TowerRow)}{@render sector(r, 0)}{/snippet}
 {#snippet s2(r: TowerRow)}{@render sector(r, 1)}{/snippet}
@@ -57,7 +57,7 @@
 
 <div class="tower">
 <Table
-  columns={TOWER_COLUMNS.map((c) => ({ ...c, cell: { position, change, car, gap, interval, toUs, last, s1, s2, s3, compound, age, stops, penalty: pen, pit }[c.key] }))}
+  columns={TOWER_COLUMNS.map((c) => ({ ...c, cell: { position, change, car, gap, interval, toUs, last, s1, s2, s3, compound, age, stops, penalty: pen, situation }[c.key] }))}
   {rows}
   rowKey={(r) => String(r.carId)}
   inactive={(r) => r.retired}

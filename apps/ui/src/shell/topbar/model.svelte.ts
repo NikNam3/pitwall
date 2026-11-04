@@ -1,8 +1,13 @@
 // What the top bar's segments read: the topics of one feed plus the global alert and settings topics.
 import type { AlertsState, CarOverview, FeedStatus, ReplayControl, ReplayStatus, SessionInfo, UiAction, UiSettings } from '@pitwall/contracts';
-import type { FeedId, Insight, Known, Moment, RaceMoment } from '@pitwall/domain';
+import type { MachineSpans } from '@pitwall/contracts';
+import type { FeedId, Insight, Known, Moment, NeutralisedDetail, NeutralisedStage, OpenSpan, RaceMoment } from '@pitwall/domain';
 import type { EntryState, TopicStore } from '../../connection/topic-store.svelte.ts';
+import { openSpanOf } from '../../kit/situation.ts';
+import * as text from '../../kit/text.ts';
+import type { Role } from '../../theme/index.ts';
 import { activeInsights, MAX_SHOWN_ALERTS, tierOneAlerts } from './alerts.ts';
+import { phaseOf, type PhaseMachine } from './phase-presentation.ts';
 
 const okValue = <T>(state: EntryState<T> | undefined): T | undefined => (state?.status === 'ok' ? state.value : undefined);
 
@@ -17,6 +22,9 @@ export class TopBarModel {
   readonly #alerts: EntryState<AlertsState>;
   readonly #settings: EntryState<UiSettings>;
   readonly #moment: EntryState<Known<RaceMoment>>;
+  readonly #weekend: EntryState<MachineSpans>;
+  readonly #clock: EntryState<MachineSpans>;
+  readonly #phases: Record<'race' | 'qualifying' | 'practice', EntryState<MachineSpans>>;
   /** The open workbook's name, set by the top bar; undefined until a workbook is known. */
   workbookName = $state<string | undefined>();
   /** Opens the workbook picker, set by the top bar. */
@@ -41,6 +49,13 @@ export class TopBarModel {
     this.#settings = take(store.acquire({ topic: 'ui.settings', params: {} }));
     // Optional: no data until the race-moment analysis publishes, and notApplicable outside the race.
     this.#moment = take(store.acquire({ topic: 'raceMoment.current', params: {}, feedId }));
+    this.#weekend = take(store.acquire({ topic: 'situation.weekendPhase', params: {}, feedId }));
+    this.#clock = take(store.acquire({ topic: 'situation.clock', params: {}, feedId }));
+    this.#phases = {
+      race: take(store.acquire({ topic: 'situation.sessionPhaseRace', params: {}, feedId })),
+      qualifying: take(store.acquire({ topic: 'situation.sessionPhaseQualifying', params: {}, feedId })),
+      practice: take(store.acquire({ topic: 'situation.sessionPhasePractice', params: {}, feedId })),
+    };
     // The feed's kind is fixed by its hello; a replay feed has a transport.
     this.#isReplay = store.feeds.find((f) => f.feedId === feedId)?.kind === 'replay';
     this.#replay = this.#isReplay ? take(store.acquire({ topic: 'replay.status', params: {}, feedId })) : undefined;
@@ -54,10 +69,29 @@ export class TopBarModel {
     const player = this.session?.playerCar;
     return player === undefined ? undefined : okValue(this.#cars)?.find((car) => car.id === player)?.timing?.lap;
   }
+  /** The weekend phase's open span (`situation.weekendPhase`); undefined while the phase is pending or not published. */
+  get weekendPhase(): OpenSpan | undefined {
+    return openSpanOf(okValue(this.#weekend));
+  }
   /** The race moment; undefined while it is unknown or not published. */
   get moment(): Moment | undefined {
     const current = okValue(this.#moment);
     return current?.known ? current.value.moment : undefined;
+  }
+  /**
+   * The session phase to show: PAUSED while the clock is paused, else the open span of the session-phase machine of the
+   * weekend phase through its presentation table. Undefined while hidden, pending or `none`.
+   */
+  get phase(): { label: string; role: Role | undefined; stage: NeutralisedStage | undefined } | undefined {
+    const weekend = this.weekendPhase?.kind;
+    if (weekend !== 'race' && weekend !== 'qualifying' && weekend !== 'practice') return undefined;
+    if (openSpanOf(okValue(this.#clock))?.kind === 'paused') return { label: text.topBar.phase.paused, role: undefined, stage: undefined };
+    const machine: PhaseMachine = weekend === 'race' ? 'session-phase-race' : weekend === 'qualifying' ? 'session-phase-qualifying' : 'session-phase-practice';
+    const span = openSpanOf(okValue(this.#phases[weekend]));
+    const shown = span === undefined ? undefined : phaseOf(machine, span);
+    if (span === undefined || shown === undefined) return undefined;
+    const stages = shown.label === 'sc' || shown.label === 'vsc' ? (span.detail as NeutralisedDetail | undefined)?.stages : undefined;
+    return { label: text.topBar.phase[shown.label], role: shown.role, stage: stages?.at(-1)?.stage };
   }
   get feed(): FeedStatus | undefined {
     return okValue(this.#feed);

@@ -14,15 +14,11 @@ type JobBinding = Extract<TopicBinding, { fromJob: string }>;
 type LiveBinding = Extract<TopicBinding, { fromLive: unknown }>;
 type SituationBinding = Extract<TopicBinding, { fromSituation: MachineId }>;
 
-/**
- * A sub-machine's spans as they are now (C20): its open spans in the view's situation and its closed spans in the
- * projection, copied, since the engine changes its state in place.
- */
+/** A sub-machine's open spans as they are now (C20), from the view's situation, copied, since the engine changes its state in place. */
 export type SpansOf = (machine: MachineId) => MachineSpans;
 
-/** A situation topic's value holds no span, open or closed; no value (its `spansOf` threw) is not such a value. */
-const hasNoSpan = (value: unknown): boolean =>
-  value !== undefined && (value as MachineSpans).open.length === 0 && (value as MachineSpans).closed.length === 0;
+/** A situation topic's value holds no open span; no value (its `spansOf` threw) is not such a value. */
+const hasNoSpan = (value: unknown): boolean => value !== undefined && (value as MachineSpans).open.length === 0;
 
 /** A topic that could not be published: a feature's `select` threw, or the hub did. The topic is marked `errored`. */
 export type PublishError = { topic: TopicName; error: unknown };
@@ -139,7 +135,7 @@ export class TopicPublisher {
    * `spansOf` when it sends a subscription a value (at once if the throttle allows, else on a later tick; at most
    * `maxHz`). It reads the runner's current state, so after a flashback (`rewound`, every tag set) the restored one: a
    * state topic, recomputed, never resent as a log (C57). Then a topic not published yet in the session whose machine
-   * has no span stays unpublished, as in a run that never received the undone frames (C33).
+   * has no open span stays unpublished, as in a run that never received the undone frames (C33).
    */
   publishSituations(spansOf: SpansOf, changed: ReadonlySet<string>, rewound = false): PublishError[] {
     return this.#collecting(() => {
@@ -156,7 +152,7 @@ export class TopicPublisher {
 
   /**
    * The subscriptions changed (a demand change): a subscribed situation topic not published yet in the session gets its
-   * machine's spans now, so a new subscriber has them at once (C49). One published before needs nothing: the hub reads
+   * machine's open spans now, so a new subscriber has them at once (C49). One published before needs nothing: the hub reads
    * its value from the current state whenever it sends one.
    */
   publishNewSituations(spansOf: SpansOf): PublishError[] {

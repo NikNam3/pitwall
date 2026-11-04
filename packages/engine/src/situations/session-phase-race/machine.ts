@@ -7,8 +7,8 @@
 // too); `suspended` (a red flag); `finished` (the race winner or the chequered flag); `postSession` (SEND, or the clock's
 // simulated end, C36). A session joined in progress opens its current phase with `joinedAt` (Review Focus 2). The end
 // of a session is a signal, never the final classification's arrival (user ruling, Task 9).
-import { known, sessionPhaseRaceSpans, unknown, type NeutralisedDetail, type NeutralisedStage, type SessionFlag, type SessionTime, type SuspendedDetail } from '@pitwall/domain';
-import type { SituationEvent } from '../../signals/types.ts';
+import { known, sessionPhaseRaceSpans, unknown, type NeutralisedDetail, type NeutralisedStage, type SessionTime, type SuspendedDetail } from '@pitwall/domain';
+import type { SessionFlag, SituationEvent } from '../../signals/types.ts';
 import type { DeepReadonly } from '../../util/deep-readonly.ts';
 import { CAR_STATUS } from '../car-status/in-session.ts';
 import type { MachineInput, MachineStep, SubMachine } from '../machine.ts';

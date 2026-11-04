@@ -658,8 +658,9 @@ describe('alarms behaviour table (C44)', () => {
       expect(only(viewWith({}, { config }), 'warningLast')).toEqual([]);
     });
 
-    it('reads the span of the car, not the game field: a count only on the car\'s timing is no warning', () => {
-      const view = engineView({ cars: [carState({ timing: { cornerCuttingWarnings: 2 } })], outputs: outputsOf([outputsFor(0)]), config, sessionTime: NOW });
+    // Task 24 (C13): the game's warning counts left the live state; a car without a warnings span is no warning
+    it('reads the span of the car: a car without its warnings span is no warning', () => {
+      const view = engineView({ cars: [carState()], outputs: outputsOf([outputsFor(0)]), config, sessionTime: NOW });
       expect(only(view, 'warningLast')).toEqual([]);
     });
   });

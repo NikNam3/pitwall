@@ -348,28 +348,28 @@ describe('tyre-wear calculator', () => {
       expect(Object.keys(TYRE_WEAR_BEHAVIOUR)).toEqual(['car-status']);
     });
 
-    // car 0 on a set as old as its three laps of 2 %/lap; the live state's transitional `active` says the opposite of
-    // car-status in every case, so only car-status decides (C43)
-    const statusView = (kind: string, active: boolean) =>
-      situatedView({ cars: [{ ...carWithWear(6, { age: 3 }), active }], history: { laps: chain([2, 2, 2]) }, status: { 0: kind } });
+    // car 0 on a set as old as its three laps of 2 %/lap; car-status decides (C43); Task 24 removed the transitional
+    // `car.active` these cases contradicted
+    const statusView = (kind: string) =>
+      situatedView({ cars: [carWithWear(6, { age: 3 })], history: { laps: chain([2, 2, 2]) }, status: { 0: kind } });
 
     it('competing: the car has its wear, rate and laps to the limit', () => {
-      const out = calc.compute(statusView('competing', false))[carId(0)];
+      const out = calc.compute(statusView('competing'))[carId(0)];
       expect(out?.corners.fl.wearPct).toEqual({ known: true, value: 6, at: 0 });
       expect(out?.corners.fl.ratePctPerLap).toMatchObject({ known: true, value: 2 });
       expect(out?.corners.fl.lapsToLimit).toMatchObject({ known: true, value: 32 });
     });
 
     it('retired: the car is still in the session and keeps its entry, its rate as of its laps', () => {
-      expect(calc.compute(statusView('retired', false))[carId(0)]?.corners.fl.ratePctPerLap).toMatchObject({ known: true, value: 2 });
+      expect(calc.compute(statusView('retired'))[carId(0)]?.corners.fl.ratePctPerLap).toMatchObject({ known: true, value: 2 });
     });
 
     it('disqualified: the car is still in the session and keeps its entry', () => {
-      expect(calc.compute(statusView('disqualified', false))[carId(0)]?.corners.fl.ratePctPerLap).toMatchObject({ known: true, value: 2 });
+      expect(calc.compute(statusView('disqualified'))[carId(0)]?.corners.fl.ratePctPerLap).toMatchObject({ known: true, value: 2 });
     });
 
-    it('absent: no entry, though the slot has laps and the live state calls it active', () => {
-      expect(calc.compute(statusView('absent', true))[carId(0)]).toBeUndefined();
+    it('absent: no entry, though the slot has laps', () => {
+      expect(calc.compute(statusView('absent'))[carId(0)]).toBeUndefined();
     });
   });
 

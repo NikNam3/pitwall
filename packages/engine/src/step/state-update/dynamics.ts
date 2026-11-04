@@ -17,7 +17,7 @@ export const dynamicsUpdate: StateUpdate = { id: 'dynamics', apply: (frame, live
       car.updatedAt.telemetry = at;
       const limits = car.dynamics.known
         ? car.dynamics.value
-        : { maxRpm: 0, drsAllowed: false, drsActivationDistanceM: 0, pitLimiter: false };
+        : { maxRpm: 0, drsActivationDistanceM: 0, pitLimiter: false };
       const dynamics: CarDynamics = {
         ...limits,
         speedKmh: t.speed,
@@ -54,7 +54,6 @@ export const dynamicsUpdate: StateUpdate = { id: 'dynamics', apply: (frame, live
       if (!s || !car.dynamics.known) continue;
       Object.assign(car.dynamics.value, {
         maxRpm: s.maxRpm,
-        drsAllowed: s.drsAllowed === 1,
         drsActivationDistanceM: s.drsActivationDistance,
         pitLimiter: s.pitLimiterStatus === 1,
       });

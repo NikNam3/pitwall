@@ -65,11 +65,12 @@ describe('compounds (appendix codes)', () => {
 });
 
 describe('ids and units', () => {
-  it('driverKeyString: AI by driverId, human by networkId + race number + name', () => {
-    expect(driverKeyString({ kind: 'ai', driverId: 9 })).toBe('ai:9');
-    expect(driverKeyString({ kind: 'human', networkId: 255, name: 'HAMILTON', raceNumber: 44 })).toBe(
-      'human:255:44:HAMILTON',
-    );
+  // Task 24 (user): a DriverKey is the name and the network id only (`aiControlled` is a signal, C12, C13)
+  it('driverKeyString: one string per name and network id', () => {
+    const hamilton = driverKeyString({ name: 'HAMILTON', networkId: 255 });
+    expect(driverKeyString({ name: 'HAMILTON', networkId: 255 })).toBe(hamilton);
+    expect(driverKeyString({ name: 'HAMILTON', networkId: 1 })).not.toBe(hamilton);
+    expect(driverKeyString({ name: 'RUSSELL', networkId: 255 })).not.toBe(hamilton);
   });
 
   it('sessionUidString is the decimal u64', () =>

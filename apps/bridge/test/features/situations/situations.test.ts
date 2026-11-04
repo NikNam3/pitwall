@@ -1,12 +1,12 @@
 // The situation topics (C20, C53–C55, C57, C33, C49): one core topic per sub-machine, `situation.<camelMachineId>`,
-// bound with `bindSituation(topic, machine)` in the one feature `situations`. Its value is the machine's spans as they
-// are (`MachineSpans`): the open ones (`view.situation.byMachine[machine]`) and the closed ones (the projection's
-// `spans[machine]`), each with its frames (C26), and no signal (C13, C54). A state topic, recomputed after a flashback,
+// bound with `bindSituation(topic, machine)` in the one feature `situations`. Its value is the machine's open spans as
+// they are (`MachineSpans`, `view.situation.byMachine[machine]`), each with the frame it opened on (C26), and no signal
+// (C13, C54); closed spans are not resent at the topic's rate (contracts 0f4caa8). A state topic, recomputed after a flashback,
 // so a client then holds what a run that never received the undone frames gives it (C33). Published only while
-// subscribed; a new subscriber gets the current spans at once (ruling 3, C49).
+// subscribed; a new subscriber gets the current open spans at once (ruling 3, C49).
 //
-// What the spans are is the engine's, read here by a probe unit with an `insights` hook (so it always runs) that reads
-// every `spans:<machine>` tag and keeps a copy of each machine's spans whenever any of them changed.
+// What the open spans are is the engine's, read here by a probe unit with an `insights` hook (so it always runs) that
+// reads every `spans:<machine>` tag and keeps a copy of each machine's open spans whenever any machine's spans changed.
 import { describe, expect, it } from 'vitest';
 import { TOPICS, type MachineSpans, type ServerMessage, type TopicName } from '@pitwall/contracts';
 import { SPAN_DECLARATIONS, type FeedId, type MachineId } from '@pitwall/domain';
@@ -63,7 +63,7 @@ const situationsFeature = (): Feature => {
   return feature;
 };
 
-/** Each machine's spans whenever any changed: what the engine's view holds then, copied (the projection grows in place). */
+/** Each machine's open spans whenever any machine's spans changed: what the engine's view holds then, copied. */
 function spansProbe() {
   const seen: Array<Record<MachineId, MachineSpans>> = [];
   const probe: QuickCalculator<number> = {
@@ -71,10 +71,9 @@ function spansProbe() {
     id: 'probe.spans',
     reads: MACHINES.map((machine) => `spans:${machine}`) as never,
     cadence: 'frame',
-    compute: ({ situation, history }) => {
+    compute: ({ situation }) => {
       seen.push(Object.fromEntries(MACHINES.map((machine) => [machine, structuredClone({
         open: [...(situation.byMachine[machine] ?? [])],
-        closed: [...(history.spans[machine] ?? [])],
       }) as MachineSpans])));
       return seen.length;
     },
@@ -112,7 +111,7 @@ const toPrepared = (packets: Timed): PreparedPacket[] => packets.map(({ packet, 
 
 /** `vehicleFiaFlags` 3: yellow (0: none). */
 const YELLOW = 3;
-/** Two cars; car 0 is shown yellow on the frames in `[yellow.from, yellow.to)`, so car-flags opens and closes spans there. */
+/** Two cars; car 0 is shown yellow on the frames in `[yellow.from, yellow.to)`, so car-flags opens a yellow span there and a new one after. */
 const scenario = (frames: number, yellow?: { from: number; to: number }) =>
   new ScenarioBuilder({ sessionUid: 77n, cars: 2 }).session().participants().frames(frames, (d, i) => {
     d.status.carStatusData[0]!.vehicleFiaFlags = yellow !== undefined && i >= yellow.from && i < yellow.to ? YELLOW : 0;
@@ -136,7 +135,7 @@ let segment: ReturnType<typeof run> | undefined;
 const segmentRun = () => (segment ??= run(new PwrecSource({ feedId: F, path: segmentPath('race-drive-through-served.pwrec.gz'), mode: 'asFastAsPossible' })));
 
 const hasYellow = (value: MachineSpans | undefined): boolean =>
-  value !== undefined && [...value.open, ...value.closed].some((span) => span.kind === 'yellow');
+  value !== undefined && value.open.some((span) => span.kind === 'yellow');
 
 describe('the situations feature (C53, C55, C63)', () => {
   it('binds one topic per sub-machine, situation.<camelMachineId>, each with bindSituation(topic, machine), and runs no calculator', () => {
@@ -153,20 +152,20 @@ describe('the situations feature (C53, C55, C63)', () => {
   });
 });
 
-describe('each situation topic carries the open and closed spans of its machine and no signal field (C20, C54, C13)', () => {
-  it('on a race segment (a drive-through served): the last value of every topic is its machine\'s spans as the engine holds them', async () => {
+describe('each situation topic carries the open spans of its machine and no signal field (C20, C54, C13)', () => {
+  it('on a race segment (a drive-through served): the last value of every topic is its machine\'s open spans as the engine holds them', async () => {
     const r = await segmentRun();
     const expected = r.seen.at(-1)!;
     expect(expected).toBeDefined();
-    const withSpans = MACHINES.filter((machine) => expected[machine]!.open.length + expected[machine]!.closed.length > 0);
-    // the segment is a race: the shared and race sub-machines have spans
+    const withSpans = MACHINES.filter((machine) => expected[machine]!.open.length > 0);
+    // the segment is a race: the shared and race sub-machines have open spans
     expect(withSpans).toEqual(expect.arrayContaining(['clock', 'car-location', 'car-status', 'car-flags', 'car-activity-race', 'penalties', 'session-phase-race']));
     for (const machine of MACHINES) {
       const topic = topicOf(machine);
       const last = r.values(topic).at(-1);
       if (withSpans.includes(machine)) expect(last, topic).toEqual(expected[machine]);
       // a machine that does not run in this phase has no spans: its topic carries none, or nothing at all
-      else expect(last ?? { open: [], closed: [] }, topic).toEqual({ open: [], closed: [] });
+      else expect(last ?? { open: [] }, topic).toEqual({ open: [] });
     }
   });
 
@@ -176,10 +175,10 @@ describe('each situation topic carries the open and closed spans of its machine 
     for (const machine of MACHINES) {
       for (const value of r.values(topicOf(machine))) {
         sent++;
-        expect(Object.keys(value).sort(), topicOf(machine)).toEqual(['closed', 'open']);
-        for (const span of [...value.open, ...value.closed]) expect(span.machine, topicOf(machine)).toBe(machine);
+        expect(Object.keys(value), topicOf(machine)).toEqual(['open']);
+        for (const span of value.open) expect(span.machine, topicOf(machine)).toBe(machine);
         for (const span of value.open) expect(span, topicOf(machine)).not.toHaveProperty('endFrame');
-        for (const span of value.closed) expect(span, topicOf(machine)).toHaveProperty('endFrame');
+        for (const span of value.open) expect(span, topicOf(machine)).not.toHaveProperty('end');
         expect([...keysOf(value)].filter((key) => SIGNAL_FIELDS.has(key)), topicOf(machine)).toEqual([]);
       }
     }
@@ -189,21 +188,20 @@ describe('each situation topic carries the open and closed spans of its machine 
 });
 
 describe('bindSituation publishes (C55; the rows moved over from Task 18)', () => {
-  it('publishes a machine\'s open and closed spans: car 0\'s yellow opens and closes car-flags spans, and the topic follows them', async () => {
+  it('publishes a machine\'s open spans: car 0\'s yellow opens a car-flags span and its end opens the next, and the topic follows them', async () => {
     const r = await run(new ArraySource(F, toPrepared(scenario(30, { from: 10, to: 20 }).packets())));
     const values = r.values(topicOf('car-flags'));
     expect(values.some((value) => value.open.some((span) => span.carId === 0 && span.kind === 'yellow'))).toBe(true);
     const last = values.at(-1)!;
     expect(last).toEqual(r.seen.at(-1)!['car-flags']);
-    // car 0's yellow is closed by then, and every car slot has one open span (car-flags covers every slot)
-    expect(last.closed.filter((span) => span.carId === 0).map((span) => span.kind)).toContain('yellow');
+    // car 0's yellow has ended by then, and every car slot has one open span (car-flags covers every slot)
     const openCars = last.open.map((span) => span.carId);
     expect(new Set(openCars).size).toBe(openCars.length);
     expect(openCars).toEqual(expect.arrayContaining([0, 1]));
     expect(last.open.find((span) => span.carId === 0)?.kind).not.toBe('yellow');
   });
 
-  it('after a flashback every situation topic equals a run that never received the undone frames (C33): the undone yellow is gone', async () => {
+  it('after a flashback every situation topic\'s open spans equal a run that never received the undone frames (C33): the undone yellow is gone', async () => {
     const rewound = await run(new ArraySource(F, withFlashback()));
     const straight = await run(new ArraySource(F, toPrepared(scenario(80).packets())));
     // the engine agrees on both runs (C33), and the undone frames' yellow reached the topic before the flashback
@@ -215,7 +213,7 @@ describe('bindSituation publishes (C55; the rows moved over from Task 18)', () =
 });
 
 describe('published only while subscribed (ruling 3, C49)', () => {
-  it('a topic subscribed in the middle of a session gets its machine\'s current spans at once', async () => {
+  it('a topic subscribed in the middle of a session gets its machine\'s current open spans at once', async () => {
     let now = 0;
     const box: { pipeline?: FeedPipeline } = {};
     const c = client(() => (now += 1000), () => box.pipeline?.demandChanged());

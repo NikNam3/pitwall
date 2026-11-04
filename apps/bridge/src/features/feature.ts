@@ -34,7 +34,7 @@ type BindingShape =
   | { topic: TopicName; fromJob: CalculatorId }
   /** A part of the feed's live state, read when the hub sends a value. */
   | { topic: TopicName; fromLive: LiveSelect<unknown> }
-  /** A sub-machine's spans: its open spans in the situation and its closed spans in the projection (C20). */
+  /** A sub-machine's open spans in the situation (C20). */
   | { topic: TopicName; fromSituation: MachineId };
 
 /**
@@ -84,8 +84,8 @@ export const bindHistory = <T extends TopicName, L extends ProjectedList>(
 ): TopicBinding => binding({ topic, fromHistory: list });
 
 /**
- * Binds a core topic to a sub-machine's spans (C54, C55): its open spans (`view.situation`) and its closed spans (the
- * projection's `spans[machine]`). The topic's value must be `MachineSpans`. The hub reads them when it sends a
+ * Binds a core topic to a sub-machine's open spans (C54, C55), as `view.situation` holds them; its closed spans stay in
+ * the projection. The topic's value must be `MachineSpans`. The hub reads them when it sends a
  * subscription a value (at most `maxHz`), never per frame; a topic no one subscribed is never published (C49). The
  * machine is not tied to its topic by type: `MachineId` is a string.
  */

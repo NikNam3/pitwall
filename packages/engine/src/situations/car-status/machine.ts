@@ -147,7 +147,7 @@ const machine: SubMachine<Open> = {
   step(open, input): MachineStep<Open> {
     const { signals, at, frameNumber } = input;
     const closed: MachineStep<Open>['closed'] = [];
-    const slots = slotsInUse({ cars: signals.cars.map((c) => ({ timing: { resultStatus: c.resultStatus } })), session: signals.session });
+    const slots = slotsInUse(signals);
     const cars = signals.cars.map((car, index): CarOpen | undefined => {
       const before = open.cars[index];
       if (before === undefined && input.live.cars[index]?.updatedAt.participants === undefined) return undefined;

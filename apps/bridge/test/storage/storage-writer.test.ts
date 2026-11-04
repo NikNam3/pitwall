@@ -16,7 +16,7 @@ function setup() {
 
 /** Session '1' of weekend W1 (the `setup` one) and a session of the same uid in weekend W2, each with its own history. */
 const W2 = key('1', 'W2');
-const w2Session = session('1', { weekendId: 'W2', sessionType: 5, startedAt: '2026-11-03T20:00:00.000Z', drivers: [{ carId: car(0), driverKey: HUMAN }] });
+const w2Session = session('1', { weekendId: 'W2', sessionType: 'qualifying:grandPrix:1', startedAt: '2026-11-03T20:00:00.000Z', drivers: [{ carId: car(0), driverKey: HUMAN }] });
 const w1History = history({ laps: [lap(0, 1), lap(1, 1)], stints: [stint(0, 1)], pitStops: [pitStop(1, 3)], events: [event(5, 0)] });
 const w2History = history({ laps: [lap(0, 1, { lapTimeMs: 91_000 })], stints: [stint(0, 4)], pitStops: [pitStop(0, 2)], events: [event(8), event(9, 0)] });
 function sameUidTwoWeekends() {

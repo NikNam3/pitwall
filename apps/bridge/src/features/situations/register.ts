@@ -2,7 +2,7 @@ import { bindSituation, defineFeature } from '../feature.ts';
 
 /**
  * The situation topics (C20, C53–C55): one core topic per sub-machine, `situation.<camelMachineId>`, carrying its open
- * and closed spans as they are. No calculator: the hub reads the spans when it sends a value.
+ * spans as they are. No calculator: the hub reads the spans when it sends a value.
  */
 export default defineFeature({
   name: 'situations',

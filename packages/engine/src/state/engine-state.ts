@@ -39,7 +39,10 @@ export type EngineState = {
   log: Log;
   /** The projection of the log (C28): what readers see as the history. */
   history: ProjectionState;
-  /** This frame's signals (C12, C13): written by step 1, read only by the machine; never part of the live state or the view. */
+  /**
+   * This frame's signals (C12, C13): written by step 1 and read by the machine; step 1 may read the signals it writes, to
+   * shape the values it writes; it decides no situation (C8). Never part of the live state or the view.
+   */
   signals: Signals;
   /** This frame's value events (OVTK, COLL, FTLP, SPTP), written by step 1 (C8). */
   frameEvents: FrameEvent[];

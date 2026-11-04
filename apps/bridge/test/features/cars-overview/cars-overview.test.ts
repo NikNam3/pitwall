@@ -14,26 +14,29 @@ const stint = (id: number, visualCompound: VisualCompound): StintRecord => ({
   carId: carId(id), firstLap: 1, lastLap: 10, actualCompound: 'C3', visualCompound, tyreAgeAtFitting: 0, frame: 0,
 });
 
-/** Car 0 with the game's stop count and live compound, over the given records. */
-const overviewOf = (o: { numPitStops?: number; compound?: VisualCompound; pitStops?: PitStopRecord[]; stints?: StintRecord[] }) => {
-  const car = carState({ timing: { numPitStops: o.numPitStops ?? 0 }, tyres: { visualCompound: o.compound ?? 'medium' } });
+/** Car 0 with its live compound, over the given records. */
+const overviewOf = (o: { compound?: VisualCompound; pitStops?: PitStopRecord[]; stints?: StintRecord[] }) => {
+  const car = carState({ tyres: { visualCompound: o.compound ?? 'medium' } });
   const view = engineView({ cars: [car], history: { pitStops: o.pitStops ?? [], stints: o.stints ?? [] } });
   return calculator.compute(view)[0]!;
 };
 
-describe('cars.overview: reconciled stops, live compound', () => {
+describe('cars.overview: the stops recorded, live compound', () => {
   it('reads the pit-stop records', () => {
     expect(calculator.reads).toEqual(expect.arrayContaining(['pitStops', 'stints']));
   });
 
-  it('stops: the larger of the car`s pit-stop records and the game count', () => {
-    expect(overviewOf({ numPitStops: 1, pitStops: [stop(0, 10), stop(0, 18), stop(1, 5)] }).stops).toBe(2);
-    expect(overviewOf({ numPitStops: 1, pitStops: [] }).stops).toBe(1);
-    expect(overviewOf({ numPitStops: 3, pitStops: [stop(0, 10)] }).stops).toBe(3);
+  // Task 24 (C13, C43): the game's count (numPitStops) is a signal, so it neither reaches the topic nor counts; the
+  // stops are the car's pit-stop records
+  it('stops: the car`s pit-stop records', () => {
+    expect(overviewOf({ pitStops: [stop(0, 10), stop(0, 18), stop(1, 5)] }).stops).toBe(2);
+    expect(overviewOf({ pitStops: [] }).stops).toBe(0);
+    expect(overviewOf({ pitStops: [stop(0, 10)] }).stops).toBe(1);
   });
 
-  it('keeps the game count (the timing is the game`s)', () => {
-    expect(overviewOf({ numPitStops: 1, pitStops: [stop(0, 10), stop(0, 18)] }).timing.numPitStops).toBe(1);
+  // decisions.md (Task 24 reshapes cars.overview): the confirmed laps leave the topic's timing
+  it('the timing carries no confirmed laps', () => {
+    expect(overviewOf({}).timing).not.toHaveProperty('confirmedLaps');
   });
 
   it('compound: the live visual compound when the game sends it', () => {
