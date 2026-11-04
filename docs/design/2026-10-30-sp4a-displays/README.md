@@ -55,7 +55,7 @@ Column priorities (first to drop last): undercut `DRV, GAP, MARGIN 1–3 > GAIN 
 - **Lap overview:** heat = background brightness within the stint (`bgBand` to `textFaint`), laps outside the pace set dim, `i`/`o` marks, purple session best, green personal best, a yellow VSC/SC strip.
 - **Unknown values:** empty cells with a dotted underline and the reason on hover; `notApplicable` cells blank with the hover, no underline.
 - **Realism:** no field of the 4a displays is hidden for our own cars; positions stay on the map.
-- **Radio window dropped** (user, round 2): the track map does the job. No `radio-clock` display.
+- **Radio window dropped** (user, round 2): the track map does the job. No `radio-clock` display. **Superseded in part (user, live test, 2026-11-05):** no panel, but a colour indicator in the top bar showing whether now is a good moment to talk (on a straight).
 - **Workbooks (Q15 A, a starting point):** `strategy` main = tower, crossing order, map, gap chart, undercut card, SC card, pit sweep; side = forecast strip plus the `race` workbook's car-care set (tyre life, corners, fuel, ERS, alarms, damage). `longrun` main = stint scatter, raising average, lap overview, timing tower; side = pit-loss table, crossover chart.
 
 ## Contract and theme changes for Task 1 (checklist)

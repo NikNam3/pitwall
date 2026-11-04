@@ -563,7 +563,7 @@ The virtual finish car (🟢) runs at the average lap time and crosses the line 
 | V31 | **Damage card** | Damage %, measured lap-time loss, break-even laps against a stop | D10 | 🟢 Simulator Controller "Impact"; 🔵 break-even | CarDamage, lap times |
 | V32 | **Knowledge checklist** | What is still unknown for quali and the race, with session time left | D01 | 🔵 | fits, counts |
 | V33 | **Pit loss table** | Measured pit loss per track and condition (green, VSC, SC), with sample count | D21–D25 | 🟢 TUM table ([03](03-strategy-models.md)), HH pit stop scoreboard | pit-lane timers, lap times |
-| V34 | ~~Radio window~~ | Dropped: the track map shows where our car is (mockup review, user, 2026-10-30) | – | – | – |
+| V34 | **Radio window: top-bar indicator** | Dropped as a panel (mockup review, user, 2026-10-30); wanted again as a colour indicator in the top bar, to see at a glance whether now is a good moment to talk (user, live test, 2026-11-05) | – | 🟢 McLaren, radio only on straights (above) | track position, lap distance |
 | V35 | **Incident feed** | One line per incident to our cars or cars near them: who, what, time lost, and what changed for us (position, gaps, plan delta) | D33, D10, D18 | 🟢 HH car-off-track display; 🔵 "what changed for us" | events, warnings, penalties, gaps, damage |
 
 **The most promising computed displays** (🔵 judgement): the circle of doom with condition ghosts (V01), the SC card as a standing answer (V18), the undercut card (V13), the pit-lap sweep (V15) and the plan board (V17). Together they move the strategist's live arithmetic into the tool, which is what the real teams try to avoid doing live.
