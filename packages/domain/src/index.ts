@@ -22,6 +22,7 @@ export { spans as carLocationSpans } from './situations/car-location.ts';
 export { spans as carStatusSpans, type RetiredDetail } from './situations/car-status.ts';
 export { spans as carActivityPracticeSpans } from './situations/car-activity-practice.ts';
 export { spans as carActivityQualifyingSpans } from './situations/car-activity-qualifying.ts';
+export { spans as carActivityRaceSpans, type ServingPenaltyDetail } from './situations/car-activity-race.ts';
 export { spans as clockSpans, type PausedDetail } from './situations/clock.ts';
 export {
   spans as sessionPhaseRaceSpans,

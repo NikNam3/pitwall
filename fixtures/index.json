@@ -567,6 +567,20 @@
       ]
     },
     {
+      "file": "race-drive-through-served.pwrec.gz",
+      "source": "raceFriendWet",
+      "fromS": 1631,
+      "toS": 1639.2,
+      "records": 1802,
+      "features": [
+        "601 313 bytes; 2 context packets (Session, Participants) first; session time 1631.025 to 1639.176, rising throughout",
+        "car 19 (the player) on lap 15 in the pit lane past its box on the drive-through visit of race-drive-through (pitStatus 1, pitStopTimer 8542 ms, numUnservedDriveThroughPens 1); the pit exit at 1631.735 (pitStatus 1 to 0, d256)",
+        "DTSV car 19 at 1638.850 (d512), 7.1 s after the pit exit; numUnservedDriveThroughPens 1 to 0 one frame later (1638.878)",
+        "DTSV x1, BUTN x7",
+        "duration 8154.651 ms"
+      ]
+    },
+    {
       "file": "race-sprint-start.pwrec.gz",
       "source": "raceSprint",
       "fromS": 0,
@@ -670,6 +684,21 @@
         "cars 0, 1, 5-9, 12, 14, 18 in the garage (driverStatus 0, pitStatus 1) throughout; car 2 ends its out lap at the line at 645.636 (driverStatus 3 to 1); every car resultStatus 2",
         "BUTN x48, no other event",
         "duration 10489.438 ms"
+      ]
+    },
+    {
+      "file": "race-miami-finish.pwrec.gz",
+      "source": "raceFriendWet",
+      "fromS": 2266.5,
+      "toS": 2271,
+      "records": 983,
+      "features": [
+        "316 361 bytes; 2 context packets (Session, Participants) first; session time 2266.514 to 2270.718; the last lap (lap 20)",
+        "15 cars already finished (resultStatus 3) at the first frame; car 18 retired in its garage (resultStatus 7, to 4 on the last frame); slots 20 and 21 hold no car",
+        "CHQF at 2266.835; car 9 crosses the line at 2267.670 (lapDistance 5410 to 2, lap timer to 0, the lap number stays 20) and turns resultStatus 3 one frame later at 2267.698",
+        "car 19 (the player) crosses at 2270.659 and turns resultStatus 3 at 2270.688; the last frame 2270.718 sets cars 1 and 6 resultStatus 3 mid-lap (d5289, d5249, lap timer 29 ms) and carries SEND",
+        "CHQF x1, SEND x1, BUTN x21",
+        "duration 5239.535 ms"
       ]
     }
   ]
