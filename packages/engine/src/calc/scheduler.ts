@@ -90,8 +90,6 @@ const isDue = (cadence: Cadence, lastRunAt: SessionTime, pending: Pending, now: 
       return rewound !== undefined || (after.laps ?? 0) > (before.laps ?? 0);
     case 'pitStop':
       return rewound !== undefined || (after.pitStops ?? 0) > (before.pitStops ?? 0);
-    case 'flagChange':
-      return pending.changed.has('flagPhases');
     case 'sessionChange':
       return pending.changed.has('session');
   }
@@ -269,7 +267,6 @@ export class Scheduler implements Snapshotable<SchedulerBookkeeping> {
         priors: input.priors,
         feed: input.feed,
         outputs: this.#outputs,
-        activeFlagPhase: input.activeFlagPhase,
       };
       let evaluation: Evaluation;
       try {

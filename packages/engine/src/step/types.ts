@@ -23,7 +23,6 @@ export const CHANGE_TAGS = [
   'laps',
   'stints',
   'pitStops',
-  'flagPhases',
   'events',
   'miniSectors',
   /** Step 0 appended a clock fact (`clock`: a fall, a jump, the simulated end). */

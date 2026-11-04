@@ -3,7 +3,6 @@ import type {
   ClockFact,
   FactList,
   FactRef,
-  FlagPhase,
   FrameNumber,
   LapRecord,
   MachineId,
@@ -33,20 +32,11 @@ export type FactOf<L extends FactList> = L extends 'laps'
               ? LogVoidFact
               : Span;
 
-/**
- * The old mechanism's list, no facts: the flag phases (`history/flags.ts`), hidden only by a void fact's `legacy`
- * ranges (never by formation), in the log and the projection until Task 19 replaces it.
- */
-export type LegacyList = 'flagPhases';
+/** A void fact as the log stores it (C27). */
+export type LogVoidFact = VoidFact;
 
-/**
- * A void fact as the log stores it: the domain's `VoidFact` plus the void ranges of the legacy list, which is no fact
- * list. Internal to the engine; `legacy` goes with the list (Task 19 removes it).
- */
-export type LogVoidFact = VoidFact & { legacy?: Partial<Record<LegacyList, readonly [from: number, to: number]>> };
-
-/** The length of every list that has facts (and of the legacy list, until it goes). */
-export type LogLengths = Partial<Record<FactList | LegacyList, number>>;
+/** The length of every list that has facts. */
+export type LogLengths = Partial<Record<FactList, number>>;
 /** What a frame changed in the log (C30): the lengths before and after; `rewound` when a void fact appeared. */
 export type HistoryDelta = { before: LogLengths; after: LogLengths; rewound?: VoidFact['target'] };
 
@@ -65,13 +55,10 @@ type Lists = {
   events: RaceEvent[];
   clock: ClockFact[];
   spans: Record<MachineId, Span[]>;
-  /** Legacy (`LegacyList`): removed by Task 19. */
-  flagPhases: FlagPhase[];
 };
 
 /**
- * The append-only log (C21): one list per fact type, the void facts and one span list per sub-machine, plus the legacy
- * list. Plain data (snapshots copy it). Written through a `LogWriter` (`log/log.ts`); read only by the projection,
+ * The append-only log (C21): one list per fact type, the void facts and one span list per sub-machine. Plain data (snapshots copy it). Written through a `LogWriter` (`log/log.ts`); read only by the projection,
  * the runner and the storage writer (C28).
  */
 export type Log = Lists & { voids: LogVoidFact[] };
@@ -92,12 +79,11 @@ export type ProjectedList = Exclude<keyof ProjectionState, 'spans'>;
 export type HidingFrames = { startFrame: FrameNumber; endFrame?: FrameNumber };
 
 /**
- * What hides facts: per list the void ranges `[from, to)` of log positions (C27, from the void facts; the legacy list's
- * from their `legacy` ranges), and the frames of the closed hiding spans (the open one comes with each update's
- * situation).
+ * What hides facts: per list the void ranges `[from, to)` of log positions (C27, from the void facts), and the frames
+ * of the closed hiding spans (the open one comes with each update's situation).
  */
 export type HiddenRanges = {
-  voided: Partial<Record<FactList | LegacyList, Array<readonly [from: number, to: number]>>>;
+  voided: Partial<Record<FactList, Array<readonly [from: number, to: number]>>>;
   hiding: HidingFrames[];
 };
 

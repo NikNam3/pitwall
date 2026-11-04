@@ -1,5 +1,4 @@
 import type { Frame } from '../frame/frame.ts';
-import { applyFlagPhases } from '../history/flags.ts';
 import { logWriter } from '../log/log.ts';
 import { ProjectionTracker } from '../log/projection.ts';
 import { eventsRecorder } from '../recorders/events.ts';
@@ -121,10 +120,8 @@ const record = (state: EngineState, input: RecorderInput, out: StepOutput): void
  * facts, appended after step 2); step 1, the state update; step 2, the machine (`runMachine`: the registered
  * sub-machines, with step 0's clock, and their closed spans; `tracked`, what the frame's situation events tell the
  * recorders); step 3, the recorders, with the frame's number, the machine's situation (its open spans and the spans
- * it closed on the frame) and the cars in the session it gives, worked out once for the frame. Then the projection takes in what the frame appended, computing membership from frame
- * numbers with the open spans. Last the flag phases, the
- * legacy mirror of the race's session-phase spans (until Task 19), read the projection's closed spans, the situation
- * and the live state (C10), and the projection takes in what they appended.
+ * it closed on the frame) and the cars in the session it gives, worked out once for the frame. Last the projection
+ * takes in what the frame appended, computing membership from frame numbers with the open spans.
  */
 export function step(state: EngineState, received: Frame, report?: FlashbackReport): StepOutput {
   const out: StepOutput = { changed: new Set(), corrections: [] };
@@ -138,9 +135,7 @@ export function step(state: EngineState, received: Frame, report?: FlashbackRepo
   const carsInSession = carsInSessionOf(situation.byMachine[CAR_STATUS]);
   const tracked = trackedEventsOf(state.signals.events);
   record(state, { at: frame.sessionTime, frameId: frame.frameId, frameNumber: state.frameNumber, live: state, situation, closed, carsInSession, tracked }, out);
-  const projection = projectionTrackerOf(state);
-  projection.update(situation);
-  if (applyFlagPhases(state, situation, carsInSession, out)) projection.update(situation);
+  projectionTrackerOf(state).update(situation);
   state.lastFrameId = frame.frameId;
   state.sessionTime = frame.sessionTime;
   return out;

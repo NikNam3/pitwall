@@ -2,7 +2,6 @@ import type {
   CarId,
   CarState,
   FeedId,
-  FlagPhase,
   FrameEvent,
   FrameNumber,
   MachineId,
@@ -22,8 +21,6 @@ import type { WeekendContext } from './weekend-context.ts';
 export type OpenTrackers = {
   /** Step 0's open state (`situations/clock/`, C7): the race clock's offset, the last receive time, the open span (`running` or `paused`). */
   clock: ClockOpen;
-  /** The flag phase in progress (`history/flags.ts`, the mirror of the race's session-phase spans until Task 19). */
-  flagPhase?: Omit<FlagPhase, 'end' | 'endLeaderLap'> | undefined;
   /** Each recorder's own open state by recorder id (C10, C11): only that recorder reads it. */
   recorders: Record<string, unknown>;
   /** Each sub-machine's open state by machine id (C9); empty until the machine runs (Task 5). */

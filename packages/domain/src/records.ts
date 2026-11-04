@@ -82,18 +82,6 @@ export type PitStopRecord = {
   frame: FrameNumber;
 };
 
-export type ScPhase = { phase: 'deployed' | 'returning' | 'returned' | 'resume'; at: SessionTime };
-
-/** A neutralised or stopped part of the session; a red phase ends at the next lights out, an SC restart or the session end. */
-export type FlagPhase = {
-  kind: 'SC' | 'VSC' | 'red';
-  start: SessionTime;
-  end: SessionTime;
-  startLeaderLap: number;
-  endLeaderLap: number;
-  scPhases: ScPhase[];
-};
-
 export type RaceEventKind =
   | 'penalty'
   | 'overtake'

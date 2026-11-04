@@ -1,4 +1,4 @@
-import { driverKeyString, type CarId, type DriverKey, type FlagPhase, type LapRecord, type PitStopRecord, type RaceEvent, type SessionUid, type StintRecord } from '@pitwall/domain';
+import { driverKeyString, type CarId, type DriverKey, type LapRecord, type PitStopRecord, type RaceEvent, type SessionUid, type StintRecord } from '@pitwall/domain';
 import { unknownLapEnd, type WeekendContext } from '@pitwall/engine/readers';
 import type { Db, SessionKey, SessionRow } from './db.ts';
 
@@ -57,7 +57,6 @@ export class WeekendRepository {
       laps: byKey('laps', 't.rowid'),
       stints: byKey('stints', 't.seq'),
       pitStops: byKey('pit_stops', 't.seq'),
-      flagPhases: records('flag_phases'),
       events: records('events'),
     };
   }
@@ -76,10 +75,6 @@ export class WeekendRepository {
 
   pitStopsOf(key: SessionKey, driverKey?: DriverKey): PitStopRecord[] {
     return this.read<PitStopRecord>(this.statements.pitStops, key, driverKey);
-  }
-
-  flagPhasesOf(key: SessionKey): FlagPhase[] {
-    return (this.statements.flagPhases.all(keyParams(key)) as string[]).map((json) => JSON.parse(json) as FlagPhase);
   }
 
   eventsOf(key: SessionKey): RaceEvent[] {

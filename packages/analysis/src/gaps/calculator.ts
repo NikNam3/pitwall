@@ -1,6 +1,7 @@
 // The `gaps` calculator (spec 6.1): a fold over the mini-sector crossings; the order and our cars come from the car state.
-import { known, MINI_SECTORS, unknown, type CarId, type FlagPhase, type Interval, type Known, type Ms, type Neighbourhood, type SessionTime } from '@pitwall/domain';
+import { known, MINI_SECTORS, unknown, type CarId, type Interval, type Known, type Ms, type Neighbourhood, type SessionTime } from '@pitwall/domain';
 import type { EngineView, IncrementalCalculator } from '@pitwall/engine/readers';
+import { isClosed, NEUTRALISATION_READS, neutralisationKind, neutralisedSpans, type NeutralisationKind } from '../shared/neutralised.ts';
 import { ourCars } from '../shared/our-cars.ts';
 import { outOfRace } from '../shared/out-of-race.ts';
 import { gapBehind, lapsBehind, latestTime, progressAt, progressOf, recentOf, type CarCrossings } from './gaps.ts';
@@ -75,14 +76,15 @@ const positionsGained = (timing: { gridPosition: number; position: number }, vie
 };
 
 /** A neutralised phase: its end `undefined` while it is open. */
-type Phase = { kind: FlagPhase['kind']; start: SessionTime; end: SessionTime | undefined };
+type Phase = { kind: NeutralisationKind; start: SessionTime; end: SessionTime | undefined };
 
-/** The race's neutralised phases from the history, then the open one. */
-const neutralisedPhases = (view: EngineView): Phase[] => {
-  const closed = view.history.flagPhases.map((p) => ({ kind: p.kind, start: p.start, end: p.end }));
-  const open = view.activeFlagPhase;
-  return open === undefined ? closed : [...closed, { kind: open.kind, start: open.start, end: undefined }];
-};
+/** The race's neutralisations (`shared/neutralised.ts`: closed in the projection, then the open one, C20), as phases. */
+const neutralisedPhases = (view: EngineView): Phase[] =>
+  neutralisedSpans(view.history, view.situation).map((span) => ({
+    kind: neutralisationKind(span),
+    start: span.start,
+    end: isClosed(span) ? span.end : undefined,
+  }));
 
 /** The leader's progress in laps at `t`: the furthest crossing of any car by then, / 50 (the race start before any). */
 const leaderLapAt = (acc: Table, t: SessionTime): number => {
@@ -163,7 +165,7 @@ const init = (view: EngineView): GapsAcc => {
 export const gapsCalculator: IncrementalCalculator<GapsAcc, GapsOutput> = {
   id: GAPS,
   kind: 'incremental',
-  reads: ['miniSectors', 'timing', 'identity', 'events', 'flagPhases'],
+  reads: ['miniSectors', 'timing', 'identity', 'events', ...NEUTRALISATION_READS],
   cadence: 'frame',
   init,
   update(acc, delta, view) {

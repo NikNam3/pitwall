@@ -17,6 +17,7 @@ import type { QuickCalculator } from '@pitwall/engine/readers';
 import { ALARMS } from '../alarms/index.ts';
 import { BATTLE, BATTLE_CONFIG, type BattleOutput } from '../battle/index.ts';
 import { INCIDENTS } from '../incidents/index.ts';
+import { isClosed, NEUTRALISATION_READS, neutralisationKind, neutralisedSpans } from '../shared/neutralised.ts';
 import { RACE_MOMENT, RACE_MOMENT_CONFIG, type RaceMomentOutput } from './index.ts';
 
 type Cause = Pick<RaceMoment, 'since' | 'cause'>;
@@ -41,7 +42,7 @@ const valueOf = (k: Known<number>): number | undefined => (k.known ? k.value : u
 export const raceMomentCalculator: QuickCalculator<RaceMomentOutput> = {
   id: RACE_MOMENT,
   kind: 'quick',
-  reads: ['flagPhases', 'session', { calculator: INCIDENTS }, { calculator: BATTLE }, { calculator: ALARMS }],
+  reads: [...NEUTRALISATION_READS, 'session', { calculator: INCIDENTS }, { calculator: BATTLE }, { calculator: ALARMS }],
   cadence: { hz: 4 },
   compute(view) {
     const { session, sessionTime: now } = view.live;
@@ -49,9 +50,10 @@ export const raceMomentCalculator: QuickCalculator<RaceMomentOutput> = {
     const cfg = RACE_MOMENT_CONFIG.read(view);
     const holding: Holding[] = [];
 
-    const phase = view.activeFlagPhase;
-    if (phase !== undefined) {
-      holding.push(['neutralised', { since: known(phase.start, now), cause: { rule: 'flagPhase', params: { kind: phase.kind } } }]);
+    // the neutralisation open now (`shared/neutralised.ts`, C20), pending its confirmation or not
+    const open = neutralisedSpans(view.history, view.situation).find((span) => !isClosed(span));
+    if (open !== undefined) {
+      holding.push(['neutralised', { since: known(open.start, now), cause: { rule: 'flagPhase', params: { kind: neutralisationKind(open) } } }]);
     }
 
     const incidents = (view.outputs.get(INCIDENTS) as readonly IncidentEntry[] | undefined) ?? [];

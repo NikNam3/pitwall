@@ -1,4 +1,4 @@
-import type { FlagPhase, Insight, SessionTime } from '@pitwall/domain';
+import type { Insight, SessionTime } from '@pitwall/domain';
 import type { FrameMetrics } from '../frame/metrics.ts';
 import type { HistoryDelta, Projection } from '../log/types.ts';
 import type { Situation } from '../situations/situation.ts';
@@ -10,7 +10,7 @@ import type { DeepReadonly } from '../util/deep-readonly.ts';
 export type CalculatorId = string;
 
 /** When a calculator is due, measured in session time (spec 7.3). */
-export type Cadence = 'frame' | { hz: number } | 'lapCompleted' | 'pitStop' | 'flagChange' | 'sessionChange';
+export type Cadence = 'frame' | { hz: number } | 'lapCompleted' | 'pitStop' | 'sessionChange';
 
 /** What a calculator reads: a part of the engine state, the feed health, or another calculator's output. */
 export type Dependency = ChangeTag | 'feed' | { calculator: CalculatorId };
@@ -53,8 +53,6 @@ export type EngineView = {
   feed: FeedMetricsView;
   /** Outputs of the calculators run before this one in the same pass. */
   outputs: ReadonlyMap<CalculatorId, unknown>;
-  /** The neutralised phase in progress, if any; it moves to `history.flagPhases` when it ends. Transitional (Task 19). */
-  activeFlagPhase: DeepReadonly<Omit<FlagPhase, 'end' | 'endLeaderLap'>> | undefined;
 };
 
 type CalculatorBase = {

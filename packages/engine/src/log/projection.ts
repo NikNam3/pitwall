@@ -6,8 +6,8 @@
 import { scopeOf, type CarId, type FactList, type FrameNumber, type MachineId, type OpenSpan, type Span } from '@pitwall/domain';
 import type { Situation } from '../situations/situation.ts';
 import type { DeepReadonly } from '../util/deep-readonly.ts';
-import { createLog, FACT_LISTS, LEGACY_LISTS } from './log.ts';
-import type { HiddenRanges, HidingFrames, HistoryDelta, LegacyList, Log, LogLengths, LogVoidFact, Projection, ProjectionBook, ProjectionState } from './types.ts';
+import { createLog, FACT_LISTS } from './log.ts';
+import type { HiddenRanges, HidingFrames, HistoryDelta, Log, LogLengths, LogVoidFact, Projection, ProjectionBook, ProjectionState } from './types.ts';
 
 /** The span that hides the facts describing a frame it covers (C29): what the formation lap recorded did not happen in the race. */
 const HIDING = { machine: 'session-phase-race', kind: 'formation' } as const;
@@ -28,7 +28,6 @@ const emptyProjection = (): ProjectionState => ({
   events: [],
   clock: [],
   spans: {},
-  flagPhases: [],
 });
 
 const spanList = (machine: MachineId): FactList => `spans:${machine}`;
@@ -38,12 +37,11 @@ export const projectionLengths = (p: Projection): LogLengths => {
   const lengths: LogLengths = {};
   for (const list of FACT_LISTS) lengths[list] = p[list].length;
   for (const [machine, spans] of Object.entries(p.spans)) lengths[spanList(machine)] = spans.length;
-  for (const list of LEGACY_LISTS) lengths[list] = p[list].length;
   return lengths;
 };
 
 /** A void range covers position `index` of `list` (C27). */
-export const isVoided = (list: FactList | LegacyList, index: number, hidden: HiddenRanges): boolean =>
+export const isVoided = (list: FactList, index: number, hidden: HiddenRanges): boolean =>
   hidden.voided[list]?.some(([from, to]) => index >= from && index < to) ?? false;
 
 /** The frames a span covers (C26): from the one it opened on up to, not including, the one it closed on; an open span every frame from its first. */
@@ -65,11 +63,11 @@ export const isHidden = (fact: { frame: FrameNumber }, list: FactList, hidden: H
   return hidden.hiding.some((h) => covers(h, fact.frame));
 };
 
-/** The void ranges of every void fact, the legacy list's too, each range once. */
+/** The void ranges of every void fact, each range once. */
 const voidedBy = (voids: readonly DeepReadonly<LogVoidFact>[]): HiddenRanges['voided'] => {
   const voided: HiddenRanges['voided'] = {};
   for (const v of voids) {
-    for (const [list, range] of Object.entries({ ...v.ranges, ...v.legacy }) as Array<[FactList | LegacyList, readonly [number, number]]>) {
+    for (const [list, range] of Object.entries(v.ranges) as Array<[FactList, readonly [number, number]]>) {
       const ranges = (voided[list] ??= []);
       if (!ranges.some(([from, to]) => from === range[0] && to === range[1])) ranges.push([range[0], range[1]]);
     }
@@ -137,7 +135,7 @@ export class ProjectionTracker {
 
   #rebuild(open: Situation): void {
     const p = this.#projection;
-    for (const list of [...FACT_LISTS, ...LEGACY_LISTS]) p[list] = [];
+    for (const list of FACT_LISTS) p[list] = [];
     p.spans = {};
     this.#book.seen = {};
     this.#book.hidden = { voided: voidedBy(this.#log.voids), hiding: [] };
@@ -164,11 +162,6 @@ export class ProjectionTracker {
     }
     const hiding = withOpen(hidden, open);
     for (const list of FACT_LISTS) this.#projectList(list, hiding);
-    // The legacy list is hidden by void ranges only (it describes no frame).
-    for (const list of LEGACY_LISTS) {
-      (p[list] as unknown[]) = project(p[list] as unknown[], log[list] as unknown[], seen[list] ?? 0, (i) => !isVoided(list, i, hidden));
-      seen[list] = log[list].length;
-    }
     seen.voids = log.voids.length;
   }
 

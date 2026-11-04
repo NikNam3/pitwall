@@ -8,7 +8,6 @@ export default defineFeature({
     bindHistory('laps', 'laps'),
     bindHistory('stints', 'stints'),
     bindHistory('pitStops', 'pitStops'),
-    bindHistory('flagPhases', 'flagPhases'),
     bindHistory('events', 'events'),
   ],
 });

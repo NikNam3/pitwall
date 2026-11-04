@@ -1,7 +1,6 @@
 // One session of a feed: frames → SessionRunner → Scheduler → topics, plus its session file and its storage.
 import { sessionUidString, type FeedId, type ParticipantsValues, type SessionTime, type SessionUid } from '@pitwall/domain';
 import {
-  activeFlagPhaseOf,
   participantsValuesOf,
   projectionLengths,
   Scheduler,
@@ -222,7 +221,6 @@ export class SessionProcessor {
       live: state,
       situation: situationOf(state),
       history: state.history,
-      activeFlagPhase: activeFlagPhaseOf(state),
       changed,
       delta,
       weekend: state.weekend,

@@ -8,7 +8,9 @@ export interface StorageWriterOptions {
 }
 
 /** History lists that are written to storage, in the order of `writeConfirmed`'s statements. */
-const STORED_TABLES = ['laps', 'stints', 'pit_stops', 'flag_phases', 'events'] as const;
+const STORED_TABLES = ['laps', 'stints', 'pit_stops', 'events'] as const;
+/** Tables no longer written that rows of an older database may still fill: deleted with their session (Task 27 drops them). */
+const UNWRITTEN_TABLES = ['flag_phases'] as const;
 
 /** The rows of one stored session, bound to `@sessionUid` and `@weekendId`. */
 const OF_SESSION = 'session_uid = @sessionUid AND weekend_id = @weekendId';
@@ -50,10 +52,9 @@ export class StorageWriter {
       ),
       upsertStint: upsertBySeq('stints', 'car_id, record'),
       upsertPitStop: upsertBySeq('pit_stops', 'car_id, record'),
-      upsertFlagPhase: upsertBySeq('flag_phases', 'record'),
       upsertEvent: upsertBySeq('events', 'car_id, record'),
       clear: STORED_TABLES.map((table) => db.prepare(`DELETE FROM ${table} WHERE ${OF_SESSION}`)),
-      deleteSession: [...STORED_TABLES, 'drivers', 'sessions'].map((table) => db.prepare(`DELETE FROM ${table} WHERE ${OF_SESSION}`)),
+      deleteSession: [...STORED_TABLES, ...UNWRITTEN_TABLES, 'drivers', 'sessions'].map((table) => db.prepare(`DELETE FROM ${table} WHERE ${OF_SESSION}`)),
     };
   }
 
@@ -84,9 +85,8 @@ export class StorageWriter {
     const laps = added('laps', history.laps).filter((l) => l.status === 'confirmed');
     const stints = added('stints', history.stints);
     const pitStops = added('pitStops', history.pitStops);
-    const flagPhases = added('flagPhases', history.flagPhases);
     const events = added('events', history.events);
-    const nothingToWrite = [laps, stints, pitStops, flagPhases, events].every((list) => list.length === 0);
+    const nothingToWrite = [laps, stints, pitStops, events].every((list) => list.length === 0);
     if (nothingToWrite && !rewound) return;
 
     this.guarded(() =>
@@ -99,7 +99,6 @@ export class StorageWriter {
         }
         stints.forEach((r, i) => s.upsertStint.run({ sessionUid, weekendId, seq: from('stints') + i, car_id: r.carId, record: JSON.stringify(r) }));
         pitStops.forEach((r, i) => s.upsertPitStop.run({ sessionUid, weekendId, seq: from('pitStops') + i, car_id: r.carId, record: JSON.stringify(r) }));
-        flagPhases.forEach((r, i) => s.upsertFlagPhase.run({ sessionUid, weekendId, seq: from('flagPhases') + i, record: JSON.stringify(r) }));
         events.forEach((r, i) => s.upsertEvent.run({ sessionUid, weekendId, seq: from('events') + i, car_id: r.carId ?? null, record: JSON.stringify(r) }));
       })(),
     );

@@ -5,6 +5,7 @@ import {
   MINI_SECTORS,
   unknown,
   type CarId,
+  type FrameNumber,
   type Known,
   type MiniSectorCrossing,
   type Ms,
@@ -18,11 +19,11 @@ export const MEDIAN_LAPS = 5;
 /** ...and needs at least this many. */
 export const MEDIAN_MIN_LAPS = 3;
 
-/** A stretch of session time that is no racing for a car: a neutralised phase (an open one ends at `Infinity`) or a pit visit. */
+/** A stretch of session time that is no racing for a car: a pit visit. */
 export type Span = { start: SessionTime; end: SessionTime };
 
-/** A crossing; "progress" counts mini-sector boundaries from the race start (gaps' `progressOf`). */
-export type Point = { at: SessionTime; progress: number };
+/** A crossing; "progress" counts mini-sector boundaries from the race start (gaps' `progressOf`); `frame`: the frame it describes (C26). */
+export type Point = { at: SessionTime; progress: number; frame: FrameNumber };
 
 /** One mini-sector against the car's median for its segment: `lossMs` negative = faster. */
 export type MiniSector = { start: SessionTime; end: SessionTime; progress: number; lossMs: Ms };
@@ -65,7 +66,7 @@ export function resetTrack(track: Track): void {
 
 export function addCrossing(track: Track, c: MiniSectorCrossing): void {
   const progress = progressOf(c);
-  track.points.push({ at: c.at, progress });
+  track.points.push({ at: c.at, progress, frame: c.frame });
   track.atByProgress[progress] = c.at;
 }
 
@@ -89,18 +90,18 @@ const median = (values: readonly Ms[]): Ms => {
 };
 
 /**
- * Evaluates the mini-sectors completed since the last call: one `excluded` covers is neither a loss nor a sample;
- * otherwise its loss is its duration minus the median of the segment's samples, and it is slow above `timeLossMs`.
- * A gap in the crossings (a skipped segment) is no mini-sector.
+ * Evaluates the mini-sectors completed since the last call, each from its start crossing to its end crossing: one
+ * `excluded` covers is neither a loss nor a sample; otherwise its loss is its duration minus the median of the
+ * segment's samples, and it is slow above `timeLossMs`. A gap in the crossings (a skipped segment) is no mini-sector.
  */
-export function evaluate(track: Track, timeLossMs: Ms, excluded: (start: SessionTime, end: SessionTime) => boolean): void {
+export function evaluate(track: Track, timeLossMs: Ms, excluded: (from: Point, to: Point) => boolean): void {
   let from = track.points[track.evaluated - 1];
   for (const to of track.points.slice(track.evaluated)) {
     const prev = from;
     from = to;
     if (prev === undefined || to.progress !== prev.progress + 1) continue;
     const { progress, at: start } = prev;
-    if (excluded(start, to.at)) {
+    if (excluded(prev, to)) {
       track.loss[progress] = 'excluded';
       continue;
     }

@@ -1,5 +1,5 @@
-// The `incidents` calculator (spec 6.4): a fold over the events, flag phases, pit stops, laps and mini-sector crossings
-// into `incidents.feed`. Positions and gaps before and after, and the sector, come from the crossings, so a flashback
+// The `incidents` calculator (spec 6.4): a fold over the events, the neutralisations (the session-phase spans, through
+// `shared/neutralised.ts`), pit stops, laps and mini-sector crossings into `incidents.feed`. Positions and gaps before and after, and the sector, come from the crossings, so a flashback
 // reproduces them. A log: it reads the history only, never another analysis's output; its damage entries come from the
 // shared jump grouping over the `damageChange` events (`shared/damage-jumps.ts`) and stay through a repair.
 import {
@@ -9,6 +9,7 @@ import {
   unknown,
   type CarId,
   type CurrentLaps,
+  type FrameNumber,
   type DamageJump,
   type IncidentDamagePart,
   type IncidentEntry,
@@ -28,6 +29,7 @@ import { LAP_CLASSES_CONFIG } from '../lap-classes/index.ts';
 import { PACE_CONFIG } from '../pace/index.ts';
 import { paceDeltaAround } from '../pace-delta/index.ts';
 import { emptyDamageJumps, finishJump, foldDamageJumps, type DamageJumpFold } from '../shared/damage-jumps.ts';
+import { isClosed, leaderLapAt, NEUTRALISATION_READS, neutralisedSpans } from '../shared/neutralised.ts';
 import { ourCars } from '../shared/our-cars.ts';
 import { penaltyClass, penaltyKind, warningInCycle } from '../shared/penalties.ts';
 import {
@@ -43,6 +45,7 @@ import {
   sectorAt,
   slowRuns,
   snapshotAt,
+  type Point,
   type Snapshot,
   type Span,
   type SlowRun,
@@ -77,18 +80,22 @@ type CarEvent = {
   penalty?: IncidentPenalty;
 };
 
+/**
+ * A neutralisation (`shared/neutralised.ts`): its start, the leader's lap at its start frame (ruling 3, from the
+ * projection's laps) and the frames it covers, `startFrame <= f < endFrame` (C26; an open one ends at `Infinity`).
+ */
+type Neutralised = { at: SessionTime; lap: number; startFrame: FrameNumber; endFrame: FrameNumber };
+
 type Acc = {
   /** How much of each history list is folded. */
   events: number;
   crossings: number;
-  flagPhases: number;
   pitStops: number;
   laps: number;
   /** Per car id. */
   tracks: (Track | undefined)[];
-  /** Closed neutralised phases, and their starts for the feed. */
-  phases: Span[];
-  phaseStarts: { at: SessionTime; lap: number }[];
+  /** The neutralisations, closed then open, as of the latest fold. */
+  neutralised: Neutralised[];
   /** Per car id, its recorded pit visits. */
   pits: Span[][];
   carEvents: CarEvent[];
@@ -102,7 +109,6 @@ type Acc = {
   /** Positions at final moments. */
   snapshots: Map<SessionTime, Snapshot>;
   // From the latest view.
-  active: { at: SessionTime; lap: number } | undefined;
   pitting: Set<CarId>;
   ours: CarId[];
   isRace: boolean;
@@ -122,6 +128,9 @@ type Acc = {
 
 const overlaps = (start: SessionTime, end: SessionTime, span: Span): boolean => start < span.end && end > span.start;
 
+/** The mini-sector from crossing `from` to crossing `to` covers frames `from.frame <= f < to.frame`: it shares one with `n` (C26). */
+const underNeutralisation = (from: Point, to: Point, n: Neutralised): boolean => from.frame < n.endFrame && to.frame > n.startFrame;
+
 const readLive = (acc: Acc, view: EngineView): void => {
   const { live } = view;
   acc.isRace = live.session.kind === 'race';
@@ -136,26 +145,42 @@ const readLive = (acc: Acc, view: EngineView): void => {
   acc.window = PACE_CONFIG.read(view).window;
   acc.maxNeutralisedMs = LAP_CLASSES_CONFIG.read(view).maxNeutralisedMs;
   acc.ours = ourCars(live);
-  const phase = view.activeFlagPhase;
-  acc.active = phase && { at: phase.start, lap: phase.startLeaderLap };
   acc.pitting = new Set(live.cars.filter((c) => c.timing.pitStatus !== 'none').map((c) => c.id));
 };
 
 /**
- * Folds the new spans and crossings; a new span re-evaluates the crossings it may cover (all cars for a flag phase), and
- * so does a change of the active flag phase (`activeChanged`: it started, its start changed, or it went, also without a
- * closed flag phase, as a neutralisation never confirmed does, C18), so the fold equals a run from scratch (C31).
+ * The neutralisations of the view (`shared/neutralised.ts`); whether the frames they cover changed (one opened, closed,
+ * or went, as a neutralisation never confirmed does, C18). A neutralisation's leader lap is taken from the projection's
+ * laps once, then raised by the laps folded after it that describe a frame up to its start, so it equals
+ * `leaderLapAt` over the whole projection (C31).
  */
-const foldCrossings = (acc: Acc, view: EngineView, activeChanged: boolean): void => {
-  const { flagPhases, pitStops, crossings } = view.history;
+const foldNeutralised = (acc: Acc, view: EngineView): boolean => {
+  const { laps } = view.history;
+  const fresh = laps.slice(acc.laps);
+  const before = acc.neutralised;
+  const lapAt = new Map(before.map((n) => [n.startFrame, n.lap]));
+  acc.neutralised = neutralisedSpans(view.history, view.situation).map((span) => {
+    const folded = lapAt.get(span.startFrame);
+    return {
+      at: span.start,
+      lap: folded === undefined ? leaderLapAt(laps, span.startFrame) : Math.max(folded, leaderLapAt(fresh, span.startFrame)),
+      startFrame: span.startFrame,
+      endFrame: isClosed(span) ? span.endFrame : Infinity,
+    };
+  });
+  const now = acc.neutralised;
+  return now.length !== before.length || now.some((n, i) => n.startFrame !== before[i]?.startFrame || n.endFrame !== before[i]?.endFrame);
+};
+
+/**
+ * Folds the new pit visits and crossings; a new pit visit re-evaluates its car's crossings, and a change of the
+ * neutralisations (`neutralisedChanged`) every car's, so the fold equals a run from scratch (C31). A mini-sector under a
+ * neutralisation is decided by frames (C26), one in a pit visit by its times.
+ */
+const foldCrossings = (acc: Acc, view: EngineView, neutralisedChanged: boolean): void => {
+  const { pitStops, crossings } = view.history;
   const reset = new Set<number>();
-  let resetAll = activeChanged;
-  for (const p of flagPhases.slice(acc.flagPhases)) {
-    acc.phases.push({ start: p.start, end: p.end });
-    acc.phaseStarts.push({ at: p.start, lap: p.startLeaderLap });
-    resetAll = true;
-  }
-  acc.flagPhases = flagPhases.length;
+  const resetAll = neutralisedChanged;
   for (const s of pitStops.slice(acc.pitStops)) {
     (acc.pits[s.carId] ??= []).push({ start: s.pitLaneEntry, end: s.pitLaneExit });
     reset.add(s.carId);
@@ -168,12 +193,15 @@ const foldCrossings = (acc: Acc, view: EngineView, activeChanged: boolean): void
   }
   acc.crossings = crossings.length;
 
-  const open: Span[] = acc.active === undefined ? [] : [{ start: acc.active.at, end: Infinity }];
   acc.tracks.forEach((track, id) => {
     if (track === undefined) return;
     if (resetAll || reset.has(id)) resetTrack(track);
-    const spans = [...acc.phases, ...open, ...(acc.pits[id] ?? [])];
-    evaluate(track, acc.config.timeLossMs, (start, end) => spans.some((s) => overlaps(start, end, s)));
+    const pits = acc.pits[id] ?? [];
+    evaluate(
+      track,
+      acc.config.timeLossMs,
+      (from, to) => acc.neutralised.some((n) => underNeutralisation(from, to, n)) || pits.some((s) => overlaps(from.at, to.at, s)),
+    );
   });
 };
 
@@ -214,9 +242,8 @@ const foldLaps = (acc: Acc, view: EngineView): void => {
 };
 
 const fold = (acc: Acc, view: EngineView): Acc => {
-  const activeBefore = acc.active?.at;
   readLive(acc, view);
-  foldCrossings(acc, view, acc.active?.at !== activeBefore);
+  foldCrossings(acc, view, foldNeutralised(acc, view));
   foldEvents(acc, view);
   foldLaps(acc, view);
   return acc;
@@ -227,12 +254,10 @@ const init = (view: EngineView): Acc =>
     {
       events: 0,
       crossings: 0,
-      flagPhases: 0,
       pitStops: 0,
       laps: 0,
       tracks: [],
-      phases: [],
-      phaseStarts: [],
+      neutralised: [],
       pits: [],
       carEvents: [],
       warnings: [],
@@ -240,7 +265,6 @@ const init = (view: EngineView): Acc =>
       grouping: emptyDamageJumps(),
       newestAt: -Infinity,
       snapshots: new Map(),
-      active: undefined,
       pitting: new Set(),
       ours: [],
       isRace: false,
@@ -352,8 +376,7 @@ const candidates = (acc: Acc): Candidate[] => {
     for (const c of into) c.merged.push(run);
     if (into.length === 0) list.push(candidate('timeLoss', run.at, [run.carId], { lap: lapOfProgress(run.startProgress), run }));
   }
-  const starts = acc.active === undefined ? acc.phaseStarts : [...acc.phaseStarts, acc.active];
-  for (const { at, lap } of starts) list.push(candidate('neutralised', at, [], { lap }));
+  for (const { at, lap } of acc.neutralised) list.push(candidate('neutralised', at, [], { lap }));
   return list;
 };
 
@@ -492,7 +515,7 @@ const output = (acc: Acc): IncidentsOutput => {
 export const incidentsCalculator: IncrementalCalculator<Acc, IncidentsOutput> = {
   id: INCIDENTS,
   kind: 'incremental',
-  reads: ['session', 'identity', 'timing', 'events', 'flagPhases', 'miniSectors', 'pitStops', 'laps'],
+  reads: ['session', 'identity', 'timing', 'events', ...NEUTRALISATION_READS, 'miniSectors', 'pitStops', 'laps'],
   cadence: { hz: 4 },
   init,
   update: (acc, delta, view) => (delta.rewound !== undefined ? init(view) : fold(acc, view)),
