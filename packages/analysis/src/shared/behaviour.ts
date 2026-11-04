@@ -56,21 +56,26 @@ export function behaviourByCar<B>(table: BehaviourTable<B>, view: EngineView): (
     if (!Object.hasOwn(byKind, kind)) throw new Error(`behaviour table: no row for ${machine} ${kind}`);
     return byKind[kind] as B;
   };
-  const parts: Array<B[] | ReadonlyMap<CarId, B[]>> = [];
+  /** Per machine in the table's order: a session or zone machine's rows, or a car machine's rows by car id. */
+  const parts: Array<{ byCar: false; rows: B[] } | { byCar: true; rows: (B[] | undefined)[] }> = [];
   for (const [machine, byKind] of Object.entries(table)) {
     const scope = scopeOf(machine);
     if (scope === undefined) throw new Error(`behaviour table: ${machine} has no span declaration`);
+    const spans = openSpansOf(view, machine);
     if (scope !== 'car') {
-      parts.push(openSpansOf(view, machine).map((span) => rowOf(machine, byKind, span.kind)));
+      parts.push({ byCar: false, rows: spans.map((span) => rowOf(machine, byKind, span.kind)) });
       continue;
     }
-    const byCar = new Map<CarId, B[]>();
-    for (const [carId, spans] of openSpansByCar(view, machine)) byCar.set(carId, spans.map((span) => rowOf(machine, byKind, span.kind)));
-    parts.push(byCar);
+    const rows: (B[] | undefined)[] = [];
+    for (const span of spans) if (span.carId !== undefined) (rows[span.carId] ??= []).push(rowOf(machine, byKind, span.kind));
+    parts.push({ byCar: true, rows });
   }
   return (carId) => {
     const rows: B[] = [];
-    for (const part of parts) for (const row of part instanceof Map ? (part.get(carId) ?? []) : (part as B[])) rows.push(row);
+    for (const part of parts) {
+      const own = part.byCar ? part.rows[carId] : part.rows;
+      if (own !== undefined) for (const row of own) rows.push(row);
+    }
     return rows;
   };
 }

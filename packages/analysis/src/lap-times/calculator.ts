@@ -17,7 +17,7 @@ import {
 import type { EngineView, IncrementalCalculator } from '@pitwall/engine/readers';
 import { LAP_CLASSES_CONFIG, type LapClassOptions } from '../lap-classes/index.ts';
 import { behaviourByCar } from '../shared/behaviour.ts';
-import { inSessionByCar } from '../shared/car-status.ts';
+import { carsInSession } from '../shared/car-status.ts';
 import { bestsOf, rowOf, sessionBestBoard, sessionBestsOf, type Best, type CarBests } from './lap-times.ts';
 import { LAP_TIMES_BEHAVIOUR, type LapTimesEffect } from './behaviour.ts';
 import { LAP_TIMES, LAP_TIMES_CONFIG, type LapTimesOutput } from './index.ts';
@@ -25,8 +25,8 @@ import { LAP_TIMES, LAP_TIMES_CONFIG, type LapTimesOutput } from './index.ts';
 /** The crossings of one lap of one car: time by segment, and the newest. */
 type LapCrossings = { at: number[]; latest: { segment: number; at: number } };
 
-/** A car at the view: its lap and what the situations open for it say (their rows merged, C44). `inSession` is car-status not absent. */
-type CarSnapshot = { id: CarId; inSession: boolean; lap: number; effect: LapTimesEffect };
+/** A car in the session (car-status not absent) at the view: its lap and what the situations open for it say (their rows merged, C44). */
+type CarSnapshot = { id: CarId; lap: number; effect: LapTimesEffect };
 
 /** The accumulator: a pure fold over the laps and the crossings (C31.2). */
 type Acc = {
@@ -37,7 +37,9 @@ type Acc = {
 
 /** What the view shows right now: cars, session and config; read by `output`, never kept in the accumulator (C31.2). */
 type Now = {
+  /** The cars in the session, by id ascending; the other slots are not read. */
   cars: CarSnapshot[];
+  inSession: ReadonlySet<CarId>;
   session: { phase: WeekendPhase; timeLeftMs: Ms; updatedAt: number };
   eliminated: { q1: number; q2: number };
   /** The session and the `lap-classes` config, for `classifyLap`. */
@@ -74,18 +76,19 @@ const nowOf = (view: EngineView): Now => {
   const { live } = view;
   const phase = view.situation.weekendPhase;
   const rowsOf = behaviourByCar(LAP_TIMES_BEHAVIOUR, view);
-  const inSession = inSessionByCar(view);
-  const cars = live.cars.map((c) => ({
-    id: c.id,
-    inSession: inSession(c.id),
-    lap: c.timing.lap,
+  const cars: CarSnapshot[] = [];
+  for (const id of carsInSession(view)) {
+    const c = live.cars[id];
+    if (c === undefined) continue;
     // a pending phase has no span and nothing is projected until it is decided (C14, C3)
-    effect: Object.assign({}, ...rowsOf(c.id), phase.kind === 'pending' ? { offLap: true } : {}) as LapTimesEffect,
-  }));
+    const effect = Object.assign({}, ...rowsOf(id), phase.kind === 'pending' ? { offLap: true } : {}) as LapTimesEffect;
+    cars.push({ id, lap: c.timing.lap, effect });
+  }
   const s = live.session;
   const config = LAP_TIMES_CONFIG.read(view);
   return {
     cars,
+    inSession: new Set(cars.map((c) => c.id)),
     session: { phase, timeLeftMs: s.timeLeftMs, updatedAt: s.updatedAt },
     eliminated: { q1: config.eliminatedQ1, q2: config.eliminatedQ2 },
     classes: { isRace: phase.kind === 'race', ...LAP_CLASSES_CONFIG.read(view) },
@@ -135,7 +138,7 @@ const noProjection = (carId: CarId, cutOff: Projection['cutOff'], reason: Known<
 
 /** The best laps of the active cars other than `id`. */
 const othersBests = (acc: Board, id: CarId, bests: Map<CarId, CarBests>): Best[] =>
-  [...bests].filter(([other, b]) => other !== id && b.lap !== undefined && acc.cars[other]?.inSession === true).map(([, b]) => b.lap as Best);
+  [...bests].filter(([other, b]) => other !== id && b.lap !== undefined && acc.inSession.has(other)).map(([, b]) => b.lap as Best);
 
 /**
  * The quali cut-off from the other cars' bests alone, so it stands on an out lap and on the first flying lap too;
@@ -144,7 +147,7 @@ const othersBests = (acc: Board, id: CarId, bests: Map<CarId, CarBests>): Best[]
 const cutOffOf = (acc: Board, others: readonly Best[], margin: (timeMs: Ms) => Known<Ms>): Projection['cutOff'] => {
   const eliminated = eliminatedIn(acc);
   if (eliminated === undefined) return notApplicable;
-  const cutPosition = acc.cars.filter((c) => c.inSession).length - eliminated;
+  const cutPosition = acc.cars.length - eliminated;
   if (cutPosition < 1) return notApplicable;
   if (others.length < cutPosition) return insufficientData;
   const timeMs = ([...others].sort((a, b) => a.ms - b.ms)[cutPosition - 1] as Best).ms;
@@ -205,7 +208,6 @@ const output = (fold: Acc, view: EngineView): LapTimesOutput => {
   const rows: LapTimesOutput['rows'] = [];
   const projections: LapTimesOutput['projections'] = {};
   for (const car of acc.cars) {
-    if (!car.inSession) continue;
     const carBests = bests.get(car.id) ?? { sectors: [undefined, undefined, undefined] };
     rows.push(rowOf(car.id, lapsByCar.get(car.id) ?? [], carBests, session, acc.classes, car.effect.outOfRace === true));
     projections[car.id] = projectionOf(acc, car, carBests.lap, bests);

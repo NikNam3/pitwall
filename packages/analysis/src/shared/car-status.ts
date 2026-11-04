@@ -31,11 +31,12 @@ export function competing(view: EngineView, carId: CarId): boolean {
   return kind.known && kind.value === 'competing';
 }
 
-/** `inSession` for every car of one view: car-status's open spans read once (`spans:car-status`, C41). */
-export function inSessionByCar(view: EngineView): (carId: CarId) => boolean {
-  const byCar = openSpansByCar(view, carStatusSpans.machine);
-  return (carId) => {
-    const kind = byCar.get(carId)?.[0]?.kind;
-    return kind !== undefined && kind !== 'absent';
-  };
+/** The cars in the session (`inSession`), by id ascending: car-status's open spans read once (`spans:car-status`, C41). */
+export function carsInSession(view: EngineView): CarId[] {
+  const ids: CarId[] = [];
+  for (const [id, spans] of openSpansByCar(view, carStatusSpans.machine)) {
+    const kind = spans[0]?.kind;
+    if (kind !== undefined && kind !== 'absent') ids.push(id);
+  }
+  return ids.sort((a, b) => a - b);
 }

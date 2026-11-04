@@ -1,7 +1,7 @@
 // The `gaps` calculator (spec 6.1): a fold over the mini-sector crossings; the order and our cars come from the car state.
-import { known, MINI_SECTORS, sessionPhaseRaceSpans, unknown, type CarId, type Interval, type Known, type MiniSectorCrossing, type Ms, type Neighbourhood, type SessionTime } from '@pitwall/domain';
+import { carStatusSpans, known, MINI_SECTORS, sessionPhaseRaceSpans, unknown, type CarId, type Interval, type Known, type MiniSectorCrossing, type Ms, type Neighbourhood, type SessionTime } from '@pitwall/domain';
 import type { EngineView, IncrementalCalculator } from '@pitwall/engine/readers';
-import { behaviourByCar, behaviourFor } from '../shared/behaviour.ts';
+import { behaviourByCar, behaviourFor, openSpansByCar } from '../shared/behaviour.ts';
 import { CAR_STATUS_READS } from '../shared/car-status.ts';
 import { isClosed, NEUTRALISATION_READS, neutralisationKind, neutralisedSpans, type NeutralisationKind } from '../shared/neutralised.ts';
 import { ourCars } from '../shared/our-cars.ts';
@@ -39,7 +39,8 @@ function foldCrossings(acc: Table, view: EngineView, from: number): void {
   const length = list.length;
   if (from >= length) return;
   let lineTimes = acc.lineTimes;
-  const crossed = new Set<CarId>();
+  /** By car id: the car crossed something. */
+  const crossed: boolean[] = [];
   for (let i = from; i < length; i++) {
     const m = list[i] as MiniSectorCrossing;
     const progress = progressOf(m);
@@ -47,7 +48,7 @@ function foldCrossings(acc: Table, view: EngineView, from: number): void {
     const track = (acc.tracks[m.carId] ??= { fromProgress: 0, at: [] });
     track.at[progress] = m.at;
     if (track.at.length > progress + 1) track.at.length = progress + 1; // a car that went back drops what lay ahead
-    crossed.add(m.carId);
+    crossed[m.carId] = true;
     // segment 0 is the line at the start of its lap: it completes the lap before (none for lap 1, the start)
     const completed = m.lap - 1;
     if (m.segment === 0 && completed >= 1) {
@@ -56,7 +57,7 @@ function foldCrossings(acc: Table, view: EngineView, from: number): void {
     }
   }
   const recent = { ...acc.recent };
-  for (const id of crossed) recent[id] = recentOf(acc.tracks[id] as CarCrossings);
+  crossed.forEach((_, id) => (recent[id as CarId] = recentOf(acc.tracks[id] as CarCrossings)));
   acc.lineTimes = lineTimes;
   acc.recent = recent;
 }
@@ -153,14 +154,17 @@ const phasesOf = (acc: Table, race: boolean, view: EngineView): GapsOutput['phas
 /** The running cars in position order (ties by id), their intervals, the cars around each of ours, and the cars out of the race. */
 function build(acc: Table, view: EngineView): GapsOutput {
   const race = raceOnly(view);
+  // only the cars car-status has a span open for can stand in the order: the other slots are not read
   const statusRows = behaviourByCar(STATUS_BEHAVIOUR, view);
   const running: (typeof view.live.cars)[number][] = [];
   const outOfRace: CarId[] = [];
-  for (const car of view.live.cars) {
+  for (const id of openSpansByCar(view, carStatusSpans.machine).keys()) {
+    const car = view.live.cars[id];
+    if (car === undefined) continue;
     let standing: 'running' | 'out' | undefined;
-    for (const row of statusRows(car.id)) if ('car' in row && row.car !== 'absent') standing = row.car;
+    for (const row of statusRows(id)) if ('car' in row && row.car !== 'absent') standing = row.car;
     if (standing === 'running') running.push(car);
-    else if (standing === 'out') outOfRace.push(car.id); // out of the race: no gaps, no neighbour
+    else if (standing === 'out') outOfRace.push(id); // out of the race: no gaps, no neighbour
   }
   running.sort((a, b) => a.timing.position - b.timing.position || a.id - b.id);
   const order = running.map((c) => c.id);
