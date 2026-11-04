@@ -186,3 +186,101 @@ describe('WeekendRepository.weekendContext (C39, C62)', () => {
     expect(new WeekendRepository(db).weekendContext('W2', FERRARI_16, keyOf(q)).context.sessions.map((s) => s.sessionUid)).toEqual(['P']);
   });
 });
+
+// Task 28 (C61): the repository knows the current rules version (`rulesVersion`). A session stored under another one is
+// stale and treated like an incomplete one wherever completeness is checked: never served, rebuilt first, skipped by the
+// weekend context. An unchanged, complete session is served as it is.
+describe('WeekendRepository: a stale rules version (C61)', () => {
+  const OLD = 'old-rules';
+  const NEW = 'new-rules';
+
+  /** Storage whose rows are written under `OLD`: an earlier bridge stored them. */
+  function staleStorage() {
+    const db = openDatabase(':memory:');
+    const old = new StorageWriter(db, { onError: (e) => { throw e; }, rulesVersion: OLD });
+    const current = new StorageWriter(db, { onError: (e) => { throw e; }, rulesVersion: NEW });
+    /** Stores `row` complete with `l` as its log, under `OLD` unless `version` says `NEW`. */
+    const put = (row: SessionRow, l: Log = log(), version: typeof OLD | typeof NEW = OLD) => {
+      const writer = version === OLD ? old : current;
+      writer.upsertSession(row);
+      writer.writeLog(keyOf(row), l);
+      writer.complete(keyOf(row));
+    };
+    return { db, current, put };
+  }
+
+  it('a complete session of another rules version is rebuilt from its recording before it is read, once', async () => {
+    const { db, current, put } = staleStorage();
+    const row = session('1', { pwrecPath: recording() });
+    put(row, log({ laps: [lap(1, 1)] }));
+    const rebuiltLog = log({ laps: [lap(1, 1)], events: [event(3)] });
+    const rebuild = vi.fn(async (r: SessionRow) => { current.replaceLog(r, rebuiltLog, NEW); });
+    const repo = new WeekendRepository(db, { log: captured().logger, rebuild, rulesVersion: NEW });
+    expect(await repo.projectionOf(keyOf(row))).toEqual(projected(rebuiltLog));
+    expect(rebuild).toHaveBeenCalledOnce();
+    expect(rebuild.mock.calls[0]![0]).toMatchObject({ sessionUid: '1', weekendId: 'W1', playerCar: 1, rulesVersion: OLD, complete: true });
+    expect(repo.sessionsOf('W1')).toEqual([stored(row, true, NEW)]);
+    expect(await repo.projectionOf(keyOf(row))).toEqual(projected(rebuiltLog));
+    expect(rebuild).toHaveBeenCalledOnce();
+  });
+
+  it('an unchanged rules version rebuilds nothing: a complete session of the current version is served as stored', async () => {
+    const { db, put } = staleStorage();
+    const row = session('1', { pwrecPath: recording() });
+    const l = log({ laps: [lap(1, 1)] });
+    put(row, l, NEW);
+    const before = factRows(db, keyOf(row));
+    const rebuild = vi.fn(async () => {});
+    const repo = new WeekendRepository(db, { rebuild, rulesVersion: NEW });
+    expect(await repo.projectionOf(keyOf(row))).toEqual(projected(l));
+    expect(rebuild).not.toHaveBeenCalled();
+    expect(factRows(db, keyOf(row))).toEqual(before);
+  });
+
+  it('a stale session whose recording is missing is kept and not served, with a warning (C24)', async () => {
+    const { db, put } = staleStorage();
+    const row = session('1', { pwrecPath: join(mkdtempSync(join(tmpdir(), 'repo-')), 'gone.pwrec.gz') });
+    put(row, log({ laps: [lap(1, 1)] }));
+    const before = factRows(db, keyOf(row));
+    const rebuild = vi.fn(async () => {});
+    const { logger, warnings } = captured();
+    const repo = new WeekendRepository(db, { log: logger, rebuild, rulesVersion: NEW });
+    expect(await repo.projectionOf(keyOf(row))).toBeUndefined();
+    expect(rebuild).not.toHaveBeenCalled();
+    expect(warnings()).toEqual([expect.objectContaining({ sessionUid: '1', weekendId: 'W1' })]);
+    expect(repo.sessionsOf('W1')).toEqual([stored(row, true, OLD)]);
+    expect(factRows(db, keyOf(row))).toEqual(before);
+  });
+
+  it('a rebuild that no longer produces the session keeps the stored row and log, never serves it, and warns once (C24)', async () => {
+    const { db, put } = staleStorage();
+    const row = session('1', { pwrecPath: recording() });
+    put(row, log({ laps: [lap(1, 1)] }));
+    const before = factRows(db, keyOf(row));
+    // the recording now yields no such session: the rebuild writes nothing under its key
+    const rebuild = vi.fn(async () => {});
+    const { logger, warnings } = captured();
+    const repo = new WeekendRepository(db, { log: logger, rebuild, rulesVersion: NEW });
+    expect(await repo.projectionOf(keyOf(row))).toBeUndefined();
+    expect(await repo.projectionOf(keyOf(row))).toBeUndefined();
+    expect(warnings()).toEqual([expect.objectContaining({ sessionUid: '1', weekendId: 'W1' })]);
+    expect(repo.sessionsOf('W1')).toEqual([stored(row, true, OLD)]);
+    expect(factRows(db, keyOf(row))).toEqual(before);
+  });
+
+  it('weekendContext skips a session of another rules version, warns and returns its key for a rebuild', () => {
+    const { db, put } = staleStorage();
+    const practice = session('P', { startedAt: '2026-10-27T20:00:00.000Z' });
+    const qualifying = session('Q', { startedAt: '2026-10-27T21:00:00.000Z' });
+    const race = session('R', { startedAt: '2026-10-27T22:00:00.000Z' });
+    put(practice, log({ laps: [lap(1, 1)] }), NEW);
+    put(qualifying, log({ laps: [lap(1, 1)] }));
+    put(race, log(), NEW);
+    const { logger, warnings } = captured();
+    const repo = new WeekendRepository(db, { log: logger, rulesVersion: NEW });
+    const { context, incomplete } = repo.weekendContext('W1', FERRARI_16, keyOf(race));
+    expect(context.sessions.map((s) => s.sessionUid)).toEqual(['P']);
+    expect(incomplete).toEqual([keyOf(qualifying)]);
+    expect(warnings()).toEqual([expect.objectContaining({ sessionUid: 'Q', weekendId: 'W1' })]);
+  });
+});

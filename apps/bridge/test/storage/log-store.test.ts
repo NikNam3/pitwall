@@ -103,7 +103,7 @@ describe('storage over a segment with a flashback (race-singapore-wet-flashback)
 
   it('reprocessing writes the same log once, at its end: its projection equals the live one (C38)', async () => {
     const replayed = openDatabase(join(tmp(), 'reprocess.db'));
-    await processRecording(FLASHBACK, replayed, silent, new AbortController().signal, loadFeatureConfig(tmp(), FEATURES));
+    await processRecording(FLASHBACK, replayed, silent, new AbortController().signal, loadFeatureConfig(tmp(), FEATURES), 'unversioned');
     const k = onlyKey(replayed);
     expect(k).toEqual(key);
     expect(new WeekendRepository(replayed).sessionsOf(k.weekendId)).toEqual([expect.objectContaining({ complete: true, pwrecPath: FLASHBACK })]);
@@ -133,7 +133,7 @@ describe('storage: a session the bridge left incomplete', () => {
       log: silent,
       rebuild: async (row) => {
         rebuilt.push(row.pwrecPath!);
-        await processRecording(row.pwrecPath!, db, silent, new AbortController().signal, config);
+        await processRecording(row.pwrecPath!, db, silent, new AbortController().signal, config, 'unversioned');
       },
     });
     expect(await repo.projectionOf(key)).toEqual(complete);
