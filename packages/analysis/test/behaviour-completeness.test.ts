@@ -1,8 +1,8 @@
 // Every behaviour table is complete (contract C44, C87): one generic test over every unit folder whose `index.ts` exports
 // `<UNIT>_BEHAVIOUR`. Its table has a row for every kind (from the domain's span declarations, `SPAN_DECLARATIONS`) of
 // every sub-machine the unit's calculator declares in `reads` (`spans:<machine>`), and no row for a machine it does not
-// declare or a kind its machine does not declare. It passes while no unit exports a table yet; the second half ("every
-// unit that reads a sub-machine exports a table") follows once every lane has its tables (Task 20).
+// declare or a kind its machine does not declare; and every unit that reads a sub-machine (a `spans:<machine>` in its
+// `reads`) exports one.
 import { SPAN_DECLARATIONS, type SpanDeclaration } from '@pitwall/domain';
 import type { Calculator } from '@pitwall/engine/readers';
 import { describe, expect, it } from 'vitest';
@@ -50,6 +50,14 @@ describe('behaviour tables (C44)', () => {
   it('every exported table covers every kind of every sub-machine its unit reads, and nothing else', () => {
     const problems = folders.flatMap(({ unit, table }) => (table === undefined ? [] : tableProblems(unit, table, CALCULATORS.find((c) => c.id === unit))));
     expect(problems).toEqual([]);
+  });
+
+  it('every unit that reads a sub-machine exports its behaviour table', () => {
+    const withTable = new Set(folders.filter((f) => f.table !== undefined).map((f) => f.unit));
+    const missing = CALCULATORS.filter((calc) => machinesRead(calc).length > 0 && !withTable.has(calc.id)).map(
+      (calc) => `${calc.id}: reads ${machinesRead(calc).join(', ')} but its index.ts does not export ${behaviourExport(calc.id)}`,
+    );
+    expect(missing).toEqual([]);
   });
 
   it('the check names a missing row, a row of an unread machine, a row of an undeclared kind and a table without a unit', () => {
