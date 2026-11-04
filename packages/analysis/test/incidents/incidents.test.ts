@@ -1,30 +1,58 @@
+// `incidents` (spec 6.4) on situations (contract C20, C26, C43, C44, C45): pitting from car-location, retirements and
+// disqualifications from car-status, penalties and warnings from the penalties and warnings spans, neutralisations from
+// the session-phase spans, the race from the weekend phase; one test per row of its behaviour table. Every test runs
+// the calculator through its guarded view (`race.ts`, C41).
 import { describe, expect, it } from 'vitest';
-import { carId, known, unknown, type CarId, type DamageParts, type IncidentEntry, type Known, type LapRecord, type RaceEvent } from '@pitwall/domain';
-import { carState, event, lap, neutralisation, openNeutralisation } from '../../../../test-support/builders/index.ts';
+import {
+  carId,
+  known,
+  SPAN_DECLARATIONS,
+  unknown,
+  type CarId,
+  type DamageParts,
+  type IncidentEntry,
+  type Known,
+  type LapRecord,
+  type RaceEvent,
+  type WeekendPhase,
+} from '@pitwall/domain';
+import { event, lap, neutralisation, openNeutralisation } from '../../../../test-support/builders/index.ts';
 import { incidentsCalculator } from '../../src/incidents/calculator.ts';
-import { INCIDENTS, INCIDENTS_CONFIG } from '../../src/incidents/index.ts';
+import * as unit from '../../src/incidents/index.ts';
 import { DAMAGE } from '../../src/damage/index.ts';
 import type { GapsOutput } from '../../src/gaps/index.ts';
+import type { BehaviourTable } from '../../src/shared/behaviour.ts';
+import { behaviourExport } from '../units.ts';
 import {
   boundaryAt,
+  chain,
   damageState,
   deltaOf,
+  incidents,
   leaderLaps,
   LAPS,
+  location,
+  owedStep,
+  owes,
   PACE_MS,
   SEGMENT_MS,
   pitStop,
   PLAYER,
   race,
+  RETIRED,
   run,
   runSteps,
+  spansUntil,
   startOf,
+  status,
   TRACK,
   until,
   viewOf,
+  warned,
   type Delay,
 } from './race.ts';
 
+const { INCIDENTS, INCIDENTS_CONFIG } = unit;
 const car = carId;
 /** Mid-lap 5 of the player: between its boundaries (5, 24) at 407 400 and (5, 25) at 409 200. */
 const T = 407_900;
@@ -33,16 +61,11 @@ const AFTER_MS = 5_000;
 const valueOf = <T>(k: Known<T>): T | undefined => (k.known ? k.value : undefined);
 
 const collision = (a: number, b: number, at = T): RaceEvent => event({ kind: 'collision', at, carId: car(a), otherCarId: car(b) });
-/** A PENA event; `timeMs` is the engine's param for the event's `time` (absent when the game sends 255, no value). */
-const penalty = (id: number, penaltyType: number, at = T, timeMs?: number): RaceEvent =>
-  event({
-    kind: 'penalty', at, carId: car(id),
-    params: { penaltyType, infringementType: 7, ...(timeMs !== undefined && { timeMs }), lap: 5, placesGained: 0 },
-  });
+/** A PENA event, as the engine recorded it before Task 21: a signal (C12, C13), which `incidents` never reads. */
+const penaltyEvent = (id: number, penaltyType: number, at = T): RaceEvent =>
+  event({ kind: 'penalty', at, carId: car(id), params: { penaltyType, infringementType: 7, timeMs: 5_000, lap: 5, placesGained: 0 } });
 
-/** The F1 25 `penaltyType` codes (Event packet, "Penalty types" appendix of the data-output spec). */
-const DRIVE_THROUGH = 0;
-const STOP_GO = 1;
+/** The F1 25 `penaltyType` codes of a PENA (Event packet, "Penalty types" appendix of the data-output spec). */
 const WARNING = 5;
 const TIME_PENALTY = 4;
 
@@ -65,15 +88,31 @@ const only = (feed: IncidentEntry[], kind: IncidentEntry['kind']): IncidentEntry
   return entries[0]!;
 };
 
+const ofKind = (feed: IncidentEntry[], kind: IncidentEntry['kind']): IncidentEntry[] => feed.filter((e) => e.kind === kind);
+
 /** A slow mini-sector of car 7 on lap 5, segment 10 (it enters it at boundary (5, 10)). */
 const slow7 = (ms: number, segment = 10): Delay => ({ carId: car(7), lap: 5, segment, ms });
 const SLOW_START = boundaryAt(7, 5, 10);
+/** Where car 7's 2.5 s slow mini-sector ends: its crossing (5, 11), on the frame numbered by that time (`race`). */
+const SLOW_END = SLOW_START + SEGMENT_MS + 2_500;
+
+/** The sub-machines `incidents` reads, each a part of its behaviour table (C44). */
+const MACHINES = [
+  'car-location',
+  'car-status',
+  'penalties',
+  'warnings',
+  'session-phase-race',
+  'session-phase-qualifying',
+  'session-phase-practice',
+  'weekend-phase',
+] as const;
 
 describe('incidents calculator', () => {
-  it("is incremental over events, the race's session phases, mini-sectors, pit stops and laps, and reads no damage output (a log reads the history only)", () => {
+  it('is incremental over events, the situations it reads, mini-sectors and laps, and reads no damage output (a log reads the history only)', () => {
     expect(incidentsCalculator.id).toBe(INCIDENTS);
     expect(incidentsCalculator.kind).toBe('incremental');
-    expect(incidentsCalculator.reads).toEqual(expect.arrayContaining(['events', 'spans:session-phase-race', 'spans:session-phase-qualifying', 'spans:session-phase-practice', 'miniSectors', 'pitStops', 'laps']));
+    expect(incidentsCalculator.reads).toEqual(expect.arrayContaining(['events', 'miniSectors', 'laps', ...MACHINES.map((m) => `spans:${m}`)]));
     expect(incidentsCalculator.reads).not.toContainEqual({ calculator: DAMAGE });
   });
 
@@ -108,19 +147,19 @@ describe('incidents calculator', () => {
     expect(run(viewOf({ miniSectors: race(), events: [collision(0, 1)], gaps: live }))).toEqual([]);
   });
 
-  it('a retirement of a neighbour is a major entry', () => {
-    const entry = only(run(viewOf({ miniSectors: race(), events: [event({ kind: 'retirement', at: T, carId: car(8), params: { reason: 'retired' } })] })), 'retirement');
+  it('a retirement of a neighbour (its car-status span) is a major entry', () => {
+    const entry = only(run(viewOf({ miniSectors: race(), spans: status(8, [{ kind: 'retired', at: T, detail: RETIRED }]) })), 'retirement');
     expect(entry).toMatchObject({ id: `retirement:8:${T}`, severity: 'major', carIds: [car(8)], lap: 5 });
   });
 
-  it('a warning penalty event of a neighbour is a minor warning entry', () => {
-    const entry = only(run(viewOf({ miniSectors: race(), events: [penalty(7, WARNING)] })), 'warning');
+  it('a warning of a neighbour (its warned span) is a minor warning entry', () => {
+    const entry = only(run(viewOf({ miniSectors: race(), spans: warned(7, [T]) })), 'warning');
     expect(entry).toMatchObject({ id: `warning:7:${T}`, at: T, severity: 'minor', carIds: [car(7)] });
     expect(entry.timeLostMs).toEqual(unknown('notApplicable'));
   });
 
-  it('any other penalty type is a minor penalty entry', () => {
-    const entry = only(run(viewOf({ miniSectors: race(), events: [penalty(7, TIME_PENALTY)] })), 'penalty');
+  it('a penalty of a neighbour (its penalties span) is a minor penalty entry', () => {
+    const entry = only(run(viewOf({ miniSectors: race(), spans: owes(7, [{ at: T, totalMs: 5_000 }]) })), 'penalty');
     expect(entry).toMatchObject({ id: `penalty:7:${T}`, severity: 'minor', carIds: [car(7)] });
     expect(entry.timeLostMs).toEqual(unknown('notApplicable'));
   });
@@ -193,14 +232,14 @@ describe('incidents calculator', () => {
       expect(valueOf(entry.timeLostMs)).toBe(5_000);
     });
 
-    it('a slow mini-sector inside an SC or a pit stop is no timeLoss', () => {
+    it('a slow mini-sector inside an SC or a pit visit (the car\'s pitLane span) is no timeLoss', () => {
       const miniSectors = race({ delays: [slow7(2_500)] });
       const sc = neutralisation({ kind: 'SC', start: SLOW_START - 10_000, end: SLOW_START + 30_000 });
       const underSc = run(viewOf({ miniSectors, phases: [sc] }));
       expect(underSc.filter((e) => e.kind === 'timeLoss')).toEqual([]);
 
-      const stop = pitStop(car(7), 5, SLOW_START - 1_000, SLOW_START + 20_000);
-      expect(run(viewOf({ miniSectors, pitStops: [stop] })).filter((e) => e.kind === 'timeLoss')).toEqual([]);
+      const visit = location(7, [{ kind: 'pitLane', at: SLOW_START - 1_000 }, { kind: 'track', at: SLOW_START + 20_000 }]);
+      expect(run(viewOf({ miniSectors, spans: visit })).filter((e) => e.kind === 'timeLoss')).toEqual([]);
     });
 
     it('timeLostMs first from the mini-sector, then from paceDelta once two laps exist', () => {
@@ -243,9 +282,9 @@ describe('incidents calculator', () => {
       expect(us.gapAfterMs).toEqual(unknown('notApplicable'));
     });
 
-    it('the other car retired by the after moment: gapAfterMs notApplicable (it has no gap any more)', () => {
-      const events = [collision(6, 5), event({ kind: 'retirement', at: T + 1_000, carId: car(5), params: { reason: 'retired' } })];
-      const us = only(run(viewOf({ miniSectors: race(), events })), 'collision').forUs[0]!;
+    it('the other car retired (its car-status span) by the after moment: gapAfterMs notApplicable (it has no gap any more)', () => {
+      const spans = status(5, [{ kind: 'retired', at: T + 1_000, detail: RETIRED }]);
+      const us = only(run(viewOf({ miniSectors: race(), events: [collision(6, 5)], spans })), 'collision').forUs[0]!;
       expect(valueOf(us.gapBeforeMs)).toBe(700);
       expect(us.gapAfterMs).toEqual(unknown('notApplicable'));
     });
@@ -278,32 +317,27 @@ describe('incidents calculator', () => {
     });
 
     it('for a neighbour\'s incident, the gap is ours to that car (positive = we are behind it)', () => {
-      const us = only(run(viewOf({ miniSectors: race(), events: [penalty(5, WARNING)] })), 'warning').forUs[0]!;
+      const us = only(run(viewOf({ miniSectors: race(), spans: warned(5, [T]) })), 'warning').forUs[0]!;
       expect(valueOf(us.positionBefore)).toBe(7);
       // the car the gap is to: the neighbour of the incident, named so a label cannot name another car
       expect(us.otherCarId).toEqual(known(car(5), T));
       expect(valueOf(us.gapBeforeMs)).toBe(700);
-      const behind = only(run(viewOf({ miniSectors: race(), events: [penalty(8, WARNING)] })), 'warning').forUs[0]!;
+      const behind = only(run(viewOf({ miniSectors: race(), spans: warned(8, [T]) })), 'warning').forUs[0]!;
       expect(valueOf(behind.gapBeforeMs)).toBe(-1_400);
     });
   });
 
   it('majorKinds config: warningMajor true makes warnings major', () => {
-    const view = viewOf({ miniSectors: race(), events: [penalty(7, WARNING)], config: { warningMajor: true } });
+    const view = viewOf({ miniSectors: race(), spans: warned(7, [T]), config: { warningMajor: true } });
     expect(only(run(view), 'warning').severity).toBe('major');
     const noCollision = viewOf({ miniSectors: race(), events: [collision(6, 5)], config: { collisionMajor: false } });
     expect(only(run(noCollision), 'collision').severity).toBe('minor');
   });
 
   it('the feed is newest first and holds at most feedLength entries', () => {
-    const events = [380_000, 390_000, 400_000].map((at) => penalty(7, WARNING, at));
-    const feed = run(viewOf({ miniSectors: race(), events, config: { feedLength: 2 } }));
+    const feed = run(viewOf({ miniSectors: race(), spans: warned(7, [380_000, 390_000, 400_000]), config: { feedLength: 2 } }));
     expect(feed.map((e) => e.at)).toEqual([400_000, 390_000]);
     expect(INCIDENTS_CONFIG.read(viewOf({ miniSectors: [] })).feedLength).toBe(50);
-  });
-
-  it('outside a race the feed is empty', () => {
-    expect(run(viewOf({ miniSectors: race(), events: [collision(6, 5)], kind: 'practice' }))).toEqual([]);
   });
 
   describe('open spans (ruling 1): the session-phase span open in the situation (C20)', () => {
@@ -364,74 +398,21 @@ describe('incidents calculator', () => {
     });
   });
 
-  describe('pit lane (ruling 2)', () => {
+  describe('pit lane now (ruling 2): the car-location span open in the situation (C20)', () => {
     // History up to just after car 7's slow mini-sector; its newest crossings are the slow one's end and after.
-    const miniSectors = until(race({ delays: [slow7(2_500)] }), SLOW_START + SEGMENT_MS + 2_500 + 500);
-    const car7 = (pitStatus: 'none' | 'pitting' | 'inPitArea') => [carState({ id: car(7), timing: { pitStatus } })];
+    const miniSectors = until(race({ delays: [slow7(2_500)] }), SLOW_END + 500);
 
     it('no timeLoss for a car that is in the pit lane now, before its pit stop is recorded', () => {
-      expect(run(viewOf({ miniSectors, cars: car7('none') })).filter((e) => e.kind === 'timeLoss')).toHaveLength(1);
-      for (const status of ['pitting', 'inPitArea'] as const) {
-        expect(run(viewOf({ miniSectors, cars: car7(status) })).filter((e) => e.kind === 'timeLoss'), status).toEqual([]);
-      }
+      expect(ofKind(run(viewOf({ miniSectors, spans: location(7) })), 'timeLoss')).toHaveLength(1);
+      // it entered the pit lane after the slow mini-sector's end crossing: no frame of the mini-sector is in the visit
+      const entered = location(7, [{ kind: 'pitLane', at: SLOW_END + 300 }]);
+      expect(ofKind(run(viewOf({ miniSectors, spans: entered })), 'timeLoss')).toEqual([]);
     });
 
-    it('the live pit status does not remove an older timeLoss of that car', () => {
+    it('the pit lane now does not remove an older timeLoss of that car', () => {
       const later = until(race({ delays: [slow7(2_500)] }), boundaryAt(7, 7, 30));
-      expect(run(viewOf({ miniSectors: later, cars: car7('pitting') })).filter((e) => e.kind === 'timeLoss')).toHaveLength(1);
-    });
-  });
-
-  describe('penalty types (ruling 3)', () => {
-    it.each([0, 1, 2, 4, 6, 9])('penaltyType %i is a penalty entry', (type) => {
-      expect(run(viewOf({ miniSectors: race(), events: [penalty(7, type)] })).map((e) => e.kind)).toEqual(['penalty']);
-    });
-
-    it('penaltyType 5 is a warning entry', () => {
-      expect(run(viewOf({ miniSectors: race(), events: [penalty(7, WARNING)] })).map((e) => e.kind)).toEqual(['warning']);
-    });
-
-    it.each([3, 7, 8, 10, 11, 12, 13, 14, 15, 16, 17])('penaltyType %i is ignored', (type) => {
-      expect(run(viewOf({ miniSectors: race(), events: [penalty(7, type)] }))).toEqual([]);
-    });
-  });
-
-  describe('time loss merged into a collision or damage (ruling 4)', () => {
-    const miniSectors = race({ delays: [slow7(3_000)] });
-
-    it('a timeLoss within 5 s of a collision of the same car sets the collision\'s timeLostMs, no second entry', () => {
-      // The collision is reported 2 s before the slow mini-sector starts.
-      const feed = run(viewOf({ miniSectors, events: [collision(7, 8, SLOW_START - 2_000)] }));
-      expect(feed.map((e) => e.kind)).toEqual(['collision']);
-      expect(valueOf(feed[0]!.timeLostMs)).toBe(3_000);
-    });
-
-    it('a timeLoss of the second car of a collision (otherCarId) merges into that collision entry', () => {
-      const feed = run(viewOf({ miniSectors, events: [collision(8, 7, SLOW_START - 2_000)] }));
-      expect(feed.map((e) => e.kind)).toEqual(['collision']);
-      expect(feed[0]!.carIds).toEqual([car(8), car(7)]);
-      expect(valueOf(feed[0]!.timeLostMs)).toBe(3_000);
-    });
-
-    it('a timeLoss near a warning or penalty of the same car stays its own entry; the penalty has no time lost', () => {
-      for (const type of [WARNING, TIME_PENALTY]) {
-        const feed = run(viewOf({ miniSectors, events: [penalty(7, type, SLOW_START - 2_000)] }));
-        expect(feed.map((e) => e.kind).sort()).toEqual([type === WARNING ? 'warning' : 'penalty', 'timeLoss'].sort());
-        expect(feed.find((e) => e.kind !== 'timeLoss')!.timeLostMs).toEqual(unknown('notApplicable'));
-      }
-    });
-
-    it('a timeLoss within 5 s of a damage jump of the same car sets the damage entry\'s timeLostMs', () => {
-      const feed = run(viewOf({ miniSectors, events: [dmg(SLOW_START + 1_000, 'floorPct', 0, 30)] }));
-      expect(feed.map((e) => e.kind)).toEqual(['damage']);
-      expect(valueOf(feed[0]!.timeLostMs)).toBe(3_000);
-    });
-
-    it('a timeLoss more than 5 s from the collision, or of another car, stays its own entry', () => {
-      const far = run(viewOf({ miniSectors, events: [collision(7, 8, SLOW_START - 8_000)] }));
-      expect(far.map((e) => e.kind).sort()).toEqual(['collision', 'timeLoss']);
-      const other = run(viewOf({ miniSectors, events: [collision(8, 9, SLOW_START - 2_000)] }));
-      expect(other.map((e) => e.kind).sort()).toEqual(['collision', 'timeLoss']);
+      const entered = location(7, [{ kind: 'pitLane', at: boundaryAt(7, 7, 30) - 100 }]);
+      expect(ofKind(run(viewOf({ miniSectors: later, spans: entered })), 'timeLoss')).toHaveLength(1);
     });
   });
 
@@ -462,7 +443,7 @@ describe('incidents calculator', () => {
       expect(loss.where.sector).toEqual(known(1, SLOW_START));
       const damage = only(run(viewOf({ miniSectors: race(), events: [hit(T, 'frontLeftWingPct', 12)] })), 'damage');
       expect(damage.where.sector).toEqual(known(2, T));
-      expect(only(run(viewOf({ miniSectors: race(), events: [penalty(7, WARNING)] })), 'warning').where.sector).toEqual(known(2, T));
+      expect(only(run(viewOf({ miniSectors: race(), spans: warned(7, [T]) })), 'warning').where.sector).toEqual(known(2, T));
     });
 
     it('no invented sector: notApplicable without a car, notReceived before a crossing or without the sector distances', () => {
@@ -486,59 +467,76 @@ describe('incidents calculator', () => {
       expect(feed[0]!.damage).toEqual([{ part: 'rearWingPct', deltaPct: 8 }]);
     });
 
-    it('a warning entry carries its count of the limit: the car\'s nth warning, a penalty every warningsBeforePenalty', () => {
-      const events = [
-        penalty(7, WARNING, 370_000),
-        penalty(7, WARNING, 380_000),
-        penalty(7, TIME_PENALTY, 385_000),
-        penalty(7, WARNING, 390_000),
-        penalty(5, WARNING, 395_000),
-        penalty(7, WARNING, 400_000),
-      ];
+    it('a warning entry carries its count of the limit: the warned span\'s count, a penalty every warningsBeforePenalty', () => {
+      // car 7: warnings 1 to 4 (a time penalty after the second), car 5: its first
+      const spans = [...warned(7, [370_000, 380_000, 390_000, 400_000]), ...owes(7, [{ at: 385_000, totalMs: 5_000 }]), ...warned(5, [395_000])];
       const counts = (feed: IncidentEntry[], id: number) =>
         feed.filter((e) => e.kind === 'warning' && e.carIds[0] === car(id)).map((e) => e.warning);
-      const feed = run(viewOf({ miniSectors: race(), events }));
+      const feed = run(viewOf({ miniSectors: race(), spans }));
       expect(counts(feed, 7)).toEqual([1, 3, 2, 1].map((count) => ({ count, limit: 3 })));
       expect(counts(feed, 5)).toEqual([{ count: 1, limit: 3 }]);
-      const two = run(viewOf({ miniSectors: race(), events, alarmsConfig: { warningsBeforePenalty: 2 } }));
+      const two = run(viewOf({ miniSectors: race(), spans, alarmsConfig: { warningsBeforePenalty: 2 } }));
       expect(counts(two, 7)).toEqual([2, 1, 2, 1].map((count) => ({ count, limit: 2 })));
     });
 
-    it('a penalty entry says which penalty was given: a drive-through and a stop-go carry their kind and no time', () => {
-      expect(only(run(viewOf({ miniSectors: race(), events: [penalty(7, DRIVE_THROUGH)] })), 'penalty').penalty).toEqual({ kind: 'driveThrough' });
-      expect(only(run(viewOf({ miniSectors: race(), events: [penalty(7, STOP_GO)] })), 'penalty').penalty).toEqual({ kind: 'stopGo' });
-    });
-
-    it('a time penalty carries its time from the PENA time', () => {
-      const entry = only(run(viewOf({ miniSectors: race(), events: [penalty(7, TIME_PENALTY, T, 5_000)] })), 'penalty');
-      expect(entry.penalty).toEqual({ kind: 'time', timeMs: 5_000 });
-    });
-
-    it('a time penalty without a time (the game sent none) carries no invented time', () => {
-      const entry = only(run(viewOf({ miniSectors: race(), events: [penalty(7, TIME_PENALTY)] })), 'penalty');
-      expect(entry.penalty).toEqual({ kind: 'time' });
-    });
-
-    it.each([
-      [2, 'grid'],
-      [6, 'disqualified'],
-      [9, 'tyreRegulations'],
-    ] as const)('penaltyType %i is a penalty entry of kind %s', (type, kind) => {
-      expect(only(run(viewOf({ miniSectors: race(), events: [penalty(7, type)] })), 'penalty').penalty).toEqual({ kind });
-    });
-
     it('only penalty entries carry penalty', () => {
-      const feed = run(viewOf({ miniSectors: race(), events: [collision(6, 5), penalty(7, WARNING, T + 100), penalty(7, TIME_PENALTY, T + 200, 5_000)] }));
+      const spans = [...warned(7, [T + 100]), ...owes(7, [{ at: T + 200, totalMs: 5_000 }])];
+      const feed = run(viewOf({ miniSectors: race(), events: [collision(6, 5)], spans }));
       expect(feed.map((e) => e.kind).sort()).toEqual(['collision', 'penalty', 'warning']);
       for (const entry of feed) expect('penalty' in entry, entry.kind).toBe(entry.kind === 'penalty');
     });
 
     it('only damage entries carry damage and only warning entries carry warning', () => {
-      const feed = run(viewOf({ miniSectors: race(), events: [collision(6, 5), penalty(7, TIME_PENALTY, T + 100)] }));
+      const feed = run(viewOf({ miniSectors: race(), events: [collision(6, 5)], spans: owes(7, [{ at: T + 100, totalMs: 5_000 }]) }));
+      expect(feed.map((e) => e.kind).sort()).toEqual(['collision', 'penalty']);
       for (const entry of feed) {
         expect('damage' in entry, entry.kind).toBe(false);
         expect('warning' in entry, entry.kind).toBe(false);
       }
+    });
+  });
+
+  describe('time loss merged into a collision or damage (ruling 4)', () => {
+    const miniSectors = race({ delays: [slow7(3_000)] });
+
+    it('a timeLoss within 5 s of a collision of the same car sets the collision\'s timeLostMs, no second entry', () => {
+      // The collision is reported 2 s before the slow mini-sector starts.
+      const feed = run(viewOf({ miniSectors, events: [collision(7, 8, SLOW_START - 2_000)] }));
+      expect(feed.map((e) => e.kind)).toEqual(['collision']);
+      expect(valueOf(feed[0]!.timeLostMs)).toBe(3_000);
+    });
+
+    it('a timeLoss of the second car of a collision (otherCarId) merges into that collision entry', () => {
+      const feed = run(viewOf({ miniSectors, events: [collision(8, 7, SLOW_START - 2_000)] }));
+      expect(feed.map((e) => e.kind)).toEqual(['collision']);
+      expect(feed[0]!.carIds).toEqual([car(8), car(7)]);
+      expect(valueOf(feed[0]!.timeLostMs)).toBe(3_000);
+    });
+
+    it('a timeLoss near a warning or penalty of the same car stays its own entry; the penalty has no time lost', () => {
+      const near = SLOW_START - 2_000;
+      const cases = [
+        ['warning', warned(7, [near])],
+        ['penalty', owes(7, [{ at: near, totalMs: 5_000 }])],
+      ] as const;
+      for (const [kind, spans] of cases) {
+        const feed = run(viewOf({ miniSectors, spans: [...spans] }));
+        expect(feed.map((e) => e.kind).sort()).toEqual([kind, 'timeLoss'].sort());
+        expect(feed.find((e) => e.kind !== 'timeLoss')!.timeLostMs).toEqual(unknown('notApplicable'));
+      }
+    });
+
+    it('a timeLoss within 5 s of a damage jump of the same car sets the damage entry\'s timeLostMs', () => {
+      const feed = run(viewOf({ miniSectors, events: [dmg(SLOW_START + 1_000, 'floorPct', 0, 30)] }));
+      expect(feed.map((e) => e.kind)).toEqual(['damage']);
+      expect(valueOf(feed[0]!.timeLostMs)).toBe(3_000);
+    });
+
+    it('a timeLoss more than 5 s from the collision, or of another car, stays its own entry', () => {
+      const far = run(viewOf({ miniSectors, events: [collision(7, 8, SLOW_START - 8_000)] }));
+      expect(far.map((e) => e.kind).sort()).toEqual(['collision', 'timeLoss']);
+      const other = run(viewOf({ miniSectors, events: [collision(8, 9, SLOW_START - 2_000)] }));
+      expect(other.map((e) => e.kind).sort()).toEqual(['collision', 'timeLoss']);
     });
   });
 
@@ -607,8 +605,8 @@ describe('incidents calculator', () => {
     it('a flashback to between the hit and the repair equals a fresh run, and the entry is there', () => {
       const full = at(720_000);
       const cut = at(HIT + 60_000);
-      const acc = incidentsCalculator.update(incidentsCalculator.init(at(0)), deltaOf(at(0), full), full);
-      const after = incidentsCalculator.output(incidentsCalculator.update(acc, deltaOf(full, cut, true), cut));
+      const acc = incidents.update(incidents.init(at(0)), deltaOf(at(0), full), full);
+      const after = incidents.output(incidents.update(acc, deltaOf(full, cut, true), cut));
       expect(after).toEqual(run(cut));
       expect(after.filter((e) => e.kind === 'damage').map((e) => e.at)).toEqual([HIT]);
     });
@@ -616,20 +614,29 @@ describe('incidents calculator', () => {
 
   describe('incremental', () => {
     const miniSectors = race({ delays: [slow7(2_500), { carId: PLAYER, lap: 5, segment: 24, ms: 1_800 }] });
-    const events = [collision(6, 5), penalty(7, WARNING, 420_000), collision(0, 1, 430_000)];
-    const at = (t: number) => viewOf({ miniSectors: until(miniSectors, t), events: until(events, t) });
+    const events = [collision(6, 5), collision(0, 1, 430_000)];
+    // car 7 warned at 420 s, car 8 retires at 450 s, car 5 takes a drive-through at 460 s and serves it at 520 s
+    const spans = [
+      ...warned(7, [420_000]),
+      ...status(8, [{ kind: 'retired', at: 450_000, detail: RETIRED }]),
+      ...owes(5, [{ at: 460_000, dt: 1 }, { at: 520_000 }]),
+      ...location(5, [{ kind: 'pitLane', at: 515_000 }, { kind: 'track', at: 540_000 }]),
+    ];
+    const at = (t: number) => viewOf({ miniSectors: until(miniSectors, t), events: until(events, t), spans: spansUntil(spans, t) });
 
     it('update in steps equals init over the whole history', () => {
-      const steps = [300_000, 383_000, 386_000, 407_900, 410_000, 412_000, 413_000, 425_000, 500_000, 800_000].map(at);
-      expect(runSteps(steps)).toEqual(run(steps[steps.length - 1]!));
+      const steps = [300_000, 383_000, 386_000, 407_900, 410_000, 412_000, 413_000, 425_000, 455_000, 465_000, 518_000, 530_000, 800_000].map(at);
+      const final = run(steps[steps.length - 1]!);
+      expect(runSteps(steps)).toEqual(final);
+      expect(final.map((e) => e.kind).sort()).toEqual(['collision', 'penalty', 'retirement', 'timeLoss', 'warning']);
     });
 
     it('flashback equals fresh run', () => {
       const full = at(800_000);
       const truncatedView = at(400_000);
-      const acc = incidentsCalculator.update(incidentsCalculator.init(at(500_000)), deltaOf(at(500_000), full), full);
-      const truncated = incidentsCalculator.update(acc, deltaOf(full, truncatedView, true), truncatedView);
-      expect(incidentsCalculator.output(truncated)).toEqual(run(truncatedView));
+      const acc = incidents.update(incidents.init(at(500_000)), deltaOf(at(500_000), full), full);
+      const truncated = incidents.update(acc, deltaOf(full, truncatedView, true), truncatedView);
+      expect(incidents.output(truncated)).toEqual(run(truncatedView));
     });
 
     it('no duplicate entry after a flashback over the incident', () => {
@@ -638,14 +645,255 @@ describe('incidents calculator', () => {
       // After the flashback the player drives the same stretch again and collides 1.6 s later.
       const again = viewOf({ miniSectors, events: [collision(6, 5, T + 1_600)] });
 
-      let acc = incidentsCalculator.init(first);
-      acc = incidentsCalculator.update(acc, deltaOf(first, cut, true), cut);
-      acc = incidentsCalculator.update(acc, deltaOf(cut, again), again);
-      const feed = incidentsCalculator.output(acc);
+      let acc = incidents.init(first);
+      acc = incidents.update(acc, deltaOf(first, cut, true), cut);
+      acc = incidents.update(acc, deltaOf(cut, again), again);
+      const feed = incidents.output(acc);
 
       const collisions = feed.filter((e) => e.kind === 'collision');
       expect(collisions.map((e) => e.at)).toEqual([T + 1_600]);
       expect(feed).toEqual(run(again));
+    });
+  });
+});
+
+// The behaviour table (C43, C44): one row per kind of every sub-machine `incidents` reads; one test per row, each on a
+// builder view with the span set.
+describe('incidents behaves per situation by its behaviour table (C44)', () => {
+  it('exports INCIDENTS_BEHAVIOUR from its index: a row for every kind of every sub-machine it reads, and no other', () => {
+    const table = (unit as Record<string, unknown>)[behaviourExport('incidents')] as BehaviourTable<unknown> | undefined;
+    expect(table, 'INCIDENTS_BEHAVIOUR').toBeDefined();
+    expect(Object.keys(table ?? {}).sort()).toEqual([...MACHINES].sort());
+    for (const machine of MACHINES) {
+      const kinds = SPAN_DECLARATIONS.find((d) => d.machine === machine)?.kinds ?? [];
+      expect(Object.keys(table?.[machine] ?? {}).sort(), machine).toEqual([...kinds].sort());
+    }
+  });
+
+  // C14: the feed is the race's; in any other weekend phase it holds nothing.
+  describe('weekend-phase', () => {
+    const PHASES: Record<'practice' | 'qualifying' | 'none' | 'pending', WeekendPhase> = {
+      practice: { kind: 'practice', format: 'practice', segment: 1 },
+      qualifying: { kind: 'qualifying', format: 'grandPrix', segment: 1 },
+      none: { kind: 'none' },
+      pending: { kind: 'pending' },
+    };
+    const feedIn = (weekendPhase: WeekendPhase, session = {}) => run(viewOf({ miniSectors: race(), events: [collision(6, 5)], weekendPhase, session }));
+
+    it('race: the feed holds the incidents of the race, a grand prix or a sprint', () => {
+      expect(feedIn({ kind: 'race', format: 'grandPrix' }).map((e) => e.id)).toEqual([`collision:6-5:${T}`]);
+      expect(feedIn({ kind: 'race', format: 'sprint' }).map((e) => e.id)).toEqual([`collision:6-5:${T}`]);
+    });
+
+    it.each(['practice', 'qualifying'] as const)('%s: the feed is empty (race only)', (phase) => {
+      expect(feedIn(PHASES[phase])).toEqual([]);
+    });
+
+    it('none: the feed is empty (notApplicable, C14)', () => {
+      expect(feedIn(PHASES.none)).toEqual([]);
+    });
+
+    it('pending (no weekend phase yet, no span): the feed is empty, as on the grid (C14)', () => {
+      expect(feedIn(PHASES.pending)).toEqual([]);
+    });
+
+    it('the weekend phase decides, not the session type', () => {
+      expect(feedIn(PHASES.practice, { kind: 'race' })).toEqual([]);
+      expect(feedIn({ kind: 'race', format: 'grandPrix' }, { kind: 'practice' })).toHaveLength(1);
+    });
+  });
+
+  describe('session-phase-race', () => {
+    const miniSectors = race({ delays: [slow7(2_500)] });
+
+    it.each(['SC', 'VSC', 'red'] as const)('neutralised and suspended (%s): a neutralised entry, and no timeLoss inside it', (kind) => {
+      const span = neutralisation({ kind, start: SLOW_START - 10_000, end: SLOW_START + 30_000 });
+      const feed = run(viewOf({ miniSectors, phases: [span], laps: leaderLaps(LAPS) }));
+      expect(only(feed, 'neutralised')).toMatchObject({ at: SLOW_START - 10_000, carIds: [] });
+      expect(ofKind(feed, 'timeLoss')).toEqual([]);
+    });
+
+    it.each(['grid', 'formation', 'startLights', 'racing', 'finished', 'postSession'])('%s: no entry of its own', (kind) => {
+      const spans = chain('session-phase-race', undefined, [{ kind, at: SLOW_START - 10_000 }], SLOW_START + 30_000);
+      const feed = run(viewOf({ miniSectors: race(), events: [collision(6, 5)], spans }));
+      expect(feed.map((e) => e.kind)).toEqual(['collision']);
+    });
+
+    it('racing: a slow mini-sector inside it is a timeLoss', () => {
+      const spans = chain('session-phase-race', undefined, [{ kind: 'racing', at: 1_000 }]);
+      expect(only(run(viewOf({ miniSectors, spans })), 'timeLoss').at).toBe(SLOW_START);
+    });
+
+    it('a mini-sector shares a frame with a neutralisation by frame, not by time (C26)', () => {
+      // the SC opens on the frame before car 7's crossing (5, 11) that ends the slow mini-sector, at that crossing's
+      // race-clock time: several frames share one time, so the times touch but the frames overlap
+      const sc = neutralisation({ kind: 'SC', start: SLOW_END, end: SLOW_END + 30_000, startFrame: SLOW_END - 1 });
+      expect(ofKind(run(viewOf({ miniSectors, phases: [sc] })), 'timeLoss')).toEqual([]);
+    });
+  });
+
+  // A session-phase sub-machine of another weekend phase: the feed is the race's, so none of its kinds gives an entry.
+  describe.each([
+    ['session-phase-qualifying', { kind: 'qualifying', format: 'grandPrix', segment: 1 }],
+    ['session-phase-practice', { kind: 'practice', format: 'practice', segment: 1 }],
+  ] as const)('%s', (machine, weekendPhase) => {
+    it.each(['grid', 'running', 'suspended', 'finished', 'postSession'])('%s: no entry (the feed is race only)', (kind) => {
+      const detail = kind === 'suspended' ? { restart: unknown('notReceived') } : undefined;
+      const spans = chain(machine, undefined, [{ kind, at: T - 10_000, detail }], T + 30_000);
+      expect(run(viewOf({ miniSectors: race({ delays: [slow7(2_500)] }), events: [collision(6, 5)], spans, weekendPhase }))).toEqual([]);
+    });
+  });
+
+  describe('car-location', () => {
+    const miniSectors = race({ delays: [slow7(2_500)] });
+    const losses = (spans: ReturnType<typeof location>) => ofKind(run(viewOf({ miniSectors, spans })), 'timeLoss').map((e) => e.at);
+
+    it('track: a slow mini-sector on track is a timeLoss', () => {
+      expect(losses(location(7))).toEqual([SLOW_START]);
+    });
+
+    it('pitLane: a slow mini-sector that shares a frame with a pit visit (closed or open) is no timeLoss', () => {
+      expect(losses(location(7, [{ kind: 'pitLane', at: SLOW_START + 1_000 }, { kind: 'track', at: SLOW_START + 20_000 }]))).toEqual([]);
+      const now = until(miniSectors, SLOW_START + 20_000);
+      expect(ofKind(run(viewOf({ miniSectors: now, spans: location(7, [{ kind: 'pitLane', at: SLOW_START + 1_000 }]) })), 'timeLoss')).toEqual([]);
+    });
+
+    it('garage: a slow mini-sector that shares a frame with a spell in the garage is no timeLoss', () => {
+      expect(losses(location(7, [{ kind: 'garage', at: SLOW_START + 1_000 }, { kind: 'track', at: SLOW_START + 20_000 }]))).toEqual([]);
+    });
+
+    it("another car's pit visit excludes nothing of car 7", () => {
+      expect(losses([...location(7), ...location(6, [{ kind: 'pitLane', at: SLOW_START + 1_000 }, { kind: 'track', at: SLOW_START + 20_000 }])])).toEqual([SLOW_START]);
+    });
+
+    // C26 (Task 19 review): a pit visit is matched to a mini-sector by frames, as a neutralisation is, never by times.
+    describe('a pit visit overlaps by frame, not by time, as a neutralisation does (C26)', () => {
+      it('a visit that opens on the frame before the crossing that ends the slow mini-sector, at its time, overlaps it', () => {
+        // the pit stop record's times touch the mini-sector's end and do not overlap it; the frames do
+        const spans = location(7, [{ kind: 'pitLane', at: SLOW_END, frame: SLOW_END - 1 }, { kind: 'track', at: SLOW_END + 20_000 }]);
+        const pitStops = [pitStop(car(7), 5, SLOW_END, SLOW_END + 20_000)];
+        expect(ofKind(run(viewOf({ miniSectors, spans, pitStops })), 'timeLoss')).toEqual([]);
+      });
+
+      it('a visit that closes on the frame after the crossing that starts the slow mini-sector, at its time, overlaps it', () => {
+        const spans = location(7, [{ kind: 'pitLane', at: SLOW_START - 20_000 }, { kind: 'track', at: SLOW_START, frame: SLOW_START + 1 }]);
+        const pitStops = [pitStop(car(7), 5, SLOW_START - 20_000, SLOW_START)];
+        expect(ofKind(run(viewOf({ miniSectors, spans, pitStops })), 'timeLoss')).toEqual([]);
+      });
+
+      it("a visit that opens on the crossing's own frame does not overlap the mini-sector that ends there", () => {
+        expect(losses(location(7, [{ kind: 'pitLane', at: SLOW_END }, { kind: 'track', at: SLOW_END + 20_000 }]))).toEqual([SLOW_START]);
+      });
+
+      it("a pit stop record alone excludes nothing: the visit is the car's car-location span, with its frames", () => {
+        const pitStops = [pitStop(car(7), 5, SLOW_START - 1_000, SLOW_START + 20_000)];
+        expect(ofKind(run(viewOf({ miniSectors, spans: location(7), pitStops })), 'timeLoss').map((e) => e.at)).toEqual([SLOW_START]);
+      });
+    });
+  });
+
+  describe('car-status', () => {
+    const feedWith = (spans: ReturnType<typeof status>, events: RaceEvent[] = []) => run(viewOf({ miniSectors: race(), spans, events }));
+
+    it('competing: no entry', () => {
+      expect(feedWith([...status(7), ...status(8)])).toEqual([]);
+    });
+
+    it('retired: a major retirement entry when the span opens, with no time lost', () => {
+      const entry = only(feedWith(status(8, [{ kind: 'retired', at: T, detail: RETIRED }])), 'retirement');
+      expect(entry).toMatchObject({ id: `retirement:8:${T}`, at: T, lap: 5, severity: 'major', carIds: [car(8)] });
+      expect(entry.timeLostMs).toEqual(unknown('notApplicable'));
+    });
+
+    it('retired since the engine joined the session (joinedAt): no entry, its retirement was not seen', () => {
+      expect(feedWith(chain('car-status', 8, [{ kind: 'retired', at: T, detail: RETIRED, joinedAt: true }]))).toEqual([]);
+    });
+
+    it('disqualified: a penalty entry of kind disqualified when the span opens', () => {
+      const entry = only(feedWith(status(7, [{ kind: 'disqualified', at: T }])), 'penalty');
+      expect(entry).toMatchObject({ id: `penalty:7:${T}`, at: T, severity: 'minor', carIds: [car(7)] });
+      expect(entry.penalty).toEqual({ kind: 'disqualified' });
+    });
+
+    it('a disqualification closed unconfirmed is no entry (C18)', () => {
+      expect(feedWith(status(7, [{ kind: 'disqualified', at: T, confirmed: false }, { kind: 'competing', at: T + 1_500 }]))).toEqual([]);
+    });
+
+    it('absent: no entry', () => {
+      expect(feedWith(status(8, [{ kind: 'absent', at: T }]))).toEqual([]);
+    });
+
+    it('a retirement event without the car-status span is no entry: retirements come from car-status (C13, C20)', () => {
+      expect(feedWith(status(8), [event({ kind: 'retirement', at: T, carId: car(8), params: { reason: 'retired' } })])).toEqual([]);
+    });
+  });
+
+  describe('penalties', () => {
+    const penalties = (spans: ReturnType<typeof owes>) => ofKind(run(viewOf({ miniSectors: race(), spans })), 'penalty').map((e) => [e.at, e.penalty]);
+
+    it('clear: no entry; a served penalty (back to clear) adds none', () => {
+      expect(penalties(owes(7, []))).toEqual([]);
+      expect(penalties(owes(7, [{ at: T - 30_000, dt: 1 }, { at: T }]))).toEqual([[T - 30_000, { kind: 'driveThrough' }]]);
+    });
+
+    it('timePenalty: a time penalty entry with its time, the rise of the time penalties in total', () => {
+      expect(penalties(owes(7, [{ at: T, totalMs: 5_000 }]))).toEqual([[T, { kind: 'time', timeMs: 5_000 }]]);
+      expect(penalties(owes(7, [{ at: T - 20_000, totalMs: 5_000 }, { at: T, totalMs: 15_000 }]))).toEqual([
+        [T, { kind: 'time', timeMs: 10_000 }],
+        [T - 20_000, { kind: 'time', timeMs: 5_000 }],
+      ]);
+    });
+
+    it('driveThroughPending: a drive-through entry, with no time', () => {
+      expect(penalties(owes(7, [{ at: T, dt: 1 }]))).toEqual([[T, { kind: 'driveThrough' }]]);
+    });
+
+    it('stopGoPending: a stop-go entry, with no time', () => {
+      expect(penalties(owes(7, [{ at: T, sg: 1 }]))).toEqual([[T, { kind: 'stopGo' }]]);
+    });
+
+    it('a drive-through served while a time penalty stands adds no entry', () => {
+      const spans = owes(7, [{ at: T - 20_000, totalMs: 5_000 }, { at: T - 10_000, dt: 1, totalMs: 5_000 }, { at: T, totalMs: 5_000 }]);
+      expect(penalties(spans)).toEqual([
+        [T - 10_000, { kind: 'driveThrough' }],
+        [T - 20_000, { kind: 'time', timeMs: 5_000 }],
+      ]);
+    });
+
+    it('a time penalty given while a drive-through is pending is a time penalty entry', () => {
+      const spans = owes(7, [{ at: T - 10_000, dt: 1 }, { at: T, dt: 1, totalMs: 5_000 }]);
+      expect(penalties(spans)).toEqual([
+        [T, { kind: 'time', timeMs: 5_000 }],
+        [T - 10_000, { kind: 'driveThrough' }],
+      ]);
+    });
+
+    it('owed since the engine joined the session (joinedAt): no entry, the penalty was not seen given', () => {
+      expect(penalties(chain('penalties', 7, [owedStep({ at: T, totalMs: 5_000, joinedAt: true })]))).toEqual([]);
+    });
+
+    it('a PENA penalty event without a penalties span is no entry: penalties come from the spans (C13, C20)', () => {
+      expect(run(viewOf({ miniSectors: race(), spans: owes(7, []), events: [penaltyEvent(7, TIME_PENALTY)] }))).toEqual([]);
+    });
+  });
+
+  describe('warnings', () => {
+    it('noWarning: no entry', () => {
+      expect(run(viewOf({ miniSectors: race(), spans: warned(7, []) }))).toEqual([]);
+    });
+
+    it("warned: a warning entry with the span's count of the limit", () => {
+      const entry = only(run(viewOf({ miniSectors: race(), spans: warned(7, [T - 10_000, T]) })).filter((e) => e.at === T), 'warning');
+      expect(entry).toMatchObject({ id: `warning:7:${T}`, at: T, carIds: [car(7)], warning: { count: 2, limit: 3 } });
+    });
+
+    it('warned since the engine joined the session (joinedAt): no entry, the warning was not seen given', () => {
+      const spans = chain('warnings', 7, [{ kind: 'warned', at: T, detail: { count: 2, infringement: unknown('notReceived') }, joinedAt: true }]);
+      expect(run(viewOf({ miniSectors: race(), spans }))).toEqual([]);
+    });
+
+    it('a PENA warning event without a warned span is no entry: warnings come from the spans (C13, C20)', () => {
+      expect(run(viewOf({ miniSectors: race(), spans: warned(7, []), events: [penaltyEvent(7, WARNING)] }))).toEqual([]);
     });
   });
 });
