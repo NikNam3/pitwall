@@ -46,12 +46,12 @@ export const tyreWearCalculator: QuickCalculator<TyreWearOutput> = {
     const { limitPct } = TYRE_WEAR_CONFIG.read(view);
     const { wearLapsWarning: warnLaps } = ALARMS_CONFIG.read(view);
     const rateOpts = PER_LAP_RATE_CONFIG.read(view);
-    const classes = { isRace: view.state.session.kind === 'race', ...LAP_CLASSES_CONFIG.read(view) };
+    const classes = { isRace: view.live.session.kind === 'race', ...LAP_CLASSES_CONFIG.read(view) };
     const out: Record<CarId, TyreWear> = {};
-    for (const car of view.state.cars) {
+    for (const car of view.live.cars) {
       if (!car.active) continue;
       const own = onFittedSet(
-        currentStintLaps(view.state.history, car.id).filter((l) => classifyLap(l, classes).forRate),
+        currentStintLaps(view.history, car.id).filter((l) => classifyLap(l, classes).forRate),
         car.tyres,
       );
       const corner = (c: (typeof CORNERS)[number]): TyreWear['corners']['fl'] => {

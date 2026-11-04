@@ -42,11 +42,11 @@ const notApplicable = unknown('notApplicable');
 const insufficientData = unknown('insufficientData');
 
 const foldLaps = (acc: Acc, view: EngineView, from: number): void => {
-  addLaps(acc.laps, view.state.history.laps.slice(from) as LapRecord[]);
+  addLaps(acc.laps, view.history.laps.slice(from) as LapRecord[]);
 };
 
 const foldCrossings = (acc: Acc, view: EngineView, from: number): void => {
-  const list = view.state.history.crossings;
+  const list = view.history.crossings;
   for (let i = from; i < list.length; i++) {
     const m = list[i] as MiniSectorCrossing;
     const byLap = (acc.crossings[m.carId] ??= new Map());
@@ -59,9 +59,9 @@ const foldCrossings = (acc: Acc, view: EngineView, from: number): void => {
 
 /** What the view shows right now: cars, session and config (the history is folded separately). */
 const snapshot = (acc: Acc, view: EngineView): void => {
-  const { state } = view;
-  acc.cars = state.cars.map((c) => ({ id: c.id, active: c.active, lap: c.timing.lap, driverStatus: c.timing.driverStatus, pitStatus: c.timing.pitStatus, outOfRace: outOfRace(c) }));
-  const s = state.session;
+  const { live } = view;
+  acc.cars = live.cars.map((c) => ({ id: c.id, active: c.active, lap: c.timing.lap, driverStatus: c.timing.driverStatus, pitStatus: c.timing.pitStatus, outOfRace: outOfRace(c) }));
+  const s = live.session;
   acc.session = { kind: s.kind, sessionType: s.sessionType, numActiveCars: s.numActiveCars, timeLeftMs: s.timeLeftMs, updatedAt: s.updatedAt };
   const config = LAP_TIMES_CONFIG.read(view);
   acc.eliminated = { q1: config.eliminatedQ1, q2: config.eliminatedQ2 };

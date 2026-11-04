@@ -31,7 +31,7 @@ const runLaps = (laps: readonly LapRecord[]): readonly LapRecord[] => laps.slice
  */
 const burnSamples = (view: EngineView, id: CarId, isRace: boolean): GainSample[] => {
   const classes = { isRace, ...LAP_CLASSES_CONFIG.read(view) };
-  return runLaps(carLaps(view.state.history, id)).flatMap((l) => {
+  return runLaps(carLaps(view.history, id)).flatMap((l) => {
     if (!classifyLap(l, classes).forRate || !l.fuelAtStartKg.known || !l.fuelAtEndKg.known) return [];
     const burn = l.fuelAtStartKg.value - l.fuelAtEndKg.value;
     return burn >= 0 ? [{ lap: l.lapNumber, gain: burn, at: l.completedAt }] : [];
@@ -39,11 +39,11 @@ const burnSamples = (view: EngineView, id: CarId, isRace: boolean): GainSample[]
 };
 
 const fuelState = (view: EngineView, id: CarId, lapsLeft: Known<number>): FuelState => {
-  const { state } = view;
-  const car = state.cars[id];
+  const { live } = view;
+  const car = live.cars[id];
   const fuel = car?.energy.fuel;
-  const now: SessionTime = state.sessionTime;
-  const kind = state.session.kind;
+  const now: SessionTime = live.sessionTime;
+  const kind = live.session.kind;
   if (fuel === undefined || !fuel.known) {
     const reason = fuel === undefined ? unknown('notReceived') : unknown(fuel.reason);
     return {
@@ -93,7 +93,7 @@ export const fuelCalculator: QuickCalculator<FuelOutput> = {
     const remaining = view.outputs.get(SESSION_REMAINING) as SessionRemaining | undefined;
     const lapsLeft = remaining?.lapsLeft ?? unknown('notReceived');
     const out: FuelOutput = {};
-    for (const car of view.state.cars) if (car.active) out[car.id as CarId] = fuelState(view, car.id, lapsLeft);
+    for (const car of view.live.cars) if (car.active) out[car.id as CarId] = fuelState(view, car.id, lapsLeft);
     return out;
   },
 };

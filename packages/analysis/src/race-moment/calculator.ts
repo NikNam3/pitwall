@@ -44,7 +44,7 @@ export const raceMomentCalculator: QuickCalculator<RaceMomentOutput> = {
   reads: ['flagPhases', 'session', { calculator: INCIDENTS }, { calculator: BATTLE }, { calculator: ALARMS }],
   cadence: { hz: 4 },
   compute(view) {
-    const { session, sessionTime: now } = view.state;
+    const { session, sessionTime: now } = view.live;
     if (session.kind !== 'race') return NOT_APPLICABLE;
     const cfg = RACE_MOMENT_CONFIG.read(view);
     const holding: Holding[] = [];

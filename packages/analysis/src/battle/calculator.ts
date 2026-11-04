@@ -35,7 +35,7 @@ function paceDelta(ours: Known<Ms> | undefined, theirs: Known<Ms> | undefined): 
 }
 
 function side(view: EngineView, gaps: GapsOutput, pace: Pace, drs: DrsStatus, ourId: CarId, theirId: CarId, isAhead: boolean): Known<BattleSide> {
-  const { cars } = view.state;
+  const { cars } = view.live;
   const ours = cars[ourId];
   const theirs = cars[theirId];
   if (ours === undefined || theirs === undefined) return NOT_APPLICABLE;
@@ -67,13 +67,13 @@ function side(view: EngineView, gaps: GapsOutput, pace: Pace, drs: DrsStatus, ou
       theirs: tyre(theirs),
       theirErsStoreJ: ers.known ? known(ers.value.storeJ, ers.at) : ers,
     },
-    view.state.sessionTime,
+    view.live.sessionTime,
   );
 }
 
 /** One of our cars against its neighbours in the order of `gaps.intervals`. */
 function cardOf(view: EngineView, gaps: GapsOutput | undefined, pace: Pace | undefined, drs: DrsStatus, ourId: CarId): BattleCard {
-  if (view.state.session.kind !== 'race') return { carId: ourId, ahead: NOT_APPLICABLE, behind: NOT_APPLICABLE, drs };
+  if (view.live.session.kind !== 'race') return { carId: ourId, ahead: NOT_APPLICABLE, behind: NOT_APPLICABLE, drs };
   if (gaps === undefined || pace === undefined) return { carId: ourId, ahead: unknown('notReceived'), behind: unknown('notReceived'), drs };
   const at = gaps.intervals.findIndex((i) => i.carId === ourId);
   const neighbour = (index: number) => (at < 0 ? undefined : gaps.intervals[index]?.carId);
@@ -96,9 +96,9 @@ export const battleCalculator: QuickCalculator<BattleOutput> = {
   compute(view) {
     const gaps = view.outputs.get('gaps') as GapsOutput | undefined;
     const pace = view.outputs.get('pace') as Pace | undefined;
-    const drs = drsStatus(view.state);
+    const drs = drsStatus({ session: view.live.session, history: view.history });
     const out: BattleOutput = {};
-    for (const id of ourCars(view.state)) out[id] = cardOf(view, gaps, pace, drs, id);
+    for (const id of ourCars(view.live)) out[id] = cardOf(view, gaps, pace, drs, id);
     return out;
   },
 };

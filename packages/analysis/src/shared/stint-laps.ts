@@ -2,7 +2,7 @@
 import { currentLaps, type CarId, type LapRecord, type StintRecord } from '@pitwall/domain';
 import type { EngineView } from '@pitwall/engine/readers';
 
-type History = Pick<EngineView['state']['history'], 'laps' | 'stints'>;
+type History = Pick<EngineView['history'], 'laps' | 'stints'>;
 
 /**
  * The laps of the current stint among one car's laps. `history.stints` holds closed stints only (the engine writes a

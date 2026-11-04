@@ -57,6 +57,8 @@ export class TopicPublisher {
       else if ('fromInsights' in binding) this.#insights.push(binding.topic);
       else if ('fromJob' in binding) this.#jobs.push(binding);
       else if ('fromLive' in binding) this.#live.push(binding);
+      // No topic carries a sub-machine's spans yet: the first one (Task 23) brings their publishing and its tests.
+      else if ('fromSituation' in binding) throw new Error(`topic ${binding.topic}: situation bindings are not published yet`);
       else throw new Error(`unknown topic binding ${JSON.stringify(binding satisfies never)}`);
     }
   }

@@ -25,7 +25,7 @@ const NOT_APPLICABLE = unknown('notApplicable');
  * outputs hold them: one new `recent` window per car that crossed something.
  */
 function foldCrossings(acc: Table, view: EngineView, from: number): void {
-  const list = view.state.history.crossings;
+  const list = view.history.crossings;
   if (from >= list.length) return;
   let lineTimes = acc.lineTimes;
   const crossed = new Set<CarId>();
@@ -50,11 +50,11 @@ function foldCrossings(acc: Table, view: EngineView, from: number): void {
 }
 
 function foldEvents(acc: Table, view: EngineView, from: number): void {
-  for (const e of view.state.history.events.slice(from)) if (e.kind === 'lightsOut') acc.lightsOutAt = e.at;
+  for (const e of view.history.events.slice(from)) if (e.kind === 'lightsOut') acc.lightsOutAt = e.at;
 }
 
 const raceStartAt = (acc: Table, view: EngineView): Known<SessionTime> => {
-  if (view.state.session.kind !== 'race') return NOT_APPLICABLE;
+  if (view.live.session.kind !== 'race') return NOT_APPLICABLE;
   return acc.lightsOutAt === undefined ? unknown('notReceived') : known(acc.lightsOutAt, acc.lightsOutAt);
 };
 
@@ -69,9 +69,9 @@ const leaderGap = (leader: CarCrossings | undefined): Known<Ms> => {
 
 /** Grid position minus position; the grid position is 0 until the first LapData (the engine counts it from 1). */
 const positionsGained = (timing: { gridPosition: number; position: number }, view: EngineView): Known<number> => {
-  if (view.state.session.kind !== 'race') return NOT_APPLICABLE;
+  if (view.live.session.kind !== 'race') return NOT_APPLICABLE;
   if (timing.gridPosition === 0) return unknown('notReceived');
-  return known(timing.gridPosition - timing.position, view.state.sessionTime);
+  return known(timing.gridPosition - timing.position, view.live.sessionTime);
 };
 
 /** A neutralised phase: its end `undefined` while it is open. */
@@ -79,7 +79,7 @@ type Phase = { kind: FlagPhase['kind']; start: SessionTime; end: SessionTime | u
 
 /** The race's neutralised phases from the history, then the open one. */
 const neutralisedPhases = (view: EngineView): Phase[] => {
-  const closed = view.state.history.flagPhases.map((p) => ({ kind: p.kind, start: p.start, end: p.end }));
+  const closed = view.history.flagPhases.map((p) => ({ kind: p.kind, start: p.start, end: p.end }));
   const open = view.activeFlagPhase;
   return open === undefined ? closed : [...closed, { kind: open.kind, start: open.start, end: undefined }];
 };
@@ -96,7 +96,7 @@ const leaderLapAt = (acc: Table, t: SessionTime): number => {
 
 /** The phases on the gapper's x: the leader's progress at their start and end. */
 const phasesOf = (acc: Table, view: EngineView): GapsOutput['phases'] => {
-  if (view.state.session.kind !== 'race') return [];
+  if (view.live.session.kind !== 'race') return [];
   return neutralisedPhases(view).map(({ kind, start, end }) => ({
     kind,
     fromLap: leaderLapAt(acc, start),
@@ -106,7 +106,7 @@ const phasesOf = (acc: Table, view: EngineView): GapsOutput['phases'] => {
 
 /** The running cars in position order (ties by id), their intervals, the cars around each of ours, and the cars out of the race. */
 function build(acc: Table, view: EngineView): GapsOutput {
-  const active = view.state.cars.filter((c) => c.active);
+  const active = view.live.cars.filter((c) => c.active);
   const running = active
     .filter((c) => !outOfRace(c)) // out of the race: no gaps, no neighbour
     .sort((a, b) => a.timing.position - b.timing.position || a.id - b.id);
@@ -130,7 +130,7 @@ function build(acc: Table, view: EngineView): GapsOutput {
   const { neighbourhoodMs } = GAPS_CONFIG.read(view);
   const near = (gap: Known<Ms>) => gap.known && Math.abs(gap.value) <= neighbourhoodMs;
   const neighbourhood: Neighbourhood[] = [];
-  for (const ourCarId of ourCars(view.state)) {
+  for (const ourCarId of ourCars(view.live)) {
     const at = order.indexOf(ourCarId);
     if (at < 0) continue;
     const carIds = order.filter((_, j) => j !== at && (Math.abs(j - at) <= 1 || near(gapBehind(tracks[j], tracks[at]))));

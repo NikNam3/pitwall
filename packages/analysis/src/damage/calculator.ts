@@ -37,20 +37,20 @@ type Acc = {
 
 const settings = (view: EngineView) => ({
   ...DAMAGE_CONFIG.read(view),
-  isRace: view.state.session.kind === 'race',
+  isRace: view.live.session.kind === 'race',
   ...LAP_CLASSES_CONFIG.read(view),
   window: PACE_CONFIG.read(view).window,
 });
 
 const foldLaps = (acc: Acc, view: EngineView): void => {
-  const { laps } = view.state.history;
+  const { laps } = view.history;
   addLaps(acc.laps, laps.slice(acc.lapCount) as LapRecord[]);
   acc.lapCount = laps.length;
 };
 
 const foldCars = (acc: Acc, view: EngineView): void => {
   acc.now.clear();
-  for (const car of view.state.cars) {
+  for (const car of view.live.cars) {
     if (!car.active) continue;
     const { bodywork, powerUnit } = car.condition;
     const parts: DamageState['parts'] = !bodywork.known
@@ -75,7 +75,7 @@ const foldCars = (acc: Acc, view: EngineView): void => {
 
 const fold = (acc: Acc, view: EngineView): Acc => {
   Object.assign(acc, settings(view));
-  foldDamageJumps(acc.grouping, view.state.history.events, acc);
+  foldDamageJumps(acc.grouping, view.history.events, acc);
   foldLaps(acc, view);
   foldCars(acc, view);
   return acc;

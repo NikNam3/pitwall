@@ -58,10 +58,10 @@ export const carBandsCalculator: QuickCalculator<CarBandsOutput> = {
   cadence: { hz: 4 },
   compute(view: EngineView): CarBandsOutput {
     const config = CAR_BANDS_CONFIG.read(view);
-    const lastLap = lastLaps(view.state.history.laps);
-    const classes = { isRace: view.state.session.kind === 'race', ...LAP_CLASSES_CONFIG.read(view) };
+    const lastLap = lastLaps(view.history.laps);
+    const classes = { isRace: view.live.session.kind === 'race', ...LAP_CLASSES_CONFIG.read(view) };
     const out: CarBandsOutput = {};
-    for (const car of view.state.cars) if (car.active) out[car.id] = bandsOfCar(car, lastLap.get(car.id), config, classes);
+    for (const car of view.live.cars) if (car.active) out[car.id] = bandsOfCar(car, lastLap.get(car.id), config, classes);
     return out;
   },
 };

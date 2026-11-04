@@ -13,8 +13,8 @@ import type { ErsOutput } from './index.ts';
  * not tied to the tyre set, so a stop keeps the samples.
  */
 function trendSamples(view: EngineView, id: CarId): GainSample[] {
-  const classes = { isRace: view.state.session.kind === 'race', ...LAP_CLASSES_CONFIG.read(view) };
-  return carLaps(view.state.history, id).flatMap((l) =>
+  const classes = { isRace: view.live.session.kind === 'race', ...LAP_CLASSES_CONFIG.read(view) };
+  return carLaps(view.history, id).flatMap((l) =>
     classifyLap(l, classes).forRate && l.ersStoreAtStartJ.known && l.ersStoreAtEndJ.known
       ? [{ lap: l.lapNumber, gain: l.ersStoreAtEndJ.value - l.ersStoreAtStartJ.value, at: l.completedAt }]
       : [],
@@ -35,7 +35,7 @@ function attackOf(storeJ: Known<number>, attackLevelJ: number, lapsToLevel: Know
   return known({ ready: false, inLaps: Math.max(1, Math.ceil(lapsToLevel.value)) }, lapsToLevel.at);
 }
 
-function ersOf(view: EngineView, car: EngineView['state']['cars'][number]): ErsState {
+function ersOf(view: EngineView, car: EngineView['live']['cars'][number]): ErsState {
   const { deployLimitJ, capacityJ, attackLevelJ } = ERS_CONFIG.read(view);
   const constants = { capacityJ, deployLimitJ, attackLevelJ };
   const ers = car.energy.ers;
@@ -76,7 +76,7 @@ export const ersCalculator: QuickCalculator<ErsOutput> = {
   cadence: { hz: 4 },
   compute: (view): ErsOutput => {
     const out: ErsOutput = {};
-    for (const car of view.state.cars) if (car.active) out[car.id] = ersOf(view, car);
+    for (const car of view.live.cars) if (car.active) out[car.id] = ersOf(view, car);
     return out;
   },
 };

@@ -15,6 +15,7 @@ function referencedCalculator(binding: TopicBinding): CalculatorId | undefined {
     case 'fromHistory' in binding:
     case 'fromInsights' in binding:
     case 'fromLive' in binding:
+    case 'fromSituation' in binding:
       return undefined;
     default:
       throw new Error(`unknown topic binding ${JSON.stringify(binding satisfies never)}`);

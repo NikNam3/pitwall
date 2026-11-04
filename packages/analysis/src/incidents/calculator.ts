@@ -123,9 +123,9 @@ type Acc = {
 const overlaps = (start: SessionTime, end: SessionTime, span: Span): boolean => start < span.end && end > span.start;
 
 const readLive = (acc: Acc, view: EngineView): void => {
-  const { state } = view;
-  acc.isRace = state.session.kind === 'race';
-  const { trackLengthM, sector2StartM, sector3StartM } = state.session;
+  const { live } = view;
+  acc.isRace = live.session.kind === 'race';
+  const { trackLengthM, sector2StartM, sector3StartM } = live.session;
   acc.layout = { trackLengthM, sector2StartM, sector3StartM };
   acc.config = INCIDENTS_CONFIG.read(view);
   const { jumpPct, jumpWindowMs } = DAMAGE_CONFIG.read(view);
@@ -135,10 +135,10 @@ const readLive = (acc: Acc, view: EngineView): void => {
   acc.neighbourhoodMs = GAPS_CONFIG.read(view).neighbourhoodMs;
   acc.window = PACE_CONFIG.read(view).window;
   acc.maxNeutralisedMs = LAP_CLASSES_CONFIG.read(view).maxNeutralisedMs;
-  acc.ours = ourCars(state);
+  acc.ours = ourCars(live);
   const phase = view.activeFlagPhase;
   acc.active = phase && { at: phase.start, lap: phase.startLeaderLap };
-  acc.pitting = new Set(state.cars.filter((c) => c.timing.pitStatus !== 'none').map((c) => c.id));
+  acc.pitting = new Set(live.cars.filter((c) => c.timing.pitStatus !== 'none').map((c) => c.id));
 };
 
 /**
@@ -147,7 +147,7 @@ const readLive = (acc: Acc, view: EngineView): void => {
  * closed flag phase, as a neutralisation never confirmed does, C18), so the fold equals a run from scratch (C31).
  */
 const foldCrossings = (acc: Acc, view: EngineView, activeChanged: boolean): void => {
-  const { flagPhases, pitStops, crossings } = view.state.history;
+  const { flagPhases, pitStops, crossings } = view.history;
   const reset = new Set<number>();
   let resetAll = activeChanged;
   for (const p of flagPhases.slice(acc.flagPhases)) {
@@ -186,7 +186,7 @@ const penaltyOf = (params: Record<string, number | string>): IncidentPenalty | u
 };
 
 const foldEvents = (acc: Acc, view: EngineView): void => {
-  const { events } = view.state.history;
+  const { events } = view.history;
   for (const e of events.slice(acc.events)) {
     if (e.carId === undefined) continue;
     const carIds = e.otherCarId === undefined ? [e.carId] : [e.carId, e.otherCarId];
@@ -208,7 +208,7 @@ const foldEvents = (acc: Acc, view: EngineView): void => {
 };
 
 const foldLaps = (acc: Acc, view: EngineView): void => {
-  const { laps } = view.state.history;
+  const { laps } = view.history;
   addLaps(acc.current, laps.slice(acc.laps) as LapRecord[]);
   acc.laps = laps.length;
 };

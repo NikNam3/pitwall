@@ -10,12 +10,12 @@ export const sessionRemainingCalculator: QuickCalculator<SessionRemaining> = {
   kind: 'quick',
   reads: ['session', 'timing'],
   cadence: { hz: 1 },
-  compute: ({ state }): SessionRemaining => {
-    const { session, sessionTime: at } = state;
+  compute: ({ live }): SessionRemaining => {
+    const { session, sessionTime: at } = live;
     const notApplicable = unknown('notApplicable');
     switch (session.kind) {
       case 'race': {
-        const leader = state.cars.find((c) => c.timing.position === 1);
+        const leader = live.cars.find((c) => c.timing.position === 1);
         let lapsLeft: Known<number>;
         if (!leader || session.trackLengthM <= 0 || session.totalLaps <= 0) lapsLeft = unknown('notReceived');
         else if (leader.timing.resultStatus === 'finished') lapsLeft = known(0, at);

@@ -20,5 +20,7 @@ export {
 // The registered sub-machines, step 0's clock and their type, for tools that read the machine's spans on their own
 // (`pitwall scan-situations`).
 export { MACHINES } from './situations/index.generated.ts';
+// The view's situation of a state (C20, C39): the bridge's scheduler inputs and tools that read the open spans.
+export { situationOf } from './situations/run.ts';
 export { STEP0_CLOCK } from './situations/clock/clock.ts';
 export type { SubMachine } from './situations/machine.ts';

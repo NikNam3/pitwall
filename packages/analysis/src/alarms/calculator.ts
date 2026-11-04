@@ -119,7 +119,7 @@ const warningAlarms = (warnings: number, config: Config, make: Make): Insight[] 
 
 /** Real penalties (not warnings, reminders or lap invalidations) of the car after its latest completed lap; they resolve when it completes the next one. */
 const penaltyAlarms = (view: EngineView, id: CarId, make: Make): Insight[] => {
-  const { laps, events } = view.state.history;
+  const { laps, events } = view.history;
   let lastLapAt = -Infinity;
   for (const l of laps) if (l.carId === id && l.completedAt > lastLapAt) lastLapAt = l.completedAt;
   return events
@@ -132,20 +132,20 @@ const alarmsOf = (view: EngineView, id: CarId, config: Config): Insight[] => {
     key: `${kind}:${id}:${channel}`,
     severity,
     category,
-    feedId: view.state.feedId,
+    feedId: view.live.feedId,
     carId: id,
     kind,
     params,
-    raisedAt: view.state.sessionTime,
+    raisedAt: view.live.sessionTime,
   });
-  const car = view.state.cars[id];
+  const car = view.live.cars[id];
   if (car === undefined) return [];
   const pick = <T>(calculator: string) => (view.outputs.get(calculator) as Record<number, T> | undefined)?.[id];
   const bands = pick<CarBands>(CAR_BANDS);
   const wear = pick<TyreWear>(TYRE_WEAR);
   const fuel = pick<FuelState>(FUEL);
   const damage = pick<DamageState>(DAMAGE);
-  const lap = lastLaps(view.state.history.laps).get(id);
+  const lap = lastLaps(view.history.laps).get(id);
   const lapBands = lap && bandsFor(lap.visualCompound, CAR_BANDS_CONFIG.read(view));
   return [
     ...(bands ? bandAlarms(bands, lap, lapBands, make) : []),
@@ -173,7 +173,7 @@ export const alarmsCalculator: QuickCalculator<AlarmsOutput> = {
   cadence: { hz: 2 },
   compute(view) {
     const config = ALARMS_CONFIG.read(view);
-    return ourCars(view.state).flatMap((id) => alarmsOf(view, id, config));
+    return ourCars(view.live).flatMap((id) => alarmsOf(view, id, config));
   },
   insights: (out) => out,
 };

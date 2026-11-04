@@ -24,9 +24,9 @@ const carsOverview: QuickCalculator<CarOverview[]> = {
   // `updatedAt` moves with every source, so it reads every area a source feeds.
   reads: ['identity', 'timing', 'tyres', 'condition', 'dynamics', 'ownCar', 'laps', 'stints', 'pitStops'],
   cadence: { hz: 10 },
-  compute: ({ state }) => {
-    const stops = byCar(state.history.pitStops);
-    return state.cars.map(({ id, identity, timing, tyres, updatedAt }) => {
+  compute: ({ live, history }) => {
+    const stops = byCar(history.pitStops);
+    return live.cars.map(({ id, identity, timing, tyres, updatedAt }) => {
       return copyPlain({
         id,
         identity,

@@ -140,10 +140,10 @@ const calculatorError = (id: CalculatorId, error: unknown, input: SchedulerInput
   key: `system.calculatorError:${id}`,
   severity: 'advisory',
   category: 'system',
-  feedId: input.state.feedId,
+  feedId: input.live.feedId,
   kind: 'system.calculatorError',
   params: { calculatorId: id, message: error instanceof Error ? error.message : String(error) },
-  raisedAt: input.state.sessionTime,
+  raisedAt: input.live.sessionTime,
 });
 
 /**
@@ -240,7 +240,7 @@ export class Scheduler implements Snapshotable<SchedulerBookkeeping> {
    * they neither run nor note what they missed (for a pass that adds nothing, like a demand change between frames).
    */
   run(input: SchedulerInput, opts: { only?: ReadonlySet<CalculatorId> } = {}): SchedulerResult {
-    const now = input.state.sessionTime;
+    const now = input.live.sessionTime;
     const ran = new Set<CalculatorId>();
     const errors: SchedulerResult['errors'] = [];
     const insights: InsightChange[] = [];
@@ -259,14 +259,17 @@ export class Scheduler implements Snapshotable<SchedulerBookkeeping> {
       if (!due || (slot.lastRunAt !== undefined && !isAffected(calc, slot, pending))) continue;
 
       const view: EngineView = {
-        state: input.state,
-        activeFlagPhase: input.activeFlagPhase,
+        live: input.live,
         situation: input.situation,
-        changed: pending.changed,
+        history: input.history,
         delta: pending.delta,
+        changed: pending.changed,
+        weekend: input.weekend,
+        config: input.config,
+        priors: input.priors,
         feed: input.feed,
         outputs: this.#outputs,
-        config: input.config,
+        activeFlagPhase: input.activeFlagPhase,
       };
       let evaluation: Evaluation;
       try {

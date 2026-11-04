@@ -11,6 +11,7 @@ import {
   type CalculatorRegistry,
   type FeedMetricsView,
   type Frame,
+  type SchedulerInput,
   type StepResult,
   type WeekendContext,
 } from '@pitwall/engine';
@@ -195,7 +196,7 @@ export class SessionProcessor {
         unpublished.push(...publisher.resendInsights(rewound));
       }
       this.#o.calcStats?.atSessionTime(result.state.sessionTime);
-      const scheduled = scheduler.run({ state: result.state, activeFlagPhase: activeFlagPhaseOf(result.state), situation: situationOf(result.state), changed: result.changed, delta: result.delta, feed: this.#o.feedView(), config: this.#o.config });
+      const scheduled = scheduler.run(this.#schedulerInput(result.state, result.changed, result.delta));
       // Each topic is published on its own: a failing feature binding never holds back the others.
       unpublished.push(
         ...publisher.publishOutputs(scheduled),
@@ -213,6 +214,25 @@ export class SessionProcessor {
   };
 
   /**
+   * The scheduler's input for `state` (C39): its live state, situation and projection, the weekend's earlier sessions, the
+   * run's config and the feed health; no priors (`{}` until the priors store exists, C62a).
+   */
+  #schedulerInput(state: StepResult['state'], changed: SchedulerInput['changed'], delta: SchedulerInput['delta']): SchedulerInput {
+    return {
+      live: state,
+      situation: situationOf(state),
+      history: state.history,
+      activeFlagPhase: activeFlagPhaseOf(state),
+      changed,
+      delta,
+      weekend: state.weekend,
+      feed: this.#o.feedView(),
+      config: this.#o.config,
+      priors: {},
+    };
+  }
+
+  /**
    * One scheduler pass on the current state with nothing changed and an empty history delta, restricted to the newly
    * needed calculators `only`: one that never ran is due and runs. Every other calculator stays untouched, `feed`
    * readers included (re-running `feed.status` on the last packet's time would undo a stale status). The outputs and
@@ -224,15 +244,7 @@ export class SessionProcessor {
     const { state } = this.#runner;
     this.#o.calcStats?.atSessionTime(state.sessionTime);
     const lengths = projectionLengths(state.history);
-    const scheduled = scheduler.run({
-      state,
-      activeFlagPhase: activeFlagPhaseOf(state),
-      situation: situationOf(state),
-      changed: new Set(),
-      delta: { before: lengths, after: lengths },
-      feed: this.#o.feedView(),
-      config: this.#o.config,
-    }, { only });
+    const scheduled = scheduler.run(this.#schedulerInput(state, new Set(), { before: lengths, after: lengths }), { only });
     // A pass between frames: a flashback to the frame before it undoes it too.
     const unpublished = [...publisher.publishOutputs(scheduled), ...publisher.publishInsights(scheduled.insights, { frameId: state.lastFrameId, between: true })];
     for (const { error, topic } of unpublished) {

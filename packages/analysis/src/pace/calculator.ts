@@ -15,16 +15,16 @@ type PaceAcc = {
 };
 
 const foldStints = (acc: PaceAcc, view: EngineView, from: number): void => {
-  const stints = view.state.history.stints;
+  const stints = view.history.stints;
   for (const s of stints.slice(from)) acc.lastStint[s.carId] = s;
 };
 
 const foldLaps = (acc: PaceAcc, view: EngineView, from: number): void => {
-  addLaps(acc.laps, view.state.history.laps.slice(from) as LapRecord[]);
+  addLaps(acc.laps, view.history.laps.slice(from) as LapRecord[]);
 };
 
 const settings = (view: EngineView) => ({
-  isRace: view.state.session.kind === 'race',
+  isRace: view.live.session.kind === 'race',
   ...LAP_CLASSES_CONFIG.read(view),
   window: PACE_CONFIG.read(view).window,
 });
