@@ -1,6 +1,6 @@
 // The derived storage layer for one session (spec 9.2, 9.3): its row, its confirmed history, its weekend context.
 import type { DriverKey, ParticipantsValues, SessionState, SessionUid, WeekendPhase } from '@pitwall/domain';
-import type { HistoryDelta, Projection, WeekendContext } from '@pitwall/engine/readers';
+import { CAR_STATUS, carsInSessionOf, type DeepReadonly, type HistoryDelta, type LiveState, type Projection, type Situation, type WeekendContext } from '@pitwall/engine/readers';
 import type { Logger } from '../log.ts';
 import type { Db, SessionKey, SessionRow } from '../storage/db.ts';
 import { StorageWriter } from '../storage/storage-writer.ts';
@@ -25,6 +25,16 @@ export const weekendPhaseText = (phase: WeekendPhase): string => {
   if (phase.kind === 'race' || phase.segment === undefined) return `${phase.kind}:${phase.format}`;
   return `${phase.kind}:${phase.format}:${phase.segment}`;
 };
+
+/**
+ * The session's drivers as the row stores them: the cars car-status has in the session (not `absent`, C43), each with
+ * its driver key from the live state; no signal decides them (C13).
+ */
+export const driversInSession = (live: DeepReadonly<Pick<LiveState, 'cars'>>, situation: Situation): ParticipantsValues['drivers'] =>
+  carsInSessionOf(situation.byMachine[CAR_STATUS]).flatMap((carId) => {
+    const driverKey = live.cars[carId]?.identity.driverKey;
+    return driverKey === undefined ? [] : [{ carId, driverKey: { ...driverKey } }];
+  });
 
 export const sessionRowOf = (s: SessionRowInput): SessionRow => ({
   sessionUid: s.sessionUid,

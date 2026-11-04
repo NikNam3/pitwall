@@ -1,7 +1,6 @@
 // One session of a feed: frames → SessionRunner → Scheduler → topics, plus its session file and its storage.
 import { sessionUidString, type FeedId, type MachineId, type ParticipantsValues, type SessionTime, type SessionUid } from '@pitwall/domain';
 import {
-  participantsValuesOf,
   projectionLengths,
   Scheduler,
   SessionRunner,
@@ -23,7 +22,7 @@ import type { Logger } from '../log.ts';
 import type { SessionKey, SessionRow } from '../storage/db.ts';
 import type { SessionFile } from '../storage/session-files.ts';
 import { MAX_DUMPS_PER_SESSION, writeDebugDump } from './debug-dump.ts';
-import { sessionRowOf, type SessionStorage } from './session-storage.ts';
+import { driversInSession, sessionRowOf, type SessionStorage } from './session-storage.ts';
 import type { PublishError, SpansOf, TopicPublisher } from './topic-publisher.ts';
 
 export type SessionProcessorOptions = {
@@ -71,8 +70,6 @@ export class SessionProcessor {
   readonly #scheduler: Scheduler;
   /** The runner applied a frame: its identity wait is over. */
   #started = false;
-  /** The drivers of the session's slots, once Participants named them: every later row keeps them. */
-  #drivers: ParticipantsValues['drivers'] | undefined;
   #dumps = 0;
   #lastReceivedAtMs = 0;
 
@@ -98,9 +95,6 @@ export class SessionProcessor {
   }
 
   push(frame: Frame): void {
-    // The drivers are stored before the runner asks for the weekend context; a session started by the identity wait's
-    // cap still stores them, so later sessions find it in the weekend.
-    if (frame.participants !== undefined && this.#drivers === undefined) this.#storeDrivers(participantsValuesOf(frame, frame.participants).drivers);
     this.#applying(frame, () => this.#runner.apply(frame, this.#onResult));
   }
 
@@ -152,11 +146,6 @@ export class SessionProcessor {
     return driverKey && this.#o.storage?.weekendContext(this.#key, driverKey);
   }
 
-  #storeDrivers(drivers: ParticipantsValues['drivers']): void {
-    this.#drivers = drivers;
-    this.#o.storage?.upsertSession(this.#row());
-  }
-
   /**
    * Runs `work` (the runner applying frames). A step that throws skips its frame (`runner.applying`), which is reported;
    * the frames still queued behind it are applied by the next call.
@@ -189,8 +178,9 @@ export class SessionProcessor {
       scheduler.setNeeded(this.#o.needed());
     }
     try {
-      // The row stores the weekend phase: once the machine decides it (or a rewind before it undoes it), the row follows.
-      if (result.changed.has('spans:weekend-phase')) storage?.upsertSession(this.#row());
+      // The row stores the weekend phase and the drivers of the cars car-status has in the session: whenever the machine
+      // changes either (a rewind included), the row follows.
+      if (result.changed.has('spans:weekend-phase') || result.changed.has('spans:car-status')) storage?.upsertSession(this.#row());
       storage?.writeConfirmed(this.#key, result.state.history, result.delta);
       // A session time that fell back with no flashback and no start: the engine keeps its race clock monotonic (spec 3.3); worth knowing.
       if (result.clockFall) log.info({ feedId, sessionUid: this.#uid, clockFall: result.clockFall }, 'session time fell back');
@@ -288,12 +278,13 @@ export class SessionProcessor {
 
   /**
    * The session's row from the engine's values: the session as the state holds it (the first Session packet's until a
-   * frame was applied) and its weekend phase (`pending` until the machine decided it); the drivers once stored.
+   * frame was applied), its weekend phase (`pending` until the machine decided it) and the drivers of the cars car-status
+   * has in the session (none before it opened a span).
    */
   #row(): SessionRow {
     const { startedAt, pwrecPath } = this.#o;
     const { state } = this.#runner;
-    const drivers = this.#drivers;
-    return sessionRowOf({ sessionUid: this.#uid, session: state.session, weekendPhase: situationOf(state).weekendPhase, startedAt, pwrecPath, ...(drivers && { drivers }) });
+    const situation = situationOf(state);
+    return sessionRowOf({ sessionUid: this.#uid, session: state.session, weekendPhase: situation.weekendPhase, startedAt, pwrecPath, drivers: driversInSession(state, situation) });
   }
 }
