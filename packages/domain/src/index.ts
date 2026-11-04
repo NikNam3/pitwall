@@ -20,6 +20,8 @@ export { spans as raceControlRaceSpans, type DrsOffDetail, type DrsOffReason } f
 export { spans as penaltiesSpans, type PendingPenaltyDetail, type TimePenaltyDetail } from './situations/penalties.ts';
 export { spans as carLocationSpans } from './situations/car-location.ts';
 export { spans as carStatusSpans, type RetiredDetail } from './situations/car-status.ts';
+export { spans as carActivityPracticeSpans } from './situations/car-activity-practice.ts';
+export { spans as carActivityQualifyingSpans } from './situations/car-activity-qualifying.ts';
 export { spans as clockSpans, type PausedDetail } from './situations/clock.ts';
 export {
   spans as sessionPhaseRaceSpans,
