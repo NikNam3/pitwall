@@ -13,6 +13,7 @@ Everything here is done, superseded or void. **Do not read it unless your brief 
 | `plans/2026-10-29-timing-car-monitoring*.md` | sub-project 3 plan and its questions | done |
 | `plans/2026-10-30-situations.md` | the situations plan | Tasks 0–2 done; Tasks 3–9 replaced by the migration plan |
 | `plans/2026-10-30-strategy-live-calls.md` | SP4a plan | **void** |
+| `plans/2026-11-02-contract-migration.md` | the migration to the contract (M1–M7) | done 2026-11-04 |
 | `notes/` | run rulings and notes of earlier runs | record only; rulings that still bind are in the contract |
 | `reviews/2026-10-28-foundation-architecture-review.md` | the foundation's architecture review | done |
 | `tasks/research-06-engineer-decisions.md` | the brief of research 06 | done; the result is `docs/research/06-engineer-decisions.md` |
