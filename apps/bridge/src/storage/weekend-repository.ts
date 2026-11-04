@@ -26,31 +26,47 @@ export type WeekendRepositoryOptions = {
   log?: Logger;
   /** Rebuilds a session from its recording (`replaceLog`); without it an incomplete session is not served. */
   rebuild?: (row: StoredSessionRow) => Promise<void>;
+  /**
+   * The rules version this bridge computes (C61): a session stored under another one is stale, like one whose log is not
+   * complete. Without it only completeness is checked.
+   */
+  rulesVersion?: string;
 };
+
+/** A stored session is stale when its log is not complete or another rules version produced it (C61): it is never served. */
+export const isStale = (row: Pick<StoredSessionRow, 'complete' | 'rulesVersion'>, rulesVersion: string | undefined): boolean =>
+  !row.complete || (rulesVersion !== undefined && row.rulesVersion !== rulesVersion);
 
 const keyOf = (row: SessionDbRow): SessionKey => ({ sessionUid: row.session_uid, weekendId: row.weekend_id, playerCar: row.player_car as CarId });
 /** The named parameters of a key; a caller's key object may carry more fields than a statement binds. */
 const keyParams = ({ sessionUid, weekendId, playerCar }: SessionKey) => ({ sessionUid, weekendId, playerCar });
+const keyText = ({ sessionUid, weekendId, playerCar }: SessionKey): string => `${sessionUid}/${weekendId}/${playerCar}`;
 const OF_SESSION = 'session_uid = @sessionUid AND weekend_id = @weekendId AND player_car = @playerCar';
 
 /**
  * The read side of storage: the sessions of a weekend (the rows), and the one read API (C34), a stored session's
- * projection, computed from its stored log by the engine's projection module (C28). A session whose log is not complete
- * is never served (C61): `projectionOf` rebuilds it from its recording first; a session whose recording is missing is
- * neither served nor deleted (C24).
+ * projection, computed from its stored log by the engine's projection module (C28). A stale session (`isStale`: its log
+ * not complete, or of another rules version) is never served (C61): `projectionOf` rebuilds it from its recording first;
+ * a session whose recording is missing, or that its rebuild does not produce, is neither served nor deleted (C24), and
+ * is warned about once per repository.
  */
 export class WeekendRepository {
   readonly #statements;
   readonly #log: Logger;
   readonly #rebuild: WeekendRepositoryOptions['rebuild'];
+  readonly #rulesVersion: string | undefined;
+  /** The sessions found unservable and warned about (`keyText`): neither rebuilt again nor warned about again. */
+  readonly #unservable = new Set<string>();
 
   constructor(db: Db, opts: WeekendRepositoryOptions = {}) {
     this.#log = opts.log ?? createLogger({ level: 'silent' });
     this.#rebuild = opts.rebuild;
+    this.#rulesVersion = opts.rulesVersion;
     const sessionColumns = `s.session_uid, s.weekend_id, w.season_id, s.player_car, s.track_id, s.started_at, s.pwrec_path, s.settings, s.rules_version, s.complete`;
     const sessionsFrom = `FROM sessions s JOIN weekends w ON w.weekend_id = s.weekend_id`;
     this.#statements = {
       weekendSessions: db.prepare(`SELECT ${sessionColumns} ${sessionsFrom} WHERE s.weekend_id = ? ORDER BY s.started_at, s.session_uid, s.player_car`),
+      newestWeekend: db.prepare(`SELECT weekend_id FROM sessions ORDER BY started_at DESC, session_uid DESC, player_car DESC LIMIT 1`).pluck(),
       session: db.prepare(
         `SELECT ${sessionColumns} ${sessionsFrom} WHERE s.session_uid = @sessionUid AND s.weekend_id = @weekendId AND s.player_car = @playerCar`,
       ),
@@ -75,24 +91,35 @@ export class WeekendRepository {
     return (this.#statements.weekendSessions.all(weekendId) as SessionDbRow[]).map((row) => this.#toSession(row));
   }
 
+  /** The weekend of the newest stored session (by start); `undefined` when none is stored. */
+  newestWeekendId(): string | undefined {
+    return this.#statements.newestWeekend.get() as string | undefined;
+  }
+
+  /** The weekend's stale sessions (`isStale`) in start order. */
+  staleSessionsOf(weekendId: string): StoredSessionRow[] {
+    return this.sessionsOf(weekendId).filter((row) => isStale(row, this.#rulesVersion));
+  }
+
   /**
-   * The stored session's projection (C34); `undefined` when nothing is stored under `key`. A session whose log is not
-   * complete is rebuilt from its recording first; one whose recording is missing (or that cannot be rebuilt) is not
-   * served, with a warning, and stays stored as it is. The projection is the caller's own: it is computed from the log
-   * read for this call, so no one else holds its lists.
+   * The stored session's projection (C34); `undefined` when nothing is stored under `key`. A stale session is rebuilt
+   * from its recording first; one whose recording is missing, or that the rebuild does not produce, is not served, with
+   * one warning, and stays stored as it is. The projection is the caller's own: it is computed from the log read for
+   * this call, so no one else holds its lists.
    */
   async projectionOf(key: SessionKey): Promise<ProjectionState | undefined> {
-    let row = this.#row(key);
+    const row = this.#row(key);
     if (row === undefined) return undefined;
-    if (!row.complete) {
+    if (isStale(row, this.#rulesVersion)) {
+      if (this.#unservable.has(keyText(key))) return undefined;
       if (!this.#canRebuild(row)) {
-        this.#warnIncomplete(row);
+        this.#warnUnservable(row, row.pwrecPath === null || !existsSync(row.pwrecPath) ? 'its recording is missing: not served, kept' : 'not served');
         return undefined;
       }
       await this.#rebuild?.(row);
-      row = this.#row(key);
-      if (row?.complete !== true) {
-        this.#log.warn({ sessionUid: key.sessionUid, weekendId: key.weekendId, playerCar: key.playerCar }, 'stored session not rebuilt, not served');
+      const rebuilt = this.#row(key);
+      if (rebuilt === undefined || isStale(rebuilt, this.#rulesVersion)) {
+        this.#warnUnservable(row, 'not rebuilt: not served, kept');
         return undefined;
       }
     }
@@ -101,8 +128,8 @@ export class WeekendRepository {
 
   /**
    * The weekend context of the session `before` (C39, C62): the weekend's sessions that started before it whose player
-   * car had `player`'s team and race number, oldest first, each with its cars by car id and its projection. A session
-   * whose log is not complete is skipped with a warning and its key returned in `incomplete`, so the caller rebuilds it.
+   * car had `player`'s team and race number, oldest first, each with its cars by car id and its projection. A stale
+   * session (`isStale`) is skipped with a warning and its key returned in `incomplete`, so the caller rebuilds it.
    * `startedAt` stands for `before`'s start when its row is not stored yet (a rebuild writes it at the end).
    */
   weekendContext(
@@ -120,8 +147,8 @@ export class WeekendRepository {
     const incomplete: SessionKey[] = [];
     for (const dbRow of rows) {
       const key = keyOf(dbRow);
-      if (dbRow.complete !== 1) {
-        this.#log.warn({ sessionUid: key.sessionUid, weekendId: key.weekendId, playerCar: key.playerCar }, 'stored session not complete, left out of the weekend context');
+      if (isStale({ complete: dbRow.complete === 1, rulesVersion: dbRow.rules_version }, this.#rulesVersion)) {
+        this.#log.warn({ sessionUid: key.sessionUid, weekendId: key.weekendId, playerCar: key.playerCar }, 'stored session stale, left out of the weekend context');
         incomplete.push(key);
         continue;
       }
@@ -134,11 +161,11 @@ export class WeekendRepository {
     return this.#rebuild !== undefined && row.pwrecPath !== null && existsSync(row.pwrecPath);
   }
 
-  #warnIncomplete(row: StoredSessionRow): void {
-    const missing = row.pwrecPath === null || !existsSync(row.pwrecPath);
+  #warnUnservable(row: StoredSessionRow, why: string): void {
+    this.#unservable.add(keyText(row));
     this.#log.warn(
-      { sessionUid: row.sessionUid, weekendId: row.weekendId, playerCar: row.playerCar, pwrecPath: row.pwrecPath },
-      missing ? 'stored session not complete and its recording is missing: not served, kept' : 'stored session not complete: not served',
+      { sessionUid: row.sessionUid, weekendId: row.weekendId, playerCar: row.playerCar, pwrecPath: row.pwrecPath, rulesVersion: row.rulesVersion, complete: row.complete },
+      `stored session stale, ${why}`,
     );
   }
 

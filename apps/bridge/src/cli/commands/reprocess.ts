@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import { StartupError } from '../../startup-error.ts';
 import { dataDir, type DataDir } from '../../storage/data-dir.ts';
 import { openDatabase, type Db } from '../../storage/db.ts';
+import { rulesVersion, SOURCE_ROOT } from '../../storage/rules-version.ts';
 import { WeekendRepository } from '../../storage/weekend-repository.ts';
 import type { Logger } from '../../log.ts';
 import { cliLogger, EXIT_INTERRUPTED, type CliIo } from '../io.ts';
@@ -25,8 +26,9 @@ function weekendJobs(db: Db, weekendId: string, dirs: DataDir, log: Logger): Rec
 /** `pitwall reprocess [--weekend id]`: rebuilds the database from the recordings, all of them or one weekend's. */
 export async function run(_positionals: string[], values: { weekend?: string | undefined }, io: CliIo): Promise<number> {
   const dirs = dataDir(io.env);
+  const version = await rulesVersion(SOURCE_ROOT);
   if (values.weekend === undefined) {
-    const rebuilt = await rebuildDatabase(dirs, io);
+    const rebuilt = await rebuildDatabase(dirs, io, version);
     if (rebuilt === undefined) return EXIT_INTERRUPTED;
     rebuilt.db.close();
     io.out(`reprocessed ${rebuilt.recordings} recordings`);
@@ -39,7 +41,7 @@ export async function run(_positionals: string[], values: { weekend?: string | u
       io.err(`pitwall: no stored sessions of weekend ${values.weekend}`);
       return 1;
     }
-    if (!(await processRecordings(jobs, db, io, 'pitwall: interrupted; the sessions not reprocessed keep their stored logs'))) return EXIT_INTERRUPTED;
+    if (!(await processRecordings(jobs, db, io, version, 'pitwall: interrupted; the sessions not reprocessed keep their stored logs'))) return EXIT_INTERRUPTED;
     io.out(`reprocessed ${jobs.length} recordings`);
     return 0;
   } finally {

@@ -48,7 +48,7 @@ export type SessionStorageOptions = {
   /** The rules version the session's log is stored with (C61). */
   rulesVersion: string;
   mode: StorageMode;
-  /** Rebuilds a stored session the weekend context skipped as incomplete, in the background (C61). */
+  /** Rebuilds a stored session the weekend context skipped as stale, in the background (C61). */
   rebuild?: (row: StoredSessionRow) => Promise<void>;
 };
 
@@ -67,7 +67,7 @@ export class SessionStorage {
     try {
       this.#access = {
         writer: new StorageWriter(db, { onError: (error) => this.#fail(error), rulesVersion: opts.rulesVersion }),
-        repo: new WeekendRepository(db, { log: opts.log }),
+        repo: new WeekendRepository(db, { log: opts.log, rulesVersion: opts.rulesVersion }),
       };
     } catch (error) {
       this.#fail(error);
@@ -106,8 +106,8 @@ export class SessionStorage {
   }
 
   /**
-   * The player's earlier sessions of the weekend (C62); `undefined` when storage is off. Those not complete are left out
-   * and handed to `rebuild`, in the background.
+   * The player's earlier sessions of the weekend (C62); `undefined` when storage is off. Stale ones (not complete, or of
+   * another rules version) are left out and handed to `rebuild`, in the background.
    */
   weekendContext(row: SessionRow, player: CarKey): WeekendContext | undefined {
     const repo = this.#access?.repo;

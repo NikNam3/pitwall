@@ -8,9 +8,6 @@ export type Db = Database.Database;
 
 export const SCHEMA_VERSION = 4;
 
-/** The rules version every log is stored with until the computed one is wired (C61, Task 28). */
-export const UNVERSIONED_RULES = 'unversioned';
-
 /** Every per-session table refers to its session by the three key columns (C1a, C60). */
 const SESSION_REF = `session_uid TEXT NOT NULL, weekend_id TEXT NOT NULL, player_car INTEGER NOT NULL`;
 const SESSION_FK = `FOREIGN KEY (session_uid, weekend_id, player_car) REFERENCES sessions(session_uid, weekend_id, player_car)`;
