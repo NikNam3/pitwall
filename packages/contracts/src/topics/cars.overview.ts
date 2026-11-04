@@ -6,7 +6,7 @@ export type CarOverview = {
   identity: CarState['identity'];
   /** The car's timing values without its confirmed laps (no signal, C13, C54). */
   timing: Omit<CarState['timing'], 'confirmedLaps'>;
-  /** `visualCompound` is the live one, or the car's latest stint record's while the game sends `unknown`. */
+  /** The live tyre values as the live state holds them: compounds and age. */
   tyres: Pick<CarState['tyres'], 'actualCompound' | 'visualCompound' | 'age'>;
   updatedAt: CarState['updatedAt'];
 };
