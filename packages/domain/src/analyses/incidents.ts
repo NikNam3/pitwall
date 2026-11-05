@@ -45,6 +45,12 @@ export type PenaltyKind = 'driveThrough' | 'stopGo' | 'grid' | 'time' | 'disqual
 /** A penalty entry's penalty: its kind, its time for a time penalty, and the infringement its record names (unknown without one, C3). */
 export type IncidentPenalty = { kind: PenaltyKind; timeMs?: Ms; infringement?: Known<number> };
 
+/**
+ * What caused a `neutralised` entry: the entry it names, with that entry's kind, cars and time copied so the display
+ * renders the line without looking another entry up (C65).
+ */
+export type IncidentCause = { entryId: string; kind: 'collision' | 'retirement' | 'damage' | 'timeLoss'; carIds: CarId[]; at: SessionTime };
+
 /** One entry of `incidents.feed` (newest first); it updates as its time lost resolves. */
 export type IncidentEntry = {
   /** Stable across updates: kind + cars + session time; a penalty entry's id names its penalty record. */
@@ -65,4 +71,6 @@ export type IncidentEntry = {
   warning?: IncidentWarning;
   /** Penalty entries only. */
   penalty?: IncidentPenalty;
+  /** Neutralised entries only: the entry that caused it. */
+  cause?: IncidentCause;
 };

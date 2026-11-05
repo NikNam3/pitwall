@@ -15,7 +15,7 @@ export type BattleSide = {
   lapsToDrs: Known<number>;
   /** Positive = we are faster. */
   paceDeltaMs: Known<Ms>;
-  /** `paceDeltaMs` minus the overtaking threshold. */
+  /** The margin to pass of the car that would pass: ahead, our pace delta minus the threshold; behind, theirs (−`paceDeltaMs` − the threshold). */
   overtakeMarginMs: Known<Ms>;
   ours: { compound: VisualCompound; age: number };
   theirs: { compound: VisualCompound; age: number };

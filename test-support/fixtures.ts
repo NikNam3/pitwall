@@ -16,6 +16,10 @@ export const FIXTURES = {
   raceWetVscMexico: '2026-10-30_15-20-41_55cc94d2d5c13280.pwrec.gz',
   practiceFriendWings: '2026-10-30_18-26-27_581b388bbb23c5e7.pwrec.gz',
   raceFriendWet: '2026-10-30_18-53-00_082927e692fdf2af.pwrec.gz',
+  practiceLiveTest: '2026-11-04_23-32-45_ae2907d2c5493776_car19.pwrec.gz',
+  oneShotQualifyingLiveTest: '2026-11-05_00-05-11_261aa3b56ae144ef_car19.pwrec.gz',
+  raceLiveTestAbandoned: '2026-11-05_00-09-56_69fd076f54e429b0_car19.pwrec.gz',
+  raceLiveTest: '2026-11-05_00-13-26_f5b2b5fdb8a6c50e_car19.pwrec.gz',
 } as const;
 
 export type FixtureName = keyof typeof FIXTURES;
