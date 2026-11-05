@@ -135,7 +135,9 @@ describe('battleRows', () => {
     expect(behind!.cells.paceDelta.role).toBeUndefined();
     expect(behind!.cells.margin.role).toBe('warning');
     expect(ahead!.highlighted).toBe(false);
-    expect(Object.values(ahead!.cells).every((c) => c.role === undefined)).toBe(true);
+    // No other moment light: the unnamed row keeps only its own margin emphasis (a positive PASS is text).
+    expect(Object.entries(ahead!.cells).filter(([c, cell]) => c !== 'margin' && cell.role !== undefined)).toEqual([]);
+    expect(ahead!.cells.margin.role).toBe('text');
   });
 
   it('lights nothing without the moment, outside the battle moment, or for another car\'s card', () => {
