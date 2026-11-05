@@ -123,3 +123,27 @@ export const run = (view: EngineView): LapTimesOutput => lapTimes.output(lapTime
 
 /** The row of one car. */
 export const rowOf = (out: LapTimesOutput, id: number) => out.rows.find((r) => r.carId === (id as CarId));
+
+/**
+ * A garage restart's new pass over `lapNumber` of `car`, as the mini-sector recorder appends it (Task 2): the line at
+ * `startAt` (segment 0) and segments 1 to `segment` of an evenly paced `paceMs` lap, each crossing that repeats a
+ * (car, lap, segment) of `history` carrying `supersedes` = the newest earlier one's fact id (C21, C25). `history` is the
+ * crossings list in log order (by time, as `scene` keeps it), every crossing of it before `startAt`; the pass is appended
+ * after it.
+ */
+export function restartPass(history: readonly MiniSectorCrossing[], car: number, lapNumber: number, paceMs: number, startAt: number, segment = 49): MiniSectorCrossing[] {
+  const id = carId(car);
+  return crossings(id, lapNumber, paceMs, startAt)
+    .slice(0, segment + 1)
+    .map((c): MiniSectorCrossing => {
+      let index = -1;
+      for (let i = history.length - 1; i >= 0; i--) {
+        const h = history[i]!;
+        if (h.carId === id && h.lap === lapNumber && h.segment === c.segment) {
+          index = i;
+          break;
+        }
+      }
+      return index < 0 ? c : { ...c, supersedes: { list: 'crossings', index } };
+    });
+}
