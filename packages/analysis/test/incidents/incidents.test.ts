@@ -475,10 +475,10 @@ describe('incidents calculator', () => {
       const counts = (feed: IncidentEntry[], id: number) =>
         feed.filter((e) => e.kind === 'warning' && e.carIds[0] === car(id)).map((e) => e.warning);
       const feed = run(viewOf({ miniSectors: race(), spans, penalties }));
-      expect(counts(feed, 7)).toEqual([1, 3, 2, 1].map((count) => ({ count, limit: 3 })));
-      expect(counts(feed, 5)).toEqual([{ count: 1, limit: 3 }]);
+      expect(counts(feed, 7)).toEqual([1, 3, 2, 1].map((count) => ({ kind: 'cornerCutting', count, limit: 3 })));
+      expect(counts(feed, 5)).toEqual([{ kind: 'cornerCutting', count: 1, limit: 3 }]);
       const two = run(viewOf({ miniSectors: race(), spans, penalties, alarmsConfig: { warningsBeforePenalty: 2 } }));
-      expect(counts(two, 7)).toEqual([2, 1, 2, 1].map((count) => ({ count, limit: 2 })));
+      expect(counts(two, 7)).toEqual([2, 1, 2, 1].map((count) => ({ kind: 'cornerCutting', count, limit: 2 })));
     });
 
     it('only penalty entries carry penalty', () => {
