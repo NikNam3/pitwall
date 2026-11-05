@@ -55,6 +55,9 @@ export function createWsConnection(
     ws.onmessage = (event) => {
       const message = typeof event.data === 'string' ? decodeServerMessage(event.data) : undefined;
       if (message === undefined) return;
+      if (message.type === 'heartbeat' && ws.readyState === WS_OPEN) {
+        ws.send(encodeMessage({ type: 'heartbeat' }));
+      }
       for (const cb of [...messageListeners]) cb(message);
     };
     ws.onclose = () => {
