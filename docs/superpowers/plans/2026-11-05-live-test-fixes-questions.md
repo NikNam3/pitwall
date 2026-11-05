@@ -1,6 +1,6 @@
 # Live-test fixes: questions for the user
 
-Four decisions the plan (`2026-11-05-live-test-fixes.md`) needs. Each names the option the plan builds if you have no answer. The evidence is in `docs/acceptance/live-checklist.md`, section "2026-11-04/05".
+Five decisions the plan (`2026-11-05-live-test-fixes.md`) needs. Each names the option the plan builds if you have no answer. The evidence is in `docs/acceptance/live-checklist.md`, section "2026-11-04/05".
 
 ## Q1. Which laps should the tyre and brake band alarms judge?
 
@@ -30,9 +30,9 @@ Only the slick carcass gets two levels. Surface, brakes, engine, the intermediat
 
 ## Q3. What should the tyre pressure band be?
 
-The band is one fixed range, 20–31 psi, for all four tyres. Your friend's setup is 20.9 psi rear and 24.2 psi front. Warm, the live pressure sits at the setup value: in practice rear 19.7–21.5 psi (p5–p95), front 22.6–24.9. Cold (race start, safety car) the rears fell to 18.8. The game sends our cars' setup pressures; for rivals, realism hides them.
+The band is one fixed range, 20–31 psi, for all four tyres. Your friend's setup is 20.9 psi rear and 24.2 psi front. Warm, the live pressure sits at the setup value: in practice rear 19.7–21.5 psi (p5–p95), front 22.6–24.9. Cold (race start, safety car) the rears fell to 18.8. The game's setup (with the pressures) reaches pitwall for the player's car only (see Q5).
 
-- **A.** Per corner, relative to the car's own setup pressure: in band from setup − 1.5 psi to setup + 1.0 psi (tonight's spread, pitwall estimate). With realism hiding a rival's setup, its pressure band is `unknown('realism')`.
+- **A.** Per corner, relative to the car's own setup pressure: in band from setup − 1.5 psi to setup + 1.0 psi (tonight's spread, pitwall estimate). Every other car's pressure band is unknown (`notReceived`), see Q5.
 - **B.** Per axle, fixed: front 22–26 psi, rear 19–23 psi (from tonight's data, one driver, one track).
 - **C.** No pressure band alarm; show only the difference to the setup pressure.
 
@@ -42,7 +42,7 @@ Recommendation: **A** (built): it follows any setup and any track.
 
 ## Q4. Which warnings lead to a penalty, and in which sessions?
 
-The "one warning left before a penalty" alarm counts every warning together and fires in every session. Tonight's race: warning 1 was corner cutting, warning 2 a small collision. The game then counted 2 warnings, 1 of them corner cutting. In practice warnings never led to a penalty (4 warnings tonight, 9 in an older practice). In the three older races with a penalty, the first came after the 4th warning, counted together. Task 3a of the plan counts, over every recording, which warnings came before each penalty, split by kind, and adds that table here before you answer.
+The "one warning left before a penalty" alarm counts every warning together and fires in every session. Tonight's race: warning 1 was corner cutting, warning 2 a small collision. The game then counted 2 warnings, 1 of them corner cutting. In practice warnings never led to a penalty (4 warnings tonight, 9 in an older practice). In the three older races with a penalty, the first came after the 4th warning, counted together. Task 6b of the plan lists, over every recording, each penalty with the game's two warning counters at that moment (all warnings, and corner-cutting warnings alone) and the penalty's infringement, and adds that table here before you answer.
 
 - **A.** Count only corner-cutting warnings; the limit is whatever Task 3a's table shows (3 if the penalties follow the 3rd corner-cutting warning); the alarm in races only (qualifying added once a recording shows a qualifying penalty).
 - **B.** Count every warning, as now, with the limit from the table; races only.
@@ -50,7 +50,19 @@ The "one warning left before a penalty" alarm counts every warning together and 
 
 Recommendation: **A**, pending the table (built only after your answer).
 
-**Answer:** open until Task 6a's table is here.
+**Answer:** open until Task 6b's table is here.
+
+## Q5. Should the teammate get a pressure band too?
+
+The setup-based pressure band (Q3) needs the car's setup. pitwall reads the setup only for the player's car (`ownCar`), so the teammate's and every rival's pressure band would be unknown. The game's Setups packet does hold a row per car, but in tonight's race cars 0, 4, 7 (the AI teammate) and 19 (the player) all carry the same 20.9 / 20.9 / 24.2 / 24.2 psi. That looks like a copy, not each car's real setup. Reading other cars' setups would be an adapter change (step 1), and realism would then have to hide the rivals' setups there (C8).
+
+- **A.** Player only now: the teammate's and rivals' pressure bands stay unknown. Revisit once a recording with a human teammate shows whether the game sends real setups for other cars.
+- **B.** Read every car's setup in step 1 now (realism hiding rivals'), and give the teammate a band from it, even if the values may be copies.
+- **C.** Teammate and rivals get the fixed band they have today (20–31 psi).
+
+Recommendation: **A** (built): it shows no band from data that looks wrong.
+
+**Answer:**
 
 ## Also decided (user, 2026-11-05)
 
