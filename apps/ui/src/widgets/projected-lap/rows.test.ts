@@ -105,6 +105,17 @@ describe('projectionRows', () => {
   });
 });
 
+describe('finish margin in minutes', () => {
+  it('shows a margin of 1 128 600 ms as minutes and tenths with the label left at line', () => {
+    const finish = projectionRows(projection({ finishMs: 1_128_600 }), true)[2]!;
+    expect(finish.delta).toBe('18:48.6');
+    expect(finish.label).toBe('left at line');
+  });
+  it('keeps a margin of 45 300 ms in seconds', () => {
+    expect(projectionRows(projection({ finishMs: 45_300 }), true)[2]!.delta).toBe('45.3 s');
+  });
+});
+
 describe('PROJECTION_COLUMNS and projectionHeader', () => {
   it('has the columns name, time, pos, delta, label with the widths 7, 8, 3, 7, 12', () => {
     expect(PROJECTION_COLUMNS.map((c) => [c.key, c.width])).toEqual([
