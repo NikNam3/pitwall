@@ -9,7 +9,7 @@ import type { Known } from '../known.ts';
 export type WarnedDetail = {
   count: number;
   /** The game's `cornerCuttingWarnings` of the car: how many of `count` are corner-cutting warnings. */
-  cornerCutting?: number;
+  cornerCutting: number;
   infringement: Known<number>;
 };
 

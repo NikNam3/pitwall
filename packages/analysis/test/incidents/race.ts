@@ -20,6 +20,7 @@ import {
   type RaceEvent,
   type SessionState,
   type Span,
+  type WarnedDetail,
   type WeekendPhase,
   unknown,
 } from '@pitwall/domain';
@@ -149,12 +150,30 @@ export const status = (car: number, steps: SpanStep[] = []): Array<Span | OpenSp
 /** The detail of a `retired` span: its cause, not received. */
 export const RETIRED = { cause: unknown('notReceived') };
 
-/** A car's warnings spans: no warning from 0 (the engine joined so), then a `warned` span per time, the count rising by one each. */
-export const warned = (car: number, times: number[]): Array<Span | OpenSpan> =>
-  chain('warnings', car, [
+/** The F1 25 infringement of a corner-cutting warning ("corner cutting gained time") and of a collision warning ("small collision"). */
+export const CORNER_CUTTING_INFRINGEMENT = 7;
+export const COLLISION_INFRINGEMENT = 4;
+
+/** What a warning was given for: corner cutting (it counts toward the limit) or a collision. */
+export type WarningKind = 'cornerCutting' | 'collision';
+
+/**
+ * A car's warnings spans: no warning from 0 (the engine joined so), then a `warned` span per time, the count rising by
+ * one each; `kinds[i]` is what the i-th warning was given for (default corner cutting): `cornerCutting` counts the
+ * corner-cutting ones so far, and the infringement is the kind's.
+ */
+export const warned = (car: number, times: number[], kinds: readonly WarningKind[] = []): Array<Span | OpenSpan> => {
+  let cornerCutting = 0;
+  return chain('warnings', car, [
     { kind: 'noWarning', at: 0, detail: {}, joinedAt: true },
-    ...times.map((at, i): SpanStep => ({ kind: 'warned', at, detail: { count: i + 1, infringement: known(7, at) } })),
+    ...times.map((at, i): SpanStep => {
+      const isCornerCutting = (kinds[i] ?? 'cornerCutting') === 'cornerCutting';
+      if (isCornerCutting) cornerCutting++;
+      const infringement = known(isCornerCutting ? CORNER_CUTTING_INFRINGEMENT : COLLISION_INFRINGEMENT, at);
+      return { kind: 'warned', at, detail: { count: i + 1, cornerCutting, infringement } satisfies WarnedDetail };
+    }),
   ]);
+};
 
 /** What a car owes in a penalties span step: drive-throughs, stop-gos and time penalties in total. */
 export type Owed = { at: number; dt?: number; sg?: number; totalMs?: number; joinedAt?: boolean };

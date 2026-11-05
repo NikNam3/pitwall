@@ -15,6 +15,7 @@ import {
   type Known,
   type LapRecord,
   type RaceEvent,
+  type WarnedDetail,
   type WeekendPhase,
 } from '@pitwall/domain';
 import { event, lap, neutralisation, openNeutralisation } from '../../../../test-support/builders/index.ts';
@@ -911,10 +912,40 @@ describe('incidents behaves per situation by its behaviour table (C44)', () => {
     });
 
     it('warned since the engine joined the session (joinedAt): no entry, the warning was not seen given', () => {
-      const spans = chain('warnings', 7, [{ kind: 'warned', at: T, detail: { count: 2, infringement: unknown('notReceived') }, joinedAt: true }]);
+      const spans = chain('warnings', 7, [{ kind: 'warned', at: T, detail: { count: 2, cornerCutting: 2, infringement: unknown('notReceived') } satisfies WarnedDetail, joinedAt: true }]);
       expect(run(viewOf({ miniSectors: race(), spans }))).toEqual([]);
     });
 
+    // Task 6c (Q4, user 2026-11-05): only corner-cutting warnings count toward the limit (3)
+    it('a corner-cutting warning shows cornerCutting/limit', () => {
+      // car 7: corner cutting, a collision, corner cutting: the third warning is the second corner-cutting one
+      const spans = warned(7, [T - 20_000, T - 10_000, T], ['cornerCutting', 'collision', 'cornerCutting']);
+      const entry = only(run(viewOf({ miniSectors: race(), spans })).filter((e) => e.at === T), 'warning');
+      expect(entry).toMatchObject({ id: `warning:7:${T}`, at: T, carIds: [car(7)], warning: { count: 2, limit: 3 } });
+    });
+
+    it('a collision warning shows its kind without n/limit', () => {
+      const spans = warned(7, [T - 20_000, T - 10_000, T], ['cornerCutting', 'collision', 'cornerCutting']);
+      const feed = run(viewOf({ miniSectors: race(), spans })).filter((e) => e.kind === 'warning');
+      // newest first: the corner-cutting ones 2/3 and 1/3, the collision one a warning entry without a count
+      expect(feed.map((e) => [e.at, e.warning])).toEqual([
+        [T, { count: 2, limit: 3 }],
+        [T - 10_000, undefined],
+        [T - 20_000, { count: 1, limit: 3 }],
+      ]);
+      const collision = feed.find((e) => e.at === T - 10_000)!;
+      expect(collision).toMatchObject({ id: `warning:7:${T - 10_000}`, kind: 'warning', carIds: [car(7)] });
+      expect('warning' in collision).toBe(false);
+    });
+
+    it('a collision warning first: the entry has no count, and the next corner-cutting warning is 1/3', () => {
+      const spans = warned(7, [T - 10_000, T], ['collision', 'cornerCutting']);
+      const feed = run(viewOf({ miniSectors: race(), spans })).filter((e) => e.kind === 'warning');
+      expect(feed.map((e) => [e.at, e.warning])).toEqual([
+        [T, { count: 1, limit: 3 }],
+        [T - 10_000, undefined],
+      ]);
+    });
   });
 });
 

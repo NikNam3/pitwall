@@ -1,4 +1,4 @@
-import { carId, known, unknown, type CarBands, type CarId, type DamageState, type ErsState, type FuelState, type Insight, type NeutralisedStage, type OpenSpan, type TyreWear, type WeekendPhase } from '@pitwall/domain';
+import { carId, known, unknown, type CarBands, type CarId, type DamageState, type ErsState, type FuelState, type Insight, type NeutralisedStage, type OpenSpan, type TyreWear, type WarnedDetail, type WeekendPhase } from '@pitwall/domain';
 import { InsightBook, type EngineView, type Projection } from '@pitwall/engine';
 import { describe, expect, it } from 'vitest';
 import { ALARMS, ALARMS_BEHAVIOUR, type AlarmsEffect } from '../../src/alarms/index.ts';
@@ -111,11 +111,14 @@ const open = (machine: string, kind: string, car: number, over: Partial<OpenSpan
   carId: carId(car),
   ...over,
 });
-/** The car's `warnings` span: `warned` with the count held, or `noWarning` at 0. */
-const warned = (count: number, car = 0): OpenSpan =>
+/**
+ * The car's `warnings` span: `warned` with the count held, of which `cornerCutting` are corner-cutting warnings (by
+ * default all of them), or `noWarning` at 0.
+ */
+const warned = (count: number, car = 0, cornerCutting = count): OpenSpan =>
   count === 0
     ? open('warnings', 'noWarning', car)
-    : open('warnings', 'warned', car, { detail: { count, infringement: unknown('notReceived') } });
+    : open('warnings', 'warned', car, { detail: { count, cornerCutting, infringement: unknown('notReceived') } satisfies WarnedDetail });
 type Owes = { kind: 'clear' | 'timePenalty' | 'driveThroughPending' | 'stopGoPending'; id?: number; startFrame?: number; infringement?: number };
 /** The car's `penalties` span: what it owes race control now, with the details the machine records. */
 const owes = ({ kind, id = 0, startFrame = 50, infringement }: Owes, car = 0): OpenSpan =>
@@ -147,6 +150,8 @@ const situationOf = (spans: readonly OpenSpan[], phase: WeekendPhase = RACE): En
 
 type ViewOpts = {
   warnings?: number;
+  /** Of `warnings`, the corner-cutting ones (default: all of them). */
+  cornerCutting?: number;
   owes?: Owes;
   spans?: OpenSpan[];
   lap?: number;
@@ -163,7 +168,7 @@ const viewWith = (parts: Parts, o: ViewOpts = {}): EngineView =>
     cars: [o.noSetup ? carState({ timing: { lap: o.lap ?? 1 } }) : withSetup(carState({ timing: { lap: o.lap ?? 1 } }), 25)],
     outputs: outputsOf([outputsFor(0, parts)]),
     sessionTime: NOW,
-    situation: situationOf([...(o.warnings === undefined ? [] : [warned(o.warnings)]), ...(o.owes === undefined ? [] : [owes(o.owes)]), ...(o.spans ?? [])], o.phase),
+    situation: situationOf([...(o.warnings === undefined ? [] : [warned(o.warnings, 0, o.cornerCutting)]), ...(o.owes === undefined ? [] : [owes(o.owes)]), ...(o.spans ?? [])], o.phase),
     ...(o.history && { history: o.history }),
     config: { [CAR_BANDS_CONFIG.key]: TEST_BANDS, ...o.config },
     ...(o.playerCar !== undefined && { playerCar: o.playerCar }),
@@ -759,17 +764,30 @@ describe('alarms behaviour table (C44)', () => {
     expect(alarmsCalculator.reads).toEqual(expect.arrayContaining(['spans:warnings', 'spans:penalties', 'spans:session-phase-race', 'spans:weekend-phase']));
   });
 
-  it('weekend phase: only race asks for the lap-1 rule; practice, qualifying and none do not; the row is the one car-bands uses', () => {
+  it('weekend phase: a row for exactly its kinds (C44)', () => {
     const table: BehaviourTable<AlarmsEffect> = ALARMS_BEHAVIOUR;
-    expect(table['weekend-phase']).toEqual({ practice: {}, qualifying: {}, race: { isRace: true }, none: {} });
-    // both units judge the same lap (C43)
-    expect(table['weekend-phase']).toEqual(CAR_BANDS_BEHAVIOUR['weekend-phase']);
+    expect(Object.keys(table['weekend-phase']!).sort()).toEqual(['none', 'practice', 'qualifying', 'race']);
   });
 
-  it("today's warning and penalty alarms are unchanged", () => {
+  it('weekend phase: only race asks for the lap-1 rule and counts corner-cutting warnings; practice, qualifying and none ask for nothing', () => {
+    const table: BehaviourTable<AlarmsEffect> = ALARMS_BEHAVIOUR;
+    expect(table['weekend-phase']).toEqual({ practice: {}, qualifying: {}, race: { isRace: true, warningCount: 'cornerCutting' }, none: {} });
+  });
+
+  it("weekend phase: the lap-1 rule is car-bands' row, so both judge the same lap (C43); car-bands counts no warnings", () => {
+    const table: BehaviourTable<AlarmsEffect> = ALARMS_BEHAVIOUR;
+    expect(CAR_BANDS_BEHAVIOUR['weekend-phase']).toEqual({ practice: {}, qualifying: {}, race: { isRace: true }, none: {} });
+    for (const [kind, row] of Object.entries(CAR_BANDS_BEHAVIOUR['weekend-phase']!)) {
+      expect(table['weekend-phase']![kind], kind).toMatchObject(row);
+      expect(table['weekend-phase']![kind]!.isRace, kind).toBe(row.isRace);
+    }
+  });
+
+  it("today's penalty alarms are unchanged; the warning alarm counts corner-cutting warnings in a race", () => {
     // the rows, ported to one merged effect per kind (AlarmsEffect)
     const table: BehaviourTable<AlarmsEffect> = ALARMS_BEHAVIOUR;
-    expect(table['warnings']).toEqual({ noWarning: {}, warned: { warningCount: 'total' } });
+    // no warnings row names the total any more
+    for (const [kind, effect] of Object.entries(table['warnings']!)) expect(effect.warningCount, kind).not.toBe('total');
     expect(table['penalties']).toEqual({
       clear: {},
       timePenalty: { penalty: 'time' },
@@ -833,6 +851,46 @@ describe('alarms behaviour table (C44)', () => {
 
     it('no span open: nothing (a car the machine has not covered yet raises no warning, never a zero reading)', () => {
       expect(only(viewWith({}, { config }), 'warningLast')).toEqual([]);
+    });
+
+    // Task 6c (Q4, user 2026-11-05): races only, corner-cutting warnings only, limit 3, the alarm at the 2nd
+    it('a collision warning does not count toward the limit', () => {
+      // cornerCutting 1 of 3, a collision warning besides: two warnings, one left only by the total
+      expect(only(viewWith({}, { warnings: 2, cornerCutting: 1, config }), 'warningLast')).toEqual([]);
+      // two collision warnings, no corner cutting
+      expect(only(viewWith({}, { warnings: 2, cornerCutting: 0, config }), 'warningLast')).toEqual([]);
+      // cornerCutting 2 of 3, a collision warning besides: the alarm, naming the corner-cutting count
+      const alarm = only(viewWith({}, { warnings: 3, cornerCutting: 2, config }), 'warningLast');
+      expect(alarm.map((i) => [i.key, i.severity, i.category, i.params])).toEqual([['warningLast:0:warnings', 'advisory', 'race', { warnings: 2, before: 3 }]]);
+    });
+
+    it('the limit is 3 corner-cutting warnings by default: the alarm at the 2nd', () => {
+      expect(only(viewWith({}, { warnings: 2 }), 'warningLast').map((i) => i.params)).toEqual([{ warnings: 2, before: 3 }]);
+      for (const cornerCutting of [1, 3]) expect(only(viewWith({}, { warnings: 4, cornerCutting }), 'warningLast'), String(cornerCutting)).toEqual([]);
+    });
+
+    it('no last-warning alarm in practice', () => {
+      for (const o of [{ warnings: 2 }, { warnings: 3, cornerCutting: 2 }, { warnings: 5 }, { warnings: 8 }]) {
+        expect(only(viewWith({}, { ...o, config, phase: PRACTICE }), 'warningLast'), JSON.stringify(o)).toEqual([]);
+      }
+    });
+
+    it('no last-warning alarm in qualifying', () => {
+      for (const o of [{ warnings: 2 }, { warnings: 3, cornerCutting: 2 }, { warnings: 5 }]) {
+        expect(only(viewWith({}, { ...o, config, phase: QUALIFYING }), 'warningLast'), JSON.stringify(o)).toEqual([]);
+      }
+    });
+
+    it('no last-warning alarm without a weekend phase (none)', () => {
+      expect(only(viewWith({}, { warnings: 2, config, phase: NONE }), 'warningLast')).toEqual([]);
+    });
+
+    it('outside a race the other alarms are raised as in a race', () => {
+      const wear = wearOk();
+      wear.corners.fl.lapsToLimit = known(2, 0);
+      for (const phase of [PRACTICE, QUALIFYING]) {
+        expect(run(viewWith({ wear }, { warnings: 2, config, phase })).map((i) => i.kind), phase.kind).toEqual(['wearLimitNear']);
+      }
     });
 
     // Task 24 (C13): the game's warning counts left the live state; a car without a warnings span is no warning

@@ -7,8 +7,11 @@ import type { BehaviourTable } from '../shared/behaviour.ts';
 
 /** What the situations open for a car ask of its alarms; every field absent means "nothing". */
 export type AlarmsEffect = {
-  /** The car holds warnings: the warning count to judge, the game's total or its corner-cutting warnings. */
-  warningCount?: 'total' | 'cornerCutting';
+  /**
+   * The session judges the warning count of the car's `warned` span: its corner-cutting warnings (`cornerCutting`), the
+   * only ones that lead to a penalty. Races only: practice reaches many warnings without one.
+   */
+  warningCount?: 'cornerCutting';
   /** The car owes race control a penalty, to announce. */
   penalty?: 'time' | 'driveThrough' | 'stopGo';
   /**
@@ -23,10 +26,20 @@ export type AlarmsEffect = {
 
 const NOTHING: AlarmsEffect = {};
 
+/**
+ * The `weekend-phase` rows: the judged lap's (`car-bands`' rows, so both judge the same lap, C43), and in a race the
+ * last-warning alarm on the corner-cutting warnings; the warned span's row asks for nothing, so no other phase raises it.
+ */
+const WEEKEND_PHASE_ROWS = {
+  ...JUDGED_LAP_PHASE_ROWS,
+  race: { ...JUDGED_LAP_PHASE_ROWS.race, warningCount: 'cornerCutting' },
+} as const satisfies Record<keyof typeof JUDGED_LAP_PHASE_ROWS, AlarmsEffect>;
+
 /** One row per kind of `weekend-phase`, `warnings`, `penalties` and `session-phase-race`. */
 export const ALARMS_BEHAVIOUR = {
-  'weekend-phase': JUDGED_LAP_PHASE_ROWS,
-  warnings: { noWarning: NOTHING, warned: { warningCount: 'total' } },
+  'weekend-phase': WEEKEND_PHASE_ROWS,
+  // a warned span's count is judged only where the weekend phase's row asks for it
+  warnings: { noWarning: NOTHING, warned: NOTHING },
   penalties: {
     clear: NOTHING,
     timePenalty: { penalty: 'time' },
