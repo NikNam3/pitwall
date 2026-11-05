@@ -715,6 +715,16 @@ describe('incidents behaves per situation by its behaviour table (C44)', () => {
       expect(ofKind(feed, 'timeLoss')).toEqual([]);
     });
 
+    it.each([
+      ['an SC neutralisation entry names SC', 'SC'],
+      ['a VSC neutralisation entry names VSC', 'VSC'],
+      ['a red flag entry names red', 'red'],
+    ] as const)('%s', (_name, kind) => {
+      const span = neutralisation({ kind, start: SLOW_START - 10_000, end: SLOW_START + 30_000 });
+      const feed = run(viewOf({ miniSectors, phases: [span], laps: leaderLaps(LAPS) }));
+      expect(only(feed, 'neutralised').neutralisation).toBe(kind);
+    });
+
     it.each(['grid', 'formation', 'startLights', 'racing', 'finished', 'postSession'])('%s: no entry of its own', (kind) => {
       const spans = chain('session-phase-race', undefined, [{ kind, at: SLOW_START - 10_000 }], SLOW_START + 30_000);
       const feed = run(viewOf({ miniSectors: race(), events: [collision(6, 5)], spans }));

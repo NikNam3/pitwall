@@ -255,12 +255,22 @@ describe('the incident detail in the what cell (mockup: time loss (T7), damage F
 
     it('a neutralised entry with a cause shows its cars and kind', () => {
       const cause = { entryId: 'collision:6+7:228000', kind: 'collision', carIds: [carId(6), carId(7)], at: toSessionTime(228_000) } as const;
-      expect(whatOf(neutralised({ cause: { ...cause, carIds: [...cause.carIds] } }))).toBe('SC · ALO–TSU collision');
+      expect(whatOf(neutralised({ neutralisation: 'SC', cause: { ...cause, carIds: [...cause.carIds] } }))).toBe('SC · ALO–TSU collision');
     });
 
     it('a retirement cause names its one car and kind', () => {
       const cause = { entryId: 'retirement:6:228000', kind: 'retirement', carIds: [carId(6)], at: toSessionTime(228_000) } as const;
-      expect(whatOf(neutralised({ cause: { ...cause, carIds: [...cause.carIds] } }))).toBe('SC · ALO retirement');
+      expect(whatOf(neutralised({ neutralisation: 'SC', cause: { ...cause, carIds: [...cause.carIds] } }))).toBe('SC · ALO retirement');
+    });
+
+    it('a VSC neutralisation with a cause', () => {
+      const cause = { entryId: 'collision:6+7:228000', kind: 'collision', carIds: [carId(6), carId(7)], at: toSessionTime(228_000) } as const;
+      expect(whatOf(neutralised({ neutralisation: 'VSC', cause: { ...cause, carIds: [...cause.carIds] } }))).toBe('VSC · ALO–TSU collision');
+    });
+
+    it('a red flag with a cause (the kit's phase word RED)', () => {
+      const cause = { entryId: 'collision:6+7:228000', kind: 'collision', carIds: [carId(6), carId(7)], at: toSessionTime(228_000) } as const;
+      expect(whatOf(neutralised({ neutralisation: 'red', cause: { ...cause, carIds: [...cause.carIds] } }))).toBe('RED · ALO–TSU collision');
     });
 
     it('without a cause it reads as today', () => {
