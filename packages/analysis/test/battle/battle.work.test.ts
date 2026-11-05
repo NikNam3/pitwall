@@ -1,0 +1,6 @@
+// `battle` justifies its accumulator by counted work on the long race (contract C31, live polish spec 3.1): its reads at
+// lap 7 and lap 70 (C31.1) and its accumulator from the projection alone (C31.2); its C31.3 property is in
+// incremental-rewind.property.test.ts and battle.test.ts.
+import { describeWork } from '../work.ts';
+
+describeWork('battle');
