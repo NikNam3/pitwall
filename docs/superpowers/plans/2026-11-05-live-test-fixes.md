@@ -260,7 +260,7 @@
 
 - [ ] **Step 1: Write the failing tests** in `car-bands.test.ts`, a table: "lap 1 of a race is not judged" (a cold lap 1, then nothing out: `outForFullLap` false); "an SC lap is not judged" (`scShare` over `maxNeutralisedMs`); "an in-lap is not judged"; "a rate lap out of band is judged" (true); "carcass 72 °C is in band" (state `in`); "carcass 106 °C is above"; "pressure band follows the setup" (setup 20.9 rear: band 19.4–21.9; 19.3 is `below`); "a hidden setup gives an unknown pressure reading" (`realism`). In `alarms.test.ts`: "no band alarm from lap 1 of a race".
 - [ ] **Step 2: Run** the three test files. Expected: FAIL on the new rows.
-- [ ] **Step 3: Implement** per brief: the judged-lap filter and levels in `car-bands`, the alarm reads only `car-bands`' readings, no corner-block code change.
+- [ ] **Step 3: Implement** per brief: the judged-lap filter, the carcass band and the setup-based pressure band in `car-bands`, the alarm reads only `car-bands`' readings, no corner-block code change.
 - [ ] **Step 4: Run the tests again** and `vitest related`. Expected: PASS.
 - [ ] **Step 5: Commit** per unit: `fix(analysis): bands judge representative laps; carcass levels; pressure on the setup`, `fix(analysis): band alarms`.
 
