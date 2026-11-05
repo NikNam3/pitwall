@@ -36,10 +36,28 @@ if [ -n "${PITWALL_WORKER_UNIT:-}" ]; then
   if [[ "$REL" =~ $UNIT_TOPIC_RE ]]; then UNIT_TOPIC_FILE=1; fi
 fi
 
+# A scope entry delegates a supervisor-owned path (C78) when it names that file or a folder lying inside an owned area
+# (packages/domain/test); a broader entry (packages, packages/domain) delegates nothing.
+delegated() {
+  local e
+  for e in "${entries[@]}"; do
+    e="${e%/}"
+    case "$e" in
+      packages/domain/?*|packages/contracts/?*|packages/engine/src/state/?*)
+        if [ "$REL" = "$e" ] || [[ "$REL" == "$e"/* ]]; then return 0; fi ;;
+    esac
+  done
+  return 1
+}
+
+IFS=':' read -ra entries <<< "${PITWALL_WORKER_SCOPE:-}"
+
 if [ -z "$UNIT_TOPIC_FILE" ]; then
   case "$REL" in
-    package.json|*/package.json|pnpm-lock.yaml|pnpm-workspace.yaml|packages/domain/*|packages/contracts/*|packages/engine/src/state/*)
+    package.json|*/package.json|pnpm-lock.yaml|pnpm-workspace.yaml)
       block "$REL is supervisor-owned. Do not edit it; list the change under 'Requested changes to supervisor-owned files' in your report." ;;
+    packages/domain/*|packages/contracts/*|packages/engine/src/state/*)
+      delegated || block "$REL is supervisor-owned. Do not edit it; list the change under 'Requested changes to supervisor-owned files' in your report." ;;
   esac
 else
   exit 0
@@ -49,7 +67,6 @@ for dir in "${UNIT_DIRS[@]}"; do
   if [[ "$REL" == "$dir"/* ]]; then exit 0; fi
 done
 
-IFS=':' read -ra entries <<< "${PITWALL_WORKER_SCOPE:-}"
 for entry in "${entries[@]}"; do
   entry="${entry%/}"
   if [ "$REL" = "$entry" ] || [[ "$REL" == "$entry"/* ]]; then
