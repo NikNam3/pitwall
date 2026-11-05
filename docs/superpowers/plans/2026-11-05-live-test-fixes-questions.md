@@ -12,7 +12,7 @@ On lap 1 of the race and on the safety-car laps, cold tyres raised up to nine ad
 
 Recommendation: **A** now (built), B later as its own contract change if the AI alarms still bother you.
 
-**Answer:**
+**Answer:** A (user, 2026-11-05).
 
 ## Q2. How should the carcass band's two levels show and alarm?
 
@@ -26,7 +26,7 @@ Recommendation: **A** (built). It keeps 70 °C uncoloured, as you asked, and sti
 
 Only the slick carcass gets two levels. Surface, brakes, engine, the intermediate and wet carcass keep their one band until you give ranges for them.
 
-**Answer:**
+**Answer:** A (user, 2026-11-05). Also confirmed: 100–105 °C is okay, not good.
 
 ## Q3. What should the tyre pressure band be?
 
@@ -38,7 +38,7 @@ The band is one fixed range, 20–31 psi, for all four tyres. Your friend's setu
 
 Recommendation: **A** (built): it follows any setup and any track.
 
-**Answer:**
+**Answer:** the user has no view yet ("do as you think fits for now, I'll fix it once I understand more about it", 2026-11-05). Built: A, provisional; the offsets are config with a pitwall-estimate source note, so changing them later is a config edit.
 
 ## Q4. Which warnings lead to a penalty, and in which sessions?
 
@@ -50,4 +50,10 @@ The "one warning left before a penalty" alarm counts every warning together and 
 
 Recommendation: **A**, pending the table (built only after your answer).
 
-**Answer:**
+**Answer:** open until Task 6a's table is here.
+
+## Also decided (user, 2026-11-05)
+
+- The per-mini-sector battle pace delta waits for the SP4a re-spec.
+- Execution: subagent-driven. **No go yet**: the user reviews the plan first.
+- "Update and send as often as it stays correct" stays a spec rule for now, not a contract clause.
