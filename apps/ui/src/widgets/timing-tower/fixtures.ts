@@ -72,6 +72,13 @@ export const toCar = (id: number, gapMs: number | undefined, lapsDown = 0): GapT
 });
 
 /**
+ * The last lap's sectors of a row that names none. The tower shows the newest sectors and never reads the last lap's, so
+ * these are known in every row: an unknown there would be a second copy of the newest one, and the unknown-marks test
+ * renders the tower once for every unknown leaf it tries (in every case) only to find the tower does not show it.
+ */
+const LAST_SECTORS_SHOWN_NOWHERE = [28_500, 41_500, 35_500] as const;
+
+/**
  * A lap-board row; `last` is the last lap in ms (`undefined` = not received yet, `'realism'` = withheld, `'retired'` = a
  * car out of the race without a time: its times will not come and the row says it is out, as `lap-times` gives them).
  */
@@ -87,11 +94,12 @@ export function boardRow(
   const time = (v: number | 'realism' | 'retired' | undefined) =>
     v === 'realism' ? unknown('realism') : v === 'retired' ? unknown('notApplicable') : v === undefined ? unknown('notReceived') : ms(v);
   const s = (v: number | undefined) => (last === 'realism' || last === 'retired' ? time(last) : time(v));
+  const lastSector = (i: 0 | 1 | 2) => ms(sectors[i] ?? LAST_SECTORS_SHOWN_NOWHERE[i]);
   const unknownDelta = unknown('notApplicable');
   return {
     carId: carId(id),
     lastLapMs: time(last),
-    lastSectorsMs: [s(sectors[0]), s(sectors[1]), s(sectors[2])],
+    lastSectorsMs: [lastSector(0), lastSector(1), lastSector(2)],
     lastSectorStatus: status,
     newestSectorsMs: newest.sectors ? [s(newest.sectors[0]), s(newest.sectors[1]), s(newest.sectors[2])] : [s(sectors[0]), s(sectors[1]), s(sectors[2])],
     newestSectorStatus: newest.status ?? status,
