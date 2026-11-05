@@ -20,4 +20,9 @@ export const INCIDENTS_CONFIG = defineConfig('incidents', {
   neutralisedMajor: false,
   /** Entries the feed keeps, newest first. Source: pitwall estimate. */
   feedLength: 50,
+  /**
+   * A neutralisation's cause is the newest collision, retirement, damage or time loss of any car at most this long before
+   * its start. Source: pitwall estimate (the first live test's SC came 3.5 s after its collision).
+   */
+  causeWindowMs: 10_000,
 });

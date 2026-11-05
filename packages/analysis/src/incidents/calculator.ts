@@ -16,6 +16,7 @@ import {
   type CurrentLaps,
   type FrameNumber,
   type DamageJump,
+  type IncidentCause,
   type IncidentDamagePart,
   type IncidentEntry,
   type IncidentForUs,
@@ -646,18 +647,56 @@ const detailOf = (acc: Board, c: Candidate): Pick<IncidentEntry, 'damage' | 'war
   return {};
 };
 
-/** Newest first, ties by id; only entries of our cars or their neighbourhood, cut at `feedLength`. */
+/** The kinds that can cause a neutralisation. */
+const CAUSE_KINDS = new Set(['collision', 'retirement', 'damage', 'timeLoss'] as const satisfies readonly IncidentCause['kind'][]);
+
+const isCauseKind = (kind: IncidentKind): kind is IncidentCause['kind'] => (CAUSE_KINDS as ReadonlySet<IncidentKind>).has(kind);
+
+/** Kinds that follow from a collision of their car: a damage jump or time loss up to `MERGE_MS` after it is its consequence. */
+const CONSEQUENCE_KINDS: ReadonlySet<IncidentKind> = new Set(['damage', 'timeLoss']);
+
+/**
+ * Per neutralised candidate, its likely cause: the newest candidate of a cause kind of any car with its time in
+ * `[start − causeWindowMs, start]`, among every candidate before the neighbourhood filter; a damage or time loss that
+ * is the consequence of a collision of its car in that window names that collision. `sorted` is newest first, ties by
+ * id, so the first match is the newest.
+ */
+const causesOf = (acc: Board, sorted: readonly Candidate[]): Map<string, IncidentCause> => {
+  const causes = new Map<string, IncidentCause>();
+  for (const n of sorted) {
+    if (n.kind !== 'neutralised') continue;
+    const inWindow = (c: Candidate): boolean => c.at <= n.at && c.at >= n.at - acc.config.causeWindowMs;
+    const newest = sorted.find((c) => isCauseKind(c.kind) && inWindow(c));
+    if (newest === undefined) continue;
+    const root = CONSEQUENCE_KINDS.has(newest.kind)
+      ? sorted.find(
+          (c) => c.kind === 'collision' && inWindow(c) && c.at <= newest.at && newest.at - c.at <= MERGE_MS && c.carIds.some((id) => newest.carIds.includes(id)),
+        )
+      : undefined;
+    const cause = root ?? newest;
+    if (isCauseKind(cause.kind)) causes.set(n.id, { entryId: cause.id, kind: cause.kind, carIds: [...cause.carIds], at: cause.at });
+  }
+  return causes;
+};
+
+/**
+ * Newest first, ties by id; only entries of our cars or their neighbourhood, and the cause of a neutralisation (its
+ * `forUs` empty where no car of ours is concerned), cut at `feedLength`.
+ */
 const output = (fold: Acc, view: EngineView): IncidentsOutput => {
   if (!behaviourFor(WEEKEND_PHASE, view).includes('feed')) return [];
   const acc: Board = { ...fold, ...nowOf(fold, view) };
   const byId = new Map<string, Candidate>();
   for (const c of candidates(acc)) if (!byId.has(c.id)) byId.set(c.id, c);
   const sorted = [...byId.values()].sort((a, b) => b.at - a.at || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  const causes = causesOf(acc, sorted);
+  const causeIds = new Set([...causes.values()].map((c) => c.entryId));
   const feed: IncidentEntry[] = [];
   for (const c of sorted) {
     if (feed.length >= acc.config.feedLength) break;
     const forUs = forUsOf(acc, c);
-    if (forUs.length === 0) continue;
+    if (forUs.length === 0 && !causeIds.has(c.id)) continue;
+    const cause = causes.get(c.id);
     const lap = lapOf(acc, c);
     feed.push({
       id: c.id,
@@ -670,6 +709,7 @@ const output = (fold: Acc, view: EngineView): IncidentsOutput => {
       forUs,
       where: { sector: c.carIds[0] === undefined ? unknown('notApplicable') : sectorAt(acc.tracks[c.carIds[0]], c.at, acc.layout) },
       ...detailOf(acc, c),
+      ...(cause !== undefined && { cause }),
     });
   }
   return feed;
