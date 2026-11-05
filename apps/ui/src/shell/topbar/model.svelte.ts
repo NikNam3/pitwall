@@ -93,6 +93,10 @@ export class TopBarModel {
     const stages = shown.label === 'sc' || shown.label === 'vsc' ? (span.detail as NeutralisedDetail | undefined)?.stages : undefined;
     return { label: text.topBar.phase[shown.label], role: shown.role, stage: stages?.at(-1)?.stage };
   }
+  /** The talk window of the player car; undefined while unknown, not applicable or without a player car. */
+  get talk(): 'clear' | 'busy' | undefined {
+    return undefined;
+  }
   get feed(): FeedStatus | undefined {
     return okValue(this.#feed);
   }
