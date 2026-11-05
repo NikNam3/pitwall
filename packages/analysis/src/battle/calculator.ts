@@ -52,7 +52,7 @@ function side(view: EngineView, gaps: GapsOutput, pace: Pace, drs: DrsStatus, ou
   const lapsToDrs: Known<number> = !drs.enabled ? NOT_APPLICABLE : gapMs.known ? lapsToReach(rate, gapMs, drsRangeMs, 'falling') : gapMs;
 
   const delta = paceDelta(pace.byCar[ourId]?.recentMs, pace.byCar[theirId]?.recentMs);
-  const overtakeMarginMs: Known<Ms> = delta.known ? known((delta.value - overtakeThresholdMs) as Ms, delta.at) : delta;
+  const overtakeMarginMs: Known<Ms> = delta.known ? known(((isAhead ? delta.value : -delta.value) - overtakeThresholdMs) as Ms, delta.at) : delta;
   const ers = theirs.energy.ers;
   const tyre = (c: Car) => ({ compound: c.tyres.visualCompound, age: c.tyres.age });
   return known(
