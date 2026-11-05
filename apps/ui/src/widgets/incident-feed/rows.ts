@@ -3,7 +3,7 @@ import type { CarOverview } from '@pitwall/contracts';
 import type { CarId, IncidentEntry, IncidentForUs, IncidentKind, IncidentPenalty, Known, RaceMoment, UnknownReason } from '@pitwall/domain';
 import { carCodeById } from '../../kit/car/car-label.ts';
 import { fitCell, fitParts, knownPart, unknownPart, type CellPart } from '../../kit/grid/grid.ts';
-import { arrow, incidentKinds, insightText, sectorNames, separator, unknownReason } from '../../kit/text.ts';
+import { arrow, incidentKinds, insightText, sectorNames, separator, topBar, unknownReason } from '../../kit/text.ts';
 import type { WidgetSize } from '../../kit/types.ts';
 import { formatCount, formatDeltaPct, formatLapNumber, formatSeconds, formatSignedSeconds } from '../../kit/values/format.ts';
 import { positionPairParts } from '../../kit/values/position-mark.ts';
@@ -107,7 +107,11 @@ function detailText(entry: IncidentEntry): string {
  * The kind and its detail, `time loss S2`; when both do not fit the what column, the detail alone (`FL wing +12 %`,
  * `drive-through`: the names say what it is), cut by the grid if even that is too long.
  */
-function whatText(entry: IncidentEntry): string {
+function whatText(entry: IncidentEntry, cars: readonly CarOverview[]): string {
+  if (entry.kind === 'neutralised' && entry.cause !== undefined && entry.neutralisation !== undefined) {
+    const codes = entry.cause.carIds.map((id) => carCodeById(cars, id).text).filter((code) => code !== '');
+    return text.neutralisedCause(topBar.phase[entry.neutralisation === 'red' ? 'red' : entry.neutralisation === 'VSC' ? 'vsc' : 'sc'], codes.join(text.carsJoint), incidentKinds[entry.cause.kind]);
+  }
   const kind = incidentKinds[entry.kind];
   const detail = detailText(entry);
   if (detail === '') return kind;
@@ -125,7 +129,7 @@ export function incidentRows(feed: readonly IncidentEntry[], cars: readonly CarO
       cells: {
         lap: { text: formatLapNumber(entry.lap) },
         cars: carsCell(entry.carIds, cars),
-        what: { text: whatText(entry) },
+        what: { text: whatText(entry, cars) },
         lost,
         forUs: forUsCells(entry, cars),
       },
@@ -155,6 +159,13 @@ const partsOf = (cell: IncidentCell, reason: UnknownReason): CellPart[] =>
   cell.parts ?? (cell.text === '' ? [unknownPart(reason)] : [{ text: cell.text }, { text: ' ' }, unknownPart(reason)]);
 
 /**
+ * The width of a column that is not the last: its own, or, when its text is longer (a neutralisation's cause line,
+ * `SC · ALO–TSU collision`) and every column after it is empty, as long as the text needs, so nothing after it moves.
+ */
+const spansOn = (after: readonly IncidentColumn[], row: IncidentRow, cell: IncidentCell, width: number): number =>
+  cell.text.length > width && after.every((c) => row.cells[c].text === '') ? cell.text.length : width;
+
+/**
  * The row's cells on the fixed grid of a line `cols` characters wide: each column in its width, the last one in what
  * is left of the line; a text that does not fit is cut with `…` (kit `fitCell`), never silently.
  */
@@ -163,7 +174,8 @@ export function fitRow(mode: WidgetSize['mode'], row: IncidentRow, cols: number)
   const fixed = columns.slice(0, -1).reduce((sum, c) => sum + widths[c] + COLUMN_GAP, LEAD);
   return columns.map((column, i) => {
     const cell = row.cells[column];
-    const width = i === columns.length - 1 ? Math.max(0, cols - fixed) : widths[column];
+    const last = i === columns.length - 1;
+    const width = last ? Math.max(0, cols - fixed) : spansOn(columns.slice(i + 1), row, cell, widths[column]);
     const fitted = { column, text: fitCell(cell.text, width) };
     return cell.reason === undefined ? fitted : { ...fitted, title: unknownReason[cell.reason], parts: fitParts(partsOf(cell, cell.reason), width) };
   });

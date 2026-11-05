@@ -715,6 +715,16 @@ describe('incidents behaves per situation by its behaviour table (C44)', () => {
       expect(ofKind(feed, 'timeLoss')).toEqual([]);
     });
 
+    it.each([
+      ['an SC neutralisation entry names SC', 'SC'],
+      ['a VSC neutralisation entry names VSC', 'VSC'],
+      ['a red flag entry names red', 'red'],
+    ] as const)('%s', (_name, kind) => {
+      const span = neutralisation({ kind, start: SLOW_START - 10_000, end: SLOW_START + 30_000 });
+      const feed = run(viewOf({ miniSectors, phases: [span], laps: leaderLaps(LAPS) }));
+      expect(only(feed, 'neutralised').neutralisation).toBe(kind);
+    });
+
     it.each(['grid', 'formation', 'startLights', 'racing', 'finished', 'postSession'])('%s: no entry of its own', (kind) => {
       const spans = chain('session-phase-race', undefined, [{ kind, at: SLOW_START - 10_000 }], SLOW_START + 30_000);
       const feed = run(viewOf({ miniSectors: race(), events: [collision(6, 5)], spans }));
@@ -905,5 +915,66 @@ describe('incidents behaves per situation by its behaviour table (C44)', () => {
       expect(run(viewOf({ miniSectors: race(), spans }))).toEqual([]);
     });
 
+  });
+});
+
+// Task 5 (live-test fixes): a neutralisation names its likely cause (C43, C45). Its `cause` is the newest collision,
+// retirement, damage or time loss of any car with its time in [the neutralisation's start - 10 000 ms, its start]
+// (`causeWindowMs`, a pitwall estimate); that entry stays in the feed although no car of ours is near it (`forUs`
+// empty). Twenty cars, our car 15 (P16): its neighbourhood is cars 11..19, so cars 2..5 are far from it.
+describe('a neutralisation names its likely cause', () => {
+  const SC_START = 400_000;
+  const SC_END = 460_000;
+  const FAR = { playerCar: 15, miniSectors: race({ cars: 20 }), laps: leaderLaps(LAPS) } satisfies Partial<RaceInput>;
+  const sc = neutralisation({ kind: 'SC', start: SC_START, end: SC_END });
+  const at = (before: number) => SC_START - before;
+
+  type Row = { name: string; events?: RaceEvent[]; spans?: RaceInput['spans']; cause?: { id: string; kind: IncidentEntry['kind']; carIds: number[]; at: number } };
+  const rows: Row[] = [
+    {
+      name: 'a collision 3.5 s before the SC is its cause',
+      events: [collision(5, 4, at(3_500))],
+      cause: { id: `collision:5-4:${at(3_500)}`, kind: 'collision', carIds: [5, 4], at: at(3_500) },
+    },
+    { name: 'no incident before: no cause' },
+    {
+      name: 'two incidents before: the newest is the cause',
+      events: [collision(5, 4, at(8_000))],
+      spans: status(3, [{ kind: 'retired', at: at(2_000), detail: RETIRED }]),
+      cause: { id: `retirement:3:${at(2_000)}`, kind: 'retirement', carIds: [3], at: at(2_000) },
+    },
+    { name: 'an incident after the neutralisation opened is not its cause', events: [collision(5, 4, SC_START + 2_000)] },
+    { name: 'an incident 11 s before is outside the window', events: [collision(5, 4, at(11_000))] },
+  ];
+
+  it.each(rows)('$name', ({ events = [], spans = [], cause }) => {
+    const feed = run(viewOf({ ...FAR, phases: [sc], events, spans }));
+    const entry = only(feed, 'neutralised');
+    if (cause === undefined) {
+      expect(entry.cause).toBeUndefined();
+      return;
+    }
+    expect(entry.cause).toEqual({ entryId: cause.id, kind: cause.kind, carIds: cause.carIds.map(car), at: cause.at });
+    expect(feed.find((e) => e.id === cause.id)).toMatchObject({ kind: cause.kind, carIds: cause.carIds.map(car), at: cause.at, forUs: [] });
+  });
+
+  it('without a neutralisation the far collision is no entry: it is kept only as a cause', () => {
+    expect(run(viewOf({ ...FAR, events: [collision(5, 4, at(3_500))] }))).toEqual([]);
+  });
+
+  it('incremental equals from scratch through the collision, the SC opening and its close (C31)', () => {
+    const events = [collision(5, 4, at(3_500))];
+    const viewAt = (t: number) =>
+      viewOf({
+        ...FAR,
+        miniSectors: until(FAR.miniSectors, t),
+        laps: FAR.laps.filter((l) => l.completedAt <= t),
+        events: until(events, t),
+        ...(t < SC_START ? {} : t < SC_END ? { open: openNeutralisation({ kind: 'SC', start: SC_START }) } : { phases: [sc] }),
+      });
+    const views = [viewAt(at(1_000)), viewAt(SC_START + 5_000), viewAt(SC_END + 10_000)];
+    const last = views[views.length - 1]!;
+    expect(runSteps(views)).toEqual(run(last));
+    expect(only(runSteps(views.slice(0, 2)), 'neutralised').cause?.entryId).toBe(`collision:5-4:${at(3_500)}`);
   });
 });

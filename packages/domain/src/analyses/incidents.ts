@@ -73,4 +73,6 @@ export type IncidentEntry = {
   penalty?: IncidentPenalty;
   /** Neutralised entries only: the entry that caused it. */
   cause?: IncidentCause;
+  /** Neutralised entries only: what neutralised the session, the `neutralised` span's car (SC or VSC), `red` for a suspension. */
+  neutralisation?: 'SC' | 'VSC' | 'red';
 };

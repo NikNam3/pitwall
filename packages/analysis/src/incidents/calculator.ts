@@ -16,6 +16,7 @@ import {
   type CurrentLaps,
   type FrameNumber,
   type DamageJump,
+  type IncidentCause,
   type IncidentDamagePart,
   type IncidentEntry,
   type IncidentForUs,
@@ -41,7 +42,7 @@ import { LAP_CLASSES_CONFIG } from '../lap-classes/index.ts';
 import { PACE_CONFIG } from '../pace/index.ts';
 import { paceDeltaAround } from '../pace-delta/index.ts';
 import { emptyDamageJumps, finishJump, foldDamageJumps, type DamageJumpFold } from '../shared/damage-jumps.ts';
-import { isNeutralisation, leaderLapAt, NEUTRALISATION_MACHINES, NEUTRALISATION_READS } from '../shared/neutralised.ts';
+import { isNeutralisation, leaderLapAt, NEUTRALISATION_MACHINES, NEUTRALISATION_READS, neutralisationKind, type NeutralisationKind } from '../shared/neutralised.ts';
 import { behaviourFor } from '../shared/behaviour.ts';
 import { ourCars } from '../shared/our-cars.ts';
 import { warningInCycle } from '../shared/penalties.ts';
@@ -66,11 +67,6 @@ import {
   type TrackLayout,
 } from './incidents.ts';
 import { INCIDENTS, INCIDENTS_CONFIG, type IncidentsOutput } from './index.ts';
-
-/** "After" is this long after the incident. */
-const AFTER_MS = 5_000;
-/** A time loss this close to a collision or damage jump of the same car is part of that entry. */
-const MERGE_MS = 5_000;
 
 type Config = ReturnType<typeof INCIDENTS_CONFIG.read>;
 
@@ -101,7 +97,7 @@ type CarEvent = {
  * A neutralisation (`shared/neutralised.ts`): its start, the leader's lap at its start frame (ruling 3, from the
  * projection's laps) and the frames it covers, `startFrame <= f < endFrame` (C26; an open one ends at `Infinity`).
  */
-type Neutralised = { at: SessionTime; lap: number; startFrame: FrameNumber; endFrame: FrameNumber };
+type Neutralised = { at: SessionTime; lap: number; startFrame: FrameNumber; endFrame: FrameNumber; neutralisation: NeutralisationKind };
 
 /** The car-scoped sub-machines whose spans `incidents` folds (C20). */
 const CAR_MACHINES = ['car-location', 'car-status', 'warnings'] as const satisfies readonly MachineId[];
@@ -220,7 +216,7 @@ const foldNeutralised = (acc: Acc, view: EngineView): boolean => {
     for (let i = acc.closedPhases[machine] ?? 0; i < list.length; i++) {
       const span = list[i] as DeepReadonly<Span>;
       if (!isNeutralisation(machine, span) || behaviourOf(machine, span.kind) !== 'neutralised') continue;
-      (acc.neutralised[machine] ??= []).push({ at: span.start, startFrame: span.startFrame, endFrame: span.endFrame });
+      (acc.neutralised[machine] ??= []).push({ at: span.start, startFrame: span.startFrame, endFrame: span.endFrame, neutralisation: neutralisationKind(span) });
       changed = true;
     }
     acc.closedPhases[machine] = list.length;
@@ -403,7 +399,7 @@ const nowOf = (acc: Acc, view: EngineView): Now => {
     openSpansOf(view, machine).filter((span) => isNeutralisation(machine, span) && behaviourOf(machine, span.kind) === 'neutralised'),
   );
   const closed = NEUTRALISATION_MACHINES.flatMap((machine) => acc.neutralised[machine] ?? []);
-  const spans = [...closed, ...open.map((span) => ({ at: span.start, startFrame: span.startFrame, endFrame: Infinity }))];
+  const spans = [...closed, ...open.map((span) => ({ at: span.start, startFrame: span.startFrame, endFrame: Infinity, neutralisation: neutralisationKind(span) }))];
   const { trackLengthM, sector2StartM, sector3StartM } = live.session;
   return {
     isRace: true,
@@ -437,6 +433,8 @@ type Candidate = {
   jumps?: DamageJump[];
   /** A warning entry's count of the car's warnings. */
   warnings?: number;
+  /** A neutralised entry's kind (`neutralisationKind`). */
+  neutralisation?: NeutralisationKind;
   /** A penalty entry's ruling. */
   penalty?: IncidentPenalty;
   run?: SlowRun;
@@ -522,11 +520,11 @@ const candidates = (acc: Board): Candidate[] => {
   const absorbers = list.filter((c) => c.kind === 'collision' || c.kind === 'damage');
   for (const run of standingRuns(acc)) {
     // F1 25 names a collision's two cars in no fixed order, so either one's time loss belongs to it.
-    const into = absorbers.filter((c) => c.carIds.includes(run.carId) && Math.abs(c.at - run.at) <= MERGE_MS);
+    const into = absorbers.filter((c) => c.carIds.includes(run.carId) && Math.abs(c.at - run.at) <= acc.config.mergeMs);
     for (const c of into) c.merged.push(run);
     if (into.length === 0) list.push(candidate('timeLoss', run.at, [run.carId], { lap: lapOfProgress(run.startProgress), run }));
   }
-  for (const { at, lap } of acc.neutralisedNow) list.push(candidate('neutralised', at, [], { lap }));
+  for (const { at, lap, neutralisation } of acc.neutralisedNow) list.push(candidate('neutralised', at, [], { lap, neutralisation }));
   return list;
 };
 
@@ -603,7 +601,7 @@ const gapAfter = (acc: Board, after: Snapshot | undefined, ours: CarId, other: C
 /** Per our car that is involved or has an involved car in its neighbourhood: its position and gap before and after. */
 const forUsOf = (acc: Board, c: Candidate): IncidentForUs[] => {
   const before = snapshot(acc, c.at);
-  const afterAt = c.at + AFTER_MS;
+  const afterAt = c.at + acc.config.afterMs;
   const after = acc.newestAt >= afterAt ? snapshot(acc, afterAt) : undefined;
   const items: IncidentForUs[] = [];
   for (const ours of acc.ours) {
@@ -646,18 +644,56 @@ const detailOf = (acc: Board, c: Candidate): Pick<IncidentEntry, 'damage' | 'war
   return {};
 };
 
-/** Newest first, ties by id; only entries of our cars or their neighbourhood, cut at `feedLength`. */
+/** The kinds that can cause a neutralisation. */
+const CAUSE_KINDS = new Set(['collision', 'retirement', 'damage', 'timeLoss'] as const satisfies readonly IncidentCause['kind'][]);
+
+const isCauseKind = (kind: IncidentKind): kind is IncidentCause['kind'] => (CAUSE_KINDS as ReadonlySet<IncidentKind>).has(kind);
+
+/** Kinds that follow from a collision of their car: a damage jump or time loss up to `mergeMs` after it is its consequence. */
+const CONSEQUENCE_KINDS: ReadonlySet<IncidentKind> = new Set(['damage', 'timeLoss']);
+
+/**
+ * Per neutralised candidate, its likely cause: the newest candidate of a cause kind of any car with its time in
+ * `[start − causeWindowMs, start]`, among every candidate before the neighbourhood filter; a damage or time loss that
+ * is the consequence of a collision of its car in that window names that collision. `sorted` is newest first, ties by
+ * id, so the first match is the newest.
+ */
+const causesOf = (acc: Board, sorted: readonly Candidate[]): Map<string, IncidentCause> => {
+  const causes = new Map<string, IncidentCause>();
+  for (const n of sorted) {
+    if (n.kind !== 'neutralised') continue;
+    const inWindow = (c: Candidate): boolean => c.at <= n.at && c.at >= n.at - acc.config.causeWindowMs;
+    const newest = sorted.find((c) => isCauseKind(c.kind) && inWindow(c));
+    if (newest === undefined) continue;
+    const root = CONSEQUENCE_KINDS.has(newest.kind)
+      ? sorted.find(
+          (c) => c.kind === 'collision' && inWindow(c) && c.at <= newest.at && newest.at - c.at <= acc.config.mergeMs && c.carIds.some((id) => newest.carIds.includes(id)),
+        )
+      : undefined;
+    const cause = root ?? newest;
+    if (isCauseKind(cause.kind)) causes.set(n.id, { entryId: cause.id, kind: cause.kind, carIds: [...cause.carIds], at: cause.at });
+  }
+  return causes;
+};
+
+/**
+ * Newest first, ties by id; only entries of our cars or their neighbourhood, and the cause of a neutralisation (its
+ * `forUs` empty where no car of ours is concerned), cut at `feedLength`.
+ */
 const output = (fold: Acc, view: EngineView): IncidentsOutput => {
   if (!behaviourFor(WEEKEND_PHASE, view).includes('feed')) return [];
   const acc: Board = { ...fold, ...nowOf(fold, view) };
   const byId = new Map<string, Candidate>();
   for (const c of candidates(acc)) if (!byId.has(c.id)) byId.set(c.id, c);
   const sorted = [...byId.values()].sort((a, b) => b.at - a.at || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  const causes = causesOf(acc, sorted);
+  const causeIds = new Set([...causes.values()].map((c) => c.entryId));
   const feed: IncidentEntry[] = [];
   for (const c of sorted) {
     if (feed.length >= acc.config.feedLength) break;
     const forUs = forUsOf(acc, c);
-    if (forUs.length === 0) continue;
+    if (forUs.length === 0 && !causeIds.has(c.id)) continue;
+    const cause = causes.get(c.id);
     const lap = lapOf(acc, c);
     feed.push({
       id: c.id,
@@ -670,6 +706,8 @@ const output = (fold: Acc, view: EngineView): IncidentsOutput => {
       forUs,
       where: { sector: c.carIds[0] === undefined ? unknown('notApplicable') : sectorAt(acc.tracks[c.carIds[0]], c.at, acc.layout) },
       ...detailOf(acc, c),
+      ...(cause !== undefined && { cause }),
+      ...(c.neutralisation !== undefined && { neutralisation: c.neutralisation }),
     });
   }
   return feed;
