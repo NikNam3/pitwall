@@ -21,7 +21,7 @@
 </script>
 
 {#snippet value(c: CellPart, width: number = W.value)}<TextCell {...c} {width} align="right" />{/snippet}
-{#snippet jump(j: JumpRow)}<span style:color={roleOrUndefined(j.role)}>{fitCell(j.text, W.jump)}  <span title={j.title}><CellParts parts={[j.loss]} /></span></span>{/snippet}
+{#snippet jump(j: JumpRow)}<span style:color={roleOrUndefined(j.role)}>{fitCell(j.text, W.jump)}  <span title={j.title} style:color={roleOrUndefined(j.lossRole)}><CellParts parts={[j.loss]} /></span></span>{/snippet}
 <!-- The compact jump hovers its loss: the loss text, or the reason's hover text when the loss is unknown; no room for the
      loss text, but a hidden loss still shows its reason's mark after the jump, never nothing. -->
 {#snippet compactJump(j: JumpRow)}<div class="line" style:color={roleOrUndefined(j.role)} title={unknownTitle(j.loss.reason) ?? j.loss.text}><span>{j.text}</span>{#if j.loss.reason !== undefined} <CellParts parts={[j.loss]} />{/if}</div>{/snippet}

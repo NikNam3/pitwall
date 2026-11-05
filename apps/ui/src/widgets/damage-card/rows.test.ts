@@ -139,6 +139,56 @@ describe('damageRows jumps', () => {
   });
 });
 
+describe('damageRows measuring and estimate', () => {
+  const NA = unknown('notApplicable');
+  const measuringJump = (done: number, estimate: DamageJump['estimateMsPerLap'] = NA): DamageJump => ({
+    ...wing, lossMsPerLap: unknown('insufficientData'), measuring: known({ lapsDone: done, lapsNeeded: 2 }, 0), estimateMsPerLap: estimate,
+  });
+
+  it('shows the laps done of the laps needed while measuring without an estimate', () => {
+    const [row] = damageRows(state({ jumps: [measuringJump(0)] })).jumps;
+    expect(row!.loss).toStrictEqual({ text: 'measuring 0/2 laps' });
+    expect(row!.lossRole).toBeUndefined();
+    const [later] = damageRows(state({ jumps: [measuringJump(1)] })).jumps;
+    expect(later!.loss).toStrictEqual({ text: 'measuring 1/2 laps' });
+  });
+
+  it('shows the estimate in textFaint while measuring, replacing the measuring text', () => {
+    const [row] = damageRows(state({ jumps: [measuringJump(1, known(800, 0))] })).jumps;
+    expect(row!.loss).toStrictEqual({ text: '~+0.8 s/lap est.' });
+    expect(row!.lossRole).toBe('textFaint');
+  });
+
+  it('shows the measured loss alone once known: no estimate text, no faint role', () => {
+    const measured: DamageJump = {
+      ...wing, lossMsPerLap: known(1230, 400_000), measuring: NA, estimateMsPerLap: NA,
+    };
+    const [row] = damageRows(state({ jumps: [measured] })).jumps;
+    expect(row!.loss).toStrictEqual({ text: 'loss +1.23 s/lap' });
+    expect(row!.lossRole).toBeUndefined();
+  });
+
+  it('shows the estimate of a jump that can never be measured, its only number', () => {
+    const never: DamageJump = { ...wing, lossMsPerLap: NA, measuring: NA, estimateMsPerLap: known(800, 0) };
+    const [row] = damageRows(state({ jumps: [never] })).jumps;
+    expect(row!.loss).toStrictEqual({ text: '~+0.8 s/lap est.' });
+    expect(row!.lossRole).toBe('textFaint');
+  });
+
+  it('keeps "loss: not measurable" for a never-measurable jump without an estimate', () => {
+    const never: DamageJump = { ...wing, lossMsPerLap: NA, measuring: NA, estimateMsPerLap: NA };
+    const [row] = damageRows(state({ jumps: [never] })).jumps;
+    expect(row!.loss).toStrictEqual({ text: 'loss: not measurable' });
+    expect(row!.lossRole).toBeUndefined();
+  });
+
+  it('gives the compact view the same loss and role for the newest jump', () => {
+    const { compact } = damageRows(state({ jumps: [measuringJump(1, known(800, 0))] }));
+    expect(compact.jump?.loss).toStrictEqual({ text: '~+0.8 s/lap est.' });
+    expect(compact.jump?.lossRole).toBe('textFaint');
+  });
+});
+
 describe('damageRows compact', () => {
   it('gives the parts line (wings L/R/rear, floor, diffuser, sidepod, gearbox, engine) and the newest jump', () => {
     const { compact } = damageRows(state({ jumps: [floor, wing] }));

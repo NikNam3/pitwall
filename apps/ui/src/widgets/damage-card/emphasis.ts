@@ -6,3 +6,6 @@ export function jumpRole(jump: DamageJump, newest: boolean): Role | undefined {
   const loss = jump.lossMsPerLap;
   return newest && !loss.known && loss.reason === 'insufficientData' ? 'critical' : undefined;
 }
+
+/** The estimate of a loss is a guess: faint, so it never reads as a measurement. */
+export const estimateRole: Role = 'textFaint';
