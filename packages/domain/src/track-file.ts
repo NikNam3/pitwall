@@ -17,7 +17,7 @@ export type TrackTurn = { number: number; letter?: string; label: string; apex: 
 /** A braking zone on the lap; it may wrap past the line (`start > end`). */
 export type BrakingZone = { start: LapFraction; end: LapFraction };
 
-/** A default a run starts from, with where it came from (`"FastF1 3.x, 2025 <event> R, median of n stops"`). */
+/** A default a run starts from, with where it came from (`"OpenF1, 2025 <event> R, median of n stops"`). */
 export type TrackDefault<T> = { value: T; source: string };
 
 /** A track's data as the view holds it (`view.track`): the file without its provenance. */
@@ -40,7 +40,7 @@ export type TrackData = {
 
 /** The file as committed and as the sidecar: the data plus its provenance. */
 export type TrackFile = TrackData & {
-  source: { generator: string; fastf1: string; season: number; generatedOn: string };
+  source: { generator: string; sources: string; season: number; generatedOn: string };
 };
 
 /** Checks parsed JSON against `TrackFile`: every part's shape, every lap fraction in `[0, 1)`, every `Ms` an integer. */
