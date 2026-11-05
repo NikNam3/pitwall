@@ -167,6 +167,8 @@ const IN_WORDS: Record<string, { field: string; reason: UnknownReason; rule: str
   'damage-card': [
     { field: 'damage.jumps.*.lossMsPerLap', reason: 'insufficientData', rule: '"loss: measuring" (Task P ruling)' },
     { field: 'damage.jumps.*.lossMsPerLap', reason: 'notApplicable', rule: '"loss: not measurable"' },
+    { field: 'damage.jumps.*.estimateMsPerLap', reason: 'notApplicable', rule: 'no estimate: the loss text stands alone' },
+    { field: 'damage.jumps.*.measuring', reason: 'notApplicable', rule: 'measured or never measurable: the loss text stands alone' },
   ],
   'incident-feed': [{ field: 'feed.*.forUs.*.gapAfterMs', reason: 'notApplicable', rule: 'the other car retired: DNF' }],
 };
