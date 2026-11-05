@@ -1,6 +1,6 @@
 // What `car-bands` does per situation (contract C43, C44): one row per kind of every sub-machine it reads. The machine
-// decided the situation; the calculator only looks up the rows of the spans open for a car and merges them. Its last
-// lap counts by activity through the lap record (in and out laps), and a rate lap has no lap-1 rule.
+// decided the situation; the calculator only looks up the rows of the spans open for a car and merges them. Its judged
+// lap counts by activity through the lap record (in and out laps) and by the weekend phase (lap 1 of a race, C14).
 import type { BehaviourTable } from '../shared/behaviour.ts';
 
 /** What the situations open for a car say about its bands; every field absent means "no change". */
