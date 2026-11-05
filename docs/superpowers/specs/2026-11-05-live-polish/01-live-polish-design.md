@@ -48,7 +48,7 @@ The panel the user ran on the first live weekend reads right on the next one: ba
 Each `DamageJump` (its `lossMsPerLap` is the measured loss) gains:
 
 - `measuring: Known<{ lapsDone: number; lapsNeeded: number }>`: while a jump's loss is being measured over `forPace` laps (`lapsNeeded` = the existing 2); `notApplicable` otherwise;
-- `estimateMsPerLap: Known<Ms>`: from the car's mini-sectors since the jump against its median for those segments (the median of its earlier current crossings, pit and neutralised segments skipped), summed and scaled to 50 segments, after at least `minEstimateSegments` (config, 10); `notApplicable` once its `lossMsPerLap` is known, and `notApplicable` for a jump whose loss can never be measured (no pace laps before it), where it is the only number.
+- `estimateMsPerLap: Known<Ms>`: from the car's mini-sectors since the jump against its median for those segments (the median of its earlier current crossings, pit and neutralised segments skipped), summed and scaled to 50 segments, after at least `minEstimateSegments` (config, 10); `notApplicable` once its `lossMsPerLap` is known. A jump whose loss can never be measured (`lossMsPerLap` `notApplicable`: no pace laps before it) keeps its estimate, its only number.
 
 The per-segment median moves from `incidents` (`incidents.ts`) to `analysis/src/shared/segment-medians.ts`, one pure function both units call (C43, C45); `incidents`' behaviour is unchanged.
 
