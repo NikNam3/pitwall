@@ -3,7 +3,7 @@ import type { CarOverview } from '@pitwall/contracts';
 import type { CarId, GapperLines, GapperReference } from '@pitwall/domain';
 import { carCodeById } from '../../kit/car/car-label.ts';
 import type { ChartSeries, PhaseBand } from '../../kit/chart/data.ts';
-import { carColour } from '../../theme/index.ts';
+import { role } from '../../theme/index.ts';
 
 /** The gapper's reference kinds, the default first. */
 export const REFERENCE_KINDS = ['leaderAverage', 'carAverage', 'fixed'] as const;
@@ -37,23 +37,25 @@ export function phaseBands(phases: GapperLines['phases']): PhaseBand[] {
 }
 
 /**
- * One line per car with laps or a gap now: lap against -gap in seconds, so a car losing time drops; `ours` from kit
- * `ourCars`. A car with a gap now continues to it as a live (dotted) last segment; in lap 1, before any completed lap,
- * its line is just that live point.
+ * One line per car of the gapper's window with points or a gap now: x as the gapper gives it (completed laps plus the
+ * segment), y = -gap in seconds, so a car losing time drops. A car with a gap now continues to it as a live (dotted)
+ * last segment. Ours in the ownCar role (the teammate dashed), every other car textFaint; the kit chart owns the y range.
  */
 export function gapSeries(lines: GapperLines, cars: readonly CarOverview[], ours: ReadonlySet<CarId>): ChartSeries[] {
-  const field = cars.map((c) => ({ id: c.id, teamId: c.identity.teamId, raceNumber: c.identity.raceNumber }));
   const out: ChartSeries[] = [];
+  const player = ours.values().next().value;
   for (const line of lines.cars) {
-    if (line.byLap.length === 0 && !line.now.known) continue;
-    const car = cars.find((c) => c.id === line.carId);
-    const points: ChartSeries['points'] = line.byLap.map((p) => [p.lap, -p.gapMs / 1000]);
+    // `points` is optional until Task 15; a gapper line without it falls back to its per-lap points.
+    const drawn = line.points ?? line.byLap;
+    if (drawn.length === 0 && !line.now.known) continue;
+    const points: ChartSeries['points'] = drawn.map((p) => [p.lap, -p.gapMs / 1000]);
     if (line.now.known) points.push([line.now.value.lap, -line.now.value.gapMs / 1000]);
+    const own = ours.has(line.carId);
     out.push({
       label: carCodeById(cars, line.carId).text,
       points,
       ...(line.now.known ? { liveEnd: true } : {}),
-      colour: carColour(car ? { id: car.id, teamId: car.identity.teamId, raceNumber: car.identity.raceNumber } : { id: line.carId, teamId: -1, raceNumber: 0 }, field, ours),
+      colour: own ? { colour: role('ownCar'), dashed: line.carId !== player, ownCar: true } : { colour: role('textFaint'), dashed: false, ownCar: false },
     });
   }
   return out;
