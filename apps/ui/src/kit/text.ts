@@ -108,6 +108,7 @@ export const commandTitles = {
   paletteOpen: 'Command palette',
   keysOverview: 'Key overview',
   windowFocus: (id: string): string => `Focus window ${id}`,
+  panelAdd: (title: string): string => `Add panel: ${title}`,
   realismToggle: 'Toggle realism mode',
   replayPause: 'Pause replay',
   replayPlay: 'Play replay',

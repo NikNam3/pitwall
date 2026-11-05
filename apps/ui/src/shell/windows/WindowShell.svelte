@@ -9,7 +9,7 @@
   import { applyTheme, DEFAULT_THEME, role, type ThemeVariant } from '../../theme/index.ts';
   import '../controls.css';
   import { WIDGETS } from '../../widgets/index.generated.ts';
-  import { alertCommands, defaultCommands, DEFAULT_KEYS, windowCommands, type CommandContext, type ShellOverlay } from '../commands/default-commands.ts';
+  import { alertCommands, defaultCommands, DEFAULT_KEYS, panelCommands, windowCommands, type CommandContext, type ShellOverlay } from '../commands/default-commands.ts';
   import { eventKey, parseKeys } from '../commands/keys.ts';
   import KeyOverview from '../commands/KeyOverview.svelte';
   import { OverlayStack, provideOverlayStack } from '../commands/overlay-stack.ts';
@@ -176,6 +176,7 @@
     ...baseCommands,
     ...alertCommands(shownAlerts, commandContext),
     ...windowCommands((read?.workbook.windows ?? []).map((w) => w.id), commandContext),
+    ...panelCommands(widgets.map((w) => w.decl), (spec) => dock?.addPanel(spec)),
   ]);
   $effect(() => {
     const offs = commands.map((c) => registry.register(c));
