@@ -5,7 +5,7 @@ import type { GapsOutput } from '../../src/gaps/index.ts';
 import { gapperLines, gapsToCar } from '../../src/gaps/gaps.ts';
 import { neutralisation } from '../../../../test-support/builders/index.ts';
 import { GAPS_CONFIG } from '../../src/gaps/index.ts';
-import { byTime, isWholeLap, plain, pointsByProgress, progressOf, run, viewOf, windowOf } from './race.ts';
+import { byTime, carsFor, isWholeLap, plain, pointsByProgress, progressOf, run, viewOf, windowOf } from './race.ts';
 
 /**
  * 3 to 5 cars over 1 to 3 laps, each mini-sector 1.7 to 1.9 s and a start up to 3 s late: the field stays within
@@ -153,7 +153,13 @@ describe('gap properties', () => {
         const history = all.slice(0, 1 + Math.floor(race.cut * (all.length - 1)));
         const lines = gapperLines(run(viewOf(history)), { kind: 'fixed', lapMs: 90_000 });
         for (const car of lines.cars) {
-          const newest = history.findLast((m) => m.carId === car.carId)!;
+          const newest = history.findLast((m) => m.carId === car.carId);
+          // our car is always in the window, also before its first crossing: no point, no live point
+          if (newest === undefined) {
+            expect(car.points, `car ${car.carId} without a crossing`).toEqual([]);
+            expect(car.now.known, `car ${car.carId} without a crossing`).toBe(false);
+            continue;
+          }
           if (newest.lap === 1 && newest.segment === 0) continue; // the start line: not pinned
           if (newest.segment === 0) {
             expect(car.now, `car ${car.carId} at the line`).toEqual({ known: false, reason: 'notApplicable' });
@@ -219,7 +225,8 @@ describe('gap properties', () => {
       fc.property(windowRaceArb, (race) => {
         const all = crossingsOf(race);
         const history = all.slice(0, 1 + Math.floor(race.cut * (all.length - 1)));
-        const out = run(viewOf(history));
+        // our car (car 0) has a car state from the start, before its first crossing too
+        const out = run(viewOf(history, { cars: carsFor(history, { 0: {} }) }));
         for (const reference of [{ kind: 'fixed', lapMs: 90_000 } as const, { kind: 'leaderAverage' } as const]) {
           expect(windowOf(gapperLines(out, reference)), JSON.stringify(reference)).toEqual(windowModel(history, 0));
         }
