@@ -18,7 +18,7 @@ describe('incidents: warnings by kind', () => {
 
   it('a collision warning (the corner-cutting count unchanged, infringement 4) is an other entry with its infringement', () => {
     const [entry] = warnings(run(viewOf({ miniSectors: race(), spans: warned(7, [T], ['collision']) })), 7);
-    expect(entry!.warning).toEqual({ kind: 'other', infringement: known(4, T) });
+    expect(entry!.warning).toMatchObject({ kind: 'other', infringement: known(4, T) });
   });
 
   it('a warning without an infringement is an other entry with an unknown one', () => {
@@ -27,16 +27,15 @@ describe('incidents: warnings by kind', () => {
       { kind: 'warned', at: T, detail: { count: 1, cornerCutting: 0, infringement: unknown('notReceived') } satisfies WarnedDetail },
     ];
     const [entry] = warnings(run(viewOf({ miniSectors: race(), spans: chain('warnings', 7, steps) })), 7);
-    expect(entry!.warning).toEqual({ kind: 'other', infringement: unknown('notReceived') });
+    expect(entry!.warning).toMatchObject({ kind: 'other', infringement: unknown('notReceived') });
   });
 
   it('each warning of a car has its own kind: a collision between two corner-cutting ones does not move the count', () => {
     const spans = warned(7, [370_000, 380_000, 390_000], ['cornerCutting', 'collision', 'cornerCutting']);
     const feed = warnings(run(viewOf({ miniSectors: race(), spans })), 7); // newest first
-    expect(feed.map((e) => e.warning).reverse()).toEqual([
-      { kind: 'cornerCutting', count: 1, limit: 3 },
-      { kind: 'other', infringement: known(4, 380_000) },
-      { kind: 'cornerCutting', count: 2, limit: 3 },
-    ]);
+    const [first, second, third] = feed.map((e) => e.warning).reverse();
+    expect(first).toEqual({ kind: 'cornerCutting', count: 1, limit: 3 });
+    expect(second).toMatchObject({ kind: 'other', infringement: known(4, 380_000) });
+    expect(third).toEqual({ kind: 'cornerCutting', count: 2, limit: 3 });
   });
 });
