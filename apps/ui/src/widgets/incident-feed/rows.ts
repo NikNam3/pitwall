@@ -172,28 +172,53 @@ export type FittedCell = { column: IncidentColumn; text: string; title?: string;
 const partsOf = (cell: IncidentCell, reason: UnknownReason): CellPart[] =>
   cell.parts ?? (cell.text === '' ? [unknownPart(reason)] : [{ text: cell.text }, { text: ' ' }, unknownPart(reason)]);
 
+/** A cell that shows nothing at all: no text and no mark (a cell with an unknown value shows its mark). */
+const blank = (cell: IncidentCell): boolean => cell.text === '' && cell.reason === undefined;
+
+/** One cell fitted to `width` characters; a cell with an unknown value gets its parts and the reason in words. */
+function fitTo(column: IncidentColumn, cell: IncidentCell, width: number): FittedCell {
+  const fitted = { column, text: fitCell(cell.text, width) };
+  return cell.reason === undefined ? fitted : { ...fitted, title: unknownReason[cell.reason], parts: fitParts(partsOf(cell, cell.reason), width) };
+}
+
 /**
  * The row's cells on the fixed grid of a line `cols` characters wide: each column in its width, the last one in what
- * is left of the line; a text that does not fit its column is cut with `…` (kit `fitCell`), never silently, so a line
- * never grows past the panel (a warning's full text too: `warning · corner cutting…`).
+ * is left of the line; a text that does not fit is cut with `…` (kit `fitCell`), never silently, so a line never grows
+ * past the panel. A text longer than its column (a neutralisation's cause line, `SC · ALO–TSU collision`) spans on
+ * when every cell after it is blank: it takes their place, as long as it needs and at most the rest of the line. Any
+ * cell after it that shows something (the `–` of a warning's lost cell) keeps the text in its own column, cut there.
  */
 export function fitRow(mode: WidgetSize['mode'], row: IncidentRow, cols: number): FittedCell[] {
   const columns = columnsFor(mode);
-  const fixed = columns.slice(0, -1).reduce((sum, c) => sum + widths[c] + COLUMN_GAP, LEAD);
-  return columns.map((column, i) => {
+  const fitted: FittedCell[] = [];
+  let start = LEAD;
+  for (const [i, column] of columns.entries()) {
     const cell = row.cells[column];
-    const last = i === columns.length - 1;
-    const width = last ? Math.max(0, cols - fixed) : widths[column];
-    const fitted = { column, text: fitCell(cell.text, width) };
-    return cell.reason === undefined ? fitted : { ...fitted, title: unknownReason[cell.reason], parts: fitParts(partsOf(cell, cell.reason), width) };
-  });
+    const after = columns.slice(i + 1);
+    const room = Math.max(0, cols - start);
+    if (after.length === 0) {
+      fitted.push(fitTo(column, cell, room));
+    } else if (cell.text.length > widths[column] && after.every((c) => blank(row.cells[c]))) {
+      fitted.push(fitTo(column, cell, Math.max(widths[column], Math.min(cell.text.length, room))));
+      break;
+    } else {
+      fitted.push(fitTo(column, cell, widths[column]));
+      start += widths[column] + COLUMN_GAP;
+    }
+  }
+  return fitted;
 }
 
-/** A row as one line of text on the fixed grid (`cols` wide; by default as wide as its last cell needs), without the marks. */
+/**
+ * A row as one line of text on the fixed grid (`cols` wide; by default as wide as its cells need: the last one's text
+ * and a spanning cell's text past its column), without the marks.
+ */
 export function incidentRowText(mode: WidgetSize['mode'], row: IncidentRow, cols = Infinity): string {
   const columns = columnsFor(mode);
   const last = columns[columns.length - 1];
-  const needed = columns.slice(0, -1).reduce((sum, c) => sum + widths[c] + COLUMN_GAP, LEAD) + (last === undefined ? 0 : row.cells[last].text.length);
+  const fixed = columns.slice(0, -1);
+  const overflow = Math.max(0, ...fixed.map((c) => row.cells[c].text.length - widths[c]));
+  const needed = fixed.reduce((sum, c) => sum + widths[c] + COLUMN_GAP, LEAD) + overflow + (last === undefined ? 0 : row.cells[last].text.length);
   const cells = fitRow(mode, row, Math.min(cols, needed));
   return `${' '.repeat(LEAD)}${cells.map((c) => c.text).join(' '.repeat(COLUMN_GAP))}`.trimEnd();
 }
