@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { carId, known, unknown } from '@pitwall/domain';
 import type { Known, Moment, RaceMoment } from '@pitwall/domain';
-import { battleRole } from './emphasis.ts';
+import { battleRole, marginRole } from './emphasis.ts';
 
 const k = <T>(v: T): Known<T> => known(v, 0);
 const OURS = carId(1);
@@ -43,5 +43,24 @@ describe('battleRole', () => {
 
   it('does not look at laps or gap values: no threshold in the display', () => {
     expect(battleRole(moment('battle', { carId: 1, side: 'ahead', lapsToDrs: 99, gapMs: 99999 }), OURS, 'ahead')).toBe('text');
+  });
+});
+
+describe('marginRole', () => {
+  it('is text (bold white) for a positive PASS', () => {
+    expect(marginRole(k({ kind: 'pass', ms: 250 }))).toBe('text');
+  });
+
+  it('is warning for a negative HOLD', () => {
+    expect(marginRole(k({ kind: 'hold', ms: -400 }))).toBe('warning');
+  });
+
+  it('is undefined for a negative PASS, a positive HOLD, a zero margin, an unknown or missing margin', () => {
+    expect(marginRole(k({ kind: 'pass', ms: -100 }))).toBeUndefined();
+    expect(marginRole(k({ kind: 'hold', ms: 100 }))).toBeUndefined();
+    expect(marginRole(k({ kind: 'pass', ms: 0 }))).toBeUndefined();
+    expect(marginRole(k({ kind: 'hold', ms: 0 }))).toBeUndefined();
+    expect(marginRole(unknown('insufficientData'))).toBeUndefined();
+    expect(marginRole(undefined)).toBeUndefined();
   });
 });

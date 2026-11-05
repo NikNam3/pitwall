@@ -1,15 +1,15 @@
-import type { BattleCard, BattleSide, DrsStatus, Known, RaceMoment, VisualCompound } from '@pitwall/domain';
+import { unknown, type BattleCard, type BattleSide, type DrsStatus, type Known, type RaceMoment, type VisualCompound } from '@pitwall/domain';
 import type { CarOverview } from '@pitwall/contracts';
 import { carCodeById } from '../../kit/car/car-label.ts';
 import { gridRow, knownPart, unknownPart, type CellPart, type GridColumn } from '../../kit/grid/grid.ts';
 import { compoundText } from '../../kit/compound/compound-mark.ts';
-import { formatJoules, formatLaps, formatSecondsPerLapPlain, formatSignedSeconds } from '../../kit/values/format.ts';
+import { formatJoules, formatLaps, formatSecondsPerLap, formatSignedSeconds } from '../../kit/values/format.ts';
 import type { Role } from '../../theme/roles.ts';
 import type { WidgetSize } from '../../kit/types.ts';
-import { battleRole, type Side } from './emphasis.ts';
+import { battleRole, marginRole, type Side } from './emphasis.ts';
 import * as text from './text.ts';
 
-export type ColumnId = 'drv' | 'gap' | 'closing' | 'toDrs' | 'paceDelta' | 'margin' | 'tyres' | 'ers';
+export type ColumnId = 'drv' | 'gap' | 'paceDelta' | 'margin' | 'toDrs' | 'tyres' | 'ers';
 /** A field: a part (its text, or why it is unknown) with its emphasis and what it means on hover (`title`). */
 export type Cell = CellPart & { role?: Role; title?: string };
 export type TyrePair = { ours: { compound: VisualCompound; age: number }; theirs: { compound: VisualCompound; age: number } };
@@ -21,17 +21,16 @@ export type BattleRow = {
   tyres?: TyrePair;
 };
 
-const COLUMN_IDS: readonly ColumnId[] = ['drv', 'gap', 'closing', 'toDrs', 'paceDelta', 'margin', 'tyres', 'ers'];
+const COLUMN_IDS: readonly ColumnId[] = ['drv', 'gap', 'paceDelta', 'margin', 'toDrs', 'tyres', 'ers'];
 const COMPACT: readonly ColumnId[] = ['drv', 'gap', 'toDrs'];
 export const LABEL_WIDTH = 6;
 /** The fixed field of each column. */
 export const WIDTH: Record<ColumnId, GridColumn> = {
   drv: { width: 3, align: 'right' },
   gap: { width: 6, align: 'right' },
-  closing: { width: 10, align: 'right' },
   toDrs: { width: 8, align: 'right' },
-  paceDelta: { width: 6, align: 'right' },
-  margin: { width: 6, align: 'right' },
+  paceDelta: { width: 11, align: 'right' },
+  margin: { width: 16, align: 'right' },
   tyres: { width: 7, align: 'left' },
   ers: { width: 6, align: 'right' },
 };
@@ -49,6 +48,13 @@ const GAP_SIGN: Record<Side, 1 | -1> = { ahead: -1, behind: 1 };
 const toDrsCell = (lapsToDrs: Known<number>, drs: DrsStatus): Cell =>
   drs.enabled ? knownPart(lapsToDrs, (n) => (n === 0 ? text.inDrs : formatLaps(n))) : { text: text.drsOff, title: text.drsOffTitle[drs.reason] };
 
+/** MARGIN: PASS or HOLD with the pace margin per lap; a missing margin is unknown. */
+function marginCell(margin: BattleSide['margin']): Cell {
+  const cell: Cell = knownPart(margin ?? unknown('notReceived'), (m) => `${text.marginKind[m.kind]} ${formatSecondsPerLap(m.ms)}`);
+  const role = marginRole(margin);
+  return role === undefined ? cell : { ...cell, role };
+}
+
 const tyreText = (side: BattleSide): string => `${compoundText(side.ours.compound, side.ours.age)} ${compoundText(side.theirs.compound, side.theirs.age)}`;
 
 function sideRow(label: BattleRow['label'], side: Side, card: BattleCard, cars: readonly CarOverview[], moment: Known<RaceMoment> | undefined): BattleRow {
@@ -62,10 +68,9 @@ function sideRow(label: BattleRow['label'], side: Side, card: BattleCard, cars: 
   const cells: Record<ColumnId, Cell> = {
     drv: carCodeById(cars, s.carId),
     gap: knownPart(s.gapMs, (ms) => formatSignedSeconds(GAP_SIGN[side] * ms, 3)),
-    closing: knownPart(s.closingMsPerLap, formatSecondsPerLapPlain),
     toDrs: toDrsCell(s.lapsToDrs, card.drs),
-    paceDelta: knownPart(s.paceDeltaMs, (ms) => formatSignedSeconds(ms, 2)),
-    margin: knownPart(s.overtakeMarginMs, (ms) => formatSignedSeconds(ms, 2)),
+    paceDelta: knownPart(s.paceDeltaMs, formatSecondsPerLap),
+    margin: marginCell(s.margin),
     tyres: { text: tyreText(s) },
     ers: knownPart(s.theirErsStoreJ, formatJoules),
   };
