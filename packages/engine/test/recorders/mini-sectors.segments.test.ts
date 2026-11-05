@@ -10,6 +10,7 @@ import { MINI_SECTORS, type MiniSectorCrossing } from '@pitwall/domain';
 import type { StepResult } from '../../src/index.ts';
 import type { DeepReadonly } from '../../src/util/deep-readonly.ts';
 import { replaySegment, type SegmentRun } from '../support/segment-run.ts';
+import { SEGMENTS } from '../../../../test-support/segments.ts';
 
 const CARS = [9, 19] as const;
 /** Per frame: every car's lap and lap distance, the race clock, the track length, and the projection's crossings (the list itself: it only grows here). */
@@ -60,5 +61,29 @@ describe('mini-sector crossings: race-miami-finish (MiR: car 9 crosses at 2267.6
     });
     expect(driving.length).toBeGreaterThan(0);
     expect(crossings().filter((c) => inCoolDown(c.carId, c.frame))).toEqual([]);
+  });
+});
+
+// practice-garage-restart-line (practiceLiveTest 1118-1135 s; fixtures/index.json): the player (car 19) ends its out lap
+// from the garage at the line at about 1122.6 s with the lap number staying 7; car-activity-practice opens flyingLap
+// there (not joined), so the lap restarts (`lapStepOf`, live-test fixes Task 2). From that frame the crossings of lap 7
+// are recorded again from the line: segment 0 on the frame the flying lap opens, then every segment in order. The
+// earlier passes of these segments lie before the segment, so none of them supersedes a crossing (C25). The frame is
+// read from the segment's own spans, never a fact of the recording.
+describe('mini-sector crossings: practice-garage-restart-line (the player’s out lap ends at the line on lap 7)', () => {
+  const PLAYER = 19;
+  let seg: SegmentRun<DeepReadonly<MiniSectorCrossing[]>>;
+  beforeAll(async () => {
+    seg = await replaySegment(SEGMENTS.practiceGarageRestartLine, (state) => state.history.crossings);
+  });
+
+  it('after the line, the crossings of lap 7 are appended again from segment 0, in increasing segment order, superseding nothing', () => {
+    const push = seg.spans('car-activity-practice').find((s) => s.carId === PLAYER && s.kind === 'flyingLap' && s.joinedAt === undefined);
+    expect(push).toBeDefined();
+    const again = seg.frames.at(-1)!.value.filter((c) => c.carId === PLAYER && c.lap === 7 && c.frame >= push!.startFrame);
+    expect(again.length).toBeGreaterThan(0);
+    expect(again[0]).toMatchObject({ segment: 0, frame: push!.startFrame });
+    expect(again.map((c) => c.segment)).toEqual(Array.from({ length: again.length }, (_, s) => s));
+    expect(again.filter((c) => c.supersedes !== undefined)).toEqual([]);
   });
 });
