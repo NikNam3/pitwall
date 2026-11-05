@@ -1,6 +1,6 @@
 // The damage jump grouping from the history's `damageChange` events, shared by `damage` (the card and the alarm: the
 // jumps not repaired since) and `incidents` (the feed, a log: every jump).
-import type { CarId, DamageChangeParams, DamageJump, DamageParts, LapRecord, RaceEvent, SessionTime } from '@pitwall/domain';
+import type { CarId, DamageChangeParams, DamageJump, DamageParts, FrameNumber, LapRecord, RaceEvent, SessionTime } from '@pitwall/domain';
 import type { DeepReadonly } from '@pitwall/engine/readers';
 import { paceDeltaAround, type PaceDeltaOptions } from '../pace-delta/index.ts';
 
@@ -19,12 +19,15 @@ export type DamageJumps = {
 /** Rises of one part so far inside the window that opened at `start`. */
 type Cluster = { start: SessionTime; sumPct: number };
 
-/** The grouping folded over the first `folded` events, for an incremental caller. */
-export type DamageJumpFold = DamageJumps & { folded: number; clusters: Map<string, Cluster> };
+/**
+ * The grouping folded over the first `folded` events, for an incremental caller; `frames`: per car, the frame each of
+ * its jumps describes (the event that reached `jumpPct`, C26), by the jump's index in `jumps`.
+ */
+export type DamageJumpFold = DamageJumps & { folded: number; clusters: Map<string, Cluster>; frames: Map<CarId, FrameNumber[]> };
 
-type Event = Pick<RaceEvent, 'at' | 'kind' | 'carId' | 'params'>;
+type Event = Pick<RaceEvent, 'at' | 'kind' | 'carId' | 'params' | 'frame'>;
 
-export const emptyDamageJumps = (): DamageJumpFold => ({ jumps: new Map(), repairs: new Map(), folded: 0, clusters: new Map() });
+export const emptyDamageJumps = (): DamageJumpFold => ({ jumps: new Map(), repairs: new Map(), folded: 0, clusters: new Map(), frames: new Map() });
 
 /**
  * Folds the events after the `folded` ones into `fold`. Rises of one part of a car add up within `jumpWindowMs` of the
@@ -55,6 +58,9 @@ export function foldDamageJumps(fold: DamageJumpFold, events: readonly DeepReado
       const list = fold.jumps.get(e.carId) ?? [];
       fold.jumps.set(e.carId, list);
       list.push({ at: e.at, part, deltaPct: cluster.sumPct });
+      const frames = fold.frames.get(e.carId) ?? [];
+      fold.frames.set(e.carId, frames);
+      frames.push(e.frame);
     } else fold.clusters.set(key, cluster);
   }
   fold.folded = events.length;
