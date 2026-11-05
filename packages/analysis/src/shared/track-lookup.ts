@@ -12,16 +12,17 @@ export function fractionOf(lapDistanceM: Metres, trackLengthM: Metres): LapFract
   return wrap01(lapDistanceM / trackLengthM);
 }
 
-/** The outline point at a lap fraction: linear between point floor(f*n) and the next, wrapping at the line. */
+/** The outline point at a lap fraction (throws on an empty outline or a non-finite fraction, which valid callers never pass): linear between point floor(f*n) and the next, wrapping at the line. */
 export function pointAt(outline: readonly MapPoint[], fraction: LapFraction): MapPoint {
   const n = outline.length;
-  if (n === 0) return { x: 0, y: 0 };
-  const scaled = wrap01(Number.isFinite(fraction) ? fraction : 0) * n;
+  if (n === 0) throw new Error('pointAt: the outline is empty');
+  if (!Number.isFinite(fraction)) throw new Error(`pointAt: the fraction is not finite (${fraction})`);
+  const scaled = wrap01(fraction) * n;
   const i = Math.min(Math.floor(scaled), n - 1);
   const t = scaled - i;
   const a = outline[i];
   const b = outline[(i + 1) % n];
-  if (a === undefined || b === undefined) return { x: 0, y: 0 };
+  if (a === undefined || b === undefined) throw new Error('pointAt: outline index out of range');
   return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
 }
 
