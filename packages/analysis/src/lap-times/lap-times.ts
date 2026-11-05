@@ -100,6 +100,8 @@ export type LivePass = {
   sector2TimeMs: Ms;
   /** The pass restarted its lap: its own line crossing supersedes an earlier pass's (a garage restart, C25). */
   restarted: boolean;
+  /** The current lap is invalid (its lap-validity span): its own sector times rank as no best. */
+  invalid: boolean;
   /** When the live timing was read. */
   at: number;
 };
@@ -117,7 +119,7 @@ const liveStatusOf = (ms: Ms, own: Best | undefined, session: Holder | undefined
  * passed their end, else (and sector 3 always) the newest lap record's, judged as that record is. A time is older when
  * it belongs to an earlier pass than the newest one with a time: the lap just finished is not older until the current
  * pass has a sector of its own, and on a restarted pass every time before it is older, a live time the game still
- * shows from the abandoned attempt included. `live` is absent for a car out of the race: its record times stand.
+ * shows from the abandoned attempt included. A time of the current pass on an invalid lap ranks `none`. `live` is absent for a car out of the race: its record times stand.
  */
 export function newestSectorsOf(
   row: Omit<LapBoardRow, 'deltaToReference'>,
@@ -133,7 +135,7 @@ export function newestSectorsOf(
       const own = live.sector > i + 1;
       // 0 is the game's "no time yet" (C3); a time the pass has not reached is the abandoned attempt's, on a restart only
       if (ms <= 0 || (!own && !live.restarted)) continue;
-      newest[i] = { ms: known(ms, live.at), status: liveStatusOf(ms, bests.sectors[i], session.sectors[i]), older: !own };
+      newest[i] = { ms: known(ms, live.at), status: own && live.invalid ? 'none' : liveStatusOf(ms, bests.sectors[i], session.sectors[i]), older: !own };
     }
   }
   return {

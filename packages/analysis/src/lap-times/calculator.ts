@@ -219,7 +219,7 @@ const projectionOf = (acc: Board, car: CarSnapshot, best: Best | undefined, best
 const livePassOf = (acc: Board, car: CarSnapshot): LivePass | undefined => {
   if (car.effect.outOfRace) return undefined;
   const line = acc.crossings.get(car.id)?.get(car.lap)?.[0];
-  return { ...car.timing, restarted: line?.supersedes !== undefined, at: acc.at };
+  return { ...car.timing, restarted: line?.supersedes !== undefined, invalid: car.effect.invalidLap === true, at: acc.at };
 };
 
 const output = (fold: Acc, view: EngineView): LapTimesOutput => {
@@ -246,7 +246,7 @@ const output = (fold: Acc, view: EngineView): LapTimesOutput => {
 export const lapTimesCalculator: IncrementalCalculator<Acc, LapTimesOutput> = {
   id: LAP_TIMES,
   kind: 'incremental',
-  reads: ['laps', 'miniSectors', 'timing', 'session', 'spans:weekend-phase', 'spans:car-status', 'spans:car-location', 'spans:car-activity-race', 'spans:car-activity-qualifying', 'spans:car-activity-practice'],
+  reads: ['laps', 'miniSectors', 'timing', 'session', 'spans:weekend-phase', 'spans:car-status', 'spans:car-location', 'spans:car-activity-race', 'spans:car-activity-qualifying', 'spans:car-activity-practice', 'spans:lap-validity'],
   cadence: 'frame',
   init,
   update(acc, delta, view) {

@@ -15,6 +15,8 @@ export type LapTimesEffect = {
   outOfRace?: true;
   /** The session is timed: a projection has a finish margin. */
   timed?: true;
+  /** The car's current lap is invalid: its live sector times rank as no best (spec 3.4). */
+  invalidLap?: true;
 };
 
 const OFF: LapTimesEffect = { offLap: true };
@@ -27,4 +29,5 @@ export const LAP_TIMES_BEHAVIOUR: BehaviourTable<LapTimesEffect> = {
   'car-activity-race': { racingLap: ON, inLap: OFF, boxStop: OFF, servingPenalty: ON, outLap: OFF, finished: OFF, coolDown: OFF, notCompeting: ON },
   'car-activity-qualifying': { outLap: OFF, pushLap: ON, inLap: OFF, garage: OFF, finished: OFF, notCompeting: ON },
   'car-activity-practice': { outLap: OFF, flyingLap: ON, inLap: OFF, garage: OFF, finished: OFF, notCompeting: ON },
+  'lap-validity': { valid: ON, invalid: { invalidLap: true } },
 };
