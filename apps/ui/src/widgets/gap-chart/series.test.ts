@@ -21,6 +21,10 @@ const car = (id: number, name: string, teamId: number, raceNumber: number): CarO
 /** A car that just crossed the line (or has not crossed one since lights out): no live point. */
 const NO_NOW = unknown('notApplicable');
 
+type Line = GapperLines['cars'][number];
+/** One car of the window. */
+const line = (id: number, points: Line['points'], now: Line['now']): Line => ({ carId: carId(id), points, now });
+
 const session = (playerCar: number, teammateCar?: number): SessionInfo =>
   ({ playerCar: carId(playerCar), ...(teammateCar === undefined ? {} : { teammateCar: carId(teammateCar) }) }) as unknown as SessionInfo;
 
@@ -83,10 +87,9 @@ describe('phaseBands', () => {
 });
 
 // The gap chart draws the window of `gaps.gapper` (Task 8, spec N3): one line per car of `cars` from its `points`
-// (per mini-sector crossing, x = completed laps + segment / 50) plus `now` as the live end; `byLap` is no longer read.
+// (per mini-sector crossing, x = completed laps + segment / 50) plus `now` as the live end.
 // Ours in the ownCar role (the teammate dashed), every other car `textFaint`: no team colours. No y range in the series.
 const pts = (...p: Array<[number, number]>) => p.map(([lap, gapMs]) => ({ lap, gapMs }));
-const BYLAP_NOISE = [{ lap: 99, gapMs: 99_000 }];
 const live = (lap: number, gapMs: number) => known({ lap, gapMs }, toSessionTime(0));
 
 describe('gapSeries', () => {
@@ -95,8 +98,8 @@ describe('gapSeries', () => {
     reference: { kind: 'leaderAverage', carId: unknown('notApplicable') },
     referenceLapMs: known(105_000, toSessionTime(0)),
     cars: [
-      { carId: carId(2), byLap: BYLAP_NOISE, points: pts([1, 250], [1.02, 260], [2, 500]), now: NO_NOW },
-      { carId: carId(0), byLap: BYLAP_NOISE, points: pts([1, 1000], [1.5, 1800], [2, 2500]), now: NO_NOW },
+      line(2, pts([1, 250], [1.02, 260], [2, 500]), NO_NOW),
+      line(0, pts([1, 1000], [1.5, 1800], [2, 2500]), NO_NOW),
     ],
     phases: [],
   };
@@ -106,7 +109,7 @@ describe('gapSeries', () => {
     expect(gapSeries(lines, cars, ours).map((s) => s.label)).toEqual(['VER', 'KUH']);
   });
 
-  it('plots every point of `points` (per mini-sector crossing): x as given, y = -gap / 1000; byLap is not drawn', () => {
+  it('plots every point of `points` (per mini-sector crossing): x as given, y = -gap / 1000', () => {
     const [ver, kuh] = gapSeries(lines, cars, ours);
     expect(ver?.points).toEqual([[1, -0.25], [1.02, -0.26], [2, -0.5]]);
     expect(kuh?.points).toEqual([[1, -1], [1.5, -1.8], [2, -2.5]]);
@@ -124,9 +127,9 @@ describe('gapSeries', () => {
 
   it('dashes only our teammate; rivals of one team are all the same plain textFaint', () => {
     const more: GapperLines = { ...lines, cars: [
-      { carId: carId(1), byLap: [], points: pts([1, 100]), now: NO_NOW },
-      { carId: carId(3), byLap: [], points: pts([1, 100]), now: NO_NOW },
-      { carId: carId(4), byLap: [], points: pts([1, 100]), now: NO_NOW },
+      line(1, pts([1, 100]), NO_NOW),
+      line(3, pts([1, 100]), NO_NOW),
+      line(4, pts([1, 100]), NO_NOW),
     ] };
     const [zho, nor, pia] = gapSeries(more, cars, ours);
     expect(zho?.colour).toEqual({ colour: role('ownCar'), dashed: true, ownCar: true });
@@ -135,7 +138,7 @@ describe('gapSeries', () => {
   });
 
   it('draws a car without an identity in textFaint with an empty label, not an error', () => {
-    const [s] = gapSeries({ ...lines, cars: [{ carId: carId(15), byLap: [], points: pts([1, 10]), now: NO_NOW }] }, cars, ours);
+    const [s] = gapSeries({ ...lines, cars: [line(15, pts([1, 10]), NO_NOW)] }, cars, ours);
     expect(s?.label).toBe('');
     expect(s?.colour).toEqual({ colour: role('textFaint'), dashed: false, ownCar: false });
   });
@@ -146,8 +149,8 @@ describe('gapSeries', () => {
 
   it('keeps a car with one point and drops a car with neither a point nor a live end', () => {
     const short: GapperLines = { ...lines, cars: [
-      { carId: carId(2), byLap: BYLAP_NOISE, points: pts([1, 0]), now: NO_NOW },
-      { carId: carId(3), byLap: BYLAP_NOISE, points: [], now: NO_NOW },
+      line(2, pts([1, 0]), NO_NOW),
+      line(3, [], NO_NOW),
     ] };
     const out = gapSeries(short, cars, ours);
     expect(out.map((s) => s.label)).toEqual(['VER']);
@@ -174,9 +177,9 @@ describe('gapSeries: the live point', () => {
     reference: { kind: 'leaderAverage', carId: unknown('notApplicable') },
     referenceLapMs: known(105_000, toSessionTime(0)),
     cars: [
-      { carId: carId(2), byLap: BYLAP_NOISE, points: pts([1, 250], [2, 500], [2.2, 600]), now: live(2.4, 700) },
-      { carId: carId(0), byLap: BYLAP_NOISE, points: pts([1, 1000], [2, 2500]), now: live(2.3, 2900) },
-      { carId: carId(3), byLap: BYLAP_NOISE, points: pts([1, -500], [2, -1500]), now: NO_NOW },
+      line(2, pts([1, 250], [2, 500], [2.2, 600]), live(2.4, 700)),
+      line(0, pts([1, 1000], [2, 2500]), live(2.3, 2900)),
+      line(3, pts([1, -500], [2, -1500]), NO_NOW),
     ],
     phases: [],
   };
@@ -212,8 +215,8 @@ describe('gapSeries: the live point', () => {
     const longer: GapperLines = {
       ...lines,
       cars: [
-        { carId: carId(2), byLap: [], points: pts(...[1, 2, 3, 4, 5].map((lap): [number, number] => [lap, 250 * lap])), now: live(5.4, 1400) },
-        { carId: carId(3), byLap: [], points: pts([1, -500], [2, -1500]), now: NO_NOW },
+        line(2, pts(...[1, 2, 3, 4, 5].map((lap): [number, number] => [lap, 250 * lap])), live(5.4, 1400)),
+        line(3, pts([1, -500], [2, -1500]), NO_NOW),
       ],
     };
     const series = gapSeries(longer, cars, ours);
@@ -242,9 +245,9 @@ describe('gapSeries: lap 1', () => {
     reference: { kind: 'fixed', carId: unknown('notApplicable') },
     referenceLapMs: known(90_000, toSessionTime(0)),
     cars: [
-      { carId: carId(2), byLap: [], points: [], now: live(0.42, 300) },
-      { carId: carId(0), byLap: [], points: [], now: live(0.4, -1200) },
-      { carId: carId(3), byLap: [], points: [], now: NO_NOW },
+      line(2, [], live(0.42, 300)),
+      line(0, [], live(0.4, -1200)),
+      line(3, [], NO_NOW),
     ],
     phases: [],
   };

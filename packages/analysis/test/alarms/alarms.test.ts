@@ -310,7 +310,7 @@ describe('alarms calculator', () => {
     it('a damage jump on the current lap: critical, damage, damageJump with lap, parts and delta', () => {
       const damage = {
         ...damageOk(),
-        jumps: [{ at: 5_000, lap: 3, parts: ['rearWingPct' as const, 'floorPct' as const], deltaPct: 12, lossMsPerLap: unknown('insufficientData') }],
+        jumps: [{ at: 5_000, lap: 3, parts: ['rearWingPct' as const, 'floorPct' as const], deltaPct: 12, lossMsPerLap: unknown('insufficientData'), measuring: known({ lapsDone: 0, lapsNeeded: 2 }, 5_000), estimateMsPerLap: unknown('insufficientData') }],
       };
       const [a, ...rest] = run(viewWith({ damage }, { lap: 3 }));
       expect(rest).toEqual([]);
@@ -496,7 +496,7 @@ describe('alarms calculator', () => {
     });
 
     it('a damage alarm stays during the SC', () => {
-      const damage = { ...damageOk(), jumps: [{ at: 305_000, lap: 5, parts: ['frontLeftWingPct' as const], deltaPct: 20, lossMsPerLap: unknown('insufficientData') }] };
+      const damage = { ...damageOk(), jumps: [{ at: 305_000, lap: 5, parts: ['frontLeftWingPct' as const], deltaPct: 20, lossMsPerLap: unknown('insufficientData'), measuring: known({ lapsDone: 0, lapsNeeded: 2 }, 305_000), estimateMsPerLap: unknown('insufficientData') }] };
       const wear = wearOk();
       wear.corners.fl.lapsToLimit = known(2, 0);
       const fuel = { ...fuelOk(), marginLaps: known(-1, 0) };
@@ -571,7 +571,7 @@ describe('alarms calculator', () => {
     });
 
     it('a damage jump lasts for its lap and resolves on the next', () => {
-      const damage = { ...damageOk(), jumps: [{ at: 5_000, lap: 3, parts: ['floorPct' as const], deltaPct: 9, lossMsPerLap: unknown('insufficientData') }] };
+      const damage = { ...damageOk(), jumps: [{ at: 5_000, lap: 3, parts: ['floorPct' as const], deltaPct: 9, lossMsPerLap: unknown('insufficientData'), measuring: known({ lapsDone: 0, lapsNeeded: 2 }, 5_000), estimateMsPerLap: unknown('insufficientData') }] };
       expect(only(viewWith({ damage }, { lap: 3 }), 'damageJump')).toHaveLength(1);
       expect(only(viewWith({ damage }, { lap: 4 }), 'damageJump')).toEqual([]);
     });

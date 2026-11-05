@@ -321,7 +321,7 @@ describe('damage: measuring and the early estimate (spec 3.5)', () => {
         expect(out, `at (${lap}, ${segment})`).toEqual(damage.output(damage.init(view)));
         const jump = out[car0]!.jumps[0];
         if (jump?.estimateMsPerLap !== undefined) seen.add(jump.estimateMsPerLap.known ? 'estimate' : jump.estimateMsPerLap.reason);
-        if (jump?.measuring?.known === true) seen.add(`measuring ${jump.measuring.value.lapsDone}`);
+        if (jump?.measuring.known === true) seen.add(`measuring ${jump.measuring.value.lapsDone}`);
       }
       // the run passes through every state of the jump: building, estimated while measuring, measured
       expect([...seen].sort()).toEqual(['estimate', 'insufficientData', 'measuring 0', 'measuring 1', 'notApplicable']);
@@ -336,7 +336,7 @@ describe('damage: measuring and the early estimate (spec 3.5)', () => {
         const after = damage.output(damage.update(state, delta, { ...cut, delta }));
         expect(after, `rewound to (${lap}, ${segment})`).toEqual(damage.output(damage.init(cut)));
         // at (5, 25) the jump has 15 eligible mini-sectors and an estimate; at (4, 30) it never happened
-        expect(after[car0]!.jumps.map((j) => j.estimateMsPerLap?.known), `rewound to (${lap}, ${segment})`).toEqual(lap === 5 ? [true] : []);
+        expect(after[car0]!.jumps.map((j) => j.estimateMsPerLap.known), `rewound to (${lap}, ${segment})`).toEqual(lap === 5 ? [true] : []);
       }
     });
   });

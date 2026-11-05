@@ -25,11 +25,14 @@ export type LapBoardRow = {
    * Per sector the newest finished time: sectors 1 and 2 as soon as the car has passed the sector's end in its current
    * lap, sector 3 (and all three) at the line.
    */
-  newestSectorsMs?: [Known<Ms>, Known<Ms>, Known<Ms>];
+  newestSectorsMs: [Known<Ms>, Known<Ms>, Known<Ms>];
   /** Per sector, the newest time judged against the bests before it. */
-  newestSectorStatus?: [SectorStatus, SectorStatus, SectorStatus];
-  /** Per sector, the newest time belongs to an earlier lap than the car's current one (the display dims it). */
-  newestSectorOlder?: [boolean, boolean, boolean];
+  newestSectorStatus: [SectorStatus, SectorStatus, SectorStatus];
+  /**
+   * Per sector, the newest time belongs to an earlier pass than the car's newest sector time (at the line the
+   * just-completed lap's three are not older); the display dims it.
+   */
+  newestSectorOlder: [boolean, boolean, boolean];
   bestLapMs: Known<Ms>;
   bestSectorsMs: [Known<Ms>, Known<Ms>, Known<Ms>];
   /** `sessionBest` when this car's best lap is the session's best lap; `none` otherwise and without a best. */

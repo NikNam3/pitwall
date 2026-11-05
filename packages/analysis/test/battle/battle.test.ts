@@ -141,12 +141,16 @@ describe('battle', () => {
     expect(close.ahead.lapsToDrs).toEqual(known(0, early.now));
   });
 
-  it('CLOSING and the old overtaking margin are written notApplicable on both sides until they are removed', () => {
+  it('writes no CLOSING and no old overtaking margin on either side: `margin` replaces them', () => {
     const { ahead, behind } = sides(cardOf(base()));
     for (const side of [ahead, behind]) {
-      expect(side.closingMsPerLap).toEqual(NA);
-      expect(side.overtakeMarginMs).toEqual(NA);
+      expect(side).not.toHaveProperty('closingMsPerLap');
+      expect(side).not.toHaveProperty('overtakeMarginMs');
     }
+  });
+
+  it('declares no closing config: only the DRS range, the overtake threshold and the PACE Δ minimum', () => {
+    expect(Object.keys(BATTLE_CONFIG.defaults).sort()).toEqual(['drsRangeMs', 'minPaceSegments', 'overtakeThresholdMs']);
   });
 
   it('compound and tyre age of both cars come from the car states', () => {

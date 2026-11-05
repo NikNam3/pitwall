@@ -21,30 +21,30 @@ describe('lap-times newest sectors', () => {
   it('row S1: sector 1 appears when the car passes sector 2 start, with its status against the bests before it', () => {
     const row = (s1: number) => rowOf(run(scene({ laps: [car1Lap1, car0Lap1], cars: cars({ lap: 2, sector: 2, sector1TimeMs: s1 }) })), 0)!;
     // 29.5 beats car 0's 30.0, not car 1's 29.0
-    expect(valueOf(row(29_500).newestSectorsMs![0])).toBe(29_500);
-    expect(row(29_500).newestSectorStatus![0]).toBe('personalBest');
-    expect(row(29_500).newestSectorOlder![0]).toBe(false);
+    expect(valueOf(row(29_500).newestSectorsMs[0])).toBe(29_500);
+    expect(row(29_500).newestSectorStatus[0]).toBe('personalBest');
+    expect(row(29_500).newestSectorOlder[0]).toBe(false);
     // 31.0 beats nothing
-    expect(row(31_000).newestSectorStatus![0]).toBe('none');
+    expect(row(31_000).newestSectorStatus[0]).toBe('none');
     // sectors 2 and 3 are still those of lap 1, older
     const r = row(29_500);
-    expect(r.newestSectorsMs!.slice(1).map(valueOf)).toEqual([30_000, 30_000]);
+    expect(r.newestSectorsMs.slice(1).map(valueOf)).toEqual([30_000, 30_000]);
     expect(r.newestSectorOlder).toEqual([false, true, true]);
   });
 
   it('row S2: sector 2 appears when the car passes sector 3 start', () => {
     const view = scene({ laps: [car1Lap1, car0Lap1], cars: cars({ lap: 2, sector: 3, sector1TimeMs: 29_500, sector2TimeMs: 29_700 }) });
     const r = rowOf(run(view), 0)!;
-    expect(r.newestSectorsMs!.map(valueOf)).toEqual([29_500, 29_700, 30_000]);
+    expect(r.newestSectorsMs.map(valueOf)).toEqual([29_500, 29_700, 30_000]);
     // 29.7 beats car 1's session-best 29.8
-    expect(r.newestSectorStatus!.slice(0, 2)).toEqual(['personalBest', 'sessionBest']);
+    expect(r.newestSectorStatus.slice(0, 2)).toEqual(['personalBest', 'sessionBest']);
     expect(r.newestSectorOlder).toEqual([false, false, true]);
   });
 
   it('row line: at the line all three times are those of the lap just finished, judged as the lap record is', () => {
     const view = scene({ laps: [car1Lap1, car0Lap1, car0Lap2], cars: cars({ lap: 3, sector: 1, sector1TimeMs: 0, sector2TimeMs: 0 }) });
     const r = rowOf(run(view), 0)!;
-    expect(r.newestSectorsMs!.map(valueOf)).toEqual([29_500, 29_700, 29_900]);
+    expect(r.newestSectorsMs.map(valueOf)).toEqual([29_500, 29_700, 29_900]);
     expect(r.newestSectorStatus).toEqual(r.lastSectorStatus);
     expect(r.newestSectorStatus).toEqual(['personalBest', 'sessionBest', 'sessionBest']);
     expect(r.newestSectorOlder).toEqual([false, false, false]);
@@ -55,15 +55,15 @@ describe('lap-times newest sectors', () => {
   it("row after the line: S2 and S3 of the previous lap stay, older; the new lap's S1 replaces S1, not older", () => {
     const view = scene({ laps: [car1Lap1, car0Lap1, car0Lap2], cars: cars({ lap: 3, sector: 2, sector1TimeMs: 29_400 }) });
     const r = rowOf(run(view), 0)!;
-    expect(r.newestSectorsMs!.map(valueOf)).toEqual([29_400, 29_700, 29_900]);
-    expect(r.newestSectorStatus![0]).toBe('personalBest');
-    expect(r.newestSectorStatus!.slice(1)).toEqual(r.lastSectorStatus.slice(1));
+    expect(r.newestSectorsMs.map(valueOf)).toEqual([29_400, 29_700, 29_900]);
+    expect(r.newestSectorStatus[0]).toBe('personalBest');
+    expect(r.newestSectorStatus.slice(1)).toEqual(r.lastSectorStatus.slice(1));
     expect(r.newestSectorOlder).toEqual([false, true, true]);
   });
 
   it('row session-best S1 mid-lap: sessionBest at once', () => {
     const view = scene({ laps: [car1Lap1, car0Lap1], cars: cars({ lap: 2, sector: 2, sector1TimeMs: 28_900 }) });
-    expect(rowOf(run(view), 0)!.newestSectorStatus![0]).toBe('sessionBest');
+    expect(rowOf(run(view), 0)!.newestSectorStatus[0]).toBe('sessionBest');
   });
 
   describe('row garage restart (same lap number, practice)', () => {
@@ -76,16 +76,16 @@ describe('lap-times newest sectors', () => {
       const miniSectors = [...first, ...restarted(5)];
       const view = scene({ laps: five.laps, miniSectors, cars: activeCars(1, { 0: { lap: 6, sector: 1, sector1TimeMs: 28_000 } }), sessionTime: 700_000 + 9_800 });
       const r = rowOf(run(view), 0)!;
-      expect(valueOf(r.newestSectorsMs![0])).toBe(28_000);
-      expect(r.newestSectorOlder![0]).toBe(true);
+      expect(valueOf(r.newestSectorsMs[0])).toBe(28_000);
+      expect(r.newestSectorOlder[0]).toBe(true);
     });
 
     it("the restarted pass's own S1 is not older once it has passed sector 2's start", () => {
       const miniSectors = [...first, ...restarted(20)];
       const view = scene({ laps: five.laps, miniSectors, cars: activeCars(1, { 0: { lap: 6, sector: 2, sector1TimeMs: 27_500 } }), sessionTime: 700_000 + 39_200 });
       const r = rowOf(run(view), 0)!;
-      expect(valueOf(r.newestSectorsMs![0])).toBe(27_500);
-      expect(r.newestSectorOlder![0]).toBe(false);
+      expect(valueOf(r.newestSectorsMs[0])).toBe(27_500);
+      expect(r.newestSectorOlder[0]).toBe(false);
     });
   });
 
@@ -100,12 +100,12 @@ describe('lap-times newest sectors', () => {
 
     it('a live sector of an invalid lap has status none; the time itself still shows', () => {
       const r = withValidity('invalid');
-      expect(valueOf(r.newestSectorsMs![0])).toBe(28_900);
-      expect(r.newestSectorStatus![0]).toBe('none');
+      expect(valueOf(r.newestSectorsMs[0])).toBe(28_900);
+      expect(r.newestSectorStatus[0]).toBe('none');
     });
 
     it('the same time on a valid lap is sessionBest (as row session-best S1 mid-lap)', () => {
-      expect(withValidity('valid').newestSectorStatus![0]).toBe('sessionBest');
+      expect(withValidity('valid').newestSectorStatus[0]).toBe('sessionBest');
     });
   });
 
@@ -118,9 +118,9 @@ describe('lap-times newest sectors', () => {
 
     it('a car with only sector 1 known keeps the others unknown', () => {
       const r = rowOf(run(scene({ cars: activeCars(1, { 0: { lap: 1, sector: 2, sector1TimeMs: 30_000 } }) })), 0)!;
-      expect(r.newestSectorsMs![0]).toMatchObject({ known: true });
-      expect(valueOf(r.newestSectorsMs![0])).toBe(30_000);
-      expect(r.newestSectorsMs!.slice(1)).toEqual([insufficientData, insufficientData]);
+      expect(r.newestSectorsMs[0]).toMatchObject({ known: true });
+      expect(valueOf(r.newestSectorsMs[0])).toBe(30_000);
+      expect(r.newestSectorsMs.slice(1)).toEqual([insufficientData, insufficientData]);
     });
 
     it('a car out of the race has notApplicable, as its other times', () => {

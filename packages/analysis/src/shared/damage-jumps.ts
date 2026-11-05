@@ -10,6 +10,9 @@ export type DamageJumpOptions = { jumpPct: number; jumpWindowMs: number };
 /** A jump of one part before its lap and loss are known: at the event that reached `jumpPct`, with the summed rise. */
 export type RawDamageJump = { at: SessionTime; part: keyof DamageParts; deltaPct: number };
 
+/** A jump with its lap and measured loss; `damage` adds the measuring and the estimate. */
+export type FinishedJump = Omit<DamageJump, 'measuring' | 'estimateMsPerLap'>;
+
 /** Per car, its jumps in event order, and per part the times of its repairs (falls) in event order. */
 export type DamageJumps = {
   jumps: Map<CarId, RawDamageJump[]>;
@@ -86,7 +89,7 @@ export function finishJump(
   laps: readonly DeepReadonly<LapRecord>[],
   currentLap: number,
   opts: PaceDeltaOptions,
-): DamageJump {
+): FinishedJump {
   const lap = laps.find((l) => l.completedAt >= raw.at)?.lapNumber ?? currentLap;
   return { at: raw.at, lap, parts: [raw.part], deltaPct: raw.deltaPct, lossMsPerLap: paceDeltaAround(laps, lap, opts) };
 }

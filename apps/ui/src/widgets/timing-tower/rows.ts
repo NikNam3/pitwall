@@ -89,9 +89,9 @@ const rowOf = <R>(rows: Readonly<Record<string, R>>, span: OpenSpan | undefined)
 
 function sectorsOf(row: LapBoardRow | undefined, ours: boolean): TowerRow['sectors'] {
   return [0, 1, 2].map((i) => {
-    const timeMs = row?.newestSectorsMs?.[i] ?? row?.lastSectorsMs[i] ?? missing();
-    const status = row?.newestSectorStatus?.[i] ?? row?.lastSectorStatus[i] ?? 'none';
-    const older = timeMs.known && (row?.newestSectorOlder?.[i] ?? false);
+    const timeMs = row?.newestSectorsMs[i] ?? missing();
+    const status = row?.newestSectorStatus[i] ?? 'none';
+    const older = timeMs.known && (row?.newestSectorOlder[i] ?? false);
     return { timeMs, status, older, ...(timeMs.known ? { role: sectorRole(status, older, ours) } : {}) };
   });
 }

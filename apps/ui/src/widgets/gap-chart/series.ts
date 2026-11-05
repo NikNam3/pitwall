@@ -45,10 +45,8 @@ export function gapSeries(lines: GapperLines, cars: readonly CarOverview[], ours
   const out: ChartSeries[] = [];
   const player = ours.values().next().value;
   for (const line of lines.cars) {
-    // `points` is optional until Task 15; a gapper line without it falls back to its per-lap points.
-    const drawn = line.points ?? line.byLap;
-    if (drawn.length === 0 && !line.now.known) continue;
-    const points: ChartSeries['points'] = drawn.map((p) => [p.lap, -p.gapMs / 1000]);
+    if (line.points.length === 0 && !line.now.known) continue;
+    const points: ChartSeries['points'] = line.points.map((p) => [p.lap, -p.gapMs / 1000]);
     if (line.now.known) points.push([line.now.value.lap, -line.now.value.gapMs / 1000]);
     const own = ours.has(line.carId);
     out.push({

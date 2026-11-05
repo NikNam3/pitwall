@@ -95,8 +95,8 @@ function penaltyText(penalty: IncidentPenalty): string {
 
 /** What a warning was for: `corner cutting 2/3` (its count of the limit), or the infringement's name (`collision`), `warning` when we cannot name it. */
 function warningDetail(warning: NonNullable<IncidentEntry['warning']>): string {
-  if (warning.kind === 'cornerCutting' || warning.kind === undefined) return `${warningKind('cornerCutting')} ${text.warningCount(formatCount(warning.count), formatCount(warning.limit))}`;
-  return warningKind('other', warning.infringement?.known ? warning.infringement.value : undefined);
+  if (warning.kind === 'cornerCutting') return `${warningKind('cornerCutting')} ${text.warningCount(formatCount(warning.count), formatCount(warning.limit))}`;
+  return warningKind('other', warning.infringement.known ? warning.infringement.value : undefined);
 }
 
 /** The entry's detail: the damaged parts, a warning's count of the limit, a penalty's ruling, or the sector; empty when it has none known. */

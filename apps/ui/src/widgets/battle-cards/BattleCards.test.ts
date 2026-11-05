@@ -15,7 +15,7 @@ const overview = (id: number, name: string): CarOverview =>
   ({ id: carId(id), identity: { name, raceNumber: id }, timing: {}, tyres: {}, updatedAt: 0 }) as unknown as CarOverview;
 const cars = [overview(1, 'Kuhnlein'), overview(3, 'Charles Leclerc'), overview(7, 'Alexander Albon')];
 const side = (id: number, gapMs: number): BattleSide => ({
-  carId: carId(id), gapMs: k(gapMs), closingMsPerLap: unknown('notApplicable'), lapsToDrs: unknown('notApplicable'), paceDeltaMs: k(100), overtakeMarginMs: unknown('notApplicable'),
+  carId: carId(id), gapMs: k(gapMs), lapsToDrs: unknown('notApplicable'), paceDeltaMs: k(100),
   margin: k({ kind: 'pass', ms: 150 }),
   ours: { compound: 'inter', age: 4 }, theirs: { compound: 'inter', age: 6 }, theirErsStoreJ: k(2_000_000),
 });

@@ -1,6 +1,6 @@
 // `incidents`: a warning entry carries what the warning was given for (spec 3.3; C3, C43). The calculator reads the
 // warned span: a corner-cutting count that rose is `cornerCutting` (with its count of the limit); any other warning is
-// `other` and carries the span's infringement code, unknown when the span has none.
+// `other` and carries the span's infringement code, unknown when the span has none, and no count of the limit.
 import { describe, expect, it } from 'vitest';
 import { known, unknown, type IncidentEntry, type WarnedDetail } from '@pitwall/domain';
 import { chain, race, run, viewOf, warned, type SpanStep } from './race.ts';
@@ -16,9 +16,9 @@ describe('incidents: warnings by kind', () => {
     expect(entry!.warning).toEqual({ kind: 'cornerCutting', count: 1, limit: 3 });
   });
 
-  it('a collision warning (the corner-cutting count unchanged, infringement 4) is an other entry with its infringement', () => {
+  it('a collision warning (the corner-cutting count unchanged, infringement 4) is an other entry with its infringement and no count', () => {
     const [entry] = warnings(run(viewOf({ miniSectors: race(), spans: warned(7, [T], ['collision']) })), 7);
-    expect(entry!.warning).toMatchObject({ kind: 'other', infringement: known(4, T) });
+    expect(entry!.warning).toEqual({ kind: 'other', infringement: known(4, T) });
   });
 
   it('a warning without an infringement is an other entry with an unknown one', () => {
@@ -27,7 +27,7 @@ describe('incidents: warnings by kind', () => {
       { kind: 'warned', at: T, detail: { count: 1, cornerCutting: 0, infringement: unknown('notReceived') } satisfies WarnedDetail },
     ];
     const [entry] = warnings(run(viewOf({ miniSectors: race(), spans: chain('warnings', 7, steps) })), 7);
-    expect(entry!.warning).toMatchObject({ kind: 'other', infringement: unknown('notReceived') });
+    expect(entry!.warning).toEqual({ kind: 'other', infringement: unknown('notReceived') });
   });
 
   it('each warning of a car has its own kind: a collision between two corner-cutting ones does not move the count', () => {
@@ -35,7 +35,7 @@ describe('incidents: warnings by kind', () => {
     const feed = warnings(run(viewOf({ miniSectors: race(), spans })), 7); // newest first
     const [first, second, third] = feed.map((e) => e.warning).reverse();
     expect(first).toEqual({ kind: 'cornerCutting', count: 1, limit: 3 });
-    expect(second).toMatchObject({ kind: 'other', infringement: known(4, 380_000) });
+    expect(second).toEqual({ kind: 'other', infringement: known(4, 380_000) });
     expect(third).toEqual({ kind: 'cornerCutting', count: 2, limit: 3 });
   });
 });

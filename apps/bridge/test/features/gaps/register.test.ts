@@ -36,11 +36,11 @@ const gapOf = (list: GapToCar[], id: number) => {
   const g = list.find((x) => x.carId === id)!;
   return [g.gapMs.known ? plain(g.gapMs.value) : g.gapMs.reason, g.lapsDown];
 };
-/** A car's gapper gaps at its line crossings: the points at whole laps (live polish 3.2: `points` replaces `byLap`). */
+/** A car's gapper gaps at its line crossings: the points at whole laps (live polish 3.2). */
 const line = (lines: GapperLines, id: number) =>
   lines.cars
     .find((c) => c.carId === id)
-    ?.points?.filter((p) => p.lap >= 1 && Math.abs(p.lap - Math.round(p.lap)) < 1e-9)
+    ?.points.filter((p) => p.lap >= 1 && Math.abs(p.lap - Math.round(p.lap)) < 1e-9)
     .map((p) => plain(p.gapMs));
 const ref = (lines: GapperLines) => (lines.referenceLapMs.known ? lines.referenceLapMs.value : lines.referenceLapMs.reason);
 
@@ -95,7 +95,7 @@ describe('gaps feature', () => {
     const lines = select('gaps.gapper', { reference: { kind: 'fixed', lapMs: 90_000 } }) as GapperLines;
     expect(lines.cars.map((c) => c.carId).sort((a, b) => a - b)).toEqual([0, 1, 2]);
     // 3 laps of 50 crossings each after the start line
-    expect(lines.cars.find((c) => c.carId === carId(0))?.points?.filter((p) => p.lap > 0)).toHaveLength(150);
+    expect(lines.cars.find((c) => c.carId === carId(0))?.points.filter((p) => p.lap > 0)).toHaveLength(150);
   });
 
   it.each([

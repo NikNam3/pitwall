@@ -4,7 +4,8 @@ import type { DamageJump } from '@pitwall/domain';
 import { jumpRole } from './emphasis.ts';
 
 const jump = (over: Partial<DamageJump> = {}): DamageJump => ({
-  at: 100_000, lap: 14, parts: ['frontLeftWingPct'], deltaPct: 12, lossMsPerLap: unknown('insufficientData'), ...over,
+  at: 100_000, lap: 14, parts: ['frontLeftWingPct'], deltaPct: 12, lossMsPerLap: unknown('insufficientData'),
+  measuring: unknown('notApplicable'), estimateMsPerLap: unknown('notApplicable'), ...over,
 });
 
 describe('jumpRole', () => {

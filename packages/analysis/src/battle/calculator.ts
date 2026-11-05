@@ -55,12 +55,8 @@ function side(ctx: Context, ourId: CarId, theirId: CarId, isAhead: boolean): Kno
     {
       carId: theirId,
       gapMs,
-      // removed in Task 15 of the live polish plan
-      closingMsPerLap: NOT_APPLICABLE,
       lapsToDrs: lapsToDrs(drs, gapMs, pace, edge, drsRangeMs),
       paceDeltaMs: pace,
-      // removed in Task 15 of the live polish plan; `margin` replaces it
-      overtakeMarginMs: NOT_APPLICABLE,
       margin,
       ours: tyre(ours),
       theirs: tyre(theirs),

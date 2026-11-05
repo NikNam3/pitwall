@@ -98,7 +98,7 @@ describe('race-zandvoort-full-lap: the line times the gapper draws from', () => 
     expect(run.last.raceStartAt).toEqual({ known: false, reason: 'notReceived' });
     for (const reference of [{ kind: 'leaderAverage' }, { kind: 'fixed', lapMs: 75_000 }] as const) {
       const lines = gapperLines(run.last, reference);
-      expect(lines.cars.filter((c) => c.byLap.length > 0).map((c) => c.carId), reference.kind).toEqual([]);
+      expect(lines.cars.map((c) => c.points), reference.kind).toEqual(lines.cars.map(() => []));
       expect(lines.cars.filter((c) => c.now.known).map((c) => c.carId), reference.kind).toEqual([]);
     }
     expect(gapperLines(run.last, { kind: 'leaderAverage' }).referenceLapMs).toEqual({ known: false, reason: 'notReceived' });

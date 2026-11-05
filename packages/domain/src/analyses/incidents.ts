@@ -34,11 +34,11 @@ export type IncidentWhere = { sector: Known<1 | 2 | 3> };
 export type IncidentDamagePart = { part: keyof DamageParts; deltaPct: Percent };
 
 /**
- * A warning's place on the way to the next penalty: warning `count` of `limit` (`2/3`). Assumes a penalty every
- * `limit` warnings (not verified against the game). `kind` is `cornerCutting` when the warned span's `cornerCutting`
- * count rose, `other` otherwise; an `other` warning carries its PENA infringement code (`infringement`).
+ * A warning by its kind: `cornerCutting` when the warned span's `cornerCutting` count rose, with its place on the way
+ * to the next penalty, warning `count` of `limit` (`2/3`; assumes a penalty every `limit` warnings, not verified
+ * against the game); `other` otherwise, with its PENA infringement code (`infringement`).
  */
-export type IncidentWarning = { count: number; limit: number; kind?: 'cornerCutting' | 'other'; infringement?: Known<number> };
+export type IncidentWarning = { kind: 'cornerCutting'; count: number; limit: number } | { kind: 'other'; infringement: Known<number> };
 
 /** A penalty's ruling, from the PENA `penaltyType` codes the shared penalty classes count as penalties. */
 export type PenaltyKind = 'driveThrough' | 'stopGo' | 'grid' | 'time' | 'disqualified' | 'tyreRegulations';

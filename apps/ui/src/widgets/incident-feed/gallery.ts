@@ -32,10 +32,10 @@ const warning: IncidentEntry = {
   id: 'warning:5:210000', at: toSessionTime(210_000), lap: 21, kind: 'warning', severity: 'minor', carIds: [carId(5)],
   timeLostMs: unknown('notApplicable'), forUs: [], where: { sector: k(2) }, warning: { kind: 'cornerCutting', count: 2, limit: 3 },
 };
-// Warnings by kind: another infringement shows its name (its placeholder count is never shown), an unnamed one reads `warning`.
+// Warnings by kind: another infringement shows its name and no count, an unnamed one reads `warning`.
 const otherWarning = (id: number, infringement: Known<number>): IncidentEntry => ({
   id: `warning:${id}:20${id}000`, at: toSessionTime(200_000 + id * 1000), lap: 20, kind: 'warning', severity: 'minor', carIds: [carId(id)],
-  timeLostMs: unknown('notApplicable'), forUs: [], where: { sector: k(1) }, warning: { kind: 'other', count: 0, limit: 3, infringement },
+  timeLostMs: unknown('notApplicable'), forUs: [], where: { sector: k(1) }, warning: { kind: 'other', infringement },
 });
 const collisionWarning = otherWarning(3, k(4));
 const unnamedWarning = otherWarning(4, unknown('notReceived'));
