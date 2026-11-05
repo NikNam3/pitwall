@@ -1,4 +1,4 @@
-import { unknown, type BattleCard, type BattleSide, type DrsStatus, type Known, type RaceMoment, type VisualCompound } from '@pitwall/domain';
+import { type BattleCard, type BattleSide, type DrsStatus, type Known, type RaceMoment, type VisualCompound } from '@pitwall/domain';
 import type { CarOverview } from '@pitwall/contracts';
 import { carCodeById } from '../../kit/car/car-label.ts';
 import { gridRow, knownPart, unknownPart, type CellPart, type GridColumn } from '../../kit/grid/grid.ts';
@@ -48,9 +48,9 @@ const GAP_SIGN: Record<Side, 1 | -1> = { ahead: -1, behind: 1 };
 const toDrsCell = (lapsToDrs: Known<number>, drs: DrsStatus): Cell =>
   drs.enabled ? knownPart(lapsToDrs, (n) => (n === 0 ? text.inDrs : formatLaps(n))) : { text: text.drsOff, title: text.drsOffTitle[drs.reason] };
 
-/** MARGIN: PASS or HOLD with the pace margin per lap; a missing margin is unknown. */
+/** MARGIN: PASS or HOLD with the pace margin per lap. */
 function marginCell(margin: BattleSide['margin']): Cell {
-  const cell: Cell = knownPart(margin ?? unknown('notReceived'), (m) => `${text.marginKind[m.kind]} ${formatSecondsPerLap(m.ms)}`);
+  const cell: Cell = knownPart(margin, (m) => `${text.marginKind[m.kind]} ${formatSecondsPerLap(m.ms)}`);
   const role = marginRole(margin);
   return role === undefined ? cell : { ...cell, role };
 }

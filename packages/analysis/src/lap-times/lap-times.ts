@@ -54,8 +54,14 @@ const bestStatusOf = (carId: CarId, own: Best | undefined, session: Holder | und
 const knownBest = (b: Best | undefined, missing: Known<Ms>): Known<Ms> => (b === undefined ? missing : known(b.ms, b.completedAt));
 const knownHolder = (h: Holder | undefined): Known<SessionBestTime> => (h === undefined ? unknown('insufficientData') : known({ ms: h.ms, carId: h.carId }, h.completedAt));
 
+/** The newest-sector fields of a board row, which `newestSectorsOf` adds. */
+type NewestKeys = 'newestSectorsMs' | 'newestSectorStatus' | 'newestSectorOlder';
+
+/** A board row without its deltas and its newest sectors. */
+export type LapRowBase = Omit<LapBoardRow, 'deltaToReference' | NewestKeys>;
+
 /**
- * One car's board row (without deltas) from its laps and the session bests. A time the car lacks is still to come
+ * One car's board row (without deltas and newest sectors) from its laps and the session bests. A time the car lacks is still to come
  * (`insufficientData`), or will not come once the car is `outOfRace` (`notApplicable`).
  */
 export function rowOf(
@@ -65,7 +71,7 @@ export function rowOf(
   session: ReturnType<typeof sessionBestsOf>,
   classes: LapClassOptions,
   outOfRace: boolean,
-): Omit<LapBoardRow, 'deltaToReference'> {
+): LapRowBase {
   const last = laps.length === 0 ? undefined : laps.reduce((a, b) => (b.lapNumber > a.lapNumber ? b : a));
   const lastClass = last === undefined ? undefined : classifyLap(last, classes).forBest;
   const unknownMs = unknown(outOfRace ? 'notApplicable' : 'insufficientData');
@@ -122,11 +128,11 @@ const liveStatusOf = (ms: Ms, own: Best | undefined, session: Holder | undefined
  * shows from the abandoned attempt included. A time of the current pass on an invalid lap ranks `none`. `live` is absent for a car out of the race: its record times stand.
  */
 export function newestSectorsOf(
-  row: Omit<LapBoardRow, 'deltaToReference'>,
+  row: LapRowBase,
   live: LivePass | undefined,
   bests: CarBests,
   session: ReturnType<typeof sessionBestsOf>,
-): Pick<LapBoardRow, 'newestSectorsMs' | 'newestSectorStatus' | 'newestSectorOlder'> {
+): Pick<LapBoardRow, NewestKeys> {
   const passHasTime = live !== undefined && (live.sector > 1 || live.restarted);
   const newest: Newest[] = SECTORS.map((i) => ({ ms: row.lastSectorsMs[i], status: row.lastSectorStatus[i], older: passHasTime && row.lastSectorsMs[i].known }));
   if (live !== undefined) {

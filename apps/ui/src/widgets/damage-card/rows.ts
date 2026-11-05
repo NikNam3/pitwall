@@ -49,12 +49,12 @@ function jumpLoss(jump: DamageJump): Pick<JumpRow, 'loss' | 'title' | 'lossRole'
   const loss = jump.lossMsPerLap;
   if (loss.known) return { loss: knownPart(loss, (ms) => text.lossMeasured(formatSecondsPerLap(ms))) };
   const est = jump.estimateMsPerLap;
-  if (est?.known) {
+  if (est.known) {
     return { loss: { text: text.lossEstimate(formatSecondsPerLap(est.value, 1)) }, lossRole: estimateRole };
   }
   if (loss.reason === 'insufficientData') {
     const m = jump.measuring;
-    return { loss: { text: m !== undefined && m.known ? text.lossMeasuringLaps(m.value.lapsDone, m.value.lapsNeeded) : text.lossMeasuring } };
+    return { loss: { text: m.known ? text.lossMeasuringLaps(m.value.lapsDone, m.value.lapsNeeded) : text.lossMeasuring } };
   }
   if (loss.reason === 'notApplicable') return { loss: { text: text.lossNotMeasurable }, title: text.lossNotMeasurableTitle };
   return { loss: knownPart(loss, () => '') };

@@ -41,22 +41,21 @@ export type GapperLines = {
   /** Only the cars in the window: our cars and every car within ±`windowMs` of one of them (leaving beyond ±(`windowMs` + `windowExitMs`)). */
   cars: {
     carId: CarId;
-    byLap: { lap: number; gapMs: Ms }[];
     /**
      * The car's gaps per mini-sector crossing for the last `fineLaps` laps, per lap before; `lap` counts completed laps
      * plus the crossed mini-sectors / 50.
      */
-    points?: { lap: number; gapMs: Ms }[];
+    points: { lap: number; gapMs: Ms }[];
     /**
      * The car's gap now, at its newest mini-sector crossing: `lap` counts completed laps plus the part of the current
-     * lap (crossed mini-sectors / 50), so it lies after the last `byLap` point. `notApplicable` before the first crossing
+     * lap (crossed mini-sectors / 50), so it lies after the last `points` point. `notApplicable` before the first crossing
      * after lights out, or when it would equal the last completed lap.
      */
     now: Known<{ lap: number; gapMs: Ms }>;
   }[];
   /**
    * The race's neutralised phases in the leader's progress (completed laps plus the part of the current lap, from the
-   * leader's crossings at the phase start and end), on the same x as `byLap` and `now`; `toLap` `notApplicable` while
+   * leader's crossings at the phase start and end), on the same x as `points` and `now`; `toLap` `notApplicable` while
    * the phase is open.
    */
   phases: { kind: 'SC' | 'VSC' | 'red'; fromLap: number; toLap: Known<number> }[];

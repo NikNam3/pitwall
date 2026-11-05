@@ -158,7 +158,7 @@ const pointAt = (progress: number, at: SessionTime, startAt: SessionTime, lapMs:
  * The car's gapper points after `startAt`: one per completed race lap before its `fine` crossings, at the line, then one
  * per fine crossing (the last `fineLaps` completed laps and the current one). The start line (x = 0) has none.
  */
-function pointsOf(out: GapsOutput, carId: CarId, startAt: SessionTime, lapMs: Ms): NonNullable<GapperLines['cars'][number]['points']> {
+function pointsOf(out: GapsOutput, carId: CarId, startAt: SessionTime, lapMs: Ms): GapperLines['cars'][number]['points'] {
   const fine = out.fine[carId];
   if (fine === undefined) return [];
   const perLap = raceLaps(out, carId, startAt)
@@ -170,10 +170,9 @@ function pointsOf(out: GapsOutput, carId: CarId, startAt: SessionTime, lapMs: Ms
 
 /**
  * The cars of the window (`GapsOutput.gapperWindow`), running or out of the race: per car, per completed race lap L, the gap to a virtual car that
- * laps at the reference pace from lights out: `L × referenceLap − (lineTime(L) − raceStart)`, positive = ahead of it
- * (`byLap`, until the display reads `points`); `points` the same gap per crossing for the last `fineLaps` laps, per lap
- * before; `now` is the same gap at the car's newest mini-sector crossing. Without a known race start or reference lap
- * every line is empty and `now` unknown. A car out of the race keeps its line while it has completed race laps, with no
+ * laps at the reference pace from lights out: `L × referenceLap − (lineTime(L) − raceStart)`, positive = ahead of it;
+ * `points` that gap per crossing for the last `fineLaps` laps, per lap before; `now` is the same gap at the car's newest
+ * mini-sector crossing. Without a known race start or reference lap every line is empty and `now` unknown. A car out of the race keeps its line while it has completed race laps, with no
  * `now` (`notApplicable`): the chart names a line that ends early at its own end. `phases` are the calculator's, the
  * same for every reference.
  */
@@ -182,14 +181,12 @@ export function gapperLines(out: GapsOutput, reference: GapperReference): Gapper
   const start = out.raceStartAt;
   const { ours, others } = out.gapperWindow;
   const inWindow = (carId: CarId) => ours.includes(carId) || others.includes(carId);
-  const byLap = (carId: CarId, startAt: SessionTime, lapMs: Ms) =>
-    raceLaps(out, carId, startAt).map(({ lap, at }) => ({ lap, gapMs: lap * lapMs - (at - startAt) }));
-  const line = (carId: CarId, startAt: SessionTime, lapMs: Ms) => ({ carId, byLap: byLap(carId, startAt, lapMs), points: pointsOf(out, carId, startAt, lapMs) });
+  const line = (carId: CarId, startAt: SessionTime, lapMs: Ms) => ({ carId, points: pointsOf(out, carId, startAt, lapMs) });
   const running = out.intervals
     .filter(({ carId }) => inWindow(carId))
     .map(({ carId }) =>
-      !start.known ? { carId, byLap: [], points: [], now: unknown(start.reason) }
-      : !referenceLapMs.known ? { carId, byLap: [], points: [], now: unknown(referenceLapMs.reason) }
+      !start.known ? { carId, points: [], now: unknown(start.reason) }
+      : !referenceLapMs.known ? { carId, points: [], now: unknown(referenceLapMs.reason) }
       : { ...line(carId, start.value, referenceLapMs.value), now: gapNow(out.recent[carId], start.value, referenceLapMs.value) },
     );
   const stopped =

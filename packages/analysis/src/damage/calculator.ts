@@ -11,7 +11,6 @@ import {
   type CarId,
   type Corners,
   type CurrentLaps,
-  type DamageJump,
   type DamageParts,
   type DamageState,
   type FrameNumber,
@@ -28,16 +27,14 @@ import { classifyLap, LAP_CLASSES_CONFIG, type LapClassOptions } from '../lap-cl
 import { PACE_CONFIG } from '../pace/index.ts';
 import { behaviourFor, openSpansByCar } from '../shared/behaviour.ts';
 import { CAR_STATUS_READS } from '../shared/car-status.ts';
-import { emptyDamageJumps, finishJump, foldDamageJumps, repairedSince, type DamageJumpFold } from '../shared/damage-jumps.ts';
+import { MIN_LAPS } from '../pace-delta/index.ts';
+import { emptyDamageJumps, finishJump, foldDamageJumps, repairedSince, type DamageJumpFold, type FinishedJump } from '../shared/damage-jumps.ts';
 import { isNeutralisation, NEUTRALISATION_MACHINES, NEUTRALISATION_READS } from '../shared/neutralised.ts';
 import { carSegmentMedian, foldCarSample, type CarSegmentSamples } from '../shared/segment-medians.ts';
 import { DAMAGE_BEHAVIOUR, type DamageEffect } from './behaviour.ts';
 import { DAMAGE, DAMAGE_CONFIG, type DamageOutput } from './index.ts';
 
 const CORNERS = ['fl', 'fr', 'rl', 'rr'] as const;
-
-/** The pace laps after a jump that measure its loss: `pace-delta`'s two. */
-const LAPS_NEEDED = 2;
 
 /** The car-scoped sub-machine whose spans keep a car's mini-sectors out of the estimate (its pit visits). */
 const LOCATION: MachineId = 'car-location';
@@ -300,17 +297,17 @@ const openCutOf = (view: EngineView): ((id: CarId) => FrameNumber) => {
 };
 
 /**
- * While the loss is measured (`insufficientData`: enough pace laps before the jump, fewer than `LAPS_NEEDED` after its
- * lap), the pace laps after it so far; `notApplicable` once measured or when it can never be.
+ * While the loss is measured (`insufficientData`: enough pace laps before the jump, fewer than `pace-delta`'s
+ * `MIN_LAPS` after its lap), the pace laps after it so far; `notApplicable` once measured or when it can never be.
  */
 const measuringOf = (
-  jump: DamageJump,
+  jump: FinishedJump,
   laps: readonly DeepReadonly<LapRecord>[],
   opts: LapClassOptions,
 ): Known<{ lapsDone: number; lapsNeeded: number }> => {
   if (jump.lossMsPerLap.known || jump.lossMsPerLap.reason !== 'insufficientData') return unknown('notApplicable');
   const after = laps.filter((l) => l.lapNumber > jump.lap && classifyLap(l, opts).forPace);
-  return known({ lapsDone: after.length, lapsNeeded: LAPS_NEEDED }, after[after.length - 1]?.completedAt ?? jump.at);
+  return known({ lapsDone: after.length, lapsNeeded: MIN_LAPS }, after[after.length - 1]?.completedAt ?? jump.at);
 };
 
 /**
