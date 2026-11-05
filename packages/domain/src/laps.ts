@@ -35,8 +35,9 @@ export function currentLaps(laps: readonly LapRecord[]): LapRecord[] {
 
 /** Every crossing no later crossing supersedes, in log order. */
 export function currentCrossings(list: readonly MiniSectorCrossing[]): MiniSectorCrossing[] {
-  void list;
-  throw new Error('not implemented');
+  const superseded = new Set<number>();
+  for (const c of list) if (c.supersedes !== undefined) superseded.add(c.supersedes.index);
+  return list.filter((_, position) => !superseded.has(position));
 }
 
 /** The current crossings by car id, then lap number, then segment; slots may be empty. */
@@ -47,7 +48,9 @@ export type CrossingIndex = Map<CarId, Map<number, (MiniSectorCrossing | undefin
  * holds exactly `currentCrossings(list)` by car, lap and segment. Mutates `index`.
  */
 export function foldCurrentCrossing(index: CrossingIndex, crossing: MiniSectorCrossing): void {
-  void index;
-  void crossing;
-  throw new Error('not implemented');
+  const byLap = index.get(crossing.carId) ?? new Map<number, (MiniSectorCrossing | undefined)[]>();
+  index.set(crossing.carId, byLap);
+  const slots = byLap.get(crossing.lap) ?? [];
+  byLap.set(crossing.lap, slots);
+  slots[crossing.segment] = crossing;
 }
