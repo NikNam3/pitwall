@@ -10,4 +10,6 @@ export const BATTLE_CONFIG = defineConfig('battle', {
   closingWindow: 5,
   /** Fewer line crossings than this give no closing rate: two gap changes. Source: pitwall estimate. */
   closingMinSamples: 3,
+  /** Fewer usable mini-sectors than this in the PACE Δ window give no pace delta (`insufficientData`): half a lap. Source: pitwall estimate. */
+  minPaceSegments: 25,
 });

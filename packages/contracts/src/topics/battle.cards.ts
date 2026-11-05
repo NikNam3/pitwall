@@ -2,4 +2,4 @@
 import type { BattleCard } from '@pitwall/domain';
 import { defineTopic, eachCar, type CarParams } from '../topic-def.ts';
 
-export default defineTopic<CarParams, BattleCard>({ owner: 'battle', mode: 'state', maxHz: 2, momentParams: eachCar });
+export default defineTopic<CarParams, BattleCard>({ owner: 'battle', mode: 'state', maxHz: 4, momentParams: eachCar });

@@ -19,6 +19,11 @@ export function formatSessionClock(ms: Ms): string {
   return `${Math.floor(seconds / 3600)}:${pad(Math.floor((seconds % 3600) / 60), 2)}:${pad(seconds % 60, 2)}`;
 }
 
+/** Minutes and tenths, `1128600` -> `18:48.6` (stub until Task 13a of the live polish run). */
+export function formatMinutesTenths(_ms: Ms): string {
+  throw new Error('formatMinutesTenths: not implemented');
+}
+
 /** Lap time, `83456` -> `1:23.456`. */
 export const formatLapTime = (ms: Ms): string => minutesSeconds(ms, 1);
 

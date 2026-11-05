@@ -8,7 +8,7 @@ export type GapperParams = { reference: GapperReference };
 export default defineTopic<GapperParams, GapperLines>({
   owner: 'gaps',
   mode: 'state',
-  maxHz: 1,
+  maxHz: 4,
   // a fixed reference takes any lap time, so a moment holds only the leader's and each car's average
   momentParams: (carIds) => [{ reference: { kind: 'leaderAverage' } }, ...carIds.map((carId) => ({ reference: { kind: 'carAverage' as const, carId } }))],
 });

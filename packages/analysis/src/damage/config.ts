@@ -6,4 +6,6 @@ export const DAMAGE_CONFIG = defineConfig('damage', {
   jumpPct: 5,
   /** Window that rises of one jump fall into. Source: pitwall estimate. */
   jumpWindowMs: 2000,
+  /** Mini-sectors since a jump needed before its loss is estimated from them. Source: pitwall estimate. */
+  minEstimateSegments: 10,
 });
