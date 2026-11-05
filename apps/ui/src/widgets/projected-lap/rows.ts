@@ -2,7 +2,7 @@
 import type { Known, Projection, UnknownReason } from '@pitwall/domain';
 import { gridRow } from '../../kit/grid/grid.ts';
 import type { GridColumn } from '../../kit/grid/grid.ts';
-import { formatDeltaMs, formatLapTime, formatPosition, formatSeconds } from '../../kit/values/format.ts';
+import { formatDeltaMs, formatLapTime, formatMinutesTenths, formatPosition, formatSeconds } from '../../kit/values/format.ts';
 import type { Role } from '../../theme/roles.ts';
 import { cutOffRole, deltaRole, finishRole } from './emphasis.ts';
 import { columnHeaders, labels, names, outLap, seconds } from './text.ts';
@@ -36,6 +36,9 @@ export const projectionHeader = (full = true): string => {
   const columns = full ? PROJECTION_COLUMNS : PROJECTION_COLUMNS.slice(0, -1);
   return gridRow(columns, columnHeaders.slice(0, columns.length));
 };
+
+/** From this finish margin on (ms) the margin reads in minutes and tenths; below it, in seconds. */
+const FINISH_MINUTES_FROM_MS = 60_000;
 
 const text = <T>(value: Known<T>, format: (v: T) => string): string => (value.known ? format(value.value) : '');
 /** The row with the reason of each unknown value cell (`cells`, unknown ones only); unchanged when all are known. */
@@ -71,7 +74,7 @@ export function projectionRows(p: Projection, ours: boolean): ProjectionRow[] {
   const fin = p.finishMarginMs;
   const finish = withUnknown({
     key: 'finish', name: names.finish, time: '', pos: '',
-    delta: text(fin, (ms) => `${formatSeconds(ms, 1)}${seconds}`),
+    delta: text(fin, (ms) => (ms >= FINISH_MINUTES_FROM_MS ? formatMinutesTenths(ms) : `${formatSeconds(ms, 1)}${seconds}`)),
     label: fin.known ? labels.leftAtLine : '',
     deltaRole: fin.known ? finishRole(fin.value) : undefined,
   }, { delta: fin });
