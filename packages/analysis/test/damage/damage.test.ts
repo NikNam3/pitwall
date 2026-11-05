@@ -6,6 +6,7 @@ import { carState, event, lap, realismHidden } from '../../../../test-support/bu
 import { damageCalculator as unguarded } from '../../src/damage/calculator.ts';
 import { DAMAGE, DAMAGE_BEHAVIOUR, DAMAGE_CONFIG } from '../../src/damage/index.ts';
 import { damageJumps } from '../../src/shared/damage-jumps.ts';
+import { NEUTRALISATION_READS } from '../../src/shared/neutralised.ts';
 import { engineShaped } from '../engine-shaped.ts';
 import { guardedIncremental, NONE, openSpan, PRACTICE, QUALIFYING, RACE, situatedView } from '../situated.ts';
 import { scheduled } from '../scheduled.ts';
@@ -48,11 +49,11 @@ const run = (events: RaceEvent[], laps: LapRecord[] = [], extra: Parameters<type
 };
 
 describe('damage calculator', () => {
-  it('has the id damage and reads condition, tyres, events, laps, car-status, car-location and the weekend phase (not pace, not the session)', () => {
+  it('has the id damage and reads condition, tyres, events, laps, mini-sectors, car-status, car-location, the neutralisations and the weekend phase (not pace, not the session)', () => {
     expect(damageCalculator.id).toBe(DAMAGE);
     expect(damageCalculator.kind).toBe('incremental');
     expect(damageCalculator.reads).toEqual(
-      expect.arrayContaining(['condition', 'tyres', 'events', 'laps', 'spans:car-status', 'spans:car-location', 'spans:weekend-phase']),
+      expect.arrayContaining(['condition', 'tyres', 'events', 'laps', 'miniSectors', 'spans:car-status', 'spans:car-location', 'spans:weekend-phase', ...NEUTRALISATION_READS]),
     );
     expect(damageCalculator.reads).not.toContainEqual({ calculator: 'pace' });
     expect(damageCalculator.reads).not.toContain('session');
@@ -312,7 +313,7 @@ describe('damage calculator', () => {
       const { jumps, repairs } = damageJumps(repairEvents, DAMAGE_CONFIG.defaults);
       const standing = (jumps.get(car0) ?? []).filter((j) => !(repairs.get(car0)?.get(j.part) ?? []).some((t) => t > j.at));
       const shown = run(repairEvents, repairLaps).jumps;
-      expect(shown.map((j) => ({ at: j.at, part: j.parts[0], deltaPct: j.deltaPct }))).toEqual(standing);
+      expect(shown.map((j) => ({ at: j.at, part: j.parts[0], deltaPct: j.deltaPct }))).toEqual(standing.map(({ at, part, deltaPct }) => ({ at, part, deltaPct })));
       // the wing hit at 100 s was changed at 400 s; the hit at 500 s after the change stays
       expect(shown.map((j) => [j.at, j.parts, j.deltaPct])).toEqual([[500_000, ['frontRightWingPct'], 9]]);
       expect(jumps.get(car0)?.map((j) => j.at)).toEqual([100_000, 500_000]);
@@ -360,9 +361,16 @@ describe('damage calculator', () => {
     expect(damage.output(after)[car0]!.jumps).toHaveLength(1);
   });
 
-  describe('behaviour table (C44): a row per car-status, car-location and weekend-phase kind', () => {
-    it('exports DAMAGE_BEHAVIOUR over car-status, car-location and the weekend phase', () => {
-      expect(Object.keys(DAMAGE_BEHAVIOUR).sort()).toEqual(['car-location', 'car-status', 'weekend-phase']);
+  describe('behaviour table (C44): a row per car-status, car-location, session-phase and weekend-phase kind', () => {
+    it('exports DAMAGE_BEHAVIOUR over car-status, car-location, the session phases (its neutralisations) and the weekend phase', () => {
+      expect(Object.keys(DAMAGE_BEHAVIOUR).sort()).toEqual([
+        'car-location',
+        'car-status',
+        'session-phase-practice',
+        'session-phase-qualifying',
+        'session-phase-race',
+        'weekend-phase',
+      ]);
     });
 
     // laps 1..7, the jump during lap 5, the laps after it a second slower: before 2..4 (or 1..4 outside a race), after 6, 7
