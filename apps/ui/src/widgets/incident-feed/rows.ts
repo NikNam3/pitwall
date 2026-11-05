@@ -172,8 +172,15 @@ export type FittedCell = { column: IncidentColumn; text: string; title?: string;
 const partsOf = (cell: IncidentCell, reason: UnknownReason): CellPart[] =>
   cell.parts ?? (cell.text === '' ? [unknownPart(reason)] : [{ text: cell.text }, { text: ' ' }, unknownPart(reason)]);
 
-/** A cell that shows nothing at all: no text and no mark (a cell with an unknown value shows its mark). */
-const blank = (cell: IncidentCell): boolean => cell.text === '' && cell.reason === undefined;
+/** A part a span may cover: no text, and no mark but the one of a value that does not apply to the entry. */
+const coverablePart = (part: CellPart): boolean => part.text === '' && (part.reason === undefined || part.reason === 'notApplicable');
+
+/**
+ * A cell a span may cover: it shows nothing, or only the mark of a value that does not apply to the entry (a
+ * neutralisation's or a warning's time lost), so nothing is lost; never a cell with text or another reason's mark.
+ */
+const coverable = (cell: IncidentCell): boolean =>
+  coverablePart({ text: cell.text, ...(cell.reason === undefined ? {} : { reason: cell.reason }) }) && (cell.parts ?? []).every(coverablePart);
 
 /** One cell fitted to `width` characters; a cell with an unknown value gets its parts and the reason in words. */
 function fitTo(column: IncidentColumn, cell: IncidentCell, width: number): FittedCell {
@@ -184,9 +191,10 @@ function fitTo(column: IncidentColumn, cell: IncidentCell, width: number): Fitte
 /**
  * The row's cells on the fixed grid of a line `cols` characters wide: each column in its width, the last one in what
  * is left of the line; a text that does not fit is cut with `…` (kit `fitCell`), never silently, so a line never grows
- * past the panel. A text longer than its column (a neutralisation's cause line, `SC · ALO–TSU collision`) spans on
- * when every cell after it is blank: it takes their place, as long as it needs and at most the rest of the line. Any
- * cell after it that shows something (the `–` of a warning's lost cell) keeps the text in its own column, cut there.
+ * past the panel. A text longer than its column (a neutralisation's cause line `SC · ALO–TSU collision`, a warning's
+ * `warning · corner cutting 2/3`) spans on when every cell after it may be covered (`coverable`): it takes their
+ * place, as long as it needs and at most the rest of the line, cut there. When a cell after it shows text or another
+ * reason's mark, the text stays in its own column, cut there.
  */
 export function fitRow(mode: WidgetSize['mode'], row: IncidentRow, cols: number): FittedCell[] {
   const columns = columnsFor(mode);
@@ -198,7 +206,7 @@ export function fitRow(mode: WidgetSize['mode'], row: IncidentRow, cols: number)
     const room = Math.max(0, cols - start);
     if (after.length === 0) {
       fitted.push(fitTo(column, cell, room));
-    } else if (cell.text.length > widths[column] && after.every((c) => blank(row.cells[c]))) {
+    } else if (cell.text.length > widths[column] && after.every((c) => coverable(row.cells[c]))) {
       fitted.push(fitTo(column, cell, Math.max(widths[column], Math.min(cell.text.length, room))));
       break;
     } else {
