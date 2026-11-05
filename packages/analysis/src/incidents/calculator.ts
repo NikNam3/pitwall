@@ -42,7 +42,7 @@ import { LAP_CLASSES_CONFIG } from '../lap-classes/index.ts';
 import { PACE_CONFIG } from '../pace/index.ts';
 import { paceDeltaAround } from '../pace-delta/index.ts';
 import { emptyDamageJumps, finishJump, foldDamageJumps, type DamageJumpFold } from '../shared/damage-jumps.ts';
-import { isNeutralisation, leaderLapAt, NEUTRALISATION_MACHINES, NEUTRALISATION_READS } from '../shared/neutralised.ts';
+import { isNeutralisation, leaderLapAt, NEUTRALISATION_MACHINES, NEUTRALISATION_READS, neutralisationKind, type NeutralisationKind } from '../shared/neutralised.ts';
 import { behaviourFor } from '../shared/behaviour.ts';
 import { ourCars } from '../shared/our-cars.ts';
 import { warningInCycle } from '../shared/penalties.ts';
@@ -97,7 +97,7 @@ type CarEvent = {
  * A neutralisation (`shared/neutralised.ts`): its start, the leader's lap at its start frame (ruling 3, from the
  * projection's laps) and the frames it covers, `startFrame <= f < endFrame` (C26; an open one ends at `Infinity`).
  */
-type Neutralised = { at: SessionTime; lap: number; startFrame: FrameNumber; endFrame: FrameNumber };
+type Neutralised = { at: SessionTime; lap: number; startFrame: FrameNumber; endFrame: FrameNumber; neutralisation: NeutralisationKind };
 
 /** The car-scoped sub-machines whose spans `incidents` folds (C20). */
 const CAR_MACHINES = ['car-location', 'car-status', 'warnings'] as const satisfies readonly MachineId[];
@@ -216,7 +216,7 @@ const foldNeutralised = (acc: Acc, view: EngineView): boolean => {
     for (let i = acc.closedPhases[machine] ?? 0; i < list.length; i++) {
       const span = list[i] as DeepReadonly<Span>;
       if (!isNeutralisation(machine, span) || behaviourOf(machine, span.kind) !== 'neutralised') continue;
-      (acc.neutralised[machine] ??= []).push({ at: span.start, startFrame: span.startFrame, endFrame: span.endFrame });
+      (acc.neutralised[machine] ??= []).push({ at: span.start, startFrame: span.startFrame, endFrame: span.endFrame, neutralisation: neutralisationKind(span) });
       changed = true;
     }
     acc.closedPhases[machine] = list.length;
@@ -399,7 +399,7 @@ const nowOf = (acc: Acc, view: EngineView): Now => {
     openSpansOf(view, machine).filter((span) => isNeutralisation(machine, span) && behaviourOf(machine, span.kind) === 'neutralised'),
   );
   const closed = NEUTRALISATION_MACHINES.flatMap((machine) => acc.neutralised[machine] ?? []);
-  const spans = [...closed, ...open.map((span) => ({ at: span.start, startFrame: span.startFrame, endFrame: Infinity }))];
+  const spans = [...closed, ...open.map((span) => ({ at: span.start, startFrame: span.startFrame, endFrame: Infinity, neutralisation: neutralisationKind(span) }))];
   const { trackLengthM, sector2StartM, sector3StartM } = live.session;
   return {
     isRace: true,
@@ -433,6 +433,8 @@ type Candidate = {
   jumps?: DamageJump[];
   /** A warning entry's count of the car's warnings. */
   warnings?: number;
+  /** A neutralised entry's kind (`neutralisationKind`). */
+  neutralisation?: NeutralisationKind;
   /** A penalty entry's ruling. */
   penalty?: IncidentPenalty;
   run?: SlowRun;
@@ -522,7 +524,7 @@ const candidates = (acc: Board): Candidate[] => {
     for (const c of into) c.merged.push(run);
     if (into.length === 0) list.push(candidate('timeLoss', run.at, [run.carId], { lap: lapOfProgress(run.startProgress), run }));
   }
-  for (const { at, lap } of acc.neutralisedNow) list.push(candidate('neutralised', at, [], { lap }));
+  for (const { at, lap, neutralisation } of acc.neutralisedNow) list.push(candidate('neutralised', at, [], { lap, neutralisation }));
   return list;
 };
 
@@ -705,6 +707,7 @@ const output = (fold: Acc, view: EngineView): IncidentsOutput => {
       where: { sector: c.carIds[0] === undefined ? unknown('notApplicable') : sectorAt(acc.tracks[c.carIds[0]], c.at, acc.layout) },
       ...detailOf(acc, c),
       ...(cause !== undefined && { cause }),
+      ...(c.neutralisation !== undefined && { neutralisation: c.neutralisation }),
     });
   }
   return feed;
