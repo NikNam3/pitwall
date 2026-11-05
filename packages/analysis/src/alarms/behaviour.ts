@@ -1,6 +1,8 @@
-// The alarms behaviour table (C43, C44): what each kind of the warnings, penalties and race session-phase sub-machines
-// means for the alarms. The machine decides what a car holds or owes and what the session does; the calculator only
-// looks up the rows of the spans open now, the car's and the session's, and merges them (as `lap-times` does).
+// The alarms behaviour table (C43, C44): what each kind of the weekend-phase, warnings, penalties and race session-phase
+// sub-machines means for the alarms. The machine decides what a car holds or owes and what the session does; the
+// calculator only looks up the rows of the spans open now, the car's and the session's, and merges them (as `lap-times`
+// does).
+import { JUDGED_LAP_PHASE_ROWS } from '../car-bands/bands.ts';
 import type { BehaviourTable } from '../shared/behaviour.ts';
 
 /** What the situations open for a car ask of its alarms; every field absent means "nothing". */
@@ -15,12 +17,15 @@ export type AlarmsEffect = {
    * "safety car in this lap"; the VSC's ending the same).
    */
   bandsHidden?: true;
+  /** The session is a race: lap 1 is not judged (`judgedLaps`, the row `car-bands` uses). */
+  isRace?: true;
 };
 
 const NOTHING: AlarmsEffect = {};
 
-/** One row per kind of `warnings`, `penalties` and `session-phase-race`. */
+/** One row per kind of `weekend-phase`, `warnings`, `penalties` and `session-phase-race`. */
 export const ALARMS_BEHAVIOUR = {
+  'weekend-phase': JUDGED_LAP_PHASE_ROWS,
   warnings: { noWarning: NOTHING, warned: { warningCount: 'total' } },
   penalties: {
     clear: NOTHING,

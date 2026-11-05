@@ -20,11 +20,10 @@ import {
 } from '@pitwall/domain';
 import type { DeepReadonly, EngineView, QuickCalculator } from '@pitwall/engine/readers';
 import { openSpansOf } from '@pitwall/engine/readers';
-import { bandsFor, judgedLaps, stateOf, type Band, type Bands } from '../car-bands/bands.ts';
+import { bandsFor, judgedLapClasses, judgedLaps, stateOf, type Band, type Bands } from '../car-bands/bands.ts';
 import { CAR_BANDS, CAR_BANDS_CONFIG } from '../car-bands/index.ts';
 import { DAMAGE } from '../damage/index.ts';
 import { FUEL } from '../fuel/index.ts';
-import { LAP_CLASSES_CONFIG } from '../lap-classes/index.ts';
 import { ourCars } from '../shared/our-cars.ts';
 import { behaviourFor } from '../shared/behaviour.ts';
 import { warningInCycle } from '../shared/penalties.ts';
@@ -202,7 +201,7 @@ const alarmsOf = (view: EngineView, id: CarId, judged: Lap | undefined, config: 
   const fuel = pick<FuelState>(FUEL);
   const damage = pick<DamageState>(DAMAGE);
   // the rows of the car's spans and the session's, merged
-  const effect: AlarmsEffect = Object.assign({}, ...behaviourFor(ALARMS_BEHAVIOUR, view, id));
+  const effect: AlarmsEffect = Object.assign({}, ...behaviourFor<AlarmsEffect>(ALARMS_BEHAVIOUR, view, id));
   const lapBands = judged && bandsFor(judged.visualCompound, CAR_BANDS_CONFIG.read(view));
   return [
     ...(bands && !bandsHidden(view, effect) ? bandAlarms(bands, judged, lapBands, make) : []),
@@ -228,12 +227,13 @@ export const alarmsCalculator: QuickCalculator<AlarmsOutput> = {
     'spans:warnings',
     'spans:penalties',
     'spans:session-phase-race',
+    'spans:weekend-phase',
     'laps',
   ],
   cadence: { hz: 2 },
   compute(view) {
     const config = ALARMS_CONFIG.read(view);
-    const judged = judgedLaps(view.history.laps, { isRace: view.situation.weekendPhase.kind === 'race', ...LAP_CLASSES_CONFIG.read(view) });
+    const judged = judgedLaps(view.history.laps, judgedLapClasses(view));
     return ourCars(view.live).flatMap((id) => alarmsOf(view, id, judged.get(id), config));
   },
   insights: (out) => out,

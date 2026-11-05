@@ -1,10 +1,9 @@
 // `car-bands` (spec 5.4): every band channel of every car in the session against its band. Stateless (ruling R1).
 import { known, unknown, type SessionTime, type BandReading, type CarBands, type CarState, type Corners, type Known, type LapRecord, type Range } from '@pitwall/domain';
 import type { DeepReadonly, EngineView, QuickCalculator } from '@pitwall/engine/readers';
-import { LAP_CLASSES_CONFIG } from '../lap-classes/index.ts';
 import { behaviourFor } from '../shared/behaviour.ts';
 import { CAR_STATUS_READS } from '../shared/car-status.ts';
-import { bandsFor, judgedLaps, pressureBands, stateOf, type Band } from './bands.ts';
+import { bandsFor, judgedLapClasses, judgedLaps, pressureBands, stateOf, type Band } from './bands.ts';
 import { CAR_BANDS_BEHAVIOUR, type CarBandsEffect } from './behaviour.ts';
 import { CAR_BANDS, CAR_BANDS_CONFIG, type CarBandsOutput } from './index.ts';
 
@@ -72,12 +71,11 @@ const bandsOfCar = (
 export const carBandsCalculator: QuickCalculator<CarBandsOutput> = {
   id: CAR_BANDS,
   kind: 'quick',
-  reads: ['tyres', 'condition', 'ownCar', 'laps', CAR_STATUS_READS, 'spans:car-activity-race'],
+  reads: ['tyres', 'condition', 'ownCar', 'laps', CAR_STATUS_READS, 'spans:car-activity-race', 'spans:weekend-phase'],
   cadence: { hz: 4 },
   compute(view: EngineView): CarBandsOutput {
     const config = CAR_BANDS_CONFIG.read(view);
-    const classes = { isRace: view.situation.weekendPhase.kind === 'race', ...LAP_CLASSES_CONFIG.read(view) };
-    const judged = judgedLaps(view.history.laps, classes);
+    const judged = judgedLaps(view.history.laps, judgedLapClasses(view));
     const out: CarBandsOutput = {};
     for (const car of view.live.cars) {
       const effect: CarBandsEffect = Object.assign({}, ...behaviourFor(CAR_BANDS_BEHAVIOUR, view, car.id));
