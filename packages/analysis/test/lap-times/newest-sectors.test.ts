@@ -89,6 +89,26 @@ describe('lap-times newest sectors', () => {
     });
   });
 
+  describe('row lap validity', () => {
+    /** Car 0 passes sector 2's start with an S1 faster than every best, its lap-validity span `kind`. */
+    const withValidity = (kind: 'valid' | 'invalid') => {
+      const view = scene({ laps: [car1Lap1, car0Lap1], cars: cars({ lap: 2, sector: 2, sector1TimeMs: 28_900 }) });
+      const span = { machine: 'lap-validity', id: 0, carId: carId(0), kind, start: 0, confirmed: true, detail: undefined, startFrame: 1 };
+      const withSpan = { ...view, situation: { ...view.situation, byMachine: { ...view.situation.byMachine, 'lap-validity': [span] } } };
+      return rowOf(run(withSpan), 0)!;
+    };
+
+    it('a live sector of an invalid lap has status none; the time itself still shows', () => {
+      const r = withValidity('invalid');
+      expect(valueOf(r.newestSectorsMs![0])).toBe(28_900);
+      expect(r.newestSectorStatus![0]).toBe('none');
+    });
+
+    it('the same time on a valid lap is sessionBest (as row session-best S1 mid-lap)', () => {
+      expect(withValidity('valid').newestSectorStatus![0]).toBe('sessionBest');
+    });
+  });
+
   describe('row no live sector times', () => {
     it('a car on its first lap before any sector keeps unknown with the reason', () => {
       const r = rowOf(run(scene({ cars: activeCars(1, { 0: { lap: 1, sector: 1 } }) })), 0)!;
