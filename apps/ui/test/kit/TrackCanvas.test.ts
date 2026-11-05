@@ -7,7 +7,8 @@
 // Contract the tests assume of TrackCanvas.svelte:
 //  - the outline is one stroked path (beginPath, moveTo/lineTo through every outline point, stroke) in `lineRole`;
 //  - a stretch is a stroked path in its role through the outline points in its fraction range (point i of n at i / n),
-//    possibly with its two end points added;
+//    possibly with its two end points added; a stretch whose end exceeds 1 wraps past the line (`{ start: 0.9, end:
+//    1.1 }`: the points at fractions >= 0.9 and < 0.1), in one path or two;
 //  - a solid dot is a filled path holding an `arc` of its `radiusPx`, filled in its resolved colour;
 //  - every colour it draws with is a resolved theme role or a team colour of a dot, never a literal of its own.
 import { cleanup, render } from '@testing-library/svelte';
@@ -119,8 +120,8 @@ function paintedPaths(): Array<{ paint: Op; path: Op[] }> {
 }
 const vertices = (path: Op[]) => path.filter((o) => o.op === 'moveTo' || o.op === 'lineTo');
 
-async function drawn(): Promise<void> {
-  render(TrackCanvas, { scene });
+async function drawn(of: TrackScene = scene): Promise<void> {
+  render(TrackCanvas, { scene: of });
   await tick();
 }
 
@@ -139,6 +140,24 @@ describe('TrackCanvas', () => {
     const n = vertices(stretches[0]!.path).length;
     expect(n).toBeGreaterThanOrEqual(19);
     expect(n).toBeLessThanOrEqual(23);
+  });
+
+  // A marshal zone's last stretch runs from its start to the first zone's start + 1.
+  it('draws a stretch across the line: from its start through the line to its end - 1', async () => {
+    await drawn({ ...scene, stretches: [{ start: 0.9, end: 1.1, role: 'flagYellow' }] });
+    const painted = paintedPaths().filter((p) => p.paint.op === 'stroke');
+    const line = painted.find((p) => p.paint.strokeStyle === ROLES.textFaint && vertices(p.path).length >= N);
+    if (line === undefined) throw new Error('no outline drawn');
+    const at = (o: Op) => ({ x: o.args[0] as number, y: o.args[1] as number });
+    const outlinePx = vertices(line.path).slice(0, N).map(at);
+    const stretchPx = painted.filter((p) => p.paint.strokeStyle === ROLES.flagYellow).flatMap((p) => vertices(p.path).map(at));
+    const nearest = (q: { x: number; y: number }) =>
+      outlinePx.reduce((best, p, i) => (Math.hypot(p.x - q.x, p.y - q.y) < Math.hypot(outlinePx[best]!.x - q.x, outlinePx[best]!.y - q.y) ? i : best), 0);
+    const covered = new Set(stretchPx.map(nearest));
+    const wanted = [...Array.from({ length: 10 }, (_, k) => 90 + k), ...Array.from({ length: 10 }, (_, k) => k)];
+    expect(wanted.filter((i) => !covered.has(i))).toEqual([]);
+    // nothing away from the line: every vertex within the stretch, give or take its end points
+    expect([...covered].filter((i) => i > 11 && i < 88)).toEqual([]);
   });
 
   it('draws a dot in its resolved car colour', async () => {
