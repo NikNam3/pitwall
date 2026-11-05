@@ -19,9 +19,11 @@ export function formatSessionClock(ms: Ms): string {
   return `${Math.floor(seconds / 3600)}:${pad(Math.floor((seconds % 3600) / 60), 2)}:${pad(seconds % 60, 2)}`;
 }
 
-/** Minutes and tenths, `1128600` -> `18:48.6` (stub until Task 13a of the live polish run). */
-export function formatMinutesTenths(_ms: Ms): string {
-  throw new Error('formatMinutesTenths: not implemented');
+/** Minutes and tenths, `1128600` -> `18:48.6`, `59999` -> `1:00.0`: rounded to the tenth before it is split. */
+export function formatMinutesTenths(ms: Ms): string {
+  const tenths = Math.round(Math.max(0, ms) / 100);
+  const minutes = Math.floor(tenths / 600);
+  return `${minutes}:${pad(Math.floor((tenths % 600) / 10), 2)}.${tenths % 10}`;
 }
 
 /** Lap time, `83456` -> `1:23.456`. */
