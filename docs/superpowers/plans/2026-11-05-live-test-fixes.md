@@ -4,7 +4,7 @@
 
 **Goal:** The seven bugs the first remote live test found (2026-11-04/05) are fixed, so that SP4a is re-specced on correct sector timing, warnings, bands, incidents and battle cards.
 
-**Architecture:** Each fix sits in the one unit that owns the judgement (C43): the UI connection answers heartbeats; the mini-sector recorder restarts a lap's crossings where the lap recorder already restarts the lap (the timed activity's push span), and a crossing that repeats a segment supersedes the earlier one (C25), read through one `domain` helper; `lap-times` refuses a reference that lies outside the best lap; `battle` takes the behind car's view for its margin; `incidents` names the likely cause of a neutralisation wherever it happened; `alarms` and the warnings detail follow the evidence on which warnings lead to penalties; `car-bands` judges only representative laps, gives the slick carcass two levels and puts the pressure band on the car's setup.
+**Architecture:** Each fix sits in the one unit that owns the judgement (C43): the UI connection answers heartbeats; the mini-sector recorder restarts a lap's crossings where the lap recorder already restarts the lap (the timed activity's push span), and a crossing that repeats a segment supersedes the earlier one (C25), read through one `domain` helper; `lap-times` refuses a reference that lies outside the best lap; `battle` takes the behind car's view for its margin; `incidents` names the likely cause of a neutralisation wherever it happened; `alarms` and the warnings detail follow the evidence on which warnings lead to penalties; `car-bands` judges only representative laps, gives the slick carcass the band 70–105 °C and puts the pressure band on the car's setup.
 
 **Tech Stack:** TypeScript (Node type stripping), pnpm monorepo, vitest + fast-check, Svelte 5.
 
@@ -21,7 +21,7 @@
 - Worktrees under `../pitwall-wt/<task>`, `pnpm install` in each; `PITWALL_FIXTURES_DIR=/home/nklx/dev/personal/pitwall/recordings`; workers started as separate `claude` processes with `PITWALL_PHASE` and `PITWALL_WORKER_SCOPE` (CLAUDE.md, Workflow).
 - Segments (C84): cut with `pwrec-cut` from tonight's recordings, at most 1 MB each, or one full-lap segment of about 8 MB; one behaviour each; an entry in `fixtures/index.json`. No test asserts a fact of a recording. No test reads `PITWALL_DATA_DIR`.
 - Changing the mini-sector recorder changes the rules version by itself (C61, C90); stored sessions rebuild on the next bridge start. Nothing bumps a version by hand.
-- New thresholds carry a source note: `causeWindowMs: 10_000` (pitwall estimate; the live test's SC came 3.5 s after its collision), the pressure offsets of Q3 A (pitwall estimate from the live test), the carcass levels of Q2 (a driver friend, via the user, 2026-11-05).
+- New thresholds carry a source note: `causeWindowMs: 10_000` (pitwall estimate; the live test's SC came 3.5 s after its collision), the pressure offsets of Q3 A (pitwall estimate from the live test), the carcass band 70–105 °C of Q2 (a driver friend, via the user, 2026-11-05).
 - After every implement phase the supervisor checks that `git diff --stat <test-commit>..HEAD -- '*.test.ts' '**/test/**' test-support` is empty.
 
 ## Review Focus
@@ -214,12 +214,12 @@
 **Interfaces (as built for the recommended answers; adjust to the answers given):**
 - Produces:
   - Q4 A: `WarnedDetail = { count: number; cornerCutting: number; infringement: Known<number> }` (`cornerCutting` from `cornerCuttingWarnings`, already an input of the warnings sub-machine).
-  - Q2 A: `BandState = 'below' | 'in' | 'above'` stays the alarm's state against the **okay** range; `BandReading.band` becomes `{ lo: number; hi: number; good?: { lo: number; hi: number } }` (`good` only where a channel has two levels: the slick carcass).
+  - Q2: no type change (pitwall ignores "good"; the slick carcass keeps one band).
   - Q3 A: the pressure `BandReading.band` is per corner; `band.lo`/`band.hi` are `unknown` as a whole reading (`value`, `state` `unknown('realism')`) when the car's setup is hidden.
 
 - [ ] **Step 1: Change the types;** `pnpm typecheck` lists every reader; fix nothing beyond compile-neutral defaults (e.g. `cornerCutting: count` in the warnings sub-machine until Task 6b).
 - [ ] **Step 2: Run** `nice -n 10 pnpm check`. Expected: green.
-- [ ] **Step 3: Commit** `feat(domain): warning kinds, two-level bands`.
+- [ ] **Step 3: Commit** `feat(domain): warning kinds, per-corner pressure band`.
 
 ### Task 6b: The warning rule follows the evidence
 
@@ -241,29 +241,28 @@
 - [ ] **Step 4: Run the tests again,** `vitest related`, and `pnpm pitwall scan-situations recordings/` (C85: the warnings transitions over every recording, in the report). Expected: PASS; transitions unchanged except the new detail.
 - [ ] **Step 5: Commit** per unit: `test(…)`, then `fix(engine): warnings span counts corner cutting apart`, `fix(analysis): last-warning alarm in races, corner cutting only`, `fix(analysis): incident warning count`.
 
-### Task 7: Bands judge representative laps; two-level carcass; pressure on the setup
+### Task 7: Bands judge representative laps; carcass 70–105 °C; pressure on the setup
 
 **Clauses:** C8, C41, C43, C44, C47, C65, C66, C68.
 
-**Scope:** `PITWALL_WORKER_UNIT=car-bands`, then `PITWALL_WORKER_UNIT=alarms`, then `PITWALL_WORKER_UNIT=corner-block` (one brief each).
+**Scope:** `PITWALL_WORKER_UNIT=car-bands`, then `PITWALL_WORKER_UNIT=alarms` (one brief each). The corner block needs no change: it colours from the band it reads.
 
 **Files:**
-- Modify: `packages/analysis/src/car-bands/{config,calculator}.ts`; `packages/analysis/src/alarms/calculator.ts`; `apps/ui/src/widgets/corner-block/{rows,emphasis}.ts`
-- Test: `packages/analysis/test/car-bands/car-bands.test.ts`, `packages/analysis/test/alarms/alarms.test.ts`, `apps/ui/src/widgets/corner-block/rows.test.ts`
+- Modify: `packages/analysis/src/car-bands/{config,calculator}.ts`; `packages/analysis/src/alarms/calculator.ts`
+- Test: `packages/analysis/test/car-bands/car-bands.test.ts`, `packages/analysis/test/alarms/alarms.test.ts`
 
 **Interfaces (as built for Q1 A, Q2 A, Q3 A):**
-- Consumes: `classifyLap(lap, { isRace, maxNeutralisedMs })` from `lap-classes`; `CarState.setup.tyrePressurePsi` (live state); `BandReading.band.good` (Task 0b).
+- Consumes: `classifyLap(lap, { isRace, maxNeutralisedMs })` from `lap-classes`; `CarState.setup.tyrePressurePsi` (live state).
 - Produces:
   - Q1 A: `outForFullLap` is judged on the newest completed lap that is `forRate` and not lap 1 of a race; with none, `outForFullLap` is false.
-  - Q2 A: `CAR_BANDS_CONFIG` slick carcass `carcassDryLo: 70`, `carcassDryHi: 105`, `carcassDryGoodLo: 80`, `carcassDryGoodHi: 100` (source: a driver friend, via the user, 2026-11-05); the state and alarms judge against 70–105; `band.good` carries 80–100.
+  - Q2: `CAR_BANDS_CONFIG` slick carcass `carcassDryLo: 70`, `carcassDryHi: 105` (source: a driver friend, via the user, 2026-11-05: 70–105 °C drivable; pitwall ignores "good", user).
   - Q3 A: `pressureBelowSetupPsi: 1.5`, `pressureAboveSetupPsi: 1.0` (source: live test 2026-11-04/05, pitwall estimate) replace `pressureLo`/`pressureHi`; per corner `band = { lo: setup − 1.5, hi: setup + 1.0 }`; a hidden setup gives `unknown('realism')`.
-  - Corner block: the carcass cell is plain inside 70–105 (good and okay alike), amber outside; the good range shows as the band's inner mark (`presentation`/`emphasis` only, no arithmetic in the display, C65).
 
-- [ ] **Step 1: Write the failing tests** in `car-bands.test.ts`, a table: "lap 1 of a race is not judged" (a cold lap 1, then nothing out: `outForFullLap` false); "an SC lap is not judged" (`scShare` over `maxNeutralisedMs`); "an in-lap is not judged"; "a rate lap out of band is judged" (true); "carcass 72 °C is in band, below good" (state `in`, `band.good` 80–100); "carcass 106 °C is above"; "pressure band follows the setup" (setup 20.9 rear: band 19.4–21.9; 19.3 is `below`); "a hidden setup gives an unknown pressure reading" (`realism`). In `alarms.test.ts`: "no band alarm from lap 1 of a race". In `rows.test.ts`: "carcass 72 °C is plain"; "carcass 68 °C is amber".
+- [ ] **Step 1: Write the failing tests** in `car-bands.test.ts`, a table: "lap 1 of a race is not judged" (a cold lap 1, then nothing out: `outForFullLap` false); "an SC lap is not judged" (`scShare` over `maxNeutralisedMs`); "an in-lap is not judged"; "a rate lap out of band is judged" (true); "carcass 72 °C is in band" (state `in`); "carcass 106 °C is above"; "pressure band follows the setup" (setup 20.9 rear: band 19.4–21.9; 19.3 is `below`); "a hidden setup gives an unknown pressure reading" (`realism`). In `alarms.test.ts`: "no band alarm from lap 1 of a race".
 - [ ] **Step 2: Run** the three test files. Expected: FAIL on the new rows.
-- [ ] **Step 3: Implement** per brief: the judged-lap filter and levels in `car-bands`, the alarm reads only `car-bands`' readings, the corner block's emphasis.
+- [ ] **Step 3: Implement** per brief: the judged-lap filter and levels in `car-bands`, the alarm reads only `car-bands`' readings, no corner-block code change.
 - [ ] **Step 4: Run the tests again** and `vitest related`. Expected: PASS.
-- [ ] **Step 5: Commit** per unit: `fix(analysis): bands judge representative laps; carcass levels; pressure on the setup`, `fix(analysis): band alarms`, `feat(ui): corner block carcass levels`.
+- [ ] **Step 5: Commit** per unit: `fix(analysis): bands judge representative laps; carcass levels; pressure on the setup`, `fix(analysis): band alarms`.
 
 ### Task 8: Gate (supervisor)
 

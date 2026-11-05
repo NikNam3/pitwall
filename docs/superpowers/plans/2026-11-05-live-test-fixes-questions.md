@@ -26,7 +26,7 @@ Recommendation: **A** (built). It keeps 70 °C uncoloured, as you asked, and sti
 
 Only the slick carcass gets two levels. Surface, brakes, engine, the intermediate and wet carcass keep their one band until you give ranges for them.
 
-**Answer:** A (user, 2026-11-05). Also confirmed: 100–105 °C is okay, not good.
+**Answer:** A (user, 2026-11-05). Also confirmed: 100–105 °C is okay, not good. Later the same day: **pitwall ignores "good"** (user: "our software can ignore good"). The slick carcass keeps one band, 70–105 °C: no colour inside, amber and the advisory outside, critical for a whole lap outside. No target mark, no second level.
 
 ## Q3. What should the tyre pressure band be?
 
