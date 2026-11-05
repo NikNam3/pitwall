@@ -605,7 +605,10 @@ export function recordRun(frames: readonly Frame[]): SchedulerInput[] {
  */
 export function expectIncrementalOverSteps<Acc, Out>(calc: IncrementalCalculator<Acc, Out>, steps: readonly SchedulerInput[], label = ''): void {
   const { insights: _insights, ...fold } = calc;
-  const probe: Calculator = { ...fold, output: (acc: unknown) => acc } as Calculator;
+  // the accumulator is a fold over the projection and config alone (C31.2): it never reads an upstream unit's output, so
+  // the probe runs without the unit's reads of other units (`{ calculator }`), which a registry of the probe alone cannot
+  // resolve; a unit reading no other unit keeps its reads as they are
+  const probe: Calculator = { ...fold, reads: fold.reads.filter((read) => typeof read !== 'object'), output: (acc: unknown) => acc } as Calculator;
   const scheduler = new Scheduler(CalculatorRegistry.build([probe]));
   scheduler.setNeeded([calc.id]);
   steps.forEach((input, i) => {

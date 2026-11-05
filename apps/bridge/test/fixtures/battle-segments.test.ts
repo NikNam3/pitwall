@@ -23,7 +23,8 @@ async function drsRuns(file: string): Promise<{ at: number; drs: DrsStatus[] }[]
 describe('battle on real data', () => {
   it('race-zandvoort-vsc: joined after the lights out, every card has DRS enabled until the DRSD, then off with reason wetTrack', async () => {
     const runs = await drsRuns('race-zandvoort-vsc.pwrec.gz');
-    const first = runs.findIndex((r) => r.at >= DRSD_AT);
+    // the drsOff span opens on the frame after the DRSD's time (914.192 s); battle runs every frame, that of 914.178 s included
+    const first = runs.findIndex((r) => r.at > DRSD_AT);
     expect(first).toBeGreaterThan(0);
     const enabled: DrsStatus = { enabled: true };
     const wet: DrsStatus = { enabled: false, reason: 'wetTrack' };
