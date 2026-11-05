@@ -48,6 +48,18 @@ const gallery: GalleryEntry<typeof widget> = {
         mix: unknown('realism'),
       },
     },
+    // First lap: the kg are known from the start, burn, lasts and margin follow later.
+    firstLap: {
+      fuel: {
+        ...positive,
+        kg: known(10, at),
+        burnKgPerLap: unknown('insufficientData'),
+        lapsOfFuel: unknown('insufficientData'),
+        lapsLeft: unknown('insufficientData'),
+        marginLaps: unknown('insufficientData'),
+        gameRemainingLaps: unknown('insufficientData'),
+      },
+    },
     // Not enough laps yet to know the burn.
     burnUnknown: {
       fuel: {
