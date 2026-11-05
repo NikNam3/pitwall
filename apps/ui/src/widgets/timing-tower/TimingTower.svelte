@@ -44,7 +44,7 @@
 {#snippet interval(r: TowerRow)}{#if r.retired}{formatLapNumber(r.retiredAtLap ?? NaN)}{:else if r.lapsDown === 0}<Value value={r.interval} format={formatDeltaMs} />{/if}{/snippet}
 {#snippet toUs(r: TowerRow)}<TextCell {...gapToCarCell(r.toUs)} />{/snippet}
 {#snippet last(r: TowerRow)}<span style:color={colourOf(r.lastLapStatus, r.ours)}><Value value={r.lastLap} format={formatLapTime} /></span>{/snippet}
-{#snippet sector(r: TowerRow, i: number)}{@const s = r.sectors[i]}{#if s}<span style:color={colourOf(s.status, r.ours)}><Value value={s.timeMs} format={formatSector} /></span>{/if}{/snippet}
+{#snippet sector(r: TowerRow, i: number)}{@const s = r.sectors[i]}{#if s}<span style:color={roleOrUndefined(s.role)}><Value value={s.timeMs} format={formatSector} /></span>{/if}{/snippet}
 {#snippet compound(r: TowerRow)}<CompoundMark compound={r.compound} />{/snippet}
 {#snippet age(r: TowerRow)}{formatCount(r.age)}{/snippet}
 {#snippet stops(r: TowerRow)}{r.stops === undefined ? '' : formatCount(r.stops)}{/snippet}
