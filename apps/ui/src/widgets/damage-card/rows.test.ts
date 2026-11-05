@@ -11,8 +11,15 @@ const corner = (tyre: number, brake: number) => ({ tyrePct: known(tyre, 0), brak
 const CORNERS: Corners<{ tyrePct: ReturnType<typeof known<number>>; brakePct: ReturnType<typeof known<number>> }> = {
   fl: corner(3, 0), fr: corner(1, 0), rl: corner(0, 0), rr: corner(0, 0),
 };
-const wing: DamageJump = { at: 200_000, lap: 14, parts: ['frontLeftWingPct'], deltaPct: 12, lossMsPerLap: unknown('insufficientData') };
-const floor: DamageJump = { at: 100_000, lap: 9, parts: ['floorPct'], deltaPct: 4, lossMsPerLap: known(120, 150_000) };
+/** The jumps without measuring or an estimate (the plain loss texts); `damageRows measuring and estimate` sets both. */
+const wing: DamageJump = {
+  at: 200_000, lap: 14, parts: ['frontLeftWingPct'], deltaPct: 12, lossMsPerLap: unknown('insufficientData'),
+  measuring: unknown('notApplicable'), estimateMsPerLap: unknown('notApplicable'),
+};
+const floor: DamageJump = {
+  at: 100_000, lap: 9, parts: ['floorPct'], deltaPct: 4, lossMsPerLap: known(120, 150_000),
+  measuring: unknown('notApplicable'), estimateMsPerLap: unknown('notApplicable'),
+};
 /** The reasons of a loss the card does not say in words ("measuring", "not measurable"): it shows their mark. */
 const HIDDEN: UnknownReason[] = ['restricted', 'notReceived', 'realism'];
 

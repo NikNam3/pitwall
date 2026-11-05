@@ -4,7 +4,7 @@
 // cars' gapper lines at a point both passed: the time between their crossings of it, the same for every reference (the
 // reference is the topic's param, the fold over the crossings cannot know it, C31.2). Each line has `points`: one per
 // crossing for the last `fineLaps` (10) completed laps and the current one, one per completed lap before them, at
-// x = completed laps + segment / 50. `byLap` stays until Task 15; `now` is unchanged.
+// x = completed laps + segment / 50; `points` replaces the per-lap `byLap`, which is no longer written. `now` is unchanged.
 import { carId, feedId, known, MINI_SECTORS, unknown, type MiniSectorCrossing } from '@pitwall/domain';
 import { SessionRunner, situationOf, type EngineView, type Frame, type StepResult } from '@pitwall/engine';
 import { describe, expect, it } from 'vitest';
@@ -119,10 +119,10 @@ describe('the gapper points', () => {
     expect(pointsByProgress(lines, 0)?.map(([p]) => p)).toEqual([...range(1, 13).map((l) => l * MINI_SECTORS), ...range(651, 770)]);
   });
 
-  it('byLap stays the per-lap gaps until Task 15: the points at the lines', () => {
+  it('writes no byLap: the per-lap gaps are the points at the lines', () => {
     const lines = gapperLines(run(viewOf(midLap())), at89);
-    const car0 = lines.cars.find((c) => c.carId === carId(0));
-    expect(car0?.byLap).toEqual(range(1, 15).map((lap) => ({ lap, gapMs: -1_000 * lap })));
+    expect(lines.cars.length).toBeGreaterThan(0);
+    for (const car of lines.cars) expect(car, `car ${car.carId}`).not.toHaveProperty('byLap');
   });
 
   it('a car without a known race start or reference lap has no point', () => {

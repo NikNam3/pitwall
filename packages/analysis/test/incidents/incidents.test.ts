@@ -175,7 +175,7 @@ describe('incidents calculator', () => {
   });
 
   it('a damage entry comes from the history only: a damage output with a jump and no damageChange event gives none', () => {
-    const jump = { at: T, lap: 5, parts: ['frontLeftWingPct' as const], deltaPct: 20, lossMsPerLap: known(800, 500_000) };
+    const jump = { at: T, lap: 5, parts: ['frontLeftWingPct' as const], deltaPct: 20, lossMsPerLap: known(800, 500_000), measuring: unknown('notApplicable'), estimateMsPerLap: unknown('notApplicable') };
     const damage = { [car(7)]: damageState([jump]) } as Record<CarId, ReturnType<typeof damageState>>;
     expect(run(viewOf({ miniSectors: race(), damage }))).toEqual([]);
   });
@@ -937,7 +937,7 @@ describe('incidents behaves per situation by its behaviour table (C44)', () => {
       expect(feed[2]!.warning).toEqual({ kind: 'cornerCutting', count: 1, limit: 3 });
       const collision = feed.find((e) => e.at === T - 10_000)!;
       expect(collision).toMatchObject({ id: `warning:7:${T - 10_000}`, kind: 'warning', carIds: [car(7)] });
-      expect(collision.warning).toMatchObject({ kind: 'other', infringement: known(4, T - 10_000) });
+      expect(collision.warning).toEqual({ kind: 'other', infringement: known(4, T - 10_000) });
     });
 
     it('a collision warning first: it is an other warning, and the next corner-cutting warning is 1/3', () => {
@@ -946,7 +946,7 @@ describe('incidents behaves per situation by its behaviour table (C44)', () => {
       expect(feed[0]!.at).toBe(T);
       expect(feed[0]!.warning).toEqual({ kind: 'cornerCutting', count: 1, limit: 3 });
       expect(feed[1]!.at).toBe(T - 10_000);
-      expect(feed[1]!.warning).toMatchObject({ kind: 'other', infringement: known(4, T - 10_000) });
+      expect(feed[1]!.warning).toEqual({ kind: 'other', infringement: known(4, T - 10_000) });
       expect(feed).toHaveLength(2);
     });
   });

@@ -36,7 +36,7 @@ const gapOf = (list: GapToCar[], id: number) => {
   const g = list.find((x) => x.carId === id)!;
   return [g.gapMs.known ? plain(g.gapMs.value) : g.gapMs.reason, g.lapsDown];
 };
-/** A car's gapper gaps at its line crossings: the points at whole laps (live polish 3.2: `points` replaces `byLap`). */
+/** A car's gapper gaps at its line crossings: the points at whole laps (live polish 3.2). */
 const line = (lines: GapperLines, id: number) =>
   lines.cars
     .find((c) => c.carId === id)

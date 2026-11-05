@@ -259,24 +259,26 @@ describe('the incident detail in the what cell (mockup: time loss (T7), damage F
 
   describe('a warning names its kind (cells.what.text, before the grid fits it)', () => {
     const warned = (warning: NonNullable<IncidentEntry['warning']>): string => what({ kind: 'warning', warning, where: { sector: k(2) } });
+    /** Another infringement's warning: no count. The assertion lets it compile while the domain type still has the count (plan Task 15). */
+    const other = (infringement: Known<number>) => ({ kind: 'other', infringement }) as NonNullable<IncidentEntry['warning']>;
 
     it('corner cutting shows its count of the limit', () => {
       expect(warned({ kind: 'cornerCutting', count: 2, limit: 3 })).toBe('warning · corner cutting 2/3');
     });
 
     it('another infringement shows its name from the kit, never a count', () => {
-      expect(warned({ kind: 'other', count: 0, limit: 3, infringement: k(4) })).toBe('warning · collision');
-      expect(warned({ kind: 'other', count: 0, limit: 3, infringement: k(12) })).toBe('warning · ignored yellow flags');
+      expect(warned(other(k(4)))).toBe('warning · collision');
+      expect(warned(other(k(12)))).toBe('warning · ignored yellow flags');
     });
 
-    it('never shows the placeholder 0/3 of another infringement', () => {
-      expect(warned({ kind: 'other', count: 0, limit: 3, infringement: k(4) })).not.toMatch(/\d\/\d/);
-      expect(warned({ kind: 'other', count: 0, limit: 3, infringement: unknown('notReceived') })).not.toMatch(/\d\/\d/);
+    it('never shows a count for another infringement', () => {
+      expect(warned(other(k(4)))).not.toMatch(/\d\/\d/);
+      expect(warned(other(unknown('notReceived')))).not.toMatch(/\d\/\d/);
     });
 
     it('an infringement we cannot name, or an unknown one, reads warning', () => {
-      expect(warned({ kind: 'other', count: 0, limit: 3, infringement: k(999) })).toBe('warning');
-      expect(warned({ kind: 'other', count: 0, limit: 3, infringement: unknown('notReceived') })).toBe('warning');
+      expect(warned(other(k(999)))).toBe('warning');
+      expect(warned(other(unknown('notReceived')))).toBe('warning');
     });
   });
 

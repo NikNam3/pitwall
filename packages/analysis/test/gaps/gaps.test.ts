@@ -14,7 +14,7 @@ const interval = (out: GapsOutput, id: number): Interval => {
   if (found === undefined) throw new Error(`no interval for car ${id}`);
   return found;
 };
-/** A car's gapper points at its line crossings, `[lap, gapMs]` (live polish 3.2: `points` replaces `byLap`). */
+/** A car's gapper points at its line crossings, `[lap, gapMs]` (live polish 3.2). */
 const line = lapPoints;
 /** No car of the gapper has a point. */
 const noPoints = (lines: ReturnType<typeof gapperLines>) => expect(lines.cars.map((c) => c.points)).toEqual(lines.cars.map(() => []));
@@ -617,7 +617,6 @@ describe('the gapper line of a car out of the race', () => {
     const lines = gapperLines(out(status), { kind: 'fixed', lapMs: 90_000 });
     expect(lines.cars.find((c) => c.carId === carId(3))).toMatchObject({
       carId: carId(3),
-      byLap: [{ lap: 1, gapMs: -500 }, { lap: 2, gapMs: -1_000 }],
       now: unknown('notApplicable'),
     });
     expect(line(lines, 3)).toEqual([[1, -500], [2, -1_000]]);
