@@ -31,6 +31,9 @@ export function boardRow(id: number, t: Times | 'realism' | 'noTimes', ref: Time
     bestSectorsMs: [none(reason), none(reason), none(reason)], theoreticalBestMs: none(reason),
     bestLapStatus: 'none', bestSectorStatus: ['none', 'none', 'none'],
     deltaToReference: { bestLapMs: none(reason), bestSectorsMs: [none(reason), none(reason), none(reason)], theoreticalBestMs: none(reason) },
+    newestSectorsMs: [none(reason), none(reason), none(reason)],
+    newestSectorStatus: ['none', 'none', 'none'],
+    newestSectorOlder: [false, false, false],
     outOfRace: false,
   });
   if (t === 'realism') return unknownRow('realism');
@@ -42,6 +45,10 @@ export function boardRow(id: number, t: Times | 'realism' | 'noTimes', ref: Time
     bestLapMs: ms(t.best),
     bestSectorsMs: [ms(t.sectors[0]), ms(t.sectors[1]), ms(t.sectors[2])],
     theoreticalBestMs: ms(t.theo),
+    // the just-completed lap's three sectors, none older (at the line)
+    newestSectorsMs: [ms(t.sectors[0] + 90), ms(t.sectors[1] + 90), ms(t.sectors[2] + 90)],
+    newestSectorStatus: ['none', 'none', 'none'],
+    newestSectorOlder: [false, false, false],
     deltaToReference: {
       bestLapMs: d(t.best, ref.best),
       bestSectorsMs: [d(t.sectors[0], ref.sectors[0]), d(t.sectors[1], ref.sectors[1]), d(t.sectors[2], ref.sectors[2])],

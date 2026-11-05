@@ -102,6 +102,21 @@ describe('buildRows', () => {
   });
 });
 
+describe('sectors as they finish (Task 10b)', () => {
+  // lap-analysis is a best-lap table: its S1-S3 columns are each car's best sectors (or deltas), not the current lap's.
+  // The newest-sector fields are therefore not shown here; this pins that the cells stay the best sectors.
+  it('keeps S1-S3 on the best sectors whatever the newest-sector fields say', () => {
+    const input = base();
+    const ver = input.board.rows.find((r) => r.carId === carId(0))!;
+    ver.newestSectorsMs = [ms(1), ms(2), unknown('notReceived')];
+    ver.newestSectorStatus = ['sessionBest', 'personalBest', 'none'];
+    ver.newestSectorOlder = [false, true, true];
+    const row = buildRows(input).find((r) => r.carId === carId(0))!;
+    expect(row.sectors.map((s) => s.value)).toEqual(buildRows(base()).find((r) => r.carId === carId(0))!.sectors.map((s) => s.value));
+    expect(row.sectors.map((s) => s.status)).toEqual(['sessionBest', 'none', 'none']);
+  });
+});
+
 describe('cellOf', () => {
   it('gives the cell of each time column and none for DRV', () => {
     const [ref] = buildRows(base());
