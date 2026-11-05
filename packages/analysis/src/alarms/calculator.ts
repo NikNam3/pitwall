@@ -135,14 +135,14 @@ const damageAlarms = (damage: DamageState, lap: number, make: Make): Insight[] =
     .map((j) => make('damageJump', 'critical', 'damage', String(j.at), { lap: j.lap, parts: j.parts.join(','), deltaPct: j.deltaPct }));
 
 /**
- * One corner-cutting warning left before a penalty, by the count of the car's `warned` span its row names. The game's
- * count runs on after a penalty, so this assumes a penalty every `warningsBeforePenalty` warnings (not verified against
- * the game; `warningInCycle`).
+ * One corner-cutting warning left before a penalty, by the corner-cutting count of the car's `warned` span, where the
+ * weekend phase's row asks for it (a race). The game's count runs on after a penalty, so this assumes a penalty every
+ * `warningsBeforePenalty` corner-cutting warnings (`warningInCycle`).
  */
 const warningAlarms = (view: EngineView, id: CarId, effect: AlarmsEffect, config: Config, make: Make): Insight[] => {
-  if (effect.warningCount === undefined) return [];
+  if (effect.warningCount !== 'cornerCutting') return [];
   const detail = openSpansOf(view, 'warnings', id)[0]?.detail as WarnedDetail | undefined;
-  const warnings = effect.warningCount === 'total' ? detail?.count : detail?.cornerCutting;
+  const warnings = detail?.cornerCutting;
   return warnings !== undefined &&
     config.warningsBeforePenalty > 1 &&
     warnings > 0 &&
