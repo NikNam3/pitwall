@@ -243,7 +243,7 @@
 
 ### Task 7: Bands judge representative laps; carcass 70–105 °C; pressure on the setup
 
-**Clauses:** C8, C41, C43, C44, C47, C65, C66, C68.
+**Clauses:** C20, C41, C43, C44, C47, C52.
 
 **Scope:** `PITWALL_WORKER_UNIT=car-bands`, then `PITWALL_WORKER_UNIT=alarms` (one brief each). The corner block needs no change: it colours from the band it reads.
 
@@ -255,10 +255,11 @@
 - Consumes: `classifyLap(lap, { isRace, maxNeutralisedMs })` from `lap-classes`; `CarState.setup.tyrePressurePsi` (live state).
 - Produces:
   - Q1 A: `outForFullLap` is judged on the newest completed lap that is `forRate` and not lap 1 of a race; with none, `outForFullLap` is false.
+  - Q1, refined (user): `alarms` raises no band alarm (`bandOut`, `bandOutLap`) while the race's session phase is `neutralised` and its `NeutralisedDetail.stages` has no `returning` yet (the game's "safety car in this lap"; the VSC's ending the same); from `returning` on they are raised again from the newest clean lap. `alarms` gains a `session-phase-race` row in its behaviour table (C44). Other alarms (damage, fuel, wear, warnings) are unaffected.
   - Q2: `CAR_BANDS_CONFIG` slick carcass `carcassDryLo: 70`, `carcassDryHi: 105` (source: a driver friend, via the user, 2026-11-05: 70–105 °C drivable; pitwall ignores "good", user).
   - Q3 A: `pressureBelowSetupPsi: 1.5`, `pressureAboveSetupPsi: 1.0` (source: live test 2026-11-04/05, pitwall estimate) replace `pressureLo`/`pressureHi`; per corner `band = { lo: setup − 1.5, hi: setup + 1.0 }`; a hidden setup gives `unknown('realism')`.
 
-- [ ] **Step 1: Write the failing tests** in `car-bands.test.ts`, a table: "lap 1 of a race is not judged" (a cold lap 1, then nothing out: `outForFullLap` false); "an SC lap is not judged" (`scShare` over `maxNeutralisedMs`); "an in-lap is not judged"; "a rate lap out of band is judged" (true); "carcass 72 °C is in band" (state `in`); "carcass 106 °C is above"; "pressure band follows the setup" (setup 20.9 rear: band 19.4–21.9; 19.3 is `below`); "a hidden setup gives an unknown pressure reading" (`realism`). In `alarms.test.ts`: "no band alarm from lap 1 of a race".
+- [ ] **Step 1: Write the failing tests** in `car-bands.test.ts`, a table: "lap 1 of a race is not judged" (a cold lap 1, then nothing out: `outForFullLap` false); "an SC lap is not judged" (`scShare` over `maxNeutralisedMs`); "an in-lap is not judged"; "a rate lap out of band is judged" (true); "carcass 72 °C is in band" (state `in`); "carcass 106 °C is above"; "pressure band follows the setup" (setup 20.9 rear: band 19.4–21.9; 19.3 is `below`); "a hidden setup gives an unknown pressure reading" (`realism`). In `alarms.test.ts`: "no band alarm from lap 1 of a race"; "band alarms are hidden while the SC is deployed" (a pre-SC carcass alarm is cleared at `deployed`); "band alarms return at returning" (the same alarm raised again from the pre-SC clean lap); "a damage alarm stays during the SC"; behaviour-table completeness over `session-phase-race`.
 - [ ] **Step 2: Run** the three test files. Expected: FAIL on the new rows.
 - [ ] **Step 3: Implement** per brief: the judged-lap filter, the carcass band and the setup-based pressure band in `car-bands`, the alarm reads only `car-bands`' readings, no corner-block code change.
 - [ ] **Step 4: Run the tests again** and `vitest related`. Expected: PASS.

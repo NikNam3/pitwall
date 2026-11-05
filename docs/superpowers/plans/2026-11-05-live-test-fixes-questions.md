@@ -12,7 +12,7 @@ On lap 1 of the race and on the safety-car laps, cold tyres raised up to nine ad
 
 Recommendation: **A** now (built), B later as its own contract change if the AI alarms still bother you.
 
-**Answer:** A (user, 2026-11-05).
+**Answer:** A (user, 2026-11-05). Refined the same day: **band alarms are hidden while the safety car is out, and come back at "safety car in this lap"** (user: "they can be hidden until safety car in this lap, then they become important again"). From then on they judge the newest clean lap (before the SC) until a new clean lap replaces it.
 
 ## Q2. How should the carcass band's two levels show and alarm?
 
