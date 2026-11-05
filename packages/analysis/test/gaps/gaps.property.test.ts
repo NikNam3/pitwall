@@ -4,7 +4,8 @@ import { describe, expect, it } from 'vitest';
 import type { GapsOutput } from '../../src/gaps/index.ts';
 import { gapperLines, gapsToCar } from '../../src/gaps/gaps.ts';
 import { neutralisation } from '../../../../test-support/builders/index.ts';
-import { byTime, plain, progressOf, run, viewOf } from './race.ts';
+import { GAPS_CONFIG } from '../../src/gaps/index.ts';
+import { byTime, isWholeLap, plain, pointsByProgress, progressOf, run, viewOf, windowOf } from './race.ts';
 
 /**
  * 3 to 5 cars over 1 to 3 laps, each mini-sector 1.7 to 1.9 s and a start up to 3 s late: the field stays within
@@ -22,6 +23,55 @@ const raceArb = fc.integer({ min: 3, max: 5 }).chain((cars) =>
   }),
 );
 type Race = { laps: number; startsMs: number[]; segmentsMs: number[][]; cut: number };
+
+/**
+ * 3 to 5 cars over 1 to 3 laps, each with its own pace (a mini-sector 1.7 to 1.9 s, ± up to 60 ms each) and a start up
+ * to 14 s late: their gaps spread across the window's edges (10 and 11 s); no car is lapped.
+ */
+const windowRaceArb = fc.integer({ min: 3, max: 5 }).chain((cars) =>
+  fc.record({
+    laps: fc.integer({ min: 1, max: 3 }),
+    startsMs: fc.array(fc.integer({ min: 0, max: 14_000 }), { minLength: cars, maxLength: cars }),
+    segmentsMs: fc.array(
+      fc.integer({ min: 1_700, max: 1_900 }).chain((base) =>
+        fc.array(fc.integer({ min: base - 60, max: base + 60 }), { minLength: 3 * MINI_SECTORS, maxLength: 3 * MINI_SECTORS }),
+      ),
+      { minLength: cars, maxLength: cars },
+    ),
+    cut: fc.double({ min: 0, max: 1, noNaN: true }),
+  }),
+);
+
+/**
+ * The window as the spec states it (3.2), with `ours` our only car: each crossing, in the order they come, judges every
+ * other car that, with `ours`, has passed its point, on the time between their crossings of it: within
+ * `windowMs` a car enters, beyond `windowMs + windowExitMs` it leaves. Our car and the cars in, sorted.
+ */
+function windowModel(history: readonly MiniSectorCrossing[], ours: number): number[] {
+  const { windowMs, windowExitMs } = GAPS_CONFIG.defaults;
+  const times = new Map<number, Map<number, number>>();
+  const timeOf = (car: number, p: number) => times.get(car)?.get(p);
+  const inside = new Set<number>();
+  const judge = (car: number, gapMs: number) => {
+    if (Math.abs(gapMs) <= windowMs) inside.add(car);
+    else if (Math.abs(gapMs) > windowMs + windowExitMs) inside.delete(car);
+  };
+  for (const m of history) {
+    const p = progressOf(m);
+    if (!times.has(m.carId)) times.set(m.carId, new Map());
+    times.get(m.carId)!.set(p, m.at);
+    if (m.carId !== ours) {
+      const our = timeOf(ours, p);
+      if (our !== undefined) judge(m.carId, m.at - our);
+    } else {
+      for (const car of times.keys()) {
+        const theirs = car === ours ? undefined : timeOf(car, p);
+        if (theirs !== undefined) judge(car, theirs - m.at);
+      }
+    }
+  }
+  return [ours, ...inside].sort((a, b) => a - b);
+}
 
 const crossingsOf = ({ laps, startsMs, segmentsMs }: Race): MiniSectorCrossing[] =>
   byTime(
@@ -111,7 +161,7 @@ describe('gap properties', () => {
           }
           if (!car.now.known) throw new Error(`car ${car.carId} has no now at (${newest.lap}, ${newest.segment})`);
           const lap = newest.lap - 1 + newest.segment / MINI_SECTORS;
-          const completed = car.byLap.at(-1)?.lap ?? 0;
+          const completed = Math.max(0, ...(car.points ?? []).filter((p) => isWholeLap(p.lap)).map((p) => p.lap));
           expect(car.now.value.lap).toBeCloseTo(lap, 9);
           expect(car.now.value.lap).toBeGreaterThan(completed);
           expect(car.now.value.lap).toBeLessThan(completed + 1);
@@ -161,6 +211,35 @@ describe('gap properties', () => {
         if (!value.known) throw new Error(`no leader average at progress ${progress}: ${value.reason}`);
         expect(Number.isInteger(value.value)).toBe(true);
         expect(Math.abs(value.value - newest.at / (progress / MINI_SECTORS))).toBeLessThanOrEqual(0.5);
+      }),
+    );
+  });
+  it('the window is our car plus every car the fold over their common crossings lets in: within 10 s enters, beyond 11 s leaves', () => {
+    fc.assert(
+      fc.property(windowRaceArb, (race) => {
+        const all = crossingsOf(race);
+        const history = all.slice(0, 1 + Math.floor(race.cut * (all.length - 1)));
+        const out = run(viewOf(history));
+        for (const reference of [{ kind: 'fixed', lapMs: 90_000 } as const, { kind: 'leaderAverage' } as const]) {
+          expect(windowOf(gapperLines(out, reference)), JSON.stringify(reference)).toEqual(windowModel(history, 0));
+        }
+      }),
+    );
+  });
+
+  it("the gapper's points are the car's crossings, at x = completed laps + segment / 50, the gap there to the virtual car", () => {
+    fc.assert(
+      fc.property(raceArb, (race) => {
+        const all = crossingsOf(race);
+        const history = all.slice(0, 1 + Math.floor(race.cut * (all.length - 1)));
+        const lines = gapperLines(run(viewOf(history)), { kind: 'fixed', lapMs: 90_000 });
+        // 3 laps at most: every crossing is within the last 10 laps; the start line (x = 0) is not pinned
+        for (const car of lines.cars) {
+          const expected = history
+            .filter((m) => m.carId === car.carId && progressOf(m) > 0)
+            .map((m): [number, number] => [progressOf(m), plain(Math.round((progressOf(m) * 90_000) / MINI_SECTORS - m.at))]);
+          expect(pointsByProgress(lines, car.carId)?.filter(([p]) => p > 0), `car ${car.carId}`).toEqual(expected);
+        }
       }),
     );
   });

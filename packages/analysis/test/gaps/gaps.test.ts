@@ -5,7 +5,7 @@ import { GAPS, GAPS_CONFIG, type GapsOutput } from '../../src/gaps/index.ts';
 import { gapsCalculator } from '../../src/gaps/calculator.ts';
 import { gapperLines, gapsToCar } from '../../src/gaps/gaps.ts';
 import { crossings, field, neutralisation, openNeutralisation } from '../../../../test-support/builders/index.ts';
-import { byTime, carsFor, deltaOf, gaps, guarded, offsetRace, plain, progressOf, run, viewOf } from './race.ts';
+import { byTime, carsFor, deltaOf, gaps, guarded, lapPoints, offsetRace, plain, progressOf, run, viewOf } from './race.ts';
 
 /** A known value (with -0 as 0), or the reason it is unknown. */
 const v = (k: Known<number>): number | string => (k.known ? plain(k.value) : k.reason);
@@ -14,8 +14,10 @@ const interval = (out: GapsOutput, id: number): Interval => {
   if (found === undefined) throw new Error(`no interval for car ${id}`);
   return found;
 };
-const line = (lines: ReturnType<typeof gapperLines>, id: number) =>
-  lines.cars.find((c) => c.carId === id)?.byLap.map(({ lap, gapMs }) => [lap, plain(gapMs)]);
+/** A car's gapper points at its line crossings, `[lap, gapMs]` (live polish 3.2: `points` replaces `byLap`). */
+const line = lapPoints;
+/** No car of the gapper has a point. */
+const noPoints = (lines: ReturnType<typeof gapperLines>) => expect(lines.cars.map((c) => c.points)).toEqual(lines.cars.map(() => []));
 const neighbours = (out: GapsOutput, our: number) => out.neighbourhood.find((n) => n.ourCarId === our)?.carIds;
 
 /** 3 cars at 90, 91 and 92 s, 5 full laps: everyone's latest crossing is the line at the end of lap 5. */
@@ -367,7 +369,7 @@ describe('gapper', () => {
 
   it('without a known race start no car has a line', () => {
     const lines = gapperLines(run(viewOf(threeCars(), { lightsOutAt: null })), { kind: 'fixed', lapMs: 90_000 });
-    expect(lines.cars.every((c) => c.byLap.length === 0)).toBe(true);
+    noPoints(lines);
   });
 
   it("before the leader's first crossing after lights out the leader average is insufficientData and no car has a line", () => {
@@ -375,7 +377,8 @@ describe('gapper', () => {
     const ms = field({ cars: 2, laps: 1, paceMs: 90_000 }).crossings.filter((m) => m.lap === 1 && m.segment < 30);
     const lines = gapperLines(run(viewOf(ms, { lightsOutAt: 60_000 })), { kind: 'leaderAverage' });
     expect(lines.referenceLapMs).toEqual({ known: false, reason: 'insufficientData' });
-    expect(lines.cars.every((c) => c.byLap.length === 0 && !c.now.known)).toBe(true);
+    noPoints(lines);
+    expect(lines.cars.every((c) => !c.now.known)).toBe(true);
   });
 });
 
@@ -428,7 +431,8 @@ describe('gapper lines are continuous', () => {
       ...[1, 2, 3, 4, 5].flatMap((n) => crossings(carId(1), n, 110_000, (n - 1) * 110_000)),
       { carId: carId(1), lap: 6, segment: 0, at: 550_000, frame: 0 },
     ]).filter((m) => m.at <= 560_000);
-    const out = run(viewOf(ms));
+    // car 1, a lap down, is our teammate: the window keeps our cars
+    const out = run(viewOf(ms, { teammateCar: 1 }));
     expect(interval(out, 1).lapsDown).toBe(1);
     // the virtual car at 90 s: the leader stays on it, car 1 loses 20 s each lap
     const lines = gapperLines(out, { kind: 'fixed', lapMs: 90_000 });
@@ -493,7 +497,8 @@ describe("the gapper's live point (now)", () => {
       ...[1, 2, 3, 4, 5, 6, 7].flatMap((n) => crossings(carId(0), n, 90_000, (n - 1) * 90_000)),
       ...[1, 2, 3, 4, 5, 6].flatMap((n) => crossings(carId(1), n, 110_000, (n - 1) * 110_000)),
     ]).filter((m) => m.at <= 560_000);
-    const out = run(viewOf(ms));
+    // car 1, a lap down, is our teammate: the window keeps our cars
+    const out = run(viewOf(ms, { teammateCar: 1 }));
     expect(interval(out, 1).lapsDown).toBe(1);
     const lines = gapperLines(out, { kind: 'fixed', lapMs: 90_000 });
     // the leader: 6.22 × 90 000 − 559 800; car 1: 5.08 × 90 000 − 558 800
@@ -511,7 +516,8 @@ describe("the gapper's live point (now)", () => {
       { carId: carId(1), lap: 1, segment: 0, at: 0, frame: 0 },
       { carId: carId(1), lap: 1, segment: 5, at: 19_000, frame: 0 },
     ]);
-    const lines = gapperLines(run(viewOf(ms, { lightsOutAt: 10_000 })), { kind: 'fixed', lapMs: 90_000 });
+    // car 1 is our teammate: in the window whatever its crossings
+    const lines = gapperLines(run(viewOf(ms, { lightsOutAt: 10_000, teammateCar: 1 })), { kind: 'fixed', lapMs: 90_000 });
     expect(nowOf(lines, 0)).toBe('notApplicable');
     // 0.1 × 90 000 − 9 000
     expect(nowOf(lines, 1)).toEqual({ lap: expect.closeTo(0.1, 9), gapMs: 0, at: 19_000 });
@@ -609,11 +615,12 @@ describe('the gapper line of a car out of the race', () => {
 
   it.each(['retired', 'disqualified'] as const)('keeps a %s car\'s completed laps, with no live point', (status) => {
     const lines = gapperLines(out(status), { kind: 'fixed', lapMs: 90_000 });
-    expect(lines.cars.find((c) => c.carId === carId(3))).toEqual({
+    expect(lines.cars.find((c) => c.carId === carId(3))).toMatchObject({
       carId: carId(3),
       byLap: [{ lap: 1, gapMs: -500 }, { lap: 2, gapMs: -1_000 }],
       now: unknown('notApplicable'),
     });
+    expect(line(lines, 3)).toEqual([[1, -500], [2, -1_000]]);
   });
 
   it('keeps the running cars\' lines beside it, and the leader average of the running leader', () => {
@@ -807,7 +814,8 @@ describe('the leader average over the leader\'s progress', () => {
 
   it('gives lap 1 its live points with the default reference: no completed lap, a gap now for each car', () => {
     const lines = gapperLines(run(viewOf(lapOne())), leader);
-    expect(lines.cars.map((c) => [c.carId, c.byLap])).toEqual([[0, []], [1, []]]);
+    expect(lines.cars.map((c) => c.carId)).toEqual([0, 1]);
+    expect([0, 1].map((id) => [id, line(lines, id)])).toEqual([[0, []], [1, []]]);
     const now = (id: number) => {
       const n = lines.cars.find((c) => c.carId === id)?.now;
       return n?.known ? { lap: n.value.lap, gapMs: plain(n.value.gapMs), at: n.at } : n;

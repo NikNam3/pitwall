@@ -36,7 +36,12 @@ const gapOf = (list: GapToCar[], id: number) => {
   const g = list.find((x) => x.carId === id)!;
   return [g.gapMs.known ? plain(g.gapMs.value) : g.gapMs.reason, g.lapsDown];
 };
-const line = (lines: GapperLines, id: number) => lines.cars.find((c) => c.carId === id)?.byLap.map((p) => plain(p.gapMs));
+/** A car's gapper gaps at its line crossings: the points at whole laps (live polish 3.2: `points` replaces `byLap`). */
+const line = (lines: GapperLines, id: number) =>
+  lines.cars
+    .find((c) => c.carId === id)
+    ?.points?.filter((p) => p.lap >= 1 && Math.abs(p.lap - Math.round(p.lap)) < 1e-9)
+    .map((p) => plain(p.gapMs));
 const ref = (lines: GapperLines) => (lines.referenceLapMs.known ? lines.referenceLapMs.value : lines.referenceLapMs.reason);
 
 describe('gaps feature', () => {
@@ -83,6 +88,14 @@ describe('gaps feature', () => {
     expect(ref(car1)).toBe(91_000);
     expect(line(car1, 2)).toEqual([-1_000, -2_000, -3_000]);
     expect(line(car1, 0)).toEqual([1_000, 2_000, 3_000]);
+  });
+
+  it('gaps.gapper holds the window: our car and the cars within 10 s of it, with a point per crossing', () => {
+    // car 0 is ours; after 3 laps car 1 is 3 s and car 2 6 s behind it: both in the window
+    const lines = select('gaps.gapper', { reference: { kind: 'fixed', lapMs: 90_000 } }) as GapperLines;
+    expect(lines.cars.map((c) => c.carId).sort((a, b) => a - b)).toEqual([0, 1, 2]);
+    // 3 laps of 50 crossings each after the start line
+    expect(lines.cars.find((c) => c.carId === carId(0))?.points?.filter((p) => p.lap > 0)).toHaveLength(150);
   });
 
   it.each([
