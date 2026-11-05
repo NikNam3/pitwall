@@ -1,4 +1,4 @@
-import { carId, isKnown, unknown, type Ms } from '@pitwall/domain';
+import { carId, unknown, type Ms } from '@pitwall/domain';
 import { describe, expect, it } from 'vitest';
 import {
   foldSegmentSample,
@@ -16,7 +16,7 @@ const fold = (samples: SegmentSamples, values: number[], who = car, segment = 4)
 };
 const value = (samples: SegmentSamples, who = car, segment = 4) => {
   const m = segmentMedian(samples, who, segment);
-  return isKnown(m) ? m.value : m;
+  return m.known ? m.value : m;
 };
 
 describe('segment medians', () => {
