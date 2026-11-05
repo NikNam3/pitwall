@@ -189,3 +189,17 @@ export const deltaOf = (from: EngineView, to: EngineView, rewound = false) => ({
 
 /** Turns -0 into 0 so `toEqual` compares the number, not its sign bit. */
 export const plain = (n: number): number => n + 0;
+
+/**
+ * A garage restart's pass (as `lap-times`' scene builds it): car `car` runs lap `lapNumber` again from segment 0 at
+ * `startAt`, up to `segment`; each crossing supersedes the newest earlier crossing of its slot in `history` (C25).
+ */
+export function restartPass(history: readonly MiniSectorCrossing[], car: number, lapNumber: number, paceMs: number, startAt: number, segment = MINI_SECTORS - 1): MiniSectorCrossing[] {
+  const id = carId(car);
+  return crossings(id, lapNumber, paceMs, startAt)
+    .slice(0, segment + 1)
+    .map((c): MiniSectorCrossing => {
+      const index = history.findLastIndex((h) => h.carId === id && h.lap === lapNumber && h.segment === c.segment);
+      return index < 0 ? c : { ...c, supersedes: { list: 'crossings', index } };
+    });
+}

@@ -6,12 +6,14 @@ import { lap } from '../../../../test-support/builders/index.ts';
 const LIMIT = LAP_CLASSES_CONFIG.defaults.maxNeutralisedMs;
 const race = { isRace: true, maxNeutralisedMs: LIMIT };
 const practice = { isRace: false, maxNeutralisedMs: LIMIT };
+const qualifying = { isRace: false, maxNeutralisedMs: LIMIT };
 
 describe('classifyLap', () => {
-  it('a clean lap counts for pace, rate and best', () => {
+  it('a clean lap counts for pace, rate, bands and best', () => {
     expect(classifyLap(lap({ lapNumber: 3 }), race)).toEqual({
       forPace: true,
       forRate: true,
+      forBands: true,
       forBest: { lap: true, sectors: [true, true, true] },
     });
   });
@@ -95,6 +97,41 @@ describe('classifyLap', () => {
     expect(classifyLap(lap({ lapNumber: 2 }), race).forPace).toBe(true);
   });
 
+  describe('forBands: a rate lap that is not lap 1 of a race, valid or not (the laps car-bands and alarms judge, C43)', () => {
+    it('an invalid rate lap counts for bands: a cut does not change the temperatures', () => {
+      const c = classifyLap(lap({ lapNumber: 3, valid: { lap: false, sectors: [true, false, true] } }), race);
+      expect(c.forRate).toBe(true);
+      expect(c.forPace).toBe(false);
+      expect(c.forBands).toBe(true);
+    });
+
+    it('lap 1 of a race does not count for bands, though it is a rate lap', () => {
+      const c = classifyLap(lap({ lapNumber: 1 }), race);
+      expect(c.forRate).toBe(true);
+      expect(c.forBands).toBe(false);
+    });
+
+    it('lap 1 of qualifying and of practice counts for bands', () => {
+      expect(classifyLap(lap({ lapNumber: 1 }), qualifying).forBands).toBe(true);
+      expect(classifyLap(lap({ lapNumber: 1 }), practice).forBands).toBe(true);
+    });
+
+    it('lap 2 of a race counts for bands', () => {
+      expect(classifyLap(lap({ lapNumber: 2 }), race).forBands).toBe(true);
+    });
+
+    it('an in lap and an out lap do not count for bands, in a race or not', () => {
+      for (const opts of [race, qualifying]) {
+        expect(classifyLap(lap({ lapNumber: 3, inLap: true }), opts).forBands).toBe(false);
+        expect(classifyLap(lap({ lapNumber: 3, outLap: true }), opts).forBands).toBe(false);
+      }
+    });
+
+    it('a lap with 9 s under SC does not count for bands: it is no rate lap', () => {
+      expect(classifyLap(lap({ lapNumber: 3, lapTimeMs: 90_000, scShare: 0.1 }), race).forBands).toBe(false);
+    });
+  });
+
   const lapArb = fc.record({
     lapNumber: fc.integer({ min: 1, max: 80 }),
     lapTimeMs: fc.integer({ min: 60_000, max: 150_000 }),
@@ -111,6 +148,24 @@ describe('classifyLap', () => {
       fc.property(lapArb, fc.boolean(), limitArb, (over, isRace, maxNeutralisedMs) => {
         const c = classifyLap(lap(over), { isRace, maxNeutralisedMs });
         return !c.forPace || c.forRate;
+      }),
+    );
+  });
+
+  it('property: forBands is forRate except on lap 1 of a race; validity does not matter', () => {
+    fc.assert(
+      fc.property(lapArb, fc.boolean(), limitArb, (over, isRace, maxNeutralisedMs) => {
+        const c = classifyLap(lap(over), { isRace, maxNeutralisedMs });
+        return c.forBands === (c.forRate && !(isRace && over.lapNumber === 1));
+      }),
+    );
+  });
+
+  it('property: forPace implies forBands, and forBands implies forRate', () => {
+    fc.assert(
+      fc.property(lapArb, fc.boolean(), limitArb, (over, isRace, maxNeutralisedMs) => {
+        const c = classifyLap(lap(over), { isRace, maxNeutralisedMs });
+        return (!c.forPace || c.forBands) && (!c.forBands || c.forRate);
       }),
     );
   });
