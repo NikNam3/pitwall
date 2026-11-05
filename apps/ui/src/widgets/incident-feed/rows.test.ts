@@ -390,7 +390,7 @@ describe('fitRow', () => {
     const cells = fitRow('full', row!, 70);
     const forUsCell = cells.find((c) => c.column === 'forUs')!;
     expect(row!.cells.forUs.text).toBe('KUH P12→P14, ALB +12.3→+14.1');
-    expect(forUsCell.text).toBe('KUH P12→P14, ALB +12.3→…');
+    expect(forUsCell.text).toBe('KUH P12→P14, ALB +12.3…');
     expect(incidentRowText('full', row!, 70)).toHaveLength(70);
   });
 
