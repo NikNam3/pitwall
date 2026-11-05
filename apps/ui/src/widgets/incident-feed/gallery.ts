@@ -9,7 +9,10 @@ const k = <T>(value: T): Known<T> => known(value, 10);
 
 const overview = (id: number, name: string): CarOverview =>
   ({ id: carId(id), identity: { name, raceNumber: id }, timing: {}, tyres: {}, updatedAt: 10 }) as unknown as CarOverview;
-const cars = [overview(1, 'Kuhnlein'), overview(2, 'Esteban Ocon'), overview(3, 'Carlos Sainz'), overview(4, 'Alexander Albon'), overview(5, 'Oscar Piastri')];
+const cars = [
+  overview(1, 'Kuhnlein'), overview(2, 'Esteban Ocon'), overview(3, 'Carlos Sainz'), overview(4, 'Alexander Albon'), overview(5, 'Oscar Piastri'),
+  overview(6, 'George Russell'),
+];
 
 // Mockup 2-timing.html, newest first. Car 1 is ours. The mockup's turn `(T7)` is a sector here: F1 25 sends no turn numbers.
 const collision: IncidentEntry = {
@@ -27,7 +30,19 @@ const timeLoss: IncidentEntry = {
 };
 const warning: IncidentEntry = {
   id: 'warning:5:210000', at: toSessionTime(210_000), lap: 21, kind: 'warning', severity: 'minor', carIds: [carId(5)],
-  timeLostMs: unknown('notApplicable'), forUs: [], where: { sector: k(2) }, warning: { count: 2, limit: 3 },
+  timeLostMs: unknown('notApplicable'), forUs: [], where: { sector: k(2) }, warning: { kind: 'cornerCutting', count: 2, limit: 3 },
+};
+// Warnings by kind: another infringement shows its name (its placeholder count is never shown), an unnamed one reads `warning`.
+const otherWarning = (id: number, infringement: Known<number>): IncidentEntry => ({
+  id: `warning:${id}:20${id}000`, at: toSessionTime(200_000 + id * 1000), lap: 20, kind: 'warning', severity: 'minor', carIds: [carId(id)],
+  timeLostMs: unknown('notApplicable'), forUs: [], where: { sector: k(1) }, warning: { kind: 'other', count: 0, limit: 3, infringement },
+});
+const collisionWarning = otherWarning(3, k(4));
+const unnamedWarning = otherWarning(4, unknown('notReceived'));
+// Our teammate (car 6) and the player (car 1) read their driver codes, never `us`.
+const teammate: IncidentEntry = {
+  ...collision, id: 'collision:6+2:231000', at: toSessionTime(231_000), carIds: [carId(6), carId(2)],
+  forUs: [{ ourCarId: carId(6), otherCarId: k(carId(2)), positionBefore: k(6), positionAfter: k(7), gapBeforeMs: k(2500), gapAfterMs: k(-900) }],
 };
 const neutralised: IncidentEntry = {
   id: 'neutralised::190000', at: toSessionTime(190_000), lap: 19, kind: 'neutralised', severity: 'minor', carIds: [],
@@ -73,6 +88,10 @@ const gallery: GalleryEntry<typeof widget> = {
     battleMoment: { feed: [collision, warning], cars, moment: moment('battle') },
     // A drive-through, a stop-go and a 5 s time penalty among the feed: each names its ruling.
     driveThrough: { feed: [driveThrough, stopGo, timePenalty, collision, warning], cars, moment: undefined },
+    // Warnings by kind: corner cutting with its count, a collision by name, an unnamed infringement as a bare warning.
+    warningKinds: { feed: [collisionWarning, unnamedWarning, warning, collision], cars, moment: undefined },
+    // Our teammate and the player each read their driver code in the for-us cell.
+    ourCars: { feed: [teammate, collision], cars, moment: undefined },
     // A car missing from cars.overview shows its mark in its place, with the reason on hover.
     unknownCar: { feed: [collision], cars: cars.slice(0, 2), moment: undefined },
     // Our position before and the gap after still to come: each mark sits where its value goes, `us …→P4, OCO +4.1→…`.

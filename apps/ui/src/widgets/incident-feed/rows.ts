@@ -3,7 +3,7 @@ import type { CarOverview } from '@pitwall/contracts';
 import type { CarId, IncidentEntry, IncidentForUs, IncidentKind, IncidentPenalty, Known, RaceMoment, UnknownReason } from '@pitwall/domain';
 import { carCodeById } from '../../kit/car/car-label.ts';
 import { fitCell, fitParts, knownPart, unknownPart, type CellPart } from '../../kit/grid/grid.ts';
-import { arrow, incidentKinds, insightText, sectorNames, separator, topBar, unknownReason } from '../../kit/text.ts';
+import { arrow, incidentKinds, warningKind, insightText, sectorNames, separator, topBar, unknownReason } from '../../kit/text.ts';
 import type { WidgetSize } from '../../kit/types.ts';
 import { formatCount, formatDeltaPct, formatLapNumber, formatSeconds, formatSignedSeconds } from '../../kit/values/format.ts';
 import { positionPairParts } from '../../kit/values/position-mark.ts';
@@ -42,7 +42,7 @@ const pieceParts = (p: Piece): CellPart[] => (p.lead === '' ? p.value : [{ text:
  * not applicable: `DNF`.
  */
 function forUsPieces(f: IncidentForUs, cars: readonly CarOverview[]): Piece[] {
-  const ours: Piece[] = [{ lead: '', value: [{ text: text.us }] }, { lead: ' ', value: positionPairParts(f.positionBefore, f.positionAfter) }];
+  const ours: Piece[] = [{ lead: '', value: [carCodeById(cars, f.ourCarId)] }, { lead: ' ', value: positionPairParts(f.positionBefore, f.positionAfter) }];
   if (!f.otherCarId.known) return ours;
   const after = f.gapAfterMs.known || f.gapAfterMs.reason !== 'notApplicable' ? knownPart(f.gapAfterMs, signedSeconds) : { text: text.retired };
   return [
@@ -93,12 +93,18 @@ function penaltyText(penalty: IncidentPenalty): string {
   return penalty.timeMs === undefined ? '' : text.timePenalty(formatSeconds(penalty.timeMs, 0));
 }
 
+/** What a warning was for: `corner cutting 2/3` (its count of the limit), or the infringement's name (`collision`), `warning` when we cannot name it. */
+function warningDetail(warning: NonNullable<IncidentEntry['warning']>): string {
+  if (warning.kind === 'cornerCutting' || warning.kind === undefined) return `${warningKind('cornerCutting')} ${text.warningCount(formatCount(warning.count), formatCount(warning.limit))}`;
+  return warningKind('other', warning.infringement?.known ? warning.infringement.value : undefined);
+}
+
 /** The entry's detail: the damaged parts, a warning's count of the limit, a penalty's ruling, or the sector; empty when it has none known. */
 function detailText(entry: IncidentEntry): string {
   if (entry.damage !== undefined) {
     return entry.damage.map((d) => text.damagePart(insightText.part[d.part], formatDeltaPct(d.deltaPct))).join(text.partsJoint);
   }
-  if (entry.warning !== undefined) return text.warningCount(formatCount(entry.warning.count), formatCount(entry.warning.limit));
+  if (entry.warning !== undefined) return warningDetail(entry.warning);
   if (entry.penalty !== undefined) return penaltyText(entry.penalty);
   return SECTOR_KINDS.has(entry.kind) && entry.where.sector.known ? sectorNames[entry.where.sector.value] : '';
 }
@@ -115,8 +121,16 @@ function whatText(entry: IncidentEntry, cars: readonly CarOverview[]): string {
   const kind = incidentKinds[entry.kind];
   const detail = detailText(entry);
   if (detail === '') return kind;
+  if (entry.warning !== undefined) return detail === warningKind('other') ? kind : text.warningWhat(kind, detail);
   const both = text.withDetail(kind, detail);
   return both.length <= widths.what ? both : detail;
+}
+
+/** The what cell; an infringement the game did not send leaves the reason on the hover. */
+function whatCell(entry: IncidentEntry, cars: readonly CarOverview[]): IncidentCell {
+  const cell: IncidentCell = { text: whatText(entry, cars) };
+  const infringement = entry.warning?.kind === 'other' ? entry.warning.infringement : undefined;
+  return infringement !== undefined && !infringement.known ? { ...cell, reason: infringement.reason } : cell;
 }
 
 /** One row per entry, in feed order. */
@@ -129,7 +143,7 @@ export function incidentRows(feed: readonly IncidentEntry[], cars: readonly CarO
       cells: {
         lap: { text: formatLapNumber(entry.lap) },
         cars: carsCell(entry.carIds, cars),
-        what: { text: whatText(entry, cars) },
+        what: whatCell(entry, cars),
         lost,
         forUs: forUsCells(entry, cars),
       },
