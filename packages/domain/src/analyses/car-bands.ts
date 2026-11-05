@@ -13,8 +13,11 @@ export type BandReading = {
    * swings 30–60 °C within a lap and the brakes fall below the band on many straights, so only `outForFullLap` judges them.
    */
   state: Known<BandState>;
-  /** The band in the channel's unit (°C or psi); tyre bands are per compound. */
-  band: { lo: number; hi: number };
+  /**
+   * The band in the channel's unit (°C or psi); tyre bands are per compound. Unknown, with the live state's own reason,
+   * when the band depends on a value the live state does not have (the pressure band without the player's setup).
+   */
+  band: Known<{ lo: number; hi: number }>;
   /** The last completed lap's whole range (min and max) was outside the band. */
   outForFullLap: boolean;
 };
