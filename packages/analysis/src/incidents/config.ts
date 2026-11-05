@@ -20,6 +20,10 @@ export const INCIDENTS_CONFIG = defineConfig('incidents', {
   neutralisedMajor: false,
   /** Entries the feed keeps, newest first. Source: pitwall estimate. */
   feedLength: 50,
+  /** A time loss this close to a collision or damage jump of the same car is part of that entry. Source: pitwall estimate. */
+  mergeMs: 5_000,
+  /** The "after" of an entry's positions and gaps is this long after the incident. Source: pitwall estimate. */
+  afterMs: 5_000,
   /**
    * A neutralisation's cause is the newest collision, retirement, damage or time loss of any car at most this long before
    * its start. Source: pitwall estimate (the first live test's SC came 3.5 s after its collision).

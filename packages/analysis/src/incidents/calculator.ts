@@ -68,11 +68,6 @@ import {
 } from './incidents.ts';
 import { INCIDENTS, INCIDENTS_CONFIG, type IncidentsOutput } from './index.ts';
 
-/** "After" is this long after the incident. */
-const AFTER_MS = 5_000;
-/** A time loss this close to a collision or damage jump of the same car is part of that entry. */
-const MERGE_MS = 5_000;
-
 type Config = ReturnType<typeof INCIDENTS_CONFIG.read>;
 
 const MAJOR = {
@@ -523,7 +518,7 @@ const candidates = (acc: Board): Candidate[] => {
   const absorbers = list.filter((c) => c.kind === 'collision' || c.kind === 'damage');
   for (const run of standingRuns(acc)) {
     // F1 25 names a collision's two cars in no fixed order, so either one's time loss belongs to it.
-    const into = absorbers.filter((c) => c.carIds.includes(run.carId) && Math.abs(c.at - run.at) <= MERGE_MS);
+    const into = absorbers.filter((c) => c.carIds.includes(run.carId) && Math.abs(c.at - run.at) <= acc.config.mergeMs);
     for (const c of into) c.merged.push(run);
     if (into.length === 0) list.push(candidate('timeLoss', run.at, [run.carId], { lap: lapOfProgress(run.startProgress), run }));
   }
@@ -604,7 +599,7 @@ const gapAfter = (acc: Board, after: Snapshot | undefined, ours: CarId, other: C
 /** Per our car that is involved or has an involved car in its neighbourhood: its position and gap before and after. */
 const forUsOf = (acc: Board, c: Candidate): IncidentForUs[] => {
   const before = snapshot(acc, c.at);
-  const afterAt = c.at + AFTER_MS;
+  const afterAt = c.at + acc.config.afterMs;
   const after = acc.newestAt >= afterAt ? snapshot(acc, afterAt) : undefined;
   const items: IncidentForUs[] = [];
   for (const ours of acc.ours) {
@@ -652,7 +647,7 @@ const CAUSE_KINDS = new Set(['collision', 'retirement', 'damage', 'timeLoss'] as
 
 const isCauseKind = (kind: IncidentKind): kind is IncidentCause['kind'] => (CAUSE_KINDS as ReadonlySet<IncidentKind>).has(kind);
 
-/** Kinds that follow from a collision of their car: a damage jump or time loss up to `MERGE_MS` after it is its consequence. */
+/** Kinds that follow from a collision of their car: a damage jump or time loss up to `mergeMs` after it is its consequence. */
 const CONSEQUENCE_KINDS: ReadonlySet<IncidentKind> = new Set(['damage', 'timeLoss']);
 
 /**
@@ -670,7 +665,7 @@ const causesOf = (acc: Board, sorted: readonly Candidate[]): Map<string, Inciden
     if (newest === undefined) continue;
     const root = CONSEQUENCE_KINDS.has(newest.kind)
       ? sorted.find(
-          (c) => c.kind === 'collision' && inWindow(c) && c.at <= newest.at && newest.at - c.at <= MERGE_MS && c.carIds.some((id) => newest.carIds.includes(id)),
+          (c) => c.kind === 'collision' && inWindow(c) && c.at <= newest.at && newest.at - c.at <= acc.config.mergeMs && c.carIds.some((id) => newest.carIds.includes(id)),
         )
       : undefined;
     const cause = root ?? newest;
