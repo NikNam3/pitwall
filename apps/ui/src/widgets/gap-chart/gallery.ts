@@ -42,18 +42,22 @@ const sessionInfo = {
   realism: false,
 } as unknown as SessionInfo;
 
+/** One car of the window. */
+type Line = GapperLines['cars'][number];
+const entry = (id: number, points: Line['points'], now: Line['now']): Line => ({ carId: carId(id), points, now });
+
 /**
- * Gap in ms per lap: `step` ms more each lap, plus `jump.ms` from lap `jump.at` on, so the lines fan out. With
- * `nowLap` the car is that far into its current lap and has a live point there on the same trend; without it the car
- * has just crossed the line (no live point).
+ * Gap in ms per lap, one point at each line: `step` ms more each lap, plus `jump.ms` from lap `jump.at` on, so the
+ * lines fan out. With `nowLap` the car is that far into its current lap and has a live point there on the same trend;
+ * without it the car has just crossed the line (no live point).
  */
-const line = (id: number, laps: number, step: number, jump?: { at: number; ms: number }, nowLap?: number): GapperLines['cars'][number] => {
+const line = (id: number, laps: number, step: number, jump?: { at: number; ms: number }, nowLap?: number): Line => {
   const gapAt = (lap: number) => step * lap + (jump !== undefined && lap >= jump.at ? jump.ms : 0);
-  return {
-    carId: carId(id),
-    byLap: Array.from({ length: laps }, (_, i) => ({ lap: i + 1, gapMs: gapAt(i + 1) })),
-    now: nowLap === undefined ? unknown('notApplicable') : known({ lap: nowLap, gapMs: Math.round(gapAt(nowLap)) }, 0),
-  };
+  return entry(
+    id,
+    Array.from({ length: laps }, (_, i) => ({ lap: i + 1, gapMs: gapAt(i + 1) })),
+    nowLap === undefined ? unknown('notApplicable') : known({ lap: nowLap, gapMs: Math.round(gapAt(nowLap)) }, 0),
+  );
 };
 
 /** Live, mid-lap: the leader 60 % into lap 13, each car behind it a little less far. */
@@ -62,6 +66,24 @@ const liveLap = (rank: number) => 12.6 - 0.03 * rank;
 /** The six cars in running order (VER, NOR, LEC, KUH, PIA, ZHO), 12 laps and a live point each; `steps[rank]` per car. */
 const liveField = (steps: number[], jump?: { at: number; ms: number }) =>
   [2, 3, 5, 0, 4, 1].map((id, rank) => line(id, 12, steps[rank] ?? 0, jump, liveLap(rank)));
+
+/**
+ * The window's car at mini-sector resolution: per lap before `fineFrom` one point at the line, from there on a point per
+ * mini-sector crossing (x = laps + segment / 50), on the trend `step` ms per lap.
+ */
+const segLine = (id: number, laps: number, step: number, nowLap: number, fineFrom = laps - 2): Line => {
+  const gapAt = (lap: number) => Math.round(step * lap);
+  const xs: number[] = [];
+  for (let lap = 1; lap <= laps; lap++) {
+    if (lap < fineFrom) xs.push(lap);
+    else for (let seg = 0; seg < 50; seg += 5) xs.push(lap + seg / 50);
+  }
+  return entry(
+    id,
+    xs.filter((x) => x <= nowLap).map((x) => ({ lap: x, gapMs: gapAt(x) + Math.round(40 * Math.sin(x * 9)) })),
+    known({ lap: nowLap, gapMs: gapAt(nowLap) }, 0),
+  );
+};
 
 const lines = (over: Partial<GapperLines> = {}): GapperLines => ({
   reference: { kind: 'leaderAverage', carId: unknown('notApplicable') },
@@ -95,6 +117,14 @@ const gallery: GalleryEntry<typeof widget> = {
     // default reference; our car white and thicker, the teammate dashed, McLaren's second car dashed; mid-lap, so each
     // line runs dotted from lap 12 to its live point
     greenFlag: base,
+    // the window: our two cars and three rivals within the gap window (the rest of the field is not drawn); every
+    // rival grey, ours white; per-segment points over the last laps, one point per lap before
+    windowOfFive: {
+      ...base,
+      gapper: lines({
+        cars: [segLine(2, 12, 0, 12.6), segLine(3, 12, 300, 12.57), segLine(0, 12, 600, 12.54), segLine(1, 12, 900, 12.51), segLine(4, 12, 1100, 12.48)],
+      }),
+    },
     // a train within a second of the leader, ZHO far behind: five lines end within one text row, so their end labels
     // are pushed apart in gap order; where the plot is too low for all of them (compact), KUH's label and the nearest
     // to it stay and the rest are dropped (their lines stay)
@@ -128,7 +158,7 @@ const gallery: GalleryEntry<typeof widget> = {
       ...base,
       gapper: lines({
         referenceLapMs: known(104_200, 0),
-        cars: [2, 3, 5, 0, 4, 1].map((id, rank) => ({ carId: carId(id), byLap: [], now: known({ lap: 0.35 - 0.02 * rank, gapMs: -400 * rank }, 0) })),
+        cars: [2, 3, 5, 0, 4, 1].map((id, rank) => entry(id, [], known({ lap: 0.35 - 0.02 * rank, gapMs: -400 * rank }, 0))),
       }),
     },
     // a car average of a car the field lacks: the header shows the mark where the car's code goes

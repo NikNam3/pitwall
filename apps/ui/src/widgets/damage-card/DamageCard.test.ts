@@ -16,7 +16,10 @@ const PARTS: DamageParts = {
   frontLeftWingPct: 18, frontRightWingPct: 0, rearWingPct: 0, floorPct: 0, diffuserPct: 0, sidepodPct: 0, gearboxPct: 0, enginePct: 0,
 };
 const corner = { tyrePct: known(0, 0), brakePct: known(0, 0) };
-const jump = (lossMsPerLap: DamageJump['lossMsPerLap']): DamageJump => ({ at: 150_000, lap: 2, parts: ['frontLeftWingPct'], deltaPct: 18, lossMsPerLap });
+/** A jump with this loss; not measuring and without an estimate (the card's plain loss texts). */
+const jump = (lossMsPerLap: DamageJump['lossMsPerLap']): DamageJump => ({
+  at: 150_000, lap: 2, parts: ['frontLeftWingPct'], deltaPct: 18, lossMsPerLap, measuring: unknown('notApplicable'), estimateMsPerLap: unknown('notApplicable'),
+});
 const damage = (j: DamageJump): DamageState => ({
   parts: known(PARTS, 0), corners: { fl: corner, fr: corner, rl: corner, rr: corner }, drsFault: known(false, 0), ersFault: false, jumps: [j],
 });

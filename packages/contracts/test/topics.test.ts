@@ -67,12 +67,12 @@ describe('TOPICS', () => {
       .map(([key, d]) => [key, d.owner, d.scope, d.mode, d.maxHz] as const)
       .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
     expect(table).toEqual([
-      ['battle.cards', 'battle', 'feed', 'state', 2],
+      ['battle.cards', 'battle', 'feed', 'state', 4],
       ['carBands.car', 'car-bands', 'feed', 'state', 4],
       ['damage.car', 'damage', 'feed', 'state', 4],
       ['ers.car', 'ers', 'feed', 'state', 4],
       ['fuel.car', 'fuel', 'feed', 'state', 4],
-      ['gaps.gapper', 'gaps', 'feed', 'state', 1],
+      ['gaps.gapper', 'gaps', 'feed', 'state', 4],
       ['gaps.intervals', 'gaps', 'feed', 'state', 4],
       ['gaps.neighbourhood', 'gaps', 'feed', 'state', 2],
       ['gaps.toCar', 'gaps', 'feed', 'state', 4],

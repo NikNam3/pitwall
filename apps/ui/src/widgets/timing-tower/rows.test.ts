@@ -105,12 +105,39 @@ describe('buildRows', () => {
     expect(us?.sectors[1]?.status).toBe('personalBest');
   });
 
+  it('shows the newest sectors as they finish, with their status roles', () => {
+    const input = base();
+    input.board = lapBoard(1, [
+      boardRow(0, 104_912, [28_104, 41_311, 35_497], ['none', 'none', 'none'], 'none', { sectors: [28_000, 41_100], status: ['sessionBest', 'personalBest', 'none'] }),
+      boardRow(1, 105_031, [28_211, 41_402, 35_418], ['none', 'none', 'none'], 'none', { sectors: [28_000, 41_100], status: ['sessionBest', 'personalBest', 'none'] }),
+      boardRow(2, 105_208),
+    ]);
+    const [vsr, us] = buildRows(input);
+    expect(vsr?.sectors.map((s) => s.timeMs)).toEqual([ms(28_000), ms(41_100), { known: false, reason: 'notReceived' }]);
+    expect(vsr?.sectors.map((s) => s.status)).toEqual(['sessionBest', 'personalBest', 'none']);
+    expect(vsr?.sectors.map((s) => s.role)).toEqual(['best', undefined, undefined]);
+    expect(us?.sectors.map((s) => s.role)).toEqual(['best', 'personalBest', undefined]);
+  });
+
+  it('dims an older sector in textFaint with no best colour', () => {
+    const input = base();
+    input.board = lapBoard(1, [
+      boardRow(0, 104_912, [], ['none', 'none', 'none'], 'none', { sectors: [28_000, 41_311, 35_497], status: ['none', 'sessionBest', 'personalBest'], older: [false, true, true] }),
+      boardRow(1, 105_031, [], ['none', 'none', 'none'], 'none', { sectors: [28_000, 41_402, 35_418], status: ['none', 'personalBest', 'personalBest'], older: [false, true, true] }),
+      boardRow(2, 105_208),
+    ]);
+    const [vsr, us] = buildRows(input);
+    expect(vsr?.sectors.map((s) => s.older)).toEqual([false, true, true]);
+    expect(vsr?.sectors.map((s) => s.role)).toEqual([undefined, 'textFaint', 'textFaint']);
+    expect(us?.sectors.map((s) => s.role)).toEqual([undefined, 'textFaint', 'textFaint']);
+  });
+
   it('keeps a realism-hidden rival as unknown cells and still builds the row', () => {
     const input = base();
     input.board = lapBoard(1, [...input.board.rows.slice(0, 2), boardRow(2, 'realism')]);
     const alb = buildRows(input)[2];
     expect(alb?.lastLap).toEqual({ known: false, reason: 'realism' });
-    expect(alb?.sectors.every((s) => !s.timeMs.known && s.status === 'none')).toBe(true);
+    expect(alb?.sectors.every((s) => !s.timeMs.known && s.status === 'none' && s.role === undefined && !s.older)).toBe(true);
   });
 
   it('shows unknown cells for a car missing from the gap and lap topics', () => {

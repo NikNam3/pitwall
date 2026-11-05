@@ -1,5 +1,5 @@
 // Test races for `gaps`: mini-sector histories with car states that agree with them (position, lap, total distance).
-import { carId, MINI_SECTORS, unknown, type CarId, type CarState, type MiniSectorCrossing, type OpenSpan, type Span, type WeekendPhase } from '@pitwall/domain';
+import { carId, MINI_SECTORS, unknown, type CarId, type CarState, type GapperLines, type MiniSectorCrossing, type OpenSpan, type Span, type WeekendPhase } from '@pitwall/domain';
 import { projectionLengths, type EngineView } from '@pitwall/engine';
 import { carState, crossings, engineView, phaseSpans } from '../../../../test-support/builders/index.ts';
 import { guardedView } from '../../../engine/test/support/scheduler.ts';
@@ -100,13 +100,14 @@ export function carsFor(miniSectors: MiniSectorCrossing[], over: Record<number, 
  * open now (default `racing`, or `startLights` before lights out). `phases` are the neutralisations closed in the
  * projection (`neutralisation` builds them), `open` the one open in the situation (default none, C20); `racing`
  * closes at the first of them and, with no `open`, reopens after the last. In practice, qualifying and `none` the
- * session-phase span open is `running`.
+ * session-phase span open is `running`. `teammateCar` makes a second car ours (`ourCars`).
  */
 export const viewOf = (
   miniSectors: MiniSectorCrossing[],
   {
     cars,
     playerCar = 0,
+    teammateCar,
     config = {},
     lightsOutAt = 0,
     kind = 'race',
@@ -117,6 +118,7 @@ export const viewOf = (
   }: {
     cars?: CarState[];
     playerCar?: number;
+    teammateCar?: number;
     config?: EngineView['config'];
     lightsOutAt?: number | null;
     kind?: Phase;
@@ -162,13 +164,14 @@ export const viewOf = (
     byMachine[`session-phase-${kind}`] = [openSpan(`session-phase-${kind}`, 'running', 0)];
   }
   const { spans, situation } = phaseSpans(closed, open, { weekendPhase, byMachine });
-  return engineView({
+  const view = engineView({
     cars: carStates,
     history: { crossings: miniSectors, spans },
     situation,
     playerCar,
     config,
   });
+  return teammateCar === undefined ? view : { ...view, live: { ...view.live, teammateCar: carId(teammateCar) } };
 };
 
 /** The view as the scheduler hands it to `gaps`: through its guarded view, so a read it does not declare throws (C41). */
@@ -189,6 +192,29 @@ export const deltaOf = (from: EngineView, to: EngineView, rewound = false) => ({
 
 /** Turns -0 into 0 so `toEqual` compares the number, not its sign bit. */
 export const plain = (n: number): number => n + 0;
+
+/** A gapper point's x in mini-sectors from the start line: completed laps × 50 + segment (`lap` = that / 50). */
+export const progressAtX = (lap: number): number => Math.round(lap * MINI_SECTORS);
+
+/** Whether a gapper point lies on a line crossing: a whole lap. */
+export const isWholeLap = (lap: number): boolean => Math.abs(lap * MINI_SECTORS - progressAtX(lap)) < 1e-6 && progressAtX(lap) % MINI_SECTORS === 0;
+
+/**
+ * A car's gapper points at whole laps (its line crossings after lights out) as `[lap, gapMs]`, from `points`; laps from
+ * 1 (the start line, x = 0, is not pinned). `undefined` when the car is not in `cars` (the window).
+ */
+export const lapPoints = (lines: GapperLines, id: number): [number, number][] | undefined =>
+  lines.cars
+    .find((c) => c.carId === id)
+    ?.points.filter((p) => isWholeLap(p.lap) && p.lap >= 1)
+    .map((p): [number, number] => [progressAtX(p.lap) / MINI_SECTORS, plain(p.gapMs)]);
+
+/** A car's gapper points as `[progress, gapMs]` (x × 50, so whole numbers compare exactly). */
+export const pointsByProgress = (lines: GapperLines, id: number): [number, number][] | undefined =>
+  lines.cars.find((c) => c.carId === id)?.points.map((p): [number, number] => [progressAtX(p.lap), plain(p.gapMs)]);
+
+/** The car ids of the gapper's lines (the window), sorted. */
+export const windowOf = (lines: GapperLines): number[] => lines.cars.map((c) => c.carId as number).sort((a, b) => a - b);
 
 /**
  * A garage restart's pass (as `lap-times`' scene builds it): car `car` runs lap `lapNumber` again from segment 0 at

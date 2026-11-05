@@ -5,5 +5,5 @@ export const widget = declareWidget({
   name: 'fuel-gauge',
   title: 'Fuel',
   data: { fuel: topic('fuel.car', ({ link }) => ({ carId: link.primary })) },
-  sizes: { compact: { minCols: 30, minRows: 2 }, full: { minCols: 30, minRows: 6 } },
+  sizes: { compact: { minCols: 30, minRows: 2 }, full: { minCols: 30, minRows: 7 } },
 });

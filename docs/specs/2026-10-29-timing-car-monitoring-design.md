@@ -131,16 +131,15 @@ Reads `lap-classes`, `pace`, the lap history, the mini-sector history and `sessi
 - `lapTimes.projection` (`CarParams`): for a car on a lap that is not an in or out lap, the **projected lap** = elapsed time at its latest crossing k + (its best lap − its best lap's time at crossing k), the live delta to its best, and its projected position. In qualifying also the **cut-off**: the position that is knocked out, the cut-off time and our margin to it (from the other cars' bests, so it stands on out laps too). In timed sessions the **finish margin**: the time left on the clock when the car will cross the line, positive if another lap can still start (this replaces V11's dot on a track map).
 
 ### 6.3 `battle` → `battle.cards` (`CarParams`)
-Reads `gaps`, `pace`, `per-lap-rate` and the car state. Race only. For each of our cars, the car ahead and the car behind:
+Reads `gaps`, the mini-sector crossings, the car state and the spans it needs. Race only. Incremental (its accumulator: each car's current crossings of its last 4 laps). For each of our cars, the car ahead and the car behind:
 - gap now
-- closing rate in ms/lap (`per-lap-rate` over the gap at each line crossing)
-- laps to DRS range (`drsRangeMs`)
-- pace delta (`pace`)
-- the pace delta's margin over the overtaking threshold (config)
+- pace delta in s/lap: both cars' times over the same last 50 mini-sectors, segments where either car was in the pit lane or a neutralisation was out skipped, at most 3 laps back, `insufficientData` below `minPaceSegments` (25)
+- the margin: `pass` ahead (our edge − the overtaking threshold), `hold` behind (the threshold − their edge)
+- laps to DRS range (`drsRangeMs`), from the pace delta
 - compound and tyre age of both cars
 - the rival's ERS store when visible
 
-Numbers only, no "can pass".
+Numbers only, no "can pass". Every number is positive when it is good for our car. (Changed by the live polish run, 2026-11-05: the closing rate went; the pace delta and margin follow every mini-sector; spec `docs/history/specs/2026-11-05-live-polish/`.)
 
 ### 6.4 `incidents` → `incidents.feed`
 Reads `gaps` (the neighbourhood and the gaps before and after), `damage`, `pace-delta`, the events, the flag phases and the mini-sector history. Race only. One entry per incident to our cars or a car in their neighbourhood at that moment:
@@ -205,7 +204,7 @@ A display may read `raceMoment.current` as an optional topic, and its emphasis f
 | `gap-chart` (V04) | race | `gaps.gapper` (its `phases`: the neutralised and suspended session-phase spans) | gapper line per car with SC/VSC phase bands; the reference in the panel header | our cars white, every other car in its team colour (UI shell rule) |
 | `lap-analysis` (V28) | all | `lapTimes.board` | best lap and sectors per car as deltas to the reference car, theoretical best | session and personal bests |
 | `projected-lap` (V10, V11) | practice, quali | `lapTimes.projection`, `session.info` | projected lap, delta to best, projected position; in quali the cut-off and our margin; in timed sessions the finish margin | projection beyond the cut-off (critical), finish margin below zero |
-| `battle-cards` (V14) | race | `battle.cards`, `raceMoment.current` (optional) | ahead and behind: gap, closing rate, laps to DRS, pace delta and its margin, tyres, rival ERS | in the battle moment: the card at or below `battleLaps` |
+| `battle-cards` (V14) | race | `battle.cards`, `raceMoment.current` (optional) | ahead and behind: gap, pace delta, PASS or HOLD margin, laps to DRS, tyres, rival ERS | in the battle moment: the card at or below `battleLaps` |
 | `incident-feed` (V35) | race | `incidents.feed`, `raceMoment.current` (optional) | one line per incident: lap, cars, what, time lost, what changed for us (`P7→P9`, gap); minor entries dimmed | in the incident moment: the newest major entry |
 
 ### 8.4 UI kit pieces, built first (supervisor)
@@ -501,7 +500,7 @@ export type GapperReference = { kind: 'leaderAverage' } | { kind: 'carAverage'; 
 export type GapperLines = {
   reference: { kind: GapperReference['kind']; carId: Known<CarId> }; // carId notApplicable unless carAverage
   referenceLapMs: Known<Ms>;
-  cars: { carId: CarId; byLap: { lap: number; gapMs: Ms }[] }[];
+  cars: { carId: CarId; points: { lap: number; gapMs: Ms }[] }[]; // only the window's cars; per mini-sector for the last fineLaps laps, per lap before (live polish 2026-11-05)
 };
 export type Neighbourhood = { ourCarId: CarId; carIds: CarId[] };
 
@@ -539,10 +538,9 @@ export type Projection = {
 export type BattleSide = {
   carId: CarId;
   gapMs: Known<Ms>;
-  closingMsPerLap: Known<number>;      // positive = the gap shrinks
   lapsToDrs: Known<number>;
   paceDeltaMs: Known<Ms>;              // positive = we are faster
-  overtakeMarginMs: Known<Ms>;         // paceDelta minus the overtaking threshold
+  margin: Known<{ kind: 'pass' | 'hold'; ms: Ms }>; // positive = good for us (live polish 2026-11-05)
   ours: { compound: VisualCompound; age: number };
   theirs: { compound: VisualCompound; age: number };
   theirErsStoreJ: Known<Joules>;

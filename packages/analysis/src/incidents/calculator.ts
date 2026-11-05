@@ -15,7 +15,6 @@ import {
   type CarId,
   type CurrentLaps,
   type FrameNumber,
-  type DamageJump,
   type IncidentCause,
   type IncidentDamagePart,
   type IncidentEntry,
@@ -41,7 +40,7 @@ import { GAPS_CONFIG } from '../gaps/index.ts';
 import { LAP_CLASSES_CONFIG } from '../lap-classes/index.ts';
 import { PACE_CONFIG } from '../pace/index.ts';
 import { paceDeltaAround } from '../pace-delta/index.ts';
-import { emptyDamageJumps, finishJump, foldDamageJumps, type DamageJumpFold } from '../shared/damage-jumps.ts';
+import { emptyDamageJumps, finishJump, foldDamageJumps, type DamageJumpFold, type FinishedJump } from '../shared/damage-jumps.ts';
 import { isNeutralisation, leaderLapAt, NEUTRALISATION_MACHINES, NEUTRALISATION_READS, neutralisationKind, type NeutralisationKind } from '../shared/neutralised.ts';
 import { behaviourFor } from '../shared/behaviour.ts';
 import { ourCars } from '../shared/our-cars.ts';
@@ -91,6 +90,8 @@ type CarEvent = {
   at: SessionTime;
   carIds: CarId[];
   cornerCutting?: number;
+  /** On a warning of another kind, the warned span's infringement code. */
+  infringement?: Known<number>;
   penalty?: IncidentPenalty;
 };
 
@@ -246,7 +247,8 @@ const entriesOf = (machine: CarMachine, span: CarSpan, cornerCuttingBefore: numb
       return [{ kind: 'penalty', ...base, penalty: { kind: 'disqualified' } }];
     case 'warning': {
       const cornerCutting = cornerCuttingOf(machine, span);
-      return [{ kind: 'warning', ...base, ...(cornerCutting > cornerCuttingBefore && { cornerCutting }) }];
+      if (cornerCutting > cornerCuttingBefore) return [{ kind: 'warning', ...base, cornerCutting }];
+      return [{ kind: 'warning', ...base, infringement: (span.detail as WarnedDetail).infringement }];
     }
     default:
       return [];
@@ -441,10 +443,12 @@ type Candidate = {
   /** Known up front for damage and neutralised entries; otherwise from the primary car's crossings. */
   lap?: number;
   /** The first damage jump of a damage entry, and every jump of it. */
-  jump?: DamageJump;
-  jumps?: DamageJump[];
+  jump?: FinishedJump;
+  jumps?: FinishedJump[];
   /** A corner-cutting warning entry's count of the car's corner-cutting warnings. */
   cornerCutting?: number;
+  /** A warning entry of another kind: the warned span's infringement code. */
+  infringement?: Known<number>;
   /** A neutralised entry's kind (`neutralisationKind`). */
   neutralisation?: NeutralisationKind;
   /** A penalty entry's ruling. */
@@ -489,7 +493,7 @@ const standingRuns = (acc: Board): SlowRun[] =>
   });
 
 /** Every damage jump of every car, repaired or not, with its lap and loss (the lap from the crossings without a lap record). */
-const allJumps = (acc: Board): { carId: CarId; jump: DamageJump }[] =>
+const allJumps = (acc: Board): { carId: CarId; jump: FinishedJump }[] =>
   [...acc.grouping.jumps].flatMap(([carId, raws]) => {
     // integer keys iterate in ascending order: the car's laps by lap number
     const laps = Object.values(acc.current[carId] ?? {});
@@ -497,9 +501,9 @@ const allJumps = (acc: Board): { carId: CarId; jump: DamageJump }[] =>
   });
 
 /** Each car's damage jumps grouped: a jump within `jumpWindowMs` of a group's first one joins it (one incident, several parts). */
-const damageGroups = (acc: Board): { carId: CarId; jumps: DamageJump[] }[] => {
-  const groups: { carId: CarId; jumps: DamageJump[] }[] = [];
-  const open = new Map<CarId, { carId: CarId; jumps: DamageJump[] }>();
+const damageGroups = (acc: Board): { carId: CarId; jumps: FinishedJump[] }[] => {
+  const groups: { carId: CarId; jumps: FinishedJump[] }[] = [];
+  const open = new Map<CarId, { carId: CarId; jumps: FinishedJump[] }>();
   const sorted = allJumps(acc).sort((a, b) => a.jump.at - b.jump.at || a.carId - b.carId);
   for (const { carId, jump } of sorted) {
     const group = open.get(carId);
@@ -522,6 +526,7 @@ const candidates = (acc: Board): Candidate[] => {
     candidate(e.kind, e.at, e.carIds, {
       ...(e.id !== undefined && { id: e.id }),
       ...(e.cornerCutting !== undefined && { cornerCutting: e.cornerCutting }),
+      ...(e.infringement !== undefined && { infringement: e.infringement }),
       ...(e.penalty !== undefined && { penalty: e.penalty }),
     }),
   );
@@ -642,7 +647,7 @@ const lapOf = (acc: Board, c: Candidate): number => {
 };
 
 /** The parts of a damage entry's jumps and their rise, the biggest first; `damage` gives one part per jump. */
-const damageParts = (jumps: readonly DamageJump[]): IncidentDamagePart[] => {
+const damageParts = (jumps: readonly FinishedJump[]): IncidentDamagePart[] => {
   const rise = new Map<IncidentDamagePart['part'], number>();
   for (const j of jumps) for (const part of j.parts) rise.set(part, (rise.get(part) ?? 0) + j.deltaPct);
   return [...rise].map(([part, deltaPct]) => ({ part, deltaPct })).sort((a, b) => b.deltaPct - a.deltaPct);
@@ -650,13 +655,14 @@ const damageParts = (jumps: readonly DamageJump[]): IncidentDamagePart[] => {
 
 /**
  * The detail only some kinds have: a damage entry's parts, a corner-cutting warning's count of the limit (the
- * corner-cutting warnings, a penalty every `warningLimit`; a warning of another kind counts nothing), a penalty's ruling.
+ * corner-cutting warnings, a penalty every `warningLimit`), another warning's infringement, a penalty's ruling.
  */
 const detailOf = (acc: Board, c: Candidate): Pick<IncidentEntry, 'damage' | 'warning' | 'penalty'> => {
   if (c.jumps !== undefined) return { damage: damageParts(c.jumps) };
   if (c.cornerCutting !== undefined) {
-    return { warning: { count: warningInCycle(c.cornerCutting, acc.warningLimit), limit: acc.warningLimit } };
+    return { warning: { kind: 'cornerCutting', count: warningInCycle(c.cornerCutting, acc.warningLimit), limit: acc.warningLimit } };
   }
+  if (c.infringement !== undefined) return { warning: { kind: 'other', infringement: c.infringement } };
   if (c.penalty !== undefined) return { penalty: { ...c.penalty } };
   return {};
 };

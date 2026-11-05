@@ -32,7 +32,7 @@ const byKey = (fuel: FuelState) => Object.fromEntries(fuelRows(fuel).map((r) => 
 describe('fuelRows', () => {
   it('lists the rows in the mockup order with their labels', () => {
     expect(fuelRows(positive).map((r) => [r.key, r.label])).toEqual([
-      ['margin', 'MARGIN'], ['lasts', 'LASTS'], ['toGo', 'TO GO'], ['burn', 'BURN'], ['save', 'SAVE'], ['game', 'GAME'],
+      ['fuel', 'FUEL'], ['margin', 'MARGIN'], ['lasts', 'LASTS'], ['toGo', 'TO GO'], ['burn', 'BURN'], ['save', 'SAVE'], ['game', 'GAME'],
     ]);
   });
 
@@ -67,7 +67,7 @@ describe('fuelRows', () => {
   it('dims the game row and labels it as the game figure; no other row is dim', () => {
     const rows = byKey(positive);
     expect(rows.game).toMatchObject({ label: 'GAME', dim: true });
-    for (const key of ['margin', 'lasts', 'toGo', 'burn', 'save']) expect(rows[key]?.dim).toBeFalsy();
+    for (const key of ['fuel', 'margin', 'lasts', 'toGo', 'burn', 'save']) expect(rows[key]?.dim).toBeFalsy();
   });
 
   it('gives an empty cell with the reason for each unknown figure', () => {
@@ -90,8 +90,27 @@ describe('fuelRows', () => {
     expect(byKey({ ...positive, lapsOfFuel: unknown('realism') }).lasts).toMatchObject({ text: '', reason: 'realism' });
   });
 
+  it('shows the kg from the first lap: kg known, burn and the figures built on it insufficientData', () => {
+    const r = byKey({
+      ...positive,
+      kg: known(10, at),
+      burnKgPerLap: unknown('insufficientData'),
+      lapsOfFuel: unknown('insufficientData'),
+      lapsLeft: unknown('insufficientData'),
+      marginLaps: unknown('insufficientData'),
+    });
+    expect(r.fuel).toMatchObject({ label: 'FUEL', text: '10.0 kg' });
+    expect(r.lasts).toMatchObject({ text: '', reason: 'insufficientData' });
+    expect(r.burn).toMatchObject({ text: '', reason: 'insufficientData' });
+    expect(r.margin).toMatchObject({ text: '', reason: 'insufficientData' });
+  });
+
+  it('leaves the kg row empty, with its reason, when the kg are unknown', () => {
+    expect(byKey({ ...positive, kg: unknown('realism') }).fuel).toMatchObject({ text: '', reason: 'realism' });
+  });
+
   it('shows no role on the other rows', () => {
     const r = byKey(negative);
-    for (const key of ['lasts', 'toGo', 'burn', 'save', 'game']) expect(r[key]?.role).toBeUndefined();
+    for (const key of ['fuel', 'lasts', 'toGo', 'burn', 'save', 'game']) expect(r[key]?.role).toBeUndefined();
   });
 });

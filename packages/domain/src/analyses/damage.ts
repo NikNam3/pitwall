@@ -24,6 +24,14 @@ export type DamageJump = {
   deltaPct: Percent;
   /** Measured lap-time loss through `pace-delta`; `notApplicable` with fewer than two pace laps before the jump (it can never be measured); otherwise `insufficientData` until two pace laps after it. */
   lossMsPerLap: Known<Ms>;
+  /** While the loss is being measured over the pace laps after the jump (`lapsNeeded` 2); `notApplicable` otherwise. */
+  measuring: Known<{ lapsDone: number; lapsNeeded: number }>;
+  /**
+   * Estimated loss from the car's mini-sectors since the jump against its segment medians frozen at the jump, scaled to
+   * 50 segments, after at least `minEstimateSegments`; `notApplicable` once `lossMsPerLap` is known. A jump whose loss
+   * can never be measured keeps its estimate.
+   */
+  estimateMsPerLap: Known<Ms>;
 };
 
 /** `damage.car`: the car's damage now, its faults and its jumps. */

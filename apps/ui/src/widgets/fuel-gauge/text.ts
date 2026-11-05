@@ -1,5 +1,6 @@
 // Wording specific to this display; text shared with the kit and shell lives in kit/text.ts.
 export const labels = {
+  fuel: 'FUEL',
   margin: 'MARGIN',
   lasts: 'LASTS',
   toGo: 'TO GO',

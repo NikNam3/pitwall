@@ -46,7 +46,9 @@ const board = lapBoard(3, [
   boardRow(2, 105_208, [28_240, 41_630, 35_338], ['none', 'none', 'sessionBest']),
   boardRow(3, 104_876, [28_150, 41_288, 35_438], ['none', 'sessionBest', 'personalBest'], 'personalBest'),
   boardRow(4, undefined, [28_320]),
-  boardRow(5, 105_660, [28_402, 41_771, 35_487]),
+  boardRow(5, 105_660, [28_402, 41_771, 35_487], ['none', 'none', 'none'], 'none', {
+    sectors: [28_390, 41_700, 35_487], status: ['personalBest', 'none', 'none'], older: [false, true, true],
+  }),
   boardRow(6, 106_902, [28_771, 42_004, 36_127]),
   boardRow(7, 'retired'),
 ]);

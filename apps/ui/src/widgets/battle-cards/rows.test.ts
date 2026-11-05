@@ -12,11 +12,13 @@ const overview = (id: number, name: string): CarOverview =>
 const cars = [overview(1, 'Kuhnlein'), overview(3, 'Charles Leclerc'), overview(7, 'Alexander Albon')];
 
 const aheadSide: BattleSide = {
-  carId: carId(3), gapMs: k(3199), closingMsPerLap: k(310), lapsToDrs: k(7.1), paceDeltaMs: k(290), overtakeMarginMs: k(-710),
+  carId: carId(3), gapMs: k(3199), lapsToDrs: k(7.1), paceDeltaMs: k(430),
+  margin: k({ kind: 'pass', ms: 250 }),
   ours: { compound: 'medium', age: 12 }, theirs: { compound: 'hard', age: 23 }, theirErsStoreJ: k(3_100_000),
 };
 const behindSide: BattleSide = {
-  carId: carId(7), gapMs: k(841), closingMsPerLap: k(220), lapsToDrs: k(0), paceDeltaMs: k(-420), overtakeMarginMs: k(-1420),
+  carId: carId(7), gapMs: k(841), lapsToDrs: k(0), paceDeltaMs: k(-420),
+  margin: k({ kind: 'hold', ms: -400 }),
   ours: { compound: 'medium', age: 12 }, theirs: { compound: 'medium', age: 1 }, theirErsStoreJ: unknown('realism'),
 };
 const card = (over: Partial<BattleCard> = {}): BattleCard => ({ carId: OURS, ahead: k(aheadSide), behind: k(behindSide), drs: { enabled: true }, ...over });
@@ -39,7 +41,7 @@ describe('battleRows', () => {
   it('formats every column as in the mockup', () => {
     const [ahead] = battleRows(card(), cars, undefined);
     expect(Object.fromEntries(Object.entries(ahead!.cells).map(([c, cell]) => [c, cell.text]))).toEqual({
-      drv: 'LEC', gap: '−3.199', closing: '0.31 s/lap', toDrs: '7.1 laps', paceDelta: '+0.29', margin: '−0.71', tyres: 'M12 H23', ers: '3.1 MJ',
+      drv: 'LEC', gap: '−3.199', paceDelta: '+0.43 s/lap', margin: 'PASS +0.25 s/lap', toDrs: '7.1 laps', tyres: 'M12 H23', ers: '3.1 MJ',
     });
   });
 
@@ -47,14 +49,49 @@ describe('battleRows', () => {
     const [ahead, behind] = battleRows(card(), cars, undefined);
     expect(ahead!.cells.gap.text).toBe('−3.199');
     expect(behind!.cells.gap.text).toBe('+0.841');
-    expect(behind!.cells.paceDelta.text).toBe('−0.42');
-    expect(behind!.cells.margin.text).toBe('−1.42');
+    expect(behind!.cells.paceDelta.text).toBe('−0.42 s/lap');
+    expect(behind!.cells.margin.text).toBe('HOLD −0.40 s/lap');
   });
 
-  it('writes "in DRS" for 0 laps to DRS and a negative closing rate with its sign', () => {
-    const rows = battleRows(card({ behind: k({ ...behindSide, closingMsPerLap: k(-120) }) }), cars, undefined);
+  it('writes "in DRS" for 0 laps to DRS', () => {
+    const rows = battleRows(card(), cars, undefined);
     expect(rows[1]!.cells.toDrs.text).toBe('in DRS');
-    expect(rows[1]!.cells.closing.text).toBe('−0.12 s/lap');
+  });
+
+  it('has no CLOSING column or cell', () => {
+    expect(columnsFor('full')).not.toContain('closing');
+    const [ahead] = battleRows(card(), cars, undefined);
+    expect(Object.keys(ahead!.cells)).not.toContain('closing');
+    expect(battleHeader('full')).not.toContain('CLOSING');
+  });
+
+  it('names PASS on the AHEAD row and HOLD on the BEHIND row, with the sign of the margin', () => {
+    const [ahead, behind] = battleRows(card(), cars, undefined);
+    expect(ahead!.cells.margin.text).toBe('PASS +0.25 s/lap');
+    expect(behind!.cells.margin.text).toBe('HOLD −0.40 s/lap');
+  });
+
+  it('renders an unknown margin as an empty cell with its reason', () => {
+    const [ahead] = battleRows(card({ ahead: k({ ...aheadSide, margin: unknown('insufficientData') }) }), cars, undefined);
+    expect(ahead!.cells.margin).toMatchObject({ text: '', reason: 'insufficientData' });
+  });
+
+  it('writes no verdict word in any cell, header or row text', () => {
+    const rows = battleRows(card(), cars, undefined);
+    const all = [battleHeader('full'), ...rows.flatMap((r) => [battleRowText('full', r), ...Object.values(r.cells).map((c) => c.text)])].join(' ').toLowerCase();
+    expect(all).not.toMatch(/can pass|safe/);
+  });
+
+  it('a positive PASS is bold white (text), a negative HOLD is warning, nothing else lights the margin', () => {
+    const [ahead, behind] = battleRows(card(), cars, undefined);
+    expect(ahead!.cells.margin.role).toBe('text');
+    expect(behind!.cells.margin.role).toBe('warning');
+    const flipped = battleRows(card({
+      ahead: k({ ...aheadSide, margin: k({ kind: 'pass', ms: -100 }) }),
+      behind: k({ ...behindSide, margin: k({ kind: 'hold', ms: 100 }) }),
+    }), cars, undefined);
+    expect(flipped[0]!.cells.margin.role).toBeUndefined();
+    expect(flipped[1]!.cells.margin.role).toBeUndefined();
   });
 
   it('shows tyres as letter and age, ours then theirs', () => {
@@ -94,10 +131,12 @@ describe('battleRows', () => {
     expect(behind!.cells.drv.role).toBe('text');
     expect(behind!.cells.gap.role).toBe('text');
     expect(behind!.cells.toDrs.role).toBe('text');
-    expect(behind!.cells.closing.role).toBeUndefined();
-    expect(behind!.cells.margin.role).toBeUndefined();
+    expect(behind!.cells.paceDelta.role).toBeUndefined();
+    expect(behind!.cells.margin.role).toBe('warning');
     expect(ahead!.highlighted).toBe(false);
-    expect(Object.values(ahead!.cells).every((c) => c.role === undefined)).toBe(true);
+    // No other moment light: the unnamed row keeps only its own margin emphasis (a positive PASS is text).
+    expect(Object.entries(ahead!.cells).filter(([c, cell]) => c !== 'margin' && cell.role !== undefined)).toEqual([]);
+    expect(ahead!.cells.margin.role).toBe('text');
   });
 
   it('lights nothing without the moment, outside the battle moment, or for another car\'s card', () => {
@@ -146,26 +185,29 @@ describe('battleRows while race control has DRS off', () => {
 
   it('full and compact rows show DRS off in the TO DRS field', () => {
     const [ahead] = battleRows(drsOff('wetTrack'), cars, undefined);
-    expect(battleRowText('full', ahead!)).toBe('AHEAD  LEC −3.199 0.31 s/lap  DRS off  +0.29  −0.71 M12 H23 3.1 MJ');
+    expect(battleRowText('full', ahead!)).toContain('DRS off');
     expect(battleRowText('compact', ahead!)).toBe('AHEAD  LEC −3.199  DRS off');
   });
 });
 
 describe('text layout', () => {
-  it('full header over fixed fields', () => {
-    expect(battleHeader('full')).toBe('       DRV    GAP    CLOSING   TO DRS PACE Δ MARGIN TYRES      ERS');
+  it('full header names the columns in order: DRV GAP PACE Δ, the pass/hold margin, TO DRS, TYRES, ERS', () => {
+    const h = battleHeader('full');
+    const at = ['DRV', 'GAP', 'PACE Δ', 'TO DRS', 'TYRES', 'ERS'].map((t) => h.indexOf(t));
+    expect(at.every((i) => i >= 0)).toBe(true);
+    expect([...at].sort((x, y) => x - y)).toEqual(at);
   });
 
-  it('full rows right-align numbers in fixed fields, as the mockup', () => {
+  it('full rows are as long as the header and keep the column order', () => {
     const [ahead, behind] = battleRows(card(), cars, undefined);
-    expect(battleRowText('full', ahead!)).toBe('AHEAD  LEC −3.199 0.31 s/lap 7.1 laps  +0.29  −0.71 M12 H23 3.1 MJ');
-    expect(battleRowText('full', behind!).trimEnd()).toBe('BEHIND ALB +0.841 0.22 s/lap   in DRS  −0.42  −1.42 M12 M1');
+    expect(columnsFor('full')).toEqual(['drv', 'gap', 'paceDelta', 'margin', 'toDrs', 'tyres', 'ers']);
     expect(battleRowText('full', behind!)).toHaveLength(battleHeader('full').length);
+    expect(battleRowText('full', ahead!)).toMatch(/AHEAD +LEC +−3\.199 +\+0\.43 s\/lap +PASS \+0\.25 s\/lap +7\.1 laps +M12 H23 +3\.1 MJ/);
+    expect(battleRowText('full', behind!)).toMatch(/BEHIND +ALB +\+0\.841 +−0\.42 s\/lap +HOLD −0\.40 s\/lap +in DRS +M12 M1/);
   });
 
   it('compact shows DRV, GAP and TO DRS only', () => {
     expect(columnsFor('compact')).toEqual(['drv', 'gap', 'toDrs']);
-    expect(columnsFor('full')).toEqual(['drv', 'gap', 'closing', 'toDrs', 'paceDelta', 'margin', 'tyres', 'ers']);
     const [ahead] = battleRows(card(), cars, undefined);
     expect(battleHeader('compact')).toBe('       DRV    GAP   TO DRS');
     expect(battleRowText('compact', ahead!)).toBe('AHEAD  LEC −3.199 7.1 laps');

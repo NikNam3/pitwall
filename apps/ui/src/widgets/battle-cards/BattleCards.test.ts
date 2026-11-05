@@ -15,7 +15,8 @@ const overview = (id: number, name: string): CarOverview =>
   ({ id: carId(id), identity: { name, raceNumber: id }, timing: {}, tyres: {}, updatedAt: 0 }) as unknown as CarOverview;
 const cars = [overview(1, 'Kuhnlein'), overview(3, 'Charles Leclerc'), overview(7, 'Alexander Albon')];
 const side = (id: number, gapMs: number): BattleSide => ({
-  carId: carId(id), gapMs: k(gapMs), closingMsPerLap: k(200), lapsToDrs: unknown('notApplicable'), paceDeltaMs: k(100), overtakeMarginMs: k(-900),
+  carId: carId(id), gapMs: k(gapMs), lapsToDrs: unknown('notApplicable'), paceDeltaMs: k(100),
+  margin: k({ kind: 'pass', ms: 150 }),
   ours: { compound: 'inter', age: 4 }, theirs: { compound: 'inter', age: 6 }, theirErsStoreJ: k(2_000_000),
 });
 const card: BattleCard = { carId: carId(1), ahead: k(side(3, 1800)), behind: k(side(7, 2600)), drs: { enabled: false, reason: 'wetTrack' } };
@@ -34,5 +35,43 @@ describe('BattleCards: DRS off', () => {
   it.each(['full', 'compact'] as const)('%s: both rows read DRS off, each with the reason in its title', (mode) => {
     const fields = drsOffFields(show(mode).container);
     expect(fields.map((f) => f.title)).toEqual(['DRS off: wet track', 'DRS off: wet track']);
+  });
+});
+
+describe('BattleCards: pass and hold', () => {
+  const holdCard: BattleCard = {
+    carId: carId(1),
+    ahead: k({ ...side(3, 1800), margin: k({ kind: 'pass', ms: 250 }), lapsToDrs: k(3) }),
+    behind: k({ ...side(7, 600), margin: k({ kind: 'hold', ms: -400 }), lapsToDrs: k(0) }),
+    drs: { enabled: true },
+  };
+  const showHold = () =>
+    render(InPanel, {
+      component: BattleCards as unknown as Component<Record<string, unknown>>,
+      widgetProps: { data: { card: holdCard, cars, moment: undefined }, options: {}, size: { mode: 'full', cols: 90, rows: 6, px: { width: 900, height: 120 }, dpr: 1 }, link: {} },
+      cadenceMs: 50,
+    });
+  const field = (c: HTMLElement, t: string): HTMLElement | undefined => [...c.querySelectorAll('span')].find((s) => s.textContent?.trim() === t);
+
+  it('shows PASS +0.25 s/lap and HOLD −0.40 s/lap, and no CLOSING', () => {
+    const { container } = showHold();
+    expect(container.textContent).toContain('PASS +0.25 s/lap');
+    expect(container.textContent).toContain('HOLD −0.40 s/lap');
+    expect(container.textContent).not.toContain('CLOSING');
+  });
+
+  it('a positive PASS is bold white, a negative HOLD is bold warning', () => {
+    const { container } = showHold();
+    const pass = field(container, 'PASS +0.25 s/lap');
+    const hold = field(container, 'HOLD −0.40 s/lap');
+    expect(pass?.closest('strong')).not.toBeNull();
+    expect(pass?.getAttribute('style') ?? '').not.toMatch(/warning/);
+    expect(hold?.closest('strong')).not.toBeNull();
+    expect(hold?.getAttribute('style') ?? '').toMatch(/warning/);
+  });
+
+  it('writes no verdict word', () => {
+    const { container } = showHold();
+    expect((container.textContent ?? '').toLowerCase()).not.toMatch(/can pass|safe/);
   });
 });

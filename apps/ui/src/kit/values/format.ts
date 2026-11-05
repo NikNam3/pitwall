@@ -19,6 +19,13 @@ export function formatSessionClock(ms: Ms): string {
   return `${Math.floor(seconds / 3600)}:${pad(Math.floor((seconds % 3600) / 60), 2)}:${pad(seconds % 60, 2)}`;
 }
 
+/** Minutes and tenths, `1128600` -> `18:48.6`, `59999` -> `1:00.0`: rounded to the tenth before it is split. */
+export function formatMinutesTenths(ms: Ms): string {
+  const tenths = Math.round(Math.max(0, ms) / 100);
+  const minutes = Math.floor(tenths / 600);
+  return `${minutes}:${pad(Math.floor((tenths % 600) / 10), 2)}.${tenths % 10}`;
+}
+
 /** Lap time, `83456` -> `1:23.456`. */
 export const formatLapTime = (ms: Ms): string => minutesSeconds(ms, 1);
 
@@ -163,8 +170,8 @@ export const formatWarnings = (n: number): string => (Number.isFinite(n) ? `${n}
 /** A race position, `7` -> `7`; unknown is empty. */
 export const formatPlace = (n: number | undefined): string => (n === undefined || !Number.isFinite(n) ? '' : formatCount(n));
 
-/** A time loss in ms per lap as signed seconds to two decimals, `120` -> `+0.12 s/lap`. */
-export const formatSecondsPerLap = (ms: Ms): string => (Number.isFinite(ms) ? `${formatSignedSeconds(ms, 2)} s/lap` : '');
+/** A time loss in ms per lap as signed seconds (two decimals by default, `120` -> `+0.12 s/lap`; one: `800` -> `+0.8 s/lap`). */
+export const formatSecondsPerLap = (ms: Ms, decimals = 2): string => (Number.isFinite(ms) ? `${formatSignedSeconds(ms, decimals)} s/lap` : '');
 
 /** A rate in ms per lap as seconds to two decimals without a forced plus, `310` -> `0.31 s/lap`, `-120` -> `−0.12 s/lap`. */
 export const formatSecondsPerLapPlain = (ms: Ms): string => (Number.isFinite(ms) ? `${formatSeconds(ms, 2)} s/lap` : '');

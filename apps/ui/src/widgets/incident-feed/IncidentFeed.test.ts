@@ -52,35 +52,35 @@ const forUsText = (c: HTMLElement): string => line(c).slice(LEAD + widths.lap + 
 describe('IncidentFeed: the for-us cell places each mark at its unknown part', () => {
   it('an unknown position before: the mark before the arrow, the known position after kept', () => {
     const c = show([entry({ forUs: [forUs({ positionBefore: unknown('notReceived') })] })]);
-    expect(forUsText(c)).toBe(`us ${unknownMark.notReceived}→P4, OCO +4.1→DNF`);
+    expect(forUsText(c)).toBe(`KUH ${unknownMark.notReceived}→P4, OCO +4.1→DNF`);
     expect(marks(c, 'notReceived')).toHaveLength(1);
   });
 
   it('an unknown gap after: the mark after the arrow', () => {
     const c = show([entry({ forUs: [forUs({ gapAfterMs: unknown('notReceived') })] })]);
-    expect(forUsText(c)).toBe(`us P5→P4, OCO +4.1→${unknownMark.notReceived}`);
+    expect(forUsText(c)).toBe(`KUH P5→P4, OCO +4.1→${unknownMark.notReceived}`);
   });
 
   it('an unknown gap before: the mark before the arrow', () => {
     const c = show([entry({ forUs: [forUs({ gapBeforeMs: unknown('insufficientData'), gapAfterMs: k(5800) })] })]);
-    expect(forUsText(c)).toBe(`us P5→P4, OCO ${unknownMark.insufficientData}→+5.8`);
+    expect(forUsText(c)).toBe(`KUH P5→P4, OCO ${unknownMark.insufficientData}→+5.8`);
     expect(marks(c, 'insufficientData')).toHaveLength(1);
   });
 
   it('the other car missing from cars.overview: the mark where its code goes', () => {
     const c = show([entry({ carIds: [carId(2)], forUs: [forUs({ otherCarId: k(carId(9)) })] })]);
-    expect(forUsText(c)).toBe(`us P5→P4, ${unknownMark.notReceived} +4.1→DNF`);
+    expect(forUsText(c)).toBe(`KUH P5→P4, ${unknownMark.notReceived} +4.1→DNF`);
   });
 
   it('two unknown parts: two marks, each in its place', () => {
     const c = show([entry({ forUs: [forUs({ positionBefore: unknown('notReceived'), gapAfterMs: unknown('notReceived') })] })]);
-    expect(forUsText(c)).toBe(`us ${unknownMark.notReceived}→P4, OCO +4.1→${unknownMark.notReceived}`);
+    expect(forUsText(c)).toBe(`KUH ${unknownMark.notReceived}→P4, OCO +4.1→${unknownMark.notReceived}`);
     expect(marks(c, 'notReceived')).toHaveLength(2);
   });
 
   it('a known for-us cell has no mark', () => {
     const c = show([entry()]);
-    expect(forUsText(c)).toBe('us P5→P4, OCO +4.1→DNF');
+    expect(forUsText(c)).toBe('KUH P5→P4, OCO +4.1→DNF');
     expect(marks(c, 'notApplicable')).toEqual([]);
   });
 });

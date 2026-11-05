@@ -51,13 +51,13 @@ const incident = (over: Partial<IncidentEntry> = {}): IncidentEntry => ({
   ...over,
 });
 
+// battle's side as of the live polish (spec 3.1): `margin` from PACE Δ
 const side = (over: Partial<BattleSide> = {}): BattleSide => ({
   carId: car1,
   gapMs: known(5000, NOW),
-  closingMsPerLap: known(0, NOW),
   lapsToDrs: known(20, NOW),
   paceDeltaMs: known(0, NOW),
-  overtakeMarginMs: known(-1000, NOW),
+  margin: known({ kind: "pass" as const, ms: -1000 }, NOW),
   ours: { compound: "soft", age: 5 },
   theirs: { compound: "soft", age: 5 },
   theirErsStoreJ: na,
@@ -326,6 +326,26 @@ describe("race-moment calculator", () => {
       expect(v.moment).toBe("battle");
       expect(v.cause.rule).toBe("gap");
       expect(v.cause.params).toEqual({ carId: car0, side: "behind", gapMs: DRS });
+    });
+
+    it("with PACE Δ unknown (battle gives lapsToDrs its reason) a gap at or below drsRangeMs sets the battle by the gap rule, a gap beyond it none", () => {
+      const early = (gapMs: number) =>
+        side({
+          gapMs: known(gapMs, NOW),
+          paceDeltaMs: unknown("insufficientData"),
+          lapsToDrs: unknown("insufficientData"),
+          margin: unknown("insufficientData"),
+        });
+      const v = value(
+        run({ battle: { [car0]: card(known(early(DRS), NOW)) } }),
+      );
+      expect(v.moment).toBe("battle");
+      expect(v.cause.rule).toBe("gap");
+      expect(v.cause.params).toEqual({ carId: car0, side: "ahead", gapMs: DRS });
+      const far = value(
+        run({ battle: { [car0]: card(known(early(DRS + 1), NOW)) } }),
+      );
+      expect(far.moment).toBe("carCare");
     });
 
     it("a battle card beyond both thresholds, or with unknown values, sets no battle", () => {

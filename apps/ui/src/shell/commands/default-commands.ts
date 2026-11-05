@@ -1,9 +1,10 @@
 // The shell's own commands and their default keys (spec 7.7). Widgets cannot register commands in the MVP.
-import { ackToken, type LinkGroup, type ReplayControl, type UiAction, type UiSettings } from '@pitwall/contracts';
+import { ackToken, type LinkGroup, type PanelSpec, type ReplayControl, type UiAction, type UiSettings } from '@pitwall/contracts';
 import type { Insight } from '@pitwall/domain';
 import * as text from '../../kit/text.ts';
 import type { Inspection } from '../inspector/inspection.svelte.ts';
 import { THEMES, type ThemeVariant } from '../../theme/index.ts';
+import { defaultPanel } from '../workbooks/default-panel.ts';
 import type { Command } from './registry.ts';
 
 /** The overlays the shell can show. */
@@ -131,4 +132,14 @@ export function alertCommands(alerts: readonly Insight[], ctx: Pick<CommandConte
 /** `window.focus.<id>` for each window of the active workbook. */
 export function windowCommands(ids: readonly string[], ctx: Pick<CommandContext, 'focusWindow'>): Command[] {
   return ids.map((id) => ({ id: `window.focus.${id}`, title: text.commandTitles.windowFocus(id), group: text.commandGroups.window, run: () => ctx.focusWindow(id) }));
+}
+
+/** `panel.add.<widget>` for each widget of the build: adds a new panel of it to the dock's active group. */
+export function panelCommands(decls: readonly Parameters<typeof defaultPanel>[0][], addPanel: (spec: PanelSpec) => void): Command[] {
+  return decls.map((decl) => ({
+    id: `panel.add.${decl.name}`,
+    title: text.commandTitles.panelAdd(decl.title),
+    group: text.commandGroups.window,
+    run: () => addPanel(defaultPanel(decl)),
+  }));
 }

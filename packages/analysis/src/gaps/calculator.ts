@@ -5,8 +5,9 @@ import { behaviourByCar, behaviourFor, openSpansByCar } from '../shared/behaviou
 import { CAR_STATUS_READS } from '../shared/car-status.ts';
 import { isClosed, NEUTRALISATION_READS, neutralisationKind, neutralisedSpans, type NeutralisationKind } from '../shared/neutralised.ts';
 import { ourCars } from '../shared/our-cars.ts';
-import { gapBehind, lapsBehind, latestTime, progressAt, progressOf, recentOf, type CarCrossings } from './gaps.ts';
+import { fineOf, gapBehind, lapsBehind, latestTime, progressAt, progressOf, recentOf, type CarCrossings } from './gaps.ts';
 import { GAPS, GAPS_BEHAVIOUR, GAPS_CONFIG, type GapsOutput } from './index.ts';
+import { emptyWindow, judgeCrossing, othersInWindow, windowThresholds, type GapperWindow } from './window.ts';
 
 /** What the crossings and events so far add up to. */
 type Table = {
@@ -16,6 +17,9 @@ type Table = {
   tracks: Array<CarCrossings | undefined>;
   lineTimes: GapsOutput['lineTimes'];
   recent: GapsOutput['recent'];
+  fine: GapsOutput['fine'];
+  /** Who is near whom, judged at each crossing: the gapper's window of every set of cars that may be ours. */
+  window: GapperWindow;
   /** The race start (`RaceStart`) once a `racing` span of the race session phase has closed. */
   raceStart: RaceStart | undefined;
   /** The closed spans of the race session phase folded so far. */
@@ -33,13 +37,17 @@ const NOT_APPLICABLE = unknown('notApplicable');
 const STATUS_BEHAVIOUR = { 'car-status': GAPS_BEHAVIOUR['car-status'] } as typeof GAPS_BEHAVIOUR;
 
 /**
- * Adds the crossings from index `from` on. `lineTimes` and `recent` are replaced, never changed, as earlier
- * outputs hold them: one new `recent` window per car that crossed something.
+ * Adds the crossings from index `from` on. `lineTimes`, `recent` and `fine` are replaced, never changed, as earlier
+ * outputs hold them: one new `recent` and `fine` window per car that crossed something. Each crossing judges its car's
+ * gap to every car that passed the same point before it (the gapper's window).
  */
 function foldCrossings(acc: Table, view: EngineView, from: number): void {
   const list = view.history.crossings;
   const length = list.length;
   if (from >= length) return;
+  const config = GAPS_CONFIG.read(view);
+  const { fineLaps } = config;
+  const thresholds = windowThresholds(config);
   let lineTimes = acc.lineTimes;
   /** By car id: the car crossed something. */
   const crossed: boolean[] = [];
@@ -52,6 +60,7 @@ function foldCrossings(acc: Table, view: EngineView, from: number): void {
     track.at[progress] = (acc.current.get(m.carId)?.get(m.lap)?.[m.segment] ?? m).at;
     if (track.at.length > progress + 1) track.at.length = progress + 1; // a car that went back drops what lay ahead
     crossed[m.carId] = true;
+    judgeCrossing(acc.window, acc.tracks, m.carId, progress, track.at[progress] as SessionTime, thresholds);
     // segment 0 is the line at the start of its lap: it completes the lap before (none for lap 1, the start)
     const completed = m.lap - 1;
     if (m.segment === 0 && completed >= 1) {
@@ -60,9 +69,15 @@ function foldCrossings(acc: Table, view: EngineView, from: number): void {
     }
   }
   const recent = { ...acc.recent };
-  crossed.forEach((_, id) => (recent[id as CarId] = recentOf(acc.tracks[id] as CarCrossings)));
+  const fine = { ...acc.fine };
+  crossed.forEach((_, id) => {
+    const track = acc.tracks[id] as CarCrossings;
+    recent[id as CarId] = recentOf(track);
+    fine[id as CarId] = fineOf(track, fineLaps);
+  });
   acc.lineTimes = lineTimes;
   acc.recent = recent;
+  acc.fine = fine;
 }
 
 const RACE_PHASE = sessionPhaseRaceSpans.machine;
@@ -200,7 +215,8 @@ function build(acc: Table, view: EngineView): GapsOutput {
   const { neighbourhoodMs } = GAPS_CONFIG.read(view);
   const near = (gap: Known<Ms>) => gap.known && Math.abs(gap.value) <= neighbourhoodMs;
   const neighbourhood: Neighbourhood[] = [];
-  for (const ourCarId of ourCars(view.live)) {
+  const ours = ourCars(view.live);
+  for (const ourCarId of ours) {
     const at = order.indexOf(ourCarId);
     if (at < 0) continue;
     const carIds = order.filter((_, j) => j !== at && (Math.abs(j - at) <= 1 || near(gapBehind(tracks[j], tracks[at]))));
@@ -211,6 +227,8 @@ function build(acc: Table, view: EngineView): GapsOutput {
     intervals,
     lineTimes: acc.lineTimes,
     recent: acc.recent,
+    fine: acc.fine,
+    gapperWindow: { ours, others: othersInWindow(acc.window, ours) },
     neighbourhood,
     raceStartAt: raceStartAt(raceStartNow(acc, view), race),
     outOfRace: outOfRace.sort((a, b) => a - b),
@@ -219,7 +237,7 @@ function build(acc: Table, view: EngineView): GapsOutput {
 }
 
 const init = (view: EngineView): Table => {
-  const table: Table = { current: new Map(), tracks: [], lineTimes: {}, recent: {}, raceStart: undefined, raceSpansFolded: 0, lastRaceSpanKind: undefined };
+  const table: Table = { current: new Map(), tracks: [], lineTimes: {}, recent: {}, fine: {}, window: emptyWindow(), raceStart: undefined, raceSpansFolded: 0, lastRaceSpanKind: undefined };
   foldCrossings(table, view, 0);
   foldRaceSpans(table, view);
   return table;

@@ -41,58 +41,58 @@ describe('incidentRows', () => {
     const [collision, timeLoss] = incidentRows(
       [entry(), entry({ id: 't', kind: 'timeLoss', carIds: [carId(4)], forUs: [forUs({ otherCarId: k(carId(4)), positionAfter: k(5), gapBeforeMs: k(-1900), gapAfterMs: k(5800) })] })],
       cars, undefined);
-    expect(collision!.cells.forUs.text).toBe('us P5→P4, OCO +4.1→DNF');
-    expect(timeLoss!.cells.forUs.text).toBe('us —, ALB −1.9→+5.8');
+    expect(collision!.cells.forUs.text).toBe('KUH P5→P4, OCO +4.1→DNF');
+    expect(timeLoss!.cells.forUs.text).toBe('KUH —, ALB −1.9→+5.8');
   });
 
   it('names the car the analysis measured the gaps to (otherCarId), not one it picks from the entry itself', () => {
     const [row] = incidentRows([entry({ carIds: [carId(1), carId(4)], forUs: [forUs({ otherCarId: k(carId(4)), gapBeforeMs: k(-1900), gapAfterMs: k(5800) })] })], cars, undefined);
-    expect(row!.cells.forUs.text).toBe('us P5→P4, ALB −1.9→+5.8');
+    expect(row!.cells.forUs.text).toBe('KUH P5→P4, ALB −1.9→+5.8');
     expect(row!.cells.cars.text).toBe('KUH ALB');
     const [second] = incidentRows([entry({ forUs: [forUs({ otherCarId: k(carId(3)) })] })], cars, undefined);
-    expect(second!.cells.forUs.text).toBe('us P5→P4, SAI +4.1→DNF');
+    expect(second!.cells.forUs.text).toBe('KUH P5→P4, SAI +4.1→DNF');
   });
 
   it('shows no gap part when the entry has no other car (otherCarId notApplicable)', () => {
     const [row] = incidentRows([entry({ forUs: [forUs({ otherCarId: unknown('notApplicable'), gapBeforeMs: unknown('notApplicable') })] })], cars, undefined);
-    expect(row!.cells.forUs).toMatchObject({ text: 'us P5→P4' });
+    expect(row!.cells.forUs).toMatchObject({ text: 'KUH P5→P4' });
     expect(row!.cells.forUs.reason).toBeUndefined();
   });
 
   it('keeps the known position after an unknown position before, with the before\'s reason on hover (no invented position)', () => {
     const [row] = incidentRows([entry({ forUs: [forUs({ positionBefore: unknown('notReceived') })] })], cars, undefined);
-    expect(row!.cells.forUs).toMatchObject({ text: 'us →P4, OCO +4.1→DNF', reason: 'notReceived' });
+    expect(row!.cells.forUs).toMatchObject({ text: 'KUH →P4, OCO +4.1→DNF', reason: 'notReceived' });
   });
 
 
   it('gives an unknown gap after its reason on hover; DNF (not applicable) needs none', () => {
     const [waiting] = incidentRows([entry({ forUs: [forUs({ gapAfterMs: unknown('notReceived') })] })], cars, undefined);
-    expect(waiting!.cells.forUs).toMatchObject({ text: 'us P5→P4, OCO +4.1→', reason: 'notReceived' });
+    expect(waiting!.cells.forUs).toMatchObject({ text: 'KUH P5→P4, OCO +4.1→', reason: 'notReceived' });
     const [retired] = incidentRows([entry()], cars, undefined);
     expect(retired!.cells.forUs.reason).toBeUndefined();
   });
 
   it('writes a position change as P7→P9 through the position mark', () => {
     const [row] = incidentRows([entry({ forUs: [forUs({ positionBefore: k(7), positionAfter: k(9) })] })], cars, undefined);
-    expect(row!.cells.forUs.text.startsWith('us P7→P9')).toBe(true);
+    expect(row!.cells.forUs.text.startsWith('KUH P7→P9')).toBe(true);
   });
 
   it('writes P7→ while the position after is unknown', () => {
     const [row] = incidentRows([entry({ forUs: [forUs({ positionBefore: k(7), positionAfter: unknown('insufficientData') })] })], cars, undefined);
-    expect(row!.cells.forUs.text.startsWith('us P7→,')).toBe(true);
+    expect(row!.cells.forUs.text.startsWith('KUH P7→,')).toBe(true);
   });
 
   it('keeps the other car and the arrow when both gaps are unknown, each mark in its place; the cell is empty without forUs', () => {
     const [a, b] = incidentRows(
       [entry({ forUs: [forUs({ gapBeforeMs: unknown('insufficientData'), gapAfterMs: unknown('insufficientData') })] }), minor()],
       cars, undefined);
-    expect(a!.cells.forUs).toMatchObject({ text: 'us P5→P4, OCO →', reason: 'insufficientData' });
+    expect(a!.cells.forUs).toMatchObject({ text: 'KUH P5→P4, OCO →', reason: 'insufficientData' });
     expect(a!.cells.forUs.parts?.filter((p) => p.reason !== undefined).map((p) => p.reason)).toEqual(['insufficientData', 'insufficientData']);
     expect(b!.cells.forUs.text).toBe('');
   });
 
   // One builder of the for-us cell (review 2, F7; review 4, W2): the cell is pieces, each a value with its own leading
-  // separator (`us`, ` P5→P4`, `, OCO`, ` +4.1→DNF`; between our cars ` · `). The parts show every piece, an unknown value
+  // separator (`KUH`, ` P5→P4`, `, OCO`, ` +4.1→DNF`; between our cars ` · `). The parts show every piece, an unknown value
   // as its mark after its separator; the plain text joins the known pieces' texts, so an unknown value leaves with its
   // separator and nothing is patched afterwards. A pair (`P5→P4`, `+4.1→DNF`) is one piece: an unknown side leaves the
   // arrow and the pair keeps its separator; the arrow stays when both sides are unknown. The position pair and the gap
@@ -126,14 +126,14 @@ describe('incidentRows', () => {
     };
     /** Every combination of the position before and after, and the other car, for one of our cars. */
     const matrix: [keyof typeof before, keyof typeof after, keyof typeof other, Expected][] = [
-      ['known', 'known', 'present', { text: 'us P5→P4, OCO +4.1→DNF' }],
-      ['known', 'unknown', 'present', { text: 'us P5→, OCO +4.1→DNF', parts: 'us P5→‹insufficientData›, OCO +4.1→DNF' }],
-      ['unknown', 'known', 'present', { text: 'us →P4, OCO +4.1→DNF', parts: 'us ‹notReceived›→P4, OCO +4.1→DNF' }],
-      ['unknown', 'unknown', 'present', { text: 'us →, OCO +4.1→DNF', parts: 'us ‹notReceived›→‹insufficientData›, OCO +4.1→DNF' }],
-      ['known', 'known', 'absent', { text: 'us P5→P4' }],
-      ['known', 'unknown', 'absent', { text: 'us P5→', parts: 'us P5→‹insufficientData›' }],
-      ['unknown', 'known', 'absent', { text: 'us →P4', parts: 'us ‹notReceived›→P4' }],
-      ['unknown', 'unknown', 'absent', { text: 'us →', parts: 'us ‹notReceived›→‹insufficientData›' }],
+      ['known', 'known', 'present', { text: 'KUH P5→P4, OCO +4.1→DNF' }],
+      ['known', 'unknown', 'present', { text: 'KUH P5→, OCO +4.1→DNF', parts: 'KUH P5→‹insufficientData›, OCO +4.1→DNF' }],
+      ['unknown', 'known', 'present', { text: 'KUH →P4, OCO +4.1→DNF', parts: 'KUH ‹notReceived›→P4, OCO +4.1→DNF' }],
+      ['unknown', 'unknown', 'present', { text: 'KUH →, OCO +4.1→DNF', parts: 'KUH ‹notReceived›→‹insufficientData›, OCO +4.1→DNF' }],
+      ['known', 'known', 'absent', { text: 'KUH P5→P4' }],
+      ['known', 'unknown', 'absent', { text: 'KUH P5→', parts: 'KUH P5→‹insufficientData›' }],
+      ['unknown', 'known', 'absent', { text: 'KUH →P4', parts: 'KUH ‹notReceived›→P4' }],
+      ['unknown', 'unknown', 'absent', { text: 'KUH →', parts: 'KUH ‹notReceived›→‹insufficientData›' }],
     ];
     const ofCombination = (b: keyof typeof before, a: keyof typeof after, o: keyof typeof other): IncidentForUs =>
       forUs({ positionBefore: before[b], positionAfter: after[a], ...other[o] });
@@ -142,10 +142,12 @@ describe('incidentRows', () => {
       expectCell(cellOf([ofCombination(b, a, o)]), expected);
     });
 
-    /** The second of our cars, known and alone: `us —`. */
+    /** The second of our cars, known and alone: `KUH —`. */
     const teammate = forUs({ ourCarId: carId(5), positionBefore: k(7), positionAfter: k(7), ...other.absent });
-    const teammateExpected: Expected = { text: 'us —' };
+    const teammateExpected: Expected = { text: 'PIA —' };
     /** Two of our cars one after the other: each its own, ` · ` between them. */
+    /** The expectation of the second car (Piastri, car 5): its code leads the cell, not the player's. */
+    const asPia = (e: Expected): Expected => ({ text: e.text.replace(/^KUH/, 'PIA'), ...(e.parts === undefined ? {} : { parts: e.parts.replace(/^KUH/, 'PIA') }) });
     const joined = (x: Expected, y: Expected): Expected => {
       const text = `${x.text} · ${y.text}`;
       return x.parts === undefined && y.parts === undefined ? { text } : { text, parts: `${x.parts ?? x.text} · ${y.parts ?? y.text}` };
@@ -156,38 +158,60 @@ describe('incidentRows', () => {
     });
 
     it.each(matrix)('position before %s, after %s, other car %s: second of our two cars', (b, a, o, expected) => {
-      expectCell(cellOf([teammate, { ...ofCombination(b, a, o), ourCarId: carId(5) }]), joined(teammateExpected, expected));
+      expectCell(cellOf([teammate, { ...ofCombination(b, a, o), ourCarId: carId(5) }]), joined(teammateExpected, asPia(expected)));
     });
 
     it.each(matrix)('position before %s, after %s, other car %s: both of our two cars', (b, a, o, expected) => {
-      expectCell(cellOf([ofCombination(b, a, o), { ...ofCombination(b, a, o), ourCarId: carId(5) }]), joined(expected, expected));
+      expectCell(cellOf([ofCombination(b, a, o), { ...ofCombination(b, a, o), ourCarId: carId(5) }]), joined(expected, asPia(expected)));
     });
 
     // the other car's piece and its gap pair
     const gapCases: Record<string, { list: IncidentForUs[] } & Expected> = {
       'gap after not received': {
-        list: [forUs({ gapAfterMs: unknown('notReceived') })], text: 'us P5→P4, OCO +4.1→', parts: 'us P5→P4, OCO +4.1→‹notReceived›',
+        list: [forUs({ gapAfterMs: unknown('notReceived') })], text: 'KUH P5→P4, OCO +4.1→', parts: 'KUH P5→P4, OCO +4.1→‹notReceived›',
       },
       'gap before unknown': {
-        list: [forUs({ gapBeforeMs: unknown('insufficientData'), gapAfterMs: k(5800) })], text: 'us P5→P4, OCO →+5.8', parts: 'us P5→P4, OCO ‹insufficientData›→+5.8',
+        list: [forUs({ gapBeforeMs: unknown('insufficientData'), gapAfterMs: k(5800) })], text: 'KUH P5→P4, OCO →+5.8', parts: 'KUH P5→P4, OCO ‹insufficientData›→+5.8',
       },
       'both gaps unknown': {
         list: [forUs({ gapBeforeMs: unknown('insufficientData'), gapAfterMs: unknown('realism') })],
-        text: 'us P5→P4, OCO →', parts: 'us P5→P4, OCO ‹insufficientData›→‹realism›',
+        text: 'KUH P5→P4, OCO →', parts: 'KUH P5→P4, OCO ‹insufficientData›→‹realism›',
       },
       'position before and gap after unknown': {
         list: [forUs({ positionBefore: unknown('notReceived'), gapAfterMs: unknown('notReceived') })],
-        text: 'us →P4, OCO +4.1→', parts: 'us ‹notReceived›→P4, OCO +4.1→‹notReceived›',
+        text: 'KUH →P4, OCO +4.1→', parts: 'KUH ‹notReceived›→P4, OCO +4.1→‹notReceived›',
       },
       // the code is a value like any other: missing from the field, it leaves with its separator `, `
       'other car missing from the field, gap after unknown': {
         list: [forUs({ otherCarId: k(carId(9)), gapAfterMs: unknown('notReceived') })],
-        text: 'us P5→P4 +4.1→', parts: 'us P5→P4, ‹notReceived› +4.1→‹notReceived›',
+        text: 'KUH P5→P4 +4.1→', parts: 'KUH P5→P4, ‹notReceived› +4.1→‹notReceived›',
       },
     };
 
     it.each(Object.entries(gapCases))('%s', (_name, { list, ...expected }) => {
       expectCell(cellOf(list), expected);
+    });
+  });
+
+  // Our cars are named by their driver code, never by a stand-in word (`us`): the player's own code too.
+  describe('our cars by driver code', () => {
+    const field = [...cars, overview(6, 'George Russell')];
+    const ours = (over: Partial<IncidentForUs>): IncidentForUs =>
+      forUs({ otherCarId: unknown('notApplicable'), gapBeforeMs: unknown('notApplicable'), ...over });
+    const cell = (list: IncidentForUs[]): IncidentCell => incidentRows([entry({ forUs: list })], field, undefined)[0]!.cells.forUs;
+
+    it('an entry for our teammate reads RUS P6→P7', () => {
+      expect(cell([ours({ ourCarId: carId(6), positionBefore: k(6), positionAfter: k(7) })]).text).toBe('RUS P6→P7');
+    });
+
+    it('an entry for the player reads its own code, never us', () => {
+      const text = cell([ours({ ourCarId: carId(1) })]).text;
+      expect(text).toBe('KUH P5→P4');
+      expect(text).not.toMatch(/\bus\b/);
+    });
+
+    it('both our cars read their own codes, one after the other', () => {
+      expect(cell([ours({ ourCarId: carId(1) }), ours({ ourCarId: carId(6), positionBefore: k(6), positionAfter: k(7) })]).text).toBe('KUH P5→P4 · RUS P6→P7');
     });
   });
 
@@ -233,8 +257,29 @@ describe('the incident detail in the what cell (mockup: time loss (T7), damage F
     expect(what({ where: { sector: unknown('notReceived') } })).toBe('collision');
   });
 
-  it('a warning shows its count of the limit', () => {
-    expect(what({ kind: 'warning', warning: { count: 2, limit: 3 }, where: { sector: k(2) } })).toBe('warning 2/3');
+  describe('a warning names its kind (cells.what.text, before the grid fits it)', () => {
+    const warned = (warning: NonNullable<IncidentEntry['warning']>): string => what({ kind: 'warning', warning, where: { sector: k(2) } });
+    /** Another infringement's warning: no count. */
+    const other = (infringement: Known<number>): NonNullable<IncidentEntry['warning']> => ({ kind: 'other', infringement });
+
+    it('corner cutting shows its count of the limit', () => {
+      expect(warned({ kind: 'cornerCutting', count: 2, limit: 3 })).toBe('warning · corner cutting 2/3');
+    });
+
+    it('another infringement shows its name from the kit, never a count', () => {
+      expect(warned(other(k(4)))).toBe('warning · collision');
+      expect(warned(other(k(12)))).toBe('warning · ignored yellow flags');
+    });
+
+    it('never shows a count for another infringement', () => {
+      expect(warned(other(k(4)))).not.toMatch(/\d\/\d/);
+      expect(warned(other(unknown('notReceived')))).not.toMatch(/\d\/\d/);
+    });
+
+    it('an infringement we cannot name, or an unknown one, reads warning', () => {
+      expect(warned(other(k(999)))).toBe('warning');
+      expect(warned(other(unknown('notReceived')))).toBe('warning');
+    });
   });
 
   it('a damage entry names its parts and their rise through the kit part names', () => {
@@ -314,7 +359,7 @@ describe('the incident detail in the what cell (mockup: time loss (T7), damage F
   it('full rows keep the grid with the detail, as the mockup', () => {
     const [row] = incidentRows([entry({ id: 't', kind: 'timeLoss', carIds: [carId(4)], timeLostMs: k(6100), where: { sector: k(2) },
       forUs: [forUs({ otherCarId: k(carId(4)), positionAfter: k(5), gapBeforeMs: k(-1900), gapAfterMs: k(5800) })] })], cars, undefined);
-    expect(incidentRowText('full', row!, 70)).toBe(' L23  ALB      time loss S2        lost 6.1 s  us —, ALB −1.9→+5.8');
+    expect(incidentRowText('full', row!, 70)).toBe(' L23  ALB      time loss S2        lost 6.1 s  KUH —, ALB −1.9→+5.8');
   });
 });
 
@@ -330,7 +375,7 @@ describe('text layout', () => {
     const [a, b, c] = incidentRows(
       [entry(), entry({ id: 'd', lap: 14, kind: 'damage', carIds: [carId(1)], timeLostMs: unknown('insufficientData'), forUs: [] }), minor()],
       cars, undefined);
-    expect(incidentRowText('full', a!)).toBe(' L23  OCO SAI  collision           lost 4.2 s  us P5→P4, OCO +4.1→DNF');
+    expect(incidentRowText('full', a!)).toBe(' L23  OCO SAI  collision           lost 4.2 s  KUH P5→P4, OCO +4.1→DNF');
     expect(incidentRowText('full', b!).trimEnd()).toBe(' L14  KUH      damage');
     expect(incidentRowText('full', c!).trimEnd()).toBe(' L21  PIA      warning');
   });
@@ -346,8 +391,8 @@ describe('fitRow', () => {
     const [row] = incidentRows([long], cars, undefined);
     const cells = fitRow('full', row!, 70);
     const forUsCell = cells.find((c) => c.column === 'forUs')!;
-    expect(row!.cells.forUs.text).toBe('us P12→P14, ALB +12.3→+14.1');
-    expect(forUsCell.text).toBe('us P12→P14, ALB +12.3→…');
+    expect(row!.cells.forUs.text).toBe('KUH P12→P14, ALB +12.3→+14.1');
+    expect(forUsCell.text).toBe('KUH P12→P14, ALB +12.3…');
     expect(incidentRowText('full', row!, 70)).toHaveLength(70);
   });
 

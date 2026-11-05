@@ -9,7 +9,7 @@
   let { data, size }: WidgetProps<typeof widget> = $props();
 
   // Compact keeps the two rows that decide the stint: margin and what the fuel lasts.
-  const COMPACT_KEYS: readonly FuelRow['key'][] = ['margin', 'lasts'];
+  const COMPACT_KEYS: readonly FuelRow['key'][] = ['fuel', 'margin'];
   const rows = $derived(size.mode === 'full' ? fuelRows(data.fuel) : fuelRows(data.fuel).filter((r) => COMPACT_KEYS.includes(r.key)));
 </script>
 

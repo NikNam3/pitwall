@@ -9,14 +9,19 @@ export type BattleSide = {
   carId: CarId;
   /** The gap to that car as `gaps.intervals` gives it (`toAheadMs` / `toBehindMs`, unsigned); displays sign it by side. */
   gapMs: Known<Ms>;
-  /** Positive = the gap shrinks. */
-  closingMsPerLap: Known<number>;
-  /** `notApplicable` while race control has DRS off (`BattleCard.drs`). */
+  /**
+   * From PACE Δ (`paceDeltaMs`): (gap − `drsRangeMs`) / the closing car's edge per lap, on this side while its car
+   * closes; 0 inside DRS range; `notApplicable` while the gap is not closing or race control has DRS off
+   * (`BattleCard.drs`); PACE Δ's reason while it is unknown.
+   */
   lapsToDrs: Known<number>;
-  /** Positive = we are faster. */
+  /** Over the same last 50 mini-sectors of both cars, s/lap; positive = we are faster. */
   paceDeltaMs: Known<Ms>;
-  /** The margin to pass of the car that would pass: ahead, our pace delta minus the threshold; behind, theirs (−`paceDeltaMs` − the threshold). */
-  overtakeMarginMs: Known<Ms>;
+  /**
+   * The margin that applies on this side: `pass` ahead (our edge − `overtakeThresholdMs`), `hold` behind
+   * (`overtakeThresholdMs` − their edge); positive = good for us.
+   */
+  margin: Known<{ kind: 'pass' | 'hold'; ms: Ms }>;
   ours: { compound: VisualCompound; age: number };
   theirs: { compound: VisualCompound; age: number };
   theirErsStoreJ: Known<Joules>;
