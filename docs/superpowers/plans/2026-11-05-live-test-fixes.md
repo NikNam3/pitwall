@@ -10,7 +10,7 @@
 
 **Spec:** the findings in `docs/acceptance/live-checklist.md` ("2026-11-04/05: first remote live test"), the decisions in `docs/superpowers/plans/2026-11-05-live-test-fixes-questions.md` (Q1–Q4), the contract `docs/architecture.md`. Unit sections: timing spec `docs/specs/2026-10-29-timing-car-monitoring-design.md` §5.4 (car-bands), §5.6 (alarms), §6.2 (lap-times), §6.3 (battle), §6.4 (incidents).
 
-**Not in this plan (SP4a re-spec):** fuel kg always shown, live sectors, battle-card signs and verdict, MARGIN unit, "us" naming, finish margin in minutes, gap-chart decluttering, damage "measuring" and estimate, re-adding a closed panel, the radio indicator, recording size.
+**Not in this plan (SP4a re-spec):** fuel kg always shown, live sectors, battle-card signs and verdict, a pace delta that updates every mini-sector (today once per lap), MARGIN unit, "us" naming, finish margin in minutes, gap-chart decluttering, damage "measuring" and estimate, re-adding a closed panel, the radio indicator, recording size.
 
 ## Global Constraints
 
