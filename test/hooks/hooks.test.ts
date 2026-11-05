@@ -50,6 +50,28 @@ describe('guard-scope.sh', () => {
       expect(r.code).toBe(2);
       expect(r.stderr).toContain('supervisor-owned');
     });
+  it('allows a supervisor-owned file that a scope entry names exactly (delegated)', () => {
+    const env = { PITWALL_WORKER_SCOPE: 'packages/domain/src/track-file.ts' };
+    expect(runHook('guard-scope.sh', abs('packages/domain/src/track-file.ts'), env).code).toBe(0);
+  });
+  it('blocks another supervisor-owned file next to the delegated one', () => {
+    const r = runHook('guard-scope.sh', abs('packages/domain/src/known.ts'), { PITWALL_WORKER_SCOPE: 'packages/domain/src/track-file.ts' });
+    expect(r.code).toBe(2);
+    expect(r.stderr).toContain('supervisor-owned');
+  });
+  it('allows a supervisor-owned file under a scope folder that itself lies inside an owned area (delegated)', () => {
+    const env = { PITWALL_WORKER_SCOPE: 'packages/domain/test' };
+    expect(runHook('guard-scope.sh', abs('packages/domain/test/track-files.test.ts'), env).code).toBe(0);
+  });
+  it('allows a delegated contracts file', () => {
+    const env = { PITWALL_WORKER_SCOPE: 'packages/contracts/src/topic-def.ts' };
+    expect(runHook('guard-scope.sh', abs('packages/contracts/src/topic-def.ts'), env).code).toBe(0);
+  });
+  it('still blocks a package.json that a scope entry names exactly', () => {
+    const r = runHook('guard-scope.sh', abs('packages/protocol/package.json'), { PITWALL_WORKER_SCOPE: 'packages/protocol/package.json' });
+    expect(r.code).toBe(2);
+    expect(r.stderr).toContain('supervisor-owned');
+  });
   it('reads notebook_path for NotebookEdit', () => {
     const input = JSON.stringify({ tool_name: 'NotebookEdit', cwd: ROOT, tool_input: { notebook_path: abs('packages/engine/n.ipynb') } });
     const r = spawnSync(abs('.claude/hooks/guard-scope.sh'), { input, encoding: 'utf8', env: { ...process.env, CLAUDE_PROJECT_DIR: ROOT, ...scope } });
