@@ -9,9 +9,10 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { known, unknown, warningsSpans, type OpenSpan, type Span } from '@pitwall/domain';
 import machine from '../../../src/situations/warnings/machine.ts';
 import { all, car, events, pena } from '../../support/car-edits.ts';
+import { SEGMENTS } from '../../../../../test-support/segments.ts';
 import { replaySegment, type SegmentRun } from '../../support/segment-run.ts';
 import { FRAME_MS, inputs } from '../../support/transition-table.ts';
-import { total, warning } from './warnings.transitions.ts';
+import { cutting, total, warning } from './warnings.transitions.ts';
 
 type Run = { open: Array<OpenSpan | undefined>; closed: Array<Array<Omit<Span, 'endFrame'>>> };
 
@@ -103,6 +104,23 @@ describe('warnings: a warning opens a warned span when totalWarnings rises', () 
   });
 });
 
+describe('warnings: every warned span records the corner-cutting count of the frame it opens on', () => {
+  it('a collision warning raises totalWarnings 1 -> 2, cornerCuttingWarnings stays 1: the new span has count 2, cornerCutting 1', () => {
+    const r = run(inputs().frames(2).frame(all(warning(7), total(1), cutting(1))).frames(3).frame(all(warning(4), total(2))).frame(all(total(2), cutting(1))));
+    expect(r.open[2]).toMatchObject({ kind: 'warned', detail: { count: 1, cornerCutting: 1 } });
+    expect(r.open[6]).toMatchObject({ kind: 'warned', id: 2, detail: { count: 2, cornerCutting: 1, infringement: known(4, 6 * FRAME_MS) } });
+  });
+  it('a corner-cutting warning raises both: count 2, cornerCutting 1', () => {
+    const r = run(inputs().frames(2).frame(all(warning(7), total(1))).frames(3).frame(all(warning(27), total(2), cutting(1))));
+    expect(r.open[2]).toMatchObject({ kind: 'warned', detail: { count: 1, cornerCutting: 0 } });
+    expect(r.open[6]).toMatchObject({ kind: 'warned', detail: { count: 2, cornerCutting: 1 } });
+  });
+  it('a car that holds warnings when the session is joined records its cornerCutting too', () => {
+    const r = run(inputs().frames(2, all(total(3), cutting(2))));
+    expect(r.open[0]).toMatchObject({ kind: 'warned', joinedAt: true, detail: { count: 3, cornerCutting: 2 } });
+  });
+});
+
 describe('warnings: one warned span per count', () => {
   it('each further warning closes the span it follows and opens the next, ids counting the car’s spans', () => {
     const r = run(inputs().frames(2).frame(all(warning(7), total(1))).frames(3).frame(all(warning(27), total(2))).frames(2).frame(all(warning(7), total(3))));
@@ -190,5 +208,19 @@ describe('warnings: practice-wing-change (car 19 holds 3 warnings when the segme
   it('car 19 is one warned span, count 3, joined, for the whole segment', async () => {
     const seg = await replaySegment('practice-wing-change.pwrec.gz', totals);
     expect(spansOf(seg, 19)).toMatchObject([{ kind: 'warned', detail: { count: 3, infringement: unknown('notReceived') }, joinedAt: true, startFrame: 1, endFrame: seg.frames.at(-1)!.frameNumber + 1 }]);
+  });
+});
+
+describe('warnings: race-warning-collision (a collision warning after a corner-cutting one)', () => {
+  it('a span opened after the PENA has count 2 and cornerCutting 1, the game’s counter beside the total', async () => {
+    const seg = await replaySegment(SEGMENTS.raceWarningCollision, (state) => state.signals.cars.map((c) => [c.totalWarnings, c.cornerCuttingWarnings] as const));
+    const spans = seg.spans('warnings').filter((s) => s.kind === 'warned');
+    expect(spans.length).toBeGreaterThan(0);
+    // every warned span carries the counter the game held on the frame it opened (the frame numbers are the applied frames')
+    for (const s of spans) {
+      const frame = seg.frames.find((f) => f.frameNumber === s.startFrame)!;
+      expect(s.detail).toMatchObject({ count: frame.value[s.carId!]![0], cornerCutting: frame.value[s.carId!]![1] });
+    }
+    expect(spans).toContainEqual(expect.objectContaining({ detail: expect.objectContaining({ count: 2, cornerCutting: 1 }) }));
   });
 });
