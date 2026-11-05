@@ -81,15 +81,16 @@ const MAJOR = {
 } as const satisfies Record<IncidentKind, keyof Config>;
 
 /**
- * `warnings`: on a warning, the warned span's count of the car's warnings; `penalty`: on a penalty, its ruling; `id`: the
- * entry's own id where kind, cars and time do not tell it apart (a penalty record's).
+ * `cornerCutting`: on a corner-cutting warning, the warned span's count of the car's corner-cutting warnings (a warning of
+ * another kind has none); `penalty`: on a penalty, its ruling; `id`: the entry's own id where kind, cars and time do not
+ * tell it apart (a penalty record's).
  */
 type CarEvent = {
   id?: string;
   kind: 'collision' | 'retirement' | 'warning' | 'penalty';
   at: SessionTime;
   carIds: CarId[];
-  warnings?: number;
+  cornerCutting?: number;
   penalty?: IncidentPenalty;
 };
 
@@ -141,6 +142,8 @@ type Acc = {
   visits: Visit[][];
   /** The entries of the closed spans, by car sub-machine. */
   spanEvents: Record<CarMachine, CarEvent[]>;
+  /** Per car id, the corner-cutting count of its newest closed warnings span (0 for no warning): what the next one rises from. */
+  cornerCuttingOf: (number | undefined)[];
   /** The collisions (events). */
   collisions: CarEvent[];
   /** The penalties given (the penalty records), one per record. */
@@ -163,7 +166,7 @@ type Acc = {
   jumpPct: number;
   /** Rises of a part within this window add up; damage jumps of a car this close to the first one are one entry. */
   jumpWindowMs: Ms;
-  /** Warnings before a penalty (the alarms' config). */
+  /** Corner-cutting warnings before a penalty (the alarms' config). */
   warningLimit: number;
 };
 
@@ -224,11 +227,16 @@ const foldNeutralised = (acc: Acc, view: EngineView): boolean => {
   return changed;
 };
 
+/** The corner-cutting count a car's warnings span records: a warned span's (its row `warning`), else 0. */
+const cornerCuttingOf = (machine: CarMachine, span: CarSpan): number =>
+  behaviourOf(machine, span.kind) === 'warning' ? (span.detail as WarnedDetail).cornerCutting : 0;
+
 /**
  * The entries a car's span gives by its row (C44), at its start: none for a span the engine joined in (its incident was
- * not seen) or one closed unconfirmed (C18).
+ * not seen) or one closed unconfirmed (C18). A warning is a corner-cutting one when its span's corner-cutting count rose
+ * over `cornerCuttingBefore`, the car's previous warnings span's; only then does it carry that count.
  */
-const entriesOf = (machine: CarMachine, span: CarSpan): CarEvent[] => {
+const entriesOf = (machine: CarMachine, span: CarSpan, cornerCuttingBefore: number): CarEvent[] => {
   if (span.carId === undefined || span.joinedAt === true || ('endFrame' in span && !span.confirmed)) return [];
   const base = { at: span.start, carIds: [span.carId] };
   switch (behaviourOf(machine, span.kind)) {
@@ -236,8 +244,10 @@ const entriesOf = (machine: CarMachine, span: CarSpan): CarEvent[] => {
       return [{ kind: 'retirement', ...base }];
     case 'disqualification':
       return [{ kind: 'penalty', ...base, penalty: { kind: 'disqualified' } }];
-    case 'warning':
-      return [{ kind: 'warning', ...base, warnings: (span.detail as WarnedDetail).count }];
+    case 'warning': {
+      const cornerCutting = cornerCuttingOf(machine, span);
+      return [{ kind: 'warning', ...base, ...(cornerCutting > cornerCuttingBefore && { cornerCutting }) }];
+    }
     default:
       return [];
   }
@@ -261,7 +271,8 @@ const foldCarSpans = (acc: Acc, view: EngineView): Set<CarId> => {
         changed.add(id);
       }
       if (row === 'retirement' && span.confirmed) acc.retiredFrom[id] ??= span.startFrame;
-      acc.spanEvents[machine].push(...entriesOf(machine, span));
+      acc.spanEvents[machine].push(...entriesOf(machine, span, acc.cornerCuttingOf[id] ?? 0));
+      if (machine === 'warnings') acc.cornerCuttingOf[id] = cornerCuttingOf(machine, span);
     }
     acc.closed[machine] = list.length;
   }
@@ -364,6 +375,7 @@ const init = (view: EngineView): Acc =>
       lapFrames: [],
       visits: [],
       spanEvents: { 'car-location': [], 'car-status': [], warnings: [] },
+      cornerCuttingOf: [],
       collisions: [],
       given: [],
       givenCount: new Map(),
@@ -392,7 +404,7 @@ const nowOf = (acc: Acc, view: EngineView): Now => {
       const row = behaviourOf(machine, span.kind);
       if (row === 'noTimeLoss') openVisits[id] = span.startFrame;
       if (row === 'retirement') openRetiredFrom[id] = span.startFrame;
-      openEvents.push(...entriesOf(machine, span));
+      openEvents.push(...entriesOf(machine, span, acc.cornerCuttingOf[id] ?? 0));
     }
   }
   const open = NEUTRALISATION_MACHINES.flatMap((machine) =>
@@ -431,8 +443,8 @@ type Candidate = {
   /** The first damage jump of a damage entry, and every jump of it. */
   jump?: DamageJump;
   jumps?: DamageJump[];
-  /** A warning entry's count of the car's warnings. */
-  warnings?: number;
+  /** A corner-cutting warning entry's count of the car's corner-cutting warnings. */
+  cornerCutting?: number;
   /** A neutralised entry's kind (`neutralisationKind`). */
   neutralisation?: NeutralisationKind;
   /** A penalty entry's ruling. */
@@ -509,7 +521,7 @@ const candidates = (acc: Board): Candidate[] => {
   const list = [...closed, ...acc.collisions, ...acc.given, ...acc.openEvents].map((e) =>
     candidate(e.kind, e.at, e.carIds, {
       ...(e.id !== undefined && { id: e.id }),
-      ...(e.warnings !== undefined && { warnings: e.warnings }),
+      ...(e.cornerCutting !== undefined && { cornerCutting: e.cornerCutting }),
       ...(e.penalty !== undefined && { penalty: e.penalty }),
     }),
   );
@@ -636,10 +648,15 @@ const damageParts = (jumps: readonly DamageJump[]): IncidentDamagePart[] => {
   return [...rise].map(([part, deltaPct]) => ({ part, deltaPct })).sort((a, b) => b.deltaPct - a.deltaPct);
 };
 
-/** The detail only some kinds have: a damage entry's parts, a warning's count of the limit, a penalty's ruling. */
+/**
+ * The detail only some kinds have: a damage entry's parts, a corner-cutting warning's count of the limit (the
+ * corner-cutting warnings, a penalty every `warningLimit`; a warning of another kind counts nothing), a penalty's ruling.
+ */
 const detailOf = (acc: Board, c: Candidate): Pick<IncidentEntry, 'damage' | 'warning' | 'penalty'> => {
   if (c.jumps !== undefined) return { damage: damageParts(c.jumps) };
-  if (c.warnings !== undefined) return { warning: { count: warningInCycle(c.warnings, acc.warningLimit), limit: acc.warningLimit } };
+  if (c.cornerCutting !== undefined) {
+    return { warning: { count: warningInCycle(c.cornerCutting, acc.warningLimit), limit: acc.warningLimit } };
+  }
   if (c.penalty !== undefined) return { penalty: { ...c.penalty } };
   return {};
 };
