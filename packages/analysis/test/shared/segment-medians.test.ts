@@ -22,7 +22,7 @@ describe('segment medians', () => {
     expect(MEDIAN_MIN_LAPS).toBe(3);
   });
 
-  it('is 'fewLaps' with no sample or fewer than 3', () => {
+  it("is 'fewLaps' with no sample or fewer than 3", () => {
     const samples = empty();
     expect(segmentMedian(samples, car, 4)).toBe('fewLaps');
     fold(samples, [1000, 1100]);
