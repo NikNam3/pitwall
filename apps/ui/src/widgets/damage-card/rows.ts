@@ -1,5 +1,5 @@
 import type { Corners, DamageJump, DamageParts, DamageState, Known, SessionTime } from '@pitwall/domain';
-import { formatCount, formatDeltaPct, formatLapNumber, formatPct, formatSecondsPerLap, formatSignedSeconds } from '../../kit/values/format.ts';
+import { formatCount, formatDeltaPct, formatLapNumber, formatPct, formatSecondsPerLap } from '../../kit/values/format.ts';
 import { knownPart, type CellPart } from '../../kit/grid/grid.ts';
 import { insightText } from '../../kit/text.ts';
 import type { Role } from '../../theme/roles.ts';
@@ -50,7 +50,7 @@ function jumpLoss(jump: DamageJump): Pick<JumpRow, 'loss' | 'title' | 'lossRole'
   if (loss.known) return { loss: knownPart(loss, (ms) => text.lossMeasured(formatSecondsPerLap(ms))) };
   const est = jump.estimateMsPerLap;
   if (est?.known) {
-    return { loss: { text: text.lossEstimate(`${formatSignedSeconds(est.value, 1)} s/lap`) }, lossRole: estimateRole };
+    return { loss: { text: text.lossEstimate(formatSecondsPerLap(est.value, 1)) }, lossRole: estimateRole };
   }
   if (loss.reason === 'insufficientData') {
     const m = jump.measuring;

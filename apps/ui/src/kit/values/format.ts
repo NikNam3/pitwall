@@ -170,8 +170,8 @@ export const formatWarnings = (n: number): string => (Number.isFinite(n) ? `${n}
 /** A race position, `7` -> `7`; unknown is empty. */
 export const formatPlace = (n: number | undefined): string => (n === undefined || !Number.isFinite(n) ? '' : formatCount(n));
 
-/** A time loss in ms per lap as signed seconds to two decimals, `120` -> `+0.12 s/lap`. */
-export const formatSecondsPerLap = (ms: Ms): string => (Number.isFinite(ms) ? `${formatSignedSeconds(ms, 2)} s/lap` : '');
+/** A time loss in ms per lap as signed seconds (two decimals by default, `120` -> `+0.12 s/lap`; one: `800` -> `+0.8 s/lap`). */
+export const formatSecondsPerLap = (ms: Ms, decimals = 2): string => (Number.isFinite(ms) ? `${formatSignedSeconds(ms, decimals)} s/lap` : '');
 
 /** A rate in ms per lap as seconds to two decimals without a forced plus, `310` -> `0.31 s/lap`, `-120` -> `−0.12 s/lap`. */
 export const formatSecondsPerLapPlain = (ms: Ms): string => (Number.isFinite(ms) ? `${formatSeconds(ms, 2)} s/lap` : '');
