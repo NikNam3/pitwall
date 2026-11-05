@@ -208,6 +208,7 @@ The virtual finish car (🟢) runs at the average lap time and crosses the line 
 | F1 25 feasibility | ✅ own and AI damage; ⚠ for restricted rivals; wing-change time 🔧 from recordings |
 | Escalation | Tier 1 on any new damage (Collision event or damage jump). |
 | Time to decide | One lap, often less: the pit entry may be close. Show the break-even immediately, using the game's damage % until lap times confirm it. |
+| Smarter loss (user, 2026-11-05, later) | Wanted after the first live test. 1) **At once from mini-sectors:** the car's time per mini-sector since the hit against its own median for the same segments before it, a labelled estimate after a few segments that firms up with each one (a range, narrowing). 2) **Only the damage:** take out what changes pace anyway, using the car's own trend before the hit (fuel burning off, tyre wear); leave out segments in traffic, DRS or dirty air (within about 1 s of the car ahead) and SC/VSC and pit segments. 3) **Where it costs:** the loss per sector and corner type; a front wing costs in slow and medium corners, little on the straights, which tells what the driver feels. 4) **Before measuring:** a prior per part and damage %, from every stored recording (the priors store, C62a), so the first estimate stands at the moment of the hit and the measurement refines it. 5) **The decision, not only the number:** break-even laps against a stop, shown at once and updated with the estimate (the computed answer above). |
 
 ### 2.4 Race stint
 
