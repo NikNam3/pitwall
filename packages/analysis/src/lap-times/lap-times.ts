@@ -93,6 +93,56 @@ export function rowOf(
   };
 }
 
+/** What the live timing says of a car's current pass of its lap (spec 3.4). */
+export type LivePass = {
+  sector: 1 | 2 | 3;
+  sector1TimeMs: Ms;
+  sector2TimeMs: Ms;
+  /** The pass restarted its lap: its own line crossing supersedes an earlier pass's (a garage restart, C25). */
+  restarted: boolean;
+  /** When the live timing was read. */
+  at: number;
+};
+
+type Newest = { ms: Known<Ms>; status: SectorStatus; older: boolean };
+
+/** A live sector time against the bests of the lap records, which it is not yet part of: strictly faster wins. */
+const liveStatusOf = (ms: Ms, own: Best | undefined, session: Holder | undefined): SectorStatus => {
+  if (session === undefined || ms < session.ms) return 'sessionBest';
+  return own === undefined || ms < own.ms ? 'personalBest' : 'none';
+};
+
+/**
+ * The newest finished time per sector (spec 3.4): sectors 1 and 2 from the live timing once the current pass has
+ * passed their end, else (and sector 3 always) the newest lap record's, judged as that record is. A time is older when
+ * it belongs to an earlier pass than the newest one with a time: the lap just finished is not older until the current
+ * pass has a sector of its own, and on a restarted pass every time before it is older, a live time the game still
+ * shows from the abandoned attempt included. `live` is absent for a car out of the race: its record times stand.
+ */
+export function newestSectorsOf(
+  row: Omit<LapBoardRow, 'deltaToReference'>,
+  live: LivePass | undefined,
+  bests: CarBests,
+  session: ReturnType<typeof sessionBestsOf>,
+): Pick<LapBoardRow, 'newestSectorsMs' | 'newestSectorStatus' | 'newestSectorOlder'> {
+  const passHasTime = live !== undefined && (live.sector > 1 || live.restarted);
+  const newest: Newest[] = SECTORS.map((i) => ({ ms: row.lastSectorsMs[i], status: row.lastSectorStatus[i], older: passHasTime && row.lastSectorsMs[i].known }));
+  if (live !== undefined) {
+    for (const i of [0, 1] as const) {
+      const ms = i === 0 ? live.sector1TimeMs : live.sector2TimeMs;
+      const own = live.sector > i + 1;
+      // 0 is the game's "no time yet" (C3); a time the pass has not reached is the abandoned attempt's, on a restart only
+      if (ms <= 0 || (!own && !live.restarted)) continue;
+      newest[i] = { ms: known(ms, live.at), status: liveStatusOf(ms, bests.sectors[i], session.sectors[i]), older: !own };
+    }
+  }
+  return {
+    newestSectorsMs: newest.map((n) => n.ms) as Sectors<Known<Ms>>,
+    newestSectorStatus: newest.map((n) => n.status) as Sectors<SectorStatus>,
+    newestSectorOlder: newest.map((n) => n.older) as Sectors<boolean>,
+  };
+}
+
 /** The session-best part of the board. */
 export function sessionBestBoard(session: ReturnType<typeof sessionBestsOf>): LapBoard['sessionBest'] {
   return { lap: knownHolder(session.lap), sectors: session.sectors.map(knownHolder) as LapBoard['sessionBest']['sectors'] };
