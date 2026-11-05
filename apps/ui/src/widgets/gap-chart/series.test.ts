@@ -22,8 +22,8 @@ const car = (id: number, name: string, teamId: number, raceNumber: number): CarO
 const NO_NOW = unknown('notApplicable');
 
 type Line = GapperLines['cars'][number];
-/** One car of the window. The assertion lets it compile while the domain type still has the removed `byLap` (plan Task 15). */
-const line = (id: number, points: Line['points'], now: Line['now']): Line => ({ carId: carId(id), points, now }) as Line;
+/** One car of the window. */
+const line = (id: number, points: Line['points'], now: Line['now']): Line => ({ carId: carId(id), points, now });
 
 const session = (playerCar: number, teammateCar?: number): SessionInfo =>
   ({ playerCar: carId(playerCar), ...(teammateCar === undefined ? {} : { teammateCar: carId(teammateCar) }) }) as unknown as SessionInfo;

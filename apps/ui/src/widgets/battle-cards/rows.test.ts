@@ -11,17 +11,16 @@ const overview = (id: number, name: string): CarOverview =>
   ({ id: carId(id), identity: { name, raceNumber: id }, timing: {}, tyres: {}, updatedAt: 0 }) as unknown as CarOverview;
 const cars = [overview(1, 'Kuhnlein'), overview(3, 'Charles Leclerc'), overview(7, 'Alexander Albon')];
 
-// `as BattleSide` lets the sides compile while the domain type still has the removed fields (plan Task 15).
-const aheadSide = {
+const aheadSide: BattleSide = {
   carId: carId(3), gapMs: k(3199), lapsToDrs: k(7.1), paceDeltaMs: k(430),
   margin: k({ kind: 'pass', ms: 250 }),
   ours: { compound: 'medium', age: 12 }, theirs: { compound: 'hard', age: 23 }, theirErsStoreJ: k(3_100_000),
-} as BattleSide;
-const behindSide = {
+};
+const behindSide: BattleSide = {
   carId: carId(7), gapMs: k(841), lapsToDrs: k(0), paceDeltaMs: k(-420),
   margin: k({ kind: 'hold', ms: -400 }),
   ours: { compound: 'medium', age: 12 }, theirs: { compound: 'medium', age: 1 }, theirErsStoreJ: unknown('realism'),
-} as BattleSide;
+};
 const card = (over: Partial<BattleCard> = {}): BattleCard => ({ carId: OURS, ahead: k(aheadSide), behind: k(behindSide), drs: { enabled: true }, ...over });
 
 /** A card as battle gives it while race control has DRS off: both sides' lapsToDrs notApplicable. */

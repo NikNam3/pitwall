@@ -167,7 +167,7 @@ describe('gap properties', () => {
           }
           if (!car.now.known) throw new Error(`car ${car.carId} has no now at (${newest.lap}, ${newest.segment})`);
           const lap = newest.lap - 1 + newest.segment / MINI_SECTORS;
-          const completed = Math.max(0, ...(car.points ?? []).filter((p) => isWholeLap(p.lap)).map((p) => p.lap));
+          const completed = Math.max(0, ...car.points.filter((p) => isWholeLap(p.lap)).map((p) => p.lap));
           expect(car.now.value.lap).toBeCloseTo(lap, 9);
           expect(car.now.value.lap).toBeGreaterThan(completed);
           expect(car.now.value.lap).toBeLessThan(completed + 1);

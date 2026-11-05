@@ -14,13 +14,11 @@ const k = <T>(v: T): Known<T> => known(v, 0);
 const overview = (id: number, name: string): CarOverview =>
   ({ id: carId(id), identity: { name, raceNumber: id }, timing: {}, tyres: {}, updatedAt: 0 }) as unknown as CarOverview;
 const cars = [overview(1, 'Kuhnlein'), overview(3, 'Charles Leclerc'), overview(7, 'Alexander Albon')];
-// `as BattleSide` lets the literal compile while the domain type still has the removed fields (plan Task 15).
-const side = (id: number, gapMs: number): BattleSide =>
-  ({
-    carId: carId(id), gapMs: k(gapMs), lapsToDrs: unknown('notApplicable'), paceDeltaMs: k(100),
-    margin: k({ kind: 'pass', ms: 150 }),
-    ours: { compound: 'inter', age: 4 }, theirs: { compound: 'inter', age: 6 }, theirErsStoreJ: k(2_000_000),
-  }) as BattleSide;
+const side = (id: number, gapMs: number): BattleSide => ({
+  carId: carId(id), gapMs: k(gapMs), lapsToDrs: unknown('notApplicable'), paceDeltaMs: k(100),
+  margin: k({ kind: 'pass', ms: 150 }),
+  ours: { compound: 'inter', age: 4 }, theirs: { compound: 'inter', age: 6 }, theirErsStoreJ: k(2_000_000),
+});
 const card: BattleCard = { carId: carId(1), ahead: k(side(3, 1800)), behind: k(side(7, 2600)), drs: { enabled: false, reason: 'wetTrack' } };
 
 const show = (mode: 'compact' | 'full') =>

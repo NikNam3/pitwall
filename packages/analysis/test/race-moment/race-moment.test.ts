@@ -51,20 +51,18 @@ const incident = (over: Partial<IncidentEntry> = {}): IncidentEntry => ({
   ...over,
 });
 
-// battle's side as of the live polish (spec 3.1): `margin` from PACE Δ. The assertion lets the literal compile while
-// the domain type still has the removed fields (plan Task 15); it is redundant once they are gone.
-const side = (over: Partial<BattleSide> = {}): BattleSide =>
-  ({
-    carId: car1,
-    gapMs: known(5000, NOW),
-    lapsToDrs: known(20, NOW),
-    paceDeltaMs: known(0, NOW),
-    margin: known({ kind: "pass" as const, ms: -1000 }, NOW),
-    ours: { compound: "soft", age: 5 },
-    theirs: { compound: "soft", age: 5 },
-    theirErsStoreJ: na,
-    ...over,
-  }) as BattleSide;
+// battle's side as of the live polish (spec 3.1): `margin` from PACE Δ
+const side = (over: Partial<BattleSide> = {}): BattleSide => ({
+  carId: car1,
+  gapMs: known(5000, NOW),
+  lapsToDrs: known(20, NOW),
+  paceDeltaMs: known(0, NOW),
+  margin: known({ kind: "pass" as const, ms: -1000 }, NOW),
+  ours: { compound: "soft", age: 5 },
+  theirs: { compound: "soft", age: 5 },
+  theirErsStoreJ: na,
+  ...over,
+});
 
 const card = (
   ahead: Known<BattleSide> = na,

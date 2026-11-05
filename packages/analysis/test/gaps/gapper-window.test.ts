@@ -92,7 +92,7 @@ describe('the gapper points', () => {
 
   it('x is completed laps + segment / 50', () => {
     const lines = gapperLines(run(viewOf(midLap())), at89);
-    const xs = lines.cars.find((c) => c.carId === carId(0))?.points?.map((p) => p.lap) ?? [];
+    const xs = lines.cars.find((c) => c.carId === carId(0))?.points.map((p) => p.lap) ?? [];
     expect(xs.slice(0, 6)).toEqual([1, 2, 3, 4, 5, 5 + 1 / MINI_SECTORS].map((x) => expect.closeTo(x, 9)));
     expect(xs.at(-1)).toBeCloseTo(15 + 20 / MINI_SECTORS, 9);
     // every point lies on a crossing: x × 50 is a whole number of mini-sectors
@@ -143,7 +143,7 @@ describe("the gapper's live point (now) beside the points", () => {
     const car0 = gapperLines(run(viewOf(ms)), at89).cars.find((c) => c.carId === carId(0));
     // 15.4 × 89 000 − 1 386 000
     expect(car0?.now).toEqual(known({ lap: expect.closeTo(15.4, 9), gapMs: -15_400 }, 1_386_000));
-    const last = car0?.points?.at(-1);
+    const last = car0?.points.at(-1);
     expect(last?.lap).toBeCloseTo(15.4, 9);
     expect(last?.gapMs).toBe(-15_400);
   });
@@ -152,7 +152,7 @@ describe("the gapper's live point (now) beside the points", () => {
     const ms = offsetRace([0, 2_000], 16).filter((m) => m.at <= 1_350_000);
     const car0 = gapperLines(run(viewOf(ms)), at89).cars.find((c) => c.carId === carId(0));
     expect(car0?.now).toEqual(unknown('notApplicable'));
-    expect(car0?.points?.at(-1)).toEqual({ lap: 15, gapMs: -15_000 });
+    expect(car0?.points.at(-1)).toEqual({ lap: 15, gapMs: -15_000 });
   });
 });
 

@@ -206,12 +206,12 @@ export const isWholeLap = (lap: number): boolean => Math.abs(lap * MINI_SECTORS 
 export const lapPoints = (lines: GapperLines, id: number): [number, number][] | undefined =>
   lines.cars
     .find((c) => c.carId === id)
-    ?.points?.filter((p) => isWholeLap(p.lap) && p.lap >= 1)
+    ?.points.filter((p) => isWholeLap(p.lap) && p.lap >= 1)
     .map((p): [number, number] => [progressAtX(p.lap) / MINI_SECTORS, plain(p.gapMs)]);
 
 /** A car's gapper points as `[progress, gapMs]` (x × 50, so whole numbers compare exactly). */
 export const pointsByProgress = (lines: GapperLines, id: number): [number, number][] | undefined =>
-  lines.cars.find((c) => c.carId === id)?.points?.map((p): [number, number] => [progressAtX(p.lap), plain(p.gapMs)]);
+  lines.cars.find((c) => c.carId === id)?.points.map((p): [number, number] => [progressAtX(p.lap), plain(p.gapMs)]);
 
 /** The car ids of the gapper's lines (the window), sorted. */
 export const windowOf = (lines: GapperLines): number[] => lines.cars.map((c) => c.carId as number).sort((a, b) => a - b);

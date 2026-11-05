@@ -42,12 +42,9 @@ const sessionInfo = {
   realism: false,
 } as unknown as SessionInfo;
 
-/**
- * One car of the window. The assertion lets it compile while the domain type still has the removed `byLap` (plan
- * Task 15); it is redundant once that is gone.
- */
+/** One car of the window. */
 type Line = GapperLines['cars'][number];
-const entry = (id: number, points: Line['points'], now: Line['now']): Line => ({ carId: carId(id), points, now }) as Line;
+const entry = (id: number, points: Line['points'], now: Line['now']): Line => ({ carId: carId(id), points, now });
 
 /**
  * Gap in ms per lap, one point at each line: `step` ms more each lap, plus `jump.ms` from lap `jump.at` on, so the

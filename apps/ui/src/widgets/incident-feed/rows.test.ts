@@ -259,8 +259,8 @@ describe('the incident detail in the what cell (mockup: time loss (T7), damage F
 
   describe('a warning names its kind (cells.what.text, before the grid fits it)', () => {
     const warned = (warning: NonNullable<IncidentEntry['warning']>): string => what({ kind: 'warning', warning, where: { sector: k(2) } });
-    /** Another infringement's warning: no count. The assertion lets it compile while the domain type still has the count (plan Task 15). */
-    const other = (infringement: Known<number>) => ({ kind: 'other', infringement }) as NonNullable<IncidentEntry['warning']>;
+    /** Another infringement's warning: no count. */
+    const other = (infringement: Known<number>): NonNullable<IncidentEntry['warning']> => ({ kind: 'other', infringement });
 
     it('corner cutting shows its count of the limit', () => {
       expect(warned({ kind: 'cornerCutting', count: 2, limit: 3 })).toBe('warning · corner cutting 2/3');
