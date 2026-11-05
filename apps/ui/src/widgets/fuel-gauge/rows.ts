@@ -14,7 +14,7 @@ export type FuelRow = CellPart & {
   dim?: boolean;
 };
 
-/** The fuel rows in display order: margin, lasts, to go, burn, save target, the game's figure. */
+/** The fuel rows in display order: the kg, margin, lasts, to go, burn, save target, the game's figure. */
 export function fuelRows(fuel: FuelState): FuelRow[] {
   // The laps are the figure that decides; the kg in brackets is added when known (laps known and kg unknown shows the laps alone).
   const lasts = fuel.lapsOfFuel.known
@@ -22,6 +22,7 @@ export function fuelRows(fuel: FuelState): FuelRow[] {
     : knownPart(fuel.lapsOfFuel, formatLaps);
   const role = marginRole(fuel.marginLaps);
   return [
+    { key: 'fuel', label: text.labels.fuel, ...knownPart(fuel.kg, formatKgUnit) },
     { key: 'margin', label: text.labels.margin, ...knownPart(fuel.marginLaps, formatSignedLaps), role, bold: true },
     { key: 'lasts', label: text.labels.lasts, ...lasts },
     { key: 'toGo', label: text.labels.toGo, ...knownPart(fuel.lapsLeft, formatLaps) },
