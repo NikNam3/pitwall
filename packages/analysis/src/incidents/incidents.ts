@@ -12,12 +12,8 @@ import {
   type SessionState,
   type SessionTime,
 } from '@pitwall/domain';
+import { carSegmentMedian, foldCarSample, type CarSegmentSamples } from '../shared/segment-medians.ts';
 import { gapBehind, progressOf, type CarCrossings } from '../gaps/gaps.ts';
-
-/** The median of a segment is taken over the car's last this many laps that have it... */
-export const MEDIAN_LAPS = 5;
-/** ...and needs at least this many. */
-export const MEDIAN_MIN_LAPS = 3;
 
 /** A crossing; "progress" counts mini-sector boundaries from the race start (gaps' `progressOf`); `frame`: the frame it describes (C26). */
 export type Point = { at: SessionTime; progress: number; frame: FrameNumber };
@@ -36,7 +32,7 @@ export type Track = {
   /** How many points have had the mini-sector that ends at them evaluated. */
   evaluated: number;
   /** Per segment, the durations of its last eligible mini-sectors, oldest first. */
-  samples: Ms[][];
+  samples: CarSegmentSamples;
   /** By the progress of a mini-sector's start; absent until the mini-sector is complete. */
   loss: SegmentLoss[];
   /** By the progress of a mini-sector's start: the frame of its end crossing (C26), set with its `loss`. */
@@ -70,25 +66,6 @@ export function addCrossing(track: Track, c: MiniSectorCrossing): void {
   track.atByProgress[progress] = c.at;
 }
 
-/** The `k`-th smallest of a few values (0-based), by counting; no sorted copy, since it runs for every mini-sector. */
-const kth = (values: readonly Ms[], k: number): Ms => {
-  for (const v of values) {
-    let less = 0;
-    let lessOrEqual = 0;
-    for (const w of values) {
-      if (w < v) less++;
-      if (w <= v) lessOrEqual++;
-    }
-    if (less <= k && k < lessOrEqual) return v;
-  }
-  return NaN;
-};
-
-const median = (values: readonly Ms[]): Ms => {
-  const mid = values.length >> 1;
-  return values.length % 2 === 1 ? kth(values, mid) : (kth(values, mid - 1) + kth(values, mid)) / 2;
-};
-
 /**
  * Evaluates the mini-sectors completed since the last call, each from its start crossing to its end crossing: one
  * `excluded` covers is neither a loss nor a sample; otherwise its loss is its duration minus the median of the
@@ -106,15 +83,15 @@ export function evaluate(track: Track, timeLossMs: Ms, excluded: (from: Point, t
       track.loss[progress] = 'excluded';
       continue;
     }
-    const samples = (track.samples[progress % MINI_SECTORS] ??= []);
+    const segment = progress % MINI_SECTORS;
     const ms = to.at - start;
-    if (samples.length >= MEDIAN_MIN_LAPS) {
-      const sector = { start, end: to.at, endFrame: to.frame, progress, lossMs: ms - median(samples) };
+    const med = carSegmentMedian(track.samples, segment);
+    if (med !== 'fewLaps') {
+      const sector = { start, end: to.at, endFrame: to.frame, progress, lossMs: ms - med };
       track.loss[progress] = sector;
       if (sector.lossMs > timeLossMs) track.slow.push(sector);
     } else track.loss[progress] = 'fewLaps';
-    samples.push(ms);
-    if (samples.length > MEDIAN_LAPS) samples.shift();
+    foldCarSample(track.samples, segment, ms);
   }
   track.evaluated = track.points.length;
 }
