@@ -1,4 +1,4 @@
-import { carId, unknown, type Ms } from '@pitwall/domain';
+import { carId, type Ms } from '@pitwall/domain';
 import { describe, expect, it } from 'vitest';
 import {
   foldSegmentSample,
@@ -14,10 +14,7 @@ const empty = (): SegmentSamples => new Map();
 const fold = (samples: SegmentSamples, values: number[], who = car, segment = 4) => {
   for (const ms of values) foldSegmentSample(samples, who, segment, ms as Ms);
 };
-const value = (samples: SegmentSamples, who = car, segment = 4) => {
-  const m = segmentMedian(samples, who, segment);
-  return m.known ? m.value : m;
-};
+const value = (samples: SegmentSamples, who = car, segment = 4) => segmentMedian(samples, who, segment);
 
 describe('segment medians', () => {
   it('uses the last 5 samples and needs at least 3', () => {
@@ -25,14 +22,14 @@ describe('segment medians', () => {
     expect(MEDIAN_MIN_LAPS).toBe(3);
   });
 
-  it('is unknown(fewLaps) with no sample or fewer than 3', () => {
+  it('is 'fewLaps' with no sample or fewer than 3', () => {
     const samples = empty();
-    expect(segmentMedian(samples, car, 4)).toEqual(unknown('fewLaps'));
+    expect(segmentMedian(samples, car, 4)).toBe('fewLaps');
     fold(samples, [1000, 1100]);
-    expect(segmentMedian(samples, car, 4)).toEqual(unknown('fewLaps'));
+    expect(segmentMedian(samples, car, 4)).toBe('fewLaps');
   });
 
-  it('is known from the third sample on', () => {
+  it('is a number from the third sample on', () => {
     const samples = empty();
     fold(samples, [1000, 1100, 1200]);
     expect(value(samples)).toBe(1100);
@@ -64,6 +61,6 @@ describe('segment medians', () => {
     expect(value(samples, car, 4)).toBe(1000);
     expect(value(samples, car, 5)).toBe(2000);
     expect(value(samples, carId(7), 4)).toBe(3000);
-    expect(segmentMedian(samples, carId(7), 5)).toEqual(unknown('fewLaps'));
+    expect(segmentMedian(samples, carId(7), 5)).toBe('fewLaps');
   });
 });
