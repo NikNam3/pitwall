@@ -11,13 +11,15 @@ const overview = (id: number, name: string): CarOverview =>
   ({ id: carId(id), identity: { name, raceNumber: id }, timing: {}, tyres: {}, updatedAt: 10 }) as unknown as CarOverview;
 const cars = [overview(1, 'Kuhnlein'), overview(3, 'Charles Leclerc'), overview(7, 'Alexander Albon')];
 
-// Mockup 2-timing.html: LEC ahead out of range, ALB behind already in DRS.
+// LEC ahead: we are faster, PASS +0.25 (bold white); ALB behind in DRS range: HOLD −0.40 (warning).
 const lec: BattleSide = {
-  carId: carId(3), gapMs: k(3199), closingMsPerLap: k(310), lapsToDrs: k(7.1), paceDeltaMs: k(290), overtakeMarginMs: k(-710),
+  carId: carId(3), gapMs: k(3199), closingMsPerLap: unknown('notApplicable'), lapsToDrs: k(7.1), paceDeltaMs: k(430), overtakeMarginMs: unknown('notApplicable'),
+  margin: k({ kind: 'pass', ms: 250 }),
   ours: { compound: 'medium', age: 12 }, theirs: { compound: 'hard', age: 23 }, theirErsStoreJ: k(3_100_000),
 };
 const alb: BattleSide = {
-  carId: carId(7), gapMs: k(841), closingMsPerLap: k(220), lapsToDrs: k(0), paceDeltaMs: k(-420), overtakeMarginMs: k(-1420),
+  carId: carId(7), gapMs: k(841), closingMsPerLap: unknown('notApplicable'), lapsToDrs: k(0), paceDeltaMs: k(-420), overtakeMarginMs: unknown('notApplicable'),
+  margin: k({ kind: 'hold', ms: -400 }),
   ours: { compound: 'medium', age: 12 }, theirs: { compound: 'medium', age: 1 }, theirErsStoreJ: unknown('realism'),
 };
 const card: BattleCard = { carId: carId(1), ahead: k(lec), behind: k(alb), drs: { enabled: true } };
