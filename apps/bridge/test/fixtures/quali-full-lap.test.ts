@@ -54,7 +54,7 @@ describe('qualifying-singapore-full-lap: the flying lap', () => {
   });
 
   it('the flying lap timed from the line after the out lap from the garage counts for pace, for the rate and for bests', () => {
-    expect(classifyLap(flyingLap(), { isRace: false, ...LAP_CLASSES_CONFIG.defaults })).toEqual({ forPace: true, forRate: true, forBest: { lap: true, sectors: [true, true, true] } });
+    expect(classifyLap(flyingLap(), { isRace: false, ...LAP_CLASSES_CONFIG.defaults })).toEqual({ forPace: true, forRate: true, forBands: true, forBest: { lap: true, sectors: [true, true, true] } });
   });
 
   it("the lap carries the game's lap time, its sectors add up to it, and the board shows both as the last lap", () => {

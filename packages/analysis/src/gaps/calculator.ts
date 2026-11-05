@@ -1,5 +1,5 @@
 // The `gaps` calculator (spec 6.1): a fold over the mini-sector crossings; the order and our cars come from the car state.
-import { carStatusSpans, known, weekendPhaseSpans, MINI_SECTORS, sessionPhaseRaceSpans, unknown, type CarId, type Interval, type Known, type MiniSectorCrossing, type Ms, type Neighbourhood, type SessionTime } from '@pitwall/domain';
+import { carStatusSpans, foldCurrentCrossing, known, weekendPhaseSpans, MINI_SECTORS, sessionPhaseRaceSpans, unknown, type CarId, type CrossingIndex, type Interval, type Known, type MiniSectorCrossing, type Ms, type Neighbourhood, type SessionTime } from '@pitwall/domain';
 import { openSpansOf, type EngineView, type IncrementalCalculator } from '@pitwall/engine/readers';
 import { behaviourByCar, behaviourFor, openSpansByCar } from '../shared/behaviour.ts';
 import { CAR_STATUS_READS } from '../shared/car-status.ts';
@@ -10,6 +10,8 @@ import { GAPS, GAPS_BEHAVIOUR, GAPS_CONFIG, type GapsOutput } from './index.ts';
 
 /** What the crossings and events so far add up to. */
 type Table = {
+  /** The current crossing of every car, lap and segment (C25: folded through the domain helper). */
+  current: CrossingIndex;
   /** By car id: every crossing, from progress 0. */
   tracks: Array<CarCrossings | undefined>;
   lineTimes: GapsOutput['lineTimes'];
@@ -46,7 +48,8 @@ function foldCrossings(acc: Table, view: EngineView, from: number): void {
     const progress = progressOf(m);
     if (progress < 0) continue; // laps count from 1
     const track = (acc.tracks[m.carId] ??= { fromProgress: 0, at: [] });
-    track.at[progress] = m.at;
+    foldCurrentCrossing(acc.current, m);
+    track.at[progress] = (acc.current.get(m.carId)?.get(m.lap)?.[m.segment] ?? m).at;
     if (track.at.length > progress + 1) track.at.length = progress + 1; // a car that went back drops what lay ahead
     crossed[m.carId] = true;
     // segment 0 is the line at the start of its lap: it completes the lap before (none for lap 1, the start)
@@ -216,7 +219,7 @@ function build(acc: Table, view: EngineView): GapsOutput {
 }
 
 const init = (view: EngineView): Table => {
-  const table: Table = { tracks: [], lineTimes: {}, recent: {}, raceStart: undefined, raceSpansFolded: 0, lastRaceSpanKind: undefined };
+  const table: Table = { current: new Map(), tracks: [], lineTimes: {}, recent: {}, raceStart: undefined, raceSpansFolded: 0, lastRaceSpanKind: undefined };
   foldCrossings(table, view, 0);
   foldRaceSpans(table, view);
   return table;
