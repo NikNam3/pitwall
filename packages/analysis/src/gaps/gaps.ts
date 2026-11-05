@@ -49,6 +49,17 @@ export const recentOf = (c: CarCrossings): CarCrossings => {
   return { fromProgress: from, at: c.at.slice(from - c.fromProgress) };
 };
 
+/**
+ * The car's crossings of the last `fineLaps` completed laps and the current one (progress after
+ * `(completed − fineLaps) × 50`, the start line excluded), as a new object.
+ */
+export const fineOf = (c: CarCrossings, fineLaps: number): CarCrossings => {
+  const latest = latestOf(c);
+  const completed = Math.floor(latest / MINI_SECTORS);
+  const from = Math.max(c.fromProgress, 1, (completed - fineLaps) * MINI_SECTORS + 1);
+  return { fromProgress: from, at: c.at.slice(from - c.fromProgress) };
+};
+
 /** Whole laps car `a` is behind car `b` on the road, from their progress; 0 when `a` is not behind. */
 export const lapsBehind = (a: CarCrossings, b: CarCrossings): number => Math.max(0, Math.floor((latestOf(b) - latestOf(a)) / MINI_SECTORS));
 
@@ -137,28 +148,55 @@ function gapNow(crossings: CarCrossings | undefined, startAt: SessionTime, refer
   return known({ lap: progress / MINI_SECTORS, gapMs: Math.round((progress * referenceLapMs) / MINI_SECTORS - (at - startAt)) }, at);
 }
 
+/** A gapper point: at `progress` (x = progress / 50) the gap to the virtual car, `progress / 50 × lapMs − (at − startAt)`. */
+const pointAt = (progress: number, at: SessionTime, startAt: SessionTime, lapMs: Ms) => ({
+  lap: progress / MINI_SECTORS,
+  gapMs: Math.round((progress * lapMs) / MINI_SECTORS - (at - startAt)),
+});
+
 /**
- * Per running car, per completed race lap L, the gap to a virtual car that laps at the reference pace from lights
- * out: `L × referenceLap − (lineTime(L) − raceStart)`, positive = ahead of it; `now` is the same gap at the car's
- * newest mini-sector crossing. Without a known race start or reference lap every line is empty and `now` unknown. A car
- * out of the race keeps its line while it has completed race laps, with no `now` (`notApplicable`): the chart names a
- * line that ends early at its own end. `phases` are the calculator's, the same for every reference.
+ * The car's gapper points after `startAt`: one per completed race lap before its `fine` crossings, at the line, then one
+ * per fine crossing (the last `fineLaps` completed laps and the current one). The start line (x = 0) has none.
+ */
+function pointsOf(out: GapsOutput, carId: CarId, startAt: SessionTime, lapMs: Ms): NonNullable<GapperLines['cars'][number]['points']> {
+  const fine = out.fine[carId];
+  if (fine === undefined) return [];
+  const perLap = raceLaps(out, carId, startAt)
+    .filter(({ lap }) => lap * MINI_SECTORS < fine.fromProgress)
+    .map(({ lap, at }) => pointAt(lap * MINI_SECTORS, at, startAt, lapMs));
+  const perCrossing = fine.at.flatMap((at, i) => (at === undefined || at <= startAt ? [] : [pointAt(fine.fromProgress + i, at, startAt, lapMs)]));
+  return [...perLap, ...perCrossing];
+}
+
+/**
+ * The cars of the window (`GapsOutput.gapperWindow`), running or out of the race: per car, per completed race lap L, the gap to a virtual car that
+ * laps at the reference pace from lights out: `L × referenceLap − (lineTime(L) − raceStart)`, positive = ahead of it
+ * (`byLap`, until the display reads `points`); `points` the same gap per crossing for the last `fineLaps` laps, per lap
+ * before; `now` is the same gap at the car's newest mini-sector crossing. Without a known race start or reference lap
+ * every line is empty and `now` unknown. A car out of the race keeps its line while it has completed race laps, with no
+ * `now` (`notApplicable`): the chart names a line that ends early at its own end. `phases` are the calculator's, the
+ * same for every reference.
  */
 export function gapperLines(out: GapsOutput, reference: GapperReference): GapperLines {
   const referenceLapMs = referenceLap(out, reference);
   const start = out.raceStartAt;
+  const { ours, others } = out.gapperWindow;
+  const inWindow = (carId: CarId) => ours.includes(carId) || others.includes(carId);
   const byLap = (carId: CarId, startAt: SessionTime, lapMs: Ms) =>
     raceLaps(out, carId, startAt).map(({ lap, at }) => ({ lap, gapMs: lap * lapMs - (at - startAt) }));
-  const running = out.intervals.map(({ carId }) => {
-    if (!start.known) return { carId, byLap: [], now: unknown(start.reason) };
-    if (!referenceLapMs.known) return { carId, byLap: [], now: unknown(referenceLapMs.reason) };
-    return { carId, byLap: byLap(carId, start.value, referenceLapMs.value), now: gapNow(out.recent[carId], start.value, referenceLapMs.value) };
-  });
+  const line = (carId: CarId, startAt: SessionTime, lapMs: Ms) => ({ carId, byLap: byLap(carId, startAt, lapMs), points: pointsOf(out, carId, startAt, lapMs) });
+  const running = out.intervals
+    .filter(({ carId }) => inWindow(carId))
+    .map(({ carId }) =>
+      !start.known ? { carId, byLap: [], points: [], now: unknown(start.reason) }
+      : !referenceLapMs.known ? { carId, byLap: [], points: [], now: unknown(referenceLapMs.reason) }
+      : { ...line(carId, start.value, referenceLapMs.value), now: gapNow(out.recent[carId], start.value, referenceLapMs.value) },
+    );
   const stopped =
     !start.known || !referenceLapMs.known ? [] : (
       out.outOfRace
-        .map((carId) => ({ carId, byLap: byLap(carId, start.value, referenceLapMs.value), now: NOT_APPLICABLE }))
-        .filter((line) => line.byLap.length > 0)
+        .filter((carId) => inWindow(carId) && raceLaps(out, carId, start.value).length > 0)
+        .map((carId) => ({ ...line(carId, start.value, referenceLapMs.value), now: NOT_APPLICABLE }))
     );
   const cars = [...running, ...stopped];
   const named = reference.kind === 'carAverage' ? known(reference.carId, 0) : unknown('notApplicable');
