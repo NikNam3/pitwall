@@ -1,9 +1,10 @@
 // `lap-times` (spec 6.2): the projection part of the calculator output, per car.
-import { carId, known, unknown, type LapRecord, type WeekendPhase } from '@pitwall/domain';
+import { carId, known, unknown, type LapRecord, type MiniSectorCrossing, type WeekendPhase } from '@pitwall/domain';
+import { projectionLengths, type EngineView } from '@pitwall/engine';
 import { describe, expect, it } from 'vitest';
-import { field } from '../../../../test-support/builders/index.ts';
+import { crossings, field, lap } from '../../../../test-support/builders/index.ts';
 import { LAP_TIMES_CONFIG } from '../../src/lap-times/index.ts';
-import { activeCars, lapInProgress, NONE, PENDING, PRACTICE, Q1, Q2, Q3, RACE, SS1, SS2, run, scene, type CarKinds } from './scene.ts';
+import { activeCars, guarded, lapInProgress, lapTimes, NONE, PENDING, PRACTICE, Q1, Q2, Q3, RACE, restartPass, run, scene, SS1, SS2, type CarKinds } from './scene.ts';
 
 const notApplicable = unknown('notApplicable');
 const insufficientData = unknown('insufficientData');
@@ -303,5 +304,161 @@ describe('lap-times finish margin', () => {
     ['none (a time trial)', NONE],
   ])('row weekend-phase %s: no finish margin', (_, phase) => {
     expect(atCrossing25(phase, 60_000).p.finishMarginMs).toEqual(notApplicable);
+  });
+});
+
+// Task 3 (C25, C28, C31): a projection measures each lap from its own line, the current crossing of (car, lap, 0): after
+// a garage restart that is the restart's line, never the previous lap's end. The reference lap is measured the same way,
+// from its current crossings, and a segment-0 crossing that is missing or not before segment k leaves no projection.
+describe('lap-times projection from each lap\'s own line', () => {
+  /** Lap 6 ends at 778 s; lap 7's earlier pass (out of the garage and back) runs to the restart's line at 1122.6 s. */
+  const LAP_6_END = 778_000;
+  const RESTART = 1_122_600;
+
+  /**
+   * Car 0 in practice up to its garage restart: laps 1–5 at `paceMs`, lap 6 to 778 s, then lap 7's earlier pass from
+   * 778 s, which reaches every segment before the line at 1122.6 s (the lap number stays 7).
+   */
+  const beforeRestart = (paceMs: number): { laps: LapRecord[]; miniSectors: MiniSectorCrossing[] } => {
+    const five = field({ cars: 1, laps: 5, paceMs });
+    const lapSixStart = 5 * paceMs;
+    const lapSix = lap({ carId: carId(0), lapNumber: 6, lapTimeMs: LAP_6_END - lapSixStart, completedAt: LAP_6_END });
+    const miniSectors = [
+      ...five.crossings, // up to (6, 0) at the end of lap 5
+      ...crossings(carId(0), 6, LAP_6_END - lapSixStart, lapSixStart).slice(1),
+      ...crossings(carId(0), 7, RESTART - LAP_6_END, LAP_6_END), // (7, 0) is lap 6's closing line
+    ];
+    return { laps: [...five.laps, lapSix], miniSectors };
+  };
+
+  it.each([
+    // the restarted pass runs at 98 s against the best lap's 100 s: 40 ms gained per segment
+    [1, 99_960],
+    [25, 99_000],
+    [49, 98_040],
+  ])("the restarted lap's projection counts from its own line (segment %i)", (k, expected) => {
+    const { laps, miniSectors } = beforeRestart(100_000);
+    const restarted = restartPass(miniSectors, 0, 7, 98_000, RESTART, k);
+    const at = restarted[restarted.length - 1]!.at;
+    const view = scene({ laps, miniSectors: [...miniSectors, ...restarted], cars: activeCars(1, { 0: { lap: 7 } }), sessionTime: at });
+    const p = run(view).projections[carId(0)]!;
+    // elapsed is at − 1122.6 s (1 960 ms a segment), not at − 778 s; the best lap (lap 1) is 2 000 ms a segment
+    expect(at - RESTART).toBe(1_960 * k);
+    expect(p.onLap).toBe(true);
+    expect(p.projectedLapMs).toEqual(known(expected, at));
+    expect(p.deltaToBestMs).toEqual(known(expected - 100_000, at));
+    expect(p.projectedPosition).toEqual(known(1, at));
+  });
+
+  /** The flying lap after the restart: lap 7 of 101 497 ms from 1122.6 s, every segment again; laps 1–5 at 105 s. */
+  const FLYING_MS = 101_497;
+  const LAP_7_END = RESTART + FLYING_MS;
+  const withFlyingLap = (): { laps: LapRecord[]; miniSectors: MiniSectorCrossing[] } => {
+    const { laps, miniSectors } = beforeRestart(105_000);
+    const restarted = restartPass(miniSectors, 0, 7, FLYING_MS, RESTART);
+    const lapSeven = lap({ carId: carId(0), lapNumber: 7, lapTimeMs: FLYING_MS, completedAt: LAP_7_END });
+    const closing: MiniSectorCrossing = { carId: carId(0), lap: 8, segment: 0, at: LAP_7_END, frame: 0 };
+    return { laps: [...laps, lapSeven], miniSectors: [...miniSectors, ...restarted, closing] };
+  };
+
+  it.each([
+    // the flying lap's time at k is round(k × 101 497 / 50) from 1122.6 s: 2 030, 50 749, 99 467 ms
+    [1, 2_000 + FLYING_MS - 2_030],
+    [25, 50_000 + FLYING_MS - 50_749],
+    [49, 98_000 + FLYING_MS - 99_467],
+  ])("a garage restart's flying lap is its own reference (lap 8, segment %i)", (k, expected) => {
+    const { laps, miniSectors } = withFlyingLap();
+    // lap 8 at 100 s: 2 000 ms a segment from lap 7's end
+    const live = lapInProgress(0, 8, 100_000, LAP_7_END, k);
+    const at = live[live.length - 1]!.at;
+    const view = scene({ laps, miniSectors: [...miniSectors, ...live], cars: activeCars(1, { 0: { lap: 8 } }), sessionTime: at });
+    const p = run(view).projections[carId(0)]!;
+    // elapsed + (101 497 − the flying lap's time at k), the flying lap measured from the restart's line
+    expect(p.projectedLapMs).toEqual(known(expected, at));
+    expect(p.deltaToBestMs).toEqual(known(expected - FLYING_MS, at));
+  });
+
+  /** Car 0 on lap 3 at segment 25 after two laps at 90 s (the best is lap 1: ties go to the earlier lap), the history changed by `edit`. */
+  const atSegment25 = (edit: (all: MiniSectorCrossing[]) => MiniSectorCrossing[]) => {
+    const { laps, crossings: all } = field({ cars: 1, laps: 2, paceMs: 90_000 });
+    const live = lapInProgress(0, 3, 90_000, 180_000, 25);
+    const sessionTime = live[live.length - 1]!.at;
+    const miniSectors = edit([...all, ...live]);
+    return run(scene({ laps, miniSectors, cars: activeCars(1, { 0: { lap: 3 } }), sessionTime })).projections[carId(0)]!;
+  };
+  const isLine = (lapNumber: number) => (m: MiniSectorCrossing) => m.lap === lapNumber && m.segment === 0;
+
+  it.each<[string, (all: MiniSectorCrossing[]) => MiniSectorCrossing[]]>([
+    ["the best lap's line is missing (the engine joined on lap 1)", (all) => all.filter((m) => !isLine(1)(m))],
+    [
+      "the best lap's current line lies after its segment 25 (a later crossing of (1, 0) supersedes the first)",
+      (all) => [...all, { carId: carId(0), lap: 1, segment: 0, at: 60_000, frame: 0, supersedes: { list: 'crossings', index: all.findIndex(isLine(1)) } }],
+    ],
+    ["the current lap's line is missing", (all) => all.filter((m) => !isLine(3)(m))],
+  ])('a reference without a segment-0 crossing before k gives insufficientData: %s', (_, edit) => {
+    const p = atSegment25(edit);
+    expect(p.onLap).toBe(true);
+    expect(p.projectedLapMs).toEqual(insufficientData);
+    expect(p.deltaToBestMs).toEqual(insufficientData);
+    expect(p.projectedPosition).toEqual(insufficientData);
+    expect(p.finishMarginMs).toEqual(insufficientData);
+  });
+
+  it('an ordinary lap projects as before', () => {
+    // no restart: lap 3 at segment 25, 0.3 s up on the best lap's 45 s there
+    const { laps, crossings: all } = field({ cars: 1, laps: 2, paceMs: 90_000 });
+    const live = lapInProgress(0, 3, 90_000, 180_000, 25, 300);
+    const at = live[live.length - 1]!.at;
+    const view = scene({ laps, miniSectors: [...all, ...live], cars: activeCars(1, { 0: { lap: 3 } }), sessionTime: at });
+    const p = run(view).projections[carId(0)]!;
+    expect(p.projectedLapMs).toEqual(known(89_700, at));
+    expect(p.deltaToBestMs).toEqual(known(-300, at));
+    expect(p.projectedPosition).toEqual(known(1, at));
+  });
+
+  // C31.3 on the new shapes: the accumulator folded crossing by crossing over a restart (and a rewind across it) equals
+  // `init` over the whole projection.
+  describe('incremental = from scratch over a garage restart', () => {
+    const history = (() => {
+      const { laps, miniSectors } = withFlyingLap();
+      return { laps, miniSectors: [...miniSectors, ...lapInProgress(0, 8, 100_000, LAP_7_END, 49)] };
+    })();
+    /** The session at time `t`: the laps and crossings until then, car 0 on the lap after its last one. */
+    const at = (t: number): EngineView => {
+      const laps = history.laps.filter((l) => l.completedAt <= t);
+      const miniSectors = history.miniSectors.filter((m) => m.at <= t);
+      return scene({ laps, miniSectors, cars: activeCars(1, { 0: { lap: laps.length + 1 } }), sessionTime: t });
+    };
+    const step = (state: ReturnType<typeof lapTimes.init>, from: EngineView, to: EngineView, rewound = false) =>
+      lapTimes.update(
+        state,
+        { before: projectionLengths(from.history), after: projectionLengths(to.history), ...(rewound ? { rewound: { frameId: -1, at: 0 } } : {}) },
+        guarded(to),
+      );
+
+    it('update over each delta equals init over the whole history, through the restart', () => {
+      let view = at(700_000);
+      let state = lapTimes.init(guarded(view));
+      for (let t = 710_000; t <= 1_320_000; t += 10_000) {
+        const next = at(t);
+        state = step(state, view, next);
+        view = next;
+        expect(lapTimes.output(state), `t ${t}`).toEqual(run(next));
+      }
+    });
+
+    it('a rewind across the restart equals a fresh run, and so does the replay after it', () => {
+      const full = at(1_200_000);
+      const back = at(1_100_000);
+      let state = step(lapTimes.init(guarded(full)), full, back, true);
+      expect(lapTimes.output(state)).toEqual(run(back));
+      let view = back;
+      for (let t = 1_110_000; t <= 1_320_000; t += 10_000) {
+        const next = at(t);
+        state = step(state, view, next);
+        view = next;
+        expect(lapTimes.output(state), `t ${t}`).toEqual(run(next));
+      }
+    });
   });
 });

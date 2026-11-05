@@ -3,9 +3,11 @@ import {
   addLaps,
   carId as toCarId,
   emptyCurrentLaps,
+  foldCurrentCrossing,
   known,
   unknown,
   type CarId,
+  type CrossingIndex,
   type CurrentLaps,
   type Known,
   type LapRecord,
@@ -22,17 +24,16 @@ import { bestsOf, rowOf, sessionBestBoard, sessionBestsOf, type Best, type CarBe
 import { LAP_TIMES_BEHAVIOUR, type LapTimesEffect } from './behaviour.ts';
 import { LAP_TIMES, LAP_TIMES_CONFIG, type LapTimesOutput } from './index.ts';
 
-/** The crossings of one lap of one car: time by segment, and the newest. */
-type LapCrossings = { at: number[]; latest: { segment: number; at: number } };
-
 /** A car in the session (car-status not absent) at the view: its lap and what the situations open for it say (their rows merged, C44). */
 type CarSnapshot = { id: CarId; lap: number; effect: LapTimesEffect };
 
 /** The accumulator: a pure fold over the laps and the crossings (C31.2). */
 type Acc = {
   laps: CurrentLaps;
-  /** Per car, then lap number. */
-  crossings: Array<Map<number, LapCrossings>>;
+  /** The current crossings by car, lap and segment, through the domain fold (C25). */
+  crossings: CrossingIndex;
+  /** Per car, then lap number: the newest crossing of the lap in log order (never superseded yet). */
+  latest: Map<CarId, Map<number, MiniSectorCrossing>>;
 };
 
 /** What the view shows right now: cars, session and config; read by `output`, never kept in the accumulator (C31.2). */
@@ -61,13 +62,10 @@ const foldCrossings = (acc: Acc, view: EngineView, from: number): void => {
   const length = list.length;
   for (let i = from; i < length; i++) {
     const m = list[i] as MiniSectorCrossing;
-    const byLap = (acc.crossings[m.carId] ??= new Map());
-    let lap = byLap.get(m.lap);
-    if (lap === undefined) byLap.set(m.lap, (lap = { at: [], latest: { segment: m.segment, at: m.at } }));
-    lap.at[m.segment] = m.at;
-    // the accumulator's own object: no output holds it
-    lap.latest.segment = m.segment;
-    lap.latest.at = m.at;
+    foldCurrentCrossing(acc.crossings, m);
+    let byLap = acc.latest.get(m.carId);
+    if (byLap === undefined) acc.latest.set(m.carId, (byLap = new Map()));
+    byLap.set(m.lap, m);
   }
 };
 
@@ -96,7 +94,7 @@ const nowOf = (view: EngineView): Now => {
 };
 
 const init = (view: EngineView): Acc => {
-  const acc: Acc = { laps: emptyCurrentLaps(), crossings: [] };
+  const acc: Acc = { laps: emptyCurrentLaps(), crossings: new Map(), latest: new Map() };
   foldLaps(acc, view, 0);
   foldCrossings(acc, view, 0);
   return acc;
@@ -155,6 +153,13 @@ const cutOffOf = (acc: Board, others: readonly Best[], margin: (timeMs: Ms) => K
   return known({ position: cutPosition, timeMs, marginMs: margin(timeMs) }, at);
 };
 
+/**
+ * Whether a lap's line lies before its crossing at segment k. At segment 0 they are the same crossing, which counts
+ * (supervisor ruling, Task 3).
+ */
+const before = (line: MiniSectorCrossing | undefined, crossing: MiniSectorCrossing): line is MiniSectorCrossing =>
+  line !== undefined && (crossing.segment === 0 || line.at < crossing.at);
+
 const projectionOf = (acc: Board, car: CarSnapshot, best: Best | undefined, bests: Map<CarId, CarBests>): Projection => {
   const id = car.id;
   const others = othersBests(acc, id, bests);
@@ -165,16 +170,19 @@ const projectionOf = (acc: Board, car: CarSnapshot, best: Best | undefined, best
   if (car.effect.offLap || previous?.inLap === true) {
     return notOnLap(id, cutOffOf(acc, others, () => notApplicable));
   }
-  const bestLap = best === undefined ? undefined : byLap[best.lapNumber];
-  const now = acc.crossings[id]?.get(car.lap);
-  const bestAtSegment = best === undefined || now === undefined ? undefined : acc.crossings[id]?.get(best.lapNumber)?.at[now.latest.segment];
-  if (best === undefined || bestLap === undefined || previous === undefined || now === undefined || bestAtSegment === undefined) {
+  // each lap counts from its own line, the current crossing of (car, lap, 0): after a garage restart the restart's line
+  const now = acc.latest.get(id)?.get(car.lap);
+  const lapStart = acc.crossings.get(id)?.get(car.lap)?.[0];
+  const bestCrossings = best === undefined ? undefined : acc.crossings.get(id)?.get(best.lapNumber);
+  const bestAtSegment = now === undefined ? undefined : bestCrossings?.[now.segment];
+  const bestStart = bestCrossings?.[0];
+  if (best === undefined || now === undefined || bestAtSegment === undefined || !before(lapStart, now) || !before(bestStart, bestAtSegment)) {
     return noProjection(id, cutOffOf(acc, others, () => insufficientData));
   }
 
-  const at = now.latest.at;
-  const elapsed = at - previous.completedAt;
-  const bestElapsed = bestAtSegment - (bestLap.completedAt - bestLap.lapTimeMs);
+  const at = now.at;
+  const elapsed = at - lapStart.at;
+  const bestElapsed = bestAtSegment.at - bestStart.at;
   const projected = elapsed + (best.ms - bestElapsed);
   const position = 1 + others.filter((b) => b.ms <= projected).length;
   // with a projection the cut-off is as of the latest crossing, like the margin
