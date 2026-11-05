@@ -268,7 +268,7 @@ describe('the incident detail in the what cell (mockup: time loss (T7), damage F
       expect(whatOf(neutralised({ neutralisation: 'VSC', cause: { ...cause, carIds: [...cause.carIds] } }))).toBe('VSC · ALO–TSU collision');
     });
 
-    it('a red flag with a cause (the kit's phase word RED)', () => {
+    it('a red flag with a cause (the RED phase word)', () => {
       const cause = { entryId: 'collision:6+7:228000', kind: 'collision', carIds: [carId(6), carId(7)], at: toSessionTime(228_000) } as const;
       expect(whatOf(neutralised({ neutralisation: 'red', cause: { ...cause, carIds: [...cause.carIds] } }))).toBe('RED · ALO–TSU collision');
     });
