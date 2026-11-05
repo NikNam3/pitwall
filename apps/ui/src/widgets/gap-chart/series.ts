@@ -4,6 +4,7 @@ import type { CarId, GapperLines, GapperReference } from '@pitwall/domain';
 import { carCodeById } from '../../kit/car/car-label.ts';
 import type { ChartSeries, PhaseBand } from '../../kit/chart/data.ts';
 import { role } from '../../theme/index.ts';
+import { lineLook } from './emphasis.ts';
 
 /** The gapper's reference kinds, the default first. */
 export const REFERENCE_KINDS = ['leaderAverage', 'carAverage', 'fixed'] as const;
@@ -48,12 +49,12 @@ export function gapSeries(lines: GapperLines, cars: readonly CarOverview[], ours
     if (line.points.length === 0 && !line.now.known) continue;
     const points: ChartSeries['points'] = line.points.map((p) => [p.lap, -p.gapMs / 1000]);
     if (line.now.known) points.push([line.now.value.lap, -line.now.value.gapMs / 1000]);
-    const own = ours.has(line.carId);
+    const look = lineLook(ours.has(line.carId), line.carId, player);
     out.push({
       label: carCodeById(cars, line.carId).text,
       points,
       ...(line.now.known ? { liveEnd: true } : {}),
-      colour: own ? { colour: role('ownCar'), dashed: line.carId !== player, ownCar: true } : { colour: role('textFaint'), dashed: false, ownCar: false },
+      colour: { colour: role(look.role), dashed: look.dashed, ownCar: look.ownCar },
     });
   }
   return out;
