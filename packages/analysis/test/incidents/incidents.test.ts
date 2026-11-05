@@ -475,10 +475,10 @@ describe('incidents calculator', () => {
       const counts = (feed: IncidentEntry[], id: number) =>
         feed.filter((e) => e.kind === 'warning' && e.carIds[0] === car(id)).map((e) => e.warning);
       const feed = run(viewOf({ miniSectors: race(), spans, penalties }));
-      expect(counts(feed, 7)).toEqual([1, 3, 2, 1].map((count) => ({ count, limit: 3 })));
-      expect(counts(feed, 5)).toEqual([{ count: 1, limit: 3 }]);
+      expect(counts(feed, 7)).toEqual([1, 3, 2, 1].map((count) => ({ kind: 'cornerCutting', count, limit: 3 })));
+      expect(counts(feed, 5)).toEqual([{ kind: 'cornerCutting', count: 1, limit: 3 }]);
       const two = run(viewOf({ miniSectors: race(), spans, penalties, alarmsConfig: { warningsBeforePenalty: 2 } }));
-      expect(counts(two, 7)).toEqual([2, 1, 2, 1].map((count) => ({ count, limit: 2 })));
+      expect(counts(two, 7)).toEqual([2, 1, 2, 1].map((count) => ({ kind: 'cornerCutting', count, limit: 2 })));
     });
 
     it('only penalty entries carry penalty', () => {
@@ -924,27 +924,30 @@ describe('incidents behaves per situation by its behaviour table (C44)', () => {
       expect(entry).toMatchObject({ id: `warning:7:${T}`, at: T, carIds: [car(7)], warning: { count: 2, limit: 3 } });
     });
 
-    it('a collision warning shows its kind without n/limit', () => {
+    it('a collision warning shows its kind and infringement without n/limit', () => {
       const spans = warned(7, [T - 20_000, T - 10_000, T], ['cornerCutting', 'collision', 'cornerCutting']);
       const feed = run(viewOf({ miniSectors: race(), spans })).filter((e) => e.kind === 'warning');
-      // newest first: the corner-cutting ones 2/3 and 1/3, the collision one a warning entry without a count
-      expect(feed.map((e) => [e.at, e.warning])).toEqual([
-        [T, { count: 2, limit: 3 }],
-        [T - 10_000, undefined],
-        [T - 20_000, { count: 1, limit: 3 }],
+      // newest first: the corner-cutting ones 2/3 and 1/3, the collision one an `other` warning (infringement 4) that counts nothing
+      expect(feed.map((e) => [e.at, e.warning?.kind])).toEqual([
+        [T, 'cornerCutting'],
+        [T - 10_000, 'other'],
+        [T - 20_000, 'cornerCutting'],
       ]);
+      expect(feed[0]!.warning).toEqual({ kind: 'cornerCutting', count: 2, limit: 3 });
+      expect(feed[2]!.warning).toEqual({ kind: 'cornerCutting', count: 1, limit: 3 });
       const collision = feed.find((e) => e.at === T - 10_000)!;
       expect(collision).toMatchObject({ id: `warning:7:${T - 10_000}`, kind: 'warning', carIds: [car(7)] });
-      expect('warning' in collision).toBe(false);
+      expect(collision.warning).toMatchObject({ kind: 'other', infringement: known(4, T - 10_000) });
     });
 
-    it('a collision warning first: the entry has no count, and the next corner-cutting warning is 1/3', () => {
+    it('a collision warning first: it is an other warning, and the next corner-cutting warning is 1/3', () => {
       const spans = warned(7, [T - 10_000, T], ['collision', 'cornerCutting']);
       const feed = run(viewOf({ miniSectors: race(), spans })).filter((e) => e.kind === 'warning');
-      expect(feed.map((e) => [e.at, e.warning])).toEqual([
-        [T, { count: 1, limit: 3 }],
-        [T - 10_000, undefined],
-      ]);
+      expect(feed[0]!.at).toBe(T);
+      expect(feed[0]!.warning).toEqual({ kind: 'cornerCutting', count: 1, limit: 3 });
+      expect(feed[1]!.at).toBe(T - 10_000);
+      expect(feed[1]!.warning).toMatchObject({ kind: 'other', infringement: known(4, T - 10_000) });
+      expect(feed).toHaveLength(2);
     });
   });
 });
