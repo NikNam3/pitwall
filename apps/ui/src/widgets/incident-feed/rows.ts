@@ -173,15 +173,9 @@ const partsOf = (cell: IncidentCell, reason: UnknownReason): CellPart[] =>
   cell.parts ?? (cell.text === '' ? [unknownPart(reason)] : [{ text: cell.text }, { text: ' ' }, unknownPart(reason)]);
 
 /**
- * The width of a column that is not the last: its own, or, when its text is longer (a neutralisation's cause line,
- * `SC · ALO–TSU collision`) and every column after it is empty, as long as the text needs, so nothing after it moves.
- */
-const spansOn = (after: readonly IncidentColumn[], row: IncidentRow, cell: IncidentCell, width: number): number =>
-  cell.text.length > width && after.every((c) => row.cells[c].text === '') ? cell.text.length : width;
-
-/**
  * The row's cells on the fixed grid of a line `cols` characters wide: each column in its width, the last one in what
- * is left of the line; a text that does not fit is cut with `…` (kit `fitCell`), never silently.
+ * is left of the line; a text that does not fit its column is cut with `…` (kit `fitCell`), never silently, so a line
+ * never grows past the panel (a warning's full text too: `warning · corner cutting…`).
  */
 export function fitRow(mode: WidgetSize['mode'], row: IncidentRow, cols: number): FittedCell[] {
   const columns = columnsFor(mode);
@@ -189,7 +183,7 @@ export function fitRow(mode: WidgetSize['mode'], row: IncidentRow, cols: number)
   return columns.map((column, i) => {
     const cell = row.cells[column];
     const last = i === columns.length - 1;
-    const width = last ? Math.max(0, cols - fixed) : spansOn(columns.slice(i + 1), row, cell, widths[column]);
+    const width = last ? Math.max(0, cols - fixed) : widths[column];
     const fitted = { column, text: fitCell(cell.text, width) };
     return cell.reason === undefined ? fitted : { ...fitted, title: unknownReason[cell.reason], parts: fitParts(partsOf(cell, cell.reason), width) };
   });
