@@ -247,6 +247,27 @@ describe('the incident detail in the what cell (mockup: time loss (T7), damage F
     expect(what({ kind: 'damage', damage: [{ part: 'frontLeftWingPct', deltaPct: 12 }, { part: 'floorPct', deltaPct: 8 }] })).toBe('FL wing +12 %, floor +8 %');
   });
 
+  describe('a neutralised entry names its cause', () => {
+    const field = [...cars, overview(6, 'Fernando Alonso'), overview(7, 'Yuki Tsunoda')];
+    const neutralised = (over: Partial<IncidentEntry> = {}): IncidentEntry =>
+      entry({ id: 'neutralised:230000', kind: 'neutralised', carIds: [], forUs: [], timeLostMs: unknown('notApplicable'), where: { sector: unknown('notApplicable') }, ...over });
+    const whatOf = (e: IncidentEntry): string => incidentRows([e], field, undefined)[0]!.cells.what.text;
+
+    it('a neutralised entry with a cause shows its cars and kind', () => {
+      const cause = { entryId: 'collision:6+7:228000', kind: 'collision', carIds: [carId(6), carId(7)], at: toSessionTime(228_000) } as const;
+      expect(whatOf(neutralised({ cause: { ...cause, carIds: [...cause.carIds] } }))).toBe('SC · ALO–TSU collision');
+    });
+
+    it('a retirement cause names its one car and kind', () => {
+      const cause = { entryId: 'retirement:6:228000', kind: 'retirement', carIds: [carId(6)], at: toSessionTime(228_000) } as const;
+      expect(whatOf(neutralised({ cause: { ...cause, carIds: [...cause.carIds] } }))).toBe('SC · ALO retirement');
+    });
+
+    it('without a cause it reads as today', () => {
+      expect(whatOf(neutralised())).toBe('neutralised');
+    });
+  });
+
   it('other kinds show no sector', () => {
     expect(what({ kind: 'penalty', where: { sector: k(1) } })).toBe('penalty');
     expect(what({ kind: 'neutralised', where: { sector: unknown('notApplicable') } })).toBe('neutralised');
