@@ -1,68 +1,67 @@
-// `battle` (spec 6.3): each of our cars against the car ahead and the car behind. Stateless: the gap now is from `gaps.intervals`,
-// the closing rate from the line times, the pace from `pace`, the DRS status from race control's spans.
+// `battle` (timing spec 6.3, live polish spec 3.1): each of our cars against the car ahead and the car behind. The gap
+// now is from `gaps.intervals`; PACE Δ from the mini-sector crossings (`battle.ts`), and from it the margin and the laps
+// to DRS; the DRS status from race control's spans. Incremental (C31): the accumulator folds the projection alone
+// (C31.2); `output` adds `gaps`, the open spans and the live state. Every number is positive when it is good for our car.
 import { known, unknown, type BattleCard, type BattleSide, type CarId, type CarState, type DrsOffReason, type DrsStatus, type Known, type Ms } from '@pitwall/domain';
-import { openSpansOf, type DeepReadonly, type EngineView, type QuickCalculator } from '@pitwall/engine/readers';
+import { openSpansOf, type DeepReadonly, type EngineView, type IncrementalCalculator } from '@pitwall/engine/readers';
 import type { GapsOutput } from '../gaps/index.ts';
-import type { Pace } from '../pace/index.ts';
-import { lapsToReach, perLapRate, type RateSample } from '../per-lap-rate/index.ts';
 import { behaviourFor } from '../shared/behaviour.ts';
+import { NEUTRALISATION_READS } from '../shared/neutralised.ts';
 import { ourCars } from '../shared/our-cars.ts';
+import { emptyBattleAcc, foldBattle, openNeutralised, paceDelta, type BattleAcc } from './battle.ts';
 import { BATTLE, BATTLE_BEHAVIOUR, BATTLE_CONFIG, type BattleOutput } from './index.ts';
+
+export type { BattleAcc } from './battle.ts';
 
 const NOT_APPLICABLE = unknown('notApplicable');
 type Car = DeepReadonly<CarState>;
-type LineTimes = GapsOutput['lineTimes'][CarId];
+type Config = ReturnType<typeof BATTLE_CONFIG.read>;
 
-/** Samples of the gap of `behind` to `ahead` at each lap's line crossing, both cars having crossed it. */
-function gapSamples(behind: LineTimes | undefined, ahead: LineTimes | undefined): RateSample[] {
-  const aheadAt = new Map((ahead ?? []).map((l) => [l.lap, l.at]));
-  const samples: RateSample[] = [];
-  for (const l of behind ?? []) {
-    const other = aheadAt.get(l.lap);
-    if (other !== undefined) samples.push({ lap: l.lap, value: l.at - other, at: l.at });
-  }
-  return samples.sort((a, b) => a.lap - b.lap);
+/**
+ * The laps to DRS range on one side: (gap − `drsRangeMs`) / the closing car's edge per lap (`edge`, positive while the
+ * gap closes). DRS off: `notApplicable`; the gap unknown: its reason; inside the range: 0 as of the gap; PACE Δ unknown:
+ * its reason; not closing: `notApplicable`.
+ */
+function lapsToDrs(drs: DrsStatus, gapMs: Known<Ms>, pace: Known<Ms>, edge: number, drsRangeMs: number): Known<number> {
+  if (!drs.enabled) return NOT_APPLICABLE;
+  if (!gapMs.known) return gapMs;
+  if (gapMs.value <= drsRangeMs) return known(0, gapMs.at);
+  if (!pace.known) return pace;
+  if (edge <= 0) return NOT_APPLICABLE;
+  return known((gapMs.value - drsRangeMs) / edge, Math.max(gapMs.at, pace.at));
 }
 
-const later = (a: Known<unknown> & { known: true }, b: Known<unknown> & { known: true }) => Math.max(a.at, b.at);
+/** What one side needs besides the cars: the fold, the gaps, DRS, the neutralisations and the config. */
+type Context = { acc: BattleAcc; view: EngineView; gaps: GapsOutput; drs: DrsStatus; neutralised: ReturnType<typeof openNeutralised>; config: Config };
 
-/** Their recent pace minus ours: positive = we are faster. */
-function paceDelta(ours: Known<Ms> | undefined, theirs: Known<Ms> | undefined): Known<Ms> {
-  if (ours === undefined || theirs === undefined) return unknown('notReceived');
-  if (!ours.known) return ours;
-  if (!theirs.known) return theirs;
-  return known((theirs.value - ours.value) as Ms, later(ours, theirs));
-}
-
-function side(view: EngineView, gaps: GapsOutput, pace: Pace, drs: DrsStatus, ourId: CarId, theirId: CarId, isAhead: boolean): Known<BattleSide> {
-  const { cars } = view.live;
-  const ours = cars[ourId];
-  const theirs = cars[theirId];
+function side(ctx: Context, ourId: CarId, theirId: CarId, isAhead: boolean): Known<BattleSide> {
+  const { acc, view, gaps, drs, neutralised, config } = ctx;
+  const ours = view.live.cars[ourId];
+  const theirs = view.live.cars[theirId];
   if (ours === undefined || theirs === undefined) return NOT_APPLICABLE;
   const interval = gaps.intervals.find((i) => i.carId === ourId);
   const gapMs = (isAhead ? interval?.toAheadMs : interval?.toBehindMs) ?? unknown('notReceived');
 
-  const { overtakeThresholdMs, drsRangeMs, closingWindow, closingMinSamples } = BATTLE_CONFIG.read(view);
-  const samples = isAhead
-    ? gapSamples(gaps.lineTimes[ourId], gaps.lineTimes[theirId])
-    : gapSamples(gaps.lineTimes[theirId], gaps.lineTimes[ourId]);
-  const rate = perLapRate(samples, { window: closingWindow, minSamples: closingMinSamples });
-  const closingMsPerLap: Known<number> = rate.known ? known(-rate.value.perLap, rate.at) : rate;
-  // inside DRS range it is 0 as of the gap, with or without a closing rate; while race control has DRS off there is none to reach
-  const lapsToDrs: Known<number> = !drs.enabled ? NOT_APPLICABLE : gapMs.known ? lapsToReach(rate, gapMs, drsRangeMs, 'falling') : gapMs;
-
-  const delta = paceDelta(pace.byCar[ourId]?.recentMs, pace.byCar[theirId]?.recentMs);
-  const overtakeMarginMs: Known<Ms> = delta.known ? known(((isAhead ? delta.value : -delta.value) - overtakeThresholdMs) as Ms, delta.at) : delta;
+  const { overtakeThresholdMs, drsRangeMs, minPaceSegments } = config;
+  const pace = paceDelta(acc, view, [...acc.neutralised, ...neutralised], ourId, theirId, minPaceSegments);
+  // the closing car's edge per lap: ours on the car ahead, theirs (−PACE Δ) on the car behind
+  const edge = pace.known ? (isAhead ? pace.value : -pace.value) : 0;
+  const margin: Known<{ kind: 'pass' | 'hold'; ms: Ms }> = !pace.known
+    ? pace
+    : known(isAhead ? { kind: 'pass', ms: (edge - overtakeThresholdMs) as Ms } : { kind: 'hold', ms: (overtakeThresholdMs - edge) as Ms }, pace.at);
   const ers = theirs.energy.ers;
   const tyre = (c: Car) => ({ compound: c.tyres.visualCompound, age: c.tyres.age });
   return known(
     {
       carId: theirId,
       gapMs,
-      closingMsPerLap,
-      lapsToDrs,
-      paceDeltaMs: delta,
-      overtakeMarginMs,
+      // removed in Task 15 of the live polish plan
+      closingMsPerLap: NOT_APPLICABLE,
+      lapsToDrs: lapsToDrs(drs, gapMs, pace, edge, drsRangeMs),
+      paceDeltaMs: pace,
+      // removed in Task 15 of the live polish plan; `margin` replaces it
+      overtakeMarginMs: NOT_APPLICABLE,
+      margin,
       ours: tyre(ours),
       theirs: tyre(theirs),
       theirErsStoreJ: ers.known ? known(ers.value.storeJ, ers.at) : ers,
@@ -82,36 +81,54 @@ function drsOf(view: EngineView, race: boolean): DrsStatus {
 }
 
 /** One of our cars against its neighbours in the order of `gaps.intervals`. */
-function cardOf(view: EngineView, gaps: GapsOutput | undefined, pace: Pace | undefined, drs: DrsStatus, computed: boolean, ourId: CarId): BattleCard {
+function cardOf(ctx: Omit<Context, 'gaps'> & { gaps: GapsOutput | undefined }, computed: boolean, ourId: CarId): BattleCard {
+  const { gaps, drs } = ctx;
   if (!computed) return { carId: ourId, ahead: NOT_APPLICABLE, behind: NOT_APPLICABLE, drs };
-  if (gaps === undefined || pace === undefined) return { carId: ourId, ahead: unknown('notReceived'), behind: unknown('notReceived'), drs };
+  if (gaps === undefined) return { carId: ourId, ahead: unknown('notReceived'), behind: unknown('notReceived'), drs };
+  const withGaps = { ...ctx, gaps };
   const at = gaps.intervals.findIndex((i) => i.carId === ourId);
   const neighbour = (index: number) => (at < 0 ? undefined : gaps.intervals[index]?.carId);
   const aheadId = neighbour(at - 1);
   const behindId = neighbour(at + 1);
   return {
     carId: ourId,
-    ahead: aheadId === undefined ? NOT_APPLICABLE : side(view, gaps, pace, drs, ourId, aheadId, true),
-    behind: behindId === undefined ? NOT_APPLICABLE : side(view, gaps, pace, drs, ourId, behindId, false),
+    ahead: aheadId === undefined ? NOT_APPLICABLE : side(withGaps, ourId, aheadId, true),
+    behind: behindId === undefined ? NOT_APPLICABLE : side(withGaps, ourId, behindId, false),
     drs,
   };
 }
 
+/** The cards of our cars: the player's car and the teammate's, race only. */
+function output(acc: BattleAcc, view: EngineView): BattleOutput {
+  const gaps = view.outputs.get('gaps') as GapsOutput | undefined;
+  const phase = behaviourFor({ 'weekend-phase': BATTLE_BEHAVIOUR['weekend-phase'] }, view)[0];
+  // a pending weekend phase (no span yet) reads as a race grid (C14): the cards are computed, DRS is not enabled yet
+  const computed = phase === undefined || phase.cards === 'computed';
+  const drs = drsOf(view, phase?.cards !== 'notApplicable');
+  const ctx = { acc, view, gaps, drs, neutralised: computed && gaps !== undefined ? openNeutralised(view) : [], config: BATTLE_CONFIG.read(view) };
+  const out: BattleOutput = {};
+  for (const id of ourCars(view.live)) out[id] = cardOf(ctx, computed, id);
+  return out;
+}
+
 /** The player's car and the teammate's against the cars next to them, with race control's DRS status; race only. */
-export const battleCalculator: QuickCalculator<BattleOutput> = {
+export const battleCalculator: IncrementalCalculator<BattleAcc, BattleOutput> = {
   id: BATTLE,
-  kind: 'quick',
-  reads: [{ calculator: 'gaps' }, { calculator: 'pace' }, 'tyres', 'energy', 'identity', 'spans:race-control-race', 'spans:weekend-phase'],
-  cadence: { hz: 2 },
-  compute(view) {
-    const gaps = view.outputs.get('gaps') as GapsOutput | undefined;
-    const pace = view.outputs.get('pace') as Pace | undefined;
-    const phase = behaviourFor({ 'weekend-phase': BATTLE_BEHAVIOUR['weekend-phase'] }, view)[0];
-    // a pending weekend phase (no span yet) reads as a race grid (C14): the cards are computed, DRS is not enabled yet
-    const computed = phase === undefined || phase.cards === 'computed';
-    const drs = drsOf(view, phase?.cards !== 'notApplicable');
-    const out: BattleOutput = {};
-    for (const id of ourCars(view.live)) out[id] = cardOf(view, gaps, pace, drs, computed, id);
-    return out;
-  },
+  kind: 'incremental',
+  reads: [
+    { calculator: 'gaps' },
+    'miniSectors',
+    'spans:car-location',
+    ...NEUTRALISATION_READS,
+    'tyres',
+    'energy',
+    'identity',
+    'spans:race-control-race',
+    'spans:weekend-phase',
+  ],
+  cadence: 'frame',
+  init: (view) => foldBattle(emptyBattleAcc(), view),
+  // a flashback starts the fold over (C30, C31.5)
+  update: (acc, delta, view) => foldBattle(delta.rewound !== undefined ? emptyBattleAcc() : acc, view),
+  output,
 };

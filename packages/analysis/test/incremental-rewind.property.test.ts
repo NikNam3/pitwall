@@ -42,8 +42,8 @@ beforeAll(() => {
 });
 
 describe('every incremental unit is incremental = from scratch across random rewinds (C31.3)', () => {
-  it('covers the five incremental units, each race with its rewind run through the engine', () => {
-    expect(INCREMENTAL.map((c) => c.id).sort()).toEqual(['damage', 'gaps', 'incidents', 'lap-times', 'pace']);
+  it('covers the six incremental units, each race with its rewind run through the engine', () => {
+    expect(INCREMENTAL.map((c) => c.id).sort()).toEqual(['battle', 'damage', 'gaps', 'incidents', 'lap-times', 'pace']);
     expect(races.length, `races of seed ${SEED} that rewind`).toBe(RACES);
   });
 
