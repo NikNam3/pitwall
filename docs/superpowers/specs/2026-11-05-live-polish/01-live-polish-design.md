@@ -40,9 +40,9 @@ The panel the user ran on the first live weekend reads right on the next one: ba
 
 - `newestSectorsMs: [Known<Ms>, Known<Ms>, Known<Ms>]`: per sector the newest finished time: sector 1 and 2 from the live `sector1TimeMs` and `sector2TimeMs` as soon as the car has passed the sector's end in the current lap, sector 3 (and all three) at the line;
 - `newestSectorStatus: [SectorStatus, SectorStatus, SectorStatus]`: judged against the bests before that time;
-- `newestSectorOlder: [boolean, boolean, boolean]`: the newest time belongs to an earlier lap than the car's current one, so the display dims it without computing (C65).
+- `newestSectorOlder: [boolean, boolean, boolean]`: the newest time belongs to an earlier pass than the car's newest sector time (at the line the just-completed lap's three are not older; once the new lap's S1 is in, S2 and S3 are), so the display dims it without computing (C65). A live sector of an invalid lap has status `none`.
 
-`lastSectorsMs` and its status stay (other readers). Cadence unchanged (`frame`).
+`lastSectorsMs` and its status stay (other readers). Cadence unchanged (`frame`). `lap-analysis` is a best-lap table (each car's best sectors) and keeps them (run ruling, Task 10b).
 
 ### 3.5 `damage` (N7)
 
@@ -60,7 +60,7 @@ Each `DamageJump` (its `lossMsPerLap` is the measured loss) gains:
 | N2 | `battle-cards` | Rows: GAP, PACE Δ (`s/lap`), `PASS` or `HOLD` (`s/lap`), DRS, tyres, ERS; CLOSING removed. Emphasis: a positive PASS bold white; a negative HOLD bold `warning`; no verdict words. |
 | N3 | `gap-chart` | Draws the cars of `gaps.gapper` (the window): ours white, the others `textFaint`; no team colours. The y range comes from the drawn series (kit `Chart`). Points per mini-sector are one line. |
 | N4 | `incident-feed` | Our cars by driver code from `cars.overview` (`RUS P6→P7`), not `us`. Warnings: `warning · corner cutting 2/3`, `warning · collision`, from an infringement wording table in `kit/text.ts` (the F1 25 infringement codes of the UDP specification's appendix). |
-| N5 | `timing-tower`, `lap-analysis` | S1–S3 from `newestSectorsMs` with their status colours; a sector whose `newestSectorOlder` is set in `textFaint`. |
+| N5 | `timing-tower` | S1–S3 from `newestSectorsMs` with their status colours; a sector whose `newestSectorOlder` is set in `textFaint`. |
 | N6 | `fuel-gauge` | The kg shows whenever `kg` is known; lasts, burn and margin stay blank until known. |
 | N7 | `damage-card` | While measuring: `measuring 1/2 laps`; with an estimate: `~+0.8 s/lap est.` in `textFaint`; the measured loss replaces both. |
 | N8 | `projected-lap` | The finish margin through a new `formatMinutesTenths` (`kit/values/format.ts`, `18:48.6`) at 60 s or more, seconds below. |
