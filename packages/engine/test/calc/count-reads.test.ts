@@ -1,5 +1,5 @@
 // `countReads` (contract C31.1): the projection entries a unit reads through its guarded view, counted, never timed.
-import { carId, type MiniSectorCrossing, type OpenSpan, type Span } from '@pitwall/domain';
+import { carId, unknown, type MiniSectorCrossing, type OpenSpan, type Span } from '@pitwall/domain';
 import { describe, expect, it } from 'vitest';
 import type { ChangeTag, EngineView, IncrementalCalculator, QuickCalculator } from '../../src/index.ts';
 import { UndeclaredReadError } from '../support/guarded-input.ts';
@@ -31,6 +31,7 @@ const VIEW: EngineView = {
   feed,
   config: {},
   priors: {},
+  track: unknown('notApplicable'),
   outputs: new Map(),
 };
 

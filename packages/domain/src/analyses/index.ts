@@ -8,4 +8,6 @@ export type * from './gaps.ts';
 export type * from './incidents.ts';
 export type * from './lap-times.ts';
 export type * from './race-moment.ts';
+export type * from './talk-window.ts';
+export type * from './track-positions.ts';
 export type * from './tyre-wear.ts';

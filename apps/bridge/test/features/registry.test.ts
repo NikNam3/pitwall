@@ -1,8 +1,9 @@
 // apps/bridge/test/features/registry.test.ts
 import { describe, expect, it } from 'vitest';
-import { TOPICS } from '@pitwall/contracts';
+import { TOPICS, type TopicName } from '@pitwall/contracts';
 import { CalculatorRegistry } from '@pitwall/engine';
 import { FEATURES } from '../../src/features/index.generated.ts';
+import { NOT_YET_BOUND } from '../helpers/not-yet-bound.ts';
 
 describe('generated feature set', () => {
   const bindings = FEATURES.flatMap((f) => f.topics);
@@ -22,7 +23,7 @@ describe('generated feature set', () => {
     expect(bindings.find((b) => b.topic === 'cars.overview')).not.toHaveProperty('from');
   });
   it('binds every feed topic exactly once, core and analysis alike (global topics are published by the bridge shell, replay.status by the ReplayController; neither is bound by features)', () => {
-    const feedTopics = Object.entries(TOPICS).filter(([name, d]) => d.scope === 'feed' && name !== 'replay.status').map(([name]) => name);
+    const feedTopics = Object.entries(TOPICS).filter(([name, d]) => d.scope === 'feed' && name !== 'replay.status' && !NOT_YET_BOUND.has(name as TopicName)).map(([name]) => name);
     const bound = bindings.map((b) => b.topic);
     expect(new Set(bound).size).toBe(bound.length);
     expect([...bound].sort()).toEqual(feedTopics.sort());

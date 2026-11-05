@@ -3,7 +3,7 @@
 // runs the segment frame by frame (`SessionTracker`, `SessionRunner`), and the scheduler runs the calculator, through
 // its guarded view (C41), on every step; the test reads its last output.
 import { describe, expect, it } from 'vitest';
-import { feedId, type IncidentEntry } from '@pitwall/domain';
+import { feedId, unknown, type IncidentEntry } from '@pitwall/domain';
 import { CalculatorRegistry, Scheduler, SessionRunner, SessionTracker, situationOf, type StepResult } from '@pitwall/engine';
 import { guarded } from '../../../engine/test/support/scheduler.ts';
 import { IDLE_FEED } from '../../../../test-support/builders/index.ts';
@@ -26,7 +26,7 @@ async function lastFeed(file: string): Promise<IncidentsOutput> {
   const onResult = (r: StepResult): void => {
     if (r.delta.rewound !== undefined) scheduler.reset();
     const { state, changed, delta } = r;
-    const scheduled = scheduler.run({ live: state, situation: situationOf(state), history: state.history, changed, delta, weekend: state.weekend, feed: IDLE_FEED, config: {}, priors: {} });
+    const scheduled = scheduler.run({ live: state, situation: situationOf(state), history: state.history, changed, delta, weekend: state.weekend, feed: IDLE_FEED, config: {}, priors: {}, track: unknown('notApplicable') });
     expect(scheduled.errors).toEqual([]);
     if (scheduled.ran.includes(INCIDENTS)) feed = scheduled.outputs.get(INCIDENTS) as IncidentsOutput;
   };

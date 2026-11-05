@@ -1,7 +1,7 @@
 // Folds a recording or segment through `SessionRunner.apply`, from the first frame that carries a Session, so history,
 // deltas and flashbacks are part of the run.
 import { basename } from 'node:path';
-import type { CarId, FeedId } from '@pitwall/domain';
+import { unknown, type CarId, type FeedId } from '@pitwall/domain';
 import {
   CalculatorRegistry,
   Scheduler,
@@ -55,7 +55,7 @@ export async function replayScheduled(
   scheduler.setNeeded(calculators.map((c) => c.id));
   return replayRunner(path, (r, f) => {
     if (r.delta.rewound !== undefined) scheduler.reset();
-    const scheduled = scheduler.run({ live: r.state, situation: situationOf(r.state), history: r.state.history, changed: r.changed, delta: r.delta, weekend: r.state.weekend, feed: IDLE_FEED, config, priors: {} });
+    const scheduled = scheduler.run({ live: r.state, situation: situationOf(r.state), history: r.state.history, changed: r.changed, delta: r.delta, weekend: r.state.weekend, feed: IDLE_FEED, config, priors: {}, track: unknown('notApplicable') });
     onStep(r, scheduled, f);
   });
 }

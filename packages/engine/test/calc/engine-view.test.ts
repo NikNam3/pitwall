@@ -1,6 +1,6 @@
 // The view (C39): everything a calculator or analysis may see is the live state, the situation (the open spans, C20),
 // the projection with its membership (C26, C28), the delta, the change tags, the weekend's earlier sessions, the config,
-// the priors, the feed health and the outputs of the units it reads. Nothing else.
+// the priors, the track, the feed health and the outputs of the units it reads. Nothing else.
 import { describe, expect, expectTypeOf, it } from 'vitest';
 import type { CarId } from '@pitwall/domain';
 import {
@@ -24,7 +24,7 @@ import { gridStart, run, script } from '../situations/script.ts';
 import { input, inputOf, viewOf } from '../support/scheduler.ts';
 
 /** The parts of the view (C39). */
-const PARTS = ['live', 'situation', 'history', 'delta', 'changed', 'weekend', 'config', 'priors', 'feed', 'outputs'] as const;
+const PARTS = ['live', 'situation', 'history', 'delta', 'changed', 'weekend', 'config', 'priors', 'track', 'feed', 'outputs'] as const;
 type Part = (typeof PARTS)[number];
 
 /** A race from the grid to 60 frames after lights out: closed session-phase spans, open ones, every car's spans. */
@@ -71,7 +71,7 @@ describe('EngineView: the C39 parts', () => {
     s.run(given);
     const [view] = seen;
     expect(Object.keys(view!).sort()).toEqual([...PARTS].sort());
-    for (const part of ['live', 'situation', 'history', 'weekend', 'config', 'priors', 'feed'] as const) expect(view![part], part).toBe(given[part]);
+    for (const part of ['live', 'situation', 'history', 'weekend', 'config', 'priors', 'track', 'feed'] as const) expect(view![part], part).toBe(given[part]);
     expect([...view!.changed]).toEqual([...given.changed]);
     expect(view!.delta).toEqual(given.delta);
     expect(view!.outputs).toBeInstanceOf(Map);

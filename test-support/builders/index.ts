@@ -22,6 +22,7 @@ import {
   type SessionTime,
   type Span,
   type SuspendedDetail,
+  unknown,
 } from '../../packages/domain/src/index.ts';
 import {
   initialState,
@@ -386,7 +387,8 @@ export const RACING: EngineView['situation'] = { weekendPhase: { kind: 'race', f
  * are placed by their `id`; `history` fills the lists you give and leaves the rest empty; `session` merges onto a
  * default race session; `config` is the effective config by section key (absent sections read their declared defaults);
  * `outputs` are the upstream calculators' outputs; `delta` defaults to "everything in `history` is new"; `situation`
- * defaults to `RACING`. Feed is idle and healthy; `feed` overrides it. `changed` is empty; no weekend context, no priors.
+ * defaults to `RACING`. Feed is idle and healthy; `feed` overrides it. `track` defaults to `unknown('notApplicable')`
+ * (no track file). `changed` is empty; no weekend context, no priors.
  */
 export function engineView({
   cars = [],
@@ -399,6 +401,7 @@ export function engineView({
   feed = {},
   playerCar = 0,
   sessionTime = 0,
+  track = unknown('notApplicable'),
 }: {
   cars?: CarState[];
   history?: Partial<Projection>;
@@ -410,6 +413,7 @@ export function engineView({
   feed?: Partial<FeedMetricsView>;
   playerCar?: number;
   sessionTime?: SessionTime;
+  track?: EngineView['track'];
 } = {}): EngineView {
   const base: EngineState = initialState({
     feedId: feedId('test'),
@@ -438,6 +442,7 @@ export function engineView({
     outputs,
     config,
     priors: {},
+    track,
   };
 }
 

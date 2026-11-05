@@ -5,6 +5,7 @@
 // restarts on a truncated step, as the bridge's does. The player laps a 1000 m track in 25 frames and stands still for
 // 2.3 s in lap 5: a time loss.
 import { describe, expect, it } from 'vitest';
+import { unknown } from '@pitwall/domain';
 import { INCIDENTS, incidentsCalculator, type IncidentsOutput } from '@pitwall/analysis';
 import { CalculatorRegistry, Scheduler, SessionRunner, situationOf, type Frame } from '@pitwall/engine';
 import { IDLE_FEED } from '../../../../../test-support/builders/index.ts';
@@ -41,7 +42,7 @@ function incidentsRuns(all: Frame[]): Array<{ frame: number; scheduled: Incident
   const runs: Array<{ frame: number; scheduled: IncidentsOutput; fresh: IncidentsOutput }> = [];
   all.forEach((f, frame) => runner.apply(f, (r) => {
     if (r.delta.rewound !== undefined) scheduler.reset();
-    const input = { live: r.state, situation: situationOf(r.state), history: r.state.history, changed: r.changed, delta: r.delta, weekend: r.state.weekend, feed: IDLE_FEED, config: {}, priors: {} };
+    const input = { live: r.state, situation: situationOf(r.state), history: r.state.history, changed: r.changed, delta: r.delta, weekend: r.state.weekend, feed: IDLE_FEED, config: {}, priors: {}, track: unknown('notApplicable') };
     const { ran, outputs } = scheduler.run(input);
     if (!ran.includes(INCIDENTS)) return;
     const view = { ...input, outputs: new Map() };
