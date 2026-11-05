@@ -1,5 +1,6 @@
-// Defaults of `car-bands` (spec Appendix B): one `lo`/`hi` pair per band, in °C or psi. Tyre temperature bands are per compound kind.
-// The wet carcass window is the community's F1 24 inner-temperature window (F1 25 has no published table); the dry and inter bands come from our recordings.
+// Defaults of `car-bands` (spec Appendix B): one `lo`/`hi` pair per band, in °C or psi. Tyre temperature bands are per compound kind;
+// the pressure band is the player's setup pressure with an offset below and above it.
+// The wet carcass window is the community's F1 24 inner-temperature window (F1 25 has no published table); the dry surface and the inter bands come from our recordings.
 import { defineConfig } from '@pitwall/engine/readers';
 
 export const CAR_BANDS_CONFIG = defineConfig('car-bands', {
@@ -15,10 +16,10 @@ export const CAR_BANDS_CONFIG = defineConfig('car-bands', {
   surfaceWetLo: 50,
   /** Wet surface. Source: pitwall estimate. */
   surfaceWetHi: 80,
-  /** Slick carcass. Source: pitwall recordings 2026-10-29/30, p5–p95 of the player's racing laps (qualifyingSingapore, practiceZandvoortOnline, raceZandvoortUidReuse, raceSingaporeWet); soft 6 laps, hard 1 lap. */
-  carcassDryLo: 75,
-  /** Slick carcass. Source: pitwall recordings 2026-10-29/30, p5–p95 of the player's racing laps (qualifyingSingapore, practiceZandvoortOnline, raceZandvoortUidReuse, raceSingaporeWet); soft 6 laps, hard 1 lap. */
-  carcassDryHi: 110,
+  /** Slick carcass: 70-105 °C is drivable (pitwall ignores "good"). Source: a driver friend, via the user, 2026-11-05. */
+  carcassDryLo: 70,
+  /** Slick carcass: 70-105 °C is drivable (pitwall ignores "good"). Source: a driver friend, via the user, 2026-11-05. */
+  carcassDryHi: 105,
   /** Intermediate carcass. Source: pitwall recordings 2026-10-29/30, p5–p95 of the player's racing laps (qualifyingSingapore, practiceZandvoortOnline, raceZandvoortUidReuse, raceSingaporeWet); soft 6 laps, hard 1 lap. */
   carcassInterLo: 55,
   /** Intermediate carcass. Source: pitwall recordings 2026-10-29/30, p5–p95 of the player's racing laps (qualifyingSingapore, practiceZandvoortOnline, raceZandvoortUidReuse, raceSingaporeWet); soft 6 laps, hard 1 lap. */
@@ -28,16 +29,16 @@ export const CAR_BANDS_CONFIG = defineConfig('car-bands', {
   /** Wet carcass. Source: https://steamcommunity.com/app/2488620/discussions/0/603020374162077994 */
   carcassWetHi: 65,
   /**
-   * Live tyre pressure: community setups run down to about 20.2 psi rear. Source:
-   * https://outsidergaming.com/f1-24-canada-setup/ (F1 24), pitwall estimate; see the questions file (pressure band).
+   * The player's tyre pressure band starts this far below the setup's cold pressure, per corner, in psi: the live value
+   * sits at the setup's once warm and below it on a cold lap (`docs/acceptance/live-checklist.md`). Source: live test
+   * 2026-11-04/05, pitwall estimate, provisional.
    */
-  pressureLo: 20,
+  pressureBelowSetupPsi: 1.5,
   /**
-   * Live tyre pressure. Community F1 25 setups mostly run the maximum 29.5 psi front / 26.5 rear when cold,
-   * and the live value rises above the setup's (our recordings' racing laps read 20.9–30.2 psi, p5–p95). Source:
-   * https://www.f1laps.com/setups/f12025/556d1236-4ca0-4c00-86ad-acc82684ef0b, pitwall estimate for the headroom.
+   * The player's tyre pressure band ends this far above the setup's cold pressure, per corner, in psi. Source: live test
+   * 2026-11-04/05, pitwall estimate, provisional.
    */
-  pressureHi: 31,
+  pressureAboveSetupPsi: 1.0,
   /** Brake temperature; our recordings' racing laps run 278–920 °C (p5–p95). Source: pitwall estimate. */
   brakeLo: 300,
   /** Brake temperature: real F1 discs run up to about 1000 °C. Source: https://flowracers.com/blog/how-hot-f1-brakes/ */
