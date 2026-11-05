@@ -110,8 +110,8 @@ describe('formatInsight', () => {
 
 describe('TOP_BAR layout (mockup 9)', () => {
   // Task 24: the flag segment is gone (the session flag was a signal, C13); the phase segment shows those states
-  it('left: workbook, session, phase, moment; right: alerts, replay, feed, realism', () => {
-    expect(TOP_BAR.left).toEqual(['workbook', 'session', 'phase', 'moment']);
+  it('left: workbook, session, phase, moment, talk; right: alerts, replay, feed, realism', () => {
+    expect(TOP_BAR.left).toEqual(['workbook', 'session', 'phase', 'moment', 'talk']);
     expect(TOP_BAR.right).toEqual(['alerts', 'replay', 'feed', 'realism']);
   });
 });

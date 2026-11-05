@@ -183,6 +183,8 @@ export const topBar = {
   phaseStage: { deployed: 'deployed', returning: 'in this lap', returned: 'in', resume: 'resume' },
   /** The race moment's name (spec 7.2). */
   moment: { neutralised: 'neutralised', incident: 'incident', weather: 'weather', battle: 'battle', carCare: 'car care' },
+  /** The talk window dot's tooltip (spec 7.4). */
+  talk: { clear: 'good moment to talk', busy: 'braking: wait' },
   realismOn: 'realism on',
   realismOff: 'realism off',
   /** The value realism takes at the next session, shown when it differs from this one. */

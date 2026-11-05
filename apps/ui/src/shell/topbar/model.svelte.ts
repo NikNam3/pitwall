@@ -1,7 +1,8 @@
 // What the top bar's segments read: the topics of one feed plus the global alert and settings topics.
 import type { AlertsState, CarOverview, FeedStatus, ReplayControl, ReplayStatus, SessionInfo, UiAction, UiSettings } from '@pitwall/contracts';
 import type { MachineSpans } from '@pitwall/contracts';
-import type { FeedId, Insight, Known, Moment, NeutralisedDetail, NeutralisedStage, OpenSpan, RaceMoment } from '@pitwall/domain';
+import type { CarId, FeedId, Insight, Known, Moment, NeutralisedDetail, NeutralisedStage, OpenSpan, RaceMoment, TalkWindow } from '@pitwall/domain';
+import { untrack } from 'svelte';
 import type { EntryState, TopicStore } from '../../connection/topic-store.svelte.ts';
 import { openSpanOf } from '../../kit/situation.ts';
 import * as text from '../../kit/text.ts';
@@ -29,6 +30,9 @@ export class TopBarModel {
   workbookName = $state<string | undefined>();
   /** Opens the workbook picker, set by the top bar. */
   pickWorkbook: () => void = () => {};
+  /** The talk window of the current player car; replaced when the player car changes. */
+  #talk = $state.raw<EntryState<TalkWindow> | undefined>();
+  readonly #stopTalk: () => void;
   readonly #releases: Array<() => void> = [];
   readonly #isReplay: boolean;
   readonly #replay: EntryState<ReplayStatus> | undefined;
@@ -58,6 +62,20 @@ export class TopBarModel {
     };
     // The feed's kind is fixed by its hello; a replay feed has a transport.
     this.#isReplay = store.feeds.find((f) => f.feedId === feedId)?.kind === 'replay';
+    // The talk window takes the player car as a param: acquired once session.info names it, again when it changes.
+    this.#stopTalk = $effect.root(() => {
+      const playerCar = $derived<CarId | undefined>(okValue(this.#session)?.playerCar);
+      $effect(() => {
+        const player = playerCar;
+        if (player === undefined) return;
+        const held = untrack(() => store.acquire({ topic: 'talkWindow.car', params: { carId: player }, feedId }));
+        this.#talk = held.state;
+        return () => {
+          held.release();
+          this.#talk = undefined;
+        };
+      });
+    });
     this.#replay = this.#isReplay ? take(store.acquire({ topic: 'replay.status', params: {}, feedId })) : undefined;
   }
 
@@ -93,6 +111,11 @@ export class TopBarModel {
     const stages = shown.label === 'sc' || shown.label === 'vsc' ? (span.detail as NeutralisedDetail | undefined)?.stages : undefined;
     return { label: text.topBar.phase[shown.label], role: shown.role, stage: stages?.at(-1)?.stage };
   }
+  /** The talk window of the player car; undefined while unknown, not applicable or without a player car. */
+  get talk(): 'clear' | 'busy' | undefined {
+    const talk = okValue(this.#talk)?.talk;
+    return talk?.known ? talk.value : undefined;
+  }
   get feed(): FeedStatus | undefined {
     return okValue(this.#feed);
   }
@@ -126,6 +149,7 @@ export class TopBarModel {
   }
 
   release(): void {
+    this.#stopTalk();
     for (const release of this.#releases) release();
   }
 }
