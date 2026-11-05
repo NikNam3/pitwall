@@ -7,7 +7,7 @@ import { ourCars } from '../../kit/car/our-cars.ts';
 import { openSpanOf } from '../../kit/situation.ts';
 import { formatPenaltyMs, formatWarnings } from '../../kit/values/format.ts';
 import type { Role } from '../../theme/roles.ts';
-import { momentIncident, penaltyRole } from './emphasis.ts';
+import { momentIncident, penaltyRole, sectorRole } from './emphasis.ts';
 import { presentation, type ActivityKey, type ActivityRow, type SituationCell, type StatusRow } from './presentation.ts';
 import * as text from './text.ts';
 import type {
@@ -60,7 +60,8 @@ export type TowerRow = {
   toUs: Pick<GapToCar, 'gapMs' | 'lapsDown'>;
   lastLap: Known<Ms>;
   lastLapStatus: SectorStatus;
-  sectors: Array<{ timeMs: Known<Ms>; status: SectorStatus }>;
+  /** The newest finished time per sector; `older` when it is of an earlier lap (dimmed). `role` is unset for an unknown sector. */
+  sectors: Array<{ timeMs: Known<Ms>; status: SectorStatus; older: boolean; role?: Role | undefined }>;
   compound: VisualCompound;
   age: number;
   /** The car's stops from `pitStopCount.byCar`; undefined for a car it does not list (shown empty, C3). */
@@ -86,11 +87,13 @@ const ACTIVITY_ROWS: Readonly<Record<ActivityKey, Readonly<Record<string, Activi
 /** The presentation row of an open span's kind; `undefined` without a span. */
 const rowOf = <R>(rows: Readonly<Record<string, R>>, span: OpenSpan | undefined): R | undefined => (span === undefined ? undefined : rows[span.kind]);
 
-function sectorsOf(row: LapBoardRow | undefined): TowerRow['sectors'] {
-  return [0, 1, 2].map((i) => ({
-    timeMs: row?.lastSectorsMs[i] ?? missing(),
-    status: row?.lastSectorStatus[i] ?? 'none',
-  }));
+function sectorsOf(row: LapBoardRow | undefined, ours: boolean): TowerRow['sectors'] {
+  return [0, 1, 2].map((i) => {
+    const timeMs = row?.newestSectorsMs?.[i] ?? row?.lastSectorsMs[i] ?? missing();
+    const status = row?.newestSectorStatus?.[i] ?? row?.lastSectorStatus[i] ?? 'none';
+    const older = timeMs.known && (row?.newestSectorOlder?.[i] ?? false);
+    return { timeMs, status, older, ...(timeMs.known ? { role: sectorRole(status, older, ours) } : {}) };
+  });
 }
 
 /**
@@ -165,7 +168,7 @@ export function buildRows(input: TowerInput): TowerRow[] {
       toUs: toUs === undefined ? { gapMs: missing(), lapsDown: 0 } : { gapMs: toUs.gapMs, lapsDown: toUs.lapsDown },
       lastLap: lap?.lastLapMs ?? missing(),
       lastLapStatus: lap?.lastLapStatus ?? 'none',
-      sectors: sectorsOf(lap),
+      sectors: sectorsOf(lap, ours.has(id)),
       compound: c.tyres.visualCompound,
       age: c.tyres.age,
       stops: stops.get(id),

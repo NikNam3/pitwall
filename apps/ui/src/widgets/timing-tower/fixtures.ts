@@ -81,6 +81,8 @@ export function boardRow(
   sectors: [number?, number?, number?] = [],
   status: [SectorStatus, SectorStatus, SectorStatus] = ['none', 'none', 'none'],
   lapStatus: SectorStatus = 'none',
+  /** The newest sectors (default: the last lap's three, none older); `undefined` entries are not finished yet. */
+  newest: { sectors?: [number?, number?, number?]; status?: [SectorStatus, SectorStatus, SectorStatus]; older?: [boolean, boolean, boolean] } = {},
 ): LapBoardRow {
   const time = (v: number | 'realism' | 'retired' | undefined) =>
     v === 'realism' ? unknown('realism') : v === 'retired' ? unknown('notApplicable') : v === undefined ? unknown('notReceived') : ms(v);
@@ -91,6 +93,9 @@ export function boardRow(
     lastLapMs: time(last),
     lastSectorsMs: [s(sectors[0]), s(sectors[1]), s(sectors[2])],
     lastSectorStatus: status,
+    newestSectorsMs: newest.sectors ? [s(newest.sectors[0]), s(newest.sectors[1]), s(newest.sectors[2])] : [s(sectors[0]), s(sectors[1]), s(sectors[2])],
+    newestSectorStatus: newest.status ?? status,
+    newestSectorOlder: newest.older ?? [false, false, false],
     lastLapStatus: lapStatus,
     bestLapMs: unknown('notReceived'),
     bestSectorsMs: [unknown('notReceived'), unknown('notReceived'), unknown('notReceived')],

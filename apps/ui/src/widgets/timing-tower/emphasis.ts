@@ -1,5 +1,6 @@
-import type { IncidentEntry, Known, RaceMoment } from '@pitwall/domain';
+import type { IncidentEntry, Known, RaceMoment, SectorStatus } from '@pitwall/domain';
 import type { Role } from '../../theme/roles.ts';
+import { sectorStatusRole } from '../../emphasis/index.ts';
 import { presentation } from './presentation.ts';
 
 /** The feed entry the incident moment is about (its cause names it, `entryId`); none in any other moment. */
@@ -17,3 +18,7 @@ export const incidentRole = (involved: boolean): Role | undefined => (involved ?
  * or stop-gos (the count the cell shows); warnings alone stay neutral.
  */
 export const penaltyRole = (penaltyMs: number, unserved: number): Role | undefined => (penaltyMs > 0 || unserved > 0 ? 'warning' : undefined);
+
+/** A sector's role: an older sector (of an earlier lap) is faint with no best colour; else its status's role. */
+export const sectorRole = (status: SectorStatus, older: boolean, ours: boolean): Role | undefined =>
+  older ? 'textFaint' : sectorStatusRole(status, { ours });
