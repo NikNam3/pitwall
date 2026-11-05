@@ -23,6 +23,7 @@
 - Segments (C84): cut with `pwrec-cut` from tonight's recordings, each at most 1 MB (the two existing full-lap segments stay the only big ones); one behaviour each; an entry in `fixtures/index.json`. No test asserts a fact of a recording. No test reads `PITWALL_DATA_DIR`.
 - Changing the mini-sector recorder or the warnings sub-machine changes the rules version by itself (C61, C90); stored sessions rebuild on the next bridge start. Nothing bumps a version by hand.
 - New thresholds carry a source note: `causeWindowMs: 10_000` (pitwall estimate; the live test's SC came 3.5 s after its collision), the pressure offsets of Q3 A (pitwall estimate from the live test, provisional), the carcass band 70–105 °C of Q2 (a driver friend, via the user, 2026-11-05).
+- The run works on the integration branch `fix/integ` (worktree `../pitwall-wt/fix-integ`); tasks merge into it, and only Task 8 merges it to main. Nothing of Task 0a's helper stubs (which throw until Task 0c) reaches main on its own (C3).
 - After every implement phase the supervisor checks that `git diff --stat <test-commit>..HEAD -- '*.test.ts' '**/test/**' test-support` is empty.
 
 ## Review Focus
@@ -40,9 +41,9 @@
 | contracts first | 0a | serial (supervisor) |
 | lanes | 0c, 1, 2, 4, 5, 6a | in parallel after 0a (each on its own unit) |
 | after their inputs | 3 (after 0c, 2 and 5: `lap-times`), 6b (after 6a: the scan) | in parallel |
-| answers | Q4 from the user, after 6b's table; Q5 any time | – |
-| contracts after answers | 0b | serial (supervisor) |
-| rules | 6c (`warnings` rule: `alarms`, then `incidents`), then 7 (`car-bands`, then `alarms`) | serial: both touch `alarms` |
+| bands | 0b (supervisor), then 7 (`car-bands`, then `alarms`) | serial; needs Q1–Q3 (answered) and Q5 (player only either way) |
+| answers | Q4 from the user, after 6b's table | – |
+| warning rule | 6c (`alarms`, then `incidents`) | after 7 and Q4: both 6c and 7 touch `alarms` |
 | gate | 8 | serial (supervisor) |
 
 ---
@@ -232,7 +233,7 @@
 
 ### Task 6b: Evidence on warnings and penalties
 
-**Clauses:** C6, C28, C85.
+**Clauses:** C6, C26, C28, C85.
 
 **Scope:** `PITWALL_WORKER_SCOPE=apps/bridge/src/cli/commands:apps/bridge/test/cli`.
 
@@ -242,7 +243,7 @@
 
 **Interfaces:**
 - Consumes: the `warned` spans with `count` and `cornerCutting` (Task 6a); the penalty records (domain types only, no game codes in the bridge, C6).
-- Produces: `pitwall scan-situations --warnings <dir>` prints, per recording and weekend phase, each penalty of the player car: its kind, its infringement, and the `count` and `cornerCutting` of the `warned` span open when it was given.
+- Produces: `pitwall scan-situations --warnings <dir>` prints, per recording and weekend phase, each penalty of the player car: its kind, its infringement, and the `count` and `cornerCutting` of the car's `warned` span the penalty belongs to. That span comes from the projection's membership, `membershipOf(source, penalty)` (or `situationAt(source, penalty.frame)`), exported from `@pitwall/engine/readers`, never from matching span and penalty times (C26).
 
 - [ ] **Step 1: Write the failing test** on a builder session: two corner-cutting warnings, one collision warning, then a time penalty → the row reads `race, time penalty (infringement …): warnings 3, cornerCutting 2`.
 - [ ] **Step 2: Run** `nice -n 10 pnpm vitest run apps/bridge/test/cli/scan-situations.test.ts`. Expected: FAIL (unknown flag).
@@ -260,7 +261,7 @@
 **Interfaces (Q3 A, player only per Q5):**
 - Produces: `BandReading.band` becomes `Known<{ lo: number; hi: number }>`. A band that depends on a value the live state does not have (the pressure band without the player's setup) is unknown with the live state's own reason (`notReceived` for every car but the player); every other band is known. No reader invents a fallback (C3).
 
-- [ ] **Step 1: Change the type;** `pnpm typecheck` lists the producer (`car-bands`) and the reader (`alarms`). Make them compile with today's behaviour only: `car-bands` wraps each band it builds in `known(…, at)`, `alarms` reads `band.value` behind `band.known` (always true until Task 7). No new rule.
+- [ ] **Step 1: Change the type;** `pnpm typecheck` lists the producer (`car-bands`) and the reader (`alarms`). Make them compile with today's behaviour only: `car-bands` wraps each band it builds in `known(…, at)`; `alarms` reads `band.value` behind `band.known`, and its `!band.known` branch raises no alarm from that reading (the neutral choice, commented as Task 7's to own; Task 7's row "no pressure alarm from an unknown band" pins it). No new rule.
 - [ ] **Step 2: Run** `nice -n 10 pnpm check`. Expected: green.
 - [ ] **Step 3: Commit** `feat(domain): a band reading's band can be unknown`.
 
@@ -275,13 +276,13 @@
 - Test: `packages/analysis/test/alarms/alarms.test.ts`, `packages/analysis/test/incidents/incidents.test.ts`
 
 **Interfaces (Q4 A; adjust to the answer given):**
-- Consumes: `WarnedDetail.cornerCutting` (Task 6a); the limit from Q4's table.
+- Consumes: `WarnedDetail.cornerCutting` (Task 6a); `AlarmsEffect` (Task 7, which runs first); the limit from Q4's table.
 - Produces:
-  - `alarms`' behaviour table becomes one merged effect per kind, as `lap-times` does (`LapTimesEffect`): `type AlarmsEffect = { warningCount?: 'cornerCutting'; penalty?: 'time' | 'driveThrough' | 'stopGo'; bandsHidden?: true }`, merged over the open spans of `warnings`, `penalties` and `weekend-phase` (`race: { warningCount: 'cornerCutting' }`, the other phases `{}`). `AlarmRow` goes.
+  - Builds on Task 7's `AlarmsEffect`: `warningCount` becomes `'cornerCutting'` (Task 7 ported today's rule as `'total'`), and a `weekend-phase` row is added (`race: { warningCount: 'cornerCutting' }`, the other phases `{}`), so the warned span's row alone no longer raises the alarm outside races.
   - `warningLast` counts `cornerCutting` against `warningsBeforePenalty` (the answer's limit, with the evidence as its source note), in races only.
   - The incident feed: a corner-cutting warning shows `warning n/limit` from `cornerCutting`; any other warning shows its kind without `n/limit`.
 
-- [ ] **Step 1: Write the failing tests:** alarms "no last-warning alarm in practice"; "a collision warning does not count toward the limit" (cornerCutting 1 of 3: no alarm; cornerCutting 2 of 3: the alarm); behaviour-table completeness over `warnings`, `penalties` and `weekend-phase` (C44). Incidents "a collision warning shows its kind without n/limit"; "a corner-cutting warning shows cornerCutting/limit".
+- [ ] **Step 1: Write the failing tests:** alarms "no last-warning alarm in practice"; "a collision warning does not count toward the limit" (cornerCutting 1 of 3: no alarm; cornerCutting 2 of 3: the alarm); behaviour-table completeness over `weekend-phase` (C44). Incidents "a collision warning shows its kind without n/limit"; "a corner-cutting warning shows cornerCutting/limit".
 - [ ] **Step 2: Run** both test files. Expected: FAIL on the new rows.
 - [ ] **Step 3: Implement** per brief (alarms, then incidents).
 - [ ] **Step 4: Run the tests again** and `vitest related`. Expected: PASS.
@@ -291,21 +292,22 @@
 
 **Clauses:** C3, C8, C20, C41, C43, C44, C47, C52.
 
-**Scope:** `PITWALL_WORKER_UNIT=car-bands`, then `PITWALL_WORKER_UNIT=alarms` (one brief each, after Task 6c). The corner block needs no change: it colours from the reading's state.
+**Scope:** `PITWALL_WORKER_UNIT=car-bands`, then `PITWALL_WORKER_UNIT=alarms` (one brief each, after Task 0b; before Task 6c). The corner block needs no change: it colours from the reading's state.
 
 **Files:**
 - Modify: `packages/analysis/src/car-bands/{config,calculator}.ts`; `packages/analysis/src/alarms/{behaviour,calculator}.ts`
 - Test: `packages/analysis/test/car-bands/car-bands.test.ts`, `packages/analysis/test/alarms/alarms.test.ts`
 
 **Interfaces:**
-- Consumes: `classifyLap(lap, { isRace, maxNeutralisedMs })` from `lap-classes`; `CarState.ownCar.setup.tyrePressurePsi` (the player's car only; step 1 fills it from the Setups packet); `BandReading.band: Known<…>` (Task 0b); `AlarmsEffect` (Task 6c).
+- Consumes: `classifyLap(lap, { isRace, maxNeutralisedMs })` from `lap-classes`; `CarState.ownCar.setup.tyrePressurePsi` (the player's car only; step 1 fills it from the Setups packet); `BandReading.band: Known<…>` (Task 0b).
 - Produces:
+  - `alarms`' behaviour table becomes one merged effect per kind, as `lap-times` does (`LapTimesEffect`): `type AlarmsEffect = { warningCount?: 'total' | 'cornerCutting'; penalty?: 'time' | 'driveThrough' | 'stopGo'; bandsHidden?: true }`, merged over the car's and the session's open spans. `AlarmRow` goes; today's rows are ported unchanged (`warned: { warningCount: 'total' }`, the penalty kinds as `penalty`). Task 6c changes the warning rule on this shape.
   - Q1 A: `outForFullLap` is judged on the newest completed lap that is `forRate` and not lap 1 of a race; with none, `outForFullLap` is false.
   - Q1, refined (user): `AlarmsEffect.bandsHidden` from a `session-phase-race` row: `neutralised` hides band alarms (`bandOut`, `bandOutLap`) until its `NeutralisedDetail.stages` holds `returning` (the game's "safety car in this lap"; the VSC's ending the same); from then on they are raised again from the newest clean lap. Other alarms (damage, fuel, wear, warnings) are unaffected.
   - Q2: `CAR_BANDS_CONFIG` slick carcass `carcassDryLo: 70`, `carcassDryHi: 105` (source: a driver friend, via the user, 2026-11-05: 70–105 °C drivable; pitwall ignores "good", user).
   - Q3 A, player only (Q5): `pressureBelowSetupPsi: 1.5`, `pressureAboveSetupPsi: 1.0` (source: live test 2026-11-04/05, pitwall estimate, provisional) replace `pressureLo`/`pressureHi`; for the player's car, per corner `band = { lo: setup − 1.5, hi: setup + 1.0 }`; for every other car, and while the player's setup is not yet received, the pressure reading's band and state are unknown with the live state's reason. `car-bands` adds `ownCar` to its reads (C41).
 
-- [ ] **Step 1: Write the failing tests** in `car-bands.test.ts`, a table: "lap 1 of a race is not judged" (a cold lap 1, then nothing out: `outForFullLap` false); "an SC lap is not judged" (`scShare` over `maxNeutralisedMs`); "an in-lap is not judged"; "a rate lap out of band is judged" (true); "carcass 72 °C is in band" (state `in`); "carcass 106 °C is above"; "the player's pressure band follows the setup" (setup 20.9 rear: band 19.4–21.9; 19.3 is `below`); "another car's pressure band is unknown" (`notReceived`); "the player's band before the setup arrives is unknown". In `alarms.test.ts`: "no band alarm from lap 1 of a race"; "band alarms are hidden while the SC is deployed" (a pre-SC carcass alarm is cleared at `deployed`); "band alarms return at returning" (the same alarm raised again from the pre-SC clean lap); "a damage alarm stays during the SC"; "no pressure alarm from an unknown band"; behaviour-table completeness over `session-phase-race`.
+- [ ] **Step 1: Write the failing tests** in `car-bands.test.ts`, a table: "lap 1 of a race is not judged" (a cold lap 1, then nothing out: `outForFullLap` false); "an SC lap is not judged" (`scShare` over `maxNeutralisedMs`); "an in-lap is not judged"; "a rate lap out of band is judged" (true); "carcass 72 °C is in band" (state `in`); "carcass 106 °C is above"; "the player's pressure band follows the setup" (setup 20.9 rear: band 19.4–21.9; 19.3 is `below`); "another car's pressure band is unknown" (`notReceived`); "the player's band before the setup arrives is unknown". In `alarms.test.ts`: "no band alarm from lap 1 of a race"; "band alarms are hidden while the SC is deployed" (a pre-SC carcass alarm is cleared at `deployed`); "band alarms return at returning" (the same alarm raised again from the pre-SC clean lap); "a damage alarm stays during the SC"; "no pressure alarm from an unknown band"; behaviour-table completeness over `warnings`, `penalties` and `session-phase-race`; "today's warning and penalty alarms are unchanged" (the port).
 - [ ] **Step 2: Run** both test files. Expected: FAIL on the new rows.
 - [ ] **Step 3: Implement** per brief: the judged-lap filter, the carcass band and the player's setup-based pressure band in `car-bands`; `bandsHidden` and the unknown band in `alarms`.
 - [ ] **Step 4: Run the tests again** and `vitest related`. Expected: PASS.
