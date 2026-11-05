@@ -91,6 +91,8 @@ type CarEvent = {
   at: SessionTime;
   carIds: CarId[];
   cornerCutting?: number;
+  /** On a warning of another kind, the warned span's infringement code. */
+  infringement?: Known<number>;
   penalty?: IncidentPenalty;
 };
 
@@ -246,7 +248,8 @@ const entriesOf = (machine: CarMachine, span: CarSpan, cornerCuttingBefore: numb
       return [{ kind: 'penalty', ...base, penalty: { kind: 'disqualified' } }];
     case 'warning': {
       const cornerCutting = cornerCuttingOf(machine, span);
-      return [{ kind: 'warning', ...base, ...(cornerCutting > cornerCuttingBefore && { cornerCutting }) }];
+      if (cornerCutting > cornerCuttingBefore) return [{ kind: 'warning', ...base, cornerCutting }];
+      return [{ kind: 'warning', ...base, infringement: (span.detail as WarnedDetail).infringement }];
     }
     default:
       return [];
@@ -445,6 +448,8 @@ type Candidate = {
   jumps?: DamageJump[];
   /** A corner-cutting warning entry's count of the car's corner-cutting warnings. */
   cornerCutting?: number;
+  /** A warning entry of another kind: the warned span's infringement code. */
+  infringement?: Known<number>;
   /** A neutralised entry's kind (`neutralisationKind`). */
   neutralisation?: NeutralisationKind;
   /** A penalty entry's ruling. */
@@ -522,6 +527,7 @@ const candidates = (acc: Board): Candidate[] => {
     candidate(e.kind, e.at, e.carIds, {
       ...(e.id !== undefined && { id: e.id }),
       ...(e.cornerCutting !== undefined && { cornerCutting: e.cornerCutting }),
+      ...(e.infringement !== undefined && { infringement: e.infringement }),
       ...(e.penalty !== undefined && { penalty: e.penalty }),
     }),
   );
@@ -655,8 +661,10 @@ const damageParts = (jumps: readonly DamageJump[]): IncidentDamagePart[] => {
 const detailOf = (acc: Board, c: Candidate): Pick<IncidentEntry, 'damage' | 'warning' | 'penalty'> => {
   if (c.jumps !== undefined) return { damage: damageParts(c.jumps) };
   if (c.cornerCutting !== undefined) {
-    return { warning: { count: warningInCycle(c.cornerCutting, acc.warningLimit), limit: acc.warningLimit } };
+    return { warning: { kind: 'cornerCutting', count: warningInCycle(c.cornerCutting, acc.warningLimit), limit: acc.warningLimit } };
   }
+  // count and limit stay required until the type becomes a union; an other warning counts nothing.
+  if (c.infringement !== undefined) return { warning: { kind: 'other', count: 0, limit: acc.warningLimit, infringement: c.infringement } };
   if (c.penalty !== undefined) return { penalty: { ...c.penalty } };
   return {};
 };
