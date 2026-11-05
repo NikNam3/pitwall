@@ -62,10 +62,10 @@ The setup-based pressure band (Q3) needs the car's setup. pitwall reads the setu
 
 Recommendation: **A** (built): it shows no band from data that looks wrong.
 
-**Answer:**
+**Answer:** A, own car only for now (user, 2026-11-05).
 
 ## Also decided (user, 2026-11-05)
 
 - The per-mini-sector battle pace delta waits for the SP4a re-spec.
-- Execution: subagent-driven. **No go yet**: the user reviews the plan first.
+- Execution: subagent-driven. Plan reviewed by a second session, clean under C89 (e932c95). **Go given (user, 2026-11-05): the next agent starts the run** (a new session, from the handoff in `.superpowers/sdd/2026-11-05-live-test-fixes/handoff.md`).
 - "Update and send as often as it stays correct" stays a spec rule for now, not a contract clause.
