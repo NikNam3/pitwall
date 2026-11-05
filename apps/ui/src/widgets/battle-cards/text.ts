@@ -18,10 +18,11 @@ export const drsOffTitle = {
 export const header = {
   drv: 'DRV',
   gap: 'GAP',
-  closing: 'CLOSING',
   toDrs: 'TO DRS',
   paceDelta: 'PACE Δ',
   margin: 'MARGIN',
   tyres: 'TYRES',
   ers: 'ERS',
 } as const;
+/** The margin's verdict word per kind. */
+export const marginKind = { pass: 'PASS', hold: 'HOLD' } as const;
