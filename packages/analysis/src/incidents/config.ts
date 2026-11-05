@@ -29,4 +29,11 @@ export const INCIDENTS_CONFIG = defineConfig('incidents', {
    * its start. Source: pitwall estimate (the first live test's SC came 3.5 s after its collision).
    */
   causeWindowMs: 10_000,
+  /** An entry's turn is the turn whose apex is nearest its lap position, if at most this far away. Source: pitwall estimate. */
+  turnSnapM: 60,
+  /**
+   * A major entry stays a map marker while the leader is at most this many laps past the leader's lap at the entry.
+   * Source: pitwall estimate.
+   */
+  markerLaps: 2,
 });

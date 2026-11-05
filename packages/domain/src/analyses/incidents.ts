@@ -2,6 +2,7 @@
 import type { DamageParts } from './damage.ts';
 import type { CarId, SessionTime } from '../ids.ts';
 import type { Known } from '../known.ts';
+import type { LapFraction, MapPoint } from '../track-file.ts';
 import type { Ms, Percent } from '../units.ts';
 
 export type IncidentKind = 'collision' | 'retirement' | 'damage' | 'timeLoss' | 'warning' | 'penalty' | 'neutralised';
@@ -25,10 +26,14 @@ export type IncidentForUs = {
 /**
  * Where on the lap an incident happened, for its first car: the sector from the car's lap distance between its
  * mini-sector crossings (`notApplicable` for an entry without a car, `notReceived` before the car has a crossing or
- * the session its sector distances). F1 25 sends no turn numbers, only lap distance: a `turn` needs per-track corner
- * data and goes beside `sector` once there is some.
+ * the session its sector distances); `fraction`, where the car was on the lap at the incident's time; `turn`, the turn
+ * whose apex is nearest that fraction (spec 6.2). `turn` and `fraction` are optional until the `incidents` analysis
+ * computes them.
  */
-export type IncidentWhere = { sector: Known<1 | 2 | 3> };
+export type IncidentWhere = { sector: Known<1 | 2 | 3>; turn?: Known<string>; fraction?: Known<LapFraction> };
+
+/** `incidents.markers`: one major incident on the track map, at its point on the outline. */
+export type MapIncident = { point: MapPoint; kind: IncidentKind };
 
 /** One part of a damage entry and how much it rose, in percentage points. */
 export type IncidentDamagePart = { part: keyof DamageParts; deltaPct: Percent };

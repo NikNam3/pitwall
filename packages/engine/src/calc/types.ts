@@ -1,4 +1,4 @@
-import type { Insight, SessionTime } from '@pitwall/domain';
+import type { Insight, Known, SessionTime, TrackData } from '@pitwall/domain';
 import type { FrameMetrics } from '../frame/metrics.ts';
 import type { HistoryDelta, Projection } from '../log/types.ts';
 import type { Situation } from '../situations/situation.ts';
@@ -32,8 +32,8 @@ export type FeedMetricsView = FrameMetrics & {
 /**
  * Everything a calculator or analysis may see (C39), read-only: the live state, the situation (the machine's open spans
  * and the weekend phase, C20), the history (the projection, C28; with `situation` it answers membership, so the view is
- * a `MembershipSource`, C26), the delta and change tags, the weekend's earlier sessions, the config, the priors, the feed
- * health and the outputs of the units it reads.
+ * a `MembershipSource`, C26), the delta and change tags, the weekend's earlier sessions, the config, the priors, the
+ * track, the feed health and the outputs of the units it reads.
  */
 export type EngineView = {
   /** The live state (C8): values only; no open trackers, log, signals (C13), projection or frame number. */
@@ -50,6 +50,8 @@ export type EngineView = {
   config: DeepReadonly<Record<string, Record<string, number | string | boolean>>>;
   /** Season-wide priors (C62a), fixed for the run; `{}` until the priors store exists. */
   priors: DeepReadonly<Record<string, unknown>>;
+  /** The session's track file without its provenance (C39, C62b); fixed for the run; `notApplicable` without a file. */
+  track: Known<DeepReadonly<TrackData>>;
   feed: FeedMetricsView;
   /** Outputs of the calculators run before this one in the same pass. */
   outputs: ReadonlyMap<CalculatorId, unknown>;

@@ -1,5 +1,5 @@
 // One session of a feed: frames → SessionRunner → Scheduler → topics, plus its session file and its storage.
-import { carId, sessionUidString, type CarId, type FeedId, type MachineId, type ParticipantsValues, type SessionTime, type SessionUid } from '@pitwall/domain';
+import { carId, sessionUidString, unknown, type CarId, type FeedId, type MachineId, type ParticipantsValues, type SessionTime, type SessionUid } from '@pitwall/domain';
 import {
   projectionLengths,
   Scheduler,
@@ -240,7 +240,8 @@ export class SessionProcessor {
 
   /**
    * The scheduler's input for `state` (C39): its live state, situation and projection, the weekend's earlier sessions, the
-   * run's config and the feed health; no priors (`{}` until the priors store exists, C62a).
+   * run's config and the feed health; no priors (`{}` until the priors store exists, C62a) and no track file yet
+   * (`notApplicable` until the bridge loads it, C62b).
    */
   #schedulerInput(state: StepResult['state'], changed: SchedulerInput['changed'], delta: SchedulerInput['delta']): SchedulerInput {
     return {
@@ -253,6 +254,7 @@ export class SessionProcessor {
       feed: this.#o.feedView(),
       config: this.#o.config,
       priors: {},
+      track: unknown('notApplicable'),
     };
   }
 

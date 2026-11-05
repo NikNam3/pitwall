@@ -265,6 +265,7 @@ export class Scheduler implements Snapshotable<SchedulerBookkeeping> {
         weekend: input.weekend,
         config: input.config,
         priors: input.priors,
+        track: input.track,
         feed: input.feed,
         outputs: this.#outputs,
       };

@@ -4,6 +4,7 @@
 // entries a unit reads (`countReads`, C31.1).
 import { isDeepStrictEqual } from 'node:util';
 import { expect } from 'vitest';
+import { unknown } from '@pitwall/domain';
 import {
   CalculatorRegistry,
   MACHINES,
@@ -57,6 +58,7 @@ export const input = (t: number, changed: ChangeTag[] = ['timing'], d = delta(),
   feed,
   config,
   priors: {},
+  track: unknown('notApplicable'),
 });
 
 /**
@@ -77,6 +79,7 @@ export const inputOf = (
   feed: o.feed ?? feed,
   config: o.config ?? {},
   priors: {},
+  track: unknown('notApplicable'),
 });
 
 /** The view of a step's result, as a unit gets it with no outputs before it (`inputOf`). */
@@ -583,6 +586,7 @@ export function projectionStep(r: Pick<StepResult, 'state' | 'changed' | 'delta'
     feed: throwing('feed') as SchedulerInput['feed'],
     config: {},
     priors: {},
+    track: unknown('notApplicable'),
   });
 }
 
