@@ -6,7 +6,7 @@ import { ourCars } from '../../kit/car/our-cars.ts';
 import { buildData, clipBands, visibleXRange } from '../../kit/chart/data.ts';
 import { endLabels, endsEarly } from '../../kit/chart/labels.ts';
 import { gapperReference, gapSeries, phaseBands, REFERENCE_KINDS } from './series.ts';
-import { TEAM_COLOURS } from '../../theme/team-colours.ts';
+import { role } from '../../theme/index.ts';
 
 type Phase = GapperLines['phases'][number];
 
@@ -82,59 +82,82 @@ describe('phaseBands', () => {
   });
 });
 
+// The gap chart draws the window of `gaps.gapper` (Task 8, spec N3): one line per car of `cars` from its `points`
+// (per mini-sector crossing, x = completed laps + segment / 50) plus `now` as the live end; `byLap` is no longer read.
+// Ours in the ownCar role (the teammate dashed), every other car `textFaint`: no team colours. No y range in the series.
+const pts = (...p: Array<[number, number]>) => p.map(([lap, gapMs]) => ({ lap, gapMs }));
+const BYLAP_NOISE = [{ lap: 99, gapMs: 99_000 }];
+const live = (lap: number, gapMs: number) => known({ lap, gapMs }, toSessionTime(0));
+
 describe('gapSeries', () => {
   const cars = [car(0, 'Kuhnlein', 7, 44), car(1, 'Zhou', 7, 24), car(2, 'Max Verstappen', 2, 1), car(3, 'Lando Norris', 8, 4), car(4, 'Oscar Piastri', 8, 81)];
   const lines: GapperLines = {
     reference: { kind: 'leaderAverage', carId: unknown('notApplicable') },
     referenceLapMs: known(105_000, toSessionTime(0)),
     cars: [
-      { carId: carId(2), byLap: [{ lap: 1, gapMs: 250 }, { lap: 2, gapMs: 500 }], now: NO_NOW },
-      { carId: carId(0), byLap: [{ lap: 1, gapMs: 1000 }, { lap: 2, gapMs: 2500 }], now: NO_NOW },
+      { carId: carId(2), byLap: BYLAP_NOISE, points: pts([1, 250], [1.02, 260], [2, 500]), now: NO_NOW },
+      { carId: carId(0), byLap: BYLAP_NOISE, points: pts([1, 1000], [1.5, 1800], [2, 2500]), now: NO_NOW },
     ],
     phases: [],
   };
   const ours = ourCars(session(0, 1));
 
-  it('makes one series per car, in the order of the lines, labelled with the car code', () => {
+  it('makes one series per car of the window, in the order of the lines, labelled with the car code', () => {
     expect(gapSeries(lines, cars, ours).map((s) => s.label)).toEqual(['VER', 'KUH']);
   });
 
-  it('plots lap against seconds ahead of the reference: a car losing time drops (y = -gap / 1000)', () => {
+  it('plots every point of `points` (per mini-sector crossing): x as given, y = -gap / 1000; byLap is not drawn', () => {
     const [ver, kuh] = gapSeries(lines, cars, ours);
-    expect(ver?.points).toEqual([[1, -0.25], [2, -0.5]]);
-    expect(kuh?.points).toEqual([[1, -1], [2, -2.5]]);
+    expect(ver?.points).toEqual([[1, -0.25], [1.02, -0.26], [2, -0.5]]);
+    expect(kuh?.points).toEqual([[1, -1], [1.5, -1.8], [2, -2.5]]);
   });
 
-  it('colours our cars white and thick (ownCar), the others by team', () => {
-    const [ver, kuh] = gapSeries(lines, cars, ours);
-    expect(kuh?.colour).toMatchObject({ ownCar: true, dashed: false });
-    expect(ver?.colour).toMatchObject({ ownCar: false, dashed: false });
-    expect(ver?.colour?.colour).toBe(TEAM_COLOURS[2]);
+  it('draws only the cars of `cars`: a field car outside the window has no series', () => {
+    expect(gapSeries(lines, cars, ours).map((s) => s.label)).not.toContain('NOR');
   });
 
-  it('dashes the teammate and a team\'s second car', () => {
+  it('colours our car in the ownCar role and thick, every other car textFaint: no team colour', () => {
+    const [ver, kuh] = gapSeries(lines, cars, ours);
+    expect(kuh?.colour).toEqual({ colour: role('ownCar'), dashed: false, ownCar: true });
+    expect(ver?.colour).toEqual({ colour: role('textFaint'), dashed: false, ownCar: false });
+  });
+
+  it('dashes only our teammate; rivals of one team are all the same plain textFaint', () => {
     const more: GapperLines = { ...lines, cars: [
-      { carId: carId(1), byLap: [{ lap: 1, gapMs: 100 }], now: NO_NOW },
-      { carId: carId(3), byLap: [{ lap: 1, gapMs: 100 }], now: NO_NOW },
-      { carId: carId(4), byLap: [{ lap: 1, gapMs: 100 }], now: NO_NOW },
+      { carId: carId(1), byLap: [], points: pts([1, 100]), now: NO_NOW },
+      { carId: carId(3), byLap: [], points: pts([1, 100]), now: NO_NOW },
+      { carId: carId(4), byLap: [], points: pts([1, 100]), now: NO_NOW },
     ] };
     const [zho, nor, pia] = gapSeries(more, cars, ours);
-    expect(zho?.colour).toMatchObject({ ownCar: true, dashed: true });
-    expect(nor?.colour?.dashed).toBe(false);
-    expect(pia?.colour?.dashed).toBe(true);
+    expect(zho?.colour).toEqual({ colour: role('ownCar'), dashed: true, ownCar: true });
+    expect(nor?.colour).toEqual({ colour: role('textFaint'), dashed: false, ownCar: false });
+    expect(pia?.colour).toEqual({ colour: role('textFaint'), dashed: false, ownCar: false });
   });
 
-  it('leaves the label of a car without an identity empty (kit carCodeById) and draws it in the dim colour, not an error', () => {
-    const [s] = gapSeries({ ...lines, cars: [{ carId: carId(15), byLap: [{ lap: 1, gapMs: 10 }], now: NO_NOW }] }, cars, ours);
+  it('draws a car without an identity in textFaint with an empty label, not an error', () => {
+    const [s] = gapSeries({ ...lines, cars: [{ carId: carId(15), byLap: [], points: pts([1, 10]), now: NO_NOW }] }, cars, ours);
     expect(s?.label).toBe('');
-    expect(s?.colour).toMatchObject({ ownCar: false, dashed: false });
+    expect(s?.colour).toEqual({ colour: role('textFaint'), dashed: false, ownCar: false });
   });
 
-  it('keeps a retired or lapped car as a shorter line and drops a car with neither a completed lap nor a live point', () => {
-    const short: GapperLines = { ...lines, cars: [{ carId: carId(2), byLap: [{ lap: 1, gapMs: 0 }], now: NO_NOW }, { carId: carId(3), byLap: [], now: NO_NOW }] };
+  it('draws nothing of ours when there is no session (no car is ours)', () => {
+    expect(gapSeries(lines, cars, ourCars(undefined)).map((s) => s.colour?.ownCar)).toEqual([false, false]);
+  });
+
+  it('keeps a car with one point and drops a car with neither a point nor a live end', () => {
+    const short: GapperLines = { ...lines, cars: [
+      { carId: carId(2), byLap: BYLAP_NOISE, points: pts([1, 0]), now: NO_NOW },
+      { carId: carId(3), byLap: BYLAP_NOISE, points: [], now: NO_NOW },
+    ] };
     const out = gapSeries(short, cars, ours);
     expect(out.map((s) => s.label)).toEqual(['VER']);
     expect(out[0]?.points).toHaveLength(1);
+  });
+
+  it('carries no y range: a series is label, points, colour and the live flag only', () => {
+    for (const s of gapSeries(lines, cars, ours)) {
+      expect(Object.keys(s).sort()).toEqual(['colour', 'label', 'points']);
+    }
   });
 
   it('is empty when the reference is unknown and no car has data', () => {
@@ -142,40 +165,36 @@ describe('gapSeries', () => {
   });
 });
 
-// The live point (Task GL, user ruling 2026-10-30): each car's line runs solid through its completed laps, then dotted
-// to `now`, its gap at its newest mini-sector crossing. Contract assumed of the kit chart (src/kit/chart/data.ts):
-// `ChartSeries.liveEnd === true` says the series' last point is live, so the chart draws the segment to it dotted (the
-// look is the kit's, not a colour); a series without a live point has no `liveEnd: true`.
+// The live point: each car's line runs solid through its crossings, then dotted to `now`, its gap at its newest
+// mini-sector crossing. `ChartSeries.liveEnd === true` says the series' last point is live (the look is the kit's).
 describe('gapSeries: the live point', () => {
   const cars = [car(0, 'Kuhnlein', 7, 44), car(1, 'Zhou', 7, 24), car(2, 'Max Verstappen', 2, 1), car(3, 'Lando Norris', 8, 4)];
   const ours = ourCars(session(0, 1));
-  const live = (lap: number, gapMs: number) => known({ lap, gapMs }, toSessionTime(0));
-  // VER is 40 % into lap 3, KUH 30 %; NOR has just crossed the line
   const lines: GapperLines = {
     reference: { kind: 'leaderAverage', carId: unknown('notApplicable') },
     referenceLapMs: known(105_000, toSessionTime(0)),
     cars: [
-      { carId: carId(2), byLap: [{ lap: 1, gapMs: 250 }, { lap: 2, gapMs: 500 }], now: live(2.4, 700) },
-      { carId: carId(0), byLap: [{ lap: 1, gapMs: 1000 }, { lap: 2, gapMs: 2500 }], now: live(2.3, 2900) },
-      { carId: carId(3), byLap: [{ lap: 1, gapMs: -500 }, { lap: 2, gapMs: -1500 }], now: NO_NOW },
+      { carId: carId(2), byLap: BYLAP_NOISE, points: pts([1, 250], [2, 500], [2.2, 600]), now: live(2.4, 700) },
+      { carId: carId(0), byLap: BYLAP_NOISE, points: pts([1, 1000], [2, 2500]), now: live(2.3, 2900) },
+      { carId: carId(3), byLap: BYLAP_NOISE, points: pts([1, -500], [2, -1500]), now: NO_NOW },
     ],
     phases: [],
   };
   const range = (series: ReturnType<typeof gapSeries>) => visibleXRange(buildData(series)[0] as number[], 50, 'lap', { lap: 0.25, sessionTime: 1000 });
 
-  it("continues a car's line from its last completed lap to now, as a live (dotted) last segment", () => {
+  it("continues a car's line from its last point to now, as a live (dotted) last segment", () => {
     const [ver, kuh] = gapSeries(lines, cars, ours);
-    expect(ver).toMatchObject({ label: 'VER', points: [[1, -0.25], [2, -0.5], [2.4, -0.7]], liveEnd: true });
+    expect(ver).toMatchObject({ label: 'VER', points: [[1, -0.25], [2, -0.5], [2.2, -0.6], [2.4, -0.7]], liveEnd: true });
     expect(kuh).toMatchObject({ label: 'KUH', points: [[1, -1], [2, -2.5], [2.3, -2.9]], liveEnd: true });
   });
 
-  it('draws a car without a live point (at the line) solid through its completed laps only', () => {
+  it('draws a car without a live point solid through its points only', () => {
     const nor = gapSeries(lines, cars, ours)[2];
     expect(nor?.points).toEqual([[1, 0.5], [2, 1.5]]);
     expect(nor).not.toMatchObject({ liveEnd: true });
   });
 
-  it('the live segment is a series flag, not a colour: the car keeps its colour', () => {
+  it('the live segment is a series flag, not a colour', () => {
     const atTheLine: GapperLines = { ...lines, cars: lines.cars.map((c) => ({ ...c, now: NO_NOW })) };
     expect(gapSeries(lines, cars, ours).map((s) => s.colour)).toEqual(gapSeries(atTheLine, cars, ours).map((s) => s.colour));
   });
@@ -189,19 +208,16 @@ describe('gapSeries: the live point', () => {
     expect(endLabels(series, range(series)).map((l) => [l.text, l.value])).toEqual([['VER', -0.7], ['KUH', -2.9], ['NOR', 1.5]]);
   });
 
-  // `gaps.gapper` keeps an out-of-race car's line (review 2, F2): its completed laps and `now` notApplicable. The line
-  // stops where the car stopped, and its label goes to its own end.
-  it("draws a retired car's line, as gaps.gapper gives it, to its last completed lap, named at its own end", () => {
+  it("draws a retired car's line to its last point, named at its own end", () => {
     const longer: GapperLines = {
       ...lines,
       cars: [
-        { carId: carId(2), byLap: [1, 2, 3, 4, 5].map((lap) => ({ lap, gapMs: 250 * lap })), now: live(5.4, 1400) },
-        { carId: carId(3), byLap: [{ lap: 1, gapMs: -500 }, { lap: 2, gapMs: -1500 }], now: NO_NOW },
+        { carId: carId(2), byLap: [], points: pts(...[1, 2, 3, 4, 5].map((lap): [number, number] => [lap, 250 * lap])), now: live(5.4, 1400) },
+        { carId: carId(3), byLap: [], points: pts([1, -500], [2, -1500]), now: NO_NOW },
       ],
     };
     const series = gapSeries(longer, cars, ours);
     const nor = series.find((x) => x.label === 'NOR');
-    expect(nor?.points).toEqual([[1, 0.5], [2, 1.5]]);
     expect(nor).not.toMatchObject({ liveEnd: true });
     const visible = range(series);
     const label = endLabels(series, visible).find((l) => l.text === 'NOR')!;
@@ -218,36 +234,28 @@ describe('gapSeries: the live point', () => {
   });
 });
 
-// Lap 1 (review-fix plan F-D): before any completed lap a car's line is just its live point, so the chart shows the
-// field from the first mini-sectors on instead of staying empty until the leader completes a lap.
+// Lap 1: before any completed lap a car's line is just its live point.
 describe('gapSeries: lap 1', () => {
   const cars = [car(0, 'Kuhnlein', 7, 44), car(2, 'Max Verstappen', 2, 1), car(3, 'Lando Norris', 8, 4)];
   const ours = ourCars(session(0));
-  const live = (lap: number, gapMs: number) => known({ lap, gapMs }, toSessionTime(0));
   const lapOne: GapperLines = {
     reference: { kind: 'fixed', carId: unknown('notApplicable') },
     referenceLapMs: known(90_000, toSessionTime(0)),
     cars: [
-      { carId: carId(2), byLap: [], now: live(0.42, 300) },
-      { carId: carId(0), byLap: [], now: live(0.4, -1200) },
-      { carId: carId(3), byLap: [], now: NO_NOW },
+      { carId: carId(2), byLap: [], points: [], now: live(0.42, 300) },
+      { carId: carId(0), byLap: [], points: [], now: live(0.4, -1200) },
+      { carId: carId(3), byLap: [], points: [], now: NO_NOW },
     ],
     phases: [],
   };
 
-  it('starts a car\'s line at its live point while it has no completed lap: the line is its live end', () => {
+  it("starts a car's line at its live point while it has no point: the line is its live end", () => {
     const [ver, kuh] = gapSeries(lapOne, cars, ours);
     expect(ver).toMatchObject({ label: 'VER', points: [[0.42, -0.3]], liveEnd: true });
     expect(kuh).toMatchObject({ label: 'KUH', points: [[0.4, 1.2]], liveEnd: true });
   });
 
-  it('drops a car that has neither a completed lap nor a live point yet', () => {
+  it('drops a car that has neither a point nor a live point yet', () => {
     expect(gapSeries(lapOne, cars, ours).map((s) => s.label)).toEqual(['VER', 'KUH']);
-  });
-
-  it('labels each lap-1 line at its live point', () => {
-    const series = gapSeries(lapOne, cars, ours);
-    const visible = visibleXRange(buildData(series)[0] as number[], 50, 'lap', { lap: 0.25, sessionTime: 1000 });
-    expect(endLabels(series, visible).map((l) => [l.text, l.value])).toEqual([['VER', -0.3], ['KUH', 1.2]]);
   });
 });
