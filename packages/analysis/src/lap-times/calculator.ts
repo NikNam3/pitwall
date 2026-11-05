@@ -7,6 +7,7 @@ import {
   known,
   unknown,
   type CarId,
+  type CarTiming,
   type CrossingIndex,
   type CurrentLaps,
   type Known,
@@ -20,12 +21,15 @@ import type { EngineView, IncrementalCalculator } from '@pitwall/engine/readers'
 import { LAP_CLASSES_CONFIG, type LapClassOptions } from '../lap-classes/index.ts';
 import { behaviourByCar } from '../shared/behaviour.ts';
 import { carsInSession } from '../shared/car-status.ts';
-import { bestsOf, rowOf, sessionBestBoard, sessionBestsOf, type Best, type CarBests } from './lap-times.ts';
+import { bestsOf, newestSectorsOf, rowOf, sessionBestBoard, sessionBestsOf, type Best, type CarBests, type LivePass } from './lap-times.ts';
 import { LAP_TIMES_BEHAVIOUR, type LapTimesEffect } from './behaviour.ts';
 import { LAP_TIMES, LAP_TIMES_CONFIG, type LapTimesOutput } from './index.ts';
 
-/** A car in the session (car-status not absent) at the view: its lap and what the situations open for it say (their rows merged, C44). */
-type CarSnapshot = { id: CarId; lap: number; effect: LapTimesEffect };
+/**
+ * A car in the session (car-status not absent) at the view: its lap, its live sector times and what the situations open
+ * for it say (their rows merged, C44).
+ */
+type CarSnapshot = { id: CarId; lap: number; timing: Pick<CarTiming, 'sector' | 'sector1TimeMs' | 'sector2TimeMs'>; effect: LapTimesEffect };
 
 /** The accumulator: a pure fold over the laps and the crossings (C31.2). */
 type Acc = {
@@ -42,6 +46,8 @@ type Now = {
   cars: CarSnapshot[];
   inSession: ReadonlySet<CarId>;
   session: { phase: WeekendPhase; timeLeftMs: Ms; updatedAt: number };
+  /** The race-clock time of the view. */
+  at: number;
   eliminated: { q1: number; q2: number };
   /** The session and the `lap-classes` config, for `classifyLap`. */
   classes: LapClassOptions;
@@ -80,7 +86,8 @@ const nowOf = (view: EngineView): Now => {
     if (c === undefined) continue;
     // a pending phase has no span and nothing is projected until it is decided (C14, C3)
     const effect = Object.assign({}, ...rowsOf(id), phase.kind === 'pending' ? { offLap: true } : {}) as LapTimesEffect;
-    cars.push({ id, lap: c.timing.lap, effect });
+    const { lap, sector, sector1TimeMs, sector2TimeMs } = c.timing;
+    cars.push({ id, lap, timing: { sector, sector1TimeMs, sector2TimeMs }, effect });
   }
   const s = live.session;
   const config = LAP_TIMES_CONFIG.read(view);
@@ -88,6 +95,7 @@ const nowOf = (view: EngineView): Now => {
     cars,
     inSession: new Set(cars.map((c) => c.id)),
     session: { phase, timeLeftMs: s.timeLeftMs, updatedAt: s.updatedAt },
+    at: live.sessionTime,
     eliminated: { q1: config.eliminatedQ1, q2: config.eliminatedQ2 },
     classes: { isRace: phase.kind === 'race', ...LAP_CLASSES_CONFIG.read(view) },
   };
@@ -204,6 +212,16 @@ const projectionOf = (acc: Board, car: CarSnapshot, best: Best | undefined, best
   };
 };
 
+/**
+ * The car's current pass as its live timing shows it; none for a car out of the race. The pass is the lap's own line,
+ * its current crossing of (car, lap, 0): one that supersedes an earlier crossing is a garage restart's (C25).
+ */
+const livePassOf = (acc: Board, car: CarSnapshot): LivePass | undefined => {
+  if (car.effect.outOfRace) return undefined;
+  const line = acc.crossings.get(car.id)?.get(car.lap)?.[0];
+  return { ...car.timing, restarted: line?.supersedes !== undefined, invalid: car.effect.invalidLap === true, at: acc.at };
+};
+
 const output = (fold: Acc, view: EngineView): LapTimesOutput => {
   const acc: Board = { ...fold, ...nowOf(view) };
   const lapsByCar = new Map<CarId, LapRecord[]>();
@@ -217,7 +235,8 @@ const output = (fold: Acc, view: EngineView): LapTimesOutput => {
   const projections: LapTimesOutput['projections'] = {};
   for (const car of acc.cars) {
     const carBests = bests.get(car.id) ?? { sectors: [undefined, undefined, undefined] };
-    rows.push(rowOf(car.id, lapsByCar.get(car.id) ?? [], carBests, session, acc.classes, car.effect.outOfRace === true));
+    const row = rowOf(car.id, lapsByCar.get(car.id) ?? [], carBests, session, acc.classes, car.effect.outOfRace === true);
+    rows.push({ ...row, ...newestSectorsOf(row, livePassOf(acc, car), carBests, session) });
     projections[car.id] = projectionOf(acc, car, carBests.lap, bests);
   }
   return { rows, sessionBest: sessionBestBoard(session), projections };
@@ -227,7 +246,7 @@ const output = (fold: Acc, view: EngineView): LapTimesOutput => {
 export const lapTimesCalculator: IncrementalCalculator<Acc, LapTimesOutput> = {
   id: LAP_TIMES,
   kind: 'incremental',
-  reads: ['laps', 'miniSectors', 'timing', 'session', 'spans:weekend-phase', 'spans:car-status', 'spans:car-location', 'spans:car-activity-race', 'spans:car-activity-qualifying', 'spans:car-activity-practice'],
+  reads: ['laps', 'miniSectors', 'timing', 'session', 'spans:weekend-phase', 'spans:car-status', 'spans:car-location', 'spans:car-activity-race', 'spans:car-activity-qualifying', 'spans:car-activity-practice', 'spans:lap-validity'],
   cadence: 'frame',
   init,
   update(acc, delta, view) {
