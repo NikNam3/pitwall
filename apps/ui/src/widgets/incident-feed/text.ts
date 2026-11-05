@@ -27,3 +27,7 @@ export const penaltyKinds: Record<Exclude<PenaltyKind, 'time'>, string> = {
 };
 /** A time penalty, from formatted whole seconds: `+5 s`. */
 export const timePenalty = (seconds: string): string => `+${seconds} s`;
+/** A neutralisation's cause line: the neutralisation word, the cause's cars and its kind, `SC · ALO–TSU collision`. */
+export const neutralisedCause = (neutralisation: string, cars: string, kind: string): string => `${neutralisation} · ${cars} ${kind}`;
+/** Between the codes of the cars of one cause: `ALO–TSU`. */
+export const carsJoint = '–';
