@@ -237,7 +237,7 @@ export function situations(ids: readonly number[], of: Readonly<Record<number, C
     warnings: spansOf((id, s) => {
       if (s.warnings === null) return undefined;
       const count = s.warnings ?? 0;
-      const detail: WarnedDetail = { count, infringement: unknown('notReceived') };
+      const detail: WarnedDetail = { count, cornerCutting: count, infringement: unknown('notReceived') };
       return count === 0 ? openSpan('warnings', 'noWarning', id) : openSpan('warnings', 'warned', id, detail);
     }),
     raceActivity: activity?.key === 'raceActivity' ? activitySpans : undefined,
