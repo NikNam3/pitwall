@@ -170,7 +170,10 @@ const IN_WORDS: Record<string, { field: string; reason: UnknownReason; rule: str
     { field: 'damage.jumps.*.estimateMsPerLap', reason: 'notApplicable', rule: 'no estimate: the loss text stands alone' },
     { field: 'damage.jumps.*.measuring', reason: 'notApplicable', rule: 'measured or never measurable: the loss text stands alone' },
   ],
-  'incident-feed': [{ field: 'feed.*.forUs.*.gapAfterMs', reason: 'notApplicable', rule: 'the other car retired: DNF' }],
+  'incident-feed': [
+    { field: 'feed.*.forUs.*.gapAfterMs', reason: 'notApplicable', rule: 'the other car retired: DNF' },
+    { field: 'feed.*.timeLostMs', reason: 'notApplicable', rule: 'not applicable to the entry: a spanning what text may cover its mark' },
+  ],
 };
 const inWords = (widget: string, field: string, reason: UnknownReason): boolean =>
   (IN_WORDS[widget] ?? []).some((x) => x.field === field && x.reason === reason);

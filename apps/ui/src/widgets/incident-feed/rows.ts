@@ -172,34 +172,61 @@ export type FittedCell = { column: IncidentColumn; text: string; title?: string;
 const partsOf = (cell: IncidentCell, reason: UnknownReason): CellPart[] =>
   cell.parts ?? (cell.text === '' ? [unknownPart(reason)] : [{ text: cell.text }, { text: ' ' }, unknownPart(reason)]);
 
+/** A part a span may cover: no text, and no mark but the one of a value that does not apply to the entry. */
+const coverablePart = (part: CellPart): boolean => part.text === '' && (part.reason === undefined || part.reason === 'notApplicable');
+
 /**
- * The width of a column that is not the last: its own, or, when its text is longer (a neutralisation's cause line,
- * `SC · ALO–TSU collision`) and every column after it is empty, as long as the text needs, so nothing after it moves.
+ * A cell a span may cover: it shows nothing, or only the mark of a value that does not apply to the entry (a
+ * neutralisation's or a warning's time lost), so nothing is lost; never a cell with text or another reason's mark.
  */
-const spansOn = (after: readonly IncidentColumn[], row: IncidentRow, cell: IncidentCell, width: number): number =>
-  cell.text.length > width && after.every((c) => row.cells[c].text === '') ? cell.text.length : width;
+const coverable = (cell: IncidentCell): boolean =>
+  coverablePart({ text: cell.text, ...(cell.reason === undefined ? {} : { reason: cell.reason }) }) && (cell.parts ?? []).every(coverablePart);
+
+/** One cell fitted to `width` characters; a cell with an unknown value gets its parts and the reason in words. */
+function fitTo(column: IncidentColumn, cell: IncidentCell, width: number): FittedCell {
+  const fitted = { column, text: fitCell(cell.text, width) };
+  return cell.reason === undefined ? fitted : { ...fitted, title: unknownReason[cell.reason], parts: fitParts(partsOf(cell, cell.reason), width) };
+}
 
 /**
  * The row's cells on the fixed grid of a line `cols` characters wide: each column in its width, the last one in what
- * is left of the line; a text that does not fit is cut with `…` (kit `fitCell`), never silently.
+ * is left of the line; a text that does not fit is cut with `…` (kit `fitCell`), never silently, so a line never grows
+ * past the panel. A text longer than its column (a neutralisation's cause line `SC · ALO–TSU collision`, a warning's
+ * `warning · corner cutting 2/3`) spans on when every cell after it may be covered (`coverable`): it takes their
+ * place, as long as it needs and at most the rest of the line, cut there. When a cell after it shows text or another
+ * reason's mark, the text stays in its own column, cut there.
  */
 export function fitRow(mode: WidgetSize['mode'], row: IncidentRow, cols: number): FittedCell[] {
   const columns = columnsFor(mode);
-  const fixed = columns.slice(0, -1).reduce((sum, c) => sum + widths[c] + COLUMN_GAP, LEAD);
-  return columns.map((column, i) => {
+  const fitted: FittedCell[] = [];
+  let start = LEAD;
+  for (const [i, column] of columns.entries()) {
     const cell = row.cells[column];
-    const last = i === columns.length - 1;
-    const width = last ? Math.max(0, cols - fixed) : spansOn(columns.slice(i + 1), row, cell, widths[column]);
-    const fitted = { column, text: fitCell(cell.text, width) };
-    return cell.reason === undefined ? fitted : { ...fitted, title: unknownReason[cell.reason], parts: fitParts(partsOf(cell, cell.reason), width) };
-  });
+    const after = columns.slice(i + 1);
+    const room = Math.max(0, cols - start);
+    if (after.length === 0) {
+      fitted.push(fitTo(column, cell, room));
+    } else if (cell.text.length > widths[column] && after.every((c) => coverable(row.cells[c]))) {
+      fitted.push(fitTo(column, cell, Math.max(widths[column], Math.min(cell.text.length, room))));
+      break;
+    } else {
+      fitted.push(fitTo(column, cell, widths[column]));
+      start += widths[column] + COLUMN_GAP;
+    }
+  }
+  return fitted;
 }
 
-/** A row as one line of text on the fixed grid (`cols` wide; by default as wide as its last cell needs), without the marks. */
+/**
+ * A row as one line of text on the fixed grid (`cols` wide; by default as wide as its cells need: the last one's text
+ * and a spanning cell's text past its column), without the marks.
+ */
 export function incidentRowText(mode: WidgetSize['mode'], row: IncidentRow, cols = Infinity): string {
   const columns = columnsFor(mode);
   const last = columns[columns.length - 1];
-  const needed = columns.slice(0, -1).reduce((sum, c) => sum + widths[c] + COLUMN_GAP, LEAD) + (last === undefined ? 0 : row.cells[last].text.length);
+  const fixed = columns.slice(0, -1);
+  const overflow = Math.max(0, ...fixed.map((c) => row.cells[c].text.length - widths[c]));
+  const needed = fixed.reduce((sum, c) => sum + widths[c] + COLUMN_GAP, LEAD) + overflow + (last === undefined ? 0 : row.cells[last].text.length);
   const cells = fitRow(mode, row, Math.min(cols, needed));
   return `${' '.repeat(LEAD)}${cells.map((c) => c.text).join(' '.repeat(COLUMN_GAP))}`.trimEnd();
 }
