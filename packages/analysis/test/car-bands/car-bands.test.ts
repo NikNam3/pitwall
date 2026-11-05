@@ -5,7 +5,7 @@ import type { OpenSpan, WeekendPhase } from '../../../domain/src/index.ts';
 import { carBandsCalculator } from '../../src/car-bands/calculator.ts';
 import { CAR_BANDS, CAR_BANDS_BEHAVIOUR, CAR_BANDS_CONFIG, type CarBands } from '../../src/car-bands/index.ts';
 import { carState, lap, realismHidden } from '../../../../test-support/builders/index.ts';
-import { guardedQuick, openSpan, PRACTICE, situatedView } from '../situated.ts';
+import { guardedQuick, NONE, openSpan, PRACTICE, QUALIFYING, situatedView } from '../situated.ts';
 import { withOwnCar, withSetup } from '../own-car.ts';
 
 /** The calculator through its guarded view (C41): every case fails on a read it does not declare. */
@@ -57,7 +57,7 @@ describe('car-bands calculator', () => {
     expect(carBandsCalculator.id).toBe(CAR_BANDS);
     expect(carBandsCalculator.kind).toBe('quick');
     expect(carBandsCalculator.cadence).toEqual({ hz: 4 });
-    expect(carBandsCalculator.reads).toEqual(expect.arrayContaining(['tyres', 'condition', 'laps', 'ownCar', 'spans:car-status', 'spans:car-activity-race']));
+    expect(carBandsCalculator.reads).toEqual(expect.arrayContaining(['tyres', 'condition', 'laps', 'ownCar', 'spans:car-status', 'spans:car-activity-race', 'spans:weekend-phase']));
     expect(carBandsCalculator.reads).not.toContain('session');
   });
 
@@ -268,6 +268,12 @@ describe('car-bands calculator', () => {
       expect(out([lap({ lapNumber: 1, channelRange: cold })], { phase: PRACTICE })).toBe(true);
     });
 
+    it('only the race turns the lap-1 rule on: lap 1 of qualifying, practice or no weekend phase is judged like any rate lap', () => {
+      for (const phase of [PRACTICE, QUALIFYING, NONE]) expect(out([lap({ lapNumber: 1, channelRange: cold })], { phase }), phase.kind).toBe(true);
+      // and an SC lap 1 there is still no rate lap
+      expect(out([lap({ lapNumber: 1, channelRange: cold, scShare: 1 })], { phase: QUALIFYING })).toBe(false);
+    });
+
     it('an SC lap is not judged', () => {
       // 90 s laps: 5 % under the SC is 4.5 s, over maxNeutralisedMs (2 s); 2 % is 1.8 s, under it
       expect(out([lap({ lapNumber: 3, channelRange: cold, scShare: 0.05 })])).toBe(false);
@@ -358,8 +364,12 @@ describe('car-bands calculator', () => {
   });
 
   describe('behaviour table (C44): a row per car-status and race-activity kind', () => {
-    it('exports CAR_BANDS_BEHAVIOUR over car-status and the race activity', () => {
-      expect(Object.keys(CAR_BANDS_BEHAVIOUR).sort()).toEqual(['car-activity-race', 'car-status']);
+    it('exports CAR_BANDS_BEHAVIOUR over car-status, the race activity and the weekend phase', () => {
+      expect(Object.keys(CAR_BANDS_BEHAVIOUR).sort()).toEqual(['car-activity-race', 'car-status', 'weekend-phase']);
+    });
+
+    it('weekend phase: only race asks for the lap-1 rule; practice, qualifying and none do not', () => {
+      expect(CAR_BANDS_BEHAVIOUR['weekend-phase']).toEqual({ practice: {}, qualifying: {}, race: { isRace: true }, none: {} });
     });
 
     // carcass, pressure and engine above their bands now; the last lap a rate lap whose carcass was above the band all lap
