@@ -238,6 +238,32 @@ describe('battle', () => {
     expect(ahead.value.overtakeMarginMs).toMatchObject({ known: false, reason: 'insufficientData' });
   });
 
+  it('behind margin is the behind car\'s: their pace minus ours, negated, minus the threshold', () => {
+    const view = build(base({ pace: { 0: known(104_000, 50_000), 1: known(104_286, 60_000), 3: known(103_233, 55_000) } }));
+    const behind = card(view).behind;
+    if (!behind.known) throw new Error('behind unknown');
+    expect(behind.value.paceDeltaMs).toEqual({ known: true, value: -767, at: 55_000 });
+    expect(behind.value.overtakeMarginMs).toEqual({ known: true, value: -233, at: 55_000 });
+  });
+
+  it('ahead margin is unchanged: pace delta minus the threshold', () => {
+    const view = build(base({ pace: { 0: known(104_000, 50_000), 1: known(104_286, 60_000), 3: known(103_233, 55_000) } }));
+    const ahead = card(view).ahead;
+    if (!ahead.known) throw new Error('ahead unknown');
+    expect(ahead.value.paceDeltaMs).toEqual({ known: true, value: 286, at: 60_000 });
+    expect(ahead.value.overtakeMarginMs).toEqual({ known: true, value: -714, at: 60_000 });
+  });
+
+  it('an unknown pace gives an unknown margin on both sides', () => {
+    const view = build(base({ pace: { 0: unknown('insufficientData'), 1: known(92_500, 60_000), 3: known(89_500, 55_000) } }));
+    const { ahead, behind } = card(view);
+    if (!ahead.known || !behind.known) throw new Error('side unknown');
+    for (const s of [ahead.value, behind.value]) {
+      expect(s.paceDeltaMs).toMatchObject({ known: false, reason: 'insufficientData' });
+      expect(s.overtakeMarginMs).toMatchObject({ known: false, reason: 'insufficientData' });
+    }
+  });
+
   it('compound and tyre age of both cars come from the car states', () => {
     const view = build(
       base({ carOver: { 0: { tyres: { visualCompound: 'medium', age: 7 } }, 1: { tyres: { visualCompound: 'hard', age: 12 } } } }),

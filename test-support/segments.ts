@@ -4,6 +4,18 @@ import { join } from 'node:path';
 import { readPwrec } from '../apps/bridge/src/pwrec/reader.ts';
 import { decode, type Packet } from '../packages/protocol/src/index.ts';
 
+/**
+ * Committed segments named by id, as `FIXTURES` names the full recordings: id to file of `fixtures/segments/`.
+ * Provenance and what each shows: the `segments` entries of `fixtures/index.json`.
+ */
+export const SEGMENTS = {
+  practiceGarageRestartLine: 'practice-garage-restart-line.pwrec.gz',
+  raceScAfterCollision: 'race-sc-after-collision.pwrec.gz',
+  raceWarningCollision: 'race-warning-collision.pwrec.gz',
+} as const;
+
+export type SegmentName = keyof typeof SEGMENTS;
+
 /** The committed segment `file` of `fixtures/segments/`. */
 export const segmentPath = (file: string): string => join(import.meta.dirname, '../fixtures/segments', file);
 

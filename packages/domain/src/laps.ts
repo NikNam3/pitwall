@@ -1,4 +1,5 @@
-import type { LapRecord } from './records.ts';
+import type { CarId } from './ids.ts';
+import type { LapRecord, MiniSectorCrossing } from './records.ts';
 
 /** The current record of each lap: indexed by car id, then lap number. Slots may be sparse. */
 export type CurrentLaps = Array<Record<number, LapRecord>>;
@@ -30,4 +31,26 @@ export function currentLaps(laps: readonly LapRecord[]): LapRecord[] {
     for (const n of numbers) result.push(byLap[n] as LapRecord);
   }
   return result;
+}
+
+/** Every crossing no later crossing supersedes, in log order. */
+export function currentCrossings(list: readonly MiniSectorCrossing[]): MiniSectorCrossing[] {
+  const superseded = new Set<number>();
+  for (const c of list) if (c.supersedes !== undefined) superseded.add(c.supersedes.index);
+  return list.filter((_, position) => !superseded.has(position));
+}
+
+/** The current crossings by car id, then lap number, then segment; slots may be empty. */
+export type CrossingIndex = Map<CarId, Map<number, (MiniSectorCrossing | undefined)[]>>;
+
+/**
+ * The incremental form of `currentCrossings`: folds one crossing into `index`. After folding a list in order, `index`
+ * holds exactly `currentCrossings(list)` by car, lap and segment. Mutates `index`.
+ */
+export function foldCurrentCrossing(index: CrossingIndex, crossing: MiniSectorCrossing): void {
+  const byLap = index.get(crossing.carId) ?? new Map<number, (MiniSectorCrossing | undefined)[]>();
+  index.set(crossing.carId, byLap);
+  const slots = byLap.get(crossing.lap) ?? [];
+  byLap.set(crossing.lap, slots);
+  slots[crossing.segment] = crossing;
 }

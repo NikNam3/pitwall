@@ -4,8 +4,8 @@ import type { BandReading, CarBands, CarState, Corners, Known, TyreWear } from '
 import { CAR_FIELDS, compactBrake, cornerBlockRows, fullHeader, fullRowFields, fullRowText, worstBrake } from './rows.ts';
 
 const k = <T>(v: T): Known<T> => known(v, 0);
-const BAND = { lo: 80, hi: 100 };
-const BRAKE_BAND = { lo: 300, hi: 1000 };
+const BAND = known({ lo: 80, hi: 100 }, 0);
+const BRAKE_BAND = known({ lo: 300, hi: 1000 }, 0);
 const rd = (value: Known<number>, over: Partial<BandReading> = {}): BandReading => ({
   value, state: value.known ? k('in') : value, band: BAND, outForFullLap: false, ...over,
 });

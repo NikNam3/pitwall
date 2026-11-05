@@ -19,6 +19,7 @@ const OPTIONS = {
   feed: { type: 'string' },
   weekend: { type: 'string' },
   topic: { type: 'string' },
+  warnings: { type: 'boolean' },
   catalogue: { type: 'string' },
   help: { type: 'boolean', short: 'h' },
 } as const;

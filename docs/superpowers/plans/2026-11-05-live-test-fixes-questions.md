@@ -44,13 +44,28 @@ Recommendation: **A** (built): it follows any setup and any track.
 
 The "one warning left before a penalty" alarm counts every warning together and fires in every session. Tonight's race: warning 1 was corner cutting, warning 2 a small collision. The game then counted 2 warnings, 1 of them corner cutting. In practice warnings never led to a penalty (4 warnings tonight, 9 in an older practice). In the three older races with a penalty, the first came after the 4th warning, counted together. Task 6b of the plan lists, over every recording, each penalty with the game's two warning counters at that moment (all warnings, and corner-cutting warnings alone) and the penalty's infringement, and adds that table here before you answer.
 
+**Evidence (Task 6b, `pnpm pitwall scan-situations --warnings recordings/`, 18 recordings, 2026-11-05).** Every penalty of the player car, with the warned span it belongs to (projection membership, C26). Infringement names from the F1 25 data-output appendix.
+
+| Recording | Phase | Penalty | Infringement | Warnings (all) | Corner-cutting |
+|---|---|---|---|---|---|
+| 2026-10-29_00-04-08 | race | time penalty | 21 Multiple warnings | 4 | 3 |
+| 2026-10-30_15-20-41 | race | time penalty | 21 Multiple warnings | 4 | 3 |
+| 2026-10-30_18-53-00 | race | drive-through | 38 VSC exceeding allowed pace | 4 | 2 |
+| 2026-10-30_18-53-00 | race | time penalty | 21 Multiple warnings | 5 | 3 |
+
+Timing (a per-race probe of the spans): each "multiple warnings" penalty came one frame after the warned span of the 3rd corner-cutting warning opened (frames 50387→50388, 227529→227530, 64989→64990); a 4th corner-cutting warning (two races) brought no second penalty; six collision warnings (infringement 4) in one race brought none.
+
+Per weekend phase (every recording): practice reached 9 corner-cutting warnings (2026-10-30_18-26-27) and 4 (tonight) without a penalty; qualifying at most 2 (so no evidence either way); races: the penalty at the 3rd, three times out of three. FIA practice (research 2026-11-05, user: F1 25 follows that year's FIA rules closely): in practice and qualifying a track-limits offence deletes the lap time; in the race warnings 1–2, the black-and-white flag on the 3rd, 5 s on the 4th, 10 s on the 5th. The game's counter reads 3 at the penalty, one step before FIA's 4th: either the game penalises the 3rd cut, or its counter counts the flagged and the penalised offence as one; the telemetry has no black-and-white-flag field to tell them apart.
+
+No penalty in any practice, qualifying, sprint or tonight's sessions (tonight's race ended at 2 warnings, 1 of them corner cutting). Every "multiple warnings" penalty came with the 3rd corner-cutting warning, while the total stood at 4 or 5; the one penalty at another count (the drive-through) was for the VSC pace, not for warnings.
+
 - **A.** Count only corner-cutting warnings; the limit is whatever Task 3a's table shows (3 if the penalties follow the 3rd corner-cutting warning); the alarm in races only (qualifying added once a recording shows a qualifying penalty).
 - **B.** Count every warning, as now, with the limit from the table; races only.
 - **C.** No "last warning" alarm; the incident feed shows each warning with its kind.
 
-Recommendation: **A**, pending the table (built only after your answer).
+Recommendation: **A** with limit 3: the "one warning left" alarm when the corner-cutting count reaches 2, in races only. The table fits it on all three warning penalties; counting every warning (B) would have needed a limit of 4 in two races and 5 in the third.
 
-**Answer:** open until Task 6b's table is here.
+**Answer:** races only, corner-cutting warnings only, the "one cut left before a penalty" alarm at the 2nd (the 3rd brought the penalty in every race); practice and qualifying get no last-warning alarm (a cut there costs the lap, which lap validity shows); collision warnings show their kind without n/3 (user, 2026-11-05, after the FIA research and the per-phase table).
 
 ## Q5. Should the teammate get a pressure band too?
 

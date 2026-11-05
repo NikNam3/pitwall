@@ -32,7 +32,7 @@ export const lapNotBegun = (car: LiveCar): boolean => car.timing.lapDistanceM <=
  * qualifying the lap number does not advance through the garage, so the car leaves it on the lap it then times from the
  * line: the push span opens there and the lap restarts. A race's lap number always rolls over at the line.
  */
-export const lapStepOf = (mark: LapMark | undefined, car: LiveCar, activity: SituationSpan | undefined, frameNumber: FrameNumber): LapStep => {
+export const lapStepOf = (mark: Pick<LapMark, 'lap'> | undefined, car: LiveCar, activity: SituationSpan | undefined, frameNumber: FrameNumber): LapStep => {
   if (!mark || car.timing.lap < mark.lap) return 'first';
   if (car.timing.lap === mark.lap) return pushOpened(activity, frameNumber) ? 'restart' : 'same';
   return 'next';

@@ -1,9 +1,10 @@
-import { carId, known, unknown, type CarBands, type CarId, type DamageState, type ErsState, type FuelState, type Insight, type OpenSpan, type TyreWear } from '@pitwall/domain';
+import { carId, known, unknown, type CarBands, type CarId, type DamageState, type ErsState, type FuelState, type Insight, type NeutralisedStage, type OpenSpan, type TyreWear, type WarnedDetail, type WeekendPhase } from '@pitwall/domain';
 import { InsightBook, type EngineView, type Projection } from '@pitwall/engine';
 import { describe, expect, it } from 'vitest';
-import { ALARMS, ALARMS_BEHAVIOUR } from '../../src/alarms/index.ts';
+import { ALARMS, ALARMS_BEHAVIOUR, type AlarmsEffect } from '../../src/alarms/index.ts';
+import type { BehaviourTable } from '../../src/shared/behaviour.ts';
 import { alarmsCalculator } from '../../src/alarms/calculator.ts';
-import { CAR_BANDS, CAR_BANDS_CONFIG } from '../../src/car-bands/index.ts';
+import { CAR_BANDS, CAR_BANDS_BEHAVIOUR, CAR_BANDS_CONFIG } from '../../src/car-bands/index.ts';
 import { carBandsCalculator } from '../../src/car-bands/calculator.ts';
 import { DAMAGE } from '../../src/damage/index.ts';
 import { damageCalculator } from '../../src/damage/calculator.ts';
@@ -14,7 +15,8 @@ import { fuelCalculator } from '../../src/fuel/calculator.ts';
 import { SESSION_REMAINING, type SessionRemaining } from '../../src/session-remaining/index.ts';
 import { TYRE_WEAR } from '../../src/tyre-wear/index.ts';
 import { tyreWearCalculator } from '../../src/tyre-wear/calculator.ts';
-import { situatedView } from '../situated.ts';
+import { NONE, openSpan, PRACTICE, QUALIFYING, RACE, situatedView } from '../situated.ts';
+import { withSetup } from '../own-car.ts';
 import { scheduled } from '../scheduled.ts';
 
 /** `damage` stepped: its output reads the view its accumulator was folded on (C31.2). */
@@ -29,24 +31,26 @@ const perCorner = <T>(make: () => T) => ({ fl: make(), fr: make(), rl: make(), r
 /**
  * The `car-bands` config of every `viewWith` view (the defaults before 2026-10-30), so the band cases below don't
  * depend on the defaults: dry surface 85-105, dry carcass 85-110, inter surface 60-90, inter carcass 55-75,
- * pressure 20-31, brakes 300-1000, engine 0-125.
+ * pressure setup - 1.5 to setup + 1.0 psi (car 0's setup is 25 psi on every corner: 23.5-26), brakes 300-1000, engine 0-125.
  */
 const TEST_BANDS = {
   surfaceDryLo: 85, surfaceDryHi: 105, surfaceInterLo: 60, surfaceInterHi: 90, surfaceWetLo: 50, surfaceWetHi: 80,
   carcassDryLo: 85, carcassDryHi: 110, carcassInterLo: 55, carcassInterHi: 75, carcassWetLo: 45, carcassWetHi: 65,
-  pressureLo: 20, pressureHi: 31, brakeLo: 300, brakeHi: 1000, engineHi: 125,
+  pressureBelowSetupPsi: 1.5, pressureAboveSetupPsi: 1.0, brakeLo: 300, brakeHi: 1000, engineHi: 125,
 };
 const CORNER_IDS = ['fl', 'fr', 'rl', 'rr'] as const;
 const NOW = 12_345;
 
-const reading = (state: 'below' | 'in' | 'above', over: { outForFullLap?: boolean; value?: number } = {}) => ({
+const reading = (state: 'below' | 'in' | 'above', over: { outForFullLap?: boolean; value?: number; band?: { lo: number; hi: number } } = {}) => ({
   value: known(over.value ?? 95, 0),
   state: known(state, 0),
-  band: { lo: 85, hi: 105 },
+  band: known(over.band ?? { lo: 85, hi: 105 }, 0),
   outForFullLap: over.outForFullLap ?? false,
 });
+/** Car 0's pressure band on its 25 psi setup. */
+const PRESSURE_BAND = { lo: 23.5, hi: 26 };
 const bandsOk = (): CarBands => ({
-  tyres: perCorner(() => ({ surfaceC: reading('in'), carcassC: reading('in'), pressurePsi: reading('in') })),
+  tyres: perCorner(() => ({ surfaceC: reading('in'), carcassC: reading('in'), pressurePsi: reading('in', { value: 25, band: PRESSURE_BAND }) })),
   brakesC: perCorner(() => reading('in')),
   engineC: reading('in'),
 });
@@ -107,11 +111,14 @@ const open = (machine: string, kind: string, car: number, over: Partial<OpenSpan
   carId: carId(car),
   ...over,
 });
-/** The car's `warnings` span: `warned` with the count held, or `noWarning` at 0. */
-const warned = (count: number, car = 0): OpenSpan =>
+/**
+ * The car's `warnings` span: `warned` with the count held, of which `cornerCutting` are corner-cutting warnings (by
+ * default all of them), or `noWarning` at 0.
+ */
+const warned = (count: number, car = 0, cornerCutting = count): OpenSpan =>
   count === 0
     ? open('warnings', 'noWarning', car)
-    : open('warnings', 'warned', car, { detail: { count, infringement: unknown('notReceived') } });
+    : open('warnings', 'warned', car, { detail: { count, cornerCutting, infringement: unknown('notReceived') } satisfies WarnedDetail });
 type Owes = { kind: 'clear' | 'timePenalty' | 'driveThroughPending' | 'stopGoPending'; id?: number; startFrame?: number; infringement?: number };
 /** The car's `penalties` span: what it owes race control now, with the details the machine records. */
 const owes = ({ kind, id = 0, startFrame = 50, infringement }: Owes, car = 0): OpenSpan =>
@@ -130,27 +137,49 @@ const owes = ({ kind, id = 0, startFrame = 50, infringement }: Owes, car = 0): O
               totalMs: 0,
             },
   });
-const situationOf = (spans: readonly OpenSpan[]): EngineView['situation'] => {
+/** The situation of `spans` in `phase` (default a race): the weekend-phase span that stands for the phase (C14, C20) and `spans`. */
+const situationOf = (spans: readonly OpenSpan[], phase: WeekendPhase = RACE): EngineView['situation'] => {
   const byMachine: Record<string, OpenSpan[]> = {};
+  if (phase.kind !== 'pending') {
+    const { kind, ...detail } = phase;
+    byMachine['weekend-phase'] = [openSpan('weekend-phase', kind, { detail })];
+  }
   for (const span of spans) (byMachine[span.machine] ??= []).push(span);
-  return { ...RACING, byMachine };
+  return { ...RACING, weekendPhase: phase, byMachine };
 };
 
-type ViewOpts = { warnings?: number; owes?: Owes; spans?: OpenSpan[]; lap?: number; history?: Partial<Projection>; config?: EngineView['config']; playerCar?: number };
+type ViewOpts = {
+  warnings?: number;
+  /** Of `warnings`, the corner-cutting ones (default: all of them). */
+  cornerCutting?: number;
+  owes?: Owes;
+  spans?: OpenSpan[];
+  lap?: number;
+  history?: Partial<Projection>;
+  config?: EngineView['config'];
+  playerCar?: number;
+  /** Car 0 without its setup (not yet received): its pressure band is unknown. By default its setup is 25 psi on every corner. */
+  noSetup?: true;
+  /** The weekend phase (default a race). */
+  phase?: WeekendPhase;
+};
 const viewWith = (parts: Parts, o: ViewOpts = {}): EngineView =>
   engineView({
-    cars: [carState({ timing: { lap: o.lap ?? 1 } })],
+    cars: [o.noSetup ? carState({ timing: { lap: o.lap ?? 1 } }) : withSetup(carState({ timing: { lap: o.lap ?? 1 } }), 25)],
     outputs: outputsOf([outputsFor(0, parts)]),
     sessionTime: NOW,
-    situation: situationOf([...(o.warnings === undefined ? [] : [warned(o.warnings)]), ...(o.owes === undefined ? [] : [owes(o.owes)]), ...(o.spans ?? [])]),
+    situation: situationOf([...(o.warnings === undefined ? [] : [warned(o.warnings, 0, o.cornerCutting)]), ...(o.owes === undefined ? [] : [owes(o.owes)]), ...(o.spans ?? [])], o.phase),
     ...(o.history && { history: o.history }),
     config: { [CAR_BANDS_CONFIG.key]: TEST_BANDS, ...o.config },
     ...(o.playerCar !== undefined && { playerCar: o.playerCar }),
   });
 
-/** A completed lap of car 0 whose channel ranges are the builder's (all in band) except `over`, e.g. `{ 'brakesC.fl': [250, 290] }`. */
+/**
+ * A completed lap of car 0 (lap 2 unless `rec` says otherwise: lap 1 of a race is not judged) whose channel ranges are the
+ * builder's (all in band) except `over`, e.g. `{ 'brakesC.fl': [250, 290] }`.
+ */
 const lapWith = (over: Record<string, [number, number]>, rec: Parameters<typeof lap>[0] = {}) => {
-  const l = lap(rec);
+  const l = lap({ lapNumber: 2, ...rec });
   for (const [channel, [min, max]] of Object.entries(over)) {
     const r = known({ min, max }, l.completedAt);
     const [head, second, third] = channel.split('.') as [string, string, string];
@@ -175,7 +204,7 @@ describe('alarms calculator', () => {
     );
     // no ERS alarm exists, so ERS is no input: a new ERS output must not re-run the alarms
     expect(alarmsCalculator.reads).not.toContainEqual({ calculator: ERS });
-    expect(alarmsCalculator.reads).toEqual(expect.arrayContaining(['timing', 'laps', 'identity', 'spans:warnings', 'spans:penalties']));
+    expect(alarmsCalculator.reads).toEqual(expect.arrayContaining(['timing', 'laps', 'identity', 'spans:warnings', 'spans:penalties', 'spans:session-phase-race', 'spans:weekend-phase']));
     // warnings and penalties come from the machine's spans, not from the events list (C20)
     expect(alarmsCalculator.reads).not.toContain('events');
   });
@@ -213,14 +242,15 @@ describe('alarms calculator', () => {
     });
 
     it('a tyre channel out of band on the mid-range of the last lap: advisory, tyres, bandOut with state, value, band, lap and measure', () => {
-      const [a, ...rest] = run(lapsView([lapWith({ 'tyre.pressurePsi.rr': [31, 33] }, { lapNumber: 4 })]));
+      // the pressure band is car 0's setup band (25 psi: 23.5-26)
+      const [a, ...rest] = run(lapsView([lapWith({ 'tyre.pressurePsi.rr': [26, 28] }, { lapNumber: 4 })]));
       expect(rest).toEqual([]);
       expect(a).toMatchObject({
         kind: 'bandOut',
         severity: 'advisory',
         category: 'tyres',
         key: 'bandOut:0:tyre.pressurePsi.rr',
-        params: { channel: 'tyre.pressurePsi.rr', state: 'above', value: 32, lo: 20, hi: 31, lap: 4, measure: 'midRange' },
+        params: { channel: 'tyre.pressurePsi.rr', state: 'above', value: 27, lo: 23.5, hi: 26, lap: 4, measure: 'midRange' },
       });
     });
 
@@ -385,20 +415,107 @@ describe('alarms calculator', () => {
     });
 
     it('an unknown range of the last lap raises nothing, never a zero reading', () => {
-      const l = lap();
+      const l = lap({ lapNumber: 2 });
       l.channelRange.brakesC.fl = unknown('notReceived');
       l.channelRange.engineC = unknown('notReceived');
       expect(run(lapsView([l]))).toEqual([]);
     });
 
     it('the advisory changes at the end of a lap: raised when a lap ends out of band, resolved when the next ends in band', () => {
-      const out = lapWith({ 'brakesC.fl': [180, 290] }, { lapNumber: 1 });
-      const back = lapWith({}, { lapNumber: 2 });
+      const out = lapWith({ 'brakesC.fl': [180, 290] }, { lapNumber: 2 });
+      const back = lapWith({}, { lapNumber: 3 });
       const book = new InsightBook();
       expect(book.apply(ALARMS, run(lapsView([])), 1_000)).toEqual([]);
       expect(book.apply(ALARMS, run(lapsView([out])), 90_000)).toEqual([{ type: 'raised', insight: expect.objectContaining({ key: 'bandOut:0:brakesC.fl' }) }]);
       expect(book.apply(ALARMS, run(lapsView([out])), 120_000)).toEqual([]);
       expect(book.apply(ALARMS, run(lapsView([out, back])), 180_000)).toEqual([{ type: 'resolved', key: 'bandOut:0:brakesC.fl', at: 180_000 }]);
+    });
+  });
+
+  describe('band alarms judge representative laps and wait out the safety car (Q1)', () => {
+    /** The race's session phase: `neutralised` by `car` with the stages seen so far, or `racing`. */
+    const neutralised = (car: 'SC' | 'VSC', ...stages: NeutralisedStage[]) =>
+      openSpan('session-phase-race', 'neutralised', { start: 300_000, detail: { car, stages: stages.map((stage, i) => ({ stage, at: 300_000 + i * 30_000 })) } });
+    const racing = openSpan('session-phase-race', 'racing');
+    // lap 3, the last clean lap before the SC: the rear-left carcass above its band (110-114 °C, mid 112 > 110)
+    const preSc = lapWith({ 'tyre.carcassC.rl': [110, 114] }, { lapNumber: 3 });
+    // lap 4 under the SC: the carcass cold (70-80 °C, below its band); not a rate lap
+    const scLap = lapWith({ 'tyre.carcassC.rl': [70, 80] }, { lapNumber: 4, scShare: 1 });
+    // car-bands' judgement of the pre-SC lap: the engine out of its band for the full lap
+    const outLap = (): CarBands => ({ ...bandsOk(), engineC: reading('above', { outForFullLap: true }) });
+    const BAND_KEYS = ['bandOut:0:tyre.carcassC.rl', 'bandOutLap:0:engineC'];
+    const bandAlarms = (view: EngineView) => run(view).filter((i) => i.kind === 'bandOut' || i.kind === 'bandOutLap');
+    const keysOf = (changes: ReturnType<InsightBook['apply']>) => changes.map((c) => [c.type, c.type === 'raised' ? c.insight.key : c.key]).sort();
+
+    it('no band alarm from lap 1 of a race', () => {
+      const over = { 'tyre.carcassC.rl': [110, 114], 'brakesC.fl': [180, 290] } as Record<string, [number, number]>;
+      expect(run(lapsView([lapWith(over, { lapNumber: 1 })]))).toEqual([]);
+      // the same lap as lap 2 is judged
+      expect(run(lapsView([lapWith(over, { lapNumber: 2 })])).map((i) => i.key).sort()).toEqual(['bandOut:0:brakesC.fl', 'bandOut:0:tyre.carcassC.rl']);
+    });
+
+    it('only the race turns the lap-1 rule on: lap 1 of qualifying, practice or no weekend phase is judged like any rate lap', () => {
+      const over = { 'tyre.carcassC.rl': [110, 114], 'brakesC.fl': [180, 290] } as Record<string, [number, number]>;
+      for (const phase of [PRACTICE, QUALIFYING, NONE]) {
+        expect(run(lapsView([lapWith(over, { lapNumber: 1 })], {}, { phase })).map((i) => i.key).sort(), phase.kind).toEqual(['bandOut:0:brakesC.fl', 'bandOut:0:tyre.carcassC.rl']);
+      }
+    });
+
+    it('band alarms judge the newest clean lap: an SC or in-lap after it changes nothing', () => {
+      expect(bandAlarms(lapsView([preSc, scLap])).map((i) => [i.key, i.params['state'], i.params['lap']])).toEqual([['bandOut:0:tyre.carcassC.rl', 'above', 3]]);
+      const inLap = lapWith({ 'tyre.carcassC.rl': [70, 80] }, { lapNumber: 4, inLap: true });
+      expect(bandAlarms(lapsView([preSc, inLap])).map((i) => [i.key, i.params['lap']])).toEqual([['bandOut:0:tyre.carcassC.rl', 3]]);
+    });
+
+    it('band alarms are hidden while the SC is deployed', () => {
+      const book = new InsightBook();
+      const before = book.apply(ALARMS, run(lapsView([preSc], { bands: outLap() }, { spans: [racing] })), 1_000);
+      expect(keysOf(before)).toEqual(BAND_KEYS.map((k) => ['raised', k]));
+      // the SC comes out: the pre-SC carcass alarm and the full-lap alarm are cleared
+      const deployed = book.apply(ALARMS, run(lapsView([preSc], { bands: outLap() }, { spans: [neutralised('SC', 'deployed')] })), 2_000);
+      expect(keysOf(deployed)).toEqual(BAND_KEYS.map((k) => ['resolved', k]));
+      // an SC lap completes: still hidden
+      expect(book.apply(ALARMS, run(lapsView([preSc, scLap], { bands: outLap() }, { spans: [neutralised('SC', 'deployed')] })), 3_000)).toEqual([]);
+      // the VSC hides them the same
+      expect(bandAlarms(lapsView([preSc, scLap], { bands: outLap() }, { spans: [neutralised('VSC', 'deployed')] }))).toEqual([]);
+    });
+
+    it('band alarms return at returning', () => {
+      const book = new InsightBook();
+      book.apply(ALARMS, run(lapsView([preSc], { bands: outLap() }, { spans: [racing] })), 1_000);
+      book.apply(ALARMS, run(lapsView([preSc, scLap], { bands: outLap() }, { spans: [neutralised('SC', 'deployed')] })), 2_000);
+      // "safety car in this lap": the same alarms raised again, judged from the pre-SC clean lap
+      const returning = run(lapsView([preSc, scLap], { bands: outLap() }, { spans: [neutralised('SC', 'deployed', 'returning')] }));
+      expect(keysOf(book.apply(ALARMS, returning, 3_000))).toEqual(BAND_KEYS.map((k) => ['raised', k]));
+      expect(returning.find((i) => i.kind === 'bandOut')?.params).toMatchObject({ channel: 'tyre.carcassC.rl', state: 'above', lap: 3 });
+      // the VSC's ending the same
+      expect(bandAlarms(lapsView([preSc, scLap], { bands: outLap() }, { spans: [neutralised('VSC', 'deployed', 'returning')] })).map((i) => i.key).sort()).toEqual(BAND_KEYS);
+      // racing again: a new clean lap in band replaces the pre-SC lap
+      const clean = lapWith({}, { lapNumber: 5 });
+      expect(bandAlarms(lapsView([preSc, scLap, clean], {}, { spans: [racing] }))).toEqual([]);
+    });
+
+    it('a damage alarm stays during the SC', () => {
+      const damage = { ...damageOk(), jumps: [{ at: 305_000, lap: 5, parts: ['frontLeftWingPct' as const], deltaPct: 20, lossMsPerLap: unknown('insufficientData') }] };
+      const wear = wearOk();
+      wear.corners.fl.lapsToLimit = known(2, 0);
+      const fuel = { ...fuelOk(), marginLaps: known(-1, 0) };
+      const view = lapsView([preSc, scLap], { bands: outLap(), damage, wear, fuel }, { lap: 5, warnings: 2, owes: { kind: 'timePenalty' }, spans: [neutralised('SC', 'deployed')] });
+      // damage, fuel, wear, warnings and penalties are unaffected; only the band alarms are hidden
+      expect(run(view).map((i) => i.kind).sort()).toEqual(['damageJump', 'fuelShort', 'penaltyNew', 'warningLast', 'wearLimitNear']);
+    });
+
+    it('no pressure alarm from an unknown band', () => {
+      // car 0's setup not yet received: car-bands gives its pressure band and state unknown
+      const unknownPressure = { value: known(25, 0), state: unknown('notReceived'), band: unknown('notReceived'), outForFullLap: false };
+      const bands = bandsOk();
+      for (const c of CORNER_IDS) bands.tyres[c].pressurePsi = unknownPressure;
+      // a clean lap with every pressure far below any band and the rear-left carcass above its band
+      const over = Object.fromEntries(CORNER_IDS.map((c) => [`tyre.pressurePsi.${c}`, [10, 12]])) as Record<string, [number, number]>;
+      const found = run(lapsView([lapWith({ ...over, 'tyre.carcassC.rl': [110, 114] }, { lapNumber: 3 })], { bands }, { noSetup: true }));
+      expect(found.filter((i) => i.key.includes('pressurePsi'))).toEqual([]);
+      // the other channels are still judged
+      expect(found.map((i) => i.key)).toEqual(['bandOut:0:tyre.carcassC.rl']);
     });
   });
 
@@ -638,10 +755,88 @@ describe('hidden data of one of our cars (Review Focus 5)', () => {
 describe('alarms behaviour table (C44)', () => {
   const config = { alarms: { warningsBeforePenalty: 3 } };
 
-  it('has a row for exactly the kinds of the warnings and penalties sub-machines it reads', () => {
-    expect(Object.keys(ALARMS_BEHAVIOUR).sort()).toEqual(['penalties', 'warnings']);
-    expect(Object.keys(ALARMS_BEHAVIOUR['warnings']!).sort()).toEqual(['noWarning', 'warned']);
-    expect(Object.keys(ALARMS_BEHAVIOUR['penalties']!).sort()).toEqual(['clear', 'driveThroughPending', 'stopGoPending', 'timePenalty']);
+  it('has a row for exactly the kinds of the warnings, penalties and race session-phase sub-machines it reads', () => {
+    const table: BehaviourTable<AlarmsEffect> = ALARMS_BEHAVIOUR;
+    expect(Object.keys(table).sort()).toEqual(['penalties', 'session-phase-race', 'warnings', 'weekend-phase']);
+    expect(Object.keys(table['warnings']!).sort()).toEqual(['noWarning', 'warned']);
+    expect(Object.keys(table['penalties']!).sort()).toEqual(['clear', 'driveThroughPending', 'stopGoPending', 'timePenalty']);
+    expect(Object.keys(table['session-phase-race']!).sort()).toEqual(['finished', 'formation', 'grid', 'neutralised', 'postSession', 'racing', 'startLights', 'suspended']);
+    expect(alarmsCalculator.reads).toEqual(expect.arrayContaining(['spans:warnings', 'spans:penalties', 'spans:session-phase-race', 'spans:weekend-phase']));
+  });
+
+  it('weekend phase: a row for exactly its kinds (C44)', () => {
+    const table: BehaviourTable<AlarmsEffect> = ALARMS_BEHAVIOUR;
+    expect(Object.keys(table['weekend-phase']!).sort()).toEqual(['none', 'practice', 'qualifying', 'race']);
+  });
+
+  it('weekend phase: only race asks for the lap-1 rule and counts corner-cutting warnings; practice, qualifying and none ask for nothing', () => {
+    const table: BehaviourTable<AlarmsEffect> = ALARMS_BEHAVIOUR;
+    expect(table['weekend-phase']).toEqual({ practice: {}, qualifying: {}, race: { isRace: true, warningCount: 'cornerCutting' }, none: {} });
+  });
+
+  it("weekend phase: the lap-1 rule is car-bands' row, so both judge the same lap (C43); car-bands counts no warnings", () => {
+    const table: BehaviourTable<AlarmsEffect> = ALARMS_BEHAVIOUR;
+    expect(CAR_BANDS_BEHAVIOUR['weekend-phase']).toEqual({ practice: {}, qualifying: {}, race: { isRace: true }, none: {} });
+    for (const [kind, row] of Object.entries(CAR_BANDS_BEHAVIOUR['weekend-phase']!)) {
+      expect(table['weekend-phase']![kind], kind).toMatchObject(row);
+      expect(table['weekend-phase']![kind]!.isRace, kind).toBe(row.isRace);
+    }
+  });
+
+  it("today's penalty alarms are unchanged; the warning alarm counts corner-cutting warnings in a race", () => {
+    // the rows, ported to one merged effect per kind (AlarmsEffect)
+    const table: BehaviourTable<AlarmsEffect> = ALARMS_BEHAVIOUR;
+    // no warnings row names the total any more
+    for (const [kind, effect] of Object.entries(table['warnings']!)) expect(effect.warningCount, kind).not.toBe('total');
+    expect(table['penalties']).toEqual({
+      clear: {},
+      timePenalty: { penalty: 'time' },
+      driveThroughPending: { penalty: 'driveThrough' },
+      stopGoPending: { penalty: 'stopGo' },
+    });
+    // and what they raise
+    const out = (o: ViewOpts) => run(viewWith({}, { config, ...o })).map((i) => [i.key, i.kind, i.severity, i.category, i.params]);
+    expect(out({ warnings: 2 })).toEqual([['warningLast:0:warnings', 'warningLast', 'advisory', 'race', { warnings: 2, before: 3 }]]);
+    expect(out({ warnings: 5 })).toEqual([['warningLast:0:warnings', 'warningLast', 'advisory', 'race', { warnings: 5, before: 3 }]]);
+    for (const warnings of [0, 1, 3, 4]) expect(out({ warnings })).toEqual([]);
+    expect(out({ owes: { kind: 'clear' } })).toEqual([]);
+    expect(out({ owes: { kind: 'timePenalty', id: 1 } })).toEqual([['penaltyNew:0:1', 'penaltyNew', 'critical', 'race', { penalty: 'time', totalMs: 5000 }]]);
+    expect(out({ owes: { kind: 'driveThroughPending', id: 2, infringement: 7 } })).toEqual([
+      ['penaltyNew:0:2', 'penaltyNew', 'critical', 'race', { penalty: 'driveThrough', driveThroughs: 1, stopGos: 0, totalMs: 0, infringement: 7 }],
+    ]);
+    expect(out({ owes: { kind: 'stopGoPending', id: 3 } })).toEqual([
+      ['penaltyNew:0:3', 'penaltyNew', 'critical', 'race', { penalty: 'stopGo', driveThroughs: 0, stopGos: 1, totalMs: 0 }],
+    ]);
+  });
+
+  describe('session-phase-race', () => {
+    // lap 3 a clean lap with the rear-left carcass above its band (110-114 °C, mid 112 > 110); the engine out for the full lap
+    const hotLap = lapWith({ 'tyre.carcassC.rl': [110, 114] }, { lapNumber: 3 });
+    const bands = (): CarBands => ({ ...bandsOk(), engineC: reading('above', { outForFullLap: true }) });
+    const bandKeys = (span: OpenSpan) =>
+      run(lapsView([hotLap], { bands: bands() }, { spans: [span] }))
+        .filter((i) => i.kind === 'bandOut' || i.kind === 'bandOutLap')
+        .map((i) => i.key)
+        .sort();
+
+    it('neutralised: one effect, the band alarms hidden; no other kind hides them', () => {
+      const table: BehaviourTable<AlarmsEffect> = ALARMS_BEHAVIOUR;
+      expect(table['session-phase-race']!['neutralised']).toEqual({ bandsHidden: true });
+      for (const [kind, effect] of Object.entries(table['session-phase-race']!)) if (kind !== 'neutralised') expect(effect.bandsHidden).toBeUndefined();
+    });
+
+    for (const kind of ['grid', 'formation', 'startLights', 'racing', 'suspended', 'finished', 'postSession']) {
+      it(`${kind}: the band alarms are raised`, () => {
+        expect(bandKeys(openSpan('session-phase-race', kind))).toEqual(['bandOut:0:tyre.carcassC.rl', 'bandOutLap:0:engineC']);
+      });
+    }
+
+    it('neutralised: the band alarms hidden until its stages hold returning', () => {
+      const neutralised = (stages: NeutralisedStage[]) =>
+        openSpan('session-phase-race', 'neutralised', { detail: { car: 'SC', stages: stages.map((stage, i) => ({ stage, at: 300_000 + i * 30_000 })) } });
+      expect(bandKeys(neutralised(['deployed']))).toEqual([]);
+      expect(bandKeys(neutralised(['deployed', 'returning']))).toEqual(['bandOut:0:tyre.carcassC.rl', 'bandOutLap:0:engineC']);
+    });
   });
 
   describe('warnings', () => {
@@ -656,6 +851,46 @@ describe('alarms behaviour table (C44)', () => {
 
     it('no span open: nothing (a car the machine has not covered yet raises no warning, never a zero reading)', () => {
       expect(only(viewWith({}, { config }), 'warningLast')).toEqual([]);
+    });
+
+    // Task 6c (Q4, user 2026-11-05): races only, corner-cutting warnings only, limit 3, the alarm at the 2nd
+    it('a collision warning does not count toward the limit', () => {
+      // cornerCutting 1 of 3, a collision warning besides: two warnings, one left only by the total
+      expect(only(viewWith({}, { warnings: 2, cornerCutting: 1, config }), 'warningLast')).toEqual([]);
+      // two collision warnings, no corner cutting
+      expect(only(viewWith({}, { warnings: 2, cornerCutting: 0, config }), 'warningLast')).toEqual([]);
+      // cornerCutting 2 of 3, a collision warning besides: the alarm, naming the corner-cutting count
+      const alarm = only(viewWith({}, { warnings: 3, cornerCutting: 2, config }), 'warningLast');
+      expect(alarm.map((i) => [i.key, i.severity, i.category, i.params])).toEqual([['warningLast:0:warnings', 'advisory', 'race', { warnings: 2, before: 3 }]]);
+    });
+
+    it('the limit is 3 corner-cutting warnings by default: the alarm at the 2nd', () => {
+      expect(only(viewWith({}, { warnings: 2 }), 'warningLast').map((i) => i.params)).toEqual([{ warnings: 2, before: 3 }]);
+      for (const cornerCutting of [1, 3]) expect(only(viewWith({}, { warnings: 4, cornerCutting }), 'warningLast'), String(cornerCutting)).toEqual([]);
+    });
+
+    it('no last-warning alarm in practice', () => {
+      for (const o of [{ warnings: 2 }, { warnings: 3, cornerCutting: 2 }, { warnings: 5 }, { warnings: 8 }]) {
+        expect(only(viewWith({}, { ...o, config, phase: PRACTICE }), 'warningLast'), JSON.stringify(o)).toEqual([]);
+      }
+    });
+
+    it('no last-warning alarm in qualifying', () => {
+      for (const o of [{ warnings: 2 }, { warnings: 3, cornerCutting: 2 }, { warnings: 5 }]) {
+        expect(only(viewWith({}, { ...o, config, phase: QUALIFYING }), 'warningLast'), JSON.stringify(o)).toEqual([]);
+      }
+    });
+
+    it('no last-warning alarm without a weekend phase (none)', () => {
+      expect(only(viewWith({}, { warnings: 2, config, phase: NONE }), 'warningLast')).toEqual([]);
+    });
+
+    it('outside a race the other alarms are raised as in a race', () => {
+      const wear = wearOk();
+      wear.corners.fl.lapsToLimit = known(2, 0);
+      for (const phase of [PRACTICE, QUALIFYING]) {
+        expect(run(viewWith({ wear }, { warnings: 2, config, phase })).map((i) => i.kind), phase.kind).toEqual(['wearLimitNear']);
+      }
     });
 
     // Task 24 (C13): the game's warning counts left the live state; a car without a warnings span is no warning

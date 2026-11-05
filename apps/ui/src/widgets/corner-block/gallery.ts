@@ -9,7 +9,7 @@ const at = 10;
 const k = <T>(value: T): Known<T> => known(value, at);
 
 const reading = (value: Known<number>, band: { lo: number; hi: number }, state: Known<BandState>, outForFullLap = false): BandReading => ({
-  value, state, band, outForFullLap,
+  value, state, band: known(band, 0), outForFullLap,
 });
 const inBand = (value: number, band: { lo: number; hi: number }): BandReading => reading(k(value), band, k('in'));
 

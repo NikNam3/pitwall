@@ -2,7 +2,8 @@
 // `warned` span per count. A span opens whenever `totalWarnings` changes, on the frame of the change; the PENA (type 5)
 // that explains a rise arrives on the frame of the rise or up to 16 frames before it (the order the recordings show), so
 // it waits in the open state until the rise takes it (used once). A span is never withdrawn or rewritten (C18).
-// `cornerCuttingWarnings` is declared as an input: the game counts those warnings inside `totalWarnings`.
+// `cornerCuttingWarnings` is an input: the game counts those warnings inside `totalWarnings`; every `warned` span records it
+// (`cornerCutting`) on the frame it opens.
 import { known, unknown, warningsSpans, type CarId, type FrameNumber, type Known, type OpenSpan, type SessionTime, type WarnedDetail } from '@pitwall/domain';
 import type { MachineStep, SubMachine } from '../machine.ts';
 
@@ -16,7 +17,7 @@ type Pending = { infringement: number; at: SessionTime; frameNumber: number };
 type CarOpen = { span: OpenSpan; count: number; pending: Pending | undefined };
 type Open = { cars: CarOpen[] };
 
-const opened = (id: number, index: number, count: number, at: SessionTime, frameNumber: FrameNumber, infringement: Known<number>, joinedAt: boolean): OpenSpan => ({
+const opened = (id: number, index: number, count: number, cornerCutting: number, at: SessionTime, frameNumber: FrameNumber, infringement: Known<number>, joinedAt: boolean): OpenSpan => ({
   machine: 'warnings',
   id,
   carId: index as CarId,
@@ -24,7 +25,7 @@ const opened = (id: number, index: number, count: number, at: SessionTime, frame
   start: at,
   startFrame: frameNumber,
   confirmed: true,
-  detail: count === 0 ? {} : ({ count, infringement } satisfies WarnedDetail),
+  detail: count === 0 ? {} : ({ count, cornerCutting, infringement } satisfies WarnedDetail),
   ...(joinedAt ? { joinedAt: true as const } : {}),
 });
 
@@ -40,7 +41,7 @@ const machine: SubMachine<Open> = {
     const closed: MachineStep<Open>['closed'] = [];
     const cars = input.signals.cars.map((signals, index): CarOpen => {
       const car = open.cars[index];
-      if (car === undefined) return { span: opened(0, index, signals.totalWarnings, input.at, input.frameNumber, unknown('notReceived'), true), count: signals.totalWarnings, pending: undefined };
+      if (car === undefined) return { span: opened(0, index, signals.totalWarnings, signals.cornerCuttingWarnings, input.at, input.frameNumber, unknown('notReceived'), true), count: signals.totalWarnings, pending: undefined };
       let pending = car.pending;
       for (const event of input.signals.events) {
         if (event.code === 'PENA' && event.carId === index && event.penaltyType === WARNING_PENALTY) {
@@ -53,7 +54,7 @@ const machine: SubMachine<Open> = {
       closed.push({ ...car.span, end: input.at });
       const infringement = rise && pending !== undefined ? known(pending.infringement, pending.at) : unknown('notReceived');
       return {
-        span: opened(car.span.id + 1, index, signals.totalWarnings, input.at, input.frameNumber, infringement, false),
+        span: opened(car.span.id + 1, index, signals.totalWarnings, signals.cornerCuttingWarnings, input.at, input.frameNumber, infringement, false),
         count: signals.totalWarnings,
         pending: rise ? undefined : pending,
       };

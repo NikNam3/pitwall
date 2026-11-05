@@ -159,6 +159,32 @@ describe('createWsConnection', () => {
   });
 });
 
+describe('heartbeats', () => {
+  it('answers a server heartbeat with one heartbeat', () => {
+    createWsConnection('ws://bridge');
+    last().serverOpen();
+    last().serverSend({ type: 'heartbeat' });
+    expect(last().sent.at(-1)).toBe('{"type":"heartbeat"}');
+    expect(last().sent.filter((t) => t === '{"type":"heartbeat"}')).toHaveLength(1);
+  });
+
+  it('sends no heartbeat on its own', () => {
+    createWsConnection('ws://bridge');
+    last().serverOpen();
+    vi.advanceTimersByTime(60_000);
+    expect(last().sent).toEqual([]);
+  });
+
+  it('a heartbeat reaches message listeners as before', () => {
+    const c = createWsConnection('ws://bridge');
+    const got: ServerMessage[] = [];
+    c.onMessage((m) => got.push(m));
+    last().serverOpen();
+    last().serverSend({ type: 'heartbeat' });
+    expect(got).toEqual([{ type: 'heartbeat' }]);
+  });
+});
+
 describe('TopicStore.dispose over a real connection', () => {
   it('stops the reconnect timer: no new socket is opened after dispose', () => {
     const c = createWsConnection('ws://bridge');

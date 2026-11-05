@@ -54,7 +54,7 @@ describe('qualifying-singapore-full-lap: the flying lap', () => {
   });
 
   it('the flying lap timed from the line after the out lap from the garage counts for pace, for the rate and for bests', () => {
-    expect(classifyLap(flyingLap(), { isRace: false, ...LAP_CLASSES_CONFIG.defaults })).toEqual({ forPace: true, forRate: true, forBest: { lap: true, sectors: [true, true, true] } });
+    expect(classifyLap(flyingLap(), { isRace: false, ...LAP_CLASSES_CONFIG.defaults })).toEqual({ forPace: true, forRate: true, forBands: true, forBest: { lap: true, sectors: [true, true, true] } });
   });
 
   it("the lap carries the game's lap time, its sectors add up to it, and the board shows both as the last lap", () => {
@@ -124,7 +124,7 @@ describe('qualifying-singapore-full-lap: the projection on the next lap', () => 
 });
 
 describe("qualifying-singapore-full-lap: car-bands on the game's packets", () => {
-  it("on every run of car-bands, each of the player's channels and corners carries the packet value, the config band of the fitted slick and the live state it gives; the surface and the brakes have no live state", () => {
+  it("on every run of car-bands, each of the player's channels and corners carries the packet value, the config band of the fitted slick (the pressure: the setup band) and the live state it gives; the surface and the brakes have no live state; every other car's pressure band is unknown", () => {
     expect(run.bands.runs).toBeGreaterThan(0);
     expect(run.bands.off).toEqual([]);
   });

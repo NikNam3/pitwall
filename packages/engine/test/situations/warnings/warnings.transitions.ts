@@ -20,6 +20,8 @@ import { defineTransitionTable, inputs, type TransitionRow } from '../../support
 
 /** Car 0 holds `total` warnings from this frame on. */
 export const total = (n: number) => car(0, { totalWarnings: n });
+/** Car 0 holds `n` corner-cutting warnings (the game's `cornerCuttingWarnings`) from this frame on. */
+export const cutting = (n: number) => car(0, { cornerCuttingWarnings: n });
 /** The PENA warning (type 5) of car 0. */
 export const warning = (infringement: number) => events(pena(0, 5, infringement));
 
@@ -61,6 +63,18 @@ const rows: TransitionRow<MachineInput>[] = [
     from: 'warned',
     to: 'warned',
     input: inputs().frames(2).frame(all(warning(7), total(1))).frames(2).frame(all(warning(27), total(3))),
+  },
+  {
+    name: 'a collision warning raises the count but not cornerCutting: warned -> warned',
+    from: 'warned',
+    to: 'warned',
+    input: inputs().frames(2).frame(all(warning(7), total(1), cutting(1))).frames(3).frame(all(warning(4), total(2))),
+  },
+  {
+    name: 'a corner-cutting warning raises both: warned -> warned',
+    from: 'warned',
+    to: 'warned',
+    input: inputs().frames(2).frame(all(warning(7), total(1))).frames(3).frame(all(warning(27), total(2), cutting(1))),
   },
   // Not yet seen (C19): synthetic, from the game's spec; the count never fell in any recording.
   { name: 'the count falls to a lower count above 0: warned -> warned (not yet seen)', from: 'warned', to: 'warned', input: inputs().frames(2).frame(total(3)).frames(2).frame(total(2)) },

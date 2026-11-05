@@ -137,4 +137,12 @@ export const MINI_SECTORS = 50;
  * boundary is at `s × trackLength / 50`, so segment 0 is the start/finish line at the start of the lap, and the line
  * that completes lap L is `(L + 1, 0)`.
  */
-export type MiniSectorCrossing = { carId: CarId; lap: number; segment: number; at: SessionTime; frame: FrameNumber };
+export type MiniSectorCrossing = {
+  carId: CarId;
+  lap: number;
+  segment: number;
+  at: SessionTime;
+  frame: FrameNumber;
+  /** On a crossing of a restarted lap: the earlier crossing of the same car, lap and segment (its fact id in the log, C21, C25). */
+  supersedes?: FactRef;
+};

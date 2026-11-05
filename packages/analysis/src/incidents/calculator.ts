@@ -16,6 +16,7 @@ import {
   type CurrentLaps,
   type FrameNumber,
   type DamageJump,
+  type IncidentCause,
   type IncidentDamagePart,
   type IncidentEntry,
   type IncidentForUs,
@@ -41,7 +42,7 @@ import { LAP_CLASSES_CONFIG } from '../lap-classes/index.ts';
 import { PACE_CONFIG } from '../pace/index.ts';
 import { paceDeltaAround } from '../pace-delta/index.ts';
 import { emptyDamageJumps, finishJump, foldDamageJumps, type DamageJumpFold } from '../shared/damage-jumps.ts';
-import { isNeutralisation, leaderLapAt, NEUTRALISATION_MACHINES, NEUTRALISATION_READS } from '../shared/neutralised.ts';
+import { isNeutralisation, leaderLapAt, NEUTRALISATION_MACHINES, NEUTRALISATION_READS, neutralisationKind, type NeutralisationKind } from '../shared/neutralised.ts';
 import { behaviourFor } from '../shared/behaviour.ts';
 import { ourCars } from '../shared/our-cars.ts';
 import { warningInCycle } from '../shared/penalties.ts';
@@ -67,11 +68,6 @@ import {
 } from './incidents.ts';
 import { INCIDENTS, INCIDENTS_CONFIG, type IncidentsOutput } from './index.ts';
 
-/** "After" is this long after the incident. */
-const AFTER_MS = 5_000;
-/** A time loss this close to a collision or damage jump of the same car is part of that entry. */
-const MERGE_MS = 5_000;
-
 type Config = ReturnType<typeof INCIDENTS_CONFIG.read>;
 
 const MAJOR = {
@@ -85,15 +81,16 @@ const MAJOR = {
 } as const satisfies Record<IncidentKind, keyof Config>;
 
 /**
- * `warnings`: on a warning, the warned span's count of the car's warnings; `penalty`: on a penalty, its ruling; `id`: the
- * entry's own id where kind, cars and time do not tell it apart (a penalty record's).
+ * `cornerCutting`: on a corner-cutting warning, the warned span's count of the car's corner-cutting warnings (a warning of
+ * another kind has none); `penalty`: on a penalty, its ruling; `id`: the entry's own id where kind, cars and time do not
+ * tell it apart (a penalty record's).
  */
 type CarEvent = {
   id?: string;
   kind: 'collision' | 'retirement' | 'warning' | 'penalty';
   at: SessionTime;
   carIds: CarId[];
-  warnings?: number;
+  cornerCutting?: number;
   penalty?: IncidentPenalty;
 };
 
@@ -101,7 +98,7 @@ type CarEvent = {
  * A neutralisation (`shared/neutralised.ts`): its start, the leader's lap at its start frame (ruling 3, from the
  * projection's laps) and the frames it covers, `startFrame <= f < endFrame` (C26; an open one ends at `Infinity`).
  */
-type Neutralised = { at: SessionTime; lap: number; startFrame: FrameNumber; endFrame: FrameNumber };
+type Neutralised = { at: SessionTime; lap: number; startFrame: FrameNumber; endFrame: FrameNumber; neutralisation: NeutralisationKind };
 
 /** The car-scoped sub-machines whose spans `incidents` folds (C20). */
 const CAR_MACHINES = ['car-location', 'car-status', 'warnings'] as const satisfies readonly MachineId[];
@@ -145,6 +142,8 @@ type Acc = {
   visits: Visit[][];
   /** The entries of the closed spans, by car sub-machine. */
   spanEvents: Record<CarMachine, CarEvent[]>;
+  /** Per car id, the corner-cutting count of its newest closed warnings span (0 for no warning): what the next one rises from. */
+  cornerCuttingOf: (number | undefined)[];
   /** The collisions (events). */
   collisions: CarEvent[];
   /** The penalties given (the penalty records), one per record. */
@@ -167,7 +166,7 @@ type Acc = {
   jumpPct: number;
   /** Rises of a part within this window add up; damage jumps of a car this close to the first one are one entry. */
   jumpWindowMs: Ms;
-  /** Warnings before a penalty (the alarms' config). */
+  /** Corner-cutting warnings before a penalty (the alarms' config). */
   warningLimit: number;
 };
 
@@ -220,7 +219,7 @@ const foldNeutralised = (acc: Acc, view: EngineView): boolean => {
     for (let i = acc.closedPhases[machine] ?? 0; i < list.length; i++) {
       const span = list[i] as DeepReadonly<Span>;
       if (!isNeutralisation(machine, span) || behaviourOf(machine, span.kind) !== 'neutralised') continue;
-      (acc.neutralised[machine] ??= []).push({ at: span.start, startFrame: span.startFrame, endFrame: span.endFrame });
+      (acc.neutralised[machine] ??= []).push({ at: span.start, startFrame: span.startFrame, endFrame: span.endFrame, neutralisation: neutralisationKind(span) });
       changed = true;
     }
     acc.closedPhases[machine] = list.length;
@@ -228,11 +227,16 @@ const foldNeutralised = (acc: Acc, view: EngineView): boolean => {
   return changed;
 };
 
+/** The corner-cutting count a car's warnings span records: a warned span's (its row `warning`), else 0. */
+const cornerCuttingOf = (machine: CarMachine, span: CarSpan): number =>
+  behaviourOf(machine, span.kind) === 'warning' ? (span.detail as WarnedDetail).cornerCutting : 0;
+
 /**
  * The entries a car's span gives by its row (C44), at its start: none for a span the engine joined in (its incident was
- * not seen) or one closed unconfirmed (C18).
+ * not seen) or one closed unconfirmed (C18). A warning is a corner-cutting one when its span's corner-cutting count rose
+ * over `cornerCuttingBefore`, the car's previous warnings span's; only then does it carry that count.
  */
-const entriesOf = (machine: CarMachine, span: CarSpan): CarEvent[] => {
+const entriesOf = (machine: CarMachine, span: CarSpan, cornerCuttingBefore: number): CarEvent[] => {
   if (span.carId === undefined || span.joinedAt === true || ('endFrame' in span && !span.confirmed)) return [];
   const base = { at: span.start, carIds: [span.carId] };
   switch (behaviourOf(machine, span.kind)) {
@@ -240,8 +244,10 @@ const entriesOf = (machine: CarMachine, span: CarSpan): CarEvent[] => {
       return [{ kind: 'retirement', ...base }];
     case 'disqualification':
       return [{ kind: 'penalty', ...base, penalty: { kind: 'disqualified' } }];
-    case 'warning':
-      return [{ kind: 'warning', ...base, warnings: (span.detail as WarnedDetail).count }];
+    case 'warning': {
+      const cornerCutting = cornerCuttingOf(machine, span);
+      return [{ kind: 'warning', ...base, ...(cornerCutting > cornerCuttingBefore && { cornerCutting }) }];
+    }
     default:
       return [];
   }
@@ -265,7 +271,8 @@ const foldCarSpans = (acc: Acc, view: EngineView): Set<CarId> => {
         changed.add(id);
       }
       if (row === 'retirement' && span.confirmed) acc.retiredFrom[id] ??= span.startFrame;
-      acc.spanEvents[machine].push(...entriesOf(machine, span));
+      acc.spanEvents[machine].push(...entriesOf(machine, span, acc.cornerCuttingOf[id] ?? 0));
+      if (machine === 'warnings') acc.cornerCuttingOf[id] = cornerCuttingOf(machine, span);
     }
     acc.closed[machine] = list.length;
   }
@@ -368,6 +375,7 @@ const init = (view: EngineView): Acc =>
       lapFrames: [],
       visits: [],
       spanEvents: { 'car-location': [], 'car-status': [], warnings: [] },
+      cornerCuttingOf: [],
       collisions: [],
       given: [],
       givenCount: new Map(),
@@ -396,14 +404,14 @@ const nowOf = (acc: Acc, view: EngineView): Now => {
       const row = behaviourOf(machine, span.kind);
       if (row === 'noTimeLoss') openVisits[id] = span.startFrame;
       if (row === 'retirement') openRetiredFrom[id] = span.startFrame;
-      openEvents.push(...entriesOf(machine, span));
+      openEvents.push(...entriesOf(machine, span, acc.cornerCuttingOf[id] ?? 0));
     }
   }
   const open = NEUTRALISATION_MACHINES.flatMap((machine) =>
     openSpansOf(view, machine).filter((span) => isNeutralisation(machine, span) && behaviourOf(machine, span.kind) === 'neutralised'),
   );
   const closed = NEUTRALISATION_MACHINES.flatMap((machine) => acc.neutralised[machine] ?? []);
-  const spans = [...closed, ...open.map((span) => ({ at: span.start, startFrame: span.startFrame, endFrame: Infinity }))];
+  const spans = [...closed, ...open.map((span) => ({ at: span.start, startFrame: span.startFrame, endFrame: Infinity, neutralisation: neutralisationKind(span) }))];
   const { trackLengthM, sector2StartM, sector3StartM } = live.session;
   return {
     isRace: true,
@@ -435,8 +443,10 @@ type Candidate = {
   /** The first damage jump of a damage entry, and every jump of it. */
   jump?: DamageJump;
   jumps?: DamageJump[];
-  /** A warning entry's count of the car's warnings. */
-  warnings?: number;
+  /** A corner-cutting warning entry's count of the car's corner-cutting warnings. */
+  cornerCutting?: number;
+  /** A neutralised entry's kind (`neutralisationKind`). */
+  neutralisation?: NeutralisationKind;
   /** A penalty entry's ruling. */
   penalty?: IncidentPenalty;
   run?: SlowRun;
@@ -511,7 +521,7 @@ const candidates = (acc: Board): Candidate[] => {
   const list = [...closed, ...acc.collisions, ...acc.given, ...acc.openEvents].map((e) =>
     candidate(e.kind, e.at, e.carIds, {
       ...(e.id !== undefined && { id: e.id }),
-      ...(e.warnings !== undefined && { warnings: e.warnings }),
+      ...(e.cornerCutting !== undefined && { cornerCutting: e.cornerCutting }),
       ...(e.penalty !== undefined && { penalty: e.penalty }),
     }),
   );
@@ -522,11 +532,11 @@ const candidates = (acc: Board): Candidate[] => {
   const absorbers = list.filter((c) => c.kind === 'collision' || c.kind === 'damage');
   for (const run of standingRuns(acc)) {
     // F1 25 names a collision's two cars in no fixed order, so either one's time loss belongs to it.
-    const into = absorbers.filter((c) => c.carIds.includes(run.carId) && Math.abs(c.at - run.at) <= MERGE_MS);
+    const into = absorbers.filter((c) => c.carIds.includes(run.carId) && Math.abs(c.at - run.at) <= acc.config.mergeMs);
     for (const c of into) c.merged.push(run);
     if (into.length === 0) list.push(candidate('timeLoss', run.at, [run.carId], { lap: lapOfProgress(run.startProgress), run }));
   }
-  for (const { at, lap } of acc.neutralisedNow) list.push(candidate('neutralised', at, [], { lap }));
+  for (const { at, lap, neutralisation } of acc.neutralisedNow) list.push(candidate('neutralised', at, [], { lap, neutralisation }));
   return list;
 };
 
@@ -603,7 +613,7 @@ const gapAfter = (acc: Board, after: Snapshot | undefined, ours: CarId, other: C
 /** Per our car that is involved or has an involved car in its neighbourhood: its position and gap before and after. */
 const forUsOf = (acc: Board, c: Candidate): IncidentForUs[] => {
   const before = snapshot(acc, c.at);
-  const afterAt = c.at + AFTER_MS;
+  const afterAt = c.at + acc.config.afterMs;
   const after = acc.newestAt >= afterAt ? snapshot(acc, afterAt) : undefined;
   const items: IncidentForUs[] = [];
   for (const ours of acc.ours) {
@@ -638,26 +648,69 @@ const damageParts = (jumps: readonly DamageJump[]): IncidentDamagePart[] => {
   return [...rise].map(([part, deltaPct]) => ({ part, deltaPct })).sort((a, b) => b.deltaPct - a.deltaPct);
 };
 
-/** The detail only some kinds have: a damage entry's parts, a warning's count of the limit, a penalty's ruling. */
+/**
+ * The detail only some kinds have: a damage entry's parts, a corner-cutting warning's count of the limit (the
+ * corner-cutting warnings, a penalty every `warningLimit`; a warning of another kind counts nothing), a penalty's ruling.
+ */
 const detailOf = (acc: Board, c: Candidate): Pick<IncidentEntry, 'damage' | 'warning' | 'penalty'> => {
   if (c.jumps !== undefined) return { damage: damageParts(c.jumps) };
-  if (c.warnings !== undefined) return { warning: { count: warningInCycle(c.warnings, acc.warningLimit), limit: acc.warningLimit } };
+  if (c.cornerCutting !== undefined) {
+    return { warning: { count: warningInCycle(c.cornerCutting, acc.warningLimit), limit: acc.warningLimit } };
+  }
   if (c.penalty !== undefined) return { penalty: { ...c.penalty } };
   return {};
 };
 
-/** Newest first, ties by id; only entries of our cars or their neighbourhood, cut at `feedLength`. */
+/** The kinds that can cause a neutralisation. */
+const CAUSE_KINDS = new Set(['collision', 'retirement', 'damage', 'timeLoss'] as const satisfies readonly IncidentCause['kind'][]);
+
+const isCauseKind = (kind: IncidentKind): kind is IncidentCause['kind'] => (CAUSE_KINDS as ReadonlySet<IncidentKind>).has(kind);
+
+/** Kinds that follow from a collision of their car: a damage jump or time loss up to `mergeMs` after it is its consequence. */
+const CONSEQUENCE_KINDS: ReadonlySet<IncidentKind> = new Set(['damage', 'timeLoss']);
+
+/**
+ * Per neutralised candidate, its likely cause: the newest candidate of a cause kind of any car with its time in
+ * `[start − causeWindowMs, start]`, among every candidate before the neighbourhood filter; a damage or time loss that
+ * is the consequence of a collision of its car in that window names that collision. `sorted` is newest first, ties by
+ * id, so the first match is the newest.
+ */
+const causesOf = (acc: Board, sorted: readonly Candidate[]): Map<string, IncidentCause> => {
+  const causes = new Map<string, IncidentCause>();
+  for (const n of sorted) {
+    if (n.kind !== 'neutralised') continue;
+    const inWindow = (c: Candidate): boolean => c.at <= n.at && c.at >= n.at - acc.config.causeWindowMs;
+    const newest = sorted.find((c) => isCauseKind(c.kind) && inWindow(c));
+    if (newest === undefined) continue;
+    const root = CONSEQUENCE_KINDS.has(newest.kind)
+      ? sorted.find(
+          (c) => c.kind === 'collision' && inWindow(c) && c.at <= newest.at && newest.at - c.at <= acc.config.mergeMs && c.carIds.some((id) => newest.carIds.includes(id)),
+        )
+      : undefined;
+    const cause = root ?? newest;
+    if (isCauseKind(cause.kind)) causes.set(n.id, { entryId: cause.id, kind: cause.kind, carIds: [...cause.carIds], at: cause.at });
+  }
+  return causes;
+};
+
+/**
+ * Newest first, ties by id; only entries of our cars or their neighbourhood, and the cause of a neutralisation (its
+ * `forUs` empty where no car of ours is concerned), cut at `feedLength`.
+ */
 const output = (fold: Acc, view: EngineView): IncidentsOutput => {
   if (!behaviourFor(WEEKEND_PHASE, view).includes('feed')) return [];
   const acc: Board = { ...fold, ...nowOf(fold, view) };
   const byId = new Map<string, Candidate>();
   for (const c of candidates(acc)) if (!byId.has(c.id)) byId.set(c.id, c);
   const sorted = [...byId.values()].sort((a, b) => b.at - a.at || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  const causes = causesOf(acc, sorted);
+  const causeIds = new Set([...causes.values()].map((c) => c.entryId));
   const feed: IncidentEntry[] = [];
   for (const c of sorted) {
     if (feed.length >= acc.config.feedLength) break;
     const forUs = forUsOf(acc, c);
-    if (forUs.length === 0) continue;
+    if (forUs.length === 0 && !causeIds.has(c.id)) continue;
+    const cause = causes.get(c.id);
     const lap = lapOf(acc, c);
     feed.push({
       id: c.id,
@@ -670,6 +723,8 @@ const output = (fold: Acc, view: EngineView): IncidentsOutput => {
       forUs,
       where: { sector: c.carIds[0] === undefined ? unknown('notApplicable') : sectorAt(acc.tracks[c.carIds[0]], c.at, acc.layout) },
       ...detailOf(acc, c),
+      ...(cause !== undefined && { cause }),
+      ...(c.neutralisation !== undefined && { neutralisation: c.neutralisation }),
     });
   }
   return feed;

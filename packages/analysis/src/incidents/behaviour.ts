@@ -29,7 +29,7 @@ export type IncidentsBehaviour =
   | 'retirement'
   /** A penalty entry of kind `disqualified` when the span opens. */
   | 'disqualification'
-  /** A warning entry with the span's count of the limit. */
+  /** A warning entry; a corner-cutting warning with the span's corner-cutting count of the limit. */
   | 'warning';
 
 /** A machine's rows, one per kind its declaration names (checked at compile time). */

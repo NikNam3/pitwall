@@ -1,7 +1,8 @@
 import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { feedId, type MachineId, type Span } from '@pitwall/domain';
+import { feedId, type MachineId, type PenaltyRecord, type Span, type WarnedDetail } from '@pitwall/domain';
 import { MACHINES, SessionRunner, SessionTracker, STEP0_CLOCK, type Frame, type TrackerEvent } from '@pitwall/engine';
+import { membershipOf } from '@pitwall/engine/readers';
 import { decode } from '@pitwall/protocol';
 import { readPwrec } from '../../pwrec/reader.ts';
 import { StartupError } from '../../startup-error.ts';
@@ -50,7 +51,7 @@ function countTransitions(spans: Record<MachineId, readonly Span[]>, endFrame: n
 }
 
 /** Runs one recording's datagrams through frame assembly and the engine, session by session, counting the transitions. */
-async function scanRecording(path: string, counts: Counts, signal: AbortSignal): Promise<void> {
+async function scanRecording(path: string, counts: Counts, signal: AbortSignal, onSession?: (runner: SessionRunner) => void): Promise<void> {
   const tracker = new SessionTracker({ feedId: feedId('replay') });
   let runner: SessionRunner | undefined;
   const handle = (event: TrackerEvent): void => {
@@ -61,6 +62,7 @@ async function scanRecording(path: string, counts: Counts, signal: AbortSignal):
     } else if (runner) {
       runner.finish();
       countTransitions(runner.state.history.spans, runner.state.frameNumber + 1, counts);
+      onSession?.(runner);
       runner = undefined;
     }
   };
@@ -77,6 +79,27 @@ async function scanRecording(path: string, counts: Counts, signal: AbortSignal):
   for (const event of tracker.end()) handle(event);
 }
 
+const PENALTY_WORDS: Record<PenaltyRecord['kind'], string> = { time: 'time penalty', driveThrough: 'drive-through', stopGo: 'stop-go' };
+
+/**
+ * The rows of the warnings table for one finished session: each penalty of the player car, `<phase>, <kind>
+ * (infringement <n>): warnings <count>, cornerCutting <n>`, the `warned` span being the one the projection's membership
+ * gives for the penalty (C26), the phase that of the weekend-phase span covering its frame.
+ */
+function warningRows(runner: SessionRunner): string[] {
+  const { history, playerCar } = runner.state;
+  return history.penalties
+    .filter((penalty) => penalty.carId === playerCar)
+    .map((penalty) => {
+      const member = membershipOf({ history }, penalty);
+      const phase = member['weekend-phase']?.kind ?? NONE;
+      const infringement = penalty.infringement.known ? String(penalty.infringement.value) : 'unknown';
+      const warned = member.warnings?.kind === 'warned' ? (member.warnings.detail as WarnedDetail) : undefined;
+      const held = warned === undefined ? 'no warned span' : `warnings ${warned.count}, cornerCutting ${warned.cornerCutting ?? 'unknown'}`;
+      return `${phase}, ${PENALTY_WORDS[penalty.kind]} (infringement ${infringement}): ${held}`;
+    });
+}
+
 /**
  * `pitwall scan-situations [dir]`: runs frame assembly and the engine over every `.pwrec.gz` of `dir` (default
  * `PITWALL_FIXTURES_DIR`) and prints, per sub-machine and for step 0's clock, each transition with its count
@@ -84,16 +107,26 @@ async function scanRecording(path: string, counts: Counts, signal: AbortSignal):
  * undeclared one (`<machine> undeclared <from> -> <to> <n>`) and, apart from the transitions, the spans the session's
  * end closed per kind (`<machine> closed at session end <kind> <n>`). A span a sub-machine closed with no successor on
  * its frame is `<kind> -> none`, undeclared (every sub-machine covers its scope without gaps). Exit code 1 when a
- * transition occurred that its machine does not declare.
+ * transition occurred that its machine does not declare. With `--warnings`: instead, per recording, one row per penalty
+ * of the player car with the `warned` span it belongs to (`warningRows`); exit code 0.
  */
 export async function run(
   positionals: string[],
-  _values: unknown,
+  values: { warnings?: boolean | undefined },
   io: CliIo,
 ): Promise<number> {
   const dir = positionals[0] ?? io.env.PITWALL_FIXTURES_DIR;
   if (dir === undefined) throw new StartupError('scan-situations needs a directory: give one or set PITWALL_FIXTURES_DIR');
   const files = readdirSync(dir, { recursive: true, encoding: 'utf8' }).filter((f) => /\.pwrec(\.gz)?$/.test(f)).sort();
+  if (values.warnings) {
+    for (const file of files) {
+      const rows: string[] = [];
+      await scanRecording(join(dir, file), new Map(), io.signal, (runner) => rows.push(...warningRows(runner)));
+      io.out(file);
+      for (const row of rows) io.out(row);
+    }
+    return 0;
+  }
   const counts: Counts = new Map();
   for (const file of files) await scanRecording(join(dir, file), counts, io.signal);
 

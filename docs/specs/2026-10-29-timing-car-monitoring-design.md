@@ -157,6 +157,8 @@ Reads `gaps` (the neighbourhood and the gaps before and after), `damage`, `pace-
 
 Per entry: when, lap, kind, severity, the cars involved, the time lost (from the mini-sector at once, then `pace-delta` once there are laps), and **what changed for us**: per our car, the position and the gap to the involved car before and after, both taken from the mini-sector history (so a flashback reproduces them). Damage jumps of one car within `jumpWindowMs` are one entry, with the parts that rose. An entry's sector is interpolated from the car's crossings at the event and can refine when the next crossing arrives; turn numbers need per-track data (later). An entry updates as its time lost resolves, so the topic is a `state` topic with the last `feedLength` entries, newest first. Which kinds are major is config, so warnings can be moved up later.
 
+A `neutralised` entry names its likely cause (live-test fixes, 2026-11-05): the newest collision, retirement, damage or time loss of **any** car at most `causeWindowMs` (10 s) before the neutralisation opened; a damage jump or time loss at most `mergeMs` after a collision of the same car is that collision's consequence, so the collision is named. The cause entry stays in the feed even when no car of ours is near it (`forUs` empty), and the entry carries `neutralisation` (`SC`, `VSC`, `red`) so the feed reads `SC · ALO–TSU collision`. A warning entry carries `n/limit` only for a corner-cutting warning (the warned span's `cornerCutting` rose); other warnings carry no count (Q4, 2026-11-05).
+
 ## 7. The race moment
 
 ### 7.1 `race-moment` → `raceMoment.current`
@@ -610,7 +612,7 @@ type PhaseBand = { from: number; to: number; kind: 'sc' | 'vsc' | 'red' };
 
 Every key is declared with `defineConfig` (ADR 0008) by the unit named in the first column, with a source note in the declaration. In W0 the supervisor checks each default against a community source for F1 25 (or F1 24 where F1 25 has none), adjusts it if that source differs, and records the source. Values without one keep "pitwall estimate" as the source. Sub-project 5 calibrates all of them in training.
 
-Config fields are flat primitives: a band is one `lo`/`hi` pair per field (`surfaceDryLo`, `surfaceDryHi`, …, `pressureLo`, `pressureHi`, `engineHi`), the quali parts are `eliminatedQ1`, `eliminatedQ2`, and the major incident kinds are one boolean per kind (`collisionMajor`, …). The sources are in each unit's `packages/analysis/src/<unit>/config.ts`.
+Config fields are flat primitives: a band is one `lo`/`hi` pair per field (`surfaceDryLo`, `surfaceDryHi`, …, `engineHi`; the pressure band is the player's setup per corner minus `pressureBelowSetupPsi` to plus `pressureAboveSetupPsi`, unknown for every other car, live-test fixes 2026-11-05), the quali parts are `eliminatedQ1`, `eliminatedQ2`, and the major incident kinds are one boolean per kind (`collisionMajor`, …). The sources are in each unit's `packages/analysis/src/<unit>/config.ts`.
 
 | Unit | Key | Default | Initial source |
 |---|---|---|---|

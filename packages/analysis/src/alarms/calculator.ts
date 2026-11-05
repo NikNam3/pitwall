@@ -1,9 +1,26 @@
 // The `alarms` calculator: the conditions that hold now for our cars, as insights (spec 5.6). Stateless; the InsightBook raises and resolves.
-// Band advisories judge the last completed lap (see `bandChannels`), so they change at a lap's end only.
-import type { PendingPenaltyDetail, TimePenaltyDetail, WarnedDetail, BandReading, CarBands, CarId, DamageState, FuelState, Insight, InsightCategory, Known, LapRecord, Range, TyreWear } from '@pitwall/domain';
+// Band advisories judge the car's judged lap (see `bandChannels`), so they change at a lap's end only.
+import {
+  sessionPhaseRaceSpans,
+  type PendingPenaltyDetail,
+  type TimePenaltyDetail,
+  type WarnedDetail,
+  type BandReading,
+  type CarBands,
+  type CarId,
+  type DamageState,
+  type FuelState,
+  type Insight,
+  type InsightCategory,
+  type Known,
+  type LapRecord,
+  type NeutralisedDetail,
+  type Range,
+  type TyreWear,
+} from '@pitwall/domain';
 import type { DeepReadonly, EngineView, QuickCalculator } from '@pitwall/engine/readers';
 import { openSpansOf } from '@pitwall/engine/readers';
-import { bandsFor, lastLaps, stateOf, type Band, type Bands } from '../car-bands/bands.ts';
+import { bandsFor, judgedLapClasses, judgedLaps, stateOf, type Band, type Bands } from '../car-bands/bands.ts';
 import { CAR_BANDS, CAR_BANDS_CONFIG } from '../car-bands/index.ts';
 import { DAMAGE } from '../damage/index.ts';
 import { FUEL } from '../fuel/index.ts';
@@ -11,7 +28,7 @@ import { ourCars } from '../shared/our-cars.ts';
 import { behaviourFor } from '../shared/behaviour.ts';
 import { warningInCycle } from '../shared/penalties.ts';
 import { TYRE_WEAR } from '../tyre-wear/index.ts';
-import { ALARMS, ALARMS_BEHAVIOUR, ALARMS_CONFIG, type AlarmsOutput } from './index.ts';
+import { ALARMS, ALARMS_BEHAVIOUR, ALARMS_CONFIG, type AlarmsEffect, type AlarmsOutput } from './index.ts';
 
 const CORNERS = ['fl', 'fr', 'rl', 'rr'] as const;
 const TYRE_CHANNELS = [
@@ -34,12 +51,13 @@ type BandChannel = {
   measure: Measure;
   /** Live, from `car-bands`: its `outForFullLap` raises the critical alarm. */
   reading: BandReading;
-  /** The last completed lap: its number, its range of the channel and the band of its compound; they raise the advisory. */
+  /** The judged lap: its number, its range of the channel and its band; they raise the advisory. */
   lap?: { lapNumber: number; range: DeepReadonly<Known<Range>>; band: Band };
 };
 
 /**
- * The band channels and the measure their advisory judges. Every advisory judges the car's last completed lap, never the
+ * The band channels and the measure their advisory judges. Every advisory judges the car's judged lap (`judgedLaps`: the
+ * newest rate lap that is not lap 1 of a race), never the
  * live value, so it changes at a lap's end only: the live values cross the band edges many times within a lap and a
  * calculator keeps no frame state for hysteresis (ruling R1). Within-lap swing of our cars, measured 2026-10-29 on
  * raceSingapore (lap 1, cars 19 and 14):
@@ -54,6 +72,9 @@ const bandChannels = (bands: CarBands, lap: Lap | undefined, lapBands: Bands | u
   const range = lap?.channelRange;
   const on = (r: DeepReadonly<Known<Range>> | undefined, band: Band | undefined) =>
     lap && r && band ? { lap: { lapNumber: lap.lapNumber, range: r, band } } : {};
+  /** The pressure band is the car's setup, not the compound's: `car-bands`' band, which is unknown without the setup. */
+  const lapBand = (kind: (typeof TYRE_CHANNELS)[number][1], reading: BandReading): Band | undefined =>
+    kind === 'pressure' ? (reading.band.known ? reading.band.value : undefined) : lapBands?.[kind];
   return [
     ...CORNERS.flatMap((c) =>
       TYRE_CHANNELS.map(([t, kind]): BandChannel => ({
@@ -61,7 +82,7 @@ const bandChannels = (bands: CarBands, lap: Lap | undefined, lapBands: Bands | u
         category: 'tyres',
         measure: 'midRange',
         reading: bands.tyres[c][t],
-        ...on(range?.tyres[c][t], lapBands?.[kind]),
+        ...on(range?.tyres[c][t], lapBand(kind, bands.tyres[c][t])),
       })),
     ),
     ...CORNERS.map((c): BandChannel => ({
@@ -77,7 +98,10 @@ const bandChannels = (bands: CarBands, lap: Lap | undefined, lapBands: Bands | u
 
 const bandAlarms = (bands: CarBands, lap: Lap | undefined, lapBands: Bands | undefined, make: Make): Insight[] =>
   bandChannels(bands, lap, lapBands).flatMap(({ channel, category, measure, reading, lap: judged }) => {
-    if (reading.outForFullLap) return [make('bandOutLap', 'critical', category, channel, { channel, lo: reading.band.lo, hi: reading.band.hi })];
+    // an unknown band judges nothing: no alarm from it
+    if (reading.outForFullLap && reading.band.known) {
+      return [make('bandOutLap', 'critical', category, channel, { channel, lo: reading.band.value.lo, hi: reading.band.value.hi })];
+    }
     if (judged === undefined || !judged.range.known) return [];
     const value = measured(judged.range.value, measure);
     const state = stateOf(value, judged.band);
@@ -111,12 +135,14 @@ const damageAlarms = (damage: DamageState, lap: number, make: Make): Insight[] =
     .map((j) => make('damageJump', 'critical', 'damage', String(j.at), { lap: j.lap, parts: j.parts.join(','), deltaPct: j.deltaPct }));
 
 /**
- * One corner-cutting warning left before a penalty, by the count of the car's `warned` span. The game's count runs on
- * after a penalty, so this assumes a penalty every `warningsBeforePenalty` warnings (not verified against the game; `warningInCycle`).
+ * One corner-cutting warning left before a penalty, by the corner-cutting count of the car's `warned` span, where the
+ * weekend phase's row asks for it (a race). The game's count runs on after a penalty, so this assumes a penalty every
+ * `warningsBeforePenalty` corner-cutting warnings (`warningInCycle`).
  */
-const warningAlarms = (view: EngineView, id: CarId, config: Config, make: Make): Insight[] => {
-  if (!behaviourFor({ warnings: ALARMS_BEHAVIOUR.warnings }, view, id).some((row) => row.raises === 'warning')) return [];
-  const warnings = (openSpansOf(view, 'warnings', id)[0]?.detail as WarnedDetail | undefined)?.count;
+const warningAlarms = (view: EngineView, id: CarId, effect: AlarmsEffect, config: Config, make: Make): Insight[] => {
+  if (effect.warningCount !== 'cornerCutting') return [];
+  const detail = openSpansOf(view, 'warnings', id)[0]?.detail as WarnedDetail | undefined;
+  const warnings = detail?.cornerCutting;
   return warnings !== undefined &&
     config.warningsBeforePenalty > 1 &&
     warnings > 0 &&
@@ -133,21 +159,30 @@ const lastLapFrame = (view: EngineView, id: CarId): number => {
 };
 
 /** The penalty the car's open `penalties` span names; it resolves when the car completes a lap after the span opened. */
-const penaltyAlarms = (view: EngineView, id: CarId, make: Make): Insight[] => {
-  const rows = behaviourFor({ penalties: ALARMS_BEHAVIOUR.penalties }, view, id);
+const penaltyAlarms = (view: EngineView, id: CarId, effect: AlarmsEffect, make: Make): Insight[] => {
+  const { penalty } = effect;
   const span = openSpansOf(view, 'penalties', id)[0];
-  const row = rows[0];
-  if (span === undefined || row === undefined || row.raises !== 'penalty' || span.startFrame <= lastLapFrame(view, id)) return [];
+  if (span === undefined || penalty === undefined || span.startFrame <= lastLapFrame(view, id)) return [];
   const detail = span.detail as TimePenaltyDetail | PendingPenaltyDetail;
   const params: Record<string, number | string> =
     'driveThroughs' in detail
-      ? { penalty: row.penalty, driveThroughs: detail.driveThroughs, stopGos: detail.stopGos, totalMs: detail.totalMs }
-      : { penalty: row.penalty, totalMs: detail.totalMs };
+      ? { penalty, driveThroughs: detail.driveThroughs, stopGos: detail.stopGos, totalMs: detail.totalMs }
+      : { penalty, totalMs: detail.totalMs };
   if ('infringement' in detail && detail.infringement.known) params['infringement'] = detail.infringement.value;
   return [make('penaltyNew', 'critical', 'race', String(span.id), params as Insight['params'])];
 };
 
-const alarmsOf = (view: EngineView, id: CarId, config: Config): Insight[] => {
+/**
+ * Whether the band alarms are hidden now: a row asks for it (`neutralised`) and the neutralisation has not reached its
+ * `returning` stage yet.
+ */
+const bandsHidden = (view: EngineView, effect: AlarmsEffect): boolean =>
+  effect.bandsHidden === true &&
+  !openSpansOf(view, sessionPhaseRaceSpans.machine).some(
+    (span) => span.kind === 'neutralised' && (span.detail as NeutralisedDetail).stages.some((s) => s.stage === 'returning'),
+  );
+
+const alarmsOf = (view: EngineView, id: CarId, judged: Lap | undefined, config: Config): Insight[] => {
   const make: Make = (kind, severity, category, channel, params) => ({
     key: `${kind}:${id}:${channel}`,
     severity,
@@ -165,15 +200,16 @@ const alarmsOf = (view: EngineView, id: CarId, config: Config): Insight[] => {
   const wear = pick<TyreWear>(TYRE_WEAR);
   const fuel = pick<FuelState>(FUEL);
   const damage = pick<DamageState>(DAMAGE);
-  const lap = lastLaps(view.history.laps).get(id);
-  const lapBands = lap && bandsFor(lap.visualCompound, CAR_BANDS_CONFIG.read(view));
+  // the rows of the car's spans and the session's, merged
+  const effect: AlarmsEffect = Object.assign({}, ...behaviourFor<AlarmsEffect>(ALARMS_BEHAVIOUR, view, id));
+  const lapBands = judged && bandsFor(judged.visualCompound, CAR_BANDS_CONFIG.read(view));
   return [
-    ...(bands ? bandAlarms(bands, lap, lapBands, make) : []),
+    ...(bands && !bandsHidden(view, effect) ? bandAlarms(bands, judged, lapBands, make) : []),
     ...(wear ? wearAlarms(wear, config, make) : []),
     ...(fuel ? fuelAlarms(fuel, make) : []),
     ...(damage ? damageAlarms(damage, car.timing.lap, make) : []),
-    ...warningAlarms(view, id, config, make),
-    ...penaltyAlarms(view, id, make),
+    ...warningAlarms(view, id, effect, config, make),
+    ...penaltyAlarms(view, id, effect, make),
   ];
 };
 
@@ -190,12 +226,15 @@ export const alarmsCalculator: QuickCalculator<AlarmsOutput> = {
     'identity',
     'spans:warnings',
     'spans:penalties',
+    'spans:session-phase-race',
+    'spans:weekend-phase',
     'laps',
   ],
   cadence: { hz: 2 },
   compute(view) {
     const config = ALARMS_CONFIG.read(view);
-    return ourCars(view.live).flatMap((id) => alarmsOf(view, id, config));
+    const judged = judgedLaps(view.history.laps, judgedLapClasses(view));
+    return ourCars(view.live).flatMap((id) => alarmsOf(view, id, judged.get(id), config));
   },
   insights: (out) => out,
 };

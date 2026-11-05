@@ -286,6 +286,87 @@
         "finish: RCWN car 13 at 2217.865, CHQF 2266.835; our lap 20 in LapData at 2270.659 (currentLapNum stays 20), resultStatus finished from 2270.688; the last frame shows every car finished but car 18; gamePaused 1 and SEND at 2270.718; 20 UID-0 SessionHistory just before SEND, 1 UID-0 BUTN after; no FinalClassification",
         "COLL x22 (ours 14: car 1 x8, car 6 x3, cars 2, 14, 17), OVTK x361, SPTP x390, FTLP x12 (ours laps 1, 5, 17, 18), PENA x14, SCAR x9, DTSV x1, RTMT x1, RCWN x1, CHQF x1, BUTN x7170; no SSTA, FLBK or RDFL"
       ]
+    },
+    {
+      "id": "practiceLiveTest",
+      "file": "2026-11-04_23-32-45_ae2907d2c5493776_car19.pwrec.gz",
+      "sha256": "14749fd43f83ac4e4fb7fdaef387579747bfe39bfc282290fcb92c41ff08c58d",
+      "bytes": 74584045,
+      "track": "Texas",
+      "trackId": 15,
+      "sessionType": "practice",
+      "sessionTypeCode": 4,
+      "completedLaps": 10,
+      "durationMs": 1913266.4318,
+      "features": [
+        "first live-test weekend (2026-11-04), offline short practice, sessionDuration 1800 s; 20 cars, 1 human (index 19); weekend structure [4, 9, 15], numSessionsInWeekend 3; same weekend as oneShotQualifyingLiveTest, raceLiveTestAbandoned and raceLiveTest",
+        "no SSTA: the file starts at session time 49.167 with car 19 on its out lap (driverStatus 3), flying lap from 149.997",
+        "10 completed player laps (SessionHistory), all valid: 104.799, 102.618, 106.766, 103.798, 103.359, 106.868, 101.497, 101.933, 102.769, 100.505 s; lap 11 unfinished in the garage at SEND",
+        "garage restarts keep the lap number: in lap 7 car 19 enters the pits (driverStatus 2 at 892.610), is in the garage (driverStatus 0) from 905.258, leaves on an out lap at 1014.402 (driverStatus 3, pitStatus 1 to 0 at 1022.104) and crosses the line at 1122.598 with currentLapNum staying 7 (driverStatus 3 to 1); the same in lap 10 (garage 1538.665, out lap 1590.299, line 1696.725 still lap 10)",
+        "third garage visit in lap 11: pit entry 1896.260, garage 1908.323, resultStatus 3 at 1935.056, SEND at 1935.091",
+        "PENA x4, all ours, warnings for corner cutting (penaltyType 5; infringement 27 at 741.818, 7 at 878.971, 27 at 1359.552 and 1617.675)",
+        "SessionHistory stints of car 19: actual 20 visual 18 to lap 5, actual 18 visual 17 to lap 8, then actual 17 visual 16",
+        "FTLP x8, OVTK x236, SPTP x99, PENA x4, SEND x1, BUTN x2312; no COLL, SCAR, FLBK"
+      ]
+    },
+    {
+      "id": "oneShotQualifyingLiveTest",
+      "file": "2026-11-05_00-05-11_261aa3b56ae144ef_car19.pwrec.gz",
+      "sha256": "b1c0e8e81ae6518b8c3bed88e071d1dbc83b6ed94d3c42af055862ffa3f68771",
+      "bytes": 8116426,
+      "track": "Texas",
+      "trackId": 15,
+      "sessionType": "qualifying",
+      "sessionTypeCode": 9,
+      "completedLaps": 1,
+      "durationMs": 122580.555,
+      "features": [
+        "one-shot qualifying (session type 9), sessionDuration 240 s; 20 cars, 1 human (index 19); the first Session packets carry weekend structure zeros, [4, 9, 15] from 1.549 s; same weekend as practiceLiveTest",
+        "the file starts at session time 0 with car 19 already on its lap (driverStatus 1, lapDistance -279.6 m); crosses the line at 6.190",
+        "1 completed player lap (SessionHistory): 98.963 s, valid; lap 2 starts at 105.139, resultStatus 3 at 105.169, SEND at 105.199",
+        "FTLP x1 (car 8), OVTK x818, SPTP x26, SEND x1, BUTN x145; no PENA, COLL"
+      ]
+    },
+    {
+      "id": "raceLiveTestAbandoned",
+      "file": "2026-11-05_00-09-56_69fd076f54e429b0_car19.pwrec.gz",
+      "sha256": "7995b5a26debce9da43919fe747692b4ab48275831824d358b42b1542f7d627c",
+      "bytes": 14669087,
+      "track": "Texas",
+      "trackId": 15,
+      "sessionType": "race",
+      "sessionTypeCode": 15,
+      "completedLaps": 0,
+      "durationMs": 210685.9662,
+      "features": [
+        "20-lap race (ruleSet 1), abandoned on lap 1; 20 cars, 1 human (index 19); weekend structure [4, 9, 15] from 1.526 s; same weekend as practiceLiveTest",
+        "formation: safetyCarStatus 3 from 1.017 s, then session time resets to 0 with the formation SCAR (type 3, eventType 3), STLG x5 and LGOT at session time 0",
+        "COLL cars 7 and 4 at 8.912, 19 and 1 at 9.818, 4 and 5 at 10.632, 1 and 18 at 13.138, 1 and 19 at 23.515",
+        "SEND at 41.443 with car 19 still on lap 1 (resultStatus 2); no completed lap",
+        "SCAR x1, STLG x5, LGOT x1, COLL x5, OVTK x31, SEND x1, BUTN x587"
+      ]
+    },
+    {
+      "id": "raceLiveTest",
+      "file": "2026-11-05_00-13-26_f5b2b5fdb8a6c50e_car19.pwrec.gz",
+      "sha256": "ea0c8465eeb6de19da38f8df9c46adaf479fc886ea139c7ee03881d7f137733b",
+      "bytes": 179069722,
+      "track": "Texas",
+      "trackId": 15,
+      "sessionType": "race",
+      "sessionTypeCode": 15,
+      "completedLaps": 20,
+      "durationMs": 2257441.9347,
+      "features": [
+        "20-lap race (ruleSet 1), the restart of raceLiveTestAbandoned; 20 cars, 1 human (index 19); weekend structure [4, 9, 15]; same weekend as practiceLiveTest",
+        "no formation in the file: STLG x5 and LGOT at session time 0",
+        "20 completed player laps (SessionHistory), all valid: 107.311, 104.079, 104.539, 101.938, 101.837, 102.903, 103.907, 102.696, 102.560, 103.556, 103.886, 112.927, 140.896 and 146.294 (SC), 104.171, 104.403, 104.978, 104.709, 104.460, 105.005 s",
+        "our stop under the SC: pit entry 1248.648 (lap 12), line in the pit lane 1252.178, stop 1260.627, out lap 1263.676, pit exit 1273.686; SessionHistory stints actual 20 visual 18 to lap 11, then actual 18 visual 17",
+        "COLL cars 5 and 4 at 1205.850, SCAR deployed (type 1, eventType 0) at 1209.434, DRSD (reason 0) 1209.462, safetyCarStatus 1 and numSafetyCarPeriods 1 from 1209.817, PENA car 4 time penalty (type 1, infringement 3, 10 s, other car 5) 1209.872; SC returning 1483.819, returned 1527.456, resume 1536.514, status 0 from 1537.797",
+        "our PENA: corner-cutting warning (type 5, infringement 27) at 851.442 on lap 9; collision warning (type 5, infringement 4, other car 17) at 1712.645 on lap 16, 4 s after COLL 19 and 17 at 1708.644; LapData totalWarnings 2, cornerCuttingWarnings 1 after it",
+        "finish: RCWN car 13 at 2145.808, CHQF 2160.051; car 19 resultStatus 3 at 2167.130, P8; SEND at 2167.159; PENA car 4 (type 4, infringement 45, 10 s) at 2167.013",
+        "COLL x18 (ours: car 18 at 11.515, car 7 at 1609.230, car 17 x4, car 4, car 0), OVTK x363, SPTP x400, FTLP x3, DRSE x2, DRSD x1, PENA x4, TMPT x1 (car 7), SCAR x4, RCWN x1, CHQF x1, SEND x1, BUTN x3546; no FLBK"
+      ]
     }
   ],
   "segments": [
@@ -681,6 +762,48 @@
         "car 19 (the player) crosses at 2270.659 and turns resultStatus 3 at 2270.688; the last frame 2270.718 sets cars 1 and 6 resultStatus 3 mid-lap (d5289, d5249, lap timer 29 ms) and carries SEND",
         "CHQF x1, SEND x1, BUTN x21",
         "duration 5239.535 ms"
+      ]
+    },
+    {
+      "file": "practice-garage-restart-line.pwrec.gz",
+      "source": "practiceLiveTest",
+      "fromS": 1118,
+      "toS": 1135,
+      "records": 4071,
+      "features": [
+        "693 326 bytes; 2 context packets (Session, Participants) first; session time 1118.004 to 1134.973; short practice (session type 4)",
+        "car 19 (the player) on its out lap from the garage (driverStatus 3, lap 7, lap timer 0) until 1122.598: crosses the line with currentLapNum staying 7, driverStatus 3 to 1, lapDistance 0.1; then on the flying lap; totalWarnings 2, cornerCuttingWarnings 2 throughout",
+        "engine: car-activity-practice outLap (joined) to frame 174, flyingLap opens on frame 174 at 1122.598, not joined; the only crossing of car 19 is (lap 7, segment 49) at 1120.122",
+        "BUTN x20, OVTK x3, SPTP x3",
+        "duration 16971.703 ms"
+      ]
+    },
+    {
+      "file": "race-sc-after-collision.pwrec.gz",
+      "source": "raceLiveTest",
+      "fromS": 1204,
+      "toS": 1212,
+      "records": 1948,
+      "features": [
+        "673 956 bytes; 2 context packets (Session, Participants) first; session time 1204.003 to 1211.999; race (session type 15), lap 12; narrowed from 1200-1215 (1 272 859 bytes) to stay under 1 MB",
+        "COLL cars 5 and 4 at 1205.850; SCAR deployed (safetyCarType 1, eventType 0) at 1209.434; DRSD (reason 0) at 1209.462; safetyCarStatus 0 to 1, numSafetyCarPeriods 0 to 1 at 1209.817; PENA car 4 time penalty (type 1, infringement 3, 10 s, other car 5, lap 12) at 1209.872",
+        "engine: session-phase-race racing (joined) to frame 202, neutralised (SC, deployed at 1209.462) from frame 202; race-control-race drsOff from frame 203",
+        "COLL x1, SCAR x1, DRSD x1, PENA x1, OVTK x10, SPTP x2, BUTN x16",
+        "duration 7995.060 ms"
+      ]
+    },
+    {
+      "file": "race-warning-collision.pwrec.gz",
+      "source": "raceLiveTest",
+      "fromS": 1708,
+      "toS": 1716,
+      "records": 1921,
+      "features": [
+        "672 679 bytes; 2 context packets (Session, Participants) first; session time 1708.004 to 1715.975; race (session type 15), lap 16",
+        "COLL cars 19 and 17 at 1708.644; PENA warning (penaltyType 5, infringement 4, car 19, other car 17, lap 16) at 1712.645; LapData totalWarnings of car 19 1 to 2 at 1712.672, cornerCuttingWarnings stays 1",
+        "engine: warnings of car 19 warned count 1 (joined, infringement unknown) to frame 171, warned count 2 (infringement 4) from frame 171 at 1712.672",
+        "COLL x1, PENA x1, OVTK x4, SPTP x8, BUTN x9",
+        "duration 7973.296 ms"
       ]
     }
   ]
