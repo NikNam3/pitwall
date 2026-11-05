@@ -22,6 +22,13 @@ export type GapsOutput = {
    * lapped ones included.
    */
   recent: Record<CarId, { fromProgress: number; at: SessionTime[] }>;
+  /**
+   * Per car, its crossings after the start line of the last `fineLaps` completed laps and the current one, by progress
+   * as `recent`: the gapper's points per crossing (`GapperLines.cars[].points`); the laps before get one point per lap.
+   */
+  fine: Record<CarId, { fromProgress: number; at: SessionTime[] }>;
+  /** The gapper's window (`GapperLines.cars`): our cars, and every other car in their window, by id. */
+  gapperWindow: { ours: CarId[]; others: CarId[] };
   neighbourhood: Neighbourhood[];
   /** When the race started; the gapper counts each car's race time from it. `notApplicable` outside a race, `notReceived` before the first `racing` span. */
   raceStartAt: Known<SessionTime>;
