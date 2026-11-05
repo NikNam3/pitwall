@@ -77,7 +77,10 @@ const bandChannels = (bands: CarBands, lap: Lap | undefined, lapBands: Bands | u
 
 const bandAlarms = (bands: CarBands, lap: Lap | undefined, lapBands: Bands | undefined, make: Make): Insight[] =>
   bandChannels(bands, lap, lapBands).flatMap(({ channel, category, measure, reading, lap: judged }) => {
-    if (reading.outForFullLap) return [make('bandOutLap', 'critical', category, channel, { channel, lo: reading.band.lo, hi: reading.band.hi })];
+    // an unknown band judges nothing from this reading; Task 7 owns what an unknown pressure band means
+    if (reading.outForFullLap && reading.band.known) {
+      return [make('bandOutLap', 'critical', category, channel, { channel, lo: reading.band.value.lo, hi: reading.band.value.hi })];
+    }
     if (judged === undefined || !judged.range.known) return [];
     const value = measured(judged.range.value, measure);
     const state = stateOf(value, judged.band);

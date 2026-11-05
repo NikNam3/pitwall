@@ -42,7 +42,7 @@ const NOW = 12_345;
 const reading = (state: 'below' | 'in' | 'above', over: { outForFullLap?: boolean; value?: number } = {}) => ({
   value: known(over.value ?? 95, 0),
   state: known(state, 0),
-  band: { lo: 85, hi: 105 },
+  band: known({ lo: 85, hi: 105 }, 0),
   outForFullLap: over.outForFullLap ?? false,
 });
 const bandsOk = (): CarBands => ({

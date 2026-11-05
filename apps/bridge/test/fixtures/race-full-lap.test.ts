@@ -119,7 +119,8 @@ beforeAll(async () => {
       if (!value.known) return;
       lap.min[i] = Math.min(lap.min[i]!, value.value);
       lap.max[i] = Math.max(lap.max[i]!, value.value);
-      const band = bands && c.band(bands).band;
+      const bandReading = bands && c.band(bands).band;
+      const band = bandReading?.known ? bandReading.value : undefined;
       lap.below[i] &&= band !== undefined && value.value < band.lo;
       lap.above[i] &&= band !== undefined && value.value > band.hi;
     });

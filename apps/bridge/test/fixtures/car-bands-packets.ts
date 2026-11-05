@@ -70,7 +70,7 @@ export function bandsAgainstPackets(override: Partial<Config> = {}): {
       const r = ch.reading(bands);
       const value = ch.raw(raw);
       const band = ch.band(config, kind);
-      const ours = [r.value.known ? r.value.value : r.value.reason, r.state.known ? r.state.value : r.state.reason, r.band];
+      const ours = [r.value.known ? r.value.value : r.value.reason, r.state.known ? r.state.value : r.state.reason, r.band.known ? r.band.value : r.band.reason];
       const game = [value, ch.live ? expectedState(value, band) : 'notApplicable', band];
       if (seen.off.length < 10 && JSON.stringify(ours) !== JSON.stringify(game)) {
         seen.off.push(`${state.sessionTime} ${ch.name}: ours ${JSON.stringify(ours)} game ${JSON.stringify(game)}`);

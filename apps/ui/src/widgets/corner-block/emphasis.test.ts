@@ -4,7 +4,7 @@ import type { BandReading } from '@pitwall/domain';
 import { bandRole } from './emphasis.ts';
 
 const reading = (over: Partial<BandReading> = {}): BandReading => ({
-  value: known(90, 0), state: known('in', 0), band: { lo: 80, hi: 100 }, outForFullLap: false, ...over,
+  value: known(90, 0), state: known('in', 0), band: known({ lo: 80, hi: 100 }, 0), outForFullLap: false, ...over,
 });
 
 describe('bandRole', () => {

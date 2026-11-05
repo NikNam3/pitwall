@@ -13,7 +13,7 @@ afterEach(cleanup);
 const T = (n: number) => n as SessionTime;
 const k = <V>(v: V): Known<V> => known(v, T(0));
 const four = <V>(f: (name: keyof Corners<unknown>) => V): Corners<V> => ({ fl: f('fl'), fr: f('fr'), rl: f('rl'), rr: f('rr') });
-const rd = (v: number, over: Partial<BandReading> = {}): BandReading => ({ value: k(v), state: k('in'), band: { lo: 0, hi: 2000 }, outForFullLap: false, ...over });
+const rd = (v: number, over: Partial<BandReading> = {}): BandReading => ({ value: k(v), state: k('in'), band: known({ lo: 0, hi: 2000 }, 0), outForFullLap: false, ...over });
 
 /** Telemetry at `telemetryAt`, the car's newest update (lap data) at `newestAt`. */
 const car = (telemetryAt: number, newestAt: number): CarState =>
