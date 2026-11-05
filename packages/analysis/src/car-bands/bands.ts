@@ -65,7 +65,7 @@ export const judgedLapClasses = (view: EngineView): LapClassOptions => ({
 export const judgedLaps = (laps: readonly DeepReadonly<LapRecord>[], classes: LapClassOptions): Map<CarId, DeepReadonly<LapRecord>> => {
   const judged = new Map<CarId, DeepReadonly<LapRecord>>();
   for (const lap of laps) {
-    if (!classifyLap(lap, classes).forRate || (classes.isRace && lap.lapNumber === 1)) continue;
+    if (!classifyLap(lap, classes).forBands) continue;
     const seen = judged.get(lap.carId);
     if (seen === undefined || lap.lapNumber > seen.lapNumber) judged.set(lap.carId, lap);
   }
