@@ -82,6 +82,9 @@ const degStint = (over: Partial<StintDegradation> = {}): StintDegradation => ({
   wearRatePctPerLap: everyCorner(() => unknown('insufficientData')),
   source: { kind: 'session', sessionShare: 1, parts: '3 laps' },
   laps: [],
+  // degradation's fit band and start prior (ruling R19); tyre-life reads neither
+  cov: unknown('insufficientData'),
+  startPrior: { nuMsPerLap: 60, nuSdMs: 60, alphaOffsetMs: unknown('notApplicable'), source: { kind: 'default', note: 'degradation config default (pitwall estimate)', sessionShare: 0, parts: 'config default' } },
   ...over,
 });
 
