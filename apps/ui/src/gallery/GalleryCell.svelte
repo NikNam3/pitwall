@@ -29,8 +29,10 @@
     rows: number;
     moment: MomentValues;
     overrides?: readonly GalleryOverride[];
+    /** The case's panel options over the declaration's defaults (`GalleryEntry.caseOptions`). */
+    options?: Record<string, unknown>;
   };
-  let { id, theme, widget, widgetName, baseline = false, cols, rows, moment, overrides = [] }: Props = $props();
+  let { id, theme, widget, widgetName, baseline = false, cols, rows, moment, overrides = [], options = {} }: Props = $props();
 
   const GALLERY_FEED = feedId('gallery');
 
@@ -46,7 +48,7 @@
   const playerCar = (moment.find((e) => e.topic === 'session.info')?.value as SessionInfo | undefined)?.playerCar ?? carId(0);
   const link: ResolvedLink = { group: 1, feedId: GALLERY_FEED, primary: playerCar, compare: [], window: { kind: 'live' } };
   /* svelte-ignore state_referenced_locally */
-  const spec = widget === undefined ? { widget: widgetName, options: {}, linkGroup: 1 } : defaultPanel(widget.decl);
+  const spec = widget === undefined ? { widget: widgetName, options: {}, linkGroup: 1 } : { ...defaultPanel(widget.decl), options: { ...defaultPanel(widget.decl).options, ...options } };
 
   // Ready once the widget's lazily loaded component is in and has rendered (the Panel loads the same module).
   let ready = $state(false);

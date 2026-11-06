@@ -15,7 +15,7 @@
   import { fontsLoaded, snapBox, snapGrid } from './snap.ts';
 
   /** What a widget's `gallery.ts` declares (the widgets' gallery files are only ever imported here). */
-  type Declared = CellSource & { cases?: Record<string, Record<string, unknown>> | undefined };
+  type Declared = CellSource & { cases?: Record<string, Record<string, unknown>> | undefined; caseOptions?: Record<string, Record<string, unknown>> | undefined };
 
   type Props = {
     /** Moment name to its values; the default is every file `pnpm gen:moments` wrote. */
@@ -73,6 +73,7 @@
               rows={cell.size.rows}
               moment={cell.data.kind === 'moment' ? (moments[cell.data.name] ?? []) : []}
               overrides={cell.data.kind === 'case' ? overridesOf(widget.decl.name, entry.cases?.[cell.data.name] ?? {}) : []}
+              options={cell.data.kind === 'case' ? (entry.caseOptions?.[cell.data.name] ?? {}) : {}}
             />
             {/if}
           {/each}
