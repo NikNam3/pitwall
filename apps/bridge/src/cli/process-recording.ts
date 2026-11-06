@@ -7,13 +7,15 @@ import { PwrecSource } from '../input/pwrec-source.ts';
 import type { Logger } from '../log.ts';
 import { FeedPipeline } from '../pipeline/feed-pipeline.ts';
 import { StartupError } from '../startup-error.ts';
+import { recordingTrack, TRACKS_DIR } from '../track-files/load.ts';
 import type { Db } from '../storage/db.ts';
 
 /**
  * Runs one recording through the pipeline as fast as possible, storing its sessions in `db`: each session's log is
  * written once, at its end, and replaces the stored one in one transaction (C24, C61; a run stopped early writes
  * nothing). Nobody listens to the hub.
- * `config` is the calculator config it runs with (the recording's own, see `recordingConfig`).
+ * `config` is the calculator config it runs with (the recording's own, see `recordingConfig`); the track file is the
+ * recording's sidecar, or the committed file without one (`recordingTrack`, C62b).
  * An aborted `signal` (also one aborted before the call) stops the run, and it throws a `StartupError`.
  */
 export async function processRecording(path: string, db: Db, log: Logger, signal: AbortSignal, config: FeatureConfig, rulesVersion: string): Promise<void> {
@@ -32,6 +34,7 @@ export async function processRecording(path: string, db: Db, log: Logger, signal
     features: FEATURES,
     config,
     log,
+    tracks: (trackId) => recordingTrack(path, trackId, TRACKS_DIR, log),
     storage: { db, sourcePath: path, rulesVersion, mode: 'replace' },
   });
   const stop = () => void pipeline.stop();

@@ -15,6 +15,7 @@ import type { JobResult } from '../jobs/job-runner.ts';
 import type { Logger } from '../log.ts';
 import type { Db, StoredSessionRow } from '../storage/db.ts';
 import { SessionFile, sessionRecordingName } from '../storage/session-files.ts';
+import { loadTrackFile, TRACKS_DIR, trackSidecarPath } from '../track-files/load.ts';
 import { FeedAlerts, type WriteFailure } from './feed-alerts.ts';
 import { demandOf } from './demand.ts';
 import type { CalcStats } from '../dev/calc-stats.ts';
@@ -107,6 +108,7 @@ export class FeedPipeline {
   readonly #alerts: FeedAlerts;
   readonly #wallClock: () => number;
   readonly #sessionClock: SessionClock;
+  readonly #tracks: (trackId: number) => Known<TrackFile>;
   readonly #done: PromiseWithResolvers<void> = Promise.withResolvers();
   /** Session files still closing; each leaves the set once closed. */
   readonly #closing = new Set<Promise<void>>();
@@ -135,6 +137,7 @@ export class FeedPipeline {
     this.#tracker = new SessionTracker({ feedId: opts.feedId });
     this.#alerts = new FeedAlerts(opts.feedId);
     this.#wallClock = opts.wallClock ?? Date.now;
+    this.#tracks = opts.tracks ?? ((trackId) => loadTrackFile(trackId, TRACKS_DIR, opts.log));
     this.#sessionClock = sessionClock({ sourcePath: opts.storage?.sourcePath, wallClock: this.#wallClock, log: opts.log });
     this.done = this.#done.promise;
     this.done.catch(() => {});
@@ -245,7 +248,8 @@ export class FeedPipeline {
     const startedAt = this.#sessionClock(event.receivedAtMs);
     const storage = this.#sessionStorage();
     const config = this.#sessionConfig();
-    const file = this.#openSessionFile(event, startedAt, config);
+    const track = this.#tracks(event.session.trackId);
+    const file = this.#openSessionFile(event, startedAt, config, track);
     // A session processed from a recording points at that recording (so `reprocess` finds it), a live one at its own file.
     const sourcePath = this.#o.storage?.sourcePath;
     const pwrecPath = sourcePath !== undefined ? resolve(sourcePath) : (file?.path ?? null);
@@ -261,6 +265,7 @@ export class FeedPipeline {
       jobs: this.#jobs,
       log,
       config,
+      track,
       feedView: () => this.#monitor.view(this.#tracker.metrics, this.#lastReceivedAtMs),
       ...(storage && { storage }),
       ...(file && { file }),
@@ -289,7 +294,7 @@ export class FeedPipeline {
     return { ...this.#config, realism: { ...this.#config.realism, enabled: realismNextSession() } };
   }
 
-  #openSessionFile(event: SessionStarted, startedAt: string, config: FeatureConfig): SessionFile | undefined {
+  #openSessionFile(event: SessionStarted, startedAt: string, config: FeatureConfig, track: Known<TrackFile>): SessionFile | undefined {
     const dir = this.#o.storage?.recordingsDir;
     if (dir === undefined) return undefined;
     const file = new SessionFile({
@@ -299,14 +304,19 @@ export class FeedPipeline {
       originMs: event.receivedAtMs,
       onError: (error) => this.#writeFailed('pwrec', error),
     });
-    this.#writeConfigSidecar(file.path, config);
+    this.#writeSidecar(sessionConfigPath(file.path), config);
+    // The track file the session runs with (C59, C62b); a session without one has no sidecar.
+    if (track.known) this.#writeSidecar(trackSidecarPath(file.path), track.value);
     return file;
   }
 
-  /** The config the session runs with, next to its file, so a replay reproduces its alarms. A failure is a write failure of the session file. */
-  #writeConfigSidecar(sessionFilePath: string, config: FeatureConfig): void {
+  /**
+   * A sidecar of the session file: the config or the track file the session runs with, so a replay reproduces its
+   * stream (C38). A failure is a write failure of the session file.
+   */
+  #writeSidecar(path: string, value: unknown): void {
     try {
-      writeFileSync(sessionConfigPath(sessionFilePath), `${JSON.stringify(config, null, 2)}\n`);
+      writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`);
     } catch (error) {
       this.#writeFailed('pwrec', error);
     }
