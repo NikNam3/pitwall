@@ -89,6 +89,9 @@ describe('FeedPipeline: a session started by the buffer cap', () => {
     let t = 0;
     await replay({ features: FEATURES, now: () => (t += 1000), packets, storage: { db } });
     const [row] = new WeekendRepository(db).sessionsOf('0');
-    expect(row!.cars.slice(0, 2)).toEqual([{ carId: 0, carKey: { teamId: 0, raceNumber: 1 } }, { carId: 1, carKey: { teamId: 0, raceNumber: 2 } }]);
+    expect(row!.cars.slice(0, 2)).toEqual([
+      { carId: 0, carKey: { teamId: 0, raceNumber: 1 }, driver: { known: true, value: 'DRIVER 0', at: 0 } },
+      { carId: 1, carKey: { teamId: 0, raceNumber: 2 }, driver: { known: true, value: 'DRIVER 1', at: 0 } },
+    ]);
   });
 });

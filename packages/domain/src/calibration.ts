@@ -1,4 +1,5 @@
 // Calibration sets, priors snapshots and the calibration topics' values (contract C62a, spec 3). JSON-safe.
+import type { WeekendPhase } from './weekend-phase.ts';
 import type { VisualCompound } from './compounds.ts';
 import type { CarId, SessionUid } from './ids.ts';
 import type { Known } from './known.ts';
@@ -53,7 +54,7 @@ export type PriorsEntries = Record<string, Known<number>>;
 
 /** A calibration set's entries as the bridge hands them to a run (C62a), named by their fingerprint. */
 export type PriorsSnapshot = {
-  /** A hash of the entries: equal entries, equal fingerprint. */
+  /** A hash of the whole snapshot (set id, set name, sources count and entries): two sets with equal entries are two snapshots. */
   fingerprint: string;
   setId: string;
   setName: string;
@@ -79,6 +80,10 @@ export type FittedSource = {
   source: CalibrationSource;
   /** ISO date of the source's session; shown only. */
   sessionDate: string;
+  /** The source session's weekend phase (SESSION: race, FP2 …); shown only. */
+  phase: WeekendPhase;
+  /** The source car's driver name as the session's Participants last named it (CAR); shown only. */
+  driver: Known<string>;
   compound: VisualCompound;
   laps: number;
   /** The laps the unit's aggregate used. */
@@ -101,6 +106,8 @@ export type SkippedSource = {
   source: CalibrationSource;
   skipped: 'missing' | 'stale';
   sessionDate: Known<string>;
+  phase: Known<WeekendPhase>;
+  driver: Known<string>;
   compound: Known<VisualCompound>;
 };
 
@@ -109,7 +116,11 @@ export type CalibrationSetsValue = { sets: CalibrationSet[] };
 /** `calibration.values`: per set id its entries and its sources' fits. */
 export type CalibrationValuesValue = { bySet: Record<string, { entries: PriorsEntries; fits: SourceFit[] }> };
 /** `calibration.candidates`: per track id the suggested sources, ordered (this weekend first, then newest first). */
-export type CalibrationCandidatesValue = { byTrack: Record<number, SourceFit[]> };
+export type CalibrationCandidatesValue = {
+  byTrack: Record<number, SourceFit[]>;
+  /** The track of the newest stored session, the calibration panel's track without a running session; `null` when none is stored. */
+  newestTrackId: number | null;
+};
 /**
  * `calibration.active` (per feed): the run's set (`null` for `defaults`) and snapshot, and whether it came from a pick
  * (`picked`) or the preselection; `notApplicable` without a running session.

@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { unknown, type CarId, type CarKey, type Known, type SessionUid, type TrackData, type WeekendPhase } from '@pitwall/domain';
+import { known, unknown, type CarId, type CarKey, type Known, type SessionUid, type TrackData, type WeekendPhase } from '@pitwall/domain';
 import { projectionOfLog } from '@pitwall/engine/log';
 import type { DeepReadonly, Projection, ProjectionState, StoredSession, WeekendContext } from '@pitwall/engine/readers';
 import { createLogger, type Logger } from '../log.ts';
@@ -11,6 +11,7 @@ type SessionDbRow = {
   weekend_id: string;
   season_id: string;
   player_car: number;
+  teammate_car: number | null;
   track_id: number;
   started_at: string;
   pwrec_path: string | null;
@@ -19,7 +20,7 @@ type SessionDbRow = {
   complete: number;
 };
 
-type CarDbRow = { car_id: number; team_id: number; race_number: number };
+type CarDbRow = { car_id: number; team_id: number; race_number: number; name: string | null };
 
 export type WeekendRepositoryOptions = {
   /** Where the warnings about sessions that cannot be served go. Default: nowhere. */
@@ -46,7 +47,7 @@ export type TrackSession = StoredSessionRow & { track: Known<DeepReadonly<TrackD
 );
 
 /** The read of the stored sessions on one track the calibration store needs. */
-export type SessionsOnTrack = Pick<WeekendRepository, 'sessionsOnTrack'>;
+export type SessionsOnTrack = Pick<WeekendRepository, 'sessionsOnTrack' | 'newestTrackId'>;
 
 /** The weekend phase a session's weekend-phase span stands for; `pending` without one. */
 const phaseOf = (projection: Projection): WeekendPhase => {
@@ -85,7 +86,7 @@ export class WeekendRepository {
     this.#rebuild = opts.rebuild;
     this.#rulesVersion = opts.rulesVersion;
     this.#track = opts.track ?? (() => unknown('notApplicable'));
-    const sessionColumns = `s.session_uid, s.weekend_id, w.season_id, s.player_car, s.track_id, s.started_at, s.pwrec_path, s.settings, s.rules_version, s.complete`;
+    const sessionColumns = `s.session_uid, s.weekend_id, w.season_id, s.player_car, s.teammate_car, s.track_id, s.started_at, s.pwrec_path, s.settings, s.rules_version, s.complete`;
     const sessionsFrom = `FROM sessions s JOIN weekends w ON w.weekend_id = s.weekend_id`;
     this.#statements = {
       weekendSessions: db.prepare(`SELECT ${sessionColumns} ${sessionsFrom} WHERE s.weekend_id = ? ORDER BY s.started_at, s.session_uid, s.player_car`),
@@ -107,7 +108,8 @@ export class WeekendRepository {
                AND c.car_id = s.player_car AND c.team_id = @teamId AND c.race_number = @raceNumber)
          ORDER BY s.started_at, s.session_uid, s.player_car`,
       ),
-      cars: db.prepare(`SELECT car_id, team_id, race_number FROM cars WHERE ${OF_SESSION} ORDER BY car_id`),
+      newestTrack: db.prepare(`SELECT track_id FROM sessions ORDER BY started_at DESC, session_uid DESC, player_car DESC LIMIT 1`).pluck(),
+      cars: db.prepare(`SELECT car_id, team_id, race_number, name FROM cars WHERE ${OF_SESSION} ORDER BY car_id`),
       facts: db.prepare(`SELECT list, record FROM facts WHERE ${OF_SESSION} ORDER BY list, seq`),
     };
   }
@@ -135,6 +137,11 @@ export class WeekendRepository {
   /** The weekend of the newest stored session (by start); `undefined` when none is stored. */
   newestWeekendId(): string | undefined {
     return this.#statements.newestWeekend.get() as string | undefined;
+  }
+
+  /** The track of the newest stored session (by start), of any weekend; `null` when none is stored. */
+  newestTrackId(): number | null {
+    return (this.#statements.newestTrack.get() as number | undefined) ?? null;
   }
 
   /** The weekend's stale sessions (`isStale`) in start order. */
@@ -193,7 +200,9 @@ export class WeekendRepository {
         incomplete.push(key);
         continue;
       }
-      sessions.push({ sessionUid: key.sessionUid, playerCar: key.playerCar, cars: this.#carsOf(key), projection: this.#projectionOfStored(key) });
+      // Only the slots' team and race number reach the view (C39, C62); the driver name is the calibration panel's.
+      const cars = this.#carsOf(key).map(({ carId, carKey }) => ({ carId, carKey }));
+      sessions.push({ sessionUid: key.sessionUid, playerCar: key.playerCar, cars, projection: this.#projectionOfStored(key) });
     }
     return { context: { weekendId, player: { teamId: player.teamId, raceNumber: player.raceNumber }, sessions }, incomplete };
   }
@@ -221,7 +230,11 @@ export class WeekendRepository {
 
   #carsOf(key: SessionKey): SessionRow['cars'] {
     const rows = this.#statements.cars.all(keyParams(key)) as CarDbRow[];
-    return rows.map((c) => ({ carId: c.car_id as CarId, carKey: { teamId: c.team_id, raceNumber: c.race_number } }));
+    return rows.map((c) => ({
+      carId: c.car_id as CarId,
+      carKey: { teamId: c.team_id, raceNumber: c.race_number },
+      driver: c.name === null ? unknown('notReceived') : known(c.name, 0),
+    }));
   }
 
   #toSession(row: SessionDbRow): StoredSessionRow {
@@ -230,6 +243,7 @@ export class WeekendRepository {
       weekendId: row.weekend_id,
       seasonId: row.season_id,
       playerCar: row.player_car as CarId,
+      teammateCar: row.teammate_car === null ? null : (row.teammate_car as CarId),
       trackId: row.track_id,
       startedAt: row.started_at,
       pwrecPath: row.pwrec_path,

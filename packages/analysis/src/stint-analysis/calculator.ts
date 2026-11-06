@@ -1,12 +1,12 @@
-// `stint-analysis` (spec 5, 4.1, 4.4): `stintAnalysis.car`, our cars' stints from `degradation` as the stint scatter
-// draws them: every lap with its use, the fit line with its band per tyre age, and per compound the prior the first stint
-// on it started from. It maps `degradation`'s output and judges nothing of its own (C43). Quick: per frame over
-// `degradation`, which runs on a lap, a stint or a pick.
-import { carId, known, unknown, type CarId, type CompoundPrior, type FitPoint, type Known, type SessionTime, type StintFit } from '@pitwall/domain';
+// `stint-analysis` (spec 5, 5.1, 4.1, 4.4): `stintAnalysis.car`, our cars' stints from `degradation` as the stint scatter
+// draws them: every lap with its use, the fit line with its band per tyre age, and per compound the estimate pooled over
+// our cars' stints on it (`pool.ts`). Quick: per frame over `degradation`, which runs on a lap, a stint or a pick.
+import { carId, known, unknown, type CarId, type CompoundEstimate, type FitPoint, type Known, type SessionTime, type StintFit } from '@pitwall/domain';
 import { copyPlain, type EngineView, type QuickCalculator } from '@pitwall/engine/readers';
 import { DEGRADATION, type DegradationOutput, type StintDegradation } from '../degradation/index.ts';
 import { ourCars } from '../shared/our-cars.ts';
 import { STINT_ANALYSIS, type StintAnalysisOutput } from './index.ts';
+import { poolCompound } from './pool.ts';
 
 /**
  * The fit line of `stint`, one point per whole tyre age from its first lap's to its last lap's: `ms = α + ν · a` and
@@ -51,25 +51,38 @@ function stintFitOf(stint: StintDegradation): StintFit {
   };
 }
 
-/** Per compound (actual and visual), in the order the stints first used it, the prior its first stint started from. */
-function compoundsOf(stints: readonly StintDegradation[], now: SessionTime): CompoundPrior[] {
-  const seen = new Set<string>();
-  const out: CompoundPrior[] = [];
+/**
+ * Per actual compound, in the order our cars' stints first used it, the estimate pooled over every stint of ours on it
+ * (spec 5.1), TO SOFT the prior's offset. The current prior is the newest stint's start: `degradation` fits every stint
+ * from scratch over the current priors, so each starts from it.
+ */
+function compoundsOf(stints: readonly StintDegradation[], now: SessionTime): CompoundEstimate[] {
+  const byCompound = new Map<string, { first: StintDegradation; group: StintDegradation[] }>();
   for (const s of stints) {
-    const key = `${s.actual}/${s.visual}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    const p = s.startPrior;
-    out.push({
-      actual: s.actual,
-      visual: s.visual,
-      alphaOffsetMs: copyPlain(p.alphaOffsetMs),
-      nuMsPerLap: known(p.nuMsPerLap, now),
-      nuSdMs: known(p.nuSdMs, now),
-      source: copyPlain(p.source),
-    });
+    const entry = byCompound.get(s.actual);
+    if (entry === undefined) byCompound.set(s.actual, { first: s, group: [s] });
+    else entry.group.push(s);
   }
-  return out;
+  return [...byCompound.values()].map(({ first, group }): CompoundEstimate => {
+    const prior = (group.at(-1) ?? first).startPrior;
+    const pooled = poolCompound(prior, group, now);
+    return {
+      actual: first.actual,
+      visual: first.visual,
+      alphaOffsetMs: copyPlain(prior.alphaOffsetMs),
+      nuMsPerLap: pooled.nuMsPerLap,
+      nuSdMs: pooled.nuSdMs,
+      laps: pooled.laps,
+      source: copyPlain(pooled.source),
+    };
+  });
+}
+
+/** Our cars' stints in the order they started (the first lap), the player's first on a tie. */
+function ourStints(degradation: DegradationOutput, cars: readonly CarId[]): StintDegradation[] {
+  const stints = cars.flatMap((car) => degradation[car] ?? []);
+  const firstLap = (s: StintDegradation): number => s.laps[0]?.lapNumber ?? Number.POSITIVE_INFINITY;
+  return stints.map((s, i) => ({ s, i })).sort((a, b) => firstLap(a.s) - firstLap(b.s) || a.i - b.i).map(({ s }) => s);
 }
 
 /** Per car: our cars' stints and priors per compound; every other car `degradation` holds is `notApplicable`. */
@@ -83,9 +96,11 @@ export const stintAnalysisCalculator: QuickCalculator<StintAnalysisOutput> = {
     const now = view.live.sessionTime;
     const out: StintAnalysisOutput = {};
     for (const key of Object.keys(degradation)) out[carId(Number(key))] = unknown('notApplicable');
-    for (const car of ourCars(view.live) as CarId[]) {
+    const cars = ourCars(view.live) as CarId[];
+    const compounds = compoundsOf(ourStints(degradation, cars), now);
+    for (const car of cars) {
       const stints = degradation[car] ?? [];
-      out[car] = known({ stints: stints.map(stintFitOf), compounds: compoundsOf(stints, now) }, now);
+      out[car] = known({ stints: stints.map(stintFitOf), compounds: copyPlain(compounds) }, now);
     }
     return out;
   },

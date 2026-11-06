@@ -43,10 +43,25 @@ export const MERCEDES_44: CarKey = { teamId: 0, raceNumber: 44 };
 export const FERRARI_16: CarKey = { teamId: 1, raceNumber: 16 };
 export const ASTON_14: CarKey = { teamId: 4, raceNumber: 14 };
 
-/** A session row: a practice of weekend W1 whose feed's player is car 1 (FERRARI_16), car 0 MERCEDES_44. */
+/**
+ * One car row of a session (C62): its slot, its key (which matches a car across sessions) and its driver name as the
+ * session's Participants last named it (SP4.1a fx2: shown only, never part of the key). Storage keeps a name as it is
+ * and a missing one as NULL, read back as `known(name, 0)` and `unknown('notReceived')`, so a row written with `slot`
+ * reads back equal.
+ */
+export const slot = (c: number, carKey: CarKey, driver?: string) =>
+  ({ carId: car(c), carKey, driver: driver === undefined ? unknown('notReceived') : known(driver, 0) });
+
+/** The default cars of `session`: car 0 MERCEDES_44 and car 1 FERRARI_16, each with its driver name. */
+const CARS = [slot(0, MERCEDES_44, 'Driver Zero'), slot(1, FERRARI_16, 'Driver One')];
+
+/**
+ * A session row: a practice of weekend W1 whose feed's player is car 1 (FERRARI_16), car 0 MERCEDES_44; the engine placed
+ * no teammate (`teammateCar: null`, SP4.1a f34, C43).
+ */
 export const session = (uid: string, o: Partial<SessionRow> = {}): SessionRow => ({ sessionUid: uid as SessionUid, weekendId: 'W1', seasonId: 'S1',
-  playerCar: car(1), trackId: 26, startedAt: '2026-10-27T20:00:00.000Z', pwrecPath: `/rec/${uid}.pwrec.gz`, settings: { tyreTemperature: 1 },
-  cars: [{ carId: car(0), carKey: MERCEDES_44 }, { carId: car(1), carKey: FERRARI_16 }], ...o });
+  playerCar: car(1), teammateCar: null, trackId: 26, startedAt: '2026-10-27T20:00:00.000Z', pwrecPath: `/rec/${uid}.pwrec.gz`, settings: { tyreTemperature: 1 },
+  cars: CARS, ...o });
 
 /** The storage key of a session (C60): its uid, its weekend and its feed's player car. */
 export const key = (uid: string, weekendId = 'W1', playerCar = car(1)): SessionKey => ({ sessionUid: uid as SessionUid, weekendId, playerCar });

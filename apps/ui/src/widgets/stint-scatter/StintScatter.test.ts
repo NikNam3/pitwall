@@ -4,9 +4,10 @@
 // `StintScatter.svelte` (props `WidgetProps<typeof widget>`):
 //  - every text row is an element of class `line` (as the damage card), one row high;
 //  - full: a line naming the current stint's basis (`basis wear` / `basis age`), the chart, then the compounds table:
-//    a header line (`CMP`, `TO SOFT`, `DEG/LAP`, `SD`, `SOURCE`) and one line per compound starting with its letter;
-//    the kit `SourceBadge` right after DEG/LAP, then the source in words (`session`, `calibration`, `default`) hovered
-//    like the badge; a default row muted (`textDim`). The mockup's LAPS column is not in the topic and is not drawn;
+//    a header line (`CMP`, `TO SOFT`, `DEG/LAP`, `SD`, `LAPS`, `SOURCE`) and one line per compound starting with its
+//    letter; the kit `SourceBadge` right after DEG/LAP, LAPS (the analysis's `laps`, spec 5.1) after SD, then the source
+//    in words (`session`, `calibration`, `default`) hovered like the badge; a default row muted (`textDim`). The columns
+//    as the approved mockup `docs/design/2026-11-06-sp4.1a/source-badge.html` (LAPS 4 wide, right-aligned);
 //  - compact: the chart only (the README: compact drops axis titles, fit labels and the compounds table);
 //  - an unknown fit of the current stint shows its reason's kit mark with the reason on hover (full);
 //  - the whole value unknown (a rival: `notApplicable`) shows its reason's kit mark with the reason on hover, no chart and
@@ -95,15 +96,32 @@ describe('StintScatter: the compounds table (full)', () => {
   it('shows the header and one line per compound in the analysis\'s order', async () => {
     const c = await show('threeStints');
     const header = lines(c).find((l) => textOf(l).startsWith('CMP'));
-    expect(header && textOf(header)).toMatch(/^CMP TO SOFT DEG\/LAP SD SOURCE$/);
+    expect(header && textOf(header)).toMatch(/^CMP TO SOFT DEG\/LAP SD LAPS SOURCE$/);
     expect(['S', 'M', 'H', 'I'].map((letter) => compoundLine(c, letter) !== undefined)).toEqual([true, true, true, true]);
     expect(lines(c).indexOf(compoundLine(c, 'S')!)).toBeLessThan(lines(c).indexOf(compoundLine(c, 'H')!));
   });
 
-  it('shows each compound\'s offset, ν and sd as the rows format them', async () => {
+  it('shows each compound\'s offset, ν, sd and laps as the rows format them', async () => {
     const c = await show('threeStints');
-    expect(textOf(compoundLine(c, 'M')!)).toMatch(/^M \+0\.412 \+0\.055 0\.009 session$/);
-    expect(textOf(compoundLine(c, 'H')!)).toMatch(/^H \+0\.780 \+0\.041ᶜ 0\.015 calibration$/);
+    expect(textOf(compoundLine(c, 'M')!)).toMatch(/^M \+0\.412 \+0\.055 0\.009 10 session$/);
+    expect(textOf(compoundLine(c, 'H')!)).toMatch(/^H \+0\.780 \+0\.041ᶜ 0\.015 7 calibration$/);
+    // a compound with no stint of ours: LAPS 0
+    expect(textOf(compoundLine(c, 'I')!)).toMatch(/ 0 default$/);
+  });
+
+  it('the compounds table shows LAPS and the source word and badge per row (the approved mockup, the first case)', async () => {
+    const c = await show('oneStint');
+    const header = lines(c).find((l) => textOf(l).startsWith('CMP'));
+    expect(header && textOf(header)).toMatch(/^CMP TO SOFT DEG\/LAP SD LAPS SOURCE$/);
+    expect(['S', 'M', 'H'].map((l) => textOf(compoundLine(c, l)!))).toEqual([
+      'S +0.000 +0.085 0.018 14 session',
+      'M +0.412 +0.055 0.009 41 session',
+      'H +0.780 +0.041ᶜ 0.015 8 calibration',
+    ]);
+    expect([...c.querySelectorAll('.source-badge')].map((b) => b.textContent?.trim())).toEqual(['', '', 'ᶜ']);
+    expect(hover(shownAs(compoundLine(c, 'M')!, 'session')!)).toBe('session · 41 laps + league');
+    expect(hover(shownAs(compoundLine(c, 'H')!, 'ᶜ')!)).toBe('calibration · league · 4 sources · 8 laps + league');
+    expect(hover(shownAs(compoundLine(c, 'H')!, 'calibration')!)).toBe('calibration · league · 4 sources · 8 laps + league');
   });
 
   it('puts the kit source badge right after DEG/LAP: ᶜ for calibration, ᵈ for default, no mark for session', async () => {

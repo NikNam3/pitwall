@@ -1,6 +1,6 @@
 // The shell's own commands and their default keys (spec 7.7). Widgets cannot register commands in the MVP.
 import { ackToken, type LinkGroup, type PanelSpec, type ReplayControl, type UiAction, type UiSettings } from '@pitwall/contracts';
-import type { Insight } from '@pitwall/domain';
+import type { FeedId, Insight } from '@pitwall/domain';
 import * as text from '../../kit/text.ts';
 import type { Inspection } from '../inspector/inspection.svelte.ts';
 import { THEMES, type ThemeVariant } from '../../theme/index.ts';
@@ -14,7 +14,9 @@ export type ShellOverlay =
   | { kind: 'keys' }
   | { kind: 'workbooks' }
   | { kind: 'saveAs' }
-  | { kind: 'picker'; group: number };
+  | { kind: 'picker'; group: number }
+  /** The calibration prompt (`calibration.pick`, and by itself at a new session). */
+  | { kind: 'calibration' };
 
 /** What the commands need from the shell. */
 export type CommandContext = {
@@ -144,6 +146,30 @@ export function panelCommands(decls: readonly Parameters<typeof defaultPanel>[0]
     group: text.commandGroups.window,
     run: () => addPanel(defaultPanel(decl)),
   }));
+}
+
+/** The id of the command that chooses a calibration set for the run; `null` is the track file's defaults. */
+export const calibrationChooseId = (setId: string | null): string => `calibration.choose.${setId ?? 'defaults'}`;
+
+/**
+ * `calibration.pick` (opens the prompt), one `calibration.choose.<setId>` per set of the session's track and
+ * `calibration.choose.defaults` (SP4.1a spec 3.3). A choice sends `calibration.choose` for the feed and closes the prompt.
+ */
+export function calibrationCommands(
+  sets: readonly { id: string; name: string }[],
+  ctx: Pick<CommandContext, 'send' | 'open'> & { feedId: FeedId; closePrompt: () => void },
+): Command[] {
+  const g = text.commandGroups.calibration;
+  const t = text.commandTitles;
+  const choose = (setId: string | null): void => {
+    ctx.send({ kind: 'calibration.choose', feedId: ctx.feedId, setId });
+    ctx.closePrompt();
+  };
+  return [
+    { id: 'calibration.pick', title: t.calibrationPick, group: g, run: () => ctx.open({ kind: 'calibration' }) },
+    ...sets.map((set): Command => ({ id: calibrationChooseId(set.id), title: t.calibrationChoose(set.name), group: g, run: () => choose(set.id) })),
+    { id: calibrationChooseId(null), title: t.calibrationChoose(text.calibration.defaults), group: g, run: () => choose(null) },
+  ];
 }
 
 /** `layout.edit.toggle`: turns the window's edit mode (window-local, C73) on or off. */

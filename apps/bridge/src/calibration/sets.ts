@@ -17,12 +17,16 @@ export const sameStint = (a: CalibrationSource, b: CalibrationSource): boolean =
 /** A source's stint as a cache key part: its session's key, its car and its first lap. */
 export const stintKey = (s: CalibrationSource): string => `${s.sessionUid}/${s.weekendId}/${s.feedCar}/${s.car}/${s.firstLap}`;
 
-/** A kebab-case id for `name`, unique among `taken` (`dry-baseline`, then `dry-baseline-2`, …). */
+/** Ids no set gets: `defaults` would clash with the shell's `calibration.choose.defaults` command (ruling R32). */
+const RESERVED_IDS: ReadonlySet<string> = new Set(['defaults']);
+
+/** A kebab-case id for `name`, unique among `taken` and never reserved (`dry-baseline`, then `dry-baseline-2`, …). */
 export function newSetId(name: string, taken: ReadonlySet<string>): string {
   const slug = name.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'set';
-  if (!taken.has(slug)) return slug;
+  const isTaken = (id: string): boolean => taken.has(id) || RESERVED_IDS.has(id);
+  if (!isTaken(slug)) return slug;
   let n = 2;
-  while (taken.has(`${slug}-${n}`)) n++;
+  while (isTaken(`${slug}-${n}`)) n++;
   return `${slug}-${n}`;
 }
 

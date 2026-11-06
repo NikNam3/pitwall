@@ -12,7 +12,7 @@ import { openDatabase, type SessionRow } from '../../src/storage/db.ts';
 import { StorageWriter } from '../../src/storage/storage-writer.ts';
 import { WeekendRepository } from '../../src/storage/weekend-repository.ts';
 import {
-  ASTON_14, FERRARI_16, MERCEDES_44, car, event, factRows, key, keyOf, lap, log, projected, session, span, stint, stored, type Log,
+  ASTON_14, FERRARI_16, MERCEDES_44, car, event, factRows, key, keyOf, lap, log, projected, session, slot, span, stint, stored, type Log,
 } from './records.ts';
 
 /** A logger whose lines the test reads. */
@@ -44,13 +44,13 @@ function storage() {
 describe('WeekendRepository.sessionsOf', () => {
   it('returns the weekend\'s rows in start order, each with its cars by car id, its rules version and whether it is complete', () => {
     const { db, put } = storage();
-    const q = session('2', { startedAt: '2026-10-27T21:00:00.000Z', playerCar: car(3), cars: [{ carId: car(3), carKey: FERRARI_16 }, { carId: car(0), carKey: MERCEDES_44 }] });
+    const q = session('2', { startedAt: '2026-10-27T21:00:00.000Z', playerCar: car(3), cars: [slot(3, FERRARI_16, 'Driver Three'), slot(0, MERCEDES_44)] });
     put(q, log(), false);
     put(session('1'));
     put(session('3', { weekendId: 'W2', startedAt: '2026-10-27T19:00:00.000Z' }));
     expect(new WeekendRepository(db).sessionsOf('W1')).toEqual([
       stored(session('1'), true),
-      stored({ ...q, cars: [{ carId: car(0), carKey: MERCEDES_44 }, { carId: car(3), carKey: FERRARI_16 }] }, false),
+      stored({ ...q, cars: [slot(0, MERCEDES_44), slot(3, FERRARI_16, 'Driver Three')] }, false),
     ]);
   });
 });
@@ -102,9 +102,9 @@ describe('WeekendRepository.weekendContext (C39, C62)', () => {
   // A second feed of qualifying whose player is MERCEDES_44. The race (the current session) puts the player in slot 5.
   const practice = session('P', { startedAt: '2026-10-27T20:00:00.000Z' });
   const qualifying = session('Q', { startedAt: '2026-10-27T21:00:00.000Z', playerCar: car(3),
-    cars: [{ carId: car(0), carKey: MERCEDES_44 }, { carId: car(3), carKey: FERRARI_16 }, { carId: car(4), carKey: ASTON_14 }] });
+    cars: [slot(0, MERCEDES_44, 'Driver Zero'), slot(3, FERRARI_16, 'Driver Three'), slot(4, ASTON_14)] });
   const otherFeed = session('Q', { startedAt: '2026-10-27T21:00:00.000Z', playerCar: car(0), cars: qualifying.cars });
-  const race = session('R', { startedAt: '2026-10-27T22:00:00.000Z', playerCar: car(5), cars: [{ carId: car(5), carKey: FERRARI_16 }] });
+  const race = session('R', { startedAt: '2026-10-27T22:00:00.000Z', playerCar: car(5), cars: [slot(5, FERRARI_16)] });
   const later = session('L', { startedAt: '2026-10-27T23:00:00.000Z' });
   const elsewhere = session('X', { weekendId: 'W2', startedAt: '2026-10-27T19:00:00.000Z' });
   const practiceLog = log({ laps: [lap(1, 1), lap(0, 1)], spans: { 'weekend-phase': [span('weekend-phase', 'practice', { detail: { format: 'practice', segment: 1 } })] } });
@@ -121,8 +121,13 @@ describe('WeekendRepository.weekendContext (C39, C62)', () => {
     put(elsewhere, log({ laps: [lap(1, 1)] }));
     return db;
   }
+  /**
+   * A session as the weekend context holds it: every slot's team and race number (C39, C62), not its driver name (SP4.1a
+   * fx2: the name is stored with the row for the calibration panel only).
+   */
   const storedSession = (row: SessionRow, l: Log) => ({
-    sessionUid: row.sessionUid, playerCar: row.playerCar, cars: [...row.cars].sort((a, b) => a.carId - b.carId), projection: projected(l),
+    sessionUid: row.sessionUid, playerCar: row.playerCar,
+    cars: [...row.cars].sort((a, b) => a.carId - b.carId).map(({ carId, carKey }) => ({ carId, carKey })), projection: projected(l),
   });
 
   it('matches cars by team and race number when the slots differ between sessions: the player\'s earlier sessions, oldest first', () => {
@@ -161,12 +166,12 @@ describe('WeekendRepository.weekendContext (C39, C62)', () => {
   // 3364669 (Task 27 fix round 1, C82)
   it('a session\'s cars and projection come from its own weekend when the same uid also exists in another weekend', () => {
     const { db, put } = storage();
-    const inW1 = session('1', { playerCar: car(0), cars: [{ carId: car(0), carKey: FERRARI_16 }] });
-    const inW2 = session('1', { weekendId: 'W2', playerCar: car(0), cars: [{ carId: car(0), carKey: MERCEDES_44 }, { carId: car(1), carKey: FERRARI_16 }] });
+    const inW1 = session('1', { playerCar: car(0), cars: [slot(0, FERRARI_16)] });
+    const inW2 = session('1', { weekendId: 'W2', playerCar: car(0), cars: [slot(0, MERCEDES_44), slot(1, FERRARI_16)] });
     const w1Log = log({ laps: [lap(0, 1)] });
     put(inW1, w1Log);
     put(inW2, log({ laps: [lap(0, 1, { lapTimeMs: 91_000 }), lap(1, 1)] }));
-    const current = session('R', { startedAt: '2026-10-27T22:00:00.000Z', playerCar: car(0), cars: [{ carId: car(0), carKey: FERRARI_16 }] });
+    const current = session('R', { startedAt: '2026-10-27T22:00:00.000Z', playerCar: car(0), cars: [slot(0, FERRARI_16)] });
     put(current);
     const repo = new WeekendRepository(db);
     expect(repo.weekendContext('W1', FERRARI_16, keyOf(current))).toEqual({
@@ -328,5 +333,55 @@ describe('WeekendRepository.sessionsOnTrack', () => {
     expect(stale).toMatchObject({ sessionUid: '1', stale: true, projection: undefined });
     // The stale log is never served (C61): not as a projection, and not as the weekend phase read from it.
     expect(stale !== undefined && 'phase' in stale).toBe(false);
+  });
+});
+
+// SP4.1a f34 (F3, C43, C60): the session row carries the teammate the engine placed (`teammateCar`, `null` without one),
+// stored with the row like its player car, so the calibration store takes our cars from the row, never by its own rule.
+describe('the stored teammate', () => {
+  it('a row\'s teammate is stored with it and read back by sessionsOf and sessionsOnTrack; none is null', () => {
+    const { db, put } = storage();
+    const cars = [slot(0, MERCEDES_44), slot(1, FERRARI_16), slot(2, FERRARI_16)];
+    put(session('1', { cars, teammateCar: car(2) }));
+    put(session('2', { startedAt: '2026-10-27T21:00:00.000Z', cars, teammateCar: null }));
+    const repo = new WeekendRepository(db);
+    expect(repo.sessionsOf('W1').map((s) => [s.sessionUid, s.teammateCar])).toEqual([['1', 2], ['2', null]]);
+    expect(repo.sessionsOnTrack(26).map((s) => [s.sessionUid, s.teammateCar])).toEqual([['1', 2], ['2', null]]);
+  });
+
+  it('a newer row of the session replaces its teammate (the newest wins); a rebuild writes the rebuilt one', () => {
+    const { db, writer } = storage();
+    const row = session('1', { teammateCar: null });
+    writer.upsertSession(row);
+    writer.upsertSession({ ...row, teammateCar: car(0) });
+    const repo = new WeekendRepository(db);
+    expect(repo.sessionsOf('W1')[0]?.teammateCar).toBe(0);
+    writer.replaceLog({ ...row, teammateCar: null }, log(), 'unversioned');
+    expect(repo.sessionsOf('W1')[0]?.teammateCar).toBeNull();
+  });
+});
+
+// SP4.1a fx2 (C3, C54, C62a): the calibration panel draws, per source row, its car's driver name (CAR), and without a
+// running session the track of the newest stored session.
+describe('the stored driver names and the newest track', () => {
+  it('sessionsOnTrack carries each slot\'s stored driver name; a slot without one is unknown', () => {
+    const { db, put } = storage();
+    put(session('1', { cars: [slot(0, MERCEDES_44, 'Driver Zero'), slot(1, FERRARI_16)] }));
+    expect(new WeekendRepository(db).sessionsOnTrack(26)[0]?.cars).toEqual([
+      { carId: car(0), carKey: MERCEDES_44, driver: { known: true, value: 'Driver Zero', at: 0 } },
+      { carId: car(1), carKey: FERRARI_16, driver: { known: false, reason: 'notReceived' } },
+    ]);
+  });
+
+  it('newestTrackId is the track of the newest stored session by start, of any weekend; null when none is stored', () => {
+    const { db, put } = storage();
+    const repo = new WeekendRepository(db);
+    expect(repo.newestTrackId()).toBeNull();
+    put(session('1', { trackId: 26, startedAt: '2026-10-27T20:00:00.000Z' }));
+    put(session('2', { weekendId: 'W2', trackId: 27, startedAt: '2026-10-29T20:00:00.000Z' }));
+    put(session('3', { weekendId: 'W3', trackId: 28, startedAt: '2026-10-28T20:00:00.000Z' }));
+    expect(repo.newestTrackId()).toBe(27);
+    put(session('4', { weekendId: 'W1', trackId: 26, startedAt: '2026-10-30T20:00:00.000Z' }));
+    expect(repo.newestTrackId()).toBe(26);
   });
 });
