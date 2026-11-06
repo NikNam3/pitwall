@@ -30,6 +30,7 @@ export { sessionRemainingCalculator } from './session-remaining/calculator.ts';
 export { ersCalculator } from './ers/calculator.ts';
 export { talkWindowCalculator } from './talk-window/calculator.ts';
 export * from './track-positions/index.ts';
+export { trackPositionsCalculator } from './track-positions/calculator.ts';
 export * from './tyre-wear/index.ts';
 export { tyreWearCalculator } from './tyre-wear/calculator.ts';
 export { alarmsCalculator } from './alarms/calculator.ts';

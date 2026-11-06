@@ -2,6 +2,7 @@
 import type { Known, TrackCars, TrackGeometry } from '@pitwall/domain';
 
 export type { MapCar, MapZone, TrackCars, TrackGeometry } from '@pitwall/domain';
+export * from './behaviour.ts';
 
 /** The calculator id. */
 export const TRACK_POSITIONS = 'track-positions';
