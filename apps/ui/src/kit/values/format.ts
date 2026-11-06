@@ -126,6 +126,10 @@ export const formatFactor = (factor: number): string => `×${factor}`;
 /** A lap number, `23` -> `L23`, zero-padded to `width` digits when given, `9` at width 2 -> `L09` (a count says `laps`, see `formatLaps`). */
 export const formatLapNumber = (n: number, width = 1): string => (Number.isFinite(n) ? `L${String(Math.round(n)).padStart(width, '0')}` : '');
 
+/** A stint's laps, both padded to two digits, `1, 8` -> `L01–08`; an open stint (no last lap) ends at the dash, `9` -> `L09–`. */
+export const formatLapRange = (first: number, last?: number): string =>
+  `${formatLapNumber(first, 2)}–${last === undefined ? '' : formatLapNumber(last, 2).slice(1)}`;
+
 /** A count of laps to one decimal, `1.8` -> `1.8 laps`. */
 export const formatLaps = (n: number): string => (Number.isFinite(n) ? `${fixed(n, 1)} laps` : '');
 

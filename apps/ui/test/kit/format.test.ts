@@ -15,6 +15,7 @@ import {
   formatKg,
   formatKgUnit,
   formatLapNumber,
+  formatLapRange,
   formatWhole,
   formatWholeLaps,
   formatLapTime,
@@ -170,6 +171,22 @@ describe('formatDeltaPct', () => {
 describe('formatLapNumber', () => {
   it.each([[9, 2, 'L09'], [23, 2, 'L23'], [123, 2, 'L123'], [Number.NaN, 2, '']] as Array<[number, number, string]>)('%f/%i -> %s', (n, w, text) =>
     expect(formatLapNumber(n, w)).toBe(text));
+});
+
+describe('formatLapRange (a stint\'s laps, digits padded as formatLapNumber(n, 2))', () => {
+  it.each([
+    [1, 8, 'L01–08'],
+    [12, 23, 'L12–23'],
+    [7, 12, 'L07–12'],
+    [98, 103, 'L98–103'],
+    [100, 112, 'L100–112'],
+  ] as Array<[number, number, string]>)('%i..%i -> %s', (first, last, text) => expect(formatLapRange(first, last)).toBe(text));
+  it.each([
+    [9, 'L09–'],
+    [21, 'L21–'],
+    [104, 'L104–'],
+  ] as Array<[number, string]>)('an open stint from %i -> %s', (first, text) => expect(formatLapRange(first)).toBe(text));
+  it('an explicit undefined last lap is an open stint', () => expect(formatLapRange(9, undefined)).toBe('L09–'));
 });
 
 describe('formatSecondsPerLap', () => {
