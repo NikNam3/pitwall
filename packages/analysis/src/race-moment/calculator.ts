@@ -16,7 +16,7 @@ import {
 import { openSpansOf, type QuickCalculator } from '@pitwall/engine/readers';
 import { ALARMS } from '../alarms/index.ts';
 import { BATTLE, BATTLE_CONFIG, type BattleOutput } from '../battle/index.ts';
-import { INCIDENTS } from '../incidents/index.ts';
+import { INCIDENTS, type IncidentsOutput } from '../incidents/index.ts';
 import { behaviourFor } from '../shared/behaviour.ts';
 import { neutralisationKind } from '../shared/neutralised.ts';
 import { RACE_MOMENT, RACE_MOMENT_BEHAVIOUR, RACE_MOMENT_CONFIG, type RaceMomentOutput } from './index.ts';
@@ -60,7 +60,7 @@ export const raceMomentCalculator: QuickCalculator<RaceMomentOutput> = {
       holding.push(['neutralised', { since: known(open.start, now), cause: { rule: 'flagPhase', params: { kind: neutralisationKind(open) } } }]);
     }
 
-    const incidents = (view.outputs.get(INCIDENTS) as readonly IncidentEntry[] | undefined) ?? [];
+    const incidents = (view.outputs.get(INCIDENTS) as IncidentsOutput | undefined)?.feed ?? [];
     let newest: IncidentEntry | undefined;
     for (const e of incidents) {
       const age = now - e.at;

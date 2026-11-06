@@ -12,7 +12,7 @@ const MOMENTS: Moment[] = ['neutralised', 'incident', 'weather', 'battle', 'carC
 
 const major: IncidentEntry = {
   id: 'a', at: toSessionTime(1000), lap: 3, kind: 'collision', severity: 'major', carIds: [carId(2)],
-  timeLostMs: unknown('notApplicable'), forUs: [], where: { sector: unknown('notReceived') },
+  timeLostMs: unknown('notApplicable'), forUs: [], where: { sector: unknown('notReceived'), turn: unknown('notApplicable'), fraction: unknown('notApplicable') },
 };
 /** Moment `name` whose cause names entry `a`. */
 const moment = (name: Moment): Known<RaceMoment> =>

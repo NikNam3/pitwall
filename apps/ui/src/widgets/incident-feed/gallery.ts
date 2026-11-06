@@ -20,22 +20,22 @@ const collision: IncidentEntry = {
   timeLostMs: k(4200),
   // OCO retired by the after moment: its gap after is notApplicable (DNF)
   forUs: [{ ourCarId: carId(1), otherCarId: k(carId(2)), positionBefore: k(5), positionAfter: k(4), gapBeforeMs: k(4100), gapAfterMs: unknown('notApplicable') }],
-  where: { sector: k(3) },
+  where: { sector: k(3), turn: unknown('notApplicable'), fraction: unknown('notApplicable') },
 };
 const timeLoss: IncidentEntry = {
   id: 'timeLoss:4:220000', at: toSessionTime(220_000), lap: 22, kind: 'timeLoss', severity: 'major', carIds: [carId(4)],
   timeLostMs: k(6100),
   forUs: [{ ourCarId: carId(1), otherCarId: k(carId(4)), positionBefore: k(5), positionAfter: k(5), gapBeforeMs: k(-1900), gapAfterMs: k(5800) }],
-  where: { sector: k(2) },
+  where: { sector: k(2), turn: unknown('notApplicable'), fraction: unknown('notApplicable') },
 };
 const warning: IncidentEntry = {
   id: 'warning:5:210000', at: toSessionTime(210_000), lap: 21, kind: 'warning', severity: 'minor', carIds: [carId(5)],
-  timeLostMs: unknown('notApplicable'), forUs: [], where: { sector: k(2) }, warning: { kind: 'cornerCutting', count: 2, limit: 3 },
+  timeLostMs: unknown('notApplicable'), forUs: [], where: { sector: k(2), turn: unknown('notApplicable'), fraction: unknown('notApplicable') }, warning: { kind: 'cornerCutting', count: 2, limit: 3 },
 };
 // Warnings by kind: another infringement shows its name and no count, an unnamed one reads `warning`.
 const otherWarning = (id: number, infringement: Known<number>): IncidentEntry => ({
   id: `warning:${id}:20${id}000`, at: toSessionTime(200_000 + id * 1000), lap: 20, kind: 'warning', severity: 'minor', carIds: [carId(id)],
-  timeLostMs: unknown('notApplicable'), forUs: [], where: { sector: k(1) }, warning: { kind: 'other', infringement },
+  timeLostMs: unknown('notApplicable'), forUs: [], where: { sector: k(1), turn: unknown('notApplicable'), fraction: unknown('notApplicable') }, warning: { kind: 'other', infringement },
 });
 const collisionWarning = otherWarning(3, k(4));
 const unnamedWarning = otherWarning(4, unknown('notReceived'));
@@ -46,17 +46,17 @@ const teammate: IncidentEntry = {
 };
 const neutralised: IncidentEntry = {
   id: 'neutralised::190000', at: toSessionTime(190_000), lap: 19, kind: 'neutralised', severity: 'minor', carIds: [],
-  timeLostMs: unknown('notApplicable'), forUs: [], where: { sector: unknown('notApplicable') },
+  timeLostMs: unknown('notApplicable'), forUs: [], where: { sector: unknown('notApplicable'), turn: unknown('notApplicable'), fraction: unknown('notApplicable') },
 };
 const damage: IncidentEntry = {
   id: 'damage:1:140000', at: toSessionTime(140_000), lap: 14, kind: 'damage', severity: 'major', carIds: [carId(1)],
-  timeLostMs: unknown('insufficientData'), forUs: [], where: { sector: k(1) }, damage: [{ part: 'frontLeftWingPct', deltaPct: 12 }],
+  timeLostMs: unknown('insufficientData'), forUs: [], where: { sector: k(1), turn: unknown('notApplicable'), fraction: unknown('notApplicable') }, damage: [{ part: 'frontLeftWingPct', deltaPct: 12 }],
 };
 
 // Penalties name the ruling (user, live test 2026-10-30: a drive-through read as a bare penalty).
 const ruling = (at: number, lap: number, car: number, penalty: NonNullable<IncidentEntry['penalty']>): IncidentEntry => ({
   id: `penalty:${car}:${at}`, at: toSessionTime(at), lap, kind: 'penalty', severity: 'minor', carIds: [carId(car)],
-  timeLostMs: unknown('notApplicable'), forUs: [], where: { sector: k(2) }, penalty,
+  timeLostMs: unknown('notApplicable'), forUs: [], where: { sector: k(2), turn: unknown('notApplicable'), fraction: unknown('notApplicable') }, penalty,
 });
 const driveThrough = ruling(250_000, 25, 4, { kind: 'driveThrough' });
 const stopGo = ruling(240_000, 24, 3, { kind: 'stopGo' });
