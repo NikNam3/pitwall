@@ -20,11 +20,26 @@
     /** The open workbook's name and the way to its picker, for the `workbook` segment. */
     workbookName?: string | undefined;
     onPickWorkbook?: () => void;
+    /** The run's calibration set name (`defaults` without one) and the way to the prompt, for the `calibration` segment. */
+    calibrationName?: string | undefined;
+    onPickCalibration?: () => void;
     /** The window's edit mode and its toggle (`layout.edit.toggle`); the toggle shows only when the shell passes it. */
     editing?: boolean;
     onToggleEditing?: (() => void) | undefined;
   };
-  let { store, feedId, send, sendReplay, onShown, workbookName, onPickWorkbook = () => {}, editing = false, onToggleEditing }: Props = $props();
+  let {
+    store,
+    feedId,
+    send,
+    sendReplay,
+    onShown,
+    workbookName,
+    onPickWorkbook = () => {},
+    calibrationName,
+    onPickCalibration = () => {},
+    editing = false,
+    onToggleEditing,
+  }: Props = $props();
 
   // The bar is made per feed (the caller keys it); the feed and callbacks never change while it lives.
   // svelte-ignore state_referenced_locally
@@ -38,6 +53,8 @@
   $effect(() => {
     bar.workbookName = workbookName;
     bar.pickWorkbook = onPickWorkbook;
+    bar.calibrationName = calibrationName;
+    bar.pickCalibration = onPickCalibration;
   });
   $effect(() => {
     onShown?.(bar.shown);

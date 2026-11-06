@@ -1,16 +1,19 @@
 <script lang="ts">
   // One window (spec 7.1-7.3): the active workbook's panels for this window, in a dock, saved back to the bridge.
-  import { ackToken, type LinkGroup, type PanelSpec, type ReplayControl, type SessionInfo, type TopicValue, type UiAction, type UiSettings } from '@pitwall/contracts';
-  import type { FeedId, Insight } from '@pitwall/domain';
+  import { ackToken, type LinkGroup, type MachineSpans, type PanelSpec, type ReplayControl, type SessionInfo, type TopicValue, type UiAction, type UiSettings } from '@pitwall/contracts';
+  import type { CalibrationActiveValue, FeedId, Insight } from '@pitwall/domain';
   import { getAllContexts, mount, onDestroy, unmount, untrack, type Component, type ComponentProps } from 'svelte';
   import type { EntryState, TopicStore } from '../../connection/topic-store.svelte.ts';
+  import { openSpanOf } from '../../kit/situation.ts';
   import * as text from '../../kit/text.ts';
   import type { RegisteredWidget, ResolvedLink } from '../../kit/types.ts';
   import { applyTheme, DEFAULT_THEME, role, type ThemeVariant } from '../../theme/index.ts';
   import '../controls.css';
   import { WIDGETS } from '../../widgets/index.generated.ts';
+  import CalibrationPrompt from '../calibration/Prompt.svelte';
   import {
     alertCommands,
+    calibrationCommands,
     defaultCommands,
     DEFAULT_KEYS,
     layoutEditAddCommand,
@@ -36,6 +39,7 @@
   import { resolveLink, sameLink } from '../link-groups/resolve.ts';
   import Panel from '../panel/Panel.svelte';
   import { provideWindowFont } from '../panel/window-font.ts';
+  import { sessionOf } from '../topbar/session-presentation.ts';
   import TopBar from '../topbar/TopBar.svelte';
   import { defaultPanel } from '../workbooks/default-panel.ts';
   import { normaliseWorkbook } from '../workbooks/normalise.ts';
@@ -66,6 +70,10 @@
   const linkGroups = store.acquire({ topic: 'ui.linkGroups', params: {} });
   // svelte-ignore state_referenced_locally
   const uiSettings = store.acquire({ topic: 'ui.settings', params: {} });
+  // svelte-ignore state_referenced_locally
+  const calibrationSets = store.acquire({ topic: 'calibration.sets', params: {} });
+  // svelte-ignore state_referenced_locally
+  const calibrationValues = store.acquire({ topic: 'calibration.values', params: {} });
   let actions = 0;
   const nextId = (): string => {
     actions += 1;
@@ -125,6 +133,47 @@
     return () => held.release();
   });
 
+  // The calibration the default feed's run uses (SP4.1a spec 3.3): the prompt, its commands and the top bar's segment.
+  let calibrationActive = $state.raw<EntryState<CalibrationActiveValue> | undefined>();
+  $effect(() => {
+    const feed = defaultFeed;
+    if (feed === undefined) {
+      calibrationActive = undefined;
+      return;
+    }
+    const held = untrack(() => store.acquire({ topic: 'calibration.active', params: {}, feedId: feed }));
+    calibrationActive = held.state;
+    return () => held.release();
+  });
+  // The weekend phase names the session in the prompt's title, as the top bar's session segment does.
+  let weekendPhase = $state.raw<EntryState<MachineSpans> | undefined>();
+  $effect(() => {
+    const feed = defaultFeed;
+    if (feed === undefined) {
+      weekendPhase = undefined;
+      return;
+    }
+    const held = untrack(() => store.acquire({ topic: 'situation.weekendPhase', params: {}, feedId: feed }));
+    weekendPhase = held.state;
+    return () => held.release();
+  });
+  const sessionKind = $derived(sessionOf(openSpanOf(weekendPhase?.status === 'ok' ? weekendPhase.value : undefined))?.name);
+  const activeCalibration = $derived.by(() => {
+    const current = calibrationActive?.status === 'ok' ? calibrationActive.value : undefined;
+    return current?.known === true ? current.value : undefined;
+  });
+  const allSets = $derived(calibrationSets.state.status === 'ok' ? calibrationSets.state.value?.sets : undefined);
+  /** The sets of the session's track, in the order of `calibration.sets`. */
+  const trackSets = $derived(activeCalibration === undefined ? [] : (allSets ?? []).filter((s) => s.trackId === activeCalibration.trackId));
+  /** Per set, how many of its sources the store skipped as missing. */
+  const missingSources = $derived.by(() => {
+    const bySet = (calibrationValues.state.status === 'ok' ? calibrationValues.state.value?.bySet : undefined) ?? {};
+    return new Map(Object.entries(bySet).map(([id, set]) => [id, set.fits.filter((fit) => fit.skipped === 'missing').length]));
+  });
+  const calibrationName = $derived(
+    activeCalibration === undefined ? undefined : activeCalibration.setId === null ? text.calibration.defaults : activeCalibration.setName,
+  );
+
   const sessionInfo = $derived(session?.status === 'ok' ? session.value : undefined);
   const groups = $derived(linkGroups.state.status === 'ok' ? (linkGroups.state.value ?? []) : undefined);
   const settings = $derived<UiSettings | undefined>(uiSettings.state.status === 'ok' ? uiSettings.state.value : undefined);
@@ -144,7 +193,8 @@
     sync.dockChanged({ layout, panels: panelSpecs });
   };
 
-  const send = (action: UiAction): void => store.send({ type: 'uiAction', id: nextId(), action });
+  // Resolves with the action's outcome, the bridge's answer (C73); callers that need no answer ignore it.
+  const send = (action: UiAction) => store.send({ type: 'uiAction', id: nextId(), action });
   const sendReplay = (control: ReplayControl): void => store.send({ type: 'replayControl', id: nextId(), control });
 
   // Commands and keys (spec 7.7). Only this component listens to keys.
@@ -158,6 +208,17 @@
   $effect(() => {
     if (overlay === undefined) return;
     return stack.add(closeOverlay);
+  });
+  const closeCalibrationPrompt = (): void => {
+    if (overlay?.kind === 'calibration') overlay = undefined;
+  };
+  // The prompt opens by itself once per session the run announces, when its track has a set (README Q6); it waits for the sets.
+  let promptedSession: string | undefined;
+  $effect(() => {
+    const active = activeCalibration;
+    if (active === undefined || allSets === undefined || active.sessionUid === promptedSession) return;
+    promptedSession = active.sessionUid;
+    if (trackSets.length > 0) untrack(() => (overlay = { kind: 'calibration' }));
   });
   /** The tier-1 alerts the top bar shows. */
   let shownAlerts = $state.raw<Insight[]>([]);
@@ -218,6 +279,9 @@
     ...alertCommands(shownAlerts, commandContext),
     ...windowCommands((read?.workbook.windows ?? []).map((w) => w.id), commandContext),
     ...panelCommands(widgets.map((w) => w.decl), addPanel),
+    ...(defaultFeed === undefined || activeCalibration === undefined
+      ? []
+      : calibrationCommands(trackSets, { send, open: commandContext.open, feedId: defaultFeed, closePrompt: closeCalibrationPrompt })),
     ...(editing
       ? [
           layoutEditAddCommand(addToActiveGroup),
@@ -380,6 +444,8 @@
     workbooks.release();
     linkGroups.release();
     uiSettings.release();
+    calibrationSets.release();
+    calibrationValues.release();
   });
 
   const pick = (widget: RegisteredWidget): void => {
@@ -405,6 +471,8 @@
         onShown={(alerts) => (shownAlerts = alerts)}
         workbookName={read?.workbook.name}
         onPickWorkbook={() => registry.run('workbook.pick')}
+        {calibrationName}
+        onPickCalibration={() => registry.run('calibration.pick')}
         {editing}
         onToggleEditing={() => registry.run('layout.edit.toggle')}
       />
@@ -449,6 +517,19 @@
       }}
       onClose={closeOverlay}
     />
+  {:else if overlay?.kind === 'calibration'}
+    {#if activeCalibration !== undefined}
+      <CalibrationPrompt
+        sets={trackSets}
+        missing={missingSources}
+        trackId={activeCalibration.trackId}
+        session={sessionKind}
+        activeSetId={activeCalibration.setId}
+        picked={activeCalibration.picked}
+        run={(id) => registry.run(id)}
+        onClose={closeOverlay}
+      />
+    {/if}
   {:else if overlay?.kind === 'picker'}
     {@const wanted = overlay.group}
     {@const picked = groups === undefined ? undefined : groupOf(wanted)}

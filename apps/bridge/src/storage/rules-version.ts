@@ -1,23 +1,27 @@
 // The rules version (C61, C90): a hash of the source of every module that can change the log, computed, never kept
 // by hand.
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /** The root of the tree this bridge runs from. */
 export const SOURCE_ROOT = fileURLToPath(new URL('../../../../', import.meta.url));
 
+/** The bridge's one module that can change the log: where a committed decision lands. It imports nothing. */
+const DECISION_PLACEMENT = 'apps/bridge/src/pipeline/decision-placement.ts';
+
 /**
  * The modules that can change the log, each with everything it imports: the four steps (with their sub-machines and
- * recorders, and the log), the runner, frame assembly and its session tracker. Protocol decoding is reached through
- * frame assembly.
+ * recorders, and the log), the runner, frame assembly and its session tracker, and the bridge's decision placement,
+ * which decides the frame a decision fact describes (ruling R28). Protocol decoding is reached through frame assembly.
  */
 const ENTRIES = [
   'packages/engine/src/step/step.ts',
   'packages/engine/src/runner/session-runner.ts',
   'packages/engine/src/frame/assembler.ts',
   'packages/engine/src/frame/session-tracker.ts',
+  DECISION_PLACEMENT,
 ];
 
 /**
@@ -38,8 +42,10 @@ export async function walkRulesSources(root: string): Promise<string[]> {
   return [...new Set(sources)].sort();
 }
 
-/** The folders whose `.ts` files are the cache key: every file the walk can reach lies in them. */
+/** The folders whose `.ts` files are the cache key, and the single files it also covers: every file the walk can reach is in them. */
 const KEYED = ['packages/protocol/src', 'packages/domain/src', 'packages/engine/src'];
+const KEYED_FILES = [DECISION_PLACEMENT];
+const isKeyed = (path: string): boolean => KEYED_FILES.includes(path) || KEYED.some((dir) => path.startsWith(`${dir}/`));
 /** Where the walk's file list is cached, under the tree's root. */
 const CACHE = 'node_modules/.cache/pitwall/rules-sources.json';
 
@@ -51,9 +57,10 @@ type CacheEntry = { key: string; sources: string[] };
 
 const repoPath = (root: string, file: string): string => relative(root, file).split(sep).join('/');
 
-/** A content hash of every `.ts` file under the keyed folders (the generated indexes included), with its path. */
+/** A content hash of every `.ts` file under the keyed folders (the generated indexes included) and of each keyed file, with its path. */
 async function cacheKey(root: string): Promise<string> {
   const paths: string[] = [];
+  for (const file of KEYED_FILES) if (await exists(join(root, file))) paths.push(file);
   for (const dir of KEYED) {
     const entries = await readdir(join(root, dir), { recursive: true, withFileTypes: true });
     for (const entry of entries) {
@@ -63,6 +70,15 @@ async function cacheKey(root: string): Promise<string> {
   const hash = createHash('sha256');
   for (const path of paths.sort()) hash.update(path).update('\0').update(await readFile(join(root, path))).update('\0');
   return hash.digest('hex');
+}
+
+async function exists(file: string): Promise<boolean> {
+  try {
+    await stat(file);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** The cached entry, or `undefined` when the file is missing or not a cache entry. */
@@ -93,8 +109,8 @@ async function writeCache(file: string, entry: CacheEntry): Promise<void> {
 
 /**
  * `walkRulesSources(root)`, cached in `<root>/node_modules/.cache/pitwall/rules-sources.json` by a content key of the
- * keyed folders: on a hit the walk (and dependency-cruiser) is skipped. A missing or corrupt cache walks again. A walk
- * that reaches a file outside the keyed folders is not cached, since the key would not cover it.
+ * keyed folders and files: on a hit the walk (and dependency-cruiser) is skipped. A missing or corrupt cache walks again.
+ * A walk that reaches a file outside them is not cached, since the key would not cover it.
  */
 export async function rulesSources(root: string, opts: RulesOptions = {}): Promise<string[]> {
   const file = join(root, CACHE);
@@ -102,7 +118,7 @@ export async function rulesSources(root: string, opts: RulesOptions = {}): Promi
   const cached = await readCache(file);
   if (cached?.key === key) return cached.sources;
   const sources = await (opts.walk ?? walkRulesSources)(root);
-  if (sources.every((path) => KEYED.some((dir) => path.startsWith(`${dir}/`)))) await writeCache(file, { key, sources });
+  if (sources.every(isKeyed)) await writeCache(file, { key, sources });
   return sources;
 }
 

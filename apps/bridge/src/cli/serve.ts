@@ -1,7 +1,7 @@
 import type { FeedInfo, ReplayControl } from '@pitwall/contracts';
 import type { FeedId } from '@pitwall/domain';
 import { dirname } from 'node:path';
-import { CalibrationStore } from '../calibration/store.ts';
+import { CalibrationStore, type ApplyResult, type CalibrationAction } from '../calibration/store.ts';
 import { createCalcStats } from '../dev/calc-stats.ts';
 import { readCatalogue } from '../dev/catalogue.ts';
 import type { PositionMessage } from '../dev/dev-supervisor.ts';
@@ -147,7 +147,19 @@ export async function serve(opts: ServeOptions): Promise<number> {
         feeds,
         log: cliLogger(io, wsLogLevel(io.env)),
         ...(uiState && { uiState }),
-        ...(calibration && { calibration }),
+        // An edit of a set reaches every feed's pipeline once applied: a run on that set commits its new snapshot (C62a,
+        // C76). A new set or a copy is a set no run uses.
+        ...(calibration && {
+          calibration: {
+            apply: (action: CalibrationAction): ApplyResult => {
+              const result = calibration.apply(action);
+              if (result.ok && action.kind !== 'calibration.set.create' && action.kind !== 'calibration.set.copy') {
+                pipeline?.calibrationEdited(action.setId);
+              }
+              return result;
+            },
+          },
+        }),
         // A pick is a decision of the feed's running session (C76): the pipeline takes it.
         choose: (action: ChooseAction): ActionOutcome => {
           if (action.feedId !== feedId) return { ok: false, reason: 'invalid', message: `no feed ${action.feedId}` };

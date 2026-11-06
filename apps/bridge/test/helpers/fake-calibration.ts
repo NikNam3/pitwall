@@ -52,5 +52,13 @@ export function fakeCalibration(sets: readonly FakeSet[]) {
     edit: (trackId: number, setId: string, entries: PriorsEntries): void => {
       find(trackId, setId).entries = entries;
     },
+    /** A rename: the snapshot's name changes, and with it its fingerprint (F4); its entries do not. */
+    rename: (trackId: number, setId: string, name: string): void => {
+      find(trackId, setId).name = name;
+    },
+    /** A delete: `snapshotOf` gives `undefined` for the set from now on. */
+    remove: (trackId: number, setId: string): void => {
+      held.splice(held.indexOf(find(trackId, setId)), 1);
+    },
   };
 }

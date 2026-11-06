@@ -119,6 +119,11 @@ export class CalibrationStore {
     return { fingerprint: snapshotFingerprint(snapshot), ...snapshot };
   }
 
+  /** The track a set belongs to; `undefined` for an unknown set (C3). */
+  trackOf(setId: string): number | undefined {
+    return this.#sets.get(setId)?.trackId;
+  }
+
   /** Records that a run started on the set or picked it (spec 3.3). */
   markUsed(trackId: number, setId: string, at: string): void {
     const set = this.#sets.get(setId);

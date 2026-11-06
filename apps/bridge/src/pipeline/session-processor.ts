@@ -41,6 +41,7 @@ import type { Logger } from '../log.ts';
 import type { SessionKey, SessionRow } from '../storage/db.ts';
 import type { SessionFile } from '../storage/session-files.ts';
 import { MAX_DUMPS_PER_SESSION, writeDebugDump } from './debug-dump.ts';
+import { PendingDecisions, SessionRecords, type Placed } from './decision-placement.ts';
 import { carsOf, sessionRowOf, type SessionStorage } from './session-storage.ts';
 import type { PublishError, SpansOf, TopicPublisher } from './topic-publisher.ts';
 
@@ -111,9 +112,9 @@ export class SessionProcessor {
   /** The run's priors (C62a): only grow, a flashback leaves them (the projection decides which snapshot counts). */
   #priors: RunPriors;
   /** Decisions committed since the last frame: the next frame carries them (C10, C76). */
-  #pending: Omit<DecisionRecord, 'frame'>[] = [];
-  /** Records written to the session file: a decision committed now is recorded with this index (C76). */
-  #records = 0;
+  readonly #pending = new PendingDecisions<Omit<DecisionRecord, 'frame'>>();
+  /** The records written to the session file: a decision committed now is placed at their count (C76). */
+  readonly #records: SessionRecords;
   /** The last `calibration.active` handed to `onActive`, as JSON: it is handed on only when it changes. */
   #active: string | undefined;
   /** The teammate of the row last built (`#row`): a row is written again when the engine's teammate is another. */
@@ -123,6 +124,7 @@ export class SessionProcessor {
     this.#o = opts;
     this.#priors = opts.priors;
     this.sessionUid = opts.sessionUid;
+    this.#records = new SessionRecords(opts.sessionUid);
     this.#track = opts.track.known ? known(trackDataOf(opts.track.value), 0) : opts.track;
     this.#uid = sessionUidString(opts.sessionUid);
     this.#key = { sessionUid: this.#uid, weekendId: String(opts.session.weekendLinkIdentifier), playerCar: playerCarOf(opts.session) };
@@ -149,9 +151,9 @@ export class SessionProcessor {
     return this.#priors;
   }
 
-  /** The number of records written to the session file so far: the record index of a decision committed now (C76). */
-  get recordIndex(): number {
-    return this.#records;
+  /** A decision committed now, placed at the number of records written to the session file so far (C76). */
+  place<D>(decision: D): Placed<D> {
+    return this.#records.place(decision);
   }
 
   /**
@@ -162,7 +164,18 @@ export class SessionProcessor {
     if (snapshot !== undefined && this.#priors.snapshots[snapshot.fingerprint] === undefined) {
       this.#priors = { ...this.#priors, snapshots: { ...this.#priors.snapshots, [snapshot.fingerprint]: snapshot } };
     }
-    this.#pending.push(decision);
+    this.#pending.add(decision);
+  }
+
+  /**
+   * The set and snapshot fingerprint the run is on now (C62a): the newest `calibrationChosen` decision, pending or in the
+   * projection, else the start snapshot's; `null` for `defaults` or a run without priors.
+   */
+  get activeChoice(): { setId: string | null; snapshot: string | null } {
+    const chosen = [...this.#runner.state.history.decisions, ...this.#pending.list].findLast((d) => d.kind === 'calibrationChosen');
+    if (chosen !== undefined) return { setId: chosen.setId, snapshot: chosen.snapshot };
+    const start = this.#priors.start === null ? undefined : this.#priors.snapshots[this.#priors.start];
+    return { setId: start?.setId ?? null, snapshot: start?.fingerprint ?? null };
   }
 
   /** The newest applied frame's time on the engine's race clock (spec 3.3); undefined before the engine runs. */
@@ -171,7 +184,7 @@ export class SessionProcessor {
   }
 
   push(frame: Frame): void {
-    const decisions = this.#pending.splice(0);
+    const decisions = this.#pending.takeForFrame();
     this.#applying(frame, () => this.#runner.apply(frame, this.#onResult, decisions));
   }
 
@@ -182,11 +195,9 @@ export class SessionProcessor {
    */
   record(receivedAtMs: number, bytes: Uint8Array): void {
     this.#lastReceivedAtMs = receivedAtMs;
-    const uid = peekHeader(bytes)?.sessionUid;
-    if ((uid === this.sessionUid || uid === 0n) && this.#o.file !== undefined) {
-      this.#o.file.write(receivedAtMs, bytes);
-      this.#records++;
-    }
+    const file = this.#o.file;
+    if (file === undefined) return;
+    this.#records.keep(peekHeader(bytes)?.sessionUid, () => file.write(receivedAtMs, bytes));
   }
 
   /**
