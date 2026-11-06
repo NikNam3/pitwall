@@ -104,14 +104,17 @@ export class CalibrationStore {
     const sets = this.#setsOf(trackId);
     const used = sets.filter((s) => s.lastUsedAt !== undefined).toSorted((a, b) => ((a.lastUsedAt ?? '') < (b.lastUsedAt ?? '') ? 1 : -1));
     const chosen = used[0] ?? this.#newestBySources(trackId, sets);
-    return chosen === undefined ? null : this.snapshotOf(trackId, chosen.id);
+    return chosen === undefined ? null : (this.snapshotOf(trackId, chosen.id) ?? null);
   }
 
-  /** The set's entries as a run gets them, named by their fingerprint (C62a). An unknown set is a caller's bug. */
-  snapshotOf(trackId: number, setId: string): PriorsSnapshot {
+  /**
+   * The set's entries as a run gets them, named by their fingerprint (C62a); `undefined` for a set the track does not
+   * hold (a pick of a deleted set, or of one on another track: an expected problem, C3).
+   */
+  snapshotOf(trackId: number, setId: string): PriorsSnapshot | undefined {
     const set = this.#sets.get(setId);
     const values = this.#values.get(setId);
-    if (set === undefined || set.trackId !== trackId || values === undefined) throw new Error(`no calibration set ${setId} on track ${trackId}`);
+    if (set === undefined || set.trackId !== trackId || values === undefined) return undefined;
     return {
       fingerprint: entriesFingerprint(values.entries), setId, setName: set.name,
       sources: values.fits.filter((f) => f.skipped === undefined).length, entries: values.entries,

@@ -12,7 +12,7 @@ import type { TopicName } from '@pitwall/contracts';
 import {
   known, unknown,
   type CalibrationCandidatesValue, type CalibrationSet, type CalibrationSetsValue, type CalibrationSource, type CalibrationValuesValue,
-  type CarId, type FittedSource, type Known, type LapUse, type PriorsEntries, type SessionUid, type SourceFit,
+  type CarId, type FittedSource, type Known, type LapUse, type PriorsEntries, type PriorsSnapshot, type SessionUid, type SourceFit,
 } from '@pitwall/domain';
 import { definePriors, type PriorsCtx, type ProjectionState, type StoredSource } from '@pitwall/engine/readers';
 import { CalibrationStore, type CalibrationAction } from '../../src/calibration/store.ts';
@@ -193,8 +193,14 @@ const valueOf = (entry: Known<number> | undefined): number | undefined => (entry
 const mean = (values: number[]): number => Math.round(values.reduce((a, b) => a + b, 0) / values.length);
 /** The fit if the store could read its source (not skipped). */
 const fitted = (fit: SourceFit | undefined): FittedSource | undefined => (fit !== undefined && fit.skipped === undefined ? fit : undefined);
+/** The set's snapshot from the store; fails the test when the store has none (`undefined`, an unknown set, C3). */
+function snapshotOf(store: CalibrationStore, trackId: number, setId: string): PriorsSnapshot {
+  const snapshot: PriorsSnapshot | undefined = store.snapshotOf(trackId, setId);
+  if (snapshot === undefined) throw new Error(`the store has no snapshot of set ${setId} on track ${trackId}`);
+  return snapshot;
+}
 /** Lets every settled promise's callbacks run. */
-const settle = () => new Promise<void>((resolve) => { setImmediate(resolve); });
+const settle =() => new Promise<void>((resolve) => { setImmediate(resolve); });
 
 // --- the tests ------------------------------------------------------------------------------------------------------
 
@@ -238,7 +244,7 @@ describe('CalibrationStore', () => {
     t.ok({ kind: 'calibration.lap.exclude', trackId: TRACK, setId: id, source, lap: 3 });
     expect(readSet(t.dir, TRACK, id).sources).toEqual([{ ...source, excludedLaps: [3] }]);
     expect(lapsSeen()).toEqual([1, 2, 4, 5]);
-    expect(t.store.snapshotOf(TRACK, id).entries['fake.lapCount']).toMatchObject({ known: true, value: 4 });
+    expect(snapshotOf(t.store, TRACK, id).entries['fake.lapCount']).toMatchObject({ known: true, value: 4 });
 
     t.ok({ kind: 'calibration.lap.include', trackId: TRACK, setId: id, source: { ...source, excludedLaps: [3] }, lap: 3 });
     expect(readSet(t.dir, TRACK, id).sources).toEqual([source]);
@@ -248,14 +254,14 @@ describe('CalibrationStore', () => {
     t.ok({ kind: 'calibration.source.remove', trackId: TRACK, setId: id, source });
     expect(readSet(t.dir, TRACK, id).sources).toEqual([]);
     expect(t.features.calls.count.slice(before).some((c) => c.length === 0)).toBe(true);
-    expect(t.store.snapshotOf(TRACK, id).entries['fake.lapCount']).toMatchObject({ known: true, value: 0 });
+    expect(snapshotOf(t.store, TRACK, id).entries['fake.lapCount']).toMatchObject({ known: true, value: 0 });
   });
 
   it('an override replaces the computed entry; clearing restores it; an override-only key is unknown until set', () => {
     const s1 = trackSession('1', { startedAt: day(1), stints: [{ car: 0, firstLap: 1, lastLap: 5 }] });
     const t = setup({ sessions: [s1] });
     const id = t.createSet(TRACK, 'Set', [sourceOf(s1, 0, 1)]);
-    const entry = (key: string) => t.store.snapshotOf(TRACK, id).entries[key];
+    const entry = (key: string) => snapshotOf(t.store, TRACK, id).entries[key];
     expect(entry('fake.meanLapMs')).toMatchObject({ known: true, value: 90_003 });
 
     t.ok({ kind: 'calibration.override.set', trackId: TRACK, setId: id, key: 'fake.meanLapMs', value: 95_000 });
@@ -277,41 +283,41 @@ describe('CalibrationStore', () => {
     const dir = mkdtempSync(join(tmpdir(), 'calibration-'));
     const first = setup({ sessions: [s1, s2], dir });
     const id = first.createSet(TRACK, 'Set', [sourceOf(s1, 0, 1), sourceOf(s2, 0, 1)]);
-    const computed = first.store.snapshotOf(TRACK, id).entries;
+    const computed = snapshotOf(first.store, TRACK, id).entries;
     expect(existsSync(join(dir, 'priors.sqlite'))).toBe(true);
     first.close();
 
     // The same versions, sources, overrides and config: nothing of the set is computed again.
     const same = setup({ sessions: [s1, s2], dir });
-    expect(same.store.snapshotOf(TRACK, id).entries).toEqual(computed);
+    expect(snapshotOf(same.store, TRACK, id).entries).toEqual(computed);
     expect(callsOver(same.features.calls.mean, 2)).toEqual([]);
     expect(callsOver(same.features.calls.count, 2)).toEqual([]);
     same.close();
 
     // A new version of one entry recomputes that entry only.
     const bumped = setup({ sessions: [s1, s2], dir, features: fakeFeatures({ meanVersion: 2 }) });
-    expect(bumped.store.snapshotOf(TRACK, id).entries).toEqual(computed);
+    expect(snapshotOf(bumped.store, TRACK, id).entries).toEqual(computed);
     expect(callsOver(bumped.features.calls.mean, 2).length).toBeGreaterThan(0);
     expect(callsOver(bumped.features.calls.count, 2)).toEqual([]);
     bumped.close();
 
     // Another config is another fingerprint.
     const reconfigured = setup({ sessions: [s1, s2], dir, features: fakeFeatures({ meanVersion: 2 }), config: { fake: { weight: 2 } } });
-    expect(reconfigured.store.snapshotOf(TRACK, id).entries['fake.lapCount']).toMatchObject({ known: true, value: 20 });
+    expect(snapshotOf(reconfigured.store, TRACK, id).entries['fake.lapCount']).toMatchObject({ known: true, value: 20 });
     expect(callsOver(reconfigured.features.calls.count, 2).length).toBeGreaterThan(0);
 
     // Other sources (an excluded lap) are another fingerprint.
     const before = callsOver(reconfigured.features.calls.count, 2).length;
     reconfigured.ok({ kind: 'calibration.lap.exclude', trackId: TRACK, setId: id, source: sourceOf(s1, 0, 1), lap: 5 });
     expect(callsOver(reconfigured.features.calls.count, 2).length).toBeGreaterThan(before);
-    const edited = reconfigured.store.snapshotOf(TRACK, id).entries;
+    const edited = snapshotOf(reconfigured.store, TRACK, id).entries;
     expect(edited['fake.lapCount']).toMatchObject({ known: true, value: 18 });
     reconfigured.close();
 
     // The cache deleted: the entries are computed again from the set files, equal.
     for (const file of ['priors.sqlite', 'priors.sqlite-wal', 'priors.sqlite-shm']) rmSync(join(dir, file), { force: true });
     const rebuilt = setup({ sessions: [s1, s2], dir, features: fakeFeatures({ meanVersion: 2 }), config: { fake: { weight: 2 } } });
-    expect(rebuilt.store.snapshotOf(TRACK, id).entries).toEqual(edited);
+    expect(snapshotOf(rebuilt.store, TRACK, id).entries).toEqual(edited);
     expect(callsOver(rebuilt.features.calls.count, 2).length).toBeGreaterThan(0);
   });
 
@@ -322,7 +328,7 @@ describe('CalibrationStore', () => {
     const id = t.createSet(TRACK, 'Set', [sourceOf(s1, 0, 1)]);
     const files = calibrationFiles(t.dir);
     const published = t.published.length;
-    const entries = t.store.snapshotOf(TRACK, id).entries;
+    const entries = snapshotOf(t.store, TRACK, id).entries;
 
     const invalid: Array<[string, CalibrationAction]> = [
       ['an override out of its range', { kind: 'calibration.override.set', trackId: TRACK, setId: id, key: 'fake.meanLapMs', value: 10 }],
@@ -338,7 +344,7 @@ describe('CalibrationStore', () => {
     }
     expect(calibrationFiles(t.dir)).toEqual(files);
     expect(t.published.length).toBe(published);
-    expect(t.store.snapshotOf(TRACK, id).entries).toEqual(entries);
+    expect(snapshotOf(t.store, TRACK, id).entries).toEqual(entries);
   });
 
   it('a source names its stint by car and first lap; a teammate\'s stint is accepted', () => {
@@ -379,7 +385,7 @@ describe('CalibrationStore', () => {
     t.store.markUsed(10, old, day(2));
     t.store.markUsed(10, recent, day(3));
     expect(readSet(t.dir, 10, recent).lastUsedAt).toBe(day(3));
-    expect(t.store.preselect(10)).toEqual(t.store.snapshotOf(10, recent));
+    expect(t.store.preselect(10)).toEqual(snapshotOf(t.store, 10, recent));
     expect(t.store.preselect(10)?.setName).toBe('Recent use');
 
     // Track 11: none used: the set with the newest source session.
@@ -415,7 +421,7 @@ describe('CalibrationStore', () => {
     const after = t.features.calls.mean.slice(calls);
     expect(after.length).toBeGreaterThan(0);
     expect(after.flat().every((s) => s.source.sessionUid === 'kept')).toBe(true);
-    expect(t.store.snapshotOf(TRACK, id).entries['fake.meanLapMs']).toMatchObject({ known: true, value: 91_003 });
+    expect(snapshotOf(t.store, TRACK, id).entries['fake.meanLapMs']).toMatchObject({ known: true, value: 91_003 });
   });
 
   it('a skipped source carries no placeholder values (C3)', () => {
@@ -476,7 +482,7 @@ describe('CalibrationStore', () => {
     const fit = fitted(t.fitOf(id, sourceOf(inSet, 0, 1)));
     expect(fit).toMatchObject({ laps: 5, sessionDate: day(1) });
     expect(valueOf(fit?.entries['fake.meanLapMs'])).toBe(93_003);
-    expect(valueOf(t.store.snapshotOf(TRACK, id).entries['fake.meanLapMs'])).toBe(93_003);
+    expect(valueOf(snapshotOf(t.store, TRACK, id).entries['fake.meanLapMs'])).toBe(93_003);
     const candidates = t.last<CalibrationCandidatesValue>('calibration.candidates').byTrack[TRACK] ?? [];
     expect(candidates.map((c) => c.source)).toEqual([sourceOf(offered, 0, 1)]);
     expect(valueOf(fitted(candidates[0])?.entries['fake.meanLapMs'])).toBe(94_003);
@@ -515,7 +521,7 @@ describe('CalibrationStore', () => {
     const meanA = mean(range(1, 4).map((n) => 90_000 + n)), meanB = mean(range(1, 4).map((n) => 92_000 + n));
     const meanSet = mean([...range(1, 4).map((n) => 90_000 + n), ...range(1, 4).map((n) => 92_000 + n)]);
 
-    expect(valueOf(t.store.snapshotOf(TRACK, id).entries['fake.meanLapMs'])).toBe(meanSet);
+    expect(valueOf(snapshotOf(t.store, TRACK, id).entries['fake.meanLapMs'])).toBe(meanSet);
     const fitA = fitted(t.fitOf(id, sourceOf(a, 0, 1))), fitB = fitted(t.fitOf(id, sourceOf(b, 0, 1)));
     expect(fitA).toMatchObject({ sessionDate: day(1), compound: 'medium', laps: 4 });
     expect(valueOf(fitA?.entries['fake.meanLapMs'])).toBe(meanA);
@@ -556,8 +562,8 @@ describe('CalibrationStore', () => {
     const a = t.createSet(TRACK, 'A', [sourceOf(s1, 0, 1)]);
     t.ok({ kind: 'calibration.set.copy', trackId: TRACK, setId: a, name: 'B' });
     const b = t.setId(TRACK, 'B');
-    const print = (id: string) => t.store.snapshotOf(TRACK, id).fingerprint;
-    expect(t.store.snapshotOf(TRACK, b).entries).toEqual(t.store.snapshotOf(TRACK, a).entries);
+    const print = (id: string) => snapshotOf(t.store, TRACK, id).fingerprint;
+    expect(snapshotOf(t.store, TRACK, b).entries).toEqual(snapshotOf(t.store, TRACK, a).entries);
     expect(print(b)).toBe(print(a));
 
     t.ok({ kind: 'calibration.override.set', trackId: TRACK, setId: b, key: 'fake.meanLapMs', value: 95_000 });
@@ -572,6 +578,18 @@ describe('CalibrationStore', () => {
 
     t.ok({ kind: 'calibration.lap.exclude', trackId: TRACK, setId: b, source: sourceOf(s1, 0, 1), lap: 1 });
     expect(print(b)).not.toBe(print(a));
+  });
+
+  it('snapshotOf of an unknown set is undefined, not a throw', () => {
+    // an unknown set is an expected problem (C3, C73): a pick of a deleted set, or of one on another track
+    const s1 = trackSession('1', { startedAt: day(1), stints: [{ car: 0, firstLap: 1, lastLap: 5 }] });
+    const t = setup({ sessions: [s1] });
+    const id = t.createSet(TRACK, 'Set', [sourceOf(s1, 0, 1)]);
+    expect(() => t.store.snapshotOf(TRACK, 'no-such-set')).not.toThrow();
+    expect(t.store.snapshotOf(TRACK, 'no-such-set')).toBeUndefined();
+    expect(t.store.snapshotOf(OTHER_TRACK, id)).toBeUndefined();
+    t.ok({ kind: 'calibration.set.delete', trackId: TRACK, setId: id });
+    expect(t.store.snapshotOf(TRACK, id)).toBeUndefined();
   });
 
   it('the topics are published on every change', () => {

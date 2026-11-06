@@ -7,6 +7,26 @@ describe('decodeUiAction alertGroup.mute', () => {
   it('rejects an unknown category', () => expect(decodeUiAction({ kind: 'alertGroup.mute', category: 'brakes', muted: true })).toBeUndefined());
 });
 
+// SP4.1a Task 4: `calibration.choose` crosses the wire (C62a, C73, C76): a feed and a set of its session's track, or
+// `null` for `defaults`. The decoder checks the shape only; the bridge's pipeline resolves the set.
+describe('decodeUiAction calibration.choose', () => {
+  const actions = [
+    { kind: 'calibration.choose', feedId: 'f1', setId: 'dry-baseline' },
+    { kind: 'calibration.choose', feedId: 'f1', setId: null },
+  ];
+  it.each(actions)('decodes calibration.choose with setId $setId', (action) => expect(decodeUiAction(action)).toEqual(action));
+  it.each(actions)('drops the unknown fields of calibration.choose with setId $setId', (action) =>
+    expect(decodeUiAction({ ...action, snapshot: 'abc', entries: {} })).toEqual(action));
+
+  const invalid: Array<[string, unknown]> = [
+    ['a missing feedId', { kind: 'calibration.choose', setId: 'dry' }],
+    ['a feedId that is no string', { kind: 'calibration.choose', feedId: 1, setId: 'dry' }],
+    ['a missing setId (defaults is an explicit null)', { kind: 'calibration.choose', feedId: 'f1' }],
+    ['a setId that is no string', { kind: 'calibration.choose', feedId: 'f1', setId: 7 }],
+  ];
+  it.each(invalid)('rejects %s', (_what, raw) => expect(decodeUiAction(raw)).toBeUndefined());
+});
+
 // SP4.1a Task 5, delegated (R5): the calibration uiActions (C62a, C73) cross the wire. The decoder checks their shape
 // only and rebuilds them from the known fields; the calibration store validates them against the sets and the stored
 // sessions. `calibration.choose` is Task 4's.

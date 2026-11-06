@@ -137,6 +137,11 @@ export const decodeUiAction = (raw: unknown): UiAction | undefined => {
         : undefined;
     case 'calibration.override.clear':
       return isSetRef(raw) && isString(raw.key) ? { kind: raw.kind, trackId: raw.trackId, setId: raw.setId, key: raw.key } : undefined;
+    case 'calibration.choose':
+      // `defaults` is an explicit `null`; the bridge's pipeline resolves the set against its session's track.
+      return isString(raw.feedId) && (raw.setId === null || isString(raw.setId))
+        ? { kind: raw.kind, feedId: raw.feedId as FeedId, setId: raw.setId }
+        : undefined;
     default:
       return undefined;
   }

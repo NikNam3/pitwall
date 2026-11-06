@@ -21,8 +21,18 @@ export type StintDegradation = {
   fuelCorrected: boolean;
   wearRatePctPerLap: Corners<Known<number>>;
   source: EstimateSource;
+  /** The filter's posterior covariance of `(α, ν)` after the stint's fitted laps; `insufficientData` below two (`fitStint`). */
+  cov: Known<[[number, number], [number, number]]>;
+  /** The prior the stint started from, with its source (`sessionShare` 0). */
+  startPrior: StartPrior;
   laps: DegradationLap[];
 };
+
+/**
+ * Where a stint's filter started: `ν`'s mean and sd, the `α` offset of the compound against medium (the calibration's
+ * entry, or the track file's offset; `notApplicable` with the config default) and the prior's source.
+ */
+export type StartPrior = { nuMsPerLap: number; nuSdMs: number; alphaOffsetMs: Known<Ms>; source: EstimateSource };
 
 /** The output: per car its stints, oldest first. */
 export type DegradationOutput = Record<CarId, StintDegradation[]>;

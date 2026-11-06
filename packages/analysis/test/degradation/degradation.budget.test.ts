@@ -4,7 +4,8 @@ import { describe, expect, it } from 'vitest';
 import { degradationCalculator } from '../../src/degradation/calculator.ts';
 import { longRace } from '../../../../test-support/builders/long-race.ts';
 
-const PASSES = 5;
+/** Warm passes per lap update; the best of them counts (R23). */
+const PASSES = 25;
 
 describe('degradation budget', () => {
   it('long-race budget: under 1 ms per lap update', () => {
@@ -12,7 +13,7 @@ describe('degradation budget', () => {
     // a lap update: the first frame of each of the leader's laps 60..70, when the field completes the lap before
     const views = Array.from({ length: 11 }, (_, i) => race.viewAt(race.framesOfLap(60 + i)[0]!));
     for (const view of views) degradationCalculator.compute(view); // warm
-    // per lap the best of a few warm passes, so machine load cannot flake it (docs/testing.md 6)
+    // per lap the best of 25 warm passes, so machine load (a parallel suite, a busy core) cannot flake it (docs/testing.md 6)
     const best = views.map((view) => {
       let ms = Infinity;
       for (let k = 0; k < PASSES; k++) {

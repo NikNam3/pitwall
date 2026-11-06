@@ -1,4 +1,4 @@
-// `lap-classes` (spec 4): the one definition of which laps count. A function, imported by the analyses that use it.
+// `lap-classes` (spec 4): the one definition of which laps count. Functions, imported by the analyses that use it.
 import type { LapRecord } from '@pitwall/domain';
 import type { DeepReadonly } from '@pitwall/engine/readers';
 
@@ -17,10 +17,24 @@ export type LapClassOptions = { isRace: boolean; maxNeutralisedMs: number };
 /** Time of the lap under SC or VSC, in ms. */
 const neutralisedMs = (lap: DeepReadonly<LapRecord>): number => (lap.scShare + lap.vscShare) * lap.lapTimeMs;
 
+/** Whether a lap counts for rates: `classifyLap(lap, opts).forRate`, without building the class. */
+export function isRateLap(lap: DeepReadonly<LapRecord>, opts: Pick<LapClassOptions, 'maxNeutralisedMs'>): boolean {
+  return !lap.inLap && !lap.outLap && neutralisedMs(lap) < opts.maxNeutralisedMs;
+}
+
+/** Whether a rate lap (`forRate`) counts for bands: it is not lap 1 of a race. */
+const bandsOf = (lap: DeepReadonly<LapRecord>, opts: LapClassOptions, forRate: boolean): boolean => forRate && !(opts.isRace && lap.lapNumber === 1);
+
+/** Whether a lap counts for pace: `classifyLap(lap, opts).forPace`, without building the class. */
+export function isPaceLap(lap: DeepReadonly<LapRecord>, opts: LapClassOptions): boolean {
+  return bandsOf(lap, opts, isRateLap(lap, opts)) && lap.valid.lap;
+}
+
 /** Classifies one lap record. */
 export function classifyLap(lap: DeepReadonly<LapRecord>, opts: LapClassOptions): LapClass {
-  const forRate = !lap.inLap && !lap.outLap && neutralisedMs(lap) < opts.maxNeutralisedMs;
-  const forBands = forRate && !(opts.isRace && lap.lapNumber === 1);
+  const forRate = isRateLap(lap, opts);
+  const forBands = bandsOf(lap, opts, forRate);
   const forPace = forBands && lap.valid.lap;
-  return { forPace, forRate, forBands, forBest: { lap: lap.valid.lap, sectors: [...lap.valid.sectors] } };
+  const s = lap.valid.sectors;
+  return { forPace, forRate, forBands, forBest: { lap: lap.valid.lap, sectors: [s[0], s[1], s[2]] } };
 }

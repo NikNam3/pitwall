@@ -10,6 +10,7 @@ import { PwrecSource } from '../input/pwrec-source.ts';
 import { createLogger } from '../log.ts';
 import { effectiveConfig, recordingConfig } from '../feature-config.ts';
 import { recordingTrack, TRACKS_DIR } from '../track-files/load.ts';
+import { recordingDecisions } from './decision-sidecars.ts';
 import { FeedPipeline } from './feed-pipeline.ts';
 
 /** Hands every packet on, then calls `after` with it: the hook that runs the hub's clock and ticks per packet. */
@@ -95,8 +96,8 @@ export class StreamHash {
  * Global topics stay out: the bridge shell publishes them, not the replay.
  *
  * Job topics are subscribed too, so their jobs run as in a session with a client, but `StreamHash` leaves their
- * messages out. `features` replaces the registered features (default `FEATURES`). The recording's config and track
- * sidecars apply, as in a replay.
+ * messages out. `features` replaces the registered features (default `FEATURES`). The recording's config, track, priors
+ * and decisions sidecars apply, as in a replay.
  */
 export async function topicStreamHash(recordingPath: string, { features = FEATURES }: { features?: readonly Feature[] } = {}): Promise<string> {
   const id = feedId('hash');
@@ -130,6 +131,7 @@ export async function topicStreamHash(recordingPath: string, { features = FEATUR
     features,
     config: recordingConfig(recordingPath, features, effectiveConfig(features)),
     tracks: (trackId) => recordingTrack(recordingPath, trackId, TRACKS_DIR, log),
+    recorded: recordingDecisions(recordingPath, log),
     log,
   });
   pipeline.start();

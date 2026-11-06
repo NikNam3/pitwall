@@ -4,7 +4,7 @@
 import { carId, carStatusSpans, known, unknown, weekendPhaseSpans, type Known, type LapRecord } from '@pitwall/domain';
 import type { EngineView } from '@pitwall/engine/readers';
 import { describe, expect, it } from 'vitest';
-import { DEGRADATION, DEGRADATION_BEHAVIOUR, DEGRADATION_CONFIG, type StintDegradation } from '../../src/degradation/index.ts';
+import { DEGRADATION, DEGRADATION_BEHAVIOUR, DEGRADATION_CONFIG, fitStint, type FilterLap, type FilterPrior, type StintDegradation } from '../../src/degradation/index.ts';
 import { degradationCalculator } from '../../src/degradation/calculator.ts';
 import { fuelCalculator } from '../../src/fuel/calculator.ts';
 import { carState, realismHidden } from '../../../../test-support/builders/index.ts';
@@ -320,5 +320,119 @@ describe('degradation: the stint start without priors (spec 4.1, 4.4)', () => {
     const priors = viewPriors(priorsSnapshot({ soft: { nuMsPerLap: 40, nuSdMs: 20 } }));
     const s = stintsOf(view({ laps: one(), track: known(track, 0), priors }))[0]!;
     expect(s.source).toMatchObject({ kind: 'calibration', setName: 'Zandvoort long runs' });
+  });
+});
+
+describe('degradation: the fit band and the start prior a stint carries (R19, C43)', () => {
+  const config = DEGRADATION_CONFIG.defaults;
+  const DEFAULT_PRIOR: FilterPrior = { nuMsPerLap: config.defaultNuMsPerLap, nuSdMs: config.defaultNuSdMs };
+
+  /** The stint's fitted laps as the filter read them: its `used` and `downWeighted` laps, corrected when known. */
+  const filterLaps = (s: StintDegradation): FilterLap[] =>
+    s.laps
+      .filter((l) => l.use === 'used' || l.use === 'downWeighted')
+      .map((l) => ({ lapNumber: l.lapNumber, tyreAge: l.tyreAge, ms: l.correctedMs.known ? l.correctedMs.value : l.lapTimeMs }));
+
+  /** `fitStint` over the stint's fitted laps from `prior`, which must be known. */
+  const fitOf = (s: StintDegradation, prior: FilterPrior) => {
+    const fit = fitStint(filterLaps(s), prior, config);
+    if (!fit.known) throw new Error(`no fit: ${fit.reason}`);
+    return fit.value;
+  };
+
+  it('a stint carries its posterior covariance, equal to fitStint`s', () => {
+    // pace laps 2..16 with ±150 ms noise and lap 9 4 s slow (down-weighted): from the config default
+    const noise = (i: number) => alternating(150)(i) + (i === 8 ? 4_000 : 0);
+    const s = stintsOf(view({ laps: stintLaps({ from: 1, to: 16, nu: 80, noise }) }))[0]!;
+    expect(useOf(s, 9)).toBe('downWeighted');
+    const fit = fitOf(s, DEFAULT_PRIOR);
+    expect(s.cov).toMatchObject({ known: true, value: fit.cov });
+    // the means are the same posterior's: `basePaceMs` is `α` in whole ms (C4), `nuSdMs` the root of `ν`'s variance
+    expect(s.basePaceMs).toMatchObject({ known: true, value: Math.round(fit.alphaMs) });
+    expect(valueOf(s.nuMsPerLap)).toBe(fit.nuMsPerLap);
+    expect(valueOf(s.nuSdMs)).toBeCloseTo(Math.sqrt(fit.cov[1][1]), 9);
+
+    // from a calibration prior: the filter starts from it
+    const priors = viewPriors(priorsSnapshot({ soft: { nuMsPerLap: 40, nuSdMs: 20 } }));
+    const c = stintsOf(view({ laps: stintLaps({ from: 1, to: 16, nu: 80, noise }), priors }))[0]!;
+    expect(c.cov).toMatchObject({ known: true, value: fitOf(c, { nuMsPerLap: 40, nuSdMs: 20 }).cov });
+
+    // a stint fitted on its lap times (a rival under realism in practice)
+    const ours = stintLaps({ from: 1, to: 8, fuelAtFrom: 100 });
+    const rival = stintLaps({ car: 1, from: 1, to: 8, fuelAtFrom: 94, hidden: true, noise: alternating(100) });
+    const r = stintsOf(view({ laps: [...ours, ...rival], cars: withRival(), phase: PRACTICE }), 1)[0]!;
+    expect(r.fuelCorrected).toBe(false);
+    expect(r.cov).toMatchObject({ known: true, value: fitOf(r, DEFAULT_PRIOR).cov });
+  });
+
+  it.each([
+    ['one fitted lap', 2],
+    ['no fitted lap', 1],
+  ])('a stint with %s has no covariance: insufficientData, as fitStint', (_, to) => {
+    // a race: lap 1 is no pace lap
+    const s = stintsOf(view({ laps: stintLaps({ from: 1, to }) }))[0]!;
+    expect(fitStint(filterLaps(s), DEFAULT_PRIOR, config)).toEqual(unknown('insufficientData'));
+    expect(s.cov).toEqual(unknown('insufficientData'));
+  });
+
+  describe('a stint carries the prior it started from, with its source', () => {
+    const track = zandvoortTrack();
+    const offsets = track.defaults.compoundOffsetsMs;
+    if (!offsets.known) throw new Error('the Zandvoort fixture has compound offsets');
+
+    it('calibration: the snapshot`s entries for its compound, the set as source, also once the session has taken over', () => {
+      // stint 1 soft (laps 1..21, lap 21 the in lap), stint 2 medium (laps 22..23, lap 22 the out lap); with a track file
+      const first = stintLaps({ from: 1, to: 21, nu: 80, noise: alternating(100), over: { 21: { inLap: true } } });
+      const second = stintLaps({ from: 22, to: 23, actual: 'C2', visual: 'medium', fuelAtFrom: 70, over: { 22: { outLap: true } } });
+      const snapshot = priorsSnapshot({ soft: { alphaOffsetMs: -400, nuMsPerLap: 60, nuSdMs: 60 }, medium: { alphaOffsetMs: 0, nuMsPerLap: 90, nuSdMs: 20 } });
+      const [s1, s2] = stintsOf(
+        view({
+          laps: [...first, ...second],
+          history: { stints: [stintRecord({ firstLap: 1, lastLap: 21 })], pitStops: [pitStop({ lap: 21 })] },
+          cars: [carState({ tyres: { actualCompound: 'C2', visualCompound: 'medium', age: 2 } })],
+          priors: viewPriors(snapshot),
+          track: known(track, 0),
+        }),
+      );
+      // stint 1's own estimate is the session's by now; the prior it started from stays the calibration's
+      expect(s1!.source.kind).toBe('session');
+      expect(s1!.startPrior).toMatchObject({ nuMsPerLap: 60, nuSdMs: 60, alphaOffsetMs: { known: true, value: -400 } });
+      expect(s1!.startPrior.source).toMatchObject({ kind: 'calibration', setName: 'Zandvoort long runs', sources: 3, sessionShare: 0 });
+      expect(s2!.startPrior).toMatchObject({ nuMsPerLap: 90, nuSdMs: 20, alphaOffsetMs: { known: true, value: 0 } });
+      expect(s2!.startPrior.source).toMatchObject({ kind: 'calibration', setName: 'Zandvoort long runs', sources: 3, sessionShare: 0 });
+    });
+
+    it('default with the track note: the config`s ν and sd, the track file`s offset for the compound', () => {
+      for (const visual of ['soft', 'medium', 'hard'] as const) {
+        const laps = stintLaps({ from: 1, to: 12, visual, noise: alternating(100) });
+        const s = stintsOf(view({ laps, track: known(track, 0) }))[0]!;
+        expect(s.startPrior).toMatchObject({
+          nuMsPerLap: config.defaultNuMsPerLap,
+          nuSdMs: config.defaultNuSdMs,
+          alphaOffsetMs: { known: true, value: offsets.value.value[visual] },
+        });
+        expect(s.startPrior.source).toMatchObject({ kind: 'default', note: offsets.value.source, sessionShare: 0 });
+      }
+    });
+
+    it('default with the config note: the config`s ν and sd (overridable), no α offset', () => {
+      const configStart = (s: StintDegradation, nu: number, sd: number): void => {
+        expect(s.startPrior).toMatchObject({ nuMsPerLap: nu, nuSdMs: sd });
+        expect(s.startPrior.alphaOffsetMs.known).toBe(false);
+        expect(s.startPrior.source).toMatchObject({ kind: 'default', sessionShare: 0 });
+        if (s.startPrior.source.kind !== 'default') return;
+        expect(s.startPrior.source.note).not.toBe(offsets.value.source);
+        expect(s.startPrior.source.note).toMatch(/config default/);
+      };
+      const laps = stintLaps({ from: 1, to: 12, noise: alternating(100) });
+      // without a track file
+      configStart(stintsOf(view({ laps }))[0]!, config.defaultNuMsPerLap, config.defaultNuSdMs);
+      // the config's default is the start
+      const overridden = view({ laps, config: { [DEGRADATION_CONFIG.key]: { defaultNuMsPerLap: 70, defaultNuSdMs: 30 } } });
+      configStart(stintsOf(overridden)[0]!, 70, 30);
+      // a track file without an offset for the compound (an intermediate)
+      const inter = stintLaps({ from: 1, to: 12, visual: 'inter', actual: 'inter', noise: alternating(100) });
+      configStart(stintsOf(view({ laps: inter, track: known(track, 0) }))[0]!, config.defaultNuMsPerLap, config.defaultNuSdMs);
+    });
   });
 });

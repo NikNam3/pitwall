@@ -2,7 +2,7 @@
 // is the calculator's): each lap's use, its fuel correction, the filter over the pace laps, the basis and the wear rates.
 import { addLaps, emptyCurrentLaps, known, unknown, type CarId, type Corners, type Known, type LapRecord, type LapUse, type Ms } from '@pitwall/domain';
 import type { DeepReadonly } from '@pitwall/engine/readers';
-import { classifyLap, type LapClassOptions } from '../lap-classes/index.ts';
+import { isPaceLap, isRateLap, type LapClassOptions } from '../lap-classes/index.ts';
 import { perLapGainRate, type GainSample, type RateOptions } from '../per-lap-rate/index.ts';
 import { burnPerLapKg } from '../shared/fuel-burn.ts';
 import type { DEGRADATION_CONFIG } from './config.ts';
@@ -11,8 +11,6 @@ import { runFilter, type FilterLap, type FilterPrior, type FilterState } from '.
 
 type Lap = DeepReadonly<LapRecord>;
 type Config = (typeof DEGRADATION_CONFIG)['defaults'];
-
-type Corner = keyof Corners<unknown>;
 
 /** The excluded uses, one value each: read only, shared by every lap they describe. */
 const IN_LAP: LapUse = Object.freeze({ excluded: 'inLap' });
@@ -25,11 +23,11 @@ const NOT_FOR_PACE: LapUse = Object.freeze({ excluded: 'notForPace' });
  * A rate lap (`forRate`) is a pace lap or one excluded as `notForPace`.
  */
 export function lapClassOf(lap: Lap, classes: LapClassOptions): LapUse | 'pace' {
-  const cls = classifyLap(lap, classes);
   if (lap.inLap) return IN_LAP;
   if (lap.outLap) return OUT_LAP;
-  if (!cls.forRate) return NEUTRALISED;
-  return cls.forPace ? 'pace' : NOT_FOR_PACE;
+  // a pace lap is a rate lap: the common case asks once
+  if (isPaceLap(lap, classes)) return 'pace';
+  return isRateLap(lap, classes) ? NOT_FOR_PACE : NEUTRALISED;
 }
 
 /** Whether a lap of use `use` (`lapClassOf`) is a rate lap: a pace lap or one excluded as `notForPace`. */
@@ -111,11 +109,15 @@ export type FittedStint = {
  */
 export function fitLaps(laps: readonly Lap[], fuelOf: FuelOf, prior: FilterPrior, config: Config, classes: LapClassOptions, rate: RateOptions): FittedStint {
   const out: DegradationLap[] = [];
-  // the rows of the pace laps, in lap order
-  const pace: DegradationLap[] = [];
+  // the rows of the pace laps and the laps as the filter reads them, in lap order: a lap's corrected time when its fuel
+  // is known, else its lap time. A stint is corrected only if a pace lap's fuel is known, so in a stint that is not, every
+  // pace lap reads its lap time; in one that is, only the pace laps without their fuel are left out (below).
+  let fitted: DegradationLap[] = [];
+  let paceLaps: FilterLap[] = [];
   const rateLaps: Lap[] = [];
   let anyFuel = false;
   let paceFuel = false;
+  let paceUnfuelled = false;
   let basis: 'wear' | 'age' = 'age';
   for (const lap of laps) {
     const fuel = fuelOf(lap);
@@ -124,32 +126,50 @@ export function fitLaps(laps: readonly Lap[], fuelOf: FuelOf, prior: FilterPrior
     const row: DegradationLap = { lapNumber: lap.lapNumber, tyreAge: lap.tyreAgeAtStart, lapTimeMs: lap.lapTimeMs, correctedMs, use: use === 'pace' ? 'used' : use };
     out.push(row);
     if (use === 'pace') {
-      pace.push(row);
+      fitted.push(row);
+      paceLaps.push({ lapNumber: row.lapNumber, tyreAge: row.tyreAge, ms: correctedMs.known ? correctedMs.value : row.lapTimeMs });
       if (fuel.known) paceFuel = true;
+      else paceUnfuelled = true;
     }
     if (isRateUse(use)) rateLaps.push(lap);
     if (fuel.known) anyFuel = true;
     if (basis === 'age' && wearVisible(lap)) basis = 'wear';
   }
-  const fuelCorrected = pace.length > 0 ? paceFuel : anyFuel;
-  // the rows the filter reads, in its order: corrected, a pace lap without its fuel left out of a corrected stint
-  const fitted: DegradationLap[] = [];
-  for (const row of pace) {
-    if (!fuelCorrected || row.correctedMs.known) fitted.push(row);
-    else row.use = NOT_FOR_PACE;
+  const fuelCorrected = fitted.length > 0 ? paceFuel : anyFuel;
+  // a corrected stint leaves its pace laps without their fuel out of the fit (`notForPace`)
+  if (fuelCorrected && paceUnfuelled) {
+    const kept = fitted.filter((row) => row.correctedMs.known);
+    paceLaps = paceLaps.filter((_, i) => fitted[i]?.correctedMs.known === true);
+    for (const row of fitted) if (!row.correctedMs.known) row.use = NOT_FOR_PACE;
+    fitted = kept;
   }
-  const paceLaps: FilterLap[] = fitted.map((row) => ({
-    lapNumber: row.lapNumber,
-    tyreAge: row.tyreAge,
-    ms: fuelCorrected && row.correctedMs.known ? row.correctedMs.value : row.lapTimeMs,
-  }));
   const state = runFilter(paceLaps, prior, config);
   // the filter's uses are in the order of its laps
-  state.laps.forEach((l, i) => {
+  for (let i = 0; i < state.uses.length; i++) {
     const row = fitted[i];
-    if (row !== undefined) row.use = l.use;
-  });
+    const use = state.uses[i];
+    if (row !== undefined && use !== undefined) row.use = use;
+  }
   return { laps: out, state, paceLaps, fuelCorrected, basis, wearRatePctPerLap: wearRates(rateLaps, rate) };
+}
+
+/** One corner's wear gains, newest first, and the reason the newest lap that hid its wear hid it. */
+type CornerSamples = { samples: GainSample[]; hidden: Known<never> | undefined };
+
+const cornerSamples = (): CornerSamples => ({ samples: [], hidden: undefined });
+
+/** Adds a lap's sample of one corner (its start and end wear) unless the corner holds `window` samples already. */
+function takeSample(acc: CornerSamples, start: DeepReadonly<Known<number>>, end: DeepReadonly<Known<number>>, lap: Lap, window: number): void {
+  if (!(acc.samples.length < window)) return;
+  if (start.known && end.known) acc.samples.push({ lap: lap.lapNumber, gain: end.value - start.value, at: lap.completedAt });
+  else acc.hidden ??= unknown(start.known ? (end.known ? 'notReceived' : end.reason) : start.reason);
+}
+
+/** A corner's rate from its samples (`wearRates`). */
+function cornerRate(acc: CornerSamples, rate: RateOptions): Known<number> {
+  if (acc.samples.length === 0 && acc.hidden !== undefined) return acc.hidden;
+  const r = perLapGainRate(acc.samples.reverse(), rate);
+  return r.known ? known(r.value.perLap, r.at) : r;
 }
 
 /**
@@ -157,20 +177,22 @@ export function fitLaps(laps: readonly Lap[], fuelOf: FuelOf, prior: FilterPrior
  * `window`, so only those are sampled); a corner whose wear is hidden on every lap carries the reason it is hidden.
  */
 function wearRates(rateLaps: readonly Lap[], rate: RateOptions): Corners<Known<number>> {
-  const corner = (c: Corner): Known<number> => {
-    const samples: GainSample[] = [];
-    let hidden: Known<never> | undefined;
-    for (let i = rateLaps.length - 1; i >= 0 && samples.length < rate.window; i--) {
-      const l = rateLaps[i];
-      if (l === undefined) continue;
-      const start = l.wearAtStartPct[c];
-      const end = l.wearAtEndPct[c];
-      if (start.known && end.known) samples.push({ lap: l.lapNumber, gain: end.value - start.value, at: l.completedAt });
-      else hidden ??= unknown(start.known ? (end.known ? 'notReceived' : end.reason) : start.reason);
-    }
-    if (samples.length === 0 && hidden !== undefined) return hidden;
-    const r = perLapGainRate(samples.reverse(), rate);
-    return r.known ? known(r.value.perLap, r.at) : r;
-  };
-  return { fl: corner('fl'), fr: corner('fr'), rl: corner('rl'), rr: corner('rr') };
+  const { window } = rate;
+  const fl = cornerSamples();
+  const fr = cornerSamples();
+  const rl = cornerSamples();
+  const rr = cornerSamples();
+  // one pass from the newest lap, each corner by name, until every corner holds `window` samples
+  const open = (): boolean => fl.samples.length < window || fr.samples.length < window || rl.samples.length < window || rr.samples.length < window;
+  for (let i = rateLaps.length - 1; i >= 0 && open(); i--) {
+    const l = rateLaps[i];
+    if (l === undefined) continue;
+    const start = l.wearAtStartPct;
+    const end = l.wearAtEndPct;
+    takeSample(fl, start.fl, end.fl, l, window);
+    takeSample(fr, start.fr, end.fr, l, window);
+    takeSample(rl, start.rl, end.rl, l, window);
+    takeSample(rr, start.rr, end.rr, l, window);
+  }
+  return { fl: cornerRate(fl, rate), fr: cornerRate(fr, rate), rl: cornerRate(rl, rate), rr: cornerRate(rr, rate) };
 }

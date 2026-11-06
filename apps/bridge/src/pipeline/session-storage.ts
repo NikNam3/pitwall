@@ -50,6 +50,8 @@ export type SessionStorageOptions = {
   mode: StorageMode;
   /** Rebuilds a stored session the weekend context skipped as stale, in the background (C61). */
   rebuild?: (row: StoredSessionRow) => Promise<void>;
+  /** Live only: called once the session's log is stored complete (the calibration store's candidates change, C62a). */
+  onStored?: () => void;
 };
 
 const keyOf = (row: SessionKey): SessionKey => ({ sessionUid: row.sessionUid, weekendId: row.weekendId, playerCar: row.playerCar });
@@ -100,6 +102,8 @@ export class SessionStorage {
     if (this.#o.mode === 'append') {
       writer.writeLog(keyOf(row), log);
       if (this.#access !== undefined) writer.complete(keyOf(row));
+      // Stored complete, unless the write failed (storage then is off).
+      if (this.#access !== undefined) this.#o.onStored?.();
     } else if (!opts.interrupted) {
       writer.replaceLog(row, log, this.#o.rulesVersion);
     }
