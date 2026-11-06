@@ -17,6 +17,7 @@ import type { Db, StoredSessionRow } from '../storage/db.ts';
 import { SessionFile, sessionRecordingName } from '../storage/session-files.ts';
 import { loadTrackFile, TRACKS_DIR, trackSidecarPath } from '../track-files/load.ts';
 import { decisionsSidecarPath, noRunPriors, priorsSidecarPath, writeSidecar, type GivenDecision, type RecordedDecision, type RecordedRun } from './decision-sidecars.ts';
+import { placeCommitted, RecordedPlacement } from './decision-placement.ts';
 import { FeedAlerts, type WriteFailure } from './feed-alerts.ts';
 import { demandOf } from './demand.ts';
 import type { CalcStats } from '../dev/calc-stats.ts';
@@ -63,9 +64,10 @@ export type FeedPipelineOptions = {
   /**
    * Live: the calibration store's slice a run uses (C62a, spec 3.3). A session starts on the track's preselection
    * (marked used), and `commitDecision` takes a picked set's snapshot from it. Without it (and without `recorded`) a run
-   * has no priors (`notApplicable`) and takes no picks.
+   * has no priors (`notApplicable`) and takes no picks. `trackOf` finds a picked set's track before any session on the
+   * feed; without it such a pick is rejected.
    */
-  calibration?: Pick<CalibrationStore, 'preselect' | 'snapshotOf' | 'markUsed'>;
+  calibration?: Pick<CalibrationStore, 'preselect' | 'snapshotOf' | 'markUsed'> & Partial<Pick<CalibrationStore, 'trackOf'>>;
   /**
    * A replay: the recording's priors and decisions sidecars (`recordingDecisions`, C38, C76). Every session starts on
    * their priors, and each decision is handed to the running session before the record it was committed at.
@@ -145,9 +147,7 @@ export class FeedPipeline {
   /** `stop()` was called: the sessions still open end before their input did. */
   #stopped = false;
   /** A replay's recorded decisions by the record index they go before. */
-  readonly #recordedAt = new Map<number, GivenDecision[]>();
-  /** The index of the next record the source delivers. */
-  #recordIndex = 0;
+  readonly #recorded: RecordedPlacement<GivenDecision>;
   /** The newest session's decisions (kept once it ended: a pick then only marks its set used). */
   #decisions: SessionDecisions | undefined;
 
@@ -168,9 +168,7 @@ export class FeedPipeline {
     this.#wallClock = opts.wallClock ?? Date.now;
     this.#tracks = opts.tracks ?? ((trackId) => loadTrackFile(trackId, TRACKS_DIR, opts.log));
     this.#sessionClock = sessionClock({ sourcePath: opts.storage?.sourcePath, wallClock: this.#wallClock, log: opts.log });
-    for (const { recordIndex, decision } of opts.recorded?.decisions ?? []) {
-      this.#recordedAt.set(recordIndex, [...(this.#recordedAt.get(recordIndex) ?? []), decision]);
-    }
+    this.#recorded = new RecordedPlacement(opts.recorded?.decisions ?? []);
     this.done = this.#done.promise;
     this.done.catch(() => {});
   }
@@ -180,15 +178,22 @@ export class FeedPipeline {
    * C76; spec 3.3): the set's current snapshot joins the run's priors and the priors sidecar, the decision
    * `calibrationChosen { setId, snapshot }` goes to the runner with the next frame and, with its record index, to the
    * decisions sidecar; the set is marked used. Without a running session a pick only marks the set used (the newest
-   * session's track). An unknown set of the newest session's track is rejected, with or without a running session
-   * (C73); a pipeline without a calibration store takes no picks.
+   * session's track; before any session, the set's own track). An unknown set (of the newest session's track, or before
+   * any session of any track) is rejected, with or without a running session (C73); `defaults` before any session
+   * changes nothing. A pipeline without a calibration store takes no picks.
    */
   commitDecision(setId: string | null): DecisionResult {
     const calibration = this.#o.calibration;
     if (calibration === undefined) return { ok: false, reason: 'notSupported', message: 'this feed takes no calibration picks' };
     const run = this.#decisions;
     const session = this.#session;
-    if (run === undefined) return { ok: true };
+    if (run === undefined) {
+      if (setId === null) return { ok: true };
+      const trackId = calibration.trackOf?.(setId);
+      if (trackId === undefined) return { ok: false, reason: 'invalid', message: `no calibration set ${setId}` };
+      calibration.markUsed(trackId, setId, this.#now());
+      return { ok: true };
+    }
     const snapshot: PriorsSnapshot | undefined = setId === null ? undefined : calibration.snapshotOf(run.trackId, setId);
     if (setId !== null && snapshot === undefined) {
       return { ok: false, reason: 'invalid', message: `no calibration set ${setId} on track ${run.trackId}` };
@@ -197,15 +202,43 @@ export class FeedPipeline {
       if (setId !== null) calibration.markUsed(run.trackId, setId, this.#now());
       return { ok: true };
     }
+    this.#choose(session, run, setId, snapshot);
+    if (setId !== null) calibration.markUsed(run.trackId, setId, this.#now());
+    return { ok: true };
+  }
+
+  /**
+   * A calibration edit of the set `setId` was applied (C62a, C76): a running session on that set commits
+   * `calibrationChosen` with the set's new snapshot, exactly as a pick does. Nothing is committed without a running
+   * session, for a run on another set or on `defaults`, when the snapshot's fingerprint is the run's active one, or when
+   * the set is gone (a delete: the run keeps the snapshot it has, ruling R29). Never throws.
+   */
+  calibrationEdited(setId: string): void {
+    this.#guarded('calibration edit', () => {
+      const calibration = this.#o.calibration;
+      const run = this.#decisions;
+      const session = this.#session;
+      if (calibration === undefined || run === undefined || session === undefined) return;
+      const active = session.activeChoice;
+      if (active.setId !== setId) return;
+      const snapshot = calibration.snapshotOf(run.trackId, setId);
+      if (snapshot === undefined || snapshot.fingerprint === active.snapshot) return;
+      this.#choose(session, run, setId, snapshot);
+    });
+  }
+
+  /**
+   * Commits `calibrationChosen { setId, snapshot }` to the running session: the snapshot joins the run's priors, the
+   * decision goes to the runner with the next frame and, placed at the session's record index, to the decisions sidecar.
+   */
+  #choose(session: SessionProcessor, run: SessionDecisions, setId: string | null, snapshot: PriorsSnapshot | undefined): void {
     const decision: GivenDecision = { kind: 'calibrationChosen', setId, snapshot: snapshot?.fingerprint ?? null };
     session.decide(decision, snapshot);
-    if (setId !== null) calibration.markUsed(run.trackId, setId, this.#now());
-    run.decisions.push({ recordIndex: session.recordIndex, decision });
+    run.decisions.push(placeCommitted(decision, session.recordIndex));
     if (run.file !== undefined) {
       this.#writeSidecar(priorsSidecarPath(run.file), session.priors);
       this.#writeSidecar(decisionsSidecarPath(run.file), run.decisions);
     }
-    return { ok: true };
   }
 
   start(): void {
@@ -266,8 +299,8 @@ export class FeedPipeline {
   #onPacket({ receivedAtMs, bytes }: RawPacket): void {
     // A replay's decisions go to the running session before the record they were committed at (C76): the frame they
     // land on is the one their live pick landed on.
-    const recorded = this.#recordedAt.get(this.#recordIndex++);
-    if (recorded !== undefined) this.#guarded('recorded decision', () => {
+    const recorded = this.#recorded.beforeNextRecord();
+    if (recorded.length > 0) this.#guarded('recorded decision', () => {
       for (const decision of recorded) this.#session?.decide(decision);
     });
     this.#lastReceivedAtMs = receivedAtMs;

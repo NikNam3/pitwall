@@ -41,6 +41,7 @@ import type { Logger } from '../log.ts';
 import type { SessionKey, SessionRow } from '../storage/db.ts';
 import type { SessionFile } from '../storage/session-files.ts';
 import { MAX_DUMPS_PER_SESSION, writeDebugDump } from './debug-dump.ts';
+import { PendingDecisions } from './decision-placement.ts';
 import { carsOf, sessionRowOf, type SessionStorage } from './session-storage.ts';
 import type { PublishError, SpansOf, TopicPublisher } from './topic-publisher.ts';
 
@@ -111,7 +112,7 @@ export class SessionProcessor {
   /** The run's priors (C62a): only grow, a flashback leaves them (the projection decides which snapshot counts). */
   #priors: RunPriors;
   /** Decisions committed since the last frame: the next frame carries them (C10, C76). */
-  #pending: Omit<DecisionRecord, 'frame'>[] = [];
+  readonly #pending = new PendingDecisions<Omit<DecisionRecord, 'frame'>>();
   /** Records written to the session file: a decision committed now is recorded with this index (C76). */
   #records = 0;
   /** The last `calibration.active` handed to `onActive`, as JSON: it is handed on only when it changes. */
@@ -159,7 +160,18 @@ export class SessionProcessor {
     if (snapshot !== undefined && this.#priors.snapshots[snapshot.fingerprint] === undefined) {
       this.#priors = { ...this.#priors, snapshots: { ...this.#priors.snapshots, [snapshot.fingerprint]: snapshot } };
     }
-    this.#pending.push(decision);
+    this.#pending.add(decision);
+  }
+
+  /**
+   * The set and snapshot fingerprint the run is on now (C62a): the newest `calibrationChosen` decision, pending or in the
+   * projection, else the start snapshot's; `null` for `defaults` or a run without priors.
+   */
+  get activeChoice(): { setId: string | null; snapshot: string | null } {
+    const chosen = [...this.#runner.state.history.decisions, ...this.#pending.list].findLast((d) => d.kind === 'calibrationChosen');
+    if (chosen !== undefined) return { setId: chosen.setId, snapshot: chosen.snapshot };
+    const start = this.#priors.start === null ? undefined : this.#priors.snapshots[this.#priors.start];
+    return { setId: start?.setId ?? null, snapshot: start?.fingerprint ?? null };
   }
 
   /** The newest applied frame's time on the engine's race clock (spec 3.3); undefined before the engine runs. */
@@ -168,7 +180,7 @@ export class SessionProcessor {
   }
 
   push(frame: Frame): void {
-    const decisions = this.#pending.splice(0);
+    const decisions = this.#pending.takeForFrame();
     this.#applying(frame, () => this.#runner.apply(frame, this.#onResult, decisions));
   }
 
