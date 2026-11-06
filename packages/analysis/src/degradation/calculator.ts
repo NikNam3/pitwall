@@ -21,12 +21,11 @@ import { CAR_STATUS_READS } from '../shared/car-status.ts';
 import { DEGRADATION_BEHAVIOUR, phaseRow, type DegradationEffect } from './behaviour.ts';
 import { DEGRADATION, DEGRADATION_CONFIG, type DegradationOutput, type StartPrior, type StintDegradation } from './index.ts';
 import type { FilterPrior } from './kalman.ts';
-import { DEGRADATION_COMPOUNDS, priorKey } from './priors.ts';
+import { DEGRADATION_COMPOUNDS, defaultStart, priorKey } from './priors.ts';
 import { fitLaps, fuelResolver, lapsByCar } from './stint-fit.ts';
 
 type Lap = DeepReadonly<LapRecord>;
 type Stint = DeepReadonly<StintRecord>;
-type Config = (typeof DEGRADATION_CONFIG)['defaults'];
 
 /**
  * Where a stint's `ν` starts: the prior, the start the stint carries (`StartPrior`) and how to name the estimate's
@@ -36,29 +35,13 @@ type Start = { prior: FilterPrior; startPrior: StartPrior; source: (sessionShare
 
 const lapsWord = (n: number): string => `${n} ${n === 1 ? 'lap' : 'laps'}`;
 
-/** The default source's note: the config default's. */
-const CONFIG_NOTE = 'degradation config default (pitwall estimate)';
-
-/**
- * A stint's default start on `visual` (spec 4.1): with the track file's offset for the compound, its `compoundOffsetsMs`
- * source as the note and the offset as `α`'s; else the config default's note and no offset. The offset is carried only:
- * the filter's `α` stays diffuse.
- */
-function defaultStart(track: EngineView['track'], visual: VisualCompound): { note: string; trackNote: boolean; alphaOffsetMs: Known<Ms> } {
-  const offsets = track.known ? track.value.defaults.compoundOffsetsMs : undefined;
-  if (offsets?.known === true && Object.hasOwn(offsets.value.value, visual)) {
-    const value = offsets.value.value[visual as keyof typeof offsets.value.value];
-    return { note: offsets.value.source, trackNote: true, alphaOffsetMs: known(value, offsets.at) };
-  }
-  return { note: CONFIG_NOTE, trackNote: false, alphaOffsetMs: unknown('notApplicable') };
-}
-
 /**
  * The start of a stint on `visual` (spec 4.1, 4.4): the calibration's `ν` and sd for the compound when the snapshot holds
- * both, else the config default. The source is `session` once the session's share of `ν`'s precision is above half.
+ * both, else the default start (the entries' declared fallback, C43). The source is `session` once the session's share
+ * of `ν`'s precision is above half.
  */
-function startOf(priors: EngineView['priors'], track: EngineView['track'], visual: VisualCompound, config: Config): Start {
-  const calibration = calibrationPrior(priors, visual);
+function startOf(view: EngineView, visual: VisualCompound): Start {
+  const calibration = calibrationPrior(view.priors, visual);
   if (calibration !== undefined) {
     const { setName, sources } = calibration.snapshot;
     const startPrior: StartPrior = {
@@ -76,19 +59,14 @@ function startOf(priors: EngineView['priors'], track: EngineView['track'], visua
       },
     };
   }
-  const prior = { nuMsPerLap: config.defaultNuMsPerLap, nuSdMs: config.defaultNuSdMs };
-  const d = defaultStart(track, visual);
+  const startPrior = defaultStart({ config: view.config, track: view.track }, visual);
   return {
-    prior,
-    startPrior: {
-      ...prior,
-      alphaOffsetMs: d.alphaOffsetMs,
-      source: { kind: 'default', note: d.note, sessionShare: 0, parts: d.trackNote ? 'track default' : 'config default' },
-    },
+    prior: { nuMsPerLap: startPrior.nuMsPerLap, nuSdMs: startPrior.nuSdMs },
+    startPrior,
     source: (sessionShare, paceLaps) => {
       const laps = lapsWord(paceLaps);
       if (sessionShare > 0.5) return { kind: 'session', sessionShare, parts: `${laps} + default` };
-      return { kind: 'default', note: d.note, sessionShare, parts: `${laps} + default` };
+      return { ...startPrior.source, sessionShare, parts: `${laps} + default` };
     },
   };
 }
@@ -187,7 +165,7 @@ export const degradationCalculator: QuickCalculator<DegradationOutput> = {
       const effect: DegradationEffect = Object.assign({}, session, ...rows(car.id));
       if (effect.inSession !== true) continue;
       out[car.id] = stintsOf(lapsBy.get(car.id) ?? [], recordsBy.get(car.id) ?? []).map((s, i): StintDegradation => {
-        const start = startOf(view.priors, view.track, s.visual, config);
+        const start = startOf(view, s.visual);
         const fit = fitLaps(s.laps, fuelOf, start.prior, config, classes, rate);
         const pnn = fit.state.cov[1][1];
         const priorVar = start.prior.nuSdMs * start.prior.nuSdMs;

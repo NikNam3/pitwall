@@ -7,8 +7,10 @@
 // requested once; once that settles, the store recomputes.
 import { join } from 'node:path';
 import type { TopicName } from '@pitwall/contracts';
-import type { CalibrationSet, PriorsSnapshot, SourceFit, PriorsEntries } from '@pitwall/domain';
+import { known, trackDataOf, type CalibrationSet, type CalibrationValuesValue, type PriorsSnapshot, type SourceFit } from '@pitwall/domain';
+import type { FallbackCtx } from '@pitwall/engine/readers';
 import type { FeatureConfig } from '../feature-config.ts';
+import { loadTrackFile, TRACKS_DIR } from '../track-files/load.ts';
 import type { Feature } from '../features/feature.ts';
 import type { ValueFor } from '../hub/topic-hub.ts';
 import type { Logger } from '../log.ts';
@@ -40,7 +42,8 @@ export type CalibrationStoreDeps = {
   now?: () => string;
 };
 
-type SetValues = { entries: PriorsEntries; fits: SourceFit[] };
+type SetValues = CalibrationValuesValue['bySet'][string];
+type TrackOf = FallbackCtx['track'];
 
 const OK: ApplyResult = { ok: true };
 const byStart = (a: TrackSession, b: TrackSession): number => (a.startedAt < b.startedAt ? -1 : a.startedAt > b.startedAt ? 1 : 0);
@@ -56,6 +59,8 @@ export class CalibrationStore {
   readonly #sets = new Map<string, CalibrationSet>();
   readonly #values = new Map<string, SetValues>();
   readonly #candidates = new Map<number, SourceFit[]>();
+  /** Each track's committed track file as the defaults read it (C62b), loaded once: the files are fixed for the bridge's run. */
+  readonly #tracks = new Map<number, TrackOf>();
   /** The stale sessions whose rebuild was requested (`keyText`): never requested again in this run. */
   readonly #rebuildRequested = new Set<string>();
   #closed = false;
@@ -186,7 +191,8 @@ export class CalibrationStore {
       const computed = this.#runner.aggregates(setKeyOf(set), stored, set.overrides);
       const entries = this.#runner.setEntries(computed, set.overrides);
       const fits = resolved.map((r) => this.#runner.fit(r, `${setKeyOf(set)}/${stintKey(r.source)}`, set.overrides, entries));
-      this.#values.set(set.id, { entries, fits });
+      const defaults = this.#runner.defaults(entries, this.#trackFile(trackId));
+      this.#values.set(set.id, { entries, fits, defaults });
     }
     if (sets.length === 0) this.#candidates.delete(trackId);
     else {
@@ -194,6 +200,17 @@ export class CalibrationStore {
       // The sets' sources and the suggestions read every stored session on the track: a stale one awaits its rebuild.
       this.#requestRebuild(sessions.filter((s) => s.stale));
     }
+  }
+
+  /** The track's committed file as `view.track` holds it; a missing or invalid one is `notApplicable` (C62b, C3). */
+  #trackFile(trackId: number): TrackOf {
+    let track = this.#tracks.get(trackId);
+    if (track === undefined) {
+      const file = loadTrackFile(trackId, TRACKS_DIR, this.#deps.log);
+      track = file.known ? known(trackDataOf(file.value), file.at) : file;
+      this.#tracks.set(trackId, track);
+    }
+    return track;
   }
 
   /** Asks for the rebuild of the stale sessions not asked for yet (C61), then recomputes; a failure is logged, never thrown. */

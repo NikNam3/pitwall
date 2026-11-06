@@ -8,9 +8,10 @@ import { createHash } from 'node:crypto';
 import { canonicalJson } from '@pitwall/contracts';
 import {
   currentLaps, known, unknown,
-  type CalibrationSource, type CarId, type Known, type LapUse, type PriorsEntries, type PriorsSnapshot, type SourceFit,
+  type CalibrationSource, type CalibrationValuesValue, type CarId, type Known, type LapUse, type PriorsEntries, type PriorsSnapshot,
+  type SourceFit,
 } from '@pitwall/domain';
-import type { PriorsCtx, PriorsDecl, StoredSource } from '@pitwall/engine/readers';
+import type { FallbackCtx, PriorsCtx, PriorsDecl, StoredSource } from '@pitwall/engine/readers';
 import type { Logger } from '../log.ts';
 import type { TrackSession } from '../storage/weekend-repository.ts';
 
@@ -153,6 +154,24 @@ export class PriorsRunner {
       }
     }
     return entries;
+  }
+
+  /**
+   * Per key whose entry in `set` is unknown (no source or override covers it) and that declares a `fallback`: that
+   * fallback over `track` (the set's track's file, C62b) and the effective config (C47), the value a run on the set uses
+   * for the key with its default source (spec 6, R35). A fallback that throws is logged and not listed.
+   */
+  defaults(set: PriorsEntries, track: FallbackCtx['track']): CalibrationValuesValue['bySet'][string]['defaults'] {
+    const ctx: FallbackCtx = { config: this.#config, track };
+    const defaults: CalibrationValuesValue['bySet'][string]['defaults'] = {};
+    for (const decl of this.#decls) {
+      for (const [key, entry] of Object.entries(decl.entries)) {
+        if (entry.fallback === undefined || set[key]?.known === true) continue;
+        const value = this.#call(decl, key, () => entry.fallback?.(ctx));
+        if (value !== undefined) defaults[key] = value;
+      }
+    }
+    return defaults;
   }
 
   /** Each declared `residual`: a source's own entries against the set's (spec 3.2, A23). */

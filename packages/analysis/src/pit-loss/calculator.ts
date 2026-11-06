@@ -12,66 +12,50 @@ import {
   type PitCondition,
   type PitLossEstimate,
   type PitLossStop,
-  type SessionTime,
 } from '@pitwall/domain';
-import type { EngineView, QuickCalculator } from '@pitwall/engine/readers';
+import type { DeepReadonly, EngineView, QuickCalculator } from '@pitwall/engine/readers';
 import { LAP_CLASSES_CONFIG } from '../lap-classes/index.ts';
 import { behaviourFor } from '../shared/behaviour.ts';
 import { PIT_LOSS_BEHAVIOUR, phaseRow, type PitLossEffect } from './behaviour.ts';
 import { PIT_LOSS_CONFIG } from './config.ts';
 import { median, sessionStops, type PitLossOptions } from './loss.ts';
 import { PIT_LOSS, type PitLossOutput } from './index.ts';
-import { PIT_CONDITIONS, pitLossKey } from './priors.ts';
+import { PIT_CONDITIONS, pitLossFallback, pitLossKey } from './priors.ts';
 
-/** What a blend's `parts` call each prior (spec 4.4's hover). */
-const PRIOR_WORDS = { calibration: 'calibration', default: 'track default' } as const;
-/** The source of an estimate that has neither a prior nor a counted stop: its value is unknown. */
-const NO_ESTIMATE: EstimateSource = { kind: 'default', note: 'no calibration and no track default', sessionShare: 0, parts: 'no stops' };
+/**
+ * A condition's prior: its value (unknown without one) and its source as the estimate's without a counted stop, whose
+ * `parts` is the prior's word in a blend's (spec 4.4's hover): `calibration`, `track default`.
+ */
+type Prior = { value: DeepReadonly<Known<number>>; source: EstimateSource };
 
-/** A condition's prior: its value, since when it is known, and where it comes from. */
-type Prior = { value: number; at: SessionTime } & (
-  | { kind: 'calibration'; setName: string; sources: number }
-  | { kind: 'default'; note: string }
-);
-
-/** The prior of `condition`: the priors snapshot's entry, else the track file's default, else none. */
-const priorOf = (view: EngineView, condition: PitCondition): Prior | undefined => {
+/**
+ * The prior of `condition`: the priors snapshot's entry, else the entry's declared fallback (the track file's default,
+ * else none), the one default the run and the calibration panel use (C43).
+ */
+const priorOf = (view: EngineView, condition: PitCondition): Prior => {
   if (view.priors.known) {
     const entry = view.priors.value.entries[pitLossKey(condition)];
-    if (entry?.known) return { value: entry.value, at: entry.at, kind: 'calibration', setName: view.priors.value.setName, sources: view.priors.value.sources };
+    const { setName, sources } = view.priors.value;
+    if (entry?.known) return { value: entry, source: { kind: 'calibration', setName, sources, sessionShare: 0, parts: 'calibration' } };
   }
-  if (view.track.known) {
-    const fileDefault = view.track.value.defaults.pitLossMs[condition];
-    if (fileDefault.known) return { value: fileDefault.value.value, at: fileDefault.at, kind: 'default', note: fileDefault.value.source };
-  }
-  return undefined;
+  return pitLossFallback(condition)({ config: view.config, track: view.track });
 };
 
-/** `n stops` with the prior's word: `calibration`, `1 stop + calibration`, `3 stops + calibration`. */
-const partsOf = (n: number, prior: string | undefined): string => {
-  const stops = n === 1 ? '1 stop' : `${n} stops`;
-  if (prior === undefined) return stops;
-  return n === 0 ? prior : `${stops} + ${prior}`;
-};
+/** `n stops`: `1 stop`, `3 stops`. */
+const stopsWord = (n: number): string => (n === 1 ? '1 stop' : `${n} stops`);
 
 /** The estimate of one condition from its counted stops' losses and its prior (spec 4.3, 4.4). */
-const estimateOf = (losses: readonly Extract<Known<Ms>, { known: true }>[], prior: Prior | undefined, k: number): Pick<PitLossEstimate, 'lossMs' | 'source'> => {
+const estimateOf = (losses: readonly Extract<Known<Ms>, { known: true }>[], prior: Prior, k: number): Pick<PitLossEstimate, 'lossMs' | 'source'> => {
   const n = losses.length;
+  if (n === 0) return { lossMs: prior.value.known ? known(Math.round(prior.value.value), prior.value.at) : prior.value, source: prior.source };
   const lossesAt = losses.reduce((at, l) => Math.max(at, l.at), 0);
-  if (prior === undefined) {
-    if (n === 0) return { lossMs: unknown('insufficientData'), source: NO_ESTIMATE };
-    return { lossMs: known(Math.round(median(losses.map((l) => l.value))), lossesAt), source: { kind: 'session', sessionShare: 1, parts: partsOf(n, undefined) } };
-  }
-  const sessionShare = n + k === 0 ? 0 : n / (n + k);
-  const value = n === 0 ? prior.value : (n * median(losses.map((l) => l.value)) + k * prior.value) / (n + k);
-  const parts = partsOf(n, PRIOR_WORDS[prior.kind]);
-  const source: EstimateSource =
-    sessionShare > 0.5
-      ? { kind: 'session', sessionShare, parts }
-      : prior.kind === 'calibration'
-        ? { kind: 'calibration', setName: prior.setName, sources: prior.sources, sessionShare, parts }
-        : { kind: 'default', note: prior.note, sessionShare, parts };
-  return { lossMs: known(Math.round(value), Math.max(prior.at, lossesAt)), source };
+  const sessionMedian = median(losses.map((l) => l.value));
+  if (!prior.value.known) return { lossMs: known(Math.round(sessionMedian), lossesAt), source: { kind: 'session', sessionShare: 1, parts: stopsWord(n) } };
+  const sessionShare = n / (n + k);
+  const value = (n * sessionMedian + k * prior.value.value) / (n + k);
+  const parts = `${stopsWord(n)} + ${prior.source.parts}`;
+  const source: EstimateSource = sessionShare > 0.5 ? { kind: 'session', sessionShare, parts } : { ...prior.source, sessionShare, parts };
+  return { lossMs: known(Math.round(value), Math.max(prior.value.at, lossesAt)), source };
 };
 
 /** The median stationary time of a condition's stops that served no penalty (R12), known since the newest one's pit-lane exit. */

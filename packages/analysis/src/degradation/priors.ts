@@ -1,13 +1,15 @@
 // The priors entries of `degradation` (spec 3.2, 4.1, C62a): per compound the filter's `α` offset, `ν` and its sd, run
 // over each source stint from the config default and pooled by inverse variance; an override replaces the pooled value.
+// Each entry's fallback is the stint's default start (`defaultStart`), the one rule the calculator starts from (C43).
 import { known, unknown, type Known, type LapUse, type VisualCompound } from '@pitwall/domain';
-import { definePriors, type PriorDecl, type PriorsCtx, type StoredSource } from '@pitwall/engine/readers';
+import { definePriors, type FallbackCtx, type PriorDecl, type PriorsCtx, type StoredSource } from '@pitwall/engine/readers';
 import { LAP_CLASSES_CONFIG } from '../lap-classes/index.ts';
 import { PER_LAP_RATE_CONFIG } from '../per-lap-rate/index.ts';
 import { phaseRow } from './behaviour.ts';
 import { DEGRADATION_CONFIG } from './config.ts';
 import { fitStint, type StintFitResult } from './kalman.ts';
 import { fitLaps, fuelResolver, lapClassOf, lapsByCar, type FittedStint } from './stint-fit.ts';
+import type { StartPrior } from './types.ts';
 
 /** The compounds a set holds priors for. */
 export const DEGRADATION_COMPOUNDS = ['soft', 'medium', 'hard', 'inter', 'wet'] as const satisfies readonly VisualCompound[];
@@ -18,8 +20,28 @@ const REFERENCE: VisualCompound = 'medium';
 /** The key of entry `name` for `compound`: `degradation.<name>.<compound>`. */
 export const priorKey = (name: 'alphaOffsetMs' | 'nuMsPerLap' | 'nuSdMs', compound: VisualCompound): string => `degradation.${name}.${compound}`;
 
-/** A config section's effective values in a priors context (C47): the defaults under `ctx.config`'s overrides. */
-const configOf = <C extends object>(section: { key: string; defaults: C }, ctx: PriorsCtx): C => ({ ...section.defaults, ...ctx.config[section.key] }) as C;
+/** A config section's effective values in a priors or fallback context (C47): the defaults under `ctx.config`'s overrides. */
+const configOf = <C extends object>(section: { key: string; defaults: C }, ctx: Pick<PriorsCtx, 'config'>): C =>
+  ({ ...section.defaults, ...ctx.config[section.key] }) as C;
+
+/** The default source's note: the config default's. */
+const CONFIG_NOTE = 'degradation config default (pitwall estimate)';
+
+/**
+ * A stint's default start on `visual` (spec 4.1), the start without a calibration prior: the config's `ν` and sd; with the
+ * track file's offset for the compound, the offset as `α`'s and its `compoundOffsetsMs` source as the note; else the
+ * config default's note and no offset. The offset is carried only: the filter's `α` stays diffuse.
+ */
+export function defaultStart(ctx: FallbackCtx, visual: VisualCompound): StartPrior {
+  const config = configOf(DEGRADATION_CONFIG, ctx);
+  const prior = { nuMsPerLap: config.defaultNuMsPerLap, nuSdMs: config.defaultNuSdMs };
+  const offsets = ctx.track.known ? ctx.track.value.defaults.compoundOffsetsMs : undefined;
+  if (offsets?.known === true && Object.hasOwn(offsets.value.value, visual)) {
+    const value = offsets.value.value[visual as keyof typeof offsets.value.value];
+    return { ...prior, alphaOffsetMs: known(value, offsets.at), source: { kind: 'default', note: offsets.value.source, sessionShare: 0, parts: 'track default' } };
+  }
+  return { ...prior, alphaOffsetMs: unknown('notApplicable'), source: { kind: 'default', note: CONFIG_NOTE, sessionShare: 0, parts: 'config default' } };
+}
 
 /** A source's stint through the calculator's rules, from the config default (the set's own values never feed back). */
 function sourceFit(source: StoredSource, ctx: PriorsCtx): FittedStint {
@@ -84,6 +106,10 @@ const alphaPool = (sources: readonly StoredSource[], compound: VisualCompound, c
 const nuEntry = (compound: VisualCompound): PriorDecl => ({
   version: 1,
   range: [0, 1000],
+  fallback: (ctx) => {
+    const start = defaultStart(ctx, compound);
+    return { value: known(start.nuMsPerLap, 0), source: start.source };
+  },
   aggregate: (sources, ctx) => {
     const key = priorKey('nuMsPerLap', compound);
     return overridden(key, ctx, () => {
@@ -104,6 +130,10 @@ const nuEntry = (compound: VisualCompound): PriorDecl => ({
 const nuSdEntry = (compound: VisualCompound): PriorDecl => ({
   version: 1,
   range: [1, 1000],
+  fallback: (ctx) => {
+    const start = defaultStart(ctx, compound);
+    return { value: known(start.nuSdMs, 0), source: start.source };
+  },
   aggregate: (sources, ctx) =>
     overridden(priorKey('nuSdMs', compound), ctx, () => {
       const p = nuPool(sources, compound, ctx);
@@ -115,6 +145,10 @@ const nuSdEntry = (compound: VisualCompound): PriorDecl => ({
 const alphaEntry = (compound: VisualCompound): PriorDecl => ({
   version: 1,
   range: [-5000, 5000],
+  fallback: (ctx) => {
+    const start = defaultStart(ctx, compound);
+    return { value: start.alphaOffsetMs, source: start.source };
+  },
   aggregate: (sources, ctx) =>
     overridden(priorKey('alphaOffsetMs', compound), ctx, () => {
       const reference = alphaPool(sources, REFERENCE, ctx);
