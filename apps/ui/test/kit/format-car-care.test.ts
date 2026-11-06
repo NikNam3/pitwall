@@ -9,7 +9,6 @@ import {
   formatLapNumber,
   formatLaps,
   formatMinutesAhead,
-  formatMinutesAhead,
   formatPercent,
   formatPercentTenths,
   formatPsi,
