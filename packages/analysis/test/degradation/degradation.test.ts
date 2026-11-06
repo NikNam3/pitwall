@@ -1,12 +1,14 @@
 // `degradation` (spec 4.1, 4.4): a Kalman filter per car and stint over the fuel-corrected `forPace` laps, starting from
 // the calibration's prior for the stint's compound or the config default. Builder data; priors passed explicitly (C84);
 // every case runs through the guarded view (C41).
-import { carId, carStatusSpans, type Known, type LapRecord } from '@pitwall/domain';
+import { carId, carStatusSpans, known, unknown, weekendPhaseSpans, type Known, type LapRecord } from '@pitwall/domain';
 import type { EngineView } from '@pitwall/engine/readers';
 import { describe, expect, it } from 'vitest';
 import { DEGRADATION, DEGRADATION_BEHAVIOUR, DEGRADATION_CONFIG, type StintDegradation } from '../../src/degradation/index.ts';
 import { degradationCalculator } from '../../src/degradation/calculator.ts';
+import { fuelCalculator } from '../../src/fuel/calculator.ts';
 import { carState, realismHidden } from '../../../../test-support/builders/index.ts';
+import { zandvoortTrack } from '../../../../test-support/track.ts';
 import { guardedQuick, PRACTICE, situatedView } from '../situated.ts';
 import { CALCULATORS } from '../units.ts';
 import { alternating, fuelAt, GAMMA, pitStop, priorsSnapshot, stintLaps, stintRecord, viewPriors } from './support.ts';
@@ -40,6 +42,10 @@ describe('degradation calculator', () => {
     expect(degradationCalculator.kind).toBe('quick');
     expect(degradationCalculator.cadence).toBe('frame');
     expect(degradationCalculator.reads).toEqual(expect.arrayContaining(['laps', 'stints', 'pitStops', 'tyres', 'decisions', 'spans:car-status']));
+  });
+
+  it('declares the weekend phase it branches on (C44): `spans:weekend-phase` is in its reads', () => {
+    expect(degradationCalculator.reads).toContain('spans:weekend-phase');
   });
 
   it('a constant-degradation stint recovers ν within 10 %', () => {
@@ -177,10 +183,142 @@ describe('degradation calculator', () => {
     expect(r.laps.find((l) => l.lapNumber === 6)!.correctedMs).toMatchObject({ known: true, value: rival[5]!.lapTimeMs - GAMMA * 92.5 });
   });
 
-  it('the behaviour table covers every car-status kind (C44)', () => {
-    expect(Object.keys(DEGRADATION_BEHAVIOUR)).toEqual(['car-status']);
+  it('the behaviour table covers every kind of the weekend phase and of car-status (C44)', () => {
+    expect(Object.keys(DEGRADATION_BEHAVIOUR).sort()).toEqual(['car-status', 'weekend-phase']);
+    expect(Object.keys(DEGRADATION_BEHAVIOUR['weekend-phase']!).sort()).toEqual([...weekendPhaseSpans.kinds].sort());
     expect(Object.keys(DEGRADATION_BEHAVIOUR['car-status']!).sort()).toEqual([...carStatusSpans.kinds].sort());
     // the generic completeness tests (behaviour-completeness, guarded-view-completeness) see the calculator
     expect(CALCULATORS.map((c) => c.id)).toContain(DEGRADATION);
+  });
+});
+
+/** Our car 0 with its fuel and wear visible; rival 1 hidden by realism. */
+const withRival = () => [carState(), realismHidden(carState({ id: carId(1) }))];
+
+describe('degradation: the weekend phase (C14, C44)', () => {
+  it('a pending weekend phase reads as the race`s grid: a rival under realism gets our car`s fuel as in the race', () => {
+    const ours = stintLaps({ from: 1, to: 6, fuelAtFrom: 100 });
+    const rival = stintLaps({ car: 1, from: 1, to: 6, fuelAtFrom: 94, hidden: true });
+    const race = stintsOf(view({ laps: [...ours, ...rival], cars: withRival() }), 1);
+    const pending = stintsOf(view({ laps: [...ours, ...rival], cars: withRival(), phase: { kind: 'pending' } }), 1);
+    expect(pending[0]!.fuelCorrected).toBe(true);
+    expect(pending).toEqual(race);
+  });
+});
+
+describe('degradation: whose fuel fills a hidden load (spec 4.1, C3, C8)', () => {
+  // The rule pinned here: in the race only a rival's `fuelAtStartKg` hidden by realism is filled. Any other unknown load
+  // stays unknown: its corrected time carries the lap's reason, the lap is no pace lap of the fit
+  // (`{ excluded: 'notForPace' }`), and a stint whose other pace laps have their fuel stays fuel-corrected.
+  const NOT_FOR_PACE = { excluded: 'notForPace' };
+
+  it('a rival lap hidden by realism is filled with our car`s fuel at the same lap (row 7)', () => {
+    const oursSpec = { from: 1, to: 8, fuelAtFrom: 100 };
+    const rival = stintLaps({ car: 1, from: 1, to: 8, fuelAtFrom: 94, over: { 5: { fuelAtStartKg: unknown('realism') } } });
+    const r = stintsOf(view({ laps: [...stintLaps(oursSpec), ...rival], cars: withRival() }), 1)[0]!;
+    expect(r.laps.find((l) => l.lapNumber === 5)!.correctedMs).toMatchObject({ known: true, value: rival[4]!.lapTimeMs - GAMMA * fuelAt(oursSpec, 5) });
+    expect(useOf(r, 5)).toBe('used');
+    expect(r.fuelCorrected).toBe(true);
+  });
+
+  it.each([['notReceived'], ['restricted']] as const)('a rival lap whose fuel is unknown (%s, not realism) stays unknown and is not fitted', (reason) => {
+    const ours = stintLaps({ from: 1, to: 8, fuelAtFrom: 100 });
+    const rivalSpec = { car: 1, from: 1, to: 8, fuelAtFrom: 94, noise: alternating(100) };
+    const rival = stintLaps({ ...rivalSpec, over: { 5: { fuelAtStartKg: unknown(reason) } } });
+    const r = stintsOf(view({ laps: [...ours, ...rival], cars: withRival() }), 1)[0]!;
+    expect(r.laps.find((l) => l.lapNumber === 5)!.correctedMs).toEqual(unknown(reason));
+    expect(useOf(r, 5)).toEqual(NOT_FOR_PACE);
+    expect(r.fuelCorrected).toBe(true);
+    // the fit is that of the stint without lap 5
+    const without = stintsOf(view({ laps: [...ours, ...rival.filter((l) => l.lapNumber !== 5)], cars: withRival() }), 1)[0]!;
+    expect([r.basePaceMs, r.nuMsPerLap, r.nuSdMs]).toEqual([without.basePaceMs, without.nuMsPerLap, without.nuSdMs]);
+  });
+
+  it('a rival whose every lap`s fuel is restricted (not realism) is never filled: its stint is not fuel-corrected', () => {
+    const ours = stintLaps({ from: 1, to: 6, fuelAtFrom: 100 });
+    const rival = stintLaps({ car: 1, from: 1, to: 6, fuelAtFrom: 94 }).map((l) => ({ ...l, fuelAtStartKg: unknown('restricted'), fuelAtEndKg: unknown('restricted') }));
+    const r = stintsOf(view({ laps: [...ours, ...rival], cars: withRival() }), 1)[0]!;
+    for (const l of r.laps) expect(l.correctedMs).toEqual(unknown('restricted'));
+    expect(r.fuelCorrected).toBe(false);
+  });
+
+  it.each([
+    ['inside its laps', 5],
+    ['on its newest lap, past its last lap with fuel', 8],
+  ])('a lap of our own car whose fuel is unknown stays unknown and is not fitted (%s)', (_, n) => {
+    const spec = { from: 1, to: 8, fuelAtFrom: 100, noise: alternating(100) };
+    const laps = stintLaps({ ...spec, over: { [n]: { fuelAtStartKg: unknown('notReceived') } } });
+    const s = stintsOf(view({ laps }), 0)[0]!;
+    expect(s.laps.find((l) => l.lapNumber === n)!.correctedMs).toEqual(unknown('notReceived'));
+    expect(useOf(s, n)).toEqual(NOT_FOR_PACE);
+    expect(s.fuelCorrected).toBe(true);
+    const without = stintsOf(view({ laps: laps.filter((l) => l.lapNumber !== n) }), 0)[0]!;
+    expect([s.basePaceMs, s.nuMsPerLap, s.nuSdMs]).toEqual([without.basePaceMs, without.nuMsPerLap, without.nuSdMs]);
+  });
+});
+
+describe('degradation: our burn per lap is fuel`s (C43)', () => {
+  it('a rival under realism past our car`s last lap: our last fuel minus `fuel`s burnKgPerLap per lap since', () => {
+    // our rate laps burn 1.8, 1.6, 1.7, 1.5 kg (median 1.65); lap 3 is neutralised (0.5 kg, no sample)
+    const fuels: [number, number][] = [
+      [100, 98.2],
+      [98.2, 96.6],
+      [96.6, 96.1],
+      [96.1, 94.4],
+      [94.4, 92.9],
+    ];
+    const over = Object.fromEntries(fuels.map(([s, e], i) => [i + 1, { fuelAtStartKg: known(s, 0), fuelAtEndKg: known(e, 0), ...(i === 2 && { scShare: 1 }) }]));
+    const ours = stintLaps({ from: 1, to: 5, over });
+    const rival = stintLaps({ car: 1, from: 1, to: 7, fuelAtFrom: 94, hidden: true });
+    const v = view({ laps: [...ours, ...rival], cars: withRival() });
+    const burn = guardedQuick(fuelCalculator).compute(v)[carId(0)]!.burnKgPerLap;
+    expect(burn.known).toBe(true);
+    if (!burn.known) return;
+    expect(burn.value).toBeCloseTo(1.65, 9);
+    const r = stintsOf(v, 1)[0]!;
+    for (const n of [6, 7]) {
+      const record = rival.find((l) => l.lapNumber === n)!;
+      expect(r.laps.find((l) => l.lapNumber === n)!.correctedMs).toMatchObject({ known: true, value: Math.round(record.lapTimeMs - GAMMA * (94.4 - burn.value * (n - 5))) });
+    }
+  });
+});
+
+describe('degradation: the stint start without priors (spec 4.1, 4.4)', () => {
+  const track = zandvoortTrack();
+  const offsets = track.defaults.compoundOffsetsMs;
+  if (!offsets.known) throw new Error('the Zandvoort fixture has compound offsets');
+  const trackNote = offsets.value.source;
+  /** A stint of laps 1..2 on `visual`: lap 2 is its only pace lap, so the source stays the start's. */
+  const one = (visual: 'soft' | 'medium' | 'hard' | 'inter' = 'soft') => stintLaps({ from: 1, to: 2, visual, actual: visual === 'inter' ? 'inter' : 'C3' });
+
+  it('with a track file holding the compound`s offset: source default, its note the track file`s', () => {
+    for (const visual of ['soft', 'medium', 'hard'] as const) {
+      const s = stintsOf(view({ laps: one(visual), track: known(track, 0) }))[0]!;
+      expect(s.source).toMatchObject({ kind: 'default', note: trackNote, parts: '1 lap + default' });
+      // ν starts from the config default
+      expect(Math.abs(valueOf(s.nuMsPerLap) - DEGRADATION_CONFIG.defaults.defaultNuMsPerLap)).toBeLessThan(1);
+      expect(Math.abs(valueOf(s.nuSdMs) - DEGRADATION_CONFIG.defaults.defaultNuSdMs)).toBeLessThanOrEqual(6);
+    }
+  });
+
+  it('without a track file, or without an offset for the compound: the config default, its note saying so', () => {
+    const configNote = (s: StintDegradation): void => {
+      expect(s.source.kind).toBe('default');
+      if (s.source.kind !== 'default') return;
+      expect(s.source.note).not.toBe(trackNote);
+      expect(s.source.note).toMatch(/config default/);
+    };
+    configNote(stintsOf(view({ laps: one() }))[0]!);
+    // a track file without compound offsets
+    const noOffsets = { ...track, defaults: { ...track.defaults, compoundOffsetsMs: unknown('notApplicable') } };
+    configNote(stintsOf(view({ laps: one(), track: known(noOffsets, 0) }))[0]!);
+    // the track file has no offset for an intermediate
+    configNote(stintsOf(view({ laps: one('inter'), track: known(track, 0) }))[0]!);
+  });
+
+  it('a calibration prior for the compound wins over the track file', () => {
+    const priors = viewPriors(priorsSnapshot({ soft: { nuMsPerLap: 40, nuSdMs: 20 } }));
+    const s = stintsOf(view({ laps: one(), track: known(track, 0), priors }))[0]!;
+    expect(s.source).toMatchObject({ kind: 'calibration', setName: 'Zandvoort long runs' });
   });
 });
