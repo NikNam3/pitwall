@@ -1,6 +1,9 @@
 // spec 8 (`pit-loss`, supervisor ruling 2026-11-06), plan Task 19: the real-data check of `pit-loss` as a property over
 // every race recording, since a stop with its reference laps is beyond C84's segment limit. Only properties, no fact of a
-// recording (C84): every counted green loss exceeds its stop's pit-lane time; every stop is classed by its record's flag.
+// recording (C84): every counted green loss lies in the sanity band 0 < loss < 2 × the stop's pit-lane time (supervisor
+// ruling R18); every stop is classed by its record's flag. The band, not "loss > pit-lane time": the TUM loss is roughly the
+// pit-lane time minus the on-track time for the same stretch, plus the stationary time, so real stops lie on both sides of
+// the pit-lane time; a loss at or below 0, or at twice the pit-lane time and more, is no plausible stop.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pitLossCalculator, PIT_LOSS, type PitLossOutput } from '@pitwall/analysis';
@@ -41,7 +44,7 @@ for (const name of races) {
       return matches[0]!;
     };
 
-    it("every used green stop's loss is known and exceeds its stop's pit-lane time", () => {
+    it("every used green stop's loss is known and lies between 0 and twice its stop's pit-lane time", () => {
       const stops = output?.stops ?? [];
       expect(stops).toHaveLength(records.length);
       const green = stops.filter((s) => s.use === 'used' && s.condition === 'green');
@@ -50,9 +53,10 @@ for (const name of races) {
       const violations = green.flatMap((stop) => {
         const pitLaneTimeMs = recordOf(stop).pitLaneTimeMs;
         const lossMs = stop.lossMs.known ? stop.lossMs.value : 'unknown';
-        return lossMs === 'unknown' || lossMs <= pitLaneTimeMs ? [{ carId: stop.carId, lap: stop.lap, lossMs, pitLaneTimeMs }] : [];
+        const inBand = lossMs !== 'unknown' && lossMs > 0 && lossMs < 2 * pitLaneTimeMs;
+        return inBand ? [] : [{ carId: stop.carId, lap: stop.lap, lossMs, pitLaneTimeMs }];
       });
-      expect(violations, `${green.length} used green stops`).toEqual([]);
+      expect(violations, `${violations.length} of ${green.length} used green stops outside the band: ${JSON.stringify(violations)}`).toEqual([]);
     });
 
     it("every stop's condition equals its record's flag", () => {
