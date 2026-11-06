@@ -284,3 +284,33 @@ describe('WeekendRepository: a stale rules version (C61)', () => {
     expect(warnings()).toEqual([expect.objectContaining({ sessionUid: 'Q', weekendId: 'W1' })]);
   });
 });
+
+// SP4.1a Task 5 (C34, C61, C62a): the calibration store reads the stored sessions of one track. Only complete sessions
+// are offered; one of another rules version is offered as stale, without its projection (it is never served, C61).
+describe('WeekendRepository.sessionsOnTrack', () => {
+  it('returns the complete sessions on the track in start order with their weekend phase; another rules version is stale and has no projection', () => {
+    const db = openDatabase(':memory:');
+    const writer = (rulesVersion: string) => new StorageWriter(db, { onError: (e) => { throw e; }, rulesVersion });
+    const current = writer('current'), old = writer('old');
+    const put = (w: StorageWriter, row: SessionRow, l: Log, complete = true) => {
+      w.upsertSession(row);
+      w.writeLog(keyOf(row), l);
+      if (complete) w.complete(keyOf(row));
+    };
+    const race = { 'weekend-phase': [span('weekend-phase', 'race', { detail: { format: 'grandPrix' } })] };
+    const later = session('2', { startedAt: '2026-10-27T21:00:00.000Z' });
+    const earlier = session('1', { startedAt: '2026-10-27T20:00:00.000Z' });
+    put(current, later, log({ stints: [stint(1, 1)], laps: [lap(1, 1)], spans: race }));
+    put(old, earlier, log({ stints: [stint(1, 1)], spans: race }));
+    put(current, session('3', { startedAt: '2026-10-27T22:00:00.000Z' }), log({ spans: race }), false);
+    put(current, session('4', { weekendId: 'W2', trackId: 27 }), log({ spans: race }));
+
+    const sessions = new WeekendRepository(db, { rulesVersion: 'current' }).sessionsOnTrack(26);
+    expect(sessions.map((s) => [s.sessionUid, s.stale])).toEqual([['1', true], ['2', false]]);
+    expect(sessions.map((s) => s.phase)).toEqual([{ kind: 'race', format: 'grandPrix' }, { kind: 'race', format: 'grandPrix' }]);
+    expect(sessions[0]?.projection).toBeUndefined();
+    expect(sessions[1]?.projection?.stints).toEqual([stint(1, 1)]);
+    expect(sessions[1]?.projection?.laps).toEqual([lap(1, 1)]);
+    expect(sessions[1]).toMatchObject({ weekendId: 'W1', playerCar: car(1), trackId: 26, startedAt: '2026-10-27T21:00:00.000Z', cars: later.cars });
+  });
+});
