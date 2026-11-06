@@ -1,6 +1,6 @@
 // Structural validation of UI state (spec 7.2). Input is untrusted: decoders return `undefined`, never throw,
 // and rebuild values from the known fields only. Widget names and option values are the UI's business.
-import type { CarId, FeedId, InsightCategory } from '@pitwall/domain';
+import type { CalibrationSource, CarId, FeedId, InsightCategory, SessionUid } from '@pitwall/domain';
 import type { CarRef, Geometry, LinkGroup, PanelSpec, TimeWindow, UiAction, Workbook, WorkbookWindow } from './types.ts';
 
 type Json = Record<string, unknown>;
@@ -112,7 +112,47 @@ export const decodeUiAction = (raw: unknown): UiAction | undefined => {
         : undefined;
     case 'realism.set':
       return typeof raw.enabled === 'boolean' ? { kind: raw.kind, enabled: raw.enabled } : undefined;
+    case 'calibration.set.create':
+      return isInteger(raw.trackId) && isString(raw.name) ? { kind: raw.kind, trackId: raw.trackId, name: raw.name } : undefined;
+    case 'calibration.set.copy':
+    case 'calibration.set.rename':
+      return isSetRef(raw) && isString(raw.name) ? { kind: raw.kind, trackId: raw.trackId, setId: raw.setId, name: raw.name } : undefined;
+    case 'calibration.set.delete':
+      return isSetRef(raw) ? { kind: raw.kind, trackId: raw.trackId, setId: raw.setId } : undefined;
+    case 'calibration.source.add':
+    case 'calibration.source.remove': {
+      const source = decodeCalibrationSource(raw.source);
+      return isSetRef(raw) && source !== undefined ? { kind: raw.kind, trackId: raw.trackId, setId: raw.setId, source } : undefined;
+    }
+    case 'calibration.lap.exclude':
+    case 'calibration.lap.include': {
+      const source = decodeCalibrationSource(raw.source);
+      return isSetRef(raw) && source !== undefined && isInteger(raw.lap)
+        ? { kind: raw.kind, trackId: raw.trackId, setId: raw.setId, source, lap: raw.lap }
+        : undefined;
+    }
+    case 'calibration.override.set':
+      return isSetRef(raw) && isString(raw.key) && isNumber(raw.value)
+        ? { kind: raw.kind, trackId: raw.trackId, setId: raw.setId, key: raw.key, value: raw.value }
+        : undefined;
+    case 'calibration.override.clear':
+      return isSetRef(raw) && isString(raw.key) ? { kind: raw.kind, trackId: raw.trackId, setId: raw.setId, key: raw.key } : undefined;
     default:
       return undefined;
   }
+};
+
+const isInteger = (value: unknown): value is number => Number.isInteger(value);
+
+/** A calibration action's set: its track and its id. Only the shape; the calibration store checks that the set exists. */
+const isSetRef = (raw: Json): raw is Json & { trackId: number; setId: string } => isInteger(raw.trackId) && isString(raw.setId);
+
+const decodeCalibrationSource = (raw: unknown): CalibrationSource | undefined => {
+  if (!isObject(raw) || !isString(raw.sessionUid) || !isString(raw.weekendId)) return undefined;
+  if (!isInteger(raw.feedCar) || !isInteger(raw.car) || !isInteger(raw.firstLap)) return undefined;
+  const excludedLaps = mapAll(raw.excludedLaps, (lap) => (isInteger(lap) ? lap : undefined));
+  if (excludedLaps === undefined) return undefined;
+  return {
+    sessionUid: raw.sessionUid as SessionUid, weekendId: raw.weekendId, feedCar: raw.feedCar as CarId, car: raw.car as CarId, firstLap: raw.firstLap, excludedLaps,
+  };
 };
