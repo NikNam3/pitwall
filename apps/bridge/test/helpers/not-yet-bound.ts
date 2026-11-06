@@ -8,5 +8,4 @@ import type { TopicName } from '@pitwall/contracts';
 export const NOT_YET_BOUND: ReadonlySet<TopicName> = new Set<TopicName>([
   'trackPositions.geometry', // SP4.0 Task 7
   'trackPositions.cars', // SP4.0 Task 7
-  'talkWindow.car', // SP4.0 Task 9
 ]);
