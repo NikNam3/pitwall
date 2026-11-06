@@ -2,6 +2,7 @@
 import type { CarId, LapOverview } from '@pitwall/domain';
 
 export type { LapOverview, LapOverviewLap, LapStatus } from '@pitwall/domain';
+export * from './behaviour.ts';
 
 /** The analysis id. */
 export const LAP_OVERVIEW = 'lap-overview';
