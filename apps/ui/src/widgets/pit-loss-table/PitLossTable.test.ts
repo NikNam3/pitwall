@@ -18,15 +18,15 @@ import InPanel from '../../../test/kit/InPanel.svelte';
 import { fitCell } from '../../kit/grid/grid.ts';
 import { sourceHover, unknownMark } from '../../kit/text.ts';
 import { role } from '../../theme/index.ts';
-import { calibrationSource, defaultSource, sessionSource } from './fixtures.ts';
-import gallery from './gallery.ts';
+// The gallery's cases and fit sizes come from fixtures.ts: only the gallery imports gallery.ts (C69).
+import { calibrationSource, cases, defaultSource, fit, sessionSource } from './fixtures.ts';
 import PitLossTable from './PitLossTable.svelte';
 import * as text from './text.ts';
 import { widget } from './widget.ts';
 
 afterEach(cleanup);
 
-type CaseName = keyof NonNullable<typeof gallery.cases>;
+type CaseName = keyof typeof cases;
 const SIZES = { compact: { cols: 18, rows: 3 }, full: { cols: 32, rows: 13 } } as const;
 
 function show(name: CaseName, mode: keyof typeof SIZES | { mode: string; cols: number; rows: number }): HTMLElement {
@@ -34,7 +34,7 @@ function show(name: CaseName, mode: keyof typeof SIZES | { mode: string; cols: n
   return render(InPanel, {
     component: PitLossTable as unknown as Component<Record<string, unknown>>,
     widgetProps: {
-      data: gallery.cases?.[name],
+      data: cases[name],
       options: {},
       size: { ...size, px: { width: size.cols * 8, height: size.rows * 16 }, dpr: 1 },
       link: {},
@@ -70,19 +70,19 @@ const pendingStat = fitCell(unknownMark.insufficientData, 4, 'right');
 
 describe('the pit-loss table at its gallery cases', () => {
   it('the gallery has the cases the task names: measured (first), calibration, defaults only, a noReference and a penalty stop', () => {
-    expect(Object.keys(gallery.cases ?? {})).toEqual(expect.arrayContaining(['measured', 'calibration', 'defaultsOnly', 'noReferenceStop', 'penaltyStop']));
-    expect(Object.keys(gallery.cases ?? {})[0]).toBe('measured');
+    expect(Object.keys(cases)).toEqual(expect.arrayContaining(['measured', 'calibration', 'defaultsOnly', 'noReferenceStop', 'penaltyStop']));
+    expect(Object.keys(cases)[0]).toBe('measured');
   });
 
   it('the gallery fits at both mode minimums', () => {
     for (const [mode, s] of Object.entries(widget.sizes)) {
-      expect(gallery.fit, mode).toContainEqual({ mode, cols: s.minCols, rows: s.minRows });
+      expect(fit, mode).toContainEqual({ mode, cols: s.minCols, rows: s.minRows });
     }
   });
 
   it('every case at every fit size keeps each line within its columns and the lines within its rows', () => {
-    for (const name of Object.keys(gallery.cases ?? {}) as CaseName[]) {
-      for (const size of gallery.fit ?? []) {
+    for (const name of Object.keys(cases) as CaseName[]) {
+      for (const size of fit) {
         const c = show(name, size);
         const all = lineElements(c).map((e) => e.textContent ?? '');
         expect(all.length, `${name} at ${size.mode} ${size.cols}x${size.rows}`).toBeLessThanOrEqual(size.rows);
