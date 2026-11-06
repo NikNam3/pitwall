@@ -101,11 +101,26 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-type Setup = { sets?: CalibrationSetsValue; values?: CalibrationValuesValue; active?: CalibrationActiveValue };
+type Setup = {
+  sets?: CalibrationSetsValue;
+  values?: CalibrationValuesValue;
+  active?: CalibrationActiveValue;
+  /** The window this shell is; default the harness's `main`. */
+  windowId?: string;
+  /** The workbook's windows in order; default `main` alone. */
+  windows?: string[];
+};
+/** The harness's workbook with the windows `ids`, in order, each a copy of its `main`. */
+const workbookOf = (ids: string[]) => {
+  const base = workbook(16);
+  const main = base.windows[0]!;
+  return { ...base, windows: ids.map((id) => ({ ...main, id })) };
+};
 const mount = async (setup: Setup = {}) => {
   const ctx = makeStore();
-  render(WindowShell, { store: ctx.store, host: ctx.host, widgets: TEST_WIDGETS, defaultFeed: FEED });
-  await ctx.push('ui.workbooks', { names: ['race'], active: workbook(16) });
+  const host = setup.windowId === undefined ? ctx.host : { ...ctx.host, windowId: () => setup.windowId! };
+  render(WindowShell, { store: ctx.store, host, widgets: TEST_WIDGETS, defaultFeed: FEED });
+  await ctx.push('ui.workbooks', { names: ['race'], active: setup.windows === undefined ? workbook(16) : workbookOf(setup.windows) });
   await ctx.push('ui.linkGroups', [group1()]);
   await ctx.push('calibration.sets', setup.sets ?? SETS);
   await ctx.push('calibration.values', setup.values ?? VALUES);
@@ -169,6 +184,27 @@ describe('calibration commands (C72)', () => {
 });
 
 describe('the start prompt', () => {
+  // User report 2026-11-07: every open window asked; the prompt opens by itself only in the workbook's first window.
+  it('opens by itself only in the workbook\'s first window; another window opens it on calibration.pick', async () => {
+    await mount({ windowId: 'side', windows: ['main', 'side'] });
+    expect(prompt()).toBeNull();
+    expect(shellRegistry().run('calibration.pick')).toBe(true);
+    await tick();
+    expect(prompt()).not.toBeNull();
+  });
+
+  it('the first window opens it also when calibration.active arrives before the workbook', async () => {
+    const ctx = makeStore();
+    render(WindowShell, { store: ctx.store, host: ctx.host, widgets: TEST_WIDGETS, defaultFeed: FEED });
+    await ctx.push('ui.linkGroups', [group1()]);
+    await ctx.push('calibration.sets', SETS);
+    await ctx.push('calibration.values', VALUES);
+    await ctx.push('calibration.active', active());
+    await ctx.push('ui.workbooks', { names: ['race'], active: workbookOf(['main', 'side']) });
+    await tick();
+    expect(prompt()).not.toBeNull();
+  });
+
   it('opens when calibration.active names a new session: the track’s sets in order, defaults last, the preselection marked', async () => {
     await mount();
     expect(prompt()).not.toBeNull();

@@ -222,13 +222,16 @@
   const closeCalibrationPrompt = (): void => {
     if (overlay?.kind === 'calibration') overlay = undefined;
   };
-  // The prompt opens by itself once per session the run announces, when its track has a set (README Q6); it waits for the sets.
+  // The prompt opens by itself once per session the run announces, when its track has a set (README Q6), and only in the
+  // workbook's first window: one question per session, not one per window. It waits for the sets and the workbook.
+  // Every window still opens it on `calibration.pick`.
   let promptedSession: string | undefined;
   $effect(() => {
     const active = activeCalibration;
-    if (active === undefined || allSets === undefined || active.sessionUid === promptedSession) return;
+    const book = read?.workbook;
+    if (active === undefined || allSets === undefined || book === undefined || active.sessionUid === promptedSession) return;
     promptedSession = active.sessionUid;
-    if (trackSets.length > 0) untrack(() => (overlay = { kind: 'calibration' }));
+    if (trackSets.length > 0 && book.windows[0]?.id === windowId) untrack(() => (overlay = { kind: 'calibration' }));
   });
   /** The tier-1 alerts the top bar shows. */
   let shownAlerts = $state.raw<Insight[]>([]);
