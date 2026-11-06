@@ -53,7 +53,7 @@ export type PriorsEntries = Record<string, Known<number>>;
 
 /** A calibration set's entries as the bridge hands them to a run (C62a), named by their fingerprint. */
 export type PriorsSnapshot = {
-  /** A hash of the entries: equal entries, equal fingerprint. */
+  /** A hash of the whole snapshot (set id, set name, sources count and entries): two sets with equal entries are two snapshots. */
   fingerprint: string;
   setId: string;
   setName: string;

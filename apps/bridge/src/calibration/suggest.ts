@@ -6,11 +6,12 @@ import type { TrackSession } from '../storage/weekend-repository.ts';
 import { resolveSource, type PriorsRunner } from './compute.ts';
 import { sameStint, stintKey } from './sets.ts';
 
-/** The feed's player car and its teammates (the cars of the player's team): our cars' data only (spec 3.1). */
-export function ourCars(session: Pick<TrackSession, 'playerCar' | 'cars'>): CarId[] {
-  const team = session.cars.find((c) => c.carId === session.playerCar)?.carKey.teamId;
-  const mates = team === undefined ? [] : session.cars.filter((c) => c.carKey.teamId === team && c.carId !== session.playerCar).map((c) => c.carId);
-  return [session.playerCar, ...mates];
+/**
+ * The feed's player car and the teammate the engine placed, as stored with the session (spec 3.1): our cars' data only.
+ * The engine decides the teammate (C43); the bridge applies no rule of its own over the slots' teams.
+ */
+export function ourCars(session: Pick<TrackSession, 'playerCar' | 'teammateCar'>): CarId[] {
+  return session.teammateCar === null ? [session.playerCar] : [session.playerCar, session.teammateCar];
 }
 
 /** Sessions in suggestion order: those of the newest session's weekend first, then the rest; newest first within each. */

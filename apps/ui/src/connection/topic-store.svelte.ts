@@ -2,6 +2,7 @@
 import {
   canonicalJson,
   CONTRACT_VERSION,
+  type ActionOutcome,
   type ClientMessage,
   type FeedInfo,
   type Fold,
@@ -21,6 +22,11 @@ export type EntryState<V> = { status: 'waiting' | 'ok' | 'noData' | 'errored'; v
 
 /** Which topic to read: name, params and feed. */
 export type TopicKey<T extends TopicName> = { topic: T; params: TopicParams<T>; feedId?: FeedId };
+
+type UiActionMessage = Extract<ClientMessage, { type: 'uiAction' }>;
+
+/** The outcome of a uiAction the bridge never answered: the link was not open, or closed before the answer (C73). */
+const LINK_LOST: ActionOutcome = { ok: false, reason: 'notSupported', message: 'The link to the bridge closed before it answered.' };
 
 type Entry = {
   key: TopicKey<TopicName>;
@@ -57,6 +63,8 @@ export class TopicStore {
   private readonly clock = $state<Record<string, SessionTime>>({});
   private readonly offs: Array<() => void>;
   private readonly foldIds = new WeakMap<object, number>();
+  /** The uiActions awaiting their `actionResult`, by message id. */
+  private readonly pending = new Map<string, (outcome: ActionOutcome) => void>();
   private nextId = 1;
   private nextFoldId = 1;
 
@@ -68,6 +76,7 @@ export class TopicStore {
       link.onState((s) => {
         this.#connection = s;
         if (s === 'open') this.resubscribeAll();
+        else this.failPending();
       }),
     ];
   }
@@ -75,6 +84,7 @@ export class TopicStore {
   /** Stops processing messages and resubscribing, and closes the connection. */
   dispose(): void {
     for (const off of this.offs) off();
+    this.failPending();
     this.link.close();
   }
 
@@ -137,9 +147,29 @@ export class TopicStore {
     return this.clock[feedId];
   }
 
-  /** Sends a client message (`uiAction`, `replayControl`). */
-  send(message: ClientMessage): void {
+  /**
+   * Sends a client message (`uiAction`, `replayControl`). A uiAction returns its outcome: the bridge's `actionResult`
+   * of the same id (C73), or a failure when the link is not open or closes before the answer.
+   */
+  send(message: UiActionMessage): Promise<ActionOutcome>;
+  send(message: ClientMessage): void;
+  send(message: ClientMessage): Promise<ActionOutcome> | void {
+    if (message.type !== 'uiAction') {
+      this.link.send(message);
+      return;
+    }
+    // The connection drops what it cannot send, so no answer would come.
+    if (this.link.state !== 'open') return Promise.resolve(LINK_LOST);
+    const outcome = new Promise<ActionOutcome>((resolve) => this.pending.set(message.id, resolve));
     this.link.send(message);
+    return outcome;
+  }
+
+  /** Fails every unanswered uiAction: its answer can no longer arrive. */
+  private failPending(): void {
+    const resolves = [...this.pending.values()];
+    this.pending.clear();
+    for (const resolve of resolves) resolve(LINK_LOST);
   }
 
   /** Folds are part of the key: a different fold, or none, is its own entry. */
@@ -201,6 +231,14 @@ export class TopicStore {
       case 'topicStatus': {
         const entry = this.byId.get(message.id);
         if (entry !== undefined) entry.state.status = message.status;
+        return;
+      }
+      case 'actionResult': {
+        const resolve = this.pending.get(message.id);
+        if (resolve === undefined) return;
+        this.pending.delete(message.id);
+        const { type: _type, id: _id, ...outcome } = message;
+        resolve(outcome);
         return;
       }
       case 'error': {

@@ -293,6 +293,29 @@ describe('tyre-life calculator', () => {
         // the car is back out on the set its samples were taken on: age 4, soft C3
         expect(withCar(oldSet(), { age: 4 }).corners.fl.ratePctPerLap).toMatchObject({ known: true, value: 3 });
       });
+
+      // finding fx1: the set change is looked for over the stint's laps, in lap included, before the rate laps are taken
+      it('after a stop whose in lap is the newest lap, a used set of the same compound has no samples from the old set', () => {
+        // the in lap 5 (age 4 at its start) is the newest lap; the stint record still reaches it. The fitted set is a used
+        // soft C3 of age 3: at least lap 4's age (3), below the in lap's own (4), so only the in lap shows the change
+        const laps = [...oldSet(), wornLap(5, 12, 15, { inLap: true, tyreAgeAtStart: 4 })];
+        const out = withCar(laps, { age: 3 }, [stint({ firstLap: 1, lastLap: 5 })]);
+        for (const corner of CORNERS) {
+          expect(out.corners[corner].ratePctPerLap).toEqual(insufficient);
+          expect(out.corners[corner].lapsToLimit).toEqual(insufficient);
+        }
+      });
+
+      it('a stint without a stop keeps its rate', () => {
+        // laps 1-6 on the fitted soft C3 from new, lap 3 under SC (no rate lap, but on the set): 3 %/lap on the green laps
+        const laps = [
+          ...oldSet().slice(0, 2),
+          wornLap(3, 6, 6.5, { scShare: 1, tyreAgeAtStart: 2 }),
+          ...chain([3, 3, 3], { from: 4, startPct: 6.5 }).map((l, i) => ({ ...l, tyreAgeAtStart: i + 3 })),
+        ];
+        const out = withCar(laps, { age: 6 }, [stint({ firstLap: 1, lastLap: 6 })]);
+        for (const corner of CORNERS) expect(out.corners[corner].ratePctPerLap).toMatchObject({ known: true, value: 3 });
+      });
     });
 
     describe('on engine-shaped history: every lap provisional then confirmed, no record for the open stint', () => {

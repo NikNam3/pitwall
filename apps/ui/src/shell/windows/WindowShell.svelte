@@ -193,7 +193,8 @@
     sync.dockChanged({ layout, panels: panelSpecs });
   };
 
-  const send = (action: UiAction): void => store.send({ type: 'uiAction', id: nextId(), action });
+  // Resolves with the action's outcome, the bridge's answer (C73); callers that need no answer ignore it.
+  const send = (action: UiAction) => store.send({ type: 'uiAction', id: nextId(), action });
   const sendReplay = (control: ReplayControl): void => store.send({ type: 'replayControl', id: nextId(), control });
 
   // Commands and keys (spec 7.7). Only this component listens to keys.

@@ -125,4 +125,35 @@ describe('pitwall reprocess (every recording) on an older schema', { timeout: 60
     expect(read(dir, "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").map((r) => r['name'])).toEqual(['cars', 'facts', 'sessions', 'weekends']);
     expect(read(dir, SESSIONS)).toHaveLength(1);
   });
+
+  // SP4.1a f34 (F3, C43, C60, C61): schema 5 stores the teammate the engine placed with each session row. A session
+  // stored under schema 4 has none: its database is refused (`SchemaVersionError`) and rebuilt from the recordings, so
+  // the rebuilt row carries the teammate, as a session stored now does.
+  it('a session stored before the teammate field is rebuilt', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'pitwall-reprocess-schema4-'));
+    const dirs = dataDir({ PITWALL_DATA_DIR: dir });
+    copyFileSync(SEGMENT, join(dirs.recordings, basename(SEGMENT)));
+    const old = new Database(dirs.dbPath);
+    old.exec(`CREATE TABLE weekends (weekend_id TEXT PRIMARY KEY, season_id TEXT NOT NULL, track_id INTEGER NOT NULL) STRICT;
+      CREATE TABLE sessions (
+        session_uid TEXT NOT NULL, weekend_id TEXT NOT NULL REFERENCES weekends(weekend_id), player_car INTEGER NOT NULL,
+        track_id INTEGER NOT NULL, started_at TEXT NOT NULL, pwrec_path TEXT, settings TEXT NOT NULL,
+        rules_version TEXT NOT NULL, complete INTEGER NOT NULL, PRIMARY KEY (session_uid, weekend_id, player_car)) STRICT;`);
+    old.prepare("INSERT INTO weekends VALUES ('W', 'S', 26)").run();
+    old.prepare("INSERT INTO sessions VALUES ('13536157633115227668', 'W', 1, 26, '2026-10-27T20:00:00.000Z', ?, '{}', 'old', 1)").run(join(dirs.recordings, basename(SEGMENT)));
+    old.pragma('user_version = 4');
+    old.close();
+
+    expect(await main(['reprocess'], memoryIo(dir).io)).toBe(0);
+    expect(read(dir, 'PRAGMA user_version')).toEqual([{ user_version: SCHEMA_VERSION }]);
+    const rebuilt = read<{ session_uid: string; teammate_car: number | null }>(dir, 'SELECT session_uid, teammate_car FROM sessions');
+    expect(rebuilt.map((r) => r.session_uid)).toEqual(['13536157633115227668']);
+    expect(rebuilt[0]?.teammate_car === null || Number.isInteger(rebuilt[0]?.teammate_car)).toBe(true);
+
+    // The rebuilt row is the one a session stored now gets: an import of the same recording into a new database.
+    const fresh = mkdtempSync(join(tmpdir(), 'pitwall-reprocess-fresh-'));
+    expect(await main(['import', SEGMENT], memoryIo(fresh).io)).toBe(0);
+    expect(read(dir, 'SELECT session_uid, weekend_id, player_car, teammate_car FROM sessions'))
+      .toEqual(read(fresh, 'SELECT session_uid, weekend_id, player_car, teammate_car FROM sessions'));
+  });
 });

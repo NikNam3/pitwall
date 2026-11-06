@@ -14,7 +14,8 @@ import { StartupError } from '../startup-error.ts';
 export type ChooseAction = Extract<UiAction, { kind: 'calibration.choose' }>;
 
 /** What an action's owner answers: an `actionResult` without its type and id. */
-export type ActionOutcome = { ok: true } | { ok: false; reason: 'invalid' | 'notSupported'; message?: string };
+export type { ActionOutcome } from '@pitwall/contracts';
+import type { ActionOutcome } from '@pitwall/contracts';
 
 export type WsServerOptions = {
   /** 0 picks a free port; read it back from `WsServer.port`. */
