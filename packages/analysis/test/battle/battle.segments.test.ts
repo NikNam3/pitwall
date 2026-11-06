@@ -5,7 +5,7 @@
 // a newly needed unit runs at once against the current view (C49), from scratch (incremental = from scratch, C31.3,
 // is battle.test.ts'). Running them on every frame of the 79 s lap would take the test past its time budget.
 import { describe, expect, it } from 'vitest';
-import { currentCrossings, feedId, MINI_SECTORS, type CarId, type MiniSectorCrossing } from '@pitwall/domain';
+import { currentCrossings, feedId, MINI_SECTORS, unknown, type CarId, type MiniSectorCrossing } from '@pitwall/domain';
 import { CalculatorRegistry, Scheduler, SessionRunner, SessionTracker, situationOf, type DeepReadonly, type EngineState, type StepResult } from '@pitwall/engine';
 import { guarded } from '../../../engine/test/support/scheduler.ts';
 import { IDLE_FEED } from '../../../../test-support/builders/index.ts';
@@ -37,7 +37,7 @@ async function lastRun(file: string): Promise<LastRun> {
   const scheduler = new Scheduler(CalculatorRegistry.build([guarded(gapsCalculator), guarded(battleCalculator)]), { freezeOutputs: true });
   scheduler.setNeeded([BATTLE]);
   const { state, changed, delta } = last;
-  const scheduled = scheduler.run({ live: state, situation: situationOf(state), history: state.history, changed, delta, weekend: state.weekend, feed: IDLE_FEED, config: {}, priors: {} });
+  const scheduled = scheduler.run({ live: state, situation: situationOf(state), history: state.history, changed, delta, weekend: state.weekend, feed: IDLE_FEED, config: {}, priors: {}, track: unknown('notApplicable') });
   expect(scheduled.errors).toEqual([]);
   expect(scheduled.ran).toContain(BATTLE);
   return { cards: scheduled.outputs.get(BATTLE) as BattleOutput, state };

@@ -77,10 +77,14 @@ describe('TOPICS', () => {
       ['gaps.neighbourhood', 'gaps', 'feed', 'state', 2],
       ['gaps.toCar', 'gaps', 'feed', 'state', 4],
       ['incidents.feed', 'incidents', 'feed', 'state', 4],
+      ['incidents.markers', 'incidents', 'feed', 'state', 1],
       ['lapTimes.board', 'lap-times', 'feed', 'state', 4],
       ['lapTimes.projection', 'lap-times', 'feed', 'state', 10],
       ['pitStopCount.byCar', 'pit-stop-count', 'feed', 'state', 4],
       ['raceMoment.current', 'race-moment', 'feed', 'state', 4],
+      ['talkWindow.car', 'talk-window', 'feed', 'state', 10],
+      ['trackPositions.cars', 'track-positions', 'feed', 'state', 10],
+      ['trackPositions.geometry', 'track-positions', 'feed', 'state', 1],
       ['tyreWear.car', 'tyre-wear', 'feed', 'state', 4],
     ]);
   });
@@ -134,7 +138,8 @@ describe('topic types', () => {
       | 'replay.status' | 'ui.workbooks' | 'ui.linkGroups' | 'ui.alerts' | 'ui.settings'
       | 'tyreWear.car' | 'fuel.car' | 'ers.car' | 'carBands.car' | 'damage.car' | 'gaps.intervals' | 'gaps.toCar'
       | 'gaps.gapper' | 'gaps.neighbourhood' | 'lapTimes.board' | 'lapTimes.projection' | 'battle.cards'
-      | 'incidents.feed' | 'raceMoment.current' | 'pitStopCount.byCar'
+      | 'incidents.feed' | 'incidents.markers' | 'raceMoment.current' | 'pitStopCount.byCar'
+      | 'trackPositions.geometry' | 'trackPositions.cars' | 'talkWindow.car'
       | 'situation.carActivityPractice' | 'situation.carActivityQualifying' | 'situation.carActivityRace' | 'situation.carFlags'
       | 'situation.carLocation' | 'situation.carStatus' | 'situation.clock' | 'situation.compoundRule' | 'situation.lapValidity'
       | 'situation.penalties' | 'situation.raceControlPractice' | 'situation.raceControlQualifying' | 'situation.raceControlRace'

@@ -1,0 +1,58 @@
+{
+  "trackId": 20,
+  "name": "Azerbaijan",
+  "realLengthM": {
+    "known": false,
+    "reason": "notReceived"
+  },
+  "outline": {
+    "known": false,
+    "reason": "notReceived"
+  },
+  "turns": {
+    "known": false,
+    "reason": "notReceived"
+  },
+  "brakingZones": {
+    "known": false,
+    "reason": "notReceived"
+  },
+  "defaults": {
+    "pitLossMs": {
+      "green": {
+        "known": true,
+        "value": {
+          "value": 20652,
+          "source": "OpenF1, 2025 Azerbaijan Grand Prix R, median of 15 stops"
+        },
+        "at": 0
+      },
+      "vsc": {
+        "known": true,
+        "value": {
+          "value": 11359,
+          "source": "ratio of green, pitwall estimate"
+        },
+        "at": 0
+      },
+      "sc": {
+        "known": true,
+        "value": {
+          "value": 9293,
+          "source": "ratio of green, pitwall estimate"
+        },
+        "at": 0
+      }
+    },
+    "compoundOffsetsMs": {
+      "known": false,
+      "reason": "notReceived"
+    }
+  },
+  "source": {
+    "generator": "pitwall-trackdata 0.1.0",
+    "sources": "OpenF1 + MultiViewer",
+    "season": 2025,
+    "generatedOn": "2026-11-06"
+  }
+}

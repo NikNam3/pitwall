@@ -99,14 +99,16 @@ function warningDetail(warning: NonNullable<IncidentEntry['warning']>): string {
   return warningKind('other', warning.infringement.known ? warning.infringement.value : undefined);
 }
 
-/** The entry's detail: the damaged parts, a warning's count of the limit, a penalty's ruling, or the sector; empty when it has none known. */
+/** The entry's detail: the damaged parts, a warning's count of the limit, a penalty's ruling, or the turn (else the sector); empty when it has none known. */
 function detailText(entry: IncidentEntry): string {
   if (entry.damage !== undefined) {
     return entry.damage.map((d) => text.damagePart(insightText.part[d.part], formatDeltaPct(d.deltaPct))).join(text.partsJoint);
   }
   if (entry.warning !== undefined) return warningDetail(entry.warning);
   if (entry.penalty !== undefined) return penaltyText(entry.penalty);
-  return SECTOR_KINDS.has(entry.kind) && entry.where.sector.known ? sectorNames[entry.where.sector.value] : '';
+  if (!SECTOR_KINDS.has(entry.kind)) return '';
+  if (entry.where.turn.known) return entry.where.turn.value;
+  return entry.where.sector.known ? sectorNames[entry.where.sector.value] : '';
 }
 
 /**

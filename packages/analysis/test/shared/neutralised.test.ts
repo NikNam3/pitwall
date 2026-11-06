@@ -127,7 +127,7 @@ describe('gaps, incidents and race-moment read the same neutralisations', () => 
 
   it('the confirmed SC and the pending VSC; the SC never confirmed in none of them', () => {
     expect(gaps.output(gaps.init(view)).phases.map((p) => p.kind)).toEqual(['SC', 'VSC']);
-    const feed = incidents.output(incidents.init(view));
+    const feed = incidents.output(incidents.init(view)).feed;
     expect(feed.filter((e) => e.kind === 'neutralised').map((e) => e.at)).toEqual([600_000, 100_000]);
     const racing: OpenSpan = { machine: 'weekend-phase', id: 0, kind: 'race', start: 0, confirmed: true, detail: { format: 'grandPrix' }, startFrame: 1 };
     const raceView = { ...view, situation: { ...view.situation, byMachine: { ...view.situation.byMachine, 'weekend-phase': [racing] } } };

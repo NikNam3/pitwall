@@ -3,7 +3,7 @@
 // runs the segment frame by frame (`SessionTracker`, `SessionRunner`), and the scheduler runs the calculator, through
 // its guarded view (C41), on every step; the test reads its last output.
 import { describe, expect, it } from 'vitest';
-import { feedId, type IncidentEntry } from '@pitwall/domain';
+import { feedId, unknown, type IncidentEntry } from '@pitwall/domain';
 import { CalculatorRegistry, Scheduler, SessionRunner, SessionTracker, situationOf, type StepResult } from '@pitwall/engine';
 import { guarded } from '../../../engine/test/support/scheduler.ts';
 import { IDLE_FEED } from '../../../../test-support/builders/index.ts';
@@ -11,8 +11,8 @@ import { SEGMENTS, segmentPackets } from '../../../../test-support/segments.ts';
 import { incidentsCalculator } from '../../src/incidents/calculator.ts';
 import { INCIDENTS, type IncidentsOutput } from '../../src/incidents/index.ts';
 
-/** The feed of the calculator's last run over segment `file`, from the first frame that carries a Session. */
-async function lastFeed(file: string): Promise<IncidentsOutput> {
+/** The feed (`IncidentsOutput.feed`) of the calculator's last run over segment `file`, from the first frame that carries a Session. */
+async function lastFeed(file: string): Promise<IncidentEntry[]> {
   const tracker = new SessionTracker({ feedId: feedId(file) });
   const events = (await segmentPackets(file)).flatMap(({ packet, receivedAtMs }) => tracker.push(packet, receivedAtMs));
   const frames = [...events, ...tracker.end()].flatMap((e) => (e.type === 'frame' ? [e.frame] : []));
@@ -22,18 +22,18 @@ async function lastFeed(file: string): Promise<IncidentsOutput> {
   const unit = guarded(incidentsCalculator);
   const scheduler = new Scheduler(CalculatorRegistry.build([unit]), { freezeOutputs: true });
   scheduler.setNeeded([INCIDENTS]);
-  let feed: IncidentsOutput | undefined;
+  let out: IncidentsOutput | undefined;
   const onResult = (r: StepResult): void => {
     if (r.delta.rewound !== undefined) scheduler.reset();
     const { state, changed, delta } = r;
-    const scheduled = scheduler.run({ live: state, situation: situationOf(state), history: state.history, changed, delta, weekend: state.weekend, feed: IDLE_FEED, config: {}, priors: {} });
+    const scheduled = scheduler.run({ live: state, situation: situationOf(state), history: state.history, changed, delta, weekend: state.weekend, feed: IDLE_FEED, config: {}, priors: {}, track: unknown('notApplicable') });
     expect(scheduled.errors).toEqual([]);
-    if (scheduled.ran.includes(INCIDENTS)) feed = scheduled.outputs.get(INCIDENTS) as IncidentsOutput;
+    if (scheduled.ran.includes(INCIDENTS)) out = scheduled.outputs.get(INCIDENTS) as IncidentsOutput;
   };
   for (const f of frames.slice(frames.indexOf(first))) runner.apply(f, onResult);
   runner.end(onResult);
-  if (feed === undefined) throw new Error(`${file}: incidents never ran`);
-  return feed;
+  if (out === undefined) throw new Error(`${file}: incidents never ran`);
+  return out.feed;
 }
 
 describe('a neutralisation names its likely cause on real data', () => {

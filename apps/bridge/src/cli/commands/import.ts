@@ -3,6 +3,7 @@ import { basename, join } from 'node:path';
 import { loadFeatureConfig, recordingConfig, sessionConfigPath } from '../../feature-config.ts';
 import { FEATURES } from '../../features/index.generated.ts';
 import { StartupError } from '../../startup-error.ts';
+import { trackSidecarPath } from '../../track-files/load.ts';
 import { dataDir } from '../../storage/data-dir.ts';
 import { openDatabase } from '../../storage/db.ts';
 import { rulesVersion, SOURCE_ROOT } from '../../storage/rules-version.ts';
@@ -30,11 +31,13 @@ export async function run(positionals: string[], _values: object, io: CliIo): Pr
     try {
       copyFileSync(file, target);
       if (existsSync(sessionConfigPath(file))) copyFileSync(sessionConfigPath(file), sessionConfigPath(target));
+      if (existsSync(trackSidecarPath(file))) copyFileSync(trackSidecarPath(file), trackSidecarPath(target));
       await processRecording(target, db, cliLogger(io, 'warn'), io.signal, config, version);
     } catch (error) {
       // a recording that cannot be copied or processed (or was interrupted) is not imported, with nothing left behind
       rmSync(target, { force: true });
       rmSync(sessionConfigPath(target), { force: true });
+      rmSync(trackSidecarPath(target), { force: true });
       if (!io.signal.aborted) throw error;
       io.err('pitwall: interrupted, nothing imported');
       return EXIT_INTERRUPTED;

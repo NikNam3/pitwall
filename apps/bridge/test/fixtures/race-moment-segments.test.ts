@@ -48,10 +48,12 @@ const openPhaseOf = (state: Parameters<typeof situationOf>[0]): { kind: string; 
 /** One run of race-moment: its output and the neutralisation open on that frame (its kind and start), if any. */
 type MomentRun = { moment: RaceMomentOutput; phase: { kind: string; start: number } | undefined };
 
-/** Every run of race-moment over the segment, in order. */
+/** Every run of race-moment over the segment, in order; no unit fails on any step. */
 async function momentRuns(file: string): Promise<MomentRun[]> {
   const runs: MomentRun[] = [];
   await replayScheduled(segmentPath(file), CALCULATORS, ({ state }, scheduled) => {
+    // no unit fails: race-moment reads the incidents output as it is (`.feed`), so a reader of the old shape throws here
+    expect(scheduled.errors).toEqual([]);
     if (!scheduled.ran.includes(RACE_MOMENT)) return;
     runs.push({ moment: structuredClone(scheduled.outputs.get(RACE_MOMENT) as RaceMomentOutput), phase: openPhaseOf(state) });
   });

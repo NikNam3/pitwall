@@ -14,7 +14,7 @@ const COLLISION_BEFORE_MS = 79_000;
 
 /** The panels of the approved race layout (docs/design/2026-10-29-sp3-displays/4-layouts.html, "race"): main = timing and race awareness, side = car care. */
 const MAIN_WIDGETS = ['battle-cards', 'gap-chart', 'incident-feed', 'timing-tower'];
-const SIDE_WIDGETS = ['alarm-list', 'corner-block', 'damage-card', 'ers-budget', 'fuel-gauge', 'tyre-life-bar'];
+const SIDE_WIDGETS = ['alarm-list', 'corner-block', 'damage-card', 'ers-budget', 'fuel-gauge', 'track-map', 'tyre-life-bar'];
 
 const cleanups: Array<() => Promise<void>> = [];
 test.afterEach(async () => {

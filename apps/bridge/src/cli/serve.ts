@@ -9,6 +9,7 @@ import { TopicHub } from '../hub/topic-hub.ts';
 import type { PacketSource } from '../input/packet-source.ts';
 import { FeedPipeline, type FeedPipelineOptions } from '../pipeline/feed-pipeline.ts';
 import { ReplayController } from '../replay/replay-controller.ts';
+import { recordingTrack, TRACKS_DIR } from '../track-files/load.ts';
 import { pruneEndedAcknowledgements } from '../ui-state/ack-pruning.ts';
 import { DEFAULT_WORKBOOKS_DIR, seedDefaultWorkbooks } from '../ui-state/default-workbooks.ts';
 import { UiState } from '../ui-state/ui-state.ts';
@@ -138,6 +139,7 @@ export async function serve(opts: ServeOptions): Promise<number> {
     }
     // Test aid for the Playwright specs: inert unless set (see `FeedAlerts.raiseTestInsight`).
     const testInsight = io.env['PITWALL_E2E_INSIGHT'] || undefined;
+    const pipelineLog = cliLogger(io, 'info');
     const makePipeline = (source: PacketSource): FeedPipeline =>
       (pipeline = new FeedPipeline({
       feedId,
@@ -145,7 +147,7 @@ export async function serve(opts: ServeOptions): Promise<number> {
       hub,
       features: FEATURES,
       ...(opts.config && { config: opts.config }),
-      log: cliLogger(io, 'info'),
+      log: pipelineLog,
       dumpsDir: opts.dumpsDir,
       ...(opts.storage && {
         storage: {
@@ -160,6 +162,8 @@ export async function serve(opts: ServeOptions): Promise<number> {
       // Live only: a replay reproduces the realism its sidecar recorded (spec 7.9), whatever the UI prefers next.
       ...(uiState && opts.source && { realismNextSession: () => uiState.realismNextSession() }),
       ...(testInsight !== undefined && { testInsight }),
+      // A replay (and dev) runs with the track file its recording was made with (C62b); live loads the committed file.
+      ...(opts.replay && { tracks: (trackId: number) => recordingTrack(opts.replay.path, trackId, TRACKS_DIR, pipelineLog) }),
     }));
     const failed = (error: unknown): never => {
       throw new StartupError(`feed ${feedId} failed: ${error instanceof Error ? error.message : String(error)}`);

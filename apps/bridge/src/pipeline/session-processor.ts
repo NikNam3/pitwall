@@ -1,5 +1,5 @@
 // One session of a feed: frames → SessionRunner → Scheduler → topics, plus its session file and its storage.
-import { carId, sessionUidString, type CarId, type FeedId, type MachineId, type ParticipantsValues, type SessionTime, type SessionUid } from '@pitwall/domain';
+import { carId, known, sessionUidString, trackDataOf, type CarId, type FeedId, type MachineId, type ParticipantsValues, type Known, type SessionTime, type SessionUid, type TrackData, type TrackFile } from '@pitwall/domain';
 import {
   projectionLengths,
   Scheduler,
@@ -47,6 +47,8 @@ export type SessionProcessorOptions = {
   feedView: () => FeedMetricsView;
   /** The effective calculator config, the same for every frame of the session; `realism.enabled` switches realism mode on. */
   config: FeatureConfig;
+  /** The session's track file, resolved once when it starts (C62b); the same for every frame. */
+  track: Known<TrackFile>;
   storage?: SessionStorage;
   file?: SessionFile;
   dumpsDir?: string;
@@ -74,6 +76,8 @@ export class SessionProcessor {
   readonly #o: SessionProcessorOptions;
   readonly #runner: SessionRunner;
   readonly #scheduler: Scheduler;
+  /** `view.track`: the track file's data without its provenance (C35), fixed for the session. */
+  readonly #track: Known<TrackData>;
   /** The runner applied a frame: its identity wait is over. */
   #started = false;
   #dumps = 0;
@@ -82,6 +86,7 @@ export class SessionProcessor {
   constructor(opts: SessionProcessorOptions) {
     this.#o = opts;
     this.sessionUid = opts.sessionUid;
+    this.#track = opts.track.known ? known(trackDataOf(opts.track.value), 0) : opts.track;
     this.#uid = sessionUidString(opts.sessionUid);
     this.#key = { sessionUid: this.#uid, weekendId: String(opts.session.weekendLinkIdentifier), playerCar: playerCarOf(opts.session) };
     const { feedId, sessionUid, session, registry } = opts;
@@ -240,7 +245,7 @@ export class SessionProcessor {
 
   /**
    * The scheduler's input for `state` (C39): its live state, situation and projection, the weekend's earlier sessions, the
-   * run's config and the feed health; no priors (`{}` until the priors store exists, C62a).
+   * run's config and the feed health; no priors (`{}` until the priors store exists, C62a) and the session's track file (C62b).
    */
   #schedulerInput(state: StepResult['state'], changed: SchedulerInput['changed'], delta: SchedulerInput['delta']): SchedulerInput {
     return {
@@ -253,6 +258,7 @@ export class SessionProcessor {
       feed: this.#o.feedView(),
       config: this.#o.config,
       priors: {},
+      track: this.#track,
     };
   }
 

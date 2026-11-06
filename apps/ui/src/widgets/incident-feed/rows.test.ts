@@ -15,7 +15,7 @@ const forUs = (over: Partial<IncidentForUs> = {}): IncidentForUs => ({
 });
 const entry = (over: Partial<IncidentEntry> = {}): IncidentEntry => ({
   id: 'collision:2+3:230000', at: toSessionTime(230_000), lap: 23, kind: 'collision', severity: 'major', carIds: [carId(2), carId(3)],
-  timeLostMs: k(4200), forUs: [forUs()], where: { sector: unknown('notReceived') }, ...over,
+  timeLostMs: k(4200), forUs: [forUs()], where: { sector: unknown('notReceived'), turn: unknown('notApplicable'), fraction: unknown('notApplicable') }, ...over,
 });
 const minor = (over: Partial<IncidentEntry> = {}): IncidentEntry =>
   entry({ id: 'warning:5:210000', lap: 21, kind: 'warning', severity: 'minor', carIds: [carId(5)], timeLostMs: unknown('notApplicable'), forUs: [], ...over });
@@ -249,16 +249,25 @@ describe('the incident detail in the what cell (mockup: time loss (T7), damage F
   const what = (over: Partial<IncidentEntry>): string => incidentRows([entry(over)], cars, undefined)[0]!.cells.what.text;
 
   it('a collision and a time loss name the sector (F1 25 has no turn numbers)', () => {
-    expect(what({ where: { sector: k(3) } })).toBe('collision S3');
-    expect(what({ kind: 'timeLoss', where: { sector: k(2) } })).toBe('time loss S2');
+    expect(what({ where: { sector: k(3), turn: unknown('notApplicable'), fraction: unknown('notApplicable') } })).toBe('collision S3');
+    expect(what({ kind: 'timeLoss', where: { sector: k(2), turn: unknown('notApplicable'), fraction: unknown('notApplicable') } })).toBe('time loss S2');
+  });
+
+  it('a known turn shows where the sector stood', () => {
+    expect(what({ where: { sector: k(3), turn: k('T6a'), fraction: unknown('notApplicable') } })).toBe('collision T6a');
+    expect(what({ kind: 'timeLoss', where: { sector: k(2), turn: k('T6a'), fraction: unknown('notApplicable') } })).toBe('time loss T6a');
+  });
+
+  it('an unknown turn shows the sector as before', () => {
+    expect(what({ where: { sector: k(3), turn: unknown('notReceived'), fraction: unknown('notApplicable') } })).toBe('collision S3');
   });
 
   it('an unknown sector leaves the kind alone', () => {
-    expect(what({ where: { sector: unknown('notReceived') } })).toBe('collision');
+    expect(what({ where: { sector: unknown('notReceived'), turn: unknown('notApplicable'), fraction: unknown('notApplicable') } })).toBe('collision');
   });
 
   describe('a warning names its kind (cells.what.text, before the grid fits it)', () => {
-    const warned = (warning: NonNullable<IncidentEntry['warning']>): string => what({ kind: 'warning', warning, where: { sector: k(2) } });
+    const warned = (warning: NonNullable<IncidentEntry['warning']>): string => what({ kind: 'warning', warning, where: { sector: k(2), turn: unknown('notApplicable'), fraction: unknown('notApplicable') } });
     /** Another infringement's warning: no count. */
     const other = (infringement: Known<number>): NonNullable<IncidentEntry['warning']> => ({ kind: 'other', infringement });
 
@@ -295,7 +304,7 @@ describe('the incident detail in the what cell (mockup: time loss (T7), damage F
   describe('a neutralised entry names its cause', () => {
     const field = [...cars, overview(6, 'Fernando Alonso'), overview(7, 'Yuki Tsunoda')];
     const neutralised = (over: Partial<IncidentEntry> = {}): IncidentEntry =>
-      entry({ id: 'neutralised:230000', kind: 'neutralised', carIds: [], forUs: [], timeLostMs: unknown('notApplicable'), where: { sector: unknown('notApplicable') }, ...over });
+      entry({ id: 'neutralised:230000', kind: 'neutralised', carIds: [], forUs: [], timeLostMs: unknown('notApplicable'), where: { sector: unknown('notApplicable'), turn: unknown('notApplicable'), fraction: unknown('notApplicable') }, ...over });
     const whatOf = (e: IncidentEntry): string => incidentRows([e], field, undefined)[0]!.cells.what.text;
 
     it('a neutralised entry with a cause shows its cars and kind', () => {
@@ -324,13 +333,13 @@ describe('the incident detail in the what cell (mockup: time loss (T7), damage F
   });
 
   it('other kinds show no sector', () => {
-    expect(what({ kind: 'penalty', where: { sector: k(1) } })).toBe('penalty');
-    expect(what({ kind: 'neutralised', where: { sector: unknown('notApplicable') } })).toBe('neutralised');
+    expect(what({ kind: 'penalty', where: { sector: k(1), turn: unknown('notApplicable'), fraction: unknown('notApplicable') } })).toBe('penalty');
+    expect(what({ kind: 'neutralised', where: { sector: unknown('notApplicable'), turn: unknown('notApplicable'), fraction: unknown('notApplicable') } })).toBe('neutralised');
   });
 
   describe('a penalty entry names the penalty given (the PEN kind from incidents)', () => {
     const penalty = (detail: IncidentEntry['penalty']): string =>
-      what({ kind: 'penalty', severity: 'minor', timeLostMs: unknown('notApplicable'), where: { sector: k(2) }, ...(detail && { penalty: detail }) });
+      what({ kind: 'penalty', severity: 'minor', timeLostMs: unknown('notApplicable'), where: { sector: k(2), turn: unknown('notApplicable'), fraction: unknown('notApplicable') }, ...(detail && { penalty: detail }) });
 
     it('beside the kind word when both fit the what column: stop-go, a time penalty with the kit time, grid', () => {
       expect(penalty({ kind: 'stopGo' })).toBe('penalty stop-go');
@@ -357,7 +366,7 @@ describe('the incident detail in the what cell (mockup: time loss (T7), damage F
   });
 
   it('full rows keep the grid with the detail, as the mockup', () => {
-    const [row] = incidentRows([entry({ id: 't', kind: 'timeLoss', carIds: [carId(4)], timeLostMs: k(6100), where: { sector: k(2) },
+    const [row] = incidentRows([entry({ id: 't', kind: 'timeLoss', carIds: [carId(4)], timeLostMs: k(6100), where: { sector: k(2), turn: unknown('notApplicable'), fraction: unknown('notApplicable') },
       forUs: [forUs({ otherCarId: k(carId(4)), positionAfter: k(5), gapBeforeMs: k(-1900), gapAfterMs: k(5800) })] })], cars, undefined);
     expect(incidentRowText('full', row!, 70)).toBe(' L23  ALB      time loss S2        lost 6.1 s  KUH —, ALB −1.9→+5.8');
   });

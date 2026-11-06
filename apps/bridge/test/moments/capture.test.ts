@@ -13,6 +13,7 @@ import { describe, expect, it } from 'vitest';
 import { FEATURES } from '../../src/features/index.generated.ts';
 import { captureMoment, type MomentValues } from '../../src/moments/capture.ts';
 import { offsets, readMomentsFile, segmentPath } from './helpers.ts';
+import { NOT_YET_BOUND } from '../helpers/not-yet-bound.ts';
 
 const find = (values: MomentValues, topic: string, params: object = {}) =>
   values.find((v) => v.topic === topic && JSON.stringify(v.params) === JSON.stringify(params));
@@ -26,7 +27,7 @@ const JOB_TOPICS = new Set<string>(FEATURES.flatMap((f) => f.topics.flatMap((b) 
 /** The feed topics a moment captures with params, with their `momentParams`, from the contracts alone. */
 const PARAM_TOPICS = (Object.keys(TOPICS) as TopicName[]).flatMap((topic) => {
   const def = TOPICS[topic] as { scope: string; momentParams?: (carIds: readonly CarId[]) => object[] };
-  return def.scope === 'feed' && !JOB_TOPICS.has(topic) && def.momentParams !== undefined ? [{ topic, momentParams: def.momentParams }] : [];
+  return def.scope === 'feed' && !JOB_TOPICS.has(topic) && !NOT_YET_BOUND.has(topic) && def.momentParams !== undefined ? [{ topic, momentParams: def.momentParams }] : [];
 });
 
 /** The cars in the session at the moment: the car-status spans open and not `absent` (C43; Task 24: no `car.active`). */

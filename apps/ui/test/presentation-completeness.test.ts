@@ -4,6 +4,7 @@
 // `SPAN_DECLARATIONS`) of every sub-machine whose topic it declares, and a row for every `Moment` when it declares
 // `raceMoment.current`; and no row for a machine or `Moment` it does not read, or a kind its machine does not declare.
 // A situation topic is named after its machine (C56): `situation.` and the machine id in camelCase.
+// An analysis topic whose value carries a sub-machine's kinds (`CARRIES_KINDS`) counts as reading that machine.
 import { SPAN_DECLARATIONS, type MachineId, type Moment, type SpanDeclaration } from '@pitwall/domain';
 import { describe, expect, it } from 'vitest';
 import type { AnyDataDecl } from '../src/kit/types.ts';
@@ -13,6 +14,12 @@ import type { PresentationTable } from '../src/kit/presentation.ts';
 const MOMENT_SET: Record<Moment, true> = { neutralised: true, incident: true, weather: true, battle: true, carCare: true };
 const MOMENTS = Object.keys(MOMENT_SET) as Moment[];
 const RACE_MOMENT = 'raceMoment.current';
+
+/** Analysis topics whose value carries a sub-machine's kinds: a widget that declares one reads that machine. */
+const CARRIES_KINDS: Readonly<Record<string, MachineId>> = {
+  // MapZone.flag is typed by the zone-flags kinds (spec 6.1)
+  'trackPositions.cars': 'zone-flags',
+};
 
 const topicOf = (machine: MachineId): string => `situation.${machine.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase())}`;
 
@@ -25,6 +32,11 @@ function readsOf(data: Readonly<Record<string, AnyDataDecl>>, declarations: read
   const machines: MachineId[] = [];
   const unknownTopics: string[] = [];
   for (const topic of topics) {
+    const carried = Object.hasOwn(CARRIES_KINDS, topic) ? CARRIES_KINDS[topic] : undefined;
+    if (carried !== undefined) {
+      if (!machines.includes(carried)) machines.push(carried);
+      continue;
+    }
     if (!topic.startsWith('situation.')) continue;
     const machine = declarations.find((d) => topicOf(d.machine) === topic)?.machine;
     if (machine === undefined) unknownTopics.push(topic);
@@ -148,6 +160,17 @@ describe('presentation tables (C66)', () => {
     ]);
     expect(tableProblems('probe', reads, undefined, declarations)).toEqual(['probe: reads car-location, raceMoment.current but has no presentation.ts exporting presentation']);
     expect(tableProblems('probe', { machines: ['car-location'], moments: false }, { situations: { 'car-location': { garage: 1, pitLane: 2, track: 3 } } }, declarations)).toEqual([]);
+  });
+
+  it('counts an analysis topic that carries a machine\'s kinds as reading that machine', () => {
+    const reads = readsOf({ a: { topic: 'trackPositions.cars' }, b: { topic: 'trackPositions.geometry' } } as unknown as Record<string, AnyDataDecl>);
+    expect(reads).toEqual({ machines: ['zone-flags'], moments: false, unknownTopics: [] });
+  });
+
+  it('the track map reads the zone flags through trackPositions.cars, and no moment', () => {
+    const map = WIDGETS.find((w) => w.folder === 'track-map');
+    expect(map?.machines).toEqual(['zone-flags']);
+    expect(map?.moments).toBe(false);
   });
 
   it('names a situation topic after its machine', () => {

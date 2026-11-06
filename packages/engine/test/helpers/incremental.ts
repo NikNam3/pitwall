@@ -1,5 +1,5 @@
 // Every incremental calculator's test calls this: updating step by step must equal initialising from scratch (spec 7.3).
-import { feedId } from '@pitwall/domain';
+import { feedId, unknown } from '@pitwall/domain';
 import { expect } from 'vitest';
 import { SessionRunner, situationOf, type EngineView, type FeedMetricsView, type Frame, type IncrementalCalculator, type StepResult } from '../../src/index.ts';
 
@@ -29,7 +29,7 @@ export function expectIncrementalEqualsFromScratch<Acc, Out>(
   let acc: { value: Acc } | undefined;
   let i = 0;
   const check = ({ state, changed, delta }: StepResult) => {
-    const view: EngineView = { live: state, situation: situationOf(state), history: state.history, changed, delta, weekend: state.weekend, feed, config: {}, priors: {}, outputs: new Map() };
+    const view: EngineView = { live: state, situation: situationOf(state), history: state.history, changed, delta, weekend: state.weekend, feed, config: {}, priors: {}, track: unknown('notApplicable'), outputs: new Map() };
     acc = acc === undefined || delta.rewound !== undefined ? { value: calc.init(view) } : { value: calc.update(acc.value, delta, view) };
     expect(calc.output(acc.value, view), `frame ${i}`).toEqual(calc.output(calc.init(view), view));
     i++;

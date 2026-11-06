@@ -8,6 +8,7 @@ import type { PacketSource, RawPacket } from '../input/packet-source.ts';
 import { PwrecSource } from '../input/pwrec-source.ts';
 import { createLogger } from '../log.ts';
 import { FeedPipeline } from '../pipeline/feed-pipeline.ts';
+import { recordingTrack, TRACKS_DIR } from '../track-files/load.ts';
 
 export type { MomentValues };
 
@@ -106,13 +107,15 @@ export async function captureMoment(segmentPath: string, atMs: number): Promise<
     after: () => hub.tick(),
     stop: (): Promise<void> => pipeline.stop(),
   });
+  const log = createLogger({ level: 'silent' });
   const pipeline = new FeedPipeline({
     feedId: id,
     source,
     hub,
     features: FEATURES,
     config: recordingConfig(segmentPath, FEATURES, effectiveConfig(FEATURES)),
-    log: createLogger({ level: 'silent' }),
+    tracks: (trackId) => recordingTrack(segmentPath, trackId, TRACKS_DIR, log),
+    log,
   });
   pipeline.start();
   await pipeline.done;

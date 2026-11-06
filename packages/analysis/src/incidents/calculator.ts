@@ -6,7 +6,7 @@
 // crossings, so a flashback reproduces them. A log: it reads the history only, never another analysis's output (C45);
 // its damage entries come from the shared jump grouping over the `damageChange` events (`shared/damage-jumps.ts`) and
 // stay through a repair. The accumulator folds the projection's lists and closed spans and the config alone (C31.2);
-// `output` adds the open spans and the live state (our cars, the track layout).
+// `output` adds the open spans, the live state (our cars, the track layout) and the track file (where, the markers).
 import {
   addLaps,
   emptyCurrentLaps,
@@ -21,9 +21,12 @@ import {
   type IncidentForUs,
   type IncidentKind,
   type IncidentPenalty,
+  type IncidentWhere,
   type Known,
+  type LapFraction,
   type LapRecord,
   type MachineId,
+  type MapIncident,
   type MiniSectorCrossing,
   type Ms,
   type OpenSpan,
@@ -31,6 +34,7 @@ import {
   type RaceEvent,
   type SessionTime,
   type Span,
+  type TrackTurn,
   type WarnedDetail,
 } from '@pitwall/domain';
 import { openSpansOf, type ChangeTag, type DeepReadonly, type EngineView, type IncrementalCalculator } from '@pitwall/engine/readers';
@@ -45,11 +49,13 @@ import { isNeutralisation, leaderLapAt, NEUTRALISATION_MACHINES, NEUTRALISATION_
 import { behaviourFor } from '../shared/behaviour.ts';
 import { ourCars } from '../shared/our-cars.ts';
 import { warningInCycle } from '../shared/penalties.ts';
+import { pointAt, turnAt } from '../shared/track-lookup.ts';
 import { behaviourOf, INCIDENTS_BEHAVIOUR } from './behaviour.ts';
 import {
   addCrossing,
   emptyTrack,
   evaluate,
+  fractionAt,
   gapIn,
   isNear,
   lapOfProgress,
@@ -88,6 +94,8 @@ type CarEvent = {
   id?: string;
   kind: 'collision' | 'retirement' | 'warning' | 'penalty';
   at: SessionTime;
+  /** The frame the entry describes (C26): its span's start, its event's or its record's. */
+  frame: FrameNumber;
   carIds: CarId[];
   cornerCutting?: number;
   /** On a warning of another kind, the warned span's infringement code. */
@@ -239,7 +247,7 @@ const cornerCuttingOf = (machine: CarMachine, span: CarSpan): number =>
  */
 const entriesOf = (machine: CarMachine, span: CarSpan, cornerCuttingBefore: number): CarEvent[] => {
   if (span.carId === undefined || span.joinedAt === true || ('endFrame' in span && !span.confirmed)) return [];
-  const base = { at: span.start, carIds: [span.carId] };
+  const base = { at: span.start, frame: span.startFrame, carIds: [span.carId] };
   switch (behaviourOf(machine, span.kind)) {
     case 'retirement':
       return [{ kind: 'retirement', ...base }];
@@ -317,7 +325,7 @@ const foldEvents = (acc: Acc, view: EngineView): void => {
     const e = events[i] as DeepReadonly<RaceEvent>;
     if (e.carId === undefined || e.kind !== 'collision') continue;
     const carIds = e.otherCarId === undefined ? [e.carId] : [e.carId, e.otherCarId];
-    acc.collisions.push({ kind: 'collision', at: e.at, carIds });
+    acc.collisions.push({ kind: 'collision', at: e.at, frame: e.frame, carIds });
   }
   acc.events = events.length;
   foldDamageJumps(acc.grouping, events, acc);
@@ -341,7 +349,7 @@ const foldPenalties = (acc: Acc, view: EngineView): void => {
     const key = `${record.kind}:${record.carId}:${record.at}`;
     const n = acc.givenCount.get(key) ?? 0;
     acc.givenCount.set(key, n + 1);
-    acc.given.push({ id: `penalty:${key}:${n}`, kind: 'penalty', at: record.at, carIds: [record.carId], penalty: penaltyOf(record) });
+    acc.given.push({ id: `penalty:${key}:${n}`, kind: 'penalty', at: record.at, frame: record.frame, carIds: [record.carId], penalty: penaltyOf(record) });
   }
   acc.penalties = penalties.length;
 };
@@ -439,6 +447,8 @@ type Candidate = {
   id: string;
   kind: IncidentKind;
   at: SessionTime;
+  /** The frame the entry describes (C26), for the leader's lap at it. */
+  frame: FrameNumber;
   carIds: CarId[];
   /** Known up front for damage and neutralised entries; otherwise from the primary car's crossings. */
   lap?: number;
@@ -457,10 +467,11 @@ type Candidate = {
   merged: SlowRun[];
 };
 
-const candidate = (kind: IncidentKind, at: SessionTime, carIds: CarId[], extra: Partial<Candidate> = {}): Candidate => ({
+const candidate = (kind: IncidentKind, at: SessionTime, frame: FrameNumber, carIds: CarId[], extra: Partial<Candidate> = {}): Candidate => ({
   id: `${kind}:${carIds.join('-')}:${at}`,
   kind,
   at,
+  frame,
   carIds,
   merged: [],
   ...extra,
@@ -492,27 +503,34 @@ const standingRuns = (acc: Board): SlowRun[] =>
     return acc.openVisits[id] !== undefined ? runs.filter((r) => r.endProgress !== newest) : runs;
   });
 
-/** Every damage jump of every car, repaired or not, with its lap and loss (the lap from the crossings without a lap record). */
-const allJumps = (acc: Board): { carId: CarId; jump: FinishedJump }[] =>
+/**
+ * Every damage jump of every car, repaired or not, with its lap and loss (the lap from the crossings without a lap
+ * record) and the frame it describes (C26).
+ */
+const allJumps = (acc: Board): { carId: CarId; jump: FinishedJump; frame: FrameNumber }[] =>
   [...acc.grouping.jumps].flatMap(([carId, raws]) => {
     // integer keys iterate in ascending order: the car's laps by lap number
     const laps = Object.values(acc.current[carId] ?? {});
-    return raws.map((raw) => ({ carId, jump: finishJump(raw, laps, crossingLap(acc, carId, raw.at), acc) }));
+    const frames = acc.grouping.frames.get(carId) ?? [];
+    return raws.map((raw, i) => ({ carId, jump: finishJump(raw, laps, crossingLap(acc, carId, raw.at), acc), frame: frames[i] as FrameNumber }));
   });
 
+/** One damage entry's jumps; `frame`: the frame its first jump describes. */
+type DamageGroup = { carId: CarId; frame: FrameNumber; jumps: FinishedJump[] };
+
 /** Each car's damage jumps grouped: a jump within `jumpWindowMs` of a group's first one joins it (one incident, several parts). */
-const damageGroups = (acc: Board): { carId: CarId; jumps: FinishedJump[] }[] => {
-  const groups: { carId: CarId; jumps: FinishedJump[] }[] = [];
-  const open = new Map<CarId, { carId: CarId; jumps: FinishedJump[] }>();
+const damageGroups = (acc: Board): DamageGroup[] => {
+  const groups: DamageGroup[] = [];
+  const open = new Map<CarId, DamageGroup>();
   const sorted = allJumps(acc).sort((a, b) => a.jump.at - b.jump.at || a.carId - b.carId);
-  for (const { carId, jump } of sorted) {
+  for (const { carId, jump, frame } of sorted) {
     const group = open.get(carId);
     const first = group?.jumps[0];
     if (group !== undefined && first !== undefined && jump.at - first.at <= acc.jumpWindowMs) {
       group.jumps.push(jump);
       continue;
     }
-    const fresh = { carId, jumps: [jump] };
+    const fresh = { carId, frame, jumps: [jump] };
     open.set(carId, fresh);
     groups.push(fresh);
   }
@@ -523,25 +541,25 @@ const damageGroups = (acc: Board): { carId: CarId; jumps: FinishedJump[] }[] => 
 const candidates = (acc: Board): Candidate[] => {
   const closed = CAR_MACHINES.flatMap((machine) => acc.spanEvents[machine]);
   const list = [...closed, ...acc.collisions, ...acc.given, ...acc.openEvents].map((e) =>
-    candidate(e.kind, e.at, e.carIds, {
+    candidate(e.kind, e.at, e.frame, e.carIds, {
       ...(e.id !== undefined && { id: e.id }),
       ...(e.cornerCutting !== undefined && { cornerCutting: e.cornerCutting }),
       ...(e.infringement !== undefined && { infringement: e.infringement }),
       ...(e.penalty !== undefined && { penalty: e.penalty }),
     }),
   );
-  for (const { carId, jumps } of damageGroups(acc)) {
+  for (const { carId, frame, jumps } of damageGroups(acc)) {
     const [jump] = jumps;
-    if (jump !== undefined) list.push(candidate('damage', jump.at, [carId], { lap: jump.lap, jump, jumps }));
+    if (jump !== undefined) list.push(candidate('damage', jump.at, frame, [carId], { lap: jump.lap, jump, jumps }));
   }
   const absorbers = list.filter((c) => c.kind === 'collision' || c.kind === 'damage');
   for (const run of standingRuns(acc)) {
     // F1 25 names a collision's two cars in no fixed order, so either one's time loss belongs to it.
     const into = absorbers.filter((c) => c.carIds.includes(run.carId) && Math.abs(c.at - run.at) <= acc.config.mergeMs);
     for (const c of into) c.merged.push(run);
-    if (into.length === 0) list.push(candidate('timeLoss', run.at, [run.carId], { lap: lapOfProgress(run.startProgress), run }));
+    if (into.length === 0) list.push(candidate('timeLoss', run.at, run.frame, [run.carId], { lap: lapOfProgress(run.startProgress), run }));
   }
-  for (const { at, lap, neutralisation } of acc.neutralisedNow) list.push(candidate('neutralised', at, [], { lap, neutralisation }));
+  for (const { at, startFrame, lap, neutralisation } of acc.neutralisedNow) list.push(candidate('neutralised', at, startFrame, [], { lap, neutralisation }));
   return list;
 };
 
@@ -699,23 +717,55 @@ const causesOf = (acc: Board, sorted: readonly Candidate[]): Map<string, Inciden
   return causes;
 };
 
+/** The turn at a known fraction (spec 6.2): `notApplicable` without turns in the track file, `insufficientData` with no apex within `turnSnapM`. */
+const turnOf = (acc: Board, fraction: Known<LapFraction>, turns: readonly TrackTurn[] | undefined): Known<string> => {
+  if (turns === undefined) return unknown('notApplicable');
+  if (!fraction.known) return unknown(fraction.reason);
+  const label = turnAt(turns, fraction.value, acc.layout.trackLengthM, acc.config.turnSnapM);
+  return label === undefined ? unknown('insufficientData') : known(label, fraction.at);
+};
+
+/** Where the entry's first car was (spec 6.2): its sector, lap fraction and turn; all `notApplicable` for an entry without a car. */
+const whereOf = (acc: Board, c: Candidate, turns: readonly TrackTurn[] | undefined): IncidentWhere => {
+  const first = c.carIds[0];
+  if (first === undefined) return { sector: unknown('notApplicable'), turn: unknown('notApplicable'), fraction: unknown('notApplicable') };
+  const track = acc.tracks[first];
+  const fraction = fractionAt(track, c.at, acc.layout.trackLengthM);
+  return { sector: sectorAt(track, c.at, acc.layout), turn: turnOf(acc, fraction, turns), fraction };
+};
+
 /**
  * Newest first, ties by id; only entries of our cars or their neighbourhood, and the cause of a neutralisation (its
- * `forUs` empty where no car of ours is concerned), cut at `feedLength`.
+ * `forUs` empty where no car of ours is concerned), cut at `feedLength`. The markers are the major ones of those
+ * entries, before the cut, with a known fraction, while the leader is fewer than `markerLaps` laps past the leader's
+ * lap at the entry's frame (`leaderLapAt`, C26), at their point on the outline; `notApplicable` without an outline.
+ * `where` and the markers read the track file here, never in the fold (C31.2).
  */
 const output = (fold: Acc, view: EngineView): IncidentsOutput => {
-  if (!behaviourFor(WEEKEND_PHASE, view).includes('feed')) return [];
+  if (!behaviourFor(WEEKEND_PHASE, view).includes('feed')) return { feed: [], markers: unknown('notApplicable') };
   const acc: Board = { ...fold, ...nowOf(fold, view) };
+  const file = view.track.known ? view.track.value : undefined;
+  const turns = file?.turns.known ? file.turns.value : undefined;
+  const outline = file?.outline.known ? file.outline.value : undefined;
   const byId = new Map<string, Candidate>();
   for (const c of candidates(acc)) if (!byId.has(c.id)) byId.set(c.id, c);
   const sorted = [...byId.values()].sort((a, b) => b.at - a.at || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   const causes = causesOf(acc, sorted);
   const causeIds = new Set([...causes.values()].map((c) => c.entryId));
+  const leaderNow = leaderLapAt(acc.lapFrames, Infinity);
+  const recent = (c: Candidate): boolean => leaderNow - leaderLapAt(acc.lapFrames, c.frame) < acc.config.markerLaps;
   const feed: IncidentEntry[] = [];
+  const markers: MapIncident[] = [];
   for (const c of sorted) {
-    if (feed.length >= acc.config.feedLength) break;
+    const inFeed = feed.length < acc.config.feedLength;
+    const major = acc.config[MAJOR[c.kind]];
+    const marker = outline !== undefined && major && recent(c);
+    if (!inFeed && !marker) continue;
     const forUs = forUsOf(acc, c);
     if (forUs.length === 0 && !causeIds.has(c.id)) continue;
+    const where = whereOf(acc, c, turns);
+    if (marker && where.fraction.known) markers.push({ point: pointAt(outline, where.fraction.value), kind: c.kind });
+    if (!inFeed) continue;
     const cause = causes.get(c.id);
     const lap = lapOf(acc, c);
     feed.push({
@@ -723,17 +773,17 @@ const output = (fold: Acc, view: EngineView): IncidentsOutput => {
       at: c.at,
       lap,
       kind: c.kind,
-      severity: acc.config[MAJOR[c.kind]] ? 'major' : 'minor',
+      severity: major ? 'major' : 'minor',
       carIds: [...c.carIds],
       timeLostMs: timeLost(acc, c, lap),
       forUs,
-      where: { sector: c.carIds[0] === undefined ? unknown('notApplicable') : sectorAt(acc.tracks[c.carIds[0]], c.at, acc.layout) },
+      where,
       ...detailOf(acc, c),
       ...(cause !== undefined && { cause }),
       ...(c.neutralisation !== undefined && { neutralisation: c.neutralisation }),
     });
   }
-  return feed;
+  return { feed, markers: outline === undefined || !view.track.known ? unknown('notApplicable') : known(markers, view.track.at) };
 };
 
 /** The incidents feed of the race: an incremental fold; a flashback starts it over. */
