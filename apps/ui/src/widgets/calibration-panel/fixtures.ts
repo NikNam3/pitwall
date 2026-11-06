@@ -5,7 +5,7 @@
 // (14 Oct), and one soft stint of that FP2 that is `missing`; its hard DEG/LAP has an override (0.045 s, 45 ms).
 import type {
   CalibrationActiveValue, CalibrationCandidatesValue, CalibrationSet, CalibrationSetsValue, CalibrationSource,
-  CalibrationValuesValue, FittedSource, Known, LapUse, Ms, PriorsEntries, SkippedSource, VisualCompound,
+  CalibrationValuesValue, FittedSource, Known, LapUse, Ms, PriorsEntries, SkippedSource, VisualCompound, WeekendPhase,
 } from '@pitwall/domain';
 import { carId, known, toSessionTime, unknown } from '@pitwall/domain';
 
@@ -44,6 +44,21 @@ const FP2 = { uid: 'fp2-1014', weekend: 'league-r7', date: '2026-10-14T19:00:00Z
 const FP1 = { uid: 'fp1-1106', weekend: 'league-r8', date: '2026-11-06T18:00:00Z' };
 const TEST = { uid: 'test-0902', weekend: 'pre-season', date: '2026-09-02T17:30:00Z' };
 
+/** Each stored session's weekend phase (SESSION: race, FP2, FP1; the pre-season test is a practice). */
+const PHASES: Record<string, WeekendPhase> = {
+  [RACE.uid]: { kind: 'race', format: 'grandPrix' },
+  [FP2.uid]: { kind: 'practice', format: 'practice', segment: 2 },
+  [FP1.uid]: { kind: 'practice', format: 'practice', segment: 1 },
+  [TEST.uid]: { kind: 'practice', format: 'practice', segment: 1 },
+};
+/** Our drivers' names as the sessions' Participants named them (CAR: KUH, LIN). */
+const DRIVERS: Record<number, string> = { 0: 'Kuhn', 1: 'Lind' };
+const phaseOf = (src: CalibrationSource): WeekendPhase => PHASES[src.sessionUid] ?? { kind: 'pending' };
+const driverOf = (src: CalibrationSource): Known<string> => {
+  const name = DRIVERS[src.car];
+  return name === undefined ? unknown('notReceived') : k(name);
+};
+
 /** Priors keys (declared by the units' `priors.ts`): degradation's per compound, tyre-life's, pit-loss's per condition. */
 export const key = {
   offset: (c: VisualCompound) => `degradation.alphaOffsetMs.${c}`,
@@ -66,7 +81,7 @@ const laps = (first: number, last: number, ms: number, except: LapSpec[] = []): 
 /** A fitted source of compound `c` with its own DEG/LAP (`degMs`) and DRIFT (`driftSd`); `driftSd` undefined: none. */
 function fitted(src: CalibrationSource, date: string, c: VisualCompound, list: FittedSource['lapList'], usedLaps: number, degMs: number, driftSd: number | undefined): FittedSource {
   return {
-    source: src, sessionDate: date, compound: c, laps: list.length, usedLaps, lapList: list,
+    source: src, sessionDate: date, phase: phaseOf(src), driver: driverOf(src), compound: c, laps: list.length, usedLaps, lapList: list,
     entries: { [key.deg(c)]: k(degMs), [key.sd(c)]: k(6) },
     residuals: { [key.deg(c)]: driftSd === undefined ? unknown('notApplicable') : k(driftSd) },
   };
@@ -91,7 +106,7 @@ export const testKuh = source(TEST.uid, TEST.weekend, KUH, 2);
 
 /** A source the store could not read: `missing` (its stint is gone) or `stale` (its session awaits a rebuild). */
 export const skipped = (src: CalibrationSource, why: SkippedSource['skipped']): SkippedSource => ({
-  source: src, skipped: why, sessionDate: k(FP2.date), compound: k('soft'),
+  source: src, skipped: why, sessionDate: k(FP2.date), phase: k(phaseOf(src)), driver: driverOf(src), compound: k('soft'),
 });
 
 export const leagueFits = (softWhy: SkippedSource['skipped'] = 'missing') => [
