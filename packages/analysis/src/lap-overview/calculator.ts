@@ -4,7 +4,7 @@
 // crossing) holds a session-phase span whose row is `red` (C44). Stints by `stintLaps` (`shared/stint-laps.ts`).
 import { known, unknown, type CarId, type Known, type LapRecord, type Ratio, type StintRecord } from '@pitwall/domain';
 import { membershipOf, type EngineView, type QuickCalculator } from '@pitwall/engine/readers';
-import { classifyLap, LAP_CLASSES_CONFIG, type LapClassOptions } from '../lap-classes/index.ts';
+import { classifyLap, isNeutralisedLap, LAP_CLASSES_CONFIG, type LapClassOptions } from '../lap-classes/index.ts';
 import { behaviourFor } from '../shared/behaviour.ts';
 import { carLaps, stintLaps } from '../shared/stint-laps.ts';
 import { LAP_OVERVIEW_BEHAVIOUR, SESSION_PHASE_MACHINES, type LapOverviewEffect } from './behaviour.ts';
@@ -81,7 +81,7 @@ export const lapOverviewCalculator: QuickCalculator<LapOverviewOutput> = {
         const span = member[machine];
         if (span !== undefined && LAP_OVERVIEW_BEHAVIOUR[machine]?.[span.kind]?.red === true) return 'red';
       }
-      if ((lap.scShare + lap.vscShare) * lap.lapTimeMs < maxNeutralisedMs) return 'green';
+      if (!isNeutralisedLap(lap, { maxNeutralisedMs })) return 'green';
       return lap.scShare > 0 ? 'sc' : 'vsc';
     };
 

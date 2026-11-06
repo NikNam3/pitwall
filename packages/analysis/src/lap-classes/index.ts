@@ -17,9 +17,14 @@ export type LapClassOptions = { isRace: boolean; maxNeutralisedMs: number };
 /** Time of the lap under SC or VSC, in ms. */
 const neutralisedMs = (lap: DeepReadonly<LapRecord>): number => (lap.scShare + lap.vscShare) * lap.lapTimeMs;
 
+/** Whether the lap's time under SC or VSC reaches `maxNeutralisedMs`: the one neutralised rule (C43). */
+export function isNeutralisedLap(lap: DeepReadonly<LapRecord>, opts: Pick<LapClassOptions, 'maxNeutralisedMs'>): boolean {
+  return neutralisedMs(lap) >= opts.maxNeutralisedMs;
+}
+
 /** Whether a lap counts for rates: `classifyLap(lap, opts).forRate`, without building the class. */
 export function isRateLap(lap: DeepReadonly<LapRecord>, opts: Pick<LapClassOptions, 'maxNeutralisedMs'>): boolean {
-  return !lap.inLap && !lap.outLap && neutralisedMs(lap) < opts.maxNeutralisedMs;
+  return !lap.inLap && !lap.outLap && !isNeutralisedLap(lap, opts);
 }
 
 /** Whether a rate lap (`forRate`) counts for bands: it is not lap 1 of a race. */
