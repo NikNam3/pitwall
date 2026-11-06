@@ -1,6 +1,8 @@
 // Loading a session's track file (C62b, spec 4): the committed file of its track id, or a recording's sidecar in a
 // replay. A file that is missing or fails validation is `notApplicable`; a failing one leaves one warning on the
-// bridge's log (no insight, C52). Temporary directories only, never the data dir (C84).
+// bridge's log (no insight, C52). A session without a valid file writes a not-applicable sidecar: a replay reads it as
+// `notApplicable` without a warning, whatever the committed files hold (C62b). Temporary directories only, never the
+// data dir (C84).
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -99,6 +101,26 @@ describe('recordingTrack', () => {
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toMatchObject({ level: 40 });
     expect(JSON.stringify(warnings[0])).toContain('name: not a string');
+  });
+
+  it('a not-applicable sidecar is notApplicable without a warning, although a committed file exists', () => {
+    const recording = recordingIn();
+    writeJson(`${recording}.track.json`, { known: false, reason: 'notApplicable' });
+    const { log, warnings } = capturingLog();
+    expect(recordingTrack(recording, ZANDVOORT, tracksDir(zandvoortNamed('committed')), log)).toEqual(NOT_APPLICABLE);
+    expect(warnings).toEqual([]);
+  });
+
+  it.each([
+    ['another reason', { known: false, reason: 'restricted' }],
+    ['a key more', { known: false, reason: 'notApplicable', at: 0 }],
+  ])('a sidecar of another shape with known: false is invalid (%s)', (_what, sidecar) => {
+    const recording = recordingIn();
+    writeJson(`${recording}.track.json`, sidecar);
+    const { log, warnings } = capturingLog();
+    expect(recordingTrack(recording, ZANDVOORT, tracksDir(zandvoortNamed('committed')), log)).toEqual(NOT_APPLICABLE);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatchObject({ level: 40 });
   });
 
   it('without a sidecar loads the committed file', () => {
