@@ -28,7 +28,8 @@ import { fakeCalibration, type FakeSet, type PipelineCalibration } from '../help
 import { HookedSource } from '../helpers/hooked-source.ts';
 import { segmentPath } from '../fixtures/replay.ts';
 
-const F = 'test' as FeedId;
+/** `topicStreamHash`'s feed: `feed.status` names the feed, so a live run hashed against a replay runs on it too. */
+const F = 'hash' as FeedId;
 const ZANDVOORT = 26;
 const SINGAPORE = 12;
 const LAP10 = segmentPath('race-zandvoort-lap10.pwrec.gz');
@@ -185,10 +186,15 @@ describe('a pick in a live run', () => {
   let dry: PriorsSnapshot;
   let wet: PriorsSnapshot;
   let live: Run;
+  /** The store's calls during the live run, kept here: vitest clears mocks before each test. */
+  let snapshotOfCalls: unknown[][];
+  let markUsedCalls: unknown[][];
   beforeAll(async () => {
     dry = cal.snapshotNow(ZANDVOORT, 'dry');
     wet = cal.snapshotNow(ZANDVOORT, 'wet');
     live = await run(LAP10, { calibration: cal.store, record: true, pick: { setId: 'wet', when: (index) => index === PICK_AT - 1 } });
+    snapshotOfCalls = [...cal.snapshotOf.mock.calls];
+    markUsedCalls = [...cal.markUsed.mock.calls];
   }, 60_000);
 
   it('a pick adds its snapshot to the priors sidecar and the decision to the decisions sidecar', () => {
@@ -197,8 +203,8 @@ describe('a pick in a live run', () => {
     expect(decisionsOf(live.file!)).toEqual([{ recordIndex: expect.any(Number), decision: { kind: 'calibrationChosen', setId: 'wet', snapshot: wet.fingerprint } }]);
     const recordIndex = (decisionsOf(live.file!) as Array<{ recordIndex: number }>)[0]?.recordIndex ?? -1;
     expect(Number.isInteger(recordIndex) && recordIndex >= 0).toBe(true);
-    expect(cal.snapshotOf).toHaveBeenCalledWith(ZANDVOORT, 'wet');
-    expect(cal.markUsed).toHaveBeenCalledWith(ZANDVOORT, 'wet', ISO);
+    expect(snapshotOfCalls).toContainEqual([ZANDVOORT, 'wet']);
+    expect(markUsedCalls).toContainEqual([ZANDVOORT, 'wet', ISO]);
     // the units see the start snapshot, then the picked one from the decision's frame on
     expect(live.seen[0]?.priors).toEqual(known(dry, 0));
     expect(live.seen.at(-1)).toMatchObject({ priors: known(wet, 0), decisions: 1 });
