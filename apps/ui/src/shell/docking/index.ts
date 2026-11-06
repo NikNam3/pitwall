@@ -1,6 +1,7 @@
 // The thin adapter over dockview (spec 7.3): mounts a window's layout and panels and maps dockview's events back to
 // workbook changes. Panels are rendered by the caller's `PanelView`; nothing outside this folder knows dockview.
 import type { PanelSpec } from '@pitwall/contracts';
+import * as text from '../../kit/text.ts';
 import {
   createDockview,
   positionToDirection,
@@ -8,6 +9,7 @@ import {
   type DockviewApi,
   type DockviewGroupPanel,
   type IContentRenderer,
+  type IHeaderActionsRenderer,
   type ITabRenderer,
   type Position,
   type SerializedDockview,
@@ -24,10 +26,19 @@ export type PanelView = {
 
 /** A mounted dock. */
 export type DockHandle = {
-  /** Adds a panel under a fresh id; the change reaches `onChange` like any other. */
+  /**
+   * Adds a panel under a fresh id: as a tab of the group whose `+` was clicked last, else in a new group to the right.
+   * The change reaches `onChange` like any other.
+   */
   addPanel(spec: PanelSpec): void;
+  /** Forgets the group a `+` marked (its palette closed without a pick): the next `addPanel` opens a new group. */
+  cancelAdd(): void;
   /** Replaces the spec the dock holds for a panel (the shell changed its options); the panel is not rendered again. */
   updatePanel(id: string, spec: PanelSpec): void;
+  /** Removes a panel; a group left without panels goes. The change reaches `onChange` like any other. */
+  removePanel(id: string): void;
+  /** Shows (edit mode) or hides the `+` at the end of every group's tab strip. */
+  setEditing(on: boolean): void;
   destroy(): void;
 };
 
@@ -51,6 +62,8 @@ export function mountDock(
   onChange: (layout: unknown, panels: Record<string, PanelSpec>) => void,
   view: PanelView,
   gapPx: number,
+  /** Called after a click on a group's `+` (edit mode), which made that group the target of the next `addPanel`. */
+  onAdd: () => void = () => {},
 ): DockHandle {
   const specs = new Map(Object.entries(panels));
   const parts = new Map<string, Parts>();
@@ -63,6 +76,36 @@ export function mountDock(
       parts.set(id, p);
     }
     return p;
+  };
+
+  // Edit mode: one `+` per group, out of the accessibility tree (`hidden`) while editing is off.
+  let editing = false;
+  /** The group whose `+` was clicked; the next `addPanel` lands in it. */
+  let target: DockviewGroupPanel | undefined;
+  const addButtons = new Set<HTMLButtonElement>();
+  const groupActions = (group: DockviewGroupPanel): IHeaderActionsRenderer => {
+    const element = document.createElement('div');
+    element.className = 'pw-dock-actions';
+    const button = element.appendChild(document.createElement('button'));
+    button.type = 'button';
+    button.className = 'pw-button pw-dock-add';
+    button.setAttribute('aria-label', text.addPanel);
+    button.textContent = text.addPanelMark;
+    button.hidden = !editing;
+    button.addEventListener('click', () => {
+      group.api.setActive();
+      target = group;
+      onAdd();
+    });
+    addButtons.add(button);
+    return {
+      element,
+      init: () => {},
+      dispose: () => {
+        addButtons.delete(button);
+        if (target === group) target = undefined;
+      },
+    };
   };
 
   el.classList.add(HOST_CLASS);
@@ -92,6 +135,7 @@ export function mountDock(
       p.tabTaken = true;
       return { element: p.tab, init: () => {} };
     },
+    createRightHeaderActionComponent: groupActions,
   });
 
   /** The layout without panel params: a panel's spec lives in `panels` only, so the workbook stays hand-editable. */
@@ -126,6 +170,12 @@ export function mountDock(
     api.addPanel({ id, component: COMPONENT, title: view.title(spec), ...(position === undefined ? {} : { position }) });
   };
   const add = (spec: PanelSpec, at?: { group?: DockviewGroupPanel; position: Position }): void => place(freshId(), spec, at);
+  /** Adds into the group a `+` marked, if it is still in the dock; otherwise as before. */
+  const addFromShell = (spec: PanelSpec): void => {
+    const group = target;
+    target = undefined;
+    add(spec, group !== undefined && api.groups.includes(group) ? { group, position: 'center' } : undefined);
+  };
 
   let loading = true;
   try {
@@ -190,9 +240,20 @@ export function mountDock(
   ];
 
   return {
-    addPanel: (spec) => add(spec),
+    addPanel: addFromShell,
+    cancelAdd() {
+      target = undefined;
+    },
     updatePanel(id, spec) {
       if (specs.has(id)) specs.set(id, spec);
+    },
+    removePanel(id) {
+      const panel = api.getPanel(id);
+      if (panel !== undefined) api.removePanel(panel);
+    },
+    setEditing(on) {
+      editing = on;
+      for (const button of addButtons) button.hidden = !on;
     },
     destroy() {
       for (const s of subscriptions) s.dispose();

@@ -50,6 +50,14 @@ export const addWidget = 'add widget';
 /** Accessible name of a panel's settings icon. */
 export const settings = 'settings';
 
+/** The top-bar toggle of the window's edit mode, and the accessible names of the buttons it shows. */
+export const editLayout = 'edit layout';
+export const addPanel = 'add panel';
+export const removePanel = 'remove panel';
+/** The marks of those buttons: a group's `+` and a panel's `×`. */
+export const addPanelMark = '+';
+export const removePanelMark = '×';
+
 /** Hover text of an unknown value: why the value is missing (spec 5; `UnknownReason`). */
 export const unknownReason = {
   restricted: "hidden by the driver's telemetry setting",
@@ -109,6 +117,8 @@ export const commandTitles = {
   keysOverview: 'Key overview',
   windowFocus: (id: string): string => `Focus window ${id}`,
   panelAdd: (title: string): string => `Add panel: ${title}`,
+  panelRemove: (title: string): string => `Remove panel: ${title}`,
+  layoutEditToggle: 'Edit layout',
   realismToggle: 'Toggle realism mode',
   replayPause: 'Pause replay',
   replayPlay: 'Play replay',

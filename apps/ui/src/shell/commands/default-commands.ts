@@ -9,7 +9,8 @@ import type { Command } from './registry.ts';
 
 /** The overlays the shell can show. */
 export type ShellOverlay =
-  | { kind: 'palette' }
+  /** `adding`: opened by a group's `+`, it lists the `panel.add.*` commands only. */
+  | { kind: 'palette'; adding?: true }
   | { kind: 'keys' }
   | { kind: 'workbooks' }
   | { kind: 'saveAs' }
@@ -54,6 +55,7 @@ export const DEFAULT_KEYS: Readonly<Record<string, string>> = {
   Escape: `linkGroup.${KEY_GROUP}.resetPrimary`,
   'Ctrl+P': `linkGroup.${KEY_GROUP}.pickPrimary`,
   'Ctrl+K': 'palette.open',
+  'Ctrl+E': 'layout.edit.toggle',
   '?': 'keys.overview',
   Space: 'replay.pause',
   'Ctrl+=': 'window.fontBigger',
@@ -141,5 +143,20 @@ export function panelCommands(decls: readonly Parameters<typeof defaultPanel>[0]
     title: text.commandTitles.panelAdd(decl.title),
     group: text.commandGroups.window,
     run: () => addPanel(defaultPanel(decl)),
+  }));
+}
+
+/** `layout.edit.toggle`: turns the window's edit mode (window-local, C73) on or off. */
+export function layoutEditCommand(toggle: () => void): Command {
+  return { id: 'layout.edit.toggle', title: text.commandTitles.layoutEditToggle, group: text.commandGroups.window, run: toggle };
+}
+
+/** `panel.remove.<id>` for each panel of the window; registered only while edit mode is on. */
+export function panelRemoveCommands(panels: readonly { id: string; title: string }[], removePanel: (id: string) => void): Command[] {
+  return panels.map((panel) => ({
+    id: `panel.remove.${panel.id}`,
+    title: text.commandTitles.panelRemove(panel.title),
+    group: text.commandGroups.window,
+    run: () => removePanel(panel.id),
   }));
 }

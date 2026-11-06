@@ -9,7 +9,17 @@
   import { applyTheme, DEFAULT_THEME, role, type ThemeVariant } from '../../theme/index.ts';
   import '../controls.css';
   import { WIDGETS } from '../../widgets/index.generated.ts';
-  import { alertCommands, defaultCommands, DEFAULT_KEYS, panelCommands, windowCommands, type CommandContext, type ShellOverlay } from '../commands/default-commands.ts';
+  import {
+    alertCommands,
+    defaultCommands,
+    DEFAULT_KEYS,
+    layoutEditCommand,
+    panelCommands,
+    panelRemoveCommands,
+    windowCommands,
+    type CommandContext,
+    type ShellOverlay,
+  } from '../commands/default-commands.ts';
   import { eventKey, parseKeys } from '../commands/keys.ts';
   import KeyOverview from '../commands/KeyOverview.svelte';
   import { OverlayStack, provideOverlayStack } from '../commands/overlay-stack.ts';
@@ -75,6 +85,7 @@
   });
 
   const byName = $derived(new Map(widgets.map((w) => [w.decl.name, w])));
+  const titleOf = (spec: PanelSpec): string => byName.get(spec.widget)?.decl.title ?? spec.widget;
   const decls = $derived(new Map(widgets.map((w) => [w.decl.name, w.decl])));
   const value = $derived(workbooks.state.status === 'ok' ? workbooks.state.value : undefined);
   const read = $derived(value === undefined ? undefined : normaliseWorkbook(value.active, decls));
@@ -171,12 +182,45 @@
     alertKeys: () => shownAlerts.map(ackToken),
     inspection,
   };
-  const baseCommands = defaultCommands(commandContext);
+  // Edit mode (pre-4.1 spec 2): window-local (C73), off at start and after a reload; the dock is told only once it is used.
+  let editing = $state(false);
+  const toggleEditing = (): void => {
+    editing = !editing;
+    dock?.setEditing(editing);
+  };
+  /** Set by an `add` command: the palette a group's `+` opened closed with a pick. */
+  let picked = false;
+  const addPanel = (spec: PanelSpec): void => {
+    picked = true;
+    dock?.addPanel(spec);
+  };
+  const openAdd = (): void => {
+    picked = false;
+    overlay = { kind: 'palette', adding: true };
+  };
+  const isAdd = (id: string): boolean => id.startsWith('panel.add.');
+  // The `+` palette closed without a pick (or gave way to another overlay): its group is no longer the target.
+  let adding = false;
+  $effect(() => {
+    const open = overlay?.kind === 'palette' && overlay.adding === true;
+    untrack(() => {
+      if (adding && !open && !picked) dock?.cancelAdd();
+      adding = open;
+    });
+  });
+
+  const baseCommands = [...defaultCommands(commandContext), layoutEditCommand(toggleEditing)];
   const commands = $derived([
     ...baseCommands,
     ...alertCommands(shownAlerts, commandContext),
     ...windowCommands((read?.workbook.windows ?? []).map((w) => w.id), commandContext),
-    ...panelCommands(widgets.map((w) => w.decl), (spec) => dock?.addPanel(spec)),
+    ...panelCommands(widgets.map((w) => w.decl), addPanel),
+    ...(editing
+      ? panelRemoveCommands(
+          Object.entries(panelSpecs).map(([id, spec]) => ({ id, title: titleOf(spec) })),
+          (id) => dock?.removePanel(id),
+        )
+      : []),
   ]);
   $effect(() => {
     const offs = commands.map((c) => registry.register(c));
@@ -224,7 +268,7 @@
   // Panels are mounted by the dock, outside this component's tree: they get the window's contexts explicitly.
   const contexts = getAllContexts();
   const view: PanelView = {
-    title: (spec) => byName.get(spec.widget)?.decl.title ?? spec.widget,
+    title: titleOf,
     render(content, tab, first: PanelSpec, panelId: string) {
       // The panel follows option changes made here, which reach it before the bridge echoes them.
       const current = (): PanelSpec => panelSpecs[panelId] ?? first;
@@ -242,6 +286,10 @@
           onInspect: (target: InspectTarget) => (inspected = target),
           onOptions: (options: Record<string, unknown>) => updatePanel(panelId, { options }),
           onLinkGroup: (linkGroup: number) => updatePanel(panelId, { linkGroup }),
+          onRemove: () => registry.run(`panel.remove.${panelId}`),
+          get editing() {
+            return editing;
+          },
           get spec() {
             return current();
           },
@@ -296,7 +344,9 @@
         },
         view,
         gapPx,
+        openAdd,
       );
+      if (editing) dock.setEditing(true);
     });
   });
 
@@ -341,7 +391,17 @@
   {/if}
   {#if defaultFeed !== undefined}
     {#key defaultFeed}
-      <TopBar {store} feedId={defaultFeed} {send} {sendReplay} onShown={(alerts) => (shownAlerts = alerts)} workbookName={read?.workbook.name} onPickWorkbook={() => (overlay = { kind: 'workbooks' })} />
+      <TopBar
+        {store}
+        feedId={defaultFeed}
+        {send}
+        {sendReplay}
+        onShown={(alerts) => (shownAlerts = alerts)}
+        workbookName={read?.workbook.name}
+        onPickWorkbook={() => (overlay = { kind: 'workbooks' })}
+        {editing}
+        onToggleEditing={toggleEditing}
+      />
     {/key}
   {/if}
   <div class="area">
@@ -359,7 +419,7 @@
     <InspectorView {store} catalogue={inspectedCatalogue} params={(topic) => inspected?.params(topic) ?? {}} widget={inspection.widget} link={inspectedLink} {host} onClose={() => inspection.close()} />
   {/if}
   {#if overlay?.kind === 'palette'}
-    <Palette {registry} bindings={keys.bindings} onClose={closeOverlay} />
+    <Palette {registry} bindings={keys.bindings} filter={overlay.adding === true ? isAdd : undefined} onClose={closeOverlay} />
   {:else if overlay?.kind === 'keys'}
     <KeyOverview {registry} bindings={keys.bindings} notes={keys.notes} onClose={closeOverlay} />
   {:else if overlay?.kind === 'workbooks'}
