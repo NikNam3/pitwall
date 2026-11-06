@@ -728,9 +728,10 @@ describe('hidden data of one of our cars (Review Focus 5)', () => {
     const remaining: SessionRemaining = { basis: 'laps', lapsLeft: known(10, 0), timeLeftMs: unknown('notApplicable') };
     const base = situatedView({ cars: [carState(), car], history: { laps }, sessionTime: NOW, outputs: new Map([[SESSION_REMAINING, remaining]]) });
     const view: EngineView = { ...base, live: { ...base.live, teammateCar: TEAMMATE } };
+    const tyreLife = tyreLifeCalculator.compute(view);
     const outputs = new Map<string, unknown>([
       [SESSION_REMAINING, remaining],
-      [TYRE_WEAR, tyreWearCalculator.compute(view)],
+      [TYRE_WEAR, tyreWearCalculator.compute({ ...view, outputs: new Map([[TYRE_LIFE, tyreLife]]) })],
       [FUEL, fuelCalculator.compute(view)],
       [ERS, ersCalculator.compute(view)],
       [CAR_BANDS, carBandsCalculator.compute(view)],
