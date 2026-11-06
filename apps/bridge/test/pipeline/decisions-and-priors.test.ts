@@ -252,6 +252,17 @@ describe('a pick in a live run', () => {
     expect(readJson(priorsSidecar(live.file!))).toEqual(priorsBefore);
     expect(decisionsOf(live.file!)).toEqual(decisionsBefore);
   });
+
+  it('calibration.choose of an unknown set without a running session is rejected as invalid', () => {
+    // the live run's session has ended: the bridge still validates the pick (C73) and changes nothing
+    const priorsBefore = readJson(priorsSidecar(live.file!));
+    const decisionsBefore = decisionsOf(live.file!);
+    cal.markUsed.mockClear();
+    expect(live.pipeline.commitDecision('no-such-set')).toEqual({ ok: false, reason: 'invalid', message: expect.stringMatching(/\S/) });
+    expect(cal.markUsed).not.toHaveBeenCalled();
+    expect(readJson(priorsSidecar(live.file!))).toEqual(priorsBefore);
+    expect(decisionsOf(live.file!)).toEqual(decisionsBefore);
+  });
 });
 
 describe('an unknown set or snapshot (C3, C73)', () => {
