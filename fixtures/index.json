@@ -805,6 +805,19 @@
         "COLL x1, PENA x1, OVTK x4, SPTP x8, BUTN x9",
         "duration 7973.296 ms"
       ]
+    },
+    {
+      "file": "race-mexico-vsc-full-lap.pwrec.gz",
+      "source": "raceWetVscMexico",
+      "fromS": 1418,
+      "toS": 1526,
+      "records": 26339,
+      "features": [
+        "full-lap segment, 8 560 822 bytes; 2 context packets (Session, Participants) first; session time 1418.003 to 1525.995, rising throughout (no repeat, no flashback)",
+        "car 19 (the player, teammate 12) crosses the line into lap 15 at 1418.824 (lap 14 101.601 s) and into lap 16 at 1524.875: lap 15 106.055 s from line to line, on intermediates, confirmed by SessionHistory at 1525.194",
+        "VSC: car 11 retired on lap 14 (before the segment); VSC deployed 1395.877 and safetyCarStatus 2 before the segment, SCAR VSC ending at 1469.951, resume 1477.180, safetyCarStatus 0 from 1478.030: lap 15 of car 19 runs about 59 s under VSC, then green",
+        "weather storm throughout; every other active car completes one lap whose start lies before the segment"
+      ]
     }
   ]
 }
