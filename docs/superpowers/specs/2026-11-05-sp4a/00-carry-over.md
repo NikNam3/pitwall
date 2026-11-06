@@ -253,3 +253,13 @@ From `docs/acceptance/live-checklist.md` (live test 2026-11-04/05, user answers 
 | A17 | Talk indicator lead | Time-based: `leadS` 1.5 s × current speed before a braking zone (pitwall estimate). |
 | A18 | Which tracks get files | All tracks of the 2025 season (24); reverse layouts none. |
 | A19 | Moved out of 4.0 (YAGNI) | `ourCrossing` cadence and ghost marker → 4.2; source badge → 4.1. |
+| A20 | Before 4.1: track sidecar always, panel add/remove, desktop start order (2026-11-06) | Their own small run first; done and merged 2026-11-06. Panel UI: an edit-mode toggle (Ctrl+E), `+` per group, `×` per panel. |
+| A21 | Which weekend laps feed the race's priors? (2026-11-06) | None by a fixed rule: "too dynamic to hardcode; the engineer needs tools to calibrate the values based on the data". Replaces A13's automatic `view.weekend` feed. |
+| A22 | What can the engineer calibrate? | Both: pick stints and laps (the values follow) and override any number. |
+| A23 | Where and when | Its own panel; garage work between live actions, with a session loaded or between sessions; later together with the original race-strategy tools. Calibration is not session specific: built over many sessions ("tests"); it drifts as car and driver change: curated by hand, each source shows its age and residual, sets can be copied (no recency weighting). |
+| A24 | Set scope | One track per set; several sets per track allowed. |
+| A25 | Which set a session uses | Asked at session start, preselected "the best data for that track" (last used on the track, else newest sources, else defaults); the run starts on the preselection; a different pick is a recorded decision. Edits apply from the next session start or through a pick. |
+| A26 | Contract | C62a rewritten (calibration sets, the store as their cache), C39, C54, C75, C76, glossary; exact text in the 4.1a spec. |
+| A27 | Source badge | none = this session, `ᶜ` = calibration, `ᵈ` = default (replaces Q2 A's `ˢ` and the briefly chosen `ʷ`). |
+| A28 | 4.1 cut | 4.1a calibration and estimation; 4.1b long run and weather. |
+
