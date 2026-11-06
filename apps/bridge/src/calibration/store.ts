@@ -14,7 +14,7 @@ import type { ValueFor } from '../hub/topic-hub.ts';
 import type { Logger } from '../log.ts';
 import type { SessionKey } from '../storage/db.ts';
 import type { SessionsOnTrack, TrackSession } from '../storage/weekend-repository.ts';
-import { entriesFingerprint, PriorsCache, PriorsRunner, resolveSource } from './compute.ts';
+import { PriorsCache, snapshotFingerprint, PriorsRunner, resolveSource } from './compute.ts';
 import { loadSets, removeSet, stintKey, writeSet } from './sets.ts';
 import { suggestions } from './suggest.ts';
 import { checkAction, type CalibrationAction } from './validate.ts';
@@ -115,10 +115,8 @@ export class CalibrationStore {
     const set = this.#sets.get(setId);
     const values = this.#values.get(setId);
     if (set === undefined || set.trackId !== trackId || values === undefined) return undefined;
-    return {
-      fingerprint: entriesFingerprint(values.entries), setId, setName: set.name,
-      sources: values.fits.filter((f) => f.skipped === undefined).length, entries: values.entries,
-    };
+    const snapshot = { setId, setName: set.name, sources: values.fits.filter((f) => f.skipped === undefined).length, entries: values.entries };
+    return { fingerprint: snapshotFingerprint(snapshot), ...snapshot };
   }
 
   /** The track a set belongs to; `undefined` for an unknown set (C3). */

@@ -6,12 +6,15 @@
 //    value is left out;
 //  - append topics (`laps`) carry `entries`, state topics carry `value`;
 //  - deterministic: two runs give byte-identical JSON.
-import { existsSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { canonicalJson, TOPICS, type MachineSpans, type SessionInfo, type TopicName } from '@pitwall/contracts';
-import { carId, MAX_CARS, type CarId } from '@pitwall/domain';
+import { carId, known, MAX_CARS, type CalibrationActiveValue, type CarId, type PriorsSnapshot } from '@pitwall/domain';
 import { describe, expect, it } from 'vitest';
 import { FEATURES } from '../../src/features/index.generated.ts';
 import { captureMoment, type MomentValues } from '../../src/moments/capture.ts';
+import { readPwrec } from '../../src/pwrec/reader.ts';
 import { offsets, readMomentsFile, segmentPath } from './helpers.ts';
 import { NOT_YET_BOUND } from '../helpers/not-yet-bound.ts';
 
@@ -112,6 +115,52 @@ describe('captureMoment', () => {
     expect(eventMs).toBeDefined();
     const values = await captureMoment(segmentPath(LAP10), eventMs! + 1000);
     expect(find(values, 'laps')?.entries).toContainEqual(expect.objectContaining({ carId: 1, lapNumber: 9, lapTimeMs: 74_655 }));
+  }, 60_000);
+});
+
+// SP4.1a f34 (F6, C38, C62a, C76): a moment replays its recording as a replay does, with the recording's priors and
+// decisions sidecars (`recordingDecisions`), so a captured moment of a session with a calibration pick computes on the
+// picked snapshot, as the live run did. The sidecars are written by hand next to a copy of the segment in a temporary
+// dir (C84: no data dir, no priors store).
+describe('captureMoment and the recording\'s sidecars', () => {
+  /** The record of LAP10 before which the recorded pick is handed to the run. */
+  const PICK_AT = 800;
+  const snapshot = (setId: string, setName: string, greenMs: number): PriorsSnapshot => ({
+    fingerprint: `fp-${setId}`, setId, setName, sources: 2,
+    entries: { 'pitLoss.ms.green': known(greenMs, 0), 'pitLoss.ms.sc': known(greenMs - 9_000, 0) },
+  });
+  const dry = snapshot('dry', 'Dry', 21_500);
+  const wet = snapshot('wet', 'Wet', 24_000);
+
+  /** A copy of LAP10 with a priors sidecar (the run started on `dry`, picked `wet`) and the pick in its decisions sidecar. */
+  function recordingWithPick(): string {
+    const path = join(mkdtempSync(join(tmpdir(), 'moment-pick-')), LAP10);
+    copyFileSync(segmentPath(LAP10), path);
+    writeFileSync(`${path}.priors.json`, JSON.stringify({ start: dry.fingerprint, snapshots: { [dry.fingerprint]: dry, [wet.fingerprint]: wet } }));
+    writeFileSync(`${path}.decisions.json`, JSON.stringify([{ recordIndex: PICK_AT, decision: { kind: 'calibrationChosen', setId: 'wet', snapshot: wet.fingerprint } }]));
+    return path;
+  }
+
+  /** The receive-time offset of LAP10's record `index` from its first record. */
+  async function offsetOf(index: number): Promise<number> {
+    let first: number | undefined;
+    let i = 0;
+    for await (const record of readPwrec(segmentPath(LAP10))) {
+      first ??= record.t;
+      if (i++ === index) return record.t - first;
+    }
+    throw new Error(`LAP10 has no record ${index}`);
+  }
+
+  it('a captured moment of a recording with a calibration pick uses the picked snapshot', async () => {
+    const path = recordingWithPick();
+    const active = (values: MomentValues) => find(values, 'calibration.active')?.value as CalibrationActiveValue | undefined;
+    // Before the pick: the run's start snapshot, from the priors sidecar.
+    const before = await offsetOf(PICK_AT - 400);
+    expect(before).toBeLessThan(await offsetOf(PICK_AT));
+    expect(active(await captureMoment(path, before))).toMatchObject({ known: true, value: { setId: 'dry', setName: 'Dry', snapshot: dry.fingerprint, picked: false } });
+    // After it: the picked snapshot, from the decisions sidecar.
+    expect(active(await captureMoment(path, 1_000_000))).toMatchObject({ known: true, value: { setId: 'wet', setName: 'Wet', snapshot: wet.fingerprint, picked: true } });
   }, 60_000);
 });
 

@@ -41,17 +41,22 @@ type StintSpec = { car: number; firstLap: number; lastLap: number; lapMs?: (lapN
 
 /**
  * A complete stored session of the feed whose player is car 0, on `trackId`, with the stints (and their laps) given;
- * `stale`: stored under another rules version (`staleOf`).
+ * `stale`: stored under another rules version (`staleOf`). `cars` (default `CARS`) and `teammateCar` (default car 1, the
+ * teammate the engine placed, stored with the session: SP4.1a f34, C43) stand for its stored row.
  */
-function trackSession(uid: string, o: { startedAt: string; stints: StintSpec[]; weekendId?: string; trackId?: number; stale?: boolean }): TrackSession {
+function trackSession(uid: string, o: {
+  startedAt: string; stints: StintSpec[]; weekendId?: string; trackId?: number; stale?: boolean;
+  cars?: TrackSession['cars']; teammateCar?: CarId | null;
+}): TrackSession {
   const projection: ProjectionState = {
     laps: o.stints.flatMap((s) => range(s.firstLap, s.lastLap).map((n) => lap(s.car, n, { lapTimeMs: s.lapMs?.(n) ?? 90_000 + n }))),
     stints: o.stints.map((s) => stint(s.car, s.firstLap, { lastLap: s.lastLap })),
     pitStops: [], crossings: [], events: [], penalties: [], decisions: [], clock: [], spans: {},
   };
   const session: TrackSession = {
-    sessionUid: uid as SessionUid, weekendId: o.weekendId ?? 'W1', seasonId: 'S1', playerCar: car(0), trackId: o.trackId ?? TRACK,
-    startedAt: o.startedAt, pwrecPath: null, settings: {}, cars: CARS, rulesVersion: 'current', complete: true,
+    sessionUid: uid as SessionUid, weekendId: o.weekendId ?? 'W1', seasonId: 'S1', playerCar: car(0),
+    teammateCar: o.teammateCar === undefined ? car(1) : o.teammateCar, trackId: o.trackId ?? TRACK,
+    startedAt: o.startedAt, pwrecPath: null, settings: {}, cars: o.cars ?? CARS, rulesVersion: 'current', complete: true,
     phase: { kind: 'race', format: 'grandPrix' }, stale: false, projection, track: unknown('notApplicable'),
   };
   return o.stale === true ? staleOf(session) : session;
@@ -63,7 +68,7 @@ function trackSession(uid: string, o: { startedAt: string; stints: StintSpec[]; 
  */
 function staleOf(s: TrackSession): TrackSession {
   return {
-    sessionUid: s.sessionUid, weekendId: s.weekendId, seasonId: s.seasonId, playerCar: s.playerCar, trackId: s.trackId, startedAt: s.startedAt,
+    sessionUid: s.sessionUid, weekendId: s.weekendId, seasonId: s.seasonId, playerCar: s.playerCar, teammateCar: s.teammateCar, trackId: s.trackId, startedAt: s.startedAt,
     pwrecPath: s.pwrecPath, settings: s.settings, cars: s.cars, rulesVersion: 'old', complete: s.complete, track: s.track,
     stale: true, projection: undefined,
   };
@@ -556,28 +561,110 @@ describe('CalibrationStore', () => {
     expect(listOf(withoutUse.fitOf(other, sourceOf(s1, 0, 1)))?.map((l) => l.use)).toEqual(['notApplicable', 'notApplicable', 'notApplicable', 'notApplicable']);
   });
 
-  it('a snapshot\'s fingerprint is equal for equal entries and changes with any entry', () => {
+  // SP4.1a f34 (F4, C62a): a snapshot is named by its fingerprint, so the fingerprint hashes the whole snapshot (set id,
+  // set name, sources count and entries), not its entries alone. This ports the earlier "equal for equal entries" test:
+  // its entry half stays, its "equal sets, equal fingerprint" half is reversed by F4.
+  it('a snapshot\'s fingerprint changes with any entry and is the same again when the entries are', () => {
+    const s1 = trackSession('1', { startedAt: day(1), stints: [{ car: 0, firstLap: 1, lastLap: 5 }] });
+    const t = setup({ sessions: [s1] });
+    const id = t.createSet(TRACK, 'A', [sourceOf(s1, 0, 1)]);
+    const print = () => snapshotOf(t.store, TRACK, id).fingerprint;
+    const first = print();
+
+    t.ok({ kind: 'calibration.override.set', trackId: TRACK, setId: id, key: 'fake.meanLapMs', value: 95_000 });
+    expect(print()).not.toBe(first);
+    t.ok({ kind: 'calibration.override.clear', trackId: TRACK, setId: id, key: 'fake.meanLapMs' });
+    expect(print()).toBe(first);
+
+    t.ok({ kind: 'calibration.override.set', trackId: TRACK, setId: id, key: 'fake.limitPct', value: 50 });
+    expect(print()).not.toBe(first);
+    t.ok({ kind: 'calibration.override.clear', trackId: TRACK, setId: id, key: 'fake.limitPct' });
+    expect(print()).toBe(first);
+
+    t.ok({ kind: 'calibration.lap.exclude', trackId: TRACK, setId: id, source: sourceOf(s1, 0, 1), lap: 1 });
+    expect(print()).not.toBe(first);
+  });
+
+  it('two sets with equal entries have different snapshot fingerprints', () => {
     const s1 = trackSession('1', { startedAt: day(1), stints: [{ car: 0, firstLap: 1, lastLap: 5 }] });
     const t = setup({ sessions: [s1] });
     const a = t.createSet(TRACK, 'A', [sourceOf(s1, 0, 1)]);
     t.ok({ kind: 'calibration.set.copy', trackId: TRACK, setId: a, name: 'B' });
     const b = t.setId(TRACK, 'B');
-    const print = (id: string) => snapshotOf(t.store, TRACK, id).fingerprint;
-    expect(snapshotOf(t.store, TRACK, b).entries).toEqual(snapshotOf(t.store, TRACK, a).entries);
-    expect(print(b)).toBe(print(a));
+    const snapA = snapshotOf(t.store, TRACK, a), snapB = snapshotOf(t.store, TRACK, b);
+    expect(snapB.entries).toEqual(snapA.entries);
+    expect(snapB.sources).toBe(snapA.sources);
+    expect(snapB.fingerprint).not.toBe(snapA.fingerprint);
 
-    t.ok({ kind: 'calibration.override.set', trackId: TRACK, setId: b, key: 'fake.meanLapMs', value: 95_000 });
-    expect(print(b)).not.toBe(print(a));
-    t.ok({ kind: 'calibration.override.clear', trackId: TRACK, setId: b, key: 'fake.meanLapMs' });
-    expect(print(b)).toBe(print(a));
+    // The name is part of the snapshot: a rename names another snapshot, renaming it back the same one again.
+    const before = snapB.fingerprint;
+    t.ok({ kind: 'calibration.set.rename', trackId: TRACK, setId: b, name: 'B renamed' });
+    expect(snapshotOf(t.store, TRACK, b).fingerprint).not.toBe(before);
+    t.ok({ kind: 'calibration.set.rename', trackId: TRACK, setId: b, name: 'B' });
+    expect(snapshotOf(t.store, TRACK, b).fingerprint).toBe(before);
 
-    t.ok({ kind: 'calibration.override.set', trackId: TRACK, setId: b, key: 'fake.limitPct', value: 50 });
-    expect(print(b)).not.toBe(print(a));
-    t.ok({ kind: 'calibration.override.clear', trackId: TRACK, setId: b, key: 'fake.limitPct' });
-    expect(print(b)).toBe(print(a));
+    // Two sets without sources and with equal overrides: equal entries, equal sources count, still two snapshots.
+    const c = t.createSet(TRACK, 'C'), d = t.createSet(TRACK, 'D');
+    for (const id of [c, d]) t.ok({ kind: 'calibration.override.set', trackId: TRACK, setId: id, key: 'fake.limitPct', value: 80 });
+    const snapC = snapshotOf(t.store, TRACK, c), snapD = snapshotOf(t.store, TRACK, d);
+    expect(snapD.entries).toEqual(snapC.entries);
+    expect(snapD.fingerprint).not.toBe(snapC.fingerprint);
+  });
 
-    t.ok({ kind: 'calibration.lap.exclude', trackId: TRACK, setId: b, source: sourceOf(s1, 0, 1), lap: 1 });
-    expect(print(b)).not.toBe(print(a));
+  it('a snapshot\'s fingerprint is stable across a reload of the same set', () => {
+    const s1 = trackSession('1', { startedAt: day(1), stints: [{ car: 0, firstLap: 1, lastLap: 5 }] });
+    const dir = mkdtempSync(join(tmpdir(), 'calibration-'));
+    const first = setup({ sessions: [s1], dir });
+    const id = first.createSet(TRACK, 'Set', [sourceOf(s1, 0, 1)]);
+    first.ok({ kind: 'calibration.override.set', trackId: TRACK, setId: id, key: 'fake.limitPct', value: 80 });
+    const before = snapshotOf(first.store, TRACK, id);
+    first.close();
+
+    // Reloaded from the set file, with the cache in place.
+    const reloaded = setup({ sessions: [s1], dir });
+    expect(snapshotOf(reloaded.store, TRACK, id)).toEqual(before);
+    reloaded.close();
+
+    // Reloaded with the cache deleted: the entries are computed again, the fingerprint is the same.
+    for (const file of ['priors.sqlite', 'priors.sqlite-wal', 'priors.sqlite-shm']) rmSync(join(dir, file), { force: true });
+    const recomputed = setup({ sessions: [s1], dir });
+    expect(snapshotOf(recomputed.store, TRACK, id).fingerprint).toBe(before.fingerprint);
+  });
+
+  // SP4.1a f34 (F3, C43): which cars are ours is the engine's placement (the player and the teammate it placed, stored
+  // with the session), not a rule of the bridge over the slots' teams.
+  it('suggestions take the stored teammate, not every slot of the player\'s team', () => {
+    // Cars 0 (the player), 1 and 2 are of one team; the engine placed car 2 as the teammate. Car 3 is a rival.
+    const cars = [
+      { carId: car(0), carKey: { teamId: 0, raceNumber: 44 } },
+      { carId: car(1), carKey: { teamId: 0, raceNumber: 63 } },
+      { carId: car(2), carKey: { teamId: 0, raceNumber: 12 } },
+      { carId: car(3), carKey: { teamId: 1, raceNumber: 16 } },
+    ];
+    const stints = [0, 1, 2, 3].map((n) => ({ car: n, firstLap: 1, lastLap: 5 }));
+    const placed = trackSession('placed', { startedAt: day(2), cars, teammateCar: car(2), stints });
+    // The engine placed no teammate in this one: only the player's stints are ours.
+    const alone = trackSession('alone', { startedAt: day(1), cars, teammateCar: null, stints });
+    const t = setup({ sessions: [placed, alone] });
+    t.createSet(TRACK, 'Set');
+    t.store.recompute('sessionEnd');
+
+    const candidates = t.last<CalibrationCandidatesValue>('calibration.candidates').byTrack[TRACK] ?? [];
+    expect(candidates.map((c) => c.source)).toEqual([sourceOf(placed, 0, 1), sourceOf(placed, 2, 1), sourceOf(alone, 0, 1)]);
+  });
+
+  it('a source of a same-team slot that is not the stored teammate is rejected', () => {
+    const cars = [
+      { carId: car(0), carKey: { teamId: 0, raceNumber: 44 } },
+      { carId: car(1), carKey: { teamId: 0, raceNumber: 63 } },
+      { carId: car(2), carKey: { teamId: 0, raceNumber: 12 } },
+    ];
+    const s1 = trackSession('1', { startedAt: day(1), cars, teammateCar: car(2), stints: [0, 1, 2].map((n) => ({ car: n, firstLap: 1, lastLap: 5 })) });
+    const t = setup({ sessions: [s1] });
+    const id = t.createSet(TRACK, 'Set');
+    t.ok({ kind: 'calibration.source.add', trackId: TRACK, setId: id, source: sourceOf(s1, 2, 1) });
+    expect(t.apply({ kind: 'calibration.source.add', trackId: TRACK, setId: id, source: sourceOf(s1, 1, 1) })).toMatchObject({ ok: false, reason: 'invalid' });
+    expect(readSet(t.dir, TRACK, id).sources).toEqual([sourceOf(s1, 2, 1)]);
   });
 
   it('snapshotOf of an unknown set is undefined, not a throw', () => {

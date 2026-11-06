@@ -3,6 +3,7 @@
 import { currentLaps, known, unknown, type Known, type PitCondition } from '@pitwall/domain';
 import { definePriors, type PriorDecl, type PriorsCtx, type StoredSource } from '@pitwall/engine/readers';
 import { LAP_CLASSES_CONFIG } from '../lap-classes/index.ts';
+import { phaseRow } from './behaviour.ts';
 import { PIT_LOSS_CONFIG } from './config.ts';
 import { median, sessionStops, type PitLossOptions } from './loss.ts';
 
@@ -16,7 +17,7 @@ export const pitLossKey = (condition: PitCondition): string => `pitLoss.ms.${con
 const optionsOf = (source: StoredSource, ctx: PriorsCtx): PitLossOptions => ({
   ...PIT_LOSS_CONFIG.defaults,
   ...ctx.config[PIT_LOSS_CONFIG.key],
-  classes: { isRace: source.phase.kind === 'race', ...LAP_CLASSES_CONFIG.defaults, ...ctx.config[LAP_CLASSES_CONFIG.key] },
+  classes: { isRace: phaseRow(source.phase.kind).isRace === true, ...LAP_CLASSES_CONFIG.defaults, ...ctx.config[LAP_CLASSES_CONFIG.key] },
 });
 
 /** The entry of one condition. */
