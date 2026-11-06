@@ -72,6 +72,9 @@ const carWithWear = (now: number, set: { age?: number; actualCompound?: ActualCo
 /** One stint of `degradation`'s output (spec 4.1): soft C3, `ν` 100 ms per lap unless `over` says otherwise. */
 const degStint = (over: Partial<StintDegradation> = {}): StintDegradation => ({
   stint: 1,
+  // the stint's first and last lap (G1); tyre-life reads neither
+  firstLap: 1,
+  lastLap: 3,
   actual: 'C3',
   visual: 'soft',
   basePaceMs: known(87_000, 0),

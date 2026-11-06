@@ -21,9 +21,12 @@
 //  - every value has an override field `override-<priors key>` (full mode), holding the set's override when it has one,
 //    in the unit the cell shows (s for deg, sd, offset, pit loss and the age-loss limit; % for wear and the wear
 //    limit); a commit (its `change` event) of a number sends `calibration.override.set` with the value in the key's
-//    unit (ms, %), of an empty field `calibration.override.clear`, of anything else nothing;
+//    unit (ms, %), of an empty field `calibration.override.clear` (nothing without an override); a text that is no
+//    number sends nothing, shows `text.rejected(text.notANumber)` in `rejection` and the field shows the set's override
+//    again (C73);
 //  - a rejection (the panel's `send` resolves `{ ok: false, message }`) shows `text.rejected(message)` in `rejection`;
-//    the field keeps its draft.
+//    the field keeps its draft. A `linkLost` outcome (set by the UI connection, no message) shows
+//    `text.rejected(text.linkLost)` (C68: the panel words it).
 // `send` comes from the panel (kit `getUiActions`); here test/kit/ActionsHarness.svelte stands in for it. Its result is
 // the bridge's `actionResult` (requested kit change, Task 15 report: `send` resolves the result).
 import type { UiAction } from '@pitwall/contracts';
@@ -47,8 +50,8 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-/** What the bridge answers an action: accepted, or rejected with its reason. */
-type Outcome = { ok: true } | { ok: false; reason: 'invalid' | 'notSupported'; message?: string };
+/** What the bridge answers an action: accepted, or rejected with its reason (`linkLost`: the UI connection's). */
+type Outcome = { ok: true } | { ok: false; reason: 'invalid' | 'notSupported' | 'linkLost'; message?: string };
 const accepted = (): Promise<Outcome> => Promise.resolve({ ok: true });
 const rejectedWith = (message: string) => (): Promise<Outcome> => Promise.resolve({ ok: false, reason: 'invalid', message });
 
@@ -236,6 +239,38 @@ describe('calibration-panel: a rejection reason is shown', () => {
     await fireEvent.click(get(c, 'set-new'));
     await commit(c, 'set-name', 'league');
     await vi.waitFor(() => expect(find(c, 'rejection')?.textContent?.trim()).toBe(text.rejected(message)));
+  });
+
+  it('an override that is not a number sends nothing, shows a rejection and restores the field', async () => {
+    const { container: c, sent } = mount(cases.activeLeague);
+    // hard's DEG/LAP holds the set's override 0.045 s
+    const field = `override-${key.deg('hard')}`;
+    expect(get<HTMLInputElement>(c, field).value).toBe('0.045');
+    await commit(c, field, 'fast');
+    expect(sent).toEqual([]);
+    await vi.waitFor(() => expect(find(c, 'rejection')?.textContent?.trim()).toBe(text.rejected(text.notANumber)));
+    expect(get<HTMLInputElement>(c, field).value).toBe('0.045');
+    // a field without an override shows empty again
+    await commit(c, `override-${key.deg('medium')}`, 'slow');
+    expect(sent).toEqual([]);
+    expect(get<HTMLInputElement>(c, `override-${key.deg('medium')}`).value).toBe('');
+    expect(find(c, 'rejection')?.textContent?.trim()).toBe(text.rejected(text.notANumber));
+  });
+
+  it('an empty field without an override sends nothing and shows no rejection', async () => {
+    const { container: c, sent } = mount(cases.activeLeague);
+    await commit(c, `override-${key.deg('medium')}`, '');
+    expect(sent).toEqual([]);
+    await Promise.resolve();
+    expect(find(c, 'rejection')?.textContent?.trim() ?? '').toBe('');
+  });
+
+  it('a linkLost outcome is worded by the panel', async () => {
+    const { container: c, sent } = mount(cases.activeLeague, { respond: () => Promise.resolve({ ok: false, reason: 'linkLost' }) });
+    await commit(c, `override-${key.deg('hard')}`, '0.050');
+    expect(sent).toHaveLength(1);
+    await vi.waitFor(() => expect(find(c, 'rejection')?.textContent?.trim()).toBe(text.rejected(text.linkLost)));
+    expect(text.linkLost).not.toBe(text.rejectedNoReason);
   });
 
   it('shows no rejection for an accepted action', async () => {

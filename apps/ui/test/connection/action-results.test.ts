@@ -2,8 +2,9 @@
 //  - `send({ type: 'uiAction', id, action })` sends the message and returns a promise of the outcome: the bridge's
 //    `actionResult` of the same id without `type` and `id` (`{ ok: true }` or `{ ok: false, reason, message? }`);
 //  - results are matched by id, whatever their order;
-//  - an action still unanswered when the link closes resolves `{ ok: false, reason: 'notSupported', message }`
-//    (message: a string for the UI to show); so does one sent while the link is not open. No timer is involved.
+//  - an action still unanswered when the link closes resolves `{ ok: false, reason: 'linkLost' }`, without a message
+//    (the sender words it, C68: no user-visible wording in `connection/`); so does one sent while the link is not
+//    open. No timer is involved.
 import type { ClientMessage, UiAction } from '@pitwall/contracts';
 import { describe, expect, it } from 'vitest';
 import { TopicStore } from '../../src/connection/topic-store.svelte.ts';
@@ -78,16 +79,17 @@ describe('TopicStore: the result of a uiAction', () => {
     await flush();
     expect(pending.map((p) => p.settled)).toEqual([false, false]);
     connection.setState('closed');
-    const failed = { ok: false, reason: 'notSupported', message: expect.any(String) };
-    for (const p of pending) expect(await p.outcome).toEqual(failed);
+    // exactly these keys: no message
+    const failed = { ok: false, reason: 'linkLost' };
+    for (const p of pending) expect(await p.outcome).toStrictEqual(failed);
     expect(await answered.outcome).toEqual({ ok: true });
     // A late answer for an id the close already settled changes nothing.
     connection.reopen();
     connection.push({ type: 'actionResult', id: 'main.2', ok: true });
-    expect(await pending[0]!.outcome).toEqual(failed);
+    expect(await pending[0]!.outcome).toStrictEqual(failed);
     // Sent while the link is not open: the connection drops it, so it fails at once.
     connection.setState('closed');
     const whileClosed = act('main.4', ack);
-    expect(await whileClosed.outcome).toEqual(failed);
+    expect(await whileClosed.outcome).toStrictEqual(failed);
   });
 });
