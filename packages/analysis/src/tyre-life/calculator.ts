@@ -5,7 +5,7 @@ import { known, unknown, type CarId, type CarState, type Corners, type Known, ty
 import type { DeepReadonly, EngineView, QuickCalculator } from '@pitwall/engine/readers';
 import { DEGRADATION, type DegradationOutput, type StintDegradation } from '../degradation/index.ts';
 import { priorKey } from '../degradation/priors.ts';
-import { LAP_CLASSES_CONFIG } from '../lap-classes/index.ts';
+import { isRateLap, LAP_CLASSES_CONFIG } from '../lap-classes/index.ts';
 import { lapsToReach, PER_LAP_RATE_CONFIG } from '../per-lap-rate/index.ts';
 import { behaviourFor } from '../shared/behaviour.ts';
 import { CAR_STATUS_READS } from '../shared/car-status.ts';
@@ -13,7 +13,7 @@ import { currentStintLaps } from '../shared/stint-laps.ts';
 import { TYRE_LIFE_BEHAVIOUR, type TyreLifeEffect } from './behaviour.ts';
 import { TYRE_LIFE, TYRE_LIFE_CONFIG, type TyreLife, type TyreLifeOutput } from './index.ts';
 import { AGE_LOSS_LIMIT_KEY, WEAR_LIMIT_KEY, wearRateKey } from './priors.ts';
-import { CORNERS, cornerRate, rateLaps, type Corner } from './wear-rate.ts';
+import { CORNERS, wearBasis, wearRatePerCorner, type Corner } from '../shared/wear-rate.ts';
 
 const COMPOUNDS = ['soft', 'medium', 'hard', 'inter', 'wet'] as const satisfies readonly VisualCompound[];
 
@@ -110,11 +110,16 @@ export const tyreLifeCalculator: QuickCalculator<TyreLifeOutput> = {
     for (const car of view.live.cars) {
       const effect: TyreLifeEffect = Object.assign({}, ...behaviourFor(TYRE_LIFE_BEHAVIOUR, view, car.id));
       if (effect.inSession !== true) continue;
-      const own = onFittedSet(rateLaps(currentStintLaps(view.history, car.id), classes), car.tyres);
+      // the set's rate laps: the fitted set is judged over the stint's rate laps (`isRateLap`, as before the shared rule)
+      const own = onFittedSet(
+        currentStintLaps(view.history, car.id).filter((l) => isRateLap(l, classes)),
+        car.tyres,
+      );
+      const rates = wearRatePerCorner(own, { lapClasses: classes, rate: rateOpts });
       const corner = (c: Corner): CornerLife => {
         const wearPct = car.tyres.corners[c].wearPct;
         if (!wearPct.known) return { wearPct, ratePctPerLap: wearPct, lapsToLimit: wearPct };
-        const rate = cornerRate(own, c, rateOpts);
+        const rate = rates[c];
         return {
           wearPct,
           ratePctPerLap: rate.known ? known(rate.value.perLap, rate.at) : rate,
@@ -123,8 +128,8 @@ export const tyreLifeCalculator: QuickCalculator<TyreLifeOutput> = {
       };
       const corners = Object.fromEntries(CORNERS.map((c) => [c, corner(c)])) as Corners<CornerLife>;
       const stints = degradation[car.id] ?? [];
-      // the basis follows the live state: `wear` while every corner's wear is visible (as `degradation`'s rule)
-      const basis = CORNERS.every((c) => car.tyres.corners[c].wearPct.known) ? 'wear' : 'age';
+      // the basis follows the live state: `wear` while every corner's wear is visible (the shared rule, `wearBasis`)
+      const basis = wearBasis({ fl: car.tyres.corners.fl.wearPct, fr: car.tyres.corners.fr.wearPct, rl: car.tyres.corners.rl.wearPct, rr: car.tyres.corners.rr.wearPct });
       out[car.id] = {
         corners,
         lapsToLimit: basis === 'wear' ? worstCorner(corners) : ageLaps(stints.at(-1)?.nuMsPerLap, car.tyres.age, limits.ageLossLimitMs),
