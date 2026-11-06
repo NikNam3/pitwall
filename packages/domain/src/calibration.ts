@@ -72,7 +72,10 @@ export type RunPriors = { start: string | null; snapshots: Record<string, Priors
  * stint is no longer in its session's projection (`missing`) or the session awaits a rebuild (`stale`, C61); a skipped
  * source is left out of every aggregate.
  */
-export type SourceFit = {
+export type SourceFit = FittedSource | SkippedSource;
+
+/** A source the store could read: its own values, residuals and laps. */
+export type FittedSource = {
   source: CalibrationSource;
   /** ISO date of the source's session; shown only. */
   sessionDate: string;
@@ -87,7 +90,18 @@ export type SourceFit = {
   lapList: { lapNumber: number; lapTimeMs: Known<Ms>; excluded: boolean; use: Known<LapUse> }[];
   entries: PriorsEntries;
   residuals: Record<string, Known<number>>;
-  skipped?: 'missing' | 'stale';
+  skipped?: undefined;
+};
+
+/**
+ * A source left out of every aggregate (C3: no placeholder values): `missing` (its stint or session is gone) or `stale`
+ * (its session awaits a rebuild, C61). What is still known of it is `Known`; the rest it does not carry.
+ */
+export type SkippedSource = {
+  source: CalibrationSource;
+  skipped: 'missing' | 'stale';
+  sessionDate: Known<string>;
+  compound: Known<VisualCompound>;
 };
 
 /** `calibration.sets`: every calibration set, of all tracks. */
