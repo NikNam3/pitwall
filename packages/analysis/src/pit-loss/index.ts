@@ -4,6 +4,7 @@ import type { PitLosses } from '@pitwall/domain';
 
 export * from './config.ts';
 export * from './priors.ts';
+export { stopLoss, type PitLossConfig, type PitLossOptions } from './loss.ts';
 
 /** The calculator id. */
 export const PIT_LOSS = 'pit-loss';

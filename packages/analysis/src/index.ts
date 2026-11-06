@@ -23,6 +23,7 @@ export { fuelCalculator } from './fuel/calculator.ts';
 export * from './pace-delta/index.ts';
 export * from './per-lap-rate/index.ts';
 export * from './pit-loss/index.ts';
+export { pitLossCalculator } from './pit-loss/calculator.ts';
 export * from './pit-losses/index.ts';
 export * from './pit-stop-count/index.ts';
 export { pitStopCountCalculator } from './pit-stop-count/calculator.ts';

@@ -14,8 +14,8 @@ export type PitCondition = PitStopRecord['flag'];
  */
 export type PitLossEstimate = { lossMs: Known<Ms>; stationaryMedianMs: Known<Ms>; sessionStops: number; source: EstimateSource };
 
-/** One stop of the session: its loss, its stationary time, and whether it counts (`noReference`: no clean reference laps). */
-export type PitLossStop = { carId: CarId; lap: number; condition: PitCondition; lossMs: Known<Ms>; stationaryMs: Ms; use: 'used' | 'noReference' };
+/** One stop of the session: its loss, its stationary time, and whether it counts (`noReference`: no clean reference laps; `penalty`: the stop served a penalty, R12). */
+export type PitLossStop = { carId: CarId; lap: number; condition: PitCondition; lossMs: Known<Ms>; stationaryMs: Ms; use: 'used' | 'noReference' | 'penalty' };
 
 /** `pitLosses.track`: per condition the loss, and this session's stops in lap order. */
 export type PitLosses = { conditions: Record<PitCondition, PitLossEstimate>; stops: PitLossStop[] };
