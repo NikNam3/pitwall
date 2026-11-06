@@ -70,7 +70,7 @@
     rejection = undefined;
     const outcome = await send(action);
     if (outcome.ok) return true;
-    rejection = text.rejected(outcome.message ?? text.rejectedNoReason);
+    rejection = text.rejected(outcome.reason === 'linkLost' ? text.linkLost : (outcome.message ?? text.rejectedNoReason));
     return false;
   }
 
@@ -114,10 +114,14 @@
     const at = onSet();
     if (at !== undefined) void act({ kind: toggle === 'kept' ? 'calibration.lap.exclude' : 'calibration.lap.include', ...at, source, lap });
   }
-  function commitOverride(spec: ValueSpec, typed: string): void {
+  /** A number or an empty field sends its action; a text that is no number is rejected here and the field shows the set's override again. */
+  function commitOverride(spec: ValueSpec, input: HTMLInputElement): void {
     const at = onSet();
-    const action = at === undefined ? undefined : overrideAction(spec, typed, { ...at, overrides });
-    if (action !== undefined) void act(action);
+    const action = at === undefined ? undefined : overrideAction(spec, input.value, { ...at, overrides });
+    if (action === 'notANumber') {
+      rejection = text.rejected(text.notANumber);
+      input.value = overrideText(spec, overrides);
+    } else if (action !== undefined) void act(action);
   }
 
   const header = (cells: [string, number, 'left' | 'right'][]): string => cells.map(([t, w, a]) => fitCell(t, w, a)).join(SP);
@@ -171,7 +175,7 @@
     aria-label={spec.key}
     style:width="{spec.width}ch"
     value={overrideText(spec, overrides)}
-    onchange={(e) => commitOverride(spec, e.currentTarget.value)}
+    onchange={(e) => commitOverride(spec, e.currentTarget)}
   />
 {/snippet}
 

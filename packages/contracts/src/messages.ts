@@ -24,8 +24,12 @@ export type ClientMessage =
   | { type: 'replayControl'; id: string; control: ReplayControl }
   | { type: 'heartbeat' };
 
-/** What a uiAction's owner answers: accepted, or rejected with a reason and, for an invalid one, a message (C73). */
-export type ActionOutcome = { ok: true } | { ok: false; reason: 'invalid' | 'notSupported'; message?: string };
+/**
+ * What a uiAction's owner answers: accepted, or rejected with a reason and, for an invalid one, a message (C73).
+ * `linkLost` is never sent by the bridge: the UI's connection settles an action with it when the link was not open or
+ * closed before the answer; it carries no message (the UI words it, C68).
+ */
+export type ActionOutcome = { ok: true } | { ok: false; reason: 'invalid' | 'notSupported' | 'linkLost'; message?: string };
 
 export type ServerMessage =
   | { type: 'hello'; contractVersion: number; feeds: FeedInfo[] }

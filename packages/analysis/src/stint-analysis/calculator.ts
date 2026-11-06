@@ -30,8 +30,8 @@ function fitLineOf(stint: StintDegradation): Known<FitPoint[]> {
 function stintFitOf(stint: StintDegradation): StintFit {
   return {
     stint: stint.stint,
-    firstLap: stint.laps[0]?.lapNumber ?? 0,
-    lastLap: stint.laps.at(-1)?.lapNumber ?? 0,
+    firstLap: stint.firstLap,
+    lastLap: stint.lastLap,
     actual: stint.actual,
     visual: stint.visual,
     basePaceMs: copyPlain(stint.basePaceMs),

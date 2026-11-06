@@ -104,3 +104,7 @@ export const compactPit = 'pit';
 /** The bridge's reason for a rejected action, below the set line. */
 export const rejected = (message: string): string => `rejected: ${message}`;
 export const rejectedNoReason = 'the bridge did not accept it';
+/** An override text that is no number: the panel rejects it without sending it (C73). */
+export const notANumber = 'not a number';
+/** An action the bridge never answered: the link closed first (the connection's `linkLost`). */
+export const linkLost = 'the link to the bridge closed before it answered';

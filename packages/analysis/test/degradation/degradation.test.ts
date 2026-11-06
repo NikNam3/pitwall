@@ -57,6 +57,24 @@ describe('degradation calculator', () => {
     expect(Math.abs(valueOf(stint!.nuMsPerLap) - 80)).toBeLessThanOrEqual(8);
   });
 
+  it('a stint carries its first and last lap: a closed one its record`s, its laps all hidden; the open one its first and newest lap', () => {
+    // stint 1's record covers laps 1..3, none of them in the projection (hidden, e.g. by the formation span); stint 2's
+    // record laps 4..8; the open stint laps 9..12
+    const laps = [...stintLaps({ from: 4, to: 8 }), ...stintLaps({ from: 9, to: 12, actual: 'C2', visual: 'medium', fuelAtFrom: 90 })];
+    const stints = stintsOf(
+      view({
+        laps,
+        history: { stints: [stintRecord({ firstLap: 1, lastLap: 3 }), stintRecord({ firstLap: 4, lastLap: 8 })], pitStops: [pitStop({ lap: 3 }), pitStop({ lap: 8 })] },
+        cars: [carState({ tyres: { actualCompound: 'C2', visualCompound: 'medium', age: 4 } })],
+      }),
+    );
+    expect(stints.map((s) => [s.stint, s.firstLap, s.lastLap, s.laps.length])).toEqual([
+      [1, 1, 3, 0],
+      [2, 4, 8, 5],
+      [3, 9, 12, 4],
+    ]);
+  });
+
   it('a slow outlier is down-weighted, a fast lap never', () => {
     // pace laps 2..13 (tyre age 1..12), ±100 ms noise; lap 8 (age 7, near the stint's middle) 4 s slow or 4 s fast
     const spec = { from: 1, to: 13, nu: 80, noise: alternating(100) };

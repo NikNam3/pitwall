@@ -25,8 +25,11 @@ export type TopicKey<T extends TopicName> = { topic: T; params: TopicParams<T>; 
 
 type UiActionMessage = Extract<ClientMessage, { type: 'uiAction' }>;
 
-/** The outcome of a uiAction the bridge never answered: the link was not open, or closed before the answer (C73). */
-const LINK_LOST: ActionOutcome = { ok: false, reason: 'notSupported', message: 'The link to the bridge closed before it answered.' };
+/**
+ * The outcome of a uiAction the bridge never answered: the link was not open, or closed before the answer (C73). No
+ * message: the sender words it (C68).
+ */
+const LINK_LOST: ActionOutcome = { ok: false, reason: 'linkLost' };
 
 type Entry = {
   key: TopicKey<TopicName>;

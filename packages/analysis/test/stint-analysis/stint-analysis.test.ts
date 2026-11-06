@@ -317,6 +317,27 @@ describe('stint-analysis calculator', () => {
     expect(analysisOf(calc.compute(view({ laps: stintLaps({ from: 1, to: 10 }) }))).stints[0]!.fuelCorrected).toBe(true);
   });
 
+  it('a closed stint whose laps are all hidden keeps its record`s first and last lap', () => {
+    // the projection holds stint 1's record (laps 1..3) but none of its laps (hidden, e.g. by the formation span); the
+    // open stint runs from lap 4 to the newest lap, 10. Never lap 0 (C3).
+    const laps = stintLaps({ from: 4, to: 10, actual: 'C2', visual: 'medium', ageAtFrom: 0, over: { 4: { outLap: true } } });
+    const v = view({
+      laps,
+      history: { stints: [stintRecord({ firstLap: 1, lastLap: 3 })], pitStops: [pitStop({ lap: 3 })] },
+      cars: [carState({ tyres: { actualCompound: 'C2', visualCompound: 'medium', age: 7 } })],
+    });
+    // `degradation` carries them: the closed stint's from its record, the open stint's from its first and newest lap
+    expect(degradationOf(v).map((s) => [s.stint, s.firstLap, s.lastLap, s.laps.length])).toEqual([
+      [1, 1, 3, 0],
+      [2, 4, 10, 7],
+    ]);
+    const { stints } = analysisOf(calc.compute(v));
+    expect(stints.map((s) => [s.stint, s.firstLap, s.lastLap, s.visual])).toEqual([
+      [1, 1, 3, 'soft'],
+      [2, 4, 10, 'medium'],
+    ]);
+  });
+
   it('our cars: the teammate`s stints too', () => {
     const laps = [...stintLaps({ from: 1, to: 8 }), ...stintLaps({ car: 1, from: 1, to: 8, nu: 100 })];
     const out = calc.compute(view({ laps, cars: [carState(), carState({ id: carId(1) })], teammate: 1 }));
