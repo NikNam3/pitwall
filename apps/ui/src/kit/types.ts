@@ -34,13 +34,16 @@ export type OptionalDecl<D extends AnyDataDecl> = D & { readonly optional: true 
 type OptionBase<V> = { readonly label: string; readonly default: V; readonly _value?: () => V };
 
 export type BoolOption = OptionBase<boolean> & { readonly kind: 'bool' };
-export type CarOption = OptionBase<CarRef | undefined> & { readonly kind: 'car' };
+/** What an unset car option means: `follow` the panel's link, or `none`, no car. */
+export type CarUnset = 'follow' | 'none';
+export type CarOption = OptionBase<CarRef | undefined> & { readonly kind: 'car'; readonly unset: CarUnset };
 export type ChoiceOption<C extends string> = OptionBase<C> & { readonly kind: 'choice'; readonly choices: readonly C[] };
 export type NumberOption = OptionBase<number> & { readonly kind: 'number'; readonly range: { min: number; max: number; step: number } };
 
 /** One per-panel setting, UI-only, discriminated on `kind`: `choices` only on choice options, `range` only on number options. */
 export type OptionDecl<V> =
-  | (OptionBase<V> & { readonly kind: 'bool' | 'car' })
+  | (OptionBase<V> & { readonly kind: 'bool' })
+  | (OptionBase<V> & { readonly kind: 'car'; readonly unset: CarUnset })
   | (OptionBase<V> & { readonly kind: 'choice'; readonly choices: readonly string[] })
   | (OptionBase<V> & { readonly kind: 'number'; readonly range: { min: number; max: number; step: number } });
 
