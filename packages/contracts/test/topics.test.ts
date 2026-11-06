@@ -65,7 +65,7 @@ describe('TOPICS', () => {
   it.each(['calibration.sets', 'calibration.values', 'calibration.candidates'] as const)('has the global topic %s of the calibration store (C54, C62a): owner core, state', (name) => {
     expect(TOPICS[name]).toMatchObject({ name, owner: 'core', scope: 'global', mode: 'state', maxHz: Infinity });
   });
-  it('has the analysis topics of sub-project 3 (spec A.3) and SP4.1a: owner, mode and rate', () => {
+  it('has the analysis topics of sub-project 3 (spec A.3), SP4.1a and SP4.1b: owner, mode and rate', () => {
     const table = Object.entries(TOPICS)
       .filter(([, d]) => d.owner !== 'core')
       .map(([key, d]) => [key, d.owner, d.scope, d.mode, d.maxHz] as const)
@@ -73,6 +73,7 @@ describe('TOPICS', () => {
     expect(table).toEqual([
       ['battle.cards', 'battle', 'feed', 'state', 4],
       ['carBands.car', 'car-bands', 'feed', 'state', 4],
+      ['crossover.car', 'crossover', 'feed', 'state', 1],
       ['damage.car', 'damage', 'feed', 'state', 4],
       ['ers.car', 'ers', 'feed', 'state', 4],
       ['fuel.car', 'fuel', 'feed', 'state', 4],
@@ -82,16 +83,19 @@ describe('TOPICS', () => {
       ['gaps.toCar', 'gaps', 'feed', 'state', 4],
       ['incidents.feed', 'incidents', 'feed', 'state', 4],
       ['incidents.markers', 'incidents', 'feed', 'state', 1],
+      ['lapOverview.car', 'lap-overview', 'feed', 'state', 1],
       ['lapTimes.board', 'lap-times', 'feed', 'state', 4],
       ['lapTimes.projection', 'lap-times', 'feed', 'state', 10],
       ['pitLosses.track', 'pit-losses', 'feed', 'state', 1],
       ['pitStopCount.byCar', 'pit-stop-count', 'feed', 'state', 4],
       ['raceMoment.current', 'race-moment', 'feed', 'state', 4],
+      ['raisingAverage.field', 'raising-average', 'feed', 'state', 1],
       ['stintAnalysis.car', 'stint-analysis', 'feed', 'state', 1],
       ['talkWindow.car', 'talk-window', 'feed', 'state', 10],
       ['trackPositions.cars', 'track-positions', 'feed', 'state', 10],
       ['trackPositions.geometry', 'track-positions', 'feed', 'state', 1],
       ['tyreWear.car', 'tyre-wear', 'feed', 'state', 4],
+      ['weather.forecast', 'weather', 'feed', 'state', 1],
     ]);
   });
   it('has the global topic dev.calcStats: owner core, state, 1 Hz', () => {
@@ -147,6 +151,7 @@ describe('topic types', () => {
       | 'incidents.feed' | 'incidents.markers' | 'raceMoment.current' | 'pitStopCount.byCar'
       | 'trackPositions.geometry' | 'trackPositions.cars' | 'talkWindow.car'
       | 'stintAnalysis.car' | 'pitLosses.track'
+      | 'raisingAverage.field' | 'lapOverview.car' | 'weather.forecast' | 'crossover.car'
       | 'calibration.sets' | 'calibration.values' | 'calibration.candidates' | 'calibration.active'
       | 'situation.carActivityPractice' | 'situation.carActivityQualifying' | 'situation.carActivityRace' | 'situation.carFlags'
       | 'situation.carLocation' | 'situation.carStatus' | 'situation.clock' | 'situation.compoundRule' | 'situation.lapValidity'
