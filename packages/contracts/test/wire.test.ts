@@ -26,6 +26,7 @@ const servers: ServerMessage[] = [
   { type: 'heartbeat' },
   { type: 'error', reason: 'malformed' },
   { type: 'error', id: 's9', reason: 'unknownFeed' },
+  { type: 'starting', step: 'rebuild', done: 3, total: 12 },
 ];
 
 describe('wire format', () => {
@@ -66,7 +67,7 @@ describe('wire format', () => {
   it('drops unknown extra fields', () => {
     expect(decodeClientMessage('{"type":"unsubscribe","id":"s1","x":1}')).toEqual({ type: 'unsubscribe', id: 's1' });
   });
-  it.each(['nope', '{"type":"update"}', '{"type":"topicStatus","id":"s","status":"weird"}', '{"type":"hello","feeds":[]}'])(
+  it.each(['nope', '{"type":"update"}', '{"type":"topicStatus","id":"s","status":"weird"}', '{"type":"hello","feeds":[]}', '{"type":"starting","step":"rebuild","done":1}', '{"type":"starting","step":"other","done":1,"total":2}', '{"type":"starting","step":"rebuild","done":3,"total":2}'])(
     'rejects malformed server message %s', (s) => { expect(decodeServerMessage(s)).toBeUndefined(); });
   it('wire DTOs carry sessionUid as a decimal string', () => {
     expect(JSON.parse(encodeMessage(servers[1]!))).toEqual({ type: 'snapshot', id: 's1', value: { sessionUid: '1896528710553860228' } });

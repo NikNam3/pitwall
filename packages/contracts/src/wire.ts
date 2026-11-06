@@ -49,6 +49,8 @@ export const decodeServerMessage = (text: string): ServerMessage | undefined => 
   switch (raw.type) {
     case 'heartbeat':
       return { type: 'heartbeat' };
+    case 'starting':
+      return decodeStarting(raw);
     case 'hello':
       return decodeHello(raw);
     case 'snapshot':
@@ -112,6 +114,13 @@ const decodeReplayControl = (raw: unknown): ReplayControl | undefined => {
       return undefined;
   }
 };
+
+const isCount = (v: unknown): v is number => Number.isInteger(v) && (v as number) >= 0;
+
+const decodeStarting = (raw: Json): ServerMessage | undefined =>
+  raw.step === 'rebuild' && isCount(raw.done) && isCount(raw.total) && raw.done <= raw.total
+    ? { type: 'starting', step: 'rebuild', done: raw.done, total: raw.total }
+    : undefined;
 
 const decodeHello = (raw: Json): ServerMessage | undefined => {
   if (typeof raw.contractVersion !== 'number' || !Array.isArray(raw.feeds)) return undefined;
