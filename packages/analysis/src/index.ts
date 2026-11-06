@@ -25,6 +25,7 @@ export * from './per-lap-rate/index.ts';
 export * from './pit-loss/index.ts';
 export { pitLossCalculator } from './pit-loss/calculator.ts';
 export * from './pit-losses/index.ts';
+export { pitLossesCalculator } from './pit-losses/calculator.ts';
 export * from './pit-stop-count/index.ts';
 export { pitStopCountCalculator } from './pit-stop-count/calculator.ts';
 export * from './race-moment/index.ts';
