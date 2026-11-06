@@ -1,5 +1,5 @@
 // Every fixed text of the kit and the shell (spec 4.3, 7.4): the one place UI wording changes.
-import type { Corners, DamageParts, IncidentKind, InsightCategory, UnknownReason } from '@pitwall/domain';
+import type { Corners, DamageParts, EstimateSource, IncidentKind, InsightCategory, UnknownReason } from '@pitwall/domain';
 
 /** Header state while a required topic has no value yet. */
 export const noDataYet = 'no data yet';
@@ -86,6 +86,18 @@ export const unknownMark = {
 
 /** Prefix of an estimated value in a value cell. */
 export const estimatedPrefix = '~';
+
+/**
+ * The source badge after a value that rests on a prior (spec 4.4): its mark per source kind (none for a value measured
+ * this session, `ᶜ` for the calibration, `ᵈ` for a default) and its hover per kind.
+ */
+export const sourceMark = { session: '', calibration: 'ᶜ', default: 'ᵈ' } as const satisfies Record<EstimateSource['kind'], string>;
+export const sourceHover = {
+  session: (parts: string): string => ['session', parts].join(separator),
+  calibration: (setName: string, sources: number, parts: string): string =>
+    ['calibration', setName, `${sources} ${sources === 1 ? 'source' : 'sources'}`, parts].join(separator),
+  default: (note: string): string => ['default', note].join(separator),
+} as const;
 
 /** Body of a gallery cell whose moment file is missing. */
 export const momentMissing = 'moment not generated, run pnpm gen:moments';

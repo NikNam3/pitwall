@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from 'vitest';
+import type { UiAction } from '@pitwall/contracts';
+import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { lapsFold } from '../../src/kit/folds.ts';
 import { declareWidget, folded, registerWidget, topic } from '../../src/kit/define-widget.ts';
 import defineWidgetSource from '../../src/kit/define-widget.ts?raw';
@@ -33,6 +34,24 @@ describe('declareWidget', () => {
   });
   it('throws when there are no sizes', () => {
     expect(() => declareWidget({ name: 'gaps', title: 'T', data, sizes: {} })).toThrow();
+  });
+});
+
+// Declared widget actions (C74, plan Task 12): a widget lists the uiAction kinds it sends; the panel passes that list to
+// `setUiActions`. `actions` is `readonly UiAction['kind'][]`, `[]` when the widget sends none.
+describe('declareWidget: declared actions', () => {
+  it('keeps the uiAction kinds the widget declares', () => {
+    const w = declareWidget({ name: 'alarm-list', title: 'Alarms', data, sizes, actions: ['alert.ack', 'alertGroup.mute'] });
+    expect(w.actions).toEqual(['alert.ack', 'alertGroup.mute']);
+  });
+  it('a widget that declares none sends none: actions is empty', () => {
+    expect(declareWidget({ name: 'gaps', title: 'T', data, sizes }).actions).toEqual([]);
+  });
+  it('actions are uiAction kinds: the declaration\'s type, and an unknown kind does not compile', () => {
+    const w = declareWidget({ name: 'gaps', title: 'T', data, sizes, actions: ['alert.ack'] });
+    expectTypeOf(w.actions).toEqualTypeOf<readonly UiAction['kind'][]>();
+    // @ts-expect-error -- not a uiAction kind
+    declareWidget({ name: 'gaps', title: 'T', data, sizes, actions: ['alert.dismiss'] });
   });
 });
 
