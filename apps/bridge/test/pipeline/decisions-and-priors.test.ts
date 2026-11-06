@@ -5,7 +5,7 @@
 // `calibrationChosen { setId, snapshot }` with the next frame and appends it, with its record index, to
 // `<file>.decisions.json`. A replay feeds both sidecars back (`recordingDecisions`), so it reproduces the live stream
 // whatever the store holds by then; a recording without them runs on `notApplicable`. The store here is a fake (C84).
-import { copyFileSync, existsSync, mkdtempSync, readdirSync, readFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
@@ -20,7 +20,7 @@ import { TopicHub } from '../../src/hub/topic-hub.ts';
 import { PwrecSource } from '../../src/input/pwrec-source.ts';
 import { createLogger } from '../../src/log.ts';
 import { recordingDecisions, type RecordedRun } from '../../src/pipeline/decision-sidecars.ts';
-import { FeedPipeline, type FeedPipelineOptions } from '../../src/pipeline/feed-pipeline.ts';
+import { FeedPipeline, type DecisionResult, type FeedPipelineOptions } from '../../src/pipeline/feed-pipeline.ts';
 import { StreamHash, topicStreamHash } from '../../src/pipeline/stream-hash.ts';
 import { openDatabase } from '../../src/storage/db.ts';
 import { trackSidecarPath } from '../../src/track-files/load.ts';
@@ -92,7 +92,8 @@ type RunOptions = {
   /** Live: one pick, after the first record for which `when` holds. */
   pick?: Pick;
 };
-type Run = { pipeline: FeedPipeline; seen: Seen[]; hash: string; values: Map<TopicName, unknown[]>; file: string | undefined };
+/** `answer`: what `commitDecision` answered the pick; undefined without one. */
+type Run = { pipeline: FeedPipeline; seen: Seen[]; hash: string; values: Map<TopicName, unknown[]>; file: string | undefined; answer: DecisionResult | undefined };
 
 /** The params `topicStreamHash` subscribes a topic without a `select` with (none of these features has one). */
 const HASH_PARAMS = { carId: 0, referenceCarId: 0, reference: { kind: 'leaderAverage' } };
@@ -124,6 +125,7 @@ async function run(path: string, o: RunOptions = {}): Promise<Run> {
   }
   const dir = o.record === true ? tmp() : undefined;
   let picked = false;
+  let answer: DecisionResult | undefined = undefined;
   let pipeline: FeedPipeline | undefined = undefined;
   const source = new HookedSource(new PwrecSource({ feedId: F, path, mode: 'asFastAsPossible' }), {
     before: (packet) => {
@@ -133,7 +135,7 @@ async function run(path: string, o: RunOptions = {}): Promise<Run> {
       hub.tick();
       if (o.pick !== undefined && !picked && o.pick.when(index, probe.seen)) {
         picked = true;
-        pipeline?.commitDecision(o.pick.setId);
+        answer = pipeline?.commitDecision(o.pick.setId);
       }
     },
   });
@@ -157,7 +159,7 @@ async function run(path: string, o: RunOptions = {}): Promise<Run> {
     expect(files).toHaveLength(1);
     file = join(dir, files[0]!);
   }
-  return { pipeline, seen: probe.seen, hash: hash.digest(), values, file };
+  return { pipeline, seen: probe.seen, hash: hash.digest(), values, file, answer };
 }
 
 const lastOf = (r: Run, topic: TopicName): unknown => r.values.get(topic)?.at(-1);
@@ -250,6 +252,41 @@ describe('a pick in a live run', () => {
     expect(readJson(priorsSidecar(live.file!))).toEqual(priorsBefore);
     expect(decisionsOf(live.file!)).toEqual(decisionsBefore);
   });
+});
+
+describe('an unknown set or snapshot (C3, C73)', () => {
+  it('a pick of an unknown set is rejected as invalid with a message and changes nothing', async () => {
+    const cal = fakeCalibration(setsOn(ZANDVOORT));
+    const dry = cal.snapshotNow(ZANDVOORT, 'dry');
+    const live = await run(LAP10, { calibration: cal.store, record: true, pick: { setId: 'no-such-set', when: (index) => index === PICK_AT - 1 } });
+    expect(live.answer).toEqual({ ok: false, reason: 'invalid', message: expect.stringMatching(/\S/) });
+    // no snapshot joins the priors sidecar, no decision is recorded, and the set is not marked used
+    expect(readJson(priorsSidecar(live.file!))).toEqual({ start: dry.fingerprint, snapshots: { [dry.fingerprint]: dry } });
+    expect(decisionsOf(live.file!)).toEqual([]);
+    expect(cal.markUsed.mock.calls).toEqual([[ZANDVOORT, 'dry', ISO]]);
+    // and the run never sees a decision: the start snapshot throughout
+    for (const s of live.seen) expect(s).toMatchObject({ priors: known(dry, 0), decisions: 0 });
+    expect(lastOf(live, 'calibration.active')).toMatchObject({ known: true, value: { setId: 'dry', snapshot: dry.fingerprint, picked: false } });
+  }, 60_000);
+
+  it('calibration.active follows priorsOf for a decision naming an unknown snapshot', async () => {
+    // a session file whose decisions sidecar names a fingerprint its priors sidecar does not hold
+    const dry = fakeCalibration(setsOn(ZANDVOORT)).snapshotNow(ZANDVOORT, 'dry');
+    const file = join(tmp(), 'unknown-snapshot.pwrec.gz');
+    copyFileSync(LAP10, file);
+    writeFileSync(priorsSidecar(file), JSON.stringify({ start: dry.fingerprint, snapshots: { [dry.fingerprint]: dry } }));
+    const missing = 'f'.repeat(16);
+    writeFileSync(decisionsSidecar(file), JSON.stringify([{ recordIndex: PICK_AT, decision: { kind: 'calibrationChosen', setId: 'wet', snapshot: missing } }]));
+    const recorded = recordingDecisions(file);
+    expect(recorded.decisions).toHaveLength(1);
+    const replay = await run(file, { recorded });
+    // the units see the start snapshot, then notApplicable from the decision on (priorsOf)
+    expect(replay.seen[0]?.priors).toEqual(known(dry, 0));
+    expect(replay.seen.at(-1)).toMatchObject({ priors: unknown('notApplicable'), decisions: 1 });
+    // and calibration.active agrees with them: it names no snapshot
+    expect(replay.values.get('calibration.active')?.[0]).toMatchObject({ known: true, value: { snapshot: dry.fingerprint } });
+    expect(lastOf(replay, 'calibration.active')).toMatchObject({ known: true, value: { snapshot: null, setName: '' } });
+  }, 60_000);
 });
 
 describe('a flashback and a pick (C27a, C33)', () => {

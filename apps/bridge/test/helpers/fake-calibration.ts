@@ -15,21 +15,24 @@ const fingerprintOf = (entries: PriorsEntries): string => createHash('sha256').u
 
 /**
  * The fake store: `preselect` gives the snapshot of the track's first set (none without one), `snapshotOf` the set's
- * snapshot from its current entries, `markUsed` only records its call. `snapshotNow` is `snapshotOf` without a recorded
- * call; `edit` changes a set's entries, as a calibration edit does between runs.
+ * snapshot from its current entries, `undefined` for an unknown set (never a throw, C3), `markUsed` only records its
+ * call. `snapshotNow` is `snapshotOf` without a recorded call, for a set the test knows (it throws for an unknown one);
+ * `edit` changes a set's entries, as a calibration edit does between runs.
  */
 export function fakeCalibration(sets: readonly FakeSet[]) {
   const held = sets.map((set) => ({ ...set }));
+  const lookup = (trackId: number, setId: string): FakeSet | undefined => held.find((s) => s.trackId === trackId && s.id === setId);
   const find = (trackId: number, setId: string): FakeSet => {
-    const set = held.find((s) => s.trackId === trackId && s.id === setId);
-    if (set === undefined) throw new Error(`no calibration set ${setId} on track ${trackId}`);
+    const set = lookup(trackId, setId);
+    if (set === undefined) throw new Error(`the test names no calibration set ${setId} on track ${trackId}`);
     return set;
   };
-  const snapshotNow = (trackId: number, setId: string): PriorsSnapshot => {
-    const set = find(trackId, setId);
-    return { fingerprint: fingerprintOf(set.entries), setId: set.id, setName: set.name, sources: set.sources, entries: set.entries };
-  };
-  const snapshotOf = vi.fn(snapshotNow);
+  const snapshotFrom = (set: FakeSet): PriorsSnapshot => ({ fingerprint: fingerprintOf(set.entries), setId: set.id, setName: set.name, sources: set.sources, entries: set.entries });
+  const snapshotNow = (trackId: number, setId: string): PriorsSnapshot => snapshotFrom(find(trackId, setId));
+  const snapshotOf = vi.fn((trackId: number, setId: string): PriorsSnapshot | undefined => {
+    const set = lookup(trackId, setId);
+    return set === undefined ? undefined : snapshotFrom(set);
+  });
   const preselect = vi.fn((trackId: number): PriorsSnapshot | null => {
     const first = held.find((s) => s.trackId === trackId);
     return first === undefined ? null : snapshotNow(trackId, first.id);
