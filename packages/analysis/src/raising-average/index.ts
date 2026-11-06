@@ -2,6 +2,7 @@
 import type { RaisingAverage } from '@pitwall/domain';
 
 export type { RaisingAverage, RaisingAverageCurve } from '@pitwall/domain';
+export { RAISING_AVERAGE_BEHAVIOUR, type RaisingAverageEffect } from './behaviour.ts';
 
 /** The analysis id. */
 export const RAISING_AVERAGE = 'raising-average';
