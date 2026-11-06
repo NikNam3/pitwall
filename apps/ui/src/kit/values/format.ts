@@ -1,5 +1,8 @@
 // The only place numbers become text (spec 5): every value cell formats through one of these.
-import { trackName, type Celsius, type CarId, type Kg, type Ms, type Percent, type Psi, type SessionKind } from '@pitwall/domain';
+import {
+  carCode, trackName, type Celsius, type CarId, type Kg, type Ms, type Percent, type Psi, type QualifyingFormat, type SessionKind,
+  type WeekendPhase,
+} from '@pitwall/domain';
 
 /** The one minus glyph of every signed value (U+2212): as wide as `+` in the mono font. */
 export const MINUS = '−';
@@ -102,6 +105,32 @@ const SESSION_KIND_LABEL: Record<SessionKind, string> = {
 /** Session kind in words, `sprintShootout` -> `sprint shootout`. */
 export const formatSessionKind = (kind: SessionKind): string => SESSION_KIND_LABEL[kind];
 
+const SPRINT_SHOOTOUT_FORMATS: ReadonlySet<QualifyingFormat> = new Set<QualifyingFormat>(['sprintShootout', 'shortSprintShootout', 'oneShotSprintShootout']);
+
+/**
+ * A stored session by its weekend phase, short: a practice or qualifying segment as the paddock names it (`FP2`, `Q1`,
+ * `SQ1` for a sprint shootout), a race `race` or `sprint`; without a segment the session kind's word (`practice`); `''`
+ * while the phase is `pending` or `none`.
+ */
+export const formatWeekendPhase = (phase: WeekendPhase): string => {
+  switch (phase.kind) {
+    case 'practice':
+      return phase.segment === undefined ? formatSessionKind('practice') : `FP${phase.segment}`;
+    case 'qualifying': {
+      const shootout = SPRINT_SHOOTOUT_FORMATS.has(phase.format);
+      if (phase.segment === undefined) return formatSessionKind(shootout ? 'sprintShootout' : 'qualifying');
+      return `${shootout ? 'SQ' : 'Q'}${phase.segment}`;
+    }
+    case 'race':
+      return phase.format === 'sprint' ? 'sprint' : formatSessionKind('race');
+    default:
+      return '';
+  }
+};
+
+/** A driver's three-letter code from the name the game gives (`carCode`'s rule), `Lando Norris` -> `NOR`; an empty name is `''`. */
+export const formatDriverCode = (name: string): string => (name.trim() === '' ? '' : carCode({ name, raceNumber: 0 }));
+
 /** Track by its game id, `26` -> `Zandvoort`; an id the game does not list by number, `1` -> `track 1`. */
 export const formatTrack = (trackId: number): string => trackName(trackId) ?? `track ${trackId}`;
 
@@ -126,6 +155,10 @@ export const formatFactor = (factor: number): string => `×${factor}`;
 /** A lap number, `23` -> `L23`, zero-padded to `width` digits when given, `9` at width 2 -> `L09` (a count says `laps`, see `formatLaps`). */
 export const formatLapNumber = (n: number, width = 1): string => (Number.isFinite(n) ? `L${String(Math.round(n)).padStart(width, '0')}` : '');
 
+/** A stint's laps, both padded to two digits, `1, 8` -> `L01–08`; an open stint (no last lap) ends at the dash, `9` -> `L09–`. */
+export const formatLapRange = (first: number, last?: number): string =>
+  `${formatLapNumber(first, 2)}–${last === undefined ? '' : formatLapNumber(last, 2).slice(1)}`;
+
 /** A count of laps to one decimal, `1.8` -> `1.8 laps`. */
 export const formatLaps = (n: number): string => (Number.isFinite(n) ? `${fixed(n, 1)} laps` : '');
 
@@ -149,6 +182,26 @@ export const formatJoules = (j: number): string => (Number.isFinite(j) ? `${form
 
 /** Seconds from ms, no unit, `4100` -> `4.1`, `-4100` -> `−4.1`; the caller names the unit. */
 export const formatSeconds = (ms: Ms, decimals: number): string => (Number.isFinite(ms) ? fixed(ms / 1000, decimals) : '');
+
+/** Seconds from ms with their unit, `4100` at 3 decimals -> `4.100 s`. */
+export const formatSecondsUnit = (ms: Ms, decimals: number): string => (Number.isFinite(ms) ? `${formatSeconds(ms, decimals)} s` : '');
+
+const DECIMAL = /^[+\-−]?(\d+(\.\d*)?|\.\d+)$/;
+
+/**
+ * A number the user typed, the inverse of `fixed`: `2.1` -> 2.1, `−0.5` (the true minus, or `-`) -> -0.5; surrounding
+ * spaces are ignored; anything else (empty, `fast`, `1e3`) is `undefined`.
+ */
+export const parseDecimal = (typed: string): number | undefined => {
+  const t = typed.trim();
+  return DECIMAL.test(t) ? Number(t.replace(MINUS, '-')) : undefined;
+};
+
+/** Seconds the user typed as whole ms, the inverse of `formatSeconds`: `0.050` -> 50, `21.5` -> 21500; no number is `undefined`. */
+export const parseSeconds = (typed: string): Ms | undefined => {
+  const s = parseDecimal(typed);
+  return s === undefined ? undefined : Math.round(s * 1000);
+};
 
 /** Signed seconds from ms, `120` at 2 decimals -> `+0.12`, `-120` -> `−0.12`; a value that rounds to zero reads `+`. */
 export const formatSignedSeconds = (ms: Ms, decimals: number): string => {
@@ -210,6 +263,32 @@ export const formatDeltaPct = (pct: Percent): string => {
   if (!Number.isFinite(pct)) return '';
   const text = whole(Math.abs(pct));
   return `${pct < 0 && text !== '0' ? MINUS : '+'}${text} %`;
+};
+
+// calibration
+
+/** A residual in standard deviations, signed, one decimal, with the true minus, `0.4` -> `+0.4σ`, `-1.26` -> `−1.3σ`; zero is `+0.0σ`. */
+export const formatSigma = (s: number): string => {
+  const text = fixed(s, 1);
+  if (text === '') return '';
+  return `${text.startsWith(MINUS) ? '' : '+'}${text}σ`;
+};
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const;
+const ISO_DATE = /^\d{4}-(\d{2})-(\d{2})(?:T|$)/;
+
+/**
+ * The calendar day of an ISO date as written, `2026-10-15` -> `15 Oct`; a full timestamp shows its own date part, with no
+ * time zone conversion. Only for stored dates (a set's `createdAt`, a session's date), never a race-clock time (C35).
+ * A string that is no ISO date is empty.
+ */
+export const formatDay = (iso: string): string => {
+  const match = ISO_DATE.exec(iso);
+  if (match === null) return '';
+  const day = match[2] ?? '';
+  const month = MONTHS[Number(match[1]) - 1];
+  const d = Number(day);
+  return month === undefined || d < 1 || d > 31 ? '' : `${day} ${month}`;
 };
 
 // gap chart

@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
-import type { CarId, CarKey, SessionUid } from '@pitwall/domain';
+import { known, unknown, type CarId, type CarKey, type Known, type SessionUid, type TrackData, type WeekendPhase } from '@pitwall/domain';
 import { projectionOfLog } from '@pitwall/engine/log';
-import type { Projection, ProjectionState, StoredSession, WeekendContext } from '@pitwall/engine/readers';
+import type { DeepReadonly, Projection, ProjectionState, StoredSession, WeekendContext } from '@pitwall/engine/readers';
 import { createLogger, type Logger } from '../log.ts';
 import type { Db, SessionKey, SessionRow, StoredSessionRow } from './db.ts';
 import { logOfRows, type StoredFact } from './log-rows.ts';
@@ -11,6 +11,7 @@ type SessionDbRow = {
   weekend_id: string;
   season_id: string;
   player_car: number;
+  teammate_car: number | null;
   track_id: number;
   started_at: string;
   pwrec_path: string | null;
@@ -19,7 +20,7 @@ type SessionDbRow = {
   complete: number;
 };
 
-type CarDbRow = { car_id: number; team_id: number; race_number: number };
+type CarDbRow = { car_id: number; team_id: number; race_number: number; name: string | null };
 
 export type WeekendRepositoryOptions = {
   /** Where the warnings about sessions that cannot be served go. Default: nowhere. */
@@ -31,6 +32,27 @@ export type WeekendRepositoryOptions = {
    * complete. Without it only completeness is checked.
    */
   rulesVersion?: string;
+  /** The track file a stored session ran with (C62b), for `sessionsOnTrack`. Default: `notApplicable`. */
+  track?: (row: StoredSessionRow) => Known<DeepReadonly<TrackData>>;
+};
+
+/**
+ * A complete stored session on a track, as the calibration store reads it (C62a): its row, its weekend phase (from its
+ * weekend-phase span), the track file it ran with and its projection (C34). A session of another rules version is
+ * `stale` and has neither projection nor weekend phase: its log is never read before its rebuild (C61).
+ */
+export type TrackSession = StoredSessionRow & { track: Known<DeepReadonly<TrackData>> } & (
+  | { stale: false; phase: WeekendPhase; projection: ProjectionState }
+  | { stale: true; projection: undefined }
+);
+
+/** The read of the stored sessions on one track the calibration store needs. */
+export type SessionsOnTrack = Pick<WeekendRepository, 'sessionsOnTrack' | 'newestTrackId'>;
+
+/** The weekend phase a session's weekend-phase span stands for; `pending` without one. */
+const phaseOf = (projection: Projection): WeekendPhase => {
+  const span = projection.spans['weekend-phase']?.[0];
+  return span === undefined ? { kind: 'pending' } : ({ kind: span.kind, ...(span.detail as object) } as WeekendPhase);
 };
 
 /** A stored session is stale when its log is not complete or another rules version produced it (C61): it is never served. */
@@ -55,6 +77,7 @@ export class WeekendRepository {
   readonly #log: Logger;
   readonly #rebuild: WeekendRepositoryOptions['rebuild'];
   readonly #rulesVersion: string | undefined;
+  readonly #track: NonNullable<WeekendRepositoryOptions['track']>;
   /** The sessions found unservable and warned about (`keyText`): neither rebuilt again nor warned about again. */
   readonly #unservable = new Set<string>();
 
@@ -62,10 +85,14 @@ export class WeekendRepository {
     this.#log = opts.log ?? createLogger({ level: 'silent' });
     this.#rebuild = opts.rebuild;
     this.#rulesVersion = opts.rulesVersion;
-    const sessionColumns = `s.session_uid, s.weekend_id, w.season_id, s.player_car, s.track_id, s.started_at, s.pwrec_path, s.settings, s.rules_version, s.complete`;
+    this.#track = opts.track ?? (() => unknown('notApplicable'));
+    const sessionColumns = `s.session_uid, s.weekend_id, w.season_id, s.player_car, s.teammate_car, s.track_id, s.started_at, s.pwrec_path, s.settings, s.rules_version, s.complete`;
     const sessionsFrom = `FROM sessions s JOIN weekends w ON w.weekend_id = s.weekend_id`;
     this.#statements = {
       weekendSessions: db.prepare(`SELECT ${sessionColumns} ${sessionsFrom} WHERE s.weekend_id = ? ORDER BY s.started_at, s.session_uid, s.player_car`),
+      trackSessions: db.prepare(
+        `SELECT ${sessionColumns} ${sessionsFrom} WHERE s.track_id = ? AND s.complete = 1 ORDER BY s.started_at, s.session_uid, s.player_car`,
+      ),
       newestWeekend: db.prepare(`SELECT weekend_id FROM sessions ORDER BY started_at DESC, session_uid DESC, player_car DESC LIMIT 1`).pluck(),
       session: db.prepare(
         `SELECT ${sessionColumns} ${sessionsFrom} WHERE s.session_uid = @sessionUid AND s.weekend_id = @weekendId AND s.player_car = @playerCar`,
@@ -81,7 +108,8 @@ export class WeekendRepository {
                AND c.car_id = s.player_car AND c.team_id = @teamId AND c.race_number = @raceNumber)
          ORDER BY s.started_at, s.session_uid, s.player_car`,
       ),
-      cars: db.prepare(`SELECT car_id, team_id, race_number FROM cars WHERE ${OF_SESSION} ORDER BY car_id`),
+      newestTrack: db.prepare(`SELECT track_id FROM sessions ORDER BY started_at DESC, session_uid DESC, player_car DESC LIMIT 1`).pluck(),
+      cars: db.prepare(`SELECT car_id, team_id, race_number, name FROM cars WHERE ${OF_SESSION} ORDER BY car_id`),
       facts: db.prepare(`SELECT list, record FROM facts WHERE ${OF_SESSION} ORDER BY list, seq`),
     };
   }
@@ -91,9 +119,29 @@ export class WeekendRepository {
     return (this.#statements.weekendSessions.all(weekendId) as SessionDbRow[]).map((row) => this.#toSession(row));
   }
 
+  /**
+   * The complete stored sessions on `trackId` in start order (C62a), each with its weekend phase and track file. One of
+   * another rules version is `stale` and comes without its projection and weekend phase, its log unread (C61); an
+   * incomplete one is left out.
+   */
+  sessionsOnTrack(trackId: number): TrackSession[] {
+    return (this.#statements.trackSessions.all(trackId) as SessionDbRow[]).map((dbRow): TrackSession => {
+      const row = this.#toSession(dbRow);
+      const track = this.#track(row);
+      if (isStale(row, this.#rulesVersion)) return { ...row, track, stale: true, projection: undefined };
+      const projection = this.#projectionOfStored(keyOf(dbRow));
+      return { ...row, track, stale: false, phase: phaseOf(projection), projection: projection as ProjectionState };
+    });
+  }
+
   /** The weekend of the newest stored session (by start); `undefined` when none is stored. */
   newestWeekendId(): string | undefined {
     return this.#statements.newestWeekend.get() as string | undefined;
+  }
+
+  /** The track of the newest stored session (by start), of any weekend; `null` when none is stored. */
+  newestTrackId(): number | null {
+    return (this.#statements.newestTrack.get() as number | undefined) ?? null;
   }
 
   /** The weekend's stale sessions (`isStale`) in start order. */
@@ -152,7 +200,9 @@ export class WeekendRepository {
         incomplete.push(key);
         continue;
       }
-      sessions.push({ sessionUid: key.sessionUid, playerCar: key.playerCar, cars: this.#carsOf(key), projection: this.#projectionOfStored(key) });
+      // Only the slots' team and race number reach the view (C39, C62); the driver name is the calibration panel's.
+      const cars = this.#carsOf(key).map(({ carId, carKey }) => ({ carId, carKey }));
+      sessions.push({ sessionUid: key.sessionUid, playerCar: key.playerCar, cars, projection: this.#projectionOfStored(key) });
     }
     return { context: { weekendId, player: { teamId: player.teamId, raceNumber: player.raceNumber }, sessions }, incomplete };
   }
@@ -180,7 +230,11 @@ export class WeekendRepository {
 
   #carsOf(key: SessionKey): SessionRow['cars'] {
     const rows = this.#statements.cars.all(keyParams(key)) as CarDbRow[];
-    return rows.map((c) => ({ carId: c.car_id as CarId, carKey: { teamId: c.team_id, raceNumber: c.race_number } }));
+    return rows.map((c) => ({
+      carId: c.car_id as CarId,
+      carKey: { teamId: c.team_id, raceNumber: c.race_number },
+      driver: c.name === null ? unknown('notReceived') : known(c.name, 0),
+    }));
   }
 
   #toSession(row: SessionDbRow): StoredSessionRow {
@@ -189,6 +243,7 @@ export class WeekendRepository {
       weekendId: row.weekend_id,
       seasonId: row.season_id,
       playerCar: row.player_car as CarId,
+      teammateCar: row.teammate_car === null ? null : (row.teammate_car as CarId),
       trackId: row.track_id,
       startedAt: row.started_at,
       pwrecPath: row.pwrec_path,

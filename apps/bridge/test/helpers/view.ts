@@ -28,7 +28,7 @@ export const viewFrom = (frames: readonly Frame[], feed: Partial<FeedMetricsView
     feed: { ...IDLE_FEED, ...feed },
     outputs: new Map(),
     config,
-    priors: {},
+    priors: unknown('notApplicable'),
     track: unknown('notApplicable'),
   };
 };

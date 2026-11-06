@@ -1,4 +1,4 @@
-import type { Ms, ParticipantsValues, SessionTime } from '@pitwall/domain';
+import type { DecisionRecord, Ms, ParticipantsValues, SessionTime } from '@pitwall/domain';
 import type { Frame } from '../frame/frame.ts';
 import { logWriter, voidFactOf } from '../log/log.ts';
 import { projectionLengths } from '../log/projection.ts';
@@ -75,11 +75,18 @@ const spanLengths = (state: DeepReadonly<EngineState>): Record<string, number> =
 /** The frame a flashback goes back to; without an `FLBK` event its session time is only known after the replay. */
 type Target = { frameId: number; sessionTime?: SessionTime };
 
+/** The decisions the user committed with a frame (C76): as the bridge hands them, without the frame the recorder adds. */
+type GivenDecisions = readonly Omit<DecisionRecord, 'frame'>[];
+
+/** A frame given to `apply`, with the decisions committed at it; absent means none. */
+type Given = { frame: Frame; decisions?: GivenDecisions };
+
 /**
- * An applied frame and the runner's decision on it, given again to `step` whenever a rewind replays the frame; `at`: the
- * session time on the race clock after it; `attached`: the attached bookkeeping once its result was handed out.
+ * An applied frame with its decisions and the runner's decision on it, given again to `step` whenever a rewind replays
+ * the frame (so a decision of a frame up to the target comes back, one after it does not, C27a); `at`: the session time
+ * on the race clock after it; `attached`: the attached bookkeeping once its result was handed out.
  */
-type Kept = { frame: Frame; report?: FlashbackReport; at: SessionTime; attached: unknown };
+type Kept = Given & { report?: FlashbackReport; at: SessionTime; attached: unknown };
 
 /**
  * Runs one session's frames through `step` and handles flashbacks (spec 5.4). Frames wait until the first Participants
@@ -104,7 +111,7 @@ export class SessionRunner {
    * Frames to apply, oldest first: the identity wait's, then the frames given since. Each leaves the queue before its
    * step, so one that throws is skipped and the next `apply` or `end` applies the rest.
    */
-  readonly #queue: Frame[] = [];
+  readonly #queue: Given[] = [];
   /** The frame whose step runs, or threw: `undefined` once it was applied. */
   #applying: Frame | undefined;
   /** Applied frames, ids strictly rising; they hold every frame after the snapshot at the replay window's start. */
@@ -145,10 +152,11 @@ export class SessionRunner {
   /**
    * Applies the frame, or holds it while the identity wait lasts; the frame that ends the wait applies every held
    * frame, in order, and so does the next call after a step threw. `onResult` gets each applied frame's result right
-   * after its step (`result.state` is the state after that frame).
+   * after its step (`result.state` is the state after that frame). `decisions`: the decisions the user committed at the
+   * frame (C10, C76), appended by the decision recorder describing it, and given again whenever a rewind replays it.
    */
-  apply(frame: Frame, onResult?: OnResult): void {
-    this.#queue.push(frame);
+  apply(frame: Frame, onResult?: OnResult, decisions?: GivenDecisions): void {
+    this.#queue.push({ frame, ...(decisions && decisions.length > 0 && { decisions }) });
     if (this.#waiting) {
       if (frame.participants !== undefined) this.#endWait(participantsValuesOf(frame, frame.participants));
       else if (this.#queue.length >= IDENTITY_WAIT_FRAMES) this.#endWait(undefined);
@@ -192,21 +200,21 @@ export class SessionRunner {
 
   /** Applies the queued frames in order; each leaves the queue before its step. */
   #drain(onResult: OnResult | undefined): void {
-    for (let frame = this.#queue.shift(); frame !== undefined; frame = this.#queue.shift()) {
-      this.#applying = frame;
-      this.#applyNow(frame, onResult);
+    for (let given = this.#queue.shift(); given !== undefined; given = this.#queue.shift()) {
+      this.#applying = given.frame;
+      this.#applyNow(given, onResult);
       this.#applying = undefined;
     }
   }
 
-  #applyNow(frame: Frame, onResult: OnResult | undefined): void {
+  #applyNow({ frame, decisions }: Given, onResult: OnResult | undefined): void {
     const before = projectionLengths(this.#state.history);
     const reported = this.#reportedTarget(frame);
     const target = reported && this.#takes(reported) ? reported : undefined;
     // The runner's decision on the frame; a rewind's mark is of the state it leaves, so taken before restoring.
     const report: FlashbackReport | undefined = reported && (target ? { rewound: rewindMarkOf(this.#state) } : {});
     const rewind = target && this.#rewind(target, frame);
-    const { changed, corrections, clockFall, clockJump } = step(this.#state, frame, report);
+    const { changed, corrections, clockFall, clockJump } = step(this.#state, frame, report, decisions);
     this.#applied = true;
     this.#lastOverallFrameId = frame.overallFrameId;
     if (target) this.#rewoundTo = target.frameId;
@@ -226,7 +234,7 @@ export class SessionRunner {
     );
     // After the result was handed out: the attached bookkeeping has taken the frame in.
     const attached = this.#attach?.snapshot();
-    this.#keep({ frame, ...(report && { report }), at: this.#state.sessionTime, attached });
+    this.#keep({ frame, ...(decisions && { decisions }), ...(report && { report }), at: this.#state.sessionTime, attached });
   }
 
   /**
@@ -252,8 +260,9 @@ export class SessionRunner {
    * gained since the restored snapshot; its target is the frame restored to, at its time on the race clock (the
    * snapshot's own when the target is older than the replay window; `flashback` keeps the game's target), and its frame
    * number (C26). The restored state carries the snapshot's frame number, so each replayed frame counts again and gets
-   * the number of its first pass (C33). Each replayed frame gets the runner's decision it got when first applied and
-   * appends its facts again after the void.
+   * the number of its first pass (C33). Each replayed frame gets the runner's decision it got when first applied and the
+   * user's decisions committed with it, and appends its facts again after the void; a frame after the target is not
+   * replayed, so its decisions stay voided (C27a).
    */
   #rewind(target: Target, frame: Frame): { flashback: FlashbackInfo; target: LogVoidFact['target'] } {
     const rewoundFrom = this.#state.sessionTime;
@@ -272,7 +281,7 @@ export class SessionRunner {
     logWriter(log).append('voids', voidFactOf(log, snapshot.lengths, voidTarget, snapshot.state.frameNumber + replayed.length));
     // The new void fact projects the log again (C30), before the replayed frames extend it.
     projectionTrackerOf(this.#state).update(situationOf(this.#state));
-    for (const { frame: f, report } of replayed) step(this.#state, f, report);
+    for (const { frame: f, report, decisions } of replayed) step(this.#state, f, report, decisions);
     this.#attach?.restore(last === undefined ? snapshot.attached : last.attached);
     const targetSessionTime = target.sessionTime === undefined ? this.#state.sessionTime : onRaceClock(this.#state, target.sessionTime);
     const flashback = {

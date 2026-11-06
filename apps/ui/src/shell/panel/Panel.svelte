@@ -1,7 +1,7 @@
 <script lang="ts">
   // The panel frame (spec 4.3, 7.4; Task 0 option B): a header band in bgBand with the title, the one state and the
   // gear, then the widget body measured in character cells. The only place widget-level states are handled.
-  import type { LinkGroup, PanelSpec, UiAction } from '@pitwall/contracts';
+  import type { ActionOutcome, LinkGroup, PanelSpec, UiAction } from '@pitwall/contracts';
   import type { FeedId } from '@pitwall/domain';
   import { onDestroy, untrack, type Component } from 'svelte';
   import type { TopicStore } from '../../connection/topic-store.svelte.ts';
@@ -39,8 +39,8 @@
     group?: LinkGroup | undefined;
     /** The feed a group without its own feed follows. */
     defaultFeed?: FeedId | undefined;
-    /** Sends a UI action to the bridge. */
-    send?: (action: UiAction) => void;
+    /** Sends a UI action to the bridge; resolves with its outcome (C73). */
+    send?: (action: UiAction) => Promise<ActionOutcome>;
     /** Saves new option values for this panel with its window. */
     onOptions?: (options: Record<string, unknown>) => void;
     /** Saves the link group this panel follows with its window. */
@@ -61,7 +61,7 @@
     headerTarget,
     group,
     defaultFeed,
-    send = () => {},
+    send = () => Promise.resolve({ ok: true }),
     onOptions = () => {},
     onLinkGroup = () => {},
     inspection,
@@ -130,8 +130,10 @@
     return state?.status === 'ok' ? (state.value as { stale?: boolean; cadenceMs?: number } | undefined) : undefined;
   });
 
-  // Widgets send their UI actions (acknowledge, mute) through the panel's `send`.
-  setUiActions((action) => send(action));
+  // Widgets send their UI actions (acknowledge, mute) through the panel's `send`, only the kinds they declare (C74).
+  // A panel's widget is fixed for its life (a new widget is a new panel), so its declared kinds are read once.
+  // svelte-ignore state_referenced_locally
+  setUiActions((action) => send(action), widget?.decl.actions ?? []);
 
   const panelStale = providePanelStale({ cadenceMs: () => feed?.cadenceMs });
 

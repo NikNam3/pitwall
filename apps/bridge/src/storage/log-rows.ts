@@ -30,7 +30,7 @@ export const logRows = (log: DeepReadonly<Log>, from: (list: string) => number):
 
 /** The log the rows hold, each list in position order. */
 export const logOfRows = (rows: readonly StoredFact[]): Log => {
-  const log: Log = { laps: [], stints: [], pitStops: [], crossings: [], events: [], penalties: [], clock: [], voids: [], spans: {} };
+  const log: Log = { laps: [], stints: [], pitStops: [], crossings: [], events: [], penalties: [], decisions: [], clock: [], voids: [], spans: {} };
   const fixed = new Set<string>(FACT_LISTS);
   for (const { list, record } of rows) {
     const fact: unknown = JSON.parse(record);

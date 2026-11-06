@@ -172,7 +172,10 @@ describe('FeedPipeline: session start', () => {
     await run(lateParticipants(5), { storage: { db } });
     const [row] = new WeekendRepository(db).sessionsOf('0');
     expect(row).toMatchObject({ sessionUid: '77', playerCar: 0, pwrecPath: null, complete: true });
-    expect(row!.cars.slice(0, 2)).toEqual([{ carId: 0, carKey: { teamId: 0, raceNumber: 1 } }, { carId: 1, carKey: { teamId: 0, raceNumber: 2 } }]);
+    expect(row!.cars.slice(0, 2)).toEqual([
+      { carId: 0, carKey: { teamId: 0, raceNumber: 1 }, driver: { known: true, value: 'DRIVER 0', at: 0 } },
+      { carId: 1, carKey: { teamId: 0, raceNumber: 2 }, driver: { known: true, value: 'DRIVER 1', at: 0 } },
+    ]);
   });
 });
 
@@ -200,10 +203,24 @@ describe("FeedPipeline: the session's car rows", () => {
     expect(row.cars.slice(0, 3).map((c) => c.carKey)).toEqual([{ teamId: 0, raceNumber: 1 }, { teamId: 0, raceNumber: 2 }, { teamId: 1, raceNumber: 3 }]);
   });
 
+  // SP4.1a fx2 (C3, C62): the calibration panel's CAR column. The name comes from the live identity of the slot, as its
+  // team and race number do; a slot the game names no driver for (an empty name) is stored as none and reads unknown.
+  it('the session\'s car rows carry each slot\'s driver name from the live identity; a slot without one reads unknown', async () => {
+    const packets = prepared(new ScenarioBuilder({ sessionUid: 77n, cars: 3 }).session().participants().frames(10, () => {}));
+    const { row } = await storedSession(packets);
+    expect(row.cars.slice(0, 4)).toEqual([
+      { carId: 0, carKey: { teamId: 0, raceNumber: 1 }, driver: { known: true, value: 'DRIVER 0', at: 0 } },
+      { carId: 1, carKey: { teamId: 0, raceNumber: 2 }, driver: { known: true, value: 'DRIVER 1', at: 0 } },
+      { carId: 2, carKey: { teamId: 1, raceNumber: 3 }, driver: { known: true, value: 'DRIVER 2', at: 0 } },
+      // slot 3 carries no participant: the game sends an empty name
+      { carId: 3, carKey: expect.anything(), driver: { known: false, reason: 'notReceived' } },
+    ]);
+  });
+
   it('a car that turns absent keeps its stored facts and its cars row (B2)', async () => {
     const packets = prepared(new ScenarioBuilder({ sessionUid: 77n, cars: 3 }).session().participants().frames(10, () => {}).frames(10, inactive(1)));
     const { row, projection } = await storedSession(packets);
-    expect(row.cars.find((c) => c.carId === 1)).toEqual({ carId: 1, carKey: { teamId: 0, raceNumber: 2 } });
+    expect(row.cars.find((c) => c.carId === 1)).toEqual({ carId: 1, carKey: { teamId: 0, raceNumber: 2 }, driver: { known: true, value: 'DRIVER 1', at: 0 } });
     const car1 = (projection.spans['car-status'] ?? []).filter((s) => s.carId === 1).map((s) => s.kind);
     expect(car1).toContain('competing');
     expect(car1.at(-1)).toBe('absent');
@@ -211,9 +228,9 @@ describe("FeedPipeline: the session's car rows", () => {
 
   it('a new Participants that renames a slot\'s car stores the newest key', async () => {
     const packets = prepared(new ScenarioBuilder({ sessionUid: 77n, cars: 3 }).session().participants().frames(10, () => {})
-      .participants({ participants: { 2: { teamId: 7, raceNumber: 31 } } }).frames(10, () => {}));
+      .participants({ participants: { 2: { teamId: 7, raceNumber: 31, name: 'NEW DRIVER' } } }).frames(10, () => {}));
     const { row } = await storedSession(packets);
-    expect(row.cars.find((c) => c.carId === 2)).toEqual({ carId: 2, carKey: { teamId: 7, raceNumber: 31 } });
+    expect(row.cars.find((c) => c.carId === 2)).toEqual({ carId: 2, carKey: { teamId: 7, raceNumber: 31 }, driver: { known: true, value: 'NEW DRIVER', at: 0 } });
   });
 });
 
@@ -248,7 +265,7 @@ describe('FeedPipeline: the session end', () => {
     const firstProjection = await repo.projectionOf({ sessionUid: '77', weekendId: '0', playerCar: first.playerCar });
     expect(seen.at(-1)).toEqual({
       weekendId: '0', player: { teamId: 0, raceNumber: 1 },
-      sessions: [{ sessionUid: '77', playerCar: 0, cars: first.cars, projection: firstProjection }],
+      sessions: [{ sessionUid: '77', playerCar: 0, cars: first.cars.map(({ carId, carKey }) => ({ carId, carKey })), projection: firstProjection }],
     });
   });
 });

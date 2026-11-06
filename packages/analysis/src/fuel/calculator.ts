@@ -1,29 +1,15 @@
 // The `fuel` calculator: per car in the session, the fuel now, its burn over its rate laps, and the margin against the laps left.
 import { known, unknown, type CarId, type Known, type Kg, type SessionTime } from '@pitwall/domain';
 import type { EngineView, QuickCalculator } from '@pitwall/engine/readers';
-import { classifyLap, LAP_CLASSES_CONFIG } from '../lap-classes/index.ts';
-import { PER_LAP_RATE_CONFIG, perLapGainRate, type GainSample } from '../per-lap-rate/index.ts';
+import { LAP_CLASSES_CONFIG } from '../lap-classes/index.ts';
+import { PER_LAP_RATE_CONFIG } from '../per-lap-rate/index.ts';
 import { SESSION_REMAINING, type SessionRemaining } from '../session-remaining/index.ts';
 import { behaviourFor } from '../shared/behaviour.ts';
 import { CAR_STATUS_READS } from '../shared/car-status.ts';
+import { burnPerLapKg } from '../shared/fuel-burn.ts';
 import { carLaps } from '../shared/stint-laps.ts';
 import { FUEL_BEHAVIOUR, type FuelEffect } from './behaviour.ts';
 import { FUEL, type FuelOutput, type FuelState } from './index.ts';
-
-/**
- * The burns (start minus end) of the car's rate laps, by lap. Fuel is not tied to the tyre set, and a refuel keeps the
- * window: the burn per lap does not change with the fuel in the car. A lap whose fuel rose was refuelled on the way, so
- * it is no sample: a refuel never counts as negative burn.
- */
-const burnSamples = (view: EngineView, id: CarId): GainSample[] => {
-  // only `forRate` is read, and a rate lap has no lap-1 rule
-  const classes = { isRace: false, ...LAP_CLASSES_CONFIG.read(view) };
-  return carLaps(view.history, id).flatMap((l) => {
-    if (!classifyLap(l, classes).forRate || !l.fuelAtStartKg.known || !l.fuelAtEndKg.known) return [];
-    const burn = l.fuelAtStartKg.value - l.fuelAtEndKg.value;
-    return burn >= 0 ? [{ lap: l.lapNumber, gain: burn, at: l.completedAt }] : [];
-  });
-};
 
 const fuelState = (view: EngineView, id: CarId, lapsLeft: Known<number>, effect: FuelEffect): FuelState => {
   const { live } = view;
@@ -48,8 +34,8 @@ const fuelState = (view: EngineView, id: CarId, lapsLeft: Known<number>, effect:
 
   const na = unknown('notApplicable');
   if (effect.judged !== true) return { ...base, burnKgPerLap: na, lapsOfFuel: na, marginLaps: na, saveTargetKgPerLap: na };
-  const rate = perLapGainRate(burnSamples(view, id), PER_LAP_RATE_CONFIG.read(view));
-  const burn: Known<Kg> = rate.known ? known(rate.value.perLap as Kg, rate.at) : rate;
+  // the burn over the car's rate laps (`burnPerLapKg`, shared with `degradation`, C43)
+  const burn = burnPerLapKg(carLaps(view.history, id), { lapClasses: LAP_CLASSES_CONFIG.read(view), rate: PER_LAP_RATE_CONFIG.read(view) });
   if (!burn.known) return { ...base, burnKgPerLap: burn, lapsOfFuel: burn, marginLaps: burn, saveTargetKgPerLap: burn };
 
   if (burn.value <= 0) return { ...base, burnKgPerLap: burn, lapsOfFuel: na, marginLaps: lapsLeft.known ? na : lapsLeft, saveTargetKgPerLap: lapsLeft.known ? na : lapsLeft };

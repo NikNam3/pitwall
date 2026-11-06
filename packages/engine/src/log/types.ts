@@ -1,6 +1,7 @@
 // The log and the projection (contract C21-C30): one list per fact type and one span list per sub-machine.
 import type {
   ClockFact,
+  DecisionRecord,
   FactList,
   FactRef,
   FrameNumber,
@@ -29,11 +30,13 @@ export type FactOf<L extends FactList> = L extends 'laps'
           ? RaceEvent
           : L extends 'penalties'
             ? PenaltyRecord
-            : L extends 'clock'
-              ? ClockFact
-              : L extends 'voids'
-                ? LogVoidFact
-                : Span;
+            : L extends 'decisions'
+              ? DecisionRecord
+              : L extends 'clock'
+                ? ClockFact
+                : L extends 'voids'
+                  ? LogVoidFact
+                  : Span;
 
 /** A void fact as the log stores it (C27). */
 export type LogVoidFact = VoidFact;
@@ -57,6 +60,8 @@ type Lists = {
   crossings: MiniSectorCrossing[];
   events: RaceEvent[];
   penalties: PenaltyRecord[];
+  /** The decisions the user committed (C76); never hidden by formation (C29). */
+  decisions: DecisionRecord[];
   clock: ClockFact[];
   spans: Record<MachineId, Span[]>;
 };

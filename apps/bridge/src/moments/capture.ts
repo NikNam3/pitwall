@@ -7,6 +7,7 @@ import { TopicHub } from '../hub/topic-hub.ts';
 import type { PacketSource, RawPacket } from '../input/packet-source.ts';
 import { PwrecSource } from '../input/pwrec-source.ts';
 import { createLogger } from '../log.ts';
+import { recordingDecisions } from '../pipeline/decision-sidecars.ts';
 import { FeedPipeline } from '../pipeline/feed-pipeline.ts';
 import { recordingTrack, TRACKS_DIR } from '../track-files/load.ts';
 
@@ -78,7 +79,8 @@ class StopAfterSource implements PacketSource {
  * returns what one client subscribed to every feed topic holds then: each topic with the params its `momentParams` gives
  * for the cars in the session (car-status's open spans in `situation.carStatus` that are not `absent`, C43), in that
  * order, or with `{}` when it has none. The hub's clock is the recorded time, so its throttle sees the recording's
- * pace and the run needs no real waiting. Deterministic: the same segment and `atMs` give the same JSON.
+ * pace and the run needs no real waiting. The run takes the recording's priors and decisions sidecars, as a replay does
+ * (C38, C76). Deterministic: the same segment, sidecars and `atMs` give the same JSON.
  */
 export async function captureMoment(segmentPath: string, atMs: number): Promise<MomentValues> {
   const id = feedId('moment');
@@ -115,6 +117,8 @@ export async function captureMoment(segmentPath: string, atMs: number): Promise<
     features: FEATURES,
     config: recordingConfig(segmentPath, FEATURES, effectiveConfig(FEATURES)),
     tracks: (trackId) => recordingTrack(segmentPath, trackId, TRACKS_DIR, log),
+    // The recording's priors and decisions sidecars, as a replay reads them (C38, C76).
+    recorded: recordingDecisions(segmentPath, log),
     log,
   });
   pipeline.start();

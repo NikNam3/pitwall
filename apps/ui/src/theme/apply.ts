@@ -23,6 +23,11 @@ export function applyTheme(variant: ThemeVariant, root: HTMLElement): void {
   set('--pw-chart-live-dash', variant.chart.liveDash.join(' '));
   set('--pw-chart-x-lap', String(variant.chart.xPerCell.lap));
   set('--pw-chart-x-session', String(variant.chart.xPerCell.sessionTime));
+  set('--pw-chart-mark-r', String(variant.chart.markRadius));
+  set('--pw-chart-ring-r', String(variant.chart.ringRadius));
+  set('--pw-chart-ring-width', String(variant.chart.ringWidth));
+  set('--pw-chart-ring-dash', variant.chart.ringDash.join(' '));
+  set('--pw-chart-band-alpha', String(variant.chart.bandAlpha));
   set('--pw-border-px', `${variant.table.borderPx}px`);
   set('--pw-bar-px', `${variant.table.barPx}px`);
   set('--pw-weight-bold', String(variant.table.boldWeight));

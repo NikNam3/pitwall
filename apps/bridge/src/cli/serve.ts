@@ -1,21 +1,25 @@
 import type { FeedInfo, ReplayControl } from '@pitwall/contracts';
 import type { FeedId } from '@pitwall/domain';
+import { dirname } from 'node:path';
+import { CalibrationStore, type ApplyResult, type CalibrationAction } from '../calibration/store.ts';
 import { createCalcStats } from '../dev/calc-stats.ts';
 import { readCatalogue } from '../dev/catalogue.ts';
 import type { PositionMessage } from '../dev/dev-supervisor.ts';
-import type { FeatureConfig } from '../feature-config.ts';
+import { effectiveConfig, type FeatureConfig } from '../feature-config.ts';
 import { FEATURES } from '../features/index.generated.ts';
 import { TopicHub } from '../hub/topic-hub.ts';
 import type { PacketSource } from '../input/packet-source.ts';
 import { FeedPipeline, type FeedPipelineOptions } from '../pipeline/feed-pipeline.ts';
 import { ReplayController } from '../replay/replay-controller.ts';
-import { recordingTrack, TRACKS_DIR } from '../track-files/load.ts';
+import { loadTrackFile, recordingTrack, TRACKS_DIR } from '../track-files/load.ts';
 import { pruneEndedAcknowledgements } from '../ui-state/ack-pruning.ts';
 import { DEFAULT_WORKBOOKS_DIR, seedDefaultWorkbooks } from '../ui-state/default-workbooks.ts';
 import { UiState } from '../ui-state/ui-state.ts';
 import { StartupError } from '../startup-error.ts';
-import type { Db, StoredSessionRow } from '../storage/db.ts';
-import { WsServer } from '../ws/server.ts';
+import type { Db, SessionKey, StoredSessionRow } from '../storage/db.ts';
+import { WeekendRepository } from '../storage/weekend-repository.ts';
+import { WsServer, type ActionOutcome, type ChooseAction } from '../ws/server.ts';
+import { recordingDecisions } from '../pipeline/decision-sidecars.ts';
 import { cliLogger, whenAborted, type CliIo } from './io.ts';
 
 /** A recording served through a `ReplayController`; `controls` are applied (and any jump finished) before `listening` is printed. */
@@ -60,6 +64,8 @@ function wsLogLevel(env: NodeJS.ProcessEnv): string {
   return level;
 }
 
+const sameSession = (a: SessionKey, b: SessionKey): boolean => a.sessionUid === b.sessionUid && a.weekendId === b.weekendId && a.playerCar === b.playerCar;
+
 /** How often a dev child reports its replay position to the supervisor. */
 const POSITION_EVERY_MS = 500;
 
@@ -100,6 +106,37 @@ export async function serve(opts: ServeOptions): Promise<number> {
       // Acknowledgements of occurrences that have ended are dropped, so state.json does not grow forever.
       undo.push(pruneEndedAcknowledgements(hub, [feedId], uiState));
     }
+    const { rebuild } = storage ?? {};
+    // The calibration store (C62a) reads the stored sessions, so only a run that stores has one; `uiDir` is `<data dir>/ui`.
+    const calibrationLog = cliLogger(io, 'warn');
+    const calibrationRepo = storage && new WeekendRepository(storage.db, {
+      rulesVersion: storage.rulesVersion,
+      track: (row) => (row.pwrecPath === null ? loadTrackFile(row.trackId, TRACKS_DIR) : recordingTrack(row.pwrecPath, row.trackId, TRACKS_DIR)),
+    });
+    const calibration = calibrationRepo && opts.uiDir !== undefined
+      ? CalibrationStore.open(dirname(opts.uiDir), {
+        features: FEATURES,
+        repo: calibrationRepo,
+        config: opts.config ?? effectiveConfig(FEATURES),
+        hub,
+        log: calibrationLog,
+        // The stale sessions a set or the suggestions read (C61), rebuilt from their recordings as a session start's
+        // weekend context rebuilds its stale ones; a failed rebuild is logged and its session stays stale (C3).
+        rebuild: async (keys) => {
+          if (rebuild === undefined) return;
+          const rows = keys.flatMap((key) => calibrationRepo.sessionsOf(key.weekendId).filter((row) => sameSession(row, key)));
+          await Promise.all(rows.map((row) => rebuild(row).catch((error: unknown) => {
+            calibrationLog.error({ sessionUid: row.sessionUid, weekendId: row.weekendId, playerCar: row.playerCar, err: error }, 'stored session not rebuilt');
+          })));
+        },
+      })
+      : undefined;
+    if (calibration) undo.push(() => calibration.close());
+    // A rebuild changes the stored projections the sets' sources rest on (C61).
+    const rebuildThenRecompute = rebuild && (async (row: StoredSessionRow) => {
+      await rebuild(row);
+      calibration?.recompute('rebuild');
+    });
     let controller: ReplayController | undefined;
     // The server opens after the pipeline, and a replay's only once the startup jump has landed: a client that connects
     // earlier would be told the positions the fast-forward passes through, and a dev restart would not come back to the moment it left.
@@ -110,6 +147,24 @@ export async function serve(opts: ServeOptions): Promise<number> {
         feeds,
         log: cliLogger(io, wsLogLevel(io.env)),
         ...(uiState && { uiState }),
+        // An edit of a set reaches every feed's pipeline once applied: a run on that set commits its new snapshot (C62a,
+        // C76). A new set or a copy is a set no run uses.
+        ...(calibration && {
+          calibration: {
+            apply: (action: CalibrationAction): ApplyResult => {
+              const result = calibration.apply(action);
+              if (result.ok && action.kind !== 'calibration.set.create' && action.kind !== 'calibration.set.copy') {
+                pipeline?.calibrationEdited(action.setId);
+              }
+              return result;
+            },
+          },
+        }),
+        // A pick is a decision of the feed's running session (C76): the pipeline takes it.
+        choose: (action: ChooseAction): ActionOutcome => {
+          if (action.feedId !== feedId) return { ok: false, reason: 'invalid', message: `no feed ${action.feedId}` };
+          return pipeline === undefined ? { ok: false, reason: 'notSupported' } : pipeline.commitDecision(action.setId);
+        },
         ...(opts.replay && { replay: { control: (control: ReplayControl) => (controller === undefined ? false : (controller.control(control), true)) } }),
       });
       undo.push(() => started.close());
@@ -154,9 +209,15 @@ export async function serve(opts: ServeOptions): Promise<number> {
           db: opts.storage.db,
           recordingsDir: opts.storage.recordingsDir,
           rulesVersion: opts.storage.rulesVersion,
-          ...(opts.storage.rebuild && { rebuild: opts.storage.rebuild }),
+          ...(rebuildThenRecompute && { rebuild: rebuildThenRecompute }),
+          // A stored session gives new candidates (ruling R14).
+          onStored: () => calibration?.recompute('sessionEnd'),
         },
       }),
+      // Live: the session starts on the calibration store's preselection and takes picks (C62a). A replay runs on its
+      // recording's priors and decisions sidecars instead (C38, C76).
+      ...(calibration && opts.source && { calibration }),
+      ...(opts.replay && { recorded: recordingDecisions(opts.replay.path, pipelineLog) }),
       ...(opts.staleCheck && { staleCheck: opts.staleCheck }),
       ...(calcStats && { calcStats }),
       // Live only: a replay reproduces the realism its sidecar recorded (spec 7.9), whatever the UI prefers next.

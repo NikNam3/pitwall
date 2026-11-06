@@ -16,6 +16,15 @@ export type ChartTokens = {
   liveDash: [number, number];
   /** X units one character cell of chart width spans: a wider chart shows more history. */
   xPerCell: { lap: number; sessionTime: number };
+  /** Radius in px of a point mark's dot. */
+  markRadius: number;
+  /** Radius in px of a ring mark (solid or dotted) and its stroke width. */
+  ringRadius: number;
+  ringWidth: number;
+  /** Dash pattern (px on, px off) of a dotted ring. */
+  ringDash: [number, number];
+  /** Alpha of a line's ±sd band, painted in the line's colour. */
+  bandAlpha: number;
 };
 
 /** Table drawing tokens: rule and marker widths in px, and the weight of the own car's row. */
@@ -34,6 +43,12 @@ const QUIET_CHART: ChartTokens = {
   dash: [6, 4],
   liveDash: [1.5, 3],
   xPerCell: { lap: 0.5, sessionTime: 2000 },
+  // The approved stint-scatter mockup (docs/design/2026-10-30-sp4a-displays/4-longrun.html).
+  markRadius: 3,
+  ringRadius: 3.5,
+  ringWidth: 1.2,
+  ringDash: [1.5, 1.5],
+  bandAlpha: 0.1,
 };
 
 const QUIET_TABLE: TableTokens = { borderPx: 1, barPx: 2, boldWeight: 700 };

@@ -1,6 +1,7 @@
 import type { Frame } from '../frame/frame.ts';
 import { logWriter } from '../log/log.ts';
 import { ProjectionTracker } from '../log/projection.ts';
+import { decisionsRecorder } from '../recorders/decisions.ts';
 import { eventsRecorder } from '../recorders/events.ts';
 import { lapsRecorder } from '../recorders/laps.ts';
 import { miniSectorsRecorder } from '../recorders/mini-sectors.ts';
@@ -90,6 +91,7 @@ export const RECORDERS: Array<Recorder<unknown>> = [
   eventsRecorder,
   miniSectorsRecorder,
   penaltiesRecorder,
+  decisionsRecorder,
 ];
 
 /** The projection of the state's log, kept in the state (`history`, `open.projection`). */
@@ -116,10 +118,10 @@ const record = (state: EngineState, input: RecorderInput, out: StepOutput): void
  * facts, appended after step 2); step 1, the state update; step 2, the machine (`runMachine`: the registered
  * sub-machines, with step 0's clock, and their closed spans); step 3, the recorders, with the frame's number, the
  * machine's situation (its open spans and the spans it closed on the frame) and the cars in the session it gives,
- * worked out once for the frame. Last the projection takes in what the frame appended, computing membership from frame
- * numbers with the open spans.
+ * worked out once for the frame, and `decisions`, the ones the user committed with the frame (C10, C76). Last the
+ * projection takes in what the frame appended, computing membership from frame numbers with the open spans.
  */
-export function step(state: EngineState, received: Frame, report?: FlashbackReport): StepOutput {
+export function step(state: EngineState, received: Frame, report?: FlashbackReport, decisions?: RecorderInput['decisions']): StepOutput {
   const out: StepOutput = { changed: new Set(), corrections: [] };
   state.frameNumber += 1;
   const clock = step0Clock(state, received, report, out);
@@ -129,7 +131,11 @@ export function step(state: EngineState, received: Frame, report?: FlashbackRepo
   appendClock(state, clock);
   const situation = situationOf(state);
   const carsInSession = carsInSessionOf(situation.byMachine[CAR_STATUS]);
-  record(state, { at: frame.sessionTime, frameId: frame.frameId, frameNumber: state.frameNumber, live: state, situation, closed, carsInSession }, out);
+  record(
+    state,
+    { at: frame.sessionTime, frameId: frame.frameId, frameNumber: state.frameNumber, live: state, situation, closed, carsInSession, ...(decisions && { decisions }) },
+    out,
+  );
   projectionTrackerOf(state).update(situation);
   state.lastFrameId = frame.frameId;
   state.sessionTime = frame.sessionTime;

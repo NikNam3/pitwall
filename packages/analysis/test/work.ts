@@ -136,12 +136,16 @@ const forbidden = (unit: CalculatorId, path: string): object => {
 /**
  * `view` through `calc`'s guarded view (C41) with the projection, the config, the delta and the change tags alone: the
  * live state, the situation, the outputs and the feed throw on any read (C31.2). An empty value can hide a read whose
- * result is the same for it (a pending weekend phase reads as the race's grid, C14); a throw cannot.
+ * result is the same for it (a pending weekend phase reads as the race's grid, C14); a throw cannot. A proxy, not a
+ * spread: a spread would read every key of the guarded view, so only the unit's own reads reach the guard.
  */
 export const readsOnlyTheProjection = (calc: Calculator, view: EngineView): EngineView => {
   const guarded = guardedView(view, calc.reads, { unit: calc.id });
-  const parts = Object.fromEntries((['live', 'situation', 'outputs', 'feed'] as const).map((part) => [part, forbidden(calc.id, part)]));
-  return { ...guarded, ...parts } as EngineView;
+  const parts = new Map<string | symbol, object>((['live', 'situation', 'outputs', 'feed'] as const).map((part) => [part, forbidden(calc.id, part)]));
+  return new Proxy({} as EngineView, {
+    get: (_, key) => parts.get(key) ?? Reflect.get(guarded, key),
+    has: (_, key) => parts.has(key) || Reflect.has(guarded, key),
+  });
 };
 
 /** The laps the C31.2 run folds: through the safety car and the stops around it. */

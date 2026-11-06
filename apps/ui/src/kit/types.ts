@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- `any` is the wildcard of the type-level contract (variance of Component and Fold) */
 // Types of the widget contract (spec 4.2). Type-only: the one svelte import is erased, so Node can import widget.ts.
 import type { Component } from 'svelte';
-import type { CarRef, Fold, TimeWindow, TopicName, TopicParams, TopicValue } from '@pitwall/contracts';
+import type { CarRef, Fold, TimeWindow, TopicName, TopicParams, TopicValue, UiAction } from '@pitwall/contracts';
 import type { CarId, FeedId } from '@pitwall/domain';
 
 /** The link group of a panel, resolved to concrete cars and a window. */
@@ -53,6 +53,8 @@ export type WidgetDecl<D extends Record<string, AnyDataDecl>, O extends Record<s
   readonly data: D;
   readonly options: O;
   readonly sizes: Record<string, SizeMode>;
+  /** The uiAction kinds the widget sends (C74); the panel passes them to `setUiActions`. `[]` when it sends none. */
+  readonly actions: readonly UiAction['kind'][];
 };
 
 /** The size a component gets (spec 4.4): the mode, cells, pixels and device pixel ratio. */

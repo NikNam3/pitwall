@@ -27,7 +27,7 @@ export const span = (machine: MachineId, kind: string, o: Partial<Span> = {}): S
   confirmed: true, detail: {}, startFrame: 1, endFrame: 10, ...o });
 
 /** A log with every list empty, `o`'s lists in place (arrays the test may push to: the log only grows, C24). */
-export const log = (o: Partial<Log> = {}): Log => ({ laps: [], stints: [], pitStops: [], crossings: [], events: [], penalties: [], clock: [], voids: [], spans: {}, ...o });
+export const log = (o: Partial<Log> = {}): Log => ({ laps: [], stints: [], pitStops: [], crossings: [], events: [], penalties: [], decisions: [], clock: [], voids: [], spans: {}, ...o });
 
 /** A flashback's void fact (C27): the frame restored to and, per list, the log positions that never happened. */
 export const voidFact = (ranges: VoidFact['ranges'], frame = 5): VoidFact => ({ target: { frameId: frame, at: frame * 100 }, ranges, frame });
@@ -36,17 +36,32 @@ export const voidFact = (ranges: VoidFact['ranges'], frame = 5): VoidFact => ({ 
 export const projected = ({ voids: _voids, ...lists }: Log): Projection => lists;
 
 /** A projection with every list empty, `o`'s lists in place. */
-export const history = (o: Partial<Projection> = {}): Projection => ({ laps: [], stints: [], pitStops: [], events: [], crossings: [], penalties: [], clock: [], spans: {}, ...o });
+export const history = (o: Partial<Projection> = {}): Projection => ({ laps: [], stints: [], pitStops: [], events: [], crossings: [], penalties: [], decisions: [], clock: [], spans: {}, ...o });
 
 /** Cars by team and race number (C62); no driver name, no network id (user, 2026-11-04). */
 export const MERCEDES_44: CarKey = { teamId: 0, raceNumber: 44 };
 export const FERRARI_16: CarKey = { teamId: 1, raceNumber: 16 };
 export const ASTON_14: CarKey = { teamId: 4, raceNumber: 14 };
 
-/** A session row: a practice of weekend W1 whose feed's player is car 1 (FERRARI_16), car 0 MERCEDES_44. */
+/**
+ * One car row of a session (C62): its slot, its key (which matches a car across sessions) and its driver name as the
+ * session's Participants last named it (SP4.1a fx2: shown only, never part of the key). Storage keeps a name as it is
+ * and a missing one as NULL, read back as `known(name, 0)` and `unknown('notReceived')`, so a row written with `slot`
+ * reads back equal.
+ */
+export const slot = (c: number, carKey: CarKey, driver?: string) =>
+  ({ carId: car(c), carKey, driver: driver === undefined ? unknown('notReceived') : known(driver, 0) });
+
+/** The default cars of `session`: car 0 MERCEDES_44 and car 1 FERRARI_16, each with its driver name. */
+const CARS = [slot(0, MERCEDES_44, 'Driver Zero'), slot(1, FERRARI_16, 'Driver One')];
+
+/**
+ * A session row: a practice of weekend W1 whose feed's player is car 1 (FERRARI_16), car 0 MERCEDES_44; the engine placed
+ * no teammate (`teammateCar: null`, SP4.1a f34, C43).
+ */
 export const session = (uid: string, o: Partial<SessionRow> = {}): SessionRow => ({ sessionUid: uid as SessionUid, weekendId: 'W1', seasonId: 'S1',
-  playerCar: car(1), trackId: 26, startedAt: '2026-10-27T20:00:00.000Z', pwrecPath: `/rec/${uid}.pwrec.gz`, settings: { tyreTemperature: 1 },
-  cars: [{ carId: car(0), carKey: MERCEDES_44 }, { carId: car(1), carKey: FERRARI_16 }], ...o });
+  playerCar: car(1), teammateCar: null, trackId: 26, startedAt: '2026-10-27T20:00:00.000Z', pwrecPath: `/rec/${uid}.pwrec.gz`, settings: { tyreTemperature: 1 },
+  cars: CARS, ...o });
 
 /** The storage key of a session (C60): its uid, its weekend and its feed's player car. */
 export const key = (uid: string, weekendId = 'W1', playerCar = car(1)): SessionKey => ({ sessionUid: uid as SessionUid, weekendId, playerCar });

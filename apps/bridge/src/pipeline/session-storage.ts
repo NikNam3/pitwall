@@ -1,5 +1,5 @@
 // The storage of one session (C24, C59–C62): its row and cars, its log, its weekend context.
-import { carKeyOf, type CarId, type CarKey, type SessionState, type SessionUid } from '@pitwall/domain';
+import { carKeyOf, known, unknown, type CarId, type CarKey, type SessionState, type SessionUid } from '@pitwall/domain';
 import type { DeepReadonly, EngineState, WeekendContext } from '@pitwall/engine/readers';
 import type { Logger } from '../log.ts';
 import type { Db, SessionKey, SessionRow, StoredSessionRow } from '../storage/db.ts';
@@ -8,13 +8,15 @@ import { WeekendRepository } from '../storage/weekend-repository.ts';
 
 /**
  * A session row from the engine's values (C6: storage sees no packet type) and the recording's: the session as the live
- * state holds it, the feed's player car, and every slot's team and race number from the live identity (C62). No
- * situation and no signal shapes it (C13, C32).
+ * state holds it, the feed's player car, the teammate the engine placed (`live.teammateCar`, C43: no rule of the bridge's
+ * own) and every slot's team and race number from the live identity (C62). No situation and no signal shapes it (C13, C32).
  */
 export type SessionRowInput = {
   sessionUid: SessionUid;
   session: Pick<SessionState, 'link' | 'trackId' | 'settings'>;
   playerCar: CarId;
+  /** The engine's `live.teammateCar` now; `null` when it placed none. */
+  teammateCar: CarId | null;
   startedAt: string;
   pwrecPath: string | null;
   cars: SessionRow['cars'];
@@ -25,6 +27,7 @@ export const sessionRowOf = (s: SessionRowInput): SessionRow => ({
   weekendId: String(s.session.link.weekend),
   seasonId: String(s.session.link.season),
   playerCar: s.playerCar,
+  teammateCar: s.teammateCar,
   trackId: s.session.trackId,
   startedAt: s.startedAt,
   pwrecPath: s.pwrecPath,
@@ -32,9 +35,16 @@ export const sessionRowOf = (s: SessionRowInput): SessionRow => ({
   cars: s.cars,
 });
 
-/** Every slot's car key from the live identity, with no car-status filter (C62; B2). */
+/**
+ * Every slot's car key and driver name from the live identity, with no car-status filter (C62; B2). The game sends an
+ * empty name for a slot it names no driver for: unknown (C3), never an empty string.
+ */
 export const carsOf = (live: DeepReadonly<Pick<EngineState, 'cars'>>): SessionRow['cars'] =>
-  live.cars.map((car) => ({ carId: car.id, carKey: carKeyOf(car.identity) }));
+  live.cars.map((car) => ({
+    carId: car.id,
+    carKey: carKeyOf(car.identity),
+    driver: car.identity.name === '' ? unknown('notReceived') : known(car.identity.name, 0),
+  }));
 
 /**
  * How a session reaches storage: `append` (live) appends its log frame by frame and marks it complete at its end;
@@ -50,6 +60,8 @@ export type SessionStorageOptions = {
   mode: StorageMode;
   /** Rebuilds a stored session the weekend context skipped as stale, in the background (C61). */
   rebuild?: (row: StoredSessionRow) => Promise<void>;
+  /** Live only: called once the session's log is stored complete (the calibration store's candidates change, C62a). */
+  onStored?: () => void;
 };
 
 const keyOf = (row: SessionKey): SessionKey => ({ sessionUid: row.sessionUid, weekendId: row.weekendId, playerCar: row.playerCar });
@@ -79,7 +91,7 @@ export class SessionStorage {
     if (this.#o.mode === 'append') this.#access?.writer.startSession(row);
   }
 
-  /** The session's row and cars whenever its identity changed (the newest wins); live only. */
+  /** The session's row and cars whenever its identity or its teammate changed (the newest wins); live only. */
   upsertSession(row: SessionRow): void {
     if (this.#o.mode === 'append') this.#access?.writer.upsertSession(row);
   }
@@ -100,6 +112,8 @@ export class SessionStorage {
     if (this.#o.mode === 'append') {
       writer.writeLog(keyOf(row), log);
       if (this.#access !== undefined) writer.complete(keyOf(row));
+      // Stored complete, unless the write failed (storage then is off).
+      if (this.#access !== undefined) this.#o.onStored?.();
     } else if (!opts.interrupted) {
       writer.replaceLog(row, log, this.#o.rulesVersion);
     }

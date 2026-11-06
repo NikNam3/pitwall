@@ -5,9 +5,10 @@ import fc from 'fast-check';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { feedId, type FeedId } from '@pitwall/domain';
 import type { Packet } from '@pitwall/protocol';
-import { initialState, SessionTracker, step, type EngineState, type Frame, type StepOutput } from '../../src/index.ts';
+import { initialState, SessionRunner, SessionTracker, step, type EngineState, type Frame, type StepOutput, type StepResult } from '../../src/index.ts';
 import { RECORDERS, STATE_UPDATE } from '../../src/step/step.ts';
 import { segmentPackets } from '../../../../test-support/segments.ts';
+import { applyWith, PICK_B } from '../support/decisions.ts';
 import { inOrder } from '../support/module-order.ts';
 
 const SEGMENTS = ['race-zandvoort-pit-stop', 'race-singapore-start', 'practice-wing-change'] as const;
@@ -48,6 +49,43 @@ describe('the step modules', () => {
     expect(STATE_UPDATE.length).toBeGreaterThan(0);
     expect(RECORDERS.length).toBeGreaterThan(0);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+});
+
+/**
+ * The segment's session through a `SessionRunner`, a decision given with its middle frame (C10, C76): the runner's state
+ * and every applied frame's step output.
+ */
+const runWithDecision = (segment: Segment): Run => {
+  const frames = framesOf(segment);
+  const first = frames.findIndex((f) => f.session !== undefined);
+  const { sessionUid, session } = frames[first]!;
+  const own = frames.slice(first).filter((f) => f.sessionUid === sessionUid);
+  const runner = new SessionRunner({ feedId: segment as FeedId, sessionUid, session: session! });
+  const outputs: Run['outputs'] = [];
+  // the step's output, the projection's delta and a flashback's report; the state is compared once, at the end
+  const keep = ({ state: _state, ...result }: StepResult) => outputs.push(outputOf(result));
+  const middle = Math.floor(own.length / 2);
+  own.forEach((f, i) => applyWith(runner, f, i === middle ? [PICK_B] : undefined, keep));
+  runner.end(keep);
+  return { state: runner.state as EngineState, outputs };
+};
+
+describe('the decisions recorder', () => {
+  it('recorders in shuffled order give identical results (C11)', () => {
+    expect(RECORDERS.map((r) => r.id)).toContain('decisions');
+    const segment: Segment = 'race-zandvoort-pit-stop';
+    const expected = runWithDecision(segment);
+    expect(expected.state.history.decisions).toHaveLength(1);
+    const permutation = fc.shuffledSubarray([...RECORDERS], { minLength: RECORDERS.length, maxLength: RECORDERS.length });
+    fc.assert(
+      fc.property(permutation, (recorders) => {
+        const shuffled = inOrder(RECORDERS, recorders, () => runWithDecision(segment));
+        expect(shuffled.state).toEqual(expected.state);
+        expect(shuffled.outputs).toEqual(expected.outputs);
+      }),
+      { numRuns: 10 },
+    );
   });
 });
 

@@ -2,7 +2,7 @@
 // the projection with its membership (C26, C28), the delta, the change tags, the weekend's earlier sessions, the config,
 // the priors, the track, the feed health and the outputs of the units it reads. Nothing else.
 import { describe, expect, expectTypeOf, it } from 'vitest';
-import type { CarId } from '@pitwall/domain';
+import { unknown, type CarId, type Known, type PriorsSnapshot } from '@pitwall/domain';
 import {
   CalculatorRegistry,
   membershipOf,
@@ -58,33 +58,35 @@ describe('EngineView: the C39 parts', () => {
     expectTypeOf<EngineView['history']>().toEqualTypeOf<Projection>();
   });
 
-  it('`weekend` is the weekend\'s earlier sessions, read-only, absent without a weekend context; `priors` are read-only (C62, C62a)', () => {
+  it('`weekend` is the weekend\'s earlier sessions, read-only, absent without a weekend context; `priors` is the run\'s priors snapshot, read-only (C62, C62a)', () => {
     expectTypeOf<EngineView['weekend']>().toEqualTypeOf<DeepReadonly<WeekendContext> | undefined>();
-    expectTypeOf<EngineView['priors']>().toEqualTypeOf<DeepReadonly<Record<string, unknown>>>();
+    expectTypeOf<EngineView['priors']>().toEqualTypeOf<Known<DeepReadonly<PriorsSnapshot>>>();
   });
 
   it('a unit gets the view with exactly these parts, each the scheduler input\'s, and the outputs of the units before it', () => {
     const seen: EngineView[] = [];
     const s = new Scheduler(CalculatorRegistry.build([{ kind: 'quick', id: 'probe', reads: ['timing'], cadence: 'frame', compute: (v) => (seen.push(v), 0) }]));
     s.setNeeded(['probe']);
-    const given = { ...input(1000), priors: { 'pace.model': { k: 1 } }, weekend: { weekendId: 'w', player: { teamId: 0, raceNumber: 1 }, sessions: [] } as never };
+    const given = { ...input(1000), weekend: { weekendId: 'w', player: { teamId: 0, raceNumber: 1 }, sessions: [] } as never };
     s.run(given);
     const [view] = seen;
     expect(Object.keys(view!).sort()).toEqual([...PARTS].sort());
-    for (const part of ['live', 'situation', 'history', 'weekend', 'config', 'priors', 'track', 'feed'] as const) expect(view![part], part).toBe(given[part]);
+    for (const part of ['live', 'situation', 'history', 'weekend', 'config', 'track', 'feed'] as const) expect(view![part], part).toBe(given[part]);
+    // the scheduler picks `priors` from the run's priors (C62a); the input holds no snapshot
+    expect(view!.priors).toEqual(unknown('notApplicable'));
     expect([...view!.changed]).toEqual([...given.changed]);
     expect(view!.delta).toEqual(given.delta);
     expect(view!.outputs).toBeInstanceOf(Map);
   });
 
-  it('a step\'s view holds its live state, its situation (`situationOf`) and its projection; priors are `{}` until the priors store exists', () => {
+  it('a step\'s view holds its live state, its situation (`situationOf`) and its projection; without a priors snapshot `priors` is `notApplicable`', () => {
     const { last } = race();
     const view = viewOf(last);
     expect(view.live).toBe(last.state);
     expect(view.history).toBe(last.state.history);
     expect(view.situation).toEqual(situationOf(last.state));
     expect(view.situation.byMachine['clock']?.map((s) => s.kind)).toEqual(['running']);
-    expect(view.priors).toEqual({});
+    expect(view.priors).toEqual(unknown('notApplicable'));
   });
 });
 
@@ -127,7 +129,7 @@ describe('openSpansOf', () => {
   it('reads only the situation: a view whose situation has the spans gives them, whatever its projection holds', () => {
     const span = { machine: 'car-status', id: 0, carId: 2 as CarId, kind: 'competing', start: 0, confirmed: true, detail: undefined, startFrame: 1 } as const;
     const situation: Situation = { weekendPhase: { kind: 'race', format: 'grandPrix' }, byMachine: { 'car-status': [span] } };
-    const view: EngineView = { ...inputOf(race().last), situation, outputs: new Map() };
+    const view: EngineView = { ...inputOf(race().last), situation, priors: unknown('notApplicable'), outputs: new Map() };
     expect(openSpansOf(view, 'car-status', 2 as CarId)).toEqual([span]);
     expect(openSpansOf(view, 'car-status', 3 as CarId)).toEqual([]);
   });

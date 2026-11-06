@@ -6,7 +6,7 @@ import { openDatabase, type Db } from '../../src/storage/db.ts';
 import { StorageWriter } from '../../src/storage/storage-writer.ts';
 import { WeekendRepository } from '../../src/storage/weekend-repository.ts';
 import {
-  ASTON_14, FERRARI_16, MERCEDES_44, car, event, factRows, forbidFactRewrites, key, keyOf, lap, log, pitStop, projected, session, span, stint, stored, voidFact,
+  ASTON_14, FERRARI_16, MERCEDES_44, car, event, factRows, forbidFactRewrites, key, keyOf, lap, log, pitStop, projected, session, slot, span, stint, stored, voidFact,
 } from './records.ts';
 
 const K = key('1');
@@ -29,9 +29,33 @@ describe('StorageWriter: the session row and its cars', () => {
   });
   it('upsertSession again (the identity changed) replaces the cars: the newest wins', () => {
     const { writer, repo } = setup();
-    const cars = [{ carId: car(0), carKey: ASTON_14 }, { carId: car(1), carKey: FERRARI_16 }, { carId: car(2), carKey: MERCEDES_44 }];
+    const cars = [slot(0, ASTON_14, 'Driver Zero'), slot(1, FERRARI_16, 'Driver One'), slot(2, MERCEDES_44, 'Driver Two')];
     writer.upsertSession(session('1', { cars }));
     expect(repo.sessionsOf('W1')).toEqual([stored(session('1', { cars }), false)]);
+  });
+  // SP4.1a fx2 (C3, C60, C62): the calibration panel shows a source's driver (CAR); storage keeps each slot's driver name
+  // as the session's Participants last named it, beside its team and race number. A name the game does not send (or
+  // hides) is stored as NULL and read back as unknown, never as an empty string.
+  it('a stored session keeps each slot\'s driver name; a slot without one reads unknown', async () => {
+    const { db, writer, repo } = setup();
+    const cars = [slot(0, MERCEDES_44, 'Driver Zero'), slot(1, FERRARI_16), slot(2, ASTON_14, 'Driver Two')];
+    const row = session('1', { cars });
+    writer.upsertSession(row);
+    expect(repo.sessionsOf('W1')[0]?.cars).toEqual([
+      { carId: car(0), carKey: MERCEDES_44, driver: { known: true, value: 'Driver Zero', at: 0 } },
+      { carId: car(1), carKey: FERRARI_16, driver: { known: false, reason: 'notReceived' } },
+      { carId: car(2), carKey: ASTON_14, driver: { known: true, value: 'Driver Two', at: 0 } },
+    ]);
+    // NULL in the row, not an empty string.
+    expect(db.prepare("SELECT car_id, name FROM cars WHERE session_uid = '1' ORDER BY car_id").all())
+      .toEqual([{ car_id: 0, name: 'Driver Zero' }, { car_id: 1, name: null }, { car_id: 2, name: 'Driver Two' }]);
+    // A rebuild writes the rebuilt names: the newest wins.
+    writer.replaceLog(session('1', { cars: [slot(0, MERCEDES_44), slot(1, FERRARI_16, 'Driver One')] }), log(), 'unversioned');
+    expect(repo.sessionsOf('W1')[0]?.cars).toEqual([
+      { carId: car(0), carKey: MERCEDES_44, driver: { known: false, reason: 'notReceived' } },
+      { carId: car(1), carKey: FERRARI_16, driver: { known: true, value: 'Driver One', at: 0 } },
+    ]);
+    expect(await repo.projectionOf(keyOf(row))).toEqual(projected(log()));
   });
   it('a closed database is reported through onError', () => {
     const { db, writer, onError } = setup();
@@ -138,7 +162,7 @@ describe('StorageWriter: a live session appends its log', () => {
 describe('StorageWriter: sessions side by side', () => {
   it('two feeds of one session are stored side by side, each with its row, cars and log (C1a)', async () => {
     const { writer, repo, onError } = setup();
-    const second = session('1', { playerCar: car(0), cars: [{ carId: car(0), carKey: MERCEDES_44 }, { carId: car(1), carKey: FERRARI_16 }] });
+    const second = session('1', { playerCar: car(0), cars: [slot(0, MERCEDES_44, 'Driver Zero'), slot(1, FERRARI_16)] });
     writer.upsertSession(second);
     const mine = log({ laps: [lap(1, 1)] });
     const theirs = log({ laps: [lap(0, 1), lap(0, 2)] });
@@ -173,7 +197,7 @@ describe('StorageWriter: a rebuild replaces a session\'s log as a whole (C24, C6
   it('replaceLog writes the log, the cars and the row, complete, with the given rules version; the session\'s old rows are gone', async () => {
     const { db, writer, repo, onError } = setup();
     writer.writeLog(K, log({ laps: [lap(0, 1)], events: [event(1), event(2)] }));
-    const cars = [{ carId: car(1), carKey: FERRARI_16 }, { carId: car(3), carKey: ASTON_14 }];
+    const cars = [slot(1, FERRARI_16, 'Driver One'), slot(3, ASTON_14)];
     const rebuilt = log({ laps: [lap(0, 1, { lapTimeMs: 89_000 })], stints: [stint(0, 1)] });
     writer.replaceLog(session('1', { cars, trackId: 27 }), rebuilt, 'rules-2');
     expect(onError).not.toHaveBeenCalled();

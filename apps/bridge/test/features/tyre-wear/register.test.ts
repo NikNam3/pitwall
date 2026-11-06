@@ -1,4 +1,4 @@
-import { TYRE_WEAR, TYRE_WEAR_CONFIG, type TyreWearOutput } from '@pitwall/analysis';
+import { TYRE_WEAR, type TyreWearOutput } from '@pitwall/analysis';
 import { carId, type TyreWear } from '@pitwall/domain';
 import { describe, expect, it } from 'vitest';
 import tyreWear from '../../../src/features/tyre-wear/register.ts';
@@ -16,10 +16,10 @@ const value = (limitPct: number): TyreWear => ({
 });
 
 describe('tyre-wear feature', () => {
-  it('registers the calculator, its config and the topic tyreWear.car', () => {
+  it('registers the analysis and the topic tyreWear.car, and no config of its own (its wear limit is tyre-life`s, spec 4.2, 7)', () => {
     expect(tyreWear.name).toBe('tyre-wear');
     expect(tyreWear.calculators.map((c) => c.id)).toEqual([TYRE_WEAR]);
-    expect(tyreWear.config).toEqual([TYRE_WEAR_CONFIG]);
+    expect(tyreWear.config ?? []).toEqual([]);
     expect(tyreWear.topics).toHaveLength(1);
     expect(tyreWear.topics[0]).toMatchObject({ topic: 'tyreWear.car', from: TYRE_WEAR });
   });

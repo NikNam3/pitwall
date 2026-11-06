@@ -24,12 +24,13 @@ import carDetail from '../src/topics/car.detail.ts';
 import laps from '../src/topics/laps.ts';
 
 describe('TOPICS', () => {
-  it('has exactly the 11 feed topics besides the situation topics (spec 8.4 and replay.status of 8.5) with their modes and rates', () => {
+  it('has exactly the 12 feed topics besides the situation topics (spec 8.4, replay.status of 8.5, calibration.active of SP4.1a) with their modes and rates', () => {
     const table = Object.entries(TOPICS)
       .filter(([key, d]) => d.scope === 'feed' && d.owner === 'core' && !key.startsWith('situation.'))
       .map(([key, d]) => [key, d.name, d.mode, d.maxHz] as const)
       .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
     expect(table).toEqual([
+      ['calibration.active', 'calibration.active', 'state', Infinity],
       ['car.detail', 'car.detail', 'state', 30],
       ['car.telemetry', 'car.telemetry', 'state', 60],
       ['cars.overview', 'cars.overview', 'state', 10],
@@ -56,12 +57,15 @@ describe('TOPICS', () => {
     );
     expect(table).toHaveLength(19);
   });
-  it('gives every core topic outside dev and ui scope feed', () => {
-    const core = Object.entries(TOPICS).filter(([name, d]) => d.owner === 'core' && !/^(dev|ui)\./.test(name));
-    expect(core).toHaveLength(11 + 19);
+  it('gives every core topic outside dev, ui and the calibration store\'s scope feed', () => {
+    const core = Object.entries(TOPICS).filter(([name, d]) => d.owner === 'core' && !/^(dev|ui)\./.test(name) && !['calibration.sets', 'calibration.values', 'calibration.candidates'].includes(name));
+    expect(core).toHaveLength(12 + 19);
     for (const [, d] of core) expect(d.scope).toBe('feed');
   });
-  it('has the analysis topics of sub-project 3 (spec A.3): owner, mode and rate', () => {
+  it.each(['calibration.sets', 'calibration.values', 'calibration.candidates'] as const)('has the global topic %s of the calibration store (C54, C62a): owner core, state', (name) => {
+    expect(TOPICS[name]).toMatchObject({ name, owner: 'core', scope: 'global', mode: 'state', maxHz: Infinity });
+  });
+  it('has the analysis topics of sub-project 3 (spec A.3) and SP4.1a: owner, mode and rate', () => {
     const table = Object.entries(TOPICS)
       .filter(([, d]) => d.owner !== 'core')
       .map(([key, d]) => [key, d.owner, d.scope, d.mode, d.maxHz] as const)
@@ -80,8 +84,10 @@ describe('TOPICS', () => {
       ['incidents.markers', 'incidents', 'feed', 'state', 1],
       ['lapTimes.board', 'lap-times', 'feed', 'state', 4],
       ['lapTimes.projection', 'lap-times', 'feed', 'state', 10],
+      ['pitLosses.track', 'pit-losses', 'feed', 'state', 1],
       ['pitStopCount.byCar', 'pit-stop-count', 'feed', 'state', 4],
       ['raceMoment.current', 'race-moment', 'feed', 'state', 4],
+      ['stintAnalysis.car', 'stint-analysis', 'feed', 'state', 1],
       ['talkWindow.car', 'talk-window', 'feed', 'state', 10],
       ['trackPositions.cars', 'track-positions', 'feed', 'state', 10],
       ['trackPositions.geometry', 'track-positions', 'feed', 'state', 1],
@@ -140,6 +146,8 @@ describe('topic types', () => {
       | 'gaps.gapper' | 'gaps.neighbourhood' | 'lapTimes.board' | 'lapTimes.projection' | 'battle.cards'
       | 'incidents.feed' | 'incidents.markers' | 'raceMoment.current' | 'pitStopCount.byCar'
       | 'trackPositions.geometry' | 'trackPositions.cars' | 'talkWindow.car'
+      | 'stintAnalysis.car' | 'pitLosses.track'
+      | 'calibration.sets' | 'calibration.values' | 'calibration.candidates' | 'calibration.active'
       | 'situation.carActivityPractice' | 'situation.carActivityQualifying' | 'situation.carActivityRace' | 'situation.carFlags'
       | 'situation.carLocation' | 'situation.carStatus' | 'situation.clock' | 'situation.compoundRule' | 'situation.lapValidity'
       | 'situation.penalties' | 'situation.raceControlPractice' | 'situation.raceControlQualifying' | 'situation.raceControlRace'

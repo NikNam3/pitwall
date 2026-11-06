@@ -5,6 +5,7 @@ import { FEATURES } from '../features/index.generated.ts';
 import { TopicHub } from '../hub/topic-hub.ts';
 import { PwrecSource } from '../input/pwrec-source.ts';
 import type { Logger } from '../log.ts';
+import { recordingDecisions } from '../pipeline/decision-sidecars.ts';
 import { FeedPipeline } from '../pipeline/feed-pipeline.ts';
 import { StartupError } from '../startup-error.ts';
 import { recordingTrack, TRACKS_DIR } from '../track-files/load.ts';
@@ -15,7 +16,8 @@ import type { Db } from '../storage/db.ts';
  * written once, at its end, and replaces the stored one in one transaction (C24, C61; a run stopped early writes
  * nothing). Nobody listens to the hub.
  * `config` is the calculator config it runs with (the recording's own, see `recordingConfig`); the track file is the
- * recording's sidecar, or the committed file without one (`recordingTrack`, C62b).
+ * recording's sidecar, or the committed file without one (`recordingTrack`, C62b); the priors and decisions are its
+ * sidecars' (`recordingDecisions`, C76), none without them.
  * An aborted `signal` (also one aborted before the call) stops the run, and it throws a `StartupError`.
  */
 export async function processRecording(path: string, db: Db, log: Logger, signal: AbortSignal, config: FeatureConfig, rulesVersion: string): Promise<void> {
@@ -35,6 +37,8 @@ export async function processRecording(path: string, db: Db, log: Logger, signal
     config,
     log,
     tracks: (trackId) => recordingTrack(path, trackId, TRACKS_DIR, log),
+    // Reprocessing equals the live run (C38): the recording's priors and decisions sidecars (C76).
+    recorded: recordingDecisions(path, log),
     storage: { db, sourcePath: path, rulesVersion, mode: 'replace' },
   });
   const stop = () => void pipeline.stop();

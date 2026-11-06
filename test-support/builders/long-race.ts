@@ -325,6 +325,7 @@ function build(): BuilderRace {
       pitStops: facts.pitStops.slice(0, countBy(lists.pitStops, frame)),
       events: facts.events.slice(0, countBy(lists.events, frame)),
       penalties: [],
+      decisions: [],
       clock: [],
       spans: spansAt,
     };

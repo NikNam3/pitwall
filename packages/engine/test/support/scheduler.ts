@@ -5,6 +5,8 @@
 import { isDeepStrictEqual } from 'node:util';
 import { expect } from 'vitest';
 import { unknown } from '@pitwall/domain';
+import { NO_PRIORS } from '../../../../test-support/builders/index.ts';
+import { priorsOf } from '../../src/calc/priors.ts';
 import {
   CalculatorRegistry,
   MACHINES,
@@ -51,24 +53,24 @@ export const RACING: Situation = { weekendPhase: { kind: 'race', format: 'grandP
 export const input = (t: number, changed: ChangeTag[] = ['timing'], d = delta(), laps = d.after.laps ?? 0, config: SchedulerInput['config'] = {}): SchedulerInput => ({
   live: { feedId: 'f1', sessionTime: t } as never,
   situation: RACING,
-  history: { laps: new Array(laps).fill({}) } as never,
+  history: { laps: new Array(laps).fill({}), decisions: [] } as never,
   changed: new Set(changed),
   delta: d,
   weekend: undefined,
   feed,
   config,
-  priors: {},
+  priors: NO_PRIORS,
   track: unknown('notApplicable'),
 });
 
 /**
  * The scheduler input of a step's result (C39): its live state, its situation (`situationOf`), its projection and its
- * weekend context, with the change tags and the delta of the step; no priors (`{}` until the priors store exists).
- * `feed` defaults to a healthy feed.
+ * weekend context, with the change tags and the delta of the step. `feed` defaults to a healthy feed, `priors` (the
+ * run's priors, C62a) to none (`NO_PRIORS`).
  */
 export const inputOf = (
   { state, changed, delta: d }: Pick<StepResult, 'state' | 'changed' | 'delta'>,
-  o: { feed?: FeedMetricsView; config?: SchedulerInput['config'] } = {},
+  o: { feed?: FeedMetricsView; config?: SchedulerInput['config']; priors?: SchedulerInput['priors'] } = {},
 ): SchedulerInput => ({
   live: state,
   situation: situationOf(state),
@@ -78,12 +80,22 @@ export const inputOf = (
   weekend: state.weekend,
   feed: o.feed ?? feed,
   config: o.config ?? {},
-  priors: {},
+  priors: o.priors ?? NO_PRIORS,
   track: unknown('notApplicable'),
 });
 
+/**
+ * The view of a scheduler input with `outputs` before the unit, as the scheduler builds it: `view.priors` is the snapshot
+ * the projection's decisions name (`priorsOf`, C62a).
+ */
+export const viewOfInput = (input: SchedulerInput, outputs: EngineView['outputs'] = new Map()): EngineView => ({
+  ...input,
+  priors: priorsOf(input.history.decisions, input.priors),
+  outputs,
+});
+
 /** The view of a step's result, as a unit gets it with no outputs before it (`inputOf`). */
-export const viewOf = (result: Pick<StepResult, 'state' | 'changed' | 'delta'>, o: Parameters<typeof inputOf>[1] = {}): EngineView => ({ ...inputOf(result, o), outputs: new Map() });
+export const viewOf = (result: Pick<StepResult, 'state' | 'changed' | 'delta'>, o: Parameters<typeof inputOf>[1] = {}): EngineView => viewOfInput(inputOf(result, o));
 
 // ---------------------------------------------------------------------------------------------------------------------
 // The guarded view (C41): a unit reads only what it declares in `reads`.
@@ -96,6 +108,7 @@ const LIST_TAGS: Readonly<Record<string, ChangeTag>> = {
   events: 'events',
   crossings: 'miniSectors',
   penalties: 'penalties',
+  decisions: 'decisions',
   clock: 'clock',
 };
 
@@ -203,7 +216,8 @@ const refuseWrites = <T extends object>(path: string): ProxyHandler<T> => ({
  *   read; any other field of them (`kind`, `detail`, ...) throws. Listing frees nothing else;
  * - `outputs`: the declared calculators' outputs only (`get`, `has`), never the whole map;
  * - `feed` only with `feed`;
- * - `delta`, `changed`, `weekend`, `config` and `priors` always.
+ * - `priors` only with `decisions` (C41, C62a), so a unit that reads the priors runs again on a pick and on its void;
+ * - `delta`, `changed`, `weekend`, `config` and `track` always.
  * The situation is deep-frozen where it is (its spans are step 2's own, ruling 6); the projection's lists are handed out
  * read-only (they are the log's own arrays, which cannot be frozen; the log freezes their entries): a unit that changes
  * either throws a `TypeError`. The view itself is not changed: the guard reads through to it.
@@ -354,11 +368,17 @@ export function guardedView(view: EngineView, reads: readonly Dependency[], { un
     [Symbol.iterator]: whole,
   } as unknown as ReadonlyMap<CalculatorId, unknown>;
 
-  return guard(
-    { ...view, live, history, situation, outputs, feed: guard({ ...view.feed }, 'feed', () => tags.has('feed')) } as EngineView,
-    'view',
-    () => true,
-  );
+  const top = { ...view, live, history, situation, outputs, feed: guard({ ...view.feed }, 'feed', () => tags.has('feed')) } as EngineView;
+  return new Proxy(top, {
+    ...refuseWrites<EngineView>('view'),
+    get(t, key, receiver) {
+      if (key === 'priors') {
+        onRead?.('priors');
+        if (!tags.has('decisions')) throw new UndeclaredReadError(unit, 'priors', 'C41');
+      }
+      return Reflect.get(t, key, receiver);
+    },
+  });
 }
 
 /** `calc` with every call given its guarded view (`guardedView` with its own `reads`), so an undeclared read throws (C41). */
@@ -585,7 +605,7 @@ export function projectionStep(r: Pick<StepResult, 'state' | 'changed' | 'delta'
     weekend: undefined,
     feed: throwing('feed') as SchedulerInput['feed'],
     config: {},
-    priors: {},
+    priors: NO_PRIORS,
     track: unknown('notApplicable'),
   });
 }
@@ -620,7 +640,7 @@ export function expectIncrementalOverSteps<Acc, Out>(calc: IncrementalCalculator
     // the scheduler contains a unit's throw (C48): here it is the failure
     if (errors.length > 0) throw errors[0]!.error;
     if (!ran.includes(calc.id)) return;
-    const fresh: EngineView = Object.freeze({ ...input, outputs: new Map() });
+    const fresh: EngineView = Object.freeze(viewOfInput(input));
     expectEqual(outputs.get(calc.id), calc.init(fresh), `${label}frame ${i}`);
   });
 }
@@ -639,7 +659,7 @@ export function expectScheduledIncremental<Acc, Out>(calc: IncrementalCalculator
     const input = inputOf(r);
     const { ran, outputs } = scheduler.run(input);
     if (ran.includes(calc.id)) {
-      const fresh = guardedView({ ...input, outputs: new Map() }, calc.reads, { unit: calc.id });
+      const fresh = guardedView(viewOfInput(input), calc.reads, { unit: calc.id });
       expectEqual(outputs.get(calc.id), calc.output(calc.init(fresh), fresh), `frame ${i}`);
     }
     i++;

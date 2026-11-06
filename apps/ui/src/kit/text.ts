@@ -1,5 +1,5 @@
 // Every fixed text of the kit and the shell (spec 4.3, 7.4): the one place UI wording changes.
-import type { Corners, DamageParts, IncidentKind, InsightCategory, UnknownReason } from '@pitwall/domain';
+import type { Corners, DamageParts, EstimateSource, IncidentKind, InsightCategory, UnknownReason } from '@pitwall/domain';
 
 /** Header state while a required topic has no value yet. */
 export const noDataYet = 'no data yet';
@@ -87,6 +87,24 @@ export const unknownMark = {
 /** Prefix of an estimated value in a value cell. */
 export const estimatedPrefix = '~';
 
+/**
+ * The source badge after a value that rests on a prior (spec 4.4): its mark per source kind (none for a value measured
+ * this session, `ᶜ` for the calibration, `ᵈ` for a default) and its hover per kind.
+ */
+export const sourceMark = { session: '', calibration: 'ᶜ', default: 'ᵈ' } as const satisfies Record<EstimateSource['kind'], string>;
+export const sourceHover = {
+  session: (parts: string): string => ['session', parts].join(separator),
+  calibration: (setName: string, sources: number, parts: string): string =>
+    ['calibration', setName, `${sources} ${sources === 1 ? 'source' : 'sources'}`, parts].join(separator),
+  default: (note: string): string => ['default', note].join(separator),
+} as const;
+/** The source kind in words (a SOURCE column), shared by every display that names a source. */
+export const sourceWord = {
+  session: 'session',
+  calibration: 'calibration',
+  default: 'default',
+} as const satisfies Record<EstimateSource['kind'], string>;
+
 /** Body of a gallery cell whose moment file is missing. */
 export const momentMissing = 'moment not generated, run pnpm gen:moments';
 
@@ -101,6 +119,7 @@ export const commandGroups = {
   window: 'Window',
   theme: 'Theme',
   realism: 'Realism',
+  calibration: 'Calibration',
   help: 'Help',
 } as const;
 
@@ -127,6 +146,29 @@ export const commandTitles = {
   fontSmaller: 'Smaller font',
   fontReset: 'Default font size',
   theme: (name: string): string => `Theme ${name}`,
+  calibrationPick: 'Pick the calibration set',
+  calibrationChoose: (setName: string): string => `Calibration: ${setName}`,
+} as const;
+
+/** The session-start calibration prompt and the top bar's calibration segment (SP4.1a spec 3.3). */
+export const calibration = {
+  /** The track, then the session's kind as the top bar names it (`Silverstone race`); the track alone without one. */
+  promptTitle: (track: string, session?: string): string =>
+    ['Calibration for this session', session === undefined ? track : `${track} ${session}`].join(separator),
+  sources: (n: number): string => `${n} ${n === 1 ? 'source' : 'sources'}`,
+  missing: (n: number): string => `${n} missing`,
+  missingHover: 'a stint no longer in its session (session rebuilt or deleted): left out of every value',
+  /** A set's day: when it was last used, else when it was made. */
+  used: (day: string): string => `used ${day}`,
+  created: (day: string): string => `new ${day}`,
+  preselected: 'preselected',
+  preselectedHover: 'the preselection for this track; Esc keeps it',
+  /** The choice of no set: the track file's values. */
+  defaults: 'defaults',
+  defaultsNote: "the track file's values",
+  footer: (kept: string): string => ['↑↓ move', 'Enter choose', `Esc keeps ${kept}`].join(separator),
+  /** The top bar's label before the active set's name. */
+  label: 'calibration',
 } as const;
 
 /** Notes of the key overview for entries of `keys.json` that are ignored. */

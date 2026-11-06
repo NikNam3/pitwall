@@ -101,6 +101,19 @@ export class UiState {
         this.hub.publishGlobal('ui.settings', () => this.settings());
         this.scheduleSave();
         return OK;
+      case 'calibration.set.create':
+      case 'calibration.set.copy':
+      case 'calibration.set.rename':
+      case 'calibration.set.delete':
+      case 'calibration.source.add':
+      case 'calibration.source.remove':
+      case 'calibration.lap.exclude':
+      case 'calibration.lap.include':
+      case 'calibration.override.set':
+      case 'calibration.override.clear':
+      case 'calibration.choose':
+        // The calibration store's (C62a), not UI state.
+        return INVALID;
     }
   }
 

@@ -1,4 +1,4 @@
-import type { Insight, Known, SessionTime, TrackData } from '@pitwall/domain';
+import type { Insight, Known, PriorsSnapshot, SessionTime, TrackData } from '@pitwall/domain';
 import type { FrameMetrics } from '../frame/metrics.ts';
 import type { HistoryDelta, Projection } from '../log/types.ts';
 import type { Situation } from '../situations/situation.ts';
@@ -48,8 +48,12 @@ export type EngineView = {
   weekend: DeepReadonly<WeekendContext> | undefined;
   /** The effective config of the run, by section key (see `defineConfig`); fixed for the run (C47). */
   config: DeepReadonly<Record<string, Record<string, number | string | boolean>>>;
-  /** Season-wide priors (C62a), fixed for the run; `{}` until the priors store exists. */
-  priors: DeepReadonly<Record<string, unknown>>;
+  /**
+   * The run's priors snapshot (C62a), built by the scheduler with `priorsOf`: the snapshot of the newest
+   * `calibrationChosen` decision in the projection, else the session-start one; `notApplicable` without one. A unit
+   * that reads it declares `decisions` in its `reads`.
+   */
+  priors: Known<DeepReadonly<PriorsSnapshot>>;
   /** The session's track file without its provenance (C39, C62b); fixed for the run; `notApplicable` without a file. */
   track: Known<DeepReadonly<TrackData>>;
   feed: FeedMetricsView;

@@ -9,11 +9,13 @@ import {
   CAR_BANDS_CONFIG,
   carBandsCalculator,
   damageCalculator,
+  degradationCalculator,
   fuelCalculator,
   GAPS,
   gapsCalculator,
   gapsToCar,
   sessionRemainingCalculator,
+  tyreLifeCalculator,
   tyreWearCalculator,
   type AlarmsOutput,
   type CarBandsOutput,
@@ -147,7 +149,18 @@ beforeAll(async () => {
     }
   };
 
-  const calculators = [gapsCalculator, carBandsCalculator, alarmsCalculator, tyreWearCalculator, fuelCalculator, damageCalculator, sessionRemainingCalculator];
+  // tyre-wear publishes from tyre-life, which reads degradation (spec 4.2)
+  const calculators = [
+    gapsCalculator,
+    carBandsCalculator,
+    alarmsCalculator,
+    tyreWearCalculator,
+    tyreLifeCalculator,
+    degradationCalculator,
+    fuelCalculator,
+    damageCalculator,
+    sessionRemainingCalculator,
+  ];
   const runner = await replayScheduled(segmentPath('race-zandvoort-full-lap.pwrec.gz'), calculators, (r, scheduled, frame) => {
     try {
       checker.check(r);

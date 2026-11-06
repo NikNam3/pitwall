@@ -1,5 +1,23 @@
 // One session of a feed: frames → SessionRunner → Scheduler → topics, plus its session file and its storage.
-import { carId, known, sessionUidString, trackDataOf, type CarId, type FeedId, type MachineId, type ParticipantsValues, type Known, type SessionTime, type SessionUid, type TrackData, type TrackFile } from '@pitwall/domain';
+import {
+  carId,
+  known,
+  sessionUidString,
+  trackDataOf,
+  type CalibrationActiveValue,
+  type CarId,
+  type DecisionRecord,
+  type FeedId,
+  type Known,
+  type MachineId,
+  type ParticipantsValues,
+  type PriorsSnapshot,
+  type RunPriors,
+  type SessionTime,
+  type SessionUid,
+  type TrackData,
+  type TrackFile,
+} from '@pitwall/domain';
 import {
   projectionLengths,
   Scheduler,
@@ -13,6 +31,7 @@ import {
   type StepResult,
   type WeekendContext,
 } from '@pitwall/engine';
+import { priorsOf, type DeepReadonly } from '@pitwall/engine/readers';
 import type { TopicName } from '@pitwall/contracts';
 import { peekHeader, type SessionPacket } from '@pitwall/protocol';
 import type { CalcStats } from '../dev/calc-stats.ts';
@@ -22,6 +41,7 @@ import type { Logger } from '../log.ts';
 import type { SessionKey, SessionRow } from '../storage/db.ts';
 import type { SessionFile } from '../storage/session-files.ts';
 import { MAX_DUMPS_PER_SESSION, writeDebugDump } from './debug-dump.ts';
+import { PendingDecisions, SessionRecords, type Placed } from './decision-placement.ts';
 import { carsOf, sessionRowOf, type SessionStorage } from './session-storage.ts';
 import type { PublishError, SpansOf, TopicPublisher } from './topic-publisher.ts';
 
@@ -54,7 +74,14 @@ export type SessionProcessorOptions = {
   dumpsDir?: string;
   /** Dev mode: times every calculator run (see `createCalcStats`). */
   calcStats?: CalcStats;
+  /** The run's priors at session start (C62a): the start snapshot (none: `notApplicable`); picks add theirs (`choose`). */
+  priors: RunPriors;
+  /** `calibration.active` changed: at the start, and whenever the projection's newest pick does (a pick, its void). */
+  onActive?: (value: CalibrationActiveValue) => void;
 };
+
+/** The time `calibration.active` is known from: fixed, so its value stays equal from frame to frame and after a rewind (C33). */
+const ACTIVE_AT = 0;
 
 /**
  * Runs one session (spec 5.4, 7.3). The runner holds the frames until the first Participants packet, which names the
@@ -82,10 +109,22 @@ export class SessionProcessor {
   #started = false;
   #dumps = 0;
   #lastReceivedAtMs = 0;
+  /** The run's priors (C62a): only grow, a flashback leaves them (the projection decides which snapshot counts). */
+  #priors: RunPriors;
+  /** Decisions committed since the last frame: the next frame carries them (C10, C76). */
+  readonly #pending = new PendingDecisions<Omit<DecisionRecord, 'frame'>>();
+  /** The records written to the session file: a decision committed now is placed at their count (C76). */
+  readonly #records: SessionRecords;
+  /** The last `calibration.active` handed to `onActive`, as JSON: it is handed on only when it changes. */
+  #active: string | undefined;
+  /** The teammate of the row last built (`#row`): a row is written again when the engine's teammate is another. */
+  #storedTeammate: CarId | null = null;
 
   constructor(opts: SessionProcessorOptions) {
     this.#o = opts;
+    this.#priors = opts.priors;
     this.sessionUid = opts.sessionUid;
+    this.#records = new SessionRecords(opts.sessionUid);
     this.#track = opts.track.known ? known(trackDataOf(opts.track.value), 0) : opts.track;
     this.#uid = sessionUidString(opts.sessionUid);
     this.#key = { sessionUid: this.#uid, weekendId: String(opts.session.weekendLinkIdentifier), playerCar: playerCarOf(opts.session) };
@@ -97,7 +136,46 @@ export class SessionProcessor {
       { feedId, sessionUid, session, realism: opts.config.realism?.enabled === true },
       { attach: this.#scheduler, contextFor: (participants) => this.#contextFor(participants) },
     );
-    opts.storage?.start(this.#row());
+    const { storage } = opts;
+    if (storage !== undefined) this.#storeRow((row) => storage.start(row));
+    this.#publishActive(this.#runner.state.history.decisions);
+  }
+
+  /** The session's track id, from its first Session packet. */
+  get trackId(): number {
+    return this.#o.session.trackId;
+  }
+
+  /** The run's priors: the start snapshot and every picked one (C62a); also the priors sidecar's content. */
+  get priors(): RunPriors {
+    return this.#priors;
+  }
+
+  /** A decision committed now, placed at the number of records written to the session file so far (C76). */
+  place<D>(decision: D): Placed<D> {
+    return this.#records.place(decision);
+  }
+
+  /**
+   * A decision the user committed (C76): the next frame carries it to the runner, whose decision recorder appends it
+   * describing that frame. `snapshot`: the priors snapshot a `calibrationChosen` names, added to the run's priors first.
+   */
+  decide(decision: Omit<DecisionRecord, 'frame'>, snapshot?: PriorsSnapshot): void {
+    if (snapshot !== undefined && this.#priors.snapshots[snapshot.fingerprint] === undefined) {
+      this.#priors = { ...this.#priors, snapshots: { ...this.#priors.snapshots, [snapshot.fingerprint]: snapshot } };
+    }
+    this.#pending.add(decision);
+  }
+
+  /**
+   * The set and snapshot fingerprint the run is on now (C62a): the newest `calibrationChosen` decision, pending or in the
+   * projection, else the start snapshot's; `null` for `defaults` or a run without priors.
+   */
+  get activeChoice(): { setId: string | null; snapshot: string | null } {
+    const chosen = [...this.#runner.state.history.decisions, ...this.#pending.list].findLast((d) => d.kind === 'calibrationChosen');
+    if (chosen !== undefined) return { setId: chosen.setId, snapshot: chosen.snapshot };
+    const start = this.#priors.start === null ? undefined : this.#priors.snapshots[this.#priors.start];
+    return { setId: start?.setId ?? null, snapshot: start?.fingerprint ?? null };
   }
 
   /** The newest applied frame's time on the engine's race clock (spec 3.3); undefined before the engine runs. */
@@ -106,7 +184,8 @@ export class SessionProcessor {
   }
 
   push(frame: Frame): void {
-    this.#applying(frame, () => this.#runner.apply(frame, this.#onResult));
+    const decisions = this.#pending.takeForFrame();
+    this.#applying(frame, () => this.#runner.apply(frame, this.#onResult, decisions));
   }
 
   /**
@@ -116,8 +195,9 @@ export class SessionProcessor {
    */
   record(receivedAtMs: number, bytes: Uint8Array): void {
     this.#lastReceivedAtMs = receivedAtMs;
-    const uid = peekHeader(bytes)?.sessionUid;
-    if (uid === this.sessionUid || uid === 0n) this.#o.file?.write(receivedAtMs, bytes);
+    const file = this.#o.file;
+    if (file === undefined) return;
+    this.#records.keep(peekHeader(bytes)?.sessionUid, () => file.write(receivedAtMs, bytes));
   }
 
   /**
@@ -205,9 +285,9 @@ export class SessionProcessor {
       scheduler.setNeeded(this.#o.needed());
     }
     try {
-      // The row stores every slot's car key from the live identity: whenever the identity changes (a rewind included),
-      // the row follows (the newest wins). Then the log's new facts are appended (C24).
-      if (result.changed.has('identity')) storage?.upsertSession(this.#row());
+      // The row stores every slot's car key from the live identity and the teammate the engine placed: whenever either
+      // changes (a rewind included), the row follows (the newest wins). Then the log's new facts are appended (C24).
+      if (storage !== undefined && (result.changed.has('identity') || this.#teammate() !== this.#storedTeammate)) this.#storeRow((row) => storage.upsertSession(row));
       storage?.writeLog(this.#key, result.state.log);
       // A session time that fell back with no flashback and no start: the engine keeps its race clock monotonic (spec 3.3); worth knowing.
       if (result.clockFall) log.info({ feedId, sessionUid: this.#uid, clockFall: result.clockFall }, 'session time fell back');
@@ -234,6 +314,7 @@ export class SessionProcessor {
         ...publisher.publishHistory(result.state.history, result.delta),
         ...publisher.publishInsights(scheduled.insights, { frameId: frame.frameId }),
       );
+      this.#publishActive(result.state.history.decisions);
       const { cars, playerCar } = result.state;
       this.#o.jobs?.triggerRan(scheduled, { lap: cars[playerCar]?.timing.lap ?? 0, frameId: frame.frameId });
       for (const correction of result.corrections) log.info({ feedId, sessionUid: this.#uid, correction }, 'lap time corrected');
@@ -244,8 +325,38 @@ export class SessionProcessor {
   };
 
   /**
+   * `calibration.active` (C54, C62a) as the projection has it: the newest `calibrationChosen` decision's set and snapshot
+   * (`picked`), else the start snapshot's; handed to `onActive` when it changed. It follows the projection, so a pick's
+   * void restores the start (C27a, C33). The snapshot is the units' (`priorsOf`, C43): `snapshot` and `setName` are
+   * `null` and empty without one (`defaults`, no set, or a snapshot the run does not hold).
+   */
+  #publishActive(decisions: readonly DeepReadonly<DecisionRecord>[]): void {
+    const { onActive, session } = this.#o;
+    if (onActive === undefined) return;
+    const chosen = decisions.findLast((d) => d.kind === 'calibrationChosen');
+    const priors = priorsOf(decisions, this.#priors);
+    const snapshot = priors.known ? priors.value : undefined;
+    const value: CalibrationActiveValue = known(
+      {
+        sessionUid: this.#uid,
+        trackId: session.trackId,
+        setId: chosen === undefined ? (snapshot?.setId ?? null) : chosen.setId,
+        setName: snapshot?.setName ?? '',
+        snapshot: snapshot?.fingerprint ?? null,
+        picked: chosen !== undefined,
+      },
+      ACTIVE_AT,
+    );
+    const json = JSON.stringify(value);
+    if (json === this.#active) return;
+    this.#active = json;
+    onActive(value);
+  }
+
+  /**
    * The scheduler's input for `state` (C39): its live state, situation and projection, the weekend's earlier sessions, the
-   * run's config and the feed health; no priors (`{}` until the priors store exists, C62a) and the session's track file (C62b).
+   * run's config and the feed health, the run's priors (the scheduler gives `view.priors` from them and the projection's
+   * decisions, C62a) and the session's track file (C62b).
    */
   #schedulerInput(state: StepResult['state'], changed: SchedulerInput['changed'], delta: SchedulerInput['delta']): SchedulerInput {
     return {
@@ -257,7 +368,7 @@ export class SessionProcessor {
       weekend: state.weekend,
       feed: this.#o.feedView(),
       config: this.#o.config,
-      priors: {},
+      priors: this.#priors,
       track: this.#track,
     };
   }
@@ -311,6 +422,20 @@ export class SessionProcessor {
   #row(): SessionRow {
     const { startedAt, pwrecPath } = this.#o;
     const { state } = this.#runner;
-    return sessionRowOf({ sessionUid: this.#uid, session: state.session, playerCar: this.#key.playerCar, startedAt, pwrecPath, cars: carsOf(state) });
+    return sessionRowOf({
+      sessionUid: this.#uid, session: state.session, playerCar: this.#key.playerCar, teammateCar: this.#teammate(), startedAt, pwrecPath, cars: carsOf(state),
+    });
+  }
+
+  /** Writes the session's row (live: `start`, then `upsertSession`) and keeps the teammate it was written with. */
+  #storeRow(write: (row: SessionRow) => void): void {
+    const row = this.#row();
+    this.#storedTeammate = row.teammateCar;
+    write(row);
+  }
+
+  /** The teammate the engine placed now (`live.teammateCar`, C43); `null` when it placed none. */
+  #teammate(): CarId | null {
+    return this.#runner.state.teammateCar ?? null;
   }
 }
