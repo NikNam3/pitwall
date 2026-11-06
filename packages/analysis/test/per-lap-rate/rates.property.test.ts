@@ -1,4 +1,5 @@
-// Properties of the three per-lap-gain rates (tyre wear, fuel burn, ERS store trend) on generated stints.
+// Properties of the three per-lap-gain rates (tyre wear, fuel burn, ERS store trend) on generated stints. The wear rate
+// is `tyre-life`'s (spec 4.2: the judgement moved there from `tyre-wear`); no `degradation` output here (it reads `{}`).
 // The three calculators are stateless quick calculators (one compute over the view), so incremental = from scratch and
 // flashback hold by construction and have no property here (docs/testing.md section 5: incremental calculators only).
 import { carId, known, unknown, type Corners, type LapRecord, type Percent } from '@pitwall/domain';
@@ -8,12 +9,12 @@ import { describe, expect, it } from 'vitest';
 import { ersCalculator } from '../../src/ers/calculator.ts';
 import { fuelCalculator } from '../../src/fuel/calculator.ts';
 import { SESSION_REMAINING, type SessionRemaining } from '../../src/session-remaining/index.ts';
-import { tyreWearCalculator } from '../../src/tyre-wear/calculator.ts';
+import { tyreLifeCalculator } from '../../src/tyre-life/calculator.ts';
 import { carState, lap } from '../../../../test-support/builders/index.ts';
 import { guardedQuick, situatedView } from '../situated.ts';
 
 /** The three calculators through their guarded views (C41), on views with car 0 in the session (its car-status span). */
-const tyreWearCalc = guardedQuick(tyreWearCalculator);
+const tyreLifeCalc = guardedQuick(tyreLifeCalculator);
 const fuelCalc = guardedQuick(fuelCalculator);
 const ersCalc = guardedQuick(ersCalculator);
 
@@ -94,7 +95,7 @@ function viewOf(laps: LapRecord[]): EngineView {
 
 /** The three rates of car 0. */
 const rates = (view: EngineView) => ({
-  wear: tyreWearCalc.compute(view)[carId(0)]!.corners,
+  wear: tyreLifeCalc.compute(view)[carId(0)]!.corners,
   fuel: fuelCalc.compute(view)[carId(0)]!.burnKgPerLap,
   ers: ersCalc.compute(view)[carId(0)]!.storeTrendJPerLap,
 });
