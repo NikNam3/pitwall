@@ -15,8 +15,9 @@ import {
   type CarId, type FittedSource, type Known, type LapUse, type PriorsEntries, type PriorsSnapshot, type SessionUid, type SourceFit,
   type WeekendPhase,
 } from '@pitwall/domain';
-import { definePriors, type PriorsCtx, type ProjectionState, type StoredSource } from '@pitwall/engine/readers';
+import { definePriors, type FallbackCtx, type PriorsCtx, type ProjectionState, type StoredSource } from '@pitwall/engine/readers';
 import { newSetId } from '../../src/calibration/sets.ts';
+import { loadTrackFile, TRACKS_DIR } from '../../src/track-files/load.ts';
 import { CalibrationStore, type CalibrationAction } from '../../src/calibration/store.ts';
 import type { Feature } from '../../src/features/feature.ts';
 import type { ValueFor } from '../../src/hub/topic-hub.ts';
@@ -803,5 +804,120 @@ describe('CalibrationStore', () => {
     expect(t.setId(TRACK, 'Defaults')).toBe('defaults-3');
     expect(t.sets().map((s) => s.id)).not.toContain('defaults');
     expect(existsSync(setPath(t.dir, TRACK, 'defaults'))).toBe(false);
+  });
+});
+
+// SP4.1a fx3 (ruling R35; C43, C62a, C62b, C3, C47): an entry no source covers is unknown in `calibration.values`,
+// while a run on that set falls back to the unit's default. Per such key the store lists the unit's declared fallback
+// over the set's track's committed track file (`loadTrackFile(trackId, TRACKS_DIR)`; a missing or invalid file is
+// `unknown('notApplicable')`) and the effective config, so the panel draws the run's default with `ᵈ` and its note.
+describe('CalibrationStore: the defaults of entries no source covers (R35)', () => {
+  /** A track id without a committed track file (Hockenheim, not in F1 25). */
+  const NO_FILE_TRACK = 8;
+  const CONFIG_NOTE = 'fake config default (pitwall estimate)';
+  const configSource = { kind: 'default', note: CONFIG_NOTE, sessionShare: 0, parts: 'config default' } as const;
+
+  /**
+   * `fakeFeatures`' unit with fallbacks: `fake.meanLapMs` falls back to the track file's green pit loss (its note the
+   * file's), else to the config's `fake.meanDefaultMs` (88 000); the override-only `fake.limitPct` to the config's
+   * `fake.limitDefault` (70); `fake.lapCount` and the override-only `fake.noDefault` declare none. Every fallback
+   * call's context is recorded.
+   */
+  function fallbackFeatures() {
+    const base = fakeFeatures();
+    const [decl] = base.features[0]?.priors ?? [];
+    if (decl === undefined) throw new Error('fakeFeatures declares no priors');
+    const ctxs: FallbackCtx[] = [];
+    const configOf = (ctx: FallbackCtx, key: string, fallback: number): number => Number(ctx.config['fake']?.[key] ?? fallback);
+    const withFallbacks = definePriors('fake', {
+      ...decl,
+      entries: {
+        ...decl.entries,
+        'fake.meanLapMs': {
+          ...decl.entries['fake.meanLapMs']!,
+          fallback: (ctx) => {
+            ctxs.push(ctx);
+            const green = ctx.track.known ? ctx.track.value.defaults.pitLossMs.green : unknown('notApplicable');
+            if (green.known) return { value: known(green.value.value, green.at), source: { kind: 'default', note: green.value.source, sessionShare: 0, parts: 'track default' } };
+            return { value: known(configOf(ctx, 'meanDefaultMs', 88_000), 0), source: configSource };
+          },
+        },
+        'fake.limitPct': {
+          ...decl.entries['fake.limitPct']!,
+          fallback: (ctx) => { ctxs.push(ctx); return { value: known(configOf(ctx, 'limitDefault', 70), 0), source: configSource }; },
+        },
+        'fake.noDefault': { version: 1, range: [0, 10] },
+      },
+    });
+    const features: Feature[] = [{ name: 'fake', calculators: [], topics: [], priors: [withFallbacks] }];
+    return { ...base, features, ctxs };
+  }
+
+  /** The green pit loss of `trackId`'s committed track file, which the test requires. */
+  const greenOf = (trackId: number): { value: number; at: number; source: string } => {
+    const file = loadTrackFile(trackId, TRACKS_DIR);
+    if (!file.known) throw new Error(`no valid committed track file for track ${trackId}`);
+    const green = file.value.defaults.pitLossMs.green;
+    if (!green.known) throw new Error(`track ${trackId}'s file holds no green pit loss`);
+    return { value: green.value.value, at: green.at, source: green.value.source };
+  };
+
+  const defaultsOf = (t: ReturnType<typeof setup>, id: string): CalibrationValuesValue['bySet'][string]['defaults'] => {
+    const values = t.last<CalibrationValuesValue>('calibration.values').bySet[id];
+    if (values === undefined) throw new Error(`no values of set ${id}`);
+    return values.defaults;
+  };
+
+  it('an entry no source covers carries the unit\'s default and its source', () => {
+    const t = setup({ sessions: [], features: fallbackFeatures(), config: { fake: { weight: 1, limitDefault: 75 } } });
+    // Two sets without a source, each on a track with a committed track file: each gets its own track's default.
+    const here = t.createSet(TRACK, 'Here');
+    const there = t.createSet(OTHER_TRACK, 'There');
+    for (const [id, trackId] of [[here, TRACK], [there, OTHER_TRACK]] as const) {
+      const green = greenOf(trackId);
+      const defaults = defaultsOf(t, id);
+      expect(defaults['fake.meanLapMs']).toEqual({
+        value: known(green.value, green.at),
+        source: { kind: 'default', note: green.source, sessionShare: 0, parts: 'track default' },
+      });
+      // the override-only key's default, from the effective config (C47)
+      expect(defaults['fake.limitPct']).toEqual({ value: known(75, 0), source: configSource });
+      // a covered entry (the lap count over no source is 0) and a key without a fallback are not listed
+      expect(Object.keys(defaults).toSorted()).toEqual(['fake.limitPct', 'fake.meanLapMs']);
+    }
+  });
+
+  it('a set on a track without a track file gets the config defaults', () => {
+    expect(existsSync(join(TRACKS_DIR, `${NO_FILE_TRACK}.json`))).toBe(false);
+    const features = fallbackFeatures();
+    const t = setup({ sessions: [], features, config: { fake: { weight: 1, meanDefaultMs: 91_000 } } });
+    const id = t.createSet(NO_FILE_TRACK, 'No file');
+    const defaults = defaultsOf(t, id);
+    expect(defaults['fake.meanLapMs']).toEqual({ value: known(91_000, 0), source: configSource });
+    expect(defaults['fake.limitPct']).toEqual({ value: known(70, 0), source: configSource });
+    // the fallbacks read the track as notApplicable (C62b) and the effective config
+    expect(features.ctxs.length).toBeGreaterThan(0);
+    for (const ctx of features.ctxs) {
+      expect(ctx.track).toEqual(unknown('notApplicable'));
+      expect(ctx.config['fake']).toMatchObject({ meanDefaultMs: 91_000 });
+    }
+  });
+
+  it('a covered entry has no default listed', () => {
+    const s1 = trackSession('1', { startedAt: day(1), stints: [{ car: 0, firstLap: 1, lastLap: 5 }] });
+    const t = setup({ sessions: [s1], features: fallbackFeatures() });
+    // a source covers the mean lap time: no default for it
+    const id = t.createSet(TRACK, 'Set', [sourceOf(s1, 0, 1)]);
+    expect(snapshotOf(t.store, TRACK, id).entries['fake.meanLapMs']).toMatchObject({ known: true });
+    expect(Object.keys(defaultsOf(t, id))).toEqual(['fake.limitPct']);
+    // an override covers the limit: no default for it either
+    t.ok({ kind: 'calibration.override.set', trackId: TRACK, setId: id, key: 'fake.limitPct', value: 80 });
+    expect(defaultsOf(t, id)).toEqual({});
+    // cleared, the limit's default is listed again
+    t.ok({ kind: 'calibration.override.clear', trackId: TRACK, setId: id, key: 'fake.limitPct' });
+    expect(Object.keys(defaultsOf(t, id))).toEqual(['fake.limitPct']);
+    // the source removed, the mean lap time's default is listed again
+    t.ok({ kind: 'calibration.source.remove', trackId: TRACK, setId: id, source: sourceOf(s1, 0, 1) });
+    expect(Object.keys(defaultsOf(t, id)).toSorted()).toEqual(['fake.limitPct', 'fake.meanLapMs']);
   });
 });
