@@ -21,9 +21,10 @@ export type EndLabel = { index: number; text: string; x: number; value: number; 
 /**
  * How far before the newest x a line must end to be labelled at its own end instead of in the column, per x kind: a
  * car on the lead lap ends within a lap of the newest x (each car counts its own laps), a lapped or retired car
- * further back; on session time, a line without a point for a minute has stopped.
+ * further back; on session time, a line without a point for a minute has stopped. On tyre age the axis ends one lap
+ * past the oldest age, so the newest stint ends a lap before it and an earlier, shorter stint at least two.
  */
-export const EARLY_END = { lap: 1, sessionTime: 60_000 } as const;
+export const EARLY_END = { lap: 1, sessionTime: 60_000, tyreAge: 2 } as const;
 
 /** Whether the label's line ends so far before the range's end (the newest x) that it is labelled at its own end. */
 export const endsEarly = (label: EndLabel, [, hi]: [number, number], kind: keyof typeof EARLY_END): boolean => hi - label.x >= EARLY_END[kind];
