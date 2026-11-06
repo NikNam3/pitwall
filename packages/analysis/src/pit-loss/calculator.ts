@@ -72,9 +72,9 @@ const estimateOf = (losses: readonly Extract<Known<Ms>, { known: true }>[], prio
   return { lossMs: known(Math.round(value), Math.max(prior.at, lossesAt)), source };
 };
 
-/** The median stationary time of a condition's stops, known since the newest one's pit-lane exit. */
+/** The median stationary time of a condition's stops that served no penalty (R12), known since the newest one's pit-lane exit. */
 const stationaryMedianOf = (view: EngineView, condition: PitCondition): Known<Ms> => {
-  const records = view.history.pitStops.filter((s) => s.flag === condition);
+  const records = view.history.pitStops.filter((s) => s.flag === condition && !s.penaltyServed);
   if (records.length === 0) return unknown('insufficientData');
   const at = records.reduce((t, s) => Math.max(t, s.pitLaneExit), 0);
   return known(Math.round(median(records.map((s) => s.stationaryTimeMs))), at);

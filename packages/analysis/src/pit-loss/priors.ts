@@ -1,5 +1,5 @@
-// The priors entries of `pit-loss` (spec 3.2, 4.3): per condition the median loss over every stop of the sessions that
-// give the set a source, each session counted once; an override replaces it.
+// The priors entries of `pit-loss` (spec 3.2, 4.3): per condition the median loss over every counted stop (`used`: no
+// penalty served, R12) of the sessions that give the set a source, each session counted once; an override replaces it.
 import { currentLaps, known, unknown, type Known, type PitCondition } from '@pitwall/domain';
 import { definePriors, type PriorDecl, type PriorsCtx, type StoredSource } from '@pitwall/engine/readers';
 import { LAP_CLASSES_CONFIG } from '../lap-classes/index.ts';

@@ -41,12 +41,14 @@ export function stopLoss(stop: DeepReadonly<PitStopRecord>, carLaps: readonly De
 
 /**
  * Every stop of a session with its loss, in lap order: the TUM loss minus the stationary time above the session's
- * median stationary time (over every stop, all conditions); `stationaryMs` keeps the raw time. A stop without a loss is
- * `noReference` and counts for no estimate.
+ * median stationary time (over every stop that served no penalty, all conditions); `stationaryMs` keeps the raw time.
+ * A stop that served a penalty is `penalty` (R12, whatever its reference laps), a stop without a loss `noReference`;
+ * neither counts for an estimate.
  */
 export function sessionStops(pitStops: readonly DeepReadonly<PitStopRecord>[], laps: readonly DeepReadonly<LapRecord>[], opts: PitLossOptions): PitLossStop[] {
   if (pitStops.length === 0) return [];
-  const stationaryMedian = median(pitStops.map((s) => s.stationaryTimeMs));
+  const counted = pitStops.filter((s) => !s.penaltyServed);
+  const stationaryMedian = counted.length === 0 ? undefined : median(counted.map((s) => s.stationaryTimeMs));
   const lapsByCar = new Map<CarId, DeepReadonly<LapRecord>[]>();
   for (const lap of laps) {
     const list = lapsByCar.get(lap.carId);
@@ -58,8 +60,8 @@ export function sessionStops(pitStops: readonly DeepReadonly<PitStopRecord>[], l
     .map((stop): PitLossStop => {
       const base = { carId: stop.carId, lap: stop.lap, condition: stop.flag, stationaryMs: stop.stationaryTimeMs };
       const raw = stopLoss(stop, lapsByCar.get(stop.carId) ?? [], opts);
-      if (!raw.known) return { ...base, lossMs: unknown('insufficientData'), use: 'noReference' };
-      const aboveMedian = Math.max(0, stop.stationaryTimeMs - stationaryMedian);
-      return { ...base, lossMs: known(Math.round(raw.value - aboveMedian), raw.at), use: 'used' };
+      if (!raw.known) return { ...base, lossMs: unknown('insufficientData'), use: stop.penaltyServed ? 'penalty' : 'noReference' };
+      const aboveMedian = stationaryMedian === undefined ? 0 : Math.max(0, stop.stationaryTimeMs - stationaryMedian);
+      return { ...base, lossMs: known(Math.round(raw.value - aboveMedian), raw.at), use: stop.penaltyServed ? 'penalty' : 'used' };
     });
 }
