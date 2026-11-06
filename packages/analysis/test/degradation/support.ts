@@ -146,6 +146,7 @@ export function storedSource(laps: LapRecord[], { phase = RACE, pitStops = [] }:
     stint: stintRecord({ carId: first.carId, firstLap: first.lapNumber, lastLap: last.lapNumber, actualCompound: first.actualCompound, visualCompound: first.visualCompound, tyreAgeAtFitting: first.tyreAgeAtStart }),
     laps,
     pitStops,
+    sessionLaps: laps,
     track: unknown('notApplicable'),
   };
 }
