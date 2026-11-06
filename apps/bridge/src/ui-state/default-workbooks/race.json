@@ -214,12 +214,29 @@
                   }
                 ],
                 "size": 46
+              },
+              {
+                "type": "branch",
+                "data": [
+                  {
+                    "type": "leaf",
+                    "data": {
+                      "views": [
+                        "track-map"
+                      ],
+                      "activeView": "track-map",
+                      "id": "gtrack-map"
+                    },
+                    "size": 394
+                  }
+                ],
+                "size": 90
               }
             ],
             "size": 394
           },
           "width": 394,
-          "height": 189,
+          "height": 279,
           "orientation": "VERTICAL"
         },
         "panels": {
@@ -252,6 +269,11 @@
             "id": "alarm-list",
             "contentComponent": "panel",
             "title": "alarm-list"
+          },
+          "track-map": {
+            "id": "track-map",
+            "contentComponent": "panel",
+            "title": "track-map"
           }
         },
         "activeGroup": "gcorner-block"
@@ -284,6 +306,11 @@
         },
         "alarm-list": {
           "widget": "alarm-list",
+          "options": {},
+          "linkGroup": 1
+        },
+        "track-map": {
+          "widget": "track-map",
           "options": {},
           "linkGroup": 1
         }
