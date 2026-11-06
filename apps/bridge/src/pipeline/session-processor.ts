@@ -41,7 +41,7 @@ import type { Logger } from '../log.ts';
 import type { SessionKey, SessionRow } from '../storage/db.ts';
 import type { SessionFile } from '../storage/session-files.ts';
 import { MAX_DUMPS_PER_SESSION, writeDebugDump } from './debug-dump.ts';
-import { PendingDecisions } from './decision-placement.ts';
+import { PendingDecisions, SessionRecords, type Placed } from './decision-placement.ts';
 import { carsOf, sessionRowOf, type SessionStorage } from './session-storage.ts';
 import type { PublishError, SpansOf, TopicPublisher } from './topic-publisher.ts';
 
@@ -113,8 +113,8 @@ export class SessionProcessor {
   #priors: RunPriors;
   /** Decisions committed since the last frame: the next frame carries them (C10, C76). */
   readonly #pending = new PendingDecisions<Omit<DecisionRecord, 'frame'>>();
-  /** Records written to the session file: a decision committed now is recorded with this index (C76). */
-  #records = 0;
+  /** The records written to the session file: a decision committed now is placed at their count (C76). */
+  readonly #records: SessionRecords;
   /** The last `calibration.active` handed to `onActive`, as JSON: it is handed on only when it changes. */
   #active: string | undefined;
 
@@ -122,6 +122,7 @@ export class SessionProcessor {
     this.#o = opts;
     this.#priors = opts.priors;
     this.sessionUid = opts.sessionUid;
+    this.#records = new SessionRecords(opts.sessionUid);
     this.#track = opts.track.known ? known(trackDataOf(opts.track.value), 0) : opts.track;
     this.#uid = sessionUidString(opts.sessionUid);
     this.#key = { sessionUid: this.#uid, weekendId: String(opts.session.weekendLinkIdentifier), playerCar: playerCarOf(opts.session) };
@@ -147,9 +148,9 @@ export class SessionProcessor {
     return this.#priors;
   }
 
-  /** The number of records written to the session file so far: the record index of a decision committed now (C76). */
-  get recordIndex(): number {
-    return this.#records;
+  /** A decision committed now, placed at the number of records written to the session file so far (C76). */
+  place<D>(decision: D): Placed<D> {
+    return this.#records.place(decision);
   }
 
   /**
@@ -191,11 +192,9 @@ export class SessionProcessor {
    */
   record(receivedAtMs: number, bytes: Uint8Array): void {
     this.#lastReceivedAtMs = receivedAtMs;
-    const uid = peekHeader(bytes)?.sessionUid;
-    if ((uid === this.sessionUid || uid === 0n) && this.#o.file !== undefined) {
-      this.#o.file.write(receivedAtMs, bytes);
-      this.#records++;
-    }
+    const file = this.#o.file;
+    if (file === undefined) return;
+    this.#records.keep(peekHeader(bytes)?.sessionUid, () => file.write(receivedAtMs, bytes));
   }
 
   /**

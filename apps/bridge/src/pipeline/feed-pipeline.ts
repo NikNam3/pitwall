@@ -17,7 +17,7 @@ import type { Db, StoredSessionRow } from '../storage/db.ts';
 import { SessionFile, sessionRecordingName } from '../storage/session-files.ts';
 import { loadTrackFile, TRACKS_DIR, trackSidecarPath } from '../track-files/load.ts';
 import { decisionsSidecarPath, noRunPriors, priorsSidecarPath, writeSidecar, type GivenDecision, type RecordedDecision, type RecordedRun } from './decision-sidecars.ts';
-import { placeCommitted, RecordedPlacement } from './decision-placement.ts';
+import { RecordedPlacement } from './decision-placement.ts';
 import { FeedAlerts, type WriteFailure } from './feed-alerts.ts';
 import { demandOf } from './demand.ts';
 import type { CalcStats } from '../dev/calc-stats.ts';
@@ -234,7 +234,7 @@ export class FeedPipeline {
   #choose(session: SessionProcessor, run: SessionDecisions, setId: string | null, snapshot: PriorsSnapshot | undefined): void {
     const decision: GivenDecision = { kind: 'calibrationChosen', setId, snapshot: snapshot?.fingerprint ?? null };
     session.decide(decision, snapshot);
-    run.decisions.push(placeCommitted(decision, session.recordIndex));
+    run.decisions.push(session.place(decision));
     if (run.file !== undefined) {
       this.#writeSidecar(priorsSidecarPath(run.file), session.priors);
       this.#writeSidecar(decisionsSidecarPath(run.file), run.decisions);
@@ -296,13 +296,17 @@ export class FeedPipeline {
     if (failure !== undefined) throw failure.error;
   }
 
-  #onPacket({ receivedAtMs, bytes }: RawPacket): void {
+  #onPacket(packet: RawPacket): void {
     // A replay's decisions go to the running session before the record they were committed at (C76): the frame they
-    // land on is the one their live pick landed on.
-    const recorded = this.#recorded.beforeNextRecord();
-    if (recorded.length > 0) this.#guarded('recorded decision', () => {
-      for (const decision of recorded) this.#session?.decide(decision);
+    // land on is the one their live pick landed on. The placement module owns that order.
+    this.#recorded.deliver(packet, {
+      decide: (decision) => this.#guarded('recorded decision', () => this.#session?.decide(decision)),
+      process: (record) => this.#process(record),
     });
+  }
+
+  /** One datagram: decoded, pushed through the tracker, recorded in the session file, and the feed's health checked. */
+  #process({ receivedAtMs, bytes }: RawPacket): void {
     this.#lastReceivedAtMs = receivedAtMs;
     this.#monitor.onPacket(receivedAtMs);
     this.#guarded('datagram', () => {
