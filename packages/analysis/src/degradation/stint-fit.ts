@@ -25,8 +25,9 @@ const NOT_FOR_PACE: LapUse = Object.freeze({ excluded: 'notForPace' });
 export function lapClassOf(lap: Lap, classes: LapClassOptions): LapUse | 'pace' {
   if (lap.inLap) return IN_LAP;
   if (lap.outLap) return OUT_LAP;
-  if (!isRateLap(lap, classes)) return NEUTRALISED;
-  return isPaceLap(lap, classes) ? 'pace' : NOT_FOR_PACE;
+  // a pace lap is a rate lap: the common case asks once
+  if (isPaceLap(lap, classes)) return 'pace';
+  return isRateLap(lap, classes) ? NOT_FOR_PACE : NEUTRALISED;
 }
 
 /** Whether a lap of use `use` (`lapClassOf`) is a rate lap: a pace lap or one excluded as `notForPace`. */
@@ -108,11 +109,15 @@ export type FittedStint = {
  */
 export function fitLaps(laps: readonly Lap[], fuelOf: FuelOf, prior: FilterPrior, config: Config, classes: LapClassOptions, rate: RateOptions): FittedStint {
   const out: DegradationLap[] = [];
-  // the rows of the pace laps, in lap order
-  const pace: DegradationLap[] = [];
+  // the rows of the pace laps and the laps as the filter reads them, in lap order: a lap's corrected time when its fuel
+  // is known, else its lap time. A stint is corrected only if a pace lap's fuel is known, so in a stint that is not, every
+  // pace lap reads its lap time; in one that is, only the pace laps without their fuel are left out (below).
+  let fitted: DegradationLap[] = [];
+  let paceLaps: FilterLap[] = [];
   const rateLaps: Lap[] = [];
   let anyFuel = false;
   let paceFuel = false;
+  let paceUnfuelled = false;
   let basis: 'wear' | 'age' = 'age';
   for (const lap of laps) {
     const fuel = fuelOf(lap);
@@ -121,26 +126,22 @@ export function fitLaps(laps: readonly Lap[], fuelOf: FuelOf, prior: FilterPrior
     const row: DegradationLap = { lapNumber: lap.lapNumber, tyreAge: lap.tyreAgeAtStart, lapTimeMs: lap.lapTimeMs, correctedMs, use: use === 'pace' ? 'used' : use };
     out.push(row);
     if (use === 'pace') {
-      pace.push(row);
+      fitted.push(row);
+      paceLaps.push({ lapNumber: row.lapNumber, tyreAge: row.tyreAge, ms: correctedMs.known ? correctedMs.value : row.lapTimeMs });
       if (fuel.known) paceFuel = true;
+      else paceUnfuelled = true;
     }
     if (isRateUse(use)) rateLaps.push(lap);
     if (fuel.known) anyFuel = true;
     if (basis === 'age' && wearVisible(lap)) basis = 'wear';
   }
-  const fuelCorrected = pace.length > 0 ? paceFuel : anyFuel;
-  // the rows the filter reads and the laps as it reads them, in its order: corrected, a pace lap without its fuel left
-  // out of a corrected stint
-  const fitted: DegradationLap[] = [];
-  const paceLaps: FilterLap[] = [];
-  for (const row of pace) {
-    const corrected = row.correctedMs;
-    if (fuelCorrected && !corrected.known) {
-      row.use = NOT_FOR_PACE;
-      continue;
-    }
-    fitted.push(row);
-    paceLaps.push({ lapNumber: row.lapNumber, tyreAge: row.tyreAge, ms: fuelCorrected && corrected.known ? corrected.value : row.lapTimeMs });
+  const fuelCorrected = fitted.length > 0 ? paceFuel : anyFuel;
+  // a corrected stint leaves its pace laps without their fuel out of the fit (`notForPace`)
+  if (fuelCorrected && paceUnfuelled) {
+    const kept = fitted.filter((row) => row.correctedMs.known);
+    paceLaps = paceLaps.filter((_, i) => fitted[i]?.correctedMs.known === true);
+    for (const row of fitted) if (!row.correctedMs.known) row.use = NOT_FOR_PACE;
+    fitted = kept;
   }
   const state = runFilter(paceLaps, prior, config);
   // the filter's uses are in the order of its laps
@@ -181,9 +182,9 @@ function wearRates(rateLaps: readonly Lap[], rate: RateOptions): Corners<Known<n
   const fr = cornerSamples();
   const rl = cornerSamples();
   const rr = cornerSamples();
-  const open = (acc: CornerSamples): boolean => acc.samples.length < window;
   // one pass from the newest lap, each corner by name, until every corner holds `window` samples
-  for (let i = rateLaps.length - 1; i >= 0 && (open(fl) || open(fr) || open(rl) || open(rr)); i--) {
+  const open = (): boolean => fl.samples.length < window || fr.samples.length < window || rl.samples.length < window || rr.samples.length < window;
+  for (let i = rateLaps.length - 1; i >= 0 && open(); i--) {
     const l = rateLaps[i];
     if (l === undefined) continue;
     const start = l.wearAtStartPct;
