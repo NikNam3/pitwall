@@ -9,7 +9,8 @@ import { DEFAULT_THEME, THEMES } from '../../src/theme/index.ts';
  * theme) plus the frame states, the kit parts and the shell cells. Raising it is a deliberate decision, not a fix for a
  * failing check: prefer fewer cells.
  */
-const SCREENSHOT_BUDGET = 50;
+// 52: 50 plus the two track-map baselines (supervisor ruling, SP4.0 Task 10).
+const SCREENSHOT_BUDGET = 52;
 
 /** The baseline files, by path (listed, not loaded). */
 const baselines = Object.keys(import.meta.glob('../../e2e/__screenshots__/*.png'));

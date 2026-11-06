@@ -174,6 +174,7 @@ const IN_WORDS: Record<string, { field: string; reason: UnknownReason; rule: str
     { field: 'feed.*.forUs.*.gapAfterMs', reason: 'notApplicable', rule: 'the other car retired: DNF' },
     { field: 'feed.*.timeLostMs', reason: 'notApplicable', rule: 'not applicable to the entry: a spanning what text may cover its mark' },
   ],
+  'track-map': [{ field: 'geometry', reason: 'notApplicable', rule: '"no track data" (spec 7.2)' }],
 };
 const inWords = (widget: string, field: string, reason: UnknownReason): boolean =>
   (IN_WORDS[widget] ?? []).some((x) => x.field === field && x.reason === reason);

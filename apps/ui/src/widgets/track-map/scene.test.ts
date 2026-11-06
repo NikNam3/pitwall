@@ -3,7 +3,7 @@
 // colour and our cars in ownCar (both `carColour`'s, our cars being the cars the topic marks `ours`), ours larger; a car
 // in the pit lane hollow; a car shown blue with a flagBlue side bar; a yellow zone's stretch in flagYellow; turn and
 // sector labels in the full size only; incident markers amber (warning) with their kind's wording (kit `incidentKinds`).
-// Car code labels are left to the implementation: the tests only pin the turn and sector labels.
+// No car code labels (supervisor ruling): the labels are the turns' and the sector starts' only.
 import { describe, expect, it } from 'vitest';
 import { carId, known, unknown, zoneFlagsSpans } from '@pitwall/domain';
 import type { Known, MapCar, MapIncident, MapPoint, MapZone, TrackCars, TrackGeometry } from '@pitwall/domain';
@@ -174,26 +174,37 @@ describe('sceneOf: the marshal zones', () => {
 });
 
 describe('sceneOf: the labels', () => {
-  const sectorLabels = () => geometry().sectorStarts.map((at, i) => ({ text: text.sectorLabels[i], at }));
+  // Spec 7.2 (supervisor ruling, test fix round): turn labels and sector labels only, no car code labels, no ticks; the
+  // compact size drops both, as the mockup does. Labels compared as sets: the kit layout orders them itself.
+  const sectorLabels = () => geometry().sectorStarts.map((at, i) => ({ text: text.sectorLabels[i] ?? '', at }));
+  const byText = (labels: { text: string; at: MapPoint }[]) => [...labels].sort((a, b) => a.text.localeCompare(b.text));
 
-  it('labels every turn at its point and every sector start in the full size', () => {
+  it('labels every turn at its point and every sector start in the full size, and nothing else', () => {
     expect(text.sectorLabels).toEqual(['S1', 'S2', 'S3']);
-    expect(scene().labels).toEqual(expect.arrayContaining([
+    expect(byText(scene().labels)).toEqual(byText([
       { text: 'T1', at: p(0.9, 0.1) },
       { text: 'T2', at: p(0.9, 0.9) },
       ...sectorLabels(),
     ]));
   });
 
-  it('a track without turns keeps the sector labels', () => {
-    const labels = scene({ geometry: geometry({ turns: [] }) }).labels;
-    expect(labels).toEqual(expect.arrayContaining(sectorLabels()));
-    expect(labels.filter((l) => /^T\d/.test(l.text))).toEqual([]);
+  it('labels the three sector starts at geometry.sectorStarts with the widget wording', () => {
+    const labels = scene().labels.filter((l) => (text.sectorLabels as readonly string[]).includes(l.text));
+    expect(labels).toEqual(sectorLabels());
   });
 
-  it('drops the turn and sector labels in the compact size', () => {
-    const named = new Set<string>(['T1', 'T2', ...text.sectorLabels]);
-    expect(scene({ size: COMPACT }).labels.filter((l) => named.has(l.text))).toEqual([]);
+  it('a track without turns keeps the sector labels', () => {
+    expect(byText(scene({ geometry: geometry({ turns: [] }) }).labels)).toEqual(byText(sectorLabels()));
+  });
+
+  it('draws no car code labels', () => {
+    const codes = new Set(FIELD.map((c) => c.code));
+    expect(scene().labels.filter((l) => codes.has(l.text))).toEqual([]);
+    expect(scene({ size: COMPACT }).labels.filter((l) => codes.has(l.text))).toEqual([]);
+  });
+
+  it('drops the turn and sector labels in the compact size: no labels at all', () => {
+    expect(scene({ size: COMPACT }).labels).toEqual([]);
   });
 });
 
