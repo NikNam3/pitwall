@@ -145,13 +145,14 @@ export const SETS: CalibrationSet[] = [
 
 export const values = (softWhy: SkippedSource['skipped'] = 'missing'): CalibrationValuesValue => ({
   bySet: {
-    'pre-season': { entries: { [key.deg('medium')]: k(58) }, fits: [fitted(testKuh, TEST.date, 'medium', laps(2, 14, 92_400), 12, 58, 0)] },
-    league: { entries: leagueEntries, fits: leagueFits(softWhy) },
+    'pre-season': { entries: { [key.deg('medium')]: k(58) }, fits: [fitted(testKuh, TEST.date, 'medium', laps(2, 14, 92_400), 12, 58, 0)], defaults: {} },
+    league: { entries: leagueEntries, fits: leagueFits(softWhy), defaults: {} },
     'after-floor-upgrade': {
       entries: { [key.deg('medium')]: k(49), [key.deg('hard')]: k(36) },
       fits: [fitted(fp1Kuh, FP1.date, 'medium', laps(4, 15, 91_300), 11, 49, 0), fitted(fp1LinHard, FP1.date, 'hard', laps(3, 13, 91_900), 9, 36, 0)],
+      defaults: {},
     },
-    'monza-test': { entries: {}, fits: [] },
+    'monza-test': { entries: {}, fits: [], defaults: {} },
   },
 });
 
