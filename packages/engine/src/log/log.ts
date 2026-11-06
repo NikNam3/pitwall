@@ -5,7 +5,7 @@ import type { DeepReadonly } from '../util/deep-readonly.ts';
 import type { FactOf, Log, LogLengths, LogVoidFact, LogWriter } from './types.ts';
 
 /** The lists of the log that hold one fact type each; the span lists are `spans:<machine>`. */
-export const FACT_LISTS = ['laps', 'stints', 'pitStops', 'crossings', 'events', 'penalties', 'clock'] as const satisfies readonly FactList[];
+export const FACT_LISTS = ['laps', 'stints', 'pitStops', 'crossings', 'events', 'penalties', 'decisions', 'clock'] as const satisfies readonly FactList[];
 
 const SPANS = 'spans:';
 
