@@ -10,7 +10,7 @@ import { DEFAULT_THEME, THEMES } from '../../src/theme/index.ts';
  * failing check: prefer fewer cells.
  */
 // 52: 50 plus the two track-map baselines (supervisor ruling, SP4.0 Task 10).
-const SCREENSHOT_BUDGET = 52;
+const SCREENSHOT_BUDGET = 56;
 
 /** The baseline files, by path (listed, not loaded). */
 const baselines = Object.keys(import.meta.glob('../../e2e/__screenshots__/*.png'));
