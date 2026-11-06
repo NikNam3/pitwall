@@ -75,7 +75,9 @@ describe('guardedView throws on an undeclared read and passes a declared one (C4
     expect(guardedBy(['laps'], view).history.laps).toEqual(view.history.laps);
     expect(guardedBy(['miniSectors'], view).history.crossings).toEqual(view.history.crossings);
     expect(guardedBy(['clock'], view).history.clock).toEqual(view.history.clock);
+    expect(guardedBy(['decisions'], view).history.decisions).toEqual(view.history.decisions);
     const g = guardedBy(['timing'], view);
+    expect(undeclared(() => g.history.decisions)).toBe('history.decisions');
     expect(undeclared(() => g.history.laps)).toBe('history.laps');
     expect(undeclared(() => g.history.crossings)).toBe('history.crossings');
     expect(undeclared(() => g.history.events)).toBe('history.events');
@@ -118,10 +120,27 @@ describe('guardedView throws on an undeclared read and passes a declared one (C4
     expect(undeclared(() => guardedBy(['timing'], view).feed.connected)).toBe('feed.connected');
   });
 
-  it('delta, changed, weekend, config and priors are every unit\'s', () => {
-    const view = { ...raceView(), config: { k: { a: 1 } }, priors: known({ fingerprint: 'f', setId: 's', setName: 'S', sources: 1, entries: {} }, 0) };
+  it('delta, changed, weekend, config and track are every unit\'s', () => {
+    const view = { ...raceView(), config: { k: { a: 1 } } };
     const g = guardedBy([], view);
-    expect([g.delta, [...g.changed], g.weekend, g.config, g.priors]).toEqual([view.delta, [...view.changed], view.weekend, view.config, view.priors]);
+    expect([g.delta, [...g.changed], g.weekend, g.config, g.track]).toEqual([view.delta, [...view.changed], view.weekend, view.config, view.track]);
+  });
+
+  // Generic: every unit the harness, the analysis and the bridge completeness tests run gets this guard (C87), so a
+  // registered unit that reads the priors without declaring `decisions` fails there.
+  it('the guarded view throws on view.priors without decisions in reads (C41, C62a)', () => {
+    const view = { ...raceView(), priors: known({ fingerprint: 'f', setId: 's', setName: 'S', sources: 1, entries: {} }, 0) };
+    expect(guardedBy(['decisions'], view).priors).toEqual(view.priors);
+    expect(undeclared(() => guardedBy([], view).priors)).toBe('priors');
+    expect(undeclared(() => guardedBy([...ALL_CHANGE_TAGS.filter((t) => t !== 'decisions'), 'feed'], view).priors)).toBe('priors');
+    const s = sched([
+      quick('with', { reads: ['decisions'], compute: (v) => v.priors.known }),
+      quick('without', { reads: ['timing'], compute: (v) => v.priors.known }),
+    ]);
+    const result = s.run(input(0, ['timing', 'decisions']));
+    expect(result.ran).toEqual(['with']);
+    expect(result.outputs.get('with')).toBe(false);
+    expect(result.errors.map((e) => [e.id, e.error instanceof UndeclaredReadError && e.error.path])).toEqual([['without', 'priors']]);
   });
 
   it('the error names the unit, the path and C41', () => {

@@ -11,8 +11,10 @@
 // 510 ms from the reset on, as raceZandvoortOnline's cars 1-7 do.
 import { describe, expect, it } from 'vitest';
 import type { EventDetails } from '@pitwall/protocol';
-import type { SessionRunner } from '../../src/index.ts';
+import { SessionRunner } from '../../src/index.ts';
 import { situationOf } from '../../src/situations/run.ts';
+import { applyWith, PICK_B } from '../support/decisions.ts';
+import { initFor } from '../support/run.ts';
 import { after } from '../support/runner.ts';
 import { beats, fuel, lap, LGOT, ovtk, run, scar, script, status, STEP, stlg, TRACK, type Beat } from './script.ts';
 
@@ -183,6 +185,18 @@ describe('a lap crossed in the formation lap and confirmed after lights out', ()
     const lap1 = runner.state.log.laps.filter((l) => l.carId === 0 && l.lapNumber === 1);
     expect(lap1.map((l) => [l.status, l.frame])).toEqual([['provisional', 21], ['confirmed', 21]]);
     expect(spans(runner).find((s) => s.kind === 'formation')).toMatchObject({ startFrame: FORMATION + 1, endFrame: LIGHTS_AT[0]! + 1 });
+    expect(runner.state.history.laps.filter((l) => l.carId === 0 && l.lapNumber === 1)).toEqual([]);
+  });
+
+  // C29 as changed for SP4.1a (spec 2, 3.3): a decision is never hidden by formation; a pick in the formation lap counts.
+  it('a decision in the formation lap stays visible; the lap\'s other facts stay hidden (C29)', () => {
+    const frames = lapScript();
+    const runner = new SessionRunner(initFor(frames));
+    // frame 20 (frame number 21) is the crossing's, inside the formation span
+    frames.forEach((f, k) => applyWith(runner, f, k === 20 ? [PICK_B] : undefined));
+    expect(spans(runner).find((s) => s.kind === 'formation')).toMatchObject({ startFrame: FORMATION + 1, endFrame: LIGHTS_AT[0]! + 1 });
+    expect(runner.state.history.decisions).toEqual([{ ...PICK_B, frame: 21 }]);
+    expect(runner.state.log.laps.filter((l) => l.carId === 0 && l.lapNumber === 1).map((l) => l.frame)).toEqual([21, 21]);
     expect(runner.state.history.laps.filter((l) => l.carId === 0 && l.lapNumber === 1)).toEqual([]);
   });
 });
