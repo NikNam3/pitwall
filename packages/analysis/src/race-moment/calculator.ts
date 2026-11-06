@@ -1,4 +1,4 @@
-// `race-moment` (spec 7): the one moment the race is in, from the neutralisation, the incidents, the forecast, our battles and our alarms.
+// `race-moment` (spec 7): the one moment the race is in, from the neutralisation, the incidents, the rain outlook, our battles and our alarms.
 // Stateless; race only.
 import {
   known,
@@ -17,6 +17,7 @@ import { openSpansOf, type QuickCalculator } from '@pitwall/engine/readers';
 import { ALARMS } from '../alarms/index.ts';
 import { BATTLE, BATTLE_CONFIG, type BattleOutput } from '../battle/index.ts';
 import { INCIDENTS, type IncidentsOutput } from '../incidents/index.ts';
+import { RAIN_OUTLOOK, type RainOutlook } from '../rain-outlook/index.ts';
 import { behaviourFor } from '../shared/behaviour.ts';
 import { neutralisationKind } from '../shared/neutralised.ts';
 import { RACE_MOMENT, RACE_MOMENT_BEHAVIOUR, RACE_MOMENT_CONFIG, type RaceMomentOutput } from './index.ts';
@@ -43,10 +44,10 @@ const valueOf = (k: Known<number>): number | undefined => (k.known ? k.value : u
 export const raceMomentCalculator: QuickCalculator<RaceMomentOutput> = {
   id: RACE_MOMENT,
   kind: 'quick',
-  reads: ['spans:weekend-phase', 'spans:session-phase-race', 'session', { calculator: INCIDENTS }, { calculator: BATTLE }, { calculator: ALARMS }],
+  reads: ['spans:weekend-phase', 'spans:session-phase-race', { calculator: INCIDENTS }, { calculator: BATTLE }, { calculator: ALARMS }, { calculator: RAIN_OUTLOOK }],
   cadence: { hz: 4 },
   compute(view) {
-    const { session, sessionTime: now } = view.live;
+    const now = view.live.sessionTime;
     // a pending weekend phase (no span yet, C14): whether the session is a race is not known yet (C3)
     if (openSpansOf(view, 'weekend-phase').length === 0) return unknown('notReceived');
     const rows = behaviourFor(RACE_MOMENT_BEHAVIOUR, view);
@@ -70,10 +71,11 @@ export const raceMomentCalculator: QuickCalculator<RaceMomentOutput> = {
       holding.push(['incident', { since: known(newest.at as SessionTime, now), cause: { rule: 'majorIncident', params: { entryId: newest.id, kind: newest.kind, ageMs: now - newest.at } } }]);
     }
 
-    // the forecast holds this session's samples only (step 1 selects them)
-    const rainy = session.forecast.find((s) => s.offsetMin >= 0 && s.offsetMin <= cfg.weatherHorizonMin && s.rainPct >= cfg.weatherRainPct);
-    if (rainy !== undefined) {
-      holding.push(['weather', { since: NOT_APPLICABLE, cause: { rule: 'forecastRain', params: { rainPct: rainy.rainPct, offsetMin: rainy.offsetMin } } }]);
+    // "rain is coming" is rain-outlook's judgement (C43): its first rain, when within its horizon
+    const outlook = view.outputs.get(RAIN_OUTLOOK) as RainOutlook | undefined;
+    if (outlook?.withinHorizon === true && outlook.firstRain.known) {
+      const { rainPct, offsetMin } = outlook.firstRain.value;
+      holding.push(['weather', { since: NOT_APPLICABLE, cause: { rule: 'forecastRain', params: { rainPct, offsetMin } } }]);
     }
 
     const { drsRangeMs } = BATTLE_CONFIG.read(view);
