@@ -30,6 +30,10 @@ export class TopBarModel {
   workbookName = $state<string | undefined>();
   /** Opens the workbook picker, set by the top bar. */
   pickWorkbook: () => void = () => {};
+  /** The name of the calibration set the run uses (`defaults` without one), set by the top bar; undefined while unknown. */
+  calibrationName = $state<string | undefined>();
+  /** Opens the calibration prompt, set by the top bar. */
+  pickCalibration: () => void = () => {};
   /** The talk window of the current player car; replaced when the player car changes. */
   #talk = $state.raw<EntryState<TalkWindow> | undefined>();
   readonly #stopTalk: () => void;

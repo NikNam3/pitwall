@@ -119,6 +119,7 @@ export const commandGroups = {
   window: 'Window',
   theme: 'Theme',
   realism: 'Realism',
+  calibration: 'Calibration',
   help: 'Help',
 } as const;
 
@@ -145,6 +146,27 @@ export const commandTitles = {
   fontSmaller: 'Smaller font',
   fontReset: 'Default font size',
   theme: (name: string): string => `Theme ${name}`,
+  calibrationPick: 'Pick the calibration set',
+  calibrationChoose: (setName: string): string => `Calibration: ${setName}`,
+} as const;
+
+/** The session-start calibration prompt and the top bar's calibration segment (SP4.1a spec 3.3). */
+export const calibration = {
+  promptTitle: (track: string): string => ['Calibration for this session', track].join(separator),
+  sources: (n: number): string => `${n} ${n === 1 ? 'source' : 'sources'}`,
+  missing: (n: number): string => `${n} missing`,
+  missingHover: 'a stint no longer in its session (session rebuilt or deleted): left out of every value',
+  /** A set's day: when it was last used, else when it was made. */
+  used: (day: string): string => `used ${day}`,
+  created: (day: string): string => `new ${day}`,
+  preselected: 'preselected',
+  preselectedHover: 'the preselection for this track; Esc keeps it',
+  /** The choice of no set: the track file's values. */
+  defaults: 'defaults',
+  defaultsNote: "the track file's values",
+  footer: (kept: string): string => ['↑↓ move', 'Enter choose', `Esc keeps ${kept}`].join(separator),
+  /** The top bar's label before the active set's name. */
+  label: 'calibration',
 } as const;
 
 /** Notes of the key overview for entries of `keys.json` that are ignored. */
