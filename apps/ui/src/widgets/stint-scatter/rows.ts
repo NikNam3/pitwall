@@ -1,7 +1,7 @@
 // The stint scatter's marks and compounds table (spec 6; C65, C68): `stintAnalysis.car` mapped to what the component
 // draws, formatting and mapping only. The fit and its band, every lap's use and every source's kind are the analysis's
 // (C43); nothing here computes a value.
-import type { CompoundPrior, EstimateSource, FitPoint, Known, Ms, StintFit, StintLap } from '@pitwall/domain';
+import type { CompoundEstimate, EstimateSource, FitPoint, Known, Ms, StintFit, StintLap } from '@pitwall/domain';
 import type { ChartMark, ChartSeries } from '../../kit/chart/data.ts';
 import { COMPOUND_MARK } from '../../kit/compound/compound-mark.ts';
 import { knownPart, type CellPart } from '../../kit/grid/grid.ts';
@@ -75,7 +75,7 @@ const signed3 = (ms: number): string => formatSignedSeconds(ms, 3);
 const plain3 = (ms: number): string => formatSeconds(ms, 3);
 
 /** One row per compound in the analysis's order. */
-export function compoundRows(compounds: readonly CompoundPrior[]): CompoundRow[] {
+export function compoundRows(compounds: readonly CompoundEstimate[]): CompoundRow[] {
   return compounds.map((c) => ({
     compound: COMPOUND_MARK[c.visual].letter,
     toSoft: knownPart(c.alphaOffsetMs, signed3),
