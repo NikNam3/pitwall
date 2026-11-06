@@ -1,5 +1,5 @@
 // The storage of one session (C24, C59–C62): its row and cars, its log, its weekend context.
-import { carKeyOf, type CarId, type CarKey, type SessionState, type SessionUid } from '@pitwall/domain';
+import { carKeyOf, known, unknown, type CarId, type CarKey, type SessionState, type SessionUid } from '@pitwall/domain';
 import type { DeepReadonly, EngineState, WeekendContext } from '@pitwall/engine/readers';
 import type { Logger } from '../log.ts';
 import type { Db, SessionKey, SessionRow, StoredSessionRow } from '../storage/db.ts';
@@ -35,9 +35,16 @@ export const sessionRowOf = (s: SessionRowInput): SessionRow => ({
   cars: s.cars,
 });
 
-/** Every slot's car key from the live identity, with no car-status filter (C62; B2). */
+/**
+ * Every slot's car key and driver name from the live identity, with no car-status filter (C62; B2). The game sends an
+ * empty name for a slot it names no driver for: unknown (C3), never an empty string.
+ */
 export const carsOf = (live: DeepReadonly<Pick<EngineState, 'cars'>>): SessionRow['cars'] =>
-  live.cars.map((car) => ({ carId: car.id, carKey: carKeyOf(car.identity) }));
+  live.cars.map((car) => ({
+    carId: car.id,
+    carKey: carKeyOf(car.identity),
+    driver: car.identity.name === '' ? unknown('notReceived') : known(car.identity.name, 0),
+  }));
 
 /**
  * How a session reaches storage: `append` (live) appends its log frame by frame and marks it complete at its end;

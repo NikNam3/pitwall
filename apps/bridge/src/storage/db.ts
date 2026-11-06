@@ -1,12 +1,12 @@
 import Database from 'better-sqlite3';
-import type { CarId, CarKey, SessionUid } from '@pitwall/domain';
+import type { CarId, CarKey, Known, SessionUid } from '@pitwall/domain';
 import { SchemaVersionError } from './schema-version-error.ts';
 
 export { SchemaVersionError };
 
 export type Db = Database.Database;
 
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 6;
 
 /** Every per-session table refers to its session by the three key columns (C1a, C60). */
 const SESSION_REF = `session_uid TEXT NOT NULL, weekend_id TEXT NOT NULL, player_car INTEGER NOT NULL`;
@@ -29,9 +29,12 @@ CREATE TABLE sessions (
   teammate_car INTEGER, track_id INTEGER NOT NULL, started_at TEXT NOT NULL, pwrec_path TEXT, settings TEXT NOT NULL /* JSON */,
   rules_version TEXT NOT NULL, complete INTEGER NOT NULL, PRIMARY KEY (session_uid, weekend_id, player_car)) STRICT;
 CREATE INDEX sessions_by_weekend ON sessions (weekend_id, started_at);
-/* Every slot's team and race number (C62), as the session's Participants last named them. */
+/*
+ * Every slot's team and race number (C62) and its driver name (shown only, never part of the key; NULL when the game
+ * names none), as the session's Participants last named them.
+ */
 CREATE TABLE cars (
-  ${SESSION_REF}, car_id INTEGER NOT NULL, team_id INTEGER NOT NULL, race_number INTEGER NOT NULL,
+  ${SESSION_REF}, car_id INTEGER NOT NULL, team_id INTEGER NOT NULL, race_number INTEGER NOT NULL, name TEXT,
   PRIMARY KEY (session_uid, weekend_id, player_car, car_id), ${SESSION_FK}) STRICT;
 CREATE INDEX cars_by_key ON cars (team_id, race_number);
 /* The log (C21, C24): one row per fact, by its list and its position in it; append-only. */
@@ -59,8 +62,11 @@ export type SessionRow = {
   pwrecPath: string | null;
   /** The game settings as the engine reads them (`GameSettings`). */
   settings: Record<string, string | number | boolean>;
-  /** Every slot's team and race number (C62), ordered by car id when read. */
-  cars: ReadonlyArray<{ carId: CarId; carKey: CarKey }>;
+  /**
+   * Every slot's team and race number (C62) and its driver name as the Participants last named it (shown only, never
+   * part of the key; `notReceived` when the game names none), ordered by car id when read.
+   */
+  cars: ReadonlyArray<{ carId: CarId; carKey: CarKey; driver: Known<string> }>;
 };
 
 /** A row as storage returns it: with the rules version of its log and whether that log is complete (C61). */

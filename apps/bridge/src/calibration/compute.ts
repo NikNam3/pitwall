@@ -8,7 +8,7 @@ import { createHash } from 'node:crypto';
 import { canonicalJson } from '@pitwall/contracts';
 import {
   currentLaps, known, unknown,
-  type CalibrationSource, type Known, type LapUse, type PriorsEntries, type PriorsSnapshot, type SourceFit,
+  type CalibrationSource, type CarId, type Known, type LapUse, type PriorsEntries, type PriorsSnapshot, type SourceFit,
 } from '@pitwall/domain';
 import type { PriorsCtx, PriorsDecl, StoredSource } from '@pitwall/engine/readers';
 import type { Logger } from '../log.ts';
@@ -57,6 +57,10 @@ export class PriorsCache {
 export type Resolved =
   | { source: CalibrationSource; session: TrackSession; stored: StoredSource }
   | { source: CalibrationSource; session: TrackSession | undefined; skipped: 'missing' | 'stale' };
+
+/** The driver name of the session's slot `car` as its stored row holds it; unknown for a slot the row does not hold. */
+const driverOf = (session: Pick<TrackSession, 'cars'>, car: CarId): Known<string> =>
+  session.cars.find((c) => c.carId === car)?.driver ?? unknown('notReceived');
 
 const sessionOf = (source: CalibrationSource, sessions: readonly TrackSession[]): TrackSession | undefined =>
   sessions.find((s) => s.sessionUid === source.sessionUid && s.weekendId === source.weekendId && s.playerCar === source.feedCar);
@@ -183,8 +187,10 @@ export class PriorsRunner {
 
   /**
    * The panel's view of one source (spec 3.2, A23): its own entries (each aggregate over this source alone), their
-   * residuals against `set`, its lap list with the units' lap use; a skipped source has none of them (C3): only its
-   * session's date (unknown when the session is gone) and its compound (unknown: its stint is not read).
+   * residuals against `set`, its lap list with the units' lap use, its session's weekend phase and its car's driver name
+   * (shown only); a skipped source has none of the computed ones (C3): only its session's date, its weekend phase (known
+   * while its session is stored and not stale: a stale log is not read, C61), its car's driver name (from its session's
+   * row) and its compound (unknown: its stint is not read), each unknown when the session is gone.
    */
   fit(resolved: Resolved, setKey: string, overrides: Readonly<Record<string, number>>, set: PriorsEntries | undefined): SourceFit {
     const { source, session } = resolved;
@@ -192,11 +198,15 @@ export class PriorsRunner {
       return {
         source, skipped: resolved.skipped,
         sessionDate: session === undefined ? unknown('notReceived') : known(session.startedAt, 0),
+        phase: session === undefined ? unknown('notReceived') : session.stale ? unknown('notApplicable') : known(session.phase, 0),
+        driver: session === undefined ? unknown('notReceived') : driverOf(session, source.car),
         compound: session === undefined ? unknown('notReceived') : unknown('notApplicable'),
       };
     }
     const sessionDate = resolved.session.startedAt;
     const { stored } = resolved;
+    const { phase } = stored;
+    const driver = driverOf(resolved.session, source.car);
     const entries = this.aggregates(setKey, [stored], overrides);
     const uses = this.lapUses(stored, overrides);
     const excluded = new Set(source.excludedLaps);
@@ -213,7 +223,7 @@ export class PriorsRunner {
       ? stored.laps.length
       : stored.laps.filter((l) => uses[l.lapNumber] === 'used' || uses[l.lapNumber] === 'downWeighted').length;
     return {
-      source, sessionDate, compound: stored.stint.visualCompound, laps: stored.laps.length, usedLaps, lapList, entries,
+      source, sessionDate, phase, driver, compound: stored.stint.visualCompound, laps: stored.laps.length, usedLaps, lapList, entries,
       residuals: set === undefined ? {} : this.residuals(entries, set),
     };
   }

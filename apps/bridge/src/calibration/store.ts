@@ -223,6 +223,8 @@ export class CalibrationStore {
     const bySet = Object.fromEntries(this.#values);
     this.#deps.hub.publishGlobal('calibration.values', () => ({ bySet }));
     const byTrack = Object.fromEntries(this.#candidates);
-    this.#deps.hub.publishGlobal('calibration.candidates', () => ({ byTrack }));
+    // The panel's track without a running session: the newest stored session's (spec 6).
+    const newestTrackId = this.#deps.repo.newestTrackId();
+    this.#deps.hub.publishGlobal('calibration.candidates', () => ({ byTrack, newestTrackId }));
   }
 }

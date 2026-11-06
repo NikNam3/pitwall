@@ -44,8 +44,8 @@ export class StorageWriter {
       ),
       deleteCars: db.prepare(`DELETE FROM cars WHERE ${OF_SESSION}`),
       insertCar: db.prepare(
-        `INSERT INTO cars (session_uid, weekend_id, player_car, car_id, team_id, race_number)
-         VALUES (@sessionUid, @weekendId, @playerCar, @carId, @teamId, @raceNumber)`,
+        `INSERT INTO cars (session_uid, weekend_id, player_car, car_id, team_id, race_number, name)
+         VALUES (@sessionUid, @weekendId, @playerCar, @carId, @teamId, @raceNumber, @name)`,
       ),
       insertFact: db.prepare(
         `INSERT INTO facts (session_uid, weekend_id, player_car, list, seq, car_id, record)
@@ -133,7 +133,11 @@ export class StorageWriter {
       complete: complete ? 1 : 0,
     });
     s.deleteCars.run(key);
-    for (const { carId, carKey } of row.cars) s.insertCar.run({ ...key, carId, teamId: carKey.teamId, raceNumber: carKey.raceNumber });
+    for (const { carId, carKey, driver } of row.cars) {
+      // A driver name the game does not send is stored as none (NULL), never as an empty string (C3).
+      const name = driver.known ? driver.value : null;
+      s.insertCar.run({ ...key, carId, teamId: carKey.teamId, raceNumber: carKey.raceNumber, name });
+    }
   }
 
   #guarded(write: () => void): void {
