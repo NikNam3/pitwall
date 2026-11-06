@@ -144,6 +144,33 @@ export class PriorsRunner {
     return entries;
   }
 
+  /**
+   * Per key that declares `samples`: the unit's count of the samples its aggregate rests on over `sources` (the panel's
+   * N and STOPS), cached as the aggregates are (under `<key>#samples`). A count that throws is logged and not listed.
+   */
+  samples(setKey: string, sources: readonly StoredSource[], overrides: Readonly<Record<string, number>>): Record<string, number> {
+    this.#touched.add(setKey);
+    const ctx = this.ctx(overrides);
+    const fingerprint = sha256(canonicalJson({ sources, overrides, config: this.#config }));
+    const samples: Record<string, number> = {};
+    for (const decl of this.#decls) {
+      for (const [key, entry] of Object.entries(decl.entries)) {
+        if (entry.samples === undefined) continue;
+        const cacheKey = `${key}#samples`;
+        const cached = this.#cache.get(setKey, cacheKey, entry.version, fingerprint);
+        if (cached?.known === true) {
+          samples[key] = cached.value;
+          continue;
+        }
+        const count = this.#call(decl, cacheKey, () => entry.samples?.(sources, ctx));
+        if (count === undefined) continue;
+        samples[key] = count;
+        this.#cache.put(setKey, cacheKey, entry.version, fingerprint, known(count, 0));
+      }
+    }
+    return samples;
+  }
+
   /** A set's entries: the computed ones, an override in place of its key's value; an override-only key is unknown until set. */
   setEntries(computed: PriorsEntries, overrides: Readonly<Record<string, number>>): PriorsEntries {
     const entries: PriorsEntries = {};

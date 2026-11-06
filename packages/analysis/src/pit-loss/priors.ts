@@ -39,6 +39,26 @@ const optionsOf = (source: StoredSource, ctx: PriorsCtx): PitLossOptions => ({
   classes: { isRace: phaseRow(source.phase.kind).isRace === true, ...LAP_CLASSES_CONFIG.defaults, ...ctx.config[LAP_CLASSES_CONFIG.key] },
 });
 
+/**
+ * The losses of `condition` the aggregate takes the median of: every `used` stop with a known loss of the sessions that
+ * give the set a source, one source per session (its stops and laps are the session's, however many of its stints are
+ * sources).
+ */
+function countedLosses(sources: readonly StoredSource[], condition: PitCondition, ctx: PriorsCtx): number[] {
+  const sessions = new Map<string, StoredSource>();
+  for (const source of sources) {
+    const id = `${source.source.weekendId}/${String(source.source.sessionUid)}`;
+    if (!sessions.has(id)) sessions.set(id, source);
+  }
+  const losses: number[] = [];
+  for (const source of sessions.values()) {
+    for (const stop of sessionStops(source.pitStops, currentLaps(source.sessionLaps), optionsOf(source, ctx))) {
+      if (stop.condition === condition && stop.use === 'used' && stop.lossMs.known) losses.push(stop.lossMs.value);
+    }
+  }
+  return losses;
+}
+
 /** The entry of one condition. */
 const lossEntry = (condition: PitCondition): PriorDecl => {
   const key = pitLossKey(condition);
@@ -49,20 +69,11 @@ const lossEntry = (condition: PitCondition): PriorDecl => {
     aggregate: (sources, ctx): Known<number> => {
       const override = ctx.overrides[key];
       if (override !== undefined) return known(override, 0);
-      // one source per session: its stops and laps are the session's, however many of its stints are sources
-      const sessions = new Map<string, StoredSource>();
-      for (const source of sources) {
-        const id = `${source.source.weekendId}/${String(source.source.sessionUid)}`;
-        if (!sessions.has(id)) sessions.set(id, source);
-      }
-      const losses: number[] = [];
-      for (const source of sessions.values()) {
-        for (const stop of sessionStops(source.pitStops, currentLaps(source.sessionLaps), optionsOf(source, ctx))) {
-          if (stop.condition === condition && stop.use === 'used' && stop.lossMs.known) losses.push(stop.lossMs.value);
-        }
-      }
+      const losses = countedLosses(sources, condition, ctx);
       return losses.length === 0 ? unknown('insufficientData') : known(Math.round(median(losses)), 0);
     },
+    /** The stops the aggregate's median rests on (the panel's STOPS column). */
+    samples: (sources, ctx) => countedLosses(sources, condition, ctx).length,
     /** The source session's median minus the set's, in ms. */
     residual: (source, set): Known<number> => {
       const own = source[key];

@@ -192,7 +192,9 @@ export class CalibrationStore {
       const entries = this.#runner.setEntries(computed, set.overrides);
       const fits = resolved.map((r) => this.#runner.fit(r, `${setKeyOf(set)}/${stintKey(r.source)}`, set.overrides, entries));
       const defaults = this.#runner.defaults(entries, this.#trackFile(trackId));
-      this.#values.set(set.id, { entries, fits, defaults });
+      const samples = this.#runner.samples(setKeyOf(set), stored, set.overrides);
+      const missing = resolved.filter((r) => 'skipped' in r && r.skipped === 'missing').length;
+      this.#values.set(set.id, { entries, fits, defaults, samples, missing });
     }
     if (sets.length === 0) this.#candidates.delete(trackId);
     else {

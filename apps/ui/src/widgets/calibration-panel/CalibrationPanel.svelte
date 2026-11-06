@@ -9,11 +9,13 @@
   import { fitCell } from '../../kit/grid/grid.ts';
   import type { WidgetProps } from '../../kit/types.ts';
   import { formatDay, formatTrack } from '../../kit/values/format.ts';
+  import SourceBadge from '../../kit/values/SourceBadge.svelte';
   import TextCell from '../../kit/values/TextCell.svelte';
   import { role } from '../../theme/index.ts';
   import {
     COMPOUNDS, LIMIT_SPECS, PIT_SPECS, compactDegSpec, compoundLabel, compoundSpecs, lapColumns, overrideAction, overrideText,
-    runningSetId, sessionState, setsOf, shownSet, sourceKey, sourceRow, trackOf, trackOptions, valueCell, type ValueSpec,
+    runningSetId, samplesCell, samplesKey, sessionState, setsOf, shownSet, sourceKey, sourceRow, trackOf, trackOptions, valueCell,
+    type ValueSpec,
   } from './rows.ts';
   import * as text from './text.ts';
   import type { widget } from './widget.ts';
@@ -124,18 +126,39 @@
     [text.sourceHeaders.cmp, W.cmp, 'left'], [text.sourceHeaders.stint, W.stint, 'left'], [text.sourceHeaders.laps, W.laps, 'right'],
     [text.sourceHeaders.deg, W.deg, 'right'], [text.sourceHeaders.drift, W.drift, 'right'],
   ]);
+  /** The N and STOPS columns (mockup). */
+  const N_WIDTH = 2;
+  const STOPS_WIDTH = 5;
+  const pitWidth = PIT_SPECS[0]?.spec.width ?? 0;
   const valueHeader = header([
     [text.valueHeaders.cmp, 3, 'left'],
     ...compoundSpecs('soft').map((c): [string, number, 'right'] => [text.valueHeaders[c.column], c.spec.width, 'right']),
+    [text.valueHeaders.n, N_WIDTH, 'right'],
   ]);
-  const pitHeader = header([[text.pitHeaders.cond, 5, 'left'], [text.pitHeaders.set, 5, 'right'], [text.pitHeaders.ovr, 5, 'left']]);
+  const pitHeader = header([
+    [text.pitHeaders.cond, 5, 'left'], [text.pitHeaders.set, pitWidth, 'right'], [text.pitHeaders.stops, STOPS_WIDTH, 'right'],
+    [text.pitHeaders.ovr, pitWidth, 'left'],
+  ]);
   const skippedWidth = W.laps + W.deg + W.drift + 2;
-  const compactPitWidth = 4;
+  const compactPitWidth = 5;
 </script>
 
+<!-- A value; a default (no source covers the key) is dim with its badge, in the cell's slot when it has one. -->
 {#snippet value(spec: ValueSpec)}
-  {@const cell = valueCell(spec, setValues?.entries, overrides)}
-  <span data-testid="value-{spec.key}" title={cell.title}><TextCell {...cell.part} width={spec.width} align="right" /></span>
+  {@const cell = valueCell(spec, setValues, overrides)}
+  <span data-testid="value-{spec.key}" title={cell.title}
+    ><TextCell
+      {...cell.part}
+      width={spec.slot ? spec.width - 1 : spec.width}
+      align="right"
+      role={cell.source === undefined ? undefined : 'textDim'}
+    />{#if cell.source !== undefined}<SourceBadge source={cell.source} />{:else if spec.slot}{SP}{/if}</span
+  >
+{/snippet}
+
+{#snippet samples(key: string, width: number)}
+  {@const n = samplesCell(key, setValues)}
+  <span data-testid="samples-{key}" class:dim={n.none}>{fitCell(n.text, width, 'right')}</span>
 {/snippet}
 
 {#snippet field(spec: ValueSpec)}
@@ -267,7 +290,12 @@
           </select>{SP2}{:else if trackId !== null}<span>{formatTrack(trackId)}</span>{#if set !== undefined}<span class="faint"
               >{text.afterTrack}</span
             >{/if}{/if}{#if set !== undefined}<span class="faint"
-            >{text.setDates(formatDay(set.createdAt), set.lastUsedAt === undefined ? undefined : formatDay(set.lastUsedAt), set.sources.length)}</span
+            >{text.setDates(
+              formatDay(set.createdAt),
+              set.lastUsedAt === undefined ? undefined : formatDay(set.lastUsedAt),
+              set.sources.length,
+              setValues?.missing ?? 0,
+            )}</span
           >{/if}{/if}
     </div>
     <!-- The bridge's reason for a rejected action; a blank line otherwise. -->
@@ -292,7 +320,11 @@
       <div class="line">{SP}<span class="faint">{text.valuesTitle}</span>{SP}<span class="faint">{text.valuesNote}</span></div>
       <div class="line faint">{SP}{valueHeader}</div>
       {#each COMPOUNDS as c (c)}
-        <div class="line">{SP}{fitCell(compoundLabel(c), 3)}{#each compoundSpecs(c) as { spec } (spec.key)}{SP}{@render value(spec)}{/each}</div>
+        <div class="line">
+          {SP}<span class:dim={samplesCell(samplesKey(c), setValues).none}>{fitCell(compoundLabel(c), 3)}</span>{#each compoundSpecs(c) as { spec } (spec.key)}{SP}{@render value(
+              spec,
+            )}{/each}{SP}{@render samples(samplesKey(c), N_WIDTH)}
+        </div>
         <div class="line">
           {SP}<span class="faint">{fitCell(text.overrideRow, 3)}</span>{#each compoundSpecs(c) as { spec } (spec.key)}{SP}{@render field(spec)}{/each}
         </div>
@@ -306,7 +338,11 @@
       <div class="line">{SP}<span class="faint">{text.pitTitle}</span>{SP}<span class="faint">{text.pitNote}</span></div>
       <div class="line faint">{SP}{pitHeader}</div>
       {#each PIT_SPECS as { condition, spec } (spec.key)}
-        <div class="line">{SP}{fitCell(text.conditions[condition], 5)}{SP}{@render value(spec)}{SP}{@render field(spec)}</div>
+        <div class="line">
+          {SP}<span class:dim={samplesCell(spec.key, setValues).none}>{fitCell(text.conditions[condition], 5)}</span>{SP}{@render value(
+            spec,
+          )}{SP}{@render samples(spec.key, STOPS_WIDTH)}{SP}{@render field(spec)}
+        </div>
       {/each}
     {/if}
   {:else if set !== undefined}
@@ -337,15 +373,16 @@
   .fld {
     vertical-align: top;
   }
+  /* One character cell tall: the browser's minimum size of a customisable select (24 px) would make its line taller. */
   .fld {
     height: calc(var(--pw-line) * 1em);
+    min-height: 0;
     text-align: right;
   }
   select.fld,
   .fld.name {
     text-align: left;
-  }
-  .faint {
+  }  .faint {
     color: var(--pw-textFaint);
   }
   .dim {

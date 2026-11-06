@@ -34,9 +34,16 @@ export const noTrackShort = 'no session stored';
 
 /** Between the running session's track and the set's dates. */
 export const afterTrack = separator;
-/** The set's dates and sources under the picker: `created 28 Sep · last used 15 Oct · 4 sources`. */
-export const setDates = (created: string, lastUsed: string | undefined, sources: number): string =>
-  [`created ${created}`, ...(lastUsed === undefined ? [] : [`last used ${lastUsed}`]), calibration.sources(sources)].join(separator);
+/**
+ * The set's dates and sources under the picker: `created 28 Sep · last used 15 Oct · 4 sources, 1 missing` (the missing
+ * count only when some source is missing).
+ */
+export const setDates = (created: string, lastUsed: string | undefined, sources: number, missing: number): string =>
+  [
+    `created ${created}`,
+    ...(lastUsed === undefined ? [] : [`last used ${lastUsed}`]),
+    missing > 0 ? `${calibration.sources(sources)}, ${calibration.missing(missing)}` : calibration.sources(sources),
+  ].join(separator);
 
 /** Section titles and their notes. */
 export const sourcesTitle = 'SOURCES';
@@ -81,7 +88,7 @@ export const neverPace = { notForPace: 'other', inLap: 'in', outLap: 'out', neut
 export const neverPaceHover = 'not a pace lap: never used';
 
 /** Headers of the values table by column key. */
-export const valueHeaders = { cmp: 'CMP', offset: 'TO SOFT', deg: 'DEG/LAP', sd: 'SD', fl: 'FL', fr: 'FR', rl: 'RL', rr: 'RR' } as const;
+export const valueHeaders = { cmp: 'CMP', offset: 'TO SOFT', deg: 'DEG/LAP', sd: 'SD', fl: 'FL', fr: 'FR', rl: 'RL', rr: 'RR', n: 'N' } as const;
 /** An entry no source of the set covers. */
 export const noSource = 'no source in this set covers it';
 export const overrideHover = (value: string): string => `your override ${value}`;
@@ -89,7 +96,7 @@ export const overrideHover = (value: string): string => `your override ${value}`
 export const limits = { wearLimit: 'wear limit', ageLossLimit: 'age loss limit' } as const;
 /** The pit-loss conditions and the table's headers. */
 export const conditions = { green: 'green', vsc: 'VSC', sc: 'SC' } as const;
-export const pitHeaders = { cond: 'COND', set: 'SET', ovr: 'OVR' } as const;
+export const pitHeaders = { cond: 'COND', set: 'SET', stops: 'STOPS', ovr: 'OVR' } as const;
 /** The compact mode's line labels. */
 export const compactDeg = 'deg';
 export const compactPit = 'pit';

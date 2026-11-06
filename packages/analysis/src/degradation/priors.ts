@@ -99,6 +99,12 @@ const overridden = (key: string, ctx: PriorsCtx, aggregate: () => Known<number>)
 const nuPool = (sources: readonly StoredSource[], compound: VisualCompound, ctx: PriorsCtx) =>
   pool(fitsOf(sources, compound, ctx).map((f) => ({ mean: f.nuMsPerLap, variance: f.cov[1][1] })));
 
+/** How many sources on `compound` the aggregate pools (those with a fit): the calibration panel's N column. */
+const samplesOf =
+  (compound: VisualCompound) =>
+  (sources: readonly StoredSource[], ctx: PriorsCtx): number =>
+    fitsOf(sources, compound, ctx).length;
+
 const alphaPool = (sources: readonly StoredSource[], compound: VisualCompound, ctx: PriorsCtx) =>
   pool(fitsOf(sources, compound, ctx).map((f) => ({ mean: f.alphaMs, variance: f.cov[0][0] })));
 
@@ -117,6 +123,7 @@ const nuEntry = (compound: VisualCompound): PriorDecl => ({
       return p === undefined ? unknown('insufficientData') : known(p.mean, 0);
     });
   },
+  samples: samplesOf(compound),
   residual: (source, set) => {
     const own = source[priorKey('nuMsPerLap', compound)];
     const value = set[priorKey('nuMsPerLap', compound)];
@@ -139,6 +146,7 @@ const nuSdEntry = (compound: VisualCompound): PriorDecl => ({
       const p = nuPool(sources, compound, ctx);
       return p === undefined ? unknown('insufficientData') : known(Math.max(1, p.sd), 0);
     }),
+  samples: samplesOf(compound),
 });
 
 /** The tyre-pace offset `α` of `compound` against medium's, in ms (medium is 0). */
@@ -157,6 +165,7 @@ const alphaEntry = (compound: VisualCompound): PriorDecl => ({
       const own = alphaPool(sources, compound, ctx);
       return own === undefined ? unknown('insufficientData') : known(Math.round(own.mean - reference.mean), 0);
     }),
+  samples: samplesOf(compound),
 });
 
 export const DEGRADATION_PRIORS = definePriors('degradation', {

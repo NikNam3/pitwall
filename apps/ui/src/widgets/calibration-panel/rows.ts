@@ -3,15 +3,16 @@
 // track and the set are window-local choices of the panel (C73); the actions carry the picked track and set.
 import type { UiAction } from '@pitwall/contracts';
 import type {
-  CalibrationActiveValue, CalibrationCandidatesValue, CalibrationSet, CalibrationSetsValue, CalibrationSource, FittedSource,
-  Known, LapUse, PriorsEntries, SourceFit, VisualCompound,
+  CalibrationActiveValue, CalibrationCandidatesValue, CalibrationSet, CalibrationSetsValue, CalibrationSource, CalibrationValuesValue,
+  EstimateSource, FittedSource, Known, LapUse, SourceFit, VisualCompound,
 } from '@pitwall/domain';
 import { COMPOUND_MARK } from '../../kit/compound/compound-mark.ts';
 import { knownPart, unknownPart, type CellPart } from '../../kit/grid/grid.ts';
 import {
-  fixed, formatDay, formatDriverCode, formatLapNumber, formatLapRange, formatLapTime, formatPct, formatSeconds, formatSecondsUnit,
-  formatSigma, formatSignedSeconds, formatWeekendPhase, parseDecimal, parseSeconds,
+  fixed, formatCount, formatDay, formatDriverCode, formatLapNumber, formatLapRange, formatLapTime, formatPct, formatSeconds,
+  formatSecondsUnit, formatSigma, formatSignedSeconds, formatWeekendPhase, parseDecimal, parseSeconds,
 } from '../../kit/values/format.ts';
+import { sourceTitle } from '../../kit/values/source-badge.ts';
 import * as text from './text.ts';
 
 // The track and the set
@@ -139,7 +140,11 @@ export function lapColumns(fit: FittedSource, columns: number): LapCell[][] {
 /** How an entry shows and how its override is typed: in seconds (a key in ms) or as the number itself (a key in %). */
 /** `withUnit`: the cell prints the unit (`s`, `%`) through the kit's formatter; a table's header names it otherwise. */
 type Unit = { kind: 'seconds'; decimals: number; signed: boolean; withUnit: boolean } | { kind: 'percent'; decimals: number; withUnit: boolean };
-export type ValueSpec = { key: string; width: number; unit: Unit };
+/**
+ * A value's cell: its priors key, its width in cells and its unit. `slot`: the cell's last cell is kept for the source
+ * badge (`ᵈ` of a default), so a column's values stay aligned; without it the badge follows the cell.
+ */
+export type ValueSpec = { key: string; width: number; unit: Unit; slot?: true };
 
 const S3: Unit = { kind: 'seconds', decimals: 3, signed: true, withUnit: false };
 const SD: Unit = { kind: 'seconds', decimals: 3, signed: false, withUnit: false };
@@ -155,12 +160,14 @@ export type ValueColumn = 'offset' | 'deg' | 'sd' | (typeof CORNERS)[number];
 
 /** A compound's row of the values table, by column. */
 export const compoundSpecs = (c: VisualCompound): { column: ValueColumn; spec: ValueSpec }[] => [
-  { column: 'offset', spec: { key: `degradation.alphaOffsetMs.${c}`, width: 7, unit: S3 } },
-  { column: 'deg', spec: { key: degKey(c), width: 7, unit: S3 } },
-  { column: 'sd', spec: { key: `degradation.nuSdMs.${c}`, width: 6, unit: SD } },
+  { column: 'offset', spec: { key: `degradation.alphaOffsetMs.${c}`, width: 7, unit: S3, slot: true } },
+  { column: 'deg', spec: { key: degKey(c), width: 7, unit: S3, slot: true } },
+  { column: 'sd', spec: { key: `degradation.nuSdMs.${c}`, width: 6, unit: SD, slot: true } },
   ...CORNERS.map((corner) => ({ column: corner, spec: { key: `tyreLife.wearPerLapPct.${c}.${corner}`, width: 4, unit: WEAR } })),
 ];
 export const compoundLabel = compoundLetter;
+/** The key whose samples a compound's N shows: its DEG/LAP's (the three keys of a compound count the same sources). */
+export const samplesKey = degKey;
 
 /** Tyre-life's two per-set limits. */
 export const LIMIT_SPECS: { name: keyof typeof text.limits; spec: ValueSpec }[] = [
@@ -171,7 +178,7 @@ export const LIMIT_SPECS: { name: keyof typeof text.limits; spec: ValueSpec }[] 
 /** Pit loss per condition. */
 export const PIT_SPECS: { condition: keyof typeof text.conditions; spec: ValueSpec }[] = (['green', 'vsc', 'sc'] as const).map((condition) => ({
   condition,
-  spec: { key: `pitLoss.ms.${condition}`, width: 5, unit: { kind: 'seconds', decimals: 1, signed: false, withUnit: false } },
+  spec: { key: `pitLoss.ms.${condition}`, width: 6, unit: { kind: 'seconds', decimals: 1, signed: false, withUnit: false }, slot: true },
 }));
 
 const formatIn = (unit: Unit, v: number): string => {
@@ -180,18 +187,34 @@ const formatIn = (unit: Unit, v: number): string => {
   return unit.withUnit ? formatSecondsUnit(v, unit.decimals) : formatSeconds(v, unit.decimals);
 };
 
-/**
- * A value cell: the set's entry formatted, or the kit's unknown part of an entry no source covers; `title` is the cell's
- * hover (why it is unknown, or the set's override).
- */
-export type ValueCell = { part: CellPart; title: string | undefined };
+/** A set's values as `calibration.values` holds them. */
+export type SetValues = CalibrationValuesValue['bySet'][string];
 
-export function valueCell(spec: ValueSpec, entries: PriorsEntries | undefined, overrides: Record<string, number>): ValueCell {
-  const v = entries?.[spec.key];
-  if (v === undefined) return { part: unknownPart('insufficientData'), title: text.noSource };
-  if (!v.known) return { part: unknownPart(v.reason), title: text.noSource };
-  const o = overrides[spec.key];
-  return { part: { text: formatIn(spec.unit, v.value) }, title: o === undefined ? undefined : text.overrideHover(overrideText(spec, overrides)) };
+/**
+ * A value cell: the set's entry formatted; for an entry no source covers, the run's default from the topic's `defaults`
+ * with its `source` (the badge `ᵈ`, dim), else the kit's unknown part. `title` is the cell's hover (the default's
+ * source, why it is unknown, or the set's override).
+ */
+export type ValueCell = { part: CellPart; title: string | undefined; source: EstimateSource | undefined };
+
+export function valueCell(spec: ValueSpec, values: SetValues | undefined, overrides: Record<string, number>): ValueCell {
+  const v = values?.entries[spec.key];
+  if (v?.known === true) {
+    const o = overrides[spec.key];
+    return { part: { text: formatIn(spec.unit, v.value) }, title: o === undefined ? undefined : text.overrideHover(overrideText(spec, overrides)), source: undefined };
+  }
+  const fallback = values?.defaults[spec.key];
+  if (fallback?.value.known === true) return { part: { text: formatIn(spec.unit, fallback.value.value) }, title: sourceTitle(fallback.source), source: fallback.source };
+  return { part: unknownPart(v === undefined ? 'insufficientData' : v.reason), title: text.noSource, source: undefined };
+}
+
+/**
+ * A key's samples (N, STOPS) as the topic counts them: the text (empty for a key whose unit declares none) and whether
+ * there is none (the mockup dims such a row's label and count).
+ */
+export function samplesCell(key: string, values: SetValues | undefined): { text: string; none: boolean } {
+  const n = values?.samples[key];
+  return { text: n === undefined ? '' : formatCount(n), none: n === 0 };
 }
 
 /** The override field's text: the set's override in the unit the cell shows, or empty. */
@@ -219,4 +242,4 @@ export function overrideAction(
 }
 
 /** The compact mode's deg line: the set's DEG/LAP per compound. */
-export const compactDegSpec = (c: VisualCompound): ValueSpec => ({ key: degKey(c), width: 6, unit: S3 });
+export const compactDegSpec = (c: VisualCompound): ValueSpec => ({ key: degKey(c), width: 7, unit: S3, slot: true });
