@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
-import type { CarId, CarKey, SessionUid } from '@pitwall/domain';
+import { unknown, type CarId, type CarKey, type Known, type SessionUid, type TrackData, type WeekendPhase } from '@pitwall/domain';
 import { projectionOfLog } from '@pitwall/engine/log';
-import type { Projection, ProjectionState, StoredSession, WeekendContext } from '@pitwall/engine/readers';
+import type { DeepReadonly, Projection, ProjectionState, StoredSession, WeekendContext } from '@pitwall/engine/readers';
 import { createLogger, type Logger } from '../log.ts';
 import type { Db, SessionKey, SessionRow, StoredSessionRow } from './db.ts';
 import { logOfRows, type StoredFact } from './log-rows.ts';
@@ -31,6 +31,29 @@ export type WeekendRepositoryOptions = {
    * complete. Without it only completeness is checked.
    */
   rulesVersion?: string;
+  /** The track file a stored session ran with (C62b), for `sessionsOnTrack`. Default: `notApplicable`. */
+  track?: (row: StoredSessionRow) => Known<DeepReadonly<TrackData>>;
+};
+
+/**
+ * A complete stored session on a track, as the calibration store reads it (C62a): its row, its weekend phase (from its
+ * weekend-phase span), the track file it ran with and its projection (C34). A session of another rules version is
+ * `stale` and has no projection: it is never served before its rebuild (C61).
+ */
+export type TrackSession = StoredSessionRow & {
+  phase: WeekendPhase;
+  stale: boolean;
+  projection: ProjectionState | undefined;
+  track: Known<DeepReadonly<TrackData>>;
+};
+
+/** The read of the stored sessions on one track the calibration store needs. */
+export type SessionsOnTrack = Pick<WeekendRepository, 'sessionsOnTrack'>;
+
+/** The weekend phase a session's weekend-phase span stands for; `pending` without one. */
+const phaseOf = (projection: Projection): WeekendPhase => {
+  const span = projection.spans['weekend-phase']?.[0];
+  return span === undefined ? { kind: 'pending' } : ({ kind: span.kind, ...(span.detail as object) } as WeekendPhase);
 };
 
 /** A stored session is stale when its log is not complete or another rules version produced it (C61): it is never served. */
@@ -55,6 +78,7 @@ export class WeekendRepository {
   readonly #log: Logger;
   readonly #rebuild: WeekendRepositoryOptions['rebuild'];
   readonly #rulesVersion: string | undefined;
+  readonly #track: NonNullable<WeekendRepositoryOptions['track']>;
   /** The sessions found unservable and warned about (`keyText`): neither rebuilt again nor warned about again. */
   readonly #unservable = new Set<string>();
 
@@ -62,10 +86,14 @@ export class WeekendRepository {
     this.#log = opts.log ?? createLogger({ level: 'silent' });
     this.#rebuild = opts.rebuild;
     this.#rulesVersion = opts.rulesVersion;
+    this.#track = opts.track ?? (() => unknown('notApplicable'));
     const sessionColumns = `s.session_uid, s.weekend_id, w.season_id, s.player_car, s.track_id, s.started_at, s.pwrec_path, s.settings, s.rules_version, s.complete`;
     const sessionsFrom = `FROM sessions s JOIN weekends w ON w.weekend_id = s.weekend_id`;
     this.#statements = {
       weekendSessions: db.prepare(`SELECT ${sessionColumns} ${sessionsFrom} WHERE s.weekend_id = ? ORDER BY s.started_at, s.session_uid, s.player_car`),
+      trackSessions: db.prepare(
+        `SELECT ${sessionColumns} ${sessionsFrom} WHERE s.track_id = ? AND s.complete = 1 ORDER BY s.started_at, s.session_uid, s.player_car`,
+      ),
       newestWeekend: db.prepare(`SELECT weekend_id FROM sessions ORDER BY started_at DESC, session_uid DESC, player_car DESC LIMIT 1`).pluck(),
       session: db.prepare(
         `SELECT ${sessionColumns} ${sessionsFrom} WHERE s.session_uid = @sessionUid AND s.weekend_id = @weekendId AND s.player_car = @playerCar`,
@@ -89,6 +117,19 @@ export class WeekendRepository {
   /** The weekend's rows in start order, each with its cars by car id, its rules version and whether it is complete. */
   sessionsOf(weekendId: string): StoredSessionRow[] {
     return (this.#statements.weekendSessions.all(weekendId) as SessionDbRow[]).map((row) => this.#toSession(row));
+  }
+
+  /**
+   * The complete stored sessions on `trackId` in start order (C62a), each with its weekend phase and track file. One of
+   * another rules version is `stale` and comes without its projection (C61); an incomplete one is left out.
+   */
+  sessionsOnTrack(trackId: number): TrackSession[] {
+    return (this.#statements.trackSessions.all(trackId) as SessionDbRow[]).map((dbRow) => {
+      const row = this.#toSession(dbRow);
+      const projection = this.#projectionOfStored(keyOf(dbRow));
+      const stale = isStale(row, this.#rulesVersion);
+      return { ...row, phase: phaseOf(projection), stale, projection: stale ? undefined : (projection as ProjectionState), track: this.#track(row) };
+    });
   }
 
   /** The weekend of the newest stored session (by start); `undefined` when none is stored. */

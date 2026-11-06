@@ -32,6 +32,7 @@ export type ServerMessage =
   | { type: 'topicStatus'; id: string; status: TopicStatus }
   | { type: 'commandResult'; id: string; ok: false; reason: 'notSupported' }
   | { type: 'actionResult'; id: string; ok: true }
-  | { type: 'actionResult'; id: string; ok: false; reason: 'invalid' | 'notSupported' }
+  /** `message`: why an invalid action was rejected, for the UI to show (C73). */
+  | { type: 'actionResult'; id: string; ok: false; reason: 'invalid' | 'notSupported'; message?: string }
   | { type: 'heartbeat' }
   | { type: 'error'; id?: string; reason: ErrorReason };

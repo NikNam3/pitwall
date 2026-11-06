@@ -141,9 +141,9 @@ const decodeSnapshot = (raw: Json): ServerMessage | undefined => {
 const decodeActionResult = (raw: Json): ServerMessage | undefined => {
   if (typeof raw.id !== 'string') return undefined;
   if (raw.ok === true) return { type: 'actionResult', id: raw.id, ok: true };
-  return raw.ok === false && (raw.reason === 'invalid' || raw.reason === 'notSupported')
-    ? { type: 'actionResult', id: raw.id, ok: false, reason: raw.reason }
-    : undefined;
+  if (raw.ok !== false || (raw.reason !== 'invalid' && raw.reason !== 'notSupported')) return undefined;
+  if (raw.message === undefined) return { type: 'actionResult', id: raw.id, ok: false, reason: raw.reason };
+  return typeof raw.message === 'string' ? { type: 'actionResult', id: raw.id, ok: false, reason: raw.reason, message: raw.message } : undefined;
 };
 
 const decodeError = (raw: Json): ServerMessage | undefined => {
