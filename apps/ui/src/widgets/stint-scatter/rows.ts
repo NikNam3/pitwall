@@ -5,7 +5,7 @@ import type { CompoundEstimate, EstimateSource, FitPoint, Known, Ms, StintFit, S
 import type { ChartMark, ChartSeries } from '../../kit/chart/data.ts';
 import { COMPOUND_MARK } from '../../kit/compound/compound-mark.ts';
 import { knownPart, type CellPart } from '../../kit/grid/grid.ts';
-import { formatSeconds, formatSignedSeconds } from '../../kit/values/format.ts';
+import { formatCount, formatSeconds, formatSignedSeconds } from '../../kit/values/format.ts';
 import { role, type Role } from '../../theme/index.ts';
 import { compoundRole, lapRole, stintRole } from './emphasis.ts';
 import { stintLabel } from './text.ts';
@@ -66,8 +66,8 @@ export function chartOf(plots: readonly StintPlot[]): { series: ChartSeries[]; m
   return { series, marks };
 }
 
-/** One line of the compounds table: the prior a compound started from, with its source for the kit badge. */
-export type CompoundRow = { compound: string; toSoft: CellPart; degPerLap: CellPart; sd: CellPart; source: EstimateSource; role: Role | undefined };
+/** One line of the compounds table: a compound's pooled estimate (spec 5.1), our laps on it, its source for the kit badge. */
+export type CompoundRow = { compound: string; toSoft: CellPart; degPerLap: CellPart; sd: CellPart; laps: string; source: EstimateSource; role: Role | undefined };
 
 /** Signed seconds to three decimals, `412` -> `+0.412`. */
 const signed3 = (ms: number): string => formatSignedSeconds(ms, 3);
@@ -81,6 +81,7 @@ export function compoundRows(compounds: readonly CompoundEstimate[]): CompoundRo
     toSoft: knownPart(c.alphaOffsetMs, signed3),
     degPerLap: knownPart(c.nuMsPerLap, signed3),
     sd: knownPart(c.nuSdMs, plain3),
+    laps: formatCount(c.laps),
     source: c.source,
     role: compoundRole(c.source.kind),
   }));
