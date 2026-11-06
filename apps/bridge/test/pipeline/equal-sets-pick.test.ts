@@ -57,7 +57,7 @@ describe('a pick of one of two sets with equal entries', () => {
   beforeAll(async () => {
     store = CalibrationStore.open(mkdtempSync(join(tmpdir(), 'equal-sets-')), {
       features: [probe.feature],
-      repo: { sessionsOnTrack: () => [] },
+      repo: { sessionsOnTrack: () => [], newestTrackId: () => null },
       config: {},
       hub: { publishGlobal: (topic, valueFor) => { published.push({ topic, value: valueFor({}) }); } },
       log,

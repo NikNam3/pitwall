@@ -265,7 +265,7 @@ describe('FeedPipeline: the session end', () => {
     const firstProjection = await repo.projectionOf({ sessionUid: '77', weekendId: '0', playerCar: first.playerCar });
     expect(seen.at(-1)).toEqual({
       weekendId: '0', player: { teamId: 0, raceNumber: 1 },
-      sessions: [{ sessionUid: '77', playerCar: 0, cars: first.cars, projection: firstProjection }],
+      sessions: [{ sessionUid: '77', playerCar: 0, cars: first.cars.map(({ carId, carKey }) => ({ carId, carKey })), projection: firstProjection }],
     });
   });
 });

@@ -652,10 +652,10 @@ describe('CalibrationStore', () => {
   it('suggestions take the stored teammate, not every slot of the player\'s team', () => {
     // Cars 0 (the player), 1 and 2 are of one team; the engine placed car 2 as the teammate. Car 3 is a rival.
     const cars = [
-      { carId: car(0), carKey: { teamId: 0, raceNumber: 44 } },
-      { carId: car(1), carKey: { teamId: 0, raceNumber: 63 } },
-      { carId: car(2), carKey: { teamId: 0, raceNumber: 12 } },
-      { carId: car(3), carKey: { teamId: 1, raceNumber: 16 } },
+      { carId: car(0), carKey: { teamId: 0, raceNumber: 44 }, driver: unknown('notReceived') },
+      { carId: car(1), carKey: { teamId: 0, raceNumber: 63 }, driver: unknown('notReceived') },
+      { carId: car(2), carKey: { teamId: 0, raceNumber: 12 }, driver: unknown('notReceived') },
+      { carId: car(3), carKey: { teamId: 1, raceNumber: 16 }, driver: unknown('notReceived') },
     ];
     const stints = [0, 1, 2, 3].map((n) => ({ car: n, firstLap: 1, lastLap: 5 }));
     const placed = trackSession('placed', { startedAt: day(2), cars, teammateCar: car(2), stints });
@@ -671,9 +671,9 @@ describe('CalibrationStore', () => {
 
   it('a source of a same-team slot that is not the stored teammate is rejected', () => {
     const cars = [
-      { carId: car(0), carKey: { teamId: 0, raceNumber: 44 } },
-      { carId: car(1), carKey: { teamId: 0, raceNumber: 63 } },
-      { carId: car(2), carKey: { teamId: 0, raceNumber: 12 } },
+      { carId: car(0), carKey: { teamId: 0, raceNumber: 44 }, driver: unknown('notReceived') },
+      { carId: car(1), carKey: { teamId: 0, raceNumber: 63 }, driver: unknown('notReceived') },
+      { carId: car(2), carKey: { teamId: 0, raceNumber: 12 }, driver: unknown('notReceived') },
     ];
     const s1 = trackSession('1', { startedAt: day(1), cars, teammateCar: car(2), stints: [0, 1, 2].map((n) => ({ car: n, firstLap: 1, lastLap: 5 })) });
     const t = setup({ sessions: [s1] });
