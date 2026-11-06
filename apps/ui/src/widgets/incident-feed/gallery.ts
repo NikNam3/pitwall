@@ -22,6 +22,7 @@ const collision: IncidentEntry = {
   forUs: [{ ourCarId: carId(1), otherCarId: k(carId(2)), positionBefore: k(5), positionAfter: k(4), gapBeforeMs: k(4100), gapAfterMs: unknown('notApplicable') }],
   where: { sector: k(3), turn: unknown('notApplicable'), fraction: unknown('notApplicable') },
 };
+const atTurn: IncidentEntry = { ...collision, id: 'collision:2+3:232000', at: toSessionTime(232_000), where: { sector: k(3), turn: k('T6a'), fraction: unknown('notApplicable') } };
 const timeLoss: IncidentEntry = {
   id: 'timeLoss:4:220000', at: toSessionTime(220_000), lap: 22, kind: 'timeLoss', severity: 'major', carIds: [carId(4)],
   timeLostMs: k(6100),
@@ -100,6 +101,8 @@ const gallery: GalleryEntry<typeof widget> = {
       cars,
       moment: undefined,
     },
+    // A known turn shows where the sector stood: `collision T6a`.
+    turn: { feed: [atTurn, timeLoss], cars, moment: undefined },
     // Realism hides no rival value of this display (incidents are public), so there is no realism case.
   },
   fit: [
