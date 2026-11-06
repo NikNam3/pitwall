@@ -8,6 +8,7 @@ export {
   type DockviewGroupPanel,
   type DockviewTheme,
   type IContentRenderer,
+  type IHeaderActionsRenderer,
   type ITabRenderer,
   type Position,
   type SerializedDockview,

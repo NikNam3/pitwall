@@ -49,8 +49,26 @@
     inspection?: Inspection | undefined;
     /** Told what the inspector needs of a clicked panel: its link and the params of its topics, read live. */
     onInspect?: (target: InspectTarget) => void;
+    /** The window's edit mode: the header then shows a `×` that calls `onRemove`. */
+    editing?: boolean;
+    onRemove?: () => void;
   };
-  let { store, spec, widget, link, headerTarget, group, defaultFeed, send = () => {}, onOptions = () => {}, onLinkGroup = () => {}, inspection, onInspect = () => {} }: Props = $props();
+  let {
+    store,
+    spec,
+    widget,
+    link,
+    headerTarget,
+    group,
+    defaultFeed,
+    send = () => {},
+    onOptions = () => {},
+    onLinkGroup = () => {},
+    inspection,
+    onInspect = () => {},
+    editing = false,
+    onRemove = () => {},
+  }: Props = $props();
 
   // The picker and the settings popover open next to their buttons; Escape closes them (the shell owns the keys).
   const stack = useOverlayStack();
@@ -178,6 +196,9 @@
     <button type="button" class="pw-button" style:color={role('textFaint')} onclick={(e) => openAt('settings', e.currentTarget)}
       ><Gear label={text.settings} /></button
     >
+    {#if editing}
+      <button type="button" class="pw-button remove" aria-label={text.removePanel} onclick={onRemove}>{text.removePanelMark}</button>
+    {/if}
   </header>
   <!-- Popovers sit on the page, not in the (clipped) panel. -->
   <div use:portal={document.body}>
@@ -227,6 +248,12 @@
   }
   .fill {
     flex: 1;
+  }
+  .remove {
+    color: var(--pw-textFaint);
+  }
+  .remove:hover {
+    color: var(--pw-text);
   }
   .body {
     flex: 1;
