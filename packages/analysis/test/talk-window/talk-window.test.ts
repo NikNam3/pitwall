@@ -84,7 +84,7 @@ describe('talk-window calculator', () => {
   it('on the last metres of the lap before a zone that starts after the line: busy', () => {
     // 20 m to the line, the zone starts 50 m after it: 70 m ahead, within the 125 m lead
     expect(talk({ distanceM: LENGTH - 20 })).toMatchObject(busy);
-    expect(talk({ distanceM: LENGTH - 20, speedKmh: 100 })).toMatchObject(busy);
+    expect(talk({ distanceM: LENGTH - 20, speedKmh: 200 })).toMatchObject(busy); // lead 83 m still reaches it
   });
 
   it('in the pit lane: clear, even where a zone is; in the garage: notApplicable', () => {
