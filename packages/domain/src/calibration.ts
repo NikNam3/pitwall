@@ -124,6 +124,10 @@ export type CalibrationValuesValue = {
      * the effective config, with its default source (the `ᵈ` values of the calibration panel).
      */
     defaults: Record<string, { value: Known<number>; source: EstimateSource }>;
+    /** Per key whose unit declares `samples`: how many samples its aggregate rests on (N, STOPS). */
+    samples: Record<string, number>;
+    /** How many of the set's sources are skipped as `missing`. */
+    missing: number;
   }>;
 };
 /** `calibration.candidates`: per track id the suggested sources, ordered (this weekend first, then newest first). */

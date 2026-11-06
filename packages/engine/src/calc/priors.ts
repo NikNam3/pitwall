@@ -59,6 +59,11 @@ export type PriorDecl = {
    * without a run-time default.
    */
   fallback?(ctx: FallbackCtx): { value: Known<number>; source: EstimateSource };
+  /**
+   * How many samples the entry's aggregate rests on over these sources (the sources on its compound, the stops of its
+   * condition): the unit's count, the one rule its aggregate uses (C43), shown in the calibration panel (N, STOPS).
+   */
+  samples?(sources: readonly StoredSource[], ctx: PriorsCtx): number;
 };
 
 /**
