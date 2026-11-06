@@ -4,7 +4,7 @@ The spec or plan of the work in progress lives here (`specs/`, `plans/`), writte
 
 Current: the SP4 re-spec, `specs/2026-11-05-sp4a/`: `00-carry-over.md` (what carries over, and the brainstorm answers), `01-sp4-sections.md` (dependency graph and sections). SP4.0 (foundation and track) is **done**, merged 2026-11-06: spec `docs/specs/2026-11-05-sp4.0-foundation-and-track-design.md`, plan and run rulings in `docs/history/`.
 
-Done 2026-11-06: the pre-4.1 run (track sidecar always, panel edit mode, desktop start order; spec and plan in `docs/history/`). Still open: **loading screen during the startup rebuild** (C61 "progress shown"; another session works on it).
+Done 2026-11-06: the pre-4.1 run (track sidecar always, panel edit mode, desktop start order; spec and plan in `docs/history/`). The loading screen during the startup rebuild (C61 "progress shown") is done (small-1, 2026-11-06: the bridge's startup server sends `starting` progress before `hello`).
 
 Current: **4.1a calibration and estimation**: spec `specs/2026-11-06-sp4.1a-calibration-and-estimation-design.md` (approved 2026-11-06), plan `plans/2026-11-06-sp4.1a-calibration-and-estimation.md` (awaiting the user's review and go). 4.1b (long run and weather) after it.
 
