@@ -6,6 +6,4 @@ import type { TopicName } from '@pitwall/contracts';
  * run.
  */
 export const NOT_YET_BOUND: ReadonlySet<TopicName> = new Set<TopicName>([
-  // SP4.1a: bound by `stint-analysis` (Task 10)
-  'stintAnalysis.car',
 ]);

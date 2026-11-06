@@ -32,6 +32,7 @@ export { pitStopCountCalculator } from './pit-stop-count/calculator.ts';
 export * from './race-moment/index.ts';
 export * from './session-remaining/index.ts';
 export * from './stint-analysis/index.ts';
+export { stintAnalysisCalculator } from './stint-analysis/calculator.ts';
 export * from './talk-window/index.ts';
 export { sessionRemainingCalculator } from './session-remaining/calculator.ts';
 export { ersCalculator } from './ers/calculator.ts';
