@@ -230,9 +230,8 @@ describe('edits that commit nothing (C62a, ruling R29)', () => {
       calibration: cal.store,
       record: true,
       steps: [
-        // a rename: a new name, the same entries
-        { at: EDIT_AT - 1, act: (pipeline) => { cal.rename(ZANDVOORT, 'dry', 'Dry v2'); pipeline.calibrationEdited('dry'); } },
-        // an edit that ends where it started (an override set, then cleared)
+        // an edit that ends where it started (an override set, then cleared); a rename changes the fingerprint since F4
+        { at: EDIT_AT - 1, act: (pipeline) => pipeline.calibrationEdited('dry') },
         { at: LATER, act: (pipeline) => pipeline.calibrationEdited('dry') },
       ],
     });
