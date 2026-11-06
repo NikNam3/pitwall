@@ -11,6 +11,7 @@ type SessionDbRow = {
   weekend_id: string;
   season_id: string;
   player_car: number;
+  teammate_car: number | null;
   track_id: number;
   started_at: string;
   pwrec_path: string | null;
@@ -85,7 +86,7 @@ export class WeekendRepository {
     this.#rebuild = opts.rebuild;
     this.#rulesVersion = opts.rulesVersion;
     this.#track = opts.track ?? (() => unknown('notApplicable'));
-    const sessionColumns = `s.session_uid, s.weekend_id, w.season_id, s.player_car, s.track_id, s.started_at, s.pwrec_path, s.settings, s.rules_version, s.complete`;
+    const sessionColumns = `s.session_uid, s.weekend_id, w.season_id, s.player_car, s.teammate_car, s.track_id, s.started_at, s.pwrec_path, s.settings, s.rules_version, s.complete`;
     const sessionsFrom = `FROM sessions s JOIN weekends w ON w.weekend_id = s.weekend_id`;
     this.#statements = {
       weekendSessions: db.prepare(`SELECT ${sessionColumns} ${sessionsFrom} WHERE s.weekend_id = ? ORDER BY s.started_at, s.session_uid, s.player_car`),
@@ -230,6 +231,7 @@ export class WeekendRepository {
       weekendId: row.weekend_id,
       seasonId: row.season_id,
       playerCar: row.player_car as CarId,
+      teammateCar: row.teammate_car === null ? null : (row.teammate_car as CarId),
       trackId: row.track_id,
       startedAt: row.started_at,
       pwrecPath: row.pwrec_path,

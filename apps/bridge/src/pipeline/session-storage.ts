@@ -8,13 +8,15 @@ import { WeekendRepository } from '../storage/weekend-repository.ts';
 
 /**
  * A session row from the engine's values (C6: storage sees no packet type) and the recording's: the session as the live
- * state holds it, the feed's player car, and every slot's team and race number from the live identity (C62). No
- * situation and no signal shapes it (C13, C32).
+ * state holds it, the feed's player car, the teammate the engine placed (`live.teammateCar`, C43: no rule of the bridge's
+ * own) and every slot's team and race number from the live identity (C62). No situation and no signal shapes it (C13, C32).
  */
 export type SessionRowInput = {
   sessionUid: SessionUid;
   session: Pick<SessionState, 'link' | 'trackId' | 'settings'>;
   playerCar: CarId;
+  /** The engine's `live.teammateCar` now; `null` when it placed none. */
+  teammateCar: CarId | null;
   startedAt: string;
   pwrecPath: string | null;
   cars: SessionRow['cars'];
@@ -25,6 +27,7 @@ export const sessionRowOf = (s: SessionRowInput): SessionRow => ({
   weekendId: String(s.session.link.weekend),
   seasonId: String(s.session.link.season),
   playerCar: s.playerCar,
+  teammateCar: s.teammateCar,
   trackId: s.session.trackId,
   startedAt: s.startedAt,
   pwrecPath: s.pwrecPath,
@@ -81,7 +84,7 @@ export class SessionStorage {
     if (this.#o.mode === 'append') this.#access?.writer.startSession(row);
   }
 
-  /** The session's row and cars whenever its identity changed (the newest wins); live only. */
+  /** The session's row and cars whenever its identity or its teammate changed (the newest wins); live only. */
   upsertSession(row: SessionRow): void {
     if (this.#o.mode === 'append') this.#access?.writer.upsertSession(row);
   }

@@ -10,8 +10,12 @@ export type FakeSet = { trackId: number; id: string; name: string; sources: numb
 /** The slice of the calibration store a feed pipeline is given. */
 export type PipelineCalibration = Pick<CalibrationStore, 'preselect' | 'snapshotOf' | 'markUsed'>;
 
-/** The fingerprint of a set's entries: equal entries, equal fingerprint (as the store's `entriesFingerprint`). */
-const fingerprintOf = (entries: PriorsEntries): string => createHash('sha256').update(JSON.stringify(entries)).digest('hex').slice(0, 16);
+/**
+ * The fingerprint of a set's snapshot: its id, name, sources count and entries (as the store's, SP4.1a f34, C62a), so two
+ * sets with equal entries are two snapshots.
+ */
+const fingerprintOf = (set: FakeSet): string =>
+  createHash('sha256').update(JSON.stringify({ setId: set.id, setName: set.name, sources: set.sources, entries: set.entries })).digest('hex').slice(0, 16);
 
 /**
  * The fake store: `preselect` gives the snapshot of the track's first set (none without one), `snapshotOf` the set's
@@ -27,7 +31,7 @@ export function fakeCalibration(sets: readonly FakeSet[]) {
     if (set === undefined) throw new Error(`the test names no calibration set ${setId} on track ${trackId}`);
     return set;
   };
-  const snapshotFrom = (set: FakeSet): PriorsSnapshot => ({ fingerprint: fingerprintOf(set.entries), setId: set.id, setName: set.name, sources: set.sources, entries: set.entries });
+  const snapshotFrom = (set: FakeSet): PriorsSnapshot => ({ fingerprint: fingerprintOf(set), setId: set.id, setName: set.name, sources: set.sources, entries: set.entries });
   const snapshotNow = (trackId: number, setId: string): PriorsSnapshot => snapshotFrom(find(trackId, setId));
   const snapshotOf = vi.fn((trackId: number, setId: string): PriorsSnapshot | undefined => {
     const set = lookup(trackId, setId);
@@ -47,6 +51,14 @@ export function fakeCalibration(sets: readonly FakeSet[]) {
     snapshotNow,
     edit: (trackId: number, setId: string, entries: PriorsEntries): void => {
       find(trackId, setId).entries = entries;
+    },
+    /** A rename: the snapshot's name changes, and with it its fingerprint (F4); its entries do not. */
+    rename: (trackId: number, setId: string, name: string): void => {
+      find(trackId, setId).name = name;
+    },
+    /** A delete: `snapshotOf` gives `undefined` for the set from now on. */
+    remove: (trackId: number, setId: string): void => {
+      held.splice(held.indexOf(find(trackId, setId)), 1);
     },
   };
 }

@@ -8,7 +8,7 @@ import { createHash } from 'node:crypto';
 import { canonicalJson } from '@pitwall/contracts';
 import {
   currentLaps, known, unknown,
-  type CalibrationSource, type Known, type LapUse, type PriorsEntries, type SourceFit,
+  type CalibrationSource, type Known, type LapUse, type PriorsEntries, type PriorsSnapshot, type SourceFit,
 } from '@pitwall/domain';
 import type { PriorsCtx, PriorsDecl, StoredSource } from '@pitwall/engine/readers';
 import type { Logger } from '../log.ts';
@@ -228,5 +228,9 @@ export class PriorsRunner {
   }
 }
 
-/** A snapshot's fingerprint: a hash of its entries, so equal entries give an equal fingerprint (C62a). */
-export const entriesFingerprint = (entries: PriorsEntries): string => sha256(canonicalJson(entries));
+/**
+ * A snapshot's fingerprint, its name (C62a): a hash of the whole snapshot (set id, set name, sources count and entries),
+ * keys in a fixed order, so two sets with equal entries are two snapshots and a reload of a set gives the same one.
+ */
+export const snapshotFingerprint = (snapshot: Omit<PriorsSnapshot, 'fingerprint'>): string =>
+  sha256(canonicalJson({ setId: snapshot.setId, setName: snapshot.setName, sources: snapshot.sources, entries: snapshot.entries }));

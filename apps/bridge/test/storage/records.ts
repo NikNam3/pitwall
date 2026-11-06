@@ -43,9 +43,12 @@ export const MERCEDES_44: CarKey = { teamId: 0, raceNumber: 44 };
 export const FERRARI_16: CarKey = { teamId: 1, raceNumber: 16 };
 export const ASTON_14: CarKey = { teamId: 4, raceNumber: 14 };
 
-/** A session row: a practice of weekend W1 whose feed's player is car 1 (FERRARI_16), car 0 MERCEDES_44. */
+/**
+ * A session row: a practice of weekend W1 whose feed's player is car 1 (FERRARI_16), car 0 MERCEDES_44; the engine placed
+ * no teammate (`teammateCar: null`, SP4.1a f34, C43).
+ */
 export const session = (uid: string, o: Partial<SessionRow> = {}): SessionRow => ({ sessionUid: uid as SessionUid, weekendId: 'W1', seasonId: 'S1',
-  playerCar: car(1), trackId: 26, startedAt: '2026-10-27T20:00:00.000Z', pwrecPath: `/rec/${uid}.pwrec.gz`, settings: { tyreTemperature: 1 },
+  playerCar: car(1), teammateCar: null, trackId: 26, startedAt: '2026-10-27T20:00:00.000Z', pwrecPath: `/rec/${uid}.pwrec.gz`, settings: { tyreTemperature: 1 },
   cars: [{ carId: car(0), carKey: MERCEDES_44 }, { carId: car(1), carKey: FERRARI_16 }], ...o });
 
 /** The storage key of a session (C60): its uid, its weekend and its feed's player car. */

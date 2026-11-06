@@ -37,9 +37,9 @@ export class StorageWriter {
     this.#statements = {
       insertWeekend: db.prepare('INSERT OR IGNORE INTO weekends (weekend_id, season_id, track_id) VALUES (?, ?, ?)'),
       upsertSession: db.prepare(
-        `INSERT INTO sessions (session_uid, weekend_id, player_car, track_id, started_at, pwrec_path, settings, rules_version, complete)
-         VALUES (@sessionUid, @weekendId, @playerCar, @trackId, @startedAt, @pwrecPath, @settings, @rulesVersion, @complete)
-         ON CONFLICT (session_uid, weekend_id, player_car) DO UPDATE SET track_id = excluded.track_id, started_at = excluded.started_at,
+        `INSERT INTO sessions (session_uid, weekend_id, player_car, teammate_car, track_id, started_at, pwrec_path, settings, rules_version, complete)
+         VALUES (@sessionUid, @weekendId, @playerCar, @teammateCar, @trackId, @startedAt, @pwrecPath, @settings, @rulesVersion, @complete)
+         ON CONFLICT (session_uid, weekend_id, player_car) DO UPDATE SET teammate_car = excluded.teammate_car, track_id = excluded.track_id, started_at = excluded.started_at,
            pwrec_path = excluded.pwrec_path, settings = excluded.settings, rules_version = excluded.rules_version, complete = excluded.complete`,
       ),
       deleteCars: db.prepare(`DELETE FROM cars WHERE ${OF_SESSION}`),
@@ -124,6 +124,7 @@ export class StorageWriter {
     s.insertWeekend.run(row.weekendId, row.seasonId, row.trackId);
     s.upsertSession.run({
       ...key,
+      teammateCar: row.teammateCar,
       trackId: row.trackId,
       startedAt: row.startedAt,
       pwrecPath: row.pwrecPath,

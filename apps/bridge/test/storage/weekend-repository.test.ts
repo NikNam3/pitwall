@@ -330,3 +330,28 @@ describe('WeekendRepository.sessionsOnTrack', () => {
     expect(stale !== undefined && 'phase' in stale).toBe(false);
   });
 });
+
+// SP4.1a f34 (F3, C43, C60): the session row carries the teammate the engine placed (`teammateCar`, `null` without one),
+// stored with the row like its player car, so the calibration store takes our cars from the row, never by its own rule.
+describe('the stored teammate', () => {
+  it('a row\'s teammate is stored with it and read back by sessionsOf and sessionsOnTrack; none is null', () => {
+    const { db, put } = storage();
+    const cars = [{ carId: car(0), carKey: MERCEDES_44 }, { carId: car(1), carKey: FERRARI_16 }, { carId: car(2), carKey: FERRARI_16 }];
+    put(session('1', { cars, teammateCar: car(2) }));
+    put(session('2', { startedAt: '2026-10-27T21:00:00.000Z', cars, teammateCar: null }));
+    const repo = new WeekendRepository(db);
+    expect(repo.sessionsOf('W1').map((s) => [s.sessionUid, s.teammateCar])).toEqual([['1', 2], ['2', null]]);
+    expect(repo.sessionsOnTrack(26).map((s) => [s.sessionUid, s.teammateCar])).toEqual([['1', 2], ['2', null]]);
+  });
+
+  it('a newer row of the session replaces its teammate (the newest wins); a rebuild writes the rebuilt one', () => {
+    const { db, writer } = storage();
+    const row = session('1', { teammateCar: null });
+    writer.upsertSession(row);
+    writer.upsertSession({ ...row, teammateCar: car(0) });
+    const repo = new WeekendRepository(db);
+    expect(repo.sessionsOf('W1')[0]?.teammateCar).toBe(0);
+    writer.replaceLog({ ...row, teammateCar: null }, log(), 'unversioned');
+    expect(repo.sessionsOf('W1')[0]?.teammateCar).toBeNull();
+  });
+});
