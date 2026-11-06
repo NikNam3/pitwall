@@ -168,6 +168,9 @@ export const formatCelsius = (c: Celsius): string => (Number.isFinite(c) ? `${wh
 /** Percentage to whole numbers, `17.6` -> `18%`. */
 export const formatPercent = (p: Percent): string => (Number.isFinite(p) ? formatPct(p) : '');
 
+/** Percentage to one decimal, `109.29` -> `109.3%`. */
+export const formatPercentTenths = (p: Percent): string => (Number.isFinite(p) ? `${fixed(p, 1)}%` : '');
+
 /** Joules as MJ to one decimal, no unit, `2100000` -> `2.1`, `-400000` -> `−0.4`. */
 export const formatMJ = (j: number): string => (Number.isFinite(j) ? fixed(j / 1e6, 1) : '');
 
