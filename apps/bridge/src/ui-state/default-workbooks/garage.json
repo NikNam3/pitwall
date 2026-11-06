@@ -1,0 +1,110 @@
+{
+  "name": "garage",
+  "windows": [
+    {
+      "id": "main",
+      "layout": {
+        "grid": {
+          "root": {
+            "type": "branch",
+            "data": [
+              {
+                "type": "leaf",
+                "data": {
+                  "views": [
+                    "calibration-panel"
+                  ],
+                  "activeView": "calibration-panel",
+                  "id": "gcalibration-panel"
+                },
+                "size": 320
+              },
+              {
+                "type": "leaf",
+                "data": {
+                  "views": [
+                    "stint-scatter"
+                  ],
+                  "activeView": "stint-scatter",
+                  "id": "gstint-scatter"
+                },
+                "size": 256
+              }
+            ],
+            "size": 303
+          },
+          "width": 576,
+          "height": 303,
+          "orientation": "HORIZONTAL"
+        },
+        "panels": {
+          "calibration-panel": {
+            "id": "calibration-panel",
+            "contentComponent": "panel",
+            "title": "calibration-panel"
+          },
+          "stint-scatter": {
+            "id": "stint-scatter",
+            "contentComponent": "panel",
+            "title": "stint-scatter"
+          }
+        },
+        "activeGroup": "gcalibration-panel"
+      },
+      "panels": {
+        "calibration-panel": {
+          "widget": "calibration-panel",
+          "options": {},
+          "linkGroup": 1
+        },
+        "stint-scatter": {
+          "widget": "stint-scatter",
+          "options": {},
+          "linkGroup": 1
+        }
+      }
+    },
+    {
+      "id": "side",
+      "layout": {
+        "grid": {
+          "root": {
+            "type": "branch",
+            "data": [
+              {
+                "type": "leaf",
+                "data": {
+                  "views": [
+                    "pit-loss-table"
+                  ],
+                  "activeView": "pit-loss-table",
+                  "id": "gpit-loss-table"
+                },
+                "size": 189
+              }
+            ],
+            "size": 394
+          },
+          "width": 394,
+          "height": 189,
+          "orientation": "VERTICAL"
+        },
+        "panels": {
+          "pit-loss-table": {
+            "id": "pit-loss-table",
+            "contentComponent": "panel",
+            "title": "pit-loss-table"
+          }
+        },
+        "activeGroup": "gpit-loss-table"
+      },
+      "panels": {
+        "pit-loss-table": {
+          "widget": "pit-loss-table",
+          "options": {},
+          "linkGroup": 1
+        }
+      }
+    }
+  ]
+}

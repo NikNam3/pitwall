@@ -25,11 +25,11 @@ describe('seedDefaultWorkbooks', () => {
     expect(JSON.parse(seeded)).toMatchObject({ name: 'car' });
   });
 
-  it('the shipped defaults are car, quali and race, each seeded under its own name', async () => {
-    expect(readdirSync(SHIPPED).sort()).toEqual(['car.json', 'quali.json', 'race.json']);
+  it('the shipped defaults are car, garage, quali and race, each seeded under its own name', async () => {
+    expect(readdirSync(SHIPPED).sort()).toEqual(['car.json', 'garage.json', 'quali.json', 'race.json']);
     const dir = uiDir();
     await seedDefaultWorkbooks(dir, SHIPPED);
-    for (const name of ['car', 'quali', 'race']) {
+    for (const name of ['car', 'garage', 'quali', 'race']) {
       const seeded = readFileSync(join(workbooks(dir), `${name}.json`), 'utf8');
       expect(seeded).toBe(readFileSync(join(SHIPPED, `${name}.json`), 'utf8'));
       expect(JSON.parse(seeded)).toMatchObject({ name });
