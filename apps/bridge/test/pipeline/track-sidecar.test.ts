@@ -1,8 +1,9 @@
 // The session's track file travels with its recording (C59, C62b, spec 4): a live session loads the committed file of
 // its track id, hands it to the units as `view.track` (its data, without the provenance, C35) and writes the whole file
 // next to the session file as `<file>.track.json`; a replay uses that sidecar, so it reproduces the live stream (C38)
-// whatever the committed files say by then.
-import { copyFileSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+// whatever the committed files say by then. A session without a valid file writes a not-applicable sidecar, so a file
+// committed for its track later does not change its replay (C62b, pre-4.1 spec 1).
+import { copyFileSync, existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
@@ -18,7 +19,7 @@ import { createLogger } from '../../src/log.ts';
 import { FeedPipeline, type FeedPipelineOptions } from '../../src/pipeline/feed-pipeline.ts';
 import { topicStreamHash } from '../../src/pipeline/stream-hash.ts';
 import { openDatabase } from '../../src/storage/db.ts';
-import { recordingTrack } from '../../src/track-files/load.ts';
+import { loadTrackFile, recordingTrack } from '../../src/track-files/load.ts';
 import { segmentPath } from '../fixtures/replay.ts';
 
 const F = 'test' as FeedId;
@@ -54,10 +55,14 @@ async function run(path: string, features: Feature[], extra: Partial<FeedPipelin
   await pipeline.done;
 }
 
-/** A live run over `path`: the default track files, one session file per session in a fresh recordings dir. */
-async function liveRun(path: string, features: Feature[]): Promise<{ file: string; dir: string }> {
+/**
+ * A live run over `path`: the track files of `tracksDir` (default: the committed ones), one session file per session
+ * in a fresh recordings dir.
+ */
+async function liveRun(path: string, features: Feature[], tracksDir?: string): Promise<{ file: string; dir: string }> {
   const dir = tmp();
-  await run(path, features, { storage: { rulesVersion: 'unversioned', db: openDatabase(join(tmp(), 'live.db')), recordingsDir: dir } });
+  const tracks = tracksDir === undefined ? {} : { tracks: (id: number) => loadTrackFile(id, tracksDir, log) };
+  await run(path, features, { storage: { rulesVersion: 'unversioned', db: openDatabase(join(tmp(), 'live.db')), recordingsDir: dir }, ...tracks });
   const files = readdirSync(dir).filter((name) => name.endsWith('.pwrec.gz'));
   expect(files).toHaveLength(1);
   return { file: join(dir, files[0]!), dir };
@@ -84,6 +89,42 @@ describe('a live session and its track file', () => {
       expect(track?.known === true && track.value).not.toHaveProperty('source');
     }
   });
+});
+
+describe('a live session on a track without a committed file', () => {
+  // talk-window reads the braking zones of view.track, so its topic tells a known track from a notApplicable one
+  const features = [talkWindow];
+  let live: { file: string };
+  beforeAll(async () => {
+    // a tracks dir without a Zandvoort file: the session's track is notApplicable
+    live = await liveRun(FULL_LAP, [trackProbe().feature, ...features], tmp());
+  }, 60_000);
+
+  it('a live session on a track without a committed file writes a not-applicable sidecar', () => {
+    expect(existsSync(trackSidecar(live.file))).toBe(true);
+    expect(JSON.parse(readFileSync(trackSidecar(live.file), 'utf8'))).toEqual({ known: false, reason: 'notApplicable' });
+  });
+
+  it('a replay with a not-applicable sidecar stays notApplicable after a committed file appears (C38)', async () => {
+    // the committed files now hold a valid Zandvoort file
+    const committed = tmp();
+    writeJson(join(committed, `${ZANDVOORT}.json`), zandvoortTrackFile());
+    const probe = trackProbe();
+    await run(live.file, [probe.feature], { tracks: (id) => recordingTrack(live.file, id, committed, log) });
+    expect(probe.seen.length).toBeGreaterThan(0);
+    for (const track of [probe.seen[0], probe.seen.at(-1)]) expect(track).toEqual(unknown('notApplicable'));
+
+    // the live run's stream: the segment as it came in, on a notApplicable track (a sidecar that fails validation is
+    // notApplicable, whatever the committed files hold)
+    const asLive = join(tmp(), 'as-live.pwrec.gz');
+    copyFileSync(FULL_LAP, asLive);
+    writeJson(trackSidecar(asLive), { ...zandvoortTrackFile(), name: 42 });
+    const liveHash = await topicStreamHash(asLive, { features });
+    // the stream follows the track: with the committed Zandvoort file it is another one
+    expect(await topicStreamHash(FULL_LAP, { features })).not.toBe(liveHash);
+    // the replay of the session file the live run wrote, with the committed Zandvoort file there by now
+    expect(await topicStreamHash(live.file, { features })).toBe(liveHash);
+  }, 120_000);
 });
 
 describe('a replay and the sidecar', () => {

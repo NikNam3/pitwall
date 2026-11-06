@@ -5,6 +5,7 @@
   import type { Component } from 'svelte';
   import { onDestroy } from 'svelte';
   import type { TopicStore } from '../../connection/topic-store.svelte.ts';
+  import * as text from '../../kit/text.ts';
   import { role } from '../../theme/index.ts';
   import { TOP_BAR } from './layout.ts';
   import { TopBarModel } from './model.svelte.ts';
@@ -19,8 +20,11 @@
     /** The open workbook's name and the way to its picker, for the `workbook` segment. */
     workbookName?: string | undefined;
     onPickWorkbook?: () => void;
+    /** The window's edit mode and its toggle (`layout.edit.toggle`); the toggle shows only when the shell passes it. */
+    editing?: boolean;
+    onToggleEditing?: (() => void) | undefined;
   };
-  let { store, feedId, send, sendReplay, onShown, workbookName, onPickWorkbook = () => {} }: Props = $props();
+  let { store, feedId, send, sendReplay, onShown, workbookName, onPickWorkbook = () => {}, editing = false, onToggleEditing }: Props = $props();
 
   // The bar is made per feed (the caller keys it); the feed and callbacks never change while it lives.
   // svelte-ignore state_referenced_locally
@@ -52,6 +56,16 @@
       {@const Segment = SEGMENTS.get(name)}
       <span class="segment" data-testid="segment-{name}">{#if Segment}<Segment {bar} />{/if}</span>
     {/each}
+    {#if onToggleEditing !== undefined}
+      <button
+        type="button"
+        class="pw-button"
+        class:on={editing}
+        aria-pressed={editing}
+        style:color={role(editing ? 'text' : 'textFaint')}
+        onclick={onToggleEditing}>{text.editLayout}</button
+      >
+    {/if}
   </div>
 </div>
 
@@ -74,6 +88,9 @@
   .segment {
     display: inline-flex;
     gap: var(--pw-header-pad);
+  }
+  .on {
+    font-weight: bold;
   }
   /* A segment with nothing to show (no workbook open, no alert) takes no gap. */
   .segment:not(:has(*)):empty {

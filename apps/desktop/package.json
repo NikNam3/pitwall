@@ -6,7 +6,7 @@
   "main": "dist/main.cjs",
   "scripts": {
     "build": "node scripts/build.ts",
-    "start": "pnpm --filter @pitwall/ui build && pnpm build && electron .",
+    "start": "pnpm -w gen && pnpm --filter @pitwall/ui build && pnpm build && electron .",
     "dev": "pnpm build && electron . --dev",
     "typecheck": "tsc -p tsconfig.json"
   },

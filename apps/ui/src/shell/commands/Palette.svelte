@@ -9,9 +9,11 @@
     registry: CommandRegistry;
     /** Key to command id. */
     bindings: ReadonlyMap<string, string>;
+    /** Which commands it lists (a group's `+` lists the `panel.add.*` ones); every command when absent. */
+    filter?: ((commandId: string) => boolean) | undefined;
     onClose?: () => void;
   };
-  let { registry, bindings, onClose = () => {} }: Props = $props();
+  let { registry, bindings, filter = () => true, onClose = () => {} }: Props = $props();
 
   let query = $state('');
   let selected = $state(0);
@@ -31,7 +33,7 @@
   const keyOf = $derived(new Map([...bindings].map(([key, id]) => [id, key] as const).reverse()));
   // Titles that contain the query as typed come first.
   const results = $derived.by(() => {
-    const matching = registry.list().filter((c) => fuzzy(query, c.title));
+    const matching = registry.list().filter((c) => filter(c.id) && fuzzy(query, c.title));
     const q = query.trim().toLowerCase();
     return q === '' ? matching : [...matching.filter((c) => c.title.toLowerCase().includes(q)), ...matching.filter((c) => !c.title.toLowerCase().includes(q))];
   });

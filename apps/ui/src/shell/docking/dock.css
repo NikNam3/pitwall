@@ -37,3 +37,17 @@
   width: 100%;
   height: 100%;
 }
+
+/* Edit mode: a group's `+` at the end of its tab strip, quiet until hovered. */
+.pw-dock .pw-dock-actions {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  padding: 0 var(--pw-header-pad);
+}
+.pw-dock .pw-dock-add {
+  color: var(--pw-textFaint);
+}
+.pw-dock .pw-dock-add:hover {
+  color: var(--pw-text);
+}
