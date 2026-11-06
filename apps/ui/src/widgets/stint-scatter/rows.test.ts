@@ -12,7 +12,7 @@
 //  - `compoundRows(compounds: readonly CompoundEstimate[]): CompoundRow[]`, where
 //    `CompoundRow = { compound: string; toSoft: CellPart; degPerLap: CellPart; sd: CellPart; laps: string; source: EstimateSource; role: Role | undefined }`:
 //    one row per compound in the analysis's order (its pooled estimate, spec 5.1); `compound` is the kit compound letter;
-//    TO SOFT and DEG/LAP in signed seconds, SD in seconds, three decimals each (kit formats); LAPS the analysis's `laps`
+//    TO MED (the offset to the medium) and DEG/LAP in signed seconds, SD in seconds, three decimals each (kit formats); LAPS the analysis's `laps`
 //    as a whole number (`'41'`, `'0'`); an unknown value is the kit's unknown part; the source
 //    passes through for the kit badge (no switch on its kind here, C68); a default row is muted (`textDim`).
 import { unknown } from '@pitwall/domain';
@@ -111,7 +111,7 @@ describe('compoundRows', () => {
     expect(rows.map((r) => r.compound)).toEqual(['S', 'M', 'H', 'I']);
   });
 
-  it('shows TO SOFT as the offset in signed seconds to three decimals', () => {
+  it('shows TO MED as the offset in signed seconds to three decimals', () => {
     expect(rows.slice(0, 3).map((r) => r.toSoft)).toEqual([{ text: '+0.000' }, { text: '+0.412' }, { text: '+0.780' }]);
   });
 

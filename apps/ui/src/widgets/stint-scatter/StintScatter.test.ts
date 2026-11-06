@@ -4,7 +4,7 @@
 // `StintScatter.svelte` (props `WidgetProps<typeof widget>`):
 //  - every text row is an element of class `line` (as the damage card), one row high;
 //  - full: a line naming the current stint's basis (`basis wear` / `basis age`), the chart, then the compounds table:
-//    a header line (`CMP`, `TO SOFT`, `DEG/LAP`, `SD`, `LAPS`, `SOURCE`) and one line per compound starting with its
+//    a header line (`CMP`, `TO MED`, `DEG/LAP`, `SD`, `LAPS`, `SOURCE`) and one line per compound starting with its
 //    letter; the kit `SourceBadge` right after DEG/LAP, LAPS (the analysis's `laps`, spec 5.1) after SD, then the source
 //    in words (`session`, `calibration`, `default`) hovered like the badge; a default row muted (`textDim`). The columns
 //    as the approved mockup `docs/design/2026-11-06-sp4.1a/source-badge.html` (LAPS 4 wide, right-aligned);
@@ -96,7 +96,7 @@ describe('StintScatter: the compounds table (full)', () => {
   it('shows the header and one line per compound in the analysis\'s order', async () => {
     const c = await show('threeStints');
     const header = lines(c).find((l) => textOf(l).startsWith('CMP'));
-    expect(header && textOf(header)).toMatch(/^CMP TO SOFT DEG\/LAP SD LAPS SOURCE$/);
+    expect(header && textOf(header)).toMatch(/^CMP TO MED DEG\/LAP SD LAPS SOURCE$/);
     expect(['S', 'M', 'H', 'I'].map((letter) => compoundLine(c, letter) !== undefined)).toEqual([true, true, true, true]);
     expect(lines(c).indexOf(compoundLine(c, 'S')!)).toBeLessThan(lines(c).indexOf(compoundLine(c, 'H')!));
   });
@@ -112,7 +112,7 @@ describe('StintScatter: the compounds table (full)', () => {
   it('the compounds table shows LAPS and the source word and badge per row (the approved mockup, the first case)', async () => {
     const c = await show('oneStint');
     const header = lines(c).find((l) => textOf(l).startsWith('CMP'));
-    expect(header && textOf(header)).toMatch(/^CMP TO SOFT DEG\/LAP SD LAPS SOURCE$/);
+    expect(header && textOf(header)).toMatch(/^CMP TO MED DEG\/LAP SD LAPS SOURCE$/);
     expect(['S', 'M', 'H'].map((l) => textOf(compoundLine(c, l)!))).toEqual([
       'S +0.000 +0.085 0.018 14 session',
       'M +0.412 +0.055 0.009 41 session',

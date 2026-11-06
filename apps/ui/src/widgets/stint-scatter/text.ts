@@ -16,7 +16,7 @@ export const basis = { wear: 'basis wear', age: 'basis age' } as const satisfies
 export const fitUnknown = 'fit';
 
 /** Headers of the compounds table by column key. */
-export const compoundHeaders = { cmp: 'CMP', toSoft: 'TO SOFT', degPerLap: 'DEG/LAP', sd: 'SD', laps: 'LAPS', source: 'SOURCE' } as const;
+export const compoundHeaders = { cmp: 'CMP', toSoft: 'TO MED', degPerLap: 'DEG/LAP', sd: 'SD', laps: 'LAPS', source: 'SOURCE' } as const;
 
 /**
  * A stint's fit label: the compound letter, the first lap as `L01`, an en dash and the last lap in two digits for a closed

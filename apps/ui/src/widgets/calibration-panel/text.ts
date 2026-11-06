@@ -88,7 +88,7 @@ export const neverPace = { notForPace: 'other', inLap: 'in', outLap: 'out', neut
 export const neverPaceHover = 'not a pace lap: never used';
 
 /** Headers of the values table by column key. */
-export const valueHeaders = { cmp: 'CMP', offset: 'TO SOFT', deg: 'DEG/LAP', sd: 'SD', fl: 'FL', fr: 'FR', rl: 'RL', rr: 'RR', n: 'N' } as const;
+export const valueHeaders = { cmp: 'CMP', offset: 'TO MED', deg: 'DEG/LAP', sd: 'SD', fl: 'FL', fr: 'FR', rl: 'RL', rr: 'RR', n: 'N' } as const;
 /** An entry no source of the set covers. */
 export const noSource = 'no source in this set covers it';
 export const overrideHover = (value: string): string => `your override ${value}`;
