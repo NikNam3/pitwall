@@ -7,7 +7,7 @@ const k = <T>(v: T): Known<T> => known(v, 0);
 const BAND = known({ lo: 80, hi: 100 }, 0);
 const BRAKE_BAND = known({ lo: 300, hi: 1000 }, 0);
 const rd = (value: Known<number>, over: Partial<BandReading> = {}): BandReading => ({
-  value, state: value.known ? k('in') : value, band: BAND, outForFullLap: false, ...over,
+  value, state: value.known ? k('in') : value, band: BAND, outForFullLap: false, lapState: unknown('insufficientData'), ...over,
 });
 const four = <T>(f: (name: keyof Corners<unknown>) => T): Corners<T> => ({ fl: f('fl'), fr: f('fr'), rl: f('rl'), rr: f('rr') });
 
@@ -95,6 +95,30 @@ describe('cornerBlockRows', () => {
     expect(rows.corners.fr.brake.role).toBeUndefined();
     expect(rows.corners.rl.brake.role).toBe('critical');
     expect(rows.corners.rr.brake.role).toBeUndefined();
+  });
+
+  // C43: the cell shows the judgement the band advisory raises on (the 2026-11-06 bug: an advisory and no amber)
+  it("colours the surface and a brake warning when car-bands' judged lap is out (lapState), without any live state", () => {
+    const rows = cornerBlockRows(
+      car({ brake: { fl: k(650) } }),
+      bands({ fr: { surfaceC: surface(k(98), { lapState: k('above') }) }, brakes: { fl: brake(k(650), { lapState: k('below') }) } }),
+      wear(),
+    );
+    expect(rows.corners.fr.surface.role).toBe('warning');
+    expect(rows.corners.fl.brake.role).toBe('warning');
+    // the other corners' judged laps are unknown: no role
+    expect(rows.corners.fl.surface.role).toBeUndefined();
+    expect(rows.corners.rr.brake.role).toBeUndefined();
+  });
+
+  it('a judged lap in band gives no role; a whole lap out stays critical beside an out lapState', () => {
+    const rows = cornerBlockRows(
+      car(),
+      bands({ fr: { surfaceC: surface(k(104), { lapState: k('in') }) }, brakes: { fr: brake(k(1043), { outForFullLap: true, lapState: k('above') }) } }),
+      wear(),
+    );
+    expect(rows.corners.fr.surface.role).toBeUndefined();
+    expect(rows.corners.fr.brake.role).toBe('critical');
   });
 
   it('gives the engine its band role', () => {

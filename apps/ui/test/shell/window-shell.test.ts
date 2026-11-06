@@ -9,7 +9,7 @@
 //    carrying the whole window (id, geometry, fontPx, layout, panels);
 //  - its root element is the first child of the container and carries `--pw-font-px`;
 //  - texts: `kit/text.ts` named export `addWidget` (the button's accessible name).
-import type { Geometry, Workbook, WorkbookWindow } from '@pitwall/contracts';
+import { CONTRACT_VERSION, type Geometry, type Workbook, type WorkbookWindow } from '@pitwall/contracts';
 import { cleanup, fireEvent, render, screen } from '@testing-library/svelte';
 import { carId, type FeedId, feedId } from '@pitwall/domain';
 import { tick } from 'svelte';
@@ -259,6 +259,81 @@ describe('WindowShell: an unknown window id', () => {
     lastMount()[3]({ L: 'fresh' }, panels);
     await vi.advanceTimersByTimeAsync(250);
     expect(updates()).toEqual([{ id: 'ghost', layout: { L: 'fresh' }, panels }]);
+  });
+});
+
+// C61 "with progress shown": until the window has the bridge's `hello` and its workbook, a centred loading screen
+// (test id `loading-screen`, wording in kit/text.ts `loading`) says what the bridge is doing.
+describe('WindowShell: the loading screen', () => {
+  const hello = async (connection: FakeConnection) => {
+    connection.push({ type: 'hello', contractVersion: CONTRACT_VERSION, feeds: [{ feedId: feedId('f1'), kind: 'udp', label: 'x' }] });
+    await tick();
+  };
+  const starting = async (connection: FakeConnection, done: number, total: number) => {
+    connection.push({ type: 'starting', step: 'rebuild', done, total });
+    await tick();
+  };
+  const loading = () => screen.queryByTestId('loading-screen');
+
+  it('says "starting the bridge" before the bridge has said anything (no link yet)', () => {
+    const { mountShell } = setup();
+    mountShell();
+    expect(loading()?.textContent).toContain('starting the bridge');
+  });
+
+  it('says "starting the bridge" while the starting bridge does not know the count yet (total 0)', async () => {
+    const { connection, mountShell } = setup();
+    mountShell();
+    await starting(connection, 0, 0);
+    expect(loading()?.textContent).toContain('starting the bridge');
+    expect(loading()?.textContent).not.toContain('rebuilding');
+  });
+
+  it('says "rebuilding sessions <done>/<total>" while the bridge rebuilds, and follows each update', async () => {
+    const { connection, mountShell } = setup();
+    mountShell();
+    await starting(connection, 0, 7);
+    expect(loading()?.textContent).toContain('rebuilding sessions 0/7');
+    await starting(connection, 3, 7);
+    expect(loading()?.textContent).toContain('rebuilding sessions 3/7');
+    expect(loading()?.textContent).not.toContain('starting the bridge');
+  });
+
+  it('keeps the progress across the reconnect to the serving bridge, until its hello', async () => {
+    const { connection, mountShell } = setup();
+    mountShell();
+    await starting(connection, 7, 7);
+    connection.close();
+    connection.reopen();
+    await tick();
+    expect(loading()?.textContent).toContain('rebuilding sessions 7/7');
+  });
+
+  it('says "loading the workbook" once hello has arrived and the workbook has not', async () => {
+    const { connection, mountShell } = setup();
+    mountShell();
+    await starting(connection, 7, 7);
+    await hello(connection);
+    expect(loading()?.textContent).toContain('loading the workbook');
+    expect(loading()?.textContent).not.toContain('rebuilding');
+  });
+
+  it('is gone once the window has both hello and its workbook', async () => {
+    const { connection, snapshot, mountShell } = setup();
+    mountShell();
+    await hello(connection);
+    expect(loading()).not.toBeNull();
+    await snapshot(book());
+    expect(loading()).toBeNull();
+  });
+
+  it('a workbook without a hello is not enough: the loading screen stays', async () => {
+    const { connection, snapshot, mountShell } = setup();
+    mountShell();
+    await snapshot(book());
+    expect(loading()).not.toBeNull();
+    await hello(connection);
+    expect(loading()).toBeNull();
   });
 });
 
