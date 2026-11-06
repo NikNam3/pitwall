@@ -266,4 +266,31 @@ describe('pit-loss', () => {
     expect(without).toMatchObject({ known: true, value: 24_950 });
     expect(withPenalties).toEqual(without);
   });
+
+  // SP4.1a fx3b (ruling R37; C43, C62a): the calibration panel's STOPS column is the unit's count of the stops its
+  // aggregate takes the median of per condition: `used` stops with a known loss, each session counted once.
+  it('samples counts the sources (stops) the aggregate used', () => {
+    const samplesOf = (condition: Condition) => {
+      const samples = PIT_LOSS_PRIORS.entries[`pitLoss.ms.${condition}`]?.samples;
+      if (samples === undefined) throw new Error(`pitLoss.ms.${condition} declares no samples`);
+      return samples;
+    };
+    // session 1: two green stops used, a green stop that served a penalty and one without a clean reference (both left
+    // out), one VSC stop; session 2: one green stop. Session 1 is named by two sources (two of its stints).
+    const s1 = [
+      stopWith(0, { lossMs: 24_000 }),
+      stopWith(1, { lossMs: 26_000 }),
+      stopWith(2, { lap: 14, lossMs: 40_000, penaltyServed: true }),
+      stopWith(3, { lossMs: 30_000, refsValid: false }),
+      stopWith(4, { lap: 16, lossMs: 12_000, flag: 'vsc' }),
+    ];
+    const s2 = [stopWith(0, { lossMs: 22_000 })];
+    const sources = [storedSource(1, s1, 0, 1), storedSource(1, s1, 1, 1), storedSource(2, s2, 0, 1)];
+    // the aggregate's median rests on three green stops: 22 000, 24 000, 26 000
+    expect(PIT_LOSS_PRIORS.entries['pitLoss.ms.green']?.aggregate?.(sources, ctx)).toMatchObject({ known: true, value: 24_000 });
+    expect(samplesOf('green')(sources, ctx)).toBe(3);
+    expect(samplesOf('vsc')(sources, ctx)).toBe(1);
+    expect(samplesOf('sc')(sources, ctx)).toBe(0);
+    expect(samplesOf('green')([], ctx)).toBe(0);
+  });
 });

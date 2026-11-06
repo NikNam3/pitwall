@@ -921,3 +921,74 @@ describe('CalibrationStore: the defaults of entries no source covers (R35)', () 
     expect(Object.keys(defaultsOf(t, id)).toSorted()).toEqual(['fake.limitPct', 'fake.meanLapMs']);
   });
 });
+
+// SP4.1a fx3b (ruling R37; C43, C62a, C65): the calibration panel's N and STOPS columns and the set line's `<m> missing`
+// come from `calibration.values`, never from counting in the UI. Per key whose unit declares `samples` the store lists
+// that function over the set's resolved sources (the skipped ones left out, as from every aggregate) and the set's
+// context; per set it lists how many of its sources it skipped as `missing` (a `stale` one is not missing).
+describe('CalibrationStore: samples and the missing count (R37)', () => {
+  /**
+   * `fakeFeatures`' unit with `samples` on `fake.meanLapMs` (the sources of at least 3 laps, times the config's
+   * `fake.weight`); `fake.lapCount` and the override-only `fake.limitPct` declare none. Every samples call's sources
+   * are recorded.
+   */
+  function samplesFeatures() {
+    const base = fakeFeatures();
+    const [decl] = base.features[0]?.priors ?? [];
+    if (decl === undefined) throw new Error('fakeFeatures declares no priors');
+    const calls: StoredSource[][] = [];
+    const withSamples = definePriors('fake', {
+      ...decl,
+      entries: {
+        ...decl.entries,
+        'fake.meanLapMs': {
+          ...decl.entries['fake.meanLapMs']!,
+          samples: (sources, ctx) => {
+            calls.push([...sources]);
+            return sources.filter((s) => s.laps.length >= 3).length * weightOf(ctx);
+          },
+        },
+      },
+    });
+    const features: Feature[] = [{ name: 'fake', calculators: [], topics: [], priors: [withSamples] }];
+    return { ...base, features, samplesCalls: calls };
+  }
+
+  const valuesOf = (t: ReturnType<typeof setup>, id: string): CalibrationValuesValue['bySet'][string] => {
+    const values = t.last<CalibrationValuesValue>('calibration.values').bySet[id];
+    if (values === undefined) throw new Error(`no values of set ${id}`);
+    return values;
+  };
+
+  it('a set\'s values carry each key\'s samples and the set\'s missing count', () => {
+    const at = (uid: string, d: number, lastLap: number) => trackSession(uid, { startedAt: day(d), stints: [{ car: 0, firstLap: 1, lastLap }] });
+    const long = at('long', 1, 5), short = at('short', 2, 2), gone = at('gone', 3, 5), stale = at('stale', 4, 5), deleted = at('deleted', 5, 5);
+    const features = samplesFeatures();
+    const t = setup({ sessions: [long, short, gone, stale, deleted], features, config: { fake: { weight: 2 } } });
+    const id = t.createSet(TRACK, 'Set', [sourceOf(long, 0, 1), sourceOf(short, 0, 1), sourceOf(gone, 0, 1), sourceOf(stale, 0, 1), sourceOf(deleted, 0, 1)]);
+    const empty = t.createSet(TRACK, 'Empty');
+
+    // Every source readable: the four stints of 5 laps are four samples, times the config's weight 2 (C47); none is missing.
+    expect(valuesOf(t, id).samples).toEqual({ 'fake.meanLapMs': 8 });
+    expect(valuesOf(t, id).missing).toBe(0);
+
+    // A rebuild drops one stint, one session awaits its rebuild (C61), one is deleted.
+    t.repo.sessions = [long, short, trackSession('gone', { startedAt: day(3), stints: [] }), staleOf(stale)];
+    const calls = features.samplesCalls.length;
+    t.store.recompute('rebuild');
+
+    // Only the keys that declare `samples` are listed: the unit's count over the readable sources (the long one).
+    expect(valuesOf(t, id).samples).toEqual({ 'fake.meanLapMs': 2 });
+    // The lost stint and the deleted session are missing; the stale session is not.
+    expect(valuesOf(t, id).missing).toBe(2);
+    expect(t.fits(id).filter((f) => f.skipped === 'missing')).toHaveLength(2);
+    // The samples function receives the set's readable sources only, as every aggregate does.
+    const after = features.samplesCalls.slice(calls);
+    expect(after.length).toBeGreaterThan(0);
+    expect(after.some((c) => c.map((s) => s.source.sessionUid).toSorted().join() === 'long,short')).toBe(true);
+    expect(after.flat().every((s) => s.source.sessionUid === 'long' || s.source.sessionUid === 'short')).toBe(true);
+
+    // A set without a source: no sample, nothing missing.
+    expect(valuesOf(t, empty)).toMatchObject({ samples: { 'fake.meanLapMs': 0 }, missing: 0 });
+  });
+});

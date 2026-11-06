@@ -105,4 +105,30 @@ describe('degradation priors', () => {
     expect(two).toEqual({ 9: { excluded: 'outLap' }, 10: 'used', 11: 'used', 12: 'used', 13: 'downWeighted', 14: 'used', 15: 'used' });
     expect(two).toEqual(usesOf(stints[1]!.laps));
   });
+
+  // SP4.1a fx3b (ruling R37; C43, C62a): the calibration panel's N column is the unit's count of the sources its
+  // aggregate pools per compound: those on the compound with a fit (at least two pace laps), the one rule `aggregate` uses.
+  it('samples counts the sources (stops) the aggregate used', () => {
+    const medium = { actual: 'C2', visual: 'medium' } as const;
+    // two medium stints the filter fits, one medium stint of one lap it cannot fit (left out), one soft stint
+    const fitA = storedSource(stintLaps({ from: 1, to: 10, ...medium, noise: alternating(100) }), { phase: PRACTICE });
+    const fitB = storedSource(stintLaps({ car: 1, from: 1, to: 8, nu: 60, ...medium, noise: alternating(80) }), { phase: PRACTICE });
+    const oneLap = storedSource(stintLaps({ car: 0, from: 12, to: 12, ...medium }), { phase: PRACTICE });
+    const soft = storedSource(stintLaps({ from: 1, to: 9, visual: 'soft', noise: alternating(100) }), { phase: PRACTICE });
+    const sources = [fitA, oneLap, fitB, soft];
+    // the one-lap stint is left out of the aggregate: the pooled ν is the same without it
+    expect(entry('degradation.nuMsPerLap.medium').aggregate!(sources, CTX)).toEqual(entry('degradation.nuMsPerLap.medium').aggregate!([fitA, fitB, soft], CTX));
+
+    const expected = { soft: 1, medium: 2, hard: 0, inter: 0, wet: 0 } as const;
+    for (const [compound, n] of Object.entries(expected)) {
+      for (const name of ['alphaOffsetMs', 'nuMsPerLap', 'nuSdMs']) {
+        const samples = entry(`degradation.${name}.${compound}`).samples;
+        expect(samples, `degradation.${name}.${compound} declares samples`).toBeDefined();
+        expect(samples!(sources, CTX), `degradation.${name}.${compound}`).toBe(n);
+      }
+    }
+    // no source, no sample; a source the aggregate cannot fit is never counted
+    expect(entry('degradation.nuMsPerLap.medium').samples!([], CTX)).toBe(0);
+    expect(entry('degradation.nuMsPerLap.medium').samples!([oneLap], CTX)).toBe(0);
+  });
 });

@@ -31,12 +31,13 @@ import { cleanup, fireEvent, render } from '@testing-library/svelte';
 import type { Component } from 'svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import ActionsHarness from '../../../test/kit/ActionsHarness.svelte';
-import { unknownMark } from '../../kit/text.ts';
-import { formatDay, formatLapRange, formatSigma, formatSignedSeconds } from '../../kit/values/format.ts';
+import { calibration, sourceMark, unknownMark } from '../../kit/text.ts';
+import { formatCount, formatDay, formatLapRange, formatSeconds, formatSigma, formatSignedSeconds } from '../../kit/values/format.ts';
+import { sourceTitle } from '../../kit/values/source-badge.ts';
 import { role } from '../../theme/index.ts';
 import CalibrationPanel from './CalibrationPanel.svelte';
 import {
-  cases, fp1Kuh, fp2LinSoft, key, MONZA, raceKuh, raceLin, SILVERSTONE, type PanelData,
+  cases, fp1Kuh, fp2LinSoft, key, leagueDefaults, MONZA, raceKuh, raceLin, SILVERSTONE, TRACK_NOTE, type PanelData,
 } from './fixtures.ts';
 import * as text from './text.ts';
 import { widget } from './widget.ts';
@@ -101,6 +102,12 @@ function colourOf(el: HTMLElement | undefined, stop: HTMLElement): string {
   }
   return '';
 }
+/** Every hover on or around a cell: its nearest titled ancestor's (or its own) and its descendants'. */
+const titlesAround = (cell: HTMLElement): string[] =>
+  [cell.closest('[title]'), ...cell.querySelectorAll('[title]')].flatMap((e) => (e === null ? [] : [e.getAttribute('title') ?? '']));
+/** Shown dim: the `textDim` role inline, or inside the panel's `dim` class. */
+const isDim = (el: HTMLElement | undefined, stop: HTMLElement): boolean =>
+  el !== undefined && (colourOf(el, stop) === role('textDim') || el.closest('.dim') !== null);
 
 const league = { trackId: SILVERSTONE, setId: 'league' } as const;
 
@@ -271,12 +278,90 @@ describe('calibration-panel: what a source and a value show', () => {
     }
   });
 
-  it('a value no source covers shows the unknown mark with why on hover; the panel carries no ᶜ (README Q3 A)', () => {
+  // Ported (SP4.1a fx3b, C82): soft's DEG/LAP now has a default (R35); a value without a source and without a default
+  // (tyre-life's wear rates declare no fallback) keeps the unknown mark.
+  it('a value no source covers and no default fills shows the unknown mark with why on hover; the panel carries no ᶜ (README Q3 A)', () => {
     const { container: c } = mount(cases.activeLeague);
-    const cell = get(c, `value-${key.deg('soft')}`);
+    const cell = get(c, `value-${key.wear('soft', 'fl')}`);
     expect(cell.textContent?.trim()).toBe(unknownMark.insufficientData);
     expect(cell.closest('[title]')?.getAttribute('title')).toBe(text.noSource);
     expect(c.textContent).not.toContain('ᶜ');
+  });
+
+  // SP4.1a fx3b (R35, R37; README Q3 A; C65, C68): a value no source covers shows the run's default from the topic's
+  // `defaults`, followed by the kit's `SourceBadge` (`ᵈ`) whose hover is the kit's `sourceTitle` (the default's note),
+  // the value dim (`textDim`) as the mockup draws it. A covered value carries no mark.
+  it('an uncovered value shows its default with ᵈ and the default\'s note', () => {
+    const { container: c } = mount(cases.activeLeague);
+    const shown: [string, string][] = [
+      [key.offset('soft'), formatSignedSeconds(-405, 3)],
+      [key.deg('soft'), formatSignedSeconds(60, 3)],
+      [key.sd('soft'), formatSeconds(60, 3)],
+      [key.offset('hard'), formatSignedSeconds(367, 3)],
+      [key.sd('hard'), formatSeconds(60, 3)],
+      [key.pit('sc'), formatSeconds(9_800, 1)],
+    ];
+    for (const [k, value] of shown) {
+      const cell = get(c, `value-${k}`);
+      const def = leagueDefaults[k];
+      if (def === undefined) throw new Error(`the fixture lists no default for ${k}`);
+      expect(cell.textContent, k).toContain(value);
+      expect(cell.textContent, k).toContain(sourceMark.default);
+      expect(cell.textContent, k).not.toContain(unknownMark.insufficientData);
+      expect(titlesAround(cell), k).toContain(sourceTitle(def.source));
+      expect(sourceTitle(def.source), k).toContain(TRACK_NOTE);
+      expect(isDim(cellWithText(cell, value), c), k).toBe(true);
+    }
+    // covered values carry no mark: medium's from its sources, hard's DEG/LAP from the override, green from its stops
+    for (const k of [key.deg('medium'), key.deg('hard'), key.pit('green')]) expect(get(c, `value-${k}`).textContent, k).not.toContain(sourceMark.default);
+    // compact mode's deg and pit lines show the defaults with their mark too
+    cleanup();
+    const compact = mount(cases.activeLeague, { mode: 'compact' }).container;
+    for (const k of [key.deg('soft'), key.pit('sc')]) expect(get(compact, `value-${k}`).textContent, k).toContain(sourceMark.default);
+  });
+
+  // SP4.1a fx3b (R37, C65): N per compound and STOPS per condition are the topic's `samples` (the units' counts), in
+  // cells `samples-degradation.nuMsPerLap.<compound>` and `samples-pitLoss.ms.<condition>`; the panel counts nothing.
+  it('N and STOPS show the topic\'s samples', () => {
+    const { container: c } = mount(cases.activeLeague);
+    // the headers, wording of the widget's text.ts (C68): `valueHeaders.n` and `pitHeaders.stops`, as the mockup's
+    const headers = { n: (text.valueHeaders as Record<string, string>)['n'], stops: (text.pitHeaders as Record<string, string>)['stops'] };
+    expect(headers).toEqual({ n: 'N', stops: 'STOPS' });
+    // N after RR, STOPS after SET (the mockup's columns)
+    expect(c.textContent).toMatch(new RegExp(`${text.valueHeaders.rr}\\s+${headers.n}\\b`));
+    expect(c.textContent).toMatch(new RegExp(`${text.pitHeaders.set}\\s+${headers.stops}\\b`));
+    const expected: [string, number][] = [
+      [key.deg('soft'), 0], [key.deg('medium'), 3], [key.deg('hard'), 0], [key.pit('green'), 6], [key.pit('vsc'), 1], [key.pit('sc'), 0],
+    ];
+    for (const [k, n] of expected) expect(get(c, `samples-${k}`).textContent?.trim(), k).toBe(formatCount(n));
+
+    // other samples in the topic, other numbers: nothing is counted from the fits (three medium sources) or the stops
+    cleanup();
+    const league = cases.activeLeague.values.bySet['league']!;
+    const samples = { ...league.samples, [key.deg('medium')]: 7, [key.pit('green')]: 11 };
+    const other = mount({ ...cases.activeLeague, values: { bySet: { ...cases.activeLeague.values.bySet, league: { ...league, samples } } } }).container;
+    expect(get(other, `samples-${key.deg('medium')}`).textContent?.trim()).toBe(formatCount(7));
+    expect(get(other, `samples-${key.pit('green')}`).textContent?.trim()).toBe(formatCount(11));
+  });
+
+  // SP4.1a fx3b (R37, C65; mockup `created 28 Sep · last used 15 Oct · 4 sources, 1 missing`): the sources are the set's,
+  // the missing count is the topic's `missing`.
+  it('the set line shows the sources and the missing count', () => {
+    const { container: c } = mount(cases.activeLeague);
+    expect(c.textContent).toContain(`${calibration.sources(4)}, ${calibration.missing(1)}`);
+
+    // the topic's count, not a count of the skipped fits (one)
+    cleanup();
+    const league = cases.activeLeague.values.bySet['league']!;
+    const two = mount({ ...cases.activeLeague, values: { bySet: { ...cases.activeLeague.values.bySet, league: { ...league, missing: 2 } } } }).container;
+    expect(two.textContent).toContain(`${calibration.sources(4)}, ${calibration.missing(2)}`);
+    expect(two.textContent).not.toContain(calibration.missing(1));
+
+    // the soft source stale instead: nothing is missing, and the line says no missing count
+    cleanup();
+    const stale = mount(cases.staleSource).container;
+    expect(stale.textContent).toContain(calibration.sources(4));
+    expect(stale.textContent).not.toContain(calibration.missing(0));
   });
 
   it('compact mode drops the controls: no set actions, override fields or suggestions', () => {

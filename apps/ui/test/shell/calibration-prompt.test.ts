@@ -56,12 +56,15 @@ const SETS: CalibrationSetsValue = {
 const TRACK_SET_IDS = ['league', 'after-floor-upgrade', 'pre-season'];
 
 const source = (firstLap: number) => ({ sessionUid: 'old', weekendId: 'w0', feedCar: carId(5), car: carId(5), firstLap, excludedLaps: [] });
-// league: one of its sources is missing (README "1 missing").
+// league: one of its sources is missing (README "1 missing"), one stale; the store counts the missing one (`missing`,
+// SP4.1a fx3b: the shell counts nothing, C65).
 const VALUES: CalibrationValuesValue = {
   bySet: {
     league: {
       entries: {},
       defaults: {},
+      samples: {},
+      missing: 1,
       fits: [
         { source: source(3), skipped: 'missing', sessionDate: unknown('notApplicable'), phase: unknown('notApplicable'), driver: unknown('notApplicable'), compound: unknown('notApplicable') },
         { source: source(12), skipped: 'stale', sessionDate: unknown('notApplicable'), phase: unknown('notApplicable'), driver: unknown('notApplicable'), compound: unknown('notApplicable') },
@@ -179,6 +182,14 @@ describe('the start prompt', () => {
   it('a set with a missing source shows how many are missing; a stale one is not counted', async () => {
     await mount();
     expect(row('league').textContent).toContain('1 missing');
+    expect(row('after-floor-upgrade').textContent).not.toContain('missing');
+  });
+
+  // SP4.1a fx3b (R37, C65): the count is the topic's `missing`, not a count of the fits in the shell.
+  it('the missing count is the topic\'s, not counted from the fits', async () => {
+    const withoutFits = { entries: {}, defaults: {}, samples: {}, fits: [] };
+    await mount({ values: { bySet: { league: { ...withoutFits, missing: 2 }, 'after-floor-upgrade': { ...withoutFits, missing: 0 } } } });
+    expect(row('league').textContent).toContain('2 missing');
     expect(row('after-floor-upgrade').textContent).not.toContain('missing');
   });
 

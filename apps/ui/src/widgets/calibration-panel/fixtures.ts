@@ -143,16 +143,60 @@ export const SETS: CalibrationSet[] = [
   set('monza-test', MONZA, 'monza-test', '2026-08-20T12:00:00Z', []),
 ];
 
+/** The note of Silverstone's track-file defaults (the mockup's `default · Silverstone track file: community value (R3)`). */
+export const TRACK_NOTE = 'Silverstone track file: community value (R3)';
+/** The note of tyre-life's config defaults (its two limits). */
+export const TYRE_LIFE_NOTE = 'tyre-life config default (racinggames.gg)';
+type Defaults = CalibrationValuesValue['bySet'][string]['defaults'];
+const fromTrack = (value: number): Defaults[string] => ({ value: k(value), source: { kind: 'default', note: TRACK_NOTE, sessionShare: 0, parts: 'track default' } });
+const fromConfig = (value: number, note: string): Defaults[string] => ({ value: k(value), source: { kind: 'default', note, sessionShare: 0, parts: 'config default' } });
+
+/**
+ * `league`'s defaults (R35): the value a run on the set uses for each key no source covers, as the units' fallbacks give
+ * it. The mockup's S and H rows (offsets against medium: S −0.405 s, H +0.367 s, the mockup's 0, 0.405 and 0.772 to
+ * soft; DEG/LAP and SD 0.060 s) and its SC loss (9.8 s), each the track file's; hard's DEG/LAP is overridden, so covered.
+ * Tyre-life's wear rates declare no fallback; its two limits fall back to its config.
+ */
+export const leagueDefaults: Defaults = {
+  [key.offset('soft')]: fromTrack(-405), [key.deg('soft')]: fromTrack(60), [key.sd('soft')]: fromTrack(60),
+  [key.offset('hard')]: fromTrack(367), [key.sd('hard')]: fromTrack(60),
+  [key.wearLimit]: fromConfig(70, TYRE_LIFE_NOTE), [key.ageLossLimit]: fromConfig(2_000, 'tyre-life config default (pitwall estimate)'),
+  [key.pit('sc')]: fromTrack(9_800),
+};
+
+/** Per compound the degradation keys' samples (the sources the aggregate pooled on it: the N column). */
+const degSamples = (byCompound: Partial<Record<VisualCompound, number>>): Record<string, number> =>
+  Object.fromEntries(
+    (['soft', 'medium', 'hard', 'inter', 'wet'] as const).flatMap((c) => [key.offset(c), key.deg(c), key.sd(c)].map((kk) => [kk, byCompound[c] ?? 0])),
+  );
+/** Per condition the stops the pit-loss aggregate used (the STOPS column). */
+const pitSamples = (green: number, vsc: number, sc: number): Record<string, number> => ({ [key.pit('green')]: green, [key.pit('vsc')]: vsc, [key.pit('sc')]: sc });
+
+/**
+ * `league`'s samples: medium's three sources (the soft one is missing, so soft has none; hard none), the league race's
+ * six green stops and one VSC stop, no SC stop (the mockup's N and STOPS).
+ */
+export const leagueSamples: Record<string, number> = { ...degSamples({ medium: 3 }), ...pitSamples(6, 1, 0) };
+
 export const values = (softWhy: SkippedSource['skipped'] = 'missing'): CalibrationValuesValue => ({
   bySet: {
-    'pre-season': { entries: { [key.deg('medium')]: k(58) }, fits: [fitted(testKuh, TEST.date, 'medium', laps(2, 14, 92_400), 12, 58, 0)], defaults: {} },
-    league: { entries: leagueEntries, fits: leagueFits(softWhy), defaults: {} },
+    'pre-season': {
+      entries: { [key.deg('medium')]: k(58) },
+      fits: [fitted(testKuh, TEST.date, 'medium', laps(2, 14, 92_400), 12, 58, 0)],
+      defaults: {},
+      samples: { ...degSamples({ medium: 1 }), ...pitSamples(0, 0, 0) },
+      missing: 0,
+    },
+    // the soft source skipped as `missing` counts as missing; skipped as `stale` it does not (the store decides)
+    league: { entries: leagueEntries, fits: leagueFits(softWhy), defaults: leagueDefaults, samples: leagueSamples, missing: softWhy === 'missing' ? 1 : 0 },
     'after-floor-upgrade': {
       entries: { [key.deg('medium')]: k(49), [key.deg('hard')]: k(36) },
       fits: [fitted(fp1Kuh, FP1.date, 'medium', laps(4, 15, 91_300), 11, 49, 0), fitted(fp1LinHard, FP1.date, 'hard', laps(3, 13, 91_900), 9, 36, 0)],
       defaults: {},
+      samples: { ...degSamples({ medium: 1, hard: 1 }), ...pitSamples(0, 0, 0) },
+      missing: 0,
     },
-    'monza-test': { entries: {}, fits: [], defaults: {} },
+    'monza-test': { entries: {}, fits: [], defaults: {}, samples: { ...degSamples({}), ...pitSamples(0, 0, 0) }, missing: 0 },
   },
 });
 
