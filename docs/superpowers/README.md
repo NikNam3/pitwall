@@ -6,6 +6,6 @@ Current: the SP4 re-spec, `specs/2026-11-05-sp4a/`: `00-carry-over.md` (what car
 
 Done 2026-11-06: the pre-4.1 run (track sidecar always, panel edit mode, desktop start order; spec and plan in `docs/history/`). Still open: **loading screen during the startup rebuild** (C61 "progress shown"; another session works on it).
 
-In progress: the 4.1a brainstorm (calibration and estimation; 4.1b long run and weather after it). Sections 1–2 approved 2026-11-06; the spec follows.
+Current: **4.1a calibration and estimation**: spec `specs/2026-11-06-sp4.1a-calibration-and-estimation-design.md` (approved 2026-11-06), plan `plans/2026-11-06-sp4.1a-calibration-and-estimation.md` (awaiting the user's review and go). 4.1b (long run and weather) after it.
 
 Next: spec 4.1 (estimation and long run) from `01-sp4-sections.md`.
