@@ -36,25 +36,25 @@ describe('rain-outlook', () => {
   });
 
   it('2. samples at 0 (20 %), 5 (45 %), 15 (60 %) min: firstRain is the 5-min sample (index 1), within the horizon', () => {
-    expect(outlook(AT_0_5_15)).toEqual({ firstRain: { known: true, value: { index: 1, offsetMin: 5, rainPct: 45 } }, withinHorizon: true });
+    expect(outlook(AT_0_5_15)).toEqual({ firstRain: { known: true, at: 0, value: { index: 1, offsetMin: 5, rainPct: 45 } }, withinHorizon: true });
   });
 
   it('3. the same samples out of order, plus one at -5 min with 90 %: the same answer (sorted by offsetMin, offsetMin < 0 ignored)', () => {
     const shuffled = [sample(15, 60), sample(-5, 90), sample(5, 45), sample(0, 20)];
-    expect(outlook(shuffled)).toEqual({ firstRain: { known: true, value: { index: 1, offsetMin: 5, rainPct: 45 } }, withinHorizon: true });
+    expect(outlook(shuffled)).toEqual({ firstRain: { known: true, at: 0, value: { index: 1, offsetMin: 5, rainPct: 45 } }, withinHorizon: true });
   });
 
   it('4. first rain at 15 min: withinHorizon false by default (10 min); with horizonMin 20 it is true', () => {
     const later = [sample(0, 20), sample(5, 30), sample(15, 60)];
     const byDefault = outlook(later);
-    expect(byDefault.firstRain).toEqual({ known: true, value: { index: 2, offsetMin: 15, rainPct: 60 } });
+    expect(byDefault.firstRain).toEqual({ known: true, at: 0, value: { index: 2, offsetMin: 15, rainPct: 60 } });
     expect(byDefault.withinHorizon).toBe(false);
     expect(outlook(later, { horizonMin: 20 }).withinHorizon).toBe(true);
   });
 
   it('5. a sample at exactly rainPct (40 %) counts; 39 % does not', () => {
     expect(RAIN_OUTLOOK_CONFIG.defaults.rainPct).toBe(40);
-    expect(outlook([sample(5, 40)])).toEqual({ firstRain: { known: true, value: { index: 0, offsetMin: 5, rainPct: 40 } }, withinHorizon: true });
+    expect(outlook([sample(5, 40)])).toEqual({ firstRain: { known: true, at: 0, value: { index: 0, offsetMin: 5, rainPct: 40 } }, withinHorizon: true });
     expect(outlook([sample(5, 39)])).toEqual({ firstRain: unknown('notApplicable'), withinHorizon: false });
   });
 
