@@ -168,7 +168,7 @@
   /** Per set, how many of its sources the store skipped as missing. */
   const missingSources = $derived.by(() => {
     const bySet = (calibrationValues.state.status === 'ok' ? calibrationValues.state.value?.bySet : undefined) ?? {};
-    return new Map(Object.entries(bySet).map(([id, set]) => [id, set.fits.filter((fit) => fit.skipped === 'missing').length]));
+    return new Map(Object.entries(bySet).map(([id, set]) => [id, set.missing]));
   });
   const calibrationName = $derived(
     activeCalibration === undefined ? undefined : activeCalibration.setId === null ? text.calibration.defaults : activeCalibration.setName,

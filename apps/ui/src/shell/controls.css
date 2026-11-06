@@ -23,7 +23,9 @@
 /* A select is one character cell tall; its native inner line is a pixel taller than the cell and would overflow it. */
 select.pw-input {
   appearance: base-select;
-  line-height: calc(var(--pw-line) * 1em);
+  /* border-box: the line fits inside the 1 px frame; a customisable select keeps a minimum height of its own otherwise */
+  line-height: calc(var(--pw-line) * 1em - 2 * var(--pw-border-px));
+  min-height: 0;
 }
 
 /* The open list of a select, drawn by the browser's customisable picker: the quiet theme, nothing of its own. */
