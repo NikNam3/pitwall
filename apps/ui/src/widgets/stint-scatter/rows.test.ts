@@ -112,7 +112,7 @@ describe('compoundRows', () => {
   });
 
   it('shows TO MED as the offset in signed seconds to three decimals', () => {
-    expect(rows.slice(0, 3).map((r) => r.toSoft)).toEqual([{ text: '+0.000' }, { text: '+0.412' }, { text: '+0.780' }]);
+    expect(rows.slice(0, 3).map((r) => r.toSoft)).toEqual([{ text: '−0.412' }, { text: '+0.000' }, { text: '+0.368' }]);
   });
 
   it('shows DEG/LAP as ν in signed seconds per lap and SD in seconds, three decimals each', () => {

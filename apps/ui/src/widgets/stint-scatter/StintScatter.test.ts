@@ -103,8 +103,8 @@ describe('StintScatter: the compounds table (full)', () => {
 
   it('shows each compound\'s offset, ν, sd and laps as the rows format them', async () => {
     const c = await show('threeStints');
-    expect(textOf(compoundLine(c, 'M')!)).toMatch(/^M \+0\.412 \+0\.055 0\.009 10 session$/);
-    expect(textOf(compoundLine(c, 'H')!)).toMatch(/^H \+0\.780 \+0\.041ᶜ 0\.015 7 calibration$/);
+    expect(textOf(compoundLine(c, 'M')!)).toMatch(/^M \+0\.000 \+0\.055 0\.009 10 session$/);
+    expect(textOf(compoundLine(c, 'H')!)).toMatch(/^H \+0\.368 \+0\.041ᶜ 0\.015 7 calibration$/);
     // a compound with no stint of ours: LAPS 0
     expect(textOf(compoundLine(c, 'I')!)).toMatch(/ 0 default$/);
   });
@@ -114,9 +114,9 @@ describe('StintScatter: the compounds table (full)', () => {
     const header = lines(c).find((l) => textOf(l).startsWith('CMP'));
     expect(header && textOf(header)).toMatch(/^CMP TO MED DEG\/LAP SD LAPS SOURCE$/);
     expect(['S', 'M', 'H'].map((l) => textOf(compoundLine(c, l)!))).toEqual([
-      'S +0.000 +0.085 0.018 14 session',
-      'M +0.412 +0.055 0.009 41 session',
-      'H +0.780 +0.041ᶜ 0.015 8 calibration',
+      'S −0.412 +0.085 0.018 14 session',
+      'M +0.000 +0.055 0.009 41 session',
+      'H +0.368 +0.041ᶜ 0.015 8 calibration',
     ]);
     expect([...c.querySelectorAll('.source-badge')].map((b) => b.textContent?.trim())).toEqual(['', '', 'ᶜ']);
     expect(hover(shownAs(compoundLine(c, 'M')!, 'session')!)).toBe('session · 41 laps + league');
