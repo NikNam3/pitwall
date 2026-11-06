@@ -173,6 +173,8 @@ const IN_WORDS: Record<string, { field: string; reason: UnknownReason; rule: str
   'incident-feed': [
     { field: 'feed.*.forUs.*.gapAfterMs', reason: 'notApplicable', rule: 'the other car retired: DNF' },
     { field: 'feed.*.timeLostMs', reason: 'notApplicable', rule: 'not applicable to the entry: a spanning what text may cover its mark' },
+    { field: 'feed.*.where.turn', reason: 'notApplicable', rule: 'no turns in the track file: the sector stands in its place (spec 6.2, D4)' },
+    { field: 'feed.*.where.turn', reason: 'insufficientData', rule: 'no apex near: the sector stands in its place (spec 6.2, D4)' },
   ],
 };
 const inWords = (widget: string, field: string, reason: UnknownReason): boolean =>
