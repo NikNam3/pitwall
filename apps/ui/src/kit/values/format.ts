@@ -183,6 +183,9 @@ export const formatJoules = (j: number): string => (Number.isFinite(j) ? `${form
 /** Seconds from ms, no unit, `4100` -> `4.1`, `-4100` -> `−4.1`; the caller names the unit. */
 export const formatSeconds = (ms: Ms, decimals: number): string => (Number.isFinite(ms) ? fixed(ms / 1000, decimals) : '');
 
+/** Seconds from ms with their unit, `4100` at 3 decimals -> `4.100 s`. */
+export const formatSecondsUnit = (ms: Ms, decimals: number): string => (Number.isFinite(ms) ? `${formatSeconds(ms, decimals)} s` : '');
+
 const DECIMAL = /^[+\-−]?(\d+(\.\d*)?|\.\d+)$/;
 
 /**

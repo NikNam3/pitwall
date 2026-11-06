@@ -8,10 +8,9 @@ import type {
 } from '@pitwall/domain';
 import { COMPOUND_MARK } from '../../kit/compound/compound-mark.ts';
 import { knownPart, unknownPart, type CellPart } from '../../kit/grid/grid.ts';
-import { unknownMark } from '../../kit/text.ts';
 import {
-  fixed, formatDay, formatDriverCode, formatLapNumber, formatLapRange, formatLapTime, formatPct, formatSeconds, formatSigma,
-  formatSignedSeconds, formatWeekendPhase, parseDecimal, parseSeconds,
+  fixed, formatDay, formatDriverCode, formatLapNumber, formatLapRange, formatLapTime, formatPct, formatSeconds, formatSecondsUnit,
+  formatSigma, formatSignedSeconds, formatWeekendPhase, parseDecimal, parseSeconds,
 } from '../../kit/values/format.ts';
 import * as text from './text.ts';
 
@@ -138,12 +137,13 @@ export function lapColumns(fit: FittedSource, columns: number): LapCell[][] {
 // Values and overrides
 
 /** How an entry shows and how its override is typed: in seconds (a key in ms) or as the number itself (a key in %). */
-type Unit = { kind: 'seconds'; decimals: number; signed: boolean; suffix: string } | { kind: 'percent'; decimals: number; suffix: string };
+/** `withUnit`: the cell prints the unit (`s`, `%`) through the kit's formatter; a table's header names it otherwise. */
+type Unit = { kind: 'seconds'; decimals: number; signed: boolean; withUnit: boolean } | { kind: 'percent'; decimals: number; withUnit: boolean };
 export type ValueSpec = { key: string; width: number; unit: Unit };
 
-const S3: Unit = { kind: 'seconds', decimals: 3, signed: true, suffix: '' };
-const SD: Unit = { kind: 'seconds', decimals: 3, signed: false, suffix: '' };
-const WEAR: Unit = { kind: 'percent', decimals: 1, suffix: '' };
+const S3: Unit = { kind: 'seconds', decimals: 3, signed: true, withUnit: false };
+const SD: Unit = { kind: 'seconds', decimals: 3, signed: false, withUnit: false };
+const WEAR: Unit = { kind: 'percent', decimals: 1, withUnit: false };
 
 /** Priors keys, as the units declare them (`priors.ts` of degradation, tyre-life and pit-loss). */
 const degKey = (c: VisualCompound): string => `degradation.nuMsPerLap.${c}`;
@@ -164,29 +164,34 @@ export const compoundLabel = compoundLetter;
 
 /** Tyre-life's two per-set limits. */
 export const LIMIT_SPECS: { name: keyof typeof text.limits; spec: ValueSpec }[] = [
-  { name: 'wearLimit', spec: { key: 'tyreLife.wearLimitPct', width: 4, unit: { kind: 'percent', decimals: 0, suffix: '%' } } },
-  { name: 'ageLossLimit', spec: { key: 'tyreLife.ageLossLimitMs', width: 7, unit: { kind: 'seconds', decimals: 3, signed: false, suffix: ' s' } } },
+  { name: 'wearLimit', spec: { key: 'tyreLife.wearLimitPct', width: 4, unit: { kind: 'percent', decimals: 0, withUnit: true } } },
+  { name: 'ageLossLimit', spec: { key: 'tyreLife.ageLossLimitMs', width: 7, unit: { kind: 'seconds', decimals: 3, signed: false, withUnit: true } } },
 ];
 
 /** Pit loss per condition. */
 export const PIT_SPECS: { condition: keyof typeof text.conditions; spec: ValueSpec }[] = (['green', 'vsc', 'sc'] as const).map((condition) => ({
   condition,
-  spec: { key: `pitLoss.ms.${condition}`, width: 5, unit: { kind: 'seconds', decimals: 1, signed: false, suffix: '' } },
+  spec: { key: `pitLoss.ms.${condition}`, width: 5, unit: { kind: 'seconds', decimals: 1, signed: false, withUnit: false } },
 }));
 
 const formatIn = (unit: Unit, v: number): string => {
-  if (unit.kind === 'percent') return unit.suffix === '%' ? formatPct(v) : fixed(v, unit.decimals);
-  return `${unit.signed ? formatSignedSeconds(v, unit.decimals) : formatSeconds(v, unit.decimals)}${unit.suffix}`;
+  if (unit.kind === 'percent') return unit.withUnit ? formatPct(v) : fixed(v, unit.decimals);
+  if (unit.signed) return formatSignedSeconds(v, unit.decimals);
+  return unit.withUnit ? formatSecondsUnit(v, unit.decimals) : formatSeconds(v, unit.decimals);
 };
 
-/** A value cell: the set's entry formatted, or the unknown mark of an entry no source covers (with why on hover). */
-export type ValueCell = { text: string; title: string | undefined; unknown: boolean };
+/**
+ * A value cell: the set's entry formatted, or the kit's unknown part of an entry no source covers; `title` is the cell's
+ * hover (why it is unknown, or the set's override).
+ */
+export type ValueCell = { part: CellPart; title: string | undefined };
 
 export function valueCell(spec: ValueSpec, entries: PriorsEntries | undefined, overrides: Record<string, number>): ValueCell {
   const v = entries?.[spec.key];
-  if (v === undefined || !v.known) return { text: unknownMark[v?.reason ?? 'insufficientData'], title: text.noSource, unknown: true };
+  if (v === undefined) return { part: unknownPart('insufficientData'), title: text.noSource };
+  if (!v.known) return { part: unknownPart(v.reason), title: text.noSource };
   const o = overrides[spec.key];
-  return { text: formatIn(spec.unit, v.value), title: o === undefined ? undefined : text.overrideHover(overrideText(spec, overrides)), unknown: false };
+  return { part: { text: formatIn(spec.unit, v.value) }, title: o === undefined ? undefined : text.overrideHover(overrideText(spec, overrides)) };
 }
 
 /** The override field's text: the set's override in the unit the cell shows, or empty. */

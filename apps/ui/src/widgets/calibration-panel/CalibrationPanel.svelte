@@ -135,7 +135,7 @@
 
 {#snippet value(spec: ValueSpec)}
   {@const cell = valueCell(spec, setValues?.entries, overrides)}
-  <span data-testid="value-{spec.key}" title={cell.title} style:color={cell.unknown ? role('textFaint') : undefined}>{fitCell(cell.text, spec.width, 'right')}</span>
+  <span data-testid="value-{spec.key}" title={cell.title}><TextCell {...cell.part} width={spec.width} align="right" /></span>
 {/snippet}
 
 {#snippet field(spec: ValueSpec)}
