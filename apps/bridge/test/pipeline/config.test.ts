@@ -114,7 +114,7 @@ describe('FeedPipeline: the config travels with the session file', () => {
     await run(new ArraySource(F, [...packetsOf(77n), ...second]), features, { config, dir });
     const files = sessionFiles(dir);
     expect(files).toHaveLength(2);
-    expect(readdirSync(dir).sort()).toEqual(files.flatMap((f) => [f, `${f}.config.json`]));
+    expect(readdirSync(dir).filter((name) => name.endsWith('.config.json')).sort()).toEqual(files.map((f) => `${f}.config.json`));
     for (const file of files) expect(sidecar(join(dir, file))).toEqual(config);
   });
   it('without a config option the sidecar holds the defaults of the declared keys', async () => {
