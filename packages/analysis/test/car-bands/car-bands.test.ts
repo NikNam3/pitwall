@@ -23,6 +23,9 @@ const TEST_BANDS = {
   pressureBelowSetupPsi: 1.5, pressureAboveSetupPsi: 1.0, brakeLo: 300, brakeHi: 1000, engineHi: 125,
 };
 const NO_LIVE_STATE = unknown('notApplicable');
+/** `lapState` without a judged lap, its range or its band: unknown, whatever the reason. */
+const NO_LAP_STATE = expect.objectContaining({ known: false });
+const lapStateOf = (value: 'below' | 'in' | 'above') => expect.objectContaining({ known: true, value });
 const corners = ['fl', 'fr', 'rl', 'rr'] as const;
 const withSurface = (c: number) =>
   carState({
@@ -77,7 +80,7 @@ describe('car-bands calculator', () => {
     for (const c of [95, 106, 80]) {
       const bands = bandsOf(withSurface(c));
       for (const corner of corners) {
-        expect(bands.tyres[corner].surfaceC).toEqual({ value: known(c, 0), state: NO_LIVE_STATE, band: known({ lo: 85, hi: 105 }, 0), outForFullLap: false });
+        expect(bands.tyres[corner].surfaceC).toEqual({ value: known(c, 0), state: NO_LIVE_STATE, band: known({ lo: 85, hi: 105 }, 0), outForFullLap: false, lapState: NO_LAP_STATE });
       }
     }
   });
@@ -86,7 +89,7 @@ describe('car-bands calculator', () => {
     for (const c of [650, 1100, 278]) {
       const bands = bandsOf(withBrakes(c));
       for (const corner of corners) {
-        expect(bands.brakesC[corner]).toEqual({ value: known(c, 0), state: NO_LIVE_STATE, band: known({ lo: 300, hi: 1000 }, 0), outForFullLap: false });
+        expect(bands.brakesC[corner]).toEqual({ value: known(c, 0), state: NO_LIVE_STATE, band: known({ lo: 300, hi: 1000 }, 0), outForFullLap: false, lapState: NO_LAP_STATE });
       }
     }
   });
@@ -95,7 +98,7 @@ describe('car-bands calculator', () => {
     const cold = lap({ lapNumber: 3, channelRange: rangeOf({ brakesC: perCorner(() => known({ min: 150, max: 290 }, 0)) }) });
     const b = bandsOf(withBrakes(650), [cold]);
     for (const corner of corners) {
-      expect(b.brakesC[corner]).toEqual({ value: known(650, 0), state: NO_LIVE_STATE, band: known({ lo: 300, hi: 1000 }, 0), outForFullLap: true });
+      expect(b.brakesC[corner]).toEqual({ value: known(650, 0), state: NO_LIVE_STATE, band: known({ lo: 300, hi: 1000 }, 0), outForFullLap: true, lapState: lapStateOf('below') });
     }
   });
 
@@ -294,6 +297,111 @@ describe('car-bands calculator', () => {
     });
   });
 
+  describe('lapState (C43): the judged lap by its one number against the band of that lap, the one judgement of the advisory and the display', () => {
+    /** A completed lap of car 0 (lap 3 unless `rec` says otherwise) whose ranges are the builder's (all in band) except `over`. */
+    const lapWith = (over: Partial<ChannelRange>, rec: Parameters<typeof lap>[0] = {}) => lap({ lapNumber: 3, ...rec, channelRange: rangeOf(over) });
+    /** A lap whose tyre `channel` ranged `min`-`max` on every corner. */
+    const tyreLap = (channel: 'surfaceC' | 'carcassC' | 'pressurePsi', min: number, max: number, rec: Parameters<typeof lap>[0] = {}) => {
+      const tyres = rangeOf({}).tyres;
+      for (const corner of corners) tyres[corner] = { ...tyres[corner], [channel]: known({ min, max }, 0) };
+      return lapWith({ tyres }, rec);
+    };
+    const surface = (laps: LapRecord[], opts: Parameters<typeof bandsOf>[2] = {}) => bandsOf(withSurface(95), laps, opts).tyres.fl.surfaceC.lapState;
+
+    it('the tyre surface by its mid-range: 100-120 °C (110) above the dry band 85-105, 60-90 °C (75) below, 80-100 °C (90) in', () => {
+      expect(surface([tyreLap('surfaceC', 100, 120)])).toEqual(lapStateOf('above'));
+      expect(surface([tyreLap('surfaceC', 60, 90)])).toEqual(lapStateOf('below'));
+      expect(surface([tyreLap('surfaceC', 80, 100)])).toEqual(lapStateOf('in'));
+      // the range crosses the band, so the lap is not out for the full lap: lapState judges the surface beside it, on every corner
+      const b = bandsOf(withSurface(95), [tyreLap('surfaceC', 100, 120)]);
+      for (const corner of corners) expect(b.tyres[corner].surfaceC).toMatchObject({ state: NO_LIVE_STATE, outForFullLap: false, lapState: lapStateOf('above') });
+    });
+
+    it('lapState ignores the live value: a lap out of band with the live value in band, and a lap in band with the live value out', () => {
+      expect(bandsOf(withSurface(95), [tyreLap('surfaceC', 100, 120)]).tyres.fl.surfaceC.lapState).toEqual(lapStateOf('above'));
+      expect(bandsOf(withSurface(130), [tyreLap('surfaceC', 80, 100)]).tyres.fl.surfaceC.lapState).toEqual(lapStateOf('in'));
+    });
+
+    it('the carcass and the pressure by their mid-range: carcass 110-114 °C (112) above 85-110; pressure 26-28 psi (27) above the setup band 23.5-26', () => {
+      expect(bandsOf(carState(), [tyreLap('carcassC', 110, 114)]).tyres.rl.carcassC.lapState).toEqual(lapStateOf('above'));
+      expect(bandsOf(carState(), [tyreLap('carcassC', 80, 100)]).tyres.rl.carcassC.lapState).toEqual(lapStateOf('in'));
+      const player = withSetup(carState(), 25);
+      expect(bandsOf(player, [tyreLap('pressurePsi', 26, 28)]).tyres.rr.pressurePsi.lapState).toEqual(lapStateOf('above'));
+      expect(bandsOf(player, [tyreLap('pressurePsi', 20, 23)]).tyres.rr.pressurePsi.lapState).toEqual(lapStateOf('below'));
+      expect(bandsOf(player, [tyreLap('pressurePsi', 24, 26)]).tyres.rr.pressurePsi.lapState).toEqual(lapStateOf('in'));
+    });
+
+    it('the brakes by their peak: 180-290 °C below 300-1000, 120-750 °C in (it dipped below but peaked in band), 400-1050 °C above', () => {
+      const brake = (min: number, max: number) => bandsOf(withBrakes(650), [lapWith({ brakesC: perCorner(() => known({ min, max }, 0)) })]).brakesC;
+      for (const corner of corners) {
+        expect(brake(180, 290)[corner].lapState).toEqual(lapStateOf('below'));
+        expect(brake(120, 750)[corner].lapState).toEqual(lapStateOf('in'));
+        expect(brake(400, 1050)[corner].lapState).toEqual(lapStateOf('above'));
+      }
+    });
+
+    it('the engine by its peak: 120-130 °C above 0-125; 110 °C in', () => {
+      expect(bandsOf(carState(), [lapWith({ engineC: known({ min: 120, max: 130 }, 0) })]).engineC.lapState).toEqual(lapStateOf('above'));
+      expect(bandsOf(carState(), [lapWith({})]).engineC.lapState).toEqual(lapStateOf('in'));
+    });
+
+    it('unknown on every channel without a judged lap: no lap, or only lap 1 of a race', () => {
+      for (const laps of [[], [tyreLap('surfaceC', 60, 80, { lapNumber: 1 })]]) {
+        const b = bandsOf(withSetup(carState(), 25), laps);
+        for (const corner of corners) {
+          for (const channel of ['surfaceC', 'carcassC', 'pressurePsi'] as const) expect(b.tyres[corner][channel].lapState).toEqual(NO_LAP_STATE);
+          expect(b.brakesC[corner].lapState).toEqual(NO_LAP_STATE);
+        }
+        expect(b.engineC.lapState).toEqual(NO_LAP_STATE);
+      }
+      // lap 1 of a practice session is judged
+      expect(surface([tyreLap('surfaceC', 60, 80, { lapNumber: 1 })], { phase: PRACTICE })).toEqual(lapStateOf('below'));
+    });
+
+    it('unknown with an unknown range of the judged lap, never a zero reading', () => {
+      const b = bandsOf(carState(), [lapWith({ brakesC: { ...rangeOf({}).brakesC, fl: unknown('notReceived') }, engineC: unknown('notReceived') })]);
+      expect(b.brakesC.fl.lapState).toEqual(NO_LAP_STATE);
+      expect(b.engineC.lapState).toEqual(NO_LAP_STATE);
+      // the other corners are judged
+      expect(b.brakesC.fr.lapState).toEqual(lapStateOf('in'));
+    });
+
+    it('unknown with an unknown band: the pressure without the setup, even for a lap far below any band', () => {
+      const low = tyreLap('pressurePsi', 10, 12);
+      for (const car of [carState(), withOwnCar(carState())]) {
+        const b = bandsOf(car, [low]);
+        for (const corner of corners) expect(b.tyres[corner].pressurePsi.lapState).toEqual(NO_LAP_STATE);
+        // the other channels of the same lap are judged
+        expect(b.tyres.fl.carcassC.lapState).toEqual(lapStateOf('in'));
+      }
+    });
+
+    it("judges judgedLaps' lap: an SC or in-lap after it changes nothing, another car's lap does not count, the newest rate lap does", () => {
+      const cold = tyreLap('surfaceC', 60, 80, { lapNumber: 2 });
+      expect(surface([cold, lap({ lapNumber: 3, scShare: 1 })])).toEqual(lapStateOf('below'));
+      expect(surface([cold, lap({ lapNumber: 3, inLap: true })])).toEqual(lapStateOf('below'));
+      expect(surface([cold, tyreLap('surfaceC', 100, 120, { lapNumber: 3, carId: carId(1) })])).toEqual(lapStateOf('below'));
+      expect(surface([cold, lap({ lapNumber: 3 })])).toEqual(lapStateOf('in'));
+    });
+
+    it('judges the lap against the band of the compound it was driven on: an inter lap at 65-80 °C is in, though below the dry band', () => {
+      expect(surface([tyreLap('surfaceC', 65, 80, { visualCompound: 'inter', actualCompound: 'inter' })])).toEqual(lapStateOf('in'));
+      expect(surface([tyreLap('surfaceC', 65, 80)])).toEqual(lapStateOf('below'));
+    });
+
+    it('the band comes from the config: a brake lap peaking at 340 °C is in with brakeLo 300 and below with brakeLo 350', () => {
+      const laps = [lapWith({ brakesC: perCorner(() => known({ min: 200, max: 340 }, 0)) })];
+      expect(bandsOf(withBrakes(650), laps).brakesC.fl.lapState).toEqual(lapStateOf('in'));
+      expect(bandsOf(withBrakes(650), laps, { config: { [CAR_BANDS_CONFIG.key]: { ...TEST_BANDS, brakeLo: 350 } } }).brakesC.fl.lapState).toEqual(lapStateOf('below'));
+    });
+
+    it("in the box stop the live states are off but the judged lap's lapState stays", () => {
+      const b = bandsOf(withSurface(95), [tyreLap('surfaceC', 100, 120)], { spans: [openSpan('car-activity-race', 'boxStop', { car: 0 })] });
+      expect(b.tyres.fl.surfaceC.lapState).toEqual(lapStateOf('above'));
+      expect(b.tyres.fl.carcassC).toMatchObject({ state: NO_LIVE_STATE, lapState: lapStateOf('in') });
+    });
+  });
+
   describe('the slick carcass band 70-105 °C (Q2)', () => {
     const carcass = (c: number) =>
       bandsOf(carState({ tyres: { corners: perCorner(() => ({ carcassTempC: known(c, 0) })) } }), [], { config: {} }).tyres.fl.carcassC;
@@ -314,7 +422,7 @@ describe('car-bands calculator', () => {
       carState({ tyres: { corners: { fl: { pressurePsi: known(p.fl, 0) }, fr: { pressurePsi: known(p.fr, 0) }, rl: { pressurePsi: known(p.rl, 0) }, rr: { pressurePsi: known(p.rr, 0) } } } });
     const pressureRange = (min: number, max: number): ChannelRange['tyres'] =>
       perCorner(() => ({ surfaceC: known({ min: 90, max: 100 }, 0), carcassC: known({ min: 90, max: 100 }, 0), pressurePsi: known({ min, max }, 0) }));
-    const notReceived = { state: unknown('notReceived'), band: unknown('notReceived'), outForFullLap: false };
+    const notReceived = { state: unknown('notReceived'), band: unknown('notReceived'), outForFullLap: false, lapState: NO_LAP_STATE };
 
     it("the player's pressure band follows the setup", () => {
       const player = withSetup(pressures({ fl: 24.2, fr: 23, rl: 19.3, rr: 21.9 }), SETUP);
@@ -408,7 +516,7 @@ describe('car-bands calculator', () => {
         expect(b.tyres[corner].carcassC).toMatchObject({ value: known(120, 0), band: known({ lo: 85, hi: 110 }, 0), outForFullLap: true });
         expect(b.tyres[corner].pressurePsi).toMatchObject({ value: known(32, 0), band: { known: true, value: { lo: 23.5, hi: 26 } } });
       }
-      expect(b.engineC).toEqual({ value: known(130, 0), state: NO_LIVE_STATE, band: known({ lo: 0, hi: 125 }, 0), outForFullLap: false });
+      expect(b.engineC).toEqual({ value: known(130, 0), state: NO_LIVE_STATE, band: known({ lo: 0, hi: 125 }, 0), outForFullLap: false, lapState: lapStateOf('in') });
     });
 
     it('only the car in its box stop is off: another car racing reads its live state', () => {

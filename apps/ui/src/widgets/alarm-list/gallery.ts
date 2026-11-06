@@ -1,5 +1,5 @@
 // Gallery declaration of the alarm-list display (spec 9.1). Test-phase file: the implementer does not edit it.
-import { ackToken, type InsightEntry } from '@pitwall/contracts';
+import { ackToken, type CarOverview, type InsightEntry } from '@pitwall/contracts';
 import { carId, feedId, toSessionTime, type Insight } from '@pitwall/domain';
 import type { GalleryEntry } from '../../kit/gallery-types.ts';
 import type { widget } from './widget.ts';
@@ -20,6 +20,12 @@ const carcass = make('bandOut', 'tyre.carcassC.fr', 'advisory', 'tyres', 229_000
 const warning = make('warningLast', 'warnings', 'advisory', 'race', 210_000, { warnings: 2, before: 3 });
 const wing = make('damageJump', '140000', 'critical', 'damage', 140_000, { lap: 12, parts: 'frontLeftWingPct', deltaPct: 12 });
 const engine = make('bandOut', 'engineC', 'advisory', 'car', 225_000, { channel: 'engineC', state: 'above', value: 127, lo: 90, hi: 120 });
+/** The teammate's (car 5) front-left wing: its row shows PIA where the player's show NOR. */
+const teammateWing: Insight = { ...make('damageJump', '150000', 'critical', 'damage', 150_000, { lap: 13, parts: 'frontLeftWingPct', deltaPct: 40 }), key: 'damageJump:5:150000', carId: carId(5) };
+/** `cars.overview` of our cars: the player (car 0) and the teammate (car 5). */
+const overview = (id: number, name: string, raceNumber: number): CarOverview =>
+  ({ id: carId(id), identity: { name, raceNumber }, timing: {}, tyres: {}, updatedAt: 10 }) as unknown as CarOverview;
+const CARS = [overview(0, 'Lando Norris', 4), overview(5, 'Oscar Piastri', 81)];
 const pressure = make('bandOut', 'tyre.pressurePsi.rl', 'advisory', 'tyres', 200_000, { channel: 'tyre.pressurePsi.rl', state: 'below', value: 21.2, lo: 21.5, hi: 23.5 });
 
 /** Synthetic cases and fit expectations for `alarm-list`. */
@@ -29,13 +35,18 @@ const gallery: GalleryEntry<typeof widget> = {
     mixed: {
       insights: active(brake, fuel, carcass, warning, wing, engine),
       alerts: { acknowledged: [ackToken(wing)], muted: ['energy'] },
+      cars: CARS,
     },
-    none: { insights: entries([]), alerts: { acknowledged: [], muted: [] } },
-    critical: { insights: active(brake, fuel), alerts: { acknowledged: [], muted: [] } },
-    advisory: { insights: active(carcass, warning, pressure), alerts: { acknowledged: [], muted: [] } },
-    acknowledged: { insights: active(brake, wing), alerts: { acknowledged: [ackToken(wing)], muted: [] } },
-    mutedCategory: { insights: active(brake, fuel), alerts: { acknowledged: [], muted: ['energy'] } },
-    mutedNothingActive: { insights: entries([]), alerts: { acknowledged: [], muted: ['feed'] } },
+    none: { insights: entries([]), alerts: { acknowledged: [], muted: [] }, cars: CARS },
+    critical: { insights: active(brake, fuel), alerts: { acknowledged: [], muted: [] }, cars: CARS },
+    advisory: { insights: active(carcass, warning, pressure), alerts: { acknowledged: [], muted: [] }, cars: CARS },
+    acknowledged: { insights: active(brake, wing), alerts: { acknowledged: [ackToken(wing)], muted: [] }, cars: CARS },
+    mutedCategory: { insights: active(brake, fuel), alerts: { acknowledged: [], muted: ['energy'] }, cars: CARS },
+    mutedNothingActive: { insights: entries([]), alerts: { acknowledged: [], muted: ['feed'] }, cars: CARS },
+    // the player's and the teammate's wing: NOR and PIA tell them apart
+    ourCars: { insights: active(wing, teammateWing, brake), alerts: { acknowledged: [], muted: [] }, cars: CARS },
+    // cars.overview not arrived yet: the texts alone
+    noCars: { insights: active(brake, carcass), alerts: { acknowledged: [], muted: [] }, cars: [] },
   },
   // Task 22: one at each mode's minimum plus the edges just inside it. Not realism dependent: no rival data.
   fit: [

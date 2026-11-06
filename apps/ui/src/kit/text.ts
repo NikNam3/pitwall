@@ -31,6 +31,16 @@ export const optionIgnored = (panelId: string, option: string): string => `${pan
 /** Between the items of a one-line list. */
 export const separator = ' · ';
 
+/** The loading screen's line until a window has the bridge's `hello` and its workbook. */
+export const loading = {
+  /** No link yet, or the starting bridge does not know the count of recordings yet. */
+  starting: 'starting the bridge',
+  /** The starting bridge rebuilds stored sessions (C61): `done` of `total` recordings. */
+  rebuilding: (done: number, total: number): string => `rebuilding sessions ${done}/${total}`,
+  /** The bridge serves; the window's workbook has not arrived yet. */
+  workbook: 'loading the workbook',
+} as const;
+
 /** Between a before and an after (positions, gaps, settings): one glyph for every display. */
 export const arrow = '→';
 

@@ -1,5 +1,5 @@
 // The `alarms` calculator: the conditions that hold now for our cars, as insights (spec 5.6). Stateless; the InsightBook raises and resolves.
-// Band advisories judge the car's judged lap (see `bandChannels`), so they change at a lap's end only.
+// Band advisories are `car-bands`' judgement of the car's judged lap (see `bandChannels`), so they change at a lap's end only.
 import {
   sessionPhaseRaceSpans,
   type PendingPenaltyDetail,
@@ -20,7 +20,7 @@ import {
 } from '@pitwall/domain';
 import type { DeepReadonly, EngineView, QuickCalculator } from '@pitwall/engine/readers';
 import { openSpansOf } from '@pitwall/engine/readers';
-import { bandsFor, judgedLapClasses, judgedLaps, stateOf, type Band, type Bands } from '../car-bands/bands.ts';
+import { bandsFor, judgedLapClasses, judgedLaps, measured, type Band, type Bands, type Measure } from '../car-bands/bands.ts';
 import { CAR_BANDS, CAR_BANDS_CONFIG } from '../car-bands/index.ts';
 import { DAMAGE } from '../damage/index.ts';
 import { FUEL } from '../fuel/index.ts';
@@ -41,25 +41,22 @@ type Config = ReturnType<typeof ALARMS_CONFIG.read>;
 type Make = (kind: string, severity: Insight['severity'], category: InsightCategory, channel: string, params: Insight['params']) => Insight;
 type Lap = DeepReadonly<LapRecord>;
 
-/** The one number of a lap's range the advisory judges: its maximum, or the middle of min and max (the lap record keeps no mean). */
-type Measure = 'peak' | 'midRange';
-const measured = (range: DeepReadonly<Range>, measure: Measure): number => (measure === 'peak' ? range.max : (range.min + range.max) / 2);
-
 type BandChannel = {
   channel: string;
   category: InsightCategory;
+  /** The measure `car-bands` judges the channel's lap by; the advisory reports it with its value. */
   measure: Measure;
-  /** Live, from `car-bands`: its `outForFullLap` raises the critical alarm. */
+  /** From `car-bands`: its `outForFullLap` raises the critical alarm, its `lapState` the advisory. */
   reading: BandReading;
-  /** The judged lap: its number, its range of the channel and its band; they raise the advisory. */
+  /** The judged lap: its number, its range of the channel and its band; the advisory's params. */
   lap?: { lapNumber: number; range: DeepReadonly<Known<Range>>; band: Band };
 };
 
 /**
- * The band channels and the measure their advisory judges. Every advisory judges the car's judged lap (`judgedLaps`: the
- * newest rate lap that is not lap 1 of a race), never the
- * live value, so it changes at a lap's end only: the live values cross the band edges many times within a lap and a
- * calculator keeps no frame state for hysteresis (ruling R1). Within-lap swing of our cars, measured 2026-10-29 on
+ * The band channels and the measure of their lap. Every advisory is `car-bands`' judgement of the car's judged lap
+ * (`lapState`; `judgedLaps`: the newest rate lap that is not lap 1 of a race), never of the live value, so it changes at
+ * a lap's end only: the live values cross the band edges many times within a lap and a calculator keeps no frame state
+ * for hysteresis (ruling R1). Within-lap swing of our cars, measured 2026-10-29 on
  * raceSingapore (lap 1, cars 19 and 14):
  * - brakes, `peak`: 500-940 °C swing per lap; judged under load.
  * - surface, `midRange`: 26-57 °C swing, up to 9 band crossings and 49 direction changes per lap.
@@ -102,10 +99,10 @@ const bandAlarms = (bands: CarBands, lap: Lap | undefined, lapBands: Bands | und
     if (reading.outForFullLap && reading.band.known) {
       return [make('bandOutLap', 'critical', category, channel, { channel, lo: reading.band.value.lo, hi: reading.band.value.hi })];
     }
-    if (judged === undefined || !judged.range.known) return [];
+    // the in/out decision is car-bands' (C43); the judged lap only gives the advisory's params
+    const state = reading.lapState.known ? reading.lapState.value : 'in';
+    if (state === 'in' || judged === undefined || !judged.range.known) return [];
     const value = measured(judged.range.value, measure);
-    const state = stateOf(value, judged.band);
-    if (state === 'in') return [];
     const { lo, hi } = judged.band;
     return [make('bandOut', 'advisory', category, channel, { channel, state, value, lo, hi, lap: judged.lapNumber, measure })];
   });

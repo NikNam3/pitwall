@@ -31,7 +31,12 @@ export type ClientMessage =
  */
 export type ActionOutcome = { ok: true } | { ok: false; reason: 'invalid' | 'notSupported' | 'linkLost'; message?: string };
 
+/** What a starting bridge is doing before it serves: rebuilding stored sessions (C61), `done` of `total` recordings. */
+export type StartupProgress = { step: 'rebuild'; done: number; total: number };
+
 export type ServerMessage =
+  /** Sent only by a bridge that is still starting; it sends no `hello` and closes the link before it serves. */
+  | ({ type: 'starting' } & StartupProgress)
   | { type: 'hello'; contractVersion: number; feeds: FeedInfo[] }
   | { type: 'snapshot'; id: string; value?: unknown; entries?: unknown[] }
   | { type: 'update'; id: string; value: unknown }

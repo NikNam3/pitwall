@@ -33,13 +33,25 @@ export function recordingJobs(files: readonly string[], dirs: DataDir, log: Logg
 
 const INCOMPLETE = 'pitwall: interrupted; the database is incomplete, run "pitwall reprocess" again';
 
+/** A rebuild's progress: `done` of `total` recordings finished. */
+export type RebuildProgress = (done: number, total: number) => void;
+
 /**
- * Runs `jobs` in order into `db`. False when `io.signal` stopped it, and the user has been told so (`interrupted`; by
- * default: the database is incomplete, run `pitwall reprocess` again).
+ * Runs `jobs` in order into `db`, reporting `onProgress` before the first and after each recording. False when
+ * `io.signal` stopped it, and the user has been told so (`interrupted`; by default: the database is incomplete, run
+ * `pitwall reprocess` again).
  */
-export async function processRecordings(jobs: readonly RecordingJob[], db: Db, io: CliIo, rulesVersion: string, interrupted = INCOMPLETE): Promise<boolean> {
+export async function processRecordings(
+  jobs: readonly RecordingJob[],
+  db: Db,
+  io: CliIo,
+  rulesVersion: string,
+  interrupted = INCOMPLETE,
+  onProgress?: RebuildProgress,
+): Promise<boolean> {
   const log = cliLogger(io, 'warn');
-  for (const { file, config } of jobs) {
+  onProgress?.(0, jobs.length);
+  for (const [i, { file, config }] of jobs.entries()) {
     try {
       await processRecording(file, db, log, io.signal, config, rulesVersion);
     } catch (error) {
@@ -47,6 +59,7 @@ export async function processRecordings(jobs: readonly RecordingJob[], db: Db, i
       io.err(interrupted);
       return false;
     }
+    onProgress?.(i + 1, jobs.length);
   }
   return true;
 }
@@ -57,15 +70,21 @@ export async function processRecordings(jobs: readonly RecordingJob[], db: Db, i
  *
  * Until the last recording is in, the database is marked with `user_version` 0: a rebuild stopped by a signal, an
  * error or a crash leaves an outdated database, which `openDatabase` refuses and the next `live` rebuilds again.
+ * `onProgress` reports the recordings finished (`processRecordings`).
  */
-export async function rebuildDatabase(dirs: DataDir, io: CliIo, rulesVersion: string): Promise<{ db: Db; recordings: number } | undefined> {
+export async function rebuildDatabase(
+  dirs: DataDir,
+  io: CliIo,
+  rulesVersion: string,
+  onProgress?: RebuildProgress,
+): Promise<{ db: Db; recordings: number } | undefined> {
   const files = allRecordings(dirs.recordings);
   const jobs = recordingJobs(files, dirs, cliLogger(io, 'warn'));
   for (const suffix of ['', '-wal', '-shm']) rmSync(dirs.dbPath + suffix, { force: true });
   const db = openDatabase(dirs.dbPath);
   try {
     db.pragma('user_version = 0');
-    if (!(await processRecordings(jobs, db, io, rulesVersion))) {
+    if (!(await processRecordings(jobs, db, io, rulesVersion, INCOMPLETE, onProgress))) {
       db.close();
       return undefined;
     }
@@ -142,10 +161,11 @@ export class StaleSessions {
 
   /**
    * At bridge start, before input opens: rebuilds every stale session of the newest stored session's weekend, one
-   * progress line per recording. False when `io.signal` stopped it (the sessions not rebuilt keep their stored logs and
-   * stay stale), and the user has been told so.
+   * progress line per recording, and `onProgress` before the first and after each recording (rebuilt or failed). False
+   * when `io.signal` stopped it (the sessions not rebuilt keep their stored logs and stay stale), and the user has been
+   * told so.
    */
-  async rebuildNewestWeekend(): Promise<boolean> {
+  async rebuildNewestWeekend(onProgress?: RebuildProgress): Promise<boolean> {
     const repo = new WeekendRepository(this.#db, { rulesVersion: this.#rulesVersion });
     const weekendId = repo.newestWeekendId();
     if (weekendId === undefined) return true;
@@ -156,6 +176,7 @@ export class StaleSessions {
     }
     const files = [...new Set(stale.filter(hasRecording).map((row) => row.pwrecPath))];
     const rebuilt = new Set<string>();
+    onProgress?.(0, files.length);
     for (const [i, file] of files.entries()) {
       this.#io.err(`pitwall: rebuilding ${i + 1}/${files.length}: ${file}`);
       try {
@@ -168,6 +189,7 @@ export class StaleSessions {
         }
         this.#log.error({ pwrecPath: file, err: error }, 'recording not rebuilt: its stored sessions are kept, not served');
       }
+      onProgress?.(i + 1, files.length);
     }
     // a recording that no longer yields one of its sessions
     for (const row of repo.staleSessionsOf(weekendId)) {

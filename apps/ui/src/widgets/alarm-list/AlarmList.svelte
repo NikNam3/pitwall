@@ -2,7 +2,7 @@
   // Active insights by severity (V25): critical first, acknowledged ones stay dim, muted groups as a count. Only what
   // fits the size is drawn (fit.ts): the rows beyond it are counted on the last line, long texts are cut.
   import { getUiActions } from '../../kit/actions.ts';
-  import { formatInsight } from '../../kit/insight/insight-text.ts';
+  import { insightLabel } from '../../kit/insight/insight-text.ts';
   import { severityRole } from '../../emphasis/index.ts';
   import { role } from '../../theme/index.ts';
   import type { WidgetProps } from '../../kit/types.ts';
@@ -16,7 +16,7 @@
   const { send } = getUiActions();
   const view = $derived(alarmRows(data.insights, data.alerts));
   const full = $derived(size.mode === 'full');
-  const fitted = $derived(fitAlarms(view, size, full, formatInsight));
+  const fitted = $derived(fitAlarms(view, size, full, (insight) => insightLabel(insight, data.cars)));
 </script>
 
 <div class="alarms" style:--sev-cols={SEVERITY_COLS}>

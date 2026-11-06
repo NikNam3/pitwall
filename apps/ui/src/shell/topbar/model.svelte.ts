@@ -91,6 +91,10 @@ export class TopBarModel {
     const player = this.session?.playerCar;
     return player === undefined ? undefined : okValue(this.#cars)?.find((car) => car.id === player)?.timing?.lap;
   }
+  /** The feed's cars (`cars.overview`); an alert names its car by them. Undefined until the overview arrives. */
+  get cars(): CarOverview[] | undefined {
+    return okValue(this.#cars);
+  }
   /** The weekend phase's open span (`situation.weekendPhase`); undefined while the phase is pending or not published. */
   get weekendPhase(): OpenSpan | undefined {
     return openSpanOf(okValue(this.#weekend));

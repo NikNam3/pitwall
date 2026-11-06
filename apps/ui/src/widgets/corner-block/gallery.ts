@@ -8,8 +8,15 @@ import type { widget } from './widget.ts';
 const at = 10;
 const k = <T>(value: T): Known<T> => known(value, at);
 
-const reading = (value: Known<number>, band: { lo: number; hi: number }, state: Known<BandState>, outForFullLap = false): BandReading => ({
-  value, state, band: known(band, 0), outForFullLap,
+/** A reading; its judged lap (`lapState`) in band unless given. */
+const reading = (
+  value: Known<number>,
+  band: { lo: number; hi: number },
+  state: Known<BandState>,
+  outForFullLap = false,
+  lapState: Known<BandState> = k('in'),
+): BandReading => ({
+  value, state, band: known(band, 0), outForFullLap, lapState,
 });
 const inBand = (value: number, band: { lo: number; hi: number }): BandReading => reading(k(value), band, k('in'));
 
@@ -20,7 +27,8 @@ const BRAKE = { lo: 300, hi: 900 };
 const ENGINE = { lo: 80, hi: 120 };
 /** The surface and the brakes have no live state: `car-bands` judges them per lap only (rulings 2026-10-30). */
 const surfaceOf = (value: number): BandReading => reading(k(value), SURFACE, unknown('notApplicable'));
-const brakeOf = (value: number, outForFullLap = false): BandReading => reading(k(value), BRAKE, unknown('notApplicable'), outForFullLap);
+const brakeOf = (value: number, outForFullLap = false, lapState?: Known<BandState>): BandReading =>
+  reading(k(value), BRAKE, unknown('notApplicable'), outForFullLap, lapState);
 
 
 type Temps = { surface: number; carcass: Known<number>; psi: number; brake: number; wear: number };
@@ -72,7 +80,9 @@ const wearOf = (t: Corners<Temps>, known_ = true): TyreWear => {
 };
 
 const frCarcassHigh = reading(k(109), CARCASS, k('above'));
-const frBrakeCritical = brakeOf(1043, true);
+const frBrakeCritical = brakeOf(1043, true, k('above'));
+/** The FR surface's judged lap above the band (amber), its live value in band: the band advisory's one judgement (C43). */
+const frSurfaceLapHigh = reading(k(100), SURFACE, unknown('notApplicable'), false, k('above'));
 
 /** Synthetic cases and fit expectations for `corner-block`. */
 const gallery: GalleryEntry<typeof widget> = {
@@ -85,6 +95,8 @@ const gallery: GalleryEntry<typeof widget> = {
       car: carOf({ ...healthy, fr }),
     },
     allInBand: { bands: bandsOf(healthy), wear: wearOf(healthy), car: carOf(healthy) },
+    // The FR surface's last judged lap above its band (amber), as the band advisory says, with no live state.
+    surfaceLapOut: { bands: bandsOf(healthy, { fr: { surfaceC: frSurfaceLapHigh } }), wear: wearOf(healthy), car: carOf(healthy) },
     // Surface-only tyre temperatures: the carcass column stays, with its reason's mark and the reason on hover.
     carcassNotApplicable: { bands: bandsOf(surfaceOnly), wear: wearOf(surfaceOnly), car: carOf(surfaceOnly) },
     // A rival linked as primary in realism mode: every value is hidden.

@@ -1,6 +1,7 @@
 // The words of an insight (spec 8.3): the bridge sends a kind and params, the UI formats them through the kit formatters.
-import type { DamageParts, Insight } from '@pitwall/domain';
-import { cornerNames, insightText as words } from '../text.ts';
+import type { CarOverview } from '@pitwall/contracts';
+import { carCode, type DamageParts, type Insight } from '@pitwall/domain';
+import { cornerNames, insightText as words, separator } from '../text.ts';
 import { formatCelsius, formatDeltaPct, formatLaps, formatPenaltyMs, formatPsi, formatSignedLaps } from '../values/format.ts';
 
 type Params = Insight['params'];
@@ -54,6 +55,15 @@ const KINDS: Record<string, (params: Params) => string> = {
     return ms === undefined ? words.penalty : `${words.penalty} ${formatPenaltyMs(ms)}`;
   },
 };
+
+/**
+ * The insight's line: its car's code (`carCode`), the separator, then its text (`formatInsight`), `NOR · FL wing +40 %`.
+ * The text alone without a `carId` or while `cars` lacks the car.
+ */
+export function insightLabel(i: Insight, cars: readonly CarOverview[] | undefined): string {
+  const car = i.carId === undefined ? undefined : cars?.find((c) => c.id === i.carId);
+  return car === undefined ? formatInsight(i) : `${carCode(car.identity)}${separator}${formatInsight(i)}`;
+}
 
 /** The text of an insight; a kind without an entry is shown as `kind: key value, key value`. */
 export function formatInsight(i: Insight): string {

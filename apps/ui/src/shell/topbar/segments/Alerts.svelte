@@ -27,7 +27,7 @@
 
 {#each bar.shown as alert (alert.key)}
   <span class="alert" style:color={role('critical')}>
-    <span data-testid="alert-{alert.key}">{text.topBar.alertMark} <InsightLine insight={alert} acknowledged={false} /></span>
+    <span data-testid="alert-{alert.key}">{text.topBar.alertMark} <InsightLine insight={alert} acknowledged={false} cars={bar.cars} /></span>
     <button
       type="button"
       class="pw-button"

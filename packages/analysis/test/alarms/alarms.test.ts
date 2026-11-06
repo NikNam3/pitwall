@@ -1,4 +1,4 @@
-import { carId, known, unknown, type CarBands, type CarId, type DamageState, type ErsState, type FuelState, type Insight, type NeutralisedStage, type OpenSpan, type TyreWear, type WarnedDetail, type WeekendPhase } from '@pitwall/domain';
+import { carId, known, unknown, type BandReading, type BandState, type CarBands, type CarId, type DamageState, type ErsState, type FuelState, type Insight, type NeutralisedStage, type OpenSpan, type TyreWear, type WarnedDetail, type WeekendPhase } from '@pitwall/domain';
 import { InsightBook, type EngineView, type Projection } from '@pitwall/engine';
 import { describe, expect, it } from 'vitest';
 import { ALARMS, ALARMS_BEHAVIOUR, type AlarmsEffect } from '../../src/alarms/index.ts';
@@ -43,11 +43,16 @@ const TEST_BANDS = {
 const CORNER_IDS = ['fl', 'fr', 'rl', 'rr'] as const;
 const NOW = 12_345;
 
-const reading = (state: 'below' | 'in' | 'above', over: { outForFullLap?: boolean; value?: number; band?: { lo: number; hi: number } } = {}) => ({
+/** A stubbed `car-bands` reading; its `lapState` is unknown (no judged lap) unless `over.lapState` names it. */
+const reading = (
+  state: BandState,
+  over: { outForFullLap?: boolean; value?: number; band?: { lo: number; hi: number }; lapState?: BandState } = {},
+): BandReading => ({
   value: known(over.value ?? 95, 0),
   state: known(state, 0),
   band: known(over.band ?? { lo: 85, hi: 105 }, 0),
   outForFullLap: over.outForFullLap ?? false,
+  lapState: over.lapState === undefined ? unknown('insufficientData') : known(over.lapState, 0),
 });
 /** Car 0's pressure band on its 25 psi setup. */
 const PRESSURE_BAND = { lo: 23.5, hi: 26 };
@@ -164,9 +169,39 @@ type ViewOpts = {
   noSetup?: true;
   /** The weekend phase (default a race). */
   phase?: WeekendPhase;
+  /** The stubbed readings keep their own `lapState` (see `withJudgedLaps`). */
+  ownLapStates?: true;
 };
-const viewWith = (parts: Parts, o: ViewOpts = {}): EngineView =>
-  engineView({
+
+const mapCorners = <T, U>(c: { fl: T; fr: T; rl: T; rr: T }, f: (t: T, corner: (typeof CORNER_IDS)[number]) => U) =>
+  ({ fl: f(c.fl, 'fl'), fr: f(c.fr, 'fr'), rl: f(c.rl, 'rl'), rr: f(c.rr, 'rr') });
+/**
+ * `bands` with car 0's `lapState` of every channel as the real `car-bands` gives it on `view` (its cars, laps, weekend
+ * phase and config, car 0 competing): the one judgement of the judged lap (C43). Every other part of the stubbed
+ * readings stays, so a lap case judges its lap through `car-bands` while the live state and `outForFullLap` stay stubs.
+ */
+const withJudgedLaps = (bands: CarBands, view: EngineView): CarBands => {
+  const byMachine = { ...view.situation.byMachine, 'car-status': [openSpan('car-status', 'competing', { car: 0 })] };
+  const judged = carBandsCalculator.compute({ ...view, situation: { ...view.situation, byMachine } })[carId(0)];
+  if (judged === undefined) throw new Error('car-bands gave car 0 no entry');
+  const lapOf = (r: BandReading, j: BandReading): BandReading => ({ ...r, lapState: j.lapState });
+  return {
+    tyres: mapCorners(bands.tyres, (t, c) => ({
+      surfaceC: lapOf(t.surfaceC, judged.tyres[c].surfaceC),
+      carcassC: lapOf(t.carcassC, judged.tyres[c].carcassC),
+      pressurePsi: lapOf(t.pressurePsi, judged.tyres[c].pressurePsi),
+    })),
+    brakesC: mapCorners(bands.brakesC, (b, c) => lapOf(b, judged.brakesC[c])),
+    engineC: lapOf(bands.engineC, judged.engineC),
+  };
+};
+
+/**
+ * Car 0's view: `parts` as its upstream outputs, the `car-bands` readings with their `lapState` from `car-bands` itself
+ * on the same view (`withJudgedLaps`) unless `o.ownLapStates`.
+ */
+const viewWith = (parts: Parts, o: ViewOpts = {}): EngineView => {
+  const view = engineView({
     cars: [o.noSetup ? carState({ timing: { lap: o.lap ?? 1 } }) : withSetup(carState({ timing: { lap: o.lap ?? 1 } }), 25)],
     outputs: outputsOf([outputsFor(0, parts)]),
     sessionTime: NOW,
@@ -175,6 +210,9 @@ const viewWith = (parts: Parts, o: ViewOpts = {}): EngineView =>
     config: { [CAR_BANDS_CONFIG.key]: TEST_BANDS, ...o.config },
     ...(o.playerCar !== undefined && { playerCar: o.playerCar }),
   });
+  if (o.ownLapStates) return view;
+  return { ...view, outputs: outputsOf([outputsFor(0, { ...parts, bands: withJudgedLaps(parts.bands ?? bandsOk(), view) })]) };
+};
 
 /**
  * A completed lap of car 0 (lap 2 unless `rec` says otherwise: lap 1 of a race is not judged) whose channel ranges are the
@@ -436,6 +474,60 @@ describe('alarms calculator', () => {
     });
   });
 
+  describe("bandOut is car-bands' lapState (C43): alarms makes no judgement of the lap of its own", () => {
+    /** The bandOut alarms of `laps` with the stubbed readings as given (`bandsOk`, changed by `set`), lapState included. */
+    const given = (laps: ReturnType<typeof lap>[], set: (b: CarBands) => void) => {
+      const bands = bandsOk();
+      set(bands);
+      return run(lapsView(laps, { bands }, { ownLapStates: true })).filter((i) => i.kind === 'bandOut');
+    };
+    // lap 2: the FL brake peaks at 290 °C (below 300-1000), the engine at 130 °C (above 0-125), the RL carcass at 112 °C mid-range (above 85-110)
+    const outLap = lapWith({ 'brakesC.fl': [180, 290], engineC: [120, 130], 'tyre.carcassC.rl': [110, 114] });
+
+    it("raised from the reading's lapState, with today's params from the same judged lap: value, band, lap number and measure", () => {
+      const found = given([outLap], (b) => {
+        b.brakesC.fl = reading('in', { lapState: 'below', band: { lo: 300, hi: 1000 } });
+        b.engineC = reading('in', { lapState: 'above', band: { lo: 0, hi: 125 } });
+        b.tyres.rl.carcassC = reading('in', { lapState: 'above', band: { lo: 85, hi: 110 } });
+      });
+      expect(found.map((i) => [i.key, i.severity, i.category, i.params]).sort()).toEqual([
+        ['bandOut:0:brakesC.fl', 'advisory', 'car', { channel: 'brakesC.fl', state: 'below', value: 290, lo: 300, hi: 1000, lap: 2, measure: 'peak' }],
+        ['bandOut:0:engineC', 'advisory', 'car', { channel: 'engineC', state: 'above', value: 130, lo: 0, hi: 125, lap: 2, measure: 'peak' }],
+        ['bandOut:0:tyre.carcassC.rl', 'advisory', 'tyres', { channel: 'tyre.carcassC.rl', state: 'above', value: 112, lo: 85, hi: 110, lap: 2, measure: 'midRange' }],
+      ]);
+    });
+
+    it("a reading whose lapState is in raises no bandOut, even where the lap's range would say out", () => {
+      expect(
+        given([outLap], (b) => {
+          b.brakesC.fl = reading('in', { lapState: 'in' });
+          b.engineC = reading('in', { lapState: 'in' });
+          b.tyres.rl.carcassC = reading('in', { lapState: 'in' });
+        }),
+      ).toEqual([]);
+    });
+
+    it("a reading whose lapState is unknown raises no bandOut, even where the lap's range would say out", () => {
+      // bandsOk: every lapState unknown
+      expect(given([outLap], () => {})).toEqual([]);
+    });
+
+    it("the advisory's state is the lapState: the surface, which car-bands judges by its mid-range, raises exactly where lapState is out", () => {
+      // the FL surface 100-120 °C (110): above the dry band 85-105, though it touched the band
+      const hotSurface = lapWith({ 'tyre.surfaceC.fl': [100, 120] });
+      expect(given([hotSurface], (b) => (b.tyres.fl.surfaceC = reading('in', { lapState: 'above' }))).map((i) => [i.key, i.params['state'], i.params['value']])).toEqual([
+        ['bandOut:0:tyre.surfaceC.fl', 'above', 110],
+      ]);
+    });
+
+    it('a reading out for the full lap raises bandOutLap only, also when its lapState is out', () => {
+      const bands = bandsOk();
+      bands.engineC = reading('above', { outForFullLap: true, lapState: 'above', band: { lo: 0, hi: 125 } });
+      const found = run(lapsView([lapWith({ engineC: [126, 140] })], { bands }, { ownLapStates: true }));
+      expect(found.map((i) => i.key)).toEqual(['bandOutLap:0:engineC']);
+    });
+  });
+
   describe('band alarms judge representative laps and wait out the safety car (Q1)', () => {
     /** The race's session phase: `neutralised` by `car` with the stages seen so far, or `racing`. */
     const neutralised = (car: 'SC' | 'VSC', ...stages: NeutralisedStage[]) =>
@@ -511,7 +603,7 @@ describe('alarms calculator', () => {
 
     it('no pressure alarm from an unknown band', () => {
       // car 0's setup not yet received: car-bands gives its pressure band and state unknown
-      const unknownPressure = { value: known(25, 0), state: unknown('notReceived'), band: unknown('notReceived'), outForFullLap: false };
+      const unknownPressure = { value: known(25, 0), state: unknown('notReceived'), band: unknown('notReceived'), outForFullLap: false, lapState: unknown('notReceived') };
       const bands = bandsOk();
       for (const c of CORNER_IDS) bands.tyres[c].pressurePsi = unknownPressure;
       // a clean lap with every pressure far below any band and the rear-left carcass above its band

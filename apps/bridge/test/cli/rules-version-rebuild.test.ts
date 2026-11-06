@@ -16,7 +16,7 @@ import { ScenarioBuilder, packetBytes } from '../../../../packages/engine/test/b
 import type { CliIo } from '../../src/cli/io.ts';
 import { cliLogger } from '../../src/cli/io.ts';
 import { main } from '../../src/cli/pitwall.ts';
-import { sessionRebuilder } from '../../src/cli/rebuild-database.ts';
+import { rebuildDatabase, sessionRebuilder, StaleSessions } from '../../src/cli/rebuild-database.ts';
 import { loadFeatureConfig, sessionConfigPath } from '../../src/feature-config.ts';
 import { defineFeature } from '../../src/features/feature.ts';
 import { FEATURES } from '../../src/features/index.generated.ts';
@@ -215,6 +215,60 @@ describe('pitwall live: the stale sessions of the newest weekend are rebuilt at 
     const rebuild = vi.fn(async () => {});
     expect(await withDb(dir, (db) => repoOf(db, { rebuild }).projectionOf(gone.key))).toBeUndefined();
     expect(rebuild).not.toHaveBeenCalled();
+  });
+});
+
+// C61 "with progress shown": the rebuilds report `onProgress(done, total)` (done = recordings finished) for the startup
+// server to send; they know nothing of the server.
+describe('the start-up rebuilds report their progress (C61)', { timeout: 60_000 }, () => {
+  const config = () => loadFeatureConfig(tmp(), FEATURES);
+
+  it('rebuildNewestWeekend reports 0 of n before the first recording, then each recording finished', async () => {
+    const dir = tmp();
+    await storeSession(dir, { uid: 11, weekend: 1, at: T0, version: OLD });
+    await storeSession(dir, { uid: 21, weekend: 2, at: T0 + 24 * HOUR, version: OLD });
+    await storeSession(dir, { uid: 22, weekend: 2, at: T0 + 25 * HOUR, version: OLD });
+    const { io } = memoryIo();
+    const calls: Array<[number, number]> = [];
+    await withDb(dir, async (db) => {
+      const stale = new StaleSessions(db, config(), io, current);
+      expect(await stale.rebuildNewestWeekend((done: number, total: number) => calls.push([done, total]))).toBe(true);
+    });
+    // the other weekend's stale session is not counted: it waits for its first read
+    expect(calls).toEqual([[0, 2], [1, 2], [2, 2]]);
+  });
+
+  it('rebuildNewestWeekend with nothing stale reports no recording to rebuild', async () => {
+    const dir = tmp();
+    await storeSession(dir, { uid: 21, weekend: 2, at: T0, version: current });
+    const { io } = memoryIo();
+    const calls: Array<[number, number]> = [];
+    await withDb(dir, async (db) => {
+      expect(await new StaleSessions(db, config(), io, current).rebuildNewestWeekend((done: number, total: number) => calls.push([done, total]))).toBe(true);
+    });
+    expect(calls.every(([done, total]) => done === 0 && total === 0)).toBe(true);
+  });
+
+  it('rebuildNewestWeekend without a callback rebuilds as before', async () => {
+    const dir = tmp();
+    const session = await storeSession(dir, { uid: 21, weekend: 2, at: T0, version: OLD });
+    const { io } = memoryIo();
+    await withDb(dir, async (db) => {
+      expect(await new StaleSessions(db, config(), io, current).rebuildNewestWeekend()).toBe(true);
+    });
+    expect(await rowOf(dir, session.key)).toMatchObject({ rules_version: current, complete: 1 });
+  });
+
+  it('rebuildDatabase (a schema change) reports 0 of n before the first recording, then each recording finished', async () => {
+    const dir = tmp();
+    const dirs = dataDir({ PITWALL_DATA_DIR: dir });
+    copyFileSync(SEGMENT, join(dirs.recordings, basename(SEGMENT)));
+    const { io } = memoryIo({ PITWALL_DATA_DIR: dir });
+    const calls: Array<[number, number]> = [];
+    const rebuilt = await rebuildDatabase(dirs, io, current, (done: number, total: number) => calls.push([done, total]));
+    rebuilt?.db.close();
+    expect(rebuilt?.recordings).toBe(1);
+    expect(calls).toEqual([[0, 1], [1, 1]]);
   });
 });
 

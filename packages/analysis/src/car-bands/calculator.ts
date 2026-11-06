@@ -1,9 +1,9 @@
 // `car-bands` (spec 5.4): every band channel of every car in the session against its band. Stateless (ruling R1).
-import { known, unknown, type SessionTime, type BandReading, type CarBands, type CarState, type Corners, type Known, type LapRecord, type Range } from '@pitwall/domain';
+import { known, unknown, type SessionTime, type BandReading, type BandState, type CarBands, type CarState, type Corners, type Known, type LapRecord, type Range } from '@pitwall/domain';
 import type { DeepReadonly, EngineView, QuickCalculator } from '@pitwall/engine/readers';
 import { behaviourFor } from '../shared/behaviour.ts';
 import { CAR_STATUS_READS } from '../shared/car-status.ts';
-import { bandsFor, judgedLapClasses, judgedLaps, pressureBands, stateOf, type Band } from './bands.ts';
+import { bandsFor, judgedLapClasses, judgedLaps, measured, pressureBands, stateOf, type Band, type Measure } from './bands.ts';
 import { CAR_BANDS_BEHAVIOUR, type CarBandsEffect } from './behaviour.ts';
 import { CAR_BANDS, CAR_BANDS_CONFIG, type CarBandsOutput } from './index.ts';
 
@@ -11,25 +11,40 @@ import { CAR_BANDS, CAR_BANDS_CONFIG, type CarBandsOutput } from './index.ts';
 const outFor = (range: DeepReadonly<Known<Range>> | undefined, band: Known<Band>): boolean =>
   range !== undefined && range.known && band.known && (range.value.min > band.value.hi || range.value.max < band.value.lo);
 
+/** The judged lap by its measure against the band of that lap; unknown without a judged lap, its range or its band. */
+const lapStateOf = (range: DeepReadonly<Known<Range>> | undefined, band: Known<Band>, measure: Measure): Known<BandState> => {
+  if (range === undefined) return unknown('insufficientData');
+  if (!range.known) return unknown(range.reason);
+  if (!band.known) return unknown(band.reason);
+  return known(stateOf(measured(range.value, measure), band.value), range.at);
+};
+
+type Reader = (value: Known<number>, band: Known<Band>, range: DeepReadonly<Known<Range>> | undefined, lapBand: Known<Band>) => BandReading;
+
 /**
- * The live value against the live band; the judged lap's range (if the car has one) against the band of that lap. An
- * unknown band judges nothing: the live state carries the band's reason.
+ * The live value against the live band; the judged lap's range (if the car has one) by `measure` against the band of
+ * that lap. An unknown band judges nothing: the live state carries the band's reason.
  */
-const reading = (value: Known<number>, band: Known<Band>, range: DeepReadonly<Known<Range>> | undefined, lapBand: Known<Band>): BandReading => ({
-  value,
-  state: !band.known ? unknown(band.reason) : value.known ? { known: true, value: stateOf(value.value, band.value), at: value.at } : unknown(value.reason),
-  band,
-  outForFullLap: outFor(range, lapBand),
-});
+const reading =
+  (measure: Measure): Reader =>
+  (value, band, range, lapBand) => ({
+    value,
+    state: !band.known ? unknown(band.reason) : value.known ? { known: true, value: stateOf(value.value, band.value), at: value.at } : unknown(value.reason),
+    band,
+    outForFullLap: outFor(range, lapBand),
+    lapState: lapStateOf(range, lapBand, measure),
+  });
 
 /**
  * A channel judged per lap only: the tyre surface swings 30–60 °C within a lap and the brakes fall below the band on
- * many straights, so a live state would flicker; only `outForFullLap` judges them.
+ * many straights, so a live state would flicker; only the judged lap (`lapState`, `outForFullLap`) judges them.
  */
-const lapOnlyReading = (value: Known<number>, band: Known<Band>, range: DeepReadonly<Known<Range>> | undefined, lapBand: Known<Band>): BandReading => ({
-  ...reading(value, band, range, lapBand),
-  state: unknown('notApplicable'),
-});
+const lapOnlyReading =
+  (measure: Measure): Reader =>
+  (value, band, range, lapBand) => ({
+    ...reading(measure)(value, band, range, lapBand),
+    state: unknown('notApplicable'),
+  });
 
 /** One corner's pressure band, or the whole band's reason. */
 const cornerOf = (bands: Known<Corners<Band>>, corner: keyof Corners<Band>): Known<Band> =>
@@ -50,23 +65,25 @@ const bandsOfCar = (
   const pressure = pressureBands(car, c, at);
   // in the box the bands are off: every channel is judged per lap only
   const live = effect.bandsOff === true ? lapOnlyReading : reading;
+  // tyre channels are judged by their lap's mid-range, the brakes and the engine by their peak
+  const tyreReading = live('midRange');
   const fixed = (band: Band) => known(band, at);
   const tyre = (corner: 'fl' | 'fr' | 'rl' | 'rr') => ({
-    surfaceC: lapOnlyReading(car.tyres.corners[corner].surfaceTempC, fixed(b.surface), r?.tyres[corner].surfaceC, fixed(l.surface)),
-    carcassC: live(car.tyres.corners[corner].carcassTempC, fixed(b.carcass), r?.tyres[corner].carcassC, fixed(l.carcass)),
-    pressurePsi: live(car.tyres.corners[corner].pressurePsi, cornerOf(pressure, corner), r?.tyres[corner].pressurePsi, cornerOf(pressure, corner)),
+    surfaceC: lapOnlyReading('midRange')(car.tyres.corners[corner].surfaceTempC, fixed(b.surface), r?.tyres[corner].surfaceC, fixed(l.surface)),
+    carcassC: tyreReading(car.tyres.corners[corner].carcassTempC, fixed(b.carcass), r?.tyres[corner].carcassC, fixed(l.carcass)),
+    pressurePsi: tyreReading(car.tyres.corners[corner].pressurePsi, cornerOf(pressure, corner), r?.tyres[corner].pressurePsi, cornerOf(pressure, corner)),
   });
-  const brake = (corner: 'fl' | 'fr' | 'rl' | 'rr') => lapOnlyReading(car.condition.brakes[corner].tempC, fixed(b.brakes), r?.brakesC[corner], fixed(l.brakes));
+  const brake = (corner: 'fl' | 'fr' | 'rl' | 'rr') => lapOnlyReading('peak')(car.condition.brakes[corner].tempC, fixed(b.brakes), r?.brakesC[corner], fixed(l.brakes));
   return {
     tyres: { fl: tyre('fl'), fr: tyre('fr'), rl: tyre('rl'), rr: tyre('rr') },
     brakesC: { fl: brake('fl'), fr: brake('fr'), rl: brake('rl'), rr: brake('rr') },
-    engineC: live(car.condition.engineTempC, fixed(b.engine), r?.engineC, fixed(l.engine)),
+    engineC: live('peak')(car.condition.engineTempC, fixed(b.engine), r?.engineC, fixed(l.engine)),
   };
 };
 
 /**
- * Each car's channels against the bands, by its rows (`CAR_BANDS_BEHAVIOUR`); `outForFullLap` reads the car's judged
- * lap (`judgedLaps`: the newest rate lap that is not lap 1 of a race).
+ * Each car's channels against the bands, by its rows (`CAR_BANDS_BEHAVIOUR`); `outForFullLap` and `lapState` read the
+ * car's judged lap (`judgedLaps`: the newest rate lap that is not lap 1 of a race).
  */
 export const carBandsCalculator: QuickCalculator<CarBandsOutput> = {
   id: CAR_BANDS,

@@ -181,6 +181,29 @@ describe('tier-1 alerts', () => {
     expect(t.actions).toEqual([{ kind: 'alert.ack', key: 'f1:a:1000' }]);
   });
 
+  it("names the alert's car: the code from cars.overview, the separator, then the text", async () => {
+    const t = await setup();
+    await t.push('ui.alerts', { acknowledged: [], muted: [] });
+    await t.push('cars.overview', [
+      { id: carId(5), identity: { name: 'Lando Norris', raceNumber: 4 }, timing: { lap: 3 } },
+      { id: carId(7), identity: { name: 'Oscar Piastri', raceNumber: 81 }, timing: { lap: 3 } },
+    ]);
+    const a = crit('a', 1000, { kind: 'damageJump', params: { lap: 3, parts: 'frontLeftWingPct', deltaPct: 40 } });
+    await t.raise(a);
+    expect(screen.getByTestId('alert-a').textContent).toContain('NOR · damage: FL wing +40 %');
+  });
+
+  it('shows the text alone while cars.overview lacks the car', async () => {
+    const t = await setup();
+    await t.push('ui.alerts', { acknowledged: [], muted: [] });
+    await t.push('cars.overview', [{ id: carId(7), identity: { name: 'Oscar Piastri', raceNumber: 81 }, timing: { lap: 3 } }]);
+    await t.raise(crit('a', 1000, { kind: 'damageJump', params: { lap: 3, parts: 'frontLeftWingPct', deltaPct: 40 } }));
+    const shown = screen.getByTestId('alert-a').textContent ?? '';
+    expect(shown).toContain('damage: FL wing +40 %');
+    expect(shown).not.toContain('PIA');
+    expect(shown).not.toContain(text.separator);
+  });
+
   it('hides acknowledged alerts', async () => {
     const t = await setup();
     await t.push('ui.alerts', { acknowledged: ['f1:a:1000'], muted: [] });
