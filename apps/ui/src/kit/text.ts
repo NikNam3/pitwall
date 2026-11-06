@@ -98,6 +98,12 @@ export const sourceHover = {
     ['calibration', setName, `${sources} ${sources === 1 ? 'source' : 'sources'}`, parts].join(separator),
   default: (note: string): string => ['default', note].join(separator),
 } as const;
+/** The source kind in words (a SOURCE column), shared by every display that names a source. */
+export const sourceWord = {
+  session: 'session',
+  calibration: 'calibration',
+  default: 'default',
+} as const satisfies Record<EstimateSource['kind'], string>;
 
 /** Body of a gallery cell whose moment file is missing. */
 export const momentMissing = 'moment not generated, run pnpm gen:moments';

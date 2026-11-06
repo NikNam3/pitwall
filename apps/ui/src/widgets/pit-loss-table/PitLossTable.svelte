@@ -4,6 +4,8 @@
   import type { WidgetProps } from '../../kit/types.ts';
   import { fitCell } from '../../kit/grid/grid.ts';
   import { fitColumns } from '../../kit/size/size.ts';
+  import { sourceWord } from '../../kit/text.ts';
+  import { sourceTitle } from '../../kit/values/source-badge.ts';
   import SourceBadge from '../../kit/values/SourceBadge.svelte';
   import TextCell from '../../kit/values/TextCell.svelte';
   import { roleOrUndefined } from '../../theme/index.ts';
@@ -40,7 +42,12 @@
             text={text.conditions[r.condition]}
             width={c.widthCols}
             align={c.align}
-          />{:else if c.key === 'loss'}{#if sourceInWords}<TextCell {...r.loss} width={c.widthCols} align={c.align} />{:else}<TextCell
+          />{:else if c.key === 'loss'}{#if sourceInWords}<TextCell
+              {...r.loss}
+              width={c.widthCols}
+              align={c.align}
+              title={sourceTitle(r.source)}
+            />{:else}<TextCell
               {...r.loss}
               width={c.widthCols - 1}
               align={c.align}
@@ -48,7 +55,12 @@
             text={r.n}
             width={c.widthCols}
             align={c.align}
-          />{:else}<TextCell text={text.sourceWord[r.source.kind]} width={c.widthCols} align={c.align} />{/if}{/each}</div>
+          />{:else}<TextCell
+            text={sourceWord[r.source.kind]}
+            width={c.widthCols}
+            align={c.align}
+            title={sourceTitle(r.source)}
+          />{/if}{/each}</div>
   {/each}
   {#if full}
     <div class="line"></div>
