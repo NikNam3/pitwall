@@ -5,11 +5,14 @@
 //    `dev.inspect` (key Ctrl+I in DEFAULT_KEYS) only when `import.meta.env.DEV` is true at the call; it runs `ctx.inspection.toggle()`.
 //  - WindowShell mounts the top bar for its default feed; `alerts.ackAll` (Ctrl+Enter) sends `uiAction alert.ackAll` with
 //    exactly the keys of the tier-1 alerts the bar shows (at most 3, oldest first; acknowledged and muted ones are not shown).
-import { cleanup, render } from '@testing-library/svelte';
+//  - task fix-c72 (C72): the top bar's workbook segment invokes `workbook.pick` by id (`registry.run('workbook.pick')`),
+//    which opens the workbook picker.
+import { cleanup, fireEvent, render, screen } from '@testing-library/svelte';
 import { feedId, type Insight } from '@pitwall/domain';
 import { tick } from 'svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_KEYS, defaultCommands, type CommandContext } from '../../src/shell/commands/default-commands.ts';
+import { CommandRegistry } from '../../src/shell/commands/registry.ts';
 import { Inspection } from '../../src/shell/inspector/inspection.svelte.ts';
 import { TEST_WIDGETS } from './fixtures/index.ts';
 import { FEED, group1, makeStore, press, stubBrowser, workbook } from './shell-harness.ts';
@@ -120,5 +123,17 @@ describe('alerts.ackAll (Ctrl+Enter)', () => {
     press('Enter', { ctrl: true });
     await tick();
     expect(ackAlls(ctx)).toEqual([]);
+  });
+});
+
+describe('the workbook segment', () => {
+  it('runs workbook.pick by id, which opens the workbook picker', async () => {
+    await mount([]);
+    expect(screen.queryByTestId('workbook-picker')).toBeNull();
+    const run = vi.spyOn(CommandRegistry.prototype, 'run');
+    await fireEvent.click(screen.getByTestId('workbook-name'));
+    await tick();
+    expect(run).toHaveBeenCalledWith('workbook.pick');
+    expect(screen.getByTestId('workbook-picker')).toBeTruthy();
   });
 });
