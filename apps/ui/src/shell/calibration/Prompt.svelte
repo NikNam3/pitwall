@@ -2,8 +2,8 @@
   // The calibration prompt (SP4.1a spec 3.3, mockup start-prompt.html): the session track's sets, the preselection
   // marked, and `defaults` last. Every row invokes its command by id (C72); ↑↓ move the cursor, Enter chooses.
   // Escape (through the shell's overlay stack) or a click outside closes it and keeps what the run uses.
-  import type { CalibrationSet } from '@pitwall/domain';
-  import { formatDay, formatTrack } from '../../kit/values/format.ts';
+  import type { CalibrationSet, SessionKind } from '@pitwall/domain';
+  import { formatDay, formatSessionKind, formatTrack } from '../../kit/values/format.ts';
   import * as text from '../../kit/text.ts';
   import { role } from '../../theme/index.ts';
   import { calibrationChooseId } from '../commands/default-commands.ts';
@@ -16,6 +16,8 @@
     /** Per set id, how many of its sources are skipped as `missing` (`calibration.values`). */
     missing: ReadonlyMap<string, number>;
     trackId: number;
+    /** The session's kind as the top bar's session segment names it (`sessionOf`); undefined while pending or `none`. */
+    session: SessionKind | undefined;
     /** The set the run uses (`null`: defaults), and whether a pick chose it rather than the preselection. */
     activeSetId: string | null;
     picked: boolean;
@@ -23,7 +25,9 @@
     run: (commandId: string) => void;
     onClose: () => void;
   };
-  let { sets, missing, trackId, activeSetId, picked, run, onClose }: Props = $props();
+  let { sets, missing, trackId, session, activeSetId, picked, run, onClose }: Props = $props();
+
+  const title = $derived(text.calibration.promptTitle(formatTrack(trackId), session === undefined ? undefined : formatSessionKind(session)));
 
   type Row = { setId: string | null; name: string };
   const rows = $derived<Row[]>([...sets.map((s) => ({ setId: s.id, name: s.name })), { setId: null, name: text.calibration.defaults }]);
@@ -50,7 +54,7 @@
     set.lastUsedAt !== undefined ? text.calibration.used(formatDay(set.lastUsedAt)) : text.calibration.created(formatDay(set.createdAt));
 </script>
 
-<Overlay title={text.calibration.promptTitle(formatTrack(trackId))} {onClose} cols={OVERLAY_COLS.calibration}>
+<Overlay {title} {onClose} cols={OVERLAY_COLS.calibration}>
   <!-- The list holds the focus: the keys go to it. -->
   <ul bind:this={list} data-testid="calibration-prompt" tabindex="-1" role="listbox" onkeydown={onKey}>
     {#each rows as row, i (row.setId)}

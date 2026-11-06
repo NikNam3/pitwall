@@ -152,7 +152,9 @@ export const commandTitles = {
 
 /** The session-start calibration prompt and the top bar's calibration segment (SP4.1a spec 3.3). */
 export const calibration = {
-  promptTitle: (track: string): string => ['Calibration for this session', track].join(separator),
+  /** The track, then the session's kind as the top bar names it (`Silverstone race`); the track alone without one. */
+  promptTitle: (track: string, session?: string): string =>
+    ['Calibration for this session', session === undefined ? track : `${track} ${session}`].join(separator),
   sources: (n: number): string => `${n} ${n === 1 ? 'source' : 'sources'}`,
   missing: (n: number): string => `${n} missing`,
   missingHover: 'a stint no longer in its session (session rebuilt or deleted): left out of every value',
