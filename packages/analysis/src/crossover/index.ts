@@ -2,7 +2,9 @@
 import type { CarId, Crossover } from '@pitwall/domain';
 
 export type { Crossover, CrossoverLap, FirstFaster, TyreType } from '@pitwall/domain';
+export { CROSSOVER_BEHAVIOUR, type CrossoverEffect } from './behaviour.ts';
 export * from './config.ts';
+export { tyreTypeOf } from './tyre-type.ts';
 
 /** The analysis id. */
 export const CROSSOVER = 'crossover';
