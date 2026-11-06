@@ -40,7 +40,7 @@ describe('paceDelta', () => {
     expect(paceDelta([90_000, 90_000], [89_000, 89_000], at).known).toBe(true);
   });
 
-  it('swapping before and after flips the sign', () => {
+  it('swapping before and after flips the sign (up to the rounding of a half: +x.5 rounds up, −x.5 too)', () => {
     const laps = fc.array(fc.integer({ min: 60_000, max: 130_000 }), { minLength: 2, maxLength: 12 });
     fc.assert(
       fc.property(laps, laps, (before, after) => {
@@ -48,9 +48,43 @@ describe('paceDelta', () => {
         const backward = valueOf(paceDelta(after, before, at));
         expect(forward).toBeDefined();
         expect(backward).toBeDefined();
-        expect(forward! + backward!).toBeCloseTo(0, 6);
+        expect(Math.abs(forward! + backward!)).toBeLessThanOrEqual(1);
       }),
     );
+  });
+
+  describe('whole milliseconds (C4)', () => {
+    it('a mean difference with a fraction is rounded: 1809.67 ms is 1810 ms', () => {
+      // after: mean 91 809.67; before: 90 000
+      expect(paceDelta([90_000, 90_000, 90_000], [91_809, 91_810, 91_810], at)).toEqual({ known: true, value: 1810, at });
+    });
+
+    it('rounds to the nearest ms: +1.5 is 2, −1.25 is −1, −1.5 is −1 (a half rounds up), −2.5 is −2', () => {
+      expect(valueOf(paceDelta([90_000, 90_000], [90_001, 90_002], at))).toBe(2);
+      expect(valueOf(paceDelta([90_000, 90_000, 90_000, 90_005], [90_000, 90_000], at))).toBe(-1);
+      expect(valueOf(paceDelta([90_000, 90_003], [90_000, 90_000], at))).toBe(-1);
+      expect(valueOf(paceDelta([90_000, 90_005], [90_000, 90_000], at))).toBe(-2);
+    });
+
+    it('a result that rounds to zero from below is 0, never −0', () => {
+      // −0.5 and −0.33 round to −0 with Math.round alone
+      expect(Object.is(valueOf(paceDelta([90_000, 90_001], [90_000, 90_000], at)), 0)).toBe(true);
+      expect(Object.is(valueOf(paceDelta([90_000, 90_000, 90_001], [90_000, 90_000], at)), 0)).toBe(true);
+    });
+
+    it('is always an integer within half a ms of the mean difference, for integer lap times', () => {
+      const laps = fc.array(fc.integer({ min: 60_000, max: 130_000 }), { minLength: 2, maxLength: 12 });
+      const mean = (values: number[]) => values.reduce((sum, v) => sum + v, 0) / values.length;
+      fc.assert(
+        fc.property(laps, laps, (before, after) => {
+          const value = valueOf(paceDelta(before, after, at));
+          expect(value).toBeDefined();
+          expect(Number.isInteger(value)).toBe(true);
+          expect(Object.is(value, -0)).toBe(false);
+          expect(Math.abs(value! - (mean(after) - mean(before)))).toBeLessThanOrEqual(0.5 + 1e-9);
+        }),
+      );
+    });
   });
 });
 
@@ -114,6 +148,16 @@ describe('paceDeltaAround', () => {
   it('the order of the laps does not matter', () => {
     const list = laps(8, (n) => (n < 5 ? 90_000 : 91_000));
     expect(paceDeltaAround([...list].reverse(), 5, race)).toEqual(paceDeltaAround(list, 5, race));
+  });
+
+  it('whole milliseconds (C4): a mean difference with a fraction is rounded, and one just below zero is 0, never −0', () => {
+    // before: laps 2..4 at 90 000, 90 000, 90 001 (mean 90 000.33); after: laps 6..8
+    const before = (n: number) => (n === 4 ? 90_001 : 90_000);
+    const slower = laps(8, (n) => (n < 5 ? before(n) : n === 5 ? 150_000 : 91_000));
+    expect(paceDeltaAround(slower, 5, race)).toEqual(known(1000, 800_000));
+    const same = paceDeltaAround(laps(8, (n) => (n < 5 ? before(n) : 90_000)), 5, race);
+    expect(same).toEqual(known(0, 800_000));
+    expect(same.known && Object.is(same.value, 0)).toBe(true);
   });
 
   it('the lap-class options are required: a call without maxNeutralisedMs is a type error, not a silent default', () => {
