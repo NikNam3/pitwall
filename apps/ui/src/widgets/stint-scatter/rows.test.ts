@@ -9,7 +9,7 @@
 //    last lap as two digits for a closed stint, nothing for the current one (`S L01–15`, `M L16–`). The current stint in
 //    the `ownCar` role, earlier ones `textDim` (the approved mockup). `pinned`: drawn at the plot's edge when off-scale and
 //    never widening the y-range (excluded laps only);
-//  - `compoundRows(compounds: readonly CompoundPrior[]): CompoundRow[]`, where
+//  - `compoundRows(compounds: readonly CompoundEstimate[]): CompoundRow[]`, where
 //    `CompoundRow = { compound: string; toSoft: CellPart; degPerLap: CellPart; sd: CellPart; source: EstimateSource; role: Role | undefined }`:
 //    one row per compound in the analysis's order; `compound` is the kit compound letter; TO SOFT and DEG/LAP in signed
 //    seconds, SD in seconds, three decimals each (kit formats); an unknown value is the kit's unknown part; the source

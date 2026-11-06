@@ -2,7 +2,7 @@
 // draws them: every lap with its use, the fit line with its band per tyre age, and per compound the prior the first stint
 // on it started from. It maps `degradation`'s output and judges nothing of its own (C43). Quick: per frame over
 // `degradation`, which runs on a lap, a stint or a pick.
-import { carId, known, unknown, type CarId, type CompoundPrior, type FitPoint, type Known, type SessionTime, type StintFit } from '@pitwall/domain';
+import { carId, known, unknown, type CarId, type CompoundEstimate, type FitPoint, type Known, type SessionTime, type StintFit } from '@pitwall/domain';
 import { copyPlain, type EngineView, type QuickCalculator } from '@pitwall/engine/readers';
 import { DEGRADATION, type DegradationOutput, type StintDegradation } from '../degradation/index.ts';
 import { ourCars } from '../shared/our-cars.ts';
@@ -52,9 +52,9 @@ function stintFitOf(stint: StintDegradation): StintFit {
 }
 
 /** Per compound (actual and visual), in the order the stints first used it, the prior its first stint started from. */
-function compoundsOf(stints: readonly StintDegradation[], now: SessionTime): CompoundPrior[] {
+function compoundsOf(stints: readonly StintDegradation[], now: SessionTime): CompoundEstimate[] {
   const seen = new Set<string>();
-  const out: CompoundPrior[] = [];
+  const out: CompoundEstimate[] = [];
   for (const s of stints) {
     const key = `${s.actual}/${s.visual}`;
     if (seen.has(key)) continue;

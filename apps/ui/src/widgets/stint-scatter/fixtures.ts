@@ -4,7 +4,7 @@
 // Silverstone, KUH on mediums from lap 1, basis wear; the three-stint case is LIN's soft, medium and hard stints.
 import { known, toSessionTime, unknown } from '@pitwall/domain';
 import type {
-  ActualCompound, CompoundPrior, EstimateSource, FitPoint, Known, LapUse, Ms, StintAnalysis, StintFit, StintLap, UnknownReason,
+  ActualCompound, CompoundEstimate, EstimateSource, FitPoint, Known, LapUse, Ms, StintAnalysis, StintFit, StintLap, UnknownReason,
   VisualCompound,
 } from '@pitwall/domain';
 
@@ -59,7 +59,7 @@ export const compound = (
   nuMsPerLap: number,
   nuSdMs: number,
   source: EstimateSource,
-): CompoundPrior => ({ actual: ACTUAL[visual] ?? 'unknown', visual, alphaOffsetMs, nuMsPerLap: k(nuMsPerLap), nuSdMs: k(nuSdMs), source });
+): CompoundEstimate => ({ actual: ACTUAL[visual] ?? 'unknown', visual, alphaOffsetMs, nuMsPerLap: k(nuMsPerLap), nuSdMs: k(nuSdMs), source });
 
 // ---- KUH: one medium stint from lap 1 (the approved full mockup) ----
 
@@ -83,7 +83,7 @@ export const kuhStint = stint(1, 'medium', 1, 23, {
   source: sessionSource('19 laps + league (3 sources), 88 % session'),
 });
 
-export const kuhCompounds: CompoundPrior[] = [
+export const kuhCompounds: CompoundEstimate[] = [
   compound('medium', k(412), 55, 9, calibrationSource('calibration')),
 ];
 
@@ -128,7 +128,7 @@ export const linStints: StintFit[] = [
 const softPrior = compound('soft', k(0), 85, 18, sessionSource('6 laps (LIN, stint 1) + track default'));
 
 /** The compounds table of the redrawn mockup: S and M from the session, H from the calibration. */
-export const linCompounds: CompoundPrior[] = [
+export const linCompounds: CompoundEstimate[] = [
   softPrior,
   compound('medium', k(412), 55, 9, sessionSource('10 laps + league (3 sources), 88 % session')),
   compound('hard', k(780), 41, 15, calibrationSource('league: your override 0.045 · + 7 laps this session (LIN), 31 % session')),
