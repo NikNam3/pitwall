@@ -7,4 +7,5 @@ export const widget = declareWidget({
   title: 'Alarms',
   data: { insights: folded('insights', activeInsights), alerts: topic('ui.alerts') },
   sizes: { compact: { minCols: 40, minRows: 3 }, full: { minCols: 62, minRows: 6 } },
+  actions: ['alert.ack', 'alertGroup.mute'],
 });

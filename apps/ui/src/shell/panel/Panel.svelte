@@ -130,8 +130,10 @@
     return state?.status === 'ok' ? (state.value as { stale?: boolean; cadenceMs?: number } | undefined) : undefined;
   });
 
-  // Widgets send their UI actions (acknowledge, mute) through the panel's `send`.
-  setUiActions((action) => send(action));
+  // Widgets send their UI actions (acknowledge, mute) through the panel's `send`, only the kinds they declare (C74).
+  // A panel's widget is fixed for its life (a new widget is a new panel), so its declared kinds are read once.
+  // svelte-ignore state_referenced_locally
+  setUiActions((action) => send(action), widget?.decl.actions ?? []);
 
   const panelStale = providePanelStale({ cadenceMs: () => feed?.cadenceMs });
 

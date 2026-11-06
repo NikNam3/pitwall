@@ -212,6 +212,32 @@ export const formatDeltaPct = (pct: Percent): string => {
   return `${pct < 0 && text !== '0' ? MINUS : '+'}${text} %`;
 };
 
+// calibration
+
+/** A residual in standard deviations, signed, one decimal, with the true minus, `0.4` -> `+0.4σ`, `-1.26` -> `−1.3σ`; zero is `+0.0σ`. */
+export const formatSigma = (s: number): string => {
+  const text = fixed(s, 1);
+  if (text === '') return '';
+  return `${text.startsWith(MINUS) ? '' : '+'}${text}σ`;
+};
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const;
+const ISO_DATE = /^\d{4}-(\d{2})-(\d{2})(?:T|$)/;
+
+/**
+ * The calendar day of an ISO date as written, `2026-10-15` -> `15 Oct`; a full timestamp shows its own date part, with no
+ * time zone conversion. Only for stored dates (a set's `createdAt`, a session's date), never a race-clock time (C35).
+ * A string that is no ISO date is empty.
+ */
+export const formatDay = (iso: string): string => {
+  const match = ISO_DATE.exec(iso);
+  if (match === null) return '';
+  const day = match[2] ?? '';
+  const month = MONTHS[Number(match[1]) - 1];
+  const d = Number(day);
+  return month === undefined || d < 1 || d > 31 ? '' : `${day} ${month}`;
+};
+
 // gap chart
 
 /** A y tick of the gap chart from the plotted (negated) value, as seconds behind the reference: `-5` -> `+5`, `5` -> `−5`, `0` -> `0`. */

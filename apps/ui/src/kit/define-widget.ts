@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- `any` is the wildcard of the type-level contract (variance of Component and Fold) */
 // The widget contract (spec 4.2): data declarations, `declareWidget` and `registerWidget`.
 // No Svelte or DOM here: Node scripts import every widget.ts. Everything recorded is plain data plus functions.
-import type { Fold, TopicName, TopicValue } from '@pitwall/contracts';
+import type { Fold, TopicName, TopicValue, UiAction } from '@pitwall/contracts';
 import type {
   AnyDataDecl, ComponentLoader, DataDecl, OptionDecl, OptionalDecl, ParamsArg, RegisteredWidget, SizeMode, WidgetDecl,
 } from './types.ts';
@@ -34,6 +34,8 @@ export function declareWidget<D extends Record<string, AnyDataDecl>, O extends R
   data: D;
   options?: O;
   sizes: Record<string, SizeMode>;
+  /** The uiAction kinds the widget sends (C74); none when omitted. */
+  actions?: readonly UiAction['kind'][];
 }): WidgetDecl<D, O> {
   if (!KEBAB_CASE.test(w.name)) throw new Error(`widget name "${w.name}" is not kebab-case`);
   const modes = Object.entries(w.sizes);
@@ -43,7 +45,7 @@ export function declareWidget<D extends Record<string, AnyDataDecl>, O extends R
       throw new Error(`widget "${w.name}" size "${mode}" needs minCols and minRows of at least 1`);
     }
   }
-  return { name: w.name, title: w.title, data: w.data, options: w.options ?? ({} as O), sizes: w.sizes };
+  return { name: w.name, title: w.title, data: w.data, options: w.options ?? ({} as O), sizes: w.sizes, actions: w.actions ?? [] };
 }
 
 /**
