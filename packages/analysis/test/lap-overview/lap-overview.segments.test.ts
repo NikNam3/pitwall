@@ -6,7 +6,7 @@
 // end, the session phase back to `racing`, inside the player's lap. The engine runs the segment frame by frame
 // (`SessionTracker`, `SessionRunner`); after its last frame a scheduler that needs `lap-overview` runs it through its
 // guarded view (C41) on the final view: a newly needed unit runs at once against the current view (C49).
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { currentLaps, feedId, unknown, type LapRecord } from '@pitwall/domain';
 import { CalculatorRegistry, Scheduler, SessionRunner, SessionTracker, situationOf, type DeepReadonly, type EngineState, type StepResult } from '@pitwall/engine';
 import { guarded } from '../../../engine/test/support/scheduler.ts';
@@ -47,13 +47,17 @@ async function lastRun(file: string): Promise<LastRun> {
 const { maxNeutralisedMs } = LAP_CLASSES_CONFIG.defaults;
 const neutralisedMs = (l: DeepReadonly<LapRecord>): number => (l.scShare + l.vscShare) * l.lapTimeMs;
 
-/** The run of the segment, once for both rows. */
-let run: Promise<LastRun> | undefined;
-const segmentRun = (): Promise<LastRun> => (run ??= lastRun(VSC_LAP));
+/** The run of the segment, once for both rows, in the setup as the other full-lap segment tests do. */
+let run: LastRun;
+const segmentRun = (): LastRun => run;
 
 describe('lap-overview on real data', () => {
+  beforeAll(async () => {
+    run = await lastRun(VSC_LAP);
+  });
+
   it("race-mexico-vsc-full-lap: the player's lap run from line to line under a VSC that ends during it is `vsc`", async () => {
-    const { overview, state } = await segmentRun();
+    const { overview, state } = segmentRun();
     const player = state.playerCar;
     // the player's newest lap: the one the segment holds whole, partly green after the VSC's end
     const record = currentLaps(state.history.laps as LapRecord[])
@@ -70,7 +74,7 @@ describe('lap-overview on real data', () => {
   });
 
   it('race-mexico-vsc-full-lap: after the VSC ends the session is green again, and every lap that overlaps the VSC is `vsc`, none `green`, `sc` or `red`', async () => {
-    const { overview, state } = await segmentRun();
+    const { overview, state } = segmentRun();
     // the VSC's end: a closed `neutralised` span, the session phase `racing` after it
     const closed = state.history.spans['session-phase-race'] ?? [];
     expect(closed.map((s) => s.kind)).toContain('neutralised');
