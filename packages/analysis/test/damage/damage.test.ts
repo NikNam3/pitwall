@@ -195,6 +195,19 @@ describe('damage calculator', () => {
       expect(out[car1]!.jumps).toEqual([]);
     });
 
+    it('is whole milliseconds (C4): a mean difference with a fraction is rounded, one just below zero is 0, never −0', () => {
+      // before: laps 2..4 at 90 s; after: laps 6..8 at 91 809, 91 810, 91 810 ms (mean +1 809.67)
+      const fraction = lapsOf(8, (n) => (n <= 5 ? 90_000 : n === 6 ? 91_809 : 91_810));
+      const loss = run(jump, fraction).jumps[0]!.lossMsPerLap;
+      expect(loss).toEqual(known(1810, fraction[7]!.completedAt));
+      // before: laps 2..4 at 90 000, 90 000, 90 001 (mean 90 000.33); after: 90 s, so −0.33
+      const level = lapsOf(8, (n) => (n === 4 ? 90_001 : 90_000));
+      const zero = run([dmg(level[3]!.completedAt + 45_000, 'frontRightWingPct', 0, 20)], level).jumps[0]!;
+      expect(zero.lap).toBe(5);
+      expect(zero.lossMsPerLap).toEqual(known(0, level[7]!.completedAt));
+      expect(zero.lossMsPerLap.known && Object.is(zero.lossMsPerLap.value, 0)).toBe(true);
+    });
+
     it('update recomputes it when laps arrive without a new event', () => {
       const early = situatedView({ cars: [carState({ id: car0 })], history: { events: jump, laps: lapsOf(6, timeOf) } });
       const late = situatedView({ cars: [carState({ id: car0 })], history: { events: jump, laps: lapsOf(7, timeOf) } });

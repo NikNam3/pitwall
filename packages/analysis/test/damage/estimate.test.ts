@@ -184,6 +184,22 @@ describe('damage: measuring and the early estimate (spec 3.5)', () => {
       expect(estimate(jumpAt(slowed, 5, 30))).toEqual(knownMs((550 * 50) / 20));
     });
 
+    it('is whole milliseconds (C4): after 12, 550 × 50 / 12 = 2 291.67 is 2 292', () => {
+      const value = estimate(jumpAt(slowed, 5, 22));
+      expect(value).toEqual(knownMs(2292));
+      expect(value.known && Number.isInteger(value.value)).toBe(true);
+    });
+
+    it('rounds a half up and never gives −0: over 100 mini-sectors, one 1 ms fast is 0, 3 ms fast −1, 1 ms slow +1', () => {
+      // (5, 10) .. (7, 9): 100 mini-sectors since the jump; lap 6 alone after it, so the loss is still measured
+      const oneOff = (ms: number): Scenario => ({ slow: (lap, segment) => (lap === 5 && segment === 10 ? ms : 0) });
+      const zero = estimate(jumpAt(oneOff(-1), 7, 10));
+      expect(zero).toEqual(knownMs(0));
+      expect(zero.known && Object.is(zero.value, 0)).toBe(true);
+      expect(estimate(jumpAt(oneOff(-3), 7, 10))).toEqual(knownMs(-1));
+      expect(estimate(jumpAt(oneOff(1), 7, 10))).toEqual(knownMs(1));
+    });
+
     it('minEstimateSegments comes from the config section damage', () => {
       // (5, 10) .. (5, 14): 10 + 20 + 30 + 40 + 50 = 150 ms over 5 mini-sectors
       const five = { ...slowed, config: { minEstimateSegments: 5 } };

@@ -13,14 +13,15 @@ const mean = (values: Ms[]): number => values.reduce((sum, value) => sum + value
 
 /**
  * Time lost per lap after an event (positive = slower after): the mean of the pace laps after it minus the mean of
- * those before it. At least two laps on each side: with fewer before it the delta can never be known
+ * those before it, rounded to whole ms. At least two laps on each side: with fewer before it the delta can never be known
  * (`unknown('notApplicable')`, checked first); with fewer after it it is still waiting for laps
  * (`unknown('insufficientData')`). A known result carries `at`, the session time it is valid for.
  */
 export function paceDelta(beforeMs: Ms[], afterMs: Ms[], at: SessionTime): Known<Ms> {
   if (beforeMs.length < MIN_LAPS) return unknown('notApplicable');
   if (afterMs.length < MIN_LAPS) return unknown('insufficientData');
-  return known(mean(afterMs) - mean(beforeMs), at);
+  // whole ms (C4); `+ 0` turns a −0 into 0
+  return known(Math.round(mean(afterMs) - mean(beforeMs)) + 0, at);
 }
 
 /**
