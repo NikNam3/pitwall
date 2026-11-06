@@ -1,10 +1,11 @@
-import { unknown, type Insight, type RunPriors, type SessionTime } from '@pitwall/domain';
+import type { Insight, RunPriors, SessionTime } from '@pitwall/domain';
 import type { HistoryDelta } from '../log/types.ts';
 import type { Snapshotable } from '../runner/snapshotable.ts';
 import type { ChangeTag } from '../step/types.ts';
 import type { DeepReadonly } from '../util/deep-readonly.ts';
 import { deepFreeze } from '../util/deep-freeze.ts';
 import { InsightBook, type InsightBookState } from './insight-book.ts';
+import { priorsOf } from './priors.ts';
 import { RegistryError, type CalculatorRegistry } from './registry.ts';
 import type { Cadence, Calculator, CalculatorId, EngineView, InsightChange } from './types.ts';
 
@@ -247,6 +248,8 @@ export class Scheduler implements Snapshotable<SchedulerBookkeeping> {
     const ran = new Set<CalculatorId>();
     const errors: SchedulerResult['errors'] = [];
     const insights: InsightChange[] = [];
+    // Once per pass (C62a): the snapshot the projection's decisions name, else the session-start one.
+    const priors = priorsOf(input.history.decisions, input.priors);
 
     for (const { calc, slot } of this.#entries) {
       if (opts.only !== undefined && !opts.only.has(calc.id)) continue;
@@ -269,8 +272,7 @@ export class Scheduler implements Snapshotable<SchedulerBookkeeping> {
         changed: pending.changed,
         weekend: input.weekend,
         config: input.config,
-        // `priorsOf(input.history.decisions, input.priors)` once the decision foundation exists (spec 3.4).
-        priors: unknown('notApplicable'),
+        priors,
         track: input.track,
         feed: input.feed,
         outputs: this.#outputs,

@@ -1,19 +1,21 @@
 // Priors declarations and `view.priors` (contract C62a, spec 3.2, 3.4): each estimation unit declares its priors entries
 // with pure functions over a set's sources; the bridge's priors store runs them between runs; the scheduler gives a run
 // the snapshot the projection's decisions name.
-import type {
-  CalibrationSource,
-  DecisionRecord,
-  Known,
-  LapRecord,
-  LapUse,
-  PitStopRecord,
-  PriorsEntries,
-  PriorsSnapshot,
-  RunPriors,
-  StintRecord,
-  TrackData,
-  WeekendPhase,
+import {
+  known,
+  unknown,
+  type CalibrationSource,
+  type DecisionRecord,
+  type Known,
+  type LapRecord,
+  type LapUse,
+  type PitStopRecord,
+  type PriorsEntries,
+  type PriorsSnapshot,
+  type RunPriors,
+  type StintRecord,
+  type TrackData,
+  type WeekendPhase,
 } from '@pitwall/domain';
 import type { DeepReadonly } from '../util/deep-readonly.ts';
 import type { EngineView } from './types.ts';
@@ -67,9 +69,19 @@ export function definePriors(unit: string, decl: Omit<PriorsDecl, 'unit'>): Prio
 }
 
 /**
- * `view.priors` (C62a): the snapshot of the newest `calibrationChosen` in `decisions`, else `run.start`'s;
- * `notApplicable` without one (no set, `defaults` chosen, a recording without a priors sidecar).
+ * The time a chosen snapshot is known from: fixed per snapshot, so `view.priors` stays equal from frame to frame and
+ * after a rewind (C33, C38); a decision records no race-clock time to use instead.
  */
-export function priorsOf(_decisions: readonly DecisionRecord[], _run: DeepReadonly<RunPriors>): Known<DeepReadonly<PriorsSnapshot>> {
-  throw new Error('not implemented');
+const PRIORS_AT = 0;
+
+/**
+ * `view.priors` (C62a): the snapshot of the newest `calibrationChosen` in `decisions`, else `run.start`'s;
+ * `notApplicable` without one (no set, `defaults` chosen, a recording without a priors sidecar) and when the chosen
+ * snapshot is not among the run's.
+ */
+export function priorsOf(decisions: readonly DeepReadonly<DecisionRecord>[], run: DeepReadonly<RunPriors>): Known<DeepReadonly<PriorsSnapshot>> {
+  const chosen = decisions.findLast((d) => d.kind === 'calibrationChosen');
+  const fingerprint = chosen === undefined ? run.start : chosen.setId === null ? null : chosen.snapshot;
+  const snapshot = fingerprint === null ? undefined : run.snapshots[fingerprint];
+  return snapshot === undefined ? unknown('notApplicable') : known(snapshot, PRIORS_AT);
 }

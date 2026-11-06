@@ -1,8 +1,9 @@
 // The projection (contract C26, C28-C30): the log as readers see it, every hidden fact skipped. The only module that
 // computes it, and the only one that computes membership: which spans a fact belongs to, from the frame number it
 // describes and the frame numbers each span opened and closed on (`situationAt`, `membershipOf`), never from times. A
-// fact is hidden when a void range covers its position (C27) or, for a fact that is no span, when the frame it describes
-// lies in the `formation` span of `session-phase-race` (C29). Spans are never hidden that way.
+// fact is hidden when a void range covers its position (C27) or, for a fact that is neither a span nor a decision, when
+// the frame it describes lies in the `formation` span of `session-phase-race` (C29). Spans and decisions are never
+// hidden that way.
 import { scopeOf, type CarId, type FactList, type FrameNumber, type MachineId, type OpenSpan, type Span } from '@pitwall/domain';
 import type { Situation } from '../situations/situation.ts';
 import type { DeepReadonly } from '../util/deep-readonly.ts';
@@ -57,11 +58,11 @@ const hidingFramesOf = (span: DeepReadonly<OpenSpan> & { endFrame?: FrameNumber 
 });
 
 /**
- * A fact of `list` is hidden by formation (C29): it is no span and the frame it describes lies in the race's formation
- * span, whenever the fact was recorded.
+ * A fact of `list` is hidden by formation (C29): it is neither a span nor a decision and the frame it describes lies in
+ * the race's formation span, whenever the fact was recorded.
  */
 export const isHidden = (fact: { frame: FrameNumber }, list: FactList, hidden: HiddenRanges): boolean => {
-  if (list.startsWith('spans:')) return false;
+  if (list.startsWith('spans:') || list === 'decisions') return false;
   return hidden.hiding.some((h) => covers(h, fact.frame));
 };
 
