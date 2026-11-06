@@ -28,6 +28,7 @@ export * from './session-remaining/index.ts';
 export * from './talk-window/index.ts';
 export { sessionRemainingCalculator } from './session-remaining/calculator.ts';
 export { ersCalculator } from './ers/calculator.ts';
+export { talkWindowCalculator } from './talk-window/calculator.ts';
 export * from './track-positions/index.ts';
 export * from './tyre-wear/index.ts';
 export { tyreWearCalculator } from './tyre-wear/calculator.ts';
