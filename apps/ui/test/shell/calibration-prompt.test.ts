@@ -17,7 +17,8 @@
 //  - the top-bar segment `calibration` (TOP_BAR.left, after `moment`): a button `calibration-name` reading
 //    `calibration <set name>` or `calibration defaults` (setId null); nothing while `calibration.active` is unknown;
 //    a click invokes `calibration.pick` by id.
-import type { CalibrationActiveValue, CalibrationSet, CalibrationSetsValue, CalibrationValuesValue } from '@pitwall/domain';
+import type { MachineSpans } from '@pitwall/contracts';
+import type { CalibrationActiveValue, CalibrationSet, CalibrationSetsValue, CalibrationValuesValue, OpenSpan } from '@pitwall/domain';
 import { carId, unknown } from '@pitwall/domain';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/svelte';
 import { tick } from 'svelte';
@@ -261,6 +262,32 @@ describe('the start prompt', () => {
     key('Enter');
     await tick();
     expect(t.chosen()).toEqual([{ kind: 'calibration.choose', feedId: FEED, setId: 'league' }]);
+  });
+
+  // Fix round 1 (mockup start-prompt.html: `Calibration for this session · Silverstone race`): the title names the track
+  // and the session as the top bar's session segment does (`sessionOf` over `situation.weekendPhase`, then
+  // `formatSessionKind`, C68); while the weekend phase is pending (no open span) or `none` (no name), the track alone.
+  it('the prompt’s title names the track and the session as the top bar does', async () => {
+    const t = await mount();
+    const title = (): string | undefined =>
+      prompt()?.closest<HTMLElement>('[data-testid="overlay"]')?.querySelector<HTMLElement>('.band')?.textContent?.replace(/\s+/g, ' ').trim();
+    const weekendPhase = (kind: string, detail: unknown = {}): MachineSpans => ({
+      open: [{ machine: 'weekend-phase', id: 0, kind, start: 1000, confirmed: true, detail, startFrame: 1 } as OpenSpan],
+    });
+    expect(title()).toBe('Calibration for this session · Silverstone');
+    const cases: [MachineSpans, string][] = [
+      [weekendPhase('race', { format: 'grandPrix' }), 'Calibration for this session · Silverstone race'],
+      [weekendPhase('race', { format: 'sprint' }), 'Calibration for this session · Silverstone race'],
+      [weekendPhase('practice'), 'Calibration for this session · Silverstone practice'],
+      [weekendPhase('qualifying', { format: 'sprintShootout' }), 'Calibration for this session · Silverstone sprint shootout'],
+      [weekendPhase('qualifying', { format: 'grandPrix' }), 'Calibration for this session · Silverstone qualifying'],
+      [weekendPhase('none'), 'Calibration for this session · Silverstone'],
+      [{ open: [] }, 'Calibration for this session · Silverstone'],
+    ];
+    for (const [spans, expected] of cases) {
+      await t.push('situation.weekendPhase', spans);
+      expect(title()).toBe(expected);
+    }
   });
 
   it('calibration.pick opens it at any time', async () => {

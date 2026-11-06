@@ -110,8 +110,9 @@ describe('formatInsight', () => {
 
 describe('TOP_BAR layout (mockup 9)', () => {
   // Task 24: the flag segment is gone (the session flag was a signal, C13); the phase segment shows those states
-  it('left: workbook, session, phase, moment, talk; right: alerts, replay, feed, realism', () => {
-    expect(TOP_BAR.left).toEqual(['workbook', 'session', 'phase', 'moment', 'talk']);
+  // SP4.1a Task 16: the calibration segment follows talk (C82: ported, the other segments stay)
+  it('left: workbook, session, phase, moment, talk, calibration; right: alerts, replay, feed, realism', () => {
+    expect(TOP_BAR.left).toEqual(['workbook', 'session', 'phase', 'moment', 'talk', 'calibration']);
     expect(TOP_BAR.right).toEqual(['alerts', 'replay', 'feed', 'realism']);
   });
 });
