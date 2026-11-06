@@ -4,6 +4,7 @@ import { addLaps, emptyCurrentLaps, known, unknown, type CarId, type Corners, ty
 import type { DeepReadonly } from '@pitwall/engine/readers';
 import { classifyLap, type LapClassOptions } from '../lap-classes/index.ts';
 import { perLapGainRate, type GainSample, type RateOptions } from '../per-lap-rate/index.ts';
+import { burnPerLapKg } from '../shared/fuel-burn.ts';
 import type { DEGRADATION_CONFIG } from './config.ts';
 import type { DegradationLap } from './types.ts';
 import { runFilter, type FilterLap, type FilterPrior, type FilterState } from './kalman.ts';
@@ -42,12 +43,14 @@ const wearVisible = (lap: Lap): boolean =>
 export type FuelOf = (lap: Lap) => Known<number>;
 
 /**
- * The fuel of a lap (spec 4.1): its own `fuelAtStartKg` when known. Hidden (a rival under realism) in the race: our
- * car's fuel at the start of the same lap; past our car's last lap with fuel, that value minus our burn per lap since
- * (the median burn of our rate laps, else `fallbackBurnKgPerLap`). Outside the race a hidden load stays unknown.
+ * The fuel of a lap (spec 4.1, C3, C8): its own `fuelAtStartKg` when known. A rival's load hidden by realism
+ * (`unknown('realism')`) in the race: our car's fuel at the start of the same lap; past our car's last lap with fuel,
+ * that value minus our burn per lap since (`burnPerLapKg`, `fuel`'s rate, C43; else `fallbackBurnKgPerLap`). Any other
+ * unknown load (another reason, our own car's, or outside the race) stays unknown.
  */
 export function fuelResolver(o: {
   isRace: boolean;
+  ourCar: CarId;
   ourLaps: () => readonly Lap[];
   classes: LapClassOptions;
   rate: RateOptions;
@@ -55,26 +58,23 @@ export function fuelResolver(o: {
 }): FuelOf {
   let ours: ((lapNumber: number) => number | undefined) | undefined;
   const oursOf = (): ((lapNumber: number) => number | undefined) => {
+    const laps = o.ourLaps();
     const byLap = new Map<number, number>();
-    const burns: GainSample[] = [];
     let last: { lapNumber: number; kg: number } | undefined;
-    for (const l of o.ourLaps()) {
+    for (const l of laps) {
       if (!l.fuelAtStartKg.known) continue;
       byLap.set(l.lapNumber, l.fuelAtStartKg.value);
       if (last === undefined || l.lapNumber > last.lapNumber) last = { lapNumber: l.lapNumber, kg: l.fuelAtStartKg.value };
-      if (!l.fuelAtEndKg.known || !classifyLap(l, o.classes).forRate) continue;
-      const burn = l.fuelAtStartKg.value - l.fuelAtEndKg.value;
-      // a refuel is no negative burn
-      if (burn >= 0) burns.push({ lap: l.lapNumber, gain: burn, at: l.completedAt });
     }
-    const rate = perLapGainRate(burns, o.rate);
-    const burnPerLap = rate.known ? rate.value.perLap : o.fallbackBurnKgPerLap;
+    const burn = burnPerLapKg(laps, { lapClasses: o.classes, rate: o.rate });
+    const burnPerLap = burn.known ? burn.value : o.fallbackBurnKgPerLap;
     return (n) => byLap.get(n) ?? (last !== undefined && n > last.lapNumber ? last.kg - burnPerLap * (n - last.lapNumber) : undefined);
   };
   return (lap) => {
-    if (lap.fuelAtStartKg.known || !o.isRace) return lap.fuelAtStartKg;
+    const own = lap.fuelAtStartKg;
+    if (own.known || !o.isRace || own.reason !== 'realism' || lap.carId === o.ourCar) return own;
     const kg = (ours ??= oursOf())(lap.lapNumber);
-    return kg === undefined ? lap.fuelAtStartKg : known(kg, lap.completedAt);
+    return kg === undefined ? own : known(kg, lap.completedAt);
   };
 }
 
@@ -103,17 +103,19 @@ export type FittedStint = {
 };
 
 /**
- * A stint's laps (oldest first) through the filter from `prior`: every pace lap is read, fuel-corrected
- * (`lapTimeMs − γ · fuelKg`, whole ms) when every pace lap's fuel is known (`fuelCorrected`), else on its lap time.
- * The basis is `wear` when the stint's wear is visible (a lap with every corner's start wear known), else `age`.
+ * A stint's laps (oldest first) through the filter from `prior`. The stint is fuel-corrected (`fuelCorrected`,
+ * `lapTimeMs − γ · fuelKg` in whole ms) when one of its pace laps has a known fuel (one of its laps, without a pace lap):
+ * then a pace lap whose fuel stays unknown (`fuelResolver`) is no pace lap of the fit (`notForPace`, C3). A stint where
+ * none has is fitted on its lap times. The basis is `wear` when the stint's wear is visible (a lap with every corner's
+ * start wear known), else `age`.
  */
 export function fitLaps(laps: readonly Lap[], fuelOf: FuelOf, prior: FilterPrior, config: Config, classes: LapClassOptions, rate: RateOptions): FittedStint {
   const out: DegradationLap[] = [];
-  // the rows of the pace laps, in the order the filter reads them
+  // the rows of the pace laps, in lap order
   const pace: DegradationLap[] = [];
   const rateLaps: Lap[] = [];
-  let allFuel = true;
-  let paceFuel = true;
+  let anyFuel = false;
+  let paceFuel = false;
   let basis: 'wear' | 'age' = 'age';
   for (const lap of laps) {
     const fuel = fuelOf(lap);
@@ -123,14 +125,20 @@ export function fitLaps(laps: readonly Lap[], fuelOf: FuelOf, prior: FilterPrior
     out.push(row);
     if (use === 'pace') {
       pace.push(row);
-      if (!fuel.known) paceFuel = false;
+      if (fuel.known) paceFuel = true;
     }
     if (isRateUse(use)) rateLaps.push(lap);
-    if (!fuel.known) allFuel = false;
+    if (fuel.known) anyFuel = true;
     if (basis === 'age' && wearVisible(lap)) basis = 'wear';
   }
-  const fuelCorrected = pace.length > 0 ? paceFuel : allFuel;
-  const paceLaps: FilterLap[] = pace.map((row) => ({
+  const fuelCorrected = pace.length > 0 ? paceFuel : anyFuel;
+  // the rows the filter reads, in its order: corrected, a pace lap without its fuel left out of a corrected stint
+  const fitted: DegradationLap[] = [];
+  for (const row of pace) {
+    if (!fuelCorrected || row.correctedMs.known) fitted.push(row);
+    else row.use = NOT_FOR_PACE;
+  }
+  const paceLaps: FilterLap[] = fitted.map((row) => ({
     lapNumber: row.lapNumber,
     tyreAge: row.tyreAge,
     ms: fuelCorrected && row.correctedMs.known ? row.correctedMs.value : row.lapTimeMs,
@@ -138,7 +146,7 @@ export function fitLaps(laps: readonly Lap[], fuelOf: FuelOf, prior: FilterPrior
   const state = runFilter(paceLaps, prior, config);
   // the filter's uses are in the order of its laps
   state.laps.forEach((l, i) => {
-    const row = pace[i];
+    const row = fitted[i];
     if (row !== undefined) row.use = l.use;
   });
   return { laps: out, state, paceLaps, fuelCorrected, basis, wearRatePctPerLap: wearRates(rateLaps, rate) };

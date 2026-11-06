@@ -4,6 +4,7 @@ import { known, unknown, type Known, type LapUse, type VisualCompound } from '@p
 import { definePriors, type PriorDecl, type PriorsCtx, type StoredSource } from '@pitwall/engine/readers';
 import { LAP_CLASSES_CONFIG } from '../lap-classes/index.ts';
 import { PER_LAP_RATE_CONFIG } from '../per-lap-rate/index.ts';
+import { phaseRow } from './behaviour.ts';
 import { DEGRADATION_CONFIG } from './config.ts';
 import { fitStint, type StintFitResult } from './kalman.ts';
 import { fitLaps, fuelResolver, lapClassOf, lapsByCar, type FittedStint } from './stint-fit.ts';
@@ -23,11 +24,13 @@ const configOf = <C extends object>(section: { key: string; defaults: C }, ctx: 
 /** A source's stint through the calculator's rules, from the config default (the set's own values never feed back). */
 function sourceFit(source: StoredSource, ctx: PriorsCtx): FittedStint {
   const config = configOf(DEGRADATION_CONFIG, ctx);
-  const isRace = source.phase.kind === 'race';
+  // the source session's weekend-phase row, as the calculator's (C44)
+  const isRace = phaseRow(source.phase.kind).isRace === true;
   const classes = { isRace, ...configOf(LAP_CLASSES_CONFIG, ctx) };
   const rate = configOf(PER_LAP_RATE_CONFIG, ctx);
   const fuelOf = fuelResolver({
     isRace,
+    ourCar: source.source.feedCar,
     ourLaps: () => lapsByCar(source.sessionLaps).get(source.source.feedCar) ?? [],
     classes,
     rate,
@@ -132,7 +135,7 @@ export const DEGRADATION_PRIORS = definePriors('degradation', {
   ),
   /** A stint of at least `minSourceLaps` `forPace` laps. */
   candidate: (source, ctx) => {
-    const classes = { isRace: source.phase.kind === 'race', ...configOf(LAP_CLASSES_CONFIG, ctx) };
+    const classes = { isRace: phaseRow(source.phase.kind).isRace === true, ...configOf(LAP_CLASSES_CONFIG, ctx) };
     const pace = source.laps.filter((l) => lapClassOf(l, classes) === 'pace').length;
     return pace >= configOf(DEGRADATION_CONFIG, ctx).minSourceLaps;
   },
