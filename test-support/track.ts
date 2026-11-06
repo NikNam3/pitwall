@@ -1,7 +1,7 @@
 // The committed Zandvoort track file (a copy of data/tracks/26.json, C84) for tests that need a track (spec 9).
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { TrackData, TrackFile } from '@pitwall/domain';
+import type { TrackData, TrackFile } from '../packages/domain/src/index.ts';
 
 /** The Zandvoort track file as committed: the data plus its provenance. */
 export const zandvoortTrackFile = (): TrackFile =>
