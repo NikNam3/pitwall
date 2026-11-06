@@ -2,6 +2,7 @@
 // wear rates (wear basis) or `degradation`'s `ν` (age basis). A calculator: no topic; `tyre-wear` publishes from it.
 import type { CarId, Corners, Known, Ms, Percent, VisualCompound } from '@pitwall/domain';
 
+export * from './behaviour.ts';
 export * from './config.ts';
 export * from './priors.ts';
 
