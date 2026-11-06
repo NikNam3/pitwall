@@ -1,0 +1,95 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Calibration panel (SP4.1a §6): full and compact</title><style>
+@font-face { font-family:'JetBrains Mono'; src:url('../../../apps/ui/src/theme/font/JetBrainsMono%5Bwght%5D.woff2') format('woff2'); font-weight:100 800; font-display:block; }
+:root { --pw-text:#d9dbe0; --pw-textDim:#8d9199; --pw-textFaint:#5c6068; --pw-ownCar:#ffffff; --pw-bg:#000000; --pw-bgPanel:#000000; --pw-bgBand:#141416; --pw-bgRowBand:#0d0d0f; --pw-border:#25272c; --pw-grid:#1c1d21; --pw-dropTarget:#5c606859; --pw-focus:#8d9199; --pw-critical:#ff5c5c; --pw-warning:#f0b429; --pw-best:#b06cff; --pw-personalBest:#3fcf70; --pw-flagYellow:#ffd23f; --pw-flagGreen:#3fcf70; --pw-flagRed:#ff5c5c; --pw-flagBlue:#5ca8ff; --pw-compoundSoft:#d9dbe0; --pw-compoundMedium:#d9dbe0; --pw-compoundHard:#d9dbe0; --pw-series1:oklch(0.72 0.09 250); --pw-series2:oklch(0.72 0.09 40); --pw-series3:oklch(0.72 0.09 150); --pw-series4:oklch(0.72 0.09 310); --pw-series5:oklch(0.72 0.09 95); --pw-series6:oklch(0.72 0.09 200); --pw-font:'JetBrains Mono', monospace; --pw-font-px:14px; --pw-line:1.4; }
+* { box-sizing:border-box; margin:0; padding:0; }
+body { background:var(--pw-bg); color:var(--pw-text); font-family:var(--pw-font); font-size:var(--pw-font-px); line-height:var(--pw-line); font-variant-ligatures:none; padding:24px 28px 56px; }
+h1 { font-size:var(--pw-font-px); font-weight:600; margin-bottom:4px; }
+h2 { font-size:var(--pw-font-px); font-weight:500; color:var(--pw-textDim); margin:26px 0 8px; }
+.note { color:var(--pw-textDim); max-width:150ch; margin-bottom:10px; }
+.note b { color:var(--pw-text); font-weight:500; }
+.row { display:flex; gap:24px; align-items:flex-start; flex-wrap:wrap; } .row > div { width:min-content; }
+.panel { background:var(--pw-bgPanel); display:inline-block; vertical-align:top; outline:1px dashed var(--pw-border); }
+.ph { display:flex; gap:1ch; padding:0 1ch; background:var(--pw-bgBand); white-space:nowrap; color:var(--pw-textFaint); }
+.ph .t { color:var(--pw-textDim); overflow:hidden; text-overflow:ellipsis; min-width:0; } .ph > span { flex-shrink:0; } .ph > .t { flex-shrink:1; } .ph .sp { flex:1; } .ph .lk { color:var(--pw-text); }
+pre { font-family:inherit; font-size:inherit; line-height:inherit; padding:0 1ch; white-space:pre; }
+svg { display:block; }
+svg text { font-family:var(--pw-font); font-size:14px; }
+.cap { color:var(--pw-textFaint); margin:4px 0 0; min-width:44ch; }
+.d { color:var(--pw-textDim); } .f { color:var(--pw-textFaint); } .w { color:var(--pw-warning); } .c { color:var(--pw-critical); }
+.o, .hi { color:var(--pw-ownCar); font-weight:700; } .m { font-weight:700; }
+.band { background:var(--pw-bgRowBand); display:inline-block; width:100%; }
+.me { color:var(--pw-ownCar); font-weight:700; box-shadow:inset 2px 0 0 var(--pw-text); display:inline-block; width:100%; }
+.tip { text-decoration:underline dotted var(--pw-textFaint); }
+.tooltip { display:inline-block; border:1px solid var(--pw-border); background:var(--pw-bgBand); color:var(--pw-text); padding:0 1ch; margin-left:2ch; }
+/* a control: a number field or a select, drawn like .pw-input (a 1 px border-role frame, no fill); a button: a quiet word */
+.fld { box-shadow:inset 0 0 0 1px var(--pw-border); color:var(--pw-text); }
+.fld.on { box-shadow:inset 0 0 0 1px var(--pw-focus); }
+.btn { color:var(--pw-textDim); }
+.cur { background:var(--pw-bgBand); color:var(--pw-text); display:inline-block; width:100%; }
+.topbar { display:flex; justify-content:space-between; gap:2ch; padding:0 1ch; border:1px solid var(--pw-border); color:var(--pw-textDim); white-space:nowrap; width:150ch; }
+.topbar .side { display:flex; gap:2ch; } .topbar .t { color:var(--pw-text); }
+.seg { box-shadow:inset 0 -1px 0 var(--pw-textFaint); }
+.window { position:relative; width:150ch; height:313.59999999999997px; outline:1px dashed var(--pw-border); background:var(--pw-bg); }
+.window .layout { position:absolute; inset:27.599999999999998px 8px 8px 8px; display:grid; grid-template-columns:1fr 1fr; gap:8px; opacity:0.35; }
+.window .layout > div { background:var(--pw-bgPanel); outline:1px dashed var(--pw-border); color:var(--pw-textFaint); padding:0 1ch; }
+.window .overlay { position:absolute; left:50%; top:58.8px; transform:translateX(-50%); border:1px solid var(--pw-border); background:var(--pw-bgPanel); }
+.window .overlay .bandT { background:var(--pw-bgBand); color:var(--pw-textDim); padding:0 1ch; white-space:nowrap; }
+</style></head><body><h1>Calibration panel (SP4.1a §6): full and compact</h1>
+<div class="note">Sample: Silverstone, a league weekend on <b>06 Nov</b>. The race runs now (L23/52) on the set <b>league</b> (the preselection). <code>league</code> has 4 sources: three medium stints of the league race (15 Oct) and its FP2 (14 Oct), and one soft stint whose session was rebuilt: <b>missing</b>. Its copy <code>after-floor-upgrade</code> holds this weekend's two FP1 stints. Values are <code>calibration.values</code>, suggestions <code>calibration.candidates</code>, the active set <code>calibration.active</code>; every control sends one <code>calibration.*</code> uiAction (C73, C74). Hover texts are named in the captions (a screenshot cannot hover).</div>
+<h2>Full 76×37</h2>
+<div class="row"><div><div class="panel" style="width:78ch"><div class="ph"><span class="t">Calibration</span><span class="lk"></span><span class="sp"></span><span class="age">Silverstone</span><span><svg width="14" height="14" viewBox="0 0 14 14" style="display:inline;vertical-align:-2px"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.1" stroke-dasharray="2 1.4"/><circle cx="7" cy="7" r="2.1" fill="none" stroke="currentColor" stroke-width="1.1"/></svg></span></div><pre> set <span class="fld"> league ▾             </span>  <span title="calibration.active: preselection at session start">active in this race</span>  <span class="btn">new</span>  <span class="btn">copy</span>  <span class="btn">rename</span>  <span class="btn">delete</span> 
+ <span class="f">created 28 Sep · last used 15 Oct · 4 sources, 1 missing</span>
+
+ <span class="f">SOURCES</span> <span class="f">· one stint each; ▸ opens its laps</span>
+<span class="f">   SESSION DATE   CAR CMP STINT   LAPS DEG/LAP  DRIFT       </span>
+ <span class="d">▾</span> race    15 Oct KUH M   L01–22 <span title="17 used of 22 laps">17/22</span>  +0.054 <span title="this source minus the set, in sd of the set's value"> +0.4σ</span> <span class="btn">     ×</span>
+   <span class="f" title="not a pace lap: never used">    L01 1:37.880 lap 1</span>  <span class="f" title="not a pace lap: never used">    L09 1:52.400 VSC  </span>  [x] L17 1:31.641
+   [x] L02 1:31.494        <span class="f" title="not a pace lap: never used">    L10 1:52.700 VSC  </span>  [x] L18 1:31.544
+   [x] L03 1:31.591        [x] L11 1:31.591        [x] L19 1:31.572
+   [x] L04 1:31.524        [x] L12 1:31.594        [x] L20 1:31.652
+   [x] L05 1:31.412        [x] L13 1:31.421        [x] L21 1:31.463
+   [x] L06 1:31.570        [ ] <span class="f" title="excluded by you">L14 1:33.120</span>        <span class="f" title="not a pace lap: never used">    L22 1:38.510 in   </span>
+   [x] L07 1:31.487        [x] L15 1:31.496
+   [x] L08 1:31.521        [x] L16 1:31.454
+<span class="band"> <span class="d">▸</span> race    15 Oct LIN M   L01–17 <span title="15 used of 17 laps">15/17</span>  +0.047 <span title="this source minus the set, in sd of the set's value"> −0.6σ</span> <span class="btn">     ×</span></span>
+ <span class="d">▸</span> FP2     14 Oct KUH M   L06–17 <span title="10 used of 12 laps">10/12</span>  +0.061 <span title="this source minus the set, in sd of the set's value"> +1.1σ</span> <span class="btn">     ×</span>
+<span class="band"> <span class="f">▸</span> <span class="f">FP2    </span> <span class="f">14 Oct</span> <span class="f">LIN</span> <span class="f">S  </span> <span class="f">L03–10</span>       <span class="w" title="this stint is no longer in its session (session rebuilt or deleted): left out of every value">missing</span>        <span class="btn">     ×</span></span>
+
+ <span class="f">SUGGESTIONS</span> <span class="f">· our stints on this track not in the set, this weekend first</span>
+ <span class="d">▸</span> FP1     06 Nov KUH M   L04–15 11/12  +0.049        <span class="btn">   add</span>
+<span class="band"> <span class="d">▸</span> FP1     06 Nov LIN H   L03–13  9/11  +0.036        <span class="btn">   add</span></span>
+
+ <span class="f">VALUES PER COMPOUND</span> <span class="f">· deg s/lap, wear %/lap; ovr = your override</span>
+<span class="f"> CMP TO SOFT DEG/LAP     SD   FL   FR   RL   RR  N</span>
+ <span class="d">S  </span> <span class="d" title="default · Silverstone track file: community value (R3)">+0.000<span class="d">ᵈ</span></span> <span class="d" title="default · Silverstone track file: community value (R3)">+0.060<span class="d">ᵈ</span></span> <span class="d" title="default · Silverstone track file: community value (R3)">0.060<span class="d">ᵈ</span></span> <span class="tip" title="no source in this set covers it: the track file default is used">    </span> <span class="tip" title="no source in this set covers it: the track file default is used">    </span> <span class="tip" title="no source in this set covers it: the track file default is used">    </span> <span class="tip" title="no source in this set covers it: the track file default is used">    </span> <span class="d"> 0</span>
+ <span class="f">ovr</span> <span class="fld">       </span> <span class="fld">       </span> <span class="fld">      </span> <span class="fld">    </span> <span class="fld">    </span> <span class="fld">    </span> <span class="fld">    </span>   
+<span class="band"> M   <span title="league · 3 sources">+0.405 </span> <span title="league · 3 sources">+0.052 </span> <span title="league · 3 sources">0.006 </span>  2.4  2.2  1.9  2.0  3</span>
+<span class="band"> <span class="f">ovr</span> <span class="fld">       </span> <span class="fld">       </span> <span class="fld">      </span> <span class="fld">    </span> <span class="fld">    </span> <span class="fld">    </span> <span class="fld">    </span>   </span>
+ <span class="d">H  </span> <span class="d" title="default · Silverstone track file: community value (R3)">+0.772<span class="d">ᵈ</span></span> <span class="f" title="replaced by your override 0.045">+0.060 </span> <span class="d" title="default · Silverstone track file: community value (R3)">0.060<span class="d">ᵈ</span></span> <span class="tip" title="no source in this set covers it: the track file default is used">    </span> <span class="tip" title="no source in this set covers it: the track file default is used">    </span> <span class="tip" title="no source in this set covers it: the track file default is used">    </span> <span class="tip" title="no source in this set covers it: the track file default is used">    </span> <span class="d"> 0</span>
+ <span class="f">ovr</span> <span class="fld">       </span> <span class="fld">  0.045</span> <span class="fld">      </span> <span class="fld">    </span> <span class="fld">    </span> <span class="fld">    </span> <span class="fld">    </span>   
+ <span class="f">LIMITS</span>  wear limit <span title="tyre-life config default">70%</span> <span class="fld">     </span>   age loss limit <span title="tyre-life config default">2.000 s</span> <span class="fld">      </span>
+
+ <span class="f">PIT LOSS PER CONDITION</span> <span class="f">· s</span>
+<span class="f"> COND     SET STOPS OVR   </span>
+ green <span title="league · 6 stops (race 15 Oct)"> 20.4 </span>     6 <span class="fld">      </span>
+<span class="band"> VSC   <span title="league · 1 stop (race 15 Oct)"> 13.4 </span>     1 <span class="fld">      </span></span>
+ <span class="d">SC   </span> <span class="d" title="default · Silverstone track file: community value (R3)">  9.8<span class="d">ᵈ</span></span> <span class="d">    0</span> <span class="fld">      </span></pre></div><div class="cap">full · the set picker (a select) with new, copy, rename, delete as quiet words · SOURCES: one row per stint; the first is opened to its laps in three columns: <code>[x]</code> used, <code>[ ]</code> excluded by you (L14, faint), no toggle on laps that are never pace laps (lap 1, VSC, in) · LAPS = used of the stint's laps · DEG/LAP = the source's own value, DRIFT = its residual against the set in sd (README Q1) · the missing source faint with <b>missing</b> in amber, still removable (Q4) · SUGGESTIONS: this weekend's FP1 stints with <b>add</b> · VALUES: per compound the set's value and below it its override fields; S (its only source missing) and H (no source) are the track file's defaults (ᵈ, dim); H's DEG/LAP override is filled (0.045), so the value above is faint: replaced (Q2, Q3) · wear cells of S and H empty with "no source in this set covers it" on hover · LIMITS: tyre-life's two per-set overrides · PIT LOSS: green and VSC from the league race's stops, SC default</div></div></div>
+<h2>Compact 36×7</h2>
+<div class="row"><div><div class="panel" style="width:38ch"><div class="ph"><span class="t">Calibration</span><span class="lk"></span><span class="sp"></span><span class="age">Silverstone</span><span><svg width="14" height="14" viewBox="0 0 14 14" style="display:inline;vertical-align:-2px"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.1" stroke-dasharray="2 1.4"/><circle cx="7" cy="7" r="2.1" fill="none" stroke="currentColor" stroke-width="1.1"/></svg></span></div><pre> <span class="fld"> league ▾             </span>      active 
+ race 15 Oct KUH M  +0.054 +0.4σ
+ race 15 Oct LIN M  +0.047 −0.6σ
+ FP2  14 Oct KUH M  +0.061 +1.1σ
+ <span class="f">FP2  14 Oct LIN S</span>  <span class="w" title="this stint is no longer in its session (session rebuilt or deleted): left out of every value">missing</span>
+ <span class="f">deg</span> S +0.060<span class="d">ᵈ</span> M +0.052  H +0.045 
+ <span class="f">pit</span> green 20.4  VSC 13.4  SC 9.8<span class="d">ᵈ</span></pre></div><div class="cap">compact · the set and whether it is active, each source on one line (its DEG/LAP and DRIFT, or missing), the effective deg per compound (H shows the override) and the three pit losses · drops the laps, suggestions, fields, actions, SD and wear</div></div><div><div class="panel" style="width:38ch"><div class="ph"><span class="t">Calibration</span><span class="lk"></span><span class="sp"></span><span class="age">Silverstone</span><span><svg width="14" height="14" viewBox="0 0 14 14" style="display:inline;vertical-align:-2px"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.1" stroke-dasharray="2 1.4"/><circle cx="7" cy="7" r="2.1" fill="none" stroke="currentColor" stroke-width="1.1"/></svg></span></div><pre> <span class="fld"> league ▾             </span>  <span class="f">no session</span> 
+ race 15 Oct KUH M  +0.054 +0.4σ
+ race 15 Oct LIN M  +0.047 −0.6σ
+ FP2  14 Oct KUH M  +0.061 +1.1σ
+ <span class="f">FP2  14 Oct LIN S</span>  <span class="w" title="this stint is no longer in its session (session rebuilt or deleted): left out of every value">missing</span>
+ <span class="f">deg</span> S +0.060<span class="d">ᵈ</span> M +0.052  H +0.045 
+ <span class="f">pit</span> green 20.4  VSC 13.4  SC 9.8<span class="d">ᵈ</span></pre></div><div class="cap">no session loaded: the panel works from storage, on the newest stored session's track; "no session" instead of "active"</div></div></div>
+<h2>A rejected override (C73)</h2>
+<div class="row"><div><div class="panel" style="width:46ch"><div class="ph"><span class="t">Calibration</span><span class="lk"></span><span class="sp"></span><span class="age">Silverstone</span><span><svg width="14" height="14" viewBox="0 0 14 14" style="display:inline;vertical-align:-2px"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.1" stroke-dasharray="2 1.4"/><circle cx="7" cy="7" r="2.1" fill="none" stroke="currentColor" stroke-width="1.1"/></svg></span></div><pre><span class="f"> CMP TO SOFT DEG/LAP     SD</span>
+ H    +0.772<span class="d">ᵈ</span>  <span class="f">+0.060 </span> 0.060<span class="d">ᵈ</span>
+ <span class="f">ovr</span> <span class="fld">       </span> <span class="fld on">    3.5</span> <span class="fld">      </span>
+ <span class="w">rejected: deg/lap must be 0.000 to 0.300 s</span></pre></div><div class="cap">the bridge validates the value against the key's declared range and rejects it; the field keeps the draft (window-local), the reason below in amber; nothing is stored</div></div></div></body></html>
