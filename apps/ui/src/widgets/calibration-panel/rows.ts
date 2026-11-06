@@ -226,19 +226,20 @@ export function overrideText(spec: ValueSpec, overrides: Record<string, number>)
 
 /**
  * The action a commit of an override field sends: a number (in the unit the cell shows) sets the override in the key's
- * unit (ms, %), an empty field clears the set's override; anything else, or an empty field without an override, nothing.
+ * unit (ms, %), an empty field clears the set's override (nothing without one); a text that is no number sends nothing
+ * and is `notANumber`, which the panel shows as a rejection (C73).
  */
 export function overrideAction(
   spec: ValueSpec,
   typed: string,
   at: { trackId: number; setId: string; overrides: Record<string, number> },
-): UiAction | undefined {
+): UiAction | 'notANumber' | undefined {
   const { trackId, setId, overrides } = at;
   if (typed.trim() === '') {
     return overrides[spec.key] === undefined ? undefined : { kind: 'calibration.override.clear', trackId, setId, key: spec.key };
   }
   const value = spec.unit.kind === 'seconds' ? parseSeconds(typed) : parseDecimal(typed);
-  return value === undefined ? undefined : { kind: 'calibration.override.set', trackId, setId, key: spec.key, value };
+  return value === undefined ? 'notANumber' : { kind: 'calibration.override.set', trackId, setId, key: spec.key, value };
 }
 
 /** The compact mode's deg line: the set's DEG/LAP per compound. */

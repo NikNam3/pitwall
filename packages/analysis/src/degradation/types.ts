@@ -12,6 +12,9 @@ export type DegradationLap = { lapNumber: number; tyreAge: number; lapTimeMs: Ms
 export type StintDegradation = {
   /** The car's stint, counted from 1. */
   stint: number;
+  /** The stint's first and last lap: a closed stint's from its stint record, the open stint's its first and newest lap. */
+  firstLap: number;
+  lastLap: number;
   actual: ActualCompound;
   visual: VisualCompound;
   basePaceMs: Known<Ms>;

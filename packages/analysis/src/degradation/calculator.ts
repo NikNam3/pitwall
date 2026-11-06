@@ -36,21 +36,24 @@ type Start = { prior: FilterPrior; startPrior: StartPrior; source: (sessionShare
 const lapsWord = (n: number): string => `${n} ${n === 1 ? 'lap' : 'laps'}`;
 
 /**
- * The start of a stint on `visual` (spec 4.1, 4.4): the calibration's `ν` and sd for the compound when the snapshot holds
- * both, else the default start (the entries' declared fallback, C43). The source is `session` once the session's share
- * of `ν`'s precision is above half.
+ * The start of a stint on `visual` (spec 4.1, 4.4; ruling R41): per key (`ν`, its sd, the `α` offset) the snapshot's
+ * entry when it is known, else that key's declared fallback, the default start's field (C43: the calibration panel's
+ * one rule). The source is the calibration's when at least one key came from the snapshot, else the default start's;
+ * it is `session` once the session's share of `ν`'s precision is above half.
  */
 function startOf(view: EngineView, visual: VisualCompound): Start {
-  const calibration = calibrationPrior(view.priors, visual);
-  if (calibration !== undefined) {
-    const { setName, sources } = calibration.snapshot;
-    const startPrior: StartPrior = {
-      ...calibration.prior,
-      alphaOffsetMs: calibration.alphaOffsetMs,
-      source: { kind: 'calibration', setName, sources, sessionShare: 0, parts: 'calibration' },
-    };
+  const fallback = defaultStart({ config: view.config, track: view.track }, visual);
+  const snapshot = snapshotOf(view.priors, visual);
+  const nu = snapshot?.entry('nuMsPerLap');
+  const sd = snapshot?.entry('nuSdMs');
+  const offset = snapshot?.entry('alphaOffsetMs');
+  const prior: FilterPrior = { nuMsPerLap: nu?.value ?? fallback.nuMsPerLap, nuSdMs: sd?.value ?? fallback.nuSdMs };
+  const alphaOffsetMs: Known<Ms> = offset === undefined ? fallback.alphaOffsetMs : known(Math.round(offset.value), offset.at);
+  if (snapshot !== undefined && (nu !== undefined || sd !== undefined || offset !== undefined)) {
+    const { setName, sources } = snapshot.snapshot;
+    const startPrior: StartPrior = { ...prior, alphaOffsetMs, source: { kind: 'calibration', setName, sources, sessionShare: 0, parts: 'calibration' } };
     return {
-      prior: calibration.prior,
+      prior,
       startPrior,
       source: (sessionShare, paceLaps) => {
         const laps = lapsWord(paceLaps);
@@ -59,41 +62,47 @@ function startOf(view: EngineView, visual: VisualCompound): Start {
       },
     };
   }
-  const startPrior = defaultStart({ config: view.config, track: view.track }, visual);
   return {
-    prior: { nuMsPerLap: startPrior.nuMsPerLap, nuSdMs: startPrior.nuSdMs },
-    startPrior,
+    prior,
+    startPrior: { ...prior, alphaOffsetMs, source: fallback.source },
     source: (sessionShare, paceLaps) => {
       const laps = lapsWord(paceLaps);
       if (sessionShare > 0.5) return { kind: 'session', sessionShare, parts: `${laps} + default` };
-      return { ...startPrior.source, sessionShare, parts: `${laps} + default` };
+      return { ...fallback.source, sessionShare, parts: `${laps} + default` };
     },
   };
 }
 
+/** A priors entry's name for one compound. */
+type EntryName = 'alphaOffsetMs' | 'nuMsPerLap' | 'nuSdMs';
+
 /**
- * The calibration's prior of `visual`: `ν` and its sd from the snapshot, when it holds both, with the compound's `α`
- * offset (whole ms, C4; `insufficientData` when the snapshot holds none).
+ * The snapshot's entries of `visual`, when the run has a snapshot and the compound has priors: `entry(name)` gives the
+ * entry when it is known, else `undefined`.
  */
-function calibrationPrior(
+function snapshotOf(
   priors: EngineView['priors'],
   visual: VisualCompound,
-): { prior: FilterPrior; alphaOffsetMs: Known<Ms>; snapshot: DeepReadonly<PriorsSnapshot> } | undefined {
+): { snapshot: DeepReadonly<PriorsSnapshot>; entry: (name: EntryName) => { value: number; at: Ms } | undefined } | undefined {
   if (!priors.known || !(DEGRADATION_COMPOUNDS as readonly string[]).includes(visual)) return undefined;
-  const nu = priors.value.entries[priorKey('nuMsPerLap', visual)];
-  const sd = priors.value.entries[priorKey('nuSdMs', visual)];
-  if (nu === undefined || sd === undefined || !nu.known || !sd.known) return undefined;
-  const offset = priors.value.entries[priorKey('alphaOffsetMs', visual)];
-  const alphaOffsetMs: Known<Ms> =
-    offset === undefined ? unknown('insufficientData') : offset.known ? known(Math.round(offset.value), offset.at) : unknown(offset.reason);
-  return { prior: { nuMsPerLap: nu.value, nuSdMs: sd.value }, alphaOffsetMs, snapshot: priors.value };
+  const snapshot = priors.value;
+  return {
+    snapshot,
+    entry: (name) => {
+      const e = snapshot.entries[priorKey(name, visual)];
+      return e?.known === true ? { value: e.value, at: e.at } : undefined;
+    },
+  };
 }
 
 /**
  * A car's laps by stint, oldest first: each closed stint record's laps, then the laps after the last record (the open
  * stint). Without a record every lap is one stint. A stint is the record's compound, an open one its first lap's.
  */
-function stintsOf(laps: readonly Lap[], records: readonly Stint[]): { laps: Lap[]; actual: Lap['actualCompound']; visual: Lap['visualCompound'] }[] {
+function stintsOf(
+  laps: readonly Lap[],
+  records: readonly Stint[],
+): { laps: Lap[]; firstLap: number; lastLap: number; actual: Lap['actualCompound']; visual: Lap['visualCompound'] }[] {
   // the laps are in lap order, the records in stint order: one pass. A record's laps and the open stint's are each a
   // run of consecutive laps, kept as its index range [from, to) and sliced once.
   const ranges = records.map(() => ({ from: 0, to: 0 }));
@@ -115,11 +124,14 @@ function stintsOf(laps: readonly Lap[], records: readonly Stint[]): { laps: Lap[
   }
   const out = records.map((r, j) => {
     const range = ranges[j] ?? { from: 0, to: 0 };
-    return { laps: laps.slice(range.from, range.to), actual: r.actualCompound, visual: r.visualCompound };
+    return { laps: laps.slice(range.from, range.to), firstLap: r.firstLap, lastLap: r.lastLap, actual: r.actualCompound, visual: r.visualCompound };
   });
   const open = laps.slice(openFrom);
   const first = open[0];
-  if (first !== undefined) out.push({ laps: open, actual: first.actualCompound, visual: first.visualCompound });
+  const newest = open.at(-1);
+  if (first !== undefined && newest !== undefined) {
+    out.push({ laps: open, firstLap: first.lapNumber, lastLap: newest.lapNumber, actual: first.actualCompound, visual: first.visualCompound });
+  }
   return out;
 }
 
@@ -173,6 +185,8 @@ export const degradationCalculator: QuickCalculator<DegradationOutput> = {
         const alpha = fit.state.alphaMs;
         return {
           stint: i + 1,
+          firstLap: s.firstLap,
+          lastLap: s.lastLap,
           actual: s.actual,
           visual: s.visual,
           basePaceMs: alpha === undefined ? unknown('insufficientData') : known(Math.round(alpha), now),
