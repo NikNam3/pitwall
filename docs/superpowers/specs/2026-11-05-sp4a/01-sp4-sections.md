@@ -51,7 +51,7 @@ Status: agreed with the user in the SP4 brainstorm, 2026-11-05. It replaces the 
 
 | Section | Content | Needs |
 |---|---|---|
-| **4.0 Foundation and track** | F1–F3, F5's outline canvas, R1, R3; track map, incident turns, talk indicator (spec `02-sp4.0-foundation-and-track-design.md`) | — |
+| **4.0 Foundation and track** | F1–F3, F5's outline canvas, R1, R3; track map, incident turns, talk indicator (spec `docs/specs/2026-11-05-sp4.0-foundation-and-track-design.md`; **done**, merged 2026-11-06) | — |
 | **4.1 Estimation and long run** | the source badge; `degradation`, `pit-loss`, `tyre-life` (+ `tyre-wear` port); stint scatter, raising average, lap overview, pit-loss table, weather strip, crossover chart; workbook `longrun` | 4.0 |
 | **4.2 Race calls** | F4 (`ourCrossing`), the ghost marker; rejoin (crossing order, gap-chart ghost lines, map ghost), SC card, pit window and `window` moment; workbook `strategy` | 4.0, 4.1 |
 | **4.3 Strategy model** | lap model, race forecast with battles, Monte Carlo, DP optimiser; undercut, pit sweep, forecast scoreboard; V16, V06, V17, V01; weather in the model | 4.1, 4.2 |

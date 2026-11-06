@@ -13,6 +13,7 @@ Everything here is done, superseded or void. **Do not read it unless your brief 
 | `plans/2026-10-30-situations.md` | the situations plan | Tasks 0–2 done; Tasks 3–9 replaced by the migration plan |
 | `specs/2026-11-05-live-polish/` | live polish spec (N2–N8, N10 of the first live test) and its brainstorm answers | **done**, run merged 2026-11-05; the timing spec §6.3 and A.3 carry the result |
 | `plans/2026-11-05-live-polish.md` | live polish plan, Tasks 0–16 | **done**, 2026-11-05 |
+| `plans/2026-11-05-sp4.0-foundation-and-track.md` | SP4.0 plan, Tasks 0–14 | **done**, merged 2026-11-06; spec in `docs/specs/`, rulings in `notes/2026-11-06-sp4.0-run-rulings.md` |
 | `plans/2026-10-30-strategy-live-calls.md` | SP4a plan | **void**; its spec is deleted, what carries over is in `docs/superpowers/specs/2026-11-05-sp4a/00-carry-over.md` |
 | `plans/2026-11-02-contract-migration.md` | the migration to the contract (M1–M7) | done 2026-11-04 |
 | `notes/` | run rulings and notes of earlier runs | record only; rulings that still bind are in the contract |
