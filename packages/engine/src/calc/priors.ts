@@ -20,7 +20,9 @@ import type { EngineView } from './types.ts';
 
 /**
  * A calibration source as an aggregate reads it, from its session's stored projection (C34): the stint with its laps
- * (minus the excluded ones), its session's weekend phase and stops, and the session's track file.
+ * (minus the excluded ones), its session's weekend phase, every car's stops and current laps, and the session's track
+ * file. `laps` is the source stint's laps; `sessionLaps` every car's current laps of the session (a stop's loss needs
+ * the car's reference laps, in-lap and out-lap, spec 4.3).
  */
 export type StoredSource = {
   source: CalibrationSource;
@@ -28,6 +30,7 @@ export type StoredSource = {
   stint: StintRecord;
   laps: LapRecord[];
   pitStops: PitStopRecord[];
+  sessionLaps: LapRecord[];
   track: Known<DeepReadonly<TrackData>>;
 };
 
