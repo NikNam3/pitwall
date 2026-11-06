@@ -13,11 +13,12 @@ CREATE TABLE sessions (
 describe('openDatabase', () => {
   // Task 27 (C24, C60, C1a): each session's log in generic tables, keyed per feed by the player car. SP4.1a f34 (C43,
   // C60): schema 5 stores the teammate the engine placed with the session row, so a schema-4 database is outdated.
-  it('creates schema 5: weekends, sessions, cars and facts, with foreign keys on', () => {
+  // SP4.1a fx2 (C60, C62): schema 6 stores each slot's driver name with its cars row, so a schema-5 database is outdated.
+  it('creates schema 6: weekends, sessions, cars and facts, with foreign keys on', () => {
     const db = openDatabase(':memory:');
     expect(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").pluck().all())
       .toEqual(['cars', 'facts', 'sessions', 'weekends']);
-    expect(SCHEMA_VERSION).toBe(5);
+    expect(SCHEMA_VERSION).toBe(6);
     expect(db.pragma('user_version', { simple: true })).toBe(SCHEMA_VERSION);
     expect(db.pragma('foreign_keys', { simple: true })).toBe(1);
   });
@@ -29,11 +30,11 @@ describe('openDatabase', () => {
     expect(key('cars')).toEqual(['session_uid', 'weekend_id', 'player_car', 'car_id']);
     expect(key('facts')).toEqual(['session_uid', 'weekend_id', 'player_car', 'list', 'seq']);
   });
-  it('the session row holds the recording\'s values, the player car, the teammate the engine placed, the rules version and complete; no weekend phase, no drivers', () => {
+  it('the session row holds the recording\'s values, the player car, the teammate the engine placed, the rules version and complete; no weekend phase; a car row its driver name', () => {
     const db = openDatabase(':memory:');
     const columns = (table: string) => db.prepare(`SELECT name FROM pragma_table_info('${table}') ORDER BY cid`).pluck().all();
     expect(columns('sessions')).toEqual(['session_uid', 'weekend_id', 'player_car', 'teammate_car', 'track_id', 'started_at', 'pwrec_path', 'settings', 'rules_version', 'complete']);
-    expect(columns('cars')).toEqual(['session_uid', 'weekend_id', 'player_car', 'car_id', 'team_id', 'race_number']);
+    expect(columns('cars')).toEqual(['session_uid', 'weekend_id', 'player_car', 'car_id', 'team_id', 'race_number', 'name']);
     expect(columns('facts')).toEqual(['session_uid', 'weekend_id', 'player_car', 'list', 'seq', 'car_id', 'record']);
     expect(columns('weekends')).toEqual(['weekend_id', 'season_id', 'track_id']);
   });
@@ -66,6 +67,20 @@ describe('openDatabase', () => {
   it('the teammate column is nullable: a session the engine placed no teammate in stores none', () => {
     const db = openDatabase(':memory:');
     expect(db.prepare("SELECT \"notnull\" FROM pragma_table_info('sessions') WHERE name = 'teammate_car'").pluck().get()).toBe(0);
+  });
+  it('the driver name column is nullable text: a slot the game names no driver for stores none', () => {
+    const db = openDatabase(':memory:');
+    expect(db.prepare("SELECT type, \"notnull\" FROM pragma_table_info('cars') WHERE name = 'name'").get()).toEqual({ type: 'TEXT', notnull: 0 });
+  });
+  it('refuses a schema-5 database (car rows without the driver name) with SchemaVersionError, so `live` rebuilds it', () => {
+    const path = file();
+    const raw = new Database(path);
+    raw.exec(`${SCHEMA_4_SESSIONS}
+CREATE TABLE cars (session_uid TEXT NOT NULL, weekend_id TEXT NOT NULL, player_car INTEGER NOT NULL, car_id INTEGER NOT NULL,
+  team_id INTEGER NOT NULL, race_number INTEGER NOT NULL, PRIMARY KEY (session_uid, weekend_id, player_car, car_id)) STRICT;`);
+    raw.pragma('user_version = 5');
+    raw.close();
+    expect(() => openDatabase(path)).toThrow(expect.objectContaining({ name: 'SchemaVersionError', found: 5, expected: SCHEMA_VERSION }));
   });
   it('refuses a schema-4 database (session rows without the teammate) with SchemaVersionError, so `live` rebuilds it', () => {
     const path = file();

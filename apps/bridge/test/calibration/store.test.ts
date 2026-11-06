@@ -13,8 +13,10 @@ import {
   known, unknown,
   type CalibrationCandidatesValue, type CalibrationSet, type CalibrationSetsValue, type CalibrationSource, type CalibrationValuesValue,
   type CarId, type FittedSource, type Known, type LapUse, type PriorsEntries, type PriorsSnapshot, type SessionUid, type SourceFit,
+  type WeekendPhase,
 } from '@pitwall/domain';
 import { definePriors, type PriorsCtx, type ProjectionState, type StoredSource } from '@pitwall/engine/readers';
+import { newSetId } from '../../src/calibration/sets.ts';
 import { CalibrationStore, type CalibrationAction } from '../../src/calibration/store.ts';
 import type { Feature } from '../../src/features/feature.ts';
 import type { ValueFor } from '../../src/hub/topic-hub.ts';
@@ -26,11 +28,14 @@ import { lap, stint } from '../storage/records.ts';
 const TRACK = 10;
 const OTHER_TRACK = 11;
 const car = (n: number): CarId => n as CarId;
-/** Our cars (team 0: the feed's player car 0 and its teammate car 1) and a rival (car 2, team 1). */
+/**
+ * Our cars (team 0: the feed's player car 0 and its teammate car 1) and a rival (car 2, team 1), each with its driver
+ * name as the stored row reads it (SP4.1a fx2: `known(name, 0)`; a slot without one `unknown('notReceived')`).
+ */
 const CARS = [
-  { carId: car(0), carKey: { teamId: 0, raceNumber: 44 } },
-  { carId: car(1), carKey: { teamId: 0, raceNumber: 63 } },
-  { carId: car(2), carKey: { teamId: 1, raceNumber: 16 } },
+  { carId: car(0), carKey: { teamId: 0, raceNumber: 44 }, driver: known('Driver Zero', 0) },
+  { carId: car(1), carKey: { teamId: 0, raceNumber: 63 }, driver: known('Driver One', 0) },
+  { carId: car(2), carKey: { teamId: 1, raceNumber: 16 }, driver: known('Rival Two', 0) },
 ];
 const day = (d: number): string => `2026-10-${String(d).padStart(2, '0')}T20:00:00.000Z`;
 const range = (from: number, to: number): number[] => Array.from({ length: to - from + 1 }, (_, i) => from + i);
@@ -42,11 +47,12 @@ type StintSpec = { car: number; firstLap: number; lastLap: number; lapMs?: (lapN
 /**
  * A complete stored session of the feed whose player is car 0, on `trackId`, with the stints (and their laps) given;
  * `stale`: stored under another rules version (`staleOf`). `cars` (default `CARS`) and `teammateCar` (default car 1, the
- * teammate the engine placed, stored with the session: SP4.1a f34, C43) stand for its stored row.
+ * teammate the engine placed, stored with the session: SP4.1a f34, C43) stand for its stored row; `phase` (default a
+ * grand-prix race) for its weekend-phase span.
  */
 function trackSession(uid: string, o: {
   startedAt: string; stints: StintSpec[]; weekendId?: string; trackId?: number; stale?: boolean;
-  cars?: TrackSession['cars']; teammateCar?: CarId | null;
+  cars?: TrackSession['cars']; teammateCar?: CarId | null; phase?: WeekendPhase;
 }): TrackSession {
   const projection: ProjectionState = {
     laps: o.stints.flatMap((s) => range(s.firstLap, s.lastLap).map((n) => lap(s.car, n, { lapTimeMs: s.lapMs?.(n) ?? 90_000 + n }))),
@@ -57,7 +63,7 @@ function trackSession(uid: string, o: {
     sessionUid: uid as SessionUid, weekendId: o.weekendId ?? 'W1', seasonId: 'S1', playerCar: car(0),
     teammateCar: o.teammateCar === undefined ? car(1) : o.teammateCar, trackId: o.trackId ?? TRACK,
     startedAt: o.startedAt, pwrecPath: null, settings: {}, cars: o.cars ?? CARS, rulesVersion: 'current', complete: true,
-    phase: { kind: 'race', format: 'grandPrix' }, stale: false, projection, track: unknown('notApplicable'),
+    phase: o.phase ?? { kind: 'race', format: 'grandPrix' }, stale: false, projection, track: unknown('notApplicable'),
   };
   return o.stale === true ? staleOf(session) : session;
 }
@@ -74,10 +80,17 @@ function staleOf(s: TrackSession): TrackSession {
   };
 }
 
-/** A fake read of the stored sessions; `sessions` may be replaced to stand for a rebuild or a deleted session. */
+/**
+ * A fake read of the stored sessions; `sessions` may be replaced to stand for a rebuild, a deleted or a new session.
+ * `newestTrackId` (SP4.1a fx2) is the track of the newest of them by start, `null` without one, as storage answers it.
+ */
 function fakeRepo(sessions: TrackSession[]): { sessions: TrackSession[]; repo: SessionsOnTrack } {
   const state = { sessions, repo: undefined as unknown as SessionsOnTrack };
-  state.repo = { sessionsOnTrack: (trackId: number) => state.sessions.filter((s) => s.trackId === trackId) };
+  const repo = {
+    sessionsOnTrack: (trackId: number) => state.sessions.filter((s) => s.trackId === trackId),
+    newestTrackId: (): number | null => state.sessions.toSorted((a, b) => (a.startedAt < b.startedAt ? 1 : -1))[0]?.trackId ?? null,
+  };
+  state.repo = repo;
   return state;
 }
 
@@ -446,8 +459,11 @@ describe('CalibrationStore', () => {
     expect(skippedOf(gone)).toMatchObject({ skipped: 'missing', sessionDate: { known: true, value: day(2) }, compound: { known: false } });
     // A session awaiting its rebuild is read for its row only: its date is known, its projection is not served.
     expect(skippedOf(stale)).toMatchObject({ skipped: 'stale', sessionDate: { known: true, value: day(3) }, compound: { known: false } });
-    // A skipped source carries no laps, lap list, entries or residuals at all: not as zeros, not as empty lists.
-    for (const s of [deleted, gone, stale]) expect(Object.keys(skippedOf(s) ?? {}).toSorted(), s.sessionUid).toEqual(['compound', 'sessionDate', 'skipped', 'source']);
+    // A skipped source carries no laps, lap list, entries or residuals at all: not as zeros, not as empty lists. SP4.1a
+    // fx2: it carries its session's weekend phase and its car's driver, each `Known` (C3).
+    for (const s of [deleted, gone, stale]) {
+      expect(Object.keys(skippedOf(s) ?? {}).toSorted(), s.sessionUid).toEqual(['compound', 'driver', 'phase', 'sessionDate', 'skipped', 'source']);
+    }
     expect(fitted(skippedOf(kept))).toMatchObject({ sessionDate: day(4), compound: 'medium', laps: 5 });
   });
 
@@ -712,5 +728,80 @@ describe('CalibrationStore', () => {
     const candidates = t.count('calibration.candidates');
     t.store.recompute('sessionEnd');
     expect(t.count('calibration.candidates')).toBeGreaterThan(candidates);
+  });
+
+  // SP4.1a fx2 (C3, C43, C54, C62a; spec 3.1, 6): the approved calibration panel draws per source row its SESSION (the
+  // source session's weekend phase), DATE and CAR (the source car's driver name as the stored session's Participants
+  // last named it). The bridge only carries what storage holds; shown only.
+  it('a fitted source carries its session\'s weekend phase and its car\'s driver name', () => {
+    const qualifying: WeekendPhase = { kind: 'qualifying', format: 'grandPrix', segment: 2 };
+    const race = trackSession('race', { startedAt: day(2), stints: [{ car: 0, firstLap: 1, lastLap: 5 }, { car: 1, firstLap: 1, lastLap: 5 }] });
+    // In the qualifying session the teammate's slot came without a name (stored NULL, read unknown).
+    const unnamed = [CARS[0]!, { ...CARS[1]!, driver: unknown('notReceived') }, CARS[2]!];
+    const quali = trackSession('quali', { startedAt: day(1), phase: qualifying, cars: unnamed, stints: [{ car: 0, firstLap: 1, lastLap: 4 }, { car: 1, firstLap: 1, lastLap: 4 }] });
+    const t = setup({ sessions: [race, quali] });
+    const id = t.createSet(TRACK, 'Set', [sourceOf(race, 0, 1), sourceOf(race, 1, 1), sourceOf(quali, 0, 1)]);
+
+    expect(fitted(t.fitOf(id, sourceOf(race, 0, 1)))).toMatchObject({ phase: { kind: 'race', format: 'grandPrix' }, driver: { known: true, value: 'Driver Zero' } });
+    expect(fitted(t.fitOf(id, sourceOf(race, 1, 1)))).toMatchObject({ phase: { kind: 'race', format: 'grandPrix' }, driver: { known: true, value: 'Driver One' } });
+    expect(fitted(t.fitOf(id, sourceOf(quali, 0, 1)))).toMatchObject({ phase: qualifying, driver: { known: true, value: 'Driver Zero' } });
+
+    // A candidate carries them too: the teammate's qualifying stint, its driver unknown, never an empty string (C3).
+    t.store.recompute('sessionEnd');
+    const candidates = t.last<CalibrationCandidatesValue>('calibration.candidates').byTrack[TRACK] ?? [];
+    expect(candidates.map((c) => c.source)).toEqual([sourceOf(quali, 1, 1)]);
+    expect(fitted(candidates[0])).toMatchObject({ phase: qualifying, driver: { known: false } });
+  });
+
+  it('a missing source\'s phase and driver are unknown', () => {
+    const at = (uid: string, d: number) => trackSession(uid, { startedAt: day(d), stints: [{ car: 0, firstLap: 1, lastLap: 5 }] });
+    const deleted = at('deleted', 1), gone = at('gone', 2), stale = at('stale', 3);
+    const t = setup({ sessions: [deleted, gone, stale] });
+    const id = t.createSet(TRACK, 'Set', [sourceOf(deleted, 0, 1), sourceOf(gone, 0, 1), sourceOf(stale, 0, 1)]);
+
+    // One session is deleted, one lost the stint in a rebuild, one awaits its rebuild (C61).
+    t.repo.sessions = [trackSession('gone', { startedAt: day(2), stints: [] }), staleOf(stale)];
+    t.store.recompute('rebuild');
+    const skippedOf = (s: TrackSession) => t.fitOf(id, sourceOf(s, 0, 1));
+
+    // Its session is gone: nothing is known of its phase or its car's driver.
+    expect(skippedOf(deleted)).toMatchObject({ skipped: 'missing', phase: { known: false }, driver: { known: false } });
+    // Its session is still stored, only the stint is gone: the session's phase and its row's driver name are still known.
+    expect(skippedOf(gone)).toMatchObject({
+      skipped: 'missing', phase: { known: true, value: { kind: 'race', format: 'grandPrix' } }, driver: { known: true, value: 'Driver Zero' },
+    });
+    // A stale session's phase would be read from its stale log (C61): unknown; its row, and so the driver name, is still read.
+    expect(skippedOf(stale)).toMatchObject({ skipped: 'stale', phase: { known: false }, driver: { known: true, value: 'Driver Zero' } });
+  });
+
+  it('calibration.candidates names the newest stored session\'s track, null without one', () => {
+    const none = setup({ sessions: [] });
+    expect(none.last<CalibrationCandidatesValue>('calibration.candidates').newestTrackId).toBeNull();
+    none.close();
+
+    // The newest by start, whether or not a set exists on its track or it offers a candidate.
+    const older = trackSession('older', { startedAt: day(1), stints: [{ car: 0, firstLap: 1, lastLap: 5 }] });
+    const newer = trackSession('newer', { startedAt: day(3), trackId: OTHER_TRACK, stints: [] });
+    const t = setup({ sessions: [newer, older] });
+    t.createSet(TRACK, 'Set', [sourceOf(older, 0, 1)]);
+    expect(t.last<CalibrationCandidatesValue>('calibration.candidates').newestTrackId).toBe(OTHER_TRACK);
+
+    // A session stored later on another track: the next publish names it.
+    t.repo.sessions = [...t.repo.sessions, trackSession('newest', { startedAt: day(5), trackId: 12, stints: [] })];
+    t.store.recompute('sessionEnd');
+    expect(t.last<CalibrationCandidatesValue>('calibration.candidates').newestTrackId).toBe(12);
+  });
+
+  // Ruling R32: `defaults` is no set's id; it would clash with the shell's `calibration.choose.defaults` command.
+  it('a set named defaults gets the id defaults-2', () => {
+    expect(newSetId('defaults', new Set())).toBe('defaults-2');
+    expect(newSetId('Defaults', new Set(['defaults-2']))).toBe('defaults-3');
+    const t = setup({ sessions: [] });
+    t.ok({ kind: 'calibration.set.create', trackId: TRACK, name: 'defaults' });
+    expect(t.setId(TRACK, 'defaults')).toBe('defaults-2');
+    t.ok({ kind: 'calibration.set.copy', trackId: TRACK, setId: 'defaults-2', name: 'Defaults' });
+    expect(t.setId(TRACK, 'Defaults')).toBe('defaults-3');
+    expect(t.sets().map((s) => s.id)).not.toContain('defaults');
+    expect(existsSync(setPath(t.dir, TRACK, 'defaults'))).toBe(false);
   });
 });
