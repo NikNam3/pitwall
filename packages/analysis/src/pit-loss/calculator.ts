@@ -16,6 +16,8 @@ import {
 } from '@pitwall/domain';
 import type { EngineView, QuickCalculator } from '@pitwall/engine/readers';
 import { LAP_CLASSES_CONFIG } from '../lap-classes/index.ts';
+import { behaviourFor } from '../shared/behaviour.ts';
+import { PIT_LOSS_BEHAVIOUR, phaseRow, type PitLossEffect } from './behaviour.ts';
 import { PIT_LOSS_CONFIG } from './config.ts';
 import { median, sessionStops, type PitLossOptions } from './loss.ts';
 import { PIT_LOSS, type PitLossOutput } from './index.ts';
@@ -83,13 +85,15 @@ const stationaryMedianOf = (view: EngineView, condition: PitCondition): Known<Ms
 export const pitLossCalculator: QuickCalculator<PitLossOutput> = {
   id: PIT_LOSS,
   kind: 'quick',
-  reads: ['pitStops', 'laps', 'decisions'],
+  reads: ['pitStops', 'laps', 'decisions', 'spans:weekend-phase'],
   cadence: 'frame',
   compute: (view): PitLossOutput => {
-    // the weekend phase is every unit's (C14): lap 1 of a race is no reference lap
+    // the session's row (the weekend phase), over the grid's (C14: a pending phase reads as the race): lap 1 of a race
+    // is no reference lap
+    const session: PitLossEffect = Object.assign({}, phaseRow('pending'), ...behaviourFor(PIT_LOSS_BEHAVIOUR, view));
     const opts: PitLossOptions = {
       ...PIT_LOSS_CONFIG.read(view),
-      classes: { isRace: view.situation.weekendPhase.kind === 'race', ...LAP_CLASSES_CONFIG.read(view) },
+      classes: { isRace: session.isRace === true, ...LAP_CLASSES_CONFIG.read(view) },
     };
     const stops: PitLossStop[] = sessionStops(view.history.pitStops, currentLaps(view.history.laps as readonly LapRecord[]), opts);
     const conditions = {} as Record<PitCondition, PitLossEstimate>;
