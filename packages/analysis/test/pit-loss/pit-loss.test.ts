@@ -24,7 +24,7 @@ const REF_MS = 80_000;
 const IN_MS = 92_000;
 
 /** A pit-stop record of car `car` that entered the pit lane on lap `lap`. */
-const stopRecord = (car: number, lapNumber: number, o: { stationaryMs?: Ms; flag?: Condition } = {}): PitStopRecord => ({
+const stopRecord = (car: number, lapNumber: number, o: { stationaryMs?: Ms; flag?: Condition; penaltyServed?: boolean } = {}): PitStopRecord => ({
   carId: carId(car),
   lap: lapNumber,
   pitLaneEntry: lapNumber * 90_000 - 5_000,
@@ -32,7 +32,7 @@ const stopRecord = (car: number, lapNumber: number, o: { stationaryMs?: Ms; flag
   pitLaneTimeMs: 20_000,
   stationaryTimeMs: o.stationaryMs ?? 2_500,
   flag: o.flag ?? 'green',
-  penaltyServed: false,
+  penaltyServed: o.penaltyServed ?? false,
   frame: lapNumber * 100 + 50,
 });
 
@@ -47,7 +47,7 @@ const lapOf = (car: number, lapNumber: number, lapTimeMs: Ms, over: Partial<LapR
  */
 const stopWith = (
   car: number,
-  o: { lap?: number; lossMs?: Ms; inMs?: Ms; outMs?: Ms; refs?: [Ms, Ms, Ms]; stationaryMs?: Ms; flag?: Condition; refsValid?: boolean },
+  o: { lap?: number; lossMs?: Ms; inMs?: Ms; outMs?: Ms; refs?: [Ms, Ms, Ms]; stationaryMs?: Ms; flag?: Condition; refsValid?: boolean; penaltyServed?: boolean },
 ): { laps: LapRecord[]; stop: PitStopRecord } => {
   const n = o.lap ?? 10;
   const refs = o.refs ?? [REF_MS, REF_MS, REF_MS];
@@ -63,7 +63,11 @@ const stopWith = (
       lapOf(car, n, inMs, { inLap: true, ...neutralised }),
       lapOf(car, n + 1, outMs, { outLap: true, ...neutralised }),
     ],
-    stop: stopRecord(car, n, { ...(o.stationaryMs !== undefined && { stationaryMs: o.stationaryMs }), ...(o.flag !== undefined && { flag: o.flag }) }),
+    stop: stopRecord(car, n, {
+      ...(o.stationaryMs !== undefined && { stationaryMs: o.stationaryMs }),
+      ...(o.flag !== undefined && { flag: o.flag }),
+      ...(o.penaltyServed !== undefined && { penaltyServed: o.penaltyServed }),
+    }),
   };
 };
 
@@ -89,6 +93,21 @@ const snapshot = (ms: Ms): PriorsSnapshot => ({
   setName: 'Zandvoort dry',
   sources: 3,
   entries: { 'pitLoss.ms.green': known(ms, 0), 'pitLoss.ms.vsc': known(ms, 0), 'pitLoss.ms.sc': known(ms, 0) },
+});
+
+/** The priors aggregate's context: default config, no override. */
+const ctx = { config: {}, overrides: {} };
+
+/** A stored source of session `session`: car `car`'s stint from `firstLap`, the session's stops and every car's laps. */
+const storedSource = (session: number, stops: { laps: LapRecord[]; stop: PitStopRecord }[], car: number, firstLap: number): StoredSource => ({
+  source: { sessionUid: `${session}`, weekendId: 'w1', feedCar: carId(0), car: carId(car), firstLap, excludedLaps: [] },
+  phase: { kind: 'race', format: 'grandPrix' },
+  stint: { carId: carId(car), firstLap, lastLap: firstLap + 10, actualCompound: 'C3', visualCompound: 'medium', tyreAgeAtFitting: 0, frame: firstLap * 100 },
+  laps: stops.flatMap((s) => s.laps),
+  pitStops: stops.map((s) => s.stop),
+  // every car's laps of the session: the laps each stop's loss needs (StoredSource.sessionLaps, ruling R6)
+  sessionLaps: stops.flatMap((s) => s.laps),
+  track: unknown('notApplicable'),
 });
 
 describe('pit-loss', () => {
@@ -187,24 +206,64 @@ describe('pit-loss', () => {
   it("the aggregate counts each session's stops once", () => {
     const aggregate = PIT_LOSS_PRIORS.entries['pitLoss.ms.green']?.aggregate;
     if (aggregate === undefined) throw new Error('pitLoss.ms.green declares an aggregate');
-    const ctx = { config: {}, overrides: {} };
     // session 1: one stop of 20 000; session 2: two stops of 24 000 and 26 000. Counted once each: median 24 000;
     // session 1 counted twice it would be median(20 000, 20 000, 24 000, 26 000) = 22 000.
     const s1 = [stopWith(0, { lossMs: 20_000 })];
     const s2 = [stopWith(0, { lossMs: 24_000 }), stopWith(1, { lossMs: 26_000 })];
-    const source = (session: number, stops: typeof s1, car: number, firstLap: number): StoredSource => ({
-      source: { sessionUid: `${session}`, weekendId: 'w1', feedCar: carId(0), car: carId(car), firstLap, excludedLaps: [] },
-      phase: { kind: 'race', format: 'grandPrix' },
-      stint: { carId: carId(car), firstLap, lastLap: firstLap + 10, actualCompound: 'C3', visualCompound: 'medium', tyreAgeAtFitting: 0, frame: firstLap * 100 },
-      laps: stops.flatMap((s) => s.laps),
-      pitStops: stops.map((s) => s.stop),
-      // every car's laps of the session: the laps each stop's loss needs (StoredSource.sessionLaps, ruling R6)
-      sessionLaps: stops.flatMap((s) => s.laps),
-      track: unknown('notApplicable'),
-    });
-    const once = aggregate([source(1, s1, 0, 1), source(2, s2, 0, 1)], ctx);
-    const twice = aggregate([source(1, s1, 0, 1), source(1, s1, 1, 1), source(2, s2, 0, 1)], ctx);
+    const once = aggregate([storedSource(1, s1, 0, 1), storedSource(2, s2, 0, 1)], ctx);
+    const twice = aggregate([storedSource(1, s1, 0, 1), storedSource(1, s1, 1, 1), storedSource(2, s2, 0, 1)], ctx);
     expect(once).toMatchObject({ known: true, value: 24_000 });
     expect(twice).toEqual(once);
+  });
+
+  // R12: a stop that served a penalty (a drive-through or stop-go in the pit lane) is no pit-lane loss.
+  it('a stop that served a penalty is not counted', () => {
+    const priors = known(snapshot(20_000), 0);
+    const penalty = stopWith(0, { lossMs: 40_000, penaltyServed: true });
+    const normal = stopWith(1, { lap: 12, lossMs: 23_000 });
+    const out = compute(viewOf([penalty, normal], { priors }));
+    const alone = compute(viewOf([normal], { priors }));
+    // its loss may stay known: it is kept for the record but counts for no estimate
+    expect(out.stops.find((s) => s.carId === carId(0))).toMatchObject({ carId: carId(0), lap: 10, condition: 'green', use: 'penalty' });
+    expect(out.stops.find((s) => s.carId === carId(1))).toMatchObject({ lossMs: { known: true, value: 23_000 }, use: 'used' });
+    expect(out.conditions.green.sessionStops).toBe(1);
+    // the one-stop blend: (23 000 + 2 × 20 000) / 3
+    expect(out.conditions.green).toMatchObject({ lossMs: { known: true, value: 21_000 }, sessionStops: 1 });
+    const { lossMs, sessionStops, source } = alone.conditions.green;
+    expect(out.conditions.green).toMatchObject({ lossMs, sessionStops, source });
+  });
+
+  it('a penalty stop is left out of the median stationary time', () => {
+    const quick = stopWith(1, { inMs: 92_000, outMs: 95_000, refs: [80_000, 80_400, 80_200], stationaryMs: 2_400 });
+    const slow = stopWith(2, { inMs: 92_000, outMs: 95_000, refs: [80_000, 80_400, 80_200], stationaryMs: 5_400 });
+    // a stop-go: 10 s stationary for the penalty and the service; counted, it would lift the median to 5 400
+    const stopGo = stopWith(0, { lap: 14, lossMs: 38_000, stationaryMs: 12_400, penaltyServed: true });
+    const without = compute(viewOf([quick, slow]));
+    const withPenalty = compute(viewOf([quick, slow, stopGo]));
+    const normalStops = (out: PitLossOutput) => out.stops.filter((s) => s.carId !== carId(0));
+    // the normal stops' median is 3 900: the slow stop's 1 500 above it are removed (26 600 − 1 500)
+    expect(normalStops(without)).toMatchObject([
+      { carId: carId(1), lossMs: { known: true, value: 26_600 }, use: 'used' },
+      { carId: carId(2), lossMs: { known: true, value: 25_100 }, use: 'used' },
+    ]);
+    expect(normalStops(withPenalty)).toEqual(normalStops(without));
+    expect(withPenalty.conditions.green.stationaryMedianMs).toMatchObject({ known: true, value: 3_900 });
+    expect(withPenalty.conditions.green.lossMs).toEqual(without.conditions.green.lossMs);
+  });
+
+  it('the aggregate leaves penalty stops out', () => {
+    const aggregate = PIT_LOSS_PRIORS.entries['pitLoss.ms.green']?.aggregate;
+    if (aggregate === undefined) throw new Error('pitLoss.ms.green declares an aggregate');
+    const normal = [stopWith(1, { lossMs: 24_000, stationaryMs: 2_400 }), stopWith(2, { lossMs: 26_000, stationaryMs: 2_600 })];
+    // a drive-through on lap 14 and a stop-go on lap 16: counted, their losses would lift the median
+    const penalties = [
+      stopWith(0, { lap: 14, lossMs: 38_000, stationaryMs: 0, penaltyServed: true }),
+      stopWith(3, { lap: 16, lossMs: 40_000, stationaryMs: 12_500, penaltyServed: true }),
+    ];
+    const without = aggregate([storedSource(1, normal, 1, 1)], ctx);
+    const withPenalties = aggregate([storedSource(1, [...normal, ...penalties], 1, 1)], ctx);
+    // the normal stops' median stationary time is 2 500: 24 000 and 25 900, median 24 950
+    expect(without).toMatchObject({ known: true, value: 24_950 });
+    expect(withPenalties).toEqual(without);
   });
 });
