@@ -60,7 +60,7 @@ export const cases = {
  *  just below full, and a larger full. */
 export const fit = [
   { mode: 'compact', cols: 34, rows: 2 },
-  { mode: 'compact', cols: 55, rows: 4 },
-  { mode: 'full', cols: 56, rows: 5 },
+  { mode: 'compact', cols: 55, rows: 5 },
+  { mode: 'full', cols: 56, rows: 6 },
   { mode: 'full', cols: 72, rows: 8 },
 ] satisfies NonNullable<GalleryEntry<typeof widget>['fit']>;

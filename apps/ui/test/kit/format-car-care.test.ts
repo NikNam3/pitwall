@@ -8,6 +8,7 @@ import {
   formatKg,
   formatLapNumber,
   formatLaps,
+  formatMinutesAhead,
   formatPercent,
   formatPsi,
 } from '../../src/kit/values/format.ts';
@@ -93,4 +94,12 @@ describe('formatDeltaMs (signed seconds, three decimals)', () => {
     [-1234, '−1.234'],
   ])('%i -> %s', (ms, text) => expect(formatDeltaMs(ms)).toBe(text));
   it('a non-finite number is empty', () => expect(formatDeltaMs(Number.NaN)).toBe(''));
+});
+
+describe('formatMinutesAhead', () => {
+  it.each([
+    [5, '+5'],
+    [30, '+30'],
+    [Number.NaN, ''],
+  ])('%f -> %s', (n, text) => expect(formatMinutesAhead(n)).toBe(text));
 });
