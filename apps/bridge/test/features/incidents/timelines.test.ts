@@ -5,7 +5,7 @@
 // restarts on a truncated step, as the bridge's does. The player laps a 1000 m track in 25 frames and stands still for
 // 2.3 s in lap 5: a time loss.
 import { describe, expect, it } from 'vitest';
-import { unknown } from '@pitwall/domain';
+import { unknown, type IncidentEntry } from '@pitwall/domain';
 import { INCIDENTS, incidentsCalculator, type IncidentsOutput } from '@pitwall/analysis';
 import { CalculatorRegistry, Scheduler, SessionRunner, situationOf, type Frame } from '@pitwall/engine';
 import { IDLE_FEED } from '../../../../../test-support/builders/index.ts';
@@ -35,11 +35,11 @@ const frames = (n: number, beat: (k: number) => Beat = () => ({})): Frame[] =>
   );
 
 /** Every scheduled output of `incidents`, each with a fresh `init` over the same view. */
-function incidentsRuns(all: Frame[]): Array<{ frame: number; scheduled: IncidentsOutput; fresh: IncidentsOutput }> {
+function incidentsRuns(all: Frame[]): Array<{ frame: number; scheduled: IncidentEntry[]; fresh: IncidentEntry[] }> {
   const runner = new SessionRunner(initFor(all));
   const scheduler = new Scheduler(CalculatorRegistry.build([incidentsCalculator]), { freezeOutputs: true });
   scheduler.setNeeded([INCIDENTS]);
-  const runs: Array<{ frame: number; scheduled: IncidentsOutput; fresh: IncidentsOutput }> = [];
+  const runs: Array<{ frame: number; scheduled: IncidentEntry[]; fresh: IncidentEntry[] }> = [];
   all.forEach((f, frame) => runner.apply(f, (r) => {
     if (r.delta.rewound !== undefined) scheduler.reset();
     const input = { live: r.state, situation: situationOf(r.state), history: r.state.history, changed: r.changed, delta: r.delta, weekend: r.state.weekend, feed: IDLE_FEED, config: {}, priors: {}, track: unknown('notApplicable') };
@@ -47,7 +47,7 @@ function incidentsRuns(all: Frame[]): Array<{ frame: number; scheduled: Incident
     if (!ran.includes(INCIDENTS)) return;
     const view = { ...input, outputs: new Map() };
     const fresh = incidentsCalculator.output(incidentsCalculator.init(view), view);
-    runs.push({ frame, scheduled: outputs.get(INCIDENTS) as IncidentsOutput, fresh });
+    runs.push({ frame, scheduled: (outputs.get(INCIDENTS) as IncidentsOutput).feed, fresh: fresh.feed });
   }));
   return runs;
 }

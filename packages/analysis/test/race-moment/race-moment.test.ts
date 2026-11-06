@@ -27,7 +27,7 @@ import {
   RACE_MOMENT_CONFIG,
 } from "../../src/race-moment/index.ts";
 import { BATTLE, BATTLE_CONFIG } from "../../src/battle/index.ts";
-import { INCIDENTS } from "../../src/incidents/index.ts";
+import { INCIDENTS, type IncidentsOutput } from "../../src/incidents/index.ts";
 import { ALARMS } from "../../src/alarms/index.ts";
 import { RACE_MOMENT_BEHAVIOUR } from "../../src/race-moment/index.ts";
 
@@ -139,7 +139,8 @@ function run({
   forecast?: ForecastSample[];
 } = {}): Known<RaceMoment> {
   const outputs = new Map<string, unknown>();
-  if (incidents) outputs.set(INCIDENTS, incidents);
+  // the incidents output: its feed (race-moment reads `.feed`); no markers without a track file
+  if (incidents) outputs.set(INCIDENTS, { feed: incidents, markers: na } satisfies IncidentsOutput);
   if (battle) outputs.set(BATTLE, battle);
   if (alarms) outputs.set(ALARMS, alarms);
   const { spans, situation } = phaseSpans(phases, active, situationOf(kind, session));

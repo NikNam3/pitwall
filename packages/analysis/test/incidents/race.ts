@@ -10,6 +10,7 @@ import {
   MINI_SECTORS,
   type CarId,
   type DamageState,
+  type IncidentEntry,
   type LapRecord,
   type MachineId,
   type MiniSectorCrossing,
@@ -239,6 +240,8 @@ export type RaceInput = {
   session?: Partial<SessionState>;
   /** The session-phase span open in the situation (`openNeutralisation`), not yet in `phases` (C20). */
   open?: OpenSpan;
+  /** The session's track file (`view.track`); none (`notApplicable`) by default. */
+  track?: EngineView['track'];
 };
 
 /**
@@ -263,6 +266,7 @@ export function viewOf({
   weekendPhase = RACE,
   session = {},
   open,
+  track,
 }: RaceInput): EngineView {
   const outputs = new Map<string, unknown>();
   if (damage) outputs.set(DAMAGE, damage);
@@ -284,11 +288,15 @@ export function viewOf({
     config: { incidents: config, alarms: alarmsConfig, damage: damageConfig },
     session: { ...TRACK, ...session },
     sessionTime: last?.at ?? 0,
+    ...(track !== undefined && { track }),
   });
 }
 
-/** `init` over the view, as on a fresh run, through the guarded view. */
-export const run = (view: EngineView): IncidentsOutput => incidents.output(incidents.init(view));
+/** `init` over the view, as on a fresh run, through the guarded view: the whole output (feed and markers). */
+export const runOutput = (view: EngineView): IncidentsOutput => incidents.output(incidents.init(view));
+
+/** `init` over the view, as on a fresh run, through the guarded view: the feed (`IncidentsOutput.feed`). */
+export const run = (view: EngineView): IncidentEntry[] => runOutput(view).feed;
 
 /** The delta from one view's history to the next one's. */
 export const deltaOf = (from: EngineView, to: EngineView, rewound = false) => ({
@@ -297,8 +305,11 @@ export const deltaOf = (from: EngineView, to: EngineView, rewound = false) => ({
   ...(rewound ? { rewound: { frameId: -1, at: 0 } } : {}),
 });
 
-/** `init` over the first view, then `update` through the rest, as the scheduler does, through the guarded view. */
-export function runSteps(views: EngineView[]): IncidentsOutput {
+/**
+ * `init` over the first view, then `update` through the rest, as the scheduler does, through the guarded view: the whole
+ * output (feed and markers).
+ */
+export function stepsOutput(views: EngineView[]): IncidentsOutput {
   const [first, ...rest] = views;
   if (!first) throw new Error('runSteps: no view');
   let acc = incidents.init(first);
@@ -309,6 +320,9 @@ export function runSteps(views: EngineView[]): IncidentsOutput {
   }
   return incidents.output(acc);
 }
+
+/** `stepsOutput`'s feed (`IncidentsOutput.feed`). */
+export const runSteps = (views: EngineView[]): IncidentEntry[] => stepsOutput(views).feed;
 
 /** A healthy car's damage state with the given jumps. */
 export function damageState(jumps: DamageState['jumps']): DamageState {

@@ -607,7 +607,7 @@ describe('incidents calculator', () => {
       const full = at(720_000);
       const cut = at(HIT + 60_000);
       const acc = incidents.update(incidents.init(at(0)), deltaOf(at(0), full), full);
-      const after = incidents.output(incidents.update(acc, deltaOf(full, cut, true), cut));
+      const after = incidents.output(incidents.update(acc, deltaOf(full, cut, true), cut)).feed;
       expect(after).toEqual(run(cut));
       expect(after.filter((e) => e.kind === 'damage').map((e) => e.at)).toEqual([HIT]);
     });
@@ -639,7 +639,7 @@ describe('incidents calculator', () => {
       const truncatedView = at(400_000);
       const acc = incidents.update(incidents.init(at(500_000)), deltaOf(at(500_000), full), full);
       const truncated = incidents.update(acc, deltaOf(full, truncatedView, true), truncatedView);
-      expect(incidents.output(truncated)).toEqual(run(truncatedView));
+      expect(incidents.output(truncated).feed).toEqual(run(truncatedView));
     });
 
     it('no duplicate entry after a flashback over the incident', () => {
@@ -651,7 +651,7 @@ describe('incidents calculator', () => {
       let acc = incidents.init(first);
       acc = incidents.update(acc, deltaOf(first, cut, true), cut);
       acc = incidents.update(acc, deltaOf(cut, again), again);
-      const feed = incidents.output(acc);
+      const feed = incidents.output(acc).feed;
 
       const collisions = feed.filter((e) => e.kind === 'collision');
       expect(collisions.map((e) => e.at)).toEqual([T + 1_600]);
@@ -896,8 +896,8 @@ describe('incidents behaves per situation by its behaviour table (C44)', () => {
       const full = viewOf({ miniSectors: race(), penalties: [penaltyRecord(7, 'driveThrough', T), penaltyRecord(7, 'time', T)] });
       const cut = viewOf({ miniSectors: until(race(), T - 1_000), penalties: [] });
       const acc = incidents.update(incidents.init(full), deltaOf(full, cut, true), cut);
-      expect(incidents.output(acc)).toEqual(run(cut));
-      expect(ofKind(incidents.output(acc), 'penalty')).toEqual([]);
+      expect(incidents.output(acc).feed).toEqual(run(cut));
+      expect(ofKind(incidents.output(acc).feed, 'penalty')).toEqual([]);
     });
   });
 
