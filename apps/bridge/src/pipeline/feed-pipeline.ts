@@ -180,20 +180,22 @@ export class FeedPipeline {
    * C76; spec 3.3): the set's current snapshot joins the run's priors and the priors sidecar, the decision
    * `calibrationChosen { setId, snapshot }` goes to the runner with the next frame and, with its record index, to the
    * decisions sidecar; the set is marked used. Without a running session a pick only marks the set used (the newest
-   * session's track). An unknown set is rejected; a pipeline without a calibration store takes no picks.
+   * session's track). An unknown set of the newest session's track is rejected, with or without a running session
+   * (C73); a pipeline without a calibration store takes no picks.
    */
   commitDecision(setId: string | null): DecisionResult {
     const calibration = this.#o.calibration;
     if (calibration === undefined) return { ok: false, reason: 'notSupported', message: 'this feed takes no calibration picks' };
     const run = this.#decisions;
     const session = this.#session;
-    if (session === undefined || run === undefined) {
-      if (run !== undefined && setId !== null) calibration.markUsed(run.trackId, setId, this.#now());
-      return { ok: true };
-    }
+    if (run === undefined) return { ok: true };
     const snapshot: PriorsSnapshot | undefined = setId === null ? undefined : calibration.snapshotOf(run.trackId, setId);
     if (setId !== null && snapshot === undefined) {
       return { ok: false, reason: 'invalid', message: `no calibration set ${setId} on track ${run.trackId}` };
+    }
+    if (session === undefined) {
+      if (setId !== null) calibration.markUsed(run.trackId, setId, this.#now());
+      return { ok: true };
     }
     const decision: GivenDecision = { kind: 'calibrationChosen', setId, snapshot: snapshot?.fingerprint ?? null };
     session.decide(decision, snapshot);
