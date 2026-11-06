@@ -24,6 +24,9 @@ export type ClientMessage =
   | { type: 'replayControl'; id: string; control: ReplayControl }
   | { type: 'heartbeat' };
 
+/** What a uiAction's owner answers: accepted, or rejected with a reason and, for an invalid one, a message (C73). */
+export type ActionOutcome = { ok: true } | { ok: false; reason: 'invalid' | 'notSupported'; message?: string };
+
 export type ServerMessage =
   | { type: 'hello'; contractVersion: number; feeds: FeedInfo[] }
   | { type: 'snapshot'; id: string; value?: unknown; entries?: unknown[] }
@@ -31,8 +34,7 @@ export type ServerMessage =
   | { type: 'append'; id: string; entries: unknown[] }
   | { type: 'topicStatus'; id: string; status: TopicStatus }
   | { type: 'commandResult'; id: string; ok: false; reason: 'notSupported' }
-  | { type: 'actionResult'; id: string; ok: true }
-  /** `message`: why an invalid action was rejected, for the UI to show (C73). */
-  | { type: 'actionResult'; id: string; ok: false; reason: 'invalid' | 'notSupported'; message?: string }
+  /** A uiAction's answer; `message`: why an invalid action was rejected, for the UI to show (C73). */
+  | ({ type: 'actionResult'; id: string } & ActionOutcome)
   | { type: 'heartbeat' }
   | { type: 'error'; id?: string; reason: ErrorReason };
