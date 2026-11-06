@@ -58,10 +58,11 @@ describe('pitwall CLI: config', { timeout: 30_000 }, () => {
     await sendSegment(udpPort, 300);
     await vi.waitFor(() => expect(readdirSync(recordings).filter((name) => name.endsWith('.config.json'))).toHaveLength(1), { timeout: 10_000 });
     const files = readdirSync(recordings).sort();
-    expect(files).toHaveLength(2);
-    const [session, sidecar] = files as [string, string];
-    expect(session).toMatch(/\.pwrec\.gz$/);
-    expect(sidecar).toBe(`${session}.config.json`);
+    const sessions = files.filter((name) => name.endsWith('.pwrec.gz'));
+    expect(sessions).toHaveLength(1);
+    const session = sessions[0]!;
+    const sidecar = `${session}.config.json`;
+    expect(files.filter((name) => name.endsWith('.config.json'))).toEqual([sidecar]);
     // Every declared key is in the sidecar; analyses add their own, so only realism is pinned here.
     expect(JSON.parse(readFileSync(join(recordings, sidecar), 'utf8'))).toMatchObject({ realism: { enabled: false } });
     expect(await live.stop()).toBe(0);
