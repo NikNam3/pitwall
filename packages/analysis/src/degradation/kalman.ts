@@ -19,13 +19,13 @@ export type FilterPrior = { nuMsPerLap: number; nuSdMs: number };
 /** How the filter used a lap: at full weight, or down-weighted as a slow outlier. */
 export type FilterUse = 'used' | 'downWeighted';
 
-/** The posterior after every lap: means, covariance `[[α α, α ν], [ν α, ν ν]]`, and per lap its use. */
+/** The posterior after every lap: means, covariance `[[α α, α ν], [ν α, ν ν]]`, and per lap its use, in the laps' order. */
 export type FilterState = {
   /** `undefined` before the first lap: `α` is diffuse. */
   alphaMs: number | undefined;
   nuMsPerLap: number;
   cov: [[number, number], [number, number]];
-  laps: { lapNumber: number; use: FilterUse }[];
+  uses: FilterUse[];
 };
 
 /**
@@ -44,7 +44,7 @@ export function runFilter(laps: readonly FilterLap[], prior: FilterPrior, config
   let pan = 0;
   let pnn = prior.nuSdMs * prior.nuSdMs;
   let lastAge = 0;
-  const uses: FilterState['laps'] = [];
+  const uses: FilterUse[] = [];
   for (const lap of laps) {
     const age = lap.tyreAge;
     if (alpha === undefined) {
@@ -52,7 +52,7 @@ export function runFilter(laps: readonly FilterLap[], prior: FilterPrior, config
       paa = r + pnn * age * age;
       pan = -pnn * age;
       lastAge = age;
-      uses.push({ lapNumber: lap.lapNumber, use: 'used' });
+      uses.push('used');
       continue;
     }
     const steps = Math.abs(age - lastAge);
@@ -70,9 +70,9 @@ export function runFilter(laps: readonly FilterLap[], prior: FilterPrior, config
     paa -= ka * ka * s;
     pan -= ka * kn * s;
     pnn -= kn * kn * s;
-    uses.push({ lapNumber: lap.lapNumber, use: down ? 'downWeighted' : 'used' });
+    uses.push(down ? 'downWeighted' : 'used');
   }
-  return { alphaMs: alpha, nuMsPerLap: nu, cov: [[paa, pan], [pan, pnn]], laps: uses };
+  return { alphaMs: alpha, nuMsPerLap: nu, cov: [[paa, pan], [pan, pnn]], uses };
 }
 
 /** A stint's fit: the filter's posterior mean and covariance and how it used each lap. */
@@ -86,5 +86,7 @@ export function fitStint(laps: readonly FilterLap[], prior: FilterPrior, config:
   if (laps.length < 2) return unknown('insufficientData');
   const state = runFilter(laps, prior, config);
   if (state.alphaMs === undefined) return unknown('insufficientData');
-  return known({ alphaMs: state.alphaMs, nuMsPerLap: state.nuMsPerLap, cov: state.cov, laps: state.laps }, 0);
+  // one use per lap, in the laps' order
+  const uses = laps.map((lap, i) => ({ lapNumber: lap.lapNumber, use: state.uses[i] as FilterUse }));
+  return known({ alphaMs: state.alphaMs, nuMsPerLap: state.nuMsPerLap, cov: state.cov, laps: uses }, 0);
 }

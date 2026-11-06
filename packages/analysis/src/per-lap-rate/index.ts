@@ -10,8 +10,10 @@ export type Rate = { perLap: number; samples: number };
 export type RateOptions = { window: number; minSamples: number };
 
 /** The last `window` samples, newest last; `undefined` when they are fewer than `minSamples` or none. */
-function windowOf<S>(samples: readonly S[], opts: RateOptions): S[] | undefined {
-  const used = opts.window > 0 ? samples.slice(-opts.window) : [];
+function windowOf<S>(samples: readonly S[], opts: RateOptions): readonly S[] | undefined {
+  if (!(opts.window > 0)) return undefined;
+  // only read: a window that holds every sample is the samples themselves
+  const used = samples.length > opts.window ? samples.slice(-opts.window) : samples;
   return used.length > 0 && used.length >= opts.minSamples ? used : undefined;
 }
 
@@ -26,7 +28,9 @@ export function perLapGainRate(samples: GainSample[], opts: RateOptions): Known<
   const used = windowOf(samples, opts);
   const newest = used?.at(-1);
   if (used === undefined || newest === undefined) return unknown('insufficientData');
-  return known({ perLap: median(used.map((s) => s.gain)), samples: used.length }, newest.at);
+  const gains: number[] = [];
+  for (const s of used) gains.push(s.gain);
+  return known({ perLap: median(gains), samples: used.length }, newest.at);
 }
 
 /** A value sampled once a lap, e.g. a gap at the line; `at` is when it was taken. The result's `at` is the newest used sample's. */
@@ -50,8 +54,24 @@ export function perLapRate(samples: RateSample[], opts: RateOptions): Known<Rate
   return known({ perLap: median(slopes), samples: used.length }, newest.at);
 }
 
+/** Above this many values `median` sorts with `Array.prototype.sort`; at or below it, by insertion (a window is small). */
+const INSERTION_SORT_MAX = 16;
+
+/** Sorts `values` ascending in place, stable, as `sort((x, y) => x - y)` does. */
+function sortAscending(values: number[]): number[] {
+  if (values.length > INSERTION_SORT_MAX) return values.sort((x, y) => x - y);
+  for (let i = 1; i < values.length; i++) {
+    const v = values[i] as number;
+    let j = i - 1;
+    for (; j >= 0 && (values[j] as number) > v; j--) values[j + 1] = values[j] as number;
+    values[j + 1] = v;
+  }
+  return values;
+}
+
+/** The median of `values`, a fresh array of its caller's, which it sorts in place. */
 function median(values: number[]): number {
-  const sorted = [...values].sort((x, y) => x - y);
+  const sorted = sortAscending(values);
   const mid = sorted.length >> 1;
   const hi = sorted[mid] as number;
   return sorted.length % 2 === 1 ? hi : ((sorted[mid - 1] as number) + hi) / 2;

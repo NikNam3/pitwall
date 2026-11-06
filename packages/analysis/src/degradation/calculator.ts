@@ -70,22 +70,30 @@ function calibrationPrior(priors: EngineView['priors'], visual: VisualCompound):
  * stint). Without a record every lap is one stint. A stint is the record's compound, an open one its first lap's.
  */
 function stintsOf(laps: readonly Lap[], records: readonly Stint[]): { laps: Lap[]; actual: Lap['actualCompound']; visual: Lap['visualCompound'] }[] {
-  const out: { laps: Lap[]; actual: Lap['actualCompound']; visual: Lap['visualCompound'] }[] = [];
-  // the laps are in lap order, the records in stint order: one pass
-  const closed = records.map((r) => ({ laps: [] as Lap[], actual: r.actualCompound, visual: r.visualCompound }));
-  const open: Lap[] = [];
+  // the laps are in lap order, the records in stint order: one pass. A record's laps and the open stint's are each a
+  // run of consecutive laps, kept as its index range [from, to) and sliced once.
+  const ranges = records.map(() => ({ from: 0, to: 0 }));
+  let openFrom = laps.length;
   const after = records.at(-1)?.lastLap ?? 0;
   let k = 0;
-  for (const lap of laps) {
+  for (let i = 0; i < laps.length; i++) {
+    const lap = laps[i] as Lap;
     if (lap.lapNumber > after) {
-      open.push(lap);
+      openFrom = Math.min(openFrom, i);
       continue;
     }
     while (k < records.length && (records[k]?.lastLap ?? Infinity) < lap.lapNumber) k++;
     const r = records[k];
-    if (r !== undefined && lap.lapNumber >= r.firstLap) closed[k]?.laps.push(lap);
+    const range = ranges[k];
+    if (r === undefined || range === undefined || lap.lapNumber < r.firstLap) continue;
+    if (range.to === range.from) range.from = i;
+    range.to = i + 1;
   }
-  out.push(...closed);
+  const out = records.map((r, j) => {
+    const range = ranges[j] ?? { from: 0, to: 0 };
+    return { laps: laps.slice(range.from, range.to), actual: r.actualCompound, visual: r.visualCompound };
+  });
+  const open = laps.slice(openFrom);
   const first = open[0];
   if (first !== undefined) out.push({ laps: open, actual: first.actualCompound, visual: first.visualCompound });
   return out;
