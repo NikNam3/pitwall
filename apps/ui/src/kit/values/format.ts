@@ -165,8 +165,14 @@ export const formatLaps = (n: number): string => (Number.isFinite(n) ? `${fixed(
 /** The one temperature with its unit, to whole degrees (alarm texts, the engine line), `94.6` -> `95 °C`. */
 export const formatCelsius = (c: Celsius): string => (Number.isFinite(c) ? `${whole(c)} °C` : '');
 
+/** Minutes ahead as a signed whole number, no unit, `5` -> `+5`. */
+export const formatMinutesAhead = (min: number): string => (Number.isFinite(min) ? `+${whole(min)}` : '');
+
 /** Percentage to whole numbers, `17.6` -> `18%`. */
 export const formatPercent = (p: Percent): string => (Number.isFinite(p) ? formatPct(p) : '');
+
+/** Percentage to one decimal, `109.29` -> `109.3%`. */
+export const formatPercentTenths = (p: Percent): string => (Number.isFinite(p) ? `${fixed(p, 1)}%` : '');
 
 /** Joules as MJ to one decimal, no unit, `2100000` -> `2.1`, `-400000` -> `−0.4`. */
 export const formatMJ = (j: number): string => (Number.isFinite(j) ? fixed(j / 1e6, 1) : '');

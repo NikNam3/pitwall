@@ -6,7 +6,6 @@ import type {
   BattleSide,
   CarId,
   DrsStatus,
-  ForecastSample,
   IncidentEntry,
   Insight,
   Known,
@@ -29,6 +28,7 @@ import {
 import { BATTLE, BATTLE_CONFIG } from "../../src/battle/index.ts";
 import { INCIDENTS, type IncidentsOutput } from "../../src/incidents/index.ts";
 import { ALARMS } from "../../src/alarms/index.ts";
+import { RAIN_OUTLOOK, type RainOutlook } from "../../src/rain-outlook/index.ts";
 import { RACE_MOMENT_BEHAVIOUR } from "../../src/race-moment/index.ts";
 
 const NOW = 600_000 as SessionTime;
@@ -92,12 +92,11 @@ const alarm = (over: Partial<Insight> = {}): Insight =>
 const openPhase = (kind: "SC" | "VSC" | "red", start: number, confirmed = true) =>
   openNeutralisation({ kind, start: start as SessionTime, confirmed });
 
-const rain = (offsetMin: number, rainPct: number): ForecastSample =>
-  ({
-    offsetMin,
-    weather: "lightRain",
-    rainPct,
-  }) as unknown as ForecastSample;
+/** The `rain-outlook` output (C43): its first rain sample, and whether it lies within the horizon. */
+const rain = (offsetMin: number, rainPct: number, withinHorizon = true): RainOutlook => ({
+  firstRain: known({ index: 0, offsetMin, rainPct }, NOW),
+  withinHorizon,
+});
 
 /** An open span of a session-scoped machine (C20). */
 const openSpan = (machine: string, kind: string, detail: unknown = undefined): OpenSpan => ({
@@ -126,7 +125,7 @@ function run({
   incidents,
   battle,
   alarms,
-  forecast = [],
+  outlook,
 }: {
   kind?: "race" | "practice" | "qualifying" | "none";
   /** The other open spans of the situation, beside the weekend phase and `active`. */
@@ -136,16 +135,16 @@ function run({
   incidents?: IncidentEntry[];
   battle?: Record<CarId, BattleCard>;
   alarms?: Insight[];
-  forecast?: ForecastSample[];
+  outlook?: RainOutlook;
 } = {}): Known<RaceMoment> {
   const outputs = new Map<string, unknown>();
   // the incidents output: its feed (race-moment reads `.feed`); no markers without a track file
   if (incidents) outputs.set(INCIDENTS, { feed: incidents, markers: na } satisfies IncidentsOutput);
   if (battle) outputs.set(BATTLE, battle);
   if (alarms) outputs.set(ALARMS, alarms);
+  if (outlook) outputs.set(RAIN_OUTLOOK, outlook);
   const { spans, situation } = phaseSpans(phases, active, situationOf(kind, session));
   const view = engineView({
-    session: { forecast },
     history: { spans },
     situation,
     outputs,
@@ -161,7 +160,7 @@ const value = (out: Known<RaceMoment>): RaceMoment => {
 };
 
 describe("race-moment calculator", () => {
-  it("is the quick calculator race-moment at 4 Hz reading its five inputs", () => {
+  it("is the quick calculator race-moment at 4 Hz reading its inputs, rain-outlook among them (C43)", () => {
     expect(raceMomentCalculator.id).toBe(RACE_MOMENT);
     expect(raceMomentCalculator.kind).toBe("quick");
     expect(raceMomentCalculator.cadence).toEqual({ hz: 4 });
@@ -169,10 +168,10 @@ describe("race-moment calculator", () => {
       expect.arrayContaining([
         "spans:weekend-phase",
         "spans:session-phase-race",
-        "session",
         { calculator: INCIDENTS },
         { calculator: BATTLE },
         { calculator: ALARMS },
+        { calculator: RAIN_OUTLOOK },
       ]),
     );
   });
@@ -246,27 +245,22 @@ describe("race-moment calculator", () => {
       expect(v.active).toEqual(["incident", "carCare"]);
     });
 
-    it("weather: a forecast sample within the horizon has rain at or above the threshold", () => {
-      const v = value(run({ forecast: [rain(5, CFG.weatherRainPct)] }));
+    it("weather: rain-outlook has rain within the horizon, its first rain the cause params", () => {
+      const v = value(run({ outlook: rain(5, 45) }));
       expect(v.moment).toBe("weather");
-      expect(v.cause.rule).toBe("forecastRain");
-      expect(v.cause.params).toEqual({
-        rainPct: CFG.weatherRainPct,
-        offsetMin: 5,
-      });
+      expect(v.cause).toEqual({ rule: "forecastRain", params: { rainPct: 45, offsetMin: 5 } });
       expect(v.active).toEqual(["weather", "carCare"]);
     });
 
-    it("weather ignores rain below the threshold and rain beyond the horizon", () => {
-      const v = value(
-        run({
-          forecast: [
-            rain(5, CFG.weatherRainPct - 1),
-            rain(CFG.weatherHorizonMin + 1, 100),
-          ],
-        }),
-      );
+    it("weather: rain-outlook's rain beyond the horizon (withinHorizon false) sets no weather moment", () => {
+      const v = value(run({ outlook: rain(5, 45, false) }));
       expect(v.moment).toBe("carCare");
+      expect(v.active).toEqual(["carCare"]);
+    });
+
+    it("the rain thresholds are rain-outlook's: RACE_MOMENT_CONFIG has no weatherRainPct or weatherHorizonMin (C43)", () => {
+      expect(Object.keys(RACE_MOMENT_CONFIG.defaults)).not.toContain("weatherRainPct");
+      expect(Object.keys(RACE_MOMENT_CONFIG.defaults)).not.toContain("weatherHorizonMin");
     });
 
     it("battle by laps to DRS range at or below battleLaps", () => {
@@ -382,7 +376,7 @@ describe("race-moment calculator", () => {
       const v = value(
         run({
           incidents: [incident()],
-          forecast: [rain(2, 90)],
+          outlook: rain(2, 90),
           battle: {
             [car0]: card(known(side({ gapMs: known(300, NOW) }), NOW)),
           },
@@ -447,7 +441,7 @@ describe("race-moment calculator", () => {
     });
 
     it("is notApplicable for weather, battle and car care", () => {
-      expect(value(run({ forecast: [rain(1, 100)] })).since).toEqual(na);
+      expect(value(run({ outlook: rain(1, 100) })).since).toEqual(na);
       expect(
         value(
           run({
@@ -544,7 +538,7 @@ describe("race-moment calculator", () => {
       const v = value(
         run({
           incidents: [incident({ kind: "neutralised" })],
-          forecast: [rain(1, 100)],
+          outlook: rain(1, 100),
           battle: { [car0]: card(known(side({ gapMs: known(10, NOW) }), NOW)) },
         }),
       );

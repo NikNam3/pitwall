@@ -166,7 +166,7 @@ Reads the flag phases, `incidents`, `battle`, the active insights from `alarms` 
 ### 7.2 Moments, highest priority first
 1. **neutralised:** an SC, VSC or red phase is active.
 2. **incident:** a major incident entry within the last `incidentHoldMs`.
-3. **weather:** a forecast sample within `weatherHorizonMin` has `rainPct` at or above `weatherRainPct`.
+3. **weather:** `rain-outlook` says rain within its horizon (its `rainPct` and `horizonMin`; SP4.1b, C43).
 4. **battle:** a battle card has laps to DRS range at or below `battleLaps`, or a gap at or below `drsRangeMs`.
 5. **carCare:** the default.
 
@@ -636,4 +636,4 @@ Config fields are flat primitives: a band is one `lo`/`hi` pair per field (`surf
 | `incidents` | `feedLength` | 50 | pitwall estimate |
 | `race-moment` | `incidentHoldMs` | 30 000 | research 06 §4 |
 | `race-moment` | `battleLaps` | 2 | research 06 §4 |
-| `race-moment` | `weatherRainPct`, `weatherHorizonMin` | 40 %, 10 | pitwall estimate |
+| `rain-outlook` | `rainPct`, `horizonMin` | 40 %, 10 | pitwall estimate (moved from `race-moment` in SP4.1b) |

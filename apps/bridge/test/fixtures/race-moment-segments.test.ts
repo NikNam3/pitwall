@@ -13,6 +13,7 @@ import {
   paceCalculator,
   RACE_MOMENT,
   raceMomentCalculator,
+  rainOutlookCalculator,
   sessionRemainingCalculator,
   tyreLifeCalculator,
   tyreWearCalculator,
@@ -37,6 +38,7 @@ const CALCULATORS = [
   fuelCalculator,
   sessionRemainingCalculator,
   carBandsCalculator,
+  rainOutlookCalculator,
 ];
 
 /**
