@@ -42,10 +42,15 @@
     size: WidgetSize;
     /** Formats the y axis tick values; the default prints the plain numbers. */
     yFormat?: ((v: number) => string) | undefined;
+    /**
+     * The y axis' tick steps, in y units, smallest first: give steps the format can tell apart (`TENTH_STEPS_MS` for a
+     * time to tenths); the default is uPlot's (1, 2, 2.5, 5 per decade).
+     */
+    ySteps?: readonly number[] | undefined;
     /** Called after every draw of the plot (the gallery marks its cell ready on the first). */
     ondraw?: (() => void) | undefined;
   };
-  let { series, xLabel, yLabel, x, marks, bands, size, yFormat, ondraw }: Props = $props();
+  let { series, xLabel, yLabel, x, marks, bands, size, yFormat, ySteps, ondraw }: Props = $props();
 
   const SERIES_ROLES: Role[] = ['series1', 'series2', 'series3', 'series4', 'series5', 'series6'];
 
@@ -64,6 +69,26 @@
   /** Whole laps: the tyre-age axis' tick steps. */
   const WHOLE_LAPS = [1, 2, 4, 5, 10, 20, 25, 50, 100];
 
+  /** uPlot's default y gutter (CSS px): a chart whose tick labels fit it keeps it. */
+  const Y_GUTTER_PX = 50;
+
+  /** What uPlot holds of an axis at run time: its tick font as drawn (canvas px) first, its tick length and gap. */
+  type DrawnAxis = { font: readonly [string, ...unknown[]]; ticks: { show?: boolean; size: number }; gap: number };
+
+  /**
+   * The y gutter (CSS px): the tick, the gap and the widest tick label, measured in the tick font as uPlot draws it, so
+   * no label leaves the canvas; never narrower than uPlot's default.
+   */
+  const yGutter = (u: uPlot, values: string[] | null, i: number): number => {
+    const axis = u.axes[i] as unknown as DrawnAxis | undefined;
+    if (!axis || !values || values.length === 0) return Y_GUTTER_PX;
+    u.ctx.save();
+    u.ctx.font = axis.font[0];
+    const widest = values.reduce((m, v) => Math.max(m, u.ctx.measureText(String(v ?? '')).width), 0) / uPlot.pxRatio;
+    u.ctx.restore();
+    return Math.max(Y_GUTTER_PX, Math.ceil((axis.ticks.show === false ? 0 : axis.ticks.size) + axis.gap + widest));
+  };
+
   /** The x of the marks: they widen the x data so the plot has data where only marks are. */
   const markXs = (): number[] => (untrack(() => marks) ?? []).map((m) => m.x);
 
@@ -76,6 +101,7 @@
       series.map((s) => [s.label, s.colour, s.fresh, s.band !== undefined]),
       (marks ?? []).length > 0,
       bands,
+      ySteps,
       xLabel,
       yLabel,
       x.kind,
@@ -278,7 +304,7 @@
             x: { time: false, range: () => visibleXRange(xs, cols, x.kind, xPerCell) },
             ...(fitsMarks ? { y: { range: yRange } } : {}),
           },
-          axes: [{ ...axis, label: labelForms(xLabel, 'width'), ...(x.kind === 'tyreAge' ? { incrs: WHOLE_LAPS } : {}) }, { ...axis, label: labelForms(yLabel, 'height'), ...(yFormat ? { values: (_u: uPlot, splits: number[]) => splits.map(yFormat) } : {}) }],
+          axes: [{ ...axis, label: labelForms(xLabel, 'width'), ...(x.kind === 'tyreAge' ? { incrs: WHOLE_LAPS } : {}) }, { ...axis, label: labelForms(yLabel, 'height'), size: yGutter, ...(ySteps ? { incrs: [...ySteps] } : {}), ...(yFormat ? { values: (_u: uPlot, splits: number[]) => splits.map(yFormat) } : {}) }],
           series: [{}, ...lines, ...liveLines],
           hooks: {
             draw: [drawMarks, drawLabels, () => ondraw?.()],

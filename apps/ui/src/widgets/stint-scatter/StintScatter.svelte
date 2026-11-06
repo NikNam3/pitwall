@@ -4,10 +4,11 @@
   // excluded ones as faint rings pinned at the edge, down-weighted ones as dotted rings, the fit with its band; full adds
   // the current stint's basis and the prior per compound with its source. The analysis computed every value (C65).
   import Chart from '../../kit/chart/Chart.svelte';
+  import { TENTH_STEPS_MS } from '../../kit/chart/data.ts';
   import { fitCell } from '../../kit/grid/grid.ts';
   import { noDataYet, sourceWord } from '../../kit/text.ts';
   import type { WidgetProps } from '../../kit/types.ts';
-  import { formatLapTime } from '../../kit/values/format.ts';
+  import { formatMinutesTenths } from '../../kit/values/format.ts';
   import { sourceTitle } from '../../kit/values/source-badge.ts';
   import SourceBadge from '../../kit/values/SourceBadge.svelte';
   import TextCell from '../../kit/values/TextCell.svelte';
@@ -65,7 +66,8 @@
       yLabel={full ? text.yLabel(current.fuelCorrected) : text.noAxisLabel}
       x={{ kind: 'tyreAge' }}
       size={chartSize}
-      yFormat={formatLapTime}
+      yFormat={formatMinutesTenths}
+      ySteps={TENTH_STEPS_MS}
     />
     {#if rows.length > 0}
       <div class="line faint">{header}</div>
