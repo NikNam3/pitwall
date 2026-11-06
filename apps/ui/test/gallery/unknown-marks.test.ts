@@ -164,6 +164,7 @@ const shown = (container: HTMLElement): Shown => {
  * as `*`) and the reason. Each rule is pinned by the display's own tests.
  */
 const IN_WORDS: Record<string, { field: string; reason: UnknownReason; rule: string }[]> = {
+  'calibration-panel': [{ field: 'active', reason: 'notApplicable', rule: '"no session" and the track picker (spec 6)' }],
   'damage-card': [
     { field: 'damage.jumps.*.lossMsPerLap', reason: 'insufficientData', rule: '"loss: measuring" (Task P ruling)' },
     { field: 'damage.jumps.*.lossMsPerLap', reason: 'notApplicable', rule: '"loss: not measurable"' },
