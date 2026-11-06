@@ -191,11 +191,9 @@ export class FeedPipeline {
       if (run !== undefined && setId !== null) calibration.markUsed(run.trackId, setId, this.#now());
       return { ok: true };
     }
-    let snapshot: PriorsSnapshot | undefined;
-    try {
-      snapshot = setId === null ? undefined : calibration.snapshotOf(run.trackId, setId);
-    } catch (error) {
-      return { ok: false, reason: 'invalid', message: error instanceof Error ? error.message : String(error) };
+    const snapshot: PriorsSnapshot | undefined = setId === null ? undefined : calibration.snapshotOf(run.trackId, setId);
+    if (setId !== null && snapshot === undefined) {
+      return { ok: false, reason: 'invalid', message: `no calibration set ${setId} on track ${run.trackId}` };
     }
     const decision: GivenDecision = { kind: 'calibrationChosen', setId, snapshot: snapshot?.fingerprint ?? null };
     session.decide(decision, snapshot);

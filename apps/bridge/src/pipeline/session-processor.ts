@@ -31,7 +31,7 @@ import {
   type StepResult,
   type WeekendContext,
 } from '@pitwall/engine';
-import type { DeepReadonly } from '@pitwall/engine/readers';
+import { priorsOf, type DeepReadonly } from '@pitwall/engine/readers';
 import type { TopicName } from '@pitwall/contracts';
 import { peekHeader, type SessionPacket } from '@pitwall/protocol';
 import type { CalcStats } from '../dev/calc-stats.ts';
@@ -313,21 +313,22 @@ export class SessionProcessor {
   /**
    * `calibration.active` (C54, C62a) as the projection has it: the newest `calibrationChosen` decision's set and snapshot
    * (`picked`), else the start snapshot's; handed to `onActive` when it changed. It follows the projection, so a pick's
-   * void restores the start (C27a, C33). `setName` is the snapshot's; empty without one (`defaults` or no set).
+   * void restores the start (C27a, C33). The snapshot is the units' (`priorsOf`, C43): `snapshot` and `setName` are
+   * `null` and empty without one (`defaults`, no set, or a snapshot the run does not hold).
    */
   #publishActive(decisions: readonly DeepReadonly<DecisionRecord>[]): void {
     const { onActive, session } = this.#o;
     if (onActive === undefined) return;
     const chosen = decisions.findLast((d) => d.kind === 'calibrationChosen');
-    const fingerprint = chosen === undefined ? this.#priors.start : chosen.snapshot;
-    const snapshot = fingerprint === null ? undefined : this.#priors.snapshots[fingerprint];
+    const priors = priorsOf(decisions, this.#priors);
+    const snapshot = priors.known ? priors.value : undefined;
     const value: CalibrationActiveValue = known(
       {
         sessionUid: this.#uid,
         trackId: session.trackId,
         setId: chosen === undefined ? (snapshot?.setId ?? null) : chosen.setId,
         setName: snapshot?.setName ?? '',
-        snapshot: fingerprint,
+        snapshot: snapshot?.fingerprint ?? null,
         picked: chosen !== undefined,
       },
       ACTIVE_AT,
