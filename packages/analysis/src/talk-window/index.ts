@@ -2,6 +2,7 @@
 import type { CarId, TalkWindow } from '@pitwall/domain';
 
 export type { TalkWindow } from '@pitwall/domain';
+export * from './behaviour.ts';
 export * from './config.ts';
 
 /** The calculator id. */

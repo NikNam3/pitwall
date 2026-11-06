@@ -7,5 +7,4 @@ import type { TopicName } from '@pitwall/contracts';
  */
 export const NOT_YET_BOUND: ReadonlySet<TopicName> = new Set<TopicName>([
   'incidents.markers', // SP4.0 Task 8
-  'talkWindow.car', // SP4.0 Task 9
 ]);
