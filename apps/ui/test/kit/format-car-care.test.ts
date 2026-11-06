@@ -9,6 +9,7 @@ import {
   formatLapNumber,
   formatLaps,
   formatPercent,
+  formatPercentTenths,
   formatPsi,
 } from '../../src/kit/values/format.ts';
 
@@ -93,4 +94,12 @@ describe('formatDeltaMs (signed seconds, three decimals)', () => {
     [-1234, '−1.234'],
   ])('%i -> %s', (ms, text) => expect(formatDeltaMs(ms)).toBe(text));
   it('a non-finite number is empty', () => expect(formatDeltaMs(Number.NaN)).toBe(''));
+});
+
+describe('formatPercentTenths', () => {
+  it.each([
+    [109.29, '109.3%'],
+    [100, '100.0%'],
+    [Number.NaN, ''],
+  ])('%f -> %s', (n, text) => expect(formatPercentTenths(n)).toBe(text));
 });
