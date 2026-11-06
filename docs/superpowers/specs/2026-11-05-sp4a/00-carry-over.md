@@ -262,4 +262,5 @@ From `docs/acceptance/live-checklist.md` (live test 2026-11-04/05, user answers 
 | A26 | Contract | C62a rewritten (calibration sets, the store as their cache), C39, C54, C75, C76, glossary; exact text in the 4.1a spec. |
 | A27 | Source badge | none = this session, `ᶜ` = calibration, `ᵈ` = default (replaces Q2 A's `ˢ` and the briefly chosen `ʷ`). |
 | A28 | 4.1 cut | 4.1a calibration and estimation; 4.1b long run and weather. |
-
+| A29 | A decision in the formation lap (spec 4.1a review, 2026-11-06) | Never hidden by formation: hiding is for what the game produced then, a decision is the engineer's input. Replaces the 2026-11-04 ruling; C29 changes. |
+| A30 | Where the calibration values live | View input, like config and the track file: a `calibrationChosen` decision names the set and its snapshot's fingerprint, the priors sidecar holds the snapshots; no values in the log (C23). |
