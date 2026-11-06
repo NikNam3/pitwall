@@ -23,6 +23,12 @@ export type BandPoint = { x: number; y: number; sd: number };
  */
 export type ChartMark = { x: number; y: number; shape: 'dot' | 'ring' | 'dottedRing'; role: Role; pinned?: boolean | undefined };
 
+/**
+ * Tick steps (ms) for a y axis of times to tenths (`formatMinutesTenths`): whole tenths only, so no two ticks print
+ * alike, `0.1 s` to `10 min`.
+ */
+export const TENTH_STEPS_MS: readonly number[] = [100, 200, 500, 1_000, 2_000, 5_000, 10_000, 15_000, 30_000, 60_000, 120_000, 300_000, 600_000];
+
 /** The x kinds: laps and session time follow the width; a tyre age shows the whole stint. */
 export type XKind = 'lap' | 'sessionTime' | 'tyreAge';
 
