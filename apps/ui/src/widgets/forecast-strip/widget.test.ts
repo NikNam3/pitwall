@@ -14,7 +14,7 @@ describe('forecast-strip: the declaration', () => {
     expect(widget.data.forecast).not.toHaveProperty('optional');
   });
 
-  it('has the mockup sizes: compact 34×2, full 56×6 (ruling R10: the accuracy note's own row)', () => {
+  it('has the mockup sizes: compact 34×2, full 56×6 (ruling R10: a row for the accuracy note)', () => {
     expect(widget.sizes).toEqual({ compact: { minCols: 34, minRows: 2 }, full: { minCols: 56, minRows: 6 } });
   });
 
