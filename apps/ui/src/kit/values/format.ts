@@ -165,6 +165,9 @@ export const formatLaps = (n: number): string => (Number.isFinite(n) ? `${fixed(
 /** The one temperature with its unit, to whole degrees (alarm texts, the engine line), `94.6` -> `95 °C`. */
 export const formatCelsius = (c: Celsius): string => (Number.isFinite(c) ? `${whole(c)} °C` : '');
 
+/** Minutes ahead as a signed whole number, no unit, `5` -> `+5`. */
+export const formatMinutesAhead = (min: number): string => (Number.isFinite(min) ? `+${whole(min)}` : '');
+
 /** Percentage to whole numbers, `17.6` -> `18%`. */
 export const formatPercent = (p: Percent): string => (Number.isFinite(p) ? formatPct(p) : '');
 

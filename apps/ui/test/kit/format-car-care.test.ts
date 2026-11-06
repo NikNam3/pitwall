@@ -8,6 +8,8 @@ import {
   formatKg,
   formatLapNumber,
   formatLaps,
+  formatMinutesAhead,
+  formatMinutesAhead,
   formatPercent,
   formatPercentTenths,
   formatPsi,
@@ -102,4 +104,12 @@ describe('formatPercentTenths', () => {
     [100, '100.0%'],
     [Number.NaN, ''],
   ])('%f -> %s', (n, text) => expect(formatPercentTenths(n)).toBe(text));
+});
+
+describe('formatMinutesAhead', () => {
+  it.each([
+    [5, '+5'],
+    [30, '+30'],
+    [Number.NaN, ''],
+  ])('%f -> %s', (n, text) => expect(formatMinutesAhead(n)).toBe(text));
 });
