@@ -1,0 +1,60 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Session-start prompt and top-bar set name (SP4.1a §3.3)</title><style>
+@font-face { font-family:'JetBrains Mono'; src:url('../../../apps/ui/src/theme/font/JetBrainsMono%5Bwght%5D.woff2') format('woff2'); font-weight:100 800; font-display:block; }
+:root { --pw-text:#d9dbe0; --pw-textDim:#8d9199; --pw-textFaint:#5c6068; --pw-ownCar:#ffffff; --pw-bg:#000000; --pw-bgPanel:#000000; --pw-bgBand:#141416; --pw-bgRowBand:#0d0d0f; --pw-border:#25272c; --pw-grid:#1c1d21; --pw-dropTarget:#5c606859; --pw-focus:#8d9199; --pw-critical:#ff5c5c; --pw-warning:#f0b429; --pw-best:#b06cff; --pw-personalBest:#3fcf70; --pw-flagYellow:#ffd23f; --pw-flagGreen:#3fcf70; --pw-flagRed:#ff5c5c; --pw-flagBlue:#5ca8ff; --pw-compoundSoft:#d9dbe0; --pw-compoundMedium:#d9dbe0; --pw-compoundHard:#d9dbe0; --pw-series1:oklch(0.72 0.09 250); --pw-series2:oklch(0.72 0.09 40); --pw-series3:oklch(0.72 0.09 150); --pw-series4:oklch(0.72 0.09 310); --pw-series5:oklch(0.72 0.09 95); --pw-series6:oklch(0.72 0.09 200); --pw-font:'JetBrains Mono', monospace; --pw-font-px:14px; --pw-line:1.4; }
+* { box-sizing:border-box; margin:0; padding:0; }
+body { background:var(--pw-bg); color:var(--pw-text); font-family:var(--pw-font); font-size:var(--pw-font-px); line-height:var(--pw-line); font-variant-ligatures:none; padding:24px 28px 56px; }
+h1 { font-size:var(--pw-font-px); font-weight:600; margin-bottom:4px; }
+h2 { font-size:var(--pw-font-px); font-weight:500; color:var(--pw-textDim); margin:26px 0 8px; }
+.note { color:var(--pw-textDim); max-width:150ch; margin-bottom:10px; }
+.note b { color:var(--pw-text); font-weight:500; }
+.row { display:flex; gap:24px; align-items:flex-start; flex-wrap:wrap; } .row > div { width:min-content; }
+.panel { background:var(--pw-bgPanel); display:inline-block; vertical-align:top; outline:1px dashed var(--pw-border); }
+.ph { display:flex; gap:1ch; padding:0 1ch; background:var(--pw-bgBand); white-space:nowrap; color:var(--pw-textFaint); }
+.ph .t { color:var(--pw-textDim); overflow:hidden; text-overflow:ellipsis; min-width:0; } .ph > span { flex-shrink:0; } .ph > .t { flex-shrink:1; } .ph .sp { flex:1; } .ph .lk { color:var(--pw-text); }
+pre { font-family:inherit; font-size:inherit; line-height:inherit; padding:0 1ch; white-space:pre; }
+svg { display:block; }
+svg text { font-family:var(--pw-font); font-size:14px; }
+.cap { color:var(--pw-textFaint); margin:4px 0 0; min-width:44ch; }
+.d { color:var(--pw-textDim); } .f { color:var(--pw-textFaint); } .w { color:var(--pw-warning); } .c { color:var(--pw-critical); }
+.o, .hi { color:var(--pw-ownCar); font-weight:700; } .m { font-weight:700; }
+.band { background:var(--pw-bgRowBand); display:inline-block; width:100%; }
+.me { color:var(--pw-ownCar); font-weight:700; box-shadow:inset 2px 0 0 var(--pw-text); display:inline-block; width:100%; }
+.tip { text-decoration:underline dotted var(--pw-textFaint); }
+.tooltip { display:inline-block; border:1px solid var(--pw-border); background:var(--pw-bgBand); color:var(--pw-text); padding:0 1ch; margin-left:2ch; }
+/* a control: a number field or a select, drawn like .pw-input (a 1 px border-role frame, no fill); a button: a quiet word */
+.fld { box-shadow:inset 0 0 0 1px var(--pw-border); color:var(--pw-text); }
+.fld.on { box-shadow:inset 0 0 0 1px var(--pw-focus); }
+.btn { color:var(--pw-textDim); }
+.cur { background:var(--pw-bgBand); color:var(--pw-text); display:inline-block; width:100%; }
+.topbar { display:flex; justify-content:space-between; gap:2ch; padding:0 1ch; border:1px solid var(--pw-border); color:var(--pw-textDim); white-space:nowrap; width:150ch; }
+.topbar .side { display:flex; gap:2ch; } .topbar .t { color:var(--pw-text); }
+.seg { box-shadow:inset 0 -1px 0 var(--pw-textFaint); }
+.window { position:relative; width:150ch; height:313.59999999999997px; outline:1px dashed var(--pw-border); background:var(--pw-bg); }
+.window .layout { position:absolute; inset:27.599999999999998px 8px 8px 8px; display:grid; grid-template-columns:1fr 1fr; gap:8px; opacity:0.35; }
+.window .layout > div { background:var(--pw-bgPanel); outline:1px dashed var(--pw-border); color:var(--pw-textFaint); padding:0 1ch; }
+.window .overlay { position:absolute; left:50%; top:58.8px; transform:translateX(-50%); border:1px solid var(--pw-border); background:var(--pw-bgPanel); }
+.window .overlay .bandT { background:var(--pw-bgBand); color:var(--pw-textDim); padding:0 1ch; white-space:nowrap; }
+</style></head><body><h1>Session-start prompt and top-bar set name (SP4.1a §3.3)</h1>
+<div class="note">A new session starts (the league race at Silverstone, on the grid). The UI opens the prompt over the window: the track's sets, the preselection marked, and <b>defaults</b>. Each row is a command (<code>calibration.choose.&lt;setId&gt;</code>, <code>calibration.choose.defaults</code>, C72); Enter sends <code>calibration.choose</code>. Esc, or a click outside, keeps the preselection. <code>calibration.pick</code> (the top-bar segment) opens it again at any time. The layout behind is dimmed here only to show the overlay.</div>
+<h2>Prompt as it opens: the cursor on the preselection (overlay 70×6 plus its title band)</h2>
+<div class="window"><div class="topbar"><div class="side"><span>garage</span><span class="t">RACE</span><span>Silverstone</span><span class="t">L0/52</span><span>1:30:00</span><span>green</span><span>moment —</span><span class="seg" title="calibration.pick">calibration <span class="t">league</span></span></div><div class="side"><span>feed ok · 0.2 % loss</span><span>realism on</span></div></div><div class="layout"><div>Calibration</div><div>Pit loss</div><div>Stint scatter</div><div></div></div><div class="overlay" style="width:70ch"><div class="bandT">Calibration for this session · Silverstone race</div><pre><span class="cur"> league              <span class="f">4 sources </span> <span class="w" title="this stint is no longer in its session (session rebuilt or deleted): left out of every value">1 missing </span> <span class="f">used 15 Oct </span> <span class="f" title="the set used last on this track; Esc keeps it">preselected</span></span>
+ <span class="d">after-floor-upgrade</span> <span class="f">2 sources </span>            <span class="f">new 06 Nov  </span>            
+ <span class="d">pre-season         </span> <span class="f">1 source  </span>            <span class="f">used 02 Sep </span>            
+ <span class="d">defaults           </span> <span class="f">the track file's values</span>
+
+<span class="f"> ↑↓ move · Enter choose · Esc keeps league</span></pre></div></div>
+<div class="cap">the cursor row in the palette's look (band background, text white), the others dim · <b>preselected</b> faint at the right of league (the newest lastUsedAt, spec 3.3); the cursor starts there · "1 missing" amber with the missing-source hover · a set never used shows its creation day · <b>defaults</b> last: the track file's values (ᵈ everywhere)</div>
+<h2>The cursor moved to the copy (before Enter)</h2>
+<div class="window"><div class="topbar"><div class="side"><span>garage</span><span class="t">RACE</span><span>Silverstone</span><span class="t">L0/52</span><span>1:30:00</span><span>green</span><span>moment —</span><span class="seg" title="calibration.pick">calibration <span class="t">league</span></span></div><div class="side"><span>feed ok · 0.2 % loss</span><span>realism on</span></div></div><div class="layout"><div>Calibration</div><div>Pit loss</div><div>Stint scatter</div><div></div></div><div class="overlay" style="width:70ch"><div class="bandT">Calibration for this session · Silverstone race</div><pre> <span class="d">league             </span> <span class="f">4 sources </span> <span class="w" title="this stint is no longer in its session (session rebuilt or deleted): left out of every value">1 missing </span> <span class="f">used 15 Oct </span> <span class="f" title="the set used last on this track; Esc keeps it">preselected</span>
+<span class="cur"> after-floor-upgrade <span class="f">2 sources </span>            <span class="f">new 06 Nov  </span>            </span>
+ <span class="d">pre-season         </span> <span class="f">1 source  </span>            <span class="f">used 02 Sep </span>            
+ <span class="d">defaults           </span> <span class="f">the track file's values</span>
+
+<span class="f"> ↑↓ move · Enter choose · Esc keeps league</span></pre></div></div>
+<div class="cap">the preselected mark stays on league; the cursor is only where Enter will choose · the footer still says what Esc keeps</div>
+<h2>Top-bar segment: the active set's name (a click invokes <code>calibration.pick</code>)</h2>
+<div class="note">Grey like the session segment, the name in the text role; underlined faint here only to point it out. Drawn: <b>A</b> (README Q5).</div>
+<div class="topbar"><div class="side"><span>garage</span><span class="t">RACE</span><span>Silverstone</span><span class="t">L23/52</span><span>1:12:04</span><span>green</span><span>moment —</span><span class="seg" title="calibration.pick">calibration <span class="t">league</span></span></div><div class="side"><span>feed ok · 0.2 % loss</span><span>realism on</span></div></div><div class="cap">A · running on league, after the left segments (workbook, session, phase, moment)</div>
+<div style="height:10px"></div><div class="topbar"><div class="side"><span>garage</span><span class="t">RACE</span><span>Silverstone</span><span class="t">L23/52</span><span>1:12:04</span><span>green</span><span>moment —</span><span class="seg" title="calibration.pick">calibration <span class="t">defaults</span></span></div><div class="side"><span>feed ok · 0.2 % loss</span><span>realism on</span></div></div><div class="cap">A · running on the track file's defaults (chosen, or no set on the track)</div>
+<div style="height:10px"></div><div class="topbar"><div class="side"><span>garage</span><span class="t">RACE</span><span>Silverstone</span><span class="t">L23/52</span><span>1:12:04</span><span>green</span><span>moment —</span><span class="seg" title="calibration.pick">ᶜ <span class="t">league</span></span></div><div class="side"><span>feed ok · 0.2 % loss</span><span>realism on</span></div></div><div class="cap">B · the badge glyph as the label</div>
+<div style="height:10px"></div><div class="topbar"><div class="side"><span>garage</span><span class="t">RACE</span><span>Silverstone</span><span class="t">L23/52</span><span>1:12:04</span><span>green</span><span>moment —</span><span class="seg" title="calibration.pick"><span class="t">league</span></span></div><div class="side"><span>feed ok · 0.2 % loss</span><span>realism on</span></div></div><div class="cap">C · the name alone</div></body></html>
