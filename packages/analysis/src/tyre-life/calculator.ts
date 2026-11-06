@@ -5,7 +5,7 @@ import { known, unknown, type CarId, type CarState, type Corners, type Known, ty
 import type { DeepReadonly, EngineView, QuickCalculator } from '@pitwall/engine/readers';
 import { DEGRADATION, type DegradationOutput, type StintDegradation } from '../degradation/index.ts';
 import { priorKey } from '../degradation/priors.ts';
-import { isRateLap, LAP_CLASSES_CONFIG } from '../lap-classes/index.ts';
+import { LAP_CLASSES_CONFIG } from '../lap-classes/index.ts';
 import { lapsToReach, PER_LAP_RATE_CONFIG } from '../per-lap-rate/index.ts';
 import { behaviourFor } from '../shared/behaviour.ts';
 import { CAR_STATUS_READS } from '../shared/car-status.ts';
@@ -110,11 +110,9 @@ export const tyreLifeCalculator: QuickCalculator<TyreLifeOutput> = {
     for (const car of view.live.cars) {
       const effect: TyreLifeEffect = Object.assign({}, ...behaviourFor(TYRE_LIFE_BEHAVIOUR, view, car.id));
       if (effect.inSession !== true) continue;
-      // the set's rate laps: the fitted set is judged over the stint's rate laps (`isRateLap`, as before the shared rule)
-      const own = onFittedSet(
-        currentStintLaps(view.history, car.id).filter((l) => isRateLap(l, classes)),
-        car.tyres,
-      );
+      // the set's laps: the set change is looked for over every lap of the stint (an in lap included), and only then are
+      // the rate laps taken (`wearRatePerCorner` picks them itself)
+      const own = onFittedSet(currentStintLaps(view.history, car.id), car.tyres);
       const rates = wearRatePerCorner(own, { lapClasses: classes, rate: rateOpts });
       const corner = (c: Corner): CornerLife => {
         const wearPct = car.tyres.corners[c].wearPct;
