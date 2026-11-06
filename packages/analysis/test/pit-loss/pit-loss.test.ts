@@ -196,9 +196,10 @@ describe('pit-loss', () => {
       source: { sessionUid: `${session}`, weekendId: 'w1', feedCar: carId(0), car: carId(car), firstLap, excludedLaps: [] },
       phase: { kind: 'race', format: 'grandPrix' },
       stint: { carId: carId(car), firstLap, lastLap: firstLap + 10, actualCompound: 'C3', visualCompound: 'medium', tyreAgeAtFitting: 0, frame: firstLap * 100 },
-      // the laps every stop of the session needs (see the report: `StoredSource` holds only the stint's laps)
       laps: stops.flatMap((s) => s.laps),
       pitStops: stops.map((s) => s.stop),
+      // every car's laps of the session: the laps each stop's loss needs (StoredSource.sessionLaps, ruling R6)
+      sessionLaps: stops.flatMap((s) => s.laps),
       track: unknown('notApplicable'),
     });
     const once = aggregate([source(1, s1, 0, 1), source(2, s2, 0, 1)], ctx);
