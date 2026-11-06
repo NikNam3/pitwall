@@ -36,11 +36,11 @@
       {#if l.kind === 'stint'}
         <div class="line faint"> {l.text}</div>
       {:else if l.kind === 'laps'}
-        <div class="line"><span class="faint"> {l.label}</span>{#each l.cells as c (c.lapNumber)} <span
+        <div class="line"><span class="faint"> {l.label}</span>{#each l.cells as c (c.lapNumber)}{' '}<span
               style:color={roleOrUndefined(lapRole(c))}
               style:background={heatBackground(c.heat)}>{fitCell(c.time, TIME_COLS, 'right')}</span><span class="faint">{fitCell(c.mark, 1)}</span>{/each}</div>
       {:else}
-        <div class="line">{fitCell('', LABEL_COLS)}{#each l.cells as c (c.lapNumber)} <span style:color={roleOrUndefined(statusRole(c.status))}
+        <div class="line">{fitCell('', LABEL_COLS)}{#each l.cells as c (c.lapNumber)}{' '}<span style:color={roleOrUndefined(statusRole(c.status))}
               >{fitCell(c.strip, STRIP_COLS)}</span
             >{/each}</div>
       {/if}

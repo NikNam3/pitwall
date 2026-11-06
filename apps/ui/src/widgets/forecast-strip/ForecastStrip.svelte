@@ -54,7 +54,7 @@
     <div class="line"> <span style:color={role(labelRole)}>{text.compactLabels.rain}</span> <span
         class:bold={compact.firstRain.reason === undefined}
         ><TextCell {...compact.firstRain} role={firstRainRole(compact.firstRain.reason === undefined)} /></span
-      >{#if note !== ''}  <span style:color={role(noteRole)}>{note}</span>{/if}</div>
+      >{#if note !== ''}{'  '}<span style:color={role(noteRole)}>{note}</span>{/if}</div>
   {/if}
 </div>
 
