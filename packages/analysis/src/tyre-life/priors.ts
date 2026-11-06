@@ -5,7 +5,7 @@ import { known, unknown, type Known, type VisualCompound } from '@pitwall/domain
 import { definePriors, type PriorDecl, type PriorsCtx, type StoredSource } from '@pitwall/engine/readers';
 import { LAP_CLASSES_CONFIG } from '../lap-classes/index.ts';
 import { PER_LAP_RATE_CONFIG } from '../per-lap-rate/index.ts';
-import { CORNERS, cornerRate, rateLaps, type Corner } from './wear-rate.ts';
+import { CORNERS, wearRatePerCorner, type Corner } from '../shared/wear-rate.ts';
 
 const COMPOUNDS = ['soft', 'medium', 'hard', 'inter', 'wet'] as const satisfies readonly VisualCompound[];
 
@@ -42,7 +42,7 @@ const wearRate = (compound: VisualCompound, corner: Corner): PriorDecl => {
       const rates: number[] = [];
       for (const source of sources) {
         if (source.stint.visualCompound !== compound) continue;
-        const rate = cornerRate(rateLaps(source.laps, classes), corner, opts);
+        const rate = wearRatePerCorner(source.laps, { lapClasses: classes, rate: opts })[corner];
         if (rate.known) rates.push(rate.value.perLap);
       }
       return rates.length === 0 ? unknown('insufficientData') : known(median(rates), 0);

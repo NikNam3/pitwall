@@ -3,8 +3,9 @@
 import { addLaps, emptyCurrentLaps, known, unknown, type CarId, type Corners, type Known, type LapRecord, type LapUse, type Ms } from '@pitwall/domain';
 import type { DeepReadonly } from '@pitwall/engine/readers';
 import { isPaceLap, isRateLap, type LapClassOptions } from '../lap-classes/index.ts';
-import { perLapGainRate, type GainSample, type RateOptions } from '../per-lap-rate/index.ts';
+import type { Rate, RateOptions } from '../per-lap-rate/index.ts';
 import { burnPerLapKg } from '../shared/fuel-burn.ts';
+import { wearBasis, wearRatePerCorner } from '../shared/wear-rate.ts';
 import type { DEGRADATION_CONFIG } from './config.ts';
 import type { DegradationLap } from './types.ts';
 import { runFilter, type FilterLap, type FilterPrior, type FilterState } from './kalman.ts';
@@ -29,13 +30,6 @@ export function lapClassOf(lap: Lap, classes: LapClassOptions): LapUse | 'pace' 
   if (isPaceLap(lap, classes)) return 'pace';
   return isRateLap(lap, classes) ? NOT_FOR_PACE : NEUTRALISED;
 }
-
-/** Whether a lap of use `use` (`lapClassOf`) is a rate lap: a pace lap or one excluded as `notForPace`. */
-const isRateUse = (use: LapUse | 'pace'): boolean => use === 'pace' || use === NOT_FOR_PACE;
-
-/** Whether every corner's wear at the lap's start is known. */
-const wearVisible = (lap: Lap): boolean =>
-  lap.wearAtStartPct.fl.known && lap.wearAtStartPct.fr.known && lap.wearAtStartPct.rl.known && lap.wearAtStartPct.rr.known;
 
 /** A lap's fuel at its start in kg: its own, or what stands in for a hidden value (`fuelResolver`). */
 export type FuelOf = (lap: Lap) => Known<number>;
@@ -114,7 +108,6 @@ export function fitLaps(laps: readonly Lap[], fuelOf: FuelOf, prior: FilterPrior
   // pace lap reads its lap time; in one that is, only the pace laps without their fuel are left out (below).
   let fitted: DegradationLap[] = [];
   let paceLaps: FilterLap[] = [];
-  const rateLaps: Lap[] = [];
   let anyFuel = false;
   let paceFuel = false;
   let paceUnfuelled = false;
@@ -131,9 +124,9 @@ export function fitLaps(laps: readonly Lap[], fuelOf: FuelOf, prior: FilterPrior
       if (fuel.known) paceFuel = true;
       else paceUnfuelled = true;
     }
-    if (isRateUse(use)) rateLaps.push(lap);
     if (fuel.known) anyFuel = true;
-    if (basis === 'age' && wearVisible(lap)) basis = 'wear';
+    // the stint's basis: `wear` once any lap's start wear gives it (the shared rule, `wearBasis`)
+    if (basis === 'age') basis = wearBasis(lap.wearAtStartPct);
   }
   const fuelCorrected = fitted.length > 0 ? paceFuel : anyFuel;
   // a corrected stint leaves its pace laps without their fuel out of the fit (`notForPace`)
@@ -150,49 +143,12 @@ export function fitLaps(laps: readonly Lap[], fuelOf: FuelOf, prior: FilterPrior
     const use = state.uses[i];
     if (row !== undefined && use !== undefined) row.use = use;
   }
-  return { laps: out, state, paceLaps, fuelCorrected, basis, wearRatePctPerLap: wearRates(rateLaps, rate) };
+  return { laps: out, state, paceLaps, fuelCorrected, basis, wearRatePctPerLap: wearRates(laps, classes, rate) };
 }
 
-/** One corner's wear gains, newest first, and the reason the newest lap that hid its wear hid it. */
-type CornerSamples = { samples: GainSample[]; hidden: Known<never> | undefined };
-
-const cornerSamples = (): CornerSamples => ({ samples: [], hidden: undefined });
-
-/** Adds a lap's sample of one corner (its start and end wear) unless the corner holds `window` samples already. */
-function takeSample(acc: CornerSamples, start: DeepReadonly<Known<number>>, end: DeepReadonly<Known<number>>, lap: Lap, window: number): void {
-  if (!(acc.samples.length < window)) return;
-  if (start.known && end.known) acc.samples.push({ lap: lap.lapNumber, gain: end.value - start.value, at: lap.completedAt });
-  else acc.hidden ??= unknown(start.known ? (end.known ? 'notReceived' : end.reason) : start.reason);
-}
-
-/** A corner's rate from its samples (`wearRates`). */
-function cornerRate(acc: CornerSamples, rate: RateOptions): Known<number> {
-  if (acc.samples.length === 0 && acc.hidden !== undefined) return acc.hidden;
-  const r = perLapGainRate(acc.samples.reverse(), rate);
-  return r.known ? known(r.value.perLap, r.at) : r;
-}
-
-/**
- * Per corner the wear rate in % per lap (`per-lap-rate`'s median gain over the rate laps, of which it reads the newest
- * `window`, so only those are sampled); a corner whose wear is hidden on every lap carries the reason it is hidden.
- */
-function wearRates(rateLaps: readonly Lap[], rate: RateOptions): Corners<Known<number>> {
-  const { window } = rate;
-  const fl = cornerSamples();
-  const fr = cornerSamples();
-  const rl = cornerSamples();
-  const rr = cornerSamples();
-  // one pass from the newest lap, each corner by name, until every corner holds `window` samples
-  const open = (): boolean => fl.samples.length < window || fr.samples.length < window || rl.samples.length < window || rr.samples.length < window;
-  for (let i = rateLaps.length - 1; i >= 0 && open(); i--) {
-    const l = rateLaps[i];
-    if (l === undefined) continue;
-    const start = l.wearAtStartPct;
-    const end = l.wearAtEndPct;
-    takeSample(fl, start.fl, end.fl, l, window);
-    takeSample(fr, start.fr, end.fr, l, window);
-    takeSample(rl, start.rl, end.rl, l, window);
-    takeSample(rr, start.rr, end.rr, l, window);
-  }
-  return { fl: cornerRate(fl, rate), fr: cornerRate(fr, rate), rl: cornerRate(rl, rate), rr: cornerRate(rr, rate) };
+/** Per corner the wear rate in % per lap of the stint's laps: the shared rule (`wearRatePerCorner`, C43), as a plain rate. */
+function wearRates(laps: readonly Lap[], classes: LapClassOptions, rate: RateOptions): Corners<Known<number>> {
+  const rates = wearRatePerCorner(laps, { lapClasses: classes, rate });
+  const perLap = (r: Known<Rate>): Known<number> => (r.known ? known(r.value.perLap, r.at) : r);
+  return { fl: perLap(rates.fl), fr: perLap(rates.fr), rl: perLap(rates.rl), rr: perLap(rates.rr) };
 }
