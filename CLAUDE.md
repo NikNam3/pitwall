@@ -38,7 +38,7 @@ Other docs: `docs/research/README.md` (index of the domain research), `docs/acce
 
 ## Commands
 
-- `pnpm check`: typecheck, lint, depcruise and tests; the supervisor runs it before every merge (C88)
+- `pnpm check`: typecheck, lint, depcruise and tests; the supervisor runs it before every merge (C88), except of a minor change, which runs its related tests (C82)
 - `pnpm vitest related <files>`: the tests a worker runs for its changes, with `pnpm typecheck`, `pnpm lint`, `pnpm depcruise`
 - `pnpm test` / `pnpm test:acceptance`: unit and property tests / acceptance tests on real recordings
 - `pnpm test:ui`: the Playwright suite. Screenshots: one baseline per display size of the display's first gallery case, default theme (plus kit and shell cells); `SCREENSHOT_BUDGET` (`apps/ui/test/gallery/screenshot-budget.test.ts`) caps the total; `fit.spec` checks every case and theme
