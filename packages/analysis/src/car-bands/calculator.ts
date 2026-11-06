@@ -20,6 +20,8 @@ const reading = (value: Known<number>, band: Known<Band>, range: DeepReadonly<Kn
   state: !band.known ? unknown(band.reason) : value.known ? { known: true, value: stateOf(value.value, band.value), at: value.at } : unknown(value.reason),
   band,
   outForFullLap: outFor(range, lapBand),
+  // stub until the task's implement phase
+  lapState: unknown('notApplicable'),
 });
 
 /**

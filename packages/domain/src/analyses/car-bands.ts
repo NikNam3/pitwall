@@ -20,6 +20,12 @@ export type BandReading = {
   band: Known<{ lo: number; hi: number }>;
   /** The last completed lap's whole range (min and max) was outside the band. */
   outForFullLap: boolean;
+  /**
+   * The judged lap against the band of that lap, by the channel's one number of the lap (its peak for the brakes and the
+   * engine, else the middle of min and max). `unknown` without a judged lap, its range or its band. The band advisory
+   * and every display of the channel read this one judgement.
+   */
+  lapState: Known<BandState>;
 };
 
 /** `carBands.car`: every band channel of the car. */
