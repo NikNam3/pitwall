@@ -305,7 +305,7 @@ describe('a pick before any session on the feed (F5, C73)', () => {
     writeSetFile(dataDir, set(SINGAPORE, 'wet'));
     const store = CalibrationStore.open(dataDir, {
       features: [pitLoss],
-      repo: { sessionsOnTrack: () => [] },
+      repo: { sessionsOnTrack: () => [], newestTrackId: () => null },
       config: effectiveConfig([pitLoss]),
       hub: { publishGlobal: vi.fn() },
       log,
