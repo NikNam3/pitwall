@@ -38,14 +38,12 @@ export type WeekendRepositoryOptions = {
 /**
  * A complete stored session on a track, as the calibration store reads it (C62a): its row, its weekend phase (from its
  * weekend-phase span), the track file it ran with and its projection (C34). A session of another rules version is
- * `stale` and has no projection: it is never served before its rebuild (C61).
+ * `stale` and has neither projection nor weekend phase: its log is never read before its rebuild (C61).
  */
-export type TrackSession = StoredSessionRow & {
-  phase: WeekendPhase;
-  stale: boolean;
-  projection: ProjectionState | undefined;
-  track: Known<DeepReadonly<TrackData>>;
-};
+export type TrackSession = StoredSessionRow & { track: Known<DeepReadonly<TrackData>> } & (
+  | { stale: false; phase: WeekendPhase; projection: ProjectionState }
+  | { stale: true; projection: undefined }
+);
 
 /** The read of the stored sessions on one track the calibration store needs. */
 export type SessionsOnTrack = Pick<WeekendRepository, 'sessionsOnTrack'>;
@@ -121,14 +119,16 @@ export class WeekendRepository {
 
   /**
    * The complete stored sessions on `trackId` in start order (C62a), each with its weekend phase and track file. One of
-   * another rules version is `stale` and comes without its projection (C61); an incomplete one is left out.
+   * another rules version is `stale` and comes without its projection and weekend phase, its log unread (C61); an
+   * incomplete one is left out.
    */
   sessionsOnTrack(trackId: number): TrackSession[] {
-    return (this.#statements.trackSessions.all(trackId) as SessionDbRow[]).map((dbRow) => {
+    return (this.#statements.trackSessions.all(trackId) as SessionDbRow[]).map((dbRow): TrackSession => {
       const row = this.#toSession(dbRow);
+      const track = this.#track(row);
+      if (isStale(row, this.#rulesVersion)) return { ...row, track, stale: true, projection: undefined };
       const projection = this.#projectionOfStored(keyOf(dbRow));
-      const stale = isStale(row, this.#rulesVersion);
-      return { ...row, phase: phaseOf(projection), stale, projection: stale ? undefined : (projection as ProjectionState), track: this.#track(row) };
+      return { ...row, track, stale: false, phase: phaseOf(projection), projection: projection as ProjectionState };
     });
   }
 

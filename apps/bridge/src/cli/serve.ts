@@ -16,7 +16,7 @@ import { pruneEndedAcknowledgements } from '../ui-state/ack-pruning.ts';
 import { DEFAULT_WORKBOOKS_DIR, seedDefaultWorkbooks } from '../ui-state/default-workbooks.ts';
 import { UiState } from '../ui-state/ui-state.ts';
 import { StartupError } from '../startup-error.ts';
-import type { Db, StoredSessionRow } from '../storage/db.ts';
+import type { Db, SessionKey, StoredSessionRow } from '../storage/db.ts';
 import { WeekendRepository } from '../storage/weekend-repository.ts';
 import { WsServer } from '../ws/server.ts';
 import { cliLogger, whenAborted, type CliIo } from './io.ts';
@@ -63,6 +63,8 @@ function wsLogLevel(env: NodeJS.ProcessEnv): string {
   return level;
 }
 
+const sameSession = (a: SessionKey, b: SessionKey): boolean => a.sessionUid === b.sessionUid && a.weekendId === b.weekendId && a.playerCar === b.playerCar;
+
 /** How often a dev child reports its replay position to the supervisor. */
 const POSITION_EVERY_MS = 500;
 
@@ -103,22 +105,32 @@ export async function serve(opts: ServeOptions): Promise<number> {
       // Acknowledgements of occurrences that have ended are dropped, so state.json does not grow forever.
       undo.push(pruneEndedAcknowledgements(hub, [feedId], uiState));
     }
+    const { rebuild } = storage ?? {};
     // The calibration store (C62a) reads the stored sessions, so only a run that stores has one; `uiDir` is `<data dir>/ui`.
     const calibrationLog = cliLogger(io, 'warn');
-    const calibration = storage && opts.uiDir !== undefined
+    const calibrationRepo = storage && new WeekendRepository(storage.db, {
+      rulesVersion: storage.rulesVersion,
+      track: (row) => (row.pwrecPath === null ? loadTrackFile(row.trackId, TRACKS_DIR) : recordingTrack(row.pwrecPath, row.trackId, TRACKS_DIR)),
+    });
+    const calibration = calibrationRepo && opts.uiDir !== undefined
       ? CalibrationStore.open(dirname(opts.uiDir), {
         features: FEATURES,
-        repo: new WeekendRepository(storage.db, {
-          rulesVersion: storage.rulesVersion,
-          track: (row) => (row.pwrecPath === null ? loadTrackFile(row.trackId, TRACKS_DIR) : recordingTrack(row.pwrecPath, row.trackId, TRACKS_DIR)),
-        }),
+        repo: calibrationRepo,
         config: opts.config ?? effectiveConfig(FEATURES),
         hub,
         log: calibrationLog,
+        // The stale sessions a set or the suggestions read (C61), rebuilt from their recordings as a session start's
+        // weekend context rebuilds its stale ones; a failed rebuild is logged and its session stays stale (C3).
+        rebuild: async (keys) => {
+          if (rebuild === undefined) return;
+          const rows = keys.flatMap((key) => calibrationRepo.sessionsOf(key.weekendId).filter((row) => sameSession(row, key)));
+          await Promise.all(rows.map((row) => rebuild(row).catch((error: unknown) => {
+            calibrationLog.error({ sessionUid: row.sessionUid, weekendId: row.weekendId, playerCar: row.playerCar, err: error }, 'stored session not rebuilt');
+          })));
+        },
       })
       : undefined;
     if (calibration) undo.push(() => calibration.close());
-    const { rebuild } = storage ?? {};
     // A rebuild changes the stored projections the sets' sources rest on (C61).
     const rebuildThenRecompute = rebuild && (async (row: StoredSessionRow) => {
       await rebuild(row);

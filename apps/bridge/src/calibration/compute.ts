@@ -183,17 +183,19 @@ export class PriorsRunner {
 
   /**
    * The panel's view of one source (spec 3.2, A23): its own entries (each aggregate over this source alone), their
-   * residuals against `set`, its lap list with the units' lap use; a skipped source has none of them.
+   * residuals against `set`, its lap list with the units' lap use; a skipped source has none of them (C3): only its
+   * session's date (unknown when the session is gone) and its compound (unknown: its stint is not read).
    */
   fit(resolved: Resolved, setKey: string, overrides: Readonly<Record<string, number>>, set: PriorsEntries | undefined): SourceFit {
     const { source, session } = resolved;
-    const sessionDate = session?.startedAt ?? '';
     if (!('stored' in resolved)) {
-      const stint = session?.projection?.stints.find((s) => s.carId === source.car && s.firstLap === source.firstLap);
       return {
-        source, sessionDate, compound: stint?.visualCompound ?? 'unknown', laps: 0, usedLaps: 0, lapList: [], entries: {}, residuals: {}, skipped: resolved.skipped,
+        source, skipped: resolved.skipped,
+        sessionDate: session === undefined ? unknown('notReceived') : known(session.startedAt, 0),
+        compound: session === undefined ? unknown('notReceived') : unknown('notApplicable'),
       };
     }
+    const sessionDate = resolved.session.startedAt;
     const { stored } = resolved;
     const entries = this.aggregates(setKey, [stored], overrides);
     const uses = this.lapUses(stored, overrides);

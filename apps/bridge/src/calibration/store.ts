@@ -3,7 +3,8 @@
 // applies the calibration uiActions, rejecting an invalid one with a reason (C73); runs the units' declared priors
 // functions over the sets' sources, read from the stored projections (C34); and publishes `calibration.sets`, `.values`
 // and `.candidates` itself, as the UI state publishes `ui.*` (C54, C55). It decides nothing about the data (C43): the
-// units' functions do; it resolves, orders and stores.
+// units' functions do; it resolves, orders and stores. A stale stored session it reads (C61) is skipped, and its rebuild
+// requested once; once that settles, the store recomputes.
 import { join } from 'node:path';
 import type { TopicName } from '@pitwall/contracts';
 import type { CalibrationSet, PriorsSnapshot, SourceFit, PriorsEntries } from '@pitwall/domain';
@@ -11,6 +12,7 @@ import type { FeatureConfig } from '../feature-config.ts';
 import type { Feature } from '../features/feature.ts';
 import type { ValueFor } from '../hub/topic-hub.ts';
 import type { Logger } from '../log.ts';
+import type { SessionKey } from '../storage/db.ts';
 import type { SessionsOnTrack, TrackSession } from '../storage/weekend-repository.ts';
 import { entriesFingerprint, PriorsCache, PriorsRunner, resolveSource } from './compute.ts';
 import { loadSets, removeSet, stintKey, writeSet } from './sets.ts';
@@ -29,6 +31,11 @@ export type CalibrationStoreDeps = {
   config: FeatureConfig;
   hub: { publishGlobal(topic: TopicName, valueFor: ValueFor): void };
   log: Logger;
+  /**
+   * Rebuilds stored sessions from their recordings (C61). The store asks once per session it read stale and recomputes
+   * once the rebuild settles; a rejection is logged and the sources stay `stale`.
+   */
+  rebuild: (keys: readonly SessionKey[]) => Promise<void>;
   /** Now as an ISO date, for a new set's `createdAt`. Default: the wall clock. */
   now?: () => string;
 };
@@ -37,7 +44,8 @@ type SetValues = { entries: PriorsEntries; fits: SourceFit[] };
 
 const OK: ApplyResult = { ok: true };
 const byStart = (a: TrackSession, b: TrackSession): number => (a.startedAt < b.startedAt ? -1 : a.startedAt > b.startedAt ? 1 : 0);
-const setKeyOf = (set: Pick<CalibrationSet, 'trackId' | 'id'>): string => `${set.trackId}/set/${set.id}`;
+const keyText = (s: SessionKey): string => `${s.sessionUid}/${s.weekendId}/${s.playerCar}`;
+const setKeyOf =(set: Pick<CalibrationSet, 'trackId' | 'id'>): string => `${set.trackId}/set/${set.id}`;
 
 export class CalibrationStore {
   readonly #root: string;
@@ -48,6 +56,8 @@ export class CalibrationStore {
   readonly #sets = new Map<string, CalibrationSet>();
   readonly #values = new Map<string, SetValues>();
   readonly #candidates = new Map<number, SourceFit[]>();
+  /** The stale sessions whose rebuild was requested (`keyText`): never requested again in this run. */
+  readonly #rebuildRequested = new Set<string>();
   #closed = false;
 
   private constructor(root: string, deps: CalibrationStoreDeps) {
@@ -173,7 +183,33 @@ export class CalibrationStore {
       this.#values.set(set.id, { entries, fits });
     }
     if (sets.length === 0) this.#candidates.delete(trackId);
-    else this.#candidates.set(trackId, suggestions(trackId, sessions, sets, this.#runner));
+    else {
+      this.#candidates.set(trackId, suggestions(trackId, sessions, sets, this.#runner));
+      // The sets' sources and the suggestions read every stored session on the track: a stale one awaits its rebuild.
+      this.#requestRebuild(sessions.filter((s) => s.stale));
+    }
+  }
+
+  /** Asks for the rebuild of the stale sessions not asked for yet (C61), then recomputes; a failure is logged, never thrown. */
+  #requestRebuild(stale: readonly TrackSession[]): void {
+    const keys = stale
+      .filter((s) => !this.#rebuildRequested.has(keyText(s)))
+      .map((s): SessionKey => ({ sessionUid: s.sessionUid, weekendId: s.weekendId, playerCar: s.playerCar }));
+    if (keys.length === 0) return;
+    for (const key of keys) this.#rebuildRequested.add(keyText(key));
+    const { log } = this.#deps;
+    (async () => this.#deps.rebuild(keys))()
+      .then(
+        () => {
+          if (!this.#closed) this.recompute('rebuild');
+        },
+        (error: unknown) => {
+          log.error({ err: error, sessions: keys.map(keyText) }, 'stored sessions not rebuilt: their calibration sources stay stale');
+        },
+      )
+      .catch((error: unknown) => {
+        log.error({ err: error }, 'calibration recompute after a rebuild failed');
+      });
   }
 
   #publishSets(): void {
