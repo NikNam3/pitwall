@@ -324,7 +324,8 @@ const estimateOf = (est: JumpEstimate | undefined, cut: FrameNumber, minSegments
   }
   const newest = est.counted[n - 1];
   if (n < minSegments || newest === undefined) return unknown('insufficientData');
-  return known((sumMs * MINI_SECTORS) / n, newest.at);
+  // whole ms (C4), rounded on the output only, never in the accumulator's sums (C31); `+ 0` turns a −0 into 0
+  return known(Math.round((sumMs * MINI_SECTORS) / n) + 0, newest.at);
 };
 
 /**
