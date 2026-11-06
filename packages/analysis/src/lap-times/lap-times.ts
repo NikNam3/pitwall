@@ -108,17 +108,59 @@ export type LivePass = {
   restarted: boolean;
   /** The current lap is invalid (its lap-validity span): its own sector times rank as no best. */
   invalid: boolean;
+  /** The race-clock time of the lap's own line crossing (its current crossing of (car, lap, 0)); absent when none is recorded. */
+  lineAt: number | undefined;
   /** When the live timing was read. */
   at: number;
 };
 
+const LIVE_SECTORS = [0, 1] as const;
+
+/** A live S1 or S2 the pass has passed the end of, and when it finished (line + S1, line + S1 + S2). */
+type LiveSector = { ms: Ms; finishedAt: number };
+
+/**
+ * The pass's own finished live sectors: the times it has passed the end of. 0 is the game's "no time yet" (C3). A time
+ * the pass has not reached (the abandoned attempt's, on a restart) is none of them. Without a recorded line the finish
+ * time is unknown and ranks after every known one.
+ */
+function ownLiveSectorsOf(live: LivePass): [LiveSector | undefined, LiveSector | undefined] {
+  const s1 = live.sector > 1 && live.sector1TimeMs > 0 ? live.sector1TimeMs : undefined;
+  const s2 = s1 !== undefined && live.sector > 2 && live.sector2TimeMs > 0 ? live.sector2TimeMs : undefined;
+  const line = live.lineAt ?? Number.POSITIVE_INFINITY;
+  if (s1 === undefined) return [undefined, undefined];
+  return [{ ms: s1, finishedAt: line + s1 }, s2 === undefined ? undefined : { ms: s2, finishedAt: line + s1 + s2 }];
+}
+
+/** Who holds a sector column's best: a completed lap's (the session best of the lap records) or a live sector's. */
+export type ColumnLeader = { carId: CarId; ms: Ms; at: number; live: boolean };
+
+/**
+ * Per sector column, the best time over the completed laps' session best and every car's finished live sectors of its
+ * current pass, invalid laps excluded (spec 3.4). Strictly faster wins; an equal time goes to the one set earlier (a
+ * lap record by its `completedAt`, a live sector by its finish time), then to the lower car id.
+ */
+export function columnLeadersOf(session: ReturnType<typeof sessionBestsOf>, passes: ReadonlyMap<CarId, LivePass>): Sectors<ColumnLeader | undefined> {
+  const leaders = session.sectors.map((h): ColumnLeader | undefined => (h === undefined ? undefined : { carId: h.carId, ms: h.ms, at: h.completedAt, live: false })) as Sectors<ColumnLeader | undefined>;
+  const beats = (b: ColumnLeader, a: ColumnLeader | undefined): boolean =>
+    a === undefined || b.ms < a.ms || (b.ms === a.ms && (b.at < a.at || (b.at === a.at && b.carId < a.carId)));
+  for (const [carId, live] of passes) {
+    if (live.invalid) continue;
+    const own = ownLiveSectorsOf(live);
+    for (const i of LIVE_SECTORS) {
+      const s = own[i];
+      if (s === undefined) continue;
+      const candidate: ColumnLeader = { carId, ms: s.ms, at: s.finishedAt, live: true };
+      if (beats(candidate, leaders[i])) leaders[i] = candidate;
+    }
+  }
+  return leaders;
+}
+
 type Newest = { ms: Known<Ms>; status: SectorStatus; older: boolean };
 
-/** A live sector time against the bests of the lap records, which it is not yet part of: strictly faster wins. */
-const liveStatusOf = (ms: Ms, own: Best | undefined, session: Holder | undefined): SectorStatus => {
-  if (session === undefined || ms < session.ms) return 'sessionBest';
-  return own === undefined || ms < own.ms ? 'personalBest' : 'none';
-};
+/** A live time against the car's own completed-lap best: strictly faster is a personal best. */
+const personalStatusOf = (ms: Ms, own: Best | undefined): SectorStatus => (own === undefined || ms < own.ms ? 'personalBest' : 'none');
 
 /**
  * The newest finished time per sector (spec 3.4): sectors 1 and 2 from the live timing once the current pass has
@@ -126,22 +168,36 @@ const liveStatusOf = (ms: Ms, own: Best | undefined, session: Holder | undefined
  * it belongs to an earlier pass than the newest one with a time: the lap just finished is not older until the current
  * pass has a sector of its own, and on a restarted pass every time before it is older, a live time the game still
  * shows from the abandoned attempt included. A time of the current pass on an invalid lap ranks `none`. `live` is absent for a car out of the race: its record times stand.
+ * Only the column's leader (`columnLeadersOf`) is `sessionBest`: a lap record's session best a live sector beats ranks
+ * as the car's own best, and an abandoned attempt's time ranks against the car's own bests only.
  */
 export function newestSectorsOf(
   row: LapRowBase,
   live: LivePass | undefined,
   bests: CarBests,
-  session: ReturnType<typeof sessionBestsOf>,
+  leaders: Sectors<ColumnLeader | undefined>,
 ): Pick<LapBoardRow, NewestKeys> {
   const passHasTime = live !== undefined && (live.sector > 1 || live.restarted);
-  const newest: Newest[] = SECTORS.map((i) => ({ ms: row.lastSectorsMs[i], status: row.lastSectorStatus[i], older: passHasTime && row.lastSectorsMs[i].known }));
+  const newest: Newest[] = SECTORS.map((i) => {
+    const status = row.lastSectorStatus[i];
+    const beaten = status === 'sessionBest' && leaders[i]?.live === true;
+    return { ms: row.lastSectorsMs[i], status: beaten ? 'personalBest' : status, older: passHasTime && row.lastSectorsMs[i].known };
+  });
   if (live !== undefined) {
-    for (const i of [0, 1] as const) {
+    for (const i of LIVE_SECTORS) {
       const ms = i === 0 ? live.sector1TimeMs : live.sector2TimeMs;
       const own = live.sector > i + 1;
       // 0 is the game's "no time yet" (C3); a time the pass has not reached is the abandoned attempt's, on a restart only
       if (ms <= 0 || (!own && !live.restarted)) continue;
-      newest[i] = { ms: known(ms, live.at), status: own && live.invalid ? 'none' : liveStatusOf(ms, bests.sectors[i], session.sectors[i]), older: !own };
+      const leader = leaders[i];
+      const status: SectorStatus = !own
+        ? personalStatusOf(ms, bests.sectors[i])
+        : live.invalid
+          ? 'none'
+          : leader?.live === true && leader.carId === row.carId
+            ? 'sessionBest'
+            : personalStatusOf(ms, bests.sectors[i]);
+      newest[i] = { ms: known(ms, live.at), status, older: !own };
     }
   }
   return {

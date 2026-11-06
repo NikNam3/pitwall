@@ -21,7 +21,7 @@ import type { EngineView, IncrementalCalculator } from '@pitwall/engine/readers'
 import { LAP_CLASSES_CONFIG, type LapClassOptions } from '../lap-classes/index.ts';
 import { behaviourByCar } from '../shared/behaviour.ts';
 import { carsInSession } from '../shared/car-status.ts';
-import { bestsOf, newestSectorsOf, rowOf, sessionBestBoard, sessionBestsOf, type Best, type CarBests, type LivePass } from './lap-times.ts';
+import { bestsOf, columnLeadersOf, newestSectorsOf,rowOf, sessionBestBoard, sessionBestsOf, type Best, type CarBests, type LivePass } from './lap-times.ts';
 import { LAP_TIMES_BEHAVIOUR, type LapTimesEffect } from './behaviour.ts';
 import { LAP_TIMES, LAP_TIMES_CONFIG, type LapTimesOutput } from './index.ts';
 
@@ -219,7 +219,7 @@ const projectionOf = (acc: Board, car: CarSnapshot, best: Best | undefined, best
 const livePassOf = (acc: Board, car: CarSnapshot): LivePass | undefined => {
   if (car.effect.outOfRace) return undefined;
   const line = acc.crossings.get(car.id)?.get(car.lap)?.[0];
-  return { ...car.timing, restarted: line?.supersedes !== undefined, invalid: car.effect.invalidLap === true, at: acc.at };
+  return { ...car.timing, restarted: line?.supersedes !== undefined, invalid: car.effect.invalidLap === true, lineAt: line?.at, at: acc.at };
 };
 
 const output = (fold: Acc, view: EngineView): LapTimesOutput => {
@@ -233,10 +233,16 @@ const output = (fold: Acc, view: EngineView): LapTimesOutput => {
   const session = sessionBestsOf(bests);
   const rows: LapTimesOutput['rows'] = [];
   const projections: LapTimesOutput['projections'] = {};
+  const passes = new Map<CarId, LivePass>();
+  for (const car of acc.cars) {
+    const pass = livePassOf(acc, car);
+    if (pass !== undefined) passes.set(car.id, pass);
+  }
+  const leaders = columnLeadersOf(session, passes);
   for (const car of acc.cars) {
     const carBests = bests.get(car.id) ?? { sectors: [undefined, undefined, undefined] };
     const row = rowOf(car.id, lapsByCar.get(car.id) ?? [], carBests, session, acc.classes, car.effect.outOfRace === true);
-    rows.push({ ...row, ...newestSectorsOf(row, livePassOf(acc, car), carBests, session) });
+    rows.push({ ...row, ...newestSectorsOf(row, passes.get(car.id), carBests, leaders) });
     projections[car.id] = projectionOf(acc, car, carBests.lap, bests);
   }
   return { rows, sessionBest: sessionBestBoard(session), projections };
