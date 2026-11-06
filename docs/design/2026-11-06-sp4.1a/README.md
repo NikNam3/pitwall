@@ -50,7 +50,7 @@ Each priors entry has a per-source value and residual (`calibration.values`), bu
 
 Recommendation: A. Degradation is what changes with the car and the driver, so it is the drift worth watching; wear and pit loss stay visible in the values table.
 
-**Answer:**
+**Answer:** A, as drawn (mockups approved, user 2026-11-06).
 
 ### Q2. How are the override fields laid out?
 
@@ -62,7 +62,7 @@ Every value in the values table can be overridden (one uiAction per commit, C73)
 
 Recommendation: A. Every override is visible at a glance next to the value it replaces, and the table stays 7 rows.
 
-**Answer:**
+**Answer:** A, as drawn (mockups approved, user 2026-11-06).
 
 ### Q3. Do the set's own values carry ᶜ inside the panel?
 
@@ -73,7 +73,7 @@ Spec 4.4 marks every value that rests on calibration with `ᶜ`. In the calibrat
 
 Recommendation: A. A mark on every value says nothing; the mark that matters here is where the set has no data.
 
-**Answer:**
+**Answer:** A, as drawn (mockups approved, user 2026-11-06).
 
 ### Q4. How is a missing source marked?
 
@@ -85,7 +85,7 @@ A missing source stays in the set and is left out of every value (spec 3.1). It 
 
 Recommendation: A. Amber says "something to fix" without competing with the race's red alarms.
 
-**Answer:**
+**Answer:** A, as drawn (mockups approved, user 2026-11-06).
 
 ### Q5. Which form does the top-bar segment take?
 
@@ -97,7 +97,7 @@ The segment names the active set (or `defaults`) and opens the prompt on a click
 
 Recommendation: A. The top bar has room, and the label leaves no doubt.
 
-**Answer:**
+**Answer:** A, as drawn (mockups approved, user 2026-11-06).
 
 ### Q6. Does the prompt open when the track has no set?
 
@@ -108,7 +108,7 @@ Without a set the run starts on the track file's defaults (spec 3.3), and the on
 
 Recommendation: A. A prompt with one choice is a click for nothing; the top bar already says it.
 
-**Answer:**
+**Answer:** A, as drawn (mockups approved, user 2026-11-06).
 
 ### Q7. Is a large drift highlighted?
 
@@ -119,7 +119,7 @@ DRIFT is the residual in sd. A source far from the set (old car spec, a wet stin
 
 Recommendation: B. It is the one thing in the sources table worth a glance during a weekend, and the cost is one config key and one flag.
 
-**Answer:**
+**Answer:** A, as drawn (mockups approved, user 2026-11-06).
 
 ### Q8. Does the prompt close itself at lights out?
 
@@ -130,4 +130,4 @@ A pick on the grid or in the formation lap counts like any other (spec 3.3); an 
 
 Recommendation: B. The race start is the worst moment for an overlay, and closing keeps the safe choice.
 
-**Answer:**
+**Answer:** A, as drawn (mockups approved, user 2026-11-06).
