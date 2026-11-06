@@ -7,7 +7,7 @@ const k = <T>(v: T): Known<T> => known(v, 0);
 
 const entry = (id: string, severity: IncidentEntry['severity']): IncidentEntry => ({
   id, at: toSessionTime(1000), lap: 3, kind: severity === 'major' ? 'collision' : 'warning', severity, carIds: [carId(2)],
-  timeLostMs: unknown('notApplicable'), forUs: [], where: { sector: unknown('notReceived') },
+  timeLostMs: unknown('notApplicable'), forUs: [], where: { sector: unknown('notReceived'), turn: unknown('notApplicable'), fraction: unknown('notApplicable') },
 });
 /** A moment whose cause names entry `entryId` (as race-moment's incident cause does). */
 const moment = (name: Moment, entryId = 'a'): Known<RaceMoment> =>

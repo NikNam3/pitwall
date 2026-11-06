@@ -183,7 +183,7 @@ describe('incidents: markers', () => {
     const noFile = runOutput(viewOf(input));
     expect(noFile.markers).toEqual(unknown('notApplicable'));
     expect(noFile.feed.map((e) => e.id)).toEqual(withTrack.feed.map((e) => e.id));
-    const noOutline = runOutput(viewOf({ ...input, track: trackWith({ outline: unknown('notReceived') }) }));
+    const noOutline = runOutput(viewOf({ ...input, track: trackWith({ turns: known([turn('T7', F + 50 * M)], 0), outline: unknown('notReceived') }) }));
     expect(noOutline.markers).toEqual(unknown('notApplicable'));
     expect(noOutline.feed).toEqual(withTrack.feed);
   });

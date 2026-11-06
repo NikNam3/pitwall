@@ -26,7 +26,7 @@ const forUs = (over: Partial<IncidentForUs> = {}): IncidentForUs => ({
 });
 const entry = (over: Partial<IncidentEntry> = {}): IncidentEntry => ({
   id: 'e', at: toSessionTime(230_000), lap: 23, kind: 'collision', severity: 'major', carIds: [carId(2), carId(3)],
-  timeLostMs: k(4200), forUs: [forUs()], where: { sector: unknown('notReceived') }, ...over,
+  timeLostMs: k(4200), forUs: [forUs()], where: { sector: unknown('notReceived'), turn: unknown('notApplicable'), fraction: unknown('notApplicable') }, ...over,
 });
 
 const show = (feed: IncidentEntry[], overview: CarOverview[] = cars) =>

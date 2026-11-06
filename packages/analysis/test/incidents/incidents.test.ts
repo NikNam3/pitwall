@@ -424,7 +424,7 @@ describe('incidents calculator', () => {
     it('a collision carries the sector its first car was in, from the lap distance (2 428 m on the test track: S2)', () => {
       expect(TRACK.sector2StartM).toBe(1_600);
       const entry = only(run(viewOf({ miniSectors: race(), events: [collision(6, 5)] })), 'collision');
-      expect(entry.where).toEqual({ sector: known(2, T) });
+      expect(entry.where.sector).toEqual(known(2, T));
       // the player in mini-sector 40 of lap 5 (about 4 044 m): sector 3
       const late = boundaryAt(6, 5, 40) + 800;
       expect(only(run(viewOf({ miniSectors: race(), events: [collision(6, 5, late)] })), 'collision').where.sector).toEqual(known(3, late));
