@@ -253,6 +253,15 @@ describe('the incident detail in the what cell (mockup: time loss (T7), damage F
     expect(what({ kind: 'timeLoss', where: { sector: k(2), turn: unknown('notApplicable'), fraction: unknown('notApplicable') } })).toBe('time loss S2');
   });
 
+  it('a known turn shows where the sector stood', () => {
+    expect(what({ where: { sector: k(3), turn: k('T6a'), fraction: unknown('notApplicable') } })).toBe('collision T6a');
+    expect(what({ kind: 'timeLoss', where: { sector: k(2), turn: k('T6a'), fraction: unknown('notApplicable') } })).toBe('time loss T6a');
+  });
+
+  it('an unknown turn shows the sector as before', () => {
+    expect(what({ where: { sector: k(3), turn: unknown('notReceived'), fraction: unknown('notApplicable') } })).toBe('collision S3');
+  });
+
   it('an unknown sector leaves the kind alone', () => {
     expect(what({ where: { sector: unknown('notReceived'), turn: unknown('notApplicable'), fraction: unknown('notApplicable') } })).toBe('collision');
   });
