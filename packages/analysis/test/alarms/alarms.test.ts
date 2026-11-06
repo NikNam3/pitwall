@@ -13,6 +13,8 @@ import { ersCalculator } from '../../src/ers/calculator.ts';
 import { FUEL } from '../../src/fuel/index.ts';
 import { fuelCalculator } from '../../src/fuel/calculator.ts';
 import { SESSION_REMAINING, type SessionRemaining } from '../../src/session-remaining/index.ts';
+import { TYRE_LIFE } from '../../src/tyre-life/index.ts';
+import { tyreLifeCalculator } from '../../src/tyre-life/calculator.ts';
 import { TYRE_WEAR } from '../../src/tyre-wear/index.ts';
 import { tyreWearCalculator } from '../../src/tyre-wear/calculator.ts';
 import { NONE, openSpan, PRACTICE, QUALIFYING, RACE, situatedView } from '../situated.ts';
@@ -286,8 +288,10 @@ describe('alarms calculator', () => {
 
     it('a tyre past the wear limit keeps wearLimitNear raised: tyre-wear gives 0 laps to the limit there', () => {
       const corners = perCorner(() => ({ wearPct: known(76, 0) }));
-      const wearView = situatedView({ cars: [carState({ tyres: { corners } })], history: { laps: [64, 68, 72].map((w, i) => lap({ lapNumber: i + 1, wearAtEndPct: perCorner(() => known(w, 0)) })) } });
-      const wear = tyreWearCalculator.compute(wearView)[carId(0)]!;
+      const wearParts = { cars: [carState({ tyres: { corners } })], history: { laps: [64, 68, 72].map((w, i) => lap({ lapNumber: i + 1, wearAtEndPct: perCorner(() => known(w, 0)) })) } };
+      // tyre-wear publishes from tyre-life's output (spec 4.2): tyre-life computes on the view first
+      const tyreLife = tyreLifeCalculator.compute(situatedView(wearParts));
+      const wear = tyreWearCalculator.compute(situatedView({ ...wearParts, outputs: new Map([[TYRE_LIFE, tyreLife]]) }))[carId(0)]!;
       expect(wear.corners.fl.lapsToLimit).toMatchObject({ known: true, value: 0 });
       expect(only(viewWith({ wear }), 'wearLimitNear').map((i) => i.key)).toEqual(['wearLimitNear:0:wear.fl', 'wearLimitNear:0:wear.fr', 'wearLimitNear:0:wear.rl', 'wearLimitNear:0:wear.rr']);
     });
