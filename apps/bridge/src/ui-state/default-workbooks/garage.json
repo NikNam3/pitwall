@@ -9,32 +9,77 @@
             "type": "branch",
             "data": [
               {
-                "type": "leaf",
-                "data": {
-                  "views": [
-                    "calibration-panel"
-                  ],
-                  "activeView": "calibration-panel",
-                  "id": "gcalibration-panel"
-                },
-                "size": 320
+                "type": "branch",
+                "data": [
+                  {
+                    "type": "leaf",
+                    "data": {
+                      "views": [
+                        "calibration-panel"
+                      ],
+                      "activeView": "calibration-panel",
+                      "id": "gcalibration-panel"
+                    },
+                    "size": 500
+                  },
+                  {
+                    "type": "leaf",
+                    "data": {
+                      "views": [
+                        "timing-tower"
+                      ],
+                      "activeView": "timing-tower",
+                      "id": "gtiming-tower"
+                    },
+                    "size": 400
+                  }
+                ],
+                "size": 620
               },
               {
-                "type": "leaf",
-                "data": {
-                  "views": [
-                    "stint-scatter"
-                  ],
-                  "activeView": "stint-scatter",
-                  "id": "gstint-scatter"
-                },
-                "size": 256
+                "type": "branch",
+                "data": [
+                  {
+                    "type": "leaf",
+                    "data": {
+                      "views": [
+                        "stint-scatter"
+                      ],
+                      "activeView": "stint-scatter",
+                      "id": "gstint-scatter"
+                    },
+                    "size": 340
+                  },
+                  {
+                    "type": "leaf",
+                    "data": {
+                      "views": [
+                        "raising-average-chart"
+                      ],
+                      "activeView": "raising-average-chart",
+                      "id": "graising-average-chart"
+                    },
+                    "size": 300
+                  },
+                  {
+                    "type": "leaf",
+                    "data": {
+                      "views": [
+                        "lap-overview-grid"
+                      ],
+                      "activeView": "lap-overview-grid",
+                      "id": "glap-overview-grid"
+                    },
+                    "size": 260
+                  }
+                ],
+                "size": 980
               }
             ],
-            "size": 303
+            "size": 900
           },
-          "width": 576,
-          "height": 303,
+          "width": 1600,
+          "height": 900,
           "orientation": "HORIZONTAL"
         },
         "panels": {
@@ -43,10 +88,25 @@
             "contentComponent": "panel",
             "title": "calibration-panel"
           },
+          "timing-tower": {
+            "id": "timing-tower",
+            "contentComponent": "panel",
+            "title": "timing-tower"
+          },
           "stint-scatter": {
             "id": "stint-scatter",
             "contentComponent": "panel",
             "title": "stint-scatter"
+          },
+          "raising-average-chart": {
+            "id": "raising-average-chart",
+            "contentComponent": "panel",
+            "title": "raising-average-chart"
+          },
+          "lap-overview-grid": {
+            "id": "lap-overview-grid",
+            "contentComponent": "panel",
+            "title": "lap-overview-grid"
           }
         },
         "activeGroup": "gcalibration-panel"
@@ -57,8 +117,23 @@
           "options": {},
           "linkGroup": 1
         },
+        "timing-tower": {
+          "widget": "timing-tower",
+          "options": {},
+          "linkGroup": 1
+        },
         "stint-scatter": {
           "widget": "stint-scatter",
+          "options": {},
+          "linkGroup": 1
+        },
+        "raising-average-chart": {
+          "widget": "raising-average-chart",
+          "options": {},
+          "linkGroup": 1
+        },
+        "lap-overview-grid": {
+          "widget": "lap-overview-grid",
           "options": {},
           "linkGroup": 1
         }
@@ -80,13 +155,35 @@
                   "activeView": "pit-loss-table",
                   "id": "gpit-loss-table"
                 },
-                "size": 189
+                "size": 260
+              },
+              {
+                "type": "leaf",
+                "data": {
+                  "views": [
+                    "crossover-chart"
+                  ],
+                  "activeView": "crossover-chart",
+                  "id": "gcrossover-chart"
+                },
+                "size": 420
+              },
+              {
+                "type": "leaf",
+                "data": {
+                  "views": [
+                    "forecast-strip"
+                  ],
+                  "activeView": "forecast-strip",
+                  "id": "gforecast-strip"
+                },
+                "size": 220
               }
             ],
-            "size": 394
+            "size": 600
           },
-          "width": 394,
-          "height": 189,
+          "width": 600,
+          "height": 900,
           "orientation": "VERTICAL"
         },
         "panels": {
@@ -94,6 +191,16 @@
             "id": "pit-loss-table",
             "contentComponent": "panel",
             "title": "pit-loss-table"
+          },
+          "crossover-chart": {
+            "id": "crossover-chart",
+            "contentComponent": "panel",
+            "title": "crossover-chart"
+          },
+          "forecast-strip": {
+            "id": "forecast-strip",
+            "contentComponent": "panel",
+            "title": "forecast-strip"
           }
         },
         "activeGroup": "gpit-loss-table"
@@ -101,6 +208,16 @@
       "panels": {
         "pit-loss-table": {
           "widget": "pit-loss-table",
+          "options": {},
+          "linkGroup": 1
+        },
+        "crossover-chart": {
+          "widget": "crossover-chart",
+          "options": {},
+          "linkGroup": 1
+        },
+        "forecast-strip": {
+          "widget": "forecast-strip",
           "options": {},
           "linkGroup": 1
         }
