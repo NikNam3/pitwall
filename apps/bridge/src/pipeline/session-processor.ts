@@ -1,5 +1,23 @@
 // One session of a feed: frames → SessionRunner → Scheduler → topics, plus its session file and its storage.
-import { carId, known, sessionUidString, trackDataOf, type CarId, type FeedId, type MachineId, type ParticipantsValues, type Known, type SessionTime, type SessionUid, type TrackData, type TrackFile } from '@pitwall/domain';
+import {
+  carId,
+  known,
+  sessionUidString,
+  trackDataOf,
+  type CalibrationActiveValue,
+  type CarId,
+  type DecisionRecord,
+  type FeedId,
+  type Known,
+  type MachineId,
+  type ParticipantsValues,
+  type PriorsSnapshot,
+  type RunPriors,
+  type SessionTime,
+  type SessionUid,
+  type TrackData,
+  type TrackFile,
+} from '@pitwall/domain';
 import {
   projectionLengths,
   Scheduler,
@@ -13,6 +31,7 @@ import {
   type StepResult,
   type WeekendContext,
 } from '@pitwall/engine';
+import { priorsOf, type DeepReadonly } from '@pitwall/engine/readers';
 import type { TopicName } from '@pitwall/contracts';
 import { peekHeader, type SessionPacket } from '@pitwall/protocol';
 import type { CalcStats } from '../dev/calc-stats.ts';
@@ -54,7 +73,14 @@ export type SessionProcessorOptions = {
   dumpsDir?: string;
   /** Dev mode: times every calculator run (see `createCalcStats`). */
   calcStats?: CalcStats;
+  /** The run's priors at session start (C62a): the start snapshot (none: `notApplicable`); picks add theirs (`choose`). */
+  priors: RunPriors;
+  /** `calibration.active` changed: at the start, and whenever the projection's newest pick does (a pick, its void). */
+  onActive?: (value: CalibrationActiveValue) => void;
 };
+
+/** The time `calibration.active` is known from: fixed, so its value stays equal from frame to frame and after a rewind (C33). */
+const ACTIVE_AT = 0;
 
 /**
  * Runs one session (spec 5.4, 7.3). The runner holds the frames until the first Participants packet, which names the
@@ -82,9 +108,18 @@ export class SessionProcessor {
   #started = false;
   #dumps = 0;
   #lastReceivedAtMs = 0;
+  /** The run's priors (C62a): only grow, a flashback leaves them (the projection decides which snapshot counts). */
+  #priors: RunPriors;
+  /** Decisions committed since the last frame: the next frame carries them (C10, C76). */
+  #pending: Omit<DecisionRecord, 'frame'>[] = [];
+  /** Records written to the session file: a decision committed now is recorded with this index (C76). */
+  #records = 0;
+  /** The last `calibration.active` handed to `onActive`, as JSON: it is handed on only when it changes. */
+  #active: string | undefined;
 
   constructor(opts: SessionProcessorOptions) {
     this.#o = opts;
+    this.#priors = opts.priors;
     this.sessionUid = opts.sessionUid;
     this.#track = opts.track.known ? known(trackDataOf(opts.track.value), 0) : opts.track;
     this.#uid = sessionUidString(opts.sessionUid);
@@ -98,6 +133,33 @@ export class SessionProcessor {
       { attach: this.#scheduler, contextFor: (participants) => this.#contextFor(participants) },
     );
     opts.storage?.start(this.#row());
+    this.#publishActive(this.#runner.state.history.decisions);
+  }
+
+  /** The session's track id, from its first Session packet. */
+  get trackId(): number {
+    return this.#o.session.trackId;
+  }
+
+  /** The run's priors: the start snapshot and every picked one (C62a); also the priors sidecar's content. */
+  get priors(): RunPriors {
+    return this.#priors;
+  }
+
+  /** The number of records written to the session file so far: the record index of a decision committed now (C76). */
+  get recordIndex(): number {
+    return this.#records;
+  }
+
+  /**
+   * A decision the user committed (C76): the next frame carries it to the runner, whose decision recorder appends it
+   * describing that frame. `snapshot`: the priors snapshot a `calibrationChosen` names, added to the run's priors first.
+   */
+  decide(decision: Omit<DecisionRecord, 'frame'>, snapshot?: PriorsSnapshot): void {
+    if (snapshot !== undefined && this.#priors.snapshots[snapshot.fingerprint] === undefined) {
+      this.#priors = { ...this.#priors, snapshots: { ...this.#priors.snapshots, [snapshot.fingerprint]: snapshot } };
+    }
+    this.#pending.push(decision);
   }
 
   /** The newest applied frame's time on the engine's race clock (spec 3.3); undefined before the engine runs. */
@@ -106,7 +168,8 @@ export class SessionProcessor {
   }
 
   push(frame: Frame): void {
-    this.#applying(frame, () => this.#runner.apply(frame, this.#onResult));
+    const decisions = this.#pending.splice(0);
+    this.#applying(frame, () => this.#runner.apply(frame, this.#onResult, decisions));
   }
 
   /**
@@ -117,7 +180,10 @@ export class SessionProcessor {
   record(receivedAtMs: number, bytes: Uint8Array): void {
     this.#lastReceivedAtMs = receivedAtMs;
     const uid = peekHeader(bytes)?.sessionUid;
-    if (uid === this.sessionUid || uid === 0n) this.#o.file?.write(receivedAtMs, bytes);
+    if ((uid === this.sessionUid || uid === 0n) && this.#o.file !== undefined) {
+      this.#o.file.write(receivedAtMs, bytes);
+      this.#records++;
+    }
   }
 
   /**
@@ -234,6 +300,7 @@ export class SessionProcessor {
         ...publisher.publishHistory(result.state.history, result.delta),
         ...publisher.publishInsights(scheduled.insights, { frameId: frame.frameId }),
       );
+      this.#publishActive(result.state.history.decisions);
       const { cars, playerCar } = result.state;
       this.#o.jobs?.triggerRan(scheduled, { lap: cars[playerCar]?.timing.lap ?? 0, frameId: frame.frameId });
       for (const correction of result.corrections) log.info({ feedId, sessionUid: this.#uid, correction }, 'lap time corrected');
@@ -244,9 +311,38 @@ export class SessionProcessor {
   };
 
   /**
+   * `calibration.active` (C54, C62a) as the projection has it: the newest `calibrationChosen` decision's set and snapshot
+   * (`picked`), else the start snapshot's; handed to `onActive` when it changed. It follows the projection, so a pick's
+   * void restores the start (C27a, C33). The snapshot is the units' (`priorsOf`, C43): `snapshot` and `setName` are
+   * `null` and empty without one (`defaults`, no set, or a snapshot the run does not hold).
+   */
+  #publishActive(decisions: readonly DeepReadonly<DecisionRecord>[]): void {
+    const { onActive, session } = this.#o;
+    if (onActive === undefined) return;
+    const chosen = decisions.findLast((d) => d.kind === 'calibrationChosen');
+    const priors = priorsOf(decisions, this.#priors);
+    const snapshot = priors.known ? priors.value : undefined;
+    const value: CalibrationActiveValue = known(
+      {
+        sessionUid: this.#uid,
+        trackId: session.trackId,
+        setId: chosen === undefined ? (snapshot?.setId ?? null) : chosen.setId,
+        setName: snapshot?.setName ?? '',
+        snapshot: snapshot?.fingerprint ?? null,
+        picked: chosen !== undefined,
+      },
+      ACTIVE_AT,
+    );
+    const json = JSON.stringify(value);
+    if (json === this.#active) return;
+    this.#active = json;
+    onActive(value);
+  }
+
+  /**
    * The scheduler's input for `state` (C39): its live state, situation and projection, the weekend's earlier sessions, the
-   * run's config and the feed health; no priors (no snapshot, so `view.priors` is `notApplicable`, until the run keeps its
-   * `RunPriors`, C62a) and the session's track file (C62b).
+   * run's config and the feed health, the run's priors (the scheduler gives `view.priors` from them and the projection's
+   * decisions, C62a) and the session's track file (C62b).
    */
   #schedulerInput(state: StepResult['state'], changed: SchedulerInput['changed'], delta: SchedulerInput['delta']): SchedulerInput {
     return {
@@ -258,7 +354,7 @@ export class SessionProcessor {
       weekend: state.weekend,
       feed: this.#o.feedView(),
       config: this.#o.config,
-      priors: { start: null, snapshots: {} },
+      priors: this.#priors,
       track: this.#track,
     };
   }

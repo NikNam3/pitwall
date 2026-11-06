@@ -1,8 +1,8 @@
 // One feed end to end (spec 4): PacketSource → decode → SessionTracker → SessionProcessor → TopicHub,
 // with the feed's health, its session files and its storage alongside.
-import { writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { toSessionTime, type FeedId, type Known, type SessionTime, type TrackFile } from '@pitwall/domain';
+import { toSessionTime, type CalibrationActiveValue, type FeedId, type Known, type PriorsSnapshot, type RunPriors, type SessionTime, type TrackFile } from '@pitwall/domain';
+import type { CalibrationStore } from '../calibration/store.ts';
 import { CalculatorRegistry, SessionTracker, type Frame, type FrameMetrics, type InsightChange, type TrackerEvent } from '@pitwall/engine';
 import { decode } from '@pitwall/protocol';
 import { effectiveConfig, sessionConfigPath, type FeatureConfig } from '../feature-config.ts';
@@ -16,6 +16,7 @@ import type { Logger } from '../log.ts';
 import type { Db, StoredSessionRow } from '../storage/db.ts';
 import { SessionFile, sessionRecordingName } from '../storage/session-files.ts';
 import { loadTrackFile, TRACKS_DIR, trackSidecarPath } from '../track-files/load.ts';
+import { decisionsSidecarPath, noRunPriors, priorsSidecarPath, writeSidecar, type GivenDecision, type RecordedDecision, type RecordedRun } from './decision-sidecars.ts';
 import { FeedAlerts, type WriteFailure } from './feed-alerts.ts';
 import { demandOf } from './demand.ts';
 import type { CalcStats } from '../dev/calc-stats.ts';
@@ -56,7 +57,20 @@ export type FeedPipelineOptions = {
     recordingsDir?: string;
     sourcePath?: string;
     rebuild?: (row: StoredSessionRow) => Promise<void>;
+    /** Live: called once a session's log is stored complete (`serve` recomputes the calibration store, ruling R14). */
+    onStored?: () => void;
   };
+  /**
+   * Live: the calibration store's slice a run uses (C62a, spec 3.3). A session starts on the track's preselection
+   * (marked used), and `commitDecision` takes a picked set's snapshot from it. Without it (and without `recorded`) a run
+   * has no priors (`notApplicable`) and takes no picks.
+   */
+  calibration?: Pick<CalibrationStore, 'preselect' | 'snapshotOf' | 'markUsed'>;
+  /**
+   * A replay: the recording's priors and decisions sidecars (`recordingDecisions`, C38, C76). Every session starts on
+   * their priors, and each decision is handed to the running session before the record it was committed at.
+   */
+  recorded?: RecordedRun;
   /** Where debug dumps go; without it none are written. */
   dumpsDir?: string;
   /** Names the session files and dates live sessions. Default `Date.now`. */
@@ -86,6 +100,12 @@ export type FeedPipelineOptions = {
 export type FeedPosition = { sessionTimeMs: number; playerLap: number };
 
 type SessionStarted = Extract<TrackerEvent, { type: 'sessionStarted' }>;
+
+/** The answer to a pick (`commitDecision`), as the WebSocket server sends it back (C73). */
+export type DecisionResult = { ok: true } | { ok: false; reason: 'invalid' | 'notSupported'; message: string };
+
+/** A session's decisions as its decisions sidecar holds them, and where that sidecar goes (none without a session file). */
+type SessionDecisions = { trackId: number; file: string | undefined; decisions: RecordedDecision[] };
 
 /** The track sidecar of a session without a valid track file (C62b). */
 const NOT_APPLICABLE_SIDECAR = { known: false, reason: 'notApplicable' } as const;
@@ -124,6 +144,12 @@ export class FeedPipeline {
   #started = false;
   /** `stop()` was called: the sessions still open end before their input did. */
   #stopped = false;
+  /** A replay's recorded decisions by the record index they go before. */
+  readonly #recordedAt = new Map<number, GivenDecision[]>();
+  /** The index of the next record the source delivers. */
+  #recordIndex = 0;
+  /** The newest session's decisions (kept once it ended: a pick then only marks its set used). */
+  #decisions: SessionDecisions | undefined;
 
   constructor(opts: FeedPipelineOptions) {
     this.#o = opts;
@@ -142,8 +168,44 @@ export class FeedPipeline {
     this.#wallClock = opts.wallClock ?? Date.now;
     this.#tracks = opts.tracks ?? ((trackId) => loadTrackFile(trackId, TRACKS_DIR, opts.log));
     this.#sessionClock = sessionClock({ sourcePath: opts.storage?.sourcePath, wallClock: this.#wallClock, log: opts.log });
+    for (const { recordIndex, decision } of opts.recorded?.decisions ?? []) {
+      this.#recordedAt.set(recordIndex, [...(this.#recordedAt.get(recordIndex) ?? []), decision]);
+    }
     this.done = this.#done.promise;
     this.done.catch(() => {});
+  }
+
+  /**
+   * The user picked a calibration set, or `defaults` (`null`), for the running session (`calibration.choose`, C62a,
+   * C76; spec 3.3): the set's current snapshot joins the run's priors and the priors sidecar, the decision
+   * `calibrationChosen { setId, snapshot }` goes to the runner with the next frame and, with its record index, to the
+   * decisions sidecar; the set is marked used. Without a running session a pick only marks the set used (the newest
+   * session's track). An unknown set of the newest session's track is rejected, with or without a running session
+   * (C73); a pipeline without a calibration store takes no picks.
+   */
+  commitDecision(setId: string | null): DecisionResult {
+    const calibration = this.#o.calibration;
+    if (calibration === undefined) return { ok: false, reason: 'notSupported', message: 'this feed takes no calibration picks' };
+    const run = this.#decisions;
+    const session = this.#session;
+    if (run === undefined) return { ok: true };
+    const snapshot: PriorsSnapshot | undefined = setId === null ? undefined : calibration.snapshotOf(run.trackId, setId);
+    if (setId !== null && snapshot === undefined) {
+      return { ok: false, reason: 'invalid', message: `no calibration set ${setId} on track ${run.trackId}` };
+    }
+    if (session === undefined) {
+      if (setId !== null) calibration.markUsed(run.trackId, setId, this.#now());
+      return { ok: true };
+    }
+    const decision: GivenDecision = { kind: 'calibrationChosen', setId, snapshot: snapshot?.fingerprint ?? null };
+    session.decide(decision, snapshot);
+    if (setId !== null) calibration.markUsed(run.trackId, setId, this.#now());
+    run.decisions.push({ recordIndex: session.recordIndex, decision });
+    if (run.file !== undefined) {
+      this.#writeSidecar(priorsSidecarPath(run.file), session.priors);
+      this.#writeSidecar(decisionsSidecarPath(run.file), run.decisions);
+    }
+    return { ok: true };
   }
 
   start(): void {
@@ -202,6 +264,12 @@ export class FeedPipeline {
   }
 
   #onPacket({ receivedAtMs, bytes }: RawPacket): void {
+    // A replay's decisions go to the running session before the record they were committed at (C76): the frame they
+    // land on is the one their live pick landed on.
+    const recorded = this.#recordedAt.get(this.#recordIndex++);
+    if (recorded !== undefined) this.#guarded('recorded decision', () => {
+      for (const decision of recorded) this.#session?.decide(decision);
+    });
     this.#lastReceivedAtMs = receivedAtMs;
     this.#monitor.onPacket(receivedAtMs);
     this.#guarded('datagram', () => {
@@ -252,7 +320,9 @@ export class FeedPipeline {
     const storage = this.#sessionStorage();
     const config = this.#sessionConfig();
     const track = this.#tracks(event.session.trackId);
-    const file = this.#openSessionFile(event, startedAt, config, track);
+    const priors = this.#startPriors(event.session.trackId);
+    const file = this.#openSessionFile(event, startedAt, config, track, priors);
+    this.#decisions = { trackId: event.session.trackId, file: file?.path, decisions: [] };
     // A session processed from a recording points at that recording (so `reprocess` finds it), a live one at its own file.
     const sourcePath = this.#o.storage?.sourcePath;
     const pwrecPath = sourcePath !== undefined ? resolve(sourcePath) : (file?.path ?? null);
@@ -269,6 +339,8 @@ export class FeedPipeline {
       log,
       config,
       track,
+      priors,
+      onActive: (value: CalibrationActiveValue) => hub.publishState(feedId, 'calibration.active', () => value),
       feedView: () => this.#monitor.view(this.#tracker.metrics, this.#lastReceivedAtMs),
       ...(storage && { storage }),
       ...(file && { file }),
@@ -287,7 +359,32 @@ export class FeedPipeline {
       rulesVersion: storage.rulesVersion,
       mode: storage.mode ?? 'append',
       ...(storage.rebuild && { rebuild: storage.rebuild }),
+      ...(storage.onStored && { onStored: storage.onStored }),
     });
+  }
+
+  /**
+   * The run's priors at session start (C62a, spec 3.3): a replay's recorded ones; live, the calibration store's
+   * preselection for the track, marked used; else none (`notApplicable`).
+   */
+  #startPriors(trackId: number): RunPriors {
+    const { recorded, calibration } = this.#o;
+    if (recorded !== undefined) return recorded.priors;
+    if (calibration === undefined) return noRunPriors();
+    try {
+      const start = calibration.preselect(trackId);
+      if (start === null) return noRunPriors();
+      calibration.markUsed(trackId, start.setId, this.#now());
+      return { start: start.fingerprint, snapshots: { [start.fingerprint]: start } };
+    } catch (error) {
+      this.#log.error({ feedId: this.#feedId, trackId, err: error }, 'calibration preselection failed: the run has no priors');
+      return noRunPriors();
+    }
+  }
+
+  /** Now as an ISO date: when a set was used (spec 3.1 `lastUsedAt`). */
+  #now(): string {
+    return new Date(this.#wallClock()).toISOString();
   }
 
   /** The run's config with `realism.enabled` taken from the live hook, if any; fixed for the whole session. */
@@ -297,7 +394,7 @@ export class FeedPipeline {
     return { ...this.#config, realism: { ...this.#config.realism, enabled: realismNextSession() } };
   }
 
-  #openSessionFile(event: SessionStarted, startedAt: string, config: FeatureConfig, track: Known<TrackFile>): SessionFile | undefined {
+  #openSessionFile(event: SessionStarted, startedAt: string, config: FeatureConfig, track: Known<TrackFile>, priors: RunPriors): SessionFile | undefined {
     const dir = this.#o.storage?.recordingsDir;
     if (dir === undefined) return undefined;
     const file = new SessionFile({
@@ -311,16 +408,18 @@ export class FeedPipeline {
     // The track file the session runs with (C59, C62b); a session without a valid one writes a not-applicable sidecar,
     // so its replay stays notApplicable even after a committed file appears (C38).
     this.#writeSidecar(trackSidecarPath(file.path), track.known ? track.value : NOT_APPLICABLE_SIDECAR);
+    // The priors the run starts on (C59, C62a): rewritten with each pick's snapshot; none gives `{ start: null }`.
+    this.#writeSidecar(priorsSidecarPath(file.path), priors);
     return file;
   }
 
   /**
-   * A sidecar of the session file: the config or the track file the session runs with, so a replay reproduces its
-   * stream (C38). A failure is a write failure of the session file.
+   * A sidecar of the session file: the config, the track file or the priors the session runs with, or its decisions,
+   * so a replay reproduces its stream (C38). A failure is a write failure of the session file.
    */
   #writeSidecar(path: string, value: unknown): void {
     try {
-      writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`);
+      writeSidecar(path, value);
     } catch (error) {
       this.#writeFailed('pwrec', error);
     }
