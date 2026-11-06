@@ -215,6 +215,8 @@ export const picker = {
 export const settingsTitle = (widget: string): string => `${widget} · settings`;
 /** The choice of a car option that follows the panel's link group. */
 export const followLink = 'follow';
+/** The choice of a car option whose unset value is no car (a rival picker). */
+export const noCar = 'none';
 export const noSettings = 'no settings';
 export const settingsSaved = 'saved in this workbook';
 /** The settings popover's choice of the link group the panel follows. */

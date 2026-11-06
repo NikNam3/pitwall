@@ -207,7 +207,7 @@
     {#if popover?.kind === 'picker' && group !== undefined}
       <GroupPicker {store} {group} feedId={group.feedId ?? link?.feedId ?? defaultFeed} {send} onClose={close} anchor={popover.anchor} />
     {:else if popover?.kind === 'settings' && widget !== undefined}
-      <SettingsPopover decl={widget.decl} options={spec.options} onChange={onOptions} linkGroup={spec.linkGroup} {onLinkGroup} onClose={close} anchor={popover.anchor} />
+      <SettingsPopover {store} feedId={group?.feedId ?? link?.feedId ?? defaultFeed} decl={widget.decl} options={spec.options} onChange={onOptions} linkGroup={spec.linkGroup} {onLinkGroup} onClose={close} anchor={popover.anchor} />
     {/if}
   </div>
   <div class="body" use:measure={(m: Measured) => (measured = m)} style:color={dim ? role('textFaint') : undefined}>
