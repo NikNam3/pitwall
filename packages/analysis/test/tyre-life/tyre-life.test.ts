@@ -486,6 +486,34 @@ describe('tyre-life calculator', () => {
       expect(fresh.medium).toMatchObject({ known: true, value: 20 });
       for (const compound of ['soft', 'hard', 'inter', 'wet'] as const) expect(fresh[compound], compound).toEqual(insufficient);
     });
+
+    it('fresh life from priors needs all four corners; with one missing it falls back to ν', () => {
+      // ruling R21. medium: fl 2, fr 2.5, rl 1.6 %/lap → the wear rule would give 70 / 2.5 = 28 laps; ν 100 gives 2000 / 100 = 20
+      const threeCorners = Object.fromEntries(Object.entries(wearPriors('medium', { fl: 2, fr: 2.5, rl: 1.6, rr: 2 })).filter(([k]) => !k.endsWith('.rr')));
+      const rrKey = 'tyreLife.wearPerLapPct.medium.rr';
+      const mediumView = (priors: EngineView['priors'], stints: StintDegradation[] = [degStint({ actual: 'C2', visual: 'medium' })]) =>
+        situatedView({
+          cars: [carWithWear(6, { age: 3, actualCompound: 'C2', visualCompound: 'medium' })],
+          history: { laps: chain([2, 2, 2], { over: { actualCompound: 'C2', visualCompound: 'medium' } }) },
+          outputs: upstream({ [carId(0)]: stints }),
+          priors,
+        });
+      const withEntries = (entries: PriorsSnapshot['entries']): EngineView['priors'] =>
+        known({ fingerprint: 'fp-long-runs', setId: 'long-runs', setName: 'Zandvoort long runs', sources: 2, entries }, 0);
+
+      // rr absent: ν of the car's newest medium stint
+      expect(run(mediumView(snapshot(threeCorners))).freshLifeLaps.medium).toMatchObject({ known: true, value: 20 });
+      // rr present but unknown: the same
+      const rrUnknown = { ...Object.fromEntries(Object.entries(threeCorners).map(([k, v]) => [k, known(v, 0)])), [rrKey]: unknown('insufficientData') };
+      expect(run(mediumView(withEntries(rrUnknown))).freshLifeLaps.medium).toMatchObject({ known: true, value: 20 });
+      // rr absent and no medium stint of the car: the priors' ν (80 → 25 laps)
+      const priorNu = snapshot({ ...threeCorners, 'degradation.nuMsPerLap.medium': 80 });
+      expect(run(mediumView(priorNu, [])).freshLifeLaps.medium).toMatchObject({ known: true, value: 25 });
+      // rr absent, no ν anywhere: insufficientData, not the worst of the three known corners
+      expect(run(mediumView(snapshot(threeCorners), [])).freshLifeLaps.medium).toEqual(insufficient);
+      // all four known: the wear rule (28), ahead of ν
+      expect(run(mediumView(snapshot({ ...threeCorners, [rrKey]: 2 }))).freshLifeLaps.medium).toMatchObject({ known: true, value: 28 });
+    });
   });
 
   describe('the set`s overrides of the limits (override-only priors keys)', () => {
