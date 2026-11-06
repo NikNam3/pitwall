@@ -87,6 +87,9 @@ export type FeedPosition = { sessionTimeMs: number; playerLap: number };
 
 type SessionStarted = Extract<TrackerEvent, { type: 'sessionStarted' }>;
 
+/** The track sidecar of a session without a valid track file (C62b). */
+const NOT_APPLICABLE_SIDECAR = { known: false, reason: 'notApplicable' } as const;
+
 /**
  * Runs one feed: every datagram updates the feed's health, the tracker splits the stream into sessions and frames,
  * and each session runs in its own `SessionProcessor`. Nothing a datagram does throws out of the pipeline:
@@ -305,8 +308,9 @@ export class FeedPipeline {
       onError: (error) => this.#writeFailed('pwrec', error),
     });
     this.#writeSidecar(sessionConfigPath(file.path), config);
-    // The track file the session runs with (C59, C62b); a session without one has no sidecar.
-    if (track.known) this.#writeSidecar(trackSidecarPath(file.path), track.value);
+    // The track file the session runs with (C59, C62b); a session without a valid one writes a not-applicable sidecar,
+    // so its replay stays notApplicable even after a committed file appears (C38).
+    this.#writeSidecar(trackSidecarPath(file.path), track.known ? track.value : NOT_APPLICABLE_SIDECAR);
     return file;
   }
 
