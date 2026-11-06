@@ -12,13 +12,14 @@ import type { TopicName } from '@pitwall/contracts';
 import {
   known, unknown,
   type CalibrationCandidatesValue, type CalibrationSet, type CalibrationSetsValue, type CalibrationSource, type CalibrationValuesValue,
-  type CarId, type Known, type LapUse, type PriorsEntries, type SessionUid, type SourceFit,
+  type CarId, type FittedSource, type Known, type LapUse, type PriorsEntries, type SessionUid, type SourceFit,
 } from '@pitwall/domain';
 import { definePriors, type PriorsCtx, type ProjectionState, type StoredSource } from '@pitwall/engine/readers';
 import { CalibrationStore, type CalibrationAction } from '../../src/calibration/store.ts';
 import type { Feature } from '../../src/features/feature.ts';
 import type { ValueFor } from '../../src/hub/topic-hub.ts';
 import { createLogger } from '../../src/log.ts';
+import type { SessionKey } from '../../src/storage/db.ts';
 import type { SessionsOnTrack, TrackSession } from '../../src/storage/weekend-repository.ts';
 import { lap, stint } from '../storage/records.ts';
 
@@ -38,18 +39,33 @@ const range = (from: number, to: number): number[] => Array.from({ length: to - 
 
 type StintSpec = { car: number; firstLap: number; lastLap: number; lapMs?: (lapNumber: number) => number };
 
-/** A complete stored session of the feed whose player is car 0, on `trackId`, with the stints (and their laps) given. */
+/**
+ * A complete stored session of the feed whose player is car 0, on `trackId`, with the stints (and their laps) given;
+ * `stale`: stored under another rules version (`staleOf`).
+ */
 function trackSession(uid: string, o: { startedAt: string; stints: StintSpec[]; weekendId?: string; trackId?: number; stale?: boolean }): TrackSession {
   const projection: ProjectionState = {
     laps: o.stints.flatMap((s) => range(s.firstLap, s.lastLap).map((n) => lap(s.car, n, { lapTimeMs: s.lapMs?.(n) ?? 90_000 + n }))),
     stints: o.stints.map((s) => stint(s.car, s.firstLap, { lastLap: s.lastLap })),
     pitStops: [], crossings: [], events: [], penalties: [], decisions: [], clock: [], spans: {},
   };
-  const stale = o.stale ?? false;
-  return {
+  const session: TrackSession = {
     sessionUid: uid as SessionUid, weekendId: o.weekendId ?? 'W1', seasonId: 'S1', playerCar: car(0), trackId: o.trackId ?? TRACK,
-    startedAt: o.startedAt, pwrecPath: null, settings: {}, cars: CARS, rulesVersion: stale ? 'old' : 'current', complete: true,
-    phase: { kind: 'race', format: 'grandPrix' }, stale, projection: stale ? undefined : projection, track: unknown('notApplicable'),
+    startedAt: o.startedAt, pwrecPath: null, settings: {}, cars: CARS, rulesVersion: 'current', complete: true,
+    phase: { kind: 'race', format: 'grandPrix' }, stale: false, projection, track: unknown('notApplicable'),
+  };
+  return o.stale === true ? staleOf(session) : session;
+}
+
+/**
+ * `s` as stored under another rules version: it awaits its rebuild (C61), so it comes with neither its projection nor
+ * its weekend phase (both would be read from the stale log).
+ */
+function staleOf(s: TrackSession): TrackSession {
+  return {
+    sessionUid: s.sessionUid, weekendId: s.weekendId, seasonId: s.seasonId, playerCar: s.playerCar, trackId: s.trackId, startedAt: s.startedAt,
+    pwrecPath: s.pwrecPath, settings: s.settings, cars: s.cars, rulesVersion: 'old', complete: s.complete, track: s.track,
+    stale: true, projection: undefined,
   };
 }
 
@@ -125,12 +141,22 @@ function fakeHub() {
 const opened = new Set<CalibrationStore>();
 afterEach(() => { for (const store of opened) store.close(); opened.clear(); });
 
-type Setup = { sessions: TrackSession[]; dir?: string; features?: ReturnType<typeof fakeFeatures>; config?: Record<string, Record<string, number>> };
+type Rebuild = (keys: readonly SessionKey[]) => Promise<void>;
+type Setup = {
+  sessions: TrackSession[]; dir?: string; features?: ReturnType<typeof fakeFeatures>; config?: Record<string, Record<string, number>>;
+  /** The rebuild the store asks for (C61); by default one that stays pending, so a stale session stays stale. */
+  rebuild?: Rebuild;
+};
 
-function setup({ sessions, dir = mkdtempSync(join(tmpdir(), 'calibration-')), features = fakeFeatures(), config = { fake: { weight: 1 } } }: Setup) {
+function setup({
+  sessions, dir = mkdtempSync(join(tmpdir(), 'calibration-')), features = fakeFeatures(), config = { fake: { weight: 1 } },
+  rebuild = vi.fn<Rebuild>(() => new Promise<void>(() => {})),
+}: Setup) {
   const repo = fakeRepo(sessions);
   const h = fakeHub();
-  const store = CalibrationStore.open(dir, { features: features.features, repo: repo.repo, config, hub: h.hub, log: createLogger({ level: 'silent' }) });
+  const store = CalibrationStore.open(dir, {
+    features: features.features, repo: repo.repo, config, hub: h.hub, log: createLogger({ level: 'silent' }), rebuild,
+  });
   opened.add(store);
   const close = () => { store.close(); opened.delete(store); };
   const apply = (action: CalibrationAction) => store.apply(action);
@@ -165,6 +191,10 @@ const calibrationFiles = (dir: string): Record<string, string> => {
 };
 const valueOf = (entry: Known<number> | undefined): number | undefined => (entry?.known === true ? entry.value : undefined);
 const mean = (values: number[]): number => Math.round(values.reduce((a, b) => a + b, 0) / values.length);
+/** The fit if the store could read its source (not skipped). */
+const fitted = (fit: SourceFit | undefined): FittedSource | undefined => (fit !== undefined && fit.skipped === undefined ? fit : undefined);
+/** Lets every settled promise's callbacks run. */
+const settle = () => new Promise<void>((resolve) => { setImmediate(resolve); });
 
 // --- the tests ------------------------------------------------------------------------------------------------------
 
@@ -371,11 +401,7 @@ describe('CalibrationStore', () => {
     const id = t.createSet(TRACK, 'Set', [sourceOf(kept, 0, 1), sourceOf(gone, 0, 1), sourceOf(stale, 0, 1), sourceOf(deleted, 0, 1)]);
 
     // A rebuild dropped one stint, another session awaits its rebuild (C61), one session is deleted.
-    t.repo.sessions = [
-      kept,
-      { ...gone, projection: { ...gone.projection!, stints: [], laps: [] } },
-      { ...stale, stale: true, rulesVersion: 'old', projection: undefined },
-    ];
+    t.repo.sessions = [kept, trackSession('gone', { startedAt: day(2), stints: [] }), staleOf(stale)];
     const calls = t.features.calls.mean.length;
     expect(() => t.store.recompute('rebuild')).not.toThrow();
 
@@ -390,6 +416,72 @@ describe('CalibrationStore', () => {
     expect(after.length).toBeGreaterThan(0);
     expect(after.flat().every((s) => s.source.sessionUid === 'kept')).toBe(true);
     expect(t.store.snapshotOf(TRACK, id).entries['fake.meanLapMs']).toMatchObject({ known: true, value: 91_003 });
+  });
+
+  it('a skipped source carries no placeholder values (C3)', () => {
+    const at = (uid: string, d: number) => trackSession(uid, { startedAt: day(d), stints: [{ car: 0, firstLap: 1, lastLap: 5 }] });
+    const deleted = at('deleted', 1), gone = at('gone', 2), stale = at('stale', 3), kept = at('kept', 4);
+    const t = setup({ sessions: [deleted, gone, stale, kept] });
+    const id = t.createSet(TRACK, 'Set', [sourceOf(deleted, 0, 1), sourceOf(gone, 0, 1), sourceOf(stale, 0, 1), sourceOf(kept, 0, 1)]);
+
+    // One session is deleted, one lost the stint in a rebuild, one awaits its rebuild (C61).
+    t.repo.sessions = [trackSession('gone', { startedAt: day(2), stints: [] }), staleOf(stale), kept];
+    t.store.recompute('rebuild');
+    const skippedOf = (s: TrackSession) => t.fitOf(id, sourceOf(s, 0, 1));
+
+    // Nothing is known of a source whose session is gone: no date, no compound (C3: unknown, never a placeholder).
+    expect(skippedOf(deleted)).toMatchObject({ skipped: 'missing', sessionDate: { known: false }, compound: { known: false } });
+    // Its session is still stored: its date is known; its stint, and so its compound, is not.
+    expect(skippedOf(gone)).toMatchObject({ skipped: 'missing', sessionDate: { known: true, value: day(2) }, compound: { known: false } });
+    // A session awaiting its rebuild is read for its row only: its date is known, its projection is not served.
+    expect(skippedOf(stale)).toMatchObject({ skipped: 'stale', sessionDate: { known: true, value: day(3) }, compound: { known: false } });
+    // A skipped source carries no laps, lap list, entries or residuals at all: not as zeros, not as empty lists.
+    for (const s of [deleted, gone, stale]) expect(Object.keys(skippedOf(s) ?? {}).toSorted(), s.sessionUid).toEqual(['compound', 'sessionDate', 'skipped', 'source']);
+    expect(fitted(skippedOf(kept))).toMatchObject({ sessionDate: day(4), compound: 'medium', laps: 5 });
+  });
+
+  it('reading a stale session requests its rebuild once, then recomputes', async () => {
+    const at = (uid: string, d: number, base: number) =>
+      trackSession(uid, { startedAt: day(d), stints: [{ car: 0, firstLap: 1, lastLap: 5, lapMs: (n) => base + n }] });
+    const inSet = at('in-set', 1, 91_000), offered = at('offered', 2, 92_000);
+    // What the rebuilds produce: the current rules version gives the same recordings other lap times.
+    const rebuilt = [at('in-set', 1, 93_000), at('offered', 2, 94_000)];
+    const pending: Array<() => void> = [];
+    const rebuild = vi.fn<Rebuild>(() => new Promise<void>((resolve) => { pending.push(resolve); }));
+    const t = setup({ sessions: [inSet], rebuild });
+    const id = t.createSet(TRACK, 'Set', [sourceOf(inSet, 0, 1)]);
+    expect(rebuild).not.toHaveBeenCalled();
+    const requested = () => rebuild.mock.calls.flatMap(([keys]) => keys).map((k) => `${k.sessionUid}/${k.weekendId}/${k.playerCar}`).toSorted();
+
+    // Both sessions are now of another rules version: the set reads one, the suggestions the other (C61: rebuilt when
+    // first read).
+    t.repo.sessions = [staleOf(inSet), staleOf(offered)];
+    const recompute = vi.spyOn(t.store, 'recompute');
+    t.store.recompute('sessionEnd');
+    await settle();
+    expect(requested()).toEqual(['in-set/W1/0', 'offered/W1/0']);
+    expect(t.fitOf(id, sourceOf(inSet, 0, 1))?.skipped).toBe('stale');
+
+    // Read again while the rebuilds are pending: no second request.
+    t.store.recompute('sessionEnd');
+    t.ok({ kind: 'calibration.override.set', trackId: TRACK, setId: id, key: 'fake.limitPct', value: 80 });
+    await settle();
+    expect(requested()).toEqual(['in-set/W1/0', 'offered/W1/0']);
+    expect(recompute).not.toHaveBeenCalledWith('rebuild');
+
+    // The rebuilds finish: the store recomputes from the rebuilt projections.
+    t.repo.sessions = rebuilt;
+    for (const resolve of pending) resolve();
+    await vi.waitFor(() => expect(recompute).toHaveBeenCalledWith('rebuild'));
+    const fit = fitted(t.fitOf(id, sourceOf(inSet, 0, 1)));
+    expect(fit).toMatchObject({ laps: 5, sessionDate: day(1) });
+    expect(valueOf(fit?.entries['fake.meanLapMs'])).toBe(93_003);
+    expect(valueOf(t.store.snapshotOf(TRACK, id).entries['fake.meanLapMs'])).toBe(93_003);
+    const candidates = t.last<CalibrationCandidatesValue>('calibration.candidates').byTrack[TRACK] ?? [];
+    expect(candidates.map((c) => c.source)).toEqual([sourceOf(offered, 0, 1)]);
+    expect(valueOf(fitted(candidates[0])?.entries['fake.meanLapMs'])).toBe(94_003);
+    // Nothing is stale any more: nothing is requested again.
+    expect(requested()).toEqual(['in-set/W1/0', 'offered/W1/0']);
   });
 
   it('suggestions: our cars\' stints not in the set that a declared candidate accepts, this weekend first, then newest', () => {
@@ -412,7 +504,7 @@ describe('CalibrationStore', () => {
     expect(t.features.candidate.mock.calls.some(([s]) => s.source.sessionUid === 'w2-late' && s.source.car === car(1) && s.stint.firstLap === 1)).toBe(true);
     // A candidate carries its own entries and lap counts.
     expect(candidates[0]).toMatchObject({ laps: 5, sessionDate: day(5), compound: 'medium' });
-    expect(valueOf(candidates[0]?.entries['fake.meanLapMs'])).toBe(mean(range(6, 10).map((n) => 90_000 + n)));
+    expect(valueOf(fitted(candidates[0])?.entries['fake.meanLapMs'])).toBe(mean(range(6, 10).map((n) => 90_000 + n)));
   });
 
   it('per-source values and residuals come from the declared functions', () => {
@@ -424,7 +516,7 @@ describe('CalibrationStore', () => {
     const meanSet = mean([...range(1, 4).map((n) => 90_000 + n), ...range(1, 4).map((n) => 92_000 + n)]);
 
     expect(valueOf(t.store.snapshotOf(TRACK, id).entries['fake.meanLapMs'])).toBe(meanSet);
-    const fitA = t.fitOf(id, sourceOf(a, 0, 1)), fitB = t.fitOf(id, sourceOf(b, 0, 1));
+    const fitA = fitted(t.fitOf(id, sourceOf(a, 0, 1))), fitB = fitted(t.fitOf(id, sourceOf(b, 0, 1)));
     expect(fitA).toMatchObject({ sessionDate: day(1), compound: 'medium', laps: 4 });
     expect(valueOf(fitA?.entries['fake.meanLapMs'])).toBe(meanA);
     expect(valueOf(fitB?.entries['fake.meanLapMs'])).toBe(meanB);
@@ -440,7 +532,7 @@ describe('CalibrationStore', () => {
     const times = [90_000, 96_000, 90_500, 91_000];
     const s1 = trackSession('1', { startedAt: day(1), stints: [{ car: 0, firstLap: 1, lastLap: 4, lapMs: (n) => times[n - 1]! }] });
     const listOf = (fit: SourceFit | undefined) =>
-      fit?.lapList.map((l) => ({ lapNumber: l.lapNumber, ms: valueOf(l.lapTimeMs), excluded: l.excluded, use: l.use.known ? l.use.value : l.use.reason }));
+      fitted(fit)?.lapList.map((l) => ({ lapNumber: l.lapNumber, ms: valueOf(l.lapTimeMs), excluded: l.excluded, use: l.use.known ? l.use.value : l.use.reason }));
 
     const withUse = setup({ sessions: [s1] });
     const id = withUse.createSet(TRACK, 'Set', [sourceOf(s1, 0, 1)]);

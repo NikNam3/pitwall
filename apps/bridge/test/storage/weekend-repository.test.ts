@@ -307,10 +307,26 @@ describe('WeekendRepository.sessionsOnTrack', () => {
 
     const sessions = new WeekendRepository(db, { rulesVersion: 'current' }).sessionsOnTrack(26);
     expect(sessions.map((s) => [s.sessionUid, s.stale])).toEqual([['1', true], ['2', false]]);
-    expect(sessions.map((s) => s.phase)).toEqual([{ kind: 'race', format: 'grandPrix' }, { kind: 'race', format: 'grandPrix' }]);
+    const fresh = sessions[1];
+    expect(fresh?.stale === false ? fresh.phase : undefined).toEqual({ kind: 'race', format: 'grandPrix' });
     expect(sessions[0]?.projection).toBeUndefined();
     expect(sessions[1]?.projection?.stints).toEqual([stint(1, 1)]);
     expect(sessions[1]?.projection?.laps).toEqual([lap(1, 1)]);
     expect(sessions[1]).toMatchObject({ weekendId: 'W1', playerCar: car(1), trackId: 26, startedAt: '2026-10-27T21:00:00.000Z', cars: later.cars });
+  });
+
+  it('a stale session\'s phase is not read from its log', () => {
+    const db = openDatabase(':memory:');
+    const old = new StorageWriter(db, { onError: (e) => { throw e; }, rulesVersion: 'old' });
+    const row = session('1');
+    old.upsertSession(row);
+    old.writeLog(keyOf(row), log({ stints: [stint(1, 1)], spans: { 'weekend-phase': [span('weekend-phase', 'race', { detail: { format: 'grandPrix' } })] } }));
+    old.complete(keyOf(row));
+
+    const [stale, ...rest] = new WeekendRepository(db, { rulesVersion: 'current' }).sessionsOnTrack(26);
+    expect(rest).toEqual([]);
+    expect(stale).toMatchObject({ sessionUid: '1', stale: true, projection: undefined });
+    // The stale log is never served (C61): not as a projection, and not as the weekend phase read from it.
+    expect(stale !== undefined && 'phase' in stale).toBe(false);
   });
 });
