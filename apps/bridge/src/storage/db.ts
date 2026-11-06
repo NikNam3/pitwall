@@ -6,7 +6,7 @@ export { SchemaVersionError };
 
 export type Db = Database.Database;
 
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 /** Every per-session table refers to its session by the three key columns (C1a, C60). */
 const SESSION_REF = `session_uid TEXT NOT NULL, weekend_id TEXT NOT NULL, player_car INTEGER NOT NULL`;
@@ -21,11 +21,12 @@ CREATE TABLE weekends (weekend_id TEXT PRIMARY KEY, season_id TEXT NOT NULL, tra
 /*
  * Keyed by session uid, weekend id and the feed's player car: the game reuses a session uid across online weekends, and
  * two feeds of one session are stored side by side (C1a). The row holds only values from the recording, the player
- * car, the rules version of its log and whether that log is complete (C32, C61).
+ * car, the teammate the engine placed (the newest live.teammateCar of the session's run, NULL without one), the rules
+ * version of its log and whether that log is complete (C32, C43, C61).
  */
 CREATE TABLE sessions (
   session_uid TEXT NOT NULL, weekend_id TEXT NOT NULL REFERENCES weekends(weekend_id), player_car INTEGER NOT NULL,
-  track_id INTEGER NOT NULL, started_at TEXT NOT NULL, pwrec_path TEXT, settings TEXT NOT NULL /* JSON */,
+  teammate_car INTEGER, track_id INTEGER NOT NULL, started_at TEXT NOT NULL, pwrec_path TEXT, settings TEXT NOT NULL /* JSON */,
   rules_version TEXT NOT NULL, complete INTEGER NOT NULL, PRIMARY KEY (session_uid, weekend_id, player_car)) STRICT;
 CREATE INDEX sessions_by_weekend ON sessions (weekend_id, started_at);
 /* Every slot's team and race number (C62), as the session's Participants last named them. */
@@ -50,6 +51,8 @@ export type SessionRow = {
   seasonId: string;
   /** The feed's player car: the player car index of the session's first frame. */
   playerCar: CarId;
+  /** The teammate the engine placed: the newest `live.teammateCar` of the session's run; `null` when it placed none. */
+  teammateCar: CarId | null;
   trackId: number;
   /** ISO 8601. */
   startedAt: string;

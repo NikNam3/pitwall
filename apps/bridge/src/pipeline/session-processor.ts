@@ -116,6 +116,8 @@ export class SessionProcessor {
   #records = 0;
   /** The last `calibration.active` handed to `onActive`, as JSON: it is handed on only when it changes. */
   #active: string | undefined;
+  /** The teammate of the row last built (`#row`): a row is written again when the engine's teammate is another. */
+  #storedTeammate: CarId | null = null;
 
   constructor(opts: SessionProcessorOptions) {
     this.#o = opts;
@@ -132,7 +134,8 @@ export class SessionProcessor {
       { feedId, sessionUid, session, realism: opts.config.realism?.enabled === true },
       { attach: this.#scheduler, contextFor: (participants) => this.#contextFor(participants) },
     );
-    opts.storage?.start(this.#row());
+    const { storage } = opts;
+    if (storage !== undefined) this.#storeRow((row) => storage.start(row));
     this.#publishActive(this.#runner.state.history.decisions);
   }
 
@@ -271,9 +274,9 @@ export class SessionProcessor {
       scheduler.setNeeded(this.#o.needed());
     }
     try {
-      // The row stores every slot's car key from the live identity: whenever the identity changes (a rewind included),
-      // the row follows (the newest wins). Then the log's new facts are appended (C24).
-      if (result.changed.has('identity')) storage?.upsertSession(this.#row());
+      // The row stores every slot's car key from the live identity and the teammate the engine placed: whenever either
+      // changes (a rewind included), the row follows (the newest wins). Then the log's new facts are appended (C24).
+      if (storage !== undefined && (result.changed.has('identity') || this.#teammate() !== this.#storedTeammate)) this.#storeRow((row) => storage.upsertSession(row));
       storage?.writeLog(this.#key, result.state.log);
       // A session time that fell back with no flashback and no start: the engine keeps its race clock monotonic (spec 3.3); worth knowing.
       if (result.clockFall) log.info({ feedId, sessionUid: this.#uid, clockFall: result.clockFall }, 'session time fell back');
@@ -408,6 +411,20 @@ export class SessionProcessor {
   #row(): SessionRow {
     const { startedAt, pwrecPath } = this.#o;
     const { state } = this.#runner;
-    return sessionRowOf({ sessionUid: this.#uid, session: state.session, playerCar: this.#key.playerCar, startedAt, pwrecPath, cars: carsOf(state) });
+    return sessionRowOf({
+      sessionUid: this.#uid, session: state.session, playerCar: this.#key.playerCar, teammateCar: this.#teammate(), startedAt, pwrecPath, cars: carsOf(state),
+    });
+  }
+
+  /** Writes the session's row (live: `start`, then `upsertSession`) and keeps the teammate it was written with. */
+  #storeRow(write: (row: SessionRow) => void): void {
+    const row = this.#row();
+    this.#storedTeammate = row.teammateCar;
+    write(row);
+  }
+
+  /** The teammate the engine placed now (`live.teammateCar`, C43); `null` when it placed none. */
+  #teammate(): CarId | null {
+    return this.#runner.state.teammateCar ?? null;
   }
 }
