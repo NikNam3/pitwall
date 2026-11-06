@@ -4,11 +4,8 @@ The spec or plan of the work in progress lives here (`specs/`, `plans/`), writte
 
 Current: the SP4 re-spec, `specs/2026-11-05-sp4a/`: `00-carry-over.md` (what carries over, and the brainstorm answers), `01-sp4-sections.md` (dependency graph and sections). SP4.0 (foundation and track) is **done**, merged 2026-11-06: spec `docs/specs/2026-11-05-sp4.0-foundation-and-track-design.md`, plan and run rulings in `docs/history/`.
 
-Open before 4.1: the pre-4.1 run, spec `specs/2026-11-06-pre-4.1-design.md` (track sidecar always, panel edit mode, desktop start order; approved and given the go 2026-11-06). Its items below stay listed until it is merged.
+Done 2026-11-06: the pre-4.1 run (track sidecar always, panel edit mode, desktop start order; spec and plan in `docs/history/`). Still open: **loading screen during the startup rebuild** (C61 "progress shown"; another session works on it).
 
-- **Track sidecar always written (user chose option A, 2026-11-06):** a session without a valid track file writes no track sidecar, so its replay changes once a file is added (C38). Change C62b's text first (contract and ADR line, C0: "a session without a valid file writes a not-applicable sidecar; a recording without any sidecar loads the committed file"), then `feed-pipeline.ts` writes the run's track always and `recordingTrack` honours a not-applicable sidecar, in two phases.
-- **Loading screen during the startup rebuild:** C61 says "with progress shown"; today the desktop window is black until the rebuild ends (user, 2026-11-06; another session works on it).
-- **Add and remove panels in the UI (user, 2026-11-06):** a visible UI element to add a panel to a window and to remove one, without the command palette (today only "Add panel: …" via Ctrl+K exists, and nothing removes a panel). Each button still invokes a command from the shell's one registry (C72), so a `panel.remove` command comes with it. Hand edits of `ui/workbooks/*.json` hot-reload while the bridge runs and work well meanwhile.
-- **`pnpm desktop` builds the UI before the widget index is regenerated:** the UI build runs first and the bridge's `gen` after it, so the first start after a new widget shows the old widget list. Run `pnpm gen` before the UI build in the desktop start script.
+In progress: the 4.1a brainstorm (calibration and estimation; 4.1b long run and weather after it). Sections 1–2 approved 2026-11-06; the spec follows.
 
 Next: spec 4.1 (estimation and long run) from `01-sp4-sections.md`.

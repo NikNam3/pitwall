@@ -20,3 +20,4 @@ Everything here is done, superseded or void. **Do not read it unless your brief 
 | `reviews/2026-10-28-foundation-architecture-review.md` | the foundation's architecture review | done |
 | `tasks/research-06-engineer-decisions.md` | the brief of research 06 | done; the result is `docs/research/06-engineer-decisions.md` |
 | `foundation-open-questions.md` | open questions of sub-project 1 | answered or carried into later specs |
+| `specs/2026-11-06-pre-4.1-design.md`, `plans/2026-11-06-pre-4.1.md` | the pre-4.1 run: track sidecar always (C62b), panel edit mode, `pnpm desktop` start order | **done**, merged 2026-11-06 (86e65215); run ruling: a `+` adds into its group, Ctrl+K keeps a new group to the right |
