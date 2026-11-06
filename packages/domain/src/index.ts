@@ -38,4 +38,5 @@ export * from './laps.ts';
 export * from './freshness.ts';
 export * from './tracks.ts';
 export * from './track-file.ts';
+export * from './car-code.ts';
 export * from './analyses/index.ts';
