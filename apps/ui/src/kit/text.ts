@@ -119,6 +119,7 @@ export const commandTitles = {
   panelAdd: (title: string): string => `Add panel: ${title}`,
   panelRemove: (title: string): string => `Remove panel: ${title}`,
   layoutEditToggle: 'Edit layout',
+  layoutEditAddPanel: 'Add panel to the active group',
   realismToggle: 'Toggle realism mode',
   replayPause: 'Pause replay',
   replayPlay: 'Play replay',

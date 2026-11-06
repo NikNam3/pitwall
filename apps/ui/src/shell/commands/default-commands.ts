@@ -151,6 +151,15 @@ export function layoutEditCommand(toggle: () => void): Command {
   return { id: 'layout.edit.toggle', title: text.commandTitles.layoutEditToggle, group: text.commandGroups.window, run: toggle };
 }
 
+/**
+ * `layout.edit.addPanel`: what a group's `+` runs; `addToActiveGroup` targets the active group and opens the palette on
+ * the `panel.add.*` commands. Registered only while edit mode is on; its id is no `panel.add.*` one, so that palette
+ * does not list it.
+ */
+export function layoutEditAddCommand(addToActiveGroup: () => void): Command {
+  return { id: 'layout.edit.addPanel', title: text.commandTitles.layoutEditAddPanel, group: text.commandGroups.window, run: addToActiveGroup };
+}
+
 /** `panel.remove.<id>` for each panel of the window; registered only while edit mode is on. */
 export function panelRemoveCommands(panels: readonly { id: string; title: string }[], removePanel: (id: string) => void): Command[] {
   return panels.map((panel) => ({
