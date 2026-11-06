@@ -13,6 +13,7 @@
     alertCommands,
     defaultCommands,
     DEFAULT_KEYS,
+    layoutEditAddCommand,
     layoutEditCommand,
     panelCommands,
     panelRemoveCommands,
@@ -194,7 +195,9 @@
     picked = true;
     dock?.addPanel(spec);
   };
-  const openAdd = (): void => {
+  /** `layout.edit.addPanel`: the active group becomes the target and the palette lists the `panel.add.*` commands. */
+  const addToActiveGroup = (): void => {
+    dock?.targetActiveGroup();
     picked = false;
     overlay = { kind: 'palette', adding: true };
   };
@@ -216,10 +219,13 @@
     ...windowCommands((read?.workbook.windows ?? []).map((w) => w.id), commandContext),
     ...panelCommands(widgets.map((w) => w.decl), addPanel),
     ...(editing
-      ? panelRemoveCommands(
-          Object.entries(panelSpecs).map(([id, spec]) => ({ id, title: titleOf(spec) })),
-          (id) => dock?.removePanel(id),
-        )
+      ? [
+          layoutEditAddCommand(addToActiveGroup),
+          ...panelRemoveCommands(
+            Object.entries(panelSpecs).map(([id, spec]) => ({ id, title: titleOf(spec) })),
+            (id) => dock?.removePanel(id),
+          ),
+        ]
       : []),
   ]);
   $effect(() => {
@@ -344,7 +350,7 @@
         },
         view,
         gapPx,
-        openAdd,
+        () => registry.run('layout.edit.addPanel'),
       );
       if (editing) dock.setEditing(true);
     });
@@ -398,9 +404,9 @@
         {sendReplay}
         onShown={(alerts) => (shownAlerts = alerts)}
         workbookName={read?.workbook.name}
-        onPickWorkbook={() => (overlay = { kind: 'workbooks' })}
+        onPickWorkbook={() => registry.run('workbook.pick')}
         {editing}
-        onToggleEditing={toggleEditing}
+        onToggleEditing={() => registry.run('layout.edit.toggle')}
       />
     {/key}
   {/if}
@@ -419,7 +425,10 @@
     <InspectorView {store} catalogue={inspectedCatalogue} params={(topic) => inspected?.params(topic) ?? {}} widget={inspection.widget} link={inspectedLink} {host} onClose={() => inspection.close()} />
   {/if}
   {#if overlay?.kind === 'palette'}
-    <Palette {registry} bindings={keys.bindings} filter={overlay.adding === true ? isAdd : undefined} onClose={closeOverlay} />
+    <!-- Each opening is a fresh palette: a command run from it may open it again (`layout.edit.addPanel`). -->
+    {#key overlay}
+      <Palette {registry} bindings={keys.bindings} filter={overlay.adding === true ? isAdd : undefined} onClose={closeOverlay} />
+    {/key}
   {:else if overlay?.kind === 'keys'}
     <KeyOverview {registry} bindings={keys.bindings} notes={keys.notes} onClose={closeOverlay} />
   {:else if overlay?.kind === 'workbooks'}

@@ -27,11 +27,13 @@ export type PanelView = {
 /** A mounted dock. */
 export type DockHandle = {
   /**
-   * Adds a panel under a fresh id: as a tab of the group whose `+` was clicked last, else in a new group to the right.
+   * Adds a panel under a fresh id: as a tab of the group `targetActiveGroup` marked, else in a new group to the right.
    * The change reaches `onChange` like any other.
    */
   addPanel(spec: PanelSpec): void;
-  /** Forgets the group a `+` marked (its palette closed without a pick): the next `addPanel` opens a new group. */
+  /** Makes the active group the target of the next `addPanel`; with no active group there is no target. */
+  targetActiveGroup(): void;
+  /** Forgets the target (the add palette closed without a pick): the next `addPanel` opens a new group. */
   cancelAdd(): void;
   /** Replaces the spec the dock holds for a panel (the shell changed its options); the panel is not rendered again. */
   updatePanel(id: string, spec: PanelSpec): void;
@@ -62,7 +64,7 @@ export function mountDock(
   onChange: (layout: unknown, panels: Record<string, PanelSpec>) => void,
   view: PanelView,
   gapPx: number,
-  /** Called after a click on a group's `+` (edit mode), which made that group the target of the next `addPanel`. */
+  /** Called after a click on a group's `+` (edit mode), which made that group the active one. */
   onAdd: () => void = () => {},
 ): DockHandle {
   const specs = new Map(Object.entries(panels));
@@ -80,7 +82,7 @@ export function mountDock(
 
   // Edit mode: one `+` per group, out of the accessibility tree (`hidden`) while editing is off.
   let editing = false;
-  /** The group whose `+` was clicked; the next `addPanel` lands in it. */
+  /** The group `targetActiveGroup` marked; the next `addPanel` lands in it. */
   let target: DockviewGroupPanel | undefined;
   const addButtons = new Set<HTMLButtonElement>();
   const groupActions = (group: DockviewGroupPanel): IHeaderActionsRenderer => {
@@ -94,7 +96,6 @@ export function mountDock(
     button.hidden = !editing;
     button.addEventListener('click', () => {
       group.api.setActive();
-      target = group;
       onAdd();
     });
     addButtons.add(button);
@@ -170,7 +171,7 @@ export function mountDock(
     api.addPanel({ id, component: COMPONENT, title: view.title(spec), ...(position === undefined ? {} : { position }) });
   };
   const add = (spec: PanelSpec, at?: { group?: DockviewGroupPanel; position: Position }): void => place(freshId(), spec, at);
-  /** Adds into the group a `+` marked, if it is still in the dock; otherwise as before. */
+  /** Adds into the group `targetActiveGroup` marked, if it is still in the dock; otherwise as before. */
   const addFromShell = (spec: PanelSpec): void => {
     const group = target;
     target = undefined;
@@ -241,6 +242,9 @@ export function mountDock(
 
   return {
     addPanel: addFromShell,
+    targetActiveGroup() {
+      target = api.activeGroup;
+    },
     cancelAdd() {
       target = undefined;
     },
