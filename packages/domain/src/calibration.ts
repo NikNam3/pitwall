@@ -1,4 +1,5 @@
 // Calibration sets, priors snapshots and the calibration topics' values (contract C62a, spec 3). JSON-safe.
+import type { EstimateSource } from './estimates.ts';
 import type { WeekendPhase } from './weekend-phase.ts';
 import type { VisualCompound } from './compounds.ts';
 import type { CarId, SessionUid } from './ids.ts';
@@ -114,7 +115,17 @@ export type SkippedSource = {
 /** `calibration.sets`: every calibration set, of all tracks. */
 export type CalibrationSetsValue = { sets: CalibrationSet[] };
 /** `calibration.values`: per set id its entries and its sources' fits. */
-export type CalibrationValuesValue = { bySet: Record<string, { entries: PriorsEntries; fits: SourceFit[] }> };
+export type CalibrationValuesValue = {
+  bySet: Record<string, {
+    entries: PriorsEntries;
+    fits: SourceFit[];
+    /**
+     * Per key whose entry is unknown (no source covers it): the unit's declared fallback over the set's track file and
+     * the effective config, with its default source (the `ᵈ` values of the calibration panel).
+     */
+    defaults: Record<string, { value: Known<number>; source: EstimateSource }>;
+  }>;
+};
 /** `calibration.candidates`: per track id the suggested sources, ordered (this weekend first, then newest first). */
 export type CalibrationCandidatesValue = {
   byTrack: Record<number, SourceFit[]>;

@@ -11,8 +11,8 @@ import { behaviourFor } from '../shared/behaviour.ts';
 import { CAR_STATUS_READS } from '../shared/car-status.ts';
 import { currentStintLaps } from '../shared/stint-laps.ts';
 import { TYRE_LIFE_BEHAVIOUR, type TyreLifeEffect } from './behaviour.ts';
-import { TYRE_LIFE, TYRE_LIFE_CONFIG, type TyreLife, type TyreLifeOutput } from './index.ts';
-import { AGE_LOSS_LIMIT_KEY, WEAR_LIMIT_KEY, wearRateKey } from './priors.ts';
+import { TYRE_LIFE, type TyreLife, type TyreLifeOutput } from './index.ts';
+import { AGE_LOSS_LIMIT_KEY, limitFallback, WEAR_LIMIT_KEY, wearRateKey } from './priors.ts';
 import { CORNERS, wearBasis, wearRatePerCorner, type Corner } from '../shared/wear-rate.ts';
 
 const COMPOUNDS = ['soft', 'medium', 'hard', 'inter', 'wet'] as const satisfies readonly VisualCompound[];
@@ -28,12 +28,17 @@ function priorValue(priors: Priors, key: string): number | undefined {
   return entry?.known === true ? entry.value : undefined;
 }
 
-/** The limits in force: the config's, each replaced by the set's override-only entry when the snapshot holds it. */
-function limitsOf(priors: Priors, config: (typeof TYRE_LIFE_CONFIG)['defaults']): Limits {
-  return {
-    limitPct: priorValue(priors, WEAR_LIMIT_KEY) ?? config.wearLimitPct,
-    ageLossLimitMs: Math.round(priorValue(priors, AGE_LOSS_LIMIT_KEY) ?? config.ageLossLimitMs),
-  };
+/**
+ * The value of limit `key` in force: the set's override-only entry when the snapshot holds it, else the entry's declared
+ * fallback (the config's), the one default the run and the calibration panel use (C43).
+ */
+function limitOf(view: EngineView, key: typeof WEAR_LIMIT_KEY | typeof AGE_LOSS_LIMIT_KEY): number {
+  return priorValue(view.priors, key) ?? limitFallback(key)({ config: view.config, track: view.track }).value.value;
+}
+
+/** The limits in force (the age limit in whole ms, C4). */
+function limitsOf(view: EngineView): Limits {
+  return { limitPct: limitOf(view, WEAR_LIMIT_KEY), ageLossLimitMs: Math.round(limitOf(view, AGE_LOSS_LIMIT_KEY)) };
 }
 
 /** The fitted set's `lifeSpanLaps`, as of the `sets` value. */
@@ -102,7 +107,7 @@ export const tyreLifeCalculator: QuickCalculator<TyreLifeOutput> = {
   reads: ['laps', 'stints', 'tyres', 'decisions', CAR_STATUS_READS, { calculator: 'degradation' }],
   cadence: { hz: 4 },
   compute: (view: EngineView): TyreLifeOutput => {
-    const limits = limitsOf(view.priors, TYRE_LIFE_CONFIG.read(view));
+    const limits = limitsOf(view);
     const rateOpts = PER_LAP_RATE_CONFIG.read(view);
     const classes = LAP_CLASSES_CONFIG.read(view);
     const degradation = (view.outputs.get(DEGRADATION) as DeepReadonly<DegradationOutput> | undefined) ?? {};

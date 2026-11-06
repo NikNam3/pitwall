@@ -1,11 +1,13 @@
 // The priors entries of `tyre-life` (spec 3.2, 4.2): per compound and corner the wear per lap, each source's stint
 // through the calculator's rate rule and pooled by the median of the sources' rates; and the set's limits,
-// override-only (the config's value unless the set overrides it).
-import { known, unknown, type Known, type VisualCompound } from '@pitwall/domain';
-import { definePriors, type PriorDecl, type PriorsCtx, type StoredSource } from '@pitwall/engine/readers';
+// override-only, each falling back to the config's value (`limitFallback`, the calculator's limit too, C43). A wear
+// rate has no run-time default (a fresh set's life falls back to `ν`), so it declares no fallback.
+import { known, unknown, type EstimateSource, type Known, type VisualCompound } from '@pitwall/domain';
+import { definePriors, type FallbackCtx, type PriorDecl, type PriorsCtx, type StoredSource } from '@pitwall/engine/readers';
 import { LAP_CLASSES_CONFIG } from '../lap-classes/index.ts';
 import { PER_LAP_RATE_CONFIG } from '../per-lap-rate/index.ts';
 import { CORNERS, wearRatePerCorner, type Corner } from '../shared/wear-rate.ts';
+import { TYRE_LIFE_CONFIG } from './config.ts';
 
 const COMPOUNDS = ['soft', 'medium', 'hard', 'inter', 'wet'] as const satisfies readonly VisualCompound[];
 
@@ -18,8 +20,25 @@ export const WEAR_LIMIT_KEY = 'tyreLife.wearLimitPct';
 /** The override-only key of the age basis's loss limit in ms. */
 export const AGE_LOSS_LIMIT_KEY = 'tyreLife.ageLossLimitMs';
 
-/** A config section's effective values in a priors context (C47): the defaults under `ctx.config`'s overrides. */
-const configOf = <C extends object>(section: { key: string; defaults: C }, ctx: PriorsCtx): C => ({ ...section.defaults, ...ctx.config[section.key] }) as C;
+/** A config section's effective values in a priors or fallback context (C47): the defaults under `ctx.config`'s overrides. */
+const configOf = <C extends object>(section: { key: string; defaults: C }, ctx: Pick<PriorsCtx, 'config'>): C =>
+  ({ ...section.defaults, ...ctx.config[section.key] }) as C;
+
+type TyreLifeConfig = (typeof TYRE_LIFE_CONFIG)['defaults'];
+
+/** The limits a set falls back to without its override: the config's (the age limit in whole ms, C4), with its note. */
+const LIMIT_DEFAULTS = {
+  [WEAR_LIMIT_KEY]: { of: (config: TyreLifeConfig) => config.wearLimitPct, note: 'tyre-life config default (racinggames.gg)' },
+  [AGE_LOSS_LIMIT_KEY]: { of: (config: TyreLifeConfig) => Math.round(config.ageLossLimitMs), note: 'tyre-life config default (pitwall estimate)' },
+} as const;
+
+/** The value a run uses for limit `key` without the set's override, with its default source (C43); always known. */
+export const limitFallback =
+  (key: keyof typeof LIMIT_DEFAULTS) =>
+  (ctx: FallbackCtx): { value: Extract<Known<number>, { known: true }>; source: EstimateSource } => ({
+    value: { known: true, value: LIMIT_DEFAULTS[key].of(configOf(TYRE_LIFE_CONFIG, ctx)), at: 0 },
+    source: { kind: 'default', note: LIMIT_DEFAULTS[key].note, sessionShare: 0, parts: 'config default' },
+  });
 
 function median(values: readonly number[]): number {
   const sorted = [...values].sort((x, y) => x - y);
@@ -60,8 +79,8 @@ export const TYRE_LIFE_PRIORS = definePriors('tyre-life', {
   entries: {
     ...Object.fromEntries(COMPOUNDS.flatMap((compound) => CORNERS.map((corner) => [wearRateKey(compound, corner), wearRate(compound, corner)]))),
     /** Override-only: the wear limit in %. */
-    [WEAR_LIMIT_KEY]: { version: 1, range: [30, 100] },
+    [WEAR_LIMIT_KEY]: { version: 1, range: [30, 100], fallback: limitFallback(WEAR_LIMIT_KEY) },
     /** Override-only: the age basis's loss limit in ms. */
-    [AGE_LOSS_LIMIT_KEY]: { version: 1, range: [200, 10000] },
+    [AGE_LOSS_LIMIT_KEY]: { version: 1, range: [200, 10000], fallback: limitFallback(AGE_LOSS_LIMIT_KEY) },
   },
 });

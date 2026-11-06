@@ -61,6 +61,7 @@ const VALUES: CalibrationValuesValue = {
   bySet: {
     league: {
       entries: {},
+      defaults: {},
       fits: [
         { source: source(3), skipped: 'missing', sessionDate: unknown('notApplicable'), phase: unknown('notApplicable'), driver: unknown('notApplicable'), compound: unknown('notApplicable') },
         { source: source(12), skipped: 'stale', sessionDate: unknown('notApplicable'), phase: unknown('notApplicable'), driver: unknown('notApplicable'), compound: unknown('notApplicable') },
