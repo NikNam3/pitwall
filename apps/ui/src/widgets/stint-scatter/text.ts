@@ -1,7 +1,7 @@
 // Wording of the stint-scatter display; text shared with the kit lives in kit/text.ts.
 import type { StintFit } from '@pitwall/domain';
 import type { AxisLabel } from '../../kit/chart/labels.ts';
-import { formatLapNumber } from '../../kit/values/format.ts';
+import { formatLapRange } from '../../kit/values/format.ts';
 
 /** The x axis' label forms, longest first. */
 export const xLabel: AxisLabel = ['tyre age, laps', 'tyre age'];
@@ -23,4 +23,4 @@ export const compoundHeaders = { cmp: 'CMP', toSoft: 'TO SOFT', degPerLap: 'DEG/
  * stint, nothing for the current one (`S L01–15`, `M L16–`).
  */
 export const stintLabel = (letter: string, firstLap: number, lastLap: number | undefined): string =>
-  `${letter} ${formatLapNumber(firstLap, 2)}–${lastLap === undefined ? '' : formatLapNumber(lastLap, 2).slice(1)}`;
+  `${letter} ${formatLapRange(firstLap, lastLap)}`;
