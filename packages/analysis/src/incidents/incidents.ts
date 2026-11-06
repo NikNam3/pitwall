@@ -7,6 +7,8 @@ import {
   type CarId,
   type FrameNumber,
   type Known,
+  type LapFraction,
+  type Metres,
   type MiniSectorCrossing,
   type Ms,
   type SessionState,
@@ -14,12 +16,16 @@ import {
 } from '@pitwall/domain';
 import { carSegmentMedian, foldCarSample, type CarSegmentSamples } from '../shared/segment-medians.ts';
 import { gapBehind, progressOf, type CarCrossings } from '../gaps/gaps.ts';
+import { fractionOf } from '../shared/track-lookup.ts';
 
 /** A crossing; "progress" counts mini-sector boundaries from the race start (gaps' `progressOf`); `frame`: the frame it describes (C26). */
 export type Point = { at: SessionTime; progress: number; frame: FrameNumber };
 
-/** One mini-sector against the car's median for its segment: `lossMs` negative = faster; `endFrame`: its end crossing's frame (C26). */
-export type MiniSector = { start: SessionTime; end: SessionTime; endFrame: FrameNumber; progress: number; lossMs: Ms };
+/**
+ * One mini-sector against the car's median for its segment: `lossMs` negative = faster; `startFrame`, `endFrame`: its
+ * start and end crossings' frames (C26).
+ */
+export type MiniSector = { start: SessionTime; end: SessionTime; startFrame: FrameNumber; endFrame: FrameNumber; progress: number; lossMs: Ms };
 
 /** What one complete mini-sector gave: a loss, or why there is none. */
 export type SegmentLoss = MiniSector | 'excluded' | 'fewLaps';
@@ -41,8 +47,8 @@ export type Track = {
   slow: MiniSector[];
 };
 
-/** Consecutive slow mini-sectors of one car: one time loss from the first one's start. */
-export type SlowRun = { carId: CarId; at: SessionTime; endAt: SessionTime; startProgress: number; endProgress: number; lossMs: Ms };
+/** Consecutive slow mini-sectors of one car: one time loss from the first one's start (on frame `frame`, C26). */
+export type SlowRun = { carId: CarId; at: SessionTime; frame: FrameNumber; endAt: SessionTime; startProgress: number; endProgress: number; lossMs: Ms };
 
 /** Every car's latest crossing at one moment and the positions it gives, indexed by car id. */
 export type Snapshot = { latest: (Point | undefined)[]; position: (number | undefined)[]; count: number };
@@ -87,7 +93,7 @@ export function evaluate(track: Track, timeLossMs: Ms, excluded: (from: Point, t
     const ms = to.at - start;
     const med = carSegmentMedian(track.samples, segment);
     if (med !== 'fewLaps') {
-      const sector = { start, end: to.at, endFrame: to.frame, progress, lossMs: ms - med };
+      const sector = { start, end: to.at, startFrame: prev.frame, endFrame: to.frame, progress, lossMs: ms - med };
       track.loss[progress] = sector;
       if (sector.lossMs > timeLossMs) track.slow.push(sector);
     } else track.loss[progress] = 'fewLaps';
@@ -107,7 +113,7 @@ export function slowRuns(carId: CarId, slow: readonly MiniSector[]): SlowRun[] {
       run.lossMs += s.lossMs;
       continue;
     }
-    run = { carId, at: s.start, endAt: s.end, startProgress: s.progress, endProgress: s.progress + 1, lossMs: s.lossMs };
+    run = { carId, at: s.start, frame: s.startFrame, endAt: s.end, startProgress: s.progress, endProgress: s.progress + 1, lossMs: s.lossMs };
     runs.push(run);
   }
   return runs;
@@ -191,6 +197,20 @@ export function sectorAt(track: Track | undefined, t: SessionTime, layout: Track
   const fraction = nextAt !== undefined && nextAt > point.at ? Math.min(1, (t - point.at) / (nextAt - point.at)) : 0;
   const distanceM = (((point.progress % MINI_SECTORS) + fraction) * trackLengthM) / MINI_SECTORS;
   return known(distanceM < sector2StartM ? 1 : distanceM < sector3StartM ? 2 : 3, t);
+}
+
+/**
+ * Where the car was on the lap at `t` (spec 6.2): its lap distance interpolated by time between its latest crossing at
+ * or before `t` and the next one, as a lap fraction of the session's track length. `insufficientData` before its first
+ * crossing and while the next crossing is not in the history yet; `notReceived` while the session has no track length.
+ */
+export function fractionAt(track: Track | undefined, t: SessionTime, trackLengthM: Metres): Known<LapFraction> {
+  const point = track && latestAt(track, t);
+  const nextAt = point && track?.atByProgress[point.progress + 1];
+  if (point === undefined || nextAt === undefined || !(nextAt > point.at)) return unknown('insufficientData');
+  const share = Math.min(1, (t - point.at) / (nextAt - point.at));
+  const fraction = fractionOf((((point.progress % MINI_SECTORS) + share) * trackLengthM) / MINI_SECTORS, trackLengthM);
+  return fraction === undefined ? unknown('notReceived') : known(fraction, t);
 }
 
 /** Whether `other` is in the neighbourhood of `ours` in the snapshot: one position away or within `neighbourhoodMs`. */
