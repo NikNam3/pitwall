@@ -20,6 +20,7 @@ export const createLog = (): Log => ({
   crossings: [],
   events: [],
   penalties: [],
+  decisions: [],
   clock: [],
   voids: [],
   spans: {},

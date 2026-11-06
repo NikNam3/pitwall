@@ -245,7 +245,8 @@ export class SessionProcessor {
 
   /**
    * The scheduler's input for `state` (C39): its live state, situation and projection, the weekend's earlier sessions, the
-   * run's config and the feed health; no priors (`{}` until the priors store exists, C62a) and the session's track file (C62b).
+   * run's config and the feed health; no priors (no snapshot, so `view.priors` is `notApplicable`, until the run keeps its
+   * `RunPriors`, C62a) and the session's track file (C62b).
    */
   #schedulerInput(state: StepResult['state'], changed: SchedulerInput['changed'], delta: SchedulerInput['delta']): SchedulerInput {
     return {
@@ -257,7 +258,7 @@ export class SessionProcessor {
       weekend: state.weekend,
       feed: this.#o.feedView(),
       config: this.#o.config,
-      priors: {},
+      priors: { start: null, snapshots: {} },
       track: this.#track,
     };
   }

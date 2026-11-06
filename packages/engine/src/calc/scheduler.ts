@@ -1,14 +1,19 @@
-import type { Insight, SessionTime } from '@pitwall/domain';
+import { unknown, type Insight, type RunPriors, type SessionTime } from '@pitwall/domain';
 import type { HistoryDelta } from '../log/types.ts';
 import type { Snapshotable } from '../runner/snapshotable.ts';
 import type { ChangeTag } from '../step/types.ts';
+import type { DeepReadonly } from '../util/deep-readonly.ts';
 import { deepFreeze } from '../util/deep-freeze.ts';
 import { InsightBook, type InsightBookState } from './insight-book.ts';
 import { RegistryError, type CalculatorRegistry } from './registry.ts';
 import type { Cadence, Calculator, CalculatorId, EngineView, InsightChange } from './types.ts';
 
-/** What the scheduler is given per frame: an `EngineView` without the calculator outputs, which it keeps itself. */
-export type SchedulerInput = Omit<EngineView, 'outputs'>;
+/**
+ * What the scheduler is given per frame: an `EngineView` without the calculator outputs, which it keeps itself, and
+ * with the run's priors (C62a: the session-start snapshot and every picked one) instead of the view's snapshot, which
+ * it picks from the projection's decisions.
+ */
+export type SchedulerInput = Omit<EngineView, 'outputs' | 'priors'> & { priors: DeepReadonly<RunPriors> };
 
 export type SchedulerResult = {
   /** The calculators that ran successfully, in registry order. */
@@ -264,7 +269,8 @@ export class Scheduler implements Snapshotable<SchedulerBookkeeping> {
         changed: pending.changed,
         weekend: input.weekend,
         config: input.config,
-        priors: input.priors,
+        // `priorsOf(input.history.decisions, input.priors)` once the decision foundation exists (spec 3.4).
+        priors: unknown('notApplicable'),
         track: input.track,
         feed: input.feed,
         outputs: this.#outputs,

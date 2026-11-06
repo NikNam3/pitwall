@@ -62,6 +62,8 @@ describe('change tags', () => {
       'session', 'identity', 'timing', 'tyres', 'energy', 'condition', 'dynamics', 'ownCar',
       // `penalties`: the penalty records' list (Task 21, C40: one tag per fact list)
       'laps', 'stints', 'pitStops', 'events', 'miniSectors', 'penalties',
+      // `decisions`: the decisions the user committed (SP4.1a, C40, C76)
+      'decisions',
       'clock', 'spans:clock',
       'spans:car-activity-practice', 'spans:car-activity-qualifying', 'spans:car-activity-race', 'spans:car-flags', 'spans:car-location',
       'spans:car-status', 'spans:compound-rule', 'spans:lap-validity', 'spans:penalties',

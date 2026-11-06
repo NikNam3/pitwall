@@ -7,6 +7,8 @@ export * from './session.ts';
 export * from './car.ts';
 export * from './records.ts';
 export * from './facts.ts';
+export * from './calibration.ts';
+export * from './estimates.ts';
 export * from './weekend-phase.ts';
 export * from './span-scopes.ts';
 export { spans as carFlagsSpans } from './situations/car-flags.ts';

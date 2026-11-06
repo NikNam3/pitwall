@@ -9,6 +9,7 @@ import type {
   IncrementalCalculator,
   Job,
   LiveState,
+  PriorsDecl,
   ProjectedList,
   ProjectionState,
   QuickCalculator,
@@ -125,6 +126,8 @@ export type Feature = {
   jobs?: Job<unknown, unknown>[];
   /** Thresholds and other values its calculators read with `read(view)`; `<data dir>/config.json` may override them. Keys are unique across features. */
   config?: ConfigKey<Record<string, ConfigValue>>[];
+  /** Its units' priors declarations (`definePriors`, C62a), which the bridge's priors store runs over calibration sets. */
+  priors?: PriorsDecl[];
 };
 
 export const defineFeature = (feature: Feature): Feature => feature;

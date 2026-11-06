@@ -27,7 +27,7 @@ export const span = (machine: MachineId, kind: string, o: Partial<Span> = {}): S
   confirmed: true, detail: {}, startFrame: 1, endFrame: 10, ...o });
 
 /** A log with every list empty, `o`'s lists in place (arrays the test may push to: the log only grows, C24). */
-export const log = (o: Partial<Log> = {}): Log => ({ laps: [], stints: [], pitStops: [], crossings: [], events: [], penalties: [], clock: [], voids: [], spans: {}, ...o });
+export const log = (o: Partial<Log> = {}): Log => ({ laps: [], stints: [], pitStops: [], crossings: [], events: [], penalties: [], decisions: [], clock: [], voids: [], spans: {}, ...o });
 
 /** A flashback's void fact (C27): the frame restored to and, per list, the log positions that never happened. */
 export const voidFact = (ranges: VoidFact['ranges'], frame = 5): VoidFact => ({ target: { frameId: frame, at: frame * 100 }, ranges, frame });
@@ -36,7 +36,7 @@ export const voidFact = (ranges: VoidFact['ranges'], frame = 5): VoidFact => ({ 
 export const projected = ({ voids: _voids, ...lists }: Log): Projection => lists;
 
 /** A projection with every list empty, `o`'s lists in place. */
-export const history = (o: Partial<Projection> = {}): Projection => ({ laps: [], stints: [], pitStops: [], events: [], crossings: [], penalties: [], clock: [], spans: {}, ...o });
+export const history = (o: Partial<Projection> = {}): Projection => ({ laps: [], stints: [], pitStops: [], events: [], crossings: [], penalties: [], decisions: [], clock: [], spans: {}, ...o });
 
 /** Cars by team and race number (C62); no driver name, no network id (user, 2026-11-04). */
 export const MERCEDES_44: CarKey = { teamId: 0, raceNumber: 44 };

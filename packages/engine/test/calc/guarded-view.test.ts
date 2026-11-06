@@ -2,7 +2,7 @@
 // (`situationAt`, `membershipOf`) reads the projection and the situation as a whole; `openSpansOf` reads one
 // sub-machine's spans (ruling 4). The situation and the projection are handed out read-only (ruling 6).
 import { describe, expect, it } from 'vitest';
-import type { CarId } from '@pitwall/domain';
+import { known, type CarId } from '@pitwall/domain';
 import {
   ALL_CHANGE_TAGS,
   membershipOf,
@@ -119,7 +119,7 @@ describe('guardedView throws on an undeclared read and passes a declared one (C4
   });
 
   it('delta, changed, weekend, config and priors are every unit\'s', () => {
-    const view = { ...raceView(), config: { k: { a: 1 } }, priors: { p: 1 } };
+    const view = { ...raceView(), config: { k: { a: 1 } }, priors: known({ fingerprint: 'f', setId: 's', setName: 'S', sources: 1, entries: {} }, 0) };
     const g = guardedBy([], view);
     expect([g.delta, [...g.changed], g.weekend, g.config, g.priors]).toEqual([view.delta, [...view.changed], view.weekend, view.config, view.priors]);
   });

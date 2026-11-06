@@ -5,4 +5,9 @@ import type { TopicName } from '@pitwall/contracts';
  * removes its topic here, which makes the registry and moment-capture tests demand the binding. Empty at the end of a
  * run.
  */
-export const NOT_YET_BOUND: ReadonlySet<TopicName> = new Set<TopicName>([]);
+export const NOT_YET_BOUND: ReadonlySet<TopicName> = new Set<TopicName>([
+  // SP4.1a: bound by `stint-analysis` (Task 10), `pit-losses` (Task 11); `calibration.active` published by the bridge (Tasks 4, 5)
+  'stintAnalysis.car',
+  'pitLosses.track',
+  'calibration.active',
+]);

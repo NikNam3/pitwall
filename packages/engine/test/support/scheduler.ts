@@ -5,6 +5,7 @@
 import { isDeepStrictEqual } from 'node:util';
 import { expect } from 'vitest';
 import { unknown } from '@pitwall/domain';
+import { NO_PRIORS } from '../../../../test-support/builders/index.ts';
 import {
   CalculatorRegistry,
   MACHINES,
@@ -57,13 +58,13 @@ export const input = (t: number, changed: ChangeTag[] = ['timing'], d = delta(),
   weekend: undefined,
   feed,
   config,
-  priors: {},
+  priors: NO_PRIORS,
   track: unknown('notApplicable'),
 });
 
 /**
  * The scheduler input of a step's result (C39): its live state, its situation (`situationOf`), its projection and its
- * weekend context, with the change tags and the delta of the step; no priors (`{}` until the priors store exists).
+ * weekend context, with the change tags and the delta of the step; no priors (`NO_PRIORS`, C62a).
  * `feed` defaults to a healthy feed.
  */
 export const inputOf = (
@@ -78,12 +79,12 @@ export const inputOf = (
   weekend: state.weekend,
   feed: o.feed ?? feed,
   config: o.config ?? {},
-  priors: {},
+  priors: NO_PRIORS,
   track: unknown('notApplicable'),
 });
 
 /** The view of a step's result, as a unit gets it with no outputs before it (`inputOf`). */
-export const viewOf = (result: Pick<StepResult, 'state' | 'changed' | 'delta'>, o: Parameters<typeof inputOf>[1] = {}): EngineView => ({ ...inputOf(result, o), outputs: new Map() });
+export const viewOf = (result: Pick<StepResult, 'state' | 'changed' | 'delta'>, o: Parameters<typeof inputOf>[1] = {}): EngineView => ({ ...inputOf(result, o), priors: unknown('notApplicable'), outputs: new Map() });
 
 // ---------------------------------------------------------------------------------------------------------------------
 // The guarded view (C41): a unit reads only what it declares in `reads`.
@@ -585,7 +586,7 @@ export function projectionStep(r: Pick<StepResult, 'state' | 'changed' | 'delta'
     weekend: undefined,
     feed: throwing('feed') as SchedulerInput['feed'],
     config: {},
-    priors: {},
+    priors: NO_PRIORS,
     track: unknown('notApplicable'),
   });
 }
@@ -620,7 +621,7 @@ export function expectIncrementalOverSteps<Acc, Out>(calc: IncrementalCalculator
     // the scheduler contains a unit's throw (C48): here it is the failure
     if (errors.length > 0) throw errors[0]!.error;
     if (!ran.includes(calc.id)) return;
-    const fresh: EngineView = Object.freeze({ ...input, outputs: new Map() });
+    const fresh: EngineView = Object.freeze({ ...input, priors: unknown('notApplicable'), outputs: new Map() });
     expectEqual(outputs.get(calc.id), calc.init(fresh), `${label}frame ${i}`);
   });
 }
@@ -639,7 +640,7 @@ export function expectScheduledIncremental<Acc, Out>(calc: IncrementalCalculator
     const input = inputOf(r);
     const { ran, outputs } = scheduler.run(input);
     if (ran.includes(calc.id)) {
-      const fresh = guardedView({ ...input, outputs: new Map() }, calc.reads, { unit: calc.id });
+      const fresh = guardedView({ ...input, priors: unknown('notApplicable'), outputs: new Map() }, calc.reads, { unit: calc.id });
       expectEqual(outputs.get(calc.id), calc.output(calc.init(fresh), fresh), `frame ${i}`);
     }
     i++;

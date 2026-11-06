@@ -1,6 +1,6 @@
 // Protocol-free (C6): recorders and the bridge import these types; `StateUpdate` (`state-update/types.ts`) holds the
 // frame.
-import type { CarId, FrameNumber, MachineId, Ms, SessionTime, Span } from '@pitwall/domain';
+import type { CarId, DecisionRecord, FrameNumber, MachineId, Ms, SessionTime, Span } from '@pitwall/domain';
 import type { LogWriter } from '../log/types.ts';
 import { SPAN_TAGS } from '../situations/span-tags.generated.ts';
 import type { Situation } from '../situations/situation.ts';
@@ -27,6 +27,8 @@ export const CHANGE_TAGS = [
   'miniSectors',
   /** The penalties recorder appended a penalty record. */
   'penalties',
+  /** The decision recorder appended a decision the user committed (C76). */
+  'decisions',
   /** Step 0 appended a clock fact (`clock`: a fall, a jump, the simulated end). */
   'clock',
   /** The clock's open spans changed (a pause opened, its wall time so far grew) or a paused span closed. */
@@ -94,7 +96,8 @@ export type Recorder<Own> = {
  * `frameNumber` unless it describes an earlier one. `closed`: the spans step 2 closed on this frame, per sub-machine
  * (C9, C10), with how each closed (`confirmed`); a machine that closed none has no entry, and absent means none closed.
  * `carsInSession`: the cars in the session by the situation's car-status spans (`carsInSessionOf`, C43), worked out
- * once per frame by `step`; absent, a recorder works them out from `situation`.
+ * once per frame by `step`; absent, a recorder works them out from `situation`. `decisions`: the decisions the user
+ * committed with this frame (C10, C76), which the decision recorder appends describing it; absent means none.
  */
 export type RecorderInput = {
   at: SessionTime;
@@ -104,4 +107,5 @@ export type RecorderInput = {
   situation: Situation;
   closed?: Readonly<Record<MachineId, readonly Span[]>>;
   carsInSession?: readonly CarId[];
+  decisions?: readonly Omit<DecisionRecord, 'frame'>[];
 };

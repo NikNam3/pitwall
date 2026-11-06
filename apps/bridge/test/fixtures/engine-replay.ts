@@ -15,7 +15,7 @@ import {
   type SchedulerResult,
   type StepResult,
 } from '@pitwall/engine';
-import { IDLE_FEED } from '../../../../test-support/builders/index.ts';
+import { IDLE_FEED, NO_PRIORS } from '../../../../test-support/builders/index.ts';
 import { trackFile } from './replay.ts';
 
 /**
@@ -55,7 +55,7 @@ export async function replayScheduled(
   scheduler.setNeeded(calculators.map((c) => c.id));
   return replayRunner(path, (r, f) => {
     if (r.delta.rewound !== undefined) scheduler.reset();
-    const scheduled = scheduler.run({ live: r.state, situation: situationOf(r.state), history: r.state.history, changed: r.changed, delta: r.delta, weekend: r.state.weekend, feed: IDLE_FEED, config, priors: {}, track: unknown('notApplicable') });
+    const scheduled = scheduler.run({ live: r.state, situation: situationOf(r.state), history: r.state.history, changed: r.changed, delta: r.delta, weekend: r.state.weekend, feed: IDLE_FEED, config, priors: NO_PRIORS, track: unknown('notApplicable') });
     onStep(r, scheduled, f);
   });
 }

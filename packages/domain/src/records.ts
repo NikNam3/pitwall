@@ -146,3 +146,10 @@ export type MiniSectorCrossing = {
   /** On a crossing of a restarted lap: the earlier crossing of the same car, lap and segment (its fact id in the log, C21, C25). */
   supersedes?: FactRef;
 };
+
+/**
+ * A decision the user committed (C76), appended by the decision recorder describing the frame it was committed at (C10,
+ * C26). It names the choice, never the values (C23): `calibrationChosen` names the set (`null` for `defaults`) and the
+ * priors snapshot it chose (`null` without one, C62a); the snapshot's entries live in the priors sidecar.
+ */
+export type DecisionRecord = { kind: 'calibrationChosen'; setId: string | null; snapshot: string | null; frame: FrameNumber };

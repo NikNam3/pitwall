@@ -27,6 +27,7 @@ const emptyProjection = (): ProjectionState => ({
   crossings: [],
   events: [],
   penalties: [],
+  decisions: [],
   clock: [],
   spans: {},
 });

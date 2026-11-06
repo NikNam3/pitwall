@@ -14,7 +14,7 @@ export type SpanId = number;
 export type FrameNumber = number;
 
 /** One list of the log (C21): one per fact type and one span list per sub-machine. */
-export type FactList = 'laps' | 'stints' | 'pitStops' | 'crossings' | 'events' | 'penalties' | 'clock' | 'voids' | `spans:${MachineId}`;
+export type FactList = 'laps' | 'stints' | 'pitStops' | 'crossings' | 'events' | 'penalties' | 'decisions' | 'clock' | 'voids' | `spans:${MachineId}`;
 /** A fact's id: its list and its position in the log (C21). */
 export type FactRef = { list: FactList; index: number };
 
