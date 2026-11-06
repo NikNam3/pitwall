@@ -4,7 +4,7 @@
 //  - `CommandContext` gains `inspection: Inspection` (shell/inspector/inspection.svelte.ts). `defaultCommands(ctx)` includes
 //    `dev.inspect` (key Ctrl+I in DEFAULT_KEYS) only when `import.meta.env.DEV` is true at the call; it runs `ctx.inspection.toggle()`.
 //  - WindowShell mounts the top bar for its default feed; `alerts.ackAll` (Ctrl+Enter) sends `uiAction alert.ackAll` with
-//    exactly the keys of the tier-1 alerts the bar shows (at most 3, oldest first; acknowledged and muted ones are not shown).
+//    exactly the keys of the tier-1 alerts the bar shows (one, the oldest; acknowledged and muted ones are not shown).
 //  - task fix-c72 (C72): the top bar's workbook segment invokes `workbook.pick` by id (`registry.run('workbook.pick')`),
 //    which opens the workbook picker.
 import { cleanup, fireEvent, render, screen } from '@testing-library/svelte';
@@ -99,7 +99,7 @@ const ackAlls = (ctx: Awaited<ReturnType<typeof mount>>) =>
   ctx.connection.sent.flatMap((m) => (m.type === 'uiAction' && m.action.kind === 'alert.ackAll' ? [m.action.keys] : []));
 
 describe('alerts.ackAll (Ctrl+Enter)', () => {
-  it('sends exactly the keys shown: at most 3, oldest first, without advisory, acknowledged or muted ones', async () => {
+  it('sends exactly the key shown: the oldest, without advisory, acknowledged or muted ones', async () => {
     const ctx = await mount(
       [
         crit('d', 4000),
@@ -115,7 +115,7 @@ describe('alerts.ackAll (Ctrl+Enter)', () => {
     press('Enter', { ctrl: true });
     await tick();
     // the keys are occurrence tokens `<feedId>:<insightKey>:<raisedAt>`
-    expect(ackAlls(ctx)).toEqual([['f1:a:1000', 'f1:b:2000', 'f1:c:3000']]);
+    expect(ackAlls(ctx)).toEqual([['f1:a:1000']]);
   });
 
   it('sends nothing when no alert is shown', async () => {

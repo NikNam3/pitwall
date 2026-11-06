@@ -9,8 +9,8 @@
 //    transport: `replay-transport` (only for kind 'replay'), a button `replay-pause` (click sends pause while playing, play while
 //    paused), a <select> `replay-speed` with options 0.5, 1, 2, 4, 8 (change sends `speed`), a number input `replay-lap`
 //    (change sends `jumpToLap`);
-//    alerts: at most 3 tier-1 alerts `alert-<key>` showing `formatInsight(insight)`, each with a button `alert-ack-<key>` (sends
-//    `alert.ack`); beyond 3 a button `alerts-more` with text `text.topBar.moreAlerts(n)`; a click opens a list with a toggle button
+//    alerts: one tier-1 alert at a time (the oldest) `alert-<key>` showing `formatInsight(insight)`, each with a button `alert-ack-<key>` (sends
+//    `alert.ack`); beyond it a button `alerts-more` with text `text.topBar.moreAlerts(n)`; a click opens a list with a toggle button
 //    `mute-<category>` for every InsightCategory (click sends `alertGroup.mute { category, muted: !currentlyMuted }`).
 // New in kit/text.ts: `topBar = { realismOn, realismOff, realismNext(enabled: boolean), moreAlerts(n: number) }`.
 import type { ReplayControl, UiAction } from '@pitwall/contracts';
@@ -192,24 +192,34 @@ describe('tier-1 alerts', () => {
   it('a later occurrence of an acknowledged alert (same key, raised again) shows again; a bare key acknowledges nothing', async () => {
     const t = await setup();
     await t.push('ui.alerts', { acknowledged: ['f1:a:1000', 'b'], muted: [] });
-    await t.raise(crit('a', 9000), crit('b', 2000));
+    await t.raise(crit('a', 9000), crit('b', 10_000));
     expect(screen.getByTestId('alert-a')).toBeTruthy();
-    expect(screen.getByTestId('alert-b')).toBeTruthy();
+    expect(screen.getByTestId('alerts-more').textContent).toContain(text.topBar.moreAlerts(1));
   });
 
-  it('shows at most 3, oldest first, plus +N', async () => {
+  it('shows only the oldest alert, plus +N for the rest', async () => {
     const t = await setup();
     await t.push('ui.alerts', { acknowledged: [], muted: [] });
     await t.raise(crit('e', 5000), crit('c', 3000), crit('a', 1000), crit('d', 4000), crit('b', 2000));
-    for (const key of ['a', 'b', 'c']) expect(screen.getByTestId(`alert-${key}`)).toBeTruthy();
-    for (const key of ['d', 'e']) expect(screen.queryByTestId(`alert-${key}`)).toBeNull();
-    expect(screen.getByTestId('alerts-more').textContent).toContain(text.topBar.moreAlerts(2));
+    expect(screen.getByTestId('alert-a')).toBeTruthy();
+    for (const key of ['b', 'c', 'd', 'e']) expect(screen.queryByTestId(`alert-${key}`)).toBeNull();
+    expect(screen.getByTestId('alerts-more').textContent).toContain(text.topBar.moreAlerts(4));
   });
 
-  it('has no +N with three or fewer alerts', async () => {
+  it('shows the next alert once the shown one is acknowledged', async () => {
     const t = await setup();
     await t.push('ui.alerts', { acknowledged: [], muted: [] });
-    await t.raise(crit('a', 1000), crit('b', 2000), crit('c', 3000));
+    await t.raise(crit('a', 1000), crit('b', 2000));
+    await t.push('ui.alerts', { acknowledged: ['f1:a:1000'], muted: [] });
+    expect(screen.queryByTestId('alert-a')).toBeNull();
+    expect(screen.getByTestId('alert-b')).toBeTruthy();
+    expect(screen.queryByTestId('alerts-more')).toBeNull();
+  });
+
+  it('has no +N with one alert', async () => {
+    const t = await setup();
+    await t.push('ui.alerts', { acknowledged: [], muted: [] });
+    await t.raise(crit('a', 1000));
     expect(screen.queryByTestId('alerts-more')).toBeNull();
   });
 

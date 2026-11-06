@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Tier-1 alerts (spec 7.7): at most three in red until acknowledged, then `+N`, which opens the mute list.
+  // Tier-1 alerts (spec 7.7): the oldest in red until acknowledged, the rest behind `+N`, which opens the mute list.
   import { ackToken } from '@pitwall/contracts';
   import { useOverlayStack } from '../../commands/overlay-stack.ts';
   import * as text from '../../../kit/text.ts';

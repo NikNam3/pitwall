@@ -13,5 +13,5 @@ export function tierOneAlerts(active: Map<string, Insight>, alerts: { acknowledg
     .sort((a, b) => a.raisedAt - b.raisedAt);
 }
 
-/** At most this many alerts show in the bar; the rest are behind `+N`. */
-export const MAX_SHOWN_ALERTS = 3;
+/** The bar shows one alert at a time, the oldest; the rest wait behind `+N` and follow as each is acknowledged. */
+export const MAX_SHOWN_ALERTS = 1;
