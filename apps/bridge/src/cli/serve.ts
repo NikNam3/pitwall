@@ -18,7 +18,8 @@ import { UiState } from '../ui-state/ui-state.ts';
 import { StartupError } from '../startup-error.ts';
 import type { Db, SessionKey, StoredSessionRow } from '../storage/db.ts';
 import { WeekendRepository } from '../storage/weekend-repository.ts';
-import { WsServer } from '../ws/server.ts';
+import { WsServer, type ActionOutcome, type ChooseAction } from '../ws/server.ts';
+import { recordingDecisions } from '../pipeline/decision-sidecars.ts';
 import { cliLogger, whenAborted, type CliIo } from './io.ts';
 
 /** A recording served through a `ReplayController`; `controls` are applied (and any jump finished) before `listening` is printed. */
@@ -147,6 +148,11 @@ export async function serve(opts: ServeOptions): Promise<number> {
         log: cliLogger(io, wsLogLevel(io.env)),
         ...(uiState && { uiState }),
         ...(calibration && { calibration }),
+        // A pick is a decision of the feed's running session (C76): the pipeline takes it.
+        choose: (action: ChooseAction): ActionOutcome => {
+          if (action.feedId !== feedId) return { ok: false, reason: 'invalid', message: `no feed ${action.feedId}` };
+          return pipeline === undefined ? { ok: false, reason: 'notSupported' } : pipeline.commitDecision(action.setId);
+        },
         ...(opts.replay && { replay: { control: (control: ReplayControl) => (controller === undefined ? false : (controller.control(control), true)) } }),
       });
       undo.push(() => started.close());
@@ -192,8 +198,14 @@ export async function serve(opts: ServeOptions): Promise<number> {
           recordingsDir: opts.storage.recordingsDir,
           rulesVersion: opts.storage.rulesVersion,
           ...(rebuildThenRecompute && { rebuild: rebuildThenRecompute }),
+          // A stored session gives new candidates (ruling R14).
+          onStored: () => calibration?.recompute('sessionEnd'),
         },
       }),
+      // Live: the session starts on the calibration store's preselection and takes picks (C62a). A replay runs on its
+      // recording's priors and decisions sidecars instead (C38, C76).
+      ...(calibration && opts.source && { calibration }),
+      ...(opts.replay && { recorded: recordingDecisions(opts.replay.path, pipelineLog) }),
       ...(opts.staleCheck && { staleCheck: opts.staleCheck }),
       ...(calcStats && { calcStats }),
       // Live only: a replay reproduces the realism its sidecar recorded (spec 7.9), whatever the UI prefers next.

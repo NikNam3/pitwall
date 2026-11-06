@@ -3,12 +3,18 @@
 import { WebSocket, WebSocketServer } from 'ws';
 import type { FeedId } from '@pitwall/domain';
 import { CONTRACT_VERSION, TOPICS, decodeClientMessage, encodeMessage } from '@pitwall/contracts';
-import type { ClientMessage, FeedInfo, ReplayControl, ServerMessage } from '@pitwall/contracts';
+import type { ClientMessage, FeedInfo, ReplayControl, ServerMessage, UiAction } from '@pitwall/contracts';
 import { isCalibrationAction, type CalibrationStore } from '../calibration/store.ts';
 import type { Logger } from '../log.ts';
 import type { UiState } from '../ui-state/ui-state.ts';
 import type { TopicHub } from '../hub/topic-hub.ts';
 import { StartupError } from '../startup-error.ts';
+
+/** The uiAction that picks a calibration set (or `defaults`) for a feed's running session (C62a). */
+export type ChooseAction = Extract<UiAction, { kind: 'calibration.choose' }>;
+
+/** What an action's owner answers: an `actionResult` without its type and id. */
+export type ActionOutcome = { ok: true } | { ok: false; reason: 'invalid' | 'notSupported'; message?: string };
 
 export type WsServerOptions = {
   /** 0 picks a free port; read it back from `WsServer.port`. */
@@ -20,6 +26,11 @@ export type WsServerOptions = {
   uiState?: Pick<UiState, 'apply'>;
   /** The calibration store that the `calibration.*` uiActions (but `calibration.choose`) change; without it they are answered with `notSupported`. */
   calibration?: Pick<CalibrationStore, 'apply'>;
+  /**
+   * Takes `calibration.choose` (a decision, C76): `serve` hands it to the feed's pipeline (`FeedPipeline.commitDecision`),
+   * never to the calibration store. Without it the action is answered with `notSupported`.
+   */
+  choose?: (action: ChooseAction) => ActionOutcome;
   /** The replay transport that `replayControl` messages drive; without it (a live feed), or when its `control` returns `false`, they are answered with `notSupported`. */
   replay?: { control(control: ReplayControl): boolean | undefined };
   /** Default `127.0.0.1`. */
@@ -128,9 +139,12 @@ export class WsServer {
         send({ type: 'commandResult', id: message.id, ok: false, reason: 'notSupported' });
         return;
       case 'uiAction': {
-        // The calibration actions are the calibration store's (C62a), every other one the UI state's.
+        // A pick is the feed pipeline's (a decision, C76), the other calibration actions the calibration store's (C62a),
+        // every other one the UI state's.
         const { action } = message;
-        const owner = isCalibrationAction(action) ? this.options.calibration?.apply(action) : this.options.uiState?.apply(action);
+        const owner = action.kind === 'calibration.choose'
+          ? this.options.choose?.(action)
+          : isCalibrationAction(action) ? this.options.calibration?.apply(action) : this.options.uiState?.apply(action);
         const result = owner ?? { ok: false, reason: 'notSupported' } as const;
         send({ type: 'actionResult', id: message.id, ...result });
         return;
