@@ -6,6 +6,7 @@ import {
   unknown,
   type CalibrationSource,
   type DecisionRecord,
+  type EstimateSource,
   type Known,
   type LapRecord,
   type LapUse,
@@ -39,6 +40,9 @@ export type StoredSource = {
 /** What a priors function reads besides its sources: the effective config (C47), so it uses the unit's thresholds, and the set's overrides. */
 export type PriorsCtx = { config: EngineView['config']; overrides: Readonly<Record<string, number>> };
 
+/** What a priors entry's fallback reads: the effective config (C47) and the track file of the set's or the session's track (C62b). */
+export type FallbackCtx = { config: EngineView['config']; track: Known<DeepReadonly<TrackData>> };
+
 /** One priors entry: its aggregate's version, the range an override must lie in, and its pure functions. */
 export type PriorDecl = {
   /** Bumped when `aggregate` changes, so the store recomputes the entry (C62a). */
@@ -49,6 +53,12 @@ export type PriorDecl = {
   aggregate?(sources: readonly StoredSource[], ctx: PriorsCtx): Known<number>;
   /** A source's own entries against the set's (spec 3.2, A23). */
   residual?(source: PriorsEntries, set: PriorsEntries): Known<number>;
+  /**
+   * The value a run uses for this key when its snapshot has none (no set, `defaults`, or no source covers it), with its
+   * default source: the one rule the unit's calculator and the calibration panel both read (C43). Absent for a key
+   * without a run-time default.
+   */
+  fallback?(ctx: FallbackCtx): { value: Known<number>; source: EstimateSource };
 };
 
 /**
