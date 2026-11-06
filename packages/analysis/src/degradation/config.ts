@@ -8,8 +8,14 @@ export const DEGRADATION_CONFIG = defineConfig('degradation', {
   fallbackBurnKgPerLap: 1.8,
   /** A lap slower than the prediction by more than this many sd is down-weighted. Source: Cappello & Hoegh. */
   outlierSd: 2.5,
-  /** A down-weighted lap's observation noise is multiplied by this. Source: pitwall estimate. */
+  /** A down-weighted lap's observation noise (its variance) is multiplied by this. Source: pitwall estimate. */
   outlierNoiseFactor: 10,
+  /** The sd of a pace lap's corrected time around the model `α + ν · age`, in ms. Source: pitwall estimate. */
+  obsSdMs: 400,
+  /** Process noise: the sd of the drift of `α` per lap of tyre age (track evolution), in ms. Source: pitwall estimate. */
+  processAlphaSdMs: 20,
+  /** Process noise: the sd of the drift of `ν` per lap of tyre age, in ms per lap. Source: pitwall estimate. */
+  processNuSdMs: 2,
   /** `ν` in ms per lap a stint starts from without a prior. Source: pitwall estimate. */
   defaultNuMsPerLap: 60,
   /** The sd of that default `ν`, in ms per lap. Source: pitwall estimate. */

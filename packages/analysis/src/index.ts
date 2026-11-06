@@ -6,6 +6,7 @@ export * from './car-bands/index.ts';
 export * from './car-bands/calculator.ts';
 export * from './damage/index.ts';
 export * from './degradation/index.ts';
+export { degradationCalculator } from './degradation/calculator.ts';
 export { damageCalculator } from './damage/calculator.ts';
 export * from './ers/index.ts';
 export * from './fuel/index.ts';
