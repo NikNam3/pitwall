@@ -39,15 +39,21 @@ export type StintFit = {
   fitLine: Known<FitPoint[]>;
 };
 
-/** Per compound the prior a stint on it started from, with its source (calibration or default). */
-export type CompoundPrior = {
+/**
+ * Per compound the estimate pooled over our cars' stints on it this session (spec 5.1): `ν` and its sd in information
+ * form over the compound's current prior, `laps` our used laps on it, the source by 4.4's half rule. With no stint of
+ * ours it is the prior (`laps` 0).
+ */
+export type CompoundEstimate = {
   actual: ActualCompound;
   visual: VisualCompound;
+  /** The prior's pace offset to the soft (TO SOFT). */
   alphaOffsetMs: Known<Ms>;
   nuMsPerLap: Known<number>;
   nuSdMs: Known<number>;
+  laps: number;
   source: EstimateSource;
 };
 
-/** `stintAnalysis.car`: one of our cars' stints and the priors per compound; a rival is `unknown('notApplicable')`. */
-export type StintAnalysis = Known<{ stints: StintFit[]; compounds: CompoundPrior[] }>;
+/** `stintAnalysis.car`: one of our cars' stints and the pooled estimate per compound; a rival is `unknown('notApplicable')`. */
+export type StintAnalysis = Known<{ stints: StintFit[]; compounds: CompoundEstimate[] }>;

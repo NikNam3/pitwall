@@ -1,8 +1,21 @@
 // `stint-analysis` (spec 5, 4.1, 4.4): `stintAnalysis.car`, our cars' stints with every lap's use from `degradation`,
-// the fit line with its band per tyre age from `fitStint`'s posterior, and per compound the prior the stint started
-// from with its source; a rival is `notApplicable`. Builder data; priors passed explicitly (C84). `degradation` runs for
-// real on the same view and its output is the unit's input (`view.outputs`); both run through the guarded view (C41).
-import { carId, unknown, type CarId, type FitPoint, type Known, type LapRecord, type StintAnalysis, type StintFit } from '@pitwall/domain';
+// the fit line with its band per tyre age from `fitStint`'s posterior, and per actual compound the estimate pooled over
+// every stint of our cars on it this session (spec 5.1, `pool.test.ts` for the arithmetic), TO SOFT the prior's offset;
+// a rival is `notApplicable` and never pooled. Builder data; priors passed explicitly (C84). `degradation` runs for real
+// on the same view and its output is the unit's input (`view.outputs`); both run through the guarded view (C41). Every
+// stint `degradation` fits starts from the current prior (it fits from scratch over the current `view.priors`), so the
+// tests' current prior is the snapshot's (or the config default).
+import {
+  carId,
+  unknown,
+  type CarId,
+  type CompoundEstimate,
+  type FitPoint,
+  type Known,
+  type LapRecord,
+  type StintAnalysis,
+  type StintFit,
+} from '@pitwall/domain';
 import type { EngineView } from '@pitwall/engine/readers';
 import { describe, expect, it } from 'vitest';
 import { degradationCalculator } from '../../src/degradation/calculator.ts';
@@ -89,6 +102,47 @@ function expectLine(line: Known<FitPoint[]>, expected: FitPoint[]): void {
     expect(Math.abs(p.ms - e.ms)).toBeLessThanOrEqual(1);
     expect(Math.abs(p.sdMs - e.sdMs)).toBeLessThanOrEqual(1);
   });
+}
+
+type Pooled = { nu: number; sd: number; share: number; laps: number };
+
+/**
+ * Spec 5.1's pooled estimate, worked here as the test's own oracle: from the compound's current prior `(ν₀, σ₀)` and each
+ * stint's posterior `(μₛ, σₛ)` and start prior `(ν₀ₛ, σ₀ₛ)`, `Iₛ = max(0, 1/σₛ² − 1/σ₀ₛ²)`, `Jₛ = μₛ/σₛ² − ν₀ₛ/σ₀ₛ²` (0
+ * when `Iₛ` is 0), `P = 1/σ₀² + Σ Iₛ`, `ν = (ν₀/σ₀² + Σ Jₛ) / P`, sd `√(1/P)`, share `Σ Iₛ / P`; `laps` the laps the
+ * filters read (`used`, `downWeighted`) of the stints whose `ν` is known.
+ */
+function pooled(prior: FilterPrior, stints: readonly StintDegradation[]): Pooled {
+  const v0 = prior.nuSdMs ** 2;
+  let p = 1 / v0;
+  let j = prior.nuMsPerLap / v0;
+  let laps = 0;
+  for (const s of stints) {
+    if (!s.nuMsPerLap.known || !s.nuSdMs.known) continue;
+    laps += s.laps.filter((l) => l.use === 'used' || l.use === 'downWeighted').length;
+    const v = s.nuSdMs.value ** 2;
+    const vs = s.startPrior.nuSdMs ** 2;
+    const info = Math.max(0, 1 / v - 1 / vs);
+    if (info === 0) continue;
+    p += info;
+    j += s.nuMsPerLap.value / v - s.startPrior.nuMsPerLap / vs;
+  }
+  return { nu: j / p, sd: Math.sqrt(1 / p), share: (p - 1 / v0) / p, laps };
+}
+
+/**
+ * `c` carries the pooled estimate `e`: `ν`, sd, `laps`, the share, the kind by 4.4's half rule (above half `session`,
+ * else the prior's, `priorName` being a calibration's set name or a default's parts) and the parts
+ * `"<n> laps + <priorName>"`.
+ */
+function expectPooled(c: CompoundEstimate, e: Pooled, priorName: string): void {
+  expect(known_(c.nuMsPerLap)).toBeCloseTo(e.nu, 6);
+  expect(known_(c.nuSdMs)).toBeCloseTo(e.sd, 6);
+  expect(c.laps).toBe(e.laps);
+  expect(c.source.sessionShare).toBeCloseTo(e.share, 9);
+  const priorKind = priorName === 'config default' || priorName === 'track default' ? 'default' : 'calibration';
+  expect(c.source.kind).toBe(e.share > 0.5 ? 'session' : priorKind);
+  expect(c.source.parts).toBe(`${e.laps} laps + ${priorName}`);
 }
 
 /**
@@ -178,51 +232,66 @@ describe('stint-analysis calculator', () => {
     expect(stints[0]!.fitLine).toEqual(unknown('insufficientData'));
   });
 
-  it('per compound the prior and source: the calibration`s', () => {
+  it('per compound TO SOFT is the prior`s offset and the estimate pooled from its stints: the calibration`s', () => {
     const snapshot = priorsSnapshot({ soft: { alphaOffsetMs: -300, nuMsPerLap: 40, nuSdMs: 20 }, medium: { alphaOffsetMs: 0, nuMsPerLap: 90, nuSdMs: 25 } });
-    const { compounds } = analysisOf(calc.compute(twoStints({ priors: viewPriors(snapshot) })));
-    expect(compounds).toEqual([
-      expect.objectContaining({
-        actual: 'C3',
-        visual: 'soft',
-        alphaOffsetMs: expect.objectContaining({ known: true, value: -300 }),
-        nuMsPerLap: expect.objectContaining({ known: true, value: 40 }),
-        nuSdMs: expect.objectContaining({ known: true, value: 20 }),
-        source: expect.objectContaining({ kind: 'calibration', setName: 'Zandvoort long runs', sources: 3 }),
-      }),
-      expect.objectContaining({
-        actual: 'C2',
-        visual: 'medium',
-        alphaOffsetMs: expect.objectContaining({ known: true, value: 0 }),
-        nuMsPerLap: expect.objectContaining({ known: true, value: 90 }),
-        nuSdMs: expect.objectContaining({ known: true, value: 25 }),
-        source: expect.objectContaining({ kind: 'calibration', setName: 'Zandvoort long runs', sources: 3 }),
-      }),
+    const v = twoStints({ priors: viewPriors(snapshot) });
+    const [soft, medium] = degradationOf(v) as [StintDegradation, StintDegradation];
+    const { compounds } = analysisOf(calc.compute(v));
+    expect(compounds.map((c) => [c.actual, c.visual, c.alphaOffsetMs.known && c.alphaOffsetMs.value])).toEqual([
+      ['C3', 'soft', -300],
+      ['C2', 'medium', 0],
     ]);
+    expectPooled(compounds[0]!, pooled({ nuMsPerLap: 40, nuSdMs: 20 }, [soft]), 'Zandvoort long runs');
+    expectPooled(compounds[1]!, pooled({ nuMsPerLap: 90, nuSdMs: 25 }, [medium]), 'Zandvoort long runs');
+    for (const c of compounds) if (c.source.kind === 'calibration') expect([c.source.setName, c.source.sources]).toEqual(['Zandvoort long runs', 3]);
   });
 
-  it('per compound the prior and source: the config default without priors', () => {
-    const { compounds } = analysisOf(calc.compute(twoStints()));
+  it('per compound the pooled estimate over the config default without priors', () => {
+    const v = twoStints();
+    const [soft, medium] = degradationOf(v) as [StintDegradation, StintDegradation];
+    const { compounds } = analysisOf(calc.compute(v));
     expect(compounds.map((c) => c.visual)).toEqual(['soft', 'medium']);
-    for (const c of compounds) {
-      expect(c.nuMsPerLap).toMatchObject({ known: true, value: DEFAULT_PRIOR.nuMsPerLap });
-      expect(c.nuSdMs).toMatchObject({ known: true, value: DEFAULT_PRIOR.nuSdMs });
-      expect(c.source.kind).toBe('default');
-      // no calibration and no track file: no α offset
-      expect(c.alphaOffsetMs.known).toBe(false);
+    expectPooled(compounds[0]!, pooled(DEFAULT_PRIOR, [soft]), 'config default');
+    expectPooled(compounds[1]!, pooled(DEFAULT_PRIOR, [medium]), 'config default');
+    // no calibration and no track file: no α offset
+    for (const c of compounds) expect(c.alphaOffsetMs.known).toBe(false);
+  });
+
+  it('the compounds table pools both our cars` stints, the running one included', () => {
+    // player: soft 1..8 (lap 8 the in lap), the stop, soft 9..16 running (lap 9 the out lap); teammate: soft 1..12 running
+    const snapshot = priorsSnapshot({ soft: { alphaOffsetMs: -250, nuMsPerLap: 60, nuSdMs: 40 } });
+    const player = [...stintLaps({ from: 1, to: 8, noise: alternating(80), over: { 8: { inLap: true } } }), ...stintLaps({ from: 9, to: 16, nu: 90, fuelAtFrom: 88, over: { 9: { outLap: true } } })];
+    const teammate = stintLaps({ car: 1, from: 1, to: 12, nu: 110, noise: alternating(60) });
+    const v = view({
+      laps: [...player, ...teammate],
+      history: { stints: [stintRecord({ firstLap: 1, lastLap: 8 })], pitStops: [pitStop({ lap: 8 })] },
+      cars: [carState(), carState({ id: carId(1) })],
+      teammate: 1,
+      priors: viewPriors(snapshot),
+    });
+    const ours = [...degradationOf(v, 0), ...degradationOf(v, 1)];
+    expect(ours).toHaveLength(3);
+    const expected = pooled({ nuMsPerLap: 60, nuSdMs: 40 }, ours);
+    // pooled over all three: more than the player's stints alone, the running ones included
+    expect(expected.laps).toBeGreaterThan(pooled({ nuMsPerLap: 60, nuSdMs: 40 }, degradationOf(v, 0)).laps);
+    expect(expected.laps).toBeGreaterThan(pooled({ nuMsPerLap: 60, nuSdMs: 40 }, ours.slice(0, 1)).laps);
+    const out = calc.compute(v);
+    for (const car of [0, 1]) {
+      const { compounds } = analysisOf(out, car);
+      expect(compounds.map((c) => [c.actual, c.visual, c.alphaOffsetMs.known && c.alphaOffsetMs.value])).toEqual([['C3', 'soft', -250]]);
+      expectPooled(compounds[0]!, expected, 'Zandvoort long runs');
     }
   });
 
-  it('per compound the prior a stint started from, not the stint`s estimate: a long stint turns session, its prior stays calibration', () => {
-    // soft prior ν 60 sd 60; pace laps 2..21: the session's share of ν passes half (degradation's test)
-    const snapshot = priorsSnapshot({ soft: { nuMsPerLap: 60, nuSdMs: 60 } });
-    const v = view({ laps: stintLaps({ from: 1, to: 21, nu: 80, noise: alternating(100) }), priors: viewPriors(snapshot) });
-    const { stints, compounds } = analysisOf(calc.compute(v));
-    expect(stints[0]!.source.kind).toBe('session');
+  it('a rival`s stints are not pooled', () => {
+    const snapshot = priorsSnapshot({ soft: { nuMsPerLap: 60, nuSdMs: 40 } });
+    const laps = [...stintLaps({ from: 1, to: 10, noise: alternating(80) }), ...stintLaps({ car: 3, from: 1, to: 12, nu: 160, hidden: true })];
+    const v = view({ laps, cars: [carState(), realismHidden(carState({ id: carId(3) }))], priors: viewPriors(snapshot) });
+    // `degradation` fits the rival's stint; the compounds table pools our car's alone
+    expect(degradationOf(v, 3)).toHaveLength(1);
+    const { compounds } = analysisOf(calc.compute(v));
     expect(compounds).toHaveLength(1);
-    expect(compounds[0]!.visual).toBe('soft');
-    expect(compounds[0]!.nuMsPerLap).toMatchObject({ known: true, value: 60 });
-    expect(compounds[0]!.source).toMatchObject({ kind: 'calibration', setName: 'Zandvoort long runs' });
+    expectPooled(compounds[0]!, pooled({ nuMsPerLap: 60, nuSdMs: 40 }, degradationOf(v, 0)), 'Zandvoort long runs');
   });
 
   it('per compound one entry: two stints on one compound share it', () => {

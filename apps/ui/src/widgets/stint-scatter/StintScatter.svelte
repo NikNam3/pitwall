@@ -2,7 +2,7 @@
   // The stint scatter (spec 6; approved mockup docs/design/2026-10-30-sp4a-displays/4-longrun.html, compounds table in
   // docs/design/2026-11-06-sp4.1a/source-badge.html): lap time over tyre age per stint on the kit chart, used laps as dots,
   // excluded ones as faint rings pinned at the edge, down-weighted ones as dotted rings, the fit with its band; full adds
-  // the current stint's basis and the prior per compound with its source. The analysis computed every value (C65).
+  // the current stint's basis and per compound the pooled estimate with our laps on it and its source. The analysis computed every value (C65).
   import Chart from '../../kit/chart/Chart.svelte';
   import { TENTH_STEPS_MS } from '../../kit/chart/data.ts';
   import { fitCell } from '../../kit/grid/grid.ts';
@@ -20,7 +20,7 @@
   let { data, size }: WidgetProps<typeof widget> = $props();
 
   /** Column widths of the compounds table; the badge takes the cell after DEG/LAP. */
-  const W = { cmp: 3, toSoft: 7, degPerLap: 7, sd: 5, source: 11 } as const;
+  const W = { cmp: 3, toSoft: 7, degPerLap: 7, sd: 5, laps: 4, source: 11 } as const;
 
   const full = $derived(size.mode === 'full');
   const value = $derived(data.analysis.known ? data.analysis.value : undefined);
@@ -34,6 +34,7 @@
       fitCell(text.compoundHeaders.toSoft, W.toSoft, 'right'),
       fitCell(text.compoundHeaders.degPerLap, W.degPerLap, 'right'),
       ` ${fitCell(text.compoundHeaders.sd, W.sd, 'right')}`,
+      fitCell(text.compoundHeaders.laps, W.laps, 'right'),
       fitCell(text.compoundHeaders.source, W.source),
     ].join(' '),
   );
@@ -80,7 +81,7 @@
             {...r.sd}
             width={W.sd}
             align="right"
-          /> <TextCell text={sourceWord[r.source.kind]} width={W.source} title={sourceTitle(r.source)} /></div>
+          /> <TextCell text={r.laps} width={W.laps} align="right" /> <TextCell text={sourceWord[r.source.kind]} width={W.source} title={sourceTitle(r.source)} /></div>
       {/each}
     {/if}
   {/if}
