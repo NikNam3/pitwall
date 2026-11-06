@@ -31,8 +31,11 @@ export const ACTIVITY_MACHINE: Record<'practice' | 'qualifying' | 'race', Machin
 /** The default activity of a car on a lap of the phase: what a car projects on. */
 const ON_LAP: Record<'practice' | 'qualifying' | 'race', string> = { practice: 'flyingLap', qualifying: 'pushLap', race: 'racingLap' };
 
-/** The kinds of the spans open for one car; absent ones default to a competing car on the track on a lap. */
-export type CarKinds = { status?: string; location?: string; activity?: string };
+/**
+ * The kinds of the spans open for one car; absent ones default to a competing car on the track on a lap. `validity` opens
+ * the car's lap-validity span (none when absent).
+ */
+export type CarKinds = { status?: string; location?: string; activity?: string; validity?: 'valid' | 'invalid' };
 
 const open = (machine: MachineId, car: number, kind: string, detail: unknown = undefined): OpenSpan => ({ machine, id: 0, carId: carId(car), kind, start: 0, confirmed: true, detail, startFrame: 1 });
 
@@ -53,6 +56,7 @@ export function situationOf(phase: WeekendPhase, cars: readonly CarState[], kind
     add(open('car-status', car.id, k.status ?? 'competing', k.status === 'retired' ? { cause: { known: false, reason: 'notReceived' } } : undefined));
     add(open('car-location', car.id, k.location ?? 'track'));
     if (phaseKind !== undefined) add(open(ACTIVITY_MACHINE[phaseKind], car.id, k.activity ?? ON_LAP[phaseKind]));
+    if (k.validity !== undefined) add(open('lap-validity', car.id, k.validity));
   }
   return { weekendPhase: phase, byMachine };
 }
@@ -110,6 +114,27 @@ export function scene({
     sessionTime,
     config,
   });
+}
+
+/**
+ * One car's current pass as a test gives it: its lap, the sector it is in, its live S1 and S2 (0 or absent: none yet, C3),
+ * when it crossed the lap's line, and whether its lap is invalid.
+ */
+export type PassSpec = { lap: number; sector: 1 | 2 | 3; s1?: number; s2?: number; lineAt: number; invalid?: boolean };
+
+/**
+ * Cars 0..n-1 on these passes (car i on `passes[i]`): their live timing, each lap's line crossing (car, lap, 0) at
+ * `lineAt`, and each car's lap-validity span; the race clock a second after the last live sector finished.
+ */
+export function passScene({ passes, laps = [], phase = PRACTICE }: { passes: readonly PassSpec[]; laps?: LapRecord[]; phase?: WeekendPhase }): EngineView {
+  const cars = activeCars(
+    passes.length,
+    Object.fromEntries(passes.map((p, i) => [i, { lap: p.lap, sector: p.sector, sector1TimeMs: p.s1 ?? 0, sector2TimeMs: p.s2 ?? 0 }])),
+  );
+  const lines = passes.map((p, i): MiniSectorCrossing => ({ carId: carId(i), lap: p.lap, segment: 0, at: p.lineAt, frame: 0 }));
+  const kinds = Object.fromEntries(passes.map((p, i): [number, CarKinds] => [i, { validity: p.invalid === true ? 'invalid' : 'valid' }]));
+  const end = Math.max(...passes.map((p) => p.lineAt + (p.s1 ?? 0) + (p.s2 ?? 0)));
+  return scene({ laps, miniSectors: lines, cars, phase, kinds, sessionTime: end + 1_000 });
 }
 
 /** The view as `lap-times` may see it: through its guarded view, so an undeclared read throws (C41). */
