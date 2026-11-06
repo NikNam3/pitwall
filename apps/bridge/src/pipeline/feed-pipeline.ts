@@ -2,7 +2,7 @@
 // with the feed's health, its session files and its storage alongside.
 import { writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { toSessionTime, type FeedId, type SessionTime } from '@pitwall/domain';
+import { toSessionTime, type FeedId, type Known, type SessionTime, type TrackFile } from '@pitwall/domain';
 import { CalculatorRegistry, SessionTracker, type Frame, type FrameMetrics, type InsightChange, type TrackerEvent } from '@pitwall/engine';
 import { decode } from '@pitwall/protocol';
 import { effectiveConfig, sessionConfigPath, type FeatureConfig } from '../feature-config.ts';
@@ -71,6 +71,11 @@ export type FeedPipelineOptions = {
   testInsight?: string;
   /** Live only: whether realism mode is on for the next session; read when a session starts and fixed for it. Replays use the config's value. */
   realismNextSession?: () => boolean;
+  /**
+   * The track file of a session's track id, resolved once when the session starts (C62b). Default: the committed file
+   * (`loadTrackFile(id, TRACKS_DIR)`); a pipeline built from a recording passes `recordingTrack(file, id, TRACKS_DIR)`.
+   */
+  tracks?: (trackId: number) => Known<TrackFile>;
 };
 
 /**
