@@ -78,13 +78,13 @@ function worstCorner(corners: Corners<CornerLife>): Known<number> {
 }
 
 /**
- * The life of a fresh set of `compound`: from the priors' wear rates, laps from 0 to the limit at the worst corner; else
- * from `ν` (the car's newest stint on the compound, else the priors'), the age at which `ν · age` reaches the loss limit;
- * else `insufficientData`.
+ * The life of a fresh set of `compound`: from the priors' wear rates when all four corners are known, laps from 0 to the
+ * limit at the worst corner; else from `ν` (the car's newest stint on the compound, else the priors'), the age at which
+ * `ν · age` reaches the loss limit; else `insufficientData`.
  */
 function freshLife(compound: VisualCompound, priors: Priors, stints: readonly DeepReadonly<StintDegradation>[], limits: Limits): Known<number> {
-  const rates = CORNERS.map((c) => priorValue(priors, wearRateKey(compound, c))).filter((r) => r !== undefined);
-  const worstRate = Math.max(0, ...rates);
+  const rates = CORNERS.map((c) => priorValue(priors, wearRateKey(compound, c)));
+  const worstRate = rates.every((r) => r !== undefined) ? Math.max(0, ...rates) : 0;
   if (worstRate > 0) return known(limits.limitPct / worstRate, 0);
   const own = stints.findLast((s) => s.visual === compound)?.nuMsPerLap;
   const prior = priorValue(priors, priorKey('nuMsPerLap', compound));
