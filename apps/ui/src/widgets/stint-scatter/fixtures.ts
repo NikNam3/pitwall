@@ -52,14 +52,15 @@ export const stint = (n: number, visual: VisualCompound, firstLap: number, lastL
   ...over,
 });
 
-/** The prior a compound's first stint started from. */
+/** A compound's estimate pooled over our cars' stints on it (spec 5.1): the prior's offset, `ν` and sd, our used laps on it. */
 export const compound = (
   visual: VisualCompound,
   alphaOffsetMs: Known<Ms>,
   nuMsPerLap: number,
   nuSdMs: number,
+  laps: number,
   source: EstimateSource,
-): CompoundEstimate => ({ actual: ACTUAL[visual] ?? 'unknown', visual, alphaOffsetMs, nuMsPerLap: k(nuMsPerLap), nuSdMs: k(nuSdMs), source });
+): CompoundEstimate => ({ actual: ACTUAL[visual] ?? 'unknown', visual, alphaOffsetMs, nuMsPerLap: k(nuMsPerLap), nuSdMs: k(nuSdMs), laps, source });
 
 // ---- KUH: one medium stint from lap 1 (the approved full mockup) ----
 
@@ -83,8 +84,14 @@ export const kuhStint = stint(1, 'medium', 1, 23, {
   source: sessionSource('19 laps + league (3 sources), 88 % session'),
 });
 
+/**
+ * KUH's compounds table as the approved mockup (`source-badge.html`): pooled over our two cars, KUH's mediums and LIN's
+ * softs and hards; S and M from the session, H still the calibration's.
+ */
 export const kuhCompounds: CompoundEstimate[] = [
-  compound('medium', k(412), 55, 9, calibrationSource('calibration')),
+  compound('soft', k(0), 85, 18, 14, sessionSource('14 laps + track default')),
+  compound('medium', k(412), 55, 9, 41, sessionSource('41 laps + league')),
+  compound('hard', k(780), 41, 15, 8, calibrationSource('8 laps + league')),
 ];
 
 // ---- LIN: three stints, soft, medium and hard (current); an excluded and a down-weighted lap in each closed stint ----
@@ -125,28 +132,30 @@ export const linStints: StintFit[] = [
   }),
 ];
 
-const softPrior = compound('soft', k(0), 85, 18, sessionSource('6 laps (LIN, stint 1) + track default'));
+const softPrior = compound('soft', k(0), 85, 18, 6, sessionSource('6 laps (LIN, stint 1) + track default'));
 
 /** The compounds table of the redrawn mockup: S and M from the session, H from the calibration. */
 export const linCompounds: CompoundEstimate[] = [
   softPrior,
-  compound('medium', k(412), 55, 9, sessionSource('10 laps + league (3 sources), 88 % session')),
-  compound('hard', k(780), 41, 15, calibrationSource('league: your override 0.045 · + 7 laps this session (LIN), 31 % session')),
+  compound('medium', k(412), 55, 9, 10, sessionSource('10 laps + league (3 sources), 88 % session')),
+  compound('hard', k(780), 41, 15, 7, calibrationSource('league: your override 0.045 · + 7 laps this session (LIN), 31 % session')),
 ];
 
-/** A compound whose prior is the config default without a track file: its offset is not applicable. */
+/** A compound with no stint of ours whose prior is the config default without a track file: LAPS 0, no offset. */
 export const defaultCompound = compound(
   'inter',
   unknown('notApplicable'),
   60,
   60,
+  0,
   defaultSource('degradation config default (pitwall estimate)'),
 );
 
 // ---- the cases (the gallery's, in its order; the first is the screenshot baseline) ----
 
 export const cases = {
-  // The approved mockup: KUH's one medium stint, three excluded laps (faint rings at the edge) and a down-weighted one.
+  // The approved mockups: KUH's one medium stint, three excluded laps (faint rings at the edge) and a down-weighted one;
+  // the compounds table of `source-badge.html`, pooled over our two cars (S, M, H with LAPS 14, 41, 8).
   oneStint: { analysis: k({ stints: [kuhStint], compounds: kuhCompounds }) as StintAnalysis },
   // LIN's three stints: the earlier two grey, the current one white; each closed stint holds an excluded and a
   // down-weighted lap; the compounds table holds a session, a calibration and a default row.

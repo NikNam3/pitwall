@@ -10,15 +10,16 @@
 //    the `ownCar` role, earlier ones `textDim` (the approved mockup). `pinned`: drawn at the plot's edge when off-scale and
 //    never widening the y-range (excluded laps only);
 //  - `compoundRows(compounds: readonly CompoundEstimate[]): CompoundRow[]`, where
-//    `CompoundRow = { compound: string; toSoft: CellPart; degPerLap: CellPart; sd: CellPart; source: EstimateSource; role: Role | undefined }`:
-//    one row per compound in the analysis's order; `compound` is the kit compound letter; TO SOFT and DEG/LAP in signed
-//    seconds, SD in seconds, three decimals each (kit formats); an unknown value is the kit's unknown part; the source
+//    `CompoundRow = { compound: string; toSoft: CellPart; degPerLap: CellPart; sd: CellPart; laps: string; source: EstimateSource; role: Role | undefined }`:
+//    one row per compound in the analysis's order (its pooled estimate, spec 5.1); `compound` is the kit compound letter;
+//    TO SOFT and DEG/LAP in signed seconds, SD in seconds, three decimals each (kit formats); LAPS the analysis's `laps`
+//    as a whole number (`'41'`, `'0'`); an unknown value is the kit's unknown part; the source
 //    passes through for the kit badge (no switch on its kind here, C68); a default row is muted (`textDim`).
 import { unknown } from '@pitwall/domain';
 import type { StintFit } from '@pitwall/domain';
 import { describe, expect, it } from 'vitest';
 import { unknownPart } from '../../kit/grid/grid.ts';
-import { cases, compound, defaultCompound, excluded, k, kuhStint, lap, linCompounds, linStints, stint } from './fixtures.ts';
+import { cases, compound, defaultCompound, excluded, k, kuhCompounds, kuhStint, lap, linCompounds, linStints, stint } from './fixtures.ts';
 import { compoundRows, stintPlots } from './rows.ts';
 
 const [soft, medium, hard] = linStints as [StintFit, StintFit, StintFit];
@@ -125,9 +126,14 @@ describe('compoundRows', () => {
 
   it('shows an unknown value as its reason\'s part', () => {
     expect(rows[3]?.toSoft).toEqual(unknownPart('notApplicable'));
-    const hidden = compound('soft', unknown('notReceived'), 0, 0, linCompounds[0]!.source);
+    const hidden = compound('soft', unknown('notReceived'), 0, 0, 0, linCompounds[0]!.source);
     const [row] = compoundRows([{ ...hidden, nuMsPerLap: unknown('insufficientData'), nuSdMs: unknown('insufficientData') }]);
     expect([row?.toSoft, row?.degPerLap, row?.sd]).toEqual([unknownPart('notReceived'), unknownPart('insufficientData'), unknownPart('insufficientData')]);
+  });
+
+  it('shows LAPS as our used laps on the compound, as the analysis counts them', () => {
+    expect(rows.map((r) => r.laps)).toEqual(['6', '10', '7', '0']);
+    expect(compoundRows(kuhCompounds).map((r) => [r.compound, r.laps])).toEqual([['S', '14'], ['M', '41'], ['H', '8']]);
   });
 
   it('carries each compound\'s source as the analysis gives it, for the kit badge', () => {
