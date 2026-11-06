@@ -99,6 +99,16 @@
   const value = $derived(workbooks.state.status === 'ok' ? workbooks.state.value : undefined);
   const read = $derived(value === undefined ? undefined : normaliseWorkbook(value.active, decls));
   const thisWindow = $derived(read?.workbook.windows.find((w) => w.id === windowId));
+  /**
+   * The loading screen's line (C61): until the window has the bridge's `hello` and its workbook, and while a starting
+   * bridge reports its progress. Undefined once the window has both.
+   */
+  const loadingLine = $derived.by(() => {
+    const starting = store.starting;
+    if (starting !== undefined && starting.total > 0) return text.loading.rebuilding(starting.done, starting.total);
+    if (starting !== undefined || !store.greeted) return text.loading.starting;
+    return read === undefined ? text.loading.workbook : undefined;
+  });
   // A size set here shows at once; the bridge's copy takes over when it echoes it.
   let pendingFontPx = $state<number | undefined>();
   // The theme in use: cells are counted with its line height and a font reset goes to its size.
@@ -480,12 +490,17 @@
   {/if}
   <div class="area">
     <div class="dock" bind:this={dockEl}></div>
-    {#if read !== undefined && empty}
-      <div class="empty">
-        <button type="button" class="pw-button" style:color={role('textDim')} style:border-color={role('border')} onclick={() => (picking = !picking)}
-          >{text.addWidget}</button
-        >
-        {#if picking}<WidgetPicker {widgets} onPick={pick} />{/if}
+    {#if loadingLine !== undefined || (read !== undefined && empty)}
+      <div class="centre">
+        {#if loadingLine !== undefined}
+          <div data-testid="loading-screen" style:color={role('textDim')}>{loadingLine}</div>
+        {/if}
+        {#if read !== undefined && empty}
+          <button type="button" class="pw-button" style:color={role('textDim')} style:border-color={role('border')} onclick={() => (picking = !picking)}
+            >{text.addWidget}</button
+          >
+          {#if picking}<WidgetPicker {widgets} onPick={pick} />{/if}
+        {/if}
       </div>
     {/if}
   </div>
@@ -564,7 +579,8 @@
     /* Its own stacking context, so dockview's layers stay below the empty-window picker. */
     z-index: 0;
   }
-  .empty {
+  /* The loading screen and the empty window's picker, centred over the dock. */
+  .centre {
     position: absolute;
     inset: 0;
     display: flex;
@@ -574,7 +590,7 @@
     gap: var(--pw-panel-gap);
     pointer-events: none;
   }
-  .empty > :global(*) {
+  .centre > :global(*) {
     pointer-events: auto;
   }
   button {

@@ -8,6 +8,7 @@ import {
   type Fold,
   type ServerMessage,
   type SessionInfo,
+  type StartupProgress,
   type TopicName,
   type TopicParams,
   type TopicValue,
@@ -47,6 +48,8 @@ export class TopicStore {
   #connection = $state<ConnectionState>('connecting');
   #contractMismatch = $state(false);
   #feeds = $state.raw<FeedInfo[]>([]);
+  #starting = $state.raw<StartupProgress | undefined>(undefined);
+  #greeted = $state(false);
   /** The state of the link to the bridge. */
   get connection(): ConnectionState {
     return this.#connection;
@@ -54,6 +57,17 @@ export class TopicStore {
   /** The feeds the bridge announced in its last `hello`; empty before the first. */
   get feeds(): FeedInfo[] {
     return this.#feeds;
+  }
+  /**
+   * A starting bridge's newest progress (C61), before it serves; kept across a reconnect and cleared by `hello`.
+   * Undefined before any `starting` message and once the bridge serves.
+   */
+  get starting(): StartupProgress | undefined {
+    return this.#starting;
+  }
+  /** True once a bridge has sent its `hello`. */
+  get greeted(): boolean {
+    return this.#greeted;
   }
   /** True once `hello` announced another contract version; the shell then reloads. */
   get contractMismatch(): boolean {
@@ -201,7 +215,14 @@ export class TopicStore {
 
   private handle(message: ServerMessage): void {
     switch (message.type) {
+      case 'starting': {
+        const { type: _type, ...progress } = message;
+        this.#starting = progress;
+        return;
+      }
       case 'hello':
+        this.#greeted = true;
+        this.#starting = undefined;
         this.#feeds = message.feeds;
         if (message.contractVersion !== CONTRACT_VERSION) this.#contractMismatch = true;
         return;

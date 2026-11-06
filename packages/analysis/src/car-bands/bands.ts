@@ -1,5 +1,5 @@
-// The bands of `car-bands` and the lap they judge, shared with `alarms`, which judges the judged lap's aggregates against them.
-import { known, unknown, type BandState, type CarId, type CarState, type Corners, type Known, type LapRecord, type SessionTime, type VisualCompound } from '@pitwall/domain';
+// The bands of `car-bands` and the lap they judge.
+import { known, unknown, type BandState, type CarId, type CarState, type Corners, type Known, type LapRecord, type Range, type SessionTime, type VisualCompound } from '@pitwall/domain';
 import type { DeepReadonly, EngineView } from '@pitwall/engine/readers';
 import { classifyLap, LAP_CLASSES_CONFIG, type LapClassOptions } from '../lap-classes/index.ts';
 import { behaviourFor } from '../shared/behaviour.ts';
@@ -36,6 +36,13 @@ export const pressureBands = (car: DeepReadonly<CarState>, c: Config, at: Sessio
   const band = (psi: number): Band => ({ lo: psi - c.pressureBelowSetupPsi, hi: psi + c.pressureAboveSetupPsi });
   return known({ fl: band(fl), fr: band(fr), rl: band(rl), rr: band(rr) }, at);
 };
+
+/**
+ * The one number of a lap's range a channel's lap is judged by: its maximum (`peak`, the brakes and the engine), or the
+ * middle of min and max (`midRange`, the tyre channels; the lap record keeps no mean).
+ */
+export type Measure = 'peak' | 'midRange';
+export const measured = (range: DeepReadonly<Range>, measure: Measure): number => (measure === 'peak' ? range.max : (range.min + range.max) / 2);
 
 /** Where a value is against a band. */
 export const stateOf = (value: number, { lo, hi }: Band): BandState => (value < lo ? 'below' : value > hi ? 'above' : 'in');
