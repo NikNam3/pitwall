@@ -1,14 +1,25 @@
 // `degradation` (spec 4.1, 4.4): per car in the session and stint, the Kalman filter over the fuel-corrected pace laps,
 // started from the calibration's prior for the stint's compound (`view.priors`) or the config default. Quick: from
 // scratch over the projection on each frame one of its reads changes (a completed lap, a stint, a pick or its void).
-import { known, unknown, type CarId, type EstimateSource, type LapRecord, type PriorsSnapshot, type StintRecord, type VisualCompound } from '@pitwall/domain';
+import {
+  known,
+  unknown,
+  type CarId,
+  type EstimateSource,
+  type Known,
+  type LapRecord,
+  type Ms,
+  type PriorsSnapshot,
+  type StintRecord,
+  type VisualCompound,
+} from '@pitwall/domain';
 import type { DeepReadonly, EngineView, QuickCalculator } from '@pitwall/engine/readers';
 import { LAP_CLASSES_CONFIG } from '../lap-classes/index.ts';
 import { PER_LAP_RATE_CONFIG } from '../per-lap-rate/index.ts';
 import { behaviourByCar, behaviourFor } from '../shared/behaviour.ts';
 import { CAR_STATUS_READS } from '../shared/car-status.ts';
 import { DEGRADATION_BEHAVIOUR, phaseRow, type DegradationEffect } from './behaviour.ts';
-import { DEGRADATION, DEGRADATION_CONFIG, type DegradationOutput, type StintDegradation } from './index.ts';
+import { DEGRADATION, DEGRADATION_CONFIG, type DegradationOutput, type StartPrior, type StintDegradation } from './index.ts';
 import type { FilterPrior } from './kalman.ts';
 import { DEGRADATION_COMPOUNDS, priorKey } from './priors.ts';
 import { fitLaps, fuelResolver, lapsByCar } from './stint-fit.ts';
@@ -17,8 +28,11 @@ type Lap = DeepReadonly<LapRecord>;
 type Stint = DeepReadonly<StintRecord>;
 type Config = (typeof DEGRADATION_CONFIG)['defaults'];
 
-/** Where a stint's `ν` starts: the prior and how to name the estimate's source once the session's share is known. */
-type Start = { prior: FilterPrior; source: (sessionShare: number, paceLaps: number) => EstimateSource };
+/**
+ * Where a stint's `ν` starts: the prior, the start the stint carries (`StartPrior`) and how to name the estimate's
+ * source once the session's share is known.
+ */
+type Start = { prior: FilterPrior; startPrior: StartPrior; source: (sessionShare: number, paceLaps: number) => EstimateSource };
 
 const lapsWord = (n: number): string => `${n} ${n === 1 ? 'lap' : 'laps'}`;
 
@@ -26,13 +40,17 @@ const lapsWord = (n: number): string => `${n} ${n === 1 ? 'lap' : 'laps'}`;
 const CONFIG_NOTE = 'degradation config default (pitwall estimate)';
 
 /**
- * The note of a stint's default start on `visual` (spec 4.1): the track file's `compoundOffsetsMs` source when the file
- * holds an offset for the compound, else the config default's. The offset only names the source: `α` stays diffuse.
+ * A stint's default start on `visual` (spec 4.1): with the track file's offset for the compound, its `compoundOffsetsMs`
+ * source as the note and the offset as `α`'s; else the config default's note and no offset. The offset is carried only:
+ * the filter's `α` stays diffuse.
  */
-function defaultNote(track: EngineView['track'], visual: VisualCompound): string {
-  if (!track.known) return CONFIG_NOTE;
-  const offsets = track.value.defaults.compoundOffsetsMs;
-  return offsets.known && Object.hasOwn(offsets.value.value, visual) ? offsets.value.source : CONFIG_NOTE;
+function defaultStart(track: EngineView['track'], visual: VisualCompound): { note: string; trackNote: boolean; alphaOffsetMs: Known<Ms> } {
+  const offsets = track.known ? track.value.defaults.compoundOffsetsMs : undefined;
+  if (offsets?.known === true && Object.hasOwn(offsets.value.value, visual)) {
+    const value = offsets.value.value[visual as keyof typeof offsets.value.value];
+    return { note: offsets.value.source, trackNote: true, alphaOffsetMs: known(value, offsets.at) };
+  }
+  return { note: CONFIG_NOTE, trackNote: false, alphaOffsetMs: unknown('notApplicable') };
 }
 
 /**
@@ -41,28 +59,56 @@ function defaultNote(track: EngineView['track'], visual: VisualCompound): string
  */
 function startOf(priors: EngineView['priors'], track: EngineView['track'], visual: VisualCompound, config: Config): Start {
   const calibration = calibrationPrior(priors, visual);
-  const prior = calibration?.prior ?? { nuMsPerLap: config.defaultNuMsPerLap, nuSdMs: config.defaultNuSdMs };
+  if (calibration !== undefined) {
+    const { setName, sources } = calibration.snapshot;
+    const startPrior: StartPrior = {
+      ...calibration.prior,
+      alphaOffsetMs: calibration.alphaOffsetMs,
+      source: { kind: 'calibration', setName, sources, sessionShare: 0, parts: 'calibration' },
+    };
+    return {
+      prior: calibration.prior,
+      startPrior,
+      source: (sessionShare, paceLaps) => {
+        const laps = lapsWord(paceLaps);
+        if (sessionShare > 0.5) return { kind: 'session', sessionShare, parts: `${laps} + calibration` };
+        return { kind: 'calibration', setName, sources, sessionShare, parts: `${laps} + calibration` };
+      },
+    };
+  }
+  const prior = { nuMsPerLap: config.defaultNuMsPerLap, nuSdMs: config.defaultNuSdMs };
+  const d = defaultStart(track, visual);
   return {
     prior,
+    startPrior: {
+      ...prior,
+      alphaOffsetMs: d.alphaOffsetMs,
+      source: { kind: 'default', note: d.note, sessionShare: 0, parts: d.trackNote ? 'track default' : 'config default' },
+    },
     source: (sessionShare, paceLaps) => {
       const laps = lapsWord(paceLaps);
-      if (sessionShare > 0.5) return { kind: 'session', sessionShare, parts: `${laps} + ${calibration === undefined ? 'default' : 'calibration'}` };
-      if (calibration !== undefined) {
-        const { setName, sources } = calibration.snapshot;
-        return { kind: 'calibration', setName, sources, sessionShare, parts: `${laps} + calibration` };
-      }
-      return { kind: 'default', note: defaultNote(track, visual), sessionShare, parts: `${laps} + default` };
+      if (sessionShare > 0.5) return { kind: 'session', sessionShare, parts: `${laps} + default` };
+      return { kind: 'default', note: d.note, sessionShare, parts: `${laps} + default` };
     },
   };
 }
 
-/** The calibration's prior of `visual`: `ν` and its sd from the snapshot, when it holds both. */
-function calibrationPrior(priors: EngineView['priors'], visual: VisualCompound): { prior: FilterPrior; snapshot: DeepReadonly<PriorsSnapshot> } | undefined {
+/**
+ * The calibration's prior of `visual`: `ν` and its sd from the snapshot, when it holds both, with the compound's `α`
+ * offset (whole ms, C4; `insufficientData` when the snapshot holds none).
+ */
+function calibrationPrior(
+  priors: EngineView['priors'],
+  visual: VisualCompound,
+): { prior: FilterPrior; alphaOffsetMs: Known<Ms>; snapshot: DeepReadonly<PriorsSnapshot> } | undefined {
   if (!priors.known || !(DEGRADATION_COMPOUNDS as readonly string[]).includes(visual)) return undefined;
   const nu = priors.value.entries[priorKey('nuMsPerLap', visual)];
   const sd = priors.value.entries[priorKey('nuSdMs', visual)];
   if (nu === undefined || sd === undefined || !nu.known || !sd.known) return undefined;
-  return { prior: { nuMsPerLap: nu.value, nuSdMs: sd.value }, snapshot: priors.value };
+  const offset = priors.value.entries[priorKey('alphaOffsetMs', visual)];
+  const alphaOffsetMs: Known<Ms> =
+    offset === undefined ? unknown('insufficientData') : offset.known ? known(Math.round(offset.value), offset.at) : unknown(offset.reason);
+  return { prior: { nuMsPerLap: nu.value, nuSdMs: sd.value }, alphaOffsetMs, snapshot: priors.value };
 }
 
 /**
@@ -70,22 +116,30 @@ function calibrationPrior(priors: EngineView['priors'], visual: VisualCompound):
  * stint). Without a record every lap is one stint. A stint is the record's compound, an open one its first lap's.
  */
 function stintsOf(laps: readonly Lap[], records: readonly Stint[]): { laps: Lap[]; actual: Lap['actualCompound']; visual: Lap['visualCompound'] }[] {
-  const out: { laps: Lap[]; actual: Lap['actualCompound']; visual: Lap['visualCompound'] }[] = [];
-  // the laps are in lap order, the records in stint order: one pass
-  const closed = records.map((r) => ({ laps: [] as Lap[], actual: r.actualCompound, visual: r.visualCompound }));
-  const open: Lap[] = [];
+  // the laps are in lap order, the records in stint order: one pass. A record's laps and the open stint's are each a
+  // run of consecutive laps, kept as its index range [from, to) and sliced once.
+  const ranges = records.map(() => ({ from: 0, to: 0 }));
+  let openFrom = laps.length;
   const after = records.at(-1)?.lastLap ?? 0;
   let k = 0;
-  for (const lap of laps) {
+  for (let i = 0; i < laps.length; i++) {
+    const lap = laps[i] as Lap;
     if (lap.lapNumber > after) {
-      open.push(lap);
+      openFrom = Math.min(openFrom, i);
       continue;
     }
     while (k < records.length && (records[k]?.lastLap ?? Infinity) < lap.lapNumber) k++;
     const r = records[k];
-    if (r !== undefined && lap.lapNumber >= r.firstLap) closed[k]?.laps.push(lap);
+    const range = ranges[k];
+    if (r === undefined || range === undefined || lap.lapNumber < r.firstLap) continue;
+    if (range.to === range.from) range.from = i;
+    range.to = i + 1;
   }
-  out.push(...closed);
+  const out = records.map((r, j) => {
+    const range = ranges[j] ?? { from: 0, to: 0 };
+    return { laps: laps.slice(range.from, range.to), actual: r.actualCompound, visual: r.visualCompound };
+  });
+  const open = laps.slice(openFrom);
   const first = open[0];
   if (first !== undefined) out.push({ laps: open, actual: first.actualCompound, visual: first.visualCompound });
   return out;
@@ -150,6 +204,9 @@ export const degradationCalculator: QuickCalculator<DegradationOutput> = {
           fuelCorrected: fit.fuelCorrected,
           wearRatePctPerLap: fit.wearRatePctPerLap,
           source: start.source(sessionShare, fit.paceLaps.length),
+          // the same run's posterior: `fitStint`'s, which needs two laps
+          cov: fit.paceLaps.length < 2 ?unknown('insufficientData') : known(fit.state.cov, now),
+          startPrior: start.startPrior,
           laps: fit.laps,
         };
       });
