@@ -15,8 +15,15 @@ export function fitAxisLabel(forms: AxisLabel, roomPx: number, widthOf: (form: s
   return best;
 }
 
-/** A line's label: `index` is the series' index, `x` and `value` the x and y of its last point in the visible range. */
-export type EndLabel = { index: number; text: string; x: number; value: number; bold: boolean };
+/**
+ * A line's label: `index` is the series' index, `x` and `value` the x and y of its last point in the visible range;
+ * `rank` orders which labels keep their place when not all fit (lowest first).
+ */
+export type EndLabel = { index: number; text: string; x: number; value: number; bold: boolean; rank: number };
+
+/** A label's rank: the series' `labelRank`, else 0 for an own car and 2 for every other line. */
+const OWN_RANK = 0;
+const FIELD_RANK = 2;
 
 /**
  * How far before the newest x a line must end to be labelled at its own end instead of in the column, per x kind: a
@@ -42,21 +49,26 @@ export function endLabels(series: ChartSeries[], [lo, hi]: [number, number]): En
   series.forEach((s, index) => {
     let last: [number, number] | undefined;
     for (const p of s.points) if (p[0] >= lo && p[0] <= hi && (last === undefined || p[0] > last[0])) last = p;
-    if (last !== undefined) out.push({ index, text: s.label, x: last[0], value: last[1], bold: s.colour?.ownCar === true });
+    if (last === undefined) return;
+    const bold = s.colour?.ownCar === true;
+    out.push({ index, text: s.label, x: last[0], value: last[1], bold, rank: s.labelRank ?? (bold ? OWN_RANK : FIELD_RANK) });
   });
   return out;
 }
 
+/** A label's rank from `placeLabels`' fourth argument: a rank as given, `true` (one of ours) 0, else the field's. */
+const rankOf = (v: boolean | number | undefined): number => (typeof v === 'number' ? v : v === true ? OWN_RANK : FIELD_RANK);
+
 /**
- * Which labels keep their place when only `capacity` fit: every one of ours first, then the others nearest to one of
- * ours by end; without ours, the topmost. Returns the kept indices.
+ * Which labels keep their place when only `capacity` fit: the lowest rank first, ties the nearest to a rank-0 end
+ * (one of ours); without one, the topmost. Returns the kept indices.
  */
-function keptLabels(ends: number[], capacity: number, ours: readonly boolean[]): number[] {
-  const own = ends.flatMap((end, i) => (ours[i] === true ? [end] : []));
+function keptLabels(ends: number[], capacity: number, ranks: readonly (boolean | number)[]): number[] {
+  const own = ends.flatMap((end, i) => (rankOf(ranks[i]) === OWN_RANK ? [end] : []));
   const distance = (end: number): number => (own.length === 0 ? end : Math.min(...own.map((o) => Math.abs(end - o))));
   return ends
-    .map((end, i) => ({ i, mine: ours[i] === true, d: distance(end) }))
-    .sort((a, b) => Number(b.mine) - Number(a.mine) || a.d - b.d)
+    .map((end, i) => ({ i, rank: rankOf(ranks[i]), d: distance(end) }))
+    .sort((a, b) => a.rank - b.rank || a.d - b.d)
     .slice(0, Math.max(0, capacity))
     .map((k) => k.i);
 }
@@ -64,13 +76,18 @@ function keptLabels(ends: number[], capacity: number, ours: readonly boolean[]):
 /**
  * Label centres for line ends given as plot-relative pixel ys (0 the top), in input order. Labels closer than `rowPx`
  * form a group centred on its ends, a row apart, in end order; every centre stays in `[rowPx / 2, heightPx - rowPx / 2]`.
- * When they cannot all fit a row apart, only `floor(heightPx / rowPx)` keep one (`keptLabels`: `ours[i]` marks our
- * cars); a dropped label is `undefined`.
+ * When they cannot all fit a row apart, only `floor(heightPx / rowPx)` keep one (`keptLabels`): `ranks[i]` is label
+ * i's rank (`EndLabel.rank`), or `true` for one of our cars (rank 0); a dropped label is `undefined`.
  */
-export function placeLabels(ends: number[], rowPx: number, heightPx: number, ours: readonly boolean[] = []): Array<number | undefined> {
+export function placeLabels(
+  ends: number[],
+  rowPx: number,
+  heightPx: number,
+  ranks: readonly boolean[] | readonly number[] = [],
+): Array<number | undefined> {
   const capacity = Math.floor(heightPx / rowPx);
   if (ends.length <= capacity) return spread(ends, rowPx, heightPx);
-  const kept = keptLabels(ends, capacity, ours);
+  const kept = keptLabels(ends, capacity, ranks);
   const placed = spread(kept.map((i) => ends[i] ?? 0), rowPx, heightPx);
   const out = new Array<number | undefined>(ends.length).fill(undefined);
   kept.forEach((i, k) => (out[i] = placed[k]));
