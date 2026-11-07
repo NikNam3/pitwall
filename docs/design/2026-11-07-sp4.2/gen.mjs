@@ -25,7 +25,6 @@ const FMT = {
 // ---------------------------------------------------------------- wording (the widget's text.ts)
 const TEXT = {
   title: 'Pit window',
-  fresh: 'new',
   unknown: {
     insufficientData: 'too few laps on these tyres yet (3 needed)',
     notReceived: 'tyre sets not received yet',
@@ -82,7 +81,7 @@ const page = (file, title, body) =>
 //   sets[]: per available dry set that meets the compound rule: earliest (the first lap from which it reaches the flag),
 //           latest (= the fitted set's life), and the lap its life ends when fitted at the latest.
 // The display places laps on the race's lap axis; it computes nothing.
-const LABEL_W = 7;   // cells: compound letter + wear
+const LABEL_W = 3;   // cells: the compound letter
 const RANGE_W = 7;   // cells: L23–31
 const ROW_H = CELL_H;
 const BAR = 6;       // px
@@ -119,7 +118,7 @@ function chartSvg({ cols, now, flag, stint, sets, unknownLife }) {
   sets.forEach((set, i) => {
     const y = yMid(i + 1);
     if (i % 2 === 0) s += `<rect x="0" y="${(i + 1) * ROW_H}" width="${W}" height="${ROW_H}" fill="${R.bgRowBand}"/>`;
-    s += text(CELL_W, y, set.letter, R.textDim) + text(CELL_W * 3, y, set.wear === 0 ? TEXT.fresh : FMT.pct(set.wear), R.text);
+    s += text(CELL_W, y, set.letter, R.textDim);
     const reaches = set.lifeEnd >= flag;
     if (reaches) {
       const open = now >= set.earliest && now <= set.latest;
@@ -145,11 +144,11 @@ function panelSvg(title, { cols, rows, link = '1 · KUH', state = '', svg, svgRo
 }
 
 const FULL_COLS = 46;
-const full = (w, opts = {}) => panelSvg(TEXT.title, { cols: FULL_COLS, rows: 5, state: `${FMT.lapNumber(w.now)}/${w.flag}`, ...chartSvg({ cols: FULL_COLS, ...w }), ...opts });
+const full = (w, opts = {}) => panelSvg(TEXT.title, { cols: FULL_COLS, rows: 4, state: `${FMT.lapNumber(w.now)}/${w.flag}`, ...chartSvg({ cols: FULL_COLS, ...w }), ...opts });
 
 function compactLines({ now, stint, sets, unknownLife }) {
   const lines = [];
-  const label = (letter, rest) => `${span('d', letter)} ${padR(rest, LABEL_W - 3)}`;
+  const label = (letter, rest) => `${span('d', letter)} ${padR(rest, 4)}`;
   if (unknownLife) lines.push(` ${label(stint.letter, '')} ${span('tip', sp(RANGE_W), TEXT.unknown[unknownLife])}`);
   else {
     const over = now > stint.life;
@@ -158,19 +157,18 @@ function compactLines({ now, stint, sets, unknownLife }) {
   for (const s of sets) {
     if (s.lifeEnd < 52) continue; // a set that cannot reach the flag has no window: no line in compact
     const open = now >= s.earliest && now <= s.latest;
-    lines.push(` ${label(s.letter, s.wear === 0 ? TEXT.fresh : FMT.pct(s.wear))} ${span(open ? 'hi' : now > s.latest ? 'f' : '', padL(FMT.lapRange(s.earliest, s.latest).replace(/–L/, '–'), RANGE_W))}`);
+    lines.push(` ${label(s.letter, '')} ${span(open ? 'hi' : now > s.latest ? 'f' : '', padL(FMT.lapRange(s.earliest, s.latest).replace(/–L/, '–'), RANGE_W))}`);
   }
   return lines;
 }
 const compact = (w, opts = {}) => panel(TEXT.title, { cols: 22, rows: 3, state: '', lines: compactLines(w), ...opts });
 
 // ================================================================ the sample: Silverstone L23/52, KUH on mediums since L1
-// Sets: H new (earliest L23, life to the flag), H 12 % (earliest L26), S 31 % (fitted at L31 it lasts to L40).
+// Round 3: only new sets (user, 2026-11-07), one row per compound. H (earliest L23, life to the flag), S (fitted at L31 it lasts to L46).
 // The second M set is left out: KUH started on M, the compound rule needs another dry compound.
 const SETS = [
-  { letter: 'H', wear: 0, earliest: 23, latest: 31, lifeEnd: 60 },
-  { letter: 'H', wear: 12, earliest: 26, latest: 31, lifeEnd: 57 },
-  { letter: 'S', wear: 31, earliest: 0, latest: 31, lifeEnd: 40 },
+  { letter: 'H', earliest: 23, latest: 31, lifeEnd: 60 },
+  { letter: 'S', earliest: 0, latest: 31, lifeEnd: 46 },
 ];
 const STINT = { letter: 'M', from: 1, life: 31 };
 const OPEN = { now: 23, flag: 52, stint: STINT, sets: SETS };
@@ -179,9 +177,9 @@ const OVER = { now: 33, flag: 52, stint: STINT, sets: SETS };
 const NOSTOP = { now: 41, flag: 52, stint: { letter: 'H', from: 16, life: 55 }, sets: [] };
 const EARLY = { now: 2, flag: 52, stint: { letter: 'M', from: 1 }, sets: [], unknownLife: 'insufficientData' };
 
-page('pit-window.html', 'SP4.2 · pit-window-strip, round 2', `
-<div class="note">Lap axis = the whole race, the flag a vertical line, <b>now</b> the white line. Top row: the fitted set, done laps solid, the rest of its life hollow. Below: one row per set we may fit (compound rule applied), its window solid (white when open now), then its life as a thin line. A line that stops short of the flag is a set that does not make it. No words in the panel.</div>
-<h2>Full ${FULL_COLS}×5</h2>
+page('pit-window.html', 'SP4.2 · pit-window-strip, round 3', `
+<div class="note">Lap axis = the whole race, the flag a vertical line, <b>now</b> the white line. Top row: the fitted set, done laps solid, the rest of its life hollow. Below: one row per compound we still have a new set of (compound rule applied), its window solid (white when open now), then its life as a thin line. A line that stops short of the flag is a set that does not make it. No words in the panel.</div>
+<h2>Full ${FULL_COLS}×4</h2>
 <div class="row">${fig(full(OPEN, { size: 'full' }), 'L23, H new open')}${fig(full(AHEAD), 'L15')}</div>
 <div class="row" style="margin-top:12px">${fig(full(OVER), 'L33, mediums past their life')}${fig(full({ ...NOSTOP }, { link: '1 · LIN' }), 'LIN L41, tyres reach the flag, rule met')}${fig(full(EARLY), 'L02, life still unknown, sets not received')}</div>
 <h2>Compact 22×3</h2>
