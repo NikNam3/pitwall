@@ -254,32 +254,32 @@ page('sweep.html', 'SP4.2 · pit-window-strip, layout sweep (round 5b)', `<div c
 const BADGE = { session: '', calibration: 'ᶜ', default: 'ᵈ' };
 const HOVER = { calibration: 'calibration · Silverstone league (4 stops)', default: 'default · Silverstone, real F1 2025 (track file)' };
 const bv = (v, src) => (src === 'session' ? v + ' ' : span('', v, HOVER[src]) + span('d', BADGE[src]));
-const SC_COLS = [{ h: '', w: 3, a: 'l' }, { h: 'REJOIN', w: 6, a: 'r' }, { h: 'LOSS', w: 6, a: 'r' }, { h: 'GAIN', w: 6, a: 'r' }, { h: 'ALSO GAIN', w: 11, a: 'l' }];
+const SC_COLS = [{ h: '', w: 3, a: 'l' }, { h: 'REJOIN', w: 6, a: 'r' }, { h: 'LOSS', w: 6, a: 'r' }, { h: 'GAIN', w: 6, a: 'r' }];
 const SC_ROWS = [
-  { cond: 'SC', rejoin: 'P9', loss: ['9.8', 'default'], gain: ['+10.5', 'default'], also: 'ALO HAM' },
-  { cond: 'VSC', rejoin: 'P10', loss: ['13.1', 'calibration'], gain: ['+7.2', 'calibration'], also: 'HAM' },
+  { cond: 'SC', rejoin: 'P9', loss: ['9.8', 'default'], gain: ['+10.5', 'default'] },
+  { cond: 'VSC', rejoin: 'P10', loss: ['13.1', 'calibration'], gain: ['+7.2', 'calibration'] },
 ];
 const cellFit = (t, col) => (col.a === 'r' ? padL(t, col.w) : padR(t, col.w));
 function scSheet(active, { unknown = false } = {}) {
   const head = span('f', ' ' + SC_COLS.map((c) => cellFit(c.h, c)).join(sp(2)));
   const rows = SC_ROWS.map((r, i) => {
     const cells = unknown
-      ? [r.cond, '', '', '', ''].map((t, k) => (k === 0 ? cellFit(t, SC_COLS[k]) : span('tip', sp(SC_COLS[k].w), 'too few laps or samples yet')))
-      : [cellFit(r.cond, SC_COLS[0]), cellFit(r.rejoin, SC_COLS[1]), padL(bv(...r.loss), SC_COLS[2].w), padL(bv(...r.gain), SC_COLS[3].w), cellFit(r.also, SC_COLS[4])];
+      ? [r.cond, '', '', ''].map((t, k) => (k === 0 ? cellFit(t, SC_COLS[k]) : span('tip', sp(SC_COLS[k].w), 'too few laps or samples yet')))
+      : [cellFit(r.cond, SC_COLS[0]), cellFit(r.rejoin, SC_COLS[1]), padL(bv(...r.loss), SC_COLS[2].w), padL(bv(...r.gain), SC_COLS[3].w)];
     const line = ' ' + cells.join(sp(2));
     return active === r.cond.toLowerCase() ? span('hi', line) : i % 2 === 1 ? span('band', line) : line;
   });
   return [head, ...rows];
 }
 const scState = (active) => (active ? span('w', active.toUpperCase()) : '');
-const scFull = (active, opts = {}) => panel('SC / VSC call', { cols: 48, rows: 3, state: scState(active), lines: scSheet(active, opts), size: opts.size });
+const scFull = (active, opts = {}) => panel('SC / VSC call', { cols: 30, rows: 3, state: scState(active), lines: scSheet(active, opts), size: opts.size });
 const scCompact = (active, opts = {}) => panel('SC / VSC call', { cols: 26, rows: 2, state: scState(active), size: opts.size, lines: SC_ROWS.map((r) => {
   const line = ` ${padR(r.cond, 3)}  ${padL(r.rejoin, 3)}  ${padL(bv(...r.gain), 6)}`;
   return active === r.cond.toLowerCase() ? span('hi', line) : line;
 }) });
-page('sc-card.html', 'SP4.2 · SC / VSC call, round 2 (no words)', `
-<div class="note">The approved 2026-10-30 card without its words. Always the sheet: per condition the rejoin position, the stop's loss, the gain against a green stop (positive = good for us), the rivals within the window who would gain too. Under SC or VSC the header names it in amber and its row is white bold. Badges: none = this session, <b>ᶜ</b> calibration, <b>ᵈ</b> default; hover names the source.</div>
-<h2>Full 48×3</h2>
+page('sc-card.html', 'SP4.2 · SC / VSC call, round 3', `
+<div class="note">The approved 2026-10-30 card without its words. Always the sheet: per condition the rejoin position, the stop's loss, the gain against a green stop (positive = good for us). No ALSO GAIN column (user, 2026-11-07). Under SC or VSC the header names it in amber and its row is white bold. Badges: none = this session, <b>ᶜ</b> calibration, <b>ᵈ</b> default; hover names the source.</div>
+<h2>Full 30×3</h2>
 <div class="row">${fig(scFull(null, { size: 'full' }), 'green running')}${fig(scFull('sc'), 'SC out')}${fig(scFull('vsc'), 'VSC out')}</div>
 <div class="row" style="margin-top:12px">${fig(scFull(null, { unknown: true }), 'no loss or gaps yet: empty cells, reason on hover')}</div>
 <h2>Compact 26×2</h2>
