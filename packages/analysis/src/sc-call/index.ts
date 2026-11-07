@@ -2,6 +2,7 @@
 import type { CarId, ScCall } from '@pitwall/domain';
 
 export type { ScCall, ScCallRow } from '@pitwall/domain';
+export { SC_CALL_BEHAVIOUR, type ScCallEffect } from './behaviour.ts';
 
 /** The analysis id. */
 export const SC_CALL = 'sc-call';
