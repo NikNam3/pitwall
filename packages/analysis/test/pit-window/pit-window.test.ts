@@ -293,7 +293,7 @@ describe('pit-window calculator', () => {
   });
 
   // 6
-  it('a boxStop span opened at L25 after the stint start: closed; one before the stint start does not close; L32 with latest 31: closed', () => {
+  it('a boxStop span opened at L25 after the stint start: closed; one before the stint start does not close; L32 with lapsToLimit 0: latest 32, closed', () => {
     expect(ours({ lap: 25, activity: { kind: 'boxStop', start: 24 * LAP_MS + 60_000 } }).window).toMatchObject(v('closed'));
     // the stop that began this stint (box stop on lap 9, stint from lap 10) is no stop since the stint start
     const before: Span = {
@@ -303,10 +303,19 @@ describe('pit-window calculator', () => {
       endFrame: 9 * LAP_MS - 17_000,
     };
     expect(ours({ lap: 23, fromLap: 10, closed: [before] }).window).toMatchObject(v('open'));
-    // a built tyre-life value one lap past the limit: the set's last lap was 31
-    const past = ours({ lap: 32, lapsToLimit: -1 });
-    expect(past.stint.latest).toMatchObject(v(31));
-    expect(past.window).toMatchObject(v('closed'));
+    // tyre-life never goes below 0: lapsToLimit 0 means the fitted set is at its limit, so this lap is its last
+    const atLimit = ours({ lap: 32, lapsToLimit: 0 });
+    expect(atLimit.stint.latest).toMatchObject(v(32));
+    expect(atLimit.window).toMatchObject(v('closed'));
+    expect(atLimit.windowCompound).toMatchObject(v('hard'));
+  });
+
+  // 6b
+  it('lapsToLimit 0.4 at L31 (floor 0): latest 31, closed; windowCompound still hard', () => {
+    const w = ours({ lap: 31, lapsToLimit: 0.4 });
+    expect(w.stint.latest).toMatchObject(v(31));
+    expect(w.window).toMatchObject(v('closed'));
+    expect(w.windowCompound).toMatchObject(v('hard'));
   });
 
   // 7
@@ -369,7 +378,7 @@ describe('pit-window calculator', () => {
       }
     });
 
-    it('property: every reaching set with a window has fromLap ≤ earliest ≤ latest ≤ flag − 1; no window without reaching; the rule and used sets hold', () => {
+    it('property: every reaching set with a window has fromLap ≤ earliest ≤ latest ≤ flag − 1; no window without reaching; lapsToLimit < 1 ⇒ closed; the rule and used sets hold', () => {
       const DRY = ['soft', 'medium', 'hard'] as const;
       const arb = fc
         .record({
@@ -405,6 +414,8 @@ describe('pit-window calculator', () => {
           const reaching = w.sets.filter((s) => s.sameType && s.reaches.known && s.reaches.value);
           if (reaching.length === 0) expect(w.window).toMatchObject(v('none'));
           else expect(w.windowCompound).toMatchObject(v(reaching[0]!.compound));
+          // no box stop here and lap ≤ flag − 1: the window is closed exactly when the fitted set is at its limit
+          if (reaching.length > 0) expect(w.window.known && w.window.value === 'closed').toBe(r.lapsToLimit < 1);
         }),
         { numRuns: 200 },
       );
