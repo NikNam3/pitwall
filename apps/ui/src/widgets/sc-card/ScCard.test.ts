@@ -48,8 +48,9 @@ const lineElements = (c: HTMLElement): HTMLElement[] => [...c.querySelectorAll<H
 /** The non-blank lines as they read, trimmed. */
 const lines = (c: HTMLElement): string[] => lineElements(c).map((e) => (e.textContent ?? '').trim()).filter((t) => t !== '');
 /** The line that starts with `prefix` (after its lead). */
+/** The first body line (never the header, which may start with the active condition) whose text starts with `prefix`. */
 const lineStarting = (c: HTMLElement, prefix: string): HTMLElement | undefined =>
-  lineElements(c).find((e) => (e.textContent ?? '').trim().startsWith(`${prefix} `));
+  lineElements(c).find((e) => !(e.textContent ?? '').includes('REJOIN') && (e.textContent ?? '').trim().startsWith(`${prefix} `));
 /** The header line of the full sheet: the one that carries REJOIN. */
 const headerLine = (c: HTMLElement): HTMLElement | undefined => lineElements(c).find((e) => (e.textContent ?? '').includes('REJOIN'));
 /** The innermost element of `scope` whose own text, trimmed, is `t`. */
