@@ -1,9 +1,9 @@
 // The track map's scene (spec 7.2): a pure mapping from the topic values to what the kit's track canvas draws. It
 // chooses roles and styles only (C65, from `presentation.ts`, C66); the canvas places everything. Colours only as
 // theme roles or `carColour` (C68).
-import type { Known, MapCar, MapIncident, TrackCars, TrackGeometry } from '@pitwall/domain';
-import { incidentKinds } from '../../kit/text.ts';
-import type { TrackDot, TrackLabel, TrackScene, TrackStretch } from '../../kit/track/types.ts';
+import type { Known, MapCar, MapIncident, PitCondition, Rejoin, TrackCars, TrackGeometry } from '@pitwall/domain';
+import { ghostLetter, incidentKinds } from '../../kit/text.ts';
+import type { TrackDot, TrackGhost, TrackLabel, TrackScene, TrackStretch } from '../../kit/track/types.ts';
 import type { WidgetSize } from '../../kit/types.ts';
 import { carColour } from '../../theme/index.ts';
 import { dots, parts, presentation } from './presentation.ts';
@@ -43,12 +43,25 @@ function labelsOf(geometry: TrackGeometry): TrackLabel[] {
   return [...turns, ...sectors];
 }
 
-/** The scene of the geometry, the cars and the markers at the panel's size. */
+/** The ghost's conditions in drawing order. */
+const CONDITIONS = ['green', 'vsc', 'sc'] as const satisfies readonly PitCondition[];
+
+/** One ghost per condition whose map point is known, lettered in the full size only; none before the value arrives. */
+function ghostsOf(rejoin: Rejoin | undefined, full: boolean): TrackGhost[] {
+  if (rejoin === undefined) return [];
+  return CONDITIONS.flatMap((c) => {
+    const point = rejoin.conditions[c].mapPoint;
+    return point.known ? [{ at: point.value, letter: full ? ghostLetter(c) : undefined }] : [];
+  });
+}
+
+/** The scene of the geometry, the cars, the markers and the rejoin ghost at the panel's size. */
 export function sceneOf(
   geometry: TrackGeometry,
   cars: Known<TrackCars>,
   markers: Known<MapIncident[]> | undefined,
   size: Pick<WidgetSize, 'mode'>,
+  rejoin?: Rejoin,
 ): TrackScene {
   const full = size.mode === 'full';
   return {
@@ -59,5 +72,6 @@ export function sceneOf(
     dots: cars.known ? dotsOf(cars.value.cars) : [],
     // the compact size draws the triangle only, as the mockup does
     markers: markers?.known === true ? markers.value.map((m) => ({ at: m.point, label: full ? incidentKinds[m.kind] : '', role: parts.marker })) : [],
+    ghosts: ghostsOf(rejoin, full),
   };
 }

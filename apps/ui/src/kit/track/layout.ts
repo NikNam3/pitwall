@@ -17,6 +17,10 @@ export const TRACK_PX = {
   triangle: 10,
   /** A marker triangle's stroke width. */
   triangleLine: 2,
+  /** A ghost ring's radius (`drawGhostRing`, stroked `ring` wide). */
+  ghostRadius: 5,
+  /** The gap between a ghost ring's edge and its letter. */
+  ghostLetterGap: 3,
 } as const;
 
 type Pt = { x: number; y: number };
@@ -223,9 +227,21 @@ export function triangleBox(at: { x: number; y: number }): Rect {
   return { x: at.x - s / 2, y: at.y - s / 2, w: s, h: s };
 }
 
+/** The box a ghost ring's letter is drawn in: right of the ring, `ghostLetterGap` from its edge, centred on its line. */
+function ghostLetterBox(at: Pt, letter: string, textWidth: (s: string) => number, lineHeight: number): Rect {
+  return { x: at.x + TRACK_PX.ghostRadius + TRACK_PX.ghostLetterGap, y: at.y - lineHeight / 2, w: textWidth(letter), h: lineHeight };
+}
+
+/** The scene's ghosts; a scene built before ghosts existed (one without the list) has none. */
+export function ghostsOf(scene: TrackScene): TrackScene['ghosts'] {
+  const ghosts: TrackScene['ghosts'] | undefined = scene.ghosts;
+  return ghosts ?? [];
+}
+
 /**
- * Fits the outline into the box with a margin, keeping its aspect; places each label outside the bend at its point,
- * each side bar on the first free side (right, left, above, below) of its dot, each marker label beside its triangle.
+ * Fits the outline into the box with a margin, keeping its aspect; keeps every ghost ring and its letter clear; places
+ * each label outside the bend at its point, each side bar on the first free side (right, left, above, below) of its
+ * dot, each marker label beside its triangle.
  * A label or marker label with no free place is left out (labels never overlap); a bar with no free side goes right
  * of its dot.
  */
@@ -241,8 +257,11 @@ export function layoutTrack(
   const centre = { x: box.width / 2, y: box.height / 2 };
   const reach = BEND_REACH_LINES * lineHeight;
   const dots = scene.dots.map((d) => ({ ...toPx(d.at), r: d.radiusPx }));
-  const placedRects: Rect[] = scene.markers.map((m) => triangleBox(toPx(m.at)));
-  const obstacles: Obstacles = { line, dots, rects: placedRects, box };
+  const ghosts = ghostsOf(scene).map((g) => ({ ...toPx(g.at), letter: g.letter }));
+  const rings = ghosts.map((g) => ({ x: g.x, y: g.y, r: TRACK_PX.ghostRadius + TRACK_PX.ring / 2 }));
+  const letters = ghosts.flatMap((g) => (g.letter === undefined ? [] : [ghostLetterBox(g, g.letter, textWidth, lineHeight)]));
+  const placedRects: Rect[] = [...scene.markers.map((m) => triangleBox(toPx(m.at))), ...letters];
+  const obstacles: Obstacles = { line, dots: [...dots, ...rings], rects: placedRects, box };
   const sizeOf = (text: string) => ({ w: textWidth(text), h: lineHeight });
   const indexOf = (p: Pt) => (line.length > 0 ? nearestIndex(line, p) : 0);
   const outAt = (p: Pt) => (line.length > 0 ? outsideOfBend(line, indexOf(p), reach, centre) : { x: 0, y: -1 });
