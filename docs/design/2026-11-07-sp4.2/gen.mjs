@@ -86,58 +86,101 @@ const RANGE_W = 7;   // cells: L23–31
 const ROW_H = CELL_H;
 const BAR = 6;       // px
 
+// ---------------------------------------------------------------- label layout (round 5: the rules the display's layout.ts gets)
+// Every lap label is a box in its row. Rules, in order:
+//  1. labels sit on top of lines: each gets a knockout in its row's background, so a line (now, flag, a life line) breaks behind it;
+//  2. a window's laps go left and right of its band; if either does not fit, both go together (`L23–31`) on the right, else on the left;
+//  3. the fitted set's last lap goes right of its bar end, else left of it;
+//  4. the axis: now first, then the flag, then the faint laps every 10; a later label that would touch an earlier one is dropped.
+// A layout that still overlaps throws: the generator sweeps every lap of several races (see `sweep`), as the property test will.
+const PAD = 4;      // px between a label and its bar
+const GAP_PX = CELL_W; // between two labels
+function layoutRow(cands, placed, lo, hi) {
+  for (const group of cands) {
+    const boxes = group.map((l) => ({ ...l, ...boxOf(l) }));
+    if (boxes.every((b) => b.l >= lo && b.r <= hi && placed.every((p) => b.r + (p.bar ? PAD : GAP_PX) <= p.l || b.l >= p.r + (p.bar ? PAD : GAP_PX)))) { placed.push(...boxes); return true; }
+  }
+  return false;
+}
+const boxOf = (l) => { const w = vis(l.t) * CELL_W; return l.anchor === 'end' ? { l: l.x - w, r: l.x } : l.anchor === 'middle' ? { l: l.x - w / 2, r: l.x + w / 2 } : { l: l.x, r: l.x + w }; };
+
 function chartSvg({ cols, now, flag, stint, sets, unknownLife }) {
   const W = (cols + 2) * CELL_W;
   const rows = 1 + sets.length;
   const H = rows * ROW_H + ROW_H; // + the axis row
-  const x0 = (LABEL_W + 1) * CELL_W, x1 = W - 3 * CELL_W;
+  const lo = (LABEL_W + 0.5) * CELL_W, hi = W - 2;
+  const x0 = (LABEL_W + 1) * CELL_W, x1 = W - 4 * CELL_W - PAD - 2; // room right of the flag for one lap label
   const Xe = (lap) => x0 + ((x1 - x0) * lap) / flag;               // the end of lap `lap`
   const Xs = (lap) => x0 + ((x1 - x0) * (lap - 1)) / flag;         // the start of lap `lap`
-  const LW = 3 * CELL_W;                                           // a lap label, `L31`
   const yMid = (r) => r * ROW_H + ROW_H / 2;
+  const rowBg = (r) => (r >= 1 && r <= sets.length && (r - 1) % 2 === 0 ? R.bgRowBand : R.bgPanel);
+  const labels = []; // { row, x, anchor, t, fill, bold, l, r }
   let s = `<svg width="${W}" height="${H}">`;
   const text = (x, y, t, fill, anchor = 'start', bold = false) => `<text x="${x}" y="${y + 4}" fill="${fill}" text-anchor="${anchor}"${bold ? ' font-weight="700"' : ''}>${t}</text>`;
   const rule = (xa, xb, y, colour = R.textFaint) => (xb > xa ? `<line x1="${xa}" x2="${xb}" y1="${y}" y2="${y}" stroke="${colour}" stroke-width="1"/>` : '');
-  // row bands, the flag line, the axis (faint laps every 10, now and the flag)
+  const need = (ok, what) => { if (!ok) throw new Error(`pit window L${now}/${flag}: no room for ${what}`); };
   sets.forEach((_, i) => { if (i % 2 === 0) s += `<rect x="0" y="${(i + 1) * ROW_H}" width="${W}" height="${ROW_H}" fill="${R.bgRowBand}"/>`; });
-  const axisY = rows * ROW_H + ROW_H / 2;
+  // lines and bars first
   s += `<line x1="${Xe(flag)}" x2="${Xe(flag)}" y1="2" y2="${rows * ROW_H}" stroke="${R.textDim}" stroke-width="1"/>`;
-  for (let l = 10; l < flag - 4; l += 10) if (Math.abs(Xe(l) - Xe(now)) > 2 * LW) s += text((Xs(l) + Xe(l)) / 2, axisY, FMT.lapNumber(l), R.textFaint, 'middle');
-  s += text(Xe(flag), axisY, FMT.lapNumber(flag), R.textDim, 'middle');
-  // the fitted set: done laps solid, the rest of its life hollow, past its life amber; its last lap written at the end
   const r0 = yMid(0);
   s += text(CELL_W, r0, stint.letter, R.textDim);
   s += `<rect x="${Xs(stint.from)}" y="${r0 - BAR / 2}" width="${Xe(now) - Xs(stint.from)}" height="${BAR}" fill="${R.text}"/>`;
+  const placed = rows + 1 ? Array.from({ length: rows + 1 }, () => []) : [];
   if (!unknownLife) {
     const over = now > stint.life;
-    if (!over) s += `<rect x="${Xe(now) + 0.5}" y="${r0 - BAR / 2 + 0.5}" width="${Xe(Math.min(stint.life, flag)) - Xe(now) - 1}" height="${BAR - 1}" fill="none" stroke="${R.textDim}"/>`;
+    if (!over) s += `<rect x="${Xe(now) + 0.5}" y="${r0 - BAR / 2 + 0.5}" width="${Math.max(0, Xe(Math.min(stint.life, flag)) - Xe(now) - 1)}" height="${BAR - 1}" fill="none" stroke="${R.textDim}"/>`;
     else s += `<rect x="${Xe(stint.life)}" y="${r0 - BAR / 2}" width="${Xe(now) - Xe(stint.life)}" height="${BAR}" fill="${R.warning}"/>`;
-    if (stint.life < flag) s += text(Math.max(Xe(stint.life), Xe(now)) + 5, r0, FMT.lapNumber(stint.life), over ? R.warning : R.text, 'start', over);
+    placed[0].push({ bar: true, l: Xs(stint.from), r: Math.max(Xe(Math.min(stint.life, flag)), Xe(now)) });
+    if (stint.life < flag) {
+      const end = Math.max(Xe(stint.life), Xe(now));
+      const l = { row: 0, t: FMT.lapNumber(stint.life), fill: over ? R.warning : R.text, bold: over };
+      need(layoutRow([[{ ...l, x: end + PAD, anchor: 'start' }], [{ ...l, x: Xs(stint.from) - PAD, anchor: 'end' }], [{ ...l, x: end - PAD, anchor: 'end' }]], placed[0], lo, hi), 'the fitted set\'s last lap');
+    }
   } else {
     s += `<rect x="${Xe(now)}" y="${r0 - ROW_H / 2}" width="${x1 - Xe(now)}" height="${ROW_H}" fill="transparent"><title>${TEXT.unknown[unknownLife]}</title></rect>`;
-    s += `<line x1="${Xe(now) + 4}" x2="${Xe(now) + 4 + 2 * LW}" y1="${r0 + 7}" y2="${r0 + 7}" stroke="${R.textFaint}" stroke-dasharray="1 2"/>`;
+    s += `<line x1="${Xe(now) + 4}" x2="${Xe(now) + 4 + 6 * CELL_W}" y1="${r0 + 7}" y2="${r0 + 7}" stroke="${R.textFaint}" stroke-dasharray="1 2"/>`;
   }
-  // the next sets: the window as a solid band with its first and last lap written beside it, then the set's life as a thin line
   sets.forEach((set, i) => {
-    const y = yMid(i + 1);
+    const row = i + 1, y = yMid(row);
     s += text(CELL_W, y, set.letter, R.textDim);
-    if (set.lifeEnd < flag) { // no window: only its life from the latest, ending short of the flag
+    if (set.lifeEnd < flag) {
       s += rule(Xe(set.latest), Xe(set.lifeEnd), y) + `<line x1="${Xe(set.lifeEnd)}" x2="${Xe(set.lifeEnd)}" y1="${y - 4}" y2="${y + 4}" stroke="${R.textFaint}"/>`;
       return;
     }
     const open = now >= set.earliest && now <= set.latest;
     const closed = now > set.latest;
-    const colour = open ? R.ownCar : closed ? R.textFaint : R.text;
+    const fill = open ? R.ownCar : closed ? R.textFaint : R.text;
     const from = Math.max(set.earliest, now + 1);
     if (from <= set.latest) s += `<rect x="${Xs(from)}" y="${y - BAR / 2}" width="${Xe(set.latest) - Xs(from)}" height="${BAR}" fill="${open ? R.ownCar : R.textDim}"/>`;
-    const leftEdge = Math.min(Xs(set.earliest), Xs(from));
-    s += text(leftEdge - 5, y, FMT.lapNumber(set.earliest), colour, 'end', open);
-    s += text(Xe(set.latest) + 5, y, FMT.lapNumber(set.latest), colour, 'start', open);
-    s += rule(Xe(set.latest) + 5 + LW + 4, Xe(flag), y);
+    s += rule(Xe(set.latest), Xe(flag), y);
+    const bandL = Xs(Math.min(set.earliest, from)), bandR = Xe(set.latest);
+    const base = { row, fill, bold: open };
+    const a = FMT.lapNumber(set.earliest), b = FMT.lapNumber(set.latest);
+    const ab = set.earliest === set.latest ? b : FMT.lapRange(set.earliest, set.latest).replace(/–L/, '–');
+    placed[row].push({ bar: true, l: bandL, r: bandR });
+    need(layoutRow(set.earliest === set.latest ? [
+      [{ ...base, t: b, x: bandR + PAD, anchor: 'start' }],
+      [{ ...base, t: b, x: bandL - PAD, anchor: 'end' }],
+    ] : [
+      [{ ...base, t: a, x: bandL - PAD, anchor: 'end' }, { ...base, t: b, x: bandR + PAD, anchor: 'start' }],
+      [{ ...base, t: ab, x: bandR + PAD, anchor: 'start' }],
+      [{ ...base, t: ab, x: bandL - PAD, anchor: 'end' }],
+    ], placed[row], lo, hi), `the ${set.letter} window`);
   });
-  // now: a white line through every row, its lap on the axis
   s += `<line x1="${Xe(now)}" x2="${Xe(now)}" y1="2" y2="${rows * ROW_H}" stroke="${R.ownCar}" stroke-width="1"/>`;
-  s += text(Xe(now), axisY, FMT.lapNumber(now), R.ownCar, 'middle', true);
+  // the axis: now, the flag, then every 10 laps; dropped when they touch
+  const axis = placed[rows];
+  const clampMid = (x, t) => Math.min(hi - (vis(t) * CELL_W) / 2, Math.max(lo + (vis(t) * CELL_W) / 2, x));
+  const nowT = FMT.lapNumber(now);
+  need(layoutRow([[{ row: rows, t: nowT, x: clampMid(Xe(now), nowT), anchor: 'middle', fill: R.ownCar, bold: true }]], axis, lo, hi), 'now');
+  const flagT = FMT.lapNumber(flag);
+  layoutRow([[{ row: rows, t: flagT, x: clampMid(Xe(flag), flagT), anchor: 'middle', fill: R.textDim }]], axis, lo, hi);
+  for (let l = 10; l < flag; l += 10) layoutRow([[{ row: rows, t: FMT.lapNumber(l), x: (Xs(l) + Xe(l)) / 2, anchor: 'middle', fill: R.textFaint }]], axis, lo, hi);
+  // labels last, each on a knockout in its row's background
+  for (const row of placed) for (const l of row.filter((x) => !x.bar)) {
+    s += `<rect x="${l.l - 2}" y="${l.row * ROW_H + 2}" width="${l.r - l.l + 4}" height="${ROW_H - 4}" fill="${rowBg(l.row)}"/>`;
+    s += text(l.x, yMid(l.row), l.t, l.fill, l.anchor, l.bold);
+  }
   return { svg: s + '</svg>', svgRows: rows + 1 };
 }
 
@@ -181,11 +224,27 @@ const OVER = { now: 33, flag: 52, stint: STINT, sets: SETS };
 const NOSTOP = { now: 41, flag: 52, stint: { letter: 'H', from: 16, life: 55 }, sets: [] };
 const EARLY = { now: 2, flag: 52, stint: { letter: 'M', from: 1 }, sets: [], unknownLife: 'insufficientData' };
 
-page('pit-window.html', 'SP4.2 · pit-window-strip, round 4', `
+page('pit-window.html', 'SP4.2 · pit-window-strip, round 5', `
 <div class="note">Lap axis = the whole race, the flag a vertical line, <b>now</b> the white line. Top row: the fitted set, done laps solid, the rest of its life hollow. Below: one row per compound we still have a new set of (compound rule applied), its window solid (white when open now), then its life as a thin line. A line that stops short of the flag is a set that does not make it. No words in the panel.</div>
 <h2>Full ${FULL_COLS}×4</h2>
 <div class="row">${fig(full(OPEN, { size: 'full' }), 'L23, H new open')}${fig(full(AHEAD), 'L15')}</div>
 <div class="row" style="margin-top:12px">${fig(full(OVER), 'L33, mediums past their life')}${fig(full({ ...NOSTOP }, { link: '1 · LIN' }), 'LIN L41, tyres reach the flag, rule met')}${fig(full(EARLY), 'L02, life still unknown, sets not received')}</div>
 <h2>Compact 22×3</h2>
 <div class="row">${fig(compact(OPEN, { size: 'compact' }), 'L23')}${fig(compact(OVER), 'L33')}</div>`);
+
+// ================================================================ the sweep: every lap of several races through the layout rules
+// Each scenario runs now = 1 … flag; the layout throws on any overlap. The page shows a sample of each.
+const SCENARIOS = [
+  { name: 'Monaco 78 laps, a one-lap window on the H, the S life ending one lap short', flag: 78, stint: { letter: 'M', from: 1, life: 44 }, sets: [{ letter: 'H', earliest: 44, latest: 44, lifeEnd: 90 }, { letter: 'S', earliest: 0, latest: 44, lifeEnd: 77 }] },
+  { name: 'Silverstone 52 laps, a long window opening at L03', flag: 52, stint: { letter: 'S', from: 1, life: 24 }, sets: [{ letter: 'H', earliest: 3, latest: 24, lifeEnd: 70 }, { letter: 'M', earliest: 12, latest: 24, lifeEnd: 60 }] },
+  { name: 'sprint 19 laps, a window at the flag', flag: 19, stint: { letter: 'M', from: 1, life: 17 }, sets: [{ letter: 'S', earliest: 10, latest: 17, lifeEnd: 25 }, { letter: 'H', earliest: 2, latest: 17, lifeEnd: 40 }] },
+  { name: 'short race 5 laps', flag: 5, stint: { letter: 'S', from: 1, life: 4 }, sets: [{ letter: 'M', earliest: 1, latest: 4, lifeEnd: 12 }, { letter: 'H', earliest: 1, latest: 4, lifeEnd: 20 }] },
+  { name: 'Spa 44 laps, life past the flag (no stop), second stint from L20', flag: 44, stint: { letter: 'H', from: 20, life: 60 }, sets: [] },
+];
+const sweepHtml = SCENARIOS.map((sc) => {
+  for (let now = Math.max(1, sc.stint.from); now <= sc.flag; now++) chartSvg({ cols: FULL_COLS, now, flag: sc.flag, stint: sc.stint, sets: sc.sets }); // throws on overlap
+  const shown = [...new Set([sc.stint.from, Math.round((sc.stint.from + sc.flag) / 3), Math.round(((sc.stint.from + sc.flag) * 2) / 3), sc.stint.life, sc.flag - 1, sc.flag].filter((l) => l >= sc.stint.from && l <= sc.flag))];
+  return `<h2>${sc.name} · checked at every lap, shown at ${shown.map(FMT.lapNumber).join(', ')}</h2><div class="row">${shown.map((now) => fig(full({ now, flag: sc.flag, stint: sc.stint, sets: sc.sets }), FMT.lapNumber(now))).join('')}</div>`;
+}).join('');
+page('sweep.html', 'SP4.2 · pit-window-strip, layout sweep (round 5b)', `<div class="note">Every lap of five races run through the label rules; any overlap stops the generator. Lines break behind labels; a window that has no room for its two laps writes them together; the axis drops the flag or a 10-lap label before it touches now.</div>${sweepHtml}`);
 console.log(SIZES.join('\n'));
