@@ -118,10 +118,11 @@ function pitWindowOf(view: EngineView, car: CarId, life: TyreLife | undefined, w
   const lapsToLimit: Known<number> = life?.lapsToLimit ?? INSUFFICIENT;
   const last: Known<number> = lapsToLimit.known ? known(currentLap + Math.floor(lapsToLimit.value), lapsToLimit.at) : lapsToLimit;
   const latest: Known<number> = last.known ? known(Math.min(last.value, flag - 1), last.at) : last;
-  const pastLimit = (lapsToLimit.known && lapsToLimit.value < 1) || (latest.known && currentLap > latest.value);
 
   // without the rule to meet, a set that runs the final lap needs no stop
   const noStop = effect.ruleRequired !== true && last.known && last.value >= flag;
+  // a set that runs to the flag is never past its limit: `latest` is only capped at flag − 1 (SP4.2 fix re-review)
+  const pastLimit = (lapsToLimit.known && lapsToLimit.value < 1) || (!noStop && latest.known && currentLap > latest.value);
   const stopNeeded: Known<boolean> = latest.known ? known(!noStop, latest.at) : latest;
   const compounds: VisualCompound[] = [];
   if (!noStop) {

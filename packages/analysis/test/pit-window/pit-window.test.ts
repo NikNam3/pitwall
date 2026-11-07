@@ -391,6 +391,10 @@ describe('pit-window calculator', () => {
       expect(ours({ lap: 23, lapsToLimit: 40 }).stint.stopNeeded).toMatchObject(v(true));
     });
 
+    it('no stop needed on the last lap (L52, rule waived, the set runs to the flag): pastLimit false', () => {
+      expect(ours({ lap: 52, lapsToLimit: 40, rule: 'waived' }).stint.pastLimit).toBe(false);
+    });
+
     it('lapsToLimit insufficientData: every windowLaps, state and stopNeeded insufficientData', () => {
       const w = ours({ lap: 23, lapsToLimit: INSUFFICIENT });
       expect(w.sets).not.toEqual([]);
