@@ -11,8 +11,8 @@ import type { PitWindow, UnknownReason } from '@pitwall/domain';
 import { COMPOUND_MARK } from '../../kit/compound/compound-mark.ts';
 import { formatLapNumber } from '../../kit/values/format.ts';
 import type { Role } from '../../theme/roles.ts';
-import { bandRole, windowEmphasis } from './emphasis.ts';
-import { fittedEmphasis, hasWindow, setState, visibleSets, windowText } from './rows.ts';
+import { bandRole, lastLapEmphasis, windowEmphasis } from './emphasis.ts';
+import { noStop as noStopOf, visibleSets, windowOf, windowText } from './rows.ts';
 
 type Box = { l: number; r: number };
 export type Cell = { w: number; h: number };
@@ -56,7 +56,8 @@ export type StripLayout = {
   unknown?: { x: number; y: number; reason: UnknownReason };
 };
 
-export type StripInput = { cols: number; window: PitWindow; showOther: boolean };
+/** `rows`: the panel's height in cells; it shows at most `rows − 2` set rows (the fitted set's and the axis row excepted). */
+export type StripInput = { cols: number; rows: number; window: PitWindow; showOther: boolean };
 
 /** The panel's cell in px, from its size. */
 export const cellOf = (size: { cols: number; rows: number; px: { width: number; height: number } }): Cell => ({
@@ -100,10 +101,11 @@ function clampedMiddle(base: Omit<Candidate, 'x' | 'anchor'>, mid: number, lo: n
 
 /** The strip's bars, lines and labels in px. */
 export function layoutStrip(input: StripInput, cell: Cell): StripLayout {
-  const { cols, window: w, showOther } = input;
+  const { cols, rows, window: w, showOther } = input;
   const cw = cell.w;
   const width = cols * cw;
-  const sets = visibleSets(w, showOther);
+  // the sets that fit whole: same type first, then the other type (`visibleSets`' order); the rest are not drawn
+  const sets = visibleSets(w, showOther).slice(0, Math.max(0, rows - 2));
   const axisRow = sets.length + 1;
   const lo = (LETTER_COLS + 0.5) * cw;
   const hi = width - EDGE;
@@ -179,16 +181,18 @@ export function layoutStrip(input: StripInput, cell: Cell): StripLayout {
     unknown = { x: Math.min(xe(now) + PAD, x1), y: 0, reason: latest.reason };
   } else {
     const last = latest.value;
-    // no stop to plan (the analysis caps the latest stop lap at flag − 1): the bar runs to the flag, no last lap
-    const noStop = w.sets.length === 0 && w.window.known && w.window.value === 'none' && last === flag - 1;
+    // no stop needed (the topic's `stopNeeded`): the bar runs to the flag, no last lap
+    const noStop = noStopOf(w);
     const end = noStop ? flag : last;
-    bar(0, xs(from), xe(Math.min(now, end)), 'text');
+    // past its limit beyond `latest` (the topic's `pastLimit`): the overrun from `latest` to now amber
+    const overrun = !noStop && w.stint.pastLimit && now > end;
+    bar(0, xs(from), xe(overrun ? end : now), 'text');
     if (now < end) bar(0, xe(now), xe(end), 'textDim', true);
-    if (now > end) bar(0, xe(end), xe(now), 'warning');
+    if (overrun) bar(0, xe(end), xe(now), 'warning');
     const barEnd = Math.max(xe(end), xe(now));
     placed(0).push({ l: xs(from), r: barEnd, bar: true });
     if (!noStop) {
-      const base = { row: 0, text: formatLapNumber(last, 2), ...fittedEmphasis(w) };
+      const base = { row: 0, text: formatLapNumber(last, 2), ...lastLapEmphasis(w.stint.pastLimit) };
       const ok = placeFirst(0, [[{ ...base, x: barEnd + PAD, anchor: 'start' }], [{ ...base, x: xs(from) - PAD, anchor: 'end' }]]);
       if (!ok) placeInside(0, { ...base, x: Math.max(lo + [...base.text].length * cw, barEnd - PAD), anchor: 'end' });
     }
@@ -200,24 +204,24 @@ export function layoutStrip(input: StripInput, cell: Cell): StripLayout {
     const y = yMid(row);
     letters.push({ x: cw, y, text: COMPOUND_MARK[set.compound].letter });
     if (!latest.known) return;
-    const last = latest.value;
-    if (!hasWindow(set) || !set.earliest.known) {
+    const own = windowOf(set);
+    if (own === undefined) {
       if (set.lifeEnd.known) {
         const lifeEnd = Math.min(set.lifeEnd.value, flag);
-        line(xe(last), y, xe(lifeEnd), y, 'textFaint');
+        line(xe(latest.value), y, xe(lifeEnd), y, 'textFaint');
         line(xe(lifeEnd), y - TICK_PX, xe(lifeEnd), y + TICK_PX, 'textFaint');
       }
       return;
     }
-    const earliest = set.earliest.value;
-    const state = setState(w, set);
+    // the set's own window and state, as the topic gives them
+    const { laps: { from: earliest, to: last }, state } = own;
     bar(row, xs(Math.max(earliest, now + 1)), xe(last), bandRole(state));
     line(xe(last), y, xe(flag), y, 'textFaint');
     const bandL = xs(earliest);
     const bandR = xe(last);
     placed(row).push({ l: bandL, r: bandR, bar: true });
     const base = { row, ...windowEmphasis(state) };
-    const both = windowText(earliest, last);
+    const both = windowText(own.laps);
     const groups: Candidate[][] = earliest === last
       ? [[{ ...base, text: both, x: bandR + PAD, anchor: 'start' }], [{ ...base, text: both, x: bandL - PAD, anchor: 'end' }]]
       : [

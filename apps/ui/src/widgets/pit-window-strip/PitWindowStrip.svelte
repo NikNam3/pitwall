@@ -16,7 +16,7 @@
 
   const full = $derived(size.mode === 'full');
   const layout = $derived(
-    data.window.known && full ? layoutStrip({ cols: size.cols, window: data.window.value, showOther: options.otherType }, cellOf(size)) : undefined,
+    data.window.known && full ? layoutStrip({ cols: size.cols, rows: size.rows, window: data.window.value, showOther: options.otherType }, cellOf(size)) : undefined,
   );
   const rows = $derived(data.window.known && !full ? compactRows(data.window.value, options.otherType).slice(0, size.rows) : []);
 </script>

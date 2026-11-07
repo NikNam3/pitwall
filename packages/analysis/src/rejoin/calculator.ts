@@ -108,7 +108,8 @@ function rejoinAt(
     // positions at pit exit: a car that passes us while we stop gains one place
     others.push({ carId: g.carId, ...gap, t: g.gapMs.value - loss, position: passedBy(gap, loss) ? current - 1 : current });
   }
-  const rejoinPosition = ctx.position + others.filter((o) => passedBy(o, loss)).length;  const mapPoint = ctx.outline.known ? mapPointAt(ctx.ours, latest - loss, ctx.outline.value, at) : ctx.outline;
+  const rejoinPosition = ctx.position + others.filter((o) => passedBy(o, loss)).length;
+  const mapPoint = ctx.outline.known ? mapPointAt(ctx.ours, latest - loss, ctx.outline.value, at) : ctx.outline;
   return { ...base, rejoinPosition: known(rejoinPosition, at), order: known(orderOf(others, ctx.carId, rejoinPosition, ctx.around, at), at), mapPoint };
 }
 
