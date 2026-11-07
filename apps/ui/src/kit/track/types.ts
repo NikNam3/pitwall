@@ -22,6 +22,9 @@ export type TrackDot = {
 /** A triangle at a point with its label beside it (an incident). */
 export type TrackMarker = { at: MapPoint; label: string; role: Role };
 
+/** A ghost ring at a point (a rejoin ghost), with its letter right of it, or none. */
+export type TrackGhost = { at: MapPoint; letter: string | undefined };
+
 /** Everything the canvas draws. */
 export type TrackScene = {
   outline: MapPoint[];
@@ -30,6 +33,7 @@ export type TrackScene = {
   labels: TrackLabel[];
   dots: TrackDot[];
   markers: TrackMarker[];
+  ghosts: TrackGhost[];
 };
 
 /** The scene placed in a box: the outline's fit (`toPx`), and the labels, side bars and marker labels in px. */

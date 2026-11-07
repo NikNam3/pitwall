@@ -27,6 +27,7 @@ const scene = (over: Partial<TrackScene>): TrackScene => ({
   labels: [],
   dots: [],
   markers: [],
+  ghosts: [],
   ...over,
 });
 const dot = (id: string, at: MapPoint, over: Partial<TrackDot> = {}): TrackDot => ({ id, at, colour: team, radiusPx: 4, hollow: false, ...over });

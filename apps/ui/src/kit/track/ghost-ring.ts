@@ -5,9 +5,9 @@ import { GHOST_ROLE } from '../ghost/ghost.ts';
 import { TRACK_PX } from './layout.ts';
 
 /** The ring's radius (px). */
-const RING_RADIUS = 5;
+export const RING_RADIUS = TRACK_PX.ghostRadius;
 /** The gap between the ring's edge and its letter (px). */
-const LETTER_GAP = 3;
+export const LETTER_GAP = TRACK_PX.ghostLetterGap;
 
 /** Strokes the ghost ring centred at `point` (CSS px) and writes `letter` right of it; `roles` resolves a role. */
 export function drawGhostRing(
