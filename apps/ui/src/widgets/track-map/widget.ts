@@ -9,6 +9,8 @@ export const widget = declareWidget({
     geometry: topic('trackPositions.geometry'),
     cars: topic('trackPositions.cars'),
     markers: optional(topic('incidents.markers')),
+    // the rejoin ghost of the link's primary car (SP4.2 spec §5): one ring per condition
+    rejoin: optional(topic('rejoin.car', ({ link }) => ({ carId: link.primary }))),
   },
   // Mockup 2-map-views.html: full 64x20 (turn and sector labels, every car's code), compact 32x10.
   sizes: { compact: { minCols: 32, minRows: 10 }, full: { minCols: 64, minRows: 20 } },
