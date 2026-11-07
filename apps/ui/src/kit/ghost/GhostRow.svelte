@@ -10,15 +10,26 @@
   const faint = role(GHOST_ROLE);
 </script>
 
+<!-- The hairlines lie on the row's top and bottom edge and take no height: the ghost keeps exactly one line. -->
 <div class="ghost">
-  <div data-hairline style:height="1px" style:background-color={faint}></div>
+  <div class="hairline top" data-hairline style:height="1px" style:background-color={faint}></div>
   <div data-ghost-row style:color={faint}>{@render children()}</div>
-  <div data-hairline style:height="1px" style:background-color={faint}></div>
+  <div class="hairline bottom" data-hairline style:height="1px" style:background-color={faint}></div>
 </div>
 
 <style>
   .ghost {
-    display: flex;
-    flex-direction: column;
+    position: relative;
+  }
+  .hairline {
+    position: absolute;
+    left: 0;
+    right: 0;
+  }
+  .top {
+    top: 0;
+  }
+  .bottom {
+    bottom: 0;
   }
 </style>
