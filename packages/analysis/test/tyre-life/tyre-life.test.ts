@@ -117,6 +117,18 @@ const viewOf = (laps: LapRecord[], now: number, stints: StintRecord[] = [], conf
 };
 
 const run = (view: EngineView) => calc.compute(view)[carId(0)]!;
+
+/** `n` laps of car 1 whose wear realism hides, its set aged `age` laps at the end of the last (one stint, no record). */
+const hiddenRivalLaps = (n: number, age: number): LapRecord[] =>
+  Array.from({ length: n }, (_, i) =>
+    lap({
+      carId: carId(1),
+      lapNumber: i + 1,
+      tyreAgeAtStart: age - n + i,
+      wearAtStartPct: everyCorner(() => unknown('realism')),
+      wearAtEndPct: everyCorner(() => unknown('realism')),
+    }),
+  );
 const insufficient = { known: false, reason: 'insufficientData' };
 
 describe('tyre-life calculator', () => {
@@ -351,8 +363,11 @@ describe('tyre-life calculator', () => {
       const laps = chain([4, 4, 4], { startPct: 60 });
       expect(run(viewOf(laps, 76)).corners.fl.lapsToLimit).toEqual({ known: true, value: 0, at: 0 });
       expect(run(viewOf(laps, 70)).corners.fl.lapsToLimit).toEqual({ known: true, value: 0, at: 0 });
-      // even before there is a rate
-      expect(run(viewOf([wornLap(1, 68, 72)], 76)).corners.fl.lapsToLimit).toEqual({ known: true, value: 0, at: 0 });
+      // ported (Task 4, minLaps): before the stint has run `minLaps` laps the laps to the limit are insufficientData, at
+      // the limit too (K17: the wear stays known)
+      const early = run(viewOf([wornLap(1, 68, 72)], 76)).corners.fl;
+      expect(early.lapsToLimit).toEqual(insufficient);
+      expect(early.wearPct).toMatchObject({ known: true, value: 76 });
     });
 
     it('wear that does not grow has no laps to the limit', () => {
@@ -476,9 +491,10 @@ describe('tyre-life calculator', () => {
 
     it('age basis: a rival whose wear realism hides reaches the limit where ν · age is ageLossLimitMs (ν 100, limit 2000, age 12 → 8 laps)', () => {
       const rival = realismHidden(carState({ id: carId(1), tyres: { age: 12, actualCompound: 'C3', visualCompound: 'soft' } }));
+      // ported (Task 4, minLaps): the rival has run 3 laps of its stint
       const view = situatedView({
         cars: [carWithWear(6, { age: 3 }), rival],
-        history: { laps: chain([2, 2, 2]) },
+        history: { laps: [...chain([2, 2, 2]), ...hiddenRivalLaps(3, 12)] },
         outputs: upstream({ [carId(1)]: [degStint({ basis: 'age', fuelCorrected: false })] }),
       });
       const out = calc.compute(view)[carId(1)]!;
@@ -563,9 +579,10 @@ describe('tyre-life calculator', () => {
 
     it('tyreLife.ageLossLimitMs replaces the config`s loss limit: ν 100, limit 3000, age 12 → 18 laps; fresh life 30', () => {
       const rival = realismHidden(carState({ id: carId(1), tyres: { age: 12, actualCompound: 'C3', visualCompound: 'soft' } }));
+      // ported (Task 4, minLaps): the rival has run 3 laps of its stint
       const view = situatedView({
         cars: [carWithWear(6, { age: 3 }), rival],
-        history: { laps: chain([2, 2, 2]) },
+        history: { laps: [...chain([2, 2, 2]), ...hiddenRivalLaps(3, 12)] },
         outputs: upstream({ [carId(1)]: [degStint({ basis: 'age', fuelCorrected: false })] }),
         priors: snapshot({ 'tyreLife.ageLossLimitMs': 3000 }),
       });
@@ -597,6 +614,75 @@ describe('tyre-life calculator', () => {
       expect(out.limitPct).toBe(80);
       expect(out.ageLossLimitMs).toBe(2500);
       expect(out.corners.fl.lapsToLimit).toMatchObject({ known: true, value: 35 });
+    });
+  });
+
+  // Task 4 (spec 7, K17): `lapsToLimit` (the set's and each corner's) is insufficientData while the current stint has run
+  // fewer than `minLaps` laps (`currentStintLaps`); wear, rate and the fresh-set life stay
+  describe('minLaps: no laps to the limit before the stint has run minLaps laps', () => {
+    it('the config declares minLaps 3', () => {
+      expect((TYRE_LIFE_CONFIG.defaults as Record<string, unknown>)['minLaps']).toBe(3);
+    });
+
+    it('a stint with 2 laps: lapsToLimit and every corner`s are insufficientData; wear and rate stay known', () => {
+      const out = run(viewOf(chain([2, 2]), 4));
+      expect(out.lapsToLimit).toEqual(insufficient);
+      for (const corner of CORNERS) {
+        expect(out.corners[corner].lapsToLimit, corner).toEqual(insufficient);
+        expect(out.corners[corner].wearPct, corner).toEqual({ known: true, value: 4, at: 0 });
+        expect(out.corners[corner].ratePctPerLap, corner).toMatchObject({ known: true, value: 2 });
+      }
+    });
+
+    it('a stint with 3 laps: lapsToLimit and every corner`s are known ((70 − 6) / 2 = 32 laps)', () => {
+      const out = run(viewOf(chain([2, 2, 2]), 6));
+      expect(out.lapsToLimit).toMatchObject({ known: true, value: 32 });
+      for (const corner of CORNERS) expect(out.corners[corner].lapsToLimit, corner).toMatchObject({ known: true, value: 32 });
+    });
+
+    it('a lap counts once on engine-shaped history: 2 laps, each written twice, are below minLaps', () => {
+      const out = run(viewOf(engineShaped(chain([2, 2])), 4));
+      expect(out.lapsToLimit).toEqual(insufficient);
+      expect(out.corners.fl.lapsToLimit).toEqual(insufficient);
+    });
+
+    it('the stint`s laps count, not the set`s age: a used set (age 10) refitted with 1 stint lap is insufficientData', () => {
+      // car 1 (wear hidden: age basis, ν 100, limit 2000): stint 1 laps 1-5 closed by its record, then the used set of age
+      // 10 fitted, lap 6 on it; by its age alone it would have 2000 / 100 − 11 = 9 laps left
+      const oldStint = hiddenRivalLaps(5, 5).map((l, i) => ({ ...l, ...(i === 4 && { inLap: true }) }));
+      const refitted = (n: number) =>
+        Array.from({ length: n }, (_, i) => ({ ...hiddenRivalLaps(1, 11 + i)[0]!, lapNumber: 6 + i, outLap: i === 0 }));
+      const viewWith = (n: number) =>
+        situatedView({
+          cars: [carWithWear(6, { age: 3 }), realismHidden(carState({ id: carId(1), tyres: { age: 10 + n, actualCompound: 'C3', visualCompound: 'soft' } }))],
+          history: { laps: [...chain([2, 2, 2]), ...oldStint, ...refitted(n)], stints: [stint({ carId: carId(1), firstLap: 1, lastLap: 5 })] },
+          outputs: upstream({ [carId(1)]: [degStint({ basis: 'age', fuelCorrected: false })] }),
+        });
+      const one = calc.compute(viewWith(1))[carId(1)]!;
+      expect(one.basis).toBe('age');
+      expect(one.lapsToLimit).toEqual(insufficient);
+      // after 3 laps on it: 2000 / 100 − 13 = 7
+      expect(calc.compute(viewWith(3))[carId(1)]!.lapsToLimit).toMatchObject({ known: true, value: 7 });
+    });
+
+    it('config minLaps 5: still insufficientData at 3 laps, known at 5', () => {
+      const config = { [TYRE_LIFE_CONFIG.key]: { minLaps: 5 } };
+      const three = run(viewOf(chain([2, 2, 2]), 6, [], config));
+      expect(three.lapsToLimit).toEqual(insufficient);
+      for (const corner of CORNERS) expect(three.corners[corner].lapsToLimit, corner).toEqual(insufficient);
+      expect(run(viewOf(chain([2, 2, 2, 2, 2]), 10, [], config)).lapsToLimit).toMatchObject({ known: true, value: 30 });
+    });
+
+    it('freshLifeLaps is unaffected: 2 stint laps still give the fresh soft life from the priors (70 / 2.5 = 28)', () => {
+      const view = situatedView({
+        cars: [carWithWear(4, { age: 2 })],
+        history: { laps: chain([2, 2]) },
+        outputs: upstream({ [carId(0)]: [degStint()] }),
+        priors: snapshot(wearPriors('soft', { fl: 2, fr: 2.5, rl: 1.6, rr: 2 })),
+      });
+      const out = run(view);
+      expect(out.lapsToLimit).toEqual(insufficient);
+      expect(out.freshLifeLaps.soft).toMatchObject({ known: true, value: 28 });
     });
   });
 });
