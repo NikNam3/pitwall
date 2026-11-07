@@ -2,6 +2,7 @@
 import type { CarId, Known, PitWindow } from '@pitwall/domain';
 
 export type { PitWindow, PitWindowSet, PitWindowState } from '@pitwall/domain';
+export { PIT_WINDOW_BEHAVIOUR, type PitWindowEffect } from './behaviour.ts';
 export * from './config.ts';
 
 /** The analysis id. */
