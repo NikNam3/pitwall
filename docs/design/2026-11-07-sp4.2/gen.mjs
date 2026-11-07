@@ -90,46 +90,50 @@ function chartSvg({ cols, now, flag, stint, sets, unknownLife }) {
   const W = (cols + 2) * CELL_W;
   const rows = 1 + sets.length;
   const H = rows * ROW_H + ROW_H; // + the axis row
-  const x0 = (LABEL_W + 1) * CELL_W, x1 = W - (RANGE_W + 2) * CELL_W;
-  const X = (lap) => x0 + ((x1 - x0) * (lap - 1)) / (flag - 1);   // the start of lap `lap`
+  const x0 = (LABEL_W + 1) * CELL_W, x1 = W - 3 * CELL_W;
   const Xe = (lap) => x0 + ((x1 - x0) * lap) / flag;               // the end of lap `lap`
-  const Xs = (lap) => x0 + ((x1 - x0) * (lap - 1)) / flag;
+  const Xs = (lap) => x0 + ((x1 - x0) * (lap - 1)) / flag;         // the start of lap `lap`
+  const LW = 3 * CELL_W;                                           // a lap label, `L31`
   const yMid = (r) => r * ROW_H + ROW_H / 2;
   let s = `<svg width="${W}" height="${H}">`;
   const text = (x, y, t, fill, anchor = 'start', bold = false) => `<text x="${x}" y="${y + 4}" fill="${fill}" text-anchor="${anchor}"${bold ? ' font-weight="700"' : ''}>${t}</text>`;
-  // the flag line and the axis
+  const rule = (xa, xb, y, colour = R.textFaint) => (xb > xa ? `<line x1="${xa}" x2="${xb}" y1="${y}" y2="${y}" stroke="${colour}" stroke-width="1"/>` : '');
+  // row bands, the flag line, the axis (faint laps every 10, now and the flag)
+  sets.forEach((_, i) => { if (i % 2 === 0) s += `<rect x="0" y="${(i + 1) * ROW_H}" width="${W}" height="${ROW_H}" fill="${R.bgRowBand}"/>`; });
   const axisY = rows * ROW_H + ROW_H / 2;
   s += `<line x1="${Xe(flag)}" x2="${Xe(flag)}" y1="2" y2="${rows * ROW_H}" stroke="${R.textDim}" stroke-width="1"/>`;
-  for (let l = 10; l < flag - 2; l += 10) if (Math.abs(l - now) > 8) s += text(Xs(l) + (Xe(l) - Xs(l)) / 2, axisY, FMT.lapNumber(l), R.textFaint, 'middle');
+  for (let l = 10; l < flag - 4; l += 10) if (Math.abs(Xe(l) - Xe(now)) > 2 * LW) s += text((Xs(l) + Xe(l)) / 2, axisY, FMT.lapNumber(l), R.textFaint, 'middle');
   s += text(Xe(flag), axisY, FMT.lapNumber(flag), R.textDim, 'middle');
-  // the fitted set: done laps solid, the rest of its life hollow, past its life amber
+  // the fitted set: done laps solid, the rest of its life hollow, past its life amber; its last lap written at the end
   const r0 = yMid(0);
   s += text(CELL_W, r0, stint.letter, R.textDim);
   s += `<rect x="${Xs(stint.from)}" y="${r0 - BAR / 2}" width="${Xe(now) - Xs(stint.from)}" height="${BAR}" fill="${R.text}"/>`;
   if (!unknownLife) {
-    if (now < stint.life) s += `<rect x="${Xe(now) + 0.5}" y="${r0 - BAR / 2 + 0.5}" width="${Xe(Math.min(stint.life, flag)) - Xe(now) - 1}" height="${BAR - 1}" fill="none" stroke="${R.textDim}"/>`;
+    const over = now > stint.life;
+    if (!over) s += `<rect x="${Xe(now) + 0.5}" y="${r0 - BAR / 2 + 0.5}" width="${Xe(Math.min(stint.life, flag)) - Xe(now) - 1}" height="${BAR - 1}" fill="none" stroke="${R.textDim}"/>`;
     else s += `<rect x="${Xe(stint.life)}" y="${r0 - BAR / 2}" width="${Xe(now) - Xe(stint.life)}" height="${BAR}" fill="${R.warning}"/>`;
-    s += text(W - CELL_W, r0, FMT.lapNumber(stint.life), now > stint.life ? R.warning : R.text, 'end', now > stint.life);
+    if (stint.life < flag) s += text(Math.max(Xe(stint.life), Xe(now)) + 5, r0, FMT.lapNumber(stint.life), over ? R.warning : R.text, 'start', over);
   } else {
-    s += `<rect x="${W - (RANGE_W + 1) * CELL_W}" y="${r0 - ROW_H / 2 + 2}" width="${RANGE_W * CELL_W}" height="${ROW_H - 4}" fill="transparent"><title>${TEXT.unknown[unknownLife]}</title></rect>`;
-    s += `<line x1="${W - (RANGE_W + 1) * CELL_W}" x2="${W - CELL_W}" y1="${r0 + 7}" y2="${r0 + 7}" stroke="${R.textFaint}" stroke-dasharray="1 2"/>`;
+    s += `<rect x="${Xe(now)}" y="${r0 - ROW_H / 2}" width="${x1 - Xe(now)}" height="${ROW_H}" fill="transparent"><title>${TEXT.unknown[unknownLife]}</title></rect>`;
+    s += `<line x1="${Xe(now) + 4}" x2="${Xe(now) + 4 + 2 * LW}" y1="${r0 + 7}" y2="${r0 + 7}" stroke="${R.textFaint}" stroke-dasharray="1 2"/>`;
   }
-  // the next sets: the window as a solid band, then the set's life from the latest as a thin line to where it ends
+  // the next sets: the window as a solid band with its first and last lap written beside it, then the set's life as a thin line
   sets.forEach((set, i) => {
     const y = yMid(i + 1);
-    if (i % 2 === 0) s += `<rect x="0" y="${(i + 1) * ROW_H}" width="${W}" height="${ROW_H}" fill="${R.bgRowBand}"/>`;
     s += text(CELL_W, y, set.letter, R.textDim);
-    const reaches = set.lifeEnd >= flag;
-    if (reaches) {
-      const open = now >= set.earliest && now <= set.latest;
-      const from = Math.max(set.earliest, now + 1);
-      if (from <= set.latest) s += `<rect x="${Xs(from)}" y="${y - BAR / 2}" width="${Xe(set.latest) - Xs(from)}" height="${BAR}" fill="${open ? R.ownCar : R.textDim}"/>`;
-      s += `<line x1="${Xe(set.latest)}" x2="${Xe(flag)}" y1="${y}" y2="${y}" stroke="${R.textFaint}" stroke-width="1"/>`;
-      s += text(W - CELL_W, y, FMT.lapRange(set.earliest, set.latest).replace(/–L/, '–'), open ? R.ownCar : now > set.latest ? R.textFaint : R.text, 'end', open);
-    } else {
-      s += `<line x1="${Xe(set.latest)}" x2="${Xe(set.lifeEnd)}" y1="${y}" y2="${y}" stroke="${R.textFaint}" stroke-width="1"/>`;
-      s += `<line x1="${Xe(set.lifeEnd)}" x2="${Xe(set.lifeEnd)}" y1="${y - 4}" y2="${y + 4}" stroke="${R.textFaint}" stroke-width="1"/>`;
+    if (set.lifeEnd < flag) { // no window: only its life from the latest, ending short of the flag
+      s += rule(Xe(set.latest), Xe(set.lifeEnd), y) + `<line x1="${Xe(set.lifeEnd)}" x2="${Xe(set.lifeEnd)}" y1="${y - 4}" y2="${y + 4}" stroke="${R.textFaint}"/>`;
+      return;
     }
+    const open = now >= set.earliest && now <= set.latest;
+    const closed = now > set.latest;
+    const colour = open ? R.ownCar : closed ? R.textFaint : R.text;
+    const from = Math.max(set.earliest, now + 1);
+    if (from <= set.latest) s += `<rect x="${Xs(from)}" y="${y - BAR / 2}" width="${Xe(set.latest) - Xs(from)}" height="${BAR}" fill="${open ? R.ownCar : R.textDim}"/>`;
+    const leftEdge = Math.min(Xs(set.earliest), Xs(from));
+    s += text(leftEdge - 5, y, FMT.lapNumber(set.earliest), colour, 'end', open);
+    s += text(Xe(set.latest) + 5, y, FMT.lapNumber(set.latest), colour, 'start', open);
+    s += rule(Xe(set.latest) + 5 + LW + 4, Xe(flag), y);
   });
   // now: a white line through every row, its lap on the axis
   s += `<line x1="${Xe(now)}" x2="${Xe(now)}" y1="2" y2="${rows * ROW_H}" stroke="${R.ownCar}" stroke-width="1"/>`;
@@ -177,7 +181,7 @@ const OVER = { now: 33, flag: 52, stint: STINT, sets: SETS };
 const NOSTOP = { now: 41, flag: 52, stint: { letter: 'H', from: 16, life: 55 }, sets: [] };
 const EARLY = { now: 2, flag: 52, stint: { letter: 'M', from: 1 }, sets: [], unknownLife: 'insufficientData' };
 
-page('pit-window.html', 'SP4.2 · pit-window-strip, round 3', `
+page('pit-window.html', 'SP4.2 · pit-window-strip, round 4', `
 <div class="note">Lap axis = the whole race, the flag a vertical line, <b>now</b> the white line. Top row: the fitted set, done laps solid, the rest of its life hollow. Below: one row per compound we still have a new set of (compound rule applied), its window solid (white when open now), then its life as a thin line. A line that stops short of the flag is a set that does not make it. No words in the panel.</div>
 <h2>Full ${FULL_COLS}×4</h2>
 <div class="row">${fig(full(OPEN, { size: 'full' }), 'L23, H new open')}${fig(full(AHEAD), 'L15')}</div>
