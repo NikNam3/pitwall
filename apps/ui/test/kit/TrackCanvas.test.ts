@@ -78,6 +78,7 @@ const scene: TrackScene = {
     { id: 'ours', at: outline[80]!, colour: ours, radiusPx: 6, hollow: false },
   ],
   markers: [],
+  ghosts: [],
 };
 
 beforeEach(() => {

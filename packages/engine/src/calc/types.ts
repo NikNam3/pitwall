@@ -10,7 +10,8 @@ import type { DeepReadonly } from '../util/deep-readonly.ts';
 export type CalculatorId = string;
 
 /** When a calculator is due, measured in session time (spec 7.3). */
-export type Cadence = 'frame' | { hz: number } | 'lapCompleted' | 'pitStop' | 'sessionChange';
+/** `ourCrossing`: a mini-sector crossing of one of our cars was appended (SP4.2 spec 3.1). */
+export type Cadence = 'frame' | { hz: number } | 'lapCompleted' | 'pitStop' | 'sessionChange' | 'ourCrossing';
 
 /** What a calculator reads: a part of the engine state, the feed health, or another calculator's output. */
 export type Dependency = ChangeTag | 'feed' | { calculator: CalculatorId };

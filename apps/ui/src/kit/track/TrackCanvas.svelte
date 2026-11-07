@@ -1,8 +1,8 @@
 <script lang="ts">
   // The track outline canvas (spec 7.1): measures its box, lays the scene out (`layoutTrack`, pure) and draws it
   // through the kit's canvas: the outline in its line role, the stretches over it in theme roles, the labels, the
-  // marker triangles with their labels, the dots in their car colour (resolved as the chart resolves it) and the side
-  // bars. Colours only as theme roles or a dot's team colour (C68).
+  // marker triangles with their labels, the dots in their car colour (resolved as the chart resolves it), the side
+  // bars and the ghost rings (`drawGhostRing`). Colours only as theme roles or a dot's team colour (C68).
   import { DEFAULT_THEME, cssNumber, resolveColour } from '../../theme/index.ts';
   import Canvas from '../canvas/Canvas.svelte';
   import type { DrawApi } from '../canvas/types.ts';
@@ -10,7 +10,8 @@
   import type { Measured } from '../size/measure.ts';
   import { cellBox, toCells } from '../size/size.ts';
   import type { WidgetSize } from '../types.ts';
-  import { TRACK_PX, layoutTrack, stretchPoints, triangleBox } from './layout.ts';
+  import { drawGhostRing } from './ghost-ring.ts';
+  import { TRACK_PX, ghostsOf, layoutTrack, stretchPoints, triangleBox } from './layout.ts';
   import type { TrackScene } from './types.ts';
 
   type Props = { scene: TrackScene };
@@ -94,6 +95,8 @@
       ctx.fillStyle = api.role(b.role);
       ctx.fillRect(b.x, b.y, b.w, b.h);
     }
+
+    for (const g of ghostsOf(scene)) drawGhostRing(ctx, toPx(g.at), g.letter, api.role);
   }
 </script>
 

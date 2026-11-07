@@ -1,8 +1,10 @@
 // Pure helpers of the gap chart: the reference option, the bands and one line per car.
 import type { CarOverview } from '@pitwall/contracts';
-import type { CarId, GapperLines, GapperReference } from '@pitwall/domain';
+import type { CarId, GapperLines, GapperReference, GhostLines } from '@pitwall/domain';
 import { carCodeById } from '../../kit/car/car-label.ts';
 import type { ChartSeries, PhaseBand } from '../../kit/chart/data.ts';
+import { GHOST_DASH, GHOST_ROLE } from '../../kit/ghost/ghost.ts';
+import { ghostLetter } from '../../kit/text.ts';
 import { role } from '../../theme/index.ts';
 import { lineLook } from './emphasis.ts';
 
@@ -58,4 +60,32 @@ export function gapSeries(lines: GapperLines, cars: readonly CarOverview[], ours
     });
   }
   return out;
+}
+
+/** The ghost conditions in the order the chart draws and names them. */
+const GHOST_ORDER = ['green', 'vsc', 'sc'] as const;
+
+/** A ghost line's width (px) and label rank: after our cars (0), before the field (2). */
+const GHOST_WIDTH_PX = 1;
+const GHOST_LABEL_RANK = 1;
+
+/**
+ * The rejoin ghost of `primary` (the panel's car): one line per condition with points, green, VSC, SC, plotted like a
+ * gapper line (y = -gap in seconds; the loss is already in the gap), faint, 1 px, dashed by condition, lettered `G`,
+ * `VSC`, `SC`. No ghost lines or no primary car draws none.
+ */
+export function ghostSeries(ghosts: GhostLines | undefined, primary: CarId | undefined): ChartSeries[] {
+  if (ghosts === undefined || primary === undefined) return [];
+  return GHOST_ORDER.flatMap((condition) => {
+    const line = ghosts.lines.find((l) => l.carId === primary && l.condition === condition);
+    if (line === undefined || line.points.length === 0) return [];
+    return [{
+      label: ghostLetter(condition),
+      points: line.points.map((p): [number, number] => [p.lap, -p.gapMs / 1000]),
+      colour: { colour: role(GHOST_ROLE), dashed: false, ownCar: false },
+      dash: GHOST_DASH[condition],
+      widthPx: GHOST_WIDTH_PX,
+      labelRank: GHOST_LABEL_RANK,
+    }];
+  });
 }

@@ -16,6 +16,7 @@ import {
   rainOutlookCalculator,
   sessionRemainingCalculator,
   tyreLifeCalculator,
+  pitWindowCalculator,
   tyreWearCalculator,
   type RaceMomentOutput,
 } from '@pitwall/analysis';
@@ -34,6 +35,7 @@ const CALCULATORS = [
   alarmsCalculator,
   tyreWearCalculator,
   tyreLifeCalculator,
+  pitWindowCalculator,
   degradationCalculator,
   fuelCalculator,
   sessionRemainingCalculator,

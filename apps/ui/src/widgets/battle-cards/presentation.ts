@@ -11,6 +11,7 @@ export const presentation = {
   moments: {
     neutralised: { emphasis: undefined },
     incident: { emphasis: undefined },
+    window: { emphasis: undefined },
     weather: { emphasis: undefined },
     battle: { emphasis: 'text' },
     carCare: { emphasis: undefined },

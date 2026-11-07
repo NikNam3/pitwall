@@ -17,8 +17,10 @@ import { openSpansOf, type QuickCalculator } from '@pitwall/engine/readers';
 import { ALARMS } from '../alarms/index.ts';
 import { BATTLE, BATTLE_CONFIG, type BattleOutput } from '../battle/index.ts';
 import { INCIDENTS, type IncidentsOutput } from '../incidents/index.ts';
+import { PIT_WINDOW, type PitWindowOutput } from '../pit-window/index.ts';
 import { RAIN_OUTLOOK, type RainOutlook } from '../rain-outlook/index.ts';
 import { behaviourFor } from '../shared/behaviour.ts';
+import { ourCars } from '../shared/our-cars.ts';
 import { neutralisationKind } from '../shared/neutralised.ts';
 import { RACE_MOMENT, RACE_MOMENT_BEHAVIOUR, RACE_MOMENT_CONFIG, type RaceMomentOutput } from './index.ts';
 
@@ -44,7 +46,7 @@ const valueOf = (k: Known<number>): number | undefined => (k.known ? k.value : u
 export const raceMomentCalculator: QuickCalculator<RaceMomentOutput> = {
   id: RACE_MOMENT,
   kind: 'quick',
-  reads: ['spans:weekend-phase', 'spans:session-phase-race', { calculator: INCIDENTS }, { calculator: BATTLE }, { calculator: ALARMS }, { calculator: RAIN_OUTLOOK }],
+  reads: ['identity', 'spans:weekend-phase', 'spans:session-phase-race', { calculator: INCIDENTS }, { calculator: BATTLE }, { calculator: ALARMS }, { calculator: RAIN_OUTLOOK }, { calculator: PIT_WINDOW }],
   cadence: { hz: 4 },
   compute(view) {
     const now = view.live.sessionTime;
@@ -69,6 +71,19 @@ export const raceMomentCalculator: QuickCalculator<RaceMomentOutput> = {
     }
     if (newest !== undefined) {
       holding.push(['incident', { since: known(newest.at as SessionTime, now), cause: { rule: 'majorIncident', params: { entryId: newest.id, kind: newest.kind, ageMs: now - newest.at } } }]);
+    }
+
+    // the pit window is pit-window's judgement (C43): the first of our cars, player first, whose window is lead or open
+    const windows = (view.outputs.get(PIT_WINDOW) as PitWindowOutput | undefined) ?? {};
+    for (const id of ourCars(view.live)) {
+      const w = windows[id];
+      if (w === undefined || !w.known || !w.value.window.known) continue;
+      const state = w.value.window.value;
+      if (state !== 'lead' && state !== 'open') continue;
+      const params: Record<string, number | string> = { carId: id };
+      if (w.value.windowCompound.known) params.compound = w.value.windowCompound.value;
+      holding.push(['window', { since: NOT_APPLICABLE, cause: { rule: 'pitWindow', params } }]);
+      break;
     }
 
     // "rain is coming" is rain-outlook's judgement (C43): its first rain, when within its horizon

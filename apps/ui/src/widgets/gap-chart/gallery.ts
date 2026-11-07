@@ -5,6 +5,7 @@ import { carId, feedId } from '@pitwall/domain';
 import type { GapperLines, SessionState } from '@pitwall/domain';
 import { known, unknown } from '@pitwall/domain';
 import type { GalleryEntry } from '../../kit/gallery-types.ts';
+import { ghostLinesOf, KUH, rejoinOf, ZHO } from './fixtures.ts';
 import type { widget } from './widget.ts';
 
 type Car = { id: number; name: string; teamId: number; raceNumber: number };
@@ -164,6 +165,10 @@ const gallery: GalleryEntry<typeof widget> = {
     // a car average of a car the field lacks: the header shows the mark where the car's code goes
     referenceCarUnknown: { ...base, gapper: lines({ reference: { kind: 'carAverage', carId: known(carId(9), 0) }, referenceLapMs: known(104_800, 0) }) },
     referenceUnknown: { ...base, gapper: lines({ referenceLapMs: unknown('insufficientData'), cars: [] }) },
+    // the rejoin ghost (1-ghost-views.html): KUH's line plus each condition's loss over the last 6 laps (7 to 12), faint
+    // 1 px lines G dotted, VSC dashed, SC dash-dot, lettered at their ends; ZHO's ghost lines are in the topic but not
+    // drawn (the panel's car is KUH); the header names the losses `pit G 20.3 VSC 13.1ᶜ SC 9.8ᵈ`
+    ghostLines: { ...base, ghosts: ghostLinesOf([KUH, ZHO], [900, 1500], 7, 12), rejoin: rejoinOf(KUH) },
     noSession: { ...base, session: undefined },
     empty: { ...base, gapper: lines({ referenceLapMs: unknown('insufficientData'), cars: [] }), cars: [] },
   },

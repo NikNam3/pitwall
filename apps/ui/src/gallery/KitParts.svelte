@@ -1,8 +1,8 @@
 <script lang="ts">
   // The kit parts with sample data (spec 9.2): value cell states, icon and table, each in a cell of its own.
   // `data-ready` marks a cell whose parts have rendered (the e2e harness waits for it); only the chart loads lazily.
-  // Kit parts with a screenshot baseline (`data-baseline`): those no widget baseline shows (insight line, position mark,
-  // sector status); the others are pinned through the widget baselines that use them (SP4.1b Task 14).
+  // No kit part has a screenshot baseline of its own: the widget baselines pin the parts they use (SP4.1b Task 14), and
+  // the last three (insight line, position mark, sector status) were retired for SP4.2's displays (budget K13).
   import { known, unknown, type SessionTime } from '@pitwall/domain';
   import Bar from '../kit/bar/Bar.svelte';
   import CarLabel from '../kit/car/CarLabel.svelte';
@@ -85,7 +85,7 @@
     <figcaption style:color={role('textFaint')}>kit/compound-mark</figcaption>
     <div><CompoundMark compound="soft" age={4} /> <CompoundMark compound="medium" age={12} /> <CompoundMark compound="hard" age={0} /> <CompoundMark compound="inter" /></div>
   </figure>
-  <figure data-baseline data-gallery-id="kit/insight-line" data-ready>
+  <figure data-gallery-id="kit/insight-line" data-ready>
     <figcaption style:color={role('textFaint')}>kit/insight-line</figcaption>
     {#each KIT_INSIGHTS as line (line.insight.key)}<div><InsightLine insight={line.insight} acknowledged={line.acknowledged} /></div>{/each}
   </figure>
@@ -111,7 +111,7 @@
     <div><CarLabel identity={{ name: 'Lewis Hamilton', raceNumber: 44 }} ours={false} /></div>
     <div><CarLabel identity={{ name: '', raceNumber: 44 }} ours={false} /></div>
   </figure>
-  <figure data-baseline data-gallery-id="kit/position-mark" data-ready>
+  <figure data-gallery-id="kit/position-mark" data-ready>
     <figcaption style:color={role('textFaint')}>kit/position-mark</figcaption>
     <div><PositionMark change={2} /></div>
     <div><PositionMark change={-1} /></div>
@@ -119,7 +119,7 @@
       <div><CellParts parts={positionPairParts(from, to)} /></div>
     {/each}
   </figure>
-  <figure data-baseline data-gallery-id="kit/sector-status" data-ready>
+  <figure data-gallery-id="kit/sector-status" data-ready>
     <figcaption style:color={role('textFaint')}>kit/sector-status</figcaption>
     {#each sectors as [status, ours] (status + ours)}
       {@const r = sectorStatusRole(status, { ours })}

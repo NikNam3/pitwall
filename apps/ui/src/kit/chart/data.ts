@@ -12,6 +12,12 @@ export type ChartSeries = {
   liveEnd?: boolean | undefined;
   /** The ±sd band around the line (usually the line's own points with their sd), painted in the line's colour. */
   band?: readonly BandPoint[] | undefined;
+  /** The line's own dash (px on, px off), instead of the theme's dash for `colour.dashed`. */
+  dash?: readonly number[] | undefined;
+  /** The line's own width (px), instead of the theme's line or own-car width. */
+  widthPx?: number | undefined;
+  /** Which labels keep their place first when not all fit (lowest first); else 0 for an own car, 2 for every other line. */
+  labelRank?: number | undefined;
 };
 
 /** One point of a series' band: the band runs from `y - sd` to `y + sd` at `x`. */

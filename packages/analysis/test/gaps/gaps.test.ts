@@ -3,7 +3,8 @@ import type { EngineView } from '@pitwall/engine';
 import { describe, expect, it } from 'vitest';
 import { GAPS, GAPS_CONFIG, type GapsOutput } from '../../src/gaps/index.ts';
 import { gapsCalculator } from '../../src/gaps/calculator.ts';
-import { gapperLines, gapsToCar } from '../../src/gaps/gaps.ts';
+import { gapsToCar } from '../../src/gaps/gaps.ts';
+import { gapperLines } from '../../src/shared/gapper-lines.ts';
 import { crossings, field, neutralisation, openNeutralisation } from '../../../../test-support/builders/index.ts';
 import { byTime, carsFor, deltaOf, gaps, guarded, lapPoints, offsetRace, plain, progressOf, run, viewOf } from './race.ts';
 

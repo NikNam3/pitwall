@@ -12,7 +12,7 @@ import { ScenarioBuilder } from '../../../engine/test/builders/index.ts';
 import { expectIncrementalEqualsFromScratch, IDLE_FEED } from '../../../engine/test/helpers/incremental.ts';
 import { openNeutralisation } from '../../../../test-support/builders/index.ts';
 import { gapsCalculator } from '../../src/gaps/calculator.ts';
-import { gapperLines } from '../../src/gaps/gaps.ts';
+import { gapperLines } from '../../src/shared/gapper-lines.ts';
 import { GAPS_CONFIG, type GapperReference } from '../../src/gaps/index.ts';
 import { byTime, carsFor, deltaOf, gaps, guarded, offsetRace, plain, pointsByProgress, progressOf, run, viewOf, windowOf } from './race.ts';
 
