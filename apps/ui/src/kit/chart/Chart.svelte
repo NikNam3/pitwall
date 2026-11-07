@@ -1,7 +1,8 @@
 <script lang="ts">
   // The line chart every display uses (spec 5): uPlot on a black plot with labelled axes and grids; each line is named at
   // its right end in its colour (our car bold), labels pushed apart where lines end close together; when they cannot all
-  // fit, ours and the ones nearest to ours keep theirs. A line that ends well before the newest x (a retired or lapped
+  // fit, the lowest `EndLabel.rank` keeps its first (ours, then a series' own `labelRank`, then the field), ties the
+  // nearest to ours. A series may carry its own dash and width (`ChartSeries.dash`, `widthPx`). A line that ends well before the newest x (a retired or lapped
   // car) is named at its own end instead, inside the plot. A line of one point shows as a dot. A series' live end is
   // drawn dotted (`ChartSeries.liveEnd`): every series has its live line, empty when not live, so a live end that comes
   // or goes is a data change, never a rebuild.
@@ -98,7 +99,7 @@
    */
   const structure = $derived(
     JSON.stringify([
-      series.map((s) => [s.label, s.colour, s.fresh, s.band !== undefined]),
+      series.map((s) => [s.label, s.colour, s.fresh, s.band !== undefined, s.dash, s.widthPx]),
       (marks ?? []).length > 0,
       bands,
       ySteps,
@@ -151,12 +152,13 @@
       let plain = 0;
       const lines = series.map((s) => {
         const stroke = s.colour ? resolveColour(el, s.colour.colour) : resolveRole(el, SERIES_ROLES[plain++ % SERIES_ROLES.length] ?? 'series1');
-        const width = s.colour?.ownCar ? ownWidth : lineWidth;
+        const width = s.widthPx ?? (s.colour?.ownCar ? ownWidth : lineWidth);
+        const lineDash = s.dash ? [...s.dash] : s.colour?.dashed ? dash : undefined;
         return {
           label: s.label,
           stroke,
           width,
-          ...(s.colour?.dashed ? { dash } : {}),
+          ...(lineDash ? { dash: lineDash } : {}),
           alpha: s.fresh === false ? staleAlpha : 1,
           spanGaps: true,
           points: { show: onePoint, size: 2 * width, fill: stroke, stroke },
@@ -189,7 +191,7 @@
         const labels = endLabels(untrack(() => series), range);
         const early = labels.filter((l) => endsEarly(l, range, x.kind));
         const column = labels.filter((l) => !endsEarly(l, range, x.kind));
-        const ys = placeLabels(column.map((l) => u.valToPos(l.value, 'y', true) - u.bbox.top), rowPx, u.bbox.height, column.map((l) => l.bold));
+        const ys = placeLabels(column.map((l) => u.valToPos(l.value, 'y', true) - u.bbox.top), rowPx, u.bbox.height, column.map((l) => l.rank));
         const plotRight = u.bbox.left + u.bbox.width;
         const columnLeft = plotRight + labelGapPx * ratio;
         /** Draws the label at the left `leftOf` gives for its width in the label font. */
