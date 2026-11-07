@@ -89,7 +89,7 @@
             theme={DEFAULT_THEME}
             widget={state.widget ? frameWidget : undefined}
             widgetName={MISSING_WIDGET}
-            baseline
+            baseline={state.baseline}
             cols={frameSize.minCols}
             rows={frameSize.minRows}
             moment={[]}
