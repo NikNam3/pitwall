@@ -1,8 +1,13 @@
 // The pit-window strip's label layout (SP4.2 spec §4 "Pit-window label layout", §6.2; the rules of
 // docs/design/2026-11-07-sp4.2/gen.mjs `layoutRow` and `chartSvg`). The layout places, it computes no value (C65).
 // Contract assumed of `layout.ts`:
-//  - `layoutStrip(input: { cols: number; window: PitWindow; showOther: boolean }, cell: { w: number; h: number }):
-//    StripLayout`, `StripLayout = { bars: Bar[]; lines: Line[]; labels: Label[] }`, in px of a panel `cols × cell.w` wide;
+//  - `layoutStrip(input: { cols: number; rows: number; window: PitWindow; showOther: boolean }, cell: { w: number; h: number }):
+//    StripLayout`, `StripLayout = { bars: Bar[]; lines: Line[]; labels: Label[]; letters; height }`, in px of a panel
+//    `cols × cell.w` wide and `rows` cells high: at most `rows − 2` set rows (the fitted set's row and the axis row
+//    excepted), the first of `visibleSets`; the rest are not drawn, nothing half;
+//  - every state is `pit-window`'s (C43): a set's band and laps map its own `state` and its laps are its `windowLaps`;
+//    `stint.stopNeeded` false draws no stop (the bar to the flag, no last lap); the last lap is amber and, past `latest`,
+//    the overrun from `latest` to now is drawn amber only by `stint.pastLimit`;
 //  - `Label = { row; x; anchor: 'start' | 'middle' | 'end'; text; role; bold; box: { l; r } }`: `box` is the label's
 //    extent in its row, `[...text].length × cell.w` wide, at `x` by its anchor;
 //  - `Bar` carries at least `{ row: number; box: { l: number; r: number } }`: every solid or hollow bar of a row (the
@@ -15,7 +20,7 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import type { PitWindow, VisualCompound } from '@pitwall/domain';
-import { CELL, INTER, OPEN, race, type SetSpec } from './fixtures.ts';
+import { AT_LIMIT, CELL, FIVE_SETS, INTER, NOSTOP_WITH_SET, OPEN, OVER, SET_CLOSED, STOPPED, race, type SetSpec } from './fixtures.ts';
 import { layoutStrip } from './layout.ts';
 
 type Layout = ReturnType<typeof layoutStrip>;
@@ -26,7 +31,10 @@ const inRow = (l: Layout, row: number): Lbl[] => l.labels.filter((x) => x.row ==
 const texts = (labels: Lbl[]): string[] => labels.map((x) => x.text);
 const barsOf = (l: Layout, row: number) => l.bars.filter((b) => b.row === row);
 const axisRow = (l: Layout): number => Math.max(...l.labels.map((x) => x.row));
-const full = (window: PitWindow, showOther = false, cols = 46): Layout => layoutStrip({ cols, window, showOther }, CELL);
+const full = (window: PitWindow, showOther = false, cols = 46, rows = 8): Layout => layoutStrip({ cols, rows, window, showOther }, CELL);
+/** The flag's x: the vertical dim line. */
+const flagX = (l: Layout): number => l.lines.find((x) => x.role === 'textDim' && x.x1 === x.x2)!.x1;
+const amberBars = (l: Layout) => barsOf(l, 0).filter((b) => b.role === 'warning');
 
 describe('layoutStrip: the mockup L23 case (Silverstone 52 laps, M to L31, H window L23–31, S short)', () => {
   const l = full(OPEN);
@@ -99,6 +107,58 @@ describe('layoutStrip: the rules', () => {
   });
 });
 
+describe('layoutStrip: it maps the topic (the final review, findings 1, 2, 4, 5)', () => {
+  it('draws a set the topic closes faint (band and laps), although its laps L22–31 would look open at L23', () => {
+    const l = full(SET_CLOSED);
+    expect(texts(inRow(l, 2))).toEqual(['L22', 'L31']);
+    for (const x of inRow(l, 2)) expect([x.role, x.bold]).toEqual(['textFaint', false]);
+    expect(barsOf(l, 2).length).toBeGreaterThan(0);
+    for (const b of barsOf(l, 2)) expect(b.role).toBe('textFaint');
+    for (const x of inRow(l, 1)) expect([x.role, x.bold]).toEqual(['ownCar', true]);
+  });
+
+  it('draws stopNeeded false as no stop although the topic still lists a set: the bar to the flag, no last lap', () => {
+    const l = full(NOSTOP_WITH_SET);
+    expect(inRow(l, 0)).toEqual([]);
+    expect(Math.max(...barsOf(l, 0).map((b) => b.box.r))).toBeCloseTo(flagX(l), 6);
+  });
+
+  it('full with 5 visible sets in 4 rows: 2 set rows (H, S: same type first), the axis in row 3, nothing below it', () => {
+    const l = full(FIVE_SETS, true, 46, 4);
+    expect(l.letters.map((x) => x.text)).toEqual(['M', 'H', 'S']);
+    expect(axisRow(l)).toBe(3);
+    for (const x of l.labels) expect(x.row).toBeLessThanOrEqual(3);
+    for (const b of l.bars) expect(b.row).toBeLessThanOrEqual(2);
+    expect(l.height).toBeLessThanOrEqual(4 * CELL.h + EPS);
+    // with room every visible set is drawn, the other type below
+    expect(full(FIVE_SETS, true, 46, 8).letters.map((x) => x.text)).toEqual(['M', 'H', 'S', 'SS', 'I', 'W']);
+  });
+
+  it('pastLimit at the limit (now = latest L31): the last lap amber bold, no overrun', () => {
+    const l = full(AT_LIMIT);
+    expect(inRow(l, 0)).toHaveLength(1);
+    expect(inRow(l, 0)[0]).toMatchObject({ text: 'L31', role: 'warning', bold: true });
+    expect(amberBars(l)).toEqual([]);
+  });
+
+  it('pastLimit beyond latest (L33, latest L31): the overrun segment from latest to now amber, the last lap amber', () => {
+    const l = full(OVER);
+    const nowX = l.lines.find((x) => x.role === 'ownCar' && x.x1 === x.x2)!.x1;
+    const amber = amberBars(l);
+    expect(amber).toHaveLength(1);
+    expect(amber[0]!.box.r).toBeCloseTo(nowX, 6);
+    expect(amber[0]!.box.l).toBeLessThan(amber[0]!.box.r);
+    expect(inRow(l, 0)[0]).toMatchObject({ text: 'L31', role: 'warning', bold: true });
+  });
+
+  it('pastLimit false with the window closed by a box stop: no amber, the H window faint', () => {
+    const l = full(STOPPED);
+    expect(amberBars(l)).toEqual([]);
+    expect(inRow(l, 0)[0]).toMatchObject({ text: 'L31', role: 'text', bold: false });
+    for (const x of inRow(l, 1)) expect(x.role).toBe('textFaint');
+  });
+});
+
 // ---------------------------------------------------------------- property (spec §6.2)
 const COMPOUNDS: VisualCompound[] = ['soft', 'medium', 'hard', 'inter', 'wet'];
 
@@ -121,11 +181,13 @@ const arbRace = fc
       fitted: fc.constantFrom(...COMPOUNDS),
       sets: fc.uniqueArray(fc.tuple(fc.constantFrom(...COMPOUNDS), arbSet), { maxLength: 4, selector: ([c]) => c }),
       cols: fc.integer({ min: 46, max: 90 }),
+      rows: fc.integer({ min: 4, max: 10 }),
       showOther: fc.boolean(),
     });
   })
   .map((r) => ({
     cols: r.cols,
+    rows: r.rows,
     showOther: r.showOther,
     window: race({
       flag: r.flag, now: r.now, stint: { compound: r.fitted, fromLap: r.fromLap, latest: r.latest },
@@ -136,9 +198,13 @@ const arbRace = fc
 describe('layoutStrip: property over random races', () => {
   it('keeps every label a cell from every other one in its row, off the bars of its row, and inside the panel', () => {
     fc.assert(
-      fc.property(arbRace, ({ cols, window, showOther }) => {
-        const l = layoutStrip({ cols, window, showOther }, CELL);
+      fc.property(arbRace, ({ cols, rows, window, showOther }) => {
+        const l = layoutStrip({ cols, rows, window, showOther }, CELL);
         const width = cols * CELL.w;
+        // at most rows − 2 set rows, nothing below the panel
+        expect(l.letters.length).toBeLessThanOrEqual(rows - 1);
+        expect(l.height).toBeLessThanOrEqual(rows * CELL.h + EPS);
+        for (const a of l.labels) expect(a.row).toBeLessThanOrEqual(rows - 1);
         for (const a of l.labels) {
           // honest boxes: the text's width, at x by its anchor
           expect(a.box.r - a.box.l).toBeCloseTo([...a.text].length * CELL.w, 6);

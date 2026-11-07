@@ -18,52 +18,64 @@ export const CELL = { w: 8, h: 14 * 1.4 } as const;
 /** `windowLeadLaps` of `pit-window` (spec §7). */
 const LEAD = 2;
 
-export type SetSpec = { compound: VisualCompound; lifeLaps: number; sameType?: boolean };
+/** One new set; `state` overrides the analysis' rule for this set alone (a case that shows the display maps the topic). */
+export type SetSpec = { compound: VisualCompound; lifeLaps: number; sameType?: boolean; state?: PitWindowState };
 export type RaceSpec = {
   car?: number;
   flag: number;
   now: number;
   stint: { compound: VisualCompound; fromLap: number; latest: number | UnknownReason };
   sets: SetSpec[];
+  /** The fitted set at its limit (tyre-life's `lapsToLimit` below 1): `pastLimit`, every window closed. */
+  atLimit?: boolean;
+  /** A box stop since the stint start: every window closed, not past the limit. */
+  stopped?: boolean;
+  /** Whether a stop is needed (default true; false: the rule met and the fitted set reaches the flag). */
+  stopNeeded?: boolean;
 };
 
-/** One set as the analysis gives it for a known (or unknown) latest stop lap. */
-export function pwSet(spec: SetSpec, flag: number, fromLap: number, latest: number | UnknownReason): PitWindowSet {
+/** What every set's state depends on besides the set: the lap now and whether the windows are closed. */
+type Ctx = { flag: number; fromLap: number; latest: number | UnknownReason; now: number; closed: boolean };
+
+/** One set as the analysis gives it for a known (or unknown) latest stop lap; its window and state by the analysis' rules. */
+export function pwSet(spec: SetSpec, ctx: Ctx): PitWindowSet {
+  const { flag, fromLap, latest, now, closed } = ctx;
   const sameType = spec.sameType ?? true;
+  const earliest = Math.max(fromLap, flag - spec.lifeLaps);
+  const base = { compound: spec.compound, sameType, lifeLaps: k(spec.lifeLaps), earliest: k(earliest) };
   if (typeof latest !== 'number') {
-    return { compound: spec.compound, sameType, lifeLaps: k(spec.lifeLaps), earliest: k(Math.max(fromLap, flag - spec.lifeLaps)), lifeEnd: unknown(latest), reaches: unknown(latest) };
+    return { ...base, lifeEnd: unknown(latest), reaches: unknown(latest), windowLaps: unknown(latest), state: unknown(latest) };
   }
   const lifeEnd = latest + spec.lifeLaps;
+  const has = lifeEnd >= flag && earliest <= latest;
+  const rule: PitWindowState = !has ? 'none' : closed ? 'closed' : now >= earliest ? 'open' : now >= earliest - LEAD ? 'lead' : 'before';
   return {
-    compound: spec.compound, sameType, lifeLaps: k(spec.lifeLaps),
-    earliest: k(Math.max(fromLap, flag - spec.lifeLaps)), lifeEnd: k(lifeEnd), reaches: k(lifeEnd >= flag),
+    ...base, lifeEnd: k(lifeEnd), reaches: k(lifeEnd >= flag),
+    windowLaps: has ? k({ from: earliest, to: latest }) : unknown('notApplicable'),
+    state: k(spec.state ?? rule),
   };
 }
 
-/** The window state of the analysis: from the first same-type compound that reaches the flag. */
-export function windowState(now: number, latest: number, sets: PitWindowSet[]): { state: PitWindowState; compound?: VisualCompound } {
-  const first = sets.find((s) => s.sameType && s.reaches.known && s.reaches.value);
-  if (first === undefined || !first.earliest.known) return { state: 'none' };
-  const earliest = first.earliest.value;
-  const state: PitWindowState = now > latest ? 'closed' : now >= earliest ? 'open' : now >= earliest - LEAD ? 'lead' : 'before';
-  return { state, compound: first.compound };
-}
-
-/** A whole `PitWindow` value from a race description. */
+/** A whole `PitWindow` value from a race description; `window` is the state of the first same-type set with a window. */
 export function race(spec: RaceSpec): PitWindow {
   const { flag, now, stint } = spec;
-  const sets = spec.sets.map((s) => pwSet(s, flag, stint.fromLap, stint.latest));
+  const latest = stint.latest;
+  const pastLimit = (spec.atLimit ?? false) || (typeof latest === 'number' && now > latest);
+  const ctx: Ctx = { flag, fromLap: stint.fromLap, latest, now, closed: pastLimit || (spec.stopped ?? false) };
+  const sets = spec.sets.map((s) => pwSet(s, ctx));
   const base = { carId: carId(spec.car ?? KUH), flag, currentLap: now, sets };
-  if (typeof stint.latest !== 'number') {
+  if (typeof latest !== 'number') {
     return {
-      ...base, stint: { compound: stint.compound, fromLap: stint.fromLap, latest: unknown(stint.latest) },
-      window: unknown(stint.latest), windowCompound: unknown(stint.latest),
+      ...base, stint: { compound: stint.compound, fromLap: stint.fromLap, latest: unknown(latest), stopNeeded: unknown(latest), pastLimit },
+      window: unknown(latest), windowCompound: unknown(latest),
     };
   }
-  const w = windowState(now, stint.latest, sets);
+  const first = sets.find((s) => s.sameType && s.windowLaps.known);
   return {
-    ...base, stint: { compound: stint.compound, fromLap: stint.fromLap, latest: k(stint.latest) },
-    window: k(w.state), windowCompound: w.compound === undefined ? unknown('notApplicable') : k(w.compound),
+    ...base,
+    stint: { compound: stint.compound, fromLap: stint.fromLap, latest: k(latest), stopNeeded: k(spec.stopNeeded ?? true), pastLimit },
+    window: first === undefined ? k('none') : first.state,
+    windowCompound: first === undefined ? unknown('notApplicable') : k(first.compound),
   };
 }
 
@@ -81,7 +93,34 @@ export const OPEN = mockup(23); // L23: the H window open now
 export const AHEAD = mockup(15); // L15: before the window
 export const OVER = mockup(33); // L33: the mediums past their life, the window closed
 /** LIN at L41 on hards since L16: the tyres reach the flag, the rule met, nothing to plan (latest capped at flag − 1). */
-export const NOSTOP = race({ car: LIN, flag: 52, now: 41, stint: { compound: 'hard', fromLap: 16, latest: 51 }, sets: [] });
+export const NOSTOP = race({ car: LIN, flag: 52, now: 41, stint: { compound: 'hard', fromLap: 16, latest: 51 }, sets: [], stopNeeded: false });
+
+/** The mockup at L23 with a second H-type set S (life 30: L22–31) the topic closes alone while H is open: the display
+ *  maps each set's `state`, its laps would look open by the current lap. */
+export const SET_CLOSED = race({
+  flag: 52, now: 23, stint: MOCKUP_STINT,
+  sets: [{ compound: 'hard', lifeLaps: 29 }, { compound: 'soft', lifeLaps: 30, state: 'closed' }],
+});
+/** `stopNeeded` false with a set still in the topic: drawn as no stop all the same (the display reads the field). */
+export const NOSTOP_WITH_SET = race({
+  car: LIN, flag: 52, now: 41, stint: { compound: 'hard', fromLap: 16, latest: 51 }, sets: [{ compound: 'medium', lifeLaps: 20 }], stopNeeded: false,
+});
+/** Five visible sets (`otherType` on): three of the fitted type (H, S, SS), two of the other (I, W); the topic lists
+ *  an other-type set first. */
+export const FIVE_SETS = race({
+  flag: 52, now: 23, stint: MOCKUP_STINT,
+  sets: [
+    { compound: 'inter', lifeLaps: 25, sameType: false },
+    { compound: 'hard', lifeLaps: 29 },
+    { compound: 'soft', lifeLaps: 15 },
+    { compound: 'wet', lifeLaps: 25, sameType: false },
+    { compound: 'superSoft', lifeLaps: 10 },
+  ],
+});
+/** L31, the mediums at their limit on their last lap (latest = now): `pastLimit`, the H window closed. */
+export const AT_LIMIT = race({ flag: 52, now: 31, stint: MOCKUP_STINT, sets: MOCKUP_SETS, atLimit: true });
+/** L25 after a box stop with the mediums still good (latest L31): the H window closed, not past the limit. */
+export const STOPPED = race({ flag: 52, now: 25, stint: MOCKUP_STINT, sets: MOCKUP_SETS, stopped: true });
 /** L02: too few laps on these tyres for a life (tyre-life's `minLaps`), no set planned yet. */
 export const EARLY = race({ flag: 52, now: 2, stint: { compound: 'medium', fromLap: 1, latest: 'insufficientData' }, sets: [] });
 

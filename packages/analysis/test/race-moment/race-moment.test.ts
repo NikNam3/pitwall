@@ -106,7 +106,7 @@ const pitWindowOf = (window: Known<PitWindowState>, car: CarId = car0): PitWindo
     carId: car,
     flag: 50,
     currentLap: 20,
-    stint: { compound: "soft", fromLap: 1, latest: known(24, NOW) },
+    stint: { compound: "soft", fromLap: 1, latest: known(24, NOW), stopNeeded: known(true, NOW), pastLimit: false },
     sets: [],
     window,
     windowCompound: window.known && window.value !== "none" ? known("medium", NOW) : na,

@@ -339,6 +339,70 @@ describe('pit-window calculator', () => {
     expect(w.window).toMatchObject(v('closed'));
   });
 
+  // 10: each set's window and state, stopNeeded and pastLimit (the final review, findings 1, 2, 5)
+  describe("10: each set's windowLaps and state, the stint's stopNeeded and pastLimit", () => {
+    it('row 1 at L23: H windowLaps { from: 22, to: 31 }, state open; S (does not reach) windowLaps notApplicable, state none', () => {
+      const w = ours({ lap: 23 });
+      expect(row(w, 'hard').windowLaps).toMatchObject(v({ from: 22, to: 31 }));
+      expect(row(w, 'hard').state).toMatchObject(v('open'));
+      expect(row(w, 'soft').windowLaps).toEqual(NOT_APPLICABLE);
+      expect(row(w, 'soft').state).toMatchObject(v('none'));
+      expect(w.stint.stopNeeded).toMatchObject(v(true));
+      expect(w.stint.pastLimit).toBe(false);
+    });
+
+    it('a second same-type compound with earliest 26 (S life 26): before at L23, lead at L24, open at L26; H open meanwhile', () => {
+      const c: Case = { lap: 23, lives: { ...LIVES, soft: 26 } };
+      expect(row(ours(c), 'soft').earliest).toMatchObject(v(26));
+      expect(row(ours(c), 'soft').state).toMatchObject(v('before'));
+      expect(row(ours(c), 'hard').state).toMatchObject(v('open'));
+      expect(row(ours({ ...c, lap: 24 }), 'soft').state).toMatchObject(v('lead'));
+      expect(row(ours({ ...c, lap: 26 }), 'soft').state).toMatchObject(v('open'));
+      expect(row(ours({ ...c, lap: 26 }), 'soft').windowLaps).toMatchObject(v({ from: 26, to: 34 }));
+    });
+
+    it('at the limit (L32 lapsToLimit 0, L31 lapsToLimit 0.4): every set with a window closed, pastLimit true', () => {
+      for (const c of [{ lap: 32, lapsToLimit: 0 }, { lap: 31, lapsToLimit: 0.4 }]) {
+        const w = ours(c);
+        const withWindow = w.sets.filter((s) => s.windowLaps.known);
+        expect(withWindow.map((s) => s.compound)).toContain('hard');
+        for (const s of withWindow) expect(s.state).toMatchObject(v('closed'));
+        expect(row(w, 'soft').state).toMatchObject(v('none'));
+        expect(w.stint.pastLimit).toBe(true);
+      }
+    });
+
+    it('on the last lap (L52, latest 51): pastLimit true (the current lap beyond latest)', () => {
+      expect(ours({ lap: 52, lapsToLimit: 5 }).stint.pastLimit).toBe(true);
+    });
+
+    it('a boxStop span opened since the stint start (L25): every set with a window closed, pastLimit false', () => {
+      const w = ours({ lap: 25, lives: { ...LIVES, soft: 26 }, activity: { kind: 'boxStop', start: 24 * LAP_MS + 60_000 } });
+      const withWindow = w.sets.filter((s) => s.windowLaps.known);
+      expect(withWindow.map((s) => s.compound).sort()).toEqual(['hard', 'soft']);
+      for (const s of withWindow) expect(s.state).toMatchObject(v('closed'));
+      expect(w.stint.pastLimit).toBe(false);
+    });
+
+    it('no stop needed (rule waived, the last lap at or past the flag): stopNeeded false; waived with last lap 51: stopNeeded true', () => {
+      expect(ours({ lap: 23, lapsToLimit: 40, rule: 'waived' }).stint.stopNeeded).toMatchObject(v(false));
+      expect(ours({ lap: 23, lapsToLimit: 28.6, rule: 'waived' }).stint.stopNeeded).toMatchObject(v(true));
+      // the rule still to meet: a stop is needed although the set runs to the flag
+      expect(ours({ lap: 23, lapsToLimit: 40 }).stint.stopNeeded).toMatchObject(v(true));
+    });
+
+    it('lapsToLimit insufficientData: every windowLaps, state and stopNeeded insufficientData', () => {
+      const w = ours({ lap: 23, lapsToLimit: INSUFFICIENT });
+      expect(w.sets).not.toEqual([]);
+      for (const s of w.sets) {
+        expect(s.windowLaps).toEqual(INSUFFICIENT);
+        expect(s.state).toEqual(INSUFFICIENT);
+      }
+      expect(w.stint.stopNeeded).toEqual(INSUFFICIENT);
+      expect(w.stint.pastLimit).toBe(false);
+    });
+  });
+
   // 9
   describe('9: our cars, the race only, the behaviour table, the property', () => {
     it('a rival is absent from the output', () => {
@@ -416,6 +480,20 @@ describe('pit-window calculator', () => {
           else expect(w.windowCompound).toMatchObject(v(reaching[0]!.compound));
           // no box stop here and lap ≤ flag − 1: the window is closed exactly when the fitted set is at its limit
           if (reaching.length > 0) expect(w.window.known && w.window.value === 'closed').toBe(r.lapsToLimit < 1);
+          // each set: state none exactly when it has no window; the car's window is its window compound's set's state
+          for (const s of w.sets) {
+            if (!s.state.known) throw new Error('a set state unknown with a known lapsToLimit');
+            expect(s.state.value === 'none').toBe(!s.windowLaps.known && s.windowLaps.reason === 'notApplicable');
+            if (s.windowLaps.known) {
+              expect(s.earliest).toMatchObject(v(s.windowLaps.value.from));
+              expect(w.stint.latest).toMatchObject(v(s.windowLaps.value.to));
+            }
+          }
+          if (w.windowCompound.known) {
+            const compound = w.windowCompound.value;
+            expect(w.window).toEqual(w.sets.find((s) => s.compound === compound)?.state);
+          }
+          expect(w.stint.pastLimit).toBe(r.lapsToLimit < 1);
         }),
         { numRuns: 200 },
       );
