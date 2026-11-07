@@ -26,3 +26,8 @@ html.pw-window body {
   height: 100%;
   overflow: hidden;
 }
+
+/* An SVG text's line box no taller than its glyphs: the inherited line height would reach past its own box (fit.spec). */
+svg text {
+  line-height: 1;
+}

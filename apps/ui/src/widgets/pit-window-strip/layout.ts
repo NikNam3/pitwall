@@ -51,6 +51,7 @@ export type StripLayout = {
   /** The set rows with the band background (every other one, from the first). */
   bands: Rect[];
   width: number;
+  /** The rows' height in whole px, so the chart never reaches a fraction past the panel's body. */
   height: number;
   /** While the fitted set's last lap is unknown: where its reason's mark goes (top left). */
   unknown?: { x: number; y: number; reason: UnknownReason };
@@ -252,7 +253,7 @@ export function layoutStrip(input: StripInput, cell: Cell): StripLayout {
   }));
   const bands: Rect[] = sets.flatMap((_, i) => (banded(i + 1) ? [{ x: 0, y: (i + 1) * cell.h, width, height: cell.h }] : []));
   return {
-    bars, lines, labels, knockouts, letters, bands, width, height: (axisRow + 1) * cell.h,
+    bars, lines, labels, knockouts, letters, bands, width, height: Math.floor((axisRow + 1) * cell.h),
     ...(unknown === undefined ? {} : { unknown }),
   };
 }
