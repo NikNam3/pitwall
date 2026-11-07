@@ -6,4 +6,6 @@ export const TYRE_LIFE_CONFIG = defineConfig('tyre-life', {
   wearLimitPct: 70,
   /** Age basis: the set is at its limit once `ν · age` reaches this, in ms. Source: pitwall estimate. */
   ageLossLimitMs: 2000,
+  /** Laps the current stint has run before its laps to the limit are known (the set's and each corner's). Source: research 06 §4. */
+  minLaps: 3,
 });

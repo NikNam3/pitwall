@@ -11,6 +11,7 @@ import { behaviourFor } from '../shared/behaviour.ts';
 import { CAR_STATUS_READS } from '../shared/car-status.ts';
 import { currentStintLaps } from '../shared/stint-laps.ts';
 import { TYRE_LIFE_BEHAVIOUR, type TyreLifeEffect } from './behaviour.ts';
+import { TYRE_LIFE_CONFIG } from './config.ts';
 import { TYRE_LIFE, type TyreLife, type TyreLifeOutput } from './index.ts';
 import { AGE_LOSS_LIMIT_KEY, limitFallback, WEAR_LIMIT_KEY, wearRateKey } from './priors.ts';
 import { CORNERS, wearBasis, wearRatePerCorner, type Corner } from '../shared/wear-rate.ts';
@@ -99,7 +100,7 @@ function freshLife(compound: VisualCompound, priors: Priors, stints: readonly De
 /**
  * Per car in the session (its rows, `TYRE_LIFE_BEHAVIOUR`): wear now, its rate (the median of the rate laps' own wear
  * gains, over the current stint's laps on the fitted set) and the laps until the wear limit (0 at or past it) per corner;
- * the set's laps to its limit on its basis; the fresh-set life per compound; the game's life span of the fitted set.
+ * the set's laps to its limit on its basis (each `insufficientData` before the current stint has run `minLaps` laps); the fresh-set life per compound; the game's life span of the fitted set.
  */
 export const tyreLifeCalculator: QuickCalculator<TyreLifeOutput> = {
   id: TYRE_LIFE,
@@ -108,6 +109,7 @@ export const tyreLifeCalculator: QuickCalculator<TyreLifeOutput> = {
   cadence: { hz: 4 },
   compute: (view: EngineView): TyreLifeOutput => {
     const limits = limitsOf(view);
+    const { minLaps } = TYRE_LIFE_CONFIG.read(view);
     const rateOpts = PER_LAP_RATE_CONFIG.read(view);
     const classes = LAP_CLASSES_CONFIG.read(view);
     const degradation = (view.outputs.get(DEGRADATION) as DeepReadonly<DegradationOutput> | undefined) ?? {};
@@ -117,7 +119,10 @@ export const tyreLifeCalculator: QuickCalculator<TyreLifeOutput> = {
       if (effect.inSession !== true) continue;
       // the set's laps: the set change is looked for over every lap of the stint (an in lap included), and only then are
       // the rate laps taken (`wearRatePerCorner` picks them itself)
-      const own = onFittedSet(currentStintLaps(view.history, car.id), car.tyres);
+      const stintLaps = currentStintLaps(view.history, car.id);
+      const own = onFittedSet(stintLaps, car.tyres);
+      // the rates come from this stint: before it has run `minLaps` laps there are no laps to the limit (spec 7, K17)
+      const measured = stintLaps.length >= minLaps;
       const rates = wearRatePerCorner(own, { lapClasses: classes, rate: rateOpts });
       const corner = (c: Corner): CornerLife => {
         const wearPct = car.tyres.corners[c].wearPct;
@@ -126,7 +131,7 @@ export const tyreLifeCalculator: QuickCalculator<TyreLifeOutput> = {
         return {
           wearPct,
           ratePctPerLap: rate.known ? known(rate.value.perLap, rate.at) : rate,
-          lapsToLimit: lapsToReach(rate, wearPct, limits.limitPct, 'rising'),
+          lapsToLimit: measured ? lapsToReach(rate, wearPct, limits.limitPct, 'rising') : unknown('insufficientData'),
         };
       };
       const corners = Object.fromEntries(CORNERS.map((c) => [c, corner(c)])) as Corners<CornerLife>;
@@ -135,7 +140,11 @@ export const tyreLifeCalculator: QuickCalculator<TyreLifeOutput> = {
       const basis = wearBasis({ fl: car.tyres.corners.fl.wearPct, fr: car.tyres.corners.fr.wearPct, rl: car.tyres.corners.rl.wearPct, rr: car.tyres.corners.rr.wearPct });
       out[car.id] = {
         corners,
-        lapsToLimit: basis === 'wear' ? worstCorner(corners) : ageLaps(stints.at(-1)?.nuMsPerLap, car.tyres.age, limits.ageLossLimitMs),
+        lapsToLimit: !measured
+          ? unknown('insufficientData')
+          : basis === 'wear'
+            ? worstCorner(corners)
+            : ageLaps(stints.at(-1)?.nuMsPerLap, car.tyres.age, limits.ageLossLimitMs),
         basis,
         limitPct: limits.limitPct,
         ageLossLimitMs: limits.ageLossLimitMs,
