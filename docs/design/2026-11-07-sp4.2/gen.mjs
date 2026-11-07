@@ -1,7 +1,7 @@
 // Generates the SP4.2 mockup of the new pit-window-strip display (brainstorm 2026-11-07): node gen.mjs
-// Same method as the 2026-10-30 and 2026-11-06 sets: every display is laid out in character cells, with the real theme
-// (imported from apps/ui/src/theme) and the SP3 panel frame B. FMT mirrors kit/values/format.ts, TEXT is the wording.
-// The generator throws when a line is wider than its panel or a cell wider than its column, so a misfit cannot ship.
+// Same method as the 2026-10-30 and 2026-11-06 sets: the real theme (imported from apps/ui/src/theme), the SP3 panel
+// frame B, sizes in character cells. The full size is a chart (kit Chart look); the compact size is text in cells.
+// Round 2: no sentences in the display; the shapes say what the text said.
 import { writeFileSync } from 'node:fs';
 import { DEFAULT_THEME, FONT_FAMILY } from '../../../apps/ui/src/theme/themes.ts';
 
@@ -11,6 +11,7 @@ const FONT_PX = DEFAULT_THEME.fontPx;
 const LINE = DEFAULT_THEME.density.lineHeight;
 const GAP = DEFAULT_THEME.density.columnGapCols;
 const CELL_H = FONT_PX * LINE;
+const CELL_W = (800 / 100 / 14) * FONT_PX; // JetBrains Mono's advance, measured in headless Chromium
 
 // ---------------------------------------------------------------- formats (mirror kit/values/format.ts)
 const pad0 = (n, w) => String(n).padStart(w, '0');
@@ -24,13 +25,7 @@ const FMT = {
 // ---------------------------------------------------------------- wording (the widget's text.ts)
 const TEXT = {
   title: 'Pit window',
-  head: { tyre: 'TYRE', window: 'WINDOW' },
-  fitted: 'now',
   fresh: 'new',
-  twoStops: '2 stops',
-  twoStopsLong: (laps) => `lasts ${laps} laps: not to the flag`,
-  noStop: 'no stop needed · compound rule met',
-  over: 'over',
   unknown: {
     insufficientData: 'too few laps on these tyres yet (3 needed)',
     notReceived: 'tyre sets not received yet',
@@ -83,126 +78,112 @@ const page = (file, title, body) =>
 
 // ================================================================ the display
 // pitWindow.car (sample values; the analysis delivers every number):
-//   current: the fitted set and its latest lap (tyre-life reaches its limit), or `over` once that lap has passed;
-//   next[]: per available dry set that meets the compound rule, earliest (the first lap from which it reaches the flag)
-//           and latest (= current.latest), or `twoStops` with the laps it lasts.
-// The scale runs from now to the flag, one cell per lap when it fits, else laps per cell rounded (the display formats only:
-// the cell of a lap is layout, no arithmetic on values).
-const SCALE = 30;
-const TYRE_W = 6;
-const WIN_W = 7;
-const FULL_COLS = 1 + TYRE_W + GAP + SCALE + GAP + WIN_W;
+//   stint: the fitted set, its first lap and the lap it reaches its life (tyre-life);
+//   sets[]: per available dry set that meets the compound rule: earliest (the first lap from which it reaches the flag),
+//           latest (= the fitted set's life), and the lap its life ends when fitted at the latest.
+// The display places laps on the race's lap axis; it computes nothing.
+const LABEL_W = 7;   // cells: compound letter + wear
+const RANGE_W = 7;   // cells: L23–31
+const ROW_H = CELL_H;
+const BAR = 6;       // px
 
-// Cell c shows lap `lapAt(c)`; with fewer laps than cells a lap spans several cells.
-const lapAt = (c, now, flag) => now + Math.floor((c * (flag - now + 1)) / SCALE);
-const cellOf = (lap, now, flag) => Math.ceil(((lap - now) * SCALE) / (flag - now + 1));
-
-function scaleHead(now, flag) {
-  const cells = Array(SCALE).fill(' ');
-  const free = (c, n) => c >= 0 && c + n <= SCALE && cells.slice(Math.max(0, c - 1), c + n + 1).every((x) => x === ' ');
-  const put = (c, t) => { if (!free(c, t.length)) return; for (let i = 0; i < t.length; i++) cells[c + i] = t[i]; };
-  const end = FMT.lapNumber(flag);
-  put(0, FMT.lapNumber(now));
-  put(SCALE - end.length, end);
-  for (let l = Math.ceil((now + 1) / 10) * 10; l < flag; l += 10) put(cellOf(l, now, flag), FMT.lapNumber(l));
-  return cells.join('');
-}
-
-/** One bar on the scale: `━` on the laps in [from, to], `┤` on the last cell of `to` when it is a limit, `·` elsewhere. */
-function bar(now, flag, from, to, { cls = '', limit = false } = {}) {
-  let out = '';
-  for (let c = 0; c < SCALE; c++) {
-    const lap = lapAt(c, now, flag);
-    const inside = lap >= from && lap <= to;
-    const isLimit = limit && lap === to && (c === SCALE - 1 || lapAt(c + 1, now, flag) > to);
-    out += isLimit ? span(cls, '┤') : inside ? span(cls, '━') : span('f', '·');
-  }
-  return out;
-}
-
-const tyreCell = (letter, label) => `${span('d', letter)} ${padR(label, TYRE_W - 2)}`;
-
-function fullLines({ now, flag, current, next }) {
-  const lines = [span('f', ` ${padR(TEXT.head.tyre, TYRE_W)}${sp(GAP)}${scaleHead(now, flag)}${sp(GAP)}${padL(TEXT.head.window, WIN_W)}`)];
-  if (current.unknown) {
-    lines.push(` ${tyreCell(current.letter, TEXT.fitted)}${sp(GAP)}${span('tip', sp(SCALE), TEXT.unknown[current.unknown])}${sp(GAP)}${span('tip', sp(WIN_W), TEXT.unknown[current.unknown])}`);
+function chartSvg({ cols, now, flag, stint, sets, unknownLife }) {
+  const W = (cols + 2) * CELL_W;
+  const rows = 1 + sets.length;
+  const H = rows * ROW_H + ROW_H; // + the axis row
+  const x0 = (LABEL_W + 1) * CELL_W, x1 = W - (RANGE_W + 2) * CELL_W;
+  const X = (lap) => x0 + ((x1 - x0) * (lap - 1)) / (flag - 1);   // the start of lap `lap`
+  const Xe = (lap) => x0 + ((x1 - x0) * lap) / flag;               // the end of lap `lap`
+  const Xs = (lap) => x0 + ((x1 - x0) * (lap - 1)) / flag;
+  const yMid = (r) => r * ROW_H + ROW_H / 2;
+  let s = `<svg width="${W}" height="${H}">`;
+  const text = (x, y, t, fill, anchor = 'start', bold = false) => `<text x="${x}" y="${y + 4}" fill="${fill}" text-anchor="${anchor}"${bold ? ' font-weight="700"' : ''}>${t}</text>`;
+  // the flag line and the axis
+  const axisY = rows * ROW_H + ROW_H / 2;
+  s += `<line x1="${Xe(flag)}" x2="${Xe(flag)}" y1="2" y2="${rows * ROW_H}" stroke="${R.textDim}" stroke-width="1"/>`;
+  for (let l = 10; l < flag - 2; l += 10) if (Math.abs(l - now) > 8) s += text(Xs(l) + (Xe(l) - Xs(l)) / 2, axisY, FMT.lapNumber(l), R.textFaint, 'middle');
+  s += text(Xe(flag), axisY, FMT.lapNumber(flag), R.textDim, 'middle');
+  // the fitted set: done laps solid, the rest of its life hollow, past its life amber
+  const r0 = yMid(0);
+  s += text(CELL_W, r0, stint.letter, R.textDim);
+  s += `<rect x="${Xs(stint.from)}" y="${r0 - BAR / 2}" width="${Xe(now) - Xs(stint.from)}" height="${BAR}" fill="${R.text}"/>`;
+  if (!unknownLife) {
+    if (now < stint.life) s += `<rect x="${Xe(now) + 0.5}" y="${r0 - BAR / 2 + 0.5}" width="${Xe(Math.min(stint.life, flag)) - Xe(now) - 1}" height="${BAR - 1}" fill="none" stroke="${R.textDim}"/>`;
+    else s += `<rect x="${Xe(stint.life)}" y="${r0 - BAR / 2}" width="${Xe(now) - Xe(stint.life)}" height="${BAR}" fill="${R.warning}"/>`;
+    s += text(W - CELL_W, r0, FMT.lapNumber(stint.life), now > stint.life ? R.warning : R.text, 'end', now > stint.life);
   } else {
-    const over = now > current.latest;
-    const cls = over ? 'w' : 'd';
-    lines.push(` ${tyreCell(current.letter, TEXT.fitted)}${sp(GAP)}${bar(now, flag, now, current.latest, { cls, limit: !over })}${sp(GAP)}${span(cls, padL(over ? TEXT.over : `≤${FMT.lapNumber(current.latest)}`, WIN_W))}`);
+    s += `<rect x="${W - (RANGE_W + 1) * CELL_W}" y="${r0 - ROW_H / 2 + 2}" width="${RANGE_W * CELL_W}" height="${ROW_H - 4}" fill="transparent"><title>${TEXT.unknown[unknownLife]}</title></rect>`;
+    s += `<line x1="${W - (RANGE_W + 1) * CELL_W}" x2="${W - CELL_W}" y1="${r0 + 7}" y2="${r0 + 7}" stroke="${R.textFaint}" stroke-dasharray="1 2"/>`;
   }
-  if (next.unknown) {
-    lines.push(` ${span('tip', sp(TYRE_W + GAP + SCALE + GAP + WIN_W), TEXT.unknown[next.unknown])}`);
-    return lines;
-  }
-  next.forEach((s, i) => {
-    const label = s.wear === 0 ? TEXT.fresh : FMT.pct(s.wear);
-    let body;
-    if (s.twoStops) {
-      body = `${span('d', padR(TEXT.twoStopsLong(s.lasts), SCALE))}${sp(GAP)}${span('d', padL(TEXT.twoStops, WIN_W))}`;
+  // the next sets: the window as a solid band, then the set's life from the latest as a thin line to where it ends
+  sets.forEach((set, i) => {
+    const y = yMid(i + 1);
+    if (i % 2 === 0) s += `<rect x="0" y="${(i + 1) * ROW_H}" width="${W}" height="${ROW_H}" fill="${R.bgRowBand}"/>`;
+    s += text(CELL_W, y, set.letter, R.textDim) + text(CELL_W * 3, y, set.wear === 0 ? TEXT.fresh : FMT.pct(set.wear), R.text);
+    const reaches = set.lifeEnd >= flag;
+    if (reaches) {
+      const open = now >= set.earliest && now <= set.latest;
+      const from = Math.max(set.earliest, now + 1);
+      if (from <= set.latest) s += `<rect x="${Xs(from)}" y="${y - BAR / 2}" width="${Xe(set.latest) - Xs(from)}" height="${BAR}" fill="${open ? R.ownCar : R.textDim}"/>`;
+      s += `<line x1="${Xe(set.latest)}" x2="${Xe(flag)}" y1="${y}" y2="${y}" stroke="${R.textFaint}" stroke-width="1"/>`;
+      s += text(W - CELL_W, y, FMT.lapRange(set.earliest, set.latest).replace(/–L/, '–'), open ? R.ownCar : now > set.latest ? R.textFaint : R.text, 'end', open);
     } else {
-      const open = now >= s.earliest && now <= s.latest;
-      const cls = open ? 'hi' : '';
-      body = `${bar(now, flag, Math.max(now, s.earliest), s.latest, { cls })}${sp(GAP)}${span(cls, padL(FMT.lapRange(s.earliest, s.latest).replace(/–L/, '–'), WIN_W))}`;
+      s += `<line x1="${Xe(set.latest)}" x2="${Xe(set.lifeEnd)}" y1="${y}" y2="${y}" stroke="${R.textFaint}" stroke-width="1"/>`;
+      s += `<line x1="${Xe(set.lifeEnd)}" x2="${Xe(set.lifeEnd)}" y1="${y - 4}" y2="${y + 4}" stroke="${R.textFaint}" stroke-width="1"/>`;
     }
-    const line = ` ${tyreCell(s.letter, label)}${sp(GAP)}${body}`;
-    lines.push(i % 2 === 0 ? span('band', line) : line);
   });
-  return lines;
+  // now: a white line through every row, its lap on the axis
+  s += `<line x1="${Xe(now)}" x2="${Xe(now)}" y1="2" y2="${rows * ROW_H}" stroke="${R.ownCar}" stroke-width="1"/>`;
+  s += text(Xe(now), axisY, FMT.lapNumber(now), R.ownCar, 'middle', true);
+  return { svg: s + '</svg>', svgRows: rows + 1 };
 }
 
-function compactLines({ now, current, next }) {
+function panelSvg(title, { cols, rows, link = '1 · KUH', state = '', svg, svgRows, size }) {
+  if (size) SIZES.push(`${title} ${size}: ${cols}×${rows}`);
+  const fill = rows - svgRows;
+  return `<div class="panel" style="width:${cols + 2}ch"><div class="ph"><span class="t">${title}</span><span class="lk">${link}</span><span class="sp"></span><span>${state}</span><span>${GEAR}</span></div>${svg}${fill > 0 ? `<div style="height:${fill * CELL_H}px"></div>` : ''}</div>`;
+}
+
+const FULL_COLS = 46;
+const full = (w, opts = {}) => panelSvg(TEXT.title, { cols: FULL_COLS, rows: 5, state: `${FMT.lapNumber(w.now)}/${w.flag}`, ...chartSvg({ cols: FULL_COLS, ...w }), ...opts });
+
+function compactLines({ now, stint, sets, unknownLife }) {
   const lines = [];
-  if (current.unknown) lines.push(` ${tyreCell(current.letter, TEXT.fitted)} ${span('tip', sp(WIN_W), TEXT.unknown[current.unknown])}`);
+  const label = (letter, rest) => `${span('d', letter)} ${padR(rest, LABEL_W - 3)}`;
+  if (unknownLife) lines.push(` ${label(stint.letter, '')} ${span('tip', sp(RANGE_W), TEXT.unknown[unknownLife])}`);
   else {
-    const over = now > current.latest;
-    lines.push(` ${tyreCell(current.letter, TEXT.fitted)} ${span(over ? 'w' : 'd', padL(over ? TEXT.over : `≤${FMT.lapNumber(current.latest)}`, WIN_W))}`);
+    const over = now > stint.life;
+    lines.push(` ${label(stint.letter, '')} ${span(over ? 'w' : '', padL(FMT.lapNumber(stint.life), RANGE_W))}`);
   }
-  if (next.unknown) return [...lines, ` ${span('tip', sp(TYRE_W + 1 + WIN_W), TEXT.unknown[next.unknown])}`];
-  for (const s of next) {
-    const label = s.wear === 0 ? TEXT.fresh : FMT.pct(s.wear);
-    if (s.twoStops) { lines.push(` ${tyreCell(s.letter, label)} ${span('d', padL(TEXT.twoStops, WIN_W))}`); continue; }
+  for (const s of sets) {
+    if (s.lifeEnd < 52) continue; // a set that cannot reach the flag has no window: no line in compact
     const open = now >= s.earliest && now <= s.latest;
-    lines.push(` ${tyreCell(s.letter, label)} ${span(open ? 'hi' : '', padL(FMT.lapRange(s.earliest, s.latest).replace(/–L/, '–'), WIN_W))}`);
+    lines.push(` ${label(s.letter, s.wear === 0 ? TEXT.fresh : FMT.pct(s.wear))} ${span(open ? 'hi' : now > s.latest ? 'f' : '', padL(FMT.lapRange(s.earliest, s.latest).replace(/–L/, '–'), RANGE_W))}`);
   }
   return lines;
 }
+const compact = (w, opts = {}) => panel(TEXT.title, { cols: 22, rows: 3, state: '', lines: compactLines(w), ...opts });
 
-const full = (w, opts = {}) => panel(TEXT.title, { cols: FULL_COLS, rows: 5, state: `${FMT.lapNumber(w.now)}/${w.flag}`, lines: fullLines(w), ...opts });
-const compact = (w, opts = {}) => panel(TEXT.title, { cols: 22, rows: 4, state: '', lines: compactLines(w), ...opts });
-
-// ================================================================ the sample: Silverstone L23/52, KUH on mediums, 23 laps old
-// Sets: H new (life 30 laps, earliest L23 = 52 − 30 + 1), H 12 % (life 27, earliest L26), S 31 % (lasts 9 laps: two stops).
+// ================================================================ the sample: Silverstone L23/52, KUH on mediums since L1
+// Sets: H new (earliest L23, life to the flag), H 12 % (earliest L26), S 31 % (fitted at L31 it lasts to L40).
 // The second M set is left out: KUH started on M, the compound rule needs another dry compound.
-const NEXT = [
-  { letter: 'H', wear: 0, earliest: 23, latest: 31 },
-  { letter: 'H', wear: 12, earliest: 26, latest: 31 },
-  { letter: 'S', wear: 31, twoStops: true, lasts: 9 },
+const SETS = [
+  { letter: 'H', wear: 0, earliest: 23, latest: 31, lifeEnd: 60 },
+  { letter: 'H', wear: 12, earliest: 26, latest: 31, lifeEnd: 57 },
+  { letter: 'S', wear: 31, earliest: 0, latest: 31, lifeEnd: 40 },
 ];
-const OPEN = { now: 23, flag: 52, current: { letter: 'M', latest: 31 }, next: NEXT };
-const AHEAD = { now: 15, flag: 52, current: { letter: 'M', latest: 31 }, next: NEXT };
-const OVER = { now: 33, flag: 52, current: { letter: 'M', latest: 31 }, next: [
-  { letter: 'H', wear: 0, earliest: 23, latest: 31 },
-  { letter: 'H', wear: 12, earliest: 26, latest: 31 },
-  { letter: 'S', wear: 31, twoStops: true, lasts: 9 },
-] };
-const EARLY = { now: 2, flag: 52, current: { letter: 'M', unknown: 'insufficientData' }, next: { unknown: 'notReceived' } };
+const STINT = { letter: 'M', from: 1, life: 31 };
+const OPEN = { now: 23, flag: 52, stint: STINT, sets: SETS };
+const AHEAD = { now: 15, flag: 52, stint: STINT, sets: SETS };
+const OVER = { now: 33, flag: 52, stint: STINT, sets: SETS };
+const NOSTOP = { now: 41, flag: 52, stint: { letter: 'H', from: 16, life: 55 }, sets: [] };
+const EARLY = { now: 2, flag: 52, stint: { letter: 'M', from: 1 }, sets: [], unknownLife: 'insufficientData' };
 
-const noStop = panel(TEXT.title, { cols: FULL_COLS, rows: 5, link: '1 · LIN', state: 'L41/52', lines: [
-  span('f', ` ${padR(TEXT.head.tyre, TYRE_W)}${sp(GAP)}${scaleHead(41, 52)}${sp(GAP)}${padL(TEXT.head.window, WIN_W)}`),
-  ` ${tyreCell('H', TEXT.fitted)}${sp(GAP)}${bar(41, 52, 41, 52, { cls: 'd' })}${sp(GAP)}${span('d', padL('flag', WIN_W))}`,
-  span('d', ` ${TEXT.noStop}`),
-] });
-
-page('pit-window.html', 'SP4.2 · pit-window-strip (new display, pitWindow.car)', `
-<div class="note">The pit window of one of our cars, from now to the flag. Sample: Silverstone, 52 laps, KUH on mediums. <b>now</b> = the fitted set and the lap it reaches its life (tyre-life). Below it one row per available dry set that meets the compound rule (KUH started on M, so the second M set is left out): the window from its <b>earliest</b> lap (the first lap from which that set reaches the flag) to the fitted set's <b>latest</b>. A set that cannot reach the flag even from the latest lap says <b>two stops</b>; choosing between one stop and two is 4.3's. Numbers only, no verdict. Colour: white bold = the window is open now; amber = the fitted set is past its life. Compound letters grey (SP3).</div>
-<h2>Full ${FULL_COLS}×5 · window open (L23)</h2>
-<div class="row">${fig(full(OPEN, { size: 'full' }), 'L23 · H new: window L23–31, open now (white bold) · H 12%: opens L26 · S 31%: lasts 9 laps, not to the flag from L31 · the scale is now to the flag; lap labels every 10 laps')}</div>
-<h2>Before the window (L15) · past the fitted set's life (L33)</h2>
-<div class="row">${fig(full(AHEAD), 'L15 · both H windows ahead, plain text · the scale squeezes 38 laps into 30 cells')}${fig(full(OVER), 'L33 · the mediums are past L31: "over" in amber; every window has closed (all of it lies behind now), so the bars are empty and the ranges stay as text')}</div>
-<h2>No stop needed · early laps</h2>
-<div class="row">${fig(noStop, 'LIN, L41, on H since L15, the compound rule met: these tyres reach the flag · one line, no set rows')}${fig(full(EARLY), 'L02 · fewer than 3 laps on these tyres: the latest lap is unknown (dotted underline, reason on hover) · the sets have not arrived yet: one empty row with its reason')}</div>
-<h2>Compact 22×4</h2>
-<div class="row">${fig(compact(OPEN, { size: 'compact' }), 'compact · no scale: the fitted set\'s latest lap, then one line per set · same emphasis')}${fig(compact(OVER), 'L33 · over in amber')}</div>
-<div class="note">Topic <code>pitWindow.car</code> (params: our car). The <code>window</code> moment of <code>race-moment</code> is active from <code>earliest − windowLeadLaps</code> (2) until we stop or the window closes; this display does not show the moment, the shell's switch rules may use it (C67).</div>`);
+page('pit-window.html', 'SP4.2 · pit-window-strip, round 2', `
+<div class="note">Lap axis = the whole race, the flag a vertical line, <b>now</b> the white line. Top row: the fitted set, done laps solid, the rest of its life hollow. Below: one row per set we may fit (compound rule applied), its window solid (white when open now), then its life as a thin line. A line that stops short of the flag is a set that does not make it. No words in the panel.</div>
+<h2>Full ${FULL_COLS}×5</h2>
+<div class="row">${fig(full(OPEN, { size: 'full' }), 'L23, H new open')}${fig(full(AHEAD), 'L15')}</div>
+<div class="row" style="margin-top:12px">${fig(full(OVER), 'L33, mediums past their life')}${fig(full({ ...NOSTOP }, { link: '1 · LIN' }), 'LIN L41, tyres reach the flag, rule met')}${fig(full(EARLY), 'L02, life still unknown, sets not received')}</div>
+<h2>Compact 22×3</h2>
+<div class="row">${fig(compact(OPEN, { size: 'compact' }), 'L23')}${fig(compact(OVER), 'L33')}</div>`);
 console.log(SIZES.join('\n'));
