@@ -4,8 +4,10 @@
 // `gaps` and `pit-loss` upstream; the track file is the session's committed one (C62b), so `pit-loss` has its
 // defaults for every condition. Behaviour only, never the recording's values (C84):
 //  - race-zandvoort-full-lap at its end: for our car every condition has a known rejoin position no better than its
-//    position, the order holds `2 × orderAround + 1` rows with exactly one ghost, and the map point lies on the outline;
+//    position, the order holds exactly one ghost and at most `orderAround` rows either side of it (fewer where the field
+//    ends: no wrap around the lap), in `t` order, and the map point lies on the outline;
 //  - race-mexico-vsc-full-lap while the VSC is out: the VSC row is known.
+// The runner changes its state in place on every frame, so a kept frame records what the test reads at that frame.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { feedId, known, unknown, type MapPoint, type TrackData, type TrackFile } from '@pitwall/domain';
@@ -27,8 +29,8 @@ function trackOf(trackId: number): DeepReadonly<TrackData> {
   return data;
 }
 
-/** A run's output on one frame, with its state. */
-type Seen = { out: RejoinOutput; state: DeepReadonly<EngineState> };
+/** A run's output on one frame, with what the test reads of that frame's state, recorded at that frame. */
+type Seen = { out: RejoinOutput; playerCar: EngineState['playerCar']; trackId: EngineState['session']['trackId']; vsc: boolean };
 
 /**
  * Runs segment `file` frame by frame with a scheduler that needs `rejoin` (guarded) on every frame; `keep` picks the
@@ -62,7 +64,7 @@ async function runSegment(file: string, keep: (state: DeepReadonly<EngineState>)
     });
     expect(result.errors).toEqual([]);
     const out = result.outputs.get(REJOIN) as RejoinOutput | undefined;
-    if (out !== undefined && keep(state)) seen = { out, state };
+    if (out !== undefined && keep(state)) seen = { out, playerCar: state.playerCar, trackId: state.session.trackId, vsc: vscOut(state) };
   };
   for (const f of frames.slice(frames.indexOf(first))) runner.apply(f, onResult);
   runner.end(onResult);
@@ -83,15 +85,14 @@ describe('rejoin on real data', () => {
     mexico = await runSegment(MEXICO_VSC_LAP, vscOut);
   }, 120_000);
 
-  it('race-zandvoort-full-lap at its end: every condition known, no better than our position, the full order with one ghost, the map point on the outline', () => {
-    const { out, state } = zandvoort;
-    const player = state.playerCar;
-    const r = out.cars[player];
-    expect(r, `car ${player}`).toBeDefined();
+  it('race-zandvoort-full-lap at its end: every condition known, no better than our position, one ghost with at most orderAround rows either side in t order, the map point on the outline', () => {
+    const { out, playerCar, trackId } = zandvoort;
+    const r = out.cars[playerCar];
+    expect(r, `car ${playerCar}`).toBeDefined();
     if (r === undefined) return;
-    const outline = trackOf(state.session.trackId).outline;
+    const outline = trackOf(trackId).outline;
     if (!outline.known) throw new Error('the committed track file has an outline');
-    const rows = 2 * REJOIN_CONFIG.defaults.orderAround + 1;
+    const around = REJOIN_CONFIG.defaults.orderAround;
     for (const c of ['green', 'vsc', 'sc'] as const) {
       const at = r.conditions[c];
       expect(at.lossMs.known, c).toBe(true);
@@ -99,8 +100,16 @@ describe('rejoin on real data', () => {
       if (at.rejoinPosition.known) expect(at.rejoinPosition.value, c).toBeGreaterThanOrEqual(r.position);
       expect(at.order.known, c).toBe(true);
       if (at.order.known) {
-        expect(at.order.value, c).toHaveLength(rows);
-        expect(at.order.value.filter((row) => row.ghost), c).toHaveLength(1);
+        const order = at.order.value;
+        expect(order.filter((row) => row.ghost), c).toHaveLength(1);
+        const ghostAt = order.findIndex((row) => row.ghost);
+        expect(ghostAt, `${c}: rows ahead of the ghost`).toBeLessThanOrEqual(around);
+        expect(order.length - ghostAt - 1, `${c}: rows behind the ghost`).toBeLessThanOrEqual(around);
+        order.forEach((row, i) => {
+          const ahead = order[i - 1];
+          if (ahead === undefined || ahead.ghost || row.ghost || !row.intervalMs.known) return;
+          expect(row.intervalMs.value, `${c}: row ${i} in t order`).toBeGreaterThanOrEqual(0);
+        });
       }
       expect(at.mapPoint.known, c).toBe(true);
       if (at.mapPoint.known) expect(onOutline(outline.value, at.mapPoint.value), c).toBe(true);
@@ -108,10 +117,10 @@ describe('rejoin on real data', () => {
   });
 
   it('race-mexico-vsc-full-lap with the VSC out: the VSC row is known', () => {
-    const { out, state } = mexico;
-    expect(vscOut(state)).toBe(true);
-    const r = out.cars[state.playerCar];
-    expect(r, `car ${state.playerCar}`).toBeDefined();
+    const { out, playerCar, vsc: vscWasOut } = mexico;
+    expect(vscWasOut).toBe(true);
+    const r = out.cars[playerCar];
+    expect(r, `car ${playerCar}`).toBeDefined();
     if (r === undefined) return;
     const vsc = r.conditions.vsc;
     expect(vsc.lossMs.known).toBe(true);
