@@ -30,6 +30,8 @@ import { INCIDENTS, type IncidentsOutput } from "../../src/incidents/index.ts";
 import { ALARMS } from "../../src/alarms/index.ts";
 import { RAIN_OUTLOOK, type RainOutlook } from "../../src/rain-outlook/index.ts";
 import { RACE_MOMENT_BEHAVIOUR } from "../../src/race-moment/index.ts";
+import { PIT_WINDOW, type PitWindowOutput, type PitWindowState } from "../../src/pit-window/index.ts";
+import type { PitWindow } from "@pitwall/domain";
 
 const NOW = 600_000 as SessionTime;
 const car0 = carId(0);
@@ -98,6 +100,20 @@ const rain = (offsetMin: number, rainPct: number, withinHorizon = true): RainOut
   withinHorizon,
 });
 
+/** The `pit-window` output (C43): our car's window state, the window's compound medium (SP4.2 spec 3.4). */
+const pitWindowOf = (window: Known<PitWindowState>, car: CarId = car0): PitWindowOutput => {
+  const w: PitWindow = {
+    carId: car,
+    flag: 50,
+    currentLap: 20,
+    stint: { compound: "soft", fromLap: 1, latest: known(24, NOW) },
+    sets: [],
+    window,
+    windowCompound: window.known && window.value !== "none" ? known("medium", NOW) : na,
+  };
+  return { [car]: known(w, NOW) } as PitWindowOutput;
+};
+
 /** An open span of a session-scoped machine (C20). */
 const openSpan = (machine: string, kind: string, detail: unknown = undefined): OpenSpan => ({
   machine,
@@ -126,6 +142,7 @@ function run({
   battle,
   alarms,
   outlook,
+  pitWindow,
 }: {
   kind?: "race" | "practice" | "qualifying" | "none";
   /** The other open spans of the situation, beside the weekend phase and `active`. */
@@ -136,6 +153,7 @@ function run({
   battle?: Record<CarId, BattleCard>;
   alarms?: Insight[];
   outlook?: RainOutlook;
+  pitWindow?: PitWindowOutput;
 } = {}): Known<RaceMoment> {
   const outputs = new Map<string, unknown>();
   // the incidents output: its feed (race-moment reads `.feed`); no markers without a track file
@@ -143,6 +161,7 @@ function run({
   if (battle) outputs.set(BATTLE, battle);
   if (alarms) outputs.set(ALARMS, alarms);
   if (outlook) outputs.set(RAIN_OUTLOOK, outlook);
+  if (pitWindow) outputs.set(PIT_WINDOW, pitWindow);
   const { spans, situation } = phaseSpans(phases, active, situationOf(kind, session));
   const view = engineView({
     history: { spans },
@@ -174,6 +193,11 @@ describe("race-moment calculator", () => {
         { calculator: RAIN_OUTLOOK },
       ]),
     );
+  });
+
+  it("reads pit-window for the window moment (C43, SP4.2 spec 3.5)", () => {
+    expect(raceMomentCalculator.reads).toEqual(expect.arrayContaining([{ calculator: PIT_WINDOW }]));
+    expect(raceMomentCalculator.reads).toContainEqual({ calculator: "pit-window" });
   });
 
   it("reads no session-phase machine of qualifying or practice: it is race only (C14, C46)", () => {
@@ -356,6 +380,48 @@ describe("race-moment calculator", () => {
         run({ battle: { [car0]: card(known(far, NOW), known(unk, NOW)) } }),
       );
       expect(v.moment).toBe("carCare");
+    });
+  });
+
+  describe("window (SP4.2 spec 3.5): pit-window's window of one of our cars is lead or open (C43, C46)", () => {
+    it("lead: window active, cause pitWindow with the car and the window compound, since notApplicable", () => {
+      const v = value(run({ pitWindow: pitWindowOf(known("lead", NOW)) }));
+      expect(v.moment).toBe("window");
+      expect(v.cause).toEqual({ rule: "pitWindow", params: { carId: car0, compound: "medium" } });
+      expect(v.since).toEqual(na);
+      expect(v.active).toEqual(["window", "carCare"]);
+    });
+
+    it("open: window active", () => {
+      const v = value(run({ pitWindow: pitWindowOf(known("open", NOW)) }));
+      expect(v.moment).toBe("window");
+      expect(v.cause).toEqual({ rule: "pitWindow", params: { carId: car0, compound: "medium" } });
+      expect(v.active).toEqual(["window", "carCare"]);
+    });
+
+    it.each(["before", "closed", "none"] as const)("%s: no window moment", (state) => {
+      const v = value(run({ pitWindow: pitWindowOf(known(state, NOW)) }));
+      expect(v.moment).toBe("carCare");
+      expect(v.active).toEqual(["carCare"]);
+    });
+
+    it("an unknown window: no window moment", () => {
+      const v = value(run({ pitWindow: pitWindowOf(unknown("insufficientData")) }));
+      expect(v.moment).toBe("carCare");
+      expect(v.active).toEqual(["carCare"]);
+    });
+
+    it("with an incident active: incident current, window in active after it", () => {
+      const v = value(run({ incidents: [incident()], pitWindow: pitWindowOf(known("open", NOW)) }));
+      expect(v.moment).toBe("incident");
+      expect(v.active).toEqual(["incident", "window", "carCare"]);
+    });
+
+    it("with a weather moment: window current, weather after it", () => {
+      const v = value(run({ outlook: rain(5, 45), pitWindow: pitWindowOf(known("lead", NOW)) }));
+      expect(v.moment).toBe("window");
+      expect(v.cause).toEqual({ rule: "pitWindow", params: { carId: car0, compound: "medium" } });
+      expect(v.active).toEqual(["window", "weather", "carCare"]);
     });
   });
 
