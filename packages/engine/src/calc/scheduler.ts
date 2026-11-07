@@ -86,7 +86,23 @@ export type SchedulerBookkeeping = {
 };
 
 
-const isDue = (cadence: Cadence, lastRunAt: SessionTime, pending: Pending, now: SessionTime): boolean => {
+/**
+ * Whether the crossings pending since a calculator last ran, `[before, after)` of the `crossings` list, hold one of our
+ * cars' (the player's or the teammate's, from the input's live state): only the new entries are read, never the list.
+ */
+const hasOurCrossing = (input: SchedulerInput, pending: Pending): boolean => {
+  const { before, after } = pending.delta;
+  const { playerCar, teammateCar } = input.live;
+  const crossings = input.history.crossings;
+  for (let i = before.crossings ?? 0; i < (after.crossings ?? 0); i += 1) {
+    const car = crossings[i]?.carId;
+    if (car !== undefined && (car === playerCar || car === teammateCar)) return true;
+  }
+  return false;
+};
+
+const isDue = (cadence: Cadence, lastRunAt: SessionTime, pending: Pending, input: SchedulerInput): boolean => {
+  const now = input.live.sessionTime;
   if (cadence === 'frame') return true;
   if (typeof cadence === 'object') return now < lastRunAt || now - lastRunAt >= 1000 / cadence.hz;
   const { before, after, rewound } = pending.delta;
@@ -99,7 +115,7 @@ const isDue = (cadence: Cadence, lastRunAt: SessionTime, pending: Pending, now: 
     case 'sessionChange':
       return pending.changed.has('session');
     case 'ourCrossing':
-      return false; // SP4.2 Task 2 implements it
+      return rewound !== undefined || hasOurCrossing(input, pending);
   }
 };
 
@@ -263,7 +279,7 @@ export class Scheduler implements Snapshotable<SchedulerBookkeeping> {
         this.#failed.add(calc.id);
         continue;
       }
-      const due = slot.lastRunAt === undefined || isDue(calc.cadence, slot.lastRunAt, pending, now);
+      const due = slot.lastRunAt === undefined || isDue(calc.cadence, slot.lastRunAt, pending, input);
       if (!due || (slot.lastRunAt !== undefined && !isAffected(calc, slot, pending))) continue;
 
       const view: EngineView = {
