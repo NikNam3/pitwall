@@ -88,8 +88,12 @@ describe('TOPICS', () => {
       ['lapTimes.projection', 'lap-times', 'feed', 'state', 10],
       ['pitLosses.track', 'pit-losses', 'feed', 'state', 1],
       ['pitStopCount.byCar', 'pit-stop-count', 'feed', 'state', 4],
+      ['pitWindow.car', 'pit-window', 'feed', 'state', 4],
       ['raceMoment.current', 'race-moment', 'feed', 'state', 4],
       ['raisingAverage.field', 'raising-average', 'feed', 'state', 1],
+      ['rejoin.car', 'rejoin', 'feed', 'state', 4],
+      ['rejoin.ghostLines', 'rejoin', 'feed', 'state', 4],
+      ['scCall.car', 'sc-call', 'feed', 'state', 4],
       ['stintAnalysis.car', 'stint-analysis', 'feed', 'state', 1],
       ['talkWindow.car', 'talk-window', 'feed', 'state', 10],
       ['trackPositions.cars', 'track-positions', 'feed', 'state', 10],
@@ -152,6 +156,7 @@ describe('topic types', () => {
       | 'trackPositions.geometry' | 'trackPositions.cars' | 'talkWindow.car'
       | 'stintAnalysis.car' | 'pitLosses.track'
       | 'raisingAverage.field' | 'lapOverview.car' | 'weather.forecast' | 'crossover.car'
+      | 'rejoin.car' | 'rejoin.ghostLines' | 'scCall.car' | 'pitWindow.car'
       | 'calibration.sets' | 'calibration.values' | 'calibration.candidates' | 'calibration.active'
       | 'situation.carActivityPractice' | 'situation.carActivityQualifying' | 'situation.carActivityRace' | 'situation.carFlags'
       | 'situation.carLocation' | 'situation.carStatus' | 'situation.clock' | 'situation.compoundRule' | 'situation.lapValidity'

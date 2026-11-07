@@ -11,7 +11,7 @@ import type { AnyDataDecl } from '../src/kit/types.ts';
 import type { PresentationTable } from '../src/kit/presentation.ts';
 
 /** Every `Moment`, so a new one fails to compile here until it is listed. */
-const MOMENT_SET: Record<Moment, true> = { neutralised: true, incident: true, weather: true, battle: true, carCare: true };
+const MOMENT_SET: Record<Moment, true> = { neutralised: true, incident: true, window: true, weather: true, battle: true, carCare: true };
 const MOMENTS = Object.keys(MOMENT_SET) as Moment[];
 const RACE_MOMENT = 'raceMoment.current';
 
@@ -138,7 +138,7 @@ describe('presentation tables (C66)', () => {
     expect(reads).toEqual({ machines: ['car-location'], moments: true, unknownTopics: ['situation.nothing'] });
     const table: PresentationTable = {
       situations: { 'car-location': { garage: 'GARAGE', track: '', boxStop: 'BOX' }, 'weekend-phase': { none: '' } },
-      moments: { neutralised: 'n', incident: 'i', weather: 'w', battle: 'b', carCare: 'c', ...{ extra: 'x' } } as Record<Moment, unknown>,
+      moments: { neutralised: 'n', incident: 'i', window: 'p', weather: 'w', battle: 'b', carCare: 'c', ...{ extra: 'x' } } as Record<Moment, unknown>,
     };
     expect(tableProblems('probe', reads, table, declarations)).toEqual([
       'probe: no row for car-location pitLane',
@@ -154,6 +154,7 @@ describe('presentation tables (C66)', () => {
     ]);
     expect(tableProblems('probe', { machines: [], moments: true }, { moments: { neutralised: 1 } as Record<Moment, unknown> }, declarations)).toEqual([
       'probe: no row for moment incident',
+      'probe: no row for moment window',
       'probe: no row for moment weather',
       'probe: no row for moment battle',
       'probe: no row for moment carCare',

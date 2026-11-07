@@ -3,16 +3,16 @@ import type { SessionTime } from '../ids.ts';
 import type { Known } from '../known.ts';
 
 /** The race moments, highest priority first (spec 7.2). */
-export type Moment = 'neutralised' | 'incident' | 'weather' | 'battle' | 'carCare';
+export type Moment = 'neutralised' | 'incident' | 'window' | 'weather' | 'battle' | 'carCare';
 
 /** `raceMoment.current` (a `Known` of it: `notApplicable` outside the race). */
 export type RaceMoment = {
   moment: Moment;
-  /** From the cause: the flag phase start or the incident time; `notApplicable` for battle, weather and car care. */
+  /** From the cause: the flag phase start or the incident time; `notApplicable` for window, battle, weather and car care. */
   since: Known<SessionTime>;
   /**
    * The rule that set the moment and its values. `incident` names its entry of `incidents.feed` (`entryId`, with
-   * `kind`, `ageMs`); `battle` names the card's car and side (`carId`, `side`). Displays light what the cause names.
+   * `kind`, `ageMs`); `battle` names the card's car and side (`carId`, `side`); `window` the car and the compound (`carId`, `compound`). Displays light what the cause names.
    */
   cause: { rule: string; params: Record<string, number | string> };
   /** Every moment that holds now, the current one included, highest priority first. */

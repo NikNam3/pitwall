@@ -98,6 +98,8 @@ const isDue = (cadence: Cadence, lastRunAt: SessionTime, pending: Pending, now: 
       return rewound !== undefined || (after.pitStops ?? 0) > (before.pitStops ?? 0);
     case 'sessionChange':
       return pending.changed.has('session');
+    case 'ourCrossing':
+      return false; // SP4.2 Task 2 implements it
   }
 };
 

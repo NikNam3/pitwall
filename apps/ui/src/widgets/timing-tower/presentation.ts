@@ -126,6 +126,7 @@ export const presentation: TowerTable = {
   moments: {
     neutralised: { emphasis: undefined },
     incident: { emphasis: 'warning' },
+    window: { emphasis: undefined },
     weather: { emphasis: undefined },
     battle: { emphasis: undefined },
     carCare: { emphasis: undefined },

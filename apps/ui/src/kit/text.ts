@@ -247,7 +247,7 @@ export const topBar = {
   /** The latest stage of a safety car period. */
   phaseStage: { deployed: 'deployed', returning: 'in this lap', returned: 'in', resume: 'resume' },
   /** The race moment's name (spec 7.2). */
-  moment: { neutralised: 'neutralised', incident: 'incident', weather: 'weather', battle: 'battle', carCare: 'car care' },
+  moment: { neutralised: 'neutralised', incident: 'incident', window: 'pit window', weather: 'weather', battle: 'battle', carCare: 'car care' },
   /** The talk window dot's tooltip (spec 7.4). */
   talk: { clear: 'good moment to talk', busy: 'braking: wait' },
   realismOn: 'realism on',
