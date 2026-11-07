@@ -4,6 +4,7 @@ import type { GapsOutput } from '../gaps/index.ts';
 
 export type { CrossingRow, GhostLines, Rejoin, RejoinAt } from '@pitwall/domain';
 export * from './config.ts';
+export { REJOIN_BEHAVIOUR, type RejoinEffect } from './behaviour.ts';
 
 /** The analysis id. */
 export const REJOIN = 'rejoin';
