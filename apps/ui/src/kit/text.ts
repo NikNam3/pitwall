@@ -1,5 +1,5 @@
 // Every fixed text of the kit and the shell (spec 4.3, 7.4): the one place UI wording changes.
-import type { Corners, DamageParts, EstimateSource, IncidentKind, InsightCategory, UnknownReason } from '@pitwall/domain';
+import type { Corners, DamageParts, EstimateSource, IncidentKind, InsightCategory, PitCondition, UnknownReason } from '@pitwall/domain';
 
 /** Header state while a required topic has no value yet. */
 export const noDataYet = 'no data yet';
@@ -396,3 +396,7 @@ export const infringementNames: Readonly<Record<number, string>> = {
 /** What the incident feed calls a warning: `corner cutting`, or the name of its infringement code; `warning` for a code we don't know. */
 export const warningKind = (kind: 'cornerCutting' | 'other', infringement?: number): string =>
   kind === 'cornerCutting' ? 'corner cutting' : ((infringement === undefined ? undefined : infringementNames[infringement]) ?? 'warning');
+
+/** A ghost's condition letter, at a ghost line's end and beside a map ring. */
+const ghostLetters: Record<PitCondition, string> = { green: 'G', vsc: 'VSC', sc: 'SC' };
+export const ghostLetter = (c: PitCondition): string => ghostLetters[c];
