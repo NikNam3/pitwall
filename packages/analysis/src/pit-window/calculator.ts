@@ -51,13 +51,48 @@ function stoppedSince(view: EngineView, car: CarId, sinceFrame: number): boolean
   return (view.history.spans[ACTIVITY] ?? []).some(stopped) || openSpansOf(view, ACTIVITY, car).some(stopped);
 }
 
-/** One compound's row (spec 3.4): its life, the first stop lap from which it reaches the flag, its life end from `latest`. */
-function setRow(compound: VisualCompound, fitted: VisualCompound, life: TyreLife | undefined, flag: number, fromLap: number, latest: Known<number>): PitWindowSet {
+/** What a set's state depends on besides its own window: the current lap, the lead, and whether every window is closed. */
+type StateContext = { currentLap: number; windowLeadLaps: number; closed: boolean };
+
+/**
+ * One compound's row (spec 3.4): its life, the first stop lap from which it reaches the flag, its life end from `latest`;
+ * its window (stop laps `earliest` to `latest`, none when it does not reach the flag or opens after `latest`) and its state.
+ */
+function setRow(
+  compound: VisualCompound,
+  fitted: VisualCompound,
+  life: TyreLife | undefined,
+  flag: number,
+  fromLap: number,
+  latest: Known<number>,
+  ctx: StateContext,
+): PitWindowSet {
   const lifeLaps: Known<number> = life?.freshLifeLaps[compound] ?? INSUFFICIENT;
   const earliest: Known<number> = lifeLaps.known ? known(Math.max(flag - lifeLaps.value, fromLap), lifeLaps.at) : lifeLaps;
   const lifeEnd: Known<number> = !lifeLaps.known ? lifeLaps : !latest.known ? latest : known(latest.value + lifeLaps.value, atOf(latest, lifeLaps));
   const reaches: Known<boolean> = lifeEnd.known ? known(lifeEnd.value >= flag, lifeEnd.at) : lifeEnd;
-  return { compound, sameType: sameTypeOf(compound, fitted), lifeLaps, earliest, lifeEnd, reaches };
+  let windowLaps: Known<{ from: number; to: number }>;
+  let state: Known<PitWindowState>;
+  if (!latest.known) {
+    windowLaps = latest;
+    state = latest;
+  } else if (!(reaches.known && reaches.value && earliest.known && earliest.value <= latest.value)) {
+    windowLaps = unknown('notApplicable');
+    state = known('none', latest.at);
+  } else {
+    const opens = earliest.value;
+    const at = atOf(latest, reaches, earliest);
+    const value: PitWindowState = ctx.closed
+      ? 'closed'
+      : ctx.currentLap >= opens
+        ? 'open'
+        : ctx.currentLap >= opens - ctx.windowLeadLaps
+          ? 'lead'
+          : 'before';
+    windowLaps = known({ from: opens, to: latest.value }, at);
+    state = known(value, at);
+  }
+  return { compound, sameType: sameTypeOf(compound, fitted), lifeLaps, earliest, lifeEnd, reaches, windowLaps, state };
 }
 
 /** Rows by the stop lap they open from (unknown last), then the longer life, then the allocation's order. */
@@ -83,10 +118,12 @@ function pitWindowOf(view: EngineView, car: CarId, life: TyreLife | undefined, w
   const lapsToLimit: Known<number> = life?.lapsToLimit ?? INSUFFICIENT;
   const last: Known<number> = lapsToLimit.known ? known(currentLap + Math.floor(lapsToLimit.value), lapsToLimit.at) : lapsToLimit;
   const latest: Known<number> = last.known ? known(Math.min(last.value, flag - 1), last.at) : last;
-  const atLimit = lapsToLimit.known && lapsToLimit.value < 1;
 
   // without the rule to meet, a set that runs the final lap needs no stop
   const noStop = effect.ruleRequired !== true && last.known && last.value >= flag;
+  // a set that runs to the flag is never past its limit: `latest` is only capped at flag − 1 (SP4.2 fix re-review)
+  const pastLimit = (lapsToLimit.known && lapsToLimit.value < 1) || (!noStop && latest.known && currentLap > latest.value);
+  const stopNeeded: Known<boolean> = latest.known ? known(!noStop, latest.at) : latest;
   const compounds: VisualCompound[] = [];
   if (!noStop) {
     for (const s of tyres.sets.value.sets) {
@@ -95,36 +132,29 @@ function pitWindowOf(view: EngineView, car: CarId, life: TyreLife | undefined, w
       compounds.push(s.visualCompound);
     }
   }
-  const sets = compounds.map((c) => setRow(c, fitted, life, flag, fromLap, latest)).sort(byEarliest);
+  // every window closes once the fitted set is past its limit or the car boxed since the stint start
+  const ctx: StateContext = { currentLap, windowLeadLaps, closed: pastLimit || stoppedSince(view, car, sinceFrame) };
+  const sets = compounds.map((c) => setRow(c, fitted, life, flag, fromLap, latest, ctx)).sort(byEarliest);
 
+  // the car's window: its first same-type set with a window
   let window: Known<PitWindowState>;
   let windowCompound: Known<VisualCompound>;
   if (!latest.known) {
     window = latest;
     windowCompound = latest;
   } else {
-    const first = sets.find((s) => s.sameType && s.reaches.known && s.reaches.value && s.earliest.known);
-    if (first === undefined || !first.earliest.known) {
+    const first = sets.find((s) => s.sameType && s.windowLaps.known);
+    if (first === undefined) {
       window = known('none', latest.at);
       windowCompound = unknown('notApplicable');
     } else {
-      const opens = first.earliest.value;
-      const at = atOf(latest, first.reaches, first.earliest);
-      const value: PitWindowState =
-        atLimit || currentLap > latest.value || stoppedSince(view, car, sinceFrame)
-          ? 'closed'
-          : currentLap >= opens
-            ? 'open'
-            : currentLap >= opens - windowLeadLaps
-              ? 'lead'
-              : 'before';
-      window = known(value, at);
-      windowCompound = known(first.compound, at);
+      window = first.state;
+      windowCompound = known(first.compound, first.windowLaps.known ? first.windowLaps.at : latest.at);
     }
   }
 
   return known(
-    { carId: car, flag, currentLap, stint: { compound: fitted, fromLap, latest }, sets, window, windowCompound },
+    { carId: car, flag, currentLap, stint: { compound: fitted, fromLap, latest, stopNeeded, pastLimit }, sets, window, windowCompound },
     atOf(tyres.sets, latest),
   );
 }

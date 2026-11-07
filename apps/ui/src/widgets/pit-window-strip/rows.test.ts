@@ -4,11 +4,13 @@
 //    `showOther`, then the other type's sets below them, in topic order; without it, none of them;
 //  - `compactRows(window: PitWindow, showOther: boolean): CompactRow[]`, `CompactRow = { letter: string; lap: CellPart;
 //    role: Role; bold: boolean }`: first the fitted set, its letter (kit `COMPOUND_MARK`) and its last lap `L31` (kit
-//    `formatLapNumber(n, 2)`), empty with the reason while `stint.latest` is unknown, emphasis `lastLapEmphasis`; then
-//    one row per visible set that reaches the flag (a set that does not has no window: no row), its window `L23–31`
-//    (kit `formatLapRange`), a one-lap window one lap `L44`, emphasis `windowEmphasis(window)` for the window compound.
+//    `formatLapNumber(n, 2)`), empty with the reason while `stint.latest` is unknown, empty without a reason while
+//    `stint.stopNeeded` is false (no stop: no last lap), emphasis `lastLapEmphasis(stint.pastLimit)`; then one row per
+//    visible set with a window (`windowLaps` known; a set without one: no row), its `windowLaps` `L23–31` (kit
+//    `formatLapRange`), a one-lap window one lap `L44`, emphasis `windowEmphasis` of the set's own `state` (C43: the
+//    display maps the topic, it judges nothing).
 import { describe, expect, it } from 'vitest';
-import { INTER, OPEN, OVER, EARLY, race } from './fixtures.ts';
+import { AT_LIMIT, EARLY, INTER, NOSTOP, OPEN, OVER, SET_CLOSED, STOPPED, race } from './fixtures.ts';
 import { compactRows, visibleSets } from './rows.ts';
 
 const text = (rows: ReturnType<typeof compactRows>): string[] => rows.map((r) => `${r.letter} ${r.lap.text}`);
@@ -55,5 +57,23 @@ describe('compactRows', () => {
   it('adds the other type\'s rows below only while otherType is on', () => {
     expect(text(compactRows(INTER, false))).toEqual(['I L30', 'I L27–30']);
     expect(text(compactRows(INTER, true))).toEqual(['I L30', 'I L27–30', 'M L24–30']);
+  });
+
+  it('maps each set\'s own state: S closed by the topic is faint while its laps L22–31 would look open at L23', () => {
+    const rows = compactRows(SET_CLOSED, false);
+    expect(text(rows)).toEqual(['M L31', 'H L23–31', 'S L22–31']);
+    expect(rows.map((r) => [r.role, r.bold])).toEqual([['text', false], ['ownCar', true], ['textFaint', false]]);
+  });
+
+  it('writes no stop (stopNeeded false) as the fitted compound without a lap: H', () => {
+    const rows = compactRows(NOSTOP, false);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ letter: 'H', lap: { text: '' } });
+    expect(rows[0]!.lap.reason).toBeUndefined();
+  });
+
+  it('makes the last lap amber at the limit (pastLimit, latest = now) and leaves it plain when a box stop closed the window', () => {
+    expect(compactRows(AT_LIMIT, false).map((r) => [r.role, r.bold])).toEqual([['warning', true], ['textFaint', false]]);
+    expect(compactRows(STOPPED, false).map((r) => [r.role, r.bold])).toEqual([['text', false], ['textFaint', false]]);
   });
 });

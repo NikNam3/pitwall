@@ -1,5 +1,5 @@
 // The pit-window strip's emphasis (C68; SP4.2 spec §4): colour only to highlight. A window open now is white bold (the
-// own-car role), a closed one faint, tyres at or past their limit amber. The window state is `pit-window`'s (C43).
+// own-car role), a closed one faint, tyres at or past their limit amber. Every state is `pit-window`'s (C43).
 import type { PitWindowState } from '@pitwall/domain';
 import type { Role } from '../../theme/roles.ts';
 
@@ -21,7 +21,7 @@ export function bandRole(state: PitWindowState): Role {
   return 'textDim';
 }
 
-/** The fitted set's last lap: amber bold once the window is closed with the tyres at or past their limit. */
-export function lastLapEmphasis(state: PitWindowState, latest: number, currentLap: number): Emphasis {
-  return state === 'closed' && latest <= currentLap ? { role: 'warning', bold: true } : PLAIN;
+/** The fitted set's last lap by `pit-window`'s `stint.pastLimit`: amber bold while the tyres are at or past their limit. */
+export function lastLapEmphasis(pastLimit: boolean): Emphasis {
+  return pastLimit ? { role: 'warning', bold: true } : PLAIN;
 }
