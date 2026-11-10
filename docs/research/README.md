@@ -1,6 +1,6 @@
 # Research
 
-Race-engineering research done on 2026-10-27/28; 01–05 before the foundation spec, 06–07 before the strategy and UI work; 08 (market landscape) on 2026-10-30; 09 (situations inventory) on 2026-10-30, extended 2026-11-02; 10 (situations catalogue) on 2026-11-04, during the contract migration; 11 (strategy model reread) on 2026-11-10, before 4.3. These files keep its findings in the repo. Which file to read for which work: CLAUDE.md "What to read".
+Race-engineering research done on 2026-10-27/28; 01–05 before the foundation spec, 06–07 before the strategy and UI work; 08 (market landscape) on 2026-10-30; 09 (situations inventory) on 2026-10-30, extended 2026-11-02; 10 (situations catalogue) on 2026-11-04, during the contract migration; 11 (strategy model reread) and 12 (strategy data spike) on 2026-11-10, before 4.3. These files keep its findings in the repo. Which file to read for which work: CLAUDE.md "What to read".
 
 | File | Content |
 |---|---|
@@ -15,6 +15,7 @@ Race-engineering research done on 2026-10-27/28; 01–05 before the foundation s
 | [09-situations-inventory.md](09-situations-inventory.md) | Every situation signal as our recordings show it (session phases, car situations, flags, penalties, the sprint, race starts), with times; the facts the machine's sub-machines are built on |
 | [10-situations-catalogue.md](10-situations-catalogue.md) | The situations catalogue (contract C17, C19): one section per sub-machine with its scope, kinds, transitions, signals and their timing, test rows, segments and "seen" or "not yet seen" from `pitwall scan-situations`; the recording checklist for every situation not yet seen |
 | [11-strategy-model-reread.md](11-strategy-model-reread.md) | Every strategy paper read again before 4.3: Monte Carlo run counts and variance reduction, TUM's random-event tables, reacting vs fixed strategies, DP formulations and runtimes, tyre, dirty-air and overtaking models, driver noise, validation on noisy data; corrections to 03 and 07 |
+| [12-strategy-data-spike.md](12-strategy-data-spike.md) | What the recordings say about the strategy model: driver noise (AI vs our two humans), wear vs age, wet lap times, dirty air, blocking and passes, pit loss per condition, double stacks, the AI's stop and SC behaviour, undercut cases; engine defects found; consequences for the 4.3 spec; recordings wanted |
 
 ## Provenance
 
