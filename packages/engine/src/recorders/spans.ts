@@ -3,6 +3,7 @@
 // situation and decides nothing again: the kinds are the machine's. Protocol-free and signal-free (C6, C13).
 import type { CarId, NeutralisedDetail, OpenSpan } from '@pitwall/domain';
 import type { Situation } from '../situations/situation.ts';
+import { carSpanIn } from '../util/car-span.ts';
 import type { DeepReadonly } from '../util/deep-readonly.ts';
 
 /** The car-activity sub-machines (C17: one per weekend phase); at most one runs in a session, none under `pending` or `none`. */
@@ -18,8 +19,7 @@ const LAP_VALIDITY = 'lap-validity';
 /** A span as a recorder reads it from the situation. */
 export type SituationSpan = DeepReadonly<OpenSpan>;
 
-const carSpan = (situation: Situation, machine: string, carId: CarId): SituationSpan | undefined =>
-  situation.byMachine[machine]?.find((span) => span.carId === carId);
+const carSpan = (situation: Situation, machine: string, carId: CarId): SituationSpan | undefined => carSpanIn(situation.byMachine[machine], carId);
 
 /** The car's open activity span, of whichever activity sub-machine runs; none before its scope begins or without one. */
 export const activityOf = (situation: Situation, carId: CarId): SituationSpan | undefined => {

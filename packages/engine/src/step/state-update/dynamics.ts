@@ -1,4 +1,5 @@
-import { known, type CarDynamics } from '@pitwall/domain';
+import type { CarDynamics } from '@pitwall/domain';
+import { known } from '../../util/hot-domain.ts';
 import { maskForRealism } from './realism.ts';
 import type { StateUpdate } from './types.ts';
 
@@ -39,12 +40,11 @@ export const dynamicsUpdate: StateUpdate = { id: 'dynamics', apply: (frame, live
       const m = motion.carMotionData[car.id];
       if (!m) continue;
       car.updatedAt.motion = at;
-      Object.assign(car.motion, {
-        position: { x: m.worldPositionX, y: m.worldPositionY, z: m.worldPositionZ },
-        velocityMps: { x: m.worldVelocityX, y: m.worldVelocityY, z: m.worldVelocityZ },
-        gForce: { lateral: m.gForceLateral, longitudinal: m.gForceLongitudinal, vertical: m.gForceVertical },
-        orientation: { yawRad: m.yaw, pitchRad: m.pitch, rollRad: m.roll },
-      });
+      const { motion: carMotion } = car;
+      carMotion.position = { x: m.worldPositionX, y: m.worldPositionY, z: m.worldPositionZ };
+      carMotion.velocityMps = { x: m.worldVelocityX, y: m.worldVelocityY, z: m.worldVelocityZ };
+      carMotion.gForce = { lateral: m.gForceLateral, longitudinal: m.gForceLongitudinal, vertical: m.gForceVertical };
+      carMotion.orientation = { yawRad: m.yaw, pitchRad: m.pitch, rollRad: m.roll };
     }
     out.changed.add('dynamics');
   }
@@ -52,11 +52,10 @@ export const dynamicsUpdate: StateUpdate = { id: 'dynamics', apply: (frame, live
     for (const car of live.cars) {
       const s = status.carStatusData[car.id];
       if (!s || !car.dynamics.known) continue;
-      Object.assign(car.dynamics.value, {
-        maxRpm: s.maxRpm,
-        drsActivationDistanceM: s.drsActivationDistance,
-        pitLimiter: s.pitLimiterStatus === 1,
-      });
+      const { value } = car.dynamics;
+      value.maxRpm = s.maxRpm;
+      value.drsActivationDistanceM = s.drsActivationDistance;
+      value.pitLimiter = s.pitLimiterStatus === 1;
     }
     out.changed.add('dynamics');
   }

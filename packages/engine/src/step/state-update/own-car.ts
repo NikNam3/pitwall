@@ -1,4 +1,5 @@
-import { known, type CarSetup, type OwnCarMotionEx } from '@pitwall/domain';
+import type { CarSetup, OwnCarMotionEx } from '@pitwall/domain';
+import { known } from '../../util/hot-domain.ts';
 import type { CarSetupsPacket, MotionExPacket } from '@pitwall/protocol';
 import { cornersOf, mapCorners } from '../corners.ts';
 import { createOwnCarState } from './identity.ts';

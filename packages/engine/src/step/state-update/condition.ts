@@ -1,5 +1,5 @@
-import { known } from '@pitwall/domain';
-import { CORNER_NAMES, cornersOf } from '../corners.ts';
+import { known } from '../../util/hot-domain.ts';
+import { CORNER_NAMES, cornerOf } from '../corners.ts';
 import { knownUnlessRestricted } from './restricted.ts';
 import { maskForRealism } from './realism.ts';
 import { visibilityIn } from './identity.ts';
@@ -15,8 +15,9 @@ export const conditionUpdate: StateUpdate = { id: 'condition', apply: (frame, li
       if (!d) continue;
       car.updatedAt.damage = at;
       const { condition } = car;
+      const visibility = visibilityIn(frame, car, signals);
       condition.bodywork = knownUnlessRestricted(
-        visibilityIn(frame, car, signals),
+        visibility,
         {
           frontLeftWingPct: d.frontLeftWingDamage,
           frontRightWingPct: d.frontRightWingDamage,
@@ -28,7 +29,7 @@ export const conditionUpdate: StateUpdate = { id: 'condition', apply: (frame, li
         at,
       );
       condition.powerUnit = knownUnlessRestricted(
-        visibilityIn(frame, car, signals),
+        visibility,
         {
           engineDamagePct: d.engineDamage,
           gearboxDamagePct: d.gearBoxDamage,
@@ -41,13 +42,12 @@ export const conditionUpdate: StateUpdate = { id: 'condition', apply: (frame, li
         },
         at,
       );
-      condition.drsFault = knownUnlessRestricted(visibilityIn(frame, car, signals), d.drsFault === 1, at);
+      condition.drsFault = knownUnlessRestricted(visibility, d.drsFault === 1, at);
       condition.ersFault = d.ersFault === 1;
       condition.engineBlown = d.engineBlown === 1;
       condition.engineSeized = d.engineSeized === 1;
-      const brakeDamage = cornersOf(d.brakesDamage);
       for (const corner of CORNER_NAMES) {
-        condition.brakes[corner].damagePct = knownUnlessRestricted(visibilityIn(frame, car, signals), brakeDamage[corner], at);
+        condition.brakes[corner].damagePct = knownUnlessRestricted(visibility, cornerOf(d.brakesDamage, corner), at);
       }
     }
     out.changed.add('condition');
@@ -56,8 +56,7 @@ export const conditionUpdate: StateUpdate = { id: 'condition', apply: (frame, li
     for (const car of live.cars) {
       const t = telemetry.carTelemetryData[car.id];
       if (!t) continue;
-      const brakeTemp = cornersOf(t.brakesTemperature);
-      for (const corner of CORNER_NAMES) car.condition.brakes[corner].tempC = known(brakeTemp[corner], at);
+      for (const corner of CORNER_NAMES) car.condition.brakes[corner].tempC = known(cornerOf(t.brakesTemperature, corner), at);
       car.condition.engineTempC = known(t.engineTemperature, at);
     }
     out.changed.add('condition');

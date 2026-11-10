@@ -1,4 +1,5 @@
-import { known, unknown, type ConfirmedLap, type Known, type Ms, type SessionTime } from '@pitwall/domain';
+import type { ConfirmedLap, Known, Ms, SessionTime } from '@pitwall/domain';
+import { known, unknown } from '../../util/hot-domain.ts';
 import type { SessionHistoryPacket } from '@pitwall/protocol';
 import { pick } from '../pick.ts';
 import type { StateUpdate } from './types.ts';
@@ -63,24 +64,24 @@ export const timingUpdate: StateUpdate = { id: 'timing', apply: (frame, live, _s
       const l = lapData.lapData[car.id];
       if (!l) continue;
       car.updatedAt.lapData = at;
-      Object.assign(car.timing, {
-        position: l.carPosition,
-        lap: l.currentLapNum,
-        lapDistanceM: l.lapDistance,
-        totalDistanceM: l.totalDistance,
-        currentLapTimeMs: l.currentLapTimeInMs,
-        lastLapTimeMs: l.lastLapTimeInMs,
-        sector: pick(SECTOR, l.sector),
-        sector1TimeMs: l.sector1TimeMs,
-        sector2TimeMs: l.sector2TimeMs,
-        gapToLeaderMs: gap(l.deltaToRaceLeaderMs, at),
-        gapToCarAheadMs: gap(l.deltaToCarInFrontMs, at),
-        safetyCarDeltaMs: Math.round(l.safetyCarDelta * 1000),
-        pitLaneTimeMs: l.pitLaneTimeInLaneInMs,
-        pitStopTimerMs: l.pitStopTimerInMs,
-        gridPosition: l.gridPosition + GRID_FROM_ONE,
-        speedTrapFastestKmh: l.speedTrapFastestLap === NO_SPEED_TRAP_LAP ? unknown('notReceived') : known(l.speedTrapFastestSpeed, at),
-      });
+      // Field by field, in the timing's key order (no per-car object to merge).
+      const { timing } = car;
+      timing.position = l.carPosition;
+      timing.lap = l.currentLapNum;
+      timing.lapDistanceM = l.lapDistance;
+      timing.totalDistanceM = l.totalDistance;
+      timing.currentLapTimeMs = l.currentLapTimeInMs;
+      timing.lastLapTimeMs = l.lastLapTimeInMs;
+      timing.sector = pick(SECTOR, l.sector);
+      timing.sector1TimeMs = l.sector1TimeMs;
+      timing.sector2TimeMs = l.sector2TimeMs;
+      timing.gapToLeaderMs = gap(l.deltaToRaceLeaderMs, at);
+      timing.gapToCarAheadMs = gap(l.deltaToCarInFrontMs, at);
+      timing.safetyCarDeltaMs = Math.round(l.safetyCarDelta * 1000);
+      timing.pitLaneTimeMs = l.pitLaneTimeInLaneInMs;
+      timing.pitStopTimerMs = l.pitStopTimerInMs;
+      timing.gridPosition = l.gridPosition + GRID_FROM_ONE;
+      timing.speedTrapFastestKmh = l.speedTrapFastestLap === NO_SPEED_TRAP_LAP ? unknown('notReceived') : known(l.speedTrapFastestSpeed, at);
     }
     out.changed.add('timing');
   }

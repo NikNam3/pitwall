@@ -5,6 +5,7 @@
 // (nothing tells whether the race is under way, as in car-flags).
 import { compoundRuleSpans, type FrameNumber, carId as toCarId, type OpenSpan, type SessionTime } from '@pitwall/domain';
 import type { MachineStep, SubMachine } from '../machine.ts';
+import { sameEntries } from '../same-entries.ts';
 
 /** Per car slot: the open span, the same object while it holds (C40). */
 type Open = { cars: Array<OpenSpan | undefined> };
@@ -47,7 +48,7 @@ const machine: SubMachine<Open> = {
       closed.push({ ...span, end: input.at });
       return opening(span.id + 1, carId, 'waived', input.at, input.frameNumber, false);
     });
-    return { open: { cars }, closed };
+    return { open: sameEntries(open.cars, cars) ? open : { cars }, closed };
   },
 };
 

@@ -57,6 +57,16 @@ const opening = (kind: Kind, car: CarView, id: number, input: DeepReadonly<Machi
   },
 });
 
+/** A car's entry: its span and the spans it has opened, with what it was on this frame. */
+const entryOf = (held: Held | undefined, opened: number, car: CarView, crossed: boolean): CarOpen => ({
+  held,
+  opened,
+  location: car.location,
+  lap: car.lap,
+  lapDistanceM: car.lapDistanceM,
+  crossed,
+});
+
 /** A car's step: the kind of its next span (and how the one it closes ends), or its open span as it now stands. */
 type Next = { kind: Kind; confirmed?: boolean } | Held;
 
@@ -148,19 +158,18 @@ const machine: SubMachine<Open> = {
       const before = open.cars[index];
       if (car === undefined) return before;
       const crossed = before !== undefined && car.lapDistanceM < before.lapDistanceM;
-      const seen = { location: car.location, lap: car.lap, lapDistanceM: car.lapDistanceM, crossed };
       const opened = before?.opened ?? 0;
-      if (!started) return { held: undefined, opened, ...seen };
+      if (!started) return entryOf(undefined, opened, car, crossed);
       if (before?.held === undefined) {
-        if (car.competing === undefined) return { held: undefined, opened, ...seen };
+        if (car.competing === undefined) return entryOf(undefined, opened, car, crossed);
         const atLightsOut = lightsOutNow && sawBeforeLightsOut;
         const kind = atLightsOut ? lightsOutKind(car) : currentKind(car);
-        return { held: opening(kind, car, opened, input, !atLightsOut), opened: opened + 1, ...seen };
+        return entryOf(opening(kind, car, opened, input, !atLightsOut), opened + 1, car, crossed);
       }
       const step = next(before.held, before, car, crossed, input);
-      if ('span' in step) return { held: step, opened, ...seen };
+      if ('span' in step) return entryOf(step, opened, car, crossed);
       closed.push({ ...before.held.span, confirmed: step.confirmed ?? before.held.span.confirmed, end: input.at });
-      return { held: opening(step.kind, car, opened, input, false), opened: opened + 1, ...seen };
+      return entryOf(opening(step.kind, car, opened, input, false), opened + 1, car, crossed);
     });
     return { open: { sawBeforeLightsOut, started, cars }, closed };
   },

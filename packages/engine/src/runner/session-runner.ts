@@ -1,7 +1,6 @@
 import type { DecisionRecord, Ms, ParticipantsValues, SessionTime } from '@pitwall/domain';
 import type { Frame } from '../frame/frame.ts';
 import { logWriter, voidFactOf } from '../log/log.ts';
-import { projectionLengths } from '../log/projection.ts';
 import type { HistoryDelta, LogVoidFact } from '../log/types.ts';
 import { onRaceClock, rewindMarkOf } from '../situations/clock/clock.ts';
 import { closeSession, situationOf } from '../situations/run.ts';
@@ -208,7 +207,8 @@ export class SessionRunner {
   }
 
   #applyNow({ frame, decisions }: Given, onResult: OnResult | undefined): void {
-    const before = projectionLengths(this.#state.history);
+    // The projection's lengths as its last update left them (`open.projection.lengths`, its book).
+    const before = this.#state.open.projection.lengths;
     const reported = this.#reportedTarget(frame);
     const target = reported && this.#takes(reported) ? reported : undefined;
     // The runner's decision on the frame; a rewind's mark is of the state it leaves, so taken before restoring.
@@ -225,7 +225,7 @@ export class SessionRunner {
         state: this.#state,
         changed: rewound ? new Set(ALL_CHANGE_TAGS) : changed,
         corrections,
-        delta: { before, after: projectionLengths(this.#state.history), ...(rewound && { rewound }) },
+        delta: { before, after: this.#state.open.projection.lengths, ...(rewound && { rewound }) },
         ...(rewind && { flashback: rewind.flashback }),
         ...(clockFall && { clockFall }),
         ...(clockJump && { clockJump }),

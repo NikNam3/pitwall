@@ -3,6 +3,7 @@
 import { carFlagsSpans, carId as toCarId, type OpenSpan } from '@pitwall/domain';
 import { FLAG_TRANSITIONS, flagKind } from '../flag-kind.ts';
 import type { MachineStep, SubMachine } from '../machine.ts';
+import { sameEntries } from '../same-entries.ts';
 
 /** Per car slot: the open span (the same object while it holds, C40) and how many spans the car has had. */
 type Open = { cars: Array<{ span: OpenSpan; opened: number } | undefined> };
@@ -27,7 +28,7 @@ const machine: SubMachine<Open> = {
       const span: OpenSpan = { machine: 'car-flags', id, carId: toCarId(carId), kind, start: input.at, startFrame: input.frameNumber, confirmed: true, detail: undefined, ...(first ? { joinedAt: true as const } : {}) };
       return { span, opened: id + 1 };
     });
-    return { open: { cars }, closed };
+    return { open: sameEntries(open.cars, cars) ? open : { cars }, closed };
   },
 };
 

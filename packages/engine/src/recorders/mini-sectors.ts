@@ -28,27 +28,43 @@ export type MiniSectorsOwn = {
 /** A boundary the car passed between two samples, and how far along the path between them that was. */
 type Crossing = { lap: number; segment: number; pathM: Metres };
 
-const SEGMENTS = Array.from({ length: MINI_SECTORS }, (_, segment) => segment);
+/** The segments of a lap, read once (a per-frame loop reads it many times per car). */
+const SEGMENT_COUNT = MINI_SECTORS;
 
 /** Where the boundary of `segment` lies on a track `trackLengthM` long. */
-const boundaryOf = (segment: number, trackLengthM: Metres): Metres => (segment * trackLengthM) / MINI_SECTORS;
+const boundaryOf = (segment: number, trackLengthM: Metres): Metres => (segment * trackLengthM) / SEGMENT_COUNT;
 
-/** The boundaries passed between the cursor and the sample (spec: same lap, or the lap after). */
+/**
+ * The first segment whose boundary lies beyond `distanceM` (strictly), `SEGMENT_COUNT` when none does. Boundaries rise
+ * with the segment, so the segments up to a distance are the ones before it; the search starts at the estimate and
+ * walks to the exact boundary, so it agrees with `boundaryOf` to the last bit.
+ */
+const firstBeyond = (distanceM: Metres, trackLengthM: Metres): number => {
+  let s = Math.min(SEGMENT_COUNT, Math.max(0, Math.floor((distanceM * SEGMENT_COUNT) / trackLengthM)));
+  while (s > 0 && boundaryOf(s - 1, trackLengthM) > distanceM) s -= 1;
+  while (s < SEGMENT_COUNT && boundaryOf(s, trackLengthM) <= distanceM) s += 1;
+  return s;
+};
+
+/**
+ * The boundaries passed between the cursor and the sample (spec: same lap, or the lap after), in order: the boundaries
+ * beyond the cursor's distance up to the sample's on the same lap; over a lap wrap, those beyond the cursor on its lap,
+ * then those up to the sample's distance on the next.
+ */
 const crossingsBetween = (cursor: MiniSectorCursor, lap: number, distanceM: Metres, trackLengthM: Metres): Crossing[] => {
-  const boundary = (segment: number): Metres => boundaryOf(segment, trackLengthM);
   const from = cursor.distanceM;
+  const firstPassed = firstBeyond(from, trackLengthM);
+  const crossings: Crossing[] = [];
   if (lap === cursor.lap) {
-    return SEGMENTS.filter((s) => from < boundary(s) && boundary(s) <= distanceM).map((s) => ({
-      lap,
-      segment: s,
-      pathM: boundary(s) - from,
-    }));
+    const end = firstBeyond(distanceM, trackLengthM);
+    for (let s = firstPassed; s < end; s++) crossings.push({ lap, segment: s, pathM: boundaryOf(s, trackLengthM) - from });
+    return crossings;
   }
   const toLine = trackLengthM - from;
-  return [
-    ...SEGMENTS.filter((s) => boundary(s) > from).map((s) => ({ lap: cursor.lap, segment: s, pathM: boundary(s) - from })),
-    ...SEGMENTS.filter((s) => boundary(s) <= distanceM).map((s) => ({ lap, segment: s, pathM: toLine + boundary(s) })),
-  ];
+  for (let s = firstPassed; s < SEGMENT_COUNT; s++) crossings.push({ lap: cursor.lap, segment: s, pathM: boundaryOf(s, trackLengthM) - from });
+  const end = firstBeyond(distanceM, trackLengthM);
+  for (let s = 0; s < end; s++) crossings.push({ lap, segment: s, pathM: toLine + boundaryOf(s, trackLengthM) });
+  return crossings;
 };
 
 const isAfter = (crossing: Crossing, lap: number, segment: number): boolean =>
@@ -94,13 +110,13 @@ const restartLap = (own: MiniSectorsOwn, cursor: MiniSectorCursor, sample: Sampl
   const { carId, lap, distanceM, at, frame } = sample;
   const toLine = cursor.distanceM < 0 ? -cursor.distanceM : trackLengthM - cursor.distanceM;
   const path = toLine + distanceM;
-  const passed = SEGMENTS.filter((s) => boundaryOf(s, trackLengthM) <= distanceM);
-  for (const segment of passed) {
+  const passed = firstBeyond(distanceM, trackLengthM);
+  for (let segment = 0; segment < passed; segment++) {
     const crossedAt = timeAlong(cursor, at, toLine + boundaryOf(segment, trackLengthM), path);
     appendCrossing(own, { carId, lap, segment, at: crossedAt, frame }, log);
   }
-  next.segment = passed.at(-1) ?? -1;
-  return passed.length > 0;
+  next.segment = passed > 0 ? passed - 1 : -1;
+  return passed > 0;
 };
 
 /** The path from the cursor to the sample on the same lap number passes the line: from below 0, or over a wrap. */

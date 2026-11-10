@@ -1,4 +1,5 @@
-import { known, unknown, type ChannelRange, type DamageParts, type Known, type LapRecord, type SessionTime } from '@pitwall/domain';
+import type { ChannelRange, DamageParts, Known, LapRecord, SessionTime } from '@pitwall/domain';
+import { known, unknown } from '../util/hot-domain.ts';
 import { CORNER_NAMES, mapCorners } from '../step/corners.ts';
 import type { LiveCar } from './cars.ts';
 import type { LapCursor } from './lap-cursor.ts';
