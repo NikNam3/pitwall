@@ -19,6 +19,13 @@ export type SegmentName = keyof typeof SEGMENTS;
 /** The committed segment `file` of `fixtures/segments/`. */
 export const segmentPath = (file: string): string => join(import.meta.dirname, '../fixtures/segments', file);
 
+/** Every record's raw payload of the segment `file`, in file order: the decoder's input. */
+export async function segmentPayloads(file: string): Promise<Uint8Array[]> {
+  const payloads: Uint8Array[] = [];
+  for await (const r of readPwrec(segmentPath(file))) payloads.push(r.payload);
+  return payloads;
+}
+
 /** Every decodable packet of the segment `file`, in file order, with the time it was received. */
 export async function segmentPackets(file: string): Promise<Array<{ packet: Packet; receivedAtMs: number }>> {
   const packets: Array<{ packet: Packet; receivedAtMs: number }> = [];

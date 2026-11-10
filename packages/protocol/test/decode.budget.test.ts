@@ -3,8 +3,7 @@
 // on average. The profile measured 0.030 ms per packet. The payloads are read once; each pass decodes all of them. The
 // best of the timed passes counts, so machine load (a parallel suite, a busy core) cannot flake it (docs/testing.md 6).
 import { describe, expect, it } from 'vitest';
-import { readPwrec } from '../../../apps/bridge/src/pwrec/reader.ts';
-import { segmentPath } from '../../../test-support/segments.ts';
+import { segmentPayloads } from '../../../test-support/segments.ts';
 import { decode } from '../src/index.ts';
 
 const FULL_LAP = 'race-zandvoort-full-lap.pwrec.gz';
@@ -14,8 +13,7 @@ const TARGET_MS_PER_PACKET = 0.015;
 
 describe('decoder budget', () => {
   it(`race-zandvoort-full-lap: the best of ${PASSES} warm passes decodes a packet in under ${TARGET_MS_PER_PACKET} ms on average`, async () => {
-    const payloads: Uint8Array[] = [];
-    for await (const record of readPwrec(segmentPath(FULL_LAP))) payloads.push(record.payload);
+    const payloads = await segmentPayloads(FULL_LAP);
     expect(payloads.length).toBeGreaterThan(25_000);
 
     /** One pass: every payload decoded; the count of decoded packets keeps the work observable. */
