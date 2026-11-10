@@ -1,5 +1,5 @@
 import { known } from '../../util/hot-domain.ts';
-import { CORNER_NAMES, cornerOf } from '../corners.ts';
+import { CORNER_SLOTS } from '../corners.ts';
 import { knownUnlessRestricted } from './restricted.ts';
 import { maskForRealism } from './realism.ts';
 import { visibilityIn } from './identity.ts';
@@ -46,8 +46,8 @@ export const conditionUpdate: StateUpdate = { id: 'condition', apply: (frame, li
       condition.ersFault = d.ersFault === 1;
       condition.engineBlown = d.engineBlown === 1;
       condition.engineSeized = d.engineSeized === 1;
-      for (const corner of CORNER_NAMES) {
-        condition.brakes[corner].damagePct = knownUnlessRestricted(visibility, cornerOf(d.brakesDamage, corner), at);
+      for (const [corner, wheel] of CORNER_SLOTS) {
+        condition.brakes[corner].damagePct = knownUnlessRestricted(visibility, d.brakesDamage[wheel] ?? 0, at);
       }
     }
     out.changed.add('condition');
@@ -56,7 +56,7 @@ export const conditionUpdate: StateUpdate = { id: 'condition', apply: (frame, li
     for (const car of live.cars) {
       const t = telemetry.carTelemetryData[car.id];
       if (!t) continue;
-      for (const corner of CORNER_NAMES) car.condition.brakes[corner].tempC = known(cornerOf(t.brakesTemperature, corner), at);
+      for (const [corner, wheel] of CORNER_SLOTS) car.condition.brakes[corner].tempC = known(t.brakesTemperature[wheel] ?? 0, at);
       car.condition.engineTempC = known(t.engineTemperature, at);
     }
     out.changed.add('condition');

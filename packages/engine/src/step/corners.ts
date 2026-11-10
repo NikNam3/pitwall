@@ -12,11 +12,16 @@ export const mapCorners = <T>(make: (corner: CornerName) => T): Corners<T> => ({
   rr: make('rr'),
 });
 
-/** Each corner's index in a per-wheel array of a packet (game order RL, RR, FL, FR, C5). */
-const GAME_INDEX: Readonly<Record<CornerName, number>> = { rl: 0, rr: 1, fl: 2, fr: 3 };
-
-/** One corner's entry of a per-wheel array of a packet, as `cornersOf` names it, without building the four. A missing entry reads as 0. */
-export const cornerOf = (wheels: readonly number[], corner: CornerName): number => wheels[GAME_INDEX[corner]] ?? 0;
+/**
+ * Each corner, in `CORNER_NAMES`' order, with its index in a per-wheel array of a packet (game order RL, RR, FL, FR,
+ * C5): `wheels[index] ?? 0` is the corner's entry as `cornersOf` names it, read without building the four.
+ */
+export const CORNER_SLOTS: ReadonlyArray<readonly [CornerName, number]> = [
+  ['fl', 2],
+  ['fr', 3],
+  ['rl', 0],
+  ['rr', 1],
+];
 
 /** Names a per-wheel array of a packet (game order RL, RR, FL, FR). A missing entry reads as 0. */
 export const cornersOf = (wheels: readonly number[]): Corners<number> =>

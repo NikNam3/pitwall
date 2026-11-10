@@ -1,7 +1,7 @@
 import type { TyreSet } from '@pitwall/domain';
 import { actualCompoundFromCode, known, unknown, visualCompoundFromCode } from '../../util/hot-domain.ts';
 import type { TyreSetsPacket } from '@pitwall/protocol';
-import { CORNER_NAMES, cornerOf } from '../corners.ts';
+import { CORNER_SLOTS } from '../corners.ts';
 import { knownUnlessRestricted } from './restricted.ts';
 import { surfaceOnly as surfaceOnlyIn } from './session.ts';
 import { maskForRealism } from './realism.ts';
@@ -67,11 +67,12 @@ export const tyresUpdate: StateUpdate = { id: 'tyres', apply: (frame, live, sign
     for (const car of live.cars) {
       const t = telemetry.carTelemetryData[car.id];
       if (!t) continue;
-      for (const corner of CORNER_NAMES) {
+      const { tyresSurfaceTemperature: surface, tyresInnerTemperature: carcass, tyresPressure: pressure } = t;
+      for (const [corner, wheel] of CORNER_SLOTS) {
         const tyre = car.tyres.corners[corner];
-        tyre.surfaceTempC = known(cornerOf(t.tyresSurfaceTemperature, corner), at);
-        tyre.carcassTempC = surfaceOnly ? unknown('notApplicable') : known(cornerOf(t.tyresInnerTemperature, corner), at);
-        tyre.pressurePsi = known(cornerOf(t.tyresPressure, corner), at);
+        tyre.surfaceTempC = known(surface[wheel] ?? 0, at);
+        tyre.carcassTempC = surfaceOnly ? unknown('notApplicable') : known(carcass[wheel] ?? 0, at);
+        tyre.pressurePsi = known(pressure[wheel] ?? 0, at);
       }
     }
     out.changed.add('tyres');
@@ -81,11 +82,11 @@ export const tyresUpdate: StateUpdate = { id: 'tyres', apply: (frame, live, sign
       const d = damage.carDamageData[car.id];
       if (!d) continue;
       const visibility = visibilityIn(frame, car, signals);
-      for (const corner of CORNER_NAMES) {
+      for (const [corner, wheel] of CORNER_SLOTS) {
         const tyre = car.tyres.corners[corner];
-        tyre.wearPct = knownUnlessRestricted(visibility, cornerOf(d.tyresWear, corner), at);
-        tyre.damagePct = knownUnlessRestricted(visibility, cornerOf(d.tyresDamage, corner), at);
-        tyre.blistersPct = known(cornerOf(d.tyreBlisters, corner), at);
+        tyre.wearPct = knownUnlessRestricted(visibility, d.tyresWear[wheel] ?? 0, at);
+        tyre.damagePct = knownUnlessRestricted(visibility, d.tyresDamage[wheel] ?? 0, at);
+        tyre.blistersPct = known(d.tyreBlisters[wheel] ?? 0, at);
       }
     }
     out.changed.add('tyres');
