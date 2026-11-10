@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { FeedId } from '@pitwall/domain';
-import { PacketId, type Packet } from '@pitwall/protocol';
+import { PacketId, type EventCode, type Packet } from '@pitwall/protocol';
 import { FrameAssembler, type Frame } from '../../src/index.ts';
 import { buildPacket } from '../builders/index.ts';
 import { menuGroup, stub } from './stub-packet.ts';
@@ -179,5 +179,120 @@ describe('FrameAssembler: the flashback report', () => {
     const a = new FrameAssembler({ feedId });
     pushAll(a, [...menuGroup(10, 1.0), stub('event', 10, 1.0, { code: 'SSTA' })]);
     expect(a.flush()[0]!.flashback).toBeUndefined();
+  });
+});
+
+// C5, inventory 1.10: the game sends the flashback frame under one `overallFrameIdentifier` for two ticks: the undone old
+// tick (its own frame id and session time, events only, the FLBK among them) and the first tick of the new timeline
+// (frame id at the target). On some flashbacks the new tick's first packets are events with the new frame id and the OLD
+// session time.
+describe('FrameAssembler: one frame per game tick (C5)', () => {
+  const OVERALL = 42_053;
+  const OLD = 42_053;
+  const NEW = 41_153;
+  const old = (code: EventCode) => stub('event', OLD, 496.561, { overall: OVERALL, code });
+  const flbkOf = (frameId: number, overall: number, sessionTimeS: number, target: number, targetS: number) =>
+    buildPacket('event', {
+      header: { sessionUid: 7n, sessionTime: sessionTimeS, frameIdentifier: frameId, overallFrameIdentifier: overall },
+      details: { code: 'FLBK', flashbackFrameIdentifier: target, flashbackSessionTime: targetS },
+    });
+  const oldTick = () => [old('PENA'), old('OVTK'), old('SCAR'), old('DRSD'), flbkOf(OLD, OVERALL, 496.561, NEW, 481.561)];
+  const newTick = () => [
+    stub('session', NEW, 484.014, { overall: OVERALL }),
+    stub('participants', NEW, 484.014, { overall: OVERALL }),
+    ...menuGroup(NEW, 484.014, { overall: OVERALL }),
+  ];
+  const ticks = (fs: Frame[]) => fs.map((f) => [f.frameId, f.overallFrameId, f.sessionTime]);
+
+  it('packets sharing an overall id with two frame ids become two frames, in arrival order, each with its frame id, session time and receive time', () => {
+    const a = new FrameAssembler({ feedId });
+    pushAll(a, [...oldTick(), ...newTick()]);
+    const fs = a.flush();
+    expect(ticks(fs)).toEqual([[OLD, OVERALL, 496_561], [NEW, OVERALL, 484_014]]);
+    expect(fs.map((f) => f.receivedAtMs)).toEqual([496_561, 484_014]);
+    expect(a.metrics.framesClosed).toBe(2);
+  });
+  it('each packet goes to its own tick: the undone events and the FLBK report to the old one, the slots to the new one', () => {
+    const a = new FrameAssembler({ feedId });
+    pushAll(a, [...oldTick(), ...newTick()]);
+    const [undone, fresh] = a.flush();
+    expect(undone!.events.map((e) => e.details.code)).toEqual(['PENA', 'OVTK', 'SCAR', 'DRSD', 'FLBK']);
+    expect(undone!.flashback).toEqual({ targetFrameId: NEW, targetSessionTime: 481_561 });
+    expect([undone!.session, undone!.lapData]).toEqual([undefined, undefined]);
+    expect(fresh!.events).toEqual([]);
+    expect(fresh!.flashback).toBeUndefined();
+    expect([fresh!.session, fresh!.participants, fresh!.lapData]).not.toContain(undefined);
+  });
+  it('a packet of the older tick that arrives among the newer tick’s packets still joins its own tick', () => {
+    const a = new FrameAssembler({ feedId });
+    const [first, ...rest] = oldTick();
+    pushAll(a, [first!, ...newTick(), ...rest]);
+    const fs = a.flush();
+    expect(ticks(fs)).toEqual([[OLD, OVERALL, 496_561], [NEW, OVERALL, 484_014]]);
+    expect(fs[0]!.events).toHaveLength(5);
+    expect(fs[1]!.events).toEqual([]);
+  });
+
+  // Inventory 1.10: FLBK sent at 4581.839, f308668, target f307768; RTMT re-sent at f307768 still with 4581.839; Session at 4566.882.
+  describe('a re-sent event with the new frame id and the old session time', () => {
+    const O = 310_513;
+    const undone = () => flbkOf(308_668, O, 4581.839, 307_768, 4566.839);
+    const rtmt = () => stub('event', 307_768, 4581.839, { overall: O, code: 'RTMT' });
+    const rest = () => [stub('session', 307_768, 4566.882, { overall: O }), ...menuGroup(307_768, 4566.882, { overall: O })];
+
+    it.each([
+      ['before the tick’s other packets', () => [undone(), rtmt(), ...rest()]],
+      ['after the tick’s other packets', () => [undone(), ...rest(), rtmt()]],
+    ])('%s: it stays with the new tick and does not raise its time', (_, packets) => {
+      const a = new FrameAssembler({ feedId });
+      pushAll(a, packets());
+      const fs = a.flush();
+      expect(ticks(fs)).toEqual([[308_668, O, 4_581_839], [307_768, O, 4_566_882]]);
+      expect(fs[1]!.events.map((e) => e.details.code)).toEqual(['RTMT']);
+    });
+  });
+
+  it('an ordinary tick stays one frame', () => {
+    const a = new FrameAssembler({ feedId });
+    pushAll(a, [stub('event', 10, 1.0, { code: 'OVTK' }), stub('session', 10, 1.0), ...menuGroup(10, 1.0), stub('event', 10, 1.0, { code: 'SPTP' })]);
+    const fs = a.flush();
+    expect(ticks(fs)).toEqual([[10, 10, 1000]]);
+    expect(fs[0]!.events.map((e) => e.details.code)).toEqual(['OVTK', 'SPTP']);
+  });
+
+  it('attach never lowers a frame’s time', () => {
+    const a = new FrameAssembler({ feedId });
+    pushAll(a, menuGroup(4138, 63.318));
+    a.attach(stub('event', 0, 63.1, { code: 'SEND' }));
+    expect(a.flush()[0]!.sessionTime).toBe(63_318);
+  });
+  it('attach merges into the tick that arrived last when two ticks share the newest overall id', () => {
+    const a = new FrameAssembler({ feedId });
+    pushAll(a, [...oldTick(), ...newTick()]);
+    a.attach(stub('event', 0, 484.014, { code: 'SEND' }));
+    const fs = a.flush();
+    expect(fs.map((f) => f.events.at(-1)?.details.code)).toEqual(['FLBK', 'SEND']);
+  });
+
+  it('both ticks close together once a packet more than the reorder window newer has arrived, oldest arrival first', () => {
+    const a = new FrameAssembler({ feedId });
+    pushAll(a, [...oldTick(), ...newTick()]);
+    pushAll(a, menuGroup(NEW + 1, 484.03, { overall: OVERALL + 1 }));
+    pushAll(a, menuGroup(NEW + 2, 484.046, { overall: OVERALL + 2 }));
+    expect(ticks(push(a, stub('lapData', NEW + 3, 484.062, { overall: OVERALL + 3 })))).toEqual([[OLD, OVERALL, 496_561], [NEW, OVERALL, 484_014]]);
+  });
+  it('lateness goes by the overall id: a packet more than the window behind is dropped whatever its frame id', () => {
+    const a = new FrameAssembler({ feedId });
+    pushAll(a, [...menuGroup(10, 1.0), stub('motion', 13, 1.048)]);
+    expect(push(a, stub('lapData', 999, 1.0, { overall: 10 }))).toEqual([]);
+    expect(a.metrics.latePackets).toBe(1);
+    expect(ids(a.flush())).toEqual([13]);
+  });
+  it('a held jump goes by the overall id: its confirmed packets still split into their ticks', () => {
+    const a = new FrameAssembler({ feedId });
+    pushAll(a, menuGroup(10, 1.0));
+    pushAll(a, [stub('event', 600, 9.6, { overall: 500, code: 'OVTK' }), stub('lapData', 400, 6.4, { overall: 500 })]);
+    expect(ticks(a.flush())).toEqual([[10, 10, 1000], [600, 500, 9600], [400, 500, 6400]]);
+    expect(a.metrics.latePackets).toBe(0);
   });
 });

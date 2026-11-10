@@ -1,8 +1,9 @@
 // Shared by the SessionRunner tests: a 2-car scenario on a 4000 m track in which car 0 drives laps, and the
 // helpers that run it, flash it back and count the flashbacks.
+import { toSessionTime } from '@pitwall/domain';
 import type { EventDetails } from '@pitwall/protocol';
 import type { DeepReadonly, EngineState, Frame, SessionRunner, StepResult } from '../../src/index.ts';
-import { ScenarioBuilder, type FrameDraft } from '../builders/index.ts';
+import { buildPacket, ScenarioBuilder, type FrameDraft } from '../builders/index.ts';
 
 /** Session time per frame, in ms. */
 export const STEP = 16;
@@ -58,6 +59,32 @@ export const factLengths = (log: DeepReadonly<EngineState['log']>): Record<strin
 
 /** An FLBK event back to `frameId` (at its session time). */
 export const flbk = (frameId: number): EventDetails => ({ code: 'FLBK', flashbackFrameIdentifier: frameId, flashbackSessionTime: (frameId * STEP) / 1000 });
+
+/**
+ * The last tick of the undone timeline as the game sends it (inventory 1.10), assembled: one frame after `last` on the
+ * old timeline, events only, with `before` and an `FLBK` back to frame `target` (at `targetMs`). The new timeline's first
+ * tick shares its `overallFrameId`.
+ */
+export const undoneTick = (last: Frame, target: number, { targetMs = target * STEP, before = [] }: { targetMs?: number; before?: EventDetails[] } = {}): Frame => {
+  const frameId = last.frameId + 1;
+  const overallFrameId = last.overallFrameId + 1;
+  const sessionTime = toSessionTime((last.sessionTime + STEP) / 1000);
+  const header = { sessionUid: last.sessionUid, sessionTime: sessionTime / 1000, frameIdentifier: frameId, overallFrameIdentifier: overallFrameId, playerCarIndex: last.playerCarIndex };
+  const details: EventDetails[] = [...before, { code: 'FLBK', flashbackFrameIdentifier: target, flashbackSessionTime: targetMs / 1000 }];
+  return {
+    feedId: last.feedId,
+    sessionUid: last.sessionUid,
+    frameId,
+    overallFrameId,
+    sessionTime,
+    playerCarIndex: last.playerCarIndex,
+    receivedAtMs: last.receivedAtMs + STEP,
+    sessionHistory: [],
+    tyreSets: [],
+    events: details.map((d) => buildPacket('event', { header, details: d })),
+    flashback: { targetFrameId: target, targetSessionTime: toSessionTime(targetMs / 1000) },
+  };
+};
 
 /** Car 0 drives 40 m per frame on a 4000 m track; a new lap begins at each frame index in `lapStarts`. */
 export const drive = (lapStarts: number[]) => (d: FrameDraft) => {

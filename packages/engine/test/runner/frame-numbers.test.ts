@@ -8,7 +8,7 @@ import { situationOf } from '../../src/situations/run.ts';
 import type { DeepReadonly } from '../../src/util/deep-readonly.ts';
 import { ScenarioBuilder } from '../builders/index.ts';
 import { initFor } from '../support/run.ts';
-import { after, applyOne, drive, flbk, runAll, STEP, timeline } from '../support/runner.ts';
+import { after, applyOne, drive, runAll, STEP, timeline, undoneTick } from '../support/runner.ts';
 
 vi.mock('../../src/situations/index.generated.ts', async () => {
   const { TEST_MACHINES } = await import('../support/test-machines.ts');
@@ -19,12 +19,11 @@ vi.mock('../../src/situations/index.generated.ts', async () => {
 
 /**
  * Car 0 drives laps beginning at the frame indexes of `lapStarts` and is in the pit lane on the frames of `pits` (`[from,
- * to)` each); `extra` adds events per frame index.
+ * to)` each).
  */
-const race = (frames: number, lapStarts: number[], pits: ReadonlyArray<readonly [number, number]>, extra: (i: number) => ReturnType<typeof flbk>[] = () => []): Frame[] => {
+const race = (frames: number, lapStarts: number[], pits: ReadonlyArray<readonly [number, number]>): Frame[] => {
   const b = new ScenarioBuilder({ cars: 2, stepMs: STEP }).session({ trackLength: 4000 });
   for (let i = 0; i < frames; i++) {
-    for (const details of extra(i)) b.event(details);
     b.frame((d) => {
       drive(lapStarts)(d);
       d.lapData.lapData[0]!.pitStatus = pits.some(([from, to]) => i >= from && i < to) ? 1 : 0;
@@ -32,8 +31,6 @@ const race = (frames: number, lapStarts: number[], pits: ReadonlyArray<readonly 
   }
   return b.build();
 };
-
-const noFlbk = (fs: Frame[]) => fs.map((f) => ({ ...f, events: f.events.filter((e) => e.details.code !== 'FLBK') }));
 
 /** The frame numbers of everything readers see: every projected fact's and span's, and the open spans'. */
 const frameNumbers = (state: DeepReadonly<EngineState>) => ({
@@ -54,8 +51,8 @@ const carZero = (state: DeepReadonly<EngineState>) =>
 // and lap 3 begins at 330.
 const scene = () => {
   const original = race(300, [100, 250], [[150, 220]]);
-  const fork = race(400, [100, 330], [[150, 210], [260, 280]], (i) => (i === 201 ? [flbk(200)] : []));
-  return { original, continuation: after(fork, 201, 300), reference: noFlbk(fork) };
+  const fork = race(400, [100, 330], [[150, 210], [260, 280]]);
+  return { original, continuation: [undoneTick(original.at(-1)!, 200), ...after(fork, 201, 300)], reference: fork };
 };
 
 describe('frame numbers across a flashback (C26, C27, C33)', () => {
@@ -80,17 +77,17 @@ describe('frame numbers across a flashback (C26, C27, C33)', () => {
     const runner = new SessionRunner(initFor(original));
     runAll(runner, original);
     applyOne(runner, continuation[0]!);
-    // restored to frame 200, the last replayed frame: number 201
+    // restored to frame 200, the last replayed frame: number 201; the undone tick gets no number
     expect(runner.state.log.voids.map((v) => [v.target.frameId, v.frame])).toEqual([[200, 201]]);
-    expect(runner.state.frameNumber).toBe(202);
+    expect(runner.state.frameNumber).toBe(201);
 
     // A target older than the replay window: nothing is replayed, the state is the snapshot's after frame 63 (number 64).
-    const laps = Array.from({ length: 9 }, (_, k) => 100 * (k + 1));
-    const long = timeline(1000, laps);
+    const laps = Array.from({ length: 24 }, (_, k) => 100 * (k + 1));
+    const long = timeline(2500, laps);
     const old = new SessionRunner(initFor(long));
     runAll(old, long);
-    applyOne(old, after(timeline(200, [120], (i) => (i === 91 ? [flbk(90)] : [])), 91, 1000)[0]!);
+    applyOne(old, undoneTick(long.at(-1)!, 90));
     expect(old.state.log.voids.map((v) => [v.target.frameId, v.frame])).toEqual([[63, 64]]);
-    expect(old.state.frameNumber).toBe(65);
+    expect(old.state.frameNumber).toBe(64);
   });
 });
