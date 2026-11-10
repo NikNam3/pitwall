@@ -9,5 +9,7 @@ export default defineConfig({
     hookTimeout: 600_000,
     // Files run in parallel: each replays whole recordings on one core; the gate's wall time is its slowest file.
     fileParallelism: true,
+    // The gate's wall-time budget: fails the run when a file or the whole run exceeds it.
+    reporters: ['default', './vitest.acceptance.budget.ts'],
   },
 });
