@@ -9,7 +9,7 @@ import type { WeekendContext } from '../state/weekend-context.ts';
 import { participantsValuesOf } from '../step/state-update/identity.ts';
 import { initialState } from '../step/state-update/initial.ts';
 import { ALL_CHANGE_TAGS, projectionTrackerOf, step, type ChangeTag, type ClockFall, type ClockJump, type FlashbackReport, type LapCorrection } from '../step/step.ts';
-import { copyPlain } from '../util/copy-plain.ts';
+import { copyPlainSharingKnown } from '../util/copy-plain.ts';
 import type { DeepReadonly } from '../util/deep-readonly.ts';
 import type { Snapshotable } from './snapshotable.ts';
 import { SnapshotStore } from './snapshots.ts';
@@ -273,7 +273,7 @@ export class SessionRunner {
     const replayed = this.#frames.filter(({ frame: f }) => f.frameId > snapshot.frameId && f.frameId <= replayTo);
     this.#frames = this.#frames.filter(({ frame: f }) => f.frameId <= replayTo);
     const { log, history, weekend } = this.#state;
-    this.#state = { ...copyPlain(snapshot.state), log, history, ...(weekend && { weekend }) };
+    this.#state = { ...copyPlainSharingKnown(snapshot.state), log, history, ...(weekend && { weekend }) };
     // The frame restored to: the last replayed one, or the snapshot's when the target is older than the window. Its
     // frame number: the snapshot's, counted on by each replayed frame (C26).
     const last = replayed.at(-1);

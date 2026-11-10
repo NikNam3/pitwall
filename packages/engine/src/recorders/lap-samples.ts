@@ -1,6 +1,7 @@
 import type { ChannelRange, DamageParts, Known, LapRecord, SessionTime } from '@pitwall/domain';
 import { known, unknown } from '../util/hot-domain.ts';
-import { CORNER_NAMES, mapCorners } from '../step/corners.ts';
+import { CORNER_NAMES, mapCorners, type CornerName } from '../step/corners.ts';
+import type { DeepReadonly } from '../util/deep-readonly.ts';
 import type { LiveCar } from './cars.ts';
 import type { LapCursor } from './lap-cursor.ts';
 
@@ -31,15 +32,26 @@ export const emptyChannels = (): Pick<LapCursor, 'channelMin' | 'channelMax'> =>
   channelMax: CHANNELS.map(() => -Infinity),
 });
 
+/** Folds one channel's reading into the cursor's range of channel `i`. */
+const observeChannel = (cursor: LapCursor, i: number, reading: DeepReadonly<Known<number>>): void => {
+  if (!reading.known) return;
+  if (reading.value < (cursor.channelMin[i] ?? Infinity)) cursor.channelMin[i] = reading.value;
+  if (reading.value > (cursor.channelMax[i] ?? -Infinity)) cursor.channelMax[i] = reading.value;
+};
+
 /** Folds the frame's channel values and ERS totals into the lap. Runs per car and frame: comparisons only, no allocation. */
 export const observeLapFrame = (cursor: LapCursor, car: LiveCar): void => {
-  const { channelMin, channelMax } = cursor;
-  for (let i = 0; i < CHANNELS.length; i++) {
-    const reading = CHANNELS[i]?.(car);
-    if (!reading?.known) continue;
-    if (reading.value < (channelMin[i] ?? Infinity)) channelMin[i] = reading.value;
-    if (reading.value > (channelMax[i] ?? -Infinity)) channelMax[i] = reading.value;
+  // The channels of `CHANNELS`, in its order, read directly.
+  for (let c = 0; c < CORNER_NAMES.length; c++) {
+    const corner = CORNER_NAMES[c] as CornerName;
+    const tyre = car.tyres.corners[corner];
+    const first = TYRE_CHANNELS_PER_CORNER * c;
+    observeChannel(cursor, first, tyre.surfaceTempC);
+    observeChannel(cursor, first + 1, tyre.carcassTempC);
+    observeChannel(cursor, first + 2, tyre.pressurePsi);
+    observeChannel(cursor, BRAKE_CHANNEL_0 + c, car.condition.brakes[corner].tempC);
   }
+  observeChannel(cursor, ENGINE_CHANNEL, car.condition.engineTempC);
   const { ers } = car.energy;
   if (ers.known) {
     cursor.ersDeployedJ = ers.value.deployedJ;

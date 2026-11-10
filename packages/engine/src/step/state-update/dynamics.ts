@@ -52,10 +52,10 @@ export const dynamicsUpdate: StateUpdate = { id: 'dynamics', apply: (frame, live
     for (const car of live.cars) {
       const s = status.carStatusData[car.id];
       if (!s || !car.dynamics.known) continue;
-      const { value } = car.dynamics;
-      value.maxRpm = s.maxRpm;
-      value.drsActivationDistanceM = s.drsActivationDistance;
-      value.pitLimiter = s.pitLimiterStatus === 1;
+      // A new value with the limits, known since the telemetry's time as before: a `Known` is never changed once made,
+      // so a snapshot may keep it as it is (`copyPlainSharingKnown`).
+      const { value, at: telemetryAt } = car.dynamics;
+      car.dynamics = known({ ...value, maxRpm: s.maxRpm, drsActivationDistanceM: s.drsActivationDistance, pitLimiter: s.pitLimiterStatus === 1 }, telemetryAt);
     }
     out.changed.add('dynamics');
   }
