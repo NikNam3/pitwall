@@ -1,6 +1,6 @@
 # Research
 
-Race-engineering research done on 2026-10-27/28; 01–05 before the foundation spec, 06–07 before the strategy and UI work; 08 (market landscape) on 2026-10-30; 09 (situations inventory) on 2026-10-30, extended 2026-11-02; 10 (situations catalogue) on 2026-11-04, during the contract migration. These files keep its findings in the repo. Which file to read for which work: CLAUDE.md "What to read".
+Race-engineering research done on 2026-10-27/28; 01–05 before the foundation spec, 06–07 before the strategy and UI work; 08 (market landscape) on 2026-10-30; 09 (situations inventory) on 2026-10-30, extended 2026-11-02; 10 (situations catalogue) on 2026-11-04, during the contract migration; 11 (strategy model reread) on 2026-11-10, before 4.3. These files keep its findings in the repo. Which file to read for which work: CLAUDE.md "What to read".
 
 | File | Content |
 |---|---|
@@ -14,6 +14,7 @@ Race-engineering research done on 2026-10-27/28; 01–05 before the foundation s
 | [08-market-landscape.md](08-market-landscape.md) | Other race-engineer tools (F1 25 apps, iRacing/LMU/ACC team platforms, real-F1 timing apps): what to take, where pitwall is ahead and behind, the 2026 Season Pack format risk |
 | [09-situations-inventory.md](09-situations-inventory.md) | Every situation signal as our recordings show it (session phases, car situations, flags, penalties, the sprint, race starts), with times; the facts the machine's sub-machines are built on |
 | [10-situations-catalogue.md](10-situations-catalogue.md) | The situations catalogue (contract C17, C19): one section per sub-machine with its scope, kinds, transitions, signals and their timing, test rows, segments and "seen" or "not yet seen" from `pitwall scan-situations`; the recording checklist for every situation not yet seen |
+| [11-strategy-model-reread.md](11-strategy-model-reread.md) | Every strategy paper read again before 4.3: Monte Carlo run counts and variance reduction, TUM's random-event tables, reacting vs fixed strategies, DP formulations and runtimes, tyre, dirty-air and overtaking models, driver noise, validation on noisy data; corrections to 03 and 07 |
 
 ## Provenance
 
@@ -32,7 +33,7 @@ Race-engineering research done on 2026-10-27/28; 01–05 before the foundation s
 - the ATLAS cursor documentation (reference vs comparison cursor, live follow mode)
 - ~~degradation estimation from noisy live lap times~~: covered by the state-space model in [07](07-strategy-literature.md) §2.2; traffic correction still open
 - the F1 25 measurements listed in [06](06-engineer-decisions.md) §5 and [07](07-strategy-literature.md) §4 (pit loss per condition, SC behaviour, dirty-air loss, wear against lap time); they need recordings with stops and an SC
-- Carrasco Heine & Thraves (2023) full text ([DOI](https://doi.org/10.1007/s10100-022-00806-4)), optional
+- Carrasco Heine & Thraves (2023) full text ([DOI](https://doi.org/10.1007/s10100-022-00806-4)) and Aguad & Thraves' supplementary material (per-circuit SC/VSC rates): see [11](11-strategy-model-reread.md) §9
 - Segers, *Analysis Techniques for Racecar Data Acquisition* (SAE, 2nd ed. 2014), and Knox, *A Practical Guide to Race Car Data Analysis*, for standard math channels
 - photos of real pit-wall screens, as visual reference for the UI (sub-project 2)
 - live performance analysis: how the delta channel is aligned by distance, how the reference lap is chosen, splitting a lap into corners (sub-project 5)

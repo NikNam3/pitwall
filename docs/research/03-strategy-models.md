@@ -1,5 +1,7 @@
 # Strategy models
 
+> Reread on 2026-11-10: [11](11-strategy-model-reread.md) corrects this file in §8; where they disagree, 11 is right.
+
 ## 1. What teams do
 
 - Monte Carlo simulation of the whole race has been standard since McLaren in the 1990s (Neil Martin) ([The National](https://www.thenationalnews.com/uae/science/the-strategy-behind-the-race-1.567592)).

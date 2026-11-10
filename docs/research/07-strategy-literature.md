@@ -1,5 +1,7 @@
 # Strategy models: the literature map
 
+> Reread on 2026-11-10: [11](11-strategy-model-reread.md) corrects this file in §8; where they disagree, 11 is right.
+
 [03](03-strategy-models.md) covers the TUM race simulation. [06](06-engineer-decisions.md) found a 2026 MILP model built on F1 25 data (Avella et al.). This file follows their citations backwards and searches forwards for newer work. It asks what each paper adds and how the pieces combine into pitwall's strategy layer (sub-projects 4 and 5).
 
 Research done on 2026-10-28. The user's view: the 2026 paper is promising but not a finished solution; learn from it and combine it with the rest.
