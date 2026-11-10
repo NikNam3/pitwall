@@ -33,8 +33,9 @@ const snapshotOf = (state: EngineState, frameId: number, attached: unknown): Sna
 };
 
 /**
- * The snapshots of one session. Frame ids rise from one snapshot to the next, because a rewind drops every snapshot
- * after the one it restores. Session times may fall between them (a fall before the race start, the formation reset
+ * The snapshots of one session. Frame ids never fall from one snapshot to the next, because a rewind drops every
+ * snapshot after the one it restores; two can share one, the old frame of a rewind's target and the new timeline's first
+ * tick that lands on it. Session times may fall between them (a fall before the race start, the formation reset
  * before lights out), so the window's frame bound and the restore go by frame id. The first snapshot is never replaced.
  * Every snapshot from the window's start on is kept; before it, one per
  * `KEEP_OLDER_EVERY_MS` slot, so the count grows by two a minute.
