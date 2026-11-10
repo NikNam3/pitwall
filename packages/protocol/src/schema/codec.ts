@@ -61,10 +61,43 @@ function membersOf<T>(spec: StructSpec, codecOf: (field: FieldSpec) => T): Struc
  * struct share one hidden class (a loop of keyed writes into `{}` is several times slower). The literal
  * is generated once per spec; field names go in through `JSON.stringify`, offsets are numbers.
  */
-function compileStructReader(members: readonly StructMember<Reader>[]): Reader {
-  const fields = members.map((member, i) => `${JSON.stringify(member.name)}: c[${i}](v, o + ${member.offset})`);
-  const build = new Function('c', `return (v, o) => ({ ${fields.join(', ')} });`) as (codecs: readonly Reader[]) => Reader;
-  return build(members.map((member) => member.codec));
+function compileStructReader(spec: StructSpec): Reader {
+  const members = membersOf(spec, (field) => field);
+  const fields = members.map((member, i) => {
+    const at = `o + ${member.offset}`;
+    const value = member.codec.kind === 'primitive' ? primitiveRead(member.codec.type, at) : `c[${i}](v, ${at})`;
+    return `${JSON.stringify(member.name)}: ${value}`;
+  });
+  const build = new Function('c', `return (v, o) => ({ ${fields.join(', ')} });`) as (codecs: readonly (Reader | undefined)[]) => Reader;
+  return build(members.map((member) => (member.codec.kind === 'primitive' ? undefined : readerOf(member.codec))));
+}
+
+/** The DataView getter of each primitive, as `PRIMITIVE_CODECS` reads it. */
+const PRIMITIVE_GETTERS: Readonly<Record<Primitive, { method: string; endian: boolean }>> = {
+  u8: { method: 'getUint8', endian: false },
+  i8: { method: 'getInt8', endian: false },
+  u16: { method: 'getUint16', endian: true },
+  i16: { method: 'getInt16', endian: true },
+  u32: { method: 'getUint32', endian: true },
+  i32: { method: 'getInt32', endian: true },
+  u64: { method: 'getBigUint64', endian: true },
+  f32: { method: 'getFloat32', endian: true },
+  f64: { method: 'getFloat64', endian: true },
+};
+
+/**
+ * The source of a primitive read at offset expression `at` of view `v`, inlined into a generated reader: the same
+ * DataView call `PRIMITIVE_CODECS` makes, without a call through the codec per field.
+ */
+const primitiveRead = (type: Primitive, at: string): string => {
+  const { method, endian } = PRIMITIVE_GETTERS[type];
+  return `v.${method}(${at}${endian ? `, ${String(LITTLE_ENDIAN)}` : ''})`;
+};
+
+/** An array reader of a primitive item: the item read inlined into the loop. */
+function compilePrimitiveArrayReader(type: Primitive, stride: number, length: number): Reader {
+  const body = `const items = new Array(${length}); for (let i = 0; i < ${length}; i++) items[i] = ${primitiveRead(type, `o + i * ${stride}`)}; return items;`;
+  return new Function('v', 'o', body) as Reader;
 }
 
 function compileReader(spec: FieldSpec): Reader {
@@ -72,9 +105,10 @@ function compileReader(spec: FieldSpec): Reader {
     case 'primitive':
       return PRIMITIVE_CODECS[spec.type].read;
     case 'array': {
-      const readItem = readerOf(spec.item);
       const stride = sizeOf(spec.item);
       const length = spec.length;
+      if (spec.item.kind === 'primitive') return compilePrimitiveArrayReader(spec.item.type, stride, length);
+      const readItem = readerOf(spec.item);
       return (view, offset) => {
         const items = new Array<unknown>(length);
         for (let i = 0; i < length; i++) items[i] = readItem(view, offset + i * stride);
@@ -82,7 +116,7 @@ function compileReader(spec: FieldSpec): Reader {
       };
     }
     case 'struct':
-      return compileStructReader(membersOf(spec, readerOf));
+      return compileStructReader(spec);
     case 'chars':
       return (view, offset) => {
         const bytes = new Uint8Array(view.buffer, view.byteOffset + offset, spec.length);
