@@ -12,7 +12,7 @@ The extraction drives the engine as `scan-situations` does (decode, session trac
 |---|---|---|---|
 | Singapore race, wet then drying then wet (44 laps) | 812 | car 19 (DR, Ferrari) | the only race with changing weather; engine defect after the lap-5 flashback (§7) |
 | Zandvoort race (14 laps) | 276 | two online: car 0 (Asymetrisch, Mercedes), car 1 (DR, Ferrari, named) | 14 stops under SC; ends without SEND |
-| Mexico race, constant storm, VSC (70 laps) | 1,275 | car 19 (Mercedes: Asymetrisch, to confirm) | no SC stops |
+| Mexico race, constant storm, VSC (70 laps) | 1,275 | car 19 (Asymetrisch, Mercedes; confirmed by the user) | no SC stops |
 | China race (10 laps) | 184 | car 19 (DR, Ferrari) | not in `fixtures/index.json`; one stop |
 | Miami race, constant storm (20 laps) | 392 | car 19 (Asymetrisch, Mercedes; the friend's game over VPN) | 9 stops under SC, one under VSC |
 | Texas race (20 laps) | 400 | car 19 (Asymetrisch, Mercedes; VPN) | the only clean dry green stops; SC on lap 12 |
