@@ -291,8 +291,8 @@ describe('FrameAssembler: one frame per game tick (C5)', () => {
   it('a held jump goes by the overall id: its confirmed packets still split into their ticks', () => {
     const a = new FrameAssembler({ feedId });
     pushAll(a, menuGroup(10, 1.0));
-    pushAll(a, [stub('event', 600, 9.6, { overall: 500, code: 'OVTK' }), stub('lapData', 400, 6.4, { overall: 500 })]);
-    expect(ticks(a.flush())).toEqual([[10, 10, 1000], [600, 500, 9600], [400, 500, 6400]]);
+    const closed = pushAll(a, [stub('event', 600, 9.6, { overall: 500, code: 'OVTK' }), stub('lapData', 400, 6.4, { overall: 500 })]);
+    expect(ticks([...closed, ...a.flush()])).toEqual([[10, 10, 1000], [600, 500, 9600], [400, 500, 6400]]);
     expect(a.metrics.latePackets).toBe(0);
   });
 });
