@@ -112,7 +112,7 @@ A new analysis states which of these apply, and adds its own domain property if 
 
 **Speed targets** are tests: a measured baseline, a target, and an acceptance test that fails above it (best of several warm passes, so machine load can't flake it). The decoder's target (`decoder.acceptance.test.ts`) is the model.
 
-A speed target on a segment is a `*.budget.test.ts` file. `pnpm test` leaves these out and `pnpm test:budget` runs them one file at a time, after the suite, as the last step of `pnpm check`: inside a saturated parallel run they fail whatever the code does. They need a quiet machine; a failure while other work runs is rerun quiet, and the target is never raised.
+A speed target on a segment is a `*.budget.test.ts` file. `pnpm test` and `pnpm check` leave these out, so a merge cannot fail on machine load. `pnpm test:budget` runs them one file at a time, and `pnpm test:acceptance` runs it after the acceptance files, at the sub-project gate. They need a quiet machine; a failure while other work runs is rerun quiet.
 
 **The acceptance gate's budget:** `pnpm test:acceptance` runs its files in parallel, each heavy recording in a file of its own (`apps/bridge/test/acceptance/groups.ts`). The reporter `vitest.acceptance.budget.ts` fails the run when one file or the whole run takes over 5 minutes. It measures wall time, so the gate runs on an idle machine; a failure under load is rerun idle, and the budget is never raised.
 
