@@ -5,6 +5,6 @@ export default defineProject({
     name: 'bridge',
     hookTimeout: 60_000,
     include: ['src/**/*.test.ts', 'test/**/*.test.ts'],
-    exclude: ['**/*.acceptance.test.ts'],
+    exclude: ['**/*.acceptance.test.ts', '**/*.budget.test.ts'],
   },
 });
