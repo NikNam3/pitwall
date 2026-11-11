@@ -29,6 +29,8 @@ export type Catalogue = {
     jobs: string[];
     config: string[];
   }>;
+  /** The simulator units (C50): the analysis folders whose `index.ts` exports a `SIMULATOR` marker; `exports` are that module's export names. `gen:catalogue` always writes it. */
+  simulators?: Array<{ name: string; folder: string; exports: string[] }>;
 };
 
 /** The catalogue as the running bridge sees it (dev mode only, spec 8.3). */
