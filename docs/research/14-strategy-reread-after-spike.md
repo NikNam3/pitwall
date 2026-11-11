@@ -1,6 +1,6 @@
 # Strategy model: the reread after the compute spike
 
-Research done on 2026-11-11, after the compute spike and its follow-up ([13](13-strategy-compute-spike.md) §10): every strategy paper read again with the spike's questions (overtaking and blocking, DRS trains, pitting into traffic, pace uncertainty, ranking under noise, driver differences), by three readers. This file adds to [11](11-strategy-model-reread.md) and does not repeat it; where they disagree, this file is right (corrections in §3). Parts A–C are the three readers' reports as written; §1–§4 merge them.
+Research done on 2026-11-11, after the compute spike and its follow-up ([13](13-strategy-compute-spike.md) §10): every strategy paper read again with the spike's questions (overtaking and blocking, DRS trains, pitting into traffic, pace uncertainty, ranking under noise, driver differences), by three readers. This file adds to [11](11-strategy-model-reread.md) and does not repeat it; where they disagree, this file is right (corrections in §3). Parts A–D are the readers' reports as written; §1–§5 merge them.
 
 **Labels:** 🟢 stated by the source · 🟡 read off a figure (about ±10 %) · 🔵 pitwall's own inference.
 
@@ -10,7 +10,7 @@ Research done on 2026-11-11, after the compute spike and its follow-up ([13](13-
 
 - **Passing is per track, and hard.** TUM passes by a fixed per-track threshold (Suzuka 1.26 s to Monaco, Singapore, Montreal 3.75 s), lowered by top-speed advantage; with its lap scatter that is a per-lap pass chance of about 6 / 16 / 34 / 57 % at 0.5 / 1 / 1.5 / 2 s advantage at Austin 🔵 (A §1): the spike's "× 0.25" regime, where the plan choice moved most. Tulabandhula & Rudin find overtaking "race-specific rather than racer-specific" (B §1). No paper has a pass hazard fitted to anything we can borrow (C §1). → the pass chance per track with a pooled prior, its slope tied to the lap scatter, fitted on F1 25 recordings.
 - **Blocking matters; dirty air stays 0.** TUM holds a car at 0.5 s and charges both cars 0.3 s per lap within 0.5 s (A §1); Wüthrich: held behind a car 0.5 s per lap slower after a stop costs 6.87 s (C §1). The dirty-air terms in the ETH papers are heuristic, Joshi's evidence is weak (C §1, §7); Tulabandhula & Rudin's "fresh air" mixes in car pace (B §7).
-- **DRS is relative to the car directly ahead** in TUM, as in the spike's follow-up; TUM's deterministic run has the same never-breaking pairs the spike fixed (A §2). Aguad's DRS gain (mean 0.28 s) is as assumed as the spike's 0.25 s (B §2). The undercut turns on the 1 s DRS line (Aguad fn. 15).
+- **DRS is relative to the car directly ahead** in TUM, as in the spike's follow-up; TUM's deterministic run has the same never-breaking pairs the spike fixed (A §2). Aguad's DRS gain (mean 0.28 s) is as assumed as the spike's 0.25 s (B §2); its appendix L gives no source for it at all (D). The undercut turns on the 1 s DRS line (Aguad fn. 15).
 - **No paper solved traffic in the optimiser.** TUM's optimiser assumes a free track and its agents could not place stops into free air (A §3); Fieni 2026's agent answers a rival by shifting stop laps, Wüthrich finds the local minima in the pit choice (C §3); a short stop keeps its places only with slower cars behind as a shield (Tulabandhula & Rudin Fig. 8, B §3), which the DP's look-ahead traffic term cannot see. → stop-lap neighbours as candidates, scored by the Monte Carlo; TUM proposes showing a pit window of every lap within 1–2 s of the optimum (A §3).
 - **Pace uncertainty is drawn by nobody.** TUM draws lap scatter, start, stop times and events, never its parameter errors; its biggest errors are per driver and in the degradation slope (A §4). Cappello's slope stays ±0.11–0.13 s per lap wide after a full stint (C §4). → draw a per-car degradation-rate factor besides the pace level.
 - **Ranking.** TUM ranks by mean position over 10,000 runs, no CRN, and redraws invalid races, which biases each strategy's sample differently (A §5). Ranking by win probability gambles (Aguad: same win rate, final-gap sd 2.00 → 5.17 s; B §5). The ranking-and-selection literature (C §5): near-ties need "good selection", not "correct selection"; compare every policy with the leader, not pairwise (pairwise ties are not transitive); a tie is `Δ < max(0.05, z·SE)`, not "not shown different"; with 15–30 candidates looked at after every batch, elimination needs z ≈ 2.7–2.9; Kim–Nelson at 0.05 needs 8,000–10,000 scenarios per policy, so a cap with measured good selection is the right frame.
@@ -44,9 +44,20 @@ Checks for the 4.3a calibration (A §7): whether the car ahead loses time when a
 
 From Part C §7: §5 "DRS, the tow and effort swamp it" is not Joshi's wording; §5 Wüthrich's dirty-air hump is heuristic, not fitted; §4 "RL 4.96 s off" is Fieni 2025's agent, while Wüthrich's standalone RL is +1.170 s against a 3.370 s MINLP; §5 misses Cappello's skew prior λ ~ N(0.5, 0.1²) and the RMSPE totals.
 
-## 4. Still to get
+## 4. The two late sources (Part D)
 
-As research 11 §9: Aguad & Thraves' supplement (doi 10.1016/j.ejor.2024.07.011; appendices A, G, L) and the Carrasco Heine & Thraves 2023 full text (SSRN 3769652), both a browser download by the user; Stahn's and Faist's TUM theses on fitting the overtaking model and the parameters are unpublished.
+Read after the user downloaded them (2026-11-11): Aguad & Thraves' supplement and Carrasco Heine & Thraves 2023 in full.
+
+- **SC/VSC rates per circuit (Aguad Appendix A, O6):** the share of races with at least one SC (2000–2023) and one VSC (2015–2023), with race counts, for 25 circuits; source Trotman 2024 (Kaggle "Formula 1 Race Events"). Copied exactly to [`14-aguad-appendix-a.csv`](14-aguad-appendix-a.csv) with an F1 25 track id column. Overall SC 0.47 (455 races), VSC 0.30 (185); as Poisson counts 0.63 SC and 0.36 VSC per race, so the spike's 0.5 SC was about 20–30 % low. The spread matters more than the mean: Catalunya 0.21, Hungaroring 0.25 up to Marina Bay 0.93. Caveats: "at least one" not a count (`race-hazard` still needs TUM's shape for counts, starts, durations); the SC window predates the VSC (era bias); Miami, Las Vegas and Losail missing; Zandvoort, Jeddah, Imola rest on 3 races; the printed totals do not match their rows. Proposal: the track-file default with its source and race count (a domain type change, C78), recomputed over 2015–2025 by `pitwall-trackdata`.
+- **Calibrating the rates (C62a):** it works if the aggregate counts each race session once and only races with a known lobby safety-car setting; at about one race per track per season the real prior dominates for years. **Possible contract gap for the 4.3b spec:** the useful learning is one F1 25 factor pooled over all tracks, while a calibration set belongs to one track (C62a); as a `race-hazard` config value (C47) it stays within the contract.
+- **Rejoin rule confirmed twice:** Aguad's Appendix G pushes the car behind a rejoining car back to 0.4 s, as TUM's 0.5 s rule: a 4.3a calibration check.
+- **Planning for SC chances pays mostly at street circuits:** Carrasco Heine & Thraves (one car, VSC only, nothing fitted) gain about 0–0.03 s per race at a yellow chance ≤ 0.5, 0.1 s at 0.7, 0.4 s at 0.9, 0.65–1.05 s at 0.95 🟡: about 0.1 s at an average track and 0.5–1 s at Marina Bay. Their baseline (deterministic DP re-solved on a yellow) is the spike's SC trigger (proposal 7). Their mean and their win count disagree (rare big gains against frequent small losses), which supports ranking by the mean (proposal 1).
+- **Planning against the rival** gains 10–20 points of win rate in three more instances (Aguad Appendix K), and the win-probability objective always gambles: supports proposals 1 and 15.
+- **Runtimes for scale:** Aguad's two-car DP 20.5 billion states, 5.5 h; Carrasco Heine's one-car stochastic DP 636 s (Julia, 6 cores). Pitwall's per-car DP without rivals in the state stays in the 300 ms budget.
+
+## 5. Still to get
+
+Both sources of research 11 §9 are now read (§4, Part D). Still missing: Stahn's and Faist's TUM theses on fitting the overtaking model and the parameters are unpublished.
 
 
 ## Part A: the TUM work
@@ -518,3 +529,202 @@ Reader agent, 2026-11-11, after the compute spike (research 13). Read-only.
 | 12 pass chance first | agree | no paper has a pass hazard to borrow; F1 25 calibration only |
 | 13 plain forecast at ln 2 | no evidence | — |
 | 14 pace uncertainty | **sharpen** | draw the degradation slope too (Cappello: slope 95 % width 0.11–0.13 s per lap after a full stint); may change stop-lap choices, not only the spread; re-test |
+
+## Part D: Aguad & Thraves' supplement and Carrasco Heine & Thraves 2023
+
+
+Reader D, 2026-11-11. Adds to research 14 (Part B read only Aguad's main text and the CEJOR abstract) and research 11 §2–§3; nothing here repeats them.
+
+**Labels:** 🟢 stated by the source · 🟡 read off a figure (about ±10 %) · 🔵 my inference.
+
+### Sources and how they were read
+
+| Source | How | Notes |
+|---|---|---|
+| Aguad & Thraves 2024, EJOR, supplementary material (`external/1-s2.0-S0377221724005484-mmc1.pdf`, 15 pp., Appendices A–P) | full, `pdftotext -layout` | A (SC/VSC rates), C (notation), G (minimum gap), J (instance values), K (other instances), L (parameter sources), M (state counts), N–P (example races, start-tyre equilibrium) |
+| Carrasco Heine & Thraves 2023, CEJOR 31:239–268 (`external/s10100-022-00806-4.pdf`, 30 pp.) | full, `pdftotext -layout`; Fig. 5 viewed as an image | Code: github.com/FCarrascoHeine/F1DP (fn. 12, not read) |
+
+Appendix A's table is in `aguad-appendix-a.csv` next to this file. It holds every row exactly as printed, plus one column I added: the F1 25 track id (`packages/domain/src/tracks.ts`), left empty for circuits that are not in F1 25. A check script confirmed that every fraction equals a whole number of races divided by the printed race count, to ±0.005.
+
+### 0. The SC/VSC rates per circuit (Appendix A), against the spike and the plan
+
+**What Table A.1 is** 🟢 (supp. p. 1):
+- "the proportion of races that have had a VSC and SC", with the number of races in parentheses.
+- VSC from races 2015–2023, SC from races 2000–2023, "based on data availability".
+- Data: Trotman (2024), "Kaggle: Formula 1 Race Events", accessed January 2024.
+- 25 circuits, plus a total row: VSC 0.30 (185 races), SC 0.47 (455 races), ratio 0.41.
+- "there is heterogeneity among circuits in their probabilities of experiencing VSC and SC".
+
+| F1 25 id | Circuit | VSC (n) | SC (n) |
+|---|---|---|---|
+| 0 | Albert Park | 0.29 (7) | 0.68 (22) |
+| 17 | Red Bull Ring | 0.33 (9) | 0.64 (14) |
+| 20 | Baku | 0.33 (6) | 0.57 (7) |
+| 3 | Bahrain | 0.22 (9) | 0.37 (19) |
+| 10 | Spa | 0.11 (9) | 0.64 (22) |
+| 16 | Interlagos | 0.17 (6) | 0.52 (21) |
+| 6 | Montreal | 0.29 (7) | 0.57 (21) |
+| 2 | Shanghai | 0.00 (5) | 0.44 (16) |
+| — | Paul Ricard | 0.75 (4) | 0.50 (4) |
+| — | Hockenheim | 0.33 (3) | 0.36 (14) |
+| 9 | Hungaroring | 0.33 (9) | 0.25 (24) |
+| 27 | Imola | 0.00 (3) | 0.40 (10) |
+| 11 | Monza | 0.22 (9) | 0.38 (24) |
+| 13 | Suzuka | 0.43 (7) | 0.50 (20) |
+| — | Sepang | 0.33 (3) | 0.28 (18) |
+| 19 | Mexico | 0.50 (8) | 0.50 (8) |
+| 5 | Monaco | 0.50 (8) | 0.61 (23) |
+| 26 | Zandvoort | 0.67 (3) | 0.67 (3) |
+| — | Sochi | 0.14 (7) | 0.62 (8) |
+| 29 | Jeddah | 0.67 (3) | 1.00 (3) |
+| 12 | Marina Bay | 0.43 (7) | 0.93 (14) |
+| 4 | Catalunya | 0.22 (9) | 0.21 (24) |
+| 14 | Yas Marina | 0.11 (9) | 0.33 (15) |
+| 7 | Silverstone | 0.33 (9) | 0.62 (24) |
+| 15 | COTA | 0.38 (8) | 0.36 (11) |
+
+**Oddities in the table** 🔵:
+- The per-circuit counts add up to 167 VSC races and 389 SC races, against the totals of 185 and 455. The total row therefore includes circuits that are not listed (for example Portimão, Istanbul, Qatar, Miami, Las Vegas, Korea, India).
+- The printed total ratio of 0.41 does not equal 0.30 / 0.47 = 0.64. The per-row ratios are consistent (for example 0.29 / 0.68 = 0.43, printed 0.4), so the 0.41 is probably a typo or a different quantity.
+- The race-weighted mean over the listed circuits is VSC 0.305 and SC 0.488, close to the totals.
+
+**Missing F1 25 tracks** 🔵:
+- Miami (30), Las Vegas (31) and Losail (32) have no row.
+- The reverse layouts (39–41) have no real-F1 data at all.
+- Thin rows: Zandvoort, Jeddah and Imola (VSC) rest on 3 races, Shanghai on 5 for VSC. Shanghai's and Imola's VSC 0.00 is "none in 5 or 3 races", not an impossible event.
+
+**Against the spike's assumptions** (research 13 §1: 0.5 SC per race, 3–5 laps; 0.3 VSC per race, 1–3 laps):
+- 🔵 Table A.1 gives P(at least one) per race, not a count per race. Read as Poisson, P(≥1 SC) = 0.47 means a mean of −ln 0.53 = **0.63 SC per race**, and P(≥1 VSC) = 0.30 means **0.36 VSC per race**.
+- TUM's count distribution (research 11 §2) has P(≥1) = 0.545 and a mean of 0.71.
+- The spike's 0.5 SC per race corresponds to P(≥1) = 0.39 under Poisson. So the spike is **somewhat low**: by about 20 % on the SC mean against Aguad and 30 % against TUM, and by about 15 % on VSC.
+- That gap is small next to the spread across tracks. Real P(≥1 SC) runs from 0.21 (Catalunya) and 0.25 (Hungaroring) to 0.93 (Marina Bay) and 1.00 (Jeddah, n = 3), a factor of 4–5. For VSC it runs from 0.00–0.11 to 0.67–0.75.
+- Per-track rates are therefore worth more than a better global mean.
+- The spike's "30 % of SCs from lap 1" matches TUM's 36 %. Neither Aguad nor CEJOR has a lap-1 bump: both use a constant per-lap q.
+
+**Aguad's own instance does not use its table** 🟢:
+- The instance sets r_SC = r_VSC = 0.3 ("set to 30 %. As shown in Appendix A, there are circuits where the frequency has been lower, while others have seen higher", L p. 14). That is below the table's own SC total of 0.47.
+- Lengths are fixed: VSC 2 laps and SC 3 laps, "as the latter usually involves more track clearing" (L).
+- 🔵 These are illustrative values, not a calibration.
+
+**Does this fit the plan: rates per track in the track file, calibrated through a calibration set (C62a, spec §6.2, O6)?**
+1. **As a track-file default with its source: yes** 🔵. Each row gives value, n and window, and fills `TrackDefault { value, source }`, for example source `"Aguad & Thraves 2024 suppl. Table A.1 (Trotman 2024 Kaggle), SC races 2000–2023, n = 24"`.
+   - The race count should also be a number, not only text: a calibration aggregate that shrinks toward the real rate needs it (a Beta prior with n pseudo-races).
+   - That is a change to the track-file type in `domain` (C78, supervisor), not a contract change: C62b only requires "each default with its source".
+2. **What `race-hazard` has to add** 🔵. The table gives P(≥1) only: no counts, start laps or durations. `race-hazard` needs TUM's shape (multiplicity 0–3, start bins with the lap-1 bump, duration distributions; research 11 §2) to turn a per-track P(≥1) into a per-lap hazard.
+   - Both papers' formula, q = 1 − (1 − r)^(1/N), spreads the hazard evenly and ignores a second SC.
+3. **Era bias** 🔵. The SC window (2000–2023) is mostly before the VSC existed (2015). Some incidents that became VSCs from 2015 were SCs before, so a modern SC rate may be lower than the table's.
+   - Recomputing SC over 2015–2025 only, from the same Kaggle dataset or from timing data, would also fill Miami, Las Vegas and Losail. That is a job for `pitwall-trackdata`, outside pitwall (memory rule).
+4. **Real F1 is not F1 25** 🔵. The game's neutralisations come from its AI and human incidents and the lobby's safety-car setting (`m_safetyCar`: 0 Off, 1 Reduced, 2 Standard, 3 Increased, Session packet). League races are also 10–20 laps, not full distance.
+   - Research 12's six races: an SC in 3 of them (Zandvoort 14 laps, Miami 20, Texas 20), a VSC in 2 (Mexico 70, Miami). That is about 178 race laps.
+   - Real P(≥1 SC) per race would predict about 2.8 SC races if the game scales incidents to race length, and about 1.9 SCs if it keeps real per-lap rates. Three events cannot tell these apart.
+   - Before any formula is chosen, the 4.3b spec has to answer whether rates convert per race or per lap. It needs more recordings, and the lobby setting of each.
+5. **Calibration through C62a: workable, with three details for the 4.3b spec** 🔵.
+   - **Dedupe by session.** A set's sources are stints, but an SC is a property of a race session. The aggregate counts each race session behind the set's stints once, from the session-phase spans in its stored projection (C62a: "pure functions over a set's sources (read from their stored projections)"). It counts only race sessions and only those with a known lobby setting. The setting is a value, not a C12 signal, so it is readable.
+   - **The real prior dominates for years.** At about one race per track per season the calibration adds 1–3 observations against the real prior's 3–24. A set mainly confirms or overrides the default; an override already exists (C62a).
+   - **Possible contract gap.** The quantity worth learning from the game is probably one factor for the whole game (F1 25 against real F1, per lobby setting), not a per-track rate. A calibration set belongs to one track (C62a), and C62a has no priors entry pooled across tracks.
+   - **Ways around it within the contract:** make that factor a `race-hazard` config value (C47), fixed for a run, next to the lobby-setting factors the spec already has (spec §4, `race-hazard`); or accept per-track learning only. If the 4.3b spec wants the factor learned from data across tracks, that is a contract gap against C62a (C0).
+
+### 1. Overtaking and blocking
+
+- 🟢 **Appendix G: what the minimum gap Δ does** (supp. pp. 7–8). "Circuits usually have sections where cars are almost enforced to follow a race line". Cars must keep "a minimum time difference of Δ > 0 after the pit stop exit". Two changes:
+  - (i) The interaction term is evaluated at a gap of at least Δ: `exp(−λ·|min{−Δ, ε′}|)·Z(1)` if ε′ < 0, otherwise `exp(−λ·|max{Δ, ε′}|)·Z(2)` (G.1). Very close cars therefore pay the interaction for a gap of Δ, not for zero.
+  - (ii) The trailing car's lap time gains `+ max{Δ − ε, 0}` (A when ε > 0, B when ε ≤ 0). The car behind is pushed back to Δ behind at the pit-exit point.
+  - Under VSC and SC the lap time is unchanged (G.2). Δ = 0.4 s (J.1).
+  - 🔵 This is the same rule as TUM's rejoin rule (the car just behind is pushed back to 0.5 s; research 14 §2, "Checks"). Two independent models hold the follower 0.4–0.5 s back at one point of the lap. 4.3a can check it on F1 25.
+- 🟢 **Appendix L: no source for Z1, Z2, T_DRS** (supp. p. 14). L says "most parameters are not specifically based on any particular circuit … rough estimates to match their order of magnitude", and "the exponent coefficient … λ is considered arbitrarily as a positive number (we use λ = 2)". L says **nothing** about the values of Z1, Z2 or T_DRS, and neither does J.1. 🔵 The blocking and DRS numbers quoted in research 14 B §1–§2 have no source at all.
+- 🟢 L gives sources for the other values:
+  - 52 laps "the same as the Silverstone Circuit"; laps "around 95 seconds".
+  - Tyre life 30 / 40 / 50 laps as an "upper bound".
+  - Pit loss "around 20 seconds", "around 10" under VSC or SC.
+  - Grid gap g0 = 0.4 s, since adjacent cars "typically cross the finish line with a time gap of less than half a second".
+  - Small inconsistency: J.1 prints d0 = 97.2 s for both cars, while L and the main text give 97.22 / 97.24.
+- **CEJOR:** not covered. One car; "we have decided to neglect these from the model for tractability reasons", which omits "overtaking and blocking" (pp. 241–242, 262).
+
+### 2. DRS and DRS trains
+
+- 🟢 Aguad, supplement:
+  - T_DRS is a random variable in the SDP and a fixed parameter in the deterministic DP (Table C.2, C.1). No source (above).
+  - L: "The DRS is usually enabled a couple of laps after a VSC/SC incident and three laps after the start of the race" (k_VSC = k_SC = 2).
+  - The circuit sketch (Fig. D.1) has one DRS zone, on the straight before the pit stop. Nothing on trains.
+- **CEJOR:** not covered.
+
+### 3. Pitting into traffic and clear air
+
+- 🟢 **Aguad Appendix K** (supp. pp. 12–13): when one driver ignores the competition and the other does not, "the latter increases their winning odds in 10 − 20 % of the scenarios", over all three other instances.
+  - The instances: B starts ahead (g = 0.4); equal pit loss (20 s); both together.
+  - Table K.1: A alone strategic 67.18 % against both strategic 57.52 %. K.2: 87.22 against 70.33 %. K.3: 78.23 against 64.47 %.
+  - 🔵 The +18 pp of the main text (research 14 B §3) is typical of this family of near-tie instances, not an outlier. It is still a two-car near-tie value.
+- 🟢 **Rejoin at pit exit:** Appendix G is the only rejoin mechanism (§1 above). No search over neighbouring stop laps; the DP is exact over its grid.
+- 🟢 **CEJOR:** no traffic, no rivals. The yellow-flag sweeps (Fig. 3, Fig. 4: one 2-lap yellow at each lap) show what happens to the stop:
+  - The best stop moves in jumps with the yellow's timing. A yellow on laps 7–19 makes the soft-start plan pit under it and add a stop later; on laps 20–26 it switches to hards to the end; before lap 20 or after 33 the soft start wins (p. 253).
+  - Race times between starting compounds differ by about 1–3 s. Example: a yellow on laps 6–7 gives 4630, 4633 and 4632 s (p. 253); without a yellow, medium +2.5 s and hard +1.5 s (p. 249).
+  - 🔵 Distinct plans sit within a few seconds of each other even in a noise-free model, so near-ties are normal (proposal 1).
+
+### 4. Pace and pace uncertainty
+
+- 🟢 **CEJOR's lap time** (eq. 10): `μ0 + p0·1{stop} + α_t + β(w) + g·f`.
+  - β(w) is a cubic spline through chosen points, flat early and steep late ("falling off the cliff"; Appendix B, Fig. 6: +1.2 s at 70 % wear).
+  - Wear per lap is `d_t·(1+δ)^(f/F)`: it grows with fuel (eq. 9).
+  - Instance: μ0 = 85 s, p0 = 21 s, g = 0.03 s/kg; fuel use 1.92 / 1.87 / 1.83 kg per lap (S/M/H); d = 1/25, 1/40, 1/65 per lap; α = 0, 0.6, 0.9 s (p. 248).
+  - Starting fuel is a decision (eq. 8).
+- 🟢 **Under yellow** (CEJOR): no tyre wear, 0.5 kg/lap fuel, pit loss 10 s (fn. 13, which labels it μ1 by mistake; p1 is meant).
+- 🟢 **No noise at all.** No lap-time noise and no parameter uncertainty. The only random inputs are yellow flags and, in the formulation only, weather as a lap-dependent Markov chain P(n), "updated at each lap as new weather forecast information is revealed" (p. 255).
+  - The yellow-flag chance may depend on weather and lap (q_{l,r}(n): "more likely to occur during rainy weather"; higher in the first laps, p. 256).
+  - 🔵 **No rain case is computed.** Every result is dry with yellows; the abstract's "rainy weather" is formulation only.
+- 🟢 **Nothing fitted.** No parameter is fitted to data and there is no validation against real races in either paper (CEJOR §2.2, §3.1; Aguad L).
+- **Aguad:** as in research 14 B §4.
+
+### 5. Ranking strategies under noise
+
+- 🟢 **CEJOR's comparison** (p. 259, Table 1): DP and SDP are evaluated "on 1000 sampled scenarios of yellow flag occurrences", generated with the SDP's probabilities.
+  - The DP is CEJOR's Algorithm 1: the deterministic DP, **re-solved from the current lap whenever a yellow appears**, with its length known.
+  - Table 1 (yellow chance 70 %) reports mean, sd, min and max of the paired race-time difference, the win, loss and even counts, and conditional means.
+  - 🔵 Win, loss and even counts per scenario mean both policies ran on the same scenarios: common random numbers in effect. No confidence interval is given.
+- 🟢 **The mean and the win count disagree.** With 2+ yellows from a soft start, the SDP has the lower mean (−0.22 s at 2 yellows, −1.05 s at 3) but wins fewer scenarios than the DP (27 against 57 at 2; 16 against 18 at 3). With one yellow the DP wins more (72 against 22) at about the same mean (+0.01 s). With no yellow on a hard start the DP is better by exactly 0.18 s in all 314 scenarios.
+  - 🔵 "Mean better" and "more often better" pick different policies: the gain comes from rare large wins (min −11 to −16 s) against frequent small losses (about +0.25–0.9 s). This supports proposal 1's mean-first key and argues against P(better) as the main key.
+- 🟢 **Aguad K:** the gamble effect holds in every other instance. Final-gap sd is 1.95–2.08 s under the gap objective against 4.81–5.08 s under the win objective (Tables K.1–K.3).
+- 🟢 **Runtimes and state counts:**
+  - CEJOR (Appendix G, Table 2; Julia 1.7.2, 6 CPUs of an M1 Pro): DP 120.72 s on average (sd 5.94, 53 runs), 2,107,242 states per stage on average. SDP 635.58 s (sd 12.67, 10 runs), 9,109,140 states per stage. Grid: wear 1/1995, fuel 0.0505 kg.
+  - Aguad (Table M.1): 9 states at lap 1, 113,464,800 at lap 15, 889,564,032 at lap 52. **20,478,351,241 states in all, 5 h 34′ 23″.** 1,046 s for lap 52 alone. The main text says 15 CPUs.
+  - 🔵 Both are orders of magnitude above the spike's 300 ms per car. The spike's DP is affordable only through its coarse state, not through the papers' formulations; the papers do not show that a fine wear grid matters.
+
+### 6. Driver differences
+
+- **CEJOR:** not covered (one car).
+- 🟢 **Aguad:** only d0 and pit loss differ. L: "rough estimates"; J.1 even prints equal d0 values. Nothing on consistency, AI or humans.
+
+### 7. What sharpens or contradicts the spike
+
+1. **The stochastic DP gains little at real rates** 🟡 (CEJOR Fig. 5, 1,000 scenarios per point, one car, VSC only, race time).
+   - The SDP's expected gain over the re-solve-on-yellow DP is about 0.00–0.03 s per race for P(yellow) 0.1–0.5, about 0.05–0.1 s at 0.6–0.7, 0.15–0.2 s at 0.8, 0.35–0.45 s at 0.9, and 0.65 s (soft, hard) to 1.05 s (medium) at 0.95.
+   - 🔵 Real tracks: P(SC or VSC) ≈ 1 − (1 − 0.47)(1 − 0.30) ≈ 0.63 overall, assuming independence; about 0.45 at Catalunya and about 0.96 at Marina Bay.
+   - So the planned stretch before a likely yellow (research 11 §3) is worth about 0.1 s per race at an average track and about 0.5–1 s at the street circuits, for a single car's race time.
+   - 🔵 **Caveat:** CEJOR's yellow is a VSC (gaps kept, p. 241 fn. 5). The SC's bunching of the field, which changes positions, is not in it. The spike's DP already has SC and VSC states (research 13 §1, the brute-force checks), so this bounds only part of their value.
+2. **The deterministic DP, re-solved when a yellow appears, is CEJOR's baseline** 🟢 (Algorithm 1). That is proposal 7's shape: a reaction to the SC, from the current state. It loses almost nothing at P(yellow) ≤ 0.5.
+3. **The 0.28 s DRS agreement carries no weight.** Appendix L gives no source for T_DRS, Z1 or Z2 (§1 above). Research 14 B's "agreement between two guesses" is really agreement with an unsourced number.
+4. **Rejoin push-back** 🟢 (Aguad G, Δ = 0.4 s): independent support for TUM's 0.5 s rule as a candidate for the 4.3a check.
+5. **Pit loss under yellow about 0.5 × green** 🟢: both papers assume it (Aguad L: 20 s against 10 s; CEJOR: 21 s against 10 s). It matches research 12's SC measurement (about 0.5 × green). Both values are assumed, not measured.
+6. **No wear under yellow** 🟢 in both papers, against TUM's ×0.25 (SC) and ×0.5 (VSC). 🔵 A modelling choice to check against F1 25 laps under SC (research 12 has some).
+7. **Fixed yellow lengths** 🟢: Aguad VSC 2 and SC 3 laps; CEJOR 2 laps. The spike's ranges and TUM's distributions are the better shape.
+
+### Consequences for the spike's proposals (research 13 §8, §10; numbering as research 14 §2)
+
+| # | Proposal | Verdict | From this reread |
+|---|---|---|---|
+| 1 | Ranking by E[pos], paired tie | **agree** | The mean and the win count rank DP and SDP differently (CEJOR Table 1). The win objective gambles in every Aguad instance (K.1–K.3: sd about 2 against about 5 s). Near-ties between distinct plans are normal even without noise (CEJOR: 1–3 s between starting compounds) |
+| 2 | Common random numbers | agree | CEJOR compares on the same 1,000 scenarios (paired counts), without CIs |
+| 3 | Time cap 5 s | no evidence | The papers' solve times (121 s to 5.6 h) are offline and say nothing about a cap |
+| 4 | Re-score the winner | no evidence | — |
+| 5 | Braking-zone steps | no evidence | Both papers split the lap at pit exit only |
+| 6 | DP 300 ms per car | agree | The papers' state counts (2.1–9.1 M per stage; 20.5 bn in all for two cars) show the price of fine grids; nothing shows the coarse grid loses decisions |
+| 7 | SC trigger per remaining stop | **agree, sharpen** | It is CEJOR's DP baseline; the full SDP adds about 0.1 s per race at an average track and 0.5–1 s at Marina Bay or Jeddah (Fig. 5, VSC only). Keep the DP's SC states but expect value mainly at high-rate tracks; an ablation per track rate band is enough |
+| 8 | Dedupe candidates | no evidence | — |
+| 9 | Blocking, relative DRS; dirty air 0 | agree, sharpen | Aguad's Z1, Z2 and T_DRS have no source (L). The rejoin push-back (G, Δ 0.4 s) is a second model with TUM's 0.5 s rule: add it to 4.3a's checks |
+| 10 | S24 | no evidence | — |
+| 11 | Stop-lap neighbours | agree | CEJOR's best stop jumps with the yellow's timing (Fig. 3, 4), so a single optimum is fragile |
+| 12 | Calibrate the pass chance | no evidence | Neither paper fits anything |
+| 13 | Plain forecast at the median | no evidence | — |
+| 14 | Pace uncertainty | no evidence | Neither paper draws pace (no lap noise either) |
+| 15 | Rivals' reaction ablation | **agree** | Aguad K: +10–20 pp of win rate for the strategic driver over a non-reacting one, in all instances |
+| new | SC/VSC rates per track | **adopt Appendix A as the first source** | Shape from TUM; store the race count as a number; recompute 2015–2025 for SC and the three missing tracks in `pitwall-trackdata`; settle whether rates convert per race or per lap on F1 25 recordings; the spike's 0.5 SC per race is about 20–30 % low, the track spread (×4–5) matters more |
+| new | Calibration of the rates via C62a | **fits, with care** | Dedupe by race session, only race sessions with a known lobby setting; a game-wide F1 25 factor pooled across tracks does not fit a one-track set (C62a). Make it a `race-hazard` config value (C47), or report it as a contract gap in the 4.3b spec |
