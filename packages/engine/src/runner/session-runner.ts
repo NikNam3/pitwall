@@ -1,6 +1,7 @@
 import type { DecisionRecord, FrameNumber, Ms, ParticipantsValues, SessionTime } from '@pitwall/domain';
 import type { Frame } from '../frame/frame.ts';
 import { logWriter, voidFactOf } from '../log/log.ts';
+import { projectionLengths } from '../log/projection.ts';
 import type { HistoryDelta, LogVoidFact } from '../log/types.ts';
 import { onRaceClock, rewindMarkOf } from '../situations/clock/clock.ts';
 import { closeSession, situationOf } from '../situations/run.ts';
