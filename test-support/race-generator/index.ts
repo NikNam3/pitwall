@@ -3,64 +3,13 @@
 // time in 100 ms steps with a pass hazard over time (not per braking zone, the simulator's model), AR(1) scatter and
 // log-normal mistakes, and records facts and spans as the engine appends them, one frame every 500 ms. Seeded; it reads
 // no clock and no `Math.random` (C2). Imports are relative because the repo root does not link workspace packages.
-import type { DrsZone, NoiseCompound } from '../../packages/domain/src/index.ts';
 import type { BuilderRace } from '../builders/long-race.ts';
+import { record } from './record.ts';
+import { simulate } from './simulate.ts';
+import type { GeneratorCar, GeneratorParams } from './types.ts';
 
-/** One car of the field, in grid order: `field[0]` starts on pole. */
-export type GeneratorCar = {
-  /** Its base lap time on a fresh soft set, before fuel, tyre age, scatter and mistakes. */
-  paceMs: number;
-  /** Driven by a human from the start (its `car-driver` span is `human`), else by the AI. */
-  human: boolean;
-  /** The stationary standard deviation of its lap-time scatter (AR(1)), in ms. */
-  sigmaMs: number;
-  /** The lap-to-lap correlation of its scatter. */
-  rho: number;
-  /** The chance of a mistake per lap. */
-  mistakeRate: number;
-  /** A mistake's time loss, log-normal: its median in ms and the σ of its log. */
-  mistakeMedianMs: number;
-  mistakeSigmaLog: number;
-  /** Its tyre wear per lap as a multiple of the compound's `wearPctPerLap`. */
-  wearFactor: number;
-  /** Its stops: it pits at the end of lap `lap` (its in lap) and leaves on a fresh set of `compound`. */
-  stops: { lap: number; compound: NoiseCompound }[];
-  /** The compound it starts on; `soft` when absent. */
-  startCompound?: NoiseCompound;
-  /** A human car handed to the AI: its `human` span closes, and an `ai` span opens, on the frame it starts this lap. */
-  takeoverLap?: number;
-};
-
-export type GeneratorParams = {
-  cars: number;
-  laps: number;
-  trackM: number;
-  /** By lap fraction, in lap order. */
-  brakingZones: number[];
-  /** By lap fraction (a zone may wrap past the line). */
-  drsZones: DrsZone[];
-  /** What a stop costs against staying out (the in lap and out lap together, the stationary time included), in ms. */
-  pitLossMs: number;
-  stationaryMs: number;
-  fuelStartKg: number;
-  fuelPerLapKg: number;
-  /** Per compound: its lap-time offset against a fresh soft set, its time loss per lap of tyre age, its wear per lap. */
-  compounds: Record<NoiseCompound, { offsetMs: number; degMsPerLap: number; wearPctPerLap: number }>;
-  /** `field.length === cars`; `generateRace` throws otherwise. */
-  field: GeneratorCar[];
-  pass: {
-    /** The hazard of passing per second while within `minGapMs` of the car ahead, by the follower's pace advantage in ms a lap. */
-    hazardPerS: (advantageMs: number) => number;
-    /** The hazard's multiple while the follower has DRS. */
-    drsFactor: number;
-    /** A car held up behind a slower one follows it at no less than this gap. */
-    minGapMs: number;
-  };
-  /** A safety car, deployed during the leader's lap `fromLap` and in during its lap `toLap`. */
-  sc?: { fromLap: number; toLap: number };
-  /** From lap `fromLap` on, every lap is `wetnessMs` slower. */
-  rain?: { fromLap: number; wetnessMs: number };
-};
+export type { GeneratorCar, GeneratorParams } from './types.ts';
+export { FUEL_MS_PER_KG, SC_LAP_FACTOR } from './simulate.ts';
 
 const AI_CARS = 18;
 
@@ -103,9 +52,31 @@ export const GENERATOR_DEFAULTS: GeneratorParams = {
   pass: { hazardPerS: (advantageMs) => (advantageMs <= 0 ? 0 : 0.05 * (1 - Math.exp(-advantageMs / 300))), drsFactor: 2, minGapMs: 1_000 },
 };
 
-/** A race from `params`, as the views of its frames, and the parameters it was generated from (`truth`). */
+/** Throws on parameters the generator cannot race: a field of another size than `cars`, stops it cannot make, a safety car outside the race. */
+function validate(p: GeneratorParams): void {
+  if (p.field.length !== p.cars) throw new Error(`generateRace: ${p.field.length} cars in the field for cars = ${p.cars}`);
+  if (p.cars < 1 || p.cars > 22 || p.laps < 1 || p.laps > 160 || p.trackM <= 0) throw new Error('generateRace: needs 1 to 22 cars, 1 to 160 laps and a track');
+  if (p.pitLossMs < p.stationaryMs) throw new Error('generateRace: pitLossMs must include stationaryMs');
+  p.field.forEach((car, i) => {
+    car.stops.forEach((stop, k) => {
+      const before = car.stops[k - 1];
+      if (stop.lap < 1 || stop.lap >= p.laps || (before !== undefined && stop.lap < before.lap + 2))
+        throw new Error(`generateRace: car ${i}'s stop on lap ${stop.lap} is not an in lap of the race at least two laps after the one before`);
+    });
+  });
+  if (p.sc !== undefined && (p.sc.fromLap < 1 || p.sc.toLap < p.sc.fromLap || p.sc.toLap > p.laps)) throw new Error('generateRace: the safety car lies outside the race');
+}
+
+/**
+ * A race from `params`, as the views of its frames, and the parameters it was generated from (`truth`, the same object).
+ * Lights out at 1 s; the field leaves the grid in field order, each car `minGapMs` + 500 ms behind the one ahead. A lap's
+ * target is `paceMs` + the compound's offset + its `degMsPerLap` per lap of tyre age + 30 ms per kg of fuel at its start
+ * (`FUEL_MS_PER_KG`) + the AR(1) scatter + a mistake + `wetnessMs` from the rain's lap; an in lap adds 30 % of the pit
+ * loss without the stop, the out lap the rest and the stop. Under the safety car every car laps 1.4 times slower and
+ * nobody passes. A pass puts the passer 1 m ahead of the car it passed (an `overtake` event). The race ends on the frame
+ * after the leader completes its last lap (its confirmed record's frame).
+ */
 export function generateRace(params: GeneratorParams, seed: number): { race: BuilderRace; truth: GeneratorParams } {
-  void params;
-  void seed;
-  throw new Error('not implemented');
+  validate(params);
+  return { race: record(params, simulate(params, seed)), truth: params };
 }
