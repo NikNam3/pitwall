@@ -1,6 +1,6 @@
 // SessionRunner beyond the brief's cases: bounded snapshots and frames, the weekend context, and one flashback that
 // the game reports twice or in a frame with an unexpected id.
-import { carId, type SessionUid } from '@pitwall/domain';
+import { carId, toSessionTime, type SessionUid } from '@pitwall/domain';
 import { describe, expect, it } from 'vitest';
 import { SessionRunner, type Frame, type WeekendContext } from '../../src/index.ts';
 import { ScenarioBuilder } from '../builders/index.ts';
@@ -24,9 +24,9 @@ describe('SessionRunner retention', () => {
     const frames = session(900, 1000);                                                 // 15 minutes, a snapshot every second
     const r = new SessionRunner(initFor(frames));
     runAll(r, frames);
-    // the first, the window (10 s → 11 snapshots) and 30 slots before it
-    expect(r.retained.snapshots).toBeGreaterThanOrEqual(1 + 11 + 29);
-    expect(r.retained.snapshots).toBeLessThanOrEqual(1 + 11 + 31);
+    // the first, the window (30 s → 31 snapshots) and 29 slots before it
+    expect(r.retained.snapshots).toBeGreaterThanOrEqual(1 + 31 + 28);
+    expect(r.retained.snapshots).toBeLessThanOrEqual(1 + 31 + 30);
   });
 
   it('a target older than the window restores the nearest retained snapshot; one inside it, the exact frame', () => {
@@ -38,14 +38,15 @@ describe('SessionRunner retention', () => {
     };
     expect(back(605)).toBe(600_000);                                                   // the first snapshot of the 600–630 s slot
     expect(back(895)).toBe(895_000);
+    expect(back(875)).toBe(875_000);                                                   // 25 s back: inside the 30 s window
   });
 
   it('bounds the kept frames and snapshots while session time stands still', () => {
     const frames = session(5000, 0);
     const r = new SessionRunner(initFor(frames));
     runAll(r, frames);
-    expect(r.retained.frames).toBeLessThanOrEqual(1200 + 2 * 120);
-    expect(r.retained.snapshots).toBeLessThanOrEqual(15);
+    expect(r.retained.frames).toBeLessThanOrEqual(3600 + 2 * 120);
+    expect(r.retained.snapshots).toBeLessThanOrEqual(35);
   });
 
   it('carries the read-only weekend context over a rewind by reference', () => {
@@ -72,7 +73,7 @@ describe('SessionRunner: one flashback, reported in more than one way', () => {
 
   it('FLBK in a frame that still carries the old high frameId: one rewind', () => {
     const { feedId, sessionUid, playerCarIndex } = fork[201]!;
-    const stale: Frame = { feedId, sessionUid, playerCarIndex, frameId: 300, overallFrameId: 300, sessionTime: 3_200, receivedAtMs: 3_200, sessionHistory: [], tyreSets: [], events: flbk200 };
+    const stale: Frame = { feedId, sessionUid, playerCarIndex, frameId: 300, overallFrameId: 300, sessionTime: 3_200, receivedAtMs: 3_200, sessionHistory: [], tyreSets: [], events: flbk200, flashback: { targetFrameId: 200, targetSessionTime: toSessionTime(3.2) } };
     const a = new SessionRunner(initFor(original));
     runAll(a, original);
     const results = runAll(a, [stale, ...after(fork, 201, 301)]);

@@ -8,9 +8,24 @@ const DEFAULT_REORDER_WINDOW = 2;
 /** A packet and when it arrived. */
 type Arrival = { packet: Packet; receivedAtMs: number };
 
+/** A frame being assembled. `timed`: a packet other than an event has set its session time. */
+type Tick = { frame: Frame; timed: boolean };
+
+/**
+ * Takes in the session time of a packet of the tick. An event may still carry an older timeline's time (inventory 1.10),
+ * so the tick's other packets set its time and events count only until the first of them arrives.
+ */
+function timeTick(tick: Tick, packet: Packet): void {
+  const { frame } = tick;
+  const time = toSessionTime(packet.header.sessionTime);
+  if (packet.packetId !== PacketId.event) {
+    frame.sessionTime = tick.timed ? Math.max(frame.sessionTime, time) : time;
+    tick.timed = true;
+  } else if (!tick.timed) frame.sessionTime = Math.max(frame.sessionTime, time);
+}
+
 /** Stores a packet in its slot: single-instance slots keep the last packet, list slots append. */
 function place(frame: Frame, packet: Packet): void {
-  frame.sessionTime = Math.max(frame.sessionTime, toSessionTime(packet.header.sessionTime));
   switch (packet.packetId) {
     case PacketId.motion: frame.motion = packet; break;
     case PacketId.lapData: frame.lapData = packet; break;
@@ -38,8 +53,10 @@ function place(frame: Frame, packet: Packet): void {
 }
 
 /**
- * Groups decoded packets into frames by `overallFrameIdentifier` (spec 5.2).
- * A frame closes once a packet more than `reorderWindow` frames newer has arrived;
+ * Groups decoded packets into one frame per game tick (C5, spec 5.2): by `overallFrameIdentifier`, and within it by
+ * `frameIdentifier`, because a flashback sends two ticks under one overall id (the undone tick and the new timeline's
+ * first, inventory 1.10); they become two frames, in arrival order.
+ * The frames of an overall id close once a packet more than `reorderWindow` overall ids newer has arrived;
  * packets for closed frames are dropped and counted as late.
  *
  * A packet that skips frames (more than `reorderWindow + 1` ahead of the newest) is held, not trusted: a packet type may
@@ -51,7 +68,8 @@ function place(frame: Frame, packet: Packet): void {
 export class FrameAssembler {
   readonly #feedId: FeedId;
   readonly #reorderWindow: number;
-  readonly #open = new Map<number, Frame>();
+  /** The open ticks by overall id, in arrival order. */
+  readonly #open = new Map<number, Tick[]>();
   readonly #counters = emptyMetrics();
   readonly #cadence = new CadenceTracker();
   #newest: number | undefined;
@@ -82,17 +100,18 @@ export class FrameAssembler {
   }
 
   /**
-   * Merges a packet into the newest open frame, whatever its own frame id
-   * (the session end event and grace-window packets carry frame id 0).
+   * Merges a packet into the newest open frame (of the newest overall id, the tick that arrived last), whatever its
+   * own frame id (the session end event and grace-window packets carry frame id 0); it never lowers the frame's time.
    * Without an open frame the packet is dropped and counted as late.
    */
   attach(packet: Packet): void {
-    const newestFrame = [...this.#open.values()].sort((a, b) => b.overallFrameId - a.overallFrameId)[0];
-    if (newestFrame === undefined) {
+    const newest = this.#open.get(Math.max(...this.#open.keys()))?.at(-1)?.frame;
+    if (newest === undefined) {
       this.#counters.latePackets++;
       return;
     }
-    place(newestFrame, packet);
+    newest.sessionTime = Math.max(newest.sessionTime, toSessionTime(packet.header.sessionTime));
+    place(newest, packet);
   }
 
   /** Closes every open frame, oldest first. Later packets are still checked against the newest frame id. */
@@ -109,7 +128,9 @@ export class FrameAssembler {
     }
     if (newest !== this.#newest) this.#dropHeld();
     this.#newest = newest;
-    place(this.#frameFor(packet, key, receivedAtMs), packet);
+    const tick = this.#tickFor(packet, key, receivedAtMs);
+    timeTick(tick, packet);
+    place(tick.frame, packet);
     return this.#closeWhere((k) => newest - k > this.#reorderWindow);
   }
 
@@ -135,10 +156,11 @@ export class FrameAssembler {
     this.#held = [];
   }
 
-  #frameFor(packet: Packet, key: number, receivedAtMs: number): Frame {
-    const existing = this.#open.get(key);
-    if (existing !== undefined) return existing;
+  #tickFor(packet: Packet, key: number, receivedAtMs: number): Tick {
     const { header } = packet;
+    const ticks = this.#open.get(key) ?? [];
+    const existing = ticks.find(({ frame }) => frame.frameId === header.frameIdentifier);
+    if (existing !== undefined) return existing;
     const frame: Frame = {
       feedId: this.#feedId,
       sessionUid: header.sessionUid,
@@ -151,19 +173,22 @@ export class FrameAssembler {
       tyreSets: [],
       events: [],
     };
-    this.#open.set(key, frame);
-    return frame;
+    const tick = { frame, timed: false };
+    this.#open.set(key, [...ticks, tick]);
+    return tick;
   }
 
+  /** Closes the overall ids `shouldClose` names: oldest first, each one's ticks in arrival order. */
   #closeWhere(shouldClose: (key: number) => boolean): Frame[] {
-    const closing = [...this.#open.values()]
-      .filter((frame) => shouldClose(frame.overallFrameId))
-      .sort((a, b) => a.overallFrameId - b.overallFrameId);
-    return closing.map((frame) => this.#close(frame));
+    const closing = [...this.#open.keys()].filter(shouldClose).sort((a, b) => a - b);
+    return closing.flatMap((key) => {
+      const ticks = this.#open.get(key) ?? [];
+      this.#open.delete(key);
+      return ticks.map(({ frame }) => this.#close(frame));
+    });
   }
 
   #close(frame: Frame): Frame {
-    this.#open.delete(frame.overallFrameId);
     this.#counters.framesClosed++;
     if (MENU_RATE_SLOTS.some((slot) => frame[slot] === undefined)) this.#counters.incompleteFrames++;
     this.#cadence.record(frame.sessionTime);

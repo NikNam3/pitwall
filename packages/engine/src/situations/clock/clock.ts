@@ -16,7 +16,7 @@ import { CLOCK_MACHINE, clockPaused, type ClockOpen, type ClockSpan } from './ty
 /** What the clock reads of one frame besides its own open state. */
 export type ClockStepInput = {
   frame: Frame;
-  /** The runner's decision that the frame reports a flashback (no jump is read on it); `rewound` when it rewound on it. */
+  /** The runner's decision that the frame reports a flashback (no jump is read on it); `rewound` when it rewound on it or on the undone tick just before it. */
   report: FlashbackReport | undefined;
   /** The previous frame's time on the race clock. */
   lastRaceMs: SessionTime;
@@ -35,12 +35,13 @@ export type ClockStep = { open: ClockOpen; frame: Frame; facts: ClockFact[]; clo
 const onClock = (frame: Frame, offsetMs: number): Frame => (offsetMs === 0 ? frame : { ...frame, sessionTime: frame.sessionTime + offsetMs });
 
 /**
- * Notes the rewind the runner took on `frame`, before the frame is applied, on its first pass and on every replay of
- * it: wall time does not go back, so an offline pause is measured from the last frame applied before the rewind
- * (`before.lastWallMs`), not the restored one. The old timeline's last session time is the new frame's own when its
- * frame id still rises (an FLBK sent on the old timeline), else the time where the rewind started. While frames carry
- * exactly that time (inventory 1.10: the game's time, whatever the race clock did), they belong to the rewind's target
- * moment (`staleRawMs`).
+ * Notes the rewind the runner reports with `frame` (the frame it rewound on, or the first stepped after an undone tick
+ * it rewound on), before the frame is applied, on its first pass and on every replay of it: wall time does not go back,
+ * so an offline pause is measured from the last frame applied before the rewind (`before.lastWallMs`), not the restored
+ * one. The old timeline's last session time is the undone tick's, else the time where the rewind started
+ * (`before.rawMs`), or the frame's own should its frame id still rise past the mark's. While frames carry exactly that
+ * time (inventory 1.10: the game's time, whatever the race clock did), they belong to the rewind's target moment
+ * (`staleRawMs`).
  */
 const noteRewind = (open: ClockOpen, before: RewindMark, frame: Frame): void => {
   open.lastWallMs = before.lastWallMs;

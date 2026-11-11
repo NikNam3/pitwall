@@ -1,19 +1,17 @@
 // packages/engine/test/runner/session-runner.test.ts
 import { describe, expect, it } from 'vitest';
-import { SessionRunner, type Frame } from '../../src/index.ts';
+import { SessionRunner } from '../../src/index.ts';
 import { initFor } from '../support/run.ts';
-import { after, applyOne, flbk, runAll, shown, STEP, timeline } from '../support/runner.ts';
-
-const noFlbk = (fs: Frame[]) => fs.map((f) => ({ ...f, events: f.events.filter((e) => e.details.code !== 'FLBK') }));
-// the FLBK event back to `target` lands in frame target + 1, where the forked timeline begins to differ
-const flbkAt = (target: number) => (i: number) => (i === target + 1 ? [flbk(target)] : []);
+import { after, applyOne, runAll, shown, STEP, timeline, undoneTick } from '../support/runner.ts';
 
 // original: frames 0..299, laps begin at 100 and 250. The game flashes back to frame 200 (t = 3200 ms);
-// in the new timeline (frames 201..399) lap 3 begins at 330.
+// in the new timeline (frames 201..399) lap 3 begins at 330. Reported by event: the old timeline's last tick carries the
+// FLBK and is undone; reported by the frame id going back: the new timeline's first frame is the report.
 const scene = (event: boolean) => {
   const original = timeline(300, [100, 250]);
-  const fork = timeline(400, [100, 330], event ? flbkAt(200) : undefined);
-  return { original, fork, continuation: after(fork, 201, 300), reference: noFlbk(fork) };
+  const fork = timeline(400, [100, 330]);
+  const resumed = after(fork, 201, 300);
+  return { original, fork, continuation: event ? [undoneTick(original.at(-1)!, 200), ...resumed] : resumed, reference: fork };
 };
 
 describe('SessionRunner', () => {
@@ -48,27 +46,27 @@ describe('SessionRunner', () => {
     const b = new SessionRunner(initFor(original)); runAll(b, reference);
     expect(shown(a.state)).toEqual(shown(b.state));
   });
-  // The replay window is 10 s of session time (an engine constant): 1000 frames of 16 ms run past it, so frame 90
+  // The replay window is 30 s of session time (an engine constant): 2500 frames of 16 ms run past it, so frame 90
   // lies before it; the newest snapshot at or before it is the one after frame 63 (1008 ms). The state and the attached
   // bookkeeping go back there, so the rewind targets that snapshot's frame and time (review F3 of Task 3); the
   // flashback info keeps the game's target.
   it('a target older than the replay window restores the newest snapshot at or before it and targets it; the lap is detected again, once', () => {
-    const laps = Array.from({ length: 9 }, (_, k) => 100 * (k + 1));
-    const original = timeline(1000, laps);
-    const continuation = after(timeline(200, [120], flbkAt(90)), 91, 1000);
+    const laps = Array.from({ length: 24 }, (_, k) => 100 * (k + 1));
+    const original = timeline(2500, laps);
+    const continuation = after(timeline(200, [120]), 91, 2500);
     const a = new SessionRunner(initFor(original));
     runAll(a, original);
-    const r = applyOne(a, continuation[0]!);
+    const r = applyOne(a, undoneTick(original.at(-1)!, 90));
     expect([r.delta.rewound, a.state.log.voids.at(-1)?.target, r.flashback?.targetFrameId]).toEqual([{ frameId: 63, at: 1_008 }, { frameId: 63, at: 1_008 }, 90]);
     expect(a.state.history.laps).toEqual([]);                                          // lap 1 ended at frame 100 > target 90
-    runAll(a, continuation.slice(1));
+    runAll(a, continuation);
     expect(a.state.history.laps.map((l) => [l.lapNumber, l.lapTimeMs])).toEqual([[1, 1_920]]);
   });
   it('a second flashback after the first one still matches the reference run', () => {
     const { original, continuation } = scene(true);
-    const again = timeline(360, [100, 340], flbkAt(300));             // equals the fork up to frame 300
-    const a = new SessionRunner(initFor(original)); runAll(a, original); runAll(a, continuation); runAll(a, after(again, 301, 499));
-    const b = new SessionRunner(initFor(original)); runAll(b, noFlbk(again));
+    const again = timeline(360, [100, 340]);                          // equals the fork up to frame 300
+    const a = new SessionRunner(initFor(original)); runAll(a, original); runAll(a, continuation); runAll(a, [undoneTick(continuation.at(-1)!, 300), ...after(again, 301, continuation.at(-1)!.overallFrameId + 1)]);
+    const b = new SessionRunner(initFor(original)); runAll(b, again);
     expect(shown(a.state)).toEqual(shown(b.state));
   });
 });

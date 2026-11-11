@@ -7,6 +7,7 @@ import { feedId } from '@pitwall/domain';
 import type { EventDetails, Packet } from '@pitwall/protocol';
 import { SessionTracker, type Frame } from '../../src/index.ts';
 import { ScenarioBuilder, type FrameDraft } from '../builders/index.ts';
+import { undoneTick } from './runner.ts';
 
 const TRACK = 1000;
 const STEP = 16;
@@ -214,13 +215,12 @@ function simulate(p: RaceParams, cars: Car[], from: number, to: number, salt: nu
   return ticks;
 }
 
-/** The frames of `ticks` with the phase beats, plus `extra` events by frame index; the packets carry the beats' session times. */
-function build(p: RaceParams, ticks: Tick[], extra: ReadonlyMap<number, EventDetails> = new Map()): Frame[] {
+/** The frames of `ticks` with the phase beats; the packets carry the beats' session times. */
+function build(p: RaceParams, ticks: Tick[]): Frame[] {
   const b = new ScenarioBuilder({ cars: p.cars, stepMs: STEP }).session({ trackLength: TRACK });
   ticks.forEach((tick, i) => {
     const { events, status } = signalsOf(p.phases, i);
-    const own = extra.get(i);
-    for (const details of own ? [...events, own] : events) b.event(details);
+    for (const details of events) b.event(details);
     if (status !== undefined) b.session({ trackLength: TRACK, safetyCarStatus: status });
     b.frame((d: FrameDraft) => {
       tick.rows.forEach((row, k) => Object.assign(d.lapData.lapData[k]!, row));
@@ -282,21 +282,20 @@ export function raceFrames(p: RaceParams): { frames: Frame[]; reference: Frame[]
   }
   sent.push(p.frames - sent.reduce((a, b) => a + b, 0));
 
-  /** Frames 0..length-1 of the timeline `forks`, with the FLBK of `rewind` if it reports by event. */
-  const timelineOf = (forks: readonly Fork[], length: number, rewind?: Taken): Frame[] => {
-    const extra = rewind?.viaEvent
-      ? new Map<number, EventDetails>([[rewind.target + 1, { code: 'FLBK', flashbackFrameIdentifier: rewind.target, flashbackSessionTime: timeOf(p.phases, rewind.target) / 1000 }]])
-      : undefined;
-    return build(p, ticksOf(p, forks, length), extra);
-  };
+  /** Frames 0..length-1 of the timeline `forks`. */
+  const timelineOf = (forks: readonly Fork[], length: number): Frame[] => build(p, ticksOf(p, forks, length));
   // frames 0..at-1 of the original
   let frames = timelineOf(first.forks.slice(0, 1), fb.at);
   let timeline = frames;
   /** Per rewind, how many of its first frames carry the session time of the frame before it. */
   const staleCounts: number[] = [];
   rewinds.forEach((r, k) => {
-    timeline = timelineOf(r.forks, r.target + 1 + sent[k + 1]!, r);
+    timeline = timelineOf(r.forks, r.target + 1 + sent[k + 1]!);
     const own = timeline.slice(r.target + 1);
+    // Reported by event: the old timeline's last tick carries the FLBK and is undone; the new timeline's first tick
+    // shares its overall frame id (inventory 1.10). A run that never had the undone frames never has it.
+    if (r.viaEvent) frames = [...frames, undoneTick(frames.at(-1)!, r.target, { targetMs: timeOf(p.phases, r.target) })];
+    const nextOverall = frames.at(-1)!.overallFrameId + (r.viaEvent ? 0 : 1);
     // The first `stale` frames still carry the session time of the frame before the rewind. A frame right after them
     // that carries that time anyway (the new timeline reaching it again) is one of them: nothing tells it apart. A frame
     // on another time ends them, so the race does not end inside them (the engine would still wait for that frame).
@@ -310,11 +309,11 @@ export function raceFrames(p: RaceParams): { frames: Frame[]; reference: Frame[]
     staleCounts.push(stale);
     // overallFrameIdentifier goes on rising across the rewind; the receive times stay the timeline's, so the state's
     // last receive time compares equal
-    frames = [...frames, ...own.map((f, i) => ({ ...f, overallFrameId: frames.length + i, ...(i < stale && { sessionTime: oldMs }) }))];
+    frames = [...frames, ...own.map((f, i) => ({ ...f, overallFrameId: nextOverall + i, ...(i < stale && { sessionTime: oldMs }) }))];
   });
 
   // the last timeline from its start; a stale frame a later rewind discarded is not in it
-  let reference = timeline.map(({ flashback: _flashback, ...f }) => ({ ...f, events: f.events.filter((e) => e.details.code !== 'FLBK') }));
+  let reference = timeline;
   rewinds.forEach((r, k) => {
     const kept = Math.min(staleCounts[k]!, (rewinds[k + 1]?.target ?? Infinity) - r.target);
     if (kept > 0) reference = carrying(reference, r.target + 1, kept, reference[r.target]!.sessionTime);

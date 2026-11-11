@@ -1,4 +1,4 @@
-import type { DecisionRecord, Ms, ParticipantsValues, SessionTime } from '@pitwall/domain';
+import type { DecisionRecord, FrameNumber, Ms, ParticipantsValues, SessionTime } from '@pitwall/domain';
 import type { Frame } from '../frame/frame.ts';
 import { logWriter, voidFactOf } from '../log/log.ts';
 import type { HistoryDelta, LogVoidFact } from '../log/types.ts';
@@ -57,8 +57,11 @@ export type SessionRunnerOptions = {
 export const IDENTITY_WAIT_FRAMES = 600;
 /** Session time between two snapshots. */
 const SNAPSHOT_EVERY_MS = 1000;
-/** Session time of applied frames kept for a replay, so a flashback inside it restores the exact target state. */
-const REPLAY_WINDOW_MS = 10_000;
+/**
+ * Session time of applied frames kept for a replay, with no snapshot thinned: a flashback inside it (the game's go 15 s
+ * back) restores the exact target state. A deeper one restores the newest snapshot at or before its target.
+ */
+const REPLAY_WINDOW_MS = 30_000;
 
 /**
  * Frames per second of session time that the frame bounds allow for: 60 Hz with twice the headroom. While session
@@ -82,21 +85,24 @@ type Given = { frame: Frame; decisions?: GivenDecisions };
 
 /**
  * An applied frame with its decisions and the runner's decision on it, given again to `step` whenever a rewind replays
- * the frame (so a decision of a frame up to the target comes back, one after it does not, C27a); `at`: the session time
- * on the race clock after it; `attached`: the attached bookkeeping once its result was handed out.
+ * the frame (so a decision of a frame up to the target comes back, one after it does not, C27a); `number`: its frame
+ * number (C26), which tells apart frames sharing a frame id; `at`: the session time on the race clock after it;
+ * `attached`: the attached bookkeeping once its result was handed out.
  */
-type Kept = Given & { report?: FlashbackReport; at: SessionTime; attached: unknown };
+type Kept = Given & { report?: FlashbackReport; number: FrameNumber; at: SessionTime; attached: unknown };
 
 /**
  * Runs one session's frames through `step` and handles flashbacks (spec 5.4). Frames wait until the first Participants
  * packet, at most `IDENTITY_WAIT_FRAMES`, so the weekend context (`contextFor`) is known before the first step (C61).
  * The runner takes a snapshot every `SNAPSHOT_EVERY_MS` of session time and keeps the frames of the last
  * `REPLAY_WINDOW_MS`. A flashback restores the newest snapshot at or before the target, appends one void fact over what
- * the log gained since (C27; nothing is removed), replays the kept frames up to the target, restores the attached
- * bookkeeping as it stood there and then applies the game's new frame, so the discarded frames leave no trace in what
- * readers see. The runner alone decides what reports a flashback; it hands that
- * decision to `step` with the frame (a `FlashbackReport`) and keeps it with the frame for every replay. Every other
- * session-time jump is the clock's (step 0, `situations/clock/`).
+ * the log gained since (C27; nothing is removed), replays the kept frames up to the target and restores the attached
+ * bookkeeping as it stood there, so the discarded frames leave no trace in what readers see. A frame reporting an `FLBK`
+ * above its target is the undone timeline's last tick: the runner rewinds on it and never steps it, and the game's new
+ * frame comes next; any other frame that rewinds is stepped after the rewind. The runner alone decides what reports a
+ * flashback; it hands that decision to `step` with the frame (a `FlashbackReport`; an undone tick's, with the next frame
+ * stepped) and keeps it with the frame for every replay. Every other session-time jump is the clock's (step 0,
+ * `situations/clock/`).
  */
 export class SessionRunner {
   #state: EngineState;
@@ -113,7 +119,10 @@ export class SessionRunner {
   readonly #queue: Given[] = [];
   /** The frame whose step runs, or threw: `undefined` once it was applied. */
   #applying: Frame | undefined;
-  /** Applied frames, ids strictly rising; they hold every frame after the snapshot at the replay window's start. */
+  /**
+   * Applied frames, ids never falling (two share one where a new timeline's first tick lands on its rewind's target);
+   * they hold every frame after the snapshot at the replay window's start.
+   */
   #frames: Kept[] = [];
   #lastOverallFrameId: number;
   /**
@@ -121,6 +130,8 @@ export class SessionRunner {
    * one flashback twice (an `FLBK` event and the `frameId` drop, in different frames); this is that second report.
    */
   #rewoundTo: number | undefined;
+  /** The flashback report of an undone tick, until the next frame stepped takes it. */
+  #undoneReport: FlashbackReport | undefined;
   /** A frame was applied. Before the first there is nothing to rewind, so no frame reports a flashback (review 6 R6-1). */
   #applied = false;
 
@@ -211,10 +222,21 @@ export class SessionRunner {
     const before = this.#state.open.projection.lengths;
     const reported = this.#reportedTarget(frame);
     const target = reported && this.#takes(reported) ? reported : undefined;
-    // The runner's decision on the frame; a rewind's mark is of the state it leaves, so taken before restoring.
-    const report: FlashbackReport | undefined = reported && (target ? { rewound: rewindMarkOf(this.#state) } : {});
+    // A rewind's mark is of the state it leaves, so taken before restoring; an undone tick before it left that tick.
+    const left = target && (this.#undoneReport?.rewound ?? rewindMarkOf(this.#state));
     const rewind = target && this.#rewind(target, frame);
+    if (left && rewind && frame.flashback && frame.frameId > frame.flashback.targetFrameId) {
+      this.#undoneReport = { rewound: { ...left, frameId: frame.frameId, rawMs: frame.sessionTime } };
+      this.#lastOverallFrameId = frame.overallFrameId;
+      this.#rewoundTo = rewind.flashback.targetFrameId;
+      const delta = { before, after: projectionLengths(this.#state.history), rewound: rewind.target };
+      onResult?.({ state: this.#state, changed: new Set(ALL_CHANGE_TAGS), corrections: [], delta, flashback: rewind.flashback }, frame);
+      return;
+    }
+    // The runner's decision on the frame: its own rewind, an undone tick's just before it, or a report it did not take.
+    const report: FlashbackReport | undefined = left ? { rewound: left } : (this.#undoneReport ?? (reported && {}));
     const { changed, corrections, clockFall, clockJump } = step(this.#state, frame, report, decisions);
+    this.#undoneReport = undefined;
     this.#applied = true;
     this.#lastOverallFrameId = frame.overallFrameId;
     if (target) this.#rewoundTo = target.frameId;
@@ -234,7 +256,7 @@ export class SessionRunner {
     );
     // After the result was handed out: the attached bookkeeping has taken the frame in.
     const attached = this.#attach?.snapshot();
-    this.#keep({ frame, ...(decisions && { decisions }), ...(report && { report }), at: this.#state.sessionTime, attached });
+    this.#keep({ frame, ...(decisions && { decisions }), ...(report && { report }), number: this.#state.frameNumber, at: this.#state.sessionTime, attached });
   }
 
   /**
@@ -262,7 +284,8 @@ export class SessionRunner {
    * number (C26). The restored state carries the snapshot's frame number, so each replayed frame counts again and gets
    * the number of its first pass (C33). Each replayed frame gets the runner's decision it got when first applied and the
    * user's decisions committed with it, and appends its facts again after the void; a frame after the target is not
-   * replayed, so its decisions stay voided (C27a).
+   * replayed, so its decisions stay voided (C27a). The frames to replay go by frame number from the snapshot, as frame
+   * ids can repeat, and by frame id up to the game's target, so a target's id replays every frame that has it.
    */
   #rewind(target: Target, frame: Frame): { flashback: FlashbackInfo; target: LogVoidFact['target'] } {
     const rewoundFrom = this.#state.sessionTime;
@@ -270,7 +293,7 @@ export class SessionRunner {
     const snapshot = this.#snapshots.newestAtOrBefore(replayTo);
     this.#snapshots.dropAfter(snapshot.frameId);
     // A target older than the window has no kept frames after its snapshot: the snapshot's state stands for it.
-    const replayed = this.#frames.filter(({ frame: f }) => f.frameId > snapshot.frameId && f.frameId <= replayTo);
+    const replayed = this.#frames.filter(({ frame: f, number }) => number > snapshot.state.frameNumber && f.frameId <= replayTo);
     this.#frames = this.#frames.filter(({ frame: f }) => f.frameId <= replayTo);
     const { log, history, weekend } = this.#state;
     this.#state = { ...copyPlainSharingKnown(snapshot.state), log, history, ...(weekend && { weekend }) };
@@ -299,16 +322,18 @@ export class SessionRunner {
    */
   #keep(kept: Kept): void {
     const { frame } = kept;
-    // A frame id at or below kept ones (a flashback, or a report of one that was ignored) makes those stale.
-    this.#snapshots.dropAfter(frame.frameId - 1);
-    while ((this.#frames.at(-1)?.frame.frameId ?? -Infinity) >= frame.frameId) this.#frames.pop();
+    // A frame id at or below kept ones (a report of a flashback that was ignored) makes those stale, but for a new
+    // timeline's first tick on its rewind's target: it comes after the target's own frame, and both stay.
+    const lastValid = frame.frameId === this.#rewoundTo ? frame.frameId : frame.frameId - 1;
+    this.#snapshots.dropAfter(lastValid);
+    while ((this.#frames.at(-1)?.frame.frameId ?? -Infinity) > lastValid) this.#frames.pop();
     this.#frames.push(kept);
     const newest = this.#snapshots.newest;
     const due = this.#state.sessionTime >= newest.sessionTime + SNAPSHOT_EVERY_MS || frame.frameId >= newest.frameId + this.#snapshotEveryFrames;
     if (!due) return;
     this.#snapshots.take(this.#state, frame.frameId, kept.attached);
-    const start = this.#snapshots.windowStart.frameId;
-    const firstNeeded = this.#frames.findIndex(({ frame: f }) => f.frameId > start);
+    const start = this.#snapshots.windowStart.state.frameNumber;
+    const firstNeeded = this.#frames.findIndex(({ number }) => number > start);
     this.#frames.splice(0, firstNeeded < 0 ? this.#frames.length : firstNeeded);
   }
 }

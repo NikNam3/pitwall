@@ -77,25 +77,27 @@ describe('FeedPipeline: the insights topic after a flashback', () => {
   });
 });
 
-// Review F3 of Task 3: a rewind deeper than the replay window (10 s) restores the snapshot at or before its target (the
-// one after frame 63, 1008 ms), the state and the scheduler's bookkeeping with it; the resend keeps the changes up to
+// Review F3 of Task 3: a rewind deeper than the replay window (30 s) restores the snapshot at or before its target (the
+// one after frame 10, 1000 ms), the state and the scheduler's bookkeeping with it; the resend keeps the changes up to
 // that snapshot, so the topic holds what the scheduler holds.
 describe('FeedPipeline: the insights topic after a rewind deeper than the replay window', () => {
-  /** `a` holds from 1100 ms on: raised at frame 69, after the snapshot of frame 63 and before the target, frame 90. */
+  const STEP_MS = 100;
+  const slowFrames = (n: number) => new ScenarioBuilder({ sessionUid: 77n, cars: 2, stepMs: STEP_MS }).session().participants().frames(n, () => {});
+  /** `a` holds from 1100 ms on: raised at frame 11, after the snapshot of frame 10 and before the target, frame 15. */
   const deepProbe = defineFeature({ name: 'probe-deep', topics: [], calculators: [{ ...probe, id: 'probe.deep', insights: (t: number) => (t >= 1100 ? [insight('a')] : []) }] });
-  /** Frames 0..999 (16 s), then the game rewinds to frame 90 and plays frames 91..200. */
+  /** Frames 0..499 (50 s), then the game rewinds to frame 15 and plays frames 16..60. */
   const deepFlashback = (): PreparedPacket[] => {
-    const continuation = frames(201).packets().filter((p) => p.packet.header.frameIdentifier > 90);
+    const continuation = slowFrames(61).packets().filter((p) => p.packet.header.frameIdentifier > 15);
     const rewound = continuation.map(({ packet, receivedAtMs }) => ({
-      packet: { ...packet, header: { ...packet.header, overallFrameIdentifier: packet.header.frameIdentifier + 909 } },
-      receivedAtMs: receivedAtMs + 909 * 16,
+      packet: { ...packet, header: { ...packet.header, overallFrameIdentifier: packet.header.frameIdentifier + 484 } },
+      receivedAtMs: receivedAtMs + 484 * STEP_MS,
     }));
-    return [...toPrepared(frames(1000).packets()), ...toPrepared(rewound)];
+    return [...toPrepared(slowFrames(500).packets()), ...toPrepared(rewound)];
   };
 
   it('after a rewind deeper than the replay window the insights topic equals the scheduler’s state: `a` once, raised anew on the rewinding frame', async () => {
     const messages = await insightsMessages(deepFlashback(), deepProbe);
-    expect(held(messages)).toEqual([raised('a', 91 * 16)]);
+    expect(held(messages)).toEqual([raised('a', 16 * STEP_MS)]);
   });
 });
 

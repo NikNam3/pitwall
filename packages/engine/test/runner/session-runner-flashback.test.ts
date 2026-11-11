@@ -8,6 +8,7 @@ import {
   CalculatorRegistry,
   Scheduler,
   SessionRunner,
+  situationOf,
   type DeepReadonly,
   type Frame,
   type InsightChange,
@@ -19,7 +20,8 @@ import { buildPacket, ScenarioBuilder } from '../builders/index.ts';
 import { IDLE_FEED } from '../helpers/incremental.ts';
 import { initFor } from '../support/run.ts';
 import { inputOf } from '../support/scheduler.ts';
-import { after, applyOne, drive, factLengths, factLists, flashbacks, flbk, runAll, shown, STEP, timeline as plainTimeline } from '../support/runner.ts';
+import { after, applyOne, drive, factLengths, factLists, flashbacks, flbk, runAll, shown, STEP, timeline as plainTimeline, undoneTick } from '../support/runner.ts';
+import { gridStart, LIGHTS_OUT, ovtk, scar, script } from '../situations/script.ts';
 
 const overtake: EventDetails = { code: 'OVTK', overtakingVehicleIdx: 0, beingOvertakenVehicleIdx: 1 };
 /** The shared timeline with an overtake in every frame, before the events `extra` names for its index. */
@@ -217,10 +219,10 @@ describe('SessionRunner: the attached bookkeeping rewinds with the state (C27, C
 // bookkeeping are the snapshot's; the rewind targets that snapshot, and the insight changes a publisher keeps up to the
 // target (C30) are then what the scheduler holds.
 describe('SessionRunner: a rewind deeper than the replay window', () => {
-  const laps = Array.from({ length: 9 }, (_, k) => 100 * (k + 1));
-  // 1000 frames (16 s) run the 10 s window past frame 90; the game goes back to it (frame id drop, no FLBK)
-  const original = () => timeline(1000, laps);
-  const continuation = () => after(timeline(201, laps), 91, 1000);
+  const laps = Array.from({ length: 24 }, (_, k) => 100 * (k + 1));
+  // 2500 frames (40 s) run the 30 s window past frame 90; the game goes back to it (frame id drop, no FLBK)
+  const original = () => timeline(2500, laps);
+  const continuation = () => after(timeline(201, laps), 91, 2500);
   const insight = (key: string): Insight => ({ key, severity: 'info', category: 'race', feedId: feedId('test'), kind: key, params: {}, raisedAt: toSessionTime(0) });
   /** `a` holds from 1100 ms on (raised at frame 69: after the snapshot of frame 63, before the target 90), `b` from 5000 ms. */
   const clockProbe: QuickCalculator<number> = {
@@ -331,12 +333,12 @@ describe('SessionRunner: what a rewind keeps', () => {
     expect([flashbacks(results), results[0]!.flashback?.targetFrameId]).toEqual([1, 230]);
     expect(shown(a.state)).toEqual(sameAs(forkB));
   });
-  it('a rewind from a frame with a high id keeps the snapshots and frames of the target timeline and that frame only', () => {
+  it('a rewind on a tick of the undone timeline keeps the snapshots and frames of the target timeline and nothing of that tick', () => {
     const frames = original();
     const a = new SessionRunner(initFor(frames));
     runAll(a, frames);
     applyOne(a, withEvents({ ...frames[200]!, frameId: 300, overallFrameId: 300 }, flbk(200)));
-    expect(a.retained).toEqual({ snapshots: upToTarget().snapshots, frames: upToTarget().frames + 1 });
+    expect(a.retained).toEqual(upToTarget());
   });
 
   // frames that differ in id and time only, one second apart unless said otherwise: a snapshot per frame
@@ -365,19 +367,125 @@ describe('SessionRunner: what a rewind keeps', () => {
     const frames = session(5000, 0);                                                   // snapshots at frame 119, 239, ..., 4919
     const r = new SessionRunner(initFor(frames));
     runAll(r, frames);
-    expect(r.retained.frames).toBe(5000 - (4919 - 1200));                              // the window is 1200 frames, it starts at snapshot 3719
+    expect(r.retained.frames).toBe(5000 - (4919 - 3600));                              // the window is 3600 frames, it starts at snapshot 1319
   });
 });
 
 // C21, C25, C33 (Task M1-R): a fact's id counts the facts of its list before it in the current timeline (the log without
 // the voided facts), so a confirmed lap names its provisional by the id a run without the rewind gives it, though the
 // log keeps the voided provisional before it.
+// C5, C7, C27, C33, inventory 1.10 (the flashback at 496.561, f42053): the game's last tick on the undone timeline carries
+// that tick's events and the FLBK; the new timeline's first tick has the target's frame id and the same overall frame id,
+// 2.453 s after the target's time. The undone tick rewinds and is never stepped.
+describe('SessionRunner: the undone tick of a flashback (C7, C27, C33)', () => {
+  /** The target's frame index (race frame 200) and the old timeline's last one (race frame 300). */
+  const T = LIGHTS_OUT + 201;
+  const U = LIGHTS_OUT + 301;
+  const LANDS_MS = 2_453;
+  const UNDONE_EVENTS: EventDetails[] = [
+    { code: 'PENA', penaltyType: 16, infringementType: 42, vehicleIdx: 0, otherVehicleIdx: 255, time: 255, lapNum: 5, placesGained: 255 },
+    ovtk(1, 0),
+    scar(1, 0),
+    { code: 'DRSD', reason: 1 },
+  ];
+  /** A race with DRS on from race frame 10; car 0's laps begin at `lapStarts`. */
+  const race = (n: number, lapStarts: number[]) => script(gridStart(n, (k) => ({ ...(k === 10 && { events: [{ code: 'DRSE' }] }), cars: drive(lapStarts) })));
+  // equal up to frame 299, so past the target
+  const original = race(U - LIGHTS_OUT, [100, 200, 300]);
+  const fork = race(U - LIGHTS_OUT + 100, [100, 200, 320, 420]);
+  const tick = undoneTick(original[U]!, T, { targetMs: original[T]!.sessionTime, before: UNDONE_EVENTS });
+  /** The new timeline from frame `from` on, its first tick sharing the overall id `overall`, `landsMs` off the frames' own time. */
+  const landed = (from: number, overall: number, landsMs = LANDS_MS) => after(fork, from, overall).map((f) => ({ ...f, sessionTime: f.sessionTime + landsMs }));
+  const resumed = landed(T, tick.overallFrameId);
+  const ran = (frames: Frame[]) => {
+    const r = new SessionRunner(initFor(frames));
+    runAll(r, frames);
+    return r;
+  };
+  /** Every span of `machine` readers see: closed and open. */
+  const spansOf = (r: SessionRunner, machine: string) => [...(r.state.history.spans[machine] ?? []), ...(situationOf(r.state).byMachine[machine] ?? [])];
+
+  it('the undone tick rewinds and its result says so, but it gets no frame number', () => {
+    const a = ran(original);
+    const r = applyOne(a, tick);
+    expect(r.delta.rewound).toEqual({ frameId: T, at: original[T]!.sessionTime });
+    expect(r.flashback?.targetFrameId).toBe(T);
+    expect((['laps', 'timing', 'miniSectors'] as const).every((t) => r.changed.has(t))).toBe(true);
+    expect([a.state.lastFrameId, a.state.frameNumber]).toEqual([T, T + 1]);
+  });
+  it('none of the undone tick’s events reach a step: the player stays competing, no neutralisation, DRS stays on, exactly one void', () => {
+    const a = ran([...original, tick, ...resumed]);
+    expect(spansOf(a, 'car-status').filter((s) => s.carId === 0).map((s) => s.kind)).toEqual(['competing']);
+    expect(spansOf(a, 'session-phase-race').filter((s) => s.kind === 'neutralised')).toEqual([]);
+    expect(situationOf(a.state).byMachine['race-control-race']?.map((s) => s.kind)).toEqual(['drsOn']);
+    expect(spansOf(a, 'race-control-race').filter((s) => s.kind === 'drsOff' && (s.detail as { reason?: string }).reason !== 'notEnabledYet')).toEqual([]);
+    expect(a.state.log.voids).toHaveLength(1);
+  });
+  it('the projection and the state equal a run that never received the undone frames (C33)', () => {
+    const a = ran([...original, tick, ...resumed]);
+    const reference = ran([...original.slice(0, T + 1), ...resumed]);
+    expect(shown(a.state)).toEqual(shown(reference.state));
+  });
+  it('the flashback report goes with the next stepped frame: a landing below the target’s time is no fall', () => {
+    const a = ran([...original, tick, ...landed(T, tick.overallFrameId, -300)]);
+    expect(a.state.log.clock).toEqual([]);
+  });
+  it('the report stays with that frame: a later rewind replays it, and both frames of the target’s id, without a fall', () => {
+    const first = landed(T, tick.overallFrameId, -300);
+    const played = first.slice(0, 40);
+    const second = undoneTick(played.at(-1)!, T + 5, { targetMs: first[5]!.sessionTime });
+    const again = landed(T + 5, second.overallFrameId, -300);
+    const a = ran([...original, tick, ...played, second, ...again]);
+    expect(a.state.log.clock).toEqual([]);
+    expect(a.state.log.voids).toHaveLength(2);
+    expect(shown(a.state)).toEqual(shown(ran([...original, tick, ...first.slice(0, 6), ...again]).state));
+  });
+  // Inventory 1.10: the rewind to f56743 came 0.8 s after the one to f56744.
+  it('a second flashback to the frame before the first one’s target equals a run without either’s undone frames', () => {
+    const played = resumed.slice(0, 45);
+    const second = undoneTick(played.at(-1)!, T - 1, { targetMs: original[T - 1]!.sessionTime });
+    const again = landed(T - 1, second.overallFrameId, 21);
+    const a = ran([...original, tick, ...played, second, ...again]);
+    expect(a.state.log.voids).toHaveLength(2);
+    expect(shown(a.state)).toEqual(shown(ran([...original.slice(0, T), ...again]).state));
+  });
+});
+
+// Every real flashback goes 15.000 s back: inside the 30 s replay window, where no snapshot is thinned, so the rewind
+// restores the game's target frame exactly.
+describe('SessionRunner: a 15 s rewind at 60 Hz (C27, C33)', () => {
+  const TARGET = 1_100;
+  const LAST = TARGET + 900;
+  const race = (frames: number, lapStarts: number[]) => {
+    const b = new ScenarioBuilder({ cars: 2, stepMs: 1000 / 60 }).session({ trackLength: 4000 });
+    for (let i = 0; i < frames; i++) b.frame(drive(lapStarts));
+    return b.build();
+  };
+  const every100 = (to: number) => Array.from({ length: to / 100 }, (_, k) => 100 * (k + 1));
+  const original = race(LAST + 1, every100(LAST));
+  const fork = race(TARGET + 200, [...every100(TARGET), TARGET + 50, TARGET + 150]);
+  const tick = undoneTick(original[LAST]!, TARGET, { targetMs: original[TARGET]!.sessionTime });
+  const resumed = after(fork, TARGET, tick.overallFrameId);
+
+  it('the void target is the game’s target frame, and the projection equals a run that never received the undone frames', () => {
+    const a = new SessionRunner(initFor(original));
+    runAll(a, original);
+    const target = { frameId: TARGET, at: original[TARGET]!.sessionTime };
+    expect(applyOne(a, tick).delta.rewound).toEqual(target);
+    expect(a.state.log.voids.at(-1)!.target).toEqual(target);
+    runAll(a, resumed);
+    const frames = [...original.slice(0, TARGET + 1), ...resumed];
+    const reference = new SessionRunner(initFor(frames));
+    runAll(reference, frames);
+    expect(shown(a.state)).toEqual(shown(reference.state));
+  });
+});
+
 describe('SessionRunner: a confirmed lap names its provisional across a flashback (C21, C25)', () => {
-  /** Car 0's laps begin at `lapStarts`; Session History confirms laps 1 and 2 at frame 300; an FLBK to frame 200 in frame 201 when `flashback`. */
-  const laps = (frames: number, lapStarts: number[], flashback: boolean) => {
+  /** Car 0's laps begin at `lapStarts`; Session History confirms laps 1 and 2 at frame 300. */
+  const laps = (frames: number, lapStarts: number[]) => {
     const b = new ScenarioBuilder({ cars: 2, stepMs: STEP }).session({ trackLength: 4000 });
     for (let i = 0; i < frames; i++) {
-      if (flashback && i === 201) b.event(flbk(200));
       b.frame((d) => {
         drive(lapStarts)(d);
         if (i === 300) {
@@ -390,15 +498,15 @@ describe('SessionRunner: a confirmed lap names its provisional across a flashbac
   };
   // original: frames 0..259, laps begin at 100 and 230 (lap 2's provisional at 230, after the snapshot of frame 189);
   // the game goes back to frame 200 and lap 2 now ends at 240; a run without the rewind has only the fork's frames
-  const original = () => laps(260, [100, 230], false);
-  const continuation = () => after(laps(320, [100, 240], true), 201, 260);
+  const original = () => laps(260, [100, 230]);
+  const continuation = () => [undoneTick(original().at(-1)!, 200), ...after(laps(320, [100, 240]), 201, 260)];
   const rewound = () => {
     const runner = new SessionRunner(initFor(original()));
     runAll(runner, [...original(), ...continuation()]);
     return runner;
   };
   const straight = () => {
-    const frames = laps(320, [100, 240], false);
+    const frames = laps(320, [100, 240]);
     const runner = new SessionRunner(initFor(frames));
     runAll(runner, frames);
     return runner;

@@ -147,9 +147,11 @@ describe('race-singapore-wet-flashback: two flashbacks on lap 7', () => {
     });
     // the first FLBK (sent at 757.045 s) lies outside the segment: the frame id falls from the end of the window to 56744
     expect(flashbacks[0]).toMatchObject({ frameId: 56_744, info: { targetFrameId: 56_743, targetLap: 7 }, truncated: true });
-    expect(flashbacks[1]).toEqual({ frameId: 56_788, info: { targetFrameId: 56_743, targetSessionTime: 742_076, rewoundMs: 741, targetLap: 7 }, truncated: true });
+    // the FLBK's own tick (frame 56788) is undone and never stepped: its result shows the state restored to the target
+    expect(flashbacks[1]).toEqual({ frameId: 56_743, info: { targetFrameId: 56_743, targetSessionTime: 742_076, rewoundMs: 741, targetLap: 7 }, truncated: true });
     expect(flashbacks).toHaveLength(2);
-    expect(after).toEqual([{ frameId: 56_744, sessionTime: 742_120 }]);
+    // the new timeline's first tick is a frame of its own: frame 56743 at 742.097 s (fixtures/index.json)
+    expect(after).toEqual([{ frameId: 56_743, sessionTime: 742_097 }]);
   });
 });
 

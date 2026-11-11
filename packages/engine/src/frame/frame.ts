@@ -20,15 +20,15 @@ import type {
 /** The packets the game sends on every frame; a closed frame without one of them lost a packet. */
 export const MENU_RATE_SLOTS = ['lapData', 'motion', 'telemetry', 'status', 'motionEx'] as const;
 
-/** All packets of one game frame (spec 5.1), keyed by `overallFrameId`. */
+/** All packets of one game tick (spec 5.1, C5), keyed by `overallFrameId` and `frameId`. */
 export type Frame = {
   feedId: FeedId;
   sessionUid: bigint;
   /** The game's `frameIdentifier`; it goes back after a flashback. */
   frameId: number;
-  /** The game's `overallFrameIdentifier`; it keeps rising across flashbacks. */
+  /** The game's `overallFrameIdentifier`; it keeps rising across flashbacks, and the two ticks of a flashback share it. */
   overallFrameId: number;
-  /** The latest header session time of the frame's packets. */
+  /** The latest header session time of the tick's packets other than events; of its events when it has only those. */
   sessionTime: SessionTime;
   /**
    * When the frame's first packet arrived (wall clock, ms, as the source stamped it; only compared, never read from a
