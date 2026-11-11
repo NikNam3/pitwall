@@ -2,16 +2,17 @@
 // AI (`ai`) or a human (`human`), from the `aiControlled` signal alone; shared by every weekend phase; its spans declared
 // in domain (`carDriverSpans`), with no detail; a new span on every flip, none withdrawn (C18). The signal defaults to
 // `true` before any Participants packet, so a car's first span opens, with `joinedAt`, on the first frame its
-// Participants data is in the live state (`updatedAt.participants`, the identity area), as car-location's does. No
+// Participants data is in the live state (`updatedAt.participants`, the identity area), as car-location's does, and only
+// while a car of the session holds the slot (car-status's rule, `slotsInUse`; ruling R7). No
 // upstream sub-machine. A takeover is known only from the game's spec (C19): synthetic rows. Transition rows:
 // car-driver.transitions.ts. Segment: race-zandvoort-lap10 (Participants first; 2 humans, 1 the player and 0).
 import { beforeAll, describe, expect, it } from 'vitest';
 import { carDriverSpans, type OpenSpan, type Span } from '@pitwall/domain';
 import machine from '../../../src/situations/car-driver/machine.ts';
-import { car, participants } from '../../support/car-edits.ts';
+import { all, car, participants } from '../../support/car-edits.ts';
 import { replaySegment, type SegmentRun } from '../../support/segment-run.ts';
-import { FRAME_MS, inputs } from '../../support/transition-table.ts';
-import { byAi, byHuman, drivenBy } from './car-driver.transitions.ts';
+import { FRAME_MS, inputs, type InputEdit } from '../../support/transition-table.ts';
+import { allInUse, byAi, byHuman, drivenBy } from './car-driver.transitions.ts';
 
 type Run = { open: Array<OpenSpan | undefined>; closed: Array<Array<Omit<Span, 'endFrame'>>>; all: OpenSpan[][] };
 
@@ -37,8 +38,9 @@ describe('car-driver: id, span declaration, applies to, inputs', () => {
     expect(machine.spans.scope).toBe('car');
     expect([...carDriverSpans.kinds].sort()).toEqual(['ai', 'human']);
   });
-  it('reads the signal aiControlled and the identity area (the Participants data’s arrival), no upstream sub-machine', () => {
-    expect(machine.inputs).toEqual({ signals: ['aiControlled'], values: ['identity'], upstream: [] });
+  it('reads the signals aiControlled, numActiveCars and resultStatus (the slots in use, R7) and the identity area (the Participants data’s arrival), no upstream sub-machine', () => {
+    expect([...machine.inputs.signals].sort()).toEqual(['aiControlled', 'numActiveCars', 'resultStatus']);
+    expect([machine.inputs.values, machine.inputs.upstream]).toEqual([['identity'], []]);
   });
   it('declares none -> ai, none -> human, ai -> human and human -> ai, nothing else', () => {
     expect([...machine.transitions].map(([from, to]) => `${from}->${to}`).sort()).toEqual(['ai->human', 'human->ai', 'none->ai', 'none->human']);
@@ -47,16 +49,16 @@ describe('car-driver: id, span declaration, applies to, inputs', () => {
 
 describe('car-driver: a car’s first span opens with its Participants data (C3)', () => {
   it('opens no span before the Participants data is in the live state: the default aiControlled true opens nothing', () => {
-    const r = run(inputs().frames(4));
+    const r = run(inputs().frames(4, allInUse));
     expect(r.all.map((spans) => spans.length)).toEqual([0, 0, 0, 0]);
     expect(r.closed.flat()).toEqual([]);
   });
   it('a human flag before the Participants data opens nothing either', () => {
-    const r = run(inputs().frames(3, car(0, { aiControlled: false })));
+    const r = run(inputs().frames(3, all(allInUse, car(0, { aiControlled: false }))));
     expect(r.all.map((spans) => spans.length)).toEqual([0, 0, 0]);
   });
   it('opens a span for every slot on the frame the Participants data arrives, joined, on that frame number, id 0, confirmed, no detail', () => {
-    const r = run(inputs().frames(3).frame(participants));
+    const r = run(inputs().frames(3).frame(all(participants, allInUse)));
     const spans = r.all[3]!;
     expect(spans.length).toBeGreaterThan(0);
     expect(spans.map((s) => s.carId)).toEqual(Array.from({ length: spans.length }, (_, i) => i));
@@ -66,6 +68,17 @@ describe('car-driver: a car’s first span opens with its Participants data (C3)
     const r = run(inputs().frames(2).frame(drivenBy(1, false)));
     expect(r.all[2]!.find((s) => s.carId === 1)).toMatchObject({ kind: 'human', joinedAt: true, startFrame: 3 });
     expect(r.all[2]!.filter((s) => s.carId !== 1).every((s) => s.kind === 'ai')).toBe(true);
+  });
+  it('a slot not in use (beyond numActiveCars, never retired) opens no span, even with aiControlled 0 (the game’s empty slots, R7)', () => {
+    const inUse2: InputEdit = (input) => {
+      input.signals.session.numActiveCars = 2;
+    };
+    const r = run(inputs().frames(2).frame(all(participants, inUse2, car(5, { aiControlled: false }))).frames(2), 5);
+    expect(r.open).toEqual([undefined, undefined, undefined, undefined, undefined]);
+    expect(r.all[2]!.map((s) => [s.carId, s.kind])).toEqual([
+      [0, 'ai'],
+      [1, 'ai'],
+    ]);
   });
   it('holds the span while the driver holds, the same object every frame, closing nothing', () => {
     const r = run(inputs().frames(6, byHuman));

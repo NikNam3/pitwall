@@ -1,6 +1,7 @@
 // The car-driver transition table (contract C15, C17, C18, C19, C85): per car, who drives it, the AI or a human, from the
-// `aiControlled` signal alone. The signal defaults to `true` before any Participants packet, so a car's first span opens
-// on the first frame its Participants data is in the live state (`updatedAt.participants`, a value of the identity area),
+// `aiControlled` signal. The signal defaults to `true` before any Participants packet, so a car's first span opens on the
+// first frame its Participants data is in the live state (`updatedAt.participants`, a value of the identity area) while
+// a car of the session holds the slot (car-status's rule, `slotsInUse`: `numActiveCars`, `resultStatus`; ruling R7),
 // with `joinedAt` (a join row): `none -> <kind>`. After it every flip of the signal closes the car's span and opens the
 // other. No kind goes to `none`. The declared transitions:
 //   none -> ai       the first frame with the car's Participants data, the AI driving (join)
@@ -12,8 +13,13 @@ import machine from '../../../src/situations/car-driver/machine.ts';
 import { all, car, participants } from '../../support/car-edits.ts';
 import { defineTransitionTable, inputs, type InputEdit, type TransitionRow } from '../../support/transition-table.ts';
 
-/** Car `index` driven by the AI (`ai`) or a human from this frame on, the Participants data in (`participants`). */
-export const drivenBy = (index: number, ai: boolean): InputEdit => all(participants, car(index, { aiControlled: ai }));
+/** Every slot in use by car-status's rule (`slotsInUse`): `numActiveCars` the number of slots; it holds on the frames after it. */
+export const allInUse: InputEdit = (input) => {
+  input.signals.session.numActiveCars = input.signals.cars.length;
+};
+
+/** Car `index` driven by the AI (`ai`) or a human from this frame on, the Participants data in (`participants`), every slot in use. */
+export const drivenBy = (index: number, ai: boolean): InputEdit => all(participants, allInUse, car(index, { aiControlled: ai }));
 
 /** Car 0 driven by the AI, by a human. */
 export const byAi = drivenBy(0, true);
