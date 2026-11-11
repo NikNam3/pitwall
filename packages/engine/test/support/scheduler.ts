@@ -9,6 +9,7 @@ import { NO_DRIVERS, NO_PRIORS } from '../../../../test-support/builders/index.t
 import { priorsOf } from '../../src/calc/priors.ts';
 import {
   CalculatorRegistry,
+  driversOf,
   MACHINES,
   Scheduler,
   SessionRunner,
@@ -51,7 +52,8 @@ export const RACING: Situation = { weekendPhase: { kind: 'race', format: 'grandP
 
 /** A scheduler input at session time `t`; the history holds `laps` laps; `config` is the features' effective config. */
 export const input = (t: number, changed: ChangeTag[] = ['timing'], d = delta(), laps = d.after.laps ?? 0, config: SchedulerInput['config'] = {}): SchedulerInput => ({
-  live: { feedId: 'f1', sessionTime: t } as never,
+  // no car slots: the scheduler reads their number for `view.drivers`
+  live: { feedId: 'f1', sessionTime: t, cars: [] } as never,
   situation: RACING,
   history: { laps: new Array(laps).fill({}), decisions: [] } as never,
   changed: new Set(changed),
@@ -92,10 +94,17 @@ export const inputOf = (
 export const viewOfInput = (input: SchedulerInput, outputs: EngineView['outputs'] = new Map()): EngineView => ({
   ...input,
   priors: priorsOf(input.history.decisions, input.priors),
-  // as the scheduler builds it until `driversOf` (SP4.3a Task 3)
-  drivers: [],
+  drivers: driversOfInput(input),
   outputs,
 });
+
+/**
+ * `view.drivers` as the scheduler builds it (C62c): `driversOf(input.drivers, input.live.cars.length)`. Without a
+ * snapshot every slot is `notApplicable` (`driversOf`'s own rule, pinned in profiles.test.ts), built here directly so the
+ * many views without a snapshot do not depend on `driversOf`.
+ */
+const driversOfInput = (input: SchedulerInput): EngineView['drivers'] =>
+  input.drivers === null ? Array.from({ length: input.live.cars.length }, () => unknown('notApplicable')) : driversOf(input.drivers, input.live.cars.length);
 
 /** The view of a step's result, as a unit gets it with no outputs before it (`inputOf`). */
 export const viewOf = (result: Pick<StepResult, 'state' | 'changed' | 'delta'>, o: Parameters<typeof inputOf>[1] = {}): EngineView => viewOfInput(inputOf(result, o));
@@ -220,13 +229,14 @@ const refuseWrites = <T extends object>(path: string): ProxyHandler<T> => ({
  * - `outputs`: the declared calculators' outputs only (`get`, `has`), never the whole map;
  * - `feed` only with `feed`;
  * - `priors` only with `decisions` (C41, C62a), so a unit that reads the priors runs again on a pick and on its void;
+ * - `drivers` only with `drivers` (C41, C62c);
  * - `delta`, `changed`, `weekend`, `config` and `track` always.
  * The situation is deep-frozen where it is (its spans are step 2's own, ruling 6); the projection's lists are handed out
  * read-only (they are the log's own arrays, which cannot be frozen; the log freezes their entries): a unit that changes
  * either throws a `TypeError`. The view itself is not changed: the guard reads through to it.
  */
 export function guardedView(view: EngineView, reads: readonly Dependency[], { unit = 'unit', onRead, onEntry, onList }: GuardOptions = {}): EngineView {
-  const tags = new Set<string>(reads.filter((r): r is ChangeTag => typeof r === 'string'));
+  const tags = new Set<string>(reads.filter((r): r is ChangeTag | 'feed' | 'drivers' => typeof r === 'string'));
   const calculators = new Set(reads.flatMap((r) => (typeof r === 'object' ? [r.calculator] : [])));
   /** The sub-machines whose spans the unit declares (`spans:<id>`). */
   const machines = new Set([...tags].flatMap((tag) => (tag.startsWith('spans:') ? [tag.slice('spans:'.length)] : [])));
@@ -378,6 +388,10 @@ export function guardedView(view: EngineView, reads: readonly Dependency[], { un
       if (key === 'priors') {
         onRead?.('priors');
         if (!tags.has('decisions')) throw new UndeclaredReadError(unit, 'priors', 'C41');
+      }
+      if (key === 'drivers') {
+        onRead?.('drivers');
+        if (!tags.has('drivers')) throw new UndeclaredReadError(unit, 'drivers', 'C41');
       }
       return Reflect.get(t, key, receiver);
     },
@@ -601,7 +615,8 @@ export function projectionStep(r: Pick<StepResult, 'state' | 'changed' | 'delta'
     appendedAt: Object.freeze(Object.fromEntries(Object.entries(appendedAt).map(([list, frames]) => [list, frozenList(frames ?? [])]))),
   }) as unknown as SchedulerInput['history'];
   return Object.freeze({
-    live: throwing('live', { feedId: r.state.feedId, sessionTime: r.state.sessionTime }) as SchedulerInput['live'],
+    // the car slots' number too, for `view.drivers` (C62c); a read of a car throws
+    live: throwing('live', { feedId: r.state.feedId, sessionTime: r.state.sessionTime, cars: throwing('live.cars', { length: r.state.cars.length }) }) as SchedulerInput['live'],
     situation: throwing('situation') as SchedulerInput['situation'],
     history,
     changed: Object.freeze(new Set(r.changed)),

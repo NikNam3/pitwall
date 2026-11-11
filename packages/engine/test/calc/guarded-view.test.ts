@@ -143,6 +143,26 @@ describe('guardedView throws on an undeclared read and passes a declared one (C4
     expect(result.errors.map((e) => [e.id, e.error instanceof UndeclaredReadError && e.error.path])).toEqual([['without', 'priors']]);
   });
 
+  // Generic as the priors' row: every unit the harness, the analysis and the bridge completeness tests run gets this
+  // guard (C87), so a registered unit that reads the profiles without declaring `drivers` fails there.
+  it('the guarded view throws on view.drivers without drivers in reads (C41, C62c)', () => {
+    const view = raceView();
+    expect(guardedBy(['drivers'], view).drivers).toEqual(view.drivers);
+    expect(undeclared(() => guardedBy([], view).drivers)).toBe('drivers');
+    expect(undeclared(() => guardedBy([...ALL_CHANGE_TAGS, 'feed'], view).drivers)).toBe('drivers');
+    const { results } = run(script(gridStart(5)));
+    const s = sched([
+      quick('with', { reads: ['drivers', 'timing'], compute: (v) => v.drivers.length }),
+      quick('without', { reads: ['timing'], compute: (v) => v.drivers.length }),
+    ]);
+    const last = inputOf(results.at(-1)!);
+    const result = s.run(last);
+    expect(result.ran).toEqual(['with']);
+    // the scheduler's view: one entry per car slot (`driversOf`), not an empty list
+    expect(result.outputs.get('with')).toBe(last.live.cars.length);
+    expect(result.errors.map((e) => [e.id, e.error instanceof UndeclaredReadError && e.error.path])).toEqual([['without', 'drivers']]);
+  });
+
   it('the error names the unit, the path and C41', () => {
     expect(() => guardedView(raceView(), ['timing'], { unit: 'gaps' }).history.laps).toThrow(/gaps reads history\.laps, which it does not declare \(C41\)/);
   });
