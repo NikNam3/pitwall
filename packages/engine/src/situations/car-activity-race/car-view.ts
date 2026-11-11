@@ -2,8 +2,9 @@
 // car-status, penalties), its signals (pitStatus, resultStatus) and its timing values, gathered once per car. Holds the
 // two choices of a kind that need no history: the activity at the lights out and the current activity (a join, a return
 // from notCompeting). Facts: docs/research/09-situations-inventory.md §2.5, §2.7, §2.10.
-import { carId as toCarId, type CarId, type OpenSpan, type PitStatus, type ResultStatus, type ServingPenaltyDetail } from '@pitwall/domain';
+import { carId as toCarId, type CarId, type OpenSpan,type PitStatus, type ResultStatus, type ServingPenaltyDetail } from '@pitwall/domain';
 import type { CarSignals } from '../../signals/types.ts';
+import { carSpanIn } from '../../util/car-span.ts';
 import type { DeepReadonly } from '../../util/deep-readonly.ts';
 import type { MachineInput } from '../machine.ts';
 
@@ -33,8 +34,7 @@ export type CarView = {
   pitStopTimerMs: number;
 };
 
-const spanOf = (input: DeepReadonly<MachineInput>, machine: string, carId: CarId): DeepReadonly<OpenSpan> | undefined =>
-  input.upstream[machine]?.find((span) => span.carId === carId);
+const spanOf = (input: DeepReadonly<MachineInput>, machine: string, carId: CarId): DeepReadonly<OpenSpan> | undefined => carSpanIn(input.upstream[machine], carId);
 
 /** Car slot `index` on this frame; none while the live state holds no car in the slot. */
 export const carView = (input: DeepReadonly<MachineInput>, index: number, signals: DeepReadonly<CarSignals>): CarView | undefined => {

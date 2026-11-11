@@ -7,6 +7,7 @@
 // docs/research/09-situations-inventory.md §2.1-2.5.
 import { carId as toCarId, carLocationSpans, type DriverStatus, type FrameNumber, type OpenSpan, type PitStatus, type SessionTime } from '@pitwall/domain';
 import type { MachineStep, SubMachine } from '../machine.ts';
+import { sameEntries } from '../same-entries.ts';
 
 type Kind = 'garage' | 'pitLane' | 'track';
 /** Per car slot: the open span (the same object while it holds, C40) and how many spans the car has had. */
@@ -59,7 +60,7 @@ const machine: SubMachine<Open> = {
       const id = before?.opened ?? 0;
       return { span: opening(id, index, kind, input.at, input.frameNumber, before === undefined), opened: id + 1 };
     });
-    return { open: { cars }, closed };
+    return { open: sameEntries(open.cars, cars) ? open : { cars }, closed };
   },
 };
 

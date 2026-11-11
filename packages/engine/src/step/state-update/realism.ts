@@ -1,4 +1,5 @@
-import { unknown, type CarState } from '@pitwall/domain';
+import type { CarState } from '@pitwall/domain';
+import { unknown } from '../../util/hot-domain.ts';
 import type { LiveState } from '../../state/live-state.ts';
 import { CORNER_NAMES } from '../corners.ts';
 

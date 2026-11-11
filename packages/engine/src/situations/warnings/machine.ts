@@ -6,6 +6,7 @@
 // (`cornerCutting`) on the frame it opens.
 import { known, unknown, warningsSpans, type CarId, type FrameNumber, type Known, type OpenSpan, type SessionTime, type WarnedDetail } from '@pitwall/domain';
 import type { MachineStep, SubMachine } from '../machine.ts';
+import { sameEntries } from '../same-entries.ts';
 
 /** How many frames a PENA waits for the rise it explains (the longest gap the recordings show). */
 export const PENDING_FRAMES = 16;
@@ -49,7 +50,7 @@ const machine: SubMachine<Open> = {
         }
       }
       if (pending !== undefined && input.frameNumber - pending.frameNumber > PENDING_FRAMES) pending = undefined;
-      if (signals.totalWarnings === car.count) return { span: car.span, count: car.count, pending };
+      if (signals.totalWarnings === car.count) return pending === car.pending ? car : { span: car.span, count: car.count, pending };
       const rise = signals.totalWarnings > car.count;
       closed.push({ ...car.span, end: input.at });
       const infringement = rise && pending !== undefined ? known(pending.infringement, pending.at) : unknown('notReceived');
@@ -59,7 +60,7 @@ const machine: SubMachine<Open> = {
         pending: rise ? undefined : pending,
       };
     });
-    return { open: { cars }, closed };
+    return { open: sameEntries(open.cars, cars) ? open : { cars }, closed };
   },
 };
 

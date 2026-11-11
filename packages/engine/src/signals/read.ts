@@ -121,25 +121,25 @@ const carSignalsOf = (frame: Frame, index: number, prev: CarSignals): CarSignals
   const l = frame.lapData?.lapData[index];
   const s = frame.status?.carStatusData[index];
   const p = frame.participants?.participants[index];
+  // One literal in `initialCarSignals`' key order: a field the frame does not send stays as in `prev`.
   return {
-    ...prev,
-    ...(l && {
-      pitStatus: pick(PIT_STATUS, l.pitStatus),
-      driverStatus: pick(DRIVER_STATUS, l.driverStatus),
-      pitLaneTimerActive: l.pitLaneTimerActive === 1,
-      resultStatus: pick(RESULT_STATUS, l.resultStatus),
-      numPitStops: l.numPitStops,
-      shouldServePenalty: l.pitStopShouldServePen === 1,
-      unservedDriveThroughs: l.numUnservedDriveThroughPens,
-      unservedStopGos: l.numUnservedStopGoPens,
-      timePenaltyMs: l.penalties * 1000,
-      totalWarnings: l.totalWarnings,
-      cornerCuttingWarnings: l.cornerCuttingWarnings,
-      currentLapInvalid: l.currentLapInvalid === 1,
-    }),
+    pitStatus: l ? pick(PIT_STATUS, l.pitStatus) : prev.pitStatus,
+    driverStatus: l ? pick(DRIVER_STATUS, l.driverStatus) : prev.driverStatus,
+    pitLaneTimerActive: l ? l.pitLaneTimerActive === 1 : prev.pitLaneTimerActive,
+    resultStatus: l ? pick(RESULT_STATUS, l.resultStatus) : prev.resultStatus,
+    numPitStops: l ? l.numPitStops : prev.numPitStops,
+    shouldServePenalty: l ? l.pitStopShouldServePen === 1 : prev.shouldServePenalty,
+    unservedDriveThroughs: l ? l.numUnservedDriveThroughPens : prev.unservedDriveThroughs,
+    unservedStopGos: l ? l.numUnservedStopGoPens : prev.unservedStopGos,
+    timePenaltyMs: l ? l.penalties * 1000 : prev.timePenaltyMs,
+    totalWarnings: l ? l.totalWarnings : prev.totalWarnings,
+    cornerCuttingWarnings: l ? l.cornerCuttingWarnings : prev.cornerCuttingWarnings,
+    currentLapInvalid: l ? l.currentLapInvalid === 1 : prev.currentLapInvalid,
     // The game sends -1 for an unknown flag, then 0 none, 1 green, 2 blue, 3 yellow.
-    ...(s && { fiaFlag: pick(ZONE_FLAG, s.vehicleFiaFlags + 1), drsAllowed: s.drsAllowed === 1, networkPaused: s.networkPaused === 1 }),
-    ...(p && { aiControlled: p.aiControlled === 1 }),
+    fiaFlag: s ? pick(ZONE_FLAG, s.vehicleFiaFlags + 1) : prev.fiaFlag,
+    drsAllowed: s ? s.drsAllowed === 1 : prev.drsAllowed,
+    networkPaused: s ? s.networkPaused === 1 : prev.networkPaused,
+    aiControlled: p ? p.aiControlled === 1 : prev.aiControlled,
   };
 };
 

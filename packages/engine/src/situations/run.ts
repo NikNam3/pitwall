@@ -21,17 +21,24 @@ import { phaseOfSpan } from './weekend-phase/machine.ts';
 
 type Closed = MachineStep<unknown>['closed'];
 
-/** A sub-machine's change tag (C40); `SPAN_TAGS` holds the registered ones' as literals. */
-const spanTag = (machine: MachineId): ChangeTag => `spans:${machine}` as ChangeTag;
+/** The registered sub-machines' change tags (C40), built once; `SPAN_TAGS` holds them as literals. */
+const SPAN_TAG_OF: ReadonlyMap<MachineId, ChangeTag> = new Map(MACHINE_ORDER.map((m) => [m.id, `spans:${m.id}` as ChangeTag]));
+
+/** A sub-machine's change tag (C40). */
+const spanTag = (machine: MachineId): ChangeTag => SPAN_TAG_OF.get(machine) ?? (`spans:${machine}` as ChangeTag);
+
+/** The upstream of a sub-machine that reads none: one empty record, which no sub-machine writes (its input is read-only). */
+const NO_UPSTREAM: Readonly<Record<MachineId, OpenSpan[]>> = Object.freeze({});
 
 /** The sub-machine that decides the weekend phase (C14). */
 const WEEKEND_PHASE: MachineId = 'weekend-phase';
 
+/** The registered weekend-phase sub-machine, looked up once. */
+const WEEKEND_PHASE_MACHINE = MACHINE_ORDER.find((m) => m.id === WEEKEND_PHASE);
+
 /** The weekend phase: the open span of the weekend-phase sub-machine, `pending` while none is open (C14). */
-const weekendPhaseOf = (state: DeepReadonly<EngineState>): WeekendPhase => {
-  const machine = MACHINE_ORDER.find((m) => m.id === WEEKEND_PHASE);
-  return phaseOfSpan(machine === undefined ? undefined : openSpansOf(state, machine)[0]);
-};
+const weekendPhaseOf = (state: DeepReadonly<EngineState>): WeekendPhase =>
+  phaseOfSpan(WEEKEND_PHASE_MACHINE === undefined ? undefined : openSpansOf(state, WEEKEND_PHASE_MACHINE)[0]);
 
 /** A sub-machine runs in a weekend phase it applies to; a per-phase one never while the phase is pending or `none` (C14). */
 const applies = (machine: SubMachine<unknown>, phase: WeekendPhase): boolean =>
@@ -113,7 +120,7 @@ export function runMachine(state: EngineState, frame: Frame, out: StepOutput, cl
     if (!applies(machine, weekendPhase)) continue;
     const before = openSpansOf(state, machine);
     const open = machine.id in state.open.machines ? state.open.machines[machine.id] : machine.init();
-    const upstream = Object.fromEntries(machine.inputs.upstream.map((id) => [id, after[id] ?? []]));
+    const upstream = machine.inputs.upstream.length === 0 ? NO_UPSTREAM : Object.fromEntries(machine.inputs.upstream.map((id) => [id, after[id] ?? []]));
     const step = machine.step(open, { at: frame.sessionTime, frameId: frame.frameId, frameNumber: state.frameNumber, signals: state.signals, live: state, clock, upstream, weekendPhase });
     state.open.machines[machine.id] = step.open;
     after[machine.id] = spansOf(machine, step.open);

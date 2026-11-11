@@ -19,6 +19,7 @@ import { carId as toCarId, carStatusSpans, known, unknown, type Known, type Open
 import type { RetirementReason, SituationEvent } from '../../signals/types.ts';
 import type { DeepReadonly } from '../../util/deep-readonly.ts';
 import type { MachineStep, SubMachine } from '../machine.ts';
+import { sameEntries } from '../same-entries.ts';
 import { isActiveCar, slotsInUse } from './slots.ts';
 
 type Kind = 'competing' | 'retired' | 'disqualified' | 'absent';
@@ -78,7 +79,11 @@ type Rtmt = Extract<SituationEvent, { code: 'RTMT' }>;
 /** The frame's events about one car that car-status reads. */
 type CarEvents = { retiredPena: Pena | undefined; disqualifiedPena: boolean; rtmt: Rtmt | undefined };
 
+/** A frame without events: the same answer for every car. */
+const NO_EVENTS: CarEvents = { retiredPena: undefined, disqualifiedPena: false, rtmt: undefined };
+
 const carEventsOf = (events: DeepReadonly<SituationEvent[]>, index: number): CarEvents => {
+  if (events.length === 0) return NO_EVENTS;
   const own = events.filter((e) => 'carId' in e && e.carId === index);
   return {
     retiredPena: own.find((e): e is Pena => e.code === 'PENA' && e.penaltyType === RETIRED_PENALTY),
@@ -155,6 +160,7 @@ const machine: SubMachine<Open> = {
       const kind = nextKind(before, isActiveCar(index, slots, car.resultStatus), car.resultStatus, events);
       if (before !== undefined && kind === before.span.kind) {
         const confirms = !before.span.confirmed && (events.disqualifiedPena || at - before.span.start >= DSQ_CONFIRM_MS);
+        if (!confirms && car.resultStatus === before.resultStatus) return before;
         return { span: confirms ? { ...before.span, confirmed: true } : before.span, opened: before.opened, resultStatus: car.resultStatus };
       }
       if (before !== undefined) closed.push({ ...before.span, end: at });
@@ -172,7 +178,7 @@ const machine: SubMachine<Open> = {
       };
       return { span, opened: id + 1, resultStatus: car.resultStatus };
     });
-    return { open: { cars }, closed };
+    return { open: sameEntries(open.cars, cars) ? open : { cars }, closed };
   },
 };
 

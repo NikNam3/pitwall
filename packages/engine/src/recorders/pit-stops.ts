@@ -1,6 +1,7 @@
 import { MAX_CARS, type CarId, type FrameNumber, type Ms, type PitStopRecord, type SessionTime } from '@pitwall/domain';
 import type { LogWriter } from '../log/types.ts';
 import type { Recorder, RecorderInput } from '../step/types.ts';
+import { carSpanIn } from '../util/car-span.ts';
 import type { DeepReadonly } from '../util/deep-readonly.ts';
 import { carsInSession, type LiveCar } from './cars.ts';
 import { locationOf, neutralisedBy, RACE_ACTIVITY } from './spans.ts';
@@ -49,7 +50,7 @@ const record = (log: LogWriter, carId: CarId, visit: OpenPitVisit, exit: ExitedP
 };
 
 /** The car's race activity span on this frame; none before the lights out or outside a race. */
-const raceActivityOf = (input: DeepReadonly<RecorderInput>, carId: CarId) => input.situation.byMachine[RACE_ACTIVITY]?.find((s) => s.carId === carId);
+const raceActivityOf = (input: DeepReadonly<RecorderInput>, carId: CarId) => carSpanIn(input.situation.byMachine[RACE_ACTIVITY], carId);
 
 /** The car's visit on a frame in the pit lane: opened at its entry, with the times and the spans of its frames. */
 const inPitLane = (own: PitStopsOwn, car: LiveCar, entry: SessionTime, input: DeepReadonly<RecorderInput>): void => {

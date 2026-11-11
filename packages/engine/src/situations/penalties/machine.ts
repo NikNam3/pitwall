@@ -9,6 +9,7 @@
 // Stop-gos and both kinds at once are not yet seen in any recording (C19): implemented from the game's spec.
 import { known, unknown, type CarId, type FrameNumber, type Known, type OpenSpan, type PendingPenaltyDetail, penaltiesSpans, type SessionTime, type TimePenaltyDetail } from '@pitwall/domain';
 import type { MachineStep, SubMachine } from '../machine.ts';
+import { sameEntries } from '../same-entries.ts';
 
 /** How many frames a PENA waits for the rise it explains. */
 export const PENDING_FRAMES = 16;
@@ -70,6 +71,7 @@ const machine: SubMachine<Open> = {
   openSpans: (open) => open.cars.map(({ span }) => span),
   step(open, input): MachineStep<Open> {
     const closed: MachineStep<Open>['closed'] = [];
+    const waiting = (p: Pena): boolean => input.frameNumber - p.frameNumber <= PENDING_FRAMES;
     const cars = input.signals.cars.map((signals, index): CarOpen => {
       const car = open.cars[index];
       const dt = signals.unservedDriveThroughs;
@@ -83,7 +85,10 @@ const machine: SubMachine<Open> = {
         const timeInfringement = unknown('notReceived');
         return { ...opened(0, index, describe(queue, dt, sg, totalMs, timeInfringement), input.at, input.frameNumber, true), dt, sg, totalMs, queue, timeInfringement, penas: [] };
       }
-      const penas = car.penas.filter((p) => input.frameNumber - p.frameNumber <= PENDING_FRAMES);
+      const penaOfCar = input.signals.events.length > 0 && input.signals.events.some((event) => event.code === 'PENA' && event.carId === index && WAITING_TYPES.has(event.penaltyType));
+      // Nothing changed for the car: what it owes stands, and so does its entry.
+      if (dt === car.dt && sg === car.sg && totalMs === car.totalMs && !penaOfCar && car.penas.every(waiting)) return car;
+      const penas = car.penas.filter(waiting);
       for (const event of input.signals.events) {
         if (event.code === 'PENA' && event.carId === index && WAITING_TYPES.has(event.penaltyType)) {
           penas.push({ type: event.penaltyType, infringement: event.infringementType, at: input.at, frameNumber: input.frameNumber });
@@ -106,7 +111,7 @@ const machine: SubMachine<Open> = {
       closed.push({ ...car.span, end: input.at });
       return { ...opened(car.span.id + 1, index, current, input.at, input.frameNumber, false), ...kept };
     });
-    return { open: { cars }, closed };
+    return { open: sameEntries(open.cars, cars) ? open : { cars }, closed };
   },
 };
 

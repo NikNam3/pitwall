@@ -2,12 +2,13 @@ import type { SessionTime } from '@pitwall/domain';
 import { logLengths } from '../log/log.ts';
 import type { LogLengths } from '../log/types.ts';
 import type { EngineState } from '../state/engine-state.ts';
-import { copyPlain } from '../util/copy-plain.ts';
+import { copyPlainSharingKnown } from '../util/copy-plain.ts';
 
 /**
  * The state after frame `frameId`. The append-only log is kept by its lengths only (spec 5.4) and the projection not at
  * all (a restore projects the log again); the read-only weekend context is not kept either, a restore carries the
  * current one over. `attached`: the attached bookkeeping as it stood once the frame's result was handed out (C27).
+ * The state is copied except its `Known`s, which no later frame changes (`copyPlainSharingKnown`).
  */
 export type Snapshot = {
   frameId: number;
@@ -29,7 +30,7 @@ const slotOf = (s: Snapshot): number => Math.floor(s.sessionTime / KEEP_OLDER_EV
 
 const snapshotOf = (state: EngineState, frameId: number, attached: unknown): Snapshot => {
   const { log, history: _projected, weekend: _readOnly, ...rest } = state;
-  return { frameId, sessionTime: state.sessionTime, lengths: logLengths(log), state: copyPlain(rest), attached };
+  return { frameId, sessionTime: state.sessionTime, lengths: logLengths(log), state: copyPlainSharingKnown(rest), attached };
 };
 
 /**

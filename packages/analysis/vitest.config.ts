@@ -4,6 +4,6 @@ export default defineProject({
   test: {
     name: 'analysis',
     include: ['src/**/*.test.ts', 'test/**/*.test.ts'],
-    exclude: ['**/*.acceptance.test.ts'],
+    exclude: ['**/*.acceptance.test.ts', '**/*.budget.test.ts'],
   },
 });

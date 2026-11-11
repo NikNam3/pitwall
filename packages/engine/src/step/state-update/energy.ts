@@ -17,14 +17,15 @@ export const energyUpdate: StateUpdate = { id: 'energy', apply: (frame, live, si
     const s = status.carStatusData[car.id];
     if (!s) continue;
     car.updatedAt.status = at;
+    const visibility = visibilityIn(frame, car, signals);
     car.energy = {
       fuel: knownUnlessRestricted(
-        visibilityIn(frame, car, signals),
+        visibility,
         { kg: s.fuelInTank, capacityKg: s.fuelCapacity, remainingLaps: s.fuelRemainingLaps, mix: pick(FUEL_MIX, s.fuelMix) },
         at,
       ),
       ers: knownUnlessRestricted(
-        visibilityIn(frame, car, signals),
+        visibility,
         {
           storeJ: s.ersStoreEnergy,
           mode: pick(ERS_DEPLOY_MODE, s.ersDeployMode),
@@ -34,7 +35,7 @@ export const energyUpdate: StateUpdate = { id: 'energy', apply: (frame, live, si
         },
         at,
       ),
-      power: knownUnlessRestricted(visibilityIn(frame, car, signals), { iceW: s.enginePowerIce, mgukW: s.enginePowerMguk }, at),
+      power: knownUnlessRestricted(visibility, { iceW: s.enginePowerIce, mgukW: s.enginePowerMguk }, at),
     };
   }
   out.changed.add('energy');

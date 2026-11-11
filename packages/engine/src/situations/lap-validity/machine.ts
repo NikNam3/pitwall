@@ -5,6 +5,7 @@
 // detail unknown(notReceived) (C3); a PENA after the flag never changes the open span (C18).
 import { known, lapValiditySpans, unknown, type CarId, type FrameNumber, type InvalidLapDetail, type OpenSpan, type SessionTime } from '@pitwall/domain';
 import type { MachineStep, SubMachine } from '../machine.ts';
+import { sameEntries } from '../same-entries.ts';
 
 /** How many frames a PENA waits for the flag it explains. */
 export const PENDING_FRAMES = 16;
@@ -57,11 +58,11 @@ const machine: SubMachine<Open> = {
       if (pending !== undefined && input.frameNumber - pending.frameNumber > PENDING_FRAMES) pending = undefined;
       const invalid = signals.currentLapInvalid;
       if (car === undefined) return { span: opened(0, index, invalid, input.at, input.frameNumber, pending, true), invalid, pending: invalid ? undefined : pending };
-      if (invalid === car.invalid) return { span: car.span, invalid, pending };
+      if (invalid === car.invalid) return pending === car.pending ? car : { span: car.span, invalid, pending };
       closed.push({ ...car.span, end: input.at });
       return { span: opened(car.span.id + 1, index, invalid, input.at, input.frameNumber, pending, false), invalid, pending: invalid ? undefined : pending };
     });
-    return { open: { cars }, closed };
+    return { open: sameEntries(open.cars, cars) ? open : { cars }, closed };
   },
 };
 

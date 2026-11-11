@@ -1,4 +1,5 @@
-import { known, unknown, type CarState, type Known, type SessionTime, type Visibility } from '@pitwall/domain';
+import type { CarState, Known, SessionTime, Visibility } from '@pitwall/domain';
+import { known, unknown } from '../../util/hot-domain.ts';
 import { CORNER_NAMES } from '../corners.ts';
 
 /**

@@ -1,7 +1,6 @@
 import type { DecisionRecord, Ms, ParticipantsValues, SessionTime } from '@pitwall/domain';
 import type { Frame } from '../frame/frame.ts';
 import { logWriter, voidFactOf } from '../log/log.ts';
-import { projectionLengths } from '../log/projection.ts';
 import type { HistoryDelta, LogVoidFact } from '../log/types.ts';
 import { onRaceClock, rewindMarkOf } from '../situations/clock/clock.ts';
 import { closeSession, situationOf } from '../situations/run.ts';
@@ -10,7 +9,7 @@ import type { WeekendContext } from '../state/weekend-context.ts';
 import { participantsValuesOf } from '../step/state-update/identity.ts';
 import { initialState } from '../step/state-update/initial.ts';
 import { ALL_CHANGE_TAGS, projectionTrackerOf, step, type ChangeTag, type ClockFall, type ClockJump, type FlashbackReport, type LapCorrection } from '../step/step.ts';
-import { copyPlain } from '../util/copy-plain.ts';
+import { copyPlainSharingKnown } from '../util/copy-plain.ts';
 import type { DeepReadonly } from '../util/deep-readonly.ts';
 import type { Snapshotable } from './snapshotable.ts';
 import { SnapshotStore } from './snapshots.ts';
@@ -208,7 +207,8 @@ export class SessionRunner {
   }
 
   #applyNow({ frame, decisions }: Given, onResult: OnResult | undefined): void {
-    const before = projectionLengths(this.#state.history);
+    // The projection's lengths as its last update left them (`open.projection.lengths`, its book).
+    const before = this.#state.open.projection.lengths;
     const reported = this.#reportedTarget(frame);
     const target = reported && this.#takes(reported) ? reported : undefined;
     // The runner's decision on the frame; a rewind's mark is of the state it leaves, so taken before restoring.
@@ -225,7 +225,7 @@ export class SessionRunner {
         state: this.#state,
         changed: rewound ? new Set(ALL_CHANGE_TAGS) : changed,
         corrections,
-        delta: { before, after: projectionLengths(this.#state.history), ...(rewound && { rewound }) },
+        delta: { before, after: this.#state.open.projection.lengths, ...(rewound && { rewound }) },
         ...(rewind && { flashback: rewind.flashback }),
         ...(clockFall && { clockFall }),
         ...(clockJump && { clockJump }),
@@ -273,7 +273,7 @@ export class SessionRunner {
     const replayed = this.#frames.filter(({ frame: f }) => f.frameId > snapshot.frameId && f.frameId <= replayTo);
     this.#frames = this.#frames.filter(({ frame: f }) => f.frameId <= replayTo);
     const { log, history, weekend } = this.#state;
-    this.#state = { ...copyPlain(snapshot.state), log, history, ...(weekend && { weekend }) };
+    this.#state = { ...copyPlainSharingKnown(snapshot.state), log, history, ...(weekend && { weekend }) };
     // The frame restored to: the last replayed one, or the snapshot's when the target is older than the window. Its
     // frame number: the snapshot's, counted on by each replayed frame (C26).
     const last = replayed.at(-1);
