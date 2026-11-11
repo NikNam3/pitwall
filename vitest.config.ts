@@ -14,6 +14,7 @@ export default defineConfig({
           // These tests drive real tools (ESLint with types, hook scripts, generators): seconds each, more under load.
           testTimeout: 30_000,
           include: ['test/**/*.test.ts', 'test-support/**/*.test.ts', 'scripts/**/*.test.ts'],
+          exclude: ['**/*.budget.test.ts', '**/node_modules/**'],
         },
       },
     ],
