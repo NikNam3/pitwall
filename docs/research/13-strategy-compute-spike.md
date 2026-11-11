@@ -155,13 +155,13 @@ Proposals (for the user's approval before the 4.3a and 4.3b specs; each with its
 
 1. **S5 ranking (§3.5):** rank by E[pos]; two policies tie only when their paired (CRN) difference is within 2 standard errors of the Monte Carlo (and below a small practical band, proposal 0.05 places, never below the MC's own error); within a tie by E[points] with the same paired test; then by the **mean** paired race time, not the median. Evidence §7: regret ≤ 0.003 against 0.05–0.11 for the fixed bands; the median is blind to rare-branch differences. The displays still show all three numbers.
 2. **Common random numbers are required**, keyed as built here: 8–13 × fewer scenarios, and without them the ranking has τ 0.49 at N = 100. (§3)
-3. **Run counts (O1):** a time cap, not a count. The adaptive stop with z = 2 and the band 0.05 used 2,400–3,100 scenario-policies (median, 11 policies) and found the best within 0.05 every time; n0 = 100, batch = 100. Proposed `strategy` job cap: **2 s single thread** at lap 1 (300–540 scenarios per policy plus the DP), with a test that the winner at the cap lies within 0.05 of a 50,000-scenario reference on the test race. 1 s is the floor (80–100 %). (§3, §4)
+3. **Run counts (O1):** a time cap, not a count. The adaptive stop with z = 2 and the band 0.05 used 2,400–3,100 scenario-policies (median, 11 policies) and found the best within 0.05 every time; n0 = 100, batch = 100. Proposed `strategy` job cap: **2 s single thread** at lap 1 (300–540 scenarios per policy plus the DP), with a test that the winner at the cap lies within 0.05 of a 50,000-scenario reference on the test race. 1 s is the floor (80–100 %). (§3, §4) *Updated in §10.6:* on the follow-up model 2 s still holds for up to about 15 policies (18–20 of 20 within 0.05); with the stop-lap neighbours of proposal 11 (about 17–20 policies) **3 s**.
 4. **Re-scoring the winner** on 1,000 fresh scenarios costs about 0.5 s and corrects about 0.02 places with CRN: cheap enough to keep, of small value; keep it for the shown numbers, not for the choice. (§3)
-5. **Step mode (§3.3, S11): all braking-zone steps for every car.** The mode switch saves only 10–20 % on a close F1 25 field (59 % of car-laps are in battle anyway) and changed no ranking; one code path is simpler. Budgets: `race-forecast` **1 ms per scenario** from lap 1 and 0.5 ms from lap 35 (measured 0.53–0.79 and 0.23–0.41). The battle range is then moot; if the switch is kept, 1.5 s.
+5. **Step mode (§3.3, S11): all braking-zone steps for every car.** The mode switch saves only 10–20 % on a close F1 25 field (59 % of car-laps are in battle anyway) and changed no ranking; one code path is simpler. Budgets: `race-forecast` **1 ms per scenario** from lap 1 and 0.5 ms from lap 35 (measured 0.53–0.79 and 0.23–0.41). The battle range is then moot; if the switch is kept, 1.5 s. *Updated in §10.6:* on the follow-up model all braking-zone steps take 0.82–1.10 ms from lap 1 and 0.38 ms from lap 35 (the switch saves 9–21 %); proposed budgets **1.5 ms** and **0.6 ms**.
 6. **`strategy-dp` budget: 300 ms per car** from lap 1 with up to three stops (measured 188–273 ms), 100 ms with up to two (56–63). Sharing tables between sequences with a common suffix is the first optimisation if the 2 s job cap gets tight. Keep three stops: Asymetrisch's best plan has three.
 7. **The SC trigger (§3.4 table)** needs a lap range **per remaining stop**, and the DP sets it from "box during this SC against stay out past it" (the SC's last lap), not from the first SC lap, which favours waiting within the SC. It is the most valuable trigger: 0.04–0.29 places in 12 of 13 cases. (§6)
 8. **Rule-based candidates (S21):** keep "extend" (best rule in 12 of 13 cases, significantly ahead twice, never outside the band); score mirror ahead, mirror behind and cover only after removing duplicates by outcome (they coincide when the neighbours stop in the field's cluster). (§6)
-9. **Ablation (S22, O11):** on these cases only the wetness term changes a decision by more than 0.03 places. Proposal: keep braking-zone steps (they come with proposal 5 for free), the rivals' SC rule (significant, cheap, and research 12 shows the behaviour) and the wetness term; dirty air stays 0 (research 12); the mistake process and the double stack change no ranking here but do change the shown distributions and a split-or-stack call (D27) that these cases did not test: keep them pending a dedicated stack case in the 4.3b spec. S22 as written judges a part only by rankings; the 4.3a spec should say whether the shown numbers count too.
+9. **Ablation (S22, O11):** on these cases only the wetness term changes a decision by more than 0.03 places. Proposal: keep braking-zone steps (they come with proposal 5 for free), the rivals' SC rule (significant, cheap, and research 12 shows the behaviour) and the wetness term; dirty air stays 0 (research 12); the mistake process and the double stack change no ranking here but do change the shown distributions and a split-or-stack call (D27) that these cases did not test: keep them pending a dedicated stack case in the 4.3b spec. S22 as written judges a part only by rankings; the 4.3a spec should say whether the shown numbers count too. *Updated in §10:* blocking earns its place (switching it off changes the top-1 in 4 of 6 follow-up cases); the pass chance is the most decision-relevant parameter of all (O5); relative DRS and pace uncertainty change the shown numbers, not the choice.
 10. **S24:** the near-deterministic AI does not cut the scenario count much under CRN (about 12 %, one case, thin); its edge is that rival stop windows are cheap to draw.
 
 ## 9. Limits
@@ -171,3 +171,93 @@ Proposals (for the user's approval before the 4.3a and 4.3b specs; each with its
 - The traffic term in the DP is crude; the DP's "box now" plan is the base plan's path, not forced (prototype bug, so no box-now candidate appeared mid-race).
 - Timings vary 25–60 % with desktop load; budgets above leave that room.
 - One worker thread per job is assumed (C51 as written); the 7 × multi-thread figure is a bonus only.
+- Follow-up: one draw of the qualifying noise for every case; the rejoin train is placed by hand; the passes and the train losses are calibrated against six races only.
+
+## 10. Traffic, DRS trains and pace uncertainty (follow-up)
+
+A follow-up run on 2026-11-11, approved by the user, who doubted that pitting into traffic barely matters. The first run's cases had the grid sorted exactly by pace, our humans on their slot's pace, DRS only as a factor on the follower's pass chance, and a crude DP traffic term; and no ablation removed blocking. Raw tables: `spike/out/traffic.md`, `traffic-shifts.md`, `convergence-v2-{0,5}.md`, `ranking-rules-v2.md`.
+
+### 10.1 Model changes (the "v2" model; every number an assumption unless cited)
+
+| Part | First run | Follow-up |
+|---|---|---|
+| DRS | the follower's pass chance × 1.2 on DRS straights | **relative:** every car within 1 s of the car ahead at the start of a DRS straight gains 0.25 s on it (a straight-line gain, so a train's cars all gain and it cancels); the × 1.2 on the pass chance only if the car ahead is not itself in DRS |
+| Grid | exactly the race-pace order | qualifying pace = race pace + N(0, 0.25 s); three AI cars (race-pace ranks 2, 6, 10) qualify 1.2 s off their pace; one draw of the noise for every case |
+| Our drivers | their slot's pace | own race pace: DR 0.3 s faster than its slot (P8), or 0.3 s slower; Asymetrisch 0.3 s slower than P12 |
+| Pace uncertainty | none | each scenario draws every car's true race pace around its estimate: σ 0.25 s at a lap-1 start, 0.08 s from lap 20 on, linear in between; the forecast's plain run and the DP use the estimate |
+| DP traffic term | 0.5 s per slower car within 1 s ahead of the rejoin | also **train-aware:** the car we rejoin behind (within 1.5 s) and every car chained ahead of it within 1 s; cost = our fresh-tyre advantage over the train's front car × the expected laps stuck (Σ 1 / pass hazard per car), capped by the laps left |
+| Plain forecast passes | at u = 0.5 per braking zone, so **never** (the per-zone chance is below 0.5): a bug of the first run, which made the plain forecast's trains permanent | when the held car's summed hazard reaches ln 2 (the median pass time) |
+
+Six cases (`TRAFFIC_CASES`): lap 1 with DR faster than its slot; lap 1 with DR slower; lap 25 near the window; SC at lap 22; teammate 0.5 s behind at lap 15; and a **rejoin case** at lap 20: the five slowest AI cars, given one equal pace and their stops moved 15 laps later, form a train 1 s apart that our car's stop at about lap 27 rejoins into, with other cars moved away from it. Candidates: the DP's plans under both traffic terms, merged, plus the SC-trigger and rule variants (11–17 policies). 20,000 scenarios per policy, CRN, the same scenario ids in every variant.
+
+### 10.2 Traffic in the model against research 12 (sanity check)
+
+| Measure | Model (six cases) | Research 12 (§4) |
+|---|---|---|
+| Passes per lap | 2.0 from lap 1 (lap 1 included); 1.1–2.0 from mid-race starts (lap 25: 1.1, lap 22 SC: 1.6, lap 15: 1.5, lap 20 rejoin: 2.0); with pass chance × 0.5: 1.2 from lap 1 | 1.28 (228 clean passes, 178 race laps; lap 1, stops and SC removed) |
+| Faster follower (> 0.5 s per lap) | 0.78–1.25 s lost per lap of following; episode median 1–2 laps, p90 3–5, 0.2–2 % of episodes ≥ 10 laps | 0.3–0.67 s per lap at 0–1 s (75 laps); median 0.9 laps following before a pass; 9 of 142 followed 2 laps or more |
+| All following episodes | median 2–3 laps, p90 9–12, 9–15 % ≥ 10 laps | long trains of 10–16 laps are cars of equal pace |
+| Trains of 3+ cars | 0.9–1.6 per lap, mean size 3.4–4.3; a car 2nd or later loses 0.41–0.67 s per lap to blocking | — |
+| Held in the 3 laps after a stop | 0.3–1.1 s per stop in the ordinary cases; 1.7–2.9 s into the train; 3.8–4.8 s into the train at pass chance × 0.5 and × 0.25 | not measured (no clean rejoin cases) |
+
+- The pass count matches the data within the range pass chance × 0.5 to × 1 (the data leaves lap 1 out; mid-race the model is at the top of that range or above). **Thin:** six races, mostly AI.
+- A held faster car loses about twice the data's time per lap (the model holds it fully to the leader's pace) but gets past about as fast.
+- **Relative DRS made trains less stable, not more:** passes per race rose from 91 to 141 (lap-1 case) against the first run's factor, and the time held per race doubled (8 → 15 s), because the follower's straight-line gain closes it up on the car ahead before the next braking zone. The "brutal DRS train" appears only with a lower pass chance (× 0.5: the loss per lap in a train 0.55–1.14 s; × 0.25: 0.66–1.31 s).
+
+### 10.3 Does traffic change the plan?
+
+| Variant | Top-1 changed (of 6) | Δ of the full model's choice under the variant (places) | τ against full |
+|---|---|---|---|
+| noise floor (other scenarios) | 2 (0.014 ± 0.011, 0.004 ± 0.004: noise) | — | 0.85–0.99 |
+| DRS as in the first run | 0 | — | 0.64–1.00 |
+| no pace uncertainty | 1 (0.001 ± 0.004: noise) | — | 0.85–1.00 |
+| **no blocking** | **4** | 0.021 ± 0.007 to 0.065 ± 0.017 (all significant) | 0.56–0.92 |
+| pass chance × 0.5 | 6 | 0.000 to 0.095 ± 0.013 | 0.67–0.90 |
+| **pass chance × 0.25** | **6** | **0.014 to 0.375** (five of six above 0.2) | 0.48–0.75 |
+
+- **Blocking changes the choice**, by 0.02–0.07 places at the measured pass chance: small but real; the first run's conclusion ("traffic barely matters") rested on blocking that never was switched off.
+- **The pass chance is the most decision-relevant parameter** measured in this spike: at a quarter of the measured hazard every case picks another policy and the full model's pick loses up to 0.38 places.
+- **Stop-lap neighbours in the rejoin case** (`traffic-shifts.md`; the DP's best plan with its first stop moved −3 to +3 laps):
+
+  | Pass chance | Best first stop vs the DP's | The DP's plan loses | Stopping into the train (2–3 laps early) loses |
+  |---|---|---|---|
+  | × 1 | +0 / +1 (the DP's) | 0 | 0.09–0.21 |
+  | × 0.5 | +2 | 0.07 | 0.29–0.47 |
+  | × 0.25 | +3 | **0.37** | 0.94–1.29 |
+
+  At lap 25 (no train) the neighbours are within 0.03 of each other at ±1 lap; from lap 1, two laps later is 0.04 better.
+- **The train-aware DP term** changed the DP's best plan in 3 of 6 cases; the Monte Carlo preferred its plan once (DR slower, −0.099 ± 0.013) and the simple term's twice (lap 25 +0.151 ± 0.012, rejoin +0.074 ± 0.012). At pass chance × 0.5 and × 0.25 it moves the rejoin stop later (laps 32 and 31, against 29 and 27 with the simple term), towards the Monte Carlo's best (31 and 30). It points the right way where trains are sticky and overshoots where they are not: the DP's traffic estimate is not good enough to choose by; the Monte Carlo is.
+
+### 10.4 Pace uncertainty
+
+Spread of the full model's top-1 policy, with against without pace uncertainty (q10 / median / q90 of the position, P(gain) = finishing ahead of the start position):
+
+| Case | With | Without |
+|---|---|---|
+| lap 1, DR faster (from P8) | E 9.16; 5 / 9 / 13; P(gain) 32 % | E 9.21; 7 / 9 / 11; 17 % |
+| lap 1, DR slower (from P8) | E 13.50; 10 / 13 / 18; 1 % | E 13.57; 11 / 13 / 16; 0 % |
+| lap 25 (from P3) | 6 / 7 / 9; 0 % | 6 / 7 / 9; 0 % |
+| SC at lap 22 | 6 / 8 / 10; 48 % | 6 / 7 / 10; 52 % |
+| teammate, lap 15 | 6 / 8 / 10; 36 % | 7 / 8 / 9; 30 % |
+| rejoin, lap 20 | E 7.06; 5 / 6 / 9; 77 % | E 6.96; 5 / 6 / 9; 82 % |
+
+It changes no decision (one flip, inside the noise) but **doubles the shown P(gain) and widens the q10–q90 range from 4 to 8 places at a lap-1 start**; mid-race it barely shows. It earns its place for the displayed distribution, not for the ranking.
+
+### 10.5 Compute on the follow-up model
+
+- One policy's position scatters by 3.60 places per race from lap 1 (first run 2.55) and 2.92 in the rejoin case; the paired difference to the best by 1.44 and 1.30 (first run 1.01): about **twice the scenarios** for the same error. CRN still cuts them 12.6 × and 10.2 ×.
+- `race-forecast` from lap 1, single thread, load average about 1: all braking-zone steps 0.82 ms (0.82–1.10 over two passes), mode switch 0.76 ms; from lap 35 0.38 and 0.30 ms. 69 % of green car-laps in battle from lap 1 (first run 59 %).
+- The Monte Carlo: 1,100–1,300 scenario-policies per s single thread (15–17 policies).
+- Adaptive with the 0.05 band: full resolution took 4,000–10,700 evaluations (median; max 21,200) because five policies lie within 0.01 of each other; at a 2 s cap (2,200–2,800) the winner lay within 0.05 of the reference in 18–20 of 20 repeats, at 1 s in 13–19 of 20, at 0.5 s in 18–20 of 20 (the cap rows overshoot to n0 · P = 1,500–1,700).
+- Ranking rules (§7) on the follow-up model: S5 as specified has a regret of 0.12–0.14 places (max 0.15) in the rejoin case and 0.017 → 0.001 from lap 1 (where the top five are within 0.01); E[pos] only and the paired tie test stay at 0.002 or less. **Proposal 1 holds.**
+
+### 10.6 What changes in the proposals (§8)
+
+- **Still hold:** 1 (paired-tie ranking), 2 (CRN), 4 (re-scoring), 6 (DP budget), 7 (SC trigger per stop), 8 (rule candidates), 10 (S24).
+- **3 (cap):** 2 s still holds for about 15 policies; with the neighbours of proposal 11 about 17–20 policies, proposed **3 s single thread**.
+- **5 (step mode):** all braking-zone steps still; budgets **1.5 ms per scenario from lap 1, 0.6 ms from lap 35**.
+- **9 (ablation):** blocking stays (it changes choices); relative DRS stays (it changes the held time and the pass count by 2 ×, i.e. the numbers shown; no choice changed); pace uncertainty stays for the shown spread.
+- **New 11. Stop-lap neighbours as candidates:** besides the DP's plans, score each DP plan's next stop moved by ±1 to ±3 laps (about six more candidates for the best plan). The DP's traffic term (simple or train-aware) does not judge traffic well enough to choose a stop lap; the Monte Carlo does, and the clear-air stop is worth up to 0.37 places when trains are sticky. Keep the simple term in the DP or the train term: the evidence does not separate them (one better, two worse).
+- **New 12. The pass chance is the first thing to calibrate (O5):** it changes the plan choice by up to 0.38 places between × 1 and × 0.25, more than any model part. The data's pass count fits × 0.5 to × 1 (thin); the 4.3a `race-interaction` calibration should report the hazard with its uncertainty, and the strategy job should not be trusted for traffic calls before it is calibrated on F1 25 recordings.
+- **New 13. The plain forecast passes at the median pass time** (summed hazard ln 2), not at a fixed draw: otherwise its trains never break (a first-run bug, which also fed the DP's traffic term).
+- **New 14. Pace uncertainty** as a per-scenario draw of each car's race pace around its estimate (σ falling with the laps seen), part of the scenario from 4.3a; its σ should come from `degradation`'s standard errors rather than the assumed 0.25 / 0.08 s.
