@@ -33,10 +33,10 @@ export const log = (o: Partial<Log> = {}): Log => ({ laps: [], stints: [], pitSt
 export const voidFact = (ranges: VoidFact['ranges'], frame = 5): VoidFact => ({ target: { frameId: frame, at: frame * 100 }, ranges, frame });
 
 /** The projection of a log without void facts or a formation span: its lists as they are (C28). */
-export const projected = ({ voids: _voids, ...lists }: Log): Projection => lists;
+export const projected = ({ voids: _voids, ...lists }: Log): Projection => ({ ...lists, appendedAt: {} });
 
 /** A projection with every list empty, `o`'s lists in place. */
-export const history = (o: Partial<Projection> = {}): Projection => ({ laps: [], stints: [], pitStops: [], events: [], crossings: [], penalties: [], decisions: [], clock: [], spans: {}, ...o });
+export const history = (o: Partial<Projection> = {}): Projection => ({ laps: [], stints: [], pitStops: [], events: [], crossings: [], penalties: [], decisions: [], clock: [], spans: {}, appendedAt: {}, ...o });
 
 /** Cars by team and race number (C62); no driver name, no network id (user, 2026-11-04). */
 export const MERCEDES_44: CarKey = { teamId: 0, raceNumber: 44 };

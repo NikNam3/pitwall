@@ -2147,6 +2147,10 @@
     ],
     "at": 0
   },
+  "drsZones": {
+    "known": false,
+    "reason": "notReceived"
+  },
   "defaults": {
     "pitLossMs": {
       "green": {

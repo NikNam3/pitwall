@@ -31,6 +31,7 @@ const emptyProjection = (): ProjectionState => ({
   decisions: [],
   clock: [],
   spans: {},
+  appendedAt: {},
 });
 
 const spanList = (machine: MachineId): FactList => `spans:${machine}`;
@@ -222,4 +223,13 @@ export function membershipOf(source: MembershipSource, fact: { frame: FrameNumbe
     if (span) member[machine] = span;
   }
   return member;
+}
+
+/**
+ * The projection as it stood after frame N: per list the entries appended on frames up to N (the book's append frames,
+ * `ProjectionState.appendedAt`, SP4.3a plan review P1), never a fact appended later about an earlier frame (a confirmed
+ * lap, C25); and the situation at N: the spans open at N, a span closed after N among them without its end.
+ */
+export function projectionAsOf(_source: MembershipSource, _frame: FrameNumber): { history: Projection; situation: Situation } {
+  throw new Error('not implemented');
 }

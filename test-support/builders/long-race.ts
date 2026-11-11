@@ -198,12 +198,12 @@ function buildEvents(): Appended<RaceEvent>[] {
 }
 
 /** A span from `start` to `end` (open without `end`), of car `car` or zone `zone`; its id is set by `numbered`. */
-type Draft = { machine: MachineId; kind: string; start: SessionTime; end?: SessionTime; car?: number; zone?: number; detail?: unknown };
+type Draft = { machine: MachineId; kind: string; start: SessionTime; end?: SessionTime; car?: number; zone?: number; detail?: unknown; joinedAt?: true };
 
 /** The drafts as spans, each numbered by the spans its sub-machine opened before it (per car or zone, C26). */
 function numbered(drafts: readonly Draft[]): Array<Span | OpenSpan> {
   const opened = new Map<string, number>();
-  return drafts.map(({ machine, kind, start, end, car, zone, detail }) => {
+  return drafts.map(({ machine, kind, start, end, car, zone, detail, joinedAt }) => {
     const key = `${machine}:${car ?? ''}:${zone ?? ''}`;
     const id = opened.get(key) ?? 0;
     opened.set(key, id + 1);
@@ -217,6 +217,7 @@ function numbered(drafts: readonly Draft[]): Array<Span | OpenSpan> {
       startFrame: frameAt(start),
       ...(car !== undefined && { carId: carId(car) }),
       ...(zone !== undefined && { zone }),
+      ...(joinedAt && { joinedAt }),
     };
     return end === undefined ? base : { ...base, end, endFrame: frameAt(end) };
   });
@@ -224,8 +225,8 @@ function numbered(drafts: readonly Draft[]): Array<Span | OpenSpan> {
 
 /**
  * Every span of the race: the clock and the weekend phase; the session phase (grid to racing, the SC, racing again) and
- * race control's DRS; the zones' flags; per car its status, flags, warnings, lap validity, penalties, compound rule,
- * location and activity, its stop the pit lane, in lap, box stop and out lap.
+ * race control's DRS; the zones' flags; per car its status, its driver (the AI, joined on frame 1), flags, warnings,
+ * lap validity, penalties, compound rule, location and activity, its stop the pit lane, in lap, box stop and out lap.
  */
 function buildSpans(): Array<Span | OpenSpan> {
   const drafts: Draft[] = [
@@ -247,6 +248,7 @@ function buildSpans(): Array<Span | OpenSpan> {
     const { entry, boxIn, boxOut, exit, lap: stopLap } = stopOf(car);
     drafts.push(
       { machine: 'car-status', kind: 'competing', start: 0, car },
+      { machine: 'car-driver', kind: 'ai', start: 0, car, joinedAt: true },
       { machine: 'car-flags', kind: 'noFlag', start: 0, car },
       { machine: 'warnings', kind: 'noWarning', start: 0, car },
       { machine: 'lap-validity', kind: 'valid', start: 0, car },
@@ -328,6 +330,7 @@ function build(): BuilderRace {
       decisions: [],
       clock: [],
       spans: spansAt,
+      appendedAt: {},
     };
   };
   const lengthsAt = (frame: FrameNumber): LogLengths => projectionLengths(projectionAt(frame));

@@ -20,7 +20,7 @@ import {
 import { currentLaps, unknown, type LapRecord, type PitStopRecord } from '@pitwall/domain';
 import { CalculatorRegistry, Scheduler, situationOf, type DeepReadonly, type EngineState, type StepResult } from '@pitwall/engine';
 import { expect, it } from 'vitest';
-import { IDLE_FEED, NO_PRIORS } from '../../../../test-support/builders/index.ts';
+import { IDLE_FEED, NO_DRIVERS, NO_PRIORS } from '../../../../test-support/builders/index.ts';
 import { describeWithFixture, FIXTURES, type FixtureName } from '../../../../test-support/fixtures.ts';
 import { topicStreamHash } from '../../src/pipeline/stream-hash.ts';
 import { replayScheduled } from '../fixtures/engine-replay.ts';
@@ -127,7 +127,7 @@ export function racesAcceptance(group: readonly FixtureName[]): void {
         const scheduler = new Scheduler(CalculatorRegistry.build([pitLossCalculator, lapOverviewCalculator, crossoverCalculator]), { freezeOutputs: true });
         scheduler.setNeeded([LAP_OVERVIEW, CROSSOVER]);
         const { changed, delta } = last;
-        const scheduled = scheduler.run({ live: state, situation: situationOf(state), history: state.history, changed, delta, weekend: state.weekend, feed: IDLE_FEED, config: {}, priors: NO_PRIORS, track: unknown('notApplicable') });
+        const scheduled = scheduler.run({ live: state, situation: situationOf(state), history: state.history, changed, delta, weekend: state.weekend, feed: IDLE_FEED, config: {}, priors: NO_PRIORS, drivers: NO_DRIVERS, track: unknown('notApplicable') });
         expect(scheduled.errors).toEqual([]);
         expect(scheduled.ran).toEqual(expect.arrayContaining([LAP_OVERVIEW, CROSSOVER]));
         overview = scheduled.outputs.get(LAP_OVERVIEW) as LapOverviewOutput;

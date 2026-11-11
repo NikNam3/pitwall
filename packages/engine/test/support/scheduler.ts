@@ -5,7 +5,7 @@
 import { isDeepStrictEqual } from 'node:util';
 import { expect } from 'vitest';
 import { unknown } from '@pitwall/domain';
-import { NO_PRIORS } from '../../../../test-support/builders/index.ts';
+import { NO_DRIVERS, NO_PRIORS } from '../../../../test-support/builders/index.ts';
 import { priorsOf } from '../../src/calc/priors.ts';
 import {
   CalculatorRegistry,
@@ -59,7 +59,7 @@ export const input = (t: number, changed: ChangeTag[] = ['timing'], d = delta(),
   weekend: undefined,
   feed,
   config,
-  priors: NO_PRIORS,
+  priors: NO_PRIORS, drivers: NO_DRIVERS,
   track: unknown('notApplicable'),
 });
 
@@ -81,6 +81,7 @@ export const inputOf = (
   feed: o.feed ?? feed,
   config: o.config ?? {},
   priors: o.priors ?? NO_PRIORS,
+  drivers: NO_DRIVERS,
   track: unknown('notApplicable'),
 });
 
@@ -91,6 +92,8 @@ export const inputOf = (
 export const viewOfInput = (input: SchedulerInput, outputs: EngineView['outputs'] = new Map()): EngineView => ({
   ...input,
   priors: priorsOf(input.history.decisions, input.priors),
+  // as the scheduler builds it until `driversOf` (SP4.3a Task 3)
+  drivers: [],
   outputs,
 });
 
@@ -591,10 +594,11 @@ const throwing = (path: string, allowed: Readonly<Record<string, unknown>> = {})
  * live state's feed id and race-clock time, which the scheduler reads for its cadences; no live state is copied.
  */
 export function projectionStep(r: Pick<StepResult, 'state' | 'changed' | 'delta'>): SchedulerInput {
-  const { spans, ...lists } = r.state.history;
+  const { spans, appendedAt, ...lists } = r.state.history;
   const history = Object.freeze({
     ...Object.fromEntries(Object.entries(lists).map(([name, list]) => [name, frozenList(list as readonly unknown[])])),
     spans: Object.freeze(Object.fromEntries(Object.entries(spans).map(([machine, list]) => [machine, frozenList(list)]))),
+    appendedAt: Object.freeze(Object.fromEntries(Object.entries(appendedAt).map(([list, frames]) => [list, frozenList(frames ?? [])]))),
   }) as unknown as SchedulerInput['history'];
   return Object.freeze({
     live: throwing('live', { feedId: r.state.feedId, sessionTime: r.state.sessionTime }) as SchedulerInput['live'],
@@ -605,7 +609,7 @@ export function projectionStep(r: Pick<StepResult, 'state' | 'changed' | 'delta'
     weekend: undefined,
     feed: throwing('feed') as SchedulerInput['feed'],
     config: {},
-    priors: NO_PRIORS,
+    priors: NO_PRIORS, drivers: NO_DRIVERS,
     track: unknown('notApplicable'),
   });
 }

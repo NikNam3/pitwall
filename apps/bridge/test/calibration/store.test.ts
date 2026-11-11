@@ -58,7 +58,7 @@ function trackSession(uid: string, o: {
   const projection: ProjectionState = {
     laps: o.stints.flatMap((s) => range(s.firstLap, s.lastLap).map((n) => lap(s.car, n, { lapTimeMs: s.lapMs?.(n) ?? 90_000 + n }))),
     stints: o.stints.map((s) => stint(s.car, s.firstLap, { lastLap: s.lastLap })),
-    pitStops: [], crossings: [], events: [], penalties: [], decisions: [], clock: [], spans: {},
+    pitStops: [], crossings: [], events: [], penalties: [], decisions: [], clock: [], spans: {}, appendedAt: {},
   };
   const session: TrackSession = {
     sessionUid: uid as SessionUid, weekendId: o.weekendId ?? 'W1', seasonId: 'S1', playerCar: car(0),

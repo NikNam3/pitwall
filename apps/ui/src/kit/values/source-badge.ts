@@ -11,6 +11,8 @@ export function sourceTitle(source: EstimateSource): string {
       return sourceHover.session(source.parts);
     case 'calibration':
       return sourceHover.calibration(source.setName, source.sources, source.parts);
+    case 'profile':
+      return sourceHover.profile(source.person, source.laps, source.parts);
     case 'default':
       return sourceHover.default(source.note);
   }

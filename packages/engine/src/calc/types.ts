@@ -1,4 +1,4 @@
-import type { Insight, Known, PriorsSnapshot, SessionTime, TrackData } from '@pitwall/domain';
+import type { DriverProfile, Insight, Known, PriorsSnapshot, SessionTime, TrackData } from '@pitwall/domain';
 import type { FrameMetrics } from '../frame/metrics.ts';
 import type { HistoryDelta, Projection } from '../log/types.ts';
 import type { Situation } from '../situations/situation.ts';
@@ -10,11 +10,17 @@ import type { DeepReadonly } from '../util/deep-readonly.ts';
 export type CalculatorId = string;
 
 /** When a calculator is due, measured in session time (spec 7.3). */
-/** `ourCrossing`: a mini-sector crossing of one of our cars was appended (SP4.2 spec 3.1). */
-export type Cadence = 'frame' | { hz: number } | 'lapCompleted' | 'pitStop' | 'sessionChange' | 'ourCrossing';
+/**
+ * `ourCrossing`: a mini-sector crossing of one of our cars was appended (SP4.2 spec 3.1). `leaderLap`: a lap record with
+ * `positionAtEnd` 1 was appended, or a rewind (SP4.3a spec 5).
+ */
+export type Cadence = 'frame' | { hz: number } | 'lapCompleted' | 'pitStop' | 'sessionChange' | 'ourCrossing' | 'leaderLap';
 
-/** What a calculator reads: a part of the engine state, the feed health, or another calculator's output. */
-export type Dependency = ChangeTag | 'feed' | { calculator: CalculatorId };
+/**
+ * What a calculator reads: a part of the engine state, the feed health, the run's driver profiles (`view.drivers`,
+ * C62c), or another calculator's output.
+ */
+export type Dependency = ChangeTag | 'feed' | 'drivers' | { calculator: CalculatorId };
 
 /** Feed health: the frame counters plus what the bridge's feed monitor measures. */
 export type FeedMetricsView = FrameMetrics & {
@@ -34,7 +40,7 @@ export type FeedMetricsView = FrameMetrics & {
  * Everything a calculator or analysis may see (C39), read-only: the live state, the situation (the machine's open spans
  * and the weekend phase, C20), the history (the projection, C28; with `situation` it answers membership, so the view is
  * a `MembershipSource`, C26), the delta and change tags, the weekend's earlier sessions, the config, the priors, the
- * track, the feed health and the outputs of the units it reads.
+ * track, the driver profiles, the feed health and the outputs of the units it reads.
  */
 export type EngineView = {
   /** The live state (C8): values only; no open trackers, log, signals (C13), projection or frame number. */
@@ -57,6 +63,12 @@ export type EngineView = {
   priors: Known<DeepReadonly<PriorsSnapshot>>;
   /** The session's track file without its provenance (C39, C62b); fixed for the run; `notApplicable` without a file. */
   track: Known<DeepReadonly<TrackData>>;
+  /**
+   * Per car slot, its linked driver's profile from the run's profile snapshot (C39, C62c), built by the scheduler with
+   * `driversOf`; `notApplicable` for an unlinked slot and without a snapshot. Fixed for the run; which frames of the car
+   * it applies to is the car-driver sub-machine's (C17). A unit that reads it declares `drivers` in its `reads`.
+   */
+  drivers: readonly Known<DeepReadonly<DriverProfile>>[];
   feed: FeedMetricsView;
   /** Outputs of the calculators run before this one in the same pass. */
   outputs: ReadonlyMap<CalculatorId, unknown>;

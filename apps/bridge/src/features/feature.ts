@@ -10,6 +10,7 @@ import type {
   Job,
   LiveState,
   PriorsDecl,
+  ProfilesDecl,
   ProjectedList,
   ProjectionState,
   QuickCalculator,
@@ -128,6 +129,8 @@ export type Feature = {
   config?: ConfigKey<Record<string, ConfigValue>>[];
   /** Its units' priors declarations (`definePriors`, C62a), which the bridge's priors store runs over calibration sets. */
   priors?: PriorsDecl[];
+  /** Its units' driver-profile declarations (`defineProfiles`, C62c), which the bridge's profile store runs over each person's linked sessions. */
+  profiles?: ProfilesDecl[];
 };
 
 export const defineFeature = (feature: Feature): Feature => feature;

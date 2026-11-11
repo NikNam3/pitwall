@@ -31,6 +31,8 @@ export type TrackData = {
   turns: Known<TrackTurn[]>;
   /** In lap order, disjoint; a zone may wrap past the line (start > end). */
   brakingZones: Known<BrakingZone[]>;
+  /** In lap order, by lap fraction (as braking zones); a zone may wrap past the line (start > end). `detection`: where the gap to the car ahead is measured. */
+  drsZones: Known<{ detection: LapFraction; start: LapFraction; end: LapFraction }[]>;
   defaults: {
     pitLossMs: { green: Known<TrackDefault<Ms>>; vsc: Known<TrackDefault<Ms>>; sc: Known<TrackDefault<Ms>> };
     /** Relative to medium = 0. */

@@ -370,6 +370,8 @@ export class SessionProcessor {
       config: this.#o.config,
       priors: this.#priors,
       track: this.#track,
+      // The run's profile snapshot (C62c); none until the bridge's profile store (SP4.3a Task 6).
+      drivers: null,
     };
   }
 

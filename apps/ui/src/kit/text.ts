@@ -99,19 +99,22 @@ export const estimatedPrefix = '~';
 
 /**
  * The source badge after a value that rests on a prior (spec 4.4): its mark per source kind (none for a value measured
- * this session, `ᶜ` for the calibration, `ᵈ` for a default) and its hover per kind.
+ * this session, `ᶜ` for the calibration, `ᵖ` for a driver profile, `ᵈ` for a default) and its hover per kind.
  */
-export const sourceMark = { session: '', calibration: 'ᶜ', default: 'ᵈ' } as const satisfies Record<EstimateSource['kind'], string>;
+export const sourceMark = { session: '', calibration: 'ᶜ', profile: 'ᵖ', default: 'ᵈ' } as const satisfies Record<EstimateSource['kind'], string>;
 export const sourceHover = {
   session: (parts: string): string => ['session', parts].join(separator),
   calibration: (setName: string, sources: number, parts: string): string =>
     ['calibration', setName, `${sources} ${sources === 1 ? 'source' : 'sources'}`, parts].join(separator),
+  profile: (person: string, laps: number, parts: string): string =>
+    ['profile', person, `${laps} ${laps === 1 ? 'lap' : 'laps'}`, parts].join(separator),
   default: (note: string): string => ['default', note].join(separator),
 } as const;
 /** The source kind in words (a SOURCE column), shared by every display that names a source. */
 export const sourceWord = {
   session: 'session',
   calibration: 'calibration',
+  profile: 'profile',
   default: 'default',
 } as const satisfies Record<EstimateSource['kind'], string>;
 

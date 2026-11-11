@@ -2,7 +2,7 @@
 // crossings gained one of our cars' (the player's or the teammate's) since it last ran, or on a rewind.
 import { describe, expect, it } from 'vitest';
 import { carId, unknown, type CarId, type MiniSectorCrossing } from '@pitwall/domain';
-import { NO_PRIORS } from '../../../../test-support/builders/index.ts';
+import { NO_DRIVERS, NO_PRIORS } from '../../../../test-support/builders/index.ts';
 import { longRace } from '../../../../test-support/builders/long-race.ts';
 import type { EngineView, SchedulerInput } from '../../src/index.ts';
 import { feed, len, quick, RACING, sched } from '../support/scheduler.ts';
@@ -38,7 +38,7 @@ const feedOf = () => {
       weekend: undefined,
       feed,
       config: {},
-      priors: NO_PRIORS,
+      priors: NO_PRIORS, drivers: NO_DRIVERS,
       track: unknown('notApplicable'),
     };
   };
@@ -114,7 +114,7 @@ describe('Scheduler: the ourCrossing cadence', () => {
     for (const frame of frames) {
       const view = race.viewAt(frame);
       const { outputs: _outputs, priors: _priors, ...rest } = view;
-      const input: SchedulerInput = { ...rest, live: { ...view.live, playerCar: player, teammateCar: teammate }, priors: NO_PRIORS };
+      const input: SchedulerInput = { ...rest, live: { ...view.live, playerCar: player, teammateCar: teammate }, priors: NO_PRIORS, drivers: NO_DRIVERS };
       const appended = view.history.crossings.slice(view.delta.before.crossings, view.delta.after.crossings).filter(ours).length;
       total += appended;
       if (appended > 0) expected.push(frame);

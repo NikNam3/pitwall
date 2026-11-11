@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { feedId, unknown, type IncidentEntry } from '@pitwall/domain';
 import { CalculatorRegistry, Scheduler, SessionRunner, SessionTracker, situationOf, type StepResult } from '@pitwall/engine';
 import { guarded } from '../../../engine/test/support/scheduler.ts';
-import { IDLE_FEED, NO_PRIORS } from '../../../../test-support/builders/index.ts';
+import { IDLE_FEED, NO_DRIVERS, NO_PRIORS } from '../../../../test-support/builders/index.ts';
 import { SEGMENTS, segmentPackets } from '../../../../test-support/segments.ts';
 import { incidentsCalculator } from '../../src/incidents/calculator.ts';
 import { INCIDENTS, type IncidentsOutput } from '../../src/incidents/index.ts';
@@ -26,7 +26,7 @@ async function lastFeed(file: string): Promise<IncidentEntry[]> {
   const onResult = (r: StepResult): void => {
     if (r.delta.rewound !== undefined) scheduler.reset();
     const { state, changed, delta } = r;
-    const scheduled = scheduler.run({ live: state, situation: situationOf(state), history: state.history, changed, delta, weekend: state.weekend, feed: IDLE_FEED, config: {}, priors: NO_PRIORS, track: unknown('notApplicable') });
+    const scheduled = scheduler.run({ live: state, situation: situationOf(state), history: state.history, changed, delta, weekend: state.weekend, feed: IDLE_FEED, config: {}, priors: NO_PRIORS, drivers: NO_DRIVERS, track: unknown('notApplicable') });
     expect(scheduled.errors).toEqual([]);
     if (scheduled.ran.includes(INCIDENTS)) out = scheduled.outputs.get(INCIDENTS) as IncidentsOutput;
   };

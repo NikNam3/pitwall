@@ -34,8 +34,8 @@ describe('session state', () => {
     const st = initialState({ feedId, sessionUid: 0xb3cd07e2790bdcben, session: buildPacket('session', { header: { playerCarIndex: 4, frameIdentifier: 9 } }) });
     expect(st.cars.map((c) => c.id)).toEqual([...Array(22).keys()]);
     expect([st.feedId, st.sessionUid, st.playerCar, st.teammateCar, st.lastFrameId]).toEqual([feedId, '12956020372289608894', 4, undefined, 9]);
-    const { spans, ...lists } = st.history;
-    expect([...Object.values(lists), ...Object.values(spans)].every((h) => h.length === 0)).toBe(true);
+    const { spans, appendedAt, ...lists } = st.history;
+    expect([...Object.values(lists), ...Object.values(spans), ...Object.values(appendedAt)].every((h) => h?.length === 0)).toBe(true);
     expect(st.cars[4]!.ownCar).toEqual({ motionEx: nr, setup: nr, brakeBiasPct: nr });
     // no car is in the session before car-status opened a span (Task 24: car-status, not `car.active`)
     expect([st.cars[3]!.ownCar, st.cars[3]!.energy.fuel, carsInSessionOf(situationOf(st).byMachine['car-status'])]).toEqual([undefined, nr, []]);

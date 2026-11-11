@@ -1,4 +1,4 @@
-import type { Insight, RunPriors, SessionTime } from '@pitwall/domain';
+import type { Insight, ProfileSnapshot, RunPriors, SessionTime } from '@pitwall/domain';
 import type { HistoryDelta } from '../log/types.ts';
 import type { Snapshotable } from '../runner/snapshotable.ts';
 import type { ChangeTag } from '../step/types.ts';
@@ -10,11 +10,15 @@ import { RegistryError, type CalculatorRegistry } from './registry.ts';
 import type { Cadence, Calculator, CalculatorId, EngineView, InsightChange } from './types.ts';
 
 /**
- * What the scheduler is given per frame: an `EngineView` without the calculator outputs, which it keeps itself, and
- * with the run's priors (C62a: the session-start snapshot and every picked one) instead of the view's snapshot, which
- * it picks from the projection's decisions.
+ * What the scheduler is given per frame: an `EngineView` without the calculator outputs, which it keeps itself, with
+ * the run's priors (C62a: the session-start snapshot and every picked one) instead of the view's snapshot, which it
+ * picks from the projection's decisions, and with the run's profile snapshot (C62c; `null` without one) instead of the
+ * view's per-slot profiles, which it builds with `driversOf`.
  */
-export type SchedulerInput = Omit<EngineView, 'outputs' | 'priors'> & { priors: DeepReadonly<RunPriors> };
+export type SchedulerInput = Omit<EngineView, 'outputs' | 'priors' | 'drivers'> & {
+  priors: DeepReadonly<RunPriors>;
+  drivers: DeepReadonly<ProfileSnapshot> | null;
+};
 
 export type SchedulerResult = {
   /** The calculators that ran successfully, in registry order. */
@@ -116,12 +120,15 @@ const isDue = (cadence: Cadence, lastRunAt: SessionTime, pending: Pending, input
       return pending.changed.has('session');
     case 'ourCrossing':
       return rewound !== undefined || hasOurCrossing(input, pending);
+    case 'leaderLap':
+      throw new Error('not implemented');
   }
 };
 
 const isAffected = (calc: Calculator, slot: Slot, pending: Pending): boolean =>
   calc.reads.some((read) => {
     if (read === 'feed') return true;
+    if (read === 'drivers') throw new Error('not implemented');
     return typeof read === 'object' ? slot.ranDependencies.has(read.calculator) : pending.changed.has(read);
   });
 
@@ -292,6 +299,8 @@ export class Scheduler implements Snapshotable<SchedulerBookkeeping> {
         config: input.config,
         priors,
         track: input.track,
+        // Built with `driversOf(input.drivers, input.live.cars.length)` once per pass (SP4.3a Task 3); empty until then.
+        drivers: [],
         feed: input.feed,
         outputs: this.#outputs,
       };

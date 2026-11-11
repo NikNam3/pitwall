@@ -17,6 +17,10 @@
     "known": false,
     "reason": "notReceived"
   },
+  "drsZones": {
+    "known": false,
+    "reason": "notReceived"
+  },
   "defaults": {
     "pitLossMs": {
       "green": {

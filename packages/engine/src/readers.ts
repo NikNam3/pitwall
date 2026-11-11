@@ -9,6 +9,9 @@ export type { FrameMetrics } from './frame/metrics.ts';
 export { CalculatorRegistry, RegistryError, type RegistryErrorReason } from './calc/registry.ts';
 export { defineConfig, type ConfigKey, type ConfigShape, type ConfigValue } from './calc/config.ts';
 export { definePriors, priorsOf, type FallbackCtx, type PriorDecl, type PriorsCtx, type PriorsDecl, type StoredSource } from './calc/priors.ts';
+export { defineProfiles, driversOf, type ProfileCtx, type ProfileEntryDecl, type ProfilesDecl, type StoredDriverSession } from './calc/profiles.ts';
+export { asOfNow, asOfStored, runAsOf, type AsOfUnit, type AsOfView } from './calc/as-of.ts';
+export { defineSimulator, type SimulatorMarker } from './calc/simulator.ts';
 export { openSpansOf } from './calc/situation.ts';
 export { InsightBook } from './calc/insight-book.ts';
 export type { OnCalculatorRun, SchedulerBookkeeping, SchedulerInput, SchedulerOptions, SchedulerResult } from './calc/scheduler.ts';
@@ -27,7 +30,7 @@ export type {
 export { createRng, type Rng } from './util/rng.ts';
 export { copyPlain } from './util/copy-plain.ts';
 export { ALL_CHANGE_TAGS, CHANGE_TAGS, type ChangeTag, type ClockFall, type ClockJump, type LapCorrection, type StepOutput } from './step/types.ts';
-export { membershipOf, projectionLengths, situationAt, type MembershipSource } from './log/projection.ts';
+export { membershipOf, projectionAsOf, projectionLengths, situationAt, type MembershipSource } from './log/projection.ts';
 export type { HistoryDelta, LogLengths, Projection, ProjectedList, ProjectionState } from './log/types.ts';
 export { unknownLapEnd, type LapEndSamples } from './recorders/lap-samples.ts';
 export { CAR_STATUS, carsInSessionOf } from './situations/car-status/in-session.ts';
