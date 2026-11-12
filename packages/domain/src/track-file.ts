@@ -49,7 +49,7 @@ export type TrackData = {
     pitLossMs: { green: Known<TrackDefault<Ms>>; vsc: Known<TrackDefault<Ms>>; sc: Known<TrackDefault<Ms>> };
     /** Relative to medium = 0. */
     compoundOffsetsMs: Known<TrackDefault<{ soft: Ms; medium: Ms; hard: Ms }>>;
-    /** The SC and VSC chances (SP4.3b spec §5.1); validated from Task 4 on. */
+    /** The SC and VSC chances (SP4.3b spec §5.1). */
     hazard: Known<TrackDefault<TrackHazard>>;
   };
 };
@@ -152,7 +152,51 @@ function checkDrsZones(value: unknown, path: string, errors: Errors): void {
   });
 }
 
-/** Checks parsed JSON against `TrackFile`: every part's shape, every lap fraction in `[0, 1)`, every `Ms` an integer. */
+const PMF_TOLERANCE = 1e-9;
+const isChance = (v: unknown): v is number => isNum(v) && v >= 0 && v <= 1;
+
+function checkChances(value: unknown, path: string, errors: Errors): void {
+  if (!isRec(value)) return void errors.push(`${path}: not an object`);
+  for (const k of ['sc', 'vsc']) {
+    if (!isChance(value[k])) errors.push(`${path}.${k}: not a chance in [0, 1]`);
+  }
+}
+
+function checkPmf(value: unknown, path: string, errors: Errors): void {
+  if (!Array.isArray(value) || value.length === 0) return void errors.push(`${path}: not a non-empty array`);
+  value.forEach((p, i) => {
+    if (!isChance(p)) errors.push(`${path}[${i}]: not a chance in [0, 1]`);
+  });
+  if (value.every(isChance) && Math.abs(value.reduce((a: number, b: number) => a + b, 0) - 1) > PMF_TOLERANCE) {
+    errors.push(`${path}: does not sum to 1`);
+  }
+}
+
+/** Checks a `TrackHazard`: races a whole number ≥ 1, chances in `[0, 1]`, `upTo` strictly ascending ending at 1, each pmf summing to 1. */
+function checkHazard(value: unknown, path: string, errors: Errors): void {
+  if (!isRec(value)) return void errors.push(`${path}: not an object`);
+  if (!isInt(value.races) || value.races < 1) errors.push(`${path}.races: not an integer ≥ 1`);
+  checkChances(value.lapOne, `${path}.lapOne`, errors);
+  const bins = value.byFraction;
+  if (!Array.isArray(bins) || bins.length === 0) errors.push(`${path}.byFraction: not a non-empty array`);
+  else {
+    let previous = 0;
+    bins.forEach((b, i) => {
+      const at = `${path}.byFraction[${i}]`;
+      if (!isRec(b)) return void errors.push(`${at}: not an object`);
+      checkChances(b, at, errors);
+      if (!isNum(b.upTo) || b.upTo <= previous || b.upTo > 1) errors.push(`${at}.upTo: not ascending in (0, 1]`);
+      else previous = b.upTo;
+    });
+    const last = bins.at(-1);
+    if (!isRec(last) || last.upTo !== 1) errors.push(`${path}.byFraction: the last upTo is not 1`);
+  }
+  const durations = value.durationLaps;
+  if (!isRec(durations)) errors.push(`${path}.durationLaps: not an object`);
+  else for (const k of ['sc', 'vsc']) checkPmf(durations[k], `${path}.durationLaps.${k}`, errors);
+}
+
+/** Checks parsed JSON against `TrackFile`: every part's shape, every lap fraction in `[0, 1)`, every `Ms` an integer, the hazard's chances and pmfs. */
 export function validateTrackFile(json: unknown): { ok: true; file: TrackFile } | { ok: false; errors: string[] } {
   const errors: Errors = [];
   if (!isRec(json)) return { ok: false, errors: ['$: not an object'] };
@@ -181,6 +225,9 @@ export function validateTrackFile(json: unknown): { ok: true; file: TrackFile } 
         if (!isRec(offsets)) return void errors.push(`${op}: not an object`);
         for (const c of ['soft', 'medium', 'hard']) checkMs(errors)(offsets[c], `${op}.${c}`);
       }),
+    );
+    checkKnown(defaults.hazard, 'defaults.hazard', errors, (v, p) =>
+      checkDefault(v, p, errors, (h, hp) => checkHazard(h, hp, errors)),
     );
   }
 
