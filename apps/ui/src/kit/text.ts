@@ -133,6 +133,7 @@ export const commandGroups = {
   theme: 'Theme',
   realism: 'Realism',
   calibration: 'Calibration',
+  plan: 'Plan',
   help: 'Help',
 } as const;
 
@@ -161,6 +162,8 @@ export const commandTitles = {
   theme: (name: string): string => `Theme ${name}`,
   calibrationPick: 'Pick the calibration set',
   calibrationChoose: (setName: string): string => `Calibration: ${setName}`,
+  planCommit: (car: number): string => `Commit the plan for car ${car}`,
+  planClear: (car: number): string => `Clear the plan for car ${car}`,
 } as const;
 
 /** The session-start calibration prompt and the top bar's calibration segment (SP4.1a spec 3.3). */

@@ -6,6 +6,7 @@ import { CONTRACT_VERSION, TOPICS, decodeClientMessage, encodeMessage } from '@p
 import type { ClientMessage, FeedInfo, ReplayControl, ServerMessage, UiAction } from '@pitwall/contracts';
 import { isCalibrationAction, type CalibrationStore } from '../calibration/store.ts';
 import { isDriverAction, type ProfileStore } from '../drivers/store.ts';
+import { isPlanAction, type PlanAction } from '../pipeline/plan-routing.ts';
 import type { Logger } from '../log.ts';
 import type { UiState } from '../ui-state/ui-state.ts';
 import type { TopicHub } from '../hub/topic-hub.ts';
@@ -35,6 +36,11 @@ export type WsServerOptions = {
    * never to the calibration store. Without it the action is answered with `notSupported`.
    */
   choose?: (action: ChooseAction) => ActionOutcome;
+  /**
+   * Takes `plan.commit` and `plan.clear` (decisions, C76): `serve` hands them to `PlanRouting.commit`, which commits them
+   * to every feed of the team. Without it they are answered with `notSupported`.
+   */
+  plan?: (action: PlanAction) => ActionOutcome;
   /** The replay transport that `replayControl` messages drive; without it (a live feed), or when its `control` returns `false`, they are answered with `notSupported`. */
   replay?: { control(control: ReplayControl): boolean | undefined };
   /** Default `127.0.0.1`. */
@@ -144,11 +150,12 @@ export class WsServer {
         return;
       case 'uiAction': {
         // A pick is the feed pipeline's (a decision, C76), the other calibration actions the calibration store's (C62a),
-        // every other one the UI state's.
+        // a plan the plan routing's (a decision for the team's feeds, C76), every other one the UI state's.
         const { action } = message;
         // The driver-profile actions are the profile store's (C62c).
         const owner = action.kind === 'calibration.choose'
           ? this.options.choose?.(action)
+          : isPlanAction(action) ? this.options.plan?.(action)
           : isCalibrationAction(action) ? this.options.calibration?.apply(action)
             : isDriverAction(action) ? this.options.drivers?.apply(action) : this.options.uiState?.apply(action);
         const result = owner ?? { ok: false, reason: 'notSupported' } as const;

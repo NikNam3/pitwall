@@ -5,6 +5,7 @@ import type { CarId } from './ids.ts';
 import type { DecisionRecord } from './records.ts';
 
 /** The car's committed plan: its newest plan decision's policy, `null` when cleared or never committed. */
-export function latestPlan(_history: { readonly decisions: readonly DecisionRecord[] }, _carId: CarId): Policy | null {
-  throw new Error('not implemented');
+export function latestPlan(history: { readonly decisions: readonly DecisionRecord[] }, carId: CarId): Policy | null {
+  const newest = history.decisions.findLast((d) => d.kind !== 'calibrationChosen' && d.carId === carId);
+  return newest?.kind === 'planCommitted' ? newest.policy : null;
 }
