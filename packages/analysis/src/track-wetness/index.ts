@@ -2,6 +2,7 @@
 // its standard error. A calculator: no topic.
 import type { TrackWetness } from '@pitwall/domain';
 
+export { TRACK_WETNESS_BEHAVIOUR, type TrackWetnessEffect } from './behaviour.ts';
 export * from './config.ts';
 export { trackWetnessAsOf } from './asof.ts';
 
