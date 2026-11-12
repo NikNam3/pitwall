@@ -13,10 +13,13 @@ describe('forecast-score forecast cases', () => {
     // Three cars 1 s apart, 20 laps; car 0 stops on lap 10 and drops to P3; car 2's wear is hidden (realism).
     const race = plannedRace({ laps: 20, cars: spacedField(3, 1_000, { 0: { stops: [{ lap: 10 }] }, 2: { wearHidden: true } }) });
     const cases = forecastCases(race.history, HORIZONS);
+    // Ported in Task 11e (U9 Q1 A): no case from leader laps 1 and 2 (minPredictLap 3), and none of car 0 whose horizon
+    // holds its own in-lap 10 or out-lap 11 (start laps 10 − h to 10).
     for (const h of HORIZONS) {
       const of = cases.filter((c) => c.horizon === h);
-      // Every leader lap L whose lap L + h every car completed: L = 1 .. 20 − h, three cars each.
-      expect(of, `horizon ${h}`).toHaveLength(3 * (20 - h));
+      // Every leader lap L ≥ 3 whose lap L + h every car completed: L = 3 .. 20 − h, cars 1 and 2 each, and car 0's.
+      const car0 = Array.from({ length: 18 - h }, (_, i) => 3 + i).filter((l) => l < 10 - h || l > 10).length;
+      expect(of, `horizon ${h}`).toHaveLength(2 * (18 - h) + car0);
       expect(Math.max(...of.map((c) => c.lap)), `horizon ${h}`).toBe(20 - h);
     }
     // Horizon 10 has no case for the last 9 laps (nor for lap 11, whose lap 21 never comes).
@@ -32,8 +35,10 @@ describe('forecast-score forecast cases', () => {
       expect(c.baselinePosition).toBe(race.lapOf(c.carId, c.lap).positionAtEnd);
       expect(c.basis).toBe(c.carId === 2 ? 'age' : 'wear');
     }
-    // Car 0's stop on lap 10: from lap 9 the baseline keeps it P1, the race puts it P3 at lap 12.
-    expect(cases.find((c) => c.carId === 0 && c.lap === 9 && c.horizon === 3)).toMatchObject({ baselinePosition: 1, actualPosition: 3 });
+    // Car 0's stop on lap 10 (Task 11e: its own case is left out): from lap 9 the baseline keeps car 1 P2, the race puts
+    // it P1 at lap 12.
+    expect(cases.find((c) => c.carId === 0 && c.lap === 9 && c.horizon === 3)).toBeUndefined();
+    expect(cases.find((c) => c.carId === 1 && c.lap === 9 && c.horizon === 3)).toMatchObject({ baselinePosition: 2, actualPosition: 1 });
   });
 
   it('wet laps and weather crossovers are excluded', () => {
