@@ -75,3 +75,4 @@ export { driverNoiseCalculator } from './driver-noise/calculator.ts';
 export * from './race-interaction/index.ts';
 export { raceInteractionCalculator } from './race-interaction/calculator.ts';
 export * from './forecast-score/index.ts';
+export { FORECAST_FIELD_CONFIG } from './shared/forecast-field/config.ts';
