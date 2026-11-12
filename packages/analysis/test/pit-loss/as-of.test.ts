@@ -173,4 +173,53 @@ describe('pit-loss as of frame N (Task 15b)', () => {
     expect(compute(back)).toEqual(compute(viewAt(target)));
     expect(pitLossAsOf(asOfNow(back))).toEqual(compute(viewAt(target)));
   });
+
+  // SP4.3b Task 11c R1: the in-lap share (in-lap − reference) / loss of the session's stops, blended with the prior 0.26
+  it('rewind: output equals a run without the undone frames (C33), the in-lap share included', () => {
+    const lapOf = (car: number, n: number, lapTimeMs: Ms, over: Partial<LapRecord> = {}): LapRecord =>
+      lap({ carId: carId(car), lapNumber: n, lapTimeMs, completedAt: n * 90_000, frame: n * 100, ...over });
+    // references 80 000 ms; a 20 000 ms loss of which the in-lap pays `inMs − 80 000`
+    const stopOf = (car: number, n: number, inMs: Ms): { laps: LapRecord[]; stop: PitStopRecord } => ({
+      laps: [
+        lapOf(car, n - 3, 80_000),
+        lapOf(car, n - 2, 80_000),
+        lapOf(car, n - 1, 80_000),
+        lapOf(car, n, inMs, { inLap: true }),
+        lapOf(car, n + 1, 180_000 - inMs, { outLap: true }),
+      ],
+      stop: {
+        carId: carId(car),
+        lap: n,
+        pitLaneEntry: n * 90_000 - 5_000,
+        pitLaneExit: n * 90_000 + 15_000,
+        pitLaneTimeMs: 20_000,
+        stationaryTimeMs: 2_500,
+        flag: 'green',
+        penaltyServed: false,
+        frame: n * 100 + 50,
+      },
+    });
+    // car 0's in-lap pays nothing (share 0), car 1's 6 000 ms (share 0.3); the flashback to lap 15 undoes car 1's stop
+    const ours = stopOf(0, 10, 80_000);
+    const rival = stopOf(1, 18, 86_000);
+    const projectionOf = (stops: { laps: LapRecord[]; stop: PitStopRecord }[]): Projection =>
+      history({
+        laps: engineShaped(stops.flatMap((s) => s.laps).sort((a, b) => a.frame - b.frame || a.carId - b.carId)),
+        pitStops: stops.map((s) => s.stop),
+      });
+    const before = projectionOf([ours, rival]);
+    const kept = projectionOf([ours]);
+    const viewOf = (h: Projection, delta?: EngineView['delta']): EngineView =>
+      engineView({ history: h, track: TRACK, priors: PRIORS, sessionTime: 1_350_000, ...(delta !== undefined && { delta }) });
+    const rewound = viewOf(kept, { before: projectionLengths(before), after: projectionLengths(kept), rewound: { frameId: 1500, at: 1_350_000 } });
+    const fresh = compute(viewOf(kept));
+
+    // before: (2 · median(0, 0.3) + 2 · 0.26) / 4; after: (0 + 2 · 0.26) / 3
+    const shareBefore = compute(viewOf(before)).conditions.green.inLapShare;
+    const shareAfter = fresh.conditions.green.inLapShare;
+    expect(shareBefore.known && shareBefore.value).toBeCloseTo((2 * 0.15 + 2 * 0.26) / 4, 9);
+    expect(shareAfter.known && shareAfter.value).toBeCloseTo((2 * 0.26) / 3, 9);
+    expect(compute(rewound)).toEqual(fresh);
+    expect(pitLossAsOf(asOfNow(rewound))).toEqual(fresh);
+  });
 });

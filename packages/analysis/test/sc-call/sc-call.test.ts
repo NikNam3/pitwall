@@ -37,7 +37,7 @@ const SESSION_SOURCE: EstimateSource = { kind: 'session', sessionShare: 1, parts
 const DEFAULT_SOURCE: EstimateSource = { kind: 'default', note: 'track file', sessionShare: 0, parts: 'default' };
 const CALIBRATION_SOURCE: EstimateSource = { kind: 'calibration', setName: 'Monza dry', sources: 4, sessionShare: 0, parts: 'calibration' };
 
-const estimate = (lossMs: Known<Ms>, source: EstimateSource): PitLossEstimate => ({ lossMs, stationaryMedianMs: known(2_500, 0), sessionStops: 3, source });
+const estimate = (lossMs: Known<Ms>, source: EstimateSource): PitLossEstimate => ({ lossMs, inLapShare: unknown('notReceived'), stationaryMedianMs: known(2_500, 0), sessionStops: 3, source });
 
 /** The losses of case 1: green 20 300 (session), SC 9 800 (default), VSC 13 100 (calibration). */
 type Losses = Record<PitCondition, Known<Ms>>;

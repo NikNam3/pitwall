@@ -42,7 +42,7 @@ export const NOW = 230_000;
 const SOURCE = (parts: string): EstimateSource => ({ kind: 'session', sessionShare: 1, parts });
 
 /** One condition's pit-loss estimate with its own source. */
-const estimate = (lossMs: Known<Ms>, source: EstimateSource): PitLossEstimate => ({ lossMs, stationaryMedianMs: known(2_500, 0), sessionStops: 2, source });
+const estimate = (lossMs: Known<Ms>, source: EstimateSource): PitLossEstimate => ({ lossMs, inLapShare: unknown('notReceived'), stationaryMedianMs: known(2_500, 0), sessionStops: 2, source });
 
 /** The sources `pitLosses` gives each condition, each its own. */
 export const SOURCES: Record<PitCondition, EstimateSource> = {
