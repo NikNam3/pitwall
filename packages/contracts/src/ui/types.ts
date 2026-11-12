@@ -49,8 +49,8 @@ export type UiAction =
   // Plans (C76, SP4.3b spec §8.2): a plan decision for one of our cars, for every feed of the team; the bridge checks
   // shape and range only (C73), whether the plan can still be followed is the `strategy` job's judgement (C43).
   /** Commits `policy` for `carId`, its triggers with their thresholds as the user saw them. */
-  | { kind: 'plan.commit'; carId: CarId; policy: Policy }
-  | { kind: 'plan.clear'; carId: CarId };
+  | { kind: 'plan.commit'; feedId: FeedId; carId: CarId; policy: Policy }
+  | { kind: 'plan.clear'; feedId: FeedId; carId: CarId };
 
 /** The driver-profile uiActions (C62c), for the CLI's and the driver-profile panel's edits; answered as every uiAction (`ActionOutcome`, C73). */
 export type DriverAction = Extract<UiAction, { kind: `drivers.${string}` }>;
