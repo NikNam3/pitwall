@@ -16,4 +16,7 @@ export const FORECAST_SCORE_CONFIG = defineConfig('forecast-score', {
   repairStationaryMs: 6000,
   /** SC stop: the laps after the neutralisation ends at which the change is measured. Source: research 12 §8. */
   scSettleLaps: 2,
+  /** Forecast tables: the first leader lap a forecast case starts from. Source: U9 Q1 A, 2026-11-12 (no fitted pace
+   *  before two pace laps; the standing start). */
+  minPredictLap: 3,
 });

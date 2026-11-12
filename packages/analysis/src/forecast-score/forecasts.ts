@@ -2,6 +2,7 @@
 // plain forecast from the leader's crossing of lap L is scored against at lap L + h, beside the "gaps stay" baseline.
 import { NOISE_COMPOUNDS, type CarId, type FrameNumber, type LapRecord, type Ms, type NoiseCompound, type Policy, type RivalStops, type SessionTime } from '@pitwall/domain';
 import type { DeepReadonly, Projection } from '@pitwall/engine/readers';
+import { FORECAST_SCORE_CONFIG } from './config.ts';
 import { raceLaps } from './laps.ts';
 
 /** The horizons the report has a table for (spec 7.1). */
@@ -41,9 +42,15 @@ const wearKnown = (l: DeepReadonly<LapRecord>): boolean => {
  * The forecast cases of `history`: for every leader lap L that has a confirmed record of the leader, every horizon h
  * with lap L + h completed (a confirmed record) by the car. Dry laps only: a case whose laps L to L + h hold a lap on
  * inter or wet tyres, or a weather crossover (a stop from slicks to inter or wet tyres, or back), is no case. Green
- * horizons only: a case whose laps L + 1 to L + h of the car hold a lap with an SC or VSC share is no case (F1).
+ * horizons only: a case whose laps L + 1 to L + h of the car hold a lap with an SC or VSC share is no case (F1). No own
+ * stop in the horizon: a case whose laps L + 1 to L + h hold the car's own in-lap or out-lap is no case, and no case
+ * starts before leader lap `minPredictLap` (SP4.3b Task 11e; U9 Q1 A).
  */
-export function forecastCases(history: Projection, horizons: readonly Horizon[]): ForecastCase[] {
+export function forecastCases(
+  history: Projection,
+  horizons: readonly Horizon[],
+  minPredictLap: number = FORECAST_SCORE_CONFIG.defaults.minPredictLap,
+): ForecastCase[] {
   const race = raceLaps(history);
   const leaders: DeepReadonly<LapRecord>[] = [];
   for (let car = 0; car < race.cars; car++) for (const l of race.lapsOf(car)) if (l.positionAtEnd === 1) leaders[l.lapNumber] = l;
@@ -51,6 +58,7 @@ export function forecastCases(history: Projection, horizons: readonly Horizon[])
   for (const leader of leaders) {
     if (leader === undefined) continue;
     const lap = leader.lapNumber;
+    if (lap < minPredictLap) continue;
     for (const horizon of horizons) {
       for (let car = 0; car < race.cars; car++) {
         const start = race.lap(car, lap);
@@ -58,6 +66,8 @@ export function forecastCases(history: Projection, horizons: readonly Horizon[])
         if (start === undefined || target === undefined || !race.dry(car, lap, lap + horizon)) continue;
         // F1 (SP4.3b spec 4.2): a horizon lap under an SC or VSC is no case; the start lap L is no horizon lap.
         if (race.neutralised(car, lap + 1, lap + horizon)) continue;
+        // Task 11e: the car's own real stop is not in its predicted policy; stop timing is scored by the experiments.
+        if (race.ownStopLap(car, lap + 1, lap + horizon)) continue;
         cases.push({
           lap,
           horizon,

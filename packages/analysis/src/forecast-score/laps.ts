@@ -28,6 +28,9 @@ export type RaceLaps = {
   dry(car: CarId | number, from: number, to: number): boolean;
   /** Whether any of car `car`'s confirmed laps `from` to `to` ran partly under an SC or VSC (`scShare + vscShare > 0`). */
   neutralised(car: CarId | number, from: number, to: number): boolean;
+  /** Whether any of car `car`'s laps `from` to `to` is its own in-lap (a pit stop's lap) or out-lap (the lap after a
+   *  stop, the first lap of a later stint), from the projection's pit stops and stints (SP4.3b Task 11e). */
+  ownStopLap(car: CarId | number, from: number, to: number): boolean;
   /** The frame on which car `car` made its stop `stop` (its in-lap record's, else the stop's own). */
   inLapFrame(stop: DeepReadonly<PitStopRecord>): FrameNumber;
 };
@@ -45,6 +48,13 @@ export function raceLaps(history: DeepReadonly<Projection>): RaceLaps {
   for (const s of history.stints) (stints[s.carId] ??= []).push(s);
   const stops = new Map<string, boolean>();
   for (const s of history.pitStops) stops.set(`${s.carId}:${s.lap}`, true);
+  // every car's in-laps (a stop's lap) and out-laps (the lap after it, the first lap of a later stint), as `car:lap`
+  const stopLaps = new Set<string>();
+  for (const s of history.pitStops) {
+    stopLaps.add(`${s.carId}:${s.lap}`);
+    stopLaps.add(`${s.carId}:${s.lap + 1}`);
+  }
+  for (const s of history.stints) if (s.firstLap > 1) stopLaps.add(`${s.carId}:${s.firstLap}`);
 
   const lap = (car: number, n: number) => byNumber[car]?.get(n);
   const visualOf = (car: number, n: number): string | undefined =>
@@ -77,6 +87,10 @@ export function raceLaps(history: DeepReadonly<Projection>): RaceLaps {
         const l = lap(car, n);
         if (l !== undefined && l.scShare + l.vscShare > 0) return true;
       }
+      return false;
+    },
+    ownStopLap: (car, from, to) => {
+      for (let n = from; n <= to; n++) if (stopLaps.has(`${car}:${n}`)) return true;
       return false;
     },
     inLapFrame: (stop) => lap(stop.carId, stop.lap)?.frame ?? stop.frame,
