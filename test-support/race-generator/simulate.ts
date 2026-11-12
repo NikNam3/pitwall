@@ -156,7 +156,7 @@ function startLap(s: State, c: number, lap: number): void {
     FUEL_MS_PER_KG * fuelAtStart(p, lap) +
     s.scatter[c]! +
     mistake +
-    (p.rain !== undefined && lap >= p.rain.fromLap ? p.rain.wetnessMs : 0) +
+    (p.rain !== undefined && 'fromLap' in p.rain && lap >= p.rain.fromLap ? p.rain.wetnessMs : 0) +
     (inLap ? s.inLossMs : 0) +
     (outLap ? s.outLossMs : 0);
   s.target[c] = t;
