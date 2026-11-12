@@ -8,7 +8,7 @@ import type { ProfileStore, SlotIdentity } from '../drivers/store.ts';
 import { profilesSidecarPath } from './profile-sidecar.ts';
 import { CalculatorRegistry, SessionTracker, type Frame, type FrameMetrics, type InsightChange, type TrackerEvent } from '@pitwall/engine';
 import { decode } from '@pitwall/protocol';
-import { effectiveConfig, overriddenFields, sessionConfigPath, type FeatureConfig } from '../feature-config.ts';
+import { effectiveConfig, overriddenFields, sessionConfigPath, sessionConfigSidecar, type FeatureConfig } from '../feature-config.ts';
 import type { Feature } from '../features/feature.ts';
 import { feedStatusOf } from '../features/feed-status/feed-status.ts';
 import type { TopicHub } from '../hub/topic-hub.ts';
@@ -508,7 +508,7 @@ export class FeedPipeline {
       originMs: event.receivedAtMs,
       onError: (error) => this.#writeFailed('pwrec', error),
     });
-    this.#writeSidecar(sessionConfigPath(file.path), config);
+    this.#writeSidecar(sessionConfigPath(file.path), sessionConfigSidecar(config, this.#overridden));
     // The track file the session runs with (C59, C62b); a session without a valid one writes a not-applicable sidecar,
     // so its replay stays notApplicable even after a committed file appears (C38).
     this.#writeSidecar(trackSidecarPath(file.path), track.known ? track.value : NOT_APPLICABLE_SIDECAR);
