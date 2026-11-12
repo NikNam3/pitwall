@@ -1,6 +1,6 @@
 // `tyre-life` "as of frame N" (SP4.3a Task 15c; rows R2 and R3 of Tasks 9–12): the as-of form on the projection cut at a
-// leader crossing frame equals the scheduled run at that frame in its projection-derived fields (ruling R20; the as-of
-// form gives wear as of each car's newest lap end), and after a flashback the output equals a run that never
+// leader crossing frame from the second on equals the scheduled run at that frame in its projection-derived fields (rulings
+// R20, R26; the as-of form gives wear as of each car's newest lap end, for the cars with one), and after a flashback the output equals a run that never
 // received the undone frames (C33). The generator's race records every fact as the engine appends it; its views carry no
 // append frames, so the source handed to `projectionAsOf` gets them from the lists' lengths at the frames the test cuts at.
 import { carId, currentLaps, known, unknown, type FrameNumber, type LapRecord, type Percent } from '@pitwall/domain';
@@ -79,8 +79,9 @@ const asOfAt = (frame: FrameNumber, outputs: EngineView['outputs']): AsOfView =>
 });
 
 describe('tyre-life as of frame N', () => {
-  it('as of frame N equals the scheduled run at every leader crossing frame (its projection-derived fields, R20)', () => {
-    for (const frame of CROSSINGS) {
+  it('as of frame N equals the scheduled run at every leader crossing frame from the second on (its projection-derived fields, R20, R26)', () => {
+    // From the leader's second crossing every car has a completed lap; at its first only the leader has one (ruling R26).
+    for (const frame of CROSSINGS.slice(1)) {
       const view = scheduledAt(frame);
       const expected = tyreLifeCalculator.compute(view);
       // every car of the race has its set
@@ -98,12 +99,16 @@ describe('tyre-life as of frame N', () => {
       const laps = currentLaps(cut.history.laps as readonly LapRecord[]);
       const out = tyreLifeAsOf(cut);
       expect(Object.keys(out), `frame ${frame}`).toHaveLength(PARAMS.cars);
+      let checked = 0;
       for (const [car, life] of Object.entries(out)) {
-        const newest = laps.filter((l) => String(l.carId) === car).at(-1);
-        expect(newest, `frame ${frame}, car ${car}`).toBeDefined();
-        for (const c of CORNERS) expect(life.corners[c].wearPct, `frame ${frame}, car ${car}, ${c}`).toEqual(newest!.wearAtEndPct[c]);
         expect(life.gameLifeSpanLaps, `frame ${frame}, car ${car}`).toEqual(unknown('notReceived'));
+        // a car without a completed lap in the cut has no lap end to read wear from (ruling R26)
+        const newest = laps.filter((l) => String(l.carId) === car).at(-1);
+        if (newest === undefined) continue;
+        checked += 1;
+        for (const c of CORNERS) expect(life.corners[c].wearPct, `frame ${frame}, car ${car}, ${c}`).toEqual(newest.wearAtEndPct[c]);
       }
+      expect(checked, `frame ${frame}: cars with a lap in the cut`).toBeGreaterThan(0);
     }
   });
 
