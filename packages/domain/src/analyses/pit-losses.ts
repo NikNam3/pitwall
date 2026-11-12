@@ -12,7 +12,8 @@ export type PitCondition = PitStopRecord['flag'];
  * The pit loss of one condition: the blend of the session's stops and the prior (spec 4.3), the median stationary time
  * of the session's stops, how many stops of the session it rests on, and its source with the blend's parts.
  */
-export type PitLossEstimate = { lossMs: Known<Ms>; stationaryMedianMs: Known<Ms>; sessionStops: number; source: EstimateSource };
+/** `inLapShare`: the share of the loss paid on the in-lap, this session's stops blended with the prior (SP4.3b Task 11c). */
+export type PitLossEstimate = { lossMs: Known<Ms>; inLapShare: Known<number>; stationaryMedianMs: Known<Ms>; sessionStops: number; source: EstimateSource };
 
 /** One stop of the session: its loss, its stationary time, and whether it counts (`noReference`: no clean reference laps; `penalty`: the stop served a penalty, R12). */
 export type PitLossStop = { carId: CarId; lap: number; condition: PitCondition; lossMs: Known<Ms>; stationaryMs: Ms; use: 'used' | 'noReference' | 'penalty' };

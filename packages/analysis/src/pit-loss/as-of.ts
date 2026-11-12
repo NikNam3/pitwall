@@ -20,7 +20,7 @@ import { LAP_CLASSES_CONFIG } from '../lap-classes/index.ts';
 import { behaviourFor } from '../shared/behaviour.ts';
 import { PIT_LOSS_BEHAVIOUR, phaseRow, type PitLossEffect } from './behaviour.ts';
 import { PIT_LOSS_CONFIG } from './config.ts';
-import { median, sessionStops, type PitLossOptions } from './loss.ts';
+import { inLapShareOf, median, sessionStops, type PitLossOptions } from './loss.ts';
 import { PIT_CONDITIONS, pitLossFallback, pitLossKey } from './priors.ts';
 
 /**
@@ -73,6 +73,43 @@ const stationaryMedianOf = (view: AsOfView, condition: PitCondition): Known<Ms> 
   return known(Math.round(median(records.map((s) => s.stationaryTimeMs))), at);
 };
 
+/** A counted stop's in-lap share (`inLapShareOf`), known since its loss is. */
+type Share = { value: number; at: number };
+
+/**
+ * The in-lap shares of the counted stops (`used`, with a known loss) per condition (SP4.3b Task 11c): each stop's
+ * (in-lap − the car's reference lap) / its loss; a stop whose share cannot be measured gives none.
+ */
+function inLapSharesOf(view: AsOfView, laps: readonly LapRecord[], stops: readonly PitLossStop[], opts: PitLossOptions): Map<PitCondition, Share[]> {
+  const lapsByCar = new Map<number, LapRecord[]>();
+  for (const lap of laps) {
+    const list = lapsByCar.get(lap.carId);
+    if (list === undefined) lapsByCar.set(lap.carId, [lap]);
+    else list.push(lap);
+  }
+  const shares = new Map<PitCondition, Share[]>();
+  for (const stop of stops) {
+    if (stop.use !== 'used' || !stop.lossMs.known) continue;
+    const record = view.history.pitStops.find((r) => r.carId === stop.carId && r.lap === stop.lap);
+    if (record === undefined) continue;
+    const value = inLapShareOf(record, lapsByCar.get(stop.carId) ?? [], stop.lossMs.value, opts);
+    if (value === undefined) continue;
+    const list = shares.get(stop.condition);
+    const share = { value, at: stop.lossMs.at };
+    if (list === undefined) shares.set(stop.condition, [share]);
+    else list.push(share);
+  }
+  return shares;
+}
+
+/** A condition's in-lap share: the blend `(n · sessionMedian + k · prior) / (n + k)` of its stops' shares and the config's prior (C47). */
+const inLapShareBlend = (shares: readonly Share[], prior: number, k: number): Known<number> => {
+  const n = shares.length;
+  if (n === 0) return known(prior, 0);
+  const at = shares.reduce((t, s) => Math.max(t, s.at), 0);
+  return known((n * median(shares.map((s) => s.value)) + k * prior) / (n + k), at);
+};
+
 /** The output of `pit-loss` as of the view's frame. */
 export function pitLossAsOf(view: AsOfView): PitLosses {
   const readers = readersOf(view);
@@ -83,12 +120,15 @@ export function pitLossAsOf(view: AsOfView): PitLosses {
     ...PIT_LOSS_CONFIG.read(readers),
     classes: { isRace: session.isRace === true, ...LAP_CLASSES_CONFIG.read(readers) },
   };
-  const stops: PitLossStop[] = sessionStops(view.history.pitStops, currentLaps(view.history.laps as readonly LapRecord[]), opts);
+  const laps = currentLaps(view.history.laps as readonly LapRecord[]);
+  const stops: PitLossStop[] = sessionStops(view.history.pitStops, laps, opts);
+  const shares = inLapSharesOf(view, laps, stops, opts);
   const conditions = {} as Record<PitCondition, PitLossEstimate>;
   for (const condition of PIT_CONDITIONS) {
     const losses = stops.flatMap((s) => (s.condition === condition && s.use === 'used' && s.lossMs.known ? [s.lossMs] : []));
     const estimate = estimateOf(losses, priorOf(view, condition), opts.priorWeightStops);
-    conditions[condition] = { ...estimate, stationaryMedianMs: stationaryMedianOf(view, condition), sessionStops: losses.length };
+    const inLapShare = inLapShareBlend(shares.get(condition) ?? [], opts.inLapShare, opts.priorWeightStops);
+    conditions[condition] = { ...estimate, inLapShare, stationaryMedianMs: stationaryMedianOf(view, condition), sessionStops: losses.length };
   }
   return { conditions, stops };
 }

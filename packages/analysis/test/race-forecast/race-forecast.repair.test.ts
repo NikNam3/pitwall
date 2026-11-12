@@ -2,7 +2,9 @@
 // `forecast-field`.
 //
 // F2: a stop's loss is split between the in-lap and the out-lap. `forecast-field` fills `track.pitLossMs.inLapShare`
-// from its config's `inLapLossShare` (0.26 = 5.5 / 21.5 s, research 12 §5); `race-forecast` adds `inLapShare × loss` to
+// from `pit-loss`'s in-lap share (ported in SP4.3b Task 11c: before, forecast-field's config `inLapLossShare`; now
+// pit-loss's measured share, whose prior is its config's `inLapShare` 0.26 = 5.5 / 21.5 s, research 12 §5, and which is
+// that prior before any stop is measured, as at lap 6 and lap 8 of the generator race); `race-forecast` adds `inLapShare × loss` to
 // the stopping car's in-lap (before the line) and the rest after the line. The test agent's reading of row 3 (no
 // `StartingPoint` field marks a car in the pit lane): a car whose in-lap is done at the start is a car that has just
 // crossed the line ending lap L − 1 (lap fraction 0 on lap L) whose policy holds a stop at the end of lap L − 1; the
@@ -19,7 +21,8 @@ import { describe, expect, it } from 'vitest';
 import * as constants from '../../src/race-forecast/constants.ts';
 import { raceForecast } from '../../src/race-forecast/index.ts';
 import { RACE_INTERACTION_CONFIG } from '../../src/race-interaction/config.ts';
-import { buildStartingPoint, FORECAST_FIELD_CONFIG } from '../../src/shared/forecast-field/index.ts';
+import { PIT_LOSS_CONFIG } from '../../src/pit-loss/index.ts';
+import { buildStartingPoint } from '../../src/shared/forecast-field/index.ts';
 import { generated, materialised, PARAMS, plainNoise, TRACK, upstreamOf, type Generated } from '../shared/forecast-field/support.ts';
 import { interaction, noStops, PACE_MS, PLAIN, startingPoint, traceAt } from './start.ts';
 
@@ -58,9 +61,10 @@ const buildAtLap6 = (config: AsOfView['config'] = {}): StartingPoint => buildAt(
 describe('race-forecast: the pit loss split (SP4.3b F2)', () => {
   // row 1
   it('a stop puts inLapShare of the loss on the in-lap and the rest on the out-lap; the total is unchanged', () => {
-    // forecast-field fills the share from its config (0.26 by default; an override is followed)
+    // forecast-field fills the share from pit-loss's, before any measured stop its config's prior (0.26 by default; an
+    // override is followed). Ported in SP4.3b Task 11c: the override was forecast-field's `inLapLossShare`.
     expect(buildAtLap6().track.pitLossMs.inLapShare).toBeCloseTo(SHARE, 9);
-    expect(buildAtLap6({ [FORECAST_FIELD_CONFIG.key]: { inLapLossShare: 0.4 } }).track.pitLossMs.inLapShare).toBeCloseTo(0.4, 9);
+    expect(buildAtLap6({ [PIT_LOSS_CONFIG.key]: { inLapShare: 0.4 } }).track.pitLossMs.inLapShare).toBeCloseTo(0.4, 9);
 
     // one quiet car, equal laps; it stops at the end of lap 10 (its in-lap), lap 11 is its out-lap
     const start = startingPoint({ lap: 1, lapsTotal: 20, cars: [{ gapMs: 0 }], pitLossMs: PIT_LOSS });
@@ -132,7 +136,8 @@ describe('race-forecast and forecast-field: rewind (SP4.3b R1)', () => {
     const undone = g.race.framesOfLap(11)[0]!;
     const rewoundView: EngineView = { ...g.race.viewAt(target, { from: undone }), track: TRACK };
     expect(rewoundView.delta.rewound).toBeDefined();
-    const config = { [FORECAST_FIELD_CONFIG.key]: { inLapLossShare: 0.3 }, [RACE_INTERACTION_CONFIG.key]: { drsRangeMs: 800 } };
+    // ported in SP4.3b Task 11c: the share's override was forecast-field's `inLapLossShare`, now pit-loss's prior
+    const config = { [PIT_LOSS_CONFIG.key]: { inLapShare: 0.3 }, [RACE_INTERACTION_CONFIG.key]: { drsRangeMs: 800 } };
     const rewound = buildAt(rewoundView, config);
     const fresh = buildAt(g.viewAt(target), config);
     // the rewound build carries the config's split and DRS rule, and equals the build that never saw the undone frames

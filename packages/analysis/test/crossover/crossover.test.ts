@@ -72,7 +72,7 @@ const DRY_REF_LAPS = (): LapRecord[] => [
 const LOSS_SOURCE: EstimateSource = { kind: 'session', sessionShare: 1, parts: '3 stops' };
 
 /** One condition's pit-loss estimate. */
-const estimate = (lossMs: Known<Ms>, source: EstimateSource = LOSS_SOURCE): PitLossEstimate => ({ lossMs, stationaryMedianMs: known(2_500, 0), sessionStops: 3, source });
+const estimate = (lossMs: Known<Ms>, source: EstimateSource = LOSS_SOURCE): PitLossEstimate => ({ lossMs, inLapShare: unknown('notReceived'), stationaryMedianMs: known(2_500, 0), sessionStops: 3, source });
 
 /** `pit-loss`'s output with this green loss (VSC and SC unknown). */
 const pitLosses = (green: Known<Ms> = known(21_000, 0)): PitLosses => ({
