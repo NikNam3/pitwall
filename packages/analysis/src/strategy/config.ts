@@ -29,10 +29,10 @@ export const STRATEGY_CONFIG = defineConfig('strategy', {
   maxScenarioPolicies: 5000,
   /** The league points table, position 1 first, comma-separated. Source: F1 sporting regulations (25-18-15-12-10-8-6-4-2-1). */
   points: '25,18,15,12,10,8,6,4,2,1',
-  /** Under an SC, a rival that owes a stop boxes with this chance. Source: placeholder, fitted in Task 12 (spec §7.2; Spa 16 of 18). */
-  rivalScBoxChance: 0.9,
-  /** … once its tyres are at least this many laps old (`aMin`). Source: placeholder, fitted in Task 12 (spec §7.2). */
-  rivalScMinTyreAge: 6,
-  /** In the wet a rival switches tyre type this many laps after its type falls behind (`reactionLaps`). Source: placeholder, fitted in Task 12 (spec §7.2). */
-  rivalReactionLaps: 1,
+  /** Under an SC, a rival with a stop still ahead (its rival-stops window; not only one the compound rule demands) boxes with this chance. Source: spike 4.3b-defaults (research 19 §5): 28 of 32 AI cars with a stop still ahead boxed under 3 SCs (Zandvoort, Texas, Spa), SE 0.05; thin */
+  rivalScBoxChance: 0.88,
+  /** … once its tyres are at least this many laps old (`aMin`). Source: spike 4.3b-defaults (research 19 §5): the youngest AI car with a stop ahead that boxed under an SC (3 SCs); no younger such car seen; thin */
+  rivalScMinTyreAge: 4,
+  /** In the wet a rival switches tyre type this many laps after its type falls behind (`reactionLaps`). Source: spike 4.3b-defaults (research 19 §5): the AI switched within one lap of the crossover or before it at 3 crossovers (54 switches, Singapore and Mexico); thin */
+  rivalReactionLaps: 0,
 });

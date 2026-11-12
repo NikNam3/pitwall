@@ -15,13 +15,13 @@ export const FORECAST_FIELD_CONFIG = defineConfig('forecast-field', {
   defaultSoftOffsetMs: -600,
   /** The hard's fresh-set offset against medium without a track file's, in ms. Source: research 13 §1 (assumed). */
   defaultHardOffsetMs: 500,
-  /** The inter's offset against medium on a dry track, in ms (the wetness term adds the rest). Source: pitwall estimate. */
-  interOffsetMs: 5000,
-  /** The wet's offset against medium on a dry track, in ms. Source: pitwall estimate. */
-  wetOffsetMs: 9000,
+  /** The inter's offset against medium on a dry track, in ms (the wetness term adds the rest). Source: spike 4.3b-defaults (research 19 §4): Singapore's slick/inter crossover at 6–8 s inter excess, with interMsPerWetnessMs 0.5; one crossover, thin; the three wet values hold together */
+  interOffsetMs: 3500,
+  /** The wet's offset against medium on a dry track, in ms. Source: spike 4.3b-defaults (research 19 §4): Miami's wet/inter meeting at 12.5 s inter excess, with interOffsetMs 3500 and interMsPerWetnessMs 0.5; one race, thin */
+  wetOffsetMs: 8100,
   /** The convex tyre term starts at this wear, in %. Source: research 12 §4, 13 §1 (Fieni's shape, flagged). */
   convexFromPct: 40,
-  /** The convex tyre term per (% wear past `convexFromPct`)², in ms: about 4 s at 80 %. Source: pitwall estimate (flagged prior). */
+  /** The convex tyre term per (% wear past `convexFromPct`)², in ms: about 4 s at 80 %. Source: pitwall estimate (flagged prior); spike 4.3b-defaults (research 19 §3): wet stints bracket 1.7–5.4 (25 stints past 40 %, Mexico and Miami), dry not identified (max 50 %): kept */
   convexMsPerPct2: 2.5,
   /** The cold-tyre term of the first lap on a set, in ms. Source: research 12 §3 (Texas, +0.41 s dry). */
   coldTyreLap1Ms: 410,
@@ -29,24 +29,24 @@ export const FORECAST_FIELD_CONFIG = defineConfig('forecast-field', {
   coldTyreLap2Ms: 100,
   /** The cold-tyre terms on a wet track are this times the dry ones. Source: research 12 §3 (Mexico inters +1.4 s, thin). */
   coldTyreWetFactor: 3.4,
-  /** A lap behind the SC is this times the green lap. Source: research 03 (TUM, ×1.6). */
-  scPaceFactor: 1.6,
-  /** Tyre wear behind the SC is this times the green lap's. Source: pitwall estimate. */
-  scWearFactor: 0.5,
-  /** Fuel burn behind the SC is this times the green lap's. Source: pitwall estimate. */
-  scFuelFactor: 0.5,
-  /** A VSC lap is this times the green lap. Source: research 03 (TUM, ×1.4). */
-  vscPaceFactor: 1.4,
-  /** Tyre wear under the VSC is this times the green lap's. Source: pitwall estimate. */
-  vscWearFactor: 0.6,
-  /** Fuel burn under the VSC is this times the green lap's. Source: pitwall estimate. */
+  /** A lap behind the SC is this times the green lap. Source: spike 4.3b-defaults (research 19 §2): 123 SC laps, 4 SCs in 4 races, ±0.02 */
+  scPaceFactor: 1.27,
+  /** Tyre wear behind the SC is this times the green lap's. Source: spike 4.3b-defaults (research 19 §2): 123 SC laps, 4 SCs, ±0.03 */
+  scWearFactor: 0.36,
+  /** Fuel burn behind the SC is this times the green lap's. Source: spike 4.3b-defaults (research 19 §2): 123 SC laps, 4 SCs, ±0.01 */
+  scFuelFactor: 0.57,
+  /** A VSC lap is this times the green lap. Source: spike 4.3b-defaults (research 19 §2): 70 partial VSC laps, 3 VSCs, Mexico and Miami (wet only), ±0.01; thin */
+  vscPaceFactor: 1.19,
+  /** Tyre wear under the VSC is this times the green lap's. Source: spike 4.3b-defaults (research 19 §2): VSC 0.24 ± 0.17 (thin, 3 VSCs), set to the SC's 0.36 */
+  vscWearFactor: 0.35,
+  /** Fuel burn under the VSC is this times the green lap's. Source: spike 4.3b-defaults (research 19 §2): 0.62 ± 0.03, 3 VSCs; thin: kept */
   vscFuelFactor: 0.6,
   /** A slick's loss per ms of track wetness (the wetness is the slick's loss, so 1). Source: spec 5.1 (definition). */
   slickMsPerWetnessMs: 1,
-  /** An inter's loss per ms of track wetness. Source: pitwall estimate. */
+  /** An inter's loss per ms of track wetness. Source: pitwall estimate; not identifiable from the recordings (research 19 §4) */
   interMsPerWetnessMs: 0.5,
-  /** A wet's loss per ms of track wetness. Source: pitwall estimate. */
-  wetMsPerWetnessMs: 0.35,
+  /** A wet's loss per ms of track wetness. Source: spike 4.3b-defaults (research 19 §4): Miami sWet/sInter 0.49 ± 0.12 (14 laps) × interMsPerWetnessMs 0.5; one race, thin */
+  wetMsPerWetnessMs: 0.25,
   /** The sd of the wetness prior (a dry track) while track-wetness has no known state, in ms. Source: pitwall estimate (ruling R40). */
   priorWetnessSdMs: 1500,
   /** Whether a rival whose owesStop is unknown is assumed to owe a stop. Source: pitwall estimate (ruling R40: the dry race's compound rule). */
