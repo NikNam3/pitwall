@@ -4,6 +4,8 @@
 
 Accepted (2026-10-28). User decision Q-A of the foundation review.
 
+Partly superseded (2026-11-12, SP4.3b U12): one bridge runs several feeds; the team's feeds share plan decisions (C1a, C76). The team view of values stays open.
+
 ## Context
 
 The engineer will eventually look after both drivers of a team: two games, two feeds of the same online session. The MVP covers one driver. The question was whether to build multi-feed serving and storage now.
