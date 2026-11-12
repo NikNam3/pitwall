@@ -158,6 +158,99 @@ describe('validateTrackFile rejections', () => {
   });
 });
 
+// SP4.3b Task 4 (spec §5.1, C3, C62b): the hazard is validated like every other part. A malformed hazard fails the
+// whole file, as a bad pit-loss default does: the bridge's loader then gives `view.track` as `unknown('notApplicable')`
+// and logs the validator's errors (apps/bridge/src/track-files/load.ts), so each error names `defaults.hazard`.
+describe('the track hazard', () => {
+  const sum = (xs: number[]): number => xs.reduce((a, b) => a + b, 0);
+  const inUnit = (p: number): boolean => Number.isFinite(p) && p >= 0 && p <= 1;
+
+  it.each(NAMES)(
+    "every committed track file's hazard validates: chances in [0, 1], byFraction ascending ending at 1, each duration pmf sums to 1 within 1e-9, races ≥ 1 (%s)",
+    (name) => {
+      const r = validateTrackFile(read(name));
+      if (!r.ok) throw new Error(r.errors.join('; '));
+      const hazard = r.file.defaults.hazard;
+      expect(hazard).toHaveProperty('known');
+      if (!hazard.known) return;
+      expect(typeof hazard.value.source).toBe('string');
+      const h = hazard.value.value;
+      expect(Number.isInteger(h.races)).toBe(true);
+      expect(h.races).toBeGreaterThanOrEqual(1);
+      expect(inUnit(h.lapOne.sc) && inUnit(h.lapOne.vsc)).toBe(true);
+      expect(h.byFraction.length).toBeGreaterThan(0);
+      h.byFraction.forEach((b, i) => {
+        expect(inUnit(b.sc) && inUnit(b.vsc), `byFraction[${i}] chances`).toBe(true);
+        expect(b.upTo).toBeGreaterThan(i === 0 ? 0 : h.byFraction[i - 1]!.upTo);
+      });
+      expect(h.byFraction.at(-1)!.upTo).toBe(1);
+      for (const pmf of [h.durationLaps.sc, h.durationLaps.vsc]) {
+        expect(pmf.length).toBeGreaterThan(0);
+        for (const p of pmf) expect(inUnit(p)).toBe(true);
+        expect(Math.abs(sum(pmf) - 1)).toBeLessThanOrEqual(1e-9);
+      }
+    },
+  );
+
+  const withHazard = (edit: (h: Record<string, any>) => void): Record<string, any> => {
+    const json = zandvoort();
+    json.defaults.hazard = {
+      known: true,
+      value: {
+        value: {
+          races: 5,
+          lapOne: { sc: 0.2, vsc: 0.03 },
+          byFraction: [
+            { upTo: 0.5, sc: 0.01, vsc: 0.005 },
+            { upTo: 1, sc: 0.012, vsc: 0.006 },
+          ],
+          durationLaps: { sc: [0.1, 0.4, 0.5], vsc: [0.25, 0.75] },
+        },
+        source: 'test',
+      },
+      at: 0,
+    };
+    edit(json.defaults.hazard.value.value);
+    return json;
+  };
+
+  it('accepts a valid hazard and an unknown one', () => {
+    expect(validateTrackFile(withHazard(() => {}))).toMatchObject({ ok: true });
+    const json = zandvoort();
+    json.defaults.hazard = { known: false, reason: 'insufficientData' };
+    expect(validateTrackFile(json)).toMatchObject({ ok: true });
+  });
+
+  it.each<[string, (h: Record<string, any>) => void]>([
+    ['a lap-one chance above 1', (h) => (h.lapOne.sc = 1.2)],
+    ['a negative lap-one chance', (h) => (h.lapOne.vsc = -0.01)],
+    ['a byFraction chance above 1', (h) => (h.byFraction[0].vsc = 1.5)],
+    ['a NaN byFraction chance', (h) => (h.byFraction[1].sc = Number.NaN)],
+    ['byFraction not ascending', (h) => (h.byFraction = [{ upTo: 0.75, sc: 0.01, vsc: 0.01 }, { upTo: 0.5, sc: 0.01, vsc: 0.01 }, { upTo: 1, sc: 0.01, vsc: 0.01 }])],
+    ['byFraction with a repeated upTo', (h) => (h.byFraction = [{ upTo: 0.5, sc: 0.01, vsc: 0.01 }, { upTo: 0.5, sc: 0.01, vsc: 0.01 }, { upTo: 1, sc: 0.01, vsc: 0.01 }])],
+    ['the last upTo not 1', (h) => (h.byFraction[1].upTo = 0.9)],
+    ['an empty byFraction', (h) => (h.byFraction = [])],
+    ['an SC duration pmf not summing to 1', (h) => (h.durationLaps.sc = [0.1, 0.4, 0.4])],
+    ['a VSC duration pmf not summing to 1', (h) => (h.durationLaps.vsc = [0.25, 0.75, 1e-6])],
+    ['a negative duration chance', (h) => (h.durationLaps.sc = [-0.1, 0.6, 0.5])],
+    ['races 0', (h) => (h.races = 0)],
+  ])("a malformed hazard gives unknown('notApplicable') with the reason in the load log, never a throw: %s", (_case, edit) => {
+    const json = withHazard(edit);
+    expect(() => validateTrackFile(json)).not.toThrow();
+    const r = validateTrackFile(json);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.errors.length).toBeGreaterThan(0);
+    expect(r.errors.every((e) => e.startsWith('defaults.hazard')), r.errors.join('; ')).toBe(true);
+  });
+
+  it('rejects a missing hazard part', () => {
+    const json = zandvoort();
+    delete json.defaults.hazard;
+    expect(errorsOf(json).some((e) => e.includes('defaults.hazard'))).toBe(true);
+  });
+});
+
 describe('trackDataOf', () => {
   it('returns everything but source', () => {
     const file = zandvoort() as TrackFile;
