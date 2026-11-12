@@ -54,11 +54,6 @@ function parseSession(text: string | undefined): SessionRef {
   return { sessionUid, weekendId, feedCar: carId(Number(feedCar)) };
 }
 
-function wholeNumber(text: string | undefined, what: string): number {
-  if (text === undefined || !/^\d+$/.test(text)) throw new UsageError(`${what} must be a whole number, got "${text ?? ''}"`);
-  return Number(text);
-}
-
 function need(text: string | undefined, what: string): string {
   if (text === undefined || text === '') throw new UsageError(`drivers needs ${what}`);
   return text;
@@ -70,8 +65,8 @@ function actionOf(verb: string, args: string[], values: DriversValues): DriverAc
     case 'add':
       return { kind: 'drivers.add', person: need(args[0], 'a person'), displayName: need(values.name, '--name "<display name>"') };
     case 'link':
-      if (values.accept) return { kind: 'drivers.accept' };
-      return { kind: 'drivers.link', session: parseSession(args[0]), carId: carId(wholeNumber(args[1], 'the slot')), person: need(args[2], 'a person') };
+      // SP4.3b Task 2: `drivers link <team> <raceNumber> <person>`, `--accept` removed.
+      throw new Error('not implemented');
     case 'exclude':
       return { kind: 'drivers.exclude', person: need(args[0], 'a person'), session: parseSession(args[1]) };
     case 'override': {

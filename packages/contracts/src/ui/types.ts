@@ -1,5 +1,5 @@
 // UI state shared by the bridge and every window (spec 7.2, 7.5, 7.7, 7.8). JSON-safe.
-import type { CalibrationSource, CarId, FeedId, InsightCategory, PersonId, SessionRef } from '@pitwall/domain';
+import type { CalibrationSource, CarId, FeedId, InsightCategory, PersonId, SessionRef, TeamId } from '@pitwall/domain';
 
 export type WindowId = string;
 export type Geometry = { screen: number; x: number; y: number; width: number; height: number };
@@ -40,10 +40,8 @@ export type UiAction =
   // next session start (C75).
   /** A new person: `person` kebab-case (its file name). */
   | { kind: 'drivers.add'; person: PersonId; displayName: string }
-  /** Links one stored session's slot to `person`; by the slot's name and race number when the slot has a name. */
-  | { kind: 'drivers.link'; session: SessionRef; carId: CarId; person: PersonId }
-  /** Confirms every shown suggestion (`drivers.links`) as a link. */
-  | { kind: 'drivers.accept' }
+  /** Links a seat (team and race number) to `person` for every stored session; `null` unlinks the seat (C62c). */
+  | { kind: 'drivers.link'; team: TeamId; raceNumber: number; person: PersonId | null }
   | { kind: 'drivers.exclude'; person: PersonId; session: SessionRef }
   /** `value` within the entry's declared range (`ProfileEntryDecl.range`). */
   | { kind: 'drivers.override'; person: PersonId; key: string; value: number }

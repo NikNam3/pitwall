@@ -71,8 +71,8 @@ describe('decodeUiAction drivers', () => {
   const session = { sessionUid: '123', weekendId: '77', feedCar: 0 };
   const actions = [
     { kind: 'drivers.add', person: 'anna', displayName: 'Anna' },
-    { kind: 'drivers.link', session, carId: 3, person: 'anna' },
-    { kind: 'drivers.accept' },
+    { kind: 'drivers.link', team: 3, raceNumber: 7, person: 'anna' },
+    { kind: 'drivers.link', team: 3, raceNumber: 7, person: null },
     { kind: 'drivers.exclude', person: 'anna', session },
     { kind: 'drivers.override', person: 'anna', key: 'driverNoise.coreScatterMs', value: 310.5 },
     { kind: 'drivers.override.clear', person: 'anna', key: 'driverNoise.coreScatterMs' },
@@ -84,11 +84,11 @@ describe('decodeUiAction drivers', () => {
   const invalid: Array<[string, unknown]> = [
     ['a person that is no string', { kind: 'drivers.add', person: 7, displayName: 'Anna' }],
     ['a missing display name', { kind: 'drivers.add', person: 'anna' }],
-    ['a link without its session', { kind: 'drivers.link', carId: 3, person: 'anna' }],
-    ['a link car that is no integer', { kind: 'drivers.link', session, carId: '3', person: 'anna' }],
+    ['a link without its team', { kind: 'drivers.link', raceNumber: 7, person: 'anna' }],
+    ['a link race number that is no integer', { kind: 'drivers.link', team: 3, raceNumber: '7', person: 'anna' }],
     ['a session uid that is no string', { kind: 'drivers.exclude', person: 'anna', session: { ...session, sessionUid: 123 } }],
     ['a session feed car that is no integer', { kind: 'drivers.exclude', person: 'anna', session: { ...session, feedCar: 0.5 } }],
-    ['a session without its weekend', { kind: 'drivers.link', session: { sessionUid: '123', feedCar: 0 }, carId: 3, person: 'anna' }],
+    ['a session without its weekend', { kind: 'drivers.exclude', person: 'anna', session: { sessionUid: '123', feedCar: 0 } }],
     ['an override value that is no number', { kind: 'drivers.override', person: 'anna', key: 'k', value: '5' }],
     ['an override value that is not finite', { kind: 'drivers.override', person: 'anna', key: 'k', value: Number.NaN }],
     ['an override clear without its key', { kind: 'drivers.override.clear', person: 'anna' }],

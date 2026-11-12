@@ -116,7 +116,6 @@ export class UiState {
         return INVALID;
       case 'drivers.add':
       case 'drivers.link':
-      case 'drivers.accept':
       case 'drivers.exclude':
       case 'drivers.override':
       case 'drivers.override.clear':

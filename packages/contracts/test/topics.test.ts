@@ -24,7 +24,7 @@ import carDetail from '../src/topics/car.detail.ts';
 import laps from '../src/topics/laps.ts';
 
 describe('TOPICS', () => {
-  it('has exactly the 12 feed topics besides the situation topics (spec 8.4, replay.status of 8.5, calibration.active of SP4.1a) with their modes and rates', () => {
+  it('has exactly the 13 feed topics besides the situation topics (spec 8.4, replay.status of 8.5, calibration.active of SP4.1a, config.effective of SP4.3b) with their modes and rates', () => {
     const table = Object.entries(TOPICS)
       .filter(([key, d]) => d.scope === 'feed' && d.owner === 'core' && !key.startsWith('situation.'))
       .map(([key, d]) => [key, d.name, d.mode, d.maxHz] as const)
@@ -34,6 +34,7 @@ describe('TOPICS', () => {
       ['car.detail', 'car.detail', 'state', 30],
       ['car.telemetry', 'car.telemetry', 'state', 60],
       ['cars.overview', 'cars.overview', 'state', 10],
+      ['config.effective', 'config.effective', 'state', Infinity],
       ['events', 'events', 'append', Infinity],
       ['feed.status', 'feed.status', 'state', 2],
       ['insights', 'insights', 'append', Infinity],
@@ -59,7 +60,7 @@ describe('TOPICS', () => {
   });
   it('gives every core topic outside dev, ui, the calibration store\'s and the profile module\'s scope feed', () => {
     const core = Object.entries(TOPICS).filter(([name, d]) => d.owner === 'core' && !/^(dev|ui)\./.test(name) && !['calibration.sets', 'calibration.values', 'calibration.candidates', 'drivers.profiles', 'drivers.links'].includes(name));
-    expect(core).toHaveLength(12 + 20);
+    expect(core).toHaveLength(13 + 20);
     for (const [, d] of core) expect(d.scope).toBe('feed');
   });
   it.each(['calibration.sets', 'calibration.values', 'calibration.candidates'] as const)('has the global topic %s of the calibration store (C54, C62a): owner core, state', (name) => {
@@ -159,7 +160,7 @@ describe('topic types', () => {
       | 'raisingAverage.field' | 'lapOverview.car' | 'weather.forecast' | 'crossover.car'
       | 'rejoin.car' | 'rejoin.ghostLines' | 'scCall.car' | 'pitWindow.car'
       | 'calibration.sets' | 'calibration.values' | 'calibration.candidates' | 'calibration.active'
-      | 'drivers.profiles' | 'drivers.links' | 'forecastScore.report'
+      | 'drivers.profiles' | 'drivers.links' | 'forecastScore.report' | 'config.effective'
       | 'situation.carActivityPractice' | 'situation.carActivityQualifying' | 'situation.carActivityRace' | 'situation.carFlags'
       | 'situation.carDriver' | 'situation.carLocation' | 'situation.carStatus' | 'situation.clock' | 'situation.compoundRule' | 'situation.lapValidity'
       | 'situation.penalties' | 'situation.raceControlPractice' | 'situation.raceControlQualifying' | 'situation.raceControlRace'

@@ -148,16 +148,14 @@ describe('pitwall drivers', () => {
     const store = fakeStore();
     const runs = [
       await drivers(['add', 'asym'], store.deps, env, { name: 'Asymetrisch' }),
-      await drivers(['link', '1234/w1/0', '3', 'asym'], store.deps, env),
-      await drivers(['link'], store.deps, env, { accept: true }),
+      await drivers(['link', '0', '63', 'asym'], store.deps, env),
       await drivers(['exclude', 'asym', '5678/w1/0'], store.deps, env),
       await drivers(['override', 'asym', SCATTER, '400'], store.deps, env),
     ];
-    expect(runs.map((r) => r.code)).toEqual([0, 0, 0, 0, 0]);
+    expect(runs.map((r) => r.code)).toEqual([0, 0, 0, 0]);
     expect(store.actions).toEqual<DriverAction[]>([
       { kind: 'drivers.add', person: 'asym', displayName: 'Asymetrisch' },
-      { kind: 'drivers.link', session: S1, carId: carId(3), person: 'asym' },
-      { kind: 'drivers.accept' },
+      { kind: 'drivers.link', team: 0, raceNumber: 63, person: 'asym' },
       { kind: 'drivers.exclude', person: 'asym', session: S2 },
       { kind: 'drivers.override', person: 'asym', key: SCATTER, value: 400 },
     ]);
@@ -195,8 +193,7 @@ describe('pitwall drivers', () => {
     const runs = [
       await drivers([], store.deps, env),
       await drivers(['add', 'asym'], store.deps, env, { name: 'Asymetrisch' }),
-      await drivers(['link', '1234/w1/0', '3', 'asym'], store.deps, env),
-      await drivers(['link'], store.deps, env, { accept: true }),
+      await drivers(['link', '0', '63', 'asym'], store.deps, env),
       await drivers(['exclude', 'asym', '5678/w1/0'], store.deps, env),
       await drivers(['override', 'asym', SCATTER, '400'], store.deps, env),
       await drivers(['show', 'asym'], store.deps, env),

@@ -145,14 +145,10 @@ export const decodeUiAction = (raw: unknown): UiAction | undefined => {
     // The driver-profile actions (C62c): only their shape; the bridge's profile store checks persons, sessions and keys (C73).
     case 'drivers.add':
       return isString(raw.person) && isString(raw.displayName) ? { kind: raw.kind, person: raw.person, displayName: raw.displayName } : undefined;
-    case 'drivers.link': {
-      const session = decodeSessionRef(raw.session);
-      return session !== undefined && isInteger(raw.carId) && isString(raw.person)
-        ? { kind: raw.kind, session, carId: raw.carId as CarId, person: raw.person }
+    case 'drivers.link':
+      return isInteger(raw.team) && isInteger(raw.raceNumber) && (raw.person === null || isString(raw.person))
+        ? { kind: raw.kind, team: raw.team, raceNumber: raw.raceNumber, person: raw.person }
         : undefined;
-    }
-    case 'drivers.accept':
-      return { kind: raw.kind };
     case 'drivers.exclude': {
       const session = decodeSessionRef(raw.session);
       return session !== undefined && isString(raw.person) ? { kind: raw.kind, person: raw.person, session } : undefined;

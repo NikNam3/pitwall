@@ -96,6 +96,11 @@ function fakeRepo(sessions: DriverSessionRow[]): { sessions: DriverSessionRow[];
 
 /** The stored session `s` as a driver-profile action names it (C60's key). */
 const ref = (s: Pick<DriverSessionRow, 'sessionUid' | 'weekendId' | 'playerCar'>): SessionRef => ({ sessionUid: s.sessionUid, weekendId: s.weekendId, feedCar: s.playerCar });
+/** The seat (team and race number) of slot `carNumber` of `s`, as `drivers.link` names it (SP4.3b Task 2). */
+const seat = (s: DriverSessionRow, carNumber: number): { team: number; raceNumber: number } => {
+  const key = s.cars.find((c) => c.carId === car(carNumber))?.carKey;
+  return { team: key?.teamId ?? -1, raceNumber: key?.raceNumber ?? -1 };
+};
 /** The slots of `s` as a run starting on it gives them to `snapshotFor`. */
 const slotsOf = (s: DriverSessionRow): SlotIdentity[] =>
   s.cars.map((c) => ({ carId: c.carId, teamId: c.carKey.teamId, raceNumber: c.carKey.raceNumber, name: c.driver.known ? c.driver.value : null }));
@@ -181,7 +186,7 @@ function setup({
   /** Adds the person and links it to the slot `carId` of `s`. */
   const addAndLink = (person: string, displayName: string, s: DriverSessionRow, carNumber: number) => {
     ok({ kind: 'drivers.add', person, displayName });
-    ok({ kind: 'drivers.link', session: ref(s), carId: car(carNumber), person });
+    ok({ kind: 'drivers.link', ...seat(s, carNumber), person });
   };
   return { dir, store, repo, features, ...h, close, apply, ok, persons, entry, addAndLink };
 }
@@ -217,7 +222,7 @@ describe('ProfileStore', () => {
     t.ok({ kind: 'drivers.add', person: 'anna', displayName: 'Anna' });
     expect(readPerson(t.dir, 'anna')).toEqual({ id: 'anna', displayName: 'Anna', links: [], excluded: [], overrides: {} });
 
-    t.ok({ kind: 'drivers.link', session: ref(s1), carId: car(2), person: 'anna' });
+    t.ok({ kind: 'drivers.link', ...seat(s1, 2), person: 'anna' });
     expect(readPerson(t.dir, 'anna').links).toEqual([{ kind: 'nameAndNumber', name: 'Anna R', raceNumber: 7 }]);
     // The three sessions' slots are the person's: the entries rest on them, and none is listed unlinked.
     const last = withSessions(t.features.calls.count).at(-1) ?? [];
@@ -412,7 +417,7 @@ describe('ProfileStore', () => {
     expect(readPerson(t.dir, 'ben').links).toHaveLength(1);
 
     // Accept links every shown suggestion: a slot without a name by its slot.
-    t.ok({ kind: 'drivers.accept' });
+    // SP4.3b Task 2: drivers.accept removed.
     expect(readPerson(t.dir, 'anna').links).toEqual([
       { kind: 'nameAndNumber', name: 'Anna R', raceNumber: 7 },
       { kind: 'slot', session: ref(s2), carId: car(0) },
@@ -517,7 +522,7 @@ describe('ProfileStore', () => {
 
     changes('add', () => t.ok({ kind: 'drivers.add', person: 'anna', displayName: 'Anna' }));
     expect(t.persons().map((p) => p.person)).toEqual(['anna']);
-    changes('link', () => t.ok({ kind: 'drivers.link', session: ref(s1), carId: car(2), person: 'anna' }));
+    changes('link', () => t.ok({ kind: 'drivers.link', ...seat(s1, 2), person: 'anna' }));
     expect(t.persons()[0]?.links).toEqual([{ kind: 'nameAndNumber', name: 'Anna R', raceNumber: 7 }]);
     changes('override', () => t.ok({ kind: 'drivers.override', person: 'anna', key: 'fake.meanLapMs', value: 95_000 }));
     expect(valueOf(t.entry('anna', 'fake.meanLapMs'))).toBe(95_000);
@@ -525,7 +530,7 @@ describe('ProfileStore', () => {
     expect(valueOf(t.entry('anna', 'fake.meanLapMs'))).toBe(mean([1, 2, 3, 4, 5].map((n) => 90_000 + n)));
     // Car 3 (no name, Anna's race number) is suggested; accepting links it.
     expect(t.last<DriversLinksValue>('drivers.links').unlinked.map((u) => [u.carId, u.suggestion?.person])).toEqual(expect.arrayContaining([[car(3), 'anna']]));
-    changes('accept', () => t.ok({ kind: 'drivers.accept' }));
+    // SP4.3b Task 2: drivers.accept removed.
     expect(t.last<DriversLinksValue>('drivers.links').unlinked.map((u) => u.carId)).not.toContain(car(3));
     changes('exclude', () => t.ok({ kind: 'drivers.exclude', person: 'anna', session: ref(s1) }));
     expect(t.persons()[0]?.excluded).toEqual([ref(s1)]);

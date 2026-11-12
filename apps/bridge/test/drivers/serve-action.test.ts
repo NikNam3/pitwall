@@ -122,7 +122,7 @@ describe('serve: the running bridge applies driver-profile actions (P3, C62c)', 
 
     // Applied by the running bridge: answered, written, published.
     expect(await live.send('add', { kind: 'drivers.add', person: 'anna', displayName: 'Anna' })).toEqual({ type: 'actionResult', id: 'add', ok: true });
-    expect(await live.send('link', { kind: 'drivers.link', session: live.seedRef, carId: live.player.carId, person: 'anna' }))
+    expect(await live.send('link', { kind: 'drivers.link', team: live.player.teamId, raceNumber: live.player.raceNumber, person: 'anna' }))
       .toEqual({ type: 'actionResult', id: 'link', ok: true });
     // A rejected action is answered with its reason (C73).
     expect(await live.send('bad', { kind: 'drivers.override', person: 'nobody', key: 'x', value: 1 })).toMatchObject({ type: 'actionResult', id: 'bad', ok: false, reason: 'invalid' });
