@@ -12,7 +12,7 @@ import { applyOne, timeline } from '../support/runner.ts';
 const player = { teamId: 0, raceNumber: 1 };
 /** One earlier session (Task 27: its projection and the car key of each slot, C62); empty, the runner never reads it. */
 const WEEKEND: WeekendContext = { weekendId: 'w', player, sessions: [{ sessionUid: '1' as SessionUid, playerCar: carId(0),
-  cars: [{ carId: carId(0), carKey: player }], projection: { laps: [], stints: [], pitStops: [], crossings: [], events: [], penalties: [], decisions: [], clock: [], spans: {} } }] };
+  cars: [{ carId: carId(0), carKey: player }], projection: { laps: [], stints: [], pitStops: [], crossings: [], events: [], penalties: [], decisions: [], clock: [], spans: {}, appendedAt: {} } }] };
 
 /** The frame without its Participants packet. */
 const withoutParticipants = ({ participants: _participants, ...frame }: Frame): Frame => frame;

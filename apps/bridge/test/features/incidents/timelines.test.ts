@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { unknown, type IncidentEntry } from '@pitwall/domain';
 import { INCIDENTS, incidentsCalculator, type IncidentsOutput } from '@pitwall/analysis';
 import { CalculatorRegistry, Scheduler, SessionRunner, situationOf, type Frame } from '@pitwall/engine';
-import { IDLE_FEED, NO_PRIORS } from '../../../../../test-support/builders/index.ts';
+import { IDLE_FEED, NO_DRIVERS, NO_PRIORS } from '../../../../../test-support/builders/index.ts';
 import { initFor } from '../../../../../packages/engine/test/support/run.ts';
 import { gridStart, lap, scar, script, status, STEP, type Beat } from '../../../../../packages/engine/test/situations/script.ts';
 
@@ -42,10 +42,10 @@ function incidentsRuns(all: Frame[]): Array<{ frame: number; scheduled: Incident
   const runs: Array<{ frame: number; scheduled: IncidentEntry[]; fresh: IncidentEntry[] }> = [];
   all.forEach((f, frame) => runner.apply(f, (r) => {
     if (r.delta.rewound !== undefined) scheduler.reset();
-    const input = { live: r.state, situation: situationOf(r.state), history: r.state.history, changed: r.changed, delta: r.delta, weekend: r.state.weekend, feed: IDLE_FEED, config: {}, priors: NO_PRIORS, track: unknown('notApplicable') };
+    const input = { live: r.state, situation: situationOf(r.state), history: r.state.history, changed: r.changed, delta: r.delta, weekend: r.state.weekend, feed: IDLE_FEED, config: {}, priors: NO_PRIORS, drivers: NO_DRIVERS, track: unknown('notApplicable') };
     const { ran, outputs } = scheduler.run(input);
     if (!ran.includes(INCIDENTS)) return;
-    const view = { ...input, priors: unknown('notApplicable'), outputs: new Map() };
+    const view = { ...input, priors: unknown('notApplicable'), drivers: [], outputs: new Map() };
     const fresh = incidentsCalculator.output(incidentsCalculator.init(view), view);
     runs.push({ frame, scheduled: (outputs.get(INCIDENTS) as IncidentsOutput).feed, fresh: fresh.feed });
   }));

@@ -52,7 +52,7 @@ describe('SessionRunner retention', () => {
   it('carries the read-only weekend context over a rewind by reference', () => {
     const original = timeline(300, [100, 250]);
     const player = { teamId: 0, raceNumber: 1 };
-    const projection = { laps: [], stints: [], pitStops: [], crossings: [], events: [], penalties: [], decisions: [], clock: [], spans: {} };
+    const projection = { laps: [], stints: [], pitStops: [], crossings: [], events: [], penalties: [], decisions: [], clock: [], spans: {}, appendedAt: {} };
     const weekend: WeekendContext = { weekendId: 'w', player, sessions: [{ sessionUid: '1' as SessionUid, playerCar: carId(0), cars: [{ carId: carId(0), carKey: player }], projection }] };
     const r = new SessionRunner(initFor(original), { contextFor: () => weekend });
     runAll(r, original);

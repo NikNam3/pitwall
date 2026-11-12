@@ -29,8 +29,20 @@ export function carLaps(history: Pick<History, 'laps'>, carId: CarId): LapRecord
   return currentLaps((history.laps as readonly LapRecord[]).filter((l) => l.carId === carId));
 }
 
-/** The car's laps of its current stint (`stintLaps`), as `carLaps` gives them. */
-export function currentStintLaps(history: History, carId: CarId): LapRecord[] {
-  const last = history.stints.filter((s) => s.carId === carId).at(-1);
-  return stintLaps(carLaps(history, carId), last);
+/** Every car's laps, each as `carLaps` gives them, from one pass over the history's laps (a reader of many cars). */
+export function lapsByCar(history: Pick<History, 'laps'>): ReadonlyMap<CarId, LapRecord[]> {
+  const byCar = new Map<CarId, LapRecord[]>();
+  // `currentLaps` sorts by car id, then lap number: each car's list comes out sorted by lap number
+  for (const l of currentLaps(history.laps as readonly LapRecord[])) {
+    const own = byCar.get(l.carId);
+    if (own === undefined) byCar.set(l.carId, [l]);
+    else own.push(l);
+  }
+  return byCar;
+}
+
+/** The car's laps of its current stint (`stintLaps`), as `carLaps` gives them; `laps`, when given, are its `carLaps`. */
+export function currentStintLaps(history: History, carId: CarId, laps: readonly LapRecord[] = carLaps(history, carId)): LapRecord[] {
+  const last = history.stints.findLast((s) => s.carId === carId);
+  return stintLaps(laps, last);
 }

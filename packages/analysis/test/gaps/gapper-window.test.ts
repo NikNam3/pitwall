@@ -337,7 +337,7 @@ describe('the gapper window over engine frames with a flashback (C31.3, Review F
     const runner = new SessionRunner({ feedId: feedId('test'), sessionUid: first.sessionUid, session: first.session });
     let window: number[] = [];
     const record = ({ state, changed, delta }: StepResult) => {
-      const view: EngineView = { live: state, situation: situationOf(state), history: state.history, changed, delta, weekend: state.weekend, feed: IDLE_FEED, config: {}, priors: unknown('notApplicable'), track: unknown('notApplicable'), outputs: new Map() };
+      const view: EngineView = { live: state, situation: situationOf(state), history: state.history, changed, delta, weekend: state.weekend, feed: IDLE_FEED, config: {}, priors: unknown('notApplicable'), track: unknown('notApplicable'), drivers: [], outputs: new Map() };
       window = windowOf(gapperLines(gapsCalculator.output(gapsCalculator.init(view), view), at100));
     };
     for (const frame of frames) runner.apply(frame, record);

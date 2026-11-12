@@ -38,8 +38,8 @@ describe('sourceTitle: the badge\'s hover per kind', () => {
 });
 
 describe('sourceWord: the source kind in words', () => {
-  it('holds the three words', () => {
-    expect(sourceWord).toEqual({ session: 'session', calibration: 'calibration', default: 'default' });
+  it('holds the four words', () => {
+    expect(sourceWord).toEqual({ session: 'session', calibration: 'calibration', profile: 'profile', default: 'default' });
   });
 });
 

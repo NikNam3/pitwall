@@ -18,6 +18,7 @@ import {
   type OpenSpan,
   type RaceEvent,
   type RaceEventKind,
+  type ProfileSnapshot,
   type RunPriors,
   type SessionState,
   type SessionTime,
@@ -383,6 +384,9 @@ export function telemetryRestricted(car: CarState): CarState {
 /** The run's priors of a run without any (C62a): no session-start snapshot, none picked; `view.priors` is `notApplicable`. */
 export const NO_PRIORS: RunPriors = { start: null, snapshots: {} };
 
+/** The run's profile snapshot of a run without any (C62c): every `view.drivers` slot is `notApplicable`. */
+export const NO_DRIVERS: ProfileSnapshot | null = null;
+
 /** The view's situation by default: a race, no span open (the session phase is in the projection's spans, C20). */
 export const RACING: EngineView['situation'] = { weekendPhase: { kind: 'race', format: 'grandPrix' }, byMachine: {} };
 
@@ -393,7 +397,7 @@ export const RACING: EngineView['situation'] = { weekendPhase: { kind: 'race', f
  * `outputs` are the upstream calculators' outputs; `delta` defaults to "everything in `history` is new"; `situation`
  * defaults to `RACING`. Feed is idle and healthy; `feed` overrides it. `track` defaults to `unknown('notApplicable')`
  * (no track file). `changed` is empty; no weekend context; `priors` defaults to `unknown('notApplicable')` (no priors
- * snapshot, C62a).
+ * snapshot, C62a); `drivers` to `unknown('notApplicable')` for every slot (no profile snapshot, C62c).
  */
 export function engineView({
   cars = [],
@@ -408,6 +412,7 @@ export function engineView({
   sessionTime = 0,
   track = unknown('notApplicable'),
   priors = unknown('notApplicable'),
+  drivers,
 }: {
   cars?: CarState[];
   history?: Partial<Projection>;
@@ -421,6 +426,7 @@ export function engineView({
   sessionTime?: SessionTime;
   track?: EngineView['track'];
   priors?: EngineView['priors'];
+  drivers?: EngineView['drivers'];
 } = {}): EngineView {
   const base: EngineState = initialState({
     feedId: feedId('test'),
@@ -450,12 +456,13 @@ export function engineView({
     config,
     priors,
     track,
+    drivers: drivers ?? slots.map(() => unknown('notApplicable')),
   };
 }
 
 /** A projection with every list empty. */
 const emptyProjection = (): Projection => ({
-  laps: [], stints: [], pitStops: [], crossings: [], events: [], penalties: [], decisions: [], clock: [], spans: {},
+  laps: [], stints: [], pitStops: [], crossings: [], events: [], penalties: [], decisions: [], clock: [], spans: {}, appendedAt: {},
 });
 
 /** A projection with the given lists and the rest empty: pass it to `engineView({ history })`. */

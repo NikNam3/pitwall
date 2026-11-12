@@ -1,5 +1,6 @@
-// The catalogue (spec 8.1): imports every widget, feature and topic file, writes catalogue.generated.json and checks the naming rules.
-import { existsSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+// The catalogue (spec 8.1): imports every widget, feature and topic file and every simulator marker (C50), writes
+// catalogue.generated.json and checks the naming rules.
+import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { Catalogue } from '../packages/contracts/src/topics/dev.catalogue.ts';
@@ -116,7 +117,54 @@ export async function buildCatalogue(dirs: CatalogueDirs = DEFAULT_DIRS): Promis
       readers: widgets.filter((w) => w.topics.some((t) => t.topic === name)).map((w) => w.name).sort(),
     });
   }
-  return { widgets, topics, features };
+  return { widgets, topics, features, simulators: await findSimulators(dirs.analysis) };
+}
+
+/** A module exporting a `SIMULATOR` marker (`defineSimulator`, C50). */
+type Simulators = NonNullable<Catalogue['simulators']>;
+
+type SimulatorModule ={ SIMULATOR?: { kind?: unknown; name?: unknown } };
+
+/** Matches the marker's export; only such `index.ts` files are imported. */
+const SIMULATOR_EXPORT = /^export const SIMULATOR\b/m;
+
+/** The simulator units in `analysisDir`: the folders whose `index.ts` exports a `SIMULATOR` marker, sorted by folder. */
+async function findSimulators(analysisDir: string | undefined): Promise<Simulators> {
+  const simulators: Simulators = [];
+  if (analysisDir === undefined) return simulators;
+  for (const folder of findAnalysisFolders(analysisDir)) {
+    const index = join(analysisDir, folder, 'index.ts');
+    if (!existsSync(index) || !SIMULATOR_EXPORT.test(readFileSync(index, 'utf8'))) continue;
+    const module = (await import(pathToFileURL(index).href)) as SimulatorModule & Record<string, unknown>;
+    const marker = module.SIMULATOR;
+    if (marker?.kind !== 'simulator' || typeof marker.name !== 'string') continue;
+    simulators.push({ name: marker.name, folder: shown(join(analysisDir, folder)), exports: Object.keys(module).sort() });
+  }
+  return simulators;
+}
+
+/** What a simulator never has (C50): scheduler declarations a calculator or analysis exports. */
+const NOT_A_SIMULATOR = ['reads', 'cadence', 'topics', 'calculators', 'jobs', 'insights'];
+
+/** The simulator rules (C50): name equals folder, no feature, no reads or cadence, no topic. */
+function checkSimulators(c: Catalogue, errors: string[]): void {
+  const listed = c.simulators ?? [];
+  const simulators = new Set(listed.map((s) => s.name));
+  for (const s of listed) {
+    const index = `${s.folder}/index.ts`;
+    const folderName = s.folder.slice(s.folder.lastIndexOf('/') + 1);
+    if (s.name !== folderName) errors.push(`${index}: simulator name "${s.name}" differs from its folder "${folderName}"`);
+    simulators.add(folderName);
+    for (const name of s.exports.filter((e) => NOT_A_SIMULATOR.includes(e))) {
+      errors.push(`${index}: simulator "${s.name}" exports ${name}; a simulator has no reads, no cadence and no topic`);
+    }
+  }
+  for (const f of c.features) {
+    if (simulators.has(f.name)) errors.push(`${f.folder}/register.ts: a feature of simulator "${f.name}"; a simulator has none`);
+  }
+  for (const t of c.topics) {
+    if (simulators.has(t.owner)) errors.push(`${t.file}: topic "${t.name}" is owned by simulator "${t.owner}"; a simulator has no topic`);
+  }
 }
 
 /** The folders in `analysisDir`, sorted; none when it is missing. Each is a unit even before its feature exists. */
@@ -177,6 +225,7 @@ export function checkCatalogue(c: Catalogue, analysisUnits: readonly string[] = 
       }
     }
   }
+  checkSimulators(c, errors);
   return { errors, warnings };
 }
 

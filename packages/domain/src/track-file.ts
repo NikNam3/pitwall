@@ -31,6 +31,8 @@ export type TrackData = {
   turns: Known<TrackTurn[]>;
   /** In lap order, disjoint; a zone may wrap past the line (start > end). */
   brakingZones: Known<BrakingZone[]>;
+  /** In lap order, by lap fraction (as braking zones); a zone may wrap past the line (start > end). `detection`: where the gap to the car ahead is measured. */
+  drsZones: Known<{ detection: LapFraction; start: LapFraction; end: LapFraction }[]>;
   defaults: {
     pitLossMs: { green: Known<TrackDefault<Ms>>; vsc: Known<TrackDefault<Ms>>; sc: Known<TrackDefault<Ms>> };
     /** Relative to medium = 0. */
@@ -127,6 +129,15 @@ function checkZones(value: unknown, path: string, errors: Errors): void {
   }
 }
 
+function checkDrsZones(value: unknown, path: string, errors: Errors): void {
+  if (!Array.isArray(value)) return void errors.push(`${path}: not an array`);
+  value.forEach((z, i) => {
+    const at = `${path}[${i}]`;
+    if (!isRec(z)) return void errors.push(`${at}: not an object`);
+    for (const k of ['detection', 'start', 'end']) checkFraction(z[k], `${at}.${k}`, errors);
+  });
+}
+
 /** Checks parsed JSON against `TrackFile`: every part's shape, every lap fraction in `[0, 1)`, every `Ms` an integer. */
 export function validateTrackFile(json: unknown): { ok: true; file: TrackFile } | { ok: false; errors: string[] } {
   const errors: Errors = [];
@@ -139,6 +150,7 @@ export function validateTrackFile(json: unknown): { ok: true; file: TrackFile } 
   checkKnown(json.outline, 'outline', errors, (v, p) => checkOutline(v, p, errors));
   checkKnown(json.turns, 'turns', errors, (v, p) => checkTurns(v, p, errors));
   checkKnown(json.brakingZones, 'brakingZones', errors, (v, p) => checkZones(v, p, errors));
+  checkKnown(json.drsZones, 'drsZones', errors, (v, p) => checkDrsZones(v, p, errors));
 
   const defaults = json.defaults;
   if (!isRec(defaults)) errors.push('defaults: not an object');

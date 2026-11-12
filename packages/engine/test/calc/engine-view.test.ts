@@ -24,7 +24,7 @@ import { gridStart, run, script } from '../situations/script.ts';
 import { input, inputOf, viewOf } from '../support/scheduler.ts';
 
 /** The parts of the view (C39). */
-const PARTS = ['live', 'situation', 'history', 'delta', 'changed', 'weekend', 'config', 'priors', 'track', 'feed', 'outputs'] as const;
+const PARTS = ['live', 'situation', 'history', 'delta', 'changed', 'weekend', 'config', 'priors', 'track', 'drivers', 'feed', 'outputs'] as const;
 type Part = (typeof PARTS)[number];
 
 /** A race from the grid to 60 frames after lights out: closed session-phase spans, open ones, every car's spans. */
@@ -129,7 +129,7 @@ describe('openSpansOf', () => {
   it('reads only the situation: a view whose situation has the spans gives them, whatever its projection holds', () => {
     const span = { machine: 'car-status', id: 0, carId: 2 as CarId, kind: 'competing', start: 0, confirmed: true, detail: undefined, startFrame: 1 } as const;
     const situation: Situation = { weekendPhase: { kind: 'race', format: 'grandPrix' }, byMachine: { 'car-status': [span] } };
-    const view: EngineView = { ...inputOf(race().last), situation, priors: unknown('notApplicable'), outputs: new Map() };
+    const view: EngineView = { ...inputOf(race().last), situation, priors: unknown('notApplicable'), drivers: [], outputs: new Map() };
     expect(openSpansOf(view, 'car-status', 2 as CarId)).toEqual([span]);
     expect(openSpansOf(view, 'car-status', 3 as CarId)).toEqual([]);
   });

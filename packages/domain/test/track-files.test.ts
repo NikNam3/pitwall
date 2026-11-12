@@ -55,6 +55,16 @@ describe('the committed track files', () => {
       const wrap = zones.at(-1);
       if (wrap && wrap.start > wrap.end && zones.length > 1) expect(wrap.end).toBeLessThan(zones[0]!.start);
     }
+    // drsZones is a Known part of every file; a known list holds lap fractions only.
+    expect(r.file.drsZones).toHaveProperty('known');
+    if (r.file.drsZones.known) {
+      for (const z of r.file.drsZones.value) {
+        for (const f of [z.detection, z.start, z.end]) {
+          expect(f).toBeGreaterThanOrEqual(0);
+          expect(f).toBeLessThan(1);
+        }
+      }
+    }
   });
 });
 
@@ -89,6 +99,58 @@ describe('validateTrackFile rejections', () => {
     const json = zandvoort();
     delete json.realLengthM.known;
     expect(errorsOf(json).some((e) => e.includes('realLengthM'))).toBe(true);
+  });
+
+  it('rejects a missing drsZones part', () => {
+    const json = zandvoort();
+    delete json.drsZones;
+    expect(errorsOf(json).some((e) => e.includes('drsZones'))).toBe(true);
+  });
+
+  it('rejects a drsZones value that is not a list', () => {
+    const json = zandvoort();
+    json.drsZones = { known: true, value: { detection: 0.1, start: 0.2, end: 0.3 }, at: 0 };
+    expect(errorsOf(json).some((e) => e.includes('drsZones'))).toBe(true);
+  });
+
+  it.each(['detection', 'start', 'end'])('rejects a drs zone without %s and names its path', (field) => {
+    const json = zandvoort();
+    const full: Record<string, number> = { detection: 0.85, start: 0.9, end: 0.1 };
+    const zone = Object.fromEntries(Object.entries(full).filter(([k]) => k !== field));
+    json.drsZones = { known: true, value: [zone], at: 0 };
+    expect(errorsOf(json).some((e) => e.includes('drsZones') && e.includes(field))).toBe(true);
+  });
+
+  it.each([
+    ['detection', 1],
+    ['start', -0.1],
+    ['end', 1.2],
+    ['start', Number.NaN],
+  ])('rejects a drs zone %s of %s', (field, fraction) => {
+    const json = zandvoort();
+    const zone: Record<string, number> = { detection: 0.4, start: 0.45, end: 0.55 };
+    zone[field] = fraction;
+    json.drsZones = { known: true, value: [zone], at: 0 };
+    expect(errorsOf(json).some((e) => e.includes('drsZones') && e.includes(field))).toBe(true);
+  });
+
+  it('accepts a valid drs zone list, a zone wrapping past the line included', () => {
+    const json = zandvoort();
+    json.drsZones = {
+      known: true,
+      value: [
+        { detection: 0.3, start: 0.35, end: 0.45 },
+        { detection: 0.88, start: 0.93, end: 0.04 },
+      ],
+      at: 0,
+    };
+    expect(validateTrackFile(json)).toMatchObject({ ok: true });
+  });
+
+  it('accepts an unknown drsZones part', () => {
+    const json = zandvoort();
+    json.drsZones = { known: false, reason: 'notReceived' };
+    expect(validateTrackFile(json)).toMatchObject({ ok: true });
   });
 
   it('rejects a value that is not an object', () => {

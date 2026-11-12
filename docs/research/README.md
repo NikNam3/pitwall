@@ -18,6 +18,8 @@ Race-engineering research done on 2026-10-27/28; 01–05 before the foundation s
 | [12-strategy-data-spike.md](12-strategy-data-spike.md) | What the recordings say about the strategy model: driver noise (AI vs our two humans), wear vs age, wet lap times, dirty air, blocking and passes, pit loss per condition, double stacks, the AI's stop and SC behaviour, undercut cases; engine defects found; consequences for the 4.3 spec; recordings wanted |
 | [13-strategy-compute-spike.md](13-strategy-compute-spike.md) | What the simulators cost and how fast the Monte Carlo ranking settles: race-forecast, strategy-dp and race-monte-carlo prototypes on a generated race; time per piece, convergence with and without common random numbers, time caps, mode switch, ablation per model part, rule-based candidates, the S5 ranking rule; consequences for the 4.3 spec; follow-up on traffic, DRS trains and pace uncertainty |
 | [14-strategy-reread-after-spike.md](14-strategy-reread-after-spike.md) | Every strategy paper reread with the compute spike's questions: overtaking per track, blocking, DRS trains, traffic after a stop, pace uncertainty, ranking and selection under noise; the spike's proposals after the reread (cap 5 s); corrections to 11 |
+| [15-pass-curve-fit.md](15-pass-curve-fit.md) | The pooled pass-curve fit on the F1 25 recordings (SP4.3a Task 13): recordings kept and dropped, curves per band and pooled, wet factor, DRS hint, the O14 checks (held loss, rejoin push-back) |
+| [16-scoreboard-baseline.json](16-scoreboard-baseline.json) | The first `pitwall score` baseline over the six race recordings (SP4.3a): the `--compare` base for later model changes, with its known limits |
 
 ## Provenance
 

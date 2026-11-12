@@ -58,6 +58,15 @@ const onlyKey = (db: Db): SessionKey => {
   return keyOf(rows[0]!);
 };
 
+/**
+ * A projection's fact and span lists: what storage serves (C28, C34). The live projection also holds the frame each entry
+ * was appended on (`appendedAt`, in memory only, SP4.3a ruling R1); a stored one supports only frame `'now'`.
+ */
+const lists = (p: Projection | undefined) => {
+  const { appendedAt: _appendedAt, ...rest } = p!;
+  return rest;
+};
+
 /** Every fact of a projection that describes a frame, with its list (C26). */
 const factsOf = (p: Projection) =>
   (['laps', 'stints', 'pitStops', 'crossings', 'events', 'penalties', 'clock'] as const).flatMap((list) =>
@@ -89,7 +98,7 @@ describe('storage over a segment with a flashback (race-singapore-wet-flashback)
   });
 
   it('the stored projection equals the live projection (C28, C34)', async () => {
-    expect(await new WeekendRepository(db).projectionOf(key)).toEqual(liveProjection);
+    expect(lists(await new WeekendRepository(db).projectionOf(key))).toEqual(lists(liveProjection));
   });
 
   it('membership over a stored projection (membershipOf with history only) equals the live one (C26)', async () => {
@@ -107,7 +116,7 @@ describe('storage over a segment with a flashback (race-singapore-wet-flashback)
     const k = onlyKey(replayed);
     expect(k).toEqual(key);
     expect(new WeekendRepository(replayed).sessionsOf(k.weekendId)).toEqual([expect.objectContaining({ complete: true, pwrecPath: FLASHBACK })]);
-    expect(await new WeekendRepository(replayed).projectionOf(k)).toEqual(liveProjection);
+    expect(lists(await new WeekendRepository(replayed).projectionOf(k))).toEqual(lists(liveProjection));
   });
 });
 

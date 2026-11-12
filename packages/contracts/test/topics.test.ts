@@ -55,11 +55,11 @@ describe('TOPICS', () => {
         .sort()
         .map((name) => [name, name, 'core', 'feed', 'state', 4]),
     );
-    expect(table).toHaveLength(19);
+    expect(table).toHaveLength(20);
   });
-  it('gives every core topic outside dev, ui and the calibration store\'s scope feed', () => {
-    const core = Object.entries(TOPICS).filter(([name, d]) => d.owner === 'core' && !/^(dev|ui)\./.test(name) && !['calibration.sets', 'calibration.values', 'calibration.candidates'].includes(name));
-    expect(core).toHaveLength(12 + 19);
+  it('gives every core topic outside dev, ui, the calibration store\'s and the profile module\'s scope feed', () => {
+    const core = Object.entries(TOPICS).filter(([name, d]) => d.owner === 'core' && !/^(dev|ui)\./.test(name) && !['calibration.sets', 'calibration.values', 'calibration.candidates', 'drivers.profiles', 'drivers.links'].includes(name));
+    expect(core).toHaveLength(12 + 20);
     for (const [, d] of core) expect(d.scope).toBe('feed');
   });
   it.each(['calibration.sets', 'calibration.values', 'calibration.candidates'] as const)('has the global topic %s of the calibration store (C54, C62a): owner core, state', (name) => {
@@ -76,6 +76,7 @@ describe('TOPICS', () => {
       ['crossover.car', 'crossover', 'feed', 'state', 1],
       ['damage.car', 'damage', 'feed', 'state', 4],
       ['ers.car', 'ers', 'feed', 'state', 4],
+      ['forecastScore.report', 'forecast-score', 'feed', 'state', 1],
       ['fuel.car', 'fuel', 'feed', 'state', 4],
       ['gaps.gapper', 'gaps', 'feed', 'state', 4],
       ['gaps.intervals', 'gaps', 'feed', 'state', 4],
@@ -158,8 +159,9 @@ describe('topic types', () => {
       | 'raisingAverage.field' | 'lapOverview.car' | 'weather.forecast' | 'crossover.car'
       | 'rejoin.car' | 'rejoin.ghostLines' | 'scCall.car' | 'pitWindow.car'
       | 'calibration.sets' | 'calibration.values' | 'calibration.candidates' | 'calibration.active'
+      | 'drivers.profiles' | 'drivers.links' | 'forecastScore.report'
       | 'situation.carActivityPractice' | 'situation.carActivityQualifying' | 'situation.carActivityRace' | 'situation.carFlags'
-      | 'situation.carLocation' | 'situation.carStatus' | 'situation.clock' | 'situation.compoundRule' | 'situation.lapValidity'
+      | 'situation.carDriver' | 'situation.carLocation' | 'situation.carStatus' | 'situation.clock' | 'situation.compoundRule' | 'situation.lapValidity'
       | 'situation.penalties' | 'situation.raceControlPractice' | 'situation.raceControlQualifying' | 'situation.raceControlRace'
       | 'situation.sessionPhasePractice' | 'situation.sessionPhaseQualifying' | 'situation.sessionPhaseRace' | 'situation.warnings'
       | 'situation.weekendPhase' | 'situation.zoneFlags'

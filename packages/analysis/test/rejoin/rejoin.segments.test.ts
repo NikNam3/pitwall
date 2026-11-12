@@ -14,7 +14,7 @@ import { feedId, known, unknown, type MapPoint, type TrackData, type TrackFile }
 import { CalculatorRegistry, Scheduler, SessionRunner, SessionTracker, situationOf, type Calculator, type DeepReadonly, type EngineState, type StepResult } from '@pitwall/engine';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { guarded } from '../../../engine/test/support/scheduler.ts';
-import { IDLE_FEED, NO_PRIORS } from '../../../../test-support/builders/index.ts';
+import { IDLE_FEED, NO_DRIVERS, NO_PRIORS } from '../../../../test-support/builders/index.ts';
 import { segmentPackets } from '../../../../test-support/segments.ts';
 import { rejoinCalculator } from '../../src/rejoin/calculator.ts';
 import { REJOIN, REJOIN_CONFIG, type RejoinOutput } from '../../src/rejoin/index.ts';
@@ -59,7 +59,7 @@ async function runSegment(file: string, keep: (state: DeepReadonly<EngineState>)
       weekend: state.weekend,
       feed: IDLE_FEED,
       config: {},
-      priors: NO_PRIORS,
+      priors: NO_PRIORS, drivers: NO_DRIVERS,
       track: known(track, 0),
     });
     expect(result.errors).toEqual([]);

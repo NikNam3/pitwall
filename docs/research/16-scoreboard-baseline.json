@@ -1,0 +1,4640 @@
+{
+ "date": "2026-11-12",
+ "commit": "cc05f88f",
+ "command": "PITWALL_DATA_DIR=<empty temp dir> node apps/bridge/src/cli/pitwall.ts score recordings/<recording>.pwrec.gz --json <file>",
+ "note": "The first scoreboard baseline (SP4.3a Task 23): the --compare base for later model changes. Known limits (ruling R52, for 4.3b): the forecast tables still count laps under SC/VSC (about 73 % of the h1 lap-time error on Texas) and the stops' in- and out-laps; Mexico and Miami are wet all race, so every dry-only table has 0 cases.",
+ "reports": {
+  "2026-10-29_00-04-08_095e1bf6add44b18": {
+   "experiments": {
+    "rejoin": {
+     "name": "rejoin",
+     "unit": "places",
+     "ai": {
+      "n": 17,
+      "meanAbs": {
+       "known": true,
+       "value": 0.11764705882352941,
+       "at": 4795132
+      },
+      "bias": {
+       "known": true,
+       "value": 0,
+       "at": 4795132
+      }
+     },
+     "human": {
+      "n": 1,
+      "meanAbs": {
+       "known": true,
+       "value": 0,
+       "at": 4795132
+      },
+      "bias": {
+       "known": true,
+       "value": 0,
+       "at": 4795132
+      }
+     }
+    },
+    "undercut": {
+     "name": "undercut",
+     "unit": "ms",
+     "ai": {
+      "n": 0,
+      "meanAbs": {
+       "known": false,
+       "reason": "insufficientData"
+      },
+      "bias": {
+       "known": false,
+       "reason": "insufficientData"
+      }
+     },
+     "human": {
+      "n": 0,
+      "meanAbs": {
+       "known": false,
+       "reason": "insufficientData"
+      },
+      "bias": {
+       "known": false,
+       "reason": "insufficientData"
+      }
+     }
+    },
+    "scStop": {
+     "name": "scStop",
+     "unit": "ms",
+     "ai": {
+      "n": 0,
+      "meanAbs": {
+       "known": false,
+       "reason": "insufficientData"
+      },
+      "bias": {
+       "known": false,
+       "reason": "insufficientData"
+      }
+     },
+     "human": {
+      "n": 0,
+      "meanAbs": {
+       "known": false,
+       "reason": "insufficientData"
+      },
+      "bias": {
+       "known": false,
+       "reason": "insufficientData"
+      }
+     }
+    }
+   },
+   "forecasts": [
+    {
+     "horizon": 1,
+     "basis": "wear",
+     "lapTime": {
+      "name": "h1.wear.lapTime",
+      "unit": "ms",
+      "ai": {
+       "n": 348,
+       "meanAbs": {
+        "known": true,
+        "value": 7301.916666666667,
+        "at": 4795132
+       },
+       "bias": {
+        "known": true,
+        "value": 6291.801724137931,
+        "at": 4795132
+       }
+      },
+      "human": {
+       "n": 19,
+       "meanAbs": {
+        "known": true,
+        "value": 7471.736842105263,
+        "at": 4795132
+       },
+       "bias": {
+        "known": true,
+        "value": 6368.263157894737,
+        "at": 4795132
+       }
+      }
+     },
+     "position": {
+      "name": "h1.wear.position",
+      "unit": "places",
+      "ai": {
+       "n": 348,
+       "meanAbs": {
+        "known": true,
+        "value": 0.26436781609195403,
+        "at": 4795132
+       },
+       "bias": {
+        "known": true,
+        "value": -0.011494252873563218,
+        "at": 4795132
+       }
+      },
+      "human": {
+       "n": 19,
+       "meanAbs": {
+        "known": true,
+        "value": 0.15789473684210525,
+        "at": 4795132
+       },
+       "bias": {
+        "known": true,
+        "value": -0.15789473684210525,
+        "at": 4795132
+       }
+      }
+     },
+     "baselinePosition": {
+      "name": "h1.wear.baselinePosition",
+      "unit": "places",
+      "ai": {
+       "n": 348,
+       "meanAbs": {
+        "known": true,
+        "value": 0.11781609195402298,
+        "at": 4795132
+       },
+       "bias": {
+        "known": true,
+        "value": -0.020114942528735632,
+        "at": 4795132
+       }
+      },
+      "human": {
+       "n": 19,
+       "meanAbs": {
+        "known": true,
+        "value": 0.10526315789473684,
+        "at": 4795132
+       },
+       "bias": {
+        "known": true,
+        "value": -0.10526315789473684,
+        "at": 4795132
+       }
+      }
+     }
+    },
+    {
+     "horizon": 1,
+     "basis": "age",
+     "lapTime": {
+      "name": "h1.age.lapTime",
+      "unit": "ms",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     },
+     "position": {
+      "name": "h1.age.position",
+      "unit": "places",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     },
+     "baselinePosition": {
+      "name": "h1.age.baselinePosition",
+      "unit": "places",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     }
+    },
+    {
+     "horizon": 3,
+     "basis": "wear",
+     "lapTime": {
+      "name": "h3.wear.lapTime",
+      "unit": "ms",
+      "ai": {
+       "n": 310,
+       "meanAbs": {
+        "known": true,
+        "value": 7731.851612903226,
+        "at": 4795132
+       },
+       "bias": {
+        "known": true,
+        "value": 6674.264516129032,
+        "at": 4795132
+       }
+      },
+      "human": {
+       "n": 17,
+       "meanAbs": {
+        "known": true,
+        "value": 6513.588235294118,
+        "at": 4795132
+       },
+       "bias": {
+        "known": true,
+        "value": 5346.64705882353,
+        "at": 4795132
+       }
+      }
+     },
+     "position": {
+      "name": "h3.wear.position",
+      "unit": "places",
+      "ai": {
+       "n": 310,
+       "meanAbs": {
+        "known": true,
+        "value": 0.8806451612903226,
+        "at": 4795132
+       },
+       "bias": {
+        "known": true,
+        "value": -0.00967741935483871,
+        "at": 4795132
+       }
+      },
+      "human": {
+       "n": 17,
+       "meanAbs": {
+        "known": true,
+        "value": 1.0588235294117647,
+        "at": 4795132
+       },
+       "bias": {
+        "known": true,
+        "value": -1.0588235294117647,
+        "at": 4795132
+       }
+      }
+     },
+     "baselinePosition": {
+      "name": "h3.wear.baselinePosition",
+      "unit": "places",
+      "ai": {
+       "n": 310,
+       "meanAbs": {
+        "known": true,
+        "value": 0.2870967741935484,
+        "at": 4795132
+       },
+       "bias": {
+        "known": true,
+        "value": -0.06129032258064516,
+        "at": 4795132
+       }
+      },
+      "human": {
+       "n": 17,
+       "meanAbs": {
+        "known": true,
+        "value": 0.23529411764705882,
+        "at": 4795132
+       },
+       "bias": {
+        "known": true,
+        "value": -0.23529411764705882,
+        "at": 4795132
+       }
+      }
+     }
+    },
+    {
+     "horizon": 3,
+     "basis": "age",
+     "lapTime": {
+      "name": "h3.age.lapTime",
+      "unit": "ms",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     },
+     "position": {
+      "name": "h3.age.position",
+      "unit": "places",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     },
+     "baselinePosition": {
+      "name": "h3.age.baselinePosition",
+      "unit": "places",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     }
+    },
+    {
+     "horizon": 5,
+     "basis": "wear",
+     "lapTime": {
+      "name": "h5.wear.lapTime",
+      "unit": "ms",
+      "ai": {
+       "n": 272,
+       "meanAbs": {
+        "known": true,
+        "value": 8365.150735294117,
+        "at": 4795132
+       },
+       "bias": {
+        "known": true,
+        "value": 7310.966911764706,
+        "at": 4795132
+       }
+      },
+      "human": {
+       "n": 15,
+       "meanAbs": {
+        "known": true,
+        "value": 7069.4,
+        "at": 4795132
+       },
+       "bias": {
+        "known": true,
+        "value": 5697.133333333333,
+        "at": 4795132
+       }
+      }
+     },
+     "position": {
+      "name": "h5.wear.position",
+      "unit": "places",
+      "ai": {
+       "n": 272,
+       "meanAbs": {
+        "known": true,
+        "value": 1.088235294117647,
+        "at": 4795132
+       },
+       "bias": {
+        "known": true,
+        "value": -0.10294117647058823,
+        "at": 4795132
+       }
+      },
+      "human": {
+       "n": 15,
+       "meanAbs": {
+        "known": true,
+        "value": 1.2666666666666666,
+        "at": 4795132
+       },
+       "bias": {
+        "known": true,
+        "value": -1.2666666666666666,
+        "at": 4795132
+       }
+      }
+     },
+     "baselinePosition": {
+      "name": "h5.wear.baselinePosition",
+      "unit": "places",
+      "ai": {
+       "n": 272,
+       "meanAbs": {
+        "known": true,
+        "value": 0.4375,
+        "at": 4795132
+       },
+       "bias": {
+        "known": true,
+        "value": -0.1213235294117647,
+        "at": 4795132
+       }
+      },
+      "human": {
+       "n": 15,
+       "meanAbs": {
+        "known": true,
+        "value": 0.26666666666666666,
+        "at": 4795132
+       },
+       "bias": {
+        "known": true,
+        "value": -0.26666666666666666,
+        "at": 4795132
+       }
+      }
+     }
+    },
+    {
+     "horizon": 5,
+     "basis": "age",
+     "lapTime": {
+      "name": "h5.age.lapTime",
+      "unit": "ms",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     },
+     "position": {
+      "name": "h5.age.position",
+      "unit": "places",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     },
+     "baselinePosition": {
+      "name": "h5.age.baselinePosition",
+      "unit": "places",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     }
+    },
+    {
+     "horizon": 10,
+     "basis": "wear",
+     "lapTime": {
+      "name": "h10.wear.lapTime",
+      "unit": "ms",
+      "ai": {
+       "n": 182,
+       "meanAbs": {
+        "known": true,
+        "value": 10369.846153846154,
+        "at": 4795132
+       },
+       "bias": {
+        "known": true,
+        "value": 8845.065934065935,
+        "at": 4795132
+       }
+      },
+      "human": {
+       "n": 10,
+       "meanAbs": {
+        "known": true,
+        "value": 8440.1,
+        "at": 4795132
+       },
+       "bias": {
+        "known": true,
+        "value": 6621.9,
+        "at": 4795132
+       }
+      }
+     },
+     "position": {
+      "name": "h10.wear.position",
+      "unit": "places",
+      "ai": {
+       "n": 182,
+       "meanAbs": {
+        "known": true,
+        "value": 1.6373626373626373,
+        "at": 4795132
+       },
+       "bias": {
+        "known": true,
+        "value": -0.3516483516483517,
+        "at": 4795132
+       }
+      },
+      "human": {
+       "n": 10,
+       "meanAbs": {
+        "known": true,
+        "value": 2.3,
+        "at": 4795132
+       },
+       "bias": {
+        "known": true,
+        "value": -2.3,
+        "at": 4795132
+       }
+      }
+     },
+     "baselinePosition": {
+      "name": "h10.wear.baselinePosition",
+      "unit": "places",
+      "ai": {
+       "n": 182,
+       "meanAbs": {
+        "known": true,
+        "value": 0.8626373626373627,
+        "at": 4795132
+       },
+       "bias": {
+        "known": true,
+        "value": -0.3241758241758242,
+        "at": 4795132
+       }
+      },
+      "human": {
+       "n": 10,
+       "meanAbs": {
+        "known": true,
+        "value": 0.4,
+        "at": 4795132
+       },
+       "bias": {
+        "known": true,
+        "value": -0.4,
+        "at": 4795132
+       }
+      }
+     }
+    },
+    {
+     "horizon": 10,
+     "basis": "age",
+     "lapTime": {
+      "name": "h10.age.lapTime",
+      "unit": "ms",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     },
+     "position": {
+      "name": "h10.age.position",
+      "unit": "places",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     },
+     "baselinePosition": {
+      "name": "h10.age.baselinePosition",
+      "unit": "places",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     }
+    }
+   ]
+  },
+  "2026-10-29_23-00-37_bbda17a651868614": {
+   "experiments": {
+    "rejoin": {
+     "name": "rejoin",
+     "unit": "places",
+     "ai": {
+      "n": 0,
+      "meanAbs": {
+       "known": false,
+       "reason": "insufficientData"
+      },
+      "bias": {
+       "known": false,
+       "reason": "insufficientData"
+      }
+     },
+     "human": {
+      "n": 0,
+      "meanAbs": {
+       "known": false,
+       "reason": "insufficientData"
+      },
+      "bias": {
+       "known": false,
+       "reason": "insufficientData"
+      }
+     }
+    },
+    "undercut": {
+     "name": "undercut",
+     "unit": "ms",
+     "ai": {
+      "n": 0,
+      "meanAbs": {
+       "known": false,
+       "reason": "insufficientData"
+      },
+      "bias": {
+       "known": false,
+       "reason": "insufficientData"
+      }
+     },
+     "human": {
+      "n": 0,
+      "meanAbs": {
+       "known": false,
+       "reason": "insufficientData"
+      },
+      "bias": {
+       "known": false,
+       "reason": "insufficientData"
+      }
+     }
+    },
+    "scStop": {
+     "name": "scStop",
+     "unit": "ms",
+     "ai": {
+      "n": 0,
+      "meanAbs": {
+       "known": false,
+       "reason": "insufficientData"
+      },
+      "bias": {
+       "known": false,
+       "reason": "insufficientData"
+      }
+     },
+     "human": {
+      "n": 0,
+      "meanAbs": {
+       "known": false,
+       "reason": "insufficientData"
+      },
+      "bias": {
+       "known": false,
+       "reason": "insufficientData"
+      }
+     }
+    }
+   },
+   "forecasts": [
+    {
+     "horizon": 1,
+     "basis": "wear",
+     "lapTime": {
+      "name": "h1.wear.lapTime",
+      "unit": "ms",
+      "ai": {
+       "n": 215,
+       "meanAbs": {
+        "known": true,
+        "value": 3963.8093023255815,
+        "at": 1355846
+       },
+       "bias": {
+        "known": true,
+        "value": 1770.3023255813953,
+        "at": 1355846
+       }
+      },
+      "human": {
+       "n": 23,
+       "meanAbs": {
+        "known": true,
+        "value": 6279.739130434783,
+        "at": 1355846
+       },
+       "bias": {
+        "known": true,
+        "value": 2480.782608695652,
+        "at": 1355846
+       }
+      }
+     },
+     "position": {
+      "name": "h1.wear.position",
+      "unit": "places",
+      "ai": {
+       "n": 215,
+       "meanAbs": {
+        "known": true,
+        "value": 0.4186046511627907,
+        "at": 1355846
+       },
+       "bias": {
+        "known": true,
+        "value": -0.08372093023255814,
+        "at": 1355846
+       }
+      },
+      "human": {
+       "n": 23,
+       "meanAbs": {
+        "known": true,
+        "value": 1.0869565217391304,
+        "at": 1355846
+       },
+       "bias": {
+        "known": true,
+        "value": 0.13043478260869565,
+        "at": 1355846
+       }
+      }
+     },
+     "baselinePosition": {
+      "name": "h1.wear.baselinePosition",
+      "unit": "places",
+      "ai": {
+       "n": 215,
+       "meanAbs": {
+        "known": true,
+        "value": 0.386046511627907,
+        "at": 1355846
+       },
+       "bias": {
+        "known": true,
+        "value": -0.13488372093023257,
+        "at": 1355846
+       }
+      },
+      "human": {
+       "n": 23,
+       "meanAbs": {
+        "known": true,
+        "value": 1.3043478260869565,
+        "at": 1355846
+       },
+       "bias": {
+        "known": true,
+        "value": 0.6956521739130435,
+        "at": 1355846
+       }
+      }
+     }
+    },
+    {
+     "horizon": 1,
+     "basis": "age",
+     "lapTime": {
+      "name": "h1.age.lapTime",
+      "unit": "ms",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     },
+     "position": {
+      "name": "h1.age.position",
+      "unit": "places",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     },
+     "baselinePosition": {
+      "name": "h1.age.baselinePosition",
+      "unit": "places",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     }
+    },
+    {
+     "horizon": 3,
+     "basis": "wear",
+     "lapTime": {
+      "name": "h3.wear.lapTime",
+      "unit": "ms",
+      "ai": {
+       "n": 179,
+       "meanAbs": {
+        "known": true,
+        "value": 4830.787709497206,
+        "at": 1355846
+       },
+       "bias": {
+        "known": true,
+        "value": 1689.1564245810057,
+        "at": 1355846
+       }
+      },
+      "human": {
+       "n": 19,
+       "meanAbs": {
+        "known": true,
+        "value": 7069.473684210527,
+        "at": 1355846
+       },
+       "bias": {
+        "known": true,
+        "value": 3936.315789473684,
+        "at": 1355846
+       }
+      }
+     },
+     "position": {
+      "name": "h3.wear.position",
+      "unit": "places",
+      "ai": {
+       "n": 179,
+       "meanAbs": {
+        "known": true,
+        "value": 1.0279329608938548,
+        "at": 1355846
+       },
+       "bias": {
+        "known": true,
+        "value": -0.7150837988826816,
+        "at": 1355846
+       }
+      },
+      "human": {
+       "n": 19,
+       "meanAbs": {
+        "known": true,
+        "value": 5.105263157894737,
+        "at": 1355846
+       },
+       "bias": {
+        "known": true,
+        "value": 4.684210526315789,
+        "at": 1355846
+       }
+      }
+     },
+     "baselinePosition": {
+      "name": "h3.wear.baselinePosition",
+      "unit": "places",
+      "ai": {
+       "n": 179,
+       "meanAbs": {
+        "known": true,
+        "value": 0.8100558659217877,
+        "at": 1355846
+       },
+       "bias": {
+        "known": true,
+        "value": -0.441340782122905,
+        "at": 1355846
+       }
+      },
+      "human": {
+       "n": 19,
+       "meanAbs": {
+        "known": true,
+        "value": 4.315789473684211,
+        "at": 1355846
+       },
+       "bias": {
+        "known": true,
+        "value": 2.736842105263158,
+        "at": 1355846
+       }
+      }
+     }
+    },
+    {
+     "horizon": 3,
+     "basis": "age",
+     "lapTime": {
+      "name": "h3.age.lapTime",
+      "unit": "ms",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     },
+     "position": {
+      "name": "h3.age.position",
+      "unit": "places",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     },
+     "baselinePosition": {
+      "name": "h3.age.baselinePosition",
+      "unit": "places",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     }
+    },
+    {
+     "horizon": 5,
+     "basis": "wear",
+     "lapTime": {
+      "name": "h5.wear.lapTime",
+      "unit": "ms",
+      "ai": {
+       "n": 143,
+       "meanAbs": {
+        "known": true,
+        "value": 6133.251748251748,
+        "at": 1355846
+       },
+       "bias": {
+        "known": true,
+        "value": 2997.3916083916083,
+        "at": 1355846
+       }
+      },
+      "human": {
+       "n": 15,
+       "meanAbs": {
+        "known": true,
+        "value": 7767.466666666666,
+        "at": 1355846
+       },
+       "bias": {
+        "known": true,
+        "value": 5580.8,
+        "at": 1355846
+       }
+      }
+     },
+     "position": {
+      "name": "h5.wear.position",
+      "unit": "places",
+      "ai": {
+       "n": 143,
+       "meanAbs": {
+        "known": true,
+        "value": 1.06993006993007,
+        "at": 1355846
+       },
+       "bias": {
+        "known": true,
+        "value": -0.6783216783216783,
+        "at": 1355846
+       }
+      },
+      "human": {
+       "n": 15,
+       "meanAbs": {
+        "known": true,
+        "value": 5.733333333333333,
+        "at": 1355846
+       },
+       "bias": {
+        "known": true,
+        "value": 4.8,
+        "at": 1355846
+       }
+      }
+     },
+     "baselinePosition": {
+      "name": "h5.wear.baselinePosition",
+      "unit": "places",
+      "ai": {
+       "n": 143,
+       "meanAbs": {
+        "known": true,
+        "value": 1.1958041958041958,
+        "at": 1355846
+       },
+       "bias": {
+        "known": true,
+        "value": -0.8321678321678322,
+        "at": 1355846
+       }
+      },
+      "human": {
+       "n": 15,
+       "meanAbs": {
+        "known": true,
+        "value": 7.066666666666666,
+        "at": 1355846
+       },
+       "bias": {
+        "known": true,
+        "value": 6.133333333333334,
+        "at": 1355846
+       }
+      }
+     }
+    },
+    {
+     "horizon": 5,
+     "basis": "age",
+     "lapTime": {
+      "name": "h5.age.lapTime",
+      "unit": "ms",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     },
+     "position": {
+      "name": "h5.age.position",
+      "unit": "places",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     },
+     "baselinePosition": {
+      "name": "h5.age.baselinePosition",
+      "unit": "places",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     }
+    },
+    {
+     "horizon": 10,
+     "basis": "wear",
+     "lapTime": {
+      "name": "h10.wear.lapTime",
+      "unit": "ms",
+      "ai": {
+       "n": 53,
+       "meanAbs": {
+        "known": true,
+        "value": 9159.245283018869,
+        "at": 1355846
+       },
+       "bias": {
+        "known": true,
+        "value": 7481.509433962264,
+        "at": 1355846
+       }
+      },
+      "human": {
+       "n": 5,
+       "meanAbs": {
+        "known": true,
+        "value": 6740.6,
+        "at": 1355846
+       },
+       "bias": {
+        "known": true,
+        "value": 4143,
+        "at": 1355846
+       }
+      }
+     },
+     "position": {
+      "name": "h10.wear.position",
+      "unit": "places",
+      "ai": {
+       "n": 53,
+       "meanAbs": {
+        "known": true,
+        "value": 1.679245283018868,
+        "at": 1355846
+       },
+       "bias": {
+        "known": true,
+        "value": -0.7735849056603774,
+        "at": 1355846
+       }
+      },
+      "human": {
+       "n": 5,
+       "meanAbs": {
+        "known": true,
+        "value": 4.8,
+        "at": 1355846
+       },
+       "bias": {
+        "known": true,
+        "value": 3.2,
+        "at": 1355846
+       }
+      }
+     },
+     "baselinePosition": {
+      "name": "h10.wear.baselinePosition",
+      "unit": "places",
+      "ai": {
+       "n": 53,
+       "meanAbs": {
+        "known": true,
+        "value": 1.9811320754716981,
+        "at": 1355846
+       },
+       "bias": {
+        "known": true,
+        "value": -1.490566037735849,
+        "at": 1355846
+       }
+      },
+      "human": {
+       "n": 5,
+       "meanAbs": {
+        "known": true,
+        "value": 9.6,
+        "at": 1355846
+       },
+       "bias": {
+        "known": true,
+        "value": 9.6,
+        "at": 1355846
+       }
+      }
+     }
+    },
+    {
+     "horizon": 10,
+     "basis": "age",
+     "lapTime": {
+      "name": "h10.age.lapTime",
+      "unit": "ms",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     },
+     "position": {
+      "name": "h10.age.position",
+      "unit": "places",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     },
+     "baselinePosition": {
+      "name": "h10.age.baselinePosition",
+      "unit": "places",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     }
+    }
+   ]
+  },
+  "2026-10-30_15-20-41_55cc94d2d5c13280": {
+   "experiments": {
+    "rejoin": {
+     "name": "rejoin",
+     "unit": "places",
+     "ai": {
+      "n": 0,
+      "meanAbs": {
+       "known": false,
+       "reason": "insufficientData"
+      },
+      "bias": {
+       "known": false,
+       "reason": "insufficientData"
+      }
+     },
+     "human": {
+      "n": 0,
+      "meanAbs": {
+       "known": false,
+       "reason": "insufficientData"
+      },
+      "bias": {
+       "known": false,
+       "reason": "insufficientData"
+      }
+     }
+    },
+    "undercut": {
+     "name": "undercut",
+     "unit": "ms",
+     "ai": {
+      "n": 0,
+      "meanAbs": {
+       "known": false,
+       "reason": "insufficientData"
+      },
+      "bias": {
+       "known": false,
+       "reason": "insufficientData"
+      }
+     },
+     "human": {
+      "n": 0,
+      "meanAbs": {
+       "known": false,
+       "reason": "insufficientData"
+      },
+      "bias": {
+       "known": false,
+       "reason": "insufficientData"
+      }
+     }
+    },
+    "scStop": {
+     "name": "scStop",
+     "unit": "ms",
+     "ai": {
+      "n": 0,
+      "meanAbs": {
+       "known": false,
+       "reason": "insufficientData"
+      },
+      "bias": {
+       "known": false,
+       "reason": "insufficientData"
+      }
+     },
+     "human": {
+      "n": 0,
+      "meanAbs": {
+       "known": false,
+       "reason": "insufficientData"
+      },
+      "bias": {
+       "known": false,
+       "reason": "insufficientData"
+      }
+     }
+    }
+   },
+   "forecasts": [
+    {
+     "horizon": 1,
+     "basis": "wear",
+     "lapTime": {
+      "name": "h1.wear.lapTime",
+      "unit": "ms",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     },
+     "position": {
+      "name": "h1.wear.position",
+      "unit": "places",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     },
+     "baselinePosition": {
+      "name": "h1.wear.baselinePosition",
+      "unit": "places",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     }
+    },
+    {
+     "horizon": 1,
+     "basis": "age",
+     "lapTime": {
+      "name": "h1.age.lapTime",
+      "unit": "ms",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     },
+     "position": {
+      "name": "h1.age.position",
+      "unit": "places",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     },
+     "baselinePosition": {
+      "name": "h1.age.baselinePosition",
+      "unit": "places",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     }
+    },
+    {
+     "horizon": 3,
+     "basis": "wear",
+     "lapTime": {
+      "name": "h3.wear.lapTime",
+      "unit": "ms",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     },
+     "position": {
+      "name": "h3.wear.position",
+      "unit": "places",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     },
+     "baselinePosition": {
+      "name": "h3.wear.baselinePosition",
+      "unit": "places",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     }
+    },
+    {
+     "horizon": 3,
+     "basis": "age",
+     "lapTime": {
+      "name": "h3.age.lapTime",
+      "unit": "ms",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     },
+     "position": {
+      "name": "h3.age.position",
+      "unit": "places",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     },
+     "baselinePosition": {
+      "name": "h3.age.baselinePosition",
+      "unit": "places",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     }
+    },
+    {
+     "horizon": 5,
+     "basis": "wear",
+     "lapTime": {
+      "name": "h5.wear.lapTime",
+      "unit": "ms",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     },
+     "position": {
+      "name": "h5.wear.position",
+      "unit": "places",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     },
+     "baselinePosition": {
+      "name": "h5.wear.baselinePosition",
+      "unit": "places",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     }
+    },
+    {
+     "horizon": 5,
+     "basis": "age",
+     "lapTime": {
+      "name": "h5.age.lapTime",
+      "unit": "ms",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     },
+     "position": {
+      "name": "h5.age.position",
+      "unit": "places",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     },
+     "baselinePosition": {
+      "name": "h5.age.baselinePosition",
+      "unit": "places",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     }
+    },
+    {
+     "horizon": 10,
+     "basis": "wear",
+     "lapTime": {
+      "name": "h10.wear.lapTime",
+      "unit": "ms",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     },
+     "position": {
+      "name": "h10.wear.position",
+      "unit": "places",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     },
+     "baselinePosition": {
+      "name": "h10.wear.baselinePosition",
+      "unit": "places",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     }
+    },
+    {
+     "horizon": 10,
+     "basis": "age",
+     "lapTime": {
+      "name": "h10.age.lapTime",
+      "unit": "ms",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     },
+     "position": {
+      "name": "h10.age.position",
+      "unit": "places",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     },
+     "baselinePosition": {
+      "name": "h10.age.baselinePosition",
+      "unit": "places",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     }
+    }
+   ]
+  },
+  "2026-10-30_18-53-00_082927e692fdf2af": {
+   "experiments": {
+    "rejoin": {
+     "name": "rejoin",
+     "unit": "places",
+     "ai": {
+      "n": 0,
+      "meanAbs": {
+       "known": false,
+       "reason": "insufficientData"
+      },
+      "bias": {
+       "known": false,
+       "reason": "insufficientData"
+      }
+     },
+     "human": {
+      "n": 0,
+      "meanAbs": {
+       "known": false,
+       "reason": "insufficientData"
+      },
+      "bias": {
+       "known": false,
+       "reason": "insufficientData"
+      }
+     }
+    },
+    "undercut": {
+     "name": "undercut",
+     "unit": "ms",
+     "ai": {
+      "n": 0,
+      "meanAbs": {
+       "known": false,
+       "reason": "insufficientData"
+      },
+      "bias": {
+       "known": false,
+       "reason": "insufficientData"
+      }
+     },
+     "human": {
+      "n": 0,
+      "meanAbs": {
+       "known": false,
+       "reason": "insufficientData"
+      },
+      "bias": {
+       "known": false,
+       "reason": "insufficientData"
+      }
+     }
+    },
+    "scStop": {
+     "name": "scStop",
+     "unit": "ms",
+     "ai": {
+      "n": 0,
+      "meanAbs": {
+       "known": false,
+       "reason": "insufficientData"
+      },
+      "bias": {
+       "known": false,
+       "reason": "insufficientData"
+      }
+     },
+     "human": {
+      "n": 0,
+      "meanAbs": {
+       "known": false,
+       "reason": "insufficientData"
+      },
+      "bias": {
+       "known": false,
+       "reason": "insufficientData"
+      }
+     }
+    }
+   },
+   "forecasts": [
+    {
+     "horizon": 1,
+     "basis": "wear",
+     "lapTime": {
+      "name": "h1.wear.lapTime",
+      "unit": "ms",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     },
+     "position": {
+      "name": "h1.wear.position",
+      "unit": "places",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     },
+     "baselinePosition": {
+      "name": "h1.wear.baselinePosition",
+      "unit": "places",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     }
+    },
+    {
+     "horizon": 1,
+     "basis": "age",
+     "lapTime": {
+      "name": "h1.age.lapTime",
+      "unit": "ms",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     },
+     "position": {
+      "name": "h1.age.position",
+      "unit": "places",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     },
+     "baselinePosition": {
+      "name": "h1.age.baselinePosition",
+      "unit": "places",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     }
+    },
+    {
+     "horizon": 3,
+     "basis": "wear",
+     "lapTime": {
+      "name": "h3.wear.lapTime",
+      "unit": "ms",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     },
+     "position": {
+      "name": "h3.wear.position",
+      "unit": "places",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     },
+     "baselinePosition": {
+      "name": "h3.wear.baselinePosition",
+      "unit": "places",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     }
+    },
+    {
+     "horizon": 3,
+     "basis": "age",
+     "lapTime": {
+      "name": "h3.age.lapTime",
+      "unit": "ms",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     },
+     "position": {
+      "name": "h3.age.position",
+      "unit": "places",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     },
+     "baselinePosition": {
+      "name": "h3.age.baselinePosition",
+      "unit": "places",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     }
+    },
+    {
+     "horizon": 5,
+     "basis": "wear",
+     "lapTime": {
+      "name": "h5.wear.lapTime",
+      "unit": "ms",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     },
+     "position": {
+      "name": "h5.wear.position",
+      "unit": "places",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     },
+     "baselinePosition": {
+      "name": "h5.wear.baselinePosition",
+      "unit": "places",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     }
+    },
+    {
+     "horizon": 5,
+     "basis": "age",
+     "lapTime": {
+      "name": "h5.age.lapTime",
+      "unit": "ms",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     },
+     "position": {
+      "name": "h5.age.position",
+      "unit": "places",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     },
+     "baselinePosition": {
+      "name": "h5.age.baselinePosition",
+      "unit": "places",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     }
+    },
+    {
+     "horizon": 10,
+     "basis": "wear",
+     "lapTime": {
+      "name": "h10.wear.lapTime",
+      "unit": "ms",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     },
+     "position": {
+      "name": "h10.wear.position",
+      "unit": "places",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     },
+     "baselinePosition": {
+      "name": "h10.wear.baselinePosition",
+      "unit": "places",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     }
+    },
+    {
+     "horizon": 10,
+     "basis": "age",
+     "lapTime": {
+      "name": "h10.age.lapTime",
+      "unit": "ms",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     },
+     "position": {
+      "name": "h10.age.position",
+      "unit": "places",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     },
+     "baselinePosition": {
+      "name": "h10.age.baselinePosition",
+      "unit": "places",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     }
+    }
+   ]
+  },
+  "2026-11-02_15-17-14_e4984016b74ee5c8": {
+   "experiments": {
+    "rejoin": {
+     "name": "rejoin",
+     "unit": "places",
+     "ai": {
+      "n": 0,
+      "meanAbs": {
+       "known": false,
+       "reason": "insufficientData"
+      },
+      "bias": {
+       "known": false,
+       "reason": "insufficientData"
+      }
+     },
+     "human": {
+      "n": 0,
+      "meanAbs": {
+       "known": false,
+       "reason": "insufficientData"
+      },
+      "bias": {
+       "known": false,
+       "reason": "insufficientData"
+      }
+     }
+    },
+    "undercut": {
+     "name": "undercut",
+     "unit": "ms",
+     "ai": {
+      "n": 0,
+      "meanAbs": {
+       "known": false,
+       "reason": "insufficientData"
+      },
+      "bias": {
+       "known": false,
+       "reason": "insufficientData"
+      }
+     },
+     "human": {
+      "n": 0,
+      "meanAbs": {
+       "known": false,
+       "reason": "insufficientData"
+      },
+      "bias": {
+       "known": false,
+       "reason": "insufficientData"
+      }
+     }
+    },
+    "scStop": {
+     "name": "scStop",
+     "unit": "ms",
+     "ai": {
+      "n": 0,
+      "meanAbs": {
+       "known": false,
+       "reason": "insufficientData"
+      },
+      "bias": {
+       "known": false,
+       "reason": "insufficientData"
+      }
+     },
+     "human": {
+      "n": 0,
+      "meanAbs": {
+       "known": false,
+       "reason": "insufficientData"
+      },
+      "bias": {
+       "known": false,
+       "reason": "insufficientData"
+      }
+     }
+    }
+   },
+   "forecasts": [
+    {
+     "horizon": 1,
+     "basis": "wear",
+     "lapTime": {
+      "name": "h1.wear.lapTime",
+      "unit": "ms",
+      "ai": {
+       "n": 121,
+       "meanAbs": {
+        "known": true,
+        "value": 1883.099173553719,
+        "at": 1059623
+       },
+       "bias": {
+        "known": true,
+        "value": -472.5702479338843,
+        "at": 1059623
+       }
+      },
+      "human": {
+       "n": 8,
+       "meanAbs": {
+        "known": true,
+        "value": 723,
+        "at": 1059623
+       },
+       "bias": {
+        "known": true,
+        "value": -62.5,
+        "at": 1059623
+       }
+      }
+     },
+     "position": {
+      "name": "h1.wear.position",
+      "unit": "places",
+      "ai": {
+       "n": 121,
+       "meanAbs": {
+        "known": true,
+        "value": 0.8347107438016529,
+        "at": 1059623
+       },
+       "bias": {
+        "known": true,
+        "value": -0.2231404958677686,
+        "at": 1059623
+       }
+      },
+      "human": {
+       "n": 8,
+       "meanAbs": {
+        "known": true,
+        "value": 0,
+        "at": 1059623
+       },
+       "bias": {
+        "known": true,
+        "value": 0,
+        "at": 1059623
+       }
+      }
+     },
+     "baselinePosition": {
+      "name": "h1.wear.baselinePosition",
+      "unit": "places",
+      "ai": {
+       "n": 121,
+       "meanAbs": {
+        "known": true,
+        "value": 0.5867768595041323,
+        "at": 1059623
+       },
+       "bias": {
+        "known": true,
+        "value": -0.15702479338842976,
+        "at": 1059623
+       }
+      },
+      "human": {
+       "n": 8,
+       "meanAbs": {
+        "known": true,
+        "value": 0,
+        "at": 1059623
+       },
+       "bias": {
+        "known": true,
+        "value": 0,
+        "at": 1059623
+       }
+      }
+     }
+    },
+    {
+     "horizon": 1,
+     "basis": "age",
+     "lapTime": {
+      "name": "h1.age.lapTime",
+      "unit": "ms",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     },
+     "position": {
+      "name": "h1.age.position",
+      "unit": "places",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     },
+     "baselinePosition": {
+      "name": "h1.age.baselinePosition",
+      "unit": "places",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     }
+    },
+    {
+     "horizon": 3,
+     "basis": "wear",
+     "lapTime": {
+      "name": "h3.wear.lapTime",
+      "unit": "ms",
+      "ai": {
+       "n": 85,
+       "meanAbs": {
+        "known": true,
+        "value": 2455.6823529411763,
+        "at": 1059623
+       },
+       "bias": {
+        "known": true,
+        "value": -323.54117647058825,
+        "at": 1059623
+       }
+      },
+      "human": {
+       "n": 6,
+       "meanAbs": {
+        "known": true,
+        "value": 838.6666666666666,
+        "at": 1059623
+       },
+       "bias": {
+        "known": true,
+        "value": 473,
+        "at": 1059623
+       }
+      }
+     },
+     "position": {
+      "name": "h3.wear.position",
+      "unit": "places",
+      "ai": {
+       "n": 85,
+       "meanAbs": {
+        "known": true,
+        "value": 1.4823529411764707,
+        "at": 1059623
+       },
+       "bias": {
+        "known": true,
+        "value": -0.5647058823529412,
+        "at": 1059623
+       }
+      },
+      "human": {
+       "n": 6,
+       "meanAbs": {
+        "known": true,
+        "value": 0,
+        "at": 1059623
+       },
+       "bias": {
+        "known": true,
+        "value": 0,
+        "at": 1059623
+       }
+      }
+     },
+     "baselinePosition": {
+      "name": "h3.wear.baselinePosition",
+      "unit": "places",
+      "ai": {
+       "n": 85,
+       "meanAbs": {
+        "known": true,
+        "value": 1.3058823529411765,
+        "at": 1059623
+       },
+       "bias": {
+        "known": true,
+        "value": -0.4823529411764706,
+        "at": 1059623
+       }
+      },
+      "human": {
+       "n": 6,
+       "meanAbs": {
+        "known": true,
+        "value": 0,
+        "at": 1059623
+       },
+       "bias": {
+        "known": true,
+        "value": 0,
+        "at": 1059623
+       }
+      }
+     }
+    },
+    {
+     "horizon": 3,
+     "basis": "age",
+     "lapTime": {
+      "name": "h3.age.lapTime",
+      "unit": "ms",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     },
+     "position": {
+      "name": "h3.age.position",
+      "unit": "places",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     },
+     "baselinePosition": {
+      "name": "h3.age.baselinePosition",
+      "unit": "places",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     }
+    },
+    {
+     "horizon": 5,
+     "basis": "wear",
+     "lapTime": {
+      "name": "h5.wear.lapTime",
+      "unit": "ms",
+      "ai": {
+       "n": 51,
+       "meanAbs": {
+        "known": true,
+        "value": 3136.294117647059,
+        "at": 1059623
+       },
+       "bias": {
+        "known": true,
+        "value": -608.2941176470588,
+        "at": 1059623
+       }
+      },
+      "human": {
+       "n": 4,
+       "meanAbs": {
+        "known": true,
+        "value": 720.5,
+        "at": 1059623
+       },
+       "bias": {
+        "known": true,
+        "value": 720.5,
+        "at": 1059623
+       }
+      }
+     },
+     "position": {
+      "name": "h5.wear.position",
+      "unit": "places",
+      "ai": {
+       "n": 51,
+       "meanAbs": {
+        "known": true,
+        "value": 2.156862745098039,
+        "at": 1059623
+       },
+       "bias": {
+        "known": true,
+        "value": -0.9411764705882353,
+        "at": 1059623
+       }
+      },
+      "human": {
+       "n": 4,
+       "meanAbs": {
+        "known": true,
+        "value": 0,
+        "at": 1059623
+       },
+       "bias": {
+        "known": true,
+        "value": 0,
+        "at": 1059623
+       }
+      }
+     },
+     "baselinePosition": {
+      "name": "h5.wear.baselinePosition",
+      "unit": "places",
+      "ai": {
+       "n": 51,
+       "meanAbs": {
+        "known": true,
+        "value": 1.9411764705882353,
+        "at": 1059623
+       },
+       "bias": {
+        "known": true,
+        "value": -0.803921568627451,
+        "at": 1059623
+       }
+      },
+      "human": {
+       "n": 4,
+       "meanAbs": {
+        "known": true,
+        "value": 0,
+        "at": 1059623
+       },
+       "bias": {
+        "known": true,
+        "value": 0,
+        "at": 1059623
+       }
+      }
+     }
+    },
+    {
+     "horizon": 5,
+     "basis": "age",
+     "lapTime": {
+      "name": "h5.age.lapTime",
+      "unit": "ms",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     },
+     "position": {
+      "name": "h5.age.position",
+      "unit": "places",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     },
+     "baselinePosition": {
+      "name": "h5.age.baselinePosition",
+      "unit": "places",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     }
+    },
+    {
+     "horizon": 10,
+     "basis": "wear",
+     "lapTime": {
+      "name": "h10.wear.lapTime",
+      "unit": "ms",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     },
+     "position": {
+      "name": "h10.wear.position",
+      "unit": "places",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     },
+     "baselinePosition": {
+      "name": "h10.wear.baselinePosition",
+      "unit": "places",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     }
+    },
+    {
+     "horizon": 10,
+     "basis": "age",
+     "lapTime": {
+      "name": "h10.age.lapTime",
+      "unit": "ms",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     },
+     "position": {
+      "name": "h10.age.position",
+      "unit": "places",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     },
+     "baselinePosition": {
+      "name": "h10.age.baselinePosition",
+      "unit": "places",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     }
+    }
+   ]
+  },
+  "2026-11-05_00-13-26_f5b2b5fdb8a6c50e_car19": {
+   "experiments": {
+    "rejoin": {
+     "name": "rejoin",
+     "unit": "places",
+     "ai": {
+      "n": 16,
+      "meanAbs": {
+       "known": true,
+       "value": 0.6875,
+       "at": 2145779
+      },
+      "bias": {
+       "known": true,
+       "value": -0.5625,
+       "at": 2145779
+      }
+     },
+     "human": {
+      "n": 0,
+      "meanAbs": {
+       "known": false,
+       "reason": "insufficientData"
+      },
+      "bias": {
+       "known": false,
+       "reason": "insufficientData"
+      }
+     }
+    },
+    "undercut": {
+     "name": "undercut",
+     "unit": "ms",
+     "ai": {
+      "n": 4,
+      "meanAbs": {
+       "known": true,
+       "value": 2454,
+       "at": 2145779
+      },
+      "bias": {
+       "known": true,
+       "value": 2102.5,
+       "at": 2145779
+      }
+     },
+     "human": {
+      "n": 0,
+      "meanAbs": {
+       "known": false,
+       "reason": "insufficientData"
+      },
+      "bias": {
+       "known": false,
+       "reason": "insufficientData"
+      }
+     }
+    },
+    "scStop": {
+     "name": "scStop",
+     "unit": "ms",
+     "ai": {
+      "n": 14,
+      "meanAbs": {
+       "known": true,
+       "value": 3425,
+       "at": 2145779
+      },
+      "bias": {
+       "known": true,
+       "value": 2521.1428571428573,
+       "at": 2145779
+      }
+     },
+     "human": {
+      "n": 4,
+      "meanAbs": {
+       "known": true,
+       "value": 4491.25,
+       "at": 2145779
+      },
+      "bias": {
+       "known": true,
+       "value": 4491.25,
+       "at": 2145779
+      }
+     }
+    }
+   },
+   "forecasts": [
+    {
+     "horizon": 1,
+     "basis": "wear",
+     "lapTime": {
+      "name": "h1.wear.lapTime",
+      "unit": "ms",
+      "ai": {
+       "n": 343,
+       "meanAbs": {
+        "known": true,
+        "value": 5720.9416909620995,
+        "at": 2145779
+       },
+       "bias": {
+        "known": true,
+        "value": 4795.723032069971,
+        "at": 2145779
+       }
+      },
+      "human": {
+       "n": 18,
+       "meanAbs": {
+        "known": true,
+        "value": 5174,
+        "at": 2145779
+       },
+       "bias": {
+        "known": true,
+        "value": 4195.888888888889,
+        "at": 2145779
+       }
+      }
+     },
+     "position": {
+      "name": "h1.wear.position",
+      "unit": "places",
+      "ai": {
+       "n": 343,
+       "meanAbs": {
+        "known": true,
+        "value": 0.9737609329446064,
+        "at": 2145779
+       },
+       "bias": {
+        "known": true,
+        "value": 0.023323615160349854,
+        "at": 2145779
+       }
+      },
+      "human": {
+       "n": 18,
+       "meanAbs": {
+        "known": true,
+        "value": 0.7777777777777778,
+        "at": 2145779
+       },
+       "bias": {
+        "known": true,
+        "value": -0.4444444444444444,
+        "at": 2145779
+       }
+      }
+     },
+     "baselinePosition": {
+      "name": "h1.wear.baselinePosition",
+      "unit": "places",
+      "ai": {
+       "n": 343,
+       "meanAbs": {
+        "known": true,
+        "value": 0.9504373177842566,
+        "at": 2145779
+       },
+       "bias": {
+        "known": true,
+        "value": 0.0058309037900874635,
+        "at": 2145779
+       }
+      },
+      "human": {
+       "n": 18,
+       "meanAbs": {
+        "known": true,
+        "value": 0.7777777777777778,
+        "at": 2145779
+       },
+       "bias": {
+        "known": true,
+        "value": -0.1111111111111111,
+        "at": 2145779
+       }
+      }
+     }
+    },
+    {
+     "horizon": 1,
+     "basis": "age",
+     "lapTime": {
+      "name": "h1.age.lapTime",
+      "unit": "ms",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     },
+     "position": {
+      "name": "h1.age.position",
+      "unit": "places",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     },
+     "baselinePosition": {
+      "name": "h1.age.baselinePosition",
+      "unit": "places",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     }
+    },
+    {
+     "horizon": 3,
+     "basis": "wear",
+     "lapTime": {
+      "name": "h3.wear.lapTime",
+      "unit": "ms",
+      "ai": {
+       "n": 305,
+       "meanAbs": {
+        "known": true,
+        "value": 6458.016393442623,
+        "at": 2145779
+       },
+       "bias": {
+        "known": true,
+        "value": 5632.481967213114,
+        "at": 2145779
+       }
+      },
+      "human": {
+       "n": 16,
+       "meanAbs": {
+        "known": true,
+        "value": 5671.25,
+        "at": 2145779
+       },
+       "bias": {
+        "known": true,
+        "value": 4654.375,
+        "at": 2145779
+       }
+      }
+     },
+     "position": {
+      "name": "h3.wear.position",
+      "unit": "places",
+      "ai": {
+       "n": 305,
+       "meanAbs": {
+        "known": true,
+        "value": 2.3737704918032785,
+        "at": 2145779
+       },
+       "bias": {
+        "known": true,
+        "value": 0.05901639344262295,
+        "at": 2145779
+       }
+      },
+      "human": {
+       "n": 16,
+       "meanAbs": {
+        "known": true,
+        "value": 2,
+        "at": 2145779
+       },
+       "bias": {
+        "known": true,
+        "value": -1.125,
+        "at": 2145779
+       }
+      }
+     },
+     "baselinePosition": {
+      "name": "h3.wear.baselinePosition",
+      "unit": "places",
+      "ai": {
+       "n": 305,
+       "meanAbs": {
+        "known": true,
+        "value": 1.9213114754098362,
+        "at": 2145779
+       },
+       "bias": {
+        "known": true,
+        "value": 0.02622950819672131,
+        "at": 2145779
+       }
+      },
+      "human": {
+       "n": 16,
+       "meanAbs": {
+        "known": true,
+        "value": 2,
+        "at": 2145779
+       },
+       "bias": {
+        "known": true,
+        "value": -0.5,
+        "at": 2145779
+       }
+      }
+     }
+    },
+    {
+     "horizon": 3,
+     "basis": "age",
+     "lapTime": {
+      "name": "h3.age.lapTime",
+      "unit": "ms",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     },
+     "position": {
+      "name": "h3.age.position",
+      "unit": "places",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     },
+     "baselinePosition": {
+      "name": "h3.age.baselinePosition",
+      "unit": "places",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     }
+    },
+    {
+     "horizon": 5,
+     "basis": "wear",
+     "lapTime": {
+      "name": "h5.wear.lapTime",
+      "unit": "ms",
+      "ai": {
+       "n": 267,
+       "meanAbs": {
+        "known": true,
+        "value": 7262.014981273408,
+        "at": 2145779
+       },
+       "bias": {
+        "known": true,
+        "value": 6575.820224719101,
+        "at": 2145779
+       }
+      },
+      "human": {
+       "n": 14,
+       "meanAbs": {
+        "known": true,
+        "value": 6433.571428571428,
+        "at": 2145779
+       },
+       "bias": {
+        "known": true,
+        "value": 5458,
+        "at": 2145779
+       }
+      }
+     },
+     "position": {
+      "name": "h5.wear.position",
+      "unit": "places",
+      "ai": {
+       "n": 267,
+       "meanAbs": {
+        "known": true,
+        "value": 2.554307116104869,
+        "at": 2145779
+       },
+       "bias": {
+        "known": true,
+        "value": 0.17228464419475656,
+        "at": 2145779
+       }
+      },
+      "human": {
+       "n": 14,
+       "meanAbs": {
+        "known": true,
+        "value": 4,
+        "at": 2145779
+       },
+       "bias": {
+        "known": true,
+        "value": -3.2857142857142856,
+        "at": 2145779
+       }
+      }
+     },
+     "baselinePosition": {
+      "name": "h5.wear.baselinePosition",
+      "unit": "places",
+      "ai": {
+       "n": 267,
+       "meanAbs": {
+        "known": true,
+        "value": 2.202247191011236,
+        "at": 2145779
+       },
+       "bias": {
+        "known": true,
+        "value": 0.052434456928838954,
+        "at": 2145779
+       }
+      },
+      "human": {
+       "n": 14,
+       "meanAbs": {
+        "known": true,
+        "value": 3,
+        "at": 2145779
+       },
+       "bias": {
+        "known": true,
+        "value": -1,
+        "at": 2145779
+       }
+      }
+     }
+    },
+    {
+     "horizon": 5,
+     "basis": "age",
+     "lapTime": {
+      "name": "h5.age.lapTime",
+      "unit": "ms",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     },
+     "position": {
+      "name": "h5.age.position",
+      "unit": "places",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     },
+     "baselinePosition": {
+      "name": "h5.age.baselinePosition",
+      "unit": "places",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     }
+    },
+    {
+     "horizon": 10,
+     "basis": "wear",
+     "lapTime": {
+      "name": "h10.wear.lapTime",
+      "unit": "ms",
+      "ai": {
+       "n": 172,
+       "meanAbs": {
+        "known": true,
+        "value": 10302.732558139534,
+        "at": 2145779
+       },
+       "bias": {
+        "known": true,
+        "value": 8202.93023255814,
+        "at": 2145779
+       }
+      },
+      "human": {
+       "n": 9,
+       "meanAbs": {
+        "known": true,
+        "value": 8312.666666666666,
+        "at": 2145779
+       },
+       "bias": {
+        "known": true,
+        "value": 8312.666666666666,
+        "at": 2145779
+       }
+      }
+     },
+     "position": {
+      "name": "h10.wear.position",
+      "unit": "places",
+      "ai": {
+       "n": 172,
+       "meanAbs": {
+        "known": true,
+        "value": 3.296511627906977,
+        "at": 2145779
+       },
+       "bias": {
+        "known": true,
+        "value": 0.45930232558139533,
+        "at": 2145779
+       }
+      },
+      "human": {
+       "n": 9,
+       "meanAbs": {
+        "known": true,
+        "value": 8.777777777777779,
+        "at": 2145779
+       },
+       "bias": {
+        "known": true,
+        "value": -8.777777777777779,
+        "at": 2145779
+       }
+      }
+     },
+     "baselinePosition": {
+      "name": "h10.wear.baselinePosition",
+      "unit": "places",
+      "ai": {
+       "n": 172,
+       "meanAbs": {
+        "known": true,
+        "value": 1.9883720930232558,
+        "at": 2145779
+       },
+       "bias": {
+        "known": true,
+        "value": 0.19767441860465115,
+        "at": 2145779
+       }
+      },
+      "human": {
+       "n": 9,
+       "meanAbs": {
+        "known": true,
+        "value": 3.7777777777777777,
+        "at": 2145779
+       },
+       "bias": {
+        "known": true,
+        "value": -3.7777777777777777,
+        "at": 2145779
+       }
+      }
+     }
+    },
+    {
+     "horizon": 10,
+     "basis": "age",
+     "lapTime": {
+      "name": "h10.age.lapTime",
+      "unit": "ms",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     },
+     "position": {
+      "name": "h10.age.position",
+      "unit": "places",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     },
+     "baselinePosition": {
+      "name": "h10.age.baselinePosition",
+      "unit": "places",
+      "ai": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      },
+      "human": {
+       "n": 0,
+       "meanAbs": {
+        "known": false,
+        "reason": "insufficientData"
+       },
+       "bias": {
+        "known": false,
+        "reason": "insufficientData"
+       }
+      }
+     }
+    }
+   ]
+  }
+ }
+}

@@ -81,7 +81,10 @@ export function resolveSource(source: CalibrationSource, sessions: readonly Trac
   const sessionLaps = currentLaps(projection.laps);
   const excluded = new Set(source.excludedLaps);
   const laps = sessionLaps.filter((l) => l.carId === stint.carId && l.lapNumber >= stint.firstLap && l.lapNumber <= stint.lastLap && !excluded.has(l.lapNumber));
-  return { source, session, stored: { source, phase: session.phase, stint, laps, pitStops: projection.pitStops, sessionLaps, track: session.track } };
+  // the session's AI difficulty from its stored game settings; a row without one (an older session) gives `notReceived`
+  const stored = session.settings.aiDifficulty;
+  const aiDifficulty: Known<number> = typeof stored === 'number' ? known(stored, 0) : unknown('notReceived');
+  return { source, session, stored: { source, phase: session.phase, stint, laps, pitStops: projection.pitStops, sessionLaps, track: session.track, aiDifficulty, projection } };
 }
 
 /** Runs the declared functions; a unit's function that throws is a bug of that unit: logged, its value unknown (C48). */

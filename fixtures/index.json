@@ -840,6 +840,34 @@
         "VSC: car 11 retired on lap 14 (before the segment); VSC deployed 1395.877 and safetyCarStatus 2 before the segment, SCAR VSC ending at 1469.951, resume 1477.180, safetyCarStatus 0 from 1478.030: lap 15 of car 19 runs about 59 s under VSC, then green",
         "weather storm throughout; every other active car completes one lap whose start lies before the segment"
       ]
+    },
+    {
+      "file": "race-pass-braking-zone.pwrec.gz",
+      "source": "raceLiveTest",
+      "fromS": 582,
+      "toS": 590,
+      "records": 1939,
+      "features": [
+        "653 748 bytes; 2 context packets (Session, Participants) first; session time 582.03 to 589.98, rising throughout (no repeat, no flashback); Texas (track 15), race lap 6, safetyCarStatus 0 throughout, no events",
+        "a clean DRS pass: car 14 (P15) passes car 0 (P14 to P15 for car 0) at 586.18 on the back straight at lap distance 3479 m (0.639 of the lap, inside the DRS zone 0.537-0.660); car 14 has DRS open (CarTelemetry drs 1 from 583.03 to 587.05), car 0 does not; the gap closes from 24 m at 582.03 to 0 at 586.04",
+        "the next braking zone of the track file (0.663-0.684, lap distance 3612-3724 m) follows 1.3 s later: car 14 stays ahead through it (3646 m against 3638 m at 588.07) and no car passes back in the segment or within 40 s after it",
+        "neither car in the pit lane (pitStatus 0), numPitStops 0 for both; every other car is racing around them; not lap 1",
+        "duration 7967 ms"
+      ]
+    },
+    {
+      "file": "race-rejoin.pwrec.gz",
+      "source": "raceLiveTest",
+      "fromS": 1061.8,
+      "toS": 1070.6,
+      "records": 2160,
+      "features": [
+        "733 362 bytes; 2 context packets (Session, Participants) first; session time 1061.80 to 1070.60, rising throughout (no repeat, no flashback); Texas (track 15), race lap 11, safetyCarStatus 0 throughout, no events; a green stop of an AI car, not the whole in-lap to out-lap (a full-lap segment is not available: three exist, C84): the stop's last seconds and the rejoin",
+        "car 14 (the AI car, P16 to P18 in the window) stops in its box at the segment's start (pitStatus 2, lap distance 258 m, numPitStops 0, pitLaneTimerActive 1): pitStatus 2 to 1 at 1062.80 (release), driverStatus 2 to 3 at 1063.29 (out lap), numPitStops 0 to 1 at 1066.57, pit exit pitStatus 1 to 0 at 1068.96 (lap distance 360 m); the segment ends 1.6 s after the exit on the out lap",
+        "car 0 (P9) races past on the track at lap distance 701 to 1163 m; cars 3, 9 and 18 are also in the pit lane at the start (their stops end 1068.0 to 1079.6)",
+        "the other stops of the race: cars 3, 5, 9, 13, 14, 18 on laps 10-11 (all green); the player (car 19) stops only under the SC, so this is no player stop",
+        "duration 8777 ms"
+      ]
     }
   ]
 }

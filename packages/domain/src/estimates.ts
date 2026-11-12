@@ -1,4 +1,4 @@
-// Where an estimate's value comes from (spec 4.4): measured this session, the calibration, or a default.
+// Where an estimate's value comes from (spec 4.4): measured this session, the calibration, a driver profile, or a default.
 
 /**
  * The source of an estimate that rests on a prior. `kind` is decided by the calculator with spec 4.4's half rule (the
@@ -11,4 +11,6 @@ export type EstimateSource =
   /** `setName`: the calibration set's name; `sources`: how many sources it pools. */
   | { kind: 'calibration'; setName: string; sources: number; sessionShare: number; parts: string }
   /** `note`: the default's source note (the track file's, or the unit's config). */
-  | { kind: 'default'; note: string; sessionShare: number; parts: string };
+  | { kind: 'default'; note: string; sessionShare: number; parts: string }
+  /** `person`: the driver profile's person (C62c); `laps`: the laps the profile entry rests on. */
+  | { kind: 'profile'; person: string; laps: number; sessionShare: number; parts: string };

@@ -20,6 +20,22 @@ export const USAGE = `usage: pitwall <live|replay|tap|reprocess|import> …
                             sub-machine's transitions with their counts, the declared ones never seen and the undeclared
                             ones (exit code 1 on those); with --warnings: each penalty of the player car with the
                             warnings count and corner-cutting count of its warned span
+  score <file> [--json <out.json>] [--compare <old.json>]
+                            reprocess a recording (its sidecars included) and print the forecast-score tables: each
+                            experiment and each forecast horizon, AI and human; --json writes the report without its
+                            cases, --compare prints each number beside the old one with its change; stores nothing
+  drivers                   list the persons with their profile entries, then the unlinked human slots with a suggestion
+  drivers add <person> --name "<display name>"
+                            add a person (kebab-case id)
+  drivers link <session> <slot> <person> | drivers link --accept
+                            link a session's slot to a person, or confirm every shown suggestion
+  drivers exclude <person> <session>
+                            leave one session out of the person's profile
+  drivers override <person> <key> <value>
+                            set one entry of the person's profile by hand
+  drivers show <person>     each entry with laps, sessions, age and every linked session's own value
+                            <session> is <sessionUid>/<weekendId>/<feedCar>; with a running bridge an edit goes to
+                            it and the list reads its topics; show needs the bridge stopped
 
 The WebSocket server listens on 127.0.0.1 only. Ports, the UDP bind address and the data directory
 come from PITWALL_WS_PORT, PITWALL_UDP_PORT, PITWALL_UDP_HOST (default 0.0.0.0) and PITWALL_DATA_DIR.`;

@@ -132,6 +132,65 @@ describe('checkCatalogue: errors name the file', () => {
   });
 });
 
+// Simulators (C50, C63; SP4.3a Task 5): an analysis folder whose `index.ts` exports `SIMULATOR`, a marker
+// `{ kind: 'simulator', name }` (`defineSimulator`), is a simulator. The catalogue lists them as `simulators`
+// (`{ name, folder }`); `checkCatalogue` takes the analysis folders as today. `Catalogue.simulators` is a requested
+// supervisor change to the contracts package, so these rows read it through a local type.
+type Simulator = { name: string; folder: string };
+const simulatorsOf = (c: object): Simulator[] | undefined => (c as { simulators?: Simulator[] }).simulators;
+const checkWithUnits = async (name: string) => {
+  const dirs = tree(name);
+  return checkCatalogue(await buildCatalogue(dirs), findAnalysisFolders(dirs.analysis));
+};
+
+describe('buildCatalogue lists simulators by their SIMULATOR marker', () => {
+  it('lists each simulator folder with its name and folder, and nothing else', async () => {
+    const simulators = simulatorsOf(await buildCatalogue(tree('simulators')));
+    expect(simulators?.map((s) => s.name)).toEqual(['lap-model', 'race-forecast']);
+    expect(simulators?.find((s) => s.name === 'lap-model')?.folder).toMatch(/analysis\/lap-model$/);
+    expect(simulators?.find((s) => s.name === 'race-forecast')?.folder).toMatch(/analysis\/race-forecast$/);
+  });
+
+  it('a clean simulator tree has no errors', async () => {
+    expect((await checkWithUnits('simulators')).errors).toEqual([]);
+  });
+
+  it('a tree without simulators lists none', async () => {
+    expect(simulatorsOf(await buildCatalogue(tree('clean')))).toEqual([]);
+  });
+
+  it('the repo lists its simulators from their markers', async () => {
+    // The repo's analysis folder with empty widget, feature and topic trees: only the markers are read.
+    const dirs = { ...tree('simulator-name'), analysis: join(import.meta.dirname, '..', 'packages', 'analysis', 'src') };
+    const names = simulatorsOf(await buildCatalogue(dirs))?.map((s) => s.name) ?? [];
+    expect(names).toContain('lap-model');
+    expect(names).toContain('race-forecast');
+    expect(names).not.toContain('degradation');
+  });
+});
+
+describe('checkCatalogue: a simulator has no feature, no reads, no topic (C50)', () => {
+  it('a simulator with a feature folder fails, naming the feature file', async () => {
+    const { errors } = await checkWithUnits('simulator-feature');
+    expect(errors).toContainEqual(expect.stringMatching(/features\/lap-model\/register\.ts.*simulator/));
+  });
+
+  it('a topic owned by a simulator fails, naming the topic file', async () => {
+    const { errors } = await checkWithUnits('simulator-topic');
+    expect(errors).toContainEqual(expect.stringMatching(/topics\/raceForecast\.rows\.ts.*simulator/));
+  });
+
+  it('a simulator declaring reads fails, naming its index file', async () => {
+    const { errors } = await checkWithUnits('simulator-reads');
+    expect(errors).toContainEqual(expect.stringMatching(/analysis\/lap-model\/index\.ts.*reads/));
+  });
+
+  it('a marker whose name differs from its folder fails, naming its index file', async () => {
+    const { errors } = await checkWithUnits('simulator-name');
+    expect(errors).toContainEqual(expect.stringMatching(/analysis\/lap-model\/index\.ts.*"race-model".*"lap-model"/));
+  });
+});
+
 describe('checkCatalogue: warnings', () => {
   it('an analysis topic with no reader is a warning, not an error', async () => {
     const { errors, warnings } = await check('unread-analysis');

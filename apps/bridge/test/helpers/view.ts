@@ -30,5 +30,6 @@ export const viewFrom = (frames: readonly Frame[], feed: Partial<FeedMetricsView
     config,
     priors: unknown('notApplicable'),
     track: unknown('notApplicable'),
+    drivers: [],
   };
 };

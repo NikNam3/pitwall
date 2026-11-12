@@ -72,14 +72,20 @@ type Lists = {
  */
 export type Log = Lists & { voids: LogVoidFact[] };
 
-/** The projection as the engine keeps it (`EngineState.history`): written only by `log/projection.ts`. */
-export type ProjectionState = Lists;
+/**
+ * The projection as the engine keeps it (`EngineState.history`): written only by `log/projection.ts`. `appendedAt` holds,
+ * per list (keyed like the log's, `spans:<machine>` for the span lists), the frame each entry was appended to the
+ * projection on, in the list's order (SP4.3a plan review P1: an "as of frame N" cut, `projectionAsOf`). Written only by
+ * the projection module; plain data, so `structuredClone` carries it with the projection (a job's input). A stored
+ * projection without it supports only frame `'now'`.
+ */
+export type ProjectionState = Lists & { appendedAt: Partial<Record<string, FrameNumber[]>> };
 
 /** The log as readers see it (C28): every hidden fact skipped. */
 export type Projection = DeepReadonly<ProjectionState>;
 
-/** A list of the projection that holds records (every key but `spans`). */
-export type ProjectedList = Exclude<keyof ProjectionState, 'spans'>;
+/** A list of the projection that holds records (every key but `spans` and the append frames). */
+export type ProjectedList = Exclude<keyof ProjectionState, 'spans' | 'appendedAt'>;
 
 /**
  * A hiding span (the race's `formation`, C29) as the frames it covers (C26): `startFrame <= f < endFrame`, every frame

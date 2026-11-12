@@ -455,7 +455,31 @@ PITWALL_FIXTURES_DIR=<main checkout>/recordings nice -n 10 pnpm pitwall scan-sit
 | “a join, a car that has finished: coolDown (join)” | coolDown |
 | “a join, a car retired: notCompeting (join)” | notCompeting |
 
-## 11. car-flags
+## 11. car-driver
+
+- **Scope:** car. **Applies to:** `all`. **Upstream:** none.
+- **Reads:** the signal `aiControlled` (Participants); the signals `resultStatus` and `numActiveCars` for car-status's slot rule (`slotsInUse`, `situations/car-status/slots.ts`, C43); the identity area (the arrival of the car's Participants data).
+- **Kinds:** `ai` (`aiControlled` 1), `human` (`aiControlled` 0). No detail.
+- **Rule:** a new span on every flip of `aiControlled`. The signal defaults to `true` before any Participants packet, so a car's first span opens on the first frame its Participants data is in the live state, with `joinedAt`, and only for a slot below `slotsInUse`: the game's empty slots read `aiControlled` 0 (race-zandvoort-lap10 slots 20 and 21) and open nothing. Before it no span opens (C3). A takeover is known only from the game's spec (C19).
+- **Scan:** run on 2026-11-11 at `sp4.3a/t4` over the recordings of `recordings/` (same command as above; exit code 0, no undeclared transition).
+
+**Transitions** (4 declared; 2 seen, 2 not yet seen):
+
+| From → to | Signal or value, and its timing | Test rows | Segment | Scan |
+|---|---|---|---|---|
+| none → ai | the first frame with the car’s Participants data, the slot in use, `aiControlled` 1 | join: “the first frame with Participants data, the AI driving: ai (join)” | `race-zandvoort-lap10` (car 4) | seen (276) |
+| none → human | the first frame with the car’s Participants data, the slot in use, `aiControlled` 0 | join: “the first frame with Participants data, a human driving: human (join)” | `race-zandvoort-lap10` (cars 0 and 1) | seen (26) |
+| ai → human | `aiControlled` 1 → 0: a human takes the car over from the AI (online, a driver joining a slot) | “a human takes the car over from the AI (synthetic, not yet seen): ai -> human” | – | not yet seen |
+| human → ai | `aiControlled` 0 → 1: the AI takes the car over from a human (online, a driver dropping out) | “the AI takes the car over from a human (synthetic, not yet seen): human -> ai” | – | not yet seen |
+
+**Join rows** (a session or car joined in progress):
+
+| Join row | Opens |
+|---|---|
+| “the first frame with Participants data, the AI driving: ai (join)” | ai |
+| “the first frame with Participants data, a human driving: human (join)” | human |
+
+## 12. car-flags
 
 - **Scope:** car. **Applies to:** `all`. **Upstream:** none.
 - **Reads:** the signal `fiaFlag` (CarStatus `vehicleFIAFlags`).
@@ -502,7 +526,7 @@ PITWALL_FIXTURES_DIR=<main checkout>/recordings nice -n 10 pnpm pitwall scan-sit
 | “joins a session in progress: the car shows yellow” | yellow |
 | “joins a session in progress: the car shows unknown” | unknown |
 
-## 12. compound-rule
+## 13. compound-rule
 
 - **Scope:** car. **Applies to:** `race`. **Upstream:** `session-phase-race`.
 - **Reads:** the tyres area (`visualCompound`); no signal.
@@ -526,7 +550,7 @@ PITWALL_FIXTURES_DIR=<main checkout>/recordings nice -n 10 pnpm pitwall scan-sit
 | “the first frame, a car on wets: waived (join)” | waived |
 | “the first frame in the formation lap on intermediates: required (join), nothing waived before the lights out” | required |
 
-## 13. lap-validity
+## 14. lap-validity
 
 - **Scope:** car. **Applies to:** `all`. **Upstream:** none.
 - **Reads:** the signals `events` (PENA) and `currentLapInvalid`.
@@ -549,7 +573,7 @@ PITWALL_FIXTURES_DIR=<main checkout>/recordings nice -n 10 pnpm pitwall scan-sit
 | “the session’s first frame, a valid lap: valid (join)” | valid |
 | “the session’s first frame, a lap already invalid: invalid (join)” | invalid |
 
-## 14. race-control-practice
+## 15. race-control-practice
 
 - **Scope:** session. **Applies to:** `practice`. **Upstream:** `weekend-phase`. No signal, no value.
 - **Kinds:** `drsFree`. No detail.
@@ -567,7 +591,7 @@ PITWALL_FIXTURES_DIR=<main checkout>/recordings nice -n 10 pnpm pitwall scan-sit
 |---|---|
 | “the first frame of the practice session: drsFree (join)” | drsFree |
 
-## 15. race-control-qualifying
+## 16. race-control-qualifying
 
 - **Scope:** session. **Applies to:** `qualifying`. **Upstream:** `weekend-phase`. No signal, no value.
 - **Kinds:** `drsFree`. No detail.
@@ -585,7 +609,7 @@ PITWALL_FIXTURES_DIR=<main checkout>/recordings nice -n 10 pnpm pitwall scan-sit
 |---|---|
 | “the first frame of the qualifying session: drsFree (join)” | drsFree |
 
-## 16. race-control-race
+## 17. race-control-race
 
 - **Scope:** session. **Applies to:** `race`. **Upstream:** `session-phase-race`.
 - **Reads:** the signal `events` (DRSE, DRSD).
@@ -612,7 +636,7 @@ PITWALL_FIXTURES_DIR=<main checkout>/recordings nice -n 10 pnpm pitwall scan-sit
 | “a race joined under a red flag: drsOff, reason redFlag (join)” | drsOff |
 | “a race joined after the lights out: drsOn (join)” | drsOn |
 
-## 17. warnings
+## 18. warnings
 
 - **Scope:** car. **Applies to:** `all`. **Upstream:** none.
 - **Reads:** the signals `events` (PENA), `totalWarnings` and `cornerCuttingWarnings` (counted inside `totalWarnings`).
@@ -636,7 +660,7 @@ PITWALL_FIXTURES_DIR=<main checkout>/recordings nice -n 10 pnpm pitwall scan-sit
 | “the session’s first frame, no warning: noWarning (join)” | noWarning |
 | “the session’s first frame, warnings already held: warned (join)” | warned |
 
-## 18. zone-flags
+## 19. zone-flags
 
 - **Scope:** zone (a marshal zone the Session packet lists). **Applies to:** `all`. **Upstream:** none.
 - **Reads:** the signal `marshalZones`.

@@ -12,6 +12,7 @@ export default defineFeature({
     bindSituation('situation.weekendPhase', 'weekend-phase'),
     bindSituation('situation.carLocation', 'car-location'),
     bindSituation('situation.carStatus', 'car-status'),
+    bindSituation('situation.carDriver', 'car-driver'),
     bindSituation('situation.carFlags', 'car-flags'),
     bindSituation('situation.warnings', 'warnings'),
     bindSituation('situation.lapValidity', 'lap-validity'),

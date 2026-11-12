@@ -21,6 +21,10 @@ const OPTIONS = {
   topic: { type: 'string' },
   warnings: { type: 'boolean' },
   catalogue: { type: 'string' },
+  name: { type: 'string' },
+  accept: { type: 'boolean' },
+  json: { type: 'string' },
+  compare: { type: 'string' },
   help: { type: 'boolean', short: 'h' },
 } as const;
 
@@ -41,6 +45,8 @@ const COMMANDS: Record<string, () => Promise<{ run: Command }>> = {
   import: () => import('./commands/import.ts'),
   where: () => import('./commands/where.ts'),
   'scan-situations': () => import('./commands/scan-situations.ts'),
+  drivers: () => import('./commands/drivers.ts'),
+  score: () => import('./commands/score.ts'),
 };
 
 /** SQLite codes of a file that is not (or no longer) a database. */

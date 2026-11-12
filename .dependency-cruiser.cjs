@@ -1,3 +1,41 @@
+/* global __dirname */
+/* eslint-disable @typescript-eslint/no-require-imports -- a CommonJS config loads its helpers with require() */
+const { existsSync, readFileSync, readdirSync } = require('node:fs');
+const { join } = require('node:path');
+/* eslint-enable @typescript-eslint/no-require-imports */
+
+/**
+ * The simulator units (C50): the analysis folders whose `index.ts` exports a `SIMULATOR` marker (`defineSimulator`),
+ * read from the markers on every load, never kept by hand.
+ */
+function simulatorFolders() {
+  const analysis = join(__dirname, 'packages', 'analysis', 'src');
+  return readdirSync(analysis, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .filter((name) => {
+      const index = join(analysis, name, 'index.ts');
+      return existsSync(index) && /^export const SIMULATOR\b/m.test(readFileSync(index, 'utf8'));
+    })
+    .sort();
+}
+
+/** The rule keeping simulators inside the analysis package (C50); none while there is no simulator. */
+function simulatorRules() {
+  const folders = simulatorFolders();
+  if (folders.length === 0) return [];
+  return [
+    {
+      name: 'simulators-only-from-analyses-and-jobs',
+      comment:
+        'C50: a simulator (an analysis folder whose index.ts exports SIMULATOR) is called only by analyses and job modules: it is imported only from the analysis package (its units, shared/forecast-field, job modules, its tests), never from apps/, the engine or the contracts package.',
+      severity: 'error',
+      from: { path: '^(apps|packages)/', pathNot: '^packages/analysis/' },
+      to: { path: `^packages/analysis/src/(${folders.join('|')})/` },
+    },
+  ];
+}
+
 /** Forbids `from` to depend on any workspace folder other than itself and the `allowed` packages. */
 function layer(name, from, allowed) {
   const permitted = [from, ...allowed.map((pkg) => `packages/${pkg}`)].join('|');
@@ -137,6 +175,7 @@ module.exports = {
       },
       to: { path: '^packages/engine/src/signals/' },
     },
+    ...simulatorRules(),
     { name: 'no-circular', severity: 'error', from: {}, to: { circular: true } },
     {
       name: 'not-to-unresolvable',

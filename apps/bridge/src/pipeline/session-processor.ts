@@ -12,6 +12,8 @@ import {
   type MachineId,
   type ParticipantsValues,
   type PriorsSnapshot,
+  type ProfileSnapshot,
+  type SessionRef,
   type RunPriors,
   type SessionTime,
   type SessionUid,
@@ -35,6 +37,7 @@ import { priorsOf, type DeepReadonly } from '@pitwall/engine/readers';
 import type { TopicName } from '@pitwall/contracts';
 import { peekHeader, type SessionPacket } from '@pitwall/protocol';
 import type { CalcStats } from '../dev/calc-stats.ts';
+import type { SlotIdentity } from '../drivers/store.ts';
 import type { FeatureConfig } from '../feature-config.ts';
 import type { FeedJobs } from '../jobs/feed-jobs.ts';
 import type { Logger } from '../log.ts';
@@ -76,6 +79,12 @@ export type SessionProcessorOptions = {
   calcStats?: CalcStats;
   /** The run's priors at session start (C62a): the start snapshot (none: `notApplicable`); picks add theirs (`choose`). */
   priors: RunPriors;
+  /**
+   * The run's profile snapshot (C62c) for the session's slots, asked once, on the first frame that carries Participants
+   * (before the runner applies it, so every frame the scheduler sees has it, live and replayed alike, C38). Without it,
+   * or before that frame, `drivers` is `null`.
+   */
+  profilesFor?: (slots: readonly SlotIdentity[], session: SessionRef) => ProfileSnapshot | null;
   /** `calibration.active` changed: at the start, and whenever the projection's newest pick does (a pick, its void). */
   onActive?: (value: CalibrationActiveValue) => void;
 };
@@ -119,6 +128,8 @@ export class SessionProcessor {
   #active: string | undefined;
   /** The teammate of the row last built (`#row`): a row is written again when the engine's teammate is another. */
   #storedTeammate: CarId | null = null;
+  /** The run's profile snapshot (C62c): `undefined` until the first frame with Participants asks for it, fixed after. */
+  #drivers: ProfileSnapshot | null | undefined;
 
   constructor(opts: SessionProcessorOptions) {
     this.#o = opts;
@@ -184,6 +195,7 @@ export class SessionProcessor {
   }
 
   push(frame: Frame): void {
+    if (this.#drivers === undefined && frame.participants !== undefined) this.#takeProfiles(frame.participants.participants);
     const decisions = this.#pending.takeForFrame();
     this.#applying(frame, () => this.#runner.apply(frame, this.#onResult, decisions));
   }
@@ -231,6 +243,19 @@ export class SessionProcessor {
   async end(receivedAtMs: number, opts: { interrupted?: boolean } = {}): Promise<void> {
     this.#applying(undefined, () => this.#onClosed(this.#runner.finish(this.#onResult), opts.interrupted === true));
     await this.#o.file?.close(receivedAtMs);
+  }
+
+  /** Asks for the run's profile snapshot once (C62c); a failure is logged and the run has none. */
+  #takeProfiles(participants: ReadonlyArray<{ teamId: number; raceNumber: number; name: string }>): void {
+    const { profilesFor } = this.#o;
+    this.#drivers = null;
+    if (profilesFor === undefined) return;
+    const slots = participants.map((p, i): SlotIdentity => ({ carId: carId(i), teamId: p.teamId, raceNumber: p.raceNumber, name: p.name === '' ? null : p.name }));
+    try {
+      this.#drivers = profilesFor(slots, { sessionUid: this.#key.sessionUid, weekendId: this.#key.weekendId, feedCar: this.#key.playerCar });
+    } catch (error) {
+      this.#o.log.error({ feedId: this.#o.feedId, sessionUid: this.#uid, err: error }, 'profile snapshot failed: the run has no driver profiles');
+    }
   }
 
   /** The player's earlier sessions of the weekend (C62): those whose player car had this player's team and race number; none without Participants. */
@@ -370,6 +395,8 @@ export class SessionProcessor {
       config: this.#o.config,
       priors: this.#priors,
       track: this.#track,
+      // The run's profile snapshot (C62c), fixed once taken.
+      drivers: this.#drivers ?? null,
     };
   }
 

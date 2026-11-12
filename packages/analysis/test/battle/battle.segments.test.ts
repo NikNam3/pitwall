@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { currentCrossings, feedId, MINI_SECTORS, unknown, type CarId, type MiniSectorCrossing } from '@pitwall/domain';
 import { CalculatorRegistry, Scheduler, SessionRunner, SessionTracker, situationOf, type DeepReadonly, type EngineState, type StepResult } from '@pitwall/engine';
 import { guarded } from '../../../engine/test/support/scheduler.ts';
-import { IDLE_FEED, NO_PRIORS } from '../../../../test-support/builders/index.ts';
+import { IDLE_FEED, NO_DRIVERS, NO_PRIORS } from '../../../../test-support/builders/index.ts';
 import { segmentPackets } from '../../../../test-support/segments.ts';
 import { battleCalculator } from '../../src/battle/calculator.ts';
 import { BATTLE, type BattleOutput } from '../../src/battle/index.ts';
@@ -37,7 +37,7 @@ async function lastRun(file: string): Promise<LastRun> {
   const scheduler = new Scheduler(CalculatorRegistry.build([guarded(gapsCalculator), guarded(battleCalculator)]), { freezeOutputs: true });
   scheduler.setNeeded([BATTLE]);
   const { state, changed, delta } = last;
-  const scheduled = scheduler.run({ live: state, situation: situationOf(state), history: state.history, changed, delta, weekend: state.weekend, feed: IDLE_FEED, config: {}, priors: NO_PRIORS, track: unknown('notApplicable') });
+  const scheduled = scheduler.run({ live: state, situation: situationOf(state), history: state.history, changed, delta, weekend: state.weekend, feed: IDLE_FEED, config: {}, priors: NO_PRIORS, drivers: NO_DRIVERS, track: unknown('notApplicable') });
   expect(scheduled.errors).toEqual([]);
   expect(scheduled.ran).toContain(BATTLE);
   return { cards: scheduled.outputs.get(BATTLE) as BattleOutput, state };
