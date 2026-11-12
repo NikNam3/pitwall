@@ -367,6 +367,28 @@
         "finish: RCWN car 13 at 2145.808, CHQF 2160.051; car 19 resultStatus 3 at 2167.130, P8; SEND at 2167.159; PENA car 4 (type 4, infringement 45, 10 s) at 2167.013",
         "COLL x18 (ours: car 18 at 11.515, car 7 at 1609.230, car 17 x4, car 4, car 0), OVTK x363, SPTP x400, FTLP x3, DRSE x2, DRSD x1, PENA x4, TMPT x1 (car 7), SCAR x4, RCWN x1, CHQF x1, SEND x1, BUTN x3546; no FLBK"
       ]
+    },
+    {
+      "id": "raceSpaSc",
+      "file": "2026-11-12_02-21-24_7b3e5a9043e4ec28.pwrec.gz",
+      "sha256": "26bfaccd906d5e41926cae5b5410d7e227e38d70997eb001cfc222df35df8635",
+      "bytes": 646063399,
+      "track": "Belgium",
+      "trackId": 10,
+      "sessionType": "race",
+      "sessionTypeCode": 15,
+      "completedLaps": 44,
+      "durationMs": 5726215.2994,
+      "features": [
+        "44-lap race at Spa, full distance, dry all race (clear, rain 4 %, forecast perfect); offline, 20 cars, 1 human (index 19), teammate car 15 AI; weekend structure all 0; lobby SC, red flags standard, damage simulation, flashbacks unlimited",
+        "formation lap in the file (SCAR type 3 at session time 0), LGOT x2 at 0",
+        "car 18 retires on lap 6 (RTMT at 579.111, repeated on each flashback and 34 x at 5127.083 after SEND)",
+        "one SC: SCAR deployed (type 1) at 2205.265 on leader lap 20, returning 2686.017, returned 2721.641, resume 2726.206; 17 cars box under it on lap 20, cars 2, 8 and 17 stay out; cars 0 and 1 box on lap 20 and again on lap 21 under the SC",
+        "two flashbacks under the SC: FLBK at 2594.395 (target frame 177459, session time 2579.666) and at 2633.280 (target frame 179822, session time 2619.094)",
+        "54 stops, no penalties served; the AI mostly soft-soft-soft-medium (stops near laps 10-14, 20 under the SC, 30-32); car 19 medium-soft-hard, boxing on laps 16 and 20 (SC), finishes P1",
+        "all 44 player laps valid; CHQF 5030.405, SEND 5037.708",
+        "OVTK x648, COLL x9, SPTP x841, FTLP x5, PENA x40, TMPT x3, DRSE x2, DRSD x1, FLBK x2, BUTN x6596"
+      ]
     }
   ],
   "segments": [

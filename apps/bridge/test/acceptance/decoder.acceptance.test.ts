@@ -7,7 +7,7 @@ import { referenceDecode } from '../../../../test-support/reference-decoder.ts';
 import { readPwrec } from '../../src/pwrec/reader.ts';
 
 /** The big races and the recordings over about 50 MB are too big to decode twice here; the segments and the other recordings cover the same packet layouts. */
-const EXCLUDED: readonly FixtureName[] = ['raceSingaporeWet', 'raceZandvoortUidReuse', 'raceWetVscMexico', 'practiceFriendWings', 'raceFriendWet'];
+const EXCLUDED: readonly FixtureName[] = ['raceSingaporeWet', 'raceZandvoortUidReuse', 'raceWetVscMexico', 'practiceFriendWings', 'raceFriendWet', 'raceSpaSc'];
 
 /** Best of three warm passes over every `qualifyingSingapore` payload; the generic interpreter took about 4 400 ms. */
 const SPEED_TARGET_MS = 1_500;

@@ -20,6 +20,7 @@ export const FIXTURES = {
   oneShotQualifyingLiveTest: '2026-11-05_00-05-11_261aa3b56ae144ef_car19.pwrec.gz',
   raceLiveTestAbandoned: '2026-11-05_00-09-56_69fd076f54e429b0_car19.pwrec.gz',
   raceLiveTest: '2026-11-05_00-13-26_f5b2b5fdb8a6c50e_car19.pwrec.gz',
+  raceSpaSc: '2026-11-12_02-21-24_7b3e5a9043e4ec28.pwrec.gz',
 } as const;
 
 export type FixtureName = keyof typeof FIXTURES;

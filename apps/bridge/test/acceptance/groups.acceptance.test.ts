@@ -4,7 +4,7 @@ import { expect, it } from 'vitest';
 import { FIXTURES } from '../../../../test-support/fixtures.ts';
 import { DETERMINISM, DETERMINISM_GROUPS, RACE_GROUPS, RACES } from './groups.ts';
 
-it('the race groups together are exactly the race recordings of fixtures/index.json, each once', () => {
+it('the race groups together are exactly the race recordings of fixtures/index.json not kept out of acceptance, each once', () => {
   expect(RACES.length).toBeGreaterThan(0);
   expect(RACES.every((r) => r in FIXTURES)).toBe(true);
   const grouped = Object.values(RACE_GROUPS).flat();

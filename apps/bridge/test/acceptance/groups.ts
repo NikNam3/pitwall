@@ -25,11 +25,15 @@ import { describeWithFixture, FIXTURES, type FixtureName } from '../../../../tes
 import { topicStreamHash } from '../../src/pipeline/stream-hash.ts';
 import { replayScheduled } from '../fixtures/engine-replay.ts';
 
-/** Every race recording of `fixtures/index.json`. */
+// User ruling 2026-11-12: the acceptance gate must not grow; raceSpaSc (646 MB) is a fixture for segments and `pitwall score` only.
+/** Race recordings of `fixtures/index.json` that no acceptance test replays. */
+export const NOT_IN_ACCEPTANCE: readonly FixtureName[] = ['raceSpaSc'];
+
+/** Every race recording of `fixtures/index.json`, except those not in acceptance. */
 const index = JSON.parse(readFileSync(join(import.meta.dirname, '../../../../fixtures/index.json'), 'utf8')) as {
   fixtures: Array<{ id: string; sessionType: string | null }>;
 };
-export const RACES = index.fixtures.filter((f) => f.sessionType === 'race').map((f) => f.id as FixtureName);
+export const RACES = index.fixtures.filter((f) => f.sessionType === 'race').map((f) => f.id as FixtureName).filter((id) => !NOT_IN_ACCEPTANCE.includes(id));
 
 /** The race groups, one file each: each of the two heaviest races alone, the other six together. */
 export const RACE_GROUPS = {
