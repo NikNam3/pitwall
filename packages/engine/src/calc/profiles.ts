@@ -1,7 +1,7 @@
 // Driver-profile declarations and `view.drivers` (contract C62c, SP4.3a spec 4): each estimation unit declares its
 // profile entries with pure functions over a person's linked stored sessions; the bridge's profile store runs them
 // between runs; the scheduler gives each car slot its linked profile from the run's snapshot.
-import type { CarId, DriverProfile, FrameNumber, Known, ProfileSnapshot, SessionRef, TrackData, WeekendPhase } from '@pitwall/domain';
+import { known, unknown, type CarId, type DriverProfile, type FrameNumber, type Known, type ProfileSnapshot, type SessionRef, type TrackData, type WeekendPhase } from '@pitwall/domain';
 import type { Projection } from '../log/types.ts';
 import type { DeepReadonly } from '../util/deep-readonly.ts';
 import type { EngineView } from './types.ts';
@@ -47,6 +47,11 @@ export function defineProfiles(unit: string, decl: Omit<ProfilesDecl, 'unit'>): 
  * `view.drivers` (C62c): per car slot (`cars` of them) its linked person's profile from `snapshot`;
  * `notApplicable` for an unlinked slot and for every slot without a snapshot.
  */
-export function driversOf(_snapshot: DeepReadonly<ProfileSnapshot> | null, _cars: number): Known<DeepReadonly<DriverProfile>>[] {
-  throw new Error('not implemented');
+export function driversOf(snapshot: DeepReadonly<ProfileSnapshot> | null, cars: number): Known<DeepReadonly<DriverProfile>>[] {
+  return Array.from({ length: cars }, (_, slot) => {
+    const person = snapshot?.bySlot[slot];
+    const profile = person === undefined || person === null ? undefined : snapshot?.profiles[person];
+    // Fixed for the run (C62c): known from its start.
+    return profile === undefined ? unknown('notApplicable') : known(profile, 0);
+  });
 }

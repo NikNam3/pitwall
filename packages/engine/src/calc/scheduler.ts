@@ -6,6 +6,7 @@ import type { DeepReadonly } from '../util/deep-readonly.ts';
 import { deepFreeze } from '../util/deep-freeze.ts';
 import { InsightBook, type InsightBookState } from './insight-book.ts';
 import { priorsOf } from './priors.ts';
+import { driversOf } from './profiles.ts';
 import { RegistryError, type CalculatorRegistry } from './registry.ts';
 import type { Cadence, Calculator, CalculatorId, EngineView, InsightChange } from './types.ts';
 
@@ -105,6 +106,17 @@ const hasOurCrossing = (input: SchedulerInput, pending: Pending): boolean => {
   return false;
 };
 
+/**
+ * Whether the lap records pending since a calculator last ran, `[before, after)` of the `laps` list, hold the leader's
+ * (`positionAtEnd` 1): only the new entries are read, never the list.
+ */
+const hasLeaderLap = (input: SchedulerInput, pending: Pending): boolean => {
+  const { before, after } = pending.delta;
+  const laps = input.history.laps;
+  for (let i = before.laps ?? 0; i < (after.laps ?? 0); i += 1) if (laps[i]?.positionAtEnd === 1) return true;
+  return false;
+};
+
 const isDue = (cadence: Cadence, lastRunAt: SessionTime, pending: Pending, input: SchedulerInput): boolean => {
   const now = input.live.sessionTime;
   if (cadence === 'frame') return true;
@@ -121,14 +133,15 @@ const isDue = (cadence: Cadence, lastRunAt: SessionTime, pending: Pending, input
     case 'ourCrossing':
       return rewound !== undefined || hasOurCrossing(input, pending);
     case 'leaderLap':
-      throw new Error('not implemented');
+      return rewound !== undefined || hasLeaderLap(input, pending);
   }
 };
 
 const isAffected = (calc: Calculator, slot: Slot, pending: Pending): boolean =>
   calc.reads.some((read) => {
     if (read === 'feed') return true;
-    if (read === 'drivers') throw new Error('not implemented');
+    // Fixed for the run (C62c): the profiles never change, so they never make a unit run again.
+    if (read === 'drivers') return false;
     return typeof read === 'object' ? slot.ranDependencies.has(read.calculator) : pending.changed.has(read);
   });
 
@@ -275,6 +288,8 @@ export class Scheduler implements Snapshotable<SchedulerBookkeeping> {
     const insights: InsightChange[] = [];
     // Once per pass (C62a): the snapshot the projection's decisions name, else the session-start one.
     const priors = priorsOf(input.history.decisions, input.priors);
+    // Once per pass (C62c): per car slot its linked driver's profile from the run's snapshot.
+    const drivers = driversOf(input.drivers, input.live.cars.length);
 
     for (const { calc, slot } of this.#entries) {
       if (opts.only !== undefined && !opts.only.has(calc.id)) continue;
@@ -299,8 +314,7 @@ export class Scheduler implements Snapshotable<SchedulerBookkeeping> {
         config: input.config,
         priors,
         track: input.track,
-        // Built with `driversOf(input.drivers, input.live.cars.length)` once per pass (SP4.3a Task 3); empty until then.
-        drivers: [],
+        drivers,
         feed: input.feed,
         outputs: this.#outputs,
       };

@@ -136,7 +136,7 @@ export function step(state: EngineState, received: Frame, report?: FlashbackRepo
     { at: frame.sessionTime, frameId: frame.frameId, frameNumber: state.frameNumber, live: state, situation, closed, carsInSession, ...(decisions && { decisions }) },
     out,
   );
-  projectionTrackerOf(state).update(situation);
+  projectionTrackerOf(state).update(situation, state.frameNumber);
   state.lastFrameId = frame.frameId;
   state.sessionTime = frame.sessionTime;
   return out;

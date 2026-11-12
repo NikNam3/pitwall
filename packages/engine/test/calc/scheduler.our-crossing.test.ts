@@ -26,7 +26,8 @@ const feedOf = () => {
     const before = crossings.length;
     for (const car of cars) crossings.push(crossing(car, frame));
     return {
-      live: { feedId: 'f1', sessionTime: frame * 100, playerCar: PLAYER, teammateCar: TEAMMATE } as never,
+      // no car slots: the scheduler reads their number for `view.drivers`
+      live: { feedId: 'f1', sessionTime: frame * 100, playerCar: PLAYER, teammateCar: TEAMMATE, cars: [] } as never,
       situation: RACING,
       history: { laps: [], crossings: [...crossings], decisions: [] } as never,
       changed: new Set(cars.length > 0 || o.rewound ? ['miniSectors'] : []),
