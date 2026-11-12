@@ -233,10 +233,13 @@ describe('a plan and the formation lap (C29)', () => {
     expect(first).toBeGreaterThan(0);
     // the decision describes a frame of the formation lap and is never hidden by it (C29)
     expect(live.seen[first]!.phase).toBe('formation');
-    expect(live.seen.slice(first).every((s) => s.decisions.length === 1 && s.plan !== null)).toBe(true);
+    // the committing car's plan (the formation-end reset sends one frame with another player car index: Task 17 port)
+    const committer = (live.seen[first]!.decisions[0] as { carId: CarId }).carId;
+    const planOf = (s: Seen) => latestPlan({ decisions: s.decisions }, committer);
+    expect(live.seen.slice(first).every((s) => s.decisions.length === 1 && planOf(s) !== null)).toBe(true);
     // and it still counts after lights out
     const racing = live.seen.filter((s) => s.phase === 'racing');
     expect(racing.length).toBeGreaterThan(0);
-    for (const s of racing) expect(s.plan).toEqual(policyAt(Math.min(2, s.totalLaps)));
+    for (const s of racing) expect(planOf(s)).toEqual(policyAt(Math.min(2, s.totalLaps)));
   }, 60_000);
 });

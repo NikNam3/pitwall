@@ -262,11 +262,14 @@ describe('plan routing to the team\'s feeds (C1a, C76)', () => {
     bb.push(later.slice(secondParticipants));
     expect([...b.teams.teamOf(B)].sort()).toEqual([A, B]);
     // the newest plan decision of each car, both on B's first frame with its team known
-    const joined = bb.seen[before]!;
+    // B's held frames (the identity wait) are applied first; the plans arrive on its frame with Participants (C76, C10; Task 17 port)
+    const joinedAt = bb.seen.findIndex((s, i) => i >= before && s.decisions.length > 0);
+    expect(bb.seen.slice(before, joinedAt).every((s) => s.decisions.length === 0)).toBe(true);
+    const joined = bb.seen[joinedAt]!;
     expect(joined.plans).toEqual([policyAt(7), policyAt(9)]);
     expect(joined.decisions).toHaveLength(2);
     expect(new Set(joined.decisions.map((d) => d.frame)).size).toBe(1);
-    expect(bb.seen.slice(before).every((s) => JSON.stringify(s.plans) === JSON.stringify(joined.plans))).toBe(true);
+    expect(bb.seen.slice(joinedAt).every((s) => JSON.stringify(s.plans) === JSON.stringify(joined.plans))).toBe(true);
     // A's log is unchanged by B joining
     expect(last(a.seen).decisions).toHaveLength(3);
     // and B's sidecar holds them, so its recording replays alone
