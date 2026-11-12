@@ -1,6 +1,6 @@
 // Structural validation of UI state (spec 7.2). Input is untrusted: decoders return `undefined`, never throw,
 // and rebuild values from the known fields only. Widget names and option values are the UI's business.
-import type { CalibrationSource, CarId, FeedId, InsightCategory, SessionUid } from '@pitwall/domain';
+import type { CalibrationSource, CarId, FeedId, InsightCategory, SessionRef, SessionUid } from '@pitwall/domain';
 import type { CarRef, Geometry, LinkGroup, PanelSpec, TimeWindow, UiAction, Workbook, WorkbookWindow } from './types.ts';
 
 type Json = Record<string, unknown>;
@@ -142,9 +142,34 @@ export const decodeUiAction = (raw: unknown): UiAction | undefined => {
       return isString(raw.feedId) && (raw.setId === null || isString(raw.setId))
         ? { kind: raw.kind, feedId: raw.feedId as FeedId, setId: raw.setId }
         : undefined;
+    // The driver-profile actions (C62c): only their shape; the bridge's profile store checks persons, sessions and keys (C73).
+    case 'drivers.add':
+      return isString(raw.person) && isString(raw.displayName) ? { kind: raw.kind, person: raw.person, displayName: raw.displayName } : undefined;
+    case 'drivers.link': {
+      const session = decodeSessionRef(raw.session);
+      return session !== undefined && isInteger(raw.carId) && isString(raw.person)
+        ? { kind: raw.kind, session, carId: raw.carId as CarId, person: raw.person }
+        : undefined;
+    }
+    case 'drivers.accept':
+      return { kind: raw.kind };
+    case 'drivers.exclude': {
+      const session = decodeSessionRef(raw.session);
+      return session !== undefined && isString(raw.person) ? { kind: raw.kind, person: raw.person, session } : undefined;
+    }
+    case 'drivers.override':
+      return isString(raw.person) && isString(raw.key) && isNumber(raw.value) ? { kind: raw.kind, person: raw.person, key: raw.key, value: raw.value } : undefined;
+    case 'drivers.override.clear':
+      return isString(raw.person) && isString(raw.key) ? { kind: raw.kind, person: raw.person, key: raw.key } : undefined;
     default:
       return undefined;
   }
+};
+
+/** A stored session as a driver-profile action names it (C60's key). */
+const decodeSessionRef = (raw: unknown): SessionRef | undefined => {
+  if (!isObject(raw) || !isString(raw.sessionUid) || !isString(raw.weekendId) || !isInteger(raw.feedCar)) return undefined;
+  return { sessionUid: raw.sessionUid as SessionUid, weekendId: raw.weekendId, feedCar: raw.feedCar as CarId };
 };
 
 const isInteger = (value: unknown): value is number => Number.isInteger(value);

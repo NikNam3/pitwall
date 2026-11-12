@@ -49,6 +49,16 @@ export type TrackSession = StoredSessionRow & { track: Known<DeepReadonly<TrackD
 /** The read of the stored sessions on one track the calibration store needs. */
 export type SessionsOnTrack = Pick<WeekendRepository, 'sessionsOnTrack' | 'newestTrackId'>;
 
+/**
+ * A complete stored session as the profile store reads it (C62c): a `TrackSession` (its row with its slots' team, race
+ * number and name, its track file, its weekend phase and projection, or `stale` without either, C34, C61) and the AI
+ * difficulty of its settings (`unknown('notReceived')` when its settings carry none).
+ */
+export type DriverSessionRow = TrackSession & { aiDifficulty: Known<number> };
+
+/** The read of the stored sessions the profile store needs. */
+export type DriverSessions = Pick<WeekendRepository, 'driverSessions'>;
+
 /** The weekend phase a session's weekend-phase span stands for; `pending` without one. */
 const phaseOf = (projection: Projection): WeekendPhase => {
   const span = projection.spans['weekend-phase']?.[0];
@@ -93,6 +103,7 @@ export class WeekendRepository {
       trackSessions: db.prepare(
         `SELECT ${sessionColumns} ${sessionsFrom} WHERE s.track_id = ? AND s.complete = 1 ORDER BY s.started_at, s.session_uid, s.player_car`,
       ),
+      completeSessions: db.prepare(`SELECT ${sessionColumns} ${sessionsFrom} WHERE s.complete = 1 ORDER BY s.started_at, s.session_uid, s.player_car`),
       newestWeekend: db.prepare(`SELECT weekend_id FROM sessions ORDER BY started_at DESC, session_uid DESC, player_car DESC LIMIT 1`).pluck(),
       session: db.prepare(
         `SELECT ${sessionColumns} ${sessionsFrom} WHERE s.session_uid = @sessionUid AND s.weekend_id = @weekendId AND s.player_car = @playerCar`,
@@ -125,13 +136,28 @@ export class WeekendRepository {
    * incomplete one is left out.
    */
   sessionsOnTrack(trackId: number): TrackSession[] {
-    return (this.#statements.trackSessions.all(trackId) as SessionDbRow[]).map((dbRow): TrackSession => {
-      const row = this.#toSession(dbRow);
-      const track = this.#track(row);
-      if (isStale(row, this.#rulesVersion)) return { ...row, track, stale: true, projection: undefined };
-      const projection = this.#projectionOfStored(keyOf(dbRow));
-      return { ...row, track, stale: false, phase: phaseOf(projection), projection: projection as ProjectionState };
+    return (this.#statements.trackSessions.all(trackId) as SessionDbRow[]).map((dbRow) => this.#trackSession(dbRow));
+  }
+
+  /**
+   * Every complete stored session in start order, of every track (C62c), as `sessionsOnTrack` gives them, each with its
+   * settings' AI difficulty. One of another rules version is `stale`, its log unread (C61); an incomplete one is left out.
+   */
+  driverSessions(): DriverSessionRow[] {
+    return (this.#statements.completeSessions.all() as SessionDbRow[]).map((dbRow): DriverSessionRow => {
+      const session = this.#trackSession(dbRow);
+      const difficulty = session.settings['aiDifficulty'];
+      return { ...session, aiDifficulty: typeof difficulty === 'number' ? known(difficulty, 0) : unknown('notReceived') };
     });
+  }
+
+  /** A complete stored row as `sessionsOnTrack` gives it: stale without its projection (C61), else with it (C34). */
+  #trackSession(dbRow: SessionDbRow): TrackSession {
+    const row = this.#toSession(dbRow);
+    const track = this.#track(row);
+    if (isStale(row, this.#rulesVersion)) return { ...row, track, stale: true, projection: undefined };
+    const projection = this.#projectionOfStored(keyOf(dbRow));
+    return { ...row, track, stale: false, phase: phaseOf(projection), projection: projection as ProjectionState };
   }
 
   /** The weekend of the newest stored session (by start); `undefined` when none is stored. */

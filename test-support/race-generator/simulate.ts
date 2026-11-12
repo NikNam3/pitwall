@@ -243,7 +243,7 @@ function step(s: State, t: number, scOn: boolean, drsOn: boolean): number {
       const allowed = Math.max(aheadTo - minGapM, from + (aheadTo - aheadFrom));
       if (d > allowed) d = allowed;
       const advantage = target[ahead]! - target[c]!;
-      if (!scOn && advantage > 0 && aheadTo - d < minGapM && passes(s, c, advantage, d, drsOn)) {
+      if (!scOn && advantage > 0 && aheadTo - d < minGapM + 1e-6 && passes(s, c, advantage, d, drsOn)) {
         d = aheadTo + PASS_MARGIN_M;
         s.overtakes.push({ at: t1, car: c, other: ahead });
       }

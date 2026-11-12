@@ -238,24 +238,6 @@ export const degradationCalculator: QuickCalculator<DegradationOutput> = {
   kind: 'quick',
   reads: ['laps', 'stints', 'pitStops', 'tyres', 'identity', 'decisions', CAR_STATUS_READS, 'spans:weekend-phase'],
   cadence: 'frame',
-  compute: (view: EngineView): DegradationOutput => degradationAsOf(lazyFixed(asOfNow(view), view)),
+  compute: (view: EngineView): DegradationOutput => degradationAsOf(asOfNow(view)),
 };
 
-/**
- * `now` with its `fixed` values each read from `view` only when the form reads it (C41: the unit declares no read of
- * `live.session`, which `asOfNow`'s `fixed` reads for `totalLaps` and `weatherNow`). The values are `asOfNow`'s. To be
- * dropped once `asOfNow` reads each fixed value lazily (requested of the supervisor, Task 15a).
- */
-function lazyFixed(now: AsOfView, view: EngineView): AsOfView {
-  const fixed: AsOfView['fixed'] = {
-    get totalLaps() { return known(view.live.session.totalLaps, view.live.sessionTime); },
-    get playerCar() { return known(view.live.playerCar, view.live.sessionTime); },
-    get setsNow() { return view.live.cars.map((c) => c.tyres.sets); },
-    get weatherNow() {
-      const { weather, forecast, forecastAccuracy } = view.live.session;
-      return { weather, forecast, forecastAccuracy };
-    },
-  };
-  // `now`'s own getters, so the other fields stay lazy too, and `fixed` replaced
-  return Object.defineProperties({}, { ...Object.getOwnPropertyDescriptors(now), fixed: { value: fixed, enumerable: true } }) as AsOfView;
-}

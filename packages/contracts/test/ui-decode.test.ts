@@ -63,3 +63,35 @@ describe('decodeUiAction calibration', () => {
   ];
   it.each(invalid)('rejects %s', (_what, raw) => expect(decodeUiAction(raw)).toBeUndefined());
 });
+
+// SP4.3a Task 6, delegated (R4): the driver-profile uiActions (C62c, C73) cross the wire. The decoder checks their shape
+// only and rebuilds them from the known fields; the bridge's profile store validates them against the persons, the
+// stored sessions and the entries' declarations.
+describe('decodeUiAction drivers', () => {
+  const session = { sessionUid: '123', weekendId: '77', feedCar: 0 };
+  const actions = [
+    { kind: 'drivers.add', person: 'anna', displayName: 'Anna' },
+    { kind: 'drivers.link', session, carId: 3, person: 'anna' },
+    { kind: 'drivers.accept' },
+    { kind: 'drivers.exclude', person: 'anna', session },
+    { kind: 'drivers.override', person: 'anna', key: 'driverNoise.coreScatterMs', value: 310.5 },
+    { kind: 'drivers.override.clear', person: 'anna', key: 'driverNoise.coreScatterMs' },
+  ];
+  it.each(actions)('decodes $kind', (action) => expect(decodeUiAction(action)).toEqual(action));
+  it.each(actions)('drops the unknown fields of $kind', (action) =>
+    expect(decodeUiAction({ ...action, extra: 1, ...('session' in action && { session: { ...session, extra: 2 } }) })).toEqual(action));
+
+  const invalid: Array<[string, unknown]> = [
+    ['a person that is no string', { kind: 'drivers.add', person: 7, displayName: 'Anna' }],
+    ['a missing display name', { kind: 'drivers.add', person: 'anna' }],
+    ['a link without its session', { kind: 'drivers.link', carId: 3, person: 'anna' }],
+    ['a link car that is no integer', { kind: 'drivers.link', session, carId: '3', person: 'anna' }],
+    ['a session uid that is no string', { kind: 'drivers.exclude', person: 'anna', session: { ...session, sessionUid: 123 } }],
+    ['a session feed car that is no integer', { kind: 'drivers.exclude', person: 'anna', session: { ...session, feedCar: 0.5 } }],
+    ['a session without its weekend', { kind: 'drivers.link', session: { sessionUid: '123', feedCar: 0 }, carId: 3, person: 'anna' }],
+    ['an override value that is no number', { kind: 'drivers.override', person: 'anna', key: 'k', value: '5' }],
+    ['an override value that is not finite', { kind: 'drivers.override', person: 'anna', key: 'k', value: Number.NaN }],
+    ['an override clear without its key', { kind: 'drivers.override.clear', person: 'anna' }],
+  ];
+  it.each(invalid)('rejects %s', (_what, raw) => expect(decodeUiAction(raw)).toBeUndefined());
+});
