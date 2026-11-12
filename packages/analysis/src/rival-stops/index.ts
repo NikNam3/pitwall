@@ -2,6 +2,7 @@
 // car still owes a stop. A calculator: no topic.
 import type { RivalStops } from '@pitwall/domain';
 
+export * from './behaviour.ts';
 export * from './config.ts';
 export { rivalStopsAsOf } from './asof.ts';
 
