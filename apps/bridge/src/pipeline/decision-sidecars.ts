@@ -41,7 +41,7 @@ export function recordingDecisions(recordingPath: string, log?: Logger): Recorde
 }
 
 /** The decoded sidecar at `path`; `undefined` without a file or when it fails (with a warning). */
-function readSidecar<T>(path: string, decode: (json: unknown) => T | undefined, log: Logger | undefined): T | undefined {
+export function readSidecar<T>(path: string, decode: (json: unknown) => T | undefined, log: Logger | undefined): T | undefined {
   let text: string;
   try {
     text = readFileSync(path, 'utf8');

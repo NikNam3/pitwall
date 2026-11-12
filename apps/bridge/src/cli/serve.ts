@@ -20,6 +20,8 @@ import type { Db, SessionKey, StoredSessionRow } from '../storage/db.ts';
 import { WeekendRepository } from '../storage/weekend-repository.ts';
 import { WsServer, type ActionOutcome, type ChooseAction } from '../ws/server.ts';
 import { recordingDecisions } from '../pipeline/decision-sidecars.ts';
+import { recordingProfiles } from '../pipeline/profile-sidecar.ts';
+import { ProfileStore } from '../drivers/store.ts';
 import { cliLogger, whenAborted, type CliIo } from './io.ts';
 
 /** A recording served through a `ReplayController`; `controls` are applied (and any jump finished) before `listening` is printed. */
@@ -113,6 +115,15 @@ export async function serve(opts: ServeOptions): Promise<number> {
       rulesVersion: storage.rulesVersion,
       track: (row) => (row.pwrecPath === null ? loadTrackFile(row.trackId, TRACKS_DIR) : recordingTrack(row.pwrecPath, row.trackId, TRACKS_DIR)),
     });
+    // The stale sessions a set, a person's links or the suggestions read (C61), rebuilt from their recordings as a session
+    // start's weekend context rebuilds its stale ones; a failed rebuild is logged and its session stays stale (C3).
+    const rebuildStored = async (keys: readonly SessionKey[]): Promise<void> => {
+      if (rebuild === undefined || calibrationRepo === undefined) return;
+      const rows = keys.flatMap((key) => calibrationRepo.sessionsOf(key.weekendId).filter((row) => sameSession(row, key)));
+      await Promise.all(rows.map((row) => rebuild(row).catch((error: unknown) => {
+        calibrationLog.error({ sessionUid: row.sessionUid, weekendId: row.weekendId, playerCar: row.playerCar, err: error }, 'stored session not rebuilt');
+      })));
+    };
     const calibration = calibrationRepo && opts.uiDir !== undefined
       ? CalibrationStore.open(dirname(opts.uiDir), {
         features: FEATURES,
@@ -120,22 +131,27 @@ export async function serve(opts: ServeOptions): Promise<number> {
         config: opts.config ?? effectiveConfig(FEATURES),
         hub,
         log: calibrationLog,
-        // The stale sessions a set or the suggestions read (C61), rebuilt from their recordings as a session start's
-        // weekend context rebuilds its stale ones; a failed rebuild is logged and its session stays stale (C3).
-        rebuild: async (keys) => {
-          if (rebuild === undefined) return;
-          const rows = keys.flatMap((key) => calibrationRepo.sessionsOf(key.weekendId).filter((row) => sameSession(row, key)));
-          await Promise.all(rows.map((row) => rebuild(row).catch((error: unknown) => {
-            calibrationLog.error({ sessionUid: row.sessionUid, weekendId: row.weekendId, playerCar: row.playerCar, err: error }, 'stored session not rebuilt');
-          })));
-        },
+        rebuild: rebuildStored,
       })
       : undefined;
     if (calibration) undo.push(() => calibration.close());
-    // A rebuild changes the stored projections the sets' sources rest on (C61).
+    // The profile store (C62c) reads the stored sessions too; the running bridge is its only writer (P3, `drivers/.lock`).
+    const profiles = calibrationRepo && opts.uiDir !== undefined
+      ? ProfileStore.open(dirname(opts.uiDir), {
+        features: FEATURES,
+        repo: calibrationRepo,
+        config: opts.config ?? effectiveConfig(FEATURES),
+        hub,
+        log: calibrationLog,
+        rebuild: rebuildStored,
+      })
+      : undefined;
+    if (profiles) undo.push(() => profiles.close());
+    // A rebuild changes the stored projections the sets' sources and the persons' links rest on (C61).
     const rebuildThenRecompute = rebuild && (async (row: StoredSessionRow) => {
       await rebuild(row);
       calibration?.recompute('rebuild');
+      profiles?.recompute('rebuild');
     });
     let controller: ReplayController | undefined;
     // The server opens after the pipeline, and a replay's only once the startup jump has landed: a client that connects
@@ -160,6 +176,8 @@ export async function serve(opts: ServeOptions): Promise<number> {
             },
           },
         }),
+        // A driver-profile edit takes effect at the next session start (C62c, C75).
+        ...(profiles && { drivers: profiles }),
         // A pick is a decision of the feed's running session (C76): the pipeline takes it.
         choose: (action: ChooseAction): ActionOutcome => {
           if (action.feedId !== feedId) return { ok: false, reason: 'invalid', message: `no feed ${action.feedId}` };
@@ -211,13 +229,19 @@ export async function serve(opts: ServeOptions): Promise<number> {
           rulesVersion: opts.storage.rulesVersion,
           ...(rebuildThenRecompute && { rebuild: rebuildThenRecompute }),
           // A stored session gives new candidates (ruling R14).
-          onStored: () => calibration?.recompute('sessionEnd'),
+          onStored: () => {
+            calibration?.recompute('sessionEnd');
+            profiles?.recompute('sessionEnd');
+          },
         },
       }),
       // Live: the session starts on the calibration store's preselection and takes picks (C62a). A replay runs on its
       // recording's priors and decisions sidecars instead (C38, C76).
       ...(calibration && opts.source && { calibration }),
       ...(opts.replay && { recorded: recordingDecisions(opts.replay.path, pipelineLog) }),
+      // Live: each session starts on the profile store's snapshot of its slots; a replay on its profiles sidecar (C38, C62c).
+      ...(profiles && opts.source && { profiles }),
+      ...(opts.replay && { recordedProfiles: recordingProfiles(opts.replay.path, pipelineLog) }),
       ...(opts.staleCheck && { staleCheck: opts.staleCheck }),
       ...(calcStats && { calcStats }),
       // Live only: a replay reproduces the realism its sidecar recorded (spec 7.9), whatever the UI prefers next.
