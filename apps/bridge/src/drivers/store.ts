@@ -7,7 +7,7 @@
 // requested once; once that settles, the store recomputes.
 import { join } from 'node:path';
 import { canonicalJson, type TopicName } from '@pitwall/contracts';
-import { known, unknown, type CarId, type DriverPerson, type Known, type DriverProfile, type ProfileEntry, type ProfileSnapshot, type SessionRef, type UnlinkedSlot } from '@pitwall/domain';
+import { known, unknown, type CarId, type DriverPerson, type Known, type DriverProfile, type ProfileEntry, type PersonId, type ProfileSnapshot, type SessionRef, type UnlinkedSlot } from '@pitwall/domain';
 import type { FeatureConfig } from '../feature-config.ts';
 import type { Feature } from '../features/feature.ts';
 import type { ValueFor } from '../hub/topic-hub.ts';
@@ -32,6 +32,9 @@ export type ApplyResult = { ok: true } | { ok: false; reason: 'invalid'; message
  * (`null` when hidden online). A run's slots at session start, for `snapshotFor`.
  */
 export type SlotIdentity = { carId: CarId; teamId: number; raceNumber: number; name: string | null };
+
+/** One linked session of a person with its own value of each entry: the entry's aggregate over that one session. */
+export type DriverSessionValues = { session: SessionRef; date: string; entries: Record<string, Known<number>> };
 
 export type ProfileStoreDeps = {
   /** The features whose `profiles` declarations the store runs (C63). */
@@ -158,6 +161,18 @@ export class ProfileStore {
     return this.#unlinked;
   }
 
+  /**
+   * The person's linked sessions (those their profile rests on: a `human` span, not excluded, not stale), oldest first,
+   * each with its own value of every entry (`pitwall drivers show`). Empty for an unknown person.
+   */
+  sessionValues(person: PersonId): DriverSessionValues[] {
+    const found = this.#persons.find((p) => p.id === person);
+    if (found === undefined) return [];
+    return this.#linkedSessions(found)
+      .toSorted((a, b) => (a.stored.startedAt < b.stored.startedAt ? -1 : a.stored.startedAt > b.stored.startedAt ? 1 : 0))
+      .map((s) => ({ session: s.stored.session, date: s.stored.startedAt.slice(0, 10), entries: this.#runner.sessionValues(s) }));
+  }
+
   /** Recomputes every person's entries and the unlinked slots: on an edit, at session end, after a rebuild (C61). */
   recompute(trigger: 'edit' | 'sessionEnd' | 'rebuild'): void {
     this.#deps.log.debug({ trigger }, 'driver profiles recompute');
@@ -186,15 +201,17 @@ export class ProfileStore {
     const rows = this.#deps.repo.driverSessions();
     this.#slots = rows.flatMap(storedSlots);
     this.#entries.clear();
-    for (const person of this.#persons) {
-      const sessions = this.#slots
-        .filter((slot) => slot.humanSpans.length > 0 && person.links.some((l) => linkMatches(l, slot)) && !person.excluded.some((e) => sameSession(e, slot.session)))
-        .flatMap((slot) => linkedSession(slot) ?? []);
-      this.#entries.set(person.id, this.#runner.entries(person, sessions));
-    }
+    for (const person of this.#persons) this.#entries.set(person.id, this.#runner.entries(person, this.#linkedSessions(person)));
     this.#unlinked = unlinkedSlots(this.#slots, this.#persons);
     // The links and the suggestions read every stored session: a stale one awaits its rebuild.
     this.#requestRebuild(rows.filter((r) => r.stale));
+  }
+
+  /** The person's linked, not excluded slots with a `human` span, of the sessions that are not stale (C61). */
+  #linkedSessions(person: DriverPerson): LinkedSession[] {
+    return this.#slots
+      .filter((slot) => slot.humanSpans.length > 0 && person.links.some((l) => linkMatches(l, slot)) && !person.excluded.some((e) => sameSession(e, slot.session)))
+      .flatMap((slot) => linkedSession(slot) ?? []);
   }
 
   /** Asks for the rebuild of the stale sessions not asked for yet (C61), then recomputes; a failure is logged, never thrown. */
