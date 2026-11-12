@@ -49,6 +49,13 @@ Keep `pnpm -s pitwall tap insights` and `pnpm -s pitwall tap laps` running in tw
 - Copy the session file into `recordings/` and request `FIXTURES.practiceFlashback` and a `fixtures/index.json` entry from the supervisor.
 - Take `t = flashback.targetSessionTime / 1000` (seconds; the field is in ms) from the bridge log's `flashback` line, then run `pnpm pwrec-cut <file> fixtures/segments/practice-flashback.pwrec.gz --from <t-5> --to <t+5>`. This is spec 12, recording 3.
 
+## 5. SP4.3a: driver profiles and the scoreboard (2026-11-12)
+
+- [ ] Before a league session: `pitwall drivers` lists the human slots of the stored sessions with a suggested person (race number, then team); `pitwall drivers add` the two drivers, `link` or `link --accept` the suggestions; `pitwall drivers show <person>` prints entries with laps, sessions and age.
+- [ ] During a live session: a `<recording>.profiles.json` sidecar appears next to the recording once Participants arrive; a `pitwall drivers` edit while the bridge runs is applied by the bridge (no lock error) and takes effect at the next session start.
+- [ ] After a dry race: `pitwall score <recording> --compare docs/research/16-scoreboard-baseline.json`-style comparison runs and prints the rejoin, undercut, SC-stop and forecast tables, split AI and human.
+- [ ] After the bridge starts on the new rules version: stored sessions rebuild once (the `car-driver` sub-machine is new, C61, C90).
+
 ## Results
 
 Record the date, the counts per topic and the flashback outcome here after the run.
