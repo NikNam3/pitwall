@@ -2198,8 +2198,63 @@
       "at": 0
     },
     "hazard": {
-      "known": false,
-      "reason": "notReceived"
+      "known": true,
+      "value": {
+        "value": {
+          "races": 12,
+          "lapOne": {
+            "sc": 0.208696,
+            "vsc": 0.039334
+          },
+          "byFraction": [
+            {
+              "upTo": 0.25,
+              "sc": 0.015273,
+              "vsc": 0.007039
+            },
+            {
+              "upTo": 0.5,
+              "sc": 0.010348,
+              "vsc": 0.007538
+            },
+            {
+              "upTo": 0.75,
+              "sc": 0.01206,
+              "vsc": 0.00599
+            },
+            {
+              "upTo": 1.0,
+              "sc": 0.009847,
+              "vsc": 0.004476
+            }
+          ],
+          "durationLaps": {
+            "sc": [
+              0.0,
+              0.034965,
+              0.251748,
+              0.286714,
+              0.195804,
+              0.083916,
+              0.06993,
+              0.041958,
+              0.020979,
+              0.0,
+              0.006993,
+              0.006993
+            ],
+            "vsc": [
+              0.045455,
+              0.579545,
+              0.318182,
+              0.034091,
+              0.022727
+            ]
+          }
+        },
+        "source": "12 Grands Prix 2015-2025 (12 jtrotman Kaggle Race Events); SC/VSC starts / laps at risk, lap 1 apart, laps 2+ in quarter-distance bins, empirical-Bayes shrinkage to the pooled shape of all tracks; durations SC pooled, VSC pooled; assumed: the per-lap chance is the same in a race at 25 %/50 % distance"
+      },
+      "at": 0
     }
   },
   "source": {
