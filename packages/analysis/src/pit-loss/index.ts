@@ -4,6 +4,7 @@ import type { PitLosses } from '@pitwall/domain';
 
 // not `phaseRow`: degradation's carries that name in the package index
 export { PIT_LOSS_BEHAVIOUR, type PitLossEffect } from './behaviour.ts';
+export { pitLossAsOf } from './as-of.ts';
 export * from './config.ts';
 export * from './priors.ts';
 export { stopLoss, type PitLossConfig, type PitLossOptions } from './loss.ts';
