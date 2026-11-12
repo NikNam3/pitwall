@@ -1,5 +1,5 @@
 import { feedId } from '@pitwall/domain';
-import { loadConfig } from '../../config.ts';
+import { loadConfig, udpPorts } from '../../config.ts';
 import { loadFeatureConfig, type FeatureConfig } from '../../feature-config.ts';
 import { FEATURES } from '../../features/index.generated.ts';
 import { UdpSource } from '../../input/udp-source.ts';
@@ -53,11 +53,13 @@ async function openStorage(dirs: DataDir, config: FeatureConfig, io: CliIo, onPr
 
 /** `pitwall live`: records the game's UDP telemetry and serves it; `--dev` also publishes calculator timings. */
 export async function run(_positionals: string[], values: { dev?: boolean | undefined }, io: CliIo): Promise<number> {
-  const { udpPort, udpHost, wsPort } = loadConfig(io.env);
+  const { udpHost, wsPort } = loadConfig(io.env);
+  // One feed per port (C1a, C58).
+  const ports = udpPorts(io.env);
   const dirs = dataDir(io.env);
   // Fixed for the run (a runtime change from the UI comes later); a config error stops the start before anything listens.
   const config = loadFeatureConfig(dirs.root, FEATURES);
-  await assertUdpPortFree(udpPort, udpHost);
+  for (const port of ports) await assertUdpPortFree(port, udpHost);
   // Until `serve` binds the port, windows see the startup rebuild's progress (C61); closed before `serve`, whatever happens.
   const startup = await StartupServer.start({ port: wsPort });
   const progress = (done: number, total: number) => startup.progress(done, total);
@@ -69,18 +71,19 @@ export async function run(_positionals: string[], values: { dev?: boolean | unde
   }
   if (opened === undefined) return EXIT_INTERRUPTED;
   const { db, stale, version } = opened;
-  const source = new UdpSource({ feedId: feedId(`udp-${udpPort}`), port: udpPort, host: udpHost });
+  const sources = ports.map((port) => ({ port, source: new UdpSource({ feedId: feedId(`udp-${port}`), port, host: udpHost }) }));
   return serve({
-    source,
-    feed: { kind: 'udp', label: `UDP port ${udpPort}` },
+    sources: sources.map(({ port, source }) => ({ source, feed: { kind: 'udp', label: `UDP port ${port}` } })),
     wsPort,
     dumpsDir: dirs.dumps,
     uiDir: dirs.ui,
     config,
     storage: { db, recordingsDir: dirs.recordings, rulesVersion: version, rebuild: stale.rebuild },
     staleCheck: { clock: () => performance.now(), everyMs: 500 },
-    // The port was free a moment ago; this catches the race and any other bind failure.
-    bound: () => source.listening.catch((error: unknown) => Promise.reject(udpPortError(udpPort, error))),
+    // Each port was free a moment ago; this catches the race and any other bind failure.
+    bound: async () => {
+      await Promise.all(sources.map(({ port, source }) => source.listening.catch((error: unknown) => Promise.reject(udpPortError(port, error)))));
+    },
     ...(values.dev && { dev: true }),
     io,
   });

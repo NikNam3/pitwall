@@ -1,7 +1,7 @@
 // One feed end to end (spec 4): PacketSource → decode → SessionTracker → SessionProcessor → TopicHub,
 // with the feed's health, its session files and its storage alongside.
 import { resolve } from 'node:path';
-import { toSessionTime, type CalibrationActiveValue, type FeedId, type Known, type PriorsSnapshot, type ProfileSnapshot, type RunPriors, type SessionRef, type SessionTime, type TrackFile } from '@pitwall/domain';
+import { toSessionTime, type CalibrationActiveValue, type FeedId, type Known, type PriorsSnapshot, type ProfileSnapshot, type RunPriors, type SessionRef, type SessionTime, type TeamId, type TrackFile } from '@pitwall/domain';
 import type { CalibrationStore } from '../calibration/store.ts';
 import type { ProfileStore, SlotIdentity } from '../drivers/store.ts';
 import { profilesSidecarPath } from './profile-sidecar.ts';
@@ -27,6 +27,7 @@ import { FeedMonitor } from './feed-monitor.ts';
 import { sessionClock, type SessionClock } from './session-clock.ts';
 import { playerCarOf, SessionProcessor } from './session-processor.ts';
 import { SessionStorage, type StorageMode } from './session-storage.ts';
+import type { TeamFeeds } from './team-feeds.ts';
 import { TopicPublisher } from './topic-publisher.ts';
 
 export type FeedPipelineOptions = {
@@ -103,7 +104,15 @@ export type FeedPipelineOptions = {
    * (`loadTrackFile(id, TRACKS_DIR)`); a pipeline built from a recording passes `recordingTrack(file, id, TRACKS_DIR)`.
    */
   tracks?: (trackId: number) => Known<TrackFile>;
+  /**
+   * The bridge's team bookkeeping (C1a): the pipeline reports its session uid when a session starts and its player car's
+   * team once the session's Participants name it.
+   */
+  teams?: TeamFeeds;
 };
+
+/** A feed's session uid and its player car's team (`null` before Participants), as reported to `teams`. */
+type Seat = { sessionUid: string; team: TeamId | null };
 
 /**
  * Where the feed is: the newest frame's session time and the player's lap. The time is the game's own, not the race
@@ -160,6 +169,8 @@ export class FeedPipeline {
   readonly #recorded: RecordedPlacement<GivenDecision>;
   /** The newest session's decisions (kept once it ended: a pick then only marks its set used). */
   #decisions: SessionDecisions | undefined;
+  /** The newest session's seat as last reported to `teams`. */
+  #seat: Seat | undefined;
 
   constructor(opts: FeedPipelineOptions) {
     this.#o = opts;
@@ -341,6 +352,7 @@ export class FeedPipeline {
         return;
       case 'frame':
         this.#updatePosition(event.frame);
+        this.#updateTeam(event.frame);
         this.#session?.push(event.frame);
         return;
       case 'sessionEnded':
@@ -355,10 +367,24 @@ export class FeedPipeline {
     if (playerLap !== undefined) this.#position = { sessionTimeMs: frame.sessionTime, playerLap };
   }
 
+  /** The player car's team from the frame's Participants, reported to `teams` when it changes. */
+  #updateTeam(frame: Frame): void {
+    const seat = this.#seat;
+    const team = frame.participants?.participants[frame.playerCarIndex]?.teamId;
+    if (seat === undefined || team === undefined || team === seat.team) return;
+    this.#reportSeat({ sessionUid: seat.sessionUid, team });
+  }
+
+  #reportSeat(seat: Seat): void {
+    this.#seat = seat;
+    this.#o.teams?.report(this.#feedId, seat.sessionUid, seat.team);
+  }
+
   /** A new session: every topic of the feed starts over, apart from the feed's own insights that still hold. */
   #startSession(event: SessionStarted): void {
     const { feedId, hub, log, dumpsDir } = this.#o;
     this.#ended = undefined;
+    this.#reportSeat({ sessionUid: String(event.sessionUid), team: null });
     this.#alerts.clearWriteFailures(this.#sessionTime());
     hub.resetFeed(feedId);
     this.#publisher.sessionStarted();

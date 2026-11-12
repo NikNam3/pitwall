@@ -10,6 +10,7 @@ import { FEATURES } from '../features/index.generated.ts';
 import { TopicHub } from '../hub/topic-hub.ts';
 import type { PacketSource } from '../input/packet-source.ts';
 import { FeedPipeline, type FeedPipelineOptions } from '../pipeline/feed-pipeline.ts';
+import { TeamFeeds } from '../pipeline/team-feeds.ts';
 import { ReplayController } from '../replay/replay-controller.ts';
 import { loadTrackFile, recordingTrack, TRACKS_DIR } from '../track-files/load.ts';
 import { pruneEndedAcknowledgements } from '../ui-state/ack-pruning.ts';
@@ -27,11 +28,20 @@ import { cliLogger, whenAborted, type CliIo } from './io.ts';
 /** A recording served through a `ReplayController`; `controls` are applied (and any jump finished) before `listening` is printed. */
 export type ReplayInput = { feedId: FeedId; path: string; controls: readonly ReplayControl[]; unpaced: boolean };
 
-export type ServeOptions = ({ source: PacketSource; replay?: never } | { replay: ReplayInput; source?: never }) & ServeBase;
+/** What a feed is called in the `hello` message. */
+export type FeedLabel = Omit<FeedInfo, 'feedId' | 'team'>;
+
+/** One live feed (C1a): its packet source, which names its feed id, and what it is called in `hello`. */
+export type LiveFeed = { source: PacketSource; feed: FeedLabel };
+
+/** One live feed (`source`), several (`sources`, one pipeline each, in `hello` in this order), or a replay. */
+export type ServeOptions = (
+  | { source: PacketSource; feed: FeedLabel; replay?: never; sources?: never }
+  | { sources: readonly LiveFeed[]; source?: never; replay?: never; feed?: never }
+  | { replay: ReplayInput; feed: FeedLabel; source?: never; sources?: never }
+) & ServeBase;
 
 type ServeBase = {
-  /** What the feed is called in the `hello` message. */
-  feed: Omit<FeedInfo, 'feedId' | 'team'>;
   wsPort: number;
   dumpsDir: string;
   /**
@@ -75,13 +85,17 @@ const POSITION_EVERY_MS = 500;
 const CALC_STATS_EVERY_MS = 1000;
 
 /**
- * Serves one feed over WebSocket until `io.signal` aborts. Starts the pipeline (a replay also lands its startup jump),
- * then the WebSocket server, and reports `listening` only once both are up; if a step fails, the ones before it are
- * undone (nothing stays half-started).
+ * Serves its feeds over one hub and one WebSocket server until `io.signal` aborts. Starts the pipelines (a replay also
+ * lands its startup jump), then the WebSocket server, and reports `listening` only once all are up; if a step fails, the
+ * ones before it are undone (nothing stays half-started).
  */
 export async function serve(opts: ServeOptions): Promise<number> {
   const { io } = opts;
-  const feedId = opts.replay ? opts.replay.feedId : opts.source.feedId;
+  const live: readonly LiveFeed[] = opts.sources ?? (opts.source ? [{ source: opts.source, feed: opts.feed }] : []);
+  const labels: ReadonlyArray<Omit<FeedInfo, 'team'>> = opts.replay
+    ? [{ feedId: opts.replay.feedId, ...opts.feed }]
+    : live.map(({ source, feed }) => ({ feedId: source.feedId, ...feed }));
+  const feedIds = labels.map((label) => label.feedId);
   const undo: Array<() => void | Promise<void>> = [];
   try {
     const { storage } = opts;
@@ -90,24 +104,23 @@ export async function serve(opts: ServeOptions): Promise<number> {
         storage.db.close();
       });
     }
-    // The hub's one callback tells the pipeline which calculators its subscribers need. A change before the pipeline
+    // The hub's one callback tells a feed's pipeline which calculators its subscribers need. A change before the pipeline
     // exists has none to reach; the pipeline reads the demand itself when a session starts.
-    let pipeline: FeedPipeline | undefined = undefined;
+    const pipelines = new Map<FeedId, FeedPipeline>();
     const hub = new TopicHub({
       now: () => performance.now(),
-      onDemandChange: (changed) => {
-        if (changed === feedId) pipeline?.demandChanged();
-      },
+      onDemandChange: (changed) => pipelines.get(changed)?.demandChanged(),
     });
-    // SP4.3b Task 2b fills the team from Participants.
-    const feeds = (): FeedInfo[] => [{ feedId, ...opts.feed, team: null }];
+    // The team's feeds (C1a): each pipeline reports its session uid and its player car's team.
+    const teams = new TeamFeeds();
+    const feeds = (): FeedInfo[] => labels.map((label) => ({ ...label, team: teams.team(label.feedId) }));
     // Seeded first, so the UI state opens on the shipped workbooks, never on its own fallback, and on every start path.
     if (opts.uiDir !== undefined) await seedDefaultWorkbooks(opts.uiDir, DEFAULT_WORKBOOKS_DIR);
     const uiState = opts.uiDir === undefined ? undefined : UiState.open(opts.uiDir, hub, cliLogger(io, 'warn'));
     if (uiState) {
       undo.push(() => uiState.close());
       // Acknowledgements of occurrences that have ended are dropped, so state.json does not grow forever.
-      undo.push(pruneEndedAcknowledgements(hub, [feedId], uiState));
+      undo.push(pruneEndedAcknowledgements(hub, feedIds, uiState));
     }
     const { rebuild } = storage ?? {};
     // The calibration store (C62a) reads the stored sessions, so only a run that stores has one; `uiDir` is `<data dir>/ui`.
@@ -171,7 +184,7 @@ export async function serve(opts: ServeOptions): Promise<number> {
             apply: (action: CalibrationAction): ApplyResult => {
               const result = calibration.apply(action);
               if (result.ok && action.kind !== 'calibration.set.create' && action.kind !== 'calibration.set.copy') {
-                pipeline?.calibrationEdited(action.setId);
+                for (const pipeline of pipelines.values()) pipeline.calibrationEdited(action.setId);
               }
               return result;
             },
@@ -181,7 +194,8 @@ export async function serve(opts: ServeOptions): Promise<number> {
         ...(profiles && { drivers: profiles }),
         // A pick is a decision of the feed's running session (C76): the pipeline takes it.
         choose: (action: ChooseAction): ActionOutcome => {
-          if (action.feedId !== feedId) return { ok: false, reason: 'invalid', message: `no feed ${action.feedId}` };
+          if (!feedIds.includes(action.feedId)) return { ok: false, reason: 'invalid', message: `no feed ${action.feedId}` };
+          const pipeline = pipelines.get(action.feedId);
           return pipeline === undefined ? { ok: false, reason: 'notSupported' } : pipeline.commitDecision(action.setId);
         },
         ...(opts.replay && { replay: { control: (control: ReplayControl) => (controller === undefined ? false : (controller.control(control), true)) } }),
@@ -214,10 +228,11 @@ export async function serve(opts: ServeOptions): Promise<number> {
     // Test aid for the Playwright specs: inert unless set (see `FeedAlerts.raiseTestInsight`).
     const testInsight = io.env['PITWALL_E2E_INSIGHT'] || undefined;
     const pipelineLog = cliLogger(io, 'info');
-    const makePipeline = (source: PacketSource): FeedPipeline =>
-      (pipeline = new FeedPipeline({
-      feedId,
+    const makePipeline = (source: PacketSource): FeedPipeline => {
+      const pipeline = new FeedPipeline({
+      feedId: source.feedId,
       source,
+      teams,
       hub,
       features: FEATURES,
       ...(opts.config && { config: opts.config }),
@@ -250,18 +265,23 @@ export async function serve(opts: ServeOptions): Promise<number> {
       ...(testInsight !== undefined && { testInsight }),
       // A replay (and dev) runs with the track file its recording was made with (C62b); live loads the committed file.
       ...(opts.replay && { tracks: (trackId: number) => recordingTrack(opts.replay.path, trackId, TRACKS_DIR, pipelineLog) }),
-    }));
-    const failed = (error: unknown): never => {
-      throw new StartupError(`feed ${feedId} failed: ${error instanceof Error ? error.message : String(error)}`);
+      });
+      // A replay's backward jump builds the feed's pipeline anew; the newest one takes the feed's demand and picks.
+      pipelines.set(source.feedId, pipeline);
+      return pipeline;
+    };
+    const failedFeed = (id: FeedId) => (error: unknown): never => {
+      throw new StartupError(`feed ${id} failed: ${error instanceof Error ? error.message : String(error)}`);
     };
     let finished: Promise<void>;
     if (opts.replay) {
       const { replay } = opts;
+      const failed = failedFeed(replay.feedId);
       // A startup jump that lands at the end is not announced: the replay has not finished, it was jumped to the end.
       let jumping = true;
       controller = new ReplayController({
         path: replay.path,
-        feedId,
+        feedId: replay.feedId,
         hub,
         makePipeline,
         unpaced: replay.unpaced,
@@ -275,12 +295,16 @@ export async function serve(opts: ServeOptions): Promise<number> {
       // A recording that cannot be read ends the wait too (`done` rejects), and so does an interrupt.
       await Promise.race([running.settled(), running.done, whenAborted(io.signal)]).catch(failed);
       jumping = false;
-      finished = running.done;
+      finished = running.done.catch(failed);
     } else {
-      const running = makePipeline(opts.source);
-      running.start();
-      undo.push(() => running.stop());
-      finished = running.done.then(() => opts.onDone?.());
+      // One pipeline per feed, all on the one hub (C1a); the run has finished once every feed's source is done.
+      const running = live.map(({ source }) => {
+        const pipeline = makePipeline(source);
+        pipeline.start();
+        undo.push(() => pipeline.stop());
+        return pipeline.done.catch(failedFeed(source.feedId));
+      });
+      finished = Promise.all(running).then(() => opts.onDone?.());
     }
     const server = await startServer();
     await opts.bound?.();
@@ -288,7 +312,7 @@ export async function serve(opts: ServeOptions): Promise<number> {
     io.out(`listening ws://127.0.0.1:${server.port}`);
 
     const aborted = whenAborted(io.signal);
-    await Promise.race([aborted, finished.then(() => aborted)]).catch(failed);
+    await Promise.race([aborted, finished.then(() => aborted)]);
     return 0;
   } finally {
     for (const step of undo.reverse()) await step();
