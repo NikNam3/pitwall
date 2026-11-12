@@ -1,14 +1,17 @@
 // `tyre-life` "as of frame N" (SP4.3a Task 15c; rows R2 and R3 of Tasks 9–12): the as-of form on the projection cut at a
-// leader crossing frame equals the scheduled run at that frame, and after a flashback the output equals a run that never
+// leader crossing frame equals the scheduled run at that frame in its projection-derived fields (ruling R20; the as-of
+// form gives wear as of each car's newest lap end), and after a flashback the output equals a run that never
 // received the undone frames (C33). The generator's race records every fact as the engine appends it; its views carry no
 // append frames, so the source handed to `projectionAsOf` gets them from the lists' lengths at the frames the test cuts at.
-import { carId, known, type FrameNumber, type LapRecord, type Percent } from '@pitwall/domain';
+import { carId, currentLaps, known, unknown, type FrameNumber, type LapRecord, type Percent } from '@pitwall/domain';
 import { asOfNow, projectionAsOf, projectionLengths, type AsOfView, type EngineView, type MembershipSource } from '@pitwall/engine/readers';
 import { describe, expect, it } from 'vitest';
 import { degradationCalculator } from '../../src/degradation/calculator.ts';
 import { DEGRADATION } from '../../src/degradation/index.ts';
 import { tyreLifeCalculator } from '../../src/tyre-life/calculator.ts';
 import { tyreLifeAsOf } from '../../src/tyre-life/index.ts';
+import type { TyreLifeOutput } from '../../src/tyre-life/types.ts';
+import { CORNERS } from '../../src/shared/wear-rate.ts';
 import { carState, lap } from '../../../../test-support/builders/index.ts';
 import type { BuilderRace } from '../../../../test-support/builders/long-race.ts';
 import { GENERATOR_DEFAULTS, generateRace, type GeneratorParams } from '../../../../test-support/race-generator/index.ts';
@@ -44,6 +47,20 @@ function sourceOf(r: BuilderRace, cuts: readonly FrameNumber[]): MembershipSourc
 
 const SOURCE = sourceOf(race, CROSSINGS);
 
+/**
+ * The output's projection-derived fields (ruling R20): every field except those `compute` overlays from the live state,
+ * which a projection-only as-of form cannot have. The live-overlaid fields, left out: each corner's `wearPct` (the wear
+ * now, mid-lap) and the `lapsToLimit` that follow from it (each corner's and the set's), and the fitted set's
+ * `gameLifeSpanLaps`.
+ */
+const projectionDerived = (out: TyreLifeOutput) =>
+  Object.fromEntries(
+    Object.entries(out).map(([car, life]) => {
+      const { corners, lapsToLimit: _set, gameLifeSpanLaps: _span, ...rest } = life;
+      return [car, { ...rest, corners: Object.fromEntries(CORNERS.map((c) => [c, { ratePctPerLap: corners[c].ratePctPerLap }])) }];
+    }),
+  );
+
 /** `degradation`'s output from the scheduled run on `view`: the upstream output `tyre-life` reads (R2). */
 const upstreamOn = (view: EngineView): EngineView['outputs'] => new Map([[DEGRADATION, degradationCalculator.compute(view)]]);
 
@@ -62,13 +79,31 @@ const asOfAt = (frame: FrameNumber, outputs: EngineView['outputs']): AsOfView =>
 });
 
 describe('tyre-life as of frame N', () => {
-  it('as of frame N equals the scheduled run at every leader crossing frame', () => {
+  it('as of frame N equals the scheduled run at every leader crossing frame (its projection-derived fields, R20)', () => {
     for (const frame of CROSSINGS) {
       const view = scheduledAt(frame);
       const expected = tyreLifeCalculator.compute(view);
       // every car of the race has its set
       expect(Object.keys(expected)).toHaveLength(PARAMS.cars);
-      expect(tyreLifeAsOf(asOfAt(frame, view.outputs)), `frame ${frame}`).toEqual(expected);
+      const asOf = tyreLifeAsOf(asOfAt(frame, view.outputs));
+      expect(Object.keys(asOf).sort(), `frame ${frame}`).toEqual(Object.keys(expected).sort());
+      expect(projectionDerived(asOf), `frame ${frame}`).toEqual(projectionDerived(expected));
+    }
+  });
+
+  it("the as-of form gives wear as of the car's newest lap end and gameLifeSpanLaps unknown('notReceived')", () => {
+    for (const frame of CROSSINGS) {
+      const view = scheduledAt(frame);
+      const cut = asOfAt(frame, view.outputs);
+      const laps = currentLaps(cut.history.laps as readonly LapRecord[]);
+      const out = tyreLifeAsOf(cut);
+      expect(Object.keys(out), `frame ${frame}`).toHaveLength(PARAMS.cars);
+      for (const [car, life] of Object.entries(out)) {
+        const newest = laps.filter((l) => String(l.carId) === car).at(-1);
+        expect(newest, `frame ${frame}, car ${car}`).toBeDefined();
+        for (const c of CORNERS) expect(life.corners[c].wearPct, `frame ${frame}, car ${car}, ${c}`).toEqual(newest!.wearAtEndPct[c]);
+        expect(life.gameLifeSpanLaps, `frame ${frame}, car ${car}`).toEqual(unknown('notReceived'));
+      }
     }
   });
 
@@ -80,7 +115,7 @@ describe('tyre-life as of frame N', () => {
       expect(rewound.delta.rewound).toBeDefined();
       const never = tyreLifeCalculator.compute(scheduledAt(target));
       expect(tyreLifeCalculator.compute(rewound)).toEqual(never);
-      expect(tyreLifeAsOf(asOfNow(rewound))).toEqual(never);
+      expect(projectionDerived(tyreLifeAsOf(asOfNow(rewound)))).toEqual(projectionDerived(never));
     });
 
     it('on engine-shaped history: laps 4 and 5 (each provisional then confirmed) undone back to the end of lap 3', () => {
@@ -104,7 +139,7 @@ describe('tyre-life as of frame N', () => {
       const never = tyreLifeCalculator.compute(at(false));
       expect(never[carId(0)]).toBeDefined();
       expect(tyreLifeCalculator.compute(at(true))).toEqual(never);
-      expect(tyreLifeAsOf(asOfNow(at(true)))).toEqual(never);
+      expect(projectionDerived(tyreLifeAsOf(asOfNow(at(true))))).toEqual(projectionDerived(never));
     });
   });
 });
