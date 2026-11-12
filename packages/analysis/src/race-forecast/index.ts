@@ -9,9 +9,9 @@
 // the points; the lap's time comes from `lap-model`.
 import type { ForecastResult, PassCurve, Policy, Scenario, StartingPoint } from '@pitwall/domain';
 import { defineSimulator, type Rng } from '@pitwall/engine/readers';
-import { DOUBLE_STACK_MS, DRS_FROM_LAP, DRS_RANGE_MS, HUMAN_STOP_SAVING_MS, MEDIAN_PASS_HAZARD, PASS_MARGIN_MS } from './constants.ts';
+import { DOUBLE_STACK_MS, HUMAN_STOP_SAVING_MS, MEDIAN_PASS_HAZARD, PASS_MARGIN_MS } from './constants.ts';
 import { PURPOSE, streamKey, uniform } from './draws.ts';
-import { createField, endLap, lineIndex, NEUTRAL, SLOT, startLap, STRIDE, type Field } from './field.ts';
+import { createField, endLap, fitStop, lineIndex, NEUTRAL, SLOT, startLap, stopAt, STRIDE, type Field } from './field.ts';
 import { lapPointsOf, POINT, type LapPoints } from './points.ts';
 import { result } from './result.ts';
 
@@ -26,8 +26,6 @@ const LINE = POINT.line;
 const GREEN = NEUTRAL.none;
 const SC = NEUTRAL.sc;
 const PASS = PURPOSE.pass;
-const RANGE_MS = DRS_RANGE_MS;
-const FROM_LAP = DRS_FROM_LAP;
 const MEDIAN_HAZARD = MEDIAN_PASS_HAZARD;
 const MARGIN_MS = PASS_MARGIN_MS;
 const uniformDraw = uniform;
@@ -66,8 +64,8 @@ function curveOf(start: StartingPoint): PassCurve | undefined {
 
 type Run = { f: Field; pts: LapPoints; order: Int16Array; m: number };
 
-/** DRS is enabled from `DRS_FROM_LAP`, off on a neutralised lap and the lap after one. */
-const drsOn = (f: Field, lap: number): boolean => lap >= FROM_LAP && f.neutralByLap[lap] === GREEN && f.neutralByLap[lap - 1] === GREEN;
+/** DRS is enabled from `fromLap` (`start.drs`), off on a neutralised lap and the lap after one. */
+const drsOn = (f: Field, fromLap: number, lap: number): boolean => lap >= fromLap && f.neutralByLap[lap] === GREEN && f.neutralByLap[lap - 1] === GREEN;
 
 /** Where global point `g` is, in laps (lap number plus lap fraction; the line ends its lap). */
 const posOf = (pts: LapPoints, g: number): number => {
@@ -103,6 +101,9 @@ export function raceForecast(start: StartingPoint, policies: readonly Policy[], 
   const minGapMs = it.minGapMs;
   const heldWithinMs = minGapMs + HELD_EPS_MS;
   const drsGainMs = it.drsStraightGainMs;
+  // the one DRS rule, race-interaction's (forecast-field fills it, F7)
+  const drsRangeMs = start.drs.rangeMs;
+  const drsFromLap = start.drs.fromLap;
   const drsPassFactor = it.drsPassFactor;
   const curve = curveOf(start);
   const wet = start.wetness.wetnessMs > 0;
@@ -129,7 +130,7 @@ export function raceForecast(start: StartingPoint, policies: readonly Policy[], 
     const kind = kinds[i] ?? LINE;
     const at = fractions[i] ?? 1;
     const segment = segments[i] ?? 0;
-    const drs = (kind === DETECTION || kind === DRS_END) && drsOn(f, lap);
+    const drs = (kind === DETECTION || kind === DRS_END) && drsOn(f, drsFromLap, lap);
     const drsEnd = kind === DRS_END && drs;
     const gAfter = g + 1;
     const synced = g >= gSync;
@@ -194,7 +195,7 @@ export function raceForecast(start: StartingPoint, policies: readonly Policy[], 
             }
           }
           car[b + DRS_PASS] = 0;
-        } else if (kind === DETECTION) car[b + DRS_RANGE] = drs && t - ta <= RANGE_MS ? 1 : 0;
+        } else if (kind === DETECTION) car[b + DRS_RANGE] = drs && t - ta <= drsRangeMs ? 1 : 0;
         else if (kind === DRS_END) car[b + DRS_PASS] = drs && car[b + DRS_RANGE] === 1 && car[a + DRS_RANGE] === 0 ? 1 : 0;
       } else {
         car[b + HELD_BY] = -1;
@@ -240,15 +241,29 @@ function place(r: Run): void {
     const c = order[k] ?? 0;
     const at = s.lapFraction[c] ?? 0;
     const lap = startLapOf(s, c);
+    // at its line with a stop at the end of the lap it just finished: its in-lap is done, it is in the pit lane (F2)
+    const pitting = at === 0 && lap >= 1 ? stopAt(f, c, lap - 1) : -1;
+    if (pitting !== -1) fitStop(f, c, pitting);
     lapStart(f, c, lap, at, true);
     let i = 0;
     while ((pts.fraction[i] ?? 1) <= at) i++;
     const lapMs = f.car[c * W + LAP_MS] ?? 0;
     f.car[c * W + G_NEXT] = lap * P + i;
     f.car[c * W + T_LAST] = -(at - (i === 0 ? 0 : (pts.fraction[i - 1] ?? 0))) * lapMs;
+    // it pays the out-lap part of its stop's loss only
+    if (pitting !== -1) f.car[c * W + T_LAST] = (f.car[c * W + T_LAST] ?? 0) + outLapLossMs(s, c, PIT_LOSS[f.neutralByLap[lap - 1] ?? GREEN] ?? 'green');
     if (lap >= 1) f.lineT[lineAt(f, c, lap - 1)] = -at * lapMs;
   }
 }
+
+type Condition = (typeof PIT_LOSS)[number];
+
+/** The in-lap's part of a stop's loss under `condition`: `inLapShare` of it (F2). */
+const inLapLossMs = (s: StartingPoint, condition: Condition): number => s.track.pitLossMs.inLapShare * s.track.pitLossMs[condition];
+
+/** The rest of car `c`'s loss, paid after the line: a human's shorter stationary time comes off it. */
+const outLapLossMs = (s: StartingPoint, c: number, condition: Condition): number =>
+  s.track.pitLossMs[condition] - inLapLossMs(s, condition) - (s.human[c] === 1 ? HUMAN_STOP_SAVING_MS : 0);
 
 /** Every car crossed the line ending `lap` at point `g`: its line time, its stop (loss, double stack), its next lap. */
 function crossLine(r: Run, g: number, lap: number): void {
@@ -261,13 +276,15 @@ function crossLine(r: Run, g: number, lap: number): void {
     const c = order[k] ?? 0;
     const b = c * W;
     if (car[b + G_NEXT] !== g + 1) continue;
-    const entry = car[b + T_LAST] ?? 0;
-    f.lineT[lineAt(f, c, lap)] = entry;
     const kind = car[b + NEUTRAL_AT] ?? GREEN;
+    const condition = PIT_LOSS[kind] ?? 'green';
+    // a stopping car's in-lap pays its share of the loss before the line (F2)
+    const entry = (car[b + T_LAST] ?? 0) + (car[b + IN_LAP] === 1 ? inLapLossMs(s, condition) : 0);
+    car[b + T_LAST] = entry;
+    f.lineT[lineAt(f, c, lap)] = entry;
     if (lapEnd(f, c, lap) !== undefined) {
       stopped = true;
-      const condition = PIT_LOSS[kind] ?? 'green';
-      let lossMs = s.track.pitLossMs[condition] - (s.human[c] === 1 ? HUMAN_STOP_SAVING_MS : 0);
+      let lossMs = outLapLossMs(s, c, condition);
       if (f.setsUsed.has(c)) {
         // our cars share one box: a car entering while it is busy waits for it
         const wait = Math.max(0, boxFreeAt - entry);

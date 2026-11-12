@@ -35,6 +35,7 @@ import { PER_LAP_RATE_CONFIG } from '../../per-lap-rate/index.ts';
 import { pitLossCalculator } from '../../pit-loss/calculator.ts';
 import { PIT_LOSS, pitLossAsOf, type PitLossOutput } from '../../pit-loss/index.ts';
 import { raceInteractionCalculator } from '../../race-interaction/calculator.ts';
+import { RACE_INTERACTION_CONFIG } from '../../race-interaction/config.ts';
 import { RACE_INTERACTION, raceInteractionAsOf } from '../../race-interaction/index.ts';
 import { rivalStopsCalculator } from '../../rival-stops/calculator.ts';
 import { RIVAL_STOPS, rivalStopsAsOf } from '../../rival-stops/index.ts';
@@ -164,7 +165,8 @@ export function buildStartingPoint(
   });
 
   const lapsTotal = fixed.totalLaps.value;
-  const f64 = (): Float64Array => new Float64Array(cars);
+  const drsConfig = configOf(RACE_INTERACTION_CONFIG, view);
+  const f64= (): Float64Array => new Float64Array(cars);
   const sp: StartingPoint = {
     lap: leaderNewest.lap,
     lapsTotal,
@@ -196,9 +198,9 @@ export function buildStartingPoint(
     owesStop: new Uint8Array(cars),
     sets: {},
     wetness: wetnessOf(wetness, config.priorWetnessSdMs),
-    track: trackOf(view, pitLoss, need),
-    // SP4.3b Task 6 (F7) takes the DRS rule from race-interaction's config; until then the F1 rule race-forecast keeps (1 s, from lap 3).
-    drs: { rangeMs: 1_000, fromLap: 3 },
+    track: trackOf(view, pitLoss, need, config.inLapLossShare),
+    // the one DRS rule: race-interaction's (F7)
+    drs: { rangeMs: drsConfig.drsRangeMs, fromLap: drsConfig.drsFromLap },
     interaction,
     lapModel,
   };
@@ -323,8 +325,11 @@ function wetnessOf(wetness: DeepReadonly<TrackWetness> | undefined, priorSdMs: n
   return state?.known === true ? { wetnessMs: state.value.wetnessMs, sdMs: state.value.sdMs } : { wetnessMs: 0, sdMs: priorSdMs };
 }
 
-/** The track: braking zones (their starts) and DRS zones from the track file, the pit loss per condition from pit-loss (else the track file's default). */
-function trackOf(view: AsOfView, pitLoss: DeepReadonly<PitLossOutput> | undefined, need: Needs): StartingPoint['track'] {
+/**
+ * The track: braking zones (their starts) and DRS zones from the track file, the pit loss per condition from pit-loss
+ * (else the track file's default), and the in-lap's share of it (`inLapShare`, the config's).
+ */
+function trackOf(view: AsOfView, pitLoss: DeepReadonly<PitLossOutput> | undefined, need: Needs, inLapShare: number): StartingPoint['track'] {
   const track = view.track.known ? view.track.value : undefined;
   const braking = track?.brakingZones.known === true ? track.brakingZones.value.map((z) => z.start) : [];
   const drs: DrsZone[] = track?.drsZones.known === true ? track.drsZones.value.map((z) => ({ detection: z.detection, start: z.start, end: z.end })) : [];
@@ -333,8 +338,7 @@ function trackOf(view: AsOfView, pitLoss: DeepReadonly<PitLossOutput> | undefine
     const fallback = track?.defaults.pitLossMs[c];
     return need.of(own, fallback?.known === true ? fallback.value.value : undefined);
   };
-  return { brakingZones: Float64Array.from(braking), drsZones: drs, // SP4.3b Task 6 (F2) splits the loss between the in lap and the out lap; 0 keeps it all on the out lap.
-    pitLossMs: { green: lossOf('green'), vsc: lossOf('vsc'), sc: lossOf('sc'), inLapShare: 0 } };
+  return { brakingZones: Float64Array.from(braking), drsZones: drs, pitLossMs: { green: lossOf('green'), vsc: lossOf('vsc'), sc: lossOf('sc'), inLapShare } };
 }
 
 /** Our cars' sets left (the shared `ourCars` rule, C43): every available set but the fitted one, of a compound the model tells apart. */
