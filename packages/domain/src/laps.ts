@@ -54,3 +54,29 @@ export function foldCurrentCrossing(index: CrossingIndex, crossing: MiniSectorCr
   byLap.set(crossing.lap, slots);
   slots[crossing.segment] = crossing;
 }
+
+/**
+ * The race-clock times (ms) of the current crossings of the chosen segments, in one pass over `list` under the rule
+ * of `foldCurrentCrossing` (a later crossing of the same car, lap and segment supersedes). Cell
+ * `(car * (laps + 1) + lap) * segments.length + k` holds car `car`, lap `lap`, segment `segments[k]`; `NaN` where
+ * there is none. Crossings of a segment not chosen, or of a car or lap out of range, are ignored.
+ */
+export function currentCrossingTimes(list: readonly MiniSectorCrossing[], cars: number, laps: number, segments: readonly number[]): Float64Array {
+  const chosen = segments.length;
+  const times = new Float64Array(cars * (laps + 1) * chosen).fill(NaN);
+  if (times.length === 0) return times;
+  let maxSegment = -1;
+  for (const s of segments) if (s > maxSegment) maxSegment = s;
+  const slotOf = new Int32Array(maxSegment + 1).fill(-1);
+  segments.forEach((s, k) => {
+    if (s >= 0) slotOf[s] = k;
+  });
+  for (const c of list) {
+    const car = c.carId as number;
+    if (car < 0 || car >= cars || c.lap < 0 || c.lap > laps || c.segment < 0 || c.segment > maxSegment) continue;
+    const k = slotOf[c.segment] as number;
+    if (k < 0) continue;
+    times[(car * (laps + 1) + c.lap) * chosen + k] = c.at;
+  }
+  return times;
+}
