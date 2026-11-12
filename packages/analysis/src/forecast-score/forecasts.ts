@@ -40,7 +40,8 @@ const wearKnown = (l: DeepReadonly<LapRecord>): boolean => {
 /**
  * The forecast cases of `history`: for every leader lap L that has a confirmed record of the leader, every horizon h
  * with lap L + h completed (a confirmed record) by the car. Dry laps only: a case whose laps L to L + h hold a lap on
- * inter or wet tyres, or a weather crossover (a stop from slicks to inter or wet tyres, or back), is no case.
+ * inter or wet tyres, or a weather crossover (a stop from slicks to inter or wet tyres, or back), is no case. Green
+ * horizons only: a case whose laps L + 1 to L + h of the car hold a lap with an SC or VSC share is no case (F1).
  */
 export function forecastCases(history: Projection, horizons: readonly Horizon[]): ForecastCase[] {
   const race = raceLaps(history);
@@ -55,6 +56,8 @@ export function forecastCases(history: Projection, horizons: readonly Horizon[])
         const start = race.lap(car, lap);
         const target = race.lap(car, lap + horizon);
         if (start === undefined || target === undefined || !race.dry(car, lap, lap + horizon)) continue;
+        // F1 (SP4.3b spec 4.2): a horizon lap under an SC or VSC is no case; the start lap L is no horizon lap.
+        if (race.neutralised(car, lap + 1, lap + horizon)) continue;
         cases.push({
           lap,
           horizon,
