@@ -289,3 +289,126 @@ Keep the spec 5.5 classification rule (strict set: Mexico, Miami, Texas, China, 
 - `passCap: 0.6` — unchanged, assumed: the profile likelihood cannot separate caps from 0.4 to 1.0 (research 19).
 
 Held-out (leave one race out) log-loss: strict 0.2500 on the 5 strict races (0.2239 on all 7) vs relaxed 0.2556 (0.2257).
+
+
+---
+
+# Research 19 addendum: the fresh tyre set against the lap model (SP4.3b1 Task 11, cause 4)
+
+Spike, 2026-11-12, branch `spike/4.3b-defaults` (never merged), with `sp4.3b/integ` merged in first, so the current `forecast-field`, `degradation` and `lap-model` code is used. Code in the worktree `../pitwall-wt/spike-4.3b-defaults`:
+
+- `spike/capture.ts` runs a recording through the bridge pipeline (`recordingPipeline`, the default config, an empty data dir, no priors) and keeps the forecast-score job's last prepared input: the projection, the situation, the config and the track. Spa and Texas reuse the Task 11 captures; China and Zandvoort were captured here.
+- `spike/freshset.ts` takes each AI green dry stop. At the frame that completes the in-lap, it builds the strategy's own starting point (`runAsOf(FORECAST_UNITS)` → `buildStartingPoint`). It then predicts every lap of the new set (lap on set 1 = the out-lap) and the old set's last three clean laps with `lapTimeMs`. The predictions use the car's `paceMs` and `degMsPerLap`, the fitted compound offsets and the cold-tyre terms as built. Each lap's **actual** start wear and fuel go in (the out-lap at wear 0), so only pace, degradation, offsets and the cold terms are tested. The same is done with the old stint's (α, ν) refitted by the same Kalman filter under other priors and settings, and with a plain OLS on wear.
+- `spike/freshset-summary.ts` pools the rows; `spike/freshset-print.py` prints them. The rows are in `spike/out/freshset-<race>.jsonl` and the pooled numbers in `spike/out/freshset.json`.
+
+**Labels.** Residual = actual − predicted, in ms. A mean is shown as mean ± SE (n laps). **Free air** is `freeAirLaps` at 1500 ms (the driver-noise and track-wetness rule). **All green** means green, valid laps, not an in-lap, traffic included. **Thin** marks fewer than about 30 laps or cases.
+
+**Data.** 53 stops: Spa 34, Texas 17, China 1, Zandvoort 1. That is every dry race recording. Singapore has no slick-to-slick stop (0 of 38), and Mexico and Miami are wet, so they were not used. Every stint started from the config default ν prior: `degradation.defaultNuMsPerLap` 60 ± `defaultNuSdMs` 60 ms per lap of age, with no calibration. In practice the result is **Spa plus Texas**, mostly Spa, and mostly soft and medium; hard is not identified.
+
+## 1. The fresh-set profile
+
+Lap on set, the residual as the strategy builds the model. The cold terms in this build are lap 1 +410 and lap 2 +100.
+
+| Lap on set | 1 (out-lap) | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
+|---|---|---|---|---|---|---|---|---|
+| free air | n/a | −775 ± 231 (10) | −403 ± 236 (10) | −447 ± 186 (12) | −317 ± 152 (13) | −241 ± 152 (13) | −28 ± 140 (13) | +40 ± 134 (15) |
+| all green | +15563 ± 496 (47) ¹ | −453 ± 148 (40) | −397 ± 167 (36) | −152 ± 154 (38) | −127 ± 138 (44) | +4 ± 138 (46) | +131 ± 130 (44) | +222 ± 121 (41) |
+| all green, without the cold terms | +15973 | −353 ± 148 | (same from lap 3 on) | | | | | |
+| Spa only, all green | +13713 (34) | −489 ± 151 (33) | −527 ± 162 (33) | −302 ± 153 (33) | −340 ± 133 (33) | −215 ± 114 (34) | −133 ± 122 (29) | +103 ± 127 (26) |
+| Texas only, all green | +20109 (12) | −235 ± 572 (6) | +1026 ± 275 (3) | +839 ± 381 (5) | +511 ± 319 (11) | +624 ± 375 (12) | +641 ± 258 (15) | +430 ± 244 (15) |
+| old set's last 3 clean laps (control) | | | | | | | | free air +53 ± 61 (40); all green +251 ± 86 (158) |
+
+¹ The out-lap holds the out-lap share of the pit loss. It runs +3362 ± 355 ms (47) above `(1 − inLapLossShare) · green loss`, which is Task 11 causes 2 and 3 (Spa's 12.6 s green prior; Texas charges almost nothing on the in-lap). **So `coldTyreLap1Ms` cannot be identified from these data**, and it is kept.
+
+Spa reproduces Task 11's profile: −0.49, −0.53, −0.30, −0.34 and −0.22 s on laps 2 to 6. Texas is **thin** and runs the other way from lap 3 on (n 3–15).
+
+By compound on the new set, all green: soft lap 2 −583 ± 249 (15), medium −376 ± 186 (25). Hard has no lap 2 or 3 (n 0).
+
+## 2. The stop gain
+
+The actual step is the mean fuel-corrected time on new-set laps 3–5 minus the old set's last three clean laps. The model's step is ν/rate × the wear difference + the offset difference, with the actual wear and fuel. Gap = actual − model, which equals the mean new-set residual minus the mean old-set residual.
+
+| Old stint's (α, ν) | Gap, all green, 38 stops (Spa 33, Texas 5) | Gap, free air, 12 stops (**thin**) | ms per % wear (53 stints) |
+|---|---|---|---|
+| as built (prior 60 ± 60 ms/lap) | **−450 ± 124** (actual −943 ± 130, model −493 ± 91) | **−446 ± 94** (actual −1297, model −852) | **34 ± 3** |
+| refit on free-air laps only | −631 ± 205 (14) | −833 ± 179 (8) | 29 ± 3 (19) |
+| no slow-lap down-weighting | −434 ± 126 | −425 ± 100 | 37 ± 3 |
+| no α drift | −447 ± 124 | −440 ± 94 | 34 ± 3 |
+| prior sd 150 | −271 ± 146 | −38 ± 134 | 45 ± 5 |
+| prior sd 300 | −252 ± 155 | +72 ± 147 | 49 ± 6 |
+| prior 120 ± 120 | −244 ± 141 | −49 ± 129 | 47 ± 4 |
+| **prior 150 ± 100** | **−215 ± 136** | **−66 ± 125** | **50 ± 4** |
+| prior 180 ± 120 | −189 ± 141 | +4 ± 132 | 52 ± 4 |
+| OLS on wear (no prior) | −166 ± 140 | +218 ± 127 | 51 ± 6 |
+
+**Cause.** ν is biased low. The cause is the **prior**, not the traffic.
+
+- Each stint has 6–11 pace laps at an observation sd of 400 ms. Against that, the default ν prior of 60 ± 60 ms/lap pulls ν down to 126 ms/lap on soft (OLS × rate gives 205 ± 26, prior sd 300 gives 191 ± 22) and 92 on medium (122 ± 28).
+- The model's degradation per % is 34 ms/%, against the stints' own OLS slope of 51. The ratio OLS/model is 1.47 ± 0.11 (46).
+- The filter's other rules barely matter: the down-weighting of slow outliers changes the gap by ~20 ms, the α drift by ~0.
+- Fitting on free-air laps only makes the gap worse (−631). The DRS trains are not what flattens ν through the filter: they shrink the fit to so few laps that the prior dominates even more.
+
+**The DRS trains do leave a second, smaller gap.** All green, the stop gain splits by the old stint's share of free-air pace laps:
+
+| Old stint | Actual | Gap as built | Gap, prior 150 ± 100 |
+|---|---|---|---|
+| free-air share ≥ 0.25 (13) | −1069 ± 236 | −301 ± 178 | **+7 ± 201** |
+| free-air share < 0.25 (25) | −877 ± 157 | −528 ± 165 | **−330 ± 177** |
+
+Spa car 7's first stint is one of these: 0 free laps of 8, OLS 13 ms/%, so the observed first stint is genuinely flat. There the gain at the stop is release from the train. The car's α is the train's pace, not its free pace, and no prior fixes that. This is about 1.9 SE, **thin**.
+
+**No missing fresh-set term is identified.**
+
+- The exponential `A·e^{−(j−2)/τ} + B` on the as-built residuals runs τ to the bound (6 laps; A −970 ± 291, B +526). That is a slow linear drift, the signature of a slope bias, not a peak.
+- After the prior change (150 ± 100) it is A −594 ± 283 (all green, 289 laps, 35 cars), again with τ at the bound. On free air (86 laps) it is A −597 ± 365, τ not identified.
+
+## 3. What is left on the first laps after the prior change
+
+Prior 150 ± 100, residuals without the cold terms, against the old set's control:
+
+| Lap on set | 2 | 3 | 4 | 5 | 6 | 7 | 8 | old-set control |
+|---|---|---|---|---|---|---|---|---|
+| all green | −172 ± 156 (40) | −257 ± 171 (36) | −50 ± 157 (38) | −68 ± 136 (44) | +28 ± 137 (46) | +114 ± 130 (44) | +160 ± 121 (41) | +76 ± 84 (158) |
+| free air (**thin**) | −475 ± 261 (10) | −159 ± 251 (10) | −254 ± 198 (12) | −185 ± 153 (13) | −186 ± 155 (13) | −28 ± 151 (13) | −9 ± 141 (15) | −160 ± 66 (40) |
+| all green, to soft | −330 ± 256 (15) | −369 ± 343 (13) | +310 ± 286 (16) | +6 ± 270 (16) | −127 ± 172 (16) | | | |
+| all green, to medium | −78 ± 197 (25) | −193 ± 190 (23) | −372 ± 157 (20) | −294 ± 161 (22) | +56 ± 237 (24) | | | |
+
+The free-air laps run about −160 below the fit on either set: a fit on all laps includes traffic. Relative to the control, lap 2 is −250 to −315 and lap 3 is −330 to 0. Both are within about 1.5 SE of zero. The configured +100 on lap 2 is +250 to +400 the wrong way, about 1.7 SE. A negative lap-2 term (a fresh-set peak) is suggested, but it is not established.
+
+**The prior's effect early in a stint.** Fit the first k pace laps of a stint, then predict its next up-to-5 pace laps (1,100 predictions):
+
+| Prior | k 2–3: bias / mean abs | k 4–5 | k 6–8 | k 9–20 |
+|---|---|---|---|---|
+| 60 ± 60 (now) | +467 / 797 | +639 / 803 | +589 / 668 | +283 / 551 |
+| 60 ± 300 | +392 / 892 | +395 / 875 | +246 / 578 | +14 / 487 |
+| **150 ± 100** | **+151 / 678** | **+308 / 613** | **+237 / 458** | **+34 / 459** |
+| 150 ± 60 | +137 / 682 | +296 / 608 | +270 / 450 | +72 / 458 |
+| 180 ± 120 | +54 / 665 | +222 / 612 | +183 / 461 | +3 / 459 |
+
+A wide sd alone makes the early laps noisier: mean abs at k 2–3 rises 797 → 892. Moving the prior's mean helps at every k.
+
+## 4. Recommendation
+
+1. **The smallest change that removes most of the bias** is the `degradation` ν prior. It is two literals in `packages/analysis/src/degradation/config.ts`:
+   - `defaultNuMsPerLap` 60 → **150**, source string: "spike 4.3b-defaults (research 19 §5): soft ~190–205, medium ~120 ms/lap at Spa and Texas (53 stints); 60 shrank ν to 0.67× the stints' own slope; thin: two tracks, no hard"
+   - `defaultNuSdMs` 60 → **100**, source string: "spike 4.3b-defaults (research 19 §5): with mean 150, the stop-gain gap −450 → −215 ± 136 ms (38 stops), free air −446 → −66 ± 125 (12); later-lap bias at k 6–8 589 → 237 ms"
+
+   Effects:
+   - The stop-gain gap drops from −450 ± 124 to −215 ± 136 (all green, 38 stops) and from −446 ± 94 to −66 ± 125 (free air, 12 stops).
+   - On stints not held in a train, the gap goes from −301 to +7 ± 201 (13).
+   - Degradation becomes 50 ± 4 ms/%, against the stints' OLS slope of 51 ± 6.
+   - Within a stint, forecasts improve at every k: mean abs at k 6–8 668 → 458 ms.
+
+   Because the prior is per lap of age and soft wears faster than medium, a single value is a compromise; a per-compound or per-% wear prior would fit better. That is a code change and is not needed for this bias. Other readers of degradation's ν (tyre-life, pit-window, strategy) move with it. Calibration priors, when present, replace it.
+
+2. **`coldTyreLap2Ms` 100 → 0**, source string: "spike 4.3b-defaults (research 19 §5): lap 2 on a new set −170 ± 156 ms (all green, 40), −475 ± 261 (free air, 10) without the term, after the ν prior change; a fresh-set peak not identified; thin". The lap-2 term's sign is contradicted by every subset, but its negative size is within 1.5 SE of 0, so a negative literal or a fresh-set term is not justified on these data. Re-check it with more dry races.
+
+3. **Keep `coldTyreLap1Ms` 410.** It is not identifiable here: the out-lap is confounded with the pit-loss share (+3.4 s, causes 2 and 3).
+
+4. **Not recommended now: an exponential fresh-set term** with fitted amplitude and decay. τ is not identified in any variant (it sits at the 6-lap bound).
+
+5. **Not recommended now: fitting degradation on free-air laps only.** It makes the bias worse (−631 ± 205, 14), because it leaves the prior to dominate.
+
+6. **Left open (thin, about 1.9 SE): the train-release gap**, −330 ± 177 on the 25 stops whose old stint had under 25 % free-air pace laps. The fix would be a code change in `forecast-field`'s pace stand-in: take a car's `paceMs` from its free-air laps, or the α a free-air-only refit gives, when its stint was mostly held. Re-score the undercut cases first (Task 11 causes 1, 2 and 4 together) before deciding.
+
+Thin overall: two tracks carry the result (Spa 34 stops, Texas 17), Texas's new-set laps 3–8 run the other way (n 3–15), and hard has no data. Not re-scored: the undercut and rejoin cases of forecast-score under the new prior. That needs the Task 11 trace scripts (`t11/fresh.ts`, `rf-fixed.ts`), and it is the next check.

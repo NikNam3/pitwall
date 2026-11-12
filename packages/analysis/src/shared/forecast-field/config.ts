@@ -25,8 +25,8 @@ export const FORECAST_FIELD_CONFIG = defineConfig('forecast-field', {
   convexMsPerPct2: 2.5,
   /** The cold-tyre term of the first lap on a set, in ms. Source: research 12 §3 (Texas, +0.41 s dry). */
   coldTyreLap1Ms: 410,
-  /** The cold-tyre term of the second lap on a set, in ms: a quarter of the first. Source: research 12 §3. */
-  coldTyreLap2Ms: 100,
+  /** The cold-tyre term of the second lap on a set, in ms. Source: spike 4.3b-defaults (research 19 §5): lap 2 on a new set −170 ± 156 ms (all green, 40), −475 ± 261 (free air, 10) without the term, after the ν prior change; a fresh-set peak not identified; thin. */
+  coldTyreLap2Ms: 0,
   /** The cold-tyre terms on a wet track are this times the dry ones. Source: research 12 §3 (Mexico inters +1.4 s, thin). */
   coldTyreWetFactor: 3.4,
   /** A lap behind the SC is this times the green lap. Source: spike 4.3b-defaults (research 19 §2): 123 SC laps, 4 SCs in 4 races, ±0.02 */
