@@ -4,8 +4,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { CarId, MachineId, OpenSpan, Span } from '../../packages/domain/src/index.ts';
 import type { EngineView } from '../../packages/engine/src/index.ts';
+import { projectionAsOf } from '../../packages/engine/src/readers.ts';
 import type { BuilderRace } from '../builders/long-race.ts';
-import { generateRace, GENERATOR_DEFAULTS, type GeneratorCar, type GeneratorParams } from './index.ts';
+import { FUEL_MS_PER_KG, generateRace, GENERATOR_DEFAULTS, type GeneratorCar, type GeneratorParams } from './index.ts';
 
 const memo = <T>(make: () => T): (() => T) => {
   let value: T | undefined;
@@ -353,5 +354,127 @@ describe('generateRace: the parameters show in the race', () => {
     const laps = lapsOf(race, 0).map((l) => l.lapTimeMs);
     const step = mean(laps.slice(5, 9)) - mean(laps.slice(1, 5));
     expect(Math.abs(step - 4_000)).toBeLessThanOrEqual(400);
+  });
+});
+
+/** The projection's fixed lists (`log/log.ts` `FACT_LISTS`). */
+const FACT_LISTS = ['laps', 'stints', 'pitStops', 'crossings', 'events', 'penalties', 'decisions', 'clock'] as const;
+
+/** Append frames without the lists that have none (the engine keeps no key for an empty list). */
+const nonEmpty = (appendedAt: EngineView['history']['appendedAt']): Record<string, readonly number[]> =>
+  Object.fromEntries(Object.entries(appendedAt).filter((e): e is [string, readonly number[]] => (e[1]?.length ?? 0) > 0));
+
+/** A situation's open spans per sub-machine, without empty ones, each in scope order (car, zone, start frame). */
+const openByMachine = (situation: EngineView['situation']): Record<string, OpenSpan[]> =>
+  Object.fromEntries(
+    Object.entries(situation.byMachine)
+      .filter(([, spans]) => spans.length > 0)
+      .map(([machine, spans]) => [
+        machine,
+        [...spans].sort((a, b) => (a.carId ?? -1) - (b.carId ?? -1) || (a.zone ?? -1) - (b.zone ?? -1) || a.startFrame - b.startFrame),
+      ]),
+  );
+
+describe('generateRace: append frames, so projectionAsOf cuts a generated race (Task G 1, P1, C26)', () => {
+  it('every list has one append frame per entry, never decreasing: a fact on the frame it describes, a confirmed lap on the frame after its crossing, a closed span on its end frame', () => {
+    const { race } = busy();
+    const { history } = finalView(race);
+    const expected: Record<string, number[]> = {
+      laps: history.laps.map((l) => (l.status === 'confirmed' ? l.frame + 1 : l.frame)),
+      crossings: history.crossings.map((c) => c.frame),
+      stints: history.stints.map((s) => s.frame),
+      pitStops: history.pitStops.map((s) => s.frame),
+      events: history.events.map((e) => e.frame),
+      penalties: [],
+      decisions: [],
+      clock: [],
+      ...Object.fromEntries(Object.entries(history.spans).map(([machine, spans]) => [`spans:${machine}`, spans.map((s) => s.endFrame)])),
+    };
+    for (const list of ['laps', 'crossings', 'stints', 'pitStops', 'events']) expect(expected[list]!.length, list).toBeGreaterThan(0);
+    expect(Object.keys(history.spans).length).toBeGreaterThan(0);
+    for (const [list, frames] of Object.entries(expected)) {
+      expect([...(history.appendedAt[list] ?? [])], list).toEqual(frames);
+      for (let i = 1; i < frames.length; i++) expect(frames[i]!, list).toBeGreaterThanOrEqual(frames[i - 1]!);
+    }
+    expect(Object.keys(nonEmpty(history.appendedAt)).sort()).toEqual(Object.keys(expected).filter((list) => expected[list]!.length > 0).sort());
+  });
+
+  it("projectionAsOf(the race's last view, N) equals the generator's own view at N, for every list, at several N", () => {
+    const { race } = busy();
+    const last = finalView(race);
+    const source = { history: last.history, situation: last.situation };
+    const lap3 = lapsOf(race, 0)[2]!.frame;
+    const neutralised = spansOf(race, 'session-phase-race').find((s): s is Span => s.kind === 'neutralised' && 'endFrame' in s)!;
+    const frames = [
+      1,
+      lap3,
+      lap3 + 1,
+      last.history.pitStops[0]!.frame,
+      neutralised.startFrame,
+      neutralised.endFrame,
+      lineFrame(race, 3, 5),
+      Math.floor(race.lastFrame / 2),
+      race.lastFrame - 1,
+      race.lastFrame,
+    ];
+    for (const n of frames) {
+      const cut = projectionAsOf(source, n);
+      const own = race.viewAt(n);
+      for (const list of FACT_LISTS) expect(cut.history[list], `${list} at ${n}`).toEqual(own.history[list]);
+      for (const machine of new Set([...Object.keys(cut.history.spans), ...Object.keys(own.history.spans)]))
+        expect(cut.history.spans[machine] ?? [], `spans:${machine} at ${n}`).toEqual(own.history.spans[machine] ?? []);
+      expect(nonEmpty(cut.history.appendedAt), `append frames at ${n}`).toEqual(nonEmpty(own.history.appendedAt));
+      expect(cut.situation.weekendPhase, `weekend phase at ${n}`).toEqual(own.situation.weekendPhase);
+      expect(openByMachine(cut.situation), `situation at ${n}`).toEqual(openByMachine(own.situation));
+    }
+  });
+});
+
+describe('generateRace: the scatter near stops (Task G 2)', () => {
+  /** A lap is in free air when no other car crossed any of its mini-sector boundaries (the line that ends it included) less than this before it. */
+  const FREE_AIR_MS = GENERATOR_DEFAULTS.pass.minGapMs + 500;
+
+  /** Per car and lap, whether the lap was in free air (`FREE_AIR_MS`). */
+  function freeAir(view: EngineView): (car: number, lap: number) => boolean {
+    const bySegment = new Map<number, Array<{ at: number; car: number }>>();
+    for (const c of view.history.crossings) (bySegment.get(c.segment) ?? bySegment.set(c.segment, []).get(c.segment)!).push({ at: c.at, car: c.carId as number });
+    const gapAhead = new Map<string, number>();
+    for (const [segment, list] of bySegment) {
+      list.sort((a, b) => a.at - b.at);
+      list.forEach((e, i) => gapAhead.set(`${e.car}:${segment}:${e.at}`, i === 0 ? Infinity : e.at - list[i - 1]!.at));
+    }
+    const own = new Map<string, Array<{ segment: number; at: number }>>();
+    for (const c of view.history.crossings) (own.get(`${c.carId}:${c.lap}`) ?? own.set(`${c.carId}:${c.lap}`, []).get(`${c.carId}:${c.lap}`)!).push(c);
+    return (car, lap) => {
+      const line = (own.get(`${car}:${lap + 1}`) ?? []).filter((c) => c.segment === 0);
+      return [...(own.get(`${car}:${lap}`) ?? []), ...line].every((c) => gapAhead.get(`${car}:${c.segment}:${c.at}`)! >= FREE_AIR_MS);
+    };
+  }
+
+  it('on free-air green laps that are neither in lap, out lap nor the first two laps on a set, the AI cars’ residuals recover their sigmaMs within 15 % in a race with stops', () => {
+    // The default field (one stop each, medium to hard) without mistakes: the residual against the lap's target is the AR(1) scatter alone.
+    const p = params(GENERATOR_DEFAULTS.field.map((c) => ({ ...c, mistakeRate: 0 })));
+    const SIGMA = GENERATOR_DEFAULTS.field[0]!.sigmaMs;
+    const residuals: number[] = [];
+    let nearStop = 0;
+    for (let seed = 1; seed <= 3; seed++) {
+      const { race } = generateRace(p, seed);
+      const view = finalView(race);
+      const free = freeAir(view);
+      for (const l of view.history.laps) {
+        const def = p.field[l.carId as number]!;
+        // the out lap is a set's lap at age 0; the first two laps on a set after it are ages 1 and 2
+        if (l.status !== 'confirmed' || def.human || l.inLap || l.outLap || l.tyreAgeAtStart < 3 || l.scShare > 0) continue;
+        if (!free(l.carId as number, l.lapNumber) || !l.fuelAtStartKg.known) continue;
+        const compound = p.compounds[l.visualCompound as keyof GeneratorParams['compounds']];
+        const target = def.paceMs + compound.offsetMs + compound.degMsPerLap * l.tyreAgeAtStart + FUEL_MS_PER_KG * l.fuelAtStartKg.value;
+        residuals.push(l.lapTimeMs - target);
+        if (def.stops.some((s) => l.lapNumber > s.lap + 3 && l.lapNumber <= s.lap + 6)) nearStop++;
+      }
+    }
+    expect(residuals.length).toBeGreaterThan(1_000);
+    expect(nearStop).toBeGreaterThan(50);
+    expect(Math.abs(sd(residuals) - SIGMA) / SIGMA).toBeLessThan(0.15);
+    expect(Math.abs(mean(residuals))).toBeLessThan(0.15 * SIGMA);
   });
 });
