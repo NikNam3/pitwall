@@ -11,6 +11,7 @@ import { viewOf } from '../support/scheduler.ts';
 
 /** An as-of view of an empty race, with `outputs` before the units. */
 const viewWith = (outputs: AsOfView['outputs'] = new Map()): AsOfView => ({
+  fixed: { totalLaps: unknown('notReceived'), playerCar: unknown('notReceived'), setsNow: null },
   history: history(),
   situation: { weekendPhase: { kind: 'race', format: 'grandPrix' }, byMachine: {} },
   frame: 'now',
@@ -90,6 +91,7 @@ describe('asOfStored', () => {
       startedAt: '2026-11-05T19:00:00Z',
       phase: { kind: 'race', format: 'grandPrix' },
       aiDifficulty: known(95, 0),
+      totalLaps: known(50, 0),
       projection,
       humanSpans: [{ startFrame: 1 }],
       track,
