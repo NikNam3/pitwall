@@ -81,8 +81,9 @@ export function resolveSource(source: CalibrationSource, sessions: readonly Trac
   const sessionLaps = currentLaps(projection.laps);
   const excluded = new Set(source.excludedLaps);
   const laps = sessionLaps.filter((l) => l.carId === stint.carId && l.lapNumber >= stint.firstLap && l.lapNumber <= stint.lastLap && !excluded.has(l.lapNumber));
-  // `aiDifficulty`: a stub until SP4.3a Task 12's implement phase fills it from the session's settings.
-  const aiDifficulty: Known<number> = unknown('notReceived');
+  // the session's AI difficulty from its stored game settings; a row without one (an older session) gives `notReceived`
+  const stored = session.settings.aiDifficulty;
+  const aiDifficulty: Known<number> = typeof stored === 'number' ? known(stored, 0) : unknown('notReceived');
   return { source, session, stored: { source, phase: session.phase, stint, laps, pitStops: projection.pitStops, sessionLaps, track: session.track, aiDifficulty, projection } };
 }
 
