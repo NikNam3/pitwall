@@ -62,6 +62,7 @@ export const defaultSource: EstimateSource = {
 /** One condition's estimate; `stationaryMs` undefined = not enough stops to know it. */
 export const estimate = (lossMs: number, stationaryMs: number | undefined, sessionStops: number, source: EstimateSource): PitLossEstimate => ({
   lossMs: ms(lossMs),
+  inLapShare: unknown('notReceived'),
   stationaryMedianMs: stationaryMs === undefined ? unknown('insufficientData') : ms(stationaryMs),
   sessionStops,
   source,
