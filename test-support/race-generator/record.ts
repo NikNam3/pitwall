@@ -218,7 +218,21 @@ export function record(p: GeneratorParams, sim: SimResult): BuilderRace {
 
   const projectionAt = (frame: FrameNumber): Projection => {
     const spansAt: Record<MachineId, Span[]> = {};
-    for (const [machine, list] of closed) spansAt[machine] = list.slice(0, countBy(list, frame)).map((e) => e.fact);
+    // the frame each projected entry was appended on (P1), keyed as the engine's projection book: list name, `spans:<machine>`
+    const appendedAt: Record<string, FrameNumber[]> = {};
+    const stamp = (key: string, list: readonly Appended<unknown>[], n: number): void => {
+      if (n > 0) appendedAt[key] = list.slice(0, n).map((e) => e.on);
+    };
+    for (const [machine, list] of closed) {
+      const n = countBy(list, frame);
+      spansAt[machine] = list.slice(0, n).map((e) => e.fact);
+      stamp(`spans:${machine}`, list, n);
+    }
+    stamp('laps', lists.laps, countBy(lists.laps, frame));
+    stamp('crossings', lists.crossings, countBy(lists.crossings, frame));
+    stamp('stints', lists.stints, countBy(lists.stints, frame));
+    stamp('pitStops', lists.pitStops, countBy(lists.pitStops, frame));
+    stamp('events', lists.events, countBy(lists.events, frame));
     return {
       laps: facts.laps.slice(0, countBy(lists.laps, frame)),
       crossings: facts.crossings.slice(0, countBy(lists.crossings, frame)),
@@ -229,7 +243,7 @@ export function record(p: GeneratorParams, sim: SimResult): BuilderRace {
       decisions: [],
       clock: [],
       spans: spansAt,
-      appendedAt: {},
+      appendedAt,
     };
   };
   const lengthsAt = (frame: FrameNumber): LogLengths => projectionLengths(projectionAt(frame));
