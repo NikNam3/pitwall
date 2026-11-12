@@ -10,7 +10,8 @@ export const driverNoiseCalculator: QuickCalculator<DriverNoiseOutput> = {
   id: DRIVER_NOISE,
   kind: 'quick',
   // `miniSectors`: the change tag of the crossings list (the brief's `crossings`)
-  reads: ['laps', 'stints', 'miniSectors', 'events', 'drivers', 'spans:car-driver', CAR_STATUS_READS, 'spans:weekend-phase', { calculator: 'degradation' }, { calculator: 'track-wetness' }],
+  // `identity`: our car (`fixed.playerCar`), whose rate a hidden rival's wear falls back to
+  reads: ['laps', 'stints', 'miniSectors', 'events', 'drivers', 'identity', 'spans:car-driver', CAR_STATUS_READS, 'spans:weekend-phase', { calculator: 'degradation' }, { calculator: 'track-wetness' }],
   cadence: 'lapCompleted',
   compute: (view: EngineView): DriverNoiseOutput => driverNoiseAsOf(asOfNow(view)),
 };
