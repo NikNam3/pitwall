@@ -30,7 +30,7 @@ import {
   type Rng,
   type Situation,
 } from '@pitwall/engine/readers';
-import { raceForecast } from '../race-forecast/index.ts';
+import { raceForecast, startLapOf } from '../race-forecast/index.ts';
 import { RIVAL_STOPS } from '../rival-stops/index.ts';
 import { buildStartingPoint, FORECAST_UNITS } from '../shared/forecast-field/index.ts';
 import { leaderLapAt, neutralisationKind, neutralisedSpans, isClosed } from '../shared/neutralised.ts';
@@ -197,7 +197,7 @@ export function run(input: ScoreInput, rng: Rng): ForecastScoreReport {
     const { start, stops } = buildAt(first.predictFrame, first.predictAt);
     if (!start.known) continue;
     const sp = start.value;
-    const policies: Policy[] = forecastPolicies(stops, sp.cars);
+    const policies: Policy[] = forecastPolicies(stops, sp.cars, (car) => startLapOf(sp, car));
     if (ours.length > 0) {
       const actual = actualStops(history, race, first.predictFrame, sp.cars);
       for (const car of ours) if (car < sp.cars) policies[car] = actual[car] as Policy;

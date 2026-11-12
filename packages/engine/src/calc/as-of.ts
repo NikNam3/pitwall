@@ -6,6 +6,7 @@ import { known, unknown, type CarId, type FrameNumber, type Known, type MachineI
 import type { DeepReadonly } from '../util/deep-readonly.ts';
 import type { LiveState } from '../state/live-state.ts';
 import type { Projection } from '../log/types.ts';
+import { situationAt } from '../log/projection.ts';
 import type { Situation } from '../situations/situation.ts';
 import type { ProfileCtx, StoredDriverSession } from './profiles.ts';
 import type { CalculatorId, Dependency, EngineView } from './types.ts';
@@ -112,16 +113,17 @@ const asOpen = (span: DeepReadonly<Span>): DeepReadonly<OpenSpan> => {
 
 /**
  * The situation at a stored session's end (Task 3b, C20, C26): its log is complete, every span closed (C18), the last
- * ones on the frame after the last applied one (`closeSession`). That frame is the latest `endFrame`; per sub-machine
- * the spans still open until it (opened before it, closed on it) are presented open. Without spans: an empty situation.
+ * ones on the frame after the last applied one (`closeSession`). That frame is the latest `endFrame`; the spans covering
+ * the last applied frame (`situationAt`, the projection module's one rule, C26, C28) are presented open. Without spans:
+ * an empty situation.
  */
 const situationAtEnd = (projection: Projection): Situation['byMachine'] => {
   let last = -Infinity;
   for (const spans of Object.values(projection.spans)) for (const s of spans) last = Math.max(last, s.endFrame);
+  if (last === -Infinity) return {};
   const byMachine: Record<MachineId, DeepReadonly<OpenSpan>[]> = {};
-  for (const [machine, spans] of Object.entries(projection.spans)) {
-    const open = spans.filter((s) => s.startFrame < last && s.endFrame >= last).map(asOpen);
-    if (open.length > 0) byMachine[machine] = open;
+  for (const [machine, spans] of Object.entries(situationAt({ history: projection }, (last - 1) as FrameNumber))) {
+    byMachine[machine] = spans.map((s) => asOpen(s as DeepReadonly<Span>));
   }
   return byMachine;
 };

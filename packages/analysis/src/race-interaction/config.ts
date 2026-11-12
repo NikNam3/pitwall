@@ -39,8 +39,6 @@ export const RACE_INTERACTION_CONFIG = defineConfig('race-interaction', {
   drsFromLap: 3,
   /** A lap ending with this much damage or more on a wing (front left, front right, rear) is left out (%). Source: spec 5.5. */
   aeroDamageMaxPct: 10,
-  /** A lap whose start and end are this far or more behind the car ahead is in free air: a car's pace is measured there (ms). Source: driver-noise's free-air gap (spec 8). */
-  freeAirGapMs: 1500,
   /** A race stint the calibration suggests as a source has at least this many following episodes of its car. Source: SP4.3a plan Task 12. */
   candidateEpisodes: 3,
 });

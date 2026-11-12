@@ -87,12 +87,19 @@ function likeliest(odds: DeepReadonly<Partial<Record<NoiseCompound, number>>>): 
  * The policies of a scored forecast (plan review P7): every car of `cars` slots follows `rival-stops`' window as the
  * model would have: one stop on `window.midLap` onto its likeliest next compound; no stop when its window is not known,
  * reaches the flag (`toFlag`), or its next compound's odds are not known.
+ *
+ * With `onLap` (the lap each car is on at the forecast's start), no stop falls on the lap a car is on: rival-stops
+ * starts every window at that lap, so a car past its peers' stop age (overdue) has its whole window there at every leader
+ * lap until it stops, and nothing in the starting point shows a stop before the car reaches the pit lane. Such a stop
+ * moves to the end of the next lap (final review F7).
  */
-export function forecastPolicies(stops: DeepReadonly<RivalStops>, cars: number): Policy[] {
+export function forecastPolicies(stops: DeepReadonly<RivalStops>, cars: number, onLap?: (car: number) => number): Policy[] {
   return Array.from({ length: cars }, (_, k): Policy => {
     const stop = stops[k as CarId];
     if (stop === undefined || !stop.window.known || stop.window.value.toFlag || !stop.nextCompound.known) return { stops: [] };
     const compound = likeliest(stop.nextCompound.value);
-    return compound === undefined ? { stops: [] } : { stops: [{ lap: stop.window.value.midLap, compound }] };
+    const mid = stop.window.value.midLap;
+    const lap = onLap === undefined ? mid : Math.max(mid, onLap(k) + 1);
+    return compound === undefined ? { stops: [] } : { stops: [{ lap, compound }] };
   });
 }

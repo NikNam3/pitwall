@@ -302,10 +302,9 @@ export function carModelsOf(view: AsOfView, config: ResidualConfig): Map<CarId, 
       }
     }
 
-    // the driver at the view's frame: the open car-driver span, else (a stored session) the newest closed one
-    const openDriver = open.find((s) => s.machine === 'car-driver');
-    const newestClosed = closed.filter((s) => s.machine === 'car-driver').reduce<DeepReadonly<Span> | undefined>((n, s) => (n === undefined || s.startFrame > n.startFrame ? s : n), undefined);
-    const driverSpan = openDriver ?? newestClosed;
+    // the driver at the view's frame: the open car-driver span only (C20, C26; a stored session's as-of view holds the
+    // spans covering its last frame open), else unknown
+    const driverSpan = open.find((s) => s.machine === 'car-driver');
     const driver = driverSpan === undefined ? 'unknown' : (rowOf('car-driver', driverSpan.kind).model ?? 'unknown');
 
     out.set(carId, {

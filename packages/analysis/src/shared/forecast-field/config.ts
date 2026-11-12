@@ -51,4 +51,17 @@ export const FORECAST_FIELD_CONFIG = defineConfig('forecast-field', {
   priorWetnessSdMs: 1500,
   /** Whether a rival whose owesStop is unknown is assumed to owe a stop. Source: pitwall estimate (ruling R40: the dry race's compound rule). */
   assumeOwesStop: true as boolean,
+  /**
+   * The compound a car's newest lap stands in with when its visual compound is unknown (a noise compound: soft, medium,
+   * hard, inter, wet; another value gives this default). Source: pitwall estimate (the reference compound, the lap
+   * model's zero offset; final review F4).
+   */
+  unknownCompound: 'medium' as string,
+  /**
+   * A competing car without a completed lap (still on lap 1) takes the leader's newest lap as its stand-in, its lap time
+   * plus this (ms). Source: pitwall estimate (a car on lap 1 runs at about the leader's pace; final review F4).
+   */
+  noLapStandInOffsetMs: 0,
+  /** Whether a car whose driver is unknown (no car-driver span yet) is modelled as a human. Source: pitwall estimate (the AI, the field's majority; final review F4). */
+  unknownDriverIsHuman: false as boolean,
 });
