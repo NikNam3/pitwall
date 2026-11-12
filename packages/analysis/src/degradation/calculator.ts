@@ -13,7 +13,7 @@ import {
   type StintRecord,
   type VisualCompound,
 } from '@pitwall/domain';
-import type { DeepReadonly, EngineView, QuickCalculator } from '@pitwall/engine/readers';
+import type { AsOfView, DeepReadonly, EngineView, QuickCalculator } from '@pitwall/engine/readers';
 import { LAP_CLASSES_CONFIG } from '../lap-classes/index.ts';
 import { PER_LAP_RATE_CONFIG } from '../per-lap-rate/index.ts';
 import { behaviourByCar, behaviourFor } from '../shared/behaviour.ts';
@@ -144,6 +144,14 @@ function byCar<T extends { carId: CarId }>(items: readonly T[]): Map<CarId, T[]>
     else list.push(item);
   }
   return out;
+}
+
+/**
+ * The output as of frame N (SP4.3a spec 6.1, Task 15a): from the projection cut at N and the situation at N, with the
+ * run's fixed inputs; the scheduled run is this at the current frame (`asOfNow`).
+ */
+export function degradationAsOf(_view: AsOfView): DegradationOutput {
+  throw new Error('not implemented');
 }
 
 /** Per car in the session (its rows, `DEGRADATION_BEHAVIOUR`): its stints, oldest first. */
