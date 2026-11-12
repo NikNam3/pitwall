@@ -7,6 +7,7 @@
 //    pooled fit's check (Task 13), and `notApplicable` outside the race (the `weekend-phase` row, C14).
 import { known, unknown, type EstimateSource, type Known, type PassCurve, type RaceInteraction } from '@pitwall/domain';
 import type { AsOfView } from '@pitwall/engine/readers';
+import { DRIVER_NOISE_CONFIG } from '../driver-noise/config.ts';
 import { RACE_INTERACTION_BEHAVIOUR, type RaceInteractionEffect } from './behaviour.ts';
 import { bandIndexOf, configOf, DEFAULT_SOURCE, defaultCurve, parseBands } from './bands.ts';
 import type { RaceInteractionConfig } from './config.ts';
@@ -51,7 +52,8 @@ export function raceInteractionAsOf(view: AsOfView): RaceInteraction {
     const index = difficulty.known ? bandIndexOf(bands, difficulty.value) : -1;
     band = !difficulty.known ? difficulty : index < 0 ? unknown('notApplicable') : known(index, difficulty.at);
   }
-  const episodes = band.known && view.track.known ? episodesOf({ history: view.history, situation: view.situation }, view.track.value, config) : [];
+  const freeAirGapMs = DRIVER_NOISE_CONFIG.read(view).freeAirGapMs;
+  const episodes = band.known && view.track.known ? episodesOf({ history: view.history, situation: view.situation }, view.track.value, config, freeAirGapMs) : [];
   const passes = episodes.reduce((n, e) => n + e.zones.filter((z) => z.passed).length, 0);
 
   return {

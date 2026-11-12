@@ -221,16 +221,25 @@ export function raceForecast(start: StartingPoint, policies: readonly Policy[], 
   return result(f, toFlag, opts?.trace === true);
 }
 
-/** Every car on its lap at its lap fraction, the leader's lap `start.lap`, its last point's time back-extrapolated. */
+/**
+ * The lap car `c` is on at the start: the leader's lap `start.lap`, or the one before for a car past the leader's lap
+ * fraction (behind it, not yet at the line). The forecast's one rule; `forecast-score`'s policies read it too.
+ */
+export function startLapOf(start: StartingPoint, c: number): number {
+  const leader = start.order.find((k) => start.retired[k] !== 1);
+  const leaderFraction = leader === undefined ? 0 : (start.lapFraction[leader] ?? 0);
+  return (start.lapFraction[c] ?? 0) > leaderFraction ? start.lap - 1 : start.lap;
+}
+
+/** Every car on its lap at its lap fraction (`startLapOf`), its last point's time back-extrapolated. */
 function place(r: Run): void {
   const { f, pts, order } = r;
   const s = f.start;
   const P = pts.fraction.length;
-  const leaderFraction = r.m > 0 ? (s.lapFraction[order[0] ?? 0] ?? 0) : 0;
   for (let k = 0; k < r.m; k++) {
     const c = order[k] ?? 0;
     const at = s.lapFraction[c] ?? 0;
-    const lap = at > leaderFraction ? s.lap - 1 : s.lap;
+    const lap = startLapOf(s, c);
     lapStart(f, c, lap, at, true);
     let i = 0;
     while ((pts.fraction[i] ?? 1) <= at) i++;

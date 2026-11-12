@@ -2,7 +2,7 @@
 // the aggregates give in `profiles.sqlite`. The units judge (C43): the store only resolves the linked slots from the
 // stored projections (C34), calls the declared aggregates and stores their results. The cache holds per (person, key)
 // one result with its aggregate's version and the fingerprint of its inputs (the person's links, the linked sessions
-// and their rules versions, exclusions, overrides and config); a mismatch recomputes it, and deleting the file loses
+// with their rules versions and track files' content, exclusions, overrides and config); a mismatch recomputes it, and deleting the file loses
 // nothing.
 import Database from 'better-sqlite3';
 import { createHash } from 'node:crypto';
@@ -79,7 +79,8 @@ export class ProfileRunner {
     const stored = sessions.map((s) => s.stored);
     const fingerprint = sha256(canonicalJson({
       links: person.links,
-      sessions: sessions.map((s) => ({ session: s.stored.session, carId: s.stored.carId, rulesVersion: s.rulesVersion })),
+      // each linked session's track file by its content (the aggregates read it, C62c)
+      sessions: sessions.map((s) => ({ session: s.stored.session, carId: s.stored.carId, rulesVersion: s.rulesVersion, track: sha256(canonicalJson(s.stored.track)) })),
       excluded: person.excluded,
       overrides: person.overrides,
       config: this.#config,

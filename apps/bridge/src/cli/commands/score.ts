@@ -1,6 +1,8 @@
+import { subscribe, unsubscribe } from 'node:diagnostics_channel';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import type { Worker } from 'node:worker_threads';
 import { FORECAST_SCORE } from '@pitwall/analysis';
 import type { ServerMessage, TopicName } from '@pitwall/contracts';
 import { unknown, type ForecastScoreReport, type Known, type ScoreTable } from '@pitwall/domain';
@@ -37,18 +39,52 @@ const BASES: readonly Forecast['basis'][] = ['wear', 'age'];
 /**
  * Whether a forecast-score job is under way: the CLI holds the recording back while one is, so the session's end never
  * cancels the run of the final leader lap (`FeedJobs.sessionEnded`). A run starts when its trigger calculator ran (the
- * job's `prepare`) and ends with the next message on the subscription (its result, or the topic marked errored).
+ * job's `prepare`); the job runner then starts its worker in the same frame. It ends with the next message on the
+ * subscription (its result, or the topic marked errored) and its worker's exit: a run that is cancelled (a flashback or
+ * the session's end terminates its worker, ruling R33) delivers nothing, but its worker exits, so the recording goes on.
+ * Only the workers started while a run is asked for are the job's (the command subscribes to no other job's topic, C49).
  */
 class JobGate {
-  #running = false;
+  /** A run was asked for and its worker has not started yet. */
+  #asked = false;
+  readonly #workers = new Set<Worker>();
   #waiting: Array<() => void> = [];
+  readonly #onWorker = (message: unknown): void => {
+    const worker = (message as { worker: Worker }).worker;
+    if (!this.#asked) return;
+    this.#asked = false;
+    this.#workers.add(worker);
+    worker.once('exit', () => {
+      this.#workers.delete(worker);
+      this.#settle();
+    });
+  };
 
-  started(): void {
-    this.#running = true;
+  constructor() {
+    subscribe('worker_threads', this.#onWorker);
   }
 
+  started(): void {
+    this.#asked = true;
+  }
+
+  /** A message on the subscription: the run asked for delivered (or never got a worker and failed). */
   ended(): void {
-    this.#running = false;
+    this.#asked = false;
+    this.#settle();
+  }
+
+  /** Stops watching the workers. */
+  close(): void {
+    unsubscribe('worker_threads', this.#onWorker);
+  }
+
+  get #running(): boolean {
+    return this.#asked || this.#workers.size > 0;
+  }
+
+  #settle(): void {
+    if (this.#running) return;
     for (const resolve of this.#waiting.splice(0)) resolve();
   }
 
@@ -205,7 +241,8 @@ function readOld(file: string): JsonReport {
  * `pitwall score <recording> [--json <file>] [--compare <old.json>]` (SP4.3a spec 7.2): reprocesses the recording as
  * `pitwall reprocess` does, its sidecars included (R27, C38), with `forecastScore.report` subscribed, waits for the job
  * result of the final leader lap and prints one table per experiment and per forecast horizon and basis, AI and human
- * apart. A run without a job result prints the all-zero report (R33). `--json` writes the report without its cases;
+ * apart. A run whose last job run was cancelled prints the latest report it received (R50); one without any job result
+ * prints the all-zero report (R33), exit 0 either way. `--json` writes the report without its cases;
  * `--compare` prints each number beside the old one with its change. Stores nothing (C32): no database, no session
  * files, nothing under the data dir.
  */
@@ -242,6 +279,8 @@ export async function run(positionals: string[], values: { json?: string | undef
     if (!io.signal.aborted) throw error;
     io.err('pitwall: interrupted');
     return EXIT_INTERRUPTED;
+  } finally {
+    gate.close();
   }
   if (latest !== undefined && 'failed' in latest) {
     io.err('pitwall: the forecast-score job failed (see the log above)');

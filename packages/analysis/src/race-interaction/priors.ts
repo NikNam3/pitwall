@@ -5,8 +5,9 @@
 // fit). An override replaces the aggregate; each entry's fallback is the config's default.
 import { known, unknown, type EstimateSource, type Known, type PassCurve } from '@pitwall/domain';
 import { definePriors, type FallbackCtx, type PriorDecl, type PriorsCtx, type StoredSource } from '@pitwall/engine/readers';
+import { DRIVER_NOISE_CONFIG } from '../driver-noise/config.ts';
 import { bandIndexOf, configOf, DEFAULT_SOURCE, defaultCurve, parseBands } from './bands.ts';
-import { RACE_INTERACTION_CONFIG, type RaceInteractionConfig } from './config.ts';
+import { RACE_INTERACTION_CONFIG } from './config.ts';
 import { episodesOf, type FollowingEpisode } from './episodes.ts';
 import { fitPassCurve } from './fit.ts';
 
@@ -16,26 +17,28 @@ export const passLevelKey = (band: number): string => `raceInteraction.passLevel
 export const passSlopeKey = (band: number): string => `raceInteraction.passSlope.b${band}`;
 
 /** The following episodes of a source: its stint's car following, on the stint's laps minus its excluded ones. */
-function sourceEpisodes(source: StoredSource, config: RaceInteractionConfig): FollowingEpisode[] {
+function sourceEpisodes(source: StoredSource, ctx: Pick<PriorsCtx, 'config'>): FollowingEpisode[] {
   if (source.phase.kind !== 'race' || !source.track.known) return [];
   const { stint } = source;
   const excluded = new Set(source.source.excludedLaps);
   const stintLap = (car: number, lap: number): boolean => car === stint.carId && lap >= stint.firstLap && lap <= stint.lastLap && !excluded.has(lap);
-  return episodesOf({ history: source.projection }, source.track.value, config, stintLap);
+  // free air by the shared rule with driver-noise's gap (C43)
+  const freeAirGapMs = DRIVER_NOISE_CONFIG.read(ctx).freeAirGapMs;
+  return episodesOf({ history: source.projection }, source.track.value, configOf(ctx.config), freeAirGapMs, stintLap);
 }
 
 /** The pooled episodes of the sources in band `band` (their session's `aiDifficulty`), in the sources' order. */
-function bandEpisodes(sources: readonly StoredSource[], band: number, config: RaceInteractionConfig): FollowingEpisode[] {
-  const bands = parseBands(config.difficultyBands);
+function bandEpisodes(sources: readonly StoredSource[], band: number, ctx: Pick<PriorsCtx, 'config'>): FollowingEpisode[] {
+  const bands = parseBands(configOf(ctx.config).difficultyBands);
   return sources.flatMap((source) =>
-    source.aiDifficulty.known && bandIndexOf(bands, source.aiDifficulty.value) === band ? sourceEpisodes(source, config) : [],
+    source.aiDifficulty.known && bandIndexOf(bands, source.aiDifficulty.value) === band ? sourceEpisodes(source, ctx) : [],
   );
 }
 
 /** The band's pooled curve, or unknown without an episode. */
 function bandCurve(sources: readonly StoredSource[], band: number, ctx: PriorsCtx): Known<PassCurve> {
   const config = configOf(ctx.config);
-  const episodes = bandEpisodes(sources, band, config);
+  const episodes = bandEpisodes(sources, band, ctx);
   return episodes.length === 0 ? unknown('insufficientData') : known(fitPassCurve(episodes, defaultCurve(config), config.shrinkEpisodes), 0);
 }
 
@@ -50,7 +53,7 @@ const curveEntry = (band: number, part: 'level' | 'slopePerMs', key: string, ran
     return curve.known ? known(curve.value[part], curve.at) : curve;
   },
   /** The episodes the band's fit rests on. */
-  samples: (sources, ctx) => bandEpisodes(sources, band, configOf(ctx.config)).length,
+  samples: (sources, ctx) => bandEpisodes(sources, band, ctx).length,
   /** The source's own value minus the set's. */
   residual: (source, set): Known<number> => {
     const own = source[key];
@@ -75,7 +78,6 @@ export const RACE_INTERACTION_PRIORS = definePriors('race-interaction', {
   ),
   /** A race stint whose car follows in at least `candidateEpisodes` episodes. */
   candidate: (source, ctx) => {
-    const config = configOf(ctx.config);
-    return sourceEpisodes(source, config).length >= config.candidateEpisodes;
+    return sourceEpisodes(source, ctx).length >= configOf(ctx.config).candidateEpisodes;
   },
 });

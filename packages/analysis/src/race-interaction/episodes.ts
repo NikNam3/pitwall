@@ -6,6 +6,7 @@
 //    car's filter leaves out gives no zone: a pass caused by a stop or made on lap 1 never counts.
 //  - Its pace advantage is the leader's pace minus its own, each the median of the car's free-air laps' residuals
 //    against the field's median lap (its usable laps' when it never had free air), so the race's fuel and tyre trend cancel.
+//    Which laps are free air is the shared judgement (`freeAirLaps` with `driver-noise`'s `freeAirGapMs`, C43).
 //  - DRS is relative (spec 5.4): the follower is within `drsRangeMs` of the car ahead at the detection point of the DRS
 //    zone that leads into the braking zone, and that car is not itself within range of its own car ahead.
 import {
@@ -20,11 +21,14 @@ import {
   type LapRecord,
   type MachineId,
   type MiniSectorCrossing,
+  type Ms,
   type OpenSpan,
   type Span,
   type TrackData,
 } from '@pitwall/domain';
 import { membershipOf, type DeepReadonly, type MembershipSource, type Projection } from '@pitwall/engine/readers';
+import { DRIVER_NOISE_CONFIG } from '../driver-noise/config.ts';
+import { freeAirLaps } from '../shared/free-air.ts';
 import { RACE_INTERACTION_BEHAVIOUR } from './behaviour.ts';
 import type { RaceInteractionConfig } from './config.ts';
 
@@ -75,9 +79,17 @@ function excludedByMembership(member: Readonly<Record<MachineId, DeepReadonly<Op
   return false;
 }
 
-/** Every following episode of `history` on `track`'s braking zones; laps `excludedLap` leaves out give no zone. */
-export function followingEpisodes(history: Projection, track: DeepReadonly<TrackData>, config: RaceInteractionConfig): FollowingEpisode[] {
-  return episodesOf({ history }, track, config);
+/**
+ * Every following episode of `history` on `track`'s braking zones; laps `excludedLap` leaves out give no zone. Free air
+ * by `freeAirGapMs` (driver-noise's default unless given).
+ */
+export function followingEpisodes(
+  history: Projection,
+  track: DeepReadonly<TrackData>,
+  config: RaceInteractionConfig,
+  freeAirGapMs: Ms = DRIVER_NOISE_CONFIG.defaults.freeAirGapMs,
+): FollowingEpisode[] {
+  return episodesOf({ history }, track, config, freeAirGapMs);
 }
 
 /** A point of the lap by fraction: its mini-sector and how far into it. */
@@ -190,9 +202,16 @@ type Order = { cars: CarId[]; at: number[]; rank: Int16Array };
 
 /**
  * The following episodes of `source` (its projection, and its situation's open spans for the filter's membership), on
- * `track`'s braking zones; `followerLaps` narrows which follower laps count. The calculator's and the priors' one rule (C43).
+ * `track`'s braking zones; `followerLaps` narrows which follower laps count. A car's pace is measured on its free-air
+ * laps by `freeAirGapMs` (driver-noise's, the shared rule). The calculator's and the priors' one rule (C43).
  */
-export function episodesOf(source: MembershipSource, track: DeepReadonly<TrackData>, config: RaceInteractionConfig, followerLaps?: FollowerLaps): FollowingEpisode[] {
+export function episodesOf(
+  source: MembershipSource,
+  track: DeepReadonly<TrackData>,
+  config: RaceInteractionConfig,
+  freeAirGapMs: Ms,
+  followerLaps?: FollowerLaps,
+): FollowingEpisode[] {
   if (!track.brakingZones.known || track.brakingZones.value.length === 0) return [];
   const brakingStarts = track.brakingZones.value.map((z) => z.start).sort((a, b) => a - b);
   const zoneCount = brakingStarts.length;
@@ -305,15 +324,9 @@ export function episodesOf(source: MembershipSource, track: DeepReadonly<TrackDa
     }
     return order;
   };
-  /** The gap of `car` to the car directly ahead at point `p` of `lap`, else NaN (it leads, or did not pass it). */
-  const gapAhead = (lap: number, p: number, car: CarId): number => {
-    if (lap >= laps) return Number.NaN;
-    const order = orderAt(lap, p);
-    const i = order.rank[car] ?? -1;
-    return i <= 0 ? Number.NaN : nth(order.at, i) - nth(order.at, i - 1);
-  };
 
-  // each car's pace: the median residual of its free-air laps against the field's median lap, else of its usable laps
+  // each car's pace: the median residual of its free-air laps (the shared rule) against the field's median lap, else of
+  // its usable laps
   const fieldMedian = new Float64Array(laps).fill(Number.NaN);
   for (let lap = 1; lap <= lastLap; lap++) {
     const lapTimes: number[] = [];
@@ -324,18 +337,18 @@ export function episodesOf(source: MembershipSource, track: DeepReadonly<TrackDa
     if (lapTimes.length > 0) fieldMedian[lap] = median(lapTimes);
   }
   const pace = new Float64Array(carSlots).fill(Number.NaN);
-  const inFreeAir = (gap: number): boolean => Number.isNaN(gap) || gap >= config.freeAirGapMs;
+  const free = freeAirLaps(history, freeAirGapMs);
   for (const car of cars) {
-    const free: number[] = [];
+    const freeAir: number[] = [];
     const all: number[] = [];
     for (let lap = 1; lap <= lastLap; lap++) {
       const record = lapOf(car, lap);
       if (record === undefined || !isUsable(car, lap)) continue;
       const residual = record.lapTimeMs - nth(fieldMedian, lap);
       all.push(residual);
-      if (inFreeAir(gapAhead(lap, 0, car)) && inFreeAir(gapAhead(lap + 1, 0, car))) free.push(residual);
+      if (free.isFree(car, lap)) freeAir.push(residual);
     }
-    if (all.length > 0) pace[car] = median(free.length > 0 ? free : all);
+    if (all.length > 0) pace[car] = median(freeAir.length > 0 ? freeAir : all);
   }
 
   /** Whether `car` has DRS at braking zone `z` of lap `lap` (relative: the car ahead is not itself in range). */

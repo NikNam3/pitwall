@@ -201,22 +201,27 @@ export function buildStartingPoint(
     lapModel,
   };
 
+  // the declared stand-ins (C3, final review F4): an unknown compound's, a car without a lap's, an unknown driver's
+  const unknownCompound: NoiseCompound = isNoiseCompound(config.unknownCompound) ? config.unknownCompound : (FORECAST_FIELD_CONFIG.defaults.unknownCompound as NoiseCompound);
+  const noLap: LapRecord = { ...standIn, lapTimeMs: standIn.lapTimeMs + config.noLapStandInOffsetMs };
+
   const lapMs = new Float64Array(cars);
   for (let k = 0; k < cars; k++) {
     const id = k as CarId;
-    // a car without a completed lap (lap 1 not yet done) takes the leader's newest lap as its stand-in
+    // a car without a completed lap (lap 1 not yet done) takes the leader's newest lap as its stand-in (the config's)
     const own = newestLap[k];
-    const lap = own ?? standIn;
+    const lap = own ?? noLap;
     // just stopped (on its in lap, or a stint closed on its newest lap): a fresh set; the old compound stands in until
     // its out lap is recorded
     const stopped = own !== undefined && (own.inLap || (stintsByCar[k] ?? []).some((s) => s.lastLap >= own.lapNumber));
-    const compound: NoiseCompound = isNoiseCompound(lap.visualCompound) ? lap.visualCompound : 'medium';
+    const compound: NoiseCompound = isNoiseCompound(lap.visualCompound) ? lap.visualCompound : unknownCompound;
     sp.compound[k] = NOISE_COMPOUNDS.indexOf(compound);
     const tyreAge = stopped ? 0 : own === undefined ? lap.tyreAgeAtStart : lap.tyreAgeAtStart + 1;
     sp.tyreAge[k] = tyreAge;
 
     const carNoise = noise.cars[id] as DeepReadonly<CarNoise> | undefined;
-    sp.human[k] = carNoise?.driver === 'human' ? 1 : 0;
+    const driver = carNoise?.driver ?? 'unknown';
+    sp.human[k] = driver === 'human' || (driver === 'unknown' && config.unknownDriverIsHuman) ? 1 : 0;
     const rate = Math.max(config.minWearRatePctPerLap, need.of(carNoise?.wearRatePctPerLap[compound], worstRate(degradation[id]?.at(-1))));
     sp.wearRatePct[k] = rate;
     // wear: the worst corner where every corner is visible, else tyre age × the car's wear rate (realism, C8)
