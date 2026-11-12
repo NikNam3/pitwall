@@ -193,7 +193,7 @@ export class SessionRunner {
     this.end(onResult);
     const spansBefore = spanLengths(this.#state);
     closeSession(this.#state, this.#state.sessionTime);
-    const delta = projectionTrackerOf(this.#state).update(situationOf(this.#state));
+    const delta = projectionTrackerOf(this.#state).update(situationOf(this.#state), this.#state.frameNumber + 1);
     const spansAfter = spanLengths(this.#state);
     const changed = new Set<ChangeTag>();
     for (const [machine, length] of Object.entries(spansAfter)) {
@@ -304,7 +304,7 @@ export class SessionRunner {
     const voidTarget = last === undefined ? { frameId: snapshot.frameId, at: snapshot.sessionTime } : { frameId: last.frame.frameId, at: last.at };
     logWriter(log).append('voids', voidFactOf(log, snapshot.lengths, voidTarget, snapshot.state.frameNumber + replayed.length));
     // The new void fact projects the log again (C30), before the replayed frames extend it.
-    projectionTrackerOf(this.#state).update(situationOf(this.#state));
+    projectionTrackerOf(this.#state).update(situationOf(this.#state), this.#state.frameNumber);
     for (const { frame: f, report, decisions } of replayed) step(this.#state, f, report, decisions);
     this.#attach?.restore(last === undefined ? snapshot.attached : last.attached);
     const targetSessionTime = target.sessionTime === undefined ? this.#state.sessionTime : onRaceClock(this.#state, target.sessionTime);
