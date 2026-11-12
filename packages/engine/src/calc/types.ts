@@ -12,9 +12,17 @@ export type CalculatorId = string;
 /** When a calculator is due, measured in session time (spec 7.3). */
 /**
  * `ourCrossing`: a mini-sector crossing of one of our cars was appended (SP4.2 spec 3.1). `leaderLap`: a lap record with
- * `positionAtEnd` 1 was appended, or a rewind (SP4.3a spec 5).
+ * `positionAtEnd` 1 was appended, or a rewind (SP4.3a spec 5). `onChange`: only when one of the listed changes happened
+ * since the last run, or a rewind (SP4.3b spec §5.2).
  */
-export type Cadence = 'frame' | { hz: number } | 'lapCompleted' | 'pitStop' | 'sessionChange' | 'ourCrossing' | 'leaderLap';
+export type Cadence = 'frame' | { hz: number } | 'lapCompleted' | 'pitStop' | 'sessionChange' | 'ourCrossing' | 'leaderLap' | { onChange: readonly ChangeTrigger[] };
+
+/**
+ * A change an `onChange` cadence runs on: a change tag (C40); `leaderLap`, a lap record with `positionAtEnd` 1 appended;
+ * `sessionSettings`, the session's game settings differ from those at the unit's last run (the `session` tag alone
+ * also marks every other Session packet value).
+ */
+export type ChangeTrigger = ChangeTag | 'leaderLap' | 'sessionSettings';
 
 /**
  * What a calculator reads: a part of the engine state, the feed health, the run's driver profiles (`view.drivers`,

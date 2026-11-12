@@ -47,12 +47,12 @@ export class CalculatorRegistry {
       ids.add(id);
     }
     for (const calc of calcs) {
-      if (typeof calc.cadence === 'object' && !(Number.isFinite(calc.cadence.hz) && calc.cadence.hz > 0)) {
-        throw new RegistryError(
-          'invalidCadence',
-          [calc.id],
-          `calculator "${calc.id}" has cadence hz ${calc.cadence.hz}, expected a positive number`,
-        );
+      const cadence = calc.cadence;
+      if (typeof cadence === 'object' && 'hz' in cadence && !(Number.isFinite(cadence.hz) && cadence.hz > 0)) {
+        throw new RegistryError('invalidCadence', [calc.id], `calculator "${calc.id}" has cadence hz ${cadence.hz}, expected a positive number`);
+      }
+      if (typeof cadence === 'object' && 'onChange' in cadence && cadence.onChange.length === 0) {
+        throw new RegistryError('invalidCadence', [calc.id], `calculator "${calc.id}" has cadence onChange without a change, expected at least one`);
       }
     }
     const dependencies: Dependencies = new Map(calcs.map((calc) => [calc.id, dependenciesOf(calc)]));

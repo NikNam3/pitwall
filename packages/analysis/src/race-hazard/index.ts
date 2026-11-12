@@ -3,10 +3,10 @@
 import type { RaceHazard } from '@pitwall/domain';
 
 export * from './config.ts';
+export { RACE_HAZARD_BEHAVIOUR, type RaceHazardEffect } from './behaviour.ts';
 export { raceHazardAsOf } from './asof.ts';
-
-/** The calculator id. */
-export const RACE_HAZARD = 'race-hazard';
+export { raceHazardCalculator } from './calculator.ts';
+export { RACE_HAZARD } from './id.ts';
 
 /** The output: the hazard tables. */
 export type RaceHazardOutput = RaceHazard;
