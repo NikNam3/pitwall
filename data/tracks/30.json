@@ -2144,8 +2144,25 @@
     "at": 0
   },
   "drsZones": {
-    "known": false,
-    "reason": "notReceived"
+    "known": true,
+    "value": [
+      {
+        "detection": 0.382142,
+        "start": 0.419545,
+        "end": 0.55518
+      },
+      {
+        "detection": 0.726788,
+        "start": 0.764191,
+        "end": 0.879727
+      },
+      {
+        "detection": 0.937902,
+        "start": 0.975305,
+        "end": 0.049278
+      }
+    ],
+    "at": 0
   },
   "defaults": {
     "pitLossMs": {
@@ -2169,8 +2186,8 @@
   },
   "source": {
     "generator": "pitwall-trackdata 0.1.0",
-    "sources": "OpenF1 + MultiViewer",
+    "sources": "OpenF1 + MultiViewer; drsZones: OpenF1 qualifying car_data drs channel, median of the top five laps, detection point assumed 200 m before the zone start (not in telemetry or the FIA event notes)",
     "season": 2025,
-    "generatedOn": "2026-11-06"
+    "generatedOn": "2026-11-12"
   }
 }
