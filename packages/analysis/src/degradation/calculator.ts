@@ -3,6 +3,7 @@
 // scratch over the projection on each frame one of its reads changes (a completed lap, a stint, a pick or its void).
 import {
   known,
+  scopeOf,
   unknown,
   type CarId,
   type EstimateSource,
@@ -13,10 +14,9 @@ import {
   type StintRecord,
   type VisualCompound,
 } from '@pitwall/domain';
-import type { AsOfView, DeepReadonly, EngineView, QuickCalculator } from '@pitwall/engine/readers';
+import { asOfNow, type AsOfView, type DeepReadonly, type EngineView, type QuickCalculator } from '@pitwall/engine/readers';
 import { LAP_CLASSES_CONFIG } from '../lap-classes/index.ts';
 import { PER_LAP_RATE_CONFIG } from '../per-lap-rate/index.ts';
-import { behaviourByCar, behaviourFor } from '../shared/behaviour.ts';
 import { CAR_STATUS_READS } from '../shared/car-status.ts';
 import { DEGRADATION_BEHAVIOUR, phaseRow, type DegradationEffect } from './behaviour.ts';
 import { DEGRADATION, DEGRADATION_CONFIG, type DegradationOutput, type StartPrior, type StintDegradation } from './index.ts';
@@ -41,7 +41,7 @@ const lapsWord = (n: number): string => `${n} ${n === 1 ? 'lap' : 'laps'}`;
  * one rule). The source is the calibration's when at least one key came from the snapshot, else the default start's;
  * it is `session` once the session's share of `ν`'s precision is above half.
  */
-function startOf(view: EngineView, visual: VisualCompound): Start {
+function startOf(view: Pick<AsOfView, 'config' | 'priors' | 'track'>, visual: VisualCompound): Start {
   const fallback = defaultStart({ config: view.config, track: view.track }, visual);
   const snapshot = snapshotOf(view.priors, visual);
   const nu = snapshot?.entry('nuMsPerLap');
@@ -81,7 +81,7 @@ type EntryName = 'alphaOffsetMs' | 'nuMsPerLap' | 'nuSdMs';
  * entry when it is known, else `undefined`.
  */
 function snapshotOf(
-  priors: EngineView['priors'],
+  priors: AsOfView['priors'],
   visual: VisualCompound,
 ): { snapshot: DeepReadonly<PriorsSnapshot>; entry: (name: EntryName) => { value: number; at: Ms } | undefined } | undefined {
   if (!priors.known || !(DEGRADATION_COMPOUNDS as readonly string[]).includes(visual)) return undefined;
@@ -146,71 +146,116 @@ function byCar<T extends { carId: CarId }>(items: readonly T[]): Map<CarId, T[]>
   return out;
 }
 
+/** A config section's effective values (as `defineConfig`'s `read`) from the view's config. */
+const configOf = <C extends object>(section: { key: string; defaults: C }, view: Pick<AsOfView, 'config'>): C =>
+  ({ ...section.defaults, ...view.config[section.key] }) as C;
+
 /**
- * The output as of frame N (SP4.3a spec 6.1, Task 15a): from the projection cut at N and the situation at N, with the
- * run's fixed inputs; the scheduled run is this at the current frame (`asOfNow`).
+ * The rows of the spans open in the situation (C20) for the machines of `DEGRADATION_BEHAVIOUR`, in the table's order
+ * (`behaviourFor` and `behaviourByCar` over an as-of view): the session's rows, a car's rows, and the cars with a car
+ * span open, by id ascending. A span whose kind has no row is a bug in the table (C3): it throws.
  */
-export function degradationAsOf(_view: AsOfView): DegradationOutput {
-  throw new Error('not implemented');
+function rowsOf(view: Pick<AsOfView, 'situation'>): { session: DegradationEffect[]; car: (carId: CarId) => DegradationEffect[]; cars: CarId[] } {
+  const session: DegradationEffect[] = [];
+  const byCarRows = new Map<CarId, DegradationEffect[]>();
+  for (const [machine, byKind] of Object.entries(DEGRADATION_BEHAVIOUR)) {
+    const scope = scopeOf(machine);
+    if (scope === undefined) throw new Error(`behaviour table: ${machine} has no span declaration`);
+    for (const span of view.situation.byMachine[machine] ?? []) {
+      if (!Object.hasOwn(byKind, span.kind)) throw new Error(`behaviour table: no row for ${machine} ${span.kind}`);
+      const row = byKind[span.kind] as DegradationEffect;
+      if (scope !== 'car') session.push(row);
+      else if (span.carId !== undefined) {
+        const list = byCarRows.get(span.carId);
+        if (list === undefined) byCarRows.set(span.carId, [row]);
+        else list.push(row);
+      }
+    }
+  }
+  return { session, car: (carId) => byCarRows.get(carId) ?? [], cars: [...byCarRows.keys()].sort((a, b) => a - b) };
 }
 
-/** Per car in the session (its rows, `DEGRADATION_BEHAVIOUR`): its stints, oldest first. */
+/**
+ * The output as of frame N (SP4.3a spec 6.1, Task 15a): from the projection cut at N and the situation at N, with the
+ * run's fixed inputs (our car, ruling R17); the scheduled run is this at the current frame (`asOfNow`). The cars are
+ * those whose car-status span open at N has them in the session (C17).
+ */
+export function degradationAsOf(view: AsOfView): DegradationOutput {
+  const config = configOf(DEGRADATION_CONFIG, view);
+  const rows = rowsOf(view);
+  // the session's rows (the weekend phase), over the grid's (C14: a pending phase reads as the race)
+  const session: DegradationEffect = Object.assign({}, phaseRow('pending'), ...rows.session);
+  const isRace = session.isRace === true;
+  const classes = { isRace, ...configOf(LAP_CLASSES_CONFIG, view) };
+  const rate = configOf(PER_LAP_RATE_CONFIG, view);
+  const now = view.at;
+  const lapsBy = lapsByCar(view.history.laps);
+  const recordsBy = byCar(view.history.stints);
+  const player = view.fixed.playerCar;
+  const fuelOf = fuelResolver(
+    player.known
+      ? { isRace, ourCar: player.value, ourLaps: () => lapsBy.get(player.value) ?? [], classes, rate, fallbackBurnKgPerLap: config.fallbackBurnKgPerLap }
+      : // without our car a rival's fuel hidden by realism stays unknown: no laps to fill it from
+        { isRace: false, ourCar: -1 as CarId, ourLaps: () => [], classes, rate, fallbackBurnKgPerLap: config.fallbackBurnKgPerLap },
+  );
+  const out: DegradationOutput = {};
+  for (const carId of rows.cars) {
+    const effect: DegradationEffect = Object.assign({}, session, ...rows.car(carId));
+    if (effect.inSession !== true) continue;
+    out[carId] = stintsOf(lapsBy.get(carId) ?? [], recordsBy.get(carId) ?? []).map((s, i): StintDegradation => {
+      const start = startOf(view, s.visual);
+      const fit = fitLaps(s.laps, fuelOf, start.prior, config, classes, rate);
+      const pnn = fit.state.cov[1][1];
+      const priorVar = start.prior.nuSdMs * start.prior.nuSdMs;
+      const sessionShare = priorVar > 0 ? Math.max(0, 1 - pnn / priorVar) : 0;
+      const alpha = fit.state.alphaMs;
+      return {
+        stint: i + 1,
+        firstLap: s.firstLap,
+        lastLap: s.lastLap,
+        actual: s.actual,
+        visual: s.visual,
+        basePaceMs: alpha === undefined ? unknown('insufficientData') : known(Math.round(alpha), now),
+        nuMsPerLap: known(fit.state.nuMsPerLap, now),
+        nuSdMs: known(Math.sqrt(Math.max(0, pnn)), now),
+        basis: fit.basis,
+        fuelCorrected: fit.fuelCorrected,
+        wearRatePctPerLap: fit.wearRatePctPerLap,
+        source: start.source(sessionShare, fit.paceLaps.length),
+        // the same run's posterior: `fitStint`'s, which needs two laps
+        cov: fit.paceLaps.length < 2 ? unknown('insufficientData') : known(fit.state.cov, now),
+        startPrior: start.startPrior,
+        laps: fit.laps,
+      };
+    });
+  }
+  return out;
+}
+
+/** Per car in the session (its rows, `DEGRADATION_BEHAVIOUR`): its stints, oldest first; the form at the current frame. */
 export const degradationCalculator: QuickCalculator<DegradationOutput> = {
   id: DEGRADATION,
   kind: 'quick',
   reads: ['laps', 'stints', 'pitStops', 'tyres', 'identity', 'decisions', CAR_STATUS_READS, 'spans:weekend-phase'],
   cadence: 'frame',
-  compute: (view: EngineView): DegradationOutput => {
-    const config = DEGRADATION_CONFIG.read(view);
-    // the session's rows (the weekend phase), over the grid's (C14: a pending phase reads as the race)
-    const session: DegradationEffect = Object.assign({}, phaseRow('pending'), ...behaviourFor(DEGRADATION_BEHAVIOUR, view));
-    const isRace = session.isRace === true;
-    const classes = { isRace, ...LAP_CLASSES_CONFIG.read(view) };
-    const rate = PER_LAP_RATE_CONFIG.read(view);
-    const now = view.live.sessionTime;
-    const rows = behaviourByCar(DEGRADATION_BEHAVIOUR, view);
-    const lapsBy = lapsByCar(view.history.laps);
-    const recordsBy = byCar(view.history.stints);
-    const ourCar = view.live.playerCar;
-    const fuelOf = fuelResolver({
-      isRace,
-      ourCar,
-      ourLaps: () => lapsBy.get(ourCar) ?? [],
-      classes,
-      rate,
-      fallbackBurnKgPerLap: config.fallbackBurnKgPerLap,
-    });
-    const out: DegradationOutput = {};
-    for (const car of view.live.cars) {
-      const effect: DegradationEffect = Object.assign({}, session, ...rows(car.id));
-      if (effect.inSession !== true) continue;
-      out[car.id] = stintsOf(lapsBy.get(car.id) ?? [], recordsBy.get(car.id) ?? []).map((s, i): StintDegradation => {
-        const start = startOf(view, s.visual);
-        const fit = fitLaps(s.laps, fuelOf, start.prior, config, classes, rate);
-        const pnn = fit.state.cov[1][1];
-        const priorVar = start.prior.nuSdMs * start.prior.nuSdMs;
-        const sessionShare = priorVar > 0 ? Math.max(0, 1 - pnn / priorVar) : 0;
-        const alpha = fit.state.alphaMs;
-        return {
-          stint: i + 1,
-          firstLap: s.firstLap,
-          lastLap: s.lastLap,
-          actual: s.actual,
-          visual: s.visual,
-          basePaceMs: alpha === undefined ? unknown('insufficientData') : known(Math.round(alpha), now),
-          nuMsPerLap: known(fit.state.nuMsPerLap, now),
-          nuSdMs: known(Math.sqrt(Math.max(0, pnn)), now),
-          basis: fit.basis,
-          fuelCorrected: fit.fuelCorrected,
-          wearRatePctPerLap: fit.wearRatePctPerLap,
-          source: start.source(sessionShare, fit.paceLaps.length),
-          // the same run's posterior: `fitStint`'s, which needs two laps
-          cov: fit.paceLaps.length < 2 ?unknown('insufficientData') : known(fit.state.cov, now),
-          startPrior: start.startPrior,
-          laps: fit.laps,
-        };
-      });
-    }
-    return out;
-  },
+  compute: (view: EngineView): DegradationOutput => degradationAsOf(lazyFixed(asOfNow(view), view)),
 };
+
+/**
+ * `now` with its `fixed` values each read from `view` only when the form reads it (C41: the unit declares no read of
+ * `live.session`, which `asOfNow`'s `fixed` reads for `totalLaps` and `weatherNow`). The values are `asOfNow`'s. To be
+ * dropped once `asOfNow` reads each fixed value lazily (requested of the supervisor, Task 15a).
+ */
+function lazyFixed(now: AsOfView, view: EngineView): AsOfView {
+  const fixed: AsOfView['fixed'] = {
+    get totalLaps() { return known(view.live.session.totalLaps, view.live.sessionTime); },
+    get playerCar() { return known(view.live.playerCar, view.live.sessionTime); },
+    get setsNow() { return view.live.cars.map((c) => c.tyres.sets); },
+    get weatherNow() {
+      const { weather, forecast, forecastAccuracy } = view.live.session;
+      return { weather, forecast, forecastAccuracy };
+    },
+  };
+  // `now`'s own getters, so the other fields stay lazy too, and `fixed` replaced
+  return Object.defineProperties({}, { ...Object.getOwnPropertyDescriptors(now), fixed: { value: fixed, enumerable: true } }) as AsOfView;
+}
