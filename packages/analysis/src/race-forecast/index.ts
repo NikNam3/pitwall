@@ -50,10 +50,13 @@ const DRS_PASS = SLOT.drsPass;
 const HELD_EPS_MS = 1e-6;
 const PIT_LOSS = ['green', 'vsc', 'sc'] as const;
 
-/** The pass chance at one braking zone (`PassCurve`), with the DRS factor where it applies. */
-function passChance(curve: PassCurve, wet: boolean, drsFactor: number, advantageMs: number): number {
-  const p = curve.cap / (1 + Math.exp(-(curve.level + curve.slopePerMs * advantageMs)));
-  return Math.min(1, p * (wet ? curve.wetFactor : 1) * drsFactor);
+/**
+ * The pass chance at one braking zone, the model `race-interaction` fits (`race-interaction/fit.ts`; SP4.3b Task 10b):
+ * cap · σ(level + slopePerMs · advantageMs + drsFactor · [DRS]), × wetFactor when wet; `drs`: a zone after a DRS zone.
+ */
+export function passChance(curve: PassCurve, wet: boolean, drs: boolean, advantageMs: number): number {
+  const eta = curve.level + curve.slopePerMs * advantageMs + (drs ? curve.drsFactor : 0);
+  return ((wet ? curve.wetFactor : 1) * curve.cap) / (1 + Math.exp(-eta));
 }
 
 /** The session's pass curve: its band's, else the first band's; none passes without a band. */
@@ -104,7 +107,6 @@ export function raceForecast(start: StartingPoint, policies: readonly Policy[], 
   // the one DRS rule, race-interaction's (forecast-field fills it, F7)
   const drsRangeMs = start.drs.rangeMs;
   const drsFromLap = start.drs.fromLap;
-  const drsPassFactor = it.drsPassFactor;
   const curve = curveOf(start);
   const wet = start.wetness.wetnessMs > 0;
   const plain = f.plain;
@@ -174,7 +176,7 @@ export function raceForecast(start: StartingPoint, policies: readonly Policy[], 
           if (within && curve !== undefined && nc === GREEN) {
             const advantageMs = (car[a + GREEN_MS] ?? 0) - (car[b + GREEN_MS] ?? 0);
             if (advantageMs > 0 && car[a + NEUTRAL_AT] === GREEN && car[b + IN_LAP] === 0) {
-              const p = passChance(curve, wet, car[b + DRS_PASS] === 1 ? drsPassFactor : 1, advantageMs);
+              const p = passChance(curve, wet, car[b + DRS_PASS] === 1, advantageMs);
               let passes: boolean;
               if (plain) {
                 // plain: the held car passes once its summed hazard reaches the median pass time's
