@@ -16,7 +16,13 @@ export type EnsureBridgeOptions = {
   port: number;
   /** True when something answers at `url` within `timeoutMs`. */
   probe: (url: string, timeoutMs: number) => Promise<boolean>;
-  spawn: (command: string, args: string[]) => BridgeChild;
+  /** Starts the bridge `command args` with the environment `env` (`options.env`). */
+  spawn: (command: string, args: string[], env?: NodeJS.ProcessEnv) => BridgeChild;
+  /**
+   * The environment the bridge starts with (C58: its ports and paths, `PITWALL_UDP_PORT` a list of one port per feed),
+   * passed through as given; `main.ts` passes `process.env`.
+   */
+  env?: NodeJS.ProcessEnv | undefined;
   /** Stops the child and everything it started (the child leads its own process group); default is `child.kill()`. */
   killTree?: ((pid: number) => void) | undefined;
   /** The bridge command, command first; default `pitwall live`. */
@@ -36,7 +42,7 @@ export async function ensureBridge(options: EnsureBridgeOptions): Promise<Bridge
     return { attached: true, stop: () => {} };
   }
   const [command, ...args] = options.args !== undefined && options.args.length > 0 ? options.args : DEFAULT_BRIDGE_COMMAND;
-  const child = options.spawn(command as string, args);
+  const child = options.env === undefined ? options.spawn(command as string, args) : options.spawn(command as string, args, options.env);
   // A failed start (no such command) is reported as 'error' on a later tick; later errors are ignored.
   let failure: Error | undefined;
   child.on?.('error', (error) => {
