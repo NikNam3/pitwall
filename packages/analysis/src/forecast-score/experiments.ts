@@ -49,20 +49,18 @@ export type Case = {
 export type Experiments = { rejoin: Case[]; undercut: Case[]; scStop: Case[] };
 
 /** The lap record `measure` needs; its absence on the projection the case came from is a bug of the caller. */
-function confirmed(history: DeepReadonly<Projection>, car: number, n: number): DeepReadonly<LapRecord> {
-  // the newest confirmed record of the lap is its current one (C25: a confirmed record replaces anything)
-  const laps = history.laps;
-  for (let i = laps.length - 1; i >= 0; i--) {
-    const l = laps[i] as DeepReadonly<LapRecord>;
-    if (l.carId === car && l.lapNumber === n && l.status === 'confirmed') return l;
-  }
-  throw new Error(`forecast-score: car ${car} has no confirmed lap ${n}`);
+function confirmed(race: RaceLaps, car: number, n: number): DeepReadonly<LapRecord> {
+  // the current record of the lap, through the domain helper (`raceLaps` is built on `currentLaps`, C25)
+  const l = race.lap(car, n);
+  if (l === undefined) throw new Error(`forecast-score: car ${car} has no confirmed lap ${n}`);
+  return l;
 }
 
 /** The change of the gap of `other` behind `car` from the end of lap `from` to the end of lap `to`, measured on `history`. */
 const gapChange = (car: number, other: number, from: number, to: number) => (history: Projection): number => {
-  const start = confirmed(history, other, from).completedAt - confirmed(history, car, from).completedAt;
-  return confirmed(history, other, to).completedAt - confirmed(history, car, to).completedAt - start;
+  const race = raceLaps(history);
+  const start = confirmed(race, other, from).completedAt - confirmed(race, car, from).completedAt;
+  return confirmed(race, other, to).completedAt - confirmed(race, car, to).completedAt - start;
 };
 
 /** Every car's actual stops not yet made at `frame` (P7): by car slot, each onto the compound it left on. */
@@ -102,7 +100,7 @@ export function naturalExperiments(history: Projection, config: ForecastScoreCon
     const s = stop.lap;
     if (race.lap(stop.carId, s + 1) === undefined || !race.dry(stop.carId, s - 1, s + 1)) continue;
     const c = base('rejoin', stop.carId, s, s + 1);
-    if (c !== undefined) rejoin.push({ ...c, measure: (h) => confirmed(h, stop.carId, s + 1).positionAtEnd });
+    if (c !== undefined) rejoin.push({ ...c, measure: (h) => confirmed(raceLaps(h), stop.carId, s + 1).positionAtEnd });
   }
 
   const undercut: Case[] = [];
