@@ -1,13 +1,14 @@
 // One feed end to end (spec 4): PacketSource → decode → SessionTracker → SessionProcessor → TopicHub,
 // with the feed's health, its session files and its storage alongside.
 import { resolve } from 'node:path';
+import type { ConfigEffectiveValue } from '@pitwall/contracts';
 import { toSessionTime, type CalibrationActiveValue, type FeedId, type Known, type PriorsSnapshot, type ProfileSnapshot, type RunPriors, type SessionRef, type SessionTime, type TrackFile } from '@pitwall/domain';
 import type { CalibrationStore } from '../calibration/store.ts';
 import type { ProfileStore, SlotIdentity } from '../drivers/store.ts';
 import { profilesSidecarPath } from './profile-sidecar.ts';
 import { CalculatorRegistry, SessionTracker, type Frame, type FrameMetrics, type InsightChange, type TrackerEvent } from '@pitwall/engine';
 import { decode } from '@pitwall/protocol';
-import { effectiveConfig, sessionConfigPath, type FeatureConfig } from '../feature-config.ts';
+import { effectiveConfig, overriddenFields, sessionConfigPath, type FeatureConfig } from '../feature-config.ts';
 import type { Feature } from '../features/feature.ts';
 import { feedStatusOf } from '../features/feed-status/feed-status.ts';
 import type { TopicHub } from '../hub/topic-hub.ts';
@@ -134,6 +135,8 @@ export class FeedPipeline {
   readonly #feedId: FeedId;
   readonly #log: Logger;
   readonly #config: FeatureConfig;
+  /** Per config key, the fields `config.json` set (`config.effective`). */
+  readonly #overridden: Record<string, string[]>;
   readonly #registry: CalculatorRegistry;
   readonly #demand: ReturnType<typeof demandOf>;
   readonly #publisher: TopicPublisher;
@@ -167,6 +170,7 @@ export class FeedPipeline {
     this.#log = opts.log;
     // Fixed for the run; changing the config from the UI at runtime comes later (it needs a new sidecar per change).
     this.#config = effectiveConfig(opts.features, opts.config);
+    this.#overridden = overriddenFields(opts.config);
     this.#jobs = new FeedJobs(opts.features, (result) =>
       this.#guarded('job result', () => this.#onJobResult(result)),
     );
@@ -366,6 +370,7 @@ export class FeedPipeline {
     const startedAt = this.#sessionClock(event.receivedAtMs);
     const storage = this.#sessionStorage();
     const config = this.#sessionConfig();
+    this.#publishEffectiveConfig(config);
     const track = this.#tracks(event.session.trackId);
     const priors = this.#startPriors(event.session.trackId);
     const file = this.#openSessionFile(event, startedAt, config, track, priors);
@@ -446,6 +451,18 @@ export class FeedPipeline {
   /** Now as an ISO date: when a set was used (spec 3.1 `lastUsedAt`). */
   #now(): string {
     return new Date(this.#wallClock()).toISOString();
+  }
+
+  /**
+   * `config.effective` (C47, C54, C55): the session's config, every declared key with its value, and per key the fields
+   * `config.json` set; published by the pipeline itself, typed by its topic file, once per session start.
+   */
+  #publishEffectiveConfig(config: FeatureConfig): void {
+    const value: ConfigEffectiveValue = {
+      values: config,
+      overridden: Object.fromEntries(Object.keys(config).map((key) => [key, this.#overridden[key] ?? []])),
+    };
+    this.#o.hub.publishState(this.#feedId, 'config.effective', () => value);
   }
 
   /** The run's config with `realism.enabled` taken from the live hook, if any; fixed for the whole session. */
