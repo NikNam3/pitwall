@@ -6,7 +6,7 @@
 // Rows (plan Task 9, R1–R5 and the unit's own):
 //  - R1: on a generated race with rain from lap 30 (every lap 4 s slower) the state is within 2 sd of 4000 by lap 35;
 //    on the same race dry it is not wet (below 0, or its 2 sd covering 0). Both sds are informative (under 1 s).
-//  - R2: as of every leader crossing frame N, `trackWetnessAsOf(projectionAsOf(N))`, with `degradation`'s output of the
+//  - R2: as of every leader crossing frame N, `trackWetnessAsOf(asOfNow, projectionAsOf(N))`, with `degradation`'s output of the
 //    scheduled run at N, equals the scheduled run on the view at N.
 //  - R3: after a flashback (a view at N whose delta rewinds from a later frame) the output equals a run that never
 //    received the undone frames (C33).
@@ -21,7 +21,7 @@
 // Races come from the test-race generator (spec 6.4), each generated once per file in `beforeAll`, at the smallest size
 // that shows its row (plan review P8).
 import { unknown, type ForecastSample, type Known, type TyreType, type WeekendPhase } from '@pitwall/domain';
-import { projectionAsOf, type AsOfView, type EngineView } from '@pitwall/engine/readers';
+import { asOfNow, projectionAsOf, type AsOfView, type EngineView } from '@pitwall/engine/readers';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { generateRace, GENERATOR_DEFAULTS, type GeneratorCar, type GeneratorParams } from '../../../../test-support/race-generator/index.ts';
 import type { BuilderRace } from '../../../../test-support/builders/long-race.ts';
@@ -130,6 +130,7 @@ describe('track-wetness (spec 5.1)', () => {
       const view = viewWithOutputs(small, frame);
       const cut = projectionAsOf(source, frame);
       const asOf: AsOfView = {
+        fixed: asOfNow(view).fixed,
         history: cut.history,
         situation: cut.situation,
         frame,
