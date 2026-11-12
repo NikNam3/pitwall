@@ -70,3 +70,5 @@ export { trackWetnessCalculator } from './track-wetness/calculator.ts';
 export * from './rival-stops/index.ts';
 export { rivalStopsCalculator } from './rival-stops/calculator.ts';
 export { SIMULATOR as RACE_FORECAST_SIMULATOR, raceForecast } from './race-forecast/index.ts';
+export * from './driver-noise/index.ts';
+export { driverNoiseCalculator } from './driver-noise/calculator.ts';

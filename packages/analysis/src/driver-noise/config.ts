@@ -29,6 +29,14 @@ export const DRIVER_NOISE_CONFIG = defineConfig('driver-noise', {
   humanWearRatePct: 2.0,
   /** The wear rate of a car without a measured, profile or our-car rate (% per lap, the worst corner). Source: pitwall estimate. */
   defaultWearRatePct: 2.0,
+  /** The AI field's lap-to-lap correlation of its residuals. Source: pitwall estimate. */
+  aiRho: 0.3,
+  /** A human's lap-to-lap correlation without a profile. Source: pitwall estimate until profiles exist. */
+  humanRho: 0.3,
+  /** A human's mistake size log-sd without a profile. Source: pitwall estimate until profiles exist. */
+  humanMistakeSigmaLog: 0.8,
+  /** A human's big events per lap without a profile. Source: pitwall estimate until profiles exist. */
+  humanBigEventRate: 0.002,
   /** The AI field's big events per lap. Source: research 12 §2. */
   aiBigEventRate: 0.001,
   /** The AI field's retirements per lap. Source: research 12 §2. */
