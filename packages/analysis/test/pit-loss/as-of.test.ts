@@ -76,6 +76,7 @@ const generated = (() => {
     return {
       ...projectionAsOf(source, frame),
       frame,
+      fixed: asOfNow(now).fixed,
       at: now.live.sessionTime,
       config: now.config,
       priors: now.priors,
