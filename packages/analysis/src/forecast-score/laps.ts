@@ -25,6 +25,8 @@ export type RaceLaps = {
   crossover(car: CarId | number, lap: number): boolean;
   /** Whether car `car`'s laps `from` to `to` are dry and hold no weather crossover. */
   dry(car: CarId | number, from: number, to: number): boolean;
+  /** Whether any of car `car`'s confirmed laps `from` to `to` ran partly under an SC or VSC (`scShare + vscShare > 0`). */
+  neutralised(car: CarId | number, from: number, to: number): boolean;
   /** The frame on which car `car` made its stop `stop` (its in-lap record's, else the stop's own). */
   inLapFrame(stop: DeepReadonly<PitStopRecord>): FrameNumber;
 };
@@ -66,6 +68,13 @@ export function raceLaps(history: DeepReadonly<Projection>): RaceLaps {
     dry: (car, from, to) => {
       for (let n = from; n <= to; n++) if (wetLap(car, n) || (stops.has(`${car}:${n}`) && crossover(car, n))) return false;
       return true;
+    },
+    neutralised: (car, from, to) => {
+      for (let n = from; n <= to; n++) {
+        const l = lap(car, n);
+        if (l !== undefined && l.scShare + l.vscShare > 0) return true;
+      }
+      return false;
     },
     inLapFrame: (stop) => lap(stop.carId, stop.lap)?.frame ?? stop.frame,
   };
