@@ -20,6 +20,10 @@ export const USAGE = `usage: pitwall <live|replay|tap|reprocess|import> …
                             sub-machine's transitions with their counts, the declared ones never seen and the undeclared
                             ones (exit code 1 on those); with --warnings: each penalty of the player car with the
                             warnings count and corner-cutting count of its warned span
+  score <file> [--json <out.json>] [--compare <old.json>]
+                            reprocess a recording (its sidecars included) and print the forecast-score tables: each
+                            experiment and each forecast horizon, AI and human; --json writes the report without its
+                            cases, --compare prints each number beside the old one with its change; stores nothing
   drivers                   list the persons with their profile entries, then the unlinked human slots with a suggestion
   drivers add <person> --name "<display name>"
                             add a person (kebab-case id)
