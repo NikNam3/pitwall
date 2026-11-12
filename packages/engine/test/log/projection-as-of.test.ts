@@ -11,7 +11,7 @@ import type { Situation } from '../../src/situations/situation.ts';
 import { ScenarioBuilder, type FrameDraft } from '../builders/index.ts';
 import { gridStart, script } from '../situations/script.ts';
 import { initFor } from '../support/run.ts';
-import { after, applyOne, flbk, runAll, timeline } from '../support/runner.ts';
+import { after, runAll, timeline } from '../support/runner.ts';
 
 /** The projection's fact and span lists, without its append frames: what a reader reads of it. */
 const lists = (p: Projection) => {
@@ -117,7 +117,11 @@ describe('projectionAsOf: the cut by append frame (P1)', () => {
       expect(cut.situation.byMachine['session-phase-race'] ?? []).not.toContainEqual(opened(closed));
     }
     // the situation at N is every span covering N, as membership finds it (C26), each as it stood open
-    expect(byMachineOpened(cut.situation.byMachine)).toEqual(byMachineOpened(situationAt(source, N)));
+    // (the cut's situation keeps every machine of the run's, also those with no open span; membership lists only machines
+    // with a span covering N: an empty list and a missing machine say the same)
+    const covering = (byMachine: Parameters<typeof byMachineOpened>[0]) =>
+      Object.fromEntries(Object.entries(byMachineOpened(byMachine)).filter(([, spans]) => spans.length > 0));
+    expect(covering(cut.situation.byMachine)).toEqual(covering(situationAt(source, N)));
     // the cut's situation holds the spans the run had open after N, by identity, and its weekend phase
     const identity = (byMachine: Situation['byMachine']) =>
       Object.fromEntries(Object.entries(byMachine).map(([m, spans]) => [m, ordered(spans).map((s) => [s.id, s.carId, s.zone, s.kind, s.startFrame])]));
@@ -148,24 +152,31 @@ describe('projectionAsOf: the cut by append frame (P1)', () => {
       .frames(2, (d) => Object.assign(car(d, 0), { currentLapNum: 2, lastLapTimeInMs: 90_000 }))
       .build();
     const { st, numbers } = stepped(formation);
+    // the formation lap's record is in the log and hidden: the projection skips it
     expect(st.log.laps).toHaveLength(1);
+    expect(st.history.laps).toEqual([]);
     for (const n of numbers) expect(projectionAsOf(sourceOf(st), n).history.laps, `frame ${n}`).toEqual([]);
 
-    // a flashback's voided entries (C27): no cut shows them, at a frame before the target or past the frames undone
+    // a flashback's voided entries (C27): the original's laps begin at 100 and 250; the game goes back to frame 200 and
+    // the fork's lap 3 begins at 330, so the lap completed at 250 never happened
     const original = timeline(300, [100, 250]);
+    const fork = timeline(400, [100, 330]);
     const runner = new SessionRunner(initFor(original));
     runAll(runner, original);
     const undoneNumber = runner.state.frameNumber;
-    applyOne(runner, after(timeline(400, [100, 330], (i) => (i === 201 ? [flbk(200)] : [])), 201, 300)[0]!);
+    runAll(runner, after(fork, 201, 300));
+    expect(runner.state.log.voids).toHaveLength(1);
     const source = sourceOf(runner.state);
-    const visible = runner.state.history.events;
-    expect(runner.state.log.events.length).toBeGreaterThan(visible.length);
-    for (const n of [runner.state.frameNumber - 5, runner.state.frameNumber, undoneNumber, undoneNumber + 10]) {
+    const shownLaps = runner.state.history.laps;
+    const voided = runner.state.log.laps.filter((l) => !shownLaps.some((v) => JSON.stringify(v) === JSON.stringify(l)));
+    expect(voided.length).toBeGreaterThan(0);
+    // before the target, between it and the flashback point (where the voided lap was appended), past it, and now
+    for (const n of [150, 199, 201, 250, 251, 299, undoneNumber, 330, 331, runner.state.frameNumber]) {
       const cut = projectionAsOf(source, n).history;
-      for (const e of cut.events) expect(visible, `frame ${n}`).toContain(e);
-      for (const l of cut.laps) expect(runner.state.history.laps, `frame ${n}`).toContain(l);
+      for (const v of voided) expect(cut.laps, `frame ${n}`).not.toContainEqual(v);
+      for (const l of cut.laps) expect(shownLaps, `frame ${n}`).toContainEqual(l);
     }
-    expect(projectionAsOf(source, undoneNumber).history.events).toEqual(visible);
+    expect(projectionAsOf(source, runner.state.frameNumber).history.laps).toEqual(shownLaps);
   });
 
   it('append frames survive a rewind and a structured clone', () => {
