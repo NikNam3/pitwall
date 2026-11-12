@@ -5,10 +5,107 @@ import type { DeepReadonly, Projection } from '@pitwall/engine/readers';
 
 type Crossing = DeepReadonly<MiniSectorCrossing>;
 
-/** A lap's mark: not seen, seen with no car close ahead, or held (a car within the gap ahead at one of its crossings). */
-const UNSEEN = 0;
-const FREE = 1;
-const HELD = 2;
+/** A lap's mark, as bit flags: seen (one of its crossings is), held (a car within the gap ahead at one of them, bit 2). */
+const SEEN = 1;
+/** Seen and never held. */
+const FREE = SEEN;
+
+/** The time of "no crossing yet": so far before every crossing that no gap reaches it. */
+const NEVER = -1e15;
+
+/** The free-air laps: `isFree(car, lap)`, and `has('carId:lap')` by key. */
+export type FreeAirLaps = {
+  isFree(car: number, lap: number): boolean;
+  has(key: string /* carId:lap */): boolean;
+};
+
+/** The marks per car and lap (`car * stride + lap`) as a `FreeAirLaps`. */
+function freeAirOf(marks: Uint8Array, stride: number): FreeAirLaps {
+  const isFree = (car: number, lap: number): boolean => lap >= 0 && lap < stride && car >= 0 && marks[car * stride + lap] === FREE;
+  return {
+    isFree,
+    has: (key) => {
+      const colon = key.indexOf(':');
+      return colon > 0 && isFree(Number(key.slice(0, colon)), Number(key.slice(colon + 1)));
+    },
+  };
+}
+
+/**
+ * Per boundary the newest crossing (car, time; car −1 is none) and the time of the newest crossing of another car than
+ * it (`NEVER` without one).
+ */
+type Boundaries = { lastCar: Int32Array; lastAt: Float64Array; prevAt: Float64Array };
+
+const boundaries = (count: number): Boundaries => ({
+  lastCar: new Int32Array(count).fill(-1),
+  lastAt: new Float64Array(count).fill(NEVER),
+  prevAt: new Float64Array(count).fill(NEVER),
+});
+
+/**
+ * Marks `crossings` (in race-clock order) into a table of `cars` × `stride` and `segments` boundaries; `false` (the
+ * table is left partly marked) when a crossing lies outside them or out of order, so the caller sizes and sorts first.
+ * The loop body has no branch on the data (whether the newest crossing is another car's, whether it is within the
+ * gap): those are unpredictable, and selecting by arithmetic runs about twice as fast.
+ */
+function mark(crossings: readonly Crossing[], gapMs: Ms, marks: Uint8Array, stride: number, cars: number, b: Boundaries, checkOrder: boolean): boolean {
+  const { lastCar, lastAt, prevAt } = b;
+  const segments = lastCar.length;
+  let previousAt = -Infinity;
+  // an indexed loop: on the projection's long lists it runs faster than `for … of`
+  for (let i = 0; i < crossings.length; i++) {
+    const c = crossings[i] as Crossing;
+    const s = c.segment;
+    const car: number = c.carId;
+    const at = c.at;
+    const lap = c.lap;
+    if (checkOrder) {
+      if (at < previousAt) return false;
+      previousAt = at;
+    }
+    if (s < 0 || s >= segments || car < 0 || car >= cars || lap < 0 || lap >= stride) return false;
+    // the newest crossing of another car: the newest one when it is another car's, else the one before it
+    const la = lastAt[s] as number;
+    const pa = prevAt[s] as number;
+    const another = +((lastCar[s] as number) !== car);
+    const aheadAt = pa + another * (la - pa);
+    const held = +(aheadAt < at) & +(at - aheadAt < gapMs);
+    const index = car * stride + lap;
+    marks[index] = (marks[index] as number) | SEEN | (held << 1);
+    prevAt[s] = aheadAt;
+    lastCar[s] = car;
+    lastAt[s] = at;
+  }
+  return true;
+}
+
+/** The table bounds of `crossings`: the largest car, lap and segment. */
+function boundsOf(crossings: readonly Crossing[]): { cars: number; stride: number; segments: number } {
+  let maxLap = 0;
+  let maxCar = 0;
+  let maxSegment = 0;
+  for (let i = 0; i < crossings.length; i++) {
+    const c = crossings[i] as Crossing;
+    if (c.lap > maxLap) maxLap = c.lap;
+    if (c.carId > maxCar) maxCar = c.carId;
+    if (c.segment > maxSegment) maxSegment = c.segment;
+  }
+  return { cars: maxCar + 1, stride: maxLap + 1, segments: maxSegment + 1 };
+}
+
+/** The guessed table bounds: the laps' largest car and lap (a car's next lap included), 50 boundaries. */
+function guessedBounds(history: Projection): { cars: number; stride: number; segments: number } {
+  let maxLap = 0;
+  let maxCar = 0;
+  const laps = history.laps;
+  for (let i = 0; i < laps.length; i++) {
+    const l = laps[i] as (typeof laps)[number];
+    if (l.lapNumber > maxLap) maxLap = l.lapNumber;
+    if (l.carId > maxCar) maxCar = l.carId;
+  }
+  return { cars: maxCar + 1, stride: maxLap + 3, segments: 64 };
+}
 
 /**
  * The laps (`carId:lap`) at none of whose crossings another car was within `gapMs` ahead: no other car crossed the same
@@ -17,50 +114,20 @@ const HELD = 2;
  *
  * One pass in race-clock order (the projection's append order; any other order is sorted first): per boundary it keeps
  * the newest crossing and the newest one of another car than that, so the newest crossing of any other car before each
- * crossing is one of the two.
+ * crossing is one of the two. The table is sized from the laps; a crossing outside it, or out of order, falls back to
+ * sizing it from the crossings (and sorting them).
  */
-export function freeAirLaps(history: Projection, gapMs: Ms): ReadonlySet<string /* carId:lap */> {
-  let crossings: readonly Crossing[] = history.crossings;
-  let maxLap = 0;
-  let maxCar = 0;
-  let maxSegment = 0;
+export function freeAirLaps(history: Projection, gapMs: Ms): FreeAirLaps {
+  const crossings: readonly Crossing[] = history.crossings;
+  const guess = guessedBounds(history);
+  const marks = new Uint8Array(guess.cars * guess.stride);
+  if (mark(crossings, gapMs, marks, guess.stride, guess.cars, boundaries(guess.segments), true)) return freeAirOf(marks, guess.stride);
+
+  const bounds = boundsOf(crossings);
   let sorted = true;
-  let previousAt = -Infinity;
-  for (const c of crossings) {
-    if (c.lap > maxLap) maxLap = c.lap;
-    if (c.carId > maxCar) maxCar = c.carId;
-    if (c.segment > maxSegment) maxSegment = c.segment;
-    if (c.at < previousAt) sorted = false;
-    previousAt = c.at;
-  }
-  if (!sorted) crossings = [...crossings].sort((a, b) => a.at - b.at);
-
-  const stride = maxLap + 1;
-  const marks = new Uint8Array((maxCar + 1) * stride);
-  // per boundary: the newest crossing (car, time) and the newest of another car than it; car −1 is none
-  const lastCar = new Int32Array(maxSegment + 1).fill(-1);
-  const lastAt = new Float64Array(maxSegment + 1);
-  const prevCar = new Int32Array(maxSegment + 1).fill(-1);
-  const prevAt = new Float64Array(maxSegment + 1);
-  for (const c of crossings) {
-    const s = c.segment;
-    const car: number = c.carId;
-    const at = c.at;
-    const lc = lastCar[s] as number;
-    const other = lc !== car ? lc : (prevCar[s] as number);
-    const aheadAt = (lc !== car ? lastAt[s] : prevAt[s]) as number;
-    const index = car * stride + c.lap;
-    if (other >= 0 && aheadAt < at && at - aheadAt < gapMs) marks[index] = HELD;
-    else if (marks[index] === UNSEEN) marks[index] = FREE;
-    if (lc !== car) {
-      prevCar[s] = lc;
-      prevAt[s] = lastAt[s] as number;
-    }
-    lastCar[s] = car;
-    lastAt[s] = at;
-  }
-
-  const free = new Set<string>();
-  for (let car = 0; car <= maxCar; car++) for (let lap = 0; lap < stride; lap++) if (marks[car * stride + lap] === FREE) free.add(`${car}:${lap}`);
-  return free;
+  for (let i = 1; i < crossings.length && sorted; i++) if ((crossings[i] as Crossing).at < (crossings[i - 1] as Crossing).at) sorted = false;
+  const ordered = sorted ? crossings : [...crossings].sort((a, b) => a.at - b.at);
+  const all = new Uint8Array(bounds.cars * bounds.stride);
+  mark(ordered, gapMs, all, bounds.stride, bounds.cars, boundaries(bounds.segments), false);
+  return freeAirOf(all, bounds.stride);
 }

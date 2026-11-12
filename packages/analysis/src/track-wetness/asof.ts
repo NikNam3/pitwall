@@ -11,7 +11,7 @@ import type { AsOfView } from '@pitwall/engine/readers';
 import { tyreTypeOf } from '../crossover/tyre-type.ts';
 import { DEGRADATION, DEGRADATION_CONFIG, fitStint, type DegradationOutput, type StintDegradation } from '../degradation/index.ts';
 import { DRIVER_NOISE_CONFIG } from '../driver-noise/config.ts';
-import { freeAirLaps } from '../shared/free-air.ts';
+import { freeAirLaps, type FreeAirLaps } from '../shared/free-air.ts';
 import { sessionEffect } from './behaviour.ts';
 import { TRACK_WETNESS_CONFIG } from './config.ts';
 import { runWetnessFilter, type WetnessFilterConfig } from './kalman.ts';
@@ -37,16 +37,17 @@ type PaceLap = { lap: number; tyreAge: number; ms: number; at: Ms; free: boolean
 type Stint = { type: TyreType; laps: PaceLap[]; fit: StintDegradation };
 
 /** Every stint with a tyre type and a `ν`, with its pace laps. */
-function stintsOf(degradation: DegradationOutput, free: ReadonlySet<string>): Stint[] {
+function stintsOf(degradation: DegradationOutput, free: FreeAirLaps): Stint[] {
   const out: Stint[] = [];
-  for (const [car, stints] of Object.entries(degradation)) {
+  for (const [key, stints] of Object.entries(degradation)) {
+    const car = Number(key);
     for (const fit of stints) {
       const type = tyreTypeOf(fit.actual);
       if (type === undefined || !fit.nuMsPerLap.known) continue;
       const laps: PaceLap[] = [];
       for (const l of fit.laps) {
         if (typeof l.use === 'object' || !l.correctedMs.known) continue;
-        laps.push({ lap: l.lapNumber, tyreAge: l.tyreAge, ms: l.correctedMs.value, at: l.correctedMs.at, free: free.has(`${car}:${l.lapNumber}`) });
+        laps.push({ lap: l.lapNumber, tyreAge: l.tyreAge, ms: l.correctedMs.value, at: l.correctedMs.at, free: free.isFree(car, l.lapNumber) });
       }
       out.push({ type, laps, fit });
     }
