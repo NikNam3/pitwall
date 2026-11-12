@@ -58,7 +58,9 @@ export function excludedLap(lap: DeepReadonly<LapRecord>, ctx: LapFilterCtx): bo
 function excludedByLap(lap: DeepReadonly<LapRecord>, config: RaceInteractionConfig): boolean {
   if (lap.lapNumber <= 1 || lap.inLap || lap.outLap || lap.scShare > 0 || lap.vscShare > 0) return true;
   const damage = lap.damageAtEnd;
-  return damage.known && AERO_PARTS.some((part) => damage.value[part] >= config.aeroDamageMaxPct);
+  if (!damage.known) return false;
+  for (const part of AERO_PARTS) if (damage.value[part] >= config.aeroDamageMaxPct) return true;
+  return false;
 }
 
 /** The lap filter's check on a lap's membership (C26): a span the behaviour table excludes. */
@@ -237,10 +239,6 @@ export function episodesOf(source: MembershipSource, track: DeepReadonly<TrackDa
   // the current crossings (C25) at the segments read, through the domain helper: their times by car, lap (0 … laps - 1)
   // and column (NaN without one)
   const at = currentCrossingTimes(history.crossings as readonly MiniSectorCrossing[], carSlots, laps - 1, segmentsRead);
-  const crossingAt = (car: number, lap: number, segment: number): number => {
-    const k = column[segment] ?? -1;
-    return lap < laps && k >= 0 ? nth(at, (car * laps + lap) * columns + k) : Number.NaN;
-  };
   const lapOf = (car: CarId, lap: number): DeepReadonly<LapRecord> | undefined => lapsOf[car]?.[lap];
 
   // the usable laps: those the filter keeps (membership through each car's own source)
@@ -251,21 +249,30 @@ export function episodesOf(source: MembershipSource, track: DeepReadonly<TrackDa
   }
   const isUsable = (car: CarId, lap: number): boolean => usable[car]?.[lap] === 1;
 
-  // each car's time at each point of each lap (NaN where it has no crossing there), then the order there
+  // each car's time at each point of each lap (NaN where it has no crossing there), then the order there; cell
+  // `(car * laps + lap) * columns + k` of `at` is the car's crossing of lap `lap` at column `k`
   const times = new Float64Array(carSlots * laps * pointCount).fill(Number.NaN);
   const slot = (car: number, lap: number, p: number): number => (car * laps + lap) * pointCount + p;
+  // per point its crossing table columns: its segment's (`from`) and the next segment's (`to`, on the next lap after the
+  // last segment); `within` the fraction between them, 0 at the crossing itself
+  const from = points.map((p) => column[p.segment] as number);
+  const to = points.map((p) => column[(p.segment + 1) % MINI_SECTORS] as number);
+  const wraps = points.map((p) => p.segment + 1 >= MINI_SECTORS);
+  const within = points.map((p) => (p.within < AT_CROSSING ? 0 : p.within));
   for (const car of cars) {
     for (let lap = 1; lap < laps; lap++) {
+      const row = (car * laps + lap) * columns;
+      const out = slot(car, lap, 0);
       for (let p = 0; p < pointCount; p++) {
-        const { segment, within } = points[p] as Point;
-        const t0 = crossingAt(car, lap, segment);
+        const t0 = at[row + (from[p] as number)] as number;
         if (Number.isNaN(t0)) continue;
-        if (within < AT_CROSSING) {
-          times[slot(car, lap, p)] = t0;
+        const w = within[p] as number;
+        if (w === 0) {
+          times[out + p] = t0;
           continue;
         }
-        const t1 = segment + 1 < MINI_SECTORS ? crossingAt(car, lap, segment + 1) : crossingAt(car, lap + 1, 0);
-        if (!Number.isNaN(t1)) times[slot(car, lap, p)] = t0 + within * (t1 - t0);
+        const t1 = wraps[p] ? (lap + 1 < laps ? (at[row + columns + (to[p] as number)] as number) : Number.NaN) : (at[row + (to[p] as number)] as number);
+        if (!Number.isNaN(t1)) times[out + p] = t0 + w * (t1 - t0);
       }
     }
   }
@@ -292,7 +299,7 @@ export function episodesOf(source: MembershipSource, track: DeepReadonly<TrackDa
         at[i] = t;
       }
       const rank = new Int16Array(carSlots).fill(-1);
-      for (const [i, car] of byRank.entries()) rank[car] = i;
+      for (let i = 0; i < byRank.length; i++) rank[byRank[i] as CarId] = i;
       order = { cars: byRank, at, rank };
       orders[key] = order;
     }

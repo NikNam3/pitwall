@@ -2,11 +2,13 @@
 // corrected time against `degradation`'s stint line `α + ν · tyreAge`, minus `track-wetness`'s common mode of the lap
 // and its tyre type (C43: both own their part). Each lap counts for the model (AI or human) of the car-driver span it
 // belongs to (C26, through the projection module's `membershipOf`); each model keeps only its own laps.
-import { currentLaps, type CarId, type FrameNumber, type Ms, type NoiseCompound, type OpenSpan, type Span, type TrackWetness } from '@pitwall/domain';
-import { membershipOf, type AsOfView, type DeepReadonly, type MembershipSource, type Projection } from '@pitwall/engine/readers';
+import { type CarId, type FrameNumber, type Ms, type NoiseCompound, type OpenSpan, type Span, type TrackWetness } from '@pitwall/domain';
+import type { AsOfView, DeepReadonly, MembershipSource, Projection } from '@pitwall/engine/readers';
 import { tyreTypeOf } from '../crossover/tyre-type.ts';
 import type { DegradationOutput, StintDegradation } from '../degradation/index.ts';
 import { freeAirLaps } from '../shared/free-air.ts';
+import { lapsByCar } from '../shared/stint-laps.ts';
+import { membershipByStretch } from '../shared/stretch-membership.ts';
 import { timeLossEvents } from '../shared/time-loss/index.ts';
 import { rowOf } from './behaviour.ts';
 import type { SessionEstimate } from './shrink.ts';
@@ -205,10 +207,13 @@ function carSource(closed: readonly DeepReadonly<Span>[], open: readonly DeepRea
   return { history: { spans } as unknown as DeepReadonly<Projection>, situation: { weekendPhase: view.situation.weekendPhase, byMachine } };
 }
 
-/** The car-driver kind a fact of the car describing `frame` belongs to, if any. */
-function modelAt(source: MembershipSource, carId: CarId, frame: FrameNumber): Model | undefined {
-  const span = membershipOf(source, { frame, carId })['car-driver'];
-  return span === undefined ? undefined : rowOf('car-driver', span.kind).model;
+/** The car-driver kind a fact of the car describing a frame belongs to, if any (membership once per stretch, C26). */
+function modelsAt(source: MembershipSource): (carId: CarId, frame: FrameNumber) => Model | undefined {
+  const memberOf = membershipByStretch(source);
+  return (carId, frame) => {
+    const span = memberOf({ frame, carId })['car-driver'];
+    return span === undefined ? undefined : rowOf('car-driver', span.kind).model;
+  };
 }
 
 /** Appends `value` to `map`'s list at `key`. */
@@ -223,7 +228,6 @@ export function carModelsOf(view: AsOfView, config: ResidualConfig): Map<CarId, 
   const degradation = (view.outputs.get('degradation') as DegradationOutput | undefined) ?? {};
   const wetness = view.outputs.get('track-wetness') as TrackWetness | undefined;
   const free = freeAirLaps(view.history, config.freeAirGapMs);
-  const laps = currentLaps(view.history.laps as never);
 
   // per car its spans of the two car machines
   const closedBy = new Map<CarId, DeepReadonly<Span>[]>();
@@ -232,8 +236,7 @@ export function carModelsOf(view: AsOfView, config: ResidualConfig): Map<CarId, 
     for (const s of view.history.spans[machine] ?? []) if (s.carId !== undefined) pushTo(closedBy, s.carId, s);
     for (const s of view.situation.byMachine[machine] ?? []) if (s.carId !== undefined) pushTo(openBy, s.carId, s);
   }
-  const lapsBy = new Map<CarId, typeof laps>();
-  for (const l of laps) pushTo(lapsBy, l.carId, l);
+  const lapsBy = lapsByCar(view.history);
 
   const statusOpen = view.situation.byMachine['car-status'] ?? [];
   const cars = new Set<CarId>();
@@ -254,10 +257,17 @@ export function carModelsOf(view: AsOfView, config: ResidualConfig): Map<CarId, 
   for (const carId of [...cars].sort((a, b) => a - b)) {
     const closed = closedBy.get(carId) ?? [];
     const open = openBy.get(carId) ?? [];
-    const source = carSource(closed, open, view);
+    const modelAt = modelsAt(carSource(closed, open, view));
     const own = degradation[carId] ?? [];
-    const byLap = new Map<number, DeepReadonly<StintDegradation>>();
-    for (const stint of own) for (const l of stint.laps) byLap.set(l.lapNumber, stint);
+    // per lap number its stint (the last that holds it) and that stint's first entry of the lap
+    // (a later stint overwrites an earlier one; within a stint, backwards, its first entry is written last)
+    const byLap: (StintLap | undefined)[] = [];
+    for (const stint of own) {
+      for (let i = stint.laps.length - 1; i >= 0; i--) {
+        const lap = stint.laps[i] as StintLap['lap'];
+        byLap[lap.lapNumber] = { stint, lap };
+      }
+    }
 
     // the retirements (car-status `retired` spans), each for the model driving when it began; the lap that ended in one
     // (the car's newest lap before the span) stays a lap of its model, but its slowness is the retirement's (P5)
@@ -266,7 +276,7 @@ export function carModelsOf(view: AsOfView, config: ResidualConfig): Map<CarId, 
     const retiringLaps = new Set<number>();
     const retirements: Record<Model, number> = { ai: 0, human: 0 };
     for (const s of retiredSpans) {
-      const m = modelAt(source, carId, s.startFrame);
+      const m = modelAt(carId, s.startFrame);
       if (m !== undefined) retirements[m]++;
       const before = carLaps.filter((l) => l.frame < s.startFrame).at(-1);
       if (before !== undefined) retiringLaps.add(before.lapNumber);
@@ -274,12 +284,12 @@ export function carModelsOf(view: AsOfView, config: ResidualConfig): Map<CarId, 
 
     const samples: Record<Model, LapSample[]> = { ai: [], human: [] };
     for (const l of carLaps) {
-      const m = modelAt(source, carId, l.frame);
+      const m = modelAt(carId, l.frame);
       if (m === undefined) continue;
       samples[m].push({
         lap: l.lapNumber,
-        residual: residualOf(byLap.get(l.lapNumber), l.lapNumber, wetness),
-        free: free.has(`${carId}:${l.lapNumber}`),
+        residual: residualOf(byLap[l.lapNumber], l.lapNumber, wetness),
+        free: free.isFree(carId, l.lapNumber),
         retiring: retiringLaps.has(l.lapNumber),
         completedAt: l.completedAt,
       });
@@ -311,11 +321,14 @@ export function carModelsOf(view: AsOfView, config: ResidualConfig): Map<CarId, 
   return out;
 }
 
+/** A lap's stint and the stint's entry of the lap. */
+type StintLap = { stint: DeepReadonly<StintDegradation>; lap: DeepReadonly<StintDegradation>['laps'][number] };
+
 /** A lap's residual: its corrected time against its stint's line, minus the common mode of its lap and tyre type. */
-function residualOf(stint: DeepReadonly<StintDegradation> | undefined, lapNumber: number, wetness: TrackWetness | undefined): number | undefined {
-  if (stint === undefined || !stint.basePaceMs.known) return undefined;
-  const lap = stint.laps.find((l) => l.lapNumber === lapNumber);
-  if (lap === undefined || typeof lap.use === 'object' || !lap.correctedMs.known) return undefined;
+function residualOf(entry: StintLap | undefined, lapNumber: number, wetness: TrackWetness | undefined): number | undefined {
+  if (entry === undefined) return undefined;
+  const { stint, lap } = entry;
+  if (!stint.basePaceMs.known || typeof lap.use === 'object' || !lap.correctedMs.known) return undefined;
   const type = tyreTypeOf(stint.actual);
   const common = type === undefined ? undefined : wetness?.byLap[lapNumber - 1]?.commonModeMs[type];
   if (common === undefined || !common.known) return undefined;
