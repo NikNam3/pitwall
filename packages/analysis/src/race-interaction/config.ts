@@ -13,7 +13,11 @@ export const RACE_INTERACTION_CONFIG = defineConfig('race-interaction', {
   passCap: 0.6,
   /** The pass probability's factor when wet. Source: pooled fit, Mexico and Miami, 510 wet zones, 22 passes (bootstrap SE 0.28, thin; research 15). */
   wetFactor: 0.56,
-  /** The pass probability's factor with DRS (only where the car ahead is not itself in DRS range). Source: research 12 §4 (0.71 against 0.58 passes per lap of following, about ×1.2). */
+  /**
+   * The prior of the pass curve's DRS factor: the log-odds shift of a pass at a braking zone after a DRS zone (only where
+   * the car ahead is not itself in DRS range); this race's episodes refine it with `shrinkEpisodes` (SP4.3b Task 10).
+   * Source: research 15's dry fit (about ×3.3 on the odds, log-odds 1.2).
+   */
   drsPassFactor: 1.2,
   /** The time DRS gains on a straight against the car directly ahead (ms). Source: assumed (spec 8). */
   drsStraightGainMs: 250,

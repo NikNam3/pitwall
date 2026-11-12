@@ -43,6 +43,7 @@ export const defaultCurve = (config: RaceInteractionConfig): PassCurve => ({
   slopePerMs: config.passSlopePerMs,
   cap: config.passCap,
   wetFactor: config.wetFactor,
+  drsFactor: config.drsPassFactor,
 });
 
 /** The source of the config's default curve. */
