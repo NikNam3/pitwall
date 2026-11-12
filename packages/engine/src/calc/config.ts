@@ -13,7 +13,7 @@ export type ConfigKey<C extends Record<string, ConfigValue>> = {
   key: string;
   defaults: C;
   /** The view's section for `key` over the defaults, field by field; a fresh object on every call. */
-  read(view: EngineView): C;
+  read(view: Pick<EngineView, 'config'>): C;
 };
 
 /**
