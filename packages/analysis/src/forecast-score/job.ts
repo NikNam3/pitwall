@@ -183,7 +183,7 @@ export function run(input: ScoreInput, rng: Rng): ForecastScoreReport {
   // the plain forecasts: one forecast per leader lap, rivals on rival-stops' windows, our cars on their actual stops
   const horizons = horizonsOf(config);
   const byLap = new Map<number, ForecastCase[]>();
-  for (const c of forecastCases(history, horizons)) {
+  for (const c of forecastCases(history, horizons, config.minPredictLap)) {
     const of = byLap.get(c.lap);
     if (of === undefined) byLap.set(c.lap, [c]);
     else of.push(c);

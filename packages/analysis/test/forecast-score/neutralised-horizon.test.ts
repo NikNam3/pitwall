@@ -33,9 +33,10 @@ describe('forecast-score F1: no neutralised lap in a forecast horizon', () => {
     const all = forecastCases(green, HORIZONS);
     const kept = forecastCases(sc, HORIZONS);
     const left = all.filter((c) => c.carId === 1 && holds(c, 8));
-    // h1 from lap 7, h3 from laps 5–7, h5 from laps 3–7, h10 from laps 1–7.
+    // h1 from lap 7, h3 from laps 5–7, h5 from laps 3–7, h10 from laps 3–7 (ported in Task 11e: no case from leader
+    // laps 1 and 2, minPredictLap 3).
     expect(left.map((c) => [c.lap, c.horizon]).sort((a, b) => a[1]! - b[1]! || a[0]! - b[0]!)).toEqual([
-      [7, 1], [5, 3], [6, 3], [7, 3], [3, 5], [4, 5], [5, 5], [6, 5], [7, 5], [1, 10], [2, 10], [3, 10], [4, 10], [5, 10], [6, 10], [7, 10],
+      [7, 1], [5, 3], [6, 3], [7, 3], [3, 5], [4, 5], [5, 5], [6, 5], [7, 5], [3, 10], [4, 10], [5, 10], [6, 10], [7, 10],
     ]);
     // Without the SC lap every one of them counts; with it, none does, and every other case still counts.
     expect(kept.map(key).sort()).toEqual(all.filter((c) => !left.includes(c)).map(key).sort());
