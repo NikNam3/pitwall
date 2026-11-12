@@ -49,6 +49,16 @@ export type TrackSession = StoredSessionRow & { track: Known<DeepReadonly<TrackD
 /** The read of the stored sessions on one track the calibration store needs. */
 export type SessionsOnTrack = Pick<WeekendRepository, 'sessionsOnTrack' | 'newestTrackId'>;
 
+/**
+ * A complete stored session as the profile store reads it (C62c): a `TrackSession` (its row with its slots' team, race
+ * number and name, its track file, its weekend phase and projection, or `stale` without either, C34, C61) and the AI
+ * difficulty of its settings (`unknown('notReceived')` when its settings carry none).
+ */
+export type DriverSessionRow = TrackSession & { aiDifficulty: Known<number> };
+
+/** The read of the stored sessions the profile store needs. */
+export type DriverSessions = Pick<WeekendRepository, 'driverSessions'>;
+
 /** The weekend phase a session's weekend-phase span stands for; `pending` without one. */
 const phaseOf = (projection: Projection): WeekendPhase => {
   const span = projection.spans['weekend-phase']?.[0];
@@ -132,6 +142,15 @@ export class WeekendRepository {
       const projection = this.#projectionOfStored(keyOf(dbRow));
       return { ...row, track, stale: false, phase: phaseOf(projection), projection: projection as ProjectionState };
     });
+  }
+
+  /**
+   * Every complete stored session in start order, of every track (C62c), as `sessionsOnTrack` gives them, each with its
+   * settings' AI difficulty. One of another rules version is `stale`, its log unread (C61); an incomplete one is left out.
+   * Stub of SP4.3a Task 6's test phase.
+   */
+  driverSessions(): DriverSessionRow[] {
+    throw new Error('not implemented');
   }
 
   /** The weekend of the newest stored session (by start); `undefined` when none is stored. */

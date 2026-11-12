@@ -1,8 +1,9 @@
 // One feed end to end (spec 4): PacketSource → decode → SessionTracker → SessionProcessor → TopicHub,
 // with the feed's health, its session files and its storage alongside.
 import { resolve } from 'node:path';
-import { toSessionTime, type CalibrationActiveValue, type FeedId, type Known, type PriorsSnapshot, type RunPriors, type SessionTime, type TrackFile } from '@pitwall/domain';
+import { toSessionTime, type CalibrationActiveValue, type FeedId, type Known, type PriorsSnapshot, type ProfileSnapshot, type RunPriors, type SessionTime, type TrackFile } from '@pitwall/domain';
 import type { CalibrationStore } from '../calibration/store.ts';
+import type { ProfileStore } from '../drivers/store.ts';
 import { CalculatorRegistry, SessionTracker, type Frame, type FrameMetrics, type InsightChange, type TrackerEvent } from '@pitwall/engine';
 import { decode } from '@pitwall/protocol';
 import { effectiveConfig, sessionConfigPath, type FeatureConfig } from '../feature-config.ts';
@@ -73,6 +74,14 @@ export type FeedPipelineOptions = {
    * their priors, and each decision is handed to the running session before the record it was committed at.
    */
   recorded?: RecordedRun;
+  /**
+   * Live: the profile store's slice a run uses (C62c, SP4.3a spec 4). Each session asks it once, at its start, for the
+   * profile snapshot of its slots; the snapshot is fixed for the run, goes to `<file>.profiles.json` and to the scheduler
+   * as `SchedulerInput.drivers`. Without it (and without `recordedProfiles`) a run's `drivers` is `null`.
+   */
+  profiles?: Pick<ProfileStore, 'snapshotFor'>;
+  /** A replay: the recording's profiles sidecar (`recordingProfiles`, C38); `null` for a recording without one. */
+  recordedProfiles?: ProfileSnapshot | null;
   /** Where debug dumps go; without it none are written. */
   dumpsDir?: string;
   /** Names the session files and dates live sessions. Default `Date.now`. */
