@@ -62,6 +62,8 @@ export const FORECAST_FIELD_CONFIG = defineConfig('forecast-field', {
    * plus this (ms). Source: pitwall estimate (a car on lap 1 runs at about the leader's pace; final review F4).
    */
   noLapStandInOffsetMs: 0,
+  /** The part of a stop's loss paid on the in-lap, the rest on the out-lap: 0.26 = 5.5 s of F1 25's 21.5 s green stop. Source: research 12 §5. */
+  inLapLossShare: 0.26,
   /** Whether a car whose driver is unknown (no car-driver span yet) is modelled as a human. Source: pitwall estimate (the AI, the field's majority; final review F4). */
   unknownDriverIsHuman: false as boolean,
 });

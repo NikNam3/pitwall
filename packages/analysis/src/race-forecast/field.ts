@@ -206,7 +206,7 @@ function fillStopTable(table: Int8Array, start: StartingPoint, policies: readonl
 }
 
 /** Car `c`'s stop at the end of lap `lap`: its compound index, -1 for none. */
-const stopAt = (f: Field, c: number, lap: number): number => f.stopCompound[lineIndex(f, c, lap)] ?? -1;
+export const stopAt = (f: Field, c: number, lap: number): number => f.stopCompound[lineIndex(f, c, lap)] ?? -1;
 
 /** Car `c` starts lap `lap` (`fromFraction`: where it is on that lap, 0 at its line); `first`: its first lap of the forecast. */
 export function startLap(f: Field, c: number, lap: number, fromFraction: number, first: boolean): void {
@@ -280,7 +280,12 @@ export function endLap(f: Field, c: number, lap: number): NoiseCompound | undefi
   }
   f.lapOnSet[c] = (f.lapOnSet[c] ?? 0) + 1;
   const k = f.car[c * W + IN_LAP] === 1 ? stopAt(f, c, lap) : -1;
-  if (k === -1) return undefined;
+  return k === -1 ? undefined : fitStop(f, c, k);
+}
+
+/** Car `c` fits its stop's set of compound index `k` (a fresh one, or our car's next set of it); returns the compound. */
+export function fitStop(f: Field, c: number, k: number): NoiseCompound {
+  const s = f.start;
   const compound = compounds[k] ?? 'medium';
   f.compound[c] = k;
   f.lapOnSet[c] = 1;
