@@ -2,7 +2,7 @@
 // and the situation at N, with the run's fixed inputs; its scheduled run calls it at the current frame (`asOfNow`).
 // `runAsOf` runs several such units in dependency order, so a profile aggregate or the scoreboard can rebuild a past
 // frame's outputs.
-import { known, unknown, type CarId, type FrameNumber, type Known, type MachineId, type OpenSpan, type SessionTime, type Span } from '@pitwall/domain';
+import { known, unknown, type CarId, type FrameNumber, type GameSettings, type Known, type MachineId, type OpenSpan, type SessionTime, type Span } from '@pitwall/domain';
 import type { DeepReadonly } from '../util/deep-readonly.ts';
 import type { LiveState } from '../state/live-state.ts';
 import type { Projection } from '../log/types.ts';
@@ -29,6 +29,8 @@ export type AsOfFixed = {
   teammateCar: Known<CarId>;
   /** The session's AI difficulty (fixed for the session; Task 12's band). */
   aiDifficulty: Known<number>;
+  /** The lobby's safety-car setting (fixed for the session; SP4.3b spec §5.2's lobby factor); absent reads as not received. */
+  safetyCar?: Known<GameSettings['safetyCar']>;
   setsNow: readonly LiveSets[] | null;
   weatherNow: LiveWeather | null;
 };
@@ -67,6 +69,7 @@ export function asOfNow(view: EngineView): AsOfView {
       get playerCar() { return known(view.live.playerCar, view.live.sessionTime); },
       get teammateCar() { const t = view.live.teammateCar; return t === undefined ? unknown('notApplicable') : known(t, view.live.sessionTime); },
       get aiDifficulty() { return known(view.live.session.settings.aiDifficulty, view.live.sessionTime); },
+      get safetyCar() { return known(view.live.session.settings.safetyCar, view.live.sessionTime); },
       get setsNow() { return view.live.cars.map((c) => c.tyres.sets); },
       get weatherNow() {
         const { weather, forecast, forecastAccuracy } = view.live.session;
@@ -141,6 +144,6 @@ export function asOfStored(session: StoredDriverSession, ctx: ProfileCtx): AsOfV
     track: session.track,
     weekend: undefined,
     outputs: new Map(),
-    fixed: { totalLaps: session.totalLaps, playerCar: known(session.session.feedCar, 0), teammateCar: unknown('notReceived'), aiDifficulty: session.aiDifficulty, setsNow: null, weatherNow: null },
+    fixed: { totalLaps: session.totalLaps, playerCar: known(session.session.feedCar, 0), teammateCar: unknown('notReceived'), aiDifficulty: session.aiDifficulty, safetyCar: unknown('notReceived'), setsNow: null, weatherNow: null },
   };
 }
