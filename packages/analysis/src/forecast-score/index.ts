@@ -19,9 +19,11 @@ export type ForecastScoreOutput = ForecastScoreReport;
 export const FORECAST_SCORE_JOB: Job<ScoreInput, ForecastScoreReport> = {
   kind: 'job',
   id: FORECAST_SCORE,
+  // the brief's reads (`crossings` is the change tag `miniSectors`), the session's fixed values `prepare` takes
+  // (`session`, `identity`), and the spans the forecast units read as of a frame (`car-status`, `compound-rule`)
   reads: [
     'laps', 'stints', 'pitStops', 'miniSectors', 'events', 'decisions', 'drivers', 'session', 'identity',
-    'spans:car-driver', 'spans:session-phase-race', 'spans:weekend-phase',
+    'spans:car-driver', 'spans:session-phase-race', 'spans:weekend-phase', 'spans:car-status', 'spans:compound-rule',
   ],
   trigger: 'leaderLap',
   prepare: (view) => prepareScore(view),
