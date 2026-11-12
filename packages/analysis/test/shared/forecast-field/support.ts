@@ -82,6 +82,7 @@ export function plainNoise(cars: number, humans: readonly number[] = [], at: Ses
       bigEventRatePerLap: known(0.001, at),
       retireRatePerLap: known(0.002, at),
       wearRatePctPerLap: Object.fromEntries(NOISE_COMPOUNDS.map((c) => [c, known(WEAR_RATES[c], at)])) as CarNoise['wearRatePctPerLap'],
+      wearRateSource: Object.fromEntries(NOISE_COMPOUNDS.map((c) => [c, DEFAULT_SOURCE])) as CarNoise['wearRateSource'],
       source: DEFAULT_SOURCE,
       laps: 10,
     };
