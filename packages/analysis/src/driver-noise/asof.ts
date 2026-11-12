@@ -30,7 +30,7 @@ export function residualConfigOf(view: Pick<AsOfView, 'config'>): { own: Config;
   const own = DRIVER_NOISE_CONFIG.read(view);
   const { timeLossMs, mergeMs } = INCIDENTS_CONFIG.read(view);
   const { jumpPct, jumpWindowMs } = DAMAGE_CONFIG.read(view);
-  return { own, residual: { freeAirGapMs: own.freeAirGapMs, mistakeSigmas: own.mistakeSigmas, bigEventMs: own.bigEventMs, timeLoss: { timeLossMs, mergeMs, jumpPct, jumpWindowMs } } };
+  return { own, residual: { freeAirGapMs: own.freeAirGapMs, rejoinSkipLaps: own.rejoinSkipLaps, mistakeSigmas: own.mistakeSigmas, bigEventMs: own.bigEventMs, timeLoss: { timeLossMs, mergeMs, jumpPct, jumpWindowMs } } };
 }
 
 const NA = unknown('notApplicable');

@@ -2,7 +2,7 @@
 // corrected time against `degradation`'s stint line `α + ν · tyreAge`, minus `track-wetness`'s common mode of the lap
 // and its tyre type (C43: both own their part). Each lap counts for the model (AI or human) of the car-driver span it
 // belongs to (C26, through the projection module's `membershipOf`); each model keeps only its own laps.
-import { type CarId, type FrameNumber, type Ms, type NoiseCompound, type OpenSpan, type Span, type TrackWetness } from '@pitwall/domain';
+import { type CarId, type FrameNumber, type Ms, type NoiseCompound, type OpenSpan, type Span, type StintRecord, type TrackWetness } from '@pitwall/domain';
 import type { AsOfView, DeepReadonly, MembershipSource, Projection } from '@pitwall/engine/readers';
 import { tyreTypeOf } from '../crossover/tyre-type.ts';
 import type { DegradationOutput, StintDegradation } from '../degradation/index.ts';
@@ -16,6 +16,8 @@ import type { SessionEstimate } from './shrink.ts';
 /** The thresholds the estimates read (`DRIVER_NOISE_CONFIG`, and the time-loss detection's `incidents`/`damage` config). */
 export type ResidualConfig = {
   freeAirGapMs: Ms;
+  /** The laps after each stop, its out lap aside, left out of the scatter set (F4). */
+  rejoinSkipLaps: number;
   mistakeSigmas: number;
   bigEventMs: Ms;
   timeLoss: { timeLossMs: Ms; mergeMs: Ms; jumpPct: number; jumpWindowMs: Ms };
@@ -28,6 +30,7 @@ type LapSample = {
   lap: number;
   /** The residual (ms) on a pace lap (`degradation`'s `used` or `downWeighted`) with a known line and common mode. */
   residual: number | undefined;
+  /** A free-air lap (`freeAirLaps`, C43) outside the rejoin laps of the car's stops (F4): a lap of the scatter set if a pace lap. */
   free: boolean;
   /** The car's last lap before a retirement: its slowness is the retirement's, never a big event or a mistake (P5). */
   retiring: boolean;
@@ -237,6 +240,7 @@ export function carModelsOf(view: AsOfView, config: ResidualConfig): Map<CarId, 
     for (const s of view.situation.byMachine[machine] ?? []) if (s.carId !== undefined) pushTo(openBy, s.carId, s);
   }
   const lapsBy = lapsByCar(view.history);
+  const rejoinBy = rejoinLapsByCar(view.history.stints, config.rejoinSkipLaps);
 
   const statusOpen = view.situation.byMachine['car-status'] ?? [];
   const cars = new Set<CarId>();
@@ -282,6 +286,7 @@ export function carModelsOf(view: AsOfView, config: ResidualConfig): Map<CarId, 
       if (before !== undefined) retiringLaps.add(before.lapNumber);
     }
 
+    const rejoin = rejoinBy.get(carId);
     const samples: Record<Model, LapSample[]> = { ai: [], human: [] };
     for (const l of carLaps) {
       const m = modelAt(carId, l.frame);
@@ -289,7 +294,7 @@ export function carModelsOf(view: AsOfView, config: ResidualConfig): Map<CarId, 
       samples[m].push({
         lap: l.lapNumber,
         residual: residualOf(byLap[l.lapNumber], l.lapNumber, wetness),
-        free: free.isFree(carId, l.lapNumber),
+        free: free.isFree(carId, l.lapNumber) && rejoin?.has(l.lapNumber) !== true,
         retiring: retiringLaps.has(l.lapNumber),
         completedAt: l.completedAt,
       });
@@ -316,6 +321,21 @@ export function carModelsOf(view: AsOfView, config: ResidualConfig): Map<CarId, 
       },
       ownWear: ownWearOf(own),
     });
+  }
+  return out;
+}
+
+/**
+ * Per car the laps after its stops left out of the scatter set (F4): a closed stint ending at lap L (its in lap) is
+ * followed by the out lap L + 1 (never a pace lap) and the rejoin laps L + 2 … L + 1 + `skip`.
+ */
+function rejoinLapsByCar(stints: readonly DeepReadonly<StintRecord>[], skip: number): Map<CarId, Set<number>> {
+  const out = new Map<CarId, Set<number>>();
+  if (skip <= 0) return out;
+  for (const s of stints) {
+    let laps = out.get(s.carId);
+    if (laps === undefined) out.set(s.carId, (laps = new Set()));
+    for (let i = 1; i <= skip; i++) laps.add(s.lastLap + 1 + i);
   }
   return out;
 }
