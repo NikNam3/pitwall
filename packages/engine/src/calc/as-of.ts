@@ -24,6 +24,8 @@ export type LiveWeather = Pick<DeepReadonly<LiveState>['session'], 'weather' | '
 export type AsOfFixed = {
   totalLaps: Known<number>;
   playerCar: Known<CarId>;
+  /** Our other car, where the feed has one (fixed for the session). */
+  teammateCar: Known<CarId>;
   /** The session's AI difficulty (fixed for the session; Task 12's band). */
   aiDifficulty: Known<number>;
   setsNow: readonly LiveSets[] | null;
@@ -62,6 +64,7 @@ export function asOfNow(view: EngineView): AsOfView {
     fixed: {
       get totalLaps() { return known(view.live.session.totalLaps, view.live.sessionTime); },
       get playerCar() { return known(view.live.playerCar, view.live.sessionTime); },
+      get teammateCar() { const t = view.live.teammateCar; return t === undefined ? unknown('notApplicable') : known(t, view.live.sessionTime); },
       get aiDifficulty() { return known(view.live.session.settings.aiDifficulty, view.live.sessionTime); },
       get setsNow() { return view.live.cars.map((c) => c.tyres.sets); },
       get weatherNow() {
@@ -114,6 +117,6 @@ export function asOfStored(session: StoredDriverSession, ctx: ProfileCtx): AsOfV
     track: session.track,
     weekend: undefined,
     outputs: new Map(),
-    fixed: { totalLaps: session.totalLaps, playerCar: known(session.session.feedCar, 0), aiDifficulty: session.aiDifficulty, setsNow: null, weatherNow: null },
+    fixed: { totalLaps: session.totalLaps, playerCar: known(session.session.feedCar, 0), teammateCar: unknown('notReceived'), aiDifficulty: session.aiDifficulty, setsNow: null, weatherNow: null },
   };
 }
