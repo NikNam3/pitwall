@@ -11,7 +11,7 @@ afterEach(async () => {
 
 describe('WsServer payload limit', () => {
   it('closes a connection that sends a message over 65 536 bytes with code 1009', async () => {
-    const feeds = () => [{ feedId: 'f1' as FeedId, kind: 'replay' as const, label: 'test' }];
+    const feeds = () => [{ feedId: 'f1' as FeedId, kind: 'replay' as const, label: 'test', team: null }];
     const server = await WsServer.start({ port: 0, hub: new TopicHub({ now: () => performance.now() }), feeds });
     cleanup.push(() => server.close());
     const ws = new WebSocket(`ws://127.0.0.1:${server.port}`);

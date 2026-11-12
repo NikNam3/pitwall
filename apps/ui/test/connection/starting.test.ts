@@ -13,7 +13,7 @@ const setup = () => {
   return { connection, store };
 };
 const starting = (done: number, total: number): ServerMessage => ({ type: 'starting', step: 'rebuild', done, total });
-const hello: ServerMessage = { type: 'hello', contractVersion: CONTRACT_VERSION, feeds: [{ feedId: feedId('f1'), kind: 'udp', label: 'x' }] };
+const hello: ServerMessage = { type: 'hello', contractVersion: CONTRACT_VERSION, feeds: [{ feedId: feedId('f1'), kind: 'udp', label: 'x', team: null }] };
 
 describe('TopicStore: the starting progress', () => {
   it('is undefined before any message', () => {

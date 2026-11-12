@@ -53,7 +53,7 @@ const setup = async (kind: 'udp' | 'replay' = 'udp') => {
   const store = new TopicStore(connection);
   const actions: UiAction[] = [];
   const controls: ReplayControl[] = [];
-  connection.push({ type: 'hello', contractVersion: 0, feeds: [{ feedId: FEED, kind, label: 'x' }] });
+  connection.push({ type: 'hello', contractVersion: 0, feeds: [{ feedId: FEED, kind, label: 'x', team: null }] });
   render(TopBar, { store, feedId: FEED, send: (a: UiAction) => actions.push(a), sendReplay: (c: ReplayControl) => controls.push(c) });
   const idOf = (topic: string): string => {
     const found = connection.subscribes().filter((s) => s.topic === topic).at(-1);

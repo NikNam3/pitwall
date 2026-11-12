@@ -266,7 +266,7 @@ describe('WindowShell: an unknown window id', () => {
 // (test id `loading-screen`, wording in kit/text.ts `loading`) says what the bridge is doing.
 describe('WindowShell: the loading screen', () => {
   const hello = async (connection: FakeConnection) => {
-    connection.push({ type: 'hello', contractVersion: CONTRACT_VERSION, feeds: [{ feedId: feedId('f1'), kind: 'udp', label: 'x' }] });
+    connection.push({ type: 'hello', contractVersion: CONTRACT_VERSION, feeds: [{ feedId: feedId('f1'), kind: 'udp', label: 'x', team: null }] });
     await tick();
   };
   const starting = async (connection: FakeConnection, done: number, total: number) => {

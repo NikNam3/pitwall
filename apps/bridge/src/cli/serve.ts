@@ -31,7 +31,7 @@ export type ServeOptions = ({ source: PacketSource; replay?: never } | { replay:
 
 type ServeBase = {
   /** What the feed is called in the `hello` message. */
-  feed: Omit<FeedInfo, 'feedId'>;
+  feed: Omit<FeedInfo, 'feedId' | 'team'>;
   wsPort: number;
   dumpsDir: string;
   /**
@@ -99,7 +99,8 @@ export async function serve(opts: ServeOptions): Promise<number> {
         if (changed === feedId) pipeline?.demandChanged();
       },
     });
-    const feeds = (): FeedInfo[] => [{ feedId, ...opts.feed }];
+    // SP4.3b Task 2b fills the team from Participants.
+    const feeds = (): FeedInfo[] => [{ feedId, ...opts.feed, team: null }];
     // Seeded first, so the UI state opens on the shipped workbooks, never on its own fallback, and on every start path.
     if (opts.uiDir !== undefined) await seedDefaultWorkbooks(opts.uiDir, DEFAULT_WORKBOOKS_DIR);
     const uiState = opts.uiDir === undefined ? undefined : UiState.open(opts.uiDir, hub, cliLogger(io, 'warn'));

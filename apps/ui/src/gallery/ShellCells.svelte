@@ -56,7 +56,7 @@
 
   const topBarStore = (name: keyof typeof TOP_BAR_CASES): TopicStore =>
     new TopicStore(
-      new GalleryConnection(base ?? [], [...TOP_BAR_CASES[name], ...BASE_OVERRIDES], [{ feedId: FEED, kind: name === 'replay-transport' ? 'replay' : 'udp', label: 'gallery' }]),
+      new GalleryConnection(base ?? [], [...TOP_BAR_CASES[name], ...BASE_OVERRIDES], [{ feedId: FEED, kind: name === 'replay-transport' ? 'replay' : 'udp', label: 'gallery', team: null }]),
     );
   const noop = (): void => {};
 
