@@ -18,6 +18,7 @@ import {
 } from '@pitwall/domain';
 import { defineProfiles, type ProfileCtx, type ProjectionState, type StoredDriverSession } from '@pitwall/engine/readers';
 import { history, lap as builtLap } from '../../../../test-support/builders/index.ts';
+import { zandvoortTrack } from '../../../../test-support/track.ts';
 import { ProfileStore, type DriverAction, type SlotIdentity } from '../../src/drivers/store.ts';
 import type { Feature } from '../../src/features/feature.ts';
 import type { ValueFor } from '../../src/hub/topic-hub.ts';
@@ -311,6 +312,39 @@ describe('ProfileStore', () => {
     const fresh = setup({ sessions: [s1, { ...s2, rulesVersion: 'next' }], dir, features: fakeFeatures({ countVersion: 2 }), config: { fake: { weight: 2 } } });
     expect(fresh.persons()).toEqual(edited);
     expect(withSessions(fresh.features.calls.count).length).toBeGreaterThan(0);
+  });
+
+  // SP4.3a final review F5 (C62c): the aggregates read each linked session's track file (`StoredDriverSession.track`),
+  // so its content is an input of the fingerprint: a changed file recomputes, the same content does not.
+  it("cache: a linked session's track file is an input of the fingerprint (its content)", () => {
+    const anna: SlotSpec = { car: 2, team: MERCEDES, number: 7, name: 'Anna R' };
+    const s1 = driverSession('1', { startedAt: day(1), slots: [HOST, anna] });
+    const s2 = driverSession('2', { startedAt: day(2), slots: [HOST, { ...anna, laps: 3 }] });
+    const zandvoort = zandvoortTrack();
+    const withTrack = (s: DriverSessionRow, track: DriverSessionRow['track']): DriverSessionRow => ({ ...s, track });
+    const dir = mkdtempSync(join(tmpdir(), 'profiles-'));
+    const first = setup({ sessions: [s1, withTrack(s2, known(zandvoort, 0))], dir });
+    first.addAndLink('anna', 'Anna', s1, 2);
+    first.close();
+
+    // The same track content (another copy of it): nothing is computed again.
+    const same = setup({ sessions: [s1, withTrack(s2, known(structuredClone(zandvoort), 0))], dir });
+    expect(withSessions(same.features.calls.count)).toEqual([]);
+    expect(withSessions(same.features.calls.mean)).toEqual([]);
+    same.close();
+
+    // The track file of a linked session changed (another pit loss): every entry is computed again.
+    const edited = { ...structuredClone(zandvoort), name: `${zandvoort.name} (edited)` };
+    const green = edited.defaults.pitLossMs.green;
+    if (green.known) edited.defaults.pitLossMs.green = { ...green, value: { ...green.value, value: green.value.value + 1_000 } };
+    const changed = setup({ sessions: [s1, withTrack(s2, known(edited, 0))], dir });
+    expect(withSessions(changed.features.calls.count).length).toBeGreaterThan(0);
+    expect(withSessions(changed.features.calls.mean).length).toBeGreaterThan(0);
+    changed.close();
+
+    // No track file any more (`notApplicable`): another fingerprint too.
+    const without = setup({ sessions: [s1, withTrack(s2, unknown('notApplicable'))], dir });
+    expect(withSessions(without.features.calls.count).length).toBeGreaterThan(0);
   });
 
   it('a slot without a name is linked by slot only', () => {
