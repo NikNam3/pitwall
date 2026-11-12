@@ -22,7 +22,6 @@ const OPTIONS = {
   warnings: { type: 'boolean' },
   catalogue: { type: 'string' },
   name: { type: 'string' },
-  accept: { type: 'boolean' },
   json: { type: 'string' },
   compare: { type: 'string' },
   help: { type: 'boolean', short: 'h' },

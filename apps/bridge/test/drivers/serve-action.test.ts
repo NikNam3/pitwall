@@ -127,10 +127,10 @@ describe('serve: the running bridge applies driver-profile actions (P3, C62c)', 
     // A rejected action is answered with its reason (C73).
     expect(await live.send('bad', { kind: 'drivers.override', person: 'nobody', key: 'x', value: 1 })).toMatchObject({ type: 'actionResult', id: 'bad', ok: false, reason: 'invalid' });
     const file = JSON.parse(readFileSync(join(live.dataDir, 'drivers', 'anna.json'), 'utf8')) as DriverPerson;
-    expect(file).toMatchObject({ id: 'anna', displayName: 'Anna', links: [{ kind: 'nameAndNumber', name: live.player.name, raceNumber: live.player.raceNumber }] });
+    expect(file).toMatchObject({ id: 'anna', displayName: 'Anna', links: [{ team: live.player.teamId, raceNumber: live.player.raceNumber }] });
     await vi.waitFor(() => expect(live.profiles().at(-1)?.persons.map((p) => p.person)).toEqual(['anna']));
 
-    // The next session starts on the link: its player car's slot carries the linked name and race number.
+    // The next session starts on the link: its player car's slot carries the linked seat (team and race number).
     live.push(0, live.total);
     await live.stop();
     const recordings = readdirSync(live.recordingsDir).filter((name) => name.endsWith('.pwrec.gz'));

@@ -10,3 +10,4 @@ export type { Computed } from './computed.ts';
 export type { Fold } from './fold.ts';
 export * from './ui/index.ts';
 export type { MomentValues } from './moments.ts';
+export type { ConfigEffectiveValue } from './topics/config.effective.ts';

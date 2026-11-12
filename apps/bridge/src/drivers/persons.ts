@@ -1,6 +1,7 @@
 // The person files (C62c, SP4.3a spec 4): `<data dir>/drivers/<person>.json`, user-authored through the driver-profile
 // uiActions and the source of truth (not a cache). Written atomically; a file that is not a person is skipped with one
-// warning. The lock `drivers/.lock` makes the running bridge the files' only writer (P3).
+// warning. The lock `drivers/.lock` makes the running bridge the files' only writer (P3). A link of SP4.3a (by name and
+// race number, or by one session's slot) is read once and dropped (SP4.3b spec 10, U8): the file is rewritten without it.
 import { closeSync, mkdirSync, openSync, readdirSync, rmSync, writeSync } from 'node:fs';
 import { join } from 'node:path';
 import type { CarId, DriverLink, DriverPerson, SessionRef, SessionUid } from '@pitwall/domain';
@@ -21,12 +22,16 @@ export function loadPersons(root: string, log: Logger): DriverPerson[] {
   for (const file of readdirSync(driversDir(root)).filter((f) => f.endsWith('.json') && !f.startsWith('.')).sort()) {
     const path = join(driversDir(root), file);
     const parsed = parseJson(readText(path) ?? '');
-    const person = parsed.ok ? decodePerson(parsed.value) : undefined;
-    if (person === undefined || `${person.id}.json` !== file) {
+    const decoded = parsed.ok ? decodePerson(parsed.value) : undefined;
+    if (decoded === undefined || `${decoded.person.id}.json` !== file) {
       log.warn({ path }, 'not a driver person (or not of its file name): skipped');
       continue;
     }
-    persons.push(person);
+    if (decoded.dropped > 0) {
+      log.warn({ path, dropped: decoded.dropped }, 'old driver links (by name or slot) dropped: link the seats again');
+      writePerson(root, decoded.person);
+    }
+    persons.push(decoded.person);
   }
   return persons;
 }
@@ -71,12 +76,6 @@ function isAlive(pid: number): boolean {
 /** Whether two refs name the same stored session (C60's key). */
 export const sameSession = (a: SessionRef, b: SessionRef): boolean => a.sessionUid === b.sessionUid && a.weekendId === b.weekendId && a.feedCar === b.feedCar;
 
-/** Whether two links are the same link. */
-export const sameLink = (a: DriverLink, b: DriverLink): boolean =>
-  a.kind === 'nameAndNumber'
-    ? b.kind === 'nameAndNumber' && a.name === b.name && a.raceNumber === b.raceNumber
-    : b.kind === 'slot' && sameSession(a.session, b.session) && a.carId === b.carId;
-
 type Json = Record<string, unknown>;
 const isObject = (v: unknown): v is Json => typeof v === 'object' && v !== null && !Array.isArray(v);
 const isString = (v: unknown): v is string => typeof v === 'string';
@@ -87,25 +86,31 @@ export function decodeSessionRef(raw: unknown): SessionRef | undefined {
   return { sessionUid: raw.sessionUid as SessionUid, weekendId: raw.weekendId, feedCar: raw.feedCar as CarId };
 }
 
-function decodeLink(raw: unknown): DriverLink | undefined {
+/** A seat link; `'old'` for a link of SP4.3a (by name and race number, or a slot), dropped; `undefined` when it is none. */
+function decodeLink(raw: unknown): DriverLink | 'old' | undefined {
   if (!isObject(raw)) return undefined;
-  if (raw.kind === 'nameAndNumber') return isString(raw.name) && isInteger(raw.raceNumber) ? { kind: 'nameAndNumber', name: raw.name, raceNumber: raw.raceNumber } : undefined;
-  if (raw.kind !== 'slot' || !isInteger(raw.carId)) return undefined;
-  const session = decodeSessionRef(raw.session);
-  return session === undefined ? undefined : { kind: 'slot', session, carId: raw.carId as CarId };
+  if (raw.kind === 'nameAndNumber' || raw.kind === 'slot') return 'old';
+  return isInteger(raw.team) && isInteger(raw.raceNumber) ? { team: raw.team, raceNumber: raw.raceNumber } : undefined;
 }
 
-/** A person file's content rebuilt from its known fields; `undefined` when it is not a person (a hand edit may break one). */
-function decodePerson(raw: unknown): DriverPerson | undefined {
+/**
+ * A person file's content rebuilt from its known fields, with the number of old links it dropped; `undefined` when it
+ * is not a person (a hand edit may break one).
+ */
+function decodePerson(raw: unknown): { person: DriverPerson; dropped: number } | undefined {
   if (!isObject(raw) || !isString(raw.id) || !isPersonId(raw.id) || !isString(raw.displayName)) return undefined;
   if (!Array.isArray(raw.links) || !Array.isArray(raw.excluded) || !isObject(raw.overrides)) return undefined;
-  const links = raw.links.map(decodeLink);
+  const decoded = raw.links.map(decodeLink);
   const excluded = raw.excluded.map(decodeSessionRef);
-  if (links.some((l) => l === undefined) || excluded.some((e) => e === undefined)) return undefined;
+  if (decoded.some((l) => l === undefined) || excluded.some((e) => e === undefined)) return undefined;
   const overrides = Object.entries(raw.overrides);
   if (overrides.some(([, v]) => typeof v !== 'number' || !Number.isFinite(v))) return undefined;
+  const links = decoded.filter((l): l is DriverLink => l !== undefined && l !== 'old');
   return {
-    id: raw.id, displayName: raw.displayName, links: links as DriverLink[], excluded: excluded as SessionRef[],
-    overrides: Object.fromEntries(overrides) as Record<string, number>,
+    person: {
+      id: raw.id, displayName: raw.displayName, links, excluded: excluded as SessionRef[],
+      overrides: Object.fromEntries(overrides) as Record<string, number>,
+    },
+    dropped: decoded.length - links.length,
   };
 }

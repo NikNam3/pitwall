@@ -103,8 +103,24 @@ const fail = (message: string): never => {
  * config in the scheduler input and a new sidecar for the session.
  */
 export function loadFeatureConfig(dataDirRoot: string, features: readonly Feature[]): FeatureConfig {
-  return readConfigFile(join(dataDirRoot, 'config.json'), features, fail) ?? effectiveConfig(features);
+  const path = join(dataDirRoot, 'config.json');
+  const text = readOptional(path);
+  if (text === undefined) return effectiveConfig(features);
+  const overrides = parseOverrides(path, text, declaredBy(features), fail);
+  const effective = effectiveConfig(features, overrides);
+  OVERRIDDEN.set(effective, Object.fromEntries(Object.entries(overrides).map(([key, fields]) => [key, Object.keys(fields)])));
+  return effective;
 }
+
+/** Per config `loadFeatureConfig` returned: per key, the fields `config.json` set (an override equal to its default too). */
+const OVERRIDDEN = new WeakMap<FeatureConfig, Record<string, string[]>>();
+
+/**
+ * The fields of `config` whose value came from `config.json`, per key: as `loadFeatureConfig` read them; none for a
+ * config it did not return (the defaults, a recording's sidecar).
+ */
+export const overriddenFields = (config: FeatureConfig | undefined): Record<string, string[]> =>
+  (config === undefined ? undefined : OVERRIDDEN.get(config)) ?? {};
 
 /** Where a recording keeps the config it ran with. */
 export const sessionConfigPath = (recordingPath: string): string => `${recordingPath}.config.json`;

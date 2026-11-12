@@ -7,7 +7,7 @@
 // requested once; once that settles, the store recomputes.
 import { join } from 'node:path';
 import { canonicalJson, type TopicName } from '@pitwall/contracts';
-import { known, unknown, type CarId, type DriverPerson, type Known, type DriverProfile, type ProfileEntry, type PersonId, type ProfileSnapshot, type SessionRef, type UnlinkedSlot } from '@pitwall/domain';
+import { known, unknown, type CarId, type DriverPerson, type Known, type DriverProfile, type ProfileEntry, type PersonId, type ProfileSnapshot, type SessionRef, type TeamId, type UnlinkedSlot, type DriversLinksValue } from '@pitwall/domain';
 import type { FeatureConfig } from '../feature-config.ts';
 import type { Feature } from '../features/feature.ts';
 import type { ValueFor } from '../hub/topic-hub.ts';
@@ -15,9 +15,8 @@ import type { Logger } from '../log.ts';
 import type { SessionKey } from '../storage/db.ts';
 import type { DriverSessionRow, DriverSessions } from '../storage/weekend-repository.ts';
 import { ProfileRunner, ProfilesCache, sha256, type LinkedSession } from './compute.ts';
-import { linkMatches, personOf, storedSlots, type StoredSlot } from './links.ts';
+import { linkMatches, personOf, seatLinks, storedSlots, unlinkedSlots, type StoredSlot } from './links.ts';
 import { loadPersons, sameSession, takeLock, writePerson } from './persons.ts';
-import { unlinkedSlots } from './suggest.ts';
 import { checkAction } from './validate.ts';
 
 export type { DriverAction } from '@pitwall/contracts';
@@ -139,16 +138,22 @@ export class ProfileStore {
     return OK;
   }
 
+  /** Links the seat (team and race number) to `person`, moving it from any other; `null` unlinks it (`drivers.link`). */
+  linkSeat(team: TeamId, raceNumber: number, person: PersonId | null): ApplyResult {
+    return this.apply({ kind: 'drivers.link', team, raceNumber, person });
+  }
+
   /**
-   * The run's profile snapshot at session start (C62c): the persons' files read again, every confirmed link applied to
-   * the session's slots (`bySlot`, `null` for an unlinked one) and the linked persons' profiles.
+   * The run's profile snapshot at session start (C62c): the persons' files read again, every seat link applied to the
+   * session's slots by team and race number (`bySlot`, `null` for an unlinked one) and the linked persons' profiles.
+   * The session does not change the match (a seat is the same in every session).
    */
-  snapshotFor(slots: readonly SlotIdentity[], session: SessionRef): ProfileSnapshot {
+  snapshotFor(slots: readonly SlotIdentity[], _session: SessionRef): ProfileSnapshot {
     this.#reloadPersons();
     const bySlot: (string | null)[] = Array.from({ length: slots.reduce((n, s) => Math.max(n, s.carId + 1), 0) }, () => null);
     const profiles: Record<string, DriverProfile> = {};
     for (const slot of slots) {
-      const person = personOf(this.#persons, { ...slot, session });
+      const person = personOf(this.#persons, slot);
       if (person === undefined) continue;
       bySlot[slot.carId] = person.id;
       profiles[person.id] = { person: person.id, displayName: person.displayName, entries: this.#entries.get(person.id) ?? {} };
@@ -241,7 +246,7 @@ export class ProfileStore {
       person: p.id, displayName: p.displayName, entries: this.#entries.get(p.id) ?? {}, links: p.links, excluded: p.excluded,
     }));
     this.#deps.hub.publishGlobal('drivers.profiles', () => ({ persons }));
-    const unlinked = this.#unlinked;
-    this.#deps.hub.publishGlobal('drivers.links', () => ({ unlinked }));
+    const value: DriversLinksValue = { links: seatLinks(this.#persons), unlinked: this.#unlinked };
+    this.#deps.hub.publishGlobal('drivers.links', () => value);
   }
 }

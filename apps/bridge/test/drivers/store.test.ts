@@ -1,12 +1,12 @@
 // The profile store (SP4.3a Task 6; C3, C32, C34, C54, C55, C61, C62c, C73, C84; spec 4): the bridge owns the persons
 // (files `drivers/<person>.json`, the source of truth) and the profile store (`profiles.sqlite`, a cache: deleting it
 // loses nothing). It validates every driver-profile uiAction and rejects an invalid one with a reason (C73), applies a
-// confirmed link to every stored slot it names (by name and race number, or one slot), runs the units' declared profile
-// entries over each person's linked sessions for the frames of the slot's `human` car-driver spans only (the units
-// judge, C43), suggests a person for an unlinked human slot (a hint, never applied without `link` or `accept`) and
-// publishes `drivers.profiles` and `drivers.links` itself (C54, C55). Every test owns a temporary data dir and a fake read
+// seat link (a team and a race number, SP4.3b Task 2) to every stored slot that carries the seat, runs the units' declared
+// profile entries over each person's linked sessions for the frames of the slot's `human` car-driver spans only (the
+// units judge, C43), lists the human seats without a link and publishes `drivers.profiles` and `drivers.links` itself
+// (C54, C55). Every test owns a temporary data dir and a fake read
 // of the stored sessions (C84): no real storage, no profile store of the user.
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -210,36 +210,175 @@ const HOST: SlotSpec = { car: 0, team: 5, number: 22, name: 'Host' };
 // --- the tests ------------------------------------------------------------------------------------------------------
 
 describe('ProfileStore', () => {
-  it('add writes the person file; link by name and number applies to every matching slot', () => {
+  it('add writes the person file; drivers.link writes the seat link and applies it at the next session start', () => {
     const s1 = driverSession('1', { startedAt: day(1), slots: [HOST, { car: 2, team: MERCEDES, number: 7, name: 'Anna R' }] });
-    const s2 = driverSession('2', { startedAt: day(2), slots: [HOST, { car: 5, team: MERCEDES, number: 7, name: 'Anna R' }] });
-    // Another weekend, another track and team: the same name and race number is the same person (C62c).
-    const s3 = driverSession('3', { startedAt: day(3), weekendId: 'W2', trackId: 11, slots: [HOST, { car: 3, team: 4, number: 7, name: 'Anna R' }] });
-    // The same name on another race number is not the link's.
-    const s4 = driverSession('4', { startedAt: day(4), slots: [HOST, { car: 2, team: MERCEDES, number: 8, name: 'Anna R' }] });
-    const t = setup({ sessions: [s1, s2, s3, s4] });
+    const t = setup({ sessions: [s1] });
 
     t.ok({ kind: 'drivers.add', person: 'anna', displayName: 'Anna' });
     expect(readPerson(t.dir, 'anna')).toEqual({ id: 'anna', displayName: 'Anna', links: [], excluded: [], overrides: {} });
 
-    t.ok({ kind: 'drivers.link', ...seat(s1, 2), person: 'anna' });
-    expect(readPerson(t.dir, 'anna').links).toEqual([{ kind: 'nameAndNumber', name: 'Anna R', raceNumber: 7 }]);
-    // The three sessions' slots are the person's: the entries rest on them, and none is listed unlinked.
-    const last = withSessions(t.features.calls.count).at(-1) ?? [];
-    expect(last.map(slotText).toSorted()).toEqual(['1/2', '2/5', '3/3']);
-    expect(t.entry('anna', 'fake.lapCount')).toMatchObject({ value: { known: true, value: 15 }, laps: 15, sessions: 3, newestSession: day(3) });
+    t.ok({ kind: 'drivers.link', team: MERCEDES, raceNumber: 7, person: 'anna' });
+    expect(readPerson(t.dir, 'anna').links).toEqual([{ team: MERCEDES, raceNumber: 7 }]);
+    expect(t.entry('anna', 'fake.lapCount')).toMatchObject({ value: { known: true, value: 5 }, laps: 5, sessions: 1, newestSession: day(1) });
     expect(unlinkedKeys(t.store)).not.toContain('1/2');
-    expect(unlinkedKeys(t.store)).not.toContain('2/5');
-    expect(unlinkedKeys(t.store)).not.toContain('3/3');
-    expect(unlinkedKeys(t.store)).toContain('4/2');
 
-    // A new session's slot with that name and race number is linked at its start.
+    // A new session's slot on the seat is linked at its start; the other slots are not.
     const next = driverSession('5', { startedAt: day(5), slots: [HOST, { car: 6, team: MERCEDES, number: 7, name: 'Anna R' }] });
     const snapshot = t.store.snapshotFor(slotsOf(next), ref(next));
     expect(snapshot.bySlot[6]).toBe('anna');
     expect(snapshot.bySlot[0]).toBeNull();
     expect(snapshot.profiles['anna']).toMatchObject({ person: 'anna', displayName: 'Anna' });
     expect(snapshot.profiles['anna']?.entries['fake.lapCount']).toEqual(t.entry('anna', 'fake.lapCount'));
+  });
+
+  // SP4.3b Task 2, row 1 (C62c): a person is linked to a seat, a team and a race number; the names do not count.
+  it('a seat link applies to every session whose slot has that team and race number, for its human spans', () => {
+    const s1 = driverSession('1', { startedAt: day(1), slots: [HOST, { car: 2, team: MERCEDES, number: 7, name: 'Anna R' }] });
+    // Online with names hidden, another car slot, the same seat.
+    const s2 = driverSession('2', { startedAt: day(2), slots: [HOST, { car: 5, team: MERCEDES, number: 7, name: null, laps: 4 }] });
+    // Another weekend and track, another name on the same seat: the seat's.
+    const s3 = driverSession('3', { startedAt: day(3), weekendId: 'W2', trackId: 11, slots: [HOST, { car: 3, team: MERCEDES, number: 7, name: 'Guest' }] });
+    // The same name and race number in another team, and the same name on another race number: not the seat.
+    const s4 = driverSession('4', {
+      startedAt: day(4), slots: [HOST, { car: 2, team: FERRARI, number: 7, name: 'Anna R' }, { car: 4, team: MERCEDES, number: 8, name: 'Anna R' }],
+    });
+    const t = setup({ sessions: [s1, s2, s3, s4] });
+    t.ok({ kind: 'drivers.add', person: 'anna', displayName: 'Anna' });
+    t.ok({ kind: 'drivers.link', team: MERCEDES, raceNumber: 7, person: 'anna' });
+
+    const last = withSessions(t.features.calls.count).at(-1) ?? [];
+    expect(last.map(slotText).toSorted()).toEqual(['1/2', '2/5', '3/3']);
+    expect(last.find((s) => slotText(s) === '2/5')?.humanSpans.map((h) => [h.startFrame, h.endFrame])).toEqual([[0, frameOf(5)]]);
+    expect(t.entry('anna', 'fake.lapCount')).toMatchObject({ value: { known: true, value: 14 }, laps: 14, sessions: 3, newestSession: day(3) });
+
+    // At a session start every slot on the seat is linked, whatever its name (or none).
+    for (const name of ['Someone', null]) {
+      const next = driverSession('9', {
+        startedAt: day(9), slots: [HOST, { car: 6, team: MERCEDES, number: 7, name }, { car: 7, team: FERRARI, number: 7, name: 'Anna R' }],
+      });
+      const snapshot = t.store.snapshotFor(slotsOf(next), ref(next));
+      expect([snapshot.bySlot[0], snapshot.bySlot[6], snapshot.bySlot[7]], String(name)).toEqual([null, 'anna', null]);
+    }
+  });
+
+  // SP4.3b Task 2, row 2 (C62c, C17): only the frames a human drives the seat count.
+  it('a slot with the seat but driven by the AI gets no profile', () => {
+    const seatOf = (c: number, o: Partial<SlotSpec> = {}): SlotSpec => ({ car: c, team: MERCEDES, number: 7, name: 'Anna R', ...o });
+    const s1 = driverSession('1', { startedAt: day(1), slots: [HOST, seatOf(2)] });
+    // The AI drove the seat all session (a solo session, the seat filled by the game).
+    const s2 = driverSession('2', { startedAt: day(2), slots: [HOST, seatOf(2, { driver: 'ai' })] });
+    const t = setup({ sessions: [s1, s2] });
+    t.ok({ kind: 'drivers.add', person: 'anna', displayName: 'Anna' });
+    t.ok({ kind: 'drivers.link', team: MERCEDES, raceNumber: 7, person: 'anna' });
+
+    // The AI's slot is no source of the profile: no laps, no session, no per-session value.
+    expect(withSessions(t.features.calls.count).flat().map(slotText)).not.toContain('2/2');
+    expect(t.entry('anna', 'fake.lapCount')).toMatchObject({ value: { known: true, value: 5 }, laps: 5, sessions: 1, newestSession: day(1) });
+    expect(t.store.sessionValues('anna').map((v) => v.session.sessionUid)).toEqual(['1']);
+
+    // A seat only the AI ever drove gives its person no value: never 0 (C3).
+    const s3 = driverSession('3', { startedAt: day(3), slots: [HOST, { car: 4, team: FERRARI, number: 16, name: 'Bot', driver: 'ai' }] });
+    const u = setup({ sessions: [s3] });
+    u.ok({ kind: 'drivers.add', person: 'ben', displayName: 'Ben' });
+    u.ok({ kind: 'drivers.link', team: FERRARI, raceNumber: 16, person: 'ben' });
+    expect(u.entry('ben', 'fake.meanLapMs')).toMatchObject({ value: { known: false }, laps: 0, sessions: 0 });
+    expect(u.store.sessionValues('ben')).toEqual([]);
+  });
+
+  // SP4.3b Task 2, row 3 (spec 10, U8): the 4.3a links are read once and dropped; the user links the seats again.
+  it('an old name link and an old slot link are dropped when the file is read; the file is rewritten without them', () => {
+    const s1 = driverSession('1', {
+      startedAt: day(1), slots: [HOST, { car: 2, team: MERCEDES, number: 7, name: 'Anna R' }, { car: 3, team: FERRARI, number: 16, name: null }],
+    });
+    const dir = mkdtempSync(join(tmpdir(), 'profiles-'));
+    mkdirSync(join(dir, 'drivers'), { recursive: true });
+    const old = {
+      id: 'anna', displayName: 'Anna',
+      links: [
+        { kind: 'nameAndNumber', name: 'Anna R', raceNumber: 7 },
+        { kind: 'slot', session: ref(s1), carId: 3 },
+        { team: FERRARI, raceNumber: 16 },
+      ],
+      excluded: [], overrides: { 'fake.meanLapMs': 95_000 },
+    };
+    writeFileSync(personPath(dir, 'anna'), `${JSON.stringify(old, null, 2)}\n`);
+    const t = setup({ sessions: [s1], dir });
+
+    // The person stays, with the seat link only; the old links match nothing any more.
+    expect(t.persons().map((p) => [p.person, p.links])).toEqual([['anna', [{ team: FERRARI, raceNumber: 16 }]]]);
+    expect(readPerson(dir, 'anna')).toEqual({
+      id: 'anna', displayName: 'Anna', links: [{ team: FERRARI, raceNumber: 16 }], excluded: [], overrides: { 'fake.meanLapMs': 95_000 },
+    });
+    const snapshot = t.store.snapshotFor(slotsOf(s1), ref(s1));
+    expect([snapshot.bySlot[2], snapshot.bySlot[3]]).toEqual([null, 'anna']);
+    t.close();
+
+    // Read again: nothing left to drop, the file stays as it was rewritten.
+    const rewritten = driverFiles(dir);
+    const again = setup({ sessions: [s1], dir });
+    expect(again.persons().map((p) => p.links)).toEqual([[{ team: FERRARI, raceNumber: 16 }]]);
+    expect(driverFiles(dir)).toEqual(rewritten);
+  });
+
+  // SP4.3b Task 2, row 4 (C62c, C73): `person: null` unlinks the seat; a rejection changes nothing.
+  it('drivers.link with person null removes the seat\'s link; an unknown person is rejected, never stored (C73)', () => {
+    const s1 = driverSession('1', {
+      startedAt: day(1), slots: [HOST, { car: 2, team: MERCEDES, number: 7, name: 'Anna R' }, { car: 3, team: FERRARI, number: 16, name: 'Ben K' }],
+    });
+    const t = setup({ sessions: [s1] });
+    t.ok({ kind: 'drivers.add', person: 'anna', displayName: 'Anna' });
+    t.ok({ kind: 'drivers.link', team: MERCEDES, raceNumber: 7, person: 'anna' });
+    t.ok({ kind: 'drivers.link', team: FERRARI, raceNumber: 16, person: 'anna' });
+    expect(readPerson(t.dir, 'anna').links).toEqual(expect.arrayContaining([{ team: MERCEDES, raceNumber: 7 }, { team: FERRARI, raceNumber: 16 }]));
+
+    t.ok({ kind: 'drivers.link', team: MERCEDES, raceNumber: 7, person: null });
+    expect(readPerson(t.dir, 'anna').links).toEqual([{ team: FERRARI, raceNumber: 16 }]);
+    expect(t.persons()[0]?.links).toEqual([{ team: FERRARI, raceNumber: 16 }]);
+    expect(t.entry('anna', 'fake.lapCount')).toMatchObject({ laps: 5, sessions: 1 });
+    const snapshot = t.store.snapshotFor(slotsOf(s1), ref(s1));
+    expect([snapshot.bySlot[2], snapshot.bySlot[3]]).toEqual([null, 'anna']);
+
+    // Linking a seat to another person moves it: one seat, one person.
+    t.ok({ kind: 'drivers.add', person: 'ben', displayName: 'Ben' });
+    t.ok({ kind: 'drivers.link', team: FERRARI, raceNumber: 16, person: 'ben' });
+    expect(readPerson(t.dir, 'anna').links).toEqual([]);
+    expect(readPerson(t.dir, 'ben').links).toEqual([{ team: FERRARI, raceNumber: 16 }]);
+
+    const files = driverFiles(t.dir);
+    const published = t.published.length;
+    const persons = t.persons();
+    const result = t.apply({ kind: 'drivers.link', team: MERCEDES, raceNumber: 7, person: 'nobody' });
+    expect(result).toMatchObject({ ok: false, reason: 'invalid' });
+    expect(result.ok === false && result.message.length > 0).toBe(true);
+    expect(driverFiles(t.dir)).toEqual(files);
+    expect(t.published.length).toBe(published);
+    expect(t.persons()).toEqual(persons);
+  });
+
+  // SP4.3b Task 2, row 7 (spec 10, shell U7): the bridge's bookkeeping of its links; no suggestion any more.
+  it('drivers.links lists the human seats of stored sessions that have no link', () => {
+    const s1 = driverSession('1', {
+      startedAt: day(1),
+      slots: [HOST, { car: 2, team: MERCEDES, number: 7, name: 'Anna R' }, { car: 3, team: 3, number: 60, name: 'Bot', driver: 'ai' }],
+    });
+    const s2 = driverSession('2', {
+      startedAt: day(2),
+      slots: [{ ...HOST, name: null }, { car: 1, team: FERRARI, number: 16, name: null }, { car: 2, team: MERCEDES, number: 7, name: null }],
+    });
+    const t = setup({ sessions: [s1, s2] });
+    type Listed = { unlinked: ReadonlyArray<{ teamId: number; raceNumber: number }> };
+    const seats = (value: Listed): string[] => [...new Set(value.unlinked.map((u) => `${u.teamId}/${u.raceNumber}`))].toSorted();
+
+    // Before any link: every human seat, never the AI's.
+    expect(seats(t.last<Listed>('drivers.links'))).toEqual(['0/7', '1/16', '5/22']);
+
+    t.ok({ kind: 'drivers.add', person: 'anna', displayName: 'Anna' });
+    t.ok({ kind: 'drivers.link', team: MERCEDES, raceNumber: 7, person: 'anna' });
+    const listed = t.last<Listed>('drivers.links');
+    expect(seats(listed)).toEqual(['1/16', '5/22']);
+    expect(seats({ unlinked: t.store.unlinked() })).toEqual(['1/16', '5/22']);
+    // A hint no more (U8): nothing suggests a person.
+    expect(JSON.stringify(listed)).not.toMatch(/suggestion/);
   });
 
   it('entries aggregate only the human spans\' laps; an excluded session drops out', () => {
@@ -352,86 +491,6 @@ describe('ProfileStore', () => {
     expect(withSessions(without.features.calls.count).length).toBeGreaterThan(0);
   });
 
-  it('a slot without a name is linked by slot only', () => {
-    const hidden: SlotSpec = { car: 4, team: FERRARI, number: 9, name: null };
-    const s1 = driverSession('1', { startedAt: day(1), slots: [HOST, hidden, { car: 6, team: FERRARI, number: 9, name: 'Ben K' }] });
-    const s2 = driverSession('2', { startedAt: day(2), slots: [HOST, hidden] });
-    const t = setup({ sessions: [s1, s2] });
-
-    // A name-and-number link never matches a slot without a name, whatever its race number.
-    t.addAndLink('ben', 'Ben', s1, 6);
-    expect(readPerson(t.dir, 'ben').links).toEqual([{ kind: 'nameAndNumber', name: 'Ben K', raceNumber: 9 }]);
-    expect(unlinkedKeys(t.store)).toEqual(expect.arrayContaining(['1/4', '2/4']));
-
-    t.addAndLink('anna', 'Anna', s1, 4);
-    expect(readPerson(t.dir, 'anna').links).toEqual([{ kind: 'slot', session: ref(s1), carId: car(4) }]);
-    expect(unlinkedKeys(t.store)).not.toContain('1/4');
-    expect(unlinkedKeys(t.store)).toContain('2/4');
-    expect(t.entry('anna', 'fake.lapCount')).toMatchObject({ laps: 5, sessions: 1 });
-
-    // The slot link holds for its one session; another session's nameless slot with the same race number stays unlinked.
-    const own = t.store.snapshotFor(slotsOf(s1), ref(s1));
-    expect([own.bySlot[4], own.bySlot[6]]).toEqual(['anna', 'ben']);
-    expect(t.store.snapshotFor(slotsOf(s2), ref(s2)).bySlot[4]).toBeNull();
-    const next = driverSession('3', { startedAt: day(3), slots: [HOST, hidden] });
-    expect(t.store.snapshotFor(slotsOf(next), ref(next)).bySlot[4]).toBeNull();
-  });
-
-  it('suggestions: race number first, then team; accept links every shown suggestion', () => {
-    const s1 = driverSession('1', {
-      startedAt: day(1),
-      slots: [{ car: 0, team: MERCEDES, number: 7, name: 'Anna R' }, { car: 1, team: FERRARI, number: 16, name: 'Ben K' }],
-    });
-    const s2 = driverSession('2', {
-      startedAt: day(2),
-      slots: [
-        // Anna's race number on another team: by race number.
-        { car: 0, team: 5, number: 7, name: null },
-        // Ben's team (of his newest link) on an unknown race number: by team.
-        { car: 1, team: FERRARI, number: 99, name: null },
-        // Neither: no suggestion.
-        { car: 2, team: 3, number: 50, name: 'Zed' },
-        // The AI all session: not listed.
-        { car: 3, team: 3, number: 60, name: 'Bot', driver: 'ai' },
-      ],
-    });
-    // Ben's race number in Anna's team: the race number wins over the team.
-    const s3 = driverSession('3', { startedAt: day(3), slots: [{ car: 0, team: MERCEDES, number: 16, name: null }] });
-    const t = setup({ sessions: [s1, s2, s3] });
-    t.addAndLink('anna', 'Anna', s1, 0);
-    t.addAndLink('ben', 'Ben', s1, 1);
-
-    // Newest session first, then by car id; a suggestion is shown, never applied.
-    const shown = t.store.unlinked();
-    expect(shown.map((u) => [`${u.session.sessionUid}/${u.carId}`, u.suggestion?.person, u.suggestion?.by])).toEqual([
-      ['3/0', 'ben', 'raceNumber'],
-      ['2/0', 'anna', 'raceNumber'],
-      ['2/1', 'ben', 'team'],
-      ['2/2', undefined, undefined],
-    ]);
-    expect(shown[1]).toMatchObject({ session: ref(s2), date: day(2), trackId: TRACK, carId: car(0), teamId: 5, raceNumber: 7, name: null });
-    expect(shown[3]).toMatchObject({ name: 'Zed' });
-    expect(shown[3]).not.toHaveProperty('suggestion');
-    expect(t.last<DriversLinksValue>('drivers.links')).toEqual({ unlinked: shown });
-    expect(readPerson(t.dir, 'anna').links).toHaveLength(1);
-    expect(readPerson(t.dir, 'ben').links).toHaveLength(1);
-
-    // Accept links every shown suggestion: a slot without a name by its slot.
-    // SP4.3b Task 2: drivers.accept removed.
-    expect(readPerson(t.dir, 'anna').links).toEqual([
-      { kind: 'nameAndNumber', name: 'Anna R', raceNumber: 7 },
-      { kind: 'slot', session: ref(s2), carId: car(0) },
-    ]);
-    expect(readPerson(t.dir, 'ben').links).toHaveLength(3);
-    expect(readPerson(t.dir, 'ben').links).toEqual(expect.arrayContaining([
-      { kind: 'nameAndNumber', name: 'Ben K', raceNumber: 16 },
-      { kind: 'slot', session: ref(s3), carId: car(0) },
-      { kind: 'slot', session: ref(s2), carId: car(1) },
-    ]));
-    expect(unlinkedKeys(t.store)).toEqual(['2/2']);
-    expect(t.last<DriversLinksValue>('drivers.links').unlinked.map((u) => `${u.session.sessionUid}/${u.carId}`)).toEqual(['2/2']);
-  });
-
   it('an invalid override is rejected with a reason and changes nothing', () => {
     const s1 = driverSession('1', { startedAt: day(1), slots: [HOST, { car: 2, team: MERCEDES, number: 7, name: 'Anna R' }] });
     const t = setup({ sessions: [s1] });
@@ -523,14 +582,12 @@ describe('ProfileStore', () => {
     changes('add', () => t.ok({ kind: 'drivers.add', person: 'anna', displayName: 'Anna' }));
     expect(t.persons().map((p) => p.person)).toEqual(['anna']);
     changes('link', () => t.ok({ kind: 'drivers.link', ...seat(s1, 2), person: 'anna' }));
-    expect(t.persons()[0]?.links).toEqual([{ kind: 'nameAndNumber', name: 'Anna R', raceNumber: 7 }]);
+    expect(t.persons()[0]?.links).toEqual([{ team: MERCEDES, raceNumber: 7 }]);
     changes('override', () => t.ok({ kind: 'drivers.override', person: 'anna', key: 'fake.meanLapMs', value: 95_000 }));
     expect(valueOf(t.entry('anna', 'fake.meanLapMs'))).toBe(95_000);
     changes('clear', () => t.ok({ kind: 'drivers.override.clear', person: 'anna', key: 'fake.meanLapMs' }));
     expect(valueOf(t.entry('anna', 'fake.meanLapMs'))).toBe(mean([1, 2, 3, 4, 5].map((n) => 90_000 + n)));
-    // Car 3 (no name, Anna's race number) is suggested; accepting links it.
-    expect(t.last<DriversLinksValue>('drivers.links').unlinked.map((u) => [u.carId, u.suggestion?.person])).toEqual(expect.arrayContaining([[car(3), 'anna']]));
-    // SP4.3b Task 2: drivers.accept removed.
+    // Car 3 (no name, Anna's seat) is linked by the seat link.
     expect(t.last<DriversLinksValue>('drivers.links').unlinked.map((u) => u.carId)).not.toContain(car(3));
     changes('exclude', () => t.ok({ kind: 'drivers.exclude', person: 'anna', session: ref(s1) }));
     expect(t.persons()[0]?.excluded).toEqual([ref(s1)]);

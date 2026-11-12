@@ -1,9 +1,9 @@
 // The driver-profile uiActions checked against the persons, the stored sessions and the entries' declarations (C62c,
 // C73; SP4.3a spec 4): a valid one gives the person files it writes, an invalid one its reason, and changes nothing.
 import type { DriverAction, UiAction } from '@pitwall/contracts';
-import type { DriverPerson, UnlinkedSlot } from '@pitwall/domain';
+import type { DriverLink, DriverPerson, UnlinkedSlot } from '@pitwall/domain';
 import type { ProfileEntryDecl } from '@pitwall/engine/readers';
-import type { StoredSlot } from './links.ts';
+import { sameSeat, type StoredSlot } from './links.ts';
 import { isPersonId, sameSession } from './persons.ts';
 
 /** Whether a uiAction is a driver-profile one, the profile store's (C62c). */
@@ -15,13 +15,34 @@ export type CheckCtx = {
   persons: ReadonlyMap<string, DriverPerson>;
   /** Every slot of every stored session. */
   slots: readonly StoredSlot[];
-  /** The unlinked slots as last shown (`drivers.links`), with their suggestions. */
+  /** The unlinked slots as last shown (`drivers.links`). */
   unlinked: readonly UnlinkedSlot[];
   entry: (key: string) => ProfileEntryDecl | undefined;
 };
 
 const invalid = (message: string): Checked => ({ ok: false, message });
 const write = (...persons: DriverPerson[]): Checked => ({ ok: true, write: persons });
+
+/**
+ * `drivers.link`: one seat, one person. The seat's link is removed from every person that has it, then added to the
+ * named one; `person: null` only removes it. An unknown person, or a seat that is not one, is rejected.
+ */
+function checkLink(action: Extract<DriverAction, { kind: 'drivers.link' }>, ctx: CheckCtx): Checked {
+  const seat: DriverLink = { team: action.team, raceNumber: action.raceNumber };
+  if (!Number.isInteger(seat.team) || seat.team < 0) return invalid(`a team is a team id (an integer from 0), got ${seat.team}`);
+  if (!Number.isInteger(seat.raceNumber) || seat.raceNumber < 0) return invalid(`a race number is an integer from 0, got ${seat.raceNumber}`);
+  const target = action.person === null ? undefined : ctx.persons.get(action.person);
+  if (action.person !== null && target === undefined) return invalid(`no person ${action.person}`);
+  const changed = new Map<string, DriverPerson>();
+  for (const person of ctx.persons.values()) {
+    if (person.links.some((l) => sameSeat(l, seat))) changed.set(person.id, { ...person, links: person.links.filter((l) => !sameSeat(l, seat)) });
+  }
+  if (target !== undefined) {
+    const base = changed.get(target.id) ?? target;
+    changed.set(target.id, { ...base, links: [...base.links, seat] });
+  }
+  return write(...changed.values());
+}
 
 export function checkAction(action: DriverAction, ctx: CheckCtx): Checked {
   if (action.kind === 'drivers.add') {
@@ -31,8 +52,7 @@ export function checkAction(action: DriverAction, ctx: CheckCtx): Checked {
     if (displayName === '') return invalid('a person needs a display name');
     return write({ id: action.person, displayName, links: [], excluded: [], overrides: {} });
   }
-  // SP4.3b Task 2: linking by seat (team and race number).
-  if (action.kind === 'drivers.link') throw new Error('not implemented');
+  if (action.kind === 'drivers.link') return checkLink(action, ctx);
   const person = ctx.persons.get(action.person);
   if (person === undefined) return invalid(`no person ${action.person}`);
   switch (action.kind) {

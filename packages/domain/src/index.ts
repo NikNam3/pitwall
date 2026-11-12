@@ -10,6 +10,7 @@ export * from './facts.ts';
 export * from './calibration.ts';
 export * from './estimates.ts';
 export * from './drivers.ts';
+export * from './teams.ts';
 export * from './forecast.ts';
 export * from './weekend-phase.ts';
 export * from './span-scopes.ts';
