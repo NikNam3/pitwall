@@ -41,9 +41,10 @@ const forecastAll = (start: StartingPoint) => [PLAIN, ...SCENARIOS].map((s) => r
 describe('race-forecast: the fitted DRS factor (SP4.3b Task 10b)', () => {
   // row 1
   it('a follower in DRS gets the pass chance cap·σ(level + slope·u + drsFactor) at the braking zone after the DRS zone', () => {
-    // the simulator: B, 1 s a lap faster, held behind A from lap 1; DRS from lap 3; outside DRS a pass is hopeless
-    // (σ(−26)), so the first DRS braking zone (0.6, after the zone 0.45–0.55) decides lap 3 alone: p = 0.5 + δ passes there
-    const u = 1_000;
+    // the simulator: B, 2 s a lap faster, held behind A from lap 1; DRS from lap 3; outside DRS a pass is hopeless
+    // (σ(−26)), so the first DRS braking zone (0.6, after the zone 0.45–0.55) decides lap 3 alone: p = 0.5 + δ passes there.
+    // Ported in SP4.3b Task 11f: B is 2 s a lap faster (was 1 s), above plain mode's minimum pass advantage (1.5 s).
+    const u = 2_000;
     const level = -30;
     const slopePerMs = 0.004;
     const cap = 0.8;

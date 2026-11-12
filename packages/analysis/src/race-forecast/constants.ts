@@ -12,3 +12,10 @@ export const BIG_EVENT_MAX_MS = 10_000;
 export const PASS_MARGIN_MS = 1;
 /** Plain mode: a held car passes once its summed hazard reaches ln 2, the median pass time (research 13 §10, new 13). */
 export const MEDIAN_PASS_HAZARD = Math.LN2;
+/**
+ * Plain mode: a held car passes only when its pace advantage exceeds this. A plain forecast is the distribution's
+ * mode, not a draw, so a pass it predicts must be likelier than not; the U9 Q3 C position diagnosis (2026-11-12) found
+ * plain passes at smaller advantages less than 50 % right (Spa 41 %, Texas 28 %, China 2/11, Zandvoort 0/9). The
+ * drawn (Monte Carlo) branch has no such floor.
+ */
+export const PLAIN_PASS_MIN_ADVANTAGE_MS = 1_500;

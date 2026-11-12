@@ -9,7 +9,7 @@
 // the points; the lap's time comes from `lap-model`.
 import type { ForecastResult, PassCurve, Policy, Scenario, StartingPoint } from '@pitwall/domain';
 import { defineSimulator, type Rng } from '@pitwall/engine/readers';
-import { DOUBLE_STACK_MS, HUMAN_STOP_SAVING_MS, MEDIAN_PASS_HAZARD, PASS_MARGIN_MS } from './constants.ts';
+import { DOUBLE_STACK_MS, HUMAN_STOP_SAVING_MS, MEDIAN_PASS_HAZARD, PASS_MARGIN_MS, PLAIN_PASS_MIN_ADVANTAGE_MS } from './constants.ts';
 import { PURPOSE, streamKey, uniform } from './draws.ts';
 import { createField, endLap, fitStop, lineIndex, NEUTRAL, SLOT, startLap, stopAt, STRIDE, type Field } from './field.ts';
 import { lapPointsOf, POINT, type LapPoints } from './points.ts';
@@ -178,7 +178,10 @@ export function raceForecast(start: StartingPoint, policies: readonly Policy[], 
             if (advantageMs > 0 && car[a + NEUTRAL_AT] === GREEN && car[b + IN_LAP] === 0) {
               const p = passChance(curve, wet, car[b + DRS_PASS] === 1, advantageMs);
               let passes: boolean;
-              if (plain) {
+              if (plain && advantageMs <= PLAIN_PASS_MIN_ADVANTAGE_MS) {
+                // plain is the mode: below the minimum advantage a pass is less likely than not, so it stays behind
+                passes = false;
+              } else if (plain) {
                 // plain: the held car passes once its summed hazard reaches the median pass time's
                 const h = (car[b + HAZARD] ?? 0) + (p >= 1 ? Infinity : -Math.log1p(-p));
                 car[b + HAZARD] = h;
