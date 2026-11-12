@@ -218,10 +218,12 @@ describe('race-forecast: the generated race', () => {
       brakingZones: truth.brakingZones,
       interaction: interaction({ minGapMs: truth.pass.minGapMs, curve: { level: -3, slopePerMs: 0.01, cap: 0.8 } }),
     });
-    const r = raceForecast(start, truth.field.map((car) => ({ stops: car.stops })), PLAIN, createRng(1));
+    // the generator stops one frame after the leader takes the flag, so the comparison is at the last lap every car
+    // completes (R35): the forecast to lap LAPS − 1 and each car's crossing of that lap's line in the generated race
+    const AT_LAP = LAPS - 1;
+    const r = raceForecast(start, truth.field.map((car) => ({ stops: car.stops })), PLAIN, createRng(1), { toLap: AT_LAP });
 
-    // the generated race at the flag: each car's crossing of its last line
-    const last = race.viewAt(race.lastFrame).history.laps.filter((l) => l.status === 'confirmed' && l.lapNumber === LAPS);
+    const last = race.viewAt(race.lastFrame).history.laps.filter((l) => l.status === 'confirmed' && l.lapNumber === AT_LAP);
     expect(last).toHaveLength(CARS);
     const finishedAt = new Map(last.map((l) => [l.carId as number, l.completedAt]));
     const byFinish = [...last].sort((a, b) => a.completedAt - b.completedAt).map((l) => l.carId as number);
