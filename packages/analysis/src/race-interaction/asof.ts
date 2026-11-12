@@ -20,14 +20,8 @@ const phaseRow = (view: AsOfView): RaceInteractionEffect => {
   return (kind === 'pending' ? undefined : RACE_INTERACTION_BEHAVIOUR['weekend-phase']?.[kind]) ?? {};
 };
 
-/**
- * The session's AI difficulty, from the as-of view's fixed session values. `notReceived` while the view carries none
- * (the field `fixed.aiDifficulty` is requested of the supervisor, SP4.3a Task 12 report).
- */
-const difficultyOf = (view: AsOfView): Known<number> => {
-  const fixed: AsOfView['fixed'] & { aiDifficulty?: Known<number> } = view.fixed;
-  return fixed.aiDifficulty ?? unknown('notReceived');
-};
+/** The session's AI difficulty, from the as-of view's fixed session values. */
+const difficultyOf = (view: AsOfView): Known<number> => view.fixed.aiDifficulty;
 
 /** Band `band`'s prior: the calibration's entries when it holds both, else the config's default. */
 const priorOf = (view: AsOfView, band: number, config: RaceInteractionConfig): { curve: PassCurve; source: EstimateSource } => {

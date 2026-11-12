@@ -10,12 +10,12 @@
 //    zone that leads into the braking zone, and that car is not itself within range of its own car ahead.
 import {
   carStatusSpans,
-  currentCrossings,
   currentLaps,
   MINI_SECTORS,
   sessionPhaseRaceSpans,
   type CarId,
   type DamageParts,
+  type FrameNumber,
   type LapRecord,
   type MachineId,
   type MiniSectorCrossing,
@@ -50,10 +50,18 @@ const AERO_PARTS = ['frontLeftWingPct', 'frontRightWingPct', 'rearWingPct'] as c
 
 /** The spec 5.5 lap filter: lap 1, in- and out-laps, SC, VSC and formation laps, a car with aero damage of 10 % or more. */
 export function excludedLap(lap: DeepReadonly<LapRecord>, ctx: LapFilterCtx): boolean {
+  return excludedByLap(lap, ctx.config) || excludedByMembership(membershipOf(ctx.source, lap));
+}
+
+/** The lap filter's checks on the lap record itself (the cheap ones, so membership runs only for the laps they keep). */
+function excludedByLap(lap: DeepReadonly<LapRecord>, config: RaceInteractionConfig): boolean {
   if (lap.lapNumber <= 1 || lap.inLap || lap.outLap || lap.scShare > 0 || lap.vscShare > 0) return true;
   const damage = lap.damageAtEnd;
-  if (damage.known && AERO_PARTS.some((part) => damage.value[part] >= ctx.config.aeroDamageMaxPct)) return true;
-  const member = membershipOf(ctx.source, lap);
+  return damage.known && AERO_PARTS.some((part) => damage.value[part] >= config.aeroDamageMaxPct);
+}
+
+/** The lap filter's check on a lap's membership (C26): a span the behaviour table excludes. */
+function excludedByMembership(member: Readonly<Record<MachineId, DeepReadonly<OpenSpan>>>): boolean {
   for (const machine of FILTER_MACHINES) {
     const span = member[machine];
     if (span === undefined) continue;
@@ -83,6 +91,52 @@ const AT_CROSSING = 1e-9;
 
 /** A projection without facts: the lap filter's sources hold only the spans of its machines. */
 const NO_FACTS = { laps: [], stints: [], pitStops: [], crossings: [], events: [], penalties: [], decisions: [], clock: [], appendedAt: {} } as const;
+
+/** The number of entries of the ascending `xs` at or below `x`. */
+const countAtOrBelow = (xs: readonly number[], x: number): number => {
+  let lo = 0;
+  let hi = xs.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if ((xs[mid] ?? Number.POSITIVE_INFINITY) <= x) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+};
+
+/**
+ * The membership half of the lap filter for `source`, per car: whether a lap of that car (its car id and the frame it
+ * describes) lies in a span the behaviour table excludes. Membership comes from `membershipOf` over the car's own source
+ * (`filterSources`); a car's frames between the same two span boundaries (a span's start or end frame, C26) share one
+ * membership, so it is computed once per such stretch.
+ */
+function membershipFilter(source: MembershipSource): (lap: { carId: CarId; frame: FrameNumber }) => boolean {
+  const sourceOf = filterSources(source);
+  const memo = new Map<CarId, { boundaries: number[]; excluded: Map<number, boolean> }>();
+  return (lap) => {
+    const own = sourceOf(lap.carId);
+    let car = memo.get(lap.carId);
+    if (car === undefined) {
+      const frames = new Set<number>();
+      const spanLists = [...Object.values(own.history.spans), ...Object.values(own.situation?.byMachine ?? {})];
+      for (const spans of spanLists) {
+        for (const span of spans as readonly DeepReadonly<OpenSpan & { endFrame?: FrameNumber }>[]) {
+          frames.add(span.startFrame);
+          if (span.endFrame !== undefined) frames.add(span.endFrame);
+        }
+      }
+      car = { boundaries: [...frames].sort((a, b) => a - b), excluded: new Map() };
+      memo.set(lap.carId, car);
+    }
+    const stretch = countAtOrBelow(car.boundaries, lap.frame);
+    let excluded = car.excluded.get(stretch);
+    if (excluded === undefined) {
+      excluded = excludedByMembership(membershipOf(own, lap));
+      car.excluded.set(stretch, excluded);
+    }
+    return excluded;
+  };
+}
 
 /**
  * Per car, the membership source of the lap filter: the session phase's spans and only that car's car-status spans, so
@@ -152,10 +206,11 @@ export function episodesOf(source: MembershipSource, track: DeepReadonly<TrackDa
     return { point: points.length - 1, lapBefore: zone.detection > start };
   });
   const pointCount = points.length;
-  const needed = new Uint8Array(MINI_SECTORS);
+  // the segments read (each point's and the next), by column of the crossing table: -1 for a segment not read
+  const column = new Int8Array(MINI_SECTORS).fill(-1);
+  let columns = 0;
   for (const p of points) {
-    needed[p.segment] = 1;
-    needed[(p.segment + 1) % MINI_SECTORS] = 1;
+    for (const segment of [p.segment, (p.segment + 1) % MINI_SECTORS]) if (column[segment] === -1) column[segment] = columns++;
   }
 
   // the current laps (C25) by car and lap number
@@ -172,19 +227,28 @@ export function episodesOf(source: MembershipSource, track: DeepReadonly<TrackDa
   const cars: CarId[] = [];
   for (let car = 0; car < carSlots; car++) if (lapsOf[car] !== undefined) cars.push(car as CarId);
 
-  // the current crossings (C25) at the segments read: their times by car, lap and segment (NaN without one)
-  const at = new Float64Array(carSlots * laps * MINI_SECTORS).fill(Number.NaN);
-  for (const c of currentCrossings(history.crossings as readonly MiniSectorCrossing[])) {
-    if (needed[c.segment] === 1 && c.carId < carSlots && c.lap < laps) at[(c.carId * laps + c.lap) * MINI_SECTORS + c.segment] = c.at;
+  // the current crossings (C25) at the segments read: their times by car, lap and segment (NaN without one). Written in
+  // log order, a later crossing of a slot over an earlier one: the domain's rule `foldCurrentCrossing` (its index holds
+  // exactly `currentCrossings` by car, lap and segment), kept in a typed array; the domain's Map index costs this
+  // from-scratch run about 4 ms over the ~69k crossings of a long race (a typed form in `domain` is requested)
+  const at = new Float64Array(carSlots * laps * columns).fill(Number.NaN);
+  const crossings = history.crossings as readonly MiniSectorCrossing[];
+  for (let i = 0; i < crossings.length; i++) {
+    const c = crossings[i] as MiniSectorCrossing;
+    const k = column[c.segment] ?? -1;
+    if (k >= 0 && c.carId < carSlots && c.lap < laps) at[(c.carId * laps + c.lap) * columns + k] = c.at;
   }
-  const crossingAt = (car: number, lap: number, segment: number): number => (lap < laps ? nth(at, (car * laps + lap) * MINI_SECTORS + segment) : Number.NaN);
+  const crossingAt = (car: number, lap: number, segment: number): number => {
+    const k = column[segment] ?? -1;
+    return lap < laps && k >= 0 ? nth(at, (car * laps + lap) * columns + k) : Number.NaN;
+  };
   const lapOf = (car: CarId, lap: number): DeepReadonly<LapRecord> | undefined => lapsOf[car]?.[lap];
 
   // the usable laps: those the filter keeps (membership through each car's own source)
-  const sourceOf = filterSources(source);
+  const excludedByMember = membershipFilter(source);
   const usable: Uint8Array[] = [];
   for (const lap of current) {
-    if (!excludedLap(lap, { source: sourceOf(lap.carId), config })) (usable[lap.carId] ??= new Uint8Array(laps))[lap.lapNumber] = 1;
+    if (!excludedByLap(lap, config) && !excludedByMember(lap)) (usable[lap.carId] ??= new Uint8Array(laps))[lap.lapNumber] = 1;
   }
   const isUsable = (car: CarId, lap: number): boolean => usable[car]?.[lap] === 1;
 
@@ -193,7 +257,8 @@ export function episodesOf(source: MembershipSource, track: DeepReadonly<TrackDa
   const slot = (car: number, lap: number, p: number): number => (car * laps + lap) * pointCount + p;
   for (const car of cars) {
     for (let lap = 1; lap < laps; lap++) {
-      for (const [p, { segment, within }] of points.entries()) {
+      for (let p = 0; p < pointCount; p++) {
+        const { segment, within } = points[p] as Point;
         const t0 = crossingAt(car, lap, segment);
         if (Number.isNaN(t0)) continue;
         if (within < AT_CROSSING) {
@@ -211,11 +276,25 @@ export function episodesOf(source: MembershipSource, track: DeepReadonly<TrackDa
     const key = lap * pointCount + p;
     let order = orders[key];
     if (order === undefined) {
-      const passed = cars.filter((car) => !Number.isNaN(timeAt(car, lap, p)));
-      passed.sort((a, b) => timeAt(a, lap, p) - timeAt(b, lap, p) || a - b);
+      // insertion by time, ties by car id (cars come in id order): a field of about 20 cars
+      const byRank: CarId[] = [];
+      const at: number[] = [];
+      for (const car of cars) {
+        const t = timeAt(car, lap, p);
+        if (Number.isNaN(t)) continue;
+        let i = at.length;
+        byRank.push(car);
+        at.push(t);
+        for (; i > 0 && nth(at, i - 1) > t; i--) {
+          byRank[i] = byRank[i - 1] as CarId;
+          at[i] = nth(at, i - 1);
+        }
+        byRank[i] = car;
+        at[i] = t;
+      }
       const rank = new Int16Array(carSlots).fill(-1);
-      passed.forEach((car, i) => (rank[car] = i));
-      order = { cars: passed, at: passed.map((car) => timeAt(car, lap, p)), rank };
+      for (const [i, car] of byRank.entries()) rank[car] = i;
+      order = { cars: byRank, at, rank };
       orders[key] = order;
     }
     return order;
