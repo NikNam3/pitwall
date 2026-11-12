@@ -2161,28 +2161,16 @@
   "defaults": {
     "pitLossMs": {
       "green": {
-        "known": true,
-        "value": {
-          "value": 22184,
-          "source": "OpenF1, 2025 British Grand Prix R, median of 9 stops"
-        },
-        "at": 0
+        "known": false,
+        "reason": "notReceived"
       },
       "vsc": {
-        "known": true,
-        "value": {
-          "value": 12201,
-          "source": "ratio of green, pitwall estimate"
-        },
-        "at": 0
+        "known": false,
+        "reason": "notReceived"
       },
       "sc": {
-        "known": true,
-        "value": {
-          "value": 9983,
-          "source": "ratio of green, pitwall estimate"
-        },
-        "at": 0
+        "known": false,
+        "reason": "notReceived"
       }
     },
     "compoundOffsetsMs": {

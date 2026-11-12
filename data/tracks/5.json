@@ -2175,15 +2175,15 @@
       "green": {
         "known": true,
         "value": {
-          "value": 19882,
-          "source": "OpenF1, 2025 Monaco Grand Prix R, median of 34 stops"
+          "value": 20083,
+          "source": "OpenF1, 2025 Monaco Grand Prix R, median of 31 green stops (in-lap + out-lap - 2 x median of the 3 racing laps before; stops with SC, VSC, red or yellow on in-lap or out-lap, on intermediate or wet tyres, or with the pace after off the reference by more than 5 % left out)"
         },
         "at": 0
       },
       "vsc": {
         "known": true,
         "value": {
-          "value": 10935,
+          "value": 11046,
           "source": "ratio of green, pitwall estimate"
         },
         "at": 0
@@ -2191,7 +2191,7 @@
       "sc": {
         "known": true,
         "value": {
-          "value": 8947,
+          "value": 9037,
           "source": "ratio of green, pitwall estimate"
         },
         "at": 0

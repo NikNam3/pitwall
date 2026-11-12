@@ -2168,15 +2168,15 @@
       "green": {
         "known": true,
         "value": {
-          "value": 12646,
-          "source": "OpenF1, 2025 Belgian Grand Prix R, median of 26 stops"
+          "value": 18939,
+          "source": "OpenF1, 2025 Belgian Grand Prix R, median of 6 green stops (in-lap + out-lap - 2 x median of the 3 racing laps before; stops with SC, VSC, red or yellow on in-lap or out-lap, on intermediate or wet tyres, or with the pace after off the reference by more than 5 % left out)"
         },
         "at": 0
       },
       "vsc": {
         "known": true,
         "value": {
-          "value": 6955,
+          "value": 10416,
           "source": "ratio of green, pitwall estimate"
         },
         "at": 0
@@ -2184,7 +2184,7 @@
       "sc": {
         "known": true,
         "value": {
-          "value": 5691,
+          "value": 8523,
           "source": "ratio of green, pitwall estimate"
         },
         "at": 0

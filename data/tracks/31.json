@@ -2147,7 +2147,7 @@
         "known": true,
         "value": {
           "value": 20982,
-          "source": "OpenF1, 2025 Las Vegas Grand Prix R, median of 13 stops"
+          "source": "OpenF1, 2025 Las Vegas Grand Prix R, median of 13 green stops (in-lap + out-lap - 2 x median of the 3 racing laps before; stops with SC, VSC, red or yellow on in-lap or out-lap, on intermediate or wet tyres, or with the pace after off the reference by more than 5 % left out)"
         },
         "at": 0
       },

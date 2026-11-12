@@ -2125,7 +2125,7 @@
         "known": true,
         "value": {
           "value": 24611,
-          "source": "OpenF1, 2025 Italian Grand Prix R, median of 19 stops"
+          "source": "OpenF1, 2025 Italian Grand Prix R, median of 19 green stops (in-lap + out-lap - 2 x median of the 3 racing laps before; stops with SC, VSC, red or yellow on in-lap or out-lap, on intermediate or wet tyres, or with the pace after off the reference by more than 5 % left out)"
         },
         "at": 0
       },
