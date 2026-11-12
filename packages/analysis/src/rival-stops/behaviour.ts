@@ -10,8 +10,11 @@ export type RivalStopsEffect = {
   inSession?: boolean;
   /** The car no longer competes (retired, disqualified): no next stop, its fields `notApplicable`. */
   notCompeting?: boolean;
-  /** The compound rule: the car still owes a stop (`required`) or not (`waived`). */
-  owesStop?: boolean;
+  /**
+   * The compound rule's span: it applies (`required`) or not (`waived`). Whether the car has met it is the shared
+   * helper's judgement over its stints (`owesSecondDryCompound`, SP4.3b Task 11d, C43), not the span's.
+   */
+  rule?: 'required' | 'waived';
   /** The weekend phase is not the race: every field `notApplicable` (C14). */
   notApplicable?: boolean;
 };
@@ -27,7 +30,7 @@ export const RIVAL_STOPS_BEHAVIOUR: BehaviourTable<RivalStopsEffect> = {
     disqualified: { inSession: true, notCompeting: true },
     absent: { inSession: false },
   },
-  'compound-rule': { required: { owesStop: true }, waived: { owesStop: false } },
+  'compound-rule': { required: { rule: 'required' }, waived: { rule: 'waived' } },
   // AI and human cars stop by the same peers and the same tyre life
   'car-driver': { ai: IN, human: IN },
 };
