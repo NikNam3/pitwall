@@ -69,3 +69,4 @@ export * from './track-wetness/index.ts';
 export { trackWetnessCalculator } from './track-wetness/calculator.ts';
 export * from './rival-stops/index.ts';
 export { rivalStopsCalculator } from './rival-stops/calculator.ts';
+export * from './forecast-score/index.ts';
