@@ -1,5 +1,5 @@
 // The test-race generator's parameters (SP4.3a spec 6.4): a race's truth.
-import type { DrsZone, NoiseCompound } from '../../packages/domain/src/index.ts';
+import type { DrsZone, NoiseCompound, TrackHazard } from '../../packages/domain/src/index.ts';
 
 /** One car of the field, in grid order: `field[0]` starts on pole. */
 export type GeneratorCar = {
@@ -53,6 +53,16 @@ export type GeneratorParams = {
   };
   /** A safety car, deployed during the leader's lap `fromLap` and in during its lap `toLap`. */
   sc?: { fromLap: number; toLap: number };
-  /** From lap `fromLap` on, every lap is `wetnessMs` slower. */
-  rain?: { fromLap: number; wetnessMs: number };
+  /**
+   * SC and VSC starts drawn per leader lap from this table (seeded): lap 1 from `lapOne`, later laps from `byFraction`
+   * by race fraction; a start's length in laps from `durationLaps`. A start on lap n lasting d laps is deployed during
+   * the leader's lap n and in during its lap n + d - 1, recorded as a `neutralised` session-phase span. No start while
+   * one is out or on the lap after it ends.
+   */
+  hazard?: TrackHazard;
+  /**
+   * From lap `fromLap` on, every lap is `wetnessMs` slower; a timeline gives each lap the wetness of its newest entry
+   * with `fromLap` at or before it (0 before the first). The single entry is a one-entry timeline.
+   */
+  rain?: { fromLap: number; wetnessMs: number } | { timeline: { fromLap: number; wetnessMs: number }[] };
 };

@@ -60,7 +60,7 @@ function numbered(drafts: readonly Draft[]): Array<Span | OpenSpan> {
       ...(zone !== undefined && { zone }),
     };
     if (end === undefined) return base;
-    if (kind === 'neutralised') return neutralisation({ start, end, id, startFrame: base.startFrame, endFrame: frameAt(end) });
+    if (kind === 'neutralised') return neutralisation({ kind: (detail as { car: 'SC' | 'VSC' }).car, start, end, id, startFrame: base.startFrame, endFrame: frameAt(end) });
     return { ...base, end, endFrame: frameAt(end) };
   });
 }
@@ -95,7 +95,10 @@ export function record(p: GeneratorParams, sim: SimResult): BuilderRace {
   const cross = sim.cars.map((c) => c.crossings.map(Math.round));
   const lineAt = (car: number, lap: number): SessionTime | undefined => cross[car]![(lap - 1) * MINI_SECTORS];
   const round = (x: number | undefined): SessionTime | undefined => (x === undefined ? undefined : Math.round(x));
-  const sc = sim.sc && { start: Math.round(sim.sc.start), end: round(sim.sc.end) };
+  const neutral: Neutralisation[] = sim.neutralisations.map((x) => ({ car: x.car, start: Math.round(x.start), end: round(x.end), drsBack: round(x.drsBack) }));
+  /** How long `[from, to)` lies under neutralisations by `car`, in ms. */
+  const underIn = (car: 'SC' | 'VSC', from: number, to: number): number =>
+    neutral.reduce((sum, x) => sum + (x.car === car ? overlap(from, to, x.start, x.end ?? Infinity) : 0), 0);
   const stops = sim.cars.map((c) => c.stops.map((s) => ({ lap: s.lap, compound: s.compound, entry: round(s.entry), boxIn: round(s.boxIn), boxOut: round(s.boxOut), exit: round(s.exit) })));
 
   // A crossing is appended on the frame it describes, so the engine's order (frame, time, car) is the order by time and
@@ -155,7 +158,8 @@ export function record(p: GeneratorParams, sim: SimResult): BuilderRace {
         wearAtEndPct: wear(age + 1),
         inLap: def.stops.some((s) => s.lap === n),
         outLap: def.stops.some((s) => s.lap + 1 === n),
-        scShare: sc === undefined ? 0 : overlap(startAt, completedAt, sc.start, sc.end ?? Infinity) / lapTimeMs,
+        scShare: underIn('SC', startAt, completedAt) / lapTimeMs,
+        vscShare: underIn('VSC', startAt, completedAt) / lapTimeMs,
         frame,
       });
       records.push({ fact: { ...fact, status: 'provisional', at: completedAt }, on: frame });
@@ -185,7 +189,7 @@ export function record(p: GeneratorParams, sim: SimResult): BuilderRace {
         fact: { carId: carId(car), firstLap: i === 0 ? 1 : stops[car]![i - 1]!.lap + 1, lastLap: s.lap, actualCompound: ACTUAL[before.compound], visualCompound: before.compound, tyreAgeAtFitting: 0, frame },
         on: frame,
       });
-      const flag = sc !== undefined && overlap(s.entry, s.exit, sc.start, sc.end ?? Infinity) > 0 ? ('sc' as const) : ('green' as const);
+      const flag = underIn('SC', s.entry, s.exit) > 0 ? ('sc' as const) : underIn('VSC', s.entry, s.exit) > 0 ? ('vsc' as const) : ('green' as const);
       pitStops.push({
         fact: { carId: carId(car), lap: s.lap, pitLaneEntry: s.entry, pitLaneExit: s.exit, pitLaneTimeMs: s.exit - s.entry, stationaryTimeMs: s.boxOut - s.boxIn, flag, penaltyServed: false, frame },
         on: frame,
@@ -199,7 +203,7 @@ export function record(p: GeneratorParams, sim: SimResult): BuilderRace {
     .map(({ at, car, other }) => ({ fact: { kind: 'overtake' as const, at, frame: frameAt(at), carId: carId(car), otherCarId: carId(other), params: {} }, on: frameAt(at) }))
     .sort(byAppend);
 
-  const spans = numbered(buildSpans(p, sim, sc, stops, lineAt));
+  const spans = numbered(buildSpans(p, sim, neutral, stops, lineAt));
   const lists = { laps, crossings, stints, pitStops, events };
   const facts = {
     laps: laps.map((e) => e.fact),
@@ -317,30 +321,32 @@ export function record(p: GeneratorParams, sim: SimResult): BuilderRace {
   };
 }
 
+/** A neutralisation with its times rounded to the ms; a time is undefined until it happened. */
+type Neutralisation = { car: 'SC' | 'VSC'; start: number; end: number | undefined; drsBack: number | undefined };
+
 /** A stop with its times rounded to the ms; a time is undefined until it happened. */
 type RoundedStop = { lap: number; compound: NoiseCompound; entry: number | undefined; boxIn: number | undefined; boxOut: number | undefined; exit: number | undefined };
 
 /**
- * Every span of the race: the clock and the weekend phase; the session phase (grid to racing, the SC, racing again) and
- * race control's DRS (on from the leader's lap 3, off under the SC until the leader's second lap after it); the zones'
+ * Every span of the race: the clock and the weekend phase; the session phase (grid to racing, each SC or VSC, racing
+ * again) and race control's DRS (on from the leader's lap 3, off under each SC or VSC until the leader's second lap after it); the zones'
  * flags; per car its status, its driver (`human` until a takeover, else `ai`), flags, warnings, lap validity, penalties,
  * compound rule (waived at the exit of the first stop onto another compound), location and activity.
  */
 function buildSpans(
   p: GeneratorParams,
   sim: SimResult,
-  sc: { start: number; end: number | undefined } | undefined,
+  neutral: readonly Neutralisation[],
   stops: RoundedStop[][],
   lineAt: (car: number, lap: number) => SessionTime | undefined,
 ): Draft[] {
   const drsOn = sim.drsEnabledAt === undefined ? undefined : Math.round(sim.drsEnabledAt);
-  const drsBack = sim.drsBackAt === undefined ? undefined : Math.round(sim.drsBackAt);
   const drsAt = (t: number): { kind: string; detail?: unknown } => {
-    if (sc !== undefined && t >= sc.start && (drsBack === undefined || t < drsBack)) return { kind: 'drsOff', detail: { reason: 'safetyCar' } };
+    if (neutral.some((x) => t >= x.start && (x.drsBack === undefined || t < x.drsBack))) return { kind: 'drsOff', detail: { reason: 'safetyCar' } };
     if (drsOn === undefined || t < drsOn) return { kind: 'drsOff', detail: { reason: 'notEnabledYet' } };
     return { kind: 'drsOn' };
   };
-  const drsTimes = [0, drsOn, sc?.start, drsBack].filter((t): t is number => t !== undefined).sort((a, b) => a - b);
+  const drsTimes = [0, drsOn, ...neutral.flatMap((x) => [x.start, x.drsBack])].filter((t): t is number => t !== undefined).sort((a, b) => a - b);
   const drafts: Draft[] = [
     { machine: 'clock', kind: 'running', start: 0 },
     { machine: 'weekend-phase', kind: 'race', start: 0, detail: { format: 'grandPrix' } },
@@ -349,8 +355,10 @@ function buildSpans(
       { kind: 'formation', at: 0 },
       { kind: 'startLights', at: 0 },
       { kind: 'racing', at: START_MS },
-      { kind: 'neutralised', at: sc?.start, detail: sc && { car: 'SC', stages: [{ stage: 'deployed', at: sc.start }] } },
-      { kind: 'racing', at: sc?.end },
+      ...neutral.flatMap((x) => [
+        { kind: 'neutralised', at: x.start, detail: { car: x.car, stages: [{ stage: 'deployed', at: x.start }] } },
+        { kind: 'racing', at: x.end },
+      ]),
     ]),
     ...chain('race-control-race', drsTimes.map((at) => ({ at, ...drsAt(at) }))),
     ...Array.from({ length: 3 }, (_, zone): Draft => ({ machine: 'zone-flags', kind: 'noFlag', start: 0, zone })),
