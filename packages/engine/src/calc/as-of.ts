@@ -2,14 +2,30 @@
 // and the situation at N, with the run's fixed inputs; its scheduled run calls it at the current frame (`asOfNow`).
 // `runAsOf` runs several such units in dependency order, so a profile aggregate or the scoreboard can rebuild a past
 // frame's outputs.
-import { unknown, type FrameNumber, type SessionTime } from '@pitwall/domain';
+import { known, unknown, type CarId, type FrameNumber, type Known, type SessionTime } from '@pitwall/domain';
+import type { DeepReadonly } from '../util/deep-readonly.ts';
+import type { LiveState } from '../state/live-state.ts';
 import type { Projection } from '../log/types.ts';
 import type { Situation } from '../situations/situation.ts';
 import type { ProfileCtx, StoredDriverSession } from './profiles.ts';
 import type { CalculatorId, Dependency, EngineView } from './types.ts';
 
+/** A car's tyre sets as the live state holds them. */
+export type LiveSets = DeepReadonly<LiveState>['cars'][number]['tyres']['sets'];
+
+/**
+ * The session's values an as-of form may read that the projection does not hold (ruling R17): `totalLaps` and our car
+ * are fixed for the session; the cars' tyre sets and the weather forecast exist only now (the live state), so a cut or
+ * stored view has none (rulings R17, R19).
+ */
+/** The session's weather now and its forecast, as the live state holds them. */
+export type LiveWeather = Pick<DeepReadonly<LiveState>['session'], 'weather' | 'forecast' | 'forecastAccuracy'>;
+
+export type AsOfFixed = { totalLaps: Known<number>; playerCar: Known<CarId>; setsNow: readonly LiveSets[] | null; weatherNow: LiveWeather | null };
+
 /** What an "as of frame N" form reads (C39 minus live, delta, changed, feed): the projection cut at N and the situation at N. */
 export type AsOfView = Pick<EngineView, 'config' | 'priors' | 'drivers' | 'track' | 'weekend'> & {
+  fixed: AsOfFixed;
   history: Projection;
   situation: Situation;
   frame: FrameNumber | 'now';
@@ -20,19 +36,30 @@ export type AsOfView = Pick<EngineView, 'config' | 'priors' | 'drivers' | 'track
 /** A unit's "as of" form, as `runAsOf` runs it: its id, its reads (the order), and the form. */
 export type AsOfUnit = { id: CalculatorId; reads: readonly Dependency[]; asOf(view: AsOfView): unknown };
 
-/** The current view as an `AsOfView` (no cut). */
+/**
+ * The current view as an `AsOfView` (no cut). Every field is read from `view` only when the form reads it (getters), so
+ * a unit's guarded view sees only what the unit declares (C41).
+ */
 export function asOfNow(view: EngineView): AsOfView {
   return {
-    history: view.history,
-    situation: view.situation,
+    get history() { return view.history; },
+    get situation() { return view.situation; },
     frame: 'now',
-    at: view.live.sessionTime,
-    config: view.config,
-    priors: view.priors,
-    drivers: view.drivers,
-    track: view.track,
-    weekend: view.weekend,
-    outputs: view.outputs,
+    get at() { return view.live.sessionTime; },
+    get config() { return view.config; },
+    get priors() { return view.priors; },
+    get drivers() { return view.drivers; },
+    get track() { return view.track; },
+    get weekend() { return view.weekend; },
+    get outputs() { return view.outputs; },
+    get fixed() {
+      return {
+        totalLaps: known(view.live.session.totalLaps, view.live.sessionTime),
+        playerCar: known(view.live.playerCar, view.live.sessionTime),
+        setsNow: view.live.cars.map((c) => c.tyres.sets),
+        weatherNow: { weather: view.live.session.weather, forecast: view.live.session.forecast, forecastAccuracy: view.live.session.forecastAccuracy },
+      };
+    },
   };
 }
 
@@ -78,5 +105,6 @@ export function asOfStored(session: StoredDriverSession, ctx: ProfileCtx): AsOfV
     track: session.track,
     weekend: undefined,
     outputs: new Map(),
+    fixed: { totalLaps: session.totalLaps, playerCar: known(session.session.feedCar, 0), setsNow: null, weatherNow: null },
   };
 }

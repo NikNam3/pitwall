@@ -55,22 +55,17 @@ import {
   addCrossing,
   emptyTrack,
   evaluate,
-  fractionAt,
-  gapIn,
-  isNear,
+  groupDamageJumps,
   lapOfProgress,
   latestAt,
-  positionIn,
+  mergesInto,
   resetTrack,
-  sectorAt,
   slowRuns,
-  snapshotAt,
   type Point,
-  type Snapshot,
   type SlowRun,
   type Track,
-  type TrackLayout,
-} from './incidents.ts';
+} from '../shared/time-loss/index.ts';
+import { fractionAt, gapIn, isNear, positionIn, sectorAt, snapshotAt, type Snapshot, type TrackLayout } from './incidents.ts';
 import { INCIDENTS, INCIDENTS_CONFIG, type IncidentsOutput } from './index.ts';
 
 type Config = ReturnType<typeof INCIDENTS_CONFIG.read>;
@@ -519,23 +514,11 @@ const allJumps = (acc: Board): { carId: CarId; jump: FinishedJump; frame: FrameN
 type DamageGroup = { carId: CarId; frame: FrameNumber; jumps: FinishedJump[] };
 
 /** Each car's damage jumps grouped: a jump within `jumpWindowMs` of a group's first one joins it (one incident, several parts). */
-const damageGroups = (acc: Board): DamageGroup[] => {
-  const groups: DamageGroup[] = [];
-  const open = new Map<CarId, DamageGroup>();
-  const sorted = allJumps(acc).sort((a, b) => a.jump.at - b.jump.at || a.carId - b.carId);
-  for (const { carId, jump, frame } of sorted) {
-    const group = open.get(carId);
-    const first = group?.jumps[0];
-    if (group !== undefined && first !== undefined && jump.at - first.at <= acc.jumpWindowMs) {
-      group.jumps.push(jump);
-      continue;
-    }
-    const fresh = { carId, frame, jumps: [jump] };
-    open.set(carId, fresh);
-    groups.push(fresh);
-  }
-  return groups;
-};
+const damageGroups = (acc: Board): DamageGroup[] =>
+  groupDamageJumps(
+    allJumps(acc).sort((a, b) => a.jump.at - b.jump.at || a.carId - b.carId),
+    acc.jumpWindowMs,
+  );
 
 /** Every entry the history gives, with each time loss merged into a collision or damage entry of its car close by. */
 const candidates = (acc: Board): Candidate[] => {
@@ -555,7 +538,7 @@ const candidates = (acc: Board): Candidate[] => {
   const absorbers = list.filter((c) => c.kind === 'collision' || c.kind === 'damage');
   for (const run of standingRuns(acc)) {
     // F1 25 names a collision's two cars in no fixed order, so either one's time loss belongs to it.
-    const into = absorbers.filter((c) => c.carIds.includes(run.carId) && Math.abs(c.at - run.at) <= acc.config.mergeMs);
+    const into = absorbers.filter((c) => c.carIds.includes(run.carId) && mergesInto(run.at, c.at, acc.config.mergeMs));
     for (const c of into) c.merged.push(run);
     if (into.length === 0) list.push(candidate('timeLoss', run.at, run.frame, [run.carId], { lap: lapOfProgress(run.startProgress), run }));
   }
