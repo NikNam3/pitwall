@@ -17,7 +17,8 @@ export type RaceLaps = {
   lap(car: CarId | number, n: number): DeepReadonly<LapRecord> | undefined;
   /** Car `car`'s confirmed records, by lap number ascending. */
   lapsOf(car: CarId | number): readonly DeepReadonly<LapRecord>[];
-  /** The compound car `car` left the pits on after its stop on lap `lap`: its next lap's, else its next stint's. */
+  /** The compound car `car` left the pits on after its stop on lap `lap`: the stint starting on lap `lap + 1`, else its
+   *  lap `lap + 2` record's (never the out-lap record's, which carries the old set). */
   compoundAfter(car: CarId | number, lap: number): NoiseCompound | undefined;
   /** Whether car `car`'s lap `n` is on inter or wet tyres. */
   wetLap(car: CarId | number, n: number): boolean;
@@ -50,7 +51,9 @@ export function raceLaps(history: DeepReadonly<Projection>): RaceLaps {
     lap(car, n)?.visualCompound ?? stints[car]?.find((s) => s.firstLap <= n && n <= s.lastLap)?.visualCompound;
   const wetLap = (car: number, n: number): boolean => WET.has(visualOf(car, n) ?? '');
   const compoundAfter = (car: number, n: number): NoiseCompound | undefined => {
-    const next = lap(car, n + 1)?.visualCompound ?? stints[car]?.find((s) => s.firstLap === n + 1)?.visualCompound;
+    // The out-lap record (lap n + 1) still carries the old set's compound in F1 25 (Task 11b, F8 cause 5): the stint
+    // that starts on lap n + 1, else (its record is written at its end) the lap n + 2 record; else unknown (C3).
+    const next = stints[car]?.find((s) => s.firstLap === n + 1)?.visualCompound ?? lap(car, n + 2)?.visualCompound;
     return next !== undefined && isNoiseCompound(next) ? next : undefined;
   };
   const crossover = (car: number, n: number): boolean => {
