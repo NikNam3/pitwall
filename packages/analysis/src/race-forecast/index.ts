@@ -278,6 +278,8 @@ function crossLine(r: Run, g: number, lap: number): void {
     const c = order[k] ?? 0;
     const b = c * W;
     if (car[b + G_NEXT] !== g + 1) continue;
+    // placed just past this line (its line time set by place): it crossed it before the start
+    if (!Number.isNaN(f.lineT[lineAt(f, c, lap)] ?? Number.NaN)) continue;
     const kind = car[b + NEUTRAL_AT] ?? GREEN;
     const condition = PIT_LOSS[kind] ?? 'green';
     // a stopping car's in-lap pays its share of the loss before the line (F2)
