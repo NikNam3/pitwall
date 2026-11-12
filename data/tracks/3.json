@@ -2190,6 +2190,10 @@
         "source": "OpenF1, 2025 Bahrain Grand Prix R, median fuel-corrected racing lap (30 ms/kg, 1.8 kg/lap; 247 soft, 455 medium, 270 hard laps)"
       },
       "at": 0
+    },
+    "hazard": {
+      "known": false,
+      "reason": "notReceived"
     }
   },
   "source": {

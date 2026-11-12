@@ -2157,6 +2157,10 @@
         "source": "OpenF1, 2025 Italian Grand Prix R, median fuel-corrected racing lap (30 ms/kg, 1.8 kg/lap; 24 soft, 399 medium, 494 hard laps)"
       },
       "at": 0
+    },
+    "hazard": {
+      "known": false,
+      "reason": "notReceived"
     }
   },
   "source": {

@@ -5,6 +5,7 @@ import type { NoiseCompound } from './analyses/driver-noise.ts';
 import type { RaceInteraction } from './analyses/race-interaction.ts';
 import type { TyreType } from './analyses/crossover.ts';
 import type { CarId } from './ids.ts';
+import type { Ms } from './units.ts';
 
 /** The compounds in `StartingPoint.compound`'s index order. */
 export const NOISE_COMPOUNDS = ['soft', 'medium', 'hard', 'inter', 'wet'] as const satisfies readonly NoiseCompound[];
@@ -46,7 +47,10 @@ export type StartingPoint = {
   /** Our cars only. */
   sets: Record<CarId, { compound: NoiseCompound; wearPct: number }[]>;
   wetness: { wetnessMs: number; sdMs: number };
-  track: { brakingZones: Float64Array; drsZones: DrsZone[]; pitLossMs: { green: number; vsc: number; sc: number } };
+  /** `inLapShare`: the part of a stop's loss paid on the in lap, the rest on the out lap (SP4.3b spec §4.2, F2). */
+  track: { brakingZones: Float64Array; drsZones: DrsZone[]; pitLossMs: { green: number; vsc: number; sc: number; inLapShare: number } };
+  /** DRS: a car within `rangeMs` of the car ahead at a detection point may open it, from lap `fromLap` (SP4.3b spec §4.2, F7). */
+  drs: { rangeMs: Ms; fromLap: number };
   /** Built by `forecast-field` (plan review P9, C50). */
   interaction: RaceInteraction;
   lapModel: LapModelParams;
@@ -82,8 +86,20 @@ export type LapInput = {
   mistakeMs: number;
 };
 
-/** One car's stops to the flag. */
-export type Policy = { stops: { lap: number; compound: NoiseCompound }[] };
+/**
+ * A reaction a plan carries (SP4.3b spec §6, §8.2): when its condition holds in a scenario, the car does its action.
+ * The closed list of kinds; every threshold is the DP's as at the plan. `degradationOff` carries the plan it switches
+ * to, never an index: a decision must replay alone (C76).
+ */
+export type Trigger =
+  | { kind: 'neutralised'; condition: 'sc' | 'vsc'; fromLap: number; toLap: number; action: { box: NoiseCompound } | 'stayOut' }
+  | { kind: 'rain'; wetnessMs: number; action: { box: NoiseCompound } }
+  | { kind: 'rivalPits'; carId: CarId; withinMs: Ms; action: 'cover' | 'extend' }
+  | { kind: 'degradationOff'; wearRateDeltaPct: number; action: { switchTo: { lap: number; compound: NoiseCompound }[] } }
+  | { kind: 'damage'; lossMsPerLap: Ms; action: { box: NoiseCompound } };
+
+/** One car's stops to the flag, and the triggers that change them inside a scenario. */
+export type Policy = { stops: { lap: number; compound: NoiseCompound }[]; triggers: Trigger[] };
 
 /** One scenario: its id (the draws' stream key), whether it draws nothing (`plain`), and its neutralisations. */
 export type Scenario = { id: number; plain: boolean; neutralisations: { kind: 'sc' | 'vsc'; fromLap: number; toLap: number }[] };

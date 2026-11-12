@@ -2172,6 +2172,10 @@
         "source": "OpenF1, 2025 Dutch Grand Prix R, median fuel-corrected racing lap (30 ms/kg, 1.8 kg/lap; 212 soft, 336 medium, 492 hard laps)"
       },
       "at": 0
+    },
+    "hazard": {
+      "known": false,
+      "reason": "notReceived"
     }
   },
   "source": {

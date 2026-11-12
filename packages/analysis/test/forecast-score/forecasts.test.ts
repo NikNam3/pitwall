@@ -78,13 +78,13 @@ describe('forecast-score policies', () => {
       [carId(4)]: stop({ window: known({ lowLap: 18, midLap: 20, highLap: 22, toFlag: false }, 0), nextCompound: known({ soft: 0.2, medium: 0.5, hard: 0.3 }, 0) }),
     };
     expect(forecastPolicies(stops, 6)).toEqual([
-      { stops: [{ lap: 12, compound: 'hard' }] },
-      { stops: [] },
-      { stops: [] },
-      { stops: [] },
-      { stops: [{ lap: 20, compound: 'medium' }] },
+      { stops: [{ lap: 12, compound: 'hard' }], triggers: [] },
+      { stops: [], triggers: [] },
+      { stops: [], triggers: [] },
+      { stops: [], triggers: [] },
+      { stops: [{ lap: 20, compound: 'medium' }], triggers: [] },
       // Car 5 has no entry: no stop.
-      { stops: [] },
+      { stops: [], triggers: [] },
     ]);
   });
 });

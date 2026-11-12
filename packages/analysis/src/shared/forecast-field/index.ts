@@ -197,6 +197,8 @@ export function buildStartingPoint(
     sets: {},
     wetness: wetnessOf(wetness, config.priorWetnessSdMs),
     track: trackOf(view, pitLoss, need),
+    // SP4.3b Task 6 (F7) takes the DRS rule from race-interaction's config; until then the F1 rule race-forecast keeps (1 s, from lap 3).
+    drs: { rangeMs: 1_000, fromLap: 3 },
     interaction,
     lapModel,
   };
@@ -331,7 +333,8 @@ function trackOf(view: AsOfView, pitLoss: DeepReadonly<PitLossOutput> | undefine
     const fallback = track?.defaults.pitLossMs[c];
     return need.of(own, fallback?.known === true ? fallback.value.value : undefined);
   };
-  return { brakingZones: Float64Array.from(braking), drsZones: drs, pitLossMs: { green: lossOf('green'), vsc: lossOf('vsc'), sc: lossOf('sc') } };
+  return { brakingZones: Float64Array.from(braking), drsZones: drs, // SP4.3b Task 6 (F2) splits the loss between the in lap and the out lap; 0 keeps it all on the out lap.
+    pitLossMs: { green: lossOf('green'), vsc: lossOf('vsc'), sc: lossOf('sc'), inLapShare: 0 } };
 }
 
 /** Our cars' sets left (the shared `ourCars` rule, C43): every available set but the fitted one, of a compound the model tells apart. */

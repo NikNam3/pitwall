@@ -2192,6 +2192,10 @@
         "source": "OpenF1, 2025 Hungarian Grand Prix R, median fuel-corrected racing lap (30 ms/kg, 1.8 kg/lap; 43 soft, 522 medium, 725 hard laps)"
       },
       "at": 0
+    },
+    "hazard": {
+      "known": false,
+      "reason": "notReceived"
     }
   },
   "source": {

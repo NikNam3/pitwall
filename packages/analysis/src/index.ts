@@ -75,4 +75,20 @@ export { driverNoiseCalculator } from './driver-noise/calculator.ts';
 export * from './race-interaction/index.ts';
 export { raceInteractionCalculator } from './race-interaction/calculator.ts';
 export * from './forecast-score/index.ts';
+export * from './race-hazard/index.ts';
+export { SIMULATOR as STRATEGY_DP_SIMULATOR, strategyDp, type DpCarParams, type DpInput, type DpPlan, type DpResult, type DpTable } from './strategy-dp/index.ts';
+export {
+  SIMULATOR as RACE_MONTE_CARLO_SIMULATOR,
+  fieldPositions,
+  raceMonteCarlo,
+  scoreAll,
+  type FieldInput,
+  type FieldResult,
+  type McCandidate,
+  type McConfig,
+  type McInput,
+  type McResult,
+  type RivalRules,
+} from './race-monte-carlo/index.ts';
+export * from './strategy/index.ts';
 export { FORECAST_FIELD_CONFIG } from './shared/forecast-field/config.ts';

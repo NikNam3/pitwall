@@ -20,6 +20,18 @@ export type BrakingZone = { start: LapFraction; end: LapFraction };
 /** A default a run starts from, with where it came from (`"OpenF1, 2025 <event> R, median of n stops"`). */
 export type TrackDefault<T> = { value: T; source: string };
 
+/** A track's chances of an SC or a VSC (SP4.3b spec §5.1), from real races. */
+export type TrackHazard = {
+  /** Real races behind the numbers. */
+  races: number;
+  /** The chance an SC or a VSC starts on lap 1. */
+  lapOne: { sc: number; vsc: number };
+  /** The chance per lap that one starts, from lap 2, by race-distance fraction; ascending `upTo`, the last 1. */
+  byFraction: { upTo: number; sc: number; vsc: number }[];
+  /** The chance of a neutralisation lasting 1, 2, 3 … laps (index 0 = 1 lap); each sums to 1. */
+  durationLaps: { sc: number[]; vsc: number[] };
+};
+
 /** A track's data as the view holds it (`view.track`): the file without its provenance. */
 export type TrackData = {
   trackId: number;
@@ -37,6 +49,8 @@ export type TrackData = {
     pitLossMs: { green: Known<TrackDefault<Ms>>; vsc: Known<TrackDefault<Ms>>; sc: Known<TrackDefault<Ms>> };
     /** Relative to medium = 0. */
     compoundOffsetsMs: Known<TrackDefault<{ soft: Ms; medium: Ms; hard: Ms }>>;
+    /** The SC and VSC chances (SP4.3b spec §5.1); validated from Task 4 on. */
+    hazard: Known<TrackDefault<TrackHazard>>;
   };
 };
 

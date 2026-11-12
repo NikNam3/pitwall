@@ -1,4 +1,4 @@
-import type { DecisionRecord, FrameNumber, Ms, ParticipantsValues, SessionTime } from '@pitwall/domain';
+import type { FrameNumber, GivenDecision, Ms, ParticipantsValues, SessionTime } from '@pitwall/domain';
 import type { Frame } from '../frame/frame.ts';
 import { logWriter, voidFactOf } from '../log/log.ts';
 import { projectionLengths } from '../log/projection.ts';
@@ -79,7 +79,7 @@ const spanLengths = (state: DeepReadonly<EngineState>): Record<string, number> =
 type Target = { frameId: number; sessionTime?: SessionTime };
 
 /** The decisions the user committed with a frame (C76): as the bridge hands them, without the frame the recorder adds. */
-type GivenDecisions = readonly Omit<DecisionRecord, 'frame'>[];
+type GivenDecisions = readonly GivenDecision[];
 
 /** A frame given to `apply`, with the decisions committed at it; absent means none. */
 type Given = { frame: Frame; decisions?: GivenDecisions };

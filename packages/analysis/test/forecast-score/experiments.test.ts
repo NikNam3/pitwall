@@ -87,9 +87,9 @@ describe('forecast-score natural experiments', () => {
     });
     const { rejoin } = naturalExperiments(race.history, CONFIG);
     const first = rejoin.find((c) => c.carId === 1)!;
-    expect(first.policy).toEqual([{ stops: [] }, { stops: [{ lap: 6, compound: 'medium' }] }, { stops: [] }, { stops: [{ lap: 8, compound: 'hard' }] }]);
+    expect(first.policy).toEqual([{ stops: [], triggers: [] }, { stops: [{ lap: 6, compound: 'medium' }], triggers: [] }, { stops: [], triggers: [] }, { stops: [{ lap: 8, compound: 'hard' }], triggers: [] }]);
     // Car 3's case is predicted at the end of its lap 7: car 1's stop is made by then, and so no policy's.
     const second = rejoin.find((c) => c.carId === 3)!;
-    expect(second.policy).toEqual([{ stops: [] }, { stops: [] }, { stops: [] }, { stops: [{ lap: 8, compound: 'hard' }] }]);
+    expect(second.policy).toEqual([{ stops: [], triggers: [] }, { stops: [], triggers: [] }, { stops: [], triggers: [] }, { stops: [{ lap: 8, compound: 'hard' }], triggers: [] }]);
   });
 });

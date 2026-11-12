@@ -4,11 +4,11 @@
 // `<file>.decisions.json`. A replay or reprocess feeds both back (`recordingDecisions`); a recording without them runs
 // on no priors (`notApplicable`) and no decisions. A sidecar that cannot be read is treated as absent, with one warning.
 import { readFileSync, writeFileSync } from 'node:fs';
-import type { DecisionRecord, PriorsSnapshot, RunPriors } from '@pitwall/domain';
+import type { GivenDecision, PriorsSnapshot, RunPriors } from '@pitwall/domain';
 import type { Logger } from '../log.ts';
 
 /** A decision as the bridge hands it to the runner (C76): without the frame, which the decision recorder adds. */
-export type GivenDecision = Omit<DecisionRecord, 'frame'>;
+export type { GivenDecision };
 
 /**
  * One entry of the decisions sidecar: the decision and the record index it was committed at, the number of records of

@@ -7,6 +7,7 @@ import {
   type CalibrationActiveValue,
   type CarId,
   type DecisionRecord,
+  type GivenDecision,
   type FeedId,
   type Known,
   type MachineId,
@@ -121,7 +122,7 @@ export class SessionProcessor {
   /** The run's priors (C62a): only grow, a flashback leaves them (the projection decides which snapshot counts). */
   #priors: RunPriors;
   /** Decisions committed since the last frame: the next frame carries them (C10, C76). */
-  readonly #pending = new PendingDecisions<Omit<DecisionRecord, 'frame'>>();
+  readonly #pending = new PendingDecisions<GivenDecision>();
   /** The records written to the session file: a decision committed now is placed at their count (C76). */
   readonly #records: SessionRecords;
   /** The last `calibration.active` handed to `onActive`, as JSON: it is handed on only when it changes. */
@@ -171,7 +172,7 @@ export class SessionProcessor {
    * A decision the user committed (C76): the next frame carries it to the runner, whose decision recorder appends it
    * describing that frame. `snapshot`: the priors snapshot a `calibrationChosen` names, added to the run's priors first.
    */
-  decide(decision: Omit<DecisionRecord, 'frame'>, snapshot?: PriorsSnapshot): void {
+  decide(decision: GivenDecision, snapshot?: PriorsSnapshot): void {
     if (snapshot !== undefined && this.#priors.snapshots[snapshot.fingerprint] === undefined) {
       this.#priors = { ...this.#priors, snapshots: { ...this.#priors.snapshots, [snapshot.fingerprint]: snapshot } };
     }

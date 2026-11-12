@@ -2208,6 +2208,10 @@
         "source": "OpenF1, 2025 Monaco Grand Prix R, median fuel-corrected racing lap (30 ms/kg, 1.8 kg/lap; 48 soft, 449 medium, 775 hard laps)"
       },
       "at": 0
+    },
+    "hazard": {
+      "known": false,
+      "reason": "notReceived"
     }
   },
   "source": {

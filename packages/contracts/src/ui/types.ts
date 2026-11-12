@@ -1,5 +1,5 @@
 // UI state shared by the bridge and every window (spec 7.2, 7.5, 7.7, 7.8). JSON-safe.
-import type { CalibrationSource, CarId, FeedId, InsightCategory, PersonId, SessionRef, TeamId } from '@pitwall/domain';
+import type { CalibrationSource, CarId, FeedId, InsightCategory, PersonId, Policy, SessionRef, TeamId } from '@pitwall/domain';
 
 export type WindowId = string;
 export type Geometry = { screen: number; x: number; y: number; width: number; height: number };
@@ -45,7 +45,12 @@ export type UiAction =
   | { kind: 'drivers.exclude'; person: PersonId; session: SessionRef }
   /** `value` within the entry's declared range (`ProfileEntryDecl.range`). */
   | { kind: 'drivers.override'; person: PersonId; key: string; value: number }
-  | { kind: 'drivers.override.clear'; person: PersonId; key: string };
+  | { kind: 'drivers.override.clear'; person: PersonId; key: string }
+  // Plans (C76, SP4.3b spec §8.2): a plan decision for one of our cars, for every feed of the team; the bridge checks
+  // shape and range only (C73), whether the plan can still be followed is the `strategy` job's judgement (C43).
+  /** Commits `policy` for `carId`, its triggers with their thresholds as the user saw them. */
+  | { kind: 'plan.commit'; carId: CarId; policy: Policy }
+  | { kind: 'plan.clear'; carId: CarId };
 
 /** The driver-profile uiActions (C62c), for the CLI's and the driver-profile panel's edits; answered as every uiAction (`ActionOutcome`, C73). */
 export type DriverAction = Extract<UiAction, { kind: `drivers.${string}` }>;

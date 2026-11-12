@@ -9,6 +9,8 @@ export const decisionsRecorder: Recorder<Record<string, never>> = {
   init: () => ({}),
   apply(input, own, log, out) {
     for (const decision of input.decisions ?? []) {
+      // SP4.3b Task 17: the recorder appends planCommitted and planCleared.
+      if (decision.kind !== 'calibrationChosen') throw new Error('not implemented');
       log.append('decisions', { ...decision, frame: input.frameNumber });
       out.changed.add('decisions');
     }

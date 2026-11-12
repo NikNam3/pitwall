@@ -2182,6 +2182,10 @@
         "source": "OpenF1, 2025 Abu Dhabi Grand Prix R, median fuel-corrected racing lap (30 ms/kg, 1.8 kg/lap; 17 soft, 384 medium, 681 hard laps)"
       },
       "at": 0
+    },
+    "hazard": {
+      "known": false,
+      "reason": "notReceived"
     }
   },
   "source": {

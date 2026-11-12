@@ -96,10 +96,10 @@ function likeliest(odds: DeepReadonly<Partial<Record<NoiseCompound, number>>>): 
 export function forecastPolicies(stops: DeepReadonly<RivalStops>, cars: number, onLap?: (car: number) => number): Policy[] {
   return Array.from({ length: cars }, (_, k): Policy => {
     const stop = stops[k as CarId];
-    if (stop === undefined || !stop.window.known || stop.window.value.toFlag || !stop.nextCompound.known) return { stops: [] };
+    if (stop === undefined || !stop.window.known || stop.window.value.toFlag || !stop.nextCompound.known) return { stops: [], triggers: [] };
     const compound = likeliest(stop.nextCompound.value);
     const mid = stop.window.value.midLap;
     const lap = onLap === undefined ? mid : Math.max(mid, onLap(k) + 1);
-    return compound === undefined ? { stops: [] } : { stops: [{ lap, compound }] };
+    return compound === undefined ? { stops: [], triggers: [] } : { stops: [{ lap, compound }], triggers: [] };
   });
 }

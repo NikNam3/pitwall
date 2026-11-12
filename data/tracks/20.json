@@ -51,6 +51,10 @@
     "compoundOffsetsMs": {
       "known": false,
       "reason": "notReceived"
+    },
+    "hazard": {
+      "known": false,
+      "reason": "notReceived"
     }
   },
   "source": {

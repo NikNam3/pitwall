@@ -121,6 +121,10 @@ export class UiState {
       case 'drivers.override.clear':
         // The profile module's (C62c), not UI state.
         return INVALID;
+      case 'plan.commit':
+      case 'plan.clear':
+        // The team's feed pipelines' decisions (C76, SP4.3b Task 17), not UI state.
+        return INVALID;
     }
   }
 

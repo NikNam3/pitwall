@@ -157,6 +157,10 @@ export const decodeUiAction = (raw: unknown): UiAction | undefined => {
       return isString(raw.person) && isString(raw.key) && isNumber(raw.value) ? { kind: raw.kind, person: raw.person, key: raw.key, value: raw.value } : undefined;
     case 'drivers.override.clear':
       return isString(raw.person) && isString(raw.key) ? { kind: raw.kind, person: raw.person, key: raw.key } : undefined;
+    case 'plan.commit':
+    case 'plan.clear':
+      // SP4.3b Task 17: their shape (C73); until then rejected as malformed.
+      return undefined;
     default:
       return undefined;
   }

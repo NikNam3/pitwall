@@ -2161,6 +2161,10 @@
         "source": "OpenF1, 2025 Austrian Grand Prix R, median fuel-corrected racing lap (30 ms/kg, 1.8 kg/lap; 54 soft, 540 medium, 417 hard laps)"
       },
       "at": 0
+    },
+    "hazard": {
+      "known": false,
+      "reason": "notReceived"
     }
   },
   "source": {

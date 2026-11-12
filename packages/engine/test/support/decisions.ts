@@ -1,10 +1,10 @@
 // Shared by the decision tests (contract C10, C27a, C62a, C76): a decision as the bridge hands it to the runner, priors
 // snapshots and the run's priors, and `applyWith`, which gives the runner a frame with the decisions committed at it.
-import { known, type DecisionRecord, type Known, type PriorsSnapshot, type RunPriors } from '@pitwall/domain';
+import { known, type GivenDecision, type Known, type PriorsSnapshot, type RunPriors } from '@pitwall/domain';
 import type { DeepReadonly, Frame, OnResult, SessionRunner } from '../../src/index.ts';
 
 /** A decision as the bridge hands it to the runner: without the frame, which the decision recorder adds (C10). */
-export type GivenDecision = Omit<DecisionRecord, 'frame'>;
+export type { GivenDecision };
 
 /** `calibrationChosen` of set `setId` with its snapshot `snapshot`; both `null` for `defaults` (C62a, spec 3.3). */
 export const chosen = (setId: string | null, snapshot: string | null): GivenDecision => ({ kind: 'calibrationChosen', setId, snapshot });

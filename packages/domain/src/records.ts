@@ -3,6 +3,7 @@ import type { DamageParts } from './analyses/damage.ts';
 import type { ActualCompound, VisualCompound } from './compounds.ts';
 import type { Corners } from './corners.ts';
 import type { FactRef, FrameNumber } from './facts.ts';
+import type { Policy } from './forecast.ts';
 import type { CarId, SessionTime } from './ids.ts';
 import type { Known } from './known.ts';
 import type { Joules, Kg, Ms, Percent, Ratio } from './units.ts';
@@ -151,5 +152,13 @@ export type MiniSectorCrossing = {
  * A decision the user committed (C76), appended by the decision recorder describing the frame it was committed at (C10,
  * C26). It names the choice, never the values (C23): `calibrationChosen` names the set (`null` for `defaults`) and the
  * priors snapshot it chose (`null` without one, C62a); the snapshot's entries live in the priors sidecar.
+ * `planCommitted` carries the whole policy the user chose for one of our cars, thresholds included, as they saw it
+ * (SP4.3b spec §8.2): followed exactly until replaced or cleared; `planCleared` drops the car's plan.
  */
-export type DecisionRecord = { kind: 'calibrationChosen'; setId: string | null; snapshot: string | null; frame: FrameNumber };
+export type DecisionRecord =
+  | { kind: 'calibrationChosen'; setId: string | null; snapshot: string | null; frame: FrameNumber }
+  | { kind: 'planCommitted'; carId: CarId; policy: Policy; frame: FrameNumber }
+  | { kind: 'planCleared'; carId: CarId; frame: FrameNumber };
+
+/** A decision as it enters the engine, before the recorder gives it its frame (C10): one kind at a time. */
+export type GivenDecision = DecisionRecord extends infer D ? (D extends DecisionRecord ? Omit<D, 'frame'> : never) : never;

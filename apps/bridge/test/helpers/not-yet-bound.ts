@@ -6,4 +6,5 @@ import type { TopicName } from '@pitwall/contracts';
  * run.
  */
 export const NOT_YET_BOUND: ReadonlySet<TopicName> = new Set<TopicName>([
+  'strategy.plans',
 ]);

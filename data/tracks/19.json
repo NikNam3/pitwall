@@ -2200,6 +2200,10 @@
         "source": "OpenF1, 2025 Mexico City Grand Prix R, median fuel-corrected racing lap (30 ms/kg, 1.8 kg/lap; 639 soft, 431 medium, 87 hard laps)"
       },
       "at": 0
+    },
+    "hazard": {
+      "known": false,
+      "reason": "notReceived"
     }
   },
   "source": {

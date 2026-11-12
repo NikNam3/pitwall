@@ -97,6 +97,7 @@ describe('TOPICS', () => {
       ['rejoin.ghostLines', 'rejoin', 'feed', 'state', 4],
       ['scCall.car', 'sc-call', 'feed', 'state', 4],
       ['stintAnalysis.car', 'stint-analysis', 'feed', 'state', 1],
+      ['strategy.plans', 'strategy', 'feed', 'state', 1],
       ['talkWindow.car', 'talk-window', 'feed', 'state', 10],
       ['trackPositions.cars', 'track-positions', 'feed', 'state', 10],
       ['trackPositions.geometry', 'track-positions', 'feed', 'state', 1],
@@ -160,7 +161,7 @@ describe('topic types', () => {
       | 'raisingAverage.field' | 'lapOverview.car' | 'weather.forecast' | 'crossover.car'
       | 'rejoin.car' | 'rejoin.ghostLines' | 'scCall.car' | 'pitWindow.car'
       | 'calibration.sets' | 'calibration.values' | 'calibration.candidates' | 'calibration.active'
-      | 'drivers.profiles' | 'drivers.links' | 'forecastScore.report' | 'config.effective'
+      | 'drivers.profiles' | 'drivers.links' | 'forecastScore.report' | 'config.effective' | 'strategy.plans'
       | 'situation.carActivityPractice' | 'situation.carActivityQualifying' | 'situation.carActivityRace' | 'situation.carFlags'
       | 'situation.carDriver' | 'situation.carLocation' | 'situation.carStatus' | 'situation.clock' | 'situation.compoundRule' | 'situation.lapValidity'
       | 'situation.penalties' | 'situation.raceControlPractice' | 'situation.raceControlQualifying' | 'situation.raceControlRace'

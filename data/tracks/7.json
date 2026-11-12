@@ -2196,6 +2196,10 @@
         "source": "OpenF1, 2025 British Grand Prix R, median fuel-corrected racing lap (30 ms/kg, 1.8 kg/lap; 31 soft, 111 medium, 20 hard laps)"
       },
       "at": 0
+    },
+    "hazard": {
+      "known": false,
+      "reason": "notReceived"
     }
   },
   "source": {

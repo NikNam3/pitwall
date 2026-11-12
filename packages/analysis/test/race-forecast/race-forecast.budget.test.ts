@@ -26,7 +26,7 @@ const field = (lap: number) =>
     }),
     ours: [0, 1],
   });
-const policiesFrom = (lap: number): Policy[] => Array.from({ length: CARS }, (_, i) => ({ stops: lap === 1 ? [{ lap: stopLap(i), compound: 'medium' }] : [] }));
+const policiesFrom = (lap: number): Policy[] => Array.from({ length: CARS }, (_, i) => ({ stops: lap === 1 ? [{ lap: stopLap(i), compound: 'medium' }] : [], triggers: [] }));
 
 /** The best pass's mean time per scenario, in ms. */
 function bestMs(lap: number): number {
