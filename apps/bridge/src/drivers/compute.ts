@@ -105,6 +105,22 @@ export class ProfileRunner {
     return entries;
   }
 
+  /**
+   * One linked session's own value of every entry: the entry's aggregate over that session alone (`pitwall drivers
+   * show`). Not cached; the person's overrides do not apply (it is the session's own value). An aggregate that throws
+   * gives `unknown` (C48).
+   */
+  sessionValues(session: LinkedSession): Record<string, Known<number>> {
+    const ctx: ProfileCtx = { config: this.#config, overrides: {} };
+    const values: Record<string, Known<number>> = {};
+    for (const decl of this.#decls) {
+      for (const [key, entry] of Object.entries(decl.entries)) {
+        values[key] = this.#call(decl, key, () => entry.aggregate([session.stored], ctx))?.value ?? unknown('notApplicable');
+      }
+    }
+    return values;
+  }
+
   #call<T>(decl: ProfilesDecl, what: string, run: () => T): T | undefined {
     try {
       return run();
