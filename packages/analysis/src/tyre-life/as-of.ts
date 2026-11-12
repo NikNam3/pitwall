@@ -3,14 +3,14 @@
 // stint record reaches that lap: a new set no lap has run on yet), and its wear is the newest lap's end wear; the game's
 // life span exists only in the live state (`unknown('notReceived')`). The scheduled run is this form on `asOfNow(view)`
 // with the live state's set, wear and life span in place of the projection's (`tyreLifeOf`, the calculator).
-import { currentLaps, known, unknown, type CarId, type Corners, type Known, type LapRecord, type Ms, type Percent, type VisualCompound } from '@pitwall/domain';
+import { known, unknown, type CarId, type Corners, type Known, type LapRecord, type Ms, type Percent, type VisualCompound } from '@pitwall/domain';
 import type { AsOfView, DeepReadonly, EngineView } from '@pitwall/engine/readers';
 import { DEGRADATION, type DegradationOutput, type StintDegradation } from '../degradation/index.ts';
 import { priorKey } from '../degradation/priors.ts';
 import { LAP_CLASSES_CONFIG } from '../lap-classes/index.ts';
 import { lapsToReach, PER_LAP_RATE_CONFIG } from '../per-lap-rate/index.ts';
 import { behaviourFor } from '../shared/behaviour.ts';
-import { currentStintLaps } from '../shared/stint-laps.ts';
+import { currentStintLaps, lapsByCar } from '../shared/stint-laps.ts';
 import { CORNERS, wearBasis, wearRatePerCorner, type Corner } from '../shared/wear-rate.ts';
 import { TYRE_LIFE_BEHAVIOUR, type TyreLifeEffect } from './behaviour.ts';
 import { TYRE_LIFE_CONFIG } from './config.ts';
@@ -117,8 +117,9 @@ function freshLife(compound: VisualCompound, priors: Priors, stints: readonly De
  * wear limit (0 at or past it) per corner; the set's laps to its limit on its basis (each `insufficientData` before the
  * current stint has run `minLaps` laps); the fresh-set life per compound; the game's life span of the fitted set.
  */
-export function tyreLifeOf(view: AsOfView, cars: readonly CarId[], tyresOf: (car: CarId) => TyresNow): TyreLifeOutput {
+export function tyreLifeOf(view: AsOfView, cars: readonly CarId[], tyresOf: (car: CarId, laps: readonly LapRecord[]) => TyresNow): TyreLifeOutput {
   const readers = readersOf(view);
+  const lapsOf = lapsByCar(view.history);
   const limits = limitsOf(view);
   const { minLaps } = TYRE_LIFE_CONFIG.read(readers);
   const rateOpts = PER_LAP_RATE_CONFIG.read(readers);
@@ -128,10 +129,11 @@ export function tyreLifeOf(view: AsOfView, cars: readonly CarId[], tyresOf: (car
   for (const id of cars) {
     const effect: TyreLifeEffect = Object.assign({}, ...behaviourFor(TYRE_LIFE_BEHAVIOUR, readers, id));
     if (effect.inSession !== true) continue;
-    const tyres = tyresOf(id);
+    const laps = lapsOf.get(id) ?? [];
+    const tyres = tyresOf(id, laps);
     // the set's laps: the set change is looked for over every lap of the stint (an in lap included), and only then are
     // the rate laps taken (`wearRatePerCorner` picks them itself)
-    const stintLaps = currentStintLaps(view.history, id);
+    const stintLaps = currentStintLaps(view.history, id, laps);
     const own = onFittedSet(stintLaps, tyres.set);
     // the rates come from this stint: before it has run `minLaps` laps there are no laps to the limit (spec 7, K17)
     const measured = stintLaps.length >= minLaps;
@@ -172,13 +174,12 @@ const NO_LAP = unknown('notReceived');
 /**
  * A car's tyres as of the projection: the set of its newest lap, aged one lap more than at that lap's start, unless the
  * car's newest stint record ends at a fitting after that lap (a set no recorded lap ran on); the wear at the
- * newest lap's end; no game life span (the live state's only).
+ * newest lap's end; no game life span (the live state's only). `laps` are the car's (`carLaps`).
  */
-function tyresAsOf(view: AsOfView, car: CarId): TyresNow {
-  const laps = currentLaps((view.history.laps as readonly LapRecord[]).filter((l) => l.carId === car));
+function tyresAsOf(view: AsOfView, car: CarId, laps: readonly LapRecord[]): TyresNow {
   const newest = laps.at(-1);
   if (newest === undefined) return { set: undefined, wearPct: { fl: NO_LAP, fr: NO_LAP, rl: NO_LAP, rr: NO_LAP }, gameLifeSpanLaps: NO_LAP };
-  const stint = view.history.stints.filter((s) => s.carId === car).at(-1);
+  const stint = view.history.stints.findLast((s) => s.carId === car);
   // a fitting closes the stint at its in lap (the newest lap, or the lap the car is on); the session's end closes it at
   // the newest lap, which is no in lap, and fits no set
   const refitted = stint !== undefined && (stint.lastLap > newest.lapNumber || (stint.lastLap === newest.lapNumber && newest.inLap));
@@ -191,5 +192,5 @@ const carsOf = (view: AsOfView): CarId[] => [...new Set((view.situation.byMachin
 
 /** `tyre-life`'s output as of the view's frame. */
 export function tyreLifeAsOf(view: AsOfView): TyreLifeOutput {
-  return tyreLifeOf(view, carsOf(view), (car) => tyresAsOf(view, car));
+  return tyreLifeOf(view, carsOf(view), (car, laps) => tyresAsOf(view, car, laps));
 }
