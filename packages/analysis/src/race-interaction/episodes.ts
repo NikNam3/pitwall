@@ -10,6 +10,7 @@
 //    zone that leads into the braking zone, and that car is not itself within range of its own car ahead.
 import {
   carStatusSpans,
+  currentCrossingTimes,
   currentLaps,
   MINI_SECTORS,
   sessionPhaseRaceSpans,
@@ -208,10 +209,16 @@ export function episodesOf(source: MembershipSource, track: DeepReadonly<TrackDa
   const pointCount = points.length;
   // the segments read (each point's and the next), by column of the crossing table: -1 for a segment not read
   const column = new Int8Array(MINI_SECTORS).fill(-1);
-  let columns = 0;
+  const segmentsRead: number[] = [];
   for (const p of points) {
-    for (const segment of [p.segment, (p.segment + 1) % MINI_SECTORS]) if (column[segment] === -1) column[segment] = columns++;
+    for (const segment of [p.segment, (p.segment + 1) % MINI_SECTORS]) {
+      if (column[segment] === -1) {
+        column[segment] = segmentsRead.length;
+        segmentsRead.push(segment);
+      }
+    }
   }
+  const columns = segmentsRead.length;
 
   // the current laps (C25) by car and lap number
   const lapsOf: (DeepReadonly<LapRecord> | undefined)[][] = [];
@@ -227,17 +234,9 @@ export function episodesOf(source: MembershipSource, track: DeepReadonly<TrackDa
   const cars: CarId[] = [];
   for (let car = 0; car < carSlots; car++) if (lapsOf[car] !== undefined) cars.push(car as CarId);
 
-  // the current crossings (C25) at the segments read: their times by car, lap and segment (NaN without one). Written in
-  // log order, a later crossing of a slot over an earlier one: the domain's rule `foldCurrentCrossing` (its index holds
-  // exactly `currentCrossings` by car, lap and segment), kept in a typed array; the domain's Map index costs this
-  // from-scratch run about 4 ms over the ~69k crossings of a long race (a typed form in `domain` is requested)
-  const at = new Float64Array(carSlots * laps * columns).fill(Number.NaN);
-  const crossings = history.crossings as readonly MiniSectorCrossing[];
-  for (let i = 0; i < crossings.length; i++) {
-    const c = crossings[i] as MiniSectorCrossing;
-    const k = column[c.segment] ?? -1;
-    if (k >= 0 && c.carId < carSlots && c.lap < laps) at[(c.carId * laps + c.lap) * columns + k] = c.at;
-  }
+  // the current crossings (C25) at the segments read, through the domain helper: their times by car, lap (0 … laps - 1)
+  // and column (NaN without one)
+  const at = currentCrossingTimes(history.crossings as readonly MiniSectorCrossing[], carSlots, laps - 1, segmentsRead);
   const crossingAt = (car: number, lap: number, segment: number): number => {
     const k = column[segment] ?? -1;
     return lap < laps && k >= 0 ? nth(at, (car * laps + lap) * columns + k) : Number.NaN;
