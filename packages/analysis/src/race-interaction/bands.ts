@@ -7,13 +7,24 @@ import { RACE_INTERACTION_CONFIG, type RaceInteractionConfig } from './config.ts
 /** One band: the AI difficulties it covers, inclusive. */
 export type DifficultyBand = { fromDifficulty: number; toDifficulty: number };
 
-/** The bands of `difficultyBands` (`from-to` inclusive, comma-separated), in order; a malformed entry is a config bug (C3). */
-export function parseBands(spec: string): DifficultyBand[] {
-  return spec.split(',').map((part) => {
+/** The bands of a well-formed spec, else `undefined`. */
+function bandsOf(spec: unknown): DifficultyBand[] | undefined {
+  if (typeof spec !== 'string') return undefined;
+  const bands: DifficultyBand[] = [];
+  for (const part of spec.split(',')) {
     const match = /^\s*(\d+)\s*-\s*(\d+)\s*$/.exec(part);
-    if (match === null) throw new Error(`race-interaction: difficultyBands entry "${part}" is not "from-to"`);
-    return { fromDifficulty: Number(match[1]), toDifficulty: Number(match[2]) };
-  });
+    if (match === null) return undefined;
+    bands.push({ fromDifficulty: Number(match[1]), toDifficulty: Number(match[2]) });
+  }
+  return bands;
+}
+
+/**
+ * The bands of `difficultyBands` (`from-to` inclusive, comma-separated), in order. The spec can come from the user's
+ * `config.json`, so a malformed one is an expected problem (C3): it gives the config's default bands (ruling R37).
+ */
+export function parseBands(spec: string): DifficultyBand[] {
+  return bandsOf(spec) ?? bandsOf(RACE_INTERACTION_CONFIG.defaults.difficultyBands) ?? [];
 }
 
 /** The index of the band covering `difficulty`, else -1. */
