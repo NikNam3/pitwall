@@ -28,3 +28,6 @@ export const RACE_INTERACTION_CONFIG = defineConfig('race-interaction', {
   /** The prior's weight in episodes in the shrinkage towards this race's episodes. Source: pitwall estimate. */
   shrinkEpisodes: 20,
 });
+
+/** The effective `race-interaction` config: what `followingEpisodes`, `excludedLap` and the priors read (C43, C47). */
+export type RaceInteractionConfig = typeof RACE_INTERACTION_CONFIG.defaults;
