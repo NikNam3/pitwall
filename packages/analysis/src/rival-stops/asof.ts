@@ -150,7 +150,8 @@ export function rivalStopsAsOf(view: AsOfView): RivalStops {
     for (const [id, effect] of effects) if (effect.inSession === true) out[id] = { ...NOT_APPLICABLE, basis: 'noStop' };
     return out;
   }
-  const spread = { ...RIVAL_STOPS_CONFIG.defaults, ...view.config[RIVAL_STOPS_CONFIG.key] }.noPeerSpreadLaps;
+  const config = { ...RIVAL_STOPS_CONFIG.defaults, ...view.config[RIVAL_STOPS_CONFIG.key] };
+  const spread = config.noPeerSpreadLaps;
   const at = view.at;
   // read once: `asOfNow` builds it on every read
   const fixed = view.fixed;
@@ -224,8 +225,19 @@ export function rivalStopsAsOf(view: AsOfView): RivalStops {
       out[id] = { owesStop, window: unknown('insufficientData'), nextCompound, basis };
       continue;
     }
-    const lapOf = (age: number): number => Math.min(totalLaps, Math.max(set.lastLap + 1, Math.round(set.lastLap + age - set.age)));
-    const window: Window = { lowLap: lapOf(ages.low), midLap: lapOf(ages.mid), highLap: lapOf(ages.high), toFlag: false };
+    const unclamped = (age: number): number => Math.round(set.lastLap + age - set.age);
+    const lapOf = (age: number): number => Math.min(totalLaps, Math.max(set.lastLap + 1, unclamped(age)));
+    // overdue (SP4.3b F3): the high lap is no later than the lap the car is on; the window spreads from its next lap on
+    const nextLap = set.lastLap + 2;
+    const window: Window =
+      unclamped(ages.high) < nextLap
+        ? {
+            lowLap: Math.min(totalLaps, nextLap),
+            midLap: Math.min(totalLaps, nextLap + config.overdueMidLaps),
+            highLap: Math.min(totalLaps, nextLap + config.overdueSpreadLaps),
+            toFlag: false,
+          }
+        : { lowLap: lapOf(ages.low), midLap: lapOf(ages.mid), highLap: lapOf(ages.high), toFlag: false };
     out[id] = { owesStop, window: known(window, at), nextCompound, basis };
   }
   return out;
