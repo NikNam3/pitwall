@@ -65,6 +65,8 @@ The committed segments (`fixtures/index.json`, `segments`; the verified facts ar
 | `practice-miami-invalid` | practiceFriendWings, 1525–1550 | a lap invalidated: PENA 12/7 and `currentLapInvalid` on one frame |
 | `practice-miami-warning` | practiceFriendWings, 214–218 | a warning: PENA 5/7 and the rise of `totalWarnings` on one frame |
 | `practice-zandvoort-warning-late` | practiceZandvoortOnline, 45–47.5 | a warning whose rise follows its PENA by 16 frames |
+| `race-pass-braking-zone` | raceLiveTest, 582–590 | lap 6, green: car 14 passes car 0 with DRS open into the braking zone at 0.663 of the lap |
+| `race-rejoin` | raceLiveTest, 1061.8–1070.6 | lap 11, green: car 14 from its box release to pit exit and the first 1.6 s of its out lap (the in lap does not fit 1 MB) |
 
 **Whole recordings** (`recordings/`, gitignored, listed in `fixtures/index.json`) appear only in the acceptance suite, and only for properties of the whole pipeline: determinism, reprocess, decoder equality and decoder speed. The big races (`raceSingaporeWet`, `raceZandvoortUidReuse`, `raceWetVscMexico`, `raceFriendWet`), recordings over about 50 MB (`practiceFriendWings`) and the time trial stay out of the determinism and decoder-equality sets.
 

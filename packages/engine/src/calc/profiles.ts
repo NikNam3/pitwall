@@ -17,6 +17,8 @@ export type StoredDriverSession = {
   startedAt: string;
   phase: WeekendPhase;
   aiDifficulty: Known<number>;
+  /** The session's laps (ruling R17, the as-of view's `fixed.totalLaps`). */
+  totalLaps: Known<number>;
   projection: Projection;
   humanSpans: { startFrame: FrameNumber; endFrame?: FrameNumber }[];
   track: Known<DeepReadonly<TrackData>>;
