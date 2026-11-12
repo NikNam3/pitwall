@@ -1,9 +1,10 @@
 // One feed end to end (spec 4): PacketSource → decode → SessionTracker → SessionProcessor → TopicHub,
 // with the feed's health, its session files and its storage alongside.
 import { resolve } from 'node:path';
-import { toSessionTime, type CalibrationActiveValue, type FeedId, type Known, type PriorsSnapshot, type ProfileSnapshot, type RunPriors, type SessionTime, type TrackFile } from '@pitwall/domain';
+import { toSessionTime, type CalibrationActiveValue, type FeedId, type Known, type PriorsSnapshot, type ProfileSnapshot, type RunPriors, type SessionRef, type SessionTime, type TrackFile } from '@pitwall/domain';
 import type { CalibrationStore } from '../calibration/store.ts';
-import type { ProfileStore } from '../drivers/store.ts';
+import type { ProfileStore, SlotIdentity } from '../drivers/store.ts';
+import { profilesSidecarPath } from './profile-sidecar.ts';
 import { CalculatorRegistry, SessionTracker, type Frame, type FrameMetrics, type InsightChange, type TrackerEvent } from '@pitwall/engine';
 import { decode } from '@pitwall/protocol';
 import { effectiveConfig, sessionConfigPath, type FeatureConfig } from '../feature-config.ts';
@@ -387,6 +388,7 @@ export class FeedPipeline {
       track,
       priors,
       onActive: (value: CalibrationActiveValue) => hub.publishState(feedId, 'calibration.active', () => value),
+      profilesFor: (slots, session) => this.#profilesFor(slots, session, file?.path),
       feedView: () => this.#monitor.view(this.#tracker.metrics, this.#lastReceivedAtMs),
       ...(storage && { storage }),
       ...(file && { file }),
@@ -428,6 +430,19 @@ export class FeedPipeline {
     }
   }
 
+  /**
+   * The run's profile snapshot (C62c), asked once per session, on its first frame with Participants: a replay's recorded
+   * one (C38); live, the profile store's for the session's slots, written to the profiles sidecar; else none (`null`).
+   */
+  #profilesFor(slots: readonly SlotIdentity[], session: SessionRef, file: string | undefined): ProfileSnapshot | null {
+    const { recordedProfiles, profiles } = this.#o;
+    if (recordedProfiles !== undefined) return recordedProfiles;
+    if (profiles === undefined) return null;
+    const snapshot = profiles.snapshotFor(slots, session);
+    if (file !== undefined) this.#writeSidecar(profilesSidecarPath(file), snapshot);
+    return snapshot;
+  }
+
   /** Now as an ISO date: when a set was used (spec 3.1 `lastUsedAt`). */
   #now(): string {
     return new Date(this.#wallClock()).toISOString();
@@ -456,6 +471,8 @@ export class FeedPipeline {
     this.#writeSidecar(trackSidecarPath(file.path), track.known ? track.value : NOT_APPLICABLE_SIDECAR);
     // The priors the run starts on (C59, C62a): rewritten with each pick's snapshot; none gives `{ start: null }`.
     this.#writeSidecar(priorsSidecarPath(file.path), priors);
+    // The run's driver profiles (C59, C62c): none until its slots are known; the snapshot replaces it then.
+    this.#writeSidecar(profilesSidecarPath(file.path), this.#o.recordedProfiles ?? null);
     return file;
   }
 
