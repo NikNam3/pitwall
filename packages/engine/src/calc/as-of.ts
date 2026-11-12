@@ -21,7 +21,14 @@ export type LiveSets = DeepReadonly<LiveState>['cars'][number]['tyres']['sets'];
 /** The session's weather now and its forecast, as the live state holds them. */
 export type LiveWeather = Pick<DeepReadonly<LiveState>['session'], 'weather' | 'forecast' | 'forecastAccuracy'>;
 
-export type AsOfFixed = { totalLaps: Known<number>; playerCar: Known<CarId>; setsNow: readonly LiveSets[] | null; weatherNow: LiveWeather | null };
+export type AsOfFixed = {
+  totalLaps: Known<number>;
+  playerCar: Known<CarId>;
+  /** The session's AI difficulty (fixed for the session; Task 12's band). */
+  aiDifficulty: Known<number>;
+  setsNow: readonly LiveSets[] | null;
+  weatherNow: LiveWeather | null;
+};
 
 /** What an "as of frame N" form reads (C39 minus live, delta, changed, feed): the projection cut at N and the situation at N. */
 export type AsOfView = Pick<EngineView, 'config' | 'priors' | 'drivers' | 'track' | 'weekend'> & {
@@ -55,6 +62,7 @@ export function asOfNow(view: EngineView): AsOfView {
     fixed: {
       get totalLaps() { return known(view.live.session.totalLaps, view.live.sessionTime); },
       get playerCar() { return known(view.live.playerCar, view.live.sessionTime); },
+      get aiDifficulty() { return known(view.live.session.settings.aiDifficulty, view.live.sessionTime); },
       get setsNow() { return view.live.cars.map((c) => c.tyres.sets); },
       get weatherNow() {
         const { weather, forecast, forecastAccuracy } = view.live.session;
@@ -106,6 +114,6 @@ export function asOfStored(session: StoredDriverSession, ctx: ProfileCtx): AsOfV
     track: session.track,
     weekend: undefined,
     outputs: new Map(),
-    fixed: { totalLaps: session.totalLaps, playerCar: known(session.session.feedCar, 0), setsNow: null, weatherNow: null },
+    fixed: { totalLaps: session.totalLaps, playerCar: known(session.session.feedCar, 0), aiDifficulty: session.aiDifficulty, setsNow: null, weatherNow: null },
   };
 }
