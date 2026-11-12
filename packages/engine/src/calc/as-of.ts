@@ -15,9 +15,13 @@ export type LiveSets = DeepReadonly<LiveState>['cars'][number]['tyres']['sets'];
 
 /**
  * The session's values an as-of form may read that the projection does not hold (ruling R17): `totalLaps` and our car
- * are fixed for the session; the cars' tyre sets exist only now (the live state), so a cut or stored view has none.
+ * are fixed for the session; the cars' tyre sets and the weather forecast exist only now (the live state), so a cut or
+ * stored view has none (rulings R17, R19).
  */
-export type AsOfFixed = { totalLaps: Known<number>; playerCar: Known<CarId>; setsNow: readonly LiveSets[] | null };
+/** The session's weather now and its forecast, as the live state holds them. */
+export type LiveWeather = Pick<DeepReadonly<LiveState>['session'], 'weather' | 'forecast' | 'forecastAccuracy'>;
+
+export type AsOfFixed = { totalLaps: Known<number>; playerCar: Known<CarId>; setsNow: readonly LiveSets[] | null; weatherNow: LiveWeather | null };
 
 /** What an "as of frame N" form reads (C39 minus live, delta, changed, feed): the projection cut at N and the situation at N. */
 export type AsOfView = Pick<EngineView, 'config' | 'priors' | 'drivers' | 'track' | 'weekend'> & {
@@ -53,6 +57,7 @@ export function asOfNow(view: EngineView): AsOfView {
         totalLaps: known(view.live.session.totalLaps, view.live.sessionTime),
         playerCar: known(view.live.playerCar, view.live.sessionTime),
         setsNow: view.live.cars.map((c) => c.tyres.sets),
+        weatherNow: { weather: view.live.session.weather, forecast: view.live.session.forecast, forecastAccuracy: view.live.session.forecastAccuracy },
       };
     },
   };
@@ -100,6 +105,6 @@ export function asOfStored(session: StoredDriverSession, ctx: ProfileCtx): AsOfV
     track: session.track,
     weekend: undefined,
     outputs: new Map(),
-    fixed: { totalLaps: session.totalLaps, playerCar: known(session.session.feedCar, 0), setsNow: null },
+    fixed: { totalLaps: session.totalLaps, playerCar: known(session.session.feedCar, 0), setsNow: null, weatherNow: null },
   };
 }
