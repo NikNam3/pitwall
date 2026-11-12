@@ -1,0 +1,85 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>SP4.3b2 · drivers-panel (new, garage), round 1</title><style>
+@font-face { font-family:'JetBrains Mono'; src:url('../../../apps/ui/src/theme/font/JetBrainsMono%5Bwght%5D.woff2') format('woff2'); font-weight:100 800; font-display:block; }
+:root { --pw-text:#d9dbe0; --pw-textDim:#8d9199; --pw-textFaint:#5c6068; --pw-ownCar:#ffffff; --pw-bg:#000000; --pw-bgPanel:#000000; --pw-bgBand:#141416; --pw-bgRowBand:#0d0d0f; --pw-border:#25272c; --pw-grid:#1c1d21; --pw-dropTarget:#5c606859; --pw-focus:#8d9199; --pw-critical:#ff5c5c; --pw-warning:#f0b429; --pw-best:#b06cff; --pw-personalBest:#3fcf70; --pw-flagYellow:#ffd23f; --pw-flagGreen:#3fcf70; --pw-flagRed:#ff5c5c; --pw-flagBlue:#5ca8ff; --pw-compoundSoft:#d9dbe0; --pw-compoundMedium:#d9dbe0; --pw-compoundHard:#d9dbe0; --pw-series1:oklch(0.72 0.09 250); --pw-series2:oklch(0.72 0.09 40); --pw-series3:oklch(0.72 0.09 150); --pw-series4:oklch(0.72 0.09 310); --pw-series5:oklch(0.72 0.09 95); --pw-series6:oklch(0.72 0.09 200); --pw-font:'JetBrains Mono', monospace; --pw-font-px:14px; --pw-line:1.4; }
+* { box-sizing:border-box; margin:0; padding:0; }
+body { background:var(--pw-bg); color:var(--pw-text); font-family:var(--pw-font); font-size:var(--pw-font-px); line-height:var(--pw-line); font-variant-ligatures:none; padding:24px 28px 56px; }
+h1 { font-size:var(--pw-font-px); font-weight:600; margin-bottom:4px; }
+h2 { font-size:var(--pw-font-px); font-weight:500; color:var(--pw-textDim); margin:26px 0 8px; }
+.note { color:var(--pw-textDim); max-width:150ch; margin-bottom:10px; }
+.note b { color:var(--pw-text); font-weight:500; }
+.row { display:flex; gap:24px; align-items:flex-start; flex-wrap:wrap; } .row > div { width:min-content; }
+.panel { background:var(--pw-bgPanel); display:inline-block; vertical-align:top; outline:1px dashed var(--pw-border); }
+.ph { display:flex; gap:1ch; padding:0 1ch; background:var(--pw-bgBand); white-space:nowrap; color:var(--pw-textFaint); }
+.ph .t { color:var(--pw-textDim); } .ph .sp { flex:1; } .ph .lk { color:var(--pw-text); }
+pre { font-family:inherit; font-size:inherit; line-height:inherit; padding:0 1ch; white-space:pre; }
+pre svg { display:inline-block; vertical-align:top; }
+.cap { color:var(--pw-textFaint); margin:4px 0 0; min-width:44ch; }
+.d { color:var(--pw-textDim); } .f { color:var(--pw-textFaint); } .w { color:var(--pw-warning); }
+.m { font-weight:700; } .hi { color:var(--pw-ownCar); font-weight:700; }
+.band { background:var(--pw-bgRowBand); display:inline-block; width:100%; }
+.me { color:var(--pw-ownCar); font-weight:700; box-shadow:inset 2px 0 0 var(--pw-text); display:inline-block; width:100%; }
+.tip { text-decoration:underline dotted var(--pw-textFaint); }
+.fld { box-shadow:inset 0 0 0 1px var(--pw-border); color:var(--pw-text); }
+.fld.on { box-shadow:inset 0 0 0 1px var(--pw-focus); }
+.btn { color:var(--pw-textDim); }
+.sel { background:var(--pw-bgBand); color:var(--pw-text); }
+.cur { background:var(--pw-bgBand); color:var(--pw-text); display:inline-block; width:100%; }
+.pop { display:inline-block; border:1px solid var(--pw-border); background:var(--pw-bgPanel); }
+.pop .bandT { background:var(--pw-bgBand); color:var(--pw-textDim); padding:0 1ch; white-space:nowrap; }
+.topbar { display:flex; justify-content:space-between; gap:2ch; padding:0 1ch; border:1px solid var(--pw-border); color:var(--pw-textDim); white-space:nowrap; }
+.topbar .side { display:flex; gap:2ch; } .topbar .t { color:var(--pw-text); }
+.window { outline:1px dashed var(--pw-border); background:var(--pw-bg); padding-bottom:8px; }
+.groups { display:flex; gap:24px; padding:8px; }
+.group { display:flex; flex-direction:column; gap:8px; }
+.group .line { display:flex; gap:8px; align-items:flex-start; }
+</style></head><body><h1>SP4.3b2 · drivers-panel (new, garage), round 1</h1>
+<div class="note">Sample: the garage before the Spa race (08 Nov). Two seats, Mercedes #12 and #63, each linked to a person by the picker (<code>drivers.link</code>; a person from the list, <b>new</b>, or <b>none</b> to remove the link). Per person: the profile entries with the laps and sessions they rest on and the newest session's day; an override field per entry (<code>drivers.override</code>; a filled one makes the value faint, a rejected one keeps the draft with the bridge's reason in amber); the linked sessions with an exclude toggle each (<code>drivers.exclude</code>; the Zandvoort race, a guest in #12, excluded). Below, read-only: the lobby settings the model uses and the feed's effective config, the values <code>config.json</code> set with <b>ʲ</b> and in the text role, the rest dim. An edit takes effect at the next session start (C62c).</div>
+<h2>Full 92×36</h2>
+<div class="row"><div><div class="panel" style="width:94ch"><div class="ph"><span class="t">Drivers</span><span class="lk"></span><span class="sp"></span><span></span><span><svg width="14" height="14" viewBox="0 0 14 14" style="display:inline;vertical-align:-2px"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.1" stroke-dasharray="2 1.4"/><circle cx="7" cy="7" r="2.1" fill="none" stroke="currentColor" stroke-width="1.1"/></svg></span></div><pre> <span class="f">SEATS</span>
+ <span class="f">#12</span> Mercedes → <span class="fld"> kuh ▾   </span>                      <span class="f">#63</span> Mercedes → <span class="fld"> lin ▾   </span>
+<span class="f"> ENTRY         VALUE LAPS SES NEWEST OVR    </span>  <span class="f"> ENTRY         VALUE LAPS SES NEWEST OVR    </span>
+ σ lap s      <span class="f" title="your override 0.380"> 0.412</span>  214   5 08 Nov <span class="fld"> 0.380 </span>   σ lap s       0.447  166   4 08 Nov <span class="fld">       </span>
+ ρ              0.31  214   5 08 Nov <span class="fld">       </span>   ρ              0.28  166   4 08 Nov <span class="fld">       </span>
+ mistake/lap   0.024  214   5 08 Nov <span class="fld">       </span>   mistake/lap   0.031  166   4 08 Nov <span class="fld on">   0.4 </span>
+ mistake s       1.9  214   5 08 Nov <span class="fld">       </span>   mistake s       2.3  166   4 08 Nov <span class="fld">       </span>
+ mistake σlog   0.55  214   5 08 Nov <span class="fld">       </span>   mistake σlog   0.61  166   4 08 Nov <span class="fld">       </span>
+ wear S %/lap    3.1   22   2 07 Nov <span class="fld">       </span>   wear S %/lap      <span class="f tip" title="too few laps or samples yet">…</span>                 <span class="fld">       </span>
+ wear M %/lap    2.2  118   4 08 Nov <span class="fld">       </span>   wear M %/lap    2.4   96   3 08 Nov <span class="fld">       </span>
+ wear H %/lap    1.6   74   3 01 Nov <span class="fld">       </span>   wear H %/lap    1.7   61   3 01 Nov <span class="fld">       </span>
+                                               <span class="w">rejected: mistake/lap 0 to 0.2</span>
+ <span class="f">SESSIONS</span>
+ <span title="drivers.exclude">[x]</span> 08 Nov Spa       Q1     18                <span class="f">SESSIONS</span>
+ <span title="drivers.exclude">[x]</span> 07 Nov Spa       FP2    31                <span title="drivers.exclude">[x]</span> 08 Nov Spa       Q1     18
+ <span title="drivers.exclude">[x]</span> 01 Nov Monza     race   51                <span title="drivers.exclude">[x]</span> 07 Nov Spa       FP2    26
+ <span title="drivers.exclude">[x]</span> 31 Oct Monza     FP2    28                <span title="drivers.exclude">[x]</span> 01 Nov Monza     race   51
+ <span class="d" title="excluded by you">[ ]</span> <span class="f">25 Oct</span> <span class="f">Zandvoort</span> <span class="f">race</span> <span class="f">  70</span>                <span title="drivers.exclude">[x]</span> 25 Oct Zandvoort race   71
+ <span title="drivers.exclude">[x]</span> 18 Oct Austin    race   86
+
+ <span class="f">LOBBY</span>                             <span class="f">CONFIG</span>
+ <span class="d">safety car  </span> standard            <span class="f"> UNIT             KEY                   VALUE</span>
+ <span class="d">red flags   </span> standard             <span class="d">strategy        </span> <span class="d">neighbourLaps      </span> <span class="d">     3 </span>
+ <span class="d">car damage  </span> standard             <span class="d">                </span> <span class="d">maxStops           </span> <span class="d">     3 </span>
+ <span class="d">damage rate </span> standard             <span class="d">                </span> <span class="d">ruleGapMs          </span> <span class="d">  3000 </span>
+ <span class="d">tyre temp   </span> surface + carcass    <span class="d">race-monte-carlo</span> <span class="d">n0                 </span> <span class="d">    40 </span>
+ <span class="d">recovery    </span> none                 <span class="d">                </span> <span class="d">zDrop              </span> <span class="d">   2.8 </span>
+                                   <span class="d">                </span> <span class="d">tieBand            </span> <span class="d">  0.05 </span>
+                                   <span class="d">                </span> <span class="d">maxScenarioPolicies</span> <span class="d">  5000 </span>
+                                   <span class="d">undercut        </span> <span class="d">undercutRangeMs    </span> <span title="set in config.json">  2500<span class="d">ʲ</span></span>
+                                   <span class="d">                </span> <span class="d">maxScenarioPolicies</span> <span class="d">  2400 </span>
+                                   <span class="d">pit-sweep       </span> <span class="d">trafficGapMs       </span> <span class="d">  1000 </span>
+                                   <span class="d">                </span> <span class="d">trafficLaps        </span> <span class="d">     3 </span>
+                                   <span class="d">race-hazard     </span> <span class="d">reducedFactor      </span> <span class="d">   0.5 </span>
+                                   <span class="d">                </span> <span class="d">increasedFactor    </span> <span class="d">   1.5 </span>
+                                   <span class="d">battle          </span> <span class="d">drsRangeMs         </span> <span title="set in config.json">  1000<span class="d">ʲ</span></span></pre></div><div class="cap">kuh: σ lap overridden (0.380); lin: wear S unknown (no soft laps, … with the reason on hover), a rejected mistake/lap override · config: undercutRangeMs and drsRangeMs set in config.json</div></div></div>
+<h2>The person picker, a new person</h2>
+<div class="row"><div><div class="pop"><pre> <span class="cur"> kuh     </span>
+  lin
+  <span class="d">new</span>
+  <span class="d">none</span></pre></div><div class="cap">the picker open: the persons, then new and none</div></div><div><div class="panel" style="width:42ch"><div class="ph"><span class="t">Drivers</span><span class="lk"></span><span class="sp"></span><span></span><span><svg width="14" height="14" viewBox="0 0 14 14" style="display:inline;vertical-align:-2px"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.1" stroke-dasharray="2 1.4"/><circle cx="7" cy="7" r="2.1" fill="none" stroke="currentColor" stroke-width="1.1"/></svg></span></div><pre> <span class="f">#63</span> Mercedes → <span class="fld on"> kai        </span>
+ <span class="f">Enter saves · Esc cancels</span></pre></div><div class="cap">new: a name field in the picker's place, the calibration panel's keys</div></div></div>
+<h2>Compact 30×3</h2>
+<div class="row"><div><div class="panel" style="width:32ch"><div class="ph"><span class="t">Drivers</span><span class="lk"></span><span class="sp"></span><span></span><span><svg width="14" height="14" viewBox="0 0 14 14" style="display:inline;vertical-align:-2px"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.1" stroke-dasharray="2 1.4"/><circle cx="7" cy="7" r="2.1" fill="none" stroke="currentColor" stroke-width="1.1"/></svg></span></div><pre><span class="f">                     SES LAPS</span>
+ <span class="f">#12</span> Mercedes kuh      5  214
+ <span class="f">#63</span> Mercedes lin      4  166</pre></div><div class="cap">compact · the seats, their persons, kept sessions and laps</div></div><div><div class="panel" style="width:32ch"><div class="ph"><span class="t">Drivers</span><span class="lk"></span><span class="sp"></span><span></span><span><svg width="14" height="14" viewBox="0 0 14 14" style="display:inline;vertical-align:-2px"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.1" stroke-dasharray="2 1.4"/><circle cx="7" cy="7" r="2.1" fill="none" stroke="currentColor" stroke-width="1.1"/></svg></span></div><pre><span class="f">                     SES LAPS</span>
+ <span class="f">#12</span> Mercedes kuh      5  214
+ <span class="f">#63</span> Mercedes <span class="f tip" title="not applicable">–</span>              </pre></div><div class="cap">compact · #63 without a link</div></div></div></body></html>

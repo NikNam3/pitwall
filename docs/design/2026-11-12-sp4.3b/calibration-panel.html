@@ -1,0 +1,51 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>SP4.3b2 · calibration-panel (change): the preferred set, round 1</title><style>
+@font-face { font-family:'JetBrains Mono'; src:url('../../../apps/ui/src/theme/font/JetBrainsMono%5Bwght%5D.woff2') format('woff2'); font-weight:100 800; font-display:block; }
+:root { --pw-text:#d9dbe0; --pw-textDim:#8d9199; --pw-textFaint:#5c6068; --pw-ownCar:#ffffff; --pw-bg:#000000; --pw-bgPanel:#000000; --pw-bgBand:#141416; --pw-bgRowBand:#0d0d0f; --pw-border:#25272c; --pw-grid:#1c1d21; --pw-dropTarget:#5c606859; --pw-focus:#8d9199; --pw-critical:#ff5c5c; --pw-warning:#f0b429; --pw-best:#b06cff; --pw-personalBest:#3fcf70; --pw-flagYellow:#ffd23f; --pw-flagGreen:#3fcf70; --pw-flagRed:#ff5c5c; --pw-flagBlue:#5ca8ff; --pw-compoundSoft:#d9dbe0; --pw-compoundMedium:#d9dbe0; --pw-compoundHard:#d9dbe0; --pw-series1:oklch(0.72 0.09 250); --pw-series2:oklch(0.72 0.09 40); --pw-series3:oklch(0.72 0.09 150); --pw-series4:oklch(0.72 0.09 310); --pw-series5:oklch(0.72 0.09 95); --pw-series6:oklch(0.72 0.09 200); --pw-font:'JetBrains Mono', monospace; --pw-font-px:14px; --pw-line:1.4; }
+* { box-sizing:border-box; margin:0; padding:0; }
+body { background:var(--pw-bg); color:var(--pw-text); font-family:var(--pw-font); font-size:var(--pw-font-px); line-height:var(--pw-line); font-variant-ligatures:none; padding:24px 28px 56px; }
+h1 { font-size:var(--pw-font-px); font-weight:600; margin-bottom:4px; }
+h2 { font-size:var(--pw-font-px); font-weight:500; color:var(--pw-textDim); margin:26px 0 8px; }
+.note { color:var(--pw-textDim); max-width:150ch; margin-bottom:10px; }
+.note b { color:var(--pw-text); font-weight:500; }
+.row { display:flex; gap:24px; align-items:flex-start; flex-wrap:wrap; } .row > div { width:min-content; }
+.panel { background:var(--pw-bgPanel); display:inline-block; vertical-align:top; outline:1px dashed var(--pw-border); }
+.ph { display:flex; gap:1ch; padding:0 1ch; background:var(--pw-bgBand); white-space:nowrap; color:var(--pw-textFaint); }
+.ph .t { color:var(--pw-textDim); } .ph .sp { flex:1; } .ph .lk { color:var(--pw-text); }
+pre { font-family:inherit; font-size:inherit; line-height:inherit; padding:0 1ch; white-space:pre; }
+pre svg { display:inline-block; vertical-align:top; }
+.cap { color:var(--pw-textFaint); margin:4px 0 0; min-width:44ch; }
+.d { color:var(--pw-textDim); } .f { color:var(--pw-textFaint); } .w { color:var(--pw-warning); }
+.m { font-weight:700; } .hi { color:var(--pw-ownCar); font-weight:700; }
+.band { background:var(--pw-bgRowBand); display:inline-block; width:100%; }
+.me { color:var(--pw-ownCar); font-weight:700; box-shadow:inset 2px 0 0 var(--pw-text); display:inline-block; width:100%; }
+.tip { text-decoration:underline dotted var(--pw-textFaint); }
+.fld { box-shadow:inset 0 0 0 1px var(--pw-border); color:var(--pw-text); }
+.fld.on { box-shadow:inset 0 0 0 1px var(--pw-focus); }
+.btn { color:var(--pw-textDim); }
+.sel { background:var(--pw-bgBand); color:var(--pw-text); }
+.cur { background:var(--pw-bgBand); color:var(--pw-text); display:inline-block; width:100%; }
+.pop { display:inline-block; border:1px solid var(--pw-border); background:var(--pw-bgPanel); }
+.pop .bandT { background:var(--pw-bgBand); color:var(--pw-textDim); padding:0 1ch; white-space:nowrap; }
+.topbar { display:flex; justify-content:space-between; gap:2ch; padding:0 1ch; border:1px solid var(--pw-border); color:var(--pw-textDim); white-space:nowrap; }
+.topbar .side { display:flex; gap:2ch; } .topbar .t { color:var(--pw-text); }
+.window { outline:1px dashed var(--pw-border); background:var(--pw-bg); padding-bottom:8px; }
+.groups { display:flex; gap:24px; padding:8px; }
+.group { display:flex; flex-direction:column; gap:8px; }
+.group .line { display:flex; gap:8px; align-items:flex-start; }
+</style></head><body><h1>SP4.3b2 · calibration-panel (change): the preferred set, round 1</h1>
+<div class="note">The approved 4.1a panel with one change on its set line: after the picker, <b>★</b> marks the set preferred for this track (the preselection at session start, 4.1a's newest-used rule only when no set is preferred); on any other set <b>☆</b> is a quiet button that makes it the preferred one (<code>calibration.prefer { trackId, setId }</code>); a click on ★ clears it (<code>setId: null</code>). The open picker marks the preferred set. The rest of the panel is unchanged (⋮). The session-start prompt goes; <code>calibration.pick</code> opens this panel in the garage.</div>
+<h2>Full 76 wide (the set line and its dates)</h2>
+<div class="row"><div><div class="panel" style="width:78ch"><div class="ph"><span class="t">Calibration</span><span class="lk"></span><span class="sp"></span><span>Spa</span><span><svg width="14" height="14" viewBox="0 0 14 14" style="display:inline;vertical-align:-2px"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.1" stroke-dasharray="2 1.4"/><circle cx="7" cy="7" r="2.1" fill="none" stroke="currentColor" stroke-width="1.1"/></svg></span></div><pre> <span class="f">set</span> <span class="fld"> league ▾             </span> <span title="preferred for this track: the preselection · calibration.prefer clears it">★</span>  active in this race  <span class="btn">new</span> <span class="btn">copy</span> <span class="btn">rename</span> <span class="btn">delete</span>
+ <span class="f">created 28 Sep · last used 15 Oct · 4 sources, 1 missing</span>
+
+<span class="f"> ⋮</span></pre></div><div class="cap">league: preferred and active in this race</div></div></div>
+<div class="row" style="margin-top:12px"><div><div class="panel" style="width:78ch"><div class="ph"><span class="t">Calibration</span><span class="lk"></span><span class="sp"></span><span>Spa</span><span><svg width="14" height="14" viewBox="0 0 14 14" style="display:inline;vertical-align:-2px"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.1" stroke-dasharray="2 1.4"/><circle cx="7" cy="7" r="2.1" fill="none" stroke="currentColor" stroke-width="1.1"/></svg></span></div><pre> <span class="f">set</span> <span class="fld"> after-floor-upgrade ▾</span> <span class="btn" title="calibration.prefer">☆</span>  <span class="f">not used in this race</span>  <span class="btn">new</span> <span class="btn">copy</span> <span class="btn">rename</span> <span class="btn">delete</span>
+ <span class="f">created 06 Nov · 2 sources</span>
+
+<span class="f"> ⋮</span></pre></div><div class="cap">after-floor-upgrade picked: not preferred, ☆ makes it so</div></div><div><div class="pop"><pre> league                ★
+<span class="cur"> after-floor-upgrade  </span>  
+ pre-season             </pre></div><div class="cap">the picker open: ★ after the preferred set</div></div></div>
+<h2>Compact 36 wide</h2>
+<div class="row"><div><div class="panel" style="width:38ch"><div class="ph"><span class="t">Calibration</span><span class="lk"></span><span class="sp"></span><span>Spa</span><span><svg width="14" height="14" viewBox="0 0 14 14" style="display:inline;vertical-align:-2px"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.1" stroke-dasharray="2 1.4"/><circle cx="7" cy="7" r="2.1" fill="none" stroke="currentColor" stroke-width="1.1"/></svg></span></div><pre> <span class="fld"> league ▾           </span> <span title="preferred for this track: the preselection · calibration.prefer clears it">★</span>  active
+<span class="f"> ⋮</span></pre></div><div class="cap">compact · ★ after the picker</div></div><div><div class="panel" style="width:38ch"><div class="ph"><span class="t">Calibration</span><span class="lk"></span><span class="sp"></span><span>Spa</span><span><svg width="14" height="14" viewBox="0 0 14 14" style="display:inline;vertical-align:-2px"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.1" stroke-dasharray="2 1.4"/><circle cx="7" cy="7" r="2.1" fill="none" stroke="currentColor" stroke-width="1.1"/></svg></span></div><pre> <span class="fld"> after-floor-upgr… ▾</span> <span class="btn" title="calibration.prefer">☆</span>  <span class="f">not used</span>
+<span class="f"> ⋮</span></pre></div><div class="cap">compact · another set: ☆</div></div></div></body></html>
