@@ -102,6 +102,8 @@ const ctx = { config: {}, overrides: {} };
 const storedSource = (session: number, stops: { laps: LapRecord[]; stop: PitStopRecord }[], car: number, firstLap: number): StoredSource => ({
   source: { sessionUid: `${session}`, weekendId: 'w1', feedCar: carId(0), car: carId(car), firstLap, excludedLaps: [] },
   phase: { kind: 'race', format: 'grandPrix' },
+  aiDifficulty: unknown('notReceived'),
+  projection: history(),
   stint: { carId: carId(car), firstLap, lastLap: firstLap + 10, actualCompound: 'C3', visualCompound: 'medium', tyreAgeAtFitting: 0, frame: firstLap * 100 },
   laps: stops.flatMap((s) => s.laps),
   pitStops: stops.map((s) => s.stop),

@@ -27,4 +27,23 @@ export const RACE_INTERACTION_CONFIG = defineConfig('race-interaction', {
   dirtyAirMsPerLap: 0,
   /** The prior's weight in episodes in the shrinkage towards this race's episodes. Source: pitwall estimate. */
   shrinkEpisodes: 20,
+  /**
+   * A follower within `minGapMs` plus this at a braking zone is held there (ms): a held car's time gap is the minimum gap
+   * times its speed over the leader's (about 3 %, 15 ms, at 2.8 s a lap of advantage), plus the interpolated crossings'
+   * slack; a wider margin counts cars still closing in, which pass nobody yet. Source: pitwall estimate (generator races).
+   */
+  heldSlackMs: 20,
+  /** A car within this gap of the car ahead at a DRS detection point has DRS in the zone (ms). Source: the game's DRS rule (1 s). */
+  drsRangeMs: 1000,
+  /** The first lap DRS is enabled in a race. Source: the sporting regulations (DRS from lap 3). */
+  drsFromLap: 3,
+  /** A lap ending with this much damage or more on a wing (front left, front right, rear) is left out (%). Source: spec 5.5. */
+  aeroDamageMaxPct: 10,
+  /** A lap whose start and end are this far or more behind the car ahead is in free air: a car's pace is measured there (ms). Source: driver-noise's free-air gap (spec 8). */
+  freeAirGapMs: 1500,
+  /** A race stint the calibration suggests as a source has at least this many following episodes of its car. Source: SP4.3a plan Task 12. */
+  candidateEpisodes: 3,
 });
+
+/** The effective `race-interaction` config: what `followingEpisodes`, `excludedLap` and the priors read (C43, C47). */
+export type RaceInteractionConfig = typeof RACE_INTERACTION_CONFIG.defaults;

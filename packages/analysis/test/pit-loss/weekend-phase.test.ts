@@ -48,6 +48,8 @@ const compute = (phase: WeekendPhase): PitLossOutput => calc.compute(viewIn(phas
 const storedSource = (phase: WeekendPhase): StoredSource => ({
   source: { sessionUid: '1', weekendId: 'w1', feedCar: carId(0), car: carId(0), firstLap: 1, excludedLaps: [] },
   phase,
+  aiDifficulty: unknown('notReceived'),
+  projection: history(),
   stint: { carId: carId(0), firstLap: 1, lastLap: 2, actualCompound: 'C3', visualCompound: 'medium', tyreAgeAtFitting: 0, frame: 100 },
   laps: LAPS,
   pitStops: [STOP],
