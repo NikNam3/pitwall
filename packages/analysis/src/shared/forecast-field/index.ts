@@ -195,7 +195,7 @@ export function buildStartingPoint(
     stopHigh: new Int16Array(cars),
     owesStop: new Uint8Array(cars),
     sets: {},
-    wetness: wetnessOf(wetness),
+    wetness: wetnessOf(wetness, config.priorWetnessSdMs),
     track: trackOf(view, pitLoss, need),
     interaction,
     lapModel,
@@ -253,13 +253,25 @@ export function buildStartingPoint(
     sp.bigEventRate[k] = need.of(carNoise?.bigEventRatePerLap, noise.aiField.bigEventRatePerLap.known ? noise.aiField.bigEventRatePerLap.value : undefined);
     sp.retireRate[k] = need.of(carNoise?.retireRatePerLap, noise.aiField.retireRatePerLap.known ? noise.aiField.retireRatePerLap.value : undefined);
 
-    // the next stop (rival-stops); without a window none before the flag
+    // the next stop (rival-stops); a car without an entry stops not before the flag. An unknown window is the
+    // uninformative one, from the next lap to the flag; an unknown owesStop the config's assumption (C3, ruling R40)
     const stop = stops[id];
-    const window = stop?.window;
-    sp.stopLow[k] = window?.known === true ? window.value.lowLap : lapsTotal;
-    sp.stopMid[k] = window?.known === true ? window.value.midLap : lapsTotal;
-    sp.stopHigh[k] = window?.known === true ? window.value.highLap : lapsTotal;
-    sp.owesStop[k] = stop?.owesStop.known === true && stop.owesStop.value ? 1 : 0;
+    if (stop === undefined) {
+      sp.stopLow[k] = lapsTotal;
+      sp.stopMid[k] = lapsTotal;
+      sp.stopHigh[k] = lapsTotal;
+    } else if (stop.window.known) {
+      sp.stopLow[k] = stop.window.value.lowLap;
+      sp.stopMid[k] = stop.window.value.midLap;
+      sp.stopHigh[k] = stop.window.value.highLap;
+    } else {
+      const low = Math.min(sp.lap + 1, lapsTotal);
+      sp.stopLow[k] = low;
+      sp.stopMid[k] = Math.floor((low + lapsTotal) / 2);
+      sp.stopHigh[k] = lapsTotal;
+    }
+    const owes = stop === undefined ? false : stop.owesStop.known ? stop.owesStop.value : config.assumeOwesStop;
+    sp.owesStop[k] = owes ? 1 : 0;
 
     lapMs[k] = lap.lapTimeMs;
   }
@@ -298,10 +310,10 @@ function worstRate(stint: DeepReadonly<StintDegradation> | undefined): number | 
   return fl.known && fr.known && rl.known && rr.known ? Math.max(fl.value, fr.value, rl.value, rr.value) : undefined;
 }
 
-/** The track's wetness (track-wetness's state); without a state yet, dry. */
-function wetnessOf(wetness: DeepReadonly<TrackWetness> | undefined): StartingPoint['wetness'] {
+/** The track's wetness (track-wetness's state); without a known state, the declared prior: dry with `priorSdMs` (C3, ruling R40). */
+function wetnessOf(wetness: DeepReadonly<TrackWetness> | undefined, priorSdMs: number): StartingPoint['wetness'] {
   const state = wetness?.state;
-  return state?.known === true ? { wetnessMs: state.value.wetnessMs, sdMs: state.value.sdMs } : { wetnessMs: 0, sdMs: 0 };
+  return state?.known === true ? { wetnessMs: state.value.wetnessMs, sdMs: state.value.sdMs } : { wetnessMs: 0, sdMs: priorSdMs };
 }
 
 /** The track: braking zones (their starts) and DRS zones from the track file, the pit loss per condition from pit-loss (else the track file's default). */

@@ -47,4 +47,8 @@ export const FORECAST_FIELD_CONFIG = defineConfig('forecast-field', {
   interMsPerWetnessMs: 0.5,
   /** A wet's loss per ms of track wetness. Source: pitwall estimate. */
   wetMsPerWetnessMs: 0.35,
+  /** The sd of the wetness prior (a dry track) while track-wetness has no known state, in ms. Source: pitwall estimate (ruling R40). */
+  priorWetnessSdMs: 1500,
+  /** Whether a rival whose owesStop is unknown is assumed to owe a stop. Source: pitwall estimate (ruling R40: the dry race's compound rule). */
+  assumeOwesStop: true as boolean,
 });
