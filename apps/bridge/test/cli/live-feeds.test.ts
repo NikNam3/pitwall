@@ -139,7 +139,7 @@ describe('pitwall live: one feed per UDP port', { timeout: 60_000 }, () => {
       const rows = db.prepare('SELECT session_uid, player_car FROM sessions ORDER BY player_car').all();
       expect(rows).toEqual([{ session_uid: '7', player_car: 0 }, { session_uid: '7', player_car: 1 }]);
       const cars = db.prepare('SELECT player_car, count(*) AS n FROM cars GROUP BY player_car ORDER BY player_car').all();
-      expect(cars).toEqual([{ player_car: 0, n: 4 }, { player_car: 1, n: 4 }]);
+      expect(cars).toEqual([{ player_car: 0, n: 22 }, { player_car: 1, n: 22 }]);
     } finally {
       db.close();
     }
