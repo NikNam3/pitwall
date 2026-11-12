@@ -90,7 +90,7 @@ export function prepareScore(view: EngineView): ScoreInput {
     drivers: view.drivers,
     track: view.track,
     weekend: view.weekend,
-    fixed: { totalLaps: fixed.totalLaps, playerCar: fixed.playerCar, teammateCar: fixed.teammateCar, aiDifficulty: fixed.aiDifficulty, setsNow: null, weatherNow: null },
+    fixed: { totalLaps: fixed.totalLaps, playerCar: fixed.playerCar, teammateCar: fixed.teammateCar, aiDifficulty: fixed.aiDifficulty, safetyCar: fixed.safetyCar, setsNow: null, weatherNow: null },
   };
 }
 

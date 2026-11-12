@@ -30,7 +30,7 @@ export type AsOfFixed = {
   /** The session's AI difficulty (fixed for the session; Task 12's band). */
   aiDifficulty: Known<number>;
   /** The lobby's safety-car setting (fixed for the session; SP4.3b spec §5.2's lobby factor); absent reads as not received. */
-  safetyCar?: Known<GameSettings['safetyCar']>;
+  safetyCar: Known<GameSettings['safetyCar']>;
   setsNow: readonly LiveSets[] | null;
   weatherNow: LiveWeather | null;
 };
