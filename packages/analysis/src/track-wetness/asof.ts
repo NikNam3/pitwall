@@ -7,7 +7,7 @@
 // with laps the first pass finds wet is refitted with `degradation`'s own filter on its dry pace laps (C43), and the
 // common modes are computed again.
 import { known, unknown, type Known, type Ms, type TrackWetness, type TyreType } from '@pitwall/domain';
-import type { AsOfView, ConfigKey, ConfigValue, EngineView } from '@pitwall/engine/readers';
+import type { AsOfView } from '@pitwall/engine/readers';
 import { tyreTypeOf } from '../crossover/tyre-type.ts';
 import { DEGRADATION, DEGRADATION_CONFIG, fitStint, type DegradationOutput, type StintDegradation } from '../degradation/index.ts';
 import { DRIVER_NOISE_CONFIG } from '../driver-noise/config.ts';
@@ -17,9 +17,6 @@ import { TRACK_WETNESS_CONFIG } from './config.ts';
 import { runWetnessFilter, type WetnessFilterConfig } from './kalman.ts';
 
 const TYPES: readonly TyreType[] = ['slick', 'inter', 'wet'];
-
-/** `key.read` on the as-of view: it reads only `config` (C47), which the as-of view holds as the engine view does. */
-const readConfig = <C extends Record<string, ConfigValue>>(key: ConfigKey<C>, view: AsOfView): C => key.read({ config: view.config } as EngineView);
 
 const NOT_APPLICABLE: TrackWetness = { byLap: [], state: unknown('notApplicable') };
 
@@ -116,14 +113,26 @@ function dryNu(stint: Stint, wet: ReadonlySet<number>, degradation: DegradationC
   return fit.known ? fit.value.nuMsPerLap : stint.fit.startPrior.nuMsPerLap;
 }
 
+/**
+ * The forecast's rain chance now (ruling R19): the `rainPct` of the forecast sample nearest the present (smallest
+ * `|offsetMin|`); `undefined` without `weatherNow` (a cut or stored view) or without a sample.
+ */
+function rainNowPct(view: AsOfView): number | undefined {
+  const weather = view.fixed.weatherNow;
+  if (weather === null) return undefined;
+  let nearest: (typeof weather.forecast)[number] | undefined;
+  for (const s of weather.forecast) if (nearest === undefined || Math.abs(s.offsetMin) < Math.abs(nearest.offsetMin)) nearest = s;
+  return nearest?.rainPct;
+}
+
 /** The field's common mode per completed leader lap and tyre type, and the filtered wetness state, as of `view`'s frame. */
 export function trackWetnessAsOf(view: AsOfView): TrackWetness {
   const effect = sessionEffect(view);
   if (effect.isRace !== true) return NOT_APPLICABLE;
   const degradation = view.outputs.get(DEGRADATION) as DegradationOutput | undefined;
   if (effect.started !== true || degradation === undefined) return { byLap: [], state: unknown('insufficientData') };
-  const config = readConfig(TRACK_WETNESS_CONFIG, view);
-  const free = freeAirLaps(view.history, readConfig(DRIVER_NOISE_CONFIG, view).freeAirGapMs);
+  const config = TRACK_WETNESS_CONFIG.read(view);
+  const free = freeAirLaps(view.history, DRIVER_NOISE_CONFIG.read(view).freeAirGapMs);
 
   let leaderLap = 0;
   for (const l of view.history.laps) if (l.lapNumber > leaderLap) leaderLap = l.lapNumber;
@@ -131,13 +140,13 @@ export function trackWetnessAsOf(view: AsOfView): TrackWetness {
   const stints = stintsOf(degradation, free);
   const first = commonModes(stints, (s) => (s.fit.nuMsPerLap.known ? s.fit.nuMsPerLap.value : s.fit.startPrior.nuMsPerLap), leaderLap, config);
   const wet = wetLaps(first, config, config.wetSigmas);
-  const degradationConfig = readConfig(DEGRADATION_CONFIG, view);
+  const degradationConfig = DEGRADATION_CONFIG.read(view);
   const byLap = wet.size === 0 ? first : commonModes(stints, (s) => dryNu(s, wet, degradationConfig), leaderLap, config);
 
   const measured = byLap.map(measurementOf);
   const newestAt = measured.reduce<Ms | undefined>((at, z) => (z === undefined ? at : Math.max(at ?? 0, z.at)), undefined);
-  // the forecast reaches the as-of form only as `fixed.weatherNow` (ruling R19); not read yet (see the task report)
-  const state = runWetnessFilter(measured.map((z) => z?.value), config);
+  // the forecast enters the prediction step only (ruling R19): the wet-lap pass and the common modes never read it
+  const state = runWetnessFilter(measured.map((z) => z?.value), config, rainNowPct(view));
   return {
     byLap,
     state: state === undefined || newestAt === undefined ? unknown('insufficientData') : known({ wetnessMs: Math.round(state.wetnessMs), sdMs: Math.round(state.sdMs) }, newestAt),
