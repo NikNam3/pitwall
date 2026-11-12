@@ -49,4 +49,4 @@ export type DriversProfilesValue = { persons: (DriverProfile & { links: DriverLi
  * `drivers.links`: the seat links, and the human slots of the stored sessions whose seat has no link. The bridge always
  * sends `links`; it is optional so a value of the unlinked slots alone (a fake store) stays one.
  */
-export type DriversLinksValue = { links?: { team: TeamId; raceNumber: number; person: PersonId }[]; unlinked: UnlinkedSlot[] };
+export type DriversLinksValue = { links: { team: TeamId; raceNumber: number; person: PersonId }[]; unlinked: UnlinkedSlot[] };

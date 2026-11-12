@@ -64,7 +64,7 @@ function fakeStore() {
       opened.push(root);
       const publish = (): void => {
         hub.publishGlobal('drivers.profiles' satisfies TopicName, () => PROFILES);
-        hub.publishGlobal('drivers.links' satisfies TopicName, (): DriversLinksValue => ({ unlinked: UNLINKED }));
+        hub.publishGlobal('drivers.links' satisfies TopicName, (): DriversLinksValue => ({ links: [], unlinked: UNLINKED }));
       };
       publish();
       return {
