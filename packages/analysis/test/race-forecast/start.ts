@@ -76,7 +76,7 @@ export const LAP_MODEL: LapModelParams = {
   wetnessMsPerMs: { slick: 0, inter: 0, wet: 0 },
 };
 
-export const CURVE: PassCurve = { level: -3, slopePerMs: 0.004, cap: 0.8, wetFactor: 1 };
+export const CURVE: PassCurve = { level: -3, slopePerMs: 0.004, cap: 0.8, wetFactor: 1, drsFactor: 1.2 };
 
 /** One DRS zone mid-lap, so a car never starts a forecast inside it. */
 export const DRS_ZONES: DrsZone[] = [{ detection: 0.4, start: 0.45, end: 0.55 }];

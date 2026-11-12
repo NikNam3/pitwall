@@ -48,7 +48,8 @@ beforeAll(() => {
 describe('race-interaction recovery (R1)', () => {
   it("recovers the generator's parameters within its noise", () => {
     expect(episodes.length).toBeGreaterThan(0);
-    const prior = { level: CONFIG.passLevel, slopePerMs: CONFIG.passSlopePerMs, cap: CONFIG.passCap, wetFactor: CONFIG.wetFactor };
+    // ported in SP4.3b Task 10 (the fitted DRS factor): the prior curve carries `drsFactor`; no DRS zones here, so it stays unread
+    const prior = { level: CONFIG.passLevel, slopePerMs: CONFIG.passSlopePerMs, cap: CONFIG.passCap, wetFactor: CONFIG.wetFactor, drsFactor: CONFIG.drsPassFactor };
     const curve = fitPassCurve(episodes, prior, 0);
     const fitted = curve.cap / (1 + Math.exp(-(curve.level + curve.slopePerMs * ADVANTAGE_MS)));
     expect(Math.abs(fitted - perZoneTruth)).toBeLessThan(0.05);

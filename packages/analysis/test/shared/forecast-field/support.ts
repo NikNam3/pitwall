@@ -96,7 +96,7 @@ export function plainNoise(cars: number, humans: readonly number[] = [], at: Ses
 /** A plain `race-interaction` output: one band, the config's DRS values, a 1 s following gap. */
 export function plainInteraction(at: SessionTime = 0): RaceInteraction {
   return {
-    bands: [{ fromDifficulty: 0, toDifficulty: 110, curve: { level: -3, slopePerMs: 0.004, cap: 0.6, wetFactor: 0.7 }, source: DEFAULT_SOURCE, episodes: 0, passes: 0 }],
+    bands: [{ fromDifficulty: 0, toDifficulty: 110, curve: { level: -3, slopePerMs: 0.004, cap: 0.6, wetFactor: 0.7, drsFactor: 1.2 }, source: DEFAULT_SOURCE, episodes: 0, passes: 0 }],
     band: known(0, at),
     drsPassFactor: 1.2,
     drsStraightGainMs: 250,

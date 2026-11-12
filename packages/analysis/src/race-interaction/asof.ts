@@ -2,8 +2,9 @@
 //  - Per band the prior: the calibration's entries (`view.priors`, both level and slope), else the config's default
 //    curve; the session's band (its AI difficulty) is then refined by this race's following episodes with shrinkage
 //    (`fitPassCurve`), its source's `sessionShare` `n / (n + shrinkEpisodes)` for `n` episodes, its kind by the half rule
-//    (spec 4.4, as `pit-loss`'s).
-//  - The DRS factor and straight gain, the minimum gap and dirty air are the config's; the O14 values too, until the
+//    (spec 4.4, as `pit-loss`'s). The curve's DRS factor is fitted with it, its prior the config's `drsPassFactor`
+//    (SP4.3b Task 10).
+//  - The DRS pass factor's prior (`drsPassFactor`) and straight gain, the minimum gap and dirty air are the config's; the O14 values too, until the
 //    pooled fit's check (Task 13), and `notApplicable` outside the race (the `weekend-phase` row, C14).
 import { known, unknown, type EstimateSource, type Known, type PassCurve, type RaceInteraction } from '@pitwall/domain';
 import type { AsOfView } from '@pitwall/engine/readers';
