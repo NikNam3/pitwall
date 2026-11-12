@@ -5,7 +5,7 @@ import { carId, known, unknown, type Corners, type LapRecord, type StintRecord }
 import type { PriorsCtx, StoredSource } from '@pitwall/engine/readers';
 import { describe, expect, it } from 'vitest';
 import { TYRE_LIFE_PRIORS } from '../../src/tyre-life/index.ts';
-import { lap } from '../../../../test-support/builders/index.ts';
+import { history, lap } from '../../../../test-support/builders/index.ts';
 import { RACE } from '../situated.ts';
 
 const CTX: PriorsCtx = { config: {}, overrides: {} };
@@ -46,6 +46,8 @@ const storedSource = (laps: LapRecord[]): StoredSource => {
   return {
     source: { sessionUid: '42', weekendId: 'w1', feedCar: carId(0), car: carId(0), firstLap: first.lapNumber, excludedLaps: [] },
     phase: RACE,
+    aiDifficulty: unknown('notReceived'),
+    projection: history(),
     stint,
     laps,
     pitStops: [],

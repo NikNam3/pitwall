@@ -18,7 +18,7 @@ import {
 } from '@pitwall/domain';
 import type { EngineView, StoredSource } from '@pitwall/engine/readers';
 import { DEGRADATION_CONFIG } from '../../src/degradation/index.ts';
-import { lap } from '../../../../test-support/builders/index.ts';
+import { history, lap } from '../../../../test-support/builders/index.ts';
 import { RACE } from '../situated.ts';
 
 /** The fuel effect of the default config, ms per kg (spec 7). */
@@ -143,6 +143,8 @@ export function storedSource(laps: LapRecord[], { phase = RACE, pitStops = [] }:
   return {
     source: { sessionUid: '42', weekendId: 'w1', feedCar: carId(0), car: first.carId, firstLap: first.lapNumber, excludedLaps: [] },
     phase,
+    aiDifficulty: unknown('notReceived'),
+    projection: history(),
     stint: stintRecord({ carId: first.carId, firstLap: first.lapNumber, lastLap: last.lapNumber, actualCompound: first.actualCompound, visualCompound: first.visualCompound, tyreAgeAtFitting: first.tyreAgeAtStart }),
     laps,
     pitStops,

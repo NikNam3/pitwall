@@ -71,3 +71,4 @@ export * from './race-interaction/index.ts';
 export { SIMULATOR as LAP_MODEL_SIMULATOR } from './lap-model/index.ts';
 export { SIMULATOR as RACE_FORECAST_SIMULATOR } from './race-forecast/index.ts';
 export * from './forecast-score/index.ts';
+export { raceInteractionCalculator } from './race-interaction/calculator.ts';
