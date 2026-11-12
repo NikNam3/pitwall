@@ -1,8 +1,9 @@
 // The `forecast-score` feature (SP4.3a spec 7.1, plan Task 19 rows 8 and 9): its job is wired as the bridge wires every
 // job (`FeedJobs`: the trigger calculator `job:forecast-score`, run by the scheduler on demand, C49, then in a worker,
 // C51). Driven frame by frame over a short generator race:
-//  - on demand: the trigger runs only while `forecastScore.report` is subscribed, then at every frame that appended a
-//    leader's lap record (the `leaderLap` trigger), and the worker delivers a report;
+//  - on demand: the trigger runs only while `forecastScore.report` is subscribed: at once on frame 1, newly needed
+//    (C49, R41), then at every frame that appended a leader's lap record (the `leaderLap` trigger), and the worker
+//    delivers a report;
 //  - a rewind: the runs under way are cancelled, the rewound frame re-triggers the job (C30), and the report equals
 //    the one of a run that never received the undone frames (C33 for the job's input; no state between runs, C31).
 import type { TopicName } from '@pitwall/contracts';
@@ -93,8 +94,10 @@ describe('forecast-score feature', () => {
 
     const demanded = feed([TOPIC]);
     for (let f = 1; f <= RACE.lastFrame; f++) demanded.pass(inputOf(f), f);
-    const expected = leaderLapFrames();
-    expect(expected.length).toBeGreaterThan(0);
+    // Newly needed, the trigger runs at once on frame 1 (C49), then at every leader's lap (R41).
+    const leaderFrames = leaderLapFrames();
+    expect(leaderFrames.length).toBeGreaterThan(0);
+    const expected = [1, ...leaderFrames];
     expect(demanded.triggered).toEqual(expected);
     const last = await demanded.resultFor(expected.at(-1)!);
     expect(last).not.toHaveProperty('error');
