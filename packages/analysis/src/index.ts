@@ -65,3 +65,5 @@ export { ghostLinesOf } from './rejoin/ghost-lines.ts';
 export * from './sc-call/index.ts';
 export { scCallCalculator } from './sc-call/calculator.ts';
 export { SIMULATOR as LAP_MODEL_SIMULATOR, lapTimeMs } from './lap-model/index.ts';
+export * from './track-wetness/index.ts';
+export { trackWetnessCalculator } from './track-wetness/calculator.ts';
