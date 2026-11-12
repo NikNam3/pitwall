@@ -18,6 +18,7 @@ import {
   type TrackData,
   type WeekendPhase,
 } from '@pitwall/domain';
+import type { Projection } from '../log/types.ts';
 import type { DeepReadonly } from '../util/deep-readonly.ts';
 import type { EngineView } from './types.ts';
 
@@ -25,7 +26,9 @@ import type { EngineView } from './types.ts';
  * A calibration source as an aggregate reads it, from its session's stored projection (C34): the stint with its laps
  * (minus the excluded ones), its session's weekend phase, every car's stops and current laps, and the session's track
  * file. `laps` is the source stint's laps; `sessionLaps` every car's current laps of the session (a stop's loss needs
- * the car's reference laps, in-lap and out-lap, spec 4.3).
+ * the car's reference laps, in-lap and out-lap, spec 4.3). `aiDifficulty`: the session's AI difficulty (its game
+ * settings), `notReceived` when the stored session carries none; `projection`: the session's stored projection, for an
+ * aggregate that reads more than laps and stops (`race-interaction`'s following episodes over the crossings, SP4.3a spec 5.4).
  */
 export type StoredSource = {
   source: CalibrationSource;
@@ -35,6 +38,8 @@ export type StoredSource = {
   pitStops: PitStopRecord[];
   sessionLaps: LapRecord[];
   track: Known<DeepReadonly<TrackData>>;
+  aiDifficulty: Known<number>;
+  projection: Projection;
 };
 
 /** What a priors function reads besides its sources: the effective config (C47), so it uses the unit's thresholds, and the set's overrides. */
