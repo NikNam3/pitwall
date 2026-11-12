@@ -205,6 +205,10 @@ export function run(input: ScoreInput, rng: Rng): ForecastScoreReport {
     const toLap = lap + Math.max(...cases.map((c) => c.horizon));
     const result = raceForecast(sp, policies, { id: 0, plain: true, neutralisations: [] }, rng, { trace: true, toLap });
     for (const c of cases) {
+      // no stop of the car's own forecast policy in L…L+h before the race's last lap (SP4.3b Task 11g): the baseline
+      // never predicts a stop, and stop timing is scored by the experiments
+      const own = policies[c.carId]?.stops ?? [];
+      if (own.some((s) => lap <= s.lap && s.lap <= lap + c.horizon && s.lap < sp.lapsTotal)) continue;
       const entry = traceAt(result.trace, c.targetLap);
       const position = entry?.position[c.carId] ?? 0;
       if (entry === undefined || position === 0) continue;
