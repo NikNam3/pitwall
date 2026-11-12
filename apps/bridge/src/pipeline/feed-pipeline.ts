@@ -28,7 +28,7 @@ import { FeedMonitor } from './feed-monitor.ts';
 import { sessionClock, type SessionClock } from './session-clock.ts';
 import { playerCarOf, SessionProcessor } from './session-processor.ts';
 import { SessionStorage, type StorageMode } from './session-storage.ts';
-import type { TeamFeeds } from './team-feeds.ts';
+import type { PlanDecision, TeamFeeds } from './team-feeds.ts';
 import { TopicPublisher } from './topic-publisher.ts';
 
 export type FeedPipelineOptions = {
@@ -266,6 +266,26 @@ export class FeedPipeline {
     }
   }
 
+  /** The running session's race laps; `undefined` without a running session. */
+  totalLaps(): number | undefined {
+    return this.#session?.totalLaps;
+  }
+
+  /**
+   * A plan decision for the running session (`plan.commit`, `plan.clear`; C76, SP4.3b spec §8.2), as `PlanRouting` hands
+   * it to each of the team's feeds: it goes to the runner with the next frame and, placed at the session's record index,
+   * to the decisions sidecar. Without a running session it is not taken.
+   */
+  commitPlan(decision: PlanDecision): DecisionResult {
+    const run = this.#decisions;
+    const session = this.#session;
+    if (run === undefined || session === undefined) return { ok: false, reason: 'notSupported', message: 'this feed runs no session' };
+    session.decide(decision);
+    run.decisions.push(session.place(decision));
+    if (run.file !== undefined) this.#writeSidecar(decisionsSidecarPath(run.file), run.decisions);
+    return { ok: true };
+  }
+
   start(): void {
     if (this.#started) throw new Error('FeedPipeline: already started');
     this.#started = true;
@@ -371,12 +391,18 @@ export class FeedPipeline {
     if (playerLap !== undefined) this.#position = { sessionTimeMs: frame.sessionTime, playerLap };
   }
 
-  /** The player car's team from the frame's Participants, reported to `teams` when it changes. */
+  /**
+   * The player car's team from the frame's Participants, reported to `teams` when it changes. Live, once the team is
+   * first known, the session is handed each car's newest plan decision of the team (C76): this frame carries them, and
+   * a replay, which has them in its decisions sidecar at the record index they were placed at, gives them to it too.
+   */
   #updateTeam(frame: Frame): void {
     const seat = this.#seat;
     const team = frame.participants?.participants[frame.playerCarIndex]?.teamId;
     if (seat === undefined || team === undefined || team === seat.team) return;
     this.#reportSeat({ sessionUid: seat.sessionUid, team });
+    if (seat.team !== null || this.#o.recorded !== undefined || this.#o.teams === undefined) return;
+    for (const decision of this.#o.teams.plansOf(this.#feedId)) this.commitPlan(decision);
   }
 
   #reportSeat(seat: Seat): void {

@@ -1,6 +1,6 @@
 // Structural validation of UI state (spec 7.2). Input is untrusted: decoders return `undefined`, never throw,
 // and rebuild values from the known fields only. Widget names and option values are the UI's business.
-import type { CalibrationSource, CarId, FeedId, InsightCategory, SessionRef, SessionUid } from '@pitwall/domain';
+import { NOISE_COMPOUNDS, type CalibrationSource, type CarId, type FeedId, type InsightCategory, type NoiseCompound, type Policy, type SessionRef, type SessionUid, type Trigger } from '@pitwall/domain';
 import type { CarRef, Geometry, LinkGroup, PanelSpec, TimeWindow, UiAction, Workbook, WorkbookWindow } from './types.ts';
 
 type Json = Record<string, unknown>;
@@ -157,10 +157,16 @@ export const decodeUiAction = (raw: unknown): UiAction | undefined => {
       return isString(raw.person) && isString(raw.key) && isNumber(raw.value) ? { kind: raw.kind, person: raw.person, key: raw.key, value: raw.value } : undefined;
     case 'drivers.override.clear':
       return isString(raw.person) && isString(raw.key) ? { kind: raw.kind, person: raw.person, key: raw.key } : undefined;
-    case 'plan.commit':
+    // The plan actions (C73, C76): their shape and the ranges checkable alone; the race's laps are the bridge's check,
+    // whether the plan can still be followed is `strategy`'s judgement (C43).
+    case 'plan.commit': {
+      const policy = decodePolicy(raw.policy);
+      return isString(raw.feedId) && isCarSlot(raw.carId) && policy !== undefined
+        ? { kind: raw.kind, feedId: raw.feedId as FeedId, carId: raw.carId as CarId, policy }
+        : undefined;
+    }
     case 'plan.clear':
-      // SP4.3b Task 17: their shape (C73); until then rejected as malformed.
-      return undefined;
+      return isString(raw.feedId) && isCarSlot(raw.carId) ? { kind: raw.kind, feedId: raw.feedId as FeedId, carId: raw.carId as CarId } : undefined;
     default:
       return undefined;
   }
@@ -176,6 +182,70 @@ const isInteger = (value: unknown): value is number => Number.isInteger(value);
 
 /** A calibration action's set: its track and its id. Only the shape; the calibration store checks that the set exists. */
 const isSetRef = (raw: Json): raw is Json & { trackId: number; setId: string } => isInteger(raw.trackId) && isString(raw.setId);
+
+/** The car slots of the game's arrays: 0…21 (F1 25 UDP spec: 22 cars). */
+const MAX_CAR_SLOT = 21;
+const isCarSlot = (value: unknown): value is number => isInteger(value) && value >= 0 && value <= MAX_CAR_SLOT;
+
+const decodeCompound = (raw: unknown): NoiseCompound | undefined =>
+  isString(raw) && (NOISE_COMPOUNDS as readonly string[]).includes(raw) ? (raw as NoiseCompound) : undefined;
+
+/** A plan's stops: whole laps of at least 1, strictly ascending, of known compounds. */
+const decodeStops = (raw: unknown): Policy['stops'] | undefined => {
+  const stops = mapAll(raw, (item) => {
+    if (!isObject(item) || !isInteger(item.lap) || item.lap < 1) return undefined;
+    const compound = decodeCompound(item.compound);
+    return compound === undefined ? undefined : { lap: item.lap, compound };
+  });
+  if (stops === undefined) return undefined;
+  return stops.every((stop, i) => i === 0 || stop.lap > (stops[i - 1]?.lap ?? 0)) ? stops : undefined;
+};
+
+const decodeBox = (raw: unknown): { box: NoiseCompound } | undefined => {
+  if (!isObject(raw)) return undefined;
+  const box = decodeCompound(raw.box);
+  return box === undefined ? undefined : { box };
+};
+
+/** A trigger of the closed kinds (`Trigger`), with its fields. */
+const decodeTrigger = (raw: unknown): Trigger | undefined => {
+  if (!isObject(raw)) return undefined;
+  switch (raw.kind) {
+    case 'neutralised': {
+      if ((raw.condition !== 'sc' && raw.condition !== 'vsc') || !isInteger(raw.fromLap) || !isInteger(raw.toLap)) return undefined;
+      const action = raw.action === 'stayOut' ? 'stayOut' : decodeBox(raw.action);
+      return action === undefined ? undefined : { kind: 'neutralised', condition: raw.condition, fromLap: raw.fromLap, toLap: raw.toLap, action };
+    }
+    case 'rain': {
+      const action = decodeBox(raw.action);
+      return isNumber(raw.wetnessMs) && action !== undefined ? { kind: 'rain', wetnessMs: raw.wetnessMs, action } : undefined;
+    }
+    case 'rivalPits':
+      return isCarSlot(raw.carId) && isNumber(raw.withinMs) && (raw.action === 'cover' || raw.action === 'extend')
+        ? { kind: 'rivalPits', carId: raw.carId as CarId, withinMs: raw.withinMs, action: raw.action }
+        : undefined;
+    case 'degradationOff': {
+      const switchTo = isObject(raw.action) ? decodeStops(raw.action.switchTo) : undefined;
+      return isNumber(raw.wearRateDeltaPct) && switchTo !== undefined
+        ? { kind: 'degradationOff', wearRateDeltaPct: raw.wearRateDeltaPct, action: { switchTo } }
+        : undefined;
+    }
+    case 'damage': {
+      const action = decodeBox(raw.action);
+      return isNumber(raw.lossMsPerLap) && action !== undefined ? { kind: 'damage', lossMsPerLap: raw.lossMsPerLap, action } : undefined;
+    }
+    default:
+      return undefined;
+  }
+};
+
+/** A plan's policy (SP4.3b spec §8.2): its stops and its triggers, rebuilt from the known fields. */
+const decodePolicy = (raw: unknown): Policy | undefined => {
+  if (!isObject(raw)) return undefined;
+  const stops = decodeStops(raw.stops);
+  const triggers = mapAll(raw.triggers, decodeTrigger);
+  return stops === undefined || triggers === undefined ? undefined : { stops, triggers };
+};
 
 const decodeCalibrationSource = (raw: unknown): CalibrationSource | undefined => {
   if (!isObject(raw) || !isString(raw.sessionUid) || !isString(raw.weekendId)) return undefined;

@@ -190,6 +190,11 @@ export class SessionProcessor {
     return { setId: start?.setId ?? null, snapshot: start?.fingerprint ?? null };
   }
 
+  /** The race's laps as the live state holds them now (the Session packet's `totalLaps`). */
+  get totalLaps(): number {
+    return this.#runner.state.session.totalLaps;
+  }
+
   /** The newest applied frame's time on the engine's race clock (spec 3.3); undefined before the engine runs. */
   get sessionTime(): SessionTime | undefined {
     return this.#started ? this.#runner.state.sessionTime : undefined;

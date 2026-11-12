@@ -10,6 +10,7 @@ import { FEATURES } from '../features/index.generated.ts';
 import { TopicHub } from '../hub/topic-hub.ts';
 import type { PacketSource } from '../input/packet-source.ts';
 import { FeedPipeline, type FeedPipelineOptions } from '../pipeline/feed-pipeline.ts';
+import { PlanRouting, type PlanAction } from '../pipeline/plan-routing.ts';
 import { TeamFeeds } from '../pipeline/team-feeds.ts';
 import { ReplayController } from '../replay/replay-controller.ts';
 import { loadTrackFile, recordingTrack, TRACKS_DIR } from '../track-files/load.ts';
@@ -113,6 +114,8 @@ export async function serve(opts: ServeOptions): Promise<number> {
     });
     // The team's feeds (C1a): each pipeline reports its session uid and its player car's team.
     const teams = new TeamFeeds();
+    // A plan decision goes to every feed of the committing feed's team (C1a, C76).
+    const planRouting = new PlanRouting({ teams, pipelines });
     const feeds = (): FeedInfo[] => labels.map((label) => ({ ...label, team: teams.team(label.feedId) }));
     // Seeded first, so the UI state opens on the shipped workbooks, never on its own fallback, and on every start path.
     if (opts.uiDir !== undefined) await seedDefaultWorkbooks(opts.uiDir, DEFAULT_WORKBOOKS_DIR);
@@ -198,6 +201,9 @@ export async function serve(opts: ServeOptions): Promise<number> {
           const pipeline = pipelines.get(action.feedId);
           return pipeline === undefined ? { ok: false, reason: 'notSupported' } : pipeline.commitDecision(action.setId);
         },
+        // A plan is a decision of the team's running sessions (C1a, C76): the plan routing takes it.
+        plan: (action: PlanAction): ActionOutcome =>
+          feedIds.includes(action.feedId) ? planRouting.commit(action) : { ok: false, reason: 'invalid', message: `no feed ${action.feedId}` },
         ...(opts.replay && { replay: { control: (control: ReplayControl) => (controller === undefined ? false : (controller.control(control), true)) } }),
       });
       undo.push(() => started.close());

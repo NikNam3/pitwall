@@ -1,6 +1,6 @@
 // The shell's own commands and their default keys (spec 7.7). Widgets cannot register commands in the MVP.
 import { ackToken, type LinkGroup, type PanelSpec, type ReplayControl, type UiAction, type UiSettings } from '@pitwall/contracts';
-import type { FeedId, Insight } from '@pitwall/domain';
+import type { CarId, FeedId, Insight, Policy } from '@pitwall/domain';
 import * as text from '../../kit/text.ts';
 import type { Inspection } from '../inspector/inspection.svelte.ts';
 import { THEMES, type ThemeVariant } from '../../theme/index.ts';
@@ -170,6 +170,31 @@ export function calibrationCommands(
     ...sets.map((set): Command => ({ id: calibrationChooseId(set.id), title: t.calibrationChoose(set.name), group: g, run: () => choose(set.id) })),
     { id: calibrationChooseId(null), title: t.calibrationChoose(text.calibration.defaults), group: g, run: () => choose(null) },
   ];
+}
+
+/** The id of the command that commits the given plan for car `carId` (C72, C76). */
+export const planCommitId = (carId: CarId): string => `plan.commit.${carId}`;
+
+/** The id of the command that clears car `carId`'s plan (C72, C76). */
+export const planClearId = (carId: CarId): string => `plan.clear.${carId}`;
+
+/**
+ * The plan decision's commands (SP4.3b spec §8.2): per car, `plan.clear.<carId>`, and `plan.commit.<carId>` for a car
+ * given a policy, which it sends whole. Both go as uiActions for the window's feed; the window keeps no copy (C73): the
+ * plan takes effect when the bridge records it.
+ */
+export function planCommands(
+  cars: readonly { carId: CarId; policy: Policy | null }[],
+  ctx: Pick<CommandContext, 'send'> & { feedId: FeedId },
+): Command[] {
+  const g = text.commandGroups.plan;
+  const t = text.commandTitles;
+  return cars.flatMap(({ carId, policy }): Command[] => [
+    ...(policy === null
+      ? []
+      : [{ id: planCommitId(carId), title: t.planCommit(carId), group: g, run: () => ctx.send({ kind: 'plan.commit', feedId: ctx.feedId, carId, policy }) }]),
+    { id: planClearId(carId), title: t.planClear(carId), group: g, run: () => ctx.send({ kind: 'plan.clear', feedId: ctx.feedId, carId }) },
+  ]);
 }
 
 /** `layout.edit.toggle`: turns the window's edit mode (window-local, C73) on or off. */
