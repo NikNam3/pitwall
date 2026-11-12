@@ -1,24 +1,24 @@
 // Defaults of `race-interaction` (SP4.3a spec 5.4, 8). The pass curve's values come from the pooled fit (SP4.3a plan
-// Task 13, docs/research/15-pass-curve-fit.md).
+// Task 13, docs/research/15-pass-curve-fit.md; refit in SP4.3b Task 13, docs/research/19-strategy-defaults.md).
 import { defineConfig } from '@pitwall/engine/readers';
 
 export const RACE_INTERACTION_CONFIG = defineConfig('race-interaction', {
   /** The AI-difficulty bands, `from-to` inclusive, comma-separated; one pass curve each. Source: kept for later fits; the pooled fit gives both one curve (research 15, ruling R39). */
   difficultyBands: '0-79,80-110',
-  /** The pass curve's level (Source: pooled fit over 4 F1 25 races (Mexico, Miami, Texas, China; AI difficulty 62–90; 333 following episodes, 892 braking zones, 52 passes), research 15; the bands share one curve (the data did not separate them); Fisher SE 0.32). */
-  passLevel: -2.267,
-  /** The pass curve's slope per ms of pace advantage (Source: pooled fit over 4 F1 25 races (Mexico, Miami, Texas, China; AI difficulty 62–90; 333 following episodes, 892 braking zones, 52 passes), research 15; the bands share one curve (the data did not separate them); Fisher SE 0.00035, thin). */
-  passSlopePerMs: 0.000556,
+  /** The pass curve's level (Source: pooled fit over 5 F1 25 races (Mexico, Miami, Texas, China, Spa; AI difficulty 62–90; 484 following episodes, 1,661 braking zones, 118 passes; 149 DRS episodes, 212 DRS zones, 40 DRS passes), research 19 (SP4.3b Task 13: leave-one-race-out log-loss 0.2500 vs 0.2556 with Singapore and Zandvoort admitted); the bands share one curve; Fisher SE 0.19, race-bootstrap SE 0.40). */
+  passLevel: -2.629,
+  /** The pass curve's slope per ms of pace advantage (Source: pooled fit over 5 F1 25 races (Mexico, Miami, Texas, China, Spa; AI difficulty 62–90; 484 following episodes, 1,661 braking zones, 118 passes; 149 DRS episodes, 212 DRS zones, 40 DRS passes), research 19 (SP4.3b Task 13: leave-one-race-out log-loss 0.2500 vs 0.2556 with Singapore and Zandvoort admitted); the bands share one curve; Fisher SE 0.00026, bootstrap SE 0.00040). */
+  passSlopePerMs: 0.001044,
   /** The pass curve's cap: the most likely a pass at one braking zone gets. Source: assumed: the pooled fit cannot identify it (flat likelihood from 0.2 to 1.0, research 15). */
   passCap: 0.6,
-  /** The pass probability's factor when wet. Source: pooled fit, Mexico and Miami, 510 wet zones, 22 passes (bootstrap SE 0.28, thin; research 15). */
-  wetFactor: 0.56,
+  /** The pass probability's factor when wet. Source: research 19 pooled fit, Mexico and Miami, 622 wet zones, 33 passes (Fisher SE 0.09, bootstrap SE 0.24, thin: both races wet throughout, mixed with the tracks). */
+  wetFactor: 0.46,
   /**
    * The prior of the pass curve's DRS factor: the log-odds shift of a pass at a braking zone after a DRS zone (only where
    * the car ahead is not itself in DRS range); this race's episodes refine it with `shrinkEpisodes` (SP4.3b Task 10).
-   * Source: research 15's dry fit (about ×3.3 on the odds, log-odds 1.2).
+   * Source: pooled fit over 5 F1 25 races (Mexico, Miami, Texas, China, Spa; AI difficulty 62–90; 484 following episodes, 1,661 braking zones, 118 passes; 149 DRS episodes, 212 DRS zones, 40 DRS passes), research 19 (SP4.3b Task 13: leave-one-race-out log-loss 0.2500 vs 0.2556 with Singapore and Zandvoort admitted); the bands share one curve (about ×6.8 on the odds; Fisher SE 0.30, bootstrap SE 0.37).
    */
-  drsPassFactor: 1.2,
+  drsPassFactor: 1.917,
   /** The time DRS gains on a straight against the car directly ahead (ms). Source: assumed (spec 8). */
   drsStraightGainMs: 250,
   /** The minimum following gap: a follower is held at it (ms). Source: pitwall estimate. */
