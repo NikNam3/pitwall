@@ -52,13 +52,14 @@ export function asOfNow(view: EngineView): AsOfView {
     get track() { return view.track; },
     get weekend() { return view.weekend; },
     get outputs() { return view.outputs; },
-    get fixed() {
-      return {
-        totalLaps: known(view.live.session.totalLaps, view.live.sessionTime),
-        playerCar: known(view.live.playerCar, view.live.sessionTime),
-        setsNow: view.live.cars.map((c) => c.tyres.sets),
-        weatherNow: { weather: view.live.session.weather, forecast: view.live.session.forecast, forecastAccuracy: view.live.session.forecastAccuracy },
-      };
+    fixed: {
+      get totalLaps() { return known(view.live.session.totalLaps, view.live.sessionTime); },
+      get playerCar() { return known(view.live.playerCar, view.live.sessionTime); },
+      get setsNow() { return view.live.cars.map((c) => c.tyres.sets); },
+      get weatherNow() {
+        const { weather, forecast, forecastAccuracy } = view.live.session;
+        return { weather, forecast, forecastAccuracy };
+      },
     },
   };
 }
