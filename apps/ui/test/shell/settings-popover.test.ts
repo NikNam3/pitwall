@@ -12,6 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as text from '../../src/kit/text.ts';
 import type { Workbook } from '@pitwall/contracts';
 import carOptionProbe from './fixtures/car-option-probe/register.ts';
+import choiceLabelProbe from './fixtures/choice-label-probe/register.ts';
 import { TEST_WIDGETS } from './fixtures/index.ts';
 import { FEED, GEO, OPTIONS, group1, makeStore, stubBrowser, workbook } from './shell-harness.ts';
 
@@ -165,5 +166,50 @@ describe('SettingsPopover: car options', () => {
     await openCars({ rival: carId(7) });
     expect(choices('Rival 1')).toEqual(['none', text.picker.player, text.picker.teammate, '7']);
     expect(select('Rival 1').value).toBe('7');
+  });
+});
+
+// SP4.3b2 Task 3b: a choice option may name its values (`choiceOption(choices, def, label, labels)`; the mockup
+// pit-sweep-table.html shows the compound popover as `auto, S, M, H`). Contract assumed:
+//  - each radio is named by `labels[choice]`, or by the choice itself when it has no label;
+//  - picking a radio sends the choice (the value), never its label.
+// Fixture `choice-label-probe`: compound ['auto', 'soft', 'medium', 'hard'], default 'auto', labels { soft: S, medium: M, hard: H }.
+describe('SettingsPopover: choice labels', () => {
+  const labelWorkbook = (options: Record<string, unknown>): Workbook => ({
+    name: 'race',
+    windows: [{ id: 'main', geometry: GEO, layout: {}, panels: { p1: { widget: 'choice-label-probe', options, linkGroup: 1 } } }],
+  });
+  const openLabels = async (options: Record<string, unknown>) => {
+    const ctx = makeStore();
+    render(WindowShell, { store: ctx.store, host: ctx.host, widgets: [...TEST_WIDGETS, choiceLabelProbe], defaultFeed: FEED });
+    await ctx.push('ui.workbooks', { names: ['race'], active: labelWorkbook(options) });
+    await ctx.push('ui.linkGroups', [group1()]);
+    const view = (mocks.mountDock.mock.calls.at(-1) as unknown as MountCall)[4];
+    const tab = document.body.appendChild(document.createElement('div'));
+    view.render(document.body.appendChild(document.createElement('div')), tab, { widget: 'choice-label-probe', options, linkGroup: 1 }, 'p1');
+    await ctx.push('session.info', { feedId: FEED, playerCar: carId(5), session: { updatedAt: 1 } });
+    await fireEvent.click(screen.getByRole('img', { name: text.settings }));
+    return ctx;
+  };
+  const radioNames = (): string[] =>
+    (within(screen.getByRole('radiogroup', { name: 'Compound' })).getAllByRole('radio') as HTMLInputElement[]).map((r) => r.labels?.[0]?.textContent?.trim() ?? '');
+
+  it('a choice option with labels names each radio by its label', async () => {
+    await openLabels({ compound: 'medium' });
+    expect(radioNames()).toEqual(['auto', 'S', 'M', 'H']);
+    expect((screen.getByRole('radio', { name: 'M' }) as HTMLInputElement).checked).toBe(true);
+  });
+
+  it("picking a labelled choice sends the choice's value, not its label", async () => {
+    const ctx = await openLabels({});
+    await fireEvent.click(screen.getByRole('radio', { name: 'H' }));
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(ctx.updates()).toHaveLength(1);
+    expect(ctx.updates()[0]!.panels.p1).toEqual({ widget: 'choice-label-probe', linkGroup: 1, options: { compound: 'hard' } });
+  });
+
+  it('a choice without a label for a value shows the value', async () => {
+    await openLabels({});
+    expect((screen.getByRole('radio', { name: 'auto' }) as HTMLInputElement).checked).toBe(true);
   });
 });

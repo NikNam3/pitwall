@@ -68,7 +68,7 @@
       <div role="radiogroup" aria-label={option.label}>
         <span style:color={role('textDim')}>{option.label}</span>
         {#each option.choices as choice (choice)}
-          <label><input type="radio" name="{uid}.{name}" checked={current === choice} onchange={() => change(name, choice)} />{choice}</label>
+          <label><input type="radio" name="{uid}.{name}" checked={current === choice} onchange={() => change(name, choice)} />{option.labels?.[choice] ?? choice}</label>
         {/each}
       </div>
     {:else if option.kind === 'number'}

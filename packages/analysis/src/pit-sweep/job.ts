@@ -84,6 +84,20 @@ function sweepOf(input: PitSweepInput, car: CarId, rng: Rng): PitSweepCar {
   return { ...head, auto: c.auto, byCompound: tablesOf(input, s.value, s.at, car, c, position, rng) };
 }
 
+/** The job's parts (C51, Task 8c): one per our car with a `cars` entry, in our cars' order, each the input with `cars`
+ * cut to that car; the input as it is when there is none. The shared strategy input and the config stay whole. */
+export function splitPitSweep(input: PitSweepInput): PitSweepInput[] {
+  const cars = input.strategy.ourCars.filter((car) => input.cars[car] !== undefined);
+  return cars.length === 0 ? [input] : cars.map((car) => ({ ...input, cars: { [car]: input.cars[car] as SweepCar } }));
+}
+
+/** The parts' outputs joined, keyed by car (each part sweeps its car only). */
+export function mergePitSweep(outs: readonly PitSweepOutput[]): PitSweepOutput {
+  const merged: PitSweepOutput = {};
+  for (const out of outs) Object.assign(merged, out);
+  return merged;
+}
+
 /** Per our car one table per compound (runs in a worker). */
 export function run(input: PitSweepInput, rng: Rng): PitSweepOutput {
   const out: PitSweepOutput = {};
