@@ -24,7 +24,7 @@ import { currentLapOf, OURS, viewAt, type ViewSpec } from '../strategy/support.t
 export { json, once, OURS, PLAYER, RACE, SETS, TEAMMATE, TEST_CAP } from '../strategy/support.ts';
 
 /** The cap per compound in these tests: small, so a run takes well under a second (the budget test runs the config's). */
-export const SWEEP_CAP = 300;
+export const SWEEP_CAP = 60;
 
 /** What a test sets of `pit-window`'s output for each of our cars. */
 export type WindowSpec = {

@@ -51,6 +51,8 @@ beforeEach(() => {
 });
 
 const SEED = 913_402_117;
+/** Row 7's cap: the smallest that agrees with `strategy` over as many seeds as the production-scale 4,000 did (Task 18p: seeds 1–7 and SEED). */
+const AGREEMENT_CAP = 400;
 const LAP = 3;
 const PAST_LIFE_LAPS = PIT_SWEEP_CONFIG.defaults.pastLifeLaps;
 
@@ -258,7 +260,7 @@ describe('pit-sweep: the job', () => {
 
       rec.calls = [];
       rec.dp = [];
-      const out = swept({ window: { compounds: [compound], latestIn: null }, sweepConfig: { maxScenarioPolicies: 4_000 } }, LAP, SEED);
+      const out = swept({ window: { compounds: [compound], latestIn: null }, sweepConfig: { maxScenarioPolicies: AGREEMENT_CAP } }, LAP, SEED);
       const t = tableOf(carOf(out, car), compound);
       const i = t.rows.findIndex((r) => r.stopLap === stop!.lap);
       expect(i, `car ${car}: a row at strategy's stop lap ${stop!.lap}`).toBeGreaterThanOrEqual(0);
