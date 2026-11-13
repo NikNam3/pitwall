@@ -32,8 +32,8 @@ type BindingShape =
   | { topic: TopicName; fromHistory: ProjectedList }
   /** The active insights. */
   | { topic: TopicName; fromInsights: true }
-  /** The results of the job with this id, as `Computed` values. */
-  | { topic: TopicName; fromJob: CalculatorId }
+  /** The results of the job with this id, as `Computed` values, optionally narrowed by the subscription's params. */
+  | { topic: TopicName; fromJob: CalculatorId; select?: (out: unknown, params: object) => unknown }
   /** A part of the feed's live state, read when the hub sends a value. */
   | { topic: TopicName; fromLive: LiveSelect<unknown> }
   /** A sub-machine's open spans in the situation (C20). */
@@ -70,7 +70,7 @@ export function bindState(
 }
 
 /**
- * The `select` of a per-car topic whose calculator output is keyed by car id: the entry `params.carId` names. `params`
+ * The `select` of a per-car topic whose calculator or job output is keyed by car id: the entry `params.carId` names. `params`
  * is client input, so `carId` must be an own integer property naming a car the output has; anything else is `undefined`.
  */
 export function selectCar<V>(out: Readonly<Record<CarId, V>>, params: object): V | undefined {
@@ -101,14 +101,31 @@ export const bindInsights = <T extends TopicName>(
   topic: InsightEntry extends TopicValue<T> ? T : never,
 ): TopicBinding => binding({ topic, fromInsights: true });
 
+/** The `V` of a job topic's `Computed<V>`: what a `bindJob` select returns. */
+export type JobValue<T extends TopicName> = TopicValue<T> extends Computed<infer V> ? V : never;
+
 /**
- * Binds a topic to a job's results. Each result arrives as `{ computedFor, value }`, so `Computed<Out>` must be the
- * topic's value. The job must also be listed in the feature's `jobs`.
+ * Binds a topic to a job's results. Each result arrives as `{ computedFor, value }`. Without `select`, `Computed<Out>`
+ * must be the topic's value; with it, `select` maps the job's output to the `V` of the topic's `Computed<V>` (or
+ * `undefined` for no data) and validates `params`, which is client input; the publisher wraps it in the result's
+ * `computedFor`. The job must also be listed in the feature's `jobs`.
  */
-export const bindJob = <T extends TopicName, Out>(
+export function bindJob<T extends TopicName, Out>(
   topic: Computed<Out> extends TopicValue<T> ? T : never,
   job: Job<unknown, Out>,
-): TopicBinding => binding({ topic, fromJob: job.id });
+): TopicBinding;
+export function bindJob<T extends TopicName, Out>(
+  topic: TopicValue<T> extends Computed<unknown> ? T : never,
+  job: Job<unknown, Out>,
+  select: (out: Out, params: object) => JobValue<T> | undefined,
+): TopicBinding;
+export function bindJob(
+  topic: TopicName,
+  job: Job<unknown, unknown>,
+  select?: (out: never, params: object) => unknown,
+): TopicBinding {
+  return binding({ topic, fromJob: job.id, ...(select !== undefined && { select: select as (out: unknown, params: object) => unknown }) });
+}
 
 /**
  * Binds a core topic to a part of the live state (C55), with no calculator between. The hub reads it from the feed's
