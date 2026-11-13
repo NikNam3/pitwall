@@ -107,8 +107,12 @@ export type Trigger =
 /** One car's stops to the flag, and the triggers that change them inside a scenario. */
 export type Policy = { stops: { lap: number; compound: NoiseCompound }[]; triggers: Trigger[] };
 
-/** One scenario: its id (the draws' stream key), whether it draws nothing (`plain`), and its neutralisations. */
-export type Scenario = { id: number; plain: boolean; neutralisations: { kind: 'sc' | 'vsc'; fromLap: number; toLap: number }[] };
+/**
+ * One scenario: its id (the draws' stream key), whether it draws nothing (`plain`), and its neutralisations.
+ * `wetnessByLap[i]`: the track's wetness (ms) on lap `start.lap + i` (the last entry beyond its end, the starting
+ * point's before `start.lap`); absent, every lap has the starting point's wetness (SP4.3b spec §7.1, Task 19b).
+ */
+export type Scenario = { id: number; plain: boolean; neutralisations: { kind: 'sc' | 'vsc'; fromLap: number; toLap: number }[]; wetnessByLap?: Float64Array };
 
 /** Per lap, every car's position, gap and lap time. */
 export type ForecastTrace = { lap: number; position: Int8Array; gapMs: Float64Array; lapTimeMs: Float64Array }[];

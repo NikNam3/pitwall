@@ -11,7 +11,7 @@ import type { ForecastResult, PassCurve, Policy, Scenario, StartingPoint } from 
 import { defineSimulator, type Rng } from '@pitwall/engine/readers';
 import { DOUBLE_STACK_MS, HUMAN_STOP_SAVING_MS, MEDIAN_PASS_HAZARD, PASS_MARGIN_MS, PLAIN_PASS_MIN_ADVANTAGE_MS } from './constants.ts';
 import { PURPOSE, streamKey, uniform } from './draws.ts';
-import { createField, endLap, fitStop, lineIndex, NEUTRAL, SLOT, startLap, stopAt, STRIDE, type Field } from './field.ts';
+import { createField, endLap, fitStop, lineIndex, NEUTRAL, SLOT, startLap, stopAt, STRIDE, wetnessOn, type Field } from './field.ts';
 import { lapPointsOf, POINT, type LapPoints } from './points.ts';
 import { result } from './result.ts';
 
@@ -108,7 +108,9 @@ export function raceForecast(start: StartingPoint, policies: readonly Policy[], 
   const drsRangeMs = start.drs.rangeMs;
   const drsFromLap = start.drs.fromLap;
   const curve = curveOf(start);
-  const wet = start.wetness.wetnessMs > 0;
+  // a wet lap scales the pass chance; per lap where the scenario carries a wetness path (SP4.3b spec §7.1)
+  const wetPath = f.wetnessByLap !== undefined;
+  let wet = start.wetness.wetnessMs > 0;
   const plain = f.plain;
   const fieldDraws = f.draws;
   const { car, running } = f;
@@ -128,6 +130,7 @@ export function raceForecast(start: StartingPoint, policies: readonly Policy[], 
   const gEnd = lastLap * P + P - 1;
   let i = gFrom % P;
   let lap = (gFrom - i) / P;
+  if (wetPath) wet = wetnessOn(f, lap) > 0;
   for (let g = gFrom; g <= gEnd; g++) {
     const kind = kinds[i] ?? LINE;
     const at = fractions[i] ?? 1;
@@ -222,6 +225,7 @@ export function raceForecast(start: StartingPoint, policies: readonly Policy[], 
     if (++i === P) {
       i = 0;
       lap++;
+      if (wetPath) wet = wetnessOn(f, lap) > 0;
     }
   }
   return result(f, toFlag, opts?.trace === true);

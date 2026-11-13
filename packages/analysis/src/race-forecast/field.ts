@@ -64,6 +64,8 @@ export type Field = {
   policies: readonly Policy[];
   plain: boolean;
   draws: Draws;
+  /** The scenario's wetness per lap from `start.lap` (`Scenario.wetnessByLap`); undefined: the starting point's on every lap. */
+  wetnessByLap: Float64Array | undefined;
   /** Per lap number: its neutralisation (`NEUTRAL`), and the common lap time of a VSC lap (the first car to start it). */
   neutralByLap: Uint8Array;
   vscLapMs: Float64Array;
@@ -169,6 +171,7 @@ export function createField(start: StartingPoint, policies: readonly Policy[], s
     policies,
     plain: scenario.plain,
     draws,
+    wetnessByLap: scenario.wetnessByLap,
     endLap,
     ...a,
     setsUsed: new Map(Object.keys(start.sets).map((k) => [Number(k), new Int16Array(NOISE_COMPOUNDS.length)])),
@@ -186,6 +189,14 @@ export function createField(start: StartingPoint, policies: readonly Policy[], s
     f.innovationMs[c] = Math.sqrt(1 - rho * rho) * (start.sigmaMs[c] ?? 0);
   }
   return f;
+}
+
+/** The track's wetness on lap `lap` (`Scenario.wetnessByLap`; the starting point's where the scenario has none). */
+export function wetnessOn(f: Field, lap: number): number {
+  const w = f.wetnessByLap;
+  const i = lap - f.start.lap;
+  if (w === undefined || w.length === 0 || i < 0) return f.start.wetness.wetnessMs;
+  return w[Math.min(i, w.length - 1)] ?? f.start.wetness.wetnessMs;
 }
 
 export const lineIndex = (f: Field, car: number, lap: number): number => car * (f.start.lapsTotal + 2) + lap;
@@ -223,7 +234,7 @@ export function startLap(f: Field, c: number, lap: number, fromFraction: number,
   input.fuelKg = f.fuelKg[c] ?? 0;
   input.compound = compounds[f.compound[c] ?? 0] ?? 'medium';
   input.lapOnSet = f.lapOnSet[c] ?? 1;
-  input.wetnessMs = s.wetness.wetnessMs;
+  input.wetnessMs = wetnessOn(f, lap);
   input.neutralised = 'none';
   const green = lapTime(s.lapModel, input);
   car[b + GREEN_MS] = green;
