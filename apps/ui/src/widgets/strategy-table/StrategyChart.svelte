@@ -4,11 +4,12 @@
   // with theme roles only (C65, C68). A click on a line toggles the highlight through `onpick`.
   import type { McRow } from '@pitwall/domain';
   import { DEFAULT_THEME, role } from '../../theme/index.ts';
-  import { chartAxes, chartLines, chartMarks, type Box } from './chart.ts';
+  import { chartAxes, chartLines, chartMarks, drawnRows, type Box } from './chart.ts';
   import { stopsText } from './rows.ts';
 
-  type Props = { rows: readonly McRow[]; highlight: number | null; box: Box; currentPosition: number; onpick: (i: number) => void };
-  let { rows, highlight, box, currentPosition, onpick }: Props = $props();
+  /** `limit`: draw only the best-ranked lines (and the committed one), compact's rule (gen.mjs `prepRows`). */
+  type Props = { rows: readonly McRow[]; highlight: number | null; box: Box; currentPosition: number; limit?: number; onpick: (i: number) => void };
+  let { rows, highlight, box, currentPosition, limit, onpick }: Props = $props();
 
   const { markRadius, liveDash } = DEFAULT_THEME.chart;
   /** Px the E[pos] tick reaches above and below the place axis, and its stroke (gen.mjs). */
@@ -28,10 +29,11 @@
   /** Draw order: the others, then the committed line, the highlighted one last (on top). */
   const layer = (i: number): number => (i === highlight ? 2 : rows[i]?.committed === true ? 1 : 0);
   const order = $derived(
-    lines
-      .flatMap((l, i) => {
+    drawnRows(rows, limit)
+      .flatMap((i) => {
         const r = rows[i];
-        return r === undefined ? [] : [{ i, l, title: `${r.rank} · ${stopsText(r.policy)}` }];
+        const l = lines[i];
+        return r === undefined || l === undefined ? [] : [{ i, l, title: `${r.rank} · ${stopsText(r.policy)}` }];
       })
       .sort((a, b) => layer(a.i) - layer(b.i)),
   );

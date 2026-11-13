@@ -18,15 +18,18 @@
 
   /** Cells of the list beside the chart (bracket, #, SRC, STOPS, E[POS] and their gaps, gen.mjs `listSpecB`). */
   const LIST = { bracket: 1, rank: 2, src: 4, stops: 11, ePos: 6 } as const;
-  const LIST_COLS = 30;
+  /** The list's share of a full panel: 88 cols − the mockup's 57 chart cols (gen.mjs `FULL_B`). */
+  const LIST_COLS = 31;
   /** Cells of the info columns (gen.mjs `infoSpecB`). */
   const INFO = { rank: 2, src: 4, stops: 17, trg: 3, ePos: 6, ePts: 6, delta: 6 } as const;
   /** Rows below the chart: full the info header, two info rows and the footer; compact one info line. */
   const BELOW_FULL = 4;
   const BELOW_COMPACT = 1;
-  /** Cells of the chart's left and right label room. */
+  /** Cells of the chart's left and right label room (gen.mjs `chartSvgB` `m`: the P20 label stays inside). */
   const PAD_L = 4;
-  const PAD_R = 1;
+  const PAD_R = 2;
+  /** Compact draws the best-ranked lines only, plus the committed one (gen.mjs `prepRows` n 5; R63). */
+  const COMPACT_LINES = 5;
   /** Two cells between trigger texts (the mockup). */
   const TRIGGER_GAP = '  ';
 
@@ -148,7 +151,7 @@
         />  <span style:color={role('textFaint')}>{text.meta.cand}</span> {foot.cand}</div>
     {/if}
   {:else}
-    <StrategyChart {rows} highlight={hi} {box} currentPosition={value.currentPosition} onpick={pick} />
+    <StrategyChart {rows} highlight={hi} {box} currentPosition={value.currentPosition} limit={COMPACT_LINES} onpick={pick} />
     {#if info !== undefined}
       <div class="line on" data-testid="info"> {info.rank} <TextCell text={info.stops} width={LIST.stops} /> {info.ePos} <span
           style:color={role('text')}>{info.ePoints}</span

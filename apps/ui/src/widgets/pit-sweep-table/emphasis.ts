@@ -8,3 +8,5 @@ export const headerRole: Role = 'textDim';
 export const compoundRole: Role = 'text';
 /** The LIFE mark's colour. */
 export const lifeRole: Role = 'warning';
+/** Every second row's background, a window row none (gen.mjs `table` band; as the sc-card). */
+export const bandRole: Role = 'bgRowBand';

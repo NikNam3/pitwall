@@ -27,6 +27,8 @@
   const lines = $derived(value === undefined || !full ? [] : fullLines(value, cars));
   const compact = $derived(value === undefined || full ? [] : compactLines(value, cars));
   const empty: CellPart = { text: '' };
+  /** One character cell of space: Svelte trims whitespace at a block's edges, so the lines spell theirs out. */
+  const SP = ' ';
 </script>
 
 {#snippet part(p: CellPart, width: number, align: 'left' | 'right')}<TextCell text={p.text} reason={p.reason} {width} {align} />{/snippet}
@@ -75,7 +77,7 @@
       {/if}
     {/each}
   {:else}
-    <div class="line" style:color={role('textDim')}> <TextCell text="" width={W.car} /> <TextCell text="" width={W.pos} />{#each NS as n (n)} <TextCell
+    <div class="line" style:color={role('textDim')}> <TextCell text="" width={W.car} /> <TextCell text="" width={W.pos} />{#each NS as n (n)}{SP}<TextCell
           text={text.nHeader[n]}
           width={W.compactDGap}
           align="right"
@@ -91,7 +93,7 @@
         data-role={e.role}
         data-bold={l.own ? e.bold : undefined}
         title={l.own && value.rivals.length === 0 ? text.noneHover(value.rangeMs) : undefined}
-      > {@render part(l.car, W.car, 'left')} <TextCell text={l.pos} width={W.pos} align="right" />{#if !l.own}{#each NS as n (n)} <span data-testid="dgap-{n}"
+      > {@render part(l.car, W.car, 'left')} <TextCell text={l.pos} width={W.pos} align="right" />{#if !l.own}{#each NS as n (n)}{SP}<span data-testid="dgap-{n}"
               >{@render part(l.dGap[n] ?? empty, W.compactDGap, 'right')}</span
             >{/each}{/if}</div>
     {/each}

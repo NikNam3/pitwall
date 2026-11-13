@@ -8,7 +8,7 @@
   import type { WidgetProps } from '../../kit/types.ts';
   import TextCell from '../../kit/values/TextCell.svelte';
   import { role } from '../../theme/index.ts';
-  import { compoundRole, headerRole, lifeRole } from './emphasis.ts';
+  import { bandRole, compoundRole, headerRole, lifeRole } from './emphasis.ts';
   import { compoundHover, compoundLetter, placesHeader, shownRows, sweepLine, WIDTH } from './rows.ts';
   import * as text from './text.ts';
   import type { widget } from './widget.ts';
@@ -17,6 +17,8 @@
 
   /** The header takes one line. */
   const HEAD_ROWS = 1;
+  /** One character cell of space: Svelte trims whitespace at a block's edges, so the lines spell theirs out. */
+  const SP = ' ';
 
   const full = $derived(size.mode === 'full');
   // The job's topic before its first result has no value: the panel frame shows its computing state.
@@ -35,26 +37,28 @@
         title={compoundHover(value.fromAuto)}
         role={compoundRole}
         width={table === undefined ? undefined : WIDTH.lap}
-      /></span>{#if !value.table.known} <TextCell text="" reason={value.table.reason} />{:else} <TextCell
+      /></span>{#if !value.table.known}{SP}<TextCell text="" reason={value.table.reason} />{:else}{SP}<TextCell
         text={text.headers.rej}
         width={WIDTH.rej}
         align="right"
-      />{#if full} <TextCell text={text.headers.trf} width={WIDTH.trf} align="right" />{/if} <TextCell
+      />{#if full}{SP}<TextCell text={text.headers.trf} width={WIDTH.trf} align="right" />{/if} <TextCell
         text={text.headers.ePos}
         width={WIDTH.ePos}
         align="right"
-      />{#if full} {placesHeader(places)}{/if} <TextCell text={text.headers.pGain} width={WIDTH.pGain} align="right" />{#if full} <TextCell
+      />{#if full}{SP}{placesHeader(places)}{/if} <TextCell text={text.headers.pGain} width={WIDTH.pGain} align="right" />{#if full}{SP}<TextCell
           text={text.headers.life}
           width={WIDTH.life}
           align="right"
         />{/if}{/if}</div>
   {#each lines as l, i (i)}
-    <div class="line" data-testid="row-{i}"><svelte:element this={l.bold ? 'strong' : 'span'}> <span data-testid="lap"
+    <!-- every second row on the row band, a window row (bold) none (gen.mjs `table` band, cls 'm') -->
+    <div class="line" data-testid="row-{i}" style:background={i % 2 === 1 && !l.bold ? role(bandRole) : undefined}><svelte:element
+        this={l.bold ? 'strong' : 'span'}> <span data-testid="lap"
           ><TextCell text={l.lap} width={WIDTH.lap} /></span
         > <span data-testid="rej"><TextCell text={l.rej.text} reason={l.rej.reason} width={WIDTH.rej} align="right" /></span
-        >{#if full} <span data-testid="trf"><TextCell text={l.trf.text} reason={l.trf.reason} width={WIDTH.trf} align="right" /></span
+        >{#if full}{SP}<span data-testid="trf"><TextCell text={l.trf.text} reason={l.trf.reason} width={WIDTH.trf} align="right" /></span
           >{/if} <span data-testid="epos"><TextCell text={l.ePos} width={WIDTH.ePos} align="right" /></span
-        >{#if full} <DistStrip form="places" pmf={l.pmf} {scale} ourPlace={value.position} />{/if} <span data-testid="pgain"
+        >{#if full}{SP}<DistStrip form="places" pmf={l.pmf} {scale} ourPlace={value.position} />{/if} <span data-testid="pgain"
           ><TextCell text={l.pGain} width={WIDTH.pGain} align="right" /></span
         > <span data-testid="life"
           ><TextCell

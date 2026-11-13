@@ -62,6 +62,14 @@ export function chartLines(rows: readonly McRow[], state: ChartState, box: Box):
   }));
 }
 
+/**
+ * The rows whose lines the chart draws (gen.mjs `prepRows`; R63): every row without a limit, else the `limit` best-ranked
+ * (rows come ranked) plus the committed row when it ranks lower (Q10 B: the committed line is always worth seeing).
+ */
+export function drawnRows(rows: readonly McRow[], limit?: number): number[] {
+  return rows.flatMap((r, i) => (limit === undefined || i < limit || r.committed ? [i] : []));
+}
+
 export function chartMarks(rows: readonly McRow[], state: ChartState, box: Box, currentPosition: number): Marks {
   const s = scaleOf(rows, box);
   const hi = state.highlight === null ? undefined : rows[state.highlight];
