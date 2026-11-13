@@ -33,8 +33,12 @@ import { generated, once, OURS, PARAMS, viewAt, viewAtFrame, type ViewSpec } fro
 
 export { OURS, PLAYER, TEAMMATE } from '../strategy/support.ts';
 
-/** The cap of the job tests: the config's (spec §11.1). */
-export const CAP = SC_CALL_CONFIG.defaults.maxScenarioPolicies;
+/**
+ * The cap of the behaviour tests, through `sc-call`'s config override (C47; Task 18s: test speed): far below the
+ * config's (spec §11.1, pinned by the budget test). The rows compare the job's rows with the recorded `scoreCalls`
+ * outcomes of the same run, so any cap with scenarios per condition holds them: 10 per forced condition, 20 under an SC out.
+ */
+export const CAP = 40;
 
 /** The leader's lap of the green views. */
 export const LAP = 3;
