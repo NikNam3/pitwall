@@ -177,11 +177,11 @@ function rowsOf(run: Run, input: McInput, car: number, cands: readonly Cand[], r
       tie: ranking.tie[i] ?? false,
       committed: isCommitted,
       infeasible: isCommitted ? infeasible(run, car, x.c.policy) : null,
-      // placeholders until SP4.3b2 Tasks 4 and 6: the rank by place, no deltas, no rule copy
+      // placeholders until SP4.3b2 Task 6: the rank by place, no deltas
       rank: index + 1,
       deltaLeaderMs: 0,
       deltaPlanMs: null,
-      rule: null,
+      rule: x.c.rule,
     };
   });
 }
