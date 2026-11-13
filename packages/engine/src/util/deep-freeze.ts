@@ -2,6 +2,8 @@
 export const deepFreeze = (value: unknown, seen = new WeakSet<object>()): void => {
   if (typeof value !== 'object' || value === null || seen.has(value)) return;
   seen.add(value);
+  // A typed array cannot be frozen (its elements are not configurable): left as it is (SP4.3b Task 21).
+  if (ArrayBuffer.isView(value)) return;
   if (value instanceof Map) {
     for (const [k, v] of value) {
       deepFreeze(k, seen);
