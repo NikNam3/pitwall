@@ -17,7 +17,7 @@ import { jobSeed, type JobResult } from '../../../src/jobs/job-runner.ts';
 import { demandOf } from '../../../src/pipeline/demand.ts';
 import { NO_DRIVERS, NO_PRIORS } from '../../../../../test-support/builders/index.ts';
 import { generated, OURS, PARAMS, PLAYER, TEAMMATE, viewAtFrame, type ViewSpec } from '../../../../../packages/analysis/test/strategy/support.ts';
-import { undercutView } from '../../../../../packages/analysis/test/undercut/support.ts';
+import { UNDERCUT_TEST_CAP, undercutView } from '../../../../../packages/analysis/test/undercut/support.ts';
 import { run } from '../../../../../packages/analysis/src/undercut/job.ts';
 
 const TOPIC: TopicName = 'undercut.car';
@@ -76,7 +76,8 @@ function inputOf(frame: FrameNumber, spec: ViewSpec = {}, delta?: SchedulerInput
   const cur = viewOf(frame, spec);
   const prev = frame > 1 ? viewOf(frame - 1, spec) : undefined;
   const { outputs: _outputs, priors: _priors, drivers: _drivers, ...view } = cur;
-  return { ...view, priors: NO_PRIORS, drivers: NO_DRIVERS, changed: changedOf(prev, cur) as SchedulerInput['changed'], ...(delta && { delta }) };
+  const config = { ...view.config, undercut: { maxScenarioPolicies: UNDERCUT_TEST_CAP } };
+  return { ...view, config, priors: NO_PRIORS, drivers: NO_DRIVERS, changed: changedOf(prev, cur) as SchedulerInput['changed'], ...(delta && { delta }) };
 }
 
 /** Per frame after the first: whether a lap record of ours was appended, and the frame's change tags. */
