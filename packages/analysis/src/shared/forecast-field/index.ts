@@ -312,10 +312,26 @@ export function buildStartingPoint(
   return known(sp, at);
 }
 
+/** The rain chance `min` minutes ahead, linearly between the samples around it (`samples` by offset, not empty). */
+function rainPctAt(samples: readonly { offsetMin: number; rainPct: number }[], min: number): number {
+  const first = samples[0] as (typeof samples)[number];
+  if (min <= first.offsetMin) return first.rainPct;
+  for (let i = 1; i < samples.length; i++) {
+    const s1 = samples[i] as (typeof samples)[number];
+    if (min > s1.offsetMin) continue;
+    const s0 = samples[i - 1] as (typeof samples)[number];
+    const span = s1.offsetMin - s0.offsetMin;
+    return span > 0 ? s0.rainPct + ((min - s0.offsetMin) / span) * (s1.rainPct - s0.rainPct) : s1.rainPct;
+  }
+  return (samples[samples.length - 1] as (typeof samples)[number]).rainPct;
+}
+
 /**
  * The forecast mapped onto race laps by the leader's lap time (SP4.3b spec §7.1, S12): lap L (from the leader's lap
- * `lap` on) takes the sample in force at its middle, the newest whose offset is at or before it (the first sample
- * before any). Only where the view holds the forecast now (`weatherNow`, the now path, R19); unknown otherwise (C3).
+ * `lap` on) takes the rain chance at its middle, linearly between the two samples around it (SP4.3b Task 19c: one
+ * sample per lap put a perfect forecast's changes 1.7–3 laps late on the game's 5/15/30-minute grid); a middle before
+ * the first sample takes the first's, one past the last the last's. Only where the view holds the forecast now
+ * (`weatherNow`, the now path, R19); unknown otherwise (C3).
  */
 function weatherOf(view: AsOfView, lap: number, lapsTotal: number, leaderFraction: number, leaderLapMs: number): StartingPoint['weather'] {
   const weather = view.fixed.weatherNow;
@@ -325,9 +341,7 @@ function weatherOf(view: AsOfView, lap: number, lapsTotal: number, leaderFractio
   const byLap: { lap: number; rainPct: number }[] = [];
   for (let l = lap; l <= lapsTotal; l++) {
     const inMin = ((l - lap + 0.5 - leaderFraction) * leaderLapMs) / 60_000;
-    let sample = samples[0];
-    for (const s of samples) if (s.offsetMin <= inMin) sample = s;
-    byLap.push({ lap: l, rainPct: sample?.rainPct ?? 0 });
+    byLap.push({ lap: l, rainPct: rainPctAt(samples, inMin) });
   }
   return known({ byLap, accuracy: weather.forecastAccuracy }, view.at);
 }
