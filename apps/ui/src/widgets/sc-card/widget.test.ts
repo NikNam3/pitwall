@@ -1,5 +1,5 @@
-// The sc-card declaration (SP4.2 spec 4, plan Task 12): what it reads and its sizes from the mockup
-// (docs/design/2026-11-07-sp4.2/sc-card.html: full 30×3, compact 26×2). It sends no uiAction (C74).
+// The sc-card declaration (SP4.2 spec 4; SP4.3b spec §10, V18): what it reads and its sizes from the mockup
+// (docs/design/2026-11-12-sp4.3b/sc-card.html: full 45×3, was 30×3; compact 26×2). It sends no uiAction (C74).
 import { carId, feedId } from '@pitwall/domain';
 import { describe, expect, it } from 'vitest';
 import { widget } from './widget.ts';
@@ -21,8 +21,8 @@ describe('sc-card declaration', () => {
     expect(widget.data.call.params?.({ link, options: {} })).toEqual({ carId: carId(3) });
   });
 
-  it('has the mockup sizes: compact 26×2, full 30×3', () => {
-    expect(widget.sizes).toEqual({ compact: { minCols: 26, minRows: 2 }, full: { minCols: 30, minRows: 3 } });
+  it('has the mockup sizes: compact 26×2, full 45×3', () => {
+    expect(widget.sizes).toEqual({ compact: { minCols: 26, minRows: 2 }, full: { minCols: 45, minRows: 3 } });
   });
 
   it('sends no uiAction', () => {
