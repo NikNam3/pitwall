@@ -150,6 +150,13 @@
     [text.pitHeaders.cond, 5, 'left'], [text.pitHeaders.set, pitWidth, 'right'], [text.pitHeaders.stops, STOPS_WIDTH, 'right'],
     [text.pitHeaders.ovr, pitWidth, 'left'],
   ]);
+  /** The set picker's cells; of them the text indent and the arrow take 3, a preferred set's star 2 more. */
+  const setPickerWidth = $derived(full ? 22 : 20);
+  /** A set's name as the picker shows it: cut with … where it would run under the arrow (mockup `after-floor-upgr… ▾`). */
+  const setName = (name: string, preferred: boolean): string => {
+    const room = setPickerWidth - 3 - (preferred ? 2 : 0);
+    return name.length > room ? fitCell(name, room) : name;
+  };
   const skippedWidth = W.laps + W.deg + W.drift + 2;
   const compactPitWidth = 5;
 </script>
@@ -173,17 +180,19 @@
 {/snippet}
 
 {#snippet field(spec: ValueSpec)}
-  <input
-    type="text"
-    inputmode="decimal"
-    spellcheck="false"
-    class="pw-input fld"
-    data-testid="override-{spec.key}"
-    aria-label={spec.key}
-    style:width="{spec.width}ch"
-    value={overrideText(spec, overrides)}
-    onchange={(e) => commitOverride(spec, e.currentTarget)}
-  />
+  <span class="ovr" style:width="{spec.width}ch"
+    ><input
+      type="text"
+      inputmode="decimal"
+      spellcheck="false"
+      class="pw-input fld"
+      data-testid="override-{spec.key}"
+      aria-label={spec.key}
+      style:width="{spec.width - 1}ch"
+      value={overrideText(spec, overrides)}
+      onchange={(e) => commitOverride(spec, e.currentTarget)}
+    /></span
+  >
 {/snippet}
 
 {#snippet sourceLine(fit: SourceFit, i: number, kind: 'source' | 'candidate')}
@@ -252,15 +261,15 @@
 <div class="block">
   <!-- The set line: the picker, whether the race runs on it, the set actions. -->
   <div class="line">
-    {SP}{#if full}<span class="faint">{text.setLabel}</span>{SP}{/if}{#if trackSets.length > 0}<select
-        class="pw-input fld"
-        data-testid="set-picker"
-        aria-label={text.setLabel}
-        style:width="{full ? 22 : 20}ch"
-        bind:value={() => set?.id ?? '', pickSet}
-      >
-        {#each trackSets as s (s.id)}<option value={s.id}>{s.name}{#if s.preferred}{SP}<Star />{/if}</option>{/each}
-      </select>{#if set !== undefined}{SP}<button
+    {SP}{#if full}<span class="faint">{text.setLabel}</span>{SP}{/if}{#if trackSets.length > 0}<span class="picker"><select
+          class="pw-input fld"
+          data-testid="set-picker"
+          aria-label={text.setLabel}
+          style:width="{setPickerWidth}ch"
+          bind:value={() => set?.id ?? '', pickSet}
+        >
+          {#each trackSets as s (s.id)}<option value={s.id}>{setName(s.name, s.preferred)}{#if s.preferred}{SP}<Star />{/if}</option>{/each}
+        </select><span class="arrow" aria-hidden="true">{text.pickerArrow}</span></span>{#if set !== undefined}{SP}<button
           type="button"
           class="pw-button"
           class:dim={!set.preferred}
@@ -297,15 +306,15 @@
           onkeydown={nameKey}
         />{SP2}<span class="faint">{text.nameHint}</span>{:else}{#if !data.active.known && tracks.length > 0}<span class="faint"
             >{text.trackLabel}</span
-          >{SP}<select
-            class="pw-input fld"
-            data-testid="track-picker"
-            aria-label={text.trackLabel}
-            style:width="16ch"
-            bind:value={() => (trackId === null ? '' : String(trackId)), pickTrack}
-          >
-            {#each tracks as t (t)}<option value={String(t)}>{formatTrack(t)}</option>{/each}
-          </select>{SP2}{:else if trackId !== null}<span>{formatTrack(trackId)}</span>{#if set !== undefined}<span class="faint"
+          >{SP}<span class="picker"><select
+              class="pw-input fld"
+              data-testid="track-picker"
+              aria-label={text.trackLabel}
+              style:width="16ch"
+              bind:value={() => (trackId === null ? '' : String(trackId)), pickTrack}
+            >
+              {#each tracks as t (t)}<option value={String(t)}>{formatTrack(t)}</option>{/each}
+            </select><span class="arrow" aria-hidden="true">{text.pickerArrow}</span></span>{SP2}{:else if trackId !== null}<span>{formatTrack(trackId)}</span>{#if set !== undefined}<span class="faint"
               >{text.afterTrack}</span
             >{/if}{/if}{#if set !== undefined}<span class="faint"
             >{text.setDates(
@@ -322,20 +331,20 @@
     </div>
 
     {#if set !== undefined}
-      <div class="line">{SP}<span class="faint">{text.sourcesTitle}</span>{SP}<span class="faint">{text.sourcesNote}</span></div>
+      <div class="line">{SP}<span class="faint" title={text.sourcesHover}>{text.sourcesTitle}</span></div>
       <div class="line faint">{SP3}{sourceHeader}</div>
       {#each fits as fit, i (sourceKey(fit.source))}{@render sourceLine(fit, i, 'source')}{/each}
       <div class="line">{SP}</div>
     {/if}
 
-    <div class="line">{SP}<span class="faint">{text.suggestionsTitle}</span>{SP}<span class="faint">{text.suggestionsNote}</span></div>
+    <div class="line">{SP}<span class="faint" title={text.suggestionsHover}>{text.suggestionsTitle}</span></div>
     {#each suggestions as fit, i (sourceKey(fit.source))}{@render sourceLine(fit, i, 'candidate')}{:else}<div class="line faint">
         {SP3}{text.noSuggestions}
       </div>{/each}
 
     {#if set !== undefined}
       <div class="line">{SP}</div>
-      <div class="line">{SP}<span class="faint">{text.valuesTitle}</span>{SP}<span class="faint">{text.valuesNote}</span></div>
+      <div class="line">{SP}<span class="faint" title={text.valuesHover}>{text.valuesTitle}</span></div>
       <div class="line faint">{SP}{valueHeader}</div>
       {#each COMPOUNDS as c (c)}
         <div class="line">
@@ -400,7 +409,49 @@
   select.fld,
   .fld.name {
     text-align: left;
-  }  .faint {
+  }
+  /* An override field: the frame on a wrapper of the field's cells (mockup `  0.045` in 7 cells); the frameless input
+     inside it is half a cell narrower on each side, so a value never reaches the frame (a 4-cell wear field keeps 3). */
+  .ovr {
+    display: inline-flex;
+    justify-content: center;
+    vertical-align: top;
+    box-sizing: border-box;
+    height: calc(var(--pw-line) * 1em);
+    border: var(--pw-border-px) solid var(--pw-border);
+  }
+  .ovr .fld {
+    border: none;
+    height: 100%;
+  }
+  .ovr:focus-within {
+    outline: var(--pw-border-px) solid var(--pw-focus);
+  }
+  /* A picker: its text one cell from its frame and the mockup's small arrow at its right edge (` league ▾`), in place of
+     the browser's own icon. */
+  .picker {
+    position: relative;
+    display: inline-block;
+    vertical-align: top;
+  }
+  .picker select.fld {
+    text-indent: 1ch;
+  }
+  .picker select.fld::picker-icon {
+    display: none;
+  }
+  /* The star after the picker one character cell wide, as the mockup's ★ and ☆ glyphs (the set line fits its 76 cells). */
+  .line :global(.star),
+  .line :global(.star-outline) {
+    width: 1ch;
+  }
+  .arrow {
+    position: absolute;
+    top: 0;
+    right: 1ch;
+    pointer-events: none;
+  }
+  .faint {
     color: var(--pw-textFaint);
   }
   .dim {

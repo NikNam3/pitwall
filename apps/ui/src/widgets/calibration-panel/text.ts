@@ -6,6 +6,8 @@ import { formatCount } from '../../kit/values/format.ts';
 
 /** The set picker's label (full mode). */
 export const setLabel = 'set';
+/** A picker's small arrow at its right edge (mockup ` league ▾`), in place of the browser's large one. */
+export const pickerArrow = '▾';
 /** The track picker's label, without a running session. */
 export const trackLabel = 'track';
 /** The name field's label while a set is made, copied or renamed. */
@@ -49,14 +51,14 @@ export const setDates = (created: string, lastUsed: string | undefined, sources:
     missing > 0 ? `${calibration.sources(sources)}, ${calibration.missing(missing)}` : calibration.sources(sources),
   ].join(separator);
 
-/** Section titles and their notes. */
+/** Section titles; what each section holds is its title's hover, never visible text (no explaining text in displays). */
 export const sourcesTitle = 'SOURCES';
-export const sourcesNote = `${separator}one stint each; ▸ opens its laps`;
+export const sourcesHover = 'one stint each; ▸ opens its laps';
 export const suggestionsTitle = 'SUGGESTIONS';
-export const suggestionsNote = `${separator}our stints on this track not in the set, this weekend first`;
+export const suggestionsHover = 'our stints on this track not in the set, this weekend first';
 export const noSuggestions = 'none';
 export const valuesTitle = 'VALUES PER COMPOUND';
-export const valuesNote = `${separator}deg s/lap, wear %/lap; ovr = your override`;
+export const valuesHover = 'deg s/lap, wear %/lap; ovr = your override';
 export const limitsTitle = 'LIMITS';
 export const pitTitle = 'PIT LOSS PER CONDITION';
 export const pitNote = `${separator}s`;

@@ -520,3 +520,35 @@ describe('calibration-panel: the track', () => {
     expect(sent).toEqual([{ kind: 'calibration.set.create', trackId: MONZA, name: 'monza-2' }]);
   });
 });
+
+// SP4.3b2 Task 18v: the display against its approved mockup (calibration-panel.html; memory "no explaining text in
+// displays"). The fit of full/defaultsChosen, compact/notPreferred and compact 75×28 is covered by fit.spec (Playwright).
+describe('calibration-panel against the mockup (Task 18v)', () => {
+  /** The section notes the panel showed as sentences: never visible text (a hover may carry them). */
+  const NOTES = ['one stint each', 'opens its laps', 'our stints on this track not in the set', 'this weekend first', 'ovr = your override'];
+  /** Every visible text node of the widget, trimmed, without empty ones (option text is the picker's list). */
+  function visibleTexts(c: HTMLElement): string[] {
+    const walker = c.ownerDocument.createTreeWalker(c, NodeFilter.SHOW_TEXT);
+    const out: string[] = [];
+    for (let n = walker.nextNode(); n !== null; n = walker.nextNode()) {
+      const t = (n.textContent ?? '').trim();
+      if (t !== '' && n.parentElement?.closest('title, option, script, style') === null) out.push(t);
+    }
+    return out;
+  }
+
+  it('no section note in the visible text: SOURCES, SUGGESTIONS and VALUES PER COMPOUND stand alone', () => {
+    for (const [name, data] of Object.entries(cases)) {
+      for (const mode of ['full', 'compact'] as const) {
+        const { container: c } = mount(data, { mode });
+        const shown = visibleTexts(c).join(' ');
+        for (const note of NOTES) expect(shown, `${name} ${mode}`).not.toContain(note);
+        cleanup();
+      }
+    }
+    // the titles stay
+    const { container: c } = mount(cases.activeLeague);
+    const shown = visibleTexts(c);
+    for (const title of [text.sourcesTitle, text.suggestionsTitle, text.valuesTitle]) expect(shown, title).toContain(title);
+  });
+});

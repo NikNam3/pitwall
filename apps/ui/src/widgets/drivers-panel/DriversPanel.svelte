@@ -45,6 +45,25 @@
   /** Each person's details show once: under the first seat linked to them, or in a column of their own without a seat. */
   const detailSeat = $derived(new Map(seats.toReversed().flatMap((s) => (s.person === null ? [] : [[s.person, seatKey(s)] as const]))));
   const unseated = $derived(persons.filter((p) => !detailSeat.has(p.person)));
+  /**
+   * The full mode's columns, two side by side: each seat with the person whose details it shows; a person without a seat
+   * fills the first seat column without details (under their name), else a column of their own, so an unlinked seat and
+   * an unseated person take one column and the panel keeps two (fit: full/unlinkedSeat, full/noSession).
+   */
+  type Column = { key: string; seat: Seat | undefined; person: Person | undefined; named: boolean };
+  const columns = $derived.by((): Column[] => {
+    const cols: Column[] = seats.map((s) => {
+      const k = seatKey(s);
+      const person = detailSeat.get(s.person ?? '') === k ? personById(s.person) : undefined;
+      return { key: k, seat: s, person, named: false };
+    });
+    for (const p of unseated) {
+      const free = cols.find((c) => c.person === undefined);
+      if (free !== undefined) Object.assign(free, { person: p, named: true });
+      else cols.push({ key: `person-${p.person}`, seat: undefined, person: p, named: true });
+    }
+    return cols;
+  });
   const lobbyKeys = Object.keys(text.lobbyLabels) as text.LobbyKey[];
   const configRows = $derived(
     data.config === undefined
@@ -142,19 +161,21 @@
       >{SP}{#if value.known}{fitCell(formatCount(entry.laps), W.laps, 'right')}{SP}{fitCell(formatCount(entry.sessions), W.ses, 'right')}{SP}{fitCell(
           formatDay(entry.newestSession),
           W.newest,
-        )}{:else}{fitCell('', W.laps + 1 + W.ses + 1 + W.newest)}{/if}{SP}<input
-        type="text"
-        inputmode="decimal"
-        spellcheck="false"
-        class="pw-input fld"
-        data-testid="override-{person.person}-{spec.key}"
-        aria-label={spec.label}
-        title={text.overrideFieldHover(spec.label)}
-        style:width="{W.ovr}ch"
-        value={drafts[draftKey(person, spec)] ?? overrideText(spec, person.overrides)}
-        oninput={(e) => editOverride(person, spec, e.currentTarget.value)}
-        onchange={(e) => void commitOverride(person, spec, e.currentTarget.value)}
-      />
+        )}{:else}{fitCell('', W.laps + 1 + W.ses + 1 + W.newest)}{/if}{SP}<span class="ovr" style:width="{W.ovr}ch"
+        ><input
+          type="text"
+          inputmode="decimal"
+          spellcheck="false"
+          class="pw-input fld"
+          data-testid="override-{person.person}-{spec.key}"
+          aria-label={spec.label}
+          title={text.overrideFieldHover(spec.label)}
+          style:width="{W.ovr - 2}ch"
+          value={drafts[draftKey(person, spec)] ?? overrideText(spec, person.overrides)}
+          oninput={(e) => editOverride(person, spec, e.currentTarget.value)}
+          onchange={(e) => void commitOverride(person, spec, e.currentTarget.value)}
+        /></span
+      >
     </div>
   {/each}
 {/snippet}
@@ -195,18 +216,18 @@
         style:width="{PICKER_WIDTH + 4}ch"
         onchange={(e) => void commitName(seat, e.currentTarget.value)}
         onkeydown={nameKey}
-      />{:else}<select
-        class="pw-input fld"
-        data-testid="link-{k}"
-        aria-label={text.pickerHover}
-        title={text.pickerHover}
-        style:width="{PICKER_WIDTH}ch"
-        bind:value={() => seat.person ?? NONE, (v: string) => pick(seat, v)}
-      >
-        {#each persons as p (p.person)}<option value={p.person}>{p.displayName}</option>{/each}
-        <option value={NEW}>{text.pickNew}</option>
-        <option value={NONE}>{text.pickNone}</option>
-      </select>{/if}
+      />{:else}<span class="picker"><select
+          class="pw-input fld"
+          data-testid="link-{k}"
+          aria-label={text.pickerHover}
+          title={text.pickerHover}
+          style:width="{PICKER_WIDTH}ch"
+          bind:value={() => seat.person ?? NONE, (v: string) => pick(seat, v)}
+        >
+          {#each persons as p (p.person)}<option value={p.person}>{p.displayName}</option>{/each}
+          <option value={NEW}>{text.pickNew}</option>
+          <option value={NONE}>{text.pickNone}</option>
+        </select><span class="arrow" aria-hidden="true">{text.pickerArrow}</span></span>{/if}
   </div>
 {/snippet}
 
@@ -214,17 +235,13 @@
   {#if full}
     <div class="line">{SP}<span class="faint">{text.seatsTitle}</span></div>
     <div class="cols">
-      {#each seats as seat (seatKey(seat))}
-        {@const person = detailSeat.get(seat.person ?? '') === seatKey(seat) ? personById(seat.person) : undefined}
+      {#each columns as col (col.key)}
         <div class="col" style:width="{COLUMN_WIDTH}ch">
-          {@render seatLine(seat)}
-          {#if person !== undefined}{@render entries(person)}{/if}
-        </div>
-      {/each}
-      {#each unseated as person (person.person)}
-        <div class="col" style:width="{COLUMN_WIDTH}ch">
-          <div class="line">{SP}{person.displayName}</div>
-          {@render entries(person)}
+          {#if col.seat !== undefined}{@render seatLine(col.seat)}{/if}
+          {#if col.person !== undefined}
+            {#if col.named}<div class="line">{SP}{col.person.displayName}</div>{/if}
+            {@render entries(col.person)}
+          {/if}
         </div>
       {/each}
     </div>
@@ -233,12 +250,8 @@
       {SP}{#if warning !== undefined}<span data-testid="warning" title={warning}><span style:color={role('warning')}>{warning}</span></span>{/if}
     </div>
     <div class="cols">
-      {#each seats as seat (seatKey(seat))}
-        {@const person = detailSeat.get(seat.person ?? '') === seatKey(seat) ? personById(seat.person) : undefined}
-        {#if person !== undefined}<div class="col" style:width="{COLUMN_WIDTH}ch">{@render sessions(person)}</div>{/if}
-      {/each}
-      {#each unseated as person (person.person)}
-        <div class="col" style:width="{COLUMN_WIDTH}ch">{@render sessions(person)}</div>
+      {#each columns as col (col.key)}
+        <div class="col" style:width="{COLUMN_WIDTH}ch">{#if col.person !== undefined}{@render sessions(col.person)}{/if}</div>
       {/each}
     </div>
     <div class="line">{SP}</div>
@@ -326,6 +339,42 @@
   select.fld,
   .fld.name {
     text-align: left;
+  }
+  /* An override field: the frame one cell wider than the value on each side (mockup `│0.380│` in 7 cells); the input
+     inside it is frameless, so a five-character value never reaches the frame. */
+  .ovr {
+    display: inline-flex;
+    justify-content: center;
+    vertical-align: top;
+    box-sizing: border-box;
+    height: calc(var(--pw-line) * 1em);
+    border: var(--pw-border-px) solid var(--pw-border);
+  }
+  .ovr .fld {
+    border: none;
+    height: 100%;
+  }
+  .ovr:focus-within {
+    outline: var(--pw-border-px) solid var(--pw-focus);
+  }
+  /* The picker: its text one cell from its frame and the mockup's small arrow at its right edge (` kuh ▾`), in place of
+     the browser's own icon. */
+  .picker {
+    position: relative;
+    display: inline-block;
+    vertical-align: top;
+  }
+  .picker select.fld {
+    text-indent: 1ch;
+  }
+  .picker select.fld::picker-icon {
+    display: none;
+  }
+  .arrow {
+    position: absolute;
+    top: 0;
+    right: 1ch;
+    pointer-events: none;
   }
   .faint {
     color: var(--pw-textFaint);

@@ -249,3 +249,20 @@ describe('undercut-card', () => {
     }
   });
 });
+
+// SP4.3b2 Task 18v: the display against its approved mockup (undercut-card.html, compact `P6 +0.7 +1.4 +2.0`).
+describe('undercut-card against the mockup (Task 18v)', () => {
+  it('compact: the place and each ΔGAP one space apart (P6 +0.7 +1.4 +2.0)', () => {
+    const v = RIVALS_VALUE;
+    const full = v.rivals.filter((r) => r.cases.length === 3);
+    expect(full.length).toBeGreaterThan(0);
+    const c = mount(cases.rivals, 'compact');
+    for (const r of full) {
+      const line = c.querySelector<HTMLElement>(`[data-car="${r.carId}"]`)!;
+      // the raw text, spaces as rendered: the code, the place, then ΔGAP per N, each its own word
+      const words = (line.textContent ?? '').trim().split(/\s+/);
+      const dGaps = [...r.cases].sort((a, b) => a.n - b.n).map((k) => shown(k.gainMs, (g) => formatSignedSeconds(g, 1)));
+      expect(words.slice(1), String(r.carId)).toEqual([formatPosition(r.position), ...dGaps]);
+    }
+  });
+});

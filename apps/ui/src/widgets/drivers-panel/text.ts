@@ -12,6 +12,8 @@ export const configTitle = 'CONFIG';
 export const pickNew = 'new';
 export const pickNone = 'none';
 export const pickerHover = 'the person who drives this seat';
+/** The picker's small arrow at its right edge (mockup ` kuh ▾`), in place of the browser's large one. */
+export const pickerArrow = '▾';
 export const nameHover = 'name of the new person: Enter saves, Esc cancels';
 
 /** Headers of a person's entries, of the config table and of the compact mode. */

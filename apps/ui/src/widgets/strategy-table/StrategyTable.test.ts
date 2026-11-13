@@ -26,7 +26,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import ActionsHarness from '../../../test/kit/ActionsHarness.svelte';
 import type { ResolvedLink } from '../../kit/types.ts';
 import { unknownMark, unknownReason } from '../../kit/text.ts';
-import { formatCount, formatExpectedPlace, formatPoints, formatRaceNumber } from '../../kit/values/format.ts';
+import { formatCount, formatExpectedPlace, formatPoints, formatPosition, formatRaceNumber } from '../../kit/values/format.ts';
 import { DEFAULT_THEME } from '../../theme/index.ts';
 import { cases, COMMITTED, FIELD, NO_HIGHLIGHT, RIVAL, RIVAL_NUMBER, table, type PlanTable } from './fixtures.ts';
 import StrategyTable from './StrategyTable.svelte';
@@ -42,6 +42,10 @@ const SIZES = { compact: { cols: 46, rows: 6 }, full: { cols: 88, rows: 13 } } a
 const LINK: ResolvedLink = { group: 2, feedId: feedId('20778'), primary: carId(1), compare: [], window: { kind: 'live' } };
 const THIN = String(DEFAULT_THEME.chart.lineWidth);
 const THICK = String(DEFAULT_THEME.chart.ownCarLineWidth);
+/** Task 18v: the lines compact draws, the best-ranked rows (gen.mjs `prepRows`: `n: full ? 8 : 5`). */
+const COMPACT_LINES = 5;
+/** Task 18v: the chart's right label room in cells (gen.mjs `chartSvgB`: `m.r = 2 * CELL_W`). */
+const RIGHT_PAD_CELLS = 2;
 
 type Data = (typeof cases)[keyof typeof cases];
 
@@ -243,7 +247,8 @@ describe('strategy-table', () => {
     const rows = NO_HIGHLIGHT.rows;
     const { container: c } = mount(cases.noHighlight, 'compact');
     expect(find(c, 'chart')).not.toBeNull();
-    expect(all(c, 'line-')).toHaveLength(rows.length);
+    // Task 18v: compact draws the best-ranked rows only (gen.mjs `prepRows`, n 5)
+    expect(all(c, 'line-')).toHaveLength(Math.min(COMPACT_LINES, rows.length));
     expect(all(c, 'row-')).toHaveLength(0);
     expect(find(c, 'info')).toBeNull();
     expect(find(c, 'footer')).toBeNull();
@@ -298,5 +303,33 @@ describe('strategy-table', () => {
     const { container: d } = mount(cases.committed);
     expect(textOf(get(d, 'info'))).toContain('ΔPLAN');
     expect(textOf(get(d, 'info'))).not.toContain('ΔTIME');
+  });
+});
+
+// SP4.3b2 Task 18v: the display against its approved mockup (strategy-table-b.html, gen.mjs `chartSvgB`, `prepRows`).
+describe('strategy-table against the mockup (Task 18v)', () => {
+  it("the last place label sits two cells inside the chart's right edge, full and compact (gen.mjs chartSvgB m.r)", () => {
+    const places = NO_HIGHLIGHT.rows[0]!.positionPmf.length;
+    for (const mode of ['full', 'compact'] as const) {
+      const { container: c } = mount(cases.noHighlight, mode);
+      const chart = get(c, 'chart');
+      const cellW = 8; // mount: px.width = cols × 8
+      const width = Number(chart.getAttribute('width'));
+      const last = [...chart.querySelectorAll('text')].find((t) => (t.textContent ?? '').trim() === formatPosition(places));
+      expect(last, mode).toBeDefined();
+      // the label is centred on the last place: that x keeps the right label room free
+      expect(Number(last!.getAttribute('x')), mode).toBeLessThanOrEqual(width - RIGHT_PAD_CELLS * cellW + 1e-6);
+      cleanup();
+    }
+  });
+
+  it("compact draws the five best-ranked rows' lines; full every row's (gen.mjs prepRows)", () => {
+    const rows = NO_HIGHLIGHT.rows;
+    expect(rows.length).toBeGreaterThan(COMPACT_LINES);
+    const { container: c } = mount(cases.noHighlight, 'compact');
+    expect(all(c, 'line-').map((l) => l.getAttribute('data-testid')).sort()).toEqual(Array.from({ length: COMPACT_LINES }, (_, i) => `line-${i}`));
+    cleanup();
+    const { container: d } = mount(cases.noHighlight, 'full');
+    expect(all(d, 'line-')).toHaveLength(rows.length);
   });
 });
