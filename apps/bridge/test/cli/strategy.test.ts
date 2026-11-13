@@ -2,10 +2,15 @@
 // C58, C84): it reprocesses the recording as `pitwall score` does, up to the frame of our car's crossing of lap n (the
 // frame its lap n is completed on; `--car` default: the player car), with `strategy.plans` subscribed, waits for that
 // frame's job result and prints per our car its ranked rows and the run's metadata. `--json` writes the
-// `StrategyOutput`. It stores nothing: the data dir it is given stays empty. No result: an empty report, exit 0 (R50).
+// `StrategyOutput`. It stores nothing: the data dir it is given holds only the test's `config.json` afterwards. No
+// result: an empty report, exit 0 (R50).
 //
-// The segment: `race-zandvoort-full-lap`, car 1 the player (teammate 4), its lap 10 completed at 799.394, the last
-// crossing of the segment. No committed segment holds enough of a race for the real job to rank a policy (each car's
+// Speed (SP4.3b2 Task 18c): every row runs with small caps through `<data dir>/config.json` (C47), and on the 0.5 MB
+// segment `race-zandvoort-lap10` (C84), not the 7.8 MB full lap: each run reprocesses the whole segment (a lap beyond
+// the race reads it to its end), so the segment's length is the file's time.
+//
+// The segment: `race-zandvoort-lap10`, car 1 the player (teammate 4), its lap 9 completed at 723.381, the segment's
+// only crossing of car 1. No committed segment holds enough of a race for the real job to rank a policy (each car's
 // estimates need the laps before the segment), so rows 1 and 2 stand in for the job's worker module with
 // `strategy-stub-job.ts` (a fixed output: ranked rows for car 1, `insufficientData` for car 4). For that the command
 // module exports `run(positionals, values, io, features?)`, `features` defaulting to the generated feature index; the
@@ -18,7 +23,7 @@
 // its kind, `E[pos] <2 decimals>`, `E[points] <2 decimals>`, the position pmf as `pmf ` and the whole percentages
 // (P1 first) separated by single spaces, the word `tie` only on a tied row and the word `committed` only on the
 // committed row. A car without a result has one indented line holding its reason. An empty report has no car heading.
-import { mkdtempSync, readdirSync, readFileSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { carId, type StrategyOutput } from '@pitwall/domain';
@@ -30,9 +35,9 @@ import { main } from '../../src/cli/pitwall.ts';
 import { segmentPath } from '../fixtures/replay.ts';
 import { STUB_META, STUB_ROWS, stubOutput } from './strategy-stub-job.ts';
 
-/** Car 1 (the player) completes lap 10 at 799.394, the segment's last crossing. */
-const SEGMENT = segmentPath('race-zandvoort-full-lap.pwrec.gz');
-const LAST_LAP = '10';
+/** Car 1 (the player) completes lap 9 at 723.381, its last crossing of the segment. */
+const SEGMENT = segmentPath('race-zandvoort-lap10.pwrec.gz');
+const LAST_LAP = '9';
 const PLAYER = 1;
 const TEAMMATE = 4;
 
@@ -52,9 +57,22 @@ const STUBBED: Feature[] = FEATURES.map((f) =>
 
 const temp = (name: string): string => mkdtempSync(join(tmpdir(), `pitwall-strategy-${name}-`));
 
-/** An io with an empty temporary data dir (C84); `dataDir` is returned to check it stays empty. */
+/**
+ * The test's `config.json` (C47): small caps, so a job run takes milliseconds instead of the production caps' seconds
+ * (Task 18c). Enough for every row: the real job still runs to a result; the stubbed one reads no cap.
+ */
+const SMALL_CAPS = {
+  strategy: { maxScenarioPolicies: 200, n0: 10, dpPlansMax: 2, rescoreTop: 2 },
+  'sc-call': { maxScenarioPolicies: 100 },
+  undercut: { maxScenarioPolicies: 100 },
+  'pit-sweep': { maxScenarioPolicies: 100 },
+};
+const CONFIG_TEXT = `${JSON.stringify(SMALL_CAPS, null, 2)}\n`;
+
+/** An io with a temporary data dir (C84) holding only the small caps' `config.json`; `dataDir` is returned to check nothing else appears. */
 function ioOf() {
   const dataDir = temp('data');
+  writeFileSync(join(dataDir, 'config.json'), CONFIG_TEXT);
   const out: string[] = [], err: string[] = [];
   const io: CliIo = { out: (l) => out.push(l), err: (l) => err.push(l), env: { PITWALL_DATA_DIR: dataDir }, signal: new AbortController().signal };
   return { io, dataDir, stdout: () => out.join('\n'), stderr: () => err.join('\n') };
@@ -123,7 +141,8 @@ describe('pitwall strategy', { timeout: 180_000 }, () => {
     const file = join(temp('out'), 'strategy.json');
     const { code, stderr, dataDir } = await cli([SEGMENT, '--at-lap', LAST_LAP, '--json', file]);
     expect(code, stderr).toBe(0);
-    expect(readdirSync(dataDir)).toEqual([]);
+    expect(readdirSync(dataDir)).toEqual(['config.json']);
+    expect(readFileSync(join(dataDir, 'config.json'), 'utf8')).toBe(CONFIG_TEXT);
   });
 
   it('a lap beyond the race prints an empty report and exits 0', async () => {
