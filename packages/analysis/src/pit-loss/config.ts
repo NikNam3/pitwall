@@ -8,7 +8,8 @@ export const PIT_LOSS_CONFIG = defineConfig('pit-loss', {
   priorWeightStops: 2,
   /**
    * The prior of the in-lap's share of a stop's loss, blended with the session's stops as the loss is (SP4.3b Task 11c):
-   * 0.26 = 5.5 s of F1 25's 21.5 s green stop. Source: research 12 §5.
+   * 0.26 = 5.5 s of F1 25's 21.5 s green stop. Source: research 12 §5. Used where the track file has no
+   * `defaults.pitLossInLapShare` (SP4.3b Task 26).
    */
   inLapShare: 0.26,
 });
