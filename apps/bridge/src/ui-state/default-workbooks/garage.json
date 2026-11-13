@@ -12,15 +12,32 @@
                 "type": "branch",
                 "data": [
                   {
-                    "type": "leaf",
-                    "data": {
-                      "views": [
-                        "calibration-panel"
-                      ],
-                      "activeView": "calibration-panel",
-                      "id": "gcalibration-panel"
-                    },
-                    "size": 500
+                    "type": "branch",
+                    "data": [
+                      {
+                        "type": "leaf",
+                        "data": {
+                          "views": [
+                            "calibration-panel"
+                          ],
+                          "activeView": "calibration-panel",
+                          "id": "gcalibration-panel"
+                        },
+                        "size": 680
+                      },
+                      {
+                        "type": "leaf",
+                        "data": {
+                          "views": [
+                            "drivers-panel"
+                          ],
+                          "activeView": "drivers-panel",
+                          "id": "gdrivers-panel"
+                        },
+                        "size": 810
+                      }
+                    ],
+                    "size": 760
                   },
                   {
                     "type": "leaf",
@@ -31,10 +48,10 @@
                       "activeView": "timing-tower",
                       "id": "gtiming-tower"
                     },
-                    "size": 400
+                    "size": 240
                   }
                 ],
-                "size": 620
+                "size": 1490
               },
               {
                 "type": "branch",
@@ -59,7 +76,7 @@
                       "activeView": "raising-average-chart",
                       "id": "graising-average-chart"
                     },
-                    "size": 300
+                    "size": 330
                   },
                   {
                     "type": "leaf",
@@ -70,16 +87,16 @@
                       "activeView": "lap-overview-grid",
                       "id": "glap-overview-grid"
                     },
-                    "size": 260
+                    "size": 330
                   }
                 ],
-                "size": 980
+                "size": 430
               }
             ],
-            "size": 900
+            "size": 1000
           },
-          "width": 1600,
-          "height": 900,
+          "width": 1920,
+          "height": 1000,
           "orientation": "HORIZONTAL"
         },
         "panels": {
@@ -87,6 +104,11 @@
             "id": "calibration-panel",
             "contentComponent": "panel",
             "title": "calibration-panel"
+          },
+          "drivers-panel": {
+            "id": "drivers-panel",
+            "contentComponent": "panel",
+            "title": "drivers-panel"
           },
           "timing-tower": {
             "id": "timing-tower",
@@ -114,6 +136,11 @@
       "panels": {
         "calibration-panel": {
           "widget": "calibration-panel",
+          "options": {},
+          "linkGroup": 1
+        },
+        "drivers-panel": {
+          "widget": "drivers-panel",
           "options": {},
           "linkGroup": 1
         },
