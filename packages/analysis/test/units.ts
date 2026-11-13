@@ -32,8 +32,9 @@ export const JOBS: readonly Job<unknown, unknown>[] = [...new Map((Object.values
 export const JOB_UNITS: readonly QuickCalculator<unknown>[] = JOBS.map((job) => ({ kind: 'quick', id: job.id, reads: job.reads, cadence: job.trigger, compute: (view) => job.prepare(view) }));
 
 /**
- * The jobs that read a sub-machine but export no behaviour table yet (C44), each fixed by the supervisor in two phases:
- * the completeness test skips them, and fails once one of them exports its table, so the list shrinks with the fix.
+ * The job ids whose `prepare` is still a contract-first stub (SP4.3b2 plan N2): the guarded-view test skips their
+ * `prepare` row, and nothing else does; each task that implements a `prepare` removes its id, and the behaviour test
+ * fails on an id that names no exported job.
  */
 export const PENDING_JOBS: readonly string[] = [];
 
