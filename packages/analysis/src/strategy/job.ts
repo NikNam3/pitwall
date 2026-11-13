@@ -8,7 +8,10 @@
 // - The rounds (spec §8.1 step 2): a committed policy is certain input for the other car; with no commit on either car,
 //   round 1 plans each against the other modelled like a rival (left out of `start.sets`), round 2 against the other's
 //   round-1 best. A car planned alone (the other not planned) has the other modelled like a rival.
-// - The cap (`maxScenarioPolicies`) covers the whole run: shared evenly by the run's calls.
+// - The cap (`maxScenarioPolicies`) covers the whole run (Task 20d): round 1 gets `round1Share` of it, split over the
+//   cars planned; the final calls share the rest; each share rounded down. Without round 1 (one car planned, a commit,
+//   `round1Share` 0 or a round-1 share below one per car) the final calls share the whole cap.
+// - `candidatesForRun` is the candidate step's one place; `scripts/gen-strategy-reference.ts` builds its input with it.
 import { known, NOISE_COMPOUNDS, unknown, type CarId, type Known, type McRow, type NoiseCompound, type Policy, type RaceHazard, type StartingPoint, type StrategyOutput } from '@pitwall/domain';
 import type { Rng } from '@pitwall/engine/readers';
 import { raceForecast, startLapOf } from '../race-forecast/index.ts';
@@ -147,21 +150,27 @@ function mcConfigOf(config: StrategyConfig): McConfig {
 }
 
 /** One car's plan as the job holds it: its candidates and, where committed, the policy followed and the commit's reason. */
-type Car = { candidates: McCandidate[]; followed: Policy | null; original: Policy | null; infeasible: Infeasible };
+export type CarPlan = { candidates: McCandidate[]; followed: Policy | null; original: Policy | null; infeasible: Infeasible };
 
-/** Our cars' ranked policies (runs in a worker). */
-export function run(input: StrategyInput, rng: Rng): StrategyOutput {
+/** `strategy`'s config as the run reads it. */
+const configOf = (input: StrategyInput): StrategyConfig => ({ ...STRATEGY_CONFIG.defaults, ...input.config[STRATEGY_CONFIG.key] }) as StrategyConfig;
+
+/**
+ * The job's candidate step, its one place: the cars planned and, per car, its candidates (a committed policy first, as
+ * far as it can be followed). `mc` is the `race-monte-carlo` input with every planned car's candidates, the committed
+ * policies, the hazard, the rival rules and the config's search settings at the whole cap; `null` when no car is
+ * planned. `out` holds the cars not planned, each with its reason. Draws the plain forecast from `rng`.
+ */
+export function candidatesForRun(input: StrategyInput, rng: Rng): { mc: McInput | null; perCar: Map<CarId, CarPlan>; out: StrategyOutput } {
   const out: StrategyOutput = {};
+  const perCar = new Map<CarId, CarPlan>();
   const { start: s } = input;
   if (!s.known) {
     for (const car of input.ourCars) out[car] = unknown(s.reason);
-    return out;
+    return { mc: null, perCar, out };
   }
   const start = s.value;
-  const config = { ...STRATEGY_CONFIG.defaults, ...input.config[STRATEGY_CONFIG.key] } as StrategyConfig;
-  const hazard = hazardOf(start, input.hazard);
-  // as of the starting point: the hazard's own time is when its calculator last ran, which its cadence decides
-  const hazardState: Known<'ok'> = input.hazard.known ? known('ok', s.at) : input.hazard;
+  const config = configOf(input);
 
   // the cars planned: by the behaviour table, running, in the field, with their sets known and a lap left to plan
   const planned = new Set<CarId>();
@@ -171,76 +180,92 @@ export function run(input: StrategyInput, rng: Rng): StrategyOutput {
     else if (start.sets[car] === undefined) out[car] = unknown('insufficientData');
     else planned.add(car);
   }
-  if (planned.size === 0) return out;
+  if (planned.size === 0) return { mc: null, perCar, out };
   // a car of ours not planned is modelled like a rival
   const sets: StartingPoint['sets'] = {};
   for (const car of planned) sets[car] = start.sets[car] ?? [];
   const field: StartingPoint = { ...start, sets };
+  const hazard = hazardOf(field, input.hazard);
 
   const road = plainRoad(field, rng);
-  const cars = new Map<CarId, Car>();
+  const candidates: Record<CarId, McCandidate[]> = {};
+  const committed: Record<CarId, Policy | null> = {};
   for (const car of planned) {
     const fromLap = startLapOf(field, car);
     const dp = strategyDp(dpInputOf(field, car, fromLap, hazard, trafficOf(field, road, car, fromLap, config.trafficGapMs)));
     const own = candidatesOf(field, car, dp, config);
     const original = input.committed[car] ?? null;
-    if (original === null) {
-      cars.set(car, { candidates: own, followed: null, original: null, infeasible: null });
-      continue;
+    let plan: CarPlan = { candidates: own, followed: null, original: null, infeasible: null };
+    if (original !== null) {
+      const f = followable(field, car, original);
+      const key = JSON.stringify(f.policy);
+      const withCommit = [{ policy: f.policy, source: 'committed' as const }, ...own.filter((c) => JSON.stringify(c.policy) !== key)];
+      plan = { candidates: withCommit, followed: f.policy, original, infeasible: f.infeasible };
     }
-    const f = followable(field, car, original);
-    const key = JSON.stringify(f.policy);
-    const candidates = [{ policy: f.policy, source: 'committed' as const }, ...own.filter((c) => JSON.stringify(c.policy) !== key)];
-    cars.set(car, { candidates, followed: f.policy, original, infeasible: f.infeasible });
+    perCar.set(car, plan);
+    candidates[car] = plan.candidates;
+    committed[car] = plan.followed;
   }
+  const rivalRules: RivalRules = { q: config.rivalScBoxChance, aMin: config.rivalScMinTyreAge, reactionLaps: config.rivalReactionLaps, coverRule: false };
+  return { mc: { start: field, candidates, committed, hazard, rivalRules, config: mcConfigOf(config) }, perCar, out };
+}
 
-  const ids = [...planned];
+/** Our cars' ranked policies (runs in a worker). */
+export function run(input: StrategyInput, rng: Rng): StrategyOutput {
+  const { mc: all, perCar: cars, out } = candidatesForRun(input, rng);
+  const { start: s } = input;
+  if (all === null || !s.known) return out;
+  const config = configOf(input);
+  // as of the starting point: the hazard's own time is when its calculator last ran, which its cadence decides
+  const hazardState: Known<'ok'> = input.hazard.known ? known('ok', s.at) : input.hazard;
+
+  const ids = [...cars.keys()];
   const other = (car: CarId): CarId | undefined => ids.find((c) => c !== car);
   const anyCommitted = ids.some((c) => cars.get(c)?.followed !== null);
-  const calls = ids.length === 1 ? 1 : anyCommitted ? 2 : 4;
-  const cap = Math.floor(config.maxScenarioPolicies / calls);
-  const mcConfig = mcConfigOf(config);
-  const rivalRules: RivalRules = { q: config.rivalScBoxChance, aMin: config.rivalScMinTyreAge, reactionLaps: config.rivalReactionLaps, coverRule: false };
+  // the cap (a count, C2): round 1 its share split over the cars, the final calls the rest; each share rounded down
+  const total = config.maxScenarioPolicies;
+  const round1Each = ids.length === 1 || anyCommitted ? 0 : Math.floor(Math.floor(total * config.round1Share) / ids.length);
+  const finalEach = Math.floor((total - round1Each * ids.length) / ids.length);
 
-  /** Car `car` planned; `with` our other car as certain input following `fixed`, else (absent) modelled like a rival. */
-  const plan = (car: CarId, mate?: { car: CarId; fixed: Policy }): McResult[CarId] => {
-    const own = cars.get(car) as Car;
-    const callSets: StartingPoint['sets'] = { [car]: sets[car] ?? [] };
+  /** Car `car` planned under `cap`; `mate` our other car as certain input following `fixed`, else (absent) modelled like a rival. */
+  const plan = (car: CarId, cap: number, mate?: { car: CarId; fixed: Policy }): McResult[CarId] => {
+    const own = cars.get(car) as CarPlan;
+    const callSets: StartingPoint['sets'] = { [car]: all.start.sets[car] ?? [] };
     const committed: Record<CarId, Policy | null> = { [car]: own.followed };
     if (mate !== undefined) {
-      callSets[mate.car] = sets[mate.car] ?? [];
+      callSets[mate.car] = all.start.sets[mate.car] ?? [];
       committed[mate.car] = mate.fixed;
     }
-    const mc: McInput = { start: { ...field, sets: callSets }, candidates: { [car]: own.candidates }, committed, hazard, rivalRules, config: { ...mcConfig, maxScenarioPolicies: cap } };
+    const mc: McInput = { ...all, start: { ...all.start, sets: callSets }, candidates: { [car]: own.candidates }, committed, config: { ...all.config, maxScenarioPolicies: cap } };
     return raceMonteCarlo(mc, rng, cap)[car] as McResult[CarId];
   };
   const bestOf = (r: McResult[CarId]): Policy => (r.rows[0] as McRow).policy;
 
   const results = new Map<CarId, McResult[CarId]>();
-  if (ids.length === 1) {
-    const car = ids[0] as CarId;
-    results.set(car, plan(car));
+  if (!anyCommitted && round1Each === 0) {
+    // one car planned, or no round 1: each car against the other modelled like a rival
+    for (const car of ids) results.set(car, plan(car, finalEach));
   } else if (!anyCommitted) {
-    const round1 = new Map(ids.map((car) => [car, plan(car)] as const));
+    const round1 = new Map(ids.map((car) => [car, plan(car, round1Each)] as const));
     for (const car of ids) {
       const mate = other(car) as CarId;
-      results.set(car, plan(car, { car: mate, fixed: bestOf(round1.get(mate) as McResult[CarId]) }));
+      results.set(car, plan(car, finalEach, { car: mate, fixed: bestOf(round1.get(mate) as McResult[CarId]) }));
     }
   } else {
     // the cars whose teammate committed first, against its commit; then the others against its best of that run
     const first = ids.filter((car) => cars.get(other(car) as CarId)?.followed !== null);
     for (const car of first) {
       const mate = other(car) as CarId;
-      results.set(car, plan(car, { car: mate, fixed: cars.get(mate)?.followed as Policy }));
+      results.set(car, plan(car, finalEach, { car: mate, fixed: cars.get(mate)?.followed as Policy }));
     }
     for (const car of ids.filter((c) => !first.includes(c))) {
       const mate = other(car) as CarId;
-      results.set(car, plan(car, { car: mate, fixed: bestOf(results.get(mate) as McResult[CarId]) }));
+      results.set(car, plan(car, finalEach, { car: mate, fixed: bestOf(results.get(mate) as McResult[CarId]) }));
     }
   }
 
   for (const car of ids) {
-    const own = cars.get(car) as Car;
+    const own = cars.get(car) as CarPlan;
     const r = results.get(car) as McResult[CarId];
     const rows = r.rows.map((row): McRow => (row.committed ? { ...row, policy: own.original ?? row.policy, source: 'committed', infeasible: own.infeasible } : row));
     out[car] = known({ rows, scenarios: r.scenarios, capHit: r.capHit, candidates: own.candidates.length, hazard: hazardState, unresolvedTie: r.unresolvedTie }, s.at);

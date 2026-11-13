@@ -35,6 +35,11 @@ export const STRATEGY_CONFIG = defineConfig('strategy', {
    * the 5 s cap (S26); above research 14's ~4,600 that good selection needs.
    */
   maxScenarioPolicies: 5500,
+  /**
+   * Round 1's share of `maxScenarioPolicies`, split over the cars planned; the final rankings share the rest (0: no round
+   * 1). Source: SP4.3b Task 20d: round 1 only finds the other car's best; most of the cap to the final ranking.
+   */
+  round1Share: 0.2,
   /** The league points table, position 1 first, comma-separated. Source: F1 sporting regulations (25-18-15-12-10-8-6-4-2-1). */
   points: '25,18,15,12,10,8,6,4,2,1',
   /** Under an SC, a rival with a stop still ahead (its rival-stops window; not only one the compound rule demands) boxes with this chance. Source: spike 4.3b-defaults (research 19 §5): 28 of 32 AI cars with a stop still ahead boxed under 3 SCs (Zandvoort, Texas, Spa), SE 0.05; thin */

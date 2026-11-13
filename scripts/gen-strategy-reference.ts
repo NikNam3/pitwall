@@ -12,18 +12,15 @@
 // see it (`viewAt`: player 2 and teammate 5, the track file, their tyre sets, `race-hazard`'s output), at the first
 // frame of the leader's lap `LAP`. Its input is one `race-monte-carlo` call with both our cars' candidates and the
 // config's search settings (the supervisor's ruling): while one car is scored our other car follows its first
-// candidate. The candidates are built as `strategy`'s job builds them (`job.ts`: the plain forecast's road, the traffic
-// term, the DP's input, `candidatesOf`); job.ts exports none of these steps, so they are restated here.
+// candidate. The candidates are the job's own: its candidate step, `candidatesForRun` (`strategy/job.ts`; Task 20d).
 import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { NOISE_COMPOUNDS, type CarId, type NoiseCompound, type Policy, type RaceHazard, type StartingPoint } from '../packages/domain/src/index.ts';
-import { createRng, type Rng } from '../packages/engine/src/readers.ts';
-import { raceForecast, startLapOf } from '../packages/analysis/src/race-forecast/index.ts';
-import { rivalNextCompound, scoreAll, type McCandidate, type McConfig, type McInput } from '../packages/analysis/src/race-monte-carlo/index.ts';
-import { candidatesOf, prepareStrategy, STRATEGY_CONFIG, type StrategyConfig } from '../packages/analysis/src/strategy/index.ts';
-import { strategyDp, type DpInput } from '../packages/analysis/src/strategy-dp/index.ts';
+import type { CarId } from '../packages/domain/src/index.ts';
+import { createRng } from '../packages/engine/src/readers.ts';
+import { scoreAll, type McCandidate, type McInput } from '../packages/analysis/src/race-monte-carlo/index.ts';
+import { candidatesForRun, prepareStrategy, STRATEGY_CONFIG } from '../packages/analysis/src/strategy/index.ts';
 import { OURS, viewAt } from '../packages/analysis/test/strategy/support.ts';
 import { generateRace, GENERATOR_DEFAULTS } from '../test-support/race-generator/index.ts';
 
@@ -85,128 +82,14 @@ export function strategyReferenceHash(root: string = ROOT): string {
 /** The generator's parameters as the fixture records them (JSON: the pass hazard, a function, is the default's). */
 const generatorParams = (): unknown => ({ base: 'GENERATOR_DEFAULTS', seed: RACE_SEED, lap: LAP, frameOfLap: FRAME_OF_LAP, ours: OURS, params: JSON.parse(JSON.stringify(GENERATOR_DEFAULTS)) });
 
-// --- the job's candidate step (`strategy/job.ts`), restated --------------------------------------------------------
-
-type Hazard = McInput['hazard'];
-
-/** `race-hazard`'s tables per lap from the leader's lap (index 0 = `start.lap`); without them, no neutralisation drawn. */
-function hazardOf(start: StartingPoint, hazard: RaceHazard): Hazard {
-  const n = Math.max(0, start.lapsTotal - start.lap + 1);
-  const byLap = new Float64Array(n);
-  const vscByLap = new Float64Array(n);
-  if (!hazard.known) return { byLap, vscByLap, scDur: Float64Array.of(1), vscDur: Float64Array.of(1), active: null };
-  const h = hazard.value;
-  for (const entry of h.byLap) {
-    const i = entry.lap - start.lap;
-    if (i < 0 || i >= n) continue;
-    byLap[i] = entry.sc;
-    vscByLap[i] = entry.vsc;
-  }
-  const active = h.active === null ? null : { condition: h.active.condition, remaining: Float64Array.from(h.active.remainingLaps) };
-  return { byLap, vscByLap, scDur: Float64Array.from(h.durationLaps.sc), vscDur: Float64Array.from(h.durationLaps.vsc), active };
-}
-
-type Road = Map<number, { gapMs: Float64Array; position: Int8Array }>;
-
-/** The plain forecast's road: per lap from `start.lap` each car's gap to the leader at that lap's line (0 = retired). */
-function plainRoad(start: StartingPoint, rng: Rng): Road {
-  const ours = new Set(Object.keys(start.sets).map(Number));
-  const policies: Policy[] = Array.from({ length: start.cars }, (_, k): Policy => {
-    const compound = ours.has(k) ? null : rivalNextCompound(start, k);
-    const lap = start.stopMid[k] ?? start.lapsTotal;
-    return compound === null || lap < start.lap || lap >= start.lapsTotal ? { stops: [], triggers: [] } : { stops: [{ lap, compound }], triggers: [] };
-  });
-  const result = raceForecast(start, policies, { id: 0, plain: true, neutralisations: [] }, rng, { trace: true });
-  return new Map((result.trace ?? []).map((t) => [t.lap, { gapMs: t.gapMs, position: t.position }]));
-}
-
-/** Per lap from `fromLap` the traffic cost of a rejoin at its end: the shortfall to `trafficGapMs` of each car ahead within it. */
-function trafficOf(start: StartingPoint, road: Road, car: CarId, fromLap: number, trafficGapMs: number): Float64Array {
-  const out = new Float64Array(start.lapsTotal - fromLap + 1);
-  for (let i = 0; i < out.length; i++) {
-    const line = road.get(fromLap + i);
-    if (line === undefined || (line.position[car] ?? 0) === 0) continue;
-    const rejoin = (line.gapMs[car] ?? 0) + start.track.pitLossMs.green;
-    let cost = 0;
-    for (let k = 0; k < start.cars; k++) {
-      if (k === car || (line.position[k] ?? 0) === 0) continue;
-      const d = rejoin - (line.gapMs[k] ?? 0);
-      if (d >= 0 && d < trafficGapMs) cost += trafficGapMs - d;
-    }
-    out[i] = cost;
-  }
-  return out;
-}
-
-/** The DP's input for car `car` from its lap `fromLap` (spec §6). */
-function dpInputOf(start: StartingPoint, car: CarId, fromLap: number, hazard: Hazard, traffic: Float64Array): DpInput {
-  const n = start.lapsTotal - fromLap + 1;
-  const shifted = (a: Float64Array): Float64Array => Float64Array.from({ length: n }, (_, i) => a[fromLap + i - start.lap] ?? 0);
-  const rate = start.wearRatePct[car] ?? 0;
-  const wearRatePct = Object.fromEntries(NOISE_COMPOUNDS.map((c) => [c, rate])) as Record<NoiseCompound, number>;
-  const sets = Object.fromEntries(NOISE_COMPOUNDS.map((c) => [c, 0])) as Record<NoiseCompound, number>;
-  for (const s of start.sets[car] ?? []) if (s.wearPct <= 0) sets[s.compound] += 1;
-  return {
-    car,
-    fromLap,
-    totalLaps: start.lapsTotal,
-    lap: start.lapModel,
-    carParams: {
-      compound: NOISE_COMPOUNDS[start.compound[car] ?? 1] ?? 'medium',
-      tyreAge: start.tyreAge[car] ?? 0,
-      wearPct: start.wearPct[car] ?? 0,
-      fuelKg: start.fuelKg[car] ?? 0,
-      paceMs: start.paceMs[car] ?? 0,
-      degMsPerLap: start.degMsPerLap[car] ?? 0,
-      wearRatePct,
-      human: start.human[car] === 1,
-    },
-    sets,
-    owesSecondCompound: start.owesStop[car] === 1,
-    pitLossMs: start.track.pitLossMs,
-    hazard: { byLap: shifted(hazard.byLap), vscByLap: shifted(hazard.vscByLap), scDur: hazard.scDur, vscDur: hazard.vscDur },
-    active: hazard.active,
-    wetnessByLap: new Float64Array(n).fill(start.wetness.wetnessMs),
-    trafficMsByLap: traffic,
-  };
-}
-
-/** The search's settings from the config (spec §7.3, §11.1). */
-const mcConfigOf = (config: StrategyConfig): McConfig => ({
-  n0: config.n0,
-  zDrop: config.zDrop,
-  zTie: config.zTie,
-  tieBand: config.tieBand,
-  rescoreTop: config.rescoreTop,
-  maxScenarioPolicies: config.maxScenarioPolicies,
-  points: String(config.points).split(',').map((p) => Number(p.trim())),
-});
-
 /** The test race's `race-monte-carlo` input: both our cars' candidates, neither committed, the config's search settings. */
 export function strategyReferenceInput(): McInput {
   const config = STRATEGY_CONFIG.defaults;
   const race = generateRace(GENERATOR_DEFAULTS, RACE_SEED).race;
   const input = prepareStrategy(viewAt(race, LAP, { frameOfLap: FRAME_OF_LAP, config: { maxScenarioPolicies: config.maxScenarioPolicies } }));
-  if (!input.start.known) throw new Error(`gen-strategy-reference: no starting point at lap ${LAP} (${input.start.reason})`);
-  const start = input.start.value;
-  const planned = input.planned.filter((car) => start.sets[car] !== undefined);
-  if (planned.length !== OURS.length) throw new Error(`gen-strategy-reference: plans ${planned.join(', ')} of our cars ${OURS.join(', ')}`);
-
-  const sets: StartingPoint['sets'] = {};
-  for (const car of planned) sets[car] = start.sets[car] ?? [];
-  const field: StartingPoint = { ...start, sets };
-  const hazard = hazardOf(field, input.hazard);
-  const road = plainRoad(field, createRng(SEED));
-  const candidates: Record<CarId, McCandidate[]> = {};
-  const committed: Record<CarId, Policy | null> = {};
-  for (const car of planned) {
-    const fromLap = startLapOf(field, car);
-    const dp = strategyDp(dpInputOf(field, car, fromLap, hazard, trafficOf(field, road, car, fromLap, config.trafficGapMs)));
-    candidates[car] = candidatesOf(field, car, dp, config);
-    committed[car] = null;
-  }
-  const rivalRules = { q: config.rivalScBoxChance, aMin: config.rivalScMinTyreAge, reactionLaps: config.rivalReactionLaps, coverRule: false };
-  return { start: field, candidates, committed, hazard, rivalRules, config: mcConfigOf(config) };
+  const { mc, perCar } = candidatesForRun(input, createRng(SEED));
+  if (mc === null || perCar.size !== OURS.length) throw new Error(`gen-strategy-reference: plans ${[...perCar.keys()].join(', ')} of our cars ${OURS.join(', ')} at lap ${LAP}`);
+  return mc;
 }
 
 /** The reference: every candidate of the test race scored on `scenarios` common scenarios. */
