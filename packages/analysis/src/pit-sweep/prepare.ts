@@ -1,5 +1,5 @@
 // `pit-sweep`'s job input (SP4.3b spec §9.2): the shared strategy input (`shared/strategy-input/`, C43) and, per our car,
-// `pit-window`'s compounds with a new set, its `windowCompound`, `flag` and `stint.latest`, `rejoin`'s green rejoin
+// `pit-window`'s compounds with a new set and their windows, its `windowCompound`, `flag` and `stint.latest`, `rejoin`'s green rejoin
 // position and the car's row of the behaviour table; the config. Structured-cloneable (C51).
 import { known, unknown, type CarId, type Known, type NoiseCompound, type VisualCompound } from '@pitwall/domain';
 import type { EngineView } from '@pitwall/engine/readers';
@@ -24,6 +24,8 @@ export type SweepCar = {
   flag: Known<number>;
   /** `pit-window`'s `stint.latest`: the fitted set's latest stop lap by its life. */
   latest: Known<number>;
+  /** Per compound of `compounds`, its first set's `windowLaps` (stop laps from its `earliest` to `stint.latest`): its rows' range (Task 18q B). */
+  windows: Partial<Record<NoiseCompound, Known<{ from: number; to: number }>>>;
   /** `rejoin`'s green rejoin position (a stop now, C43). */
   greenRejoin: Known<number>;
 };
@@ -51,18 +53,21 @@ function sweepCarOf(view: EngineView, car: CarId, windows: PitWindowOutput, rejo
   const w = windows[car];
   if (w === undefined || !w.known) {
     const why = w === undefined ? 'insufficientData' : w.reason;
-    return { lap, applies, compounds: [], auto: unknown(why), flag: unknown(why), latest: unknown(why), greenRejoin };
+    return { lap, applies, compounds: [], auto: unknown(why), flag: unknown(why), latest: unknown(why), windows: {}, greenRejoin };
   }
   const value = w.value;
   const compounds: NoiseCompound[] = [];
+  const byCompound: SweepCar['windows'] = {};
   for (const set of value.sets) {
     const c = noiseCompoundOf(set.compound);
-    if (c !== undefined && !compounds.includes(c)) compounds.push(c);
+    if (c === undefined || compounds.includes(c)) continue;
+    compounds.push(c);
+    byCompound[c] = set.windowLaps;
   }
   const wc = value.windowCompound;
   const mapped = wc.known ? noiseCompoundOf(wc.value) : undefined;
   const auto: Known<NoiseCompound> = !wc.known ? wc : mapped === undefined ? unknown('insufficientData') : known(mapped, wc.at);
-  return { lap, applies, compounds, auto, flag: known(value.flag, w.at), latest: value.stint.latest, greenRejoin };
+  return { lap, applies, compounds, auto, flag: known(value.flag, w.at), latest: value.stint.latest, windows: byCompound, greenRejoin };
 }
 
 /** The job's input from the view (C39, C41: `strategy`'s reads, `pit-window`, `rejoin` and the config). */

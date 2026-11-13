@@ -6,10 +6,12 @@ export const PIT_SWEEP_CONFIG = defineConfig('pit-sweep', {
   trafficGapMs: 1000,
   /** Traffic: counted over this many laps after the stop. Source: spec §9.2, §11.1 (where traffic losses are settled, research 13 §10.2, Tulabandhula & Rudin). */
   trafficLaps: 3,
-  /** The rows run this many stop laps past the stint's latest stop lap (`pit-window`'s `stint.latest`). Source: SP4.3b2 plan Task 2b (the approved mockup `pit-sweep-table.html`: rows L23–L26 after the life ends at L22). */
-  pastLifeLaps: 4,
-  /** The cap on scenario-policies per car and compound (a count, never a clock, C2). Source: spec §9.2, §11.1 (to the flag, about 1.5 ms per scenario at lap 1; budget 1.5 s per car and compound, §11.2). */
-  maxScenarioPolicies: 1000,
+  /** A compound's rows start this many stop laps before its window opens (`pit-window`'s `windowLaps.from`), never before now. Source: SP4.3b2 Task 18q, Q10 B (the approved mockup `pit-sweep-table.html`: rows from L14 around a window of L19–L21). */
+  rowsBefore: 3,
+  /** A compound's rows end this many stop laps after its window closes (`windowLaps.to`, the stint's latest stop lap), never past the last lap − 1; the mockup's four rows past the set's life (Task 2b's `pastLifeLaps` 4) lie inside. Source: SP4.3b2 Task 18q, Q10 B (the mockup's rows to L26 past a window of L19–L21 with life to L22). */
+  rowsAfter: 8,
+  /** The cap on scenario-policies per (car, compound) part, shared by its rows (a count, never a clock, C2). Source: SP4.3b2 Task 18q, Q10 A (≈ 500 races per row at 17 rows; one part per thread under 10 s, spec §9.2, §11.2); a placeholder until the supervisor's idle measurement. */
+  maxScenarioPolicies: 8500,
 });
 
 /** `pit-sweep`'s config values as the job reads them. */
