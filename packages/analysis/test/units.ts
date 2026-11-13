@@ -36,7 +36,7 @@ export const JOB_UNITS: readonly QuickCalculator<unknown>[] = JOBS.map((job) => 
  * `prepare` row, and nothing else does; each task that implements a `prepare` removes its id, and the behaviour test
  * fails on an id that names no exported job.
  */
-export const PENDING_JOBS: readonly string[] = ['pit-sweep', 'sc-call'];
+export const PENDING_JOBS: readonly string[] = ['sc-call'];
 
 /** The name of a unit's behaviour table export: `<UNIT>_BEHAVIOUR`, the unit's kebab-case name in upper snake case. */
 export const behaviourExport = (unit: string): string => `${unit.toUpperCase().replaceAll('-', '_')}_BEHAVIOUR`;

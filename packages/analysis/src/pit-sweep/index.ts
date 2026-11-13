@@ -5,11 +5,13 @@ import type { Job } from '@pitwall/engine/readers';
 import { PIT_WINDOW } from '../pit-window/index.ts';
 import { REJOIN } from '../rejoin/index.ts';
 import { STRATEGY_JOB, STRATEGY_TRIGGER } from '../strategy/index.ts';
-import { preparePitSweep, type PitSweepInput, type PitSweepOutput } from './job.ts';
+import type { PitSweepOutput } from './job.ts';
+import { preparePitSweep, type PitSweepInput } from './prepare.ts';
 
 export { PIT_SWEEP_BEHAVIOUR, type PitSweepEffect } from './behaviour.ts';
 export * from './config.ts';
-export type { PitSweepInput, PitSweepOutput } from './job.ts';
+export type { PitSweepOutput } from './job.ts';
+export type { PitSweepInput } from './prepare.ts';
 
 /** The analysis id (its job's id). */
 export const PIT_SWEEP = 'pit-sweep';
@@ -20,6 +22,6 @@ export const PIT_SWEEP_JOB: Job<PitSweepInput, PitSweepOutput> = {
   id: PIT_SWEEP,
   reads: [...STRATEGY_JOB.reads, { calculator: PIT_WINDOW }, { calculator: REJOIN }],
   trigger: { onChange: [...STRATEGY_TRIGGER.onChange] },
-  prepare: () => preparePitSweep(),
+  prepare: (view) => preparePitSweep(view),
   module: new URL('./job.ts', import.meta.url),
 };
