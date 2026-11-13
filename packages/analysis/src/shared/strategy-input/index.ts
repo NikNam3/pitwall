@@ -5,6 +5,7 @@ import type { McInput } from '../../race-monte-carlo/index.ts';
 import type { Policy, RaceHazard, StartingPoint, Trigger } from '@pitwall/domain';
 import { hazardOf } from './dp-input.ts';
 
+export { committedField } from './committed-field.ts';
 export { dpInputOn, hazardOf, notPlannedWhy, plainRoad, plannedCars, plannedField, toDpInput, type PlainRoad } from './dp-input.ts';
 export { STRATEGY_INPUT_READS, strategyInputFrom, type StrategyInput } from './input.ts';
 export { mcSettingsFrom, pointsOf, strategyConfigOf } from './settings.ts';
