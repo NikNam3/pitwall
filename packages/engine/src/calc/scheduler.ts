@@ -120,6 +120,21 @@ const hasLeaderLap = (input: SchedulerInput, pending: Pending): boolean => {
   return false;
 };
 
+/**
+ * Whether the lap records pending since a calculator last ran, `[before, after)` of the `laps` list, hold one of our
+ * cars' (the player's or the teammate's, from the input's live state), of any status: only the new entries are read.
+ */
+const hasOurLap = (input: SchedulerInput, pending: Pending): boolean => {
+  const { before, after } = pending.delta;
+  const { playerCar, teammateCar } = input.live;
+  const laps = input.history.laps;
+  for (let i = before.laps ?? 0; i < (after.laps ?? 0); i += 1) {
+    const car = laps[i]?.carId;
+    if (car !== undefined && (car === playerCar || car === teammateCar)) return true;
+  }
+  return false;
+};
+
 /** Whether two game settings differ in any field (every field is a plain value). */
 const settingsDiffer = (a: DeepReadonly<GameSettings>, b: DeepReadonly<GameSettings>): boolean =>
   (Object.keys(a) as (keyof GameSettings)[]).some((key) => a[key] !== b[key]);
@@ -130,6 +145,7 @@ const watchesSettings = (cadence: Cadence): boolean => typeof cadence === 'objec
 /** Whether a change `trigger` of an `onChange` cadence happened since the calculator's last run. */
 const hasChange = (trigger: ChangeTrigger, slot: Slot, pending: Pending, input: SchedulerInput): boolean => {
   if (trigger === 'leaderLap') return hasLeaderLap(input, pending);
+  if (trigger === 'ourLap') return hasOurLap(input, pending);
   if (trigger === 'sessionSettings') {
     return pending.changed.has('session') && (slot.settingsAtRun === undefined || settingsDiffer(slot.settingsAtRun, input.live.session.settings));
   }
