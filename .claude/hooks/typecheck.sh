@@ -18,6 +18,17 @@ while [ "$dir" != "$root" ] && [ ! -f "$dir/tsconfig.json" ]; do
 done
 [ "$dir" != "$root" ] || exit 0
 
+# The UI's .svelte imports type only under svelte-check (plain tsc types them through svelte's generic declaration,
+# so component props read as never): the UI package is checked as `pnpm typecheck` checks it.
+if [ "${dir#"$root"/}" = "apps/ui" ]; then
+  if ! output="$(cd "$root" && pnpm --silent --filter @pitwall/ui check 2>&1)"; then
+    echo "pitwall hook: typecheck failed in apps/ui" >&2
+    printf '%s\n' "$output" >&2
+    exit 2
+  fi
+  exit 0
+fi
+
 tsc="$(dirname "${BASH_SOURCE[0]}")/../../node_modules/.bin/tsc"
 if [ ! -x "$tsc" ]; then
   echo "pitwall hook: tsc not found at $tsc; run pnpm install" >&2
