@@ -279,7 +279,7 @@ function crossLine(r: Run, g: number, lap: number): void {
   const { f, order } = r;
   const s = f.start;
   const car = f.car;
-  let stopped = false;
+  const stoppers: number[] = [];
   let boxFreeAt = -Infinity;
   for (let k = 0; k < r.m; k++) {
     const c = order[k] ?? 0;
@@ -294,7 +294,7 @@ function crossLine(r: Run, g: number, lap: number): void {
     car[b + T_LAST] = entry;
     f.lineT[lineAt(f, c, lap)] = entry;
     if (lapEnd(f, c, lap) !== undefined) {
-      stopped = true;
+      stoppers.push(c);
       let lossMs = outLapLossMs(s, c, condition);
       if (f.setsUsed.has(c)) {
         // our cars share one box: a car entering while it is busy waits for it
@@ -306,7 +306,8 @@ function crossLine(r: Run, g: number, lap: number): void {
     }
     if (lap + 1 <= f.endLap) lapStart(f, c, lap + 1, 0, false);
   }
-  if (!stopped) return;
+  if (stoppers.length === 0) return;
+  yieldAtPitExit(r, g, stoppers);
   // the stoppers rejoin where their time puts them (stable insertion sort; only stoppers move back)
   for (let k = 1; k < r.m; k++) {
     const c = order[k] ?? 0;
@@ -317,5 +318,29 @@ function crossLine(r: Run, g: number, lap: number): void {
       j--;
     }
     order[j + 1] = c;
+  }
+}
+
+/**
+ * The pit-exit yield (SP4.3b Task 11h, the 2026-11-13 pit-stop diagnosis: in F1 25 a stopper rejoining just ahead of a
+ * car that stayed out yields to it): a stopper whose rejoin time T at the line `g` has a non-stopping car crossing it at
+ * t_o in [T, T + minGapMs) rejoins at t_o + minGapMs, behind the first such car. Once, against the times before any yield.
+ */
+function yieldAtPitExit(r: Run, g: number, stoppers: readonly number[]): void {
+  const { f, order } = r;
+  const car = f.car;
+  const minGapMs = f.start.interaction.minGapMs;
+  const rejoins = stoppers.map((c) => car[c * W + T_LAST] ?? 0);
+  for (let s = 0; s < stoppers.length; s++) {
+    const c = stoppers[s] ?? 0;
+    const t = rejoins[s] ?? 0;
+    let first = Infinity;
+    for (let k = 0; k < r.m; k++) {
+      const o = order[k] ?? 0;
+      if (stoppers.includes(o)) continue;
+      const to = tAt(r, o, g);
+      if (to >= t && to < t + minGapMs && to < first) first = to;
+    }
+    if (first !== Infinity) car[c * W + T_LAST] = first + minGapMs;
   }
 }
