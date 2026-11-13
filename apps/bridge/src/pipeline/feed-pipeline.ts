@@ -15,6 +15,7 @@ import type { TopicHub } from '../hub/topic-hub.ts';
 import type { PacketSource, RawPacket } from '../input/packet-source.ts';
 import { FeedJobs } from '../jobs/feed-jobs.ts';
 import type { JobResult } from '../jobs/job-runner.ts';
+import type { WorkerLimit } from '../jobs/worker-limit.ts';
 import type { Logger } from '../log.ts';
 import type { Db, StoredSessionRow } from '../storage/db.ts';
 import { SessionFile, sessionRecordingName } from '../storage/session-files.ts';
@@ -42,6 +43,11 @@ export type FeedPipelineOptions = {
    */
   features: readonly Feature[];
   log: Logger;
+  /**
+   * The job-worker limit this feed's jobs share with every other feed given the same instance (Task 18b); unset gives
+   * the feed's jobs a limit of their own (`MAX_JOB_WORKERS`).
+   */
+  workerLimit?: WorkerLimit;
   /**
    * The effective calculator config (see `loadFeatureConfig`), fixed for the pipeline's run; unset means the defaults
    * of the declared keys. Each session file gets a copy as `<file>.config.json`.
@@ -186,6 +192,7 @@ export class FeedPipeline {
     this.#overridden = overriddenFields(opts.config);
     this.#jobs = new FeedJobs(opts.features, (result) =>
       this.#guarded('job result', () => this.#onJobResult(result)),
+      opts.workerLimit,
     );
     this.#registry = CalculatorRegistry.build([...opts.features.flatMap((feature) => feature.calculators), ...this.#jobs.calculators]);
     this.#demand = demandOf(opts.features, this.#registry);
