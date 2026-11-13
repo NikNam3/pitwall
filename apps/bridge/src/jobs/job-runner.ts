@@ -26,14 +26,19 @@ export function jobSeed(seed: number, jobId: string, computedFor: ComputedFor): 
 
 const messageOf = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
+/** One trigger of a job: one worker per part, and the outputs of the parts that finished, by part index. */
+type Run = { workers: Worker[]; outs: unknown[]; remaining: number };
+
 /**
- * Runs jobs in worker threads, one at a time per job id: a newer trigger terminates the running worker of the same
- * job, and only the newest run delivers a result. Problems inside a job (throw, crash, bad input) arrive as error
- * results, never as exceptions. `close()` terminates everything and suppresses late results.
+ * Runs jobs in worker threads, one run at a time per job id: a newer trigger terminates every running worker of the
+ * same job, and only the newest run delivers a result. A job with `parts` runs every part at once, one worker each,
+ * and delivers one result, the merge of the parts' outputs in the parts' order. Problems inside a job (throw, crash,
+ * bad input, a failing split or merge) arrive as error results, never as exceptions; a failing part terminates the
+ * other parts of its run. `close()` terminates everything and suppresses late results.
  */
 export class JobRunner {
   readonly #seed: number;
-  readonly #running = new Map<string, Worker>();
+  readonly #running = new Map<string, Run>();
   readonly #listeners: Array<(result: JobResult) => void> = [];
   readonly #terminations = new Set<Promise<number>>();
   #closed = false;
@@ -51,8 +56,9 @@ export class JobRunner {
     if (this.#closed) throw new Error('JobRunner closed');
     this.#discard(job.id);
     try {
-      this.#start(job.id, job.module, input, computedFor);
+      this.#start(job, input, computedFor);
     } catch (e) {
+      this.#discard(job.id);
       this.#deliver({ jobId: job.id, computedFor, error: messageOf(e) });
     }
   }
@@ -69,31 +75,60 @@ export class JobRunner {
     await Promise.all(this.#terminations);
   }
 
-  #start(jobId: string, module: URL, input: unknown, computedFor: ComputedFor): void {
-    const seed = jobSeed(this.#seed, jobId, computedFor);
-    const worker = new Worker(new URL('./worker-entry.ts', import.meta.url), {
-      workerData: { moduleHref: module.href, input, seed },
-    });
-    this.#running.set(jobId, worker);
+  #start<In, Out>(job: Job<In, Out>, input: In, computedFor: ComputedFor): void {
+    const jobId = job.id;
+    const parts = job.parts === undefined ? [input] : job.parts.split(input);
+    if (parts.length === 0) throw new Error(`job ${jobId}: split returned no part`);
+    const run: Run = { workers: [], outs: new Array<unknown>(parts.length), remaining: parts.length };
+    this.#running.set(jobId, run);
 
-    const finish = (outcome: WorkerMessage): void => {
-      if (this.#running.get(jobId) !== worker) return; // replaced, closed or already finished
-      this.#discard(jobId);
-      this.#deliver(outcome.ok ? { jobId, computedFor, value: outcome.value } : { jobId, computedFor, error: outcome.error });
+    const result = (): JobResult => {
+      if (job.parts === undefined) return { jobId, computedFor, value: run.outs[0] };
+      try {
+        return { jobId, computedFor, value: job.parts.merge(run.outs as Out[]) };
+      } catch (e) {
+        return { jobId, computedFor, error: messageOf(e) };
+      }
     };
-    worker.on('message', finish);
-    worker.on('error', (e) => finish({ ok: false, error: messageOf(e) }));
-    worker.on('exit', (code) => finish({ ok: false, error: `worker exited with code ${code} without a result` }));
+
+    parts.forEach((part, i) => {
+      const seed = jobSeed(this.#seed, job.parts === undefined ? jobId : `${jobId}/${i}`, computedFor);
+      const worker = new Worker(new URL('./worker-entry.ts', import.meta.url), {
+        workerData: { moduleHref: job.module.href, input: part, seed },
+      });
+      run.workers.push(worker);
+
+      let settled = false;
+      const finish = (outcome: WorkerMessage): void => {
+        if (settled || this.#running.get(jobId) !== run) return; // replaced, closed, failed or already finished
+        settled = true;
+        if (!outcome.ok) {
+          this.#discard(jobId);
+          this.#deliver({ jobId, computedFor, error: outcome.error });
+          return;
+        }
+        run.outs[i] = outcome.value;
+        run.remaining -= 1;
+        if (run.remaining > 0) return;
+        this.#discard(jobId);
+        this.#deliver(result());
+      };
+      worker.on('message', finish);
+      worker.on('error', (e) => finish({ ok: false, error: messageOf(e) }));
+      worker.on('exit', (code) => finish({ ok: false, error: `worker exited with code ${code} without a result` }));
+    });
   }
 
-  /** Forgets the run of `jobId` (so its late events are ignored) and terminates its worker. */
+  /** Forgets the run of `jobId` (so its late events are ignored) and terminates its workers. */
   #discard(jobId: string): void {
-    const worker = this.#running.get(jobId);
-    if (worker === undefined) return;
+    const run = this.#running.get(jobId);
+    if (run === undefined) return;
     this.#running.delete(jobId);
-    const termination = worker.terminate();
-    this.#terminations.add(termination);
-    void termination.finally(() => this.#terminations.delete(termination));
+    for (const worker of run.workers) {
+      const termination = worker.terminate();
+      this.#terminations.add(termination);
+      void termination.finally(() => this.#terminations.delete(termination));
+    }
   }
 
   #deliver(result: JobResult): void {
