@@ -7,7 +7,7 @@
 //    (one row per case in the topic, in its order: an absent case has no row), in compact one line per car;
 //  - the lines run: the rivals with `side` `ahead` in topic (place) order, our line, the rivals `behind` in topic order;
 //  - full, per case row the cells `[data-testid="car"]` (the code from `cars.overview`, kit `carCode`; the kit's
-//    unknown mark for a car it does not list), `pos` (kit `formatPosition`), `gap` (kit `formatGap(gapMs)`), these three
+//    unknown mark for a car it does not list), `pos` (kit `formatPosition`), `gap` (kit `formatSeconds(gapMs, 1)`, unsigned seconds as the mockup draws them: `1.2`), these three
 //    only on the rival's N = 1 row (empty on the others), then `n`, `dgap` (kit `formatSignedSeconds(gainMs, 1)`), `pah`
 //    (kit `formatShare(pAhead)`), the gain strip (the kit `DistStrip`, form `gain`: its bins, zero between bins
 //    `-UNDERCUT_GAIN_BINS.fromMs / stepMs`, `markAtBin` = `(aheadFromGainMs − fromMs) / stepMs`, one scale over every
@@ -24,7 +24,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import InPanel from '../../../test/kit/InPanel.svelte';
 import { sharedScale } from '../../kit/dist/dist.ts';
 import { unknownMark, unknownReason } from '../../kit/text.ts';
-import { formatGap, formatPosition, formatShare, formatSignedSeconds } from '../../kit/values/format.ts';
+import { formatPosition, formatSeconds, formatShare, formatSignedSeconds } from '../../kit/values/format.ts';
 import { ALB, call, cases, FIELD, GAS, HUL, KUH, NO_RIVAL, NOR, OUR_PLACE, PARTIAL, RIVALS_VALUE } from './fixtures.ts';
 import * as text from './text.ts';
 import UndercutCard from './UndercutCard.svelte';
@@ -100,13 +100,16 @@ describe('undercut-card', () => {
     expect(carOrder(c)).toEqual([String(NOR), String(ALB), String(KUH), String(HUL)]);
   });
 
-  it('per rival its place and gap (formatGap) on its N = 1 row, then per N: ΔGAP (formatSignedSeconds 1), P(AH) (formatShare), the gain strip (zero between bins) with markAtBin from aheadFromGainMs, REJ', () => {
+  it('per rival its place and gap (formatSeconds 1, as the mockup: 1.2) on its N = 1 row, then per N: ΔGAP (formatSignedSeconds 1), P(AH) (formatShare), the gain strip (zero between bins) with markAtBin from aheadFromGainMs, REJ', () => {
     const v = RIVALS_VALUE;
     const c = mount(cases.rivals);
     // the header line
     const visible = visibleTexts(c).join(' ');
     for (const h of [text.headers.pos, text.headers.gap, text.headers.n, text.headers.dGap, text.headers.pAhead, text.headers.rej]) expect(visible).toContain(h);
     const codes: Record<number, string> = { [ALB]: 'ALB', [NOR]: 'NOR', [HUL]: 'HUL' };
+    // the mockup's GAP column: unsigned seconds, one decimal (NOR 1.2 s ahead, HUL 0.9 s behind)
+    expect(cell(caseRow(c, NOR, 1)!, 'gap')).toBe('1.2');
+    expect(cell(caseRow(c, HUL, 1)!, 'gap')).toBe('0.9');
     for (const r of v.rivals) {
       expect(carLines(c).filter((e) => e.getAttribute('data-car') === String(r.carId))).toHaveLength(r.cases.length);
       for (const k of r.cases) {
@@ -115,7 +118,7 @@ describe('undercut-card', () => {
         const first = k.n === 1;
         expect(cell(row!, 'car'), `${r.carId} N${k.n}`).toBe(first ? codes[r.carId] : '');
         expect(cell(row!, 'pos'), `${r.carId} N${k.n}`).toBe(first ? formatPosition(r.position) : '');
-        expect(cell(row!, 'gap'), `${r.carId} N${k.n}`).toBe(first ? formatGap(r.gapMs) : '');
+        expect(cell(row!, 'gap'), `${r.carId} N${k.n}`).toBe(first ? formatSeconds(r.gapMs, 1) : '');
         expect(cell(row!, 'n')).toBe(String(k.n));
         expect(cell(row!, 'dgap')).toBe(shown(k.gainMs, (g) => formatSignedSeconds(g, 1)));
         expect(cell(row!, 'pah')).toBe(shown(k.pAhead, formatShare));
