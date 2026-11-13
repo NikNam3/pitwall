@@ -93,6 +93,9 @@ export const formatMillis = (ms: Ms): string => `${whole(ms)} ms`;
 /** Car index as a car number, `7` -> `#7`. */
 export const formatCarNumber = (id: CarId): string => `#${id}`;
 
+/** A race number (a seat's), `12` -> `#12`. */
+export const formatRaceNumber = (n: number): string => `#${n}`;
+
 const SESSION_KIND_LABEL: Record<SessionKind, string> = {
   unknown: 'unknown',
   practice: 'practice',

@@ -10,7 +10,7 @@
   import { fitCell } from '../../kit/grid/grid.ts';
   import { arrow } from '../../kit/text.ts';
   import type { WidgetProps } from '../../kit/types.ts';
-  import { formatCount, formatDay, formatShort, formatTrack, formatWeekendPhase } from '../../kit/values/format.ts';
+  import { formatCount, formatDay, formatRaceNumber, formatShort, formatTrack, formatWeekendPhase } from '../../kit/values/format.ts';
   import TextCell from '../../kit/values/TextCell.svelte';
   import { role } from '../../theme/index.ts';
   import { entriesOf, entryText, overrideAction, overrideText, seatKey, seatsOf, type EntrySpec, type Person, type Seat } from './rows.ts';
@@ -184,7 +184,7 @@
 {#snippet seatLine(seat: Seat)}
   {@const k = seatKey(seat)}
   <div class="line" data-testid="seat-{k}">
-    {SP}<span class="faint">#{seat.raceNumber}</span>{SP}{text.teamName(seat.team)}{SP}{arrow}{SP}{#if naming === k}<input
+    {SP}<span class="faint">{formatRaceNumber(seat.raceNumber)}</span>{SP}{text.teamName(seat.team)}{SP}{arrow}{SP}{#if naming === k}<input
         bind:this={nameField}
         type="text"
         spellcheck="false"
@@ -283,7 +283,7 @@
     {#each compactSeats as seat (seatKey(seat))}
       {@const person = personById(seat.person)}
       <div class="line" data-testid="compact-seat-{seatKey(seat)}">
-        {SP}<span class="faint">{fitCell(`#${seat.raceNumber}`, C.number)}</span>{SP}{fitCell(text.teamName(seat.team), C.team)}{SP}{#if person === undefined}<span
+        {SP}<span class="faint">{fitCell(formatRaceNumber(seat.raceNumber), C.number)}</span>{SP}{fitCell(text.teamName(seat.team), C.team)}{SP}{#if person === undefined}<span
             title={text.unlinkedHover}><TextCell text="" reason="notApplicable" width={C.person} /></span
           >{:else}{fitCell(person.displayName, C.person)}{fitCell(formatCount(person.kept.sessions), C.ses, 'right')}{SP}{fitCell(
             formatCount(person.kept.laps),
