@@ -66,7 +66,7 @@ function expectedIds(): string[] {
 /** Every cell the gallery's kit section owes: one per kit part it shows. */
 const KIT_IDS = [
   'kit/value', 'kit/icon', 'kit/table', 'kit/corner-grid', 'kit/bar', 'kit/compound-mark', 'kit/insight-line', 'kit/chart',
-  'kit/chart-bands', 'kit/car-label', 'kit/position-mark', 'kit/sector-status',
+  'kit/chart-bands', 'kit/car-label', 'kit/position-mark', 'kit/sector-status', 'kit/dist',
 ] as const;
 const kitCell = (c: HTMLElement, id: string) => c.querySelector<HTMLElement>(`[data-gallery-id="${id}"]`);
 
