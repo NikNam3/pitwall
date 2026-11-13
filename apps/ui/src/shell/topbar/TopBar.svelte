@@ -20,9 +20,11 @@
     /** The open workbook's name and the way to its picker, for the `workbook` segment. */
     workbookName?: string | undefined;
     onPickWorkbook?: () => void;
-    /** The run's calibration set name (`defaults` without one) and the way to the prompt, for the `calibration` segment. */
+    /** The run's calibration set name (`defaults` without one) and `calibration.pick`, for the `calibration` segment. */
     calibrationName?: string | undefined;
     onPickCalibration?: () => void;
+    /** `drivers.open`, for the `unlinked` segment. */
+    onOpenDrivers?: () => void;
     /** The window's edit mode and its toggle (`layout.edit.toggle`); the toggle shows only when the shell passes it. */
     editing?: boolean;
     onToggleEditing?: (() => void) | undefined;
@@ -37,6 +39,7 @@
     onPickWorkbook = () => {},
     calibrationName,
     onPickCalibration = () => {},
+    onOpenDrivers = () => {},
     editing = false,
     onToggleEditing,
   }: Props = $props();
@@ -55,6 +58,7 @@
     bar.pickWorkbook = onPickWorkbook;
     bar.calibrationName = calibrationName;
     bar.pickCalibration = onPickCalibration;
+    bar.openDrivers = onOpenDrivers;
   });
   $effect(() => {
     onShown?.(bar.shown);

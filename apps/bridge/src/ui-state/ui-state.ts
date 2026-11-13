@@ -21,6 +21,13 @@ const defaultWorkbook = (): Workbook => ({
   windows: [{ id: 'main', layout: {}, panels: { main: { widget: 'feed-status', options: {}, linkGroup: 1 } } }],
 });
 const defaultLinkGroup = (): LinkGroup => ({ id: 1, primary: 'player', compare: [], window: { kind: 'live' } });
+/** Group 2 follows the teammate (SP4.3b spec §10, U12). */
+const teammateLinkGroup = (): LinkGroup => ({ id: 2, primary: 'teammate', compare: [], window: { kind: 'live' } });
+/** The saved groups (group 1's default when there are none), with group 2's default added when it is missing. */
+const withDefaultGroups = (groups: LinkGroup[]): LinkGroup[] => {
+  const base = groups.length > 0 ? groups : [defaultLinkGroup()];
+  return base.some((group) => group.id === 2) ? base : [...base, teammateLinkGroup()];
+};
 
 type SavedState = { activeWorkbook: string; linkGroups: LinkGroup[]; acknowledged: string[]; muted: InsightCategory[]; realism: boolean };
 
@@ -44,7 +51,7 @@ export class UiState {
   private error: string | undefined;
   private workbookDirty = false;
   private stateDirty = false;
-  private linkGroups: LinkGroup[] = [defaultLinkGroup()];
+  private linkGroups: LinkGroup[] = withDefaultGroups([]);
   private acknowledged: string[] = [];
   private muted: InsightCategory[] = [];
   private realism = false;
@@ -251,7 +258,7 @@ export class UiState {
     });
     return {
       activeWorkbook: typeof raw.activeWorkbook === 'string' ? raw.activeWorkbook : DEFAULT_NAME,
-      linkGroups: linkGroups.length > 0 ? linkGroups : [defaultLinkGroup()],
+      linkGroups: withDefaultGroups(linkGroups),
       acknowledged: strings(raw.acknowledged),
       muted,
       realism: raw.realism === true,

@@ -41,6 +41,8 @@ export type DockHandle = {
   removePanel(id: string): void;
   /** Shows (edit mode) or hides the `+` at the end of every group's tab strip. */
   setEditing(on: boolean): void;
+  /** Makes a panel the active tab of its group and its group the active one; an unknown id does nothing. */
+  focusPanel(id: string): void;
   destroy(): void;
 };
 
@@ -258,6 +260,9 @@ export function mountDock(
     setEditing(on) {
       editing = on;
       for (const button of addButtons) button.hidden = !on;
+    },
+    focusPanel(id) {
+      api.getPanel(id)?.api.setActive();
     },
     destroy() {
       for (const s of subscriptions) s.dispose();
