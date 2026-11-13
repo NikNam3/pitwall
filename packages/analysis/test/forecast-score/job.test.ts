@@ -43,7 +43,10 @@ describe('forecast-score job', () => {
     const view = viewOf(race);
     const prepared = prepareScore(view);
     expect(structuredClone(prepared)).toEqual(prepared);
-    expect(prepared.history.appendedAt).toEqual(view.history.appendedAt);
+    // only the declared lists' append frames are copied (C41; SP4.3b Task 20c port)
+    const declared = ['laps', 'stints', 'pitStops', 'crossings', 'events', 'decisions', ...jobModule.SCORE_MACHINES.map((m) => `spans:${m}`)];
+    const all = view.history.appendedAt as Record<string, unknown>;
+    expect(prepared.history.appendedAt).toEqual(Object.fromEntries(declared.filter((k) => k in all).map((k) => [k, all[k]])));
     expect(prepared.history.laps).toEqual(view.history.laps);
     expect(prepared.track).toEqual(view.track);
     expect(prepared.drivers).toEqual(view.drivers);
