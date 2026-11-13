@@ -75,6 +75,16 @@ function boxAt(stops: Stop[], lap: number, compound: NoiseCompound): void {
   else stops[next] = { lap, compound };
 }
 
+/**
+ * Boxes at the end of `lap` for `compound` and keeps every later planned stop, so the car returns to slicks as planned
+ * (Task 23b); a stop planned on that lap takes `compound`.
+ */
+function rainBox(stops: Stop[], lap: number, compound: NoiseCompound): void {
+  const there = stops.find((s) => s.lap === lap);
+  if (there !== undefined) there.compound = compound;
+  else stops.push({ lap, compound });
+}
+
 /** What a scenario holds for one of our cars' triggers: its neutralisations, its rain timeline, the car's wear rate in it. */
 export type PlayContext = {
   neutralisations: readonly Neutralisation[];
@@ -90,7 +100,8 @@ export type PlayContext = {
  * - `neutralised` holds on the first lap of its range a neutralisation of its condition is out: `box` boxes at the end
  *   of that lap (in place of the next planned stop, else as one more), `stayOut` moves every planned stop inside that
  *   neutralisation to the first lap after it.
- * - `rain` holds on the first lap before the flag whose wetness is at least its `wetnessMs`: it boxes at the end of it.
+ * - `rain` holds on the first lap before the flag whose wetness is at least its `wetnessMs`: it boxes at the end of it
+ *   for its compound, the later planned stops kept.
  * - `degradationOff` holds when the scenario's wear rate is above the car's estimate by at least `wearRateDeltaPct`:
  *   the car follows `switchTo` instead of its stops.
  * - `rivalPits` needs the field's gaps (`rivalPits`, after this); `damage` never fires: driver-noise's mistakes carry
@@ -105,7 +116,7 @@ export function playOut(policy: Policy, ctx: PlayContext, fired: Uint8Array): Po
       const at = ctx.weather?.find((w) => w.wetnessMs >= t.wetnessMs);
       if (at === undefined || at.lap >= lapsTotal) return;
       fired[i] = 1;
-      boxAt(stops, at.lap, t.action.box);
+      rainBox(stops, at.lap, t.action.box);
       return;
     }
     if (t.kind === 'degradationOff') {
