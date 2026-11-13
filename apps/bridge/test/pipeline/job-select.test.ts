@@ -68,8 +68,9 @@ describe('TopicPublisher: bindJob with a select', () => {
     expect(publisher.publishJobResult(ok(PER_CAR))).toEqual([]);
     const absent = of(sent, 'absent', before);
     expect(absent.some((m) => m.type === 'update' || m.type === 'snapshot')).toBe(false);
-    expect(absent).toContainEqual({ type: 'topicStatus', id: 'absent', status: 'noData' });
-    expect(absent).not.toContainEqual(expect.objectContaining({ status: 'errored' }));
+    // the hub sends noData once, when the subscription is made; a publish without an entry keeps it (SP4.3b2 Task 1 port)
+    expect(of(sent, 'absent')).toContainEqual({ type: 'topicStatus', id: 'absent', status: 'noData' });
+    expect(of(sent, 'absent')).not.toContainEqual(expect.objectContaining({ status: 'errored' }));
     expect(lastValue(sent, 'present')).toEqual({ computedFor: COMPUTED_FOR, value: report('car 7') });
   });
 
