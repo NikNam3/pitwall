@@ -2,11 +2,12 @@
 // that fit, centred on the window `pit-sweep` marks. Nothing here judges (C43).
 import type { Known, PitSweep, PitSweepRow, UnknownReason } from '@pitwall/domain';
 import { COMPOUND_MARK } from '../../kit/compound/compound-mark.ts';
+import { knownPart, type CellPart } from '../../kit/grid/grid.ts';
 import { formatCount, formatExpectedPlace, formatLapNumber, formatPosition, formatShare } from '../../kit/values/format.ts';
 import * as text from './text.ts';
 
 /** A cell: its text, or the reason of an unknown value (the kit's mark). */
-export type Cell = { text: string; reason?: UnknownReason | undefined };
+export type Cell = CellPart;
 
 /** One stop lap's cells. */
 export type SweepLine = {
@@ -24,8 +25,7 @@ export type SweepLine = {
 /** Cell widths (gen.mjs `swSpec`): full LAP 3, REJ 3, TRF 3, E[POS] 6, the strip, P(GAIN) 7, LIFE 4; compact LIFE 1. */
 export const WIDTH = { lap: 3, rej: 3, trf: 3, ePos: 6, pGain: 7, life: 4, lifeCompact: 1 } as const;
 
-const cellOf = (k: Known<number>, format: (n: number) => string): Cell =>
-  k.known ? { text: format(k.value) } : { text: '', reason: k.reason };
+const cellOf = (k: Known<number>, format: (n: number) => string): Cell => knownPart(k, format);
 
 /** The swept compound's letter; `auto` (unresolved) its option word. */
 export const compoundLetter = (compound: PitSweep['compound']): string =>
