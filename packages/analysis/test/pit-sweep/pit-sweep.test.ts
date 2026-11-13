@@ -17,7 +17,7 @@ import { placePmf } from '../../src/shared/distribution.ts';
 import { mcSettingsFrom, policyOf } from '../../src/shared/strategy-input/index.ts';
 import { prepareStrategy, runStrategy } from '../../src/strategy/index.ts';
 import { viewAt } from '../strategy/support.ts';
-import { json, mean, middles, OURS, PLAYER, RACE, seOf, SETS, SWEEP_CAP, sweepViewAt, TEAMMATE, type Recorded, type SweepSpec } from './support.ts';
+import { json, mean, middles, OURS, pitWindowOf, PLAYER, RACE, seOf, SETS, SWEEP_CAP, sweepViewAt, TEAMMATE, windowOf, type Recorded, type SweepSpec } from './support.ts';
 
 const rec = vi.hoisted(() => ({ dp: [], calls: [] }) as Recorded);
 
@@ -54,7 +54,15 @@ const SEED = 913_402_117;
 /** Row 7's cap: the smallest that agrees with `strategy` over as many seeds as the production-scale 4,000 did (Task 18p: seeds 1–7 and SEED). */
 const AGREEMENT_CAP = 400;
 const LAP = 3;
-const PAST_LIFE_LAPS = PIT_SWEEP_CONFIG.defaults.pastLifeLaps;
+/** Task 18q (Q10): the rows run from the window's `from − ROWS_BEFORE` to its `to + ROWS_AFTER` (config `rowsBefore`, `rowsAfter`). */
+const ROWS_BEFORE = 3;
+const ROWS_AFTER = 8;
+
+/** The stop laps a compound's rows may cover (Task 18q): `[max(now, from − rowsBefore), min(flag − 1, to + rowsAfter)]`; every stop lap without a window. */
+function rowRange(now: number, flag: number, window: { from: number; to: number } | undefined, before = ROWS_BEFORE, after = ROWS_AFTER): [number, number] {
+  if (window === undefined) return [now, flag - 1];
+  return [Math.max(now, window.from - before), Math.min(flag - 1, window.to + after)];
+}
 
 /** The job's output on the race's view at the leader's lap `lap`, as the worker computes it. */
 function swept(spec: SweepSpec = {}, lap = LAP, seed = SEED): ReturnType<typeof run> {
@@ -90,12 +98,12 @@ function callOf(car: CarId, compound: NoiseCompound) {
   return calls[0]!;
 }
 
-/** The stop laps L from now to `last` whose `bestWith` gives a plan, and those plans' policies. */
-function expectedCandidates(car: CarId, compound: NoiseCompound, last: number) {
+/** The stop laps L from `first` (default now) to `last` whose `bestWith` gives a plan, and those plans' policies. */
+function expectedCandidates(car: CarId, compound: NoiseCompound, last: number, first?: number) {
   const { input, solution } = solveOf(car);
   const thresholds = dpResult(solution).thresholds;
   const out: { lap: number; policy: ReturnType<typeof policyOf> }[] = [];
-  for (let lap = input.fromLap; lap <= last; lap++) {
+  for (let lap = first ?? input.fromLap; lap <= last; lap++) {
     const plan = bestWith(solution, { stopLap: lap, compound });
     if (plan !== null) out.push({ lap, policy: policyOf(plan, thresholds) });
   }
@@ -129,8 +137,8 @@ describe('pit-sweep: the job', () => {
     }
   });
 
-  // row 2
-  it('rows from now to min(flag − 1, stint.latest + pastLifeLaps), each "box at L onto the compound, then bestWith"', () => {
+  // row 2 (ported in Task 18q: the rows span the window's range, 18q rows 3–4, instead of now to stint.latest + pastLifeLaps)
+  it('rows over the window\'s range, each "box at L onto the compound, then bestWith"', () => {
     const flag = RACE().laps;
     for (const latestIn of [5, null]) {
       rec.dp = [];
@@ -142,13 +150,14 @@ describe('pit-sweep: the job', () => {
         const now = solveOf(car).input.fromLap;
         expect(c.lap, `car ${car}: lap is now`).toBe(now);
         expect(c.position).toBe(view.live.cars.find((x) => x.id === car)!.timing.position);
-        // stint.latest unknown: to flag − 1
-        const last = latestIn === null ? flag - 1 : Math.min(flag - 1, now + latestIn + PAST_LIFE_LAPS);
         for (const compound of SWEPT) {
+          // the window unknown (stint.latest unknown): every stop lap to flag − 1
+          const [first, last] = rowRange(now, flag, windowOf(view, car, compound, { latestIn }));
           const t = tableOf(c, compound);
-          const expected = expectedCandidates(car, compound, last);
+          const expected = expectedCandidates(car, compound, last, first);
           expect(expected.length, `car ${car} ${compound}`).toBeGreaterThan(0);
           expect(t.rows.map((r) => r.stopLap), `car ${car} ${compound}, latest ${latestIn}`).toEqual(expected.map((e) => e.lap));
+          // the default window opens 3 laps from now: the first row is now
           expect(t.rows[0]!.stopLap).toBe(now);
 
           const { input, result } = callOf(car, compound);
@@ -216,13 +225,84 @@ describe('pit-sweep: the job', () => {
       expect(Object.keys(carOf(a, car).byCompound).sort(), `car ${car}, no new soft`).toEqual(['hard', 'medium']);
       expect(Object.keys(carOf(b, car).byCompound).sort(), `car ${car}, pit-window without hard`).toEqual(['medium', 'soft']);
     }
-    // no row left: the stint's latest plus pastLifeLaps lies behind now, or the last lap
-    const passed = swept({ window: { latestIn: -(PAST_LIFE_LAPS + 1) } });
+    // no row left: the window's end plus rowsAfter lies behind now (ported in Task 18q from stint.latest + pastLifeLaps), or the last lap
+    const passed = swept({ window: { latestIn: -(ROWS_AFTER + 1) } });
     const lastLap = swept({ window: { latestIn: null } }, RACE().laps);
     for (const car of OURS) {
-      expect(carOf(passed, car).byCompound, `car ${car}, past latest + pastLifeLaps`).toEqual({});
+      expect(carOf(passed, car).byCompound, `car ${car}, past the window's end + rowsAfter`).toEqual({});
       expect(carOf(passed, car).auto).toMatchObject({ known: true, value: 'hard' });
       expect(carOf(lastLap, car).byCompound, `car ${car}, the last lap`).toEqual({});
+    }
+  });
+
+  // Task 18q row 3
+  it('rows run from max(now, earliest − 3) to min(last − 1, latest + 8); with the window unknown, every stop lap', () => {
+    expect(PIT_SWEEP_CONFIG.defaults, 'the config\'s rowsBefore and rowsAfter (Q10)').toMatchObject({ rowsBefore: ROWS_BEFORE, rowsAfter: ROWS_AFTER });
+    const flag = RACE().laps;
+    // soft, medium and hard: windows of their own (soft opens later), stint.latest 6 laps on; or hard's set does not
+    // reach the flag (windowLaps notApplicable); or stint.latest unknown (every window unknown); or the config's own bounds
+    const cases: [string, SweepSpec, number, number][] = [
+      ['windows', { window: { latestIn: 6, earliestIn: 5, earliestBy: { soft: 6 } } }, ROWS_BEFORE, ROWS_AFTER],
+      ['hard without a window', { window: { latestIn: 6, earliestIn: 5, noWindow: ['hard'] } }, ROWS_BEFORE, ROWS_AFTER],
+      ['stint.latest unknown', { window: { latestIn: null, earliestIn: 5 } }, ROWS_BEFORE, ROWS_AFTER],
+      ['rowsBefore 1, rowsAfter 2', { window: { latestIn: 6, earliestIn: 5 }, sweepConfig: { rowsBefore: 1, rowsAfter: 2 } }, 1, 2],
+    ];
+    for (const [name, spec, before, after] of cases) {
+      rec.dp = [];
+      rec.calls = [];
+      const view = sweepViewAt(RACE(), LAP, spec);
+      const out = run(structuredClone(PIT_SWEEP_JOB.prepare(view)), createRng(SEED));
+      for (const car of OURS) {
+        const c = carOf(out, car);
+        const now = solveOf(car).input.fromLap;
+        for (const compound of SWEPT) {
+          const window = windowOf(view, car, compound, spec.window);
+          const [first, last] = rowRange(now, flag, window, before, after);
+          const where = `${name}: car ${car} ${compound}, window ${json(window)}, rows L${first}–L${last}`;
+          if (name === 'windows') expect(first, `${where}: the window sets the first row`).toBeGreaterThan(now);
+          if (name === 'windows') expect(last, `${where}: the window sets the last row`).toBeLessThan(flag - 1);
+          if (window === undefined) expect([first, last], where).toEqual([now, flag - 1]);
+          const expected = expectedCandidates(car, compound, last, first);
+          expect(expected.length, where).toBeGreaterThan(0);
+          const t = tableOf(c, compound);
+          expect(t.rows.map((r) => r.stopLap), where).toEqual(expected.map((e) => e.lap));
+          const { input } = callOf(car, compound);
+          expect(input.candidates.map((x) => x.policy), where).toEqual(expected.map((e) => e.policy));
+          // the cap shared by the compound's rows
+          expect(t.scenarios, where).toBe(Math.floor(SWEEP_CAP / expected.length));
+        }
+      }
+    }
+  });
+
+  // Task 18q row 4
+  it('a window near the end clips at the last lap − 1; near now, at now', () => {
+    const flag = RACE().laps;
+    const view = sweepViewAt(RACE(), LAP);
+    for (const car of OURS) {
+      const current = pitWindowOf(view, car).currentLap;
+
+      // near the end: hard's window L(flag − 4)–L(flag − 2), so latest + 8 lies past the flag
+      rec.dp = [];
+      rec.calls = [];
+      const end: SweepSpec = { window: { compounds: ['hard'], latestIn: flag - 2 - current, earliestIn: flag - 4 - current } };
+      expect(windowOf(view, car, 'hard', end.window), `car ${car}: hard's window`).toEqual({ from: flag - 4, to: flag - 2 });
+      const atEnd = tableOf(carOf(swept(end), car), 'hard').rows.map((r) => r.stopLap);
+      const now = solveOf(car).input.fromLap;
+      const first = flag - 4 - ROWS_BEFORE;
+      expect(first, `car ${car}: the window's start − 3 lies after now`).toBeGreaterThan(now);
+      expect(atEnd, `car ${car}, near the end: L${first} to L${flag - 1}`).toEqual(expectedCandidates(car, 'hard', flag - 1, first).map((e) => e.lap));
+      expect(atEnd.at(-1), `car ${car}: never past the last lap − 1`).toBeLessThanOrEqual(flag - 1);
+
+      // near now: hard's window opens next lap, so earliest − 3 lies before now
+      rec.dp = [];
+      rec.calls = [];
+      const near: SweepSpec = { window: { compounds: ['hard'], latestIn: 3, earliestIn: 1 } };
+      const atNow = tableOf(carOf(swept(near), car), 'hard').rows.map((r) => r.stopLap);
+      const nowNear = solveOf(car).input.fromLap;
+      const last = Math.min(flag - 1, current + 3 + ROWS_AFTER);
+      expect(atNow[0], `car ${car}: the first row is now`).toBe(nowNear);
+      expect(atNow, `car ${car}, near now: L${nowNear} to L${last}`).toEqual(expectedCandidates(car, 'hard', last, nowNear).map((e) => e.lap));
     }
   });
 
