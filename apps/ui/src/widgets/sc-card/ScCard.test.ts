@@ -8,8 +8,9 @@
 //    and VSC rows, the same columns: ΔPOS, P(GAIN), the kit's `DistStrip` (form `gain`, the row's bins, the rows' shared
 //    `scaleOf`, zero `{ underBin: 4 }`, lit on the active row), REJ, LOSS (the value right in 4 cells, then the kit
 //    `SourceBadge` of the row's loss source in the fifth: `ᶜ`, `ᵈ`, a blank for a session value; an unknown loss its
-//    mark right in all 5, no badge), RANGE; the strip is an SVG (no text), an unknown strip the kit's mark left in its
-//    9 cells; every unknown cell the kit's `TextCell` (its mark, the reason on hover);
+//    mark right in all 5, no badge), RANGE; the strip is an SVG (no text); a notApplicable strip the kit's mark left in
+//    its 9 cells, any other unknown strip 9 blank cells with no hover (the mockup's unknown state); every other unknown
+//    cell the kit's `TextCell` (its mark, the reason on hover);
 //  - the row of the condition that is out is white bold: its line's colour `rowRole(true)` and its text inside a
 //    `<strong>`; the VSC row (the second) carries the kit row band (`bgRowBand`) unless it is the active row;
 //  - compact: the two rows alone, COND 3, ΔPOS 4, P(GAIN) 4, REJ 3 (no header, no strip, no LOSS, no RANGE, no band).
@@ -84,9 +85,11 @@ const barsOf = (svg: SVGSVGElement): { h: number; fill: string }[] =>
 const right = (t: string, w: number): string => fitCell(t, w, 'right');
 /** A LOSS cell: a known value right in 4 cells and its badge mark (a blank without one); an unknown mark right in 5. */
 const lossCell = (v: string, mark: string): string => right(v, 4) + (mark === '' ? ' ' : mark);
-/** The strip cell as it reads: nothing for a drawn strip (an SVG), the unknown mark left in its 9 cells. */
+/** The strip cell as it reads: nothing for a drawn strip (an SVG), the notApplicable mark left in its 9 cells, 9 blanks
+ *  for any other unknown strip (the mockup's unknown state). */
 const DRAWN = '';
 const stripMark = (mark: string): string => fitCell(mark, 9);
+const STRIP_BLANK = fitCell('', 9);
 /** A full row as it reads, trimmed. */
 const fullRow = (cond: string, dPos: string, pGain: string, strip: string, rej: string, loss: string, range: string): string =>
   ` ${[fitCell(cond, 3), right(dPos, 4), right(pGain, 7), strip, right(rej, 3), loss, right(range, 6)].join(' ')}`.trim();
@@ -117,8 +120,8 @@ const VSC_OUT_FULL = [
 ];
 const UNKNOWN_FULL = [
   header(),
-  fullRow('SC', pending, pending, stripMark(pending), pending, right(pending, 5), pending),
-  fullRow('VSC', pending, pending, stripMark(pending), pending, right(pending, 5), pending),
+  fullRow('SC', pending, pending, STRIP_BLANK, pending, right(pending, 5), pending),
+  fullRow('VSC', pending, pending, STRIP_BLANK, pending, right(pending, 5), pending),
 ];
 const GREEN_COMPACT = [compactRow('SC', '+1.4', '75%', 'P9'), compactRow('VSC', '+0.6', '53%', 'P10')];
 const SC_OUT_COMPACT = [compactRow('SC', '+1.8', '84%', 'P9'), compactRow('VSC', na, na, na)];
@@ -209,7 +212,8 @@ describe('sc-card', () => {
     for (const l of lines(c)) expect(l).not.toMatch(/[ᶜᵈ]/u);
     for (const cond of ['SC', 'VSC'] as const) {
       const l = rowLine(c, cond);
-      expect(hovers(l).filter((t) => t === unknownReason.insufficientData), cond).toHaveLength(6);
+      // five marks with their reason; the blank strip cell has no hover
+      expect(hovers(l).filter((t) => t === unknownReason.insufficientData), cond).toHaveLength(5);
       // the marks in the faint role
       expect(colourOf(cellWithText(l, pending), c), cond).toBe(role('textFaint'));
     }

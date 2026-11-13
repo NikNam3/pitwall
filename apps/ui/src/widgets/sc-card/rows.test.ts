@@ -5,7 +5,8 @@
 //    source: EstimateSource }`: ΔPOS `ePosDelta` through the kit's `formatPlacesGained`, P(GAIN) `pGain` through
 //    `formatShare`, REJ `rejoinPosition` through `formatPosition`, LOSS `lossMs` through `formatSeconds(ms, 1)`, RANGE
 //    `range` through `formatLapRange(fromLap, toLap)`; `strip` the topic's `gainBins` as they are; an unknown value its
-//    reason's part (kit `knownPart`/`unknownPart`: `{ text: '', reason }`), the strip's too; `source` the loss's source as
+//    reason's part (kit `knownPart`/`unknownPart`: `{ text: '', reason }`), a notApplicable strip's too, any other
+//    unknown strip a blank `{ text: '' }` (the mockup's unknown state); `source` the loss's source as
 //    the topic gives it (C43); `active` the row of the condition that is out;
 //  - `scaleOf(rows: readonly ScRow[]): number`: the kit's `sharedScale` over the known strips' bins, so the strips compare.
 import { describe, expect, it } from 'vitest';
@@ -49,7 +50,10 @@ describe('sc-card rows', () => {
   it('unknown cells: the kit\'s marks', () => {
     const rows = buildRows(valueOf('unknown'), undefined);
     for (const r of rows) {
-      expect([r.dPos, r.pGain, r.strip, r.rejoin, r.loss, r.range], r.condition).toEqual(Array(6).fill({ text: '', reason: 'insufficientData' }));
+      expect([r.dPos, r.pGain, r.rejoin, r.loss, r.range], r.condition).toEqual(Array(5).fill({ text: '', reason: 'insufficientData' }));
+      // the strip of an unknown row is blank, no mark and no hover, as the mockup's unknown state draws it
+      // (a notApplicable strip keeps its mark, row 2)
+      expect(r.strip, r.condition).toEqual({ text: '' });
     }
     // each cell on its own
     const [sc] = buildRows(call({ ...row('sc', scGreen, defaultSource), rejoinPosition: { known: false, reason: 'notReceived' } }), undefined);
