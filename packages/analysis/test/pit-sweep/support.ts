@@ -9,6 +9,9 @@
 // - The job calls the simulators through their units' indexes (`strategy-dp/index.ts`: `solveDp`, `bestWith`,
 //   `dpResult`; `race-monte-carlo/index.ts`: `scoreCalls`, `paired`, `ties`), so the tests record every `solveDp` and
 //   `scoreCalls` call with the real simulator running (`vi.mock` of those indexes, in each test file).
+// - A compound's window (Task 18q) is its `pit-window` set's `windowLaps` (`from` its `earliest`, `to` `stint.latest`),
+//   built here as `pit-window` builds it: unknown while `stint.latest` is, `notApplicable` for a set that does not reach
+//   the flag or opens after `stint.latest`. Either way "the window unknown": every stop lap.
 // - "now" for a car is its DP input's `fromLap` (`toDpInput`, the lap the DP plans from); `PitSweepCar.lap` is it and the
 //   first row's `stopLap`; `PitSweepCar.position` is the car's race position at the trigger (`strategyInputFrom`'s).
 // - A table's rows are in stop-lap order, one per candidate of that compound's `scoreCalls` call, in the candidates'
@@ -32,6 +35,12 @@ export type WindowSpec = {
   compounds?: readonly VisualCompound[];
   /** `stint.latest` as an offset from the car's current lap; `null`: unknown. Default +5. */
   latestIn?: number | null;
+  /** Each set's `earliest` as an offset from the car's current lap (its window's `from`). Default `latestIn − 2` (+3). */
+  earliestIn?: number;
+  /** Per compound an `earliest` offset over `earliestIn`. */
+  earliestBy?: Partial<Record<VisualCompound, number>>;
+  /** Compounds whose set does not reach the flag: `reaches` false, `windowLaps` `notApplicable`. */
+  noWindow?: readonly VisualCompound[];
   /** Default `known('hard')`. */
   windowCompound?: Known<VisualCompound>;
 };
@@ -46,17 +55,30 @@ export type SweepSpec = ViewSpec & {
   spans?: { machine: string; carId?: CarId; kind: string }[];
 };
 
-/** A `pit-window` set of `compound` (only `compound` is read by the job). */
-const windowSet = (compound: VisualCompound, at: number): PitWindowSet => ({
-  compound,
-  sameType: true,
-  lifeLaps: known(20, at),
-  earliest: known(1, at),
-  lifeEnd: known(40, at),
-  reaches: known(true, at),
-  windowLaps: unknown('notApplicable'),
-  state: known('open', at),
-});
+/** A `pit-window` set of `compound`: its window from `earliest` to `latest` as `pit-window` builds it. */
+function windowSet(compound: VisualCompound, at: number, earliest: number, latest: Known<number>, reaches: boolean): PitWindowSet {
+  const windowLaps: PitWindowSet['windowLaps'] = !latest.known
+    ? latest
+    : !reaches || earliest > latest.value
+      ? unknown('notApplicable')
+      : known({ from: earliest, to: latest.value }, at);
+  return {
+    compound,
+    sameType: true,
+    lifeLaps: known(20, at),
+    earliest: known(earliest, at),
+    lifeEnd: latest.known ? known(latest.value + 20, at) : latest,
+    reaches: known(reaches, at),
+    windowLaps,
+    state: windowLaps.known ? known('open', at) : known('none', at),
+  };
+}
+
+/** The window (stop laps) of `compound` for our car `car` on `view` by `spec`; `undefined` while it is unknown. */
+export function windowOf(view: EngineView, car: CarId, compound: VisualCompound, spec: WindowSpec = {}): { from: number; to: number } | undefined {
+  const set = pitWindowOf(view, car, spec).sets.find((s) => s.compound === compound);
+  return set?.windowLaps.known ? set.windowLaps.value : undefined;
+}
 
 /** `pit-window`'s value for our car `car` on `view`: the flag is the race's lap count, the current lap the car's. */
 export function pitWindowOf(view: EngineView, car: CarId, spec: WindowSpec = {}): PitWindow {
@@ -69,7 +91,10 @@ export function pitWindowOf(view: EngineView, car: CarId, spec: WindowSpec = {})
     flag: view.live.session.totalLaps,
     currentLap,
     stint: { compound: 'medium', fromLap: 1, latest, stopNeeded: latest.known ? known(true, at) : unknown('insufficientData'), pastLimit: false },
-    sets: (spec.compounds ?? ['soft', 'medium', 'hard']).map((c) => windowSet(c, at)),
+    sets: (spec.compounds ?? ['soft', 'medium', 'hard']).map((c) => {
+      const earliestIn = spec.earliestBy?.[c] ?? spec.earliestIn ?? (latestIn === null ? 3 : latestIn - 2);
+      return windowSet(c, at, currentLap + earliestIn, latest, !(spec.noWindow ?? []).includes(c));
+    }),
     window: latest.known ? known('open', at) : unknown('insufficientData'),
     windowCompound: spec.windowCompound ?? known('hard', at),
   };
