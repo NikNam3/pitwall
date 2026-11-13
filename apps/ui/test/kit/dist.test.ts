@@ -15,7 +15,7 @@
 //      top at or below the bars' baseline) in the `text` role (white), absent without `ourPlace`;
 //    gain: `line.zero` in the `text` role, `data-zero="between"`: at `x = between·cell`, from the top to the bottom
 //      (at least 80 % of H), or `data-zero="under"`: at `x = (underBin + 0.5)·cell`, a tick below the baseline;
-//      `line.mark` at `x = markAtBin·cell` (fractional allowed), dotted (`stroke-dasharray`), in the `ownCar` role,
+//      `line.mark` at `x = markAtBin·cell` (fractional allowed), dotted (`stroke-dasharray`), in the `textDim` role (the approved mockup, gen.mjs),
 //      absent without `markAtBin`.
 import { cleanup, render } from '@testing-library/svelte';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -109,7 +109,7 @@ describe('kit/dist', () => {
     expect(num(mark, 'x1')).toBeGreaterThan(6 * cell);
     expect(num(mark, 'x1')).toBeLessThan(7 * cell);
     expect(mark.getAttribute('stroke-dasharray') || (mark as SVGElement).style.strokeDasharray).toBeTruthy();
-    expect(colour(mark)).toBe(role('ownCar'));
+    expect(colour(mark)).toBe(role('textDim'));
     cleanup();
     const plain = strip(render(DistStrip, { form: 'gain', bins: GAIN, scale: 0.3, zero: { between: 4 } }).container);
     expect(plain.querySelector('line.mark')).toBeNull();
