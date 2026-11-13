@@ -412,3 +412,155 @@ A wide sd alone makes the early laps noisier: mean abs at k 2–3 rises 797 → 
 6. **Left open (thin, about 1.9 SE): the train-release gap**, −330 ± 177 on the 25 stops whose old stint had under 25 % free-air pace laps. The fix would be a code change in `forecast-field`'s pace stand-in: take a car's `paceMs` from its free-air laps, or the α a free-air-only refit gives, when its stint was mostly held. Re-score the undercut cases first (Task 11 causes 1, 2 and 4 together) before deciding.
 
 Thin overall: two tracks carry the result (Spa 34 stops, Texas 17), Texas's new-set laps 3–8 run the other way (n 3–15), and hard has no data. Not re-scored: the undercut and rejoin cases of forecast-score under the new prior. That needs the Task 11 trace scripts (`t11/fresh.ts`, `rf-fixed.ts`), and it is the next check.
+
+
+---
+
+# Research 19 addendum: the Monte Carlo's wetness dynamics (Task 19b check)
+
+Spike branch `spike/4.3b-defaults` (worktree `pitwall-wt/spike-4.3b-defaults`), never merged. Code: `spike/weather-scan.ts`,
+`spike/wetness-capture.ts`, `spike/wetness-fit.ts`. Outputs: `spike/out/wetness/` (`*.weather.json` per recording,
+`{singapore,miami,mexico}.tw.json`, `fit.json`).
+
+## Data
+
+- **Weather (all 15 recordings, protocol only, no engine):** per Session packet the weather (a value), the offset-0
+  forecast sample's rain % (the rain now), every distinct forecast (this session's samples, as step 1 keeps them) and
+  `forecastAccuracy`, stamped with session time and the leader's lap (LapData).
+- **Rain at all:** only the three races Singapore (2026-10-29_00-04-08), Mexico (2026-10-30_15-20-41) and Miami
+  (2026-10-30_18-53-00). Every other session (practice, qualifying, dry races) stays at clear / light cloud / overcast,
+  rain % at most 19. Only Singapore changes between rain and dry. Mexico (storm, 91–94 %) and Miami (storm, 93 %)
+  hold one state all race.
+- **`forecastAccuracy` is `perfect` on every Session packet of every recording.** There is no approximate forecast.
+- **track-wetness's state per lap:** each recording run through the bridge pipeline (`recordingPipeline`, every job a
+  no-op), track-wetness's output recorded at each of its runs (one per completed lap), with the live weather at that frame.
+- **Wetness on the model's scale** (the slick's loss, ms): per leader lap, the AI field's median fuel-corrected excess per
+  tyre type (30 ms/kg) against a dry reference, mapped through the lap model's wet terms (forecast-field config):
+  - slick: w = e;
+  - inter: w = (e − 3,500) / 0.5;
+  - wet: w = (e − 8,100) / 0.25.
+
+  Clean laps only: no SC or VSC share, not lap 1, no in-lap or out-lap, valid. The dry references are as in research 19 §4:
+  - Singapore: each car's median slick lap over laps 8–22 (light cloud, rain % 6–16, no rain).
+  - Miami: each car's best slick lap in the same-day practice. The practice best lies below a race lap, so Miami's w is
+    biased high by perhaps 0.5–1.5 s.
+
+  Mexico has no dry reference.
+- **SE:** cluster bootstrap over cars, 1,000 reps (400 per lap in the tables). It covers the car-to-car spread only. The
+  systematic errors are larger: the inter/wet scale constants (3,500 / 0.5, 8,100 / 0.25, themselves thin), the dry
+  reference, and **one event per value**. Every value below is **thin**: one recording, one event.
+
+## What the game does (Singapore, the one race with changes)
+
+| Leader lap | Weather | Rain % | w (ms) ± SE | Tyre | track-wetness state |
+|---|---|---|---|---|---|
+| 2 | lightRain | 89 | 12,927 ± 197 | inter (18) | 0 |
+| 3 | lightRain | 89 | 11,999 ± 254 | inter (18) | −10 |
+| 4 | lightRain | 77 | 8,470 ± 114 | inter (6) | −870 |
+| 5 | lightRain → overcast at 60 % | 60 | stops | | −379 |
+| 6 | overcast | 42 | 1,612 ± 343 | slick (12) | −379 |
+| 7 | overcast | 26 | −418 ± 236 | slick (17) | −159 |
+| 8–24 | overcast / lightCloud | 6–19 | −950 … +1,170 (tyre degradation, not removed) | slick | −23 … 550 |
+| 25 | overcast | 19 | stops | | 125 |
+| 26 | overcast → lightRain at 25 % | 30 | stops | | 125 |
+| 27 | lightRain | 43 | 18,171 ± 239 | inter (17) | 41 |
+| 28 | lightRain | 55 | 18,848 ± 193 | inter | 280 |
+| 29 | lightRain | 66 | 19,611 ± 251 | inter | 194 |
+| 30 | lightRain | 74 | 19,864 ± 303 | inter | −190 |
+| 31 | lightRain | 74 | 20,182 ± 222 (peak) | inter | −29 |
+| 32 | lightRain | 74 | 20,028 ± 278 | inter | 78 |
+| 33 | lightRain | 75 | 18,947 ± 341 | inter | −184 |
+| 34 | lightRain | 77 | 16,515 ± 433 | inter | −841 |
+| 35 | lightRain | 79 | 14,398 ± 198 | inter | −1,352 |
+| 36–40 | lightRain | 80–88 | 14,084 … 14,642 | inter | −1,226 … −230 |
+| 41–44 | storm (from 88 %) | 90–91 | 14,784 … 15,081 | inter | −162 … 109 |
+
+Miami (storm, 93 %, every lap): w falls from 25,545 ± 662 (lap 5, the first green lap) to 16,504 ± 950 (lap 20). The
+slope is −392 ± 45 ms per lap over laps 5–20. The mean over laps 15–20 is 18,099 ± 699. Over the same laps
+track-wetness's state reads 0 to 885.
+
+Mexico (storm, 91–94 %, every lap; every AI car stops once, wet → inter at lap 4–5, then one 67-lap inter stint): the
+field's inter pace against its own median is flat after lap 9, within ±0.5 s until degradation shows from lap ~47.
+Slopes in inter ms per lap: laps 6–20 −42 ± 12, laps 20–71 +21 ± 3. Inter degradation pushes these upward, so a −slope
+is the most drying the track can have done. Under a steady storm the track holds one level, apart from about 0.7 s of
+inter (1.4 s of w) gained over laps 6–9.
+
+Five findings:
+
+1. **Wetness is no integrator of rain laps.** It tracks the rain intensity with a lag of about 1–2 laps, overshoots, and
+   then settles. Under steady rain it settles at a level: Singapore 14.4–14.9 s at 80–91 %, Miami about 18 s at 93 %
+   and still falling, Mexico flat. A longer rain does not make the track wetter.
+2. **Drying starts while it still rains:** −2.2 s per lap over laps 2–4 under lightRain, as the rain % falls 89 → 70.
+3. **Rain % is an intensity, not a per-lap chance of rain.** The weather is lightRain from 25 % rising and until 60 %
+   falling, and storm from 88 %. The MC instead reads rain % as a per-lap chance (`uniform < rainPct`). At 75–93 % that
+   draw is nearly always rain, so the MC pins the wetness at its ceiling.
+4. **track-wetness's state is not on a dry scale.** Each stint's common mode is measured against the stint's own first
+   free-air laps. A stint that starts wet therefore reads as dry:
+   - Miami: ≤ 0.9 s on a track at w 17–26 s;
+   - Mexico: −0.4 to +1.0 s over 71 laps of storm at 91–94 % (no dry reference to put w on);
+   - Singapore: −1.4 to +0.3 s from lap 27 at w 14–20 s.
+
+   The MC starts its rain timeline from this state
+   (`start.wetness.wetnessMs`). On a wet start or after a type change it starts about 15–25 s too dry, and then climbs
+   2.5 s per rain lap. **This error is larger than any of the constants below.** It is a code issue in track-wetness, not
+   a literal.
+5. **A perfect forecast is exact:**
+   - 872 Singapore forecasts, the shift that best lines each one up with the rain % that came: 0.01 laps (sd 0.07).
+     Mean error at zero shift: 0.1 %.
+   - Mexico (11 forecasts): 0.14 laps (sd 0.21). Miami (3): 0.
+   - Its timing error in laps comes only from the sample grid: 5 min (about 2.8 laps) up to 15 min ahead, then 15 and
+     30 min. Read as `rainPctAt`'s nearest sample, the first sample with the new state lies after the real change:
+     - drying at 483 s: +1.65 laps mean (214 forecasts, 0 to 2.8);
+     - rain at 2,549 s: +3.0 mean, median 2.2 (429 forecasts, 0 to 8.4).
+
+   Interpolating linearly between samples would remove most of it. That is a code change in forecast-field's mapping.
+
+## The fits
+
+Each fit is one event, so all are **thin**.
+
+- **Rise per rain lap.** From lap 24 (slick, w 1,169) to lap 27 (inter, w 18,171). The rain started at the start of
+  lap 26 (lightRain at 2,549 s; lap 26 starts at 2,538 s).
+  - Over 2 rain laps (26, 27): **8,501 ± 109 ms/lap** (band 8,321–8,664).
+  - Counting lap 25, when the rain % was already rising: 5,667 ± 73.
+  - Afterwards only +504 ± 62 per lap up to the peak (laps 27–31). The rise is a step, not a slope.
+- **Fall per dry lap.** The start dries: lap 3 inter w 11,999 → lap 7 slick w −418.
+  - Over 4 laps: **3,104 ± 106 ms/lap**.
+  - Lap 4 → lap 6: 3,429 ± 175.
+  - Slick only, lap 6 → 7, near the floor: 2,030 ± 278.
+  - This rests on the inter scale (3,500 / 0.5).
+- **Ceiling, the level under sustained heavy rain:**
+  - Singapore laps 36–40 (lightRain 81–88 %): 14,390 ± 166.
+  - Singapore laps 41–44 (storm): 14,887 ± 154.
+  - Miami laps 15–20 (storm): 18,099 ± 699, biased high by the practice reference.
+  - Peaks: Singapore 20,182 ± 215 (lap 31, 5 laps after the onset); Miami 25,598 ± 825 (lap 5, the race started in
+    the storm).
+
+  In the MC the ceiling is the level a rain spell holds: at rain % 75–93 the per-lap draw rains on nearly every lap.
+  So it should be the settled level, not the peak.
+- **Approximate forecast's timing sd:** not measurable. No recording has an approximate forecast (all 15 are
+  `perfect`). A perfect one is exact (shift 0.01 ± 0.07 laps, n = 872). The current 2 laps cannot be checked.
+
+## Recommendation table
+
+| Value | Current | Measured | Counts | Recommendation (literal and source) |
+|---|---|---|---|---|
+| `WETNESS_RISE_MS_PER_LAP` | 2,500 | 8,501 ± 109 ms/lap over the 2 onset laps (5,667 ± 73 counting lap 25); then +504 ± 62/lap to the peak | 1 onset (Singapore laps 24 → 27), 17 cars; **thin** | **`8_500`**, source: "spike 4.3b-defaults (research 19 wetness): Singapore's rain onset, slick lap 24 to inter lap 27, w +17.0 s over 2 rain laps: 8,501 ± 109 ms/lap (17 cars; 5,667 if lap 25 counts); one onset, thin; the inter scale (3,500 / 0.5) is assumed" |
+| `WETNESS_FALL_MS_PER_LAP` | 1,000 | 3,104 ± 106 ms/lap (lap 3 → 7); 3,429 ± 175 (lap 4 → 6); 2,030 ± 278 slick only near the floor; −2,229 ± 248/lap already while lightRain fades (laps 2–4) | 1 drying (Singapore laps 2–7), 6–18 cars per lap; **thin** | **`3_000`**, source: "spike 4.3b-defaults (research 19 wetness): Singapore's drying start, inter lap 3 (w 12.0 s) to slick lap 7 (w −0.4 s): 3,104 ± 106 ms/lap (18 cars); one drying, thin; the inter scale is assumed" |
+| `WETNESS_MAX_MS` | 25,000 | settled level under heavy rain: 14,390 ± 166 (Singapore lightRain 81–88 %), 14,887 ± 154 (Singapore storm), 18,099 ± 699 (Miami storm, biased high); peaks 20,182 (Singapore) and 25,598 (Miami race start) | 3 rain spells, 2 races (Mexico: no dry reference, but flat under storm); **thin** | **`16_000`**, source: "spike 4.3b-defaults (research 19 wetness): the level a heavy rain settles at: Singapore 14.4–14.9 s (laps 36–44, 17 cars), Miami 18.1 ± 0.7 s (laps 15–20, practice reference, biased high); peaks of 20–26 s fade within 3–10 laps; thin" |
+| `APPROXIMATE_SHIFT_SD_LAPS` | 2 | not measurable: every Session packet of all 15 recordings has accuracy `perfect`; a perfect forecast is exact (best shift 0.01 ± 0.07 laps, 872 forecasts; Mexico 0.14 ± 0.21, 11) | 0 approximate | **keep `2`**, source unchanged and still flagged: "pitwall estimate (flagged; S12: wider when approximate); no approximate forecast in any recording (research 19 wetness: all 15 perfect), unchecked" |
+
+## Left to the supervisor (code, not literals; contract-neutral, analysis only)
+
+1. **track-wetness's state is relative to each stint's start** (finding 4). It reads about 0 on a track that is wet from
+   the start (Miami, Mexico) or after a type change (Singapore from lap 27). The MC's rain timeline starts from it, so
+   on a wet race it starts 15–25 s too dry. The fix belongs to track-wetness's measurement: an absolute level through
+   the type's offset and slope against a dry reference (a track file's or a prior), instead of the stint's first laps.
+   Without it the recommended constants only shape the curve after a too-dry start.
+2. **Rain % is an intensity** (finding 3). In the MC a lap rains with a chance of `rainPct` %. The game rains from about
+   25 % rising, dries from about 60 % falling, and storms from 88 %, each seen once or twice (Singapore). A
+   deterministic threshold, or a wetness target that rises with rain %, would fit better. Thin: two transitions.
+3. **The forecast is a step function on a coarse grid** (finding 5). Mapping the samples onto laps by linear
+   interpolation would remove the +1.7 to +3 laps of lateness that `rainPctAt`'s nearest sample gives a perfect
+   forecast.
+4. **Contract gaps:** none.

@@ -25,17 +25,18 @@ export const MC_PURPOSE = { scStart: 1, scLength: 2, vscStart: 3, vscLength: 4, 
 // the rise per rain lap, the fall per dry lap and the ceiling.
 
 /**
- * How much a lap of rain raises the track's wetness (ms of a slick's loss). Source: pitwall estimate (flagged): from a
- * dry track three laps of rain pass the slick/inter crossover at about 7 s (research 19 §4).
+ * How much a lap of rain raises the track's wetness (ms of a slick's loss). Source: spike 4.3b-defaults (research 19
+ * wetness): Singapore's rain onset, slick lap 24 to inter lap 27, +17.0 s over 2 rain laps: 8,501 ± 109 ms/lap (17 cars;
+ * 5,667 if lap 25 counts); one onset, thin; the inter scale (3,500 / 0.5) is assumed.
  */
-export const WETNESS_RISE_MS_PER_LAP = 2_500;
+export const WETNESS_RISE_MS_PER_LAP = 8_500;
 /**
- * How much a dry lap lowers it. Source: pitwall estimate (flagged): a track dries slower than it wets, about 7 laps
- * from the slick/inter crossover back to dry.
+ * How much a dry lap lowers it. Source: spike 4.3b-defaults (research 19 wetness): Singapore's drying start, inter lap 3
+ * (12.0 s) to slick lap 7 (−0.4 s): 3,104 ± 106 ms/lap (18 cars); one drying, thin; the inter scale is assumed.
  */
-export const WETNESS_FALL_MS_PER_LAP = 1_000;
-/** The wetness of a fully wet track. Source: pitwall estimate (flagged): the highest inter excess seen, about 16 s (Miami, research 19 §4), is a slick wetness of about 25 s at the inter slope 0.5. */
-export const WETNESS_MAX_MS = 25_000;
+export const WETNESS_FALL_MS_PER_LAP = 3_000;
+/** The level a heavy rain settles at. Source: spike 4.3b-defaults (research 19 wetness): Singapore 14.4–14.9 s (laps 36–44, 17 cars), Miami 18.1 ± 0.7 s (laps 15–20, practice reference, biased high); peaks of 20–26 s fade within 3–10 laps; thin. */
+export const WETNESS_MAX_MS = 16_000;
 /**
  * An approximate forecast's timing error: per scenario the forecast is read this many laps (sd, normal, rounded)
  * earlier or later. Source: pitwall estimate (flagged; S12: wider when approximate). The check: the game's
