@@ -32,6 +32,17 @@ export const pitLossFallback =
     };
   };
 
+/**
+ * The prior of the in-lap's share of a stop's loss (SP4.3b Task 26, spec F2; C62b): the track file's
+ * `defaults.pitLossInLapShare` where known, else the config's `inLapShare` `configShare` (C47). The same in every
+ * condition; `pit-loss` blends it with the session's stops and `forecast-field` stands in with it without an estimate.
+ */
+export const inLapSharePrior = (track: FallbackCtx['track'], configShare: number): number => {
+  // a file loaded without validation may lack the field: read it as unknown
+  const fileShare = track.known ? track.value.defaults.pitLossInLapShare : undefined;
+  return fileShare?.known === true ? fileShare.value.value : configShare;
+};
+
 /** The options a source session's stops are judged with: the effective configs (C47) and the session's weekend phase. */
 const optionsOf = (source: StoredSource, ctx: PriorsCtx): PitLossOptions => ({
   ...PIT_LOSS_CONFIG.defaults,

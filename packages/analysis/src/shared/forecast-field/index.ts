@@ -33,7 +33,7 @@ import { DRIVER_NOISE, driverNoiseAsOf } from '../../driver-noise/index.ts';
 import { LAP_CLASSES_CONFIG } from '../../lap-classes/index.ts';
 import { PER_LAP_RATE_CONFIG } from '../../per-lap-rate/index.ts';
 import { pitLossCalculator } from '../../pit-loss/calculator.ts';
-import { PIT_LOSS, PIT_LOSS_CONFIG, pitLossAsOf, type PitLossOutput } from '../../pit-loss/index.ts';
+import { inLapSharePrior, PIT_LOSS, PIT_LOSS_CONFIG, pitLossAsOf, type PitLossOutput } from '../../pit-loss/index.ts';
 import { raceInteractionCalculator } from '../../race-interaction/calculator.ts';
 import { RACE_INTERACTION_CONFIG } from '../../race-interaction/config.ts';
 import { RACE_INTERACTION, raceInteractionAsOf } from '../../race-interaction/index.ts';
@@ -200,7 +200,7 @@ export function buildStartingPoint(
     wetness: wetnessOf(wetness, config.priorWetnessSdMs),
     // filled once the cars are placed (`weatherOf`)
     weather: unknown('notReceived'),
-    track: trackOf(view, pitLoss, need, configOf(PIT_LOSS_CONFIG, view).inLapShare),
+    track: trackOf(view, pitLoss, need, inLapSharePrior(view.track, configOf(PIT_LOSS_CONFIG, view).inLapShare)),
     // the one DRS rule: race-interaction's (F7)
     drs: { rangeMs: drsConfig.drsRangeMs, fromLap: drsConfig.drsFromLap },
     interaction,
@@ -365,7 +365,8 @@ function wetnessOf(wetness: DeepReadonly<TrackWetness> | undefined, priorSdMs: n
 /**
  * The track: braking zones (their starts) and DRS zones from the track file, the pit loss per condition from pit-loss
  * (else the track file's default), and the in-lap's share of it: pit-loss's green share (SP4.3b Task 11c; a neutralised
- * stop is scored with its own loss, split by green's share), else pit-loss's prior `priorShare`.
+ * stop is scored with its own loss, split by green's share), else pit-loss's prior `priorShare` (the track file's share,
+ * else pit-loss's config's: `inLapSharePrior`, SP4.3b Task 26).
  */
 function trackOf(view: AsOfView, pitLoss: DeepReadonly<PitLossOutput> | undefined, need: Needs, priorShare: number): StartingPoint['track'] {
   const inLapShare = need.of(pitLoss?.conditions.green.inLapShare, priorShare);

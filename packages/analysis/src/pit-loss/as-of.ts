@@ -21,7 +21,7 @@ import { behaviourFor } from '../shared/behaviour.ts';
 import { PIT_LOSS_BEHAVIOUR, phaseRow, type PitLossEffect } from './behaviour.ts';
 import { PIT_LOSS_CONFIG } from './config.ts';
 import { inLapShareOf, median, sessionStops, type PitLossOptions } from './loss.ts';
-import { PIT_CONDITIONS, pitLossFallback, pitLossKey } from './priors.ts';
+import { inLapSharePrior, PIT_CONDITIONS, pitLossFallback, pitLossKey } from './priors.ts';
 
 /**
  * A condition's prior: its value (unknown without one) and its source as the estimate's without a counted stop, whose
@@ -102,7 +102,7 @@ function inLapSharesOf(view: AsOfView, laps: readonly LapRecord[], stops: readon
   return shares;
 }
 
-/** A condition's in-lap share: the blend `(n · sessionMedian + k · prior) / (n + k)` of its stops' shares and the config's prior (C47). */
+/** A condition's in-lap share: the blend `(n · sessionMedian + k · prior) / (n + k)` of its stops' shares and the prior (`inLapSharePrior`). */
 const inLapShareBlend = (shares: readonly Share[], prior: number, k: number): Known<number> => {
   const n = shares.length;
   if (n === 0) return known(prior, 0);
@@ -127,7 +127,7 @@ export function pitLossAsOf(view: AsOfView): PitLosses {
   for (const condition of PIT_CONDITIONS) {
     const losses = stops.flatMap((s) => (s.condition === condition && s.use === 'used' && s.lossMs.known ? [s.lossMs] : []));
     const estimate = estimateOf(losses, priorOf(view, condition), opts.priorWeightStops);
-    const inLapShare = inLapShareBlend(shares.get(condition) ?? [], opts.inLapShare, opts.priorWeightStops);
+    const inLapShare = inLapShareBlend(shares.get(condition) ?? [], inLapSharePrior(view.track, opts.inLapShare), opts.priorWeightStops);
     conditions[condition] = { ...estimate, inLapShare, stationaryMedianMs: stationaryMedianOf(view, condition), sessionStops: losses.length };
   }
   return { conditions, stops };
