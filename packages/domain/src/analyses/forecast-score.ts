@@ -30,5 +30,10 @@ export type ForecastScoreReport = {
     position: ScoreTable;
     baselinePosition: ScoreTable;
     crps: { ai: Summary; human: Summary };
+    /**
+     * Like for like (SP4.3b Task 27): on exactly the cases that have both a CRPS and a point score, the CRPS, the point
+     * forecast's and the baseline's ("gaps stay") mean absolute position error; a point's CRPS is its absolute error.
+     */
+    sameCases: { crps: { ai: Summary; human: Summary }; position: { ai: Summary; human: Summary }; baseline: { ai: Summary; human: Summary } };
   }[];
 };
