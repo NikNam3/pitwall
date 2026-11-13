@@ -1,5 +1,5 @@
 {
-  "sourceHash": "661d82b3c67bb7f9b4d0b8fbe6ba4a89993d30418bfb79b8b3c36c511cf7daba",
+  "sourceHash": "a5c9069bde8aaec2d9e6ddd39b5b1479f5acf86eeff4570c590c16c39542002f",
   "generatorParams": {
     "base": "GENERATOR_DEFAULTS",
     "seed": 1,
@@ -527,7 +527,8 @@
             }
           ]
         },
-        "source": "dp"
+        "source": "dp",
+        "rule": null
       },
       {
         "policy": {
@@ -623,7 +624,8 @@
             }
           ]
         },
-        "source": "dp"
+        "source": "dp",
+        "rule": null
       },
       {
         "policy": {
@@ -712,7 +714,8 @@
             }
           ]
         },
-        "source": "dp"
+        "source": "dp",
+        "rule": null
       },
       {
         "policy": {
@@ -801,7 +804,8 @@
             }
           ]
         },
-        "source": "dp"
+        "source": "dp",
+        "rule": null
       },
       {
         "policy": {
@@ -890,7 +894,8 @@
             }
           ]
         },
-        "source": "dp"
+        "source": "dp",
+        "rule": null
       },
       {
         "policy": {
@@ -983,7 +988,8 @@
             }
           ]
         },
-        "source": "dp"
+        "source": "dp",
+        "rule": null
       },
       {
         "policy": {
@@ -1076,7 +1082,8 @@
             }
           ]
         },
-        "source": "dp"
+        "source": "dp",
+        "rule": null
       },
       {
         "policy": {
@@ -1169,7 +1176,8 @@
             }
           ]
         },
-        "source": "dp"
+        "source": "dp",
+        "rule": null
       },
       {
         "policy": {
@@ -1262,7 +1270,8 @@
             }
           ]
         },
-        "source": "dp"
+        "source": "dp",
+        "rule": null
       },
       {
         "policy": {
@@ -1355,7 +1364,8 @@
             }
           ]
         },
-        "source": "dp"
+        "source": "dp",
+        "rule": null
       },
       {
         "policy": {
@@ -1444,7 +1454,8 @@
             }
           ]
         },
-        "source": "dp"
+        "source": "dp",
+        "rule": null
       },
       {
         "policy": {
@@ -1533,7 +1544,8 @@
             }
           ]
         },
-        "source": "neighbour"
+        "source": "neighbour",
+        "rule": null
       },
       {
         "policy": {
@@ -1622,7 +1634,8 @@
             }
           ]
         },
-        "source": "neighbour"
+        "source": "neighbour",
+        "rule": null
       },
       {
         "policy": {
@@ -1711,7 +1724,8 @@
             }
           ]
         },
-        "source": "neighbour"
+        "source": "neighbour",
+        "rule": null
       },
       {
         "policy": {
@@ -1800,7 +1814,8 @@
             }
           ]
         },
-        "source": "neighbour"
+        "source": "neighbour",
+        "rule": null
       },
       {
         "policy": {
@@ -1889,7 +1904,8 @@
             }
           ]
         },
-        "source": "neighbour"
+        "source": "neighbour",
+        "rule": null
       },
       {
         "policy": {
@@ -1978,7 +1994,8 @@
             }
           ]
         },
-        "source": "neighbour"
+        "source": "neighbour",
+        "rule": null
       },
       {
         "policy": {
@@ -2067,7 +2084,8 @@
             }
           ]
         },
-        "source": "neighbour"
+        "source": "neighbour",
+        "rule": null
       },
       {
         "policy": {
@@ -2156,7 +2174,8 @@
             }
           ]
         },
-        "source": "neighbour"
+        "source": "neighbour",
+        "rule": null
       },
       {
         "policy": {
@@ -2245,7 +2264,8 @@
             }
           ]
         },
-        "source": "neighbour"
+        "source": "neighbour",
+        "rule": null
       },
       {
         "policy": {
@@ -2334,7 +2354,8 @@
             }
           ]
         },
-        "source": "neighbour"
+        "source": "neighbour",
+        "rule": null
       },
       {
         "policy": {
@@ -2423,7 +2444,8 @@
             }
           ]
         },
-        "source": "neighbour"
+        "source": "neighbour",
+        "rule": null
       },
       {
         "policy": {
@@ -2512,7 +2534,8 @@
             }
           ]
         },
-        "source": "neighbour"
+        "source": "neighbour",
+        "rule": null
       },
       {
         "policy": {
@@ -2601,7 +2624,8 @@
             }
           ]
         },
-        "source": "rule"
+        "source": "rule",
+        "rule": "mirrorAhead"
       },
       {
         "policy": {
@@ -2696,7 +2720,8 @@
             }
           ]
         },
-        "source": "rule"
+        "source": "rule",
+        "rule": "cover"
       },
       {
         "policy": {
@@ -2791,7 +2816,8 @@
             }
           ]
         },
-        "source": "rule"
+        "source": "rule",
+        "rule": "extend"
       }
     ],
     "5": [
@@ -2900,7 +2926,8 @@
             }
           ]
         },
-        "source": "dp"
+        "source": "dp",
+        "rule": null
       },
       {
         "policy": {
@@ -2987,7 +3014,8 @@
             }
           ]
         },
-        "source": "dp"
+        "source": "dp",
+        "rule": null
       },
       {
         "policy": {
@@ -3067,7 +3095,8 @@
             }
           ]
         },
-        "source": "dp"
+        "source": "dp",
+        "rule": null
       },
       {
         "policy": {
@@ -3147,7 +3176,8 @@
             }
           ]
         },
-        "source": "dp"
+        "source": "dp",
+        "rule": null
       },
       {
         "policy": {
@@ -3227,7 +3257,8 @@
             }
           ]
         },
-        "source": "dp"
+        "source": "dp",
+        "rule": null
       },
       {
         "policy": {
@@ -3311,7 +3342,8 @@
             }
           ]
         },
-        "source": "dp"
+        "source": "dp",
+        "rule": null
       },
       {
         "policy": {
@@ -3395,7 +3427,8 @@
             }
           ]
         },
-        "source": "dp"
+        "source": "dp",
+        "rule": null
       },
       {
         "policy": {
@@ -3479,7 +3512,8 @@
             }
           ]
         },
-        "source": "dp"
+        "source": "dp",
+        "rule": null
       },
       {
         "policy": {
@@ -3563,7 +3597,8 @@
             }
           ]
         },
-        "source": "dp"
+        "source": "dp",
+        "rule": null
       },
       {
         "policy": {
@@ -3647,7 +3682,8 @@
             }
           ]
         },
-        "source": "dp"
+        "source": "dp",
+        "rule": null
       },
       {
         "policy": {
@@ -3727,7 +3763,8 @@
             }
           ]
         },
-        "source": "dp"
+        "source": "dp",
+        "rule": null
       },
       {
         "policy": {
@@ -3807,7 +3844,8 @@
             }
           ]
         },
-        "source": "neighbour"
+        "source": "neighbour",
+        "rule": null
       },
       {
         "policy": {
@@ -3887,7 +3925,8 @@
             }
           ]
         },
-        "source": "neighbour"
+        "source": "neighbour",
+        "rule": null
       },
       {
         "policy": {
@@ -3967,7 +4006,8 @@
             }
           ]
         },
-        "source": "neighbour"
+        "source": "neighbour",
+        "rule": null
       },
       {
         "policy": {
@@ -4047,7 +4087,8 @@
             }
           ]
         },
-        "source": "neighbour"
+        "source": "neighbour",
+        "rule": null
       },
       {
         "policy": {
@@ -4127,7 +4168,8 @@
             }
           ]
         },
-        "source": "neighbour"
+        "source": "neighbour",
+        "rule": null
       },
       {
         "policy": {
@@ -4207,7 +4249,8 @@
             }
           ]
         },
-        "source": "neighbour"
+        "source": "neighbour",
+        "rule": null
       },
       {
         "policy": {
@@ -4287,7 +4330,8 @@
             }
           ]
         },
-        "source": "neighbour"
+        "source": "neighbour",
+        "rule": null
       },
       {
         "policy": {
@@ -4367,7 +4411,8 @@
             }
           ]
         },
-        "source": "neighbour"
+        "source": "neighbour",
+        "rule": null
       },
       {
         "policy": {
@@ -4447,7 +4492,8 @@
             }
           ]
         },
-        "source": "neighbour"
+        "source": "neighbour",
+        "rule": null
       },
       {
         "policy": {
@@ -4527,7 +4573,8 @@
             }
           ]
         },
-        "source": "neighbour"
+        "source": "neighbour",
+        "rule": null
       },
       {
         "policy": {
@@ -4607,7 +4654,8 @@
             }
           ]
         },
-        "source": "neighbour"
+        "source": "neighbour",
+        "rule": null
       },
       {
         "policy": {
@@ -4687,7 +4735,8 @@
             }
           ]
         },
-        "source": "neighbour"
+        "source": "neighbour",
+        "rule": null
       },
       {
         "policy": {
@@ -4767,7 +4816,8 @@
             }
           ]
         },
-        "source": "rule"
+        "source": "rule",
+        "rule": "mirrorAhead"
       },
       {
         "policy": {
@@ -4853,7 +4903,8 @@
             }
           ]
         },
-        "source": "rule"
+        "source": "rule",
+        "rule": "cover"
       },
       {
         "policy": {
@@ -4939,66 +4990,67 @@
             }
           ]
         },
-        "source": "rule"
+        "source": "rule",
+        "rule": "extend"
       }
     ]
   },
   "ePos": {
     "2": [
-      6.31656,
-      6.35782,
-      6.34426,
-      6.62068,
-      6.6453,
-      6.94388,
-      6.93572,
-      6.90066,
-      6.89838,
-      8.5563,
-      6.35782,
-      6.366,
-      6.37526,
-      6.4012,
-      6.41266,
-      6.45984,
-      6.4788,
-      6.35474,
-      6.3777,
-      6.38482,
-      6.42312,
-      6.43484,
-      6.494,
-      7.23656,
-      6.4365,
-      6.44794
+      6.31288,
+      6.35168,
+      6.34418,
+      6.61966,
+      6.6455,
+      6.93886,
+      6.92992,
+      6.89552,
+      6.89206,
+      8.5943,
+      6.35168,
+      6.36226,
+      6.37162,
+      6.394,
+      6.41424,
+      6.45128,
+      6.47874,
+      6.35368,
+      6.37412,
+      6.38118,
+      6.42126,
+      6.42998,
+      6.49052,
+      7.23624,
+      6.4299,
+      6.4425
     ],
     "5": [
-      6.7372,
-      6.76412,
-      6.76736,
-      7.03744,
-      7.04934,
-      7.40818,
-      7.41768,
-      7.40608,
+      6.7339,
+      6.76164,
+      6.76374,
+      7.03398,
+      7.04432,
       7.40242,
-      8.92668,
-      6.76412,
-      6.79048,
-      6.76512,
-      6.83742,
-      6.79186,
-      6.91792,
-      6.88234,
-      6.78106,
-      6.79192,
-      6.81872,
-      6.8122,
-      6.88444,
-      6.8692,
-      7.73958,
-      6.84928,
-      6.85954
+      7.41168,
+      7.39976,
+      7.39906,
+      8.92126,
+      6.76164,
+      6.78606,
+      6.75766,
+      6.8319,
+      6.78422,
+      6.91324,
+      6.83696,
+      6.7773,
+      6.78554,
+      6.81606,
+      6.80542,
+      6.88384,
+      6.86548,
+      7.73664,
+      6.845,
+      6.85804
     ]
   },
   "winner": {

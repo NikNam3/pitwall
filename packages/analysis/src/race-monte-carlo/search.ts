@@ -125,13 +125,16 @@ function quantile(pmf: number[], q: number): number {
 
 /**
  * The ranked rows of car `car`'s candidates (spec §7.4), each over its own scenarios (a common prefix). With `ref`
- * (the leader over these scenarios, ranked above them) each row's difference, SE and tie are against it instead.
+ * (the leader over these scenarios, ranked above them) the rows keep the order of `cands`, and each row's difference,
+ * SE and tie are against `ref`.
  */
 function rowsOf(run: Run, input: McInput, car: number, cands: readonly Cand[], ref?: Cand): McRow[] {
   const { zTie, tieBand } = input.config;
   const scored = cands.map(scoredOf);
   const ranking = rank(scored, zTie, tieBand);
   if (ref !== undefined) {
+    // the rest keep the re-scoring's choice order (survivors first, then the dropped by paired difference, Task 28)
+    ranking.order = cands.map((_, i) => i);
     const lead = scoredOf(ref);
     scored.forEach((s, i) => {
       const d = paired(lead.pos, s.pos);
@@ -272,6 +275,22 @@ function batches(run: Run, input: McInput, car: number, group: Cand[], budget: n
 /** Whether every candidate of `group` has its first `n0` scenarios: none is judged before (Task 23b). */
 const judgeable = (group: readonly Cand[], n0: number): boolean => group.every((x) => x.n >= n0);
 
+/**
+ * The order the re-scoring chooses from (Task 28, Q7 A): the survivors `alive` in rank order, then the dropped
+ * candidates of `all` by their paired difference against the survivors' leader over the scenarios both ran (the first
+ * of equals), never by their own means over unequal counts.
+ */
+function choiceOrder(alive: readonly Cand[], all: readonly Cand[], zTie: number, tieBand: number): Cand[] {
+  const survivors = rank(alive.map(scoredOf), zTie, tieBand).order.map((i) => alive[i] as Cand);
+  const lead = survivors[0];
+  const dropped = all.filter((x) => !alive.includes(x));
+  if (lead === undefined) return dropped;
+  const leadPos = scoredOf(lead).pos;
+  const diff = new Map(dropped.map((x) => [x, paired(leadPos, scoredOf(x).pos).mean]));
+  const byDiff = dropped.map((x, i) => ({ x, i })).sort((a, b) => (diff.get(a.x) ?? 0) - (diff.get(b.x) ?? 0) || a.i - b.i);
+  return [...survivors, ...byDiff.map((e) => e.x)];
+}
+
 /** The re-scored top (fresh scenarios), the rest (the search's), the re-scored leader's search outcomes. */
 type Searched = { top: Cand[]; rest: Cand[]; ref?: Cand | undefined; capHit: boolean; unresolvedTie: boolean };
 
@@ -318,7 +337,7 @@ function search(run: Run, input: McInput, car: number, budget: number): Searched
   const searchBudget = Math.max(0, budget - Math.floor(budget * RESCORE_SHARE) - spent());
   const s = batches(run, input, car, alive, searchBudget, clear, () => merge(alive, all, committed));
   // the re-scoring: the top few together on fresh scenarios, none dropped
-  const ranked = rank(all.map(scoredOf), zTie, tieBand).order.map((i) => all[i] as Cand);
+  const ranked = choiceOrder(alive, all, zTie, tieBand);
   const chosen = ranked.slice(0, rescoreTop);
   const top = chosen.map((x) => newCand(x.c, Math.max(budget - spent(), 1), FRESH_FROM));
   const settled = (): boolean => {

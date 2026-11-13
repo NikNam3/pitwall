@@ -24,8 +24,11 @@ export const STRATEGY_CONFIG = defineConfig('strategy', {
   // race-monte-carlo (spec §7.3, §11.1)
   /** Scenarios of the first batch, for every candidate (common random numbers). Source: spec §7.3 (30–50). */
   n0: 40,
-  /** A policy is dropped when worse than the leader by this many SEs of the paired difference. Source: spec §7.3. */
-  zDrop: 2.8,
+  /**
+   * A policy is dropped when worse than the leader by this many SEs of the paired difference. Source: spec §7.3; SP4.3b
+   * Task 28 (Q7 A, the 2026-11-13 diagnosis table): 3.2 with the cap at 8,000.
+   */
+  zDrop: 3.2,
   /** A policy ties with the leader below this many SEs of the paired difference… Source: spec §7.3 (research 14 proposal 1). */
   zTie: 2,
   /** …or below this many places of E[position]. Source: spec §7.3 (research 14 proposal 1). */
@@ -36,9 +39,10 @@ export const STRATEGY_CONFIG = defineConfig('strategy', {
    * The cap on scenario-policies of one run, both our cars, re-scoring included (a count, never a clock, C2). Source:
    * SP4.3b Task 19's measurement: 0.64 ms per scenario-policy (long-race builder, lap 1, single thread, best of 6 warm
    * passes); Task 20's job budget measured 4.28 s at 6,000 (5.04 s under load), so 5,500 (~3.9 s) keeps a margin inside
-   * the 5 s cap (S26); above research 14's ~4,600 that good selection needs.
+   * the 5 s cap (S26); above research 14's ~4,600 that good selection needs. SP4.3b Task 28 (Q7 A, the 2026-11-13
+   * diagnosis table): 8,000 with zDrop 3.2, inside the 7 s per car's part the user accepted (Q7: up to 10 s per part).
    */
-  maxScenarioPolicies: 5500,
+  maxScenarioPolicies: 8000,
   /**
    * Round 1's share of `maxScenarioPolicies`, split over the cars planned; the final rankings share the rest (0: no round
    * 1). Source: SP4.3b Task 20d: round 1 only finds the other car's best; most of the cap to the final ranking.
