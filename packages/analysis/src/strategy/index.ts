@@ -11,7 +11,7 @@ export * from './config.ts';
 export { STRATEGY_BEHAVIOUR, type StrategyEffect } from './behaviour.ts';
 export { candidatesOf, policyOf } from './candidates.ts';
 export { prepareStrategy, type StrategyInput } from './prepare.ts';
-export { candidatesForRun, followable, mergeStrategy, partFinalCall, run as runStrategy, splitStrategy, type CarPlan, type FinalCall } from './job.ts';
+export { candidatesForRun, mergeStrategy, partFinalCall, run as runStrategy, splitStrategy, type CarPlan, type FinalCall } from './job.ts';
 
 /** The analysis id (its job's id). */
 export const STRATEGY = 'strategy';
