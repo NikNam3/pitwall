@@ -33,11 +33,11 @@ const seatLink = (team: number, raceNumber: number): DriverLink => ({ team, race
 const PROFILES: DriversProfilesValue = {
   persons: [
     {
-      person: 'asym', displayName: 'Asymetrisch', links: [seatLink(0, 44)], excluded: [], sessions: [], kept: { sessions: 0, laps: 0 },
+      person: 'asym', displayName: 'Asymetrisch', links: [seatLink(0, 44)], excluded: [], sessions: [], kept: { sessions: 0, laps: 0 }, overrides: {},
       entries: { [SCATTER]: { value: known(412, 0), laps: 12, sessions: 2, newestSession: '2026-11-04' } },
     },
     {
-      person: 'dr', displayName: 'DR', links: [], excluded: [], sessions: [], kept: { sessions: 0, laps: 0 },
+      person: 'dr', displayName: 'DR', links: [], excluded: [], sessions: [], kept: { sessions: 0, laps: 0 }, overrides: {},
       entries: { [SCATTER]: { value: known(287, 0), laps: 30, sessions: 3, newestSession: '2026-11-06' } },
     },
   ],
