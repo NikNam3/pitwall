@@ -17,6 +17,11 @@ export type ScRow = {
   source: EstimateSource;
 };
 
+/** The rows' shared strip scale. Test-phase stub (SP4.3b2 Task 15): the implement phase writes it. */
+export function scaleOf(_rows: readonly ScRow[]): number {
+  throw new Error('not implemented');
+}
+
 /** One row per topic row, in its order (SC, VSC); `active` the condition that is out, if any. */
 export function buildRows(call: ScCall, active: Condition | undefined): ScRow[] {
   return call.rows.map((r) => ({
