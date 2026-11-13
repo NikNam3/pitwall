@@ -35,5 +35,5 @@ describe('forecast-score budget', () => {
     }
     console.info(`[forecast-score budget] ${best.toFixed(1)} ms for one run at lap 70, target ${TARGET_MS} ms`);
     expect(best).toBeLessThan(TARGET_MS);
-  });
+  }, 30_000); // the test's own time (long-race build, warm run, passes), not the measured target (as strategy.budget's)
 });
