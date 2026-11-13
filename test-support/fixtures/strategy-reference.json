@@ -1,5 +1,5 @@
 {
-  "sourceHash": "3cca32af4b5162948936c87d3e4f20c0568fd6222d06e14409e0edf71d8ddc05",
+  "sourceHash": "9f5891a9fb94dbb4009709bba2efd67ea699c2fb2637a12dededae799b8cb986",
   "generatorParams": {
     "base": "GENERATOR_DEFAULTS",
     "seed": 1,
@@ -534,11 +534,11 @@
           "stops": [
             {
               "lap": 18,
-              "compound": "medium"
+              "compound": "soft"
             },
             {
-              "lap": 35,
-              "compound": "soft"
+              "lap": 33,
+              "compound": "medium"
             }
           ],
           "triggers": [
@@ -620,25 +620,94 @@
               "action": {
                 "box": "soft"
               }
+            }
+          ]
+        },
+        "source": "dp"
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 18,
+              "compound": "medium"
             },
             {
-              "kind": "degradationOff",
-              "wearRateDeltaPct": 1,
+              "lap": 35,
+              "compound": "soft"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 15,
+              "toLap": 21,
               "action": {
-                "switchTo": [
-                  {
-                    "lap": 14,
-                    "compound": "hard"
-                  },
-                  {
-                    "lap": 24,
-                    "compound": "soft"
-                  },
-                  {
-                    "lap": 36,
-                    "compound": "medium"
-                  }
-                ]
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 22,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 28,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 30,
+              "toLap": 30,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 32,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 30,
+              "toLap": 30,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 32,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
               }
             }
           ]
@@ -729,33 +798,6 @@
               "action": {
                 "box": "medium"
               }
-            },
-            {
-              "kind": "damage",
-              "lossMsPerLap": 1503.3529411764705,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "degradationOff",
-              "wearRateDeltaPct": 1,
-              "action": {
-                "switchTo": [
-                  {
-                    "lap": 14,
-                    "compound": "hard"
-                  },
-                  {
-                    "lap": 24,
-                    "compound": "soft"
-                  },
-                  {
-                    "lap": 36,
-                    "compound": "medium"
-                  }
-                ]
-              }
             }
           ]
         },
@@ -844,33 +886,6 @@
               "toLap": 48,
               "action": {
                 "box": "medium"
-              }
-            },
-            {
-              "kind": "damage",
-              "lossMsPerLap": 1503.3529411764705,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "degradationOff",
-              "wearRateDeltaPct": 1,
-              "action": {
-                "switchTo": [
-                  {
-                    "lap": 14,
-                    "compound": "hard"
-                  },
-                  {
-                    "lap": 24,
-                    "compound": "soft"
-                  },
-                  {
-                    "lap": 36,
-                    "compound": "medium"
-                  }
-                ]
               }
             }
           ]
@@ -964,33 +979,6 @@
               "toLap": 48,
               "action": {
                 "box": "medium"
-              }
-            },
-            {
-              "kind": "damage",
-              "lossMsPerLap": 1503.3529411764705,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "degradationOff",
-              "wearRateDeltaPct": 1,
-              "action": {
-                "switchTo": [
-                  {
-                    "lap": 14,
-                    "compound": "hard"
-                  },
-                  {
-                    "lap": 24,
-                    "compound": "soft"
-                  },
-                  {
-                    "lap": 36,
-                    "compound": "medium"
-                  }
-                ]
               }
             }
           ]
@@ -1084,33 +1072,6 @@
               "toLap": 48,
               "action": {
                 "box": "medium"
-              }
-            },
-            {
-              "kind": "damage",
-              "lossMsPerLap": 1503.3529411764705,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "degradationOff",
-              "wearRateDeltaPct": 1,
-              "action": {
-                "switchTo": [
-                  {
-                    "lap": 14,
-                    "compound": "hard"
-                  },
-                  {
-                    "lap": 24,
-                    "compound": "soft"
-                  },
-                  {
-                    "lap": 36,
-                    "compound": "medium"
-                  }
-                ]
               }
             }
           ]
@@ -1205,33 +1166,6 @@
               "action": {
                 "box": "medium"
               }
-            },
-            {
-              "kind": "damage",
-              "lossMsPerLap": 1503.3529411764705,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "degradationOff",
-              "wearRateDeltaPct": 1,
-              "action": {
-                "switchTo": [
-                  {
-                    "lap": 14,
-                    "compound": "hard"
-                  },
-                  {
-                    "lap": 24,
-                    "compound": "soft"
-                  },
-                  {
-                    "lap": 36,
-                    "compound": "medium"
-                  }
-                ]
-              }
             }
           ]
         },
@@ -1324,729 +1258,6 @@
               "toLap": 48,
               "action": {
                 "box": "medium"
-              }
-            },
-            {
-              "kind": "damage",
-              "lossMsPerLap": 1503.3529411764705,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "degradationOff",
-              "wearRateDeltaPct": 1,
-              "action": {
-                "switchTo": [
-                  {
-                    "lap": 14,
-                    "compound": "hard"
-                  },
-                  {
-                    "lap": 24,
-                    "compound": "soft"
-                  },
-                  {
-                    "lap": 36,
-                    "compound": "medium"
-                  }
-                ]
-              }
-            }
-          ]
-        },
-        "source": "dp"
-      },
-      {
-        "policy": {
-          "stops": [
-            {
-              "lap": 14,
-              "compound": "soft"
-            },
-            {
-              "lap": 25,
-              "compound": "medium"
-            },
-            {
-              "lap": 40,
-              "compound": "hard"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 15,
-              "toLap": 21,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 22,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 28,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 30,
-              "toLap": 30,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 32,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 30,
-              "toLap": 30,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 32,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "damage",
-              "lossMsPerLap": 1503.3529411764705,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "degradationOff",
-              "wearRateDeltaPct": 1,
-              "action": {
-                "switchTo": [
-                  {
-                    "lap": 14,
-                    "compound": "hard"
-                  },
-                  {
-                    "lap": 24,
-                    "compound": "soft"
-                  },
-                  {
-                    "lap": 36,
-                    "compound": "medium"
-                  }
-                ]
-              }
-            }
-          ]
-        },
-        "source": "dp"
-      },
-      {
-        "policy": {
-          "stops": [
-            {
-              "lap": 14,
-              "compound": "soft"
-            },
-            {
-              "lap": 25,
-              "compound": "hard"
-            },
-            {
-              "lap": 35,
-              "compound": "medium"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 15,
-              "toLap": 21,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 22,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 28,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 30,
-              "toLap": 30,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 32,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 30,
-              "toLap": 30,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 32,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "damage",
-              "lossMsPerLap": 1503.3529411764705,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "degradationOff",
-              "wearRateDeltaPct": 1,
-              "action": {
-                "switchTo": [
-                  {
-                    "lap": 14,
-                    "compound": "hard"
-                  },
-                  {
-                    "lap": 24,
-                    "compound": "soft"
-                  },
-                  {
-                    "lap": 36,
-                    "compound": "medium"
-                  }
-                ]
-              }
-            }
-          ]
-        },
-        "source": "dp"
-      },
-      {
-        "policy": {
-          "stops": [
-            {
-              "lap": 19,
-              "compound": "soft"
-            },
-            {
-              "lap": 36,
-              "compound": "hard"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 15,
-              "toLap": 21,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 22,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 28,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 30,
-              "toLap": 30,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 32,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 30,
-              "toLap": 30,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 32,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "damage",
-              "lossMsPerLap": 1503.3529411764705,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "degradationOff",
-              "wearRateDeltaPct": 1,
-              "action": {
-                "switchTo": [
-                  {
-                    "lap": 14,
-                    "compound": "hard"
-                  },
-                  {
-                    "lap": 24,
-                    "compound": "soft"
-                  },
-                  {
-                    "lap": 36,
-                    "compound": "medium"
-                  }
-                ]
-              }
-            }
-          ]
-        },
-        "source": "dp"
-      },
-      {
-        "policy": {
-          "stops": [
-            {
-              "lap": 19,
-              "compound": "hard"
-            },
-            {
-              "lap": 33,
-              "compound": "soft"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 15,
-              "toLap": 21,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 22,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 28,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 30,
-              "toLap": 30,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 32,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 30,
-              "toLap": 30,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 32,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "damage",
-              "lossMsPerLap": 1503.3529411764705,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "degradationOff",
-              "wearRateDeltaPct": 1,
-              "action": {
-                "switchTo": [
-                  {
-                    "lap": 14,
-                    "compound": "hard"
-                  },
-                  {
-                    "lap": 24,
-                    "compound": "soft"
-                  },
-                  {
-                    "lap": 36,
-                    "compound": "medium"
-                  }
-                ]
-              }
-            }
-          ]
-        },
-        "source": "dp"
-      },
-      {
-        "policy": {
-          "stops": [
-            {
-              "lap": 25,
-              "compound": "soft"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 15,
-              "toLap": 21,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 22,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 28,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 30,
-              "toLap": 30,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 32,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 30,
-              "toLap": 30,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 32,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "damage",
-              "lossMsPerLap": 1503.3529411764705,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "degradationOff",
-              "wearRateDeltaPct": 1,
-              "action": {
-                "switchTo": [
-                  {
-                    "lap": 14,
-                    "compound": "hard"
-                  },
-                  {
-                    "lap": 24,
-                    "compound": "soft"
-                  },
-                  {
-                    "lap": 36,
-                    "compound": "medium"
-                  }
-                ]
-              }
-            }
-          ]
-        },
-        "source": "dp"
-      },
-      {
-        "policy": {
-          "stops": [
-            {
-              "lap": 25,
-              "compound": "hard"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 15,
-              "toLap": 21,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 22,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 28,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 30,
-              "toLap": 30,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 32,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 30,
-              "toLap": 30,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 32,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "damage",
-              "lossMsPerLap": 1503.3529411764705,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "degradationOff",
-              "wearRateDeltaPct": 1,
-              "action": {
-                "switchTo": [
-                  {
-                    "lap": 14,
-                    "compound": "hard"
-                  },
-                  {
-                    "lap": 24,
-                    "compound": "soft"
-                  },
-                  {
-                    "lap": 36,
-                    "compound": "medium"
-                  }
-                ]
               }
             }
           ]
@@ -2141,32 +1352,94 @@
               "action": {
                 "box": "medium"
               }
+            }
+          ]
+        },
+        "source": "dp"
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 18,
+              "compound": "soft"
             },
             {
-              "kind": "damage",
-              "lossMsPerLap": 1503.3529411764705,
+              "lap": 33,
+              "compound": "medium"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 15,
+              "toLap": 21,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 22,
+              "toLap": 49,
               "action": {
                 "box": "soft"
               }
             },
             {
-              "kind": "degradationOff",
-              "wearRateDeltaPct": 1,
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 28,
               "action": {
-                "switchTo": [
-                  {
-                    "lap": 14,
-                    "compound": "hard"
-                  },
-                  {
-                    "lap": 24,
-                    "compound": "soft"
-                  },
-                  {
-                    "lap": 36,
-                    "compound": "medium"
-                  }
-                ]
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 30,
+              "toLap": 30,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 32,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 30,
+              "toLap": 30,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 32,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
               }
             }
           ]
@@ -2257,33 +1530,6 @@
               "action": {
                 "box": "medium"
               }
-            },
-            {
-              "kind": "damage",
-              "lossMsPerLap": 1503.3529411764705,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "degradationOff",
-              "wearRateDeltaPct": 1,
-              "action": {
-                "switchTo": [
-                  {
-                    "lap": 14,
-                    "compound": "hard"
-                  },
-                  {
-                    "lap": 24,
-                    "compound": "soft"
-                  },
-                  {
-                    "lap": 36,
-                    "compound": "medium"
-                  }
-                ]
-              }
             }
           ]
         },
@@ -2372,33 +1618,6 @@
               "toLap": 48,
               "action": {
                 "box": "medium"
-              }
-            },
-            {
-              "kind": "damage",
-              "lossMsPerLap": 1503.3529411764705,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "degradationOff",
-              "wearRateDeltaPct": 1,
-              "action": {
-                "switchTo": [
-                  {
-                    "lap": 14,
-                    "compound": "hard"
-                  },
-                  {
-                    "lap": 24,
-                    "compound": "soft"
-                  },
-                  {
-                    "lap": 36,
-                    "compound": "medium"
-                  }
-                ]
               }
             }
           ]
@@ -2489,33 +1708,6 @@
               "action": {
                 "box": "medium"
               }
-            },
-            {
-              "kind": "damage",
-              "lossMsPerLap": 1503.3529411764705,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "degradationOff",
-              "wearRateDeltaPct": 1,
-              "action": {
-                "switchTo": [
-                  {
-                    "lap": 14,
-                    "compound": "hard"
-                  },
-                  {
-                    "lap": 24,
-                    "compound": "soft"
-                  },
-                  {
-                    "lap": 36,
-                    "compound": "medium"
-                  }
-                ]
-              }
             }
           ]
         },
@@ -2604,33 +1796,6 @@
               "toLap": 48,
               "action": {
                 "box": "medium"
-              }
-            },
-            {
-              "kind": "damage",
-              "lossMsPerLap": 1503.3529411764705,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "degradationOff",
-              "wearRateDeltaPct": 1,
-              "action": {
-                "switchTo": [
-                  {
-                    "lap": 14,
-                    "compound": "hard"
-                  },
-                  {
-                    "lap": 24,
-                    "compound": "soft"
-                  },
-                  {
-                    "lap": 36,
-                    "compound": "medium"
-                  }
-                ]
               }
             }
           ]
@@ -2721,33 +1886,6 @@
               "action": {
                 "box": "medium"
               }
-            },
-            {
-              "kind": "damage",
-              "lossMsPerLap": 1503.3529411764705,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "degradationOff",
-              "wearRateDeltaPct": 1,
-              "action": {
-                "switchTo": [
-                  {
-                    "lap": 14,
-                    "compound": "hard"
-                  },
-                  {
-                    "lap": 24,
-                    "compound": "soft"
-                  },
-                  {
-                    "lap": 36,
-                    "compound": "medium"
-                  }
-                ]
-              }
             }
           ]
         },
@@ -2836,33 +1974,6 @@
               "toLap": 48,
               "action": {
                 "box": "medium"
-              }
-            },
-            {
-              "kind": "damage",
-              "lossMsPerLap": 1503.3529411764705,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "degradationOff",
-              "wearRateDeltaPct": 1,
-              "action": {
-                "switchTo": [
-                  {
-                    "lap": 14,
-                    "compound": "hard"
-                  },
-                  {
-                    "lap": 24,
-                    "compound": "soft"
-                  },
-                  {
-                    "lap": 36,
-                    "compound": "medium"
-                  }
-                ]
               }
             }
           ]
@@ -2953,33 +2064,6 @@
               "action": {
                 "box": "medium"
               }
-            },
-            {
-              "kind": "damage",
-              "lossMsPerLap": 1503.3529411764705,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "degradationOff",
-              "wearRateDeltaPct": 1,
-              "action": {
-                "switchTo": [
-                  {
-                    "lap": 14,
-                    "compound": "hard"
-                  },
-                  {
-                    "lap": 24,
-                    "compound": "soft"
-                  },
-                  {
-                    "lap": 36,
-                    "compound": "medium"
-                  }
-                ]
-              }
             }
           ]
         },
@@ -3068,33 +2152,6 @@
               "toLap": 48,
               "action": {
                 "box": "medium"
-              }
-            },
-            {
-              "kind": "damage",
-              "lossMsPerLap": 1503.3529411764705,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "degradationOff",
-              "wearRateDeltaPct": 1,
-              "action": {
-                "switchTo": [
-                  {
-                    "lap": 14,
-                    "compound": "hard"
-                  },
-                  {
-                    "lap": 24,
-                    "compound": "soft"
-                  },
-                  {
-                    "lap": 36,
-                    "compound": "medium"
-                  }
-                ]
               }
             }
           ]
@@ -3185,33 +2242,6 @@
               "action": {
                 "box": "medium"
               }
-            },
-            {
-              "kind": "damage",
-              "lossMsPerLap": 1503.3529411764705,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "degradationOff",
-              "wearRateDeltaPct": 1,
-              "action": {
-                "switchTo": [
-                  {
-                    "lap": 14,
-                    "compound": "hard"
-                  },
-                  {
-                    "lap": 24,
-                    "compound": "soft"
-                  },
-                  {
-                    "lap": 36,
-                    "compound": "medium"
-                  }
-                ]
-              }
             }
           ]
         },
@@ -3300,33 +2330,6 @@
               "toLap": 48,
               "action": {
                 "box": "medium"
-              }
-            },
-            {
-              "kind": "damage",
-              "lossMsPerLap": 1503.3529411764705,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "degradationOff",
-              "wearRateDeltaPct": 1,
-              "action": {
-                "switchTo": [
-                  {
-                    "lap": 14,
-                    "compound": "hard"
-                  },
-                  {
-                    "lap": 24,
-                    "compound": "soft"
-                  },
-                  {
-                    "lap": 36,
-                    "compound": "medium"
-                  }
-                ]
               }
             }
           ]
@@ -3417,33 +2420,6 @@
               "action": {
                 "box": "medium"
               }
-            },
-            {
-              "kind": "damage",
-              "lossMsPerLap": 1503.3529411764705,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "degradationOff",
-              "wearRateDeltaPct": 1,
-              "action": {
-                "switchTo": [
-                  {
-                    "lap": 14,
-                    "compound": "hard"
-                  },
-                  {
-                    "lap": 24,
-                    "compound": "soft"
-                  },
-                  {
-                    "lap": 36,
-                    "compound": "medium"
-                  }
-                ]
-              }
             }
           ]
         },
@@ -3532,33 +2508,6 @@
               "toLap": 48,
               "action": {
                 "box": "medium"
-              }
-            },
-            {
-              "kind": "damage",
-              "lossMsPerLap": 1503.3529411764705,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "degradationOff",
-              "wearRateDeltaPct": 1,
-              "action": {
-                "switchTo": [
-                  {
-                    "lap": 14,
-                    "compound": "hard"
-                  },
-                  {
-                    "lap": 24,
-                    "compound": "soft"
-                  },
-                  {
-                    "lap": 36,
-                    "compound": "medium"
-                  }
-                ]
               }
             }
           ]
@@ -3649,33 +2598,6 @@
               "action": {
                 "box": "medium"
               }
-            },
-            {
-              "kind": "damage",
-              "lossMsPerLap": 1503.3529411764705,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "degradationOff",
-              "wearRateDeltaPct": 1,
-              "action": {
-                "switchTo": [
-                  {
-                    "lap": 14,
-                    "compound": "hard"
-                  },
-                  {
-                    "lap": 24,
-                    "compound": "soft"
-                  },
-                  {
-                    "lap": 36,
-                    "compound": "medium"
-                  }
-                ]
-              }
             }
           ]
         },
@@ -3764,33 +2686,6 @@
               "toLap": 48,
               "action": {
                 "box": "medium"
-              }
-            },
-            {
-              "kind": "damage",
-              "lossMsPerLap": 1503.3529411764705,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "degradationOff",
-              "wearRateDeltaPct": 1,
-              "action": {
-                "switchTo": [
-                  {
-                    "lap": 14,
-                    "compound": "hard"
-                  },
-                  {
-                    "lap": 24,
-                    "compound": "soft"
-                  },
-                  {
-                    "lap": 36,
-                    "compound": "medium"
-                  }
-                ]
               }
             },
             {
@@ -3886,33 +2781,6 @@
               "toLap": 48,
               "action": {
                 "box": "medium"
-              }
-            },
-            {
-              "kind": "damage",
-              "lossMsPerLap": 1503.3529411764705,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "degradationOff",
-              "wearRateDeltaPct": 1,
-              "action": {
-                "switchTo": [
-                  {
-                    "lap": 14,
-                    "compound": "hard"
-                  },
-                  {
-                    "lap": 24,
-                    "compound": "soft"
-                  },
-                  {
-                    "lap": 36,
-                    "compound": "medium"
-                  }
-                ]
               }
             },
             {
@@ -4039,11 +2907,11 @@
           "stops": [
             {
               "lap": 17,
-              "compound": "medium"
+              "compound": "soft"
             },
             {
-              "lap": 35,
-              "compound": "soft"
+              "lap": 32,
+              "compound": "medium"
             }
           ],
           "triggers": [
@@ -4116,25 +2984,85 @@
               "action": {
                 "box": "hard"
               }
+            }
+          ]
+        },
+        "source": "dp"
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 17,
+              "compound": "medium"
             },
             {
-              "kind": "degradationOff",
-              "wearRateDeltaPct": 1,
+              "lap": 35,
+              "compound": "soft"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 15,
+              "toLap": 21,
               "action": {
-                "switchTo": [
-                  {
-                    "lap": 14,
-                    "compound": "soft"
-                  },
-                  {
-                    "lap": 26,
-                    "compound": "medium"
-                  },
-                  {
-                    "lap": 40,
-                    "compound": "hard"
-                  }
-                ]
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 22,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 28,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 31,
+              "toLap": 49,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 29,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 31,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
               }
             }
           ]
@@ -4216,33 +3144,6 @@
               "action": {
                 "box": "medium"
               }
-            },
-            {
-              "kind": "damage",
-              "lossMsPerLap": 1596.9375,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "degradationOff",
-              "wearRateDeltaPct": 1,
-              "action": {
-                "switchTo": [
-                  {
-                    "lap": 14,
-                    "compound": "soft"
-                  },
-                  {
-                    "lap": 26,
-                    "compound": "medium"
-                  },
-                  {
-                    "lap": 40,
-                    "compound": "hard"
-                  }
-                ]
-              }
             }
           ]
         },
@@ -4322,33 +3223,6 @@
               "toLap": 48,
               "action": {
                 "box": "medium"
-              }
-            },
-            {
-              "kind": "damage",
-              "lossMsPerLap": 1596.9375,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "degradationOff",
-              "wearRateDeltaPct": 1,
-              "action": {
-                "switchTo": [
-                  {
-                    "lap": 14,
-                    "compound": "soft"
-                  },
-                  {
-                    "lap": 26,
-                    "compound": "medium"
-                  },
-                  {
-                    "lap": 40,
-                    "compound": "hard"
-                  }
-                ]
               }
             }
           ]
@@ -4434,33 +3308,6 @@
               "action": {
                 "box": "medium"
               }
-            },
-            {
-              "kind": "damage",
-              "lossMsPerLap": 1596.9375,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "degradationOff",
-              "wearRateDeltaPct": 1,
-              "action": {
-                "switchTo": [
-                  {
-                    "lap": 14,
-                    "compound": "soft"
-                  },
-                  {
-                    "lap": 26,
-                    "compound": "medium"
-                  },
-                  {
-                    "lap": 40,
-                    "compound": "hard"
-                  }
-                ]
-              }
             }
           ]
         },
@@ -4544,33 +3391,6 @@
               "toLap": 48,
               "action": {
                 "box": "medium"
-              }
-            },
-            {
-              "kind": "damage",
-              "lossMsPerLap": 1596.9375,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "degradationOff",
-              "wearRateDeltaPct": 1,
-              "action": {
-                "switchTo": [
-                  {
-                    "lap": 14,
-                    "compound": "soft"
-                  },
-                  {
-                    "lap": 26,
-                    "compound": "medium"
-                  },
-                  {
-                    "lap": 40,
-                    "compound": "hard"
-                  }
-                ]
               }
             }
           ]
@@ -4656,33 +3476,6 @@
               "action": {
                 "box": "medium"
               }
-            },
-            {
-              "kind": "damage",
-              "lossMsPerLap": 1596.9375,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "degradationOff",
-              "wearRateDeltaPct": 1,
-              "action": {
-                "switchTo": [
-                  {
-                    "lap": 14,
-                    "compound": "soft"
-                  },
-                  {
-                    "lap": 26,
-                    "compound": "medium"
-                  },
-                  {
-                    "lap": 40,
-                    "compound": "hard"
-                  }
-                ]
-              }
             }
           ]
         },
@@ -4766,675 +3559,6 @@
               "toLap": 48,
               "action": {
                 "box": "medium"
-              }
-            },
-            {
-              "kind": "damage",
-              "lossMsPerLap": 1596.9375,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "degradationOff",
-              "wearRateDeltaPct": 1,
-              "action": {
-                "switchTo": [
-                  {
-                    "lap": 14,
-                    "compound": "soft"
-                  },
-                  {
-                    "lap": 26,
-                    "compound": "medium"
-                  },
-                  {
-                    "lap": 40,
-                    "compound": "hard"
-                  }
-                ]
-              }
-            }
-          ]
-        },
-        "source": "dp"
-      },
-      {
-        "policy": {
-          "stops": [
-            {
-              "lap": 14,
-              "compound": "hard"
-            },
-            {
-              "lap": 24,
-              "compound": "soft"
-            },
-            {
-              "lap": 36,
-              "compound": "medium"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 15,
-              "toLap": 21,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 22,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 28,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 31,
-              "toLap": 49,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 29,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 31,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "damage",
-              "lossMsPerLap": 1596.9375,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "degradationOff",
-              "wearRateDeltaPct": 1,
-              "action": {
-                "switchTo": [
-                  {
-                    "lap": 14,
-                    "compound": "soft"
-                  },
-                  {
-                    "lap": 26,
-                    "compound": "medium"
-                  },
-                  {
-                    "lap": 40,
-                    "compound": "hard"
-                  }
-                ]
-              }
-            }
-          ]
-        },
-        "source": "dp"
-      },
-      {
-        "policy": {
-          "stops": [
-            {
-              "lap": 14,
-              "compound": "hard"
-            },
-            {
-              "lap": 24,
-              "compound": "medium"
-            },
-            {
-              "lap": 38,
-              "compound": "soft"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 15,
-              "toLap": 21,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 22,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 28,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 31,
-              "toLap": 49,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 29,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 31,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "damage",
-              "lossMsPerLap": 1596.9375,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "degradationOff",
-              "wearRateDeltaPct": 1,
-              "action": {
-                "switchTo": [
-                  {
-                    "lap": 14,
-                    "compound": "soft"
-                  },
-                  {
-                    "lap": 26,
-                    "compound": "medium"
-                  },
-                  {
-                    "lap": 40,
-                    "compound": "hard"
-                  }
-                ]
-              }
-            }
-          ]
-        },
-        "source": "dp"
-      },
-      {
-        "policy": {
-          "stops": [
-            {
-              "lap": 19,
-              "compound": "soft"
-            },
-            {
-              "lap": 36,
-              "compound": "hard"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 15,
-              "toLap": 21,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 22,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 28,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 31,
-              "toLap": 49,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 29,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 31,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "damage",
-              "lossMsPerLap": 1596.9375,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "degradationOff",
-              "wearRateDeltaPct": 1,
-              "action": {
-                "switchTo": [
-                  {
-                    "lap": 14,
-                    "compound": "soft"
-                  },
-                  {
-                    "lap": 26,
-                    "compound": "medium"
-                  },
-                  {
-                    "lap": 40,
-                    "compound": "hard"
-                  }
-                ]
-              }
-            }
-          ]
-        },
-        "source": "dp"
-      },
-      {
-        "policy": {
-          "stops": [
-            {
-              "lap": 19,
-              "compound": "hard"
-            },
-            {
-              "lap": 33,
-              "compound": "soft"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 15,
-              "toLap": 21,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 22,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 28,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 31,
-              "toLap": 49,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 29,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 31,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "damage",
-              "lossMsPerLap": 1596.9375,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "degradationOff",
-              "wearRateDeltaPct": 1,
-              "action": {
-                "switchTo": [
-                  {
-                    "lap": 14,
-                    "compound": "soft"
-                  },
-                  {
-                    "lap": 26,
-                    "compound": "medium"
-                  },
-                  {
-                    "lap": 40,
-                    "compound": "hard"
-                  }
-                ]
-              }
-            }
-          ]
-        },
-        "source": "dp"
-      },
-      {
-        "policy": {
-          "stops": [
-            {
-              "lap": 26,
-              "compound": "soft"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 15,
-              "toLap": 21,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 22,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 28,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 31,
-              "toLap": 49,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 29,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 31,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "damage",
-              "lossMsPerLap": 1596.9375,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "degradationOff",
-              "wearRateDeltaPct": 1,
-              "action": {
-                "switchTo": [
-                  {
-                    "lap": 14,
-                    "compound": "soft"
-                  },
-                  {
-                    "lap": 26,
-                    "compound": "medium"
-                  },
-                  {
-                    "lap": 40,
-                    "compound": "hard"
-                  }
-                ]
-              }
-            }
-          ]
-        },
-        "source": "dp"
-      },
-      {
-        "policy": {
-          "stops": [
-            {
-              "lap": 26,
-              "compound": "hard"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 15,
-              "toLap": 21,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 22,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 28,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 31,
-              "toLap": 49,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 29,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 31,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "damage",
-              "lossMsPerLap": 1596.9375,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "degradationOff",
-              "wearRateDeltaPct": 1,
-              "action": {
-                "switchTo": [
-                  {
-                    "lap": 14,
-                    "compound": "soft"
-                  },
-                  {
-                    "lap": 26,
-                    "compound": "medium"
-                  },
-                  {
-                    "lap": 40,
-                    "compound": "hard"
-                  }
-                ]
               }
             }
           ]
@@ -5520,32 +3644,85 @@
               "action": {
                 "box": "medium"
               }
+            }
+          ]
+        },
+        "source": "dp"
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 17,
+              "compound": "soft"
             },
             {
-              "kind": "damage",
-              "lossMsPerLap": 1596.9375,
+              "lap": 32,
+              "compound": "medium"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 15,
+              "toLap": 21,
               "action": {
-                "box": "hard"
+                "box": "medium"
               }
             },
             {
-              "kind": "degradationOff",
-              "wearRateDeltaPct": 1,
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 22,
+              "toLap": 49,
               "action": {
-                "switchTo": [
-                  {
-                    "lap": 14,
-                    "compound": "soft"
-                  },
-                  {
-                    "lap": 26,
-                    "compound": "medium"
-                  },
-                  {
-                    "lap": 40,
-                    "compound": "hard"
-                  }
-                ]
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 28,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 31,
+              "toLap": 49,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 29,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 31,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
               }
             }
           ]
@@ -5627,33 +3804,6 @@
               "action": {
                 "box": "medium"
               }
-            },
-            {
-              "kind": "damage",
-              "lossMsPerLap": 1596.9375,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "degradationOff",
-              "wearRateDeltaPct": 1,
-              "action": {
-                "switchTo": [
-                  {
-                    "lap": 14,
-                    "compound": "soft"
-                  },
-                  {
-                    "lap": 26,
-                    "compound": "medium"
-                  },
-                  {
-                    "lap": 40,
-                    "compound": "hard"
-                  }
-                ]
-              }
             }
           ]
         },
@@ -5733,33 +3883,6 @@
               "toLap": 48,
               "action": {
                 "box": "medium"
-              }
-            },
-            {
-              "kind": "damage",
-              "lossMsPerLap": 1596.9375,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "degradationOff",
-              "wearRateDeltaPct": 1,
-              "action": {
-                "switchTo": [
-                  {
-                    "lap": 14,
-                    "compound": "soft"
-                  },
-                  {
-                    "lap": 26,
-                    "compound": "medium"
-                  },
-                  {
-                    "lap": 40,
-                    "compound": "hard"
-                  }
-                ]
               }
             }
           ]
@@ -5841,33 +3964,6 @@
               "action": {
                 "box": "medium"
               }
-            },
-            {
-              "kind": "damage",
-              "lossMsPerLap": 1596.9375,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "degradationOff",
-              "wearRateDeltaPct": 1,
-              "action": {
-                "switchTo": [
-                  {
-                    "lap": 14,
-                    "compound": "soft"
-                  },
-                  {
-                    "lap": 26,
-                    "compound": "medium"
-                  },
-                  {
-                    "lap": 40,
-                    "compound": "hard"
-                  }
-                ]
-              }
             }
           ]
         },
@@ -5947,33 +4043,6 @@
               "toLap": 48,
               "action": {
                 "box": "medium"
-              }
-            },
-            {
-              "kind": "damage",
-              "lossMsPerLap": 1596.9375,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "degradationOff",
-              "wearRateDeltaPct": 1,
-              "action": {
-                "switchTo": [
-                  {
-                    "lap": 14,
-                    "compound": "soft"
-                  },
-                  {
-                    "lap": 26,
-                    "compound": "medium"
-                  },
-                  {
-                    "lap": 40,
-                    "compound": "hard"
-                  }
-                ]
               }
             }
           ]
@@ -6055,33 +4124,6 @@
               "action": {
                 "box": "medium"
               }
-            },
-            {
-              "kind": "damage",
-              "lossMsPerLap": 1596.9375,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "degradationOff",
-              "wearRateDeltaPct": 1,
-              "action": {
-                "switchTo": [
-                  {
-                    "lap": 14,
-                    "compound": "soft"
-                  },
-                  {
-                    "lap": 26,
-                    "compound": "medium"
-                  },
-                  {
-                    "lap": 40,
-                    "compound": "hard"
-                  }
-                ]
-              }
             }
           ]
         },
@@ -6161,33 +4203,6 @@
               "toLap": 48,
               "action": {
                 "box": "medium"
-              }
-            },
-            {
-              "kind": "damage",
-              "lossMsPerLap": 1596.9375,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "degradationOff",
-              "wearRateDeltaPct": 1,
-              "action": {
-                "switchTo": [
-                  {
-                    "lap": 14,
-                    "compound": "soft"
-                  },
-                  {
-                    "lap": 26,
-                    "compound": "medium"
-                  },
-                  {
-                    "lap": 40,
-                    "compound": "hard"
-                  }
-                ]
               }
             }
           ]
@@ -6269,33 +4284,6 @@
               "action": {
                 "box": "medium"
               }
-            },
-            {
-              "kind": "damage",
-              "lossMsPerLap": 1596.9375,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "degradationOff",
-              "wearRateDeltaPct": 1,
-              "action": {
-                "switchTo": [
-                  {
-                    "lap": 14,
-                    "compound": "soft"
-                  },
-                  {
-                    "lap": 26,
-                    "compound": "medium"
-                  },
-                  {
-                    "lap": 40,
-                    "compound": "hard"
-                  }
-                ]
-              }
             }
           ]
         },
@@ -6375,33 +4363,6 @@
               "toLap": 48,
               "action": {
                 "box": "medium"
-              }
-            },
-            {
-              "kind": "damage",
-              "lossMsPerLap": 1596.9375,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "degradationOff",
-              "wearRateDeltaPct": 1,
-              "action": {
-                "switchTo": [
-                  {
-                    "lap": 14,
-                    "compound": "soft"
-                  },
-                  {
-                    "lap": 26,
-                    "compound": "medium"
-                  },
-                  {
-                    "lap": 40,
-                    "compound": "hard"
-                  }
-                ]
               }
             }
           ]
@@ -6483,33 +4444,6 @@
               "action": {
                 "box": "medium"
               }
-            },
-            {
-              "kind": "damage",
-              "lossMsPerLap": 1596.9375,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "degradationOff",
-              "wearRateDeltaPct": 1,
-              "action": {
-                "switchTo": [
-                  {
-                    "lap": 14,
-                    "compound": "soft"
-                  },
-                  {
-                    "lap": 26,
-                    "compound": "medium"
-                  },
-                  {
-                    "lap": 40,
-                    "compound": "hard"
-                  }
-                ]
-              }
             }
           ]
         },
@@ -6589,33 +4523,6 @@
               "toLap": 48,
               "action": {
                 "box": "medium"
-              }
-            },
-            {
-              "kind": "damage",
-              "lossMsPerLap": 1596.9375,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "degradationOff",
-              "wearRateDeltaPct": 1,
-              "action": {
-                "switchTo": [
-                  {
-                    "lap": 14,
-                    "compound": "soft"
-                  },
-                  {
-                    "lap": 26,
-                    "compound": "medium"
-                  },
-                  {
-                    "lap": 40,
-                    "compound": "hard"
-                  }
-                ]
               }
             }
           ]
@@ -6697,33 +4604,6 @@
               "action": {
                 "box": "medium"
               }
-            },
-            {
-              "kind": "damage",
-              "lossMsPerLap": 1596.9375,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "degradationOff",
-              "wearRateDeltaPct": 1,
-              "action": {
-                "switchTo": [
-                  {
-                    "lap": 14,
-                    "compound": "soft"
-                  },
-                  {
-                    "lap": 26,
-                    "compound": "medium"
-                  },
-                  {
-                    "lap": 40,
-                    "compound": "hard"
-                  }
-                ]
-              }
             }
           ]
         },
@@ -6803,33 +4683,6 @@
               "toLap": 48,
               "action": {
                 "box": "medium"
-              }
-            },
-            {
-              "kind": "damage",
-              "lossMsPerLap": 1596.9375,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "degradationOff",
-              "wearRateDeltaPct": 1,
-              "action": {
-                "switchTo": [
-                  {
-                    "lap": 14,
-                    "compound": "soft"
-                  },
-                  {
-                    "lap": 26,
-                    "compound": "medium"
-                  },
-                  {
-                    "lap": 40,
-                    "compound": "hard"
-                  }
-                ]
               }
             }
           ]
@@ -6911,33 +4764,6 @@
               "action": {
                 "box": "medium"
               }
-            },
-            {
-              "kind": "damage",
-              "lossMsPerLap": 1596.9375,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "degradationOff",
-              "wearRateDeltaPct": 1,
-              "action": {
-                "switchTo": [
-                  {
-                    "lap": 14,
-                    "compound": "soft"
-                  },
-                  {
-                    "lap": 26,
-                    "compound": "medium"
-                  },
-                  {
-                    "lap": 40,
-                    "compound": "hard"
-                  }
-                ]
-              }
             }
           ]
         },
@@ -7017,33 +4843,6 @@
               "toLap": 48,
               "action": {
                 "box": "medium"
-              }
-            },
-            {
-              "kind": "damage",
-              "lossMsPerLap": 1596.9375,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "degradationOff",
-              "wearRateDeltaPct": 1,
-              "action": {
-                "switchTo": [
-                  {
-                    "lap": 14,
-                    "compound": "soft"
-                  },
-                  {
-                    "lap": 26,
-                    "compound": "medium"
-                  },
-                  {
-                    "lap": 40,
-                    "compound": "hard"
-                  }
-                ]
               }
             },
             {
@@ -7133,33 +4932,6 @@
               }
             },
             {
-              "kind": "damage",
-              "lossMsPerLap": 1596.9375,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "degradationOff",
-              "wearRateDeltaPct": 1,
-              "action": {
-                "switchTo": [
-                  {
-                    "lap": 14,
-                    "compound": "soft"
-                  },
-                  {
-                    "lap": 26,
-                    "compound": "medium"
-                  },
-                  {
-                    "lap": 40,
-                    "compound": "hard"
-                  }
-                ]
-              }
-            },
-            {
               "kind": "rivalPits",
               "carId": 4,
               "withinMs": 3000,
@@ -7174,71 +4946,63 @@
   "ePos": {
     "2": [
       6.32012,
-      6.30794,
-      6.49618,
-      6.51766,
+      6.36334,
+      6.35492,
+      6.63206,
+      6.65374,
       6.94262,
-      6.93054,
-      6.87988,
-      6.88648,
-      6.91474,
-      6.93618,
-      6.80804,
-      6.81472,
-      6.9012,
-      7.2527,
-      8.03986,
-      6.33014,
-      6.32336,
-      6.354,
-      6.3389,
-      6.39076,
-      6.37086,
-      6.317,
-      6.3347,
-      6.3289,
-      6.36218,
-      6.35426,
-      6.4001,
-      6.77116,
-      6.38574,
-      6.41036
+      6.93208,
+      6.9021,
+      6.89958,
+      8.58422,
+      6.36334,
+      6.37122,
+      6.3799,
+      6.4031,
+      6.42112,
+      6.46044,
+      6.48728,
+      6.36212,
+      6.38582,
+      6.38966,
+      6.43302,
+      6.441,
+      6.5012,
+      7.24134,
+      6.44036,
+      6.45364
     ],
     "5": [
       6.74796,
-      6.7412,
-      6.96196,
-      6.97832,
+      6.77206,
+      6.77754,
+      7.08396,
+      7.09226,
       7.43378,
-      7.4601,
-      7.40948,
-      7.41704,
-      7.48114,
-      7.46094,
-      7.25498,
-      7.2645,
-      7.30014,
-      7.64542,
-      8.43504,
-      6.76886,
-      6.77564,
-      6.8033,
-      6.74774,
-      6.8686,
-      6.7708,
-      6.75262,
-      6.77104,
-      6.77242,
-      6.77642,
-      6.80556,
-      6.81104,
-      7.24954,
-      6.82212,
-      6.85328
+      7.45486,
+      7.43314,
+      7.43044,
+      8.93458,
+      6.77206,
+      6.79856,
+      6.81058,
+      6.84682,
+      6.79988,
+      6.9432,
+      6.85198,
+      6.78732,
+      6.79936,
+      6.82728,
+      6.81756,
+      6.89128,
+      6.87712,
+      7.74606,
+      6.85568,
+      6.8685
     ]
   },
   "winner": {
-    "2": 1,
-    "5": 1
+    "2": 0,
+    "5": 0
   }
 }
