@@ -77,7 +77,8 @@ describe('strategy: the job', () => {
       ]),
     );
     // forecast-field's estimation units run inside prepare: their reads are the job's
-    for (const unit of FORECAST_UNITS) expect(STRATEGY_JOB.reads, unit.id).toEqual(expect.arrayContaining([...unit.reads]));
+    // (their calculator dependencies are run inside prepare, as-of, not read as outputs: only their data reads count; Task 20 port)
+    for (const unit of FORECAST_UNITS) expect(STRATEGY_JOB.reads, unit.id).toEqual(expect.arrayContaining(unit.reads.filter((r) => typeof r === 'string')));
     expect(STRATEGY_JOB.module.href).toBe(new URL('../../src/strategy/job.ts', import.meta.url).href);
   });
 
