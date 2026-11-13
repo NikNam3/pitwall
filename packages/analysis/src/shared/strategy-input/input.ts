@@ -47,7 +47,8 @@ for (const unit of FORECAST_UNITS) {
 function startOf(view: EngineView): Known<StartingPoint> {
   const track = view.track;
   if (!track.known || !track.value.brakingZones.known) return unknown('notApplicable');
-  const asOf = asOfNow(view);
+  // the estimation units read no output from the view (they run their upstream inside): none is copied (C41)
+  const asOf = { ...asOfNow(view), outputs: new Map() };
   return buildStartingPoint(asOf, runAsOf(FORECAST_UNITS, asOf));
 }
 
