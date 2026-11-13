@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import type { Worker } from 'node:worker_threads';
 import { FORECAST_SCORE } from '@pitwall/analysis';
 import type { ServerMessage, TopicName } from '@pitwall/contracts';
-import { unknown, type ForecastScoreReport, type Known, type ScoreTable } from '@pitwall/domain';
+import { unknown, type ForecastScoreReport, type Known, type ScoreTable, type Summary } from '@pitwall/domain';
 import type { Job } from '@pitwall/engine/readers';
 import { loadFeatureConfig, recordingConfig } from '../../feature-config.ts';
 import type { Feature } from '../../features/feature.ts';
@@ -24,10 +24,11 @@ const SUBSCRIPTION = 'report';
 
 type Report = ForecastScoreReport;
 type Forecast = Report['forecasts'][number];
-type Summary = ScoreTable['ai'];
 /** A table as `--json` writes it and `--compare` reads it: without its cases. */
 type Table = Omit<ScoreTable, 'cases'>;
 type JsonReport = { experiments: Record<keyof Report['experiments'], Table>; forecasts: (Omit<Forecast, 'lapTime' | 'position' | 'baselinePosition'> & Record<ForecastTable, Table>)[] };
+/** An old report of `--compare` may come from before the CRPS (SP4.3b1 Task 22): its forecasts without `crps`. */
+type OldReport = { experiments?: Partial<JsonReport['experiments']>; forecasts?: (Omit<JsonReport['forecasts'][number], 'crps'> & { crps?: Forecast['crps'] })[] };
 
 const EXPERIMENTS = ['rejoin', 'undercut', 'scStop'] as const;
 const FORECAST_TABLES = ['lapTime', 'position', 'baselinePosition'] as const;
@@ -162,6 +163,7 @@ function emptyReport(): Report {
         lapTime: empty(`h${horizon}.${basis}.lapTime`, 'ms'),
         position: empty(`h${horizon}.${basis}.position`, 'places'),
         baselinePosition: empty(`h${horizon}.${basis}.baselinePosition`, 'places'),
+        crps: { ai: { n: 0, meanAbs: unknown('insufficientData'), bias: unknown('notApplicable') }, human: { n: 0, meanAbs: unknown('insufficientData'), bias: unknown('notApplicable') } },
       })),
     ),
   };
@@ -179,6 +181,7 @@ function jsonReport(report: Report): JsonReport {
       lapTime: withoutCases(f.lapTime),
       position: withoutCases(f.position),
       baselinePosition: withoutCases(f.baselinePosition),
+      crps: f.crps,
     })),
   };
 }
@@ -217,21 +220,32 @@ function tableLines(heading: string, table: Table, old: Table | undefined): stri
   return [`${heading} (${table.unit})`, line('ai'), line('human')];
 }
 
-/** Every table of the report: the experiments, then per horizon and basis the forecast's three. */
-function reportLines(report: JsonReport, old: JsonReport | undefined): string[] {
+/** The CRPS of a horizon and basis: its heading, then one line per driver type with its count and mean score. */
+function crpsLines(heading: string, crps: Forecast['crps'], old: Forecast['crps'] | undefined): string[] {
+  const line = (driver: 'ai' | 'human') => {
+    const s = crps[driver];
+    const o = old?.[driver];
+    return `  ${driver.padEnd(5)} ${countText(s.n, o)}  mean ${knownText(s.meanAbs, o?.meanAbs, 'places')}`;
+  };
+  return [`${heading} (places)`, line('ai'), line('human')];
+}
+
+/** Every table of the report: the experiments, then per horizon and basis the forecast's three and its CRPS. */
+function reportLines(report: JsonReport, old: OldReport | undefined): string[] {
   const lines: string[] = [];
   for (const name of EXPERIMENTS) lines.push(...tableLines(name, report.experiments[name], old?.experiments?.[name]));
   for (const f of report.forecasts) {
     const was = old?.forecasts?.find((o) => o.horizon === f.horizon && o.basis === f.basis);
     for (const kind of FORECAST_TABLES) lines.push(...tableLines(`h${f.horizon} ${f.basis} ${kind}`, f[kind], was?.[kind]));
+    lines.push(...crpsLines(`h${f.horizon} ${f.basis} crps`, f.crps, was?.crps));
   }
   return lines;
 }
 
 /** The old report of `--compare`. */
-function readOld(file: string): JsonReport {
+function readOld(file: string): OldReport {
   try {
-    return JSON.parse(readFileSync(file, 'utf8')) as JsonReport;
+    return JSON.parse(readFileSync(file, 'utf8')) as OldReport;
   } catch (error) {
     throw new StartupError(`cannot read ${file}: ${error instanceof Error ? error.message : String(error)}`);
   }

@@ -31,11 +31,15 @@ import {
   type Situation,
 } from '@pitwall/engine/readers';
 import { raceForecast } from '../race-forecast/index.ts';
+import { fieldPositions } from '../race-monte-carlo/field.ts';
+import type { FieldInput, RivalRules } from '../race-monte-carlo/types.ts';
 import { RIVAL_STOPS } from '../rival-stops/index.ts';
 import { buildStartingPoint, FORECAST_UNITS } from '../shared/forecast-field/index.ts';
 import { leaderLapAt, neutralisationKind, neutralisedSpans, isClosed } from '../shared/neutralised.ts';
 import { ourCars } from '../shared/our-cars.ts';
+import { STRATEGY_CONFIG } from '../strategy/config.ts';
 import { FORECAST_SCORE_CONFIG } from './config.ts';
+import { crpsSummary, rankedProbabilityScore } from './crps.ts';
 import { actualStops, naturalExperiments, type Case, type ForecastScoreConfig } from './experiments.ts';
 import { forecastCases, forecastPolicies, HORIZONS, type ForecastCase, type Horizon } from './forecasts.ts';
 import { raceLaps } from './laps.ts';
@@ -222,6 +226,44 @@ export function run(input: ScoreInput, rng: Rng): ForecastScoreReport {
     }
   }
 
+  // the CRPS (SP4.3b spec §8.4): one `fieldPositions` run per predict lap (every `crpsEveryLaps` from `crpsFirstLap`)
+  // over the plain plans, at the laps predict lap + each horizon, with a zero hazard (a scored case holds no SC or VSC
+  // lap, F1), the rivals' rule from `strategy`'s config; each case scores its car's pmf at its target lap
+  const strategy = STRATEGY_CONFIG.read(input);
+  const rivalRules: RivalRules = { q: strategy.rivalScBoxChance, aMin: strategy.rivalScMinTyreAge, reactionLaps: strategy.rivalReactionLaps, coverRule: false };
+  const crpsByLap = new Map<number, ForecastCase[]>();
+  for (const c of forecastCases(history, horizons, config.crpsFirstLap)) {
+    if ((c.lap - config.crpsFirstLap) % config.crpsEveryLaps !== 0) continue;
+    const of = crpsByLap.get(c.lap);
+    if (of === undefined) crpsByLap.set(c.lap, [c]);
+    else of.push(c);
+  }
+  const crpsScores: { c: ForecastCase; driver: ScoreCase['driver']; score: number }[] = [];
+  for (const [lap, cases] of crpsByLap) {
+    const first = cases[0] as ForecastCase;
+    const { start, stops } = buildAt(first.predictFrame, first.predictAt);
+    if (!start.known) continue;
+    const sp = start.value;
+    const policies: Policy[] = forecastPolicies(stops, sp.cars);
+    if (ours.length > 0) {
+      const actual = actualStops(history, race, first.predictFrame, sp.cars);
+      for (const car of ours) if (car < sp.cars) policies[car] = actual[car] as Policy;
+    }
+    const plans: FieldInput['plans'] = {};
+    policies.forEach((p, car) => (plans[car as CarId] = p));
+    const n = Math.max(0, sp.lapsTotal - sp.lap + 1);
+    const hazard: FieldInput['hazard'] = { byLap: new Float64Array(n), vscByLap: new Float64Array(n), scDur: Float64Array.of(1), vscDur: Float64Array.of(1), active: null };
+    const laps = horizons.map((h) => lap + h).filter((l) => l <= sp.lapsTotal);
+    const result = fieldPositions({ start: sp, plans, hazard, rivalRules, scenarios: config.crpsScenarios, laps }, rng);
+    for (const c of cases) {
+      const pmf = result.positionPmf[c.carId]?.[laps.indexOf(c.targetLap)];
+      if (pmf === undefined) continue;
+      crpsScores.push({ c, driver: driverAt(c.predictFrame, c.carId), score: rankedProbabilityScore(pmf, c.actualPosition) });
+    }
+  }
+  const crpsOf = (horizon: Horizon, basis: ForecastCase['basis'], driver: ScoreCase['driver']) =>
+    crpsSummary(crpsScores.filter((s) => s.c.horizon === horizon && s.c.basis === basis && s.driver === driver).map((s) => s.score), at);
+
   return {
     experiments: {
       rejoin: scoreTable('rejoin', 'places', scoreAll(experiments.rejoin), at),
@@ -238,6 +280,7 @@ export function run(input: ScoreInput, rng: Rng): ForecastScoreReport {
           lapTime: scoreTable(`${name}.lapTime`, 'ms', of.map((f) => f.lapTime), at),
           position: scoreTable(`${name}.position`, 'places', of.map((f) => f.position), at),
           baselinePosition: scoreTable(`${name}.baselinePosition`, 'places', of.map((f) => f.baseline), at),
+          crps: { ai: crpsOf(horizon, basis, 'ai'), human: crpsOf(horizon, basis, 'human') },
         };
       }),
     ),
