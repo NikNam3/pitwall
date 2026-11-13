@@ -1,6 +1,6 @@
 // `sc-call`'s budget (SP4.3b spec §9.3, §11.1, §11.2; plan SP4.3b2 Task 9 row 9, Global Constraints "caps are counts,
 // never clocks"): on the long-race builder (70 laps, 20 cars) at lap 1 (the first frame the starting point is known:
-// the leader has completed lap 1), the job's run at `maxScenarioPolicies` 320 within 500 ms per our car, its one DP
+// the leader has completed lap 1), the job's run at `maxScenarioPolicies` 240 within 500 ms per our car, its one DP
 // solve per car included, single thread. The cap is a count (C2): a miss lowers the count, never raises the budget.
 // Best of warm passes (docs/testing.md). `rejoin`'s output is passed explicitly (`./support.ts`).
 import { createRng } from '@pitwall/engine/readers';
@@ -14,9 +14,9 @@ const PER_CAR_MS = 500;
 
 describe('sc-call budget', () => {
   // row 9
-  it('budget: maxScenarioPolicies 320 under 500 ms per car at lap 1, one DP solve per car included', () => {
+  it('budget: maxScenarioPolicies 240 under 500 ms per car at lap 1, one DP solve per car included', () => {
     const cap = SC_CALL_CONFIG.defaults.maxScenarioPolicies;
-    expect(cap).toBe(320);
+    expect(cap).toBe(240);
     const view = scViewAt(longRace(), 2, { frameOfLap: 0, scConfig: { maxScenarioPolicies: cap } });
     const input = structuredClone(SC_CALL_JOB.prepare(view));
 
