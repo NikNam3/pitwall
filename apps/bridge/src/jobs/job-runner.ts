@@ -1,6 +1,7 @@
 import { Worker } from 'node:worker_threads';
 import type { Computed } from '@pitwall/contracts';
 import type { Job } from '@pitwall/engine/readers';
+import { WorkerLimit } from './worker-limit.ts';
 
 /** Where a result was computed: the player's lap and the frame that triggered the job. */
 export type ComputedFor = Computed<unknown>['computedFor'];
@@ -26,25 +27,33 @@ export function jobSeed(seed: number, jobId: string, computedFor: ComputedFor): 
 
 const messageOf = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
-/** One trigger of a job: one worker per part, and the outputs of the parts that finished, by part index. */
-type Run = { workers: Worker[]; outs: unknown[]; remaining: number };
+/**
+ * One trigger of a job: one worker per started part, the withdrawals of the parts' worker-slot requests (a no-op once
+ * a part started), and the outputs of the parts that finished, by part index.
+ */
+type Run = { workers: Worker[]; withdrawals: Array<() => void>; outs: unknown[]; remaining: number };
 
 /**
  * Runs jobs in worker threads, one run at a time per job id: a newer trigger terminates every running worker of the
  * same job, and only the newest run delivers a result. A job with `parts` runs every part at once, one worker each,
  * and delivers one result, the merge of the parts' outputs in the parts' order. Problems inside a job (throw, crash,
  * bad input, a failing split or merge) arrive as error results, never as exceptions; a failing part terminates the
- * other parts of its run. `close()` terminates everything and suppresses late results.
+ * other parts of its run. Every worker takes a slot of the runner's `WorkerLimit` (shared by every runner given the
+ * same instance; without one the runner gets its own of `MAX_JOB_WORKERS`) and frees it when it exits; a part beyond
+ * the free slots waits, first in first out, with the seed it gets anyway. A newer trigger and `cancel()` also drop
+ * the waiting parts. `close()` terminates everything, drops every waiting part and suppresses late results.
  */
 export class JobRunner {
   readonly #seed: number;
+  readonly #limit: WorkerLimit;
   readonly #running = new Map<string, Run>();
   readonly #listeners: Array<(result: JobResult) => void> = [];
   readonly #terminations = new Set<Promise<number>>();
   #closed = false;
 
-  constructor({ seed }: { seed: number }) {
+  constructor({ seed, limit }: { seed: number; limit?: WorkerLimit }) {
     this.#seed = seed;
+    this.#limit = limit ?? new WorkerLimit();
   }
 
   onResult(callback: (result: JobResult) => void): void {
@@ -79,7 +88,7 @@ export class JobRunner {
     const jobId = job.id;
     const parts = job.parts === undefined ? [input] : job.parts.split(input);
     if (parts.length === 0) throw new Error(`job ${jobId}: split returned no part`);
-    const run: Run = { workers: [], outs: new Array<unknown>(parts.length), remaining: parts.length };
+    const run: Run = { workers: [], withdrawals: [], outs: new Array<unknown>(parts.length), remaining: parts.length };
     this.#running.set(jobId, run);
 
     const result = (): JobResult => {
@@ -92,12 +101,8 @@ export class JobRunner {
     };
 
     parts.forEach((part, i) => {
+      if (this.#running.get(jobId) !== run) return; // an earlier part already failed
       const seed = jobSeed(this.#seed, job.parts === undefined ? jobId : `${jobId}/${i}`, computedFor);
-      const worker = new Worker(new URL('./worker-entry.ts', import.meta.url), {
-        workerData: { moduleHref: job.module.href, input: part, seed },
-      });
-      run.workers.push(worker);
-
       let settled = false;
       const finish = (outcome: WorkerMessage): void => {
         if (settled || this.#running.get(jobId) !== run) return; // replaced, closed, failed or already finished
@@ -113,17 +118,34 @@ export class JobRunner {
         this.#discard(jobId);
         this.#deliver(result());
       };
-      worker.on('message', finish);
-      worker.on('error', (e) => finish({ ok: false, error: messageOf(e) }));
-      worker.on('exit', (code) => finish({ ok: false, error: `worker exited with code ${code} without a result` }));
+
+      run.withdrawals.push(this.#limit.request((release) => {
+        if (this.#running.get(jobId) !== run) { release(); return; } // its run was dropped while it waited
+        let worker: Worker;
+        try {
+          worker = new Worker(new URL('./worker-entry.ts', import.meta.url), {
+            workerData: { moduleHref: job.module.href, input: part, seed },
+          });
+        } catch (e) {
+          release();
+          finish({ ok: false, error: messageOf(e) });
+          return;
+        }
+        worker.once('exit', release);
+        run.workers.push(worker);
+        worker.on('message', finish);
+        worker.on('error', (e) => finish({ ok: false, error: messageOf(e) }));
+        worker.on('exit', (code) => finish({ ok: false, error: `worker exited with code ${code} without a result` }));
+      }));
     });
   }
 
-  /** Forgets the run of `jobId` (so its late events are ignored) and terminates its workers. */
+  /** Forgets the run of `jobId` (so its late events are ignored), drops its waiting parts and terminates its workers. */
   #discard(jobId: string): void {
     const run = this.#running.get(jobId);
     if (run === undefined) return;
     this.#running.delete(jobId);
+    for (const withdraw of run.withdrawals) withdraw();
     for (const worker of run.workers) {
       const termination = worker.terminate();
       this.#terminations.add(termination);

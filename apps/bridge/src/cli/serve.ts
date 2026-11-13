@@ -9,6 +9,7 @@ import { effectiveConfig, type FeatureConfig } from '../feature-config.ts';
 import { FEATURES } from '../features/index.generated.ts';
 import { TopicHub } from '../hub/topic-hub.ts';
 import type { PacketSource } from '../input/packet-source.ts';
+import { WorkerLimit } from '../jobs/worker-limit.ts';
 import { FeedPipeline, type FeedPipelineOptions } from '../pipeline/feed-pipeline.ts';
 import { PlanRouting, type PlanAction } from '../pipeline/plan-routing.ts';
 import { TeamFeeds } from '../pipeline/team-feeds.ts';
@@ -234,6 +235,8 @@ export async function serve(opts: ServeOptions): Promise<number> {
     // Test aid for the Playwright specs: inert unless set (see `FeedAlerts.raiseTestInsight`).
     const testInsight = io.env['PITWALL_E2E_INSIGHT'] || undefined;
     const pipelineLog = cliLogger(io, 'info');
+    // One job-worker limit for every feed, so all feeds together run at most MAX_JOB_WORKERS workers (Task 18b, C1a).
+    const workerLimit = new WorkerLimit();
     const makePipeline = (source: PacketSource): FeedPipeline => {
       const pipeline = new FeedPipeline({
       feedId: source.feedId,
@@ -241,6 +244,7 @@ export async function serve(opts: ServeOptions): Promise<number> {
       teams,
       hub,
       features: FEATURES,
+      workerLimit,
       ...(opts.config && { config: opts.config }),
       log: pipelineLog,
       dumpsDir: opts.dumpsDir,
