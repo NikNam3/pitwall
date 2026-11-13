@@ -14,7 +14,7 @@ import type { ValueFor } from '../hub/topic-hub.ts';
 import type { Logger } from '../log.ts';
 import type { SessionKey } from '../storage/db.ts';
 import type { DriverSessionRow, DriverSessions } from '../storage/weekend-repository.ts';
-import { ProfileRunner, ProfilesCache, sha256, type LinkedSession } from './compute.ts';
+import { ProfileRunner, ProfilesCache, sha256, withOverrides, type LinkedSession } from './compute.ts';
 import { humanLapCount, linkMatches, newestFirst, personOf, seatLinks, storedSlots, unlinkedSlots, type StoredSlot } from './links.ts';
 import { loadPersons, sameSession, takeLock, writePerson } from './persons.ts';
 import { checkAction } from './validate.ts';
@@ -160,7 +160,7 @@ export class ProfileStore {
       const person = personOf(this.#persons, slot);
       if (person === undefined) continue;
       bySlot[slot.carId] = person.id;
-      profiles[person.id] = { person: person.id, displayName: person.displayName, entries: this.#entries.get(person.id) ?? {} };
+      profiles[person.id] = { person: person.id, displayName: person.displayName, entries: withOverrides(this.#entries.get(person.id) ?? {}, person.overrides) };
     }
     return { fingerprint: sha256(canonicalJson({ bySlot, profiles })), bySlot, profiles };
   }
@@ -292,8 +292,9 @@ export class ProfileStore {
       const sessions = this.#sessionsOf(p);
       const kept = sessions.filter((s) => !s.excluded);
       return {
+        // the computed values, the person's overrides beside them (the snapshot applies them, C62c)
         person: p.id, displayName: p.displayName, entries: this.#entries.get(p.id) ?? {}, links: p.links, excluded: p.excluded,
-        sessions, kept: { sessions: kept.length, laps: kept.reduce((n, s) => n + s.laps, 0) },
+        overrides: p.overrides, sessions, kept: { sessions: kept.length, laps: kept.reduce((n, s) => n + s.laps, 0) },
       };
     });
     this.#deps.hub.publishGlobal('drivers.profiles', () => ({ persons }));

@@ -13,6 +13,13 @@ import type { Logger } from '../log.ts';
 
 export const sha256 = (text: string): string => createHash('sha256').update(text).digest('hex');
 
+/** The entries with the person's overrides applied: an override takes its key's value, the laps and sessions stay the computed ones. */
+export const withOverrides = (entries: Record<string, ProfileEntry>, overrides: Record<string, number>): Record<string, ProfileEntry> =>
+  Object.fromEntries(Object.entries(entries).map(([key, entry]) => {
+    const override = overrides[key];
+    return [key, override === undefined ? entry : { ...entry, value: known(override, 0) }];
+  }));
+
 /** What an aggregate gives: the entry's value and the laps it rests on. */
 type Aggregated = { value: Known<number>; laps: number };
 
@@ -71,8 +78,8 @@ export class ProfileRunner {
 
   /**
    * The person's entries over `sessions` (their linked, not excluded sessions with a human span), each from the cache
-   * when its version and inputs are unchanged; an override takes its key's value, the laps and sessions stay the
-   * computed ones.
+   * when its version and inputs are unchanged. The values are the computed ones, without the person's overrides
+   * (`drivers.profiles` shows both); `withOverrides` applies them for the profile snapshot (C62c).
    */
   entries(person: DriverPerson, sessions: readonly LinkedSession[]): Record<string, ProfileEntry> {
     const ctx: ProfileCtx = { config: this.#config, overrides: person.overrides };
@@ -94,9 +101,8 @@ export class ProfileRunner {
           result = this.#call(decl, key, () => entry.aggregate(stored, ctx));
           if (result !== undefined) this.#cache.put(person.id, key, entry.version, fingerprint, result);
         }
-        const override = person.overrides[key];
         entries[key] = {
-          value: override !== undefined ? known(override, 0) : (result?.value ?? unknown('notApplicable')),
+          value: result?.value ?? unknown('notApplicable'),
           laps: result?.laps ?? 0,
           sessions: stored.length,
           newestSession,

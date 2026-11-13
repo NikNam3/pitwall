@@ -59,11 +59,18 @@ export type LinkedSession = {
 };
 
 /**
- * `drivers.profiles`: every person with their profile, links and exclusions, their linked sessions (newest first) and
- * the sessions and laps not excluded (`kept`).
+ * `drivers.profiles`: every person with their profile, links and exclusions, their overrides per entry key, their linked
+ * sessions (newest first) and the sessions and laps not excluded (`kept`). An entry's value is the computed one, without
+ * the person's override; the profile snapshot applies the overrides (C62c).
  */
 export type DriversProfilesValue = {
-  persons: (DriverProfile & { links: DriverLink[]; excluded: SessionRef[]; sessions: LinkedSession[]; kept: { sessions: number; laps: number } })[];
+  persons: (DriverProfile & {
+    links: DriverLink[];
+    excluded: SessionRef[];
+    overrides: Record<string, number>;
+    sessions: LinkedSession[];
+    kept: { sessions: number; laps: number };
+  })[];
 };
 
 /** A human seat of one of our feeds (its player car or teammate while a human drives it, C17) with its seat from Participants. */
