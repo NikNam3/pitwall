@@ -4,6 +4,7 @@ import type { ForecastScoreReport } from '@pitwall/domain';
 import type { Job } from '@pitwall/engine/readers';
 import { prepareScore, type ScoreInput } from './job.ts';
 
+export { FORECAST_SCORE_BEHAVIOUR, type ForecastScoreEffect } from './behaviour.ts';
 export * from './config.ts';
 export { naturalExperiments, orderAtPitExit, type Case, type CaseKind, type Experiments, type ForecastScoreConfig } from './experiments.ts';
 export { forecastCases, forecastPolicies, type ForecastCase, type Horizon } from './forecasts.ts';

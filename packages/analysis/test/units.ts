@@ -35,7 +35,7 @@ export const JOB_UNITS: readonly QuickCalculator<unknown>[] = JOBS.map((job) => 
  * The jobs that read a sub-machine but export no behaviour table yet (C44), each fixed by the supervisor in two phases:
  * the completeness test skips them, and fails once one of them exports its table, so the list shrinks with the fix.
  */
-export const PENDING_JOBS: readonly string[] = ['forecast-score'];
+export const PENDING_JOBS: readonly string[] = [];
 
 /** The name of a unit's behaviour table export: `<UNIT>_BEHAVIOUR`, the unit's kebab-case name in upper snake case. */
 export const behaviourExport = (unit: string): string => `${unit.toUpperCase().replaceAll('-', '_')}_BEHAVIOUR`;

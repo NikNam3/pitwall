@@ -83,6 +83,19 @@ describe('guardedView throws on an undeclared read and passes a declared one (C4
     expect(undeclared(() => g.history.events)).toBe('history.events');
   });
 
+  it('history.appendedAt of a declared list reads; of an undeclared list throws', () => {
+    const race = raceView();
+    const at = { laps: [10], crossings: [11, 12], 'spans:session-phase-race': [13], 'spans:clock': [14] };
+    const view = { ...race, history: { ...race.history, appendedAt: at } } as EngineView;
+    const g = guardedBy(['miniSectors', 'spans:session-phase-race' as ChangeTag], view);
+    const guardedAt = g.history.appendedAt as Record<string, unknown>;
+    expect(guardedAt['crossings']).toEqual(at['crossings']);
+    expect(guardedAt['spans:session-phase-race']).toEqual(at['spans:session-phase-race']);
+    expect(undeclared(() => guardedAt['laps'])).toBe('history.appendedAt.laps');
+    expect(undeclared(() => guardedAt['spans:clock'])).toBe('history.appendedAt.spans:clock');
+    expect(undeclared(() => Object.entries(guardedBy(['timing'], view).history.appendedAt))).toMatch(/^history\.appendedAt\./);
+  });
+
   it('history.spans and situation.byMachine: a sub-machine\'s closed or open spans only with its spans:<id>; the weekend phase always', () => {
     const view = raceView();
     const tag = 'spans:session-phase-race' as ChangeTag;
