@@ -22,8 +22,14 @@ type Forecast = Report['forecasts'][number];
 /** A table as `--json` writes it and `--compare` reads it: without its cases. */
 type Table = Omit<ScoreTable, 'cases'>;
 type JsonReport = { experiments: Record<keyof Report['experiments'], Table>; forecasts: (Omit<Forecast, 'lapTime' | 'position' | 'baselinePosition'> & Record<ForecastTable, Table>)[] };
-/** An old report of `--compare` may come from before the CRPS (SP4.3b1 Task 22): its forecasts without `crps`. */
-type OldReport = { experiments?: Partial<JsonReport['experiments']>; forecasts?: (Omit<JsonReport['forecasts'][number], 'crps'> & { crps?: Forecast['crps'] })[] };
+/**
+ * An old report of `--compare` may come from before the CRPS (SP4.3b1 Task 22) or before the like-for-like scores
+ * (Task 27): its forecasts without `crps` or `sameCases`.
+ */
+type OldReport = {
+  experiments?: Partial<JsonReport['experiments']>;
+  forecasts?: (Omit<JsonReport['forecasts'][number], 'crps' | 'sameCases'> & { crps?: Forecast['crps']; sameCases?: Forecast['sameCases'] })[];
+};
 
 const EXPERIMENTS = ['rejoin', 'undercut', 'scStop'] as const;
 const FORECAST_TABLES = ['lapTime', 'position', 'baselinePosition'] as const;
@@ -39,6 +45,9 @@ export function dataRoot(env: CliIo['env']): string {
 
 /** The report of a run that delivered no job result (R33): every count 0, every mean unknown. */
 function emptyReport(): Report {
+  const none = (bias: 'insufficientData' | 'notApplicable'): Summary => ({ n: 0, meanAbs: unknown('insufficientData'), bias: unknown(bias) });
+  const noCrps = (): Forecast['crps'] => ({ ai: none('notApplicable'), human: none('notApplicable') });
+  const noPoint = (): Forecast['crps'] => ({ ai: none('insufficientData'), human: none('insufficientData') });
   const empty = (name: string, unit: ScoreTable['unit']): ScoreTable => {
     const none: Summary = { n: 0, meanAbs: unknown('insufficientData'), bias: unknown('insufficientData') };
     return { name, unit, ai: none, human: { ...none }, cases: [] };
@@ -52,7 +61,8 @@ function emptyReport(): Report {
         lapTime: empty(`h${horizon}.${basis}.lapTime`, 'ms'),
         position: empty(`h${horizon}.${basis}.position`, 'places'),
         baselinePosition: empty(`h${horizon}.${basis}.baselinePosition`, 'places'),
-        crps: { ai: { n: 0, meanAbs: unknown('insufficientData'), bias: unknown('notApplicable') }, human: { n: 0, meanAbs: unknown('insufficientData'), bias: unknown('notApplicable') } },
+        crps: noCrps(),
+        sameCases: { crps: noCrps(), position: noPoint(), baseline: noPoint() },
       })),
     ),
   };
@@ -71,6 +81,7 @@ function jsonReport(report: Report): JsonReport {
       position: withoutCases(f.position),
       baselinePosition: withoutCases(f.baselinePosition),
       crps: f.crps,
+      sameCases: f.sameCases,
     })),
   };
 }
@@ -109,14 +120,23 @@ function tableLines(heading: string, table: Table, old: Table | undefined): stri
   return [`${heading} (${table.unit})`, line('ai'), line('human')];
 }
 
-/** The CRPS of a horizon and basis: its heading, then one line per driver type with its count and mean score. */
-function crpsLines(heading: string, crps: Forecast['crps'], old: Forecast['crps'] | undefined): string[] {
+/**
+ * The CRPS of a horizon and basis: its heading, one line per driver type with its count and mean score, then per
+ * driver type the like-for-like line (Task 27): on the cases with both scores, the count, the CRPS and the point
+ * forecast's and the baseline's ("gaps stay") mean absolute position error.
+ */
+function crpsLines(heading: string, crps: Forecast['crps'], same: Forecast['sameCases'], old: { crps?: Forecast['crps']; sameCases?: Forecast['sameCases'] } | undefined): string[] {
   const line = (driver: 'ai' | 'human') => {
     const s = crps[driver];
-    const o = old?.[driver];
+    const o = old?.crps?.[driver];
     return `  ${driver.padEnd(5)} ${countText(s.n, o)}  mean ${knownText(s.meanAbs, o?.meanAbs, 'places')}`;
   };
-  return [`${heading} (places)`, line('ai'), line('human')];
+  const sameLine = (driver: 'ai' | 'human') => {
+    const o = old?.sameCases;
+    const mean = (part: keyof Forecast['sameCases']) => knownText(same[part][driver].meanAbs, o?.[part][driver].meanAbs, 'places');
+    return `  same ${driver.padEnd(5)} ${countText(same.crps[driver].n, o?.crps[driver])}  crps ${mean('crps')}  point ${mean('position')}  gaps stay ${mean('baseline')}`;
+  };
+  return [`${heading} (places)`, line('ai'), line('human'), sameLine('ai'), sameLine('human')];
 }
 
 /** Every table of the report: the experiments, then per horizon and basis the forecast's three and its CRPS. */
@@ -126,7 +146,7 @@ function reportLines(report: JsonReport, old: OldReport | undefined): string[] {
   for (const f of report.forecasts) {
     const was = old?.forecasts?.find((o) => o.horizon === f.horizon && o.basis === f.basis);
     for (const kind of FORECAST_TABLES) lines.push(...tableLines(`h${f.horizon} ${f.basis} ${kind}`, f[kind], was?.[kind]));
-    lines.push(...crpsLines(`h${f.horizon} ${f.basis} crps`, f.crps, was?.crps));
+    lines.push(...crpsLines(`h${f.horizon} ${f.basis} crps`, f.crps, f.sameCases, was));
   }
   return lines;
 }

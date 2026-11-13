@@ -43,7 +43,7 @@ import { crpsSummary, rankedProbabilityScore } from './crps.ts';
 import { actualStops, naturalExperiments, type Case, type ForecastScoreConfig } from './experiments.ts';
 import { forecastCases, forecastPolicies, HORIZONS, type ForecastCase, type Horizon } from './forecasts.ts';
 import { raceLaps } from './laps.ts';
-import { scored, scoreTable } from './tables.ts';
+import { scored, scoreTable, summary } from './tables.ts';
 
 /**
  * The job's input: the projection (its `appendedAt` included) and the open spans now, the run's fixed inputs, and the
@@ -268,6 +268,21 @@ export function run(input: ScoreInput, rng: Rng): ForecastScoreReport {
   const crpsOf = (horizon: Horizon, basis: ForecastCase['basis'], driver: ScoreCase['driver']) =>
     crpsSummary(crpsScores.filter((s) => s.c.horizon === horizon && s.c.basis === basis && s.driver === driver).map((s) => s.score), at);
 
+  // like for like (SP4.3b1 Task 27): the cases with both a CRPS and a point score, matched by car, predict lap, horizon
+  // and basis; per driver type the CRPS, the point forecast's and the baseline's mean absolute position error
+  const caseKey = (c: ForecastCase) => `${c.carId}:${c.lap}:${c.horizon}:${c.basis}`;
+  const crpsByKey = new Map(crpsScores.map((s) => [caseKey(s.c), s.score]));
+  const sameCasesOf = (of: readonly Scored[]): ForecastScoreReport['forecasts'][number]['sameCases'] => {
+    const shared = of.filter((f) => crpsByKey.has(caseKey(f.c)));
+    const ofDriver = (driver: ScoreCase['driver']) => shared.filter((f) => f.position.driver === driver);
+    const crps = (driver: ScoreCase['driver']) => crpsSummary(ofDriver(driver).map((f) => crpsByKey.get(caseKey(f.c)) as number), at);
+    return {
+      crps: { ai: crps('ai'), human: crps('human') },
+      position: { ai: summary(ofDriver('ai').map((f) => f.position), at), human: summary(ofDriver('human').map((f) => f.position), at) },
+      baseline: { ai: summary(ofDriver('ai').map((f) => f.baseline), at), human: summary(ofDriver('human').map((f) => f.baseline), at) },
+    };
+  };
+
   return {
     experiments: {
       rejoin: scoreTable('rejoin', 'places', scoreAll(experiments.rejoin), at),
@@ -285,6 +300,7 @@ export function run(input: ScoreInput, rng: Rng): ForecastScoreReport {
           position: scoreTable(`${name}.position`, 'places', of.map((f) => f.position), at),
           baselinePosition: scoreTable(`${name}.baselinePosition`, 'places', of.map((f) => f.baseline), at),
           crps: { ai: crpsOf(horizon, basis, 'ai'), human: crpsOf(horizon, basis, 'human') },
+          sameCases: sameCasesOf(of),
         };
       }),
     ),
