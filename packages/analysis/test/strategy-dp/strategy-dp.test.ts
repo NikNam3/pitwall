@@ -13,6 +13,7 @@ import {
   chancesFrom,
   DRY,
   dpInput,
+  everyStopList,
   LAP,
   meetsRule,
   NO_SETS,
@@ -291,6 +292,104 @@ describe('strategy-dp: the hazard', () => {
     expect(r.plans[0]!.stops).toHaveLength(1);
     const sc = r.thresholds.filter((t) => t.kind === 'neutralised' && t.condition === 'sc' && t.action !== 'stayOut');
     expect(sc).toEqual([{ kind: 'neutralised', condition: 'sc', fromLap, toLap, action: { box: 'medium' } }]);
+  });
+});
+
+// The rain threshold (Task 23c, supervisor rulings 2026-11-13). How these rows read it: the threshold is the constant
+// track wetness w (ms, on every lap) above which a switch of the slick-shod car to its first wet-weather set (inter,
+// else wet) at the end of `fromLap`, run to the flag, beats the best dry plan (stops onto dry compounds only) at that
+// same wetness, pit loss included; no hazard, so both are deterministic race times. The current wetness is
+// `wetnessByLap[0]` (the plain forecast's wetness on `fromLap`); no rain trigger is emitted when the threshold is at
+// or below it.
+describe('strategy-dp: the rain threshold', () => {
+  const rainOf = (r: DpResult) => r.thresholds.filter((t) => t.kind === 'rain');
+  const withWetness = (input: DpInput, w: number): DpInput => ({ ...input, wetnessByLap: new Float64Array(input.wetnessByLap.length).fill(w) });
+  const bestDryMs = (input: DpInput): number =>
+    Math.min(
+      ...everyStopList(input)
+        .filter((stops) => stops.every((s) => DRY.includes(s.compound)) && meetsRule(input, stops))
+        .map((stops) => raceTimeMs(input, stops)),
+    );
+  /** The wetness where `switched(w) = against(w)`; both are linear in w (support.ts's lap model, no cold tyre term). */
+  const crossing = (input: DpInput, against: (i: DpInput) => number): number => {
+    const d = (w: number): number => raceTimeMs(withWetness(input, w), [{ lap: input.fromLap, compound: 'inter' }]) - against(withWetness(input, w));
+    const [d0, d1] = [d(0), d(1_000)];
+    return (d0 * 1_000) / (d0 - d1);
+  };
+  const wetLap: LapModelParams = { ...LAP, compoundOffsetMs: { soft: -300, medium: 0, hard: 300, inter: 1_500, wet: 3_000 }, wetnessMsPerMs: { slick: 0.1, inter: 0, wet: 0 } };
+
+  // Task 23c row 1
+  it('the rain threshold compares a switch to inter/wet against the best dry plan\'s remaining time, not against staying out on the current slick to the flag', () => {
+    // steep wear: staying out on the mediums to the flag is far slower than the best dry plan (one stop onto hards)
+    const input = dpInput({
+      totalLaps: 30,
+      lap: wetLap,
+      car: { compound: 'medium', degMsPerLap: 40, wearRatePct: { ...WEAR_RATES, medium: 3, hard: 1.5, inter: 2 } },
+      sets: { medium: 1, hard: 1, inter: 1 },
+    });
+    const expected = crossing(input, bestDryMs);
+    const stayingOut = crossing(input, (i) => raceTimeMs(i, []));
+    // the case: the two readings differ by far more than the tolerance, and the right one lies above the dry track
+    expect(expected - stayingOut).toBeGreaterThan(1_000);
+    expect(expected).toBeGreaterThan(0);
+    const rain = rainOf(strategyDp(input));
+    expect(rain).toHaveLength(1);
+    expect(rain[0]!.action).toEqual({ box: 'inter' });
+    expect(Math.abs(rain[0]!.wetnessMs - expected), `${rain[0]!.wetnessMs} against ${expected}`).toBeLessThanOrEqual(1);
+  });
+
+  // Task 23c row 2
+  it('no rain trigger is emitted when its threshold is at or below the current wetness (never 0 on a dry start)', () => {
+    // a dry start where the inters beat every dry plan even on a dry track: the threshold is at or below 0
+    const dry = dpInput({
+      totalLaps: 30,
+      lap: { ...wetLap, compoundOffsetMs: { ...wetLap.compoundOffsetMs, inter: -1_500 } },
+      car: { compound: 'medium', degMsPerLap: 40, wearRatePct: { ...WEAR_RATES, medium: 3, hard: 1.5, inter: 2 } },
+      sets: { medium: 1, hard: 1, inter: 1 },
+    });
+    expect(crossing(dry, bestDryMs), 'the case: the threshold is at or below the dry track').toBeLessThanOrEqual(0);
+    expect(rainOf(strategyDp(dry)), 'a dry start').toEqual([]);
+
+    // a wet track already past the threshold
+    const base = dpInput({ totalLaps: 30, lap: wetLap, car: { compound: 'medium', degMsPerLap: 40, wearRatePct: { ...WEAR_RATES, medium: 3, hard: 1.5, inter: 2 } }, sets: { medium: 1, hard: 1, inter: 1 } });
+    const threshold = crossing(base, bestDryMs);
+    const current = Math.ceil(threshold) + 2_000;
+    expect(threshold, 'the case: a threshold above the dry track').toBeGreaterThan(0);
+    expect(rainOf(strategyDp(withWetness(base, current))), `wetness ${current} above the threshold ${threshold}`).toEqual([]);
+  });
+
+  // Task 23c row 3
+  it('a dry start with no rain forecast gives a rain threshold above the current wetness or none', () => {
+    const dryStartArb = fc
+      .record({
+        laps: fc.integer({ min: 2, max: 30 }),
+        compound: dryArb,
+        tyreAge: fc.integer({ min: 0, max: 25 }),
+        degMsPerLap: fc.integer({ min: 0, max: 120 }),
+        rates: fc.tuple(scaled(0, 60, 10), scaled(0, 60, 10), scaled(0, 60, 10)),
+        sets: fc.tuple(fc.integer({ min: 0, max: 2 }), fc.integer({ min: 0, max: 2 }), fc.integer({ min: 0, max: 2 }), fc.integer({ min: 0, max: 2 }), fc.integer({ min: 0, max: 2 })),
+        owes: fc.boolean(),
+        interOffset: fc.integer({ min: 0, max: 4_000 }),
+        slick: scaled(1, 100, 100),
+        green: fc.integer({ min: 15_000, max: 30_000 }),
+      })
+      .map((r) => {
+        const rates = { ...WEAR_RATES, soft: r.rates[0], medium: r.rates[1], hard: r.rates[2] };
+        return dpInput({
+          totalLaps: r.laps,
+          lap: { ...LAP, compoundOffsetMs: { soft: -300, medium: 0, hard: 300, inter: r.interOffset, wet: r.interOffset + 1_500 }, wetnessMsPerMs: { slick: r.slick, inter: 0, wet: 0 } },
+          car: { compound: r.compound, tyreAge: r.tyreAge, wearPct: r.tyreAge * rates[r.compound], degMsPerLap: r.degMsPerLap, wearRatePct: rates },
+          sets: { soft: r.sets[0], medium: r.sets[1], hard: r.sets[2], inter: r.sets[3], wet: r.sets[4] },
+          owesSecondCompound: r.owes,
+          pitLossMs: { green: r.green, vsc: 0.7 * r.green, sc: 0.5 * r.green, inLapShare: 0.3 },
+        });
+      });
+    fc.assert(
+      fc.property(dryStartArb, (input) => {
+        for (const t of rainOf(strategyDp(input))) expect(t.wetnessMs, 'a rain threshold on a dry start').toBeGreaterThan(input.wetnessByLap[0]!);
+      }),
+      { numRuns: 60, seed: 23 },
+    );
   });
 });
 
