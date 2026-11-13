@@ -18,8 +18,11 @@ const KINDS: ReadonlySet<string> = new Set<CalibrationAction['kind']>([
 
 export const isCalibrationAction = (action: UiAction): action is CalibrationAction => KINDS.has(action.kind);
 
-/** What an accepted action does to the set files. */
-export type Edit = { write: CalibrationSet } | { remove: CalibrationSet };
+/**
+ * What an accepted action does to the set files: `prefer` rewrites the track's sets whose `preferred` changes, outside
+ * every set's fingerprint (no recompute, no decision; C62a, C75).
+ */
+export type Edit = { write: CalibrationSet } | { remove: CalibrationSet } | { prefer: { trackId: number; writes: CalibrationSet[] } };
 export type Checked = { ok: true; edit: Edit } | { ok: false; message: string };
 
 export type CheckCtx = {
@@ -44,7 +47,14 @@ export function checkAction(action: CalibrationAction, ctx: CheckCtx): Checked {
     const id = newSetId(name, new Set(ctx.sets.map((s) => s.id)));
     return write({ id, trackId: action.trackId, name, createdAt: ctx.now(), sources: [], overrides: {}, preferred: false });
   }
-  if (action.kind === 'calibration.prefer') throw new Error('not implemented');
+  if (action.kind === 'calibration.prefer') {
+    // At most one preferred set per track: the named one; `null` clears it. An unknown track or set is rejected (C73).
+    const sets = ctx.sets.filter((s) => s.trackId === action.trackId);
+    if (sets.length === 0) return reject(`no calibration set on track ${action.trackId}`);
+    if (action.setId !== null && !sets.some((s) => s.id === action.setId)) return reject(`no set "${action.setId}" on track ${action.trackId}`);
+    const writes = sets.filter((s) => s.preferred !== (s.id === action.setId)).map((s) => ({ ...s, preferred: s.id === action.setId }));
+    return { ok: true, edit: { prefer: { trackId: action.trackId, writes } } };
+  }
   const set = ctx.sets.find((s) => s.id === action.setId && s.trackId === action.trackId);
   if (set === undefined) return reject(`no set "${action.setId}" on track ${action.trackId}`);
   switch (action.kind) {

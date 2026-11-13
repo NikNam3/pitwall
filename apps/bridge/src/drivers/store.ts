@@ -7,7 +7,7 @@
 // requested once; once that settles, the store recomputes.
 import { join } from 'node:path';
 import { canonicalJson, type TopicName } from '@pitwall/contracts';
-import { known, unknown, type CarId, type DriverPerson, type Known, type DriverProfile, type ProfileEntry, type PersonId, type ProfileSnapshot, type SessionRef, type TeamId, type UnlinkedSlot, type DriversLinksValue, type FeedId, type LiveSeat } from '@pitwall/domain';
+import { known, unknown, type CarId, type DriverPerson, type Known, type DriverProfile, type ProfileEntry, type PersonId, type ProfileSnapshot, type SessionRef, type TeamId, type UnlinkedSlot, type DriversLinksValue, type FeedId, type LiveSeat, type LinkedSession as PersonSession } from '@pitwall/domain';
 import type { FeatureConfig } from '../feature-config.ts';
 import type { Feature } from '../features/feature.ts';
 import type { ValueFor } from '../hub/topic-hub.ts';
@@ -15,7 +15,7 @@ import type { Logger } from '../log.ts';
 import type { SessionKey } from '../storage/db.ts';
 import type { DriverSessionRow, DriverSessions } from '../storage/weekend-repository.ts';
 import { ProfileRunner, ProfilesCache, sha256, type LinkedSession } from './compute.ts';
-import { linkMatches, personOf, seatLinks, storedSlots, unlinkedSlots, type StoredSlot } from './links.ts';
+import { humanLapCount, linkMatches, newestFirst, personOf, seatLinks, storedSlots, unlinkedSlots, type StoredSlot } from './links.ts';
 import { loadPersons, sameSession, takeLock, writePerson } from './persons.ts';
 import { checkAction } from './validate.ts';
 
@@ -90,6 +90,10 @@ export class ProfileStore {
   #unlinked: UnlinkedSlot[] = [];
   /** The stale sessions whose rebuild was requested (`keyText`): never requested again in this run. */
   readonly #rebuildRequested = new Set<string>();
+  /** Each running feed's human seats as it last told them (`feedSeats`). */
+  readonly #feedSeats = new Map<FeedId, readonly Omit<LiveSeat, 'feedId'>[]>();
+  /** `unlinkedSeats` as last published, as JSON: a seat report publishes only when it changes. */
+  #publishedSeats = '[]';
   #closed = false;
 
   private constructor(root: string, deps: ProfileStoreDeps, release: () => void) {
@@ -166,8 +170,10 @@ export class ProfileStore {
    * team and race number from Participants); `[]` once the feed stops. The ones without a link are `drivers.links`'s
    * `unlinkedSeats`, published when they change (SP4.3b2 Task 10).
    */
-  feedSeats(_feedId: FeedId, _seats: readonly Omit<LiveSeat, 'feedId'>[]): void {
-    throw new Error('not implemented');
+  feedSeats(feedId: FeedId, seats: readonly Omit<LiveSeat, 'feedId'>[]): void {
+    if (seats.length === 0) this.#feedSeats.delete(feedId);
+    else this.#feedSeats.set(feedId, seats.map((s) => ({ ...s })));
+    if (JSON.stringify(this.#unlinkedSeats()) !== this.#publishedSeats) this.#publishLinks();
   }
 
   /** The slots of the stored sessions with a `human` span and no confirmed link, newest session first, with their suggestions. */
@@ -250,14 +256,47 @@ export class ProfileStore {
       });
   }
 
-  #publishAll(): void {
-    const persons = this.#persons.map((p) => ({
-      person: p.id, displayName: p.displayName, entries: this.#entries.get(p.id) ?? {}, links: p.links, excluded: p.excluded,
-      // The linked sessions and what is kept of them are SP4.3b2 Task 10's.
-      sessions: [], kept: { sessions: 0, laps: 0 },
-    }));
-    this.#deps.hub.publishGlobal('drivers.profiles', () => ({ persons }));
-    const value: DriversLinksValue = { links: seatLinks(this.#persons), unlinked: this.#unlinked, unlinkedSeats: [] };
+  /**
+   * Every stored session a seat of the person drove with a `human` span (C17, C62c), newest first: its date, track and
+   * weekend phase (the stored weekend-phase span's, C20), the person's laps in it and whether the user excluded it.
+   */
+  #sessionsOf(person: DriverPerson): PersonSession[] {
+    return this.#slots
+      .filter((slot) => slot.humanSpans.length > 0 && person.links.some((l) => linkMatches(l, slot)))
+      .toSorted(newestFirst)
+      .flatMap((slot): PersonSession[] => {
+        const { row } = slot;
+        if (row.stale) return [];
+        return [{
+          session: slot.session, date: row.startedAt, trackId: row.trackId, phase: row.phase, laps: humanLapCount(slot),
+          excluded: person.excluded.some((e) => sameSession(e, slot.session)),
+        }];
+      });
+  }
+
+  /** The running feeds' human seats whose seat no person links (C62c), feed by feed. */
+  #unlinkedSeats(): LiveSeat[] {
+    return [...this.#feedSeats].flatMap(([feedId, seats]) =>
+      seats.filter((s) => personOf(this.#persons, { teamId: s.team, raceNumber: s.raceNumber }) === undefined).map((s) => ({ feedId, ...s })));
+  }
+
+  #publishLinks(): void {
+    const unlinkedSeats = this.#unlinkedSeats();
+    this.#publishedSeats = JSON.stringify(unlinkedSeats);
+    const value: DriversLinksValue = { links: seatLinks(this.#persons), unlinked: this.#unlinked, unlinkedSeats };
     this.#deps.hub.publishGlobal('drivers.links', () => value);
+  }
+
+  #publishAll(): void {
+    const persons = this.#persons.map((p) => {
+      const sessions = this.#sessionsOf(p);
+      const kept = sessions.filter((s) => !s.excluded);
+      return {
+        person: p.id, displayName: p.displayName, entries: this.#entries.get(p.id) ?? {}, links: p.links, excluded: p.excluded,
+        sessions, kept: { sessions: kept.length, laps: kept.reduce((n, s) => n + s.laps, 0) },
+      };
+    });
+    this.#deps.hub.publishGlobal('drivers.profiles', () => ({ persons }));
+    this.#publishLinks();
   }
 }
