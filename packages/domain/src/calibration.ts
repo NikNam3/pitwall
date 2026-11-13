@@ -40,6 +40,11 @@ export type CalibrationSet = {
   overrides: Record<string, number>;
   /** ISO date; set by the bridge when a run starts on the set or picks it. */
   lastUsedAt?: string;
+  /**
+   * The set preferred for its track (`calibration.prefer`): at most one per track, the preselection at session start.
+   * Outside the set's fingerprint; a set file without it reads as `false`.
+   */
+  preferred: boolean;
 };
 
 /**

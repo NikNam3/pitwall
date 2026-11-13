@@ -46,6 +46,8 @@ function checkLink(action: Extract<DriverAction, { kind: 'drivers.link' }>, ctx:
 
 export function checkAction(action: DriverAction, ctx: CheckCtx): Checked {
   if (action.kind === 'drivers.add') {
+    // A derived id and a seat linked with the add are SP4.3b2 Task 10's.
+    if (action.person === undefined || action.seat !== undefined) throw new Error('not implemented');
     if (!isPersonId(action.person)) return invalid(`a person id is kebab-case (a-z, 0-9, -): ${JSON.stringify(action.person)}`);
     if (ctx.persons.has(action.person)) return invalid(`person ${action.person} exists already`);
     const displayName = action.displayName.trim();
@@ -56,6 +58,8 @@ export function checkAction(action: DriverAction, ctx: CheckCtx): Checked {
   const person = ctx.persons.get(action.person);
   if (person === undefined) return invalid(`no person ${action.person}`);
   switch (action.kind) {
+    case 'drivers.include':
+      throw new Error('not implemented');
     case 'drivers.exclude': {
       if (!ctx.slots.some((s) => sameSession(s.session, action.session))) {
         return invalid(`no stored session ${action.session.sessionUid}/${action.session.weekendId}/${action.session.feedCar}`);

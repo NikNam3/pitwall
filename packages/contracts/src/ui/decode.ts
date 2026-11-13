@@ -142,14 +142,31 @@ export const decodeUiAction = (raw: unknown): UiAction | undefined => {
       return isString(raw.feedId) && (raw.setId === null || isString(raw.setId))
         ? { kind: raw.kind, feedId: raw.feedId as FeedId, setId: raw.setId }
         : undefined;
+    case 'calibration.prefer':
+      // `null` clears the track's preferred set.
+      return isInteger(raw.trackId) && (raw.setId === null || isString(raw.setId))
+        ? { kind: raw.kind, trackId: raw.trackId, setId: raw.setId }
+        : undefined;
     // The driver-profile actions (C62c): only their shape; the bridge's profile store checks persons, sessions and keys (C73).
-    case 'drivers.add':
-      return isString(raw.person) && isString(raw.displayName) ? { kind: raw.kind, person: raw.person, displayName: raw.displayName } : undefined;
+    case 'drivers.add': {
+      if (!isString(raw.displayName)) return undefined;
+      const action: Extract<UiAction, { kind: 'drivers.add' }> = { kind: raw.kind, displayName: raw.displayName };
+      if (raw.person !== undefined) {
+        if (!isString(raw.person)) return undefined;
+        action.person = raw.person;
+      }
+      if (raw.seat !== undefined) {
+        if (!isObject(raw.seat) || !isInteger(raw.seat.team) || !isInteger(raw.seat.raceNumber)) return undefined;
+        action.seat = { team: raw.seat.team, raceNumber: raw.seat.raceNumber };
+      }
+      return action;
+    }
     case 'drivers.link':
       return isInteger(raw.team) && isInteger(raw.raceNumber) && (raw.person === null || isString(raw.person))
         ? { kind: raw.kind, team: raw.team, raceNumber: raw.raceNumber, person: raw.person }
         : undefined;
-    case 'drivers.exclude': {
+    case 'drivers.exclude':
+    case 'drivers.include': {
       const session = decodeSessionRef(raw.session);
       return session !== undefined && isString(raw.person) ? { kind: raw.kind, person: raw.person, session } : undefined;
     }

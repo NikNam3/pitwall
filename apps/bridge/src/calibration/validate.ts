@@ -13,7 +13,7 @@ export type CalibrationAction = Exclude<Extract<UiAction, { kind: `calibration.$
 const KINDS: ReadonlySet<string> = new Set<CalibrationAction['kind']>([
   'calibration.set.create', 'calibration.set.copy', 'calibration.set.rename', 'calibration.set.delete',
   'calibration.source.add', 'calibration.source.remove', 'calibration.lap.exclude', 'calibration.lap.include',
-  'calibration.override.set', 'calibration.override.clear',
+  'calibration.override.set', 'calibration.override.clear', 'calibration.prefer',
 ]);
 
 export const isCalibrationAction = (action: UiAction): action is CalibrationAction => KINDS.has(action.kind);
@@ -42,8 +42,9 @@ export function checkAction(action: CalibrationAction, ctx: CheckCtx): Checked {
     const problem = nameProblem(name, action.trackId, ctx.sets);
     if (problem !== undefined) return reject(problem);
     const id = newSetId(name, new Set(ctx.sets.map((s) => s.id)));
-    return write({ id, trackId: action.trackId, name, createdAt: ctx.now(), sources: [], overrides: {} });
+    return write({ id, trackId: action.trackId, name, createdAt: ctx.now(), sources: [], overrides: {}, preferred: false });
   }
+  if (action.kind === 'calibration.prefer') throw new Error('not implemented');
   const set = ctx.sets.find((s) => s.id === action.setId && s.trackId === action.trackId);
   if (set === undefined) return reject(`no set "${action.setId}" on track ${action.trackId}`);
   switch (action.kind) {
@@ -54,7 +55,7 @@ export function checkAction(action: CalibrationAction, ctx: CheckCtx): Checked {
       const id = newSetId(name, new Set(ctx.sets.map((s) => s.id)));
       return write({
         id, trackId: set.trackId, name, createdAt: ctx.now(),
-        sources: set.sources.map((s) => ({ ...s, excludedLaps: [...s.excludedLaps] })), overrides: { ...set.overrides },
+        sources: set.sources.map((s) => ({ ...s, excludedLaps: [...s.excludedLaps] })), overrides: { ...set.overrides }, preferred: false,
       });
     }
     case 'calibration.set.rename': {

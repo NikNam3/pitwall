@@ -42,6 +42,7 @@ const set = (id: string, over: Partial<CalibrationSet> = {}): CalibrationSet => 
   createdAt: '2026-09-28',
   sources: [],
   overrides: {},
+  preferred: false,
   ...over,
 });
 // The mockup's sample: three sets on the track (league the preselection), one on another track.

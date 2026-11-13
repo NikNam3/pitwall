@@ -76,10 +76,13 @@ function decodeSet(raw: unknown): CalibrationSet | undefined {
   const overrides = Object.entries(raw.overrides);
   if (overrides.some(([, v]) => typeof v !== 'number' || !Number.isFinite(v))) return undefined;
   if (raw.lastUsedAt !== undefined && !isString(raw.lastUsedAt)) return undefined;
+  if (raw.preferred !== undefined && typeof raw.preferred !== 'boolean') return undefined;
   return {
     id: raw.id, trackId: raw.trackId, name: raw.name, createdAt: raw.createdAt,
     sources: sources as CalibrationSource[], overrides: Object.fromEntries(overrides) as Record<string, number>,
     ...(raw.lastUsedAt !== undefined && { lastUsedAt: raw.lastUsedAt }),
+    // A set file from before `calibration.prefer` reads as not preferred.
+    preferred: raw.preferred === true,
   };
 }
 

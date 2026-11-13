@@ -1,7 +1,8 @@
 // Driver profiles (contract C62c, SP4.3a spec 4): the persons the user links to car slots, their profiles, the run's
 // profile snapshot and the `drivers.*` topics' values. JSON-safe.
-import type { CarId, SessionUid, TeamId } from './ids.ts';
+import type { CarId, FeedId, SessionUid, TeamId } from './ids.ts';
 import type { Known } from './known.ts';
+import type { WeekendPhase } from './weekend-phase.ts';
 
 /** A person's id: kebab-case, the name of its file `PITWALL_DATA_DIR/drivers/<person>.json`. */
 export type PersonId = string;
@@ -42,11 +43,34 @@ export type UnlinkedSlot = {
   name: string | null;
 };
 
-/** `drivers.profiles`: every person with their profile, links and exclusions. */
-export type DriversProfilesValue = { persons: (DriverProfile & { links: DriverLink[]; excluded: SessionRef[] })[] };
+/**
+ * A stored session a person's linked seat drove in with a human car-driver span (C62c): when and where, its weekend
+ * phase with its segment and format (from the stored session's `weekend-phase` span, C20; never the game's session type,
+ * C13), the person's laps in it, and whether the user excluded it.
+ */
+export type LinkedSession = {
+  session: SessionRef;
+  /** ISO date of the session. */
+  date: string;
+  trackId: number;
+  phase: WeekendPhase;
+  laps: number;
+  excluded: boolean;
+};
 
 /**
- * `drivers.links`: the seat links, and the human slots of the stored sessions whose seat has no link. The bridge always
- * sends `links`; it is optional so a value of the unlinked slots alone (a fake store) stays one.
+ * `drivers.profiles`: every person with their profile, links and exclusions, their linked sessions (newest first) and
+ * the sessions and laps not excluded (`kept`).
  */
-export type DriversLinksValue = { links: { team: TeamId; raceNumber: number; person: PersonId }[]; unlinked: UnlinkedSlot[] };
+export type DriversProfilesValue = {
+  persons: (DriverProfile & { links: DriverLink[]; excluded: SessionRef[]; sessions: LinkedSession[]; kept: { sessions: number; laps: number } })[];
+};
+
+/** A human seat of one of our feeds (its player car or teammate while a human drives it, C17) with its seat from Participants. */
+export type LiveSeat = { feedId: FeedId; carId: CarId; team: TeamId; raceNumber: number };
+
+/**
+ * `drivers.links`: the seat links, the human slots of the stored sessions whose seat has no link (`unlinked`), and our
+ * running feeds' human seats without a link (`unlinkedSeats`).
+ */
+export type DriversLinksValue = { links: { team: TeamId; raceNumber: number; person: PersonId }[]; unlinked: UnlinkedSlot[]; unlinkedSeats: LiveSeat[] };
