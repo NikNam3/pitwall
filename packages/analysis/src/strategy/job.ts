@@ -18,46 +18,15 @@
 //   mean race time against the leader's and the committed row's; per car its race position at the trigger.
 // - `candidatesForRun` is the candidate step's one place and `partFinalCall` a part's final call's;
 //   `scripts/gen-strategy-reference.ts` builds its input with them.
-import { known, unknown, type CarId, type Known, type McRow, type NoiseCompound, type Policy, type StartingPoint, type StrategyOutput } from '@pitwall/domain';
+import { known, unknown, type CarId, type Known, type McRow, type Policy, type StartingPoint, type StrategyOutput } from '@pitwall/domain';
 import type { Rng } from '@pitwall/engine/readers';
-import { startLapOf } from '../race-forecast/index.ts';
 import { raceMonteCarlo, type McCandidate, type McConfig, type McInput, type McResult } from '../race-monte-carlo/index.ts';
-import { dpInputOn, mcSettingsFrom, notPlannedWhy, plainRoad, plannedCars, plannedField, strategyConfigOf, toMcHazard, type StrategyInput } from '../shared/strategy-input/index.ts';
+import { committedField, dpInputOn, followable, mcSettingsFrom, notPlannedWhy, plainRoad, plannedCars, plannedField, strategyConfigOf, toMcHazard, type StrategyInput } from '../shared/strategy-input/index.ts';
 import { strategyDp } from '../strategy-dp/index.ts';
 import { candidatesOf } from './candidates.ts';
 import type { StrategyConfig } from './config.ts';
 
 type Infeasible = McRow['infeasible'];
-
-/**
- * A committed policy as far as car `car` can follow it (spec §8.2): a passed stop boxes this lap (one stop a lap), a
- * stop onto a compound without a set left is dropped (the car keeps its tyres); the reason, the first found.
- */
-export function followable(start: StartingPoint, car: CarId, policy: Policy): { policy: Policy; infeasible: Infeasible } {
-  const fromLap = startLapOf(start, car);
-  let infeasible: Infeasible = null;
-  const onLaps: Policy['stops'] = [];
-  for (const s of policy.stops) {
-    if (s.lap < fromLap) infeasible ??= 'stopLapPassed';
-    const lap = Math.max(s.lap, fromLap);
-    const last = onLaps.at(-1);
-    if (last !== undefined && last.lap >= lap) continue;
-    onLaps.push({ lap, compound: s.compound });
-  }
-  const left = new Map<NoiseCompound, number>();
-  for (const s of start.sets[car] ?? []) left.set(s.compound, (left.get(s.compound) ?? 0) + 1);
-  const stops: Policy['stops'] = [];
-  for (const s of onLaps) {
-    const n = left.get(s.compound) ?? 0;
-    if (n <= 0) {
-      infeasible ??= 'noSetLeft';
-      continue;
-    }
-    left.set(s.compound, n - 1);
-    stops.push(s);
-  }
-  return { policy: infeasible === null ? policy : { stops, triggers: policy.triggers }, infeasible };
-}
 
 /** The search's settings from the config (spec §7.3, §11.1). */
 function mcConfigOf(config: StrategyConfig, points: number[]): McConfig {
@@ -174,7 +143,8 @@ export function partFinalCall(input: StrategyInput, rng: Rng): { final: FinalCal
   const total = config.maxScenarioPolicies;
   const mate = [...cars.keys()].find((c) => c !== car);
   if (mate === undefined) return done(callOf(car, total));
-  const mateFollowed = (cars.get(mate) as CarPlan).followed;
+  // the committed teammate as every job models it (C43, `committedField`): its followed commit, as `perCar` holds it
+  const mateFollowed = committedField(input, car)[mate] ?? null;
   if (mateFollowed !== null) return done(callOf(car, total, { car: mate, fixed: mateFollowed }));
   const round1Cap = Math.floor(total * config.round1Share);
   if (round1Cap <= 0) return done(callOf(car, total));

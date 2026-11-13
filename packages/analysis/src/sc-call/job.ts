@@ -16,7 +16,7 @@ import type { Rng } from '@pitwall/engine/readers';
 import { startLapOf } from '../race-forecast/index.ts';
 import { scoreCalls, type CallInput, type McInput } from '../race-monte-carlo/index.ts';
 import { binShares } from '../shared/distribution.ts';
-import { mcSettingsFrom, notPlannedWhy, plannedCars, plannedField, policyOf, strategyConfigOf, toDpInput, toMcHazard } from '../shared/strategy-input/index.ts';
+import { committedField, mcSettingsFrom, notPlannedWhy, plannedCars, plannedField, policyOf, strategyConfigOf, toDpInput, toMcHazard } from '../shared/strategy-input/index.ts';
 import { bestWith, dpResult, solveDp, type DpSolution, type DpUnder } from '../strategy-dp/index.ts';
 import { SC_CALL_CONFIG, type ScCallConfig } from './config.ts';
 import type { ScCallCar, ScCallInput, ScCondition } from './prepare.ts';
@@ -126,13 +126,9 @@ function callFor(input: ScCallInput, start: StartingPoint, at: number, carId: Ca
   const cap = configOf(strategy.config).maxScenarioPolicies;
   // the call's car alone, or with a committed teammate as certain input; an uncommitted teammate is modelled like a rival
   const sets: StartingPoint['sets'] = { [carId]: field.sets[carId] ?? [] };
-  const committed: Record<CarId, Policy | null> = { [carId]: null };
-  for (const mate of strategy.ourCars) {
-    const plan = strategy.committed[mate] ?? null;
-    if (mate === carId || plan === null || field.sets[mate] === undefined) continue;
-    sets[mate] = field.sets[mate];
-    committed[mate] = plan;
-  }
+  const mates = committedField(strategy, carId);
+  for (const mate of Object.keys(mates).map((k) => Number(k) as CarId)) sets[mate] = field.sets[mate] ?? [];
+  const committed: Record<CarId, Policy | null> = { [carId]: null, ...mates };
   const callStart: StartingPoint = { ...field, sets };
   const { rivalRules } = mcSettingsFrom(strategy.config);
   // the call reads no traffic outcome: the strategy config's gap, no traffic laps

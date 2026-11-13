@@ -1,12 +1,12 @@
 // `undercut`'s job module (SP4.3b spec §9.1): `run` runs in a worker (C51). Per our car one DP solve (`solveDp`), its
 // cases against the rivals in range (`cases.ts`), scored by one `scoreCalls` on common scenarios under the cap of
-// scenario-policies (a count, C2). Our other car is certain input following its committed plan, else modelled like a
-// rival (as `strategy` plans a car alone). No state between runs (C31, C32).
+// scenario-policies (a count, C2). Our other car is certain input following its committed plan as far as it can
+// (`committedField`, one rule for every job, C43), else modelled like a rival (as `strategy` plans a car alone). No state between runs (C31, C32).
 import { known, unknown, type CarId, type Known, type Policy, type StartingPoint, type Trigger, type Undercut, type UndercutRival } from '@pitwall/domain';
 import type { Rng } from '@pitwall/engine/readers';
 import { startLapOf } from '../race-forecast/index.ts';
 import { scoreCalls, type CallInput } from '../race-monte-carlo/index.ts';
-import { mcSettingsFrom, notPlannedWhy, toDpInput, toMcHazard } from '../shared/strategy-input/index.ts';
+import { committedField, mcSettingsFrom, notPlannedWhy, toDpInput, toMcHazard } from '../shared/strategy-input/index.ts';
 import { dpResult, solveDp, type DpSolution } from '../strategy-dp/index.ts';
 import { caseValue, casesOf, ownStopsOf, rivalStopsOf, type CaseCall, type RivalStopsAt } from './cases.ts';
 import type { UndercutCarInput, UndercutInput } from './prepare.ts';
@@ -57,13 +57,9 @@ function carValue(input: UndercutInput, start: StartingPoint, at: number, car: C
     if (scenarios <= 0) return [];
     // the call's field: our car and, with a committed plan, our other car as certain input
     const sets: StartingPoint['sets'] = { [car]: start.sets[car] ?? [] };
-    const committed: Record<CarId, Policy | null> = { [car]: null };
-    for (const mate of input.strategy.ourCars) {
-      const plan = input.strategy.committed[mate] ?? null;
-      if (mate === car || plan === null || start.sets[mate] === undefined) continue;
-      sets[mate] = start.sets[mate];
-      committed[mate] = plan;
-    }
+    const mates = committedField(input.strategy, car);
+    for (const mate of Object.keys(mates).map((k) => Number(k) as CarId)) sets[mate] = start.sets[mate] ?? [];
+    const committed: Record<CarId, Policy | null> = { [car]: null, ...mates };
     const call: CallInput = {
       start: { ...start, sets },
       car,

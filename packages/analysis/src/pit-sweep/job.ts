@@ -11,9 +11,8 @@ import { known, unknown, type CarId, type PitSweepCar, type PitSweepTable, type 
 import type { Rng } from '@pitwall/engine/readers';
 import { startLapOf } from '../race-forecast/index.ts';
 import { scoreCalls, type CallCandidate } from '../race-monte-carlo/index.ts';
-import { mcSettingsFrom, notPlannedWhy, plannedCars, plannedField, policyOf, toDpInput, toMcHazard } from '../shared/strategy-input/index.ts';
+import { committedField, mcSettingsFrom, notPlannedWhy, plannedCars, plannedField, policyOf, toDpInput, toMcHazard } from '../shared/strategy-input/index.ts';
 import { bestWith, dpResult, solveDp } from '../strategy-dp/index.ts';
-import { followable } from '../strategy/job.ts';
 import type { PitSweepInput, SweepCar } from './prepare.ts';
 import { rowsOf } from './rows.ts';
 
@@ -22,17 +21,12 @@ export type { PitSweepInput } from './prepare.ts';
 /** The output: per our car its sweep of every compound with a new set; a rival is absent. */
 export type PitSweepOutput = Record<CarId, PitSweepCar>;
 
-/** The call's field for car `car`: only its sets, and a committed teammate's with its followable plan. */
+/** The call's field for car `car`: only its sets, and a committed teammate's with its followable plan (`committedField`, C43). */
 function callField(input: PitSweepInput, field: StartingPoint, car: CarId): { start: StartingPoint; committed: Record<CarId, Policy | null> } {
   const sets: StartingPoint['sets'] = { [car]: field.sets[car] ?? [] };
-  const committed: Record<CarId, Policy | null> = { [car]: null };
-  for (const mate of input.strategy.ourCars) {
-    const plan = input.strategy.committed[mate] ?? null;
-    if (mate === car || plan === null || field.sets[mate] === undefined) continue;
-    sets[mate] = field.sets[mate];
-    committed[mate] = followable(field, mate, plan).policy;
-  }
-  return { start: { ...field, sets }, committed };
+  const mates = committedField(input.strategy, car);
+  for (const mate of Object.keys(mates).map((k) => Number(k) as CarId)) sets[mate] = field.sets[mate] ?? [];
+  return { start: { ...field, sets }, committed: { [car]: null, ...mates } };
 }
 
 /** Car `car`'s tables, one per compound that has a row. */
