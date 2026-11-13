@@ -40,8 +40,9 @@ describe('uiAction over the WebSocket', () => {
     });
     a.ws.send(JSON.stringify({ type: 'uiAction', id: 'act1', action: { kind: 'linkGroup.set', group } }));
     await vi.waitFor(() => expect(a.got).toContainEqual({ type: 'actionResult', id: 'act1', ok: true }));
-    await vi.waitFor(() => expect(b.got).toContainEqual({ type: 'update', id: 'lb', value: [group] }), { timeout: 3000 });
-    expect(a.got).toContainEqual({ type: 'update', id: 'la', value: [group] });
+    await vi.waitFor(() => expect(b.got).toContainEqual({ type: 'update', id: 'lb', value: [group, { id: 2, primary: 'teammate', compare: [], window: { kind: 'live' } }] }), { timeout: 3000 });
+    // the bridge publishes the default group 2 (the teammate) beside group 1 (SP4.3b2 Task 11 port)
+    expect(a.got).toContainEqual({ type: 'update', id: 'la', value: [group, { id: 2, primary: 'teammate', compare: [], window: { kind: 'live' } }] });
   });
   it('answers ok:false invalid for a structurally invalid action and changes nothing', async () => {
     const { open } = await start();

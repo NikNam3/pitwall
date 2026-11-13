@@ -14,9 +14,7 @@ export type ShellOverlay =
   | { kind: 'keys' }
   | { kind: 'workbooks' }
   | { kind: 'saveAs' }
-  | { kind: 'picker'; group: number }
-  /** The calibration prompt (`calibration.pick`, and by itself at a new session). */
-  | { kind: 'calibration' };
+  | { kind: 'picker'; group: number };
 
 /** What the commands need from the shell. */
 export type CommandContext = {
@@ -151,26 +149,35 @@ export function panelCommands(decls: readonly Parameters<typeof defaultPanel>[0]
 /** The id of the command that chooses a calibration set for the run; `null` is the track file's defaults. */
 export const calibrationChooseId = (setId: string | null): string => `calibration.choose.${setId ?? 'defaults'}`;
 
+/** The workbook the garage setup lives in (SP4.3b spec §10, U7): `calibration.pick` and `drivers.open` switch to it. */
+export const GARAGE_WORKBOOK = 'garage';
+
 /**
- * `calibration.pick` (opens the prompt), one `calibration.choose.<setId>` per set of the session's track and
- * `calibration.choose.defaults` (SP4.1a spec 3.3). A choice sends `calibration.choose` for the feed and closes the prompt.
+ * `calibration.pick` (the garage's calibration panel, through `pick`), one `calibration.choose.<setId>` per set of the
+ * session's track and `calibration.choose.defaults` (SP4.1a spec 3.3, SP4.3b spec §10). A choice sends
+ * `calibration.choose` for the feed.
  */
 export function calibrationCommands(
   sets: readonly { id: string; name: string }[],
-  ctx: Pick<CommandContext, 'send' | 'open'> & { feedId: FeedId; closePrompt: () => void },
+  ctx: Pick<CommandContext, 'send'> & { feedId: FeedId; pick: () => void },
 ): Command[] {
   const g = text.commandGroups.calibration;
   const t = text.commandTitles;
-  const choose = (setId: string | null): void => {
-    ctx.send({ kind: 'calibration.choose', feedId: ctx.feedId, setId });
-    ctx.closePrompt();
-  };
+  const choose = (setId: string | null): void => ctx.send({ kind: 'calibration.choose', feedId: ctx.feedId, setId });
   return [
-    { id: 'calibration.pick', title: t.calibrationPick, group: g, run: () => ctx.open({ kind: 'calibration' }) },
+    { id: 'calibration.pick', title: t.calibrationPick, group: g, run: ctx.pick },
     ...sets.map((set): Command => ({ id: calibrationChooseId(set.id), title: t.calibrationChoose(set.name), group: g, run: () => choose(set.id) })),
     { id: calibrationChooseId(null), title: t.calibrationChoose(text.calibration.defaults), group: g, run: () => choose(null) },
   ];
 }
+
+/** `drivers.open`: the garage's drivers panel, through `open` (SP4.3b spec §10, README Q6 A). */
+export const driversOpenCommand = (open: () => void): Command => ({
+  id: 'drivers.open',
+  title: text.commandTitles.driversOpen,
+  group: text.commandGroups.drivers,
+  run: open,
+});
 
 /** The id of the command that commits the given plan for car `carId` (C72, C76). */
 export const planCommitId = (carId: CarId): string => `plan.commit.${carId}`;
