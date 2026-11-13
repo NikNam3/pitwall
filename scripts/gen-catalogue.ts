@@ -25,7 +25,7 @@ const DEFAULT_DIRS: Required<CatalogueDirs> = {
 };
 
 /** Topics that no feature binds because the bridge publishes them itself (global topics are exempt by their scope). */
-const PUBLISHED_BY_BRIDGE = ['replay.status', 'calibration.active'];
+const PUBLISHED_BY_BRIDGE = ['replay.status', 'calibration.active', 'config.effective'];
 
 /** A path as the catalogue shows it: relative to the repo root, with forward slashes. */
 const shown = (path: string): string => relative(ROOT, path).split('\\').join('/');

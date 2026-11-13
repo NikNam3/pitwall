@@ -591,7 +591,9 @@ describe('ProfileStore', () => {
     changes('link', () => t.ok({ kind: 'drivers.link', ...seat(s1, 2), person: 'anna' }));
     expect(t.persons()[0]?.links).toEqual([{ team: MERCEDES, raceNumber: 7 }]);
     changes('override', () => t.ok({ kind: 'drivers.override', person: 'anna', key: 'fake.meanLapMs', value: 95_000 }));
-    expect(valueOf(t.entry('anna', 'fake.meanLapMs'))).toBe(95_000);
+    // the topic keeps the computed value and shows the override beside it; the snapshot applies it (SP4.3b2 Task 16 port, C62c)
+    expect(valueOf(t.entry('anna', 'fake.meanLapMs'))).toBe(mean([1, 2, 3, 4, 5].map((n) => 90_000 + n)));
+    expect(t.persons()[0]?.overrides).toEqual({ 'fake.meanLapMs': 95_000 });
     changes('clear', () => t.ok({ kind: 'drivers.override.clear', person: 'anna', key: 'fake.meanLapMs' }));
     expect(valueOf(t.entry('anna', 'fake.meanLapMs'))).toBe(mean([1, 2, 3, 4, 5].map((n) => 90_000 + n)));
     // Car 3 (no name, Anna's seat) is linked by the seat link.
