@@ -306,3 +306,18 @@ export const formatGapTick = (plotted: number): string => {
   if (behind === 0) return '0';
   return behind > 0 ? `+${behind}` : `${MINUS}${-behind}`;
 };
+
+/** An expected place to two decimals, `7.523` -> `7.52`. */
+export const formatExpectedPlace = (x: number): string => fixed(x, 2);
+
+/** Places gained, signed, one decimal, `1.43` -> `+1.4`, `-0.6` -> `−0.6`; zero (and what rounds to it) is `+0.0`. */
+export const formatPlacesGained = (x: number): string => {
+  const text = fixed(x, 1);
+  return text === '' || text.startsWith(MINUS) ? text : `+${text}`;
+};
+
+/** A share 0…1 as a whole percent, `0.75` -> `75%`. */
+export const formatShare = (p: number): string => (Number.isFinite(p) ? `${whole(p * 100)}%` : '');
+
+/** Points to one decimal, `6.25` -> `6.3`. */
+export const formatPoints = (x: number): string => fixed(x, 1);
