@@ -408,6 +408,79 @@ describe('calibration-panel: what a source and a value show', () => {
   });
 });
 
+// SP4.3b2 Task 17 (mockup docs/design/2026-11-12-sp4.3b/calibration-panel.html, README Q8 A; C68, C73, C74). Contract
+// assumed: right after the set picker (before `session-state`), a button `set-prefer`. On the shown set when it is the
+// track's preferred one (`CalibrationSet.preferred`), it holds the kit's `Star` (`svg.star`), in the text role (not dim),
+// with `text.preferredHover` on hover, and a click sends `calibration.prefer` with `setId: null`; on any other set it
+// holds the kit's `StarOutline` (`svg.star-outline`), a quiet button (dim), with `text.preferHover` on hover, and a click
+// sends `calibration.prefer` with its `setId`. The set picker's option of the preferred set holds `svg.star`; no other
+// option holds a star. JetBrains Mono has no ★ or ☆ (README): the panel shows no ★ or ☆ character.
+describe('calibration-panel: the preferred set', () => {
+  const after = (a: HTMLElement, b: HTMLElement): boolean => (b.compareDocumentPosition(a) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+  const hovers = text as unknown as Record<string, unknown>;
+
+  it('the preferred set shows ★ after the picker; a click sends calibration.prefer with setId null', async () => {
+    const { container: c, sent } = mount(cases.activeLeague);
+    const star = get(c, 'set-prefer');
+    expect(after(star, get(c, 'set-picker'))).toBe(true);
+    expect(after(get(c, 'session-state'), star)).toBe(true);
+    expect(star.querySelector('svg.star')).not.toBeNull();
+    expect(star.querySelector('svg.star-outline')).toBeNull();
+    expect(isDim(star, c)).toBe(false);
+    expect(typeof hovers['preferredHover']).toBe('string');
+    expect(star.closest('[title]')?.getAttribute('title')).toBe(hovers['preferredHover']);
+    expect(c.textContent).not.toMatch(/[★☆]/);
+    await fireEvent.click(star);
+    expect(sent).toEqual([{ kind: 'calibration.prefer', trackId: SILVERSTONE, setId: null }]);
+  });
+
+  it('any other set shows ☆ as a quiet button that sends calibration.prefer with its setId', async () => {
+    const { container: c, sent } = mount(cases.notPreferred);
+    const outline = get(c, 'set-prefer');
+    expect(outline.tagName).toBe('BUTTON');
+    expect(after(outline, get(c, 'set-picker'))).toBe(true);
+    expect(outline.querySelector('svg.star-outline')).not.toBeNull();
+    expect(outline.querySelector('svg.star')).toBeNull();
+    expect(isDim(outline, c)).toBe(true);
+    expect(typeof hovers['preferHover']).toBe('string');
+    expect(outline.closest('[title]')?.getAttribute('title')).toBe(hovers['preferHover']);
+    await fireEvent.click(outline);
+    expect(sent).toEqual([{ kind: 'calibration.prefer', trackId: SILVERSTONE, setId: 'after-floor-upgrade' }]);
+    // a picked set (window-local) shows ☆ too, and the click names it
+    cleanup();
+    const picked = mount(cases.activeLeague);
+    await pick(picked.container, 'set-picker', 'pre-season');
+    expect(get(picked.container, 'set-prefer').querySelector('svg.star-outline')).not.toBeNull();
+    await fireEvent.click(get(picked.container, 'set-prefer'));
+    expect(picked.sent).toEqual([{ kind: 'calibration.prefer', trackId: SILVERSTONE, setId: 'pre-season' }]);
+  });
+
+  it('the open picker marks the preferred set with ★', () => {
+    const { container: c } = mount(cases.notPreferred);
+    const byValue = Object.fromEntries([...get<HTMLSelectElement>(c, 'set-picker').options].map((o) => [o.value, o]));
+    expect(byValue['league']?.querySelector('svg.star')).not.toBeNull();
+    for (const id of ['pre-season', 'after-floor-upgrade']) {
+      expect(byValue[id]?.querySelector('svg.star, svg.star-outline'), id).toBeNull();
+    }
+  });
+
+  it('compact: ★ or ☆ after the picker', async () => {
+    const preferred = mount(cases.activeLeague, { mode: 'compact' });
+    const star = get(preferred.container, 'set-prefer');
+    expect(after(star, get(preferred.container, 'set-picker'))).toBe(true);
+    expect(star.querySelector('svg.star')).not.toBeNull();
+    await fireEvent.click(star);
+    expect(preferred.sent).toEqual([{ kind: 'calibration.prefer', trackId: SILVERSTONE, setId: null }]);
+    cleanup();
+    const other = mount(cases.notPreferred, { mode: 'compact' });
+    const outline = get(other.container, 'set-prefer');
+    expect(after(outline, get(other.container, 'set-picker'))).toBe(true);
+    expect(outline.querySelector('svg.star-outline')).not.toBeNull();
+    await fireEvent.click(outline);
+    expect(other.sent).toEqual([{ kind: 'calibration.prefer', trackId: SILVERSTONE, setId: 'after-floor-upgrade' }]);
+  });
+});
+
 describe('calibration-panel: the track', () => {
   it('with a session: the running session\'s track and set, no track picker, "active in this race"', () => {
     const { container: c } = mount(cases.activeLeague);

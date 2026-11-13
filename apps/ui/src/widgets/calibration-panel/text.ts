@@ -18,6 +18,10 @@ export const add = 'add';
 export const remove = '×';
 export const removeHover = 'remove this source from the set';
 
+/** The preferred-set button after the picker: the star on the track's preferred set, the outline on any other. */
+export const preferredHover = "the track's preferred set, preselected at session start: click to unset";
+export const preferHover = 'make this the preferred set of the track, preselected at session start';
+
 /** Whether the picked set is the one the running race uses. */
 export const activeInRace = 'active in this race';
 export const notInRace = 'not used in this race';

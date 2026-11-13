@@ -21,5 +21,7 @@ export const widget = declareWidget({
     'calibration.set.create', 'calibration.set.copy', 'calibration.set.rename', 'calibration.set.delete',
     'calibration.source.add', 'calibration.source.remove', 'calibration.lap.exclude', 'calibration.lap.include',
     'calibration.override.set', 'calibration.override.clear',
+    // The preferred set of a track (SP4.3b2): the star after the picker.
+    'calibration.prefer',
   ],
 });

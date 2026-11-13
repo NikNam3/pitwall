@@ -10,6 +10,8 @@ const PANEL_ACTIONS: UiAction['kind'][] = [
   'calibration.set.create', 'calibration.set.copy', 'calibration.set.rename', 'calibration.set.delete',
   'calibration.source.add', 'calibration.source.remove', 'calibration.lap.exclude', 'calibration.lap.include',
   'calibration.override.set', 'calibration.override.clear',
+  // SP4.3b2 Task 17: the preferred set (★ / ☆ after the picker)
+  'calibration.prefer',
 ];
 
 describe('calibration-panel declaration', () => {
@@ -30,7 +32,7 @@ describe('calibration-panel declaration', () => {
     expect(widget.sizes).toEqual({ compact: { minCols: 36, minRows: 7 }, full: { minCols: 76, minRows: 29 } });
   });
 
-  it('declares exactly the calibration.* actions but calibration.choose', () => {
+  it('the widget declares every calibration.* action but calibration.choose', () => {
     expect([...widget.actions].sort()).toEqual([...PANEL_ACTIONS].sort());
     expect(widget.actions).not.toContain('calibration.choose');
   });
@@ -40,6 +42,23 @@ describe('calibration-panel gallery', () => {
   it('starts with the mockup\'s main figure and has its other figures as cases', () => {
     expect(Object.keys(cases)[0]).toBe('activeLeague');
     expect(Object.keys(cases)).toEqual(expect.arrayContaining(['noSession', 'staleSource', 'defaultsChosen', 'noSet']));
+  });
+
+  // SP4.3b2 Task 17 (mockup docs/design/2026-11-12-sp4.3b/calibration-panel.html; P17, C73): its data states are
+  // gallery cases (full with ★: the shown set is the preferred one; full with ☆: it is not), compact through the fit
+  // sizes; the open picker is window-local, a component test.
+  it('gallery: the data states of calibration-panel.html (full with ★, full with ☆, compact)', () => {
+    const shown = (c: (typeof cases)[keyof typeof cases]) => {
+      const a = c.active;
+      const setId = a.known ? a.value.setId : null;
+      return c.sets.sets.find((s) => s.id === setId);
+    };
+    expect(Object.keys(cases)[0]).toBe('activeLeague');
+    expect(shown(cases.activeLeague)?.preferred).toBe(true);
+    expect(shown(cases.notPreferred)?.preferred).toBe(false);
+    const track = shown(cases.notPreferred)?.trackId;
+    expect(cases.notPreferred.sets.sets.some((s) => s.trackId === track && s.preferred)).toBe(true);
+    expect(fit.some((f) => f.mode === 'compact')).toBe(true);
   });
 
   it('fits at both mode minimums', () => {

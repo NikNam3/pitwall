@@ -6,6 +6,8 @@
   import type { UiAction } from '@pitwall/contracts';
   import type { CalibrationSource, SourceFit } from '@pitwall/domain';
   import { getUiActions } from '../../kit/actions.ts';
+  import Star from '../../kit/icons/Star.svelte';
+  import StarOutline from '../../kit/icons/StarOutline.svelte';
   import { fitCell } from '../../kit/grid/grid.ts';
   import type { WidgetProps } from '../../kit/types.ts';
   import { formatDay, formatTrack } from '../../kit/values/format.ts';
@@ -105,6 +107,11 @@
   function deleteSet(): void {
     const at = onSet();
     if (at !== undefined) void act({ kind: 'calibration.set.delete', ...at });
+  }
+  /** The star: on the preferred set it unsets the track's preference, on any other set it makes that set preferred. */
+  function prefer(): void {
+    const at = onSet();
+    if (at !== undefined && set !== undefined) void act({ kind: 'calibration.prefer', trackId: at.trackId, setId: set.preferred ? null : at.setId });
   }
   function sourceAction(kind: 'calibration.source.add' | 'calibration.source.remove', source: CalibrationSource): void {
     const at = onSet();
@@ -252,8 +259,15 @@
         style:width="{full ? 22 : 20}ch"
         bind:value={() => set?.id ?? '', pickSet}
       >
-        {#each trackSets as s (s.id)}<option value={s.id}>{s.name}</option>{/each}
-      </select>{:else}<span class="faint"
+        {#each trackSets as s (s.id)}<option value={s.id}>{s.name}{#if s.preferred}{SP}<Star />{/if}</option>{/each}
+      </select>{#if set !== undefined}{SP}<button
+          type="button"
+          class="pw-button"
+          class:dim={!set.preferred}
+          data-testid="set-prefer"
+          title={set.preferred ? text.preferredHover : text.preferHover}
+          onclick={prefer}>{#if set.preferred}<Star />{:else}<StarOutline />{/if}</button
+        >{/if}{:else}<span class="faint"
         >{trackId === null ? (full ? text.noTrack : text.noTrackShort) : full ? text.noSet : text.noSetShort}</span
       >{/if}{SP2}<span
       data-testid="session-state"
