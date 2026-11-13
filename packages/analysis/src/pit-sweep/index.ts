@@ -5,7 +5,7 @@ import type { Job } from '@pitwall/engine/readers';
 import { PIT_WINDOW } from '../pit-window/index.ts';
 import { REJOIN } from '../rejoin/index.ts';
 import { STRATEGY_JOB, STRATEGY_TRIGGER } from '../strategy/index.ts';
-import type { PitSweepOutput } from './job.ts';
+import { mergePitSweep, splitPitSweep, type PitSweepOutput } from './job.ts';
 import { preparePitSweep, type PitSweepInput } from './prepare.ts';
 
 export { PIT_SWEEP_BEHAVIOUR, type PitSweepEffect } from './behaviour.ts';
@@ -24,4 +24,5 @@ export const PIT_SWEEP_JOB: Job<PitSweepInput, PitSweepOutput> = {
   trigger: { onChange: [...STRATEGY_TRIGGER.onChange] },
   prepare: (view) => preparePitSweep(view),
   module: new URL('./job.ts', import.meta.url),
+  parts: { split: splitPitSweep, merge: mergePitSweep },
 };
