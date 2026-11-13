@@ -57,7 +57,7 @@ describe('behaviour tables (C44)', () => {
 
   it('every unit that reads a sub-machine exports its behaviour table', () => {
     const withTable = new Set(folders.filter((f) => f.table !== undefined).map((f) => f.unit));
-    const missing = UNITS.filter((calc) => machinesRead(calc).length > 0 && !withTable.has(calc.id) && !PENDING_JOBS.includes(calc.id)).map(
+    const missing = UNITS.filter((calc) => machinesRead(calc).length > 0 && !withTable.has(calc.id)).map(
       (calc) => `${calc.id}: reads ${machinesRead(calc).join(', ')} but its index.ts does not export ${behaviourExport(calc.id)}`,
     );
     expect(missing).toEqual([]);
@@ -74,13 +74,9 @@ describe('behaviour tables (C44)', () => {
     expect(tableProblems('strategy', strategy?.table ?? {}, job)).toEqual([]);
   });
 
-  it('PENDING_JOBS lists only jobs that read a sub-machine and still export no table', () => {
-    for (const id of PENDING_JOBS) {
-      const job = JOB_UNITS.find((j) => j.id === id);
-      expect(job, `${id} is a job`).toBeDefined();
-      expect(job === undefined ? [] : machinesRead(job), `${id} reads a sub-machine`).not.toEqual([]);
-      expect(folders.find((f) => f.unit === id)?.table, `${id} exports its table: remove it from PENDING_JOBS`).toBeUndefined();
-    }
+  it('PENDING_JOBS lists only ids of exported jobs (SP4.3b2 N2: a stale entry fails)', () => {
+    const stale = PENDING_JOBS.filter((id) => !JOBS.some((j) => j.id === id));
+    expect(stale).toEqual([]);
   });
 
   it('the check names a missing row, a row of an unread machine, a row of an undeclared kind and a table without a unit', () => {

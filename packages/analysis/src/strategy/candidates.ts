@@ -67,7 +67,8 @@ export function candidatesOf(start: StartingPoint, car: CarId, dp: DpResult, con
     const key = JSON.stringify(policy);
     if (seen.has(key)) return;
     seen.add(key);
-    out.push({ policy, source });
+    // the rule is named from SP4.3b2 Task 6; until then `null` on every candidate
+    out.push({ policy, source, rule: null });
   };
   const fromLap = startLapOf(start, car);
   const thresholds = dp.thresholds.filter((t) => t.kind === 'neutralised');

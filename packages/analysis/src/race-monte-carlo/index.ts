@@ -4,6 +4,7 @@
 import { defineSimulator } from '@pitwall/engine/readers';
 
 export type * from './types.ts';
+export { scoreCalls } from './calls.ts';
 export { fieldPositions } from './field.ts';
 export { paired, ties } from './rank.ts';
 export { hasStopAhead, rivalNextCompound } from './rivals.ts';

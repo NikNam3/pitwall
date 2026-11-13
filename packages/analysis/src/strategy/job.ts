@@ -208,7 +208,7 @@ export function candidatesForRun(input: StrategyInput, rng: Rng): { mc: McInput 
     if (original !== null) {
       const f = followable(field, car, original);
       const key = JSON.stringify(f.policy);
-      const withCommit = [{ policy: f.policy, source: 'committed' as const }, ...own.filter((c) => JSON.stringify(c.policy) !== key)];
+      const withCommit = [{ policy: f.policy, source: 'committed' as const, rule: null }, ...own.filter((c) => JSON.stringify(c.policy) !== key)];
       plan = { candidates: withCommit, followed: f.policy, original, infeasible: f.infeasible };
     }
     perCar.set(car, plan);
@@ -279,6 +279,17 @@ export function partFinalCall(input: StrategyInput, rng: Rng): { final: FinalCal
   return done(callOf(car, total - round1Cap, { car: mate, fixed: best }));
 }
 
+/** The car's place in the starting point's order, retired cars skipped (a placeholder until SP4.3b2 Task 6). */
+function positionOf(start: StartingPoint, car: CarId): number {
+  let p = 0;
+  for (const c of start.order) {
+    if (start.retired[c] === 1) continue;
+    p++;
+    if (c === car) return p;
+  }
+  return start.cars;
+}
+
 /** One part: its car's ranked policies, the other entries as `candidatesForRun` gives them. */
 function runPart(input: StrategyInput, rng: Rng): StrategyOutput {
   const { final, perCar, out } = partFinalCall(input, rng);
@@ -289,7 +300,8 @@ function runPart(input: StrategyInput, rng: Rng): StrategyOutput {
   const own = perCar.get(final.car) as CarPlan;
   const r = raceMonteCarlo(final.mc, rng, final.mc.config.maxScenarioPolicies)[final.car] as McResult[CarId];
   const rows = r.rows.map((row): McRow => (row.committed ? { ...row, policy: own.original ?? row.policy, source: 'committed', infeasible: own.infeasible } : row));
-  out[final.car] = known({ rows, scenarios: r.scenarios, capHit: r.capHit, candidates: own.candidates.length, hazard: hazardState, unresolvedTie: r.unresolvedTie }, s.at);
+  const currentPosition = positionOf(s.value, final.car);
+  out[final.car] = known({ rows, scenarios: r.scenarios, capHit: r.capHit, candidates: own.candidates.length, hazard: hazardState, unresolvedTie: r.unresolvedTie, currentPosition }, s.at);
   return out;
 }
 

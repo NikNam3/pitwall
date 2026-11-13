@@ -47,3 +47,9 @@ export type DpTable = { boxUnderMs: Float64Array; stayMs: Float64Array };
 
 /** The best plan per stop count and sequence, the box-now and stay-out variants, the trigger thresholds, the table. */
 export type DpResult = { plans: DpPlan[]; boxNow: DpPlan | null; stayOut: DpPlan; thresholds: Trigger[]; table: DpTable };
+
+/** A call's first stop (4.3b2): at `stopLap` onto `compound` (`'best'`: the DP picks), or no stop through `noStopThrough`. */
+export type DpFirst = { stopLap: number; compound: NoiseCompound | 'best' } | { noStopThrough: number };
+
+/** A neutralisation forced at the start lap, with the pmf of its laps left (index 0 = it ends this lap). */
+export type DpUnder = { condition: 'sc' | 'vsc'; remaining: Float64Array };

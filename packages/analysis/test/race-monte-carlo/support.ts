@@ -46,7 +46,7 @@ export const NO_STOP: Policy = { stops: [], triggers: [] };
 
 export const stopAt = (lap: number, compound: Policy['stops'][number]['compound'] = 'hard'): Policy => ({ stops: [{ lap, compound }], triggers: [] });
 
-export const candidate = (policy: Policy, source: McCandidate['source'] = 'dp'): McCandidate => ({ policy, source });
+export const candidate = (policy: Policy, source: McCandidate['source'] = 'dp'): McCandidate => ({ policy, source, rule: null });
 
 /** An input over `start` (its `sets` are our cars), every car's candidates as given, nothing committed by default. */
 export function mcInput(
