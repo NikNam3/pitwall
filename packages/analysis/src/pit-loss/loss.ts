@@ -19,13 +19,11 @@ export function median(values: readonly number[]): number {
   return sorted.length % 2 === 1 ? (sorted[mid] as number) : ((sorted[mid - 1] as number) + (sorted[mid] as number)) / 2;
 }
 
-/**
- * A stop's TUM loss before the stationary correction: in-lap (`lapNumber === stop.lap`) + out-lap (`stop.lap + 1`) − 2 ×
- * the median of the car's `forPace` laps among the `referenceLaps` laps right before the in-lap. `carLaps` are current
- * laps (`currentLaps`, C25); only the stop's car's are used. Without an in-lap, an out-lap or a `forPace` reference lap:
- * `insufficientData`.
- */
-export function stopLoss(stop: DeepReadonly<PitStopRecord>, carLaps: readonly DeepReadonly<LapRecord>[], opts: PitLossOptions): Known<Ms> {
+/** A stop's in-lap and out-lap and the car's reference lap: the median of its `forPace` laps among the `referenceLaps` before the in-lap. */
+type StopLaps = { inLap: DeepReadonly<LapRecord>; outLap: DeepReadonly<LapRecord>; referenceMs: number };
+
+/** The laps of `stop` among `carLaps` (only the stop's car's are used); without an in-lap, an out-lap or a `forPace` reference lap: none. */
+function stopLaps(stop: DeepReadonly<PitStopRecord>, carLaps: readonly DeepReadonly<LapRecord>[], opts: PitLossOptions): StopLaps | undefined {
   const byNumber = new Map<number, DeepReadonly<LapRecord>>();
   for (const lap of carLaps) if (lap.carId === stop.carId) byNumber.set(lap.lapNumber, lap);
   const inLap = byNumber.get(stop.lap);
@@ -35,8 +33,30 @@ export function stopLoss(stop: DeepReadonly<PitStopRecord>, carLaps: readonly De
     const lap = byNumber.get(n);
     if (lap !== undefined && classifyLap(lap, opts.classes).forPace) references.push(lap.lapTimeMs);
   }
-  if (inLap === undefined || outLap === undefined || references.length === 0) return unknown('insufficientData');
-  return known(Math.round(inLap.lapTimeMs + outLap.lapTimeMs - 2 * median(references)), outLap.completedAt);
+  if (inLap === undefined || outLap === undefined || references.length === 0) return undefined;
+  return { inLap, outLap, referenceMs: median(references) };
+}
+
+/**
+ * A stop's TUM loss before the stationary correction: in-lap (`lapNumber === stop.lap`) + out-lap (`stop.lap + 1`) − 2 ×
+ * the median of the car's `forPace` laps among the `referenceLaps` laps right before the in-lap. `carLaps` are current
+ * laps (`currentLaps`, C25); only the stop's car's are used. Without an in-lap, an out-lap or a `forPace` reference lap:
+ * `insufficientData`.
+ */
+export function stopLoss(stop: DeepReadonly<PitStopRecord>, carLaps: readonly DeepReadonly<LapRecord>[], opts: PitLossOptions): Known<Ms> {
+  const laps = stopLaps(stop, carLaps, opts);
+  if (laps === undefined) return unknown('insufficientData');
+  return known(Math.round(laps.inLap.lapTimeMs + laps.outLap.lapTimeMs - 2 * laps.referenceMs), laps.outLap.completedAt);
+}
+
+/**
+ * The share of a stop's loss `lossMs` paid on its in-lap (SP4.3b Task 11c): (in-lap − the car's reference lap) / the
+ * loss. Without the stop's laps, or with a loss that is not positive: none.
+ */
+export function inLapShareOf(stop: DeepReadonly<PitStopRecord>, carLaps: readonly DeepReadonly<LapRecord>[], lossMs: Ms, opts: PitLossOptions): number | undefined {
+  const laps = stopLaps(stop, carLaps, opts);
+  if (laps === undefined || lossMs <= 0) return undefined;
+  return (laps.inLap.lapTimeMs - laps.referenceMs) / lossMs;
 }
 
 /**

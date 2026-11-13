@@ -10,6 +10,9 @@ export type SessionTime = Ms;
 
 export const MAX_CARS = 22;
 
+/** The game's team id (Participants' `teamId`). */
+export type TeamId = number;
+
 /** A car as the game names it across the sessions of a weekend (C62): its team and race number. */
 export type CarKey = { teamId: number; raceNumber: number };
 

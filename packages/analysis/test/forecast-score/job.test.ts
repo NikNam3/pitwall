@@ -43,7 +43,10 @@ describe('forecast-score job', () => {
     const view = viewOf(race);
     const prepared = prepareScore(view);
     expect(structuredClone(prepared)).toEqual(prepared);
-    expect(prepared.history.appendedAt).toEqual(view.history.appendedAt);
+    // only the declared lists' append frames are copied (C41; SP4.3b Task 20c port)
+    const declared = ['laps', 'stints', 'pitStops', 'crossings', 'events', 'decisions', ...jobModule.SCORE_MACHINES.map((m) => `spans:${m}`)];
+    const all = view.history.appendedAt as Record<string, unknown>;
+    expect(prepared.history.appendedAt).toEqual(Object.fromEntries(declared.filter((k) => k in all).map((k) => [k, all[k]])));
     expect(prepared.history.laps).toEqual(view.history.laps);
     expect(prepared.track).toEqual(view.track);
     expect(prepared.drivers).toEqual(view.drivers);
@@ -71,8 +74,12 @@ describe('forecast-score job', () => {
       expect(f.lapTime.unit).toBe('ms');
       expect(f.position.unit).toBe('places');
       const of = cases.filter((c) => c.horizon === f.horizon && c.basis === f.basis);
-      expect(f.position.cases, `h ${f.horizon} ${f.basis}`).toHaveLength(of.length);
-      expect(f.baselinePosition.cases).toHaveLength(of.length);
+      // Ported in Task 11g: the job also leaves out a case whose horizon holds a stop of the car's own predicted policy
+      // (own-predicted-stop.test), so its tables hold a subset of the forecast cases, each table the same cases.
+      expect(f.position.cases.length, `h ${f.horizon} ${f.basis}`).toBeLessThanOrEqual(of.length);
+      expect(f.baselinePosition.cases).toHaveLength(f.position.cases.length);
+      expect(f.lapTime.cases).toHaveLength(f.position.cases.length);
+      for (const c of f.position.cases) expect(of.some((o) => o.carId === c.carId && o.lap === c.lap), `h ${f.horizon} car ${c.carId} lap ${c.lap}`).toBe(true);
       for (const c of f.baselinePosition.cases) {
         const k = of.find((o) => o.carId === c.carId && o.lap === c.lap)!;
         expect(c).toMatchObject({ predicted: k.baselinePosition, actual: k.actualPosition, error: k.actualPosition - k.baselinePosition });

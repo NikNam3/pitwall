@@ -16,10 +16,10 @@ export const DEGRADATION_CONFIG = defineConfig('degradation', {
   processAlphaSdMs: 20,
   /** Process noise: the sd of the drift of `ν` per lap of tyre age, in ms per lap. Source: pitwall estimate. */
   processNuSdMs: 2,
-  /** `ν` in ms per lap a stint starts from without a prior. Source: pitwall estimate. */
-  defaultNuMsPerLap: 60,
-  /** The sd of that default `ν`, in ms per lap. Source: pitwall estimate. */
-  defaultNuSdMs: 60,
+  /** `ν` in ms per lap a stint starts from without a prior. Source: spike 4.3b-defaults (research 19 §5): soft ~190–205, medium ~120 ms/lap at Spa and Texas (53 stints); 60 shrank ν to 0.67× the stints' own slope; thin: two tracks, no hard. */
+  defaultNuMsPerLap: 150,
+  /** The sd of that default `ν`, in ms per lap. Source: spike 4.3b-defaults (research 19 §5): with mean 150 the stop-gain gap −450 → −215 ± 136 ms (38 stops), free air −446 → −66 ± 125 (12); later-lap bias at k 6–8 589 → 237 ms. */
+  defaultNuSdMs: 100,
   /** A stint with fewer `forPace` laps is no calibration candidate (`candidate`). Source: pitwall estimate. */
   minSourceLaps: 5,
 });

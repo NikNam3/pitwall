@@ -15,6 +15,7 @@ const OPTIONS = {
   dev: { type: 'boolean' },
   replay: { type: 'string' },
   carId: { type: 'string' },
+  car: { type: 'string' },
   url: { type: 'string' },
   feed: { type: 'string' },
   weekend: { type: 'string' },
@@ -22,7 +23,6 @@ const OPTIONS = {
   warnings: { type: 'boolean' },
   catalogue: { type: 'string' },
   name: { type: 'string' },
-  accept: { type: 'boolean' },
   json: { type: 'string' },
   compare: { type: 'string' },
   help: { type: 'boolean', short: 'h' },
@@ -47,6 +47,7 @@ const COMMANDS: Record<string, () => Promise<{ run: Command }>> = {
   'scan-situations': () => import('./commands/scan-situations.ts'),
   drivers: () => import('./commands/drivers.ts'),
   score: () => import('./commands/score.ts'),
+  strategy: () => import('./commands/strategy.ts'),
 };
 
 /** SQLite codes of a file that is not (or no longer) a database. */

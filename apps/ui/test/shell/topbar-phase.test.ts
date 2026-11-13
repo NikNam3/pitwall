@@ -53,7 +53,7 @@ const neutralised = (car: 'SC' | 'VSC', stage: NeutralisedDetail['stages'][numbe
 const setup = async () => {
   const connection = new FakeConnection();
   const store = new TopicStore(connection);
-  connection.push({ type: 'hello', contractVersion: 0, feeds: [{ feedId: FEED, kind: 'udp', label: 'x' }] });
+  connection.push({ type: 'hello', contractVersion: 0, feeds: [{ feedId: FEED, kind: 'udp', label: 'x', team: null }] });
   render(TopBar, { store, feedId: FEED, send: () => {}, sendReplay: () => {} });
   const push = async (topic: string, value: unknown) => {
     const found = connection.subscribes().filter((s) => s.topic === topic).at(-1);

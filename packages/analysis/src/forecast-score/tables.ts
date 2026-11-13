@@ -3,7 +3,7 @@
 import { known, unknown, type ScoreCase, type ScoreTable, type SessionTime } from '@pitwall/domain';
 
 /** The summary of one driver type's cases; without a case its mean and bias are not known (C3). */
-function summary(cases: readonly ScoreCase[], at: SessionTime): ScoreTable['ai'] {
+export function summary(cases: readonly ScoreCase[], at: SessionTime): ScoreTable['ai'] {
   const n = cases.length;
   if (n === 0) return { n, meanAbs: unknown('insufficientData'), bias: unknown('insufficientData') };
   let abs = 0;

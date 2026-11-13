@@ -3,10 +3,11 @@
 // list reads its `drivers.profiles` and `drivers.links` topics; without one the command opens the profile store itself,
 // under the lock `drivers/.lock` (ruling P3). `show` needs the store (the per-session values are not published): with a
 // running bridge it says so and exits 1 (ruling R29). `<session>` is printed and parsed as
-// `<sessionUid>/<weekendId>/<feedCar>`. A rejected action prints its reason and exits 1 (C73).
+// `<sessionUid>/<weekendId>/<feedCar>`, a seat as `<team> <raceNumber>` (the team by name or id). A rejected action
+// prints its reason and exits 1 (C73).
 import WebSocket from 'ws';
 import { decodeServerMessage, encodeMessage, type ClientMessage, type DriverAction, type ServerMessage, type TopicName } from '@pitwall/contracts';
-import { carId, trackName, type DriversProfilesValue, type Known, type PersonId, type SessionRef, type UnlinkedSlot } from '@pitwall/domain';
+import { carId, teamIdByName, trackName, type DriversLinksValue, type DriversProfilesValue, type Known, type PersonId, type SessionRef, type TeamId, type UnlinkedSlot } from '@pitwall/domain';
 import { loadConfig } from '../../config.ts';
 import type { ApplyResult, DriverSessionValues } from '../../drivers/store.ts';
 import type { ValueFor } from '../../hub/topic-hub.ts';
@@ -36,7 +37,7 @@ export type DriversDeps = {
   now(): string;
 };
 
-export type DriversValues = { name?: string | undefined; accept?: boolean | undefined };
+export type DriversValues = { name?: string | undefined };
 
 /** How long the command waits for a running bridge to greet and to answer. */
 const BRIDGE_TIMEOUT_MS = 5000;
@@ -54,9 +55,14 @@ function parseSession(text: string | undefined): SessionRef {
   return { sessionUid, weekendId, feedCar: carId(Number(feedCar)) };
 }
 
-function wholeNumber(text: string | undefined, what: string): number {
-  if (text === undefined || !/^\d+$/.test(text)) throw new UsageError(`${what} must be a whole number, got "${text ?? ''}"`);
-  return Number(text);
+/** A seat: the team by its name (`Mercedes`, case-insensitive) or its id, and the race number. */
+function parseSeat(teamText: string | undefined, numberText: string | undefined): { team: TeamId; raceNumber: number } {
+  const text = need(teamText, 'a team');
+  const team = /^\d+$/.test(text) ? Number(text) : teamIdByName(text);
+  if (team === undefined) throw new UsageError(`a team is a team name (Mercedes, Ferrari, …) or its id, got "${text}"`);
+  const raceNumber = need(numberText, 'a race number');
+  if (!/^\d+$/.test(raceNumber)) throw new UsageError(`a race number is a whole number, got "${raceNumber}"`);
+  return { team, raceNumber: Number(raceNumber) };
 }
 
 function need(text: string | undefined, what: string): string {
@@ -70,8 +76,9 @@ function actionOf(verb: string, args: string[], values: DriversValues): DriverAc
     case 'add':
       return { kind: 'drivers.add', person: need(args[0], 'a person'), displayName: need(values.name, '--name "<display name>"') };
     case 'link':
-      if (values.accept) return { kind: 'drivers.accept' };
-      return { kind: 'drivers.link', session: parseSession(args[0]), carId: carId(wholeNumber(args[1], 'the slot')), person: need(args[2], 'a person') };
+      return { kind: 'drivers.link', ...parseSeat(args[0], args[1]), person: need(args[2], 'a person') };
+    case 'unlink':
+      return { kind: 'drivers.link', ...parseSeat(args[0], args[1]), person: null };
     case 'exclude':
       return { kind: 'drivers.exclude', person: need(args[0], 'a person'), session: parseSession(args[1]) };
     case 'override': {
@@ -102,7 +109,6 @@ function listLines(profiles: DriversProfilesValue, unlinked: readonly UnlinkedSl
     const parts = [s.date, trackName(s.trackId) ?? `track ${s.trackId}`, `team ${s.teamId}`, `#${s.raceNumber}`];
     if (s.name !== null) parts.push(s.name);
     parts.push(sessionText(s.session), `slot ${s.carId}`);
-    if (s.suggestion) parts.push(`suggestion ${s.suggestion.person} by ${s.suggestion.by === 'raceNumber' ? 'race number' : 'team'}`);
     lines.push(`  ${parts.join('  ')}`);
   }
   return lines;
@@ -116,7 +122,7 @@ const ageText = (newest: string, now: string): string => {
 
 function showLines(p: DriversProfilesValue['persons'][number], sessions: readonly DriverSessionValues[], now: string): string[] {
   const lines = [personLine(p)];
-  for (const link of p.links) lines.push(`  link ${link.kind === 'nameAndNumber' ? `${link.name} #${link.raceNumber}` : `${sessionText(link.session)} slot ${link.carId}`}`);
+  for (const link of p.links) lines.push(`  link team ${link.team} #${link.raceNumber}`);
   for (const session of p.excluded) lines.push(`  excluded ${sessionText(session)}`);
   for (const [key, e] of Object.entries(p.entries)) {
     lines.push(`  ${key}  ${valueText(e.value)}  ${e.laps} laps  ${e.sessions} sessions  ${ageText(e.newestSession, now)}`);
@@ -299,7 +305,7 @@ async function withBridge(bridge: Bridge, verb: string | undefined, args: string
   }
   if (verb === undefined) {
     const profiles = (await topicValue(bridge, 'drivers.profiles', 'drivers-profiles')) as DriversProfilesValue;
-    const links = (await topicValue(bridge, 'drivers.links', 'drivers-links')) as { unlinked: UnlinkedSlot[] };
+    const links = (await topicValue(bridge, 'drivers.links', 'drivers-links')) as DriversLinksValue;
     for (const line of listLines(profiles, links.unlinked)) io.out(line);
     return 0;
   }
@@ -314,7 +320,7 @@ async function withBridge(bridge: Bridge, verb: string | undefined, args: string
   return 1;
 }
 
-/** `pitwall drivers [add|link|exclude|override|show] …`. */
+/** `pitwall drivers [add|link|unlink|exclude|override|show] …`. */
 export async function run(positionals: string[], values: DriversValues, io: CliIo, deps?: DriversDeps): Promise<number> {
   const [verb, ...args] = positionals;
   if (verb !== undefined && verb !== 'show') actionOf(verb, args, values); // a usage error before any connection

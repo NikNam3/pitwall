@@ -22,8 +22,8 @@ describe('generated feature set', () => {
     expect(bindings.find((b) => b.topic === 'cars.overview')).toHaveProperty('fromLive');
     expect(bindings.find((b) => b.topic === 'cars.overview')).not.toHaveProperty('from');
   });
-  it('binds every feed topic exactly once, core and analysis alike (global topics are published by the bridge shell, replay.status by the ReplayController, calibration.active by the feed pipeline; none is bound by features)', () => {
-    const published = new Set(['replay.status', 'calibration.active']);
+  it('binds every feed topic exactly once, core and analysis alike (global topics are published by the bridge shell, replay.status by the ReplayController, calibration.active and config.effective by the feed pipeline; none is bound by features)', () => {
+    const published = new Set(['replay.status', 'calibration.active', 'config.effective']);
     const feedTopics = Object.entries(TOPICS).filter(([name, d]) => d.scope === 'feed' && !published.has(name) && !NOT_YET_BOUND.has(name as TopicName)).map(([name]) => name);
     const bound = bindings.map((b) => b.topic);
     expect(new Set(bound).size).toBe(bound.length);

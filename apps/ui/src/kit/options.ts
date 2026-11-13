@@ -6,9 +6,9 @@ export function boolOption(def: boolean, label: string): BoolOption {
   return { kind: 'bool', label, default: def };
 }
 
-/** A pick-one setting; `choices` should be `as const` so the value type is the union. */
-export function choiceOption<C extends string>(choices: readonly C[], def: C, label: string): ChoiceOption<C> {
-  return { kind: 'choice', label, default: def, choices };
+/** A pick-one setting; `choices` should be `as const` so the value type is the union. `labels` names choices in the popover; a choice without one shows itself. */
+export function choiceOption<C extends string>(choices: readonly C[], def: C, label: string, labels?: Partial<Record<C, string>>): ChoiceOption<C> {
+  return labels === undefined ? { kind: 'choice', label, default: def, choices } : { kind: 'choice', label, default: def, choices, labels };
 }
 
 /** A number setting within `range`. */

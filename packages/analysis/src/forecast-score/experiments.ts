@@ -65,7 +65,7 @@ const gapChange = (car: number, other: number, from: number, to: number) => (his
 
 /** Every car's actual stops not yet made at `frame` (P7): by car slot, each onto the compound it left on. */
 export function actualStops(history: DeepReadonly<Projection>, race: RaceLaps, frame: FrameNumber, cars: number = race.cars): Policy[] {
-  const policies: Policy[] = Array.from({ length: cars }, () => ({ stops: [] }));
+  const policies: Policy[] = Array.from({ length: cars }, () => ({ stops: [], triggers: [] }));
   for (const stop of history.pitStops) {
     if (stop.penaltyServed || stop.carId >= cars || race.inLapFrame(stop) <= frame) continue;
     const compound = race.compoundAfter(stop.carId, stop.lap);

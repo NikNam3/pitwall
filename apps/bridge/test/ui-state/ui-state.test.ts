@@ -17,6 +17,8 @@ const win = (id: string, widget = 'feed-status'): WorkbookWindow => ({
   id, layout: { split: id }, panels: { main: { widget, options: { n: 1 }, linkGroup: 1 } },
 });
 const defaultLink: LinkGroup = { id: 1, primary: 'player', compare: [], window: { kind: 'live' } };
+/** SP4.3b2 Task 11 (spec §10, U12): group 2 follows the teammate; a state without it gets it (ports below, C82). */
+const defaultLink2: LinkGroup = { id: 2, primary: 'teammate', compare: [], window: { kind: 'live' } };
 
 /** A temp data dir's `ui` folder, a hub, one persistent subscription per ui topic, and the warnings logged. */
 function setup(dir = mkdtempSync(join(tmpdir(), 'ui-state-')), before?: (ui: string) => void) {
@@ -56,9 +58,9 @@ describe('UiState first start', () => {
     expect(onDisk.windows).toHaveLength(1);
     expect(read(WORKBOOKS)).toEqual({ names: ['default'], active: onDisk });
   });
-  it('sets link group 1 to the default and publishes settings and alerts defaults', () => {
+  it('sets link groups 1 and 2 to their defaults and publishes settings and alerts defaults', () => {
     const { read, state } = setup();
-    expect(read(LINKS)).toEqual([defaultLink]);
+    expect(read(LINKS)).toEqual([defaultLink, defaultLink2]);
     expect(read(ALERTS)).toEqual({ acknowledged: [], muted: [] });
     expect(read(SETTINGS)).toEqual({ realismNextSession: false, keys: {} });
     expect(state.realismNextSession()).toBe(false);
@@ -74,7 +76,7 @@ describe('UiState first start', () => {
     a.state.close();
     const b = setup(dir);
     expect(b.read(ALERTS).muted).toEqual(['tyres']);
-    expect(b.read(LINKS)).toEqual([{ ...defaultLink, primary: 'teammate' }]);
+    expect(b.read(LINKS)).toEqual([{ ...defaultLink, primary: 'teammate' }, defaultLink2]);
     expect(b.read(SETTINGS).realismNextSession).toBe(true);
     expect(b.read(WORKBOOKS).active.name).toBe('race');
     expect(b.read(WORKBOOKS).names).toEqual(['default', 'race']);
@@ -226,7 +228,24 @@ describe('link groups, alerts and settings', () => {
     const { state, read } = setup();
     const bad = [{ id: 2, compare: [], window: { kind: 'live' } }, { ...defaultLink, window: { kind: 'lap' } }, { ...defaultLink, compare: 'x' }];
     for (const group of bad) expect(state.apply({ kind: 'linkGroup.set', group: group as never })).toEqual({ ok: false, reason: 'invalid' });
-    expect(read(LINKS)).toEqual([defaultLink]);
+    expect(read(LINKS)).toEqual([defaultLink, defaultLink2]);
+  });
+  it('a saved state without group 2 gets its default', () => {
+    const own: LinkGroup = { ...defaultLink, window: { kind: 'lap', lap: 3 } };
+    const g3: LinkGroup = { id: 3, primary: 7 as never, compare: [], window: { kind: 'live' } };
+    const state = (groups: LinkGroup[]) => JSON.stringify({ activeWorkbook: 'default', linkGroups: groups, acknowledged: [], muted: [], realism: false });
+    // Without group 2: it gets the default; the saved groups stay as saved.
+    const a = setup(undefined, (ui) => writeFileSync(file(ui, 'state.json'), state([own, g3])));
+    const groups = a.read<LinkGroup[]>(LINKS);
+    expect(groups).toHaveLength(3);
+    expect(groups.find((g) => g.id === 1)).toEqual(own);
+    expect(groups.find((g) => g.id === 3)).toEqual(g3);
+    expect(groups.find((g) => g.id === 2)).toEqual(defaultLink2);
+    // A saved group 2 is kept as it is.
+    const saved2: LinkGroup = { id: 2, feedId: 'f2' as never, primary: 9 as never, compare: [], window: { kind: 'live' } };
+    const b = setup(undefined, (ui) => writeFileSync(file(ui, 'state.json'), state([own, saved2])));
+    expect(b.read<LinkGroup[]>(LINKS).find((g) => g.id === 2)).toEqual(saved2);
+    expect(b.read<LinkGroup[]>(LINKS)).toHaveLength(2);
   });
   it('alert.ackAll with [a] while b is active acknowledges only a', async () => {
     const { ui, state, read } = setup();

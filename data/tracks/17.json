@@ -2128,15 +2128,15 @@
       "green": {
         "known": true,
         "value": {
-          "value": 20150,
-          "source": "OpenF1, 2025 Austrian Grand Prix R, median of 30 stops"
+          "value": 20184,
+          "source": "OpenF1, 2025 Austrian Grand Prix R, median of 29 green stops (in-lap + out-lap - 2 x median of the 3 racing laps before; stops with SC, VSC, red or yellow on in-lap or out-lap, on intermediate or wet tyres, or with the pace after off the reference by more than 5 % left out)"
         },
         "at": 0
       },
       "vsc": {
         "known": true,
         "value": {
-          "value": 11082,
+          "value": 11101,
           "source": "ratio of green, pitwall estimate"
         },
         "at": 0
@@ -2144,11 +2144,19 @@
       "sc": {
         "known": true,
         "value": {
-          "value": 9068,
+          "value": 9083,
           "source": "ratio of green, pitwall estimate"
         },
         "at": 0
       }
+    },
+    "pitLossInLapShare": {
+      "known": true,
+      "value": {
+        "value": 0.179,
+        "source": "OpenF1, 2025 Austrian Grand Prix R, median of 29 green stops ((in-lap - reference) / (in-lap + out-lap - 2 x reference), reference the median of the 3 racing laps before, each stop's share clamped to [0, 1]; the green pit loss's stops)"
+      },
+      "at": 0
     },
     "compoundOffsetsMs": {
       "known": true,
@@ -2161,12 +2169,71 @@
         "source": "OpenF1, 2025 Austrian Grand Prix R, median fuel-corrected racing lap (30 ms/kg, 1.8 kg/lap; 54 soft, 540 medium, 417 hard laps)"
       },
       "at": 0
+    },
+    "hazard": {
+      "known": true,
+      "value": {
+        "value": {
+          "races": 13,
+          "lapOne": {
+            "sc": 0.208698,
+            "vsc": 0.024965
+          },
+          "byFraction": [
+            {
+              "upTo": 0.25,
+              "sc": 0.007749,
+              "vsc": 0.007439
+            },
+            {
+              "upTo": 0.5,
+              "sc": 0.005251,
+              "vsc": 0.006033
+            },
+            {
+              "upTo": 0.75,
+              "sc": 0.006119,
+              "vsc": 0.004894
+            },
+            {
+              "upTo": 1.0,
+              "sc": 0.004996,
+              "vsc": 0.005559
+            }
+          ],
+          "durationLaps": {
+            "sc": [
+              0.0,
+              0.034965,
+              0.251748,
+              0.286714,
+              0.195804,
+              0.083916,
+              0.06993,
+              0.041958,
+              0.020979,
+              0.0,
+              0.006993,
+              0.006993
+            ],
+            "vsc": [
+              0.045455,
+              0.579545,
+              0.318182,
+              0.034091,
+              0.022727
+            ]
+          }
+        },
+        "source": "13 Grands Prix 2015-2025 (13 jtrotman Kaggle Race Events); SC/VSC starts / laps at risk, lap 1 apart, laps 2+ in quarter-distance bins, empirical-Bayes shrinkage to the pooled shape of all tracks; durations SC pooled, VSC pooled; assumed: the per-lap chance is the same in a race at 25 %/50 % distance"
+      },
+      "at": 0
     }
   },
   "source": {
     "generator": "pitwall-trackdata 0.1.0",
     "sources": "OpenF1 + MultiViewer; drsZones: OpenF1 qualifying car_data drs channel, median of the top five laps, detection point assumed 200 m before the zone start (not in telemetry or the FIA event notes)",
     "season": 2025,
-    "generatedOn": "2026-11-12"
+    "generatedOn": "2026-11-13"
   }
 }

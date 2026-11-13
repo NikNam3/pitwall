@@ -96,6 +96,18 @@ describe('ensureBridge spawn failures and tree kill', () => {
     expect(killTree).toHaveBeenCalledWith(4242);
   });
 
+  // SP4.3b Task 2b seam (C58, C71): options.env, the environment the bridge is started with (main.ts passes process.env);
+  // ensureBridge hands it to spawn as its third argument: spawn(command, args, env).
+  it('the desktop starts the bridge with PITWALL_UDP_PORT as given', async () => {
+    const spawn = vi.fn((_command: string, _args: string[], _env?: NodeJS.ProcessEnv) => new FakeChild());
+    const withEnv = { env: { PITWALL_UDP_PORT: '20777,20778', PITWALL_WS_PORT: '4777' } };
+    await ensureBridge({ port: 1, probe: async () => false, spawn, ...withEnv });
+    expect(spawn).toHaveBeenCalledTimes(1);
+    expect(spawn.mock.calls[0]![0]).toBe('pitwall');
+    expect(spawn.mock.calls[0]![1]).toEqual(['live']);
+    expect(spawn.mock.calls[0]![2]).toMatchObject({ PITWALL_UDP_PORT: '20777,20778' });
+  });
+
   it('stop() on an attached bridge never calls killTree', async () => {
     const killTree = vi.fn();
     const bridge = await ensureBridge({ port: 1, probe: async () => true, spawn: () => new FakeChild(), killTree });

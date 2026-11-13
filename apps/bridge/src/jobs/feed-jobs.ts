@@ -2,6 +2,7 @@
 import type { CalculatorId, Job, QuickCalculator, SchedulerResult } from '@pitwall/engine/readers';
 import type { Feature } from '../features/feature.ts';
 import { JobRunner, type ComputedFor, type JobResult } from './job-runner.ts';
+import type { WorkerLimit } from './worker-limit.ts';
 
 /** The quick calculator that triggers the job `jobId`. */
 export const jobCalculatorId = (jobId: string): CalculatorId => `job:${jobId}`;
@@ -51,9 +52,11 @@ export class FeedJobs {
   /** The trigger calculators, to register next to the features' calculators. */
   readonly calculators: QuickCalculator<unknown>[];
   readonly #jobs: ReadonlyMap<CalculatorId, Job<unknown, unknown>>;
-  readonly #runner = new JobRunner({ seed: JOB_SEED });
+  readonly #runner: JobRunner;
 
-  constructor(features: readonly Feature[], onResult: (result: JobResult) => void) {
+  /** `limit`: the bridge-wide job-worker limit, shared with every other feed's jobs; unset gives these jobs their own. */
+  constructor(features: readonly Feature[], onResult: (result: JobResult) => void, limit?: WorkerLimit) {
+    this.#runner = new JobRunner(limit === undefined ? { seed: JOB_SEED } : { seed: JOB_SEED, limit });
     const jobs = declaredJobs(features);
     this.#jobs = new Map(jobs.map((job) => [jobCalculatorId(job.id), job]));
     this.calculators = jobs.map((job) => ({

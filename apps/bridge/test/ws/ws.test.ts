@@ -8,7 +8,7 @@ import { WsClient } from '../../src/ws/client.ts';
 import { GLOBAL_TOPIC } from '../global-topic.ts';
 
 const F = 'f1' as FeedId;
-const feeds = (): FeedInfo[] => [{ feedId: F, kind: 'replay', label: 'test' }];
+const feeds = (): FeedInfo[] => [{ feedId: F, kind: 'replay', label: 'test', team: null }];
 const cleanup: Array<() => unknown> = [];
 afterEach(async () => { for (const c of cleanup.splice(0).reverse()) await c(); });
 const server = async (hub: TopicHub, o: Partial<Parameters<typeof WsServer.start>[0]> = {}) => {

@@ -13,7 +13,7 @@ const configOf = <C extends object>(section: { key: string; defaults: C }, view:
   ({ ...section.defaults, ...view.config[section.key] }) as C;
 
 /** The prior of the fitted offsets against medium: the track file's (relative to its medium), else the config's. */
-function priorOffsets(view: Pick<AsOfView, 'track' | 'config'>): Record<Fitted, number> {
+export function priorOffsets(view: Pick<AsOfView, 'track' | 'config'>): Record<Fitted, number> {
   const track = view.track;
   if (track.known && track.value.defaults.compoundOffsetsMs.known) {
     const { soft, medium, hard } = track.value.defaults.compoundOffsetsMs.value.value;

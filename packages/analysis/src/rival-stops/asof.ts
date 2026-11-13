@@ -1,5 +1,5 @@
 // `rival-stops` as of a frame (SP4.3a spec 5.3, 6.1): a pure function of the `AsOfView`. Per car in the session: whether
-// it owes a stop (its compound-rule span), the window of its next stop (from the tyre age at which this race's peers
+// it owes a stop (its compound-rule span and the dry compounds it has used, `owesSecondDryCompound`),the window of its next stop (from the tyre age at which this race's peers
 // stopped on its compound, else from `tyre-life`'s predicted life, capped by the laps left; an open window to the flag
 // when it owes no stop and its set lasts, or when it has no set left) and the odds of its next compound.
 import {
@@ -21,6 +21,7 @@ import {
   type VisualCompound,
 } from '@pitwall/domain';
 import type { AsOfView, DeepReadonly } from '@pitwall/engine/readers';
+import { owesSecondDryCompound } from '../shared/compound-rule.ts';
 import { TYRE_LIFE, type TyreLife, type TyreLifeOutput } from '../tyre-life/index.ts';
 import { rivalStopsPhaseRow, RIVAL_STOPS_BEHAVIOUR, type RivalStopsEffect } from './behaviour.ts';
 import { RIVAL_STOPS_CONFIG } from './config.ts';
@@ -150,7 +151,8 @@ export function rivalStopsAsOf(view: AsOfView): RivalStops {
     for (const [id, effect] of effects) if (effect.inSession === true) out[id] = { ...NOT_APPLICABLE, basis: 'noStop' };
     return out;
   }
-  const spread = { ...RIVAL_STOPS_CONFIG.defaults, ...view.config[RIVAL_STOPS_CONFIG.key] }.noPeerSpreadLaps;
+  const config = { ...RIVAL_STOPS_CONFIG.defaults, ...view.config[RIVAL_STOPS_CONFIG.key] };
+  const spread = config.noPeerSpreadLaps;
   const at = view.at;
   // read once: `asOfNow` builds it on every read
   const fixed = view.fixed;
@@ -181,9 +183,10 @@ export function rivalStopsAsOf(view: AsOfView): RivalStops {
       out[id] = { ...NOT_APPLICABLE, basis: 'noStop' };
       continue;
     }
-    const owesStop: Known<boolean> = effect.owesStop === undefined ? unknown('notReceived') : known(effect.owesStop, at);
     const h = history.get(id);
     const set = currentSet(h);
+    const owes = effect.rule === undefined ? undefined : owesSecondDryCompound(effect.rule, { stints: h?.stints ?? [] }, id, set?.compound);
+    const owesStop: Known<boolean> = owes === undefined ? unknown('notReceived') : known(owes, at);
     if (set === undefined) {
       out[id] = { owesStop, window: unknown('insufficientData'), nextCompound: unknown('insufficientData'), basis: 'tyreLife' };
       continue;
@@ -201,7 +204,7 @@ export function rivalStopsAsOf(view: AsOfView): RivalStops {
       continue;
     }
     const left = lifeLeft(tyreLife[id], set);
-    if (effect.owesStop === false && left !== undefined && set.lastLap + left >= totalLaps) {
+    if (owes === false && left !== undefined && set.lastLap + left >= totalLaps) {
       out[id] = toFlag('noStop');
       continue;
     }
@@ -224,8 +227,20 @@ export function rivalStopsAsOf(view: AsOfView): RivalStops {
       out[id] = { owesStop, window: unknown('insufficientData'), nextCompound, basis };
       continue;
     }
-    const lapOf = (age: number): number => Math.min(totalLaps, Math.max(set.lastLap + 1, Math.round(set.lastLap + age - set.age)));
-    const window: Window = { lowLap: lapOf(ages.low), midLap: lapOf(ages.mid), highLap: lapOf(ages.high), toFlag: false };
+    const unclamped = (age: number): number => Math.round(set.lastLap + age - set.age);
+    const lapOf = (age: number): number => Math.min(totalLaps, Math.max(set.lastLap + 1, unclamped(age)));
+    // overdue (SP4.3b F3, Task 11d): the median lap is no later than the lap the car is on; the window spreads from its
+    // next lap on (clamping the median onto the current lap would box the car at the end of every lap)
+    const nextLap = set.lastLap + 2;
+    const window: Window =
+      unclamped(ages.mid) < nextLap
+        ? {
+            lowLap: Math.min(totalLaps, nextLap),
+            midLap: Math.min(totalLaps, nextLap + config.overdueMidLaps),
+            highLap: Math.min(totalLaps, nextLap + config.overdueSpreadLaps),
+            toFlag: false,
+          }
+        : { lowLap: lapOf(ages.low), midLap: lapOf(ages.mid), highLap: lapOf(ages.high), toFlag: false };
     out[id] = { owesStop, window: known(window, at), nextCompound, basis };
   }
   return out;

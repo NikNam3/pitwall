@@ -14,6 +14,11 @@
   import { positionPairParts } from '../kit/values/position-mark.ts';
   import { sectorStatusRole } from '../emphasis/index.ts';
   import Gear from '../kit/icons/Gear.svelte';
+  import Square from '../kit/icons/Square.svelte';
+  import Star from '../kit/icons/Star.svelte';
+  import StarOutline from '../kit/icons/StarOutline.svelte';
+  import DistStrip from '../kit/dist/DistStrip.svelte';
+  import { sharedScale } from '../kit/dist/dist.ts';
   import Table from '../kit/table/Table.svelte';
   import Value from '../kit/values/Value.svelte';
   import { formatLapTime, formatPct } from '../kit/values/format.ts';
@@ -42,6 +47,11 @@
   /** The kit's before/after position pair (`positionPairParts`): both known, and an unknown after with its mark. */
   const pairs = [[known(7, at), known(9, at)], [known(7, at), unknown('notReceived')]] as const;
   let chartDrawn = $state(false);
+  /** The distribution strip (SP4.3b2): a 20-place pmf, a gain over eight 1 s bins, a gain over whole places −3 … +3. */
+  const pmf = [0, 0.01, 0.02, 0.04, 0.08, 0.12, 0.16, 0.2, 0.14, 0.1, 0.06, 0.04, 0.02, 0.01, 0, 0, 0, 0, 0, 0];
+  const gainSeconds = [0.02, 0.05, 0.1, 0.2, 0.3, 0.2, 0.1, 0.03];
+  const gainPlaces = [0.05, 0.1, 0.25, 0.3, 0.2, 0.08, 0.02];
+  const distScale = sharedScale([pmf, gainSeconds, gainPlaces]);
 </script>
 
 <div class="parts" use:snapGrid>
@@ -54,7 +64,15 @@
   <!-- No baseline: the gear is in every panel header, so the widget baselines cover it (budget). -->
   <figure data-gallery-id="kit/icon" data-ready>
     <figcaption style:color={role('textFaint')}>kit/icon</figcaption>
-    <span style:color={role('textDim')}><Gear label="gear" /></span>
+    <span style:color={role('textDim')}><Gear label="gear" /> <Star label="star" /> <StarOutline label="star outline" /> <Square label="square" /></span>
+  </figure>
+  <!-- No baseline: the call cards' baselines pin the strip (budget). -->
+  <figure data-gallery-id="kit/dist" data-ready>
+    <figcaption style:color={role('textFaint')}>kit/dist</figcaption>
+    <div><DistStrip form="places" {pmf} scale={distScale} ourPlace={8} /></div>
+    <div><DistStrip form="gain" bins={gainSeconds} scale={distScale} zero={{ between: 4 }} markAtBin={6.2} /></div>
+    <div><DistStrip form="gain" bins={gainPlaces} scale={distScale} zero={{ underBin: 3 }} /></div>
+    <div><DistStrip form="places" {pmf} scale={distScale} lit /></div>
   </figure>
   <figure data-gallery-id="kit/table" data-ready>
     <figcaption style:color={role('textFaint')}>kit/table</figcaption>

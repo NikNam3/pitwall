@@ -19,6 +19,7 @@ import {
 import { asOfNow, projectionAsOf, projectionLengths, type EngineView, type MembershipSource } from '@pitwall/engine/readers';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { DEGRADATION } from '../../src/degradation/index.ts';
+import { forecastPolicies } from '../../src/forecast-score/index.ts';
 import { degradationCalculator } from '../../src/degradation/calculator.ts';
 import { RIVAL_STOPS, RIVAL_STOPS_CONFIG, rivalStopsAsOf, type RivalStopsOutput } from '../../src/rival-stops/index.ts';
 import { rivalStopsCalculator as unguarded } from '../../src/rival-stops/calculator.ts';
@@ -48,11 +49,20 @@ const TOTAL_LAPS = 50;
 
 /** The in laps of the field, car by car: after the fifth stop (laps 16, 17, 18, 18, 18) the peers' median age is 18. */
 const STOP_LAPS = [16, 17, 18, 18, 18, 19, 20, 20];
+/**
+ * Ported in SP4.3b Task 7 (F3, overdue windows spread past the current lap): R1's runner was car 7, whose mediums are
+ * older than every peer's stop age when five peers have stopped (overdue), so its window collapsed onto the lap it is on
+ * and the old assertion read the defect. Car 8 is added (hards, then mediums from lap 7: 12 laps old then, not
+ * overdue) as R1's runner, its wear 2.5 times the compound's so its mediums do not last to the flag (no `toFlag`).
+ */
 const PARAMS: GeneratorParams = {
   ...GENERATOR_DEFAULTS,
-  cars: STOP_LAPS.length,
+  cars: STOP_LAPS.length + 1,
   laps: 24,
-  field: STOP_LAPS.map((stopLap, i) => ({ ...GENERATOR_DEFAULTS.field[i]!, human: false, stops: [{ lap: stopLap, compound: 'hard' }], startCompound: 'medium' })),
+  field: [
+    ...STOP_LAPS.map((stopLap, i) => ({ ...GENERATOR_DEFAULTS.field[i]!, human: false, stops: [{ lap: stopLap, compound: 'hard' as const }], startCompound: 'medium' as const })),
+    { ...GENERATOR_DEFAULTS.field[STOP_LAPS.length]!, human: false, wearFactor: 2.5, stops: [{ lap: 6, compound: 'medium' }], startCompound: 'hard' },
+  ],
 };
 
 /** The upstream units' outputs at frame `frame`, as the scheduled run has them then: `degradation`, `tyre-life`, `session-remaining`. */
@@ -95,20 +105,24 @@ beforeAll(() => {
 
 describe('rival-stops on a generated race', () => {
   it('R1 recovers the generator\'s parameters within its noise: a medium runner\'s window mid within 1 lap of 18 after five peers stopped', () => {
-    // the first leader crossing on which five stints (all on mediums) are in the projection
-    const frame = crossingFrames(race).find((f) => race.viewAt(f).history.stints.length >= 5);
+    // the first leader crossing on which five medium stints are in the projection (ported, Task 7 F3: car 8's hard stint
+    // is in it too)
+    const mediums = (f: number): number => race.viewAt(f).history.stints.filter((s) => s.visualCompound === 'medium').length;
+    const frame = crossingFrames(race).find((f) => mediums(f) >= 5);
     expect(frame).toBeDefined();
     const view = race.viewAt(frame!, { outputs: upstreamAt(race, frame!) });
-    expect(view.history.stints.slice(0, 5).every((s) => s.visualCompound === 'medium')).toBe(true);
-    // car 7 (in lap 20) is still on its first set of mediums
-    const runner = carId(7);
-    expect(view.history.stints.some((s) => s.carId === runner)).toBe(false);
+    // car 8 runs the mediums it fitted after lap 6 and has not stopped off them (ported, Task 7 F3: car 7 was overdue)
+    const runner = carId(8);
+    expect(view.history.stints.filter((s) => s.carId === runner).map((s) => s.visualCompound)).toEqual(['hard']);
     const stop = rivalStops.compute(view)[runner]!;
     expect(stop.basis).toBe('peers');
     expect(stop.window.known).toBe(true);
     if (!stop.window.known) return;
     const { lowLap, midLap, highLap } = stop.window.value;
-    expect(Math.abs(midLap - 18)).toBeLessThanOrEqual(1);
+    // the set's age at the window's mid lap: its age at the end of its newest lap, plus the laps from there to the mid
+    const newest = view.history.laps.filter((l) => l.carId === runner).reduce((a, b) => (b.lapNumber > a.lapNumber ? b : a));
+    const ageAtMid = newest.tyreAgeAtStart + 1 + midLap - newest.lapNumber;
+    expect(Math.abs(ageAtMid - 18)).toBeLessThanOrEqual(1);
     expect(lowLap).toBeLessThanOrEqual(midLap);
     expect(midLap).toBeLessThanOrEqual(highLap);
   });
@@ -381,6 +395,194 @@ describe('rival-stops rows', () => {
     const out = rivalStops.compute(rewound);
     expect(out).toEqual(rivalStops.compute(never));
     expect(stopOf(out, 0).basis).toBe('tyreLife');
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------------
+// SP4.3b Task 7 (F3): an overdue car's window spreads past the current lap. A car that has completed lap n is on lap
+// n + 1 (the forecast's start lap); its next lap is n + 2. It is overdue when its window's high lap, by the peers' stop
+// ages or tyre-life, falls before its next lap.
+
+/** The overdue scenario at `completed` laps: car 0 on its first mediums; cars 1-3 stopped off mediums at ages 16, 17, 18 (in laps 16-18), onto hards. */
+function overdueField(completed: number, extra: CarRace[] = []): CarRace[] {
+  const peer = (car: number, inLap: number): CarRace => ({
+    car,
+    stints: [{ from: 1, compound: 'medium' }, { from: inLap + 1, compound: 'hard' }],
+    completed,
+    rule: 'waived',
+    life: life(10, { medium: 18, hard: 30 }),
+  });
+  return [{ car: 0, stints: MEDIUM_FROM_1, completed, life: life(0, { medium: 18, hard: 30 }) }, peer(1, 16), peer(2, 17), peer(3, 18), ...extra];
+}
+
+describe('rival-stops: overdue windows (SP4.3b Task 7, F3)', () => {
+  it('the overdue spread defaults: mid +2 laps, high +5 laps (pitwall estimate)', () => {
+    expect(RIVAL_STOPS_CONFIG.defaults).toMatchObject({ overdueMidLaps: 2, overdueSpreadLaps: 5 });
+  });
+
+  it('an overdue car\'s window spreads past the current lap: low next lap, mid +2, high +5', () => {
+    // 25 laps done (on lap 26, next lap 27); the peers' highest stop age 18 puts the high lap at 18, before lap 27
+    const out = rivalStops.compute(raceView(overdueField(25)));
+    const stop = stopOf(out, 0);
+    expect(stop.basis).toBe('peers');
+    expect(stop.window).toMatchObject({ known: true, value: { lowLap: 27, midLap: 29, highLap: 32, toFlag: false } });
+  });
+
+  it('the spread is capped at the flag', () => {
+    // 46 laps done of 50 (next lap 48): 48 .. 50 .. 53, capped at 50
+    const stop = stopOf(rivalStops.compute(raceView(overdueField(46))), 0);
+    expect(stop.basis).toBe('peers');
+    expect(stop.window).toMatchObject({ known: true, value: { lowLap: 48, midLap: TOTAL_LAPS, highLap: TOTAL_LAPS, toFlag: false } });
+  });
+
+  it('a car that has just stopped is not overdue and gets no stop on the next lap', () => {
+    // car 4 stops off its mediums at the end of lap 20 (age 20, past every peer's), onto hards whose life is 20 laps
+    const stopped = (completed: number): CarRace => ({ car: 4, stints: [{ from: 1, compound: 'medium' }, { from: 21, compound: 'hard' }], completed, rule: 'waived', life: life(20, { medium: 18, hard: 21 }) });
+    // its in lap done (its stint closed, the new set not yet in the projection), then its out lap done
+    for (const completed of [20, 21]) {
+      const stop = stopOf(rivalStops.compute(raceView(overdueField(completed, [stopped(completed)]))), 4);
+      const nextLap = completed + 2;
+      if (stop.window.known) expect(stop.window.value.lowLap, `${completed} laps done`).toBeGreaterThan(nextLap);
+    }
+    // on its out lap's end its hards are 1 lap old: the window is tyre-life's, about lap 41
+    const out = stopOf(rivalStops.compute(raceView(overdueField(21, [stopped(21)]))), 4);
+    expect(out.window).toMatchObject({ known: true, value: { toFlag: false } });
+  });
+
+  it('a plain forecast at an overdue car\'s lap does not stop it on the start lap', () => {
+    // the plain forecast's policies (forecast-score's `forecastPolicies`, one stop on the window's mid lap) without the
+    // start-lap work-around (no `onLap`, 4.3a F7): the overdue car on lap 26 stops at the end of a later lap
+    const stops = rivalStops.compute(raceView(overdueField(25)));
+    const policy = forecastPolicies(stops, 4)[0]!;
+    expect(policy.stops).toHaveLength(1);
+    expect(policy.stops[0]!.lap).toBeGreaterThan(26);
+  });
+
+  it('rewind: output equals a run without the undone frames (C33)', () => {
+    // car 5 stops off its mediums at the end of lap 27 (age 27); a flashback to lap 25 undoes it
+    const car5 = (completed: number): CarRace => ({
+      car: 5,
+      stints: completed > 27 ? [{ from: 1, compound: 'medium' }, { from: 28, compound: 'hard' }] : MEDIUM_FROM_1,
+      completed,
+      rule: completed > 27 ? 'waived' : 'required',
+      life: life(10, { medium: 18, hard: 30 }),
+    });
+    const full = raceView(overdueField(30, [car5(30)]), { shaped: true });
+    const never = raceView(overdueField(25, [car5(25)]), { shaped: true });
+    const rewound: EngineView = { ...never, delta: { before: projectionLengths(full.history), after: projectionLengths(never.history), rewound: { frameId: 25 * 20, at: never.live.sessionTime } } };
+    const out = rivalStops.compute(rewound);
+    expect(out).toEqual(rivalStops.compute(never));
+    // and the run without the undone frames spreads car 0's overdue window: 27 .. 29 .. 32
+    expect(stopOf(out, 0).window).toMatchObject({ known: true, value: { lowLap: 27, midLap: 29, highLap: 32 } });
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------------
+// SP4.3b Task 11d (U9 Q1 A, phantom rival stops). The compound-rule sub-machine holds `required` for the whole dry race
+// (the rule applies); whether a car met it by running two dry compounds is the shared helper's judgement (C43), so the
+// rows below give every car `required`, as the machine does. An overdue window is taken once the peers' median stop age
+// has passed, not only their highest.
+
+/** A car that ran softs on laps 1-12, then mediums: two dry compounds, the rule still `required` by the machine. */
+const SOFT_THEN_MEDIUM = [{ from: 1, compound: 'soft' as const }, { from: 13, compound: 'medium' as const }];
+const MEDIUM_THEN_HARD = (inLap: number) => [{ from: 1, compound: 'medium' as const }, { from: inLap + 1, compound: 'hard' as const }];
+
+describe('rival-stops: the compound rule met and the median overdue (SP4.3b Task 11d)', () => {
+  it('row 1: a car that has run soft then medium does not owe a stop: its window is toFlag (or tyre-life\'s), not a stop', () => {
+    // 30 laps done of 50: car 0's mediums last 25 more laps (to the flag), car 1's only 5 (its limit at the end of lap 35)
+    const out = rivalStops.compute(
+      raceView([
+        { car: 0, stints: SOFT_THEN_MEDIUM, completed: 30, rule: 'required', life: life(25, { soft: 12, medium: 40, hard: 45 }) },
+        { car: 1, stints: SOFT_THEN_MEDIUM, completed: 30, rule: 'required', life: life(5, { soft: 12, medium: 22, hard: 45 }) },
+      ]),
+    );
+    const lasts = stopOf(out, 0);
+    expect(lasts.owesStop).toMatchObject({ known: true, value: false });
+    expect(lasts.basis).toBe('noStop');
+    expect(lasts.window).toMatchObject({ known: true, value: { toFlag: true, highLap: TOTAL_LAPS } });
+    // a set that does not last still needs a stop, by tyre-life (no peer has stopped off mediums)
+    const short = stopOf(out, 1);
+    expect(short.owesStop).toMatchObject({ known: true, value: false });
+    expect(short.basis).toBe('tyreLife');
+    expect(short.window).toMatchObject({ known: true, value: { toFlag: false, midLap: 35 } });
+  });
+
+  it('row 2: a car on its first dry compound with the rule required owes a stop', () => {
+    // its mediums would last to the flag (25 more laps from lap 30), but the rule is not met: no toFlag
+    const out = rivalStops.compute(raceView([{ car: 0, stints: MEDIUM_FROM_1, completed: 30, rule: 'required', life: life(25, { medium: 55, hard: 45 }) }]));
+    const stop = stopOf(out, 0);
+    expect(stop.owesStop).toMatchObject({ known: true, value: true });
+    expect(stop.basis).not.toBe('noStop');
+    expect(stop.window).toMatchObject({ known: true, value: { toFlag: false } });
+    // a car with only inters behind it (fitted before the lights out, the rule still required) owes its stop too
+    const inter = stopOf(rivalStops.compute(raceView([{ car: 0, stints: [{ from: 1, compound: 'inter' }, { from: 6, compound: 'medium' }], completed: 30, rule: 'required', life: life(25, { medium: 55 }) }])), 0);
+    expect(inter.owesStop).toMatchObject({ known: true, value: true });
+    expect(inter.window).toMatchObject({ known: true, value: { toFlag: false } });
+  });
+
+  it('row 3: a car whose peers\' median age has passed but the high age has not gets the overdue window (next lap, +2, +5), not a stop at the end of the current lap', () => {
+    // car 0 ran mediums on laps 1-10 and fresh mediums from lap 11 (one dry compound: it owes its stop); 30 laps done, on
+    // lap 31, next lap 32, its mediums 20 laps old. The peers stopped off mediums at ages 8, 10 and 24: the median (10)
+    // put the stop at lap 20, passed; the high (24) puts it at lap 34, not passed.
+    const peer = (car: number, inLap: number): CarRace => ({ car, stints: MEDIUM_THEN_HARD(inLap), completed: 30, rule: 'required', life: life(20, { medium: 18, hard: 45 }) });
+    const out = rivalStops.compute(
+      raceView([
+        { car: 0, stints: [{ from: 1, compound: 'medium' }, { from: 11, compound: 'medium' }], completed: 30, rule: 'required', life: life(0, { medium: 18, hard: 45 }) },
+        peer(1, 8),
+        peer(2, 10),
+        peer(3, 24),
+      ]),
+    );
+    const stop = stopOf(out, 0);
+    expect(stop.owesStop).toMatchObject({ known: true, value: true });
+    expect(stop.basis).toBe('peers');
+    const next = 32;
+    const { overdueMidLaps, overdueSpreadLaps } = RIVAL_STOPS_CONFIG.defaults;
+    expect(stop.window).toMatchObject({ known: true, value: { lowLap: next, midLap: next + overdueMidLaps, highLap: next + overdueSpreadLaps, toFlag: false } });
+  });
+
+  it('row 4: a car two laps into a new set is not boxed again', () => {
+    // car 4 stopped off its mediums at the end of lap 20 onto hards; 22 laps done, on lap 23, its hards 2 laps old and
+    // lasting to the flag. Two peers stopped off hards after 1 lap (the median age 1, passed), one after 20 laps.
+    const shortHard = (car: number): CarRace => ({ car, stints: [{ from: 1, compound: 'hard' }, { from: 2, compound: 'medium' }], completed: 22, rule: 'required', life: life(10, { medium: 30, hard: 45 }) });
+    const view = raceView([
+      shortHard(1),
+      shortHard(2),
+      { car: 3, stints: [{ from: 1, compound: 'hard' }, { from: 21, compound: 'medium' }], completed: 22, rule: 'required', life: life(25, { medium: 30, hard: 45 }) },
+      { car: 4, stints: MEDIUM_THEN_HARD(20), completed: 22, rule: 'required', life: life(30, { medium: 20, hard: 45 }) },
+    ]);
+    const stop = stopOf(rivalStops.compute(view), 4);
+    expect(stop.owesStop).toMatchObject({ known: true, value: false });
+    expect(stop.basis).toBe('noStop');
+    expect(stop.window).toMatchObject({ known: true, value: { toFlag: true, highLap: TOTAL_LAPS } });
+    // the plain forecast (forecast-score's policies) does not stop it
+    expect(forecastPolicies(rivalStops.compute(view), 5)[4]!.stops).toEqual([]);
+  });
+
+  it('row 6: a plain forecast over a builder race where every car has met the rule predicts no further stops', () => {
+    // six cars, each on mediums to its in lap (18 .. 23), then hards lasting to the flag; 30 laps done of 50
+    const cars = [18, 19, 20, 21, 22, 23].map((inLap, car): CarRace => ({ car, stints: MEDIUM_THEN_HARD(inLap), completed: 30, rule: 'required', life: life(22, { medium: 20, hard: 45 }) }));
+    const stops = rivalStops.compute(raceView(cars));
+    for (const car of cars.keys()) expect(stopOf(stops, car).owesStop, `car ${car}`).toMatchObject({ known: true, value: false });
+    const policies = forecastPolicies(stops, cars.length);
+    expect(policies.map((p) => p.stops)).toEqual(cars.map(() => []));
+  });
+
+  it('R1 rewind: after a flashback undoing a car\'s second compound, the output equals a run without the undone frames (C33)', () => {
+    // car 1 stops off its mediums at the end of lap 27 onto hards; a flashback to lap 25 undoes it. Car 0 met the rule.
+    const at = (completed: number): CarRace[] => [
+      { car: 0, stints: SOFT_THEN_MEDIUM, completed, rule: 'required', life: life(50 - completed, { soft: 12, medium: 40, hard: 45 }) },
+      { car: 1, stints: completed > 27 ? MEDIUM_THEN_HARD(27) : MEDIUM_FROM_1, completed, rule: 'required', life: life(50 - completed, { medium: 55, hard: 45 }) },
+    ];
+    const full = raceView(at(30), { shaped: true });
+    expect(stopOf(rivalStops.compute(full), 1).owesStop).toMatchObject({ known: true, value: false });
+    const never = raceView(at(25), { shaped: true });
+    const rewound: EngineView = { ...never, delta: { before: projectionLengths(full.history), after: projectionLengths(never.history), rewound: { frameId: 25 * 20, at: never.live.sessionTime } } };
+    const out = rivalStops.compute(rewound);
+    expect(out).toEqual(rivalStops.compute(never));
+    // without the undone stop car 1 owes it again; car 0 still runs to the flag
+    expect(stopOf(out, 1).owesStop).toMatchObject({ known: true, value: true });
+    expect(stopOf(out, 0).window).toMatchObject({ known: true, value: { toFlag: true } });
   });
 });
 

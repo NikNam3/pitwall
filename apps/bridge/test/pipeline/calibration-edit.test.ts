@@ -288,6 +288,50 @@ describe('edits that commit nothing (C62a, ruling R29)', () => {
   }, 60_000);
 });
 
+// SP4.3b2 Task 10, row 3b (C62a, C75): `calibration.prefer` names the preselection of the next session start; it is
+// outside the set's fingerprint, so it commits nothing and the running session keeps its snapshot, even when a pipeline
+// is told of it as of an edit. A real calibration store on a temporary data dir with no stored session (C84).
+describe('a prefer during a session (SP4.3b2 Task 10)', () => {
+  it('prefer during a session commits no calibrationChosen and leaves the run\'s priors snapshot unchanged', async () => {
+    const dataDir = tmp();
+    const setFile = (set: CalibrationSet): void => {
+      mkdirSync(join(dataDir, 'calibration', String(set.trackId)), { recursive: true });
+      writeFileSync(join(dataDir, 'calibration', String(set.trackId), `${set.id}.json`), JSON.stringify(set));
+    };
+    const base = { trackId: ZANDVOORT, createdAt: '2026-10-01T20:00:00.000Z', sources: [], preferred: false };
+    // `dry` is the run's by 4.1a's rule (the newest use); `wet` is the other set of the track.
+    setFile({ ...base, id: 'dry', name: 'Dry', overrides: { 'pitLoss.ms.green': 21_500 }, lastUsedAt: '2026-10-02T20:00:00.000Z' });
+    setFile({ ...base, id: 'wet', name: 'Wet', overrides: { 'pitLoss.ms.green': 24_000 } });
+    const store = CalibrationStore.open(dataDir, {
+      features: [pitLoss],
+      repo: { sessionsOnTrack: () => [], newestTrackId: () => null },
+      config: effectiveConfig([pitLoss]),
+      hub: { publishGlobal: vi.fn() },
+      log,
+      rebuild: async () => {},
+    });
+    try {
+      const start = store.snapshotOf(ZANDVOORT, 'dry');
+      expect(start).toBeDefined();
+      const prefer = (setId: string | null) => expect(store.apply({ kind: 'calibration.prefer', trackId: ZANDVOORT, setId })).toEqual({ ok: true });
+      const live = await run(LAP10, {
+        calibration: store,
+        record: true,
+        steps: [
+          // Another set preferred, then the set in use, then none; each also reaches the pipeline as an edit would.
+          { at: EDIT_AT - 1, act: (pipeline) => { prefer('wet'); pipeline.calibrationEdited('wet'); } },
+          { at: EDIT_AT + 100, act: (pipeline) => { prefer('dry'); pipeline.calibrationEdited('dry'); } },
+          { at: LATER, act: (pipeline) => { prefer(null); pipeline.calibrationEdited('dry'); } },
+        ],
+      });
+      expect(store.snapshotOf(ZANDVOORT, 'dry')?.fingerprint).toBe(start!.fingerprint);
+      expectNothingCommitted(live, start!);
+    } finally {
+      store.close();
+    }
+  }, 60_000);
+});
+
 describe('a pick before any session on the feed (F5, C73)', () => {
   const NOW = '2026-11-06T12:00:00.000Z';
   const writeSetFile = (dataDir: string, set: CalibrationSet): void => {
@@ -300,7 +344,7 @@ describe('a pick before any session on the feed (F5, C73)', () => {
   it('a pick before any session marks an existing set used and rejects an unknown one', async () => {
     // a real calibration store on a temporary data dir, with no stored session (C84)
     const dataDir = tmp();
-    const set = (trackId: number, id: string): CalibrationSet => ({ id, trackId, name: id, createdAt: '2026-10-01T20:00:00.000Z', sources: [], overrides: {} });
+    const set = (trackId: number, id: string): CalibrationSet => ({ id, trackId, name: id, createdAt: '2026-10-01T20:00:00.000Z', sources: [], overrides: {}, preferred: false });
     writeSetFile(dataDir, set(ZANDVOORT, 'dry'));
     writeSetFile(dataDir, set(SINGAPORE, 'wet'));
     const store = CalibrationStore.open(dataDir, {

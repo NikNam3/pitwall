@@ -2155,15 +2155,78 @@
         "reason": "notReceived"
       }
     },
+    "pitLossInLapShare": {
+      "known": false,
+      "reason": "notReceived"
+    },
     "compoundOffsetsMs": {
       "known": false,
       "reason": "notReceived"
+    },
+    "hazard": {
+      "known": true,
+      "value": {
+        "value": {
+          "races": 9,
+          "lapOne": {
+            "sc": 0.208697,
+            "vsc": 0.026426
+          },
+          "byFraction": [
+            {
+              "upTo": 0.25,
+              "sc": 0.016535,
+              "vsc": 0.00622
+            },
+            {
+              "upTo": 0.5,
+              "sc": 0.011204,
+              "vsc": 0.010733
+            },
+            {
+              "upTo": 0.75,
+              "sc": 0.013057,
+              "vsc": 0.006085
+            },
+            {
+              "upTo": 1.0,
+              "sc": 0.010661,
+              "vsc": 0.005268
+            }
+          ],
+          "durationLaps": {
+            "sc": [
+              0.0,
+              0.034965,
+              0.251748,
+              0.286714,
+              0.195804,
+              0.083916,
+              0.06993,
+              0.041958,
+              0.020979,
+              0.0,
+              0.006993,
+              0.006993
+            ],
+            "vsc": [
+              0.045455,
+              0.579545,
+              0.318182,
+              0.034091,
+              0.022727
+            ]
+          }
+        },
+        "source": "9 Grands Prix 2015-2025 (9 jtrotman Kaggle Race Events); SC/VSC starts / laps at risk, lap 1 apart, laps 2+ in quarter-distance bins, empirical-Bayes shrinkage to the pooled shape of all tracks; durations SC pooled, VSC pooled; assumed: the per-lap chance is the same in a race at 25 %/50 % distance"
+      },
+      "at": 0
     }
   },
   "source": {
     "generator": "pitwall-trackdata 0.1.0",
     "sources": "OpenF1 + MultiViewer; drsZones: OpenF1 qualifying car_data drs channel, median of the top five laps, detection point assumed 200 m before the zone start (not in telemetry or the FIA event notes)",
     "season": 2025,
-    "generatedOn": "2026-11-12"
+    "generatedOn": "2026-11-13"
   }
 }

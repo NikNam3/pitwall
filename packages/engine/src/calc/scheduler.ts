@@ -1,4 +1,4 @@
-import type { Insight, ProfileSnapshot, RunPriors, SessionTime } from '@pitwall/domain';
+import type { GameSettings, Insight, ProfileSnapshot, RunPriors, SessionTime } from '@pitwall/domain';
 import type { HistoryDelta } from '../log/types.ts';
 import type { Snapshotable } from '../runner/snapshotable.ts';
 import type { ChangeTag } from '../step/types.ts';
@@ -8,7 +8,7 @@ import { InsightBook, type InsightBookState } from './insight-book.ts';
 import { priorsOf } from './priors.ts';
 import { driversOf } from './profiles.ts';
 import { RegistryError, type CalculatorRegistry } from './registry.ts';
-import type { Cadence, Calculator, CalculatorId, EngineView, InsightChange } from './types.ts';
+import type { Cadence, Calculator, CalculatorId, ChangeTrigger, EngineView, InsightChange } from './types.ts';
 
 /**
  * What the scheduler is given per frame: an `EngineView` without the calculator outputs, which it keeps itself, with
@@ -41,6 +41,8 @@ type Slot = {
   /** Boxed because an accumulator or output may legitimately be `undefined`. */
   acc: { value: unknown } | undefined;
   prevOutput: { value: unknown } | undefined;
+  /** The session's game settings at the last successful run, kept for an `onChange` cadence on `sessionSettings` only. */
+  settingsAtRun: DeepReadonly<GameSettings> | undefined;
 };
 
 type Entry = { calc: Calculator; slot: Slot };
@@ -53,6 +55,7 @@ const freshSlot = (): Slot => ({
   ranDependencies: new Set(),
   acc: undefined,
   prevOutput: undefined,
+  settingsAtRun: undefined,
 });
 
 type Rewound = NonNullable<HistoryDelta['rewound']>;
@@ -76,7 +79,7 @@ const absorb = (pending: Pending | undefined, input: SchedulerInput): Pending =>
 const copyPending = (pending: Pending | undefined): Pending | undefined => pending && { changed: new Set(pending.changed), delta: pending.delta };
 
 /** A calculator's slot as a snapshot keeps it: no accumulator (a rewind rebuilds it with `init`, C30), the previous output shared. */
-type SlotBookkeeping = Pick<Slot, 'lastRunAt' | 'pending' | 'ranDependencies' | 'prevOutput'>;
+type SlotBookkeeping = Pick<Slot, 'lastRunAt' | 'pending' | 'ranDependencies' | 'prevOutput' | 'settingsAtRun'>;
 
 /**
  * What the scheduler knows of the frames it ran on (`Scheduler.snapshot`): per calculator its last run, what is pending
@@ -117,11 +120,47 @@ const hasLeaderLap = (input: SchedulerInput, pending: Pending): boolean => {
   return false;
 };
 
-const isDue = (cadence: Cadence, lastRunAt: SessionTime, pending: Pending, input: SchedulerInput): boolean => {
+/**
+ * Whether the lap records pending since a calculator last ran, `[before, after)` of the `laps` list, hold one of our
+ * cars' (the player's or the teammate's, from the input's live state), of any status: only the new entries are read.
+ */
+const hasOurLap = (input: SchedulerInput, pending: Pending): boolean => {
+  const { before, after } = pending.delta;
+  const { playerCar, teammateCar } = input.live;
+  const laps = input.history.laps;
+  for (let i = before.laps ?? 0; i < (after.laps ?? 0); i += 1) {
+    const car = laps[i]?.carId;
+    if (car !== undefined && (car === playerCar || car === teammateCar)) return true;
+  }
+  return false;
+};
+
+/** Whether two game settings differ in any field (every field is a plain value). */
+const settingsDiffer = (a: DeepReadonly<GameSettings>, b: DeepReadonly<GameSettings>): boolean =>
+  (Object.keys(a) as (keyof GameSettings)[]).some((key) => a[key] !== b[key]);
+
+/** Whether the cadence runs on a change of the session's game settings (so the slot keeps the settings it last ran on). */
+const watchesSettings = (cadence: Cadence): boolean => typeof cadence === 'object' && 'onChange' in cadence && cadence.onChange.includes('sessionSettings');
+
+/** Whether a change `trigger` of an `onChange` cadence happened since the calculator's last run. */
+const hasChange = (trigger: ChangeTrigger, slot: Slot, pending: Pending, input: SchedulerInput): boolean => {
+  if (trigger === 'leaderLap') return hasLeaderLap(input, pending);
+  if (trigger === 'ourLap') return hasOurLap(input, pending);
+  if (trigger === 'sessionSettings') {
+    return pending.changed.has('session') && (slot.settingsAtRun === undefined || settingsDiffer(slot.settingsAtRun, input.live.session.settings));
+  }
+  return pending.changed.has(trigger);
+};
+
+/** Whether a calculator's cadence asks for a run, given its slot and when it last ran. */
+const isDue = (cadence: Cadence, lastRunAt: SessionTime, slot: Slot, pending: Pending, input: SchedulerInput): boolean => {
   const now = input.live.sessionTime;
   if (cadence === 'frame') return true;
-  if (typeof cadence === 'object') return now < lastRunAt || now - lastRunAt >= 1000 / cadence.hz;
   const { before, after, rewound } = pending.delta;
+  if (typeof cadence === 'object') {
+    if ('hz' in cadence) return now < lastRunAt || now - lastRunAt >= 1000 / cadence.hz;
+    return rewound !== undefined || cadence.onChange.some((trigger) => hasChange(trigger, slot, pending, input));
+  }
   // A rewind discards history, so event calculators run again to catch up with it.
   switch (cadence) {
     case 'lapCompleted':
@@ -245,8 +284,8 @@ export class Scheduler implements Snapshotable<SchedulerBookkeeping> {
   snapshot(): SchedulerBookkeeping {
     const slots = new Map<CalculatorId, SlotBookkeeping>();
     for (const { calc, slot } of this.#entries) {
-      const { lastRunAt, pending, ranDependencies, prevOutput } = slot;
-      slots.set(calc.id, { lastRunAt, pending: copyPending(pending), ranDependencies: new Set(ranDependencies), prevOutput });
+      const { lastRunAt, pending, ranDependencies, prevOutput, settingsAtRun } = slot;
+      slots.set(calc.id, { lastRunAt, pending: copyPending(pending), ranDependencies: new Set(ranDependencies), prevOutput, settingsAtRun });
     }
     return { slots, outputs: new Map(this.#outputs), insights: this.#book.snapshot(), failed: new Set(this.#failed) };
   }
@@ -263,6 +302,7 @@ export class Scheduler implements Snapshotable<SchedulerBookkeeping> {
       slot.pending = copyPending(saved.pending);
       slot.ranDependencies = new Set(saved.ranDependencies);
       slot.prevOutput = saved.prevOutput;
+      slot.settingsAtRun = saved.settingsAtRun;
     }
     this.#outputs.clear();
     for (const [id, output] of s.outputs) this.#outputs.set(id, output);
@@ -301,7 +341,7 @@ export class Scheduler implements Snapshotable<SchedulerBookkeeping> {
         this.#failed.add(calc.id);
         continue;
       }
-      const due = slot.lastRunAt === undefined || isDue(calc.cadence, slot.lastRunAt, pending, input);
+      const due = slot.lastRunAt === undefined || isDue(calc.cadence, slot.lastRunAt, slot, pending, input);
       if (!due || (slot.lastRunAt !== undefined && !isAffected(calc, slot, pending))) continue;
 
       const view: EngineView = {
@@ -332,6 +372,7 @@ export class Scheduler implements Snapshotable<SchedulerBookkeeping> {
       slot.acc = evaluation.acc;
       slot.prevOutput = { value: evaluation.output };
       slot.lastRunAt = now;
+      if (watchesSettings(calc.cadence)) slot.settingsAtRun = { ...input.live.session.settings };
       slot.pending = undefined;
       slot.ranDependencies.clear();
       this.#outputs.set(calc.id, evaluation.output);

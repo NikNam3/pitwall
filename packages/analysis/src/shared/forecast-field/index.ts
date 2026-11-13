@@ -33,8 +33,9 @@ import { DRIVER_NOISE, driverNoiseAsOf } from '../../driver-noise/index.ts';
 import { LAP_CLASSES_CONFIG } from '../../lap-classes/index.ts';
 import { PER_LAP_RATE_CONFIG } from '../../per-lap-rate/index.ts';
 import { pitLossCalculator } from '../../pit-loss/calculator.ts';
-import { PIT_LOSS, pitLossAsOf, type PitLossOutput } from '../../pit-loss/index.ts';
+import { inLapSharePrior, PIT_LOSS, PIT_LOSS_CONFIG, pitLossAsOf, type PitLossOutput } from '../../pit-loss/index.ts';
 import { raceInteractionCalculator } from '../../race-interaction/calculator.ts';
+import { RACE_INTERACTION_CONFIG } from '../../race-interaction/config.ts';
 import { RACE_INTERACTION, raceInteractionAsOf } from '../../race-interaction/index.ts';
 import { rivalStopsCalculator } from '../../rival-stops/calculator.ts';
 import { RIVAL_STOPS, rivalStopsAsOf } from '../../rival-stops/index.ts';
@@ -164,7 +165,8 @@ export function buildStartingPoint(
   });
 
   const lapsTotal = fixed.totalLaps.value;
-  const f64 = (): Float64Array => new Float64Array(cars);
+  const drsConfig = configOf(RACE_INTERACTION_CONFIG, view);
+  const f64= (): Float64Array => new Float64Array(cars);
   const sp: StartingPoint = {
     lap: leaderNewest.lap,
     lapsTotal,
@@ -196,7 +198,11 @@ export function buildStartingPoint(
     owesStop: new Uint8Array(cars),
     sets: {},
     wetness: wetnessOf(wetness, config.priorWetnessSdMs),
-    track: trackOf(view, pitLoss, need),
+    // filled once the cars are placed (`weatherOf`)
+    weather: unknown('notReceived'),
+    track: trackOf(view, pitLoss, need, inLapSharePrior(view.track, configOf(PIT_LOSS_CONFIG, view).inLapShare)),
+    // the one DRS rule: race-interaction's (F7)
+    drs: { rangeMs: drsConfig.drsRangeMs, fromLap: drsConfig.drsFromLap },
     interaction,
     lapModel,
   };
@@ -302,7 +308,42 @@ export function buildStartingPoint(
   }
 
   sp.sets = setsOf(view, cars);
+  sp.weather = weatherOf(view, sp.lap, lapsTotal, sp.lapFraction[leader] ?? 0, lapMs[leader] ?? 0);
   return known(sp, at);
+}
+
+/** The rain chance `min` minutes ahead, linearly between the samples around it (`samples` by offset, not empty). */
+function rainPctAt(samples: readonly { offsetMin: number; rainPct: number }[], min: number): number {
+  const first = samples[0] as (typeof samples)[number];
+  if (min <= first.offsetMin) return first.rainPct;
+  for (let i = 1; i < samples.length; i++) {
+    const s1 = samples[i] as (typeof samples)[number];
+    if (min > s1.offsetMin) continue;
+    const s0 = samples[i - 1] as (typeof samples)[number];
+    const span = s1.offsetMin - s0.offsetMin;
+    return span > 0 ? s0.rainPct + ((min - s0.offsetMin) / span) * (s1.rainPct - s0.rainPct) : s1.rainPct;
+  }
+  return (samples[samples.length - 1] as (typeof samples)[number]).rainPct;
+}
+
+/**
+ * The forecast mapped onto race laps by the leader's lap time (SP4.3b spec §7.1, S12): lap L (from the leader's lap
+ * `lap` on) takes the rain chance at its middle, linearly between the two samples around it (SP4.3b Task 19c: one
+ * sample per lap put a perfect forecast's changes 1.7–3 laps late on the game's 5/15/30-minute grid); a middle before
+ * the first sample takes the first's, one past the last the last's. Only where the view holds the forecast now
+ * (`weatherNow`, the now path, R19); unknown otherwise (C3).
+ */
+function weatherOf(view: AsOfView, lap: number, lapsTotal: number, leaderFraction: number, leaderLapMs: number): StartingPoint['weather'] {
+  const weather = view.fixed.weatherNow;
+  if (weather === null || weather.forecast.length === 0) return unknown('notReceived');
+  if (!(leaderLapMs > 0)) return unknown('insufficientData');
+  const samples = [...weather.forecast].sort((a, b) => a.offsetMin - b.offsetMin);
+  const byLap: { lap: number; rainPct: number }[] = [];
+  for (let l = lap; l <= lapsTotal; l++) {
+    const inMin = ((l - lap + 0.5 - leaderFraction) * leaderLapMs) / 60_000;
+    byLap.push({ lap: l, rainPct: rainPctAt(samples, inMin) });
+  }
+  return known({ byLap, accuracy: weather.forecastAccuracy }, view.at);
 }
 
 /** An offset of the lap model for a stint's visual compound (0 for one it does not tell apart). */
@@ -321,8 +362,14 @@ function wetnessOf(wetness: DeepReadonly<TrackWetness> | undefined, priorSdMs: n
   return state?.known === true ? { wetnessMs: state.value.wetnessMs, sdMs: state.value.sdMs } : { wetnessMs: 0, sdMs: priorSdMs };
 }
 
-/** The track: braking zones (their starts) and DRS zones from the track file, the pit loss per condition from pit-loss (else the track file's default). */
-function trackOf(view: AsOfView, pitLoss: DeepReadonly<PitLossOutput> | undefined, need: Needs): StartingPoint['track'] {
+/**
+ * The track: braking zones (their starts) and DRS zones from the track file, the pit loss per condition from pit-loss
+ * (else the track file's default), and the in-lap's share of it: pit-loss's green share (SP4.3b Task 11c; a neutralised
+ * stop is scored with its own loss, split by green's share), else pit-loss's prior `priorShare` (the track file's share,
+ * else pit-loss's config's: `inLapSharePrior`, SP4.3b Task 26).
+ */
+function trackOf(view: AsOfView, pitLoss: DeepReadonly<PitLossOutput> | undefined, need: Needs, priorShare: number): StartingPoint['track'] {
+  const inLapShare = need.of(pitLoss?.conditions.green.inLapShare, priorShare);
   const track = view.track.known ? view.track.value : undefined;
   const braking = track?.brakingZones.known === true ? track.brakingZones.value.map((z) => z.start) : [];
   const drs: DrsZone[] = track?.drsZones.known === true ? track.drsZones.value.map((z) => ({ detection: z.detection, start: z.start, end: z.end })) : [];
@@ -331,7 +378,7 @@ function trackOf(view: AsOfView, pitLoss: DeepReadonly<PitLossOutput> | undefine
     const fallback = track?.defaults.pitLossMs[c];
     return need.of(own, fallback?.known === true ? fallback.value.value : undefined);
   };
-  return { brakingZones: Float64Array.from(braking), drsZones: drs, pitLossMs: { green: lossOf('green'), vsc: lossOf('vsc'), sc: lossOf('sc') } };
+  return { brakingZones: Float64Array.from(braking), drsZones: drs, pitLossMs: { green: lossOf('green'), vsc: lossOf('vsc'), sc: lossOf('sc'), inLapShare } };
 }
 
 /** Our cars' sets left (the shared `ourCars` rule, C43): every available set but the fitted one, of a compound the model tells apart. */

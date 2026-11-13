@@ -1,5 +1,5 @@
 // Every unit reads only what it declares (contract C41, C87): one generic test over every calculator and analysis the
-// package registers (`CALCULATORS`). Each runs on the standard race (`standard-race.ts`: a stop and a safety car) through
+// package registers (`CALCULATORS`), and every job as its unit (`JOB_UNITS`: its `prepare` as a quick unit's compute). Each runs on the standard race (`standard-race.ts`: a stop and a safety car) through
 // its guarded view (`guardedView`): a quick unit computes on the view during the SC and on the one after the race, an
 // incremental one inits on the first, folds the delta into the second, gives its output on each (`output(acc, view)`)
 // and inits on the second; both raise their insights. Upstream outputs come from the units before it in the registry's order, computed on the same view.
@@ -8,9 +8,10 @@ import { describe, expect, it } from 'vitest';
 import { UndeclaredReadError } from '../../engine/test/support/guarded-input.ts';
 import { guardedView } from '../../engine/test/support/scheduler.ts';
 import { AFTER, DURING, grown, raceAt } from './standard-race.ts';
-import { CALCULATORS } from './units.ts';
+import { CALCULATORS, JOB_UNITS, PENDING_JOBS } from './units.ts';
 
-const ORDER = CalculatorRegistry.build(CALCULATORS).order;
+/** The calculators and analyses, and every job as its unit: its `prepare` runs through its guarded view (C41, C51). */
+const ORDER = CalculatorRegistry.build([...CALCULATORS, ...JOB_UNITS]).order;
 
 /** What a unit gives on a view, unguarded: its output, or its accumulator's. */
 const outputOf = (calc: Calculator, view: EngineView): unknown => (calc.kind === 'quick' ? calc.compute(view) : calc.output(calc.init(view), view));
@@ -72,7 +73,7 @@ function undeclaredReads(calc: Calculator): string[] {
 /**
  * The units that read what they do not declare today (Task 20 Step 0), each fixed by its Task 20 lane: their test is
  * marked `it.fails` until the lane's fix lands, which turns the mark red, so the lane removes the unit from this list.
- * Every lane's fix has landed: the list is empty.
+ * Every lane's fix has landed, `forecast-score`'s job's included (SP4.3b Task 20c).
  */
 const FIXED_BY_LANE: Readonly<Record<CalculatorId, string>> = {};
 
@@ -81,9 +82,15 @@ describe('every unit reads only what it declares (C41, C87)', () => {
     expect(ORDER.map((c) => c.id)).toEqual(expect.arrayContaining(['gaps', 'lap-times', 'incidents', 'pit-stop-count', 'race-moment']));
   });
 
+  it("every job is a unit here: its prepare runs through its guarded view (SP4.3b 4.3b2 precondition 7)", () => {
+    expect(ORDER.map((c) => c.id)).toEqual(expect.arrayContaining(['forecast-score', 'strategy']));
+  });
+
   for (const calc of ORDER) {
     const lane = FIXED_BY_LANE[calc.id];
-    (lane === undefined ? it : it.fails)(`${calc.id} ${calc.kind === 'quick' ? 'computes' : 'inits and folds'} on the standard race through its guarded view${lane === undefined ? '' : ` (undeclared reads, fixed by lane ${lane})`}`, () => {
+    // a job whose `prepare` is still a contract-first stub (SP4.3b2 N2): its row is skipped, nothing else is
+    const pending = JOB_UNITS.some((j) => j.id === calc.id) && PENDING_JOBS.includes(calc.id);
+    (pending ? it.skip : lane === undefined ? it : it.fails)(`${calc.id} ${calc.kind === 'quick' ? 'computes' : 'inits and folds'} on the standard race through its guarded view${lane === undefined ? '' : ` (undeclared reads, fixed by lane ${lane})`}`, () => {
       expect(undeclaredReads(calc)).toEqual([]);
     });
   }

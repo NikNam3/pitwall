@@ -49,11 +49,15 @@ const snapshotOf = (fingerprint: string, laps: number): ProfileSnapshot => ({
 const FIRST = snapshotOf('fp-first', 15);
 const EDITED = snapshotOf('fp-edited', 21);
 
-/** A fake profile store: `snapshotFor` answers `current`, which the test may change (an edit in the store). */
+/**
+ * A fake profile store: `snapshotFor` answers `current`, which the test may change (an edit in the store); `feedSeats`
+ * (SP4.3b2 Task 10: the feed's human seats) only records.
+ */
 function fakeProfiles(start: ProfileSnapshot) {
   const state = { current: start };
   const snapshotFor = vi.fn((_slots: readonly SlotIdentity[], _session: SessionRef): ProfileSnapshot => state.current);
-  return { state, store: { snapshotFor } };
+  const feedSeats = vi.fn();
+  return { state, store: { snapshotFor, feedSeats } };
 }
 
 /**

@@ -27,7 +27,7 @@ const info = (playerCar: number) => ({ feedId: FEED, sessionUid: '1', playerCar:
 const setup = () => {
   const connection = new FakeConnection();
   const store = new TopicStore(connection);
-  connection.push({ type: 'hello', contractVersion: 0, feeds: [{ feedId: FEED, kind: 'udp', label: 'x' }] });
+  connection.push({ type: 'hello', contractVersion: 0, feeds: [{ feedId: FEED, kind: 'udp', label: 'x', team: null }] });
   const view = render(TopBar, { store, feedId: FEED, send: () => {}, sendReplay: () => {} });
   const talkSubs = () => connection.subscribes().filter((s) => s.topic === 'talkWindow.car');
   const push = async (topic: string, value: unknown) => {
@@ -120,7 +120,7 @@ describe('TopBarModel.talk', () => {
   it('is undefined without a player car or data', () => {
     const connection = new FakeConnection();
     const store = new TopicStore(connection);
-    connection.push({ type: 'hello', contractVersion: 0, feeds: [{ feedId: FEED, kind: 'udp', label: 'x' }] });
+    connection.push({ type: 'hello', contractVersion: 0, feeds: [{ feedId: FEED, kind: 'udp', label: 'x', team: null }] });
     const model = new TopBarModel(store, FEED, () => {}, () => {});
     expect(model.talk).toBeUndefined();
     expect(connection.subscribes().filter((s) => s.topic === 'talkWindow.car')).toHaveLength(0);

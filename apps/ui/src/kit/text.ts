@@ -133,6 +133,8 @@ export const commandGroups = {
   theme: 'Theme',
   realism: 'Realism',
   calibration: 'Calibration',
+  drivers: 'Drivers',
+  plan: 'Plan',
   help: 'Help',
 } as const;
 
@@ -161,6 +163,9 @@ export const commandTitles = {
   theme: (name: string): string => `Theme ${name}`,
   calibrationPick: 'Pick the calibration set',
   calibrationChoose: (setName: string): string => `Calibration: ${setName}`,
+  driversOpen: 'Link the drivers',
+  planCommit: (car: number): string => `Commit the plan for car ${car}`,
+  planClear: (car: number): string => `Clear the plan for car ${car}`,
 } as const;
 
 /** The session-start calibration prompt and the top bar's calibration segment (SP4.1a spec 3.3). */
@@ -242,6 +247,8 @@ export const linkMarker = 'link group';
 export const topBar = {
   /** Tooltip of the workbook name in the top bar, which opens the workbook picker. */
   workbookTitle: 'Open a workbook (Ctrl+O)',
+  /** The count of human seats without a linked person (opens the drivers panel). */
+  unlinked: 'unlinked',
   laps: (count: string): string => `${count} laps`,
   /** The player's current lap, of the session's total when it has one: `L23/62`. */
   lapOf: (lap: string, total: string | undefined): string => (total === undefined ? `L${lap}` : `L${lap}/${total}`),

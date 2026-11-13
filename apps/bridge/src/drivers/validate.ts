@@ -3,8 +3,8 @@
 import type { DriverAction, UiAction } from '@pitwall/contracts';
 import type { DriverLink, DriverPerson, UnlinkedSlot } from '@pitwall/domain';
 import type { ProfileEntryDecl } from '@pitwall/engine/readers';
-import { linkFor, type StoredSlot } from './links.ts';
-import { isPersonId, sameLink, sameSession } from './persons.ts';
+import { sameSeat, type StoredSlot } from './links.ts';
+import { isPersonId, personIdOf, sameSession } from './persons.ts';
 
 /** Whether a uiAction is a driver-profile one, the profile store's (C62c). */
 export const isDriverAction = (action: UiAction): action is DriverAction => action.kind.startsWith('drivers.');
@@ -15,7 +15,7 @@ export type CheckCtx = {
   persons: ReadonlyMap<string, DriverPerson>;
   /** Every slot of every stored session. */
   slots: readonly StoredSlot[];
-  /** The unlinked slots as last shown (`drivers.links`), with their suggestions. */
+  /** The unlinked slots as last shown (`drivers.links`). */
   unlinked: readonly UnlinkedSlot[];
   entry: (key: string) => ProfileEntryDecl | undefined;
 };
@@ -23,26 +23,51 @@ export type CheckCtx = {
 const invalid = (message: string): Checked => ({ ok: false, message });
 const write = (...persons: DriverPerson[]): Checked => ({ ok: true, write: persons });
 
-/** The person with `link` added; unchanged when it holds that link already. */
-const withLink = (person: DriverPerson, link: DriverLink): DriverPerson =>
-  person.links.some((l) => sameLink(l, link)) ? person : { ...person, links: [...person.links, link] };
+/**
+ * `drivers.link`: one seat, one person. The seat's link is removed from every person that has it, then added to the
+ * named one; `person: null` only removes it. An unknown person, or a seat that is not one, is rejected.
+ */
+function checkLink(action: Extract<DriverAction, { kind: 'drivers.link' }>, ctx: CheckCtx): Checked {
+  const seat: DriverLink = { team: action.team, raceNumber: action.raceNumber };
+  if (!Number.isInteger(seat.team) || seat.team < 0) return invalid(`a team is a team id (an integer from 0), got ${seat.team}`);
+  if (!Number.isInteger(seat.raceNumber) || seat.raceNumber < 0) return invalid(`a race number is an integer from 0, got ${seat.raceNumber}`);
+  const target = action.person === null ? undefined : ctx.persons.get(action.person);
+  if (action.person !== null && target === undefined) return invalid(`no person ${action.person}`);
+  const changed = new Map<string, DriverPerson>();
+  for (const person of ctx.persons.values()) {
+    if (person.links.some((l) => sameSeat(l, seat))) changed.set(person.id, { ...person, links: person.links.filter((l) => !sameSeat(l, seat)) });
+  }
+  if (target !== undefined) {
+    const base = changed.get(target.id) ?? target;
+    changed.set(target.id, { ...base, links: [...base.links, seat] });
+  }
+  return write(...changed.values());
+}
 
 export function checkAction(action: DriverAction, ctx: CheckCtx): Checked {
   if (action.kind === 'drivers.add') {
-    if (!isPersonId(action.person)) return invalid(`a person id is kebab-case (a-z, 0-9, -): ${JSON.stringify(action.person)}`);
-    if (ctx.persons.has(action.person)) return invalid(`person ${action.person} exists already`);
     const displayName = action.displayName.trim();
     if (displayName === '') return invalid('a person needs a display name');
-    return write({ id: action.person, displayName, links: [], excluded: [], overrides: {} });
+    // Without a given id, the bridge derives it from the display name.
+    const id = action.person ?? personIdOf(displayName);
+    if (!isPersonId(id)) return invalid(`a person id is kebab-case (a-z, 0-9, -): ${JSON.stringify(id)}`);
+    if (ctx.persons.has(id)) return invalid(`person ${id} exists already`);
+    const added: DriverPerson = { id, displayName, links: [], excluded: [], overrides: {} };
+    if (action.seat === undefined) return write(added);
+    // With a seat: the person and its link are one change; a rejected link stores neither.
+    const persons = new Map(ctx.persons).set(id, added);
+    return checkLink({ kind: 'drivers.link', team: action.seat.team, raceNumber: action.seat.raceNumber, person: id }, { ...ctx, persons });
   }
-  if (action.kind === 'drivers.accept') return accept(ctx);
+  if (action.kind === 'drivers.link') return checkLink(action, ctx);
   const person = ctx.persons.get(action.person);
   if (person === undefined) return invalid(`no person ${action.person}`);
   switch (action.kind) {
-    case 'drivers.link': {
-      const slot = ctx.slots.find((s) => sameSession(s.session, action.session) && s.carId === action.carId);
-      if (slot === undefined) return invalid(`no stored slot ${action.carId} in session ${action.session.sessionUid}/${action.session.weekendId}/${action.session.feedCar}`);
-      return write(withLink(person, linkFor(slot)));
+    case 'drivers.include': {
+      const excluded = person.excluded.some((e) => sameSession(e, action.session));
+      if (!excluded && !ctx.slots.some((s) => sameSession(s.session, action.session))) {
+        return invalid(`no stored session ${action.session.sessionUid}/${action.session.weekendId}/${action.session.feedCar}`);
+      }
+      return write({ ...person, excluded: person.excluded.filter((e) => !sameSession(e, action.session)) });
     }
     case 'drivers.exclude': {
       if (!ctx.slots.some((s) => sameSession(s.session, action.session))) {
@@ -64,16 +89,4 @@ export function checkAction(action: DriverAction, ctx: CheckCtx): Checked {
       return write({ ...person, overrides });
     }
   }
-}
-
-/** Every shown suggestion confirmed as a link of its person: by name and race number when the slot has a name, else the slot. */
-function accept(ctx: CheckCtx): Checked {
-  const changed = new Map<string, DriverPerson>();
-  for (const shown of ctx.unlinked) {
-    if (shown.suggestion === undefined) continue;
-    const person = changed.get(shown.suggestion.person) ?? ctx.persons.get(shown.suggestion.person);
-    if (person === undefined) continue;
-    changed.set(person.id, withLink(person, linkFor(shown)));
-  }
-  return write(...changed.values());
 }

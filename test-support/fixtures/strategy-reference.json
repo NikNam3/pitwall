@@ -1,0 +1,5060 @@
+{
+  "sourceHash": "68e5ec0c266625c7956786de1a59b67ac80e7ba22ab4adbe65130972d748f0cf",
+  "generatorParams": {
+    "base": "GENERATOR_DEFAULTS",
+    "seed": 1,
+    "lap": 2,
+    "frameOfLap": 0,
+    "ours": [
+      2,
+      5
+    ],
+    "params": {
+      "cars": 20,
+      "laps": 50,
+      "trackM": 5000,
+      "brakingZones": [
+        0.08,
+        0.3,
+        0.45,
+        0.62,
+        0.8
+      ],
+      "drsZones": [
+        {
+          "detection": 0.88,
+          "start": 0.95,
+          "end": 0.05
+        },
+        {
+          "detection": 0.4,
+          "start": 0.5,
+          "end": 0.58
+        }
+      ],
+      "pitLossMs": 22000,
+      "stationaryMs": 2500,
+      "fuelStartKg": 100,
+      "fuelPerLapKg": 1.8,
+      "compounds": {
+        "soft": {
+          "offsetMs": 0,
+          "degMsPerLap": 80,
+          "wearPctPerLap": 3
+        },
+        "medium": {
+          "offsetMs": 600,
+          "degMsPerLap": 50,
+          "wearPctPerLap": 2
+        },
+        "hard": {
+          "offsetMs": 1100,
+          "degMsPerLap": 30,
+          "wearPctPerLap": 1.4
+        },
+        "inter": {
+          "offsetMs": 6000,
+          "degMsPerLap": 100,
+          "wearPctPerLap": 2.5
+        },
+        "wet": {
+          "offsetMs": 9000,
+          "degMsPerLap": 80,
+          "wearPctPerLap": 2
+        }
+      },
+      "field": [
+        {
+          "paceMs": 90000,
+          "human": false,
+          "sigmaMs": 200,
+          "rho": 0.3,
+          "mistakeRate": 0.02,
+          "mistakeMedianMs": 1500,
+          "mistakeSigmaLog": 0.6,
+          "wearFactor": 1,
+          "stops": [
+            {
+              "lap": 18,
+              "compound": "hard"
+            }
+          ],
+          "startCompound": "medium"
+        },
+        {
+          "paceMs": 90120,
+          "human": false,
+          "sigmaMs": 200,
+          "rho": 0.3,
+          "mistakeRate": 0.02,
+          "mistakeMedianMs": 1500,
+          "mistakeSigmaLog": 0.6,
+          "wearFactor": 1,
+          "stops": [
+            {
+              "lap": 19,
+              "compound": "hard"
+            }
+          ],
+          "startCompound": "medium"
+        },
+        {
+          "paceMs": 90240,
+          "human": false,
+          "sigmaMs": 200,
+          "rho": 0.3,
+          "mistakeRate": 0.02,
+          "mistakeMedianMs": 1500,
+          "mistakeSigmaLog": 0.6,
+          "wearFactor": 1,
+          "stops": [
+            {
+              "lap": 20,
+              "compound": "hard"
+            }
+          ],
+          "startCompound": "medium"
+        },
+        {
+          "paceMs": 90360,
+          "human": false,
+          "sigmaMs": 200,
+          "rho": 0.3,
+          "mistakeRate": 0.02,
+          "mistakeMedianMs": 1500,
+          "mistakeSigmaLog": 0.6,
+          "wearFactor": 1,
+          "stops": [
+            {
+              "lap": 21,
+              "compound": "hard"
+            }
+          ],
+          "startCompound": "medium"
+        },
+        {
+          "paceMs": 90480,
+          "human": false,
+          "sigmaMs": 200,
+          "rho": 0.3,
+          "mistakeRate": 0.02,
+          "mistakeMedianMs": 1500,
+          "mistakeSigmaLog": 0.6,
+          "wearFactor": 1,
+          "stops": [
+            {
+              "lap": 22,
+              "compound": "hard"
+            }
+          ],
+          "startCompound": "medium"
+        },
+        {
+          "paceMs": 90600,
+          "human": false,
+          "sigmaMs": 200,
+          "rho": 0.3,
+          "mistakeRate": 0.02,
+          "mistakeMedianMs": 1500,
+          "mistakeSigmaLog": 0.6,
+          "wearFactor": 1,
+          "stops": [
+            {
+              "lap": 18,
+              "compound": "hard"
+            }
+          ],
+          "startCompound": "medium"
+        },
+        {
+          "paceMs": 90720,
+          "human": false,
+          "sigmaMs": 200,
+          "rho": 0.3,
+          "mistakeRate": 0.02,
+          "mistakeMedianMs": 1500,
+          "mistakeSigmaLog": 0.6,
+          "wearFactor": 1,
+          "stops": [
+            {
+              "lap": 19,
+              "compound": "hard"
+            }
+          ],
+          "startCompound": "medium"
+        },
+        {
+          "paceMs": 90840,
+          "human": false,
+          "sigmaMs": 200,
+          "rho": 0.3,
+          "mistakeRate": 0.02,
+          "mistakeMedianMs": 1500,
+          "mistakeSigmaLog": 0.6,
+          "wearFactor": 1,
+          "stops": [
+            {
+              "lap": 20,
+              "compound": "hard"
+            }
+          ],
+          "startCompound": "medium"
+        },
+        {
+          "paceMs": 90960,
+          "human": false,
+          "sigmaMs": 200,
+          "rho": 0.3,
+          "mistakeRate": 0.02,
+          "mistakeMedianMs": 1500,
+          "mistakeSigmaLog": 0.6,
+          "wearFactor": 1,
+          "stops": [
+            {
+              "lap": 21,
+              "compound": "hard"
+            }
+          ],
+          "startCompound": "medium"
+        },
+        {
+          "paceMs": 91080,
+          "human": false,
+          "sigmaMs": 200,
+          "rho": 0.3,
+          "mistakeRate": 0.02,
+          "mistakeMedianMs": 1500,
+          "mistakeSigmaLog": 0.6,
+          "wearFactor": 1,
+          "stops": [
+            {
+              "lap": 22,
+              "compound": "hard"
+            }
+          ],
+          "startCompound": "medium"
+        },
+        {
+          "paceMs": 91200,
+          "human": false,
+          "sigmaMs": 200,
+          "rho": 0.3,
+          "mistakeRate": 0.02,
+          "mistakeMedianMs": 1500,
+          "mistakeSigmaLog": 0.6,
+          "wearFactor": 1,
+          "stops": [
+            {
+              "lap": 18,
+              "compound": "hard"
+            }
+          ],
+          "startCompound": "medium"
+        },
+        {
+          "paceMs": 91320,
+          "human": false,
+          "sigmaMs": 200,
+          "rho": 0.3,
+          "mistakeRate": 0.02,
+          "mistakeMedianMs": 1500,
+          "mistakeSigmaLog": 0.6,
+          "wearFactor": 1,
+          "stops": [
+            {
+              "lap": 19,
+              "compound": "hard"
+            }
+          ],
+          "startCompound": "medium"
+        },
+        {
+          "paceMs": 91440,
+          "human": false,
+          "sigmaMs": 200,
+          "rho": 0.3,
+          "mistakeRate": 0.02,
+          "mistakeMedianMs": 1500,
+          "mistakeSigmaLog": 0.6,
+          "wearFactor": 1,
+          "stops": [
+            {
+              "lap": 20,
+              "compound": "hard"
+            }
+          ],
+          "startCompound": "medium"
+        },
+        {
+          "paceMs": 91560,
+          "human": false,
+          "sigmaMs": 200,
+          "rho": 0.3,
+          "mistakeRate": 0.02,
+          "mistakeMedianMs": 1500,
+          "mistakeSigmaLog": 0.6,
+          "wearFactor": 1,
+          "stops": [
+            {
+              "lap": 21,
+              "compound": "hard"
+            }
+          ],
+          "startCompound": "medium"
+        },
+        {
+          "paceMs": 91680,
+          "human": false,
+          "sigmaMs": 200,
+          "rho": 0.3,
+          "mistakeRate": 0.02,
+          "mistakeMedianMs": 1500,
+          "mistakeSigmaLog": 0.6,
+          "wearFactor": 1,
+          "stops": [
+            {
+              "lap": 22,
+              "compound": "hard"
+            }
+          ],
+          "startCompound": "medium"
+        },
+        {
+          "paceMs": 91800,
+          "human": false,
+          "sigmaMs": 200,
+          "rho": 0.3,
+          "mistakeRate": 0.02,
+          "mistakeMedianMs": 1500,
+          "mistakeSigmaLog": 0.6,
+          "wearFactor": 1,
+          "stops": [
+            {
+              "lap": 18,
+              "compound": "hard"
+            }
+          ],
+          "startCompound": "medium"
+        },
+        {
+          "paceMs": 91920,
+          "human": false,
+          "sigmaMs": 200,
+          "rho": 0.3,
+          "mistakeRate": 0.02,
+          "mistakeMedianMs": 1500,
+          "mistakeSigmaLog": 0.6,
+          "wearFactor": 1,
+          "stops": [
+            {
+              "lap": 19,
+              "compound": "hard"
+            }
+          ],
+          "startCompound": "medium"
+        },
+        {
+          "paceMs": 92040,
+          "human": false,
+          "sigmaMs": 200,
+          "rho": 0.3,
+          "mistakeRate": 0.02,
+          "mistakeMedianMs": 1500,
+          "mistakeSigmaLog": 0.6,
+          "wearFactor": 1,
+          "stops": [
+            {
+              "lap": 20,
+              "compound": "hard"
+            }
+          ],
+          "startCompound": "medium"
+        },
+        {
+          "paceMs": 92160,
+          "human": true,
+          "sigmaMs": 450,
+          "rho": 0.4,
+          "mistakeRate": 0.05,
+          "mistakeMedianMs": 1500,
+          "mistakeSigmaLog": 0.6,
+          "wearFactor": 1,
+          "stops": [
+            {
+              "lap": 21,
+              "compound": "hard"
+            }
+          ],
+          "startCompound": "medium"
+        },
+        {
+          "paceMs": 92280,
+          "human": true,
+          "sigmaMs": 900,
+          "rho": 0.4,
+          "mistakeRate": 0.05,
+          "mistakeMedianMs": 1500,
+          "mistakeSigmaLog": 0.6,
+          "wearFactor": 1,
+          "stops": [
+            {
+              "lap": 22,
+              "compound": "hard"
+            }
+          ],
+          "startCompound": "medium"
+        }
+      ],
+      "pass": {
+        "drsFactor": 2,
+        "minGapMs": 1000
+      }
+    }
+  },
+  "candidates": {
+    "2": [
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 18,
+              "compound": "soft"
+            },
+            {
+              "lap": 33,
+              "compound": "medium"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 15,
+              "toLap": 21,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 22,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 28,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 30,
+              "toLap": 30,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 32,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 30,
+              "toLap": 30,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 32,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "damage",
+              "lossMsPerLap": 1503.3529411764705,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "degradationOff",
+              "wearRateDeltaPct": 1,
+              "action": {
+                "switchTo": [
+                  {
+                    "lap": 14,
+                    "compound": "hard"
+                  },
+                  {
+                    "lap": 24,
+                    "compound": "soft"
+                  },
+                  {
+                    "lap": 36,
+                    "compound": "medium"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "source": "dp",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 18,
+              "compound": "soft"
+            },
+            {
+              "lap": 33,
+              "compound": "medium"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 15,
+              "toLap": 21,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 22,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 28,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 30,
+              "toLap": 30,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 32,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 30,
+              "toLap": 30,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 32,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "damage",
+              "lossMsPerLap": 1503.3529411764705,
+              "action": {
+                "box": "soft"
+              }
+            }
+          ]
+        },
+        "source": "dp",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 18,
+              "compound": "medium"
+            },
+            {
+              "lap": 35,
+              "compound": "soft"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 15,
+              "toLap": 21,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 22,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 28,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 30,
+              "toLap": 30,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 32,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 30,
+              "toLap": 30,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 32,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            }
+          ]
+        },
+        "source": "dp",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 18,
+              "compound": "medium"
+            },
+            {
+              "lap": 36,
+              "compound": "hard"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 15,
+              "toLap": 21,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 22,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 28,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 30,
+              "toLap": 30,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 32,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 30,
+              "toLap": 30,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 32,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            }
+          ]
+        },
+        "source": "dp",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 19,
+              "compound": "hard"
+            },
+            {
+              "lap": 33,
+              "compound": "medium"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 15,
+              "toLap": 21,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 22,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 28,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 30,
+              "toLap": 30,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 32,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 30,
+              "toLap": 30,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 32,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            }
+          ]
+        },
+        "source": "dp",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 14,
+              "compound": "hard"
+            },
+            {
+              "lap": 24,
+              "compound": "soft"
+            },
+            {
+              "lap": 36,
+              "compound": "medium"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 15,
+              "toLap": 21,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 22,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 28,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 30,
+              "toLap": 30,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 32,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 30,
+              "toLap": 30,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 32,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            }
+          ]
+        },
+        "source": "dp",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 14,
+              "compound": "hard"
+            },
+            {
+              "lap": 24,
+              "compound": "medium"
+            },
+            {
+              "lap": 38,
+              "compound": "soft"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 15,
+              "toLap": 21,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 22,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 28,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 30,
+              "toLap": 30,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 32,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 30,
+              "toLap": 30,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 32,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            }
+          ]
+        },
+        "source": "dp",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 15,
+              "compound": "medium"
+            },
+            {
+              "lap": 29,
+              "compound": "soft"
+            },
+            {
+              "lap": 41,
+              "compound": "hard"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 15,
+              "toLap": 21,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 22,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 28,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 30,
+              "toLap": 30,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 32,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 30,
+              "toLap": 30,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 32,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            }
+          ]
+        },
+        "source": "dp",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 15,
+              "compound": "medium"
+            },
+            {
+              "lap": 29,
+              "compound": "hard"
+            },
+            {
+              "lap": 38,
+              "compound": "soft"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 15,
+              "toLap": 21,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 22,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 28,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 30,
+              "toLap": 30,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 32,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 30,
+              "toLap": 30,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 32,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            }
+          ]
+        },
+        "source": "dp",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 1,
+              "compound": "soft"
+            },
+            {
+              "lap": 17,
+              "compound": "medium"
+            },
+            {
+              "lap": 36,
+              "compound": "hard"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 15,
+              "toLap": 21,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 22,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 28,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 30,
+              "toLap": 30,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 32,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 30,
+              "toLap": 30,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 32,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            }
+          ]
+        },
+        "source": "dp",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 18,
+              "compound": "soft"
+            },
+            {
+              "lap": 33,
+              "compound": "medium"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 15,
+              "toLap": 21,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 22,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 28,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 30,
+              "toLap": 30,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 32,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 30,
+              "toLap": 30,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 32,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            }
+          ]
+        },
+        "source": "dp",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 17,
+              "compound": "soft"
+            },
+            {
+              "lap": 33,
+              "compound": "medium"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 15,
+              "toLap": 21,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 22,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 28,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 30,
+              "toLap": 30,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 32,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 30,
+              "toLap": 30,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 32,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            }
+          ]
+        },
+        "source": "neighbour",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 19,
+              "compound": "soft"
+            },
+            {
+              "lap": 33,
+              "compound": "medium"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 15,
+              "toLap": 21,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 22,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 28,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 30,
+              "toLap": 30,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 32,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 30,
+              "toLap": 30,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 32,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            }
+          ]
+        },
+        "source": "neighbour",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 16,
+              "compound": "soft"
+            },
+            {
+              "lap": 33,
+              "compound": "medium"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 15,
+              "toLap": 21,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 22,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 28,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 30,
+              "toLap": 30,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 32,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 30,
+              "toLap": 30,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 32,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            }
+          ]
+        },
+        "source": "neighbour",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 20,
+              "compound": "soft"
+            },
+            {
+              "lap": 33,
+              "compound": "medium"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 15,
+              "toLap": 21,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 22,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 28,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 30,
+              "toLap": 30,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 32,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 30,
+              "toLap": 30,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 32,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            }
+          ]
+        },
+        "source": "neighbour",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 15,
+              "compound": "soft"
+            },
+            {
+              "lap": 33,
+              "compound": "medium"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 15,
+              "toLap": 21,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 22,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 28,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 30,
+              "toLap": 30,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 32,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 30,
+              "toLap": 30,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 32,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            }
+          ]
+        },
+        "source": "neighbour",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 21,
+              "compound": "soft"
+            },
+            {
+              "lap": 33,
+              "compound": "medium"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 15,
+              "toLap": 21,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 22,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 28,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 30,
+              "toLap": 30,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 32,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 30,
+              "toLap": 30,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 32,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            }
+          ]
+        },
+        "source": "neighbour",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 18,
+              "compound": "soft"
+            },
+            {
+              "lap": 32,
+              "compound": "medium"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 15,
+              "toLap": 21,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 22,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 28,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 30,
+              "toLap": 30,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 32,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 30,
+              "toLap": 30,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 32,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            }
+          ]
+        },
+        "source": "neighbour",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 18,
+              "compound": "soft"
+            },
+            {
+              "lap": 34,
+              "compound": "medium"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 15,
+              "toLap": 21,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 22,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 28,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 30,
+              "toLap": 30,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 32,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 30,
+              "toLap": 30,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 32,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            }
+          ]
+        },
+        "source": "neighbour",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 18,
+              "compound": "soft"
+            },
+            {
+              "lap": 31,
+              "compound": "medium"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 15,
+              "toLap": 21,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 22,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 28,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 30,
+              "toLap": 30,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 32,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 30,
+              "toLap": 30,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 32,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            }
+          ]
+        },
+        "source": "neighbour",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 18,
+              "compound": "soft"
+            },
+            {
+              "lap": 35,
+              "compound": "medium"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 15,
+              "toLap": 21,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 22,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 28,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 30,
+              "toLap": 30,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 32,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 30,
+              "toLap": 30,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 32,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            }
+          ]
+        },
+        "source": "neighbour",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 18,
+              "compound": "soft"
+            },
+            {
+              "lap": 30,
+              "compound": "medium"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 15,
+              "toLap": 21,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 22,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 28,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 30,
+              "toLap": 30,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 32,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 30,
+              "toLap": 30,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 32,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            }
+          ]
+        },
+        "source": "neighbour",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 18,
+              "compound": "soft"
+            },
+            {
+              "lap": 36,
+              "compound": "medium"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 15,
+              "toLap": 21,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 22,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 28,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 30,
+              "toLap": 30,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 32,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 30,
+              "toLap": 30,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 32,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            }
+          ]
+        },
+        "source": "neighbour",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 26,
+              "compound": "soft"
+            },
+            {
+              "lap": 33,
+              "compound": "medium"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 15,
+              "toLap": 21,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 22,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 28,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 30,
+              "toLap": 30,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 32,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 30,
+              "toLap": 30,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 32,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            }
+          ]
+        },
+        "source": "rule",
+        "rule": "mirrorAhead"
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 18,
+              "compound": "soft"
+            },
+            {
+              "lap": 33,
+              "compound": "medium"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 15,
+              "toLap": 21,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 22,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 28,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 30,
+              "toLap": 30,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 32,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 30,
+              "toLap": 30,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 32,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "rivalPits",
+              "carId": 3,
+              "withinMs": 3000,
+              "action": "cover"
+            }
+          ]
+        },
+        "source": "rule",
+        "rule": "cover"
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 18,
+              "compound": "soft"
+            },
+            {
+              "lap": 33,
+              "compound": "medium"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 15,
+              "toLap": 21,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 22,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 28,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 30,
+              "toLap": 30,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 32,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 30,
+              "toLap": 30,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 32,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "rivalPits",
+              "carId": 1,
+              "withinMs": 3000,
+              "action": "extend"
+            }
+          ]
+        },
+        "source": "rule",
+        "rule": "extend"
+      }
+    ],
+    "5": [
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 17,
+              "compound": "soft"
+            },
+            {
+              "lap": 32,
+              "compound": "medium"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 15,
+              "toLap": 21,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 22,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 28,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 31,
+              "toLap": 49,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 29,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 31,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "damage",
+              "lossMsPerLap": 1596.9375,
+              "action": {
+                "box": "hard"
+              }
+            },
+            {
+              "kind": "degradationOff",
+              "wearRateDeltaPct": 1,
+              "action": {
+                "switchTo": [
+                  {
+                    "lap": 14,
+                    "compound": "soft"
+                  },
+                  {
+                    "lap": 26,
+                    "compound": "medium"
+                  },
+                  {
+                    "lap": 40,
+                    "compound": "hard"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "source": "dp",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 17,
+              "compound": "soft"
+            },
+            {
+              "lap": 32,
+              "compound": "medium"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 15,
+              "toLap": 21,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 22,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 28,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 31,
+              "toLap": 49,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 29,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 31,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "damage",
+              "lossMsPerLap": 1596.9375,
+              "action": {
+                "box": "hard"
+              }
+            }
+          ]
+        },
+        "source": "dp",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 17,
+              "compound": "medium"
+            },
+            {
+              "lap": 35,
+              "compound": "soft"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 15,
+              "toLap": 21,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 22,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 28,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 31,
+              "toLap": 49,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 29,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 31,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            }
+          ]
+        },
+        "source": "dp",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 18,
+              "compound": "medium"
+            },
+            {
+              "lap": 36,
+              "compound": "hard"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 15,
+              "toLap": 21,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 22,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 28,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 31,
+              "toLap": 49,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 29,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 31,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            }
+          ]
+        },
+        "source": "dp",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 18,
+              "compound": "hard"
+            },
+            {
+              "lap": 32,
+              "compound": "medium"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 15,
+              "toLap": 21,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 22,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 28,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 31,
+              "toLap": 49,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 29,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 31,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            }
+          ]
+        },
+        "source": "dp",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 14,
+              "compound": "soft"
+            },
+            {
+              "lap": 26,
+              "compound": "medium"
+            },
+            {
+              "lap": 40,
+              "compound": "hard"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 15,
+              "toLap": 21,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 22,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 28,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 31,
+              "toLap": 49,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 29,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 31,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            }
+          ]
+        },
+        "source": "dp",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 14,
+              "compound": "soft"
+            },
+            {
+              "lap": 26,
+              "compound": "hard"
+            },
+            {
+              "lap": 36,
+              "compound": "medium"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 15,
+              "toLap": 21,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 22,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 28,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 31,
+              "toLap": 49,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 29,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 31,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            }
+          ]
+        },
+        "source": "dp",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 14,
+              "compound": "medium"
+            },
+            {
+              "lap": 29,
+              "compound": "soft"
+            },
+            {
+              "lap": 41,
+              "compound": "hard"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 15,
+              "toLap": 21,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 22,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 28,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 31,
+              "toLap": 49,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 29,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 31,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            }
+          ]
+        },
+        "source": "dp",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 14,
+              "compound": "medium"
+            },
+            {
+              "lap": 29,
+              "compound": "hard"
+            },
+            {
+              "lap": 38,
+              "compound": "soft"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 15,
+              "toLap": 21,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 22,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 28,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 31,
+              "toLap": 49,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 29,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 31,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            }
+          ]
+        },
+        "source": "dp",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 1,
+              "compound": "hard"
+            },
+            {
+              "lap": 15,
+              "compound": "medium"
+            },
+            {
+              "lap": 34,
+              "compound": "soft"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 15,
+              "toLap": 21,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 22,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 28,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 31,
+              "toLap": 49,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 29,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 31,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            }
+          ]
+        },
+        "source": "dp",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 17,
+              "compound": "soft"
+            },
+            {
+              "lap": 32,
+              "compound": "medium"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 15,
+              "toLap": 21,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 22,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 28,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 31,
+              "toLap": 49,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 29,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 31,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            }
+          ]
+        },
+        "source": "dp",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 16,
+              "compound": "soft"
+            },
+            {
+              "lap": 32,
+              "compound": "medium"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 15,
+              "toLap": 21,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 22,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 28,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 31,
+              "toLap": 49,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 29,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 31,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            }
+          ]
+        },
+        "source": "neighbour",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 18,
+              "compound": "soft"
+            },
+            {
+              "lap": 32,
+              "compound": "medium"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 15,
+              "toLap": 21,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 22,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 28,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 31,
+              "toLap": 49,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 29,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 31,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            }
+          ]
+        },
+        "source": "neighbour",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 15,
+              "compound": "soft"
+            },
+            {
+              "lap": 32,
+              "compound": "medium"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 15,
+              "toLap": 21,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 22,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 28,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 31,
+              "toLap": 49,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 29,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 31,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            }
+          ]
+        },
+        "source": "neighbour",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 19,
+              "compound": "soft"
+            },
+            {
+              "lap": 32,
+              "compound": "medium"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 15,
+              "toLap": 21,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 22,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 28,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 31,
+              "toLap": 49,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 29,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 31,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            }
+          ]
+        },
+        "source": "neighbour",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 14,
+              "compound": "soft"
+            },
+            {
+              "lap": 32,
+              "compound": "medium"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 15,
+              "toLap": 21,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 22,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 28,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 31,
+              "toLap": 49,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 29,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 31,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            }
+          ]
+        },
+        "source": "neighbour",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 20,
+              "compound": "soft"
+            },
+            {
+              "lap": 32,
+              "compound": "medium"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 15,
+              "toLap": 21,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 22,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 28,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 31,
+              "toLap": 49,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 29,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 31,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            }
+          ]
+        },
+        "source": "neighbour",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 17,
+              "compound": "soft"
+            },
+            {
+              "lap": 31,
+              "compound": "medium"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 15,
+              "toLap": 21,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 22,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 28,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 31,
+              "toLap": 49,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 29,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 31,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            }
+          ]
+        },
+        "source": "neighbour",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 17,
+              "compound": "soft"
+            },
+            {
+              "lap": 33,
+              "compound": "medium"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 15,
+              "toLap": 21,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 22,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 28,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 31,
+              "toLap": 49,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 29,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 31,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            }
+          ]
+        },
+        "source": "neighbour",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 17,
+              "compound": "soft"
+            },
+            {
+              "lap": 30,
+              "compound": "medium"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 15,
+              "toLap": 21,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 22,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 28,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 31,
+              "toLap": 49,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 29,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 31,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            }
+          ]
+        },
+        "source": "neighbour",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 17,
+              "compound": "soft"
+            },
+            {
+              "lap": 34,
+              "compound": "medium"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 15,
+              "toLap": 21,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 22,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 28,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 31,
+              "toLap": 49,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 29,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 31,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            }
+          ]
+        },
+        "source": "neighbour",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 17,
+              "compound": "soft"
+            },
+            {
+              "lap": 29,
+              "compound": "medium"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 15,
+              "toLap": 21,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 22,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 28,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 31,
+              "toLap": 49,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 29,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 31,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            }
+          ]
+        },
+        "source": "neighbour",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 17,
+              "compound": "soft"
+            },
+            {
+              "lap": 35,
+              "compound": "medium"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 15,
+              "toLap": 21,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 22,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 28,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 31,
+              "toLap": 49,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 29,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 31,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            }
+          ]
+        },
+        "source": "neighbour",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 26,
+              "compound": "soft"
+            },
+            {
+              "lap": 32,
+              "compound": "medium"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 15,
+              "toLap": 21,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 22,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 28,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 31,
+              "toLap": 49,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 29,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 31,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            }
+          ]
+        },
+        "source": "rule",
+        "rule": "mirrorAhead"
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 17,
+              "compound": "soft"
+            },
+            {
+              "lap": 32,
+              "compound": "medium"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 15,
+              "toLap": 21,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 22,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 28,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 31,
+              "toLap": 49,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 29,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 31,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "rivalPits",
+              "carId": 6,
+              "withinMs": 3000,
+              "action": "cover"
+            }
+          ]
+        },
+        "source": "rule",
+        "rule": "cover"
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 17,
+              "compound": "soft"
+            },
+            {
+              "lap": 32,
+              "compound": "medium"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 15,
+              "toLap": 21,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 22,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 28,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 31,
+              "toLap": 49,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 29,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 31,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "rivalPits",
+              "carId": 4,
+              "withinMs": 3000,
+              "action": "extend"
+            }
+          ]
+        },
+        "source": "rule",
+        "rule": "extend"
+      }
+    ]
+  },
+  "ePos": {
+    "2": [
+      6.31288,
+      6.35168,
+      6.34418,
+      6.61966,
+      6.6455,
+      6.93886,
+      6.92992,
+      6.89552,
+      6.89206,
+      8.5943,
+      6.35168,
+      6.36226,
+      6.37162,
+      6.394,
+      6.41424,
+      6.45128,
+      6.47874,
+      6.35368,
+      6.37412,
+      6.38118,
+      6.42126,
+      6.42998,
+      6.49052,
+      7.23624,
+      6.4299,
+      6.4425
+    ],
+    "5": [
+      6.7339,
+      6.76164,
+      6.76374,
+      7.03398,
+      7.04432,
+      7.40242,
+      7.41168,
+      7.39976,
+      7.39906,
+      8.92126,
+      6.76164,
+      6.78606,
+      6.75766,
+      6.8319,
+      6.78422,
+      6.91324,
+      6.83696,
+      6.7773,
+      6.78554,
+      6.81606,
+      6.80542,
+      6.88384,
+      6.86548,
+      7.73664,
+      6.845,
+      6.85804
+    ]
+  },
+  "winner": {
+    "2": 0,
+    "5": 0
+  }
+}

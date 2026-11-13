@@ -31,10 +31,11 @@ import { tyreLifeCalculator } from '../../../src/tyre-life/calculator.ts';
 import { TYRE_LIFE, tyreLifeAsOf } from '../../../src/tyre-life/index.ts';
 import type { BuilderRace } from '../../../../../test-support/builders/long-race.ts';
 import { generateRace, GENERATOR_DEFAULTS, type GeneratorParams } from '../../../../../test-support/race-generator/index.ts';
-import { zandvoortTrack } from '../../../../../test-support/track.ts';
+import { withoutInLapShare, zandvoortTrack } from '../../../../../test-support/track.ts';
 
 /** The track file of every view here: braking zones, DRS zones and pit-loss defaults. */
-export const TRACK: EngineView['track'] = known(zandvoortTrack(), 0);
+// ported in SP4.3b Task 26: the track's in-lap share left out, so the config prior holds
+export const TRACK: EngineView['track'] = known(withoutInLapShare(zandvoortTrack()), 0);
 
 /** The fact lists of the projection (the log's `FACT_LISTS`). */
 export const FACT_LISTS = ['laps', 'stints', 'pitStops', 'crossings', 'events', 'penalties', 'decisions', 'clock'] as const;
@@ -96,7 +97,7 @@ export function plainNoise(cars: number, humans: readonly number[] = [], at: Ses
 /** A plain `race-interaction` output: one band, the config's DRS values, a 1 s following gap. */
 export function plainInteraction(at: SessionTime = 0): RaceInteraction {
   return {
-    bands: [{ fromDifficulty: 0, toDifficulty: 110, curve: { level: -3, slopePerMs: 0.004, cap: 0.6, wetFactor: 0.7 }, source: DEFAULT_SOURCE, episodes: 0, passes: 0 }],
+    bands: [{ fromDifficulty: 0, toDifficulty: 110, curve: { level: -3, slopePerMs: 0.004, cap: 0.6, wetFactor: 0.7, drsFactor: 1.2 }, source: DEFAULT_SOURCE, episodes: 0, passes: 0 }],
     band: known(0, at),
     drsPassFactor: 1.2,
     drsStraightGainMs: 250,

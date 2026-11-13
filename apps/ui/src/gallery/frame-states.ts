@@ -22,14 +22,14 @@ const healthy: FeedStatus = {
 
 /**
  * One frame cell: `widget` false draws the unknown-widget panel; `overrides` decide the data; `baseline` true when the
- * e2e spec compares it with a screenshot (only `noData` and `computed`, SP4.2 budget K13; `fit.spec` checks every one).
+ * e2e spec compares it with a screenshot (none since SP4.3b2: the widget baselines cover the frame; `fit.spec` checks every one).
  */
 export type FrameState = { name: string; widget: boolean; baseline: boolean; overrides: GalleryOverride[] };
 
 export const FRAME_STATES: readonly FrameState[] = [
-  { name: 'noData', widget: true, baseline: true, overrides: [] },
+  { name: 'noData', widget: true, baseline: false, overrides: [] },
   { name: 'errored', widget: true, baseline: false, overrides: [{ topic: 'feed.status', status: 'errored' }] },
   { name: 'stale', widget: true, baseline: false, overrides: [{ topic: 'feed.status', value: { ...healthy, stale: true } }] },
-  { name: 'computed', widget: true, baseline: true, overrides: [{ topic: 'feed.status', value: { ...healthy, computedFor: { lap: 12, frameId: 1 } } }] },
+  { name: 'computed', widget: true, baseline: false, overrides: [{ topic: 'feed.status', value: { ...healthy, computedFor: { lap: 12, frameId: 1 } } }] },
   { name: 'unknownWidget', widget: false, baseline: false, overrides: [] },
 ];

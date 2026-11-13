@@ -30,16 +30,20 @@ import {
   type Rng,
   type Situation,
 } from '@pitwall/engine/readers';
-import { raceForecast, startLapOf } from '../race-forecast/index.ts';
+import { raceForecast } from '../race-forecast/index.ts';
+import { fieldPositions } from '../race-monte-carlo/field.ts';
+import type { FieldInput, RivalRules } from '../race-monte-carlo/types.ts';
 import { RIVAL_STOPS } from '../rival-stops/index.ts';
 import { buildStartingPoint, FORECAST_UNITS } from '../shared/forecast-field/index.ts';
 import { leaderLapAt, neutralisationKind, neutralisedSpans, isClosed } from '../shared/neutralised.ts';
 import { ourCars } from '../shared/our-cars.ts';
+import { STRATEGY_CONFIG } from '../strategy/config.ts';
 import { FORECAST_SCORE_CONFIG } from './config.ts';
+import { crpsSummary, rankedProbabilityScore } from './crps.ts';
 import { actualStops, naturalExperiments, type Case, type ForecastScoreConfig } from './experiments.ts';
 import { forecastCases, forecastPolicies, HORIZONS, type ForecastCase, type Horizon } from './forecasts.ts';
 import { raceLaps } from './laps.ts';
-import { scored, scoreTable } from './tables.ts';
+import { scored, scoreTable, summary } from './tables.ts';
 
 /**
  * The job's input: the projection (its `appendedAt` included) and the open spans now, the run's fixed inputs, and the
@@ -77,8 +81,12 @@ export function prepareScore(view: EngineView): ScoreInput {
     const now = view.situation.byMachine[m];
     if (now !== undefined) open[m] = [...now];
   }
+  // the append frames of the declared lists and sub-machines only (C41: another list's are an undeclared read)
   const appendedAt: Record<string, FrameNumber[]> = {};
-  for (const [list, frames] of Object.entries(h.appendedAt ?? {})) appendedAt[list] = [...(frames as readonly FrameNumber[])];
+  for (const list of [...SCORE_LISTS, ...SCORE_MACHINES.map((m) => `spans:${m}`)]) {
+    const frames = h.appendedAt?.[list];
+    if (frames !== undefined) appendedAt[list] = [...(frames as readonly FrameNumber[])];
+  }
   const lists = Object.fromEntries(SCORE_LISTS.map((list) => [list, [...(h[list] as readonly unknown[])]]));
   const history = { ...lists, penalties: [], clock: [], spans, appendedAt } as unknown as Projection;
   const fixed = asOfNow(view).fixed;
@@ -90,7 +98,7 @@ export function prepareScore(view: EngineView): ScoreInput {
     drivers: view.drivers,
     track: view.track,
     weekend: view.weekend,
-    fixed: { totalLaps: fixed.totalLaps, playerCar: fixed.playerCar, teammateCar: fixed.teammateCar, aiDifficulty: fixed.aiDifficulty, setsNow: null, weatherNow: null },
+    fixed: { totalLaps: fixed.totalLaps, playerCar: fixed.playerCar, teammateCar: fixed.teammateCar, aiDifficulty: fixed.aiDifficulty, safetyCar: fixed.safetyCar, setsNow: null, weatherNow: null },
   };
 }
 
@@ -183,7 +191,7 @@ export function run(input: ScoreInput, rng: Rng): ForecastScoreReport {
   // the plain forecasts: one forecast per leader lap, rivals on rival-stops' windows, our cars on their actual stops
   const horizons = horizonsOf(config);
   const byLap = new Map<number, ForecastCase[]>();
-  for (const c of forecastCases(history, horizons)) {
+  for (const c of forecastCases(history, horizons, config.minPredictLap)) {
     const of = byLap.get(c.lap);
     if (of === undefined) byLap.set(c.lap, [c]);
     else of.push(c);
@@ -197,7 +205,7 @@ export function run(input: ScoreInput, rng: Rng): ForecastScoreReport {
     const { start, stops } = buildAt(first.predictFrame, first.predictAt);
     if (!start.known) continue;
     const sp = start.value;
-    const policies: Policy[] = forecastPolicies(stops, sp.cars, (car) => startLapOf(sp, car));
+    const policies: Policy[] = forecastPolicies(stops, sp.cars);
     if (ours.length > 0) {
       const actual = actualStops(history, race, first.predictFrame, sp.cars);
       for (const car of ours) if (car < sp.cars) policies[car] = actual[car] as Policy;
@@ -205,6 +213,10 @@ export function run(input: ScoreInput, rng: Rng): ForecastScoreReport {
     const toLap = lap + Math.max(...cases.map((c) => c.horizon));
     const result = raceForecast(sp, policies, { id: 0, plain: true, neutralisations: [] }, rng, { trace: true, toLap });
     for (const c of cases) {
+      // no stop of the car's own forecast policy in L…L+h before the race's last lap (SP4.3b Task 11g): the baseline
+      // never predicts a stop, and stop timing is scored by the experiments
+      const own = policies[c.carId]?.stops ?? [];
+      if (own.some((s) => lap <= s.lap && s.lap <= lap + c.horizon && s.lap < sp.lapsTotal)) continue;
       const entry = traceAt(result.trace, c.targetLap);
       const position = entry?.position[c.carId] ?? 0;
       if (entry === undefined || position === 0) continue;
@@ -217,6 +229,59 @@ export function run(input: ScoreInput, rng: Rng): ForecastScoreReport {
       });
     }
   }
+
+  // the CRPS (SP4.3b spec §8.4): one `fieldPositions` run per predict lap (every `crpsEveryLaps` from `crpsFirstLap`)
+  // over the plain plans, at the laps predict lap + each horizon, with a zero hazard (a scored case holds no SC or VSC
+  // lap, F1), the rivals' rule from `strategy`'s config; each case scores its car's pmf at its target lap
+  const strategy = STRATEGY_CONFIG.read(input);
+  const rivalRules: RivalRules = { q: strategy.rivalScBoxChance, aMin: strategy.rivalScMinTyreAge, reactionLaps: strategy.rivalReactionLaps, coverRule: false };
+  const crpsByLap = new Map<number, ForecastCase[]>();
+  for (const c of forecastCases(history, horizons, config.crpsFirstLap)) {
+    if ((c.lap - config.crpsFirstLap) % config.crpsEveryLaps !== 0) continue;
+    const of = crpsByLap.get(c.lap);
+    if (of === undefined) crpsByLap.set(c.lap, [c]);
+    else of.push(c);
+  }
+  const crpsScores: { c: ForecastCase; driver: ScoreCase['driver']; score: number }[] = [];
+  for (const [lap, cases] of crpsByLap) {
+    const first = cases[0] as ForecastCase;
+    const { start, stops } = buildAt(first.predictFrame, first.predictAt);
+    if (!start.known) continue;
+    const sp = start.value;
+    const policies: Policy[] = forecastPolicies(stops, sp.cars);
+    if (ours.length > 0) {
+      const actual = actualStops(history, race, first.predictFrame, sp.cars);
+      for (const car of ours) if (car < sp.cars) policies[car] = actual[car] as Policy;
+    }
+    const plans: FieldInput['plans'] = {};
+    policies.forEach((p, car) => (plans[car as CarId] = p));
+    const n = Math.max(0, sp.lapsTotal - sp.lap + 1);
+    const hazard: FieldInput['hazard'] = { byLap: new Float64Array(n), vscByLap: new Float64Array(n), scDur: Float64Array.of(1), vscDur: Float64Array.of(1), active: null };
+    const laps = horizons.map((h) => lap + h).filter((l) => l <= sp.lapsTotal);
+    const result = fieldPositions({ start: sp, plans, hazard, rivalRules, scenarios: config.crpsScenarios, laps }, rng);
+    for (const c of cases) {
+      const pmf = result.positionPmf[c.carId]?.[laps.indexOf(c.targetLap)];
+      if (pmf === undefined) continue;
+      crpsScores.push({ c, driver: driverAt(c.predictFrame, c.carId), score: rankedProbabilityScore(pmf, c.actualPosition) });
+    }
+  }
+  const crpsOf = (horizon: Horizon, basis: ForecastCase['basis'], driver: ScoreCase['driver']) =>
+    crpsSummary(crpsScores.filter((s) => s.c.horizon === horizon && s.c.basis === basis && s.driver === driver).map((s) => s.score), at);
+
+  // like for like (SP4.3b1 Task 27): the cases with both a CRPS and a point score, matched by car, predict lap, horizon
+  // and basis; per driver type the CRPS, the point forecast's and the baseline's mean absolute position error
+  const caseKey = (c: ForecastCase) => `${c.carId}:${c.lap}:${c.horizon}:${c.basis}`;
+  const crpsByKey = new Map(crpsScores.map((s) => [caseKey(s.c), s.score]));
+  const sameCasesOf = (of: readonly Scored[]): ForecastScoreReport['forecasts'][number]['sameCases'] => {
+    const shared = of.filter((f) => crpsByKey.has(caseKey(f.c)));
+    const ofDriver = (driver: ScoreCase['driver']) => shared.filter((f) => f.position.driver === driver);
+    const crps = (driver: ScoreCase['driver']) => crpsSummary(ofDriver(driver).map((f) => crpsByKey.get(caseKey(f.c)) as number), at);
+    return {
+      crps: { ai: crps('ai'), human: crps('human') },
+      position: { ai: summary(ofDriver('ai').map((f) => f.position), at), human: summary(ofDriver('human').map((f) => f.position), at) },
+      baseline: { ai: summary(ofDriver('ai').map((f) => f.baseline), at), human: summary(ofDriver('human').map((f) => f.baseline), at) },
+    };
+  };
 
   return {
     experiments: {
@@ -234,6 +299,8 @@ export function run(input: ScoreInput, rng: Rng): ForecastScoreReport {
           lapTime: scoreTable(`${name}.lapTime`, 'ms', of.map((f) => f.lapTime), at),
           position: scoreTable(`${name}.position`, 'places', of.map((f) => f.position), at),
           baselinePosition: scoreTable(`${name}.baselinePosition`, 'places', of.map((f) => f.baseline), at),
+          crps: { ai: crpsOf(horizon, basis, 'ai'), human: crpsOf(horizon, basis, 'human') },
+          sameCases: sameCasesOf(of),
         };
       }),
     ),

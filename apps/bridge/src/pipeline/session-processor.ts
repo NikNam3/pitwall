@@ -1,14 +1,18 @@
 // One session of a feed: frames → SessionRunner → Scheduler → topics, plus its session file and its storage.
 import {
+  carDriverSpans,
   carId,
+  carKeyOf,
   known,
   sessionUidString,
   trackDataOf,
   type CalibrationActiveValue,
   type CarId,
   type DecisionRecord,
+  type GivenDecision,
   type FeedId,
   type Known,
+  type LiveSeat,
   type MachineId,
   type ParticipantsValues,
   type PriorsSnapshot,
@@ -85,6 +89,11 @@ export type SessionProcessorOptions = {
    * or before that frame, `drivers` is `null`.
    */
   profilesFor?: (slots: readonly SlotIdentity[], session: SessionRef) => ProfileSnapshot | null;
+  /**
+   * The feed's human seats (C17, C62c; SP4.3b2 Task 10): its player car and teammate while their open `car-driver` span
+   * is `human`, with their team and race number from Participants. Handed on after a frame when they changed.
+   */
+  onSeats?: (seats: Omit<LiveSeat, 'feedId'>[]) => void;
   /** `calibration.active` changed: at the start, and whenever the projection's newest pick does (a pick, its void). */
   onActive?: (value: CalibrationActiveValue) => void;
 };
@@ -121,7 +130,7 @@ export class SessionProcessor {
   /** The run's priors (C62a): only grow, a flashback leaves them (the projection decides which snapshot counts). */
   #priors: RunPriors;
   /** Decisions committed since the last frame: the next frame carries them (C10, C76). */
-  readonly #pending = new PendingDecisions<Omit<DecisionRecord, 'frame'>>();
+  readonly #pending = new PendingDecisions<GivenDecision>();
   /** The records written to the session file: a decision committed now is placed at their count (C76). */
   readonly #records: SessionRecords;
   /** The last `calibration.active` handed to `onActive`, as JSON: it is handed on only when it changes. */
@@ -130,6 +139,8 @@ export class SessionProcessor {
   #storedTeammate: CarId | null = null;
   /** The run's profile snapshot (C62c): `undefined` until the first frame with Participants asks for it, fixed after. */
   #drivers: ProfileSnapshot | null | undefined;
+  /** The human seats last handed to `onSeats`, as JSON: handed on only when they change. */
+  #seats = '[]';
 
   constructor(opts: SessionProcessorOptions) {
     this.#o = opts;
@@ -171,7 +182,7 @@ export class SessionProcessor {
    * A decision the user committed (C76): the next frame carries it to the runner, whose decision recorder appends it
    * describing that frame. `snapshot`: the priors snapshot a `calibrationChosen` names, added to the run's priors first.
    */
-  decide(decision: Omit<DecisionRecord, 'frame'>, snapshot?: PriorsSnapshot): void {
+  decide(decision: GivenDecision, snapshot?: PriorsSnapshot): void {
     if (snapshot !== undefined && this.#priors.snapshots[snapshot.fingerprint] === undefined) {
       this.#priors = { ...this.#priors, snapshots: { ...this.#priors.snapshots, [snapshot.fingerprint]: snapshot } };
     }
@@ -187,6 +198,11 @@ export class SessionProcessor {
     if (chosen !== undefined) return { setId: chosen.setId, snapshot: chosen.snapshot };
     const start = this.#priors.start === null ? undefined : this.#priors.snapshots[this.#priors.start];
     return { setId: start?.setId ?? null, snapshot: start?.fingerprint ?? null };
+  }
+
+  /** The race's laps as the live state holds them now (the Session packet's `totalLaps`). */
+  get totalLaps(): number {
+    return this.#runner.state.session.totalLaps;
   }
 
   /** The newest applied frame's time on the engine's race clock (spec 3.3); undefined before the engine runs. */
@@ -340,6 +356,7 @@ export class SessionProcessor {
         ...publisher.publishInsights(scheduled.insights, { frameId: frame.frameId }),
       );
       this.#publishActive(result.state.history.decisions);
+      this.#reportSeats(result.state);
       const { cars, playerCar } = result.state;
       this.#o.jobs?.triggerRan(scheduled, { lap: cars[playerCar]?.timing.lap ?? 0, frameId: frame.frameId });
       for (const correction of result.corrections) log.info({ feedId, sessionUid: this.#uid, correction }, 'lap time corrected');
@@ -376,6 +393,29 @@ export class SessionProcessor {
     if (json === this.#active) return;
     this.#active = json;
     onActive(value);
+  }
+
+  /**
+   * The feed's player car and teammate while their open `car-driver` span is `human` (the machine's, C17, C20), each
+   * with its seat from the live identity (Participants); handed to `onSeats` when they change.
+   */
+  #reportSeats(state: StepResult['state']): void {
+    const { onSeats } = this.#o;
+    if (onSeats === undefined) return;
+    const open = situationOf(state).byMachine[carDriverSpans.machine] ?? [];
+    const ours = [state.playerCar, state.teammateCar ?? null].filter((c): c is CarId => c !== null);
+    const seats = ours
+      .filter((car) => open.some((s) => s.carId === car && s.kind === 'human'))
+      .flatMap((car): Omit<LiveSeat, 'feedId'>[] => {
+        const identity = state.cars[car]?.identity;
+        if (identity === undefined) return [];
+        const key = carKeyOf(identity);
+        return [{ carId: car, team: key.teamId, raceNumber: key.raceNumber }];
+      });
+    const json = JSON.stringify(seats);
+    if (json === this.#seats) return;
+    this.#seats = json;
+    onSeats(seats);
   }
 
   /**

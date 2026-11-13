@@ -41,7 +41,14 @@ import { cutAt, laps, projectionOf, raceView, scene, TRACK, type Scene } from '.
 
 const calc = guardedQuick(raceInteractionCalculator);
 const CONFIG = RACE_INTERACTION_CONFIG.defaults;
-const DEFAULT_CURVE: PassCurve = { level: CONFIG.passLevel, slopePerMs: CONFIG.passSlopePerMs, cap: CONFIG.passCap, wetFactor: CONFIG.wetFactor };
+// Ported in SP4.3b Task 10 (the fitted DRS factor, R31 reversed): the curve carries `drsFactor`, its prior the config's `drsPassFactor`.
+const DEFAULT_CURVE: PassCurve = {
+  level: CONFIG.passLevel,
+  slopePerMs: CONFIG.passSlopePerMs,
+  cap: CONFIG.passCap,
+  wetFactor: CONFIG.wetFactor,
+  drsFactor: CONFIG.drsPassFactor,
+};
 const CALIBRATED_CURVE: PassCurve = { ...DEFAULT_CURVE, level: -1.5, slopePerMs: 0.006 };
 
 /** A calibration set `league` of 3 sources holding band 0's pass curve only. */

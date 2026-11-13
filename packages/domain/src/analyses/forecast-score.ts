@@ -14,8 +14,26 @@ export type ScoreTable = {
   cases: ScoreCase[];
 };
 
-/** `forecastScore.report`: the three experiments, and per horizon and basis the forecast's errors beside the baseline. */
+/** One driver type's summary of a table: its number of cases, its mean (absolute error; for the CRPS the mean score) and its bias. */
+export type Summary = ScoreTable['ai'];
+
+/**
+ * `forecastScore.report`: the three experiments, and per horizon and basis the forecast's errors beside the baseline,
+ * and the CRPS of the field's position pmf (the mean ranked probability score over whole places, SP4.3b spec §8.4).
+ */
 export type ForecastScoreReport = {
   experiments: { rejoin: ScoreTable; undercut: ScoreTable; scStop: ScoreTable };
-  forecasts: { horizon: 1 | 3 | 5 | 10; basis: 'wear' | 'age'; lapTime: ScoreTable; position: ScoreTable; baselinePosition: ScoreTable }[];
+  forecasts: {
+    horizon: 1 | 3 | 5 | 10;
+    basis: 'wear' | 'age';
+    lapTime: ScoreTable;
+    position: ScoreTable;
+    baselinePosition: ScoreTable;
+    crps: { ai: Summary; human: Summary };
+    /**
+     * Like for like (SP4.3b Task 27): on exactly the cases that have both a CRPS and a point score, the CRPS, the point
+     * forecast's and the baseline's ("gaps stay") mean absolute position error; a point's CRPS is its absolute error.
+     */
+    sameCases: { crps: { ai: Summary; human: Summary }; position: { ai: Summary; human: Summary }; baseline: { ai: Summary; human: Summary } };
+  }[];
 };

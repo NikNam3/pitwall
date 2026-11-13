@@ -7,14 +7,14 @@
 //
 // Every stop here is on lap 10 or later with its three reference laps (laps 7–9) clean, so "the `referenceLaps` laps
 // before the stop" and "the last `referenceLaps` `forPace` laps before it" agree; lap 1 of a race is never `forPace`.
-import { carId, known, unknown, type LapRecord, type PitStopRecord, type PriorsSnapshot, type Ms } from '@pitwall/domain';
+import { carId, known, unknown, type LapRecord, type PitStopRecord, type PriorsSnapshot, type Ms, type TrackData } from '@pitwall/domain';
 import type { EngineView, StoredSource } from '@pitwall/engine/readers';
 import { describe, expect, it } from 'vitest';
 import { guardedView } from '../../../engine/test/support/scheduler.ts';
 import { engineView, history, lap } from '../../../../test-support/builders/index.ts';
-import { zandvoortTrack } from '../../../../test-support/track.ts';
+import { withoutInLapShare, zandvoortTrack } from '../../../../test-support/track.ts';
 import { pitLossCalculator } from '../../src/pit-loss/calculator.ts';
-import { PIT_LOSS, PIT_LOSS_PRIORS, type PitLossOutput } from '../../src/pit-loss/index.ts';
+import { PIT_LOSS, PIT_LOSS_CONFIG, PIT_LOSS_PRIORS, type PitLossOutput } from '../../src/pit-loss/index.ts';
 
 type Condition = PitStopRecord['flag'];
 
@@ -294,5 +294,137 @@ describe('pit-loss', () => {
     expect(samplesOf('vsc')(sources, ctx)).toBe(1);
     expect(samplesOf('sc')(sources, ctx)).toBe(0);
     expect(samplesOf('green')([], ctx)).toBe(0);
+  });
+});
+
+// SP4.3b Task 11c (spec F8, cause 3): the in-lap's share of a stop differs by track (Spa ≈ 0.28, Texas ≈ 0), so
+// `pit-loss` measures it per condition from this session's stops: per stop (in-lap − the car's reference lap) / the
+// stop's loss (in-lap + out-lap loss), the median over the condition's counted stops, blended with the prior as the
+// loss is, `(n · sessionMedian + k · prior) / (n + k)` with `priorWeightStops` k = 2. The prior is the config's
+// `inLapShare` 0.26 (5.5 / 21.5 s, research 12 §5) for a track file without its own share (Task 26: below), whatever
+// the calibration.
+describe('pit-loss: the in-lap share (SP4.3b Task 11c)', () => {
+  const PRIOR = 0.26;
+  /** A green stop of car `car` whose in-lap costs `share` of a 20 000 ms loss over its `REF_MS` reference laps. */
+  const stopWithShare = (car: number, share: number, o: { lap?: number; flag?: Condition } = {}) => {
+    const lossMs = 20_000;
+    const inMs = REF_MS + Math.round(share * lossMs);
+    return stopWith(car, { inMs, outMs: 2 * REF_MS + lossMs - inMs, ...o });
+  };
+  const shareOf = (out: PitLossOutput, condition: Condition = 'green') => out.conditions[condition].inLapShare;
+
+  // row 1
+  it('with no stop measured the in-lap share is the prior 0.26', () => {
+    expect(PIT_LOSS_CONFIG.defaults).toHaveProperty('inLapShare', PRIOR);
+    // ported in SP4.3b Task 26: a track without its own in-lap share
+    const out = compute(viewOf([], { track: known(withoutInLapShare(zandvoortTrack()), 0), priors: known(snapshot(20_000), 0) }));
+    for (const condition of ['green', 'vsc', 'sc'] as const) expect(shareOf(out, condition)).toMatchObject({ known: true, value: PRIOR });
+    // the prior is known without a calibration or a track file, and an override of the config is followed (C47)
+    const bare = compute(viewOf([], { track: unknown('notApplicable'), priors: unknown('notApplicable') }));
+    expect(shareOf(bare)).toMatchObject({ known: true, value: PRIOR });
+    const overridden = compute(engineView({ history: history(), config: { [PIT_LOSS_CONFIG.key]: { inLapShare: 0.4 } } }));
+    expect(shareOf(overridden)).toMatchObject({ known: true, value: 0.4 });
+    // a stop without a clean reference measures nothing
+    expect(shareOf(compute(viewOf([stopWith(0, { lossMs: 20_000, refsValid: false })])))).toMatchObject({ known: true, value: PRIOR });
+  });
+
+  // row 2
+  it('two stops with in-lap shares 0.05 and 0.07 give (2·0.06 + 2·0.26)/4', () => {
+    // in-laps 1 000 and 1 400 ms over the reference, each stop's loss 20 000 ms
+    const out = compute(viewOf([stopWithShare(0, 0.05), stopWithShare(1, 0.07, { lap: 12 })]));
+    expect(out.conditions.green.sessionStops).toBe(2);
+    const share = shareOf(out);
+    expect(share.known).toBe(true);
+    if (share.known) expect(share.value).toBeCloseTo((2 * 0.06 + 2 * PRIOR) / 4, 9);
+    // per condition: green stops leave the VSC and SC shares at the prior
+    expect(shareOf(out, 'vsc')).toMatchObject({ known: true, value: PRIOR });
+    expect(shareOf(out, 'sc')).toMatchObject({ known: true, value: PRIOR });
+    // and a VSC stop's share is the VSC condition's alone: (0.5 + 2 · 0.26) / 3
+    const vsc = shareOf(compute(viewOf([stopWithShare(0, 0.05), stopWithShare(1, 0.5, { lap: 12, flag: 'vsc' })])), 'vsc');
+    expect(vsc.known).toBe(true);
+    if (vsc.known) expect(vsc.value).toBeCloseTo((0.5 + 2 * PRIOR) / 3, 9);
+  });
+
+  // row 4
+  it('a session with an in-lap that costs nothing (share 0) moves the share towards 0 as stops accumulate', () => {
+    const shares: number[] = [];
+    for (let n = 1; n <= 4; n++) {
+      const stops = Array.from({ length: n }, (_, car) => stopWithShare(car, 0, { lap: 10 + 2 * car }));
+      const share = shareOf(compute(viewOf(stops)));
+      expect(share.known, `${n} stops`).toBe(true);
+      if (share.known) {
+        // (n · 0 + 2 · 0.26) / (n + 2)
+        expect(share.value, `${n} stops`).toBeCloseTo((2 * PRIOR) / (n + 2), 9);
+        shares.push(share.value);
+      }
+    }
+    for (let i = 1; i < shares.length; i++) expect(shares[i]!).toBeLessThan(shares[i - 1]!);
+  });
+});
+
+// SP4.3b Task 26 (spec F2, Q5 A; C62b, C3): the in-lap share's prior is the track file's `defaults.pitLossInLapShare`
+// where known (F1 25 charges ~0.28 of a green stop's loss on the in-lap at Spa, ~0.02 at Texas), else the config's
+// `inLapShare`; the session's stops move the share from that prior with `priorWeightStops` as they do from the config's.
+describe("pit-loss: the in-lap share's prior from the track file (SP4.3b Task 26)", () => {
+  const CONFIG_PRIOR = 0.26;
+  const TRACK_SHARE = 0.02;
+  /** The Zandvoort track file with the in-lap share `share`. */
+  const trackWith = (share: TrackData['defaults']['pitLossInLapShare']): EngineView['track'] => {
+    const track = zandvoortTrack();
+    return known({ ...track, defaults: { ...track.defaults, pitLossInLapShare: share } }, 0);
+  };
+  const TEXAS_LIKE = trackWith(known({ value: TRACK_SHARE, source: 'test: F1 25 Texas' }, 0));
+  /** A green stop of car `car` whose in-lap costs `share` of a 20 000 ms loss over its `REF_MS` reference laps. */
+  const stopWithShare = (car: number, share: number, o: { lap?: number; flag?: Condition } = {}) => {
+    const lossMs = 20_000;
+    const inMs = REF_MS + Math.round(share * lossMs);
+    return stopWith(car, { inMs, outMs: 2 * REF_MS + lossMs - inMs, ...o });
+  };
+  const shareOf = (out: PitLossOutput, condition: Condition = 'green') => out.conditions[condition].inLapShare;
+  const CONDITIONS = ['green', 'vsc', 'sc'] as const;
+
+  // row 1
+  it("pit-loss: with the track file's pitLossInLapShare known, the in-lap share's prior is it; with no session stop the share is exactly it", () => {
+    const out = compute(viewOf([], { track: TEXAS_LIKE, priors: unknown('notApplicable') }));
+    for (const condition of CONDITIONS) expect(shareOf(out, condition), condition).toMatchObject({ known: true, value: TRACK_SHARE });
+    // a calibration holds no share: the track's stays the prior
+    expect(shareOf(compute(viewOf([], { track: TEXAS_LIKE, priors: known(snapshot(20_000), 0) })))).toMatchObject({ known: true, value: TRACK_SHARE });
+    // a share of 0 is a known share, not a missing one (C3)
+    const zero = compute(viewOf([], { track: trackWith(known({ value: 0, source: 'test' }, 0)) }));
+    expect(shareOf(zero)).toMatchObject({ known: true, value: 0 });
+  });
+
+  // row 2
+  it("pit-loss: with it unknown (or the track unknown), the prior is the config's inLapShare, as today", () => {
+    const cases: [string, EngineView['track']][] = [
+      ['the track file without the share', trackWith(unknown('notReceived'))],
+      ['no track file', unknown('notApplicable')],
+    ];
+    for (const [what, track] of cases) {
+      const out = compute(viewOf([], { track }));
+      for (const condition of CONDITIONS) expect(shareOf(out, condition), `${what}, ${condition}`).toMatchObject({ known: true, value: CONFIG_PRIOR });
+      // an override of the config is followed (C47)
+      const overridden = compute(engineView({ history: history(), track, config: { [PIT_LOSS_CONFIG.key]: { inLapShare: 0.4 } } }));
+      expect(shareOf(overridden), what).toMatchObject({ known: true, value: 0.4 });
+    }
+  });
+
+  // row 3
+  it("pit-loss: session stops move the share from the track's prior with priorWeightStops, as they move it from the config's today", () => {
+    const stops = [stopWithShare(0, 0.05), stopWithShare(1, 0.07, { lap: 12 })];
+    // two green stops with shares 0.05 and 0.07, k = 2: (2 · 0.06 + 2 · 0.02) / 4
+    const out = compute(viewOf(stops, { track: TEXAS_LIKE }));
+    expect(out.conditions.green.sessionStops).toBe(2);
+    const share = shareOf(out);
+    expect(share.known).toBe(true);
+    if (share.known) expect(share.value).toBeCloseTo((2 * 0.06 + 2 * TRACK_SHARE) / 4, 9);
+    // the other conditions keep the track's prior
+    expect(shareOf(out, 'vsc')).toMatchObject({ known: true, value: TRACK_SHARE });
+    expect(shareOf(out, 'sc')).toMatchObject({ known: true, value: TRACK_SHARE });
+    // k is the config's priorWeightStops: with k = 1, (2 · 0.06 + 0.02) / 3
+    const history1 = history({ laps: stops.flatMap((s) => s.laps), pitStops: stops.map((s) => s.stop) });
+    const k1 = shareOf(compute(engineView({ history: history1, track: TEXAS_LIKE, config: { [PIT_LOSS_CONFIG.key]: { priorWeightStops: 1 } } })));
+    expect(k1.known).toBe(true);
+    if (k1.known) expect(k1.value).toBeCloseTo((2 * 0.06 + TRACK_SHARE) / 3, 9);
   });
 });

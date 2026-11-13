@@ -12,9 +12,18 @@ export type CalculatorId = string;
 /** When a calculator is due, measured in session time (spec 7.3). */
 /**
  * `ourCrossing`: a mini-sector crossing of one of our cars was appended (SP4.2 spec 3.1). `leaderLap`: a lap record with
- * `positionAtEnd` 1 was appended, or a rewind (SP4.3a spec 5).
+ * `positionAtEnd` 1 was appended, or a rewind (SP4.3a spec 5). `onChange`: only when one of the listed changes happened
+ * since the last run, or a rewind (SP4.3b spec §5.2).
  */
-export type Cadence = 'frame' | { hz: number } | 'lapCompleted' | 'pitStop' | 'sessionChange' | 'ourCrossing' | 'leaderLap';
+export type Cadence = 'frame' | { hz: number } | 'lapCompleted' | 'pitStop' | 'sessionChange' | 'ourCrossing' | 'leaderLap' | { onChange: readonly ChangeTrigger[] };
+
+/**
+ * A change an `onChange` cadence runs on: a change tag (C40); `leaderLap`, a lap record with `positionAtEnd` 1 appended;
+ * `ourLap`, a lap record (any status) of one of our cars (the player's or the teammate's) appended (SP4.3b spec §8.1);
+ * `sessionSettings`, the session's game settings differ from those at the unit's last run (the `session` tag alone
+ * also marks every other Session packet value).
+ */
+export type ChangeTrigger = ChangeTag | 'leaderLap' | 'ourLap' | 'sessionSettings';
 
 /**
  * What a calculator reads: a part of the engine state, the feed health, the run's driver profiles (`view.drivers`,
@@ -116,6 +125,12 @@ export type Job<In, Out> = {
   trigger: Cadence;
   prepare(view: EngineView): In;
   module: URL;
+  /**
+   * A job run in parts (SP4.3b Q4 D): `split` cuts the prepared input into at least one part, the runner runs every
+   * part's `run` at once, one worker each, and `merge` joins their outputs, in the parts' order, into the job's result.
+   * Both pure and cheap; they run on the runner's thread. Without it the input runs whole in one worker.
+   */
+  parts?: { split(input: In): In[]; merge(outs: Out[]): Out };
   /** Phantom marker that ties `Out` to the job; never set. */
   readonly out?: Out;
 };

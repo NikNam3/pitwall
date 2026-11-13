@@ -1,9 +1,14 @@
-import { scCallCalculator } from '@pitwall/analysis';
-import { bindState, defineFeature, selectCar } from '../feature.ts';
+import { SC_CALL_CONFIG, SC_CALL_JOB } from '@pitwall/analysis';
+import { bindJob, defineFeature, selectCar } from '../feature.ts';
 
-/** `sc-call` (SP4.2 spec 3.3): `scCall.car`. */
+/**
+ * `sc-call` (SP4.3b spec §9.3): per our car boxing under an SC or VSC now against staying out, a job (C51) on
+ * `strategy`'s trigger, run in a worker only while `scCall.car` is subscribed (C49); the topic selects the car's entry.
+ */
 export default defineFeature({
   name: 'sc-call',
-  calculators: [scCallCalculator],
-  topics: [bindState('scCall.car', scCallCalculator, selectCar)],
+  calculators: [],
+  topics: [bindJob('scCall.car', SC_CALL_JOB, selectCar)],
+  jobs: [SC_CALL_JOB],
+  config: [SC_CALL_CONFIG],
 });

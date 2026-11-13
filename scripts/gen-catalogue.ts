@@ -25,7 +25,7 @@ const DEFAULT_DIRS: Required<CatalogueDirs> = {
 };
 
 /** Topics that no feature binds because the bridge publishes them itself (global topics are exempt by their scope). */
-const PUBLISHED_BY_BRIDGE = ['replay.status', 'calibration.active'];
+const PUBLISHED_BY_BRIDGE = ['replay.status', 'calibration.active', 'config.effective'];
 
 /** A path as the catalogue shows it: relative to the repo root, with forward slashes. */
 const shown = (path: string): string => relative(ROOT, path).split('\\').join('/');
@@ -45,15 +45,16 @@ type BindingShape = { topic: string } & Partial<Record<'from' | 'fromHistory' | 
   fromLive?: unknown;
 };
 type FeatureModule = {
-  calculators: Array<{ id: string; reads: ReadonlyArray<string | { calculator: string }>; cadence: string | { hz: number } }>;
+  calculators: Array<{ id: string; reads: ReadonlyArray<string | { calculator: string }>; cadence: string | { hz: number } | { onChange: readonly string[] } }>;
   topics: BindingShape[];
   jobs?: Array<{ id: string }>;
   config?: Array<{ key: string }>;
 };
 type TopicModule = { owner: string; scope: string; mode: string; maxHz: number };
 
-/** An engine `Cadence` as text: `{ hz: 10 }` becomes `10 Hz`. */
-const cadenceText = (cadence: string | { hz: number }): string => (typeof cadence === 'string' ? cadence : `${cadence.hz} Hz`);
+/** An engine `Cadence` as text: `{ hz: 10 }` becomes `10 Hz`, `{ onChange: [a, b] }` becomes `on a, b`. */
+const cadenceText = (cadence: string | { hz: number } | { onChange: readonly string[] }): string =>
+  typeof cadence === 'string' ? cadence : 'hz' in cadence ? `${cadence.hz} Hz` : `on ${cadence.onChange.join(', ')}`;
 
 /** An engine `Dependency` as text: `{ calculator: id }` becomes `calculator:<id>`. */
 const readText = (read: string | { calculator: string }): string => (typeof read === 'string' ? read : `calculator:${read.calculator}`);

@@ -20,7 +20,7 @@
 // - `gapMs[car]`: the time it crosses that line after the leader.
 // - `trace`: one entry per lap from `start.lap` on, each car as it completes that lap: its position, its gap to the
 //   leader at that line and its lap time.
-import { known, NOISE_COMPOUNDS, type CarId, type DrsZone, type ForecastResult, type ForecastTrace, type LapModelParams, type NoiseCompound, type PassCurve, type Policy, type RaceInteraction, type Scenario, type StartingPoint } from '@pitwall/domain';
+import { known, unknown, NOISE_COMPOUNDS, type CarId, type DrsZone, type ForecastResult, type ForecastTrace, type LapModelParams, type NoiseCompound, type PassCurve, type Policy, type RaceInteraction, type Scenario, type StartingPoint } from '@pitwall/domain';
 
 export const PACE_MS = 90_000;
 
@@ -76,7 +76,7 @@ export const LAP_MODEL: LapModelParams = {
   wetnessMsPerMs: { slick: 0, inter: 0, wet: 0 },
 };
 
-export const CURVE: PassCurve = { level: -3, slopePerMs: 0.004, cap: 0.8, wetFactor: 1 };
+export const CURVE: PassCurve = { level: -3, slopePerMs: 0.004, cap: 0.8, wetFactor: 1, drsFactor: 1.2 };
 
 /** One DRS zone mid-lap, so a car never starts a forecast inside it. */
 export const DRS_ZONES: DrsZone[] = [{ detection: 0.4, start: 0.45, end: 0.55 }];
@@ -103,7 +103,7 @@ export type StartSpec = {
   ours?: number[];
   interaction?: RaceInteraction;
   lapModel?: LapModelParams;
-  pitLossMs?: { green: number; vsc: number; sc: number };
+  pitLossMs?: { green: number; vsc: number; sc: number; inLapShare: number };
   drsZones?: DrsZone[];
   brakingZones?: number[];
 };
@@ -158,11 +158,13 @@ export function startingPoint(spec: StartSpec): StartingPoint {
     owesStop: f((l) => new Uint8Array(l), () => 0),
     sets,
     wetness: { wetnessMs: 0, sdMs: 0 },
+    weather: unknown('notReceived'),
     track: {
       brakingZones: Float64Array.from(spec.brakingZones ?? BRAKING_ZONES),
       drsZones: spec.drsZones ?? DRS_ZONES,
-      pitLossMs: spec.pitLossMs ?? { green: 22_000, vsc: 13_000, sc: 11_000 },
+      pitLossMs: spec.pitLossMs ?? { green: 22_000, vsc: 13_000, sc: 11_000, inLapShare: 0 },
     },
+    drs: { rangeMs: 1_000, fromLap: 3 },
     interaction: spec.interaction ?? interaction(),
     lapModel: spec.lapModel ?? LAP_MODEL,
   };
@@ -172,7 +174,7 @@ export const PLAIN: Scenario = { id: 0, plain: true, neutralisations: [] };
 export const drawn = (id: number, neutralisations: Scenario['neutralisations'] = []): Scenario => ({ id, plain: false, neutralisations });
 export const plainWith = (neutralisations: Scenario['neutralisations']): Scenario => ({ id: 0, plain: true, neutralisations });
 
-export const noStops = (n: number): Policy[] => Array.from({ length: n }, () => ({ stops: [] }));
+export const noStops = (n: number): Policy[] => Array.from({ length: n }, () => ({ stops: [], triggers: [] }));
 
 /** The trace's entry of lap `lap`; throws when the forecast has none (the trace is part of what these tests check). */
 export function traceAt(r: ForecastResult, lap: number): ForecastTrace[number] {

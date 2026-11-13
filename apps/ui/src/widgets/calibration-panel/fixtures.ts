@@ -131,14 +131,15 @@ export const leagueEntries: PriorsEntries = {
   [key.pit('green')]: k(20_400), [key.pit('vsc')]: k(13_400), [key.pit('sc')]: unknown('insufficientData'),
 };
 
-const set = (id: string, trackId: number, name: string, createdAt: string, sources: CalibrationSource[], overrides: Record<string, number> = {}, lastUsedAt?: string): CalibrationSet => ({
-  id, trackId, name, createdAt, sources, overrides, ...(lastUsedAt === undefined ? {} : { lastUsedAt }),
+const set = (id: string, trackId: number, name: string, createdAt: string, sources: CalibrationSource[], overrides: Record<string, number> = {}, lastUsedAt?: string, preferred = false): CalibrationSet => ({
+  id, trackId, name, createdAt, sources, overrides, preferred, ...(lastUsedAt === undefined ? {} : { lastUsedAt }),
 });
 
-/** The sets in the bridge's order (track, then `createdAt`, then id). */
+/** The sets in the bridge's order (track, then `createdAt`, then id). `league` is Silverstone's preferred set (SP4.3b2
+ *  Task 17, mockup docs/design/2026-11-12-sp4.3b/calibration-panel.html: ★ after the picker); Monza has none. */
 export const SETS: CalibrationSet[] = [
   set('pre-season', SILVERSTONE, 'pre-season', '2026-09-02T17:40:00Z', [testKuh], {}, '2026-09-02T18:00:00Z'),
-  set('league', SILVERSTONE, 'league', '2026-09-28T10:00:00Z', [raceKuh, raceLin, fp2Kuh, fp2LinSoft], { [key.deg('hard')]: 45 }, '2026-10-15T19:00:00Z'),
+  set('league', SILVERSTONE, 'league', '2026-09-28T10:00:00Z', [raceKuh, raceLin, fp2Kuh, fp2LinSoft], { [key.deg('hard')]: 45 }, '2026-10-15T19:00:00Z', true),
   set('after-floor-upgrade', SILVERSTONE, 'after-floor-upgrade', '2026-11-06T18:40:00Z', [fp1Kuh, fp1LinHard]),
   set('monza-test', MONZA, 'monza-test', '2026-08-20T12:00:00Z', []),
 ];
@@ -218,8 +219,11 @@ export const running = (setId: string | null, trackId = SILVERSTONE): Calibratio
 /** The gallery's synthetic cases; the tests take them from here, since only the gallery imports gallery.ts (C69). */
 export const cases = {
   // The mockup's main figure (first case: the screenshot baseline per size, Task 18): the race runs on `league`, the
-  // preselection; four sources, one missing; two suggestions; the hard DEG/LAP overridden.
+  // preselection and the track's preferred set (★); four sources, one missing; two suggestions; the hard DEG/LAP overridden.
   activeLeague: { sets: { sets: SETS }, values: values(), candidates: candidates(), active: running('league') },
+  // SP4.3b2 Task 17 (mockup calibration-panel.html, ☆): the race runs on `after-floor-upgrade`, not the preferred set
+  // (`league`), so the panel shows ☆ after the picker. The mockup's ☆ figure is a picked set, which is window-local (C73).
+  notPreferred: { sets: { sets: SETS }, values: values(), candidates: candidates(), active: running('after-floor-upgrade') },
   // No session loaded: the panel works from storage, on the newest stored session's track (Silverstone).
   noSession: { sets: { sets: SETS }, values: values(), candidates: candidates(), active: unknown('notApplicable') },
   // The soft source's session awaits a rebuild (C61): `stale` instead of `missing`.

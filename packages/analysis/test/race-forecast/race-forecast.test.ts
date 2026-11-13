@@ -101,7 +101,7 @@ describe('race-forecast: stops', () => {
         });
         const stopper = pick % cars.length;
         const policies = noStops(cars.length);
-        policies[stopper] = { stops: [{ lap: stopLap, compound: 'hard' }] };
+        policies[stopper] = { stops: [{ lap: stopLap, compound: 'hard' }], triggers: [] };
         const r = run(start, policies);
         expect(traceAt(r, stopLap + 1).position[stopper]!).toBeGreaterThanOrEqual(traceAt(r, stopLap - 1).position[stopper]!);
       }),
@@ -122,10 +122,10 @@ describe('race-forecast: stops', () => {
         (paceMs, lapsTotal, wearRatePct, oneStop, at, extraAt) => {
           const start = startingPoint({ lap: 1, lapsTotal, cars: [{ paceMs, wearRatePct }] });
           const stopLap = 2 + Math.floor(at * (lapsTotal - 4));
-          const base: Policy = { stops: oneStop ? [{ lap: stopLap, compound: 'medium' }] : [] };
+          const base: Policy = { stops: oneStop ? [{ lap: stopLap, compound: 'medium' }] : [], triggers: [] };
           let extraLap = 2 + Math.floor(extraAt * (lapsTotal - 4));
           if (oneStop && Math.abs(extraLap - stopLap) < 2) extraLap = stopLap + 2 < lapsTotal ? stopLap + 2 : stopLap - 2;
-          const extra: Policy = { stops: [...base.stops, { lap: extraLap, compound: 'medium' as const }].sort((a, b) => a.lap - b.lap) };
+          const extra: Policy = { stops: [...base.stops, { lap: extraLap, compound: 'medium' as const }].sort((a, b) => a.lap - b.lap), triggers: [] };
           const without = run(start, [base]).raceTimeMs[0]!;
           const withExtra = run(start, [extra]).raceTimeMs[0]!;
           expect(withExtra).toBeGreaterThanOrEqual(without - 1);
@@ -139,8 +139,8 @@ describe('race-forecast: stops', () => {
   it('one more stop of one car leaves every other draw unchanged', () => {
     // far apart (35 s) so the extra stop meets no other car on track; the middle car stops once more on lap 10
     const start = startingPoint({ lap: 1, lapsTotal: 20, cars: [0, 35_000, 70_000].map((gapMs) => ({ ...NOISY, paceSdMs: 100, bigEventRate: 0, retireRate: 0, gapMs })) });
-    const base: Policy[] = [{ stops: [{ lap: 12, compound: 'hard' }] }, { stops: [{ lap: 14, compound: 'hard' }] }, { stops: [{ lap: 13, compound: 'hard' }] }];
-    const more = base.map((p, car) => (car === 1 ? { stops: [{ lap: 6, compound: 'medium' as const }, ...p.stops] } : p));
+    const base: Policy[] = [{ stops: [{ lap: 12, compound: 'hard' }], triggers: [] }, { stops: [{ lap: 14, compound: 'hard' }], triggers: [] }, { stops: [{ lap: 13, compound: 'hard' }], triggers: [] }];
+    const more = base.map((p, car) => (car === 1 ? { stops: [{ lap: 6, compound: 'medium' as const }, ...p.stops], triggers: [] } : p));
     for (const id of range(1, 10)) {
       const a = raceForecast(start, base, drawn(id), createRng(9), { trace: true });
       const b = raceForecast(start, more, drawn(id), createRng(9), { trace: true });
@@ -158,9 +158,9 @@ describe('race-forecast: stops', () => {
     // our two cars (one pit box), equal pace, no passes; the second car stops on lap 10 behind its teammate or alone
     const waitFor = (entryGapMs: number): { second: number; first: number } => {
       const start = startingPoint({ lap: 1, lapsTotal: 25, cars: [{ gapMs: 0 }, { gapMs: entryGapMs }], ours: [0, 1], interaction: interaction({ curve: { cap: 0 } }) });
-      const second: Policy = { stops: [{ lap: 10, compound: 'medium' }] };
-      const stacked = run(start, [{ stops: [{ lap: 10, compound: 'medium' }] }, second]);
-      const apart = run(start, [{ stops: [{ lap: 14, compound: 'medium' }] }, second]);
+      const second: Policy = { stops: [{ lap: 10, compound: 'medium' }], triggers: [] };
+      const stacked = run(start, [{ stops: [{ lap: 10, compound: 'medium' }], triggers: [] }, second]);
+      const apart = run(start, [{ stops: [{ lap: 14, compound: 'medium' }], triggers: [] }, second]);
       return { second: stacked.raceTimeMs[1]! - apart.raceTimeMs[1]!, first: stacked.raceTimeMs[0]! - apart.raceTimeMs[0]! };
     };
     const two = waitFor(2_000);
@@ -213,7 +213,7 @@ describe('race-forecast: the generated race', () => {
         fuelMsPerKg: 30,
         compoundOffsetMs: Object.fromEntries(NOISE_COMPOUNDS.map((c) => [c, truth.compounds[c].offsetMs])) as typeof LAP_MODEL.compoundOffsetMs,
       },
-      pitLossMs: { green: truth.pitLossMs, vsc: truth.pitLossMs / 2, sc: truth.pitLossMs / 2 },
+      pitLossMs: { green: truth.pitLossMs, vsc: truth.pitLossMs / 2, sc: truth.pitLossMs / 2, inLapShare: 0 },
       drsZones: truth.drsZones,
       brakingZones: truth.brakingZones,
       interaction: interaction({ minGapMs: truth.pass.minGapMs, curve: { level: -3, slopePerMs: 0.01, cap: 0.8 } }),
@@ -221,7 +221,7 @@ describe('race-forecast: the generated race', () => {
     // the generator stops one frame after the leader takes the flag, so the comparison is at the last lap every car
     // completes (R35): the forecast to lap LAPS − 1 and each car's crossing of that lap's line in the generated race
     const AT_LAP = LAPS - 1;
-    const r = raceForecast(start, truth.field.map((car) => ({ stops: car.stops })), PLAIN, createRng(1), { toLap: AT_LAP });
+    const r = raceForecast(start, truth.field.map((car) => ({ stops: car.stops, triggers: [] })), PLAIN, createRng(1), { toLap: AT_LAP });
 
     const last = race.viewAt(race.lastFrame).history.laps.filter((l) => l.status === 'confirmed' && l.lapNumber === AT_LAP);
     expect(last).toHaveLength(CARS);
@@ -254,7 +254,7 @@ describe('race-forecast: draws', () => {
       cars: range(0, 7).map((i) => ({ ...NOISY, gapMs: 1_200 * i, paceMs: PACE_MS + 60 * i, degMsPerLap: 15 })),
       ours: [3, 4],
     });
-    const policies: Policy[] = range(0, 7).map((i) => ({ stops: [{ lap: 10 + (i % 4), compound: 'hard' }] }));
+    const policies: Policy[] = range(0, 7).map((i) => ({ stops: [{ lap: 10 + (i % 4), compound: 'hard' }], triggers: [] }));
     const scenario = drawn(17, [{ kind: 'sc', fromLap: 14, toLap: 16 }]);
     const a = raceForecast(start, policies, scenario, createRng(5), { trace: true });
     const b = raceForecast(start, policies, scenario, createRng(5), { trace: true });

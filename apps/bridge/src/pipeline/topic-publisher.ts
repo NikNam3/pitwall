@@ -98,16 +98,26 @@ export class TopicPublisher {
     });
   }
 
-  /** A job's result: its topics get `{ computedFor, value }`, or are marked `errored` when the job failed. */
+  /**
+   * A job's result: its topics get `{ computedFor, value }`, with a `select` its value for each subscribed params
+   * (`undefined`: no data for those params), or are marked `errored` when the job failed.
+   */
   publishJobResult(result: JobResult): PublishError[] {
     return this.#collecting(() => {
-      for (const { topic, fromJob } of this.#jobs) {
+      for (const { topic, fromJob, select } of this.#jobs) {
         if (fromJob !== result.jobId) continue;
         if ('error' in result) {
           this.#guarded(topic, () => this.#hub.setStatus(this.#feedId, topic, 'errored'));
-        } else {
+        } else if (select === undefined) {
           const computed: Computed<unknown> = { computedFor: result.computedFor, value: result.value };
           this.#guarded(topic, () => this.#hub.publishState(this.#feedId, topic, () => computed));
+        } else {
+          const { computedFor, value: out } = result;
+          const valueFor = this.#valueFor(topic, (params) => {
+            const value = select(out, params);
+            return value === undefined ? undefined : ({ computedFor, value } satisfies Computed<unknown>);
+          });
+          this.#guarded(topic, () => this.#hub.publishState(this.#feedId, topic, valueFor));
         }
       }
     });

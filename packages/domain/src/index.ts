@@ -10,6 +10,7 @@ export * from './facts.ts';
 export * from './calibration.ts';
 export * from './estimates.ts';
 export * from './drivers.ts';
+export * from './teams.ts';
 export * from './forecast.ts';
 export * from './weekend-phase.ts';
 export * from './span-scopes.ts';
@@ -40,6 +41,7 @@ export { spans as sessionPhasePracticeSpans } from './situations/session-phase-p
 export { spans as weekendPhaseSpans, type PracticePhaseDetail, type QualifyingPhaseDetail, type RacePhaseDetail } from './situations/weekend-phase.ts';
 export * from './insight.ts';
 export * from './laps.ts';
+export * from './plans.ts';
 export * from './freshness.ts';
 export * from './tracks.ts';
 export * from './track-file.ts';

@@ -26,7 +26,7 @@ const ZANDVOORT = 26;
 const EDIT_AT = 800;
 const DRY: CalibrationSet = {
   id: 'dry', trackId: ZANDVOORT, name: 'Dry', createdAt: '2026-10-01T20:00:00.000Z', sources: [],
-  overrides: { 'pitLoss.ms.green': 21_500 }, lastUsedAt: '2026-10-02T20:00:00.000Z',
+  overrides: { 'pitLoss.ms.green': 21_500 }, lastUsedAt: '2026-10-02T20:00:00.000Z', preferred: false,
 };
 const at = { trackId: ZANDVOORT, setId: 'dry' };
 

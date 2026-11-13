@@ -2,16 +2,17 @@
 // fake of Task 6's `ProfileStore` (`DriversDeps.openStore`): it publishes `drivers.profiles` and `drivers.links` to the
 // hub it is given, as the real store does, records every action and rejects an override outside its entry's range.
 // Every run gets a temporary data dir and HOME (C84) and `PITWALL_WS_PORT` set to a port nothing listens on, so no
-// bridge running on this machine is reached; only test 6 starts a fake bridge (ruling P3: a running bridge takes the
+// bridge running on this machine is reached; only one test starts a fake bridge, and one (SP4.3b Task 2, row 5) runs the
+// real store on its temporary data dir (ruling P3: a running bridge takes the
 // action as a uiAction over its WebSocket).
-import { mkdtempSync, readdirSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { WebSocketServer } from 'ws';
 import { CONTRACT_VERSION, encodeMessage, type DriverAction, type ServerMessage, type TopicName } from '@pitwall/contracts';
-import { carId, known, unknown, type DriversLinksValue, type DriversProfilesValue, type PersonId, type SessionRef, type UnlinkedSlot } from '@pitwall/domain';
+import { carId, known, unknown, type DriverLink, type DriverPerson, type DriversLinksValue, type DriversProfilesValue, type PersonId, type SessionRef, type UnlinkedSlot } from '@pitwall/domain';
 import { run, type ApplyResult, type DriverSessionValues, type DriversDeps, type DriversHub, type DriversStore } from '../../src/cli/commands/drivers.ts';
 import type { CliIo } from '../../src/cli/io.ts';
 
@@ -23,22 +24,28 @@ const SCATTER = 'driverNoise.scatter';
 const SCATTER_MAX = 2000;
 const NOW = '2026-11-07T12:00:00.000Z';
 
+/**
+ * A seat link as a person file holds it (SP4.3b Task 2: `{ team, raceNumber }`). Cast until the supervisor ports
+ * `DriverLink` in `domain` to the seat (requested in the Task 2 test report).
+ */
+const seatLink = (team: number, raceNumber: number): DriverLink => ({ team, raceNumber }) as unknown as DriverLink;
+
 const PROFILES: DriversProfilesValue = {
   persons: [
     {
-      person: 'asym', displayName: 'Asymetrisch', links: [{ kind: 'nameAndNumber', name: 'Hamilton', raceNumber: 44 }], excluded: [],
+      person: 'asym', displayName: 'Asymetrisch', links: [seatLink(0, 44)], excluded: [], sessions: [], kept: { sessions: 0, laps: 0 }, overrides: {},
       entries: { [SCATTER]: { value: known(412, 0), laps: 12, sessions: 2, newestSession: '2026-11-04' } },
     },
     {
-      person: 'dr', displayName: 'DR', links: [], excluded: [],
+      person: 'dr', displayName: 'DR', links: [], excluded: [], sessions: [], kept: { sessions: 0, laps: 0 }, overrides: {},
       entries: { [SCATTER]: { value: known(287, 0), laps: 30, sessions: 3, newestSession: '2026-11-06' } },
     },
   ],
 };
 
 const UNLINKED: UnlinkedSlot[] = [
-  { session: S2, date: '2026-11-05', trackId: ZANDVOORT, carId: carId(5), teamId: 1, raceNumber: 16, name: null, suggestion: { person: 'dr', by: 'team' } },
-  { session: S1, date: '2026-11-04', trackId: ZANDVOORT, carId: carId(3), teamId: 0, raceNumber: 63, name: 'Russell', suggestion: { person: 'asym', by: 'raceNumber' } },
+  { session: S2, date: '2026-11-05', trackId: ZANDVOORT, carId: carId(5), teamId: 1, raceNumber: 16, name: null },
+  { session: S1, date: '2026-11-04', trackId: ZANDVOORT, carId: carId(3), teamId: 0, raceNumber: 63, name: 'Russell' },
 ];
 
 const SESSION_VALUES: DriverSessionValues[] = [
@@ -57,7 +64,7 @@ function fakeStore() {
       opened.push(root);
       const publish = (): void => {
         hub.publishGlobal('drivers.profiles' satisfies TopicName, () => PROFILES);
-        hub.publishGlobal('drivers.links' satisfies TopicName, (): DriversLinksValue => ({ unlinked: UNLINKED }));
+        hub.publishGlobal('drivers.links' satisfies TopicName, (): DriversLinksValue => ({ links: [], unlinked: UNLINKED, unlinkedSeats: [] }));
       };
       publish();
       return {
@@ -125,7 +132,7 @@ function lineIndexes(lines: string[], patterns: RegExp[]): number[] {
 }
 
 describe('pitwall drivers', () => {
-  it('drivers lists persons, then unlinked human slots with their suggestion', async () => {
+  it('drivers lists persons, then the human seats without a link', async () => {
     const { env } = await setup();
     const store = fakeStore();
     const r = await drivers([], store.deps, env);
@@ -135,33 +142,62 @@ describe('pitwall drivers', () => {
       /driverNoise\.scatter.*\b412\b.*\b12 laps\b.*\b2 sessions\b/,
       /\bdr\b.*\bDR\b/,
       /driverNoise\.scatter.*\b287\b.*\b30 laps\b.*\b3 sessions\b/,
-      // The unlinked slots, in the store's order (newest first): date, track, team, race number, the name when the
-      // game gave one, the session and slot to link, and the suggestion with what it rests on.
-      /2026-11-05.*Zandvoort.*\bteam 1\b.*#16\b.*5678\/w1\/0.*\bslot 5\b.*\bdr\b.*\bteam\b/,
-      /2026-11-04.*Zandvoort.*\bteam 0\b.*#63\b.*Russell.*1234\/w1\/0.*\bslot 3\b.*\basym\b.*race number/,
+      // The unlinked human slots, in the store's order (newest first): date, track, team, race number (the seat to
+      // link), the name when the game gave one, the session and slot.
+      /2026-11-05.*Zandvoort.*\bteam 1\b.*#16\b.*5678\/w1\/0.*\bslot 5\b/,
+      /2026-11-04.*Zandvoort.*\bteam 0\b.*#63\b.*Russell.*1234\/w1\/0.*\bslot 3\b/,
     ]);
+    // SP4.3b Task 2: no suggestion any more (U8).
+    expect(r.out.join('\n')).not.toMatch(/suggestion/);
     expect(r.err).toBe('');
   });
 
-  it('add, link, link --accept, exclude, override call the store with the exact action', async () => {
+  it('add, link, unlink, exclude, override call the store with the exact action', async () => {
     const { env } = await setup();
     const store = fakeStore();
     const runs = [
       await drivers(['add', 'asym'], store.deps, env, { name: 'Asymetrisch' }),
-      await drivers(['link', '1234/w1/0', '3', 'asym'], store.deps, env),
-      await drivers(['link'], store.deps, env, { accept: true }),
+      await drivers(['link', '0', '63', 'asym'], store.deps, env),
+      await drivers(['unlink', '0', '63'], store.deps, env),
       await drivers(['exclude', 'asym', '5678/w1/0'], store.deps, env),
       await drivers(['override', 'asym', SCATTER, '400'], store.deps, env),
     ];
     expect(runs.map((r) => r.code)).toEqual([0, 0, 0, 0, 0]);
     expect(store.actions).toEqual<DriverAction[]>([
       { kind: 'drivers.add', person: 'asym', displayName: 'Asymetrisch' },
-      { kind: 'drivers.link', session: S1, carId: carId(3), person: 'asym' },
-      { kind: 'drivers.accept' },
+      { kind: 'drivers.link', team: 0, raceNumber: 63, person: 'asym' },
+      { kind: 'drivers.link', team: 0, raceNumber: 63, person: null },
       { kind: 'drivers.exclude', person: 'asym', session: S2 },
       { kind: 'drivers.override', person: 'asym', key: SCATTER, value: 400 },
     ]);
   });
+
+  // SP4.3b Task 2, row 5 (C62c, C84): the real store of a temporary data dir; the team by its name (Mercedes: team 0).
+  it('pitwall drivers link Mercedes 12 dr writes the link; unlink removes it', async () => {
+    const { root, env } = await setup();
+    const file = join(root, 'drivers', 'dr.json');
+    const person = (): DriverPerson => JSON.parse(readFileSync(file, 'utf8')) as DriverPerson;
+    const realRun = async (args: string[], values: { name?: string } = {}) => {
+      const err: string[] = [];
+      const io: CliIo = { out: () => {}, err: (l) => err.push(l), env, signal: new AbortController().signal };
+      const code = await run(args, values, io);
+      return { code, err: err.join('\n') };
+    };
+
+    expect(await realRun(['add', 'dr'], { name: 'DR' })).toEqual({ code: 0, err: '' });
+    expect(await realRun(['link', 'Mercedes', '12', 'dr'])).toEqual({ code: 0, err: '' });
+    expect(person().links).toEqual([{ team: 0, raceNumber: 12 }]);
+    // The team id as the game numbers it reads the same.
+    expect(await realRun(['link', '1', '16', 'dr'])).toEqual({ code: 0, err: '' });
+    expect(person().links).toEqual(expect.arrayContaining([{ team: 0, raceNumber: 12 }, { team: 1, raceNumber: 16 }]));
+
+    expect(await realRun(['unlink', 'Mercedes', '12'])).toEqual({ code: 0, err: '' });
+    expect(person().links).toEqual([{ team: 1, raceNumber: 16 }]);
+    // A team that is none is a usage error, before anything is written.
+    const before = readFileSync(file, 'utf8');
+    await expect(realRun(['link', 'Nobody', '12', 'dr'])).rejects.toThrow(/team/i);
+    expect(readFileSync(file, 'utf8')).toBe(before);
+  }, 60_000);
 
   it('an out-of-range override prints the reason and exits 1', async () => {
     const { env } = await setup();
@@ -195,8 +231,8 @@ describe('pitwall drivers', () => {
     const runs = [
       await drivers([], store.deps, env),
       await drivers(['add', 'asym'], store.deps, env, { name: 'Asymetrisch' }),
-      await drivers(['link', '1234/w1/0', '3', 'asym'], store.deps, env),
-      await drivers(['link'], store.deps, env, { accept: true }),
+      await drivers(['link', '0', '63', 'asym'], store.deps, env),
+      await drivers(['unlink', '0', '63'], store.deps, env),
       await drivers(['exclude', 'asym', '5678/w1/0'], store.deps, env),
       await drivers(['override', 'asym', SCATTER, '400'], store.deps, env),
       await drivers(['show', 'asym'], store.deps, env),

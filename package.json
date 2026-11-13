@@ -32,7 +32,8 @@
     "pitwall": "pnpm -s gen:machines && pnpm -s gen:features && pnpm -s gen:topics && pnpm -s gen:widgets && node scripts/gen-catalogue.ts --no-fail && node apps/bridge/src/cli/pitwall.ts",
     "pwrec-cut": "node apps/bridge/src/cli/pwrec-cut.ts",
     "desktop": "pnpm --filter @pitwall/desktop start",
-    "desktop:dev": "pnpm --filter @pitwall/desktop dev"
+    "desktop:dev": "pnpm --filter @pitwall/desktop dev",
+    "gen:strategy-reference": "node scripts/gen-strategy-reference.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

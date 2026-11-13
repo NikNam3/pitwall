@@ -4,11 +4,12 @@
 // `<file>.decisions.json`. A replay or reprocess feeds both back (`recordingDecisions`); a recording without them runs
 // on no priors (`notApplicable`) and no decisions. A sidecar that cannot be read is treated as absent, with one warning.
 import { readFileSync, writeFileSync } from 'node:fs';
-import type { DecisionRecord, PriorsSnapshot, RunPriors } from '@pitwall/domain';
+import { decodeUiAction } from '@pitwall/contracts';
+import type { GivenDecision, PriorsSnapshot, RunPriors } from '@pitwall/domain';
 import type { Logger } from '../log.ts';
 
 /** A decision as the bridge hands it to the runner (C76): without the frame, which the decision recorder adds. */
-export type GivenDecision = Omit<DecisionRecord, 'frame'>;
+export type { GivenDecision };
 
 /**
  * One entry of the decisions sidecar: the decision and the record index it was committed at, the number of records of
@@ -89,9 +90,32 @@ function decodeRunPriors(json: unknown): RunPriors | undefined {
 
 function decodeDecision(json: unknown): RecordedDecision | undefined {
   if (!isObject(json) || !Number.isInteger(json['recordIndex']) || (json['recordIndex'] as number) < 0) return undefined;
-  const decision = json['decision'];
-  if (!isObject(decision) || decision['kind'] !== 'calibrationChosen' || !isStringOrNull(decision['setId']) || !isStringOrNull(decision['snapshot'])) return undefined;
-  return { recordIndex: json['recordIndex'] as number, decision: { kind: 'calibrationChosen', setId: decision['setId'], snapshot: decision['snapshot'] } };
+  const decision = decodeGivenDecision(json['decision']);
+  return decision === undefined ? undefined : { recordIndex: json['recordIndex'] as number, decision };
+}
+
+/**
+ * A decision of the sidecar: `calibrationChosen`, or a plan decision, whose car and policy follow the shape rules of
+ * the plan uiActions (the contracts package's decoder, C73).
+ */
+function decodeGivenDecision(decision: unknown): GivenDecision | undefined {
+  if (!isObject(decision)) return undefined;
+  switch (decision['kind']) {
+    case 'calibrationChosen':
+      return isStringOrNull(decision['setId']) && isStringOrNull(decision['snapshot'])
+        ? { kind: 'calibrationChosen', setId: decision['setId'], snapshot: decision['snapshot'] }
+        : undefined;
+    case 'planCommitted': {
+      const action = decodeUiAction({ kind: 'plan.commit', feedId: '', carId: decision['carId'], policy: decision['policy'] });
+      return action?.kind === 'plan.commit' ? { kind: 'planCommitted', carId: action.carId, policy: action.policy } : undefined;
+    }
+    case 'planCleared': {
+      const action = decodeUiAction({ kind: 'plan.clear', feedId: '', carId: decision['carId'] });
+      return action?.kind === 'plan.clear' ? { kind: 'planCleared', carId: action.carId } : undefined;
+    }
+    default:
+      return undefined;
+  }
 }
 
 function decodeDecisions(json: unknown): RecordedDecision[] | undefined {

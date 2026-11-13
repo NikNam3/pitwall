@@ -5,6 +5,11 @@ import { defineConfig } from '@pitwall/engine/readers';
 export const DRIVER_NOISE_CONFIG = defineConfig('driver-noise', {
   /** No car within this gap ahead at any of the lap's crossings: a free-air lap (ms). Source: research 12 §2. */
   freeAirGapMs: 1500,
+  /**
+   * The laps after each stop (its out lap aside, never a pace lap) left out of the scatter set: a stop at lap L leaves
+   * out L + 2 … L + 1 + this. Source: SP4.3b spec 4.2 F4 (R51: rejoin laps in traffic and on fresh tyres widen σ).
+   */
+  rejoinSkipLaps: 2,
   /** An AI free-air lap beyond this many σ on the slow side is a mistake. Source: research 12 §2. */
   mistakeSigmas: 3,
   /** A green lap more than this slow, the car running on, is a big event (ms). Source: research 12 §2. */

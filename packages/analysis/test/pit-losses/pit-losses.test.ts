@@ -23,6 +23,7 @@ const compute = (view: EngineView): PitLossesOutput =>
 /** A `pit-loss` estimate with no stop and no prior. */
 const none: PitLossEstimate = {
   lossMs: unknown('insufficientData'),
+  inLapShare: known(0.26, 0),
   stationaryMedianMs: unknown('insufficientData'),
   sessionStops: 0,
   source: { kind: 'default', note: 'no calibration and no track default', sessionShare: 0, parts: 'no stops' },
@@ -35,18 +36,21 @@ describe('pit-losses', () => {
     const conditions: PitLossOutput['conditions'] = {
       green: {
         lossMs: known(22_000, 1_000_000),
+        inLapShare: known(0.16, 1_000_000),
         stationaryMedianMs: known(2_500, 990_000),
         sessionStops: 2,
         source: { kind: 'calibration', setName: 'Zandvoort dry', sources: 3, sessionShare: 0.5, parts: '2 stops + calibration' },
       },
       vsc: {
         lossMs: known(13_000, 1_200_000),
+        inLapShare: known(0.2, 1_200_000),
         stationaryMedianMs: known(2_600, 1_190_000),
         sessionStops: 3,
         source: { kind: 'session', sessionShare: 0.6, parts: '3 stops + calibration' },
       },
       sc: {
         lossMs: known(11_000, 0),
+        inLapShare: known(0.26, 0),
         stationaryMedianMs: unknown('insufficientData'),
         sessionStops: 0,
         source: { kind: 'default', note: 'pit lane length × limiter, F1 25 track guide', sessionShare: 0, parts: 'track default' },

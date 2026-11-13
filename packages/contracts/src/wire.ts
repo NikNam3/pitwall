@@ -136,7 +136,8 @@ const decodeHello = (raw: Json): ServerMessage | undefined => {
 const decodeFeedInfo = (raw: unknown): FeedInfo | undefined => {
   if (!isPlainObject(raw) || typeof raw.feedId !== 'string' || typeof raw.label !== 'string') return undefined;
   if (!isOneOf(FEED_KINDS, raw.kind)) return undefined;
-  const feed: FeedInfo = { feedId: raw.feedId as FeedId, kind: raw.kind as FeedInfo['kind'], label: raw.label };
+  if (raw.team !== null && !Number.isInteger(raw.team)) return undefined;
+  const feed: FeedInfo = { feedId: raw.feedId as FeedId, kind: raw.kind as FeedInfo['kind'], label: raw.label, team: raw.team as number | null };
   if (raw.sessionUid === undefined) return feed;
   return typeof raw.sessionUid === 'string' ? { ...feed, sessionUid: raw.sessionUid } : undefined;
 };

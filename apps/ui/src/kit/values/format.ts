@@ -3,6 +3,7 @@ import {
   carCode, trackName, type Celsius, type CarId, type Kg, type Ms, type Percent, type Psi, type QualifyingFormat, type SessionKind,
   type WeekendPhase,
 } from '@pitwall/domain';
+import { unknownMark } from '../text.ts';
 
 /** The one minus glyph of every signed value (U+2212): as wide as `+` in the mono font. */
 export const MINUS = '−';
@@ -92,6 +93,12 @@ export const formatMillis = (ms: Ms): string => `${whole(ms)} ms`;
 
 /** Car index as a car number, `7` -> `#7`. */
 export const formatCarNumber = (id: CarId): string => `#${id}`;
+
+/** A race number (a seat's), `12` -> `#12`. */
+export const formatRaceNumber = (n: number): string => `#${n}`;
+
+/** A car's race number, or the kit's mark while the car's identity is not received yet. */
+export const formatRaceNumberOrMark = (n: number | undefined): string => (n === undefined ? unknownMark.notReceived : formatRaceNumber(n));
 
 const SESSION_KIND_LABEL: Record<SessionKind, string> = {
   unknown: 'unknown',
@@ -306,3 +313,18 @@ export const formatGapTick = (plotted: number): string => {
   if (behind === 0) return '0';
   return behind > 0 ? `+${behind}` : `${MINUS}${-behind}`;
 };
+
+/** An expected place to two decimals, `7.523` -> `7.52`. */
+export const formatExpectedPlace = (x: number): string => fixed(x, 2);
+
+/** Places gained, signed, one decimal, `1.43` -> `+1.4`, `-0.6` -> `−0.6`; zero (and what rounds to it) is `+0.0`. */
+export const formatPlacesGained = (x: number): string => {
+  const text = fixed(x, 1);
+  return text === '' || text.startsWith(MINUS) ? text : `+${text}`;
+};
+
+/** A share 0…1 as a whole percent, `0.75` -> `75%`. */
+export const formatShare = (p: number): string => (Number.isFinite(p) ? `${whole(p * 100)}%` : '');
+
+/** Points to one decimal, `6.25` -> `6.3`. */
+export const formatPoints = (x: number): string => fixed(x, 1);

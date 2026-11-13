@@ -1,16 +1,18 @@
 <script lang="ts">
-  // The SC / VSC call (SP4.2 spec 4; mockup docs/design/2026-11-07-sp4.2/sc-card.html): per condition our rejoin position,
-  // the stop's loss and the gain against a green stop, each value badged with the loss's source. The condition that is
-  // out comes from the race's session phase through the presentation table (C66); the display maps, it computes nothing.
-  import type { EstimateSource } from '@pitwall/domain';
+  // The SC / VSC call (SP4.3b spec §10, V18; mockup docs/design/2026-11-12-sp4.3b/sc-card.html; Q5 B): per condition the
+  // Monte Carlo's places gained by a stop now, its chance of a gain and its places-gained strip on one shared scale, our
+  // rejoin position, the stop's loss badged with its source, and the trigger range. The condition that is out comes from
+  // the race's session phase through the presentation table (C66); the display maps, it computes nothing (C65).
+  import { SC_CALL_GAIN_BINS, type EstimateSource } from '@pitwall/domain';
   import type { WidgetProps } from '../../kit/types.ts';
+  import DistStrip from '../../kit/dist/DistStrip.svelte';
   import { fitCell, type CellPart } from '../../kit/grid/grid.ts';
   import SourceBadge from '../../kit/values/SourceBadge.svelte';
   import TextCell from '../../kit/values/TextCell.svelte';
   import { role, roleOrUndefined } from '../../theme/index.ts';
   import { rowRole, stateRole } from './emphasis.ts';
   import { activeCondition } from './presentation.ts';
-  import { buildRows, type ScRow } from './rows.ts';
+  import { buildRows, isDrawn, scaleOf, type ScRow } from './rows.ts';
   import * as text from './text.ts';
   import type { widget } from './widget.ts';
 
@@ -18,31 +20,62 @@
 
   /** The lead cell before the first column. */
   const LEAD = ' ';
-  /** The cells between two columns. */
-  const GAP = '  ';
-  /** Column widths: a value column is its value in VALUE cells plus one badge cell. */
+  /** The cell between two columns. */
+  const GAP = ' ';
+  /** Column widths (the mockup's). */
   const COND = 3;
-  const REJOIN_FULL = 6;
-  const REJOIN_COMPACT = 3;
-  const VALUE = 5;
-  const BADGED = VALUE + 1;
-  /** The badge cell kept blank: a value measured this session, or an unknown one. */
+  const DPOS = 4;
+  const PGAIN_FULL = 7;
+  const PGAIN_COMPACT = 4;
+  const REJ = 3;
+  const LOSS = 5;
+  const RANGE = 6;
+  /** The strip: one cell per bin (−4 … +4); zero is the fifth bin, its tick under the bin's centre. */
+  const STRIP = SC_CALL_GAIN_BINS.count;
+  const ZERO_BIN = 4;
+  /** A known loss: its value in LOSS − 1 cells, then the badge cell, blank for a session value. */
+  const LOSS_VALUE = LOSS - 1;
   const NO_BADGE = ' ';
+  /** The strip's header: −4 over its first bin, 0 over the zero bin, +4 ending over its last. */
+  const STRIP_HEADER =
+    fitCell(text.stripLabels.low, ZERO_BIN) +
+    fitCell(text.stripLabels.zero, STRIP - ZERO_BIN - text.stripLabels.high.length) +
+    text.stripLabels.high;
 
   const full = $derived(size.mode === 'full');
   const active = $derived(activeCondition(data.phase));
-  const rows = $derived(buildRows(data.call, active));
+  const rows = $derived(buildRows(data.call.value, active));
+  const scale = $derived(scaleOf(rows));
 </script>
 
-{#snippet badged(part: CellPart, source: EstimateSource)}<TextCell {...part} width={VALUE} align="right" />{#if part.reason === undefined && source.kind !== 'session'}<SourceBadge
-      {source}
-    />{:else}{NO_BADGE}{/if}{/snippet}
+{#snippet loss(part: CellPart, source: EstimateSource)}{#if part.reason === undefined}<TextCell
+      {...part}
+      width={LOSS_VALUE}
+      align="right"
+    />{#if source.kind !== 'session'}<SourceBadge {source} />{:else}{NO_BADGE}{/if}{:else}<TextCell
+      {...part}
+      width={LOSS}
+      align="right"
+    />{/if}{/snippet}
+
+{#snippet strip(r: ScRow)}{#if isDrawn(r.strip)}<DistStrip
+      form="gain"
+      bins={r.strip.bins}
+      {scale}
+      zero={{ underBin: ZERO_BIN }}
+      lit={r.active}
+    />{:else}<TextCell {...r.strip} width={STRIP} />{/if}{/snippet}
 
 {#snippet cells(r: ScRow)}{LEAD}<TextCell text={text.conditions[r.condition]} width={COND} />{GAP}<TextCell
-    {...r.rejoin}
-    width={full ? REJOIN_FULL : REJOIN_COMPACT}
+    {...r.dPos}
+    width={DPOS}
     align="right"
-  />{#if full}{GAP}{@render badged(r.loss, r.source)}{/if}{GAP}{@render badged(r.gain, r.source)}{/snippet}
+  />{GAP}<TextCell {...r.pGain} width={full ? PGAIN_FULL : PGAIN_COMPACT} align="right" />{#if full}{GAP}{@render strip(
+      r,
+    )}{/if}{GAP}<TextCell {...r.rejoin} width={REJ} align="right" />{#if full}{GAP}{@render loss(
+      r.loss,
+      r.source,
+    )}{GAP}<TextCell {...r.range} width={RANGE} align="right" />{/if}{/snippet}
 
 <div class="block">
   {#if full}
@@ -50,11 +83,15 @@
         text={active === undefined ? '' : text.conditions[active]}
         width={COND}
         role={active === undefined ? undefined : stateRole()}
-      />{GAP}{fitCell(text.headers.rejoin, REJOIN_FULL, 'right')}{GAP}{fitCell(text.headers.loss, BADGED, 'right')}{GAP}{fitCell(
-        text.headers.gain,
-        BADGED,
+      />{GAP}{fitCell(text.headers.dPos, DPOS, 'right')}{GAP}{fitCell(
+        text.headers.pGain,
+        PGAIN_FULL,
         'right',
-      )}</div>
+      )}{GAP}{STRIP_HEADER}{GAP}{fitCell(text.headers.rejoin, REJ, 'right')}{GAP}{fitCell(
+        text.headers.loss,
+        LOSS,
+        'right',
+      )}{GAP}{fitCell(text.headers.range, RANGE, 'right')}</div>
   {/if}
   {#each rows as r, i (r.condition)}
     <div

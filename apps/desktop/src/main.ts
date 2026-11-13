@@ -49,10 +49,11 @@ const probe = (url: string, timeoutMs: number): Promise<boolean> =>
   });
 
 /** `pitwall` is the bridge's bin; in this repository it runs as the root script `pnpm pitwall` (generates, then runs). */
-const spawnBridge = (command: string, args: string[]): ChildProcess => {
+const spawnBridge = (command: string, args: string[], env: NodeJS.ProcessEnv = process.env): ChildProcess => {
   const [file, fileArgs] = command === 'pitwall' ? ['pnpm', ['-s', 'pitwall', ...args]] : [command, args];
-  // Detached: the child leads a process group, so `killTree` also stops pnpm's node child.
-  const child = spawn(file as string, fileArgs as string[], { cwd: repoRoot, stdio: 'inherit', detached: true });
+  // Detached: the child leads a process group, so `killTree` also stops pnpm's node child. Its environment carries the
+  // bridge's ports as given (`PITWALL_UDP_PORT`, one port per feed).
+  const child = spawn(file as string, fileArgs as string[], { cwd: repoRoot, stdio: 'inherit', detached: true, env });
   child.on('error', (error) => console.error(`bridge process: ${error.message}`));
   child.on('exit', (code, signal) => console.error(`bridge process exited (${signal ?? code})`));
   return child;
@@ -174,7 +175,7 @@ void app.whenReady().then(async () => {
   // Outside --dev there is no menu, so none of its accelerators (zoom, force reload) competes with the UI's keys.
   if (!dev) Menu.setApplicationMenu(null);
   try {
-    bridge = await ensureBridge({ port: WS_PORT, probe, spawn: spawnBridge, killTree, args: bridgeArgs });
+    bridge = await ensureBridge({ port: WS_PORT, probe, spawn: spawnBridge, killTree, args: bridgeArgs, env: process.env });
   } catch (error) {
     // The windows still open and show the connection state; the engineer can start the bridge by hand.
     console.error(error instanceof Error ? error.message : error);

@@ -23,7 +23,7 @@ const F = 'replay' as FeedId;
 describe('PwrecSource → pipeline → WebSocket (in process)', () => {
   it('delivers hello, snapshots and updates; resubscribes after reconnect', async () => {
     const hub = new TopicHub({ now: () => performance.now() });
-    const feeds = () => [{ feedId: F, kind: 'replay' as const, label: 'segment' }];
+    const feeds = () => [{ feedId: F, kind: 'replay' as const, label: 'segment', team: null }];
     const s1 = await WsServer.start({ port: 0, hub, feeds }); const port = s1.port;
     const c = WsClient.connect(`ws://127.0.0.1:${port}`, { reconnectMs: 50 }); let hellos = 0; c.onHello(() => { hellos++; });
     const info: ServerMessage[] = [], laps: ServerMessage[] = [];

@@ -219,7 +219,8 @@ const refuseWrites = <T extends object>(path: string): ProxyHandler<T> => ({
  *   the session uid, the race clock's time, the last frame id and realism always. Nothing else the engine state holds
  *   (its open trackers, log, signals, history, weekend context, frame number, masking, frame events) is readable there;
  * - `history`: a list only with its change tag (`crossings` with `miniSectors`), a sub-machine's closed spans
- *   (`history.spans[id]`) only with `spans:<id>`;
+ *   (`history.spans[id]`) only with `spans:<id>`; a list's append frames (`history.appendedAt[list]`) only with that
+ *   list's tag (`history.appendedAt['spans:<id>']` with `spans:<id>`);
  * - `situation`: a sub-machine's open spans (`situation.byMachine[id]`, so `openSpansOf(view, id)`) only with
  *   `spans:<id>`; the weekend phase always (C14);
  * - membership (`situationAt(view, frame)`, `membershipOf(view, fact)`, C26) needs no declaration in what it matches
@@ -352,11 +353,22 @@ export function guardedView(view: EngineView, reads: readonly Dependency[], { un
   // history
   const projection = view.history as unknown as Record<string, unknown>;
   const spans = byMachine({ ...(projection['spans'] as object | undefined) }, 'history.spans', 'history', (list, machine) => readOnlyList(list, `history.spans.${machine}`));
+  /** A list's append frames (`history.appendedAt[list]`) with the list's tag: `LIST_TAGS[list]`, or `spans:<id>` itself. */
+  const appendedDeclared = (list: string): boolean => (list.startsWith('spans:') ? tags.has(list) : LIST_TAGS[list] !== undefined && tags.has(LIST_TAGS[list]));
+  const appendedLists = new Set([...Object.keys(LIST_TAGS), ...[...MACHINE_IDS].map((id) => `spans:${id}`)]);
+  const appendedAt = guard(
+    { ...(projection['appendedAt'] as object | undefined) },
+    'history.appendedAt',
+    appendedDeclared,
+    // the append frames are no projection entries (C31.1): read-only, not counted
+    (frames, list) => (typeof frames === 'object' && frames !== null ? new Proxy(frames, refuseWrites(`history.appendedAt.${list}`)) : frames),
+    appendedLists,
+  );
   const history = guard(
-    { ...projection, spans },
+    { ...projection, spans, appendedAt },
     'history',
-    (k) => k === 'spans' || (LIST_TAGS[k] !== undefined && tags.has(LIST_TAGS[k])),
-    (list, k) => (k === 'spans' ? list : readOnlyList(list, `history.${k}`)),
+    (k) => k === 'spans' || k === 'appendedAt' || (LIST_TAGS[k] !== undefined && tags.has(LIST_TAGS[k])),
+    (list, k) => (k === 'spans' || k === 'appendedAt' ? list : readOnlyList(list, `history.${k}`)),
   );
 
   // situation

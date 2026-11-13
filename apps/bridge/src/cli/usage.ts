@@ -24,11 +24,17 @@ export const USAGE = `usage: pitwall <live|replay|tap|reprocess|import> …
                             reprocess a recording (its sidecars included) and print the forecast-score tables: each
                             experiment and each forecast horizon, AI and human; --json writes the report without its
                             cases, --compare prints each number beside the old one with its change; stores nothing
-  drivers                   list the persons with their profile entries, then the unlinked human slots with a suggestion
+  strategy <file> --at-lap n [--car id] [--json <out.json>]
+                            reprocess a recording up to the frame the car (default: the player car) completes lap n
+                            and print per our car the strategy job's ranked plans with their metadata; --json writes
+                            the output; stores nothing
+  drivers                   list the persons with their profile entries, then the human seats without a link
   drivers add <person> --name "<display name>"
                             add a person (kebab-case id)
-  drivers link <session> <slot> <person> | drivers link --accept
-                            link a session's slot to a person, or confirm every shown suggestion
+  drivers link <team> <raceNumber> <person>
+                            link a seat (team name or id, race number) to a person, for every session's human frames
+  drivers unlink <team> <raceNumber>
+                            remove the seat's link
   drivers exclude <person> <session>
                             leave one session out of the person's profile
   drivers override <person> <key> <value>

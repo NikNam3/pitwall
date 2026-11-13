@@ -7,7 +7,7 @@ import { SPAN_DECLARATIONS, type SpanDeclaration } from '@pitwall/domain';
 import type { Calculator } from '@pitwall/engine/readers';
 import { describe, expect, it } from 'vitest';
 import type { BehaviourTable } from '../src/shared/behaviour.ts';
-import { behaviourExport, CALCULATORS, loadUnitFolders } from './units.ts';
+import { behaviourExport, CALCULATORS, JOB_UNITS, JOBS, loadUnitFolders, PENDING_JOBS } from './units.ts';
 
 /** The sub-machines a unit declares in `reads` (`spans:<machine>`). */
 const machinesRead = (calc: Calculator): string[] =>
@@ -46,18 +46,37 @@ function tableProblems(
 
 const folders = await loadUnitFolders();
 
+/** The calculators and analyses, and every job as its unit (its reads and `prepare`, SP4.3b 4.3b2 precondition 7). */
+const UNITS: readonly Calculator[] = [...CALCULATORS, ...JOB_UNITS];
+
 describe('behaviour tables (C44)', () => {
   it('every exported table covers every kind of every sub-machine its unit reads, and nothing else', () => {
-    const problems = folders.flatMap(({ unit, table }) => (table === undefined ? [] : tableProblems(unit, table, CALCULATORS.find((c) => c.id === unit))));
+    const problems = folders.flatMap(({ unit, table }) => (table === undefined ? [] : tableProblems(unit, table, UNITS.find((c) => c.id === unit))));
     expect(problems).toEqual([]);
   });
 
   it('every unit that reads a sub-machine exports its behaviour table', () => {
     const withTable = new Set(folders.filter((f) => f.table !== undefined).map((f) => f.unit));
-    const missing = CALCULATORS.filter((calc) => machinesRead(calc).length > 0 && !withTable.has(calc.id)).map(
+    const missing = UNITS.filter((calc) => machinesRead(calc).length > 0 && !withTable.has(calc.id)).map(
       (calc) => `${calc.id}: reads ${machinesRead(calc).join(', ')} but its index.ts does not export ${behaviourExport(calc.id)}`,
     );
     expect(missing).toEqual([]);
+  });
+
+  it("a job's reads are checked against its unit's table: the strategy job's table covers the sub-machines it reads", () => {
+    expect(JOBS.map((j) => j.id)).toEqual(expect.arrayContaining(['forecast-score', 'strategy']));
+    const strategy = folders.find((f) => f.unit === 'strategy');
+    expect(strategy?.table, 'strategy/index.ts exports STRATEGY_BEHAVIOUR').toBeDefined();
+    const job = UNITS.find((c) => c.id === 'strategy');
+    expect(job === undefined ? [] : machinesRead(job)).toEqual(
+      expect.arrayContaining(['session-phase-race', 'car-activity-race', 'car-driver', 'compound-rule', 'weekend-phase']),
+    );
+    expect(tableProblems('strategy', strategy?.table ?? {}, job)).toEqual([]);
+  });
+
+  it('PENDING_JOBS lists only ids of exported jobs (SP4.3b2 N2: a stale entry fails)', () => {
+    const stale = PENDING_JOBS.filter((id) => !JOBS.some((j) => j.id === id));
+    expect(stale).toEqual([]);
   });
 
   it('the check names a missing row, a row of an unread machine, a row of an undeclared kind and a table without a unit', () => {

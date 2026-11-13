@@ -17,6 +17,7 @@ export { InsightBook } from './calc/insight-book.ts';
 export type { OnCalculatorRun, SchedulerBookkeeping, SchedulerInput, SchedulerOptions, SchedulerResult } from './calc/scheduler.ts';
 export type {
   Cadence,
+  ChangeTrigger,
   Calculator,
   CalculatorId,
   Dependency,

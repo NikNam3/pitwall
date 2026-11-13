@@ -18,6 +18,8 @@ export const START_MS = 1_000;
 export const FUEL_MS_PER_KG = 30;
 /** Under the safety car every car laps this many times slower. */
 export const SC_LAP_FACTOR = 1.4;
+/** Under the virtual safety car every car laps this many times slower (the VSC delta asks about 30 % over a green lap, FIA F1 Sporting Regulations art. 56). */
+export const VSC_LAP_FACTOR = 1.3;
 /** The field leaves the grid in free air: each car this much more than `minGapMs` behind the one ahead. */
 export const GRID_EXTRA_GAP_MS = 500;
 /** Where the pit lane starts (in lap), the box is and the pit lane ends (out lap), by lap fraction: the box lies past the line. */
@@ -31,7 +33,7 @@ const PASS_MARGIN_M = 1;
 /** A guard against parameters that never end the race. */
 const MAX_STEPS = 10_000_000;
 
-const PURPOSE = { scatter: 1, mistake: 2, pass: 3 } as const;
+const PURPOSE = { scatter: 1, mistake: 2, pass: 3, hazard: 4, duration: 5 } as const;
 
 /** A 32-bit hash of a stream's key (murmur3's finaliser over each part). */
 function streamSeed(seed: number, car: number, lap: number, purpose: number): number {
@@ -55,6 +57,66 @@ const normal = (rng: Rng): number => Math.sqrt(-2 * Math.log(1 - rng.next())) * 
 /** A standard exponential draw. */
 const exponential = (rng: Rng): number => -Math.log(1 - rng.next());
 
+/** A neutralisation as planned, by leader laps: deployed during lap `fromLap`, in during lap `toLap` (past the race: still out at its end). */
+export type PlannedNeutralisation = { car: 'SC' | 'VSC'; fromLap: number; toLap: number };
+
+/** Where in the leader's lap the fixed `sc` is deployed and in, by lap fraction (4.3a: mid-lap both). */
+const FIXED_SC_AT = [0.5, 0.5] as const;
+/** Where in the leader's lap a drawn neutralisation is deployed and in, by lap fraction: one lasting one lap still lasts half a lap. */
+const DRAWN_AT = [0.25, 0.75] as const;
+
+/** The index drawn from `pmf` by `u` in [0, 1) (the last where rounding leaves `u` past the sum). */
+function drawIndex(pmf: readonly number[], u: number): number {
+  let sum = 0;
+  for (let i = 0; i < pmf.length; i++) {
+    sum += pmf[i]!;
+    if (u < sum) return i;
+  }
+  return pmf.length - 1;
+}
+
+/**
+ * The race's neutralisations: the fixed `sc`, else per leader lap a start drawn from `hazard` (lap 1 from `lapOne`, lap
+ * n ≥ 2 from the first `byFraction` bin whose `upTo` is at or above its race fraction, the lap's midpoint (n - 0.5) / laps:
+ * pitwall-trackdata's hazard.py, which made the committed chances). SC and VSC are exclusive draws with marginal chances
+ * `sc` and `vsc`; a start's length comes from `durationLaps`. No start while one is out or on the lap after it ends.
+ */
+export function planNeutralisations(p: GeneratorParams, seed: number): PlannedNeutralisation[] {
+  if (p.sc !== undefined) return [{ car: 'SC', fromLap: p.sc.fromLap, toLap: p.sc.toLap }];
+  const hazard = p.hazard;
+  if (hazard === undefined) return [];
+  const plan: PlannedNeutralisation[] = [];
+  for (let lap = 1; lap <= p.laps; lap++) {
+    const last = plan.at(-1);
+    if (last !== undefined && lap < last.toLap + 2) continue;
+    const fraction = (lap - 0.5) / p.laps;
+    const chances = lap === 1 ? hazard.lapOne : (hazard.byFraction.find((b) => fraction <= b.upTo) ?? hazard.byFraction.at(-1));
+    if (chances === undefined) continue;
+    const u = stream(seed, 0, lap, PURPOSE.hazard).next();
+    const car = u < chances.sc ? 'SC' : u < chances.sc + chances.vsc ? 'VSC' : undefined;
+    if (car === undefined) continue;
+    const pmf = car === 'SC' ? hazard.durationLaps.sc : hazard.durationLaps.vsc;
+    const length = drawIndex(pmf, stream(seed, 0, lap, PURPOSE.duration).next()) + 1;
+    plan.push({ car, fromLap: lap, toLap: lap + length - 1 });
+  }
+  return plan;
+}
+
+/** The rain's wetness on lap `lap`: its newest timeline entry with `fromLap` at or before it, 0 before the first. */
+export function wetnessOn(p: GeneratorParams, lap: number): number {
+  if (p.rain === undefined) return 0;
+  const timeline = 'fromLap' in p.rain ? [p.rain] : p.rain.timeline;
+  let wetness = 0;
+  let from = -Infinity;
+  for (const e of timeline) {
+    if (e.fromLap <= lap && e.fromLap >= from) {
+      wetness = e.wetnessMs;
+      from = e.fromLap;
+    }
+  }
+  return wetness;
+}
+
 /** When a car moving evenly from `from` to `to` in the step from `t` passed `x` (the step's end if it did not move). */
 const passedAt = (t: number, from: number, to: number, x: number): number => (to === from ? t + STEP_MS : t + (STEP_MS * (x - from)) / (to - from));
 
@@ -69,11 +131,13 @@ export type SimCar = {
 
 export type SimResult = {
   cars: SimCar[];
-  /** The safety car's deployment and end, when it happened. */
-  sc?: { start: number; end?: number };
-  /** When the leader started lap 3 (DRS enabled) and the lap two after the safety car's (DRS back on). */
+  /**
+   * The neutralisations that started, in order: deployed, in (absent while still out) and DRS back on (when the leader
+   * started its second lap after the one it came in during; absent until then).
+   */
+  neutralisations: { car: 'SC' | 'VSC'; start: number; end?: number; drsBack?: number }[];
+  /** When the leader started lap 3 (DRS enabled). */
   drsEnabledAt?: number;
-  drsBackAt?: number;
   /** The passes: when, who passed whom. */
   overtakes: { at: number; car: number; other: number }[];
   /** The frame the leader's last lap is confirmed on: the one after it completes it. */
@@ -156,7 +220,7 @@ function startLap(s: State, c: number, lap: number): void {
     FUEL_MS_PER_KG * fuelAtStart(p, lap) +
     s.scatter[c]! +
     mistake +
-    (p.rain !== undefined && lap >= p.rain.fromLap ? p.rain.wetnessMs : 0) +
+    wetnessOn(p, lap) +
     (inLap ? s.inLossMs : 0) +
     (outLap ? s.outLossMs : 0);
   s.target[c] = t;
@@ -221,7 +285,7 @@ function passes(s: State, c: number, advantageMs: number, at: number, drsOn: boo
  * The step from `t`, from the front: each car's new distance (free, held behind the car ahead on track, or past it),
  * then its pit events and boundary crossings. Returns the leader's distance.
  */
-function step(s: State, t: number, scOn: boolean, drsOn: boolean): number {
+function step(s: State, t: number, slowFactor: number, drsOn: boolean): number {
   const t1 = t + STEP_MS;
   const { order, dist, speed, resumeAt, inPit, target, nextBoundary, nextPitM, boundaryM } = s;
   const minGapMs = s.p.pass.minGapMs;
@@ -233,7 +297,7 @@ function step(s: State, t: number, scOn: boolean, drsOn: boolean): number {
   for (let r = 0; r < s.n; r++) {
     const c = order[r]!;
     const from = dist[c]!;
-    const v = scOn ? speed[c]! / SC_LAP_FACTOR : speed[c]!;
+    const v = slowFactor === 1 ? speed[c]! : speed[c]! / slowFactor;
     const resume = resumeAt[c]!;
     const moving = resume >= t1 ? 0 : resume > t ? t1 - resume : STEP_MS;
     let d = from + v * moving;
@@ -243,7 +307,7 @@ function step(s: State, t: number, scOn: boolean, drsOn: boolean): number {
       const allowed = Math.max(aheadTo - minGapM, from + (aheadTo - aheadFrom));
       if (d > allowed) d = allowed;
       const advantage = target[ahead]! - target[c]!;
-      if (!scOn && advantage > 0 && aheadTo - d < minGapM + 1e-6 && passes(s, c, advantage, d, drsOn)) {
+      if (slowFactor === 1 && advantage > 0 && aheadTo - d < minGapM + 1e-6 && passes(s, c, advantage, d, drsOn)) {
         d = aheadTo + PASS_MARGIN_M;
         s.overtakes.push({ at: t1, car: c, other: ahead });
       }
@@ -341,15 +405,12 @@ export function simulate(p: GeneratorParams, seed: number): SimResult {
     s.nextPitM[c] = nextPitEvent(s, c);
   }
 
-  /** The leader's distances at which the SC is deployed and in, DRS enabled and back on after the SC. */
-  const scFrom = p.sc === undefined ? Infinity : (p.sc.fromLap - 0.5) * L;
-  const scTo = p.sc === undefined ? Infinity : (p.sc.toLap - 0.5) * L;
+  /** Per planned neutralisation, the leader's distances at which it is deployed, in and DRS back on; DRS first enabled. */
+  const [deployAt, inAt] = p.sc === undefined ? DRAWN_AT : FIXED_SC_AT;
+  const plan = planNeutralisations(p, seed).map((x) => ({ car: x.car, from: (x.fromLap - 1 + deployAt) * L, to: (x.toLap - 1 + inAt) * L, back: (x.toLap + 1) * L }));
   const drsFrom = 2 * L;
-  const drsBack = p.sc === undefined ? Infinity : (p.sc.toLap + 1) * L;
-  let scStart: number | undefined;
-  let scEnd: number | undefined;
+  const neutralisations: SimResult['neutralisations'] = [];
   let drsEnabledAt: number | undefined;
-  let drsBackAt: number | undefined;
   let leaderDist = Math.max(...s.dist);
   let distances = new Float64Array(n * 1_024);
   let frames = 0;
@@ -357,14 +418,24 @@ export function simulate(p: GeneratorParams, seed: number): SimResult {
   for (let t = 0, steps = 0; t < s.endT; t += STEP_MS, steps++) {
     if (steps > MAX_STEPS) throw new Error('generateRace: the race does not end');
     if (t >= START_MS) {
-      const scOn = scStart !== undefined && scEnd === undefined;
-      const drsOn = drsEnabledAt !== undefined && !(scStart !== undefined && drsBackAt === undefined);
+      /** The newest neutralisation that started (its plan entry has the same index). */
+      const k = neutralisations.length - 1;
+      const last = neutralisations[k];
+      const out = last !== undefined && last.end === undefined;
+      const drsOn = drsEnabledAt !== undefined && (last === undefined || last.drsBack !== undefined);
       sortOrder(s);
-      const lead = step(s, t, scOn, drsOn);
-      if (scStart === undefined && leaderDist < scFrom && scFrom <= lead) scStart = passedAt(t, leaderDist, lead, scFrom);
-      if (scStart !== undefined && scEnd === undefined && leaderDist < scTo && scTo <= lead) scEnd = passedAt(t, leaderDist, lead, scTo);
-      if (drsEnabledAt === undefined && leaderDist < drsFrom && drsFrom <= lead) drsEnabledAt = passedAt(t, leaderDist, lead, drsFrom);
-      if (drsBackAt === undefined && leaderDist < drsBack && drsBack <= lead) drsBackAt = passedAt(t, leaderDist, lead, drsBack);
+      const lead = step(s, t, out ? (last.car === 'SC' ? SC_LAP_FACTOR : VSC_LAP_FACTOR) : 1, drsOn);
+      const crossed = (x: number): number | undefined => (leaderDist < x && x <= lead ? passedAt(t, leaderDist, lead, x) : undefined);
+      if (last !== undefined) {
+        const end = last.end ?? crossed(plan[k]!.to);
+        if (end !== undefined) last.end = end;
+        const back = end === undefined ? undefined : (last.drsBack ?? crossed(plan[k]!.back));
+        if (back !== undefined) last.drsBack = back;
+      }
+      const next = plan[k + 1];
+      const start = next === undefined || (last !== undefined && last.end === undefined) ? undefined : crossed(next.from);
+      if (start !== undefined) neutralisations.push({ car: next!.car, start });
+      drsEnabledAt ??= crossed(drsFrom);
       leaderDist = lead;
     }
     if ((t + STEP_MS) % FRAME_MS === 0) {
@@ -379,9 +450,8 @@ export function simulate(p: GeneratorParams, seed: number): SimResult {
   }
   return {
     cars: s.cars,
-    ...(scStart !== undefined && { sc: { start: scStart, ...(scEnd !== undefined && { end: scEnd }) } }),
+    neutralisations,
     ...(drsEnabledAt !== undefined && { drsEnabledAt }),
-    ...(drsBackAt !== undefined && { drsBackAt }),
     overtakes: s.overtakes,
     lastFrame: s.endT / FRAME_MS,
     distances: distances.subarray(0, frames * n),

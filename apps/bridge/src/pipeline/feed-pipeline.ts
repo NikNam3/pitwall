@@ -1,19 +1,21 @@
 // One feed end to end (spec 4): PacketSource → decode → SessionTracker → SessionProcessor → TopicHub,
 // with the feed's health, its session files and its storage alongside.
 import { resolve } from 'node:path';
-import { toSessionTime, type CalibrationActiveValue, type FeedId, type Known, type PriorsSnapshot, type ProfileSnapshot, type RunPriors, type SessionRef, type SessionTime, type TrackFile } from '@pitwall/domain';
+import type { ConfigEffectiveValue } from '@pitwall/contracts';
+import { toSessionTime, type CalibrationActiveValue, type FeedId, type Known, type LiveSeat, type PriorsSnapshot, type ProfileSnapshot, type RunPriors, type SessionRef, type SessionTime, type TeamId, type TrackFile } from '@pitwall/domain';
 import type { CalibrationStore } from '../calibration/store.ts';
 import type { ProfileStore, SlotIdentity } from '../drivers/store.ts';
 import { profilesSidecarPath } from './profile-sidecar.ts';
 import { CalculatorRegistry, SessionTracker, type Frame, type FrameMetrics, type InsightChange, type TrackerEvent } from '@pitwall/engine';
 import { decode } from '@pitwall/protocol';
-import { effectiveConfig, sessionConfigPath, type FeatureConfig } from '../feature-config.ts';
+import { effectiveConfig, overriddenFields, sessionConfigPath, sessionConfigSidecar, type FeatureConfig } from '../feature-config.ts';
 import type { Feature } from '../features/feature.ts';
 import { feedStatusOf } from '../features/feed-status/feed-status.ts';
 import type { TopicHub } from '../hub/topic-hub.ts';
 import type { PacketSource, RawPacket } from '../input/packet-source.ts';
 import { FeedJobs } from '../jobs/feed-jobs.ts';
 import type { JobResult } from '../jobs/job-runner.ts';
+import type { WorkerLimit } from '../jobs/worker-limit.ts';
 import type { Logger } from '../log.ts';
 import type { Db, StoredSessionRow } from '../storage/db.ts';
 import { SessionFile, sessionRecordingName } from '../storage/session-files.ts';
@@ -27,6 +29,7 @@ import { FeedMonitor } from './feed-monitor.ts';
 import { sessionClock, type SessionClock } from './session-clock.ts';
 import { playerCarOf, SessionProcessor } from './session-processor.ts';
 import { SessionStorage, type StorageMode } from './session-storage.ts';
+import type { PlanDecision, TeamFeeds } from './team-feeds.ts';
 import { TopicPublisher } from './topic-publisher.ts';
 
 export type FeedPipelineOptions = {
@@ -40,6 +43,11 @@ export type FeedPipelineOptions = {
    */
   features: readonly Feature[];
   log: Logger;
+  /**
+   * The job-worker limit this feed's jobs share with every other feed given the same instance (Task 18b); unset gives
+   * the feed's jobs a limit of their own (`MAX_JOB_WORKERS`).
+   */
+  workerLimit?: WorkerLimit;
   /**
    * The effective calculator config (see `loadFeatureConfig`), fixed for the pipeline's run; unset means the defaults
    * of the declared keys. Each session file gets a copy as `<file>.config.json`.
@@ -78,9 +86,11 @@ export type FeedPipelineOptions = {
   /**
    * Live: the profile store's slice a run uses (C62c, SP4.3a spec 4). Each session asks it once, at its start, for the
    * profile snapshot of its slots; the snapshot is fixed for the run, goes to `<file>.profiles.json` and to the scheduler
-   * as `SchedulerInput.drivers`. Without it (and without `recordedProfiles`) a run's `drivers` is `null`.
+   * as `SchedulerInput.drivers`. Without it (and without `recordedProfiles`) a run's `drivers` is `null`. The pipeline
+   * also tells it the feed's human seats as they change (`feedSeats`, SP4.3b2 Task 10), and none once a session ends
+   * or the feed stops.
    */
-  profiles?: Pick<ProfileStore, 'snapshotFor'>;
+  profiles?: Pick<ProfileStore, 'snapshotFor' | 'feedSeats'>;
   /** A replay: the recording's profiles sidecar (`recordingProfiles`, C38); `null` for a recording without one. */
   recordedProfiles?: ProfileSnapshot | null;
   /** Where debug dumps go; without it none are written. */
@@ -103,7 +113,15 @@ export type FeedPipelineOptions = {
    * (`loadTrackFile(id, TRACKS_DIR)`); a pipeline built from a recording passes `recordingTrack(file, id, TRACKS_DIR)`.
    */
   tracks?: (trackId: number) => Known<TrackFile>;
+  /**
+   * The bridge's team bookkeeping (C1a): the pipeline reports its session uid when a session starts and its player car's
+   * team once the session's Participants name it.
+   */
+  teams?: TeamFeeds;
 };
+
+/** A feed's session uid and its player car's team (`null` before Participants), as reported to `teams`. */
+type Seat = { sessionUid: string; team: TeamId | null };
 
 /**
  * Where the feed is: the newest frame's session time and the player's lap. The time is the game's own, not the race
@@ -134,6 +152,8 @@ export class FeedPipeline {
   readonly #feedId: FeedId;
   readonly #log: Logger;
   readonly #config: FeatureConfig;
+  /** Per config key, the fields `config.json` set (`config.effective`). */
+  readonly #overridden: Record<string, string[]>;
   readonly #registry: CalculatorRegistry;
   readonly #demand: ReturnType<typeof demandOf>;
   readonly #publisher: TopicPublisher;
@@ -160,6 +180,8 @@ export class FeedPipeline {
   readonly #recorded: RecordedPlacement<GivenDecision>;
   /** The newest session's decisions (kept once it ended: a pick then only marks its set used). */
   #decisions: SessionDecisions | undefined;
+  /** The newest session's seat as last reported to `teams`. */
+  #seat: Seat | undefined;
 
   constructor(opts: FeedPipelineOptions) {
     this.#o = opts;
@@ -167,8 +189,10 @@ export class FeedPipeline {
     this.#log = opts.log;
     // Fixed for the run; changing the config from the UI at runtime comes later (it needs a new sidecar per change).
     this.#config = effectiveConfig(opts.features, opts.config);
+    this.#overridden = overriddenFields(opts.config);
     this.#jobs = new FeedJobs(opts.features, (result) =>
       this.#guarded('job result', () => this.#onJobResult(result)),
+      opts.workerLimit,
     );
     this.#registry = CalculatorRegistry.build([...opts.features.flatMap((feature) => feature.calculators), ...this.#jobs.calculators]);
     this.#demand = demandOf(opts.features, this.#registry);
@@ -251,6 +275,26 @@ export class FeedPipeline {
     }
   }
 
+  /** The running session's race laps; `undefined` without a running session. */
+  totalLaps(): number | undefined {
+    return this.#session?.totalLaps;
+  }
+
+  /**
+   * A plan decision for the running session (`plan.commit`, `plan.clear`; C76, SP4.3b spec §8.2), as `PlanRouting` hands
+   * it to each of the team's feeds: it goes to the runner with the next frame and, placed at the session's record index,
+   * to the decisions sidecar. Without a running session it is not taken.
+   */
+  commitPlan(decision: PlanDecision): DecisionResult {
+    const run = this.#decisions;
+    const session = this.#session;
+    if (run === undefined || session === undefined) return { ok: false, reason: 'notSupported', message: 'this feed runs no session' };
+    session.decide(decision);
+    run.decisions.push(session.place(decision));
+    if (run.file !== undefined) this.#writeSidecar(decisionsSidecarPath(run.file), run.decisions);
+    return { ok: true };
+  }
+
   start(): void {
     if (this.#started) throw new Error('FeedPipeline: already started');
     this.#started = true;
@@ -301,6 +345,8 @@ export class FeedPipeline {
     this.#guarded('stream end', () => {
       for (const event of this.#tracker.end()) this.#handle(event, this.#lastReceivedAtMs);
     });
+    // A feed that stopped runs no seat (C62c).
+    this.#reportHumanSeats([]);
     await this.#jobs.close();
     await Promise.all(this.#closing);
     if (failure !== undefined) throw failure.error;
@@ -341,6 +387,7 @@ export class FeedPipeline {
         return;
       case 'frame':
         this.#updatePosition(event.frame);
+        this.#updateTeam(event.frame);
         this.#session?.push(event.frame);
         return;
       case 'sessionEnded':
@@ -355,10 +402,30 @@ export class FeedPipeline {
     if (playerLap !== undefined) this.#position = { sessionTimeMs: frame.sessionTime, playerLap };
   }
 
+  /**
+   * The player car's team from the frame's Participants, reported to `teams` when it changes. Live, once the team is
+   * first known, the session is handed each car's newest plan decision of the team (C76): this frame carries them, and
+   * a replay, which has them in its decisions sidecar at the record index they were placed at, gives them to it too.
+   */
+  #updateTeam(frame: Frame): void {
+    const seat = this.#seat;
+    const team = frame.participants?.participants[frame.playerCarIndex]?.teamId;
+    if (seat === undefined || team === undefined || team === seat.team) return;
+    this.#reportSeat({ sessionUid: seat.sessionUid, team });
+    if (seat.team !== null || this.#o.recorded !== undefined || this.#o.teams === undefined) return;
+    for (const decision of this.#o.teams.plansOf(this.#feedId)) this.commitPlan(decision);
+  }
+
+  #reportSeat(seat: Seat): void {
+    this.#seat = seat;
+    this.#o.teams?.report(this.#feedId, seat.sessionUid, seat.team);
+  }
+
   /** A new session: every topic of the feed starts over, apart from the feed's own insights that still hold. */
   #startSession(event: SessionStarted): void {
     const { feedId, hub, log, dumpsDir } = this.#o;
     this.#ended = undefined;
+    this.#reportSeat({ sessionUid: String(event.sessionUid), team: null });
     this.#alerts.clearWriteFailures(this.#sessionTime());
     hub.resetFeed(feedId);
     this.#publisher.sessionStarted();
@@ -366,6 +433,7 @@ export class FeedPipeline {
     const startedAt = this.#sessionClock(event.receivedAtMs);
     const storage = this.#sessionStorage();
     const config = this.#sessionConfig();
+    this.#publishEffectiveConfig(config);
     const track = this.#tracks(event.session.trackId);
     const priors = this.#startPriors(event.session.trackId);
     const file = this.#openSessionFile(event, startedAt, config, track, priors);
@@ -389,6 +457,7 @@ export class FeedPipeline {
       priors,
       onActive: (value: CalibrationActiveValue) => hub.publishState(feedId, 'calibration.active', () => value),
       profilesFor: (slots, session) => this.#profilesFor(slots, session, file?.path),
+      ...(this.#o.profiles && { onSeats: (seats: Omit<LiveSeat, 'feedId'>[]) => this.#reportHumanSeats(seats) }),
       feedView: () => this.#monitor.view(this.#tracker.metrics, this.#lastReceivedAtMs),
       ...(storage && { storage }),
       ...(file && { file }),
@@ -443,9 +512,28 @@ export class FeedPipeline {
     return snapshot;
   }
 
+  /** The feed's human seats to the profile store (`drivers.links.unlinkedSeats`, C62c); a failure is logged, never thrown. */
+  #reportHumanSeats(seats: readonly Omit<LiveSeat, 'feedId'>[]): void {
+    const { profiles } = this.#o;
+    if (profiles === undefined) return;
+    this.#guarded('human seats', () => profiles.feedSeats(this.#feedId, seats));
+  }
+
   /** Now as an ISO date: when a set was used (spec 3.1 `lastUsedAt`). */
   #now(): string {
     return new Date(this.#wallClock()).toISOString();
+  }
+
+  /**
+   * `config.effective` (C47, C54, C55): the session's config, every declared key with its value, and per key the fields
+   * `config.json` set; published by the pipeline itself, typed by its topic file, once per session start.
+   */
+  #publishEffectiveConfig(config: FeatureConfig): void {
+    const value: ConfigEffectiveValue = {
+      values: config,
+      overridden: Object.fromEntries(Object.keys(config).map((key) => [key, this.#overridden[key] ?? []])),
+    };
+    this.#o.hub.publishState(this.#feedId, 'config.effective', () => value);
   }
 
   /** The run's config with `realism.enabled` taken from the live hook, if any; fixed for the whole session. */
@@ -465,7 +553,7 @@ export class FeedPipeline {
       originMs: event.receivedAtMs,
       onError: (error) => this.#writeFailed('pwrec', error),
     });
-    this.#writeSidecar(sessionConfigPath(file.path), config);
+    this.#writeSidecar(sessionConfigPath(file.path), sessionConfigSidecar(config, this.#overridden));
     // The track file the session runs with (C59, C62b); a session without a valid one writes a not-applicable sidecar,
     // so its replay stays notApplicable even after a committed file appears (C38).
     this.#writeSidecar(trackSidecarPath(file.path), track.known ? track.value : NOT_APPLICABLE_SIDECAR);
@@ -493,6 +581,8 @@ export class FeedPipeline {
     if (session === undefined) return;
     this.#session = undefined;
     this.#ended = session;
+    // A session that ended runs no seat any more (C62c).
+    this.#reportHumanSeats([]);
     this.#jobs.sessionEnded();
     const closing = session.end(receivedAtMs, { interrupted: this.#stopped }).finally(() => this.#closing.delete(closing));
     this.#closing.add(closing);

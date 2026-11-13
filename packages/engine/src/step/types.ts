@@ -1,6 +1,6 @@
 // Protocol-free (C6): recorders and the bridge import these types; `StateUpdate` (`state-update/types.ts`) holds the
 // frame.
-import type { CarId, DecisionRecord, FrameNumber, MachineId, Ms, SessionTime, Span } from '@pitwall/domain';
+import type { CarId, FrameNumber, GivenDecision, MachineId, Ms, SessionTime, Span } from '@pitwall/domain';
 import type { LogWriter } from '../log/types.ts';
 import { SPAN_TAGS } from '../situations/span-tags.generated.ts';
 import type { Situation } from '../situations/situation.ts';
@@ -107,5 +107,5 @@ export type RecorderInput = {
   situation: Situation;
   closed?: Readonly<Record<MachineId, readonly Span[]>>;
   carsInSession?: readonly CarId[];
-  decisions?: readonly Omit<DecisionRecord, 'frame'>[];
+  decisions?: readonly GivenDecision[];
 };

@@ -12,3 +12,12 @@ export const zandvoortTrack = (): TrackData => {
   const { source: _source, ...data } = zandvoortTrackFile();
   return data;
 };
+
+/**
+ * `track` with its in-lap share not received, so a test keeps `pit-loss`'s config prior (0.26): the tests written
+ * before the track file carried the share (SP4.3b Q5 A, Task 26 port).
+ */
+export const withoutInLapShare = (track: TrackData): TrackData => ({
+  ...track,
+  defaults: { ...track.defaults, pitLossInLapShare: { known: false, reason: 'notReceived' } },
+});

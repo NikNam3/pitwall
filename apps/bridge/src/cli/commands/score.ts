@@ -1,20 +1,15 @@
-import { subscribe, unsubscribe } from 'node:diagnostics_channel';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import type { Worker } from 'node:worker_threads';
 import { FORECAST_SCORE } from '@pitwall/analysis';
 import type { ServerMessage, TopicName } from '@pitwall/contracts';
-import { unknown, type ForecastScoreReport, type Known, type ScoreTable } from '@pitwall/domain';
-import type { Job } from '@pitwall/engine/readers';
+import { unknown, type ForecastScoreReport, type Known, type ScoreTable, type Summary } from '@pitwall/domain';
 import { loadFeatureConfig, recordingConfig } from '../../feature-config.ts';
-import type { Feature } from '../../features/feature.ts';
 import { FEATURES } from '../../features/index.generated.ts';
-import type { PacketSource, RawPacket } from '../../input/packet-source.ts';
-import { PwrecSource } from '../../input/pwrec-source.ts';
 import type { FeedPipeline } from '../../pipeline/feed-pipeline.ts';
 import { StartupError } from '../../startup-error.ts';
 import { cliLogger, EXIT_INTERRUPTED, type CliIo } from '../io.ts';
+import { GatedSource, gatedFeatures, JobGate } from '../job-gate.ts';
 import { RECORDING_FEED, recordingHub, recordingPipeline, runToEnd } from '../process-recording.ts';
 import { UsageError } from '../usage.ts';
 
@@ -24,10 +19,17 @@ const SUBSCRIPTION = 'report';
 
 type Report = ForecastScoreReport;
 type Forecast = Report['forecasts'][number];
-type Summary = ScoreTable['ai'];
 /** A table as `--json` writes it and `--compare` reads it: without its cases. */
 type Table = Omit<ScoreTable, 'cases'>;
 type JsonReport = { experiments: Record<keyof Report['experiments'], Table>; forecasts: (Omit<Forecast, 'lapTime' | 'position' | 'baselinePosition'> & Record<ForecastTable, Table>)[] };
+/**
+ * An old report of `--compare` may come from before the CRPS (SP4.3b1 Task 22) or before the like-for-like scores
+ * (Task 27): its forecasts without `crps` or `sameCases`.
+ */
+type OldReport = {
+  experiments?: Partial<JsonReport['experiments']>;
+  forecasts?: (Omit<JsonReport['forecasts'][number], 'crps' | 'sameCases'> & { crps?: Forecast['crps']; sameCases?: Forecast['sameCases'] })[];
+};
 
 const EXPERIMENTS = ['rejoin', 'undercut', 'scStop'] as const;
 const FORECAST_TABLES = ['lapTime', 'position', 'baselinePosition'] as const;
@@ -36,119 +38,16 @@ type ForecastTable = (typeof FORECAST_TABLES)[number];
 const HORIZONS: readonly Forecast['horizon'][] = [1, 3, 5, 10];
 const BASES: readonly Forecast['basis'][] = ['wear', 'age'];
 
-/**
- * Whether a forecast-score job is under way: the CLI holds the recording back while one is, so the session's end never
- * cancels the run of the final leader lap (`FeedJobs.sessionEnded`). A run starts when its trigger calculator ran (the
- * job's `prepare`); the job runner then starts its worker in the same frame. It ends with the next message on the
- * subscription (its result, or the topic marked errored) and its worker's exit: a run that is cancelled (a flashback or
- * the session's end terminates its worker, ruling R33) delivers nothing, but its worker exits, so the recording goes on.
- * Only the workers started while a run is asked for are the job's (the command subscribes to no other job's topic, C49).
- */
-class JobGate {
-  /** A run was asked for and its worker has not started yet. */
-  #asked = false;
-  readonly #workers = new Set<Worker>();
-  #waiting: Array<() => void> = [];
-  readonly #onWorker = (message: unknown): void => {
-    const worker = (message as { worker: Worker }).worker;
-    if (!this.#asked) return;
-    this.#asked = false;
-    this.#workers.add(worker);
-    worker.once('exit', () => {
-      this.#workers.delete(worker);
-      this.#settle();
-    });
-  };
-
-  constructor() {
-    subscribe('worker_threads', this.#onWorker);
-  }
-
-  started(): void {
-    this.#asked = true;
-  }
-
-  /** A message on the subscription: the run asked for delivered (or never got a worker and failed). */
-  ended(): void {
-    this.#asked = false;
-    this.#settle();
-  }
-
-  /** Stops watching the workers. */
-  close(): void {
-    unsubscribe('worker_threads', this.#onWorker);
-  }
-
-  get #running(): boolean {
-    return this.#asked || this.#workers.size > 0;
-  }
-
-  #settle(): void {
-    if (this.#running) return;
-    for (const resolve of this.#waiting.splice(0)) resolve();
-  }
-
-  /** Resolves once no run is under way, or once `signal` aborts. */
-  idle(signal: AbortSignal): Promise<void> {
-    if (!this.#running || signal.aborted) return Promise.resolve();
-    return new Promise((resolve) => {
-      const done = () => {
-        signal.removeEventListener('abort', done);
-        resolve();
-      };
-      this.#waiting.push(done);
-      signal.addEventListener('abort', done, { once: true });
-    });
-  }
-}
-
-/** The recording, as fast as possible, each record (and the end of the input) held back while a job is under way. */
-class GatedSource implements PacketSource {
-  readonly feedId = RECORDING_FEED;
-  readonly done: Promise<void>;
-  readonly #inner: PwrecSource;
-  readonly #stopping = new AbortController();
-
-  constructor(path: string, gate: JobGate) {
-    this.#inner = new PwrecSource({ feedId: RECORDING_FEED, path, pacer: { wait: (_gapMs, signal) => gate.idle(signal) } });
-    this.done = this.#inner.done.then(() => gate.idle(this.#stopping.signal));
-    this.done.catch(() => {});
-  }
-
-  start(onPacket: (packet: RawPacket) => void): void {
-    this.#inner.start(onPacket);
-  }
-
-  async stop(): Promise<void> {
-    this.#stopping.abort();
-    await this.#inner.stop();
-    await this.done.catch(() => {});
-  }
-}
-
-/** The features, the forecast-score job's `prepare` telling `gate` that a run starts. */
-function gatedFeatures(gate: JobGate): Feature[] {
-  const gated = (job: Job<unknown, unknown>): Job<unknown, unknown> =>
-    job.id !== FORECAST_SCORE
-      ? job
-      : {
-          ...job,
-          prepare: (view) => {
-            const input = job.prepare(view);
-            gate.started();
-            return input;
-          },
-        };
-  return FEATURES.map((feature) => (feature.jobs === undefined ? feature : { ...feature, jobs: feature.jobs.map(gated) }));
-}
-
 /** The data dir's root as `dataDir` resolves it, without creating anything (the command stores nothing, C32). */
-function dataRoot(env: CliIo['env']): string {
+export function dataRoot(env: CliIo['env']): string {
   return env['PITWALL_DATA_DIR'] || join(env['HOME'] ?? homedir(), '.local', 'share', 'pitwall');
 }
 
 /** The report of a run that delivered no job result (R33): every count 0, every mean unknown. */
 function emptyReport(): Report {
+  const none = (bias: 'insufficientData' | 'notApplicable'): Summary => ({ n: 0, meanAbs: unknown('insufficientData'), bias: unknown(bias) });
+  const noCrps = (): Forecast['crps'] => ({ ai: none('notApplicable'), human: none('notApplicable') });
+  const noPoint = (): Forecast['crps'] => ({ ai: none('insufficientData'), human: none('insufficientData') });
   const empty = (name: string, unit: ScoreTable['unit']): ScoreTable => {
     const none: Summary = { n: 0, meanAbs: unknown('insufficientData'), bias: unknown('insufficientData') };
     return { name, unit, ai: none, human: { ...none }, cases: [] };
@@ -162,6 +61,8 @@ function emptyReport(): Report {
         lapTime: empty(`h${horizon}.${basis}.lapTime`, 'ms'),
         position: empty(`h${horizon}.${basis}.position`, 'places'),
         baselinePosition: empty(`h${horizon}.${basis}.baselinePosition`, 'places'),
+        crps: noCrps(),
+        sameCases: { crps: noCrps(), position: noPoint(), baseline: noPoint() },
       })),
     ),
   };
@@ -179,6 +80,8 @@ function jsonReport(report: Report): JsonReport {
       lapTime: withoutCases(f.lapTime),
       position: withoutCases(f.position),
       baselinePosition: withoutCases(f.baselinePosition),
+      crps: f.crps,
+      sameCases: f.sameCases,
     })),
   };
 }
@@ -217,21 +120,41 @@ function tableLines(heading: string, table: Table, old: Table | undefined): stri
   return [`${heading} (${table.unit})`, line('ai'), line('human')];
 }
 
-/** Every table of the report: the experiments, then per horizon and basis the forecast's three. */
-function reportLines(report: JsonReport, old: JsonReport | undefined): string[] {
+/**
+ * The CRPS of a horizon and basis: its heading, one line per driver type with its count and mean score, then per
+ * driver type the like-for-like line (Task 27): on the cases with both scores, the count, the CRPS and the point
+ * forecast's and the baseline's ("gaps stay") mean absolute position error.
+ */
+function crpsLines(heading: string, crps: Forecast['crps'], same: Forecast['sameCases'], old: { crps?: Forecast['crps']; sameCases?: Forecast['sameCases'] } | undefined): string[] {
+  const line = (driver: 'ai' | 'human') => {
+    const s = crps[driver];
+    const o = old?.crps?.[driver];
+    return `  ${driver.padEnd(5)} ${countText(s.n, o)}  mean ${knownText(s.meanAbs, o?.meanAbs, 'places')}`;
+  };
+  const sameLine = (driver: 'ai' | 'human') => {
+    const o = old?.sameCases;
+    const mean = (part: keyof Forecast['sameCases']) => knownText(same[part][driver].meanAbs, o?.[part][driver].meanAbs, 'places');
+    return `  same ${driver.padEnd(5)} ${countText(same.crps[driver].n, o?.crps[driver])}  crps ${mean('crps')}  point ${mean('position')}  gaps stay ${mean('baseline')}`;
+  };
+  return [`${heading} (places)`, line('ai'), line('human'), sameLine('ai'), sameLine('human')];
+}
+
+/** Every table of the report: the experiments, then per horizon and basis the forecast's three and its CRPS. */
+function reportLines(report: JsonReport, old: OldReport | undefined): string[] {
   const lines: string[] = [];
   for (const name of EXPERIMENTS) lines.push(...tableLines(name, report.experiments[name], old?.experiments?.[name]));
   for (const f of report.forecasts) {
     const was = old?.forecasts?.find((o) => o.horizon === f.horizon && o.basis === f.basis);
     for (const kind of FORECAST_TABLES) lines.push(...tableLines(`h${f.horizon} ${f.basis} ${kind}`, f[kind], was?.[kind]));
+    lines.push(...crpsLines(`h${f.horizon} ${f.basis} crps`, f.crps, f.sameCases, was));
   }
   return lines;
 }
 
 /** The old report of `--compare`. */
-function readOld(file: string): JsonReport {
+function readOld(file: string): OldReport {
   try {
-    return JSON.parse(readFileSync(file, 'utf8')) as JsonReport;
+    return JSON.parse(readFileSync(file, 'utf8')) as OldReport;
   } catch (error) {
     throw new StartupError(`cannot read ${file}: ${error instanceof Error ? error.message : String(error)}`);
   }
@@ -259,7 +182,7 @@ export async function run(positionals: string[], values: { json?: string | undef
   // Every call is an hour after the one before: the hub never throttles this only subscriber, each result goes out at once.
   let clock = 0;
   const hub = recordingHub(() => pipeline, () => (clock += 3_600_000));
-  pipeline = recordingPipeline({ path, hub, log, config, features: gatedFeatures(gate), source: new GatedSource(path, gate) });
+  pipeline = recordingPipeline({ path, hub, log, config, features: gatedFeatures(FEATURES, FORECAST_SCORE, gate), source: new GatedSource(path, gate) });
   hub.addClient(CLIENT, {
     send: (message: ServerMessage) => {
       if (message.type === 'update' || (message.type === 'snapshot' && message.value !== undefined)) {
