@@ -5,6 +5,7 @@ import type { NoiseCompound } from './analyses/driver-noise.ts';
 import type { RaceInteraction } from './analyses/race-interaction.ts';
 import type { TyreType } from './analyses/crossover.ts';
 import type { CarId } from './ids.ts';
+import type { Known } from './known.ts';
 import type { Ms } from './units.ts';
 
 /** The compounds in `StartingPoint.compound`'s index order. */
@@ -47,6 +48,11 @@ export type StartingPoint = {
   /** Our cars only. */
   sets: Record<CarId, { compound: NoiseCompound; wearPct: number }[]>;
   wetness: { wetnessMs: number; sdMs: number };
+  /**
+   * The weather forecast's samples mapped onto race laps by the leader's lap time: per lap its rain chance (0–100) and
+   * the forecast's accuracy (SP4.3b spec §7.1, S12); unknown where no forecast reached the view (C3).
+   */
+  weather: Known<{ byLap: { lap: number; rainPct: number }[]; accuracy: 'perfect' | 'approximate' }>;
   /** `inLapShare`: the part of a stop's loss paid on the in lap, the rest on the out lap (SP4.3b spec §4.2, F2). */
   track: { brakingZones: Float64Array; drsZones: DrsZone[]; pitLossMs: { green: number; vsc: number; sc: number; inLapShare: number } };
   /** DRS: a car within `rangeMs` of the car ahead at a detection point may open it, from lap `fromLap` (SP4.3b spec §4.2, F7). */
@@ -101,8 +107,12 @@ export type Trigger =
 /** One car's stops to the flag, and the triggers that change them inside a scenario. */
 export type Policy = { stops: { lap: number; compound: NoiseCompound }[]; triggers: Trigger[] };
 
-/** One scenario: its id (the draws' stream key), whether it draws nothing (`plain`), and its neutralisations. */
-export type Scenario = { id: number; plain: boolean; neutralisations: { kind: 'sc' | 'vsc'; fromLap: number; toLap: number }[] };
+/**
+ * One scenario: its id (the draws' stream key), whether it draws nothing (`plain`), and its neutralisations.
+ * `wetnessByLap[i]`: the track's wetness (ms) on lap `start.lap + i` (the last entry beyond its end, the starting
+ * point's before `start.lap`); absent, every lap has the starting point's wetness (SP4.3b spec §7.1, Task 19b).
+ */
+export type Scenario = { id: number; plain: boolean; neutralisations: { kind: 'sc' | 'vsc'; fromLap: number; toLap: number }[]; wetnessByLap?: Float64Array };
 
 /** Per lap, every car's position, gap and lap time. */
 export type ForecastTrace = { lap: number; position: Int8Array; gapMs: Float64Array; lapTimeMs: Float64Array }[];

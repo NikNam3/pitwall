@@ -189,6 +189,9 @@ function setup(input: McInput, rng: Rng): { run: Run; cars: number[] } {
     fixed[c] = input.committed[c as CarId] ?? input.candidates[c as CarId]?.[0]?.policy ?? null;
   }
   const run = createRun(input.start, input.hazard, input.rivalRules, fixed, rng);
+  // a `rivalPits` trigger takes one traced forecast more per evaluation (the field's gaps)
+  const policies = [...Object.values(fixed), ...Object.values(input.candidates).flatMap((cs) => cs.map((c) => c.policy))];
+  if (policies.some((p) => p?.triggers.some((t) => t.kind === 'rivalPits') === true)) run.cost++;
   const cars = Object.keys(input.candidates)
     .map(Number)
     .filter((c) => (input.candidates[c as CarId]?.length ?? 0) > 0);

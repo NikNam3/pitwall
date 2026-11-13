@@ -198,6 +198,8 @@ export function buildStartingPoint(
     owesStop: new Uint8Array(cars),
     sets: {},
     wetness: wetnessOf(wetness, config.priorWetnessSdMs),
+    // filled once the cars are placed (`weatherOf`)
+    weather: unknown('notReceived'),
     track: trackOf(view, pitLoss, need, configOf(PIT_LOSS_CONFIG, view).inLapShare),
     // the one DRS rule: race-interaction's (F7)
     drs: { rangeMs: drsConfig.drsRangeMs, fromLap: drsConfig.drsFromLap },
@@ -306,7 +308,28 @@ export function buildStartingPoint(
   }
 
   sp.sets = setsOf(view, cars);
+  sp.weather = weatherOf(view, sp.lap, lapsTotal, sp.lapFraction[leader] ?? 0, lapMs[leader] ?? 0);
   return known(sp, at);
+}
+
+/**
+ * The forecast mapped onto race laps by the leader's lap time (SP4.3b spec §7.1, S12): lap L (from the leader's lap
+ * `lap` on) takes the sample in force at its middle, the newest whose offset is at or before it (the first sample
+ * before any). Only where the view holds the forecast now (`weatherNow`, the now path, R19); unknown otherwise (C3).
+ */
+function weatherOf(view: AsOfView, lap: number, lapsTotal: number, leaderFraction: number, leaderLapMs: number): StartingPoint['weather'] {
+  const weather = view.fixed.weatherNow;
+  if (weather === null || weather.forecast.length === 0) return unknown('notReceived');
+  if (!(leaderLapMs > 0)) return unknown('insufficientData');
+  const samples = [...weather.forecast].sort((a, b) => a.offsetMin - b.offsetMin);
+  const byLap: { lap: number; rainPct: number }[] = [];
+  for (let l = lap; l <= lapsTotal; l++) {
+    const inMin = ((l - lap + 0.5 - leaderFraction) * leaderLapMs) / 60_000;
+    let sample = samples[0];
+    for (const s of samples) if (s.offsetMin <= inMin) sample = s;
+    byLap.push({ lap: l, rainPct: sample?.rainPct ?? 0 });
+  }
+  return known({ byLap, accuracy: weather.forecastAccuracy }, view.at);
 }
 
 /** An offset of the lap model for a stint's visual compound (0 for one it does not tell apart). */
