@@ -19,10 +19,11 @@ export type Cadence = 'frame' | { hz: number } | 'lapCompleted' | 'pitStop' | 's
 
 /**
  * A change an `onChange` cadence runs on: a change tag (C40); `leaderLap`, a lap record with `positionAtEnd` 1 appended;
+ * `ourLap`, a lap record (any status) of one of our cars (the player's or the teammate's) appended (SP4.3b spec §8.1);
  * `sessionSettings`, the session's game settings differ from those at the unit's last run (the `session` tag alone
  * also marks every other Session packet value).
  */
-export type ChangeTrigger = ChangeTag | 'leaderLap' | 'sessionSettings';
+export type ChangeTrigger = ChangeTag | 'leaderLap' | 'ourLap' | 'sessionSettings';
 
 /**
  * What a calculator reads: a part of the engine state, the feed health, the run's driver profiles (`view.drivers`,

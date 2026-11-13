@@ -11,6 +11,12 @@ export const STRATEGY_CONFIG = defineConfig('strategy', {
   maxStops: 3,
   /** The rule candidates' gap: the cover rule's car within this of ours (ms). Source: `forecast-score`'s `closeGapMs`, research 12 §8. */
   ruleGapMs: 3000,
+  /**
+   * The DP's traffic term (spec §6): a rejoin within this of a car ahead (on the plain forecast's road at that lap's
+   * line) costs the shortfall. Source: spec §11.1 (`pit-sweep`'s `trafficGapMs`); a pitwall estimate, approximate
+   * (research 13 §10): the neighbours and the Monte Carlo choose (spec §6).
+   */
+  trafficGapMs: 1000,
   // race-monte-carlo (spec §7.3, §11.1)
   /** Scenarios of the first batch, for every candidate (common random numbers). Source: spec §7.3 (30–50). */
   n0: 40,
@@ -38,3 +44,6 @@ export const STRATEGY_CONFIG = defineConfig('strategy', {
   /** In the wet a rival switches tyre type this many laps after its type falls behind (`reactionLaps`). Source: spike 4.3b-defaults (research 19 §5): the AI switched within one lap of the crossover or before it at 3 crossovers (54 switches, Singapore and Mexico); thin */
   rivalReactionLaps: 0,
 });
+
+/** `strategy`'s config values as the job reads them. */
+export type StrategyConfig = typeof STRATEGY_CONFIG.defaults;
