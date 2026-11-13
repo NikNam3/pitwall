@@ -29,5 +29,10 @@ export const tieHover: string = notImplemented();
 export const openTieHover: string = notImplemented();
 /** Why a committed plan can no longer be followed as committed (hover). */
 export const infeasible: Record<NonNullable<McRow['infeasible']>, string> = notImplemented();
-/** One wording per trigger kind (P27); rows.ts `triggerTexts` joins an SC and a VSC trigger over one range. */
-export const trigger: { [K in Trigger['kind']]: (t: TriggerOf<K>) => string } = notImplemented();
+/**
+ * One wording per trigger kind (P27); rows.ts `triggerTexts` joins an SC and a VSC trigger over one range. `rivalPits`
+ * takes the rival's label as rows.ts resolves it from `cars.overview` (`#44`, or the kit's unknown mark).
+ */
+export const trigger: { [K in Exclude<Trigger['kind'], 'rivalPits'>]: (t: TriggerOf<K>) => string } & {
+  rivalPits: (t: TriggerOf<'rivalPits'>, car: string) => string;
+} = notImplemented();

@@ -4,9 +4,9 @@
 // E[pos] and E[points] computed from it as gen.mjs does; the rank, the tie group, ΔTIME and ΔPLAN are written as
 // `strategy` fills them (Task 6: tied rows share their leader's rank, then index + 1; `deltaLeaderMs` against rows[0],
 // `deltaPlanMs` against the committed row, null without one). The display computes none of it (C65).
-import type { Computed } from '@pitwall/contracts';
+import type { CarOverview, Computed } from '@pitwall/contracts';
 import { carId, known, toSessionTime, unknown } from '@pitwall/domain';
-import type { McRow, McSource, NoiseCompound, Policy, StrategyCar, Trigger } from '@pitwall/domain';
+import type { CarId, McRow, McSource, NoiseCompound, Policy, StrategyCar, Trigger } from '@pitwall/domain';
 import type { GalleryEntry } from '../../kit/gallery-types.ts';
 import type { widget } from './widget.ts';
 
@@ -53,6 +53,34 @@ export function triggersOf(from: number, to: number): Trigger[] {
   ];
 }
 
+/** A `cars.overview` entry with only the identity that matters here (the slot is not the race number). */
+export function overview(slot: number, name: string, raceNumber: number): CarOverview {
+  return {
+    id: carId(slot),
+    identity: {
+      name, teamId: 0, raceNumber, nationality: 0, driverId: slot, networkId: 255, myTeam: slot === 0,
+      platform: 0, telemetryPublic: true, visibility: 'public',
+    },
+    timing: {} as CarOverview['timing'],
+    tyres: { actualCompound: 'C3', visualCompound: 'medium', age: 13 },
+    updatedAt: {},
+  };
+}
+
+/** The rival a `cover` rule watches: slot 3, race number 44 (a slot-printing implementation shows `#3`). */
+export const RIVAL = carId(3);
+export const RIVAL_NUMBER = 44;
+/** A slot `cars.overview` does not list (no participant data yet): its race number unknown. */
+export const UNLISTED = carId(9);
+/** The field of `cars.overview`: race numbers unlike the slots. */
+export const FIELD: CarOverview[] = [
+  overview(0, 'Nikolas Kuhnlein', 7), overview(1, 'Mia Lindqvist', 21), overview(2, 'Charles Leclerc', 16),
+  overview(3, 'Lewis Hamilton', RIVAL_NUMBER), overview(4, 'Lando Norris', 4), overview(5, 'Max Verstappen', 1),
+];
+
+/** The cover trigger of the `rival` spec: box when the car (default #44, slot 3) pits within 1.0 s. */
+export const coverTrigger = (car: CarId = RIVAL): Trigger => ({ kind: 'rivalPits', carId: car, withinMs: 1_000, action: 'cover' });
+
 type Candidate = {
   source: Exclude<McSource, 'committed'>;
   rule?: NonNullable<McRow['rule']>;
@@ -98,6 +126,8 @@ export type TableSpec = {
   /** The committed row can no longer be followed as committed. */
   infeasible?: McRow['infeasible'];
   scenarios?: number;
+  /** The rule row is a `cover` rule on this car (RIVAL: #44 in slot 3): its policy gains the rival trigger last (`COVER #44 1.0 s`). */
+  rival?: CarId;
 };
 
 const stopsKey = (stops: [number, NoiseCompound][]): string => stops.map(([l, c]) => `L${l} ${c.charAt(0).toUpperCase()}`).join(' ');
@@ -110,8 +140,9 @@ const first = <T>(a: T[]): T => {
 
 /** A ranked strategy table as `strategy` publishes it for KUH. */
 export function table(spec: TableSpec = {}): PlanTable {
-  const { committed, openTie = false, allTied = false, n = 8, infeasible = null } = spec;
-  const drawn = (openTie ? CANDIDATES.map((c, i) => (i === 1 ? { ...c, mu: 7.43 } : i === 2 ? { ...c, mu: 7.56 } : c)) : CANDIDATES).map(draw);
+  const { committed, openTie = false, allTied = false, n = 8, infeasible = null, rival } = spec;
+  const candidates = rival !== undefined ? CANDIDATES.map((c): Candidate => (c.source === 'rule' ? { ...c, rule: 'cover' } : c)) : CANDIDATES;
+  const drawn = (openTie ? candidates.map((c, i) => (i === 1 ? { ...c, mu: 7.43 } : i === 2 ? { ...c, mu: 7.56 } : c)) : candidates).map(draw);
   const sorted = [...drawn].sort((a, b) => a.ePos - b.ePos);
   const lead = first(sorted).ePos;
   const inGroup = (r: Drawn, i: number): boolean => (allTied ? true : openTie ? i < 2 : r.ePos - lead < TIE);
@@ -125,7 +156,9 @@ export function table(spec: TableSpec = {}): PlanTable {
   const planMs = committedAt < 0 ? null : (ordered[committedAt]?.timeMs ?? null);
   const rows: McRow[] = ordered.map((r, i) => {
     const isCommitted = i === committedAt;
-    const policy: Policy = { stops: r.stops.map(([lap, compound]) => ({ lap, compound })), triggers: triggersOf(r.range[0], r.range[1]) };
+    const own = triggersOf(r.range[0], r.range[1]);
+    const triggers = rival !== undefined && r.rule === 'cover' ? [...own, coverTrigger(rival)] : own;
+    const policy: Policy = { stops: r.stops.map(([lap, compound]) => ({ lap, compound })), triggers };
     const tie = groupSize > 1 && i < groupSize;
     return {
       policy,
@@ -171,23 +204,27 @@ export const KUH = carId(0);
 export const NO_HIGHLIGHT = table(); // rows: L20 H, L19 H, L21 H (tied, rank 1), L18 H (rule), L22 H, …
 export const COMMITTED = table({ committed: 'L19 H' });
 export const OPEN_TIE = table({ openTie: true });
+/** The rule row a `cover` rule on #44 (slot 3): its info rows show `COVER #44 1.0 s`, TRG 4. */
+export const RIVAL_TABLE = table({ rival: RIVAL });
 
 /** The gallery's synthetic cases (data states only: a highlight is window-local, a component test, P17). */
 export const cases = {
   // The mockup's first figure (the screenshot baseline): no highlight, the three tied stop laps under one bracket.
-  noHighlight: { plan: plan() },
+  noHighlight: { plan: plan(), cars: FIELD },
   // L19 H committed: its line white, its list row `plan` with the bar; ΔPLAN in the info rows.
-  committed: { plan: plan({ committed: 'L19 H' }) },
+  committed: { plan: plan({ committed: 'L19 H' }), cars: FIELD },
   // A near-tie unresolved at the cap: the bracket and N amber.
-  openTie: { plan: plan({ openTie: true }) },
+  openTie: { plan: plan({ openTie: true }), cars: FIELD },
   // Outside the race phase (or our car in the pit lane): the kit's mark with its reason.
-  notApplicable: { plan: computed(unknown('notApplicable')) },
+  notApplicable: { plan: computed(unknown('notApplicable')), cars: FIELD },
   // The job before its first result: no value; the panel frame shows its computing state ("no data yet").
-  computing: {},
+  computing: { cars: FIELD },
   // Review Focus 6: one row; every row tied; the committed plan no longer feasible (its stop lap passed).
-  oneRow: { plan: plan({ n: 1 }) },
-  allTied: { plan: plan({ allTied: true }) },
-  infeasible: { plan: plan({ committed: 'L14 H', infeasible: 'stopLapPassed' }) },
+  oneRow: { plan: plan({ n: 1 }), cars: FIELD },
+  allTied: { plan: plan({ allTied: true }), cars: FIELD },
+  infeasible: { plan: plan({ committed: 'L14 H', infeasible: 'stopLapPassed' }), cars: FIELD },
+  // The rule row covers #44 (slot 3): its trigger names the race number, never the slot (shown with a highlight).
+  rival: { plan: plan({ rival: RIVAL }), cars: FIELD },
 } satisfies NonNullable<GalleryEntry<typeof widget>['cases']>;
 
 /** The gallery's fit sizes: the two minimums (compact 46×6, full 88×13) plus a larger one per mode. */

@@ -10,6 +10,8 @@ export const widget = declareWidget({
   data: {
     // The link group's primary car's ranked policies (our cars only; a job's result).
     plan: topic('strategy.car', ({ link }) => ({ carId: link.primary })),
+    // The field's identities: a cover or extend trigger names its rival by race number (`COVER #44 1.0 s`), not by slot.
+    cars: topic('cars.overview'),
   },
   // Mockup strategy-table-b.html: full 88×13 (chart 9 rows, the info header, two info rows, the footer), compact 46×6.
   sizes: { compact: { minCols: 46, minRows: 6 }, full: { minCols: 88, minRows: 13 } },

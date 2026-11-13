@@ -3,8 +3,8 @@
 //    `Line = { points: [x, y][]; role: Role; widthPx: number; dotted: boolean; dots: boolean }`:
 //    - no highlight: every line `textDim` at the theme's `chart.lineWidth`, no dots, not dotted; the committed row's line
 //      always `ownCar` at `chart.lineWidth` (Q10 B);
-//    - a highlighted row: `ownCar` at `chart.ownCarLineWidth` with its points (`dots`), dotted when another row is
-//      committed; the rest of its tie group (`tie`, when the highlighted row is tied) `textDim`; the others `textFaint`;
+//    - a highlighted row: `ownCar` at `chart.ownCarLineWidth` with its points (`dots`), dotted whenever a row is committed
+//      (another one, or the highlighted row itself: the committed line highlighted is white, thick, dotted); the rest of its tie group (`tie`, when the highlighted row is tied) `textDim`; the others `textFaint`;
 //      the committed line stays `ownCar` at `chart.lineWidth`;
 //    - points: one per place P1 … Pn of `positionPmf`, x increasing across the box, y inside it, one y scale shared by
 //      every line (a larger chance is higher, i.e. a smaller y);
@@ -53,6 +53,16 @@ describe('strategy-table chart', () => {
     expect(look(withPlan[k]!)).toEqual({ role: 'ownCar', widthPx: THIN, dotted: false, dots: false });
     withPlan.forEach((l, i) => {
       if (i !== h && i !== k) expect(l.role, `row ${i}`).toBe('textFaint');
+    });
+  });
+
+  it('the committed row highlighted itself: ownCar, thick, dotted, its points (the mockup caption)', () => {
+    const k = COMMITTED.rows.findIndex((r) => r.committed);
+    const lines = chartLines(COMMITTED.rows, { highlight: k }, BOX);
+    expect(look(lines[k]!)).toEqual({ role: 'ownCar', widthPx: THICK, dotted: true, dots: true });
+    lines.forEach((l, i) => {
+      if (i !== k) expect(look(l).widthPx, `row ${i}`).toBe(THIN);
+      if (i !== k) expect(l.role, `row ${i}`).not.toBe('ownCar');
     });
   });
 

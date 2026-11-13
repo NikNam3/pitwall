@@ -6,9 +6,11 @@ import { cases, fit } from './fixtures.ts';
 import { widget } from './widget.ts';
 
 describe('strategy-table declaration', () => {
-  it('reads strategy.car for the link\'s primary car, sends plan.commit and plan.clear, has the mockup sizes', () => {
+  it('reads strategy.car for the link\'s primary car and cars.overview for the rivals\' race numbers, sends plan.commit and plan.clear, has the mockup sizes', () => {
     expect([widget.name, widget.title]).toEqual(['strategy-table', 'Strategy']);
+    expect(Object.keys(widget.data).sort()).toEqual(['cars', 'plan']);
     expect(widget.data.plan.topic).toBe('strategy.car');
+    expect(widget.data.cars.topic).toBe('cars.overview');
     expect(widget.data.plan.params?.({ link: { group: 1, feedId: 'f' as never, primary: 3 as never, compare: [], window: { kind: 'live' } }, options: {} })).toEqual({ carId: 3 });
     expect([...widget.actions].sort()).toEqual(['plan.clear', 'plan.commit']);
     expect(widget.sizes).toEqual({ compact: { minCols: 46, minRows: 6 }, full: { minCols: 88, minRows: 13 } });
@@ -31,7 +33,11 @@ describe('strategy-table gallery', () => {
     expect(cases.notApplicable.plan.value).toEqual({ known: false, reason: 'notApplicable' });
     expect('plan' in cases.computing).toBe(false);
     // no case carries window-local state (a highlight)
-    for (const c of Object.values(cases)) expect(Object.keys(c).every((k) => k === 'plan')).toBe(true);
+    for (const c of Object.values(cases)) expect(Object.keys(c).every((k) => k === 'plan' || k === 'cars')).toBe(true);
+    // every case carries the field's identities, whose race numbers differ from the slots (a slot-printing display fails)
+    for (const c of Object.values(cases)) expect(c.cars.some((car) => car.id !== car.identity.raceNumber)).toBe(true);
+    const rival = cases.rival.plan.value;
+    expect(rival.known && rival.value.rows.some((r) => r.policy.triggers.some((t) => t.kind === 'rivalPits'))).toBe(true);
     // compact through the fit sizes
     expect(fit.some((f) => f.mode === 'compact')).toBe(true);
   });

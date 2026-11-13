@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // The strategy table as it renders (SP4.3b spec §10; mockup docs/design/2026-11-12-sp4.3b/strategy-table-b.html, full
 // 88×13, compact 46×6; Q7 A, Q9 B, Q10 B; C65, C68, C73, C74). Contract assumed of `StrategyTable.svelte` (props
-// `WidgetProps<typeof widget>`, data `plan`) and its `StrategyChart.svelte` (SVG, theme roles only):
+// `WidgetProps<typeof widget>`, data `plan` and `cars`) and its `StrategyChart.svelte` (SVG, theme roles only):
 //  - the chart `[data-testid="chart"]`; per row i its drawn line `[data-testid="line-<i>"]` carrying `chartLines`' look
 //    as attributes `data-role` (the role), `data-width` (px) and `data-dotted` (`true`/`false`), and its points, when
 //    drawn, as `circle` elements inside it; a click on it toggles the highlight; the faint vertical at our place now
@@ -9,8 +9,9 @@
 //  - full: the list beside the chart, one `[data-testid="row-<i>"]` per row (a click toggles the highlight), its tie
 //    bracket `[data-testid="bracket-<i>"]` (with `data-role`) on tied rows only; the info rows `[data-testid="info"]`:
 //    the header line (`#`, `SRC`, `STOPS`, `TRG`, `E[POS]`, `E[PTS]`, `ΔTIME`/`ΔPLAN`) always, the highlighted row's
-//    values, its button (`<button data-testid="commit">` or, on the committed row, `<button data-testid="clear">`) and
-//    its triggers only with a highlight; the footer `[data-testid="footer"]` `N <scenarios>  CAND <candidates>`;
+//    values (TRG in `[data-testid="trg"]`: the number of trigger lines shown), its button (`<button data-testid="commit">`
+//    or, on the committed row, `<button data-testid="clear">`) and its triggers (`rows.triggerTexts` with data `cars`, the
+//    `cars.overview` identities: a rival by race number) only with a highlight; the footer `[data-testid="footer"]` `N <scenarios>  CAND <candidates>`;
 //  - compact: the chart alone; with a highlight one info line `[data-testid="info"]` (rank, stops, E[pos], E[points]);
 //    no list, no footer, no buttons (Q7 A);
 //  - the highlight is component state (window-local, C73): it sends nothing; a second click on the same row clears it;
@@ -25,9 +26,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import ActionsHarness from '../../../test/kit/ActionsHarness.svelte';
 import type { ResolvedLink } from '../../kit/types.ts';
 import { unknownMark, unknownReason } from '../../kit/text.ts';
-import { formatCount, formatExpectedPlace, formatPoints } from '../../kit/values/format.ts';
+import { formatCount, formatExpectedPlace, formatPoints, formatRaceNumber } from '../../kit/values/format.ts';
 import { DEFAULT_THEME } from '../../theme/index.ts';
-import { cases, COMMITTED, NO_HIGHLIGHT, table, type PlanTable } from './fixtures.ts';
+import { cases, COMMITTED, FIELD, NO_HIGHLIGHT, RIVAL, RIVAL_NUMBER, table, type PlanTable } from './fixtures.ts';
 import StrategyTable from './StrategyTable.svelte';
 import * as text from './text.ts';
 import { widget } from './widget.ts';
@@ -61,7 +62,7 @@ function mount(data: Data, mode: keyof typeof SIZES = 'full') {
   return { container, sent };
 }
 
-const find = (c: HTMLElement, id: string): Element | null => c.querySelector(`[data-testid="${id}"]`);
+const find = (c: Element, id: string): Element | null => c.querySelector(`[data-testid="${id}"]`);
 function get(c: HTMLElement, id: string): Element {
   const el = find(c, id);
   if (el === null) throw new Error(`no ${id}`);
@@ -135,6 +136,42 @@ describe('strategy-table', () => {
     await fireEvent.click(get(c, `row-${h}`));
     expect(lineLook(get(c, `line-${h}`))).toMatchObject({ role: 'ownCar', width: THICK, dotted: true });
     expect(lineLook(get(c, `line-${k}`))).toEqual({ role: 'ownCar', width: THIN, dotted: false, dots: 0 });
+    // the committed row highlighted itself: white, thick, dotted, its points (the mockup caption); the others thin
+    await fireEvent.click(get(c, `row-${k}`));
+    expect(lineLook(get(c, `line-${k}`))).toEqual({ role: 'ownCar', width: THICK, dotted: true, dots: COMMITTED.rows[k]!.positionPmf.length });
+    expect(lineLook(get(c, `line-${h}`))).toMatchObject({ width: THIN, dotted: false, dots: 0 });
+  });
+
+  it('the info rows: TRG the number of trigger lines (SC/VSC joined is one); a cover trigger names the rival by race number', async () => {
+    // TRG: the sample's policies show 3 lines (SC/VSC, DMG, DEG) out of 4 triggers
+    {
+      const { container: c } = mount(cases.noHighlight);
+      await fireEvent.click(get(c, 'row-0'));
+      const info = get(c, 'info');
+      expect(find(info, 'trg')?.textContent?.trim()).toBe('3');
+      expect(textOf(info)).toContain('SC/VSC L12–24');
+      cleanup();
+    }
+    // the cover rule on slot 3, race number 44: `COVER #44 1.0 s`, never `#3`; TRG 4
+    {
+      const v = valueOf(cases.rival);
+      const r = v.rows.findIndex((x) => x.rule === 'cover');
+      const { container: c } = mount(cases.rival);
+      await fireEvent.click(get(c, `row-${r}`));
+      const info = get(c, 'info');
+      expect(textOf(info)).toContain(`COVER ${formatRaceNumber(RIVAL_NUMBER)} 1.0 s`);
+      expect(textOf(info)).not.toContain(`#${RIVAL}`);
+      expect(find(info, 'trg')?.textContent?.trim()).toBe('4');
+      cleanup();
+    }
+    // the rival missing from cars.overview: the kit's unknown mark in its place
+    {
+      const data = { plan: cases.rival.plan, cars: FIELD.filter((car) => car.id !== RIVAL) };
+      const r = valueOf(data).rows.findIndex((x) => x.rule === 'cover');
+      const { container: c } = mount(data);
+      await fireEvent.click(get(c, `row-${r}`));
+      expect(textOf(get(c, 'info'))).toContain(`COVER ${unknownMark.notReceived} 1.0 s`);
+    }
   });
 
   it('commit sends plan.commit { feedId: link.feedId, carId: link.primary, policy: row.policy }; clear sends plan.clear { feedId: link.feedId, carId: link.primary }', async () => {

@@ -1,5 +1,6 @@
 // STUB (test phase, SP4.3b2 Task 12): the shape the tests assume of the strategy table's rows; every function throws
 // `not implemented` until the implement phase writes it. The rows format and map the topic, they compute nothing (C65).
+import type { CarOverview } from '@pitwall/contracts';
 import type { Policy, StrategyCar, Trigger } from '@pitwall/domain';
 import type { Role } from '../../theme/index.ts';
 
@@ -29,9 +30,12 @@ export type InfoRow = {
   triggers: string[];
 };
 
+/** The field's identities (`cars.overview`): a `rivalPits` trigger names its rival by race number, never by slot. */
+export type Cars = readonly CarOverview[];
+
 export const stopsText = (_policy: Policy): string => notImplemented();
 export const listRows = (_plan: PlanTable): ListRow[] => notImplemented();
-export const infoRow = (_plan: PlanTable, _i: number): InfoRow => notImplemented();
+export const infoRow = (_plan: PlanTable, _i: number, _cars: Cars): InfoRow => notImplemented();
 export const deltaHeader = (_plan: PlanTable): string => notImplemented();
 export const footer = (_plan: PlanTable): { n: Cell; cand: string } => notImplemented();
-export const triggerTexts = (_triggers: readonly Trigger[]): string[] => notImplemented();
+export const triggerTexts = (_triggers: readonly Trigger[], _cars: Cars): string[] => notImplemented();
