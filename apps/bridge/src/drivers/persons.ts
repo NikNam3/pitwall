@@ -15,6 +15,10 @@ export const lockPath = (root: string): string => join(driversDir(root), '.lock'
 /** A person id: kebab-case, so it is a safe file name. */
 export const isPersonId = (id: string): boolean => /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id);
 
+/** The person id a display name gives (`drivers.add` without an id): kebab-case, `Anna Rossi` → `anna-rossi`; empty when nothing is left. */
+export const personIdOf = (displayName: string): string =>
+  displayName.normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+
 /** Every person file under `<root>/drivers/`, by id; one that is not a person of its file name is skipped with a warning. */
 export function loadPersons(root: string, log: Logger): DriverPerson[] {
   mkdirSync(driversDir(root), { recursive: true });

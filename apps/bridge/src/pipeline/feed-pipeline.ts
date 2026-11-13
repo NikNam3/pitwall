@@ -2,7 +2,7 @@
 // with the feed's health, its session files and its storage alongside.
 import { resolve } from 'node:path';
 import type { ConfigEffectiveValue } from '@pitwall/contracts';
-import { toSessionTime, type CalibrationActiveValue, type FeedId, type Known, type PriorsSnapshot, type ProfileSnapshot, type RunPriors, type SessionRef, type SessionTime, type TeamId, type TrackFile } from '@pitwall/domain';
+import { toSessionTime, type CalibrationActiveValue, type FeedId, type Known, type LiveSeat, type PriorsSnapshot, type ProfileSnapshot, type RunPriors, type SessionRef, type SessionTime, type TeamId, type TrackFile } from '@pitwall/domain';
 import type { CalibrationStore } from '../calibration/store.ts';
 import type { ProfileStore, SlotIdentity } from '../drivers/store.ts';
 import { profilesSidecarPath } from './profile-sidecar.ts';
@@ -80,9 +80,11 @@ export type FeedPipelineOptions = {
   /**
    * Live: the profile store's slice a run uses (C62c, SP4.3a spec 4). Each session asks it once, at its start, for the
    * profile snapshot of its slots; the snapshot is fixed for the run, goes to `<file>.profiles.json` and to the scheduler
-   * as `SchedulerInput.drivers`. Without it (and without `recordedProfiles`) a run's `drivers` is `null`.
+   * as `SchedulerInput.drivers`. Without it (and without `recordedProfiles`) a run's `drivers` is `null`. The pipeline
+   * also tells it the feed's human seats as they change (`feedSeats`, SP4.3b2 Task 10), and none once a session ends
+   * or the feed stops.
    */
-  profiles?: Pick<ProfileStore, 'snapshotFor'>;
+  profiles?: Pick<ProfileStore, 'snapshotFor' | 'feedSeats'>;
   /** A replay: the recording's profiles sidecar (`recordingProfiles`, C38); `null` for a recording without one. */
   recordedProfiles?: ProfileSnapshot | null;
   /** Where debug dumps go; without it none are written. */
@@ -336,6 +338,8 @@ export class FeedPipeline {
     this.#guarded('stream end', () => {
       for (const event of this.#tracker.end()) this.#handle(event, this.#lastReceivedAtMs);
     });
+    // A feed that stopped runs no seat (C62c).
+    this.#reportHumanSeats([]);
     await this.#jobs.close();
     await Promise.all(this.#closing);
     if (failure !== undefined) throw failure.error;
@@ -446,6 +450,7 @@ export class FeedPipeline {
       priors,
       onActive: (value: CalibrationActiveValue) => hub.publishState(feedId, 'calibration.active', () => value),
       profilesFor: (slots, session) => this.#profilesFor(slots, session, file?.path),
+      ...(this.#o.profiles && { onSeats: (seats: Omit<LiveSeat, 'feedId'>[]) => this.#reportHumanSeats(seats) }),
       feedView: () => this.#monitor.view(this.#tracker.metrics, this.#lastReceivedAtMs),
       ...(storage && { storage }),
       ...(file && { file }),
@@ -498,6 +503,13 @@ export class FeedPipeline {
     const snapshot = profiles.snapshotFor(slots, session);
     if (file !== undefined) this.#writeSidecar(profilesSidecarPath(file), snapshot);
     return snapshot;
+  }
+
+  /** The feed's human seats to the profile store (`drivers.links.unlinkedSeats`, C62c); a failure is logged, never thrown. */
+  #reportHumanSeats(seats: readonly Omit<LiveSeat, 'feedId'>[]): void {
+    const { profiles } = this.#o;
+    if (profiles === undefined) return;
+    this.#guarded('human seats', () => profiles.feedSeats(this.#feedId, seats));
   }
 
   /** Now as an ISO date: when a set was used (spec 3.1 `lastUsedAt`). */
@@ -562,6 +574,8 @@ export class FeedPipeline {
     if (session === undefined) return;
     this.#session = undefined;
     this.#ended = session;
+    // A session that ended runs no seat any more (C62c).
+    this.#reportHumanSeats([]);
     this.#jobs.sessionEnded();
     const closing = session.end(receivedAtMs, { interrupted: this.#stopped }).finally(() => this.#closing.delete(closing));
     this.#closing.add(closing);

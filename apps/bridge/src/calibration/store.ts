@@ -91,6 +91,15 @@ export class CalibrationStore {
     });
     if (!checked.ok) return { ok: false, reason: 'invalid', message: checked.message };
     const { edit } = checked;
+    if ('prefer' in edit) {
+      // `preferred` is outside every set's fingerprint: nothing to recompute (C62a).
+      for (const set of edit.prefer.writes) {
+        writeSet(this.#root, set);
+        this.#sets.set(set.id, set);
+      }
+      this.#publishSets();
+      return OK;
+    }
     if ('write' in edit) {
       writeSet(this.#root, edit.write);
       this.#sets.set(edit.write.id, edit.write);
@@ -104,11 +113,14 @@ export class CalibrationStore {
     return OK;
   }
 
-  /** The run's set at session start (spec 3.3): the newest `lastUsedAt`, else the newest source session, else none. */
+  /**
+   * The run's set at session start (spec 3.3; SP4.3b spec 10): the track's preferred set, else the newest `lastUsedAt`,
+   * else the newest source session, else none.
+   */
   preselect(trackId: number): PriorsSnapshot | null {
     const sets = this.#setsOf(trackId);
     const used = sets.filter((s) => s.lastUsedAt !== undefined).toSorted((a, b) => ((a.lastUsedAt ?? '') < (b.lastUsedAt ?? '') ? 1 : -1));
-    const chosen = used[0] ?? this.#newestBySources(trackId, sets);
+    const chosen = sets.find((s) => s.preferred) ?? used[0] ?? this.#newestBySources(trackId, sets);
     return chosen === undefined ? null : (this.snapshotOf(trackId, chosen.id) ?? null);
   }
 

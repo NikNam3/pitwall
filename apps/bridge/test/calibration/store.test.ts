@@ -4,7 +4,7 @@
 // declared priors functions over the sets' sources (the units judge, C43; the store only orders and stores) and
 // publishes `calibration.sets`, `.values` and `.candidates` itself (C54, C55). Every test owns a temporary data dir and
 // a fake read of the stored sessions (C84): no real storage, no priors store of the user.
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -990,5 +990,98 @@ describe('CalibrationStore: samples and the missing count (R37)', () => {
 
     // A set without a source: no sample, nothing missing.
     expect(valuesOf(t, empty)).toMatchObject({ samples: { 'fake.meanLapMs': 0 }, missing: 0 });
+  });
+});
+
+// --- SP4.3b2 Task 10: the preferred set of a track (C62a, C73, C75) ---------------------------------------------------
+
+describe('CalibrationStore: the preferred set (SP4.3b2 Task 10)', () => {
+  const preferredOf = (t: ReturnType<typeof setup>): Record<string, boolean> =>
+    Object.fromEntries(t.sets().map((s) => [s.id, s.preferred]));
+
+  // Row 1: at most one preferred set per track, written to the set files and published by `calibration.sets`.
+  it('prefer marks one set and clears the others of its track; null clears it', () => {
+    const s1 = trackSession('1', { startedAt: day(1), stints: [{ car: 0, firstLap: 1, lastLap: 5 }] });
+    const t = setup({ sessions: [s1] });
+    const dry = t.createSet(TRACK, 'Dry');
+    const wet = t.createSet(TRACK, 'Wet');
+    const elsewhere = t.createSet(OTHER_TRACK, 'Elsewhere');
+    t.ok({ kind: 'calibration.prefer', trackId: OTHER_TRACK, setId: elsewhere });
+    expect(preferredOf(t)).toEqual({ [dry]: false, [wet]: false, [elsewhere]: true });
+
+    t.ok({ kind: 'calibration.prefer', trackId: TRACK, setId: dry });
+    expect(preferredOf(t)).toEqual({ [dry]: true, [wet]: false, [elsewhere]: true });
+    expect(readSet(t.dir, TRACK, dry).preferred).toBe(true);
+
+    // Another set of the track: it is the one, the first is cleared; the other track's stays.
+    t.ok({ kind: 'calibration.prefer', trackId: TRACK, setId: wet });
+    expect(preferredOf(t)).toEqual({ [dry]: false, [wet]: true, [elsewhere]: true });
+    expect([readSet(t.dir, TRACK, dry).preferred, readSet(t.dir, TRACK, wet).preferred]).toEqual([false, true]);
+
+    // `null` clears the track's preferred set.
+    t.ok({ kind: 'calibration.prefer', trackId: TRACK, setId: null });
+    expect(preferredOf(t)).toEqual({ [dry]: false, [wet]: false, [elsewhere]: true });
+    expect([readSet(t.dir, TRACK, dry).preferred, readSet(t.dir, TRACK, wet).preferred]).toEqual([false, false]);
+    expect(readSet(t.dir, OTHER_TRACK, elsewhere).preferred).toBe(true);
+  });
+
+  // Row 2 (spec 10, U7): the session start's preselection is the track's preferred set first, then 4.1a's rule.
+  it('the preferred set is preselected at session start; without one 4.1a\'s rule holds', () => {
+    const a10 = trackSession('10a', { startedAt: day(1), stints: [{ car: 0, firstLap: 1, lastLap: 5 }] });
+    const b10 = trackSession('10b', { startedAt: day(9), stints: [{ car: 0, firstLap: 1, lastLap: 5 }] });
+    const t = setup({ sessions: [a10, b10] });
+    const used = t.createSet(TRACK, 'Used', [sourceOf(a10, 0, 1)]);
+    const newest = t.createSet(TRACK, 'Newest sources', [sourceOf(b10, 0, 1)]);
+    const preferred = t.createSet(TRACK, 'Preferred');
+    t.store.markUsed(TRACK, used, day(3));
+    // 4.1a's rule: the newest use.
+    expect(t.store.preselect(TRACK)?.setId).toBe(used);
+
+    // A preferred set wins over a used one and over newer sources, even with no source and no use of its own.
+    t.ok({ kind: 'calibration.prefer', trackId: TRACK, setId: preferred });
+    expect(t.store.preselect(TRACK)).toEqual(snapshotOf(t.store, TRACK, preferred));
+    t.store.markUsed(TRACK, newest, day(10));
+    expect(t.store.preselect(TRACK)?.setId).toBe(preferred);
+
+    // Cleared: 4.1a's rule again.
+    t.ok({ kind: 'calibration.prefer', trackId: TRACK, setId: null });
+    expect(t.store.preselect(TRACK)?.setId).toBe(newest);
+  });
+
+  // Row 3 (C73): an unknown track or set, or a set of another track, is rejected with a reason and nothing is stored.
+  it('prefer of an unknown set is rejected and stores nothing', () => {
+    const t = setup({ sessions: [] });
+    const dry = t.createSet(TRACK, 'Dry');
+    const elsewhere = t.createSet(OTHER_TRACK, 'Elsewhere');
+    t.ok({ kind: 'calibration.prefer', trackId: TRACK, setId: dry });
+    const files = calibrationFiles(t.dir);
+    const published = t.published.length;
+
+    const invalid: Array<[string, CalibrationAction]> = [
+      ['an unknown set', { kind: 'calibration.prefer', trackId: TRACK, setId: 'no-such-set' }],
+      ['a set of another track', { kind: 'calibration.prefer', trackId: TRACK, setId: elsewhere }],
+      ['an unknown track', { kind: 'calibration.prefer', trackId: 99, setId: dry }],
+      ['null on a track without a set', { kind: 'calibration.prefer', trackId: 99, setId: null }],
+    ];
+    for (const [what, action] of invalid) {
+      const result = t.apply(action);
+      expect(result, what).toMatchObject({ ok: false, reason: 'invalid' });
+      expect(result.ok === false && result.message.length > 0, what).toBe(true);
+    }
+    expect(calibrationFiles(t.dir)).toEqual(files);
+    expect(t.published.length).toBe(published);
+    expect(preferredOf(t)).toEqual({ [dry]: true, [elsewhere]: false });
+  });
+
+  // Row 3c: a set file written before `calibration.prefer` has no `preferred` field; it reads as not preferred.
+  it('a set file without preferred reads as false', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'calibration-'));
+    const old = { id: 'old', trackId: TRACK, name: 'Old', createdAt: day(1), sources: [], overrides: {} };
+    mkdirSync(join(dir, 'calibration', String(TRACK)), { recursive: true });
+    writeFileSync(setPath(dir, TRACK, 'old'), `${JSON.stringify(old, null, 2)}\n`);
+    const t = setup({ sessions: [], dir });
+    expect(t.sets()).toEqual([{ ...old, preferred: false }]);
+    // No set preferred: 4.1a's rule (no use, no source: none).
+    expect(t.store.preselect(TRACK)).toBeNull();
   });
 });

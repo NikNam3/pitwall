@@ -1,7 +1,7 @@
 // Which car slots a person's seat links name (C62c, SP4.3b spec 10): a link names a seat, a team and a race number
 // (from Participants), and with it every session's slot that carries both, whatever its name. Only the frames of the
 // slot's `human` car-driver spans count (C17): the spans are the machine's, read from the stored projection (C34).
-import { carDriverSpans, type CarId, type DriverLink, type DriverPerson, type DriversLinksValue, type FrameNumber, type SessionRef, type UnlinkedSlot } from '@pitwall/domain';
+import { carDriverSpans, currentLaps, type CarId, type DriverLink, type DriverPerson, type DriversLinksValue, type FrameNumber, type SessionRef, type UnlinkedSlot } from '@pitwall/domain';
 import type { DriverSessionRow } from '../storage/weekend-repository.ts';
 
 /** A car slot of a session as the links see it: the session, the car, its team, race number and name (`null`: hidden). */
@@ -28,6 +28,13 @@ export function storedSlots(row: DriverSessionRow): StoredSlot[] {
   }));
 }
 
+/** How many of the slot's car's current laps (C25) describe a frame of one of its `human` spans (C26). */
+export function humanLapCount(slot: StoredSlot): number {
+  if (slot.row.stale) return 0;
+  const inHuman = (frame: number): boolean => slot.humanSpans.some((h) => frame >= h.startFrame && (h.endFrame === undefined || frame < h.endFrame));
+  return currentLaps(slot.row.projection.laps).filter((l) => l.carId === slot.carId && inHuman(l.frame)).length;
+}
+
 /** Whether two links name the same seat. */
 export const sameSeat = (a: DriverLink, b: DriverLink): boolean => a.team === b.team && a.raceNumber === b.raceNumber;
 
@@ -43,7 +50,7 @@ export const personOf = (persons: readonly DriverPerson[], slot: Pick<SlotOf, 't
 export const seatLinks = (persons: readonly DriverPerson[]): NonNullable<DriversLinksValue['links']> =>
   persons.flatMap((p) => p.links.map((l) => ({ team: l.team, raceNumber: l.raceNumber, person: p.id })));
 
-const newestFirst = (a: StoredSlot, b: StoredSlot): number =>
+export const newestFirst = (a: StoredSlot, b: StoredSlot): number =>
   a.row.startedAt < b.row.startedAt ? 1 : a.row.startedAt > b.row.startedAt ? -1 : a.session.sessionUid < b.session.sessionUid ? 1 : a.session.sessionUid > b.session.sessionUid ? -1 : a.carId - b.carId;
 
 /** The slots of `slots` (every stored session's) with a `human` span whose seat no person links, newest session first. */

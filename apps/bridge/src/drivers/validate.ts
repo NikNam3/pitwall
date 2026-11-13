@@ -4,7 +4,7 @@ import type { DriverAction, UiAction } from '@pitwall/contracts';
 import type { DriverLink, DriverPerson, UnlinkedSlot } from '@pitwall/domain';
 import type { ProfileEntryDecl } from '@pitwall/engine/readers';
 import { sameSeat, type StoredSlot } from './links.ts';
-import { isPersonId, sameSession } from './persons.ts';
+import { isPersonId, personIdOf, sameSession } from './persons.ts';
 
 /** Whether a uiAction is a driver-profile one, the profile store's (C62c). */
 export const isDriverAction = (action: UiAction): action is DriverAction => action.kind.startsWith('drivers.');
@@ -46,20 +46,29 @@ function checkLink(action: Extract<DriverAction, { kind: 'drivers.link' }>, ctx:
 
 export function checkAction(action: DriverAction, ctx: CheckCtx): Checked {
   if (action.kind === 'drivers.add') {
-    // A derived id and a seat linked with the add are SP4.3b2 Task 10's.
-    if (action.person === undefined || action.seat !== undefined) throw new Error('not implemented');
-    if (!isPersonId(action.person)) return invalid(`a person id is kebab-case (a-z, 0-9, -): ${JSON.stringify(action.person)}`);
-    if (ctx.persons.has(action.person)) return invalid(`person ${action.person} exists already`);
     const displayName = action.displayName.trim();
     if (displayName === '') return invalid('a person needs a display name');
-    return write({ id: action.person, displayName, links: [], excluded: [], overrides: {} });
+    // Without a given id, the bridge derives it from the display name.
+    const id = action.person ?? personIdOf(displayName);
+    if (!isPersonId(id)) return invalid(`a person id is kebab-case (a-z, 0-9, -): ${JSON.stringify(id)}`);
+    if (ctx.persons.has(id)) return invalid(`person ${id} exists already`);
+    const added: DriverPerson = { id, displayName, links: [], excluded: [], overrides: {} };
+    if (action.seat === undefined) return write(added);
+    // With a seat: the person and its link are one change; a rejected link stores neither.
+    const persons = new Map(ctx.persons).set(id, added);
+    return checkLink({ kind: 'drivers.link', team: action.seat.team, raceNumber: action.seat.raceNumber, person: id }, { ...ctx, persons });
   }
   if (action.kind === 'drivers.link') return checkLink(action, ctx);
   const person = ctx.persons.get(action.person);
   if (person === undefined) return invalid(`no person ${action.person}`);
   switch (action.kind) {
-    case 'drivers.include':
-      throw new Error('not implemented');
+    case 'drivers.include': {
+      const excluded = person.excluded.some((e) => sameSession(e, action.session));
+      if (!excluded && !ctx.slots.some((s) => sameSession(s.session, action.session))) {
+        return invalid(`no stored session ${action.session.sessionUid}/${action.session.weekendId}/${action.session.feedCar}`);
+      }
+      return write({ ...person, excluded: person.excluded.filter((e) => !sameSession(e, action.session)) });
+    }
     case 'drivers.exclude': {
       if (!ctx.slots.some((s) => sameSession(s.session, action.session))) {
         return invalid(`no stored session ${action.session.sessionUid}/${action.session.weekendId}/${action.session.feedCar}`);
