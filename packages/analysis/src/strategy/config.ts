@@ -24,9 +24,11 @@ export const STRATEGY_CONFIG = defineConfig('strategy', {
   rescoreTop: 5,
   /**
    * The cap on scenario-policies of one run, both our cars, re-scoring included (a count, never a clock, C2). Source:
-   * research 14 §2 item 3 (about 4,600–5,500 fit 5 s single thread); set from the measured cost in Task 19.
+   * SP4.3b Task 19's measurement: 0.64 ms per scenario-policy (long-race builder, lap 1, single thread, best of 6 warm
+   * passes), so 6,000 take ~3.8 s plus two DP solves (~0.4 s) inside the 5 s cap (S26); above research 14's ~4,600
+   * that good selection needs.
    */
-  maxScenarioPolicies: 5000,
+  maxScenarioPolicies: 6000,
   /** The league points table, position 1 first, comma-separated. Source: F1 sporting regulations (25-18-15-12-10-8-6-4-2-1). */
   points: '25,18,15,12,10,8,6,4,2,1',
   /** Under an SC, a rival with a stop still ahead (its rival-stops window; not only one the compound rule demands) boxes with this chance. Source: spike 4.3b-defaults (research 19 §5): 28 of 32 AI cars with a stop still ahead boxed under 3 SCs (Zandvoort, Texas, Spa), SE 0.05; thin */
