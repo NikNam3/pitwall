@@ -15,15 +15,60 @@
                     "type": "leaf",
                     "data": {
                       "views": [
-                        "timing-tower"
+                        "strategy-table-1"
                       ],
-                      "activeView": "timing-tower",
-                      "id": "gtiming-tower"
+                      "activeView": "strategy-table-1",
+                      "id": "gstrategy-table-1"
                     },
-                    "size": 900
+                    "size": 480
+                  },
+                  {
+                    "type": "branch",
+                    "data": [
+                      {
+                        "type": "leaf",
+                        "data": {
+                          "views": [
+                            "pit-sweep-table-1"
+                          ],
+                          "activeView": "pit-sweep-table-1",
+                          "id": "gpit-sweep-table-1"
+                        },
+                        "size": 505
+                      },
+                      {
+                        "type": "branch",
+                        "data": [
+                          {
+                            "type": "leaf",
+                            "data": {
+                              "views": [
+                                "undercut-card-1"
+                              ],
+                              "activeView": "undercut-card-1",
+                              "id": "gundercut-card-1"
+                            },
+                            "size": 400
+                          },
+                          {
+                            "type": "leaf",
+                            "data": {
+                              "views": [
+                                "sc-card-1"
+                              ],
+                              "activeView": "sc-card-1",
+                              "id": "gsc-card-1"
+                            },
+                            "size": 120
+                          }
+                        ],
+                        "size": 455
+                      }
+                    ],
+                    "size": 520
                   }
                 ],
-                "size": 420
+                "size": 960
               },
               {
                 "type": "branch",
@@ -32,305 +77,152 @@
                     "type": "leaf",
                     "data": {
                       "views": [
-                        "crossing-order"
+                        "strategy-table-2"
                       ],
-                      "activeView": "crossing-order",
-                      "id": "gcrossing-order"
+                      "activeView": "strategy-table-2",
+                      "id": "gstrategy-table-2"
                     },
-                    "size": 320
+                    "size": 480
                   },
                   {
-                    "type": "leaf",
-                    "data": {
-                      "views": [
-                        "sc-card"
-                      ],
-                      "activeView": "sc-card",
-                      "id": "gsc-card"
-                    },
-                    "size": 150
-                  },
-                  {
-                    "type": "leaf",
-                    "data": {
-                      "views": [
-                        "pit-window-strip"
-                      ],
-                      "activeView": "pit-window-strip",
-                      "id": "gpit-window-strip"
-                    },
-                    "size": 170
-                  },
-                  {
-                    "type": "leaf",
-                    "data": {
-                      "views": [
-                        "gap-chart"
-                      ],
-                      "activeView": "gap-chart",
-                      "id": "ggap-chart"
-                    },
-                    "size": 260
+                    "type": "branch",
+                    "data": [
+                      {
+                        "type": "leaf",
+                        "data": {
+                          "views": [
+                            "pit-sweep-table-2"
+                          ],
+                          "activeView": "pit-sweep-table-2",
+                          "id": "gpit-sweep-table-2"
+                        },
+                        "size": 505
+                      },
+                      {
+                        "type": "branch",
+                        "data": [
+                          {
+                            "type": "leaf",
+                            "data": {
+                              "views": [
+                                "undercut-card-2"
+                              ],
+                              "activeView": "undercut-card-2",
+                              "id": "gundercut-card-2"
+                            },
+                            "size": 400
+                          },
+                          {
+                            "type": "leaf",
+                            "data": {
+                              "views": [
+                                "sc-card-2"
+                              ],
+                              "activeView": "sc-card-2",
+                              "id": "gsc-card-2"
+                            },
+                            "size": 120
+                          }
+                        ],
+                        "size": 455
+                      }
+                    ],
+                    "size": 520
                   }
                 ],
-                "size": 560
-              },
-              {
-                "type": "branch",
-                "data": [
-                  {
-                    "type": "leaf",
-                    "data": {
-                      "views": [
-                        "track-map"
-                      ],
-                      "activeView": "track-map",
-                      "id": "gtrack-map"
-                    },
-                    "size": 900
-                  }
-                ],
-                "size": 620
+                "size": 960
               }
             ],
-            "size": 900
+            "size": 1000
           },
-          "width": 1600,
-          "height": 900,
+          "width": 1920,
+          "height": 1000,
           "orientation": "HORIZONTAL"
         },
         "panels": {
-          "timing-tower": {
-            "id": "timing-tower",
+          "strategy-table-1": {
+            "id": "strategy-table-1",
             "contentComponent": "panel",
-            "title": "timing-tower"
+            "title": "strategy-table-1"
           },
-          "crossing-order": {
-            "id": "crossing-order",
+          "pit-sweep-table-1": {
+            "id": "pit-sweep-table-1",
             "contentComponent": "panel",
-            "title": "crossing-order"
+            "title": "pit-sweep-table-1"
           },
-          "sc-card": {
-            "id": "sc-card",
+          "undercut-card-1": {
+            "id": "undercut-card-1",
             "contentComponent": "panel",
-            "title": "sc-card"
+            "title": "undercut-card-1"
           },
-          "pit-window-strip": {
-            "id": "pit-window-strip",
+          "sc-card-1": {
+            "id": "sc-card-1",
             "contentComponent": "panel",
-            "title": "pit-window-strip"
+            "title": "sc-card-1"
           },
-          "track-map": {
-            "id": "track-map",
+          "strategy-table-2": {
+            "id": "strategy-table-2",
             "contentComponent": "panel",
-            "title": "track-map"
+            "title": "strategy-table-2"
           },
-          "gap-chart": {
-            "id": "gap-chart",
+          "pit-sweep-table-2": {
+            "id": "pit-sweep-table-2",
             "contentComponent": "panel",
-            "title": "gap-chart"
+            "title": "pit-sweep-table-2"
+          },
+          "undercut-card-2": {
+            "id": "undercut-card-2",
+            "contentComponent": "panel",
+            "title": "undercut-card-2"
+          },
+          "sc-card-2": {
+            "id": "sc-card-2",
+            "contentComponent": "panel",
+            "title": "sc-card-2"
           }
         },
-        "activeGroup": "gcrossing-order"
+        "activeGroup": "gstrategy-table-1"
       },
       "panels": {
-        "timing-tower": {
-          "widget": "timing-tower",
+        "strategy-table-1": {
+          "widget": "strategy-table",
           "options": {},
           "linkGroup": 1
         },
-        "crossing-order": {
-          "widget": "crossing-order",
+        "pit-sweep-table-1": {
+          "widget": "pit-sweep-table",
           "options": {},
           "linkGroup": 1
         },
-        "sc-card": {
+        "undercut-card-1": {
+          "widget": "undercut-card",
+          "options": {},
+          "linkGroup": 1
+        },
+        "sc-card-1": {
           "widget": "sc-card",
           "options": {},
           "linkGroup": 1
         },
-        "pit-window-strip": {
-          "widget": "pit-window-strip",
+        "strategy-table-2": {
+          "widget": "strategy-table",
           "options": {},
-          "linkGroup": 1
+          "linkGroup": 2
         },
-        "track-map": {
-          "widget": "track-map",
+        "pit-sweep-table-2": {
+          "widget": "pit-sweep-table",
           "options": {},
-          "linkGroup": 1
+          "linkGroup": 2
         },
-        "gap-chart": {
-          "widget": "gap-chart",
+        "undercut-card-2": {
+          "widget": "undercut-card",
           "options": {},
-          "linkGroup": 1
-        }
-      }
-    },
-    {
-      "id": "side",
-      "layout": {
-        "grid": {
-          "root": {
-            "type": "branch",
-            "data": [
-              {
-                "type": "leaf",
-                "data": {
-                  "views": [
-                    "forecast-strip"
-                  ],
-                  "activeView": "forecast-strip",
-                  "id": "gforecast-strip"
-                },
-                "size": 110
-              },
-              {
-                "type": "leaf",
-                "data": {
-                  "views": [
-                    "tyre-life-bar"
-                  ],
-                  "activeView": "tyre-life-bar",
-                  "id": "gtyre-life-bar"
-                },
-                "size": 130
-              },
-              {
-                "type": "leaf",
-                "data": {
-                  "views": [
-                    "corner-block"
-                  ],
-                  "activeView": "corner-block",
-                  "id": "gcorner-block"
-                },
-                "size": 150
-              },
-              {
-                "type": "leaf",
-                "data": {
-                  "views": [
-                    "fuel-gauge"
-                  ],
-                  "activeView": "fuel-gauge",
-                  "id": "gfuel-gauge"
-                },
-                "size": 110
-              },
-              {
-                "type": "leaf",
-                "data": {
-                  "views": [
-                    "ers-budget"
-                  ],
-                  "activeView": "ers-budget",
-                  "id": "gers-budget"
-                },
-                "size": 110
-              },
-              {
-                "type": "leaf",
-                "data": {
-                  "views": [
-                    "alarm-list"
-                  ],
-                  "activeView": "alarm-list",
-                  "id": "galarm-list"
-                },
-                "size": 170
-              },
-              {
-                "type": "leaf",
-                "data": {
-                  "views": [
-                    "damage-card"
-                  ],
-                  "activeView": "damage-card",
-                  "id": "gdamage-card"
-                },
-                "size": 120
-              }
-            ],
-            "size": 600
-          },
-          "width": 600,
-          "height": 900,
-          "orientation": "VERTICAL"
+          "linkGroup": 2
         },
-        "panels": {
-          "forecast-strip": {
-            "id": "forecast-strip",
-            "contentComponent": "panel",
-            "title": "forecast-strip"
-          },
-          "tyre-life-bar": {
-            "id": "tyre-life-bar",
-            "contentComponent": "panel",
-            "title": "tyre-life-bar"
-          },
-          "corner-block": {
-            "id": "corner-block",
-            "contentComponent": "panel",
-            "title": "corner-block"
-          },
-          "fuel-gauge": {
-            "id": "fuel-gauge",
-            "contentComponent": "panel",
-            "title": "fuel-gauge"
-          },
-          "ers-budget": {
-            "id": "ers-budget",
-            "contentComponent": "panel",
-            "title": "ers-budget"
-          },
-          "alarm-list": {
-            "id": "alarm-list",
-            "contentComponent": "panel",
-            "title": "alarm-list"
-          },
-          "damage-card": {
-            "id": "damage-card",
-            "contentComponent": "panel",
-            "title": "damage-card"
-          }
-        },
-        "activeGroup": "gtyre-life-bar"
-      },
-      "panels": {
-        "forecast-strip": {
-          "widget": "forecast-strip",
+        "sc-card-2": {
+          "widget": "sc-card",
           "options": {},
-          "linkGroup": 1
-        },
-        "tyre-life-bar": {
-          "widget": "tyre-life-bar",
-          "options": {},
-          "linkGroup": 1
-        },
-        "corner-block": {
-          "widget": "corner-block",
-          "options": {},
-          "linkGroup": 1
-        },
-        "fuel-gauge": {
-          "widget": "fuel-gauge",
-          "options": {},
-          "linkGroup": 1
-        },
-        "ers-budget": {
-          "widget": "ers-budget",
-          "options": {},
-          "linkGroup": 1
-        },
-        "alarm-list": {
-          "widget": "alarm-list",
-          "options": {},
-          "linkGroup": 1
-        },
-        "damage-card": {
-          "widget": "damage-card",
-          "options": {},
-          "linkGroup": 1
+          "linkGroup": 2
         }
       }
     }
