@@ -39,8 +39,15 @@ export function rejoinOf(car: CarId, at: number): Rejoin {
   return { carId: car, position: 3, conditions: { green: row('green', green), sc: row('sc', green - 2), vsc: row('vsc', green - 1) } };
 }
 
+/**
+ * `undercut`'s cap on scenario-policies in the behaviour tests: small, so a run takes well under a second; large enough
+ * for the agreement row's two-MC-error check (24 of 24 seed × car checks within tolerance at 800, worst 0.79 of it,
+ * 2026-11-13). The budget test runs the config's production cap, which it pins.
+ */
+export const UNDERCUT_TEST_CAP = 800;
+
 export type UndercutViewSpec = ViewSpec & {
-  /** `undercut`'s config section. */
+  /** `undercut`'s config section, over `{ maxScenarioPolicies: UNDERCUT_TEST_CAP }`. */
   undercut?: Record<string, string | number | boolean>;
   /** `rejoin`'s output; default `rejoinOf` for each of our cars; `null`: absent. */
   rejoin?: RejoinOutput | null;
@@ -74,7 +81,7 @@ export function undercutView(lap: number = LAP, spec: UndercutViewSpec = {}): En
   return {
     ...view,
     situation: { ...view.situation, byMachine } as EngineView['situation'],
-    config: { ...view.config, ...(spec.undercut === undefined ? {} : { undercut: spec.undercut }) },
+    config: { ...view.config, undercut: { maxScenarioPolicies: UNDERCUT_TEST_CAP, ...spec.undercut } },
     outputs,
   };
 }

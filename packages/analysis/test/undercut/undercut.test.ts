@@ -26,6 +26,7 @@ import {
   PLAYER,
   signedGap,
   TEAMMATE,
+  UNDERCUT_TEST_CAP,
   undercutView,
   type UndercutViewSpec,
 } from './support.ts';
@@ -159,7 +160,7 @@ describe('undercut: the job', () => {
       }
       // one call per car with every case; the cap split over them; strategy's hazard, aligned with the starting point
       expect(call.candidates).toHaveLength(cases);
-      expect(call.scenarios).toBe(Math.floor(UNDERCUT_CONFIG.defaults.maxScenarioPolicies / cases));
+      expect(call.scenarios).toBe(Math.floor(UNDERCUT_TEST_CAP / cases));
       expect(call.hazard).toEqual(toMcHazard(input.strategy.hazard, start));
       expect(call.rivalRules).toEqual(mcSettingsFrom(input.strategy.config).rivalRules);
     }
