@@ -98,6 +98,8 @@ export async function serve(opts: ServeOptions): Promise<number> {
     ? [{ feedId: opts.replay.feedId, ...opts.feed }]
     : live.map(({ source, feed }) => ({ feedId: source.feedId, ...feed }));
   const feedIds = labels.map((label) => label.feedId);
+  // Live, with one source or several (`pitwall live` always passes `sources`); a replay is the one other run.
+  const isLive = opts.replay === undefined;
   const undo: Array<() => void | Promise<void>> = [];
   try {
     const { storage } = opts;
@@ -263,15 +265,15 @@ export async function serve(opts: ServeOptions): Promise<number> {
       }),
       // Live: the session starts on the calibration store's preselection and takes picks (C62a). A replay runs on its
       // recording's priors and decisions sidecars instead (C38, C76).
-      ...(calibration && opts.source && { calibration }),
+      ...(calibration && isLive && { calibration }),
       ...(opts.replay && { recorded: recordingDecisions(opts.replay.path, pipelineLog) }),
       // Live: each session starts on the profile store's snapshot of its slots; a replay on its profiles sidecar (C38, C62c).
-      ...(profiles && opts.source && { profiles }),
+      ...(profiles && isLive && { profiles }),
       ...(opts.replay && { recordedProfiles: recordingProfiles(opts.replay.path, pipelineLog) }),
       ...(opts.staleCheck && { staleCheck: opts.staleCheck }),
       ...(calcStats && { calcStats }),
       // Live only: a replay reproduces the realism its sidecar recorded (spec 7.9), whatever the UI prefers next.
-      ...(uiState && opts.source && { realismNextSession: () => uiState.realismNextSession() }),
+      ...(uiState && isLive && { realismNextSession: () => uiState.realismNextSession() }),
       ...(testInsight !== undefined && { testInsight }),
       // A replay (and dev) runs with the track file its recording was made with (C62b); live loads the committed file.
       ...(opts.replay && { tracks: (trackId: number) => recordingTrack(opts.replay.path, trackId, TRACKS_DIR, pipelineLog) }),

@@ -46,9 +46,9 @@ async function records(): Promise<Array<{ bytes: Uint8Array; receivedAtMs: numbe
 /**
  * A live `serve` on a temporary data dir with `dry` on disk, a WebSocket client subscribed to the feed's
  * `calibration.active`, and the calibration store `serve` opened. `push(from, to)` hands the source records `[from, to)`;
- * `stop()` ends the session and `serve`.
+ * `stop()` ends the session and `serve`. `form`: one `source`, or the `sources` list `pitwall live` passes.
  */
-async function liveServe() {
+async function liveServe(form: 'source' | 'sources' = 'source') {
   const dataDir = mkdtempSync(join(tmpdir(), 'serve-calibration-edit-'));
   const uiDir = join(dataDir, 'ui');
   const recordingsDir = join(dataDir, 'recordings');
@@ -59,9 +59,9 @@ async function liveServe() {
   const source = new ManualSource(F);
   const out: string[] = [];
   const abort = new AbortController();
+  const feed = { kind: 'udp', label: 'live' } as const;
   const done = serve({
-    source,
-    feed: { kind: 'udp', label: 'live' },
+    ...(form === 'source' ? { source, feed } : { sources: [{ source, feed }] }),
     wsPort: 0,
     dumpsDir: join(dataDir, 'dumps'),
     uiDir,
@@ -161,5 +161,19 @@ describe('serve: a calibration edit reaches the running session (C62a, C76)', { 
     const files = readdirSync(live.recordingsDir).filter((name) => name.endsWith('.pwrec.gz'));
     expect(files).toHaveLength(1);
     expect(readdirSync(live.recordingsDir)).not.toContain(`${files[0]!}.decisions.json`);
+  });
+
+  // `pitwall live` passes its feeds as `sources`, also for one port: such a run is live too, and starts on the
+  // track's preselection and takes calibration edits as a single `source` does (C62a, C76)
+  it('a live run given as a sources list starts on the preselection and takes an edit of its set', async () => {
+    const live = await liveServe('sources');
+    live.push(0, EDIT_AT);
+    const start = live.store.snapshotOf(ZANDVOORT, 'dry')?.fingerprint;
+    expect(start).toBeDefined();
+    await live.activeMatches({ known: true, value: { setId: 'dry', snapshot: start, picked: false } });
+    expect(await live.send('edit', { kind: 'calibration.override.set', ...at, key: 'pitLoss.ms.green', value: 24_000 })).toMatchObject({ ok: true });
+    const edited = live.store.snapshotOf(ZANDVOORT, 'dry')?.fingerprint;
+    live.push(EDIT_AT, live.total);
+    await live.activeMatches({ known: true, value: { setId: 'dry', snapshot: edited, picked: true } });
   });
 });
