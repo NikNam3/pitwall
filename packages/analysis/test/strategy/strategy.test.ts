@@ -141,7 +141,9 @@ describe('strategy: the job', () => {
       expect(round2.length, `round 2 of car ${car}`).toBeGreaterThan(0);
       const last = round2.at(-1)!;
       expect(fixedIn(last.input, other)).toEqual(otherBest);
-      expect(calls.list.indexOf(last)).toBeGreaterThan(calls.list.indexOf(round1[0]!));
+      // ported in Task 25 (one part per car): round 2 follows the other car's round 1 it plans against (the car's own
+      // round 1 runs in the other car's part, which may come later)
+      expect(calls.list.indexOf(last)).toBeGreaterThan(calls.list.indexOf(otherRound1!));
       // the car's rows are round 2's ranking
       expect(rowsOf(out, car).rows.map((r) => json(r.policy))).toEqual(last.result[car]!.rows.map((r) => json(r.policy)));
     }

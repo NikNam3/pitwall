@@ -34,6 +34,7 @@ import { generateRace, GENERATOR_DEFAULTS, type GeneratorParams } from '../../..
 import { zandvoortTrack } from '../../../../test-support/track.ts';
 import { raceHazardCalculator } from '../../src/race-hazard/index.ts';
 import type { McInput } from '../../src/race-monte-carlo/index.ts';
+import { STRATEGY_JOB } from '../../src/strategy/index.ts';
 
 export const PLAYER: CarId = carId(2);
 export const TEAMMATE: CarId = carId(5);
@@ -207,3 +208,10 @@ export const stopIn = (view: EngineView, car: CarId, inLaps: number, compound: P
 });
 
 export const json = (x: unknown): string => JSON.stringify(x);
+
+/** `STRATEGY_JOB.parts` (Task 25); fails the test that asks when the job declares none. */
+export function jobParts(): NonNullable<typeof STRATEGY_JOB.parts> {
+  const parts = STRATEGY_JOB.parts;
+  if (parts === undefined) throw new Error('STRATEGY_JOB declares no parts (Task 25: one part per our car)');
+  return parts;
+}

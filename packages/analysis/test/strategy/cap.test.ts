@@ -5,10 +5,11 @@
 // How these tests read the job (the test agent's decisions, Task 20d report):
 // - A call is round 1 when it plans one car with our other planned car modelled like a rival (not in `start.sets`);
 //   every other call is a final ranking. The cap a call gets is the third argument of `raceMonteCarlo`.
-// - Round 1 (no commit on either car) gets `round1Share` (strategy config, default 0.2) of the cap, split evenly over
-//   the cars planned; the final calls share the rest evenly; integer caps, so each share is rounded down (a call's cap
-//   is at most one below its exact share). With `round1Share` 0 there is no round 1: each car's one call plans it
-//   against the other modelled like a rival.
+// - Ported in Task 25 (one part per car, SP4.3b Q4 D; `parts.test.ts`): each car's part has the whole cap. With the
+//   teammate uncommitted, round 1 plans the teammate at `floor(cap × round1Share)` (strategy config, default 0.2) and
+//   the car's final call gets the rest; with the teammate committed, or the car planned alone, one call at the whole
+//   cap. The run without `planCar` runs the parts one after another in our cars' order. With `round1Share` 0 there is
+//   no round 1: each car's one call plans it against the other modelled like a rival.
 // - `candidatesForRun(input, rng)` (`strategy/job.ts`) gives `mc`, the `race-monte-carlo` input with both planned cars'
 //   candidates, the committed policies, the hazard, the rival rules and the config's search settings at the whole cap;
 //   `scripts/gen-strategy-reference.ts` builds its input through it, restating none of the candidate step.
@@ -23,7 +24,7 @@ import type * as mc from '../../src/race-monte-carlo/index.ts';
 import type { McInput, McResult } from '../../src/race-monte-carlo/index.ts';
 import { prepareStrategy, runStrategy, STRATEGY_CONFIG } from '../../src/strategy/index.ts';
 import { candidatesForRun } from '../../src/strategy/job.ts';
-import { json, oursIn, plannedIn, PLAYER, RACE, stopIn, TEAMMATE, TEST_CAP, viewAt, type ViewSpec } from './support.ts';
+import { fixedIn, json, oursIn, plannedIn, PLAYER, RACE, stopIn, TEAMMATE, TEST_CAP, viewAt, type ViewSpec } from './support.ts';
 
 const calls = vi.hoisted(() => ({ list: [] as { input: McInput; cap: number; result: McResult }[] }));
 
@@ -60,19 +61,10 @@ function callOf(c: (typeof calls.list)[number]): { car: CarId; round1: boolean }
   return { car, round1: !oursIn(c.input, other) };
 }
 
-const sum = (xs: readonly number[]): number => xs.reduce((a, b) => a + b, 0);
-
-/** Caps of `n` calls sharing `total` evenly: each at most its exact share and at most one below it. */
-function expectShared(caps: readonly number[], total: number, what: string): void {
-  for (const cap of caps) {
-    expect(Number.isInteger(cap), `${what}: an integer cap`).toBe(true);
-    expect(cap, what).toBeLessThanOrEqual(total / caps.length);
-    expect(cap, what).toBeGreaterThan(total / caps.length - 1);
-  }
-}
-
 describe('strategy: the cap over the rounds (Task 20d)', () => {
-  it('with no commit, round 1 uses round1Share of the cap and the final rankings the rest; the run\'s total never exceeds maxScenarioPolicies', () => {
+  // ported in Task 25 (one part per car, SP4.3b Q4 D): the run without `planCar` plans each car as its part does, one
+  // after another in our cars' order; each part has the whole cap (round 1 for the teammate, then the car's final call)
+  it('with no commit, each car\'s part runs round 1 for the teammate at round1Share of the cap and the car\'s final ranking at the rest; a part\'s total never exceeds maxScenarioPolicies', () => {
     for (const [cap, share] of [
       [TEST_CAP, undefined],
       [401, 0.33],
@@ -82,48 +74,49 @@ describe('strategy: the cap over the rounds (Task 20d)', () => {
       planned({ config });
       const s = share ?? 0.2;
       const read = calls.list.map((c) => ({ ...callOf(c), cap: c.cap }));
-      const round1 = read.filter((c) => c.round1);
-      const final = read.filter((c) => !c.round1);
       const at = `cap ${cap}, share ${s}`;
-      expect(round1.map((c) => c.car).sort(), `${at}: round 1 once per car`).toEqual([PLAYER, TEAMMATE].sort());
-      expect(final.map((c) => c.car).sort(), `${at}: one final ranking per car`).toEqual([PLAYER, TEAMMATE].sort());
-      // round 1 before the final rankings
-      expect(read.findIndex((c) => !c.round1), at).toBe(2);
-      // round 1: its share of the cap, split over the two cars
-      expectShared(round1.map((c) => c.cap), Math.floor(cap * s), `${at}, round 1`);
-      // the final rankings: the rest
-      const rest = cap - sum(round1.map((c) => c.cap));
-      expectShared(final.map((c) => c.cap), rest, `${at}, final`);
-      expect(sum(read.map((c) => c.cap)), `${at}: the run's total`).toBeLessThanOrEqual(cap);
+      const r1 = Math.floor(cap * s);
+      // the player's part (round 1 of the teammate, the player's final), then the teammate's part
+      expect(read, at).toEqual([
+        { car: TEAMMATE, round1: true, cap: r1 },
+        { car: PLAYER, round1: false, cap: cap - r1 },
+        { car: PLAYER, round1: true, cap: r1 },
+        { car: TEAMMATE, round1: false, cap: cap - r1 },
+      ]);
+      for (const k of [0, 2]) expect(read[k]!.cap + read[k + 1]!.cap, `${at}: a part's total`).toBeLessThanOrEqual(cap);
     }
     expect((STRATEGY_CONFIG.defaults as Record<string, unknown>).round1Share, 'the default share').toBe(0.2);
   });
 
-  it('with one car committed or one car planned, the final call gets the whole cap', () => {
+  // ported in Task 25: a car whose teammate committed gets the whole cap; the committed car's part plans round 1 for
+  // the teammate against the commit
+  it('with the teammate committed or one car planned, the car\'s final call gets the whole cap', () => {
     // one car planned (no teammate): one call, the whole cap
     planned({ teammate: null });
     expect(calls.list.map((c) => plannedIn(c.input)), 'one car planned').toEqual([[PLAYER]]);
     expect(calls.list[0]!.cap, 'one car planned').toBe(TEST_CAP);
 
-    // a commit on one car: no round 1; the final calls (one per car) share the whole cap
+    // a commit on the teammate: the player's part one call at the whole cap against it; the teammate's part round 1
+    // for the player (against the commit) at its share, then the teammate's final at the rest
     calls.list = [];
     const p = stopIn(viewAt(RACE(), LAP), TEAMMATE, 5, 'hard');
     planned({ decisions: [{ kind: 'planCommitted', carId: TEAMMATE, policy: p }] });
-    const read = calls.list.map((c) => ({ ...callOf(c), cap: c.cap }));
-    expect(read.filter((c) => c.round1), 'a commit: no round 1').toEqual([]);
-    expect(read.map((c) => c.car).sort(), 'a commit: one final ranking per car').toEqual([PLAYER, TEAMMATE].sort());
-    expectShared(read.map((c) => c.cap), TEST_CAP, 'a commit, final');
-    expect(sum(read.map((c) => c.cap))).toBeLessThanOrEqual(TEST_CAP);
+    expect(calls.list.map((c) => plannedIn(c.input)), 'a commit').toEqual([[PLAYER], [PLAYER], [TEAMMATE]]);
+    const r1 = Math.floor(TEST_CAP * 0.2);
+    expect(calls.list.map((c) => c.cap), 'a commit').toEqual([TEST_CAP, r1, TEST_CAP - r1]);
+    for (const c of calls.list.slice(0, 2)) expect(fixedIn(c.input, TEAMMATE), 'against the commit').toEqual(p);
+    expect(fixedIn(calls.list[2]!.input, PLAYER), "the teammate against the player's round-1 best").toEqual(calls.list[1]!.result[PLAYER]!.rows[0]!.policy);
   });
 
+  // ported in Task 25: each call is its part's only one, with the whole cap
   it('round1Share 0 skips round 1 and plans each car against the other modelled like a rival', () => {
     const out = planned({ config: { maxScenarioPolicies: TEST_CAP, round1Share: 0 } });
     const read = calls.list.map((c) => ({ ...callOf(c), cap: c.cap, result: c.result }));
     // one call per car, the other modelled like a rival
     expect(read.map((c) => c.car).sort()).toEqual([PLAYER, TEAMMATE].sort());
     for (const c of read) expect(c.round1, `car ${c.car}: the other modelled like a rival`).toBe(true);
-    // those calls are the final rankings: the whole cap between them
-    expectShared(read.map((c) => c.cap), TEST_CAP, 'round1Share 0');
+    // those calls are the final rankings, each its part's whole cap
+    for (const c of read) expect(c.cap, `car ${c.car}: the whole cap`).toBe(TEST_CAP);
     for (const c of read) {
       const r = out[c.car];
       expect(r?.known, `car ${c.car}: ${json(r)}`).toBe(true);

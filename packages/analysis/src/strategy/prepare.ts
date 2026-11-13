@@ -19,6 +19,8 @@ export type StrategyInput = {
   planned: CarId[];
   committed: Record<CarId, Policy | null>;
   config: EngineView['config'];
+  /** The one car of ours a part plans (SP4.3b Q4 D, Task 25); absent: every car planned, one after another. */
+  planCar?: CarId;
 };
 
 /** The starting point now, `notApplicable` without a track file's braking zones (the forecast's lap points). */
