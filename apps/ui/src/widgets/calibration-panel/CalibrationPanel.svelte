@@ -180,17 +180,19 @@
 {/snippet}
 
 {#snippet field(spec: ValueSpec)}
-  <input
-    type="text"
-    inputmode="decimal"
-    spellcheck="false"
-    class="pw-input fld"
-    data-testid="override-{spec.key}"
-    aria-label={spec.key}
-    style:width="{spec.width}ch"
-    value={overrideText(spec, overrides)}
-    onchange={(e) => commitOverride(spec, e.currentTarget)}
-  />
+  <span class="ovr" style:width="{spec.width}ch"
+    ><input
+      type="text"
+      inputmode="decimal"
+      spellcheck="false"
+      class="pw-input fld"
+      data-testid="override-{spec.key}"
+      aria-label={spec.key}
+      style:width="{spec.width - 1}ch"
+      value={overrideText(spec, overrides)}
+      onchange={(e) => commitOverride(spec, e.currentTarget)}
+    /></span
+  >
 {/snippet}
 
 {#snippet sourceLine(fit: SourceFit, i: number, kind: 'source' | 'candidate')}
@@ -407,6 +409,23 @@
   select.fld,
   .fld.name {
     text-align: left;
+  }
+  /* An override field: the frame on a wrapper of the field's cells (mockup `  0.045` in 7 cells); the frameless input
+     inside it is half a cell narrower on each side, so a value never reaches the frame (a 4-cell wear field keeps 3). */
+  .ovr {
+    display: inline-flex;
+    justify-content: center;
+    vertical-align: top;
+    box-sizing: border-box;
+    height: calc(var(--pw-line) * 1em);
+    border: var(--pw-border-px) solid var(--pw-border);
+  }
+  .ovr .fld {
+    border: none;
+    height: 100%;
+  }
+  .ovr:focus-within {
+    outline: var(--pw-border-px) solid var(--pw-focus);
   }
   /* A picker: its text one cell from its frame and the mockup's small arrow at its right edge (` league ▾`), in place of
      the browser's own icon. */
