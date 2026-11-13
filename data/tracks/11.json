@@ -2146,6 +2146,14 @@
         "at": 0
       }
     },
+    "pitLossInLapShare": {
+      "known": true,
+      "value": {
+        "value": 0.169,
+        "source": "OpenF1, 2025 Italian Grand Prix R, median of 19 green stops ((in-lap - reference) / (in-lap + out-lap - 2 x reference), reference the median of the 3 racing laps before, each stop's share clamped to [0, 1]; the green pit loss's stops)"
+      },
+      "at": 0
+    },
     "compoundOffsetsMs": {
       "known": true,
       "value": {
@@ -2222,6 +2230,6 @@
     "generator": "pitwall-trackdata 0.1.0",
     "sources": "OpenF1 + MultiViewer; drsZones: OpenF1 qualifying car_data drs channel, median of the top five laps, detection point assumed 200 m before the zone start (not in telemetry or the FIA event notes)",
     "season": 2025,
-    "generatedOn": "2026-11-12"
+    "generatedOn": "2026-11-13"
   }
 }
