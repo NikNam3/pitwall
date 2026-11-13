@@ -3,8 +3,7 @@
 import type { CarOverview } from '@pitwall/contracts';
 import type { McRow, Policy, StrategyCar, Trigger } from '@pitwall/domain';
 import { COMPOUND_MARK } from '../../kit/compound/compound-mark.ts';
-import { unknownMark } from '../../kit/text.ts';
-import { formatCount, formatExpectedPlace, formatLapNumber, formatPoints, formatRaceNumber, formatSignedSeconds } from '../../kit/values/format.ts';
+import { formatCount, formatExpectedPlace, formatLapNumber, formatPoints, formatRaceNumberOrMark, formatSignedSeconds } from '../../kit/values/format.ts';
 import type { Role } from '../../theme/index.ts';
 import * as text from './text.ts';
 
@@ -103,7 +102,7 @@ export function footer(plan: PlanTable): { n: Cell; cand: string } {
 /** The rival's label: its race number from `cars.overview`, or the kit's mark while it is not listed. */
 function carLabel(car: Trigger & { kind: 'rivalPits' }, cars: Cars): string {
   const entry = cars.find((c) => c.id === car.carId);
-  return entry === undefined ? unknownMark.notReceived : formatRaceNumber(entry.identity.raceNumber);
+  return formatRaceNumberOrMark(entry?.identity.raceNumber);
 }
 
 function triggerText(t: Trigger, cars: Cars): string {

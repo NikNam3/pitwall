@@ -3,6 +3,7 @@ import {
   carCode, trackName, type Celsius, type CarId, type Kg, type Ms, type Percent, type Psi, type QualifyingFormat, type SessionKind,
   type WeekendPhase,
 } from '@pitwall/domain';
+import { unknownMark } from '../text.ts';
 
 /** The one minus glyph of every signed value (U+2212): as wide as `+` in the mono font. */
 export const MINUS = '−';
@@ -95,6 +96,9 @@ export const formatCarNumber = (id: CarId): string => `#${id}`;
 
 /** A race number (a seat's), `12` -> `#12`. */
 export const formatRaceNumber = (n: number): string => `#${n}`;
+
+/** A car's race number, or the kit's mark while the car's identity is not received yet. */
+export const formatRaceNumberOrMark = (n: number | undefined): string => (n === undefined ? unknownMark.notReceived : formatRaceNumber(n));
 
 const SESSION_KIND_LABEL: Record<SessionKind, string> = {
   unknown: 'unknown',
