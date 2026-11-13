@@ -28,13 +28,24 @@ export type McRow = {
   tie: boolean;
   committed: boolean;
   infeasible: null | 'stopLapPassed' | 'noSetLeft';
+  /** The row's rank: tied rows share their leader's rank; then index + 1. */
+  rank: number;
+  /** Mean race time against `rows[0]` (ms). */
+  deltaLeaderMs: number;
+  /** Mean race time against the committed row (ms); `null` without a commit. */
+  deltaPlanMs: number | null;
+  /** The rule candidate's rule (the SRC hover); `null` unless `source` is `'rule'`. */
+  rule: 'mirrorAhead' | 'mirrorBehind' | 'cover' | 'extend' | null;
 };
 
 /**
  * `strategy.plans`: per our car the ranked rows and the run's metadata (scenarios run, whether the cap was hit, the
- * candidate count, the hazard's state, a near-tie left unresolved at the cap).
+ * candidate count, the hazard's state, a near-tie left unresolved at the cap, the car's position at the trigger).
  */
 export type StrategyOutput = Record<
   CarId,
-  Known<{ rows: McRow[]; scenarios: number; capHit: boolean; candidates: number; hazard: Known<'ok'>; unresolvedTie: boolean }>
+  Known<{ rows: McRow[]; scenarios: number; capHit: boolean; candidates: number; hazard: Known<'ok'>; unresolvedTie: boolean; currentPosition: number }>
 >;
+
+/** `strategy.car`: one car's entry of `StrategyOutput`. */
+export type StrategyCar = StrategyOutput[CarId];

@@ -18,7 +18,7 @@
 import { defineSimulator } from '@pitwall/engine/readers';
 import { adaptiveGraph, feasibleSequences, greenPath, layoutOf, nodeAt, planGraph, plansOf, solveGraph, valueAtStart, type DpNode, type GraphSolution, type Layout } from './state.ts';
 import { nodesAlong, thresholdsOf } from './thresholds.ts';
-import type { DpInput, DpPlan, DpResult, DpTable } from './types.ts';
+import type { DpFirst, DpInput, DpPlan, DpResult, DpTable, DpUnder } from './types.ts';
 
 export type * from './types.ts';
 
@@ -95,6 +95,16 @@ export function dpResult(s: DpSolution): DpResult {
   const best = plans[0] ?? stayOut;
   const thresholds = thresholdsOf({ input, graph, adaptiveRoot: s.adaptiveRoot, best, boxNow, stayOut, bestPlanOf });
   return { plans, boxNow, stayOut, thresholds, table: tableOf(s, best.stops) };
+}
+
+/**
+ * A query of one solve's table, never a new solve (SP4.3b2 Task 5): the best plan to the flag whose first stop is
+ * `first` (at `stopLap` onto that compound, `'best'`: the DP picks; or after `noStopThrough`), from the state "that
+ * neutralisation out at the start lap" with `under`; `null` when no such plan keeps the compound rule and the sets.
+ * Contract-first stub (C81) until Task 5.
+ */
+export function bestWith(_solution: DpSolution, _first: DpFirst, _under?: DpUnder): DpPlan | null {
+  throw new Error('not implemented');
 }
 
 /** The car's best plans, its box-now and stay-out variants and its trigger thresholds from `input.fromLap`. */

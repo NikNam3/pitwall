@@ -31,7 +31,7 @@
 
   const full = $derived(size.mode === 'full');
   const active = $derived(activeCondition(data.phase));
-  const rows = $derived(buildRows(data.call, active));
+  const rows = $derived(buildRows(data.call.value, active));
 </script>
 
 {#snippet badged(part: CellPart, source: EstimateSource)}<TextCell {...part} width={VALUE} align="right" />{#if part.reason === undefined && source.kind !== 'session'}<SourceBadge

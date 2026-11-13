@@ -21,9 +21,14 @@ import type { EngineView } from '@pitwall/engine/readers';
 import { describe, expect, it } from 'vitest';
 import { PIT_LOSS } from '../../src/pit-loss/index.ts';
 import { REJOIN, type RejoinOutput } from '../../src/rejoin/index.ts';
-import { SC_CALL_BEHAVIOUR } from '../../src/sc-call/behaviour.ts';
-import { scCallCalculator } from '../../src/sc-call/calculator.ts';
-import { SC_CALL, type ScCall, type ScCallOutput, type ScCallRow } from '../../src/sc-call/index.ts';
+import {
+  SC_CALL_42_BEHAVIOUR as SC_CALL_BEHAVIOUR,
+  scCallCalculator,
+  type ScCall42 as ScCall,
+  type ScCall42Output as ScCallOutput,
+  type ScCall42Row as ScCallRow,
+} from '../../src/sc-call/calculator.ts';
+import { SC_CALL } from '../../src/sc-call/index.ts';
 import { carState } from '../../../../test-support/builders/index.ts';
 import { guardedQuick, NONE, PRACTICE, QUALIFYING, RACE, situatedView } from '../situated.ts';
 

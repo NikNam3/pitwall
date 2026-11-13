@@ -63,7 +63,6 @@ export * from './rejoin/index.ts';
 export { rejoinCalculator } from './rejoin/calculator.ts';
 export { ghostLinesOf } from './rejoin/ghost-lines.ts';
 export * from './sc-call/index.ts';
-export { scCallCalculator } from './sc-call/calculator.ts';
 export { SIMULATOR as LAP_MODEL_SIMULATOR, lapTimeMs } from './lap-model/index.ts';
 export * from './track-wetness/index.ts';
 export { trackWetnessCalculator } from './track-wetness/calculator.ts';
@@ -76,12 +75,31 @@ export * from './race-interaction/index.ts';
 export { raceInteractionCalculator } from './race-interaction/calculator.ts';
 export * from './forecast-score/index.ts';
 export * from './race-hazard/index.ts';
-export { SIMULATOR as STRATEGY_DP_SIMULATOR, strategyDp, type DpCarParams, type DpInput, type DpPlan, type DpResult, type DpTable } from './strategy-dp/index.ts';
+export {
+  SIMULATOR as STRATEGY_DP_SIMULATOR,
+  bestWith,
+  dpResult,
+  solveDp,
+  strategyDp,
+  type DpCarParams,
+  type DpFirst,
+  type DpInput,
+  type DpPlan,
+  type DpResult,
+  type DpSolution,
+  type DpTable,
+  type DpUnder,
+} from './strategy-dp/index.ts';
 export {
   SIMULATOR as RACE_MONTE_CARLO_SIMULATOR,
   fieldPositions,
   raceMonteCarlo,
   scoreAll,
+  scoreCalls,
+  type CallCandidate,
+  type CallInput,
+  type CallOutcome,
+  type CallResult,
   type FieldInput,
   type FieldResult,
   type McCandidate,
@@ -91,4 +109,6 @@ export {
   type RivalRules,
 } from './race-monte-carlo/index.ts';
 export * from './strategy/index.ts';
+export * from './undercut/index.ts';
+export * from './pit-sweep/index.ts';
 export { FORECAST_FIELD_CONFIG } from './shared/forecast-field/config.ts';

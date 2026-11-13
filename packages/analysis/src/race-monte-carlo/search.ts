@@ -142,7 +142,7 @@ function rowsOf(run: Run, input: McInput, car: number, cands: readonly Cand[], r
   const cars = run.start.cars;
   const from = startPosition(run, car);
   const committed = input.committed[car as CarId] ?? null;
-  return ranking.order.map((i) => {
+  return ranking.order.map((i, index) => {
     const x = cands[i] as Cand;
     const s = scored[i] as Scored;
     const counts = new Array<number>(cars).fill(0);
@@ -177,6 +177,11 @@ function rowsOf(run: Run, input: McInput, car: number, cands: readonly Cand[], r
       tie: ranking.tie[i] ?? false,
       committed: isCommitted,
       infeasible: isCommitted ? infeasible(run, car, x.c.policy) : null,
+      // placeholders until SP4.3b2 Tasks 4 and 6: the rank by place, no deltas, no rule copy
+      rank: index + 1,
+      deltaLeaderMs: 0,
+      deltaPlanMs: null,
+      rule: null,
     };
   });
 }

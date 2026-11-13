@@ -90,18 +90,21 @@ describe('TOPICS', () => {
       ['lapTimes.projection', 'lap-times', 'feed', 'state', 10],
       ['pitLosses.track', 'pit-losses', 'feed', 'state', 1],
       ['pitStopCount.byCar', 'pit-stop-count', 'feed', 'state', 4],
+      ['pitSweep.car', 'pit-sweep', 'feed', 'state', 1],
       ['pitWindow.car', 'pit-window', 'feed', 'state', 4],
       ['raceMoment.current', 'race-moment', 'feed', 'state', 4],
       ['raisingAverage.field', 'raising-average', 'feed', 'state', 1],
       ['rejoin.car', 'rejoin', 'feed', 'state', 4],
       ['rejoin.ghostLines', 'rejoin', 'feed', 'state', 4],
-      ['scCall.car', 'sc-call', 'feed', 'state', 4],
+      ['scCall.car', 'sc-call', 'feed', 'state', 1],
       ['stintAnalysis.car', 'stint-analysis', 'feed', 'state', 1],
+      ['strategy.car', 'strategy', 'feed', 'state', 1],
       ['strategy.plans', 'strategy', 'feed', 'state', 1],
       ['talkWindow.car', 'talk-window', 'feed', 'state', 10],
       ['trackPositions.cars', 'track-positions', 'feed', 'state', 10],
       ['trackPositions.geometry', 'track-positions', 'feed', 'state', 1],
       ['tyreWear.car', 'tyre-wear', 'feed', 'state', 4],
+      ['undercut.car', 'undercut', 'feed', 'state', 1],
       ['weather.forecast', 'weather', 'feed', 'state', 1],
     ]);
   });
@@ -162,6 +165,7 @@ describe('topic types', () => {
       | 'rejoin.car' | 'rejoin.ghostLines' | 'scCall.car' | 'pitWindow.car'
       | 'calibration.sets' | 'calibration.values' | 'calibration.candidates' | 'calibration.active'
       | 'drivers.profiles' | 'drivers.links' | 'forecastScore.report' | 'config.effective' | 'strategy.plans'
+      | 'strategy.car' | 'undercut.car' | 'pitSweep.car'
       | 'situation.carActivityPractice' | 'situation.carActivityQualifying' | 'situation.carActivityRace' | 'situation.carFlags'
       | 'situation.carDriver' | 'situation.carLocation' | 'situation.carStatus' | 'situation.clock' | 'situation.compoundRule' | 'situation.lapValidity'
       | 'situation.penalties' | 'situation.raceControlPractice' | 'situation.raceControlQualifying' | 'situation.raceControlRace'
