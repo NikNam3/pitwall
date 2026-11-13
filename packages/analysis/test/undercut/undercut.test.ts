@@ -306,13 +306,15 @@ describe('undercut: the job', () => {
       // strategy's boxNow row on the same input and seed: the DP's box-now play as strategy builds its policy
       const dp = dpResult(solveDp(toDpInput(input.strategy, car)));
       expect(dp.boxNow).not.toBeNull();
-      const boxNow = policyOf(dp.boxNow!, dp.thresholds);
+      // found by its stops, whatever triggers strategy gives it (non-best plans carry only the neutralised triggers)
+      const boxNowStops = json(policyOf(dp.boxNow!, []).stops);
       const strategyRows = candidatesForRun(structuredClone(input.strategy), createRng(SEED)).perCar.get(car)?.candidates ?? [];
-      expect(strategyRows.some((r) => json(r.policy) === json(boxNow)), `car ${car}: strategy has the boxNow row`).toBe(true);
+      const boxNowRow = strategyRows.find((r) => json(r.policy.stops) === boxNowStops);
+      expect(boxNowRow, `car ${car}: strategy has the boxNow row`).toBeDefined();
 
       // scored by scoreCalls over the same horizon, against the same rival plan, on as many scenarios
       const real = calls.real!;
-      const scored = real({ ...call, candidates: [{ policy: boxNow, rival: c.rival, untilLap: c.untilLap }] }, createRng(SEED));
+      const scored = real({ ...call, candidates: [{ policy: boxNowRow!.policy, rival: c.rival, untilLap: c.untilLap }] }, createRng(SEED));
       const a = meanSe(result.outcomes[i]!.finish);
       const b = meanSe(scored.outcomes[0]!.finish);
       const tieBand = mcSettingsFrom(input.strategy.config).tieBand;
@@ -340,8 +342,10 @@ describe('undercut: the job', () => {
       // the scenarios stop there: the race time at untilLap lies laps short of the same case run to the flag
       const first = call.candidates[0]!;
       const toFlag = calls.real!({ ...call, candidates: [{ ...first, untilLap: null }] }, createRng(SEED));
-      const short = meanSe(result.outcomes[0]!.raceMs).mean;
-      const full = meanSe(toFlag.outcomes[0]!.raceMs).mean;
+      // a retired car's raceMs is NaN: the mean skips it
+      const finite = (xs: ArrayLike<number>) => Array.from(xs).filter(Number.isFinite);
+      const short = meanSe(finite(result.outcomes[0]!.raceMs)).mean;
+      const full = meanSe(finite(toFlag.outcomes[0]!.raceMs)).mean;
       const lapsShort = start.lapsTotal - first.untilLap!;
       expect(full - short, `car ${car}`).toBeGreaterThan(lapsShort * 50_000);
     }

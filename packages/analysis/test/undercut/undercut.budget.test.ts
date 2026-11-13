@@ -1,7 +1,7 @@
 // `undercut`'s budget (SP4.3b spec §9.1, §11.2; plan 4.3b2 Task 7 row 11; Global Constraints "caps are counts"): on
 // the long-race builder (70 laps, 20 cars) at lap 1 (the first frame the starting point is known: the leader has
 // completed lap 1), each of our cars has four rivals in range, so 12 cases at the config's `maxScenarioPolicies`
-// (2,400); one car's run, its one DP solve included, under 300 ms. The cap is a count (C2): a miss lowers the count,
+// (1,200); one car's run, its one DP solve included, under 300 ms. The cap is a count (C2): a miss lowers the count,
 // never raises the budget. Best of warm passes (docs/testing.md).
 import type { CarId } from '@pitwall/domain';
 import { createRng } from '@pitwall/engine/readers';
@@ -16,8 +16,8 @@ const CAR_MS = 300;
 
 describe('undercut budget', () => {
   // row 11
-  it('budget: 12 cases with maxScenarioPolicies 2400 under 300 ms per car, one DP solve per car included', () => {
-    expect(UNDERCUT_CONFIG.defaults.maxScenarioPolicies).toBe(2_400);
+  it('budget: 12 cases with maxScenarioPolicies 1200 under 300 ms per car, one DP solve per car included', () => {
+    expect(UNDERCUT_CONFIG.defaults.maxScenarioPolicies).toBe(1_200);
     const raw = viewAt(longRace(), 2, { frameOfLap: 0 });
     const at = raw.live.sessionTime;
     const outputs = new Map(raw.outputs);
