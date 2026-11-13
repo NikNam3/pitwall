@@ -132,7 +132,7 @@ export const leagueEntries: PriorsEntries = {
 };
 
 const set = (id: string, trackId: number, name: string, createdAt: string, sources: CalibrationSource[], overrides: Record<string, number> = {}, lastUsedAt?: string): CalibrationSet => ({
-  id, trackId, name, createdAt, sources, overrides, ...(lastUsedAt === undefined ? {} : { lastUsedAt }),
+  id, trackId, name, createdAt, sources, overrides, preferred: false, ...(lastUsedAt === undefined ? {} : { lastUsedAt }),
 });
 
 /** The sets in the bridge's order (track, then `createdAt`, then id). */

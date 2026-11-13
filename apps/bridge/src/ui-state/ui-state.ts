@@ -112,11 +112,13 @@ export class UiState {
       case 'calibration.override.set':
       case 'calibration.override.clear':
       case 'calibration.choose':
+      case 'calibration.prefer':
         // The calibration store's (C62a), not UI state.
         return INVALID;
       case 'drivers.add':
       case 'drivers.link':
       case 'drivers.exclude':
+      case 'drivers.include':
       case 'drivers.override':
       case 'drivers.override.clear':
         // The profile module's (C62c), not UI state.

@@ -181,12 +181,12 @@ export async function serve(opts: ServeOptions): Promise<number> {
         log: cliLogger(io, wsLogLevel(io.env)),
         ...(uiState && { uiState }),
         // An edit of a set reaches every feed's pipeline once applied: a run on that set commits its new snapshot (C62a,
-        // C76). A new set or a copy is a set no run uses.
+        // C76). A new set or a copy is a set no run uses; a prefer changes no running session (C62a, C75).
         ...(calibration && {
           calibration: {
             apply: (action: CalibrationAction): ApplyResult => {
               const result = calibration.apply(action);
-              if (result.ok && action.kind !== 'calibration.set.create' && action.kind !== 'calibration.set.copy') {
+              if (result.ok && action.kind !== 'calibration.set.create' && action.kind !== 'calibration.set.copy' && action.kind !== 'calibration.prefer') {
                 for (const pipeline of pipelines.values()) pipeline.calibrationEdited(action.setId);
               }
               return result;

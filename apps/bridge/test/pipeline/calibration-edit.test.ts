@@ -300,7 +300,7 @@ describe('a pick before any session on the feed (F5, C73)', () => {
   it('a pick before any session marks an existing set used and rejects an unknown one', async () => {
     // a real calibration store on a temporary data dir, with no stored session (C84)
     const dataDir = tmp();
-    const set = (trackId: number, id: string): CalibrationSet => ({ id, trackId, name: id, createdAt: '2026-10-01T20:00:00.000Z', sources: [], overrides: {} });
+    const set = (trackId: number, id: string): CalibrationSet => ({ id, trackId, name: id, createdAt: '2026-10-01T20:00:00.000Z', sources: [], overrides: {}, preferred: false });
     writeSetFile(dataDir, set(ZANDVOORT, 'dry'));
     writeSetFile(dataDir, set(SINGAPORE, 'wet'));
     const store = CalibrationStore.open(dataDir, {

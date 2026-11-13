@@ -35,14 +35,21 @@ export type UiAction =
   | { kind: 'calibration.override.clear'; trackId: number; setId: string; key: string }
   /** A calibration-chosen decision for the feed's run (C76); `setId` `null` chooses `defaults`. */
   | { kind: 'calibration.choose'; feedId: FeedId; setId: string | null }
+  /** Marks `setId` the track's preferred set (the preselection at session start) and clears the others; `null` clears it. No decision (C62a, C75). */
+  | { kind: 'calibration.prefer'; trackId: number; setId: string | null }
   // Driver profiles (C62c, SP4.3a spec 4): the bridge's profile module validates each against the persons, the stored
   // sessions and the entries' declarations and rejects an invalid one with a reason (C73); a change takes effect at the
   // next session start (C75).
-  /** A new person: `person` kebab-case (its file name). */
-  | { kind: 'drivers.add'; person: PersonId; displayName: string }
+  /**
+   * A new person: `person` kebab-case (its file name), derived by the bridge from `displayName` when absent; with `seat`
+   * the bridge links the seat to the new person in the same change.
+   */
+  | { kind: 'drivers.add'; displayName: string; person?: PersonId; seat?: { team: TeamId; raceNumber: number } }
   /** Links a seat (team and race number) to `person` for every stored session; `null` unlinks the seat (C62c). */
   | { kind: 'drivers.link'; team: TeamId; raceNumber: number; person: PersonId | null }
   | { kind: 'drivers.exclude'; person: PersonId; session: SessionRef }
+  /** Undoes `drivers.exclude`. */
+  | { kind: 'drivers.include'; person: PersonId; session: SessionRef }
   /** `value` within the entry's declared range (`ProfileEntryDecl.range`). */
   | { kind: 'drivers.override'; person: PersonId; key: string; value: number }
   | { kind: 'drivers.override.clear'; person: PersonId; key: string }

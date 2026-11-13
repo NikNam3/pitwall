@@ -244,9 +244,11 @@ export class ProfileStore {
   #publishAll(): void {
     const persons = this.#persons.map((p) => ({
       person: p.id, displayName: p.displayName, entries: this.#entries.get(p.id) ?? {}, links: p.links, excluded: p.excluded,
+      // The linked sessions and what is kept of them are SP4.3b2 Task 10's.
+      sessions: [], kept: { sessions: 0, laps: 0 },
     }));
     this.#deps.hub.publishGlobal('drivers.profiles', () => ({ persons }));
-    const value: DriversLinksValue = { links: seatLinks(this.#persons), unlinked: this.#unlinked };
+    const value: DriversLinksValue = { links: seatLinks(this.#persons), unlinked: this.#unlinked, unlinkedSeats: [] };
     this.#deps.hub.publishGlobal('drivers.links', () => value);
   }
 }
