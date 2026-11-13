@@ -204,8 +204,10 @@ describe('pit-sweep feature', () => {
       expect(out[PLAYER], `${kind}, the player`).toMatchObject({ carId: PLAYER, auto: NOT_APPLICABLE, byCompound: {} });
       expect(Object.keys(out[TEAMMATE]?.byCompound ?? {}).length, `${kind}, the teammate`).toBeGreaterThan(0);
     }
-    // under a neutralisation the sweep computes (a stop lap under it costs that condition's loss through the DP)
-    const neutralised = outOf(sweepViewAt(RACE, lap, { spans: [{ machine: 'session-phase-race', kind: 'neutralised' }] }));
+    // under a neutralisation the sweep computes (a stop lap under it costs that condition's loss through the DP);
+    // taken on a racing lap of both cars: at lap 3 the even cars are on their in-lap, which stays notApplicable
+    const racingLap = 2;
+    const neutralised = outOf(sweepViewAt(RACE, racingLap, { spans: [{ machine: 'session-phase-race', kind: 'neutralised' }] }));
     for (const car of OURS) expect(Object.keys(neutralised[car]?.byCompound ?? {}).length, `neutralised, car ${car}`).toBeGreaterThan(0);
 
     // on demand: the trigger runs only while pitSweep.car is subscribed
