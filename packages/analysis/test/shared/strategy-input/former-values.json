@@ -1,0 +1,514 @@
+{
+ "cars": [
+  {
+   "car": 2,
+   "dpInput": {
+    "car": 2,
+    "fromLap": 3,
+    "totalLaps": 20,
+    "lap": {
+     "compoundOffsetMs": {
+      "soft": 380,
+      "medium": 0,
+      "hard": 682,
+      "inter": 3500,
+      "wet": 8100
+     },
+     "fuelMsPerKg": 30,
+     "convexFromPct": 40,
+     "convexMsPerPct2": 2.5,
+     "convexFlagged": true,
+     "coldTyreMs": [
+      410,
+      0
+     ],
+     "coldTyreWetFactor": 3.4,
+     "neutralised": {
+      "sc": {
+       "paceFactor": 1.27,
+       "wearFactor": 0.36,
+       "fuelFactor": 0.57
+      },
+      "vsc": {
+       "paceFactor": 1.19,
+       "wearFactor": 0.35,
+       "fuelFactor": 0.6
+      }
+     },
+     "wetnessMsPerMs": {
+      "slick": 1,
+      "inter": 0.5,
+      "wet": 0.25
+     }
+    },
+    "carParams": {
+     "compound": "medium",
+     "tyreAge": 2,
+     "wearPct": 4,
+     "fuelKg": 96.4,
+     "paceMs": 92346,
+     "degMsPerLap": 75,
+     "wearRatePct": {
+      "soft": 2,
+      "medium": 2,
+      "hard": 2,
+      "inter": 2,
+      "wet": 2
+     },
+     "human": false
+    },
+    "sets": {
+     "soft": 1,
+     "medium": 1,
+     "hard": 1,
+     "inter": 0,
+     "wet": 0
+    },
+    "owesSecondCompound": true,
+    "pitLossMs": {
+     "green": 17019,
+     "vsc": 9360,
+     "sc": 7659,
+     "inLapShare": 0.151
+    },
+    "hazard": {
+     "byLap": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "vscByLap": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "scDur": [
+      0,
+      0.034965,
+      0.251748,
+      0.286714,
+      0.195804,
+      0.083916,
+      0.06993,
+      0.041958,
+      0.020979,
+      0,
+      0.006993,
+      0.006993
+     ],
+     "vscDur": [
+      0.045455,
+      0.579545,
+      0.318182,
+      0.034091,
+      0.022727
+     ]
+    },
+    "active": null,
+    "wetnessByLap": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "trafficMsByLap": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     494,
+     0,
+     0,
+     0,
+     0,
+     333,
+     0,
+     0,
+     60,
+     0,
+     0,
+     0
+    ]
+   },
+   "policy": {
+    "stops": [
+     {
+      "lap": 11,
+      "compound": "soft"
+     }
+    ],
+    "triggers": [
+     {
+      "kind": "neutralised",
+      "condition": "sc",
+      "fromLap": 11,
+      "toLap": 19,
+      "action": {
+       "box": "soft"
+      }
+     },
+     {
+      "kind": "neutralised",
+      "condition": "vsc",
+      "fromLap": 10,
+      "toLap": 19,
+      "action": {
+       "box": "soft"
+      }
+     },
+     {
+      "kind": "damage",
+      "lossMsPerLap": 1280,
+      "action": {
+       "box": "soft"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "car": 5,
+   "dpInput": {
+    "car": 5,
+    "fromLap": 3,
+    "totalLaps": 20,
+    "lap": {
+     "compoundOffsetMs": {
+      "soft": 380,
+      "medium": 0,
+      "hard": 682,
+      "inter": 3500,
+      "wet": 8100
+     },
+     "fuelMsPerKg": 30,
+     "convexFromPct": 40,
+     "convexMsPerPct2": 2.5,
+     "convexFlagged": true,
+     "coldTyreMs": [
+      410,
+      0
+     ],
+     "coldTyreWetFactor": 3.4,
+     "neutralised": {
+      "sc": {
+       "paceFactor": 1.27,
+       "wearFactor": 0.36,
+       "fuelFactor": 0.57
+      },
+      "vsc": {
+       "paceFactor": 1.19,
+       "wearFactor": 0.35,
+       "fuelFactor": 0.6
+      }
+     },
+     "wetnessMsPerMs": {
+      "slick": 1,
+      "inter": 0.5,
+      "wet": 0.25
+     }
+    },
+    "carParams": {
+     "compound": "medium",
+     "tyreAge": 2,
+     "wearPct": 4,
+     "fuelKg": 96.4,
+     "paceMs": 92385,
+     "degMsPerLap": 75,
+     "wearRatePct": {
+      "soft": 2,
+      "medium": 2,
+      "hard": 2,
+      "inter": 2,
+      "wet": 2
+     },
+     "human": false
+    },
+    "sets": {
+     "soft": 1,
+     "medium": 1,
+     "hard": 1,
+     "inter": 0,
+     "wet": 0
+    },
+    "owesSecondCompound": true,
+    "pitLossMs": {
+     "green": 17019,
+     "vsc": 9360,
+     "sc": 7659,
+     "inLapShare": 0.151
+    },
+    "hazard": {
+     "byLap": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "vscByLap": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "scDur": [
+      0,
+      0.034965,
+      0.251748,
+      0.286714,
+      0.195804,
+      0.083916,
+      0.06993,
+      0.041958,
+      0.020979,
+      0,
+      0.006993,
+      0.006993
+     ],
+     "vscDur": [
+      0.045455,
+      0.579545,
+      0.318182,
+      0.034091,
+      0.022727
+     ]
+    },
+    "active": null,
+    "wetnessByLap": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "trafficMsByLap": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ]
+   },
+   "policy": {
+    "stops": [
+     {
+      "lap": 11,
+      "compound": "soft"
+     }
+    ],
+    "triggers": [
+     {
+      "kind": "neutralised",
+      "condition": "sc",
+      "fromLap": 11,
+      "toLap": 19,
+      "action": {
+       "box": "soft"
+      }
+     },
+     {
+      "kind": "neutralised",
+      "condition": "vsc",
+      "fromLap": 10,
+      "toLap": 19,
+      "action": {
+       "box": "soft"
+      }
+     },
+     {
+      "kind": "damage",
+      "lossMsPerLap": 1280,
+      "action": {
+       "box": "soft"
+      }
+     }
+    ]
+   }
+  }
+ ],
+ "hazard": {
+  "byLap": [
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0
+  ],
+  "vscByLap": [
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0
+  ],
+  "scDur": [
+   0,
+   0.034965,
+   0.251748,
+   0.286714,
+   0.195804,
+   0.083916,
+   0.06993,
+   0.041958,
+   0.020979,
+   0,
+   0.006993,
+   0.006993
+  ],
+  "vscDur": [
+   0.045455,
+   0.579545,
+   0.318182,
+   0.034091,
+   0.022727
+  ],
+  "active": null
+ },
+ "settings": {
+  "rivalRules": {
+   "q": 0.88,
+   "aMin": 4,
+   "reactionLaps": 0,
+   "coverRule": false
+  },
+  "points": [
+   25,
+   18,
+   15,
+   12,
+   10,
+   8,
+   6,
+   4,
+   2,
+   1
+  ],
+  "zTie": 2,
+  "tieBand": 0.05
+ }
+}
