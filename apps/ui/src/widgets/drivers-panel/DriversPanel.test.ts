@@ -323,3 +323,23 @@ describe('drivers-panel', () => {
     }
   });
 });
+
+// SP4.3b2 Task 18v: the display against its approved mockup (drivers-panel.html, the picker ` kuh ▾`). The overflow of
+// full/unlinkedSeat and full/noSession is covered by fit.spec (Playwright).
+describe('drivers-panel against the mockup (Task 18v)', () => {
+  /** The mockup's small picker arrow, and the large one the browser's own picker icon draws. */
+  const SMALL_ARROW = '▾';
+  const LARGE_ARROW = '▼';
+
+  it('the person picker shows the small ▾ of the mockup, never the large ▼', () => {
+    for (const [name, data] of [['twoSeats', cases.twoSeats], ['unlinkedSeat', cases.unlinkedSeat]] as const) {
+      const { container: c } = mount(data);
+      for (const seat of [seat12, seat63]) {
+        const shown = visibleTexts(get(c, `seat-${seat}`)).join(' ');
+        expect(shown, `${name} ${seat}`).toContain(SMALL_ARROW);
+        expect(shown, `${name} ${seat}`).not.toContain(LARGE_ARROW);
+      }
+      cleanup();
+    }
+  });
+});

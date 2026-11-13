@@ -209,3 +209,54 @@ describe('pit-sweep-table', () => {
     }
   });
 });
+
+// SP4.3b2 Task 18v: the display against its approved mockup (pit-sweep-table.html, gen.mjs `sweepLines`, `table`).
+/** The characters of `scope`'s text before `el`, spaces as rendered (an inline chart counts no character). */
+function textBefore(scope: Element, el: Element): number {
+  const walker = scope.ownerDocument.createTreeWalker(scope, NodeFilter.SHOW_TEXT);
+  let n = 0;
+  for (let t = walker.nextNode(); t !== null; t = walker.nextNode()) {
+    if (el.contains(t)) continue;
+    if (t.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING) n += (t.textContent ?? '').length;
+  }
+  return n;
+}
+const words = (el: Element): string[] => (el.textContent ?? '').trim().split(/\s+/);
+
+describe('pit-sweep-table against the mockup (Task 18v)', () => {
+  it('the header cells one space apart: H REJ TRF E[POS] P1 P10 P20 P(GAIN) LIFE (full), H REJ E[POS] P(GAIN) (compact)', () => {
+    const h = text.headers;
+    const full = mount(cases.autoHard, 'full');
+    expect(words(get(full, 'head'))).toEqual(['H', h.rej, h.trf, h.ePos, formatPosition(1), formatPosition(10), formatPosition(20), h.pGain, h.life]);
+    cleanup();
+    const compact = mount(cases.autoHard, 'compact');
+    expect(words(get(compact, 'head'))).toEqual(['H', h.rej, h.ePos, h.pGain]);
+  });
+
+  it('full: the strip stands under its labels, P1 above its first cell and P20 ending at its last', () => {
+    const c = mount(cases.autoHard, 'full');
+    const head = get(c, 'head');
+    const headText = head.textContent ?? '';
+    const p1 = headText.indexOf(formatPosition(1));
+    const p20 = headText.indexOf(formatPosition(20));
+    expect(p1).toBeGreaterThan(0);
+    rowsOf(c).forEach((row, i) => {
+      const strip = row.querySelector('.dist-strip')!;
+      const at = textBefore(row, strip);
+      const cells = Number(strip.getAttribute('data-cells'));
+      expect(at, `row ${i}: the strip's first cell under P1`).toBe(p1);
+      expect(at + cells, `row ${i}: the strip's last cell under the end of P20`).toBe(p20 + formatPosition(20).length);
+    });
+  });
+
+  it('full: every second row carries the row band (bgRowBand), a window row none', () => {
+    const rows = known(cases.autoHard.sweep.value.table).rows;
+    expect(rows.some((r, i) => i % 2 === 1 && !r.inWindow)).toBe(true);
+    const c = mount(cases.autoHard, 'full');
+    const banded = (el: Element): boolean =>
+      [el, ...el.querySelectorAll('*')].some((e) => /bgRowBand/.test(e.getAttribute('style') ?? ''));
+    rowsOf(c).forEach((row, i) => {
+      expect(banded(row), `row ${i}`).toBe(i % 2 === 1 && !rows[i]!.inWindow);
+    });
+  });
+});
