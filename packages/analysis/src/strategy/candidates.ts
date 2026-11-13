@@ -13,13 +13,11 @@
 import type { CarId, Policy, StartingPoint, Trigger } from '@pitwall/domain';
 import type { McCandidate } from '../race-monte-carlo/index.ts';
 import { startLapOf } from '../race-forecast/index.ts';
+import { policyOf } from '../shared/strategy-input/index.ts';
 import type { DpPlan, DpResult } from '../strategy-dp/index.ts';
 import type { StrategyConfig } from './config.ts';
 
-/** A plan's stops with the triggers that change them inside a scenario: the one builder of a candidate's policy. */
-export function policyOf(plan: Pick<DpPlan, 'stops'> & Partial<DpPlan>, thresholds: readonly Trigger[]): Policy {
-  return { stops: plan.stops.map((s) => ({ lap: s.lap, compound: s.compound })), triggers: thresholds.map((t) => structuredClone(t)) };
-}
+export { policyOf };
 
 type Stops = DpPlan['stops'];
 
@@ -63,12 +61,11 @@ function rainCanCome(start: StartingPoint, fromLap: number, thresholds: readonly
 export function candidatesOf(start: StartingPoint, car: CarId, dp: DpResult, config: StrategyConfig): McCandidate[] {
   const out: McCandidate[] = [];
   const seen = new Set<string>();
-  const add = (policy: Policy, source: McCandidate['source']): void => {
+  const add = (policy: Policy, source: McCandidate['source'], rule: McCandidate['rule'] = null): void => {
     const key = JSON.stringify(policy);
     if (seen.has(key)) return;
     seen.add(key);
-    // the rule is named from SP4.3b2 Task 6; until then `null` on every candidate
-    out.push({ policy, source, rule: null });
+    out.push({ policy, source, rule });
   };
   const fromLap = startLapOf(start, car);
   const thresholds = dp.thresholds.filter((t) => t.kind === 'neutralised');
@@ -99,14 +96,15 @@ export function candidatesOf(start: StartingPoint, car: CarId, dp: DpResult, con
   if (best.stops.length > 0) {
     const ahead = rivalNext(start, car, -1);
     const behind = rivalNext(start, car, 1);
-    for (const rival of [ahead, behind]) {
+    const mirrors: [CarId | undefined, 'mirrorAhead' | 'mirrorBehind'][] = [[ahead, 'mirrorAhead'], [behind, 'mirrorBehind']];
+    for (const [rival, rule] of mirrors) {
       if (rival === undefined) continue;
       const stops = moveStop(best.stops, 0, start.stopMid[rival] ?? start.lapsTotal, fromLap, start.lapsTotal);
-      if (stops !== null) add(policyOf({ stops }, thresholds), 'rule');
+      if (stops !== null) add(policyOf({ stops }, thresholds), 'rule', rule);
     }
     const rivalPits = (carId: CarId, action: 'cover' | 'extend'): Trigger => ({ kind: 'rivalPits', carId, withinMs: config.ruleGapMs, action });
-    if (behind !== undefined) add(policyOf(best, [...thresholds, rivalPits(behind, 'cover')]), 'rule');
-    if (ahead !== undefined) add(policyOf(best, [...thresholds, rivalPits(ahead, 'extend')]), 'rule');
+    if (behind !== undefined) add(policyOf(best, [...thresholds, rivalPits(behind, 'cover')]), 'rule', 'cover');
+    if (ahead !== undefined) add(policyOf(best, [...thresholds, rivalPits(ahead, 'extend')]), 'rule', 'extend');
   }
   return out;
 }

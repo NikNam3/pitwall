@@ -3,9 +3,9 @@
 // cap. No state between runs (C31, C32).
 //
 // - Per car the DP (`strategy-dp`) from the car's lap on (`startLapOf`), its input from the starting point, the hazard
-//   and the plain forecast (traffic per rejoin lap; the wetness as now, which a plain scenario keeps); its result gives
-//   the candidates (`candidates.ts`). A committed policy is followed as far as it can be (spec §8.2): a passed stop
-//   boxes this lap, a stop onto a compound without a set left is dropped; its row is marked with the reason.
+//   and the plain forecast (`shared/strategy-input/`, SP4.3b2 Task 6); its result gives the candidates
+//   (`candidates.ts`). A committed policy is followed as far as it can be (spec §8.2): a passed stop boxes this lap, a
+//   stop onto a compound without a set left is dropped; its row is marked with the reason.
 // - The parts (spec §7.3 item 4, §8.1 step 3): `splitStrategy` gives one part per our car planned (`planCar`), or the
 //   input as it is when none can be planned; `mergeStrategy` takes each car's entry from the part that planned it and
 //   every other entry from the first part. `run` without `planCar` runs the parts one after another on one rng.
@@ -14,101 +14,20 @@
 //   car's commit if it has one, else the car modelled like a rival: left out of `start.sets`) and the car is ranked
 //   against the teammate's round-1 best with the rest. A car planned alone, or a round 1 of no scenario-policy, gets
 //   the whole cap with the other modelled like a rival.
+// - The table's fields (SP4.3b2 Task 6, spec §10): per row its rank (tied rows share the leader's, then index + 1), its
+//   mean race time against the leader's and the committed row's; per car its race position at the trigger.
 // - `candidatesForRun` is the candidate step's one place and `partFinalCall` a part's final call's;
 //   `scripts/gen-strategy-reference.ts` builds its input with them.
-import { known, NOISE_COMPOUNDS, unknown, type CarId, type Known, type McRow, type NoiseCompound, type Policy, type RaceHazard, type StartingPoint, type StrategyOutput } from '@pitwall/domain';
+import { known, unknown, type CarId, type Known, type McRow, type NoiseCompound, type Policy, type StartingPoint, type StrategyOutput } from '@pitwall/domain';
 import type { Rng } from '@pitwall/engine/readers';
-import { raceForecast, startLapOf } from '../race-forecast/index.ts';
-import { raceMonteCarlo, rivalNextCompound, type McCandidate, type McConfig, type McInput, type McResult, type RivalRules } from '../race-monte-carlo/index.ts';
-import { strategyDp, type DpInput } from '../strategy-dp/index.ts';
+import { startLapOf } from '../race-forecast/index.ts';
+import { raceMonteCarlo, type McCandidate, type McConfig, type McInput, type McResult } from '../race-monte-carlo/index.ts';
+import { dpInputOn, mcSettingsFrom, notPlannedWhy, plainRoad, plannedCars, plannedField, strategyConfigOf, toMcHazard, type StrategyInput } from '../shared/strategy-input/index.ts';
+import { strategyDp } from '../strategy-dp/index.ts';
 import { candidatesOf } from './candidates.ts';
-import { STRATEGY_CONFIG, type StrategyConfig } from './config.ts';
-import type { StrategyInput } from './prepare.ts';
+import type { StrategyConfig } from './config.ts';
 
-type Hazard = McInput['hazard'];
 type Infeasible = McRow['infeasible'];
-
-/** `race-hazard`'s tables per lap from the leader's lap (index 0 = `start.lap`); without them, no neutralisation drawn. */
-function hazardOf(start: StartingPoint, hazard: RaceHazard): Hazard {
-  const n = Math.max(0, start.lapsTotal - start.lap + 1);
-  const byLap = new Float64Array(n);
-  const vscByLap = new Float64Array(n);
-  if (!hazard.known) return { byLap, vscByLap, scDur: Float64Array.of(1), vscDur: Float64Array.of(1), active: null };
-  const h = hazard.value;
-  for (const entry of h.byLap) {
-    const i = entry.lap - start.lap;
-    if (i < 0 || i >= n) continue;
-    byLap[i] = entry.sc;
-    vscByLap[i] = entry.vsc;
-  }
-  const active = h.active === null ? null : { condition: h.active.condition, remaining: Float64Array.from(h.active.remainingLaps) };
-  return { byLap, vscByLap, scDur: Float64Array.from(h.durationLaps.sc), vscDur: Float64Array.from(h.durationLaps.vsc), active };
-}
-
-/** The plain forecast's road: per lap from `start.lap` each car's gap to the leader at that lap's line (0 = retired). */
-function plainRoad(start: StartingPoint, rng: Rng): Map<number, { gapMs: Float64Array; position: Int8Array }> {
-  const ours = new Set(Object.keys(start.sets).map(Number));
-  // the rivals at their likeliest stop (rival-stops' window, its next compound); our cars without a stop
-  const policies: Policy[] = Array.from({ length: start.cars }, (_, k): Policy => {
-    const compound = ours.has(k) ? null : rivalNextCompound(start, k);
-    const lap = start.stopMid[k] ?? start.lapsTotal;
-    return compound === null || lap < start.lap || lap >= start.lapsTotal ? { stops: [], triggers: [] } : { stops: [{ lap, compound }], triggers: [] };
-  });
-  const result = raceForecast(start, policies, { id: 0, plain: true, neutralisations: [] }, rng, { trace: true });
-  return new Map((result.trace ?? []).map((t) => [t.lap, { gapMs: t.gapMs, position: t.position }]));
-}
-
-/** Per lap from `fromLap` the traffic cost of a rejoin at its end: the shortfall to `trafficGapMs` of each car ahead within it. */
-function trafficOf(start: StartingPoint, road: ReturnType<typeof plainRoad>, car: CarId, fromLap: number, trafficGapMs: number): Float64Array {
-  const out = new Float64Array(start.lapsTotal - fromLap + 1);
-  for (let i = 0; i < out.length; i++) {
-    const line = road.get(fromLap + i);
-    if (line === undefined || (line.position[car] ?? 0) === 0) continue;
-    const rejoin = (line.gapMs[car] ?? 0) + start.track.pitLossMs.green;
-    let cost = 0;
-    for (let k = 0; k < start.cars; k++) {
-      if (k === car || (line.position[k] ?? 0) === 0) continue;
-      const d = rejoin - (line.gapMs[k] ?? 0);
-      if (d >= 0 && d < trafficGapMs) cost += trafficGapMs - d;
-    }
-    out[i] = cost;
-  }
-  return out;
-}
-
-/** The DP's input for car `car` from its lap `fromLap` (spec §6). */
-function dpInputOf(start: StartingPoint, car: CarId, fromLap: number, hazard: Hazard, traffic: Float64Array): DpInput {
-  const n = start.lapsTotal - fromLap + 1;
-  const shifted = (a: Float64Array): Float64Array => Float64Array.from({ length: n }, (_, i) => a[fromLap + i - start.lap] ?? 0);
-  const rate = start.wearRatePct[car] ?? 0;
-  const wearRatePct = Object.fromEntries(NOISE_COMPOUNDS.map((c) => [c, rate])) as Record<NoiseCompound, number>;
-  // new sets only (spec §6, K5)
-  const sets = Object.fromEntries(NOISE_COMPOUNDS.map((c) => [c, 0])) as Record<NoiseCompound, number>;
-  for (const s of start.sets[car] ?? []) if (s.wearPct <= 0) sets[s.compound] += 1;
-  return {
-    car,
-    fromLap,
-    totalLaps: start.lapsTotal,
-    lap: start.lapModel,
-    carParams: {
-      compound: NOISE_COMPOUNDS[start.compound[car] ?? 1] ?? 'medium',
-      tyreAge: start.tyreAge[car] ?? 0,
-      wearPct: start.wearPct[car] ?? 0,
-      fuelKg: start.fuelKg[car] ?? 0,
-      paceMs: start.paceMs[car] ?? 0,
-      degMsPerLap: start.degMsPerLap[car] ?? 0,
-      wearRatePct,
-      human: start.human[car] === 1,
-    },
-    sets,
-    owesSecondCompound: start.owesStop[car] === 1,
-    pitLossMs: start.track.pitLossMs,
-    hazard: { byLap: shifted(hazard.byLap), vscByLap: shifted(hazard.vscByLap), scDur: hazard.scDur, vscDur: hazard.vscDur },
-    active: hazard.active,
-    wetnessByLap: new Float64Array(n).fill(start.wetness.wetnessMs),
-    trafficMsByLap: traffic,
-  };
-}
 
 /**
  * A committed policy as far as car `car` can follow it (spec §8.2): a passed stop boxes this lap (one stop a lap), a
@@ -141,7 +60,7 @@ export function followable(start: StartingPoint, car: CarId, policy: Policy): { 
 }
 
 /** The search's settings from the config (spec §7.3, §11.1). */
-function mcConfigOf(config: StrategyConfig): McConfig {
+function mcConfigOf(config: StrategyConfig, points: number[]): McConfig {
   return {
     n0: config.n0,
     zDrop: config.zDrop,
@@ -149,22 +68,12 @@ function mcConfigOf(config: StrategyConfig): McConfig {
     tieBand: config.tieBand,
     rescoreTop: config.rescoreTop,
     maxScenarioPolicies: config.maxScenarioPolicies,
-    points: String(config.points).split(',').map((p) => Number(p.trim())),
+    points,
   };
 }
 
 /** One car's plan as the job holds it: its candidates and, where committed, the policy followed and the commit's reason. */
 export type CarPlan = { candidates: McCandidate[]; followed: Policy | null; original: Policy | null; infeasible: Infeasible };
-
-/** `strategy`'s config as the run reads it. */
-const configOf = (input: StrategyInput): StrategyConfig => ({ ...STRATEGY_CONFIG.defaults, ...input.config[STRATEGY_CONFIG.key] }) as StrategyConfig;
-
-/** Why the job does not plan car `car`, or `null` when it does: by the behaviour table, running, in the field, with its sets known and a lap left to plan. */
-function notPlannedWhy(input: StrategyInput, start: StartingPoint, car: CarId): 'notApplicable' | 'insufficientData' | null {
-  const applicable = input.planned.includes(car) && car < start.cars && start.retired[car] !== 1 && startLapOf(start, car) <= start.lapsTotal;
-  if (!applicable) return 'notApplicable';
-  return start.sets[car] === undefined ? 'insufficientData' : null;
-}
 
 /**
  * The job's candidate step, its one place: the cars planned and, per car, its candidates (a committed policy first, as
@@ -181,7 +90,7 @@ export function candidatesForRun(input: StrategyInput, rng: Rng): { mc: McInput 
     return { mc: null, perCar, out };
   }
   const start = s.value;
-  const config = configOf(input);
+  const config = strategyConfigOf(input.config);
 
   const planned = new Set<CarId>();
   for (const car of input.ourCars) {
@@ -190,18 +99,14 @@ export function candidatesForRun(input: StrategyInput, rng: Rng): { mc: McInput 
     else out[car] = unknown(why);
   }
   if (planned.size === 0) return { mc: null, perCar, out };
-  // a car of ours not planned is modelled like a rival
-  const sets: StartingPoint['sets'] = {};
-  for (const car of planned) sets[car] = start.sets[car] ?? [];
-  const field: StartingPoint = { ...start, sets };
-  const hazard = hazardOf(field, input.hazard);
+  const field = plannedField(start, planned);
+  const hazard = toMcHazard(input.hazard, field);
 
   const road = plainRoad(field, rng);
   const candidates: Record<CarId, McCandidate[]> = {};
   const committed: Record<CarId, Policy | null> = {};
   for (const car of planned) {
-    const fromLap = startLapOf(field, car);
-    const dp = strategyDp(dpInputOf(field, car, fromLap, hazard, trafficOf(field, road, car, fromLap, config.trafficGapMs)));
+    const dp = strategyDp(dpInputOn(field, car, hazard, road, config.trafficGapMs));
     const own = candidatesOf(field, car, dp, config);
     const original = input.committed[car] ?? null;
     let plan: CarPlan = { candidates: own, followed: null, original: null, infeasible: null };
@@ -215,14 +120,14 @@ export function candidatesForRun(input: StrategyInput, rng: Rng): { mc: McInput 
     candidates[car] = plan.candidates;
     committed[car] = plan.followed;
   }
-  const rivalRules: RivalRules = { q: config.rivalScBoxChance, aMin: config.rivalScMinTyreAge, reactionLaps: config.rivalReactionLaps, coverRule: false };
-  return { mc: { start: field, candidates, committed, hazard, rivalRules, config: mcConfigOf(config) }, perCar, out };
+  const { rivalRules, points } = mcSettingsFrom(input.config);
+  return { mc: { start: field, candidates, committed, hazard, rivalRules, config: mcConfigOf(config, points) }, perCar, out };
 }
 
 /** The job's parts (C51): one per our car planned, in our cars' order, each `{ ...input, planCar }`; the input as it is when none can be planned. */
 export function splitStrategy(input: StrategyInput): StrategyInput[] {
   const s = input.start;
-  const cars = s.known ? input.ourCars.filter((car) => notPlannedWhy(input, s.value, car) === null) : [];
+  const cars = s.known ? plannedCars(input, s.value) : [];
   return cars.length === 0 ? [input] : cars.map((planCar) => ({ ...input, planCar }));
 }
 
@@ -250,7 +155,7 @@ export function partFinalCall(input: StrategyInput, rng: Rng): { final: FinalCal
   const { mc: all, perCar: cars, out } = candidatesForRun(input, rng);
   const car = input.planCar;
   if (all === null || car === undefined || !cars.has(car)) return { final: null, perCar: cars, out };
-  const config = configOf(input);
+  const config = strategyConfigOf(input.config);
   const done = (final: FinalCall) => ({ final, perCar: cars, out });
 
   /** Car `c` planned under `cap`; `mate` our other car as certain input following `fixed`, else (absent) modelled like a rival. */
@@ -279,8 +184,8 @@ export function partFinalCall(input: StrategyInput, rng: Rng): { final: FinalCal
   return done(callOf(car, total - round1Cap, { car: mate, fixed: best }));
 }
 
-/** The car's place in the starting point's order, retired cars skipped (a placeholder until SP4.3b2 Task 6). */
-function positionOf(start: StartingPoint, car: CarId): number {
+/** The car's place in the starting point's order, retired cars skipped: its position when the view gave none. */
+function orderPlaceOf(start: StartingPoint, car: CarId): number {
   let p = 0;
   for (const c of start.order) {
     if (start.retired[c] === 1) continue;
@@ -288,6 +193,21 @@ function positionOf(start: StartingPoint, car: CarId): number {
     if (c === car) return p;
   }
   return start.cars;
+}
+
+/**
+ * The table's fields of ranked rows (spec §10): tied rows share their leader's rank (the first row's), every other row
+ * its index + 1; each row's mean race time against the first row's and, with a committed row, against it.
+ */
+function withTableFields(rows: readonly McRow[]): McRow[] {
+  const leader = rows[0];
+  const plan = rows.find((r) => r.committed);
+  return rows.map((row, i) => ({
+    ...row,
+    rank: i > 0 && row.tie ? 1 : i + 1,
+    deltaLeaderMs: leader === undefined ? 0 : row.meanMs - leader.meanMs,
+    deltaPlanMs: plan === undefined ? null : row.meanMs - plan.meanMs,
+  }));
 }
 
 /** One part: its car's ranked policies, the other entries as `candidatesForRun` gives them. */
@@ -299,8 +219,8 @@ function runPart(input: StrategyInput, rng: Rng): StrategyOutput {
   const hazardState: Known<'ok'> = input.hazard.known ? known('ok', s.at) : input.hazard;
   const own = perCar.get(final.car) as CarPlan;
   const r = raceMonteCarlo(final.mc, rng, final.mc.config.maxScenarioPolicies)[final.car] as McResult[CarId];
-  const rows = r.rows.map((row): McRow => (row.committed ? { ...row, policy: own.original ?? row.policy, source: 'committed', infeasible: own.infeasible } : row));
-  const currentPosition = positionOf(s.value, final.car);
+  const rows = withTableFields(r.rows.map((row): McRow => (row.committed ? { ...row, policy: own.original ?? row.policy, source: 'committed', infeasible: own.infeasible } : row)));
+  const currentPosition = input.positions[final.car] ?? orderPlaceOf(s.value, final.car);
   out[final.car] = known({ rows, scenarios: r.scenarios, capHit: r.capHit, candidates: own.candidates.length, hazard: hazardState, unresolvedTie: r.unresolvedTie, currentPosition }, s.at);
   return out;
 }

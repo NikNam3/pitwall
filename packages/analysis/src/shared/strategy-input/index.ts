@@ -1,35 +1,27 @@
-// STUB (SP4.3b2 Task 6, test phase): the shared strategy input, moved here from `strategy` by the implement phase.
-// Every function throws until then; the types only name the interfaces of the task's brief.
-import type { CarId, Policy, RaceHazard, Trigger } from '@pitwall/domain';
-import type { Dependency, EngineView } from '@pitwall/engine/readers';
-import type { McInput, RivalRules } from '../../race-monte-carlo/index.ts';
-import type { DpInput, DpPlan } from '../../strategy-dp/index.ts';
-import type { StrategyInput } from '../../strategy/prepare.ts';
+// The shared strategy input (SP4.3b2 Task 6; C43): what `strategy`'s job and the calls both build their runs from, one
+// copy each: the input from the view, the DP's input per car, the Monte Carlo hazard and settings, a candidate's policy.
+import type { DpPlan } from '../../strategy-dp/index.ts';
+import type { McInput } from '../../race-monte-carlo/index.ts';
+import type { Policy, RaceHazard, StartingPoint, Trigger } from '@pitwall/domain';
+import { hazardOf } from './dp-input.ts';
 
-export type { StrategyInput };
+export { dpInputOn, hazardOf, notPlannedWhy, plainRoad, plannedCars, plannedField, toDpInput, type PlainRoad } from './dp-input.ts';
+export { STRATEGY_INPUT_READS, strategyInputFrom, type StrategyInput } from './input.ts';
+export { mcSettingsFrom, pointsOf, strategyConfigOf } from './settings.ts';
 
-const notImplemented = (name: string): never => {
-  throw new Error(`${name}: not implemented (SP4.3b2 Task 6)`);
-};
-
-export const STRATEGY_INPUT_READS: Dependency[] = [];
-
-export function strategyInputFrom(_view: EngineView): StrategyInput {
-  return notImplemented('strategyInputFrom');
+/**
+ * `race-hazard`'s tables as `race-monte-carlo` reads them: index 0 is the leader's lap of `start`, without `start` the
+ * hazard's own first lap (the leader's lap when `race-hazard` last ran), up to its last lap.
+ */
+export function toMcHazard(hazard: RaceHazard, start?: Pick<StartingPoint, 'lap' | 'lapsTotal'>): McInput['hazard'] {
+  if (start !== undefined) return hazardOf(start, hazard);
+  const laps = hazard.known ? hazard.value.byLap.map((b) => b.lap) : [];
+  const first = laps.length === 0 ? 0 : Math.min(...laps);
+  const last = laps.length === 0 ? -1 : Math.max(...laps);
+  return hazardOf({ lap: first, lapsTotal: last }, hazard);
 }
 
-export function toDpInput(_input: StrategyInput, _car: CarId): DpInput {
-  return notImplemented('toDpInput');
-}
-
-export function toMcHazard(_hazard: RaceHazard): McInput['hazard'] {
-  return notImplemented('toMcHazard');
-}
-
-export function policyOf(_plan: Pick<DpPlan, 'stops'> & Partial<DpPlan>, _thresholds: readonly Trigger[]): Policy {
-  return notImplemented('policyOf');
-}
-
-export function mcSettingsFrom(_config: EngineView['config']): { rivalRules: RivalRules; points: number[]; zTie: number; tieBand: number } {
-  return notImplemented('mcSettingsFrom');
+/** A plan's stops with the triggers that change them inside a scenario: the one builder of a candidate's policy. */
+export function policyOf(plan: Pick<DpPlan, 'stops'> & Partial<DpPlan>, thresholds: readonly Trigger[]): Policy {
+  return { stops: plan.stops.map((s) => ({ lap: s.lap, compound: s.compound })), triggers: thresholds.map((t) => structuredClone(t)) };
 }
