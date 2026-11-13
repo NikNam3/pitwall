@@ -92,7 +92,7 @@ Every clause uses these words in exactly these meanings.
 | driver profile | What pitwall knows of one human driver across sessions (lap scatter, mistakes): entries computed from the person's stored sessions, minus the sessions the user excludes, plus the user's overrides. Owned by the bridge (C62c). |
 | profile store | The database of driver profiles' computed entries, a cache computed from stored projections (C62c). |
 | profile snapshot | The driver profiles of a session's linked drivers as the bridge hands them to a run, named by their fingerprint; kept in the recording's profiles sidecar (C62c). |
-| track file | The committed reference data of one track layout: its outline, official turns, braking zones and DRS zones by lap fraction, and per-track defaults (pit loss per condition, compound pace offsets, SC and VSC chances per lap and their durations), each default with its source. Made outside pitwall. |
+| track file | The committed reference data of one track layout: its outline, official turns, braking zones and DRS zones by lap fraction, and per-track defaults (pit loss per condition and the in-lap's share of it, compound pace offsets, SC and VSC chances per lap and their durations), each default with its source. Made outside pitwall. |
 | decision | A choice the user commits for analyses to use (a plan); recorded as a fact (C76). |
 
 **Publishing and UI**
