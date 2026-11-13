@@ -42,7 +42,8 @@ describe('forecast-field: the in-lap share from pit-loss (SP4.3b Task 11c)', () 
     expect(buildWithShare(none, trackWith(known({ value: 0.02, source: 'test: F1 25 Texas' }, 0))).track.pitLossMs.inLapShare).toBeCloseTo(0.02, 9);
     // without the track's share: the config's, as before
     expect(buildWithShare(none, trackWith(unknown('notReceived'))).track.pitLossMs.inLapShare).toBeCloseTo(PIT_LOSS_CONFIG.defaults.inLapShare, 9);
-    expect(buildWithShare(none, unknown('notApplicable')).track.pitLossMs.inLapShare).toBeCloseTo(PIT_LOSS_CONFIG.defaults.inLapShare, 9);
+    // (no track file at all is not a case here: without a track's pit loss and without a stop the starting point is
+    // unknown, C3; ported by the supervisor after Task 26's implement phase)
     // pit-loss's own estimate still wins over the track's
     expect(buildWithShare(known(0.11, 0), trackWith(known({ value: 0.02, source: 'test' }, 0))).track.pitLossMs.inLapShare).toBeCloseTo(0.11, 9);
   });

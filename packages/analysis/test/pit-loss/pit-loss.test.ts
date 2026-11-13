@@ -12,7 +12,7 @@ import type { EngineView, StoredSource } from '@pitwall/engine/readers';
 import { describe, expect, it } from 'vitest';
 import { guardedView } from '../../../engine/test/support/scheduler.ts';
 import { engineView, history, lap } from '../../../../test-support/builders/index.ts';
-import { zandvoortTrack } from '../../../../test-support/track.ts';
+import { withoutInLapShare, zandvoortTrack } from '../../../../test-support/track.ts';
 import { pitLossCalculator } from '../../src/pit-loss/calculator.ts';
 import { PIT_LOSS, PIT_LOSS_CONFIG, PIT_LOSS_PRIORS, type PitLossOutput } from '../../src/pit-loss/index.ts';
 
@@ -316,7 +316,8 @@ describe('pit-loss: the in-lap share (SP4.3b Task 11c)', () => {
   // row 1
   it('with no stop measured the in-lap share is the prior 0.26', () => {
     expect(PIT_LOSS_CONFIG.defaults).toHaveProperty('inLapShare', PRIOR);
-    const out = compute(viewOf([], { track: known(zandvoortTrack(), 0), priors: known(snapshot(20_000), 0) }));
+    // ported in SP4.3b Task 26: a track without its own in-lap share
+    const out = compute(viewOf([], { track: known(withoutInLapShare(zandvoortTrack()), 0), priors: known(snapshot(20_000), 0) }));
     for (const condition of ['green', 'vsc', 'sc'] as const) expect(shareOf(out, condition)).toMatchObject({ known: true, value: PRIOR });
     // the prior is known without a calibration or a track file, and an override of the config is followed (C47)
     const bare = compute(viewOf([], { track: unknown('notApplicable'), priors: unknown('notApplicable') }));

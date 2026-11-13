@@ -31,10 +31,11 @@ import { tyreLifeCalculator } from '../../../src/tyre-life/calculator.ts';
 import { TYRE_LIFE, tyreLifeAsOf } from '../../../src/tyre-life/index.ts';
 import type { BuilderRace } from '../../../../../test-support/builders/long-race.ts';
 import { generateRace, GENERATOR_DEFAULTS, type GeneratorParams } from '../../../../../test-support/race-generator/index.ts';
-import { zandvoortTrack } from '../../../../../test-support/track.ts';
+import { withoutInLapShare, zandvoortTrack } from '../../../../../test-support/track.ts';
 
 /** The track file of every view here: braking zones, DRS zones and pit-loss defaults. */
-export const TRACK: EngineView['track'] = known(zandvoortTrack(), 0);
+// ported in SP4.3b Task 26: the track's in-lap share left out, so the config prior holds
+export const TRACK: EngineView['track'] = known(withoutInLapShare(zandvoortTrack()), 0);
 
 /** The fact lists of the projection (the log's `FACT_LISTS`). */
 export const FACT_LISTS = ['laps', 'stints', 'pitStops', 'crossings', 'events', 'penalties', 'decisions', 'clock'] as const;

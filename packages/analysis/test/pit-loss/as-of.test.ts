@@ -20,13 +20,14 @@ import { describe, expect, it } from 'vitest';
 import { guardedView } from '../../../engine/test/support/scheduler.ts';
 import { engineView, history, lap } from '../../../../test-support/builders/index.ts';
 import { generateRace, GENERATOR_DEFAULTS } from '../../../../test-support/race-generator/index.ts';
-import { zandvoortTrack } from '../../../../test-support/track.ts';
+import { withoutInLapShare, zandvoortTrack } from '../../../../test-support/track.ts';
 import { engineShaped } from '../engine-shaped.ts';
 import { pitLossCalculator } from '../../src/pit-loss/calculator.ts';
 import { PIT_LOSS, pitLossAsOf, type PitLossOutput } from '../../src/pit-loss/index.ts';
 
 /** The track file: its pit-loss defaults are the prior of a condition the priors snapshot has no entry for. */
-const TRACK: EngineView['track'] = known(zandvoortTrack(), 0);
+// ported in SP4.3b Task 26: the track's in-lap share left out, so the config prior 0.26 holds
+const TRACK: EngineView['track'] = known(withoutInLapShare(zandvoortTrack()), 0);
 
 /** A calibration with a green pit loss only: green blends with it, VSC and SC with the track file's defaults. */
 const PRIORS: EngineView['priors'] = known(
