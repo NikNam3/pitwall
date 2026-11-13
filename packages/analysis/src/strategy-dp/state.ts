@@ -23,12 +23,12 @@ export const MAX_STOPS = 3;
 export const DRY_COMPOUNDS: readonly NoiseCompound[] = ['soft', 'medium', 'hard'];
 
 const CONDITIONS = ['none', 'sc', 'vsc'] as const;
-const COND_SC = 1;
-const COND_VSC = 2;
+export const COND_SC = 1;
+export const COND_VSC = 2;
 
 /** The neutralisation states at a lap's start: 0 green, 1 green with no start possible, then SC and VSC laps left. */
-const NS_GREEN = 0;
-const NS_NO_START = 1;
+export const NS_GREEN = 0;
+export const NS_NO_START = 1;
 
 /** A node: the set on the car (`null` = the set the car is on at `fromLap`) and the stops it can make. */
 export type DpNode = {
@@ -44,6 +44,8 @@ export type Layout = {
   ns: number;
   condOf: Int8Array;
   nextOf: Int8Array;
+  /** Per condition how many laps-left states the layout holds (`left` 0 … length − 1). */
+  lengths: { sc: number; vsc: number };
   /** The state of a lap neutralised by `condition` with `left` laps after it. */
   stateOf: (condition: 'sc' | 'vsc', left: number) => number;
 };
@@ -65,7 +67,7 @@ export function layoutOf(input: DpInput): Layout {
     condOf[2 + scLen + k] = COND_VSC;
     nextOf[2 + scLen + k] = k === 0 ? NS_NO_START : 2 + scLen + k - 1;
   }
-  return { ns, condOf, nextOf, stateOf: (condition, left) => (condition === 'sc' ? 2 + left : 2 + scLen + left) };
+  return { ns, condOf, nextOf, lengths: { sc: scLen, vsc: vscLen }, stateOf: (condition, left) => (condition === 'sc' ? 2 + left : 2 + scLen + left) };
 }
 
 const ruleMet = (input: DpInput, fitted: readonly NoiseCompound[]): boolean =>
@@ -174,6 +176,12 @@ function fuelByLap(input: DpInput, n: number): Float64Array {
   return fuel;
 }
 
+/** A stop at the end of lap offset i under condition `cond` (0 green, SC, VSC): the loss less the human saving, plus traffic. */
+export function stopCostMs(input: DpInput, cond: number, i: number): number {
+  const loss = cond === COND_SC ? input.pitLossMs.sc : cond === COND_VSC ? input.pitLossMs.vsc : input.pitLossMs.green;
+  return loss - (input.carParams.human ? HUMAN_STOP_SAVING_MS : 0) + (input.trafficMsByLap[i] ?? 0);
+}
+
 /** A neutralisation starting at a state: its expected value boxing onto the best child and staying out. */
 export type NeutralValues = { box: Float64Array; boxArg: Int8Array; stay: Float64Array };
 
@@ -189,9 +197,15 @@ export type SolvedNode = {
   firstStay: Float64Array;
   /** Per `i * n + j` the values of an SC and a VSC starting on that lap, where the solve keeps them. */
   neutral: { sc: NeutralValues; vsc: NeutralValues } | null;
+  /**
+   * Per `i * ns + state` the value from lap offset i's start at the node's entry age: the car's set at i laps for the
+   * car's set, a new set (0 laps) otherwise; `Infinity` where the node holds no such state (a new set at offset 0).
+   */
+  entry: Float64Array;
 };
 
-export type GraphSolution = { nodes: SolvedNode[] };
+/** A solve: its nodes and per tyre its lap times (`[(cond * n + i) * n + j]`, as `lapTable`). */
+export type GraphSolution = { nodes: SolvedNode[]; lapTimes: ReadonlyMap<NoiseCompound | null, Float64Array> };
 
 /** A node of a solve; a missing index is a bug (C3). */
 export function nodeAt(graph: GraphSolution, index: number): SolvedNode {
@@ -233,9 +247,7 @@ export function solveGraph(input: DpInput, layout: Layout, nodes: readonly DpNod
     tables.set(tyre, table);
     return table;
   };
-  const human = input.carParams.human ? HUMAN_STOP_SAVING_MS : 0;
-  const loss = [input.pitLossMs.green, input.pitLossMs.sc, input.pitLossMs.vsc];
-  const stop = (cond: number, i: number): number => (loss[cond] ?? Infinity) - human + (input.trafficMsByLap[i] ?? 0);
+  const stop = (cond: number, i: number): number => stopCostMs(input, cond, i);
   const { byLap, vscByLap, scDur, vscDur } = input.hazard;
   const scState = layout.stateOf('sc', 0);
   const vscState = layout.stateOf('vsc', 0);
@@ -250,6 +262,7 @@ export function solveGraph(input: DpInput, layout: Layout, nodes: readonly DpNod
       firstBoxArg: new Int8Array(ns).fill(-1),
       firstStay: new Float64Array(ns),
       neutral: d >= neutralFrom ? { sc: neutralValues(n * n), vsc: neutralValues(n * n) } : null,
+      entry: new Float64Array(n * ns).fill(Infinity),
     },
     kids: [],
     lt: tableOf(node.tyre),
@@ -347,10 +360,12 @@ export function solveGraph(input: DpInput, layout: Layout, nodes: readonly DpNod
         if (solved.neutral !== null) keepNeutral(solved, kids, i, j, last, lt, self);
       }
       if (i === 0) solved.first.set(out.subarray(0, ns));
+      const jEntry = node.tyre === null ? i : 0;
+      if (jEntry >= jFrom && jEntry <= jTo) solved.entry.set(out.subarray(jEntry * ns, (jEntry + 1) * ns), i * ns);
     }
     for (const w of works) [w.cur, w.next] = [w.next, w.cur];
   }
-  return { nodes: works.map((w) => w.solved) };
+  return { nodes: works.map((w) => w.solved), lapTimes: tables };
 }
 
 /** The value at `fromLap` of a solved node, its first lap's action free (`'free'`), forced to box or to stay. */
@@ -385,18 +400,32 @@ export function valueAtStart(input: DpInput, layout: Layout, solved: SolvedNode,
  * `firstAction` forces the action at the end of `fromLap`.
  */
 export function greenPath(input: DpInput, layout: Layout, graph: GraphSolution, root: number, firstAction: 'free' | 'box' | 'stay' = 'free'): DpPlan['stops'] {
-  const n = input.totalLaps - input.fromLap + 1;
-  const stops: DpPlan['stops'] = [];
   let s = NS_NO_START;
   if (input.active !== null) s = layout.stateOf(input.active.condition, Math.max(0, input.active.remaining.findIndex((p) => p > 0)));
-  let index = root;
-  let j = 0;
-  for (let i = 0; i < n; i++) {
+  const solved = nodeAt(graph, root);
+  if (firstAction === 'free') return pathFrom(input, layout, graph, { index: root, i: 0, j: 0, s });
+  const arg = firstAction === 'box' ? (solved.firstBoxArg[s] ?? -1) : -1;
+  const at = afterLap(layout, s);
+  const child = solved.node.children[arg];
+  if (child === undefined) return pathFrom(input, layout, graph, { index: root, i: 1, j: 1, s: at });
+  return [{ lap: input.fromLap, compound: child.compound }, ...pathFrom(input, layout, graph, { index: child.node, i: 1, j: 0, s: at })];
+}
+
+/** The state of the next lap's start on the path where no neutralisation comes. */
+export const afterLap = (layout: Layout, s: number): number => {
+  const next = layout.nextOf[s] ?? NS_GREEN;
+  return next === NS_GREEN ? NS_NO_START : next;
+};
+
+/** A node's path from lap offset `i`, laps on its set `j`, state `s`, where no neutralisation comes: its stops. */
+export function pathFrom(input: DpInput, layout: Layout, graph: GraphSolution, from: { index: number; i: number; j: number; s: number }): DpPlan['stops'] {
+  const n = input.totalLaps - input.fromLap + 1;
+  const stops: DpPlan['stops'] = [];
+  let { index, j, s } = from;
+  for (let i = from.i; i < n; i++) {
     const solved = nodeAt(graph, index);
-    const decided = solved.decisions[(i * n + j) * layout.ns + s] ?? -1;
-    const arg = i > 0 || firstAction === 'free' ? decided : firstAction === 'box' ? (solved.firstBoxArg[s] ?? -1) : -1;
-    const nextS = layout.nextOf[s] ?? NS_GREEN;
-    s = nextS === NS_GREEN ? NS_NO_START : nextS;
+    const arg = solved.decisions[(i * n + j) * layout.ns + s] ?? -1;
+    s = afterLap(layout, s);
     const child = solved.node.children[arg];
     if (child !== undefined) {
       stops.push({ lap: input.fromLap + i, compound: child.compound });

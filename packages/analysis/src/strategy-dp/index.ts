@@ -2,8 +2,9 @@
 // expected over the SC/VSC chances of each lap, with the trigger thresholds. Pure, no randomness; no reads, no
 // cadence, no topic.
 //
-// One solve (`solveDp`) holds every node's values and decisions; the result (`dpResult`) only reads it, so a caller
-// that needs several reads of one input solves once (only the degradation-off threshold re-solves, a changed input).
+// One solve (`solveDp`, `solve.ts`) holds every node's values and decisions; the result (`dpResult`) only reads it, and
+// `bestWith` (`best-with.ts`) queries it, so a caller that needs several reads of one input solves once (only the
+// degradation-off threshold re-solves, a changed input).
 // - `plans`: one plan per compound sequence that meets the sets and the rule with at most `MAX_STOPS` stops, best
 //   first; its `expectedMs` is the expected remaining race time of the best closed-loop play making exactly that
 //   sequence's stops, its `stops` that play's stops where no neutralisation comes.
@@ -16,38 +17,16 @@
 //   (`stayMs`); `sc-call` reads it (4.3b2).
 // - `thresholds`: the SC/VSC lap ranges per remaining stop, damage, degradation off and rain (`thresholds.ts`).
 import { defineSimulator } from '@pitwall/engine/readers';
-import { adaptiveGraph, feasibleSequences, greenPath, layoutOf, nodeAt, planGraph, plansOf, solveGraph, valueAtStart, type DpNode, type GraphSolution, type Layout } from './state.ts';
+import { solveDp, type DpSolution } from './solve.ts';
+import { adaptiveGraph, feasibleSequences, greenPath, layoutOf, nodeAt, planGraph, plansOf, solveGraph, valueAtStart, type GraphSolution, type Layout } from './state.ts';
 import { nodesAlong, thresholdsOf } from './thresholds.ts';
-import type { DpFirst, DpInput, DpPlan, DpResult, DpTable, DpUnder } from './types.ts';
+import type { DpInput, DpPlan, DpResult, DpTable } from './types.ts';
 
 export type * from './types.ts';
+export { bestWith } from './best-with.ts';
+export { solveDp, type DpSolution } from './solve.ts';
 
 export const SIMULATOR = defineSimulator('strategy-dp');
-
-/** One solve of an input: the plan graph and the adaptive graph, solved together. */
-export type DpSolution = {
-  input: DpInput;
-  layout: Layout;
-  graph: GraphSolution;
-  /** The plan roots, one per feasible sequence. */
-  planRoots: number[];
-  /** The adaptive graph's root. */
-  adaptiveRoot: number;
-};
-
-/** The plan graph's and the adaptive graph's nodes in one list: the adaptive nodes after the plan nodes. */
-function joined(plan: readonly DpNode[], adaptive: readonly DpNode[]): DpNode[] {
-  const offset = plan.length;
-  return [...plan, ...adaptive.map((d) => ({ ...d, children: d.children.map((c) => ({ compound: c.compound, node: c.node + offset })) }))];
-}
-
-/** Solves `input` once: every plan's and the closed-loop play's values and decisions. */
-export function solveDp(input: DpInput): DpSolution {
-  const layout = layoutOf(input);
-  const plan = planGraph(feasibleSequences(input));
-  const graph = solveGraph(input, layout, joined(plan.nodes, adaptiveGraph(input, true)), plan.nodes.length);
-  return { input, layout, graph, planRoots: plan.roots, adaptiveRoot: plan.nodes.length };
-}
 
 /** The best plan of `input` alone (the plan graph only): for the degradation-off re-solves. */
 function bestPlanOf(input: DpInput): DpPlan | null {
@@ -95,16 +74,6 @@ export function dpResult(s: DpSolution): DpResult {
   const best = plans[0] ?? stayOut;
   const thresholds = thresholdsOf({ input, graph, adaptiveRoot: s.adaptiveRoot, best, boxNow, stayOut, bestPlanOf });
   return { plans, boxNow, stayOut, thresholds, table: tableOf(s, best.stops) };
-}
-
-/**
- * A query of one solve's table, never a new solve (SP4.3b2 Task 5): the best plan to the flag whose first stop is
- * `first` (at `stopLap` onto that compound, `'best'`: the DP picks; or after `noStopThrough`), from the state "that
- * neutralisation out at the start lap" with `under`; `null` when no such plan keeps the compound rule and the sets.
- * Contract-first stub (C81) until Task 5.
- */
-export function bestWith(_solution: DpSolution, _first: DpFirst, _under?: DpUnder): DpPlan | null {
-  throw new Error('not implemented');
 }
 
 /** The car's best plans, its box-now and stay-out variants and its trigger thresholds from `input.fromLap`. */
