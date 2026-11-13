@@ -3,7 +3,13 @@
 // either way (`neighbour`; the supervisor's ruling: the best plan's only, so the count stays inside the cap); the rule
 // candidates on the best plan (`rule`): mirror the rival directly ahead and the one directly behind (the first stop at
 // its likeliest stop lap, `stopMid`), cover the car behind and extend past the car ahead (a `rivalPits` trigger within
-// `ruleGapMs`). Every policy is `policyOf(plan, thresholds)`, with the DP's thresholds; no policy twice.
+// `ruleGapMs`). Every policy is `policyOf(plan, thresholds)`; no policy twice.
+//
+// SP4.3b Task 23a (supervisor rulings, 2026-11-13): at most `dpPlansMax` DP plans, the best by `expectedMs` (box-now and
+// stay-out besides); inter and wet plans only where rain can come (the track's wetness at the DP's rain threshold, or
+// the forecast's highest rain chance over the remaining laps at `rainCandidatePct`; no forecast counts as no rain); the
+// best plan's sequence twice, with every DP threshold and without degradation-off and rain; every other candidate
+// carries only the neutralised triggers (and a cover or extend rule its own `rivalPits`).
 import type { CarId, Policy, StartingPoint, Trigger } from '@pitwall/domain';
 import type { McCandidate } from '../race-monte-carlo/index.ts';
 import { startLapOf } from '../race-forecast/index.ts';
@@ -39,6 +45,20 @@ function rivalNext(start: StartingPoint, car: CarId, step: -1 | 1): CarId | unde
   return undefined;
 }
 
+const WET: ReadonlySet<string> = new Set(['inter', 'wet']);
+
+/**
+ * Whether rain can come for inter and wet plans (Task 23a): the track's wetness at the DP's rain threshold (without a
+ * rain threshold, any wetness), or the forecast's highest rain chance from `fromLap` to the flag at `rainCandidatePct`.
+ */
+function rainCanCome(start: StartingPoint, fromLap: number, thresholds: readonly Trigger[], config: StrategyConfig): boolean {
+  const rain = thresholds.find((t) => t.kind === 'rain');
+  const wetness = start.wetness.wetnessMs;
+  if (rain === undefined ? wetness > 0 : wetness >= rain.wetnessMs) return true;
+  if (!start.weather.known) return false;
+  return start.weather.value.byLap.some((l) => l.lap >= fromLap && l.lap <= start.lapsTotal && l.rainPct >= config.rainCandidatePct);
+}
+
 /** Car `car`'s candidates from its DP result (spec §8.1 step 1); the committed row is the job's. */
 export function candidatesOf(start: StartingPoint, car: CarId, dp: DpResult, config: StrategyConfig): McCandidate[] {
   const out: McCandidate[] = [];
@@ -49,11 +69,21 @@ export function candidatesOf(start: StartingPoint, car: CarId, dp: DpResult, con
     seen.add(key);
     out.push({ policy, source });
   };
-  const thresholds = dp.thresholds;
   const fromLap = startLapOf(start, car);
-  const best = dp.plans[0] ?? dp.stayOut;
+  const thresholds = dp.thresholds.filter((t) => t.kind === 'neutralised');
+  const allowed = rainCanCome(start, fromLap, dp.thresholds, config) ? () => true : (p: Pick<DpPlan, 'stops'>) => !p.stops.some((s) => WET.has(s.compound));
+  const plans = dp.plans
+    .filter(allowed)
+    .sort((a, b) => a.expectedMs - b.expectedMs)
+    .slice(0, config.dpPlansMax);
+  const best = plans[0] ?? dp.stayOut;
 
-  for (const plan of [...dp.plans, ...(dp.boxNow === null ? [] : [dp.boxNow]), dp.stayOut]) add(policyOf(plan, thresholds), 'dp');
+  // the best plan's own sequence: with every DP threshold, and without degradation-off and rain
+  add(policyOf(best, dp.thresholds), 'dp');
+  add(policyOf(best, dp.thresholds.filter((t) => t.kind !== 'degradationOff' && t.kind !== 'rain')), 'dp');
+  for (const plan of [...plans.slice(1), ...(dp.boxNow === null ? [] : [dp.boxNow]), dp.stayOut]) {
+    if (plan !== best && allowed(plan)) add(policyOf(plan, thresholds), 'dp');
+  }
 
   for (let k = 0; k < best.stops.length; k++) {
     const lap = (best.stops[k] as Stops[number]).lap;
