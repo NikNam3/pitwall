@@ -146,9 +146,13 @@ describe('strategy feature', () => {
 
     // in process, with the frame's seed: twice the same, and the worker's
     const input = prepareStrategy(viewOf(at));
-    const seed = jobSeed(0, STRATEGY_JOB.id, { lap: 0, frameId: at });
-    const once = runStrategy(structuredClone(input), createRng(seed));
-    expect(runStrategy(structuredClone(input), createRng(seed))).toStrictEqual(once);
+    // ported in SP4.3b Task 25: the job runs in one part per car, part i seeded with jobSeed(…, `${id}/${i}`, …) (Task 24)
+    const parts = STRATEGY_JOB.parts;
+    if (parts === undefined) throw new Error('strategy runs in parts');
+    const inParts = () =>
+      parts.merge(parts.split(structuredClone(input)).map((part, i) => runStrategy(part, createRng(jobSeed(0, `${STRATEGY_JOB.id}/${i}`, { lap: 0, frameId: at })))));
+    const once = inParts();
+    expect(inParts()).toStrictEqual(once);
     expect(once).toEqual(liveOut);
 
     // the live feed runs on; a feed reprocessing only up to `at` (the CLI's path) gets the live output for it
