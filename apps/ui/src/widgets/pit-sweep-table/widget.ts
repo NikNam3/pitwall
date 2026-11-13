@@ -18,8 +18,8 @@ export const widget = declareWidget({
       compound: options['compound'] as (typeof COMPOUND_CHOICES)[number],
     })),
   },
-  // A panel option: a persistent change through the panel (C73, C74); the popover is the shell's.
-  options: { compound: choiceOption(COMPOUND_CHOICES, 'auto', text.compound) },
+  // A panel option: a persistent change through the panel (C73, C74); the popover is the shell's, listing text.ts' labels.
+  options: { compound: choiceOption(COMPOUND_CHOICES, 'auto', text.compound, text.compoundChoice) },
   // Mockup pit-sweep-table.html: full 53×14 (the header, 13 stop laps), compact 26×6 (the header, 5 stop laps).
   sizes: { compact: { minCols: 26, minRows: 6 }, full: { minCols: 53, minRows: 14 } },
 });
