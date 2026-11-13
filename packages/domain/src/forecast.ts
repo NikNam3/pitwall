@@ -5,6 +5,7 @@ import type { NoiseCompound } from './analyses/driver-noise.ts';
 import type { RaceInteraction } from './analyses/race-interaction.ts';
 import type { TyreType } from './analyses/crossover.ts';
 import type { CarId } from './ids.ts';
+import type { Known } from './known.ts';
 import type { Ms } from './units.ts';
 
 /** The compounds in `StartingPoint.compound`'s index order. */
@@ -47,6 +48,11 @@ export type StartingPoint = {
   /** Our cars only. */
   sets: Record<CarId, { compound: NoiseCompound; wearPct: number }[]>;
   wetness: { wetnessMs: number; sdMs: number };
+  /**
+   * The weather forecast's samples mapped onto race laps by the leader's lap time: per lap its rain chance (0–100) and
+   * the forecast's accuracy (SP4.3b spec §7.1, S12); unknown where no forecast reached the view (C3).
+   */
+  weather: Known<{ byLap: { lap: number; rainPct: number }[]; accuracy: 'perfect' | 'approximate' }>;
   /** `inLapShare`: the part of a stop's loss paid on the in lap, the rest on the out lap (SP4.3b spec §4.2, F2). */
   track: { brakingZones: Float64Array; drsZones: DrsZone[]; pitLossMs: { green: number; vsc: number; sc: number; inLapShare: number } };
   /** DRS: a car within `rangeMs` of the car ahead at a detection point may open it, from lap `fromLap` (SP4.3b spec §4.2, F7). */

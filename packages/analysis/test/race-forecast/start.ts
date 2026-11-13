@@ -20,7 +20,7 @@
 // - `gapMs[car]`: the time it crosses that line after the leader.
 // - `trace`: one entry per lap from `start.lap` on, each car as it completes that lap: its position, its gap to the
 //   leader at that line and its lap time.
-import { known, NOISE_COMPOUNDS, type CarId, type DrsZone, type ForecastResult, type ForecastTrace, type LapModelParams, type NoiseCompound, type PassCurve, type Policy, type RaceInteraction, type Scenario, type StartingPoint } from '@pitwall/domain';
+import { known, unknown, NOISE_COMPOUNDS, type CarId, type DrsZone, type ForecastResult, type ForecastTrace, type LapModelParams, type NoiseCompound, type PassCurve, type Policy, type RaceInteraction, type Scenario, type StartingPoint } from '@pitwall/domain';
 
 export const PACE_MS = 90_000;
 
@@ -158,6 +158,7 @@ export function startingPoint(spec: StartSpec): StartingPoint {
     owesStop: f((l) => new Uint8Array(l), () => 0),
     sets,
     wetness: { wetnessMs: 0, sdMs: 0 },
+    weather: unknown('notReceived'),
     track: {
       brakingZones: Float64Array.from(spec.brakingZones ?? BRAKING_ZONES),
       drsZones: spec.drsZones ?? DRS_ZONES,

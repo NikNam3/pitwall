@@ -198,6 +198,7 @@ export function buildStartingPoint(
     owesStop: new Uint8Array(cars),
     sets: {},
     wetness: wetnessOf(wetness, config.priorWetnessSdMs),
+    weather: unknown('notReceived'),
     track: trackOf(view, pitLoss, need, configOf(PIT_LOSS_CONFIG, view).inLapShare),
     // the one DRS rule: race-interaction's (F7)
     drs: { rangeMs: drsConfig.drsRangeMs, fromLap: drsConfig.drsFromLap },
