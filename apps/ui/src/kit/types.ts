@@ -37,14 +37,14 @@ export type BoolOption = OptionBase<boolean> & { readonly kind: 'bool' };
 /** What an unset car option means: `follow` the panel's link, or `none`, no car. */
 export type CarUnset = 'follow' | 'none';
 export type CarOption = OptionBase<CarRef | undefined> & { readonly kind: 'car'; readonly unset: CarUnset };
-export type ChoiceOption<C extends string> = OptionBase<C> & { readonly kind: 'choice'; readonly choices: readonly C[] };
+export type ChoiceOption<C extends string> = OptionBase<C> & { readonly kind: 'choice'; readonly choices: readonly C[]; readonly labels?: Partial<Record<C, string>> };
 export type NumberOption = OptionBase<number> & { readonly kind: 'number'; readonly range: { min: number; max: number; step: number } };
 
 /** One per-panel setting, UI-only, discriminated on `kind`: `choices` only on choice options, `range` only on number options. */
 export type OptionDecl<V> =
   | (OptionBase<V> & { readonly kind: 'bool' })
   | (OptionBase<V> & { readonly kind: 'car'; readonly unset: CarUnset })
-  | (OptionBase<V> & { readonly kind: 'choice'; readonly choices: readonly string[] })
+  | (OptionBase<V> & { readonly kind: 'choice'; readonly choices: readonly string[]; readonly labels?: Partial<Record<string, string>> })
   | (OptionBase<V> & { readonly kind: 'number'; readonly range: { min: number; max: number; step: number } });
 
 export type SizeMode = { minCols: number; minRows: number };
