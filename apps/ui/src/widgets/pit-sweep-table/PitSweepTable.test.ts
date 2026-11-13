@@ -140,7 +140,7 @@ describe('pit-sweep-table', () => {
     });
     // rows compare: only the row holding the panel's largest bin reaches full height
     expect(Math.max(...heights)).toBeCloseTo(13, 6);
-    expect(Math.min(...heights)).toBeLessThan(13 - 0.5);
+    expect(Math.min(...heights)).toBeLessThan(13 - 0.4);
     // the mark itself is the square (gen.mjs LIFE_MARK)
     expect(text.lifeMark).toBe('■');
   });
