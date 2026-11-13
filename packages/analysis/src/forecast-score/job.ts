@@ -81,8 +81,12 @@ export function prepareScore(view: EngineView): ScoreInput {
     const now = view.situation.byMachine[m];
     if (now !== undefined) open[m] = [...now];
   }
+  // the append frames of the declared lists and sub-machines only (C41: another list's are an undeclared read)
   const appendedAt: Record<string, FrameNumber[]> = {};
-  for (const [list, frames] of Object.entries(h.appendedAt ?? {})) appendedAt[list] = [...(frames as readonly FrameNumber[])];
+  for (const list of [...SCORE_LISTS, ...SCORE_MACHINES.map((m) => `spans:${m}`)]) {
+    const frames = h.appendedAt?.[list];
+    if (frames !== undefined) appendedAt[list] = [...(frames as readonly FrameNumber[])];
+  }
   const lists = Object.fromEntries(SCORE_LISTS.map((list) => [list, [...(h[list] as readonly unknown[])]]));
   const history = { ...lists, penalties: [], clock: [], spans, appendedAt } as unknown as Projection;
   const fixed = asOfNow(view).fixed;
