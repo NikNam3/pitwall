@@ -3,12 +3,15 @@
 // `undercut.car`.
 import type { Job } from '@pitwall/engine/readers';
 import { REJOIN } from '../rejoin/index.ts';
-import { STRATEGY_JOB, STRATEGY_TRIGGER } from '../strategy/index.ts';
-import { prepareUndercut, type UndercutInput, type UndercutOutput } from './job.ts';
+import { STRATEGY_INPUT_READS } from '../shared/strategy-input/index.ts';
+import { STRATEGY_TRIGGER } from '../strategy/index.ts';
+import type { UndercutOutput } from './job.ts';
+import { prepareUndercut, type UndercutInput } from './prepare.ts';
 
 export { UNDERCUT_BEHAVIOUR, type UndercutEffect } from './behaviour.ts';
 export * from './config.ts';
-export type { UndercutInput, UndercutOutput } from './job.ts';
+export type { UndercutOutput } from './job.ts';
+export { prepareUndercut, rivalsOf, type UndercutCarInput, type UndercutInput, type UndercutRivalInput } from './prepare.ts';
 
 /** The analysis id (its job's id). */
 export const UNDERCUT = 'undercut';
@@ -17,8 +20,8 @@ export const UNDERCUT = 'undercut';
 export const UNDERCUT_JOB: Job<UndercutInput, UndercutOutput> = {
   kind: 'job',
   id: UNDERCUT,
-  reads: [...STRATEGY_JOB.reads, { calculator: REJOIN }],
+  reads: [...STRATEGY_INPUT_READS, { calculator: REJOIN }],
   trigger: { onChange: [...STRATEGY_TRIGGER.onChange] },
-  prepare: () => prepareUndercut(),
+  prepare: (view) => prepareUndercut(view),
   module: new URL('./job.ts', import.meta.url),
 };
