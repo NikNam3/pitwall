@@ -1,7 +1,7 @@
 <script lang="ts">
   // One gallery cell of the shell (spec 10): a stage of fixed character cells under the default theme, in which the top
   // bar or an overlay is drawn as in a window. An overlay is `position: fixed`; `contain: layout` makes the stage its
-  // containing block, and once drawn the stage shrinks to the overlay's height. Every shell cell has a screenshot baseline (`data-baseline`).
+  // containing block, and once drawn the stage shrinks to the overlay's height. `baseline` marks the cells with a screenshot baseline (`data-baseline`).
   import { onMount, tick, type Snippet } from 'svelte';
   import { cellBox } from '../kit/size/size.ts';
   import { role, type ThemeVariant } from '../theme/index.ts';
@@ -22,9 +22,11 @@
     overlay?: boolean;
     /** Runs once the content is mounted, before the cell counts as ready. */
     prepare?: (stage: HTMLElement) => void | Promise<void>;
+    /** True when the e2e screenshot spec compares this cell with a baseline. */
+    baseline?: boolean;
     children: Snippet;
   };
-  let { id, theme, cols, rows = 4, overlay = false, prepare, children }: Props = $props();
+  let { id, theme, cols, rows = 4, overlay = false, prepare, baseline = false, children }: Props = $props();
 
   /* svelte-ignore state_referenced_locally */
   const font = { fontPx: theme.fontPx, lineHeight: theme.density.lineHeight };
@@ -61,7 +63,7 @@
   });
 </script>
 
-<figure bind:this={figure} data-gallery-id={id} data-ready={ready || undefined} data-baseline use:themed={theme}>
+<figure bind:this={figure} data-gallery-id={id} data-ready={ready || undefined} data-baseline={baseline || undefined} use:themed={theme}>
   <figcaption style:color={role('textFaint')}>{id}</figcaption>
   <!-- The fit check (e2e/fit.spec.ts) looks for `.panel .body` in every cell that is not a kit part: the stage is the body. -->
   <div class="panel">

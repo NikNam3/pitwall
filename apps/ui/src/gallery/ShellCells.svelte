@@ -116,26 +116,26 @@
       {#if base === undefined}
         <figure data-gallery-id={cell.id} data-ready style:color={role('warning')}>{cell.id}: {text.momentMissing}</figure>
       {:else}
-        <ShellCell id={cell.id} {theme} cols={stageCols(cell.kind)}>
+        <ShellCell id={cell.id} {theme} baseline={cell.hasBaseline} cols={stageCols(cell.kind)}>
           <TopBar store={topBarStore(cell.detail as keyof typeof TOP_BAR_CASES)} feedId={FEED} send={noop} sendReplay={noop} />
         </ShellCell>
       {/if}
     {:else if cell.kind === 'palette'}
-      <ShellCell id={cell.id} {theme} cols={stageCols(cell.kind)} overlay prepare={typeQuery(cell.detail ?? '')}>
+      <ShellCell id={cell.id} {theme} baseline={cell.hasBaseline} cols={stageCols(cell.kind)} overlay prepare={typeQuery(cell.detail ?? '')}>
         <Palette {registry} bindings={keys.bindings} />
       </ShellCell>
     {:else if cell.kind === 'key-overview'}
-      <ShellCell id={cell.id} {theme} cols={stageCols(cell.kind)} rows={OVERLAY_ROWS} overlay>
+      <ShellCell id={cell.id} {theme} baseline={cell.hasBaseline} cols={stageCols(cell.kind)} rows={OVERLAY_ROWS} overlay>
         <KeyOverview {registry} bindings={keys.bindings} notes={keys.notes} onClose={noop} />
       </ShellCell>
     {:else if cell.kind === 'settings-popover'}
       {#if widget !== undefined}
-        <ShellCell id={cell.id} {theme} cols={stageCols(cell.kind)} overlay>
+        <ShellCell id={cell.id} {theme} baseline={cell.hasBaseline} cols={stageCols(cell.kind)} overlay>
           <SettingsPopover decl={widget.decl} options={{}} onChange={noop} linkGroup={1} onLinkGroup={noop} onClose={noop} anchor={{ left: 0, right: 0, top: 0, bottom: 0 }} />
         </ShellCell>
       {/if}
     {:else if cell.kind === 'inspector'}
-      <ShellCell id={cell.id} {theme} cols={stageCols(cell.kind)} prepare={settleClock}>
+      <ShellCell id={cell.id} {theme} baseline={cell.hasBaseline} cols={stageCols(cell.kind)} prepare={settleClock}>
         <Inspector store={inspectorStore} catalogue={INSPECTOR_CATALOGUE} widget={cell.detail ?? INSPECTOR_WIDGET} link={inspectorLink} host={{ openPath: noop }} />
       </ShellCell>
     {/if}
