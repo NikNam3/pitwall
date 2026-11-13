@@ -124,8 +124,44 @@ function degradationOff(t: ThresholdInput): Trigger[] {
 }
 
 /**
- * The track wetness (ms) above which switching a slick-shod car to a wet-weather set at the end of `fromLap` beats
- * staying out on its set to the flag, pit loss included (the lap model's wetness term, green laps).
+ * The rain threshold's refinements of the best dry plan: each re-solves the dry plans at the last crossing and stops
+ * once the best one no longer changes (pitwall estimate: the best dry plan changes a few times at most over the
+ * wetness range a switch to inters is decided on).
+ */
+export const RAIN_REFINE_STEPS = 4;
+/** The two positive wetnesses (ms) a fixed plan's linear race time is read at: past the cold tyre's wet step at 0. */
+const RAIN_PROBE_MS = [1_000, 2_000] as const;
+
+/** The deterministic green race time (ms) from `fromLap` to the flag at a constant wetness `w` with `stops`. */
+function greenRaceMs(input: DpInput, w: number, stops: DpPlan['stops']): number {
+  const p = input.carParams;
+  const n = input.totalLaps - input.fromLap + 1;
+  const burn = p.fuelKg / n;
+  const lap: LapInput = { paceMs: p.paceMs, degMsPerLap: p.degMsPerLap, wearPct: p.wearPct, fuelKg: p.fuelKg, compound: p.compound, lapOnSet: 1, neutralised: 'none', wetnessMs: w, scatterMs: 0, mistakeMs: 0 };
+  let onSet = p.tyreAge;
+  let total = 0;
+  for (let i = 0; i < n; i++) {
+    lap.lapOnSet = onSet + 1;
+    total += lapTimeMs(input.lap, lap);
+    onSet++;
+    lap.wearPct += p.wearRatePct?.[lap.compound] ?? 0;
+    lap.fuelKg = Math.max(0, lap.fuelKg - burn);
+    const stop = stops.find((s) => s.lap === input.fromLap + i);
+    if (stop !== undefined) {
+      total += input.pitLossMs.green - (p.human ? HUMAN_STOP_SAVING_MS : 0) + (input.trafficMsByLap[i] ?? 0);
+      Object.assign(lap, { compound: stop.compound, wearPct: 0 });
+      onSet = 0;
+    }
+  }
+  return total;
+}
+
+const stopsKey = (stops: DpPlan['stops']): string => stops.map((s) => `${s.lap}${s.compound}`).join('-');
+
+/**
+ * The track wetness (ms, constant on every lap) above which switching a slick-shod car to its first wet-weather set at
+ * the end of `fromLap`, run to the flag, beats the best dry plan (stops onto dry compounds only) at that wetness, pit
+ * loss included (green laps, no hazard). None where it is at or below the current wetness (`wetnessByLap[0]`).
  */
 function rain(t: ThresholdInput): Trigger[] {
   const { input } = t;
@@ -133,26 +169,34 @@ function rain(t: ThresholdInput): Trigger[] {
   const n = input.totalLaps - input.fromLap + 1;
   const to = RAIN_SETS.find((c) => input.sets[c] > 0);
   if (!DRY_COMPOUNDS.includes(p.compound) || to === undefined || n < 2) return [];
-  const burn = p.fuelKg / n;
-  const rate = (c: NoiseCompound): number => p.wearRatePct?.[c] ?? 0;
-  const lap: LapInput = { paceMs: p.paceMs, degMsPerLap: p.degMsPerLap, wearPct: 0, fuelKg: 0, compound: p.compound, lapOnSet: 1, neutralised: 'none', wetnessMs: 0, scatterMs: 0, mistakeMs: 0 };
-  // the switch's gain over the laps after `fromLap` at a constant wetness w, less the stop: linear in w for w > 0
-  const gain = (w: number): number => {
-    let g = -(input.pitLossMs.green - (p.human ? HUMAN_STOP_SAVING_MS : 0) + (input.trafficMsByLap[0] ?? 0));
-    let fuel = p.fuelKg;
-    for (let i = 1; i < n; i++) {
-      fuel = Math.max(0, fuel - burn);
-      Object.assign(lap, { wetnessMs: w, fuelKg: fuel, compound: p.compound, wearPct: p.wearPct + rate(p.compound) * i, lapOnSet: p.tyreAge + i + 1 });
-      const stay = lapTimeMs(input.lap, lap);
-      Object.assign(lap, { compound: to, wearPct: rate(to) * (i - 1), lapOnSet: i });
-      g += stay - lapTimeMs(input.lap, lap);
-    }
-    return g;
+  const switched: DpPlan['stops'] = [{ lap: input.fromLap, compound: to }];
+  const zeros = new Float64Array(n);
+  const dryInput = (w: number): DpInput => ({
+    ...input,
+    sets: { ...input.sets, inter: 0, wet: 0 },
+    hazard: { ...input.hazard, byLap: zeros, vscByLap: zeros },
+    active: null,
+    wetnessByLap: new Float64Array(n).fill(w),
+  });
+  // the best dry plan at w; where the rule cannot be met on dry sets, staying out
+  const bestDry = (w: number): DpPlan['stops'] => t.bestPlanOf(dryInput(w))?.stops ?? [];
+  // switched minus the dry plan: linear in w > 0 for a fixed plan; its zero
+  const crossing = (dry: DpPlan['stops']): number | null => {
+    const [a, b] = RAIN_PROBE_MS.map((w) => greenRaceMs(input, w, switched) - greenRaceMs(input, w, dry)) as [number, number];
+    const slope = (b - a) / (RAIN_PROBE_MS[1] - RAIN_PROBE_MS[0]);
+    return slope < 0 ? RAIN_PROBE_MS[0] - a / slope : null;
   };
-  const g1 = gain(1);
-  const slope = gain(2) - g1;
-  if (!(slope > 0)) return [];
-  return [{ kind: 'rain', wetnessMs: Math.max(0, 1 - g1 / slope), action: { box: to } }];
+  const current = input.wetnessByLap[0] ?? 0;
+  let dry = bestDry(current);
+  let w = crossing(dry);
+  for (let step = 0; step < RAIN_REFINE_STEPS && w !== null; step++) {
+    const next = bestDry(w);
+    if (stopsKey(next) === stopsKey(dry)) break;
+    dry = next;
+    w = crossing(dry);
+  }
+  if (w === null || !(w > current)) return [];
+  return [{ kind: 'rain', wetnessMs: w, action: { box: to } }];
 }
 
 /** Every trigger threshold of a solve (spec §6, O9). */
