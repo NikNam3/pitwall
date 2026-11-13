@@ -7,7 +7,7 @@
 // requested once; once that settles, the store recomputes.
 import { join } from 'node:path';
 import { canonicalJson, type TopicName } from '@pitwall/contracts';
-import { known, unknown, type CarId, type DriverPerson, type Known, type DriverProfile, type ProfileEntry, type PersonId, type ProfileSnapshot, type SessionRef, type TeamId, type UnlinkedSlot, type DriversLinksValue } from '@pitwall/domain';
+import { known, unknown, type CarId, type DriverPerson, type Known, type DriverProfile, type ProfileEntry, type PersonId, type ProfileSnapshot, type SessionRef, type TeamId, type UnlinkedSlot, type DriversLinksValue, type FeedId, type LiveSeat } from '@pitwall/domain';
 import type { FeatureConfig } from '../feature-config.ts';
 import type { Feature } from '../features/feature.ts';
 import type { ValueFor } from '../hub/topic-hub.ts';
@@ -159,6 +159,15 @@ export class ProfileStore {
       profiles[person.id] = { person: person.id, displayName: person.displayName, entries: this.#entries.get(person.id) ?? {} };
     }
     return { fingerprint: sha256(canonicalJson({ bySlot, profiles })), bySlot, profiles };
+  }
+
+  /**
+   * A running feed's human seats now (its player car and teammate while their `car-driver` span is `human`, with their
+   * team and race number from Participants); `[]` once the feed stops. The ones without a link are `drivers.links`'s
+   * `unlinkedSeats`, published when they change (SP4.3b2 Task 10).
+   */
+  feedSeats(_feedId: FeedId, _seats: readonly Omit<LiveSeat, 'feedId'>[]): void {
+    throw new Error('not implemented');
   }
 
   /** The slots of the stored sessions with a `human` span and no confirmed link, newest session first, with their suggestions. */

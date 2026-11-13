@@ -14,7 +14,7 @@ import type { TopicName } from '@pitwall/contracts';
 import {
   carDriverSpans, carId, known, unknown,
   type CarId, type DriverPerson, type DriversLinksValue, type DriversProfilesValue, type Known, type ProfileEntry, type SessionRef,
-  type SessionUid, type Span,
+  type LinkedSession, type SessionUid, type Span, type WeekendPhase,
 } from '@pitwall/domain';
 import { defineProfiles, type ProfileCtx, type ProjectionState, type StoredDriverSession } from '@pitwall/engine/readers';
 import { history, lap as builtLap } from '../../../../test-support/builders/index.ts';
@@ -61,19 +61,26 @@ function driverSpans(s: SlotSpec): Span[] {
  * slots given; `stale`: stored under another rules version (`staleOf`); `rulesVersion` (default `current`) as storage
  * recorded it.
  */
-function driverSession(uid: string, o: { startedAt: string; slots: SlotSpec[]; weekendId?: string; trackId?: number; stale?: boolean; rulesVersion?: string }): DriverSessionRow {
+function driverSession(uid: string, o: { startedAt: string; slots: SlotSpec[]; weekendId?: string; trackId?: number; stale?: boolean; rulesVersion?: string; phase?: WeekendPhase }): DriverSessionRow {
+  // The weekend phase as storage reads it (`weekend-repository.ts`): the weekend-phase span's kind with its detail.
+  const phase: WeekendPhase = o.phase ?? { kind: 'race', format: 'grandPrix' };
+  const { kind: phaseKind, ...phaseDetail } = phase;
   const range = (n: number) => Array.from({ length: n }, (_, i) => i + 1);
   const projection: ProjectionState = {
     laps: o.slots.flatMap((s) => range(s.laps ?? 5).map((n) => lap(s.car, n, { lapTimeMs: 90_000 + n, frame: frameOf(n) }))),
     stints: [], pitStops: [], crossings: [], events: [], penalties: [], decisions: [], clock: [],
-    spans: { [CAR_DRIVER]: o.slots.flatMap(driverSpans) }, appendedAt: {},
+    spans: {
+      [CAR_DRIVER]: o.slots.flatMap(driverSpans),
+      'weekend-phase': [span('weekend-phase', phaseKind, { detail: phaseDetail, startFrame: 0, endFrame: frameOf(99) })],
+    },
+    appendedAt: {},
   };
   const row: DriverSessionRow = {
     sessionUid: uid as SessionUid, weekendId: o.weekendId ?? 'W1', seasonId: 'S1', playerCar: car(0), teammateCar: null,
     trackId: o.trackId ?? TRACK, startedAt: o.startedAt, pwrecPath: null, settings: { aiDifficulty: 90 },
     cars: o.slots.map((s) => ({ carId: car(s.car), carKey: { teamId: s.team, raceNumber: s.number }, driver: s.name === null ? unknown('notReceived') : known(s.name, 0) })),
     rulesVersion: o.rulesVersion ?? 'current', complete: true, track: unknown('notApplicable'), aiDifficulty: known(90, 0),
-    stale: false, phase: { kind: 'race', format: 'grandPrix' }, projection,
+    stale: false, phase, projection,
   };
   return o.stale === true ? staleOf(row) : row;
 }
@@ -607,5 +614,148 @@ describe('ProfileStore', () => {
     first.close();
     const second = setup({ sessions: [s1], dir });
     expect(second.persons().map((p) => p.person)).toEqual(['anna']);
+  });
+});
+
+// --- SP4.3b2 Task 10: linked sessions, include, add with a derived id or a seat (C3, C54, C62c, C73, C84) -------------
+
+describe('ProfileStore: a person\'s linked sessions (SP4.3b2 Task 10)', () => {
+  const anna = (c: number, o: Partial<SlotSpec> = {}): SlotSpec => ({ car: c, team: MERCEDES, number: 7, name: 'Anna R', ...o });
+  const personOf = (t: ReturnType<typeof setup>, person: string) => t.persons().find((p) => p.person === person);
+  const sessionsOf = (t: ReturnType<typeof setup>, person: string): LinkedSession[] => personOf(t, person)?.sessions ?? [];
+  const files = (dir: string) => driverFiles(dir);
+
+  // Row 0 (C20, C62c): the label of a linked session is the stored session's weekend phase, read from its
+  // weekend-phase span the way `calibration/compute.ts` takes a source's phase; never the game's session type (C13).
+  it('a linked session\'s phase is its stored weekend-phase span\'s (practice segment 2, qualifying segment 1, race grandPrix)', () => {
+    const fp2: WeekendPhase = { kind: 'practice', format: 'practice', segment: 2 };
+    const q1: WeekendPhase = { kind: 'qualifying', format: 'grandPrix', segment: 1 };
+    const race: WeekendPhase = { kind: 'race', format: 'grandPrix' };
+    const s1 = driverSession('1', { startedAt: day(1), phase: fp2, slots: [HOST, anna(2)] });
+    const s2 = driverSession('2', { startedAt: day(2), phase: q1, slots: [HOST, anna(2)] });
+    const s3 = driverSession('3', { startedAt: day(3), phase: race, slots: [HOST, anna(2)] });
+    const t = setup({ sessions: [s1, s2, s3] });
+    t.addAndLink('anna', 'Anna', s1, 2);
+
+    const phases = Object.fromEntries(sessionsOf(t, 'anna').map((s) => [s.session.sessionUid, s.phase]));
+    expect(phases).toEqual({ '1': fp2, '2': q1, '3': race });
+  });
+
+  // Row 4 (C3, C62c): every stored session a linked seat drove with a human span, newest first, the excluded ones
+  // included and marked; `kept` the real counts of the rest, never a placeholder 0.
+  it('persons carry their linked sessions newest first with laps and excluded; kept counts the rest', () => {
+    const s1 = driverSession('1', { startedAt: day(1), slots: [HOST, anna(2)] });
+    // The AI drove the seat all session: not one of the person's sessions (C17).
+    const s2 = driverSession('2', { startedAt: day(2), slots: [HOST, anna(2, { driver: 'ai' })] });
+    const s3 = driverSession('3', { startedAt: day(3), slots: [HOST, anna(4, { laps: 4 })] });
+    // Another weekend and track, the same seat.
+    const s4 = driverSession('4', { startedAt: day(4), weekendId: 'W2', trackId: 11, slots: [HOST, anna(3, { laps: 3 })] });
+    // A session without the seat.
+    const s5 = driverSession('5', { startedAt: day(5), slots: [HOST, { car: 2, team: FERRARI, number: 16, name: 'Ben K' }] });
+    const t = setup({ sessions: [s1, s2, s3, s4, s5] });
+    t.addAndLink('anna', 'Anna', s1, 2);
+
+    const race: WeekendPhase = { kind: 'race', format: 'grandPrix' };
+    const linked = (s: DriverSessionRow, laps: number, excluded: boolean): LinkedSession => ({
+      session: ref(s), date: s.startedAt, trackId: s.trackId, phase: race, laps, excluded,
+    });
+    expect(sessionsOf(t, 'anna')).toEqual([linked(s4, 3, false), linked(s3, 4, false), linked(s1, 5, false)]);
+    expect(personOf(t, 'anna')?.kept).toEqual({ sessions: 3, laps: 12 });
+
+    t.ok({ kind: 'drivers.exclude', person: 'anna', session: ref(s3) });
+    expect(sessionsOf(t, 'anna')).toEqual([linked(s4, 3, false), linked(s3, 4, true), linked(s1, 5, false)]);
+    expect(personOf(t, 'anna')?.kept).toEqual({ sessions: 2, laps: 8 });
+
+    // A person without a link has no sessions, and keeps nothing.
+    t.ok({ kind: 'drivers.add', person: 'ben', displayName: 'Ben' });
+    expect(personOf(t, 'ben')).toMatchObject({ sessions: [], kept: { sessions: 0, laps: 0 } });
+  });
+
+  // Row 5 (C62c, C73): `drivers.include` removes the exclusion; an unknown person or session is rejected, never stored.
+  it('include undoes exclude', () => {
+    const s1 = driverSession('1', { startedAt: day(1), slots: [HOST, anna(2)] });
+    const s3 = driverSession('3', { startedAt: day(3), slots: [HOST, anna(4, { laps: 4 })] });
+    const t = setup({ sessions: [s1, s3] });
+    t.addAndLink('anna', 'Anna', s1, 2);
+    const before = { file: readPerson(t.dir, 'anna'), person: personOf(t, 'anna') };
+
+    t.ok({ kind: 'drivers.exclude', person: 'anna', session: ref(s1) });
+    expect(readPerson(t.dir, 'anna').excluded).toEqual([ref(s1)]);
+    expect(t.entry('anna', 'fake.lapCount')).toMatchObject({ laps: 4, sessions: 1 });
+
+    t.ok({ kind: 'drivers.include', person: 'anna', session: ref(s1) });
+    expect(readPerson(t.dir, 'anna')).toEqual(before.file);
+    expect(personOf(t, 'anna')).toEqual(before.person);
+    expect(sessionsOf(t, 'anna').map((s) => [s.session.sessionUid, s.excluded])).toEqual([['3', false], ['1', false]]);
+    expect(personOf(t, 'anna')?.kept).toEqual({ sessions: 2, laps: 9 });
+    expect(t.entry('anna', 'fake.lapCount')).toMatchObject({ laps: 9, sessions: 2 });
+
+    const stored = files(t.dir);
+    const published = t.published.length;
+    const invalid: Array<[string, DriverAction]> = [
+      ['an unknown person', { kind: 'drivers.include', person: 'nobody', session: ref(s1) }],
+      ['an unknown session', { kind: 'drivers.include', person: 'anna', session: { ...ref(s1), sessionUid: '999' as SessionUid } }],
+    ];
+    for (const [what, action] of invalid) {
+      const result = t.apply(action);
+      expect(result, what).toMatchObject({ ok: false, reason: 'invalid' });
+      expect(result.ok === false && result.message.length > 0, what).toBe(true);
+    }
+    expect(files(t.dir)).toEqual(stored);
+    expect(t.published.length).toBe(published);
+  });
+
+  // Row 7 (C62c, C73): the bridge derives a missing id from the display name (kebab-case, one function in `drivers/`);
+  // with a seat the person and the link are one change; an id that exists already is rejected and nothing is stored.
+  it('add with a display name only derives the id; add with a seat links it; an existing id is rejected and nothing is stored', () => {
+    const s1 = driverSession('1', {
+      startedAt: day(1), slots: [HOST, anna(2), { car: 3, team: FERRARI, number: 16, name: 'Ben K' }],
+    });
+    const t = setup({ sessions: [s1] });
+
+    t.ok({ kind: 'drivers.add', displayName: 'Anna Rossi' });
+    expect(readPerson(t.dir, 'anna-rossi')).toEqual({ id: 'anna-rossi', displayName: 'Anna Rossi', links: [], excluded: [], overrides: {} });
+    expect(t.persons().map((p) => p.person)).toEqual(['anna-rossi']);
+
+    // With a seat: the person and its link in one change; the seat's slots are linked from then on.
+    t.ok({ kind: 'drivers.add', displayName: 'DR', seat: { team: FERRARI, raceNumber: 16 } });
+    expect(readPerson(t.dir, 'dr')).toEqual({ id: 'dr', displayName: 'DR', links: [{ team: FERRARI, raceNumber: 16 }], excluded: [], overrides: {} });
+    expect(t.last<DriversLinksValue>('drivers.links').links).toContainEqual({ team: FERRARI, raceNumber: 16, person: 'dr' });
+    expect(t.last<DriversLinksValue>('drivers.links').unlinked.map((u) => u.carId)).not.toContain(car(3));
+    expect(personOf(t, 'dr')?.kept).toEqual({ sessions: 1, laps: 5 });
+    // A given id is kept as given.
+    t.ok({ kind: 'drivers.add', person: 'asym', displayName: 'Asymetrisch', seat: { team: MERCEDES, raceNumber: 7 } });
+    expect(readPerson(t.dir, 'asym').links).toEqual([{ team: MERCEDES, raceNumber: 7 }]);
+
+    const stored = files(t.dir);
+    const published = t.published.length;
+    const persons = t.persons();
+    const invalid: Array<[string, DriverAction]> = [
+      ['a derived id that exists', { kind: 'drivers.add', displayName: 'anna rossi' }],
+      ['a given id that exists', { kind: 'drivers.add', person: 'dr', displayName: 'Someone' }],
+      // A rejection with a seat stores neither the person nor the link.
+      ['an existing id with a seat', { kind: 'drivers.add', displayName: 'Anna Rossi', seat: { team: 4, raceNumber: 14 } }],
+      ['a seat that is none', { kind: 'drivers.add', displayName: 'Cara', seat: { team: -1, raceNumber: 14 } }],
+    ];
+    for (const [what, action] of invalid) {
+      const result = t.apply(action);
+      expect(result, what).toMatchObject({ ok: false, reason: 'invalid' });
+      expect(result.ok === false && result.message.length > 0, what).toBe(true);
+    }
+    expect(files(t.dir)).toEqual(stored);
+    expect(existsSync(personPath(t.dir, 'cara'))).toBe(false);
+    expect(t.published.length).toBe(published);
+    expect(t.persons()).toEqual(persons);
+    expect(readPerson(t.dir, 'anna-rossi').links).toEqual([]);
+  });
+
+  // Row 8 (C84, the existing setup: `vitest.global-setup.ts`): every store here opens on its own temporary directory, and
+  // `PITWALL_DATA_DIR` names a temporary directory too, never the user's data dir.
+  it('no test reads PITWALL_DATA_DIR outside its temporary directory', () => {
+    const tmp = tmpdir();
+    expect(process.env.PITWALL_DATA_DIR?.startsWith(tmp)).toBe(true);
+    const t = setup({ sessions: [] });
+    expect(t.dir.startsWith(tmp)).toBe(true);
+    expect(t.dir).not.toBe(process.env.PITWALL_DATA_DIR);
   });
 });
