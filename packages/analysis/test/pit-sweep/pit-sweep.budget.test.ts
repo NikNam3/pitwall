@@ -13,7 +13,7 @@ import { run } from '../../src/pit-sweep/job.ts';
 import { PLAYER, sweepViewAt } from './support.ts';
 
 /** The config's `maxScenarioPolicies` (per car and compound) this budget is measured at; sized by the supervisor from an idle measurement (Q10: ≈ 500 races per row at 17 rows). */
-const CAP = 8_500;
+const CAP = 7_000;
 const PART_MS = 10_000;
 const COMPOUND = 'medium';
 

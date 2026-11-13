@@ -10,8 +10,8 @@ export const PIT_SWEEP_CONFIG = defineConfig('pit-sweep', {
   rowsBefore: 3,
   /** A compound's rows end this many stop laps after its window closes (`windowLaps.to`, the stint's latest stop lap), never past the last lap − 1; the mockup's four rows past the set's life (Task 2b's `pastLifeLaps` 4) lie inside. Source: SP4.3b2 Task 18q, Q10 B (the mockup's rows to L26 past a window of L19–L21 with life to L22). */
   rowsAfter: 8,
-  /** The cap on scenario-policies per (car, compound) part, shared by its rows (a count, never a clock, C2). Source: SP4.3b2 Task 18q, Q10 A (≈ 500 races per row at 17 rows; one part per thread under 10 s, spec §9.2, §11.2); a placeholder until the supervisor's idle measurement. */
-  maxScenarioPolicies: 8500,
+  /** The cap on scenario-policies per (car, compound) part, shared by its rows (a count, never a clock, C2). Source: SP4.3b2 Task 18q, Q10 A (one part per thread under 10 s, spec §9.2, §11.2; measured 2026-11-13 on an idle machine: 10,280 ms at 8,500 for 17 rows at lap 1 of the long race, about 1.2 ms per scenario-policy, so 7,000: about 8.5 s, 410 races per row). */
+  maxScenarioPolicies: 7000,
 });
 
 /** `pit-sweep`'s config values as the job reads them. */
