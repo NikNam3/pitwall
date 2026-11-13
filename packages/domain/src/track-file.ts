@@ -47,6 +47,8 @@ export type TrackData = {
   drsZones: Known<{ detection: LapFraction; start: LapFraction; end: LapFraction }[]>;
   defaults: {
     pitLossMs: { green: Known<TrackDefault<Ms>>; vsc: Known<TrackDefault<Ms>>; sc: Known<TrackDefault<Ms>> };
+    /** The in-lap's share of a green stop's loss, in [0, 1] (the rest on the out-lap; SP4.3b Q5 A). A file without it reads as `unknown('notReceived')`. */
+    pitLossInLapShare: Known<TrackDefault<number>>;
     /** Relative to medium = 0. */
     compoundOffsetsMs: Known<TrackDefault<{ soft: Ms; medium: Ms; hard: Ms }>>;
     /** The SC and VSC chances (SP4.3b spec §5.1). */
@@ -220,6 +222,13 @@ export function validateTrackFile(json: unknown): { ok: true; file: TrackFile } 
         checkKnown(loss[k], `defaults.pitLossMs.${k}`, errors, (v, p) => checkDefault(v, p, errors, checkMs(errors)));
       }
     }
+    if (defaults.pitLossInLapShare !== undefined) {
+      checkKnown(defaults.pitLossInLapShare, 'defaults.pitLossInLapShare', errors, (v, p) =>
+        checkDefault(v, p, errors, (share, sp) => {
+          if (!isNum(share) || share < 0 || share > 1) errors.push(`${sp}: not a share in [0, 1]`);
+        }),
+      );
+    }
     checkKnown(defaults.compoundOffsetsMs, 'defaults.compoundOffsetsMs', errors, (v, p) =>
       checkDefault(v, p, errors, (offsets, op) => {
         if (!isRec(offsets)) return void errors.push(`${op}: not an object`);
@@ -240,7 +249,13 @@ export function validateTrackFile(json: unknown): { ok: true; file: TrackFile } 
     if (!isInt(source.season)) errors.push('source.season: not an integer');
   }
 
-  return errors.length > 0 ? { ok: false, errors } : { ok: true, file: json as TrackFile };
+  if (errors.length > 0) return { ok: false, errors };
+  const file = json as TrackFile;
+  // a file made before the in-lap share (SP4.3b Q5 A): the share is not received
+  if ((file.defaults as Partial<TrackFile['defaults']>).pitLossInLapShare === undefined) {
+    return { ok: true, file: { ...file, defaults: { ...file.defaults, pitLossInLapShare: { known: false, reason: 'notReceived' } } } };
+  }
+  return { ok: true, file };
 }
 
 /** The file's data without its provenance (`source`), as `view.track` holds it (C35). */

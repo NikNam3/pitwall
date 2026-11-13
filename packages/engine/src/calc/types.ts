@@ -125,6 +125,12 @@ export type Job<In, Out> = {
   trigger: Cadence;
   prepare(view: EngineView): In;
   module: URL;
+  /**
+   * A job run in parts (SP4.3b Q4 D): `split` cuts the prepared input into at least one part, the runner runs every
+   * part's `run` at once, one worker each, and `merge` joins their outputs, in the parts' order, into the job's result.
+   * Both pure and cheap; they run on the runner's thread. Without it the input runs whole in one worker.
+   */
+  parts?: { split(input: In): In[]; merge(outs: Out[]): Out };
   /** Phantom marker that ties `Out` to the job; never set. */
   readonly out?: Out;
 };
