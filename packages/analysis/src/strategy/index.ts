@@ -1,16 +1,18 @@
-// `strategy` (SP4.3b spec §8.1): an analysis with a job (C51) that plans both our cars: the DP's plans and their
-// neighbours and rule candidates, scored by `race-monte-carlo` over common scenarios. Topic `strategy.plans`.
+// `strategy` (SP4.3b spec §8.1): an analysis with a job (C51) that plans both our cars, one part per car
+// (Task 25): the DP's plans and their neighbours and rule candidates, scored by `race-monte-carlo` over common
+// scenarios. Topic `strategy.plans`.
 import type { StrategyOutput } from '@pitwall/domain';
 import type { Cadence, Dependency, Job } from '@pitwall/engine/readers';
 import { CAR_STATUS_READS } from '../shared/car-status.ts';
 import { FORECAST_UNITS } from '../shared/forecast-field/index.ts';
+import { mergeStrategy, splitStrategy } from './job.ts';
 import { prepareStrategy, type StrategyInput } from './prepare.ts';
 
 export * from './config.ts';
 export { STRATEGY_BEHAVIOUR, type StrategyEffect } from './behaviour.ts';
 export { candidatesOf, policyOf } from './candidates.ts';
 export { prepareStrategy, type StrategyInput } from './prepare.ts';
-export { candidatesForRun, followable, run as runStrategy, type CarPlan } from './job.ts';
+export { candidatesForRun, followable, mergeStrategy, partFinalCall, run as runStrategy, splitStrategy, type CarPlan, type FinalCall } from './job.ts';
 
 /** The analysis id (its job's id). */
 export const STRATEGY = 'strategy';
@@ -48,4 +50,6 @@ export const STRATEGY_JOB: Job<StrategyInput, StrategyOutput> = {
   trigger: { onChange: [...STRATEGY_TRIGGER.onChange] },
   prepare: (view) => prepareStrategy(view),
   module: new URL('./job.ts', import.meta.url),
+  // one part per our car planned, each with the whole cap (SP4.3b Q4 D, Task 25)
+  parts: { split: splitStrategy, merge: mergeStrategy },
 };

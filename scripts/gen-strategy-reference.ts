@@ -10,9 +10,10 @@
 //
 // The test race: the generator's default race (20 cars, 50 laps, seed 1) seen from our two cars as `strategy`'s tests
 // see it (`viewAt`: player 2 and teammate 5, the track file, their tyre sets, `race-hazard`'s output), at the first
-// frame of the leader's lap `LAP`. Its input is one `race-monte-carlo` call with both our cars' candidates and the
-// config's search settings (the supervisor's ruling): while one car is scored our other car follows its first
-// candidate. The candidates are the job's own: its candidate step, `candidatesForRun` (`strategy/job.ts`; Task 20d).
+// frame of the leader's lap `LAP`. Each car's reference comes from that car's part (SP4.3b Q4 D, Task 25): the input of
+// the part's final call (`partFinalCall`, `strategy/job.ts`: the part's candidate step and round 1 drawn with `SEED`),
+// so while the car is scored our other car follows what the part's final ranking holds it to. The candidates are the
+// job's own (its candidate step, `candidatesForRun`; Task 20d).
 import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
@@ -20,7 +21,7 @@ import { fileURLToPath } from 'node:url';
 import type { CarId } from '../packages/domain/src/index.ts';
 import { createRng } from '../packages/engine/src/readers.ts';
 import { scoreAll, type McCandidate, type McInput } from '../packages/analysis/src/race-monte-carlo/index.ts';
-import { candidatesForRun, prepareStrategy, STRATEGY_CONFIG } from '../packages/analysis/src/strategy/index.ts';
+import { candidatesForRun, partFinalCall, prepareStrategy, splitStrategy, STRATEGY_CONFIG, type FinalCall, type StrategyInput } from '../packages/analysis/src/strategy/index.ts';
 import { OURS, viewAt } from '../packages/analysis/test/strategy/support.ts';
 import { generateRace, GENERATOR_DEFAULTS } from '../test-support/race-generator/index.ts';
 
@@ -82,25 +83,40 @@ export function strategyReferenceHash(root: string = ROOT): string {
 /** The generator's parameters as the fixture records them (JSON: the pass hazard, a function, is the default's). */
 const generatorParams = (): unknown => ({ base: 'GENERATOR_DEFAULTS', seed: RACE_SEED, lap: LAP, frameOfLap: FRAME_OF_LAP, ours: OURS, params: JSON.parse(JSON.stringify(GENERATOR_DEFAULTS)) });
 
-/** The test race's `race-monte-carlo` input: both our cars' candidates, neither committed, the config's search settings. */
-export function strategyReferenceInput(): McInput {
+/** The test race's prepared input: the script's view, the config's cap. */
+function referenceStrategyInput(): StrategyInput {
   const config = STRATEGY_CONFIG.defaults;
   const race = generateRace(GENERATOR_DEFAULTS, RACE_SEED).race;
-  const input = prepareStrategy(viewAt(race, LAP, { frameOfLap: FRAME_OF_LAP, config: { maxScenarioPolicies: config.maxScenarioPolicies } }));
-  const { mc, perCar } = candidatesForRun(input, createRng(SEED));
+  return prepareStrategy(viewAt(race, LAP, { frameOfLap: FRAME_OF_LAP, config: { maxScenarioPolicies: config.maxScenarioPolicies } }));
+}
+
+/** The test race's candidate step for the whole input (`candidatesForRun`): both our cars' candidates, neither committed, the config's search settings. */
+export function strategyReferenceInput(): McInput {
+  const { mc, perCar } = candidatesForRun(referenceStrategyInput(), createRng(SEED));
   if (mc === null || perCar.size !== OURS.length) throw new Error(`gen-strategy-reference: plans ${[...perCar.keys()].join(', ')} of our cars ${OURS.join(', ')} at lap ${LAP}`);
   return mc;
 }
 
-/** The reference: every candidate of the test race scored on `scenarios` common scenarios. */
+/** The test race's `race-monte-carlo` inputs, one per our car: its part's final call (neither committed, the config's search settings). */
+export function strategyReferenceInputs(): FinalCall[] {
+  const calls = splitStrategy(referenceStrategyInput()).flatMap((part) => {
+    const { final } = partFinalCall(part, createRng(SEED));
+    return final === null ? [] : [final];
+  });
+  const cars = calls.map((c) => c.car);
+  if (cars.length !== OURS.length || !OURS.every((car) => cars.includes(car))) throw new Error(`gen-strategy-reference: plans ${cars.join(', ')} of our cars ${OURS.join(', ')} at lap ${LAP}`);
+  return calls;
+}
+
+/** The reference: every candidate of the test race scored on `scenarios` common scenarios, per car in its part's final call. */
 export function strategyReference(scenarios: number = REFERENCE_SCENARIOS): StrategyReference {
-  const input = strategyReferenceInput();
-  const result = scoreAll(input, createRng(SEED), scenarios);
   const ePos: Record<CarId, number[]> = {};
   const winner: Record<CarId, number> = {};
-  for (const [key, list] of Object.entries(input.candidates)) {
-    const car = Number(key) as CarId;
-    const rows = result[car]?.rows ?? [];
+  const candidates: Record<CarId, McCandidate[]> = {};
+  for (const { car, mc } of strategyReferenceInputs()) {
+    const list = mc.candidates[car] ?? [];
+    candidates[car] = list;
+    const rows = scoreAll(mc, createRng(SEED), scenarios)[car]?.rows ?? [];
     ePos[car] = list.map((c, k) => {
       const policy = JSON.stringify(c.policy);
       const row = rows.find((r) => JSON.stringify(r.policy) === policy);
@@ -110,7 +126,7 @@ export function strategyReference(scenarios: number = REFERENCE_SCENARIOS): Stra
     const best = Math.min(...ePos[car]);
     winner[car] = ePos[car].indexOf(best);
   }
-  return { sourceHash: strategyReferenceHash(), generatorParams: generatorParams(), candidates: input.candidates, ePos, winner };
+  return { sourceHash: strategyReferenceHash(), generatorParams: generatorParams(), candidates, ePos, winner };
 }
 
 /** The value of `--name <value>` in `argv`, or `undefined`. */
