@@ -2,7 +2,7 @@
 
 2026-11-14. What the recordings say about the strategy model's tyre terms: the wear rate and how many laps it needs, wear against wetness, track, track temperature and driver, degradation, warm-up, the wet slopes, the compound offsets, and the Silverstone race of 2026-11-14 read with all of it. Written after research 20 and the live test of 2026-11-14 (`docs/acceptance/live-checklist.md`, "2026-11-14: live test notes").
 
-**Data and code.** The 1 Hz samples and car-laps of research 20's spike (55 recordings of `recordings/` and `~/.local/share/pitwall/recordings/`, decoded with `packages/protocol`, flashback-undone samples dropped). The new scripts are in the session scratchpad, `/tmp/claude-1000/-home-nklx-dev-personal-pitwall/920b5a33-0c6c-4ebb-ace7-acdbabd0122b/scratchpad/tyre-spike/strategy/` (cited `strategy/<script>`; the scratchpad can be cleared, this file keeps the results). One harness (`strategy/capture.ts`) replays the Silverstone recording through the bridge pipeline as `pitwall strategy` does and logs the strategy job's view; nothing is stored.
+**Data and code.** The 1 Hz samples and car-laps of research 20's spike (55 recordings of `recordings/` and `~/.local/share/pitwall/recordings/`, decoded with `packages/protocol`, flashback-undone samples dropped). The new scripts are in the helper repo, `~/dev/personal/pitwall-research/tyre-spike/strategy/` (cited `strategy/<script>`). One harness (`strategy/capture.ts`) replays the Silverstone recording through the bridge pipeline as `pitwall strategy` does and logs the strategy job's view; nothing is stored.
 
 **Conventions.**
 - A **gain** is one green lap's own wear increase at a corner (end of lap minus end of the lap before, same set). Green: no pit, no SC or VSC, not an in-lap or out-lap, not lap 1. Rates are of the **worst corner** unless a corner is named.
@@ -394,7 +394,7 @@ For the user to decide; no code here.
 
 ## 12. The missing no-stop plan and the lap-39 win chance
 
-Recording `2026-11-14_00-04-26_…_car19` (Silverstone, laps 36–52, sidecars: set `pitloss-22`, no profiles). Tooling in the session scratchpad, `tyre-spike/strategy2/`: `capture-inputs.ts` replays the recording through the bridge pipeline as `pitwall strategy` does and saves the `strategy` job's input (`StrategyInput`) at the first prepare after car 19 completes each lap (`inputs/lapN.v8`); `dp-trace.ts` runs car 19's DP and `candidatesOf` on a saved input; `mc-many.ts` runs the job as it is, then scores the final call's candidates plus two no-stop plans together on N common scenarios (`race-monte-carlo`'s `scoreAll`, nothing dropped), with env switches `RAIN_PCT`, `WET_MS`, `NO_STOP_11`, `PACE11_AS_19`.
+Recording `2026-11-14_00-04-26_…_car19` (Silverstone, laps 36–52, sidecars: set `pitloss-22`, no profiles). Tooling in `~/dev/personal/pitwall-research/tyre-spike/strategy2/`: `capture-inputs.ts` replays the recording through the bridge pipeline as `pitwall strategy` does and saves the `strategy` job's input (`StrategyInput`) at the first prepare after car 19 completes each lap (`inputs/lapN.v8`); `dp-trace.ts` runs car 19's DP and `candidatesOf` on a saved input; `mc-many.ts` runs the job as it is, then scores the final call's candidates plus two no-stop plans together on N common scenarios (`race-monte-carlo`'s `scoreAll`, nothing dropped), with env switches `RAIN_PCT`, `WET_MS`, `NO_STOP_11`, `PACE11_AS_19`.
 
 "Lap N" means the job's run once car 19 has completed lap N, planning from lap N + 1. §9's "lap 37–39" rows are laps 38–39 here (the first prepare at lap 37 has no starting point yet).
 
@@ -500,7 +500,7 @@ For the user to decide; no code here.
 
 The question: does F1 25 scale tyre wear with the set race length, by how much, and is it the race length or something else? This section re-checks §4's claim, which rested on one same-track pair (Suzuka).
 
-**Data and code.** The same 1 Hz samples and car-laps as §2–§4 (`strategy/B.pkl`). New scripts in the session scratchpad, `tyre-spike/racelength/`:
+**Data and code.** The same 1 Hz samples and car-laps as §2–§4 (`strategy/B.pkl`). New scripts in `~/dev/personal/pitwall-research/tyre-spike/racelength/`:
 - `settings.ts` decodes one populated Session packet per recording (the first one with the weekend structure set; the very first packets carry zeros for the settings) → `settings.jsonl`.
 - `pooled.py`: rates per recording and compound.
 - `pairs.py`: same-track pairs, with a car-stint bootstrap.
