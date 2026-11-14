@@ -15,6 +15,8 @@ export type LinkGroup = { id: number; feedId?: FeedId; primary: CarRef; compare:
 export type UiAction =
   | { kind: 'workbook.open'; name: string }
   | { kind: 'workbook.saveAs'; name: string }
+  /** Replaces one workbook with its shipped default (the old file kept as `<name>.bak-<date>`, spec SP4.3c §5.9). */
+  | { kind: 'workbook.reset'; name: string }
   | { kind: 'workbook.updateWindow'; window: WorkbookWindow }
   | { kind: 'linkGroup.set'; group: LinkGroup }
   /** `key`/`keys` are occurrence tokens (`ackToken`), not bare insight keys. */

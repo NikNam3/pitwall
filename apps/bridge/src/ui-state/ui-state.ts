@@ -79,6 +79,7 @@ export class UiState {
     switch (action.kind) {
       case 'workbook.open': return this.openWorkbook(action.name);
       case 'workbook.saveAs': return this.saveAs(action.name);
+      case 'workbook.reset': return INVALID; // SP4.3c Task 24 implements it
       case 'workbook.updateWindow': {
         const windows = this.active.windows;
         const at = windows.findIndex((window) => window.id === action.window.id);
