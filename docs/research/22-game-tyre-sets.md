@@ -35,3 +35,4 @@
 - The delta on a car with a damaged or flat-spotted tyre; red-flag tyre changes.
 - `usableLife` at the other race-distance settings (very short, short, medium, long): one recording each would give the game's own factor table.
 - The C0 / C6 compounds: none seen.
+- Online: in both online recordings (Zandvoort `2026-10-29_23-00-37`, Suzuka practice `2026-11-10_23-22-46`) every car's sets came through non-zero, the other humans' included; whether those humans had restricted telemetry is not known, so the zeroing of research 20 §5 is untested.
