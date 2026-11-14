@@ -6,7 +6,6 @@ import {
   formatLoss,
   formatMillis,
   formatRate,
-  formatSessionKind,
   formatTrack,
 } from '../../src/kit/values/format.ts';
 
@@ -97,19 +96,6 @@ describe('formatCarNumber', () => {
     [21, '#21'],
   ])('%s -> %s', (id, text) => {
     expect(formatCarNumber(carId(id))).toBe(text);
-  });
-});
-
-describe('formatSessionKind', () => {
-  it.each([
-    ['unknown', 'unknown'],
-    ['practice', 'practice'],
-    ['qualifying', 'qualifying'],
-    ['sprintShootout', 'sprint shootout'],
-    ['race', 'race'],
-    ['timeTrial', 'time trial'],
-  ] as const)('%s -> %s', (kind, text) => {
-    expect(formatSessionKind(kind)).toBe(text);
   });
 });
 

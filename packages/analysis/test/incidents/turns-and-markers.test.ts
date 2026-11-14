@@ -12,6 +12,7 @@ import {
   unknown,
   type IncidentEntry,
   type IncidentKind,
+  pointAt,
   type MapPoint,
   type RaceEvent,
   type TrackData,
@@ -21,7 +22,6 @@ import type { EngineView } from '@pitwall/engine';
 import { event, neutralisation } from '../../../../test-support/builders/index.ts';
 import { zandvoortTrack } from '../../../../test-support/track.ts';
 import type { IncidentsOutput } from '../../src/incidents/index.ts';
-import { pointAt } from '../../src/shared/track-lookup.ts';
 import {
   deltaOf,
   incidents,

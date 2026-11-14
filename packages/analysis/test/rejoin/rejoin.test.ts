@@ -4,7 +4,7 @@
 // behind us within the loss; each row's interval is its `t` minus the row ahead's (the first row against the car ahead
 // of it in the full order); the map point is where we were `loss` ms ago, on the track file's outline (C62b). Built
 // races (`field.ts`); every case runs through the guarded view (C41); race only (C14); our cars only.
-import { carId, known, unknown, type CarId, type CrossingRow, type Known, type PitCondition, type TrackData } from '@pitwall/domain';
+import { carId, known, pointAt, unknown, type CarId, type CrossingRow, type Known, type PitCondition, type TrackData } from '@pitwall/domain';
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import { GAPS } from '../../src/gaps/index.ts';
@@ -12,7 +12,6 @@ import { PIT_LOSS } from '../../src/pit-loss/index.ts';
 import { REJOIN_BEHAVIOUR } from '../../src/rejoin/behaviour.ts';
 import { rejoinCalculator } from '../../src/rejoin/calculator.ts';
 import { REJOIN, REJOIN_CONFIG, type Rejoin, type RejoinAt, type RejoinOutput } from '../../src/rejoin/index.ts';
-import { pointAt } from '../../src/shared/track-lookup.ts';
 import { guardedQuick } from '../situated.ts';
 import { loadUnitFolders } from '../units.ts';
 import { INSUFFICIENT, NOT_APPLICABLE, rejoinCase, SOURCES, US, ZANDVOORT, type Field, type RejoinCase } from './field.ts';

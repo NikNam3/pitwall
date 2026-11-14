@@ -9,12 +9,12 @@
 //  - no track file, or a file without an outline: both `notApplicable` (C3).
 // Every row runs the calculator through its guarded view (C41); the generic tests cover the guarded view on the
 // standard race and the behaviour table's completeness (C44).
-import { carId, known, unknown, type CarId, type Known, type MapPoint, type OpenSpan, type TrackData } from '@pitwall/domain';
+import { carId, known, pointAt, unknown, type CarId, type Known, type MapPoint, type OpenSpan, type TrackData } from '@pitwall/domain';
 import type { DeepReadonly, EngineView } from '@pitwall/engine/readers';
 import { describe, expect, it } from 'vitest';
 import { carState } from '../../../../test-support/builders/index.ts';
 import { zandvoortTrack } from '../../../../test-support/track.ts';
-import { fractionOf, pointAt } from '../../src/shared/track-lookup.ts';
+import { fractionOf } from '../../src/shared/track-lookup.ts';
 import { TRACK_POSITIONS, trackPositionsCalculator, type MapCar, type TrackCars, type TrackGeometry } from '../../src/index.ts';
 import { guardedQuick, openSpan, situatedView } from '../situated.ts';
 import { CALCULATORS, loadUnitFolders } from '../units.ts';
