@@ -47,9 +47,9 @@ import { paceDeltaAround } from '../pace-delta/index.ts';
 import { emptyDamageJumps, finishJump, foldDamageJumps, type DamageJumpFold, type FinishedJump } from '../shared/damage-jumps.ts';
 import { isNeutralisation, leaderLapAt, NEUTRALISATION_MACHINES, NEUTRALISATION_READS, neutralisationKind, type NeutralisationKind } from '../shared/neutralised.ts';
 import { behaviourFor } from '../shared/behaviour.ts';
-import { ourCars } from '../shared/our-cars.ts';
+import { ourCars, pointAt } from '@pitwall/domain';
 import { warningInCycle } from '../shared/penalties.ts';
-import { pointAt, turnAt } from '../shared/track-lookup.ts';
+import { turnAt } from '../shared/track-lookup.ts';
 import { behaviourOf, INCIDENTS_BEHAVIOUR } from './behaviour.ts';
 import {
   addCrossing,

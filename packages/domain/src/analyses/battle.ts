@@ -2,6 +2,7 @@
 import type { VisualCompound } from '../compounds.ts';
 import type { CarId } from '../ids.ts';
 import type { Known } from '../known.ts';
+import type { DrsOffReason } from '../situations/race-control-race.ts';
 import type { Joules, Ms } from '../units.ts';
 
 /** The car ahead of or behind one of our cars. */
@@ -27,8 +28,8 @@ export type BattleSide = {
   theirErsStoreJ: Known<Joules>;
 };
 
-/** Why race control has DRS off: the game's DRSD reasons, `notEnabledYet` before a race's first DRSE, `unknown` for a reason code we don't know. */
-export type DrsOffReason = 'notEnabledYet' | 'wetTrack' | 'safetyCar' | 'redFlag' | 'minLapNotReached' | 'unknown';
+/** Why race control has DRS off: the race-control span detail's reason. */
+export type { DrsOffReason };
 
 /** Whether race control allows DRS now, from the game's DRSE and DRSD events. */
 export type DrsStatus = { enabled: true } | { enabled: false; reason: DrsOffReason };

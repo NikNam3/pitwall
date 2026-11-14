@@ -4,6 +4,8 @@
 import {
   currentLaps,
   known,
+  ourCars,
+  tyreTypeOf,
   unknown,
   type CarId,
   type Crossover,
@@ -20,11 +22,9 @@ import { isPaceLap, LAP_CLASSES_CONFIG, type LapClassOptions } from '../lap-clas
 import { median } from '../pit-loss/loss.ts';
 import { PIT_LOSS } from '../pit-loss/index.ts';
 import { behaviourFor } from '../shared/behaviour.ts';
-import { ourCars } from '../shared/our-cars.ts';
 import { CROSSOVER_BEHAVIOUR, phaseRow, type CrossoverEffect } from './behaviour.ts';
 import { CROSSOVER_CONFIG } from './config.ts';
 import { CROSSOVER, type CrossoverOutput } from './index.ts';
-import { tyreTypeOf } from './tyre-type.ts';
 
 type Lap = DeepReadonly<LapRecord>;
 

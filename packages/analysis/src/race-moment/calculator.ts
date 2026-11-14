@@ -20,7 +20,7 @@ import { INCIDENTS, type IncidentsOutput } from '../incidents/index.ts';
 import { PIT_WINDOW, type PitWindowOutput } from '../pit-window/index.ts';
 import { RAIN_OUTLOOK, type RainOutlook } from '../rain-outlook/index.ts';
 import { behaviourFor } from '../shared/behaviour.ts';
-import { ourCars } from '../shared/our-cars.ts';
+import { ourCars } from '@pitwall/domain';
 import { neutralisationKind } from '../shared/neutralised.ts';
 import { RACE_MOMENT, RACE_MOMENT_BEHAVIOUR, RACE_MOMENT_CONFIG, type RaceMomentOutput } from './index.ts';
 

@@ -2,12 +2,11 @@
 // now is from `gaps.intervals`; PACE Δ from the mini-sector crossings (`battle.ts`), and from it the margin and the laps
 // to DRS; the DRS status from race control's spans. Incremental (C31): the accumulator folds the projection alone
 // (C31.2); `output` adds `gaps`, the open spans and the live state. Every number is positive when it is good for our car.
-import { known, unknown, type BattleCard, type BattleSide, type CarId, type CarState, type DrsOffReason, type DrsStatus, type Known, type Ms } from '@pitwall/domain';
+import { known, ourCars, unknown, type BattleCard, type BattleSide, type CarId, type CarState, type DrsOffDetail, type DrsStatus, type Known, type Ms } from '@pitwall/domain';
 import { openSpansOf, type DeepReadonly, type EngineView, type IncrementalCalculator } from '@pitwall/engine/readers';
 import type { GapsOutput } from '../gaps/index.ts';
 import { behaviourFor } from '../shared/behaviour.ts';
 import { NEUTRALISATION_READS } from '../shared/neutralised.ts';
-import { ourCars } from '../shared/our-cars.ts';
 import { emptyBattleAcc, foldBattle, openNeutralised, paceDelta, type BattleAcc } from './battle.ts';
 import { BATTLE, BATTLE_BEHAVIOUR, BATTLE_CONFIG, type BattleOutput } from './index.ts';
 
@@ -72,7 +71,7 @@ function drsOf(view: EngineView, race: boolean): DrsStatus {
   const row = behaviourFor({ 'race-control-race': BATTLE_BEHAVIOUR['race-control-race'] }, view)[0];
   if (row === undefined) return { enabled: false, reason: 'notEnabledYet' };
   if (row.drs === 'enabled') return { enabled: true };
-  const detail = openSpansOf(view, 'race-control-race')[0]?.detail as { reason?: DrsOffReason } | undefined;
+  const detail = openSpansOf(view, 'race-control-race')[0]?.detail as DrsOffDetail | undefined;
   return { enabled: false, reason: detail?.reason ?? 'unknown' };
 }
 

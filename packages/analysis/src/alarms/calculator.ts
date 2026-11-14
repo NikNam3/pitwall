@@ -1,6 +1,7 @@
 // The `alarms` calculator: the conditions that hold now for our cars, as insights (spec 5.6). Stateless; the InsightBook raises and resolves.
 // Band advisories are `car-bands`' judgement of the car's judged lap (see `bandChannels`), so they change at a lap's end only.
 import {
+  ourCars,
   sessionPhaseRaceSpans,
   type PendingPenaltyDetail,
   type TimePenaltyDetail,
@@ -24,7 +25,6 @@ import { bandsFor, judgedLapClasses, judgedLaps, measured, type Band, type Bands
 import { CAR_BANDS, CAR_BANDS_CONFIG } from '../car-bands/index.ts';
 import { DAMAGE } from '../damage/index.ts';
 import { FUEL } from '../fuel/index.ts';
-import { ourCars } from '../shared/our-cars.ts';
 import { behaviourFor } from '../shared/behaviour.ts';
 import { warningInCycle } from '../shared/penalties.ts';
 import { TYRE_WEAR } from '../tyre-wear/index.ts';

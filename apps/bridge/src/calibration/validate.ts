@@ -1,11 +1,10 @@
 // Checks a calibration uiAction against the sets, the stored sessions and the declared priors keys (C62a, C73, spec
 // 3.1) and gives the edit it makes, or the reason it is rejected; a rejected action changes nothing.
 import type { UiAction } from '@pitwall/contracts';
-import type { CalibrationSet, CalibrationSource } from '@pitwall/domain';
+import { ourCars, type CalibrationSet, type CalibrationSource } from '@pitwall/domain';
 import type { PriorDecl } from '@pitwall/engine/readers';
 import type { TrackSession } from '../storage/weekend-repository.ts';
 import { newSetId, sameStint } from './sets.ts';
-import { ourCars } from './suggest.ts';
 
 /** The uiActions the calibration store applies: every `calibration.*` kind but `calibration.choose` (a decision, C76). */
 export type CalibrationAction = Exclude<Extract<UiAction, { kind: `calibration.${string}` }>, { kind: 'calibration.choose' }>;
@@ -122,7 +121,7 @@ function sourceProblem(source: CalibrationSource, sessions: readonly TrackSessio
   const session = sessions.find((s) => s.sessionUid === source.sessionUid && s.weekendId === source.weekendId && s.playerCar === source.feedCar);
   if (session === undefined) return `no stored session ${source.sessionUid} of car ${source.feedCar} on track ${trackId}`;
   if (session.stale || session.projection === undefined) return `session ${source.sessionUid} awaits a rebuild`;
-  if (!ourCars(session).includes(source.car)) return `car ${source.car} is neither the feed's player car nor its teammate`;
+  if (!ourCars({ playerCar: session.playerCar, teammateCar: session.teammateCar ?? undefined }).includes(source.car)) return `car ${source.car} is neither the feed's player car nor its teammate`;
   const stint = session.projection.stints.find((s) => s.carId === source.car && s.firstLap === source.firstLap);
   if (stint === undefined) return `no stint of car ${source.car} starts at lap ${source.firstLap}`;
   if (source.excludedLaps.some((l) => l < stint.firstLap || l > stint.lastLap)) return 'an excluded lap is not a lap of this stint';

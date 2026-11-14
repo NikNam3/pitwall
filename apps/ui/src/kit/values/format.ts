@@ -1,7 +1,6 @@
 // The only place numbers become text (spec 5): every value cell formats through one of these.
 import {
-  carCode, trackName, type Celsius, type CarId, type Kg, type Ms, type Percent, type Psi, type QualifyingFormat, type SessionKind,
-  type WeekendPhase,
+  carCode, trackName, type Celsius, type CarId, type Kg, type Ms, type Percent, type Psi, type QualifyingFormat, type WeekendPhase,
 } from '@pitwall/domain';
 import { unknownMark } from '../text.ts';
 
@@ -100,36 +99,31 @@ export const formatRaceNumber = (n: number): string => `#${n}`;
 /** A car's race number, or the kit's mark while the car's identity is not received yet. */
 export const formatRaceNumberOrMark = (n: number | undefined): string => (n === undefined ? unknownMark.notReceived : formatRaceNumber(n));
 
-const SESSION_KIND_LABEL: Record<SessionKind, string> = {
-  unknown: 'unknown',
-  practice: 'practice',
-  qualifying: 'qualifying',
-  sprintShootout: 'sprint shootout',
-  race: 'race',
-  timeTrial: 'time trial',
-};
+/** The weekend phases in words. */
+const WEEKEND_PHASE_WORDS = { practice: 'practice', qualifying: 'qualifying', sprintShootout: 'sprint shootout', race: 'race', sprint: 'sprint' } as const;
 
-/** Session kind in words, `sprintShootout` -> `sprint shootout`. */
-export const formatSessionKind = (kind: SessionKind): string => SESSION_KIND_LABEL[kind];
-
+/** The sprint shootout's qualifying formats (its short and one-shot variants included). */
 const SPRINT_SHOOTOUT_FORMATS: ReadonlySet<QualifyingFormat> = new Set<QualifyingFormat>(['sprintShootout', 'shortSprintShootout', 'oneShotSprintShootout']);
 
+/** Whether the weekend phase is a sprint shootout: the qualifying phase with a shootout format. */
+export const isSprintShootout = (phase: WeekendPhase): boolean => phase.kind === 'qualifying' && SPRINT_SHOOTOUT_FORMATS.has(phase.format);
+
 /**
- * A stored session by its weekend phase, short: a practice or qualifying segment as the paddock names it (`FP2`, `Q1`,
- * `SQ1` for a sprint shootout), a race `race` or `sprint`; without a segment the session kind's word (`practice`); `''`
- * while the phase is `pending` or `none`.
+ * A session by its weekend phase, short: a practice or qualifying segment as the paddock names it (`FP2`, `Q1`, `SQ1`
+ * for a sprint shootout), a race `race` or `sprint`; without a segment the phase's word (`practice`, `sprint
+ * shootout`); `''` while the phase is `pending` or `none`.
  */
 export const formatWeekendPhase = (phase: WeekendPhase): string => {
   switch (phase.kind) {
     case 'practice':
-      return phase.segment === undefined ? formatSessionKind('practice') : `FP${phase.segment}`;
+      return phase.segment === undefined ? WEEKEND_PHASE_WORDS.practice : `FP${phase.segment}`;
     case 'qualifying': {
-      const shootout = SPRINT_SHOOTOUT_FORMATS.has(phase.format);
-      if (phase.segment === undefined) return formatSessionKind(shootout ? 'sprintShootout' : 'qualifying');
+      const shootout = isSprintShootout(phase);
+      if (phase.segment === undefined) return shootout ? WEEKEND_PHASE_WORDS.sprintShootout : WEEKEND_PHASE_WORDS.qualifying;
       return `${shootout ? 'SQ' : 'Q'}${phase.segment}`;
     }
     case 'race':
-      return phase.format === 'sprint' ? 'sprint' : formatSessionKind('race');
+      return phase.format === 'sprint' ? WEEKEND_PHASE_WORDS.sprint : WEEKEND_PHASE_WORDS.race;
     default:
       return '';
   }
@@ -192,6 +186,9 @@ export const formatSignedMJ = (j: number): string => {
 
 /** Energy shown as MJ with one decimal, `2100000` -> `2.1 MJ`. */
 export const formatJoules = (j: number): string => (Number.isFinite(j) ? `${formatMJ(j)} MJ` : '');
+
+/** Ms as seconds, a number (a chart's axis value), `1234` -> `1.234`; the one ms → s conversion outside formatting. */
+export const msToSeconds = (ms: Ms): number => ms / 1000;
 
 /** Seconds from ms, no unit, `4100` -> `4.1`, `-4100` -> `−4.1`; the caller names the unit. */
 export const formatSeconds = (ms: Ms, decimals: number): string => (Number.isFinite(ms) ? fixed(ms / 1000, decimals) : '');

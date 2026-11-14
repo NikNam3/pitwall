@@ -4,7 +4,7 @@
 // belongs to (C26, through the projection module's `membershipOf`); each model keeps only its own laps.
 import { type CarId, type FrameNumber, type Ms, type NoiseCompound, type OpenSpan, type Span, type StintRecord, type TrackWetness } from '@pitwall/domain';
 import type { AsOfView, DeepReadonly, MembershipSource, Projection } from '@pitwall/engine/readers';
-import { tyreTypeOf } from '../crossover/tyre-type.ts';
+import { tyreTypeOf } from '@pitwall/domain';
 import type { DegradationOutput, StintDegradation } from '../degradation/index.ts';
 import { freeAirLaps } from '../shared/free-air.ts';
 import { lapsByCar } from '../shared/stint-laps.ts';

@@ -36,7 +36,7 @@ import type { FieldInput, RivalRules } from '../race-monte-carlo/types.ts';
 import { RIVAL_STOPS } from '../rival-stops/index.ts';
 import { buildStartingPoint, FORECAST_UNITS } from '../shared/forecast-field/index.ts';
 import { leaderLapAt, neutralisationKind, neutralisedSpans, isClosed } from '../shared/neutralised.ts';
-import { ourCars } from '../shared/our-cars.ts';
+import { ourCars } from '@pitwall/domain';
 import { STRATEGY_CONFIG } from '../strategy/config.ts';
 import { FORECAST_SCORE_CONFIG } from './config.ts';
 import { crpsSummary, rankedProbabilityScore } from './crps.ts';

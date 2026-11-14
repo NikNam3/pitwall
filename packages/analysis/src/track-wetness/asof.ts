@@ -13,7 +13,7 @@
 // on the slick scale through the lap model's terms. Without any dry reference the state is `insufficientData` (C3).
 import { known, unknown, type CarId, type Known, type Ms, type TrackWetness, type TyreType } from '@pitwall/domain';
 import type { AsOfView } from '@pitwall/engine/readers';
-import { tyreTypeOf } from '../crossover/tyre-type.ts';
+import { tyreTypeOf } from '@pitwall/domain';
 import { DEGRADATION, DEGRADATION_CONFIG, fitStint, type DegradationOutput, type StintDegradation } from '../degradation/index.ts';
 import { DRIVER_NOISE_CONFIG } from '../driver-noise/config.ts';
 import { freeAirLaps, type FreeAirLaps } from '../shared/free-air.ts';

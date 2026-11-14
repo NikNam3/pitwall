@@ -4,7 +4,7 @@ import { openSpansOf, type EngineView, type IncrementalCalculator } from '@pitwa
 import { behaviourByCar, behaviourFor, openSpansByCar } from '../shared/behaviour.ts';
 import { CAR_STATUS_READS } from '../shared/car-status.ts';
 import { isClosed, NEUTRALISATION_READS, neutralisationKind, neutralisedSpans, type NeutralisationKind } from '../shared/neutralised.ts';
-import { ourCars } from '../shared/our-cars.ts';
+import { ourCars } from '@pitwall/domain';
 import { fineOf, gapBehind, lapsBehind, latestTime, progressAt, progressOf, recentOf, type CarCrossings } from './gaps.ts';
 import { GAPS, GAPS_BEHAVIOUR, GAPS_CONFIG, type GapsOutput } from './index.ts';
 import { emptyWindow, judgeCrossing, othersInWindow, windowThresholds, type GapperWindow } from './window.ts';
