@@ -315,3 +315,15 @@ Car 19 (DR), inters from lap 34, drying track, forecast light rain 76–78 % to 
 - **A hot and a cool session at one track** (day and night, or two weekends): track temperature against wear.
 - **An online session with a restricted human rival**: whether blisters and temperatures stay visible.
 - **A session with blisters showing on our tyres in game**: whether `tyreBlisters` ever moves.
+
+## 9. For the setup sub-project (later)
+
+User, 2026-11-14: one main use of pitwall will be working out the car setup for each track. That is a later sub-project; the strategy model's tyre needs come first (research 21). What it will need from the tyres:
+
+- **How driving style changes temperatures and wear** (user, 2026-11-14). The player car's MotionEx gives slip ratio, slip angle and tyre forces per wheel (research 04); CarTelemetry gives throttle, brake, steering for every car. The chain to measure: inputs → slip (wheelspin on exit, lockups, axle sliding, understeer/oversteer) → surface temperature → carcass against Tref → wear. MotionEx and the setup exist only in each driver's own feed, so each driver must run their own feed.
+- **Grip against carcass temperature:** lap and corner time lost per °C away from Tref, per compound. Partly measurable from the existing recordings.
+- **Setup pressure, camber, toe and the other setup values against carcass heat, wear and pace**, apart from track and driver: only controlled tests give this (§8 recordings wanted, plus the same for camber).
+- **No temperature across the tread** in the feed (one surface and one carcass value per tyre), so camber cannot be tuned from an inner/middle/outer spread as in real F1; it has to come from wear, slip and corner speeds.
+- **Only our own cars teach setups:** AI cars show the default setup and fake temperatures; online rivals' setups are blank.
+- **A test protocol for practice:** one track, one compound, one driver, one setup value (or driving style: push against manage) changed between runs of about 5–8 laps, everything else fixed. To be written into `docs/acceptance/` when this sub-project starts.
+- Related decisions in research 06: D02 (balance and setup direction), D30 (setup change for the next session).

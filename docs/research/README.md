@@ -21,6 +21,7 @@ Race-engineering research done on 2026-10-27/28; 01–05 before the foundation s
 | [15-pass-curve-fit.md](15-pass-curve-fit.md) | The pooled pass-curve fit on the F1 25 recordings (SP4.3a Task 13): recordings kept and dropped, curves per band and pooled, wet factor, DRS hint, the O14 checks (held loss, rejoin push-back) |
 | [16-scoreboard-baseline.json](16-scoreboard-baseline.json) | The first `pitwall score` baseline over the six race recordings (SP4.3a): the `--compare` base for later model changes, with its known limits |
 | [20-tyre-behaviour.md](20-tyre-behaviour.md) | Tyre behaviour with heat, pressure and track condition in real F1, in the F1 25 model and feed, and in our recordings: the game's pressure as setup × gas law with a reference carcass temperature per compound, AI tyre values as constants, inter wear against carcass heat, the Silverstone 2026-11-14 drying case; proposals for per-compound car bands, wear inputs and a setup check; recordings wanted |
+| [21-tyre-strategy-spike.md](21-tyre-strategy-spike.md) | The tyre terms of the strategy model against our recordings: wear linear in age, the live wear rate rule and the laps it needs, wear against wetness, track, race length, track temperature and driver (DR, Asymetrisch), degradation per compound and on a drying track, warm-up, the wet slopes, compound offsets against the track files, the Silverstone 2026-11-14 stay-out replayed; a table of proposals |
 
 ## Provenance
 
