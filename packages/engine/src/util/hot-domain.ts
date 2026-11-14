@@ -4,7 +4,6 @@
 // module costs that once. The same functions and values as `@pitwall/domain`'s.
 import {
   actualCompoundFromCode as domainActualCompoundFromCode,
-  cornersFromGameOrder as domainCornersFromGameOrder,
   known as domainKnown,
   OUT_OF_RACE_STATUSES as DOMAIN_OUT_OF_RACE_STATUSES,
   unknown as domainUnknown,
@@ -13,7 +12,6 @@ import {
 
 export const known = domainKnown;
 export const unknown = domainUnknown;
-export const cornersFromGameOrder = domainCornersFromGameOrder;
 export const actualCompoundFromCode = domainActualCompoundFromCode;
 export const visualCompoundFromCode = domainVisualCompoundFromCode;
 export const OUT_OF_RACE_STATUSES = DOMAIN_OUT_OF_RACE_STATUSES;

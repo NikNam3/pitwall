@@ -16,14 +16,12 @@ import {
   type PitLosses,
   type PitLossEstimate,
   type Span,
-  type TyreType,
   type WeekendPhase,
 } from '@pitwall/domain';
 import type { EngineView } from '@pitwall/engine/readers';
 import { describe, expect, it } from 'vitest';
 import { crossoverCalculator } from '../../src/crossover/calculator.ts';
 import { CROSSOVER, CROSSOVER_CONFIG } from '../../src/crossover/index.ts';
-import { tyreTypeOf } from '../../src/crossover/tyre-type.ts';
 import { PIT_LOSS } from '../../src/pit-loss/index.ts';
 import { lap, neutralisation, RACE_PHASES } from '../../../../test-support/builders/index.ts';
 import { guardedQuick, PRACTICE, QUALIFYING, RACE, situatedView } from '../situated.ts';
@@ -128,29 +126,7 @@ describe('crossover calculator', () => {
     );
   });
 
-  // 1
-  it('tyreTypeOf: inter → inter; wet, classicWet, f2Wet → wet; unknown → undefined; every other compound → slick', () => {
-    const cases: Record<ActualCompound, TyreType | undefined> = {
-      C0: 'slick',
-      C1: 'slick',
-      C2: 'slick',
-      C3: 'slick',
-      C4: 'slick',
-      C5: 'slick',
-      C6: 'slick',
-      inter: 'inter',
-      wet: 'wet',
-      classicDry: 'slick',
-      classicWet: 'wet',
-      f2SuperSoft: 'slick',
-      f2Soft: 'slick',
-      f2Medium: 'slick',
-      f2Hard: 'slick',
-      f2Wet: 'wet',
-      unknown: undefined,
-    };
-    for (const [compound, type] of Object.entries(cases)) expect([compound, tyreTypeOf(compound as ActualCompound)]).toEqual([compound, type]);
-  });
+  // 1: `tyreTypeOf` is the domain helper (SP4.3c Task 1); its case table moved to `shared/tyre-type.test.ts`.
 
   // 2
   it('no green slick lap yet: dryRefMs, line110Ms and ourPct are insufficientData', () => {

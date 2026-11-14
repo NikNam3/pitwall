@@ -1,7 +1,6 @@
 import type { SessionTime } from './ids.ts';
 import type { Celsius, Kmh, Metres, Ms, Percent } from './units.ts';
 
-export type SessionKind = 'unknown' | 'practice' | 'qualifying' | 'sprintShootout' | 'race' | 'timeTrial';
 export type Weather = 'clear' | 'lightCloud' | 'overcast' | 'lightRain' | 'heavyRain' | 'storm';
 export type Trend = 'up' | 'down' | 'flat';
 export type ZoneFlag = 'unknown' | 'none' | 'green' | 'blue' | 'yellow';

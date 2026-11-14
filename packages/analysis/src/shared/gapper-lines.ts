@@ -62,7 +62,7 @@ function gapNow(crossings: CarCrossings | undefined, startAt: SessionTime, refer
 }
 
 /** A gapper point: at `progress` (x = progress / 50) the gap to the virtual car, `progress / 50 × lapMs − (at − startAt)`. */
-const pointAt = (progress: number, at: SessionTime, startAt: SessionTime, lapMs: Ms) => ({
+const gapperPoint = (progress: number, at: SessionTime, startAt: SessionTime, lapMs: Ms) => ({
   lap: progress / MINI_SECTORS,
   gapMs: Math.round((progress * lapMs) / MINI_SECTORS - (at - startAt)),
 });
@@ -76,8 +76,8 @@ function pointsOf(out: GapsOutput, carId: CarId, startAt: SessionTime, lapMs: Ms
   if (fine === undefined) return [];
   const perLap = raceLaps(out, carId, startAt)
     .filter(({ lap }) => lap * MINI_SECTORS < fine.fromProgress)
-    .map(({ lap, at }) => pointAt(lap * MINI_SECTORS, at, startAt, lapMs));
-  const perCrossing = fine.at.flatMap((at, i) => (at === undefined || at <= startAt ? [] : [pointAt(fine.fromProgress + i, at, startAt, lapMs)]));
+    .map(({ lap, at }) => gapperPoint(lap * MINI_SECTORS, at, startAt, lapMs));
+  const perCrossing = fine.at.flatMap((at, i) => (at === undefined || at <= startAt ? [] : [gapperPoint(fine.fromProgress + i, at, startAt, lapMs)]));
   return [...perLap, ...perCrossing];
 }
 

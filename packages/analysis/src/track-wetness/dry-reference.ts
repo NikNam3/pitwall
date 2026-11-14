@@ -7,7 +7,7 @@
 // model's inter and wet terms (`forecast-field`'s config): w = (excess − offset) / slope.
 import type { TyreType, VisualCompound } from '@pitwall/domain';
 import type { AsOfView, DeepReadonly, StoredSession } from '@pitwall/engine/readers';
-import { tyreTypeOf } from '../crossover/tyre-type.ts';
+import { tyreTypeOf } from '@pitwall/domain';
 import { DEGRADATION_CONFIG, fitStint, phaseRow } from '../degradation/index.ts';
 import { fitLaps, fuelResolver, lapsByCar } from '../degradation/stint-fit.ts';
 import { LAP_CLASSES_CONFIG } from '../lap-classes/index.ts';

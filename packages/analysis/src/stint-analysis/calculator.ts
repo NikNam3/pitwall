@@ -4,7 +4,7 @@
 import { carId, known, unknown, type CarId, type CompoundEstimate, type FitPoint, type Known, type SessionTime, type StintFit } from '@pitwall/domain';
 import { copyPlain, type EngineView, type QuickCalculator } from '@pitwall/engine/readers';
 import { DEGRADATION, type DegradationOutput, type StintDegradation } from '../degradation/index.ts';
-import { ourCars } from '../shared/our-cars.ts';
+import { ourCars } from '@pitwall/domain';
 import { STINT_ANALYSIS, type StintAnalysisOutput } from './index.ts';
 import { poolCompound } from './pool.ts';
 

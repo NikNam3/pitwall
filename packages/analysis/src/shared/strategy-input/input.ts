@@ -8,7 +8,7 @@ import { STRATEGY_BEHAVIOUR } from '../../strategy/behaviour.ts';
 import { behaviourFor } from '../behaviour.ts';
 import { CAR_STATUS_READS } from '../car-status.ts';
 import { buildStartingPoint, FORECAST_UNITS } from '../forecast-field/index.ts';
-import { ourCars } from '../our-cars.ts';
+import { ourCars } from '@pitwall/domain';
 
 /**
  * The input: the starting point and hazard as of the trigger; our cars, those of them planned (`planned`, by

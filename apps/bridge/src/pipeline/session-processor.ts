@@ -4,6 +4,7 @@ import {
   carId,
   carKeyOf,
   known,
+  ourCars,
   sessionUidString,
   trackDataOf,
   type CalibrationActiveValue,
@@ -403,8 +404,7 @@ export class SessionProcessor {
     const { onSeats } = this.#o;
     if (onSeats === undefined) return;
     const open = situationOf(state).byMachine[carDriverSpans.machine] ?? [];
-    const ours = [state.playerCar, state.teammateCar ?? null].filter((c): c is CarId => c !== null);
-    const seats = ours
+    const seats = ourCars(state)
       .filter((car) => open.some((s) => s.carId === car && s.kind === 'human'))
       .flatMap((car): Omit<LiveSeat, 'feedId'>[] => {
         const identity = state.cars[car]?.identity;

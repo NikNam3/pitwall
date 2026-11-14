@@ -5,7 +5,7 @@
 import { known, unknown, type CarId, type Known, type PitWindow, type PitWindowSet, type PitWindowState, type VisualCompound } from '@pitwall/domain';
 import { openSpansOf, type EngineView, type QuickCalculator } from '@pitwall/engine/readers';
 import { behaviourFor, type BehaviourTable } from '../shared/behaviour.ts';
-import { ourCars } from '../shared/our-cars.ts';
+import { ourCars } from '@pitwall/domain';
 import { TYRE_LIFE, type TyreLife, type TyreLifeOutput } from '../tyre-life/index.ts';
 import { PIT_WINDOW_BEHAVIOUR, phaseRow, type PitWindowEffect } from './behaviour.ts';
 import { PIT_WINDOW_CONFIG } from './config.ts';

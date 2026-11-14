@@ -45,5 +45,8 @@ export * from './plans.ts';
 export * from './freshness.ts';
 export * from './tracks.ts';
 export * from './track-file.ts';
+export * from './track-geometry.ts';
+export * from './our-cars.ts';
+export * from './tyre-type.ts';
 export * from './car-code.ts';
 export * from './analyses/index.ts';

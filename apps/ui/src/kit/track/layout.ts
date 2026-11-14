@@ -2,7 +2,7 @@
 // marker labels so that nothing collides. Greedy, in a fixed order (labels by lap fraction, then bars, then marker
 // labels); each tries its candidate positions in a fixed order and takes the first free one, so the same input always
 // gives the same result.
-import type { LapFraction, MapPoint } from '@pitwall/domain';
+import { pointAt, type MapPoint } from '@pitwall/domain';
 import type { Placed, TrackScene, TrackStretch } from './types.ts';
 
 /** The px sizes the canvas draws with; the layout keeps clear of them. */
@@ -295,16 +295,6 @@ export function layoutTrack(
   for (const m of scene.markers) place(markerLabels, m.label, toPx(m.at), TRACK_PX.triangle / 2);
 
   return { scene, toPx, labels, bars, markerLabels };
-}
-
-/** The map point at a lap fraction of the outline (point i of n at i / n), between its two neighbours; wraps past 1. */
-function pointAt(outline: MapPoint[], fraction: LapFraction): MapPoint {
-  const x = fraction * outline.length;
-  const i = Math.floor(x);
-  const t = x - i;
-  const a = ring(outline, i);
-  const b = ring(outline, i + 1);
-  return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
 }
 
 /**

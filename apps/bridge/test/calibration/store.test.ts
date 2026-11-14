@@ -670,6 +670,18 @@ describe('CalibrationStore', () => {
     expect(candidates.map((c) => c.source)).toEqual([sourceOf(placed, 0, 1), sourceOf(placed, 2, 1), sourceOf(alone, 0, 1)]);
   });
 
+  // SP4.3c Task 1 (spec §5.3, C43): our cars are the domain `ourCars`, the player first and the teammate once when it
+  // is a different car; the bridge's own copy in `calibration/suggest.ts` is deleted.
+  it('a stored teammate that is the player car counts once: each of its stints is suggested once', () => {
+    const s1 = trackSession('1', { startedAt: day(1), teammateCar: car(0), stints: [{ car: 0, firstLap: 1, lastLap: 5 }, { car: 1, firstLap: 1, lastLap: 5 }] });
+    const t = setup({ sessions: [s1] });
+    t.createSet(TRACK, 'Set');
+    t.store.recompute('sessionEnd');
+
+    const candidates = t.last<CalibrationCandidatesValue>('calibration.candidates').byTrack[TRACK] ?? [];
+    expect(candidates.map((c) => c.source)).toEqual([sourceOf(s1, 0, 1)]);
+  });
+
   it('a source of a same-team slot that is not the stored teammate is rejected', () => {
     const cars = [
       { carId: car(0), carKey: { teamId: 0, raceNumber: 44 }, driver: unknown('notReceived') },

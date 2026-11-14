@@ -1,5 +1,4 @@
 import type { Corners } from '@pitwall/domain';
-import { cornersFromGameOrder } from '../util/hot-domain.ts';
 
 export const CORNER_NAMES = ['fl', 'fr', 'rl', 'rr'] as const;
 export type CornerName = (typeof CORNER_NAMES)[number];
@@ -23,6 +22,13 @@ export const CORNER_SLOTS: ReadonlyArray<readonly [CornerName, number]> = [
   ['rr', 1],
 ];
 
-/** Names a per-wheel array of a packet (game order RL, RR, FL, FR). A missing entry reads as 0. */
-export const cornersOf = (wheels: readonly number[]): Corners<number> =>
-  cornersFromGameOrder([wheels[0] ?? 0, wheels[1] ?? 0, wheels[2] ?? 0, wheels[3] ?? 0]);
+/**
+ * Names a per-wheel array of a packet (game order RL, RR, FL, FR, C5): each corner at its `CORNER_SLOTS` index; the
+ * only place that order is translated (C6). A missing entry reads as 0.
+ */
+export const cornersOf = (wheels: readonly number[]): Corners<number> => ({
+  fl: wheels[2] ?? 0,
+  fr: wheels[3] ?? 0,
+  rl: wheels[0] ?? 0,
+  rr: wheels[1] ?? 0,
+});
