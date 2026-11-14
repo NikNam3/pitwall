@@ -6,6 +6,8 @@ import type { EngineView } from '@pitwall/engine';
 import { describe, expect, it } from 'vitest';
 import { BATTLE, BATTLE_BEHAVIOUR, BATTLE_CONFIG } from '../../src/battle/index.ts';
 import { battleCalculator } from '../../src/battle/calculator.ts';
+import { followingEpisodes, RACE_INTERACTION_CONFIG } from '../../src/race-interaction/index.ts';
+import { laps, projectionOf, scene, TRACK } from '../race-interaction/scene.ts';
 import { NEUTRALISATION_READS } from '../../src/shared/neutralised.ts';
 import { cardOf, cardsOf, closedDrs, crossingAt, deltaOf, guarded, id, viewOf, type Neutralised, type Run, type Scene } from './race.ts';
 
@@ -112,7 +114,7 @@ describe('battle', () => {
   it("lapsToDrs from PACE Δ on both sides: (gap − DRS range) / the closing car's edge; 0 inside DRS range; notApplicable while the gap is not closing or DRS is off", () => {
     expect(lapsToDrsOf(cardOf(base()))).toEqual(BASE_LAPS_TO_DRS);
     // inside DRS range ahead: 0 as of the gap; behind (2200 − 1600) / 500
-    const inRange = lapsToDrsOf(cardOf(base({ config: { [BATTLE_CONFIG.key]: { drsRangeMs: 1600 } } })));
+    const inRange = lapsToDrsOf(cardOf(base({ config: { [RACE_INTERACTION_CONFIG.key]: { drsRangeMs: 1600 } } })));
     expect(inRange).toEqual([known(0, NOW), expect.objectContaining({ known: true, value: 1.2 })]);
     // not closing: the car ahead is faster than us or as fast, the car behind slower
     expect(lapsToDrsOf(cardOf(withPace(1, 1790)))[0]).toEqual(NA);
@@ -122,10 +124,28 @@ describe('battle', () => {
     expect(lapsToDrsOf(cardOf(base({ drs: { off: 'wetTrack' } })))).toEqual([NA, NA]);
   });
 
-  it('the DRS range comes from the config', () => {
-    const { ahead } = sides(cardOf(base({ config: { [BATTLE_CONFIG.key]: { drsRangeMs: 800 } } })));
+  it("the DRS range comes from race-interaction's config", () => {
+    const { ahead } = sides(cardOf(base({ config: { [RACE_INTERACTION_CONFIG.key]: { drsRangeMs: 800 } } })));
     // (1600 − 800) / 500
     expect(value(ahead.lapsToDrs)).toBe(1.6);
+  });
+
+  it("one DRS range (SP4.3c Task 3, C43, C47): overriding race-interaction's drsRangeMs changes battle's DRS range and race-interaction's alike", () => {
+    // battle: the default 1000 gives 1.2 laps ahead; 300 gives (1600 − 300) / 500
+    const config = { [RACE_INTERACTION_CONFIG.key]: { drsRangeMs: 300 } };
+    expect(value(sides(cardOf(base({ config }))).ahead.lapsToDrs)).toBe(2.6);
+    // race-interaction: car 1 0.4 s behind car 0 has DRS at the default range, none at 300
+    const pair = projectionOf(scene([
+      { car: 0, startAt: 0, lapTimes: laps(6, 90_000) },
+      { car: 1, startAt: 400, lapTimes: laps(6, 90_000) },
+    ]));
+    const drsZones = (c: EngineView['config']) => followingEpisodes(pair, TRACK, RACE_INTERACTION_CONFIG.read({ config: c })).flatMap((e) => e.zones).filter((z) => z.drs);
+    expect(drsZones({}).length).toBeGreaterThan(0);
+    expect(drsZones(config)).toEqual([]);
+  });
+
+  it("an override of a battle drsRangeMs is not read: battle declares no DRS range of its own", () => {
+    expect(value(sides(cardOf(base({ config: { [BATTLE_CONFIG.key]: { drsRangeMs: 300 } } }))).ahead.lapsToDrs)).toBe(1.2);
   });
 
   it('with PACE Δ unknown, lapsToDrs and the margin carry its reason; a gap inside DRS range is still 0 laps to DRS', () => {
@@ -149,8 +169,8 @@ describe('battle', () => {
     }
   });
 
-  it('declares no closing config: only the DRS range, the overtake threshold and the PACE Δ minimum', () => {
-    expect(Object.keys(BATTLE_CONFIG.defaults).sort()).toEqual(['drsRangeMs', 'minPaceSegments', 'overtakeThresholdMs']);
+  it("declares no closing config and no DRS range (race-interaction's, SP4.3c Task 3): only the overtake threshold and the PACE Δ minimum", () => {
+    expect(Object.keys(BATTLE_CONFIG.defaults).sort()).toEqual(['minPaceSegments', 'overtakeThresholdMs']);
   });
 
   it('compound and tyre age of both cars come from the car states', () => {
@@ -309,7 +329,7 @@ describe('battle: the behaviour table (C44), one test per row', () => {
     }
 
     it('drsOff: a side already inside DRS range has lapsToDrs notApplicable, not 0', () => {
-      const c = cardOf(base({ drs: { off: 'notEnabledYet' }, config: { [BATTLE_CONFIG.key]: { drsRangeMs: 1600 } } }));
+      const c = cardOf(base({ drs: { off: 'notEnabledYet' }, config: { [RACE_INTERACTION_CONFIG.key]: { drsRangeMs: 1600 } } }));
       expect(lapsToDrsOf(c)).toEqual([NA, NA]);
     });
 

@@ -6,12 +6,13 @@
 // How these tests read `strategy` (the test agent's decisions, Task 20 report):
 // - `prepareStrategy(view)` gives the job's input; `runStrategy(input, rng)` its output, per our car (`ourCars`) a
 //   `Known` of its rows; `notApplicable` for a car it cannot plan (outside the race phase, no braking zones, retired).
-// - `candidatesOf(start, car, dp, config)` (`candidates.ts`) builds one car's candidates from its DP result: every DP
+// - `candidatesOf(start, car, dp, config)` (`candidates.ts`; `config`: strategy's config plus `race-interaction`'s
+//   `closeGapMs`, SP4.3c Task 3) builds one car's candidates from its DP result: every DP
 //   plan, `boxNow` (where not `null`) and `stayOut`, source `dp`; the stop-lap neighbours, source `neighbour`: a DP
 //   plan with one stop moved by 1–3 laps (`neighbourMinLaps`–`neighbourMaxLaps`), the rest kept; the rule candidates,
 //   source `rule`, on the best plan (`plans[0]`): mirror ahead and mirror behind (its first stop moved to the rival's
 //   likeliest stop lap, `start.stopMid`), cover (a `rivalPits` trigger on the rival directly behind, action `cover`,
-//   within `ruleGapMs`) and extend (the same on the rival directly ahead, action `extend`). Every policy is
+//   within `closeGapMs`) and extend (the same on the rival directly ahead, action `extend`). Every policy is
 //   `policyOf(plan, thresholds)`: the DP's thresholds, plus the rule's own `rivalPits` trigger for cover and extend.
 // - A `race-monte-carlo` call plans car `c` when `input.candidates[c]` is not empty. While it scores one car, our other
 //   car follows `committed[other] ?? candidates[other][0]` (race-monte-carlo's rule, `search.ts`); our other car is

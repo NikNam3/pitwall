@@ -7,6 +7,7 @@ import { carId, known, type CarId, type McSource, type Policy, type StartingPoin
 import { describe, expect, it } from 'vitest';
 import { candidatesOf, policyOf } from '../../src/strategy/candidates.ts';
 import { STRATEGY_CONFIG } from '../../src/strategy/config.ts';
+import { RACE_INTERACTION_CONFIG } from '../../src/race-interaction/config.ts';
 import type { DpPlan, DpResult } from '../../src/strategy-dp/index.ts';
 import { createRng } from '@pitwall/engine/readers';
 import { candidatesForRun } from '../../src/strategy/job.ts';
@@ -56,7 +57,8 @@ const DP: DpResult = {
   table: { boxUnderMs: new Float64Array(LAPS - LAP + 1), stayMs: new Float64Array(LAPS - LAP + 1) },
 };
 
-const CONFIG = { ...STRATEGY_CONFIG.defaults, ruleGapMs: 2_500 };
+// the rule candidates' gap: the one close gap, `race-interaction`'s `closeGapMs` (SP4.3c Task 3), beside strategy's config
+const CONFIG = { ...STRATEGY_CONFIG.defaults, closeGapMs: 2_500 };
 
 /** The candidate of `policy`; fails the test when there is none or more than one. */
 function find(cands: readonly { policy: Policy; source: McSource }[], policy: Policy): { policy: Policy; source: McSource } {
@@ -89,7 +91,7 @@ describe('strategy: candidates', () => {
     // the rules on the best plan: mirror the rival ahead and the one behind at their likeliest stop laps
     expect(find(cands, policyOf(moved(BEST, 0, 12), THRESHOLDS)).source).toBe('rule');
     expect(find(cands, policyOf(moved(BEST, 0, 22), THRESHOLDS)).source).toBe('rule');
-    // cover the car behind and extend past the car ahead, within ruleGapMs (from the config)
+    // cover the car behind and extend past the car ahead, within closeGapMs (from the config)
     const cover: Trigger = { kind: 'rivalPits', carId: BEHIND, withinMs: 2_500, action: 'cover' };
     const extend: Trigger = { kind: 'rivalPits', carId: AHEAD, withinMs: 2_500, action: 'extend' };
     expect(find(cands, policyOf(BEST, [...THRESHOLDS, cover])).source).toBe('rule');
@@ -223,6 +225,21 @@ describe('strategy: candidates (Task 23a)', () => {
       expect(c.policy.triggers.every((t) => t.kind === 'neutralised' || t.kind === 'rivalPits'), at).toBe(true);
       expect(carriesNeutralised(c), at).toBe(true);
     }
+  });
+
+  it("one close gap (SP4.3c Task 3, C43, C47): the job's cover and extend rules read race-interaction's closeGapMs; strategy has no ruleGapMs", () => {
+    expect(Object.keys(STRATEGY_CONFIG.defaults)).not.toContain('ruleGapMs');
+    const view = viewAt(RACE(), 3, { config: { maxScenarioPolicies: TEST_CAP } });
+    const withinOf = (config: Record<string, Record<string, number>>): number[] => {
+      const input = prepareStrategy({ ...view, config: { ...view.config, ...config } });
+      const { mc } = candidatesForRun(structuredClone(input), createRng(2_025));
+      expect(mc, 'a run').not.toBeNull();
+      return Object.values(mc!.candidates).flatMap((list) => list.flatMap((c) => c.policy.triggers.flatMap((t) => (t.kind === 'rivalPits' ? [t.withinMs] : []))));
+    };
+    const byDefault = withinOf({});
+    expect(byDefault.length, 'cover and extend rules').toBeGreaterThan(0);
+    expect(new Set(byDefault)).toEqual(new Set([3_000]));
+    expect(new Set(withinOf({ [RACE_INTERACTION_CONFIG.key]: { closeGapMs: 60_000 } }))).toEqual(new Set([60_000]));
   });
 
   // row 5

@@ -52,6 +52,17 @@ describe('race-monte-carlo: selection', () => {
     console.log(`[spec §12.3 cover-rule ablation] top policy ${changed ? 'changes' : 'unchanged'}\n  off: ${ranking(off)}\n  on:  ${ranking(on)}`);
   });
 
+  it("the cover rule's gap is the input's rivalRules.coverGapMs (SP4.3c Task 3: no constant of its own): a gap of 0 covers nobody, as the rule off", { timeout: 30_000 }, () => {
+    // the two cars ahead of ours (1.5 s and 3 s) have their stop still ahead, on lap 4: the rule can cover them
+    const start = testRace();
+    for (const k of [0, 1]) for (const window of [start.stopLow, start.stopMid, start.stopHigh]) window[k] = 4;
+    const run = (rivalRules: { coverRule: boolean; coverGapMs?: number }) => carOf(raceMonteCarlo(mcInput(start, { 2: CANDIDATES }, { hazard: HAZARD, rivalRules }), createRng(91), 5_000), 2).rows;
+    const off = run({ coverRule: false });
+    expect(run({ coverRule: true, coverGapMs: 0 })).toEqual(off);
+    // a gap wide enough for every rival ahead: the rule covers, the rows move
+    expect(run({ coverRule: true, coverGapMs: 60_000 })).not.toEqual(off);
+  });
+
   // row 11
   it('split-or-stack: both our cars boxing on one lap pay the double-stack wait; the test prints the ranking with and without the mistake process', { timeout: 30_000 }, () => {
     // quiet: our car 1 leads our car 0 by 2 s and is committed to box at the end of lap 3; stacking behind it waits

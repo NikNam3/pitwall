@@ -123,7 +123,7 @@ describe('strategy: the table fields', () => {
       thresholds,
       table: { boxUnderMs: new Float64Array(26), stayMs: new Float64Array(26) },
     };
-    const config = { ...STRATEGY_CONFIG.defaults, ruleGapMs: 2_500 };
+    const config = { ...STRATEGY_CONFIG.defaults, closeGapMs: 2_500 };
     const cands = candidatesOf(start, CAR, dp, config);
     const ruleOf = (policy: ReturnType<typeof policyOf>) => cands.find((c) => json(c.policy) === json(policy))?.rule;
     const at = (lap: number) => policyOf({ stops: [{ lap, compound: 'hard' }] }, thresholds);
