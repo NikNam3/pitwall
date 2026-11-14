@@ -34,5 +34,6 @@
 - Whether a human's own `usableLife` reacts to their setup or driving (it was 29 for car 19 at Silverstone, within the AI's 27–29).
 - The delta on a car with a damaged or flat-spotted tyre; red-flag tyre changes.
 - `usableLife` at the other race-distance settings (very short, short, medium, long): one recording each would give the game's own factor table.
+- Silverstone's switch to inters (deferred item 11): run 1 ends at lap 31 with car 19's new-inter delta falling +2.8 → +1.5 s within the lap as the rain began; the switches (laps 33–34) fall in the unrecorded laps 32–36, so whether the AI switched on the delta's sign there is not known.
 - The C0 / C6 compounds: none seen.
 - Online: in both online recordings (Zandvoort `2026-10-29_23-00-37`, Suzuka practice `2026-11-10_23-22-46`) every car's sets came through non-zero, the other humans' included; whether those humans had restricted telemetry is not known, so the zeroing of research 20 §5 is untested.
