@@ -2,6 +2,8 @@
 
 **Status: draft by the supervisor, 2026-11-14; not brainstormed, not approved.** Input for the brainstorm of Q1 in `docs/superpowers/plans/2026-11-14-live-test-triage-questions.md`. Evidence: research 21 §2, §9, §12; research 22; the triage file's T-numbers.
 
+**Superseded in scope by `2026-11-14-consolidation-map.md`** (the whole-codebase map; this draft's §2.1–2.3 are its O1, O3 and B5, with the tyre survey's corrections there).
+
 **The rule (user, 2026-11-14): the code stays clean; the strategy is improved structurally, never by a workaround.** So every fix names the one module that owns the judgement (C43: a judgement several units need is one calculator) and lists what it deletes. A fix that only makes Silverstone come out right is not on this list.
 
 ## 1. Why the symptoms happened: one judgement, several owners
