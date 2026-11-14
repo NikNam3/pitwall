@@ -25,6 +25,8 @@
 - **Realism (C8):** step 1 already hides a rival's sets under realism (`state-update/realism.ts:22`); then our own cars' values stand for the field (the AI's spread is ± 0.3 s on the delta and ± 1 lap on `usableLife`). Restricted human cars online send no tyre sets (research 20 §5).
 - **Contract:** these are values already in the live state (C8, C12: not signals); a unit reading them declares `tyres` in its `reads` (C41). No contract change.
 
+10. **The AI's dry stops follow no fixed wear or `lifeSpan`** (`ai-dry-stops.py`): Spa 52 stops at 15 / 28 / 38 % wear (p10 / p50 / p90) with 7–17 laps of `lifeSpan` left; Texas 20 stops at 24–35 % with 6–10 left; Zandvoort's 16 were early SC stops at 11–17 %. Unlike the tyre-type switches, a dry stop is not predictable from these values alone (SC laps not separated here).
+
 ## 3. Not checked, and recordings wanted
 
 - Whether `usableLife` follows a setting other than race distance (AI difficulty, tyre-wear menu settings): every session here has the same damage and surface settings (research 21 §13).
