@@ -5,7 +5,7 @@
 **Data and code.** The 1 Hz samples and car-laps of research 20's spike (55 recordings of `recordings/` and `~/.local/share/pitwall/recordings/`, decoded with `packages/protocol`, flashback-undone samples dropped). The new scripts are in the helper repo, `~/dev/personal/pitwall-research/tyre-spike/strategy/` (cited `strategy/<script>`). One harness (`strategy/capture.ts`) replays the Silverstone recording through the bridge pipeline as `pitwall strategy` does and logs the strategy job's view; nothing is stored.
 
 **Conventions.**
-- A **gain** is one green lap's own wear increase at a corner (end of lap minus end of the lap before, same set). Green: no pit, no SC or VSC, not an in-lap or out-lap, not lap 1. Rates are of the **worst corner** unless a corner is named.
+- A **gain** is one green lap's own wear increase at a corner (end of lap minus end of the lap before, same set). Green: no pit, no SC or VSC, not an in-lap or out-lap, not lap 1. Rates are of the **worst corner** unless a corner is named: in §2–§9 the highest of the four corners' gains on each lap (which biases a rate 3–17 % above a single corner's, since gains are whole percent); in §13 the corner with the highest pooled mean. State the measure with any absolute rate.
 - **Lap time** is fuel-corrected at 30 ms/kg (`degradation.gammaMsPerKg`).
 - **w** is track wetness on the lap model's slick scale (ms): the AI field's median fuel-corrected lap per tyre type against a dry reference, through the lap model's terms (slick w = excess; inter w = (excess − 3,500) / 0.5; wet w = (excess − 8,100) / 0.25), as in research 19. Dry references (AI, fuel-corrected): Singapore 96.37 s (slick laps 8–22), Silverstone 92.99 s (slick laps 23–29 of the first recording), Miami 94.77 s (practice bests). Mexico has none.
 - **Thin** marks fewer than about 30 cases or one event. Everything in §10 is a proposal for the user, not a ruling.
@@ -33,9 +33,9 @@ The set race length is the Session packet's `totalLaps` (`strategy/totallaps.ts`
 2. **The live wear rate rule is the weak point, not the number of laps alone.** The median of whole-percent per-lap gains (`per-lap-rate`, window 5, minimum 2) stays 15–27 % off the stint's later rate however many laps it sees. The cumulative rate (wear gained over the laps, divided by the laps) reaches 6 % median error on slicks after 3 laps and 5 % once 5 % wear has accrued.
 3. **The "13-lap inter life from one lap" is the age basis on the default ν, not a wear rate.** 13.3 laps = `ageLossLimitMs` 2,000 / `defaultNuMsPerLap` 150. Inters at steady wetness lose about 11 ms per lap of age (Mexico), so on the age basis an inter's life is about 180 laps, and no wear-free life is meaningful.
 4. **The game scales wear with the race-distance setting** (the menu's race length, Session `m_sessionLength`; user correction 2026-11-14). Medium long wears about 2.1 × faster than full at Suzuka (same track, compound, temperature); across tracks 1.6–1.9 ×, confounded by the track. Practice follows the weekend race's setting. Calibration sets and driver profiles pool settings without knowing it (§13).
-5. **Inters wear faster as the track dries:** +0.076 ± 0.006 %/lap per second of w lost (AI, 3 races), about +6 % of the rate per second. At Silverstone the AI inters went 1.06 → 1.84 %/lap as w fell 18 → 10.5 s. At steady wetness the inter rate is flat in age (Mexico, 67 laps).
+5. **Inters wear faster as the track dries:** +0.076 ± 0.006 %/lap per second of w lost (AI, 3 races), about +6 % of the rate per second. At Silverstone the AI inters went 1.29 → 1.84 %/lap (laps 38–44 against 45–51) as w fell about 17 → 11 s. At steady wetness the inter rate is flat in age (Mexico, 67 laps).
 6. **Track temperature has no measurable effect; the track does.** The AI's C3 runs 1.5–2.6 %/lap across full-length races. Within a track (Suzuka 20–25 °C, Texas practice 40 °C against the race at 32 °C) the rate does not follow track temperature.
-7. **Humans wear 1.2–2.0 × the AI, and DR and Asym differ.** DR 1.21–1.34 × on normal stints (Silverstone's drying inters 1.86 ×), Asym 1.46–1.97 ×. Humans wear the fronts hardest on slicks (7 of 10 stints), the AI the rears (97 %). The flat 2.0 %/lap default fits a full-length average only: human slick rates run 1.4–7.3 %/lap.
+7. **Humans wear 1.2–2.0 × the AI, and DR and Asym differ.** DR 1.21–1.34 × on normal stints (Silverstone's drying inters 1.86 ×), Asym 1.46–1.97 ×. Humans wear the fronts hardest on slicks (7 of 10 race stints, 2 rear, 1 tie; Asym clearly, DR narrowly), the AI the rears (97 %). The flat 2.0 %/lap default fits a full-length average only: human slick rates run 1.4–7.3 %/lap.
 8. **On a drying track a stint's own ν goes negative** (Silverstone inters −331, Singapore inters −201 ms/lap): the lap-time fit takes the drying as negative degradation.
 9. **The fresh-set laps are not slower in the dry; inters are slower for 2–3 laps.** Dry AI, laps 2–3 on a new set against the set's own line: medium about 0, soft (Spa) −1.8 to −2.3 s. Inters after the Mexico switch: +0.8, +0.65, +0.5 s on laps 2–4 (confounded with the track). The model's +410 ms sits on the out-lap, which the measured pit loss already contains.
 10. **The wet slopes cannot be re-fitted:** no recording since research 19 adds slicks and inters on track together. Silverstone adds one point for the rain model: under light rain at 77–78 % the track settled at w ≈ 10.7 s.
@@ -61,7 +61,7 @@ Each gain divided by its stint's mean gain, binned by the corner's wear at the l
 
 A quadratic in age, pooled within stints, gives the slope's change over 20 laps: AI inters +5 % (61 stints, to 56 % wear), AI slicks −7 % (150 stints, to 51 %), AI wets −22 % (9 stints, Miami, where the track dried), humans −5 to −10 % (thin). **Wear is linear in age.** Only the first laps of a wet-tyre set (0–10 %) wear about 9 % less than the rest.
 
-**Per corner.** The AI's worst corner is a rear in 97 % of slick stints (213) and every inter and wet stint; its fronts wear 0.74 × its rears on slicks and 0.43 × on inters and wets. Our cars' worst slick corner is a front in 7 of 10 stints (front/rear 1.15). Every inter stint wore a rear worst, AI and human. The AI's per-compound rates by track are in §4.
+**Per corner.** The AI's worst corner is a rear in 97 % of slick stints (213) and every inter and wet stint; its fronts wear 0.74 × its rears on slicks and 0.43 × on inters and wets. Our cars' worst slick corner is a front in 7 of 10 race stints, a rear in 2, one tie (front/rear mean 1.15, median 1.03). Every inter stint wore a rear worst, AI and human. The AI's per-compound rates by track are in §4.
 
 ### How many laps a rate needs
 
@@ -107,7 +107,7 @@ AI gain laps against the lap's w, race and car-stint fixed effects, SE clustered
 - **At steady wetness the inter rate is flat:** Mexico's AI inters lose 0.0019 %/lap per lap of age (1,041 laps), 0.9–1.0 %/lap from lap 7 to 69.
 - Silverstone by laps, AI (DR):
 
-  | Laps | 34–37 | 38–41 | 42–44 | 45–47 | 48–52 |
+  | Laps | 37 (16 car-laps) | 38–41 | 42–44 | 45–47 | 48–52 |
   |---|---|---|---|---|---|
   | w | 18.2 s | 16.9 | 13.1 | 10.8 | 10.7 |
   | AI gain | 1.06 | 1.12 | 1.51 | 1.84 | 1.83 |
@@ -344,7 +344,7 @@ Each probability is a multiple of 1/40 at most laps (40 runs).
 
 In the replay "no stop" is the best plan from lap 40; on laps 37–39 it is not among the top 6. §12 traces why: the DP ranks it 15th–18th on a dry track and the `dpPlansMax` cap drops it.
 
-**The cause of the wear (user: setup and drying, both).** Drying alone raised the AI's inter rate × 1.7 (1.06 → 1.84). Car 19's went × 1.9 (2.0 → 3.7), so its excess over the AI held at 1.9–2.0 × against DR's normal 1.25 ×. Part of the excess is the overheat that research 20 §7.3 measured; how much is setup is not measurable. For profiles and sets: this stint is 1.5 × DR's usual factor, and an exclusion as the checklist proposes is consistent with the data.
+**The cause of the wear (user: setup and drying, both).** Drying alone raised the AI's inter rate × 1.4 (1.29 → 1.84, laps 38–44 against 45–51). Car 19's went × 1.9 (2.0 → 3.7), so its excess grew from 1.6 × to 2.0 × (RL 1.5 → 2.2 ×) against DR's normal 1.25 ×; the step is at lap 45, when its RL carcass passed Tref + 27 °C (recount 2026-11-14, `pitwall-research/tyre-spike/reconcile/silverstone.py`). Part of the excess is the overheat that research 20 §7.3 measured; how much is setup is not measurable. For profiles and sets: this stint is 1.5 × DR's usual factor, and an exclusion as the checklist proposes is consistent with the data.
 
 ## 10. Proposals
 

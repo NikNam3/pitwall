@@ -12,7 +12,7 @@ Who drove: Ferrari cars mainly DR, Mercedes cars mainly Asymetrisch (research 12
 2. **AI tyre temperatures and pressures are constants.** AI carcass sits at Tref of its compound (98–99 % of samples on C3), the AI surface at one value per compound, AI pressure at one value per track (the game's default setup), whatever the compound. Other humans online also show a constant default pressure. Only our own cars' (and other humans') temperatures are simulated (`spike/variance.py`). **AI tyre temperatures and pressures carry no information**; AI wear does respond to compound, track and drying.
 3. **One slick carcass band of 70–105 °C is right only for C3 and C2.** The ideal moves with the compound by 25 °C (C5 80 → C1 105). A per-compound band around Tref fits the data and the game's own model.
 4. **On inters, wear rises with carcass heat above Tref:** +0.042 ± 0.004 %/lap per °C within a stint (404 corner-laps). On slicks no within-stint relation is measurable.
-5. **Silverstone 2026-11-14: the drying track raised everyone's wear, and car 19's twice as much.** AI inters ×1.4 (1.22 → 1.67 %/lap, flat AI temperatures), car 19 ×2.0 (1.86 → 3.71 %/lap) with its rear carcass at Tref +30…40 °C. The data do not show the setup pressure as a cause: the pressure rose because the carcass heated.
+5. **Silverstone 2026-11-14: the drying track raised everyone's wear, and car 19's twice as much.** AI inters ×1.4 (1.22 → 1.67 %/lap, flat AI temperatures), car 19 ×2.0 (1.86 → 3.71 %/lap; RL, laps 38–44 against 45–51, pooled) with its rear carcass at Tref +30…40 °C. The data do not show the setup pressure as a cause: the pressure rose because the carcass heated.
 6. **Track wetness is not in the feed.** No wetness, rubber or dry-line field exists; weather, rain % and track temperature are all there is. At Silverstone the forecast said 76–78 % rain to the end while lap times said drying. Lap times per tyre type are the drying signal (as research 12 §3 found).
 7. **Blisters are 0 in every sample of every recording**, and `tyresDamage` equals round(wear). Neither adds a signal today.
 8. **Real F1 matches the game's structure, not its numbers.** Real teams also judge the bulk (carcass), not the surface; real windows are about 30 °C wide and sit higher for harder compounds; real pressures follow the gas law. No public source gives degradation per °C of track temperature or per psi, in real F1 or the game.
@@ -209,8 +209,8 @@ Rear 20.5–26.5, front 24.2–29.5 psi; 26.5 rear and 29.5 front are the highes
 - **Slicks: no within-stint relation** (−0.014 ± 0.014 per °C, 552 corner-laps); across stints corr 0.54 over 12 stints (thin).
 - **Setup pressure alone: not measurable.** No session changes it while running; across sessions it is confounded with track and driver (slicks corr 0.13; inters −0.99 over 6 stints, all from Miami's low 20.5 setup).
 - **Track temperature within a stint: not measurable** (slick −0.051 ± 0.031 %/lap per °C; changes are 1–2 °C in integer steps; `spike/misc.py`).
-- **Humans wear inters 1.3–2.1 × the AI** in the same race: Mexico 1.7 ×, Singapore 1.3 ×, Miami 1.6 ×, Silverstone 2.1 × (`spike/wear.py`), in line with research 12 §3's 1.4–2.0 × on slicks.
-- Worst corner is a rear on most stints; DR's Shanghai C3 and the Texas human stints wore a front fastest (FL 5.88 and 6.17 %/lap).
+- **Humans wear inters 1.3–2.1 × the AI** in the same race: Mexico 1.7 ×, Singapore 1.3 ×, Miami 1.6 ×, Silverstone 2.0 × (RL; 1.86 × on the per-lap worst corner) (`spike/wear.py`), in line with research 12 §3's 1.4–2.0 × on slicks.
+- Worst corner is a rear on every inter stint and a front on most slick stints (8 of 12, 2 ties): Shanghai, Texas, Suzuka, Zandvoort, Silverstone C2; Asym's clearly, DR's narrowly (FL 5.88 and 6.17 %/lap at Shanghai and Texas; recount 2026-11-14, `pitwall-research/tyre-spike/reconcile/corners.py`).
 
 ### Following, pushing
 
@@ -276,11 +276,11 @@ Car 19 (DR), inters from lap 34, drying track, forecast light rain 76–78 % to 
 | 45–51 | 3.71 %/lap (3–4) | 93–105 °C | 25.4–26.3 | 101.9–103.7 s | 1.67 %/lap |
 
 - RL wear 9 % → 50 % at the flag. The field's AI median lap 106.8 s (lap 37) → 102.0 s (lap 51), 17 cars.
-- **Drying, alone:** ×1.4 on the AI. **Car 19:** ×2.0, its excess over the AI from 1.5 × (normal for a human) to 2.2 ×. The extra ~45 % is about what the inter slope (+0.042 per °C) gives for 15–20 °C more overheat.
+- **Drying, alone:** ×1.4 on the AI. **Car 19:** ×2.0, its excess over the AI from 1.5 × (DR's normal is 1.2–1.3 ×) to 2.2 ×; the step comes at lap 45, when its RL carcass passed about Tref + 27 °C. The extra ~45 % is about what the inter slope (+0.042 per °C) gives for 15–20 °C more overheat.
 - **Setup pressure:** the rear 23.5 psi is lower than DR's 26.5 at Singapore and Zandvoort; the front 29.5 is the highest seen. In the game the setup only sets which pressure the tyre shows at Tref. The data show a carcass far above Tref on a drying track, and the pressure rose with it: a symptom, not a cause the data can isolate. Whether a lower setup would have heated the tyre less is not measurable from our recordings. The user's "both" stays possible; the recording supports "the drying track, and a carcass that overheated on it".
 - **Bands as built would have flagged it:** the RL pressure crossed setup + 1.0 on lap 43 (24.8 psi, inner 83 °C = Tref + 18), the inter carcass top (95 °C) on lap 46. Proposal A's 80 °C top would have flagged it by lap 43 at the latest (inner 83 °C). The wear rate doubled from lap 45.
 - **The crossover:** lap times went under 110 % of the 94.3 s dry reference from about lap 43 while the forecast still said rain. Lap times beat the forecast as a drying signal, as research 12 found at Singapore. On the recording `track-wetness` had no state on any lap after the restart, so the forecast took the track as dry (research 21 §9); what `crossover.car` reported is still to be checked.
-- **Profiles and calibration:** this stint's 2.87 %/lap (2.1 × the AI) is an outlier for DR's `driverNoise.wearRatePct.inter` and a Silverstone set's inter wear; the recording agrees with the checklist's idea to exclude it. A stint with its carcass mostly within Tref ± 10 would be the normal case.
+- **Profiles and calibration:** this stint's 2.8 %/lap at the RL (2.0 × the AI; laps 38–51, flag lap excluded) is an outlier for DR's `driverNoise.wearRatePct.inter` and a Silverstone set's inter wear; the recording agrees with the checklist's idea to exclude it. A stint with its carcass mostly within Tref ± 10 would be the normal case.
 
 ### 7.4 Setup-pressure check
 
