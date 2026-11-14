@@ -43,6 +43,7 @@ The set race length is the Session packet's `totalLaps` (`strategy/totallaps.ts`
 12. **Silverstone, laps 39–47: staying out on inters was right.** The inters reached the flag at 50 % (limit 70 %). From lap 45 the track stopped drying at a level where, on the lap model's own constants, inters were 1.2–2.6 s/lap faster than slicks; mediums on lap 47 would have lost about 28–35 s.
     - The replay shows why the model said mediums: track-wetness had no state after the restart, so the forecast took the track as dry.
     - The 110 % crossover line sits 2–3 % too high for F1 25.
+13. **The no-stop plan was cut by the candidate cap, against the spec (§12).** The DP built it but, planning on a dry track at every lap, ranked it 15th–18th of 83; `dpPlansMax` 8 then dropped it, while spec §6 asks for the best plan per stop count. At 4,000 runs on lap 39 it wins 41–46 % (E[pos] 2.6–2.8), against 2.4–3.3 % for the L47 medium stop the panel showed.
 
 ## 2. Wear rate: shape and reliability (question 1)
 
@@ -137,7 +138,7 @@ AI, median worst-corner rate of race stints with 3 or more gain laps (`strategy/
 
 - **Soft 1.12–1.47 × medium, hard 0.69–0.86 ×.**
 - **The track spreads the same compound:** C3 1.5 (Singapore) to 2.6 (Spa) in full races, 1.7 ×; 3 × with the short races. That is what `tyreLife.wearPerLapPct.<compound>.<corner>` per track is for.
-- **Race length doubles the rate at about a third of the distance:**
+- **The race-distance setting doubles the rate at medium long, about a third of the distance (§13):**
   - Suzuka 19 laps against 53 laps, same track and temperature: C2 4.00 against 2.00, C3 4.67 against 2.25 (×2.0, ×2.1; 15 and 19 AI stints).
   - Miami's inters (35 %) 2.0 against 0.97–1.12 in three full races.
   - Texas (36 %) C3 3.17 against 1.5–2.6 in full races.
@@ -167,7 +168,7 @@ Asym is the Mercedes car (mainly Asymetrisch). DR's Spa hard (C1, 1.80), Silvers
 - **DR 1.21–1.34 × on 4 normal stints (median 1.24); Asym 1.46–1.97 × on 8 (median 1.65).** Silverstone's 1.86 is the drying-and-overheat outlier (research 20 §7.3).
 - **Corners differ:** on slicks our cars wear the fronts relatively harder, so the factor at a front corner is about 1.5 × the factor at the worst corner the AI shows.
 
-**Does `driverNoise.wearRatePct` 2.0 %/lap hold?** Only as an average over full-length races:
+**Does the 2.0 %/lap default (`driverNoise` config `humanWearRatePct` and `defaultWearRatePct`; a profile's own value is `driverNoise.wearRatePct.<compound>`) hold?** Only as an average over full-length races:
 
 | Race length | Inters | Slicks |
 |---|---|---|
@@ -176,7 +177,7 @@ Asym is the Mercedes car (mainly Asymetrisch). DR's Spa hard (C1, 1.80), Silvers
 
 The default is used where the car has no own rate on a compound: for a human, the next compound after a stop. There it misses by up to 3.6 ×.
 
-**Proposal:** a human without a profile rate takes the AI field's measured rate on that compound this session × a driver factor (default 1.5; DR 1.25, Asym 1.65 as profile values); the 2.0 only when no car has run the compound. Profiles and calibration sources keep the race length (set laps / full laps) and normalise the rate to full length, or are kept per length band (§10).
+**Proposal:** a human without a profile rate takes the AI field's measured rate on that compound this session × a driver factor (default 1.5; DR 1.25, Asym 1.65 as profile values); the 2.0 only when no car has run the compound. Profiles and calibration sources keep the race-distance setting (`m_sessionLength`; practice: the weekend race's) and normalise the rate to full length, or are kept per setting (§10, §13).
 
 ## 5. Degradation (question 4)
 
@@ -336,12 +337,12 @@ Each probability is a multiple of 1/40 at most laps (40 runs).
 | 47 | RL 31 %, 3.7 %/lap: 10.5 laps to 70 % (lap 57), 5 laps left. The flag at about 50 %. | no stop | no stop. Mediums on lap 47: pit loss 22.0 s (`pitloss-22`) + 1.2–2.6 s/lap × 5 laps + the medium's warm-up on a damp track ≈ **28–35 s lost**; only a full drying (w < 7 s within 1–2 laps) would pay back. Under steady 78 % light rain the track had already settled (§7). |
 
 **Why "mediums on lap 47" and no stay-out plan.** The model's own constants give inters the edge at w 10.5 s (§7). A plan that prefers mediums must see a drier track than the lap times say, or a slower inter. Four model parts push that way:
-1. **The dry wetness prior** (replay above): with no dry reference, the medium looks 3.5 s/lap faster than the inter. This is the largest.
+1. **The dry wetness prior** (replay above): with no dry reference, the medium looks 3.5 s/lap faster than the inter. This is the largest in the ranking; the candidate cap then drops the no-stop plan that ranking puts low (§12).
 2. The DP and the MC take one wear rate (the fitted compound's) and one `degMsPerLap` (its ν / rate) for every compound (`shared/strategy-input/dp-input.ts`, `race-forecast/field.ts` `fitStop`). With ν at the prior, the inter's 75 ms per % weighs against it. Once ν went negative (§5), a medium inherited a negative degradation too.
 3. The DP holds the wetness at today's value for every lap (`wetnessByLap` filled with the current state).
 4. `crossover`'s 110 % line read 108–109 % as "slicks faster", 2–3 % early for this game (§7).
 
-In the replay "no stop" is the best plan from lap 40; on laps 37–39 it is not among the top 6. Why the candidate set or the ranking left it out there was not traced.
+In the replay "no stop" is the best plan from lap 40; on laps 37–39 it is not among the top 6. §12 traces why: the DP ranks it 15th–18th on a dry track and the `dpPlansMax` cap drops it.
 
 **The cause of the wear (user: setup and drying, both).** Drying alone raised the AI's inter rate × 1.7 (1.06 → 1.84). Car 19's went × 1.9 (2.0 → 3.7), so its excess over the AI held at 1.9–2.0 × against DR's normal 1.25 ×. Part of the excess is the overheat that research 20 §7.3 measured; how much is setup is not measurable. For profiles and sets: this stint is 1.5 × DR's usual factor, and an exclusion as the checklist proposes is consistent with the data.
 
@@ -619,11 +620,10 @@ That fits the AI factor (§4 already shows Asym 1.57 × the AI in the 19-lap rac
 
 ### Proposals (for the user to decide)
 
-1. **Store the race-length context with every calibration source and every profile session:**
-   - set laps;
-   - the track's full race laps;
-   - the fraction;
-   - for practice and qualifying, the weekend's race length from the linked race session, else `unknown`.
+1. **Store the race-distance setting with every calibration source and every profile session:**
+   - `m_sessionLength` of the race session (the key of proposal 2);
+   - for practice and qualifying, the setting of the weekend's race session (same `weekendLinkIdentifier`), else `unknown`;
+   - set laps and the track's full race laps, as a description only.
 2. **Normalise absolute rates to full length with a measured table keyed on the length setting, not a formula:** 100 % → 1.0, 35 % (`sessionLength` 5) → 2.1, from Suzuka. Other lengths (25 %, 50 %, 5 laps, sprints) stay `unknown` until recorded: do not pool them, or pool them only through proposal 3. If one formula is wanted between the measured points, `rate_full = rate × fraction^0.7` (k 0.65–0.73 at Suzuka, 0.5–0.6 across tracks) is the best available, and is unverified away from 35 %.
 3. **Keep the driver factor as human ÷ AI in the same session (and compound), not as an absolute rate.** It needs no length normalisation. A profile's absolute rate is then the session's AI rate × the factor.
 4. **Live, prefer the session's own AI field rate on a compound over any stored absolute rate**, because it already carries the session's length scale. A calibration set's rate at full length × the table factor is the fallback before the AI field has 3 gain laps.
@@ -632,4 +632,4 @@ That fits the AI factor (§4 already shows Asym 1.57 × the AI in the 19-lap rac
    - one session at another length (25 % or 50 %) at Suzuka or Silverstone (gives the shape);
    - a full Shanghai race (settles the sprint base);
    - a practice of a full-length weekend at the same AI difficulty as a short one (repeats the practice result).
-6. **Change the research doc's earlier wording** (§1 finding 4, §4) from "the 35 % races wear about 2 ×" to "about 2.1 × at Suzuka (same track); 1.6–1.9 × across tracks, confounded by the track", and add that practice follows the weekend's race length.
+6. ~~Change the research doc's earlier wording (§1 finding 4, §4).~~ Done: §1 finding 4 and §4 now name the setting and the Suzuka 2.1 ×.
