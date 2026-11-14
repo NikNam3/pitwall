@@ -2,6 +2,8 @@ import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import { known, unknown, type SessionTime } from '@pitwall/domain';
 import { paceDelta, paceDeltaAround } from '../../src/pace-delta/index.ts';
+import { PACE_DELTA_CONFIG } from '../../src/pace-delta/config.ts';
+import * as analysis from '../../src/index.ts';
 import { lap } from '../../../../test-support/builders/index.ts';
 
 const at = 123_456 as SessionTime;
@@ -174,5 +176,22 @@ describe('paceDeltaAround', () => {
     expect(paceDeltaAround(list, 5, race)).toEqual(known(1000, 800_000));
     // in: laps 6, 7, 8 after (mean 94 s)
     expect(paceDeltaAround(list, 5, { ...race, maxNeutralisedMs: 5000 })).toEqual(known(4000, 800_000));
+  });
+});
+
+// SP4.3c Task 2: the `pace` unit is gone (no unit read its output); its one setting, the pace laps in the recent mean,
+// moves to `pace-delta`'s own config, and `damage` and `incidents` read it from there.
+describe('PACE_DELTA_CONFIG', () => {
+  it("is pace-delta's section with windowLaps 3, the old pace window", () => {
+    expect(PACE_DELTA_CONFIG.key).toBe('pace-delta');
+    expect(PACE_DELTA_CONFIG.defaults).toEqual({ windowLaps: 3 });
+    expect(PACE_DELTA_CONFIG.read({ config: { 'pace-delta': { windowLaps: 2 } } })).toEqual({ windowLaps: 2 });
+  });
+
+  it('the package exports it, and no pace calculator or pace config', () => {
+    expect((analysis as Record<string, unknown>).PACE_DELTA_CONFIG).toBe(PACE_DELTA_CONFIG);
+    expect(analysis).not.toHaveProperty('paceCalculator');
+    expect(analysis).not.toHaveProperty('PACE_CONFIG');
+    expect(analysis).not.toHaveProperty('PACE');
   });
 });
