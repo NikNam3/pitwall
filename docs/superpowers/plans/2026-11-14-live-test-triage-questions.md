@@ -109,7 +109,7 @@ Recommendation: **A**, one small two-phase task. Check online: with names hidden
 
 ## Q7. The gap chart in a race joined after lights out: what should it show?
 
-Both Silverstone runs joined the race mid-way (the first at about lap 22, the second at lap 36), so neither saw lights out. `gaps` then has no race start (`gaps/calculator.ts:90–93`, a `racing` span with `joinedAt`), the reference lap is unknown and every car's line is empty, for the whole race (verified on both recordings). The same holds for every race the bridge starts late, and the rejoin ghost lines use the same function (noticed, not verified).
+Both Silverstone runs joined the race mid-way (the first at about lap 22, the second at lap 36), so neither saw lights out. `gaps` then has no race start (`gaps/calculator.ts:90–93`, a `racing` span with `joinedAt`), the reference lap is unknown and every car's line is empty, for the whole race (verified on both recordings). The same holds for every race the bridge starts late, and the rejoin ghost lines on the gap chart are empty too: `rejoin/ghost-lines.ts:11` calls the same `gapperLines` (`shared/gapper-lines.ts:100–102`, no race start, no points; verified in the code).
 
 - **A.** A "join origin": the leader's first line crossing after the join is the chart's start; gaps between cars stay exact, only the virtual car's constant offset differs from a race seen from the start; the output marks the origin as a join with its lap. A spec change to the timing spec §6.1, no contract change (C3, C31, C43).
 - **B.** Rebuild the true race start from the game's SessionHistory lap times as step-1 values. Touches facts about frames before the first frame (C21, C26): check for a contract gap first.
