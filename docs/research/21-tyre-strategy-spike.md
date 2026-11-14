@@ -350,6 +350,8 @@ In the replay "no stop" is the best plan from lap 40; on laps 37–39 it is not 
 
 For the user to decide; no code here.
 
+**Read with research 22** (written after this file): the game's TyreSets `usableLife` predicts the AI's wear (0.86 × 70 / `usableLife`, r 0.977, race distance included) and `lapDeltaTime` gives fresh-set offsets, degradation per % and the AI's tyre-type switches. That replaces, as priors, the rows "Wear prior without a measured rate", "`driverNoise.humanWearRatePct` / `defaultWearRatePct`" (a driver factor on the game's rate instead of on the AI's), "Profile and calibration wear entries" (no race-distance table), "`degradation.defaultNuMsPerLap` for inters and wets" and "Track-file `compoundOffsetsMs`"; the live-rate rows, the drying-track rows and the DP rows stand.
+
 | Model term | Now | Proposed | Evidence | Confidence |
 |---|---|---|---|---|
 | Live wear rate (`per-lap-rate` median of gains, `wearRatePerCorner`) | median of the newest ≤ 5 whole-percent gains, from 2 gains | cumulative gain over the newest ≤ 5 green laps / laps (or a least-squares slope of wear on age) | median stays 15–27 % off at every n; cumulative 6 % at n = 3 on slicks (§2) | high: 10 races, 177 slick and 65 inter stints |
