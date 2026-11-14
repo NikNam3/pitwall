@@ -5,7 +5,7 @@
 // `unknown` has no type (C3). Belongs in `packages/domain/test/tyre-type.test.ts` (this worker's hooks could not
 // write `packages/domain/test`).
 import { describe, expect, it } from 'vitest';
-import { tyreTypeOf, type ActualCompound, type NoiseCompound, type TyreType, type VisualCompound } from '@pitwall/domain';
+import { tyreTypeOf, type ActualCompound, type NoiseCompound, type TyreType, type VisualCompound } from '../src/index.ts';
 
 describe('tyreTypeOf', () => {
   it('a noise compound: soft, medium, hard → slick; inter → inter; wet → wet', () => {

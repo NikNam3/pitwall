@@ -5,7 +5,7 @@
 // `packages/domain/test/track-geometry.test.ts` (this worker's hooks could not write `packages/domain/test`).
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
-import { pointAt, type MapPoint } from '@pitwall/domain';
+import { pointAt, type MapPoint } from '../src/index.ts';
 
 describe('pointAt', () => {
   const outline: MapPoint[] = [

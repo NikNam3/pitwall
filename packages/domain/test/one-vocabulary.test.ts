@@ -8,7 +8,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const ROOT = join(import.meta.dirname, '../../../..');
+const ROOT = join(import.meta.dirname, '../../..');
 const SOURCE_ROOTS = ['packages/domain/src', 'packages/engine/src', 'packages/analysis/src', 'packages/contracts/src', 'apps/bridge/src', 'apps/ui/src'];
 
 function filesUnder(dir: string): string[] {

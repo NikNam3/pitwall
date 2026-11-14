@@ -1,7 +1,7 @@
 // Our cars, one definition (SP4.3c Task 1, spec §5.3; C43): `ourCars` is the domain helper; the player's car first,
 // then the teammate once when it is a different car. `analysis/src/shared/our-cars.ts` is deleted. Belongs in
 // `packages/domain/test/our-cars.test.ts` (this worker's hooks could not write `packages/domain/test`).
-import { carId, ourCars } from '@pitwall/domain';
+import { carId, ourCars } from '../src/index.ts';
 import { describe, expect, it } from 'vitest';
 
 describe('ourCars', () => {
