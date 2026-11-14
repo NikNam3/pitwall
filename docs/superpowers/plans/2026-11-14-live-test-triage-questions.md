@@ -18,14 +18,14 @@ Written overnight 2026-11-14 (supervisor, alone). Sorts the findings of the Silv
 | T10 | Silverstone has no pit-loss default; its hard offset +6,956 ms is a wet race's | track data bug (`pitwall-trackdata` generator) | live checklist; research 21 §8 | fix run, aux repo (Q1) |
 | T11 | Track-file soft offsets have the wrong sign at 3 of 4 tracks | track data weakness (median race laps, not fresh-set offsets) | research 21 §8 | Q1 (generator) |
 | T12 | Gap chart shows no data | spec gap: a race joined after lights out has no race start, so `gaps` draws no line, all race (both runs joined mid-race) | `gaps/calculator.ts:90–93, 130–133`; replay of both recordings | Q7 |
-| T13 | Track-map SC/VSC/rejoin ghosts jump | see §3 (diagnosis) | | |
+| T13 | Track-map SC/VSC/rejoin ghosts jump | design gap: `rejoin` moves the map point only on our mini-sector crossings (~every 1.7 s, ~85 m hops) | `rejoin/calculator.ts:112, 120` | Q6 |
 | T14 | Track maps: driver names on cars | wish | | Q6 |
 | T15 | Tyre pressure bands uncalibrated | calibration, proposals ready (research 20 §7.1 A–D) | | Q3 |
 | T16 | Silverstone inter stint as an outlier for DR's profile and the set | user action (exclusion exists, C62c / C62a) | research 20 §7.3, 21 §9 | Q4 |
 | T17 | Wear scales with the race-distance setting (medium long ≈ 2.1 ×) | model gap, high confidence it exists | research 21 §13 | Q5 |
 | T18 | Setup pressure shown before the race | wish; the data says it cannot judge "too high" (research 20 §7.4) | | later: setup sub-project |
 | T19 | `pitwall strategy` has no run-count override | tooling | research 21 §12 proposal 9 | fix run (Q1) |
-| T20 | `crossover.car` on the recording: what did it say? | open check | live checklist | overnight (§4) |
+| T20 | `crossover.car` on the recording: what did it say? | answered: nothing all race (no dry reference) | replay, §4 | T8 |
 | T21 | The game's TyreSets (`usableLife`, `lapDeltaTime`) are in the live state but unused by the strategy model; they predict AI wear (r 0.977), carry the race distance, give compound offsets, and the AI switches tyre type on the delta's sign | **new finding**, research 22 | `state-update/tyres.ts:20–22` | Q1, Q5 |
 
 ## 2. Questions
@@ -77,7 +77,7 @@ Car 19 wore its inters 1.9–2.1 × the AI against DR's usual 1.2–1.3 × (dryi
 - **B.** Keep it in the set (it is Silverstone's only inter data), exclude it from DR's profile.
 - **C.** Keep it in both.
 
-Recommendation: **B**: the set's inter wear is the AI field's anyway once the driver factor (Q1 B) exists; the profile is DR's normal driving.
+Recommendation: **B**: with the game's wear prior (Q1 A, research 22) a set's absolute inter wear matters less, and it is Silverstone's only inter data; the profile should hold DR's normal driving (this stint is 2.3 × the game rate against DR's usual 1.2).
 
 **Answer:**
 
@@ -130,7 +130,7 @@ Recommendation: **A**, in the fix run of Q1 (or as its own small task).
 
 Not questions yet; what Silverstone teaches for 4.3c, to bring into the brainstorm.
 
-1. **The call that was needed was conditional:** "stay out on inters; box for mediums only if the track dries below about 107.5 % for two laps." The plan board (V17) is the place for that: plan A with its armed triggers, and the trigger's threshold in a unit the engineer reads (% of the dry lap, not wetness in ms). The DP already gives a rain threshold (spec §6, "the wetness at which a switch beats staying out"); 4.3c needs it as a lap-time %.
+1. **The call that was needed was conditional:** "stay out on inters; box for mediums only if the track dries below about 107.5 % for two laps." The plan board (V17) is the place for that: plan A with its armed triggers, and the trigger's threshold in a unit the engineer reads (% of the dry lap, not wetness in ms). The DP already gives a rain threshold (spec §6, "the wetness at which a switch beats staying out"); 4.3c needs it as a lap-time %, and beside it the game's own delta of a fresh slick against the fitted inter (research 22: the AI switches when it turns negative), which is the trigger the field will follow.
 2. **"Stay out" needs two meanings on screen:** not this lap (closed-loop) and to the flag (the zero-stop plan). T5 decides the words; V17 shows both rows.
 3. **The rival's predicted stop moved our P1 by 0.17** (car 11's `rival-stops` window L43–51, which never came). V06 (one row per car, stints as blocks) should show predicted rival stops as uncertain blocks, so the engineer sees what the win chance rests on.
 4. **Cold start after a restart:** for 2–3 laps every strategy number was `insufficientData` or a prior. Planning displays need a visible "on priors" state per number (as the damage card's "measuring" wish of 2026-11-05).
