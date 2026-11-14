@@ -49,8 +49,10 @@ A restart now starts an empty log, and storage keeps only the newest run of the 
 - **A.** Keep as is. T8 (a dry-reference prior) removes the worst effect; the other losses stay.
 - **B.** Chain the recordings. A live session whose key (session uid, weekend, player car) is already stored with another recording first replays that recording into the new run's engine, then goes live; the session row lists its recordings in order; a rebuild and a replay run the chain; the frames in between are a gap the clock records as a forward jump (C36). Contract change: C59 (a session's recordings, in order), C60, C61, C38 (determinism over the chain), C76 (decisions per recording position). Cost: a mid-size task in the bridge and the runner; replaying ~15 laps at start takes a few seconds.
 - **C.** As B, but only for the stored log (storage keeps both runs' facts); the live run still starts empty. Small, but the live strategy gains nothing.
+- **D.** One recording per session, continued. On a restart under a stored key, the bridge trims the session's `.pwrec` to its last complete record (a crash cuts it mid-record), replays it into the new run's engine, then appends the new packets to the same file after a "resume" record (a new record kind, wall time of the restart, so record times stay non-decreasing); the sidecars likewise. A replay, a rebuild (C61) and reprocess (C38) read one file as today. C59's "a `.pwrec` file" stays literally true; the change is to the format (`pitwall-recorder/FORMAT.md`: the resume kind, and readers continue past it) and to Task 27's "the newest run wins" ruling. Whether this needs contract text is your call; I read C59–C61 as unchanged.
+- Note: neither B nor D fixes the gap chart at Silverstone: the first run had also joined after lights out (Q7).
 
-Recommendation: **B**. Restarts will happen again (crashes, updates, the several-feeds setup), and the strategy is weakest exactly then. If B, the contract text goes to you first (C0).
+Recommendation: **D**, else B. Restarts will happen again (crashes, updates, the several-feeds setup), and the strategy is weakest exactly then; D keeps one file per session, so every reader stays as it is.
 
 **Answer:**
 
@@ -122,7 +124,7 @@ Recommendation: **A**, in the fix run of Q1 (or as its own small task).
 
 ## 4. Overnight checks
 
-- **`crossover.car` on the Silverstone recording (T20):** (pending)
+- **`crossover.car` on the Silverstone recording (T20):** replayed (`pitwall-research/tyre-spike/crossover/capture-crossover.ts`): `dryRefMs`, `line110Ms` and `ourPct` were `insufficientData` on every update of the race, `firstFaster` `notApplicable` (no car on another tyre type). It said nothing all race, for the same reason as `track-wetness`: no slick lap after the restart. T8 (a dry reference prior) fixes both; the game's own slick delta (research 22, +2.1 s from lap 46) would have answered the question directly.
 
 ## 5. Input for the 4.3c brainstorm (planning displays: V17 plan board, V06 strategy overview, V01 circle of doom)
 
