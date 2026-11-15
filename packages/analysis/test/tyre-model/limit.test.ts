@@ -54,12 +54,15 @@ describe('row 7: wear 50 %, rate 4 → 5 laps to the limit in every reader', () 
     for (const c of CORNERS) expect(valueOf(car.compounds.medium.wearRatePct[c])).toBeCloseTo(4, 9);
     expect(car.limitPct).toBe(70);
     expect(valueOf(car.compounds.medium.lapsToLimit)).toBeCloseTo(17.5, 6);
+    // the fitted set's laps to the limit from its current wear (supervisor ruling: row 7's 5 is this field)
+    expect(valueOf(car.fittedLapsToLimit)).toBeCloseTo(5, 9);
   });
 
-  it('tyre-life: the set and every corner 5 laps to the limit, the rate tyre-model`s', () => {
-    const { tl } = chain(view);
+  it('tyre-life: the set and every corner 5 laps to the limit, the rate tyre-model`s; the set`s is tyre-model`s fittedLapsToLimit', () => {
+    const { tm, tl } = chain(view);
     const life = tl[carId(0)]!;
     expect(valueOf(life.lapsToLimit)).toBeCloseTo(5, 9);
+    expect(life.lapsToLimit).toEqual(tm[carId(0)]!.fittedLapsToLimit);
     expect(life.limitPct).toBe(70);
     for (const c of CORNERS) {
       expect(valueOf(life.corners[c].lapsToLimit)).toBeCloseTo(5, 9);
@@ -105,6 +108,11 @@ describe('row 7: wear 50 %, rate 4 → 5 laps to the limit in every reader', () 
 describe('row 10: past the limit when the engine joins (Review Focus 2)', () => {
   // a restart: no lap of the car in the projection, its set already at 74 %
   const view = limitView([], 74, 30);
+
+  it('tyre-model: the fitted set`s laps to the limit 0 (supervisor ruling: row 10`s 0 is this field)', () => {
+    const { tm } = chain(view);
+    expect(tm[carId(0)]!.fittedLapsToLimit).toMatchObject({ known: true, value: 0 });
+  });
 
   it('tyre-life: laps to the limit 0, the set and every corner', () => {
     const { tl } = chain(view);

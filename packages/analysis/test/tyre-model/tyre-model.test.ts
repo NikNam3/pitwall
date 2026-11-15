@@ -32,6 +32,7 @@ import {
   LAP_MS,
   linkedDriver,
   liveSets,
+  modelCarState,
   modelView,
   tyreSet,
   valueOf,
@@ -560,6 +561,58 @@ describe('row 11: the prior\'s error on synthetic stints (research 22 §1.2)', (
     }
     errors.sort((a, b) => a - b);
     expect(errors[errors.length >> 1]!).toBeLessThanOrEqual(0.12);
+  });
+});
+
+describe('the fitted set and the used sets (supervisor ruling 95a9a1b4)', () => {
+  it('fittedLapsToLimit: (limit − the worst corner`s wear) / that corner`s rate; 0 at or past the limit; the limit from config', () => {
+    // fl gains 2, rr 4 a lap (laps 1–5): wear fl 10, rr 20 → rr limits: (70 − 20) / 4 = 12.5
+    const laps = gainLaps(Array.from({ length: 5 }, () => ({ fl: 2, fr: 2, rl: 2, rr: 4 })));
+    const view = runView(laps);
+    expect(valueOf(carOf(calc.compute(view), 0).fittedLapsToLimit)).toBeCloseTo(12.5, 9);
+    expect(valueOf(carOf(calc.compute(runView(laps, {}, { config: { [TYRE_MODEL_CONFIG.key]: { limitPct: 80 } } })), 0).fittedLapsToLimit)).toBeCloseTo(15, 9);
+    for (const wearPct of [70, 81]) expect(carOf(calc.compute(modelView([{ id: 0, wearPct }])), 0).fittedLapsToLimit, `${wearPct} %`).toMatchObject({ known: true, value: 0 });
+  });
+
+  it('fittedLapsToLimit: unknown with its reason where the live wear is (C3, never 0)', () => {
+    const car = modelCarState({ id: 0, wearPct: 10 });
+    const hidden = { ...car, tyres: { ...car.tyres, corners: everyCorner(() => ({ ...car.tyres.corners.fl, wearPct: unknown('restricted') })) } };
+    expect(carOf(calc.compute(modelView([hidden])), 0).fittedLapsToLimit).toEqual(unknown('restricted'));
+  });
+
+  it('fittedLifeSpanLaps: the fitted set`s lifeSpanLaps (not its usable life)', () => {
+    const sets = liveSets([tyreSet('soft'), tyreSet('medium', { fitted: true, lifeSpanLaps: 22, usableLifeLaps: 19 }), tyreSet('hard', { lifeSpanLaps: 14 })], 1_000);
+    expect(carOf(calc.compute(modelView([{ id: 0, sets }])), 0).fittedLifeSpanLaps).toEqual({ known: true, value: 22, at: 1_000 });
+  });
+
+  it('usedSets: our car`s available sets but the fitted one, each with its compound and wear; unavailable sets left out', () => {
+    const sets = liveSets([tyreSet('medium', { fitted: true, wearPct: 9 }), tyreSet('hard'), tyreSet('medium', { wearPct: 24 }), tyreSet('soft', { available: false })]);
+    const out = carOf(calc.compute(modelView([{ id: 0, wearPct: 9, sets }])), 0).usedSets;
+    expect(out.known).toBe(true);
+    if (!out.known) return;
+    expect([...out.value].sort((a, b) => a.compound.localeCompare(b.compound) || a.wearPct - b.wearPct)).toEqual([
+      { compound: 'hard', wearPct: 0 },
+      { compound: 'medium', wearPct: 24 },
+    ]);
+  });
+
+  it('usedSets: a rival`s are unknown(notApplicable), also with its sets known (the strategy plans only our cars)', () => {
+    const sets = liveSets([tyreSet('medium', { fitted: true }), tyreSet('hard')]);
+    const out = calc.compute(modelView([{ id: 0, sets }, { id: 1, sets }], { playerCar: 0 }));
+    expect(carOf(out, 1).usedSets).toEqual(unknown('notApplicable'));
+    expect(carOf(out, 0).usedSets.known).toBe(true);
+  });
+
+  it('a rival under realism: its fitted set`s life span unknown(realism)', () => {
+    const rival = realismHidden(carState({ id: carId(1), tyres: { actualCompound: ACTUAL.medium, visualCompound: 'medium', age: 4 } }));
+    const out = calc.compute(modelView([{ id: 0 }, rival]));
+    expect(carOf(out, 1).fittedLifeSpanLaps).toEqual(unknown('realism'));
+  });
+
+  it('an empty set list is no sets received (the game always sends a car`s sets): fresh sets and the life span notReceived, never 0 (C3)', () => {
+    const car = carOf(calc.compute(modelView([{ id: 0, sets: liveSets([]) }])), 0);
+    for (const c of NOISE_COMPOUNDS) expect(car.freshSets[c], c).toEqual(unknown('notReceived'));
+    expect(car.fittedLifeSpanLaps).toEqual(unknown('notReceived'));
   });
 });
 

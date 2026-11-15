@@ -12,6 +12,9 @@ import { GAPS } from '../../src/gaps/index.ts';
 import { gapsOf } from '../gaps/output.ts';
 import { TYRE_LIFE } from '../../src/tyre-life/index.ts';
 import { tyreLifeCalculator } from '../../src/tyre-life/calculator.ts';
+import { TRACK_WETNESS } from '../../src/track-wetness/index.ts';
+import { trackWetnessCalculator } from '../../src/track-wetness/calculator.ts';
+import { TYRE_MODEL, tyreModelCalculator } from '../../src/tyre-model/index.ts';
 import { longRace } from '../../../../test-support/builders/long-race.ts';
 
 /** Warm passes per frame; the best of them counts (docs/testing.md 6). */
@@ -30,6 +33,9 @@ describe('rival-stops budget', () => {
         const outputs = new Map<string, unknown>();
         outputs.set(GAPS, gapsOf(race.viewAt(frame, { outputs })));
         outputs.set(DEGRADATION, degradationCalculator.compute(race.viewAt(frame, { outputs })));
+        // SP4.3c Task 12: tyre-life reads tyre-model (on degradation's and track-wetness's); rival-stops reads tyre-model's fresh sets
+        outputs.set(TRACK_WETNESS, trackWetnessCalculator.compute(race.viewAt(frame, { outputs })));
+        outputs.set(TYRE_MODEL, tyreModelCalculator.compute(race.viewAt(frame, { outputs })));
         outputs.set(TYRE_LIFE, tyreLifeCalculator.compute(race.viewAt(frame, { outputs })));
         outputs.set(SESSION_REMAINING, sessionRemainingCalculator.compute(race.viewAt(frame, { outputs })));
         return race.viewAt(frame, { outputs });

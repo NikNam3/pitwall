@@ -7,6 +7,7 @@ import {
   NOISE_COMPOUNDS,
   unknown,
   type ActualCompound,
+  type CarState,
   type Celsius,
   type Corners,
   type Known,
@@ -224,13 +225,18 @@ export function plainCompound(o: { ratePct?: number; lossMsPerPct?: number; fres
 /**
  * A plain `TyreModelCar`: per compound its fresh set's laps to the limit (`lives`, a compound not given `insufficientData`)
  * and rate (`rates`, default 2 %/lap), its available fresh sets per compound (`freshSets`: counts, or one `Known` for all,
- * default 0 each), the type deltas unknown, the limit 70 %.
+ * default 0 each), the type deltas unknown, the limit 70 %; the fitted set's laps to the limit (`fittedLapsToLimit`,
+ * default `insufficientData`) and game life span (`fittedLifeSpanLaps`, default `notReceived`), the used sets
+ * (`usedSets`, default `notApplicable`: a rival's) (supervisor ruling, 95a9a1b4).
  */
 export function plainModelCar(o: {
   lives?: Partial<Record<NoiseCompound, number>>;
   rates?: Partial<Record<NoiseCompound, number>>;
   freshSets?: Partial<Record<NoiseCompound, number>> | Known<number>;
   limitPct?: number;
+  fittedLapsToLimit?: Known<number> | number;
+  fittedLifeSpanLaps?: Known<number> | number;
+  usedSets?: TyreModelCar['usedSets'];
 } = {}): TyreModelCar {
   const compounds = Object.fromEntries(
     NOISE_COMPOUNDS.map((c) => {
@@ -242,7 +248,63 @@ export function plainModelCar(o: {
   const freshSets = Object.fromEntries(
     NOISE_COMPOUNDS.map((c) => [c, fresh !== undefined && 'known' in fresh ? fresh : known((fresh as Partial<Record<NoiseCompound, number>> | undefined)?.[c] ?? 0, 0)]),
   ) as Record<NoiseCompound, Known<number>>;
-  return { compounds, typeDeltaMs: { slick: unknown('notReceived'), inter: unknown('notReceived'), wet: unknown('notReceived') }, freshSets, limitPct: o.limitPct ?? 70 };
+  const asKnown = (v: Known<number> | number | undefined, otherwise: Known<number>): Known<number> => (v === undefined ? otherwise : typeof v === 'number' ? known(v, 0) : v);
+  return {
+    compounds,
+    typeDeltaMs: { slick: unknown('notReceived'), inter: unknown('notReceived'), wet: unknown('notReceived') },
+    freshSets,
+    limitPct: o.limitPct ?? 70,
+    fittedLapsToLimit: asKnown(o.fittedLapsToLimit, unknown('insufficientData')),
+    fittedLifeSpanLaps: asKnown(o.fittedLifeSpanLaps, unknown('notReceived')),
+    usedSets: o.usedSets ?? unknown('notApplicable'),
+  };
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// The game's tyre sets on a generator race (whose laps and cars carry none: the builders leave the lap's `tyreSets`
+// `notReceived` and the live list empty), so `tyre-model` has a usable life to its prior.
+
+/** The usable life per compound the game sets carry here (laps). */
+export const GAME_LIFE: Record<NoiseCompound, number> = { soft: 20, medium: 30, hard: 45, inter: 30, wet: 30 };
+
+/** A fresh set's pace offset against a fresh medium here (ms). */
+const OFFSET: Record<NoiseCompound, number> = { soft: -600, medium: 0, hard: 500, inter: 3_500, wet: 8_100 };
+
+/** The default loss per % of each compound's actual one (research 22 §1.6), for the fresh sets' deltas here. */
+const LOSS: Record<NoiseCompound, number> = { soft: 75, medium: 57, hard: 35, inter: 11, wet: 11 };
+
+/**
+ * The sets of a car on `compound` at `wearPct` (the worst corner): the fitted set, then a fresh soft, medium and hard,
+ * each `lapDeltaMs` its offset against the fitted set (the fitted set's loss per % × its wear included).
+ */
+export function gameSetsOn(compound: NoiseCompound, wearPct: number): TyreSet[] {
+  const delta = (c: NoiseCompound): Ms => Math.round(OFFSET[c] - OFFSET[compound] - LOSS[compound] * wearPct) as Ms;
+  return [
+    tyreSet(compound, { fitted: true, wearPct, usableLifeLaps: GAME_LIFE[compound], lifeSpanLaps: GAME_LIFE[compound] + 4 }),
+    ...(['soft', 'medium', 'hard'] as const).map((c) => tyreSet(c, { usableLifeLaps: GAME_LIFE[c], lifeSpanLaps: GAME_LIFE[c] + 4, lapDeltaMs: delta(c) })),
+  ];
+}
+
+const noiseOf = (visual: string): NoiseCompound => ((NOISE_COMPOUNDS as readonly string[]).includes(visual) ? (visual as NoiseCompound) : 'medium');
+
+/** The worst corner of a known corner set (0 where unknown). */
+const worstOf = (w: Corners<Known<Percent>>): number => Math.max(...CORNERS.map((c) => (w[c].known ? w[c].value : 0)));
+
+/** A lap with the sets its car had at the lap's end (`gameSetsOn` its compound and end wear), where it has none yet. */
+export const lapWithGameSets = (l: LapRecord): LapRecord =>
+  l.tyreSets.known || l.tyreSets.reason === 'realism' ? l : { ...l, tyreSets: known(gameSetsOn(noiseOf(l.visualCompound), worstOf(l.wearAtEndPct)), l.completedAt) };
+
+/** A live car with its sets now (`gameSetsOn` its compound and wear), where its list is empty. */
+export const carWithGameSets = <C extends { tyres: { visualCompound: string; corners: Corners<{ wearPct: Known<Percent> }>; sets: Known<{ sets: readonly TyreSet[]; fittedIdx: number }> } }>(car: C): C =>
+  car.tyres.sets.known && car.tyres.sets.value.sets.length === 0
+    ? { ...car, tyres: { ...car.tyres, sets: known({ sets: gameSetsOn(noiseOf(car.tyres.visualCompound), worstOf({ fl: car.tyres.corners.fl.wearPct, fr: car.tyres.corners.fr.wearPct, rl: car.tyres.corners.rl.wearPct, rr: car.tyres.corners.rr.wearPct })), fittedIdx: 0 }, car.tyres.sets.at) } }
+    : car;
+
+/** `view` with the game's sets on every lap and every live car that has none (idempotent). */
+export function withGameSets(view: EngineView): EngineView {
+  const history = { ...view.history, laps: (view.history.laps as readonly LapRecord[]).map(lapWithGameSets) } as EngineView['history'];
+  const cars = view.live.cars.map((c) => carWithGameSets(c as CarState)) as EngineView['live']['cars'];
+  return { ...view, history, live: { ...view.live, cars } };
 }
 
 /** The fresh sets per compound of a list of sets by the rule `tyre-model` applies (available, not fitted, wear 0: SP4.2 "only new tyre sets"). */

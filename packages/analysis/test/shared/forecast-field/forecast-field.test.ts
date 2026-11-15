@@ -6,6 +6,12 @@
 // carry the time of the leader's crossing as `at` (the moment the scoreboard forecasts from) and the same fixed inputs.
 // The truth of the lap progress is the generator's: each car's distance between its own crossings, and the gap the
 // time since the leader was at that distance.
+//
+// Ported in SP4.3c Task 12 (spec §5.2, O1): the tyre terms of `StartingPoint.tyre` are `tyre-model`'s per car and
+// compound (each compound its own: the wear rate at the worst corner, the loss per % of wear, a fresh set's whole laps to
+// the limit); `forecast-field`'s ν, `minWearRatePctPerLap` and the convex term's config (moved to `tyre-model`'s slick
+// module) are deleted; our cars' sets left are `tyre-model`'s `usedSets`; a realism-hidden rival's wear is its tyre age ×
+// `tyre-model`'s rate (driver-noise has no wear output any more).
 import {
   carId,
   known,
@@ -23,6 +29,8 @@ import {
   type Percent,
   type StartingPoint,
   type TrackData,
+  type TyreModelCompound,
+  type TyreModelOutput,
   type TyreSet,
 } from '@pitwall/domain';
 import { asOfNow, runAsOf, type AsOfView, type Projection } from '@pitwall/engine/readers';
@@ -34,6 +42,7 @@ import { RACE_INTERACTION } from '../../../src/race-interaction/index.ts';
 import { RIVAL_STOPS } from '../../../src/rival-stops/index.ts';
 import { TRACK_WETNESS } from '../../../src/track-wetness/index.ts';
 import { TYRE_LIFE } from '../../../src/tyre-life/index.ts';
+import { SLICK_CONFIG, TYRE_MODEL } from '../../../src/tyre-model/index.ts';
 import {
   buildStartingPoint,
   FORECAST_FIELD_CONFIG,
@@ -54,7 +63,6 @@ import {
   segmentsAt,
   timeAtSegments,
   upstreamOf,
-  WEAR_RATES,
 } from './support.ts';
 
 const TOLERANCE_MS = FORECAST_FIELD_CONFIG.defaults.placementToleranceMs;
@@ -68,6 +76,15 @@ function valueOf(sp: Known<StartingPoint>, what: string): StartingPoint {
   if (!sp.known) throw new Error(`${what}: the starting point is unknown (${sp.reason})`);
   return sp.value;
 }
+
+/** A known number of tyre-model's; throws (failing the test) on an unknown one. */
+function numberOf(k: Known<number>, what: string): number {
+  if (!k.known) throw new Error(`${what}: unknown (${k.reason})`);
+  return k.value;
+}
+
+/** A compound's wear rate at its worst corner, as the starting point carries it (one rate per car and compound). */
+const worstRate = (c: TyreModelCompound, what: string): number => Math.max(...(['fl', 'fr', 'rl', 'rr'] as const).map((k) => numberOf(c.wearRatePct[k].value, `${what} ${k}`)));
 
 /** The leader's crossing of the line that starts its lap `n`: the frame N, the leader and the time. */
 function leaderCrossing(n: number): { frame: FrameNumber; leader: CarId; at: number } {
@@ -92,13 +109,16 @@ function expectFinite(sp: StartingPoint): void {
   for (const [name, values] of arraysOf(sp)) {
     for (let i = 0; i < values.length; i++) expect(Number.isFinite(values[i]), `${name}[${i}]`).toBe(true);
   }
+  for (const [name, values] of Object.entries(sp.tyre)) {
+    for (let i = 0; i < values.length; i++) expect(Number.isFinite(values[i]), `tyre.${name}[${i}]`).toBe(true);
+  }
 }
 
 describe('forecast-field (Task 16)', () => {
   it('at every crossing frame the as-of build equals the live build, but lap fraction and gap within placementToleranceMs; the crossing car exactly', () => {
-    // the seven units, run in their reads' order
+    // the eight units, run in their reads' order (SP4.3c Task 12: tyre-model among them)
     expect(FORECAST_UNITS.map((u) => u.id).sort()).toEqual(
-      [DEGRADATION, PIT_LOSS, TYRE_LIFE, TRACK_WETNESS, DRIVER_NOISE, RIVAL_STOPS, RACE_INTERACTION].sort(),
+      [DEGRADATION, PIT_LOSS, TYRE_MODEL, TYRE_LIFE, TRACK_WETNESS, DRIVER_NOISE, RIVAL_STOPS, RACE_INTERACTION].sort(),
     );
     const cars = PARAMS.cars;
     let checked = 0;
@@ -134,7 +154,7 @@ describe('forecast-field (Task 16)', () => {
     expect(checked).toBe(g.race.laps - 1);
   });
 
-  it("pace σ and degradation σ come from degradation's posterior covariance", () => {
+  it("pace σ comes from degradation's posterior covariance", () => {
     // lap 7, before the stops: every car in its first stint
     const view = liveViewAt(g.race.framesOfLap(7)[0]!);
     const outputs = upstreamOf(view, plainNoise(PARAMS.cars, HUMANS, view.at));
@@ -143,19 +163,38 @@ describe('forecast-field (Task 16)', () => {
     let stints = 0;
     for (let car = 0; car < PARAMS.cars; car++) {
       const stint = degradation[carId(car)]?.at(-1);
-      if (stint === undefined || !stint.cov.known || !stint.nuMsPerLap.known) continue;
-      const [[aa], [, nn]] = stint.cov.value;
+      if (stint === undefined || !stint.cov.known) continue;
+      const [[aa]] = stint.cov.value;
       // paceSdMs² = cov[0][0]
       expect(sp.paceSdMs[car]! ** 2, `car ${car}: pace σ²`).toBeCloseTo(aa, 6);
-      // degradation per % wear (ruling R18): times the car's wear rate it is ν per lap, and its σ² is cov[1][1]
-      const t = tyreIndex(car, sp.compound[car]!);
-      const wear = sp.tyre.wearRatePct[t]!;
-      expect(wear, `car ${car}: wear rate`).toBeGreaterThan(0);
-      expect(sp.tyre.degMsPerLap[t]! * wear, `car ${car}: ν`).toBeCloseTo(stint.nuMsPerLap.value, 6);
-      expect((sp.tyre.degSdMs[t]! * wear) ** 2, `car ${car}: degradation σ²`).toBeCloseTo(nn, 6);
       stints++;
     }
     expect(stints).toBeGreaterThan(0);
+  });
+
+  it("the tyre terms per car and compound are tyre-model's: each compound its own rate (worst corner), loss per % and fresh laps to the limit", () => {
+    const view = liveViewAt(g.race.framesOfLap(7)[0]!);
+    const outputs = upstreamOf(view, plainNoise(PARAMS.cars, HUMANS, view.at));
+    const sp = valueOf(buildStartingPoint(view, outputs), 'lap 7');
+    const model = outputs.get(TYRE_MODEL) as TyreModelOutput;
+    for (let car = 0; car < PARAMS.cars; car++) {
+      const m = model[carId(car)];
+      expect(m, `car ${car}: tyre-model's entry`).toBeDefined();
+      for (let i = 0; i < NOISE_COMPOUNDS.length; i++) {
+        const compound = NOISE_COMPOUNDS[i]!;
+        const terms = m!.compounds[compound];
+        const what = `car ${car}, ${compound}`;
+        const t = tyreIndex(car, i);
+        expect(sp.tyre.wearRatePct[t], `${what}: wear rate`).toBeCloseTo(worstRate(terms, what), 9);
+        // degradation per % wear (ruling R18) is tyre-model's loss per %
+        expect(sp.tyre.degMsPerLap[t], `${what}: loss per %`).toBeCloseTo(numberOf(terms.lossMsPerPct.value, `${what} loss`), 9);
+        expect(sp.tyre.lapsToLimit[t], `${what}: fresh laps to the limit`).toBe(Math.floor(numberOf(terms.lapsToLimit, `${what} laps`)));
+        expect(sp.tyre.degSdMs[t]!, `${what}: σ`).toBeGreaterThanOrEqual(0);
+      }
+    }
+    // the compounds differ (each its own terms, B5): a soft wears faster than a hard here (the game's usable lives)
+    expect(sp.tyre.wearRatePct[tyreIndex(0, NOISE_COMPOUNDS.indexOf('soft'))]!).toBeGreaterThan(sp.tyre.wearRatePct[tyreIndex(0, NOISE_COMPOUNDS.indexOf('hard'))]!);
+    expectFinite(sp);
   });
 
   it('a retired car is marked and keeps its last place', () => {
@@ -198,24 +237,26 @@ describe('forecast-field (Task 16)', () => {
     expectFinite(sp);
   });
 
-  it("a realism-hidden rival's wear is tyre age × driver-noise's wear rate, never NaN", () => {
-    // lap 6, every car on its medium start set; car 2's wear is `unknown('realism')` in every lap record (C8)
+  it("a realism-hidden rival's wear is tyre age × tyre-model's rate on its compound, never NaN", () => {
+    // lap 6, every car on its medium start set; car 2's wear and sets are `unknown('realism')` in every lap record (C8)
     const rival = carId(2);
     const hidden: Corners<Known<Percent>> = { fl: unknown('realism'), fr: unknown('realism'), rl: unknown('realism'), rr: unknown('realism') };
     const frame = g.race.framesOfLap(6)[0]!;
     const h = g.viewAt(frame).history as Projection;
-    const laps = (h.laps as readonly LapRecord[]).map((l): LapRecord => (l.carId === rival ? { ...l, wearAtStartPct: hidden, wearAtEndPct: hidden } : l));
+    const laps = (h.laps as readonly LapRecord[]).map((l): LapRecord => (l.carId === rival ? { ...l, wearAtStartPct: hidden, wearAtEndPct: hidden, tyreSets: unknown('realism') } : l));
     const view = liveViewAt(frame, { history: { ...h, laps } });
-    const sp = valueOf(buildStartingPoint(view, upstreamOf(view, plainNoise(PARAMS.cars, HUMANS, view.at))), 'lap 6');
+    const outputs = upstreamOf(view, plainNoise(PARAMS.cars, HUMANS, view.at));
+    const sp = valueOf(buildStartingPoint(view, outputs), 'lap 6');
+    const rate = worstRate((outputs.get(TYRE_MODEL) as TyreModelOutput)[rival]!.compounds.medium, 'rival medium');
 
     expect(NOISE_COMPOUNDS[sp.compound[rival]!]).toBe('medium');
-    expect(sp.tyre.wearRatePct[tyreIndex(rival, sp.compound[rival]!)]).toBe(WEAR_RATES.medium);
+    expect(sp.tyre.wearRatePct[tyreIndex(rival, sp.compound[rival]!)]).toBeCloseTo(rate, 9);
     expect(sp.tyreAge[rival]).toBeGreaterThan(0);
-    expect(sp.wearPct[rival]).toBeCloseTo(sp.tyreAge[rival]! * WEAR_RATES.medium, 9);
+    expect(sp.wearPct[rival]).toBeCloseTo(sp.tyreAge[rival]! * rate, 9);
     expectFinite(sp);
   });
 
-  it('sets left only for our cars', () => {
+  it("sets left only for our cars, tyre-model's usedSets", () => {
     // every car's sets in the fixed inputs (as a run without realism holds them); our car is car 4
     const frame = g.race.framesOfLap(6)[0]!;
     const now = g.viewAt(frame);
@@ -234,10 +275,14 @@ describe('forecast-field (Task 16)', () => {
     const sets = known({ sets: [set('medium', 9, true), set('hard', 0, false), set('medium', 24, false)], fittedIdx: 0 }, at);
     const base = asOfNow(now);
     const view = liveViewAt(frame, { fixed: { ...base.fixed, playerCar: known(carId(4), at), setsNow: now.live.cars.map(() => sets) } });
-    const sp = valueOf(buildStartingPoint(view, upstreamOf(view, plainNoise(PARAMS.cars, HUMANS, at))), 'lap 6');
+    const outputs = upstreamOf(view, plainNoise(PARAMS.cars, HUMANS, at));
+    const sp = valueOf(buildStartingPoint(view, outputs), 'lap 6');
 
     expect(Object.keys(sp.sets).map(Number)).toEqual([4]);
     for (const s of sp.sets[carId(4)]!) expect(NOISE_COMPOUNDS).toContain(s.compound);
+    const used = (outputs.get(TYRE_MODEL) as TyreModelOutput)[carId(4)]!.usedSets;
+    expect(used.known).toBe(true);
+    if (used.known) expect(sp.sets[carId(4)]).toEqual(used.value);
   });
 
   it('a projection cut never reads a fact after the frame', () => {
@@ -269,6 +314,10 @@ describe('forecast-field (Task 16)', () => {
     }
   });
 
+  it('the deleted tyre terms are gone from the config: no minWearRatePctPerLap, no convex term (tyre-model`s slick module`s)', () => {
+    for (const key of ['minWearRatePctPerLap', 'convexFromPct', 'convexMsPerPct2']) expect(FORECAST_FIELD_CONFIG.defaults, key).not.toHaveProperty(key);
+  });
+
   describe("lapModelParams: offsets from degradation's α per compound, the track file's offsets when a compound has no stint", () => {
     /** The track's offsets against medium: soft 700 ms faster, hard 350 ms slower. */
     const TRACK_OFFSETS = { soft: -700, medium: 0, hard: 350 };
@@ -277,7 +326,7 @@ describe('forecast-field (Task 16)', () => {
       return { ...t, defaults: { ...t.defaults, compoundOffsetsMs: known({ value: TRACK_OFFSETS, source: 'test' }, 0) } };
     })();
     const view = materialised(asOfNow(engineView({ track: known(track, 0) })));
-    /** One stint of base pace `alpha` on `visual`, well determined (a small covariance). */
+    /** One stint of base pace `alpha` on `visual`, well determined (a small covariance). Ported in Task 12: no per-stint wear rate. */
     const stint = (n: number, visual: 'medium' | 'hard', alpha: number): StintDegradation => ({
       stint: n,
       firstLap: n === 1 ? 1 : 15,
@@ -289,7 +338,6 @@ describe('forecast-field (Task 16)', () => {
       nuSdMs: known(5, 0),
       basis: 'wear',
       fuelCorrected: true,
-      wearRatePctPerLap: { fl: known(2, 0), fr: known(2, 0), rl: known(2, 0), rr: known(2, 0) },
       source: { kind: 'session', sessionShare: 0.9, parts: '12 laps + default' },
       cov: known(
         [
@@ -302,12 +350,17 @@ describe('forecast-field (Task 16)', () => {
       laps: [],
     });
 
-    it('a compound without a stint takes the track file’s offset; fuel 30 ms per kg', () => {
+    it('a compound without a stint takes the track file’s offset; fuel 30 ms per kg; the convex term tyre-model`s slick module`s (flagged)', () => {
       const p = lapModelParams(view, new Map([[DEGRADATION, {} satisfies DegradationOutput]]));
       expect(p.compoundOffsetMs.soft - p.compoundOffsetMs.medium).toBeCloseTo(TRACK_OFFSETS.soft - TRACK_OFFSETS.medium, 9);
       expect(p.compoundOffsetMs.hard - p.compoundOffsetMs.medium).toBeCloseTo(TRACK_OFFSETS.hard - TRACK_OFFSETS.medium, 9);
       expect(p.fuelMsPerKg).toBe(30);
+      expect(p.convexFromPct).toBe(SLICK_CONFIG.defaults.convexFromPct);
+      expect(p.convexMsPerPct2).toBe(SLICK_CONFIG.defaults.convexMsPerPct2);
       expect(p.convexFlagged).toBe(true);
+      // the slick module's config is read through the view (C47)
+      const moved = lapModelParams({ ...view, config: { [SLICK_CONFIG.key]: { convexMsPerPct2: 4 } } }, new Map([[DEGRADATION, {} satisfies DegradationOutput]]));
+      expect(moved.convexMsPerPct2).toBe(4);
     });
 
     it("the fitted compounds' offsets come from degradation's α, the track file a weak prior", () => {

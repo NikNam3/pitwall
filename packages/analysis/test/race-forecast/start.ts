@@ -39,6 +39,8 @@ export type CarSpec = {
   bigEventRate?: number;
   retireRate?: number;
   wearRatePct?: number;
+  /** Per compound its own wear rate and degradation (SP4.3c Task 12: `StartingPoint.tyre` per car and compound); the car's above otherwise. */
+  tyre?: Partial<Record<NoiseCompound, { wearRatePct?: number; degMsPerLap?: number }>>;
   compound?: NoiseCompound;
   tyreAge?: number;
   wearPct?: number;
@@ -119,10 +121,10 @@ export function startingPoint(spec: StartSpec): StartingPoint {
     cars.forEach((c, i) => (a[i] = of(c)));
     return a;
   };
-  // the car's term in every compound's slot (`tyreIndex`)
-  const perCompound = <T extends Float64Array | Int16Array>(make: (len: number) => T, of: (c: (typeof cars)[number]) => number): T => {
+  // the car's term in every compound's slot (`tyreIndex`), a compound's own where `tyre` gives it
+  const perCompound = <T extends Float64Array | Int16Array>(make: (len: number) => T, of: (c: (typeof cars)[number], compound: NoiseCompound) => number): T => {
     const a = make(n * NOISE_COMPOUNDS.length);
-    cars.forEach((c, i) => a.fill(of(c), i * NOISE_COMPOUNDS.length, (i + 1) * NOISE_COMPOUNDS.length));
+    cars.forEach((c, i) => NOISE_COMPOUNDS.forEach((compound, j) => (a[i * NOISE_COMPOUNDS.length + j] = of(c, compound))));
     return a;
   };
   const running = cars.map((c, i) => ({ c, i })).filter(({ c }) => c.retired !== true);
@@ -156,8 +158,8 @@ export function startingPoint(spec: StartSpec): StartingPoint {
     bigEventRate: f((l) => new Float64Array(l), (c) => c.bigEventRate ?? 0),
     retireRate: f((l) => new Float64Array(l), (c) => c.retireRate ?? 0),
     tyre: {
-      wearRatePct: perCompound((l) => new Float64Array(l), (c) => c.wearRatePct ?? 2),
-      degMsPerLap: perCompound((l) => new Float64Array(l), (c) => c.degMsPerLap ?? 0),
+      wearRatePct: perCompound((l) => new Float64Array(l), (c, compound) => c.tyre?.[compound]?.wearRatePct ?? c.wearRatePct ?? 2),
+      degMsPerLap: perCompound((l) => new Float64Array(l), (c, compound) => c.tyre?.[compound]?.degMsPerLap ?? c.degMsPerLap ?? 0),
       degSdMs: perCompound((l) => new Float64Array(l), (c) => c.degSdMs ?? 0),
       lapsToLimit: perCompound((l) => new Int16Array(l), () => -1),
     },

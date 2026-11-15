@@ -1,13 +1,15 @@
 // `tyre-life` (spec 4.2; SP4.3c Task 12, O1): a reader of `tyre-model`. Per car its set now: per corner the wear now
 // (the live state's), the rate (`tyre-model`'s for the fitted compound and corner) and the laps until `tyre-model`'s limit
-// (0 at or past it); the set's laps to the limit at its worst corner; the game's life span of the fitted set.
+// (0 at or past it); the set's laps to the limit and its game life span, both `tyre-model`'s.
 //
 // Ported in SP4.3c Task 12 (C82): the rate-lap cases (which laps count, the current stint, a new set, engine-shaped
 // history) moved with the rate to `test/tyre-model/tyre-model.test.ts`; the age basis, the fresh-set life per compound,
 // the wear-rate priors, the age-loss limit and `minLaps` were deleted with their mechanisms (spec §5.2 "Deletes": the
 // prior covers a stint's first laps, and a set past the limit at a restart is 0 laps from it, Review Focus 2). The
-// limit is `tyre-model`'s (`limitPct`). `tyre-model`'s output is passed explicitly (C84).
-import { carId, known, unknown, type CarState, type Corners, type NoiseCompound, type Percent, type TyreModelCar, type TyreModelOutput, type TyreSet } from '@pitwall/domain';
+// limit is `tyre-model`'s (`limitPct`). `tyre-model`'s output is passed explicitly (C84). Supervisor ruling (95a9a1b4):
+// the set's laps to the limit is `tyre-model`'s `fittedLapsToLimit` and its game life span `tyre-model`'s
+// `fittedLifeSpanLaps` (tyre-life reads no tyre set: the owners guard's "tyre rates, offsets and availability" row).
+import { carId, known, unknown, type CarState, type Corners, type NoiseCompound, type Percent, type TyreModelCar, type TyreModelOutput } from '@pitwall/domain';
 import type { EngineView } from '@pitwall/engine/readers';
 import { describe, expect, it } from 'vitest';
 import * as tyreLifeUnit from '../../src/tyre-life/index.ts';
@@ -16,7 +18,7 @@ import { tyreLifeCalculator } from '../../src/tyre-life/calculator.ts';
 import { TYRE_MODEL } from '../../src/tyre-model/index.ts';
 import { carState, realismHidden } from '../../../../test-support/builders/index.ts';
 import { guardedQuick, NONE, PRACTICE, QUALIFYING, situatedView } from '../situated.ts';
-import { plainModelCar } from '../tyre-model/support.ts';
+import { liveSets, plainModelCar, tyreSet } from '../tyre-model/support.ts';
 
 /** The calculator through its guarded view (C41): every case fails on a read it does not declare. */
 const calc = guardedQuick(tyreLifeCalculator);
@@ -37,9 +39,12 @@ const carWithWear = (now: number | Corners<number>, o: { id?: number; age?: numb
   });
 };
 
-/** A model car whose `compound` wears `rates` per corner (every other compound 2 %/lap), the limit `limitPct`. */
-function modelWith(compound: NoiseCompound, rates: number | Corners<number>, limitPct = 70): TyreModelCar {
-  const car = plainModelCar({ limitPct });
+/**
+ * A model car whose `compound` wears `rates` per corner (every other compound 2 %/lap), the limit `limitPct`, the fitted
+ * set's laps to the limit `fittedLapsToLimit` (default `insufficientData`: the per-corner cases do not read it).
+ */
+function modelWith(compound: NoiseCompound, rates: number | Corners<number>, limitPct = 70, fittedLapsToLimit?: number): TyreModelCar {
+  const car = plainModelCar({ limitPct, ...(fittedLapsToLimit !== undefined && { fittedLapsToLimit }) });
   const r = typeof rates === 'number' ? { fl: rates, fr: rates, rl: rates, rr: rates } : rates;
   const terms = car.compounds[compound];
   return {
@@ -76,13 +81,20 @@ describe('tyre-life calculator (a reader of tyre-model)', () => {
     expect(out.limitPct).toBe(70);
   });
 
-  it('each corner has its own rate, the worst corner limits the set: fl 2, fr 3, rl 1, rr 4 at 6 % → (70 − 6) / 4 = 16 laps at rr', () => {
-    const out = run(viewOf([carWithWear(6)], { [carId(0)]: modelWith('soft', { fl: 2, fr: 3, rl: 1, rr: 4 }) }));
+  it('each corner has its own rate: fl 2, fr 3, rl 1, rr 4 at 6 % → (70 − 6) / 4 = 16 laps at rr; the set`s 16 (tyre-model`s)', () => {
+    const out = run(viewOf([carWithWear(6)], { [carId(0)]: modelWith('soft', { fl: 2, fr: 3, rl: 1, rr: 4 }, 70, 16) }));
     expect(out.corners.fl.ratePctPerLap).toMatchObject({ known: true, value: 2 });
     expect(out.corners.fr.ratePctPerLap).toMatchObject({ known: true, value: 3 });
     expect(out.corners.rl.ratePctPerLap).toMatchObject({ known: true, value: 1 });
     expect(out.corners.rr.lapsToLimit).toMatchObject({ known: true, value: 16 });
-    expect(out.lapsToLimit).toEqual(out.corners.rr.lapsToLimit);
+    expect(out.lapsToLimit).toMatchObject({ known: true, value: 16 });
+  });
+
+  it('the set`s laps to the limit is tyre-model`s fittedLapsToLimit as it is (tyre-life judges no second one, C43)', () => {
+    // tyre-model says 12.5 although the live wear and rate here would give 29.5: tyre-life shows tyre-model's
+    expect(run(viewOf([carWithWear(11)], { [carId(0)]: modelWith('soft', 2, 70, 12.5) })).lapsToLimit).toEqual(known(12.5, 0));
+    const unknownFitted: TyreModelCar = { ...modelWith('soft', 2), fittedLapsToLimit: unknown('restricted') };
+    expect(run(viewOf([carWithWear(11)], { [carId(0)]: unknownFitted })).lapsToLimit).toEqual(unknown('restricted'));
   });
 
   it('the rate of the fitted compound only: a medium fitted reads the medium terms', () => {
@@ -100,7 +112,7 @@ describe('tyre-life calculator (a reader of tyre-model)', () => {
 
   it('at or past the limit the laps to it are 0, so the wear alarm stays raised (also with no lap of the stint yet: a restart)', () => {
     for (const wear of [70, 76]) {
-      const out = run(viewOf([carWithWear(wear, { age: 0 })], { [carId(0)]: modelWith('soft', 2) }));
+      const out = run(viewOf([carWithWear(wear, { age: 0 })], { [carId(0)]: modelWith('soft', 2, 70, 0) }));
       expect(out.corners.fl.lapsToLimit, `${wear} %`).toMatchObject({ known: true, value: 0 });
       expect(out.lapsToLimit, `${wear} %`).toMatchObject({ known: true, value: 0 });
     }
@@ -115,28 +127,25 @@ describe('tyre-life calculator (a reader of tyre-model)', () => {
     expect(out.corners.fl.wearPct).toMatchObject({ known: true, value: 10 });
   });
 
-  it('gameLifeSpanLaps is the fitted set`s lifeSpanLaps; unknown without a fitted set in the list', () => {
-    const set = (over: Partial<TyreSet>): TyreSet => ({
-      actualCompound: 'C3',
-      visualCompound: 'soft',
-      wearPct: 0,
-      available: true,
-      fitted: false,
-      recommendedSession: 0,
-      lifeSpanLaps: 9,
-      usableLifeLaps: 7,
-      lapDeltaMs: 0,
-      ...over,
-    });
-    const car = carState({ tyres: { sets: known({ sets: [set({}), set({ fitted: true, lifeSpanLaps: 22 }), set({ lifeSpanLaps: 14 })], fittedIdx: 1 }, 1_000) } });
-    expect(run(viewOf([car], { [carId(0)]: modelWith('soft', 2) })).gameLifeSpanLaps).toEqual({ known: true, value: 22, at: 1_000 });
-    // the builder's car has `sets` known with an empty list
-    expect(run(viewOf([carState()], { [carId(0)]: modelWith('soft', 2) })).gameLifeSpanLaps).toEqual({ known: false, reason: 'notReceived' });
+  it('gameLifeSpanLaps is tyre-model`s fittedLifeSpanLaps; unknown with its reason', () => {
+    const model: TyreModelCar = { ...modelWith('soft', 2), fittedLifeSpanLaps: known(22, 1_000) };
+    expect(run(viewOf([carWithWear(6)], { [carId(0)]: model })).gameLifeSpanLaps).toEqual({ known: true, value: 22, at: 1_000 });
+    expect(run(viewOf([carWithWear(6)], { [carId(0)]: modelWith('soft', 2) })).gameLifeSpanLaps).toEqual({ known: false, reason: 'notReceived' });
+  });
+
+  it('reads no tyre set: live sets that contradict tyre-model change nothing', () => {
+    const base = carWithWear(6);
+    const car: CarState = { ...base, tyres: { ...base.tyres, sets: liveSets([tyreSet('soft', { fitted: true, lifeSpanLaps: 9 })]) } };
+    const model: TyreModelCar = { ...modelWith('soft', 2, 70, 32), fittedLifeSpanLaps: known(30, 0) };
+    const out = run(viewOf([car], { [carId(0)]: model }));
+    expect(out.gameLifeSpanLaps).toEqual(known(30, 0));
+    expect(out).toEqual(run(viewOf([base], { [carId(0)]: model })));
   });
 
   it('realism: a rival`s wear and laps to the limit are unknown(realism); its rate is tyre-model`s (our car`s game values, row 9)', () => {
     const hidden = unknown('realism');
-    const view = viewOf([carWithWear(6), realismHidden(carState({ id: carId(1) }))], { [carId(0)]: modelWith('soft', 2), [carId(1)]: modelWith('soft', 2.15) });
+    const rivalModel: TyreModelCar = { ...modelWith('soft', 2.15), fittedLapsToLimit: hidden, fittedLifeSpanLaps: hidden };
+    const view = viewOf([carWithWear(6), realismHidden(carState({ id: carId(1) }))], { [carId(0)]: modelWith('soft', 2), [carId(1)]: rivalModel });
     const out = calc.compute(view);
     for (const corner of CORNERS) {
       expect(out[carId(1)]!.corners[corner].wearPct).toEqual(hidden);
@@ -144,6 +153,7 @@ describe('tyre-life calculator (a reader of tyre-model)', () => {
       expect(out[carId(1)]!.corners[corner].ratePctPerLap).toMatchObject({ known: true, value: 2.15 });
     }
     expect(out[carId(1)]!.gameLifeSpanLaps).toEqual(hidden);
+    expect(out[carId(1)]!.lapsToLimit).toEqual(hidden);
     // our own car is unaffected
     expect(out[carId(0)]!.corners.fl.ratePctPerLap).toMatchObject({ known: true, value: 2 });
   });
