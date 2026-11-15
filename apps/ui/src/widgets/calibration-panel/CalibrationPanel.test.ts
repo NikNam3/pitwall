@@ -373,8 +373,8 @@ describe('calibration-panel: what a source and a value show', () => {
     // the headers, wording of the widget's text.ts (C68): `valueHeaders.n` and `pitHeaders.stops`, as the mockup's
     const headers = { n: (text.valueHeaders as Record<string, string>)['n'], stops: (text.pitHeaders as Record<string, string>)['stops'] };
     expect(headers).toEqual({ n: 'N', stops: 'STOPS' });
-    // N after RR, STOPS after SET (the mockup's columns)
-    expect(c.textContent).toMatch(new RegExp(`${text.valueHeaders.rr}\\s+${headers.n}\\b`));
+    // N after SD, STOPS after SET (the mockup's columns)
+    expect(c.textContent).toMatch(new RegExp(`${text.valueHeaders.sd}\\s+${headers.n}\\b`));
     expect(c.textContent).toMatch(new RegExp(`${text.pitHeaders.set}\\s+${headers.stops}\\b`));
     const expected: [string, number][] = [
       [key.deg('soft'), 0], [key.deg('medium'), 3], [key.deg('hard'), 0], [key.pit('green'), 6], [key.pit('vsc'), 1], [key.pit('sc'), 0],
