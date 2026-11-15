@@ -11,7 +11,7 @@ export type BattleSide = {
   /** The gap to that car as `gaps.intervals` gives it (`toAheadMs` / `toBehindMs`, unsigned); displays sign it by side. */
   gapMs: Known<Ms>;
   /**
-   * From PACE Δ (`paceDeltaMs`): (gap − `drsRangeMs`) / the closing car's edge per lap, on this side while its car
+   * From PACE Δ (`paceDeltaMs`): (gap − `race-interaction`'s `drsRangeMs`) / the closing car's edge per lap, on this side while its car
    * closes; 0 inside DRS range; `notApplicable` while the gap is not closing or race control has DRS off
    * (`BattleCard.drs`); PACE Δ's reason while it is unknown.
    */

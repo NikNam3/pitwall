@@ -3,7 +3,7 @@
 // Spa race (08 Nov). Two seats, Mercedes #12 and #63, linked to the persons kuh and lin. kuh's σ lap has an override
 // (0.380 s; computed 0.412 s); lin's soft wear is unknown (no soft laps). kuh excluded the Zandvoort race (a guest in #12).
 // The config carries `strategy`'s real keys (its race-monte-carlo settings among them; a simulator has no config of its
-// own, C50) and `battle`'s `drsRangeMs`; `config.json` set `strategy.neighbourMaxLaps` and `battle.drsRangeMs`.
+// own, C50) and `race-interaction`'s `drsRangeMs`; `config.json` set `strategy.neighbourMaxLaps` and `race-interaction.drsRangeMs`.
 import type { ConfigEffectiveValue, SessionInfo } from '@pitwall/contracts';
 import { carId, feedId, known, toSessionTime, unknown } from '@pitwall/domain';
 import type {
@@ -181,9 +181,9 @@ export const sessionInfo = (s: GameSettings = settings): SessionInfo => ({
 export const config: ConfigEffectiveValue = {
   values: {
     strategy: { neighbourMinLaps: 1, neighbourMaxLaps: 2, rivalScBoxChance: 0.88, rivalScMinTyreAge: 4, rivalReactionLaps: 0 },
-    battle: { drsRangeMs: 1_200 },
+    'race-interaction': { drsRangeMs: 1_200 },
   },
-  overridden: { strategy: ['neighbourMaxLaps'], battle: ['drsRangeMs'] },
+  overridden: { strategy: ['neighbourMaxLaps'], 'race-interaction': ['drsRangeMs'] },
 };
 
 /** The gallery's synthetic cases; the tests take them from here, since only the gallery imports gallery.ts (C69). */

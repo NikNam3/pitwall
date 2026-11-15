@@ -235,7 +235,7 @@ describe('drivers-panel', () => {
     ];
     for (const [k, word] of lobby) expect(textOf(c, `lobby-${k}`), k).toBe(word);
 
-    for (const header of ['UNIT', 'KEY', 'VALUE', 'strategy', 'battle', 'neighbourMinLaps', 'rivalScBoxChance', 'drsRangeMs']) expect(all, header).toContain(header);
+    for (const header of ['UNIT', 'KEY', 'VALUE', 'strategy', 'race-interaction', 'neighbourMinLaps', 'rivalScBoxChance', 'drsRangeMs']) expect(all, header).toContain(header);
     const defaults: [string, string][] = [
       ['strategy-neighbourMinLaps', '1'], ['strategy-rivalScBoxChance', '0.88'], ['strategy-rivalScMinTyreAge', '4'], ['strategy-rivalReactionLaps', '0'],
     ];
@@ -244,7 +244,7 @@ describe('drivers-panel', () => {
       expect(cell.textContent?.trim(), id).toBe(v);
       expect(colourOf(cellWithText(cell, v) ?? cell, c), id).toBe(role('textDim'));
     }
-    const set: [string, string][] = [['strategy-neighbourMaxLaps', '2'], ['battle-drsRangeMs', '1200']];
+    const set: [string, string][] = [['strategy-neighbourMaxLaps', '2'], ['race-interaction-drsRangeMs', '1200']];
     for (const [id, v] of set) {
       const cell = get(c, `config-${id}`);
       expect(cell.textContent?.replace(/\s/g, ''), id).toBe(`${v}ʲ`);
