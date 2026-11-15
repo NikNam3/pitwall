@@ -29,6 +29,11 @@ import { GAPS } from '../../src/gaps/index.ts';
 import { gapsOf } from '../gaps/output.ts';
 import { TYRE_LIFE, type TyreLife, type TyreLifeOutput } from '../../src/tyre-life/index.ts';
 import { tyreLifeCalculator } from '../../src/tyre-life/calculator.ts';
+import { TRACK_WETNESS } from '../../src/track-wetness/index.ts';
+import { trackWetnessCalculator } from '../../src/track-wetness/calculator.ts';
+import { TYRE_MODEL, tyreModelCalculator } from '../../src/tyre-model/index.ts';
+import type { TyreModelCar, TyreModelOutput } from '@pitwall/domain';
+import { plainModelCar } from '../tyre-model/support.ts';
 import { carState, lap } from '../../../../test-support/builders/index.ts';
 import type { BuilderRace } from '../../../../test-support/builders/long-race.ts';
 import { generateRace, GENERATOR_DEFAULTS, type GeneratorParams } from '../../../../test-support/race-generator/index.ts';
@@ -72,6 +77,9 @@ function upstreamAt(race: BuilderRace, frame: number): Map<string, unknown> {
   const outputs = new Map<string, unknown>();
   outputs.set(GAPS, gapsOf(race.viewAt(frame, { outputs })));
   outputs.set(DEGRADATION, degradationCalculator.compute(race.viewAt(frame, { outputs })));
+  // SP4.3c Task 12: tyre-life reads tyre-model (its rates and limit), rival-stops reads both
+  outputs.set(TRACK_WETNESS, trackWetnessCalculator.compute(race.viewAt(frame, { outputs })));
+  outputs.set(TYRE_MODEL, tyreModelCalculator.compute(race.viewAt(frame, { outputs })));
   outputs.set(TYRE_LIFE, tyreLifeCalculator.compute(race.viewAt(frame, { outputs })));
   outputs.set(SESSION_REMAINING, sessionRemainingCalculator.compute(race.viewAt(frame, { outputs })));
   return outputs;
@@ -158,25 +166,24 @@ describe('rival-stops on a generated race', () => {
 
 const K = <T>(value: T): Known<T> => known(value, 0);
 
-/** `tyre-life`'s entry for a car: `lapsToLimit` for its set (every corner the same), each compound's fresh-set life. */
-function life(lapsToLimit: number, fresh: Partial<Record<NoiseCompound, number>>): TyreLife {
+/**
+ * A car's tyre outputs (ported in SP4.3c Task 12): `tyre-life`'s set (`lapsToLimit`, every corner the same) and
+ * `tyre-model`'s car (each compound's fresh-set life `fresh`; its fresh sets `freshSets`, hidden by default as a rival's
+ * are under realism, C8).
+ */
+type Life = { set: TyreLife; model: TyreModelCar };
+function life(lapsToLimit: number, fresh: Partial<Record<NoiseCompound, number>>, freshSets: Partial<Record<NoiseCompound, number>> | Known<number> = unknown('realism')): Life {
   const corner = { wearPct: K(10), ratePctPerLap: K(2), lapsToLimit: K(lapsToLimit) };
-  const freshLife = (c: NoiseCompound): Known<number> => (fresh[c] === undefined ? unknown('insufficientData') : K(fresh[c]));
   return {
-    corners: { fl: corner, fr: corner, rl: corner, rr: corner },
-    lapsToLimit: K(lapsToLimit),
-    basis: 'wear',
-    limitPct: 70,
-    ageLossLimitMs: 2_000,
-    freshLifeLaps: { soft: freshLife('soft'), medium: freshLife('medium'), hard: freshLife('hard'), inter: freshLife('inter'), wet: freshLife('wet') } as TyreLife['freshLifeLaps'],
-    gameLifeSpanLaps: unknown('notReceived'),
+    set: { corners: { fl: corner, fr: corner, rl: corner, rr: corner }, lapsToLimit: K(lapsToLimit), limitPct: 70, gameLifeSpanLaps: unknown('notReceived') },
+    model: plainModelCar({ lives: fresh, freshSets }),
   };
 }
 
 const ACTUAL = { soft: 'C3', medium: 'C2', hard: 'C1', inter: 'inter', wet: 'wet' } as const;
 
 /** One car's race so far: its stints (first lap and compound each; the last one runs on), `completed` laps, its stops between them. */
-type CarRace = { car: number; stints: { from: number; compound: NoiseCompound }[]; completed: number; rule?: 'required' | 'waived'; life: TyreLife; sets?: TyreSet[] };
+type CarRace = { car: number; stints: { from: number; compound: NoiseCompound }[]; completed: number; rule?: 'required' | 'waived'; life: Life; sets?: TyreSet[] };
 
 /** The car's laps 1..completed, each on the set of its stint (tyre age at start counting from the stint's first lap). */
 function lapsOf(r: CarRace): LapRecord[] {
@@ -234,7 +241,8 @@ function raceView(cars: CarRace[], o: { phase?: typeof RACE; shaped?: boolean } 
     });
   });
   const spans: OpenSpan[] = cars.flatMap((r) => [openSpan('compound-rule', r.rule ?? 'required', { car: r.car }), openSpan('car-driver', 'ai', { car: r.car })]);
-  const tyreLife: TyreLifeOutput = Object.fromEntries(cars.map((r) => [carId(r.car), r.life]));
+  const tyreLife: TyreLifeOutput = Object.fromEntries(cars.map((r) => [carId(r.car), r.life.set]));
+  const tyreModel: TyreModelOutput = Object.fromEntries(cars.map((r) => [carId(r.car), r.life.model]));
   const remaining: SessionRemaining = { basis: 'laps', lapsLeft: K(TOTAL_LAPS - leaderLaps), timeLeftMs: unknown('notApplicable') };
   return situatedView({
     phase: o.phase ?? RACE,
@@ -249,6 +257,7 @@ function raceView(cars: CarRace[], o: { phase?: typeof RACE; shaped?: boolean } 
     spans,
     outputs: new Map<string, unknown>([
       [TYRE_LIFE, tyreLife],
+      [TYRE_MODEL, tyreModel],
       [SESSION_REMAINING, remaining],
     ]),
   });
@@ -305,27 +314,26 @@ describe('rival-stops rows', () => {
   });
 
   it('row 4: a car out of sets gets toFlag', () => {
-    // car 0 (ours: its sets are known) owes its stop and its mediums last 10 more laps, but no other set is left to fit
-    const set = (visualCompound: NoiseCompound, fitted: boolean): TyreSet => ({
-      actualCompound: ACTUAL[visualCompound],
-      visualCompound,
-      wearPct: fitted ? 20 : 60,
-      available: fitted,
-      fitted,
-      recommendedSession: 0,
-      lifeSpanLaps: 20,
-      usableLifeLaps: 20,
-      lapDeltaMs: 0,
-    });
+    // car 0 (ours: its sets are known) owes its stop and its mediums last 10 more laps, but no other set is left to fit:
+    // tyre-model counts no fresh set of any compound (ported in SP4.3c Task 12: availability is tyre-model's `freshSets`)
     const out = rivalStops.compute(
       raceView([
-        { car: 0, stints: MEDIUM_FROM_1, completed: 10, life: life(10, { medium: 20, hard: 30 }), sets: [set('medium', true), set('hard', false), set('soft', false), set('hard', false)] },
+        { car: 0, stints: MEDIUM_FROM_1, completed: 10, life: life(10, { medium: 20, hard: 30 }, {}) },
         { car: 1, stints: MEDIUM_FROM_1, completed: 10, life: life(10, { medium: 20, hard: 30 }) },
       ]),
     );
     expect(stopOf(out, 0).window).toMatchObject({ known: true, value: { toFlag: true, highLap: TOTAL_LAPS } });
-    // the same car with sets of unknown count (a rival) keeps its window
+    // the same car with sets of unknown count (a rival under realism) keeps its window
     expect(stopOf(out, 1).window).toMatchObject({ known: true, value: { toFlag: false, midLap: 20 } });
+  });
+
+  it("row 10b (SP4.3c Task 12): the next compound's odds follow tyre-model's freshSets, with no read of the tyres sets", () => {
+    // car 0 on its first mediums, no peer stop: without counts the unused dry compounds evenly (soft, hard); with
+    // freshSets soft 0, hard 2 only the hard
+    const counted = rivalStops.compute(raceView([{ car: 0, stints: MEDIUM_FROM_1, completed: 5, life: life(15, { medium: 20, hard: 30, soft: 12 }, { hard: 2, medium: 1 }) }]));
+    expect(oddsOf(stopOf(counted, 0))).toEqual({ hard: 1 });
+    const hidden = rivalStops.compute(raceView([{ car: 0, stints: MEDIUM_FROM_1, completed: 5, life: life(15, { medium: 20, hard: 30, soft: 12 }) }]));
+    expect(oddsOf(stopOf(hidden, 0))).toEqual({ soft: 0.5, hard: 0.5 });
   });
 
   it('row 5: the window is capped by the laps left', () => {
@@ -594,7 +602,7 @@ describe('rival-stops in the generic tests (R4: C41, C44)', () => {
     const calc = CALCULATORS.find((c) => c.id === RIVAL_STOPS);
     expect(calc).toBeDefined();
     expect(calc).toMatchObject({ kind: 'quick', cadence: 'lapCompleted' });
-    expect(calc?.reads).toEqual(expect.arrayContaining(['stints', 'pitStops', 'laps', 'spans:compound-rule', 'spans:car-driver', 'spans:car-status', 'spans:weekend-phase', { calculator: TYRE_LIFE }]));
+    expect(calc?.reads).toEqual(expect.arrayContaining(['stints', 'pitStops', 'laps', 'spans:compound-rule', 'spans:car-driver', 'spans:car-status', 'spans:weekend-phase', { calculator: TYRE_LIFE }, { calculator: TYRE_MODEL }]));
   });
 
   it('it computes through its guarded view: no read it does not declare (C41)', () => {

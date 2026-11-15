@@ -1,7 +1,7 @@
 // `tyre-wear` (spec 4.2, the port, C43): a thin analysis that publishes `tyreWear.car` from `tyre-life`'s output. The
 // rate and laps-to-limit cases that were here moved with the judgement to `test/tyre-life/` (C82); what stays is what the
 // topic shape asserts: the `TyreWear` value from a given `tyre-life` output, and `warnLaps` from the alarms config.
-import { carId, known, unknown, type CarId, type Known, type TyreWear, type VisualCompound } from '@pitwall/domain';
+import { carId, known, unknown, type CarId, type Known, type TyreWear } from '@pitwall/domain';
 import type { EngineView } from '@pitwall/engine';
 import { describe, expect, it } from 'vitest';
 import { TYRE_LIFE, type TyreLife, type TyreLifeOutput } from '../../src/tyre-life/index.ts';
@@ -13,7 +13,6 @@ import { guardedQuick, situatedView } from '../situated.ts';
 /** The analysis through its guarded view (C41): every case fails on a read it does not declare. */
 const calc = guardedQuick(tyreWearCalculator);
 
-const COMPOUNDS = ['soft', 'medium', 'hard', 'inter', 'wet'] as const satisfies readonly VisualCompound[];
 const hidden = unknown('realism');
 const insufficient = unknown('insufficientData');
 
@@ -26,21 +25,18 @@ const life = (over: Partial<TyreLife> = {}): TyreLife => ({
     rr: { wearPct: known(66, 0), ratePctPerLap: known(4, 90_000), lapsToLimit: known(0, 0) },
   },
   lapsToLimit: known(0, 0),
-  basis: 'wear',
+  // ported in SP4.3c Task 12: tyre-life's `basis`, `ageLossLimitMs` and `freshLifeLaps` are deleted (spec §5.2)
   limitPct: 65,
-  ageLossLimitMs: 2000,
-  freshLifeLaps: Object.fromEntries(COMPOUNDS.map((c) => [c, known(25, 0)])) as Record<VisualCompound, Known<number>>,
   gameLifeSpanLaps: known(22, 1_000),
   ...over,
 });
 
-/** A rival whose wear realism hides: age basis, every corner `unknown('realism')`. */
+/** A rival whose wear realism hides: every corner `unknown('realism')`. */
 const hiddenCorner = (): TyreLife['corners']['fl'] => ({ wearPct: hidden, ratePctPerLap: hidden, lapsToLimit: hidden });
 const hiddenLife = (): TyreLife =>
   life({
     corners: { fl: hiddenCorner(), fr: hiddenCorner(), rl: hiddenCorner(), rr: hiddenCorner() },
     lapsToLimit: known(8, 0),
-    basis: 'age',
     gameLifeSpanLaps: hidden,
   });
 

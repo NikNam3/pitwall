@@ -59,6 +59,16 @@ const OWNERS: OwnerRow[] = [
   // other unit finds the leader now in the raw order (the live timing's position, a lap record's position at its end).
   // `forecast-score` scores past races lap by lap from their stored laps (`forecasts.ts`), not the race now.
   { judgement: 'gaps and order now', owner: 'gaps', source: (u) => codeMatches(u, LEADER_BY_POSITION), allowed: ['forecast-score'] },
+  // SP4.3c Task 12 (O1, spec §5.2): tyre rates, offsets and availability are `tyre-model`'s; no other unit reads the
+  // game's tyre sets (the live state's `tyres.sets`, a lap record's `tyreSets`, or their fields). `track-wetness` may,
+  // only for the slick delta as a wetness reading (O3, research 22 §1.9); `degradation` may, only for its filter prior
+  // through `shared/tyre-prior.ts` (the plan's interface: the game's usable life and loss per %, no unit read).
+  {
+    judgement: 'tyre rates, offsets and availability',
+    owner: 'tyre-model',
+    source: (u) => codeNames(u, ['tyreSets', 'fittedIdx', 'usableLifeLaps', 'lapDeltaMs', 'lifeSpanLaps', 'tyres\\.sets', 'setsNow']),
+    allowed: ['track-wetness', 'degradation'],
+  },
 ];
 
 /** A path as the guard shows it: repo-relative with forward slashes. */

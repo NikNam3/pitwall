@@ -73,25 +73,16 @@ const madSigma = (xs: readonly number[]): number => {
 };
 
 describe('driver-noise rows (spec 5.2)', () => {
-  it("7: wear rate of a hidden rival: profile, else our car's rate on that compound this race, else the config default, with the source", () => {
-    const ours = (compound: NoiseCompound): CarLaps & CarSituation => ({ car: 0, to: 10, compound });
-    // car 1: a human rival on mediums, its wear hidden by realism
-    const rival: CarLaps & CarSituation = { car: 1, to: 10, compound: 'medium', wear: 'hidden', driver: 'human' };
-
-    // its profile's rate
-    const withProfile = carOf(calc.compute(rowView([ours('medium'), rival], { drivers: linked(1, 'dr', { 'driverNoise.wearRatePct.medium': 1.7 }) })), 1);
-    expect(valueOf(withProfile.wearRatePctPerLap.medium)).toBeCloseTo(1.7, 9);
-    expect(withProfile.wearRateSource.medium).toMatchObject({ kind: 'profile', person: 'dr' });
-
-    // no profile: our car's measured rate on mediums this race (1 % a lap)
-    const fromOurs = carOf(calc.compute(rowView([ours('medium'), rival])), 1);
-    expect(valueOf(fromOurs.wearRatePctPerLap.medium)).toBeCloseTo(1, 9);
-    expect(fromOurs.wearRateSource.medium.kind).toBe('session');
-
-    // our car never ran mediums: the config default
-    const fromDefault = carOf(calc.compute(rowView([ours('soft'), rival])), 1);
-    expect(valueOf(fromDefault.wearRatePctPerLap.medium)).toBeCloseTo(D.defaultWearRatePct, 9);
-    expect(fromDefault.wearRateSource.medium.kind).toBe('default');
+  // Row 7 (a hidden rival's wear rate) moved with the wear rate to tyre-model (SP4.3c Task 12 rows 2 and 9:
+  // test/tyre-model/tyre-model.test.ts): driver-noise has no wear output any more (`humanWearRatePct`, `defaultWearRatePct`
+  // and `driverNoise.wearRatePct.*` deleted, spec §5.2).
+  it('7: driver-noise gives no wear rate and declares no wear config any more', () => {
+    expect(Object.keys(D).filter((k) => /wear/i.test(k))).toEqual([]);
+    const out = carOf(calc.compute(rowView([{ car: 0, to: 10, compound: 'medium' } satisfies CarLaps & CarSituation])), 0) as unknown as Record<string, unknown>;
+    expect(out).not.toHaveProperty('wearRatePctPerLap');
+    expect(out).not.toHaveProperty('wearRateSource');
+    void linked;
+    void ({} as NoiseCompound);
   });
 
   it('8: a human with a profile starts from it, source profile; without one from the human default, source default', () => {
@@ -174,8 +165,9 @@ describe('driver-noise rows (spec 5.2)', () => {
     const rho = entry('driverNoise.rho');
     expect(valueOf(rho.value)).toBeCloseTo(weighted((v) => v.rho), 6);
     expect(rho.laps).toBe(laps[0]! + laps[1]!);
-    // both sessions wear their mediums 2 % a lap (the generator's medium rate), so any weighting gives 2
-    expect(valueOf(entry('driverNoise.wearRatePct.medium').value)).toBeCloseTo(2, 6);
+    // ported in SP4.3c Task 12: the wear entry moved to tyre-model as the factor k (`tyreModel.wearFactor.<compound>`,
+    // test/tyre-model/profiles.test.ts); driver-noise declares none
+    expect(Object.keys(DRIVER_NOISE_PROFILES.entries).filter((k) => k.includes('wear'))).toEqual([]);
   });
 
   it('11: a retirement counts in retireRatePerLap, not in bigEventRatePerLap (P5)', () => {
