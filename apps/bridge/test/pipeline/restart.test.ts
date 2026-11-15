@@ -238,7 +238,10 @@ describe('a live session continues its recording across a bridge restart (C38, C
     const ts = raw.map((r) => r.t);
     expect(ts).toEqual([...ts].sort((a, b) => a - b));
     // the restart's packets are written byte for byte, in arrival order, on the file's time base: as one run wrote them
-    expect(await datagrams(file)).toEqual(await datagrams(onlyRecording(whole.place)));
+    // (times to 1 µs: the restart's wall time W0 + gap is a double near 1.7e12, so the gap reaches the file rounded)
+    const [got, want] = [await datagrams(file), await datagrams(onlyRecording(whole.place))];
+    expect(got.map((d) => d.payload)).toEqual(want.map((d) => d.payload));
+    got.forEach((d, i) => expect(d.t).toBeCloseTo(want[i]!.t, 3));
     // and applied in that order: the stored log is one run's
     expect(factRows(place.db, onlyKey(place.db))).toEqual(factRows(whole.place.db, onlyKey(whole.place.db)));
   });
