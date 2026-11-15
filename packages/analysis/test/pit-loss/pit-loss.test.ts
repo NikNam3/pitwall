@@ -7,7 +7,9 @@
 //
 // Every stop here is on lap 10 or later with its three reference laps (laps 7–9) clean, so "the `referenceLaps` laps
 // before the stop" and "the last `referenceLaps` `forPace` laps before it" agree; lap 1 of a race is never `forPace`.
-import { carId, known, unknown, type LapRecord, type PitStopRecord, type PriorsSnapshot, type Ms, type TrackData } from '@pitwall/domain';
+import { carId, known, unknown, type Known, type LapRecord, type PitStopRecord, type PriorsSnapshot, type Ms, type TrackData } from '@pitwall/domain';
+import { LAP_CLASSES_CONFIG } from '../../src/lap-classes/index.ts';
+import { referencePaceMs } from '../../src/pace-delta/index.ts';
 import type { EngineView, StoredSource } from '@pitwall/engine/readers';
 import { describe, expect, it } from 'vitest';
 import { guardedView } from '../../../engine/test/support/scheduler.ts';
@@ -294,6 +296,39 @@ describe('pit-loss', () => {
     expect(samplesOf('vsc')(sources, ctx)).toBe(1);
     expect(samplesOf('sc')(sources, ctx)).toBe(0);
     expect(samplesOf('green')([], ctx)).toBe(0);
+  });
+});
+
+// SP4.3c Task 7 (O12, B11, C43): the car's reference lap is `pace-delta`'s `referencePaceMs` (the mean of the last three
+// pace laps before the in-lap), not a reference of `pit-loss`'s own. The pit loss moves only where they differ.
+describe('pit-loss: the reference is pace-delta\'s (SP4.3c Task 7)', () => {
+  const classes = { isRace: true, ...LAP_CLASSES_CONFIG.defaults };
+  /** The one stop's loss in the output (one stop: no stationary time above the median). */
+  const lossOf = (s: { laps: LapRecord[]; stop: PitStopRecord }): Known<Ms> => {
+    const [stop] = compute(viewOf([s])).stops;
+    if (stop === undefined) throw new Error('no stop');
+    return stop.lossMs;
+  };
+  /** in-lap + out-lap − 2 × `referencePaceMs` over the stop's laps before its in-lap. */
+  const expected = (s: { laps: LapRecord[]; stop: PitStopRecord }, inMs: Ms, outMs: Ms): Ms => {
+    const ref = referencePaceMs(s.laps, s.stop.lap, { window: 3, ...classes });
+    if (!ref.known) throw new Error('no reference');
+    return inMs + outMs - 2 * ref.value;
+  };
+
+  it('B11: references 80 000, 80 000, 83 000 give the mean 81 000 (the median was 80 000): 92 000 + 95 000 − 162 000', () => {
+    const s = stopWith(0, { inMs: 92_000, outMs: 95_000, refs: [80_000, 80_000, 83_000] });
+    expect(lossOf(s)).toMatchObject({ known: true, value: 25_000 });
+    expect(lossOf(s)).toMatchObject({ known: true, value: expected(s, 92_000, 95_000) });
+  });
+
+  it('an invalid lap among the three before the in-lap: the last three pace laps reach one lap further back', () => {
+    // laps 6, 7, 9 are pace laps (79 000, 80 000, 81 000: mean 80 000); lap 8 is invalid
+    const s = stopWith(0, { inMs: 92_000, outMs: 95_000, refs: [80_000, 70_000, 81_000] });
+    const laps = s.laps.map((l) => (l.lapNumber === 8 ? { ...l, valid: { lap: false, sectors: [false, false, false] as [boolean, boolean, boolean] } } : l));
+    const gap = { laps: [lapOf(0, 6, 79_000), ...laps], stop: s.stop };
+    expect(lossOf(gap)).toMatchObject({ known: true, value: 27_000 });
+    expect(lossOf(gap)).toMatchObject({ known: true, value: expected(gap, 92_000, 95_000) });
   });
 });
 

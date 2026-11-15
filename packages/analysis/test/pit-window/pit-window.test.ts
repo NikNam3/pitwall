@@ -92,6 +92,8 @@ type Case = {
   fitted?: VisualCompound;
   /** The stint's first lap (default 1, a set fitted for the start); a later one follows a stop at the end of the lap before. */
   fromLap?: number;
+  /** The compound of the closed stint before `fromLap` (default soft). */
+  previous?: VisualCompound;
   /** The sets besides the fitted one (default: a new medium, a new hard and a new soft). */
   sets?: SetSpec[];
   /** The `compound-rule` span of our car (default `required`). */
@@ -111,11 +113,11 @@ type CarTyreSets = ReturnType<typeof carState>['tyres']['sets'];
 
 const DEFAULT_SETS: SetSpec[] = [{ compound: 'medium' }, { compound: 'hard' }, { compound: 'soft' }];
 
-/** Our laps 1 … `c.lap − 1`: on the old set (soft) before `fromLap`, the in lap the one before it, then the fitted set from its out lap. */
-function ourLaps(c: Required<Pick<Case, 'lap' | 'fromLap' | 'fitted'>>): LapRecord[] {
+/** Our laps 1 … `c.lap − 1`: on the old set (`previous`) before `fromLap`, the in lap the one before it, then the fitted set from its out lap. */
+function ourLaps(c: Required<Pick<Case, 'lap' | 'fromLap' | 'fitted' | 'previous'>>): LapRecord[] {
   return Array.from({ length: c.lap - 1 }, (_, i) => {
     const n = i + 1;
-    const compound: VisualCompound = n < c.fromLap ? 'soft' : c.fitted;
+    const compound: VisualCompound = n < c.fromLap ? c.previous : c.fitted;
     return lap({
       carId: carId(US),
       lapNumber: n,
@@ -135,6 +137,7 @@ function ourLaps(c: Required<Pick<Case, 'lap' | 'fromLap' | 'fitted'>>): LapReco
 function view(c: Case): EngineView {
   const fitted = c.fitted ?? 'medium';
   const fromLap = c.fromLap ?? 1;
+  const previous = c.previous ?? 'soft';
   const ltl = c.lapsToLimit ?? 8.6;
   const lapsToLimit = typeof ltl === 'number' ? known(ltl, (c.lap - 1) * LAP_MS) : ltl;
   const sets = [tyreSet({ compound: fitted, fitted: true, wearPct: 25 }), ...(c.sets ?? DEFAULT_SETS).map(tyreSet)];
@@ -148,7 +151,7 @@ function view(c: Case): EngineView {
   const rival = carState({ id: carId(RIVAL), timing: { lap: c.lap }, tyres: { ...tyres, sets: known({ sets, fittedIdx: 0 }, 0) } });
   const stopLap = fromLap - 1;
   const stints: StintRecord[] =
-    stopLap < 1 ? [] : [{ carId: carId(US), firstLap: 1, lastLap: stopLap, actualCompound: 'C3', visualCompound: 'soft', tyreAgeAtFitting: 0, frame: stopLap * LAP_MS }];
+    stopLap < 1 ? [] : [{ carId: carId(US), firstLap: 1, lastLap: stopLap, actualCompound: ACTUAL[previous], visualCompound: previous, tyreAgeAtFitting: 0, frame: stopLap * LAP_MS }];
   const pitStops: PitStopRecord[] =
     stopLap < 1
       ? []
@@ -181,7 +184,7 @@ function view(c: Case): EngineView {
     phase: c.phase ?? RACE,
     cars: [us, rival],
     session: { totalLaps: c.flag ?? FLAG },
-    history: { laps: ourLaps({ lap: c.lap, fromLap, fitted }), stints, pitStops, spans: closed },
+    history: { laps: ourLaps({ lap: c.lap, fromLap, fitted, previous }), stints, pitStops, spans: closed },
     spans,
     outputs: new Map<string, unknown>([[TYRE_LIFE, tyreLifeOut]]),
     sessionTime: (c.lap - 1) * LAP_MS + 30_000,
@@ -391,6 +394,31 @@ describe('pit-window calculator', () => {
       expect(ours({ lap: 23, lapsToLimit: 40 }).stint.stopNeeded).toMatchObject(v(true));
     });
 
+    // SP4.3c Task 7 (B4, O11, C43): whether the rule is met is `shared/compound-rule.ts`' judgement (`owesSecondDryCompound`
+    // over the car's stints and its fitted set), not the `compound-rule` span alone: the span stays `required` all race
+    it('B4: medium then hard (rule required, met): a set reaching the flag needs no stop; one short of it lists a new hard (the fitted compound)', () => {
+      const met: Case = { lap: 30, previous: 'medium', fitted: 'hard', fromLap: 15, rule: 'required' };
+      const runsToFlag = ours({ ...met, lapsToLimit: 40 });
+      expect(runsToFlag.stint.stopNeeded).toMatchObject(v(false));
+      expect(runsToFlag.sets).toEqual([]);
+      expect(runsToFlag.window).toMatchObject(v('none'));
+      // the last lap 40 < 52: a stop is needed, and the fitted compound is an option again
+      const short = ours({ ...met, lapsToLimit: 10 });
+      expect(short.stint.stopNeeded).toMatchObject(v(true));
+      expect(compounds(short)).toContain('hard');
+      expect(compounds(short).sort()).toEqual(['hard', 'medium', 'soft']);
+    });
+
+    it('B4: one dry compound so far (soft then soft, or medium from the start): the rule is still owed, a stop needed and the fitted compound no option', () => {
+      const owed = ours({ lap: 30, previous: 'soft', fitted: 'soft', fromLap: 15, rule: 'required', lapsToLimit: 40 });
+      expect(owed.stint.stopNeeded).toMatchObject(v(true));
+      expect(compounds(owed)).not.toContain('soft');
+      // an inter stint is no dry compound
+      const afterInter = ours({ lap: 30, previous: 'inter', fitted: 'hard', fromLap: 15, rule: 'required', lapsToLimit: 40 });
+      expect(afterInter.stint.stopNeeded).toMatchObject(v(true));
+      expect(compounds(afterInter)).not.toContain('hard');
+    });
+
     it('no stop needed on the last lap (L52, rule waived, the set runs to the flag): pastLimit false', () => {
       expect(ours({ lap: 52, lapsToLimit: 40, rule: 'waived' }).stint.pastLimit).toBe(false);
     });
@@ -471,7 +499,9 @@ describe('pit-window calculator', () => {
           const newSets = new Set<VisualCompound>(r.sets.filter((s) => s.available && s.wearPct === 0).map((s) => s.compound));
           for (const s of w.sets) {
             expect(newSets.has(s.compound)).toBe(true);
-            if (r.rule === 'required') expect(s.compound).not.toBe(r.fitted);
+            // the rule is owed while the car has run one dry compound: the soft before `fromLap` and the fitted set (B4)
+            const owed = r.rule === 'required' && !(r.fromLap > 1 && r.fitted !== 'soft');
+            if (owed) expect(s.compound).not.toBe(r.fitted);
             if (s.lifeEnd.known) expect(s.reaches).toMatchObject(v(s.lifeEnd.value >= r.flag));
             if (!(s.reaches.known && s.reaches.value)) continue;
             if (!(s.earliest.known && w.stint.latest.known)) throw new Error('a reaching set with an unknown lap');
