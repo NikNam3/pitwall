@@ -175,14 +175,17 @@ function withRecordedRealism(config: FeatureConfig, recordingPath: string, log: 
   return typeof enabled === 'boolean' ? { ...config, realism: { ...config.realism, enabled } } : config;
 }
 
-/** A restart's restore under way: the packets that arrive meanwhile wait in `buffer`, in arrival order. */
-type Restore = { buffer: RawPacket[]; done: Promise<void> };
+/** A decision or calibration edit that arrived during a restart's restore, as the pipeline was asked it. */
+type QueuedDecision =
+  | { kind: 'pick'; setId: string | null }
+  | { kind: 'edit'; setId: string }
+  | { kind: 'plan'; decision: PlanDecision };
 
 /**
- * The answer to a decision while a restart's restore is under way: the session's record index is not the live one yet,
- * so a decision committed now would not land where the replay of the recording puts it (C76).
+ * A restart's restore under way: the packets that arrive meanwhile wait in `buffer`, the decisions and calibration
+ * edits in `decisions`, each in arrival order.
  */
-const RESTORING: DecisionResult = { ok: false, reason: 'notSupported', message: 'the session is being restored from its recording' };
+type Restore = { buffer: RawPacket[]; decisions: QueuedDecision[]; done: Promise<void> };
 
 /**
  * Runs one feed: every datagram updates the feed's health, the tracker splits the stream into sessions and frames,
@@ -264,12 +267,13 @@ export class FeedPipeline {
    * decisions sidecar; the set is marked used. Without a running session a pick only marks the set used (the newest
    * session's track; before any session, the set's own track). An unknown set (of the newest session's track, or before
    * any session of any track) is rejected, with or without a running session (C73); `defaults` before any session
-   * changes nothing. A pipeline without a calibration store takes no picks.
+   * changes nothing. A pipeline without a calibration store takes no picks. During a restart's restore (C59) a pick is
+   * answered ok and queued: it is committed once the run is live (`#applyQueued`).
    */
   commitDecision(setId: string | null): DecisionResult {
     const calibration = this.#o.calibration;
     if (calibration === undefined) return { ok: false, reason: 'notSupported', message: 'this feed takes no calibration picks' };
-    if (this.#restore !== undefined) return RESTORING;
+    if (this.#restore !== undefined) return this.#queue({ kind: 'pick', setId });
     const run = this.#decisions;
     const session = this.#session;
     if (run === undefined) {
@@ -296,14 +300,20 @@ export class FeedPipeline {
    * A calibration edit of the set `setId` was applied (C62a, C76): a running session on that set commits
    * `calibrationChosen` with the set's new snapshot, exactly as a pick does. Nothing is committed without a running
    * session, for a run on another set or on `defaults`, when the snapshot's fingerprint is the run's active one, or when
-   * the set is gone (a delete: the run keeps the snapshot it has, ruling R29). Never throws.
+   * the set is gone (a delete: the run keeps the snapshot it has, ruling R29). During a restart's restore (C59) the edit
+   * is queued and judged once the run is live (`#applyQueued`). Never throws.
    */
   calibrationEdited(setId: string): void {
     this.#guarded('calibration edit', () => {
       const calibration = this.#o.calibration;
+      if (calibration === undefined) return;
+      if (this.#restore !== undefined) {
+        this.#queue({ kind: 'edit', setId });
+        return;
+      }
       const run = this.#decisions;
       const session = this.#session;
-      if (calibration === undefined || run === undefined || session === undefined || this.#restore !== undefined) return;
+      if (run === undefined || session === undefined) return;
       const active = session.activeChoice;
       if (active.setId !== setId) return;
       const snapshot = calibration.snapshotOf(run.trackId, setId);
@@ -334,10 +344,11 @@ export class FeedPipeline {
   /**
    * A plan decision for the running session (`plan.commit`, `plan.clear`; C76, SP4.3b spec §8.2), as `PlanRouting` hands
    * it to each of the team's feeds: it goes to the runner with the next frame and, placed at the session's record index,
-   * to the decisions sidecar. Without a running session it is not taken.
+   * to the decisions sidecar. Without a running session it is not taken. During a restart's restore (C59) it is answered
+   * ok and queued: it is committed once the run is live (`#applyQueued`).
    */
   commitPlan(decision: PlanDecision): DecisionResult {
-    if (this.#restore !== undefined) return RESTORING;
+    if (this.#restore !== undefined) return this.#queue({ kind: 'plan', decision });
     const run = this.#decisions;
     const session = this.#session;
     if (run === undefined || session === undefined) return { ok: false, reason: 'notSupported', message: 'this feed runs no session' };
@@ -474,7 +485,7 @@ export class FeedPipeline {
    * session of their own, in a file of its own.
    */
   #startRestore(stored: { row: StoredSessionRow; path: string }, first: RawPacket): void {
-    const restore: Restore = { buffer: [first], done: Promise.resolve() };
+    const restore: Restore = { buffer: [first], decisions: [], done: Promise.resolve() };
     this.#restore = restore;
     restore.done = this.#replayStored(stored, first.receivedAtMs)
       .catch((error: unknown) => {
@@ -482,8 +493,34 @@ export class FeedPipeline {
       })
       .finally(() => {
         this.#restore = undefined;
+        this.#applyQueued(restore.decisions);
         for (const packet of restore.buffer) this.#deliver(packet);
       });
+  }
+
+  /** A decision or calibration edit that arrives during a restart's restore waits for the run to be live; none is rejected for it. */
+  #queue(decision: QueuedDecision): DecisionResult {
+    this.#restore?.decisions.push(decision);
+    return { ok: true };
+  }
+
+  /**
+   * The decisions and calibration edits queued during a restart's restore, in arrival order, once the run is live (C76,
+   * like a feed that joins the team later): each goes to the runner with the first live frame and, placed at the
+   * session's record index (the first after the resume record), to the decisions sidecar. One the live run does not take
+   * (an unknown set, no running session) is logged.
+   */
+  #applyQueued(queued: readonly QueuedDecision[]): void {
+    for (const entry of queued) {
+      this.#guarded('queued decision', () => {
+        if (entry.kind === 'edit') {
+          this.calibrationEdited(entry.setId);
+          return;
+        }
+        const result = entry.kind === 'pick' ? this.commitDecision(entry.setId) : this.commitPlan(entry.decision);
+        if (!result.ok) this.#log.warn({ feedId: this.#feedId, decision: entry, reason: result.reason, message: result.message }, 'a decision sent during the restore was not taken');
+      });
+    }
   }
 
   /**
