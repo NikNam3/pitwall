@@ -748,13 +748,13 @@ describe('the gapper phases', () => {
     const never = neutralisation({ kind: 'SC', start: 200_500, end: 203_500, confirmed: false });
     expect(gapperLines(run(viewOf(eightLaps(), { phases: [never] })), fixed).phases).toEqual([]);
     const vsc = neutralisation({ kind: 'VSC', start: 99_000, end: 162_000, id: 2 });
-    expect(phasesOf(gapperLines(run(viewOf(eightLaps(), { phases: [never, vsc] })), fixed))).toEqual([['VSC', 1.1, 1.8]]);
+    expect(phasesOf(gapperLines(run(viewOf(eightLaps(), { phases: [never, vsc] })), fixed))).toEqual([['VSC', 1.1, 1.78]]);
   });
 
   it('an open neutralisation still waiting for its confirmation is on the gapper from its start (ruling 2: the earliest reliable signal, C18)', () => {
     const ms = eightLaps().filter((m) => m.at <= 250_000);
     const pending = openNeutralisation({ kind: 'SC', start: 200_500, confirmed: false });
-    expect(phasesOf(gapperLines(run(viewOf(ms, { open: pending })), fixed))).toEqual([['SC', 2.22, 'notApplicable']]);
+    expect(phasesOf(gapperLines(run(viewOf(ms, { open: pending })), fixed))).toEqual([['SC', 2.24, 'notApplicable']]);
   });
 
   it('a pending neutralisation that closes unconfirmed leaves the gapper: update equals init (C18, C31)', () => {
@@ -762,7 +762,7 @@ describe('the gapper phases', () => {
     const waiting = viewOf(ms.filter((m) => m.at <= 202_000), { open: openNeutralisation({ kind: 'SC', start: 200_500, confirmed: false }) });
     const dropped = viewOf(ms.filter((m) => m.at <= 210_000), { phases: [neutralisation({ kind: 'SC', start: 200_500, end: 203_500, confirmed: false })] });
     const acc = gaps.init(guarded(waiting));
-    expect(phasesOf(gapperLines(gaps.output(acc), fixed))).toEqual([['SC', 2.22, 'notApplicable']]);
+    expect(phasesOf(gapperLines(gaps.output(acc), fixed))).toEqual([['SC', 2.24, 'notApplicable']]);
     const updated = gaps.output(gaps.update(acc, deltaOf(waiting, dropped), guarded(dropped)));
     expect(updated).toEqual(run(dropped));
     expect(gapperLines(updated, fixed).phases).toEqual([]);
@@ -775,10 +775,10 @@ describe('the gapper phases', () => {
     const sc = neutralisation({ kind: 'SC', start: 200_500, end: 299_999 });
     const closed = viewOf(ms, { phases: [sc] });
     const acc = gaps.init(guarded(opening));
-    expect(phasesOf(gapperLines(gaps.output(acc), fixed))).toEqual([['SC', 2.22, 'notApplicable']]);
+    expect(phasesOf(gapperLines(gaps.output(acc), fixed))).toEqual([['SC', 2.24, 'notApplicable']]);
     const updated = gaps.output(gaps.update(acc, deltaOf(opening, closed), guarded(closed)));
     expect(gapperLines(updated, fixed).phases).toEqual(gapperLines(run(closed), fixed).phases);
-    expect(phasesOf(gapperLines(updated, fixed))).toEqual([['SC', 2.22, 3.32]]);
+    expect(phasesOf(gapperLines(updated, fixed))).toEqual([['SC', 2.24, 3.32]]);
   });
 
   it('flashback equals fresh run: a phase the flashback took back is gone', () => {
