@@ -34,6 +34,7 @@ export const STRATEGY_BEHAVIOUR: BehaviourTable<StrategyEffect> = {
   },
   // the driver changes the stop's length (the starting point's `human`), never whether the car is planned
   'car-driver': { ai: 'plan', human: 'plan' },
+  'car-location': { track: 'plan', pitLane: 'plan', garage: 'plan' },
   // the rule is the DP's (`owesStop`, rival-stops' judgement, C43), never whether the car is planned
   'compound-rule': { required: 'plan', waived: 'plan' },
 };

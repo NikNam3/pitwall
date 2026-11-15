@@ -36,6 +36,7 @@ export const PIT_SWEEP_BEHAVIOUR: BehaviourTable<PitSweepEffect> = {
   },
   // the driver changes the stop's length (the starting point's `human`), never whether the car is swept
   'car-driver': { ai: 'sweep', human: 'sweep' },
+  'car-location': { track: 'sweep', pitLane: 'sweep', garage: 'sweep' },
   // the rule is the DP's (`owesStop`, C43): it decides which rows can be made, never whether the car is swept
   'compound-rule': { required: 'sweep', waived: 'sweep' },
 };
