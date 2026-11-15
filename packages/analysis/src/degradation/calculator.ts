@@ -20,7 +20,7 @@ import { PER_LAP_RATE_CONFIG } from '../per-lap-rate/index.ts';
 import { CAR_STATUS_READS } from '../shared/car-status.ts';
 import { configOf } from '../shared/config-of.ts';
 import { lapsByCar } from '../shared/stint-laps.ts';
-import { gameLossMsPerPct, gamePriorRatePct } from '../shared/tyre-prior.ts';
+import { bestFreshSet, gameSetNuMsPerLap } from '../shared/tyre-prior.ts';
 import { TYRE_MODEL_CONFIG } from '../tyre-model/config.ts';
 import { DEGRADATION_BEHAVIOUR, phaseRow, type DegradationEffect } from './behaviour.ts';
 import { DEGRADATION, DEGRADATION_CONFIG, type DegradationOutput, type StartPrior, type StintDegradation } from './index.ts';
@@ -44,9 +44,9 @@ const GAME_PRIOR_SOURCE: EstimateSource = { kind: 'default', note: "the game's t
 
 /**
  * `ν` of a stint from the game's tyre prior (SP4.3c Task 12, research 22 §1.6, §2): on the stint's newest lap whose
- * recorded sets give it, the game's loss per % of wear (the fitted set against a fresh one of its compound,
- * `gameLossMsPerPct`) times the game's rate (`gamePriorRatePct`, the AI's k and the limit of `tyre-model`'s config);
- * none without such a lap (the config default then).
+ * recorded sets give it, the game's ν of the fitted set against the fresh one of its compound the shared pick gives
+ * (`bestFreshSet`, `gameSetNuMsPerLap`: the loss per % times the game's rate, with the AI's k, the limit and the loss
+ * threshold of `tyre-model`'s config); none without such a lap (the config default then).
  */
 function gameNuOf(view: Pick<AsOfView, 'config'>, laps: readonly Lap[]): number | undefined {
   const c = configOf(TYRE_MODEL_CONFIG, view);
@@ -54,13 +54,10 @@ function gameNuOf(view: Pick<AsOfView, 'config'>, laps: readonly Lap[]): number 
     const sets = (laps[i] as Lap).tyreSets;
     if (!sets.known) continue;
     const fitted = sets.value.find((s) => s.fitted);
-    if (fitted === undefined || !(fitted.usableLifeLaps > 0)) continue;
-    let fresh: number | undefined;
-    for (const s of sets.value) {
-      if (s.visualCompound === fitted.visualCompound && s.available && !s.fitted && s.wearPct === 0 && (fresh === undefined || s.lapDeltaMs < fresh)) fresh = s.lapDeltaMs;
-    }
-    const loss = fresh === undefined ? undefined : gameLossMsPerPct(fitted.lapDeltaMs, fresh, fitted.wearPct, c.minWearForLossPct);
-    if (loss !== undefined && loss > 0) return loss * gamePriorRatePct(fitted.usableLifeLaps, c.aiWearFactor, c.limitPct);
+    if (fitted === undefined) continue;
+    const fresh = bestFreshSet(sets.value, fitted.visualCompound);
+    const nu = fresh === undefined ? undefined : gameSetNuMsPerLap(fitted, fresh, c.aiWearFactor, c.limitPct, c.minWearForLossPct);
+    if (nu !== undefined) return nu;
   }
   return undefined;
 }

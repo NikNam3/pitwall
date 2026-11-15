@@ -35,7 +35,7 @@ import { refTempC } from '../car-bands/bands.ts';
 import { isRateLap, LAP_CLASSES_CONFIG } from '../lap-classes/index.ts';
 import { configOf } from '../shared/config-of.ts';
 import { currentStintLaps, lapsByCar } from '../shared/stint-laps.ts';
-import { gameLossMsPerPct, gamePriorRatePct } from '../shared/tyre-prior.ts';
+import { bestFreshSet, gamePriorRatePct, gameSetLossMsPerPct, isFreshSet, lapsToLimitOf } from '../shared/tyre-prior.ts';
 import { TRACK_WETNESS } from '../track-wetness/index.ts';
 import { TYRE_MODEL_BEHAVIOUR, type TyreModelEffect } from './behaviour.ts';
 import { TYRE_MODEL_CONFIG } from './config.ts';
@@ -88,17 +88,8 @@ type Usable = NonNullable<ReturnType<typeof usable>>;
 /** The fitted set of `s`: the one at `fittedIdx`, else the first with `fitted`. */
 const fittedOf = (s: Usable): DeepReadonly<TyreSet> | undefined => s.sets[s.fittedIdx] ?? s.sets.find((x) => x.fitted);
 
-/** A fresh set: available, not fitted, new (SP4.2 "only new tyre sets"). */
-const isFresh = (s: DeepReadonly<TyreSet>, i: number, fittedIdx: number): boolean => s.available && !s.fitted && i !== fittedIdx && s.wearPct === 0;
-
-/** The fastest fresh set of `compound` in `s` (the smallest delta), if any. */
-function bestFresh(s: Usable, compound: VisualCompound): DeepReadonly<TyreSet> | undefined {
-  let best: DeepReadonly<TyreSet> | undefined;
-  s.sets.forEach((x, i) => {
-    if (x.visualCompound === compound && isFresh(x, i, s.fittedIdx) && (best === undefined || x.lapDeltaMs < best.lapDeltaMs)) best = x;
-  });
-  return best;
-}
+/** The fastest fresh set of `compound` in `s` (the shared pick, `bestFreshSet`, with the game's fitted index), if any. */
+const bestFresh = (s: Usable, compound: VisualCompound): DeepReadonly<TyreSet> | undefined => bestFreshSet(s.sets, compound, s.fittedIdx);
 
 /** The set whose usable life stands for `compound`: the fitted one on it, else an available one, else any with a life. */
 function lifeSetOf(s: Usable, compound: NoiseCompound): DeepReadonly<TyreSet> | undefined {
@@ -250,9 +241,8 @@ function gameLossOf(v: ViewCtx, car: CarCtx, compound: NoiseCompound): number | 
   const fitted = fittedOf(s);
   if (fitted === undefined || fitted.visualCompound !== compound) return undefined;
   const fresh = bestFresh(s, compound);
-  const loss = fresh === undefined ? undefined : gameLossMsPerPct(fitted.lapDeltaMs, fresh.lapDeltaMs, fitted.wearPct, v.c.minWearForLossPct);
   // a worn set no slower than a fresh one is no reading of the game's loss (the default then, C3)
-  return loss !== undefined && loss > 0 ? loss : undefined;
+  return fresh === undefined ? undefined : gameSetLossMsPerPct(fitted, fresh, v.c.minWearForLossPct);
 }
 
 /** The track file's offset of `compound` against medium, if it has one. */
@@ -305,15 +295,15 @@ function fromFit(fit: Known<number> & { known: true }, worst: TyreTerm<number>, 
 
 /**
  * The ν of `degradation`'s fit of the car's stint on its fitted set (the stint holding the set's newest lap, on its
- * compound, with a pace lap the filter used), if it has one.
+ * compound), if that fit is the session's own: its covariance known (`degradation` gives it from two pace laps on;
+ * below, ν is still mostly the filter's prior).
  */
 function stintFitOf(stints: readonly DeepReadonly<StintDegradation>[] | undefined, set: FittedSet | undefined, own: readonly LapRecord[]): (Known<number> & { known: true }) | undefined {
   const newest = own.at(-1);
   if (stints === undefined || set === undefined || newest === undefined) return undefined;
   const stint = stints.findLast((s) => s.firstLap <= newest.lapNumber && s.lastLap >= newest.lapNumber);
   if (stint === undefined || stint.visual !== set.visualCompound || !stint.nuMsPerLap.known) return undefined;
-  const fitted = stint.laps.some((l) => typeof l.use === 'string');
-  return fitted ? (stint.nuMsPerLap as Known<number> & { known: true }) : undefined;
+  return stint.cov.known ? (stint.nuMsPerLap as Known<number> & { known: true }) : undefined;
 }
 
 /** One compound's terms for one car. */
@@ -345,24 +335,17 @@ function compoundOf(v: ViewCtx, car: CarCtx, compound: NoiseCompound): TyreModel
   const worst = worstOf(wearRatePct);
   const fit = onIt ? car.fitNuMsPerLap : undefined;
   const { nuMsPerLap, lossMsPerPct } = fit === undefined ? fromLoss(worst, gameLoss) : fromFit(fit, worst, gameLoss);
-  const lapsToLimit: Known<number> = !worst.value.known ? worst.value : worst.value.value > 0 ? known(v.c.limitPct / worst.value.value, worst.value.at) : unknown('insufficientData');
+  // a fresh set's laps: from 0 % at the worst corner's rate
+  const lapsToLimit = lapsToLimitOf(known(0, 0), worst.value, v.c.limitPct);
   return { wearRatePct, nuMsPerLap, lossMsPerPct, freshOffsetMs, lapsToLimit };
 }
 
-/** The fitted set's laps to the limit: the fewest of its corners' (limit − wear) / rate, 0 at or past it (C3: unknown with its reason). */
+/** The fitted set's laps to the limit: the fewest of its corners' (`lapsToLimitOf`; C3: unknown with its reason). */
 function fittedLapsToLimit(tyres: TyresNow, rates: Corners<TyreTerm<number>> | undefined, limitPct: number): Known<number> {
   let fewest: Known<number> | undefined;
   for (const corner of CORNERS) {
-    const wear = tyres.wearPct[corner] as Known<number>;
-    if (!wear.known) return wear;
-    let laps: Known<number>;
-    if (wear.value >= limitPct) laps = known(0, wear.at);
-    else {
-      const rate = rates?.[corner].value ?? unknown('insufficientData');
-      if (!rate.known) return rate;
-      if (!(rate.value > 0)) return unknown('insufficientData');
-      laps = known((limitPct - wear.value) / rate.value, Math.max(wear.at, rate.at));
-    }
+    const laps = lapsToLimitOf(tyres.wearPct[corner] as Known<number>, rates?.[corner].value ?? unknown('insufficientData'), limitPct);
+    if (!laps.known) return laps;
     if (fewest === undefined || (fewest.known && laps.known && laps.value < fewest.value)) fewest = laps;
   }
   return fewest ?? unknown('insufficientData');
@@ -377,7 +360,7 @@ function freshSetsOf(sets: CarSets): Record<NoiseCompound, Known<number>> {
   }
   const counts = Object.fromEntries(NOISE_COMPOUNDS.map((c) => [c, 0])) as Record<NoiseCompound, number>;
   s.sets.forEach((x, i) => {
-    if (isNoise(x.visualCompound) && isFresh(x, i, s.fittedIdx)) counts[x.visualCompound] += 1;
+    if (isNoise(x.visualCompound) && isFreshSet(x, i, s.fittedIdx)) counts[x.visualCompound] += 1;
   });
   return Object.fromEntries(NOISE_COMPOUNDS.map((c) => [c, known(counts[c], s.at)])) as Record<NoiseCompound, Known<number>>;
 }
@@ -393,7 +376,7 @@ function typeDeltasOf(sets: CarSets): Record<TyreType, Known<Ms>> {
     }
     let best: number | undefined;
     s.sets.forEach((x, i) => {
-      if (isFresh(x, i, s.fittedIdx) && tyreTypeOf(x.visualCompound) === type && (best === undefined || x.lapDeltaMs < best)) best = x.lapDeltaMs;
+      if (isFreshSet(x, i, s.fittedIdx) && tyreTypeOf(x.visualCompound) === type && (best === undefined || x.lapDeltaMs < best)) best = x.lapDeltaMs;
     });
     out[type] = best === undefined ? unknown('notReceived') : known(best, s.at);
   }

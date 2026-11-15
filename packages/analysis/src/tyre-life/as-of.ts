@@ -3,9 +3,12 @@
 // ran on (unless a stint record reaches that lap: a new set no lap has run on yet), and its wear is the newest lap's end
 // wear; the game's life span exists only in the live state (`unknown('notReceived')`). The scheduled run is this form
 // on `asOfNow(view)` with the live state's set and wear and `tyre-model`'s life span (`calculator.ts`).
-import { known, NOISE_COMPOUNDS, unknown, type CarId, type Corners, type Known, type LapRecord, type NoiseCompound, type TyreModelCar, type TyreModelOutput, type VisualCompound } from '@pitwall/domain';
+import { NOISE_COMPOUNDS, unknown, type CarId, type Corners, type Known, type LapRecord, type NoiseCompound, type TyreModelCar, type TyreModelOutput, type VisualCompound } from '@pitwall/domain';
 import type { AsOfView, DeepReadonly } from '@pitwall/engine/readers';
+import { configOf } from '../shared/config-of.ts';
 import { lapsByCar } from '../shared/stint-laps.ts';
+import { lapsToLimitOf } from '../shared/tyre-prior.ts';
+import { TYRE_MODEL_CONFIG } from '../tyre-model/config.ts';
 import { TYRE_MODEL } from '../tyre-model/id.ts';
 import { TYRE_LIFE_BEHAVIOUR, type TyreLifeEffect } from './behaviour.ts';
 import type { TyreLife, TyreLifeOutput } from './types.ts';
@@ -21,15 +24,6 @@ export type TyresNow = {
 };
 
 const isNoise = (c: VisualCompound | undefined): c is NoiseCompound => c !== undefined && (NOISE_COMPOUNDS as readonly string[]).includes(c);
-
-/** Laps from `wear` to `limitPct` at `rate`: 0 at or past it; the wear's or the rate's reason while unknown (C3). */
-function lapsTo(wear: Known<number>, rate: Known<number>, limitPct: number): Known<number> {
-  if (!wear.known) return wear;
-  if (wear.value >= limitPct) return known(0, wear.at);
-  if (!rate.known) return rate;
-  if (!(rate.value > 0)) return unknown('insufficientData');
-  return known((limitPct - wear.value) / rate.value, Math.max(wear.at, rate.at));
-}
 
 /** Each car's rows (`TYRE_LIFE_BEHAVIOUR`) of the spans open for it, merged, by car id. */
 function effectsByCar(view: AsOfView): Map<CarId, TyreLifeEffect> {
@@ -58,12 +52,14 @@ export function tyreLifeOf(view: AsOfView, cars: readonly CarId[], tyresOf: (car
     if (effects.get(id)?.inSession !== true) continue;
     const tyres = tyresOf(id, lapsOf.get(id) ?? []);
     const car = model[id];
-    const limitPct = car?.limitPct ?? 70;
+    // the limit in force is tyre-model's (its car's, else its config key, C47); without its car no laps to it (C3)
+    const limitPct = car?.limitPct ?? configOf(TYRE_MODEL_CONFIG, view).limitPct;
     const terms = car !== undefined && isNoise(tyres.compound) ? car.compounds[tyres.compound] : undefined;
     const corner = (c: Corner): CornerLife => {
       const wearPct = tyres.wearPct[c] as Known<number>;
       const rate = (terms?.wearRatePct[c].value as Known<number> | undefined) ?? unknown('insufficientData');
-      return { wearPct, ratePctPerLap: rate, lapsToLimit: lapsTo(wearPct, rate, limitPct) };
+      const lapsToLimit = car === undefined ? unknown('insufficientData') : lapsToLimitOf(wearPct, rate, car.limitPct);
+      return { wearPct, ratePctPerLap: rate, lapsToLimit };
     };
     out[id] = {
       corners: { fl: corner('fl'), fr: corner('fr'), rl: corner('rl'), rr: corner('rr') },
